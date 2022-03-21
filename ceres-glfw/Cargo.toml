@@ -1,0 +1,13 @@
+[package]
+name = "ceres-glfw"
+version = "0.1.0"
+edition = "2021"
+description = "A Gameboy/Color emulator"
+
+[dependencies]
+ceres-core = { path = "../ceres-core" }
+ceres-cli = { path = "../ceres-cli" }
+ceres-cpal = { path = "../ceres-cpal" }
+ceres-opengl = { path = "../ceres-opengl" }
+glfw = { version = "*", default-features = false }
+env_logger = "*"

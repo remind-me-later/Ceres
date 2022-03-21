@@ -1,0 +1,13 @@
+[package]
+name = "ceres-core"
+version = "0.1.0"
+edition = "2021"
+description = "A library to make Gameboy/Color emulators"
+
+[dependencies]
+bitflags = { version = "*", default-features = false }
+stackvec = "*"
+log = "*"
+
+[dev-dependencies]
+crc = "*"

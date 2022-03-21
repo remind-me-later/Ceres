@@ -1,0 +1,9 @@
+[package]
+name = "ceres-cpal"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ceres-core = { path = "../ceres-core" }
+cpal = "*"
+dasp_ring_buffer = "*"
