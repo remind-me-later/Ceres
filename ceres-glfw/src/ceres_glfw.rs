@@ -1,4 +1,4 @@
-use ceres_cli::error::Error;
+use super::error::Error;
 use ceres_core::{Cartridge, Gameboy};
 use glfw::ffi::*;
 use std::{ffi::CString, os::raw::c_int, time::Instant};
@@ -26,7 +26,7 @@ impl CeresGlfw {
                 return Err(Error::new("couldn't initialize GLFW"));
             }
 
-            let window_title = CString::new(ceres_cli::CERES_STR).map_err(Error::new)?;
+            let window_title = CString::new(super::CERES_STR).map_err(Error::new)?;
 
             let window = glfwCreateWindow(
                 ceres_core::SCREEN_WIDTH as i32 * 4,

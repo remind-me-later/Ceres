@@ -1,9 +1,0 @@
-[package]
-name = "ceres-cli"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-ceres-core = { path = "../ceres-core" }
-pico-args = { version = "*", default-features = false }
-colorful = "*"
