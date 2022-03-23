@@ -104,7 +104,7 @@ impl<AR: AudioCallbacks> Gameboy<AR> {
         self.cpu.memory().cartridge().header_info()
     }
 
-    pub fn take_cartridge(self) -> Cartridge {
-        self.cpu.take_cartridge()
+    pub fn cartridge(&self) -> &Cartridge {
+        self.cpu.cartridge()
     }
 }

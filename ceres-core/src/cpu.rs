@@ -29,8 +29,8 @@ impl<AR: AudioCallbacks> Cpu<AR> {
         }
     }
 
-    pub fn take_cartridge(self) -> Cartridge {
-        self.memory.take_cartridge()
+    pub fn cartridge(&self) -> &Cartridge {
+        self.memory.cartridge()
     }
 
     pub fn memory(&self) -> &Memory<AR> {

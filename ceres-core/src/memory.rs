@@ -63,8 +63,8 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
         }
     }
 
-    pub fn take_cartridge(self) -> Cartridge {
-        self.cartridge
+    pub fn cartridge(&self) -> &Cartridge {
+        &self.cartridge
     }
 
     pub fn reset_frame_done(&mut self) {
@@ -113,10 +113,6 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
 
     pub fn release(&mut self, button: Button) {
         self.joypad.release(button);
-    }
-
-    pub fn cartridge(&self) -> &Cartridge {
-        &self.cartridge
     }
 
     pub fn interrupt_controller(&self) -> &InterruptController {

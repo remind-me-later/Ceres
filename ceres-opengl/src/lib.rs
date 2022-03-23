@@ -27,6 +27,7 @@ pub trait Context {
     fn get_proc_address(&mut self, procname: &str) -> *const c_void;
     fn swap_buffers(&mut self);
     fn make_current(&mut self);
+    fn resize(&mut self, width: u32, height: u32);
 }
 
 pub struct Renderer<C: Context> {
@@ -148,6 +149,8 @@ impl<C: Context> Renderer<C> {
             gl::Viewport(0, 0, width as i32, height as i32);
             gl::UniformMatrix4fv(self.transform_location, 1, gl::FALSE, transform.as_ptr());
         }
+
+        self.context.resize(width, height);
     }
 
     pub fn update_texture(&mut self, rgba_pixel_data: &[u8]) {

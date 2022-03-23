@@ -1,9 +1,9 @@
 #![warn(clippy::all)]
-mod ceres_glfw;
+mod ceres_glutin;
 mod error;
 
 use ceres_core::{BootRom, Cartridge, Model};
-use ceres_glfw::CeresGlfw;
+use ceres_glutin::CeresGlfw;
 use clap::{Arg, Command};
 use error::Error;
 use std::{
@@ -102,9 +102,7 @@ fn main() {
     let ceres_glfw =
         CeresGlfw::new(model, cartridge, boot_rom).unwrap_or_else(|error| error::print(error));
 
-    let cartridge = ceres_glfw.run();
-
-    save_data(&sav_path, &cartridge);
+    ceres_glfw.run(sav_path);
 }
 
 fn read_file(path: &Path) -> Result<Vec<u8>, Error> {

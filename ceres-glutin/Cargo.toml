@@ -1,5 +1,5 @@
 [package]
-name = "ceres-glfw"
+name = "ceres-glutin"
 version = "0.1.0"
 edition = "2021"
 description = "A Gameboy/Color emulator"
@@ -8,7 +8,7 @@ description = "A Gameboy/Color emulator"
 ceres-core = { path = "../ceres-core" }
 ceres-cpal = { path = "../ceres-cpal" }
 ceres-opengl = { path = "../ceres-opengl" }
-glfw = { version = "*", default-features = false }
+glutin = "*"
 env_logger = "*"
 colorful = "*"
 clap = { version = "*", default-features = false, features = ["std"] }
