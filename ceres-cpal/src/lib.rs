@@ -6,7 +6,8 @@ use cpal::{
 };
 use dasp_ring_buffer::Bounded;
 use error::Error;
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+use std::sync::Arc;
 
 const BUFFER_SIZE: cpal::FrameCount = 512;
 const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
@@ -45,12 +46,11 @@ impl Renderer {
         let error_callback = |err| panic!("an error occurred on stream: {}", err);
         let ring_buffer_arc = Arc::clone(&ring_buffer);
         let data_callback = move |output: &mut [f32], _: &_| {
-            if let Ok(mut buf) = ring_buffer_arc.lock() {
-                output
-                    .iter_mut()
-                    .zip(buf.drain())
-                    .for_each(|(out_sample, gb_sample)| *out_sample = gb_sample)
-            }
+            let mut buf = ring_buffer_arc.lock();
+            output
+                .iter_mut()
+                .zip(buf.drain())
+                .for_each(|(out_sample, gb_sample)| *out_sample = gb_sample)
         };
 
         let stream = device
@@ -90,9 +90,8 @@ impl ceres_core::AudioCallbacks for Callbacks {
     }
 
     fn push_frame(&mut self, frame: ceres_core::Frame) {
-        if let Ok(mut buf) = self.ring_buffer.lock() {
-            buf.push(frame.left());
-            buf.push(frame.right());
-        }
+        let mut buf = self.ring_buffer.lock();
+        buf.push(frame.left());
+        buf.push(frame.right());
     }
 }

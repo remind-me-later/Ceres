@@ -39,7 +39,8 @@ fn main() {
                 .long("model")
                 .help("GameBoy model to emulate")
                 .possible_values(["dmg", "mgb", "cgb"])
-                .takes_value(true),
+                .takes_value(true)
+                .ignore_case(true),
         )
         .arg(
             Arg::new("boot")
@@ -53,12 +54,12 @@ fn main() {
     let rom_string = matches.value_of("rom").unwrap();
 
     let rom_path = Path::new(&rom_string);
-    let rom_buf = read_file_to_byte_vec(rom_path)
+    let rom_buf = read_file(rom_path)
         .unwrap_or_else(|e| error::print(e))
         .into_boxed_slice();
 
     let sav_path = rom_path.with_extension("sav");
-    let ram = if let Ok(sav_buf) = read_file_to_byte_vec(&sav_path) {
+    let ram = if let Ok(sav_buf) = read_file(&sav_path) {
         Some(sav_buf.into_boxed_slice())
     } else {
         None
@@ -84,7 +85,7 @@ fn main() {
 
     let boot_rom = if let Some(boot_rom_str) = matches.value_of("boot") {
         let boot_rom_path = Path::new(&boot_rom_str);
-        let boot_rom_buf = read_file_to_byte_vec(boot_rom_path)
+        let boot_rom_buf = read_file(boot_rom_path)
             .unwrap_or_else(|e| error::print(e))
             .into_boxed_slice();
 
@@ -103,7 +104,7 @@ fn main() {
     save_data(&sav_path, &cartridge);
 }
 
-fn read_file_to_byte_vec(path: &Path) -> Result<Vec<u8>, Error> {
+fn read_file(path: &Path) -> Result<Vec<u8>, Error> {
     let mut f = File::open(path).map_err(|_| Error::new("no file found"))?;
     let metadata = fs::metadata(&path).map_err(|_| Error::new("unable to read metadata"))?;
     let mut buffer = vec![0; metadata.len() as usize];
@@ -114,8 +115,8 @@ fn read_file_to_byte_vec(path: &Path) -> Result<Vec<u8>, Error> {
 }
 
 pub fn save_data(sav_path: &Path, cartridge: &Cartridge) {
-    let mut f =
-        File::create(sav_path).unwrap_or_else(|_| error::print(Error::new("no file found")));
+    let mut f = File::create(sav_path)
+        .unwrap_or_else(|_| error::print(Error::new("unable to open save file")));
 
     f.write_all(cartridge.ram())
         .unwrap_or_else(|_| error::print(Error::new("buffer overflow")));
