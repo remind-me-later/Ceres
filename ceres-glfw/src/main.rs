@@ -16,7 +16,10 @@ use std::{
 pub const CERES_STR: &str = "ceres";
 
 fn main() {
-    env_logger::init();
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Info)
+        .format_timestamp_nanos()
+        .init();
 
     let matches = Command::new(CERES_STR)
         .about("GameBoy/Color emulator")
@@ -65,7 +68,7 @@ fn main() {
         None
     };
 
-    let cartridge = ceres_core::Cartridge::new(rom_buf, ram).unwrap_or_else(|e| error::print(e));
+    let cartridge = Cartridge::new(rom_buf, ram).unwrap_or_else(|e| error::print(e));
 
     if matches.is_present("info") {
         println!("{}", cartridge);

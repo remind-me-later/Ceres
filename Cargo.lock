@@ -127,6 +127,7 @@ dependencies = [
  "colorful",
  "env_logger",
  "glfw",
+ "log",
 ]
 
 [[package]]

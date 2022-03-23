@@ -12,3 +12,4 @@ glfw = { version = "*", default-features = false }
 env_logger = "*"
 colorful = "*"
 clap = { version = "*", default-features = false, features = ["std"] }
+log = "*"
