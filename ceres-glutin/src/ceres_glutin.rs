@@ -13,6 +13,7 @@ pub struct CeresGlfw {
     gameboy: Gameboy<ceres_cpal::Callbacks>,
     event_loop: EventLoop<()>,
     is_focused: bool,
+    is_gui_paused: bool,
     video_renderer: ceres_opengl::Renderer<GlfwContextWrapper>,
     audio_renderer: ceres_cpal::Renderer,
 }
@@ -56,6 +57,7 @@ impl CeresGlfw {
             event_loop,
             gameboy,
             is_focused: false,
+            is_gui_paused: false,
             video_renderer,
             audio_renderer,
         })
@@ -96,6 +98,15 @@ impl CeresGlfw {
                                     VirtualKeyCode::X => self.gameboy.press(Button::A),
                                     VirtualKeyCode::Return => self.gameboy.press(Button::Start),
                                     VirtualKeyCode::Back => self.gameboy.press(Button::Select),
+                                    VirtualKeyCode::Space => {
+                                        if self.is_gui_paused {
+                                            self.audio_renderer.play();
+                                            self.is_gui_paused = false;
+                                        } else {
+                                            self.audio_renderer.pause();
+                                            self.is_gui_paused = true;
+                                        }
+                                    }
                                     _ => (),
                                 },
                                 ElementState::Released => match key {
@@ -115,6 +126,11 @@ impl CeresGlfw {
                     _ => (),
                 },
                 Event::MainEventsCleared => {
+                    if self.is_gui_paused {
+                        *control_flow = ControlFlow::Wait;
+                        return;
+                    }
+
                     let now = Instant::now();
 
                     if now >= next_frame {
