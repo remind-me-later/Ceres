@@ -7,10 +7,13 @@ target/
 **/*.rs.bk
 
 # MSVC Windows builds of rustc generate these, which store debugging information
-*.pdb
+**.pdb
 
 # Binary ROM files for testing
 roms/
+**.gb
+**.gbc
+**.sav
 
 # Cargo compile benchmarks
 cargo-timing*
