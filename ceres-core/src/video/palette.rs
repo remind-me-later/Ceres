@@ -1,12 +1,11 @@
 use super::Color;
-// use crate::util::*;
 
-// const GRAYSCALE_PALETTE: [Color; 4] = [
-//     Color::new(0xff, 0xff, 0xff),
-//     Color::new(0xcc, 0xcc, 0xcc),
-//     Color::new(0x77, 0x77, 0x77),
-//     Color::new(0x00, 0x00, 0x00),
-// ];
+const GRAYSCALE_PALETTE: [Color; 4] = [
+    Color::new(0xff, 0xff, 0xff),
+    Color::new(0xcc, 0xcc, 0xcc),
+    Color::new(0x77, 0x77, 0x77),
+    Color::new(0x00, 0x00, 0x00),
+];
 
 const ORIGINAL_PALETTE: [Color; 4] = [
     Color::new(0x9b, 0xbc, 0x0f),
@@ -17,16 +16,18 @@ const ORIGINAL_PALETTE: [Color; 4] = [
 
 #[derive(Clone, Copy)]
 pub enum MonochromePaletteColors {
-    // Grayscale,
+    Grayscale,
     Original,
 }
 
 impl MonochromePaletteColors {
     pub fn get_color(self, index: MonochromeColorIndex) -> Color {
+        use MonochromePaletteColors::*;
         let idx: u8 = index.into();
+
         match self {
-            // MonochromePaletteColors::Grayscale => GRAYSCALE_PALETTE[idx as usize],
-            MonochromePaletteColors::Original => ORIGINAL_PALETTE[idx as usize],
+            Grayscale => GRAYSCALE_PALETTE[idx as usize],
+            Original => ORIGINAL_PALETTE[idx as usize],
         }
     }
 }
@@ -41,13 +42,13 @@ pub enum MonochromeColorIndex {
 
 impl From<u8> for MonochromeColorIndex {
     fn from(val: u8) -> Self {
-        // debug_assert!(val < 4, "Index out of bounds");
         use MonochromeColorIndex::{Dark, Light, Off, On};
         match val {
             1 => Light,
             2 => Dark,
             3 => On,
-            _ => Off,
+            0 => Off,
+            _ => unreachable!("Index out of bounds"),
         }
     }
 }

@@ -14,15 +14,16 @@ mod serial;
 mod timer;
 mod video;
 
-use core::time::Duration;
-use cpu::Cpu;
-use memory::Memory;
-
 pub use audio::{AudioCallbacks, Frame, Sample};
 pub use boot_rom::BootRom;
+use cartridge::CgbFlag;
 pub use cartridge::{Cartridge, HeaderInfo};
+use core::time::Duration;
+use cpu::Cpu;
 pub use error::Error;
 pub use joypad::Button;
+use memory::Memory;
+pub use video::MonochromePaletteColors;
 pub use video::PixelData;
 pub use video::{SCANLINES_PER_FRAME, SCREEN_HEIGHT, SCREEN_WIDTH};
 
@@ -47,13 +48,26 @@ pub struct Gameboy<AR: AudioCallbacks> {
 
 impl<AR: AudioCallbacks> Gameboy<AR> {
     pub fn new(
-        model: Model,
+        model: Option<Model>,
         cartridge: Cartridge,
         boot_rom: Option<BootRom>,
         audio_renderer: AR,
+        monochrome_palette_colors: MonochromePaletteColors,
     ) -> Self {
+        let model = model.unwrap_or_else(|| match cartridge.header_info().cgb_flag() {
+            CgbFlag::NonCgb => Model::Mgb,
+            CgbFlag::CgbOnly | CgbFlag::CgbFunctions => Model::Cgb,
+        });
+
         let some_boot_rom = boot_rom.is_some();
-        let memory = Memory::new(model, cartridge, boot_rom, audio_renderer);
+        let memory = Memory::new(
+            model,
+            cartridge,
+            monochrome_palette_colors,
+            boot_rom,
+            audio_renderer,
+        );
+
         let cpu = Cpu::new(model, some_boot_rom, memory);
 
         Self { cpu }

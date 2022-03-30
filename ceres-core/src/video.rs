@@ -12,11 +12,11 @@ use bitflags::bitflags;
 use color::Color;
 use core::cmp::Ordering;
 pub use mode::PpuMode;
-use palette::{MonochromeColorIndex, MonochromePaletteColors};
+use palette::MonochromeColorIndex;
+pub use palette::MonochromePaletteColors;
 pub use pixel_buffer::PixelData;
 use registers::{Lcdc, Registers, Stat};
-use sprites::SpriteFlags;
-use sprites::{ObjectAttributeMemory, SpriteAttributes};
+use sprites::{ObjectAttributeMemory, SpriteAttributes, SpriteFlags};
 use stackvec::StackVec;
 use vram::VramBank;
 
@@ -91,10 +91,10 @@ pub struct Ppu {
 }
 
 impl Ppu {
-    pub fn new(boot_rom: bool) -> Self {
+    pub fn new(boot_rom: bool, monochrome_palette_colors: MonochromePaletteColors) -> Self {
         Self {
             registers: Registers::new(boot_rom),
-            monochrome_palette_colors: MonochromePaletteColors::Original,
+            monochrome_palette_colors,
             vram: VramBank::new(),
             oam: ObjectAttributeMemory::new(),
             pixel_data: PixelData::new(),

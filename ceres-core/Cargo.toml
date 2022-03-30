@@ -8,6 +8,3 @@ description = "A library to make Gameboy/Color emulators"
 bitflags = { version = "*", default-features = false }
 stackvec = "*"
 log = "*"
-
-[dev-dependencies]
-crc = "*"

@@ -9,11 +9,10 @@ use super::{cartridge::Cartridge, interrupts::InterruptController, timer::Timer}
 use crate::{
     audio::Apu,
     boot_rom::BootRom,
-    cartridge::CgbFlag,
     joypad::Joypad,
     serial::Serial,
     video::{
-        PixelData, Ppu,
+        MonochromePaletteColors, PixelData, Ppu,
         PpuIO::{Oam, Vram},
     },
     AudioCallbacks, Button, Model,
@@ -42,6 +41,7 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
     pub fn new(
         model: Model,
         cartridge: Cartridge,
+        monochrome_palette_colors: MonochromePaletteColors,
         boot_rom: Option<BootRom>,
         audio_renderer: AR,
     ) -> Self {
@@ -51,7 +51,7 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
             cartridge,
             high_ram: HighRam::new(),
             work_ram: WorkRam::new(),
-            ppu: Ppu::new(boot_rom.is_some()),
+            ppu: Ppu::new(boot_rom.is_some(), monochrome_palette_colors),
             joypad: Joypad::new(),
             apu: Apu::new(audio_renderer),
             serial: Serial::new(),
@@ -206,8 +206,6 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
     }
 
     fn color_mode(&self) -> bool {
-        let cgb_flag = self.cartridge().header_info().cgb_flag();
         self.model == Model::Cgb
-            && (*cgb_flag == CgbFlag::CgbOnly || *cgb_flag == CgbFlag::CgbFunctions)
     }
 }

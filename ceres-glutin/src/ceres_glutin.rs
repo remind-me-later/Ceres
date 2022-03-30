@@ -20,7 +20,7 @@ pub struct CeresGlfw {
 
 impl CeresGlfw {
     pub fn new(
-        model: ceres_core::Model,
+        model: Option<ceres_core::Model>,
         cartridge: ceres_core::Cartridge,
         boot_rom: Option<ceres_core::BootRom>,
     ) -> Result<Self, Error> {
@@ -51,7 +51,13 @@ impl CeresGlfw {
                 .map_err(Error::new)?;
 
         let (audio_renderer, audio_callbacks) = ceres_cpal::Renderer::new().map_err(Error::new)?;
-        let gameboy = ceres_core::Gameboy::new(model, cartridge, boot_rom, audio_callbacks);
+        let gameboy = ceres_core::Gameboy::new(
+            model,
+            cartridge,
+            boot_rom,
+            audio_callbacks,
+            ceres_core::MonochromePaletteColors::Grayscale,
+        );
 
         Ok(Self {
             event_loop,

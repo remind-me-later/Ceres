@@ -75,16 +75,12 @@ fn main() {
         exit(0);
     }
 
-    let model = if let Some(model_str) = matches.value_of("model") {
-        match model_str.as_ref() {
-            "dmg" => Model::Dmg,
-            "mgb" => Model::Mgb,
-            "cgb" => Model::Cgb,
-            _ => panic!("invalid model"),
-        }
-    } else {
-        Model::Cgb
-    };
+    let model = matches.value_of("model").map(|s| match s {
+        "dmg" => Model::Dmg,
+        "mgb" => Model::Mgb,
+        "cgb" => Model::Cgb,
+        _ => unreachable!("invalid model"),
+    });
 
     let boot_rom = if let Some(boot_rom_str) = matches.value_of("boot") {
         let boot_rom_path = Path::new(&boot_rom_str);
