@@ -295,13 +295,13 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn jr_d(&mut self) {
-        log::trace!("jr ${:x}", self.get_immediate_for_print() as i8);
+        log::trace!("jr ${}", self.get_immediate_for_print() as i8);
         self.do_jump_relative();
     }
 
     pub fn jr_f(&mut self, condition: JumpCondition) {
         log::trace!(
-            "jr {}, ${:x}",
+            "jr {}, ${}",
             condition.dissasemble(self),
             self.get_immediate_for_print() as i8
         );

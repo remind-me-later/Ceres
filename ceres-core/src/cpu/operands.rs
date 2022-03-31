@@ -122,7 +122,7 @@ impl Dissasemble for Indirect {
             Indirect::DE => format!("[de]"),
             Indirect::HL => format!("[hl]"),
             Indirect::Immediate => {
-                let immediate = cpu.get_immediate_for_print();
+                let immediate = cpu.get_immediate_for_print_16();
                 format!("[${:x}]", immediate)
             }
             Indirect::HighC => {

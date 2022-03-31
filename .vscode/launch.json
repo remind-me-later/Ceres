@@ -18,9 +18,8 @@
                 }
             },
             "args": [
-                "/home/maurizio/Roms/GBC/Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc",
-                "-b",
-                "/home/maurizio/Roms/GB Boot/cgb_boot.bin"
+                "/home/maurizio/Roms/GB/X (Japan).gb",
+                "-mdmg"
             ],
             "cwd": "${workspaceFolder}"
         },
