@@ -17,3 +17,7 @@ roms/
 
 # Cargo compile benchmarks
 cargo-timing*
+
+# Log files
+log/
+**/*.log

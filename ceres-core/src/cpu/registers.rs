@@ -1,6 +1,10 @@
-use bitflags::bitflags;
+extern crate alloc;
 
 use crate::Model;
+use alloc::{format, string::String};
+use bitflags::bitflags;
+
+use super::operands::Dissasemble;
 
 bitflags! {
     pub struct Flags: u8 {
@@ -22,6 +26,23 @@ pub enum Register8 {
     L,
 }
 
+impl Dissasemble for Register8 {
+    fn dissasemble<AR>(self, _cpu: &mut super::Cpu<AR>) -> String
+    where
+        AR: crate::AudioCallbacks,
+    {
+        match self {
+            Register8::A => format!("a"),
+            Register8::B => format!("b"),
+            Register8::C => format!("c"),
+            Register8::D => format!("d"),
+            Register8::E => format!("e"),
+            Register8::H => format!("h"),
+            Register8::L => format!("l"),
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub enum Register16 {
     AF,
@@ -30,6 +51,22 @@ pub enum Register16 {
     HL,
     PC,
     SP,
+}
+
+impl Dissasemble for Register16 {
+    fn dissasemble<AR>(self, _cpu: &mut super::Cpu<AR>) -> String
+    where
+        AR: crate::AudioCallbacks,
+    {
+        match self {
+            Register16::AF => format!("af"),
+            Register16::BC => format!("bc"),
+            Register16::DE => format!("de"),
+            Register16::HL => format!("hl"),
+            Register16::PC => format!("pc"),
+            Register16::SP => format!("sp"),
+        }
+    }
 }
 
 pub struct Registers {

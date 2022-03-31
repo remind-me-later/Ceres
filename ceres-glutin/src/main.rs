@@ -6,6 +6,7 @@ use ceres_core::{BootRom, Cartridge, Model};
 use ceres_glutin::CeresGlfw;
 use clap::{Arg, Command};
 use error::Error;
+use simplelog::*;
 use std::{
     fs::{self, File},
     io::{Read, Write},
@@ -16,10 +17,20 @@ use std::{
 pub const CERES_STR: &str = "ceres";
 
 fn main() {
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
-        .format_timestamp_nanos()
-        .init();
+    CombinedLogger::init(vec![
+        TermLogger::new(
+            LevelFilter::Warn,
+            Config::default(),
+            TerminalMode::Mixed,
+            ColorChoice::Auto,
+        ),
+        // WriteLogger::new(
+        //     LevelFilter::Trace,
+        //     Config::default(),
+        //     File::create("ceres.log").unwrap(),
+        // ),
+    ])
+    .unwrap();
 
     let matches = Command::new(CERES_STR)
         .about("GameBoy/Color emulator")

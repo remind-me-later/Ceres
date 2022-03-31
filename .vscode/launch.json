@@ -1,13 +1,10 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'ceres-glfw'",
+            "name": "Debug executable 'ceres-glutin'",
             "sourceLanguages": [
                 "rust"
             ],
@@ -16,12 +13,14 @@
                     "build",
                 ],
                 "filter": {
-                    "name": "ceres-glfw",
+                    "name": "ceres-glutin",
                     "kind": "bin"
                 }
             },
             "args": [
-                "roms/test/blargg/cgb_sound/rom_singles/02-len ctr.gb",
+                "/home/maurizio/Roms/GB/Kirby's Dream Land 2 (USA, Europe) (SGB Enhanced).gb",
+                "-b",
+                "/home/maurizio/Roms/GB Boot/cgb_boot.bin"
             ],
             "cwd": "${workspaceFolder}"
         },

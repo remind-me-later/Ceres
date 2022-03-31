@@ -39,7 +39,7 @@ pub const M_CYCLES_PER_FRAME: u32 = T_CYCLES_PER_FRAME / 4;
 pub enum Model {
     Dmg, // Game Boy
     Mgb, // Game Boy Pocket
-    Cgb,
+    Cgb, // Game Boy Color
 }
 
 pub struct Gameboy<AR: AudioCallbacks> {
@@ -55,7 +55,7 @@ impl<AR: AudioCallbacks> Gameboy<AR> {
         monochrome_palette_colors: MonochromePaletteColors,
     ) -> Self {
         let model = model.unwrap_or_else(|| match cartridge.header_info().cgb_flag() {
-            CgbFlag::NonCgb => Model::Mgb,
+            CgbFlag::NonCgb => Model::Cgb,
             CgbFlag::CgbOnly | CgbFlag::CgbFunctions => Model::Cgb,
         });
 

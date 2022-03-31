@@ -9,7 +9,7 @@ ceres-core = { path = "../ceres-core" }
 ceres-cpal = { path = "../ceres-cpal" }
 ceres-opengl = { path = "../ceres-opengl" }
 glutin = "*"
-env_logger = "*"
+simplelog = "*"
 colorful = "*"
 clap = { version = "*", default-features = false, features = ["std"] }
 log = "*"
