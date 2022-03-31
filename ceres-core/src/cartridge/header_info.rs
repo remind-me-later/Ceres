@@ -169,6 +169,20 @@ impl ROMSize {
             ROMSize::Mb8 => 512,
         }
     }
+
+    pub const fn mbc1_banks_bit_mask(self) -> usize {
+        match self {
+            ROMSize::Kb32 => 0x1,
+            ROMSize::Kb64 => 0x3,
+            ROMSize::Kb128 => 0x5,
+            ROMSize::Kb256 => 0xf,
+            ROMSize::Kb512 => 0x3f,
+            ROMSize::Mb1 => 0xff,
+            ROMSize::Mb2 => 0xff,
+            ROMSize::Mb4 => 0xff,
+            ROMSize::Mb8 => 0xff,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

@@ -6,16 +6,18 @@ pub struct Mbc1 {
     bank2: u8,
     mode: bool,
     is_multicart: bool,
+    banks_bit_mask: u8,
 }
 
 impl Mbc1 {
-    pub fn new() -> Self {
+    pub fn new(banks_bit_mask: u8) -> Self {
         Self {
             ramg: false,
             bank1: 1,
             bank2: 0,
             mode: false,
             is_multicart: false,
+            banks_bit_mask,
         }
     }
 
@@ -51,7 +53,8 @@ impl Mbc1 {
         match addr {
             0x0000..=0x1fff => self.ramg = (value & 0xf) == 0xa,
             0x2000..=0x3fff => {
-                self.bank1 = if value & 0x1f == 0 { 1 } else { value & 0x1f };
+                let value = value & 0x1f & self.banks_bit_mask;
+                self.bank1 = if value == 0 { 1 } else { value };
                 *rom_offsets = self.rom_offsets(self.is_multicart);
             }
             0x4000..=0x5fff => {

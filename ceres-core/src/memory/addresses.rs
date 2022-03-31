@@ -94,8 +94,7 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
                 }
             }),
             0xfea0..=0xfeff => {
-                panic!("Read from unusable RAM");
-                // log::warn!("Read from unusable RAM");
+                log::warn!("Read from unusable RAM");
                 0xff
             }
             0xff00..=0xffff => self.read_high((address & 0xff) as u8),
@@ -209,8 +208,7 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
                 }
             }),
             0xfea0..=0xfeff => {
-                panic!("Write to unusable RAM");
-                // log::warn!("Write to unusable RAM");
+                log::warn!("Write to unusable RAM");
             }
             0xff00..=0xffff => self.write_high((address & 0xff) as u8, val),
         }
