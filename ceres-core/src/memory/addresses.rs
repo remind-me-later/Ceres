@@ -66,12 +66,19 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
     pub fn read(&mut self, address: u16) -> u8 {
         match address {
             0x00..=0xff => self.generic_mem_cycle(|mem| {
-                mem.boot_rom.as_ref().filter(|b| b.is_active()).map_or_else(
-                    || mem.cartridge.read_rom(address),
-                    |b| b.read((address & 0xff) as u8),
-                )
+                mem.boot_rom
+                    .as_ref()
+                    .filter(|b| b.is_active())
+                    .map_or_else(|| mem.cartridge.read_rom(address), |b| b.read(address))
             }),
-            0x0100..=0x7fff => self.generic_mem_cycle(|mem| mem.cartridge.read_rom(address)),
+            0x0100..=0x1ff => self.generic_mem_cycle(|mem| mem.cartridge.read_rom(address)),
+            0x200..=0x8ff => self.generic_mem_cycle(|mem| {
+                mem.boot_rom
+                    .as_ref()
+                    .filter(|b| b.is_active())
+                    .map_or_else(|| mem.cartridge.read_rom(address), |b| b.read(address))
+            }),
+            0x0900..=0x7fff => self.generic_mem_cycle(|mem| mem.cartridge.read_rom(address)),
             0x8000..=0x9fff => self.generic_mem_cycle(|mem| mem.ppu.read(Vram { address })),
             0xa000..=0xbfff => self.generic_mem_cycle(|mem| mem.cartridge.read_ram(address)),
             0xc000..=0xcfff => self.generic_mem_cycle(|mem| mem.work_ram.read_low(address)),
@@ -179,16 +186,15 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
         }
     }
 
-    #[allow(clippy::semicolon_if_nothing_returned)]
     pub fn write(&mut self, address: u16, val: u8) {
         match address {
-            0x00..=0xff => self.generic_mem_cycle(|mem| {
+            0x00..=0x8ff => self.generic_mem_cycle(|mem| {
                 mem.boot_rom
                     .as_ref()
                     .filter(|b| b.is_active())
                     .map_or_else(|| mem.cartridge.write_rom(address, val), |_| ())
             }),
-            0x0100..=0x7fff => self.generic_mem_cycle(|mem| mem.cartridge.write_rom(address, val)),
+            0x0900..=0x7fff => self.generic_mem_cycle(|mem| mem.cartridge.write_rom(address, val)),
             0x8000..=0x9fff => self.generic_mem_cycle(|mem| mem.ppu.write(Vram { address }, val)),
             0xa000..=0xbfff => self.generic_mem_cycle(|mem| mem.cartridge.write_ram(address, val)),
             0xc000..=0xcfff => self.generic_mem_cycle(|mem| mem.work_ram.write_low(address, val)),

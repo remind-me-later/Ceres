@@ -18,7 +18,7 @@
                 }
             },
             "args": [
-                "/home/maurizio/Roms/GB/Kirby's Dream Land 2 (USA, Europe) (SGB Enhanced).gb",
+                "/home/maurizio/Roms/GBC/Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc",
                 "-b",
                 "/home/maurizio/Roms/GB Boot/cgb_boot.bin"
             ],

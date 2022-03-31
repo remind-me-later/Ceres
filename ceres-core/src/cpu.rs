@@ -69,8 +69,9 @@ impl<AR: AudioCallbacks> Cpu<AR> {
     }
 
     fn get_immediate_for_print_16(&mut self) -> u16 {
-        let lo = self.get_immediate_for_print();
-        let hi = self.get_immediate_for_print();
+        let address = self.registers.read16(PC);
+        let lo = self.memory.read(address);
+        let hi = self.memory.read(address.wrapping_add(1));
         u16::from_le_bytes([lo, hi])
     }
 

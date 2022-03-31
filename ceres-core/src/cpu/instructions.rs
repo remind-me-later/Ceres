@@ -205,7 +205,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn ld16_hl_sp_dd(&mut self) {
-        log::trace!("ld hl, sp + ${}", self.get_immediate_for_print_16());
+        log::trace!("ld hl, sp + ${:x}", self.get_immediate_for_print_16());
 
         let offset = self.read_immediate() as i8 as u16;
         let sp = self.registers.read16(SP);
@@ -258,14 +258,14 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn jp_nn(&mut self) {
-        log::trace!("jp ${}", self.get_immediate_for_print_16());
+        log::trace!("jp ${:x}", self.get_immediate_for_print_16());
 
         self.do_jump_to_immediate();
     }
 
     pub fn jp_f(&mut self, condition: JumpCondition) {
         log::trace!(
-            "jp {}, ${}",
+            "jp {}, ${:x}",
             condition.dissasemble(self),
             self.get_immediate_for_print_16()
         );
@@ -295,13 +295,13 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn jr_d(&mut self) {
-        log::trace!("jr ${}", self.get_immediate_for_print() as i8);
+        log::trace!("jr ${:x}", self.get_immediate_for_print() as i8);
         self.do_jump_relative();
     }
 
     pub fn jr_f(&mut self, condition: JumpCondition) {
         log::trace!(
-            "jr {}, ${}",
+            "jr {}, ${:x}",
             condition.dissasemble(self),
             self.get_immediate_for_print() as i8
         );
@@ -322,14 +322,14 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn call_nn(&mut self) {
-        log::trace!("call ${}", self.get_immediate_for_print() as i8);
+        log::trace!("call ${:x}", self.get_immediate_for_print_16());
 
         self.do_call();
     }
 
     pub fn call_f_nn(&mut self, condition: JumpCondition) {
         log::trace!(
-            "call {}, ${}",
+            "call {}, ${:x}",
             condition.dissasemble(self),
             self.get_immediate_for_print() as i8
         );
@@ -373,7 +373,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn rst(&mut self, address: u16) {
-        log::trace!("rst");
+        log::trace!("rst ${:x}", address);
 
         let pc = self.registers.read16(PC);
         self.internal_push(pc);
@@ -497,7 +497,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
 
     pub fn ld16_nn(&mut self, reg: Register16) {
         log::trace!(
-            "ld {}, ${}",
+            "ld {}, ${:x}",
             reg.dissasemble(self),
             self.get_immediate_for_print_16()
         );
@@ -507,7 +507,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn ld16_nn_sp(&mut self) {
-        log::trace!("ld [${}], sp", self.get_immediate_for_print_16());
+        log::trace!("ld [${:x}], sp", self.get_immediate_for_print_16());
 
         let val = self.registers.read16(SP);
         let address = self.read_immediate16();
@@ -516,7 +516,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn add16_sp_dd(&mut self) {
-        log::trace!("add sp, ${}", self.get_immediate_for_print() as i8);
+        log::trace!("add sp, ${:x}", self.get_immediate_for_print() as i8);
 
         let offset = self.read_immediate() as i8 as u16;
         let sp = self.registers.read16(SP);

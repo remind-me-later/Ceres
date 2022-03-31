@@ -25,7 +25,11 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
             0x3e => self.ld(A, Immediate),
             0x7e => self.ld(A, Indirect::HL),
             0x47 => self.ld(B, A),
-            0x40 => self.ld(B, B),
+            0x40 => {
+                // TODO: debugger
+                log::warn!("debug point");
+                self.ld(B, B);
+            }
             0x41 => self.ld(B, C),
             0x42 => self.ld(B, D),
             0x43 => self.ld(B, E),

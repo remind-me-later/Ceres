@@ -3,7 +3,7 @@ members = ["ceres-core", "ceres-glutin", "ceres-opengl", "ceres-cpal"]
 default-members = ["ceres-glutin"]
 
 [profile.dev]
-opt-level = 1
+opt-level = 0
 debug = 2
 debug-assertions = true
 overflow-checks = true
