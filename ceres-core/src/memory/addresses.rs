@@ -1,6 +1,6 @@
 use super::{
     dma_controller::DmaRegister::{Dma, HDMA1, HDMA2, HDMA3, HDMA4, HDMA5},
-    Memory,
+    FunctionMode, Memory,
 };
 use crate::{
     audio::{
@@ -11,7 +11,7 @@ use crate::{
             NR41, NR42, NR43, NR44, NR50, NR51, NR52,
         },
     },
-    boot_rom::BootRom,
+    cartridge::CgbFlag,
     interrupts::{
         ICRegister::{Ie, If},
         InterruptController,
@@ -27,7 +27,7 @@ use crate::{
             Bcpd, Bcps, Bgp, Lcdc, Ly, Lyc, Obp0, Obp1, Ocpd, Ocps, Opri, Scx, Scy, Stat, Wx, Wy,
         },
     },
-    AudioCallbacks,
+    AudioCallbacks, Model,
 };
 
 impl<'a, AR: AudioCallbacks> Memory<AR> {
@@ -145,41 +145,45 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
             0x49 => self.generic_mem_cycle(|mem| mem.ppu.read(PpuRegister(Obp1))),
             0x4a => self.generic_mem_cycle(|mem| mem.ppu.read(PpuRegister(Wy))),
             0x4b => self.generic_mem_cycle(|mem| mem.ppu.read(PpuRegister(Wx))),
-            0x4d if self.color_mode() => {
+            0x4d if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.speed_switch_register.read())
             }
-            0x4f if self.color_mode() => self.generic_mem_cycle(|mem| mem.ppu.read(VramBank)),
-            0x51 if self.color_mode() => {
+            0x4f if self.model == Model::Cgb => {
+                self.generic_mem_cycle(|mem| mem.ppu.read(VramBank))
+            }
+            0x51 if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.dma_controller.read(HDMA1))
             }
-            0x52 if self.color_mode() => {
+            0x52 if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.dma_controller.read(HDMA2))
             }
-            0x53 if self.color_mode() => {
+            0x53 if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.dma_controller.read(HDMA3))
             }
-            0x54 if self.color_mode() => {
+            0x54 if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.dma_controller.read(HDMA4))
             }
-            0x55 if self.color_mode() => {
+            0x55 if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.dma_controller.read(HDMA5))
             }
-            0x68 if self.color_mode() => {
+            0x68 if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.ppu.read(PpuRegister(Bcps)))
             }
-            0x69 if self.color_mode() => {
+            0x69 if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.ppu.read(PpuRegister(Bcpd)))
             }
-            0x6a if self.color_mode() => {
+            0x6a if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.ppu.read(PpuRegister(Ocps)))
             }
-            0x6b if self.color_mode() => {
+            0x6b if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.ppu.read(PpuRegister(Ocpd)))
             }
-            0x6c if self.color_mode() => {
+            0x6c if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.ppu.read(PpuRegister(Opri)))
             }
-            0x70 if self.color_mode() => self.generic_mem_cycle(|mem| mem.work_ram.read_bank()),
+            0x70 if self.model == Model::Cgb => {
+                self.generic_mem_cycle(|mem| mem.work_ram.read_bank())
+            }
             0x80..=0xfe => self.generic_mem_cycle(|mem| mem.high_ram.read(address)),
             0xff => self.generic_mem_cycle(|mem| mem.interrupt_controller.read(Ie)),
             _ => self.generic_mem_cycle(|_| 0xff),
@@ -259,47 +263,68 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
             0x49 => self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Obp1), val)),
             0x4a => self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Wy), val)),
             0x4b => self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Wx), val)),
-            0x4d if self.color_mode() => {
+            0x4d if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.speed_switch_register.write(val))
             }
-            0x4f if self.color_mode() => self.generic_mem_cycle(|mem| mem.ppu.write(VramBank, val)),
+            0x4f if self.model == Model::Cgb => {
+                self.generic_mem_cycle(|mem| mem.ppu.write(VramBank, val))
+            }
             0x50 => {
                 self.tick_t_cycle();
                 if val & 0b1 != 0 {
-                    self.boot_rom.as_mut().map_or((), BootRom::deactivate)
+                    self.boot_rom.as_mut().map_or((), |b| {
+                        if b.is_active() {
+                            match self.model {
+                                Model::Cgb => {
+                                    self.function_mode =
+                                        match self.cartridge.header_info().cgb_flag() {
+                                            CgbFlag::NonCgb => FunctionMode::Compatibility,
+                                            CgbFlag::CgbOnly | CgbFlag::CgbFunctions => {
+                                                FunctionMode::Color
+                                            }
+                                        }
+                                }
+                                _ => (),
+                            };
+
+                            b.deactivate();
+                        }
+                    })
                 }
             }
-            0x51 if self.color_mode() => {
+            0x51 if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.dma_controller.write(HDMA1, val))
             }
-            0x52 if self.color_mode() => {
+            0x52 if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.dma_controller.write(HDMA2, val))
             }
-            0x53 if self.color_mode() => {
+            0x53 if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.dma_controller.write(HDMA3, val))
             }
-            0x54 if self.color_mode() => {
+            0x54 if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.dma_controller.write(HDMA4, val))
             }
-            0x55 if self.color_mode() => {
+            0x55 if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.dma_controller.write(HDMA5, val))
             }
-            0x68 if self.color_mode() => {
+            0x68 if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Bcps), val))
             }
-            0x69 if self.color_mode() => {
+            0x69 if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Bcpd), val))
             }
-            0x6a if self.color_mode() => {
+            0x6a if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Ocps), val))
             }
-            0x6b if self.color_mode() => {
+            0x6b if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Ocpd), val))
             }
-            0x6c if self.color_mode() => {
+            0x6c if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Opri), val))
             }
-            0x70 if self.color_mode() => self.generic_mem_cycle(|mem| mem.work_ram.write_bank(val)),
+            0x70 if self.model == Model::Cgb => {
+                self.generic_mem_cycle(|mem| mem.work_ram.write_bank(val))
+            }
             0x80..=0xfe => self.generic_mem_cycle(|mem| mem.high_ram.write(address, val)),
             0xff => self.generic_mem_cycle(|mem| mem.interrupt_controller.write(Ie, val)),
             _ => self.tick_t_cycle(),

@@ -16,7 +16,6 @@ mod video;
 
 pub use audio::{AudioCallbacks, Frame, Sample};
 pub use boot_rom::BootRom;
-use cartridge::CgbFlag;
 pub use cartridge::{Cartridge, HeaderInfo};
 use core::time::Duration;
 use cpu::Cpu;
@@ -54,10 +53,7 @@ impl<AR: AudioCallbacks> Gameboy<AR> {
         audio_renderer: AR,
         monochrome_palette_colors: MonochromePaletteColors,
     ) -> Self {
-        let model = model.unwrap_or_else(|| match cartridge.header_info().cgb_flag() {
-            CgbFlag::NonCgb => Model::Mgb,
-            CgbFlag::CgbOnly | CgbFlag::CgbFunctions => Model::Cgb,
-        });
+        let model = model.unwrap_or(Model::Cgb);
 
         let some_boot_rom = boot_rom.is_some();
         let memory = Memory::new(

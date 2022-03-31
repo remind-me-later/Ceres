@@ -20,6 +20,13 @@ use crate::{
 use high_ram::HighRam;
 use work_ram::WorkRam;
 
+#[derive(Clone, Copy)]
+pub enum FunctionMode {
+    Monochrome,
+    Compatibility,
+    Color,
+}
+
 pub struct Memory<AR: AudioCallbacks> {
     cartridge: Cartridge,
     interrupt_controller: InterruptController,
@@ -35,6 +42,7 @@ pub struct Memory<AR: AudioCallbacks> {
     model: Model,
     speed_switch_register: speed_switch::Register,
     in_double_speed: bool,
+    function_mode: FunctionMode,
 }
 
 impl<'a, AR: AudioCallbacks> Memory<AR> {
@@ -45,6 +53,11 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
         boot_rom: Option<BootRom>,
         audio_renderer: AR,
     ) -> Self {
+        let function_mode = match model {
+            Model::Dmg | Model::Mgb => FunctionMode::Monochrome,
+            Model::Cgb => FunctionMode::Color,
+        };
+
         Self {
             interrupt_controller: InterruptController::new(),
             timer: Timer::new(),
@@ -60,6 +73,7 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
             model,
             in_double_speed: false,
             speed_switch_register: speed_switch::Register::empty(),
+            function_mode,
         }
     }
 
@@ -133,10 +147,9 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
 
     pub fn tick_ppu(&mut self) {
         let microseconds_elapsed_times_16 = self.t_cycles_to_microseconds_elapsed_times_8() * 2;
-        let color_mode = self.color_mode();
         self.ppu.tick(
             &mut self.interrupt_controller,
-            color_mode,
+            self.function_mode,
             microseconds_elapsed_times_16,
         );
     }
@@ -203,9 +216,5 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
                 val,
             );
         }
-    }
-
-    fn color_mode(&self) -> bool {
-        self.model == Model::Cgb
     }
 }

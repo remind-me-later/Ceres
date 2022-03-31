@@ -7,7 +7,10 @@ mod sprites;
 mod vram;
 
 use self::vram::VramBankRegister;
-use crate::interrupts::{Interrupt, InterruptController};
+use crate::{
+    interrupts::{Interrupt, InterruptController},
+    memory::FunctionMode,
+};
 use bitflags::bitflags;
 use color::Color;
 use core::cmp::Ordering;
@@ -212,7 +215,7 @@ impl Ppu {
     pub fn tick(
         &mut self,
         interrupt_controller: &mut InterruptController,
-        color_mode: bool,
+        function_mode: FunctionMode,
         microseconds_elapsed_times_16: u8,
     ) {
         if !self.registers.lcdc().contains(Lcdc::LCD_ENABLE) {
@@ -237,7 +240,7 @@ impl Ppu {
             PpuMode::AccessOam => self.switch_mode(PpuMode::AccessVram, interrupt_controller),
             PpuMode::AccessVram => {
                 if self.do_render {
-                    self.draw_line(color_mode);
+                    self.draw_line(function_mode);
                 }
                 self.switch_mode(PpuMode::HBlank, interrupt_controller);
             }
@@ -281,7 +284,7 @@ impl Ppu {
         }
     }
 
-    fn draw_line(&mut self, color_mode: bool) {
+    fn draw_line(&mut self, function_mode: FunctionMode) {
         let ly = self.registers.ly();
         let scy = self.registers.scy();
         let scx = self.registers.scx();
@@ -291,7 +294,7 @@ impl Ppu {
         let mut bg_priority = [ScanlineBackgroundPriority::Normal; SCREEN_WIDTH as usize];
 
         // draw background
-        if lcdc.background_enabled(color_mode) {
+        if lcdc.background_enabled(function_mode) {
             let tile_map_address = lcdc.bg_tile_map_address();
             let y = ly.wrapping_add(scy);
             let row = (y / 8) as u16 * 32;
@@ -307,13 +310,12 @@ impl Ppu {
                     .vram
                     .get_bank(tile_num_address, VramBankRegister::Bank0);
 
-                let background_attributes = if color_mode {
-                    BgAttributes::from_bits_truncate(
+                let background_attributes = match function_mode {
+                    FunctionMode::Monochrome | FunctionMode::Compatibility => BgAttributes::empty(),
+                    FunctionMode::Color => BgAttributes::from_bits_truncate(
                         self.vram
                             .get_bank(tile_num_address, VramBankRegister::Bank1),
-                    )
-                } else {
-                    BgAttributes::empty()
+                    ),
                 };
 
                 let tile_data_address = if background_attributes.contains(BgAttributes::Y_FLIP) {
@@ -346,14 +348,16 @@ impl Ppu {
                 let color_number =
                     (((data2 & color_bit != 0) as u8) << 1) | (data1 & color_bit != 0) as u8;
 
-                let color = if color_mode {
-                    self.registers
+                let color = match function_mode {
+                    FunctionMode::Monochrome => {
+                        let monochrome_index = MonochromeColorIndex::from(color_number);
+                        self.monochrome_palette_colors
+                            .get_color(bgp.color_index(monochrome_index))
+                    }
+                    FunctionMode::Compatibility | FunctionMode::Color => self
+                        .registers
                         .cgb_bg_palette()
-                        .get_color(background_attributes.bits() & 0x7, color_number)
-                } else {
-                    let monochrome_index = MonochromeColorIndex::from(color_number);
-                    self.monochrome_palette_colors
-                        .get_color(bgp.color_index(monochrome_index))
+                        .get_color(background_attributes.bits() & 0x7, color_number),
                 };
 
                 self.pixel_data
@@ -372,7 +376,7 @@ impl Ppu {
         // draw window
         let wy = self.registers.wy();
 
-        if lcdc.window_enabled(color_mode) && wy <= ly {
+        if lcdc.window_enabled(function_mode) && wy <= ly {
             let tile_map_address = lcdc.window_tile_map_address();
             let wx = self.registers.wx().saturating_sub(7);
             let y = ((ly - wy) as u16).wrapping_sub(self.window_lines_skipped) as u8;
@@ -391,13 +395,12 @@ impl Ppu {
                     .vram
                     .get_bank(tile_num_address, VramBankRegister::Bank0);
 
-                let background_attributes = if color_mode {
-                    BgAttributes::from_bits_truncate(
+                let background_attributes = match function_mode {
+                    FunctionMode::Monochrome | FunctionMode::Compatibility => BgAttributes::empty(),
+                    FunctionMode::Color => BgAttributes::from_bits_truncate(
                         self.vram
                             .get_bank(tile_num_address, VramBankRegister::Bank1),
-                    )
-                } else {
-                    BgAttributes::empty()
+                    ),
                 };
 
                 let tile_data_address = if background_attributes.contains(BgAttributes::Y_FLIP) {
@@ -430,14 +433,16 @@ impl Ppu {
                 let color_number =
                     (((data2 & color_bit != 0) as u8) << 1) | (data1 & color_bit != 0) as u8;
 
-                let color = if color_mode {
-                    self.registers
+                let color = match function_mode {
+                    FunctionMode::Monochrome => {
+                        let monochrome_index = MonochromeColorIndex::from(color_number);
+                        self.monochrome_palette_colors
+                            .get_color(bgp.color_index(monochrome_index))
+                    }
+                    FunctionMode::Compatibility | FunctionMode::Color => self
+                        .registers
                         .cgb_bg_palette()
-                        .get_color(background_attributes.bits() & 0x7, color_number)
-                } else {
-                    let monochrome_index = MonochromeColorIndex::from(color_number);
-                    self.monochrome_palette_colors
-                        .get_color(bgp.color_index(monochrome_index))
+                        .get_color(background_attributes.bits() & 0x7, color_number),
                 };
 
                 bg_priority[i as usize] = if color_number == 0 {
@@ -472,21 +477,26 @@ impl Ppu {
                 .enumerate()
                 .collect();
 
-            if color_mode && self.registers.prioritize_by_oam() {
-                sprites_to_draw.sort_unstable_by(|(a_index, a), (b_index, b)| {
-                    match a_index.cmp(b_index) {
-                        Ordering::Equal => a.x().cmp(&b.x()),
-                        other => other.reverse(),
+            match function_mode {
+                FunctionMode::Monochrome | FunctionMode::Compatibility => {
+                    sprites_to_draw.sort_unstable_by(|(a_index, a), (b_index, b)| {
+                        match a.x().cmp(&b.x()) {
+                            Ordering::Equal => a_index.cmp(b_index).reverse(),
+                            other => other.reverse(),
+                        }
+                    });
+                }
+                FunctionMode::Color => {
+                    if self.registers.prioritize_by_oam() {
+                        sprites_to_draw.sort_unstable_by(
+                            |(a_index, a), (b_index, b)| match a_index.cmp(b_index) {
+                                Ordering::Equal => a.x().cmp(&b.x()),
+                                other => other.reverse(),
+                            },
+                        );
                     }
-                });
-            } else {
-                sprites_to_draw.sort_unstable_by(|(a_index, a), (b_index, b)| {
-                    match a.x().cmp(&b.x()) {
-                        Ordering::Equal => a_index.cmp(b_index).reverse(),
-                        other => other.reverse(),
-                    }
-                });
-            }
+                }
+            };
 
             for (_, sprite) in sprites_to_draw {
                 let tile_number = if large_sprites {
@@ -526,7 +536,7 @@ impl Ppu {
                         && !self
                             .registers
                             .lcdc()
-                            .cgb_sprite_master_priority_on(color_mode)
+                            .cgb_sprite_master_priority_on(function_mode)
                     {
                         continue;
                     }
@@ -545,26 +555,37 @@ impl Ppu {
                         continue;
                     }
 
-                    let color = if color_mode {
-                        let cgb_palette = sprite.cgb_palette();
-                        self.registers
-                            .cgb_sprite_palette()
-                            .get_color(cgb_palette, color_number)
-                    } else {
-                        let palette = if sprite.flags().contains(SpriteFlags::NON_CGB_PALETTE) {
-                            self.registers.obp1()
-                        } else {
-                            self.registers.obp0()
-                        };
-                        let monochrome_index = MonochromeColorIndex::from(color_number);
-                        self.monochrome_palette_colors
-                            .get_color(palette.color_index(monochrome_index))
+                    let color = match function_mode {
+                        FunctionMode::Monochrome => {
+                            let palette = if sprite.flags().contains(SpriteFlags::NON_CGB_PALETTE) {
+                                self.registers.obp1()
+                            } else {
+                                self.registers.obp0()
+                            };
+                            let monochrome_index = MonochromeColorIndex::from(color_number);
+                            self.monochrome_palette_colors
+                                .get_color(palette.color_index(monochrome_index))
+                        }
+                        FunctionMode::Compatibility => {
+                            let palette =
+                                sprite.flags().contains(SpriteFlags::NON_CGB_PALETTE) as u8;
+
+                            self.registers
+                                .cgb_sprite_palette()
+                                .get_color(palette, color_number)
+                        }
+                        FunctionMode::Color => {
+                            let cgb_palette = sprite.cgb_palette();
+                            self.registers
+                                .cgb_sprite_palette()
+                                .get_color(cgb_palette, color_number)
+                        }
                     };
 
                     if !self
                         .registers
                         .lcdc()
-                        .cgb_sprite_master_priority_on(color_mode)
+                        .cgb_sprite_master_priority_on(function_mode)
                         && sprite.flags().contains(SpriteFlags::BG_WIN_OVER_OBJ)
                         && bg_priority[target_x as usize] == ScanlineBackgroundPriority::Normal
                     {

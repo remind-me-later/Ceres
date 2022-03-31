@@ -1,3 +1,5 @@
+use crate::memory::FunctionMode;
+
 use super::palette::{ColorPalette, MonochromePalette};
 use super::PpuMode;
 use super::PpuRegister;
@@ -213,27 +215,28 @@ bitflags!(
 );
 
 impl Lcdc {
-    pub const fn window_enabled(self, color_mode: bool) -> bool {
-        if color_mode {
-            self.contains(Self::WINDOW_ENABLED)
-        } else {
-            self.contains(Self::BACKGROUND_ENABLED) && self.contains(Self::WINDOW_ENABLED)
+    pub const fn window_enabled(self, function_mode: FunctionMode) -> bool {
+        match function_mode {
+            FunctionMode::Monochrome | FunctionMode::Compatibility => {
+                self.contains(Self::BACKGROUND_ENABLED) && self.contains(Self::WINDOW_ENABLED)
+            }
+            FunctionMode::Color => self.contains(Self::WINDOW_ENABLED),
         }
     }
 
-    pub const fn background_enabled(self, color_mode: bool) -> bool {
-        if color_mode {
-            true
-        } else {
-            self.contains(Self::BACKGROUND_ENABLED)
+    pub const fn background_enabled(self, function_mode: FunctionMode) -> bool {
+        match function_mode {
+            FunctionMode::Monochrome | FunctionMode::Compatibility => {
+                self.contains(Self::BACKGROUND_ENABLED)
+            }
+            FunctionMode::Color => true,
         }
     }
 
-    pub const fn cgb_sprite_master_priority_on(self, color_mode: bool) -> bool {
-        if color_mode {
-            !self.contains(Self::BACKGROUND_ENABLED)
-        } else {
-            false
+    pub const fn cgb_sprite_master_priority_on(self, function_mode: FunctionMode) -> bool {
+        match function_mode {
+            FunctionMode::Monochrome | FunctionMode::Compatibility => false,
+            FunctionMode::Color => !self.contains(Self::BACKGROUND_ENABLED),
         }
     }
 
