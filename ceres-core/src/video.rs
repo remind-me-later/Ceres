@@ -1,8 +1,8 @@
-mod color;
 mod mode;
 mod palette;
 mod pixel_buffer;
 mod registers;
+mod rgb_color;
 mod sprites;
 mod vram;
 
@@ -12,13 +12,12 @@ use crate::{
     memory::FunctionMode,
 };
 use bitflags::bitflags;
-use color::Color;
 use core::cmp::Ordering;
 pub use mode::PpuMode;
-use palette::MonochromeColorIndex;
 pub use palette::MonochromePaletteColors;
 pub use pixel_buffer::PixelData;
 use registers::{Lcdc, Registers, Stat};
+use rgb_color::RgbColor;
 use sprites::{ObjectAttributeMemory, SpriteAttributes, SpriteFlags};
 use stackvec::StackVec;
 use vram::VramBank;
@@ -349,18 +348,13 @@ impl Ppu {
                     (((data2 & color_bit != 0) as u8) << 1) | (data1 & color_bit != 0) as u8;
 
                 let color = match function_mode {
-                    FunctionMode::Monochrome => {
-                        let monochrome_index = MonochromeColorIndex::from(color_number);
-                        self.monochrome_palette_colors
-                            .get_color(bgp.color_index(monochrome_index))
-                    }
-                    FunctionMode::Compatibility => {
-                        let monochrome_index = MonochromeColorIndex::from(color_number);
-                        self.registers.cgb_bg_palette().get_color(
-                            background_attributes.bits() & 0x7,
-                            bgp.color_index(monochrome_index).into(),
-                        )
-                    }
+                    FunctionMode::Monochrome => self
+                        .monochrome_palette_colors
+                        .get_color(bgp.shade_index(color_number)),
+                    FunctionMode::Compatibility => self.registers.cgb_bg_palette().get_color(
+                        background_attributes.bits() & 0x7,
+                        bgp.shade_index(color_number),
+                    ),
                     FunctionMode::Color => self
                         .registers
                         .cgb_bg_palette()
@@ -441,18 +435,13 @@ impl Ppu {
                     (((data2 & color_bit != 0) as u8) << 1) | (data1 & color_bit != 0) as u8;
 
                 let color = match function_mode {
-                    FunctionMode::Monochrome => {
-                        let monochrome_index = MonochromeColorIndex::from(color_number);
-                        self.monochrome_palette_colors
-                            .get_color(bgp.color_index(monochrome_index))
-                    }
-                    FunctionMode::Compatibility => {
-                        let monochrome_index = MonochromeColorIndex::from(color_number);
-                        self.registers.cgb_bg_palette().get_color(
-                            background_attributes.bits() & 0x7,
-                            bgp.color_index(monochrome_index).into(),
-                        )
-                    }
+                    FunctionMode::Monochrome => self
+                        .monochrome_palette_colors
+                        .get_color(bgp.shade_index(color_number)),
+                    FunctionMode::Compatibility => self.registers.cgb_bg_palette().get_color(
+                        background_attributes.bits() & 0x7,
+                        bgp.shade_index(color_number),
+                    ),
                     FunctionMode::Color => self
                         .registers
                         .cgb_bg_palette()
@@ -576,9 +565,8 @@ impl Ppu {
                             } else {
                                 self.registers.obp0()
                             };
-                            let monochrome_index = MonochromeColorIndex::from(color_number);
                             self.monochrome_palette_colors
-                                .get_color(palette.color_index(monochrome_index))
+                                .get_color(palette.shade_index(color_number))
                         }
                         FunctionMode::Compatibility => {
                             let palette = if sprite.flags().contains(SpriteFlags::NON_CGB_PALETTE) {
@@ -586,10 +574,9 @@ impl Ppu {
                             } else {
                                 self.registers.obp0()
                             };
-                            let monochrome_index = MonochromeColorIndex::from(color_number);
                             self.registers
                                 .cgb_sprite_palette()
-                                .get_color(0, palette.color_index(monochrome_index).into())
+                                .get_color(0, palette.shade_index(color_number))
                         }
                         FunctionMode::Color => {
                             let cgb_palette = sprite.cgb_palette();
