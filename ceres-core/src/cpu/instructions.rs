@@ -6,7 +6,21 @@ use super::{
     },
     Cpu,
 };
-use crate::{cpu::operands::Dissasemble, AudioCallbacks};
+use crate::AudioCallbacks;
+
+#[cfg(debug_assertions)]
+use crate::cpu::operands::Dissasemble;
+
+macro_rules! trace_dissasembled {
+    () => ({
+        #[cfg(debug_assertions)]
+        log::debug!()
+    });
+    ($($arg:tt)*) => ({
+        #[cfg(debug_assertions)]
+        log::debug!($($arg)*);
+    })
+}
 
 impl<'a, AR: AudioCallbacks> Cpu<AR> {
     pub fn ld<G, S>(&mut self, lhs: S, rhs: G)
@@ -14,14 +28,14 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
         G: Get<u8>,
         S: Set<u8>,
     {
-        log::trace!("ld {}, {}", lhs.dissasemble(self), rhs.dissasemble(self));
+        trace_dissasembled!("ld {}, {}", lhs.dissasemble(self), rhs.dissasemble(self));
 
         let val = rhs.get(self);
         lhs.set(self, val);
     }
 
     pub fn ld16_sp_hl(&mut self) {
-        log::trace!("ld sp, hl");
+        trace_dissasembled!("ld sp, hl");
 
         let val = self.registers.read16(HL);
         self.registers.write16(SP, val);
@@ -32,7 +46,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         G: Get<u8>,
     {
-        log::trace!("add {}", rhs.dissasemble(self));
+        trace_dissasembled!("add {}", rhs.dissasemble(self));
 
         let a = self.registers.read8(A);
         let val = rhs.get(self);
@@ -48,7 +62,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         G: Get<u8>,
     {
-        log::trace!("adc {}", rhs.dissasemble(self));
+        trace_dissasembled!("adc {}", rhs.dissasemble(self));
 
         let a = self.registers.read8(A);
         let cy = u8::from(self.registers.cf());
@@ -66,7 +80,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         G: Get<u8>,
     {
-        log::trace!("sub {}", rhs.dissasemble(self));
+        trace_dissasembled!("sub {}", rhs.dissasemble(self));
 
         let a = self.registers.read8(A);
         let val = rhs.get(self);
@@ -82,7 +96,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         G: Get<u8>,
     {
-        log::trace!("sbc {}", rhs.dissasemble(self));
+        trace_dissasembled!("sbc {}", rhs.dissasemble(self));
 
         let a = self.registers.read8(A);
         let cy = u8::from(self.registers.cf());
@@ -100,7 +114,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         G: Get<u8>,
     {
-        log::trace!("cp {}", rhs.dissasemble(self));
+        trace_dissasembled!("cp {}", rhs.dissasemble(self));
 
         let a = self.registers.read8(A);
         let val = rhs.get(self);
@@ -116,7 +130,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         G: Get<u8>,
     {
-        log::trace!("and {}", rhs.dissasemble(self));
+        trace_dissasembled!("and {}", rhs.dissasemble(self));
 
         let val = rhs.get(self);
         let a = self.registers.read8(A) & val;
@@ -131,7 +145,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         G: Get<u8>,
     {
-        log::trace!("or {}", rhs.dissasemble(self));
+        trace_dissasembled!("or {}", rhs.dissasemble(self));
 
         let val = rhs.get(self);
         let a = self.registers.read8(A) | val;
@@ -146,7 +160,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         G: Get<u8>,
     {
-        log::trace!("xor {}", rhs.dissasemble(self));
+        trace_dissasembled!("xor {}", rhs.dissasemble(self));
 
         let read = rhs.get(self);
         let a = self.registers.read8(A) ^ read;
@@ -161,7 +175,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        log::trace!("inc {}", rhs.dissasemble(self));
+        trace_dissasembled!("inc {}", rhs.dissasemble(self));
 
         let read = rhs.get(self);
         let val = read.wrapping_add(1);
@@ -172,7 +186,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn inc16(&mut self, register: Register16) {
-        log::trace!("inc {}", register.dissasemble(self));
+        trace_dissasembled!("inc {}", register.dissasemble(self));
 
         let read = self.registers.read16(register);
         let val = read.wrapping_add(1);
@@ -185,7 +199,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        log::trace!("dec {}", rhs.dissasemble(self));
+        trace_dissasembled!("dec {}", rhs.dissasemble(self));
 
         let read = rhs.get(self);
         let val = read.wrapping_sub(1);
@@ -196,7 +210,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn dec16(&mut self, register: Register16) {
-        log::trace!("dec {}", register.dissasemble(self));
+        trace_dissasembled!("dec {}", register.dissasemble(self));
 
         let read = self.registers.read16(register);
         let val = read.wrapping_sub(1);
@@ -205,7 +219,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn ld16_hl_sp_dd(&mut self) {
-        log::trace!("ld hl, sp + ${:x}", self.get_immediate_for_print_16());
+        trace_dissasembled!("ld hl, sp + ${:x}", self.get_immediate_for_print_16());
 
         let offset = self.read_immediate() as i8 as u16;
         let sp = self.registers.read16(SP);
@@ -220,7 +234,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn rlca(&mut self) {
-        log::trace!("rlca");
+        trace_dissasembled!("rlca");
 
         let val = self.internal_rlc(self.registers.read8(A));
         self.registers.write8(A, val);
@@ -228,7 +242,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn rla(&mut self) {
-        log::trace!("rla");
+        trace_dissasembled!("rla");
 
         let val = self.internal_rl(self.registers.read8(A));
         self.registers.write8(A, val);
@@ -236,7 +250,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn rrca(&mut self) {
-        log::trace!("rrca");
+        trace_dissasembled!("rrca");
 
         let val = self.internal_rrc(self.registers.read8(A));
         self.registers.write8(A, val);
@@ -244,7 +258,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn rra(&mut self) {
-        log::trace!("rra");
+        trace_dissasembled!("rra");
 
         let val = self.internal_rr(self.registers.read8(A));
         self.registers.write8(A, val);
@@ -258,13 +272,13 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn jp_nn(&mut self) {
-        log::trace!("jp ${:x}", self.get_immediate_for_print_16());
+        trace_dissasembled!("jp ${:x}", self.get_immediate_for_print_16());
 
         self.do_jump_to_immediate();
     }
 
     pub fn jp_f(&mut self, condition: JumpCondition) {
-        log::trace!(
+        trace_dissasembled!(
             "jp {}, ${:x}",
             condition.dissasemble(self),
             self.get_immediate_for_print_16()
@@ -281,7 +295,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn jp_hl(&mut self) {
-        log::trace!("jp hl");
+        trace_dissasembled!("jp hl");
 
         let address = self.registers.read16(HL);
         self.registers.write16(PC, address);
@@ -295,12 +309,12 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn jr_d(&mut self) {
-        log::trace!("jr ${}", self.get_immediate_for_print() as i8);
+        trace_dissasembled!("jr ${}", self.get_immediate_for_print() as i8);
         self.do_jump_relative();
     }
 
     pub fn jr_f(&mut self, condition: JumpCondition) {
-        log::trace!(
+        trace_dissasembled!(
             "jr {}, ${}",
             condition.dissasemble(self),
             self.get_immediate_for_print() as i8
@@ -322,13 +336,13 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn call_nn(&mut self) {
-        log::trace!("call ${:x}", self.get_immediate_for_print_16());
+        trace_dissasembled!("call ${:x}", self.get_immediate_for_print_16());
 
         self.do_call();
     }
 
     pub fn call_f_nn(&mut self, condition: JumpCondition) {
-        log::trace!(
+        trace_dissasembled!(
             "call {}, ${:x}",
             condition.dissasemble(self),
             self.get_immediate_for_print() as i8
@@ -351,13 +365,13 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn ret(&mut self) {
-        log::trace!("ret");
+        trace_dissasembled!("ret");
 
         self.do_return();
     }
 
     pub fn ret_f(&mut self, condition: JumpCondition) {
-        log::trace!("ret {}", condition.dissasemble(self));
+        trace_dissasembled!("ret {}", condition.dissasemble(self));
 
         self.memory.tick_t_cycle();
         if condition.check(self) {
@@ -366,14 +380,14 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn reti(&mut self) {
-        log::trace!("reti");
+        trace_dissasembled!("reti");
 
         self.ret();
         self.ei();
     }
 
     pub fn rst(&mut self, address: u16) {
-        log::trace!("rst ${:x}", address);
+        trace_dissasembled!("rst ${:x}", address);
 
         let pc = self.registers.read16(PC);
         self.internal_push(pc);
@@ -381,7 +395,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn halt(&mut self) {
-        log::trace!("halt");
+        trace_dissasembled!("halt");
 
         self.halted = true;
 
@@ -392,7 +406,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn stop(&mut self) {
-        log::trace!("stop");
+        trace_dissasembled!("stop");
 
         self.read_immediate();
 
@@ -407,19 +421,19 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn di(&mut self) {
-        log::trace!("di");
+        trace_dissasembled!("di");
 
         self.ime = false;
     }
 
     pub fn ei(&mut self) {
-        log::trace!("ei");
+        trace_dissasembled!("ei");
 
         self.ei_delay = true;
     }
 
     pub fn ccf(&mut self) {
-        log::trace!("ccf");
+        trace_dissasembled!("ccf");
 
         self.registers.set_nf(false);
         self.registers.set_hf(false);
@@ -427,7 +441,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn scf(&mut self) {
-        log::trace!("scf");
+        trace_dissasembled!("scf");
 
         self.registers.set_nf(false);
         self.registers.set_hf(false);
@@ -436,11 +450,11 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
 
     #[allow(clippy::unused_self)]
     pub fn nop(&mut self) {
-        log::trace!("nop");
+        trace_dissasembled!("nop");
     }
 
     pub fn daa(&mut self) {
-        log::trace!("daa");
+        trace_dissasembled!("daa");
 
         // DAA table in page 110 of the official "Game Boy Programming Manual"
         let mut carry = false;
@@ -473,7 +487,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn cpl(&mut self) {
-        log::trace!("cpl");
+        trace_dissasembled!("cpl");
 
         let a = self.registers.read8(A);
         self.registers.write8(A, !a);
@@ -482,21 +496,21 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn push(&mut self, register: Register16) {
-        log::trace!("push {}", register.dissasemble(self));
+        trace_dissasembled!("push {}", register.dissasemble(self));
 
         let val = self.registers.read16(register);
         self.internal_push(val);
     }
 
     pub fn pop(&mut self, register: Register16) {
-        log::trace!("pop {}", register.dissasemble(self));
+        trace_dissasembled!("pop {}", register.dissasemble(self));
 
         let val = self.internal_pop();
         self.registers.write16(register, val);
     }
 
     pub fn ld16_nn(&mut self, reg: Register16) {
-        log::trace!(
+        trace_dissasembled!(
             "ld {}, ${:x}",
             reg.dissasemble(self),
             self.get_immediate_for_print_16()
@@ -507,7 +521,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn ld16_nn_sp(&mut self) {
-        log::trace!("ld [${:x}], sp", self.get_immediate_for_print_16());
+        trace_dissasembled!("ld [${:x}], sp", self.get_immediate_for_print_16());
 
         let val = self.registers.read16(SP);
         let address = self.read_immediate16();
@@ -516,7 +530,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn add16_sp_dd(&mut self) {
-        log::trace!("add sp, ${:x}", self.get_immediate_for_print() as i8);
+        trace_dissasembled!("add sp, ${:x}", self.get_immediate_for_print() as i8);
 
         let offset = self.read_immediate() as i8 as u16;
         let sp = self.registers.read16(SP);
@@ -532,7 +546,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     }
 
     pub fn add_hl(&mut self, register: Register16) {
-        log::trace!("add hl, {}", register.dissasemble(self));
+        trace_dissasembled!("add hl, {}", register.dissasemble(self));
 
         let hl = self.registers.read16(HL);
         let val = self.registers.read16(register);
@@ -555,7 +569,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        log::trace!("rlc {}", rhs.dissasemble(self));
+        trace_dissasembled!("rlc {}", rhs.dissasemble(self));
 
         let read = rhs.get(self);
         let val = self.internal_rlc(read);
@@ -566,7 +580,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        log::trace!("rl {}", rhs.dissasemble(self));
+        trace_dissasembled!("rl {}", rhs.dissasemble(self));
 
         let read = rhs.get(self);
         let val = self.internal_rl(read);
@@ -577,7 +591,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        log::trace!("rrc {}", rhs.dissasemble(self));
+        trace_dissasembled!("rrc {}", rhs.dissasemble(self));
 
         let read = rhs.get(self);
         let val = self.internal_rrc(read);
@@ -588,7 +602,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        log::trace!("rr {}", rhs.dissasemble(self));
+        trace_dissasembled!("rr {}", rhs.dissasemble(self));
 
         let read = rhs.get(self);
         let val = self.internal_rr(read);
@@ -599,7 +613,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        log::trace!("sla {}", rhs.dissasemble(self));
+        trace_dissasembled!("sla {}", rhs.dissasemble(self));
 
         let read = rhs.get(self);
         let val = read << 1;
@@ -615,7 +629,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        log::trace!("sra {}", rhs.dissasemble(self));
+        trace_dissasembled!("sra {}", rhs.dissasemble(self));
 
         let read = rhs.get(self);
         let hi = read & 0x80;
@@ -633,7 +647,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        log::trace!("srl {}", rhs.dissasemble(self));
+        trace_dissasembled!("srl {}", rhs.dissasemble(self));
 
         let read = rhs.get(self);
         let val = read >> 1;
@@ -649,7 +663,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        log::trace!("swap {}", rhs.dissasemble(self));
+        trace_dissasembled!("swap {}", rhs.dissasemble(self));
 
         let read = rhs.get(self);
         let val = (read >> 4) | (read << 4);
@@ -664,7 +678,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         G: Get<u8>,
     {
-        log::trace!("bit {}", rhs.dissasemble(self));
+        trace_dissasembled!("bit {}", rhs.dissasemble(self));
 
         let read = rhs.get(self);
         let value = read & (1 << bit);
@@ -677,7 +691,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        log::trace!("set {}, {}", bit, rhs.dissasemble(self));
+        trace_dissasembled!("set {}, {}", bit, rhs.dissasemble(self));
 
         let read = rhs.get(self);
         let val = read | (1 << bit);
@@ -688,7 +702,7 @@ impl<'a, AR: AudioCallbacks> Cpu<AR> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        log::trace!("res {}, {}", bit, rhs.dissasemble(self));
+        trace_dissasembled!("res {}, {}", bit, rhs.dissasemble(self));
 
         let read = rhs.get(self);
         let val = read & !(1 << bit);

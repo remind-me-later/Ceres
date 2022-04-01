@@ -90,7 +90,6 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
     }
 
     pub fn switch_speed(&mut self) {
-        log::warn!("speed switch");
         self.in_double_speed = !self.in_double_speed;
     }
 
