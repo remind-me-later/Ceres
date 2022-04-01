@@ -18,8 +18,7 @@
                 }
             },
             "args": [
-                "/home/maurizio/Roms/GB/X (Japan).gb",
-                "-mdmg"
+                "/home/maurizio/Roms/GBC/Hamtaro - Ham-Hams Unite! (USA).gbc",
             ],
             "cwd": "${workspaceFolder}"
         },

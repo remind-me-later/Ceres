@@ -1,25 +1,25 @@
 use super::{RAM_BANK_SIZE, ROM_BANK_SIZE};
 
 pub struct Mbc5 {
-    ramg: bool,
-    romb0: u8,
-    romb1: u8,
-    ramb: u8,
+    is_ram_enabled: bool,
+    rom_bank_low: u8,
+    rom_bank_high: u8,
+    ram_bank: u8,
 }
 
 impl Mbc5 {
     pub fn new() -> Self {
         Self {
-            ramg: false,
-            romb0: 1,
-            romb1: 0,
-            ramb: 0,
+            is_ram_enabled: false,
+            rom_bank_low: 1,
+            rom_bank_high: 0,
+            ram_bank: 0,
         }
     }
 
     fn rom_offsets(&self) -> (usize, usize) {
-        let lower_bits = self.romb0 as usize;
-        let upper_bits = (self.romb1 as usize) << 8;
+        let lower_bits = self.rom_bank_low as usize;
+        let upper_bits = (self.rom_bank_high as usize) << 8;
         let rom_bank = upper_bits | lower_bits;
         (0x0000, ROM_BANK_SIZE * rom_bank)
     }
@@ -32,25 +32,25 @@ impl Mbc5 {
         ram_offset: &mut usize,
     ) {
         match addr {
-            0x0000..=0x1fff => self.ramg = value == 0xa,
+            0x0000..=0x1fff => self.is_ram_enabled = (value & 0xf) == 0xa,
             0x2000..=0x2fff => {
-                self.romb0 = value;
+                self.rom_bank_low = value;
                 *rom_offsets = self.rom_offsets();
             }
             0x3000..=0x3fff => {
-                self.romb1 = value & 1;
+                self.rom_bank_high = value & 1;
                 *rom_offsets = self.rom_offsets();
             }
             0x4000..=0x5fff => {
-                self.ramb = value & 0b1111;
-                *ram_offset = RAM_BANK_SIZE * self.ramb as usize;
+                self.ram_bank = value & 0xf;
+                *ram_offset = RAM_BANK_SIZE * self.ram_bank as usize;
             }
 
             _ => (),
         }
     }
 
-    pub fn ramg(&self) -> bool {
-        self.ramg
+    pub fn is_ram_enabled(&self) -> bool {
+        self.is_ram_enabled
     }
 }

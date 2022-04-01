@@ -49,12 +49,11 @@ impl Cartridge {
     pub fn new(rom: Box<[u8]>, ram: Option<Box<[u8]>>) -> Result<Cartridge, Error> {
         let header_info = HeaderInfo::new(&rom)?;
         let mbc30 = header_info.ram_size().total_size_in_bytes() > 65536;
-        let number_of_banks = header_info.rom_size().mbc1_banks_bit_mask() as u8;
 
         let (mbc, with_battery) = match rom[0x147] {
             0x00 => (Mbc::None, false),
-            0x01 | 0x02 => (Mbc::One(Mbc1::new(number_of_banks)), false),
-            0x03 => (Mbc::One(Mbc1::new(number_of_banks)), true),
+            0x01 | 0x02 => (Mbc::One(Mbc1::new()), false),
+            0x03 => (Mbc::One(Mbc1::new()), true),
             0x05 => (Mbc::Two(Mbc2::new()), false),
             0x06 => (Mbc::Two(Mbc2::new()), true),
             0x0f | 0x10 | 0x13 => (Mbc::Three(Mbc3::new(mbc30)), true),
@@ -124,7 +123,7 @@ impl Cartridge {
         match self.mbc {
             Mbc::None => 0xff,
             Mbc::One(ref mbc1) => self.mbc_read_ram(mbc1.ramg(), address),
-            Mbc::Two(ref mbc2) => (self.mbc_read_ram(mbc2.ramg(), address) & 0xf) | 0xf0,
+            Mbc::Two(ref mbc2) => (self.mbc_read_ram(mbc2.is_ram_enabled(), address) & 0xf) | 0xf0,
             Mbc::Three(ref mbc3) => {
                 let map_select = mbc3.map_select();
                 let map_en = mbc3.map_en();
@@ -136,7 +135,7 @@ impl Cartridge {
                     _ => 0xff,
                 }
             }
-            Mbc::Five(ref mbc5) => self.mbc_read_ram(mbc5.ramg(), address),
+            Mbc::Five(ref mbc5) => self.mbc_read_ram(mbc5.is_ram_enabled(), address),
         }
     }
 
@@ -171,7 +170,7 @@ impl Cartridge {
                 self.mbc_write_ram(is_ram_enabled, address, value)
             }
             Mbc::Two(ref mbc2) => {
-                let is_ram_enabled = mbc2.ramg();
+                let is_ram_enabled = mbc2.is_ram_enabled();
                 self.mbc_write_ram(is_ram_enabled, address, value)
             }
             Mbc::Three(ref mbc3) => {
@@ -186,7 +185,7 @@ impl Cartridge {
                 }
             }
             Mbc::Five(ref mbc5) => {
-                let is_ram_enabled = mbc5.ramg();
+                let is_ram_enabled = mbc5.is_ram_enabled();
                 self.mbc_write_ram(is_ram_enabled, address, value)
             }
         }

@@ -354,7 +354,14 @@ impl Ppu {
                         self.monochrome_palette_colors
                             .get_color(bgp.color_index(monochrome_index))
                     }
-                    FunctionMode::Compatibility | FunctionMode::Color => self
+                    FunctionMode::Compatibility => {
+                        let monochrome_index = MonochromeColorIndex::from(color_number);
+                        self.registers.cgb_bg_palette().get_color(
+                            background_attributes.bits() & 0x7,
+                            bgp.color_index(monochrome_index).into(),
+                        )
+                    }
+                    FunctionMode::Color => self
                         .registers
                         .cgb_bg_palette()
                         .get_color(background_attributes.bits() & 0x7, color_number),
@@ -439,7 +446,14 @@ impl Ppu {
                         self.monochrome_palette_colors
                             .get_color(bgp.color_index(monochrome_index))
                     }
-                    FunctionMode::Compatibility | FunctionMode::Color => self
+                    FunctionMode::Compatibility => {
+                        let monochrome_index = MonochromeColorIndex::from(color_number);
+                        self.registers.cgb_bg_palette().get_color(
+                            background_attributes.bits() & 0x7,
+                            bgp.color_index(monochrome_index).into(),
+                        )
+                    }
+                    FunctionMode::Color => self
                         .registers
                         .cgb_bg_palette()
                         .get_color(background_attributes.bits() & 0x7, color_number),
@@ -478,23 +492,23 @@ impl Ppu {
                 .collect();
 
             match function_mode {
-                FunctionMode::Monochrome | FunctionMode::Compatibility => {
+                FunctionMode::Color | FunctionMode::Compatibility
+                    if self.registers.prioritize_by_oam() =>
+                {
+                    sprites_to_draw.sort_unstable_by(|(a_index, a), (b_index, b)| {
+                        match a_index.cmp(b_index) {
+                            Ordering::Equal => a.x().cmp(&b.x()),
+                            other => other.reverse(),
+                        }
+                    });
+                }
+                _ => {
                     sprites_to_draw.sort_unstable_by(|(a_index, a), (b_index, b)| {
                         match a.x().cmp(&b.x()) {
                             Ordering::Equal => a_index.cmp(b_index).reverse(),
                             other => other.reverse(),
                         }
                     });
-                }
-                FunctionMode::Color => {
-                    if self.registers.prioritize_by_oam() {
-                        sprites_to_draw.sort_unstable_by(
-                            |(a_index, a), (b_index, b)| match a_index.cmp(b_index) {
-                                Ordering::Equal => a.x().cmp(&b.x()),
-                                other => other.reverse(),
-                            },
-                        );
-                    }
                 }
             };
 
@@ -567,12 +581,15 @@ impl Ppu {
                                 .get_color(palette.color_index(monochrome_index))
                         }
                         FunctionMode::Compatibility => {
-                            let palette =
-                                sprite.flags().contains(SpriteFlags::NON_CGB_PALETTE) as u8;
-
+                            let palette = if sprite.flags().contains(SpriteFlags::NON_CGB_PALETTE) {
+                                self.registers.obp1()
+                            } else {
+                                self.registers.obp0()
+                            };
+                            let monochrome_index = MonochromeColorIndex::from(color_number);
                             self.registers
                                 .cgb_sprite_palette()
-                                .get_color(palette, color_number)
+                                .get_color(0, palette.color_index(monochrome_index).into())
                         }
                         FunctionMode::Color => {
                             let cgb_palette = sprite.cgb_palette();

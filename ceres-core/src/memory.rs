@@ -90,6 +90,7 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
     }
 
     pub fn switch_speed(&mut self) {
+        log::warn!("speed switch");
         self.in_double_speed = !self.in_double_speed;
     }
 
@@ -146,7 +147,7 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
     }
 
     pub fn tick_ppu(&mut self) {
-        let microseconds_elapsed_times_16 = self.t_cycles_to_microseconds_elapsed_times_8() * 2;
+        let microseconds_elapsed_times_16 = self.t_cycles_to_microseconds_elapsed_times_16();
         self.ppu.tick(
             &mut self.interrupt_controller,
             self.function_mode,
@@ -154,21 +155,21 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
         );
     }
 
-    fn t_cycles_to_microseconds_elapsed_times_8(&self) -> u8 {
+    fn t_cycles_to_microseconds_elapsed_times_16(&self) -> u8 {
         if self.in_double_speed {
-            1
-        } else {
             2
+        } else {
+            4
         }
     }
 
     pub fn tick_apu(&mut self) {
-        let microseconds_elapsed_times_16 = self.t_cycles_to_microseconds_elapsed_times_8() * 2;
+        let microseconds_elapsed_times_16 = self.t_cycles_to_microseconds_elapsed_times_16();
         self.apu.tick(microseconds_elapsed_times_16);
     }
 
     fn emulate_hdma(&mut self) {
-        let microseconds_elapsed_times_16 = self.t_cycles_to_microseconds_elapsed_times_8() * 2;
+        let microseconds_elapsed_times_16 = self.t_cycles_to_microseconds_elapsed_times_16();
 
         if let Some(hdma_transfer) = self
             .dma_controller
