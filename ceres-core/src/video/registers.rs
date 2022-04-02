@@ -22,43 +22,30 @@ pub struct Registers {
     cgb_sprite_palette: ColorPalette, // cgb only
 }
 
-impl Registers {
-    pub fn new(boot_rom: bool) -> Self {
-        if boot_rom {
-            Self {
-                lcdc: Lcdc::empty(),
-                stat: Stat::from_bits_truncate(0x2), // Access OAM
-                scy: 0,
-                scx: 0,
-                ly: 0,
-                lyc: 0,
-                wy: 0,
-                wx: 0,
-                bgp: MonochromePalette::new(0),
-                obp0: MonochromePalette::new(0),
-                obp1: MonochromePalette::new(0),
-                cgb_bg_palette: ColorPalette::new(),
-                cgb_sprite_palette: ColorPalette::new(),
-                opri: 0,
-            }
-        } else {
-            Self {
-                lcdc: Lcdc::from_bits_truncate(0x91),
-                stat: Stat::from_bits_truncate(0x2), // Access OAM
-                scy: 0,
-                scx: 0,
-                ly: 0,
-                lyc: 0,
-                wy: 0,
-                wx: 0,
-                bgp: MonochromePalette::new(0xfc),
-                obp0: MonochromePalette::new(0xff),
-                obp1: MonochromePalette::new(0xff),
-                cgb_bg_palette: ColorPalette::new(),
-                cgb_sprite_palette: ColorPalette::new(),
-                opri: 0,
-            }
+impl Default for Registers {
+    fn default() -> Self {
+        Self {
+            lcdc: Lcdc::empty(),
+            stat: Stat::from_bits_truncate(0x2), // Access OAM
+            scy: 0,
+            scx: 0,
+            ly: 0,
+            lyc: 0,
+            wy: 0,
+            wx: 0,
+            bgp: MonochromePalette::new(0),
+            obp0: MonochromePalette::new(0),
+            obp1: MonochromePalette::new(0),
+            cgb_bg_palette: ColorPalette::new(),
+            cgb_sprite_palette: ColorPalette::new(),
+            opri: 0,
         }
+    }
+}
+
+impl Registers {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub const fn cgb_bg_palette(&self) -> &ColorPalette {

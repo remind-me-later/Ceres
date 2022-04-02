@@ -20,9 +20,9 @@ pub struct CeresGlfw {
 
 impl CeresGlfw {
     pub fn new(
-        model: Option<ceres_core::Model>,
+        model: ceres_core::Model,
         cartridge: ceres_core::Cartridge,
-        boot_rom: Option<ceres_core::BootRom>,
+        boot_rom: ceres_core::BootRom,
     ) -> Result<Self, Error> {
         let event_loop = EventLoop::new();
         let window_builder = WindowBuilder::new()

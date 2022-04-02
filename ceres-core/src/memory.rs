@@ -38,7 +38,7 @@ pub struct Memory<AR: AudioCallbacks> {
     apu: Apu<AR>,
     serial: Serial,
     dma_controller: DmaController,
-    boot_rom: Option<BootRom>,
+    boot_rom: BootRom,
     model: Model,
     speed_switch_register: speed_switch::Register,
     in_double_speed: bool,
@@ -50,7 +50,7 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
         model: Model,
         cartridge: Cartridge,
         monochrome_palette_colors: MonochromePaletteColors,
-        boot_rom: Option<BootRom>,
+        boot_rom: BootRom,
         audio_renderer: AR,
     ) -> Self {
         let function_mode = match model {
@@ -64,7 +64,7 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
             cartridge,
             high_ram: HighRam::new(),
             work_ram: WorkRam::new(),
-            ppu: Ppu::new(boot_rom.is_some(), monochrome_palette_colors),
+            ppu: Ppu::new(monochrome_palette_colors),
             joypad: Joypad::new(),
             apu: Apu::new(audio_renderer),
             serial: Serial::new(),

@@ -93,9 +93,9 @@ pub struct Ppu {
 }
 
 impl Ppu {
-    pub fn new(boot_rom: bool, monochrome_palette_colors: MonochromePaletteColors) -> Self {
+    pub fn new(monochrome_palette_colors: MonochromePaletteColors) -> Self {
         Self {
-            registers: Registers::new(boot_rom),
+            registers: Registers::new(),
             monochrome_palette_colors,
             vram: VramBank::new(),
             oam: ObjectAttributeMemory::new(),

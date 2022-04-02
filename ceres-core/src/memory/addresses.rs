@@ -11,7 +11,6 @@ use crate::{
             NR41, NR42, NR43, NR44, NR50, NR51, NR52,
         },
     },
-    cartridge::CgbFlag,
     interrupts::{
         ICRegister::{Ie, If},
         InterruptController,
@@ -66,17 +65,19 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
     pub fn read(&mut self, address: u16) -> u8 {
         match address {
             0x00..=0xff => self.generic_mem_cycle(|mem| {
-                mem.boot_rom
-                    .as_ref()
-                    .filter(|b| b.is_active())
-                    .map_or_else(|| mem.cartridge.read_rom(address), |b| b.read(address))
+                if mem.boot_rom.is_active() {
+                    mem.boot_rom.read(address)
+                } else {
+                    mem.cartridge.read_rom(address)
+                }
             }),
             0x0100..=0x1ff => self.generic_mem_cycle(|mem| mem.cartridge.read_rom(address)),
             0x200..=0x8ff => self.generic_mem_cycle(|mem| {
-                mem.boot_rom
-                    .as_ref()
-                    .filter(|b| b.is_active())
-                    .map_or_else(|| mem.cartridge.read_rom(address), |b| b.read(address))
+                if mem.boot_rom.is_active() {
+                    mem.boot_rom.read(address)
+                } else {
+                    mem.cartridge.read_rom(address)
+                }
             }),
             0x0900..=0x7fff => self.generic_mem_cycle(|mem| mem.cartridge.read_rom(address)),
             0x8000..=0x9fff => self.generic_mem_cycle(|mem| mem.ppu.read(Vram { address })),
@@ -193,10 +194,9 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
     pub fn write(&mut self, address: u16, val: u8) {
         match address {
             0x00..=0x8ff => self.generic_mem_cycle(|mem| {
-                mem.boot_rom
-                    .as_ref()
-                    .filter(|b| b.is_active())
-                    .map_or_else(|| mem.cartridge.write_rom(address, val), |_| ())
+                if !mem.boot_rom.is_active() {
+                    mem.cartridge.write_rom(address, val)
+                }
             }),
             0x0900..=0x7fff => self.generic_mem_cycle(|mem| mem.cartridge.write_rom(address, val)),
             0x8000..=0x9fff => self.generic_mem_cycle(|mem| mem.ppu.write(Vram { address }, val)),
@@ -263,6 +263,9 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
             0x49 => self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Obp1), val)),
             0x4a => self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Wy), val)),
             0x4b => self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Wx), val)),
+            0x4c if self.model == Model::Cgb && self.boot_rom.is_active() && val == 0x4 => {
+                self.function_mode = FunctionMode::Compatibility;
+            }
             0x4d if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.speed_switch_register.write(val))
             }
@@ -272,24 +275,7 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
             0x50 => {
                 self.tick_t_cycle();
                 if val & 0b1 != 0 {
-                    self.boot_rom.as_mut().map_or((), |b| {
-                        if b.is_active() {
-                            match self.model {
-                                Model::Cgb => {
-                                    self.function_mode =
-                                        match self.cartridge.header_info().cgb_flag() {
-                                            CgbFlag::NonCgb => FunctionMode::Compatibility,
-                                            CgbFlag::CgbOnly | CgbFlag::CgbFunctions => {
-                                                FunctionMode::Color
-                                            }
-                                        }
-                                }
-                                _ => (),
-                            };
-
-                            b.deactivate();
-                        }
-                    })
+                    self.boot_rom.deactivate();
                 }
             }
             0x51 if self.model == Model::Cgb => {

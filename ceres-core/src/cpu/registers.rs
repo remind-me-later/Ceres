@@ -1,6 +1,5 @@
 extern crate alloc;
 
-use crate::Model;
 use alloc::{format, string::String};
 use bitflags::bitflags;
 
@@ -82,48 +81,26 @@ pub struct Registers {
     pub l: u8,
 }
 
-impl Registers {
-    pub const fn new(model: Model, boot_rom: bool) -> Self {
-        let pc = if boot_rom { 0x0000 } else { 0x0100 };
-
-        match model {
-            Model::Dmg => Self {
-                pc,
-                sp: 0xfffe,
-                a: 0x01,
-                f: Flags::empty(),
-                b: 0xff,
-                c: 0x13,
-                d: 0x00,
-                e: 0xc1,
-                h: 0x84,
-                l: 0x03,
-            },
-            Model::Mgb => Self {
-                pc,
-                sp: 0xfffe,
-                a: 0xff,
-                f: Flags::from_bits_truncate(0xb0),
-                b: 0x00,
-                c: 0x13,
-                d: 0x00,
-                e: 0xd8,
-                h: 0x01,
-                l: 0x4d,
-            },
-            Model::Cgb => Self {
-                pc,
-                sp: 0xfffe,
-                a: 0x11,
-                f: Flags::from_bits_truncate(0x80),
-                b: 0x00,
-                c: 0x00,
-                d: 0x00,
-                e: 0x08,
-                h: 0x00,
-                l: 0x7c,
-            },
+impl Default for Registers {
+    fn default() -> Self {
+        Self {
+            pc: 0,
+            sp: 0,
+            a: 0,
+            f: Flags::empty(),
+            b: 0,
+            c: 0,
+            d: 0,
+            e: 0,
+            h: 0,
+            l: 0,
         }
+    }
+}
+
+impl Registers {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub const fn read8(&self, register: Register8) -> u8 {

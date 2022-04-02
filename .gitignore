@@ -21,3 +21,7 @@ cargo-timing*
 # Log files
 log/
 **/*.log
+
+# Temporary and binary files
+**/*.tmp*
+**/*.bin

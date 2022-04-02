@@ -5,7 +5,7 @@ mod operands;
 mod registers;
 mod stack;
 
-use crate::{memory::Memory, AudioCallbacks, Cartridge, Model};
+use crate::{memory::Memory, AudioCallbacks, Cartridge};
 use registers::{Register16::PC, Registers};
 
 pub struct Cpu<AR: AudioCallbacks> {
@@ -18,9 +18,9 @@ pub struct Cpu<AR: AudioCallbacks> {
 }
 
 impl<AR: AudioCallbacks> Cpu<AR> {
-    pub fn new(model: Model, boot_rom: bool, memory: Memory<AR>) -> Self {
+    pub fn new(memory: Memory<AR>) -> Self {
         Self {
-            registers: Registers::new(model, boot_rom),
+            registers: Registers::new(),
             ei_delay: false,
             ime: false,
             halted: false,

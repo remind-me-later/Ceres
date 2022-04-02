@@ -47,15 +47,12 @@ pub struct Gameboy<AR: AudioCallbacks> {
 
 impl<AR: AudioCallbacks> Gameboy<AR> {
     pub fn new(
-        model: Option<Model>,
+        model: Model,
         cartridge: Cartridge,
-        boot_rom: Option<BootRom>,
+        boot_rom: BootRom,
         audio_renderer: AR,
         monochrome_palette_colors: MonochromePaletteColors,
     ) -> Self {
-        let model = model.unwrap_or(Model::Cgb);
-
-        let some_boot_rom = boot_rom.is_some();
         let memory = Memory::new(
             model,
             cartridge,
@@ -64,7 +61,7 @@ impl<AR: AudioCallbacks> Gameboy<AR> {
             audio_renderer,
         );
 
-        let cpu = Cpu::new(model, some_boot_rom, memory);
+        let cpu = Cpu::new(memory);
 
         Self { cpu }
     }

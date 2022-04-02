@@ -86,24 +86,30 @@ fn main() {
         exit(0);
     }
 
-    let model = matches.value_of("model").map(|s| match s {
-        "dmg" => Model::Dmg,
-        "mgb" => Model::Mgb,
-        "cgb" => Model::Cgb,
-        _ => unreachable!("invalid model"),
+    let model = if let Some(model_str) = matches.value_of("model") {
+        match model_str {
+            "dmg" => Model::Dmg,
+            "mgb" => Model::Mgb,
+            "cgb" => Model::Cgb,
+            _ => unreachable!("invalid model"),
+        }
+    } else {
+        Model::Cgb
+    };
+
+    let boot_rom_str = matches.value_of("boot").unwrap_or_else(|| match model {
+        Model::Dmg => "boot_roms/build/bin/dmg_boot.bin",
+        Model::Mgb => "boot_roms/build/bin/mgb_boot.bin",
+        Model::Cgb => "boot_roms/build/bin/cgb_boot_fast.bin",
     });
 
-    let boot_rom = if let Some(boot_rom_str) = matches.value_of("boot") {
+    let boot_rom = {
         let boot_rom_path = Path::new(&boot_rom_str);
         let boot_rom_buf = read_file(boot_rom_path)
             .unwrap_or_else(|e| error::print(e))
             .into_boxed_slice();
 
-        let boot_rom = BootRom::new(boot_rom_buf);
-
-        Some(boot_rom)
-    } else {
-        None
+        BootRom::new(boot_rom_buf)
     };
 
     let ceres_glfw =
