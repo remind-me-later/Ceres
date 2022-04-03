@@ -96,12 +96,12 @@ impl CeresGlfw {
                         if let Some(key) = input.virtual_keycode {
                             match input.state {
                                 ElementState::Pressed => match key {
-                                    VirtualKeyCode::Up => self.gameboy.press(Button::Up),
-                                    VirtualKeyCode::Left => self.gameboy.press(Button::Left),
-                                    VirtualKeyCode::Down => self.gameboy.press(Button::Down),
-                                    VirtualKeyCode::Right => self.gameboy.press(Button::Right),
-                                    VirtualKeyCode::Z => self.gameboy.press(Button::B),
-                                    VirtualKeyCode::X => self.gameboy.press(Button::A),
+                                    VirtualKeyCode::W => self.gameboy.press(Button::Up),
+                                    VirtualKeyCode::A => self.gameboy.press(Button::Left),
+                                    VirtualKeyCode::S => self.gameboy.press(Button::Down),
+                                    VirtualKeyCode::D => self.gameboy.press(Button::Right),
+                                    VirtualKeyCode::K => self.gameboy.press(Button::B),
+                                    VirtualKeyCode::L => self.gameboy.press(Button::A),
                                     VirtualKeyCode::Return => self.gameboy.press(Button::Start),
                                     VirtualKeyCode::Back => self.gameboy.press(Button::Select),
                                     VirtualKeyCode::Space => {
@@ -116,12 +116,12 @@ impl CeresGlfw {
                                     _ => (),
                                 },
                                 ElementState::Released => match key {
-                                    VirtualKeyCode::Up => self.gameboy.release(Button::Up),
-                                    VirtualKeyCode::Left => self.gameboy.release(Button::Left),
-                                    VirtualKeyCode::Down => self.gameboy.release(Button::Down),
-                                    VirtualKeyCode::Right => self.gameboy.release(Button::Right),
-                                    VirtualKeyCode::Z => self.gameboy.release(Button::B),
-                                    VirtualKeyCode::X => self.gameboy.release(Button::A),
+                                    VirtualKeyCode::W => self.gameboy.release(Button::Up),
+                                    VirtualKeyCode::A => self.gameboy.release(Button::Left),
+                                    VirtualKeyCode::S => self.gameboy.release(Button::Down),
+                                    VirtualKeyCode::D => self.gameboy.release(Button::Right),
+                                    VirtualKeyCode::K => self.gameboy.release(Button::B),
+                                    VirtualKeyCode::L => self.gameboy.release(Button::A),
                                     VirtualKeyCode::Return => self.gameboy.release(Button::Start),
                                     VirtualKeyCode::Back => self.gameboy.release(Button::Select),
                                     _ => (),

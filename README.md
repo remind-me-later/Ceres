@@ -8,13 +8,13 @@ Simply run `cargo build`.
 
 ## Keys
 
-| Gameboy | Emulator   |
-| ------- | ---------- |
-| Dpad    | Arrow keys |
-| A       | X          |
-| B       | Z          |
-| Start   | Return     |
-| Select  | Backspace  |
+| Gameboy | Emulator  |
+| ------- | --------- |
+| Dpad    | WASD      |
+| A       | K         |
+| B       | L         |
+| Start   | Return    |
+| Select  | Backspace |
 
 ## Documentation used
 
