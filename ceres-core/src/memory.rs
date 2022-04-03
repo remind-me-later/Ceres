@@ -12,8 +12,8 @@ use crate::{
     joypad::Joypad,
     serial::Serial,
     video::{
-        MonochromePaletteColors, PixelData, Ppu,
-        PpuIO::{Oam, Vram},
+        ppu::{Ppu, PpuIO::Vram},
+        MonochromePaletteColors, PixelData,
     },
     AudioCallbacks, Button, Model,
 };
@@ -186,16 +186,13 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
                     _ => panic!("Illegal source address for HDMA transfer"),
                 };
 
-                self.ppu.write(
-                    Vram {
-                        address: hdma_transfer.destination_address,
-                    },
-                    val,
-                );
+                self.ppu
+                    .vram_dma_write(hdma_transfer.destination_address, val);
             }
         }
     }
 
+    // FIXME: sprites are not displayed during OAM DMA
     fn emulate_oam_dma(&mut self) {
         if let Some(dma_source_address) = self.dma_controller.emulate_oam_dma(&self.ppu) {
             let val = match dma_source_address >> 8 {
@@ -209,12 +206,7 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
                 _ => panic!("Illegal source address for OAM DMA transfer"),
             };
 
-            self.ppu.write(
-                Oam {
-                    address: 0xfe00 | dma_source_address,
-                },
-                val,
-            );
+            self.ppu.oam_dma_write(dma_source_address as u8, val);
         }
     }
 }

@@ -4,7 +4,7 @@ mod oam_dma;
 pub use self::hdma::HDMATransfer;
 use self::hdma::Hdma;
 use self::oam_dma::OamDma;
-use crate::video::Ppu;
+use crate::video::ppu::Ppu;
 
 #[derive(Clone, Copy)]
 pub enum DmaRegister {

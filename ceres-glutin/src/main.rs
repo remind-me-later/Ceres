@@ -19,7 +19,7 @@ pub const CERES_STR: &str = "ceres";
 fn main() {
     CombinedLogger::init(vec![
         TermLogger::new(
-            LevelFilter::Warn,
+            LevelFilter::Info,
             Config::default(),
             TerminalMode::Mixed,
             ColorChoice::Auto,
@@ -98,15 +98,15 @@ fn main() {
     };
 
     let boot_rom_str = matches.value_of("boot").unwrap_or_else(|| match model {
-        Model::Dmg => "boot_roms/build/bin/dmg_boot.bin",
-        Model::Mgb => "boot_roms/build/bin/mgb_boot.bin",
-        Model::Cgb => "boot_roms/build/bin/cgb_boot_fast.bin",
+        Model::Dmg => "BootROMs/build/bin/dmg_boot.bin",
+        Model::Mgb => "BootROMs/build/bin/mgb_boot.bin",
+        Model::Cgb => "BootROMs/build/bin/cgb_boot_fast.bin",
     });
 
     let boot_rom = {
         let boot_rom_path = Path::new(&boot_rom_str);
         let boot_rom_buf = read_file(boot_rom_path)
-            .unwrap_or_else(|e| error::print(e))
+            .unwrap_or_else(|e| error::print(format!("could not load boot ROM {}", e)))
             .into_boxed_slice();
 
         BootRom::new(boot_rom_buf)

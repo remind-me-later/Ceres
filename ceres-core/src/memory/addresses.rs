@@ -20,7 +20,7 @@ use crate::{
         Register::{Div, Tac, Tima, Tma},
         Timer,
     },
-    video::{
+    video::ppu::{
         PpuIO::{Oam, PpuRegister, Vram, VramBank},
         PpuRegister::{
             Bcpd, Bcps, Bgp, Lcdc, Ly, Lyc, Obp0, Obp1, Ocpd, Ocps, Opri, Scx, Scy, Stat, Wx, Wy,

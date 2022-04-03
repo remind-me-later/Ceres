@@ -11,8 +11,8 @@ impl Mbc5 {
     pub fn new() -> Self {
         Self {
             is_ram_enabled: false,
-            rom_bank_low: 1,
-            rom_bank_high: 0,
+            rom_bank_low: 0,
+            rom_bank_high: 1,
             ram_bank: 0,
         }
     }
@@ -45,7 +45,6 @@ impl Mbc5 {
                 self.ram_bank = value & 0xf;
                 *ram_offset = RAM_BANK_SIZE * self.ram_bank as usize;
             }
-
             _ => (),
         }
     }

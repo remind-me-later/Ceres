@@ -1,4 +1,4 @@
-use crate::video::{Ppu, PpuMode};
+use crate::video::ppu::{Mode, Ppu};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum HdmaMode {
@@ -123,10 +123,10 @@ impl Hdma {
             }
             // else
             match self.state {
-                HdmaState::FinishedLine if ppu.mode() != PpuMode::HBlank => {
+                HdmaState::FinishedLine if ppu.mode() != Mode::HBlank => {
                     self.state = HdmaState::AwaitingHBlank;
                 }
-                HdmaState::AwaitingHBlank if ppu.mode() == PpuMode::HBlank => {
+                HdmaState::AwaitingHBlank if ppu.mode() == Mode::HBlank => {
                     self.state = HdmaState::Copying;
                     self.bytes_to_copy = 0x10;
                 }

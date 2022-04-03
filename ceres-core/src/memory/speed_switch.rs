@@ -23,6 +23,6 @@ impl Register {
     }
 
     pub fn write(&mut self, val: u8) {
-        *self = Self::from_bits_truncate(val);
+        *self = Self::from_bits_truncate(val & 1);
     }
 }

@@ -1,8 +1,8 @@
 use crate::memory::FunctionMode;
 
-use super::palette::{ColorPalette, MonochromePalette};
-use super::PpuMode;
-use super::PpuRegister;
+use super::register::PpuRegister;
+use super::Mode;
+use crate::video::palette::{ColorPalette, MonochromePalette};
 use bitflags::bitflags;
 
 pub struct Registers {
@@ -26,7 +26,7 @@ impl Default for Registers {
     fn default() -> Self {
         Self {
             lcdc: Lcdc::empty(),
-            stat: Stat::from_bits_truncate(0x2), // Access OAM
+            stat: Stat::empty(),
             scy: 0,
             scx: 0,
             ly: 0,
@@ -145,16 +145,16 @@ impl Registers {
                 let new_lcdc = Lcdc::from_bits_truncate(val);
 
                 if !new_lcdc.contains(Lcdc::LCD_ENABLE) && self.lcdc.contains(Lcdc::LCD_ENABLE) {
-                    if self.stat.mode() != PpuMode::VBlank {
+                    if self.stat.mode() != Mode::VBlank {
                         log::error!("LCD off, but not in VBlank");
                     }
                     self.ly = 0;
                 }
 
                 if new_lcdc.contains(Lcdc::LCD_ENABLE) && !self.lcdc.contains(Lcdc::LCD_ENABLE) {
-                    self.stat.set_mode(PpuMode::HBlank);
+                    self.stat.set_mode(Mode::HBlank);
                     self.stat.insert(Stat::LY_EQUALS_LYC);
-                    *cycles = PpuMode::AccessOam.cycles(self.scx);
+                    *cycles = Mode::OamScan.cycles(self.scx);
                 }
 
                 self.lcdc = new_lcdc;
@@ -278,13 +278,13 @@ bitflags!(
 );
 
 impl Stat {
-    pub fn set_mode(&mut self, mode: PpuMode) {
+    pub fn set_mode(&mut self, mode: Mode) {
         let bits: u8 = self.bits() & !3;
         let mode: u8 = mode.into();
         *self = Self::from_bits_truncate(bits | mode);
     }
 
-    pub fn mode(self) -> PpuMode {
+    pub fn mode(self) -> Mode {
         self.bits().into()
     }
 }

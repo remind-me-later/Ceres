@@ -3,7 +3,6 @@ use super::SCREEN_PIXELS;
 
 const PIXEL_SIZE_IN_BYTES: usize = 4;
 
-// rgba
 #[derive(Clone)]
 pub struct PixelData {
     data: [u8; SCREEN_PIXELS as usize * PIXEL_SIZE_IN_BYTES],
