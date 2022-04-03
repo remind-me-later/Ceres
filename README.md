@@ -1,10 +1,22 @@
 # Ceres
 
-GameBoy/GameBoy color emulator written in rust. Can play the Pokemon games and Link's Awakening DX nicely. Your mileage may vary in any other title. If you find a game that doesn't work let me know.
+GameBoy/Color emulator written in rust with a CLI frontend.
+
+## Compatibility
+
+Passes all of [blargg's test ROMs](https://gbdev.gg8.se/wiki/articles/Test_ROMs#Blargg.27s_tests) and many of [mooneye-gb](https://github.com/Gekkio/mooneye-gb) tests, so compatibility with original GameBoy games should be pretty high.
+
+Some GameBoy Color games work (all of the Pokemon games, Link's Awakening DX and Toy Story Racer for example) but there are some that show very broken graphics (Mario Tennis, Hamtaro).
 
 ## Build
 
-Simply run `cargo build`.
+To build the [SameBoy](https://github.com/LIJI32/SameBoy) bootroms is necessary a C compiler as well as the [RGBDS](https://rgbds.gbdev.io/) toolchain. By default the compiler searchs for the compiled boot roms in the `BootROMs/build/bin` directory, to build them run `make` in the `BootROMs` directory. You can also provide your own binary boot roms by passing the `-b` flag to the program.
+
+To build the emulator `cargo build` should suffice.
+
+## Platforms
+
+The project is developed in Linux but all graphics and sound libraries are cross compatible with all major operating systems so it should be easy to build for them, although it's not tested.
 
 ## Keys
 
