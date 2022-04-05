@@ -26,7 +26,7 @@ impl OamDma {
             self.is_restarting = true;
         }
 
-        self.t_cycles = 8; // two m-cycles delay
+        self.t_cycles = -8; // two m-cycles delay
         self.source = value;
         self.address = u16::from(value) << 8;
         self.is_active = true;

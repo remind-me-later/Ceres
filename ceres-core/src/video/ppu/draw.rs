@@ -43,10 +43,8 @@ impl Ppu {
                 let tile_number = self.vram.tile_number(tile_num_address);
 
                 let background_attributes = match function_mode {
-                    FunctionMode::Monochrome => BgAttributes::empty(),
-                    FunctionMode::Color | FunctionMode::Compatibility => {
-                        self.vram.background_attributes(tile_num_address)
-                    }
+                    FunctionMode::Monochrome | FunctionMode::Compatibility => BgAttributes::empty(),
+                    FunctionMode::Color => self.vram.background_attributes(tile_num_address),
                 };
 
                 let tile_data_address = if background_attributes.contains(BgAttributes::Y_FLIP) {
@@ -127,10 +125,8 @@ impl Ppu {
                 let tile_number = self.vram.tile_number(tile_num_address);
 
                 let background_attributes = match function_mode {
-                    FunctionMode::Monochrome => BgAttributes::empty(),
-                    FunctionMode::Color | FunctionMode::Compatibility => {
-                        self.vram.background_attributes(tile_num_address)
-                    }
+                    FunctionMode::Monochrome | FunctionMode::Compatibility => BgAttributes::empty(),
+                    FunctionMode::Color => self.vram.background_attributes(tile_num_address),
                 };
 
                 let tile_data_address = if background_attributes.contains(BgAttributes::Y_FLIP) {

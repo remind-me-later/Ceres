@@ -1,8 +1,8 @@
-use crate::memory::FunctionMode;
-
-use super::register::PpuRegister;
-use super::Mode;
-use crate::video::palette::{ColorPalette, MonochromePalette};
+use super::{register::PpuRegister, Mode};
+use crate::{
+    memory::FunctionMode,
+    video::palette::{ColorPalette, MonochromePalette},
+};
 use bitflags::bitflags;
 
 pub struct Registers {
@@ -26,7 +26,7 @@ impl Default for Registers {
     fn default() -> Self {
         Self {
             lcdc: Lcdc::empty(),
-            stat: Stat::empty(),
+            stat: Stat::from_bits_truncate(2),
             scy: 0,
             scx: 0,
             ly: 0,

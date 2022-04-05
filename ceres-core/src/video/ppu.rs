@@ -4,12 +4,10 @@ pub mod mode;
 pub mod register;
 mod registers;
 
-pub use self::mode::Mode;
-pub use self::register::PpuRegister;
-
+pub use self::{mode::Mode, register::PpuRegister};
 use super::{
     palette::MonochromePaletteColors, pixel_buffer::PixelData, sprites::ObjectAttributeMemory,
-    vram::Vram, ACCESS_OAM_CYCLES, VBLANK_LINE_CYCLES,
+    vram::Vram,
 };
 use crate::{
     interrupts::{Interrupt, InterruptController},
@@ -59,13 +57,16 @@ pub struct Ppu {
 
 impl Ppu {
     pub fn new(monochrome_palette_colors: MonochromePaletteColors) -> Self {
+        let registers = Registers::new();
+        let cycles = registers.stat().mode().cycles(0);
+
         Self {
-            registers: Registers::new(),
+            registers,
             monochrome_palette_colors,
             vram: Vram::new(),
             oam: ObjectAttributeMemory::new(),
             pixel_data: PixelData::new(),
-            cycles: ACCESS_OAM_CYCLES,
+            cycles,
             frame_used_window: false,
             window_lines_skipped: 0,
             scanline_used_window: false,
@@ -168,7 +169,7 @@ impl Ppu {
                 self.window_lines_skipped = 0;
                 self.frame_used_window = false;
             }
-            Mode::DrawingPixels | Mode::HBlank => {}
+            Mode::DrawingPixels | Mode::HBlank => (),
         }
     }
 
@@ -227,7 +228,8 @@ impl Ppu {
                     self.switch_mode(Mode::OamScan, interrupt_controller);
                     self.is_frame_done = true;
                 } else {
-                    self.cycles += VBLANK_LINE_CYCLES;
+                    let scx = self.registers.scx();
+                    self.cycles += self.registers.stat().mode().cycles(scx);
                 }
                 self.check_compare_interrupt(interrupt_controller);
             }
