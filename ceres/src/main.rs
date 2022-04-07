@@ -72,7 +72,7 @@ fn main() {
                 FileDialog::new()
                     .add_filter("text", &["gb", "gbc"])
                     .pick_file()
-                    .unwrap_or_else(|| std::process::exit(0))
+                    .unwrap()
             },
             |s| Path::new(s).to_path_buf(),
         );
