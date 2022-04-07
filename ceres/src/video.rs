@@ -1,5 +1,3 @@
-#![no_std]
-
 mod error;
 mod shader;
 mod shader_program;
@@ -59,8 +57,8 @@ impl<C: Context> Renderer<C> {
         let program;
 
         unsafe {
-            let vertex_shader = Shader::new(include_bytes!("shader/vs.vert"))?;
-            let fragment_shader = Shader::new(include_bytes!("shader/fs.frag"))?;
+            let vertex_shader = Shader::new(include_bytes!("video/shader/vs.vert"))?;
+            let fragment_shader = Shader::new(include_bytes!("video/shader/fs.frag"))?;
             program = ShaderProgram::new(vertex_shader, fragment_shader)?;
 
             gl::GenVertexArrays(1, &mut vao);

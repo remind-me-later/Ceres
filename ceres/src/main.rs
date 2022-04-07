@@ -1,20 +1,22 @@
 #![warn(clippy::all)]
-mod ceres_glutin;
+mod audio;
+mod emulator;
 mod error;
+mod video;
 
 use ceres_core::{BootRom, Cartridge, Model};
-use ceres_glutin::CeresGlfw;
 use clap::{Arg, Command};
+use emulator::Emulator;
 use error::Error;
+use rfd::FileDialog;
 use simplelog::*;
 use std::{
     fs::{self, File},
     io::{Read, Write},
     path::Path,
-    process::exit,
 };
 
-pub const CERES_STR: &str = "ceres";
+pub const CERES_STR: &str = "Ceres";
 
 fn main() {
     CombinedLogger::init(vec![
@@ -38,8 +40,7 @@ fn main() {
             Arg::new("rom")
                 .value_name("ROM")
                 .help("Cartridge ROM to emulate")
-                .takes_value(true)
-                .required(true),
+                .takes_value(true),
         )
         .arg(
             Arg::new("info")
@@ -65,26 +66,36 @@ fn main() {
         )
         .get_matches();
 
-    let rom_string = matches.value_of("rom").unwrap();
+    let (cartridge, sav_path) = {
+        let rom_path = matches.value_of("rom").map_or_else(
+            || {
+                FileDialog::new()
+                    .add_filter("text", &["gb", "gbc"])
+                    .pick_file()
+                    .unwrap_or_else(|| std::process::exit(0))
+            },
+            |s| Path::new(s).to_path_buf(),
+        );
 
-    let rom_path = Path::new(&rom_string);
-    let rom_buf = read_file(rom_path)
-        .unwrap_or_else(|e| error::print(e))
-        .into_boxed_slice();
+        let rom_buf = read_file(&rom_path)
+            .unwrap_or_else(|e| error::print(e))
+            .into_boxed_slice();
 
-    let sav_path = rom_path.with_extension("sav");
-    let ram = if let Ok(sav_buf) = read_file(&sav_path) {
-        Some(sav_buf.into_boxed_slice())
-    } else {
-        None
+        let sav_path = rom_path.with_extension("sav");
+        let ram = if let Ok(sav_buf) = read_file(&sav_path) {
+            Some(sav_buf.into_boxed_slice())
+        } else {
+            None
+        };
+
+        let cartridge = Cartridge::new(rom_buf, ram).unwrap_or_else(|e| error::print(e));
+
+        // if matches.is_present("info") {
+        //     println!("{}", cartridge.unwrap());
+        //     exit(0);
+        // }
+        (cartridge, sav_path)
     };
-
-    let cartridge = Cartridge::new(rom_buf, ram).unwrap_or_else(|e| error::print(e));
-
-    if matches.is_present("info") {
-        println!("{}", cartridge);
-        exit(0);
-    }
 
     let model = if let Some(model_str) = matches.value_of("model") {
         match model_str {
@@ -112,10 +123,10 @@ fn main() {
         BootRom::new(boot_rom_buf)
     };
 
-    let ceres_glfw =
-        CeresGlfw::new(model, cartridge, boot_rom).unwrap_or_else(|error| error::print(error));
+    let emulator =
+        Emulator::new(model, cartridge, boot_rom).unwrap_or_else(|error| error::print(error));
 
-    ceres_glfw.run(sav_path);
+    emulator.run(sav_path);
 }
 
 fn read_file(path: &Path) -> Result<Vec<u8>, Error> {

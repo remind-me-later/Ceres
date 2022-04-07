@@ -1,9 +1,5 @@
-extern crate alloc;
-
 use super::shader::Shader;
 use super::Error;
-use alloc::borrow::ToOwned;
-use alloc::vec::Vec;
 use core::ptr;
 use gl::types::*;
 

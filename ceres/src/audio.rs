@@ -1,24 +1,21 @@
-mod error;
-
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     SampleFormat,
 };
 use dasp_ring_buffer::Bounded;
-use error::Error;
 use parking_lot::Mutex;
 use std::sync::Arc;
 
 const BUFFER_SIZE: cpal::FrameCount = 512;
 const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
 
-pub struct Renderer {
+pub struct AudioRenderer {
     stream: cpal::Stream,
 }
 
-impl Renderer {
-    pub fn new() -> Result<(Self, Callbacks), Error> {
-        use Error::*;
+impl AudioRenderer {
+    pub fn new() -> Result<(Self, AudioCallbacks), AudioError> {
+        use AudioError::*;
 
         let host = cpal::default_host();
         let device = host.default_output_device().ok_or(OutputDeviceNotFound)?;
@@ -43,7 +40,7 @@ impl Renderer {
         let ring_buffer = Arc::new(Mutex::new(Bounded::from(
             vec![0.0; RING_BUFFER_SIZE].into_boxed_slice(),
         )));
-        let error_callback = |err| panic!("an error occurred on stream: {}", err);
+        let error_callback = |err| panic!("an AudioError occurred on stream: {}", err);
         let ring_buffer_arc = Arc::clone(&ring_buffer);
         let data_callback = move |output: &mut [f32], _: &_| {
             let mut buf = ring_buffer_arc.lock();
@@ -57,13 +54,13 @@ impl Renderer {
             .build_output_stream(&desired_config, data_callback, error_callback)
             .map_err(|_| Initialization)?;
 
-        stream.play().expect("Error playing sound");
+        stream.play().expect("AudioError playing sound");
 
         let sample_rate = desired_config.sample_rate.0;
 
         Ok((
             Self { stream },
-            Callbacks {
+            AudioCallbacks {
                 sample_rate,
                 ring_buffer,
             },
@@ -79,12 +76,12 @@ impl Renderer {
     }
 }
 
-pub struct Callbacks {
+pub struct AudioCallbacks {
     ring_buffer: Arc<Mutex<Bounded<Box<[ceres_core::Sample]>>>>,
     sample_rate: u32,
 }
 
-impl ceres_core::AudioCallbacks for Callbacks {
+impl ceres_core::AudioCallbacks for AudioCallbacks {
     fn sample_rate(&self) -> u32 {
         self.sample_rate
     }
@@ -95,3 +92,25 @@ impl ceres_core::AudioCallbacks for Callbacks {
         buf.push(frame.right());
     }
 }
+
+#[derive(Debug)]
+pub enum AudioError {
+    OutputDeviceNotFound,
+    SupportedStreamConfig,
+    UncapableStreamConfig,
+    Initialization,
+}
+
+impl std::fmt::Display for AudioError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use AudioError::*;
+        match self {
+            OutputDeviceNotFound => write!(f, "couldn't find output device"),
+            SupportedStreamConfig => write!(f, "couldn't get supported stream configurations"),
+            UncapableStreamConfig => write!(f, "couldn't get any configuration able to stream"),
+            Initialization => write!(f, "couldn't initialize audio stream"),
+        }
+    }
+}
+
+impl std::error::Error for AudioError {}

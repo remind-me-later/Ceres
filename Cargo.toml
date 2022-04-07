@@ -1,6 +1,6 @@
 [workspace]
-members = ["ceres-core", "ceres-glutin", "ceres-opengl", "ceres-cpal"]
-default-members = ["ceres-glutin"]
+members = ["ceres-core", "ceres"]
+default-members = ["ceres"]
 
 [profile.dev]
 opt-level = 0

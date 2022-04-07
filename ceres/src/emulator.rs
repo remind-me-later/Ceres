@@ -1,5 +1,7 @@
+use super::audio::{AudioCallbacks, AudioRenderer};
 use super::error::Error;
-use ceres_core::Gameboy;
+use super::video;
+use ceres_core::{BootRom, Cartridge, Gameboy};
 use glutin::{
     dpi::PhysicalSize,
     event::{ElementState, Event, VirtualKeyCode, WindowEvent},
@@ -9,20 +11,20 @@ use glutin::{
 };
 use std::{ffi::c_void, path::PathBuf, time::Instant};
 
-pub struct CeresGlfw {
-    gameboy: Gameboy<ceres_cpal::Callbacks>,
+pub struct Emulator {
+    gameboy: Gameboy<AudioCallbacks>,
     event_loop: EventLoop<()>,
     is_focused: bool,
     is_gui_paused: bool,
-    video_renderer: ceres_opengl::Renderer<GlfwContextWrapper>,
-    audio_renderer: ceres_cpal::Renderer,
+    video_renderer: video::Renderer<ContextWrapper>,
+    audio_renderer: AudioRenderer,
 }
 
-impl CeresGlfw {
+impl Emulator {
     pub fn new(
         model: ceres_core::Model,
-        cartridge: ceres_core::Cartridge,
-        boot_rom: ceres_core::BootRom,
+        cartridge: Cartridge,
+        boot_rom: BootRom,
     ) -> Result<Self, Error> {
         let event_loop = EventLoop::new();
         let window_builder = WindowBuilder::new()
@@ -44,13 +46,13 @@ impl CeresGlfw {
 
         let inner_size = windowed_context.window().inner_size();
 
-        let context_wrapper = GlfwContextWrapper { windowed_context };
+        let context_wrapper = ContextWrapper { windowed_context };
 
         let video_renderer =
-            ceres_opengl::Renderer::new(context_wrapper, inner_size.width, inner_size.height)
+            video::Renderer::new(context_wrapper, inner_size.width, inner_size.height)
                 .map_err(Error::new)?;
 
-        let (audio_renderer, audio_callbacks) = ceres_cpal::Renderer::new().map_err(Error::new)?;
+        let (audio_renderer, audio_callbacks) = AudioRenderer::new().map_err(Error::new)?;
         let gameboy = ceres_core::Gameboy::new(
             model,
             cartridge,
@@ -155,11 +157,11 @@ impl CeresGlfw {
     }
 }
 
-pub struct GlfwContextWrapper {
+pub struct ContextWrapper {
     windowed_context: WindowedContext<PossiblyCurrent>,
 }
 
-impl ceres_opengl::Context for GlfwContextWrapper {
+impl video::Context for ContextWrapper {
     fn get_proc_address(&mut self, procname: &str) -> *const c_void {
         self.windowed_context.get_proc_address(procname)
     }
