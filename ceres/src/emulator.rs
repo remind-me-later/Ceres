@@ -7,16 +7,16 @@ use glutin::{
     event::{ElementState, Event, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
-    ContextBuilder, PossiblyCurrent, WindowedContext,
+    ContextBuilder,
 };
-use std::{ffi::c_void, path::PathBuf, time::Instant};
+use std::{path::PathBuf, time::Instant};
 
 pub struct Emulator {
     gameboy: Gameboy<AudioCallbacks>,
     event_loop: EventLoop<()>,
     is_focused: bool,
     is_gui_paused: bool,
-    video_renderer: video::Renderer<ContextWrapper>,
+    video_renderer: video::Renderer,
     audio_renderer: AudioRenderer,
 }
 
@@ -38,19 +38,13 @@ impl Emulator {
                 height: ceres_core::SCREEN_HEIGHT as i32,
             });
 
-        let windowed_context = ContextBuilder::new()
-            .with_vsync(true)
-            .build_windowed(window_builder, &event_loop)
-            .unwrap();
-        let windowed_context = unsafe { windowed_context.make_current().unwrap() };
+        let context_builder = ContextBuilder::new();
 
-        let inner_size = windowed_context.window().inner_size();
+        let display = glium::Display::new(window_builder, context_builder, &event_loop).unwrap();
 
-        let context_wrapper = ContextWrapper { windowed_context };
+        let inner_size = display.gl_window().window().inner_size();
 
-        let video_renderer =
-            video::Renderer::new(context_wrapper, inner_size.width, inner_size.height)
-                .map_err(Error::new)?;
+        let video_renderer = video::Renderer::new(display, inner_size.width, inner_size.height);
 
         let (audio_renderer, audio_callbacks) = AudioRenderer::new().map_err(Error::new)?;
         let gameboy = ceres_core::Gameboy::new(
@@ -157,22 +151,22 @@ impl Emulator {
     }
 }
 
-pub struct ContextWrapper {
-    windowed_context: WindowedContext<PossiblyCurrent>,
-}
+// pub struct ContextWrapper {
+//     windowed_context: WindowedContext<PossiblyCurrent>,
+// }
 
-impl video::Context for ContextWrapper {
-    fn get_proc_address(&mut self, procname: &str) -> *const c_void {
-        self.windowed_context.get_proc_address(procname)
-    }
+// impl video::Context for ContextWrapper {
+//     fn get_proc_address(&mut self, procname: &str) -> *const c_void {
+//         self.windowed_context.get_proc_address(procname)
+//     }
 
-    fn swap_buffers(&mut self) {
-        self.windowed_context.swap_buffers().unwrap();
-    }
+//     fn swap_buffers(&mut self) {
+//         self.windowed_context.swap_buffers().unwrap();
+//     }
 
-    fn make_current(&mut self) {}
+//     fn make_current(&mut self) {}
 
-    fn resize(&mut self, width: u32, height: u32) {
-        self.windowed_context.resize(PhysicalSize { width, height });
-    }
-}
+//     fn resize(&mut self, width: u32, height: u32) {
+//         self.windowed_context.resize(PhysicalSize { width, height });
+//     }
+// }

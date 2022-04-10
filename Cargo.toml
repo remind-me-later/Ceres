@@ -10,7 +10,7 @@ overflow-checks = true
 lto = "off"
 panic = "unwind"
 incremental = true
-codegen-units = 16
+codegen-units = 2
 
 [profile.test]
 opt-level = 3
@@ -20,7 +20,7 @@ overflow-checks = true
 lto = "thin"
 panic = "unwind"
 incremental = true
-codegen-units = 16
+codegen-units = 2
 
 [profile.release]
 opt-level = "s"
