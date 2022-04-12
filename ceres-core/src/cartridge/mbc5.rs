@@ -21,6 +21,7 @@ impl Mbc5 {
         let lower_bits = self.rom_bank_low as usize;
         let upper_bits = (self.rom_bank_high as usize) << 8;
         let rom_bank = upper_bits | lower_bits;
+        // let rom_bank = if rom_bank == 0 { 1 } else { rom_bank };
         (0x0000, ROM_BANK_SIZE * rom_bank)
     }
 
@@ -32,7 +33,7 @@ impl Mbc5 {
         ram_offset: &mut usize,
     ) {
         match addr {
-            0x0000..=0x1fff => self.is_ram_enabled = (value & 0xf) == 0xa,
+            0x0000..=0x1fff => self.is_ram_enabled = value & 0xf == 0xa,
             0x2000..=0x2fff => {
                 self.rom_bank_low = value;
                 *rom_offsets = self.rom_offsets();

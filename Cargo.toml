@@ -3,7 +3,7 @@ members = ["ceres-core", "ceres"]
 default-members = ["ceres"]
 
 [profile.dev]
-opt-level = 0
+opt-level = 1
 debug = 2
 debug-assertions = true
 overflow-checks = true

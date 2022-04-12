@@ -1,4 +1,3 @@
-use ceres_core::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use glium::{
     implement_vertex, texture::SrgbTexture2d, uniform, Display, IndexBuffer, Program, Surface,
     VertexBuffer,
@@ -34,7 +33,7 @@ const TOP_LEFT: Vertex = Vertex {
 
 const SQUARE: [Vertex; 4] = [TOP_RIGHT, BOTTOM_RIGHT, BOTTOM_LEFT, TOP_LEFT];
 
-pub struct Renderer {
+pub struct Renderer<const WIDTH: u32, const HEIGHT: u32> {
     texture: SrgbTexture2d,
     program: Program,
     indices: IndexBuffer<u8>,
@@ -43,18 +42,14 @@ pub struct Renderer {
     vertex_buffer: VertexBuffer<Vertex>,
 }
 
-impl Renderer {
+impl<const WIDTH: u32, const HEIGHT: u32> Renderer<WIDTH, HEIGHT> {
     pub fn new(
         display: Display,
         initial_window_width: u32,
         initial_window_height: u32,
-    ) -> Renderer {
-        let texture = glium::texture::SrgbTexture2d::empty(
-            &display,
-            SCREEN_WIDTH as u32,
-            SCREEN_HEIGHT as u32,
-        )
-        .unwrap();
+    ) -> Renderer<WIDTH, HEIGHT> {
+        let texture =
+            glium::texture::SrgbTexture2d::empty(&display, WIDTH as u32, HEIGHT as u32).unwrap();
 
         implement_vertex!(Vertex, position, tex_coords);
 
@@ -93,11 +88,9 @@ impl Renderer {
     }
 
     pub fn resize_viewport(&mut self, width: u32, height: u32) {
-        let gb_width = ceres_core::SCREEN_WIDTH as u32;
-        let gb_height = ceres_core::SCREEN_HEIGHT as u32;
-        let multiplier = core::cmp::min(width / gb_width, height / gb_height);
-        let surface_width = gb_width * multiplier;
-        let surface_height = gb_height * multiplier;
+        let multiplier = core::cmp::min(width / WIDTH, height / HEIGHT);
+        let surface_width = WIDTH * multiplier;
+        let surface_height = HEIGHT * multiplier;
 
         let x = surface_width as f32 / width as f32;
         let y = surface_height as f32 / height as f32;
@@ -114,7 +107,7 @@ impl Renderer {
     pub fn update_texture(&mut self, rgba_pixel_data: &[u8]) {
         let image = glium::texture::RawImage2d::from_raw_rgba_reversed(
             rgba_pixel_data,
-            (SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32),
+            (WIDTH as u32, HEIGHT as u32),
         );
         self.texture = glium::texture::SrgbTexture2d::new(&self.display, image).unwrap();
     }

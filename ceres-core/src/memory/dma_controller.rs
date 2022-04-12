@@ -1,8 +1,8 @@
-mod hdma;
+mod vram_dma;
 mod oam_dma;
 
-pub use self::hdma::HDMATransfer;
-use self::hdma::Hdma;
+pub use self::vram_dma::VramDMATransfer;
+use self::vram_dma::VramDma;
 use self::oam_dma::OamDma;
 use crate::video::ppu::Ppu;
 
@@ -18,14 +18,14 @@ pub enum DmaRegister {
 
 pub struct DmaController {
     oam_dma_controller: OamDma,
-    hdma_controller: Hdma,
+    hdma_controller: VramDma,
 }
 
 impl DmaController {
     pub const fn new() -> Self {
         Self {
             oam_dma_controller: OamDma::new(),
-            hdma_controller: Hdma::new(),
+            hdma_controller: VramDma::new(),
         }
     }
 
@@ -36,10 +36,8 @@ impl DmaController {
     pub fn read(&self, register: DmaRegister) -> u8 {
         match register {
             DmaRegister::Dma => self.oam_dma_controller.read(),
-            DmaRegister::HDMA1 | DmaRegister::HDMA2 | DmaRegister::HDMA3 | DmaRegister::HDMA4 => {
-                0xff
-            }
             DmaRegister::HDMA5 => self.hdma_controller.read_hdma5(),
+            _ => 0xff,
         }
     }
 
@@ -63,7 +61,7 @@ impl DmaController {
         &mut self,
         ppu: &Ppu,
         microseconds_elapsed_times_16: u8,
-    ) -> Option<HDMATransfer> {
+    ) -> Option<VramDMATransfer> {
         self.hdma_controller
             .emulate(ppu, microseconds_elapsed_times_16)
     }

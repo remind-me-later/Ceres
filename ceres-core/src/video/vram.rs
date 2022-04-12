@@ -120,14 +120,14 @@ impl Vram {
         background_attributes: &BgAttributes,
     ) -> (u8, u8) {
         let low = self.get_bank(
-            tile_data_address - 0x8000,
+            tile_data_address & 0x1fff,
             background_attributes
                 .contains(BgAttributes::VRAM_BANK_NUMBER)
                 .into(),
         );
 
         let high = self.get_bank(
-            tile_data_address - 0x8000 + 1,
+            (tile_data_address & 0x1fff) + 1,
             background_attributes
                 .contains(BgAttributes::VRAM_BANK_NUMBER)
                 .into(),

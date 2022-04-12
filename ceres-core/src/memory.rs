@@ -13,7 +13,7 @@ use crate::{
     serial::Serial,
     video::{
         ppu::{Ppu, PpuIO::Vram},
-        MonochromePaletteColors, PixelData,
+        MonochromePaletteColors, PixelData, PixelDataVram, VramBank,
     },
     AudioCallbacks, Button, Model,
 };
@@ -145,6 +145,10 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
         self.tick_apu();
     }
 
+    pub fn draw_tile_data(&mut self, bank: VramBank) -> PixelDataVram {
+        self.ppu.draw_vram_tile_data(self.function_mode, bank)
+    }
+
     pub fn tick_ppu(&mut self) {
         let microseconds_elapsed_times_16 = self.t_cycles_to_microseconds_elapsed_times_16();
         self.ppu.tick(
@@ -179,10 +183,10 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
                 let val = match address >> 8 {
                     0x00..=0x7f => self.cartridge.read_rom(address),
                     // TODO: should copy garbage
-                    0x80..=0x9f => self.ppu.read(Vram { address }),
+                    0x80..=0x9f => 0xff,
                     0xa0..=0xbf => self.cartridge.read_ram(address),
-                    0xc0..=0xcf | 0xe0..=0xef => self.work_ram.read_low(address),
-                    0xd0..=0xdf | 0xf0..=0xff => self.work_ram.read_high(address),
+                    0xc0..=0xcf => self.work_ram.read_low(address),
+                    0xd0..=0xdf => self.work_ram.read_high(address),
                     _ => panic!("Illegal source address for HDMA transfer"),
                 };
 
@@ -198,6 +202,7 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
             let val = match dma_source_address >> 8 {
                 0x00..=0x7f => self.cartridge.read_rom(dma_source_address),
                 0x80..=0x9f => self.ppu.read(Vram {
+                    // TODO: should be able to read vram at any moment?
                     address: dma_source_address,
                 }),
                 0xa0..=0xbf => self.cartridge.read_ram(dma_source_address),

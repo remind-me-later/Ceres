@@ -6,12 +6,16 @@ mod registers;
 
 pub use self::{mode::Mode, register::PpuRegister};
 use super::{
-    palette::MonochromePaletteColors, pixel_buffer::PixelData, sprites::ObjectAttributeMemory,
-    vram::Vram,
+    palette::MonochromePaletteColors,
+    pixel_data::PixelData,
+    pixel_data_vram::{PixelDataVram, TILES_PER_WIDTH},
+    sprites::{ObjectAttributeMemory, SpriteFlags},
+    vram::{Vram, VramBank},
 };
 use crate::{
     interrupts::{Interrupt, InterruptController},
     memory::FunctionMode,
+    VRAM_DISPLAY_WIDTH,
 };
 use bitflags::bitflags;
 use registers::{Lcdc, Registers, Stat};
@@ -95,9 +99,9 @@ impl Ppu {
         self.is_frame_done
     }
 
-    pub fn is_enabled(&self) -> bool {
-        self.registers.lcdc().contains(Lcdc::LCD_ENABLE)
-    }
+    // pub fn is_enabled(&self) -> bool {
+    //     self.registers.lcdc().contains(Lcdc::LCD_ENABLE)
+    // }
 
     pub fn read(&mut self, io: PpuIO) -> u8 {
         let mode = self.registers.stat().mode();
@@ -177,6 +181,120 @@ impl Ppu {
         self.registers.stat().mode()
     }
 
+    pub fn draw_vram_tile_data(
+        &mut self,
+        function_mode: FunctionMode,
+        bank: VramBank,
+    ) -> PixelDataVram {
+        let mut data = PixelDataVram::new();
+
+        for tile in 0..384 {
+            let sprite = self
+                .oam
+                .sprite_attributes_iterator()
+                .filter(|s| s.tile_index() as usize == tile)
+                .next();
+
+            for col in 0..8 {
+                let tile_data_address = tile * 16 + col * 2;
+
+                if let Some(sprite) = &sprite {
+                    let (data_low, data_high) = {
+                        (
+                            self.vram.get_bank(tile_data_address as u16, bank),
+                            self.vram.get_bank(tile_data_address as u16 + 1, bank),
+                        )
+                    };
+
+                    for color_bit in 0..8 {
+                        let color_number = (((data_high & color_bit != 0) as u8) << 1)
+                            | (data_low & color_bit != 0) as u8;
+
+                        let color = match function_mode {
+                            FunctionMode::Monochrome => {
+                                let palette =
+                                    if sprite.flags().contains(SpriteFlags::NON_CGB_PALETTE) {
+                                        self.registers.obp1()
+                                    } else {
+                                        self.registers.obp0()
+                                    };
+                                self.monochrome_palette_colors
+                                    .get_color(palette.shade_index(color_number))
+                            }
+                            FunctionMode::Compatibility => {
+                                let palette =
+                                    if sprite.flags().contains(SpriteFlags::NON_CGB_PALETTE) {
+                                        self.registers.obp1()
+                                    } else {
+                                        self.registers.obp0()
+                                    };
+                                self.registers
+                                    .cgb_sprite_palette()
+                                    .get_color(0, palette.shade_index(color_number))
+                            }
+                            FunctionMode::Color => {
+                                let cgb_palette = sprite.cgb_palette();
+                                self.registers
+                                    .cgb_sprite_palette()
+                                    .get_color(cgb_palette, color_number)
+                            }
+                        };
+                        data.set_pixel_color(
+                            col * VRAM_DISPLAY_WIDTH
+                                + (tile / TILES_PER_WIDTH) * (VRAM_DISPLAY_WIDTH * 8)
+                                + (color_bit as usize + (tile % TILES_PER_WIDTH) * 8),
+                            color,
+                        );
+                    }
+                } else {
+                    let background_attributes = match function_mode {
+                        FunctionMode::Monochrome | FunctionMode::Compatibility => {
+                            BgAttributes::empty()
+                        }
+                        FunctionMode::Color => self.vram.background_attributes(tile as u16),
+                    };
+
+                    let (data_low, data_high) = {
+                        (
+                            self.vram.get_bank(tile_data_address as u16, bank),
+                            self.vram.get_bank(tile_data_address as u16 + 1, bank),
+                        )
+                    };
+
+                    for color_bit in 0..8 {
+                        let color_number = (((data_high & color_bit != 0) as u8) << 1)
+                            | (data_low & color_bit != 0) as u8;
+
+                        let color = match function_mode {
+                            FunctionMode::Monochrome => self
+                                .monochrome_palette_colors()
+                                .get_color(self.registers().bgp().shade_index(color_number)),
+                            FunctionMode::Compatibility => {
+                                self.registers().cgb_bg_palette().get_color(
+                                    background_attributes.bits() & 0x7,
+                                    self.registers.bgp().shade_index(color_number),
+                                )
+                            }
+                            FunctionMode::Color => self
+                                .registers()
+                                .cgb_bg_palette()
+                                .get_color(background_attributes.bits() & 0x7, color_number),
+                        };
+
+                        data.set_pixel_color(
+                            col * VRAM_DISPLAY_WIDTH
+                                + (tile / TILES_PER_WIDTH) * (VRAM_DISPLAY_WIDTH * 8)
+                                + (color_bit as usize + (tile % TILES_PER_WIDTH) * 8),
+                            color,
+                        );
+                    }
+                }
+            }
+        }
+
+        data
+    }
+
     pub fn tick(
         &mut self,
         interrupt_controller: &mut InterruptController,
@@ -249,5 +367,15 @@ impl Ppu {
         } else {
             self.registers.mut_stat().remove(Stat::LY_EQUALS_LYC);
         }
+    }
+
+    #[must_use]
+    pub fn registers(&self) -> &Registers {
+        &self.registers
+    }
+
+    #[must_use]
+    pub fn monochrome_palette_colors(&self) -> MonochromePaletteColors {
+        self.monochrome_palette_colors
     }
 }

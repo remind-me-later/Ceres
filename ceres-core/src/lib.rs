@@ -24,7 +24,11 @@ pub use joypad::Button;
 use memory::Memory;
 pub use video::MonochromePaletteColors;
 pub use video::PixelData;
-pub use video::{SCANLINES_PER_FRAME, SCREEN_HEIGHT, SCREEN_WIDTH};
+pub use video::PixelDataVram;
+pub use video::VramBank;
+pub use video::{
+    SCANLINES_PER_FRAME, SCREEN_HEIGHT, SCREEN_WIDTH, VRAM_DISPLAY_HEIGHT, VRAM_DISPLAY_WIDTH,
+};
 
 // 59.7 fps
 pub const NANOSECONDS_PER_FRAME: u64 = 16_750_418;
@@ -64,6 +68,10 @@ impl<AR: AudioCallbacks> Gameboy<AR> {
         let cpu = Cpu::new(memory);
 
         Self { cpu }
+    }
+
+    pub fn draw_vram_tile_data(&mut self, bank: VramBank) -> PixelDataVram {
+        self.cpu.draw_tile_data(bank)
     }
 
     pub fn press(&mut self, button: Button) {

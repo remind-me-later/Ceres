@@ -24,7 +24,7 @@ fn main() {
             LevelFilter::Info,
             Config::default(),
             TerminalMode::Mixed,
-            ColorChoice::Auto,
+            ColorChoice::Always,
         ),
         // WriteLogger::new(
         //     LevelFilter::Trace,

@@ -1,7 +1,7 @@
 use super::audio::{AudioCallbacks, AudioRenderer};
 use super::error::Error;
 use super::video;
-use ceres_core::{BootRom, Cartridge, Gameboy};
+use ceres_core::{BootRom, Cartridge, Gameboy, SCREEN_HEIGHT, SCREEN_WIDTH};
 use glutin::{
     dpi::PhysicalSize,
     event::{ElementState, Event, VirtualKeyCode, WindowEvent},
@@ -16,7 +16,7 @@ pub struct Emulator {
     event_loop: EventLoop<()>,
     is_focused: bool,
     is_gui_paused: bool,
-    video_renderer: video::Renderer,
+    video_renderer: video::Renderer<{ SCREEN_WIDTH as u32 }, { SCREEN_HEIGHT as u32 }>,
     audio_renderer: AudioRenderer,
 }
 
@@ -27,24 +27,9 @@ impl Emulator {
         boot_rom: BootRom,
     ) -> Result<Self, Error> {
         let event_loop = EventLoop::new();
-        let window_builder = WindowBuilder::new()
-            .with_title(super::CERES_STR)
-            .with_inner_size(PhysicalSize {
-                width: ceres_core::SCREEN_WIDTH as i32 * 4,
-                height: ceres_core::SCREEN_HEIGHT as i32 * 4,
-            })
-            .with_min_inner_size(PhysicalSize {
-                width: ceres_core::SCREEN_WIDTH as i32,
-                height: ceres_core::SCREEN_HEIGHT as i32,
-            });
 
-        let context_builder = ContextBuilder::new();
-
-        let display = glium::Display::new(window_builder, context_builder, &event_loop).unwrap();
-
-        let inner_size = display.gl_window().window().inner_size();
-
-        let video_renderer = video::Renderer::new(display, inner_size.width, inner_size.height);
+        let video_renderer =
+            Self::create_renderer::<{ SCREEN_WIDTH as u32 }, { SCREEN_HEIGHT as u32 }>(&event_loop);
 
         let (audio_renderer, audio_callbacks) = AudioRenderer::new().map_err(Error::new)?;
         let gameboy = ceres_core::Gameboy::new(
@@ -63,6 +48,29 @@ impl Emulator {
             video_renderer,
             audio_renderer,
         })
+    }
+
+    fn create_renderer<const WIDTH: u32, const HEIGHT: u32>(
+        event_loop: &EventLoop<()>,
+    ) -> video::Renderer<WIDTH, HEIGHT> {
+        let window_builder = WindowBuilder::new()
+            .with_title(super::CERES_STR)
+            .with_inner_size(PhysicalSize {
+                width: WIDTH as i32 * 4,
+                height: HEIGHT as i32 * 4,
+            })
+            .with_min_inner_size(PhysicalSize {
+                width: WIDTH as i32,
+                height: HEIGHT as i32,
+            });
+
+        let context_builder = ContextBuilder::new();
+
+        let display = glium::Display::new(window_builder, context_builder, &event_loop).unwrap();
+
+        let inner_size = display.gl_window().window().inner_size();
+
+        video::Renderer::new(display, inner_size.width, inner_size.height)
     }
 
     pub fn run(mut self, sav_path: PathBuf) -> ! {
@@ -137,10 +145,12 @@ impl Emulator {
 
                     if now >= next_frame {
                         self.gameboy.run_frame();
+                        {
+                            let pixel_data = std::mem::take(self.gameboy.mut_pixel_data());
+                            self.video_renderer.update_texture(pixel_data.rgba());
+                            self.video_renderer.draw();
+                        }
 
-                        let pixel_data = std::mem::take(self.gameboy.mut_pixel_data());
-                        self.video_renderer.update_texture(pixel_data.rgba());
-                        self.video_renderer.draw();
                         next_frame = now + ceres_core::FRAME_DURATION;
                     }
 
@@ -150,23 +160,3 @@ impl Emulator {
             });
     }
 }
-
-// pub struct ContextWrapper {
-//     windowed_context: WindowedContext<PossiblyCurrent>,
-// }
-
-// impl video::Context for ContextWrapper {
-//     fn get_proc_address(&mut self, procname: &str) -> *const c_void {
-//         self.windowed_context.get_proc_address(procname)
-//     }
-
-//     fn swap_buffers(&mut self) {
-//         self.windowed_context.swap_buffers().unwrap();
-//     }
-
-//     fn make_current(&mut self) {}
-
-//     fn resize(&mut self, width: u32, height: u32) {
-//         self.windowed_context.resize(PhysicalSize { width, height });
-//     }
-// }

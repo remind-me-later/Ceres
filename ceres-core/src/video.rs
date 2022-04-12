@@ -1,12 +1,15 @@
 mod palette;
-mod pixel_buffer;
+mod pixel_data;
+mod pixel_data_vram;
 pub mod ppu;
 mod rgb_color;
 mod sprites;
 mod vram;
 
 pub use palette::MonochromePaletteColors;
-pub use pixel_buffer::PixelData;
+pub use pixel_data::PixelData;
+pub use pixel_data_vram::{PixelDataVram, VRAM_DISPLAY_HEIGHT, VRAM_DISPLAY_WIDTH};
+pub use vram::VramBank;
 
 use rgb_color::RgbColor;
 
