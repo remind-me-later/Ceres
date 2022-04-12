@@ -2,14 +2,11 @@
 mod audio;
 mod emulator;
 mod error;
-mod video;
 
 use ceres_core::{BootRom, Cartridge, Model};
 use clap::{Arg, Command};
 use emulator::Emulator;
 use error::Error;
-use rfd::FileDialog;
-use simplelog::*;
 use std::{
     fs::{self, File},
     io::{Read, Write},
@@ -19,28 +16,14 @@ use std::{
 pub const CERES_STR: &str = "Ceres";
 
 fn main() {
-    CombinedLogger::init(vec![
-        TermLogger::new(
-            LevelFilter::Info,
-            Config::default(),
-            TerminalMode::Mixed,
-            ColorChoice::Always,
-        ),
-        // WriteLogger::new(
-        //     LevelFilter::Trace,
-        //     Config::default(),
-        //     File::create("ceres.log").unwrap(),
-        // ),
-    ])
-    .unwrap();
-
     let matches = Command::new(CERES_STR)
         .about("GameBoy/Color emulator")
         .arg(
             Arg::new("rom")
                 .value_name("ROM")
                 .help("Cartridge ROM to emulate")
-                .takes_value(true),
+                .takes_value(true)
+                .required(true),
         )
         .arg(
             Arg::new("info")
@@ -67,15 +50,10 @@ fn main() {
         .get_matches();
 
     let (cartridge, sav_path) = {
-        let rom_path = matches.value_of("rom").map_or_else(
-            || {
-                FileDialog::new()
-                    .add_filter("text", &["gb", "gbc"])
-                    .pick_file()
-                    .unwrap()
-            },
-            |s| Path::new(s).to_path_buf(),
-        );
+        let rom_path = matches
+            .value_of("rom")
+            .map(|s| Path::new(s).to_path_buf())
+            .unwrap();
 
         let rom_buf = read_file(&rom_path)
             .unwrap_or_else(|e| error::print(e))

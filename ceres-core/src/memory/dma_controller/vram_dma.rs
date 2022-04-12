@@ -15,7 +15,7 @@ impl From<u8> for VramDmaMode {
     }
 }
 
-const HDMA_T_CYCLES_DELAY: i8 = 12; //12;
+const HDMA_T_CYCLES_DELAY: i8 = 0;
 
 pub struct VramDMATransfer {
     pub source_address: u16,
@@ -115,12 +115,12 @@ impl VramDma {
 
         match self.mode {
             VramDmaMode::GeneralPurpose => {
-                log::info!(
-                    "GHDMA source: {:x}, dest: {:x}, len: {:x}",
-                    self.source,
-                    self.destination,
-                    self.transfer_size
-                );
+                // log::info!(
+                //     "GHDMA source: {:x}, dest: {:x}, len: {:x}",
+                //     self.source,
+                //     self.destination,
+                //     self.transfer_size
+                // );
 
                 let hdma_transfer = VramDMATransfer {
                     source_address: self.source,

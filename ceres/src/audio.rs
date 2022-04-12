@@ -1,116 +1,58 @@
-use cpal::{
-    traits::{DeviceTrait, HostTrait, StreamTrait},
-    SampleFormat,
+use sdl2::{
+    audio::{AudioQueue, AudioSpecDesired},
+    Sdl,
 };
-use dasp_ring_buffer::Bounded;
-use parking_lot::Mutex;
-use std::sync::Arc;
-
-const BUFFER_SIZE: cpal::FrameCount = 512;
-const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
+use std::rc::Rc;
 
 pub struct AudioRenderer {
-    stream: cpal::Stream,
+    stream: Rc<AudioQueue<f32>>,
 }
 
 impl AudioRenderer {
-    pub fn new() -> Result<(Self, AudioCallbacks), AudioError> {
-        use AudioError::*;
+    pub fn new(sdl_context: &Sdl) -> (Self, AudioCallbacks) {
+        let audio_subsystem = sdl_context.audio().unwrap();
 
-        let host = cpal::default_host();
-        let device = host.default_output_device().ok_or(OutputDeviceNotFound)?;
-
-        let default_config = device.default_output_config().unwrap();
-        let supported_config = device
-            .supported_output_configs()
-            .map_err(|_| SupportedStreamConfig)?
-            .filter(|s| s.channels() == 2 && s.sample_format() == SampleFormat::F32)
-            .nth(0)
-            .ok_or(UncapableStreamConfig)?
-            .with_sample_rate(default_config.sample_rate());
-
-        // println!("{:?}", supported_config);
-
-        let desired_config = cpal::StreamConfig {
-            channels: 2,
-            sample_rate: supported_config.sample_rate(),
-            buffer_size: cpal::BufferSize::Fixed(BUFFER_SIZE),
+        let desired_spec = AudioSpecDesired {
+            freq: Some(48000),
+            channels: Some(2),
+            samples: Some(512),
         };
 
-        let ring_buffer = Arc::new(Mutex::new(Bounded::from(
-            vec![0.0; RING_BUFFER_SIZE].into_boxed_slice(),
-        )));
-        let error_callback = |err| panic!("an AudioError occurred on stream: {}", err);
-        let ring_buffer_arc = Arc::clone(&ring_buffer);
-        let data_callback = move |output: &mut [f32], _: &_| {
-            let mut buf = ring_buffer_arc.lock();
-            output
-                .iter_mut()
-                .zip(buf.drain())
-                .for_each(|(out_sample, gb_sample)| *out_sample = gb_sample)
-        };
+        let queue = Rc::new(audio_subsystem.open_queue(None, &desired_spec).unwrap());
+        let queue_copy = Rc::clone(&queue);
 
-        let stream = device
-            .build_output_stream(&desired_config, data_callback, error_callback)
-            .map_err(|_| Initialization)?;
+        queue.resume();
 
-        stream.play().expect("AudioError playing sound");
-
-        let sample_rate = desired_config.sample_rate.0;
-
-        Ok((
-            Self { stream },
-            AudioCallbacks {
-                sample_rate,
-                ring_buffer,
-            },
-        ))
+        (Self { stream: queue }, AudioCallbacks { queue: queue_copy })
     }
 
     pub fn play(&mut self) {
-        self.stream.play().unwrap();
+        self.stream.resume()
     }
 
     pub fn pause(&mut self) {
-        self.stream.pause().unwrap();
+        self.stream.pause()
     }
 }
 
 pub struct AudioCallbacks {
-    ring_buffer: Arc<Mutex<Bounded<Box<[ceres_core::Sample]>>>>,
-    sample_rate: u32,
+    queue: Rc<AudioQueue<f32>>,
 }
 
 impl ceres_core::AudioCallbacks for AudioCallbacks {
     fn sample_rate(&self) -> u32 {
-        self.sample_rate
+        48000
     }
 
     fn push_frame(&mut self, frame: ceres_core::Frame) {
-        let mut buf = self.ring_buffer.lock();
-        buf.push(frame.left());
-        buf.push(frame.right());
-    }
-}
-
-#[derive(Debug)]
-pub enum AudioError {
-    OutputDeviceNotFound,
-    SupportedStreamConfig,
-    UncapableStreamConfig,
-    Initialization,
-}
-
-impl std::fmt::Display for AudioError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use AudioError::*;
-        match self {
-            OutputDeviceNotFound => write!(f, "couldn't find output device"),
-            SupportedStreamConfig => write!(f, "couldn't get supported stream configurations"),
-            UncapableStreamConfig => write!(f, "couldn't get any configuration able to stream"),
-            Initialization => write!(f, "couldn't initialize audio stream"),
+        // TODO: why?
+        if self.queue.as_ref().size() > 48000 / 2 {
+            return;
         }
+
+        self.queue
+            .as_ref()
+            .queue_audio(&[frame.left(), frame.right()])
+            .unwrap()
     }
 }
-
-impl std::error::Error for AudioError {}

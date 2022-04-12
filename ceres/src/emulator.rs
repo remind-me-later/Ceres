@@ -1,22 +1,16 @@
 use super::audio::{AudioCallbacks, AudioRenderer};
 use super::error::Error;
-use super::video;
 use ceres_core::{BootRom, Cartridge, Gameboy, SCREEN_HEIGHT, SCREEN_WIDTH};
-use glutin::{
-    dpi::PhysicalSize,
-    event::{ElementState, Event, VirtualKeyCode, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder,
-    ContextBuilder,
-};
+use sdl2::event::{Event, WindowEvent};
+use sdl2::keyboard::Scancode;
+use sdl2::rect::{Point, Rect};
 use std::{path::PathBuf, time::Instant};
 
 pub struct Emulator {
     gameboy: Gameboy<AudioCallbacks>,
-    event_loop: EventLoop<()>,
     is_focused: bool,
     is_gui_paused: bool,
-    video_renderer: video::Renderer<{ SCREEN_WIDTH as u32 }, { SCREEN_HEIGHT as u32 }>,
+    sdl_context: sdl2::Sdl,
     audio_renderer: AudioRenderer,
 }
 
@@ -26,12 +20,9 @@ impl Emulator {
         cartridge: Cartridge,
         boot_rom: BootRom,
     ) -> Result<Self, Error> {
-        let event_loop = EventLoop::new();
+        let sdl_context = sdl2::init().unwrap();
 
-        let video_renderer =
-            Self::create_renderer::<{ SCREEN_WIDTH as u32 }, { SCREEN_HEIGHT as u32 }>(&event_loop);
-
-        let (audio_renderer, audio_callbacks) = AudioRenderer::new().map_err(Error::new)?;
+        let (audio_renderer, audio_callbacks) = AudioRenderer::new(&sdl_context);
         let gameboy = ceres_core::Gameboy::new(
             model,
             cartridge,
@@ -41,122 +32,151 @@ impl Emulator {
         );
 
         Ok(Self {
-            event_loop,
+            sdl_context,
             gameboy,
             is_focused: false,
             is_gui_paused: false,
-            video_renderer,
             audio_renderer,
         })
     }
 
-    fn create_renderer<const WIDTH: u32, const HEIGHT: u32>(
-        event_loop: &EventLoop<()>,
-    ) -> video::Renderer<WIDTH, HEIGHT> {
-        let window_builder = WindowBuilder::new()
-            .with_title(super::CERES_STR)
-            .with_inner_size(PhysicalSize {
-                width: WIDTH as i32 * 4,
-                height: HEIGHT as i32 * 4,
-            })
-            .with_min_inner_size(PhysicalSize {
-                width: WIDTH as i32,
-                height: HEIGHT as i32,
-            });
-
-        let context_builder = ContextBuilder::new();
-
-        let display = glium::Display::new(window_builder, context_builder, &event_loop).unwrap();
-
-        let inner_size = display.gl_window().window().inner_size();
-
-        video::Renderer::new(display, inner_size.width, inner_size.height)
-    }
-
-    pub fn run(mut self, sav_path: PathBuf) -> ! {
+    pub fn run(mut self, sav_path: PathBuf) {
         let mut next_frame = Instant::now();
 
-        self.event_loop
-            .run(move |event, _, control_flow| match event {
-                Event::LoopDestroyed => {
-                    let cartridge = self.gameboy.cartridge();
-                    super::save_data(&sav_path, cartridge);
+        let video_subsystem = self.sdl_context.video().unwrap();
 
-                    return;
-                }
-                Event::WindowEvent { event, .. } => match event {
-                    WindowEvent::Resized(physical_size) => self
-                        .video_renderer
-                        .resize_viewport(physical_size.width as u32, physical_size.height as u32),
-                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                    WindowEvent::Focused(is_focused) => self.is_focused = is_focused,
-                    WindowEvent::KeyboardInput { input, .. } => {
+        let mut window = video_subsystem
+            .window(
+                super::CERES_STR,
+                SCREEN_WIDTH as u32 * 4,
+                SCREEN_HEIGHT as u32 * 4,
+            )
+            .position_centered()
+            .resizable()
+            .build()
+            .unwrap();
+
+        window
+            .set_minimum_size(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32)
+            .unwrap();
+
+        let mut canvas = window.into_canvas().build().unwrap();
+
+        let texture_creator = canvas.texture_creator();
+        let mut texture = texture_creator
+            .create_texture_streaming(
+                sdl2::pixels::PixelFormatEnum::RGBA32,
+                SCREEN_WIDTH as u32,
+                SCREEN_HEIGHT as u32,
+            )
+            .unwrap();
+
+        let mut event_pump = self.sdl_context.event_pump().unwrap();
+        let mut render_rect =
+            Self::compute_new_size(SCREEN_WIDTH as u32 * 4, SCREEN_HEIGHT as u32 * 4);
+
+        'running: loop {
+            for event in event_pump.poll_iter() {
+                match event {
+                    Event::Quit { .. } => break 'running,
+                    Event::Window { win_event, .. } => match win_event {
+                        WindowEvent::Resized(width, height) => {
+                            render_rect = Self::compute_new_size(width as u32, height as u32);
+                        }
+                        WindowEvent::Close => break 'running,
+                        WindowEvent::FocusGained => self.is_focused = true,
+                        WindowEvent::FocusLost => self.is_focused = false,
+                        _ => (),
+                    },
+                    Event::KeyDown { scancode, .. } => {
                         use ceres_core::Button;
 
                         if !self.is_focused {
                             return;
                         }
 
-                        if let Some(key) = input.virtual_keycode {
-                            match input.state {
-                                ElementState::Pressed => match key {
-                                    VirtualKeyCode::W => self.gameboy.press(Button::Up),
-                                    VirtualKeyCode::A => self.gameboy.press(Button::Left),
-                                    VirtualKeyCode::S => self.gameboy.press(Button::Down),
-                                    VirtualKeyCode::D => self.gameboy.press(Button::Right),
-                                    VirtualKeyCode::K => self.gameboy.press(Button::B),
-                                    VirtualKeyCode::L => self.gameboy.press(Button::A),
-                                    VirtualKeyCode::Return => self.gameboy.press(Button::Start),
-                                    VirtualKeyCode::Back => self.gameboy.press(Button::Select),
-                                    VirtualKeyCode::Space => {
-                                        if self.is_gui_paused {
-                                            self.audio_renderer.play();
-                                            self.is_gui_paused = false;
-                                        } else {
-                                            self.audio_renderer.pause();
-                                            self.is_gui_paused = true;
-                                        }
+                        if let Some(key) = scancode {
+                            match key {
+                                Scancode::W => self.gameboy.press(Button::Up),
+                                Scancode::A => self.gameboy.press(Button::Left),
+                                Scancode::S => self.gameboy.press(Button::Down),
+                                Scancode::D => self.gameboy.press(Button::Right),
+                                Scancode::K => self.gameboy.press(Button::B),
+                                Scancode::L => self.gameboy.press(Button::A),
+                                Scancode::Return => self.gameboy.press(Button::Start),
+                                Scancode::Backspace => self.gameboy.press(Button::Select),
+                                Scancode::Space => {
+                                    if self.is_gui_paused {
+                                        self.audio_renderer.play();
+                                        self.is_gui_paused = false;
+                                    } else {
+                                        self.audio_renderer.pause();
+                                        self.is_gui_paused = true;
                                     }
-                                    _ => (),
-                                },
-                                ElementState::Released => match key {
-                                    VirtualKeyCode::W => self.gameboy.release(Button::Up),
-                                    VirtualKeyCode::A => self.gameboy.release(Button::Left),
-                                    VirtualKeyCode::S => self.gameboy.release(Button::Down),
-                                    VirtualKeyCode::D => self.gameboy.release(Button::Right),
-                                    VirtualKeyCode::K => self.gameboy.release(Button::B),
-                                    VirtualKeyCode::L => self.gameboy.release(Button::A),
-                                    VirtualKeyCode::Return => self.gameboy.release(Button::Start),
-                                    VirtualKeyCode::Back => self.gameboy.release(Button::Select),
-                                    _ => (),
-                                },
+                                }
+                                _ => (),
                             }
                         }
                     }
-                    _ => (),
-                },
-                Event::MainEventsCleared => {
-                    if self.is_gui_paused {
-                        *control_flow = ControlFlow::Wait;
-                        return;
-                    }
+                    Event::KeyUp { scancode, .. } => {
+                        use ceres_core::Button;
 
-                    let now = Instant::now();
-
-                    if now >= next_frame {
-                        self.gameboy.run_frame();
-                        {
-                            let pixel_data = std::mem::take(self.gameboy.mut_pixel_data());
-                            self.video_renderer.update_texture(pixel_data.rgba());
-                            self.video_renderer.draw();
+                        if !self.is_focused {
+                            return;
                         }
 
-                        next_frame = now + ceres_core::FRAME_DURATION;
+                        if let Some(key) = scancode {
+                            match key {
+                                Scancode::W => self.gameboy.release(Button::Up),
+                                Scancode::A => self.gameboy.release(Button::Left),
+                                Scancode::S => self.gameboy.release(Button::Down),
+                                Scancode::D => self.gameboy.release(Button::Right),
+                                Scancode::K => self.gameboy.release(Button::B),
+                                Scancode::L => self.gameboy.release(Button::A),
+                                Scancode::Return => self.gameboy.release(Button::Start),
+                                Scancode::Backspace => self.gameboy.release(Button::Select),
+                                _ => (),
+                            }
+                        }
                     }
 
-                    *control_flow = ControlFlow::Poll;
+                    _ => (),
                 }
-                _ => (),
-            });
+            }
+
+            let now = Instant::now();
+
+            if now >= next_frame {
+                self.gameboy.run_frame();
+                let pixel_data = std::mem::take(self.gameboy.mut_pixel_data());
+                let pixel_data = pixel_data.rgba();
+                texture
+                    .with_lock(None, move |buf, _pitch| {
+                        for i in 0..SCREEN_WIDTH as usize * SCREEN_HEIGHT as usize * 4 {
+                            buf[i] = pixel_data[i];
+                        }
+                    })
+                    .unwrap();
+                canvas.clear();
+                canvas.copy(&texture, None, render_rect).unwrap();
+                canvas.present();
+
+                next_frame = now + ceres_core::FRAME_DURATION;
+            }
+        }
+
+        let cartridge = self.gameboy.cartridge();
+        super::save_data(&sav_path, cartridge);
+    }
+
+    fn compute_new_size(width: u32, height: u32) -> Rect {
+        let multiplier = core::cmp::min(width / SCREEN_WIDTH as u32, height / SCREEN_HEIGHT as u32);
+        let surface_width = SCREEN_WIDTH as u32 * multiplier;
+        let surface_height = SCREEN_HEIGHT as u32 * multiplier;
+        let center_x = width as i32 / 2;
+        let center_y = height as i32 / 2;
+        let center = Point::new(center_x, center_y);
+
+        Rect::from_center(center, surface_width, surface_height)
     }
 }

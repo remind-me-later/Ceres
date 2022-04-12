@@ -7,14 +7,7 @@ description = "A Gameboy/Color emulator"
 
 [dependencies]
 ceres-core = { path = "../ceres-core" }
-glutin = { version = "*" }
-simplelog = "*"
 colorful = "*"
 clap = { version = "*", default-features = false, features = ["std"] }
 log = "*"
-cpal = "*"
-dasp_ring_buffer = "*"
-parking_lot = "*"
-gl = "*"
-rfd = "*"
-glium = "*"
+sdl2 = "*"
