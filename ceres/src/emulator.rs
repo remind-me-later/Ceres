@@ -100,7 +100,7 @@ impl Emulator {
         })
     }
 
-    fn init_controller(sdl_context: &Sdl) -> GameController {
+    fn init_controller(sdl_context: &Sdl) -> Option<GameController> {
         let game_controller_subsystem = sdl_context.game_controller().unwrap();
 
         let available = game_controller_subsystem
@@ -108,18 +108,16 @@ impl Emulator {
             .map_err(|e| format!("can't enumerate joysticks: {}", e))
             .unwrap();
 
-        let controller = (0..available)
-            .find_map(|id| {
-                if !game_controller_subsystem.is_game_controller(id) {
-                    return None;
-                }
+        let controller = (0..available).find_map(|id| {
+            if !game_controller_subsystem.is_game_controller(id) {
+                return None;
+            }
 
-                match game_controller_subsystem.open(id) {
-                    Ok(c) => Some(c),
-                    Err(_) => None,
-                }
-            })
-            .expect("Couldn't open any controller");
+            match game_controller_subsystem.open(id) {
+                Ok(c) => Some(c),
+                Err(_) => None,
+            }
+        });
 
         controller
     }
