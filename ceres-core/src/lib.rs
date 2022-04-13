@@ -1,4 +1,3 @@
-#![no_std]
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 
@@ -22,12 +21,9 @@ use cpu::Cpu;
 pub use error::Error;
 pub use joypad::Button;
 use memory::Memory;
-pub use video::MonochromePaletteColors;
-pub use video::PixelData;
-pub use video::PixelDataVram;
-pub use video::VramBank;
 pub use video::{
-    SCANLINES_PER_FRAME, SCREEN_HEIGHT, SCREEN_WIDTH, VRAM_DISPLAY_HEIGHT, VRAM_DISPLAY_WIDTH,
+    MonochromePaletteColors, PixelData, PixelDataVram, VramBank, SCANLINES_PER_FRAME,
+    SCREEN_HEIGHT, SCREEN_WIDTH, VRAM_DISPLAY_HEIGHT, VRAM_DISPLAY_WIDTH,
 };
 
 // 59.7 fps
@@ -70,7 +66,7 @@ impl<A: AudioCallbacks, R: RumbleCallbacks> Gameboy<A, R> {
         Self { cpu }
     }
 
-    pub fn draw_vram_tile_data(&mut self, bank: VramBank) -> PixelDataVram {
+    pub fn draw_vram_tile_data(&mut self, bank: VramBank) -> &PixelDataVram {
         self.cpu.draw_tile_data(bank)
     }
 

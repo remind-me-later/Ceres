@@ -172,7 +172,7 @@ impl Registers {
             }
             PpuRegister::Scy => self.scy = val,
             PpuRegister::Scx => self.scx = val,
-            PpuRegister::Ly => self.ly = 0,
+            PpuRegister::Ly => (),
             PpuRegister::Lyc => self.lyc = val,
             PpuRegister::Wy => self.wy = val,
             PpuRegister::Wx => self.wx = val,

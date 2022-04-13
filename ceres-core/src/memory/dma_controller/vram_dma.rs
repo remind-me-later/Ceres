@@ -80,7 +80,6 @@ impl VramDma {
     pub fn write_hdma5(&mut self, val: u8) {
         // stop current transfer
         if self.is_active && val & 0x80 == 0 {
-            log::warn!("cancel hdma");
             self.is_active = false;
             return;
         }

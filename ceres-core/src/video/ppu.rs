@@ -9,13 +9,12 @@ use super::{
     palette::MonochromePaletteColors,
     pixel_data::PixelData,
     pixel_data_vram::{PixelDataVram, TILES_PER_WIDTH},
-    sprites::{ObjectAttributeMemory, SpriteFlags},
+    sprites::ObjectAttributeMemory,
     vram::{Vram, VramBank},
 };
 use crate::{
     interrupts::{Interrupt, InterruptController},
     memory::FunctionMode,
-    VRAM_DISPLAY_WIDTH,
 };
 use bitflags::bitflags;
 use registers::{Lcdc, Registers, Stat};
@@ -57,12 +56,15 @@ pub struct Ppu {
     window_lines_skipped: u16,
     is_frame_done: bool,
     do_render: bool,
+    // debug
+    vram_tile_data: Box<PixelDataVram>,
 }
 
 impl Ppu {
     pub fn new(monochrome_palette_colors: MonochromePaletteColors) -> Self {
         let registers = Registers::new();
         let cycles = registers.stat().mode().cycles(0);
+        let vram_tile_data = Box::new(PixelDataVram::new());
 
         Self {
             registers,
@@ -76,6 +78,7 @@ impl Ppu {
             scanline_used_window: false,
             is_frame_done: false,
             do_render: true,
+            vram_tile_data,
         }
     }
 
@@ -110,12 +113,12 @@ impl Ppu {
             PpuIO::PpuRegister(register) => self.registers.read(register),
             PpuIO::Vram { address } => match mode {
                 Mode::DrawingPixels => 0xff,
-                Mode::OamScan | Mode::HBlank | Mode::VBlank => self.vram.read(address),
+                _ => self.vram.read(address),
             },
             PpuIO::VramBank => self.vram.read_bank_number(),
             PpuIO::Oam { address } => match mode {
                 Mode::OamScan | Mode::DrawingPixels => 0xff,
-                Mode::HBlank | Mode::VBlank => self.oam.read(address as u8),
+                _ => self.oam.read(address as u8),
             },
         }
     }
@@ -126,13 +129,13 @@ impl Ppu {
         match io {
             PpuIO::PpuRegister(register) => self.registers.write(register, val, &mut self.cycles),
             PpuIO::Vram { address } => match mode {
-                Mode::DrawingPixels => (),
-                Mode::OamScan | Mode::HBlank | Mode::VBlank => self.vram.write(address, val),
+                // Mode::DrawingPixels => (),
+                _ => self.vram.write(address, val),
             },
             PpuIO::VramBank => self.vram.write_bank_number(val),
             PpuIO::Oam { address } => match mode {
-                Mode::OamScan | Mode::DrawingPixels => (),
-                Mode::HBlank | Mode::VBlank => self.oam.write(address as u8, val),
+                // Mode::OamScan | Mode::DrawingPixels => (),
+                _ => self.oam.write(address as u8, val),
             },
         }
     }
@@ -173,7 +176,12 @@ impl Ppu {
                 self.window_lines_skipped = 0;
                 self.frame_used_window = false;
             }
-            Mode::DrawingPixels | Mode::HBlank => (),
+            Mode::DrawingPixels => (),
+            Mode::HBlank => {
+                if stat.contains(Stat::HBLANK_INTERRUPT) {
+                    interrupt_controller.request(Interrupt::LCD_STAT);
+                }
+            }
         }
     }
 
@@ -185,114 +193,51 @@ impl Ppu {
         &mut self,
         function_mode: FunctionMode,
         bank: VramBank,
-    ) -> PixelDataVram {
-        let mut data = PixelDataVram::new();
-
+    ) -> &PixelDataVram {
         for tile in 0..384 {
-            let sprite = self
-                .oam
-                .sprite_attributes_iterator()
-                .filter(|s| s.tile_index() as usize == tile)
-                .next();
-
             for col in 0..8 {
                 let tile_data_address = tile * 16 + col * 2;
 
-                if let Some(sprite) = &sprite {
-                    let (data_low, data_high) = {
-                        (
-                            self.vram.get_bank(tile_data_address as u16, bank),
-                            self.vram.get_bank(tile_data_address as u16 + 1, bank),
-                        )
+                let background_attributes = match function_mode {
+                    FunctionMode::Monochrome | FunctionMode::Compatibility => BgAttributes::empty(),
+                    FunctionMode::Color => self.vram.background_attributes(tile as u16),
+                };
+
+                let (data_low, data_high) = {
+                    (
+                        self.vram.get_bank(tile_data_address as u16, bank),
+                        self.vram.get_bank(tile_data_address as u16 + 1, bank),
+                    )
+                };
+
+                for color_bit in 0..8 {
+                    let color_number = (((data_high & color_bit != 0) as u8) << 1)
+                        | (data_low & color_bit != 0) as u8;
+
+                    let color = match function_mode {
+                        FunctionMode::Monochrome => self
+                            .monochrome_palette_colors()
+                            .get_color(self.registers().bgp().shade_index(color_number)),
+                        FunctionMode::Compatibility => self.registers().cgb_bg_palette().get_color(
+                            background_attributes.bits() & 0x7,
+                            self.registers.bgp().shade_index(color_number),
+                        ),
+                        FunctionMode::Color => self
+                            .registers()
+                            .cgb_bg_palette()
+                            .get_color(background_attributes.bits() & 0x7, color_number),
                     };
 
-                    for color_bit in 0..8 {
-                        let color_number = (((data_high & color_bit != 0) as u8) << 1)
-                            | (data_low & color_bit != 0) as u8;
-
-                        let color = match function_mode {
-                            FunctionMode::Monochrome => {
-                                let palette =
-                                    if sprite.flags().contains(SpriteFlags::NON_CGB_PALETTE) {
-                                        self.registers.obp1()
-                                    } else {
-                                        self.registers.obp0()
-                                    };
-                                self.monochrome_palette_colors
-                                    .get_color(palette.shade_index(color_number))
-                            }
-                            FunctionMode::Compatibility => {
-                                let palette =
-                                    if sprite.flags().contains(SpriteFlags::NON_CGB_PALETTE) {
-                                        self.registers.obp1()
-                                    } else {
-                                        self.registers.obp0()
-                                    };
-                                self.registers
-                                    .cgb_sprite_palette()
-                                    .get_color(0, palette.shade_index(color_number))
-                            }
-                            FunctionMode::Color => {
-                                let cgb_palette = sprite.cgb_palette();
-                                self.registers
-                                    .cgb_sprite_palette()
-                                    .get_color(cgb_palette, color_number)
-                            }
-                        };
-                        data.set_pixel_color(
-                            col * VRAM_DISPLAY_WIDTH
-                                + (tile / TILES_PER_WIDTH) * (VRAM_DISPLAY_WIDTH * 8)
-                                + (color_bit as usize + (tile % TILES_PER_WIDTH) * 8),
-                            color,
-                        );
-                    }
-                } else {
-                    let background_attributes = match function_mode {
-                        FunctionMode::Monochrome | FunctionMode::Compatibility => {
-                            BgAttributes::empty()
-                        }
-                        FunctionMode::Color => self.vram.background_attributes(tile as u16),
-                    };
-
-                    let (data_low, data_high) = {
-                        (
-                            self.vram.get_bank(tile_data_address as u16, bank),
-                            self.vram.get_bank(tile_data_address as u16 + 1, bank),
-                        )
-                    };
-
-                    for color_bit in 0..8 {
-                        let color_number = (((data_high & color_bit != 0) as u8) << 1)
-                            | (data_low & color_bit != 0) as u8;
-
-                        let color = match function_mode {
-                            FunctionMode::Monochrome => self
-                                .monochrome_palette_colors()
-                                .get_color(self.registers().bgp().shade_index(color_number)),
-                            FunctionMode::Compatibility => {
-                                self.registers().cgb_bg_palette().get_color(
-                                    background_attributes.bits() & 0x7,
-                                    self.registers.bgp().shade_index(color_number),
-                                )
-                            }
-                            FunctionMode::Color => self
-                                .registers()
-                                .cgb_bg_palette()
-                                .get_color(background_attributes.bits() & 0x7, color_number),
-                        };
-
-                        data.set_pixel_color(
-                            col * VRAM_DISPLAY_WIDTH
-                                + (tile / TILES_PER_WIDTH) * (VRAM_DISPLAY_WIDTH * 8)
-                                + (color_bit as usize + (tile % TILES_PER_WIDTH) * 8),
-                            color,
-                        );
-                    }
+                    self.vram_tile_data.set_pixel_color_ij(
+                        col + (tile / TILES_PER_WIDTH) * 8,
+                        color_bit as usize + (tile % TILES_PER_WIDTH) * 8,
+                        color,
+                    );
                 }
             }
         }
 
-        data
+        &self.vram_tile_data
     }
 
     pub fn tick(
@@ -307,14 +252,6 @@ impl Ppu {
 
         self.cycles -= i16::from(microseconds_elapsed_times_16);
         let stat = self.registers.stat();
-
-        // FIXME: triggered twice on double speed
-        if self.cycles <= 4 && stat.mode() == Mode::DrawingPixels {
-            // STAT mode=0 interrupt happens one cycle before the actual mode switch!
-            if stat.contains(Stat::HBLANK_INTERRUPT) {
-                interrupt_controller.request(Interrupt::LCD_STAT);
-            }
-        }
 
         if self.cycles > 0 {
             return;

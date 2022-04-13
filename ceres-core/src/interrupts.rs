@@ -11,14 +11,14 @@ bitflags! {
 }
 
 impl Interrupt {
-    pub const fn handler_address(self) -> u16 {
+    pub fn handler_address(self) -> u16 {
         match self {
             Self::VBLANK => 0x40,
             Self::LCD_STAT => 0x48,
             Self::TIMER => 0x50,
             Self::SERIAL => 0x58,
             Self::JOYPAD => 0x60,
-            _ => 0x00,
+            _ => unreachable!("bad interrupt"),
         }
     }
 }

@@ -21,11 +21,7 @@ impl ColorPalette {
     }
 
     pub const fn color_palette_specification(&self) -> u8 {
-        if self.auto_increment {
-            self.index | 0x80 | 0x40
-        } else {
-            self.index | 0x40
-        }
+        self.index | 0x40 | ((self.auto_increment as u8) << 7)
     }
 
     pub const fn color_palette_data(&self) -> u8 {
@@ -52,7 +48,7 @@ impl ColorPalette {
         }
 
         if self.auto_increment {
-            self.index = (self.index + 1) & 0b0011_1111;
+            self.index = (self.index + 1) & 0x3f;
         }
     }
 

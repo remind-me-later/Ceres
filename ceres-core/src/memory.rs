@@ -146,7 +146,7 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
         self.tick_apu();
     }
 
-    pub fn draw_tile_data(&mut self, bank: VramBank) -> PixelDataVram {
+    pub fn draw_tile_data(&mut self, bank: VramBank) -> &PixelDataVram {
         self.ppu.draw_vram_tile_data(self.function_mode, bank)
     }
 

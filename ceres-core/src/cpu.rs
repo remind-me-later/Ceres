@@ -34,7 +34,7 @@ impl<A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
         }
     }
 
-    pub fn draw_tile_data(&mut self, bank: VramBank) -> PixelDataVram {
+    pub fn draw_tile_data(&mut self, bank: VramBank) -> &PixelDataVram {
         self.memory.draw_tile_data(bank)
     }
 

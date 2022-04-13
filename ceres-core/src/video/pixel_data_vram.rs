@@ -25,7 +25,8 @@ impl PixelDataVram {
         }
     }
 
-    pub fn set_pixel_color(&mut self, index: usize, color: RgbColor) {
+    pub fn set_pixel_color_ij(&mut self, i: usize, j: usize, color: RgbColor) {
+        let index = i * VRAM_DISPLAY_WIDTH + j;
         let index_of_first_byte_of_pixel = index * PIXEL_SIZE_IN_BYTES;
         self.data[index_of_first_byte_of_pixel] = color.r;
         self.data[index_of_first_byte_of_pixel + 1] = color.g;

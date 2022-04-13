@@ -10,4 +10,4 @@ ceres-core = { path = "../ceres-core" }
 colorful = "*"
 clap = { version = "*", default-features = false, features = ["std"] }
 log = "*"
-sdl2 = "*"
+sdl2 = { version = "*", features = ["unsafe_textures"] }
