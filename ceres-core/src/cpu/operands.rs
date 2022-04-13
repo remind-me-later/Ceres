@@ -6,66 +6,73 @@ use super::{
     registers::{Register16, Register8},
     Cpu,
 };
-use crate::AudioCallbacks;
+use crate::{cartridge::RumbleCallbacks, AudioCallbacks};
 
 pub trait Dissasemble
 where
     Self: Copy,
 {
-    fn dissasemble<AR>(self, cpu: &mut Cpu<AR>) -> String
+    fn dissasemble<A, R>(self, cpu: &mut Cpu<A, R>) -> String
     where
-        AR: AudioCallbacks;
+        A: AudioCallbacks,
+        R: RumbleCallbacks;
 }
 
 pub trait Get<T: Copy>
 where
     Self: Copy + Dissasemble,
 {
-    fn get<AR>(self, cpu: &mut Cpu<AR>) -> T
+    fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> T
     where
-        AR: AudioCallbacks;
+        A: AudioCallbacks,
+        R: RumbleCallbacks;
 }
 
 pub trait Set<T: Copy>
 where
     Self: Copy + Dissasemble,
 {
-    fn set<AR>(self, cpu: &mut Cpu<AR>, val: T)
+    fn set<A, R>(self, cpu: &mut Cpu<A, R>, val: T)
     where
-        AR: AudioCallbacks;
+        A: AudioCallbacks,
+        R: RumbleCallbacks;
 }
 
 impl Get<u8> for Register8 {
-    fn get<AR>(self, cpu: &mut Cpu<AR>) -> u8
+    fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> u8
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         cpu.registers.read8(self)
     }
 }
 
 impl Set<u8> for Register8 {
-    fn set<AR>(self, cpu: &mut Cpu<AR>, val: u8)
+    fn set<A, R>(self, cpu: &mut Cpu<A, R>, val: u8)
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         cpu.registers.write8(self, val);
     }
 }
 
 impl Get<u16> for Register16 {
-    fn get<AR>(self, cpu: &mut Cpu<AR>) -> u16
+    fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> u16
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         cpu.registers.read16(self)
     }
 }
 
 impl Set<u16> for Register16 {
-    fn set<AR>(self, cpu: &mut Cpu<AR>, val: u16)
+    fn set<A, R>(self, cpu: &mut Cpu<A, R>, val: u16)
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         cpu.registers.write16(self, val);
     }
@@ -75,9 +82,10 @@ impl Set<u16> for Register16 {
 pub struct Immediate;
 
 impl Dissasemble for Immediate {
-    fn dissasemble<AR>(self, cpu: &mut Cpu<AR>) -> String
+    fn dissasemble<A, R>(self, cpu: &mut Cpu<A, R>) -> String
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         let immediate = cpu.get_immediate_for_print();
         format!("${:x}", immediate)
@@ -85,18 +93,20 @@ impl Dissasemble for Immediate {
 }
 
 impl Get<u8> for Immediate {
-    fn get<AR>(self, cpu: &mut Cpu<AR>) -> u8
+    fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> u8
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         cpu.read_immediate()
     }
 }
 
 impl Get<u16> for Immediate {
-    fn get<AR>(self, cpu: &mut Cpu<AR>) -> u16
+    fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> u16
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         cpu.read_immediate16()
     }
@@ -113,9 +123,10 @@ pub enum Indirect {
 }
 
 impl Dissasemble for Indirect {
-    fn dissasemble<AR>(self, cpu: &mut Cpu<AR>) -> String
+    fn dissasemble<A, R>(self, cpu: &mut Cpu<A, R>) -> String
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         match self {
             Indirect::BC => format!("[bc]"),
@@ -137,9 +148,10 @@ impl Dissasemble for Indirect {
 }
 
 impl Indirect {
-    fn into_address<AR>(self, cpu: &mut Cpu<AR>) -> u16
+    fn into_address<A, R>(self, cpu: &mut Cpu<A, R>) -> u16
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         match self {
             Indirect::BC => cpu.registers.read16(Register16::BC),
@@ -153,9 +165,10 @@ impl Indirect {
 }
 
 impl Get<u8> for Indirect {
-    fn get<AR>(self, cpu: &mut Cpu<AR>) -> u8
+    fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> u8
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         let address = self.into_address(cpu);
         cpu.memory.read(address)
@@ -163,9 +176,10 @@ impl Get<u8> for Indirect {
 }
 
 impl Set<u8> for Indirect {
-    fn set<AR>(self, cpu: &mut Cpu<AR>, val: u8)
+    fn set<A, R>(self, cpu: &mut Cpu<A, R>, val: u8)
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         let address = self.into_address(cpu);
         cpu.memory.write(address, val);
@@ -176,18 +190,20 @@ impl Set<u8> for Indirect {
 pub struct IndirectIncreaseHL;
 
 impl Dissasemble for IndirectIncreaseHL {
-    fn dissasemble<AR>(self, _cpu: &mut Cpu<AR>) -> String
+    fn dissasemble<A, R>(self, _cpu: &mut Cpu<A, R>) -> String
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         format!("[hl++]")
     }
 }
 
 impl Get<u8> for IndirectIncreaseHL {
-    fn get<AR>(self, cpu: &mut Cpu<AR>) -> u8
+    fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> u8
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         let address = cpu.registers.read16(Register16::HL);
         let ret = cpu.memory.read(address);
@@ -198,9 +214,10 @@ impl Get<u8> for IndirectIncreaseHL {
 }
 
 impl Set<u8> for IndirectIncreaseHL {
-    fn set<AR>(self, cpu: &mut Cpu<AR>, val: u8)
+    fn set<A, R>(self, cpu: &mut Cpu<A, R>, val: u8)
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         let address = cpu.registers.read16(Register16::HL);
         cpu.memory.write(address, val);
@@ -213,18 +230,20 @@ impl Set<u8> for IndirectIncreaseHL {
 pub struct IndirectDecreaseHL;
 
 impl Dissasemble for IndirectDecreaseHL {
-    fn dissasemble<AR>(self, _cpu: &mut Cpu<AR>) -> String
+    fn dissasemble<A, R>(self, _cpu: &mut Cpu<A, R>) -> String
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         format!("[hl--]")
     }
 }
 
 impl Get<u8> for IndirectDecreaseHL {
-    fn get<AR>(self, cpu: &mut Cpu<AR>) -> u8
+    fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> u8
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         let address = cpu.registers.read16(Register16::HL);
         let ret = cpu.memory.read(address);
@@ -235,9 +254,10 @@ impl Get<u8> for IndirectDecreaseHL {
 }
 
 impl Set<u8> for IndirectDecreaseHL {
-    fn set<AR>(self, cpu: &mut Cpu<AR>, val: u8)
+    fn set<A, R>(self, cpu: &mut Cpu<A, R>, val: u8)
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         let address = cpu.registers.read16(Register16::HL);
         cpu.memory.write(address, val);
@@ -255,9 +275,10 @@ pub enum JumpCondition {
 }
 
 impl Dissasemble for JumpCondition {
-    fn dissasemble<AR>(self, _cpu: &mut Cpu<AR>) -> String
+    fn dissasemble<A, R>(self, _cpu: &mut Cpu<A, R>) -> String
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         match self {
             JumpCondition::Zero => format!("z"),
@@ -269,9 +290,10 @@ impl Dissasemble for JumpCondition {
 }
 
 impl JumpCondition {
-    pub fn check<AR>(self, cpu: &Cpu<AR>) -> bool
+    pub fn check<A, R>(self, cpu: &Cpu<A, R>) -> bool
     where
-        AR: AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         use JumpCondition::{Carry, NotCarry, NotZero, Zero};
         match self {

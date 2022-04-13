@@ -20,7 +20,7 @@ pub enum Mbc {
     One(Mbc1),
     Two(Mbc2),
     Three(Mbc3),
-    Five(Mbc5),
+    Five { mbc: Mbc5, has_rumble: bool },
 }
 
 impl core::fmt::Display for Mbc {
@@ -30,27 +30,32 @@ impl core::fmt::Display for Mbc {
             Mbc::One(_) => write!(f, "MBC 1"),
             Mbc::Two(_) => write!(f, "MBC 2"),
             Mbc::Three(_) => write!(f, "MBC 3"),
-            Mbc::Five(_) => write!(f, "MBC 5"),
+            Mbc::Five { .. } => write!(f, "MBC 5"),
         }
     }
 }
 
-pub struct Cartridge {
+pub struct Cartridge<R: RumbleCallbacks> {
     mbc: Mbc,
     rom: Box<[u8]>,
     header_info: HeaderInfo,
-    with_battery: bool,
+    has_battery: bool,
     ram: Box<[u8]>,
     rom_offsets: (usize, usize),
     ram_offset: usize,
+    rumble_callbacks: R,
 }
 
-impl Cartridge {
-    pub fn new(rom: Box<[u8]>, ram: Option<Box<[u8]>>) -> Result<Cartridge, Error> {
+impl<R: RumbleCallbacks> Cartridge<R> {
+    pub fn new(
+        rom: Box<[u8]>,
+        ram: Option<Box<[u8]>>,
+        rumble_callbacks: R,
+    ) -> Result<Cartridge<R>, Error> {
         let header_info = HeaderInfo::new(&rom)?;
         let mbc30 = header_info.ram_size().total_size_in_bytes() > 65536;
 
-        let (mbc, with_battery) = match rom[0x147] {
+        let (mbc, has_battery) = match rom[0x147] {
             0x00 => (Mbc::None, false),
             0x01 | 0x02 => (Mbc::One(Mbc1::new()), false),
             0x03 => (Mbc::One(Mbc1::new()), true),
@@ -58,8 +63,34 @@ impl Cartridge {
             0x06 => (Mbc::Two(Mbc2::new()), true),
             0x0f | 0x10 | 0x13 => (Mbc::Three(Mbc3::new(mbc30)), true),
             0x11 | 0x12 => (Mbc::Three(Mbc3::new(mbc30)), false),
-            0x19 | 0x1a | 0x1c | 0x1d => (Mbc::Five(Mbc5::new()), false),
-            0x1b | 0x1e => (Mbc::Five(Mbc5::new()), true),
+            0x19 | 0x1a => (
+                Mbc::Five {
+                    mbc: Mbc5::new(),
+                    has_rumble: false,
+                },
+                false,
+            ),
+            0x1b => (
+                Mbc::Five {
+                    mbc: Mbc5::new(),
+                    has_rumble: false,
+                },
+                true,
+            ),
+            0x1c | 0x1d => (
+                Mbc::Five {
+                    mbc: Mbc5::new(),
+                    has_rumble: true,
+                },
+                false,
+            ),
+            0x1e => (
+                Mbc::Five {
+                    mbc: Mbc5::new(),
+                    has_rumble: true,
+                },
+                true,
+            ),
             mbc_byte => return Err(Error::InvalidMBC { mbc_byte }),
         };
 
@@ -76,12 +107,17 @@ impl Cartridge {
         Ok(Self {
             rom,
             mbc,
-            with_battery,
+            has_battery,
             header_info,
             ram,
             rom_offsets,
             ram_offset,
+            rumble_callbacks,
         })
+    }
+
+    pub fn has_battery(&self) -> bool {
+        self.has_battery
     }
 
     pub fn header_info(&self) -> &HeaderInfo {
@@ -135,7 +171,7 @@ impl Cartridge {
                     _ => 0xff,
                 }
             }
-            Mbc::Five(ref mbc5) => self.mbc_read_ram(mbc5.is_ram_enabled(), address),
+            Mbc::Five { ref mbc, .. } => self.mbc_read_ram(mbc.is_ram_enabled(), address),
         }
     }
 
@@ -149,8 +185,8 @@ impl Cartridge {
             Mbc::Three(ref mut mbc3) => {
                 mbc3.write_rom(address, value, &mut self.rom_offsets, &mut self.ram_offset)
             }
-            Mbc::Five(ref mut mbc5) => {
-                mbc5.write_rom(address, value, &mut self.rom_offsets, &mut self.ram_offset)
+            Mbc::Five { ref mut mbc, .. } => {
+                mbc.write_rom(address, value, &mut self.rom_offsets, &mut self.ram_offset)
             }
         }
     }
@@ -184,9 +220,19 @@ impl Cartridge {
                     _ => (),
                 }
             }
-            Mbc::Five(ref mbc5) => {
-                let is_ram_enabled = mbc5.is_ram_enabled();
-                self.mbc_write_ram(is_ram_enabled, address, value)
+            Mbc::Five {
+                ref mbc,
+                has_rumble,
+            } => {
+                let is_ram_enabled = mbc.is_ram_enabled();
+                self.mbc_write_ram(is_ram_enabled, address, value);
+                if has_rumble {
+                    if value & 0x8 != 0 {
+                        self.rumble_callbacks.start_rumble();
+                    } else {
+                        self.rumble_callbacks.stop_rumble();
+                    }
+                }
             }
         }
     }
@@ -196,14 +242,25 @@ impl Cartridge {
     }
 }
 
-impl core::fmt::Display for Cartridge {
+impl<R: RumbleCallbacks> core::fmt::Display for Cartridge<R> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let has_rumble = match self.mbc {
+            Mbc::Five { has_rumble, .. } => has_rumble,
+            _ => false,
+        };
+
         write!(
             f,
-            "{}\n{}\nHas battery: {}",
+            "{}\n{}\nBattery: {}, Rumble: {}\n",
             self.mbc,
             self.header_info(),
-            self.with_battery,
+            self.has_battery,
+            has_rumble
         )
     }
+}
+
+pub trait RumbleCallbacks {
+    fn start_rumble(&mut self);
+    fn stop_rumble(&mut self);
 }

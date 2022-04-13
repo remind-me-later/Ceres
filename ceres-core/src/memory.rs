@@ -9,6 +9,7 @@ use super::{cartridge::Cartridge, interrupts::InterruptController, timer::Timer}
 use crate::{
     audio::Apu,
     boot_rom::BootRom,
+    cartridge::RumbleCallbacks,
     joypad::Joypad,
     serial::Serial,
     video::{
@@ -27,15 +28,15 @@ pub enum FunctionMode {
     Color,
 }
 
-pub struct Memory<AR: AudioCallbacks> {
-    cartridge: Cartridge,
+pub struct Memory<A: AudioCallbacks, R: RumbleCallbacks> {
+    cartridge: Cartridge<R>,
     interrupt_controller: InterruptController,
     timer: Timer,
     high_ram: HighRam,
     work_ram: WorkRam,
     ppu: Ppu,
     joypad: Joypad,
-    apu: Apu<AR>,
+    apu: Apu<A>,
     serial: Serial,
     dma_controller: DmaController,
     boot_rom: BootRom,
@@ -45,13 +46,13 @@ pub struct Memory<AR: AudioCallbacks> {
     function_mode: FunctionMode,
 }
 
-impl<'a, AR: AudioCallbacks> Memory<AR> {
+impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
     pub fn new(
         model: Model,
-        cartridge: Cartridge,
+        cartridge: Cartridge<R>,
         monochrome_palette_colors: MonochromePaletteColors,
         boot_rom: BootRom,
-        audio_renderer: AR,
+        audio_renderer: A,
     ) -> Self {
         let function_mode = match model {
             Model::Dmg | Model::Mgb => FunctionMode::Monochrome,
@@ -77,7 +78,7 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
         }
     }
 
-    pub fn cartridge(&self) -> &Cartridge {
+    pub fn cartridge(&self) -> &Cartridge<R> {
         &self.cartridge
     }
 
@@ -101,11 +102,11 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
         &mut self.speed_switch_register
     }
 
-    pub fn audio_callbacks(&self) -> &AR {
+    pub fn audio_callbacks(&self) -> &A {
         self.apu.callbacks()
     }
 
-    pub fn mut_audio_callbacks(&mut self) -> &mut AR {
+    pub fn mut_audio_callbacks(&mut self) -> &mut A {
         self.apu.mut_callbacks()
     }
 

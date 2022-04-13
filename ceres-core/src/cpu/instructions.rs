@@ -6,7 +6,7 @@ use super::{
     },
     Cpu,
 };
-use crate::AudioCallbacks;
+use crate::{cartridge::RumbleCallbacks, AudioCallbacks};
 
 #[cfg(debug_assertions)]
 use crate::cpu::operands::Dissasemble;
@@ -22,7 +22,7 @@ macro_rules! trace_dissasembled {
     })
 }
 
-impl<'a, AR: AudioCallbacks> Cpu<AR> {
+impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     pub fn ld<G, S>(&mut self, lhs: S, rhs: G)
     where
         G: Get<u8>,

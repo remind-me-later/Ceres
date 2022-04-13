@@ -3,6 +3,8 @@ extern crate alloc;
 use alloc::{format, string::String};
 use bitflags::bitflags;
 
+use crate::{cartridge::RumbleCallbacks, AudioCallbacks};
+
 use super::operands::Dissasemble;
 
 bitflags! {
@@ -26,9 +28,10 @@ pub enum Register8 {
 }
 
 impl Dissasemble for Register8 {
-    fn dissasemble<AR>(self, _cpu: &mut super::Cpu<AR>) -> String
+    fn dissasemble<A, R>(self, _cpu: &mut super::Cpu<A, R>) -> String
     where
-        AR: crate::AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         match self {
             Register8::A => format!("a"),
@@ -53,9 +56,10 @@ pub enum Register16 {
 }
 
 impl Dissasemble for Register16 {
-    fn dissasemble<AR>(self, _cpu: &mut super::Cpu<AR>) -> String
+    fn dissasemble<A, R>(self, _cpu: &mut super::Cpu<A, R>) -> String
     where
-        AR: crate::AudioCallbacks,
+        A: AudioCallbacks,
+        R: RumbleCallbacks,
     {
         match self {
             Register16::AF => format!("af"),

@@ -1,8 +1,9 @@
 use super::registers::Register16::PC;
 use super::Cpu;
+use crate::cartridge::RumbleCallbacks;
 use crate::AudioCallbacks;
 
-impl<'a, AR: AudioCallbacks> Cpu<AR> {
+impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     pub fn service_interrupt(&mut self) {
         if self
             .memory

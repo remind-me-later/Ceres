@@ -16,7 +16,7 @@ mod video;
 
 pub use audio::{AudioCallbacks, Frame, Sample};
 pub use boot_rom::BootRom;
-pub use cartridge::{Cartridge, HeaderInfo};
+pub use cartridge::{Cartridge, HeaderInfo, RumbleCallbacks};
 use core::time::Duration;
 use cpu::Cpu;
 pub use error::Error;
@@ -45,16 +45,16 @@ pub enum Model {
     Cgb, // Game Boy Color
 }
 
-pub struct Gameboy<AR: AudioCallbacks> {
-    cpu: Cpu<AR>,
+pub struct Gameboy<A: AudioCallbacks, R: RumbleCallbacks> {
+    cpu: Cpu<A, R>,
 }
 
-impl<AR: AudioCallbacks> Gameboy<AR> {
+impl<A: AudioCallbacks, R: RumbleCallbacks> Gameboy<A, R> {
     pub fn new(
         model: Model,
-        cartridge: Cartridge,
+        cartridge: Cartridge<R>,
         boot_rom: BootRom,
-        audio_renderer: AR,
+        audio_renderer: A,
         monochrome_palette_colors: MonochromePaletteColors,
     ) -> Self {
         let memory = Memory::new(
@@ -82,11 +82,11 @@ impl<AR: AudioCallbacks> Gameboy<AR> {
         self.cpu.mut_memory().release(button);
     }
 
-    pub fn audio_callbacks(&self) -> &AR {
+    pub fn audio_callbacks(&self) -> &A {
         self.cpu.memory().audio_callbacks()
     }
 
-    pub fn mut_audio_callbacks(&mut self) -> &mut AR {
+    pub fn mut_audio_callbacks(&mut self) -> &mut A {
         self.cpu.mut_memory().mut_audio_callbacks()
     }
 
@@ -119,7 +119,7 @@ impl<AR: AudioCallbacks> Gameboy<AR> {
         self.cpu.memory().cartridge().header_info()
     }
 
-    pub fn cartridge(&self) -> &Cartridge {
+    pub fn cartridge(&self) -> &Cartridge<R> {
         self.cpu.cartridge()
     }
 }

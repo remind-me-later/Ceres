@@ -1,7 +1,7 @@
 use super::{registers::Register16::SP, Cpu};
-use crate::AudioCallbacks;
+use crate::{cartridge::RumbleCallbacks, AudioCallbacks};
 
-impl<'a, AR: AudioCallbacks> Cpu<AR> {
+impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     pub fn internal_pop(&mut self) -> u16 {
         let lo = self.memory.read(self.registers.read16(SP));
         self.registers.increase_sp();

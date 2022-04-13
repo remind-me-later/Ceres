@@ -6,23 +6,24 @@ mod registers;
 mod stack;
 
 use crate::{
+    cartridge::RumbleCallbacks,
     memory::Memory,
     video::{PixelDataVram, VramBank},
     AudioCallbacks, Cartridge,
 };
 use registers::{Register16::PC, Registers};
 
-pub struct Cpu<AR: AudioCallbacks> {
+pub struct Cpu<A: AudioCallbacks, R: RumbleCallbacks> {
     registers: Registers,
-    memory: Memory<AR>,
+    memory: Memory<A, R>,
     ei_delay: bool,
     ime: bool,
     halted: bool,
     halt_bug: bool,
 }
 
-impl<AR: AudioCallbacks> Cpu<AR> {
-    pub fn new(memory: Memory<AR>) -> Self {
+impl<A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
+    pub fn new(memory: Memory<A, R>) -> Self {
         Self {
             registers: Registers::new(),
             ei_delay: false,
@@ -37,15 +38,15 @@ impl<AR: AudioCallbacks> Cpu<AR> {
         self.memory.draw_tile_data(bank)
     }
 
-    pub fn cartridge(&self) -> &Cartridge {
+    pub fn cartridge(&self) -> &Cartridge<R> {
         self.memory.cartridge()
     }
 
-    pub fn memory(&self) -> &Memory<AR> {
+    pub fn memory(&self) -> &Memory<A, R> {
         &self.memory
     }
 
-    pub fn mut_memory(&mut self) -> &mut Memory<AR> {
+    pub fn mut_memory(&mut self) -> &mut Memory<A, R> {
         &mut self.memory
     }
 

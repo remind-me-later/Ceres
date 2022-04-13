@@ -11,6 +11,7 @@ use crate::{
             NR41, NR42, NR43, NR44, NR50, NR51, NR52,
         },
     },
+    cartridge::RumbleCallbacks,
     interrupts::{
         ICRegister::{Ie, If},
         InterruptController,
@@ -29,7 +30,7 @@ use crate::{
     AudioCallbacks, Model,
 };
 
-impl<'a, AR: AudioCallbacks> Memory<AR> {
+impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
     fn generic_mem_cycle<T, F>(&mut self, f: F) -> T
     where
         F: FnOnce(&mut Self) -> T,
@@ -40,7 +41,7 @@ impl<'a, AR: AudioCallbacks> Memory<AR> {
 
     fn apu_mem_cycle<T, F>(&mut self, f: F) -> T
     where
-        F: FnOnce(&mut Apu<AR>) -> T,
+        F: FnOnce(&mut Apu<A>) -> T,
     {
         self.emulate_oam_dma();
         self.emulate_hdma();
