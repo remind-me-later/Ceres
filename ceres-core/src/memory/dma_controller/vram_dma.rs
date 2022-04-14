@@ -90,7 +90,6 @@ impl VramDma {
         self.is_active = true;
     }
 
-    #[allow(clippy::cast_possible_wrap)]
     pub fn start_transfer(&mut self, ppu: &Ppu, microseconds_elapsed_times_16: u8) -> bool {
         if !self.is_active {
             return false;
@@ -125,7 +124,7 @@ impl VramDma {
         }
     }
 
-    pub fn done(&self) -> bool {
+    pub fn is_transfer_done(&self) -> bool {
         !self.is_active || self.state == VramDmaState::FinishedLine
     }
 

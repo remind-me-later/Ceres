@@ -73,8 +73,6 @@ impl Emulator {
             (cartridge, sav_path)
         };
 
-        print!("{cartridge}");
-
         let boot_rom = {
             let boot_rom_buf = read_file(&boot_rom_path)
                 .unwrap_or_else(|e| error::print(format!("could not load boot ROM {}", e)))
@@ -132,14 +130,6 @@ impl Emulator {
 
         let mut main_win: EmuWindow<{ SCREEN_WIDTH as u32 }, { SCREEN_HEIGHT as u32 }, 4> =
             EmuWindow::new(super::CERES_STR, &video_subsystem);
-        // let mut vram0_win: EmuWindow<
-        //     { VRAM_DISPLAY_WIDTH as u32 },
-        //     { VRAM_DISPLAY_HEIGHT as u32 },
-        // > = EmuWindow::new("Vram bank 0", &video_subsystem);
-        // let mut vram1_win: EmuWindow<
-        //     { VRAM_DISPLAY_WIDTH as u32 },
-        //     { VRAM_DISPLAY_HEIGHT as u32 },
-        // > = EmuWindow::new("Vram bank 1", &video_subsystem);
 
         let mut event_pump = self.sdl_context.event_pump().unwrap();
 
@@ -263,10 +253,6 @@ impl Emulator {
                 let gb_screen_pixel_data = std::mem::take(self.gameboy.mut_pixel_data());
                 let gb_screen_pixel_data = gb_screen_pixel_data.rgba();
                 main_win.upload_rgba(gb_screen_pixel_data);
-
-                // let vram_pixel_data = self.gameboy.draw_vram_tile_data(VramBank::Bank0);
-                // let vram_pixel_data = vram_pixel_data.rgba();
-                // vram0_win.upload_rgba(vram_pixel_data);
 
                 next_frame = now + ceres_core::FRAME_DURATION;
             }

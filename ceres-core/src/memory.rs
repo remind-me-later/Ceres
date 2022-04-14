@@ -140,7 +140,7 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
 
     pub fn tick_t_cycle(&mut self) {
         self.emulate_oam_dma();
-        self.emulate_hdma();
+        self.emulate_vram_dma();
         self.tick_ppu();
         self.timer.tick_t_cycle(&mut self.interrupt_controller);
         self.tick_apu();
@@ -172,14 +172,14 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
         self.apu.tick(microseconds_elapsed_times_16);
     }
 
-    fn emulate_hdma(&mut self) {
+    fn emulate_vram_dma(&mut self) {
         let microseconds_elapsed_times_16 = self.t_cycles_to_microseconds_elapsed_times_16();
 
         if self
             .dma_controller
             .start_transfer(&self.ppu, microseconds_elapsed_times_16)
         {
-            while !self.dma_controller.vram_dma_is_done() {
+            while !self.dma_controller.vram_dma_is_transfer_done() {
                 if let Some(hdma_transfer) = self
                     .dma_controller
                     .do_vram_transfer(microseconds_elapsed_times_16)
@@ -199,16 +199,13 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
                         .vram_dma_write(hdma_transfer.destination_address, val);
                 }
 
-                self.tick_t_cycle_vram();
+                // tick
+                self.emulate_oam_dma();
+                self.tick_ppu();
+                self.timer.tick_t_cycle(&mut self.interrupt_controller);
+                self.tick_apu();
             }
         }
-    }
-
-    pub fn tick_t_cycle_vram(&mut self) {
-        self.emulate_oam_dma();
-        self.tick_ppu();
-        self.timer.tick_t_cycle(&mut self.interrupt_controller);
-        self.tick_apu();
     }
 
     // FIXME: sprites are not displayed during OAM DMA

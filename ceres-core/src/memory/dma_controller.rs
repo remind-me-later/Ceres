@@ -18,14 +18,14 @@ pub enum DmaRegister {
 
 pub struct DmaController {
     oam_dma_controller: OamDma,
-    hdma_controller: VramDma,
+    vram_dma_controller: VramDma,
 }
 
 impl DmaController {
     pub const fn new() -> Self {
         Self {
             oam_dma_controller: OamDma::new(),
-            hdma_controller: VramDma::new(),
+            vram_dma_controller: VramDma::new(),
         }
     }
 
@@ -36,7 +36,7 @@ impl DmaController {
     pub fn read(&self, register: DmaRegister) -> u8 {
         match register {
             DmaRegister::Dma => self.oam_dma_controller.read(),
-            DmaRegister::HDMA5 => self.hdma_controller.read_hdma5(),
+            DmaRegister::HDMA5 => self.vram_dma_controller.read_hdma5(),
             _ => 0xff,
         }
     }
@@ -44,11 +44,11 @@ impl DmaController {
     pub fn write(&mut self, register: DmaRegister, val: u8) {
         match register {
             DmaRegister::Dma => self.oam_dma_controller.write(val),
-            DmaRegister::HDMA1 => self.hdma_controller.write_hdma1(val),
-            DmaRegister::HDMA2 => self.hdma_controller.write_hdma2(val),
-            DmaRegister::HDMA3 => self.hdma_controller.write_hdma3(val),
-            DmaRegister::HDMA4 => self.hdma_controller.write_hdma4(val),
-            DmaRegister::HDMA5 => self.hdma_controller.write_hdma5(val),
+            DmaRegister::HDMA1 => self.vram_dma_controller.write_hdma1(val),
+            DmaRegister::HDMA2 => self.vram_dma_controller.write_hdma2(val),
+            DmaRegister::HDMA3 => self.vram_dma_controller.write_hdma3(val),
+            DmaRegister::HDMA4 => self.vram_dma_controller.write_hdma4(val),
+            DmaRegister::HDMA5 => self.vram_dma_controller.write_hdma5(val),
         }
     }
 
@@ -58,7 +58,7 @@ impl DmaController {
     }
 
     pub fn start_transfer(&mut self, ppu: &Ppu, microseconds_elapsed_times_16: u8) -> bool {
-        self.hdma_controller
+        self.vram_dma_controller
             .start_transfer(ppu, microseconds_elapsed_times_16)
     }
 
@@ -66,11 +66,11 @@ impl DmaController {
         &mut self,
         microseconds_elapsed_times_16: u8,
     ) -> Option<VramDMATransfer> {
-        self.hdma_controller
+        self.vram_dma_controller
             .do_vram_transfer(microseconds_elapsed_times_16)
     }
 
-    pub fn vram_dma_is_done(&self) -> bool {
-        self.hdma_controller.done()
+    pub fn vram_dma_is_transfer_done(&self) -> bool {
+        self.vram_dma_controller.is_transfer_done()
     }
 }

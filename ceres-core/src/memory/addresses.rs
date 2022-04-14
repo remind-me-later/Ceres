@@ -44,7 +44,7 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
         F: FnOnce(&mut Apu<A>) -> T,
     {
         self.emulate_oam_dma();
-        self.emulate_hdma();
+        self.emulate_vram_dma();
         self.tick_ppu();
         self.timer.tick_t_cycle(&mut self.interrupt_controller);
         self.tick_apu();
@@ -56,7 +56,7 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
         F: FnOnce(&mut Timer, &mut InterruptController) -> T,
     {
         self.emulate_oam_dma();
-        self.emulate_hdma();
+        self.emulate_vram_dma();
         self.tick_ppu();
         let result = f(&mut self.timer, &mut self.interrupt_controller);
         self.tick_apu();

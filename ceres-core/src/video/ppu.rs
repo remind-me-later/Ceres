@@ -129,19 +129,24 @@ impl Ppu {
         match io {
             PpuIO::PpuRegister(register) => self.registers.write(register, val, &mut self.cycles),
             PpuIO::Vram { address } => match mode {
-                // Mode::DrawingPixels => (),
+                Mode::DrawingPixels => (),
                 _ => self.vram.write(address, val),
             },
             PpuIO::VramBank => self.vram.write_bank_number(val),
             PpuIO::Oam { address } => match mode {
-                // Mode::OamScan | Mode::DrawingPixels => (),
+                Mode::OamScan | Mode::DrawingPixels => (),
                 _ => self.oam.write(address as u8, val),
             },
         }
     }
 
     pub fn vram_dma_write(&mut self, address: u16, val: u8) {
-        self.vram.write(address, val)
+        let mode = self.registers.stat().mode();
+
+        match mode {
+            Mode::DrawingPixels => (),
+            _ => self.vram.write(address, val),
+        }
     }
 
     pub fn oam_dma_write(&mut self, address: u8, val: u8) {
