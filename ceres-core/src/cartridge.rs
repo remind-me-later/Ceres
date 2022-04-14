@@ -53,7 +53,8 @@ impl<R: RumbleCallbacks> Cartridge<R> {
         rumble_callbacks: R,
     ) -> Result<Cartridge<R>, Error> {
         let header_info = HeaderInfo::new(&rom)?;
-        let mbc30 = header_info.ram_size().total_size_in_bytes() > 65536;
+        let mbc30 = header_info.ram_size().number_of_banks() >= 8;
+        let rom_bit_mask = header_info.rom_size().banks_bit_mask();
 
         let (mbc, has_battery) = match rom[0x147] {
             0x00 => (Mbc::None, false),
@@ -65,28 +66,28 @@ impl<R: RumbleCallbacks> Cartridge<R> {
             0x11 | 0x12 => (Mbc::Three(Mbc3::new(mbc30)), false),
             0x19 | 0x1a => (
                 Mbc::Five {
-                    mbc: Mbc5::new(),
+                    mbc: Mbc5::new(rom_bit_mask),
                     has_rumble: false,
                 },
                 false,
             ),
             0x1b => (
                 Mbc::Five {
-                    mbc: Mbc5::new(),
+                    mbc: Mbc5::new(rom_bit_mask),
                     has_rumble: false,
                 },
                 true,
             ),
             0x1c | 0x1d => (
                 Mbc::Five {
-                    mbc: Mbc5::new(),
+                    mbc: Mbc5::new(rom_bit_mask),
                     has_rumble: true,
                 },
                 false,
             ),
             0x1e => (
                 Mbc::Five {
-                    mbc: Mbc5::new(),
+                    mbc: Mbc5::new(rom_bit_mask),
                     has_rumble: true,
                 },
                 true,
@@ -125,16 +126,14 @@ impl<R: RumbleCallbacks> Cartridge<R> {
     }
 
     pub fn read_rom(&self, address: u16) -> u8 {
-        let len = self.header_info.rom_size().total_size_in_bytes();
-
         let bank_address = match address {
             0x0000..=0x3fff => {
                 let (rom_lower, _) = self.rom_offsets;
-                (rom_lower as usize | (address as usize & 0x3fff)) & (len - 1)
+                rom_lower as usize | (address as usize & 0x3fff)
             }
             0x4000..=0x7fff => {
                 let (_, rom_upper) = self.rom_offsets;
-                (rom_upper as usize | (address as usize & 0x3fff)) & (len - 1)
+                rom_upper as usize | (address as usize & 0x3fff)
             }
             _ => 0,
         };
@@ -143,7 +142,7 @@ impl<R: RumbleCallbacks> Cartridge<R> {
     }
 
     pub fn ram_address(&self, address: u16) -> usize {
-        (self.ram_offset | (address as usize & 0x1fff)) & (self.ram.len() - 1)
+        self.ram_offset | (address as usize & 0x1fff)
     }
 
     fn mbc_read_ram(&self, ram_enabled: bool, address: u16) -> u8 {

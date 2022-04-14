@@ -130,7 +130,7 @@ impl Emulator {
         let _controller = self.init_controller();
         let video_subsystem = self.sdl_context.video().unwrap();
 
-        let mut main_win: EmuWindow<{ SCREEN_WIDTH as u32 }, { SCREEN_HEIGHT as u32 }> =
+        let mut main_win: EmuWindow<{ SCREEN_WIDTH as u32 }, { SCREEN_HEIGHT as u32 }, 4> =
             EmuWindow::new(super::CERES_STR, &video_subsystem);
         // let mut vram0_win: EmuWindow<
         //     { VRAM_DISPLAY_WIDTH as u32 },
@@ -295,17 +295,17 @@ fn read_file(path: &Path) -> Result<Vec<u8>, Error> {
     Ok(buffer)
 }
 
-struct EmuWindow<const WIDTH: u32, const HEIGHT: u32> {
+struct EmuWindow<const WIDTH: u32, const HEIGHT: u32, const MUL: u32> {
     canvas: Canvas<Window>,
     _texture_creator: TextureCreator<WindowContext>,
     texture: Texture,
     render_rect: Rect,
 }
 
-impl<'a, const WIDTH: u32, const HEIGHT: u32> EmuWindow<WIDTH, HEIGHT> {
+impl<'a, const WIDTH: u32, const HEIGHT: u32, const MUL: u32> EmuWindow<WIDTH, HEIGHT, MUL> {
     pub fn new(title: &str, video_subsystem: &'a VideoSubsystem) -> Self {
         let window = video_subsystem
-            .window(title, WIDTH, HEIGHT)
+            .window(title, WIDTH * MUL, HEIGHT * MUL)
             .position_centered()
             .resizable()
             .build()
@@ -319,7 +319,7 @@ impl<'a, const WIDTH: u32, const HEIGHT: u32> EmuWindow<WIDTH, HEIGHT> {
             .create_texture_streaming(sdl2::pixels::PixelFormatEnum::RGBA32, WIDTH, HEIGHT)
             .unwrap();
 
-        let render_rect = Self::resize_texture(WIDTH, HEIGHT);
+        let render_rect = Self::resize_texture(WIDTH * MUL, HEIGHT * MUL);
 
         Self {
             canvas,

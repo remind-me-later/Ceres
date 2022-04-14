@@ -20,13 +20,11 @@ const HDMA_T_CYCLES_DELAY: i8 = 0;
 pub struct VramDMATransfer {
     pub source_address: u16,
     pub destination_address: u16,
-    pub length: u16,
 }
 
 #[derive(PartialEq, Eq)]
 enum VramDmaState {
     AwaitingHBlank,
-    Copying,
     FinishedLine,
 }
 
@@ -37,7 +35,7 @@ pub struct VramDma {
     mode: VramDmaMode,
     transfer_size: u16,
     state: VramDmaState,
-    bytes_to_copy: u8,
+    bytes_to_copy: u16,
     microseconds_elapsed_times_16: i8,
 }
 
@@ -93,15 +91,48 @@ impl VramDma {
     }
 
     #[allow(clippy::cast_possible_wrap)]
-    pub fn emulate(
-        &mut self,
-        ppu: &Ppu,
-        microseconds_elapsed_times_16: u8,
-    ) -> Option<VramDMATransfer> {
+    pub fn start_transfer(&mut self, ppu: &Ppu, microseconds_elapsed_times_16: u8) -> bool {
         if !self.is_active {
-            return None;
+            return false;
         }
 
+        self.microseconds_elapsed_times_16 = self
+            .microseconds_elapsed_times_16
+            .wrapping_add(microseconds_elapsed_times_16 as i8); // 2 or 4 so its safe
+
+        if self.microseconds_elapsed_times_16 < 4 {
+            return false;
+        }
+
+        self.microseconds_elapsed_times_16 -= 4;
+
+        match self.mode {
+            VramDmaMode::GeneralPurpose => {
+                self.bytes_to_copy = self.transfer_size;
+                true
+            }
+            VramDmaMode::Hblank => match self.state {
+                VramDmaState::FinishedLine if ppu.mode() != Mode::HBlank => {
+                    self.state = VramDmaState::AwaitingHBlank;
+                    false
+                }
+                VramDmaState::AwaitingHBlank if ppu.mode() == Mode::HBlank => {
+                    self.bytes_to_copy = 0x10;
+                    true
+                }
+                _ => false,
+            },
+        }
+    }
+
+    pub fn done(&self) -> bool {
+        !self.is_active || self.state == VramDmaState::FinishedLine
+    }
+
+    pub fn do_vram_transfer(
+        &mut self,
+        microseconds_elapsed_times_16: u8,
+    ) -> Option<VramDMATransfer> {
         self.microseconds_elapsed_times_16 = self
             .microseconds_elapsed_times_16
             .wrapping_add(microseconds_elapsed_times_16 as i8); // 2 or 4 so its safe
@@ -112,69 +143,24 @@ impl VramDma {
 
         self.microseconds_elapsed_times_16 -= 4;
 
-        match self.mode {
-            VramDmaMode::GeneralPurpose => {
-                // log::info!(
-                //     "GHDMA source: {:x}, dest: {:x}, len: {:x}",
-                //     self.source,
-                //     self.destination,
-                //     self.transfer_size
-                // );
+        let hdma_transfer = VramDMATransfer {
+            source_address: self.source,
+            destination_address: self.destination,
+        };
 
-                let hdma_transfer = VramDMATransfer {
-                    source_address: self.source,
-                    destination_address: self.destination,
-                    length: self.transfer_size,
-                };
+        self.destination = self.destination.wrapping_add(1);
+        self.source = self.source.wrapping_add(1);
+        self.transfer_size -= 1;
+        self.bytes_to_copy -= 1;
 
-                self.transfer_size = 0;
-                self.is_active = false;
-
-                Some(hdma_transfer)
-            }
-            VramDmaMode::Hblank => {
-                match self.state {
-                    VramDmaState::FinishedLine if ppu.mode() != Mode::HBlank => {
-                        self.state = VramDmaState::AwaitingHBlank;
-                    }
-                    VramDmaState::AwaitingHBlank if ppu.mode() == Mode::HBlank => {
-                        self.state = VramDmaState::Copying;
-                        self.bytes_to_copy = 0x10;
-                    }
-                    _ => (),
-                }
-
-                const BYTES_TRANSFERED_PER_M_CYCLE: u8 = 1;
-
-                if self.state == VramDmaState::Copying {
-                    let hdma_transfer = VramDMATransfer {
-                        source_address: self.source,
-                        destination_address: self.destination,
-                        length: u16::from(BYTES_TRANSFERED_PER_M_CYCLE),
-                    };
-
-                    self.destination = self
-                        .destination
-                        .wrapping_add(u16::from(BYTES_TRANSFERED_PER_M_CYCLE));
-                    self.source = self
-                        .source
-                        .wrapping_add(u16::from(BYTES_TRANSFERED_PER_M_CYCLE));
-                    self.transfer_size -= u16::from(BYTES_TRANSFERED_PER_M_CYCLE);
-                    self.bytes_to_copy -= BYTES_TRANSFERED_PER_M_CYCLE;
-
-                    if self.bytes_to_copy == 0 {
-                        self.state = VramDmaState::FinishedLine;
-                    }
-
-                    if self.transfer_size == 0 {
-                        self.is_active = false;
-                    }
-
-                    Some(hdma_transfer)
-                } else {
-                    None
-                }
-            }
+        if self.bytes_to_copy == 0 {
+            self.state = VramDmaState::FinishedLine;
         }
+
+        if self.transfer_size == 0 {
+            self.is_active = false;
+        }
+
+        Some(hdma_transfer)
     }
 }

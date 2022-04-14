@@ -5,22 +5,24 @@ pub struct Mbc5 {
     rom_bank_low: u8,
     rom_bank_high: u8,
     ram_bank: u8,
+    total_rom_banks_mask: usize,
 }
 
 impl Mbc5 {
-    pub fn new() -> Self {
+    pub fn new(total_rom_banks_mask: usize) -> Self {
         Self {
             is_ram_enabled: false,
             rom_bank_low: 0,
             rom_bank_high: 1,
             ram_bank: 0,
+            total_rom_banks_mask,
         }
     }
 
     fn rom_offsets(&self) -> (usize, usize) {
         let lower_bits = self.rom_bank_low as usize;
         let upper_bits = (self.rom_bank_high as usize) << 8;
-        let rom_bank = upper_bits | lower_bits;
+        let rom_bank = (upper_bits | lower_bits) & self.total_rom_banks_mask;
         // let rom_bank = if rom_bank == 0 { 1 } else { rom_bank };
         (0x0000, ROM_BANK_SIZE * rom_bank)
     }

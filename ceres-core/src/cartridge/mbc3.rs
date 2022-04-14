@@ -33,9 +33,9 @@ impl Mbc3 {
             0x4000..=0x5fff => {
                 self.map_select = value & 0x7;
                 if self.mbc30 {
-                    *ram_offset = RAM_BANK_SIZE * (self.map_select & 0b111) as usize;
+                    *ram_offset = RAM_BANK_SIZE * self.map_select as usize;
                 } else {
-                    *ram_offset = RAM_BANK_SIZE * (self.map_select & 0b011) as usize;
+                    *ram_offset = RAM_BANK_SIZE * (self.map_select & 0x3) as usize;
                 }
             }
 

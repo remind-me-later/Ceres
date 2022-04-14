@@ -1,9 +1,9 @@
-mod vram_dma;
 mod oam_dma;
+mod vram_dma;
 
+use self::oam_dma::OamDma;
 pub use self::vram_dma::VramDMATransfer;
 use self::vram_dma::VramDma;
-use self::oam_dma::OamDma;
 use crate::video::ppu::Ppu;
 
 #[derive(Clone, Copy)]
@@ -57,12 +57,20 @@ impl DmaController {
         self.oam_dma_controller.emulate()
     }
 
-    pub fn emulate_hdma(
+    pub fn start_transfer(&mut self, ppu: &Ppu, microseconds_elapsed_times_16: u8) -> bool {
+        self.hdma_controller
+            .start_transfer(ppu, microseconds_elapsed_times_16)
+    }
+
+    pub fn do_vram_transfer(
         &mut self,
-        ppu: &Ppu,
         microseconds_elapsed_times_16: u8,
     ) -> Option<VramDMATransfer> {
         self.hdma_controller
-            .emulate(ppu, microseconds_elapsed_times_16)
+            .do_vram_transfer(microseconds_elapsed_times_16)
+    }
+
+    pub fn vram_dma_is_done(&self) -> bool {
+        self.hdma_controller.done()
     }
 }

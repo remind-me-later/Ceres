@@ -170,17 +170,18 @@ impl ROMSize {
         }
     }
 
-    pub const fn mbc1_banks_bit_mask(self) -> usize {
+    pub const fn banks_bit_mask(self) -> usize {
+        // log2(number_of_banks) - 1
         match self {
             ROMSize::Kb32 => 0x1,
             ROMSize::Kb64 => 0x3,
-            ROMSize::Kb128 => 0x5,
+            ROMSize::Kb128 => 0x7,
             ROMSize::Kb256 => 0xf,
-            ROMSize::Kb512 => 0x3f,
-            ROMSize::Mb1 => 0xff,
-            ROMSize::Mb2 => 0xff,
+            ROMSize::Kb512 => 0x1f,
+            ROMSize::Mb1 => 0x3f,
+            ROMSize::Mb2 => 0x7f,
             ROMSize::Mb4 => 0xff,
-            ROMSize::Mb8 => 0xff,
+            ROMSize::Mb8 => 0x1ff,
         }
     }
 }
