@@ -4,9 +4,7 @@ GameBoy/Color emulator written in rust with a CLI frontend.
 
 ## Compatibility
 
-Passes all of [blargg's test ROMs](https://gbdev.gg8.se/wiki/articles/Test_ROMs#Blargg.27s_tests) and many of [mooneye-gb](https://github.com/Gekkio/mooneye-gb) tests, so compatibility with original GameBoy games should be pretty high.
-
-Some GameBoy Color games work (all of the Pokemon games, Link's Awakening DX and Toy Story Racer for example) but there are some that show very broken graphics (Mario Tennis, Hamtaro).
+Passes all of [blargg's test ROMs](https://gbdev.gg8.se/wiki/articles/Test_ROMs#Blargg.27s_tests) and many of [mooneye-gb](https://github.com/Gekkio/mooneye-gb) tests, so compatibility should be pretty high.
 
 ## Build
 
