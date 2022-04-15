@@ -46,7 +46,7 @@ impl ceres_core::AudioCallbacks for AudioCallbacks {
 
     fn push_frame(&mut self, frame: ceres_core::Frame) {
         // TODO: why?
-        if self.queue.as_ref().size() > 48000 / 2 {
+        if self.queue.as_ref().size() > 48000 {
             return;
         }
 

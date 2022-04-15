@@ -258,8 +258,13 @@ impl Emulator {
             }
         }
 
-        let cartridge = self.gameboy.cartridge();
-        save_data(&self.sav_path, cartridge);
+        {
+            // save
+            let cartridge = self.gameboy.cartridge();
+            if cartridge.has_battery() {
+                save_data(&self.sav_path, cartridge);
+            }
+        }
     }
 }
 

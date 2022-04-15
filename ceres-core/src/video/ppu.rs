@@ -1,4 +1,4 @@
-mod draw;
+mod scanline_renderer;
 // mod fifo;
 pub mod mode;
 pub mod register;
@@ -6,11 +6,8 @@ mod registers;
 
 pub use self::{mode::Mode, register::PpuRegister};
 use super::{
-    palette::MonochromePaletteColors,
-    pixel_data::PixelData,
-    pixel_data_vram::{PixelDataVram, TILES_PER_WIDTH},
-    sprites::ObjectAttributeMemory,
-    vram::{Vram, VramBank},
+    palette::MonochromePaletteColors, pixel_data::PixelData, sprites::ObjectAttributeMemory,
+    vram::Vram,
 };
 use crate::{
     interrupts::{Interrupt, InterruptController},
@@ -56,15 +53,12 @@ pub struct Ppu {
     window_lines_skipped: u16,
     is_frame_done: bool,
     do_render: bool,
-    // debug
-    vram_tile_data: Box<PixelDataVram>,
 }
 
 impl Ppu {
     pub fn new(monochrome_palette_colors: MonochromePaletteColors) -> Self {
         let registers = Registers::new();
         let cycles = registers.stat().mode().cycles(0);
-        let vram_tile_data = Box::new(PixelDataVram::new());
 
         Self {
             registers,
@@ -78,7 +72,6 @@ impl Ppu {
             scanline_used_window: false,
             is_frame_done: false,
             do_render: true,
-            vram_tile_data,
         }
     }
 
@@ -194,57 +187,6 @@ impl Ppu {
         self.registers.stat().mode()
     }
 
-    pub fn draw_vram_tile_data(
-        &mut self,
-        function_mode: FunctionMode,
-        bank: VramBank,
-    ) -> &PixelDataVram {
-        for tile in 0..384 {
-            for col in 0..8 {
-                let tile_data_address = tile * 16 + col * 2;
-
-                let background_attributes = match function_mode {
-                    FunctionMode::Monochrome | FunctionMode::Compatibility => BgAttributes::empty(),
-                    FunctionMode::Color => self.vram.background_attributes(tile as u16),
-                };
-
-                let (data_low, data_high) = {
-                    (
-                        self.vram.get_bank(tile_data_address as u16, bank),
-                        self.vram.get_bank(tile_data_address as u16 + 1, bank),
-                    )
-                };
-
-                for color_bit in 0..8 {
-                    let color_number = (((data_high & color_bit != 0) as u8) << 1)
-                        | (data_low & color_bit != 0) as u8;
-
-                    let color = match function_mode {
-                        FunctionMode::Monochrome => self
-                            .monochrome_palette_colors()
-                            .get_color(self.registers().bgp().shade_index(color_number)),
-                        FunctionMode::Compatibility => self.registers().cgb_bg_palette().get_color(
-                            background_attributes.bits() & 0x7,
-                            self.registers.bgp().shade_index(color_number),
-                        ),
-                        FunctionMode::Color => self
-                            .registers()
-                            .cgb_bg_palette()
-                            .get_color(background_attributes.bits() & 0x7, color_number),
-                    };
-
-                    self.vram_tile_data.set_pixel_color_ij(
-                        col + (tile / TILES_PER_WIDTH) * 8,
-                        color_bit as usize + (tile % TILES_PER_WIDTH) * 8,
-                        color,
-                    );
-                }
-            }
-        }
-
-        &self.vram_tile_data
-    }
-
     pub fn tick(
         &mut self,
         interrupt_controller: &mut InterruptController,
@@ -266,7 +208,7 @@ impl Ppu {
             Mode::OamScan => self.switch_mode(Mode::DrawingPixels, interrupt_controller),
             Mode::DrawingPixels => {
                 if self.do_render {
-                    self.draw_line(function_mode);
+                    self.draw_scanline(function_mode);
                 }
                 self.switch_mode(Mode::HBlank, interrupt_controller);
             }
@@ -309,15 +251,5 @@ impl Ppu {
         } else {
             self.registers.mut_stat().remove(Stat::LY_EQUALS_LYC);
         }
-    }
-
-    #[must_use]
-    pub fn registers(&self) -> &Registers {
-        &self.registers
-    }
-
-    #[must_use]
-    pub fn monochrome_palette_colors(&self) -> MonochromePaletteColors {
-        self.monochrome_palette_colors
     }
 }

@@ -5,12 +5,7 @@ mod operands;
 mod registers;
 mod stack;
 
-use crate::{
-    cartridge::RumbleCallbacks,
-    memory::Memory,
-    video::{PixelDataVram, VramBank},
-    AudioCallbacks, Cartridge,
-};
+use crate::{cartridge::RumbleCallbacks, memory::Memory, AudioCallbacks, Cartridge};
 use registers::{Register16::PC, Registers};
 
 pub struct Cpu<A: AudioCallbacks, R: RumbleCallbacks> {
@@ -32,10 +27,6 @@ impl<A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
             halt_bug: false,
             memory,
         }
-    }
-
-    pub fn draw_tile_data(&mut self, bank: VramBank) -> &PixelDataVram {
-        self.memory.draw_tile_data(bank)
     }
 
     pub fn cartridge(&self) -> &Cartridge<R> {

@@ -3,14 +3,14 @@ members = ["ceres-core", "ceres"]
 default-members = ["ceres"]
 
 [profile.dev]
-opt-level = 1
+opt-level = 0
 debug = 2
 debug-assertions = true
 overflow-checks = true
 lto = "off"
 panic = "unwind"
 incremental = true
-codegen-units = 2
+codegen-units = 4
 
 [profile.test]
 opt-level = 3

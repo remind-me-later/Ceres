@@ -9,7 +9,7 @@ use core::cmp::Ordering;
 use stackvec::StackVec;
 
 impl Ppu {
-    pub fn draw_line(&mut self, function_mode: FunctionMode) {
+    pub fn draw_scanline(&mut self, function_mode: FunctionMode) {
         let mut bg_priority = [PixelPriority::Normal; SCREEN_WIDTH as usize];
 
         self.draw_background(function_mode, &mut bg_priority);

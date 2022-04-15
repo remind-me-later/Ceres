@@ -14,7 +14,7 @@ use crate::{
     serial::Serial,
     video::{
         ppu::{Ppu, PpuIO::Vram},
-        MonochromePaletteColors, PixelData, PixelDataVram, VramBank,
+        MonochromePaletteColors, PixelData,
     },
     AudioCallbacks, Button, Model,
 };
@@ -144,10 +144,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
         self.tick_ppu();
         self.timer.tick_t_cycle(&mut self.interrupt_controller);
         self.tick_apu();
-    }
-
-    pub fn draw_tile_data(&mut self, bank: VramBank) -> &PixelDataVram {
-        self.ppu.draw_vram_tile_data(self.function_mode, bank)
     }
 
     pub fn tick_ppu(&mut self) {

@@ -22,8 +22,7 @@ pub use error::Error;
 pub use joypad::Button;
 use memory::Memory;
 pub use video::{
-    MonochromePaletteColors, PixelData, PixelDataVram, VramBank, SCANLINES_PER_FRAME,
-    SCREEN_HEIGHT, SCREEN_WIDTH, VRAM_DISPLAY_HEIGHT, VRAM_DISPLAY_WIDTH,
+    MonochromePaletteColors, PixelData, VramBank, SCANLINES_PER_FRAME, SCREEN_HEIGHT, SCREEN_WIDTH,
 };
 
 // 59.7 fps
@@ -64,10 +63,6 @@ impl<A: AudioCallbacks, R: RumbleCallbacks> Gameboy<A, R> {
         let cpu = Cpu::new(memory);
 
         Self { cpu }
-    }
-
-    pub fn draw_vram_tile_data(&mut self, bank: VramBank) -> &PixelDataVram {
-        self.cpu.draw_tile_data(bank)
     }
 
     pub fn press(&mut self, button: Button) {
