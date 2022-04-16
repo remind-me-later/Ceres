@@ -1,26 +1,12 @@
-extern crate alloc;
-
-use alloc::{format, string::String};
-
 use super::{
     registers::{Register16, Register8},
     Cpu,
 };
 use crate::{cartridge::RumbleCallbacks, AudioCallbacks};
 
-pub trait Dissasemble
-where
-    Self: Copy,
-{
-    fn dissasemble<A, R>(self, cpu: &mut Cpu<A, R>) -> String
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks;
-}
-
 pub trait Get<T: Copy>
 where
-    Self: Copy + Dissasemble,
+    Self: Copy,
 {
     fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> T
     where
@@ -30,7 +16,7 @@ where
 
 pub trait Set<T: Copy>
 where
-    Self: Copy + Dissasemble,
+    Self: Copy,
 {
     fn set<A, R>(self, cpu: &mut Cpu<A, R>, val: T)
     where
@@ -81,17 +67,6 @@ impl Set<u16> for Register16 {
 #[derive(Clone, Copy)]
 pub struct Immediate;
 
-impl Dissasemble for Immediate {
-    fn dissasemble<A, R>(self, cpu: &mut Cpu<A, R>) -> String
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
-        let immediate = cpu.get_immediate_for_print();
-        format!("${:x}", immediate)
-    }
-}
-
 impl Get<u8> for Immediate {
     fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> u8
     where
@@ -120,31 +95,6 @@ pub enum Indirect {
     Immediate,
     HighC,
     HighImmediate,
-}
-
-impl Dissasemble for Indirect {
-    fn dissasemble<A, R>(self, cpu: &mut Cpu<A, R>) -> String
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
-        match self {
-            Indirect::BC => format!("[bc]"),
-            Indirect::DE => format!("[de]"),
-            Indirect::HL => format!("[hl]"),
-            Indirect::Immediate => {
-                let immediate = cpu.get_immediate_for_print_16();
-                format!("[${:x}]", immediate)
-            }
-            Indirect::HighC => {
-                format!("[ff00 + c]")
-            }
-            Indirect::HighImmediate => {
-                let immediate = cpu.get_immediate_for_print();
-                format!("[ff00 + ${:x}]", immediate)
-            }
-        }
-    }
 }
 
 impl Indirect {
@@ -189,16 +139,6 @@ impl Set<u8> for Indirect {
 #[derive(Clone, Copy)]
 pub struct IndirectIncreaseHL;
 
-impl Dissasemble for IndirectIncreaseHL {
-    fn dissasemble<A, R>(self, _cpu: &mut Cpu<A, R>) -> String
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
-        format!("[hl++]")
-    }
-}
-
 impl Get<u8> for IndirectIncreaseHL {
     fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> u8
     where
@@ -228,16 +168,6 @@ impl Set<u8> for IndirectIncreaseHL {
 
 #[derive(Clone, Copy)]
 pub struct IndirectDecreaseHL;
-
-impl Dissasemble for IndirectDecreaseHL {
-    fn dissasemble<A, R>(self, _cpu: &mut Cpu<A, R>) -> String
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
-        format!("[hl--]")
-    }
-}
 
 impl Get<u8> for IndirectDecreaseHL {
     fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> u8
@@ -272,21 +202,6 @@ pub enum JumpCondition {
     NotZero,
     Carry,
     NotCarry,
-}
-
-impl Dissasemble for JumpCondition {
-    fn dissasemble<A, R>(self, _cpu: &mut Cpu<A, R>) -> String
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
-        match self {
-            JumpCondition::Zero => format!("z"),
-            JumpCondition::NotZero => format!("nz"),
-            JumpCondition::Carry => format!("c"),
-            JumpCondition::NotCarry => format!("c"),
-        }
-    }
 }
 
 impl JumpCondition {

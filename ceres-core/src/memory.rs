@@ -111,11 +111,11 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
     }
 
     pub fn do_render(&mut self) {
-        self.ppu.do_render()
+        self.ppu.do_render();
     }
 
     pub fn dont_render(&mut self) {
-        self.ppu.dont_render()
+        self.ppu.dont_render();
     }
 
     pub fn mut_pixel_data(&mut self) -> &mut PixelData {
@@ -219,7 +219,8 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
                 _ => panic!("Illegal source address for OAM DMA transfer"),
             };
 
-            self.ppu.oam_dma_write(dma_source_address as u8, val);
+            self.ppu
+                .oam_dma_write((dma_source_address & 0xff) as u8, val);
         }
     }
 }

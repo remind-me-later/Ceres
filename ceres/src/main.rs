@@ -1,7 +1,5 @@
-#![warn(clippy::all)]
 mod audio;
 mod emulator;
-mod error;
 
 use ceres_core::Model;
 use clap::{Arg, Command};
@@ -49,7 +47,7 @@ fn main() {
         Model::Cgb
     };
 
-    let boot_rom_str = matches.value_of("boot").unwrap_or_else(|| match model {
+    let boot_rom_str = matches.value_of("boot").unwrap_or(match model {
         Model::Dmg => "BootROMs/build/bin/dmg_boot.bin",
         Model::Mgb => "BootROMs/build/bin/mgb_boot.bin",
         Model::Cgb => "BootROMs/build/bin/cgb_boot_fast.bin",
@@ -62,8 +60,7 @@ fn main() {
         .map(|s| Path::new(s).to_path_buf())
         .unwrap();
 
-    let emulator =
-        Emulator::new(model, boot_rom_path, &rom_path).unwrap_or_else(|error| error::print(error));
+    let emulator = Emulator::new(model, boot_rom_path, &rom_path);
 
     emulator.run();
 }

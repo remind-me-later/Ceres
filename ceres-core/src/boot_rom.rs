@@ -8,6 +8,7 @@ pub struct BootRom {
 }
 
 impl BootRom {
+    #[must_use]
     pub fn new(data: Box<[u8]>) -> Self {
         // TODO: check it has the right size
         Self {
@@ -16,10 +17,12 @@ impl BootRom {
         }
     }
 
+    #[must_use]
     pub fn read(&self, address: u16) -> u8 {
         self.boot_rom[address as usize]
     }
 
+    #[must_use]
     pub const fn is_active(&self) -> bool {
         self.is_active
     }

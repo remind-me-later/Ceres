@@ -63,18 +63,6 @@ impl<A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
         self.service_interrupt();
     }
 
-    fn get_immediate_for_print(&mut self) -> u8 {
-        let address = self.registers.read16(PC);
-        self.memory.read(address)
-    }
-
-    fn get_immediate_for_print_16(&mut self) -> u16 {
-        let address = self.registers.read16(PC);
-        let lo = self.memory.read(address);
-        let hi = self.memory.read(address.wrapping_add(1));
-        u16::from_le_bytes([lo, hi])
-    }
-
     fn read_immediate(&mut self) -> u8 {
         let address = self.registers.read16(PC);
         self.registers.increase_pc();

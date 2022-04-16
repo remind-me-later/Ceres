@@ -1,9 +1,4 @@
-use crate::error;
-
-use super::{
-    audio::{AudioCallbacks, AudioRenderer},
-    error::Error,
-};
+use super::audio::{AudioCallbacks, AudioRenderer};
 use ceres_core::{BootRom, Cartridge, Gameboy, RumbleCallbacks, SCREEN_HEIGHT, SCREEN_WIDTH};
 use sdl2::{
     controller::GameController,
@@ -45,11 +40,7 @@ pub struct Emulator {
 }
 
 impl Emulator {
-    pub fn new(
-        model: ceres_core::Model,
-        boot_rom_path: &Path,
-        rom_path: &Path,
-    ) -> Result<Self, Error> {
+    pub fn new(model: ceres_core::Model, boot_rom_path: &Path, rom_path: &Path) -> Self {
         let sdl_context = sdl2::init().unwrap();
 
         let sav_path = rom_path.with_extension("sav");
@@ -57,9 +48,7 @@ impl Emulator {
         let rumble_wrapper = RumbleWrapper::new();
 
         let (cartridge, sav_path) = {
-            let rom_buf = read_file(&rom_path)
-                .unwrap_or_else(|e| error::print(e))
-                .into_boxed_slice();
+            let rom_buf = read_file(rom_path).unwrap().into_boxed_slice();
 
             let ram = if let Ok(sav_buf) = read_file(&sav_path) {
                 Some(sav_buf.into_boxed_slice())
@@ -67,16 +56,13 @@ impl Emulator {
                 None
             };
 
-            let cartridge =
-                Cartridge::new(rom_buf, ram, rumble_wrapper).unwrap_or_else(|e| error::print(e));
+            let cartridge = Cartridge::new(rom_buf, ram, rumble_wrapper).unwrap();
 
             (cartridge, sav_path)
         };
 
         let boot_rom = {
-            let boot_rom_buf = read_file(&boot_rom_path)
-                .unwrap_or_else(|e| error::print(format!("could not load boot ROM {}", e)))
-                .into_boxed_slice();
+            let boot_rom_buf = read_file(boot_rom_path).unwrap().into_boxed_slice();
 
             BootRom::new(boot_rom_buf)
         };
@@ -90,14 +76,14 @@ impl Emulator {
             ceres_core::MonochromePaletteColors::Grayscale,
         );
 
-        Ok(Self {
+        Self {
             sdl_context,
             gameboy,
             is_focused: false,
             is_gui_paused: false,
             audio_renderer,
             sav_path,
-        })
+        }
     }
 
     fn init_controller(&self) -> Option<GameController> {
@@ -108,7 +94,7 @@ impl Emulator {
             .map_err(|e| format!("can't enumerate joysticks: {}", e))
             .unwrap();
 
-        let controller = (0..available).find_map(|id| {
+        (0..available).find_map(|id| {
             if !game_controller_subsystem.is_game_controller(id) {
                 return None;
             }
@@ -117,9 +103,7 @@ impl Emulator {
                 Ok(c) => Some(c),
                 Err(_) => None,
             }
-        });
-
-        controller
+        })
     }
 
     pub fn run(mut self) {
@@ -269,19 +253,16 @@ impl Emulator {
 }
 
 pub fn save_data<R: RumbleCallbacks>(sav_path: &Path, cartridge: &Cartridge<R>) {
-    let mut f = File::create(sav_path)
-        .unwrap_or_else(|_| error::print(Error::new("unable to open save file")));
+    let mut f = File::create(sav_path).unwrap();
 
-    f.write_all(cartridge.ram())
-        .unwrap_or_else(|_| error::print(Error::new("buffer overflow")));
+    f.write_all(cartridge.ram()).unwrap();
 }
 
-fn read_file(path: &Path) -> Result<Vec<u8>, Error> {
-    let mut f = File::open(path).map_err(|_| Error::new("no file found"))?;
-    let metadata = fs::metadata(&path).map_err(|_| Error::new("unable to read metadata"))?;
+fn read_file(path: &Path) -> Result<Vec<u8>, ()> {
+    let mut f = File::open(path).map_err(|_| ())?;
+    let metadata = fs::metadata(&path).unwrap();
     let mut buffer = vec![0; metadata.len() as usize];
-    f.read(&mut buffer)
-        .map_err(|_| Error::new("buffer overflow"))?;
+    f.read_exact(&mut buffer).unwrap();
 
     Ok(buffer)
 }
@@ -336,9 +317,8 @@ impl<'a, const WIDTH: u32, const HEIGHT: u32, const MUL: u32> EmuWindow<WIDTH, H
     pub fn upload_rgba(&mut self, pixel_data: &[u8]) {
         self.texture
             .with_lock(None, move |buf, _pitch| {
-                for i in 0..WIDTH as usize * HEIGHT as usize * 4 {
-                    buf[i] = pixel_data[i];
-                }
+                buf[..(WIDTH as usize * HEIGHT as usize * 4)]
+                    .copy_from_slice(&pixel_data[..(WIDTH as usize * HEIGHT as usize * 4)]);
             })
             .unwrap();
 

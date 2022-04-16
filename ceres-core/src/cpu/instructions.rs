@@ -8,35 +8,17 @@ use super::{
 };
 use crate::{cartridge::RumbleCallbacks, AudioCallbacks};
 
-#[cfg(debug_assertions)]
-use crate::cpu::operands::Dissasemble;
-
-macro_rules! trace_dissasembled {
-    () => ({
-        #[cfg(debug_assertions)]
-        log::debug!()
-    });
-    ($($arg:tt)*) => ({
-        #[cfg(debug_assertions)]
-        log::debug!($($arg)*);
-    })
-}
-
 impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     pub fn ld<G, S>(&mut self, lhs: S, rhs: G)
     where
         G: Get<u8>,
         S: Set<u8>,
     {
-        trace_dissasembled!("ld {}, {}", lhs.dissasemble(self), rhs.dissasemble(self));
-
         let val = rhs.get(self);
         lhs.set(self, val);
     }
 
     pub fn ld16_sp_hl(&mut self) {
-        trace_dissasembled!("ld sp, hl");
-
         let val = self.registers.read16(HL);
         self.registers.write16(SP, val);
         self.memory.tick_t_cycle();
@@ -46,8 +28,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         G: Get<u8>,
     {
-        trace_dissasembled!("add {}", rhs.dissasemble(self));
-
         let a = self.registers.read8(A);
         let val = rhs.get(self);
         let (output, carry) = a.overflowing_add(val);
@@ -62,8 +42,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         G: Get<u8>,
     {
-        trace_dissasembled!("adc {}", rhs.dissasemble(self));
-
         let a = self.registers.read8(A);
         let cy = u8::from(self.registers.cf());
         let val = rhs.get(self);
@@ -80,8 +58,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         G: Get<u8>,
     {
-        trace_dissasembled!("sub {}", rhs.dissasemble(self));
-
         let a = self.registers.read8(A);
         let val = rhs.get(self);
         let (output, carry) = a.overflowing_sub(val);
@@ -96,8 +72,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         G: Get<u8>,
     {
-        trace_dissasembled!("sbc {}", rhs.dissasemble(self));
-
         let a = self.registers.read8(A);
         let cy = u8::from(self.registers.cf());
         let val = rhs.get(self);
@@ -114,8 +88,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         G: Get<u8>,
     {
-        trace_dissasembled!("cp {}", rhs.dissasemble(self));
-
         let a = self.registers.read8(A);
         let val = rhs.get(self);
         let result = a.wrapping_sub(val);
@@ -130,8 +102,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         G: Get<u8>,
     {
-        trace_dissasembled!("and {}", rhs.dissasemble(self));
-
         let val = rhs.get(self);
         let a = self.registers.read8(A) & val;
         self.registers.write8(A, a);
@@ -145,8 +115,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         G: Get<u8>,
     {
-        trace_dissasembled!("or {}", rhs.dissasemble(self));
-
         let val = rhs.get(self);
         let a = self.registers.read8(A) | val;
         self.registers.write8(A, a);
@@ -160,8 +128,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         G: Get<u8>,
     {
-        trace_dissasembled!("xor {}", rhs.dissasemble(self));
-
         let read = rhs.get(self);
         let a = self.registers.read8(A) ^ read;
         self.registers.write8(A, a);
@@ -175,8 +141,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        trace_dissasembled!("inc {}", rhs.dissasemble(self));
-
         let read = rhs.get(self);
         let val = read.wrapping_add(1);
         self.registers.set_zf(val == 0);
@@ -186,8 +150,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     }
 
     pub fn inc16(&mut self, register: Register16) {
-        trace_dissasembled!("inc {}", register.dissasemble(self));
-
         let read = self.registers.read16(register);
         let val = read.wrapping_add(1);
         self.registers.write16(register, val);
@@ -199,8 +161,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        trace_dissasembled!("dec {}", rhs.dissasemble(self));
-
         let read = rhs.get(self);
         let val = read.wrapping_sub(1);
         self.registers.set_zf(val == 0);
@@ -210,8 +170,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     }
 
     pub fn dec16(&mut self, register: Register16) {
-        trace_dissasembled!("dec {}", register.dissasemble(self));
-
         let read = self.registers.read16(register);
         let val = read.wrapping_sub(1);
         self.registers.write16(register, val);
@@ -219,8 +177,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     }
 
     pub fn ld16_hl_sp_dd(&mut self) {
-        trace_dissasembled!("ld hl, sp + ${:x}", self.get_immediate_for_print_16());
-
         let offset = self.read_immediate() as i8 as u16;
         let sp = self.registers.read16(SP);
         let val = sp.wrapping_add(offset);
@@ -234,32 +190,24 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     }
 
     pub fn rlca(&mut self) {
-        trace_dissasembled!("rlca");
-
         let val = self.internal_rlc(self.registers.read8(A));
         self.registers.write8(A, val);
         self.registers.set_zf(false);
     }
 
     pub fn rla(&mut self) {
-        trace_dissasembled!("rla");
-
         let val = self.internal_rl(self.registers.read8(A));
         self.registers.write8(A, val);
         self.registers.set_zf(false);
     }
 
     pub fn rrca(&mut self) {
-        trace_dissasembled!("rrca");
-
         let val = self.internal_rrc(self.registers.read8(A));
         self.registers.write8(A, val);
         self.registers.set_zf(false);
     }
 
     pub fn rra(&mut self) {
-        trace_dissasembled!("rra");
-
         let val = self.internal_rr(self.registers.read8(A));
         self.registers.write8(A, val);
         self.registers.set_zf(false);
@@ -272,18 +220,10 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     }
 
     pub fn jp_nn(&mut self) {
-        trace_dissasembled!("jp ${:x}", self.get_immediate_for_print_16());
-
         self.do_jump_to_immediate();
     }
 
     pub fn jp_f(&mut self, condition: JumpCondition) {
-        trace_dissasembled!(
-            "jp {}, ${:x}",
-            condition.dissasemble(self),
-            self.get_immediate_for_print_16()
-        );
-
         if condition.check(self) {
             self.do_jump_to_immediate();
         } else {
@@ -295,8 +235,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     }
 
     pub fn jp_hl(&mut self) {
-        trace_dissasembled!("jp hl");
-
         let address = self.registers.read16(HL);
         self.registers.write16(PC, address);
     }
@@ -309,17 +247,10 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     }
 
     pub fn jr_d(&mut self) {
-        trace_dissasembled!("jr ${}", self.get_immediate_for_print() as i8);
         self.do_jump_relative();
     }
 
     pub fn jr_f(&mut self, condition: JumpCondition) {
-        trace_dissasembled!(
-            "jr {}, ${}",
-            condition.dissasemble(self),
-            self.get_immediate_for_print() as i8
-        );
-
         if condition.check(self) {
             self.do_jump_relative();
         } else {
@@ -336,18 +267,10 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     }
 
     pub fn call_nn(&mut self) {
-        trace_dissasembled!("call ${:x}", self.get_immediate_for_print_16());
-
         self.do_call();
     }
 
     pub fn call_f_nn(&mut self, condition: JumpCondition) {
-        trace_dissasembled!(
-            "call {}, ${:x}",
-            condition.dissasemble(self),
-            self.get_immediate_for_print() as i8
-        );
-
         if condition.check(self) {
             self.do_call();
         } else {
@@ -365,14 +288,10 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     }
 
     pub fn ret(&mut self) {
-        trace_dissasembled!("ret");
-
         self.do_return();
     }
 
     pub fn ret_f(&mut self, condition: JumpCondition) {
-        trace_dissasembled!("ret {}", condition.dissasemble(self));
-
         self.memory.tick_t_cycle();
         if condition.check(self) {
             self.do_return();
@@ -380,23 +299,17 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     }
 
     pub fn reti(&mut self) {
-        trace_dissasembled!("reti");
-
         self.ret();
         self.ei();
     }
 
     pub fn rst(&mut self, address: u16) {
-        trace_dissasembled!("rst ${:x}", address);
-
         let pc = self.registers.read16(PC);
         self.internal_push(pc);
         self.registers.write16(PC, address);
     }
 
     pub fn halt(&mut self) {
-        trace_dissasembled!("halt");
-
         self.halted = true;
 
         if self.memory.interrupt_controller().halt_bug_condition() && !self.ime {
@@ -406,8 +319,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     }
 
     pub fn stop(&mut self) {
-        trace_dissasembled!("stop");
-
         self.read_immediate();
 
         if self.memory.speed_switch_register().speed_switch_requested() {
@@ -421,41 +332,29 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     }
 
     pub fn di(&mut self) {
-        trace_dissasembled!("di");
-
         self.ime = false;
     }
 
     pub fn ei(&mut self) {
-        trace_dissasembled!("ei");
-
         self.ei_delay = true;
     }
 
     pub fn ccf(&mut self) {
-        trace_dissasembled!("ccf");
-
         self.registers.set_nf(false);
         self.registers.set_hf(false);
         self.registers.set_cf(!self.registers.cf());
     }
 
     pub fn scf(&mut self) {
-        trace_dissasembled!("scf");
-
         self.registers.set_nf(false);
         self.registers.set_hf(false);
         self.registers.set_cf(true);
     }
 
     #[allow(clippy::unused_self)]
-    pub fn nop(&mut self) {
-        trace_dissasembled!("nop");
-    }
+    pub fn nop(&mut self) {}
 
     pub fn daa(&mut self) {
-        trace_dissasembled!("daa");
-
         // DAA table in page 110 of the official "Game Boy Programming Manual"
         let mut carry = false;
         if !self.registers.nf() {
@@ -487,8 +386,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     }
 
     pub fn cpl(&mut self) {
-        trace_dissasembled!("cpl");
-
         let a = self.registers.read8(A);
         self.registers.write8(A, !a);
         self.registers.set_nf(true);
@@ -496,33 +393,21 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     }
 
     pub fn push(&mut self, register: Register16) {
-        trace_dissasembled!("push {}", register.dissasemble(self));
-
         let val = self.registers.read16(register);
         self.internal_push(val);
     }
 
     pub fn pop(&mut self, register: Register16) {
-        trace_dissasembled!("pop {}", register.dissasemble(self));
-
         let val = self.internal_pop();
         self.registers.write16(register, val);
     }
 
     pub fn ld16_nn(&mut self, reg: Register16) {
-        trace_dissasembled!(
-            "ld {}, ${:x}",
-            reg.dissasemble(self),
-            self.get_immediate_for_print_16()
-        );
-
         let value = self.read_immediate16();
         self.registers.write16(reg, value);
     }
 
     pub fn ld16_nn_sp(&mut self) {
-        trace_dissasembled!("ld [${:x}], sp", self.get_immediate_for_print_16());
-
         let val = self.registers.read16(SP);
         let address = self.read_immediate16();
         self.memory.write(address, (val & 0xff) as u8);
@@ -530,8 +415,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     }
 
     pub fn add16_sp_dd(&mut self) {
-        trace_dissasembled!("add sp, ${:x}", self.get_immediate_for_print() as i8);
-
         let offset = self.read_immediate() as i8 as u16;
         let sp = self.registers.read16(SP);
         let val = sp.wrapping_add(offset);
@@ -546,8 +429,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     }
 
     pub fn add_hl(&mut self, register: Register16) {
-        trace_dissasembled!("add hl, {}", register.dissasemble(self));
-
         let hl = self.registers.read16(HL);
         let val = self.registers.read16(register);
         let res = hl.wrapping_add(val);
@@ -569,8 +450,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        trace_dissasembled!("rlc {}", rhs.dissasemble(self));
-
         let read = rhs.get(self);
         let val = self.internal_rlc(read);
         rhs.set(self, val);
@@ -580,8 +459,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        trace_dissasembled!("rl {}", rhs.dissasemble(self));
-
         let read = rhs.get(self);
         let val = self.internal_rl(read);
         rhs.set(self, val);
@@ -591,8 +468,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        trace_dissasembled!("rrc {}", rhs.dissasemble(self));
-
         let read = rhs.get(self);
         let val = self.internal_rrc(read);
         rhs.set(self, val);
@@ -602,8 +477,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        trace_dissasembled!("rr {}", rhs.dissasemble(self));
-
         let read = rhs.get(self);
         let val = self.internal_rr(read);
         rhs.set(self, val);
@@ -613,8 +486,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        trace_dissasembled!("sla {}", rhs.dissasemble(self));
-
         let read = rhs.get(self);
         let val = read << 1;
         let co = read & 0x80;
@@ -629,8 +500,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        trace_dissasembled!("sra {}", rhs.dissasemble(self));
-
         let read = rhs.get(self);
         let hi = read & 0x80;
         let val = (read >> 1) | hi;
@@ -647,8 +516,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        trace_dissasembled!("srl {}", rhs.dissasemble(self));
-
         let read = rhs.get(self);
         let val = read >> 1;
         let co = read & 0x01;
@@ -663,8 +530,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        trace_dissasembled!("swap {}", rhs.dissasemble(self));
-
         let read = rhs.get(self);
         let val = (read >> 4) | (read << 4);
         self.registers.set_zf(read == 0);
@@ -678,8 +543,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         G: Get<u8>,
     {
-        trace_dissasembled!("bit {}", rhs.dissasemble(self));
-
         let read = rhs.get(self);
         let value = read & (1 << bit);
         self.registers.set_zf(value == 0);
@@ -691,8 +554,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        trace_dissasembled!("set {}, {}", bit, rhs.dissasemble(self));
-
         let read = rhs.get(self);
         let val = read | (1 << bit);
         rhs.set(self, val);
@@ -702,8 +563,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
     where
         GS: Get<u8> + Set<u8>,
     {
-        trace_dissasembled!("res {}, {}", bit, rhs.dissasemble(self));
-
         let read = rhs.get(self);
         let val = read & !(1 << bit);
         rhs.set(self, val);

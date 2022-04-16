@@ -36,13 +36,13 @@ impl WorkRam {
 
     pub const fn read_high(&self, address: u16) -> u8 {
         let address = address & 0xfff;
-        let idx = address | self.bank_number as u16 * 0x1000;
+        let idx = address | (self.bank_number as u16 * 0x1000);
         self.wram[idx as usize]
     }
 
     pub fn write_high(&mut self, address: u16, val: u8) {
         let address = address & 0xfff;
-        let idx = address | self.bank_number as u16 * 0x1000;
+        let idx = address | (self.bank_number as u16 * 0x1000);
         self.wram[idx as usize] = val;
     }
 }

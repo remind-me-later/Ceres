@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-#![warn(clippy::all)]
+#![no_std]
 
 mod audio;
 mod boot_rom;
