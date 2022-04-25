@@ -1,4 +1,6 @@
-#![forbid(unsafe_code)]
+#![no_std]
+
+extern crate alloc;
 
 mod audio;
 mod boot_rom;
@@ -12,15 +14,15 @@ mod serial;
 mod timer;
 mod video;
 
+use alloc::rc::Rc;
 pub use audio::{AudioCallbacks, Frame, Sample};
 pub use boot_rom::BootRom;
 pub use cartridge::{Cartridge, HeaderInfo};
-use core::time::Duration;
+use core::{cell::RefCell, time::Duration};
 use cpu::Cpu;
 pub use error::Error;
 pub use joypad::Button;
 use memory::Memory;
-use std::{cell::RefCell, rc::Rc};
 pub use video::{
     MonochromePaletteColors, PixelData, VramBank, SCANLINES_PER_FRAME, SCREEN_HEIGHT, SCREEN_WIDTH,
 };

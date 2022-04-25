@@ -62,12 +62,8 @@ impl DmaController {
             .start_transfer(ppu, microseconds_elapsed_times_16)
     }
 
-    pub fn do_vram_transfer(
-        &mut self,
-        microseconds_elapsed_times_16: u8,
-    ) -> Option<VramDMATransfer> {
-        self.vram_dma_controller
-            .do_vram_transfer(microseconds_elapsed_times_16)
+    pub fn do_vram_transfer(&mut self) -> Option<VramDMATransfer> {
+        self.vram_dma_controller.do_vram_transfer()
     }
 
     pub fn vram_dma_is_transfer_done(&self) -> bool {

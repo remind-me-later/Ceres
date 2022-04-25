@@ -1,10 +1,13 @@
+extern crate alloc;
+
 mod addresses;
 mod dma_controller;
 mod high_ram;
 mod speed_switch;
 mod work_ram;
 
-use std::{cell::RefCell, rc::Rc};
+use alloc::rc::Rc;
+use core::cell::RefCell;
 
 use self::dma_controller::DmaController;
 use super::{cartridge::Cartridge, interrupts::Interrupts, timer::Timer};
@@ -169,10 +172,7 @@ impl Memory {
             .start_transfer(&self.ppu, microseconds_elapsed_times_16)
         {
             while !self.dma_controller.vram_dma_is_transfer_done() {
-                if let Some(hdma_transfer) = self
-                    .dma_controller
-                    .do_vram_transfer(microseconds_elapsed_times_16)
-                {
+                if let Some(hdma_transfer) = self.dma_controller.do_vram_transfer() {
                     let address = hdma_transfer.source_address;
                     let val = match address >> 8 {
                         0x00..=0x7f => self.cartridge.read_rom(address),

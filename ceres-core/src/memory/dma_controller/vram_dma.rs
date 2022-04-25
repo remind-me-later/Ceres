@@ -128,20 +128,7 @@ impl VramDma {
         !self.is_active || self.state == VramDmaState::FinishedLine
     }
 
-    pub fn do_vram_transfer(
-        &mut self,
-        microseconds_elapsed_times_16: u8,
-    ) -> Option<VramDMATransfer> {
-        self.microseconds_elapsed_times_16 = self
-            .microseconds_elapsed_times_16
-            .wrapping_add(microseconds_elapsed_times_16 as i8); // 2 or 4 so its safe
-
-        if self.microseconds_elapsed_times_16 < 4 {
-            return None;
-        }
-
-        self.microseconds_elapsed_times_16 -= 4;
-
+    pub fn do_vram_transfer(&mut self) -> Option<VramDMATransfer> {
         let hdma_transfer = VramDMATransfer {
             source_address: self.source,
             destination_address: self.destination,
