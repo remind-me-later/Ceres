@@ -11,10 +11,9 @@ use crate::{
             NR41, NR42, NR43, NR44, NR50, NR51, NR52,
         },
     },
-    cartridge::RumbleCallbacks,
     interrupts::{
         ICRegister::{Ie, If},
-        InterruptController,
+        Interrupts,
     },
     serial::Register::{SB, SC},
     timer::{
@@ -27,10 +26,10 @@ use crate::{
             Bcpd, Bcps, Bgp, Lcdc, Ly, Lyc, Obp0, Obp1, Ocpd, Ocps, Opri, Scx, Scy, Stat, Wx, Wy,
         },
     },
-    AudioCallbacks, Model,
+    Model,
 };
 
-impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
+impl Memory {
     fn generic_mem_cycle<T, F>(&mut self, f: F) -> T
     where
         F: FnOnce(&mut Self) -> T,
@@ -41,7 +40,7 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
 
     fn apu_mem_cycle<T, F>(&mut self, f: F) -> T
     where
-        F: FnOnce(&mut Apu<A>) -> T,
+        F: FnOnce(&mut Apu) -> T,
     {
         self.emulate_oam_dma();
         self.emulate_vram_dma();
@@ -53,7 +52,7 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
 
     fn timer_mem_cycle<T, F>(&mut self, f: F) -> T
     where
-        F: FnOnce(&mut Timer, &mut InterruptController) -> T,
+        F: FnOnce(&mut Timer, &mut Interrupts) -> T,
     {
         self.emulate_oam_dma();
         self.emulate_vram_dma();

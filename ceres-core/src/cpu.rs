@@ -1,24 +1,22 @@
 mod execute;
 mod instructions;
-mod interrupt_service;
 mod operands;
 mod registers;
-mod stack;
 
-use crate::{cartridge::RumbleCallbacks, memory::Memory, AudioCallbacks, Cartridge};
-use registers::{Register16::PC, Registers};
+use crate::{memory::Memory, Cartridge};
+use registers::{Register16::PC, Register16::SP, Registers};
 
-pub struct Cpu<A: AudioCallbacks, R: RumbleCallbacks> {
+pub struct Cpu {
     registers: Registers,
-    memory: Memory<A, R>,
+    memory: Memory,
     ei_delay: bool,
     ime: bool,
     halted: bool,
     halt_bug: bool,
 }
 
-impl<A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
-    pub fn new(memory: Memory<A, R>) -> Self {
+impl Cpu {
+    pub fn new(memory: Memory) -> Self {
         Self {
             registers: Registers::new(),
             ei_delay: false,
@@ -29,15 +27,15 @@ impl<A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
         }
     }
 
-    pub fn cartridge(&self) -> &Cartridge<R> {
+    pub fn cartridge(&self) -> &Cartridge {
         self.memory.cartridge()
     }
 
-    pub fn memory(&self) -> &Memory<A, R> {
+    pub fn memory(&self) -> &Memory {
         &self.memory
     }
 
-    pub fn mut_memory(&mut self) -> &mut Memory<A, R> {
+    pub fn mut_memory(&mut self) -> &mut Memory {
         &mut self.memory
     }
 
@@ -60,7 +58,32 @@ impl<A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
             self.execute(opcode);
         }
 
-        self.service_interrupt();
+        if !self.memory.interrupt_controller().has_pending_interrupts() {
+            return;
+        }
+
+        // handle interrupt
+        if self.halted {
+            self.halted = false;
+        }
+
+        if self.ime {
+            self.ime = false;
+
+            self.memory.tick_t_cycle();
+
+            let pc = self.registers.read16(PC);
+            self.internal_push(pc);
+
+            let interrupt = self.memory.interrupt_controller().requested_interrupt();
+            self.registers.write16(PC, interrupt.handler_address());
+
+            self.memory.tick_t_cycle();
+
+            self.memory
+                .mut_interrupt_controller()
+                .acknowledge(interrupt);
+        }
     }
 
     fn read_immediate(&mut self) -> u8 {
@@ -75,9 +98,23 @@ impl<A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
         u16::from_le_bytes([lo, hi])
     }
 
-    // ********************
-    // * Arithmetic/Logic *
-    // ********************
+    pub fn internal_pop(&mut self) -> u16 {
+        let lo = self.memory.read(self.registers.read16(SP));
+        self.registers.increase_sp();
+        let hi = self.memory.read(self.registers.read16(SP));
+        self.registers.increase_sp();
+        u16::from_le_bytes([lo, hi])
+    }
+
+    pub fn internal_push(&mut self, value: u16) {
+        let [lo, hi] = u16::to_le_bytes(value);
+        self.memory.tick_t_cycle();
+        self.registers.decrease_sp();
+        self.memory.write(self.registers.read16(SP), hi);
+        self.registers.decrease_sp();
+        self.memory.write(self.registers.read16(SP), lo);
+    }
+
     fn internal_rl(&mut self, val: u8) -> u8 {
         let ci = u8::from(self.registers.cf());
         let co = val & 0x80;

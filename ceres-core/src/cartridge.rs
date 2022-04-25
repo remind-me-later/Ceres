@@ -35,7 +35,7 @@ impl core::fmt::Display for Mbc {
     }
 }
 
-pub struct Cartridge<R: RumbleCallbacks> {
+pub struct Cartridge {
     mbc: Mbc,
     rom: Box<[u8]>,
     header_info: HeaderInfo,
@@ -43,15 +43,10 @@ pub struct Cartridge<R: RumbleCallbacks> {
     ram: Box<[u8]>,
     rom_offsets: (usize, usize),
     ram_offset: usize,
-    rumble_callbacks: R,
 }
 
-impl<R: RumbleCallbacks> Cartridge<R> {
-    pub fn new(
-        rom: Box<[u8]>,
-        ram: Option<Box<[u8]>>,
-        rumble_callbacks: R,
-    ) -> Result<Cartridge<R>, Error> {
+impl Cartridge {
+    pub fn new(rom: Box<[u8]>, ram: Option<Box<[u8]>>) -> Result<Cartridge, Error> {
         let header_info = HeaderInfo::new(&rom)?;
         let mbc30 = header_info.ram_size().number_of_banks() >= 8;
         let rom_bit_mask = header_info.rom_size().banks_bit_mask();
@@ -113,7 +108,6 @@ impl<R: RumbleCallbacks> Cartridge<R> {
             ram,
             rom_offsets,
             ram_offset,
-            rumble_callbacks,
         })
     }
 
@@ -219,19 +213,9 @@ impl<R: RumbleCallbacks> Cartridge<R> {
                     _ => (),
                 }
             }
-            Mbc::Five {
-                ref mbc,
-                has_rumble,
-            } => {
+            Mbc::Five { ref mbc, .. } => {
                 let is_ram_enabled = mbc.is_ram_enabled();
                 self.mbc_write_ram(is_ram_enabled, address, value);
-                if has_rumble {
-                    if value & 0x8 != 0 {
-                        self.rumble_callbacks.start_rumble();
-                    } else {
-                        self.rumble_callbacks.stop_rumble();
-                    }
-                }
             }
         }
     }
@@ -241,7 +225,7 @@ impl<R: RumbleCallbacks> Cartridge<R> {
     }
 }
 
-impl<R: RumbleCallbacks> core::fmt::Display for Cartridge<R> {
+impl core::fmt::Display for Cartridge {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let has_rumble = match self.mbc {
             Mbc::Five { has_rumble, .. } => has_rumble,
@@ -257,9 +241,4 @@ impl<R: RumbleCallbacks> core::fmt::Display for Cartridge<R> {
             has_rumble
         )
     }
-}
-
-pub trait RumbleCallbacks {
-    fn start_rumble(&mut self);
-    fn stop_rumble(&mut self);
 }

@@ -2,64 +2,43 @@ use super::{
     registers::{Register16, Register8},
     Cpu,
 };
-use crate::{cartridge::RumbleCallbacks, AudioCallbacks};
 
 pub trait Get<T: Copy>
 where
     Self: Copy,
 {
-    fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> T
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks;
+    fn get(self, cpu: &mut Cpu) -> T;
 }
 
 pub trait Set<T: Copy>
 where
     Self: Copy,
 {
-    fn set<A, R>(self, cpu: &mut Cpu<A, R>, val: T)
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks;
+    fn set(self, cpu: &mut Cpu, val: T);
 }
 
 impl Get<u8> for Register8 {
-    fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> u8
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
+    fn get(self, cpu: &mut Cpu) -> u8
+where {
         cpu.registers.read8(self)
     }
 }
 
 impl Set<u8> for Register8 {
-    fn set<A, R>(self, cpu: &mut Cpu<A, R>, val: u8)
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
+    fn set(self, cpu: &mut Cpu, val: u8) {
         cpu.registers.write8(self, val);
     }
 }
 
 impl Get<u16> for Register16 {
-    fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> u16
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
+    fn get(self, cpu: &mut Cpu) -> u16
+where {
         cpu.registers.read16(self)
     }
 }
 
 impl Set<u16> for Register16 {
-    fn set<A, R>(self, cpu: &mut Cpu<A, R>, val: u16)
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
+    fn set(self, cpu: &mut Cpu, val: u16) {
         cpu.registers.write16(self, val);
     }
 }
@@ -68,21 +47,15 @@ impl Set<u16> for Register16 {
 pub struct Immediate;
 
 impl Get<u8> for Immediate {
-    fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> u8
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
+    fn get(self, cpu: &mut Cpu) -> u8
+where {
         cpu.read_immediate()
     }
 }
 
 impl Get<u16> for Immediate {
-    fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> u16
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
+    fn get(self, cpu: &mut Cpu) -> u16
+where {
         cpu.read_immediate16()
     }
 }
@@ -98,11 +71,8 @@ pub enum Indirect {
 }
 
 impl Indirect {
-    fn into_address<A, R>(self, cpu: &mut Cpu<A, R>) -> u16
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
+    fn into_address(self, cpu: &mut Cpu) -> u16
+where {
         match self {
             Indirect::BC => cpu.registers.read16(Register16::BC),
             Indirect::DE => cpu.registers.read16(Register16::DE),
@@ -115,22 +85,15 @@ impl Indirect {
 }
 
 impl Get<u8> for Indirect {
-    fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> u8
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
+    fn get(self, cpu: &mut Cpu) -> u8
+where {
         let address = self.into_address(cpu);
         cpu.memory.read(address)
     }
 }
 
 impl Set<u8> for Indirect {
-    fn set<A, R>(self, cpu: &mut Cpu<A, R>, val: u8)
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
+    fn set(self, cpu: &mut Cpu, val: u8) {
         let address = self.into_address(cpu);
         cpu.memory.write(address, val);
     }
@@ -140,11 +103,8 @@ impl Set<u8> for Indirect {
 pub struct IndirectIncreaseHL;
 
 impl Get<u8> for IndirectIncreaseHL {
-    fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> u8
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
+    fn get(self, cpu: &mut Cpu) -> u8
+where {
         let address = cpu.registers.read16(Register16::HL);
         let ret = cpu.memory.read(address);
         cpu.registers
@@ -154,11 +114,7 @@ impl Get<u8> for IndirectIncreaseHL {
 }
 
 impl Set<u8> for IndirectIncreaseHL {
-    fn set<A, R>(self, cpu: &mut Cpu<A, R>, val: u8)
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
+    fn set(self, cpu: &mut Cpu, val: u8) {
         let address = cpu.registers.read16(Register16::HL);
         cpu.memory.write(address, val);
         cpu.registers
@@ -170,11 +126,8 @@ impl Set<u8> for IndirectIncreaseHL {
 pub struct IndirectDecreaseHL;
 
 impl Get<u8> for IndirectDecreaseHL {
-    fn get<A, R>(self, cpu: &mut Cpu<A, R>) -> u8
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
+    fn get(self, cpu: &mut Cpu) -> u8
+where {
         let address = cpu.registers.read16(Register16::HL);
         let ret = cpu.memory.read(address);
         cpu.registers
@@ -184,11 +137,7 @@ impl Get<u8> for IndirectDecreaseHL {
 }
 
 impl Set<u8> for IndirectDecreaseHL {
-    fn set<A, R>(self, cpu: &mut Cpu<A, R>, val: u8)
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
+    fn set(self, cpu: &mut Cpu, val: u8) {
         let address = cpu.registers.read16(Register16::HL);
         cpu.memory.write(address, val);
         cpu.registers
@@ -205,11 +154,8 @@ pub enum JumpCondition {
 }
 
 impl JumpCondition {
-    pub fn check<A, R>(self, cpu: &Cpu<A, R>) -> bool
-    where
-        A: AudioCallbacks,
-        R: RumbleCallbacks,
-    {
+    pub fn check(self, cpu: &Cpu) -> bool
+where {
         use JumpCondition::{Carry, NotCarry, NotZero, Zero};
         match self {
             Zero => cpu.registers.zf(),

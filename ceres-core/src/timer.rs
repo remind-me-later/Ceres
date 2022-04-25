@@ -1,4 +1,4 @@
-use crate::interrupts::{Interrupt, InterruptController};
+use crate::interrupts::{Interrupt, Interrupts};
 use bitflags::bitflags;
 
 #[derive(Clone, Copy)]
@@ -65,7 +65,7 @@ impl Timer {
 
     // TODO: breaks without it, it shouldn't :)
     #[allow(clippy::branches_sharing_code)]
-    pub fn tick_t_cycle(&mut self, interrupt_controller: &mut InterruptController) {
+    pub fn tick_t_cycle(&mut self, interrupt_controller: &mut Interrupts) {
         if self.overflow {
             self.internal_counter = self.internal_counter.wrapping_add(1);
             self.counter = self.modulo;
@@ -82,11 +82,7 @@ impl Timer {
         }
     }
 
-    pub fn read(
-        &mut self,
-        interrupt_controller: &mut InterruptController,
-        register: Register,
-    ) -> u8 {
+    pub fn read(&mut self, interrupt_controller: &mut Interrupts, register: Register) -> u8 {
         const TAC_MASK: u8 = 0xf8;
         match register {
             Register::Div => {
@@ -108,12 +104,7 @@ impl Timer {
         }
     }
 
-    pub fn write(
-        &mut self,
-        interrupt_controller: &mut InterruptController,
-        register: Register,
-        val: u8,
-    ) {
+    pub fn write(&mut self, interrupt_controller: &mut Interrupts, register: Register, val: u8) {
         match register {
             Register::Div => {
                 self.tick_t_cycle(interrupt_controller);

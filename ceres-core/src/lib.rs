@@ -1,5 +1,4 @@
 #![forbid(unsafe_code)]
-#![no_std]
 
 mod audio;
 mod boot_rom;
@@ -15,12 +14,13 @@ mod video;
 
 pub use audio::{AudioCallbacks, Frame, Sample};
 pub use boot_rom::BootRom;
-pub use cartridge::{Cartridge, HeaderInfo, RumbleCallbacks};
+pub use cartridge::{Cartridge, HeaderInfo};
 use core::time::Duration;
 use cpu::Cpu;
 pub use error::Error;
 pub use joypad::Button;
 use memory::Memory;
+use std::{cell::RefCell, rc::Rc};
 pub use video::{
     MonochromePaletteColors, PixelData, VramBank, SCANLINES_PER_FRAME, SCREEN_HEIGHT, SCREEN_WIDTH,
 };
@@ -40,16 +40,16 @@ pub enum Model {
     Cgb, // Game Boy Color
 }
 
-pub struct Gameboy<A: AudioCallbacks, R: RumbleCallbacks> {
-    cpu: Cpu<A, R>,
+pub struct Gameboy {
+    cpu: Cpu,
 }
 
-impl<A: AudioCallbacks, R: RumbleCallbacks> Gameboy<A, R> {
+impl Gameboy {
     pub fn new(
         model: Model,
-        cartridge: Cartridge<R>,
+        cartridge: Cartridge,
         boot_rom: BootRom,
-        audio_renderer: A,
+        audio_callbacks: Rc<RefCell<dyn AudioCallbacks>>,
         monochrome_palette_colors: MonochromePaletteColors,
     ) -> Self {
         let memory = Memory::new(
@@ -57,7 +57,7 @@ impl<A: AudioCallbacks, R: RumbleCallbacks> Gameboy<A, R> {
             cartridge,
             monochrome_palette_colors,
             boot_rom,
-            audio_renderer,
+            audio_callbacks,
         );
 
         let cpu = Cpu::new(memory);
@@ -71,14 +71,6 @@ impl<A: AudioCallbacks, R: RumbleCallbacks> Gameboy<A, R> {
 
     pub fn release(&mut self, button: Button) {
         self.cpu.mut_memory().release(button);
-    }
-
-    pub fn audio_callbacks(&self) -> &A {
-        self.cpu.memory().audio_callbacks()
-    }
-
-    pub fn mut_audio_callbacks(&mut self) -> &mut A {
-        self.cpu.mut_memory().mut_audio_callbacks()
     }
 
     pub fn mut_pixel_data(&mut self) -> &mut PixelData {
@@ -110,7 +102,7 @@ impl<A: AudioCallbacks, R: RumbleCallbacks> Gameboy<A, R> {
         self.cpu.memory().cartridge().header_info()
     }
 
-    pub fn cartridge(&self) -> &Cartridge<R> {
+    pub fn cartridge(&self) -> &Cartridge {
         self.cpu.cartridge()
     }
 }

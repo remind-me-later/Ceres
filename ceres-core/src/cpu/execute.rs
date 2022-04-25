@@ -9,9 +9,8 @@ use super::{
     },
     Cpu,
 };
-use crate::{cartridge::RumbleCallbacks, AudioCallbacks};
 
-impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
+impl Cpu {
     #[allow(clippy::too_many_lines)]
     pub fn execute(&mut self, opcode: u8) {
         match opcode {

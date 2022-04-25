@@ -2,14 +2,13 @@ use sdl2::{
     audio::{AudioQueue, AudioSpecDesired},
     Sdl,
 };
-use std::rc::Rc;
 
 pub struct AudioRenderer {
-    stream: Rc<AudioQueue<f32>>,
+    stream: AudioQueue<f32>,
 }
 
 impl AudioRenderer {
-    pub fn new(sdl_context: &Sdl) -> (Self, AudioCallbacks) {
+    pub fn new(sdl_context: &Sdl) -> Self {
         let audio_subsystem = sdl_context.audio().unwrap();
 
         let desired_spec = AudioSpecDesired {
@@ -18,12 +17,11 @@ impl AudioRenderer {
             samples: Some(512),
         };
 
-        let queue = Rc::new(audio_subsystem.open_queue(None, &desired_spec).unwrap());
-        let queue_copy = Rc::clone(&queue);
+        let queue = audio_subsystem.open_queue(None, &desired_spec).unwrap();
 
         queue.resume();
 
-        (Self { stream: queue }, AudioCallbacks { queue: queue_copy })
+        Self { stream: queue }
     }
 
     pub fn play(&mut self) {
@@ -35,23 +33,18 @@ impl AudioRenderer {
     }
 }
 
-pub struct AudioCallbacks {
-    queue: Rc<AudioQueue<f32>>,
-}
-
-impl ceres_core::AudioCallbacks for AudioCallbacks {
+impl ceres_core::AudioCallbacks for AudioRenderer {
     fn sample_rate(&self) -> u32 {
         48000
     }
 
     fn push_frame(&mut self, frame: ceres_core::Frame) {
         // TODO: why?
-        if self.queue.as_ref().size() > 48000 {
+        if self.stream.size() > 48000 {
             return;
         }
 
-        self.queue
-            .as_ref()
+        self.stream
             .queue_audio(&[frame.left(), frame.right()])
             .unwrap()
     }

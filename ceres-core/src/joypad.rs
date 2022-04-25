@@ -1,6 +1,6 @@
 use bitflags::bitflags;
 
-use crate::interrupts::{Interrupt, InterruptController};
+use crate::interrupts::{Interrupt, Interrupts};
 
 bitflags! {
     struct ActionButtons: u8 {
@@ -49,11 +49,7 @@ impl Joypad {
         }
     }
 
-    fn press_action_button(
-        &mut self,
-        interrupts: &mut InterruptController,
-        action_button: ActionButtons,
-    ) {
+    fn press_action_button(&mut self, interrupts: &mut Interrupts, action_button: ActionButtons) {
         self.action_buttons.insert(action_button);
 
         if self.actions_enabled {
@@ -63,7 +59,7 @@ impl Joypad {
 
     fn press_direction_button(
         &mut self,
-        interrupts: &mut InterruptController,
+        interrupts: &mut Interrupts,
         direction_button: DirectionButtons,
     ) {
         self.direction_buttons.insert(direction_button);
@@ -73,7 +69,7 @@ impl Joypad {
         }
     }
 
-    pub fn press(&mut self, interrupts: &mut InterruptController, button: Button) {
+    pub fn press(&mut self, interrupts: &mut Interrupts, button: Button) {
         match button {
             Button::Left => self.press_direction_button(interrupts, DirectionButtons::LEFT),
             Button::Up => self.press_direction_button(interrupts, DirectionButtons::UP),

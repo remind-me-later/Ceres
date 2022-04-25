@@ -4,12 +4,13 @@ mod high_ram;
 mod speed_switch;
 mod work_ram;
 
+use std::{cell::RefCell, rc::Rc};
+
 use self::dma_controller::DmaController;
-use super::{cartridge::Cartridge, interrupts::InterruptController, timer::Timer};
+use super::{cartridge::Cartridge, interrupts::Interrupts, timer::Timer};
 use crate::{
     audio::Apu,
     boot_rom::BootRom,
-    cartridge::RumbleCallbacks,
     joypad::Joypad,
     serial::Serial,
     video::{
@@ -28,15 +29,15 @@ pub enum FunctionMode {
     Color,
 }
 
-pub struct Memory<A: AudioCallbacks, R: RumbleCallbacks> {
-    cartridge: Cartridge<R>,
-    interrupt_controller: InterruptController,
+pub struct Memory {
+    cartridge: Cartridge,
+    interrupt_controller: Interrupts,
     timer: Timer,
     high_ram: HighRam,
     work_ram: WorkRam,
     ppu: Ppu,
     joypad: Joypad,
-    apu: Apu<A>,
+    apu: Apu,
     serial: Serial,
     dma_controller: DmaController,
     boot_rom: BootRom,
@@ -46,13 +47,13 @@ pub struct Memory<A: AudioCallbacks, R: RumbleCallbacks> {
     function_mode: FunctionMode,
 }
 
-impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
+impl Memory {
     pub fn new(
         model: Model,
-        cartridge: Cartridge<R>,
+        cartridge: Cartridge,
         monochrome_palette_colors: MonochromePaletteColors,
         boot_rom: BootRom,
-        audio_renderer: A,
+        audio_renderer: Rc<RefCell<dyn AudioCallbacks>>,
     ) -> Self {
         let function_mode = match model {
             Model::Dmg | Model::Mgb => FunctionMode::Monochrome,
@@ -60,7 +61,7 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
         };
 
         Self {
-            interrupt_controller: InterruptController::new(),
+            interrupt_controller: Interrupts::new(),
             timer: Timer::new(),
             cartridge,
             high_ram: HighRam::new(),
@@ -78,7 +79,7 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
         }
     }
 
-    pub fn cartridge(&self) -> &Cartridge<R> {
+    pub fn cartridge(&self) -> &Cartridge {
         &self.cartridge
     }
 
@@ -102,14 +103,6 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
         &mut self.speed_switch_register
     }
 
-    pub fn audio_callbacks(&self) -> &A {
-        self.apu.callbacks()
-    }
-
-    pub fn mut_audio_callbacks(&mut self) -> &mut A {
-        self.apu.mut_callbacks()
-    }
-
     pub fn do_render(&mut self) {
         self.ppu.do_render();
     }
@@ -130,11 +123,11 @@ impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Memory<A, R> {
         self.joypad.release(button);
     }
 
-    pub fn interrupt_controller(&self) -> &InterruptController {
+    pub fn interrupt_controller(&self) -> &Interrupts {
         &self.interrupt_controller
     }
 
-    pub fn mut_interrupt_controller(&mut self) -> &mut InterruptController {
+    pub fn mut_interrupt_controller(&mut self) -> &mut Interrupts {
         &mut self.interrupt_controller
     }
 

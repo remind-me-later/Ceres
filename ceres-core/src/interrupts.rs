@@ -29,25 +29,29 @@ pub enum ICRegister {
     Ie,
 }
 
-pub struct InterruptController {
-    ifr: Interrupt,
-    ier: u8,
+pub struct Interrupts {
+    interrupt_flag: Interrupt,
+    interrupt_enable: u8,
 }
 
-impl InterruptController {
+impl Interrupts {
     pub const fn new() -> Self {
         Self {
-            ifr: Interrupt::from_bits_truncate(1),
-            ier: 0x00,
+            interrupt_flag: Interrupt::from_bits_truncate(0),
+            interrupt_enable: 0x00,
         }
     }
 
     pub const fn halt_bug_condition(&self) -> bool {
-        self.ifr.bits() & self.ier & 0x1f != 0
+        self.interrupt_flag.bits() & self.interrupt_enable & 0x1f != 0
+    }
+
+    pub fn has_pending_interrupts(&self) -> bool {
+        !(self.interrupt_flag & Interrupt::from_bits_truncate(self.interrupt_enable)).is_empty()
     }
 
     pub fn pending_interrupts(&self) -> Interrupt {
-        self.ifr & Interrupt::from_bits_truncate(self.ier)
+        self.interrupt_flag & Interrupt::from_bits_truncate(self.interrupt_enable)
     }
 
     pub fn requested_interrupt(&self) -> Interrupt {
@@ -62,24 +66,24 @@ impl InterruptController {
     }
 
     pub fn request(&mut self, interrupt: Interrupt) {
-        self.ifr.insert(interrupt);
+        self.interrupt_flag.insert(interrupt);
     }
 
     pub fn acknowledge(&mut self, interrupt: Interrupt) {
-        self.ifr.remove(interrupt);
+        self.interrupt_flag.remove(interrupt);
     }
 
-    pub const fn read(&self, register: ICRegister) -> u8 {
+    pub fn read(&self, register: ICRegister) -> u8 {
         match register {
-            ICRegister::If => self.ifr.bits() | 0xe0,
-            ICRegister::Ie => self.ier,
+            ICRegister::If => self.interrupt_flag.bits() | 0xe0,
+            ICRegister::Ie => self.interrupt_enable,
         }
     }
 
     pub fn write(&mut self, register: ICRegister, value: u8) {
         match register {
-            ICRegister::If => self.ifr = Interrupt::from_bits_truncate(value),
-            ICRegister::Ie => self.ier = value,
+            ICRegister::If => self.interrupt_flag = Interrupt::from_bits_truncate(value),
+            ICRegister::Ie => self.interrupt_enable = value,
         }
     }
 }

@@ -1,5 +1,5 @@
-use super::audio::{AudioCallbacks, AudioRenderer};
-use ceres_core::{BootRom, Cartridge, Gameboy, RumbleCallbacks, SCREEN_HEIGHT, SCREEN_WIDTH};
+use super::audio::AudioRenderer;
+use ceres_core::{BootRom, Cartridge, Gameboy, SCREEN_HEIGHT, SCREEN_WIDTH};
 use sdl2::{
     controller::GameController,
     event::{Event, WindowEvent},
@@ -10,32 +10,20 @@ use sdl2::{
     Sdl, VideoSubsystem,
 };
 use std::{
+    cell::RefCell,
     fs::{self, File},
     io::{Read, Write},
     path::{Path, PathBuf},
+    rc::Rc,
     time::Instant,
 };
 
-pub struct RumbleWrapper {}
-
-impl RumbleWrapper {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl RumbleCallbacks for RumbleWrapper {
-    fn start_rumble(&mut self) {}
-
-    fn stop_rumble(&mut self) {}
-}
-
 pub struct Emulator {
-    gameboy: Gameboy<AudioCallbacks, RumbleWrapper>,
+    gameboy: Gameboy,
     is_focused: bool,
     is_gui_paused: bool,
     sdl_context: Sdl,
-    audio_renderer: AudioRenderer,
+    audio_renderer: Rc<RefCell<AudioRenderer>>,
     sav_path: PathBuf,
 }
 
@@ -44,8 +32,6 @@ impl Emulator {
         let sdl_context = sdl2::init().unwrap();
 
         let sav_path = rom_path.with_extension("sav");
-
-        let rumble_wrapper = RumbleWrapper::new();
 
         let (cartridge, sav_path) = {
             let rom_buf = read_file(rom_path).unwrap().into_boxed_slice();
@@ -56,7 +42,7 @@ impl Emulator {
                 None
             };
 
-            let cartridge = Cartridge::new(rom_buf, ram, rumble_wrapper).unwrap();
+            let cartridge = Cartridge::new(rom_buf, ram).unwrap();
 
             (cartridge, sav_path)
         };
@@ -67,7 +53,9 @@ impl Emulator {
             BootRom::new(boot_rom_buf)
         };
 
-        let (audio_renderer, audio_callbacks) = AudioRenderer::new(&sdl_context);
+        let audio_renderer = Rc::new(RefCell::new(AudioRenderer::new(&sdl_context)));
+        let audio_callbacks = Rc::clone(&audio_renderer);
+
         let gameboy = ceres_core::Gameboy::new(
             model,
             cartridge,
@@ -189,10 +177,10 @@ impl Emulator {
                                 Scancode::Backspace => self.gameboy.press(Button::Select),
                                 Scancode::Space => {
                                     if self.is_gui_paused {
-                                        self.audio_renderer.play();
+                                        self.audio_renderer.borrow_mut().play();
                                         self.is_gui_paused = false;
                                     } else {
-                                        self.audio_renderer.pause();
+                                        self.audio_renderer.borrow_mut().pause();
                                         self.is_gui_paused = true;
                                     }
                                 }
@@ -252,7 +240,7 @@ impl Emulator {
     }
 }
 
-pub fn save_data<R: RumbleCallbacks>(sav_path: &Path, cartridge: &Cartridge<R>) {
+pub fn save_data(sav_path: &Path, cartridge: &Cartridge) {
     let mut f = File::create(sav_path).unwrap();
 
     f.write_all(cartridge.ram()).unwrap();

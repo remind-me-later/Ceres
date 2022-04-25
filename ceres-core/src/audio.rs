@@ -1,8 +1,12 @@
+extern crate alloc;
+
 mod audio_callbacks;
 mod channels;
 mod control;
 mod high_pass_filter;
 mod sequencer;
+
+use std::cell::RefCell;
 
 use self::{
     channels::{ChannelRegister::*, Channels},
@@ -11,6 +15,7 @@ use self::{
     sequencer::Sequencer,
 };
 
+use alloc::rc::Rc;
 pub use audio_callbacks::AudioCallbacks;
 
 pub type Sample = f32;
@@ -92,20 +97,20 @@ impl From<u8> for Volume {
     }
 }
 
-pub struct Apu<A: AudioCallbacks> {
+pub struct Apu {
     channels: Channels,
     cycles_to_render: f32,
     cycles_until_next_render: f32,
-    callbacks: A,
+    callbacks: Rc<RefCell<dyn AudioCallbacks>>,
     sequencer: Sequencer,
     control: Control,
     high_pass_filter: HighPassFilter,
 }
 
-impl<A: AudioCallbacks> Apu<A> {
-    pub fn new(callbacks: A) -> Self {
-        let cycles_to_render = callbacks.cycles_to_render();
-        let sample_rate = callbacks.sample_rate();
+impl Apu {
+    pub fn new(callbacks: Rc<RefCell<dyn AudioCallbacks>>) -> Self {
+        let cycles_to_render = callbacks.borrow().cycles_to_render();
+        let sample_rate = callbacks.borrow().sample_rate();
 
         Self {
             channels: Channels::new(),
@@ -116,14 +121,6 @@ impl<A: AudioCallbacks> Apu<A> {
             sequencer: Sequencer::new(),
             high_pass_filter: HighPassFilter::new(sample_rate),
         }
-    }
-
-    pub fn callbacks(&self) -> &A {
-        &self.callbacks
-    }
-
-    pub fn mut_callbacks(&mut self) -> &mut A {
-        &mut self.callbacks
     }
 
     pub fn tick(&mut self, mut microseconds_elapsed_times_16: u8) {
@@ -174,7 +171,7 @@ impl<A: AudioCallbacks> Apu<A> {
             .filter(right_sample, self.control.is_enabled());
 
         let frame = Frame::new(left_sample, right_sample);
-        self.callbacks.push_frame(frame);
+        self.callbacks.borrow_mut().push_frame(frame);
     }
 
     fn reset(&mut self) {

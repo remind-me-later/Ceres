@@ -6,9 +6,8 @@ use super::{
     },
     Cpu,
 };
-use crate::{cartridge::RumbleCallbacks, AudioCallbacks};
 
-impl<'a, A: AudioCallbacks, R: RumbleCallbacks> Cpu<A, R> {
+impl Cpu {
     pub fn ld<G, S>(&mut self, lhs: S, rhs: G)
     where
         G: Get<u8>,

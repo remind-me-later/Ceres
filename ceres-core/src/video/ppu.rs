@@ -10,7 +10,7 @@ use super::{
     vram::Vram,
 };
 use crate::{
-    interrupts::{Interrupt, InterruptController},
+    interrupts::{Interrupt, Interrupts},
     memory::FunctionMode,
 };
 use bitflags::bitflags;
@@ -146,7 +146,7 @@ impl Ppu {
         self.oam.write(address, val)
     }
 
-    fn switch_mode(&mut self, mode: Mode, interrupt_controller: &mut InterruptController) {
+    fn switch_mode(&mut self, mode: Mode, interrupt_controller: &mut Interrupts) {
         self.registers.mut_stat().set_mode(mode);
         let scx = self.registers.scx();
         self.cycles += mode.cycles(scx);
@@ -189,7 +189,7 @@ impl Ppu {
 
     pub fn tick(
         &mut self,
-        interrupt_controller: &mut InterruptController,
+        interrupt_controller: &mut Interrupts,
         function_mode: FunctionMode,
         microseconds_elapsed_times_16: u8,
     ) {
@@ -238,7 +238,7 @@ impl Ppu {
         };
     }
 
-    fn check_compare_interrupt(&mut self, interrupt_controller: &mut InterruptController) {
+    fn check_compare_interrupt(&mut self, interrupt_controller: &mut Interrupts) {
         if self.registers.is_on_coincidence_scanline() {
             self.registers.mut_stat().insert(Stat::LY_EQUALS_LYC);
             if self
