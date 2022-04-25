@@ -57,12 +57,11 @@ impl DmaController {
         self.oam_dma_controller.emulate()
     }
 
-    pub fn start_transfer(&mut self, ppu: &Ppu, microseconds_elapsed_times_16: u8) -> bool {
-        self.vram_dma_controller
-            .start_transfer(ppu, microseconds_elapsed_times_16)
+    pub fn start_transfer(&mut self, ppu: &Ppu) -> bool {
+        self.vram_dma_controller.start_transfer(ppu)
     }
 
-    pub fn do_vram_transfer(&mut self) -> Option<VramDMATransfer> {
+    pub fn do_vram_transfer(&mut self) -> VramDMATransfer {
         self.vram_dma_controller.do_vram_transfer()
     }
 

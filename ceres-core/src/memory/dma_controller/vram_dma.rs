@@ -15,8 +15,6 @@ impl From<u8> for VramDmaMode {
     }
 }
 
-const HDMA_T_CYCLES_DELAY: i8 = 0;
-
 pub struct VramDMATransfer {
     pub source_address: u16,
     pub destination_address: u16,
@@ -36,7 +34,6 @@ pub struct VramDma {
     transfer_size: u16,
     state: VramDmaState,
     bytes_to_copy: u16,
-    microseconds_elapsed_times_16: i8,
 }
 
 impl VramDma {
@@ -49,7 +46,6 @@ impl VramDma {
             transfer_size: 0,
             state: VramDmaState::AwaitingHBlank,
             bytes_to_copy: 0,
-            microseconds_elapsed_times_16: 0,
         }
     }
 
@@ -86,24 +82,13 @@ impl VramDma {
         let transfer_blocks = val & 0x7f;
         self.transfer_size = (u16::from(transfer_blocks) + 1) * 0x10;
         self.state = VramDmaState::AwaitingHBlank;
-        self.microseconds_elapsed_times_16 = -HDMA_T_CYCLES_DELAY;
         self.is_active = true;
     }
 
-    pub fn start_transfer(&mut self, ppu: &Ppu, microseconds_elapsed_times_16: u8) -> bool {
+    pub fn start_transfer(&mut self, ppu: &Ppu) -> bool {
         if !self.is_active {
             return false;
         }
-
-        self.microseconds_elapsed_times_16 = self
-            .microseconds_elapsed_times_16
-            .wrapping_add(microseconds_elapsed_times_16 as i8); // 2 or 4 so its safe
-
-        if self.microseconds_elapsed_times_16 < 4 {
-            return false;
-        }
-
-        self.microseconds_elapsed_times_16 -= 4;
 
         match self.mode {
             VramDmaMode::GeneralPurpose => {
@@ -128,7 +113,7 @@ impl VramDma {
         !self.is_active || self.state == VramDmaState::FinishedLine
     }
 
-    pub fn do_vram_transfer(&mut self) -> Option<VramDMATransfer> {
+    pub fn do_vram_transfer(&mut self) -> VramDMATransfer {
         let hdma_transfer = VramDMATransfer {
             source_address: self.source,
             destination_address: self.destination,
@@ -147,6 +132,6 @@ impl VramDma {
             self.is_active = false;
         }
 
-        Some(hdma_transfer)
+        hdma_transfer
     }
 }

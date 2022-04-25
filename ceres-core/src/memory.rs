@@ -165,28 +165,21 @@ impl Memory {
     }
 
     fn emulate_vram_dma(&mut self) {
-        let microseconds_elapsed_times_16 = self.t_cycles_to_microseconds_elapsed_times_16();
-
-        if self
-            .dma_controller
-            .start_transfer(&self.ppu, microseconds_elapsed_times_16)
-        {
+        if self.dma_controller.start_transfer(&self.ppu) {
             while !self.dma_controller.vram_dma_is_transfer_done() {
-                if let Some(hdma_transfer) = self.dma_controller.do_vram_transfer() {
-                    let address = hdma_transfer.source_address;
-                    let val = match address >> 8 {
-                        0x00..=0x7f => self.cartridge.read_rom(address),
-                        // TODO: should copy garbage
-                        0x80..=0x9f => 0xff,
-                        0xa0..=0xbf => self.cartridge.read_ram(address),
-                        0xc0..=0xcf => self.work_ram.read_low(address),
-                        0xd0..=0xdf => self.work_ram.read_high(address),
-                        _ => panic!("Illegal source address for HDMA transfer"),
-                    };
-
-                    self.ppu
-                        .vram_dma_write(hdma_transfer.destination_address, val);
-                }
+                let hdma_transfer = self.dma_controller.do_vram_transfer();
+                let address = hdma_transfer.source_address;
+                let val = match address >> 8 {
+                    0x00..=0x7f => self.cartridge.read_rom(address),
+                    // TODO: should copy garbage
+                    0x80..=0x9f => 0xff,
+                    0xa0..=0xbf => self.cartridge.read_ram(address),
+                    0xc0..=0xcf => self.work_ram.read_low(address),
+                    0xd0..=0xdf => self.work_ram.read_high(address),
+                    _ => panic!("Illegal source address for HDMA transfer"),
+                };
+                self.ppu
+                    .vram_dma_write(hdma_transfer.destination_address, val);
 
                 // tick
                 self.emulate_oam_dma();
