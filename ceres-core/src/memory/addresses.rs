@@ -1,7 +1,4 @@
-use super::{
-    dma_controller::DmaRegister::{Dma, HDMA1, HDMA2, HDMA3, HDMA4, HDMA5},
-    FunctionMode, Memory,
-};
+use super::{FunctionMode, Memory};
 use crate::{
     audio::{
         Apu,
@@ -42,8 +39,8 @@ impl Memory {
     where
         F: FnOnce(&mut Apu) -> T,
     {
-        self.emulate_oam_dma();
-        self.emulate_vram_dma();
+        self.emulate_dma();
+        self.emulate_hdma();
         self.tick_ppu();
         self.timer.tick_t_cycle(&mut self.interrupt_controller);
         self.tick_apu();
@@ -54,8 +51,8 @@ impl Memory {
     where
         F: FnOnce(&mut Timer, &mut Interrupts) -> T,
     {
-        self.emulate_oam_dma();
-        self.emulate_vram_dma();
+        self.emulate_dma();
+        self.emulate_hdma();
         self.tick_ppu();
         let result = f(&mut self.timer, &mut self.interrupt_controller);
         self.tick_apu();
@@ -65,30 +62,36 @@ impl Memory {
     pub fn read(&mut self, address: u16) -> u8 {
         match address {
             0x00..=0xff => self.generic_mem_cycle(|mem| {
-                if mem.boot_rom.is_active() {
+                if mem.boot_rom.is_mapped() {
                     mem.boot_rom.read(address)
                 } else {
-                    mem.cartridge.read_rom(address)
+                    mem.cartridge.borrow_mut().read_rom(address)
                 }
             }),
-            0x0100..=0x1ff => self.generic_mem_cycle(|mem| mem.cartridge.read_rom(address)),
+            0x0100..=0x1ff => {
+                self.generic_mem_cycle(|mem| mem.cartridge.borrow_mut().read_rom(address))
+            }
             0x200..=0x8ff => self.generic_mem_cycle(|mem| {
-                if mem.boot_rom.is_active() {
+                if mem.boot_rom.is_mapped() {
                     mem.boot_rom.read(address)
                 } else {
-                    mem.cartridge.read_rom(address)
+                    mem.cartridge.borrow_mut().read_rom(address)
                 }
             }),
-            0x0900..=0x7fff => self.generic_mem_cycle(|mem| mem.cartridge.read_rom(address)),
+            0x0900..=0x7fff => {
+                self.generic_mem_cycle(|mem| mem.cartridge.borrow_mut().read_rom(address))
+            }
             0x8000..=0x9fff => self.generic_mem_cycle(|mem| mem.ppu.read(Vram { address })),
-            0xa000..=0xbfff => self.generic_mem_cycle(|mem| mem.cartridge.read_ram(address)),
-            0xc000..=0xcfff => self.generic_mem_cycle(|mem| mem.work_ram.read_low(address)),
-            0xd000..=0xdfff => self.generic_mem_cycle(|mem| mem.work_ram.read_high(address)),
+            0xa000..=0xbfff => {
+                self.generic_mem_cycle(|mem| mem.cartridge.borrow_mut().read_ram(address))
+            }
+            0xc000..=0xcfff => self.generic_mem_cycle(|mem| mem.work_ram.read_ram(address)),
+            0xd000..=0xdfff => self.generic_mem_cycle(|mem| mem.work_ram.read_bank_ram(address)),
             // Echo RAM
-            0xe000..=0xefff => self.generic_mem_cycle(|mem| mem.work_ram.read_low(address)),
-            0xf000..=0xfdff => self.generic_mem_cycle(|mem| mem.work_ram.read_high(address)),
+            0xe000..=0xefff => self.generic_mem_cycle(|mem| mem.work_ram.read_ram(address)),
+            0xf000..=0xfdff => self.generic_mem_cycle(|mem| mem.work_ram.read_bank_ram(address)),
             0xfe00..=0xfe9f => self.generic_mem_cycle(|mem| {
-                if mem.dma_controller.is_dma_active() {
+                if mem.dma.is_active() {
                     0xff
                 } else {
                     mem.ppu.read(Oam { address })
@@ -140,7 +143,7 @@ impl Memory {
             0x43 => self.generic_mem_cycle(|mem| mem.ppu.read(PpuRegister(Scx))),
             0x44 => self.generic_mem_cycle(|mem| mem.ppu.read(PpuRegister(Ly))),
             0x45 => self.generic_mem_cycle(|mem| mem.ppu.read(PpuRegister(Lyc))),
-            0x46 => self.generic_mem_cycle(|mem| mem.dma_controller.read(Dma)),
+            0x46 => self.generic_mem_cycle(|mem| mem.dma.read()),
             0x47 => self.generic_mem_cycle(|mem| mem.ppu.read(PpuRegister(Bgp))),
             0x48 => self.generic_mem_cycle(|mem| mem.ppu.read(PpuRegister(Obp0))),
             0x49 => self.generic_mem_cycle(|mem| mem.ppu.read(PpuRegister(Obp1))),
@@ -152,21 +155,11 @@ impl Memory {
             0x4f if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.ppu.read(VramBank))
             }
-            0x51 if self.model == Model::Cgb => {
-                self.generic_mem_cycle(|mem| mem.dma_controller.read(HDMA1))
-            }
-            0x52 if self.model == Model::Cgb => {
-                self.generic_mem_cycle(|mem| mem.dma_controller.read(HDMA2))
-            }
-            0x53 if self.model == Model::Cgb => {
-                self.generic_mem_cycle(|mem| mem.dma_controller.read(HDMA3))
-            }
-            0x54 if self.model == Model::Cgb => {
-                self.generic_mem_cycle(|mem| mem.dma_controller.read(HDMA4))
-            }
-            0x55 if self.model == Model::Cgb => {
-                self.generic_mem_cycle(|mem| mem.dma_controller.read(HDMA5))
-            }
+            0x51 if self.model == Model::Cgb => self.generic_mem_cycle(|_| 0xff),
+            0x52 if self.model == Model::Cgb => self.generic_mem_cycle(|_| 0xff),
+            0x53 if self.model == Model::Cgb => self.generic_mem_cycle(|_| 0xff),
+            0x54 if self.model == Model::Cgb => self.generic_mem_cycle(|_| 0xff),
+            0x55 if self.model == Model::Cgb => self.generic_mem_cycle(|mem| mem.hdma.read_hdma5()),
             0x68 if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.ppu.read(PpuRegister(Bcps)))
             }
@@ -194,20 +187,24 @@ impl Memory {
     pub fn write(&mut self, address: u16, val: u8) {
         match address {
             0x00..=0x8ff => self.generic_mem_cycle(|mem| {
-                if !mem.boot_rom.is_active() {
-                    mem.cartridge.write_rom(address, val)
+                if !mem.boot_rom.is_mapped() {
+                    mem.cartridge.borrow_mut().write_rom(address, val)
                 }
             }),
-            0x0900..=0x7fff => self.generic_mem_cycle(|mem| mem.cartridge.write_rom(address, val)),
+            0x0900..=0x7fff => {
+                self.generic_mem_cycle(|mem| mem.cartridge.borrow_mut().write_rom(address, val))
+            }
             0x8000..=0x9fff => self.generic_mem_cycle(|mem| mem.ppu.write(Vram { address }, val)),
-            0xa000..=0xbfff => self.generic_mem_cycle(|mem| mem.cartridge.write_ram(address, val)),
-            0xc000..=0xcfff => self.generic_mem_cycle(|mem| mem.work_ram.write_low(address, val)),
-            0xd000..=0xdfff => self.generic_mem_cycle(|mem| mem.work_ram.write_high(address, val)),
+            0xa000..=0xbfff => {
+                self.generic_mem_cycle(|mem| mem.cartridge.borrow_mut().write_ram(address, val))
+            }
+            0xc000..=0xcfff => self.generic_mem_cycle(|mem| mem.work_ram.write_ram(address, val)),
+            0xd000..=0xdfff => self.generic_mem_cycle(|mem| mem.work_ram.write_bank_ram(address, val)),
             // Echo RAM
-            0xe000..=0xefff => self.generic_mem_cycle(|mem| mem.work_ram.write_low(address, val)),
-            0xf000..=0xfdff => self.generic_mem_cycle(|mem| mem.work_ram.write_high(address, val)),
+            0xe000..=0xefff => self.generic_mem_cycle(|mem| mem.work_ram.write_ram(address, val)),
+            0xf000..=0xfdff => self.generic_mem_cycle(|mem| mem.work_ram.write_bank_ram(address, val)),
             0xfe00..=0xfe9f => self.generic_mem_cycle(|mem| {
-                if !mem.dma_controller.is_dma_active() {
+                if !mem.dma.is_active() {
                     mem.ppu.write(Oam { address }, val)
                 }
             }),
@@ -257,13 +254,13 @@ impl Memory {
             0x43 => self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Scx), val)),
             0x44 => self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Ly), val)),
             0x45 => self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Lyc), val)),
-            0x46 => self.generic_mem_cycle(|mem| mem.dma_controller.write(Dma, val)),
+            0x46 => self.generic_mem_cycle(|mem| mem.dma.write(val)),
             0x47 => self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Bgp), val)),
             0x48 => self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Obp0), val)),
             0x49 => self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Obp1), val)),
             0x4a => self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Wy), val)),
             0x4b => self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Wx), val)),
-            0x4c if self.model == Model::Cgb && self.boot_rom.is_active() && val == 0x4 => {
+            0x4c if self.model == Model::Cgb && self.boot_rom.is_mapped() && val == 0x4 => {
                 self.function_mode = FunctionMode::Compatibility;
             }
             0x4d if self.model == Model::Cgb => {
@@ -275,23 +272,23 @@ impl Memory {
             0x50 => {
                 self.tick_t_cycle();
                 if val & 0b1 != 0 {
-                    self.boot_rom.deactivate();
+                    self.boot_rom.unmap();
                 }
             }
             0x51 if self.model == Model::Cgb => {
-                self.generic_mem_cycle(|mem| mem.dma_controller.write(HDMA1, val))
+                self.generic_mem_cycle(|mem| mem.hdma.write_hdma1(val))
             }
             0x52 if self.model == Model::Cgb => {
-                self.generic_mem_cycle(|mem| mem.dma_controller.write(HDMA2, val))
+                self.generic_mem_cycle(|mem| mem.hdma.write_hdma2(val))
             }
             0x53 if self.model == Model::Cgb => {
-                self.generic_mem_cycle(|mem| mem.dma_controller.write(HDMA3, val))
+                self.generic_mem_cycle(|mem| mem.hdma.write_hdma3(val))
             }
             0x54 if self.model == Model::Cgb => {
-                self.generic_mem_cycle(|mem| mem.dma_controller.write(HDMA4, val))
+                self.generic_mem_cycle(|mem| mem.hdma.write_hdma4(val))
             }
             0x55 if self.model == Model::Cgb => {
-                self.generic_mem_cycle(|mem| mem.dma_controller.write(HDMA5, val))
+                self.generic_mem_cycle(|mem| mem.hdma.write_hdma5(val))
             }
             0x68 if self.model == Model::Cgb => {
                 self.generic_mem_cycle(|mem| mem.ppu.write(PpuRegister(Bcps), val))

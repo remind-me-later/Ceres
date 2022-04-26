@@ -67,34 +67,6 @@ pub enum ApuIO {
     WavePatternRam { address: u8 },
 }
 
-#[derive(Clone, Copy)]
-enum Volume {
-    Vol0,
-    Vol1,
-    Vol2,
-    Vol3,
-    Vol4,
-    Vol5,
-    Vol6,
-    Vol7,
-}
-
-impl From<u8> for Volume {
-    fn from(val: u8) -> Self {
-        use Volume::{Vol0, Vol1, Vol2, Vol3, Vol4, Vol5, Vol6, Vol7};
-        match val & 0x07 {
-            0 => Vol0,
-            1 => Vol1,
-            2 => Vol2,
-            3 => Vol3,
-            4 => Vol4,
-            5 => Vol5,
-            6 => Vol6,
-            _ => Vol7,
-        }
-    }
-}
-
 pub struct Apu {
     channels: Channels,
     cycles_to_render: f32,
@@ -121,13 +93,13 @@ impl Apu {
         }
     }
 
-    pub fn tick(&mut self, mut microseconds_elapsed_times_16: u8) {
+    pub fn tick(&mut self, mut mus_elapsed: u8) {
         if !self.control.is_enabled() {
             return;
         }
 
-        while microseconds_elapsed_times_16 > 0 {
-            microseconds_elapsed_times_16 -= 1;
+        while mus_elapsed > 0 {
+            mus_elapsed -= 1;
 
             self.sequencer.tick(&mut self.channels);
 

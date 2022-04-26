@@ -7,7 +7,6 @@ mod vram;
 
 pub use palette::MonochromePaletteColors;
 pub use pixel_data::PixelData;
-pub use vram::VramBank;
 
 use rgb_color::RgbColor;
 

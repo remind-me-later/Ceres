@@ -1,8 +1,7 @@
-mod scanline_renderer;
-// mod fifo;
 pub mod mode;
 pub mod register;
 mod registers;
+mod scanline_renderer;
 
 pub use self::{mode::Mode, register::PpuRegister};
 use super::{
@@ -95,10 +94,6 @@ impl Ppu {
         self.is_frame_done
     }
 
-    // pub fn is_enabled(&self) -> bool {
-    //     self.registers.lcdc().contains(Lcdc::LCD_ENABLE)
-    // }
-
     pub fn read(&mut self, io: PpuIO) -> u8 {
         let mode = self.registers.stat().mode();
 
@@ -133,7 +128,7 @@ impl Ppu {
         }
     }
 
-    pub fn vram_dma_write(&mut self, address: u16, val: u8) {
+    pub fn hdma_write(&mut self, address: u16, val: u8) {
         let mode = self.registers.stat().mode();
 
         match mode {
@@ -142,7 +137,7 @@ impl Ppu {
         }
     }
 
-    pub fn oam_dma_write(&mut self, address: u8, val: u8) {
+    pub fn dma_write(&mut self, address: u8, val: u8) {
         self.oam.write(address, val)
     }
 
@@ -191,13 +186,13 @@ impl Ppu {
         &mut self,
         interrupt_controller: &mut Interrupts,
         function_mode: FunctionMode,
-        microseconds_elapsed_times_16: u8,
+        mus_elapsed: u8,
     ) {
         if !self.registers.lcdc().contains(Lcdc::LCD_ENABLE) {
             return;
         }
 
-        self.cycles -= i16::from(microseconds_elapsed_times_16);
+        self.cycles -= i16::from(mus_elapsed);
         let stat = self.registers.stat();
 
         if self.cycles > 0 {

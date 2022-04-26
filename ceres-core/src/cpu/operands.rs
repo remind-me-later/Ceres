@@ -18,21 +18,35 @@ where
 }
 
 impl Get<u8> for Register8 {
-    fn get(self, cpu: &mut Cpu) -> u8
-where {
-        cpu.registers.read8(self)
+    fn get(self, cpu: &mut Cpu) -> u8 {
+        match self {
+            Register8::A => cpu.registers.a,
+            Register8::B => cpu.registers.b,
+            Register8::C => cpu.registers.c,
+            Register8::D => cpu.registers.d,
+            Register8::E => cpu.registers.e,
+            Register8::H => cpu.registers.h,
+            Register8::L => cpu.registers.l,
+        }
     }
 }
 
 impl Set<u8> for Register8 {
     fn set(self, cpu: &mut Cpu, val: u8) {
-        cpu.registers.write8(self, val);
+        match self {
+            Register8::A => cpu.registers.a = val,
+            Register8::B => cpu.registers.b = val,
+            Register8::C => cpu.registers.c = val,
+            Register8::D => cpu.registers.d = val,
+            Register8::E => cpu.registers.e = val,
+            Register8::H => cpu.registers.h = val,
+            Register8::L => cpu.registers.l = val,
+        }
     }
 }
 
 impl Get<u16> for Register16 {
-    fn get(self, cpu: &mut Cpu) -> u16
-where {
+    fn get(self, cpu: &mut Cpu) -> u16 {
         cpu.registers.read16(self)
     }
 }
@@ -47,15 +61,13 @@ impl Set<u16> for Register16 {
 pub struct Immediate;
 
 impl Get<u8> for Immediate {
-    fn get(self, cpu: &mut Cpu) -> u8
-where {
+    fn get(self, cpu: &mut Cpu) -> u8 {
         cpu.read_immediate()
     }
 }
 
 impl Get<u16> for Immediate {
-    fn get(self, cpu: &mut Cpu) -> u16
-where {
+    fn get(self, cpu: &mut Cpu) -> u16 {
         cpu.read_immediate16()
     }
 }
@@ -71,22 +83,20 @@ pub enum Indirect {
 }
 
 impl Indirect {
-    fn into_address(self, cpu: &mut Cpu) -> u16
-where {
+    fn into_address(self, cpu: &mut Cpu) -> u16 {
         match self {
             Indirect::BC => cpu.registers.read16(Register16::BC),
             Indirect::DE => cpu.registers.read16(Register16::DE),
             Indirect::HL => cpu.registers.read16(Register16::HL),
             Indirect::Immediate => cpu.read_immediate16(),
-            Indirect::HighC => u16::from(cpu.registers.read8(Register8::C)) | 0xff00,
+            Indirect::HighC => u16::from(cpu.registers.c) | 0xff00,
             Indirect::HighImmediate => u16::from(cpu.read_immediate()) | 0xff00,
         }
     }
 }
 
 impl Get<u8> for Indirect {
-    fn get(self, cpu: &mut Cpu) -> u8
-where {
+    fn get(self, cpu: &mut Cpu) -> u8 {
         let address = self.into_address(cpu);
         cpu.memory.read(address)
     }
@@ -103,8 +113,7 @@ impl Set<u8> for Indirect {
 pub struct IndirectIncreaseHL;
 
 impl Get<u8> for IndirectIncreaseHL {
-    fn get(self, cpu: &mut Cpu) -> u8
-where {
+    fn get(self, cpu: &mut Cpu) -> u8 {
         let address = cpu.registers.read16(Register16::HL);
         let ret = cpu.memory.read(address);
         cpu.registers
@@ -126,8 +135,7 @@ impl Set<u8> for IndirectIncreaseHL {
 pub struct IndirectDecreaseHL;
 
 impl Get<u8> for IndirectDecreaseHL {
-    fn get(self, cpu: &mut Cpu) -> u8
-where {
+    fn get(self, cpu: &mut Cpu) -> u8 {
         let address = cpu.registers.read16(Register16::HL);
         let ret = cpu.memory.read(address);
         cpu.registers
@@ -154,8 +162,7 @@ pub enum JumpCondition {
 }
 
 impl JumpCondition {
-    pub fn check(self, cpu: &Cpu) -> bool
-where {
+    pub fn check(self, cpu: &Cpu) -> bool {
         use JumpCondition::{Carry, NotCarry, NotZero, Zero};
         match self {
             Zero => cpu.registers.zf(),

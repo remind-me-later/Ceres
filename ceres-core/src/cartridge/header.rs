@@ -1,10 +1,11 @@
 use crate::Error;
+use core::fmt::Display;
 
 const TITLE_START: usize = 0x134;
 const OLD_TITLE_END: usize = 0x143;
 const NEW_TITLE_END: usize = 0x13f;
 
-pub struct HeaderInfo {
+pub struct Header {
     title: [u8; 15],
     ram_size: RAMSize,
     rom_size: ROMSize,
@@ -12,7 +13,7 @@ pub struct HeaderInfo {
     cgb_flag: CgbFlag,
 }
 
-impl core::fmt::Display for HeaderInfo {
+impl Display for Header {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let title = core::str::from_utf8(&self.title).unwrap();
 
@@ -24,7 +25,7 @@ impl core::fmt::Display for HeaderInfo {
     }
 }
 
-impl HeaderInfo {
+impl Header {
     pub fn new(rom: &[u8]) -> Result<Self, crate::Error> {
         let licensee_code = LicenseeCode::new(rom)?;
         let cgb_flag = CgbFlag::new(rom);
@@ -107,7 +108,7 @@ pub enum ROMSize {
     Mb8,
 }
 
-impl core::fmt::Display for ROMSize {
+impl Display for ROMSize {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
@@ -196,7 +197,7 @@ pub enum RAMSize {
     Kb64,
 }
 
-impl core::fmt::Display for RAMSize {
+impl Display for RAMSize {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
@@ -265,7 +266,7 @@ impl LicenseeCode {
     }
 }
 
-impl core::fmt::Display for LicenseeCode {
+impl Display for LicenseeCode {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             LicenseeCode::Old(c) => write!(f, "old: {:#04x}", c),
@@ -281,7 +282,7 @@ pub enum CgbFlag {
     CgbFunctions,
 }
 
-impl core::fmt::Display for CgbFlag {
+impl Display for CgbFlag {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,

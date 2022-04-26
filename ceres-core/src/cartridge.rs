@@ -1,19 +1,19 @@
 extern crate alloc;
 
-mod header_info;
+mod header;
 mod mbc1;
 mod mbc2;
 mod mbc3;
 mod mbc5;
 
-pub use self::header_info::{CgbFlag, HeaderInfo};
+pub use self::header::{CgbFlag, Header};
 use self::{mbc1::Mbc1, mbc2::Mbc2, mbc3::Mbc3, mbc5::Mbc5};
 use crate::Error;
 use alloc::boxed::Box;
 use alloc::vec;
 
-pub const ROM_BANK_SIZE: usize = 0x4000;
-pub const RAM_BANK_SIZE: usize = 0x2000;
+const ROM_BANK_SIZE: usize = 0x4000;
+const RAM_BANK_SIZE: usize = 0x2000;
 
 pub enum Mbc {
     None,
@@ -38,7 +38,7 @@ impl core::fmt::Display for Mbc {
 pub struct Cartridge {
     mbc: Mbc,
     rom: Box<[u8]>,
-    header_info: HeaderInfo,
+    header_info: Header,
     has_battery: bool,
     ram: Box<[u8]>,
     rom_offsets: (usize, usize),
@@ -47,7 +47,7 @@ pub struct Cartridge {
 
 impl Cartridge {
     pub fn new(rom: Box<[u8]>, ram: Option<Box<[u8]>>) -> Result<Cartridge, Error> {
-        let header_info = HeaderInfo::new(&rom)?;
+        let header_info = Header::new(&rom)?;
         let mbc30 = header_info.ram_size().number_of_banks() >= 8;
         let rom_bit_mask = header_info.rom_size().banks_bit_mask();
 
@@ -115,7 +115,7 @@ impl Cartridge {
         self.has_battery
     }
 
-    pub fn header_info(&self) -> &HeaderInfo {
+    pub fn header_info(&self) -> &Header {
         &self.header_info
     }
 

@@ -1,4 +1,5 @@
-pub struct OamDma {
+#[derive(Default)]
+pub struct Dma {
     is_active: bool,
     source: u8,
     address: u16,
@@ -6,15 +7,9 @@ pub struct OamDma {
     t_cycles: i8,
 }
 
-impl OamDma {
-    pub const fn new() -> Self {
-        Self {
-            is_active: false,
-            source: 0xff,
-            t_cycles: 0,
-            address: 0x0000,
-            is_restarting: false,
-        }
+impl Dma {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub const fn read(&self) -> u8 {

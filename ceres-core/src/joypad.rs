@@ -53,7 +53,7 @@ impl Joypad {
         self.action_buttons.insert(action_button);
 
         if self.actions_enabled {
-            interrupts.request(Interrupt::TIMER);
+            interrupts.request(Interrupt::JOYPAD);
         }
     }
 
@@ -65,7 +65,7 @@ impl Joypad {
         self.direction_buttons.insert(direction_button);
 
         if self.directions_enabled {
-            interrupts.request(Interrupt::TIMER);
+            interrupts.request(Interrupt::JOYPAD);
         }
     }
 

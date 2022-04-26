@@ -1,15 +1,13 @@
 extern crate alloc;
 
 mod addresses;
-mod dma_controller;
-mod high_ram;
-mod speed_switch;
-mod work_ram;
+mod dma;
+mod hdma;
+mod hram;
+mod key1;
+mod wram;
 
-use alloc::rc::Rc;
-use core::cell::RefCell;
-
-use self::dma_controller::DmaController;
+use self::{dma::Dma, hdma::Hdma, key1::Key1};
 use super::{cartridge::Cartridge, interrupts::Interrupts, timer::Timer};
 use crate::{
     audio::Apu,
@@ -22,8 +20,10 @@ use crate::{
     },
     AudioCallbacks, Button, Model,
 };
-use high_ram::HighRam;
-use work_ram::WorkRam;
+use alloc::rc::Rc;
+use core::cell::RefCell;
+use hram::Hram;
+use wram::Wram;
 
 #[derive(Clone, Copy)]
 pub enum FunctionMode {
@@ -33,19 +33,20 @@ pub enum FunctionMode {
 }
 
 pub struct Memory {
-    cartridge: Cartridge,
+    cartridge: Rc<RefCell<Cartridge>>,
     interrupt_controller: Interrupts,
     timer: Timer,
-    high_ram: HighRam,
-    work_ram: WorkRam,
+    high_ram: Hram,
+    work_ram: Wram,
     ppu: Ppu,
     joypad: Joypad,
     apu: Apu,
     serial: Serial,
-    dma_controller: DmaController,
+    dma: Dma,
+    hdma: Hdma,
     boot_rom: BootRom,
     model: Model,
-    speed_switch_register: speed_switch::Register,
+    speed_switch_register: Key1,
     in_double_speed: bool,
     function_mode: FunctionMode,
 }
@@ -53,7 +54,7 @@ pub struct Memory {
 impl Memory {
     pub fn new(
         model: Model,
-        cartridge: Cartridge,
+        cartridge: Rc<RefCell<Cartridge>>,
         monochrome_palette_colors: MonochromePaletteColors,
         boot_rom: BootRom,
         audio_renderer: Rc<RefCell<dyn AudioCallbacks>>,
@@ -67,23 +68,20 @@ impl Memory {
             interrupt_controller: Interrupts::new(),
             timer: Timer::new(),
             cartridge,
-            high_ram: HighRam::new(),
-            work_ram: WorkRam::new(),
+            high_ram: Hram::new(),
+            work_ram: Wram::new(),
             ppu: Ppu::new(monochrome_palette_colors),
             joypad: Joypad::new(),
             apu: Apu::new(audio_renderer),
             serial: Serial::new(),
-            dma_controller: DmaController::new(),
+            dma: Dma::new(),
+            hdma: Hdma::new(),
             boot_rom,
             model,
             in_double_speed: false,
-            speed_switch_register: speed_switch::Register::empty(),
+            speed_switch_register: Key1::empty(),
             function_mode,
         }
-    }
-
-    pub fn cartridge(&self) -> &Cartridge {
-        &self.cartridge
     }
 
     pub fn reset_frame_done(&mut self) {
@@ -98,11 +96,11 @@ impl Memory {
         self.in_double_speed = !self.in_double_speed;
     }
 
-    pub fn speed_switch_register(&self) -> &speed_switch::Register {
+    pub fn speed_switch_register(&self) -> &Key1 {
         &self.speed_switch_register
     }
 
-    pub fn mut_speed_switch_register(&mut self) -> &mut speed_switch::Register {
+    pub fn mut_speed_switch_register(&mut self) -> &mut Key1 {
         &mut self.speed_switch_register
     }
 
@@ -135,23 +133,23 @@ impl Memory {
     }
 
     pub fn tick_t_cycle(&mut self) {
-        self.emulate_oam_dma();
-        self.emulate_vram_dma();
+        self.emulate_dma();
+        self.emulate_hdma();
         self.tick_ppu();
         self.timer.tick_t_cycle(&mut self.interrupt_controller);
         self.tick_apu();
     }
 
-    pub fn tick_ppu(&mut self) {
-        let microseconds_elapsed_times_16 = self.t_cycles_to_microseconds_elapsed_times_16();
+    fn tick_ppu(&mut self) {
+        let mus_elapsed = self.mus_since_last_tick();
         self.ppu.tick(
             &mut self.interrupt_controller,
             self.function_mode,
-            microseconds_elapsed_times_16,
+            mus_elapsed,
         );
     }
 
-    fn t_cycles_to_microseconds_elapsed_times_16(&self) -> u8 {
+    fn mus_since_last_tick(&self) -> u8 {
         if self.in_double_speed {
             2
         } else {
@@ -159,30 +157,29 @@ impl Memory {
         }
     }
 
-    pub fn tick_apu(&mut self) {
-        let microseconds_elapsed_times_16 = self.t_cycles_to_microseconds_elapsed_times_16();
-        self.apu.tick(microseconds_elapsed_times_16);
+    fn tick_apu(&mut self) {
+        let mus_elapsed = self.mus_since_last_tick();
+        self.apu.tick(mus_elapsed);
     }
 
-    fn emulate_vram_dma(&mut self) {
-        if self.dma_controller.start_transfer(&self.ppu) {
-            while !self.dma_controller.vram_dma_is_transfer_done() {
-                let hdma_transfer = self.dma_controller.do_vram_transfer();
-                let address = hdma_transfer.source_address;
-                let val = match address >> 8 {
-                    0x00..=0x7f => self.cartridge.read_rom(address),
+    fn emulate_hdma(&mut self) {
+        if self.hdma.start(&self.ppu) {
+            while !self.hdma.is_transfer_done() {
+                let transfer = self.hdma.transfer();
+                let addr = transfer.src;
+                let val = match addr >> 8 {
+                    0x00..=0x7f => self.cartridge.borrow_mut().read_rom(addr),
                     // TODO: should copy garbage
                     0x80..=0x9f => 0xff,
-                    0xa0..=0xbf => self.cartridge.read_ram(address),
-                    0xc0..=0xcf => self.work_ram.read_low(address),
-                    0xd0..=0xdf => self.work_ram.read_high(address),
+                    0xa0..=0xbf => self.cartridge.borrow_mut().read_ram(addr),
+                    0xc0..=0xcf => self.work_ram.read_ram(addr),
+                    0xd0..=0xdf => self.work_ram.read_bank_ram(addr),
                     _ => panic!("Illegal source address for HDMA transfer"),
                 };
-                self.ppu
-                    .vram_dma_write(hdma_transfer.destination_address, val);
+                self.ppu.hdma_write(transfer.dst, val);
 
                 // tick
-                self.emulate_oam_dma();
+                self.emulate_dma();
                 self.tick_ppu();
                 self.timer.tick_t_cycle(&mut self.interrupt_controller);
                 self.tick_apu();
@@ -191,22 +188,18 @@ impl Memory {
     }
 
     // FIXME: sprites are not displayed during OAM DMA
-    fn emulate_oam_dma(&mut self) {
-        if let Some(dma_source_address) = self.dma_controller.emulate_oam_dma(&self.ppu) {
-            let val = match dma_source_address >> 8 {
-                0x00..=0x7f => self.cartridge.read_rom(dma_source_address),
-                0x80..=0x9f => self.ppu.read(Vram {
-                    // TODO: should be able to read vram at any moment?
-                    address: dma_source_address,
-                }),
-                0xa0..=0xbf => self.cartridge.read_ram(dma_source_address),
-                0xc0..=0xcf | 0xe0..=0xef => self.work_ram.read_low(dma_source_address),
-                0xd0..=0xdf | 0xf0..=0xff => self.work_ram.read_high(dma_source_address),
+    fn emulate_dma(&mut self) {
+        if let Some(src) = self.dma.emulate() {
+            let val = match src >> 8 {
+                0x00..=0x7f => self.cartridge.borrow_mut().read_rom(src),
+                0x80..=0x9f => self.ppu.read(Vram { address: src }),
+                0xa0..=0xbf => self.cartridge.borrow_mut().read_ram(src),
+                0xc0..=0xcf | 0xe0..=0xef => self.work_ram.read_ram(src),
+                0xd0..=0xdf | 0xf0..=0xff => self.work_ram.read_bank_ram(src),
                 _ => panic!("Illegal source address for OAM DMA transfer"),
             };
 
-            self.ppu
-                .oam_dma_write((dma_source_address & 0xff) as u8, val);
+            self.ppu.dma_write((src & 0xff) as u8, val);
         }
     }
 }

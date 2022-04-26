@@ -3,8 +3,8 @@ mod instructions;
 mod operands;
 mod registers;
 
-use crate::{memory::Memory, Cartridge};
-use registers::{Register16::PC, Register16::SP, Registers};
+use crate::memory::Memory;
+use registers::Registers;
 
 pub struct Cpu {
     registers: Registers,
@@ -25,10 +25,6 @@ impl Cpu {
             halt_bug: false,
             memory,
         }
-    }
-
-    pub fn cartridge(&self) -> &Cartridge {
-        self.memory.cartridge()
     }
 
     pub fn memory(&self) -> &Memory {
@@ -72,11 +68,11 @@ impl Cpu {
 
             self.memory.tick_t_cycle();
 
-            let pc = self.registers.read16(PC);
+            let pc = self.registers.pc;
             self.internal_push(pc);
 
             let interrupt = self.memory.interrupt_controller().requested_interrupt();
-            self.registers.write16(PC, interrupt.handler_address());
+            self.registers.pc = interrupt.handler_address();
 
             self.memory.tick_t_cycle();
 
@@ -87,7 +83,7 @@ impl Cpu {
     }
 
     fn read_immediate(&mut self) -> u8 {
-        let address = self.registers.read16(PC);
+        let address = self.registers.pc;
         self.registers.increase_pc();
         self.memory.read(address)
     }
@@ -98,21 +94,21 @@ impl Cpu {
         u16::from_le_bytes([lo, hi])
     }
 
-    pub fn internal_pop(&mut self) -> u16 {
-        let lo = self.memory.read(self.registers.read16(SP));
+    fn internal_pop(&mut self) -> u16 {
+        let lo = self.memory.read(self.registers.sp);
         self.registers.increase_sp();
-        let hi = self.memory.read(self.registers.read16(SP));
+        let hi = self.memory.read(self.registers.sp);
         self.registers.increase_sp();
         u16::from_le_bytes([lo, hi])
     }
 
-    pub fn internal_push(&mut self, value: u16) {
+    fn internal_push(&mut self, value: u16) {
         let [lo, hi] = u16::to_le_bytes(value);
         self.memory.tick_t_cycle();
         self.registers.decrease_sp();
-        self.memory.write(self.registers.read16(SP), hi);
+        self.memory.write(self.registers.sp, hi);
         self.registers.decrease_sp();
-        self.memory.write(self.registers.read16(SP), lo);
+        self.memory.write(self.registers.sp, lo);
     }
 
     fn internal_rl(&mut self, val: u8) -> u8 {

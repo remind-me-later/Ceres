@@ -4,7 +4,7 @@ use alloc::boxed::Box;
 
 pub struct BootRom {
     boot_rom: Box<[u8]>,
-    is_active: bool,
+    is_mapped: bool,
 }
 
 impl BootRom {
@@ -13,7 +13,7 @@ impl BootRom {
         // TODO: check it has the right size
         Self {
             boot_rom: data,
-            is_active: true,
+            is_mapped: true,
         }
     }
 
@@ -23,11 +23,11 @@ impl BootRom {
     }
 
     #[must_use]
-    pub const fn is_active(&self) -> bool {
-        self.is_active
+    pub fn is_mapped(&self) -> bool {
+        self.is_mapped
     }
 
-    pub fn deactivate(&mut self) {
-        self.is_active = false;
+    pub fn unmap(&mut self) {
+        self.is_mapped = false;
     }
 }

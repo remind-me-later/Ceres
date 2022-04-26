@@ -25,6 +25,7 @@ pub struct Emulator {
     sdl_context: Sdl,
     audio_renderer: Rc<RefCell<AudioRenderer>>,
     sav_path: PathBuf,
+    cartridge: Rc<RefCell<Cartridge>>,
 }
 
 impl Emulator {
@@ -42,7 +43,7 @@ impl Emulator {
                 None
             };
 
-            let cartridge = Cartridge::new(rom_buf, ram).unwrap();
+            let cartridge = Rc::new(RefCell::new(Cartridge::new(rom_buf, ram).unwrap()));
 
             (cartridge, sav_path)
         };
@@ -56,9 +57,11 @@ impl Emulator {
         let audio_renderer = Rc::new(RefCell::new(AudioRenderer::new(&sdl_context)));
         let audio_callbacks = Rc::clone(&audio_renderer);
 
+        let gb_cartridge = Rc::clone(&cartridge);
+
         let gameboy = ceres_core::Gameboy::new(
             model,
-            cartridge,
+            gb_cartridge,
             boot_rom,
             audio_callbacks,
             ceres_core::MonochromePaletteColors::Grayscale,
@@ -71,6 +74,7 @@ impl Emulator {
             is_gui_paused: false,
             audio_renderer,
             sav_path,
+            cartridge,
         }
     }
 
@@ -230,12 +234,9 @@ impl Emulator {
             }
         }
 
-        {
-            // save
-            let cartridge = self.gameboy.cartridge();
-            if cartridge.has_battery() {
-                save_data(&self.sav_path, cartridge);
-            }
+        // save
+        if self.cartridge.borrow().has_battery() {
+            save_data(&self.sav_path, &self.cartridge.borrow());
         }
     }
 }

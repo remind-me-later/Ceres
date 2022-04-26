@@ -14,18 +14,19 @@ mod serial;
 mod timer;
 mod video;
 
-use alloc::rc::Rc;
 pub use audio::{AudioCallbacks, Frame, Sample};
 pub use boot_rom::BootRom;
-pub use cartridge::{Cartridge, HeaderInfo};
-use core::{cell::RefCell, time::Duration};
-use cpu::Cpu;
+pub use cartridge::{Cartridge, Header};
 pub use error::Error;
 pub use joypad::Button;
-use memory::Memory;
 pub use video::{
-    MonochromePaletteColors, PixelData, VramBank, SCANLINES_PER_FRAME, SCREEN_HEIGHT, SCREEN_WIDTH,
+    MonochromePaletteColors, PixelData, SCANLINES_PER_FRAME, SCREEN_HEIGHT, SCREEN_WIDTH,
 };
+
+use alloc::rc::Rc;
+use core::{cell::RefCell, time::Duration};
+use cpu::Cpu;
+use memory::Memory;
 
 // 59.7 fps
 pub const NANOSECONDS_PER_FRAME: u64 = 16_750_418;
@@ -37,9 +38,9 @@ pub const M_CYCLES_PER_FRAME: u32 = T_CYCLES_PER_FRAME / 4;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Model {
-    Dmg, // Game Boy
-    Mgb, // Game Boy Pocket
-    Cgb, // Game Boy Color
+    Dmg,
+    Mgb,
+    Cgb,
 }
 
 pub struct Gameboy {
@@ -49,22 +50,20 @@ pub struct Gameboy {
 impl Gameboy {
     pub fn new(
         model: Model,
-        cartridge: Cartridge,
+        cartridge: Rc<RefCell<Cartridge>>,
         boot_rom: BootRom,
         audio_callbacks: Rc<RefCell<dyn AudioCallbacks>>,
         monochrome_palette_colors: MonochromePaletteColors,
     ) -> Self {
-        let memory = Memory::new(
-            model,
-            cartridge,
-            monochrome_palette_colors,
-            boot_rom,
-            audio_callbacks,
-        );
-
-        let cpu = Cpu::new(memory);
-
-        Self { cpu }
+        Self {
+            cpu: Cpu::new(Memory::new(
+                model,
+                cartridge,
+                monochrome_palette_colors,
+                boot_rom,
+                audio_callbacks,
+            )),
+        }
     }
 
     pub fn press(&mut self, button: Button) {
@@ -97,14 +96,5 @@ impl Gameboy {
         }
 
         self.cpu.mut_memory().reset_frame_done();
-    }
-
-    #[must_use]
-    pub fn cartridge_header_info(&self) -> &HeaderInfo {
-        self.cpu.memory().cartridge().header_info()
-    }
-
-    pub fn cartridge(&self) -> &Cartridge {
-        self.cpu.cartridge()
     }
 }

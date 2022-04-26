@@ -1,9 +1,6 @@
 use super::{
     operands::{Get, JumpCondition, Set},
-    registers::{
-        Register16::{self, HL, PC, SP},
-        Register8::A,
-    },
+    registers::Register16::{self, HL},
     Cpu,
 };
 
@@ -19,7 +16,7 @@ impl Cpu {
 
     pub fn ld16_sp_hl(&mut self) {
         let val = self.registers.read16(HL);
-        self.registers.write16(SP, val);
+        self.registers.sp = val;
         self.memory.tick_t_cycle();
     }
 
@@ -27,21 +24,21 @@ impl Cpu {
     where
         G: Get<u8>,
     {
-        let a = self.registers.read8(A);
+        let a = self.registers.a;
         let val = rhs.get(self);
         let (output, carry) = a.overflowing_add(val);
         self.registers.set_zf(output == 0);
         self.registers.set_nf(false);
         self.registers.set_hf((a & 0xf) + (val & 0xf) > 0xf);
         self.registers.set_cf(carry);
-        self.registers.write8(A, output);
+        self.registers.a = output;
     }
 
     pub fn adc<G>(&mut self, rhs: G)
     where
         G: Get<u8>,
     {
-        let a = self.registers.read8(A);
+        let a = self.registers.a;
         let cy = u8::from(self.registers.cf());
         let val = rhs.get(self);
         let output = a.wrapping_add(val).wrapping_add(cy);
@@ -50,28 +47,28 @@ impl Cpu {
         self.registers.set_hf((a & 0xf) + (val & 0xf) + cy > 0xf);
         self.registers
             .set_cf(u16::from(a) + u16::from(val) + u16::from(cy) > 0xff);
-        self.registers.write8(A, output);
+        self.registers.a = output;
     }
 
     pub fn sub<G>(&mut self, rhs: G)
     where
         G: Get<u8>,
     {
-        let a = self.registers.read8(A);
+        let a = self.registers.a;
         let val = rhs.get(self);
         let (output, carry) = a.overflowing_sub(val);
         self.registers.set_zf(output == 0);
         self.registers.set_nf(true);
         self.registers.set_hf(a & 0xf < val & 0xf);
         self.registers.set_cf(carry);
-        self.registers.write8(A, output);
+        self.registers.a = output;
     }
 
     pub fn sbc<G>(&mut self, rhs: G)
     where
         G: Get<u8>,
     {
-        let a = self.registers.read8(A);
+        let a = self.registers.a;
         let cy = u8::from(self.registers.cf());
         let val = rhs.get(self);
         let output = a.wrapping_sub(val).wrapping_sub(cy);
@@ -80,14 +77,14 @@ impl Cpu {
         self.registers.set_hf(a & 0xf < (val & 0xf) + cy);
         self.registers
             .set_cf(u16::from(a) < u16::from(val) + u16::from(cy));
-        self.registers.write8(A, output);
+        self.registers.a = output;
     }
 
     pub fn cp<G>(&mut self, rhs: G)
     where
         G: Get<u8>,
     {
-        let a = self.registers.read8(A);
+        let a = self.registers.a;
         let val = rhs.get(self);
         let result = a.wrapping_sub(val);
         self.registers.set_zf(result == 0);
@@ -102,8 +99,8 @@ impl Cpu {
         G: Get<u8>,
     {
         let val = rhs.get(self);
-        let a = self.registers.read8(A) & val;
-        self.registers.write8(A, a);
+        let a = self.registers.a & val;
+        self.registers.a = a;
         self.registers.set_zf(a == 0);
         self.registers.set_nf(false);
         self.registers.set_hf(true);
@@ -115,8 +112,8 @@ impl Cpu {
         G: Get<u8>,
     {
         let val = rhs.get(self);
-        let a = self.registers.read8(A) | val;
-        self.registers.write8(A, a);
+        let a = self.registers.a | val;
+        self.registers.a = a;
         self.registers.set_zf(a == 0);
         self.registers.set_nf(false);
         self.registers.set_hf(false);
@@ -128,8 +125,8 @@ impl Cpu {
         G: Get<u8>,
     {
         let read = rhs.get(self);
-        let a = self.registers.read8(A) ^ read;
-        self.registers.write8(A, a);
+        let a = self.registers.a ^ read;
+        self.registers.a = a;
         self.registers.set_zf(a == 0);
         self.registers.set_nf(false);
         self.registers.set_hf(false);
@@ -177,7 +174,7 @@ impl Cpu {
 
     pub fn ld16_hl_sp_dd(&mut self) {
         let offset = self.read_immediate() as i8 as u16;
-        let sp = self.registers.read16(SP);
+        let sp = self.registers.sp;
         let val = sp.wrapping_add(offset);
         let tmp = sp ^ val ^ offset;
         self.registers.write16(HL, val);
@@ -189,32 +186,32 @@ impl Cpu {
     }
 
     pub fn rlca(&mut self) {
-        let val = self.internal_rlc(self.registers.read8(A));
-        self.registers.write8(A, val);
+        let val = self.internal_rlc(self.registers.a);
+        self.registers.a = val;
         self.registers.set_zf(false);
     }
 
     pub fn rla(&mut self) {
-        let val = self.internal_rl(self.registers.read8(A));
-        self.registers.write8(A, val);
+        let val = self.internal_rl(self.registers.a);
+        self.registers.a = val;
         self.registers.set_zf(false);
     }
 
     pub fn rrca(&mut self) {
-        let val = self.internal_rrc(self.registers.read8(A));
-        self.registers.write8(A, val);
+        let val = self.internal_rrc(self.registers.a);
+        self.registers.a = val;
         self.registers.set_zf(false);
     }
 
     pub fn rra(&mut self) {
-        let val = self.internal_rr(self.registers.read8(A));
-        self.registers.write8(A, val);
+        let val = self.internal_rr(self.registers.a);
+        self.registers.a = val;
         self.registers.set_zf(false);
     }
 
     pub fn do_jump_to_immediate(&mut self) {
         let address = self.read_immediate16();
-        self.registers.write16(PC, address);
+        self.registers.pc = address;
         self.memory.tick_t_cycle();
     }
 
@@ -226,8 +223,8 @@ impl Cpu {
         if condition.check(self) {
             self.do_jump_to_immediate();
         } else {
-            let pc = self.registers.read16(PC).wrapping_add(2);
-            self.registers.write16(PC, pc);
+            let pc = self.registers.pc.wrapping_add(2);
+            self.registers.pc = pc;
             self.memory.tick_t_cycle();
             self.memory.tick_t_cycle();
         }
@@ -235,13 +232,13 @@ impl Cpu {
 
     pub fn jp_hl(&mut self) {
         let address = self.registers.read16(HL);
-        self.registers.write16(PC, address);
+        self.registers.pc = address;
     }
 
     fn do_jump_relative(&mut self) {
         let relative_address = self.read_immediate() as i8 as u16;
-        let pc = self.registers.read16(PC).wrapping_add(relative_address);
-        self.registers.write16(PC, pc);
+        let pc = self.registers.pc.wrapping_add(relative_address);
+        self.registers.pc = pc;
         self.memory.tick_t_cycle();
     }
 
@@ -260,9 +257,9 @@ impl Cpu {
 
     pub fn do_call(&mut self) {
         let address = self.read_immediate16();
-        let pc = self.registers.read16(PC);
+        let pc = self.registers.pc;
         self.internal_push(pc);
-        self.registers.write16(PC, address);
+        self.registers.pc = address;
     }
 
     pub fn call_nn(&mut self) {
@@ -273,8 +270,8 @@ impl Cpu {
         if condition.check(self) {
             self.do_call();
         } else {
-            let pc = self.registers.read16(PC).wrapping_add(2);
-            self.registers.write16(PC, pc);
+            let pc = self.registers.pc.wrapping_add(2);
+            self.registers.pc = pc;
             self.memory.tick_t_cycle();
             self.memory.tick_t_cycle();
         }
@@ -282,7 +279,7 @@ impl Cpu {
 
     fn do_return(&mut self) {
         let pc = self.internal_pop();
-        self.registers.write16(PC, pc);
+        self.registers.pc = pc;
         self.memory.tick_t_cycle();
     }
 
@@ -303,9 +300,9 @@ impl Cpu {
     }
 
     pub fn rst(&mut self, address: u16) {
-        let pc = self.registers.read16(PC);
+        let pc = self.registers.pc;
         self.internal_push(pc);
-        self.registers.write16(PC, address);
+        self.registers.pc = address;
     }
 
     pub fn halt(&mut self) {
@@ -357,36 +354,31 @@ impl Cpu {
         // DAA table in page 110 of the official "Game Boy Programming Manual"
         let mut carry = false;
         if !self.registers.nf() {
-            if self.registers.cf() || self.registers.read8(A) > 0x99 {
-                self.registers
-                    .write8(A, self.registers.read8(A).wrapping_add(0x60));
+            if self.registers.cf() || self.registers.a > 0x99 {
+                self.registers.a = self.registers.a.wrapping_add(0x60);
                 carry = true;
             }
-            if self.registers.hf() || self.registers.read8(A) & 0x0f > 0x09 {
-                self.registers
-                    .write8(A, self.registers.read8(A).wrapping_add(0x06));
+            if self.registers.hf() || self.registers.a & 0x0f > 0x09 {
+                self.registers.a = self.registers.a.wrapping_add(0x06);
             }
         } else if self.registers.cf() {
             carry = true;
-            self.registers.write8(
-                A,
+            self.registers.a =
                 self.registers
-                    .read8(A)
-                    .wrapping_add(if self.registers.hf() { 0x9a } else { 0xa0 }),
-            );
+                    .a
+                    .wrapping_add(if self.registers.hf() { 0x9a } else { 0xa0 });
         } else if self.registers.hf() {
-            self.registers
-                .write8(A, self.registers.read8(A).wrapping_add(0xfa));
+            self.registers.a = self.registers.a.wrapping_add(0xfa);
         }
 
-        self.registers.set_zf(self.registers.read8(A) == 0);
+        self.registers.set_zf(self.registers.a == 0);
         self.registers.set_hf(false);
         self.registers.set_cf(carry);
     }
 
     pub fn cpl(&mut self) {
-        let a = self.registers.read8(A);
-        self.registers.write8(A, !a);
+        let a = self.registers.a;
+        self.registers.a = !a;
         self.registers.set_nf(true);
         self.registers.set_hf(true);
     }
@@ -407,7 +399,7 @@ impl Cpu {
     }
 
     pub fn ld16_nn_sp(&mut self) {
-        let val = self.registers.read16(SP);
+        let val = self.registers.sp;
         let address = self.read_immediate16();
         self.memory.write(address, (val & 0xff) as u8);
         self.memory.write(address.wrapping_add(1), (val >> 8) as u8);
@@ -415,10 +407,10 @@ impl Cpu {
 
     pub fn add16_sp_dd(&mut self) {
         let offset = self.read_immediate() as i8 as u16;
-        let sp = self.registers.read16(SP);
+        let sp = self.registers.sp;
         let val = sp.wrapping_add(offset);
         let tmp = sp ^ val ^ offset;
-        self.registers.write16(SP, val);
+        self.registers.sp = val;
         self.registers.set_zf(false);
         self.registers.set_nf(false);
         self.registers.set_hf((tmp & 0x10) == 0x10);

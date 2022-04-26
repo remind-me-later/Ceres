@@ -23,7 +23,7 @@ incremental = true
 codegen-units = 2
 
 [profile.release]
-opt-level = "s"
+opt-level = 3
 debug = 0
 debug-assertions = false
 overflow-checks = false

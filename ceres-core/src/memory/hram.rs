@@ -1,10 +1,10 @@
 const HIGH_RAM_SIZE: usize = 0x80;
 
-pub struct HighRam {
+pub struct Hram {
     high_ram: [u8; HIGH_RAM_SIZE],
 }
 
-impl HighRam {
+impl Hram {
     pub const fn new() -> Self {
         Self {
             high_ram: [0; HIGH_RAM_SIZE],

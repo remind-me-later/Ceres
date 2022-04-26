@@ -26,7 +26,6 @@ pub enum Register16 {
     BC,
     DE,
     HL,
-    PC,
     SP,
 }
 
@@ -65,37 +64,12 @@ impl Registers {
         Self::default()
     }
 
-    pub const fn read8(&self, register: Register8) -> u8 {
-        match register {
-            Register8::A => self.a,
-            Register8::B => self.b,
-            Register8::C => self.c,
-            Register8::D => self.d,
-            Register8::E => self.e,
-            Register8::H => self.h,
-            Register8::L => self.l,
-        }
-    }
-
-    pub fn write8(&mut self, register: Register8, val: u8) {
-        match register {
-            Register8::A => self.a = val,
-            Register8::B => self.b = val,
-            Register8::C => self.c = val,
-            Register8::D => self.d = val,
-            Register8::E => self.e = val,
-            Register8::H => self.h = val,
-            Register8::L => self.l = val,
-        }
-    }
-
     pub const fn read16(&self, register: Register16) -> u16 {
         match register {
             Register16::AF => u16::from_be_bytes([self.a, self.f.bits()]),
             Register16::BC => u16::from_be_bytes([self.b, self.c]),
             Register16::DE => u16::from_be_bytes([self.d, self.e]),
             Register16::HL => u16::from_be_bytes([self.h, self.l]),
-            Register16::PC => self.pc,
             Register16::SP => self.sp,
         }
     }
@@ -122,7 +96,6 @@ impl Registers {
                 self.h = hi;
                 self.l = lo;
             }
-            Register16::PC => self.pc = val,
             Register16::SP => self.sp = val,
         }
     }

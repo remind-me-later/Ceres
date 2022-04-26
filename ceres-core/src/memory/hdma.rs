@@ -1,12 +1,12 @@
 use crate::video::ppu::{Mode, Ppu};
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum VramDmaMode {
+#[derive(PartialEq, Eq)]
+enum HdmaMode {
     GeneralPurpose,
     Hblank,
 }
 
-impl From<u8> for VramDmaMode {
+impl From<u8> for HdmaMode {
     fn from(val: u8) -> Self {
         match val >> 7 {
             0 => Self::GeneralPurpose,
@@ -15,36 +15,36 @@ impl From<u8> for VramDmaMode {
     }
 }
 
-pub struct VramDMATransfer {
-    pub source_address: u16,
-    pub destination_address: u16,
+pub struct HdmaTransfer {
+    pub src: u16,
+    pub dst: u16,
 }
 
 #[derive(PartialEq, Eq)]
-enum VramDmaState {
+enum HdmaState {
     AwaitingHBlank,
     FinishedLine,
 }
 
-pub struct VramDma {
+pub struct Hdma {
     is_active: bool,
     source: u16,
     destination: u16,
-    mode: VramDmaMode,
+    mode: HdmaMode,
     transfer_size: u16,
-    state: VramDmaState,
+    state: HdmaState,
     bytes_to_copy: u16,
 }
 
-impl VramDma {
+impl Hdma {
     pub const fn new() -> Self {
         Self {
             is_active: false,
             source: 0,
             destination: 0,
-            mode: VramDmaMode::GeneralPurpose,
+            mode: HdmaMode::GeneralPurpose,
             transfer_size: 0,
-            state: VramDmaState::AwaitingHBlank,
+            state: HdmaState::AwaitingHBlank,
             bytes_to_copy: 0,
         }
     }
@@ -81,26 +81,26 @@ impl VramDma {
         self.mode = val.into();
         let transfer_blocks = val & 0x7f;
         self.transfer_size = (u16::from(transfer_blocks) + 1) * 0x10;
-        self.state = VramDmaState::AwaitingHBlank;
+        self.state = HdmaState::AwaitingHBlank;
         self.is_active = true;
     }
 
-    pub fn start_transfer(&mut self, ppu: &Ppu) -> bool {
+    pub fn start(&mut self, ppu: &Ppu) -> bool {
         if !self.is_active {
             return false;
         }
 
         match self.mode {
-            VramDmaMode::GeneralPurpose => {
+            HdmaMode::GeneralPurpose => {
                 self.bytes_to_copy = self.transfer_size;
                 true
             }
-            VramDmaMode::Hblank => match self.state {
-                VramDmaState::FinishedLine if ppu.mode() != Mode::HBlank => {
-                    self.state = VramDmaState::AwaitingHBlank;
+            HdmaMode::Hblank => match self.state {
+                HdmaState::FinishedLine if ppu.mode() != Mode::HBlank => {
+                    self.state = HdmaState::AwaitingHBlank;
                     false
                 }
-                VramDmaState::AwaitingHBlank if ppu.mode() == Mode::HBlank => {
+                HdmaState::AwaitingHBlank if ppu.mode() == Mode::HBlank => {
                     self.bytes_to_copy = 0x10;
                     true
                 }
@@ -110,13 +110,13 @@ impl VramDma {
     }
 
     pub fn is_transfer_done(&self) -> bool {
-        !self.is_active || self.state == VramDmaState::FinishedLine
+        !self.is_active || self.state == HdmaState::FinishedLine
     }
 
-    pub fn do_vram_transfer(&mut self) -> VramDMATransfer {
-        let hdma_transfer = VramDMATransfer {
-            source_address: self.source,
-            destination_address: self.destination,
+    pub fn transfer(&mut self) -> HdmaTransfer {
+        let hdma_transfer = HdmaTransfer {
+            src: self.source,
+            dst: self.destination,
         };
 
         self.destination = self.destination.wrapping_add(1);
@@ -125,7 +125,7 @@ impl VramDma {
         self.bytes_to_copy -= 1;
 
         if self.bytes_to_copy == 0 {
-            self.state = VramDmaState::FinishedLine;
+            self.state = HdmaState::FinishedLine;
         }
 
         if self.transfer_size == 0 {
