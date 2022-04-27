@@ -59,13 +59,7 @@ impl Emulator {
 
         let gb_cartridge = Rc::clone(&cartridge);
 
-        let gameboy = ceres_core::Gameboy::new(
-            model,
-            gb_cartridge,
-            boot_rom,
-            audio_callbacks,
-            ceres_core::MonochromePaletteColors::Grayscale,
-        );
+        let gameboy = ceres_core::Gameboy::new(model, gb_cartridge, boot_rom, audio_callbacks);
 
         Self {
             sdl_context,

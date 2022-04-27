@@ -1,4 +1,5 @@
 #![no_std]
+#![forbid(unsafe_code)]
 
 extern crate alloc;
 
@@ -53,48 +54,41 @@ impl Gameboy {
         cartridge: Rc<RefCell<Cartridge>>,
         boot_rom: BootRom,
         audio_callbacks: Rc<RefCell<dyn AudioCallbacks>>,
-        monochrome_palette_colors: MonochromePaletteColors,
     ) -> Self {
         Self {
-            cpu: Cpu::new(Memory::new(
-                model,
-                cartridge,
-                monochrome_palette_colors,
-                boot_rom,
-                audio_callbacks,
-            )),
+            cpu: Cpu::new(Memory::new(model, cartridge, boot_rom, audio_callbacks)),
         }
     }
 
     pub fn press(&mut self, button: Button) {
-        self.cpu.mut_memory().press(button);
+        self.cpu.mem.press(button);
     }
 
     pub fn release(&mut self, button: Button) {
-        self.cpu.mut_memory().release(button);
+        self.cpu.mem.release(button);
     }
 
     pub fn mut_pixel_data(&mut self) -> &mut PixelData {
-        self.cpu.mut_memory().mut_pixel_data()
+        self.cpu.mem.mut_pixel_data()
     }
 
     pub fn run_frame(&mut self) {
-        self.cpu.mut_memory().do_render();
+        self.cpu.mem.do_render();
 
-        while !self.cpu.memory().is_frame_done() {
-            self.cpu.execute_instruction();
+        while !self.cpu.mem.is_frame_done() {
+            self.cpu.run();
         }
 
-        self.cpu.mut_memory().reset_frame_done();
+        self.cpu.mem.reset_frame_done();
     }
 
     pub fn run_frame_but_dont_render(&mut self) {
-        self.cpu.mut_memory().dont_render();
+        self.cpu.mem.dont_render();
 
-        while !self.cpu.memory().is_frame_done() {
-            self.cpu.execute_instruction();
+        while !self.cpu.mem.is_frame_done() {
+            self.cpu.run();
         }
 
-        self.cpu.mut_memory().reset_frame_done();
+        self.cpu.mem.reset_frame_done();
     }
 }

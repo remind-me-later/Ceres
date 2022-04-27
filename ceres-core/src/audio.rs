@@ -1,5 +1,3 @@
-extern crate alloc;
-
 mod audio_callbacks;
 mod channels;
 mod control;

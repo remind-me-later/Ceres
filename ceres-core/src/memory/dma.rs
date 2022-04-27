@@ -12,7 +12,7 @@ impl Dma {
         Self::default()
     }
 
-    pub const fn read(&self) -> u8 {
+    pub fn read(&self) -> u8 {
         self.source
     }
 
@@ -44,7 +44,7 @@ impl Dma {
         }
     }
 
-    pub const fn is_active(&self) -> bool {
+    pub fn is_active(&self) -> bool {
         self.is_active && (self.t_cycles > 0 || self.is_restarting)
     }
 }

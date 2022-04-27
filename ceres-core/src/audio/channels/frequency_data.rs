@@ -13,7 +13,7 @@ impl<const MULTIPLIER: u16> From<FrequencyData<MULTIPLIER>> for u16 {
 }
 
 impl<const PERIOD_MULTIPLIER: u16> FrequencyData<PERIOD_MULTIPLIER> {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self { frequency_data: 0 }
     }
 
@@ -29,7 +29,7 @@ impl<const PERIOD_MULTIPLIER: u16> FrequencyData<PERIOD_MULTIPLIER> {
         self.frequency_data
     }
 
-    pub const fn low_byte(self) -> u8 {
+    pub fn low_byte(self) -> u8 {
         (self.frequency_data & 0xff) as u8
     }
 
@@ -37,7 +37,7 @@ impl<const PERIOD_MULTIPLIER: u16> FrequencyData<PERIOD_MULTIPLIER> {
         self.frequency_data = (self.frequency_data & 0x700) | u16::from(value);
     }
 
-    pub const fn high_byte(self) -> u8 {
+    pub fn high_byte(self) -> u8 {
         const MASK: u8 = 0xbf;
         MASK | ((self.frequency_data >> 8) & 7) as u8
     }
@@ -46,7 +46,7 @@ impl<const PERIOD_MULTIPLIER: u16> FrequencyData<PERIOD_MULTIPLIER> {
         self.frequency_data = (self.frequency_data & 0xff) | (u16::from(value & 0x7) << 8);
     }
 
-    pub const fn period(self) -> u16 {
+    pub fn period(self) -> u16 {
         PERIOD_MULTIPLIER * (2048 - self.frequency_data)
     }
 }

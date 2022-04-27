@@ -2,24 +2,23 @@ use bitflags::bitflags;
 
 bitflags! {
     pub struct Key1: u8 {
-        const CURRENT_SPEED        = 0b1000_0000;
-        const PREPARE_SPEED_SWITCH = 1;
+        const CURRENT_SPEED    = 0x80;
+        const REQ_SPEED_SWITCH = 0x01;
     }
 }
 
 impl Key1 {
-    pub fn speed_switch_requested(self) -> bool {
-        self.contains(Self::PREPARE_SPEED_SWITCH)
+    pub fn is_req(self) -> bool {
+        self.contains(Self::REQ_SPEED_SWITCH)
     }
 
-    pub fn acknowledge_speed_switch(&mut self) {
-        self.remove(Self::PREPARE_SPEED_SWITCH);
+    pub fn ack(&mut self) {
+        self.remove(Self::REQ_SPEED_SWITCH);
         self.toggle(Self::CURRENT_SPEED);
     }
 
     pub fn read(self) -> u8 {
-        const KEY1_MASK: u8 = 0x7e;
-        KEY1_MASK | self.bits()
+        0x7e | self.bits()
     }
 
     pub fn write(&mut self, val: u8) {

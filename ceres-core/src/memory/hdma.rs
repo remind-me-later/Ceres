@@ -37,7 +37,7 @@ pub struct Hdma {
 }
 
 impl Hdma {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             is_active: false,
             source: 0,

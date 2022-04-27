@@ -76,12 +76,12 @@ impl Header {
     }
 
     #[must_use]
-    pub const fn ram_size(&self) -> &RAMSize {
+    pub fn ram_size(&self) -> &RAMSize {
         &self.ram_size
     }
 
     #[must_use]
-    pub const fn cgb_flag(&self) -> &CgbFlag {
+    pub fn cgb_flag(&self) -> &CgbFlag {
         &self.cgb_flag
     }
 
@@ -139,7 +139,7 @@ impl ROMSize {
         Ok(rom_size)
     }
 
-    pub const fn total_size_in_bytes(self) -> usize {
+    pub fn total_size_in_bytes(self) -> usize {
         const KIB_32_AS_BYTES: usize = 1 << 15;
 
         let exponent = match self {
@@ -157,7 +157,7 @@ impl ROMSize {
         KIB_32_AS_BYTES << exponent
     }
 
-    pub const fn number_of_banks(self) -> usize {
+    pub fn number_of_banks(self) -> usize {
         match self {
             ROMSize::Kb32 => 2,
             ROMSize::Kb64 => 4,
@@ -171,7 +171,7 @@ impl ROMSize {
         }
     }
 
-    pub const fn banks_bit_mask(self) -> usize {
+    pub fn banks_bit_mask(self) -> usize {
         // log2(number_of_banks) - 1
         match self {
             ROMSize::Kb32 => 0x1,
@@ -225,11 +225,11 @@ impl RAMSize {
         Ok(ram_size)
     }
 
-    pub const fn total_size_in_bytes(self) -> usize {
+    pub fn total_size_in_bytes(self) -> usize {
         self.number_of_banks() as usize * self.bank_size_in_bytes() as usize
     }
 
-    pub const fn number_of_banks(self) -> usize {
+    pub fn number_of_banks(self) -> usize {
         match self {
             RAMSize::None => 0,
             RAMSize::Kb2 | RAMSize::Kb8 => 1,
@@ -239,7 +239,7 @@ impl RAMSize {
         }
     }
 
-    pub const fn bank_size_in_bytes(self) -> usize {
+    pub fn bank_size_in_bytes(self) -> usize {
         match self {
             RAMSize::None => 0,
             RAMSize::Kb2 => 0x800,
@@ -299,7 +299,7 @@ impl Display for CgbFlag {
 impl CgbFlag {
     // Since both cgb flags are outside the ASCII range we don't need to check if the header is new or old
     #[must_use]
-    pub const fn new(rom: &[u8]) -> Self {
+    pub fn new(rom: &[u8]) -> Self {
         use CgbFlag::{CgbFunctions, CgbOnly, NonCgb};
         match rom[0x143] {
             0x80 => CgbFunctions,

@@ -19,7 +19,7 @@ pub struct GenericChannel<const N: u16> {
 }
 
 impl<const N: u16> GenericChannel<N> {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             is_enabled: false,
             is_dac_enabled: true,
@@ -82,7 +82,7 @@ impl<const N: u16> GenericChannel<N> {
         }
     }
 
-    pub const fn is_enabled(&self) -> bool {
+    pub fn is_enabled(&self) -> bool {
         self.is_enabled && self.is_dac_enabled
     }
 

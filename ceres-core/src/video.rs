@@ -8,7 +8,7 @@ mod vram;
 pub use palette::MonochromePaletteColors;
 pub use pixel_data::PixelData;
 
-use rgb_color::RgbColor;
+use rgb_color::Color;
 
 pub const SCREEN_WIDTH: u8 = 160;
 pub const SCREEN_HEIGHT: u8 = 144;
@@ -20,3 +20,23 @@ const ACCESS_OAM_CYCLES: i16 = 80; // Constant
 const ACCESS_VRAM_CYCLES: i16 = 172; // Variable, minimum ammount
 const HBLANK_CYCLES: i16 = 204; // Variable, maximum ammount
 const VBLANK_LINE_CYCLES: i16 = 456; // Constant
+
+#[derive(Clone, Copy)]
+pub enum PpuRegister {
+    Lcdc,
+    Stat,
+    Scy,
+    Scx,
+    Ly,
+    Lyc,
+    Wy,
+    Wx,
+    Bgp,
+    Obp0,
+    Obp1,
+    Bcps,
+    Bcpd,
+    Ocps,
+    Ocpd,
+    Opri,
+}

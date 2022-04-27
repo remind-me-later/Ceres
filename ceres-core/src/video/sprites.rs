@@ -19,23 +19,23 @@ pub struct SpriteAttributes {
 }
 
 impl SpriteAttributes {
-    pub const fn x(&self) -> u8 {
+    pub fn x(&self) -> u8 {
         self.x
     }
 
-    pub const fn y(&self) -> u8 {
+    pub fn y(&self) -> u8 {
         self.y
     }
 
-    pub const fn tile_index(&self) -> u8 {
+    pub fn tile_index(&self) -> u8 {
         self.tile_index
     }
 
-    pub const fn flags(&self) -> &SpriteFlags {
+    pub fn flags(&self) -> &SpriteFlags {
         &self.flags
     }
 
-    pub const fn cgb_palette(&self) -> u8 {
+    pub fn cgb_palette(&self) -> u8 {
         self.flags().bits() & 0x7
     }
 }
@@ -71,11 +71,11 @@ pub struct ObjectAttributeMemory {
 }
 
 impl ObjectAttributeMemory {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self { data: [0; 0x100] }
     }
 
-    pub const fn read(&self, address: u8) -> u8 {
+    pub fn read(&self, address: u8) -> u8 {
         self.data[address as usize]
     }
 
@@ -83,7 +83,7 @@ impl ObjectAttributeMemory {
         self.data[address as usize] = val;
     }
 
-    pub const fn sprite_attributes_iterator(&self) -> SpriteAttributesIterator {
+    pub fn sprite_attributes_iterator(&self) -> SpriteAttributesIterator {
         SpriteAttributesIterator {
             oam: self,
             index: 0,

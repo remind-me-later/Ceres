@@ -126,7 +126,7 @@ impl NoiseChannel {
         self.output_volume * self.envelope.volume()
     }
 
-    pub const fn is_enabled(&self) -> bool {
+    pub fn is_enabled(&self) -> bool {
         self.generic_channel.is_enabled()
     }
 

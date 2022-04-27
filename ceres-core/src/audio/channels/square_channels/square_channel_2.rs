@@ -64,7 +64,7 @@ impl SquareChannel2 {
         self.generic_square_channel.output_volume()
     }
 
-    pub const fn is_enabled(&self) -> bool {
+    pub fn is_enabled(&self) -> bool {
         self.generic_square_channel.is_enabled()
     }
 

@@ -1,7 +1,7 @@
-use crate::video::rgb_color::RgbColor;
+use crate::video::rgb_color::Color;
 
 pub struct ColorPalette {
-    palette: [RgbColor; 32],
+    palette: [Color; 32],
     index: u8,
     auto_increment: bool,
 }
@@ -9,7 +9,7 @@ pub struct ColorPalette {
 impl ColorPalette {
     pub fn new() -> Self {
         Self {
-            palette: [RgbColor::default(); 32],
+            palette: [Color::default(); 32],
             index: 0,
             auto_increment: false,
         }
@@ -20,11 +20,11 @@ impl ColorPalette {
         self.auto_increment = value & 0x80 != 0;
     }
 
-    pub const fn color_palette_specification(&self) -> u8 {
+    pub fn color_palette_specification(&self) -> u8 {
         self.index | 0x40 | ((self.auto_increment as u8) << 7)
     }
 
-    pub const fn color_palette_data(&self) -> u8 {
+    pub fn color_palette_data(&self) -> u8 {
         let color_index = (self.index / 2) as usize;
 
         if self.index % 2 == 0 {
@@ -52,12 +52,12 @@ impl ColorPalette {
         }
     }
 
-    pub fn get_color(&self, palette_number: u8, color_number: u8) -> RgbColor {
+    pub fn get_color(&self, palette_number: u8, color_number: u8) -> Color {
         let index = palette_number as usize * 4 + color_number as usize;
         let r = self.palette[index].r;
         let g = self.palette[index].g;
         let b = self.palette[index].b;
-        RgbColor::new(scale_channel(r), scale_channel(g), scale_channel(b))
+        Color::rgb(scale_channel(r), scale_channel(g), scale_channel(b))
     }
 }
 

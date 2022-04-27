@@ -12,7 +12,7 @@ use super::{
 
 impl Cpu {
     #[allow(clippy::too_many_lines)]
-    pub fn execute(&mut self, opcode: u8) {
+    pub fn exec(&mut self, opcode: u8) {
         match opcode {
             0x7f => self.ld(A, A),
             0x78 => self.ld(A, B),
@@ -103,10 +103,6 @@ impl Cpu {
             0xe2 => self.ld(Indirect::HighC, A),
             0xf0 => self.ld(A, Indirect::HighImmediate),
             0xe0 => self.ld(Indirect::HighImmediate, A),
-
-            // ********************
-            // * 8-bit arithmetic *
-            // ********************
             0x87 => self.add(A),
             0x80 => self.add(B),
             0x81 => self.add(C),
@@ -199,10 +195,6 @@ impl Cpu {
             0x17 => self.rla(),
             0x0f => self.rrca(),
             0x1f => self.rra(),
-
-            // ***********
-            // * Control *
-            // ***********
             0xc3 => self.jp_nn(),
             0xe9 => self.jp_hl(),
             0x18 => self.jr_d(),
@@ -242,11 +234,6 @@ impl Cpu {
             0x00 => self.nop(),
             0x27 => self.daa(),
             0x2f => self.cpl(),
-
-            // **********
-            // * 16-bit *
-            // **********
-            // load
             0x01 => self.ld16_nn(BC),
             0x11 => self.ld16_nn(DE),
             0x21 => self.ld16_nn(HL),
@@ -262,7 +249,6 @@ impl Cpu {
             0xd1 => self.pop(DE),
             0xe1 => self.pop(HL),
             0xf1 => self.pop(AF),
-            // arithmetic
             0x09 => self.add_hl(BC),
             0x19 => self.add_hl(DE),
             0x29 => self.add_hl(HL),
@@ -276,11 +262,7 @@ impl Cpu {
             0x1b => self.dec16(DE),
             0x2b => self.dec16(HL),
             0x3b => self.dec16(SP),
-            // cb operations
-            0xcb => {
-                let opcode = self.read_immediate();
-                self.execute_cb(opcode);
-            }
+            0xcb => self.exec_cb(),
             0xd3 | 0xdb | 0xdd | 0xe3 | 0xe4 | 0xeb | 0xec | 0xed | 0xf4 | 0xfc | 0xfd => {
                 panic!("Illegal opcode {}", opcode)
             }
@@ -288,7 +270,8 @@ impl Cpu {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn execute_cb(&mut self, opcode: u8) {
+    fn exec_cb(&mut self) {
+        let opcode = self.imm8();
         match opcode {
             0x07 => self.rlc(A),
             0x00 => self.rlc(B),

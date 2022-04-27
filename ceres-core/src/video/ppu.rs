@@ -1,16 +1,16 @@
 pub mod mode;
-pub mod register;
 mod registers;
 mod scanline_renderer;
 
-pub use self::{mode::Mode, register::PpuRegister};
+pub use self::mode::Mode;
 use super::{
     palette::MonochromePaletteColors, pixel_data::PixelData, sprites::ObjectAttributeMemory,
-    vram::Vram,
+    vram::Vram, PpuRegister,
 };
 use crate::{
     interrupts::{Interrupt, Interrupts},
     memory::FunctionMode,
+    Model,
 };
 use bitflags::bitflags;
 use registers::{Lcdc, Registers, Stat};
@@ -55,14 +55,14 @@ pub struct Ppu {
 }
 
 impl Ppu {
-    pub fn new(monochrome_palette_colors: MonochromePaletteColors) -> Self {
+    pub fn new(model: Model) -> Self {
         let registers = Registers::new();
         let cycles = registers.stat().mode().cycles(0);
 
         Self {
             registers,
-            monochrome_palette_colors,
-            vram: Vram::new(),
+            monochrome_palette_colors: MonochromePaletteColors::Grayscale,
+            vram: Vram::new(model),
             oam: ObjectAttributeMemory::new(),
             pixel_data: PixelData::new(),
             cycles,

@@ -17,7 +17,7 @@ impl Cpu {
     pub fn ld16_sp_hl(&mut self) {
         let val = self.registers.read16(HL);
         self.registers.sp = val;
-        self.memory.tick_t_cycle();
+        self.mem.tick_t_cycle();
     }
 
     pub fn add<G>(&mut self, rhs: G)
@@ -149,7 +149,7 @@ impl Cpu {
         let read = self.registers.read16(register);
         let val = read.wrapping_add(1);
         self.registers.write16(register, val);
-        self.memory.tick_t_cycle();
+        self.mem.tick_t_cycle();
     }
 
     #[allow(clippy::verbose_bit_mask)]
@@ -169,11 +169,11 @@ impl Cpu {
         let read = self.registers.read16(register);
         let val = read.wrapping_sub(1);
         self.registers.write16(register, val);
-        self.memory.tick_t_cycle();
+        self.mem.tick_t_cycle();
     }
 
     pub fn ld16_hl_sp_dd(&mut self) {
-        let offset = self.read_immediate() as i8 as u16;
+        let offset = self.imm8() as i8 as u16;
         let sp = self.registers.sp;
         let val = sp.wrapping_add(offset);
         let tmp = sp ^ val ^ offset;
@@ -182,7 +182,7 @@ impl Cpu {
         self.registers.set_nf(false);
         self.registers.set_hf((tmp & 0x10) == 0x10);
         self.registers.set_cf((tmp & 0x100) == 0x100);
-        self.memory.tick_t_cycle();
+        self.mem.tick_t_cycle();
     }
 
     pub fn rlca(&mut self) {
@@ -210,9 +210,9 @@ impl Cpu {
     }
 
     pub fn do_jump_to_immediate(&mut self) {
-        let address = self.read_immediate16();
+        let address = self.imm16();
         self.registers.pc = address;
-        self.memory.tick_t_cycle();
+        self.mem.tick_t_cycle();
     }
 
     pub fn jp_nn(&mut self) {
@@ -225,8 +225,8 @@ impl Cpu {
         } else {
             let pc = self.registers.pc.wrapping_add(2);
             self.registers.pc = pc;
-            self.memory.tick_t_cycle();
-            self.memory.tick_t_cycle();
+            self.mem.tick_t_cycle();
+            self.mem.tick_t_cycle();
         }
     }
 
@@ -236,10 +236,10 @@ impl Cpu {
     }
 
     fn do_jump_relative(&mut self) {
-        let relative_address = self.read_immediate() as i8 as u16;
+        let relative_address = self.imm8() as i8 as u16;
         let pc = self.registers.pc.wrapping_add(relative_address);
         self.registers.pc = pc;
-        self.memory.tick_t_cycle();
+        self.mem.tick_t_cycle();
     }
 
     pub fn jr_d(&mut self) {
@@ -251,12 +251,12 @@ impl Cpu {
             self.do_jump_relative();
         } else {
             self.registers.increase_pc();
-            self.memory.tick_t_cycle();
+            self.mem.tick_t_cycle();
         }
     }
 
     pub fn do_call(&mut self) {
-        let address = self.read_immediate16();
+        let address = self.imm16();
         let pc = self.registers.pc;
         self.internal_push(pc);
         self.registers.pc = address;
@@ -272,15 +272,15 @@ impl Cpu {
         } else {
             let pc = self.registers.pc.wrapping_add(2);
             self.registers.pc = pc;
-            self.memory.tick_t_cycle();
-            self.memory.tick_t_cycle();
+            self.mem.tick_t_cycle();
+            self.mem.tick_t_cycle();
         }
     }
 
     fn do_return(&mut self) {
         let pc = self.internal_pop();
         self.registers.pc = pc;
-        self.memory.tick_t_cycle();
+        self.mem.tick_t_cycle();
     }
 
     pub fn ret(&mut self) {
@@ -288,7 +288,7 @@ impl Cpu {
     }
 
     pub fn ret_f(&mut self, condition: JumpCondition) {
-        self.memory.tick_t_cycle();
+        self.mem.tick_t_cycle();
         if condition.check(self) {
             self.do_return();
         }
@@ -308,20 +308,18 @@ impl Cpu {
     pub fn halt(&mut self) {
         self.halted = true;
 
-        if self.memory.interrupt_controller().halt_bug_condition() && !self.ime {
+        if self.mem.interrupt_controller().halt_bug_condition() && !self.ime {
             self.halted = false;
             self.halt_bug = true;
         }
     }
 
     pub fn stop(&mut self) {
-        self.read_immediate();
+        self.imm8();
 
-        if self.memory.speed_switch_register().speed_switch_requested() {
-            self.memory.switch_speed();
-            self.memory
-                .mut_speed_switch_register()
-                .acknowledge_speed_switch();
+        if self.mem.key1.is_req() {
+            self.mem.switch_speed();
+            self.mem.key1.ack();
         } else {
             self.halted = true;
         }
@@ -394,19 +392,19 @@ impl Cpu {
     }
 
     pub fn ld16_nn(&mut self, reg: Register16) {
-        let value = self.read_immediate16();
+        let value = self.imm16();
         self.registers.write16(reg, value);
     }
 
     pub fn ld16_nn_sp(&mut self) {
         let val = self.registers.sp;
-        let address = self.read_immediate16();
-        self.memory.write(address, (val & 0xff) as u8);
-        self.memory.write(address.wrapping_add(1), (val >> 8) as u8);
+        let address = self.imm16();
+        self.mem.write(address, (val & 0xff) as u8);
+        self.mem.write(address.wrapping_add(1), (val >> 8) as u8);
     }
 
     pub fn add16_sp_dd(&mut self) {
-        let offset = self.read_immediate() as i8 as u16;
+        let offset = self.imm8() as i8 as u16;
         let sp = self.registers.sp;
         let val = sp.wrapping_add(offset);
         let tmp = sp ^ val ^ offset;
@@ -415,8 +413,8 @@ impl Cpu {
         self.registers.set_nf(false);
         self.registers.set_hf((tmp & 0x10) == 0x10);
         self.registers.set_cf((tmp & 0x100) == 0x100);
-        self.memory.tick_t_cycle();
-        self.memory.tick_t_cycle();
+        self.mem.tick_t_cycle();
+        self.mem.tick_t_cycle();
     }
 
     pub fn add_hl(&mut self, register: Register16) {
@@ -434,7 +432,7 @@ impl Cpu {
         self.registers.set_hf(half_carry);
         self.registers.set_cf(hl > 0xffff - val);
 
-        self.memory.tick_t_cycle();
+        self.mem.tick_t_cycle();
     }
 
     pub fn rlc<GS>(&mut self, rhs: GS)

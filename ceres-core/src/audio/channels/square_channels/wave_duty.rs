@@ -7,7 +7,7 @@ pub enum WaveDuty {
 }
 
 impl WaveDuty {
-    pub const fn duty_byte(self) -> u8 {
+    pub fn duty_byte(self) -> u8 {
         use self::WaveDuty::{Half, HalfQuarter, Quarter, ThreeQuarters};
 
         match self {

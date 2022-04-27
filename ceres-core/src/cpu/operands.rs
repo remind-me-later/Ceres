@@ -62,13 +62,13 @@ pub struct Immediate;
 
 impl Get<u8> for Immediate {
     fn get(self, cpu: &mut Cpu) -> u8 {
-        cpu.read_immediate()
+        cpu.imm8()
     }
 }
 
 impl Get<u16> for Immediate {
     fn get(self, cpu: &mut Cpu) -> u16 {
-        cpu.read_immediate16()
+        cpu.imm16()
     }
 }
 
@@ -88,9 +88,9 @@ impl Indirect {
             Indirect::BC => cpu.registers.read16(Register16::BC),
             Indirect::DE => cpu.registers.read16(Register16::DE),
             Indirect::HL => cpu.registers.read16(Register16::HL),
-            Indirect::Immediate => cpu.read_immediate16(),
+            Indirect::Immediate => cpu.imm16(),
             Indirect::HighC => u16::from(cpu.registers.c) | 0xff00,
-            Indirect::HighImmediate => u16::from(cpu.read_immediate()) | 0xff00,
+            Indirect::HighImmediate => u16::from(cpu.imm8()) | 0xff00,
         }
     }
 }
@@ -98,14 +98,14 @@ impl Indirect {
 impl Get<u8> for Indirect {
     fn get(self, cpu: &mut Cpu) -> u8 {
         let address = self.into_address(cpu);
-        cpu.memory.read(address)
+        cpu.mem.read(address)
     }
 }
 
 impl Set<u8> for Indirect {
     fn set(self, cpu: &mut Cpu, val: u8) {
         let address = self.into_address(cpu);
-        cpu.memory.write(address, val);
+        cpu.mem.write(address, val);
     }
 }
 
@@ -115,7 +115,7 @@ pub struct IndirectIncreaseHL;
 impl Get<u8> for IndirectIncreaseHL {
     fn get(self, cpu: &mut Cpu) -> u8 {
         let address = cpu.registers.read16(Register16::HL);
-        let ret = cpu.memory.read(address);
+        let ret = cpu.mem.read(address);
         cpu.registers
             .write16(Register16::HL, address.wrapping_add(1));
         ret
@@ -125,7 +125,7 @@ impl Get<u8> for IndirectIncreaseHL {
 impl Set<u8> for IndirectIncreaseHL {
     fn set(self, cpu: &mut Cpu, val: u8) {
         let address = cpu.registers.read16(Register16::HL);
-        cpu.memory.write(address, val);
+        cpu.mem.write(address, val);
         cpu.registers
             .write16(Register16::HL, address.wrapping_add(1));
     }
@@ -137,7 +137,7 @@ pub struct IndirectDecreaseHL;
 impl Get<u8> for IndirectDecreaseHL {
     fn get(self, cpu: &mut Cpu) -> u8 {
         let address = cpu.registers.read16(Register16::HL);
-        let ret = cpu.memory.read(address);
+        let ret = cpu.mem.read(address);
         cpu.registers
             .write16(Register16::HL, address.wrapping_sub(1));
         ret
@@ -147,7 +147,7 @@ impl Get<u8> for IndirectDecreaseHL {
 impl Set<u8> for IndirectDecreaseHL {
     fn set(self, cpu: &mut Cpu, val: u8) {
         let address = cpu.registers.read16(Register16::HL);
-        cpu.memory.write(address, val);
+        cpu.mem.write(address, val);
         cpu.registers
             .write16(Register16::HL, address.wrapping_sub(1));
     }

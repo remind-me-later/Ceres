@@ -45,7 +45,7 @@ impl GenericSquareChannel {
         self.generic_channel.write_sound_length(value);
     }
 
-    pub const fn low_byte(&self) -> u8 {
+    pub fn low_byte(&self) -> u8 {
         0xff
     }
 
@@ -84,7 +84,7 @@ impl GenericSquareChannel {
         output
     }
 
-    pub const fn frequency(&self) -> &FrequencyData<SQUARE_CHANNEL_PERIOD_MULTIPLIER> {
+    pub fn frequency(&self) -> &FrequencyData<SQUARE_CHANNEL_PERIOD_MULTIPLIER> {
         &self.frequency
     }
 
@@ -138,7 +138,7 @@ impl GenericSquareChannel {
         self.generic_channel.step_length();
     }
 
-    pub const fn is_enabled(&self) -> bool {
+    pub fn is_enabled(&self) -> bool {
         self.generic_channel.is_enabled()
     }
 }

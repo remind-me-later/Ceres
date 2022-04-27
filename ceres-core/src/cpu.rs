@@ -8,7 +8,7 @@ use registers::Registers;
 
 pub struct Cpu {
     registers: Registers,
-    memory: Memory,
+    pub mem: Memory,
     ei_delay: bool,
     ime: bool,
     halted: bool,
@@ -23,38 +23,30 @@ impl Cpu {
             ime: false,
             halted: false,
             halt_bug: false,
-            memory,
+            mem: memory,
         }
     }
 
-    pub fn memory(&self) -> &Memory {
-        &self.memory
-    }
-
-    pub fn mut_memory(&mut self) -> &mut Memory {
-        &mut self.memory
-    }
-
-    pub fn execute_instruction(&mut self) {
+    pub fn run(&mut self) {
         if self.ei_delay {
             self.ime = true;
             self.ei_delay = false;
         }
 
         if self.halted {
-            self.memory.tick_t_cycle();
+            self.mem.tick_t_cycle();
         } else {
-            let opcode = self.read_immediate();
+            let opcode = self.imm8();
 
             if self.halt_bug {
                 self.registers.decrease_pc();
                 self.halt_bug = false;
             }
 
-            self.execute(opcode);
+            self.exec(opcode);
         }
 
-        if !self.memory.interrupt_controller().has_pending_interrupts() {
+        if !self.mem.interrupt_controller().has_pending_interrupts() {
             return;
         }
 
@@ -66,49 +58,47 @@ impl Cpu {
         if self.ime {
             self.ime = false;
 
-            self.memory.tick_t_cycle();
+            self.mem.tick_t_cycle();
 
             let pc = self.registers.pc;
             self.internal_push(pc);
 
-            let interrupt = self.memory.interrupt_controller().requested_interrupt();
+            let interrupt = self.mem.interrupt_controller().requested_interrupt();
             self.registers.pc = interrupt.handler_address();
 
-            self.memory.tick_t_cycle();
+            self.mem.tick_t_cycle();
 
-            self.memory
-                .mut_interrupt_controller()
-                .acknowledge(interrupt);
+            self.mem.mut_interrupt_controller().acknowledge(interrupt);
         }
     }
 
-    fn read_immediate(&mut self) -> u8 {
+    fn imm8(&mut self) -> u8 {
         let address = self.registers.pc;
         self.registers.increase_pc();
-        self.memory.read(address)
+        self.mem.read(address)
     }
 
-    fn read_immediate16(&mut self) -> u16 {
-        let lo = self.read_immediate();
-        let hi = self.read_immediate();
+    fn imm16(&mut self) -> u16 {
+        let lo = self.imm8();
+        let hi = self.imm8();
         u16::from_le_bytes([lo, hi])
     }
 
     fn internal_pop(&mut self) -> u16 {
-        let lo = self.memory.read(self.registers.sp);
+        let lo = self.mem.read(self.registers.sp);
         self.registers.increase_sp();
-        let hi = self.memory.read(self.registers.sp);
+        let hi = self.mem.read(self.registers.sp);
         self.registers.increase_sp();
         u16::from_le_bytes([lo, hi])
     }
 
     fn internal_push(&mut self, value: u16) {
         let [lo, hi] = u16::to_le_bytes(value);
-        self.memory.tick_t_cycle();
+        self.mem.tick_t_cycle();
         self.registers.decrease_sp();
-        self.memory.write(self.registers.sp, hi);
+        self.mem.write(self.registers.sp, hi);
         self.registers.decrease_sp();
-        self.memory.write(self.registers.sp, lo);
+        self.mem.write(self.registers.sp, lo);
     }
 
     fn internal_rl(&mut self, val: u8) -> u8 {

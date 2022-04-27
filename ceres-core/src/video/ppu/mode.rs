@@ -9,7 +9,7 @@ pub enum Mode {
 }
 
 impl Mode {
-    pub const fn cycles(self, scroll_x: u8) -> i16 {
+    pub fn cycles(self, scroll_x: u8) -> i16 {
         let scroll_adjust = (scroll_x & 0x7) as i16;
         match self {
             Mode::OamScan => ACCESS_OAM_CYCLES,

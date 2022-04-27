@@ -20,7 +20,7 @@ impl Default for Volume {
 }
 
 impl Volume {
-    pub const fn right_shift_value(self) -> u16 {
+    pub fn right_shift_value(self) -> u16 {
         match self {
             Volume::Mute => 4,
             Volume::Full => 0,
@@ -85,7 +85,7 @@ pub struct WaveChannel {
 }
 
 impl WaveChannel {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         let frequency_data: FrequencyData<WAVE_CHANNEL_PERIOD_MULTIPLIER> = FrequencyData::new();
         let current_frequency_period = frequency_data.period();
 
@@ -112,7 +112,7 @@ impl WaveChannel {
         self.nr30 = 0;
     }
 
-    pub const fn read_wave_ram(&self, address: u8) -> u8 {
+    pub fn read_wave_ram(&self, address: u8) -> u8 {
         let index = (address - 0x30) as usize;
         self.wave_ram[index]
     }
@@ -177,11 +177,11 @@ impl WaveChannel {
         self.current_frequency_period -= 1;
     }
 
-    pub const fn output_volume(&self) -> u8 {
+    pub fn output_volume(&self) -> u8 {
         self.sample_buffer >> self.volume.right_shift_value()
     }
 
-    pub const fn is_enabled(&self) -> bool {
+    pub fn is_enabled(&self) -> bool {
         self.generic_channel.is_enabled()
     }
 

@@ -1,20 +1,28 @@
+use crate::Model;
+
 use super::{
     ppu::BgAttributes,
     sprites::{SpriteAttributes, SpriteFlags},
 };
+use alloc::{boxed::Box, vec};
 
 const VRAM_SIZE: usize = 0x2000;
 const VRAM_SIZE_CGB: usize = VRAM_SIZE * 2;
 
 pub struct Vram {
-    vram: [u8; VRAM_SIZE_CGB],
+    vram: Box<[u8]>,
     cgb_vram_bank: u8, // 0 or 1
 }
 
 impl Vram {
-    pub const fn new() -> Self {
+    pub fn new(model: Model) -> Self {
+        let vram = match model {
+            Model::Dmg | Model::Mgb => vec![0; VRAM_SIZE].into_boxed_slice(),
+            Model::Cgb => vec![0; VRAM_SIZE_CGB].into_boxed_slice(),
+        };
+
         Self {
-            vram: [0; VRAM_SIZE_CGB],
+            vram,
             cgb_vram_bank: 0,
         }
     }
@@ -27,7 +35,7 @@ impl Vram {
         self.cgb_vram_bank = val & 1
     }
 
-    pub const fn read(&self, address: u16) -> u8 {
+    pub fn read(&self, address: u16) -> u8 {
         self.vram[((address & 0x1fff) + self.cgb_vram_bank as u16 * VRAM_SIZE as u16) as usize]
     }
 

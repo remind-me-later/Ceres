@@ -23,26 +23,20 @@ impl Interrupt {
     }
 }
 
-#[derive(Clone, Copy)]
-pub enum ICRegister {
-    If,
-    Ie,
-}
-
 pub struct Interrupts {
     interrupt_flag: Interrupt,
     interrupt_enable: u8,
 }
 
 impl Interrupts {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             interrupt_flag: Interrupt::from_bits_truncate(0),
             interrupt_enable: 0x00,
         }
     }
 
-    pub const fn halt_bug_condition(&self) -> bool {
+    pub fn halt_bug_condition(&self) -> bool {
         self.interrupt_flag.bits() & self.interrupt_enable & 0x1f != 0
     }
 
@@ -73,17 +67,19 @@ impl Interrupts {
         self.interrupt_flag.remove(interrupt);
     }
 
-    pub fn read(&self, register: ICRegister) -> u8 {
-        match register {
-            ICRegister::If => self.interrupt_flag.bits() | 0xe0,
-            ICRegister::Ie => self.interrupt_enable,
-        }
+    pub fn read_if(&self) -> u8 {
+        self.interrupt_flag.bits() | 0xe0
     }
 
-    pub fn write(&mut self, register: ICRegister, value: u8) {
-        match register {
-            ICRegister::If => self.interrupt_flag = Interrupt::from_bits_truncate(value),
-            ICRegister::Ie => self.interrupt_enable = value,
-        }
+    pub fn read_ie(&self) -> u8 {
+        self.interrupt_enable
+    }
+
+    pub fn write_if(&mut self, value: u8) {
+        self.interrupt_flag = Interrupt::from_bits_truncate(value)
+    }
+
+    pub fn write_ie(&mut self, value: u8) {
+        self.interrupt_enable = value
     }
 }

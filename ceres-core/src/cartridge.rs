@@ -1,5 +1,3 @@
-extern crate alloc;
-
 mod header;
 mod mbc1;
 mod mbc2;

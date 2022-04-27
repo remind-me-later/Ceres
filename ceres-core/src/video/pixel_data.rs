@@ -1,4 +1,4 @@
-use super::RgbColor;
+use super::Color;
 use super::SCREEN_PIXELS;
 
 const BYTES_PER_PIXEL: usize = 4;
@@ -16,13 +16,13 @@ impl Default for PixelData {
 
 impl PixelData {
     #[must_use]
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             data: [0xff; SCREEN_PIXELS as usize * BYTES_PER_PIXEL],
         }
     }
 
-    pub fn set_pixel_color(&mut self, index: usize, color: RgbColor) {
+    pub fn set_pixel_color(&mut self, index: usize, color: Color) {
         let index_of_first_byte_of_pixel = index * BYTES_PER_PIXEL;
         self.data[index_of_first_byte_of_pixel] = color.r;
         self.data[index_of_first_byte_of_pixel + 1] = color.g;
@@ -30,7 +30,7 @@ impl PixelData {
     }
 
     #[must_use]
-    pub const fn rgba(&self) -> &[u8] {
+    pub fn rgba(&self) -> &[u8] {
         &self.data
     }
 }

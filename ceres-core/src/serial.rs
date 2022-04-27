@@ -7,38 +7,33 @@ bitflags!(
   }
 );
 
-#[derive(Clone, Copy)]
-pub enum Register {
-    SB,
-    SC,
-}
-
+// TODO: everything, dummy implementation
 pub struct Serial {
     data: u8,
     control: Control,
 }
 
 impl Serial {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             data: 0x00,
             control: Control::empty(),
         }
     }
 
-    pub const fn read(&self, register: Register) -> u8 {
-        const SC_MASK: u8 = 0x7e;
-
-        match register {
-            Register::SB => self.data,
-            Register::SC => self.control.bits | SC_MASK,
-        }
+    pub fn read_sb(&self) -> u8 {
+        self.data
     }
 
-    pub fn write(&mut self, register: Register, val: u8) {
-        match register {
-            Register::SB => self.data = val,
-            Register::SC => self.control = Control::from_bits_truncate(val),
-        }
+    pub fn read_sc(&self) -> u8 {
+        self.control.bits | 0x7e
+    }
+
+    pub fn write_sb(&mut self, val: u8) {
+        self.data = val
+    }
+
+    pub fn write_sc(&mut self, val: u8) {
+        self.control = Control::from_bits_truncate(val)
     }
 }

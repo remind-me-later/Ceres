@@ -64,7 +64,7 @@ impl Registers {
         Self::default()
     }
 
-    pub const fn read16(&self, register: Register16) -> u16 {
+    pub fn read16(&self, register: Register16) -> u16 {
         match register {
             Register16::AF => u16::from_be_bytes([self.a, self.f.bits()]),
             Register16::BC => u16::from_be_bytes([self.b, self.c]),
@@ -116,21 +116,19 @@ impl Registers {
         self.sp = self.sp.wrapping_sub(1);
     }
 
-    // flags
-
-    pub const fn zf(&self) -> bool {
+    pub fn zf(&self) -> bool {
         self.f.contains(Flags::ZERO)
     }
 
-    pub const fn nf(&self) -> bool {
+    pub fn nf(&self) -> bool {
         self.f.contains(Flags::SUBTRACT)
     }
 
-    pub const fn hf(&self) -> bool {
+    pub fn hf(&self) -> bool {
         self.f.contains(Flags::HALF_CARRY)
     }
 
-    pub const fn cf(&self) -> bool {
+    pub fn cf(&self) -> bool {
         self.f.contains(Flags::CARRY)
     }
 

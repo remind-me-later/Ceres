@@ -1,7 +1,10 @@
-use super::{register::PpuRegister, Mode};
+use super::Mode;
 use crate::{
     memory::FunctionMode,
-    video::palette::{ColorPalette, MonochromePalette},
+    video::{
+        palette::{ColorPalette, MonochromePalette},
+        PpuRegister,
+    },
 };
 use bitflags::bitflags;
 
@@ -48,19 +51,19 @@ impl Registers {
         Self::default()
     }
 
-    pub const fn cgb_bg_palette(&self) -> &ColorPalette {
+    pub fn cgb_bg_palette(&self) -> &ColorPalette {
         &self.cgb_bg_palette
     }
 
-    pub const fn cgb_sprite_palette(&self) -> &ColorPalette {
+    pub fn cgb_sprite_palette(&self) -> &ColorPalette {
         &self.cgb_sprite_palette
     }
 
-    pub const fn lcdc(&self) -> &Lcdc {
+    pub fn lcdc(&self) -> &Lcdc {
         &self.lcdc
     }
 
-    pub const fn stat(&self) -> &Stat {
+    pub fn stat(&self) -> &Stat {
         &self.stat
     }
 
@@ -68,7 +71,7 @@ impl Registers {
         &mut self.stat
     }
 
-    pub const fn ly(&self) -> u8 {
+    pub fn ly(&self) -> u8 {
         self.ly
     }
 
@@ -76,43 +79,43 @@ impl Registers {
         &mut self.ly
     }
 
-    pub const fn scx(&self) -> u8 {
+    pub fn scx(&self) -> u8 {
         self.scx
     }
 
-    pub const fn scy(&self) -> u8 {
+    pub fn scy(&self) -> u8 {
         self.scy
     }
 
-    pub const fn wx(&self) -> u8 {
+    pub fn wx(&self) -> u8 {
         self.wx
     }
 
-    pub const fn wy(&self) -> u8 {
+    pub fn wy(&self) -> u8 {
         self.wy
     }
 
-    pub const fn bgp(&self) -> &MonochromePalette {
+    pub fn bgp(&self) -> &MonochromePalette {
         &self.bgp
     }
 
-    pub const fn obp0(&self) -> &MonochromePalette {
+    pub fn obp0(&self) -> &MonochromePalette {
         &self.obp0
     }
 
-    pub const fn obp1(&self) -> &MonochromePalette {
+    pub fn obp1(&self) -> &MonochromePalette {
         &self.obp1
     }
 
-    pub const fn prioritize_by_oam(&self) -> bool {
+    pub fn prioritize_by_oam(&self) -> bool {
         self.opri & 1 == 0
     }
 
-    pub const fn is_on_coincidence_scanline(&self) -> bool {
+    pub fn is_on_coincidence_scanline(&self) -> bool {
         self.ly == self.lyc
     }
 
-    pub const fn read(&self, reg: PpuRegister) -> u8 {
+    pub fn read(&self, reg: PpuRegister) -> u8 {
         match reg {
             PpuRegister::Lcdc => self.lcdc.bits(),
             PpuRegister::Stat => {
@@ -202,7 +205,7 @@ bitflags!(
 );
 
 impl Lcdc {
-    pub const fn window_enabled(self, function_mode: FunctionMode) -> bool {
+    pub fn window_enabled(self, function_mode: FunctionMode) -> bool {
         match function_mode {
             FunctionMode::Monochrome | FunctionMode::Compatibility => {
                 self.contains(Self::BACKGROUND_ENABLED) && self.contains(Self::WINDOW_ENABLED)
@@ -211,7 +214,7 @@ impl Lcdc {
         }
     }
 
-    pub const fn background_enabled(self, function_mode: FunctionMode) -> bool {
+    pub fn background_enabled(self, function_mode: FunctionMode) -> bool {
         match function_mode {
             FunctionMode::Monochrome | FunctionMode::Compatibility => {
                 self.contains(Self::BACKGROUND_ENABLED)
@@ -220,18 +223,18 @@ impl Lcdc {
         }
     }
 
-    pub const fn cgb_sprite_master_priority_on(self, function_mode: FunctionMode) -> bool {
+    pub fn cgb_sprite_master_priority_on(self, function_mode: FunctionMode) -> bool {
         match function_mode {
             FunctionMode::Monochrome | FunctionMode::Compatibility => false,
             FunctionMode::Color => !self.contains(Self::BACKGROUND_ENABLED),
         }
     }
 
-    const fn signed_byte_for_tile_offset(self) -> bool {
+    fn signed_byte_for_tile_offset(self) -> bool {
         !self.contains(Self::BG_WINDOW_TILE_DATA_AREA)
     }
 
-    pub const fn bg_tile_map_address(self) -> u16 {
+    pub fn bg_tile_map_address(self) -> u16 {
         if self.contains(Self::BG_TILE_MAP_AREA) {
             0x9c00
         } else {
@@ -239,7 +242,7 @@ impl Lcdc {
         }
     }
 
-    pub const fn window_tile_map_address(self) -> u16 {
+    pub fn window_tile_map_address(self) -> u16 {
         if self.contains(Self::WINDOW_TILE_MAP_AREA) {
             0x9c00
         } else {
@@ -247,7 +250,7 @@ impl Lcdc {
         }
     }
 
-    const fn bg_window_tile_address(self) -> u16 {
+    fn bg_window_tile_address(self) -> u16 {
         if self.contains(Self::BG_WINDOW_TILE_DATA_AREA) {
             0x8000
         } else {
@@ -255,7 +258,7 @@ impl Lcdc {
         }
     }
 
-    pub const fn tile_data_address(self, tile_number: u8) -> u16 {
+    pub fn tile_data_address(self, tile_number: u8) -> u16 {
         self.bg_window_tile_address()
             + if self.signed_byte_for_tile_offset() {
                 ((tile_number as i8 as i16) + 128) as u16 * 16

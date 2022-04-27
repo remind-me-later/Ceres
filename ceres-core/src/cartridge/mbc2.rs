@@ -6,7 +6,7 @@ pub struct Mbc2 {
 }
 
 impl Mbc2 {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             is_ram_enabled: false,
             rom_bank: 1,
