@@ -12,10 +12,7 @@ use crate::{
     boot_rom::BootRom,
     joypad::Joypad,
     serial::Serial,
-    video::{
-        ppu::{Ppu, PpuIO::Vram},
-        PixelData,
-    },
+    video::{ppu::Ppu, PixelData},
     AudioCallbacks, Button, Model,
 };
 use alloc::rc::Rc;
@@ -178,7 +175,7 @@ impl Memory {
         if let Some(src) = self.dma.emulate() {
             let val = match src >> 8 {
                 0x00..=0x7f => self.cartridge.borrow_mut().read_rom(src),
-                0x80..=0x9f => self.ppu.read(Vram { address: src }),
+                0x80..=0x9f => self.ppu.read_vram(src),
                 0xa0..=0xbf => self.cartridge.borrow_mut().read_ram(src),
                 0xc0..=0xcf | 0xe0..=0xef => self.wram.read_ram(src),
                 0xd0..=0xdf | 0xf0..=0xff => self.wram.read_bank_ram(src),

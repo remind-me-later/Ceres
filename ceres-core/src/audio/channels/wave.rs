@@ -59,15 +59,6 @@ impl From<Volume> for u8 {
     }
 }
 
-#[derive(Clone, Copy)]
-pub enum Register {
-    NR30,
-    NR31,
-    NR32,
-    NR33,
-    NR34,
-}
-
 const WAVE_RAM_SIZE: u8 = 0x10;
 const WAVE_SAMPLE_SIZE: u8 = WAVE_RAM_SIZE * 2;
 const WAVE_CHANNEL_PERIOD_MULTIPLIER: u16 = 2;
@@ -125,36 +116,43 @@ impl WaveChannel {
         self.wave_samples[index * 2 + 1] = value & 0xf;
     }
 
-    pub fn read(&self, register: Register) -> u8 {
-        const NR30_MASK: u8 = 0x7f;
+    pub fn read_nr30(&self) -> u8 {
+        self.nr30 | 0x7f
+    }
 
-        match register {
-            Register::NR30 => NR30_MASK | self.nr30,
-            Register::NR32 => self.volume.into(),
-            Register::NR34 => self.generic_channel.read(),
-            Register::NR31 | Register::NR33 => 0xff,
+    pub fn read_nr32(&self) -> u8 {
+        self.volume.into()
+    }
+
+    pub fn read_nr34(&self) -> u8 {
+        self.generic_channel.read()
+    }
+
+    pub fn write_nr30(&mut self, val: u8) {
+        self.nr30 = val;
+        if val & (1 << 7) == 0 {
+            self.generic_channel.disable_dac();
+        } else {
+            self.generic_channel.enable_dac();
         }
     }
 
-    pub fn write(&mut self, register: Register, val: u8) {
-        match register {
-            Register::NR30 => {
-                self.nr30 = val;
-                if val & (1 << 7) == 0 {
-                    self.generic_channel.disable_dac();
-                } else {
-                    self.generic_channel.enable_dac();
-                }
-            }
-            Register::NR31 => self.generic_channel.write_sound_length(val),
-            Register::NR32 => self.volume = val.into(),
-            Register::NR33 => self.frequency_data.set_low_byte(val),
-            Register::NR34 => {
-                self.frequency_data.set_high_byte(val);
-                if self.generic_channel.write_control(val) == TriggerEvent::Trigger {
-                    self.trigger();
-                }
-            }
+    pub fn write_nr31(&mut self, val: u8) {
+        self.generic_channel.write_sound_length(val)
+    }
+
+    pub fn write_nr32(&mut self, val: u8) {
+        self.volume = val.into()
+    }
+
+    pub fn write_nr33(&mut self, val: u8) {
+        self.frequency_data.set_low_byte(val)
+    }
+
+    pub fn write_nr34(&mut self, val: u8) {
+        self.frequency_data.set_high_byte(val);
+        if self.generic_channel.write_control(val) == TriggerEvent::Trigger {
+            self.trigger();
         }
     }
 

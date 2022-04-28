@@ -5,7 +5,7 @@ mod high_pass_filter;
 mod sequencer;
 
 use self::{
-    channels::{ChannelRegister::*, Channels},
+    channels::Channels,
     control::{Control, TriggerReset},
     high_pass_filter::HighPassFilter,
     sequencer::Sequencer,
@@ -33,36 +33,6 @@ impl Frame {
     pub fn right(&self) -> Sample {
         self.right
     }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum ApuRegister {
-    NR10,
-    NR11,
-    NR12,
-    NR13,
-    NR14,
-    NR21,
-    NR22,
-    NR23,
-    NR24,
-    NR30,
-    NR31,
-    NR32,
-    NR33,
-    NR34,
-    NR41,
-    NR42,
-    NR43,
-    NR44,
-    NR50,
-    NR51,
-    NR52,
-}
-
-pub enum ApuIO {
-    ApuRegister(ApuRegister),
-    WavePatternRam { address: u8 },
 }
 
 pub struct Apu {
@@ -148,72 +118,209 @@ impl Apu {
         self.control.reset();
     }
 
-    pub fn read(&self, io: ApuIO) -> u8 {
-        match io {
-            ApuIO::ApuRegister(register) => match register {
-                ApuRegister::NR10 => self.channels.read(NR10),
-                ApuRegister::NR11 => self.channels.read(NR11),
-                ApuRegister::NR12 => self.channels.read(NR12),
-                ApuRegister::NR13 => self.channels.read(NR13),
-                ApuRegister::NR14 => self.channels.read(NR14),
-                ApuRegister::NR21 => self.channels.read(NR21),
-                ApuRegister::NR22 => self.channels.read(NR22),
-                ApuRegister::NR23 => self.channels.read(NR23),
-                ApuRegister::NR24 => self.channels.read(NR24),
-                ApuRegister::NR30 => self.channels.read(NR30),
-                ApuRegister::NR31 => self.channels.read(NR31),
-                ApuRegister::NR32 => self.channels.read(NR32),
-                ApuRegister::NR33 => self.channels.read(NR33),
-                ApuRegister::NR34 => self.channels.read(NR34),
-                ApuRegister::NR41 => self.channels.read(NR41),
-                ApuRegister::NR42 => self.channels.read(NR42),
-                ApuRegister::NR43 => self.channels.read(NR43),
-                ApuRegister::NR44 => self.channels.read(NR44),
-                ApuRegister::NR50 => self.control.read_nr50(),
-                ApuRegister::NR51 => self.control.read_nr51(),
-                ApuRegister::NR52 => self.control.read_nr52(&self.channels),
-            },
-            ApuIO::WavePatternRam { address } => self.channels.read_wave_ram(address),
+    pub fn read_nr10(&self) -> u8 {
+        self.channels.square1.read_nr10()
+    }
+
+    pub fn read_nr11(&self) -> u8 {
+        self.channels.square1.read_nr11()
+    }
+
+    pub fn read_nr12(&self) -> u8 {
+        self.channels.square1.read_nr12()
+    }
+
+    pub fn read_nr13(&self) -> u8 {
+        self.channels.square1.read_nr13()
+    }
+
+    pub fn read_nr14(&self) -> u8 {
+        self.channels.square1.read_nr14()
+    }
+
+    pub fn read_nr21(&self) -> u8 {
+        self.channels.square2.read_nr21()
+    }
+
+    pub fn read_nr22(&self) -> u8 {
+        self.channels.square2.read_nr22()
+    }
+
+    pub fn read_nr23(&self) -> u8 {
+        self.channels.square2.read_nr23()
+    }
+
+    pub fn read_nr24(&self) -> u8 {
+        self.channels.square2.read_nr24()
+    }
+
+    pub fn read_nr30(&self) -> u8 {
+        self.channels.wave.read_nr30()
+    }
+
+    pub fn read_nr32(&self) -> u8 {
+        self.channels.wave.read_nr32()
+    }
+
+    pub fn read_nr34(&self) -> u8 {
+        self.channels.wave.read_nr34()
+    }
+
+    pub fn read_nr42(&self) -> u8 {
+        self.channels.noise.read_nr42()
+    }
+
+    pub fn read_nr43(&self) -> u8 {
+        self.channels.noise.read_nr43()
+    }
+
+    pub fn read_nr44(&self) -> u8 {
+        self.channels.noise.read_nr44()
+    }
+
+    pub fn read_nr50(&self) -> u8 {
+        self.control.read_nr50()
+    }
+
+    pub fn read_nr51(&self) -> u8 {
+        self.control.read_nr51()
+    }
+
+    pub fn read_nr52(&self) -> u8 {
+        self.control.read_nr52(&self.channels)
+    }
+
+    pub fn read_wave(&self, addr: u8) -> u8 {
+        self.channels.wave.read_wave_ram(addr)
+    }
+
+    pub fn write_wave(&mut self, addr: u8, val: u8) {
+        self.channels.wave.write_wave_ram(addr, val)
+    }
+
+    pub fn write_nr10(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.channels.square1.write_nr10(val)
         }
     }
 
-    pub fn write(&mut self, io: ApuIO, val: u8) {
-        match io {
-            ApuIO::ApuRegister(register) => {
-                if register == ApuRegister::NR52 {
-                    if self.control.write_nr52(val) == TriggerReset::Reset {
-                        self.reset()
-                    }
-                    return;
-                }
+    pub fn write_nr11(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.channels.square1.write_nr11(val)
+        }
+    }
 
-                if self.control.is_enabled() {
-                    match register {
-                        ApuRegister::NR10 => self.channels.write(NR10, val),
-                        ApuRegister::NR11 => self.channels.write(NR11, val),
-                        ApuRegister::NR12 => self.channels.write(NR12, val),
-                        ApuRegister::NR13 => self.channels.write(NR13, val),
-                        ApuRegister::NR14 => self.channels.write(NR14, val),
-                        ApuRegister::NR21 => self.channels.write(NR21, val),
-                        ApuRegister::NR22 => self.channels.write(NR22, val),
-                        ApuRegister::NR23 => self.channels.write(NR23, val),
-                        ApuRegister::NR24 => self.channels.write(NR24, val),
-                        ApuRegister::NR30 => self.channels.write(NR30, val),
-                        ApuRegister::NR31 => self.channels.write(NR31, val),
-                        ApuRegister::NR32 => self.channels.write(NR32, val),
-                        ApuRegister::NR33 => self.channels.write(NR33, val),
-                        ApuRegister::NR34 => self.channels.write(NR34, val),
-                        ApuRegister::NR41 => self.channels.write(NR41, val),
-                        ApuRegister::NR42 => self.channels.write(NR42, val),
-                        ApuRegister::NR43 => self.channels.write(NR43, val),
-                        ApuRegister::NR44 => self.channels.write(NR44, val),
-                        ApuRegister::NR50 => self.control.write_nr50(val),
-                        ApuRegister::NR51 => self.control.write_nr51(val),
-                        ApuRegister::NR52 => unreachable!(),
-                    }
-                }
-            }
-            ApuIO::WavePatternRam { address } => self.channels.write_wave_ram(address, val),
+    pub fn write_nr12(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.channels.square1.write_nr12(val)
+        }
+    }
+
+    pub fn write_nr13(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.channels.square1.write_nr13(val)
+        }
+    }
+
+    pub fn write_nr14(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.channels.square1.write_nr14(val)
+        }
+    }
+
+    pub fn write_nr21(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.channels.square2.write_nr21(val)
+        }
+    }
+
+    pub fn write_nr22(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.channels.square2.write_nr22(val)
+        }
+    }
+
+    pub fn write_nr23(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.channels.square2.write_nr23(val)
+        }
+    }
+
+    pub fn write_nr24(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.channels.square2.write_nr24(val)
+        }
+    }
+
+    pub fn write_nr30(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.channels.wave.write_nr30(val)
+        }
+    }
+
+    pub fn write_nr31(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.channels.wave.write_nr31(val)
+        }
+    }
+
+    pub fn write_nr32(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.channels.wave.write_nr32(val)
+        }
+    }
+
+    pub fn write_nr33(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.channels.wave.write_nr33(val)
+        }
+    }
+
+    pub fn write_nr34(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.channels.wave.write_nr34(val)
+        }
+    }
+
+    pub fn write_nr41(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.channels.noise.write_nr41(val)
+        }
+    }
+
+    pub fn write_nr42(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.channels.noise.write_nr42(val)
+        }
+    }
+
+    pub fn write_nr43(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.channels.noise.write_nr43(val)
+        }
+    }
+
+    pub fn write_nr44(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.channels.noise.write_nr44(val)
+        }
+    }
+
+    pub fn write_nr50(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.control.write_nr50(val)
+        }
+    }
+
+    pub fn write_nr51(&mut self, val: u8) {
+        if self.control.is_enabled() {
+            self.control.write_nr51(val)
+        }
+    }
+
+    pub fn write_nr52(&mut self, val: u8) {
+        if self.control.write_nr52(val) == TriggerReset::Reset {
+            self.reset()
         }
     }
 }

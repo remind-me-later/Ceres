@@ -9,7 +9,7 @@ use super::wave_duty::WaveDuty;
 const SQUARE_CHANNEL_PERIOD_MULTIPLIER: u16 = 4;
 pub const MAX_SQUARE_CHANNEL_LENGTH: u16 = 64;
 
-pub struct GenericSquareChannel {
+pub struct SqCommon {
     frequency: FrequencyData<SQUARE_CHANNEL_PERIOD_MULTIPLIER>,
     duty_cycle: WaveDuty,
     duty_cycle_bit: u8,
@@ -19,7 +19,7 @@ pub struct GenericSquareChannel {
     envelope: Envelope,
 }
 
-impl GenericSquareChannel {
+impl SqCommon {
     pub fn new() -> Self {
         let frequency = FrequencyData::new();
         let current_frequency_period = frequency.period();
@@ -130,7 +130,7 @@ impl GenericSquareChannel {
         self.envelope.read()
     }
 
-    pub fn wite_envelope(&mut self, value: u8) {
+    pub fn write_envelope(&mut self, value: u8) {
         self.envelope.write(value, &mut self.generic_channel);
     }
 

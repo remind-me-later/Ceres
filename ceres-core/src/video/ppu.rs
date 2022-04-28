@@ -25,14 +25,6 @@ bitflags! {
     }
 }
 
-#[derive(Clone, Copy)]
-pub enum PpuIO {
-    PpuRegister(PpuRegister),
-    Vram { address: u16 },
-    VramBank,
-    Oam { address: u16 },
-}
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PixelPriority {
     SpritesOnTop,
@@ -94,38 +86,56 @@ impl Ppu {
         self.is_frame_done
     }
 
-    pub fn read(&mut self, io: PpuIO) -> u8 {
+    pub fn read_reg(&mut self, reg: PpuRegister) -> u8 {
+        self.registers.read(reg)
+    }
+
+    pub fn read_vram(&mut self, address: u16) -> u8 {
         let mode = self.registers.stat().mode();
 
-        match io {
-            PpuIO::PpuRegister(register) => self.registers.read(register),
-            PpuIO::Vram { address } => match mode {
-                Mode::DrawingPixels => 0xff,
-                _ => self.vram.read(address),
-            },
-            PpuIO::VramBank => self.vram.read_bank_number(),
-            PpuIO::Oam { address } => match mode {
-                Mode::OamScan | Mode::DrawingPixels => 0xff,
-                _ => self.oam.read(address as u8),
-            },
+        match mode {
+            Mode::DrawingPixels => 0xff,
+            _ => self.vram.read(address),
         }
     }
 
-    pub fn write(&mut self, io: PpuIO, val: u8) {
+    pub fn read_vbk(&mut self) -> u8 {
+        self.vram.read_bank_number()
+    }
+
+    pub fn read_oam(&mut self, address: u16, dma_active: bool) -> u8 {
         let mode = self.registers.stat().mode();
 
-        match io {
-            PpuIO::PpuRegister(register) => self.registers.write(register, val, &mut self.cycles),
-            PpuIO::Vram { address } => match mode {
-                Mode::DrawingPixels => (),
-                _ => self.vram.write(address, val),
-            },
-            PpuIO::VramBank => self.vram.write_bank_number(val),
-            PpuIO::Oam { address } => match mode {
-                Mode::OamScan | Mode::DrawingPixels => (),
-                _ => self.oam.write(address as u8, val),
-            },
+        match mode {
+            Mode::HBlank | Mode::VBlank if !dma_active => self.oam.read(address as u8),
+            _ => 0xff,
         }
+    }
+
+    pub fn write_reg(&mut self, reg: PpuRegister, val: u8) {
+        self.registers.write(reg, val, &mut self.cycles);
+    }
+
+    pub fn write_vram(&mut self, addr: u16, val: u8) {
+        let mode = self.registers.stat().mode();
+
+        match mode {
+            Mode::DrawingPixels => (),
+            _ => self.vram.write(addr, val),
+        };
+    }
+
+    pub fn write_vbk(&mut self, val: u8) {
+        self.vram.write_bank_number(val);
+    }
+
+    pub fn write_oam(&mut self, addr: u16, val: u8, dma_active: bool) {
+        let mode = self.registers.stat().mode();
+
+        match mode {
+            Mode::HBlank | Mode::VBlank if !dma_active => self.oam.write(addr as u8, val),
+            _ => (),
+        };
     }
 
     pub fn hdma_write(&mut self, address: u16, val: u8) {

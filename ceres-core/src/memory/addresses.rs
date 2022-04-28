@@ -1,16 +1,8 @@
 use super::{FunctionMode, Memory};
 use crate::{
-    audio::{
-        Apu,
-        ApuIO::{ApuRegister, WavePatternRam},
-        ApuRegister::{
-            NR10, NR11, NR12, NR13, NR14, NR21, NR22, NR23, NR24, NR30, NR31, NR32, NR33, NR34,
-            NR41, NR42, NR43, NR44, NR50, NR51, NR52,
-        },
-    },
+    audio::Apu,
     interrupts::Interrupts,
     timer::Timer,
-    video::ppu::PpuIO::{Oam, PpuRegister, Vram, VramBank},
     video::PpuRegister::{
         Bcpd, Bcps, Bgp, Lcdc, Ly, Lyc, Obp0, Obp1, Ocpd, Ocps, Opri, Scx, Scy, Stat, Wx, Wy,
     },
@@ -53,35 +45,25 @@ impl Memory {
     pub fn read(&mut self, address: u16) -> u8 {
         match address {
             0x00..=0xff => self.mem_tick(|mem| {
-                if mem.boot_rom.is_mapped() {
-                    mem.boot_rom.read(address)
-                } else {
-                    mem.cartridge.borrow_mut().read_rom(address)
-                }
+                mem.boot_rom
+                    .read(address)
+                    .unwrap_or_else(|| mem.cartridge.borrow_mut().read_rom(address))
             }),
             0x0100..=0x1ff => self.mem_tick(|mem| mem.cartridge.borrow_mut().read_rom(address)),
             0x200..=0x8ff => self.mem_tick(|mem| {
-                if mem.boot_rom.is_mapped() {
-                    mem.boot_rom.read(address)
-                } else {
-                    mem.cartridge.borrow_mut().read_rom(address)
-                }
+                mem.boot_rom
+                    .read(address)
+                    .unwrap_or_else(|| mem.cartridge.borrow_mut().read_rom(address))
             }),
             0x0900..=0x7fff => self.mem_tick(|mem| mem.cartridge.borrow_mut().read_rom(address)),
-            0x8000..=0x9fff => self.mem_tick(|mem| mem.ppu.read(Vram { address })),
+            0x8000..=0x9fff => self.mem_tick(|mem| mem.ppu.read_vram(address)),
             0xa000..=0xbfff => self.mem_tick(|mem| mem.cartridge.borrow_mut().read_ram(address)),
             0xc000..=0xcfff => self.mem_tick(|mem| mem.wram.read_ram(address)),
             0xd000..=0xdfff => self.mem_tick(|mem| mem.wram.read_bank_ram(address)),
             // Echo RAM
             0xe000..=0xefff => self.mem_tick(|mem| mem.wram.read_ram(address)),
             0xf000..=0xfdff => self.mem_tick(|mem| mem.wram.read_bank_ram(address)),
-            0xfe00..=0xfe9f => self.mem_tick(|mem| {
-                if mem.dma.is_active() {
-                    0xff
-                } else {
-                    mem.ppu.read(Oam { address })
-                }
-            }),
+            0xfe00..=0xfe9f => self.mem_tick(|mem| mem.ppu.read_oam(address, mem.dma.is_active())),
             0xfea0..=0xfeff => {
                 log::warn!("Read from unusable RAM");
                 0xff
@@ -100,62 +82,49 @@ impl Memory {
             0x06 => self.timer_tick(|timer, ic| timer.read_tma(ic)),
             0x07 => self.timer_tick(|timer, ic| timer.read_tac(ic)),
             0x0f => self.mem_tick(|mem| mem.ints.read_if()),
-            0x10 => self.apu_tick(|apu| apu.read(ApuRegister(NR10))),
-            0x11 => self.apu_tick(|apu| apu.read(ApuRegister(NR11))),
-            0x12 => self.apu_tick(|apu| apu.read(ApuRegister(NR12))),
-            0x13 => self.apu_tick(|apu| apu.read(ApuRegister(NR13))),
-            0x14 => self.apu_tick(|apu| apu.read(ApuRegister(NR14))),
-            0x16 => self.apu_tick(|apu| apu.read(ApuRegister(NR21))),
-            0x17 => self.apu_tick(|apu| apu.read(ApuRegister(NR22))),
-            0x18 => self.apu_tick(|apu| apu.read(ApuRegister(NR23))),
-            0x19 => self.apu_tick(|apu| apu.read(ApuRegister(NR24))),
-            0x1a => self.apu_tick(|apu| apu.read(ApuRegister(NR30))),
-            0x1b => self.apu_tick(|apu| apu.read(ApuRegister(NR31))),
-            0x1c => self.apu_tick(|apu| apu.read(ApuRegister(NR32))),
-            0x1d => self.apu_tick(|apu| apu.read(ApuRegister(NR33))),
-            0x1e => self.apu_tick(|apu| apu.read(ApuRegister(NR34))),
-            0x20 => self.apu_tick(|apu| apu.read(ApuRegister(NR41))),
-            0x21 => self.apu_tick(|apu| apu.read(ApuRegister(NR42))),
-            0x22 => self.apu_tick(|apu| apu.read(ApuRegister(NR43))),
-            0x23 => self.apu_tick(|apu| apu.read(ApuRegister(NR44))),
-            0x24 => self.apu_tick(|apu| apu.read(ApuRegister(NR50))),
-            0x25 => self.apu_tick(|apu| apu.read(ApuRegister(NR51))),
-            0x26 => self.apu_tick(|apu| apu.read(ApuRegister(NR52))),
-            0x30..=0x3f => self.apu_tick(|apu| apu.read(WavePatternRam { address })),
-            0x40 => self.mem_tick(|mem| mem.ppu.read(PpuRegister(Lcdc))),
-            0x41 => self.mem_tick(|mem| mem.ppu.read(PpuRegister(Stat))),
-            0x42 => self.mem_tick(|mem| mem.ppu.read(PpuRegister(Scy))),
-            0x43 => self.mem_tick(|mem| mem.ppu.read(PpuRegister(Scx))),
-            0x44 => self.mem_tick(|mem| mem.ppu.read(PpuRegister(Ly))),
-            0x45 => self.mem_tick(|mem| mem.ppu.read(PpuRegister(Lyc))),
+            0x10 => self.apu_tick(|apu| apu.read_nr10()),
+            0x11 => self.apu_tick(|apu| apu.read_nr11()),
+            0x12 => self.apu_tick(|apu| apu.read_nr12()),
+            0x13 => self.apu_tick(|apu| apu.read_nr13()),
+            0x14 => self.apu_tick(|apu| apu.read_nr14()),
+            0x16 => self.apu_tick(|apu| apu.read_nr21()),
+            0x17 => self.apu_tick(|apu| apu.read_nr22()),
+            0x18 => self.apu_tick(|apu| apu.read_nr23()),
+            0x19 => self.apu_tick(|apu| apu.read_nr24()),
+            0x1a => self.apu_tick(|apu| apu.read_nr30()),
+            0x1c => self.apu_tick(|apu| apu.read_nr32()),
+            0x1e => self.apu_tick(|apu| apu.read_nr34()),
+            0x21 => self.apu_tick(|apu| apu.read_nr42()),
+            0x22 => self.apu_tick(|apu| apu.read_nr43()),
+            0x23 => self.apu_tick(|apu| apu.read_nr44()),
+            0x24 => self.apu_tick(|apu| apu.read_nr50()),
+            0x25 => self.apu_tick(|apu| apu.read_nr51()),
+            0x26 => self.apu_tick(|apu| apu.read_nr52()),
+            0x30..=0x3f => self.apu_tick(|apu| apu.read_wave(address)),
+            0x40 => self.mem_tick(|mem| mem.ppu.read_reg(Lcdc)),
+            0x41 => self.mem_tick(|mem| mem.ppu.read_reg(Stat)),
+            0x42 => self.mem_tick(|mem| mem.ppu.read_reg(Scy)),
+            0x43 => self.mem_tick(|mem| mem.ppu.read_reg(Scx)),
+            0x44 => self.mem_tick(|mem| mem.ppu.read_reg(Ly)),
+            0x45 => self.mem_tick(|mem| mem.ppu.read_reg(Lyc)),
             0x46 => self.mem_tick(|mem| mem.dma.read()),
-            0x47 => self.mem_tick(|mem| mem.ppu.read(PpuRegister(Bgp))),
-            0x48 => self.mem_tick(|mem| mem.ppu.read(PpuRegister(Obp0))),
-            0x49 => self.mem_tick(|mem| mem.ppu.read(PpuRegister(Obp1))),
-            0x4a => self.mem_tick(|mem| mem.ppu.read(PpuRegister(Wy))),
-            0x4b => self.mem_tick(|mem| mem.ppu.read(PpuRegister(Wx))),
+            0x47 => self.mem_tick(|mem| mem.ppu.read_reg(Bgp)),
+            0x48 => self.mem_tick(|mem| mem.ppu.read_reg(Obp0)),
+            0x49 => self.mem_tick(|mem| mem.ppu.read_reg(Obp1)),
+            0x4a => self.mem_tick(|mem| mem.ppu.read_reg(Wy)),
+            0x4b => self.mem_tick(|mem| mem.ppu.read_reg(Wx)),
             0x4d if self.model == Model::Cgb => self.mem_tick(|mem| mem.key1.read()),
-            0x4f if self.model == Model::Cgb => self.mem_tick(|mem| mem.ppu.read(VramBank)),
+            0x4f if self.model == Model::Cgb => self.mem_tick(|mem| mem.ppu.read_vbk()),
             0x51 if self.model == Model::Cgb => self.mem_tick(|_| 0xff),
             0x52 if self.model == Model::Cgb => self.mem_tick(|_| 0xff),
             0x53 if self.model == Model::Cgb => self.mem_tick(|_| 0xff),
             0x54 if self.model == Model::Cgb => self.mem_tick(|_| 0xff),
             0x55 if self.model == Model::Cgb => self.mem_tick(|mem| mem.hdma.read_hdma5()),
-            0x68 if self.model == Model::Cgb => {
-                self.mem_tick(|mem| mem.ppu.read(PpuRegister(Bcps)))
-            }
-            0x69 if self.model == Model::Cgb => {
-                self.mem_tick(|mem| mem.ppu.read(PpuRegister(Bcpd)))
-            }
-            0x6a if self.model == Model::Cgb => {
-                self.mem_tick(|mem| mem.ppu.read(PpuRegister(Ocps)))
-            }
-            0x6b if self.model == Model::Cgb => {
-                self.mem_tick(|mem| mem.ppu.read(PpuRegister(Ocpd)))
-            }
-            0x6c if self.model == Model::Cgb => {
-                self.mem_tick(|mem| mem.ppu.read(PpuRegister(Opri)))
-            }
+            0x68 if self.model == Model::Cgb => self.mem_tick(|mem| mem.ppu.read_reg(Bcps)),
+            0x69 if self.model == Model::Cgb => self.mem_tick(|mem| mem.ppu.read_reg(Bcpd)),
+            0x6a if self.model == Model::Cgb => self.mem_tick(|mem| mem.ppu.read_reg(Ocps)),
+            0x6b if self.model == Model::Cgb => self.mem_tick(|mem| mem.ppu.read_reg(Ocpd)),
+            0x6c if self.model == Model::Cgb => self.mem_tick(|mem| mem.ppu.read_reg(Opri)),
             0x70 if self.model == Model::Cgb => self.mem_tick(|mem| mem.wram.read_bank()),
             0x80..=0xfe => self.mem_tick(|mem| mem.hram.read(address)),
             0xff => self.mem_tick(|mem| mem.ints.read_ie()),
@@ -166,14 +135,13 @@ impl Memory {
     pub fn write(&mut self, address: u16, val: u8) {
         match address {
             0x00..=0x8ff => self.mem_tick(|mem| {
-                if !mem.boot_rom.is_mapped() {
-                    mem.cartridge.borrow_mut().write_rom(address, val)
-                }
+                // assume bootrom doesnt write to rom
+                mem.cartridge.borrow_mut().write_rom(address, val)
             }),
             0x0900..=0x7fff => {
                 self.mem_tick(|mem| mem.cartridge.borrow_mut().write_rom(address, val))
             }
-            0x8000..=0x9fff => self.mem_tick(|mem| mem.ppu.write(Vram { address }, val)),
+            0x8000..=0x9fff => self.mem_tick(|mem| mem.ppu.write_vram(address, val)),
             0xa000..=0xbfff => {
                 self.mem_tick(|mem| mem.cartridge.borrow_mut().write_ram(address, val))
             }
@@ -182,11 +150,9 @@ impl Memory {
             // Echo RAM
             0xe000..=0xefff => self.mem_tick(|mem| mem.wram.write_ram(address, val)),
             0xf000..=0xfdff => self.mem_tick(|mem| mem.wram.write_bank_ram(address, val)),
-            0xfe00..=0xfe9f => self.mem_tick(|mem| {
-                if !mem.dma.is_active() {
-                    mem.ppu.write(Oam { address }, val)
-                }
-            }),
+            0xfe00..=0xfe9f => {
+                self.mem_tick(|mem| mem.ppu.write_oam(address, val, mem.dma.is_active()))
+            }
             0xfea0..=0xfeff => {
                 log::warn!("Write to unusable RAM");
             }
@@ -205,45 +171,45 @@ impl Memory {
             0x06 => self.timer_tick(|timer, ic| timer.write_tma(ic, val)),
             0x07 => self.timer_tick(|timer, ic| timer.write_tima(ic, val)),
             0x0f => self.mem_tick(|mem| mem.ints.write_if(val)),
-            0x10 => self.apu_tick(|apu| apu.write(ApuRegister(NR10), val)),
-            0x11 => self.apu_tick(|apu| apu.write(ApuRegister(NR11), val)),
-            0x12 => self.apu_tick(|apu| apu.write(ApuRegister(NR12), val)),
-            0x13 => self.apu_tick(|apu| apu.write(ApuRegister(NR13), val)),
-            0x14 => self.apu_tick(|apu| apu.write(ApuRegister(NR14), val)),
-            0x16 => self.apu_tick(|apu| apu.write(ApuRegister(NR21), val)),
-            0x17 => self.apu_tick(|apu| apu.write(ApuRegister(NR22), val)),
-            0x18 => self.apu_tick(|apu| apu.write(ApuRegister(NR23), val)),
-            0x19 => self.apu_tick(|apu| apu.write(ApuRegister(NR24), val)),
-            0x1a => self.apu_tick(|apu| apu.write(ApuRegister(NR30), val)),
-            0x1b => self.apu_tick(|apu| apu.write(ApuRegister(NR31), val)),
-            0x1c => self.apu_tick(|apu| apu.write(ApuRegister(NR32), val)),
-            0x1d => self.apu_tick(|apu| apu.write(ApuRegister(NR33), val)),
-            0x1e => self.apu_tick(|apu| apu.write(ApuRegister(NR34), val)),
-            0x20 => self.apu_tick(|apu| apu.write(ApuRegister(NR41), val)),
-            0x21 => self.apu_tick(|apu| apu.write(ApuRegister(NR42), val)),
-            0x22 => self.apu_tick(|apu| apu.write(ApuRegister(NR43), val)),
-            0x23 => self.apu_tick(|apu| apu.write(ApuRegister(NR44), val)),
-            0x24 => self.apu_tick(|apu| apu.write(ApuRegister(NR50), val)),
-            0x25 => self.apu_tick(|apu| apu.write(ApuRegister(NR51), val)),
-            0x26 => self.apu_tick(|apu| apu.write(ApuRegister(NR52), val)),
-            0x30..=0x3f => self.apu_tick(|apu| apu.write(WavePatternRam { address }, val)),
-            0x40 => self.mem_tick(|mem| mem.ppu.write(PpuRegister(Lcdc), val)),
-            0x41 => self.mem_tick(|mem| mem.ppu.write(PpuRegister(Stat), val)),
-            0x42 => self.mem_tick(|mem| mem.ppu.write(PpuRegister(Scy), val)),
-            0x43 => self.mem_tick(|mem| mem.ppu.write(PpuRegister(Scx), val)),
-            0x44 => self.mem_tick(|mem| mem.ppu.write(PpuRegister(Ly), val)),
-            0x45 => self.mem_tick(|mem| mem.ppu.write(PpuRegister(Lyc), val)),
+            0x10 => self.apu_tick(|apu| apu.write_nr10(val)),
+            0x11 => self.apu_tick(|apu| apu.write_nr11(val)),
+            0x12 => self.apu_tick(|apu| apu.write_nr12(val)),
+            0x13 => self.apu_tick(|apu| apu.write_nr13(val)),
+            0x14 => self.apu_tick(|apu| apu.write_nr14(val)),
+            0x16 => self.apu_tick(|apu| apu.write_nr21(val)),
+            0x17 => self.apu_tick(|apu| apu.write_nr22(val)),
+            0x18 => self.apu_tick(|apu| apu.write_nr23(val)),
+            0x19 => self.apu_tick(|apu| apu.write_nr24(val)),
+            0x1a => self.apu_tick(|apu| apu.write_nr30(val)),
+            0x1b => self.apu_tick(|apu| apu.write_nr31(val)),
+            0x1c => self.apu_tick(|apu| apu.write_nr32(val)),
+            0x1d => self.apu_tick(|apu| apu.write_nr33(val)),
+            0x1e => self.apu_tick(|apu| apu.write_nr34(val)),
+            0x20 => self.apu_tick(|apu| apu.write_nr41(val)),
+            0x21 => self.apu_tick(|apu| apu.write_nr42(val)),
+            0x22 => self.apu_tick(|apu| apu.write_nr43(val)),
+            0x23 => self.apu_tick(|apu| apu.write_nr44(val)),
+            0x24 => self.apu_tick(|apu| apu.write_nr50(val)),
+            0x25 => self.apu_tick(|apu| apu.write_nr51(val)),
+            0x26 => self.apu_tick(|apu| apu.write_nr52(val)),
+            0x30..=0x3f => self.apu_tick(|apu| apu.write_wave(address, val)),
+            0x40 => self.mem_tick(|mem| mem.ppu.write_reg(Lcdc, val)),
+            0x41 => self.mem_tick(|mem| mem.ppu.write_reg(Stat, val)),
+            0x42 => self.mem_tick(|mem| mem.ppu.write_reg(Scy, val)),
+            0x43 => self.mem_tick(|mem| mem.ppu.write_reg(Scx, val)),
+            0x44 => self.mem_tick(|mem| mem.ppu.write_reg(Ly, val)),
+            0x45 => self.mem_tick(|mem| mem.ppu.write_reg(Lyc, val)),
             0x46 => self.mem_tick(|mem| mem.dma.write(val)),
-            0x47 => self.mem_tick(|mem| mem.ppu.write(PpuRegister(Bgp), val)),
-            0x48 => self.mem_tick(|mem| mem.ppu.write(PpuRegister(Obp0), val)),
-            0x49 => self.mem_tick(|mem| mem.ppu.write(PpuRegister(Obp1), val)),
-            0x4a => self.mem_tick(|mem| mem.ppu.write(PpuRegister(Wy), val)),
-            0x4b => self.mem_tick(|mem| mem.ppu.write(PpuRegister(Wx), val)),
+            0x47 => self.mem_tick(|mem| mem.ppu.write_reg(Bgp, val)),
+            0x48 => self.mem_tick(|mem| mem.ppu.write_reg(Obp0, val)),
+            0x49 => self.mem_tick(|mem| mem.ppu.write_reg(Obp1, val)),
+            0x4a => self.mem_tick(|mem| mem.ppu.write_reg(Wy, val)),
+            0x4b => self.mem_tick(|mem| mem.ppu.write_reg(Wx, val)),
             0x4c if self.model == Model::Cgb && self.boot_rom.is_mapped() && val == 0x4 => {
                 self.function_mode = FunctionMode::Compatibility;
             }
             0x4d if self.model == Model::Cgb => self.mem_tick(|mem| mem.key1.write(val)),
-            0x4f if self.model == Model::Cgb => self.mem_tick(|mem| mem.ppu.write(VramBank, val)),
+            0x4f if self.model == Model::Cgb => self.mem_tick(|mem| mem.ppu.write_vbk(val)),
             0x50 => {
                 self.tick_t_cycle();
                 if val & 0b1 != 0 {
@@ -255,21 +221,11 @@ impl Memory {
             0x53 if self.model == Model::Cgb => self.mem_tick(|mem| mem.hdma.write_hdma3(val)),
             0x54 if self.model == Model::Cgb => self.mem_tick(|mem| mem.hdma.write_hdma4(val)),
             0x55 if self.model == Model::Cgb => self.mem_tick(|mem| mem.hdma.write_hdma5(val)),
-            0x68 if self.model == Model::Cgb => {
-                self.mem_tick(|mem| mem.ppu.write(PpuRegister(Bcps), val))
-            }
-            0x69 if self.model == Model::Cgb => {
-                self.mem_tick(|mem| mem.ppu.write(PpuRegister(Bcpd), val))
-            }
-            0x6a if self.model == Model::Cgb => {
-                self.mem_tick(|mem| mem.ppu.write(PpuRegister(Ocps), val))
-            }
-            0x6b if self.model == Model::Cgb => {
-                self.mem_tick(|mem| mem.ppu.write(PpuRegister(Ocpd), val))
-            }
-            0x6c if self.model == Model::Cgb => {
-                self.mem_tick(|mem| mem.ppu.write(PpuRegister(Opri), val))
-            }
+            0x68 if self.model == Model::Cgb => self.mem_tick(|mem| mem.ppu.write_reg(Bcps, val)),
+            0x69 if self.model == Model::Cgb => self.mem_tick(|mem| mem.ppu.write_reg(Bcpd, val)),
+            0x6a if self.model == Model::Cgb => self.mem_tick(|mem| mem.ppu.write_reg(Ocps, val)),
+            0x6b if self.model == Model::Cgb => self.mem_tick(|mem| mem.ppu.write_reg(Ocpd, val)),
+            0x6c if self.model == Model::Cgb => self.mem_tick(|mem| mem.ppu.write_reg(Opri, val)),
             0x70 if self.model == Model::Cgb => self.mem_tick(|mem| mem.wram.write_bank(val)),
             0x80..=0xfe => self.mem_tick(|mem| mem.hram.write(address, val)),
             0xff => self.mem_tick(|mem| mem.ints.write_ie(val)),

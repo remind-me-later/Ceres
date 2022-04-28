@@ -3,15 +3,7 @@ use super::{
     generic_channel::{GenericChannel, TriggerEvent},
 };
 
-pub const MAX_NOISE_CHANNEL_LENGTH: u16 = 64;
-
-#[derive(Clone, Copy)]
-pub enum Register {
-    NR41,
-    NR42,
-    NR43,
-    NR44,
-}
+const MAX_NOISE_CHANNEL_LENGTH: u16 = 64;
 
 pub struct NoiseChannel {
     generic_channel: GenericChannel<MAX_NOISE_CHANNEL_LENGTH>,
@@ -49,43 +41,49 @@ impl NoiseChannel {
         self.nr43 = 0;
     }
 
-    pub fn read(&self, register: Register) -> u8 {
-        match register {
-            Register::NR41 => 0xff,
-            Register::NR42 => self.envelope.read(),
-            Register::NR43 => self.nr43,
-            Register::NR44 => self.generic_channel.read(),
-        }
+    pub fn read_nr42(&self) -> u8 {
+        self.envelope.read()
     }
 
-    pub fn write(&mut self, register: Register, val: u8) {
-        match register {
-            Register::NR41 => self.generic_channel.write_sound_length(val),
-            Register::NR42 => self.envelope.write(val, &mut self.generic_channel),
-            Register::NR43 => {
-                self.nr43 = val;
-                self.width_mode_on = val & 8 != 0;
+    pub fn read_nr43(&self) -> u8 {
+        self.nr43
+    }
 
-                let clock_shift = val >> 4;
-                let divisor: u16 = match val & 7 {
-                    0 => 8,
-                    1 => 16,
-                    2 => 32,
-                    3 => 48,
-                    4 => 64,
-                    5 => 80,
-                    6 => 96,
-                    _ => 112,
-                };
+    pub fn read_nr44(&self) -> u8 {
+        self.generic_channel.read()
+    }
 
-                self.internal_timer_period = divisor << clock_shift;
-                self.current_timer_cycle = 1;
-            }
-            Register::NR44 => {
-                if self.generic_channel.write_control(val) == TriggerEvent::Trigger {
-                    self.trigger();
-                }
-            }
+    pub fn write_nr41(&mut self, val: u8) {
+        self.generic_channel.write_sound_length(val)
+    }
+
+    pub fn write_nr42(&mut self, val: u8) {
+        self.envelope.write(val, &mut self.generic_channel)
+    }
+
+    pub fn write_nr43(&mut self, val: u8) {
+        self.nr43 = val;
+        self.width_mode_on = val & 8 != 0;
+
+        let clock_shift = val >> 4;
+        let divisor: u16 = match val & 7 {
+            0 => 8,
+            1 => 16,
+            2 => 32,
+            3 => 48,
+            4 => 64,
+            5 => 80,
+            6 => 96,
+            _ => 112,
+        };
+
+        self.internal_timer_period = divisor << clock_shift;
+        self.current_timer_cycle = 1;
+    }
+
+    pub fn write_nr44(&mut self, val: u8) {
+        if self.generic_channel.write_control(val) == TriggerEvent::Trigger {
+            self.trigger();
         }
     }
 

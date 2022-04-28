@@ -1,4 +1,4 @@
-use super::generic_square_channel::GenericSquareChannel;
+use super::common::SqCommon;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Period {
@@ -104,7 +104,7 @@ impl Sweep {
         }
     }
 
-    pub fn trigger(&mut self, generic_square_channel: &mut GenericSquareChannel) {
+    pub fn trigger(&mut self, generic_square_channel: &mut SqCommon) {
         self.shadow_frequency = generic_square_channel.frequency().get();
         self.timer = self.period.into();
         self.is_enabled = self.period != Period::SweepOff && self.shift_number != 0;
@@ -121,7 +121,7 @@ impl Sweep {
         self.is_enabled = false;
     }
 
-    fn sweep_calculation(&mut self, generic_square_channel: &mut GenericSquareChannel) {
+    fn sweep_calculation(&mut self, generic_square_channel: &mut SqCommon) {
         let tmp = self.shadow_frequency >> self.shift_number;
         self.shadow_frequency = if self.direction == Direction::High {
             self.shadow_frequency + tmp
@@ -136,7 +136,7 @@ impl Sweep {
         }
     }
 
-    pub fn step(&mut self, generic_square_channel: &mut GenericSquareChannel) {
+    pub fn step(&mut self, generic_square_channel: &mut SqCommon) {
         self.timer -= 1;
         if self.timer == 0 {
             self.timer = self.period.into();
