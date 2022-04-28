@@ -1,17 +1,18 @@
-use crate::video::ppu::{Mode, Ppu};
+use self::State::*;
+use crate::video::ppu::Mode::HBlank;
+use crate::video::ppu::Ppu;
 
-#[derive(PartialEq, Eq)]
-enum HdmaMode {
-    GeneralPurpose,
-    Hblank,
+enum State {
+    Inactive,
+    General,
+    CopyingHBlank { bytes_left: u8 },
+    AwaitHBlank,
+    DoneHBlank,
 }
 
-impl From<u8> for HdmaMode {
-    fn from(val: u8) -> Self {
-        match val >> 7 {
-            0 => Self::GeneralPurpose,
-            _ => Self::Hblank,
-        }
+impl Default for State {
+    fn default() -> Self {
+        Inactive
     }
 }
 
@@ -20,116 +21,101 @@ pub struct HdmaTransfer {
     pub dst: u16,
 }
 
-#[derive(PartialEq, Eq)]
-enum HdmaState {
-    AwaitingHBlank,
-    FinishedLine,
-}
-
+#[derive(Default)]
 pub struct Hdma {
-    is_active: bool,
-    source: u16,
-    destination: u16,
-    mode: HdmaMode,
-    transfer_size: u16,
-    state: HdmaState,
-    bytes_to_copy: u16,
+    src: u16,
+    dst: u16,
+    len: u16,
+    state: State,
 }
 
 impl Hdma {
     pub fn new() -> Self {
-        Self {
-            is_active: false,
-            source: 0,
-            destination: 0,
-            mode: HdmaMode::GeneralPurpose,
-            transfer_size: 0,
-            state: HdmaState::AwaitingHBlank,
-            bytes_to_copy: 0,
-        }
+        Self::default()
     }
 
     pub fn write_hdma1(&mut self, val: u8) {
-        self.source = (self.source & 0xf0) | (u16::from(val) << 8);
+        self.src = (self.src & 0xf0) | (u16::from(val) << 8);
     }
 
     pub fn write_hdma2(&mut self, val: u8) {
-        self.source = (self.source & 0xff00) | (u16::from(val) & 0xf0);
+        self.src = (self.src & 0xff00) | (u16::from(val) & 0xf0);
     }
 
     pub fn write_hdma3(&mut self, val: u8) {
-        self.destination = (self.destination & 0xf0) | (u16::from(val & 0x1f) << 8);
+        self.dst = (self.dst & 0xf0) | (u16::from(val & 0x1f) << 8);
     }
 
     pub fn write_hdma4(&mut self, val: u8) {
-        self.destination = (self.destination & 0x1f00) | (u16::from(val) & 0xf0);
+        self.dst = (self.dst & 0x1f00) | (u16::from(val) & 0xf0);
     }
 
     pub fn read_hdma5(&self) -> u8 {
-        let is_active_bit = u8::from(self.is_active) << 7;
-        let blocks_bits = ((self.transfer_size / 0x10).wrapping_sub(1)) as u8;
+        let is_active_bit = u8::from(self.is_active()) << 7;
+        let blocks_bits = ((self.len / 0x10).wrapping_sub(1)) as u8;
         is_active_bit | blocks_bits
+    }
+
+    fn is_active(&self) -> bool {
+        !matches!(self.state, Inactive)
     }
 
     pub fn write_hdma5(&mut self, val: u8) {
         // stop current transfer
-        if self.is_active && val & 0x80 == 0 {
-            self.is_active = false;
+        // TODO: reload
+        if self.is_active() && val & 0x80 == 0 {
+            self.state = Inactive;
             return;
         }
 
-        self.mode = val.into();
+        self.state = match (val >> 7) & 1 {
+            0 => General,
+            1 => AwaitHBlank,
+            _ => unreachable!(),
+        };
+
         let transfer_blocks = val & 0x7f;
-        self.transfer_size = (u16::from(transfer_blocks) + 1) * 0x10;
-        self.state = HdmaState::AwaitingHBlank;
-        self.is_active = true;
+        self.len = (u16::from(transfer_blocks) + 1) * 0x10;
     }
 
     pub fn start(&mut self, ppu: &Ppu) -> bool {
-        if !self.is_active {
-            return false;
-        }
-
-        match self.mode {
-            HdmaMode::GeneralPurpose => {
-                self.bytes_to_copy = self.transfer_size;
+        match self.state {
+            Inactive => false,
+            General => true,
+            DoneHBlank if ppu.mode() != HBlank => {
+                self.state = AwaitHBlank;
+                false
+            }
+            AwaitHBlank if ppu.mode() == HBlank => {
+                self.state = CopyingHBlank { bytes_left: 0x10 };
                 true
             }
-            HdmaMode::Hblank => match self.state {
-                HdmaState::FinishedLine if ppu.mode() != Mode::HBlank => {
-                    self.state = HdmaState::AwaitingHBlank;
-                    false
-                }
-                HdmaState::AwaitingHBlank if ppu.mode() == Mode::HBlank => {
-                    self.bytes_to_copy = 0x10;
-                    true
-                }
-                _ => false,
-            },
+            _ => unreachable!(),
         }
     }
 
     pub fn is_transfer_done(&self) -> bool {
-        !self.is_active || self.state == HdmaState::FinishedLine
+        matches!(self.state, Inactive | DoneHBlank)
     }
 
     pub fn transfer(&mut self) -> HdmaTransfer {
         let hdma_transfer = HdmaTransfer {
-            src: self.source,
-            dst: self.destination,
+            src: self.src,
+            dst: self.dst,
         };
 
-        self.destination = self.destination.wrapping_add(1);
-        self.source = self.source.wrapping_add(1);
-        self.transfer_size -= 1;
-        self.bytes_to_copy -= 1;
+        self.dst += 1;
+        self.src += 1;
+        self.len -= 1;
 
-        if self.bytes_to_copy == 0 {
-            self.state = HdmaState::FinishedLine;
-        }
+        if self.len == 0 {
+            self.state = Inactive;
+        } else if let CopyingHBlank { mut bytes_left } = self.state {
+            bytes_left -= 1;
 
-        if self.transfer_size == 0 {
-            self.is_active = false;
+            if bytes_left == 0 {
+                self.state = DoneHBlank;
+            }
         }
 
         hdma_transfer
