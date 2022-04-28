@@ -3,6 +3,7 @@ name = "ceres-core"
 version = "0.1.0"
 edition = "2021"
 description = "A library to make Gameboy/Color emulators"
+license = "MIT"
 
 [dependencies]
 bitflags = { version = "*", default-features = false }
