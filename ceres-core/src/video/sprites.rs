@@ -41,7 +41,7 @@ impl SpriteAttributes {
 }
 
 pub struct SpriteAttributesIterator<'a> {
-    oam: &'a ObjectAttributeMemory,
+    oam: &'a Oam,
     index: usize,
 }
 
@@ -66,11 +66,11 @@ impl<'a> Iterator for SpriteAttributesIterator<'a> {
     }
 }
 
-pub struct ObjectAttributeMemory {
+pub struct Oam {
     data: [u8; 0x100],
 }
 
-impl ObjectAttributeMemory {
+impl Oam {
     pub fn new() -> Self {
         Self { data: [0; 0x100] }
     }

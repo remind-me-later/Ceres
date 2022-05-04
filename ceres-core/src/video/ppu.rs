@@ -3,7 +3,7 @@ mod scanline_renderer;
 use super::{
     palette::{ColorPalette, MonochromePalette, MonochromePaletteColors},
     pixel_data::PixelData,
-    sprites::ObjectAttributeMemory,
+    sprites::Oam,
     vram::Vram,
     ACCESS_OAM_CYCLES, ACCESS_VRAM_CYCLES, HBLANK_CYCLES, VBLANK_LINE_CYCLES,
 };
@@ -177,7 +177,7 @@ enum PixelPriority {
 pub struct Ppu {
     monochrome_palette_colors: MonochromePaletteColors,
     vram: Vram,
-    oam: ObjectAttributeMemory,
+    oam: Oam,
     cycles: i16,
     pixel_data: PixelData,
     frame_used_window: bool,
@@ -210,7 +210,7 @@ impl Ppu {
         Self {
             monochrome_palette_colors: MonochromePaletteColors::Grayscale,
             vram: Vram::new(model),
-            oam: ObjectAttributeMemory::new(),
+            oam: Oam::new(),
             pixel_data: PixelData::new(),
             cycles,
             frame_used_window: false,
@@ -225,9 +225,9 @@ impl Ppu {
             lyc: 0,
             wy: 0,
             wx: 0,
-            bgp: MonochromePalette::new(0),
-            obp0: MonochromePalette::new(0),
-            obp1: MonochromePalette::new(0),
+            bgp: MonochromePalette::new(),
+            obp0: MonochromePalette::new(),
+            obp1: MonochromePalette::new(),
             cgb_bg_palette: ColorPalette::new(),
             cgb_sprite_palette: ColorPalette::new(),
             opri: 0,
@@ -283,31 +283,31 @@ impl Ppu {
     }
 
     pub fn read_bgp(&mut self) -> u8 {
-        self.bgp.get()
+        self.bgp.val
     }
 
     pub fn read_obp0(&mut self) -> u8 {
-        self.obp0.get()
+        self.obp0.val
     }
 
     pub fn read_obp1(&mut self) -> u8 {
-        self.obp1.get()
+        self.obp1.val
     }
 
     pub fn read_bcps(&mut self) -> u8 {
-        self.cgb_bg_palette.color_palette_specification()
+        self.cgb_bg_palette.spec()
     }
 
     pub fn read_bcpd(&mut self) -> u8 {
-        self.cgb_bg_palette.color_palette_data()
+        self.cgb_bg_palette.data()
     }
 
     pub fn read_ocps(&mut self) -> u8 {
-        self.cgb_sprite_palette.color_palette_specification()
+        self.cgb_sprite_palette.spec()
     }
 
     pub fn read_ocpd(&mut self) -> u8 {
-        self.cgb_sprite_palette.color_palette_data()
+        self.cgb_sprite_palette.data()
     }
 
     pub fn read_opri(&mut self) -> u8 {
@@ -390,31 +390,31 @@ impl Ppu {
     }
 
     pub fn write_bgp(&mut self, val: u8) {
-        self.bgp.set(val);
+        self.bgp.val = val
     }
 
     pub fn write_obp0(&mut self, val: u8) {
-        self.obp0.set(val);
+        self.obp0.val = val;
     }
 
     pub fn write_obp1(&mut self, val: u8) {
-        self.obp1.set(val);
+        self.obp1.val = val;
     }
 
     pub fn write_bcps(&mut self, val: u8) {
-        self.cgb_bg_palette.set_color_palette_specification(val);
+        self.cgb_bg_palette.set_spec(val);
     }
 
     pub fn write_bcpd(&mut self, val: u8) {
-        self.cgb_bg_palette.set_color_palette_data(val);
+        self.cgb_bg_palette.set_data(val);
     }
 
     pub fn write_ocps(&mut self, val: u8) {
-        self.cgb_sprite_palette.set_color_palette_specification(val);
+        self.cgb_sprite_palette.set_spec(val);
     }
 
     pub fn write_ocpd(&mut self, val: u8) {
-        self.cgb_sprite_palette.set_color_palette_data(val);
+        self.cgb_sprite_palette.set_data(val);
     }
 
     pub fn write_opri(&mut self, val: u8) {

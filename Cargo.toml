@@ -5,28 +5,14 @@ default-members = ["ceres"]
 [profile.dev]
 opt-level = 0
 debug = 2
-debug-assertions = true
-overflow-checks = true
-lto = "off"
-panic = "unwind"
-incremental = true
-codegen-units = 4
 
 [profile.test]
 opt-level = 3
 debug = 0
-debug-assertions = true
-overflow-checks = true
-lto = "thin"
-panic = "unwind"
-incremental = true
-codegen-units = 2
 
 [profile.release]
 opt-level = 3
 debug = 0
-debug-assertions = false
-overflow-checks = false
 lto = "fat"
 codegen-units = 1
 panic = "abort"

@@ -18,7 +18,7 @@ impl PixelData {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            data: [0xff; SCREEN_PIXELS as usize * BYTES_PER_PIXEL],
+            data: [0; SCREEN_PIXELS as usize * BYTES_PER_PIXEL],
         }
     }
 
