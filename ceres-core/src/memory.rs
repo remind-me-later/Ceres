@@ -90,14 +90,6 @@ impl Memory {
         self.in_double_speed = !self.in_double_speed;
     }
 
-    pub fn do_render(&mut self) {
-        self.ppu.do_render();
-    }
-
-    pub fn dont_render(&mut self) {
-        self.ppu.dont_render();
-    }
-
     pub fn mut_pixel_data(&mut self) -> &mut PixelData {
         self.ppu.mut_pixel_data()
     }

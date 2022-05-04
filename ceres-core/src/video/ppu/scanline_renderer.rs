@@ -3,10 +3,10 @@ use crate::{
     video::sprites::{SpriteAttributes, SpriteFlags},
     SCREEN_WIDTH,
 };
-
-use super::{registers::Lcdc, BgAttributes, PixelPriority, Ppu};
 use core::cmp::Ordering;
 use stackvec::StackVec;
+
+use super::{BgAttributes, Lcdc, PixelPriority, Ppu};
 
 impl Ppu {
     pub fn draw_scanline(&mut self, function_mode: FunctionMode) {
@@ -22,11 +22,11 @@ impl Ppu {
         function_mode: FunctionMode,
         bg_priority: &mut [PixelPriority; SCREEN_WIDTH as usize],
     ) {
-        let ly = self.registers.ly();
-        let scy = self.registers.scy();
-        let scx = self.registers.scx();
-        let lcdc = self.registers.lcdc();
-        let bgp = self.registers.bgp();
+        let ly = self.ly;
+        let scy = self.scy;
+        let scx = self.scx;
+        let lcdc = self.lcdc;
+        let bgp = self.bgp;
         let index_start = SCREEN_WIDTH as usize * ly as usize;
 
         if lcdc.background_enabled(function_mode) {
@@ -71,13 +71,12 @@ impl Ppu {
                     FunctionMode::Monochrome => self
                         .monochrome_palette_colors
                         .get_color(bgp.shade_index(color_number)),
-                    FunctionMode::Compatibility => self.registers.cgb_bg_palette().get_color(
+                    FunctionMode::Compatibility => self.cgb_bg_palette.get_color(
                         background_attributes.bits() & 0x7,
                         bgp.shade_index(color_number),
                     ),
                     FunctionMode::Color => self
-                        .registers
-                        .cgb_bg_palette()
+                        .cgb_bg_palette
                         .get_color(background_attributes.bits() & 0x7, color_number),
                 };
 
@@ -100,16 +99,16 @@ impl Ppu {
         function_mode: FunctionMode,
         bg_priority: &mut [PixelPriority; SCREEN_WIDTH as usize],
     ) {
-        let ly = self.registers.ly();
-        let lcdc = self.registers.lcdc();
-        let bgp = self.registers.bgp();
+        let ly = self.ly;
+        let lcdc = self.lcdc;
+        let bgp = self.bgp;
         let index_start = SCREEN_WIDTH as usize * ly as usize;
 
-        let wy = self.registers.wy();
+        let wy = self.wy;
 
         if lcdc.window_enabled(function_mode) && wy <= ly {
             let tile_map_address = lcdc.window_tile_map_address();
-            let wx = self.registers.wx().saturating_sub(7);
+            let wx = self.wx.saturating_sub(7);
             let y = ((ly - wy) as u16).wrapping_sub(self.window_lines_skipped) as u8;
             let row = (y / 8) as u16 * 32;
             let line = ((y % 8) * 2) as u16;
@@ -153,13 +152,12 @@ impl Ppu {
                     FunctionMode::Monochrome => self
                         .monochrome_palette_colors
                         .get_color(bgp.shade_index(color_number)),
-                    FunctionMode::Compatibility => self.registers.cgb_bg_palette().get_color(
+                    FunctionMode::Compatibility => self.cgb_bg_palette.get_color(
                         background_attributes.bits() & 0x7,
                         bgp.shade_index(color_number),
                     ),
                     FunctionMode::Color => self
-                        .registers
-                        .cgb_bg_palette()
+                        .cgb_bg_palette
                         .get_color(background_attributes.bits() & 0x7, color_number),
                 };
 
@@ -186,8 +184,8 @@ impl Ppu {
         function_mode: FunctionMode,
         bg_priority: &mut [PixelPriority; SCREEN_WIDTH as usize],
     ) {
-        let ly = self.registers.ly();
-        let lcdc = self.registers.lcdc();
+        let ly = self.ly;
+        let lcdc = self.lcdc;
         let index_start = SCREEN_WIDTH as usize * ly as usize;
 
         let mut sprites_to_draw: StackVec<[(usize, SpriteAttributes); 10]>;
@@ -205,9 +203,7 @@ impl Ppu {
                 .collect();
 
             match function_mode {
-                FunctionMode::Color | FunctionMode::Compatibility
-                    if self.registers.prioritize_by_oam() =>
-                {
+                FunctionMode::Color | FunctionMode::Compatibility if self.opri & 1 == 0 => {
                     sprites_to_draw.sort_unstable_by(|(a_index, a), (b_index, b)| {
                         match a_index.cmp(b_index) {
                             Ordering::Equal => a.x().cmp(&b.x()),
@@ -252,10 +248,7 @@ impl Ppu {
                     }
 
                     if bg_priority[target_x as usize] == PixelPriority::BackgroundOnTop
-                        && !self
-                            .registers
-                            .lcdc()
-                            .cgb_sprite_master_priority_on(function_mode)
+                        && !self.lcdc.cgb_sprite_master_priority_on(function_mode)
                     {
                         continue;
                     }
@@ -278,35 +271,29 @@ impl Ppu {
                     let color = match function_mode {
                         FunctionMode::Monochrome => {
                             let palette = if sprite.flags().contains(SpriteFlags::NON_CGB_PALETTE) {
-                                self.registers.obp1()
+                                self.obp1
                             } else {
-                                self.registers.obp0()
+                                self.obp0
                             };
                             self.monochrome_palette_colors
                                 .get_color(palette.shade_index(color_number))
                         }
                         FunctionMode::Compatibility => {
                             let palette = if sprite.flags().contains(SpriteFlags::NON_CGB_PALETTE) {
-                                self.registers.obp1()
+                                self.obp1
                             } else {
-                                self.registers.obp0()
+                                self.obp0
                             };
-                            self.registers
-                                .cgb_sprite_palette()
+                            self.cgb_sprite_palette
                                 .get_color(0, palette.shade_index(color_number))
                         }
                         FunctionMode::Color => {
                             let cgb_palette = sprite.cgb_palette();
-                            self.registers
-                                .cgb_sprite_palette()
-                                .get_color(cgb_palette, color_number)
+                            self.cgb_sprite_palette.get_color(cgb_palette, color_number)
                         }
                     };
 
-                    if !self
-                        .registers
-                        .lcdc()
-                        .cgb_sprite_master_priority_on(function_mode)
+                    if !self.lcdc.cgb_sprite_master_priority_on(function_mode)
                         && sprite.flags().contains(SpriteFlags::BG_WIN_OVER_OBJ)
                         && bg_priority[target_x as usize] == PixelPriority::Normal
                     {

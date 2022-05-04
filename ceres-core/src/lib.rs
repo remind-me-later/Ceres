@@ -73,8 +73,6 @@ impl Gameboy {
     }
 
     pub fn run_frame(&mut self) {
-        self.cpu.mem.do_render();
-
         while !self.cpu.mem.is_frame_done() {
             self.cpu.run();
         }
@@ -83,8 +81,6 @@ impl Gameboy {
     }
 
     pub fn run_frame_but_dont_render(&mut self) {
-        self.cpu.mem.dont_render();
-
         while !self.cpu.mem.is_frame_done() {
             self.cpu.run();
         }

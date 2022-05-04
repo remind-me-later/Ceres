@@ -20,23 +20,3 @@ const ACCESS_OAM_CYCLES: i16 = 80; // Constant
 const ACCESS_VRAM_CYCLES: i16 = 172; // Variable, minimum ammount
 const HBLANK_CYCLES: i16 = 204; // Variable, maximum ammount
 const VBLANK_LINE_CYCLES: i16 = 456; // Constant
-
-#[derive(Clone, Copy)]
-pub enum PpuRegister {
-    Lcdc,
-    Stat,
-    Scy,
-    Scx,
-    Ly,
-    Lyc,
-    Wy,
-    Wx,
-    Bgp,
-    Obp0,
-    Obp1,
-    Bcps,
-    Bcpd,
-    Ocps,
-    Ocpd,
-    Opri,
-}
