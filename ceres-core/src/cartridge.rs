@@ -4,11 +4,13 @@ mod mbc2;
 mod mbc3;
 mod mbc5;
 
+use {
+    self::{mbc1::Mbc1, mbc2::Mbc2, mbc3::Mbc3, mbc5::Mbc5},
+    crate::Error,
+    alloc::{boxed::Box, vec},
+};
+
 pub use self::header::{CgbFlag, Header};
-use self::{mbc1::Mbc1, mbc2::Mbc2, mbc3::Mbc3, mbc5::Mbc5};
-use crate::Error;
-use alloc::boxed::Box;
-use alloc::vec;
 
 const ROM_BANK_SIZE: usize = 0x4000;
 const RAM_BANK_SIZE: usize = 0x2000;

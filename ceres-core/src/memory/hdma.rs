@@ -1,6 +1,7 @@
-use self::State::*;
-use crate::video::ppu::Mode::HBlank;
-use crate::video::ppu::Ppu;
+use {
+    self::State::*,
+    crate::video::ppu::{Mode::HBlank, Ppu},
+};
 
 enum State {
     Inactive,

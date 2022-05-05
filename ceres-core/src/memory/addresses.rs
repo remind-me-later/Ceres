@@ -1,5 +1,7 @@
-use super::{FunctionMode, Memory};
-use crate::{audio::Apu, interrupts::Interrupts, timer::Timer, Model::Cgb};
+use {
+    super::{FunctionMode, Memory},
+    crate::{audio::Apu, interrupts::Interrupts, timer::Timer, Model::Cgb},
+};
 
 impl Memory {
     fn mem_tick<T, F>(&mut self, f: F) -> T

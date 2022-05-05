@@ -1,21 +1,23 @@
-use super::audio::AudioRenderer;
-use ceres_core::{BootRom, Cartridge, Gameboy, SCREEN_HEIGHT, SCREEN_WIDTH};
-use sdl2::{
-    controller::GameController,
-    event::{Event, WindowEvent},
-    keyboard::Scancode,
-    rect::{Point, Rect},
-    render::{Canvas, Texture, TextureCreator},
-    video::{Window, WindowContext},
-    Sdl, VideoSubsystem,
-};
-use std::{
-    cell::RefCell,
-    fs::{self, File},
-    io::{Read, Write},
-    path::{Path, PathBuf},
-    rc::Rc,
-    time::Instant,
+use {
+    super::audio::AudioRenderer,
+    ceres_core::{BootRom, Cartridge, Gameboy, SCREEN_HEIGHT, SCREEN_WIDTH},
+    sdl2::{
+        controller::GameController,
+        event::{Event, WindowEvent},
+        keyboard::Scancode,
+        rect::{Point, Rect},
+        render::{Canvas, Texture, TextureCreator},
+        video::{Window, WindowContext},
+        Sdl, VideoSubsystem,
+    },
+    std::{
+        cell::RefCell,
+        fs::{self, File},
+        io::{Read, Write},
+        path::{Path, PathBuf},
+        rc::Rc,
+        time::Instant,
+    },
 };
 
 pub struct Emulator {
@@ -117,8 +119,7 @@ impl Emulator {
                         _ => (),
                     },
                     Event::ControllerButtonDown { button, .. } => {
-                        use ceres_core::Button;
-                        use sdl2::controller;
+                        use {ceres_core::Button, sdl2::controller};
 
                         if !self.is_focused {
                             return;
@@ -137,8 +138,7 @@ impl Emulator {
                         }
                     }
                     Event::ControllerButtonUp { button, .. } => {
-                        use ceres_core::Button;
-                        use sdl2::controller;
+                        use {ceres_core::Button, sdl2::controller};
 
                         if !self.is_focused {
                             return;

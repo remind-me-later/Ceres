@@ -1,5 +1,4 @@
-use super::Frame;
-use crate::T_CYCLES_PER_SECOND;
+use {super::Frame, crate::T_CYCLES_PER_SECOND};
 
 pub trait AudioCallbacks {
     fn sample_rate(&self) -> u32;

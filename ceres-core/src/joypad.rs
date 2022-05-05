@@ -1,6 +1,7 @@
-use bitflags::bitflags;
-
-use crate::interrupts::{Interrupt, Interrupts};
+use {
+    crate::interrupts::{Interrupt, Interrupts},
+    bitflags::bitflags,
+};
 
 bitflags! {
     struct Action: u8 {

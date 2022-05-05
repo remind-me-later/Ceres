@@ -3,8 +3,7 @@ mod instructions;
 mod operands;
 mod registers;
 
-use crate::memory::Memory;
-use registers::Regs;
+use {crate::memory::Memory, registers::Regs};
 
 pub struct Cpu {
     reg: Regs,

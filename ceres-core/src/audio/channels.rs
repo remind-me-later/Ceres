@@ -5,12 +5,12 @@ mod noise_channel;
 mod square;
 mod wave;
 
-use noise_channel::NoiseChannel;
-use square::square1::Square1;
-use square::square2::Square2;
-use wave::WaveChannel;
-
 pub use generic_channel::LengthPeriodHalf;
+use {
+    noise_channel::NoiseChannel,
+    square::{square1::Square1, square2::Square2},
+    wave::WaveChannel,
+};
 
 pub struct Channels {
     pub square1: Square1,
@@ -108,13 +108,11 @@ impl<'a> Iterator for DacOutputIterator<'a> {
                 self.channels.square2.output_volume()
                     * u8::from(self.channels.square2.is_enabled()),
             ),
-            2 => Some(
-                self.channels.wave.output_volume()
-                    * u8::from(self.channels.wave.is_enabled()),
-            ),
+            2 => {
+                Some(self.channels.wave.output_volume() * u8::from(self.channels.wave.is_enabled()))
+            }
             3 => Some(
-                self.channels.noise.output_volume()
-                    * u8::from(self.channels.noise.is_enabled()),
+                self.channels.noise.output_volume() * u8::from(self.channels.noise.is_enabled()),
             ),
             _ => return None,
         };

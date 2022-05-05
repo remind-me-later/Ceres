@@ -1,5 +1,4 @@
-use super::Rgb24Color;
-use super::SCREEN_PIXELS;
+use super::{Rgb24Color, SCREEN_PIXELS};
 
 const BYTES_PER_PIXEL: usize = 4;
 const BUFFER_SIZE: usize = SCREEN_PIXELS as usize * BYTES_PER_PIXEL;

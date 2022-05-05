@@ -1,5 +1,7 @@
-use super::{channels::LengthPeriodHalf, Channels};
-use crate::T_CYCLES_PER_SECOND;
+use {
+    super::{channels::LengthPeriodHalf, Channels},
+    crate::T_CYCLES_PER_SECOND,
+};
 
 #[allow(clippy::cast_possible_truncation)]
 const TIMER_RESET_VALUE: u16 = (T_CYCLES_PER_SECOND / 512) as u16;

@@ -5,20 +5,22 @@ mod hram;
 mod key1;
 mod wram;
 
-use self::{dma::Dma, hdma::Hdma, key1::Key1};
-use super::{cartridge::Cartridge, interrupts::Interrupts, timer::Timer};
-use crate::{
-    audio::Apu,
-    boot_rom::BootRom,
-    joypad::Joypad,
-    serial::Serial,
-    video::{ppu::Ppu, PixelData},
-    AudioCallbacks, Button, Model,
+use {
+    self::{dma::Dma, hdma::Hdma, key1::Key1},
+    super::{cartridge::Cartridge, interrupts::Interrupts, timer::Timer},
+    crate::{
+        audio::Apu,
+        boot_rom::BootRom,
+        joypad::Joypad,
+        serial::Serial,
+        video::{ppu::Ppu, PixelData},
+        AudioCallbacks, Button, Model,
+    },
+    alloc::rc::Rc,
+    core::cell::RefCell,
+    hram::Hram,
+    wram::Wram,
 };
-use alloc::rc::Rc;
-use core::cell::RefCell;
-use hram::Hram;
-use wram::Wram;
 
 #[derive(Clone, Copy)]
 pub enum FunctionMode {
@@ -125,11 +127,7 @@ impl Memory {
     }
 
     fn mus_since_last_tick(&self) -> u8 {
-        if self.in_double_speed {
-            2
-        } else {
-            4
-        }
+        if self.in_double_speed { 2 } else { 4 }
     }
 
     fn tick_apu(&mut self) {

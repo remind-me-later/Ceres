@@ -1,0 +1,7 @@
+unstable_features = true
+imports_granularity = "One"
+group_imports = "StdExternalCrate"
+condense_wildcard_suffixes = true
+enum_discrim_align_threshold = 20
+format_strings = true
+version = "Two"

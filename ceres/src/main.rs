@@ -1,10 +1,12 @@
 mod audio;
 mod emulator;
 
-use ceres_core::Model;
-use clap::{Arg, Command};
-use emulator::Emulator;
-use std::path::Path;
+use {
+    ceres_core::Model,
+    clap::{Arg, Command},
+    emulator::Emulator,
+    std::path::Path,
+};
 
 pub const CERES_STR: &str = "Ceres";
 

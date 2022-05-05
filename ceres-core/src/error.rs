@@ -37,7 +37,11 @@ impl core::fmt::Display for Error {
                 invalid_byte,
                 invalid_byte_position,
             } => {
-                write!(f, "Illegal value for title string '{invalid_byte}' at byte '{invalid_byte_position:#x}' is not a legal ASCII value")
+                write!(
+                    f,
+                    "Illegal value for title string '{invalid_byte}' at byte \
+                     '{invalid_byte_position:#x}' is not a legal ASCII value"
+                )
             }
             Error::InvalidMBC { mbc_byte } => {
                 write!(f, "Unrecognized MBC '{mbc_byte}' at byte 0x147")
@@ -45,7 +49,8 @@ impl core::fmt::Display for Error {
             Error::InvalidChecksum { expected, computed } => {
                 write!(
                     f,
-                    "Invalid header checksum at byte 0x14d, expected: {expected}, computed: {computed}"
+                    "Invalid header checksum at byte 0x14d, expected: {expected}, computed: \
+                     {computed}"
                 )
             }
             // TODO: more info

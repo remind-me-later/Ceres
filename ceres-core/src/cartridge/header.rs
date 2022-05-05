@@ -1,5 +1,4 @@
-use crate::Error;
-use core::fmt::Display;
+use {crate::Error, core::fmt::Display};
 
 const TITLE_START: usize = 0x134;
 const OLD_TITLE_END: usize = 0x143;

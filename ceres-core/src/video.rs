@@ -5,8 +5,7 @@ mod pixel_data;
 mod sprites;
 mod vram;
 
-pub use palette::MonochromePaletteColors;
-pub use pixel_data::PixelData;
+pub use {palette::MonochromePaletteColors, pixel_data::PixelData};
 
 pub const SCREEN_WIDTH: u8 = 160;
 pub const SCREEN_HEIGHT: u8 = 144;

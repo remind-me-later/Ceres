@@ -361,10 +361,10 @@ impl Cpu {
             }
         } else if self.reg.cf() {
             carry = true;
-            self.reg.a =
-                self.reg
-                    .a
-                    .wrapping_add(if self.reg.hf() { 0x9a } else { 0xa0 });
+            self.reg.a = self
+                .reg
+                .a
+                .wrapping_add(if self.reg.hf() { 0x9a } else { 0xa0 });
         } else if self.reg.hf() {
             self.reg.a = self.reg.a.wrapping_add(0xfa);
         }

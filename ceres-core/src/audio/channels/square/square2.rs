@@ -1,5 +1,5 @@
 use super::{
-    super::{generic_channel::GenericChannel, generic_channel::TriggerEvent},
+    super::generic_channel::{GenericChannel, TriggerEvent},
     common::{SqCommon, MAX_SQUARE_CHANNEL_LENGTH},
 };
 

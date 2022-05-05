@@ -1,5 +1,7 @@
-use crate::interrupts::{Interrupt, Interrupts};
-use bitflags::bitflags;
+use {
+    crate::interrupts::{Interrupt, Interrupts},
+    bitflags::bitflags,
+};
 
 bitflags!(
   struct Tac: u8 {

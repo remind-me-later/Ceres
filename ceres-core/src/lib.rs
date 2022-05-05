@@ -15,19 +15,20 @@ mod serial;
 mod timer;
 mod video;
 
-pub use audio::{AudioCallbacks, Frame, Sample};
-pub use boot_rom::BootRom;
-pub use cartridge::{Cartridge, Header};
-pub use error::Error;
-pub use joypad::Button;
-pub use video::{
-    MonochromePaletteColors, PixelData, SCANLINES_PER_FRAME, SCREEN_HEIGHT, SCREEN_WIDTH,
+use {
+    alloc::rc::Rc,
+    core::{cell::RefCell, time::Duration},
+    cpu::Cpu,
+    memory::Memory,
 };
-
-use alloc::rc::Rc;
-use core::{cell::RefCell, time::Duration};
-use cpu::Cpu;
-use memory::Memory;
+pub use {
+    audio::{AudioCallbacks, Frame, Sample},
+    boot_rom::BootRom,
+    cartridge::{Cartridge, Header},
+    error::Error,
+    joypad::Button,
+    video::{MonochromePaletteColors, PixelData, SCANLINES_PER_FRAME, SCREEN_HEIGHT, SCREEN_WIDTH},
+};
 
 // 59.7 fps
 pub const NANOSECONDS_PER_FRAME: u64 = 16_750_418;

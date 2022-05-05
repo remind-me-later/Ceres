@@ -10,7 +10,6 @@ target/
 **.pdb
 
 # Binary ROM files for testing
-roms/
 **.gb
 **.gbc
 **.sav
@@ -39,3 +38,6 @@ log/
 
 # Built Visual Studio Code Extensions
 *.vsix
+
+# Build directories
+**/build/

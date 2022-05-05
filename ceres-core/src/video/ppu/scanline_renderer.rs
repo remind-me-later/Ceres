@@ -1,12 +1,13 @@
-use crate::{
-    memory::FunctionMode,
-    video::sprites::{SpriteAttributes, SpriteFlags},
-    SCREEN_WIDTH,
+use {
+    super::{BgAttributes, Lcdc, PixelPriority, Ppu},
+    crate::{
+        memory::FunctionMode,
+        video::sprites::{SpriteAttr, SpriteFlags},
+        SCREEN_WIDTH,
+    },
+    core::cmp::Ordering,
+    stackvec::StackVec,
 };
-use core::cmp::Ordering;
-use stackvec::StackVec;
-
-use super::{BgAttributes, Lcdc, PixelPriority, Ppu};
 
 impl Ppu {
     pub fn draw_scanline(&mut self, function_mode: FunctionMode) {
@@ -186,7 +187,7 @@ impl Ppu {
         let lcdc = self.lcdc;
         let index_start = SCREEN_WIDTH as usize * ly as usize;
 
-        let mut sprites_to_draw: StackVec<[(usize, SpriteAttributes); 10]>;
+        let mut sprites_to_draw: StackVec<[(usize, SpriteAttr); 10]>;
 
         if lcdc.contains(Lcdc::OBJECTS_ENABLED) {
             let large_sprites = lcdc.contains(Lcdc::LARGE_SPRITES);

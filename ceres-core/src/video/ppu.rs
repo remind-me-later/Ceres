@@ -1,17 +1,19 @@
 mod scanline_renderer;
 
-use super::{
-    palette::{ColorPalette, MonochromePalette, MonochromePaletteColors},
-    pixel_data::PixelData,
-    sprites::Oam,
-    vram::Vram,
-    ACCESS_OAM_CYCLES, ACCESS_VRAM_CYCLES, HBLANK_CYCLES, VBLANK_LINE_CYCLES,
+use {
+    super::{
+        palette::{ColorPalette, MonochromePalette, MonochromePaletteColors},
+        pixel_data::PixelData,
+        sprites::Oam,
+        vram::Vram,
+        ACCESS_OAM_CYCLES, ACCESS_VRAM_CYCLES, HBLANK_CYCLES, VBLANK_LINE_CYCLES,
+    },
+    crate::{
+        interrupts::{Interrupt, Interrupts},
+        memory::FunctionMode,
+    },
+    bitflags::bitflags,
 };
-use crate::{
-    interrupts::{Interrupt, Interrupts},
-    memory::FunctionMode,
-};
-use bitflags::bitflags;
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Mode {

@@ -11,14 +11,14 @@ bitflags! {
   }
 }
 
-pub struct SpriteAttributes {
+pub struct SpriteAttr {
     x: u8,
     y: u8,
     tile_index: u8,
     flags: SpriteFlags,
 }
 
-impl SpriteAttributes {
+impl SpriteAttr {
     pub fn x(&self) -> u8 {
         self.x
     }
@@ -36,24 +36,24 @@ impl SpriteAttributes {
     }
 
     pub fn cgb_palette(&self) -> u8 {
-        self.flags().bits() & 0x7
+        self.flags().bits() & 7
     }
 }
 
-pub struct SpriteAttributesIterator<'a> {
+pub struct SpriteAttrIter<'a> {
     oam: &'a Oam,
     index: usize,
 }
 
-impl<'a> Iterator for SpriteAttributesIterator<'a> {
-    type Item = SpriteAttributes;
+impl<'a> Iterator for SpriteAttrIter<'a> {
+    type Item = SpriteAttr;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index >= 0x100 {
             return None;
         }
 
-        let sprite = SpriteAttributes {
+        let sprite = SpriteAttr {
             y: self.oam.data[self.index].wrapping_sub(16),
             x: self.oam.data[self.index + 1].wrapping_sub(8),
             tile_index: self.oam.data[self.index + 2],
@@ -83,8 +83,8 @@ impl Oam {
         self.data[addr as usize] = val;
     }
 
-    pub fn sprite_attributes_iterator(&self) -> SpriteAttributesIterator {
-        SpriteAttributesIterator {
+    pub fn sprite_attributes_iterator(&self) -> SpriteAttrIter {
+        SpriteAttrIter {
             oam: self,
             index: 0,
         }

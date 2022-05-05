@@ -1,10 +1,13 @@
-use crate::audio::channels::envelope::Envelope;
-
-use super::super::{
-    frequency_data::FrequencyData,
-    generic_channel::{GenericChannel, TriggerEvent},
+use {
+    super::{
+        super::{
+            frequency_data::FrequencyData,
+            generic_channel::{GenericChannel, TriggerEvent},
+        },
+        wave_duty::WaveDuty,
+    },
+    crate::audio::channels::envelope::Envelope,
 };
-use super::wave_duty::WaveDuty;
 
 const SQUARE_CHANNEL_PERIOD_MULTIPLIER: u16 = 4;
 pub const MAX_SQUARE_CHANNEL_LENGTH: u16 = 64;

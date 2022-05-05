@@ -4,15 +4,17 @@ mod control;
 mod high_pass_filter;
 mod sequencer;
 
-use self::{
-    channels::Channels,
-    control::{Control, TriggerReset},
-    high_pass_filter::HighPassFilter,
-    sequencer::Sequencer,
-};
-use alloc::rc::Rc;
 pub use audio_callbacks::AudioCallbacks;
-use core::cell::RefCell;
+use {
+    self::{
+        channels::Channels,
+        control::{Control, TriggerReset},
+        high_pass_filter::HighPassFilter,
+        sequencer::Sequencer,
+    },
+    alloc::rc::Rc,
+    core::cell::RefCell,
+};
 
 pub type Sample = f32;
 

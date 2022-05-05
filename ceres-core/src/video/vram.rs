@@ -1,6 +1,6 @@
 use super::{
     ppu::BgAttributes,
-    sprites::{SpriteAttributes, SpriteFlags},
+    sprites::{SpriteAttr, SpriteFlags},
 };
 
 const VRAM_SIZE: usize = 0x2000;
@@ -65,11 +65,7 @@ impl Vram {
         (low, high)
     }
 
-    pub fn sprite_data(
-        &self,
-        tile_data_addr: u16,
-        sprite_attributes: &SpriteAttributes,
-    ) -> (u8, u8) {
+    pub fn sprite_data(&self, tile_data_addr: u16, sprite_attributes: &SpriteAttr) -> (u8, u8) {
         let low = self.get_bank(
             tile_data_addr,
             sprite_attributes
