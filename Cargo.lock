@@ -20,7 +20,6 @@ version = "0.1.0"
 dependencies = [
  "ceres-core",
  "clap",
- "colorful",
  "log",
  "sdl2",
 ]
@@ -60,12 +59,6 @@ checksum = "a37c35f1112dad5e6e0b1adaff798507497a18fceeb30cceb3bae7d1427b9213"
 dependencies = [
  "os_str_bytes",
 ]
-
-[[package]]
-name = "colorful"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bca1619ff57dd7a56b58a8e25ef4199f123e78e503fe1653410350a1b98ae65"
 
 [[package]]
 name = "hashbrown"

@@ -9,6 +9,9 @@ use {
 };
 
 pub const CERES_STR: &str = "Ceres";
+const DMG_BOOT_ROM_PATH: &str = concat!("bootroms/bin/", "dmg_boot.bin");
+const MGB_BOOT_ROM_PATH: &str = concat!("bootroms/bin/", "mgb_boot.bin");
+const CGB_BOOT_ROM_PATH: &str = concat!("bootroms/bin/", "cgb_boot_fast.bin");
 
 fn main() {
     let matches = Command::new(CERES_STR)
@@ -50,9 +53,9 @@ fn main() {
     };
 
     let boot_rom_str = matches.value_of("boot").unwrap_or(match model {
-        Model::Dmg => "BootROMs/build/bin/dmg_boot.bin",
-        Model::Mgb => "BootROMs/build/bin/mgb_boot.bin",
-        Model::Cgb => "BootROMs/build/bin/cgb_boot_fast.bin",
+        Model::Dmg => DMG_BOOT_ROM_PATH,
+        Model::Mgb => MGB_BOOT_ROM_PATH,
+        Model::Cgb => CGB_BOOT_ROM_PATH,
     });
 
     let boot_rom_path = Path::new(&boot_rom_str);

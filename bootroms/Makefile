@@ -1,10 +1,10 @@
 .PHONY: all clean
 
-BIN := build/bin
-OBJ := build/obj
-PB12_COMPRESS := build/obj/pb12_compress
+BIN := bin
+OBJ := obj
+PB12_COMPRESS := $(OBJ)/pb12_compress
 
-all: $(BIN)/cgb0_boot.bin $(BIN)/mgb_boot.bin $(BIN)/cgb_boot_fast.bin $(BIN)/dmg_boot.bin
+all: $(BIN)/cgb_boot.bin $(BIN)/mgb_boot.bin $(BIN)/cgb_boot_fast.bin $(BIN)/dmg_boot.bin
 
 $(OBJ)/%.2bpp: %.png
 	mkdir -p $(dir $@)
@@ -16,6 +16,7 @@ $(OBJ)/SameBoyLogo.pb12: $(OBJ)/SameBoyLogo.2bpp $(PB12_COMPRESS)
 $(PB12_COMPRESS): pb12.c
 	cc -std=c99 -Wall -Werror $< -o $@
 
+$(BIN)/cgb_boot.bin: cgb_boot.asm
 $(BIN)/cgb0_boot.bin: cgb0_boot.asm
 $(BIN)/agb_boot.bin: agb_boot.asm
 $(BIN)/cgb_boot_fast.bin: cgb_boot_fast.asm

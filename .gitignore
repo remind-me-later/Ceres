@@ -40,4 +40,5 @@ log/
 *.vsix
 
 # Build directories
-**/build/
+**/bin/
+**/obj/
