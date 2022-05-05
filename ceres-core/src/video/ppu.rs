@@ -10,7 +10,6 @@ use super::{
 use crate::{
     interrupts::{Interrupt, Interrupts},
     memory::FunctionMode,
-    Model,
 };
 use bitflags::bitflags;
 
@@ -99,7 +98,7 @@ impl Lcdc {
         !self.contains(Self::BG_WINDOW_TILE_DATA_AREA)
     }
 
-    pub fn bg_tile_map_address(self) -> u16 {
+    pub fn bg_tile_map_addr(self) -> u16 {
         if self.contains(Self::BG_TILE_MAP_AREA) {
             0x9c00
         } else {
@@ -107,7 +106,7 @@ impl Lcdc {
         }
     }
 
-    pub fn window_tile_map_address(self) -> u16 {
+    pub fn window_tile_map_addr(self) -> u16 {
         if self.contains(Self::WINDOW_TILE_MAP_AREA) {
             0x9c00
         } else {
@@ -115,7 +114,7 @@ impl Lcdc {
         }
     }
 
-    fn bg_window_tile_address(self) -> u16 {
+    fn bg_window_tile_addr(self) -> u16 {
         if self.contains(Self::BG_WINDOW_TILE_DATA_AREA) {
             0x8000
         } else {
@@ -123,8 +122,8 @@ impl Lcdc {
         }
     }
 
-    pub fn tile_data_address(self, tile_number: u8) -> u16 {
-        self.bg_window_tile_address()
+    pub fn tile_data_addr(self, tile_number: u8) -> u16 {
+        self.bg_window_tile_addr()
             + if self.signed_byte_for_tile_offset() {
                 ((tile_number as i8 as i16) + 128) as u16 * 16
             } else {
@@ -203,13 +202,13 @@ pub struct Ppu {
 }
 
 impl Ppu {
-    pub fn new(model: Model) -> Self {
+    pub fn new() -> Self {
         let stat = Stat::from_bits_truncate(2);
         let cycles = stat.mode().cycles(0);
 
         Self {
             monochrome_palette_colors: MonochromePaletteColors::Grayscale,
-            vram: Vram::new(model),
+            vram: Vram::new(),
             oam: Oam::new(),
             pixel_data: PixelData::new(),
             cycles,
@@ -314,12 +313,12 @@ impl Ppu {
         self.opri
     }
 
-    pub fn read_vram(&mut self, address: u16) -> u8 {
+    pub fn read_vram(&mut self, addr: u16) -> u8 {
         let mode = self.stat.mode();
 
         match mode {
             Mode::DrawingPixels => 0xff,
-            _ => self.vram.read(address),
+            _ => self.vram.read(addr),
         }
     }
 
@@ -327,11 +326,11 @@ impl Ppu {
         self.vram.read_bank_number()
     }
 
-    pub fn read_oam(&mut self, address: u16, dma_active: bool) -> u8 {
+    pub fn read_oam(&mut self, addr: u16, dma_active: bool) -> u8 {
         let mode = self.stat.mode();
 
         match mode {
-            Mode::HBlank | Mode::VBlank if !dma_active => self.oam.read(address as u8),
+            Mode::HBlank | Mode::VBlank if !dma_active => self.oam.read(addr as u8),
             _ => 0xff,
         }
     }
@@ -443,17 +442,17 @@ impl Ppu {
         };
     }
 
-    pub fn hdma_write(&mut self, address: u16, val: u8) {
+    pub fn hdma_write(&mut self, addr: u16, val: u8) {
         let mode = self.stat.mode();
 
         match mode {
             Mode::DrawingPixels => (),
-            _ => self.vram.write(address, val),
+            _ => self.vram.write(addr, val),
         }
     }
 
-    pub fn dma_write(&mut self, address: u8, val: u8) {
-        self.oam.write(address, val)
+    pub fn dma_write(&mut self, addr: u8, val: u8) {
+        self.oam.write(addr, val)
     }
 
     fn switch_mode(&mut self, mode: Mode, interrupt_controller: &mut Interrupts) {

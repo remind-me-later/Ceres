@@ -28,7 +28,7 @@ pub enum FunctionMode {
 }
 
 pub struct Memory {
-    cartridge: Rc<RefCell<Cartridge>>,
+    cart: Rc<RefCell<Cartridge>>,
     ints: Interrupts,
     timer: Timer,
     hram: Hram,
@@ -61,10 +61,10 @@ impl Memory {
         Self {
             ints: Interrupts::new(),
             timer: Timer::new(),
-            cartridge,
+            cart: cartridge,
             hram: Hram::new(),
-            wram: Wram::new(model),
-            ppu: Ppu::new(model),
+            wram: Wram::new(),
+            ppu: Ppu::new(),
             joypad: Joypad::new(),
             apu: Apu::new(audio_renderer),
             serial: Serial::new(),
@@ -143,13 +143,13 @@ impl Memory {
                 let transfer = self.hdma.transfer();
                 let addr = transfer.src;
                 let val = match addr >> 8 {
-                    0x00..=0x7f => self.cartridge.borrow_mut().read_rom(addr),
+                    0x00..=0x7f => self.cart.borrow_mut().read_rom(addr),
                     // TODO: should copy garbage
                     0x80..=0x9f => 0xff,
-                    0xa0..=0xbf => self.cartridge.borrow_mut().read_ram(addr),
+                    0xa0..=0xbf => self.cart.borrow_mut().read_ram(addr),
                     0xc0..=0xcf => self.wram.read_ram(addr),
                     0xd0..=0xdf => self.wram.read_bank_ram(addr),
-                    _ => panic!("Illegal source address for HDMA transfer"),
+                    _ => panic!("Illegal source addr for HDMA transfer"),
                 };
                 self.ppu.hdma_write(transfer.dst, val);
 
@@ -166,12 +166,12 @@ impl Memory {
     fn emulate_dma(&mut self) {
         if let Some(src) = self.dma.emulate() {
             let val = match src >> 8 {
-                0x00..=0x7f => self.cartridge.borrow_mut().read_rom(src),
+                0x00..=0x7f => self.cart.borrow_mut().read_rom(src),
                 0x80..=0x9f => self.ppu.read_vram(src),
-                0xa0..=0xbf => self.cartridge.borrow_mut().read_ram(src),
+                0xa0..=0xbf => self.cart.borrow_mut().read_ram(src),
                 0xc0..=0xcf | 0xe0..=0xef => self.wram.read_ram(src),
                 0xd0..=0xdf | 0xf0..=0xff => self.wram.read_bank_ram(src),
-                _ => panic!("Illegal source address for OAM DMA transfer"),
+                _ => panic!("Illegal source addr for OAM DMA transfer"),
             };
 
             self.ppu.dma_write((src & 0xff) as u8, val);

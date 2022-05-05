@@ -75,12 +75,12 @@ impl Oam {
         Self { data: [0; 0x100] }
     }
 
-    pub fn read(&self, address: u8) -> u8 {
-        self.data[address as usize]
+    pub fn read(&self, addr: u8) -> u8 {
+        self.data[addr as usize]
     }
 
-    pub fn write(&mut self, address: u8, val: u8) {
-        self.data[address as usize] = val;
+    pub fn write(&mut self, addr: u8, val: u8) {
+        self.data[addr as usize] = val;
     }
 
     pub fn sprite_attributes_iterator(&self) -> SpriteAttributesIterator {

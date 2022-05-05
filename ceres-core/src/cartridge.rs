@@ -117,88 +117,88 @@ impl Cartridge {
         &self.header_info
     }
 
-    pub fn read_rom(&self, address: u16) -> u8 {
-        let bank_address = match address {
+    pub fn read_rom(&self, addr: u16) -> u8 {
+        let bank_addr = match addr {
             0x0000..=0x3fff => {
                 let (rom_lower, _) = self.rom_offsets;
-                rom_lower as usize | (address as usize & 0x3fff)
+                rom_lower as usize | (addr as usize & 0x3fff)
             }
             0x4000..=0x7fff => {
                 let (_, rom_upper) = self.rom_offsets;
-                rom_upper as usize | (address as usize & 0x3fff)
+                rom_upper as usize | (addr as usize & 0x3fff)
             }
             _ => 0,
         };
 
-        self.rom[bank_address as usize]
+        self.rom[bank_addr as usize]
     }
 
-    pub fn ram_address(&self, address: u16) -> usize {
-        self.ram_offset | (address as usize & 0x1fff)
+    pub fn ram_addr(&self, addr: u16) -> usize {
+        self.ram_offset | (addr as usize & 0x1fff)
     }
 
-    fn mbc_read_ram(&self, ram_enabled: bool, address: u16) -> u8 {
+    fn mbc_read_ram(&self, ram_enabled: bool, addr: u16) -> u8 {
         if !self.ram.is_empty() && ram_enabled {
-            let addr = self.ram_address(address);
+            let addr = self.ram_addr(addr);
             self.ram[addr]
         } else {
             0xff
         }
     }
 
-    pub fn read_ram(&self, address: u16) -> u8 {
+    pub fn read_ram(&self, addr: u16) -> u8 {
         match self.mbc {
             Mbc::None => 0xff,
-            Mbc::One(ref mbc1) => self.mbc_read_ram(mbc1.ramg(), address),
-            Mbc::Two(ref mbc2) => (self.mbc_read_ram(mbc2.is_ram_enabled(), address) & 0xf) | 0xf0,
+            Mbc::One(ref mbc1) => self.mbc_read_ram(mbc1.ramg(), addr),
+            Mbc::Two(ref mbc2) => (self.mbc_read_ram(mbc2.is_ram_enabled(), addr) & 0xf) | 0xf0,
             Mbc::Three(ref mbc3) => {
                 let map_select = mbc3.map_select();
                 let map_en = mbc3.map_en();
                 let mbc30 = mbc3.mbc30();
 
                 match map_select {
-                    0x00..=0x03 => self.mbc_read_ram(map_en, address),
-                    0x04..=0x07 => self.mbc_read_ram(map_en && mbc30, address),
+                    0x00..=0x03 => self.mbc_read_ram(map_en, addr),
+                    0x04..=0x07 => self.mbc_read_ram(map_en && mbc30, addr),
                     _ => 0xff,
                 }
             }
-            Mbc::Five { ref mbc, .. } => self.mbc_read_ram(mbc.is_ram_enabled(), address),
+            Mbc::Five { ref mbc, .. } => self.mbc_read_ram(mbc.is_ram_enabled(), addr),
         }
     }
 
-    pub fn write_rom(&mut self, address: u16, value: u8) {
+    pub fn write_rom(&mut self, addr: u16, value: u8) {
         match self.mbc {
             Mbc::None => (),
             Mbc::One(ref mut mbc1) => {
-                mbc1.write_rom(address, value, &mut self.rom_offsets, &mut self.ram_offset)
+                mbc1.write_rom(addr, value, &mut self.rom_offsets, &mut self.ram_offset)
             }
-            Mbc::Two(ref mut mbc2) => mbc2.write_rom(address, value, &mut self.rom_offsets),
+            Mbc::Two(ref mut mbc2) => mbc2.write_rom(addr, value, &mut self.rom_offsets),
             Mbc::Three(ref mut mbc3) => {
-                mbc3.write_rom(address, value, &mut self.rom_offsets, &mut self.ram_offset)
+                mbc3.write_rom(addr, value, &mut self.rom_offsets, &mut self.ram_offset)
             }
             Mbc::Five { ref mut mbc, .. } => {
-                mbc.write_rom(address, value, &mut self.rom_offsets, &mut self.ram_offset)
+                mbc.write_rom(addr, value, &mut self.rom_offsets, &mut self.ram_offset)
             }
         }
     }
 
-    pub fn mbc_write_ram(&mut self, ram_enabled: bool, address: u16, value: u8) {
+    pub fn mbc_write_ram(&mut self, ram_enabled: bool, addr: u16, value: u8) {
         if !self.ram.is_empty() && ram_enabled {
-            let addr = self.ram_address(address);
+            let addr = self.ram_addr(addr);
             self.ram[addr] = value;
         }
     }
 
-    pub fn write_ram(&mut self, address: u16, value: u8) {
+    pub fn write_ram(&mut self, addr: u16, value: u8) {
         match self.mbc {
             Mbc::None => (),
             Mbc::One(ref mbc1) => {
                 let is_ram_enabled = mbc1.ramg();
-                self.mbc_write_ram(is_ram_enabled, address, value)
+                self.mbc_write_ram(is_ram_enabled, addr, value)
             }
             Mbc::Two(ref mbc2) => {
                 let is_ram_enabled = mbc2.is_ram_enabled();
-                self.mbc_write_ram(is_ram_enabled, address, value)
+                self.mbc_write_ram(is_ram_enabled, addr, value)
             }
             Mbc::Three(ref mbc3) => {
                 let map_en = mbc3.map_en();
@@ -206,14 +206,14 @@ impl Cartridge {
                 let mbc30 = mbc3.mbc30();
 
                 match map_select {
-                    0x00..=0x03 => self.mbc_write_ram(map_en, address, value),
-                    0x04..=0x07 => self.mbc_write_ram(map_en && mbc30, address, value),
+                    0x00..=0x03 => self.mbc_write_ram(map_en, addr, value),
+                    0x04..=0x07 => self.mbc_write_ram(map_en && mbc30, addr, value),
                     _ => (),
                 }
             }
             Mbc::Five { ref mbc, .. } => {
                 let is_ram_enabled = mbc.is_ram_enabled();
-                self.mbc_write_ram(is_ram_enabled, address, value);
+                self.mbc_write_ram(is_ram_enabled, addr, value);
             }
         }
     }

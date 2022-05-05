@@ -10,7 +10,7 @@ bitflags! {
 }
 
 #[derive(Clone, Copy)]
-pub enum Register8 {
+pub enum Reg8 {
     A,
     B,
     C,
@@ -21,7 +21,7 @@ pub enum Register8 {
 }
 
 #[derive(Clone, Copy)]
-pub enum Register16 {
+pub enum Reg16 {
     AF,
     BC,
     DE,
@@ -29,7 +29,7 @@ pub enum Register16 {
     SP,
 }
 
-pub struct Registers {
+pub struct Regs {
     pub pc: u16,
     pub sp: u16,
     pub a: u8,
@@ -42,7 +42,7 @@ pub struct Registers {
     pub l: u8,
 }
 
-impl Default for Registers {
+impl Default for Regs {
     fn default() -> Self {
         Self {
             pc: 0,
@@ -59,60 +59,60 @@ impl Default for Registers {
     }
 }
 
-impl Registers {
+impl Regs {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn read16(&self, register: Register16) -> u16 {
+    pub fn read16(&self, register: Reg16) -> u16 {
         match register {
-            Register16::AF => u16::from_be_bytes([self.a, self.f.bits()]),
-            Register16::BC => u16::from_be_bytes([self.b, self.c]),
-            Register16::DE => u16::from_be_bytes([self.d, self.e]),
-            Register16::HL => u16::from_be_bytes([self.h, self.l]),
-            Register16::SP => self.sp,
+            Reg16::AF => u16::from_be_bytes([self.a, self.f.bits()]),
+            Reg16::BC => u16::from_be_bytes([self.b, self.c]),
+            Reg16::DE => u16::from_be_bytes([self.d, self.e]),
+            Reg16::HL => u16::from_be_bytes([self.h, self.l]),
+            Reg16::SP => self.sp,
         }
     }
 
-    pub fn write16(&mut self, register: Register16, val: u16) {
+    pub fn write16(&mut self, register: Reg16, val: u16) {
         match register {
-            Register16::AF => {
+            Reg16::AF => {
                 let [hi, lo] = u16::to_be_bytes(val);
                 self.a = hi;
                 self.f = Flags::from_bits_truncate(lo);
             }
-            Register16::BC => {
+            Reg16::BC => {
                 let [hi, lo] = u16::to_be_bytes(val);
                 self.b = hi;
                 self.c = lo;
             }
-            Register16::DE => {
+            Reg16::DE => {
                 let [hi, lo] = u16::to_be_bytes(val);
                 self.d = hi;
                 self.e = lo;
             }
-            Register16::HL => {
+            Reg16::HL => {
                 let [hi, lo] = u16::to_be_bytes(val);
                 self.h = hi;
                 self.l = lo;
             }
-            Register16::SP => self.sp = val,
+            Reg16::SP => self.sp = val,
         }
     }
 
-    pub fn increase_pc(&mut self) {
+    pub fn inc_pc(&mut self) {
         self.pc = self.pc.wrapping_add(1);
     }
 
-    pub fn decrease_pc(&mut self) {
+    pub fn dec_pc(&mut self) {
         self.pc = self.pc.wrapping_sub(1);
     }
 
-    pub fn increase_sp(&mut self) {
+    pub fn inc_sp(&mut self) {
         self.sp = self.sp.wrapping_add(1);
     }
 
-    pub fn decrease_sp(&mut self) {
+    pub fn dec_sp(&mut self) {
         self.sp = self.sp.wrapping_sub(1);
     }
 

@@ -30,7 +30,7 @@ impl Ppu {
         let index_start = SCREEN_WIDTH as usize * ly as usize;
 
         if lcdc.background_enabled(function_mode) {
-            let tile_map_address = lcdc.bg_tile_map_address();
+            let tile_map_addr = lcdc.bg_tile_map_addr();
             let y = ly.wrapping_add(scy);
             let row = (y / 8) as u16 * 32;
             let line = ((y % 8) * 2) as u16;
@@ -39,23 +39,22 @@ impl Ppu {
                 let x = i.wrapping_add(scx);
                 let col = (x / 8) as u16;
 
-                let tile_num_address = tile_map_address + row + col;
-                let tile_number = self.vram.tile_number(tile_num_address);
+                let tile_num_addr = tile_map_addr + row + col;
+                let tile_number = self.vram.tile_number(tile_num_addr);
 
                 let background_attributes = match function_mode {
                     FunctionMode::Monochrome | FunctionMode::Compatibility => BgAttributes::empty(),
-                    FunctionMode::Color => self.vram.background_attributes(tile_num_address),
+                    FunctionMode::Color => self.vram.background_attributes(tile_num_addr),
                 };
 
-                let tile_data_address = if background_attributes.contains(BgAttributes::Y_FLIP) {
-                    lcdc.tile_data_address(tile_number) + 14 - line
+                let tile_data_addr = if background_attributes.contains(BgAttributes::Y_FLIP) {
+                    lcdc.tile_data_addr(tile_number) + 14 - line
                 } else {
-                    lcdc.tile_data_address(tile_number) + line
+                    lcdc.tile_data_addr(tile_number) + line
                 };
 
-                let (data_low, data_high) = self
-                    .vram
-                    .tile_data(tile_data_address, &background_attributes);
+                let (data_low, data_high) =
+                    self.vram.tile_data(tile_data_addr, &background_attributes);
 
                 let color_bit = 1
                     << if background_attributes.contains(BgAttributes::X_FLIP) {
@@ -107,7 +106,7 @@ impl Ppu {
         let wy = self.wy;
 
         if lcdc.window_enabled(function_mode) && wy <= ly {
-            let tile_map_address = lcdc.window_tile_map_address();
+            let tile_map_addr = lcdc.window_tile_map_addr();
             let wx = self.wx.saturating_sub(7);
             let y = ((ly - wy) as u16).wrapping_sub(self.window_lines_skipped) as u8;
             let row = (y / 8) as u16 * 32;
@@ -120,23 +119,22 @@ impl Ppu {
                 let x = i.wrapping_sub(wx);
                 let col = (x / 8) as u16;
 
-                let tile_num_address = tile_map_address + row + col;
-                let tile_number = self.vram.tile_number(tile_num_address);
+                let tile_num_addr = tile_map_addr + row + col;
+                let tile_number = self.vram.tile_number(tile_num_addr);
 
                 let background_attributes = match function_mode {
                     FunctionMode::Monochrome | FunctionMode::Compatibility => BgAttributes::empty(),
-                    FunctionMode::Color => self.vram.background_attributes(tile_num_address),
+                    FunctionMode::Color => self.vram.background_attributes(tile_num_addr),
                 };
 
-                let tile_data_address = if background_attributes.contains(BgAttributes::Y_FLIP) {
-                    lcdc.tile_data_address(tile_number) + 14 - line
+                let tile_data_addr = if background_attributes.contains(BgAttributes::Y_FLIP) {
+                    lcdc.tile_data_addr(tile_number) + 14 - line
                 } else {
-                    lcdc.tile_data_address(tile_number) + line
+                    lcdc.tile_data_addr(tile_number) + line
                 };
 
-                let (data_low, data_high) = self
-                    .vram
-                    .tile_data(tile_data_address, &background_attributes);
+                let (data_low, data_high) =
+                    self.vram.tile_data(tile_data_addr, &background_attributes);
 
                 let color_bit = 1
                     << if background_attributes.contains(BgAttributes::X_FLIP) {
@@ -228,7 +226,7 @@ impl Ppu {
                     sprite.tile_index()
                 };
 
-                let tile_data_address = (tile_number as u16 * 16).wrapping_add(
+                let tile_data_addr = (tile_number as u16 * 16).wrapping_add(
                     if sprite.flags().contains(SpriteFlags::FLIP_Y) {
                         (sprite_height as u16 - 1)
                             .wrapping_sub((ly.wrapping_sub(sprite.y())) as u16)
@@ -238,7 +236,7 @@ impl Ppu {
                     },
                 );
 
-                let (data_low, data_high) = self.vram.sprite_data(tile_data_address, &sprite);
+                let (data_low, data_high) = self.vram.sprite_data(tile_data_addr, &sprite);
 
                 for xi in (0..8).rev() {
                     let target_x = sprite.x().wrapping_add(7 - xi);

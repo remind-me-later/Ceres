@@ -33,83 +33,83 @@ pub enum Button {
 }
 
 pub struct Joypad {
-    action: Action,
-    direction: Direction,
-    use_directions: bool,
-    use_actions: bool,
+    act: Action,
+    dir: Direction,
+    use_dir: bool,
+    use_act: bool,
 }
 
 impl Joypad {
     pub const fn new() -> Self {
         Self {
-            action: Action::empty(),
-            direction: Direction::empty(),
-            use_directions: true,
-            use_actions: true,
+            act: Action::empty(),
+            dir: Direction::empty(),
+            use_dir: false,
+            use_act: false,
         }
     }
 
-    fn press_action_button(&mut self, interrupts: &mut Interrupts, action_button: Action) {
-        self.action.insert(action_button);
+    fn press_action_button(&mut self, ints: &mut Interrupts, button: Action) {
+        self.act.insert(button);
 
-        if self.use_actions {
-            interrupts.request(Interrupt::JOYPAD);
+        if self.use_act {
+            ints.request(Interrupt::JOYPAD);
         }
     }
 
-    fn press_direction_button(&mut self, interrupts: &mut Interrupts, direction_button: Direction) {
-        self.direction.insert(direction_button);
+    fn press_direction_button(&mut self, ints: &mut Interrupts, button: Direction) {
+        self.dir.insert(button);
 
-        if self.use_directions {
-            interrupts.request(Interrupt::JOYPAD);
+        if self.use_dir {
+            ints.request(Interrupt::JOYPAD);
         }
     }
 
-    pub fn press(&mut self, interrupts: &mut Interrupts, button: Button) {
+    pub fn press(&mut self, ints: &mut Interrupts, button: Button) {
         match button {
-            Button::Left => self.press_direction_button(interrupts, Direction::LEFT),
-            Button::Up => self.press_direction_button(interrupts, Direction::UP),
-            Button::Right => self.press_direction_button(interrupts, Direction::RIGHT),
-            Button::Down => self.press_direction_button(interrupts, Direction::DOWN),
-            Button::A => self.press_action_button(interrupts, Action::A),
-            Button::B => self.press_action_button(interrupts, Action::B),
-            Button::Select => self.press_action_button(interrupts, Action::SELECT),
-            Button::Start => self.press_action_button(interrupts, Action::START),
+            Button::Left => self.press_direction_button(ints, Direction::LEFT),
+            Button::Up => self.press_direction_button(ints, Direction::UP),
+            Button::Right => self.press_direction_button(ints, Direction::RIGHT),
+            Button::Down => self.press_direction_button(ints, Direction::DOWN),
+            Button::A => self.press_action_button(ints, Action::A),
+            Button::B => self.press_action_button(ints, Action::B),
+            Button::Select => self.press_action_button(ints, Action::SELECT),
+            Button::Start => self.press_action_button(ints, Action::START),
         }
     }
 
     pub fn release(&mut self, button: Button) {
         match button {
-            Button::Left => self.direction.remove(Direction::LEFT),
-            Button::Up => self.direction.remove(Direction::UP),
-            Button::Right => self.direction.remove(Direction::RIGHT),
-            Button::Down => self.direction.remove(Direction::DOWN),
-            Button::A => self.action.remove(Action::A),
-            Button::B => self.action.remove(Action::B),
-            Button::Select => self.action.remove(Action::SELECT),
-            Button::Start => self.action.remove(Action::START),
+            Button::Left => self.dir.remove(Direction::LEFT),
+            Button::Up => self.dir.remove(Direction::UP),
+            Button::Right => self.dir.remove(Direction::RIGHT),
+            Button::Down => self.dir.remove(Direction::DOWN),
+            Button::A => self.act.remove(Action::A),
+            Button::B => self.act.remove(Action::B),
+            Button::Select => self.act.remove(Action::SELECT),
+            Button::Start => self.act.remove(Action::START),
         }
     }
 
     pub const fn read(&self) -> u8 {
-        let action_bits = if self.use_actions {
-            self.action.bits() | (1 << 5)
+        let act_bits = if self.use_act {
+            self.act.bits() | (1 << 5)
         } else {
             0
         };
 
-        let direction_bits = if self.use_directions {
-            self.direction.bits() | (1 << 4)
+        let dir_bits = if self.use_dir {
+            self.dir.bits() | (1 << 4)
         } else {
             0
         };
 
         // pressed on low
-        !(action_bits | direction_bits)
+        !(act_bits | dir_bits)
     }
 
     pub fn write(&mut self, val: u8) {
-        self.use_actions = (val >> 5) & 1 == 0;
-        self.use_directions = (val >> 4) & 1 == 0;
+        self.use_act = (val >> 5) & 1 == 0;
+        self.use_dir = (val >> 4) & 1 == 0;
     }
 }

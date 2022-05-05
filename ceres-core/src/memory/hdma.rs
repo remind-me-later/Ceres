@@ -35,24 +35,24 @@ impl Hdma {
     }
 
     pub fn write_hdma1(&mut self, val: u8) {
-        self.src = (self.src & 0xf0) | (u16::from(val) << 8);
+        self.src = u16::from(val) << 8 | self.src & 0xf0;
     }
 
     pub fn write_hdma2(&mut self, val: u8) {
-        self.src = (self.src & 0xff00) | (u16::from(val) & 0xf0);
+        self.src = self.src & 0xff00 | u16::from(val) & 0xf0;
     }
 
     pub fn write_hdma3(&mut self, val: u8) {
-        self.dst = (self.dst & 0xf0) | (u16::from(val & 0x1f) << 8);
+        self.dst = u16::from(val & 0x1f) << 8 | self.dst & 0xf0;
     }
 
     pub fn write_hdma4(&mut self, val: u8) {
-        self.dst = (self.dst & 0x1f00) | (u16::from(val) & 0xf0);
+        self.dst = self.dst & 0x1f00 | u16::from(val) & 0xf0;
     }
 
     pub fn read_hdma5(&self) -> u8 {
         let is_active_bit = u8::from(self.is_active()) << 7;
-        let blocks_bits = ((self.len / 0x10).wrapping_sub(1)) as u8;
+        let blocks_bits = (self.len / 0x10).wrapping_sub(1) as u8;
         is_active_bit | blocks_bits
     }
 

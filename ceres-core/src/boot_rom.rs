@@ -15,12 +15,8 @@ impl BootRom {
     }
 
     #[must_use]
-    pub fn read(&self, address: u16) -> Option<u8> {
-        if self.is_mapped {
-            Some(self.boot_rom[address as usize])
-        } else {
-            None
-        }
+    pub fn read(&self, addr: u16) -> Option<u8> {
+        self.is_mapped.then(|| self.boot_rom[addr as usize])
     }
 
     #[must_use]

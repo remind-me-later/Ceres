@@ -1,17 +1,17 @@
-use crate::video::rgb_color::Color;
+use crate::video::Rgb24Color;
 
-const GRAYSCALE_PALETTE: [Color; 4] = [
-    Color::rgb(0xff, 0xff, 0xff),
-    Color::rgb(0xcc, 0xcc, 0xcc),
-    Color::rgb(0x77, 0x77, 0x77),
-    Color::rgb(0x00, 0x00, 0x00),
+const GRAYSCALE_PALETTE: [Rgb24Color; 4] = [
+    Rgb24Color::rgb(0xff, 0xff, 0xff),
+    Rgb24Color::rgb(0xcc, 0xcc, 0xcc),
+    Rgb24Color::rgb(0x77, 0x77, 0x77),
+    Rgb24Color::rgb(0x00, 0x00, 0x00),
 ];
 
-const ORIGINAL_PALETTE: [Color; 4] = [
-    Color::rgb(0x9b, 0xbc, 0x0f),
-    Color::rgb(0x8b, 0xac, 0x0f),
-    Color::rgb(0x30, 0x62, 0x30),
-    Color::rgb(0x0f, 0x38, 0x0f),
+const ORIGINAL_PALETTE: [Rgb24Color; 4] = [
+    Rgb24Color::rgb(0x9b, 0xbc, 0x0f),
+    Rgb24Color::rgb(0x8b, 0xac, 0x0f),
+    Rgb24Color::rgb(0x30, 0x62, 0x30),
+    Rgb24Color::rgb(0x0f, 0x38, 0x0f),
 ];
 
 #[derive(Clone, Copy)]
@@ -21,7 +21,7 @@ pub enum MonochromePaletteColors {
 }
 
 impl MonochromePaletteColors {
-    pub fn get_color(self, index: u8) -> Color {
+    pub fn get_color(self, index: u8) -> Rgb24Color {
         use MonochromePaletteColors::*;
 
         match self {
@@ -47,7 +47,7 @@ impl MonochromePalette {
 }
 
 pub struct ColorPalette {
-    palette: [Color; 32],
+    palette: [Rgb24Color; 32],
     index: u8,
     auto_increment: bool,
 }
@@ -55,7 +55,7 @@ pub struct ColorPalette {
 impl ColorPalette {
     pub fn new() -> Self {
         Self {
-            palette: [Color::default(); 32],
+            palette: [Rgb24Color::default(); 32],
             index: 0,
             auto_increment: false,
         }
@@ -96,12 +96,12 @@ impl ColorPalette {
         }
     }
 
-    pub fn get_color(&self, palette_number: u8, color_number: u8) -> Color {
+    pub fn get_color(&self, palette_number: u8, color_number: u8) -> Rgb24Color {
         let index = palette_number as usize * 4 + color_number as usize;
         let r = self.palette[index].r;
         let g = self.palette[index].g;
         let b = self.palette[index].b;
-        Color::rgb(scale_channel(r), scale_channel(g), scale_channel(b))
+        Rgb24Color::rgb(scale_channel(r), scale_channel(g), scale_channel(b))
     }
 }
 

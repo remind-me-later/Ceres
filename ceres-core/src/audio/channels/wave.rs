@@ -103,13 +103,13 @@ impl WaveChannel {
         self.nr30 = 0;
     }
 
-    pub fn read_wave_ram(&self, address: u8) -> u8 {
-        let index = (address - 0x30) as usize;
+    pub fn read_wave_ram(&self, addr: u8) -> u8 {
+        let index = (addr - 0x30) as usize;
         self.wave_ram[index]
     }
 
-    pub fn write_wave_ram(&mut self, address: u8, value: u8) {
-        let index = (address - 0x30) as usize;
+    pub fn write_wave_ram(&mut self, addr: u8, value: u8) {
+        let index = (addr - 0x30) as usize;
         self.wave_ram[index] = value;
         // upper 4 bits first
         self.wave_samples[index * 2] = value >> 4;

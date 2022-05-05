@@ -2,7 +2,7 @@
 pub struct Dma {
     is_active: bool,
     source: u8,
-    address: u16,
+    addr: u16,
     is_restarting: bool,
     t_cycles: i8,
 }
@@ -23,7 +23,7 @@ impl Dma {
 
         self.t_cycles = -8; // two m-cycles delay
         self.source = value;
-        self.address = u16::from(value) << 8;
+        self.addr = u16::from(value) << 8;
         self.is_active = true;
     }
 
@@ -32,13 +32,13 @@ impl Dma {
 
         if self.is_active && self.t_cycles >= 4 {
             self.t_cycles -= 4;
-            let address = self.address;
-            self.address = self.address.wrapping_add(1);
-            if self.address & 0xff >= 0xa0 {
+            let addr = self.addr;
+            self.addr = self.addr.wrapping_add(1);
+            if self.addr & 0xff >= 0xa0 {
                 self.is_active = false;
                 self.is_restarting = false;
             }
-            Some(address)
+            Some(addr)
         } else {
             None
         }

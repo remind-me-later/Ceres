@@ -1,5 +1,5 @@
 use super::{
-    registers::{Register16, Register8},
+    registers::{Reg16, Reg8},
     Cpu,
 };
 
@@ -17,56 +17,56 @@ where
     fn set(self, cpu: &mut Cpu, val: T);
 }
 
-impl Get<u8> for Register8 {
+impl Get<u8> for Reg8 {
     fn get(self, cpu: &mut Cpu) -> u8 {
         match self {
-            Register8::A => cpu.registers.a,
-            Register8::B => cpu.registers.b,
-            Register8::C => cpu.registers.c,
-            Register8::D => cpu.registers.d,
-            Register8::E => cpu.registers.e,
-            Register8::H => cpu.registers.h,
-            Register8::L => cpu.registers.l,
+            Reg8::A => cpu.reg.a,
+            Reg8::B => cpu.reg.b,
+            Reg8::C => cpu.reg.c,
+            Reg8::D => cpu.reg.d,
+            Reg8::E => cpu.reg.e,
+            Reg8::H => cpu.reg.h,
+            Reg8::L => cpu.reg.l,
         }
     }
 }
 
-impl Set<u8> for Register8 {
+impl Set<u8> for Reg8 {
     fn set(self, cpu: &mut Cpu, val: u8) {
         match self {
-            Register8::A => cpu.registers.a = val,
-            Register8::B => cpu.registers.b = val,
-            Register8::C => cpu.registers.c = val,
-            Register8::D => cpu.registers.d = val,
-            Register8::E => cpu.registers.e = val,
-            Register8::H => cpu.registers.h = val,
-            Register8::L => cpu.registers.l = val,
+            Reg8::A => cpu.reg.a = val,
+            Reg8::B => cpu.reg.b = val,
+            Reg8::C => cpu.reg.c = val,
+            Reg8::D => cpu.reg.d = val,
+            Reg8::E => cpu.reg.e = val,
+            Reg8::H => cpu.reg.h = val,
+            Reg8::L => cpu.reg.l = val,
         }
     }
 }
 
-impl Get<u16> for Register16 {
+impl Get<u16> for Reg16 {
     fn get(self, cpu: &mut Cpu) -> u16 {
-        cpu.registers.read16(self)
+        cpu.reg.read16(self)
     }
 }
 
-impl Set<u16> for Register16 {
+impl Set<u16> for Reg16 {
     fn set(self, cpu: &mut Cpu, val: u16) {
-        cpu.registers.write16(self, val);
+        cpu.reg.write16(self, val);
     }
 }
 
 #[derive(Clone, Copy)]
-pub struct Immediate;
+pub struct Imm;
 
-impl Get<u8> for Immediate {
+impl Get<u8> for Imm {
     fn get(self, cpu: &mut Cpu) -> u8 {
         cpu.imm8()
     }
 }
 
-impl Get<u16> for Immediate {
+impl Get<u16> for Imm {
     fn get(self, cpu: &mut Cpu) -> u16 {
         cpu.imm16()
     }
@@ -83,13 +83,13 @@ pub enum Indirect {
 }
 
 impl Indirect {
-    fn into_address(self, cpu: &mut Cpu) -> u16 {
+    fn into_addr(self, cpu: &mut Cpu) -> u16 {
         match self {
-            Indirect::BC => cpu.registers.read16(Register16::BC),
-            Indirect::DE => cpu.registers.read16(Register16::DE),
-            Indirect::HL => cpu.registers.read16(Register16::HL),
+            Indirect::BC => cpu.reg.read16(Reg16::BC),
+            Indirect::DE => cpu.reg.read16(Reg16::DE),
+            Indirect::HL => cpu.reg.read16(Reg16::HL),
             Indirect::Immediate => cpu.imm16(),
-            Indirect::HighC => u16::from(cpu.registers.c) | 0xff00,
+            Indirect::HighC => u16::from(cpu.reg.c) | 0xff00,
             Indirect::HighImmediate => u16::from(cpu.imm8()) | 0xff00,
         }
     }
@@ -97,15 +97,15 @@ impl Indirect {
 
 impl Get<u8> for Indirect {
     fn get(self, cpu: &mut Cpu) -> u8 {
-        let address = self.into_address(cpu);
-        cpu.mem.read(address)
+        let addr = self.into_addr(cpu);
+        cpu.mem.read(addr)
     }
 }
 
 impl Set<u8> for Indirect {
     fn set(self, cpu: &mut Cpu, val: u8) {
-        let address = self.into_address(cpu);
-        cpu.mem.write(address, val);
+        let addr = self.into_addr(cpu);
+        cpu.mem.write(addr, val);
     }
 }
 
@@ -114,20 +114,18 @@ pub struct IndirectIncreaseHL;
 
 impl Get<u8> for IndirectIncreaseHL {
     fn get(self, cpu: &mut Cpu) -> u8 {
-        let address = cpu.registers.read16(Register16::HL);
-        let ret = cpu.mem.read(address);
-        cpu.registers
-            .write16(Register16::HL, address.wrapping_add(1));
+        let addr = cpu.reg.read16(Reg16::HL);
+        let ret = cpu.mem.read(addr);
+        cpu.reg.write16(Reg16::HL, addr.wrapping_add(1));
         ret
     }
 }
 
 impl Set<u8> for IndirectIncreaseHL {
     fn set(self, cpu: &mut Cpu, val: u8) {
-        let address = cpu.registers.read16(Register16::HL);
-        cpu.mem.write(address, val);
-        cpu.registers
-            .write16(Register16::HL, address.wrapping_add(1));
+        let addr = cpu.reg.read16(Reg16::HL);
+        cpu.mem.write(addr, val);
+        cpu.reg.write16(Reg16::HL, addr.wrapping_add(1));
     }
 }
 
@@ -136,20 +134,18 @@ pub struct IndirectDecreaseHL;
 
 impl Get<u8> for IndirectDecreaseHL {
     fn get(self, cpu: &mut Cpu) -> u8 {
-        let address = cpu.registers.read16(Register16::HL);
-        let ret = cpu.mem.read(address);
-        cpu.registers
-            .write16(Register16::HL, address.wrapping_sub(1));
+        let addr = cpu.reg.read16(Reg16::HL);
+        let ret = cpu.mem.read(addr);
+        cpu.reg.write16(Reg16::HL, addr.wrapping_sub(1));
         ret
     }
 }
 
 impl Set<u8> for IndirectDecreaseHL {
     fn set(self, cpu: &mut Cpu, val: u8) {
-        let address = cpu.registers.read16(Register16::HL);
-        cpu.mem.write(address, val);
-        cpu.registers
-            .write16(Register16::HL, address.wrapping_sub(1));
+        let addr = cpu.reg.read16(Reg16::HL);
+        cpu.mem.write(addr, val);
+        cpu.reg.write16(Reg16::HL, addr.wrapping_sub(1));
     }
 }
 
@@ -165,10 +161,10 @@ impl JumpCondition {
     pub fn check(self, cpu: &Cpu) -> bool {
         use JumpCondition::{Carry, NotCarry, NotZero, Zero};
         match self {
-            Zero => cpu.registers.zf(),
-            NotZero => !cpu.registers.zf(),
-            Carry => cpu.registers.cf(),
-            NotCarry => !cpu.registers.cf(),
+            Zero => cpu.reg.zf(),
+            NotZero => !cpu.reg.zf(),
+            Carry => cpu.reg.cf(),
+            NotCarry => !cpu.reg.cf(),
         }
     }
 }

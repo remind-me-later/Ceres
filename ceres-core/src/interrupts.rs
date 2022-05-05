@@ -11,7 +11,7 @@ bitflags! {
 }
 
 impl Interrupt {
-    pub fn handler_address(self) -> u16 {
+    pub fn handler_addr(self) -> u16 {
         match self {
             Self::VBLANK => 0x40,
             Self::LCD_STAT => 0x48,

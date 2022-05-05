@@ -12,15 +12,14 @@ bitflags!(
 impl Tac {
     fn counter_mask(self) -> u16 {
         match self.bits() & 0b11 {
-            0b11 => (1 << 5),
-            0b10 => (1 << 3),
-            0b01 => (1 << 1),
-            _ => (1 << 7),
+            3 => 1 << 5,
+            2 => 1 << 3,
+            1 => 1 << 1,
+            0 => 1 << 7,
+            _ => unreachable!(),
         }
     }
 }
-
-// TODO: Document obscure behaviour
 
 pub struct Timer {
     enabled: bool,
@@ -38,7 +37,7 @@ impl Timer {
         Self {
             enabled: false,
             overflow: false,
-            internal_counter: 0x630,
+            internal_counter: 0,
             counter: 0,
             modulo: 0,
             tac: Tac::empty(),
@@ -49,7 +48,7 @@ impl Timer {
         (self.internal_counter & self.tac.counter_mask()) != 0
     }
 
-    fn increment(&mut self) {
+    fn inc(&mut self) {
         let (counter, overflow) = self.counter.overflowing_add(1);
         self.counter = counter;
         self.overflow = overflow;
@@ -65,7 +64,7 @@ impl Timer {
             self.internal_counter = self.internal_counter.wrapping_add(1);
             let new_bit = self.counter_bit();
             if !new_bit {
-                self.increment();
+                self.inc();
             }
         } else {
             self.internal_counter = self.internal_counter.wrapping_add(1);
@@ -96,7 +95,7 @@ impl Timer {
         self.tick_t_cycle(ints);
 
         if self.counter_bit() {
-            self.increment();
+            self.inc();
         }
 
         self.internal_counter = 0;
@@ -105,6 +104,7 @@ impl Timer {
     pub fn write_tima(&mut self, ints: &mut Interrupts, val: u8) {
         let overflow = self.overflow;
         self.tick_t_cycle(ints);
+
         if !overflow {
             self.overflow = false;
             self.counter = val;
@@ -113,8 +113,10 @@ impl Timer {
 
     pub fn write_tma(&mut self, ints: &mut Interrupts, val: u8) {
         let overflow = self.overflow;
+
         self.tick_t_cycle(ints);
         self.modulo = val;
+
         if overflow {
             self.counter = val;
         }
@@ -122,12 +124,14 @@ impl Timer {
 
     pub fn write_tac(&mut self, ints: &mut Interrupts, val: u8) {
         self.tick_t_cycle(ints);
+
         let old_bit = self.enabled && self.counter_bit();
         self.tac = Tac::from_bits_truncate(val);
         self.enabled = self.tac.contains(Tac::ENABLE);
         let new_bit = self.enabled && self.counter_bit();
+
         if old_bit && !new_bit {
-            self.increment();
+            self.inc();
         }
     }
 }
