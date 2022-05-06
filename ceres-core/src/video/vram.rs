@@ -11,12 +11,18 @@ pub struct Vram {
     cgb_vram_bank: u8, // 0 or 1
 }
 
-impl Vram {
-    pub fn new() -> Self {
+impl Default for Vram {
+    fn default() -> Self {
         Self {
             vram: [0; VRAM_SIZE_CGB],
             cgb_vram_bank: 0,
         }
+    }
+}
+
+impl Vram {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn read_bank_number(&self) -> u8 {
