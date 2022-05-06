@@ -75,7 +75,7 @@ impl Memory {
             boot_rom,
             model,
             in_double_speed: false,
-            key1: Key1::empty(),
+            key1: Key1::new(),
             function_mode,
         }
     }

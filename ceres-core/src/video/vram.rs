@@ -1,6 +1,6 @@
 use super::{
-    ppu::BgAttributes,
-    sprites::{SpriteAttr, SpriteFlags},
+    ppu::BG_TILE_BANK,
+    sprites::{SpriteAttr, SPR_TILE_BANK},
 };
 
 const VRAM_SIZE: usize = 0x2000;
@@ -49,23 +49,19 @@ impl Vram {
         self.get_bank(tile_addr, 0)
     }
 
-    pub fn background_attributes(&self, tile_addr: u16) -> BgAttributes {
-        BgAttributes::from_bits_truncate(self.get_bank(tile_addr, 1))
+    pub fn background_attributes(&self, tile_addr: u16) -> u8 {
+        self.get_bank(tile_addr, 1)
     }
 
-    pub fn tile_data(&self, tile_data_addr: u16, background_attributes: &BgAttributes) -> (u8, u8) {
+    pub fn tile_data(&self, tile_data_addr: u16, background_attributes: u8) -> (u8, u8) {
         let low = self.get_bank(
             tile_data_addr & 0x1fff,
-            background_attributes
-                .contains(BgAttributes::VRAM_BANK_NUMBER)
-                .into(),
+            (background_attributes & BG_TILE_BANK != 0) as u8,
         );
 
         let high = self.get_bank(
             (tile_data_addr & 0x1fff) + 1,
-            background_attributes
-                .contains(BgAttributes::VRAM_BANK_NUMBER)
-                .into(),
+            (background_attributes & BG_TILE_BANK != 0) as u8,
         );
 
         (low, high)
@@ -74,18 +70,12 @@ impl Vram {
     pub fn sprite_data(&self, tile_data_addr: u16, sprite_attributes: &SpriteAttr) -> (u8, u8) {
         let low = self.get_bank(
             tile_data_addr,
-            sprite_attributes
-                .flags()
-                .contains(SpriteFlags::TILE_VRAM_BANK)
-                .into(),
+            (sprite_attributes.flags() & SPR_TILE_BANK != 0) as u8,
         );
 
         let high = self.get_bank(
             tile_data_addr + 1,
-            sprite_attributes
-                .flags()
-                .contains(SpriteFlags::TILE_VRAM_BANK)
-                .into(),
+            (sprite_attributes.flags() & SPR_TILE_BANK != 0) as u8,
         );
 
         (low, high)

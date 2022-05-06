@@ -1,21 +1,15 @@
-use bitflags::bitflags;
-
-bitflags! {
-  pub struct SpriteFlags: u8 {
-    const CGB_PALETTE     = 0b_0000_0111; // CGB Only
-    const TILE_VRAM_BANK  = 0b_0000_1000; // CGB Only
-    const NON_CGB_PALETTE = 0b_0001_0000; // Non CGB Only
-    const FLIP_X          = 0b_0010_0000;
-    const FLIP_Y          = 0b_0100_0000;
-    const BG_WIN_OVER_OBJ = 0b_1000_0000;
-  }
-}
+pub const SPR_CGB_PAL: u8 = 0x7; // CGB Only
+pub const SPR_TILE_BANK: u8 = 0x8; // CGB Only
+pub const SPR_PAL: u8 = 0x10; // Non CGB Only
+pub const SPR_FLIP_X: u8 = 0x20;
+pub const SPR_FLIP_Y: u8 = 0x40;
+pub const SPR_BG_WIN_OVER_OBJ: u8 = 0x80;
 
 pub struct SpriteAttr {
     x: u8,
     y: u8,
     tile_index: u8,
-    flags: SpriteFlags,
+    flags: u8,
 }
 
 impl SpriteAttr {
@@ -31,12 +25,12 @@ impl SpriteAttr {
         self.tile_index
     }
 
-    pub fn flags(&self) -> &SpriteFlags {
-        &self.flags
+    pub fn flags(&self) -> u8 {
+        self.flags
     }
 
     pub fn cgb_palette(&self) -> u8 {
-        self.flags().bits() & 7
+        self.flags() & SPR_CGB_PAL
     }
 }
 
@@ -57,7 +51,7 @@ impl<'a> Iterator for SpriteAttrIter<'a> {
             y: self.oam.data[self.index].wrapping_sub(16),
             x: self.oam.data[self.index + 1].wrapping_sub(8),
             tile_index: self.oam.data[self.index + 2],
-            flags: SpriteFlags::from_bits_truncate(self.oam.data[self.index + 3]),
+            flags: self.oam.data[self.index + 3],
         };
 
         self.index += 4;

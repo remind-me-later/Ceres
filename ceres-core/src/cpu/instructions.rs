@@ -308,7 +308,7 @@ impl Cpu {
     pub fn halt(&mut self) {
         self.halted = true;
 
-        if self.mem.interrupt_controller().halt_bug_condition() && !self.ime {
+        if self.mem.interrupt_controller().has_pending_interrupts() && !self.ime {
             self.halted = false;
             self.halt_bug = true;
         }

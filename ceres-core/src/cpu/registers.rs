@@ -1,13 +1,7 @@
-use bitflags::bitflags;
-
-bitflags! {
-    pub struct Flags: u8 {
-        const ZERO = 0b_1000_0000;
-        const SUBTRACT = 0b_0100_0000;
-        const HALF_CARRY = 0b_0010_0000;
-        const CARRY = 0b_0001_0000;
-    }
-}
+const ZF_FLAG: u8 = 0x80;
+const NF_FLAG: u8 = 0x40;
+const HF_FLAG: u8 = 0x20;
+const CF_FLAG: u8 = 0x10;
 
 #[derive(Clone, Copy)]
 pub enum Reg8 {
@@ -29,34 +23,18 @@ pub enum Reg16 {
     SP,
 }
 
+#[derive(Default)]
 pub struct Regs {
     pub pc: u16,
     pub sp: u16,
     pub a: u8,
-    pub f: Flags,
+    pub f: u8,
     pub b: u8,
     pub c: u8,
     pub d: u8,
     pub e: u8,
     pub h: u8,
     pub l: u8,
-}
-
-impl Default for Regs {
-    fn default() -> Self {
-        Self {
-            pc: 0,
-            sp: 0,
-            a: 0,
-            f: Flags::empty(),
-            b: 0,
-            c: 0,
-            d: 0,
-            e: 0,
-            h: 0,
-            l: 0,
-        }
-    }
 }
 
 impl Regs {
@@ -66,7 +44,7 @@ impl Regs {
 
     pub fn read16(&self, register: Reg16) -> u16 {
         match register {
-            Reg16::AF => u16::from_be_bytes([self.a, self.f.bits()]),
+            Reg16::AF => u16::from_be_bytes([self.a, self.f]),
             Reg16::BC => u16::from_be_bytes([self.b, self.c]),
             Reg16::DE => u16::from_be_bytes([self.d, self.e]),
             Reg16::HL => u16::from_be_bytes([self.h, self.l]),
@@ -79,7 +57,7 @@ impl Regs {
             Reg16::AF => {
                 let [hi, lo] = u16::to_be_bytes(val);
                 self.a = hi;
-                self.f = Flags::from_bits_truncate(lo);
+                self.f = lo & 0xf0;
             }
             Reg16::BC => {
                 let [hi, lo] = u16::to_be_bytes(val);
@@ -117,34 +95,50 @@ impl Regs {
     }
 
     pub fn zf(&self) -> bool {
-        self.f.contains(Flags::ZERO)
+        self.f & ZF_FLAG != 0
     }
 
     pub fn nf(&self) -> bool {
-        self.f.contains(Flags::SUBTRACT)
+        self.f & NF_FLAG != 0
     }
 
     pub fn hf(&self) -> bool {
-        self.f.contains(Flags::HALF_CARRY)
+        self.f & HF_FLAG != 0
     }
 
     pub fn cf(&self) -> bool {
-        self.f.contains(Flags::CARRY)
+        self.f & CF_FLAG != 0
     }
 
     pub fn set_zf(&mut self, zf: bool) {
-        self.f.set(Flags::ZERO, zf);
+        if zf {
+            self.f |= ZF_FLAG
+        } else {
+            self.f &= !ZF_FLAG
+        }
     }
 
     pub fn set_nf(&mut self, nf: bool) {
-        self.f.set(Flags::SUBTRACT, nf);
+        if nf {
+            self.f |= NF_FLAG
+        } else {
+            self.f &= !NF_FLAG
+        }
     }
 
     pub fn set_hf(&mut self, hf: bool) {
-        self.f.set(Flags::HALF_CARRY, hf);
+        if hf {
+            self.f |= HF_FLAG
+        } else {
+            self.f &= !HF_FLAG
+        }
     }
 
     pub fn set_cf(&mut self, cf: bool) {
-        self.f.set(Flags::CARRY, cf);
+        if cf {
+            self.f |= CF_FLAG
+        } else {
+            self.f &= !CF_FLAG
+        }
     }
 }

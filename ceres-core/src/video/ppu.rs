@@ -1,3 +1,5 @@
+use crate::interrupts::{LCD_STAT_INT, VBLANK_INT};
+
 mod scanline_renderer;
 
 use {
@@ -8,11 +10,7 @@ use {
         vram::Vram,
         ACCESS_OAM_CYCLES, ACCESS_VRAM_CYCLES, HBLANK_CYCLES, VBLANK_LINE_CYCLES,
     },
-    crate::{
-        interrupts::{Interrupt, Interrupts},
-        memory::FunctionMode,
-    },
-    bitflags::bitflags,
+    crate::{interrupts::Interrupts, memory::FunctionMode},
 };
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -57,33 +55,35 @@ impl From<Mode> for u8 {
     }
 }
 
-bitflags!(
-  pub struct Lcdc: u8 {
-    const BACKGROUND_ENABLED = 1;
-    const OBJECTS_ENABLED = 1 << 1;
-    const LARGE_SPRITES = 1 << 2;
-    const BG_TILE_MAP_AREA = 1 << 3;
-    const BG_WINDOW_TILE_DATA_AREA = 1 << 4;
-    const WINDOW_ENABLED = 1 << 5;
-    const WINDOW_TILE_MAP_AREA = 1 << 6;
-    const LCD_ENABLE = 1 << 7;
-  }
-);
+// LCDC bits
+pub const BACKGROUND_ENABLED: u8 = 1;
+pub const OBJECTS_ENABLED: u8 = 1 << 1;
+pub const LARGE_SPRITES: u8 = 1 << 2;
+pub const BG_TILE_MAP_AREA: u8 = 1 << 3;
+pub const BG_WINDOW_TILE_DATA_AREA: u8 = 1 << 4;
+pub const WINDOW_ENABLED: u8 = 1 << 5;
+pub const WINDOW_TILE_MAP_AREA: u8 = 1 << 6;
+pub const LCD_ENABLE: u8 = 1 << 7;
+
+#[derive(Clone, Copy, Default)]
+pub struct Lcdc {
+    pub val: u8,
+}
 
 impl Lcdc {
-    pub fn window_enabled(self, function_mode: FunctionMode) -> bool {
+    pub fn win_enabled(self, function_mode: FunctionMode) -> bool {
         match function_mode {
             FunctionMode::Monochrome | FunctionMode::Compatibility => {
-                self.contains(Self::BACKGROUND_ENABLED) && self.contains(Self::WINDOW_ENABLED)
+                self.val & BACKGROUND_ENABLED & WINDOW_ENABLED != 0
             }
-            FunctionMode::Color => self.contains(Self::WINDOW_ENABLED),
+            FunctionMode::Color => self.val & WINDOW_ENABLED != 0,
         }
     }
 
-    pub fn background_enabled(self, function_mode: FunctionMode) -> bool {
+    pub fn bg_enabled(self, function_mode: FunctionMode) -> bool {
         match function_mode {
             FunctionMode::Monochrome | FunctionMode::Compatibility => {
-                self.contains(Self::BACKGROUND_ENABLED)
+                self.val & BACKGROUND_ENABLED != 0
             }
             FunctionMode::Color => true,
         }
@@ -92,16 +92,16 @@ impl Lcdc {
     pub fn cgb_sprite_master_priority_on(self, function_mode: FunctionMode) -> bool {
         match function_mode {
             FunctionMode::Monochrome | FunctionMode::Compatibility => false,
-            FunctionMode::Color => !self.contains(Self::BACKGROUND_ENABLED),
+            FunctionMode::Color => self.val & BACKGROUND_ENABLED == 0,
         }
     }
 
     fn signed_byte_for_tile_offset(self) -> bool {
-        !self.contains(Self::BG_WINDOW_TILE_DATA_AREA)
+        self.val & BG_WINDOW_TILE_DATA_AREA == 0
     }
 
     pub fn bg_tile_map_addr(self) -> u16 {
-        if self.contains(Self::BG_TILE_MAP_AREA) {
+        if self.val & BG_TILE_MAP_AREA != 0 {
             0x9c00
         } else {
             0x9800
@@ -109,7 +109,7 @@ impl Lcdc {
     }
 
     pub fn window_tile_map_addr(self) -> u16 {
-        if self.contains(Self::WINDOW_TILE_MAP_AREA) {
+        if self.val & WINDOW_TILE_MAP_AREA != 0 {
             0x9c00
         } else {
             0x9800
@@ -117,7 +117,7 @@ impl Lcdc {
     }
 
     fn bg_window_tile_addr(self) -> u16 {
-        if self.contains(Self::BG_WINDOW_TILE_DATA_AREA) {
+        if self.val & BG_WINDOW_TILE_DATA_AREA != 0 {
             0x8000
         } else {
             0x8800
@@ -134,39 +134,36 @@ impl Lcdc {
     }
 }
 
-bitflags!(
-  pub struct Stat: u8 {
-    const MODE_FLAG_LOW = 1;
-    const MODE_FLAG_HIGH  = 1 << 1;
-    const LY_EQUALS_LYC = 1 << 2;
-    const HBLANK_INTERRUPT = 1 << 3;
-    const VBLANK_INTERRUPT = 1 << 4;
-    const OAM_INTERRUPT = 1 << 5;
-    const LY_EQUALS_LYC_INTERRUPT = 1 << 6;
-  }
-);
+// STAT bits
+const MODE_BITS: u8 = 3;
+const LY_EQUALS_LYC: u8 = 1 << 2;
+const HBLANK_INTERRUPT: u8 = 1 << 3;
+const VBLANK_INTERRUPT: u8 = 1 << 4;
+const OAM_INTERRUPT: u8 = 1 << 5;
+const LY_EQUALS_LYC_INTERRUPT: u8 = 1 << 6;
+
+#[derive(Clone, Copy, Default)]
+pub struct Stat {
+    pub val: u8,
+}
 
 impl Stat {
     pub fn set_mode(&mut self, mode: Mode) {
-        let bits: u8 = self.bits() & !3;
+        let bits: u8 = self.val & !MODE_BITS;
         let mode: u8 = mode.into();
-        *self = Self::from_bits_truncate(bits | mode);
+        self.val = bits | mode;
     }
 
     pub fn mode(self) -> Mode {
-        self.bits().into()
+        self.val.into()
     }
 }
 
-bitflags! {
-   pub struct BgAttributes: u8{
-        const PALETTE_NUMBER   = 0b0000_0111;
-        const VRAM_BANK_NUMBER = 0b0000_1000;
-        const X_FLIP           = 0b0010_0000;
-        const Y_FLIP           = 0b0100_0000;
-        const BG_TO_OAM_PR     = 0b1000_0000;
-    }
-}
+pub const BG_PAL: u8 = 0x7;
+pub const BG_TILE_BANK: u8 = 0x8;
+pub const BG_X_FLIP: u8 = 0x20;
+pub const BG_Y_FLIP: u8 = 0x40;
+pub const BG_TO_OAM_PR: u8 = 0x80;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PixelPriority {
@@ -205,7 +202,7 @@ pub struct Ppu {
 
 impl Ppu {
     pub fn new() -> Self {
-        let stat = Stat::from_bits_truncate(2);
+        let stat = Stat { val: 2 };
         let cycles = stat.mode().cycles(0);
 
         Self {
@@ -218,7 +215,7 @@ impl Ppu {
             window_lines_skipped: 0,
             scanline_used_window: false,
             is_frame_done: false,
-            lcdc: Lcdc::empty(),
+            lcdc: Lcdc::default(),
             stat,
             scy: 0,
             scx: 0,
@@ -248,14 +245,14 @@ impl Ppu {
     }
 
     pub fn read_lcdc(&mut self) -> u8 {
-        self.lcdc.bits()
+        self.lcdc.val
     }
 
     pub fn read_stat(&mut self) -> u8 {
-        if self.lcdc.contains(Lcdc::LCD_ENABLE) {
-            self.stat.bits() | 0b1000_0000
+        if self.lcdc.val & LCD_ENABLE != 0 {
+            self.stat.val | 0x80
         } else {
-            0b1000_0000
+            0x80
         }
     }
 
@@ -338,34 +335,29 @@ impl Ppu {
     }
 
     pub fn write_lcdc(&mut self, val: u8) {
-        let new_lcdc = Lcdc::from_bits_truncate(val);
-
-        if !new_lcdc.contains(Lcdc::LCD_ENABLE) && self.lcdc.contains(Lcdc::LCD_ENABLE) {
+        if val & LCD_ENABLE == 0 && self.lcdc.val & LCD_ENABLE != 0 {
             if self.stat.mode() != Mode::VBlank {
-                log::error!("LCD off, but not in VBlank");
+                panic!("LCD off, but not in VBlank");
             }
             self.ly = 0;
         }
 
-        if new_lcdc.contains(Lcdc::LCD_ENABLE) && !self.lcdc.contains(Lcdc::LCD_ENABLE) {
+        if val & LCD_ENABLE != 0 && self.lcdc.val & LCD_ENABLE == 0 {
             self.stat.set_mode(Mode::HBlank);
-            self.stat.insert(Stat::LY_EQUALS_LYC);
+            self.stat.val |= LY_EQUALS_LYC;
             self.cycles = Mode::OamScan.cycles(self.scx);
         }
 
-        self.lcdc = new_lcdc;
+        self.lcdc.val = val;
     }
 
     pub fn write_stat(&mut self, val: u8) {
-        let ly_equals_lyc = self.stat & Stat::LY_EQUALS_LYC;
-        let mode = self.stat.mode();
+        let ly_equals_lyc = self.stat.val & LY_EQUALS_LYC;
+        let mode: u8 = self.stat.mode().into();
 
-        self.stat = Stat::from_bits_truncate(val);
-        self.stat.remove(Stat::LY_EQUALS_LYC);
-        self.stat.remove(Stat::MODE_FLAG_HIGH);
-        self.stat.remove(Stat::MODE_FLAG_LOW);
-        self.stat.insert(ly_equals_lyc);
-        self.stat.insert(Stat::from_bits_truncate(mode.into()));
+        self.stat.val = val;
+        self.stat.val &= !(LY_EQUALS_LYC | MODE_BITS);
+        self.stat.val |= ly_equals_lyc | mode;
     }
 
     pub fn write_scy(&mut self, val: u8) {
@@ -465,21 +457,21 @@ impl Ppu {
 
         match mode {
             Mode::OamScan => {
-                if stat.contains(Stat::OAM_INTERRUPT) {
-                    interrupt_controller.request(Interrupt::LCD_STAT);
+                if stat.val & OAM_INTERRUPT != 0 {
+                    interrupt_controller.request(LCD_STAT_INT);
                 }
 
                 self.scanline_used_window = false;
             }
             Mode::VBlank => {
-                interrupt_controller.request(Interrupt::VBLANK);
+                interrupt_controller.request(VBLANK_INT);
 
-                if stat.contains(Stat::VBLANK_INTERRUPT) {
-                    interrupt_controller.request(Interrupt::LCD_STAT);
+                if stat.val & VBLANK_INTERRUPT != 0 {
+                    interrupt_controller.request(LCD_STAT_INT);
                 }
 
-                if stat.contains(Stat::OAM_INTERRUPT) {
-                    interrupt_controller.request(Interrupt::LCD_STAT);
+                if stat.val & OAM_INTERRUPT != 0 {
+                    interrupt_controller.request(LCD_STAT_INT);
                 }
 
                 self.window_lines_skipped = 0;
@@ -487,8 +479,8 @@ impl Ppu {
             }
             Mode::DrawingPixels => (),
             Mode::HBlank => {
-                if stat.contains(Stat::HBLANK_INTERRUPT) {
-                    interrupt_controller.request(Interrupt::LCD_STAT);
+                if stat.val & HBLANK_INTERRUPT != 0 {
+                    interrupt_controller.request(LCD_STAT_INT);
                 }
             }
         }
@@ -504,7 +496,7 @@ impl Ppu {
         function_mode: FunctionMode,
         mus_elapsed: u8,
     ) {
-        if !self.lcdc.contains(Lcdc::LCD_ENABLE) {
+        if self.lcdc.val & LCD_ENABLE == 0 {
             return;
         }
 
@@ -546,12 +538,12 @@ impl Ppu {
     }
 
     fn check_compare_interrupt(&mut self, interrupt_controller: &mut Interrupts) {
-        self.stat.remove(Stat::LY_EQUALS_LYC);
+        self.stat.val &= !LY_EQUALS_LYC;
 
         if self.ly == self.lyc {
-            self.stat.insert(Stat::LY_EQUALS_LYC);
-            if self.stat.contains(Stat::LY_EQUALS_LYC_INTERRUPT) {
-                interrupt_controller.request(Interrupt::LCD_STAT);
+            self.stat.val |= LY_EQUALS_LYC;
+            if self.stat.val & LY_EQUALS_LYC_INTERRUPT != 0 {
+                interrupt_controller.request(LCD_STAT_INT);
             }
         }
     }

@@ -58,10 +58,7 @@ impl Memory {
             0xe000..=0xefff => self.mem_tick(|mem| mem.wram.read_ram(addr)),
             0xf000..=0xfdff => self.mem_tick(|mem| mem.wram.read_bank_ram(addr)),
             0xfe00..=0xfe9f => self.mem_tick(|mem| mem.ppu.read_oam(addr, mem.dma.is_active())),
-            0xfea0..=0xfeff => {
-                log::warn!("Read from unusable RAM");
-                self.mem_tick(|_| 0xff)
-            }
+            0xfea0..=0xfeff => self.mem_tick(|_| 0xff),
             0xff00..=0xffff => self.read_high((addr & 0xff) as u8),
         }
     }
@@ -136,7 +133,7 @@ impl Memory {
             0xfe00..=0xfe9f => {
                 self.mem_tick(|mem| mem.ppu.write_oam(addr, val, mem.dma.is_active()))
             }
-            0xfea0..=0xfeff => log::warn!("Write to unusable RAM"),
+            0xfea0..=0xfeff => self.mem_tick(|_| ()),
             0xff00..=0xffff => self.write_high((addr & 0xff) as u8, val),
         }
     }

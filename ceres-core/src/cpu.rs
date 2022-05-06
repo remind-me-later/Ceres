@@ -1,3 +1,5 @@
+use crate::interrupts::{JOYPAD_INT, LCD_STAT_INT, SERIAL_INT, TIMER_INT, VBLANK_INT};
+
 mod execute;
 mod instructions;
 mod operands;
@@ -63,7 +65,14 @@ impl Cpu {
             self.internal_push(pc);
 
             let interrupt = self.mem.interrupt_controller().requested_interrupt();
-            self.reg.pc = interrupt.handler_addr();
+            self.reg.pc = match interrupt {
+                VBLANK_INT => 0x40,
+                LCD_STAT_INT => 0x48,
+                TIMER_INT => 0x50,
+                SERIAL_INT => 0x58,
+                JOYPAD_INT => 0x60,
+                _ => unreachable!(),
+            };
 
             self.mem.tick_t_cycle();
 

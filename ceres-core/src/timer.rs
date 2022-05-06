@@ -1,28 +1,8 @@
-use {
-    crate::interrupts::{Interrupt, Interrupts},
-    bitflags::bitflags,
-};
+use crate::interrupts::{Interrupts, TIMER_INT};
 
-bitflags!(
-  struct Tac: u8 {
-    const ENABLE = 0b100;
-    const MASK_1 = 0b010;
-    const MASK_0 = 0b001;
-  }
-);
+const TAC_ENABLE: u8 = 4;
 
-impl Tac {
-    fn counter_mask(self) -> u16 {
-        match self.bits() & 0b11 {
-            3 => 1 << 5,
-            2 => 1 << 3,
-            1 => 1 << 1,
-            0 => 1 << 7,
-            _ => unreachable!(),
-        }
-    }
-}
-
+#[derive(Default)]
 pub struct Timer {
     enabled: bool,
     internal_counter: u16,
@@ -30,24 +10,27 @@ pub struct Timer {
     // registers
     counter: u8,
     modulo: u8,
-    tac: Tac,
+    tac: u8,
     overflow: bool,
 }
 
 impl Timer {
     pub fn new() -> Self {
-        Self {
-            enabled: false,
-            overflow: false,
-            internal_counter: 0,
-            counter: 0,
-            modulo: 0,
-            tac: Tac::empty(),
+        Self::default()
+    }
+
+    fn counter_mask(&self) -> u16 {
+        match self.tac & 0b11 {
+            3 => 1 << 5,
+            2 => 1 << 3,
+            1 => 1 << 1,
+            0 => 1 << 7,
+            _ => unreachable!(),
         }
     }
 
     fn counter_bit(&self) -> bool {
-        (self.internal_counter & self.tac.counter_mask()) != 0
+        (self.internal_counter & self.counter_mask()) != 0
     }
 
     fn inc(&mut self) {
@@ -60,7 +43,7 @@ impl Timer {
         if self.overflow {
             self.internal_counter = self.internal_counter.wrapping_add(1);
             self.counter = self.modulo;
-            ints.request(Interrupt::TIMER);
+            ints.request(TIMER_INT);
             self.overflow = false;
         } else if self.enabled && self.counter_bit() {
             self.internal_counter = self.internal_counter.wrapping_add(1);
@@ -90,7 +73,7 @@ impl Timer {
 
     pub fn read_tac(&mut self, ints: &mut Interrupts) -> u8 {
         self.tick_t_cycle(ints);
-        0xf8 | self.tac.bits()
+        0xf8 | self.tac
     }
 
     pub fn write_div(&mut self, ints: &mut Interrupts) {
@@ -128,8 +111,8 @@ impl Timer {
         self.tick_t_cycle(ints);
 
         let old_bit = self.enabled && self.counter_bit();
-        self.tac = Tac::from_bits_truncate(val);
-        self.enabled = self.tac.contains(Tac::ENABLE);
+        self.tac = val & 7;
+        self.enabled = val & TAC_ENABLE != 0;
         let new_bit = self.enabled && self.counter_bit();
 
         if old_bit && !new_bit {

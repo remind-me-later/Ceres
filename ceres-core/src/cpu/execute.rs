@@ -26,7 +26,6 @@ impl Cpu {
             0x47 => self.ld(B, A),
             0x40 => {
                 // TODO: debugger
-                log::warn!("debug point");
                 self.ld(B, B);
             }
             0x41 => self.ld(B, C),

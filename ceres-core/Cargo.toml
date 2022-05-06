@@ -6,6 +6,4 @@ description = "A library to make Gameboy/Color emulators"
 license = "MIT"
 
 [dependencies]
-bitflags = { version = "*", default-features = false }
 stackvec = "*"
-log = "*"
