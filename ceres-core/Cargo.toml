@@ -6,4 +6,4 @@ description = "A library to make Gameboy/Color emulators"
 license = "MIT"
 
 [dependencies]
-stackvec = "*"
+arrayvec = { version = "*", default-features = false }

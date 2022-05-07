@@ -32,6 +32,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6f8c380fa28aa1b36107cd97f0196474bb7241bb95a453c5c01a15ac74b2eac"
 
 [[package]]
+name = "arrayvec"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8da52d66c7071e2e3fa2a1e5c6d088fec47b593032b254f5e980de8ea54454d6"
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -50,7 +56,7 @@ dependencies = [
 name = "ceres-core"
 version = "0.1.0"
 dependencies = [
- "stackvec",
+ "arrayvec",
 ]
 
 [[package]]
@@ -120,12 +126,6 @@ dependencies = [
  "libc",
  "version-compare",
 ]
-
-[[package]]
-name = "stackvec"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a28337dadadf1f595e7472e02ed7e27cbc790828b10336f144b5790d21152c16"
 
 [[package]]
 name = "syn"

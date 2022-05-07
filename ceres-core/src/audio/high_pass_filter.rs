@@ -1,13 +1,13 @@
-use crate::T_CYCLES_PER_SECOND;
-
 pub struct HighPassFilter {
     capacitor: f32,
     charge_factor: f32,
 }
 
 impl HighPassFilter {
-    pub fn new(sample_rate: u32) -> Self {
-        let charge_factor = 0.998943_f32.powf(T_CYCLES_PER_SECOND as f32 / sample_rate as f32);
+    pub fn new(_sample_rate: u32) -> Self {
+        let charge_factor = 0.998943;
+        // FIXME not powf in no_std :(
+        // let charge_factor = 0.999958_f32.powf(T_CYCLES_PER_SECOND as f32 / sample_rate as f32);
 
         Self {
             capacitor: 0.0,

@@ -8,8 +8,8 @@ use {
         video::sprites::{SpriteAttr, SPR_BG_WIN_OVER_OBJ, SPR_FLIP_X, SPR_FLIP_Y, SPR_PAL},
         SCREEN_WIDTH,
     },
+    arrayvec::ArrayVec,
     core::cmp::Ordering,
-    stackvec::StackVec,
 };
 
 impl Ppu {
@@ -186,13 +186,11 @@ impl Ppu {
         let lcdc = self.lcdc;
         let index_start = SCREEN_WIDTH as usize * ly as usize;
 
-        let mut sprites_to_draw: StackVec<[(usize, SpriteAttr); 10]>;
-
         if lcdc.val & OBJECTS_ENABLED != 0 {
             let large_sprites = lcdc.val & LARGE_SPRITES != 0;
             let sprite_height = if large_sprites { 16 } else { 8 };
 
-            sprites_to_draw = self
+            let mut spr_ly: ArrayVec<(usize, SpriteAttr), 10> = self
                 .oam
                 .sprite_attributes_iterator()
                 .filter(|sprite| ly.wrapping_sub(sprite.y()) < sprite_height)
@@ -200,26 +198,19 @@ impl Ppu {
                 .enumerate()
                 .collect();
 
-            match function_mode {
-                FunctionMode::Color | FunctionMode::Compatibility if self.opri & 1 == 0 => {
-                    sprites_to_draw.sort_unstable_by(|(a_index, a), (b_index, b)| {
-                        match a_index.cmp(b_index) {
-                            Ordering::Equal => a.x().cmp(&b.x()),
-                            other => other.reverse(),
-                        }
-                    });
-                }
-                _ => {
-                    sprites_to_draw.sort_unstable_by(|(a_index, a), (b_index, b)| {
-                        match a.x().cmp(&b.x()) {
-                            Ordering::Equal => a_index.cmp(b_index).reverse(),
-                            other => other.reverse(),
-                        }
-                    });
-                }
-            };
+            if self.opri & 1 == 0 {
+                spr_ly.sort_unstable_by(|(a_pos, a), (b_pos, b)| match b_pos.cmp(a_pos) {
+                    Ordering::Equal => a.x().cmp(&b.x()),
+                    x => x,
+                });
+            } else {
+                spr_ly.sort_unstable_by(|(a_pos, a), (b_pos, b)| match b.x().cmp(&a.x()) {
+                    Ordering::Equal => b_pos.cmp(a_pos),
+                    x => x,
+                });
+            }
 
-            for (_, sprite) in sprites_to_draw {
+            for (_, sprite) in spr_ly {
                 let tile_number = if large_sprites {
                     sprite.tile_index() & !1
                 } else {
