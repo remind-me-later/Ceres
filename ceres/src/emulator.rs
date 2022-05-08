@@ -1,6 +1,6 @@
 use {
     super::audio::AudioRenderer,
-    ceres_core::{BootRom, Cartridge, Gameboy, SCREEN_HEIGHT, SCREEN_WIDTH},
+    ceres_core::{BootRom, Cartridge, Gameboy, VideoCallbacks, SCREEN_HEIGHT, SCREEN_WIDTH},
     sdl2::{
         controller::GameController,
         event::{Event, WindowEvent},
@@ -21,13 +21,14 @@ use {
 };
 
 pub struct Emulator {
-    gameboy: Gameboy,
+    gb: Gameboy,
     is_focused: bool,
     is_gui_paused: bool,
     sdl_context: Sdl,
     audio_renderer: Rc<RefCell<AudioRenderer>>,
     sav_path: PathBuf,
-    cartridge: Rc<RefCell<Cartridge>>,
+    cart: Rc<RefCell<Cartridge>>,
+    emu_win: Rc<RefCell<EmuWindow<{ SCREEN_WIDTH as u32 }, { SCREEN_HEIGHT as u32 }, 4>>>,
 }
 
 impl Emulator {
@@ -59,18 +60,30 @@ impl Emulator {
         let audio_renderer = Rc::new(RefCell::new(AudioRenderer::new(&sdl_context)));
         let audio_callbacks = Rc::clone(&audio_renderer);
 
-        let gb_cartridge = Rc::clone(&cartridge);
+        let cart = Rc::clone(&cartridge);
 
-        let gameboy = ceres_core::Gameboy::new(model, gb_cartridge, boot_rom, audio_callbacks);
+        let video_subsystem = sdl_context.video().unwrap();
+
+        let emu_win: Rc<RefCell<EmuWindow<{ SCREEN_WIDTH as u32 }, { SCREEN_HEIGHT as u32 }, 4>>> =
+            Rc::new(RefCell::new(EmuWindow::new(
+                super::CERES_STR,
+                &video_subsystem,
+            )));
+
+        let video_callbacks = Rc::clone(&emu_win);
+
+        let gameboy =
+            ceres_core::Gameboy::new(model, cart, boot_rom, audio_callbacks, video_callbacks);
 
         Self {
             sdl_context,
-            gameboy,
+            gb: gameboy,
             is_focused: false,
             is_gui_paused: false,
             audio_renderer,
             sav_path,
-            cartridge,
+            cart: cartridge,
+            emu_win,
         }
     }
 
@@ -95,13 +108,7 @@ impl Emulator {
     }
 
     pub fn run(mut self) {
-        let mut next_frame = Instant::now();
-
         let _controller = self.init_controller();
-        let video_subsystem = self.sdl_context.video().unwrap();
-
-        let mut main_win: EmuWindow<{ SCREEN_WIDTH as u32 }, { SCREEN_HEIGHT as u32 }, 4> =
-            EmuWindow::new(super::CERES_STR, &video_subsystem);
 
         let mut event_pump = self.sdl_context.event_pump().unwrap();
 
@@ -111,7 +118,9 @@ impl Emulator {
                     Event::Quit { .. } => break 'main_loop,
                     Event::Window { win_event, .. } => match win_event {
                         WindowEvent::Resized(width, height) => {
-                            main_win.resize(width as u32, height as u32);
+                            self.emu_win
+                                .borrow_mut()
+                                .resize(width as u32, height as u32);
                         }
                         WindowEvent::Close => break 'main_loop,
                         WindowEvent::FocusGained => self.is_focused = true,
@@ -126,14 +135,14 @@ impl Emulator {
                         }
 
                         match button {
-                            controller::Button::DPadUp => self.gameboy.press(Button::Up),
-                            controller::Button::DPadLeft => self.gameboy.press(Button::Left),
-                            controller::Button::DPadDown => self.gameboy.press(Button::Down),
-                            controller::Button::DPadRight => self.gameboy.press(Button::Right),
-                            controller::Button::B => self.gameboy.press(Button::B),
-                            controller::Button::A => self.gameboy.press(Button::A),
-                            controller::Button::Start => self.gameboy.press(Button::Start),
-                            controller::Button::Back => self.gameboy.press(Button::Select),
+                            controller::Button::DPadUp => self.gb.press(Button::Up),
+                            controller::Button::DPadLeft => self.gb.press(Button::Left),
+                            controller::Button::DPadDown => self.gb.press(Button::Down),
+                            controller::Button::DPadRight => self.gb.press(Button::Right),
+                            controller::Button::B => self.gb.press(Button::B),
+                            controller::Button::A => self.gb.press(Button::A),
+                            controller::Button::Start => self.gb.press(Button::Start),
+                            controller::Button::Back => self.gb.press(Button::Select),
                             _ => (),
                         }
                     }
@@ -145,14 +154,14 @@ impl Emulator {
                         }
 
                         match button {
-                            controller::Button::DPadUp => self.gameboy.release(Button::Up),
-                            controller::Button::DPadLeft => self.gameboy.release(Button::Left),
-                            controller::Button::DPadDown => self.gameboy.release(Button::Down),
-                            controller::Button::DPadRight => self.gameboy.release(Button::Right),
-                            controller::Button::B => self.gameboy.release(Button::B),
-                            controller::Button::A => self.gameboy.release(Button::A),
-                            controller::Button::Start => self.gameboy.release(Button::Start),
-                            controller::Button::Back => self.gameboy.release(Button::Select),
+                            controller::Button::DPadUp => self.gb.release(Button::Up),
+                            controller::Button::DPadLeft => self.gb.release(Button::Left),
+                            controller::Button::DPadDown => self.gb.release(Button::Down),
+                            controller::Button::DPadRight => self.gb.release(Button::Right),
+                            controller::Button::B => self.gb.release(Button::B),
+                            controller::Button::A => self.gb.release(Button::A),
+                            controller::Button::Start => self.gb.release(Button::Start),
+                            controller::Button::Back => self.gb.release(Button::Select),
                             _ => (),
                         }
                     }
@@ -165,14 +174,14 @@ impl Emulator {
 
                         if let Some(key) = scancode {
                             match key {
-                                Scancode::W => self.gameboy.press(Button::Up),
-                                Scancode::A => self.gameboy.press(Button::Left),
-                                Scancode::S => self.gameboy.press(Button::Down),
-                                Scancode::D => self.gameboy.press(Button::Right),
-                                Scancode::K => self.gameboy.press(Button::A),
-                                Scancode::L => self.gameboy.press(Button::B),
-                                Scancode::Return => self.gameboy.press(Button::Start),
-                                Scancode::Backspace => self.gameboy.press(Button::Select),
+                                Scancode::W => self.gb.press(Button::Up),
+                                Scancode::A => self.gb.press(Button::Left),
+                                Scancode::S => self.gb.press(Button::Down),
+                                Scancode::D => self.gb.press(Button::Right),
+                                Scancode::K => self.gb.press(Button::A),
+                                Scancode::L => self.gb.press(Button::B),
+                                Scancode::Return => self.gb.press(Button::Start),
+                                Scancode::Backspace => self.gb.press(Button::Select),
                                 Scancode::Space => {
                                     if self.is_gui_paused {
                                         self.audio_renderer.borrow_mut().play();
@@ -195,14 +204,14 @@ impl Emulator {
 
                         if let Some(key) = scancode {
                             match key {
-                                Scancode::W => self.gameboy.release(Button::Up),
-                                Scancode::A => self.gameboy.release(Button::Left),
-                                Scancode::S => self.gameboy.release(Button::Down),
-                                Scancode::D => self.gameboy.release(Button::Right),
-                                Scancode::K => self.gameboy.release(Button::A),
-                                Scancode::L => self.gameboy.release(Button::B),
-                                Scancode::Return => self.gameboy.release(Button::Start),
-                                Scancode::Backspace => self.gameboy.release(Button::Select),
+                                Scancode::W => self.gb.release(Button::Up),
+                                Scancode::A => self.gb.release(Button::Left),
+                                Scancode::S => self.gb.release(Button::Down),
+                                Scancode::D => self.gb.release(Button::Right),
+                                Scancode::K => self.gb.release(Button::A),
+                                Scancode::L => self.gb.release(Button::B),
+                                Scancode::Return => self.gb.release(Button::Start),
+                                Scancode::Backspace => self.gb.release(Button::Select),
                                 _ => (),
                             }
                         }
@@ -212,25 +221,13 @@ impl Emulator {
                 }
             }
 
-            if self.is_gui_paused {
-                continue;
-            }
-
-            let now = Instant::now();
-
-            if now >= next_frame {
-                self.gameboy.run_frame();
-                let gb_screen_pixel_data = std::mem::take(self.gameboy.mut_pixel_data());
-                let gb_screen_pixel_data = gb_screen_pixel_data.rgba();
-                main_win.upload_rgba(gb_screen_pixel_data);
-
-                next_frame = now + ceres_core::FRAME_DURATION;
+            if !self.is_gui_paused {
+                self.gb.run_frame();
             }
         }
 
-        // save
-        if self.cartridge.borrow().has_battery() {
-            save_data(&self.sav_path, &self.cartridge.borrow());
+        if self.cart.borrow().has_battery() {
+            save_data(&self.sav_path, &self.cart.borrow());
         }
     }
 }
@@ -255,6 +252,7 @@ struct EmuWindow<const WIDTH: u32, const HEIGHT: u32, const MUL: u32> {
     _texture_creator: TextureCreator<WindowContext>,
     texture: Texture,
     render_rect: Rect,
+    next_frame: Instant,
 }
 
 impl<'a, const WIDTH: u32, const HEIGHT: u32, const MUL: u32> EmuWindow<WIDTH, HEIGHT, MUL> {
@@ -281,6 +279,7 @@ impl<'a, const WIDTH: u32, const HEIGHT: u32, const MUL: u32> EmuWindow<WIDTH, H
             _texture_creator: texture_creator,
             texture,
             render_rect,
+            next_frame: Instant::now(),
         }
     }
 
@@ -296,19 +295,31 @@ impl<'a, const WIDTH: u32, const HEIGHT: u32, const MUL: u32> EmuWindow<WIDTH, H
 
         Rect::from_center(center, surface_width, surface_height)
     }
+}
 
-    pub fn upload_rgba(&mut self, pixel_data: &[u8]) {
+impl<const WIDTH: u32, const HEIGHT: u32, const MUL: u32> VideoCallbacks
+    for EmuWindow<WIDTH, HEIGHT, MUL>
+{
+    fn draw(&mut self, rgba_data: &[u8]) {
         self.texture
             .with_lock(None, move |buf, _pitch| {
                 buf[..(WIDTH as usize * HEIGHT as usize * 4)]
-                    .copy_from_slice(&pixel_data[..(WIDTH as usize * HEIGHT as usize * 4)]);
+                    .copy_from_slice(&rgba_data[..(WIDTH as usize * HEIGHT as usize * 4)]);
             })
             .unwrap();
+
+        let now = Instant::now();
+
+        if now < self.next_frame {
+            std::thread::sleep(self.next_frame - now);
+        }
 
         self.canvas.clear();
         self.canvas
             .copy(&self.texture, None, self.render_rect)
             .unwrap();
         self.canvas.present();
+
+        self.next_frame += ceres_core::FRAME_DURATION;
     }
 }

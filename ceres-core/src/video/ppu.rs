@@ -4,12 +4,14 @@ use {
         pixel_data::PixelData,
         sprites::Oam,
         vram::Vram,
-        ACCESS_OAM_CYCLES, ACCESS_VRAM_CYCLES, HBLANK_CYCLES, VBLANK_LINE_CYCLES,
+        VideoCallbacks, ACCESS_OAM_CYCLES, ACCESS_VRAM_CYCLES, HBLANK_CYCLES, VBLANK_LINE_CYCLES,
     },
     crate::{
         interrupts::{Interrupts, LCD_STAT_INT, VBLANK_INT},
         FunctionMode,
     },
+    alloc::rc::Rc,
+    core::cell::RefCell,
 };
 
 mod scanline_renderer;
@@ -183,6 +185,7 @@ pub struct Ppu {
     scanline_used_window: bool,
     window_lines_skipped: u16,
     is_frame_done: bool,
+    video_callbacks: Rc<RefCell<dyn VideoCallbacks>>,
 
     // registers
     lcdc: Lcdc,
@@ -215,7 +218,7 @@ pub struct Ppu {
 }
 
 impl Ppu {
-    pub fn new() -> Self {
+    pub fn new(video_callbacks: Rc<RefCell<dyn VideoCallbacks>>) -> Self {
         let stat = Stat { val: 2 };
         let cycles = stat.mode().cycles(0);
 
@@ -229,6 +232,7 @@ impl Ppu {
             window_lines_skipped: 0,
             scanline_used_window: false,
             is_frame_done: false,
+            video_callbacks,
             lcdc: Lcdc::default(),
             stat,
             scy: 0,
@@ -244,10 +248,6 @@ impl Ppu {
             cgb_sprite_palette: ColorPalette::new(),
             opri: 0,
         }
-    }
-
-    pub fn mut_pixel_data(&mut self) -> &mut PixelData {
-        &mut self.pixel_data
     }
 
     pub fn reset_frame_done(&mut self) {
@@ -540,6 +540,9 @@ impl Ppu {
                     self.ly = 0;
                     self.switch_mode(Mode::OamScan, ints);
                     self.is_frame_done = true;
+                    self.video_callbacks
+                        .borrow_mut()
+                        .draw(self.pixel_data.rgba());
                 } else {
                     let scx = self.scx;
                     self.cycles += self.stat.mode().cycles(scx);

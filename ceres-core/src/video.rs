@@ -1,4 +1,4 @@
-pub use {palette::MonochromePaletteColors, pixel_data::PixelData};
+pub use palette::MonochromePaletteColors;
 
 pub mod ppu;
 
@@ -17,6 +17,10 @@ const ACCESS_OAM_CYCLES: i16 = 80; // Constant
 const ACCESS_VRAM_CYCLES: i16 = 172; // Variable, minimum ammount
 const HBLANK_CYCLES: i16 = 204; // Variable, maximum ammount
 const VBLANK_LINE_CYCLES: i16 = 456; // Constant
+
+pub trait VideoCallbacks {
+    fn draw(&mut self, rgba_data: &[u8]);
+}
 
 #[derive(Clone, Copy, Default)]
 pub struct Rgb24Color {

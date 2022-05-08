@@ -21,7 +21,9 @@ pub use {
     cartridge::{Cartridge, Header},
     error::Error,
     joypad::Button,
-    video::{MonochromePaletteColors, PixelData, SCANLINES_PER_FRAME, SCREEN_HEIGHT, SCREEN_WIDTH},
+    video::{
+        MonochromePaletteColors, VideoCallbacks, SCANLINES_PER_FRAME, SCREEN_HEIGHT, SCREEN_WIDTH,
+    },
 };
 
 mod audio;
@@ -89,6 +91,7 @@ impl Gameboy {
         cart: Rc<RefCell<Cartridge>>,
         boot_rom: BootRom,
         audio_callbacks: Rc<RefCell<dyn AudioCallbacks>>,
+        video_callbacks: Rc<RefCell<dyn VideoCallbacks>>,
     ) -> Self {
         let function_mode = match model {
             Model::Dmg | Model::Mgb => FunctionMode::Monochrome,
@@ -106,7 +109,7 @@ impl Gameboy {
             cart,
             hram: Hram::new(),
             wram: Wram::new(),
-            ppu: Ppu::new(),
+            ppu: Ppu::new(video_callbacks),
             joypad: Joypad::new(),
             apu: Apu::new(audio_callbacks),
             serial: Serial::new(),
@@ -126,10 +129,6 @@ impl Gameboy {
 
     pub fn release(&mut self, button: Button) {
         self.joypad.release(button);
-    }
-
-    pub fn mut_pixel_data(&mut self) -> &mut PixelData {
-        self.ppu.mut_pixel_data()
     }
 
     pub fn run_frame(&mut self) {
