@@ -4,7 +4,7 @@ pub struct HighPassFilter {
 }
 
 impl HighPassFilter {
-    pub fn new(_sample_rate: u32) -> Self {
+    pub fn new() -> Self {
         let charge_factor = 0.998943;
         // FIXME not powf in no_std :(
         // let charge_factor = 0.999958_f32.powf(T_CYCLES_PER_SECOND as f32 / sample_rate as f32);

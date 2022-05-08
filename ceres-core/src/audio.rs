@@ -1,9 +1,3 @@
-mod audio_callbacks;
-mod channels;
-mod control;
-mod high_pass_filter;
-mod sequencer;
-
 pub use audio_callbacks::AudioCallbacks;
 use {
     self::{
@@ -15,6 +9,12 @@ use {
     alloc::rc::Rc,
     core::cell::RefCell,
 };
+
+mod audio_callbacks;
+mod channels;
+mod control;
+mod high_pass_filter;
+mod sequencer;
 
 pub type Sample = f32;
 
@@ -50,7 +50,6 @@ pub struct Apu {
 impl Apu {
     pub fn new(callbacks: Rc<RefCell<dyn AudioCallbacks>>) -> Self {
         let cycles_to_render = callbacks.borrow().cycles_to_render();
-        let sample_rate = callbacks.borrow().sample_rate();
 
         Self {
             channels: Channels::new(),
@@ -59,7 +58,7 @@ impl Apu {
             control: Control::new(),
             callbacks,
             sequencer: Sequencer::new(),
-            high_pass_filter: HighPassFilter::new(sample_rate),
+            high_pass_filter: HighPassFilter::new(),
         }
     }
 

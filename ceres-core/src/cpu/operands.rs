@@ -1,59 +1,59 @@
-use super::{
-    registers::{Reg16, Reg8},
-    Cpu,
+use {
+    super::registers::{Reg16, Reg8},
+    crate::Gameboy,
 };
 
 pub trait Get<T: Copy>
 where
     Self: Copy,
 {
-    fn get(self, cpu: &mut Cpu) -> T;
+    fn get(self, gb: &mut Gameboy) -> T;
 }
 
 pub trait Set<T: Copy>
 where
     Self: Copy,
 {
-    fn set(self, cpu: &mut Cpu, val: T);
+    fn set(self, gb: &mut Gameboy, val: T);
 }
 
 impl Get<u8> for Reg8 {
-    fn get(self, cpu: &mut Cpu) -> u8 {
+    fn get(self, gb: &mut Gameboy) -> u8 {
         match self {
-            Reg8::A => cpu.reg.a,
-            Reg8::B => cpu.reg.b,
-            Reg8::C => cpu.reg.c,
-            Reg8::D => cpu.reg.d,
-            Reg8::E => cpu.reg.e,
-            Reg8::H => cpu.reg.h,
-            Reg8::L => cpu.reg.l,
+            Reg8::A => gb.reg.a,
+            Reg8::B => gb.reg.b,
+            Reg8::C => gb.reg.c,
+            Reg8::D => gb.reg.d,
+            Reg8::E => gb.reg.e,
+            Reg8::H => gb.reg.h,
+            Reg8::L => gb.reg.l,
         }
     }
 }
 
 impl Set<u8> for Reg8 {
-    fn set(self, cpu: &mut Cpu, val: u8) {
+    fn set(self, gb: &mut Gameboy, val: u8) {
         match self {
-            Reg8::A => cpu.reg.a = val,
-            Reg8::B => cpu.reg.b = val,
-            Reg8::C => cpu.reg.c = val,
-            Reg8::D => cpu.reg.d = val,
-            Reg8::E => cpu.reg.e = val,
-            Reg8::H => cpu.reg.h = val,
-            Reg8::L => cpu.reg.l = val,
+            Reg8::A => gb.reg.a = val,
+            Reg8::B => gb.reg.b = val,
+            Reg8::C => gb.reg.c = val,
+            Reg8::D => gb.reg.d = val,
+            Reg8::E => gb.reg.e = val,
+            Reg8::H => gb.reg.h = val,
+            Reg8::L => gb.reg.l = val,
         }
     }
 }
 
 impl Get<u16> for Reg16 {
-    fn get(self, cpu: &mut Cpu) -> u16 {
-        cpu.reg.read16(self)
+    fn get(self, gb: &mut Gameboy) -> u16 {
+        gb.reg.read16(self)
     }
 }
 
 impl Set<u16> for Reg16 {
-    fn set(self, cpu: &mut Cpu, val: u16) {
-        cpu.reg.write16(self, val);
+    fn set(self, gb: &mut Gameboy, val: u16) {
+        gb.reg.write16(self, val);
     }
 }
 
@@ -61,14 +61,14 @@ impl Set<u16> for Reg16 {
 pub struct Imm;
 
 impl Get<u8> for Imm {
-    fn get(self, cpu: &mut Cpu) -> u8 {
-        cpu.imm8()
+    fn get(self, gb: &mut Gameboy) -> u8 {
+        gb.imm8()
     }
 }
 
 impl Get<u16> for Imm {
-    fn get(self, cpu: &mut Cpu) -> u16 {
-        cpu.imm16()
+    fn get(self, gb: &mut Gameboy) -> u16 {
+        gb.imm16()
     }
 }
 
@@ -83,29 +83,29 @@ pub enum Indirect {
 }
 
 impl Indirect {
-    fn into_addr(self, cpu: &mut Cpu) -> u16 {
+    fn into_addr(self, gb: &mut Gameboy) -> u16 {
         match self {
-            Indirect::BC => cpu.reg.read16(Reg16::BC),
-            Indirect::DE => cpu.reg.read16(Reg16::DE),
-            Indirect::HL => cpu.reg.read16(Reg16::HL),
-            Indirect::Immediate => cpu.imm16(),
-            Indirect::HighC => u16::from(cpu.reg.c) | 0xff00,
-            Indirect::HighImmediate => u16::from(cpu.imm8()) | 0xff00,
+            Indirect::BC => gb.reg.read16(Reg16::BC),
+            Indirect::DE => gb.reg.read16(Reg16::DE),
+            Indirect::HL => gb.reg.read16(Reg16::HL),
+            Indirect::Immediate => gb.imm16(),
+            Indirect::HighC => u16::from(gb.reg.c) | 0xff00,
+            Indirect::HighImmediate => u16::from(gb.imm8()) | 0xff00,
         }
     }
 }
 
 impl Get<u8> for Indirect {
-    fn get(self, cpu: &mut Cpu) -> u8 {
-        let addr = self.into_addr(cpu);
-        cpu.mem.read(addr)
+    fn get(self, gb: &mut Gameboy) -> u8 {
+        let addr = self.into_addr(gb);
+        gb.read_mem(addr)
     }
 }
 
 impl Set<u8> for Indirect {
-    fn set(self, cpu: &mut Cpu, val: u8) {
-        let addr = self.into_addr(cpu);
-        cpu.mem.write(addr, val);
+    fn set(self, gb: &mut Gameboy, val: u8) {
+        let addr = self.into_addr(gb);
+        gb.write_mem(addr, val);
     }
 }
 
@@ -113,19 +113,19 @@ impl Set<u8> for Indirect {
 pub struct IndirectIncreaseHL;
 
 impl Get<u8> for IndirectIncreaseHL {
-    fn get(self, cpu: &mut Cpu) -> u8 {
-        let addr = cpu.reg.read16(Reg16::HL);
-        let ret = cpu.mem.read(addr);
-        cpu.reg.write16(Reg16::HL, addr.wrapping_add(1));
+    fn get(self, gb: &mut Gameboy) -> u8 {
+        let addr = gb.reg.read16(Reg16::HL);
+        let ret = gb.read_mem(addr);
+        gb.reg.write16(Reg16::HL, addr.wrapping_add(1));
         ret
     }
 }
 
 impl Set<u8> for IndirectIncreaseHL {
-    fn set(self, cpu: &mut Cpu, val: u8) {
-        let addr = cpu.reg.read16(Reg16::HL);
-        cpu.mem.write(addr, val);
-        cpu.reg.write16(Reg16::HL, addr.wrapping_add(1));
+    fn set(self, gb: &mut Gameboy, val: u8) {
+        let addr = gb.reg.read16(Reg16::HL);
+        gb.write_mem(addr, val);
+        gb.reg.write16(Reg16::HL, addr.wrapping_add(1));
     }
 }
 
@@ -133,19 +133,19 @@ impl Set<u8> for IndirectIncreaseHL {
 pub struct IndirectDecreaseHL;
 
 impl Get<u8> for IndirectDecreaseHL {
-    fn get(self, cpu: &mut Cpu) -> u8 {
-        let addr = cpu.reg.read16(Reg16::HL);
-        let ret = cpu.mem.read(addr);
-        cpu.reg.write16(Reg16::HL, addr.wrapping_sub(1));
+    fn get(self, gb: &mut Gameboy) -> u8 {
+        let addr = gb.reg.read16(Reg16::HL);
+        let ret = gb.read_mem(addr);
+        gb.reg.write16(Reg16::HL, addr.wrapping_sub(1));
         ret
     }
 }
 
 impl Set<u8> for IndirectDecreaseHL {
-    fn set(self, cpu: &mut Cpu, val: u8) {
-        let addr = cpu.reg.read16(Reg16::HL);
-        cpu.mem.write(addr, val);
-        cpu.reg.write16(Reg16::HL, addr.wrapping_sub(1));
+    fn set(self, gb: &mut Gameboy, val: u8) {
+        let addr = gb.reg.read16(Reg16::HL);
+        gb.write_mem(addr, val);
+        gb.reg.write16(Reg16::HL, addr.wrapping_sub(1));
     }
 }
 
@@ -158,13 +158,13 @@ pub enum JumpCondition {
 }
 
 impl JumpCondition {
-    pub fn check(self, cpu: &Cpu) -> bool {
+    pub fn check(self, gb: &Gameboy) -> bool {
         use JumpCondition::{Carry, NotCarry, NotZero, Zero};
         match self {
-            Zero => cpu.reg.zf(),
-            NotZero => !cpu.reg.zf(),
-            Carry => cpu.reg.cf(),
-            NotCarry => !cpu.reg.cf(),
+            Zero => gb.reg.zf(),
+            NotZero => !gb.reg.zf(),
+            Carry => gb.reg.cf(),
+            NotCarry => !gb.reg.cf(),
         }
     }
 }

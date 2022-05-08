@@ -1,9 +1,3 @@
-mod header;
-mod mbc1;
-mod mbc2;
-mod mbc3;
-mod mbc5;
-
 use {
     self::{mbc1::Mbc1, mbc2::Mbc2, mbc3::Mbc3, mbc5::Mbc5},
     crate::Error,
@@ -11,6 +5,12 @@ use {
 };
 
 pub use self::header::{CgbFlag, Header};
+
+mod header;
+mod mbc1;
+mod mbc2;
+mod mbc3;
+mod mbc5;
 
 const ROM_BANK_SIZE: usize = 0x4000;
 const RAM_BANK_SIZE: usize = 0x2000;

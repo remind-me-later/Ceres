@@ -1,6 +1,9 @@
-pub const SPR_CGB_PAL: u8 = 0x7; // CGB Only
-pub const SPR_TILE_BANK: u8 = 0x8; // CGB Only
-pub const SPR_PAL: u8 = 0x10; // Non CGB Only
+pub const SPR_CGB_PAL: u8 = 0x7;
+// CGB Only
+pub const SPR_TILE_BANK: u8 = 0x8;
+// CGB Only
+pub const SPR_PAL: u8 = 0x10;
+// Non CGB Only
 pub const SPR_FLIP_X: u8 = 0x20;
 pub const SPR_FLIP_Y: u8 = 0x40;
 pub const SPR_BG_WIN_OVER_OBJ: u8 = 0x80;

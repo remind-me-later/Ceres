@@ -25,7 +25,7 @@ impl Display for Header {
 }
 
 impl Header {
-    pub fn new(rom: &[u8]) -> Result<Self, crate::Error> {
+    pub fn new(rom: &[u8]) -> Result<Self, Error> {
         let licensee_code = LicenseeCode::new(rom)?;
         let cgb_flag = CgbFlag::new(rom);
         let rom_size = ROMSize::new(rom)?;

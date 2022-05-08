@@ -1,16 +1,18 @@
-use super::{
-    operands::{
-        Imm, Indirect, IndirectDecreaseHL, IndirectIncreaseHL,
-        JumpCondition::{Carry, NotCarry, NotZero, Zero},
+use {
+    super::{
+        operands::{
+            Imm, Indirect, IndirectDecreaseHL, IndirectIncreaseHL,
+            JumpCondition::{Carry, NotCarry, NotZero, Zero},
+        },
+        registers::{
+            Reg16::{AF, BC, DE, HL, SP},
+            Reg8::{A, B, C, D, E, H, L},
+        },
     },
-    registers::{
-        Reg16::{AF, BC, DE, HL, SP},
-        Reg8::{A, B, C, D, E, H, L},
-    },
-    Cpu,
+    crate::Gameboy,
 };
 
-impl Cpu {
+impl Gameboy {
     #[allow(clippy::too_many_lines)]
     pub fn exec(&mut self, opcode: u8) {
         match opcode {

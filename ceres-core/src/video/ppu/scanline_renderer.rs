@@ -4,16 +4,15 @@ use {
         OBJECTS_ENABLED,
     },
     crate::{
-        memory::FunctionMode,
         video::sprites::{SpriteAttr, SPR_BG_WIN_OVER_OBJ, SPR_FLIP_X, SPR_FLIP_Y, SPR_PAL},
-        SCREEN_WIDTH,
+        FunctionMode, SCREEN_WIDTH,
     },
     arrayvec::ArrayVec,
     core::cmp::Ordering,
 };
 
 impl Ppu {
-    pub fn draw_scanline(&mut self, function_mode: FunctionMode) {
+    pub(crate) fn draw_scanline(&mut self, function_mode: FunctionMode) {
         let mut bg_priority = [PixelPriority::Normal; SCREEN_WIDTH as usize];
 
         self.draw_background(function_mode, &mut bg_priority);

@@ -1,16 +1,16 @@
-mod envelope;
-mod frequency_data;
-mod generic_channel;
-mod noise_channel;
-mod square;
-mod wave;
-
 pub use generic_channel::LengthPeriodHalf;
 use {
     noise_channel::NoiseChannel,
     square::{square1::Square1, square2::Square2},
     wave::WaveChannel,
 };
+
+mod envelope;
+mod frequency_data;
+mod generic_channel;
+mod noise_channel;
+mod square;
+mod wave;
 
 pub struct Channels {
     pub square1: Square1,

@@ -1,7 +1,3 @@
-use crate::interrupts::{LCD_STAT_INT, VBLANK_INT};
-
-mod scanline_renderer;
-
 use {
     super::{
         palette::{ColorPalette, MonochromePalette, MonochromePaletteColors},
@@ -10,8 +6,13 @@ use {
         vram::Vram,
         ACCESS_OAM_CYCLES, ACCESS_VRAM_CYCLES, HBLANK_CYCLES, VBLANK_LINE_CYCLES,
     },
-    crate::{interrupts::Interrupts, memory::FunctionMode},
+    crate::{
+        interrupts::{Interrupts, LCD_STAT_INT, VBLANK_INT},
+        FunctionMode,
+    },
 };
+
+mod scanline_renderer;
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Mode {
@@ -71,7 +72,7 @@ pub struct Lcdc {
 }
 
 impl Lcdc {
-    pub fn win_enabled(self, function_mode: FunctionMode) -> bool {
+    fn win_enabled(self, function_mode: FunctionMode) -> bool {
         match function_mode {
             FunctionMode::Monochrome | FunctionMode::Compatibility => {
                 self.val & BACKGROUND_ENABLED & WINDOW_ENABLED != 0
@@ -80,7 +81,7 @@ impl Lcdc {
         }
     }
 
-    pub fn bg_enabled(self, function_mode: FunctionMode) -> bool {
+    fn bg_enabled(self, function_mode: FunctionMode) -> bool {
         match function_mode {
             FunctionMode::Monochrome | FunctionMode::Compatibility => {
                 self.val & BACKGROUND_ENABLED != 0
@@ -89,7 +90,7 @@ impl Lcdc {
         }
     }
 
-    pub fn cgb_sprite_master_priority_on(self, function_mode: FunctionMode) -> bool {
+    fn cgb_sprite_master_priority_on(self, function_mode: FunctionMode) -> bool {
         match function_mode {
             FunctionMode::Monochrome | FunctionMode::Compatibility => false,
             FunctionMode::Color => self.val & BACKGROUND_ENABLED == 0,
@@ -184,19 +185,32 @@ pub struct Ppu {
     is_frame_done: bool,
 
     // registers
-    lcdc: Lcdc,                       // lcd control
-    stat: Stat,                       // lcd status
-    scy: u8,                          // scroll y
-    scx: u8,                          // scroll x
-    ly: u8,                           // LCD Y coordinate
-    lyc: u8,                          // LY compare
-    wy: u8,                           // window y position
-    wx: u8,                           // window x position
-    opri: u8,                         // object priority mode
-    bgp: MonochromePalette,           // bg palette data
-    obp0: MonochromePalette,          // obj palette 0
-    obp1: MonochromePalette,          // obj palette 1
-    cgb_bg_palette: ColorPalette,     // cgb only
+    lcdc: Lcdc,
+    // lcd control
+    stat: Stat,
+    // lcd status
+    scy: u8,
+    // scroll y
+    scx: u8,
+    // scroll x
+    ly: u8,
+    // LCD Y coordinate
+    lyc: u8,
+    // LY compare
+    wy: u8,
+    // window y position
+    wx: u8,
+    // window x position
+    opri: u8,
+    // object priority mode
+    bgp: MonochromePalette,
+    // bg palette data
+    obp0: MonochromePalette,
+    // obj palette 0
+    obp1: MonochromePalette,
+    // obj palette 1
+    cgb_bg_palette: ColorPalette,
+    // cgb only
     cgb_sprite_palette: ColorPalette, // cgb only
 }
 
@@ -336,9 +350,7 @@ impl Ppu {
 
     pub fn write_lcdc(&mut self, val: u8) {
         if val & LCD_ENABLE == 0 && self.lcdc.val & LCD_ENABLE != 0 {
-            if self.stat.mode() != Mode::VBlank {
-                panic!("LCD off, but not in VBlank");
-            }
+            debug_assert!(self.stat.mode() != Mode::VBlank);
             self.ly = 0;
         }
 
@@ -449,7 +461,7 @@ impl Ppu {
         self.oam.write(addr, val)
     }
 
-    fn switch_mode(&mut self, mode: Mode, interrupt_controller: &mut Interrupts) {
+    fn switch_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
         self.stat.set_mode(mode);
         let scx = self.scx;
         self.cycles += mode.cycles(scx);
@@ -458,20 +470,20 @@ impl Ppu {
         match mode {
             Mode::OamScan => {
                 if stat.val & OAM_INTERRUPT != 0 {
-                    interrupt_controller.request(LCD_STAT_INT);
+                    ints.request(LCD_STAT_INT);
                 }
 
                 self.scanline_used_window = false;
             }
             Mode::VBlank => {
-                interrupt_controller.request(VBLANK_INT);
+                ints.request(VBLANK_INT);
 
                 if stat.val & VBLANK_INTERRUPT != 0 {
-                    interrupt_controller.request(LCD_STAT_INT);
+                    ints.request(LCD_STAT_INT);
                 }
 
                 if stat.val & OAM_INTERRUPT != 0 {
-                    interrupt_controller.request(LCD_STAT_INT);
+                    ints.request(LCD_STAT_INT);
                 }
 
                 self.window_lines_skipped = 0;
@@ -480,7 +492,7 @@ impl Ppu {
             Mode::DrawingPixels => (),
             Mode::HBlank => {
                 if stat.val & HBLANK_INTERRUPT != 0 {
-                    interrupt_controller.request(LCD_STAT_INT);
+                    ints.request(LCD_STAT_INT);
                 }
             }
         }
@@ -490,9 +502,9 @@ impl Ppu {
         self.stat.mode()
     }
 
-    pub fn tick(
+    pub(crate) fn tick(
         &mut self,
-        interrupt_controller: &mut Interrupts,
+        ints: &mut Interrupts,
         function_mode: FunctionMode,
         mus_elapsed: u8,
     ) {
@@ -508,42 +520,42 @@ impl Ppu {
         }
 
         match stat.mode() {
-            Mode::OamScan => self.switch_mode(Mode::DrawingPixels, interrupt_controller),
+            Mode::OamScan => self.switch_mode(Mode::DrawingPixels, ints),
             Mode::DrawingPixels => {
                 self.draw_scanline(function_mode);
-                self.switch_mode(Mode::HBlank, interrupt_controller);
+                self.switch_mode(Mode::HBlank, ints);
             }
             Mode::HBlank => {
                 self.ly += 1;
                 if self.ly < 144 {
-                    self.switch_mode(Mode::OamScan, interrupt_controller);
+                    self.switch_mode(Mode::OamScan, ints);
                 } else {
-                    self.switch_mode(Mode::VBlank, interrupt_controller);
+                    self.switch_mode(Mode::VBlank, ints);
                 }
-                self.check_compare_interrupt(interrupt_controller);
+                self.check_compare_interrupt(ints);
             }
             Mode::VBlank => {
                 self.ly += 1;
                 if self.ly > 153 {
                     self.ly = 0;
-                    self.switch_mode(Mode::OamScan, interrupt_controller);
+                    self.switch_mode(Mode::OamScan, ints);
                     self.is_frame_done = true;
                 } else {
                     let scx = self.scx;
                     self.cycles += self.stat.mode().cycles(scx);
                 }
-                self.check_compare_interrupt(interrupt_controller);
+                self.check_compare_interrupt(ints);
             }
         };
     }
 
-    fn check_compare_interrupt(&mut self, interrupt_controller: &mut Interrupts) {
+    fn check_compare_interrupt(&mut self, ints: &mut Interrupts) {
         self.stat.val &= !LY_EQUALS_LYC;
 
         if self.ly == self.lyc {
             self.stat.val |= LY_EQUALS_LYC;
             if self.stat.val & LY_EQUALS_LYC_INTERRUPT != 0 {
-                interrupt_controller.request(LCD_STAT_INT);
+                ints.request(LCD_STAT_INT);
             }
         }
     }

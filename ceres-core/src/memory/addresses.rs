@@ -1,9 +1,6 @@
-use {
-    super::{FunctionMode, Memory},
-    crate::{audio::Apu, interrupts::Interrupts, timer::Timer, Model::Cgb},
-};
+use crate::{audio::Apu, interrupts::Interrupts, timer::Timer, FunctionMode, Gameboy, Model::Cgb};
 
-impl Memory {
+impl Gameboy {
     fn mem_tick<T, F>(&mut self, f: F) -> T
     where
         F: FnOnce(&mut Self) -> T,
@@ -36,7 +33,7 @@ impl Memory {
         result
     }
 
-    pub fn read(&mut self, addr: u16) -> u8 {
+    pub fn read_mem(&mut self, addr: u16) -> u8 {
         match addr {
             0x0000..=0x00ff => self.mem_tick(|mem| {
                 mem.boot_rom
@@ -119,7 +116,7 @@ impl Memory {
         }
     }
 
-    pub fn write(&mut self, addr: u16, val: u8) {
+    pub fn write_mem(&mut self, addr: u16, val: u8) {
         match addr {
             // assume bootrom doesnt write to rom
             0x0000..=0x08ff => self.mem_tick(|mem| mem.cart.borrow_mut().write_rom(addr, val)),

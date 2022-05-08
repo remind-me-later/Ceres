@@ -69,7 +69,8 @@ pub struct WaveChannel {
     current_frequency_period: u16,
     sample_buffer: u8,
     wave_ram: [u8; WAVE_RAM_SIZE as usize],
-    wave_samples: [u8; WAVE_SAMPLE_SIZE as usize], // we don't have u4 yet
+    wave_samples: [u8; WAVE_SAMPLE_SIZE as usize],
+    // we don't have u4 yet
     wave_sample_index: u8,
     volume: Volume,
     nr30: u8,

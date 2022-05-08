@@ -1,3 +1,7 @@
+pub use {dma::Dma, hdma::Hdma, hram::Hram, key1::Key1, wram::Wram};
+
+use crate::Gameboy;
+
 mod addresses;
 mod dma;
 mod hdma;
@@ -5,111 +9,9 @@ mod hram;
 mod key1;
 mod wram;
 
-use {
-    self::{dma::Dma, hdma::Hdma, key1::Key1},
-    super::{cartridge::Cartridge, interrupts::Interrupts, timer::Timer},
-    crate::{
-        audio::Apu,
-        boot_rom::BootRom,
-        joypad::Joypad,
-        serial::Serial,
-        video::{ppu::Ppu, PixelData},
-        AudioCallbacks, Button, Model,
-    },
-    alloc::rc::Rc,
-    core::cell::RefCell,
-    hram::Hram,
-    wram::Wram,
-};
-
-#[derive(Clone, Copy)]
-pub enum FunctionMode {
-    Monochrome,
-    Compatibility,
-    Color,
-}
-
-pub struct Memory {
-    cart: Rc<RefCell<Cartridge>>,
-    ints: Interrupts,
-    timer: Timer,
-    hram: Hram,
-    wram: Wram,
-    ppu: Ppu,
-    joypad: Joypad,
-    apu: Apu,
-    serial: Serial,
-    dma: Dma,
-    hdma: Hdma,
-    boot_rom: BootRom,
-    model: Model,
-    pub key1: Key1,
-    in_double_speed: bool,
-    function_mode: FunctionMode,
-}
-
-impl Memory {
-    pub fn new(
-        model: Model,
-        cartridge: Rc<RefCell<Cartridge>>,
-        boot_rom: BootRom,
-        audio_renderer: Rc<RefCell<dyn AudioCallbacks>>,
-    ) -> Self {
-        let function_mode = match model {
-            Model::Dmg | Model::Mgb => FunctionMode::Monochrome,
-            Model::Cgb => FunctionMode::Color,
-        };
-
-        Self {
-            ints: Interrupts::new(),
-            timer: Timer::new(),
-            cart: cartridge,
-            hram: Hram::new(),
-            wram: Wram::new(),
-            ppu: Ppu::new(),
-            joypad: Joypad::new(),
-            apu: Apu::new(audio_renderer),
-            serial: Serial::new(),
-            dma: Dma::new(),
-            hdma: Hdma::new(),
-            boot_rom,
-            model,
-            in_double_speed: false,
-            key1: Key1::new(),
-            function_mode,
-        }
-    }
-
-    pub fn reset_frame_done(&mut self) {
-        self.ppu.reset_frame_done();
-    }
-
-    pub fn is_frame_done(&self) -> bool {
-        self.ppu.is_frame_done()
-    }
-
+impl Gameboy {
     pub fn switch_speed(&mut self) {
         self.in_double_speed = !self.in_double_speed;
-    }
-
-    pub fn mut_pixel_data(&mut self) -> &mut PixelData {
-        self.ppu.mut_pixel_data()
-    }
-
-    pub fn press(&mut self, button: Button) {
-        self.joypad.press(&mut self.ints, button);
-    }
-
-    pub fn release(&mut self, button: Button) {
-        self.joypad.release(button);
-    }
-
-    pub fn interrupt_controller(&self) -> &Interrupts {
-        &self.ints
-    }
-
-    pub fn mut_interrupt_controller(&mut self) -> &mut Interrupts {
-        &mut self.ints
     }
 
     pub fn tick_t_cycle(&mut self) {
