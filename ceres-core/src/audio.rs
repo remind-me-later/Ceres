@@ -39,8 +39,8 @@ impl Frame {
 
 pub struct Apu {
     channels: Channels,
-    cycles_to_render: f32,
-    cycles_until_next_render: f32,
+    cycles_to_render: u32,
+    cycles_until_next_render: u32,
     callbacks: Rc<RefCell<dyn AudioCallbacks>>,
     sequencer: Sequencer,
     control: Control,
@@ -54,7 +54,7 @@ impl Apu {
         Self {
             channels: Channels::new(),
             cycles_to_render,
-            cycles_until_next_render: 0.0,
+            cycles_until_next_render: cycles_to_render,
             control: Control::new(),
             callbacks,
             sequencer: Sequencer::new(),
@@ -72,9 +72,9 @@ impl Apu {
 
             self.sequencer.tick(&mut self.channels);
 
-            self.cycles_until_next_render -= 1.0;
-            if self.cycles_until_next_render <= 0.0 {
-                self.cycles_until_next_render += self.cycles_to_render;
+            self.cycles_until_next_render -= 1;
+            if self.cycles_until_next_render == 0 {
+                self.cycles_until_next_render = self.cycles_to_render;
                 self.mix_and_render();
             }
         }
@@ -114,7 +114,7 @@ impl Apu {
     }
 
     fn reset(&mut self) {
-        self.cycles_until_next_render = 0.0;
+        self.cycles_until_next_render = self.cycles_to_render;
         self.channels.reset();
         self.control.reset();
     }

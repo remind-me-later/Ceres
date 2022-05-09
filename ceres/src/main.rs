@@ -1,5 +1,6 @@
 mod audio;
 mod emulator;
+mod video;
 
 use {argh::FromArgs, ceres_core::Model, emulator::Emulator, std::path::Path};
 

@@ -21,9 +21,7 @@ pub use {
     cartridge::{Cartridge, Header},
     error::Error,
     joypad::Button,
-    video::{
-        MonochromePaletteColors, VideoCallbacks, SCANLINES_PER_FRAME, SCREEN_HEIGHT, SCREEN_WIDTH,
-    },
+    video::{MonochromePaletteColors, VideoCallbacks, PX_HEIGHT, PX_WIDTH, SCANLINES_PER_FRAME},
 };
 
 mod audio;
@@ -41,7 +39,7 @@ mod video;
 // 59.7 fps
 pub const NANOSECONDS_PER_FRAME: u64 = 16_750_418;
 pub const FRAME_DURATION: Duration = Duration::from_nanos(NANOSECONDS_PER_FRAME);
-pub const T_CYCLES_PER_SECOND: u32 = 0x0040_0000;
+pub const T_CYCLES_PER_SECOND: u32 = 4_194_304;
 // 2^22
 pub const M_CYCLES_PER_SECOND: u32 = T_CYCLES_PER_SECOND / 4;
 pub const T_CYCLES_PER_FRAME: u32 = 70224;

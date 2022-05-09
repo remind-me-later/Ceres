@@ -1,14 +1,11 @@
 use {
-    super::audio::AudioRenderer,
-    ceres_core::{Cartridge, Gb, VideoCallbacks, SCREEN_HEIGHT, SCREEN_WIDTH},
+    crate::{audio::AudioRenderer, video::VideoRenderer},
+    ceres_core::{Cartridge, Gb, Model, PX_HEIGHT, PX_WIDTH},
     sdl2::{
         controller::GameController,
         event::{Event, WindowEvent},
         keyboard::Scancode,
-        rect::{Point, Rect},
-        render::{Canvas, Texture, TextureCreator},
-        video::{Window, WindowContext},
-        Sdl, VideoSubsystem,
+        Sdl,
     },
     std::{
         cell::RefCell,
@@ -16,23 +13,20 @@ use {
         io::{Read, Write},
         path::{Path, PathBuf},
         rc::Rc,
-        time::Instant,
     },
 };
 
 pub struct Emulator {
+    sdl: Sdl,
     gb: Gb,
     is_focused: bool,
-    is_gui_paused: bool,
-    sdl_context: Sdl,
-    audio_renderer: Rc<RefCell<AudioRenderer>>,
     sav_path: PathBuf,
-    emu_win: Rc<RefCell<EmuWindow<{ SCREEN_WIDTH as u32 }, { SCREEN_HEIGHT as u32 }, 4>>>,
+    emu_win: Rc<RefCell<VideoRenderer<{ PX_WIDTH as u32 }, { PX_HEIGHT as u32 }, 4>>>,
 }
 
 impl Emulator {
-    pub fn new(model: ceres_core::Model, rom_path: &Path) -> Self {
-        let sdl_context = sdl2::init().unwrap();
+    pub fn new(model: Model, rom_path: &Path) -> Self {
+        let sdl = sdl2::init().unwrap();
 
         let sav_path = rom_path.with_extension("sav");
 
@@ -50,13 +44,13 @@ impl Emulator {
             (cartridge, sav_path)
         };
 
-        let audio_renderer = Rc::new(RefCell::new(AudioRenderer::new(&sdl_context)));
+        let audio_renderer = Rc::new(RefCell::new(AudioRenderer::new(&sdl)));
         let audio_callbacks = Rc::clone(&audio_renderer);
 
-        let video_subsystem = sdl_context.video().unwrap();
+        let video_subsystem = sdl.video().unwrap();
 
-        let emu_win: Rc<RefCell<EmuWindow<{ SCREEN_WIDTH as u32 }, { SCREEN_HEIGHT as u32 }, 4>>> =
-            Rc::new(RefCell::new(EmuWindow::new(
+        let emu_win: Rc<RefCell<VideoRenderer<{ PX_WIDTH as u32 }, { PX_HEIGHT as u32 }, 4>>> =
+            Rc::new(RefCell::new(VideoRenderer::new(
                 super::CERES_STR,
                 &video_subsystem,
             )));
@@ -66,18 +60,16 @@ impl Emulator {
         let gameboy = Gb::new(model, cartridge, audio_callbacks, video_callbacks);
 
         Self {
-            sdl_context,
+            sdl,
             gb: gameboy,
             is_focused: false,
-            is_gui_paused: false,
-            audio_renderer,
             sav_path,
             emu_win,
         }
     }
 
     fn init_controller(&self) -> Option<GameController> {
-        let game_controller_subsystem = self.sdl_context.game_controller().unwrap();
+        let game_controller_subsystem = self.sdl.game_controller().unwrap();
 
         let available = game_controller_subsystem
             .num_joysticks()
@@ -99,7 +91,7 @@ impl Emulator {
     pub fn run(mut self) {
         let _controller = self.init_controller();
 
-        let mut event_pump = self.sdl_context.event_pump().unwrap();
+        let mut event_pump = self.sdl.event_pump().unwrap();
 
         'main_loop: loop {
             for event in event_pump.poll_iter() {
@@ -171,15 +163,6 @@ impl Emulator {
                                 Scancode::L => self.gb.press(Button::B),
                                 Scancode::Return => self.gb.press(Button::Start),
                                 Scancode::Backspace => self.gb.press(Button::Select),
-                                Scancode::Space => {
-                                    if self.is_gui_paused {
-                                        self.audio_renderer.borrow_mut().play();
-                                        self.is_gui_paused = false;
-                                    } else {
-                                        self.audio_renderer.borrow_mut().pause();
-                                        self.is_gui_paused = true;
-                                    }
-                                }
                                 _ => (),
                             }
                         }
@@ -210,9 +193,7 @@ impl Emulator {
                 }
             }
 
-            if !self.is_gui_paused {
-                self.gb.run_frame();
-            }
+            self.gb.run_frame();
         }
 
         if let Some(cart_ram) = self.gb.save_data() {
@@ -229,81 +210,4 @@ fn read_file(path: &Path) -> Result<Vec<u8>, ()> {
     f.read_exact(&mut buffer).unwrap();
 
     Ok(buffer)
-}
-
-struct EmuWindow<const WIDTH: u32, const HEIGHT: u32, const MUL: u32> {
-    canvas: Canvas<Window>,
-    _texture_creator: TextureCreator<WindowContext>,
-    texture: Texture,
-    render_rect: Rect,
-    next_frame: Instant,
-}
-
-impl<'a, const WIDTH: u32, const HEIGHT: u32, const MUL: u32> EmuWindow<WIDTH, HEIGHT, MUL> {
-    pub fn new(title: &str, video_subsystem: &'a VideoSubsystem) -> Self {
-        let window = video_subsystem
-            .window(title, WIDTH * MUL, HEIGHT * MUL)
-            .position_centered()
-            .resizable()
-            .build()
-            .unwrap();
-
-        let canvas = window.into_canvas().build().unwrap();
-
-        let texture_creator = canvas.texture_creator();
-
-        let texture = texture_creator
-            .create_texture_streaming(sdl2::pixels::PixelFormatEnum::RGBA32, WIDTH, HEIGHT)
-            .unwrap();
-
-        let render_rect = Self::resize_texture(WIDTH * MUL, HEIGHT * MUL);
-
-        Self {
-            canvas,
-            _texture_creator: texture_creator,
-            texture,
-            render_rect,
-            next_frame: Instant::now(),
-        }
-    }
-
-    pub fn resize(&mut self, width: u32, height: u32) {
-        self.render_rect = Self::resize_texture(width, height)
-    }
-
-    fn resize_texture(width: u32, height: u32) -> Rect {
-        let multiplier = core::cmp::min(width / WIDTH, height / HEIGHT);
-        let surface_width = WIDTH * multiplier;
-        let surface_height = HEIGHT * multiplier;
-        let center = Point::new(width as i32 / 2, height as i32 / 2);
-
-        Rect::from_center(center, surface_width, surface_height)
-    }
-}
-
-impl<const WIDTH: u32, const HEIGHT: u32, const MUL: u32> VideoCallbacks
-    for EmuWindow<WIDTH, HEIGHT, MUL>
-{
-    fn draw(&mut self, rgba_data: &[u8]) {
-        self.texture
-            .with_lock(None, move |buf, _pitch| {
-                buf[..(WIDTH as usize * HEIGHT as usize * 4)]
-                    .copy_from_slice(&rgba_data[..(WIDTH as usize * HEIGHT as usize * 4)]);
-            })
-            .unwrap();
-
-        let now = Instant::now();
-
-        if now < self.next_frame {
-            std::thread::sleep(self.next_frame - now);
-        }
-
-        self.canvas.clear();
-        self.canvas
-            .copy(&self.texture, None, self.render_rect)
-            .unwrap();
-        self.canvas.present();
-
-        self.next_frame += ceres_core::FRAME_DURATION;
-    }
 }

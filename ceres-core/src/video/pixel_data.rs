@@ -11,7 +11,7 @@ pub struct PixelData {
 impl Default for PixelData {
     fn default() -> Self {
         Self {
-            data: [0; BUFFER_SIZE],
+            data: [0xff; BUFFER_SIZE],
         }
     }
 }

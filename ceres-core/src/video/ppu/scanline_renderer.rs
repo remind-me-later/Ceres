@@ -5,7 +5,7 @@ use {
     },
     crate::{
         video::sprites::{SpriteAttr, SPR_BG_WIN_OVER_OBJ, SPR_FLIP_X, SPR_FLIP_Y, SPR_PAL},
-        FunctionMode, SCREEN_WIDTH,
+        FunctionMode, PX_WIDTH,
     },
     arrayvec::ArrayVec,
     core::cmp::Ordering,
@@ -13,7 +13,7 @@ use {
 
 impl Ppu {
     pub(crate) fn draw_scanline(&mut self, function_mode: FunctionMode) {
-        let mut bg_priority = [PixelPriority::Normal; SCREEN_WIDTH as usize];
+        let mut bg_priority = [PixelPriority::Normal; PX_WIDTH as usize];
 
         self.draw_background(function_mode, &mut bg_priority);
         self.draw_window(function_mode, &mut bg_priority);
@@ -23,14 +23,14 @@ impl Ppu {
     fn draw_background(
         &mut self,
         function_mode: FunctionMode,
-        bg_priority: &mut [PixelPriority; SCREEN_WIDTH as usize],
+        bg_priority: &mut [PixelPriority; PX_WIDTH as usize],
     ) {
         let ly = self.ly;
         let scy = self.scy;
         let scx = self.scx;
         let lcdc = self.lcdc;
         let bgp = self.bgp;
-        let index_start = SCREEN_WIDTH as usize * ly as usize;
+        let index_start = PX_WIDTH as usize * ly as usize;
 
         if lcdc.bg_enabled(function_mode) {
             let tile_map_addr = lcdc.bg_tile_map_addr();
@@ -38,7 +38,7 @@ impl Ppu {
             let row = (y / 8) as u16 * 32;
             let line = ((y % 8) * 2) as u16;
 
-            for i in 0..SCREEN_WIDTH {
+            for i in 0..PX_WIDTH {
                 let x = i.wrapping_add(scx);
                 let col = (x / 8) as u16;
 
@@ -97,12 +97,12 @@ impl Ppu {
     fn draw_window(
         &mut self,
         function_mode: FunctionMode,
-        bg_priority: &mut [PixelPriority; SCREEN_WIDTH as usize],
+        bg_priority: &mut [PixelPriority; PX_WIDTH as usize],
     ) {
         let ly = self.ly;
         let lcdc = self.lcdc;
         let bgp = self.bgp;
-        let index_start = SCREEN_WIDTH as usize * ly as usize;
+        let index_start = PX_WIDTH as usize * ly as usize;
 
         let wy = self.wy;
 
@@ -113,7 +113,7 @@ impl Ppu {
             let row = (y / 8) as u16 * 32;
             let line = ((y % 8) * 2) as u16;
 
-            for i in wx..SCREEN_WIDTH {
+            for i in wx..PX_WIDTH {
                 self.frame_used_window = true;
                 self.scanline_used_window = true;
 
@@ -179,11 +179,11 @@ impl Ppu {
     fn draw_sprites(
         &mut self,
         function_mode: FunctionMode,
-        bg_priority: &mut [PixelPriority; SCREEN_WIDTH as usize],
+        bg_priority: &mut [PixelPriority; PX_WIDTH as usize],
     ) {
         let ly = self.ly;
         let lcdc = self.lcdc;
-        let index_start = SCREEN_WIDTH as usize * ly as usize;
+        let index_start = PX_WIDTH as usize * ly as usize;
 
         if lcdc.val & OBJECTS_ENABLED != 0 {
             let large_sprites = lcdc.val & LARGE_SPRITES != 0;
@@ -230,7 +230,7 @@ impl Ppu {
                 for xi in (0..8).rev() {
                     let target_x = sprite.x().wrapping_add(7 - xi);
 
-                    if target_x >= SCREEN_WIDTH {
+                    if target_x >= PX_WIDTH {
                         continue;
                     }
 

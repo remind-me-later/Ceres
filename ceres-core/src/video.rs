@@ -7,11 +7,11 @@ mod pixel_data;
 mod sprites;
 mod vram;
 
-pub const SCREEN_WIDTH: u8 = 160;
-pub const SCREEN_HEIGHT: u8 = 144;
+pub const PX_WIDTH: u8 = 160;
+pub const PX_HEIGHT: u8 = 144;
 pub const SCANLINES_PER_FRAME: u8 = 154;
 
-const SCREEN_PIXELS: u16 = SCREEN_WIDTH as u16 * SCREEN_HEIGHT as u16;
+const SCREEN_PIXELS: u16 = PX_WIDTH as u16 * PX_HEIGHT as u16;
 
 const ACCESS_OAM_CYCLES: i16 = 80; // Constant
 const ACCESS_VRAM_CYCLES: i16 = 172; // Variable, minimum ammount

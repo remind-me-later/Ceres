@@ -52,12 +52,6 @@ impl Gb {
                     _ => panic!("Illegal source addr for HDMA transfer"),
                 };
                 self.ppu.hdma_write(transfer.dst, val);
-
-                // tick
-                self.emulate_dma();
-                self.tick_ppu();
-                self.timer.tick_t_cycle(&mut self.ints);
-                self.tick_apu();
             }
         }
     }

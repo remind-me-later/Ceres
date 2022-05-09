@@ -5,7 +5,7 @@ pub trait AudioCallbacks {
     fn push_frame(&mut self, frame: Frame);
 
     #[allow(clippy::cast_precision_loss)]
-    fn cycles_to_render(&self) -> f32 {
-        T_CYCLES_PER_SECOND as f32 / self.sample_rate() as f32
+    fn cycles_to_render(&self) -> u32 {
+        T_CYCLES_PER_SECOND / self.sample_rate()
     }
 }
