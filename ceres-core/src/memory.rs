@@ -1,6 +1,6 @@
 pub use {dma::Dma, hdma::Hdma, hram::Hram, key1::Key1, wram::Wram};
 
-use crate::Gameboy;
+use crate::Gb;
 
 mod addresses;
 mod dma;
@@ -9,7 +9,7 @@ mod hram;
 mod key1;
 mod wram;
 
-impl Gameboy {
+impl Gb {
     pub fn switch_speed(&mut self) {
         self.in_double_speed = !self.in_double_speed;
     }
@@ -43,10 +43,10 @@ impl Gameboy {
                 let transfer = self.hdma.transfer();
                 let addr = transfer.src;
                 let val = match addr >> 8 {
-                    0x00..=0x7f => self.cart.borrow_mut().read_rom(addr),
+                    0x00..=0x7f => self.cart.read_rom(addr),
                     // TODO: should copy garbage
                     0x80..=0x9f => 0xff,
-                    0xa0..=0xbf => self.cart.borrow_mut().read_ram(addr),
+                    0xa0..=0xbf => self.cart.read_ram(addr),
                     0xc0..=0xcf => self.wram.read_ram(addr),
                     0xd0..=0xdf => self.wram.read_bank_ram(addr),
                     _ => panic!("Illegal source addr for HDMA transfer"),
@@ -66,9 +66,9 @@ impl Gameboy {
     fn emulate_dma(&mut self) {
         if let Some(src) = self.dma.emulate() {
             let val = match src >> 8 {
-                0x00..=0x7f => self.cart.borrow_mut().read_rom(src),
+                0x00..=0x7f => self.cart.read_rom(src),
                 0x80..=0x9f => self.ppu.read_vram(src),
-                0xa0..=0xbf => self.cart.borrow_mut().read_ram(src),
+                0xa0..=0xbf => self.cart.read_ram(src),
                 0xc0..=0xcf | 0xe0..=0xef => self.wram.read_ram(src),
                 0xd0..=0xdf | 0xf0..=0xff => self.wram.read_bank_ram(src),
                 _ => panic!("Illegal source addr for OAM DMA transfer"),

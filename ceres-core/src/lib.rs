@@ -6,6 +6,7 @@ extern crate alloc;
 use {
     alloc::rc::Rc,
     audio::Apu,
+    bootrom::BootRom,
     core::{cell::RefCell, time::Duration},
     cpu::Regs,
     interrupts::Interrupts,
@@ -17,7 +18,6 @@ use {
 };
 pub use {
     audio::{AudioCallbacks, Frame, Sample},
-    boot_rom::BootRom,
     cartridge::{Cartridge, Header},
     error::Error,
     joypad::Button,
@@ -27,7 +27,7 @@ pub use {
 };
 
 mod audio;
-mod boot_rom;
+mod bootrom;
 mod cartridge;
 mod cpu;
 mod error;
@@ -61,7 +61,7 @@ enum FunctionMode {
     Color,
 }
 
-pub struct Gameboy {
+pub struct Gb {
     reg: Regs,
     ei_delay: bool,
     ime: bool,
@@ -71,7 +71,7 @@ pub struct Gameboy {
     ints: Interrupts,
     ppu: Ppu,
     joypad: Joypad,
-    cart: Rc<RefCell<Cartridge>>,
+    cart: Cartridge,
     timer: Timer,
     hram: Hram,
     wram: Wram,
@@ -85,11 +85,10 @@ pub struct Gameboy {
     function_mode: FunctionMode,
 }
 
-impl Gameboy {
+impl Gb {
     pub fn new(
         model: Model,
-        cart: Rc<RefCell<Cartridge>>,
-        boot_rom: BootRom,
+        cart: Cartridge,
         audio_callbacks: Rc<RefCell<dyn AudioCallbacks>>,
         video_callbacks: Rc<RefCell<dyn VideoCallbacks>>,
     ) -> Self {
@@ -115,7 +114,7 @@ impl Gameboy {
             serial: Serial::new(),
             dma: Dma::new(),
             hdma: Hdma::new(),
-            boot_rom,
+            boot_rom: BootRom::new(model),
             model,
             in_double_speed: false,
             key1: Key1::new(),
@@ -145,5 +144,13 @@ impl Gameboy {
         }
 
         self.ppu.reset_frame_done();
+    }
+
+    pub fn save_data(&self) -> Option<&[u8]> {
+        if self.cart.has_battery() {
+            Some(self.cart.ram())
+        } else {
+            None
+        }
     }
 }

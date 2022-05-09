@@ -2,7 +2,7 @@ pub use registers::Regs;
 
 use crate::{
     interrupts::{JOYPAD_INT, LCD_STAT_INT, SERIAL_INT, TIMER_INT, VBLANK_INT},
-    Gameboy,
+    Gb,
 };
 
 mod execute;
@@ -10,7 +10,7 @@ mod instructions;
 mod operands;
 mod registers;
 
-impl Gameboy {
+impl Gb {
     pub fn run(&mut self) {
         if self.ei_delay {
             self.ime = true;

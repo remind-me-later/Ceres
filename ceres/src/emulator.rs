@@ -1,6 +1,6 @@
 use {
     super::audio::AudioRenderer,
-    ceres_core::{BootRom, Cartridge, Gameboy, VideoCallbacks, SCREEN_HEIGHT, SCREEN_WIDTH},
+    ceres_core::{Cartridge, Gb, VideoCallbacks, SCREEN_HEIGHT, SCREEN_WIDTH},
     sdl2::{
         controller::GameController,
         event::{Event, WindowEvent},
@@ -21,18 +21,17 @@ use {
 };
 
 pub struct Emulator {
-    gb: Gameboy,
+    gb: Gb,
     is_focused: bool,
     is_gui_paused: bool,
     sdl_context: Sdl,
     audio_renderer: Rc<RefCell<AudioRenderer>>,
     sav_path: PathBuf,
-    cart: Rc<RefCell<Cartridge>>,
     emu_win: Rc<RefCell<EmuWindow<{ SCREEN_WIDTH as u32 }, { SCREEN_HEIGHT as u32 }, 4>>>,
 }
 
 impl Emulator {
-    pub fn new(model: ceres_core::Model, boot_rom_path: &Path, rom_path: &Path) -> Self {
+    pub fn new(model: ceres_core::Model, rom_path: &Path) -> Self {
         let sdl_context = sdl2::init().unwrap();
 
         let sav_path = rom_path.with_extension("sav");
@@ -46,21 +45,13 @@ impl Emulator {
                 None
             };
 
-            let cartridge = Rc::new(RefCell::new(Cartridge::new(rom_buf, ram).unwrap()));
+            let cartridge = Cartridge::new(rom_buf, ram).unwrap();
 
             (cartridge, sav_path)
         };
 
-        let boot_rom = {
-            let boot_rom_buf = read_file(boot_rom_path).unwrap().into_boxed_slice();
-
-            BootRom::new(boot_rom_buf)
-        };
-
         let audio_renderer = Rc::new(RefCell::new(AudioRenderer::new(&sdl_context)));
         let audio_callbacks = Rc::clone(&audio_renderer);
-
-        let cart = Rc::clone(&cartridge);
 
         let video_subsystem = sdl_context.video().unwrap();
 
@@ -72,8 +63,7 @@ impl Emulator {
 
         let video_callbacks = Rc::clone(&emu_win);
 
-        let gameboy =
-            ceres_core::Gameboy::new(model, cart, boot_rom, audio_callbacks, video_callbacks);
+        let gameboy = Gb::new(model, cartridge, audio_callbacks, video_callbacks);
 
         Self {
             sdl_context,
@@ -82,7 +72,6 @@ impl Emulator {
             is_gui_paused: false,
             audio_renderer,
             sav_path,
-            cart: cartridge,
             emu_win,
         }
     }
@@ -226,16 +215,11 @@ impl Emulator {
             }
         }
 
-        if self.cart.borrow().has_battery() {
-            save_data(&self.sav_path, &self.cart.borrow());
+        if let Some(cart_ram) = self.gb.save_data() {
+            let mut f = File::create(self.sav_path).unwrap();
+            f.write_all(cart_ram).unwrap();
         }
     }
-}
-
-pub fn save_data(sav_path: &Path, cartridge: &Cartridge) {
-    let mut f = File::create(sav_path).unwrap();
-
-    f.write_all(cartridge.ram()).unwrap();
 }
 
 fn read_file(path: &Path) -> Result<Vec<u8>, ()> {

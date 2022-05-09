@@ -1,6 +1,6 @@
-use crate::{audio::Apu, interrupts::Interrupts, timer::Timer, FunctionMode, Gameboy, Model::Cgb};
+use crate::{audio::Apu, interrupts::Interrupts, timer::Timer, FunctionMode, Gb, Model::Cgb};
 
-impl Gameboy {
+impl Gb {
     fn mem_tick<T, F>(&mut self, f: F) -> T
     where
         F: FnOnce(&mut Self) -> T,
@@ -38,17 +38,17 @@ impl Gameboy {
             0x0000..=0x00ff => self.mem_tick(|mem| {
                 mem.boot_rom
                     .read(addr)
-                    .unwrap_or_else(|| mem.cart.borrow_mut().read_rom(addr))
+                    .unwrap_or_else(|| mem.cart.read_rom(addr))
             }),
-            0x0100..=0x01ff => self.mem_tick(|mem| mem.cart.borrow_mut().read_rom(addr)),
+            0x0100..=0x01ff => self.mem_tick(|mem| mem.cart.read_rom(addr)),
             0x0200..=0x08ff => self.mem_tick(|mem| {
                 mem.boot_rom
                     .read(addr)
-                    .unwrap_or_else(|| mem.cart.borrow_mut().read_rom(addr))
+                    .unwrap_or_else(|| mem.cart.read_rom(addr))
             }),
-            0x0900..=0x7fff => self.mem_tick(|mem| mem.cart.borrow_mut().read_rom(addr)),
+            0x0900..=0x7fff => self.mem_tick(|mem| mem.cart.read_rom(addr)),
             0x8000..=0x9fff => self.mem_tick(|mem| mem.ppu.read_vram(addr)),
-            0xa000..=0xbfff => self.mem_tick(|mem| mem.cart.borrow_mut().read_ram(addr)),
+            0xa000..=0xbfff => self.mem_tick(|mem| mem.cart.read_ram(addr)),
             0xc000..=0xcfff => self.mem_tick(|mem| mem.wram.read_ram(addr)),
             0xd000..=0xdfff => self.mem_tick(|mem| mem.wram.read_bank_ram(addr)),
             // Echo RAM
@@ -119,10 +119,10 @@ impl Gameboy {
     pub fn write_mem(&mut self, addr: u16, val: u8) {
         match addr {
             // assume bootrom doesnt write to rom
-            0x0000..=0x08ff => self.mem_tick(|mem| mem.cart.borrow_mut().write_rom(addr, val)),
-            0x0900..=0x7fff => self.mem_tick(|mem| mem.cart.borrow_mut().write_rom(addr, val)),
+            0x0000..=0x08ff => self.mem_tick(|mem| mem.cart.write_rom(addr, val)),
+            0x0900..=0x7fff => self.mem_tick(|mem| mem.cart.write_rom(addr, val)),
             0x8000..=0x9fff => self.mem_tick(|mem| mem.ppu.write_vram(addr, val)),
-            0xa000..=0xbfff => self.mem_tick(|mem| mem.cart.borrow_mut().write_ram(addr, val)),
+            0xa000..=0xbfff => self.mem_tick(|mem| mem.cart.write_ram(addr, val)),
             0xc000..=0xcfff => self.mem_tick(|mem| mem.wram.write_ram(addr, val)),
             0xd000..=0xdfff => self.mem_tick(|mem| mem.wram.write_bank_ram(addr, val)),
             0xe000..=0xefff => self.mem_tick(|mem| mem.wram.write_ram(addr, val)),

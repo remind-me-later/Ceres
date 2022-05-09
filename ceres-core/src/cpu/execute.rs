@@ -9,10 +9,10 @@ use {
             Reg8::{A, B, C, D, E, H, L},
         },
     },
-    crate::Gameboy,
+    crate::Gb,
 };
 
-impl Gameboy {
+impl Gb {
     #[allow(clippy::too_many_lines)]
     pub fn exec(&mut self, opcode: u8) {
         match opcode {

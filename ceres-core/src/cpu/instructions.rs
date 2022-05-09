@@ -3,10 +3,10 @@ use {
         operands::{Get, JumpCondition, Set},
         registers::Reg16::{self, HL},
     },
-    crate::Gameboy,
+    crate::Gb,
 };
 
-impl Gameboy {
+impl Gb {
     pub fn ld<G, S>(&mut self, lhs: S, rhs: G)
     where
         G: Get<u8>,

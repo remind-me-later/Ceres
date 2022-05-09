@@ -1,24 +1,24 @@
 use {
     super::registers::{Reg16, Reg8},
-    crate::Gameboy,
+    crate::Gb,
 };
 
 pub trait Get<T: Copy>
 where
     Self: Copy,
 {
-    fn get(self, gb: &mut Gameboy) -> T;
+    fn get(self, gb: &mut Gb) -> T;
 }
 
 pub trait Set<T: Copy>
 where
     Self: Copy,
 {
-    fn set(self, gb: &mut Gameboy, val: T);
+    fn set(self, gb: &mut Gb, val: T);
 }
 
 impl Get<u8> for Reg8 {
-    fn get(self, gb: &mut Gameboy) -> u8 {
+    fn get(self, gb: &mut Gb) -> u8 {
         match self {
             Reg8::A => gb.reg.a,
             Reg8::B => gb.reg.b,
@@ -32,7 +32,7 @@ impl Get<u8> for Reg8 {
 }
 
 impl Set<u8> for Reg8 {
-    fn set(self, gb: &mut Gameboy, val: u8) {
+    fn set(self, gb: &mut Gb, val: u8) {
         match self {
             Reg8::A => gb.reg.a = val,
             Reg8::B => gb.reg.b = val,
@@ -46,13 +46,13 @@ impl Set<u8> for Reg8 {
 }
 
 impl Get<u16> for Reg16 {
-    fn get(self, gb: &mut Gameboy) -> u16 {
+    fn get(self, gb: &mut Gb) -> u16 {
         gb.reg.read16(self)
     }
 }
 
 impl Set<u16> for Reg16 {
-    fn set(self, gb: &mut Gameboy, val: u16) {
+    fn set(self, gb: &mut Gb, val: u16) {
         gb.reg.write16(self, val);
     }
 }
@@ -61,13 +61,13 @@ impl Set<u16> for Reg16 {
 pub struct Imm;
 
 impl Get<u8> for Imm {
-    fn get(self, gb: &mut Gameboy) -> u8 {
+    fn get(self, gb: &mut Gb) -> u8 {
         gb.imm8()
     }
 }
 
 impl Get<u16> for Imm {
-    fn get(self, gb: &mut Gameboy) -> u16 {
+    fn get(self, gb: &mut Gb) -> u16 {
         gb.imm16()
     }
 }
@@ -83,7 +83,7 @@ pub enum Indirect {
 }
 
 impl Indirect {
-    fn into_addr(self, gb: &mut Gameboy) -> u16 {
+    fn into_addr(self, gb: &mut Gb) -> u16 {
         match self {
             Indirect::BC => gb.reg.read16(Reg16::BC),
             Indirect::DE => gb.reg.read16(Reg16::DE),
@@ -96,14 +96,14 @@ impl Indirect {
 }
 
 impl Get<u8> for Indirect {
-    fn get(self, gb: &mut Gameboy) -> u8 {
+    fn get(self, gb: &mut Gb) -> u8 {
         let addr = self.into_addr(gb);
         gb.read_mem(addr)
     }
 }
 
 impl Set<u8> for Indirect {
-    fn set(self, gb: &mut Gameboy, val: u8) {
+    fn set(self, gb: &mut Gb, val: u8) {
         let addr = self.into_addr(gb);
         gb.write_mem(addr, val);
     }
@@ -113,7 +113,7 @@ impl Set<u8> for Indirect {
 pub struct IndirectIncreaseHL;
 
 impl Get<u8> for IndirectIncreaseHL {
-    fn get(self, gb: &mut Gameboy) -> u8 {
+    fn get(self, gb: &mut Gb) -> u8 {
         let addr = gb.reg.read16(Reg16::HL);
         let ret = gb.read_mem(addr);
         gb.reg.write16(Reg16::HL, addr.wrapping_add(1));
@@ -122,7 +122,7 @@ impl Get<u8> for IndirectIncreaseHL {
 }
 
 impl Set<u8> for IndirectIncreaseHL {
-    fn set(self, gb: &mut Gameboy, val: u8) {
+    fn set(self, gb: &mut Gb, val: u8) {
         let addr = gb.reg.read16(Reg16::HL);
         gb.write_mem(addr, val);
         gb.reg.write16(Reg16::HL, addr.wrapping_add(1));
@@ -133,7 +133,7 @@ impl Set<u8> for IndirectIncreaseHL {
 pub struct IndirectDecreaseHL;
 
 impl Get<u8> for IndirectDecreaseHL {
-    fn get(self, gb: &mut Gameboy) -> u8 {
+    fn get(self, gb: &mut Gb) -> u8 {
         let addr = gb.reg.read16(Reg16::HL);
         let ret = gb.read_mem(addr);
         gb.reg.write16(Reg16::HL, addr.wrapping_sub(1));
@@ -142,7 +142,7 @@ impl Get<u8> for IndirectDecreaseHL {
 }
 
 impl Set<u8> for IndirectDecreaseHL {
-    fn set(self, gb: &mut Gameboy, val: u8) {
+    fn set(self, gb: &mut Gb, val: u8) {
         let addr = gb.reg.read16(Reg16::HL);
         gb.write_mem(addr, val);
         gb.reg.write16(Reg16::HL, addr.wrapping_sub(1));
@@ -158,7 +158,7 @@ pub enum JumpCondition {
 }
 
 impl JumpCondition {
-    pub fn check(self, gb: &Gameboy) -> bool {
+    pub fn check(self, gb: &Gb) -> bool {
         use JumpCondition::{Carry, NotCarry, NotZero, Zero};
         match self {
             Zero => gb.reg.zf(),
