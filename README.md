@@ -8,9 +8,7 @@ Passes all of [blargg's test ROMs](https://gbdev.gg8.se/wiki/articles/Test_ROMs#
 
 ## Build
 
-To build the [SameBoy](https://github.com/LIJI32/SameBoy) bootroms is necessary a C compiler as well as the [RGBDS](https://rgbds.gbdev.io/) toolchain. By default the compiler searchs for the compiled boot roms in the `BootROMs/build/bin` directory, to build them run `make` in the `BootROMs` directory. You can also provide your own binary boot roms by passing the `-b` flag to the program.
-
-To build the emulator `cargo build` should suffice.
+To build the [SameBoy](https://github.com/LIJI32/SameBoy) bootroms is necessary a C compiler as well as the [RGBDS](https://rgbds.gbdev.io/) toolchain. To build them run `make` in the `ceres-core/boootroms` directory. After that `cargo build` to build.
 
 ## Platforms
 
