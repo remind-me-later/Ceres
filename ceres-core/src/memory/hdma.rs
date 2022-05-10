@@ -25,6 +25,7 @@ pub struct Hdma {
     dst: u16,
     len: u16,
     state: State,
+    hdma5: u8, // stores only low 7 bits
 }
 
 impl Hdma {
@@ -53,18 +54,20 @@ impl Hdma {
     }
 
     pub fn read_hdma5(&self) -> u8 {
-        let is_active_bit = u8::from(self.is_active()) << 7;
-        let blocks_bits = (self.len / 0x10).wrapping_sub(1) as u8;
-        is_active_bit | blocks_bits
+        // active on low
+        let is_active_bit = !(u8::from(self.is_active()) << 7);
+        is_active_bit | self.hdma5
     }
 
     pub fn write_hdma5(&mut self, val: u8) {
         // stop current transfer
         if self.is_active() && val & 0x80 == 0 {
             self.state = State::Inactive;
+            self.hdma5 = (self.len / 0x10).wrapping_sub(1) as u8;
             return;
         }
 
+        self.hdma5 = val & !0x80;
         let transfer_blocks = val & 0x7f;
         self.len = (u16::from(transfer_blocks) + 1) * 0x10;
         self.state = match val >> 7 {

@@ -34,22 +34,9 @@ impl Mode {
             Mode::VBlank => VBLANK_LINE_CYCLES,
         }
     }
-}
 
-impl From<u8> for Mode {
-    fn from(val: u8) -> Self {
-        match val & 0x3 {
-            0 => Self::HBlank,
-            1 => Self::VBlank,
-            2 => Self::OamScan,
-            _ => Self::DrawingPixels,
-        }
-    }
-}
-
-impl From<Mode> for u8 {
-    fn from(val: Mode) -> Self {
-        match val {
+    pub fn to_u8_low(self) -> u8 {
+        match self {
             Mode::HBlank => 0,
             Mode::VBlank => 1,
             Mode::OamScan => 2,
@@ -153,12 +140,17 @@ pub struct Stat {
 impl Stat {
     pub fn set_mode(&mut self, mode: Mode) {
         let bits: u8 = self.val & !MODE_BITS;
-        let mode: u8 = mode.into();
+        let mode: u8 = mode.to_u8_low();
         self.val = bits | mode;
     }
 
     pub fn mode(self) -> Mode {
-        self.val.into()
+        match self.val & 0x3 {
+            0 => Mode::HBlank,
+            1 => Mode::VBlank,
+            2 => Mode::OamScan,
+            _ => Mode::DrawingPixels,
+        }
     }
 }
 
@@ -189,32 +181,19 @@ pub struct Ppu {
 
     // registers
     lcdc: Lcdc,
-    // lcd control
     stat: Stat,
-    // lcd status
     scy: u8,
-    // scroll y
     scx: u8,
-    // scroll x
     ly: u8,
-    // LCD Y coordinate
     lyc: u8,
-    // LY compare
     wy: u8,
-    // window y position
     wx: u8,
-    // window x position
     opri: u8,
-    // object priority mode
     bgp: MonochromePalette,
-    // bg palette data
     obp0: MonochromePalette,
-    // obj palette 0
     obp1: MonochromePalette,
-    // obj palette 1
     cgb_bg_palette: ColorPalette,
-    // cgb only
-    cgb_sprite_palette: ColorPalette, // cgb only
+    cgb_sprite_palette: ColorPalette,
 }
 
 impl Ppu {
@@ -350,8 +329,7 @@ impl Ppu {
 
     pub fn write_lcdc(&mut self, val: u8) {
         if val & LCD_ENABLE == 0 && self.lcdc.val & LCD_ENABLE != 0 {
-            // FIXME: currently every game fails :(
-            // debug_assert!(self.stat.mode() != Mode::VBlank);
+            debug_assert!(self.stat.mode() == Mode::VBlank);
             self.ly = 0;
         }
 
@@ -366,7 +344,7 @@ impl Ppu {
 
     pub fn write_stat(&mut self, val: u8) {
         let ly_equals_lyc = self.stat.val & LY_EQUALS_LYC;
-        let mode: u8 = self.stat.mode().into();
+        let mode: u8 = self.stat.mode().to_u8_low();
 
         self.stat.val = val;
         self.stat.val &= !(LY_EQUALS_LYC | MODE_BITS);
