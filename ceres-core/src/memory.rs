@@ -39,6 +39,13 @@ impl Gb {
 
     fn emulate_hdma(&mut self) {
         if self.hdma.start(&self.ppu) {
+            let tick = |gb: &mut Gb| {
+                gb.emulate_dma();
+                gb.tick_ppu();
+                gb.timer.tick_t_cycle(&mut gb.ints);
+                gb.tick_apu();
+            };
+
             while !self.hdma.is_transfer_done() {
                 let transfer = self.hdma.transfer();
                 let addr = transfer.src;
@@ -51,6 +58,8 @@ impl Gb {
                     0xd0..=0xdf => self.wram.read_bank_ram(addr),
                     _ => panic!("Illegal source addr for HDMA transfer"),
                 };
+
+                tick(self);
                 self.ppu.hdma_write(transfer.dst, val);
             }
         }
