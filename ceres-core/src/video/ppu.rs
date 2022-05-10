@@ -64,7 +64,7 @@ impl Lcdc {
     fn win_enabled(self, function_mode: FunctionMode) -> bool {
         match function_mode {
             FunctionMode::Monochrome | FunctionMode::Compatibility => {
-                self.val & BACKGROUND_ENABLED & WINDOW_ENABLED != 0
+                (self.val & BACKGROUND_ENABLED != 0) && (self.val & WINDOW_ENABLED != 0)
             }
             FunctionMode::Color => self.val & WINDOW_ENABLED != 0,
         }
