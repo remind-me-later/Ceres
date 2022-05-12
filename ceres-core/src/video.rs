@@ -4,6 +4,7 @@ pub mod ppu;
 
 mod palette;
 mod pixel_data;
+mod scanline_renderer;
 mod sprites;
 mod vram;
 

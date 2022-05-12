@@ -14,8 +14,6 @@ use {
     core::cell::RefCell,
 };
 
-mod scanline_renderer;
-
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Mode {
     OamScan,
@@ -61,7 +59,7 @@ pub struct Lcdc {
 }
 
 impl Lcdc {
-    fn win_enabled(self, function_mode: FunctionMode) -> bool {
+    pub(crate) fn win_enabled(self, function_mode: FunctionMode) -> bool {
         match function_mode {
             FunctionMode::Monochrome | FunctionMode::Compatibility => {
                 (self.val & BACKGROUND_ENABLED != 0) && (self.val & WINDOW_ENABLED != 0)
@@ -70,7 +68,7 @@ impl Lcdc {
         }
     }
 
-    fn bg_enabled(self, function_mode: FunctionMode) -> bool {
+    pub(crate) fn bg_enabled(self, function_mode: FunctionMode) -> bool {
         match function_mode {
             FunctionMode::Monochrome | FunctionMode::Compatibility => {
                 self.val & BACKGROUND_ENABLED != 0
@@ -79,7 +77,7 @@ impl Lcdc {
         }
     }
 
-    fn cgb_sprite_master_priority_on(self, function_mode: FunctionMode) -> bool {
+    pub(crate) fn cgb_sprite_master_priority_on(self, function_mode: FunctionMode) -> bool {
         match function_mode {
             FunctionMode::Monochrome | FunctionMode::Compatibility => false,
             FunctionMode::Color => self.val & BACKGROUND_ENABLED == 0,
@@ -160,40 +158,33 @@ pub const BG_X_FLIP: u8 = 0x20;
 pub const BG_Y_FLIP: u8 = 0x40;
 pub const BG_TO_OAM_PR: u8 = 0x80;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum PixelPriority {
-    SpritesOnTop,
-    BackgroundOnTop,
-    Normal,
-}
-
 pub struct Ppu {
-    monochrome_palette_colors: MonochromePaletteColors,
-    vram: Vram,
-    oam: Oam,
-    cycles: i16,
-    pixel_data: PixelData,
-    frame_used_window: bool,
-    scanline_used_window: bool,
-    window_lines_skipped: u16,
-    is_frame_done: bool,
-    video_callbacks: Rc<RefCell<dyn VideoCallbacks>>,
+    pub monochrome_palette_colors: MonochromePaletteColors,
+    pub vram: Vram,
+    pub oam: Oam,
+    pub cycles: i16,
+    pub pixel_data: PixelData,
+    pub frame_used_window: bool,
+    pub scanline_used_window: bool,
+    pub window_lines_skipped: u16,
+    pub is_frame_done: bool,
+    pub video_callbacks: Rc<RefCell<dyn VideoCallbacks>>,
 
     // registers
-    lcdc: Lcdc,
-    stat: Stat,
-    scy: u8,
-    scx: u8,
-    ly: u8,
-    lyc: u8,
-    wy: u8,
-    wx: u8,
-    opri: u8,
-    bgp: MonochromePalette,
-    obp0: MonochromePalette,
-    obp1: MonochromePalette,
-    cgb_bg_palette: ColorPalette,
-    cgb_sprite_palette: ColorPalette,
+    pub lcdc: Lcdc,
+    pub stat: Stat,
+    pub scy: u8,
+    pub scx: u8,
+    pub ly: u8,
+    pub lyc: u8,
+    pub wy: u8,
+    pub wx: u8,
+    pub opri: u8,
+    pub bgp: MonochromePalette,
+    pub obp0: MonochromePalette,
+    pub obp1: MonochromePalette,
+    pub cgb_bg_palette: ColorPalette,
+    pub cgb_sprite_palette: ColorPalette,
 }
 
 impl Ppu {

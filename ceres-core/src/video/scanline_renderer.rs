@@ -1,45 +1,44 @@
 use {
-    super::{
-        PixelPriority, Ppu, BG_PAL, BG_TO_OAM_PR, BG_X_FLIP, BG_Y_FLIP, LARGE_SPRITES,
-        OBJECTS_ENABLED,
-    },
+    super::ppu::{Ppu, BG_PAL, BG_TO_OAM_PR, BG_X_FLIP, BG_Y_FLIP, LARGE_SPRITES, OBJECTS_ENABLED},
     crate::{
-        video::sprites::{SpriteAttr, SPR_BG_WIN_OVER_OBJ, SPR_FLIP_X, SPR_FLIP_Y, SPR_PAL},
+        video::sprites::{
+            SpriteAttr, OAM_SIZE, SPR_BG_WIN_OVER_OBJ, SPR_FLIP_X, SPR_FLIP_Y, SPR_PAL,
+        },
         FunctionMode, PX_WIDTH,
     },
-    arrayvec::ArrayVec,
-    core::cmp::Ordering,
 };
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PixelPriority {
+    SpritesOnTop,
+    BackgroundOnTop,
+    Normal,
+}
 
 impl Ppu {
     pub(crate) fn draw_scanline(&mut self, function_mode: FunctionMode) {
         let mut bg_priority = [PixelPriority::Normal; PX_WIDTH as usize];
+        let index_start = PX_WIDTH as usize * self.ly as usize;
 
-        self.draw_background(function_mode, &mut bg_priority);
-        self.draw_window(function_mode, &mut bg_priority);
-        self.draw_sprites(function_mode, &mut bg_priority);
+        self.draw_background(function_mode, &mut bg_priority, index_start);
+        self.draw_window(function_mode, &mut bg_priority, index_start);
+        self.draw_sprites(function_mode, &mut bg_priority, index_start);
     }
 
     fn draw_background(
         &mut self,
         function_mode: FunctionMode,
         bg_priority: &mut [PixelPriority; PX_WIDTH as usize],
+        index_start: usize,
     ) {
-        let ly = self.ly;
-        let scy = self.scy;
-        let scx = self.scx;
-        let lcdc = self.lcdc;
-        let bgp = self.bgp;
-        let index_start = PX_WIDTH as usize * ly as usize;
-
-        if lcdc.bg_enabled(function_mode) {
-            let tile_map_addr = lcdc.bg_tile_map_addr();
-            let y = ly.wrapping_add(scy);
+        if self.lcdc.bg_enabled(function_mode) {
+            let tile_map_addr = self.lcdc.bg_tile_map_addr();
+            let y = self.ly.wrapping_add(self.scy);
             let row = (y / 8) as u16 * 32;
             let line = ((y % 8) * 2) as u16;
 
             for i in 0..PX_WIDTH {
-                let x = i.wrapping_add(scx);
+                let x = i.wrapping_add(self.scx);
                 let col = (x / 8) as u16;
 
                 let tile_num_addr = tile_map_addr + row + col;
@@ -51,12 +50,12 @@ impl Ppu {
                 };
 
                 let tile_data_addr = if gb_attr & BG_Y_FLIP != 0 {
-                    lcdc.tile_data_addr(tile_number) + 14 - line
+                    self.lcdc.tile_data_addr(tile_number) + 14 - line
                 } else {
-                    lcdc.tile_data_addr(tile_number) + line
+                    self.lcdc.tile_data_addr(tile_number) + line
                 };
 
-                let (data_low, data_high) = self.vram.tile_data(tile_data_addr, gb_attr);
+                let (data_low, data_high) = self.vram.bg_tile_data(tile_data_addr, gb_attr);
 
                 let color_bit = 1
                     << if gb_attr & BG_X_FLIP != 0 {
@@ -71,10 +70,10 @@ impl Ppu {
                 let color = match function_mode {
                     FunctionMode::Monochrome => self
                         .monochrome_palette_colors
-                        .get_color(bgp.shade_index(color_number)),
+                        .get_color(self.bgp.shade_index(color_number)),
                     FunctionMode::Compatibility => self
                         .cgb_bg_palette
-                        .get_color(gb_attr & BG_PAL, bgp.shade_index(color_number)),
+                        .get_color(gb_attr & BG_PAL, self.bgp.shade_index(color_number)),
                     FunctionMode::Color => self
                         .cgb_bg_palette
                         .get_color(gb_attr & BG_PAL, color_number),
@@ -98,18 +97,12 @@ impl Ppu {
         &mut self,
         function_mode: FunctionMode,
         bg_priority: &mut [PixelPriority; PX_WIDTH as usize],
+        index_start: usize,
     ) {
-        let ly = self.ly;
-        let lcdc = self.lcdc;
-        let bgp = self.bgp;
-        let index_start = PX_WIDTH as usize * ly as usize;
-
-        let wy = self.wy;
-
-        if lcdc.win_enabled(function_mode) && wy <= ly {
-            let tile_map_addr = lcdc.window_tile_map_addr();
+        if self.lcdc.win_enabled(function_mode) && self.wy <= self.ly {
+            let tile_map_addr = self.lcdc.window_tile_map_addr();
             let wx = self.wx.saturating_sub(7);
-            let y = ((ly - wy) as u16).wrapping_sub(self.window_lines_skipped) as u8;
+            let y = ((self.ly - self.wy) as u16).wrapping_sub(self.window_lines_skipped) as u8;
             let row = (y / 8) as u16 * 32;
             let line = ((y % 8) * 2) as u16;
 
@@ -129,12 +122,12 @@ impl Ppu {
                 };
 
                 let tile_data_addr = if bg_attr & BG_Y_FLIP != 0 {
-                    lcdc.tile_data_addr(tile_number) + 14 - line
+                    self.lcdc.tile_data_addr(tile_number) + 14 - line
                 } else {
-                    lcdc.tile_data_addr(tile_number) + line
+                    self.lcdc.tile_data_addr(tile_number) + line
                 };
 
-                let (data_low, data_high) = self.vram.tile_data(tile_data_addr, bg_attr);
+                let (data_low, data_high) = self.vram.bg_tile_data(tile_data_addr, bg_attr);
 
                 let color_bit = 1
                     << if bg_attr & BG_X_FLIP != 0 {
@@ -149,10 +142,10 @@ impl Ppu {
                 let color = match function_mode {
                     FunctionMode::Monochrome => self
                         .monochrome_palette_colors
-                        .get_color(bgp.shade_index(color_number)),
+                        .get_color(self.bgp.shade_index(color_number)),
                     FunctionMode::Compatibility => self
                         .cgb_bg_palette
-                        .get_color(bg_attr & BG_PAL, bgp.shade_index(color_number)),
+                        .get_color(bg_attr & BG_PAL, self.bgp.shade_index(color_number)),
                     FunctionMode::Color => self
                         .cgb_bg_palette
                         .get_color(bg_attr & BG_PAL, color_number),
@@ -176,59 +169,98 @@ impl Ppu {
         }
     }
 
+    fn get_sprites(&mut self, height: u8) -> ([SpriteAttr; 10], usize) {
+        let mut len = 0;
+        // TODO: not pretty
+        let mut sprites = [
+            SpriteAttr::default(),
+            SpriteAttr::default(),
+            SpriteAttr::default(),
+            SpriteAttr::default(),
+            SpriteAttr::default(),
+            SpriteAttr::default(),
+            SpriteAttr::default(),
+            SpriteAttr::default(),
+            SpriteAttr::default(),
+            SpriteAttr::default(),
+        ];
+
+        for i in (0..OAM_SIZE).step_by(4) {
+            let y = self.oam.data[i].wrapping_sub(16);
+
+            if self.ly.wrapping_sub(y) < height {
+                let attr = SpriteAttr {
+                    y,
+                    x: self.oam.data[i + 1].wrapping_sub(8),
+                    tile_index: self.oam.data[i + 2],
+                    flags: self.oam.data[i + 3],
+                };
+
+                sprites[len] = attr;
+                len += 1;
+
+                if len == 10 {
+                    break;
+                }
+            }
+        }
+
+        if self.opri & 1 == 1 {
+            // DMG order: first X pos, else OAM pos
+            for i in 0..len {
+                let mut j = i;
+
+                while j > 0 && sprites[j - 1].x <= sprites[j].x {
+                    sprites.swap(j - 1, j);
+                    j -= 1;
+                }
+            }
+        } else {
+            // CGB order: OAM pos
+            for i in 0..len {
+                let mut j = i;
+
+                while j > 0 && j - 1 < j {
+                    sprites.swap(j - 1, j);
+                    j -= 1;
+                }
+            }
+        }
+
+        (sprites, len)
+    }
+
     fn draw_sprites(
         &mut self,
         function_mode: FunctionMode,
         bg_priority: &mut [PixelPriority; PX_WIDTH as usize],
+        index_start: usize,
     ) {
-        let ly = self.ly;
-        let lcdc = self.lcdc;
-        let index_start = PX_WIDTH as usize * ly as usize;
+        if self.lcdc.val & OBJECTS_ENABLED != 0 {
+            let is_large = self.lcdc.val & LARGE_SPRITES != 0;
+            let height = if is_large { 16 } else { 8 };
 
-        if lcdc.val & OBJECTS_ENABLED != 0 {
-            let large_sprites = lcdc.val & LARGE_SPRITES != 0;
-            let sprite_height = if large_sprites { 16 } else { 8 };
+            let (sprites, sprites_len) = self.get_sprites(height);
 
-            let mut spr_ly: ArrayVec<(usize, SpriteAttr), 10> = self
-                .oam
-                .sprite_attributes_iterator()
-                .filter(|sprite| ly.wrapping_sub(sprite.y()) < sprite_height)
-                .take(10)
-                .enumerate()
-                .collect();
-
-            if self.opri & 1 == 0 {
-                spr_ly.sort_unstable_by(|(a_pos, a), (b_pos, b)| match b_pos.cmp(a_pos) {
-                    Ordering::Equal => a.x().cmp(&b.x()),
-                    x => x,
-                });
-            } else {
-                spr_ly.sort_unstable_by(|(a_pos, a), (b_pos, b)| match b.x().cmp(&a.x()) {
-                    Ordering::Equal => b_pos.cmp(a_pos),
-                    x => x,
-                });
-            }
-
-            for (_, sprite) in spr_ly {
-                let tile_number = if large_sprites {
-                    sprite.tile_index() & !1
+            for sprite in sprites.iter().take(sprites_len) {
+                let tile_number = if is_large {
+                    sprite.tile_index & !1
                 } else {
-                    sprite.tile_index()
+                    sprite.tile_index
                 };
 
                 let tile_data_addr =
-                    (tile_number as u16 * 16).wrapping_add(if sprite.flags() & SPR_FLIP_Y != 0 {
-                        (sprite_height as u16 - 1)
-                            .wrapping_sub((ly.wrapping_sub(sprite.y())) as u16)
+                    (tile_number as u16 * 16).wrapping_add(if sprite.flags & SPR_FLIP_Y != 0 {
+                        (height as u16 - 1).wrapping_sub((self.ly.wrapping_sub(sprite.y)) as u16)
                             * 2
                     } else {
-                        ly.wrapping_sub(sprite.y()) as u16 * 2
+                        self.ly.wrapping_sub(sprite.y) as u16 * 2
                     });
 
-                let (data_low, data_high) = self.vram.sprite_data(tile_data_addr, &sprite);
+                let (data_low, data_high) = self.vram.sprite_tile_data(tile_data_addr, sprite);
 
                 for xi in (0..8).rev() {
-                    let target_x = sprite.x().wrapping_add(7 - xi);
+                    let target_x = sprite.x.wrapping_add(7 - xi);
 
                     if target_x >= PX_WIDTH {
                         continue;
@@ -241,7 +273,7 @@ impl Ppu {
                     }
 
                     let color_bit = 1
-                        << if sprite.flags() & SPR_FLIP_X != 0 {
+                        << if sprite.flags & SPR_FLIP_X != 0 {
                             7 - xi
                         } else {
                             xi
@@ -257,7 +289,7 @@ impl Ppu {
 
                     let color = match function_mode {
                         FunctionMode::Monochrome => {
-                            let palette = if sprite.flags() & SPR_PAL != 0 {
+                            let palette = if sprite.flags & SPR_PAL != 0 {
                                 self.obp1
                             } else {
                                 self.obp0
@@ -266,7 +298,7 @@ impl Ppu {
                                 .get_color(palette.shade_index(color_number))
                         }
                         FunctionMode::Compatibility => {
-                            let palette = if sprite.flags() & SPR_PAL != 0 {
+                            let palette = if sprite.flags & SPR_PAL != 0 {
                                 self.obp1
                             } else {
                                 self.obp0
@@ -281,7 +313,7 @@ impl Ppu {
                     };
 
                     if !self.lcdc.cgb_sprite_master_priority_on(function_mode)
-                        && sprite.flags() & SPR_BG_WIN_OVER_OBJ != 0
+                        && sprite.flags & SPR_BG_WIN_OVER_OBJ != 0
                         && bg_priority[target_x as usize] == PixelPriority::Normal
                     {
                         continue;

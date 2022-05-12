@@ -53,27 +53,16 @@ impl Vram {
         self.get_bank(tile_addr, 1)
     }
 
-    pub fn tile_data(&self, tile_data_addr: u16, bg_attr: u8) -> (u8, u8) {
-        let low = self.get_bank(tile_data_addr & 0x1fff, (bg_attr & BG_TILE_BANK != 0) as u8);
-
-        let high = self.get_bank(
-            (tile_data_addr & 0x1fff) + 1,
-            (bg_attr & BG_TILE_BANK != 0) as u8,
-        );
+    pub fn bg_tile_data(&self, tile_addr: u16, attr: u8) -> (u8, u8) {
+        let low = self.get_bank(tile_addr & 0x1fff, (attr & BG_TILE_BANK != 0) as u8);
+        let high = self.get_bank((tile_addr & 0x1fff) + 1, (attr & BG_TILE_BANK != 0) as u8);
 
         (low, high)
     }
 
-    pub fn sprite_data(&self, tile_data_addr: u16, sprite_attributes: &SpriteAttr) -> (u8, u8) {
-        let low = self.get_bank(
-            tile_data_addr,
-            (sprite_attributes.flags() & SPR_TILE_BANK != 0) as u8,
-        );
-
-        let high = self.get_bank(
-            tile_data_addr + 1,
-            (sprite_attributes.flags() & SPR_TILE_BANK != 0) as u8,
-        );
+    pub fn sprite_tile_data(&self, tile_addr: u16, attr: &SpriteAttr) -> (u8, u8) {
+        let low = self.get_bank(tile_addr, (attr.flags & SPR_TILE_BANK != 0) as u8);
+        let high = self.get_bank(tile_addr + 1, (attr.flags & SPR_TILE_BANK != 0) as u8);
 
         (low, high)
     }
