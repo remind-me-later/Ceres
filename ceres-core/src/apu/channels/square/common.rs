@@ -6,7 +6,7 @@ use {
         },
         wave_duty::WaveDuty,
     },
-    crate::audio::channels::envelope::Envelope,
+    crate::apu::channels::envelope::Envelope,
 };
 
 const SQUARE_CHANNEL_PERIOD_MULTIPLIER: u16 = 4;

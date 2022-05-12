@@ -1,4 +1,4 @@
-use crate::{audio::Apu, interrupts::Interrupts, timer::Timer, FunctionMode, Gb, Model::Cgb};
+use crate::{apu::Apu, interrupts::Interrupts, timer::Timer, FunctionMode, Gb, Model::Cgb};
 
 impl Gb {
     fn mem_tick<T, F>(&mut self, f: F) -> T

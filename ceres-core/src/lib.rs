@@ -5,26 +5,26 @@ extern crate alloc;
 
 use {
     alloc::rc::Rc,
-    audio::Apu,
+    apu::Apu,
     bootrom::BootRom,
     core::{cell::RefCell, time::Duration},
     cpu::Regs,
     interrupts::Interrupts,
     joypad::Joypad,
     memory::{Dma, Hdma, Hram, Key1, Wram},
+    ppu::Ppu,
     serial::Serial,
     timer::Timer,
-    video::ppu::Ppu,
 };
 pub use {
-    audio::{AudioCallbacks, Frame, Sample},
+    apu::{AudioCallbacks, Frame, Sample},
     cartridge::{Cartridge, Header},
     error::Error,
     joypad::Button,
-    video::{MonochromePaletteColors, VideoCallbacks, PX_HEIGHT, PX_WIDTH, SCANLINES_PER_FRAME},
+    ppu::{VideoCallbacks, PX_HEIGHT, PX_WIDTH},
 };
 
-mod audio;
+mod apu;
 mod bootrom;
 mod cartridge;
 mod cpu;
@@ -32,9 +32,9 @@ mod error;
 mod interrupts;
 mod joypad;
 mod memory;
+mod ppu;
 mod serial;
 mod timer;
-mod video;
 
 // 59.7 fps
 pub const NANOSECONDS_PER_FRAME: u64 = 16_750_418;
@@ -129,26 +129,12 @@ impl Gb {
     }
 
     pub fn run_frame(&mut self) {
-        while !self.ppu.is_frame_done() {
+        for _ in 0..M_CYCLES_PER_FRAME {
             self.run();
         }
-
-        self.ppu.reset_frame_done();
-    }
-
-    pub fn run_frame_but_dont_render(&mut self) {
-        while !self.ppu.is_frame_done() {
-            self.run();
-        }
-
-        self.ppu.reset_frame_done();
     }
 
     pub fn save_data(&self) -> Option<&[u8]> {
-        if self.cart.has_battery() {
-            Some(self.cart.ram())
-        } else {
-            None
-        }
+        self.cart.has_battery().then_some(self.cart.ram())
     }
 }

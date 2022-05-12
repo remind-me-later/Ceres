@@ -1,4 +1,4 @@
-use crate::video::ppu::{Mode::HBlank, Ppu};
+use crate::ppu::{Mode::HBlank, Ppu};
 
 pub struct HdmaTransfer {
     pub src: u16,

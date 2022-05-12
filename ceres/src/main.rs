@@ -4,7 +4,7 @@ mod video;
 
 use {argh::FromArgs, ceres_core::Model, emulator::Emulator, std::path::Path};
 
-pub const CERES_STR: &str = "Ceres";
+const CERES_STR: &str = "Ceres";
 
 #[derive(FromArgs)]
 #[argh(description = "cli arguments")]
