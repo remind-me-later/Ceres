@@ -20,18 +20,18 @@ impl Mbc3 {
     pub fn write_rom(
         &mut self,
         addr: u16,
-        value: u8,
+        val: u8,
         rom_offsets: &mut (usize, usize),
         ram_offset: &mut usize,
     ) {
         match addr {
-            0x0000..=0x1fff => self.map_en = (value & 0x0f) == 0x0a,
+            0x0000..=0x1fff => self.map_en = (val & 0x0f) == 0x0a,
             0x2000..=0x3fff => {
-                self.rom_bank = if value == 0 { 1 } else { value & 0x7f };
+                self.rom_bank = if val == 0 { 1 } else { val & 0x7f };
                 *rom_offsets = (0x0000, ROM_BANK_SIZE * self.rom_bank as usize);
             }
             0x4000..=0x5fff => {
-                self.map_select = value & 0x7;
+                self.map_select = val & 0x7;
                 if self.mbc30 {
                     *ram_offset = RAM_BANK_SIZE * self.map_select as usize;
                 } else {

@@ -25,7 +25,6 @@ pub struct Emulator {
 }
 
 impl Emulator {
-    #[allow(clippy::similar_names)]
     pub fn new(model: Model, rom_path: &Path) -> Self {
         let sdl = sdl2::init().unwrap();
         let video_subsystem = sdl.video().unwrap();

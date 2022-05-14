@@ -42,8 +42,8 @@ impl Regs {
         Self::default()
     }
 
-    pub fn read16(&self, register: Reg16) -> u16 {
-        match register {
+    pub fn read16(&self, reg: Reg16) -> u16 {
+        match reg {
             Reg16::AF => u16::from_be_bytes([self.a, self.f]),
             Reg16::BC => u16::from_be_bytes([self.b, self.c]),
             Reg16::DE => u16::from_be_bytes([self.d, self.e]),
@@ -52,8 +52,8 @@ impl Regs {
         }
     }
 
-    pub fn write16(&mut self, register: Reg16, val: u16) {
-        match register {
+    pub fn write16(&mut self, reg: Reg16, val: u16) {
+        match reg {
             Reg16::AF => {
                 let [hi, lo] = u16::to_be_bytes(val);
                 self.a = hi;

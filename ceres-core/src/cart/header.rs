@@ -28,7 +28,6 @@ impl Header {
     /// # Errors
     ///
     /// Will return `Err` if the ROM header contains some illegal value
-    #[allow(clippy::similar_names)]
     pub fn new(rom: &[u8]) -> Result<Self, Error> {
         let licensee_code = LicenseeCode::new(rom);
         let cgb_flag = CgbFlag::new(rom);

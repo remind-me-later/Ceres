@@ -1,359 +1,209 @@
-use super::{
-    envelope::Envelope,
-    frequency_data::FrequencyData,
-    generic_channel::{GenericChannel, TriggerEvent},
-};
+use super::{core::Core, envelope::Envelope, freq::Freq};
 
-const SQUARE_CHANNEL_PERIOD_MULTIPLIER: u16 = 4;
-pub const MAX_SQUARE_CHANNEL_LENGTH: u16 = 64;
+const SQUARE_MAX_LENGTH: u16 = 64;
+const SQUARE_PERIOD_MULTIPLIER: u16 = 4;
+const DUTY_TABLE: [u8; 4] = [0b0000_0001, 0b1000_0001, 0b1000_0111, 0b0111_1110];
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Period {
-    SweepOff,
-    Div1,
-    Div2,
-    Div3,
-    Div4,
-    Div5,
-    Div6,
-    Div7,
-}
-
-impl From<Period> for u8 {
-    fn from(time: Period) -> Self {
-        match time {
-            // Apparently GB treats this internally as 8
-            Period::SweepOff => 8,
-            Period::Div1 => 1,
-            Period::Div2 => 2,
-            Period::Div3 => 3,
-            Period::Div4 => 4,
-            Period::Div5 => 5,
-            Period::Div6 => 6,
-            Period::Div7 => 7,
-        }
-    }
-}
-
-impl Default for Period {
-    fn default() -> Self {
-        Period::SweepOff
-    }
-}
-
-impl From<u8> for Period {
-    fn from(val: u8) -> Self {
-        use self::Period::{Div1, Div2, Div3, Div4, Div5, Div6, Div7, SweepOff};
-        // bits 6-4
-        match (val >> 4) & 0x07 {
-            1 => Div1,
-            2 => Div2,
-            3 => Div3,
-            4 => Div4,
-            5 => Div5,
-            6 => Div6,
-            7 => Div7,
-            _ => SweepOff,
-        }
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Direction {
-    High,
-    Low,
-}
-
-impl Default for Direction {
-    fn default() -> Self {
-        Direction::High
-    }
-}
-
-impl From<u8> for Direction {
-    fn from(value: u8) -> Self {
-        use Direction::{High, Low};
-        match value & (1 << 3) {
-            0 => High,
-            _ => Low,
-        }
-    }
-}
-
-impl From<Direction> for u8 {
-    fn from(dir: Direction) -> Self {
-        use Direction::{High, Low};
-        match dir {
-            High => 0,
-            Low => 1,
-        }
-    }
-}
-
-pub struct Sweep {
-    period: Period,
-    direction: Direction,
-    shift_number: u8,
+struct Sweep {
+    on: bool,
+    dec: bool,
+    period: u8,
+    shift: u8,
     timer: u8,
-    shadow_frequency: u16,
-    is_enabled: bool,
+    shadow_freq: u16,
 }
 
 impl Sweep {
     fn new() -> Self {
         Self {
-            period: Period::default(),
-            direction: Direction::default(),
-            shift_number: 0,
-            timer: 0,
-            shadow_frequency: 0,
-            is_enabled: false,
+            period: 8,
+            dec: false,
+            shift: 0,
+            timer: 8,
+            shadow_freq: 0,
+            on: false,
         }
     }
 
-    fn trigger(&mut self, generic_square_channel: &mut Common) {
-        self.shadow_frequency = generic_square_channel.frequency().get();
-        self.timer = self.period.into();
-        self.is_enabled = self.period != Period::SweepOff && self.shift_number != 0;
+    fn trigger(&mut self, common: &mut Common) {
+        self.shadow_freq = common.freq.val;
+        self.timer = self.period;
+        self.on = self.period != 8 && self.shift != 0;
 
-        if self.shift_number != 0 {
-            self.sweep_calculation(generic_square_channel);
+        if self.shift != 0 {
+            self.sweep_calculation(common);
         }
     }
 
     fn reset(&mut self) {
-        self.period = Period::default();
-        self.direction = Direction::default();
-        self.shift_number = 0;
-        self.is_enabled = false;
+        self.period = 8;
+        self.timer = 8;
+        self.dec = false;
+        self.shift = 0;
+        self.on = false;
     }
 
-    fn sweep_calculation(&mut self, generic_square_channel: &mut Common) {
-        let tmp = self.shadow_frequency >> self.shift_number;
-        self.shadow_frequency = if self.direction == Direction::High {
-            self.shadow_frequency + tmp
+    fn sweep_calculation(&mut self, common: &mut Common) {
+        let tmp = self.shadow_freq >> self.shift;
+        self.shadow_freq = if self.dec {
+            self.shadow_freq - tmp
         } else {
-            self.shadow_frequency - tmp
+            self.shadow_freq + tmp
         };
 
-        if self.shadow_frequency > 0x7ff {
-            generic_square_channel.set_enabled(false);
-        } else if self.shift_number != 0 {
-            generic_square_channel.set_frequency_data(self.shadow_frequency);
+        if self.shadow_freq > 0x7ff {
+            common.set_on(false);
+        } else if self.shift != 0 {
+            common.freq.val = self.shadow_freq;
         }
     }
 
-    fn step(&mut self, generic_square_channel: &mut Common) {
+    fn step(&mut self, common: &mut Common) {
         self.timer -= 1;
         if self.timer == 0 {
-            self.timer = self.period.into();
-            if self.is_enabled {
-                self.sweep_calculation(generic_square_channel);
+            self.timer = self.period;
+            if self.on {
+                self.sweep_calculation(common);
             }
         }
     }
 
     fn read(&self) -> u8 {
-        const MASK: u8 = 0x80;
-        MASK | ((u8::from(self.period)) << 4)
-            | (u8::from(self.direction) << 3)
-            | (self.shift_number)
+        0x80 | ((self.period as u8 & 7) << 4) | ((!self.dec as u8) << 3) | self.shift
     }
 
-    fn write(&mut self, value: u8) {
-        self.period = value.into();
-        self.direction = value.into();
-        self.shift_number = value & 7;
+    fn write(&mut self, val: u8) {
+        self.period = (val >> 4) & 7;
+        if self.period == 0 {
+            self.period = 8;
+        }
+        self.dec = (val & 8) != 0;
+        self.shift = val & 7;
     }
 }
 
 struct Common {
-    frequency: FrequencyData<SQUARE_CHANNEL_PERIOD_MULTIPLIER>,
-    duty_cycle: WaveDuty,
-    duty_cycle_bit: u8,
-    generic_channel: GenericChannel<MAX_SQUARE_CHANNEL_LENGTH>,
-    current_frequency_period: u16,
-    last_output: u8,
+    pub core: Core<SQUARE_MAX_LENGTH>,
+    pub freq: Freq<SQUARE_PERIOD_MULTIPLIER>,
+    duty: u8,
+    duty_bit: u8,
+    period: u16,
+    output: u8,
     envelope: Envelope,
 }
 
 impl Common {
     fn new() -> Self {
-        let frequency = FrequencyData::new();
-        let current_frequency_period = frequency.period();
+        let freq = Freq::new();
+        let period = freq.period();
 
         Self {
-            frequency,
-            current_frequency_period,
-            duty_cycle: WaveDuty::Half,
-            duty_cycle_bit: 0,
-            generic_channel: GenericChannel::new(),
-            last_output: 0,
+            freq,
+            period,
+            duty: DUTY_TABLE[0],
+            duty_bit: 0,
+            core: Core::new(),
+            output: 0,
             envelope: Envelope::new(),
         }
     }
 
     fn control_byte(&self) -> u8 {
-        const MASK: u8 = 0x3f;
-        MASK | u8::from(self.duty_cycle)
+        0x3f | ((self.duty as u8) << 6)
     }
 
-    fn set_control_byte(&mut self, value: u8) {
-        self.duty_cycle = value.into();
-        self.generic_channel.write_sound_length(value);
+    fn set_control_byte(&mut self, val: u8) {
+        self.duty = (val >> 6) & 3;
+        self.core.write_len(val);
     }
 
-    fn set_low_byte(&mut self, value: u8) {
-        self.frequency.set_low_byte(value);
+    fn set_low_byte(&mut self, val: u8) {
+        self.freq.set_lo(val);
     }
 
     fn high_byte(&self) -> u8 {
-        self.generic_channel.read()
+        self.core.read()
     }
 
-    fn set_high_byte(&mut self, value: u8) -> TriggerEvent {
-        self.frequency.set_high_byte(value);
-        self.generic_channel.write_control(value)
+    fn set_high_byte(&mut self, val: u8) -> bool {
+        self.freq.set_hi(val);
+        self.core.write_control(val)
     }
 
     fn trigger(&mut self) {
-        self.current_frequency_period = self.frequency.period();
-        self.last_output = 0;
-        self.duty_cycle_bit = 0;
+        self.period = self.freq.period();
+        self.output = 0;
+        self.duty_bit = 0;
         self.envelope.trigger();
     }
 
     fn reset(&mut self) {
-        self.generic_channel.reset();
-        self.frequency.reset();
-        self.duty_cycle = WaveDuty::HalfQuarter;
-        self.duty_cycle_bit = 0;
+        self.core.reset();
+        self.freq.reset();
+        self.duty = DUTY_TABLE[0];
+        self.duty_bit = 0;
         self.envelope.reset();
     }
 
-    pub fn next_duty_cycle_value(&mut self) -> u8 {
-        let output =
-            (self.duty_cycle.duty_byte() & (1 << self.duty_cycle_bit)) >> self.duty_cycle_bit;
-        self.duty_cycle_bit = (self.duty_cycle_bit + 1) % 8;
+    pub fn duty_output(&mut self) -> u8 {
+        let output = (DUTY_TABLE[self.duty as usize] & (1 << self.duty_bit)) >> self.duty_bit;
+        self.duty_bit = (self.duty_bit + 1) & 7;
         output
     }
 
-    fn frequency(&self) -> &FrequencyData<SQUARE_CHANNEL_PERIOD_MULTIPLIER> {
-        &self.frequency
-    }
-
-    fn set_frequency_data(&mut self, frequency: u16) {
-        self.frequency.set(frequency);
-    }
-
-    fn set_enabled(&mut self, val: bool) {
-        self.generic_channel.set_enabled(val);
-    }
-
-    fn mut_generic_channel(&mut self) -> &mut GenericChannel<MAX_SQUARE_CHANNEL_LENGTH> {
-        &mut self.generic_channel
+    fn set_on(&mut self, on: bool) {
+        self.core.set_on(on);
     }
 
     fn step_sample(&mut self) {
-        if !self.generic_channel.is_enabled() {
+        if !self.core.on() {
             return;
         }
 
-        let (new_frequency_period, overflow) = self.current_frequency_period.overflowing_sub(1);
+        let (period, overflow) = self.period.overflowing_sub(1);
 
         if overflow {
-            self.current_frequency_period = self.frequency.period();
+            self.period = self.freq.period();
 
-            if self.generic_channel.is_enabled() {
-                self.last_output = self.next_duty_cycle_value();
+            if self.core.on() {
+                self.output = self.duty_output();
             }
         } else {
-            self.current_frequency_period = new_frequency_period;
+            self.period = period;
         }
     }
 
     fn output_volume(&self) -> u8 {
-        self.last_output * self.envelope.volume()
+        self.output * self.envelope.volume()
     }
 
     fn step_envelope(&mut self) {
-        self.envelope.step(&mut self.generic_channel);
+        self.envelope.step(&mut self.core);
     }
 
     fn read_envelope(&self) -> u8 {
         self.envelope.read()
     }
 
-    fn write_envelope(&mut self, value: u8) {
-        self.envelope.write(value, &mut self.generic_channel);
+    fn write_envelope(&mut self, val: u8) {
+        self.envelope.write(val, &mut self.core);
     }
 
     fn step_length(&mut self) {
-        self.generic_channel.step_length();
+        self.core.step_len();
     }
 
-    fn is_enabled(&self) -> bool {
-        self.generic_channel.is_enabled()
-    }
-}
-
-#[derive(Clone, Copy)]
-enum WaveDuty {
-    HalfQuarter,
-    Quarter,
-    Half,
-    ThreeQuarters,
-}
-
-impl WaveDuty {
-    fn duty_byte(self) -> u8 {
-        use self::WaveDuty::{Half, HalfQuarter, Quarter, ThreeQuarters};
-
-        match self {
-            HalfQuarter => 0b0000_0001,
-            Quarter => 0b1000_0001,
-            Half => 0b1000_0111,
-            ThreeQuarters => 0b0111_1110,
-        }
+    fn on(&self) -> bool {
+        self.core.on()
     }
 }
 
-impl From<u8> for WaveDuty {
-    fn from(val: u8) -> Self {
-        use self::WaveDuty::{Half, HalfQuarter, Quarter, ThreeQuarters};
-        // bits 7-6
-        match (val >> 6) & 3 {
-            0 => HalfQuarter,
-            1 => Quarter,
-            2 => Half,
-            _ => ThreeQuarters,
-        }
-    }
-}
-
-impl From<WaveDuty> for u8 {
-    fn from(val: WaveDuty) -> Self {
-        use self::WaveDuty::{Half, HalfQuarter, Quarter, ThreeQuarters};
-
-        const WAVEDUTY_MASK: u8 = 0x3f;
-
-        let byte = match val {
-            HalfQuarter => 0,
-            Quarter => 1,
-            Half => 2,
-            ThreeQuarters => 3,
-        };
-        // bits 7-6
-        (byte << 6) | WAVEDUTY_MASK
-    }
-}
-
-pub struct Chan1 {
+pub struct Ch1 {
     sweep: Sweep,
     common: Common,
 }
 
-impl Chan1 {
+impl Ch1 {
     pub fn new() -> Self {
         Self {
             sweep: Sweep::new(),
@@ -399,7 +249,7 @@ impl Chan1 {
     }
 
     pub fn write_nr14(&mut self, val: u8) {
-        if self.common.set_high_byte(val) == TriggerEvent::Trigger {
+        if self.common.set_high_byte(val) {
             self.trigger();
         }
     }
@@ -409,7 +259,7 @@ impl Chan1 {
     }
 
     pub fn step_sweep(&mut self) {
-        if self.is_enabled() {
+        if self.on() {
             self.sweep.step(&mut self.common);
         }
     }
@@ -427,24 +277,24 @@ impl Chan1 {
         self.common.output_volume()
     }
 
-    pub fn is_enabled(&self) -> bool {
-        self.common.is_enabled()
+    pub fn on(&self) -> bool {
+        self.common.on()
     }
 
     pub fn step_length(&mut self) {
         self.common.step_length();
     }
 
-    pub fn mut_generic_channel(&mut self) -> &mut GenericChannel<MAX_SQUARE_CHANNEL_LENGTH> {
-        self.common.mut_generic_channel()
+    pub fn mut_core(&mut self) -> &mut Core<SQUARE_MAX_LENGTH> {
+        &mut self.common.core
     }
 }
 
-pub struct Chan2 {
+pub struct Ch2 {
     common: Common,
 }
 
-impl Chan2 {
+impl Ch2 {
     pub fn new() -> Self {
         Self {
             common: Common::new(),
@@ -480,7 +330,7 @@ impl Chan2 {
     }
 
     pub fn write_nr24(&mut self, val: u8) {
-        if self.common.set_high_byte(val) == TriggerEvent::Trigger {
+        if self.common.set_high_byte(val) {
             self.trigger();
         }
     }
@@ -501,15 +351,15 @@ impl Chan2 {
         self.common.output_volume()
     }
 
-    pub fn is_enabled(&self) -> bool {
-        self.common.is_enabled()
+    pub fn on(&self) -> bool {
+        self.common.on()
     }
 
     pub fn step_length(&mut self) {
         self.common.step_length();
     }
 
-    pub fn mut_generic_channel(&mut self) -> &mut GenericChannel<MAX_SQUARE_CHANNEL_LENGTH> {
-        self.common.mut_generic_channel()
+    pub fn mut_core(&mut self) -> &mut Core<SQUARE_MAX_LENGTH> {
+        &mut self.common.core
     }
 }

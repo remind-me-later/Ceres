@@ -5,6 +5,7 @@
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::struct_excessive_bools)]
+#![allow(clippy::similar_names)]
 
 extern crate alloc;
 
@@ -15,14 +16,14 @@ use {
     cpu::Regs,
     interrupts::Interrupts,
     joypad::Joypad,
-    memory::{Dma, Hdma, Hram, Key1, Wram},
+    mem::{Dma, Hdma, Hram, Wram},
     ppu::Ppu,
     serial::Serial,
     timer::Timer,
 };
 pub use {
     apu::{AudioCallbacks, Frame, Sample},
-    cartridge::{Cartridge, Header},
+    cart::{Cartridge, Header},
     error::Error,
     joypad::Button,
     ppu::{VideoCallbacks, PX_HEIGHT, PX_WIDTH},
@@ -30,24 +31,23 @@ pub use {
 
 mod apu;
 mod bootrom;
-mod cartridge;
+mod cart;
 mod cpu;
 mod error;
 mod interrupts;
 mod joypad;
-mod memory;
+mod mem;
 mod ppu;
 mod serial;
 mod timer;
 
 // 59.7 fps
-pub const NANOSECONDS_PER_FRAME: u64 = 16_750_418;
-pub const FRAME_DURATION: Duration = Duration::from_nanos(NANOSECONDS_PER_FRAME);
-pub const T_CYCLES_PER_SECOND: u32 = 4_194_304;
+pub const FRAME_DURATION: Duration = Duration::from_nanos(NANOS_PER_FRAME);
+const NANOS_PER_FRAME: u64 = 16_750_418;
+const T_CYCLES_PER_SECOND: u32 = 4_194_304;
 // 2^22
-pub const M_CYCLES_PER_SECOND: u32 = T_CYCLES_PER_SECOND / 4;
-pub const T_CYCLES_PER_FRAME: u32 = 70224;
-pub const M_CYCLES_PER_FRAME: u32 = T_CYCLES_PER_FRAME / 4;
+const T_CYCLES_PER_FRAME: u32 = 70224;
+const M_CYCLES_PER_FRAME: u32 = T_CYCLES_PER_FRAME / 4;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Model {
@@ -69,7 +69,7 @@ pub struct Gb {
     ime: bool,
     halted: bool,
     halt_bug: bool,
-    key1: Key1,
+    key1: u8,
     ints: Interrupts,
     ppu: Ppu,
     joypad: Joypad,
@@ -90,8 +90,8 @@ pub struct Gb {
 impl Gb {
     /// # Safety
     ///
-    /// `audio_callbacks` and `video_callbacks` should not be dropped before the struct 
-    /// and be in the heap, so that it's position doesn't change
+    /// `audio_callbacks` and `video_callbacks` should not be dropped before the struct
+    /// and be in the heap, so that their position doesn't change
     pub unsafe fn new(
         model: Model,
         cart: Cartridge,
@@ -123,7 +123,7 @@ impl Gb {
             boot_rom: BootRom::new(model),
             model,
             in_double_speed: false,
-            key1: Key1::new(),
+            key1: 0,
             function_mode,
         }
     }
@@ -137,6 +137,7 @@ impl Gb {
     }
 
     pub fn run_frame(&mut self) {
+        // very rough approximation
         for _ in 0..M_CYCLES_PER_FRAME {
             self.run();
         }

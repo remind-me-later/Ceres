@@ -18,14 +18,14 @@ impl Dma {
         self.source
     }
 
-    pub fn write(&mut self, value: u8) {
+    pub fn write(&mut self, val: u8) {
         if self.is_active {
             self.is_restarting = true;
         }
 
         self.t_cycles = -8; // two m-cycles delay
-        self.source = value;
-        self.addr = u16::from(value) << 8;
+        self.source = val;
+        self.addr = u16::from(val) << 8;
         self.is_active = true;
     }
 

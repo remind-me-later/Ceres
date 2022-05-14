@@ -82,8 +82,8 @@ impl Gb {
         u16::from_le_bytes([lo, hi])
     }
 
-    fn internal_push(&mut self, value: u16) {
-        let [lo, hi] = u16::to_le_bytes(value);
+    fn internal_push(&mut self, val: u16) {
+        let [lo, hi] = u16::to_le_bytes(val);
         self.tick_t_cycle();
         self.reg.dec_sp();
         self.write_mem(self.reg.sp, hi);
@@ -123,9 +123,9 @@ impl Gb {
         res
     }
 
-    fn internal_rrc(&mut self, value: u8) -> u8 {
-        let co = value & 0x01;
-        let res = value.rotate_right(1);
+    fn internal_rrc(&mut self, val: u8) -> u8 {
+        let co = val & 0x01;
+        let res = val.rotate_right(1);
         self.reg.set_zf(res == 0);
         self.reg.set_nf(false);
         self.reg.set_hf(false);

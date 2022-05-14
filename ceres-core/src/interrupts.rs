@@ -50,11 +50,11 @@ impl Interrupts {
         self.interrupt_enable
     }
 
-    pub fn write_if(&mut self, value: u8) {
-        self.interrupt_flag = value & 0x1f;
+    pub fn write_if(&mut self, val: u8) {
+        self.interrupt_flag = val & 0x1f;
     }
 
-    pub fn write_ie(&mut self, value: u8) {
-        self.interrupt_enable = value;
+    pub fn write_ie(&mut self, val: u8) {
+        self.interrupt_enable = val;
     }
 }

@@ -1,12 +1,9 @@
-use super::{
-    envelope::Envelope,
-    generic_channel::{GenericChannel, TriggerEvent},
-};
+use super::{core::Core, envelope::Envelope};
 
 const MAX_NOISE_CHANNEL_LENGTH: u16 = 64;
 
-pub struct NoiseChannel {
-    generic_channel: GenericChannel<MAX_NOISE_CHANNEL_LENGTH>,
+pub struct Noise {
+    core: Core<MAX_NOISE_CHANNEL_LENGTH>,
     envelope: Envelope,
     current_timer_cycle: u16,
     internal_timer_period: u16,
@@ -16,10 +13,10 @@ pub struct NoiseChannel {
     nr43: u8,
 }
 
-impl NoiseChannel {
+impl Noise {
     pub fn new() -> Self {
         Self {
-            generic_channel: GenericChannel::new(),
+            core: Core::new(),
             envelope: Envelope::new(),
             current_timer_cycle: 1,
             internal_timer_period: 0,
@@ -31,7 +28,7 @@ impl NoiseChannel {
     }
 
     pub fn reset(&mut self) {
-        self.generic_channel.reset();
+        self.core.reset();
         self.envelope.reset();
         self.internal_timer_period = 0;
         self.current_timer_cycle = 1;
@@ -50,15 +47,15 @@ impl NoiseChannel {
     }
 
     pub fn read_nr44(&self) -> u8 {
-        self.generic_channel.read()
+        self.core.read()
     }
 
     pub fn write_nr41(&mut self, val: u8) {
-        self.generic_channel.write_sound_length(val);
+        self.core.write_len(val);
     }
 
     pub fn write_nr42(&mut self, val: u8) {
-        self.envelope.write(val, &mut self.generic_channel);
+        self.envelope.write(val, &mut self.core);
     }
 
     pub fn write_nr43(&mut self, val: u8) {
@@ -82,7 +79,7 @@ impl NoiseChannel {
     }
 
     pub fn write_nr44(&mut self, val: u8) {
-        if self.generic_channel.write_control(val) == TriggerEvent::Trigger {
+        if self.core.write_control(val) {
             self.trigger();
         }
     }
@@ -94,11 +91,11 @@ impl NoiseChannel {
     }
 
     pub fn step_envelope(&mut self) {
-        self.envelope.step(&mut self.generic_channel);
+        self.envelope.step(&mut self.core);
     }
 
     pub fn step_sample(&mut self) {
-        if !self.is_enabled() {
+        if !self.on() {
             return;
         }
 
@@ -124,15 +121,15 @@ impl NoiseChannel {
         self.output_volume * self.envelope.volume()
     }
 
-    pub fn is_enabled(&self) -> bool {
-        self.generic_channel.is_enabled()
+    pub fn on(&self) -> bool {
+        self.core.on()
     }
 
     pub fn step_length(&mut self) {
-        self.generic_channel.step_length();
+        self.core.step_len();
     }
 
-    pub fn mut_generic_channel(&mut self) -> &mut GenericChannel<MAX_NOISE_CHANNEL_LENGTH> {
-        &mut self.generic_channel
+    pub fn mut_core(&mut self) -> &mut Core<MAX_NOISE_CHANNEL_LENGTH> {
+        &mut self.core
     }
 }

@@ -1,7 +1,6 @@
 pub use {
     dma::{Dma, Hdma},
     hram::Hram,
-    key1::Key1,
     wram::Wram,
 };
 
@@ -10,8 +9,10 @@ use crate::Gb;
 mod addresses;
 mod dma;
 mod hram;
-mod key1;
 mod wram;
+
+pub const KEY1_SPEED: u8 = 0x80;
+pub const KEY1_SWITCH: u8 = 0x01;
 
 impl Gb {
     pub fn switch_speed(&mut self) {

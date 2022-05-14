@@ -44,24 +44,24 @@ impl Mbc1 {
     pub fn write_rom(
         &mut self,
         addr: u16,
-        value: u8,
+        val: u8,
         rom_offsets: &mut (usize, usize),
         ram_offset: &mut usize,
     ) {
         match addr {
-            0x0000..=0x1fff => self.ramg = (value & 0xf) == 0xa,
+            0x0000..=0x1fff => self.ramg = (val & 0xf) == 0xa,
             0x2000..=0x3fff => {
-                let value = value & 0x1f;
-                self.bank1 = if value == 0 { 1 } else { value };
+                let val = val & 0x1f;
+                self.bank1 = if val == 0 { 1 } else { val };
                 *rom_offsets = self.rom_offsets(self.is_multicart);
             }
             0x4000..=0x5fff => {
-                self.bank2 = value & 3;
+                self.bank2 = val & 3;
                 *rom_offsets = self.rom_offsets(self.is_multicart);
                 *ram_offset = self.ram_offset();
             }
             0x6000..=0x7fff => {
-                self.mode = (value & 1) == 1;
+                self.mode = (val & 1) == 1;
                 *rom_offsets = self.rom_offsets(self.is_multicart);
                 *ram_offset = self.ram_offset();
             }

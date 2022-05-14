@@ -4,7 +4,7 @@ const TAC_ENABLE: u8 = 4;
 
 #[derive(Default)]
 pub struct Timer {
-    enabled: bool,
+    on: bool,
     internal_counter: u16,
 
     // registers
@@ -45,7 +45,7 @@ impl Timer {
             self.counter = self.modulo;
             ints.req(TIMER_INT);
             self.overflow = false;
-        } else if self.enabled && self.counter_bit() {
+        } else if self.on && self.counter_bit() {
             self.internal_counter = self.internal_counter.wrapping_add(1);
             let new_bit = self.counter_bit();
             if !new_bit {
@@ -110,10 +110,10 @@ impl Timer {
     pub fn write_tac(&mut self, ints: &mut Interrupts, val: u8) {
         self.tick_t_cycle(ints);
 
-        let old_bit = self.enabled && self.counter_bit();
+        let old_bit = self.on && self.counter_bit();
         self.tac = val & 7;
-        self.enabled = val & TAC_ENABLE != 0;
-        let new_bit = self.enabled && self.counter_bit();
+        self.on = val & TAC_ENABLE != 0;
+        let new_bit = self.on && self.counter_bit();
 
         if old_bit && !new_bit {
             self.inc();

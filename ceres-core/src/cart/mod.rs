@@ -49,7 +49,6 @@ impl Cartridge {
     /// # Errors
     ///
     /// Will return `Err` if the ROM header contains some illegal value
-    #[allow(clippy::similar_names)]
     pub fn new(rom: Box<[u8]>, ram: Option<Box<[u8]>>) -> Result<Cartridge, Error> {
         let header_info = Header::new(&rom)?;
         let mbc30 = header_info.ram_size().number_of_banks() >= 8;
@@ -177,39 +176,39 @@ impl Cartridge {
         }
     }
 
-    pub fn write_rom(&mut self, addr: u16, value: u8) {
+    pub fn write_rom(&mut self, addr: u16, val: u8) {
         match self.mbc {
             Mbc::None => (),
             Mbc::One(ref mut mbc1) => {
-                mbc1.write_rom(addr, value, &mut self.rom_offsets, &mut self.ram_offset);
+                mbc1.write_rom(addr, val, &mut self.rom_offsets, &mut self.ram_offset);
             }
-            Mbc::Two(ref mut mbc2) => mbc2.write_rom(addr, value, &mut self.rom_offsets),
+            Mbc::Two(ref mut mbc2) => mbc2.write_rom(addr, val, &mut self.rom_offsets),
             Mbc::Three(ref mut mbc3) => {
-                mbc3.write_rom(addr, value, &mut self.rom_offsets, &mut self.ram_offset);
+                mbc3.write_rom(addr, val, &mut self.rom_offsets, &mut self.ram_offset);
             }
             Mbc::Five { ref mut mbc, .. } => {
-                mbc.write_rom(addr, value, &mut self.rom_offsets, &mut self.ram_offset);
+                mbc.write_rom(addr, val, &mut self.rom_offsets, &mut self.ram_offset);
             }
         }
     }
 
-    pub fn mbc_write_ram(&mut self, ram_enabled: bool, addr: u16, value: u8) {
+    pub fn mbc_write_ram(&mut self, ram_enabled: bool, addr: u16, val: u8) {
         if !self.ram.is_empty() && ram_enabled {
             let addr = self.ram_addr(addr);
-            self.ram[addr] = value;
+            self.ram[addr] = val;
         }
     }
 
-    pub fn write_ram(&mut self, addr: u16, value: u8) {
+    pub fn write_ram(&mut self, addr: u16, val: u8) {
         match self.mbc {
             Mbc::None => (),
             Mbc::One(ref mbc1) => {
                 let is_ram_enabled = mbc1.ramg();
-                self.mbc_write_ram(is_ram_enabled, addr, value);
+                self.mbc_write_ram(is_ram_enabled, addr, val);
             }
             Mbc::Two(ref mbc2) => {
                 let is_ram_enabled = mbc2.is_ram_enabled();
-                self.mbc_write_ram(is_ram_enabled, addr, value);
+                self.mbc_write_ram(is_ram_enabled, addr, val);
             }
             Mbc::Three(ref mbc3) => {
                 let map_en = mbc3.map_en();
@@ -217,14 +216,14 @@ impl Cartridge {
                 let mbc30 = mbc3.mbc30();
 
                 match map_select {
-                    0x00..=0x03 => self.mbc_write_ram(map_en, addr, value),
-                    0x04..=0x07 => self.mbc_write_ram(map_en && mbc30, addr, value),
+                    0x00..=0x03 => self.mbc_write_ram(map_en, addr, val),
+                    0x04..=0x07 => self.mbc_write_ram(map_en && mbc30, addr, val),
                     _ => (),
                 }
             }
             Mbc::Five { ref mbc, .. } => {
                 let is_ram_enabled = mbc.is_ram_enabled();
-                self.mbc_write_ram(is_ram_enabled, addr, value);
+                self.mbc_write_ram(is_ram_enabled, addr, val);
             }
         }
     }

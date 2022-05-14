@@ -13,13 +13,13 @@ impl Mbc2 {
         }
     }
 
-    pub fn write_rom(&mut self, addr: u16, value: u8, rom_offsets: &mut (usize, usize)) {
+    pub fn write_rom(&mut self, addr: u16, val: u8, rom_offsets: &mut (usize, usize)) {
         if addr <= 0x3fff {
             if (addr >> 8) & 1 == 0 {
-                self.is_ram_enabled = (value & 0xf) == 0xa;
+                self.is_ram_enabled = (val & 0xf) == 0xa;
             } else {
-                let value = value & 0xf;
-                self.rom_bank = if value == 0 { 1 } else { value };
+                let val = val & 0xf;
+                self.rom_bank = if val == 0 { 1 } else { val };
                 *rom_offsets = (0x0000, ROM_BANK_SIZE * self.rom_bank as usize);
             }
         }

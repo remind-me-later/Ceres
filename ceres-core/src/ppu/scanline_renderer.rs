@@ -204,7 +204,6 @@ impl Ppu {
             FunctionMode::Cgb => {
                 for i in 1..len {
                     let mut j = i;
-
                     while j > 0 {
                         obj.swap(j - 1, j);
                         j -= 1;
@@ -214,7 +213,6 @@ impl Ppu {
             _ => {
                 for i in 1..len {
                     let mut j = i;
-
                     while j > 0 && obj[j - 1].x <= obj[j].x {
                         obj.swap(j - 1, j);
                         j -= 1;

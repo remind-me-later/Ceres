@@ -1,15 +1,16 @@
-pub use audio_callbacks::AudioCallbacks;
-use {
-    self::{
-        channel::{Channels, LengthPeriodHalf},
-        control::{Control, TriggerReset},
-    },
-    crate::T_CYCLES_PER_SECOND,
-};
+use {self::channel::Channels, crate::T_CYCLES_PER_SECOND};
 
-mod audio_callbacks;
 mod channel;
-mod control;
+
+pub trait AudioCallbacks {
+    fn sample_rate(&self) -> u32;
+    fn push_frame(&mut self, frame: Frame);
+
+    #[allow(clippy::cast_precision_loss)]
+    fn cycles_to_render(&self) -> u32 {
+        T_CYCLES_PER_SECOND / self.sample_rate()
+    }
+}
 
 pub type Sample = f32;
 
@@ -40,8 +41,13 @@ pub struct Apu {
     cycles_until_next_render: u32,
     callbacks: *mut dyn AudioCallbacks,
     sequencer: Sequencer,
-    control: Control,
     high_pass_filter: HighPassFilter,
+    on: bool,
+    nr51: u8,
+    right_output_volume: u8,
+    left_output_volume: u8,
+    right_vin_on: bool,
+    left_vin_on: bool,
 }
 
 impl Apu {
@@ -52,15 +58,20 @@ impl Apu {
             channels: Channels::new(),
             cycles_to_render,
             cycles_until_next_render: cycles_to_render,
-            control: Control::new(),
             callbacks,
             sequencer: Sequencer::new(),
             high_pass_filter: HighPassFilter::new(),
+            on: false,
+            nr51: 0,
+            right_output_volume: 0,
+            left_output_volume: 0,
+            right_vin_on: false,
+            left_vin_on: false,
         }
     }
 
     pub fn tick(&mut self, mut mus_elapsed: u8) {
-        if !self.control.is_enabled() {
+        if !self.on {
             return;
         }
 
@@ -81,30 +92,24 @@ impl Apu {
         let (left, right) = self
             .channels
             .dac_output_iter()
-            .zip(self.control.channel_enabled_terminal_iter())
-            .fold(
-                (0, 0),
-                |(left, right), (output, (is_left_enabled, is_right_enabled))| {
-                    (
-                        left + output * u8::from(is_left_enabled),
-                        right + output * u8::from(is_right_enabled),
-                    )
-                },
-            );
+            .zip(self.channel_on_iter())
+            .fold((0, 0), |(left, right), (output, (left_on, right_on))| {
+                (
+                    left + output * u8::from(left_on),
+                    right + output * u8::from(right_on),
+                )
+            });
 
-        let (left_output_volume, right_output_volume) = self.control.output_volumes();
+        let (left_output_volume, right_output_volume) =
+            (self.left_output_volume, self.right_output_volume);
 
         // transform to i16 sample
         let left_sample = (0xf - left as i16 * 2) * i16::from(left_output_volume);
         let right_sample = (0xf - right as i16 * 2) * i16::from(right_output_volume);
 
         // filter
-        let left_sample = self
-            .high_pass_filter
-            .filter(left_sample, self.control.is_enabled());
-        let right_sample = self
-            .high_pass_filter
-            .filter(right_sample, self.control.is_enabled());
+        let left_sample = self.high_pass_filter.filter(left_sample, self.on);
+        let right_sample = self.high_pass_filter.filter(right_sample, self.on);
 
         let frame = Frame::new(left_sample, right_sample);
         unsafe { (*self.callbacks).push_frame(frame) };
@@ -113,204 +118,244 @@ impl Apu {
     fn reset(&mut self) {
         self.cycles_until_next_render = self.cycles_to_render;
         self.channels.reset();
-        self.control.reset();
+        self.left_output_volume = 0;
+        self.left_vin_on = false;
+        self.right_output_volume = 0;
+        self.right_vin_on = false;
+        self.nr51 = 0;
     }
 
     pub fn read_nr10(&self) -> u8 {
-        self.channels.sq1.read_nr10()
+        self.channels.ch1.read_nr10()
     }
 
     pub fn read_nr11(&self) -> u8 {
-        self.channels.sq1.read_nr11()
+        self.channels.ch1.read_nr11()
     }
 
     pub fn read_nr12(&self) -> u8 {
-        self.channels.sq1.read_nr12()
+        self.channels.ch1.read_nr12()
     }
 
     pub fn read_nr14(&self) -> u8 {
-        self.channels.sq1.read_nr14()
+        self.channels.ch1.read_nr14()
     }
 
     pub fn read_nr21(&self) -> u8 {
-        self.channels.sq2.read_nr21()
+        self.channels.ch2.read_nr21()
     }
 
     pub fn read_nr22(&self) -> u8 {
-        self.channels.sq2.read_nr22()
+        self.channels.ch2.read_nr22()
     }
 
     pub fn read_nr24(&self) -> u8 {
-        self.channels.sq2.read_nr24()
+        self.channels.ch2.read_nr24()
     }
 
     pub fn read_nr30(&self) -> u8 {
-        self.channels.wave.read_nr30()
+        self.channels.ch3.read_nr30()
     }
 
     pub fn read_nr32(&self) -> u8 {
-        self.channels.wave.read_nr32()
+        self.channels.ch3.read_nr32()
     }
 
     pub fn read_nr34(&self) -> u8 {
-        self.channels.wave.read_nr34()
+        self.channels.ch3.read_nr34()
     }
 
     pub fn read_nr42(&self) -> u8 {
-        self.channels.noise.read_nr42()
+        self.channels.ch4.read_nr42()
     }
 
     pub fn read_nr43(&self) -> u8 {
-        self.channels.noise.read_nr43()
+        self.channels.ch4.read_nr43()
     }
 
     pub fn read_nr44(&self) -> u8 {
-        self.channels.noise.read_nr44()
+        self.channels.ch4.read_nr44()
     }
 
     pub fn read_nr50(&self) -> u8 {
-        self.control.read_nr50()
+        self.right_output_volume
+            | (u8::from(self.right_vin_on) << 3)
+            | (self.left_output_volume << 4)
+            | (u8::from(self.left_vin_on) << 7)
     }
 
     pub fn read_nr51(&self) -> u8 {
-        self.control.read_nr51()
+        self.nr51
     }
 
     pub fn read_nr52(&self) -> u8 {
-        self.control.read_nr52(&self.channels)
+        0x70 | (u8::from(self.on) << 7) | self.channels.read_enable_u4()
     }
 
     pub fn read_wave(&self, addr: u8) -> u8 {
-        self.channels.wave.read_wave_ram(addr)
+        self.channels.ch3.read_wave_ram(addr)
     }
 
     pub fn write_wave(&mut self, addr: u8, val: u8) {
-        self.channels.wave.write_wave_ram(addr, val);
+        self.channels.ch3.write_wave_ram(addr, val);
     }
 
     pub fn write_nr10(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.channels.sq1.write_nr10(val);
+        if self.on {
+            self.channels.ch1.write_nr10(val);
         }
     }
 
     pub fn write_nr11(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.channels.sq1.write_nr11(val);
+        if self.on {
+            self.channels.ch1.write_nr11(val);
         }
     }
 
     pub fn write_nr12(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.channels.sq1.write_nr12(val);
+        if self.on {
+            self.channels.ch1.write_nr12(val);
         }
     }
 
     pub fn write_nr13(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.channels.sq1.write_nr13(val);
+        if self.on {
+            self.channels.ch1.write_nr13(val);
         }
     }
 
     pub fn write_nr14(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.channels.sq1.write_nr14(val);
+        if self.on {
+            self.channels.ch1.write_nr14(val);
         }
     }
 
     pub fn write_nr21(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.channels.sq2.write_nr21(val);
+        if self.on {
+            self.channels.ch2.write_nr21(val);
         }
     }
 
     pub fn write_nr22(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.channels.sq2.write_nr22(val);
+        if self.on {
+            self.channels.ch2.write_nr22(val);
         }
     }
 
     pub fn write_nr23(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.channels.sq2.write_nr23(val);
+        if self.on {
+            self.channels.ch2.write_nr23(val);
         }
     }
 
     pub fn write_nr24(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.channels.sq2.write_nr24(val);
+        if self.on {
+            self.channels.ch2.write_nr24(val);
         }
     }
 
     pub fn write_nr30(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.channels.wave.write_nr30(val);
+        if self.on {
+            self.channels.ch3.write_nr30(val);
         }
     }
 
     pub fn write_nr31(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.channels.wave.write_nr31(val);
+        if self.on {
+            self.channels.ch3.write_nr31(val);
         }
     }
 
     pub fn write_nr32(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.channels.wave.write_nr32(val);
+        if self.on {
+            self.channels.ch3.write_nr32(val);
         }
     }
 
     pub fn write_nr33(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.channels.wave.write_nr33(val);
+        if self.on {
+            self.channels.ch3.write_nr33(val);
         }
     }
 
     pub fn write_nr34(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.channels.wave.write_nr34(val);
+        if self.on {
+            self.channels.ch3.write_nr34(val);
         }
     }
 
     pub fn write_nr41(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.channels.noise.write_nr41(val);
+        if self.on {
+            self.channels.ch4.write_nr41(val);
         }
     }
 
     pub fn write_nr42(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.channels.noise.write_nr42(val);
+        if self.on {
+            self.channels.ch4.write_nr42(val);
         }
     }
 
     pub fn write_nr43(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.channels.noise.write_nr43(val);
+        if self.on {
+            self.channels.ch4.write_nr43(val);
         }
     }
 
     pub fn write_nr44(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.channels.noise.write_nr44(val);
+        if self.on {
+            self.channels.ch4.write_nr44(val);
         }
     }
 
     pub fn write_nr50(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.control.write_nr50(val);
+        if self.on {
+            self.right_output_volume = val & 7;
+            self.right_vin_on = val & (1 << 3) != 0;
+            self.left_output_volume = (val >> 4) & 7;
+            self.left_vin_on = val & (1 << 7) != 0;
         }
     }
 
     pub fn write_nr51(&mut self, val: u8) {
-        if self.control.is_enabled() {
-            self.control.write_nr51(val);
+        if self.on {
+            self.nr51 = val;
         }
     }
 
     pub fn write_nr52(&mut self, val: u8) {
-        if self.control.write_nr52(val) == TriggerReset::Reset {
+        self.on = val & (1 << 7) != 0;
+        if !self.on {
             self.reset();
+        }
+    }
+
+    pub fn channel_on_iter(&self) -> ChannelOnIter {
+        ChannelOnIter {
+            channel_index: 0,
+            nr51: self.nr51,
+        }
+    }
+}
+
+pub struct ChannelOnIter {
+    channel_index: u8,
+    nr51: u8,
+}
+
+impl Iterator for ChannelOnIter {
+    type Item = (bool, bool);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.channel_index < 4 {
+            let right_bit = 1 << self.channel_index;
+            let left_bit = 1 << (self.channel_index + 4);
+            let (left_on, right_on) = (self.nr51 & left_bit != 0, self.nr51 & right_bit != 0);
+
+            self.channel_index += 1;
+            Some((left_on, right_on))
+        } else {
+            None
         }
     }
 }
@@ -332,10 +377,10 @@ impl HighPassFilter {
         }
     }
 
-    pub fn filter(&mut self, input: i16, dac_enabled: bool) -> f32 {
+    pub fn filter(&mut self, input: i16, dac_on: bool) -> f32 {
         // TODO: amplification
         let input = (input * 32) as f32 / 32768.0;
-        if dac_enabled {
+        if dac_on {
             let output = input - self.capacitor;
             self.capacitor = input - output * self.charge_factor;
             output
@@ -372,11 +417,11 @@ impl Sequencer {
     }
 
     fn step(&mut self, channels: &mut Channels) {
-        if self.counter % 2 == 0 {
+        if self.counter & 1 == 0 {
             channels.step_length();
-            channels.set_length_period_half(LengthPeriodHalf::First);
+            channels.set_period_half(0);
         } else {
-            channels.set_length_period_half(LengthPeriodHalf::Second);
+            channels.set_period_half(1);
         }
 
         match self.counter {

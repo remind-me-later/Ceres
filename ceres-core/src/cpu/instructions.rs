@@ -3,7 +3,10 @@ use {
         operands::{Get, JumpCondition, Set},
         registers::Reg16::{self, HL},
     },
-    crate::Gb,
+    crate::{
+        mem::{KEY1_SPEED, KEY1_SWITCH},
+        Gb,
+    },
 };
 
 impl Gb {
@@ -147,10 +150,10 @@ impl Gb {
         rhs.set(self, val);
     }
 
-    pub fn inc16(&mut self, register: Reg16) {
-        let read = self.reg.read16(register);
+    pub fn inc16(&mut self, reg: Reg16) {
+        let read = self.reg.read16(reg);
         let val = read.wrapping_add(1);
-        self.reg.write16(register, val);
+        self.reg.write16(reg, val);
         self.tick_t_cycle();
     }
 
@@ -167,10 +170,10 @@ impl Gb {
         rhs.set(self, val);
     }
 
-    pub fn dec16(&mut self, register: Reg16) {
-        let read = self.reg.read16(register);
+    pub fn dec16(&mut self, reg: Reg16) {
+        let read = self.reg.read16(reg);
         let val = read.wrapping_sub(1);
-        self.reg.write16(register, val);
+        self.reg.write16(reg, val);
         self.tick_t_cycle();
     }
 
@@ -319,11 +322,13 @@ impl Gb {
     pub fn stop(&mut self) {
         self.imm8();
 
-        if self.key1.is_req() {
-            self.switch_speed();
-            self.key1.ack();
-        } else {
+        if self.key1 & KEY1_SWITCH == 0 {
             self.halted = true;
+        } else {
+            self.switch_speed();
+
+            self.key1 &= !KEY1_SWITCH;
+            self.key1 ^= KEY1_SPEED;
         }
     }
 
@@ -383,19 +388,19 @@ impl Gb {
         self.reg.set_hf(true);
     }
 
-    pub fn push(&mut self, register: Reg16) {
-        let val = self.reg.read16(register);
+    pub fn push(&mut self, reg: Reg16) {
+        let val = self.reg.read16(reg);
         self.internal_push(val);
     }
 
-    pub fn pop(&mut self, register: Reg16) {
+    pub fn pop(&mut self, reg: Reg16) {
         let val = self.internal_pop();
-        self.reg.write16(register, val);
+        self.reg.write16(reg, val);
     }
 
     pub fn ld16_nn(&mut self, reg: Reg16) {
-        let value = self.imm16();
-        self.reg.write16(reg, value);
+        let val = self.imm16();
+        self.reg.write16(reg, val);
     }
 
     pub fn ld16_nn_sp(&mut self) {
@@ -419,9 +424,9 @@ impl Gb {
         self.tick_t_cycle();
     }
 
-    pub fn add_hl(&mut self, register: Reg16) {
+    pub fn add_hl(&mut self, reg: Reg16) {
         let hl = self.reg.read16(HL);
-        let val = self.reg.read16(register);
+        let val = self.reg.read16(reg);
         let res = hl.wrapping_add(val);
         self.reg.write16(HL, res);
 
@@ -535,8 +540,8 @@ impl Gb {
         G: Get<u8>,
     {
         let read = rhs.get(self);
-        let value = read & (1 << bit);
-        self.reg.set_zf(value == 0);
+        let val = read & (1 << bit);
+        self.reg.set_zf(val == 0);
         self.reg.set_nf(false);
         self.reg.set_hf(true);
     }

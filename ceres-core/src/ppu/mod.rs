@@ -149,7 +149,7 @@ impl ColorPalette {
     fn data(&self) -> u8 {
         let i = (self.idx as usize / 2) * 3;
 
-        if self.idx % 2 == 0 {
+        if self.idx & 1 == 0 {
             // red and green
             self.col[i] | (self.col[i + 1] << 5)
         } else {
@@ -161,7 +161,7 @@ impl ColorPalette {
     fn set_data(&mut self, val: u8) {
         let i = (self.idx as usize / 2) * 3;
 
-        if self.idx % 2 == 0 {
+        if self.idx & 1 == 0 {
             // red
             self.col[i] = val & 0x1F;
             // green

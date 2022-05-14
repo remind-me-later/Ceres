@@ -30,22 +30,22 @@ impl Mbc5 {
     pub fn write_rom(
         &mut self,
         addr: u16,
-        value: u8,
+        val: u8,
         rom_offsets: &mut (usize, usize),
         ram_offset: &mut usize,
     ) {
         match addr {
-            0x0000..=0x1fff => self.is_ram_enabled = value & 0xf == 0xa,
+            0x0000..=0x1fff => self.is_ram_enabled = val & 0xf == 0xa,
             0x2000..=0x2fff => {
-                self.rom_bank_low = value;
+                self.rom_bank_low = val;
                 *rom_offsets = self.rom_offsets();
             }
             0x3000..=0x3fff => {
-                self.rom_bank_high = value & 1;
+                self.rom_bank_high = val & 1;
                 *rom_offsets = self.rom_offsets();
             }
             0x4000..=0x5fff => {
-                self.ram_bank = value & 0xf;
+                self.ram_bank = val & 0xf;
                 *ram_offset = RAM_BANK_SIZE * self.ram_bank as usize;
             }
             _ => (),
