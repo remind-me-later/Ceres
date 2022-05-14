@@ -13,6 +13,9 @@ use {
 };
 
 impl Gb {
+    /// # Panics
+    ///
+    /// will panic on illegal opcode
     #[allow(clippy::too_many_lines)]
     pub fn exec(&mut self, opcode: u8) {
         match opcode {

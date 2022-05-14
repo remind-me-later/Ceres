@@ -22,7 +22,7 @@ const VBLANK_CYCLES: i16 = 456; // Constant
 
 // LCDC bits
 const BACKGROUND_ENABLED: u8 = 1;
-const OBJECTS_ENABLED: u8 = 1 << 1;
+const OBJ_ENABLED: u8 = 1 << 1;
 const LARGE_SPRITES: u8 = 1 << 2;
 const BG_TILE_MAP_AREA: u8 = 1 << 3;
 const BG_WINDOW_TILE_DATA_AREA: u8 = 1 << 4;
@@ -56,7 +56,7 @@ const SPR_TILE_BANK: u8 = 0x8;
 const SPR_PAL: u8 = 0x10;
 const SPR_FLIP_X: u8 = 0x20;
 const SPR_FLIP_Y: u8 = 0x40;
-const SPR_BG_WIN_OVER_OBJ: u8 = 0x80;
+const SPR_BG_FIRST: u8 = 0x80;
 
 // CGB palette RAM
 const PAL_RAM_SIZE: usize = 0x20;
@@ -88,11 +88,11 @@ impl RgbaBuf {
         }
     }
 
-    fn set_pixel_color(&mut self, i: usize, color: (u8, u8, u8)) {
+    fn set_px(&mut self, i: usize, rgb: (u8, u8, u8)) {
         let base = i * 4;
-        self.data[base] = color.0;
-        self.data[base + 1] = color.1;
-        self.data[base + 2] = color.2;
+        self.data[base] = rgb.0;
+        self.data[base + 1] = rgb.1;
+        self.data[base + 2] = rgb.2;
     }
 }
 
@@ -183,25 +183,25 @@ impl ColorPalette {
     }
 
     fn get_color(&self, palette_number: u8, color_number: u8) -> (u8, u8, u8) {
+        fn scale_channel(c: u8) -> u8 {
+            (c << 3) | (c >> 2)
+        }
+
         let i = (palette_number as usize * 4 + color_number as usize) * 3;
         let r = self.col[i];
         let g = self.col[i + 1];
         let b = self.col[i + 2];
-
-        fn scale_channel(c: u8) -> u8 {
-            (c << 3) | (c >> 2)
-        }
 
         (scale_channel(r), scale_channel(g), scale_channel(b))
     }
 }
 
 #[derive(Default)]
-struct SpriteAttr {
+struct Obj {
     pub x: u8,
     pub y: u8,
     pub tile_index: u8,
-    pub flags: u8,
+    pub attr: u8,
 }
 
 pub struct Ppu {
@@ -209,8 +209,8 @@ pub struct Ppu {
     oam: [u8; OAM_SIZE],
     cycles: i16,
     rgba_buf: RgbaBuf,
-    frame_used_window: bool,
-    scanline_used_window: bool,
+    win_in_frame: bool,
+    win_in_ly: bool,
     window_lines_skipped: u16,
     video_callbacks: Rc<RefCell<dyn VideoCallbacks>>,
 
@@ -228,7 +228,7 @@ pub struct Ppu {
     obp0: u8,
     obp1: u8,
     cgb_bg_palette: ColorPalette,
-    cgb_sprite_palette: ColorPalette,
+    cgb_obj_palette: ColorPalette,
     vbk: u8, // 0 or 1
 }
 
@@ -239,9 +239,9 @@ impl Ppu {
             oam: [0; OAM_SIZE],
             rgba_buf: RgbaBuf::new(),
             cycles: Mode::HBlank.cycles(0),
-            frame_used_window: false,
+            win_in_frame: false,
             window_lines_skipped: 0,
-            scanline_used_window: false,
+            win_in_ly: false,
             video_callbacks,
             lcdc: 0,
             stat: 0,
@@ -255,7 +255,7 @@ impl Ppu {
             obp0: 0,
             obp1: 0,
             cgb_bg_palette: ColorPalette::new(),
-            cgb_sprite_palette: ColorPalette::new(),
+            cgb_obj_palette: ColorPalette::new(),
             opri: 0,
             vbk: 0,
         }
@@ -276,10 +276,10 @@ impl Ppu {
     }
 
     pub fn read_stat(&mut self) -> u8 {
-        if self.lcdc & LCD_ENABLE != 0 {
-            self.stat | 0x80
-        } else {
+        if self.lcdc & LCD_ENABLE == 0 {
             0x80
+        } else {
+            self.stat | 0x80
         }
     }
 
@@ -328,11 +328,11 @@ impl Ppu {
     }
 
     pub fn read_ocps(&mut self) -> u8 {
-        self.cgb_sprite_palette.spec()
+        self.cgb_obj_palette.spec()
     }
 
     pub fn read_ocpd(&mut self) -> u8 {
-        self.cgb_sprite_palette.data()
+        self.cgb_obj_palette.data()
     }
 
     pub fn read_opri(&mut self) -> u8 {
@@ -389,8 +389,6 @@ impl Ppu {
         self.scx = val;
     }
 
-    pub fn write_ly(&mut self, _: u8) {}
-
     pub fn write_lyc(&mut self, val: u8) {
         self.lyc = val;
     }
@@ -404,7 +402,7 @@ impl Ppu {
     }
 
     pub fn write_bgp(&mut self, val: u8) {
-        self.bgp = val
+        self.bgp = val;
     }
 
     pub fn write_obp0(&mut self, val: u8) {
@@ -424,11 +422,11 @@ impl Ppu {
     }
 
     pub fn write_ocps(&mut self, val: u8) {
-        self.cgb_sprite_palette.set_spec(val);
+        self.cgb_obj_palette.set_spec(val);
     }
 
     pub fn write_ocpd(&mut self, val: u8) {
-        self.cgb_sprite_palette.set_data(val);
+        self.cgb_obj_palette.set_data(val);
     }
 
     pub fn write_opri(&mut self, val: u8) {
@@ -443,7 +441,7 @@ impl Ppu {
     }
 
     pub fn write_vbk(&mut self, val: u8) {
-        self.vbk = val & 1
+        self.vbk = val & 1;
     }
 
     pub fn write_oam(&mut self, addr: u16, val: u8, dma_active: bool) {
@@ -470,7 +468,7 @@ impl Ppu {
         self.stat = bits | mode;
     }
 
-    fn get_mono_color(&self, index: u8) -> (u8, u8, u8) {
+    fn get_mono_color(index: u8) -> (u8, u8, u8) {
         GRAYSCALE_PALETTE[index as usize]
     }
 
@@ -482,56 +480,54 @@ impl Ppu {
         match mode {
             Mode::OamScan => {
                 if self.stat & OAM_INTERRUPT != 0 {
-                    ints.request(LCD_STAT_INT);
+                    ints.req(LCD_STAT_INT);
                 }
 
-                self.scanline_used_window = false;
+                self.win_in_ly = false;
             }
             Mode::VBlank => {
-                ints.request(VBLANK_INT);
+                ints.req(VBLANK_INT);
 
                 if self.stat & VBLANK_INTERRUPT != 0 {
-                    ints.request(LCD_STAT_INT);
+                    ints.req(LCD_STAT_INT);
                 }
 
                 if self.stat & OAM_INTERRUPT != 0 {
-                    ints.request(LCD_STAT_INT);
+                    ints.req(LCD_STAT_INT);
                 }
 
                 self.window_lines_skipped = 0;
-                self.frame_used_window = false;
+                self.win_in_frame = false;
             }
             Mode::Drawing => (),
             Mode::HBlank => {
                 if self.stat & HBLANK_INTERRUPT != 0 {
-                    ints.request(LCD_STAT_INT);
+                    ints.req(LCD_STAT_INT);
                 }
             }
         }
     }
 
-    fn is_win_enabled(&self, function_mode: FunctionMode) -> bool {
+    fn win_enabled(&self, function_mode: FunctionMode) -> bool {
         match function_mode {
-            FunctionMode::Monochrome | FunctionMode::Compatibility => {
+            FunctionMode::Dmg | FunctionMode::Compat => {
                 (self.lcdc & BACKGROUND_ENABLED != 0) && (self.lcdc & WINDOW_ENABLED != 0)
             }
-            FunctionMode::Color => self.lcdc & WINDOW_ENABLED != 0,
+            FunctionMode::Cgb => self.lcdc & WINDOW_ENABLED != 0,
         }
     }
 
-    fn is_bg_enabled(&self, function_mode: FunctionMode) -> bool {
+    fn bg_enabled(&self, function_mode: FunctionMode) -> bool {
         match function_mode {
-            FunctionMode::Monochrome | FunctionMode::Compatibility => {
-                self.lcdc & BACKGROUND_ENABLED != 0
-            }
-            FunctionMode::Color => true,
+            FunctionMode::Dmg | FunctionMode::Compat => self.lcdc & BACKGROUND_ENABLED != 0,
+            FunctionMode::Cgb => true,
         }
     }
 
-    fn is_cgb_sprite_master_priority_on(&self, function_mode: FunctionMode) -> bool {
+    fn cgb_master_priority(&self, function_mode: FunctionMode) -> bool {
         match function_mode {
-            FunctionMode::Monochrome | FunctionMode::Compatibility => false,
-            FunctionMode::Color => self.lcdc & BACKGROUND_ENABLED == 0,
+            FunctionMode::Dmg | FunctionMode::Compat => false,
+            FunctionMode::Cgb => self.lcdc & BACKGROUND_ENABLED == 0,
         }
     }
 
@@ -539,37 +535,36 @@ impl Ppu {
         self.lcdc & BG_WINDOW_TILE_DATA_AREA == 0
     }
 
-    fn bg_tile_map_addr(&self) -> u16 {
-        if self.lcdc & BG_TILE_MAP_AREA != 0 {
-            0x9c00
-        } else {
+    fn bg_tile_map(&self) -> u16 {
+        if self.lcdc & BG_TILE_MAP_AREA == 0 {
             0x9800
+        } else {
+            0x9c00
         }
     }
 
-    fn window_tile_map_addr(&self) -> u16 {
-        if self.lcdc & WINDOW_TILE_MAP_AREA != 0 {
-            0x9c00
-        } else {
+    fn win_tile_map(&self) -> u16 {
+        if self.lcdc & WINDOW_TILE_MAP_AREA == 0 {
             0x9800
+        } else {
+            0x9c00
         }
     }
 
-    fn bg_window_tile_addr(&self) -> u16 {
-        if self.lcdc & BG_WINDOW_TILE_DATA_AREA != 0 {
-            0x8000
-        } else {
+    fn tile_addr(&self, tile_number: u8) -> u16 {
+        let base = if self.lcdc & BG_WINDOW_TILE_DATA_AREA == 0 {
             0x8800
-        }
-    }
+        } else {
+            0x8000
+        };
 
-    fn tile_data_addr(&self, tile_number: u8) -> u16 {
-        self.bg_window_tile_addr()
-            + if self.signed_byte_for_tile_offset() {
-                ((tile_number as i8 as i16) + 128) as u16 * 16
-            } else {
-                tile_number as u16 * 16
-            }
+        let offset = if self.signed_byte_for_tile_offset() {
+            ((tile_number as i8 as i16) + 128) as u16 * 16
+        } else {
+            tile_number as u16 * 16
+        };
+
+        base + offset
     }
 
     pub(crate) fn tick(
@@ -578,6 +573,17 @@ impl Ppu {
         function_mode: FunctionMode,
         mus_elapsed: u8,
     ) {
+        fn check_lyc(ppu: &mut Ppu, ints: &mut Interrupts) {
+            ppu.stat &= !LY_EQUALS_LYC;
+
+            if ppu.ly == ppu.lyc {
+                ppu.stat |= LY_EQUALS_LYC;
+                if ppu.stat & LY_EQUALS_LYC_INTERRUPT != 0 {
+                    ints.req(LCD_STAT_INT);
+                }
+            }
+        }
+
         if self.lcdc & LCD_ENABLE == 0 {
             return;
         }
@@ -601,7 +607,7 @@ impl Ppu {
                 } else {
                     self.switch_mode(Mode::VBlank, ints);
                 }
-                self.check_compare_interrupt(ints);
+                check_lyc(self, ints);
             }
             Mode::VBlank => {
                 self.ly += 1;
@@ -613,45 +619,36 @@ impl Ppu {
                     let scx = self.scx;
                     self.cycles += self.mode().cycles(scx);
                 }
-                self.check_compare_interrupt(ints);
-            }
-        };
-    }
-
-    fn check_compare_interrupt(&mut self, ints: &mut Interrupts) {
-        self.stat &= !LY_EQUALS_LYC;
-
-        if self.ly == self.lyc {
-            self.stat |= LY_EQUALS_LYC;
-            if self.stat & LY_EQUALS_LYC_INTERRUPT != 0 {
-                ints.request(LCD_STAT_INT);
+                check_lyc(self, ints);
             }
         }
     }
 
-    fn get_vram_bank(&self, addr: u16, bank: u8) -> u8 {
+    fn vram_at_bank(&self, addr: u16, bank: u8) -> u8 {
         self.vram[((addr & 0x1fff) + bank as u16 * VRAM_SIZE as u16) as usize]
     }
 
-    fn tile_number(&self, tile_addr: u16) -> u8 {
-        self.get_vram_bank(tile_addr, 0)
+    fn tile_number(&self, tile_map: u16) -> u8 {
+        self.vram_at_bank(tile_map, 0)
     }
 
     fn bg_attr(&self, tile_addr: u16) -> u8 {
-        self.get_vram_bank(tile_addr, 1)
+        self.vram_at_bank(tile_addr, 1)
     }
 
-    fn bg_tile_data(&self, tile_addr: u16, attr: u8) -> (u8, u8) {
-        let low = self.get_vram_bank(tile_addr & 0x1fff, (attr & BG_TILE_BANK != 0) as u8);
-        let high = self.get_vram_bank((tile_addr & 0x1fff) + 1, (attr & BG_TILE_BANK != 0) as u8);
+    fn bg_tile(&self, tile_addr: u16, attr: u8) -> (u8, u8) {
+        let bank = (attr & BG_TILE_BANK != 0) as u8;
+        let lo = self.vram_at_bank(tile_addr & 0x1fff, bank);
+        let hi = self.vram_at_bank((tile_addr & 0x1fff) + 1, bank);
 
-        (low, high)
+        (lo, hi)
     }
 
-    fn sprite_tile_data(&self, tile_addr: u16, attr: &SpriteAttr) -> (u8, u8) {
-        let low = self.get_vram_bank(tile_addr, (attr.flags & SPR_TILE_BANK != 0) as u8);
-        let high = self.get_vram_bank(tile_addr + 1, (attr.flags & SPR_TILE_BANK != 0) as u8);
+    fn obj_tile(&self, tile_addr: u16, obj: &Obj) -> (u8, u8) {
+        let bank = (obj.attr & SPR_TILE_BANK != 0) as u8;
+        let lo = self.vram_at_bank(tile_addr, bank);
+        let hi = self.vram_at_bank(tile_addr + 1, bank);
 
-        (low, high)
+        (lo, hi)
     }
 }

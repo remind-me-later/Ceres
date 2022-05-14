@@ -6,13 +6,13 @@ use sdl2::{
 const FREQ: u32 = 41800;
 const AUDIO_BUFFER_SIZE: usize = 512 * 2;
 
-pub struct AudioRenderer {
+pub struct Renderer {
     stream: AudioQueue<f32>,
     buf: [ceres_core::Sample; AUDIO_BUFFER_SIZE],
     buf_pos: usize,
 }
 
-impl AudioRenderer {
+impl Renderer {
     pub fn new(sdl: &Sdl) -> Self {
         let audio_subsystem = sdl.audio().unwrap();
 
@@ -34,7 +34,7 @@ impl AudioRenderer {
     }
 }
 
-impl ceres_core::AudioCallbacks for AudioRenderer {
+impl ceres_core::AudioCallbacks for Renderer {
     fn sample_rate(&self) -> u32 {
         FREQ
     }

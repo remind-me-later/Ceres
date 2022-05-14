@@ -1,8 +1,8 @@
 pub use generic_channel::LengthPeriodHalf;
 use {
     noise_channel::NoiseChannel,
-    square::{square1::Square1, square2::Square2},
-    wave::WaveChannel,
+    square::{Chan1, Chan2},
+    wave::Wave,
 };
 
 mod envelope;
@@ -13,18 +13,18 @@ mod square;
 mod wave;
 
 pub struct Channels {
-    pub square1: Square1,
-    pub square2: Square2,
-    pub wave: WaveChannel,
+    pub sq1: Chan1,
+    pub sq2: Chan2,
+    pub wave: Wave,
     pub noise: NoiseChannel,
 }
 
 impl Channels {
     pub fn new() -> Self {
         Self {
-            square1: Square1::new(),
-            square2: Square2::new(),
-            wave: WaveChannel::new(),
+            sq1: Chan1::new(),
+            sq2: Chan2::new(),
+            wave: Wave::new(),
             noise: NoiseChannel::new(),
         }
     }
@@ -32,15 +32,15 @@ impl Channels {
     pub fn read_enable_u4(&self) -> u8 {
         (u8::from(self.noise.is_enabled()) << 3)
             | (u8::from(self.wave.is_enabled()) << 2)
-            | (u8::from(self.square2.is_enabled()) << 1)
-            | u8::from(self.square1.is_enabled())
+            | (u8::from(self.sq2.is_enabled()) << 1)
+            | u8::from(self.sq1.is_enabled())
     }
 
     pub fn set_length_period_half(&mut self, length_period_half: LengthPeriodHalf) {
-        self.square1
+        self.sq1
             .mut_generic_channel()
             .set_length_period_half(length_period_half);
-        self.square2
+        self.sq2
             .mut_generic_channel()
             .set_length_period_half(length_period_half);
         self.wave
@@ -52,32 +52,32 @@ impl Channels {
     }
 
     pub fn step_length(&mut self) {
-        self.square1.step_length();
-        self.square2.step_length();
+        self.sq1.step_length();
+        self.sq2.step_length();
         self.wave.step_length();
         self.noise.step_length();
     }
 
     pub fn step_sample(&mut self) {
-        self.square1.step_sample();
-        self.square2.step_sample();
+        self.sq1.step_sample();
+        self.sq2.step_sample();
         self.wave.step_sample();
         self.noise.step_sample();
     }
 
     pub fn step_sweep(&mut self) {
-        self.square1.step_sweep();
+        self.sq1.step_sweep();
     }
 
     pub fn step_envelope(&mut self) {
-        self.square1.step_envelope();
-        self.square2.step_envelope();
+        self.sq1.step_envelope();
+        self.sq2.step_envelope();
         self.noise.step_envelope();
     }
 
     pub fn reset(&mut self) {
-        self.square1.reset();
-        self.square2.reset();
+        self.sq1.reset();
+        self.sq2.reset();
         self.wave.reset();
         self.noise.reset();
     }
@@ -100,14 +100,8 @@ impl<'a> Iterator for DacOutputIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let value = match self.channel_index {
-            0 => Some(
-                self.channels.square1.output_volume()
-                    * u8::from(self.channels.square1.is_enabled()),
-            ),
-            1 => Some(
-                self.channels.square2.output_volume()
-                    * u8::from(self.channels.square2.is_enabled()),
-            ),
+            0 => Some(self.channels.sq1.output_volume() * u8::from(self.channels.sq1.is_enabled())),
+            1 => Some(self.channels.sq2.output_volume() * u8::from(self.channels.sq2.is_enabled())),
             2 => {
                 Some(self.channels.wave.output_volume() * u8::from(self.channels.wave.is_enabled()))
             }

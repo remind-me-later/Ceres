@@ -30,7 +30,7 @@ impl Gb {
             self.exec(opcode);
         }
 
-        if !self.ints.has_pending_interrupts() {
+        if !self.ints.has_pending() {
             return;
         }
 
@@ -47,7 +47,7 @@ impl Gb {
             let pc = self.reg.pc;
             self.internal_push(pc);
 
-            let interrupt = self.ints.requested_interrupt();
+            let interrupt = self.ints.requested();
             self.reg.pc = match interrupt {
                 VBLANK_INT => 0x40,
                 LCD_STAT_INT => 0x48,
@@ -58,7 +58,7 @@ impl Gb {
             };
 
             self.tick_t_cycle();
-            self.ints.acknowledge(interrupt);
+            self.ints.ack(interrupt);
         }
     }
 

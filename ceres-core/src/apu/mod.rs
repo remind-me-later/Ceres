@@ -1,20 +1,17 @@
 pub use audio_callbacks::AudioCallbacks;
 use {
     self::{
-        channels::Channels,
+        channel::{Channels, LengthPeriodHalf},
         control::{Control, TriggerReset},
-        high_pass_filter::HighPassFilter,
-        sequencer::Sequencer,
     },
+    crate::T_CYCLES_PER_SECOND,
     alloc::rc::Rc,
     core::cell::RefCell,
 };
 
 mod audio_callbacks;
-mod channels;
+mod channel;
 mod control;
-mod high_pass_filter;
-mod sequencer;
 
 pub type Sample = f32;
 
@@ -28,10 +25,12 @@ impl Frame {
         Self { left, right }
     }
 
+    #[must_use]
     pub fn left(&self) -> Sample {
         self.left
     }
 
+    #[must_use]
     pub fn right(&self) -> Sample {
         self.right
     }
@@ -120,39 +119,31 @@ impl Apu {
     }
 
     pub fn read_nr10(&self) -> u8 {
-        self.channels.square1.read_nr10()
+        self.channels.sq1.read_nr10()
     }
 
     pub fn read_nr11(&self) -> u8 {
-        self.channels.square1.read_nr11()
+        self.channels.sq1.read_nr11()
     }
 
     pub fn read_nr12(&self) -> u8 {
-        self.channels.square1.read_nr12()
-    }
-
-    pub fn read_nr13(&self) -> u8 {
-        self.channels.square1.read_nr13()
+        self.channels.sq1.read_nr12()
     }
 
     pub fn read_nr14(&self) -> u8 {
-        self.channels.square1.read_nr14()
+        self.channels.sq1.read_nr14()
     }
 
     pub fn read_nr21(&self) -> u8 {
-        self.channels.square2.read_nr21()
+        self.channels.sq2.read_nr21()
     }
 
     pub fn read_nr22(&self) -> u8 {
-        self.channels.square2.read_nr22()
-    }
-
-    pub fn read_nr23(&self) -> u8 {
-        self.channels.square2.read_nr23()
+        self.channels.sq2.read_nr22()
     }
 
     pub fn read_nr24(&self) -> u8 {
-        self.channels.square2.read_nr24()
+        self.channels.sq2.read_nr24()
     }
 
     pub fn read_nr30(&self) -> u8 {
@@ -196,132 +187,206 @@ impl Apu {
     }
 
     pub fn write_wave(&mut self, addr: u8, val: u8) {
-        self.channels.wave.write_wave_ram(addr, val)
+        self.channels.wave.write_wave_ram(addr, val);
     }
 
     pub fn write_nr10(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.channels.square1.write_nr10(val)
+            self.channels.sq1.write_nr10(val);
         }
     }
 
     pub fn write_nr11(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.channels.square1.write_nr11(val)
+            self.channels.sq1.write_nr11(val);
         }
     }
 
     pub fn write_nr12(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.channels.square1.write_nr12(val)
+            self.channels.sq1.write_nr12(val);
         }
     }
 
     pub fn write_nr13(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.channels.square1.write_nr13(val)
+            self.channels.sq1.write_nr13(val);
         }
     }
 
     pub fn write_nr14(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.channels.square1.write_nr14(val)
+            self.channels.sq1.write_nr14(val);
         }
     }
 
     pub fn write_nr21(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.channels.square2.write_nr21(val)
+            self.channels.sq2.write_nr21(val);
         }
     }
 
     pub fn write_nr22(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.channels.square2.write_nr22(val)
+            self.channels.sq2.write_nr22(val);
         }
     }
 
     pub fn write_nr23(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.channels.square2.write_nr23(val)
+            self.channels.sq2.write_nr23(val);
         }
     }
 
     pub fn write_nr24(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.channels.square2.write_nr24(val)
+            self.channels.sq2.write_nr24(val);
         }
     }
 
     pub fn write_nr30(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.channels.wave.write_nr30(val)
+            self.channels.wave.write_nr30(val);
         }
     }
 
     pub fn write_nr31(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.channels.wave.write_nr31(val)
+            self.channels.wave.write_nr31(val);
         }
     }
 
     pub fn write_nr32(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.channels.wave.write_nr32(val)
+            self.channels.wave.write_nr32(val);
         }
     }
 
     pub fn write_nr33(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.channels.wave.write_nr33(val)
+            self.channels.wave.write_nr33(val);
         }
     }
 
     pub fn write_nr34(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.channels.wave.write_nr34(val)
+            self.channels.wave.write_nr34(val);
         }
     }
 
     pub fn write_nr41(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.channels.noise.write_nr41(val)
+            self.channels.noise.write_nr41(val);
         }
     }
 
     pub fn write_nr42(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.channels.noise.write_nr42(val)
+            self.channels.noise.write_nr42(val);
         }
     }
 
     pub fn write_nr43(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.channels.noise.write_nr43(val)
+            self.channels.noise.write_nr43(val);
         }
     }
 
     pub fn write_nr44(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.channels.noise.write_nr44(val)
+            self.channels.noise.write_nr44(val);
         }
     }
 
     pub fn write_nr50(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.control.write_nr50(val)
+            self.control.write_nr50(val);
         }
     }
 
     pub fn write_nr51(&mut self, val: u8) {
         if self.control.is_enabled() {
-            self.control.write_nr51(val)
+            self.control.write_nr51(val);
         }
     }
 
     pub fn write_nr52(&mut self, val: u8) {
         if self.control.write_nr52(val) == TriggerReset::Reset {
-            self.reset()
+            self.reset();
         }
+    }
+}
+
+pub struct HighPassFilter {
+    capacitor: f32,
+    charge_factor: f32,
+}
+
+impl HighPassFilter {
+    pub fn new() -> Self {
+        let charge_factor = 0.998_943;
+        // FIXME not powf in no_std :(
+        // let charge_factor = 0.999958_f32.powf(T_CYCLES_PER_SECOND as f32 / sample_rate as f32);
+
+        Self {
+            capacitor: 0.0,
+            charge_factor,
+        }
+    }
+
+    pub fn filter(&mut self, input: i16, dac_enabled: bool) -> f32 {
+        // TODO: amplification
+        let input = (input * 32) as f32 / 32768.0;
+        if dac_enabled {
+            let output = input - self.capacitor;
+            self.capacitor = input - output * self.charge_factor;
+            output
+        } else {
+            0.0
+        }
+    }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+const TIMER_RESET_VALUE: u16 = (T_CYCLES_PER_SECOND / 512) as u16;
+
+pub struct Sequencer {
+    timer: u16,
+    counter: u8,
+}
+
+impl Sequencer {
+    pub fn new() -> Self {
+        Self {
+            timer: TIMER_RESET_VALUE,
+            counter: 0,
+        }
+    }
+
+    pub fn tick(&mut self, channels: &mut Channels) {
+        self.timer -= 1;
+        if self.timer == 0 {
+            self.timer = TIMER_RESET_VALUE;
+            self.step(channels);
+        }
+
+        channels.step_sample();
+    }
+
+    fn step(&mut self, channels: &mut Channels) {
+        if self.counter % 2 == 0 {
+            channels.step_length();
+            channels.set_length_period_half(LengthPeriodHalf::First);
+        } else {
+            channels.set_length_period_half(LengthPeriodHalf::Second);
+        }
+
+        match self.counter {
+            2 | 6 => channels.step_sweep(),
+            7 => channels.step_envelope(),
+            _ => (),
+        }
+
+        self.counter = (self.counter + 1) % 8;
     }
 }

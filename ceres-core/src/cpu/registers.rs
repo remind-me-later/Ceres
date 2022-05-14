@@ -112,33 +112,33 @@ impl Regs {
 
     pub fn set_zf(&mut self, zf: bool) {
         if zf {
-            self.f |= ZF_FLAG
+            self.f |= ZF_FLAG;
         } else {
-            self.f &= !ZF_FLAG
+            self.f &= !ZF_FLAG;
         }
     }
 
     pub fn set_nf(&mut self, nf: bool) {
         if nf {
-            self.f |= NF_FLAG
+            self.f |= NF_FLAG;
         } else {
-            self.f &= !NF_FLAG
+            self.f &= !NF_FLAG;
         }
     }
 
     pub fn set_hf(&mut self, hf: bool) {
         if hf {
-            self.f |= HF_FLAG
+            self.f |= HF_FLAG;
         } else {
-            self.f &= !HF_FLAG
+            self.f &= !HF_FLAG;
         }
     }
 
     pub fn set_cf(&mut self, cf: bool) {
         if cf {
-            self.f |= CF_FLAG
+            self.f |= CF_FLAG;
         } else {
-            self.f &= !CF_FLAG
+            self.f &= !CF_FLAG;
         }
     }
 }

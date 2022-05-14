@@ -15,16 +15,16 @@ impl Interrupts {
         Self::default()
     }
 
-    pub fn has_pending_interrupts(&self) -> bool {
+    pub fn has_pending(&self) -> bool {
         self.interrupt_flag & self.interrupt_enable & 0x1f != 0
     }
 
-    pub fn pending_interrupts(&self) -> u8 {
+    pub fn pending(&self) -> u8 {
         self.interrupt_flag & self.interrupt_enable & 0x1f
     }
 
-    pub fn requested_interrupt(&self) -> u8 {
-        let pending = self.pending_interrupts();
+    pub fn requested(&self) -> u8 {
+        let pending = self.pending();
 
         if pending == 0 {
             return 0;
@@ -34,11 +34,11 @@ impl Interrupts {
         1 << pending.trailing_zeros()
     }
 
-    pub fn request(&mut self, interrupt: u8) {
+    pub fn req(&mut self, interrupt: u8) {
         self.interrupt_flag |= interrupt;
     }
 
-    pub fn acknowledge(&mut self, interrupt: u8) {
+    pub fn ack(&mut self, interrupt: u8) {
         self.interrupt_flag &= !interrupt;
     }
 
@@ -51,10 +51,10 @@ impl Interrupts {
     }
 
     pub fn write_if(&mut self, value: u8) {
-        self.interrupt_flag = value & 0x1f
+        self.interrupt_flag = value & 0x1f;
     }
 
     pub fn write_ie(&mut self, value: u8) {
-        self.interrupt_enable = value
+        self.interrupt_enable = value;
     }
 }

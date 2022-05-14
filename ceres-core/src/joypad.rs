@@ -28,11 +28,11 @@ impl Joypad {
         self.btns |= button as u8;
 
         if button as u8 & 0x0f != 0 && self.dirs {
-            ints.request(JOYPAD_INT);
+            ints.req(JOYPAD_INT);
         }
 
         if button as u8 & 0xf0 != 0 && self.acts {
-            ints.request(JOYPAD_INT);
+            ints.req(JOYPAD_INT);
         }
     }
 

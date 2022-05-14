@@ -5,3 +5,4 @@ condense_wildcard_suffixes = true
 enum_discrim_align_threshold = 20
 format_strings = true
 version = "Two"
+trailing_semicolon = true

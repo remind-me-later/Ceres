@@ -1,5 +1,11 @@
 #![no_std]
 #![forbid(unsafe_code)]
+#![warn(clippy::pedantic)]
+#![allow(clippy::cast_lossless)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::struct_excessive_bools)]
 
 extern crate alloc;
 
@@ -54,9 +60,9 @@ pub enum Model {
 
 #[derive(Clone, Copy)]
 enum FunctionMode {
-    Monochrome,
-    Compatibility,
-    Color,
+    Dmg,
+    Compat,
+    Cgb,
 }
 
 pub struct Gb {
@@ -91,8 +97,8 @@ impl Gb {
         video_callbacks: Rc<RefCell<dyn VideoCallbacks>>,
     ) -> Self {
         let function_mode = match model {
-            Model::Dmg | Model::Mgb => FunctionMode::Monochrome,
-            Model::Cgb => FunctionMode::Color,
+            Model::Dmg | Model::Mgb => FunctionMode::Dmg,
+            Model::Cgb => FunctionMode::Cgb,
         };
 
         Self {
@@ -134,6 +140,7 @@ impl Gb {
         }
     }
 
+    #[must_use]
     pub fn save_data(&self) -> Option<&[u8]> {
         self.cart.has_battery().then_some(self.cart.ram())
     }

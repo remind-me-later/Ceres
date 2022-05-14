@@ -54,11 +54,11 @@ impl NoiseChannel {
     }
 
     pub fn write_nr41(&mut self, val: u8) {
-        self.generic_channel.write_sound_length(val)
+        self.generic_channel.write_sound_length(val);
     }
 
     pub fn write_nr42(&mut self, val: u8) {
-        self.envelope.write(val, &mut self.generic_channel)
+        self.envelope.write(val, &mut self.generic_channel);
     }
 
     pub fn write_nr43(&mut self, val: u8) {

@@ -65,19 +65,17 @@ impl Gb {
             0x00 => self.mem_tick(|mem| mem.joypad.read()),
             0x01 => self.mem_tick(|mem| mem.serial.read_sb()),
             0x02 => self.mem_tick(|mem| mem.serial.read_sc()),
-            0x04 => self.timer_tick(|timer, ic| timer.read_div(ic)),
-            0x05 => self.timer_tick(|timer, ic| timer.read_tima(ic)),
-            0x06 => self.timer_tick(|timer, ic| timer.read_tma(ic)),
-            0x07 => self.timer_tick(|timer, ic| timer.read_tac(ic)),
+            0x04 => self.timer_tick(Timer::read_div),
+            0x05 => self.timer_tick(Timer::read_tima),
+            0x06 => self.timer_tick(Timer::read_tma),
+            0x07 => self.timer_tick(Timer::read_tac),
             0x0f => self.mem_tick(|mem| mem.ints.read_if()),
             0x10 => self.apu_tick(|apu| apu.read_nr10()),
             0x11 => self.apu_tick(|apu| apu.read_nr11()),
             0x12 => self.apu_tick(|apu| apu.read_nr12()),
-            0x13 => self.apu_tick(|apu| apu.read_nr13()),
             0x14 => self.apu_tick(|apu| apu.read_nr14()),
             0x16 => self.apu_tick(|apu| apu.read_nr21()),
             0x17 => self.apu_tick(|apu| apu.read_nr22()),
-            0x18 => self.apu_tick(|apu| apu.read_nr23()),
             0x19 => self.apu_tick(|apu| apu.read_nr24()),
             0x1a => self.apu_tick(|apu| apu.read_nr30()),
             0x1c => self.apu_tick(|apu| apu.read_nr32()),
@@ -128,7 +126,7 @@ impl Gb {
             0xe000..=0xefff => self.mem_tick(|mem| mem.wram.write_ram(addr, val)),
             0xf000..=0xfdff => self.mem_tick(|mem| mem.wram.write_bank_ram(addr, val)),
             0xfe00..=0xfe9f => {
-                self.mem_tick(|mem| mem.ppu.write_oam(addr, val, mem.dma.is_active()))
+                self.mem_tick(|mem| mem.ppu.write_oam(addr, val, mem.dma.is_active()));
             }
             0xfea0..=0xfeff => self.mem_tick(|_| ()),
             0xff00..=0xffff => self.write_high((addr & 0xff) as u8, val),
@@ -140,7 +138,7 @@ impl Gb {
             0x00 => self.mem_tick(|mem| mem.joypad.write(val)),
             0x01 => self.mem_tick(|mem| mem.serial.write_sb(val)),
             0x02 => self.mem_tick(|mem| mem.serial.write_sc(val)),
-            0x04 => self.timer_tick(|timer, ic| timer.write_div(ic)),
+            0x04 => self.timer_tick(Timer::write_div),
             0x05 => self.timer_tick(|timer, ic| timer.write_tima(ic, val)),
             0x06 => self.timer_tick(|timer, ic| timer.write_tma(ic, val)),
             0x07 => self.timer_tick(|timer, ic| timer.write_tac(ic, val)),
@@ -171,7 +169,6 @@ impl Gb {
             0x41 => self.mem_tick(|mem| mem.ppu.write_stat(val)),
             0x42 => self.mem_tick(|mem| mem.ppu.write_scy(val)),
             0x43 => self.mem_tick(|mem| mem.ppu.write_scx(val)),
-            0x44 => self.mem_tick(|mem| mem.ppu.write_ly(val)),
             0x45 => self.mem_tick(|mem| mem.ppu.write_lyc(val)),
             0x46 => self.mem_tick(|mem| mem.dma.write(val)),
             0x47 => self.mem_tick(|mem| mem.ppu.write_bgp(val)),
@@ -180,7 +177,7 @@ impl Gb {
             0x4a => self.mem_tick(|mem| mem.ppu.write_wy(val)),
             0x4b => self.mem_tick(|mem| mem.ppu.write_wx(val)),
             0x4c if self.model == Cgb && self.boot_rom.is_mapped() && val == 4 => {
-                self.function_mode = FunctionMode::Compatibility;
+                self.function_mode = FunctionMode::Compat;
             }
             0x4d if self.model == Cgb => self.mem_tick(|mem| mem.key1.write(val)),
             0x4f if self.model == Cgb => self.mem_tick(|mem| mem.ppu.write_vbk(val)),

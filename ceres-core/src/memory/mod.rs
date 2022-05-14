@@ -1,10 +1,14 @@
-pub use {dma::Dma, hdma::Hdma, hram::Hram, key1::Key1, wram::Wram};
+pub use {
+    dma::{Dma, Hdma},
+    hram::Hram,
+    key1::Key1,
+    wram::Wram,
+};
 
 use crate::Gb;
 
 mod addresses;
 mod dma;
-mod hdma;
 mod hram;
 mod key1;
 mod wram;
@@ -47,20 +51,19 @@ impl Gb {
             };
 
             while !self.hdma.is_transfer_done() {
-                let transfer = self.hdma.transfer();
-                let addr = transfer.src;
-                let val = match addr >> 8 {
-                    0x00..=0x7f => self.cart.read_rom(addr),
+                let (src, dst) = self.hdma.transfer();
+                let val = match src >> 8 {
+                    0x00..=0x7f => self.cart.read_rom(src),
                     // TODO: should copy garbage
                     0x80..=0x9f => 0xff,
-                    0xa0..=0xbf => self.cart.read_ram(addr),
-                    0xc0..=0xcf => self.wram.read_ram(addr),
-                    0xd0..=0xdf => self.wram.read_bank_ram(addr),
+                    0xa0..=0xbf => self.cart.read_ram(src),
+                    0xc0..=0xcf => self.wram.read_ram(src),
+                    0xd0..=0xdf => self.wram.read_bank_ram(src),
                     _ => panic!("Illegal source addr for HDMA transfer"),
                 };
 
                 tick(self);
-                self.ppu.hdma_write(transfer.dst, val);
+                self.ppu.hdma_write(dst, val);
             }
         }
     }

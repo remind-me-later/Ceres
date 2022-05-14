@@ -9,7 +9,7 @@ use {
     std::time::Instant,
 };
 
-pub struct VideoRenderer<const W: u32, const H: u32, const MUL: u32> {
+pub struct Renderer<const W: u32, const H: u32, const MUL: u32> {
     canvas: Canvas<Window>,
     _texture_creator: TextureCreator<WindowContext>,
     texture: Texture,
@@ -17,7 +17,7 @@ pub struct VideoRenderer<const W: u32, const H: u32, const MUL: u32> {
     next_frame: Instant,
 }
 
-impl<'a, const W: u32, const H: u32, const MUL: u32> VideoRenderer<W, H, MUL> {
+impl<'a, const W: u32, const H: u32, const MUL: u32> Renderer<W, H, MUL> {
     pub fn new(title: &str, video_subsystem: &'a VideoSubsystem) -> Self {
         let window = video_subsystem
             .window(title, W * MUL, H * MUL)
@@ -46,7 +46,7 @@ impl<'a, const W: u32, const H: u32, const MUL: u32> VideoRenderer<W, H, MUL> {
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
-        self.render_rect = Self::resize_texture(width, height)
+        self.render_rect = Self::resize_texture(width, height);
     }
 
     fn resize_texture(width: u32, height: u32) -> Rect {
@@ -59,7 +59,7 @@ impl<'a, const W: u32, const H: u32, const MUL: u32> VideoRenderer<W, H, MUL> {
     }
 }
 
-impl<const W: u32, const H: u32, const MUL: u32> VideoCallbacks for VideoRenderer<W, H, MUL> {
+impl<const W: u32, const H: u32, const MUL: u32> VideoCallbacks for Renderer<W, H, MUL> {
     fn draw(&mut self, rgba_data: &[u8]) {
         self.texture
             .with_lock(None, move |buf, _pitch| {

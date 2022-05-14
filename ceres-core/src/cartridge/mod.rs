@@ -46,6 +46,10 @@ pub struct Cartridge {
 }
 
 impl Cartridge {
+    /// # Errors
+    ///
+    /// Will return `Err` if the ROM header contains some illegal value
+    #[allow(clippy::similar_names)]
     pub fn new(rom: Box<[u8]>, ram: Option<Box<[u8]>>) -> Result<Cartridge, Error> {
         let header_info = Header::new(&rom)?;
         let mbc30 = header_info.ram_size().number_of_banks() >= 8;
@@ -101,24 +105,27 @@ impl Cartridge {
         let ram_offset = 0;
 
         Ok(Self {
-            rom,
             mbc,
-            has_battery,
+            rom,
             header_info,
+            has_battery,
             ram,
             rom_offsets,
             ram_offset,
         })
     }
 
+    #[must_use]
     pub fn has_battery(&self) -> bool {
         self.has_battery
     }
 
+    #[must_use]
     pub fn header_info(&self) -> &Header {
         &self.header_info
     }
 
+    #[must_use]
     pub fn read_rom(&self, addr: u16) -> u8 {
         let bank_addr = match addr {
             0x0000..=0x3fff => {
@@ -135,6 +142,7 @@ impl Cartridge {
         self.rom[bank_addr as usize]
     }
 
+    #[must_use]
     pub fn ram_addr(&self, addr: u16) -> usize {
         self.ram_offset | (addr as usize & 0x1fff)
     }
@@ -148,6 +156,7 @@ impl Cartridge {
         }
     }
 
+    #[must_use]
     pub fn read_ram(&self, addr: u16) -> u8 {
         match self.mbc {
             Mbc::None => 0xff,
@@ -172,14 +181,14 @@ impl Cartridge {
         match self.mbc {
             Mbc::None => (),
             Mbc::One(ref mut mbc1) => {
-                mbc1.write_rom(addr, value, &mut self.rom_offsets, &mut self.ram_offset)
+                mbc1.write_rom(addr, value, &mut self.rom_offsets, &mut self.ram_offset);
             }
             Mbc::Two(ref mut mbc2) => mbc2.write_rom(addr, value, &mut self.rom_offsets),
             Mbc::Three(ref mut mbc3) => {
-                mbc3.write_rom(addr, value, &mut self.rom_offsets, &mut self.ram_offset)
+                mbc3.write_rom(addr, value, &mut self.rom_offsets, &mut self.ram_offset);
             }
             Mbc::Five { ref mut mbc, .. } => {
-                mbc.write_rom(addr, value, &mut self.rom_offsets, &mut self.ram_offset)
+                mbc.write_rom(addr, value, &mut self.rom_offsets, &mut self.ram_offset);
             }
         }
     }
@@ -196,11 +205,11 @@ impl Cartridge {
             Mbc::None => (),
             Mbc::One(ref mbc1) => {
                 let is_ram_enabled = mbc1.ramg();
-                self.mbc_write_ram(is_ram_enabled, addr, value)
+                self.mbc_write_ram(is_ram_enabled, addr, value);
             }
             Mbc::Two(ref mbc2) => {
                 let is_ram_enabled = mbc2.is_ram_enabled();
-                self.mbc_write_ram(is_ram_enabled, addr, value)
+                self.mbc_write_ram(is_ram_enabled, addr, value);
             }
             Mbc::Three(ref mbc3) => {
                 let map_en = mbc3.map_en();
@@ -220,6 +229,7 @@ impl Cartridge {
         }
     }
 
+    #[must_use]
     pub fn ram(&self) -> &[u8] {
         &self.ram
     }

@@ -1,4 +1,4 @@
-use super::channels::Channels;
+use super::channel::Channels;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum TriggerReset {
@@ -88,7 +88,6 @@ impl Control {
     }
 }
 
-#[derive(Clone, Copy)]
 pub struct ChannelEnabledTerminalIterator {
     channel_index: u8,
     nr51: u8,

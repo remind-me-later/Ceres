@@ -310,7 +310,7 @@ impl Gb {
     pub fn halt(&mut self) {
         self.halted = true;
 
-        if self.ints.has_pending_interrupts() && !self.ime {
+        if self.ints.has_pending() && !self.ime {
             self.halted = false;
             self.halt_bug = true;
         }
@@ -428,7 +428,7 @@ impl Gb {
         self.reg.set_nf(false);
 
         // check carry from bit 11
-        let mask = 0b0111_1111_1111;
+        let mask = 0x7FF;
         let half_carry = (hl & mask) + (val & mask) > mask;
 
         self.reg.set_hf(half_carry);

@@ -19,10 +19,10 @@ impl Serial {
     }
 
     pub fn write_sb(&mut self, val: u8) {
-        self.data = val
+        self.data = val;
     }
 
     pub fn write_sc(&mut self, val: u8) {
-        self.control = val
+        self.control = val;
     }
 }

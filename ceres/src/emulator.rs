@@ -1,5 +1,5 @@
 use {
-    crate::{audio::AudioRenderer, video::VideoRenderer},
+    crate::{audio, video::Renderer},
     ceres_core::{Cartridge, Gb, Model, PX_HEIGHT, PX_WIDTH},
     sdl2::{
         controller::GameController,
@@ -21,7 +21,7 @@ pub struct Emulator {
     gb: Gb,
     is_focused: bool,
     sav_path: PathBuf,
-    emu_win: Rc<RefCell<VideoRenderer<{ PX_WIDTH as u32 }, { PX_HEIGHT as u32 }, 4>>>,
+    emu_win: Rc<RefCell<Renderer<{ PX_WIDTH as u32 }, { PX_HEIGHT as u32 }, 4>>>,
 }
 
 impl Emulator {
@@ -44,16 +44,14 @@ impl Emulator {
             (cartridge, sav_path)
         };
 
-        let audio_renderer = Rc::new(RefCell::new(AudioRenderer::new(&sdl)));
+        let audio_renderer = Rc::new(RefCell::new(audio::Renderer::new(&sdl)));
         let audio_callbacks = Rc::clone(&audio_renderer);
 
         let video_subsystem = sdl.video().unwrap();
 
-        let emu_win: Rc<RefCell<VideoRenderer<{ PX_WIDTH as u32 }, { PX_HEIGHT as u32 }, 4>>> =
-            Rc::new(RefCell::new(VideoRenderer::new(
-                super::CERES_STR,
-                &video_subsystem,
-            )));
+        let emu_win: Rc<RefCell<Renderer<{ PX_WIDTH as u32 }, { PX_HEIGHT as u32 }, 4>>> = Rc::new(
+            RefCell::new(Renderer::new(super::CERES_STR, &video_subsystem)),
+        );
 
         let video_callbacks = Rc::clone(&emu_win);
 

@@ -63,7 +63,7 @@ const WAVE_RAM_SIZE: u8 = 0x10;
 const WAVE_SAMPLE_SIZE: u8 = WAVE_RAM_SIZE * 2;
 const WAVE_CHANNEL_PERIOD_MULTIPLIER: u16 = 2;
 
-pub struct WaveChannel {
+pub struct Wave {
     generic_channel: GenericChannel<MAX_WAVE_CHANNEL_LENGTH>,
     frequency_data: FrequencyData<WAVE_CHANNEL_PERIOD_MULTIPLIER>,
     current_frequency_period: u16,
@@ -76,7 +76,7 @@ pub struct WaveChannel {
     nr30: u8,
 }
 
-impl WaveChannel {
+impl Wave {
     pub fn new() -> Self {
         let frequency_data: FrequencyData<WAVE_CHANNEL_PERIOD_MULTIPLIER> = FrequencyData::new();
         let current_frequency_period = frequency_data.period();
@@ -139,15 +139,15 @@ impl WaveChannel {
     }
 
     pub fn write_nr31(&mut self, val: u8) {
-        self.generic_channel.write_sound_length(val)
+        self.generic_channel.write_sound_length(val);
     }
 
     pub fn write_nr32(&mut self, val: u8) {
-        self.volume = val.into()
+        self.volume = val.into();
     }
 
     pub fn write_nr33(&mut self, val: u8) {
-        self.frequency_data.set_low_byte(val)
+        self.frequency_data.set_low_byte(val);
     }
 
     pub fn write_nr34(&mut self, val: u8) {

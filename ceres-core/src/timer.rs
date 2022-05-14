@@ -20,7 +20,7 @@ impl Timer {
     }
 
     fn counter_mask(&self) -> u16 {
-        match self.tac & 0b11 {
+        match self.tac & 3 {
             3 => 1 << 5,
             2 => 1 << 3,
             1 => 1 << 1,
@@ -43,7 +43,7 @@ impl Timer {
         if self.overflow {
             self.internal_counter = self.internal_counter.wrapping_add(1);
             self.counter = self.modulo;
-            ints.request(TIMER_INT);
+            ints.req(TIMER_INT);
             self.overflow = false;
         } else if self.enabled && self.counter_bit() {
             self.internal_counter = self.internal_counter.wrapping_add(1);

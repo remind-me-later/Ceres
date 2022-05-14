@@ -25,8 +25,12 @@ impl Display for Header {
 }
 
 impl Header {
+    /// # Errors
+    ///
+    /// Will return `Err` if the ROM header contains some illegal value
+    #[allow(clippy::similar_names)]
     pub fn new(rom: &[u8]) -> Result<Self, Error> {
-        let licensee_code = LicenseeCode::new(rom)?;
+        let licensee_code = LicenseeCode::new(rom);
         let cgb_flag = CgbFlag::new(rom);
         let rom_size = ROMSize::new(rom)?;
         let ram_size = RAMSize::new(rom)?;
@@ -48,18 +52,18 @@ impl Header {
             }
         })?;
 
-        Self::header_checksum_matches(rom)?;
+        Self::check_checksum(rom)?;
 
         Ok(Self {
             title,
-            rom_size,
             ram_size,
+            rom_size,
             licensee_code,
             cgb_flag,
         })
     }
 
-    fn header_checksum_matches(rom: &[u8]) -> Result<(), Error> {
+    fn check_checksum(rom: &[u8]) -> Result<(), Error> {
         let expected = rom[0x14d];
         let mut computed: u8 = 0;
 
@@ -67,10 +71,10 @@ impl Header {
             computed = computed.wrapping_sub(byte).wrapping_sub(1);
         }
 
-        if expected != computed {
-            Err(Error::InvalidChecksum { expected, computed })
-        } else {
+        if expected == computed {
             Ok(())
+        } else {
+            Err(Error::InvalidChecksum { expected, computed })
         }
     }
 
@@ -84,11 +88,15 @@ impl Header {
         &self.cgb_flag
     }
 
+    /// # Panics
+    ///
+    /// panics on invalid ASCII title in header
     #[must_use]
     pub fn title(&self) -> &str {
         core::str::from_utf8(&self.title).unwrap()
     }
 
+    #[must_use]
     pub fn rom_size(&self) -> ROMSize {
         self.rom_size
     }
@@ -253,15 +261,13 @@ pub enum LicenseeCode {
 }
 
 impl LicenseeCode {
-    pub fn new(rom: &[u8]) -> Result<Self, Error> {
+    pub fn new(rom: &[u8]) -> Self {
         use LicenseeCode::{New, Old};
 
-        let val = match rom[0x14b] {
+        match rom[0x14b] {
             0x33 => New([rom[0x144], rom[0x145]]),
             code => Old(code),
-        };
-
-        Ok(val)
+        }
     }
 }
 
