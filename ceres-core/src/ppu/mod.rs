@@ -1,10 +1,6 @@
-use {
-    crate::{
-        interrupts::{Interrupts, LCD_STAT_INT, VBLANK_INT},
-        FunctionMode,
-    },
-    alloc::rc::Rc,
-    core::cell::RefCell,
+use crate::{
+    interrupts::{Interrupts, LCD_STAT_INT, VBLANK_INT},
+    FunctionMode,
 };
 
 mod scanline_renderer;
@@ -212,7 +208,7 @@ pub struct Ppu {
     win_in_frame: bool,
     win_in_ly: bool,
     window_lines_skipped: u16,
-    video_callbacks: Rc<RefCell<dyn VideoCallbacks>>,
+    video_callbacks: *mut dyn VideoCallbacks,
 
     // registers
     lcdc: u8,
@@ -233,7 +229,7 @@ pub struct Ppu {
 }
 
 impl Ppu {
-    pub fn new(video_callbacks: Rc<RefCell<dyn VideoCallbacks>>) -> Self {
+    pub fn new(video_callbacks: *mut dyn VideoCallbacks) -> Self {
         Self {
             vram: [0; VRAM_SIZE_CGB],
             oam: [0; OAM_SIZE],
@@ -614,7 +610,9 @@ impl Ppu {
                 if self.ly > 153 {
                     self.ly = 0;
                     self.switch_mode(Mode::OamScan, ints);
-                    self.video_callbacks.borrow_mut().draw(&self.rgba_buf.data);
+                    unsafe {
+                        (*self.video_callbacks).draw(&self.rgba_buf.data);
+                    }
                 } else {
                     let scx = self.scx;
                     self.cycles += self.mode().cycles(scx);

@@ -1,5 +1,4 @@
 #![no_std]
-#![forbid(unsafe_code)]
 #![warn(clippy::pedantic)]
 #![allow(clippy::cast_lossless)]
 #![allow(clippy::cast_possible_truncation)]
@@ -10,10 +9,9 @@
 extern crate alloc;
 
 use {
-    alloc::rc::Rc,
     apu::Apu,
     bootrom::BootRom,
-    core::{cell::RefCell, time::Duration},
+    core::time::Duration,
     cpu::Regs,
     interrupts::Interrupts,
     joypad::Joypad,
@@ -90,11 +88,15 @@ pub struct Gb {
 }
 
 impl Gb {
-    pub fn new(
+    /// # Safety
+    ///
+    /// `audio_callbacks` and `video_callbacks` should not be dropped before the struct 
+    /// and be in the heap, so that it's position doesn't change
+    pub unsafe fn new(
         model: Model,
         cart: Cartridge,
-        audio_callbacks: Rc<RefCell<dyn AudioCallbacks>>,
-        video_callbacks: Rc<RefCell<dyn VideoCallbacks>>,
+        audio_callbacks: *mut dyn AudioCallbacks,
+        video_callbacks: *mut dyn VideoCallbacks,
     ) -> Self {
         let function_mode = match model {
             Model::Dmg | Model::Mgb => FunctionMode::Dmg,

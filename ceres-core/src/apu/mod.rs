@@ -5,8 +5,6 @@ use {
         control::{Control, TriggerReset},
     },
     crate::T_CYCLES_PER_SECOND,
-    alloc::rc::Rc,
-    core::cell::RefCell,
 };
 
 mod audio_callbacks;
@@ -40,15 +38,15 @@ pub struct Apu {
     channels: Channels,
     cycles_to_render: u32,
     cycles_until_next_render: u32,
-    callbacks: Rc<RefCell<dyn AudioCallbacks>>,
+    callbacks: *mut dyn AudioCallbacks,
     sequencer: Sequencer,
     control: Control,
     high_pass_filter: HighPassFilter,
 }
 
 impl Apu {
-    pub fn new(callbacks: Rc<RefCell<dyn AudioCallbacks>>) -> Self {
-        let cycles_to_render = callbacks.borrow().cycles_to_render();
+    pub fn new(callbacks: *mut dyn AudioCallbacks) -> Self {
+        let cycles_to_render = unsafe { (*callbacks).cycles_to_render() };
 
         Self {
             channels: Channels::new(),
@@ -109,7 +107,7 @@ impl Apu {
             .filter(right_sample, self.control.is_enabled());
 
         let frame = Frame::new(left_sample, right_sample);
-        self.callbacks.borrow_mut().push_frame(frame);
+        unsafe { (*self.callbacks).push_frame(frame) };
     }
 
     fn reset(&mut self) {

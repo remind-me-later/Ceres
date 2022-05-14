@@ -1,5 +1,5 @@
 use {
-    crate::{audio, video::Renderer},
+    crate::{audio, video},
     ceres_core::{Cartridge, Gb, Model, PX_HEIGHT, PX_WIDTH},
     sdl2::{
         controller::GameController,
@@ -8,87 +8,63 @@ use {
         Sdl,
     },
     std::{
-        cell::RefCell,
         fs::{self, File},
         io::{Read, Write},
         path::{Path, PathBuf},
-        rc::Rc,
+        vec::Vec,
     },
 };
 
 pub struct Emulator {
     sdl: Sdl,
     gb: Gb,
-    is_focused: bool,
+    has_focus: bool,
     sav_path: PathBuf,
-    emu_win: Rc<RefCell<Renderer<{ PX_WIDTH as u32 }, { PX_HEIGHT as u32 }, 4>>>,
+    video: Box<video::Renderer<{ PX_WIDTH as u32 }, { PX_HEIGHT as u32 }, 4>>,
+    _audio: Box<audio::Renderer>,
 }
 
 impl Emulator {
+    #[allow(clippy::similar_names)]
     pub fn new(model: Model, rom_path: &Path) -> Self {
         let sdl = sdl2::init().unwrap();
+        let video_subsystem = sdl.video().unwrap();
 
         let sav_path = rom_path.with_extension("sav");
 
-        let (cartridge, sav_path) = {
-            let rom_buf = read_file(rom_path).unwrap().into_boxed_slice();
-
-            let ram = if let Ok(sav_buf) = read_file(&sav_path) {
-                Some(sav_buf.into_boxed_slice())
-            } else {
-                None
-            };
-
-            let cartridge = Cartridge::new(rom_buf, ram).unwrap();
-
-            (cartridge, sav_path)
+        let cart = {
+            let rom = read_file(rom_path).unwrap().into_boxed_slice();
+            let ram = read_file(&sav_path).ok().map(Vec::into_boxed_slice);
+            Cartridge::new(rom, ram).unwrap()
         };
 
-        let audio_renderer = Rc::new(RefCell::new(audio::Renderer::new(&sdl)));
-        let audio_callbacks = Rc::clone(&audio_renderer);
-
-        let video_subsystem = sdl.video().unwrap();
-
-        let emu_win: Rc<RefCell<Renderer<{ PX_WIDTH as u32 }, { PX_HEIGHT as u32 }, 4>>> = Rc::new(
-            RefCell::new(Renderer::new(super::CERES_STR, &video_subsystem)),
-        );
-
-        let video_callbacks = Rc::clone(&emu_win);
-
-        let gameboy = Gb::new(model, cartridge, audio_callbacks, video_callbacks);
+        let mut audio = Box::new(audio::Renderer::new(&sdl));
+        let mut video = Box::new(video::Renderer::new(super::CERES_STR, &video_subsystem));
+        let gb = unsafe { Gb::new(model, cart, audio.as_mut(), video.as_mut()) };
 
         Self {
             sdl,
-            gb: gameboy,
-            is_focused: false,
+            gb,
+            has_focus: false,
             sav_path,
-            emu_win,
+            video,
+            _audio: audio,
         }
     }
 
     fn init_controller(&self) -> Option<GameController> {
-        let game_controller_subsystem = self.sdl.game_controller().unwrap();
+        let gcss = self.sdl.game_controller().unwrap();
+        let avail = gcss.num_joysticks().unwrap();
 
-        let available = game_controller_subsystem
-            .num_joysticks()
-            .map_err(|e| format!("can't enumerate joysticks: {}", e))
-            .unwrap();
-
-        (0..available).find_map(|id| {
-            if !game_controller_subsystem.is_game_controller(id) {
-                return None;
-            }
-
-            match game_controller_subsystem.open(id) {
-                Ok(c) => Some(c),
-                Err(_) => None,
-            }
+        (0..avail).find_map(|id| {
+            gcss.is_game_controller(id)
+                .then(|| gcss.open(id).ok())
+                .flatten()
         })
     }
 
     pub fn run(mut self) {
         let _controller = self.init_controller();
-
         let mut event_pump = self.sdl.event_pump().unwrap();
 
         'main_loop: loop {
@@ -97,19 +73,17 @@ impl Emulator {
                     Event::Quit { .. } => break 'main_loop,
                     Event::Window { win_event, .. } => match win_event {
                         WindowEvent::Resized(width, height) => {
-                            self.emu_win
-                                .borrow_mut()
-                                .resize(width as u32, height as u32);
+                            self.video.resize(width as u32, height as u32);
                         }
                         WindowEvent::Close => break 'main_loop,
-                        WindowEvent::FocusGained => self.is_focused = true,
-                        WindowEvent::FocusLost => self.is_focused = false,
+                        WindowEvent::FocusGained => self.has_focus = true,
+                        WindowEvent::FocusLost => self.has_focus = false,
                         _ => (),
                     },
                     Event::ControllerButtonDown { button, .. } => {
                         use {ceres_core::Button, sdl2::controller};
 
-                        if !self.is_focused {
+                        if !self.has_focus {
                             return;
                         }
 
@@ -128,7 +102,7 @@ impl Emulator {
                     Event::ControllerButtonUp { button, .. } => {
                         use {ceres_core::Button, sdl2::controller};
 
-                        if !self.is_focused {
+                        if !self.has_focus {
                             return;
                         }
 
@@ -147,7 +121,7 @@ impl Emulator {
                     Event::KeyDown { scancode, .. } => {
                         use ceres_core::Button;
 
-                        if !self.is_focused {
+                        if !self.has_focus {
                             return;
                         }
 
@@ -168,7 +142,7 @@ impl Emulator {
                     Event::KeyUp { scancode, .. } => {
                         use ceres_core::Button;
 
-                        if !self.is_focused {
+                        if !self.has_focus {
                             return;
                         }
 
