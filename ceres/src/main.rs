@@ -57,7 +57,7 @@ fn parse_args() -> Result<AppArgs, pico_args::Error> {
         rom: pargs.free_from_str()?,
     };
 
-    // It's up to the caller what to do with the remaining arguments.
+    // FIXME: It's up to the caller what to do with the remaining arguments.
     let remaining = pargs.finish();
     if !remaining.is_empty() {
         eprintln!("Warning: unused arguments left: {:?}.", remaining);

@@ -1,45 +1,45 @@
-use super::{core::Core, envelope::Envelope};
+use super::{ccore::Ccore, envelope::Envelope};
 
 const MAX_NOISE_CHANNEL_LENGTH: u16 = 64;
 
 pub struct Noise {
-    core: Core<MAX_NOISE_CHANNEL_LENGTH>,
-    envelope: Envelope,
+    core: Ccore<MAX_NOISE_CHANNEL_LENGTH>,
+    env: Envelope,
     current_timer_cycle: u16,
     internal_timer_period: u16,
     lfsr: u16,
     width_mode_on: bool,
-    output_volume: u8,
+    out: u8,
     nr43: u8,
 }
 
 impl Noise {
     pub fn new() -> Self {
         Self {
-            core: Core::new(),
-            envelope: Envelope::new(),
+            core: Ccore::new(),
+            env: Envelope::new(),
             current_timer_cycle: 1,
             internal_timer_period: 0,
             lfsr: 0x7fff,
             width_mode_on: false,
-            output_volume: 0,
+            out: 0,
             nr43: 0,
         }
     }
 
     pub fn reset(&mut self) {
         self.core.reset();
-        self.envelope.reset();
+        self.env.reset();
         self.internal_timer_period = 0;
         self.current_timer_cycle = 1;
         self.lfsr = 0x7fff;
         self.width_mode_on = false;
-        self.output_volume = 0;
+        self.out = 0;
         self.nr43 = 0;
     }
 
     pub fn read_nr42(&self) -> u8 {
-        self.envelope.read()
+        self.env.read()
     }
 
     pub fn read_nr43(&self) -> u8 {
@@ -55,7 +55,7 @@ impl Noise {
     }
 
     pub fn write_nr42(&mut self, val: u8) {
-        self.envelope.write(val, &mut self.core);
+        self.env.write(val, &mut self.core);
     }
 
     pub fn write_nr43(&mut self, val: u8) {
@@ -87,11 +87,11 @@ impl Noise {
     pub fn trigger(&mut self) {
         self.current_timer_cycle = self.internal_timer_period;
         self.lfsr = 0x7fff;
-        self.envelope.trigger();
+        self.env.trigger();
     }
 
     pub fn step_envelope(&mut self) {
-        self.envelope.step(&mut self.core);
+        self.env.step(&mut self.core);
     }
 
     pub fn step_sample(&mut self) {
@@ -111,14 +111,14 @@ impl Noise {
                 self.lfsr |= xor_bit << 6;
             }
 
-            self.output_volume = if self.lfsr & 1 == 0 { 1 } else { 0 };
+            self.out = if self.lfsr & 1 == 0 { 1 } else { 0 };
         } else {
             self.current_timer_cycle = new_timer_cycle;
         }
     }
 
-    pub fn output_volume(&self) -> u8 {
-        self.output_volume * self.envelope.volume()
+    pub fn out(&self) -> u8 {
+        self.out * self.env.volume()
     }
 
     pub fn on(&self) -> bool {
@@ -129,7 +129,7 @@ impl Noise {
         self.core.step_len();
     }
 
-    pub fn mut_core(&mut self) -> &mut Core<MAX_NOISE_CHANNEL_LENGTH> {
+    pub fn mut_core(&mut self) -> &mut Ccore<MAX_NOISE_CHANNEL_LENGTH> {
         &mut self.core
     }
 }

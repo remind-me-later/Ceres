@@ -1,4 +1,4 @@
-use super::core::Core;
+use super::ccore::Ccore;
 
 pub struct Envelope {
     on: bool,
@@ -31,10 +31,10 @@ impl Envelope {
     }
 
     pub fn read(&self) -> u8 {
-        (self.base_vol << 4) | u8::from(self.inc) | (self.period & 7)
+        (self.base_vol << 4) | self.inc as u8 | (self.period & 7)
     }
 
-    pub fn write(&mut self, val: u8, core: &mut Core<64>) {
+    pub fn write(&mut self, val: u8, core: &mut Ccore<64>) {
         // value == 0x7 || value == 0x0 to pass Blargg 2 test
         if val == 7 {
             core.disable_dac();
@@ -55,7 +55,7 @@ impl Envelope {
         self.vol = self.base_vol;
     }
 
-    pub fn step(&mut self, core: &mut Core<64>) {
+    pub fn step(&mut self, core: &mut Ccore<64>) {
         if !self.on || !core.on() {
             return;
         }

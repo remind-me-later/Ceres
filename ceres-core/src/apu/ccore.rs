@@ -1,4 +1,5 @@
-pub struct Core<const N: u16> {
+// utilities common to all channels
+pub struct Ccore<const N: u16> {
     on: bool,
     dac_on: bool,
     use_len: bool,
@@ -6,7 +7,7 @@ pub struct Core<const N: u16> {
     period_half: u8, // 0 or 1
 }
 
-impl<const N: u16> Core<N> {
+impl<const N: u16> Ccore<N> {
     pub fn new() -> Self {
         Self {
             on: false,

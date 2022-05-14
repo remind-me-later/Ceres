@@ -1,5 +1,5 @@
 // 11 bit frequency data
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Default)]
 pub struct Freq<const MUL: u16> {
     pub val: u16,
 }

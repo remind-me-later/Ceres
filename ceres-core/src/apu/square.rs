@@ -1,4 +1,4 @@
-use super::{core::Core, envelope::Envelope, freq::Freq};
+use super::{ccore::Ccore, envelope::Envelope, freq::Freq};
 
 const SQUARE_MAX_LENGTH: u16 = 64;
 const SQUARE_PERIOD_MULTIPLIER: u16 = 4;
@@ -54,7 +54,7 @@ impl Sweep {
         if self.shadow_freq > 0x7ff {
             common.set_on(false);
         } else if self.shift != 0 {
-            common.freq.val = self.shadow_freq;
+            common.freq.val = self.shadow_freq & 0x7ff;
         }
     }
 
@@ -83,13 +83,13 @@ impl Sweep {
 }
 
 struct Common {
-    pub core: Core<SQUARE_MAX_LENGTH>,
+    pub core: Ccore<SQUARE_MAX_LENGTH>,
     pub freq: Freq<SQUARE_PERIOD_MULTIPLIER>,
     duty: u8,
     duty_bit: u8,
     period: u16,
-    output: u8,
-    envelope: Envelope,
+    out: u8,
+    env: Envelope,
 }
 
 impl Common {
@@ -102,9 +102,9 @@ impl Common {
             period,
             duty: DUTY_TABLE[0],
             duty_bit: 0,
-            core: Core::new(),
-            output: 0,
-            envelope: Envelope::new(),
+            core: Ccore::new(),
+            out: 0,
+            env: Envelope::new(),
         }
     }
 
@@ -132,9 +132,9 @@ impl Common {
 
     fn trigger(&mut self) {
         self.period = self.freq.period();
-        self.output = 0;
+        self.out = 0;
         self.duty_bit = 0;
-        self.envelope.trigger();
+        self.env.trigger();
     }
 
     fn reset(&mut self) {
@@ -142,7 +142,7 @@ impl Common {
         self.freq.reset();
         self.duty = DUTY_TABLE[0];
         self.duty_bit = 0;
-        self.envelope.reset();
+        self.env.reset();
     }
 
     pub fn duty_output(&mut self) -> u8 {
@@ -166,27 +166,27 @@ impl Common {
             self.period = self.freq.period();
 
             if self.core.on() {
-                self.output = self.duty_output();
+                self.out = self.duty_output();
             }
         } else {
             self.period = period;
         }
     }
 
-    fn output_volume(&self) -> u8 {
-        self.output * self.envelope.volume()
+    fn out(&self) -> u8 {
+        self.out * self.env.volume()
     }
 
     fn step_envelope(&mut self) {
-        self.envelope.step(&mut self.core);
+        self.env.step(&mut self.core);
     }
 
     fn read_envelope(&self) -> u8 {
-        self.envelope.read()
+        self.env.read()
     }
 
     fn write_envelope(&mut self, val: u8) {
-        self.envelope.write(val, &mut self.core);
+        self.env.write(val, &mut self.core);
     }
 
     fn step_length(&mut self) {
@@ -273,8 +273,8 @@ impl Ch1 {
         self.sweep.trigger(&mut self.common);
     }
 
-    pub fn output_volume(&self) -> u8 {
-        self.common.output_volume()
+    pub fn out(&self) -> u8 {
+        self.common.out()
     }
 
     pub fn on(&self) -> bool {
@@ -285,7 +285,7 @@ impl Ch1 {
         self.common.step_length();
     }
 
-    pub fn mut_core(&mut self) -> &mut Core<SQUARE_MAX_LENGTH> {
+    pub fn mut_core(&mut self) -> &mut Ccore<SQUARE_MAX_LENGTH> {
         &mut self.common.core
     }
 }
@@ -347,8 +347,8 @@ impl Ch2 {
         self.common.trigger();
     }
 
-    pub fn output_volume(&self) -> u8 {
-        self.common.output_volume()
+    pub fn out(&self) -> u8 {
+        self.common.out()
     }
 
     pub fn on(&self) -> bool {
@@ -359,7 +359,7 @@ impl Ch2 {
         self.common.step_length();
     }
 
-    pub fn mut_core(&mut self) -> &mut Core<SQUARE_MAX_LENGTH> {
+    pub fn mut_core(&mut self) -> &mut Ccore<SQUARE_MAX_LENGTH> {
         &mut self.common.core
     }
 }

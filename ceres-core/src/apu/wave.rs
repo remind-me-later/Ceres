@@ -1,4 +1,4 @@
-use super::{core::Core, freq::Freq};
+use super::{ccore::Ccore, freq::Freq};
 
 const MAX_WAVE_CHANNEL_LENGTH: u16 = 0x100;
 const WAVE_RAM_SIZE: u8 = 0x10;
@@ -6,7 +6,7 @@ const WAVE_SAMPLE_SIZE: u8 = WAVE_RAM_SIZE * 2;
 const WAVE_CHANNEL_PERIOD_MULTIPLIER: u16 = 2;
 
 pub struct Wave {
-    core: Core<MAX_WAVE_CHANNEL_LENGTH>,
+    core: Ccore<MAX_WAVE_CHANNEL_LENGTH>,
     frequency_data: Freq<WAVE_CHANNEL_PERIOD_MULTIPLIER>,
     current_frequency_period: u16,
     sample_buffer: u8,
@@ -25,7 +25,7 @@ impl Wave {
         Self {
             wave_ram: [0; WAVE_RAM_SIZE as usize],
             vol: 0,
-            core: Core::new(),
+            core: Ccore::new(),
             frequency_data,
             current_frequency_period,
             sample_buffer: 0,
@@ -117,7 +117,7 @@ impl Wave {
         self.current_frequency_period -= 1;
     }
 
-    pub fn output_volume(&self) -> u8 {
+    pub fn out(&self) -> u8 {
         self.sample_buffer >> (self.vol.wrapping_sub(1) & 7)
     }
 
@@ -129,7 +129,7 @@ impl Wave {
         self.core.step_len();
     }
 
-    pub fn mut_core(&mut self) -> &mut Core<MAX_WAVE_CHANNEL_LENGTH> {
+    pub fn mut_core(&mut self) -> &mut Ccore<MAX_WAVE_CHANNEL_LENGTH> {
         &mut self.core
     }
 }
