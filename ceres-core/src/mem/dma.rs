@@ -1,11 +1,9 @@
-use crate::ppu::{Mode::HBlank, Ppu};
-
 #[derive(Default)]
 pub struct Dma {
-    is_active: bool,
-    source: u8,
+    on: bool,
+    src: u8,
     addr: u16,
-    is_restarting: bool,
+    restarting: bool,
     t_cycles: i8,
 }
 
@@ -15,30 +13,30 @@ impl Dma {
     }
 
     pub fn read(&self) -> u8 {
-        self.source
+        self.src
     }
 
     pub fn write(&mut self, val: u8) {
-        if self.is_active {
-            self.is_restarting = true;
+        if self.on {
+            self.restarting = true;
         }
 
         self.t_cycles = -8; // two m-cycles delay
-        self.source = val;
+        self.src = val;
         self.addr = u16::from(val) << 8;
-        self.is_active = true;
+        self.on = true;
     }
 
     pub fn emulate(&mut self) -> Option<u16> {
         self.t_cycles = self.t_cycles.wrapping_add(4);
 
-        if self.is_active && self.t_cycles >= 4 {
+        if self.on && self.t_cycles >= 4 {
             self.t_cycles -= 4;
             let addr = self.addr;
             self.addr = self.addr.wrapping_add(1);
             if self.addr & 0xff >= 0xa0 {
-                self.is_active = false;
-                self.is_restarting = false;
+                self.on = false;
+                self.restarting = false;
             }
             Some(addr)
         } else {
@@ -47,12 +45,12 @@ impl Dma {
     }
 
     pub fn is_active(&self) -> bool {
-        self.is_active && (self.t_cycles > 0 || self.is_restarting)
+        self.on && (self.t_cycles > 0 || self.restarting)
     }
 }
 
 enum State {
-    Inactive,
+    Sleep,
     HBlankAwait,
     HBlankCopy { bytes: u8 },
     HBlankDone,
@@ -61,7 +59,7 @@ enum State {
 
 impl Default for State {
     fn default() -> Self {
-        Self::Inactive
+        Self::Sleep
     }
 }
 
@@ -96,7 +94,7 @@ impl Hdma {
     }
 
     fn is_active(&self) -> bool {
-        !matches!(self.state, State::Inactive)
+        !matches!(self.state, State::Sleep)
     }
 
     pub fn read_hdma5(&self) -> u8 {
@@ -108,7 +106,7 @@ impl Hdma {
     pub fn write_hdma5(&mut self, val: u8) {
         // stop current transfer
         if self.is_active() && val & 0x80 == 0 {
-            self.state = State::Inactive;
+            self.state = State::Sleep;
             return;
         }
 
@@ -122,14 +120,14 @@ impl Hdma {
         };
     }
 
-    pub fn start(&mut self, ppu: &Ppu) -> bool {
+    pub fn start(&mut self, hblank: bool) -> bool {
         match self.state {
             State::General => true,
-            State::HBlankDone if ppu.mode() != HBlank => {
+            State::HBlankDone if hblank => {
                 self.state = State::HBlankAwait;
                 false
             }
-            State::HBlankAwait if ppu.mode() == HBlank => {
+            State::HBlankAwait if hblank => {
                 self.state = State::HBlankCopy { bytes: 0x10 };
                 true
             }
@@ -139,7 +137,7 @@ impl Hdma {
     }
 
     pub fn is_transfer_done(&self) -> bool {
-        matches!(self.state, State::Inactive | State::HBlankDone)
+        matches!(self.state, State::Sleep | State::HBlankDone)
     }
 
     pub fn transfer(&mut self) -> (u16, u16) {
@@ -150,7 +148,7 @@ impl Hdma {
         self.len -= 1;
 
         if self.len == 0 {
-            self.state = State::Inactive;
+            self.state = State::Sleep;
             self.hdma5 = 0xff;
         } else if let State::HBlankCopy { mut bytes } = self.state {
             bytes -= 1;

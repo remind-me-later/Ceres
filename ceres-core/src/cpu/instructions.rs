@@ -325,7 +325,7 @@ impl Gb {
         if self.key1 & KEY1_SWITCH == 0 {
             self.halted = true;
         } else {
-            self.switch_speed();
+            self.double_speed = !self.double_speed;
 
             self.key1 &= !KEY1_SWITCH;
             self.key1 ^= KEY1_SPEED;

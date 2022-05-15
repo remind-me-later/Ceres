@@ -1,9 +1,9 @@
 use {
     super::{
-        Obj, Ppu, BG_PAL, BG_TO_OAM_PR, BG_X_FLIP, BG_Y_FLIP, LARGE_SPRITES, OAM_SIZE, OBJ_ENABLED,
+        Obj, BG_PAL, BG_TO_OAM_PR, BG_X_FLIP, BG_Y_FLIP, LARGE_SPRITES, OAM_SIZE, OBJ_ENABLED,
         SPR_BG_FIRST, SPR_CGB_PAL, SPR_FLIP_X, SPR_FLIP_Y, SPR_PAL,
     },
-    crate::{FunctionMode, PX_WIDTH},
+    crate::{FunctionMode, Gb, PX_WIDTH},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -17,23 +17,18 @@ fn shade_index(reg: u8, color: u8) -> u8 {
     (reg >> (color * 2)) & 0x3
 }
 
-impl Ppu {
-    pub(crate) fn draw_scanline(&mut self, function_mode: FunctionMode) {
+impl Gb {
+    pub(crate) fn draw_scanline(&mut self) {
         let mut bg_priority = [Priority::Normal; PX_WIDTH as usize];
         let base_idx = PX_WIDTH as usize * self.ly as usize;
 
-        self.draw_bg(function_mode, &mut bg_priority, base_idx);
-        self.draw_win(function_mode, &mut bg_priority, base_idx);
-        self.draw_obj(function_mode, &mut bg_priority, base_idx);
+        self.draw_bg(&mut bg_priority, base_idx);
+        self.draw_win(&mut bg_priority, base_idx);
+        self.draw_obj(&mut bg_priority, base_idx);
     }
 
-    fn draw_bg(
-        &mut self,
-        function_mode: FunctionMode,
-        bg_priority: &mut [Priority; PX_WIDTH as usize],
-        base_idx: usize,
-    ) {
-        if self.bg_enabled(function_mode) {
+    fn draw_bg(&mut self, bg_priority: &mut [Priority; PX_WIDTH as usize], base_idx: usize) {
+        if self.bg_enabled(self.function_mode) {
             let y = self.ly.wrapping_add(self.scy);
             let row = (y / 8) as u16 * 32;
             let line = ((y % 8) * 2) as u16;
@@ -44,7 +39,7 @@ impl Ppu {
 
                 let tile_map = self.bg_tile_map() + row + col;
 
-                let attr = match function_mode {
+                let attr = match self.function_mode {
                     FunctionMode::Dmg | FunctionMode::Compat => 0,
                     FunctionMode::Cgb => self.bg_attr(tile_map),
                 };
@@ -71,7 +66,7 @@ impl Ppu {
                     ((hi & color_bit != 0) as u8) << 1 | (lo & color_bit != 0) as u8
                 };
 
-                let rgb = match function_mode {
+                let rgb = match self.function_mode {
                     FunctionMode::Dmg => Self::get_mono_color(shade_index(self.bgp, color)),
                     FunctionMode::Compat => self
                         .cgb_bg_palette
@@ -92,13 +87,8 @@ impl Ppu {
         }
     }
 
-    fn draw_win(
-        &mut self,
-        function_mode: FunctionMode,
-        bg_priority: &mut [Priority; PX_WIDTH as usize],
-        base_idx: usize,
-    ) {
-        if self.win_enabled(function_mode) && self.wy <= self.ly {
+    fn draw_win(&mut self, bg_priority: &mut [Priority; PX_WIDTH as usize], base_idx: usize) {
+        if self.win_enabled(self.function_mode) && self.wy <= self.ly {
             let wx = self.wx.saturating_sub(7);
             let y = ((self.ly - self.wy) as u16).wrapping_sub(self.window_lines_skipped) as u8;
             let row = (y / 8) as u16 * 32;
@@ -113,7 +103,7 @@ impl Ppu {
 
                 let tile_map = self.win_tile_map() + row + col;
 
-                let attr = match function_mode {
+                let attr = match self.function_mode {
                     FunctionMode::Dmg | FunctionMode::Compat => 0,
                     FunctionMode::Cgb => self.bg_attr(tile_map),
                 };
@@ -139,7 +129,7 @@ impl Ppu {
                     ((hi & color_bit != 0) as u8) << 1 | (lo & color_bit != 0) as u8
                 };
 
-                let rgb = match function_mode {
+                let rgb = match self.function_mode {
                     FunctionMode::Dmg => Self::get_mono_color(shade_index(self.bgp, color)),
                     FunctionMode::Compat => self
                         .cgb_bg_palette
@@ -224,17 +214,12 @@ impl Ppu {
         (obj, len)
     }
 
-    fn draw_obj(
-        &mut self,
-        function_mode: FunctionMode,
-        bg_priority: &mut [Priority; PX_WIDTH as usize],
-        base_idx: usize,
-    ) {
+    fn draw_obj(&mut self, bg_priority: &mut [Priority; PX_WIDTH as usize], base_idx: usize) {
         if self.lcdc & OBJ_ENABLED != 0 {
             let large = self.lcdc & LARGE_SPRITES != 0;
             let height = if large { 16 } else { 8 };
 
-            let (objs, len) = self.objs_in_ly(height, function_mode);
+            let (objs, len) = self.objs_in_ly(height, self.function_mode);
 
             for obj in objs.iter().take(len) {
                 let tile_addr = {
@@ -259,7 +244,7 @@ impl Ppu {
                     let x = obj.x.wrapping_add(7 - xi);
 
                     if x >= PX_WIDTH
-                        || (!self.cgb_master_priority(function_mode)
+                        || (!self.cgb_master_priority(self.function_mode)
                             && (bg_priority[x as usize] == Priority::Bg
                                 || obj.attr & SPR_BG_FIRST != 0
                                     && bg_priority[x as usize] == Priority::Normal))
@@ -283,7 +268,7 @@ impl Ppu {
                         continue;
                     }
 
-                    let rgb = match function_mode {
+                    let rgb = match self.function_mode {
                         FunctionMode::Dmg => {
                             let palette = if obj.attr & SPR_PAL == 0 {
                                 self.obp0
