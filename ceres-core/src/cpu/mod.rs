@@ -11,7 +11,7 @@ mod operands;
 mod registers;
 
 impl Gb {
-    pub fn run(&mut self) {
+    pub(crate) fn run(&mut self) {
         if self.ei_delay {
             self.ime = true;
             self.ei_delay = false;
@@ -30,7 +30,7 @@ impl Gb {
             self.exec(opcode);
         }
 
-        if !self.ints.has_pending() {
+        if !self.any_interrrupt() {
             return;
         }
 
@@ -47,7 +47,17 @@ impl Gb {
             let pc = self.reg.pc;
             self.internal_push(pc);
 
-            let interrupt = self.ints.requested();
+            let interrupt = {
+                let pending = self.interrupt_flag & self.interrupt_enable & 0x1f;
+
+                if pending == 0 {
+                    0
+                } else {
+                    // get rightmost interrupt
+                    1 << pending.trailing_zeros()
+                }
+            };
+
             self.reg.pc = match interrupt {
                 VBLANK_INT => 0x40,
                 LCD_STAT_INT => 0x48,
@@ -58,7 +68,8 @@ impl Gb {
             };
 
             self.tick_t_cycle();
-            self.ints.ack(interrupt);
+            // acknoledge
+            self.interrupt_flag &= !interrupt;
         }
     }
 

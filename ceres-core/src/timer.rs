@@ -1,24 +1,8 @@
-use crate::interrupts::{Interrupts, TIMER_INT};
+use crate::{interrupts::TIMER_INT, Gb};
 
 const TAC_ENABLE: u8 = 4;
 
-#[derive(Default)]
-pub struct Timer {
-    on: bool,
-    internal_counter: u16,
-
-    // registers
-    counter: u8,
-    modulo: u8,
-    tac: u8,
-    overflow: bool,
-}
-
-impl Timer {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
+impl Gb {
     fn counter_mask(&self) -> u16 {
         match self.tac & 3 {
             3 => 1 << 5,
@@ -33,62 +17,62 @@ impl Timer {
         (self.internal_counter & self.counter_mask()) != 0
     }
 
-    fn inc(&mut self) {
+    fn inc_timer(&mut self) {
         let (counter, overflow) = self.counter.overflowing_add(1);
         self.counter = counter;
         self.overflow = overflow;
     }
 
-    pub fn tick_t_cycle(&mut self, ints: &mut Interrupts) {
+    pub(crate) fn tick_timer(&mut self) {
         if self.overflow {
             self.internal_counter = self.internal_counter.wrapping_add(1);
             self.counter = self.modulo;
-            ints.req(TIMER_INT);
+            self.req_interrupt(TIMER_INT);
             self.overflow = false;
-        } else if self.on && self.counter_bit() {
+        } else if self.clock_on && self.counter_bit() {
             self.internal_counter = self.internal_counter.wrapping_add(1);
             let new_bit = self.counter_bit();
             if !new_bit {
-                self.inc();
+                self.inc_timer();
             }
         } else {
             self.internal_counter = self.internal_counter.wrapping_add(1);
         }
     }
 
-    pub fn read_div(&mut self, ints: &mut Interrupts) -> u8 {
-        self.tick_t_cycle(ints);
+    pub(crate) fn read_div(&mut self) -> u8 {
+        self.tick_timer();
         ((self.internal_counter >> 6) & 0xff) as u8
     }
 
-    pub fn read_tima(&mut self, ints: &mut Interrupts) -> u8 {
-        self.tick_t_cycle(ints);
+    pub(crate) fn read_tima(&mut self) -> u8 {
+        self.tick_timer();
         self.counter
     }
 
-    pub fn read_tma(&mut self, ints: &mut Interrupts) -> u8 {
-        self.tick_t_cycle(ints);
+    pub(crate) fn read_tma(&mut self) -> u8 {
+        self.tick_timer();
         self.modulo
     }
 
-    pub fn read_tac(&mut self, ints: &mut Interrupts) -> u8 {
-        self.tick_t_cycle(ints);
+    pub(crate) fn read_tac(&mut self) -> u8 {
+        self.tick_timer();
         0xf8 | self.tac
     }
 
-    pub fn write_div(&mut self, ints: &mut Interrupts) {
-        self.tick_t_cycle(ints);
+    pub(crate) fn write_div(&mut self) {
+        self.tick_timer();
 
         if self.counter_bit() {
-            self.inc();
+            self.inc_timer();
         }
 
         self.internal_counter = 0;
     }
 
-    pub fn write_tima(&mut self, ints: &mut Interrupts, val: u8) {
+    pub(crate) fn write_tima(&mut self, val: u8) {
         let overflow = self.overflow;
-        self.tick_t_cycle(ints);
+        self.tick_timer();
 
         if !overflow {
             self.overflow = false;
@@ -96,10 +80,10 @@ impl Timer {
         }
     }
 
-    pub fn write_tma(&mut self, ints: &mut Interrupts, val: u8) {
+    pub(crate) fn write_tma(&mut self, val: u8) {
         let overflow = self.overflow;
 
-        self.tick_t_cycle(ints);
+        self.tick_timer();
         self.modulo = val;
 
         if overflow {
@@ -107,16 +91,16 @@ impl Timer {
         }
     }
 
-    pub fn write_tac(&mut self, ints: &mut Interrupts, val: u8) {
-        self.tick_t_cycle(ints);
+    pub(crate) fn write_tac(&mut self, val: u8) {
+        self.tick_timer();
 
-        let old_bit = self.on && self.counter_bit();
+        let old_bit = self.clock_on && self.counter_bit();
         self.tac = val & 7;
-        self.on = val & TAC_ENABLE != 0;
-        let new_bit = self.on && self.counter_bit();
+        self.clock_on = val & TAC_ENABLE != 0;
+        let new_bit = self.clock_on && self.counter_bit();
 
         if old_bit && !new_bit {
-            self.inc();
+            self.inc_timer();
         }
     }
 }

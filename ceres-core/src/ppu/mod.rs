@@ -1,6 +1,9 @@
-use crate::{
-    interrupts::{LCD_STAT_INT, VBLANK_INT},
-    FunctionMode, Gb,
+use {
+    crate::{
+        interrupts::{LCD_STAT_INT, VBLANK_INT},
+        FunctionMode, Gb,
+    },
+    core::hint::unreachable_unchecked,
 };
 
 mod scanline_renderer;
@@ -24,7 +27,7 @@ const BG_TILE_MAP_AREA: u8 = 1 << 3;
 const BG_WINDOW_TILE_DATA_AREA: u8 = 1 << 4;
 const WINDOW_ENABLED: u8 = 1 << 5;
 const WINDOW_TILE_MAP_AREA: u8 = 1 << 6;
-const LCD_ENABLE: u8 = 1 << 7;
+pub const LCD_ENABLE: u8 = 1 << 7;
 
 // STAT bits
 const MODE_BITS: u8 = 3;
@@ -78,7 +81,7 @@ pub struct RgbaBuf {
 
 impl RgbaBuf {
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             data: [0xff; RGBA_BUF_SIZE],
         }
@@ -94,29 +97,20 @@ impl RgbaBuf {
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Mode {
-    OamScan,
-    Drawing,
-    HBlank,
-    VBlank,
+    HBlank  = 0,
+    VBlank  = 1,
+    OamScan = 2,
+    Drawing = 3,
 }
 
 impl Mode {
-    pub fn cycles(self, scroll_x: u8) -> i16 {
-        let scroll_adjust = (scroll_x & 7) as i16;
+    pub(crate) fn cycles(self, scroll_x: u8) -> i16 {
+        let scroll_adjust = (scroll_x & 7) as i16 * 4;
         match self {
             Mode::OamScan => OAM_SCAN_CYCLES,
-            Mode::Drawing => DRAWING_CYCLES + scroll_adjust * 4,
-            Mode::HBlank => HBLANK_CYCLES - scroll_adjust * 4,
+            Mode::Drawing => DRAWING_CYCLES + scroll_adjust,
+            Mode::HBlank => HBLANK_CYCLES - scroll_adjust,
             Mode::VBlank => VBLANK_CYCLES,
-        }
-    }
-
-    pub fn to_u8_low(self) -> u8 {
-        match self {
-            Mode::HBlank => 0,
-            Mode::VBlank => 1,
-            Mode::OamScan => 2,
-            Mode::Drawing => 3,
         }
     }
 }
@@ -129,7 +123,7 @@ pub struct ColorPalette {
 }
 
 impl ColorPalette {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             col: [0; PAL_RAM_SIZE_COLORS],
             idx: 0,
@@ -137,16 +131,16 @@ impl ColorPalette {
         }
     }
 
-    fn set_spec(&mut self, val: u8) {
+    pub(crate) fn set_spec(&mut self, val: u8) {
         self.idx = val & 0x3f;
         self.inc = val & 0x80 != 0;
     }
 
-    fn spec(&self) -> u8 {
+    pub(crate) fn spec(&self) -> u8 {
         self.idx | 0x40 | ((self.inc as u8) << 7)
     }
 
-    fn data(&self) -> u8 {
+    pub(crate) fn data(&self) -> u8 {
         let i = (self.idx as usize / 2) * 3;
 
         if self.idx & 1 == 0 {
@@ -158,7 +152,7 @@ impl ColorPalette {
         }
     }
 
-    fn set_data(&mut self, val: u8) {
+    pub(crate) fn set_data(&mut self, val: u8) {
         let i = (self.idx as usize / 2) * 3;
 
         if self.idx & 1 == 0 {
@@ -201,104 +195,87 @@ struct Obj {
 }
 
 impl Gb {
+    pub(crate) fn tick_ppu(&mut self) {
+        fn check_lyc(gb: &mut Gb) {
+            gb.stat &= !LY_EQUALS_LYC;
+
+            if gb.ly == gb.lyc {
+                gb.stat |= LY_EQUALS_LYC;
+                if gb.stat & LY_EQUALS_LYC_INTERRUPT != 0 {
+                    gb.req_interrupt(LCD_STAT_INT);
+                }
+            }
+        }
+
+        if self.lcdc & LCD_ENABLE == 0 {
+            return;
+        }
+
+        self.cycles -= self.t_elapsed() as i16;
+
+        if self.cycles > 0 {
+            return;
+        }
+
+        match self.ppu_mode() {
+            Mode::OamScan => self.switch_mode(Mode::Drawing),
+            Mode::Drawing => {
+                self.draw_scanline();
+                self.switch_mode(Mode::HBlank);
+            }
+            Mode::HBlank => {
+                self.ly += 1;
+                if self.ly < 144 {
+                    self.switch_mode(Mode::OamScan);
+                } else {
+                    self.switch_mode(Mode::VBlank);
+                }
+                check_lyc(self);
+            }
+            Mode::VBlank => {
+                self.ly += 1;
+                if self.ly > 153 {
+                    self.ly = 0;
+                    self.switch_mode(Mode::OamScan);
+                    self.exit = true;
+                    unsafe {
+                        (*self.video_callbacks).draw(&self.rgba_buf.data);
+                    }
+                } else {
+                    let scx = self.scx;
+                    self.cycles += self.ppu_mode().cycles(scx);
+                }
+                check_lyc(self);
+            }
+        }
+    }
+
     #[must_use]
-    pub fn ppu_mode(&self) -> Mode {
-        match self.stat & 0x3 {
+    pub(crate) fn ppu_mode(&self) -> Mode {
+        match self.stat & 3 {
             0 => Mode::HBlank,
             1 => Mode::VBlank,
             2 => Mode::OamScan,
             3 => Mode::Drawing,
-            _ => unreachable!(),
+            _ => unsafe { unreachable_unchecked() },
         }
     }
 
-    pub fn read_lcdc(&mut self) -> u8 {
-        self.lcdc
-    }
-
-    pub fn read_stat(&mut self) -> u8 {
-        if self.lcdc & LCD_ENABLE == 0 {
-            0x80
-        } else {
-            self.stat | 0x80
-        }
-    }
-
-    pub fn read_scy(&mut self) -> u8 {
-        self.scy
-    }
-
-    pub fn read_scx(&mut self) -> u8 {
-        self.scx
-    }
-
-    pub fn read_ly(&mut self) -> u8 {
-        self.ly
-    }
-
-    pub fn read_lyc(&mut self) -> u8 {
-        self.lyc
-    }
-
-    pub fn read_wy(&mut self) -> u8 {
-        self.wy
-    }
-
-    pub fn read_wx(&mut self) -> u8 {
-        self.wx
-    }
-
-    pub fn read_bgp(&mut self) -> u8 {
-        self.bgp
-    }
-
-    pub fn read_obp0(&mut self) -> u8 {
-        self.obp0
-    }
-
-    pub fn read_obp1(&mut self) -> u8 {
-        self.obp1
-    }
-
-    pub fn read_bcps(&mut self) -> u8 {
-        self.cgb_bg_palette.spec()
-    }
-
-    pub fn read_bcpd(&mut self) -> u8 {
-        self.cgb_bg_palette.data()
-    }
-
-    pub fn read_ocps(&mut self) -> u8 {
-        self.cgb_obj_palette.spec()
-    }
-
-    pub fn read_ocpd(&mut self) -> u8 {
-        self.cgb_obj_palette.data()
-    }
-
-    pub fn read_opri(&mut self) -> u8 {
-        self.opri
-    }
-
-    pub fn read_vram(&mut self, addr: u16) -> u8 {
+    pub(crate) fn read_vram(&mut self, addr: u16) -> u8 {
         match self.ppu_mode() {
             Mode::Drawing => 0xff,
             _ => self.vram[((addr & 0x1fff) + self.vbk as u16 * VRAM_SIZE as u16) as usize],
         }
     }
 
-    pub fn read_vbk(&mut self) -> u8 {
-        self.vbk | 0xfe
-    }
-
-    pub fn read_oam(&mut self, addr: u16, dma_active: bool) -> u8 {
+    pub(crate) fn read_oam(&mut self, addr: u16) -> u8 {
         match self.ppu_mode() {
-            Mode::HBlank | Mode::VBlank if !dma_active => self.oam[(addr & 0xff) as usize],
+            Mode::HBlank | Mode::VBlank if !self.dma_on => self.oam[(addr & 0xff) as usize],
             _ => 0xff,
         }
     }
 
-    pub fn write_lcdc(&mut self, val: u8) {
+    pub(crate) fn write_lcdc(&mut self, val: u8) {
         if val & LCD_ENABLE == 0 && self.lcdc & LCD_ENABLE != 0 {
             debug_assert!(self.ppu_mode() == Mode::VBlank);
             self.ly = 0;
@@ -313,100 +290,32 @@ impl Gb {
         self.lcdc = val;
     }
 
-    pub fn write_stat(&mut self, val: u8) {
+    pub(crate) fn write_stat(&mut self, val: u8) {
         let ly_equals_lyc = self.stat & LY_EQUALS_LYC;
-        let mode: u8 = self.ppu_mode().to_u8_low();
+        let mode: u8 = self.ppu_mode() as u8;
 
         self.stat = val;
         self.stat &= !(LY_EQUALS_LYC | MODE_BITS);
         self.stat |= ly_equals_lyc | mode;
     }
 
-    pub fn write_scy(&mut self, val: u8) {
-        self.scy = val;
-    }
-
-    pub fn write_scx(&mut self, val: u8) {
-        self.scx = val;
-    }
-
-    pub fn write_lyc(&mut self, val: u8) {
-        self.lyc = val;
-    }
-
-    pub fn write_wy(&mut self, val: u8) {
-        self.wy = val;
-    }
-
-    pub fn write_wx(&mut self, val: u8) {
-        self.wx = val;
-    }
-
-    pub fn write_bgp(&mut self, val: u8) {
-        self.bgp = val;
-    }
-
-    pub fn write_obp0(&mut self, val: u8) {
-        self.obp0 = val;
-    }
-
-    pub fn write_obp1(&mut self, val: u8) {
-        self.obp1 = val;
-    }
-
-    pub fn write_bcps(&mut self, val: u8) {
-        self.cgb_bg_palette.set_spec(val);
-    }
-
-    pub fn write_bcpd(&mut self, val: u8) {
-        self.cgb_bg_palette.set_data(val);
-    }
-
-    pub fn write_ocps(&mut self, val: u8) {
-        self.cgb_obj_palette.set_spec(val);
-    }
-
-    pub fn write_ocpd(&mut self, val: u8) {
-        self.cgb_obj_palette.set_data(val);
-    }
-
-    pub fn write_opri(&mut self, val: u8) {
-        self.opri = val;
-    }
-
-    pub fn write_vram(&mut self, addr: u16, val: u8) {
+    pub(crate) fn write_vram(&mut self, addr: u16, val: u8) {
         match self.ppu_mode() {
             Mode::Drawing => (),
             _ => self.vram[((addr & 0x1fff) + self.vbk as u16 * VRAM_SIZE as u16) as usize] = val,
         };
     }
 
-    pub fn write_vbk(&mut self, val: u8) {
-        self.vbk = val & 1;
-    }
-
-    pub fn write_oam(&mut self, addr: u16, val: u8, dma_active: bool) {
+    pub(crate) fn write_oam(&mut self, addr: u16, val: u8, dma_active: bool) {
         match self.ppu_mode() {
             Mode::HBlank | Mode::VBlank if !dma_active => self.oam[(addr & 0xff) as usize] = val,
             _ => (),
         };
     }
 
-    pub fn hdma_write(&mut self, addr: u16, val: u8) {
-        match self.ppu_mode() {
-            Mode::Drawing => (),
-            _ => self.vram[((addr & 0x1fff) + self.vbk as u16 * VRAM_SIZE as u16) as usize] = val,
-        }
-    }
-
-    pub fn dma_write(&mut self, addr: u8, val: u8) {
-        self.oam[addr as usize] = val;
-    }
-
     fn set_mode(&mut self, mode: Mode) {
         let bits: u8 = self.stat & !MODE_BITS;
-        let mode: u8 = mode.to_u8_low();
-        self.stat = bits | mode;
+        self.stat = bits | (mode as u8);
     }
 
     fn get_mono_color(index: u8) -> (u8, u8, u8) {
@@ -421,36 +330,36 @@ impl Gb {
         match mode {
             Mode::OamScan => {
                 if self.stat & OAM_INTERRUPT != 0 {
-                    self.ints.req(LCD_STAT_INT);
+                    self.req_interrupt(LCD_STAT_INT);
                 }
 
                 self.win_in_ly = false;
             }
             Mode::VBlank => {
-                self.ints.req(VBLANK_INT);
+                self.req_interrupt(VBLANK_INT);
 
                 if self.stat & VBLANK_INTERRUPT != 0 {
-                    self.ints.req(LCD_STAT_INT);
+                    self.req_interrupt(LCD_STAT_INT);
                 }
 
                 if self.stat & OAM_INTERRUPT != 0 {
-                    self.ints.req(LCD_STAT_INT);
+                    self.req_interrupt(LCD_STAT_INT);
                 }
 
-                self.window_lines_skipped = 0;
+                self.win_lines_skipped = 0;
                 self.win_in_frame = false;
             }
             Mode::Drawing => (),
             Mode::HBlank => {
                 if self.stat & HBLANK_INTERRUPT != 0 {
-                    self.ints.req(LCD_STAT_INT);
+                    self.req_interrupt(LCD_STAT_INT);
                 }
             }
         }
     }
 
-    fn win_enabled(&self, function_mode: FunctionMode) -> bool {
-        match function_mode {
+    fn win_enabled(&self) -> bool {
+        match self.function_mode {
             FunctionMode::Dmg | FunctionMode::Compat => {
                 (self.lcdc & BACKGROUND_ENABLED != 0) && (self.lcdc & WINDOW_ENABLED != 0)
             }
@@ -458,15 +367,15 @@ impl Gb {
         }
     }
 
-    fn bg_enabled(&self, function_mode: FunctionMode) -> bool {
-        match function_mode {
+    fn bg_enabled(&self) -> bool {
+        match self.function_mode {
             FunctionMode::Dmg | FunctionMode::Compat => self.lcdc & BACKGROUND_ENABLED != 0,
             FunctionMode::Cgb => true,
         }
     }
 
-    fn cgb_master_priority(&self, function_mode: FunctionMode) -> bool {
-        match function_mode {
+    fn cgb_master_priority(&self) -> bool {
+        match self.function_mode {
             FunctionMode::Dmg | FunctionMode::Compat => false,
             FunctionMode::Cgb => self.lcdc & BACKGROUND_ENABLED == 0,
         }
@@ -506,63 +415,6 @@ impl Gb {
         };
 
         base + offset
-    }
-
-    pub(crate) fn tick_ppu(&mut self) {
-        fn check_lyc(gb: &mut Gb) {
-            gb.stat &= !LY_EQUALS_LYC;
-
-            if gb.ly == gb.lyc {
-                gb.stat |= LY_EQUALS_LYC;
-                if gb.stat & LY_EQUALS_LYC_INTERRUPT != 0 {
-                    gb.ints.req(LCD_STAT_INT);
-                }
-            }
-        }
-
-        let mus_elapsed = self.mus_since_last_tick();
-
-        if self.lcdc & LCD_ENABLE == 0 {
-            return;
-        }
-
-        self.cycles -= i16::from(mus_elapsed);
-
-        if self.cycles > 0 {
-            return;
-        }
-
-        match self.ppu_mode() {
-            Mode::OamScan => self.switch_mode(Mode::Drawing),
-            Mode::Drawing => {
-                self.draw_scanline();
-                self.switch_mode(Mode::HBlank);
-            }
-            Mode::HBlank => {
-                self.ly += 1;
-                if self.ly < 144 {
-                    self.switch_mode(Mode::OamScan);
-                } else {
-                    self.switch_mode(Mode::VBlank);
-                }
-                check_lyc(self);
-            }
-            Mode::VBlank => {
-                self.ly += 1;
-                if self.ly > 153 {
-                    self.ly = 0;
-                    self.switch_mode(Mode::OamScan);
-                    self.exit = true;
-                    unsafe {
-                        (*self.video_callbacks).draw(&self.rgba_buf.data);
-                    }
-                } else {
-                    let scx = self.scx;
-                    self.cycles += self.ppu_mode().cycles(scx);
-                }
-                check_lyc(self);
-            }
-        }
     }
 
     fn vram_at_bank(&self, addr: u16, bank: u8) -> u8 {

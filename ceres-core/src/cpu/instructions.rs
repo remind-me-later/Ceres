@@ -10,7 +10,7 @@ use {
 };
 
 impl Gb {
-    pub fn ld<G, S>(&mut self, lhs: S, rhs: G)
+    pub(super) fn ld<G, S>(&mut self, lhs: S, rhs: G)
     where
         G: Get<u8>,
         S: Set<u8>,
@@ -19,13 +19,13 @@ impl Gb {
         lhs.set(self, val);
     }
 
-    pub fn ld16_sp_hl(&mut self) {
+    pub(super) fn ld16_sp_hl(&mut self) {
         let val = self.reg.read16(HL);
         self.reg.sp = val;
         self.tick_t_cycle();
     }
 
-    pub fn add<G>(&mut self, rhs: G)
+    pub(super) fn add<G>(&mut self, rhs: G)
     where
         G: Get<u8>,
     {
@@ -39,7 +39,7 @@ impl Gb {
         self.reg.a = output;
     }
 
-    pub fn adc<G>(&mut self, rhs: G)
+    pub(super) fn adc<G>(&mut self, rhs: G)
     where
         G: Get<u8>,
     {
@@ -55,7 +55,7 @@ impl Gb {
         self.reg.a = output;
     }
 
-    pub fn sub<G>(&mut self, rhs: G)
+    pub(super) fn sub<G>(&mut self, rhs: G)
     where
         G: Get<u8>,
     {
@@ -69,7 +69,7 @@ impl Gb {
         self.reg.a = output;
     }
 
-    pub fn sbc<G>(&mut self, rhs: G)
+    pub(super) fn sbc<G>(&mut self, rhs: G)
     where
         G: Get<u8>,
     {
@@ -85,7 +85,7 @@ impl Gb {
         self.reg.a = output;
     }
 
-    pub fn cp<G>(&mut self, rhs: G)
+    pub(super) fn cp<G>(&mut self, rhs: G)
     where
         G: Get<u8>,
     {
@@ -99,7 +99,7 @@ impl Gb {
         self.reg.set_cf(a < val);
     }
 
-    pub fn and<G>(&mut self, rhs: G)
+    pub(super) fn and<G>(&mut self, rhs: G)
     where
         G: Get<u8>,
     {
@@ -112,7 +112,7 @@ impl Gb {
         self.reg.set_cf(false);
     }
 
-    pub fn or<G>(&mut self, rhs: G)
+    pub(super) fn or<G>(&mut self, rhs: G)
     where
         G: Get<u8>,
     {
@@ -125,7 +125,7 @@ impl Gb {
         self.reg.set_cf(false);
     }
 
-    pub fn xor<G>(&mut self, rhs: G)
+    pub(super) fn xor<G>(&mut self, rhs: G)
     where
         G: Get<u8>,
     {
@@ -138,7 +138,7 @@ impl Gb {
         self.reg.set_cf(false);
     }
 
-    pub fn inc<GS>(&mut self, rhs: GS)
+    pub(super) fn inc<GS>(&mut self, rhs: GS)
     where
         GS: Get<u8> + Set<u8>,
     {
@@ -150,7 +150,7 @@ impl Gb {
         rhs.set(self, val);
     }
 
-    pub fn inc16(&mut self, reg: Reg16) {
+    pub(super) fn inc16(&mut self, reg: Reg16) {
         let read = self.reg.read16(reg);
         let val = read.wrapping_add(1);
         self.reg.write16(reg, val);
@@ -158,7 +158,7 @@ impl Gb {
     }
 
     #[allow(clippy::verbose_bit_mask)]
-    pub fn dec<GS>(&mut self, rhs: GS)
+    pub(super) fn dec<GS>(&mut self, rhs: GS)
     where
         GS: Get<u8> + Set<u8>,
     {
@@ -170,14 +170,14 @@ impl Gb {
         rhs.set(self, val);
     }
 
-    pub fn dec16(&mut self, reg: Reg16) {
+    pub(super) fn dec16(&mut self, reg: Reg16) {
         let read = self.reg.read16(reg);
         let val = read.wrapping_sub(1);
         self.reg.write16(reg, val);
         self.tick_t_cycle();
     }
 
-    pub fn ld16_hl_sp_dd(&mut self) {
+    pub(super) fn ld16_hl_sp_dd(&mut self) {
         let offset = self.imm8() as i8 as u16;
         let sp = self.reg.sp;
         let val = sp.wrapping_add(offset);
@@ -190,41 +190,41 @@ impl Gb {
         self.tick_t_cycle();
     }
 
-    pub fn rlca(&mut self) {
+    pub(super) fn rlca(&mut self) {
         let val = self.internal_rlc(self.reg.a);
         self.reg.a = val;
         self.reg.set_zf(false);
     }
 
-    pub fn rla(&mut self) {
+    pub(super) fn rla(&mut self) {
         let val = self.internal_rl(self.reg.a);
         self.reg.a = val;
         self.reg.set_zf(false);
     }
 
-    pub fn rrca(&mut self) {
+    pub(super) fn rrca(&mut self) {
         let val = self.internal_rrc(self.reg.a);
         self.reg.a = val;
         self.reg.set_zf(false);
     }
 
-    pub fn rra(&mut self) {
+    pub(super) fn rra(&mut self) {
         let val = self.internal_rr(self.reg.a);
         self.reg.a = val;
         self.reg.set_zf(false);
     }
 
-    pub fn do_jump_to_immediate(&mut self) {
+    pub(super) fn do_jump_to_immediate(&mut self) {
         let addr = self.imm16();
         self.reg.pc = addr;
         self.tick_t_cycle();
     }
 
-    pub fn jp_nn(&mut self) {
+    pub(super) fn jp_nn(&mut self) {
         self.do_jump_to_immediate();
     }
 
-    pub fn jp_f(&mut self, condition: JumpCondition) {
+    pub(super) fn jp_f(&mut self, condition: JumpCondition) {
         if condition.check(self) {
             self.do_jump_to_immediate();
         } else {
@@ -235,7 +235,7 @@ impl Gb {
         }
     }
 
-    pub fn jp_hl(&mut self) {
+    pub(super) fn jp_hl(&mut self) {
         let addr = self.reg.read16(HL);
         self.reg.pc = addr;
     }
@@ -247,11 +247,11 @@ impl Gb {
         self.tick_t_cycle();
     }
 
-    pub fn jr_d(&mut self) {
+    pub(super) fn jr_d(&mut self) {
         self.do_jump_relative();
     }
 
-    pub fn jr_f(&mut self, condition: JumpCondition) {
+    pub(super) fn jr_f(&mut self, condition: JumpCondition) {
         if condition.check(self) {
             self.do_jump_relative();
         } else {
@@ -260,18 +260,18 @@ impl Gb {
         }
     }
 
-    pub fn do_call(&mut self) {
+    pub(super) fn do_call(&mut self) {
         let addr = self.imm16();
         let pc = self.reg.pc;
         self.internal_push(pc);
         self.reg.pc = addr;
     }
 
-    pub fn call_nn(&mut self) {
+    pub(super) fn call_nn(&mut self) {
         self.do_call();
     }
 
-    pub fn call_f_nn(&mut self, condition: JumpCondition) {
+    pub(super) fn call_f_nn(&mut self, condition: JumpCondition) {
         if condition.check(self) {
             self.do_call();
         } else {
@@ -288,38 +288,38 @@ impl Gb {
         self.tick_t_cycle();
     }
 
-    pub fn ret(&mut self) {
+    pub(super) fn ret(&mut self) {
         self.do_return();
     }
 
-    pub fn ret_f(&mut self, condition: JumpCondition) {
+    pub(super) fn ret_f(&mut self, condition: JumpCondition) {
         self.tick_t_cycle();
         if condition.check(self) {
             self.do_return();
         }
     }
 
-    pub fn reti(&mut self) {
+    pub(super) fn reti(&mut self) {
         self.ret();
         self.ei();
     }
 
-    pub fn rst(&mut self, addr: u16) {
+    pub(super) fn rst(&mut self, addr: u16) {
         let pc = self.reg.pc;
         self.internal_push(pc);
         self.reg.pc = addr;
     }
 
-    pub fn halt(&mut self) {
+    pub(super) fn halt(&mut self) {
         self.halted = true;
 
-        if self.ints.has_pending() && !self.ime {
+        if self.any_interrrupt() && !self.ime {
             self.halted = false;
             self.halt_bug = true;
         }
     }
 
-    pub fn stop(&mut self) {
+    pub(super) fn stop(&mut self) {
         self.imm8();
 
         if self.key1 & KEY1_SWITCH == 0 {
@@ -332,30 +332,30 @@ impl Gb {
         }
     }
 
-    pub fn di(&mut self) {
+    pub(super) fn di(&mut self) {
         self.ime = false;
     }
 
-    pub fn ei(&mut self) {
+    pub(super) fn ei(&mut self) {
         self.ei_delay = true;
     }
 
-    pub fn ccf(&mut self) {
+    pub(super) fn ccf(&mut self) {
         self.reg.set_nf(false);
         self.reg.set_hf(false);
         self.reg.set_cf(!self.reg.cf());
     }
 
-    pub fn scf(&mut self) {
+    pub(super) fn scf(&mut self) {
         self.reg.set_nf(false);
         self.reg.set_hf(false);
         self.reg.set_cf(true);
     }
 
     #[allow(clippy::unused_self)]
-    pub fn nop(&mut self) {}
+    pub(super) fn nop(&mut self) {}
 
-    pub fn daa(&mut self) {
+    pub(super) fn daa(&mut self) {
         // DAA table in page 110 of the official "Game Boy Programming Manual"
         let mut carry = false;
         if !self.reg.nf() {
@@ -381,36 +381,36 @@ impl Gb {
         self.reg.set_cf(carry);
     }
 
-    pub fn cpl(&mut self) {
+    pub(super) fn cpl(&mut self) {
         let a = self.reg.a;
         self.reg.a = !a;
         self.reg.set_nf(true);
         self.reg.set_hf(true);
     }
 
-    pub fn push(&mut self, reg: Reg16) {
+    pub(super) fn push(&mut self, reg: Reg16) {
         let val = self.reg.read16(reg);
         self.internal_push(val);
     }
 
-    pub fn pop(&mut self, reg: Reg16) {
+    pub(super) fn pop(&mut self, reg: Reg16) {
         let val = self.internal_pop();
         self.reg.write16(reg, val);
     }
 
-    pub fn ld16_nn(&mut self, reg: Reg16) {
+    pub(super) fn ld16_nn(&mut self, reg: Reg16) {
         let val = self.imm16();
         self.reg.write16(reg, val);
     }
 
-    pub fn ld16_nn_sp(&mut self) {
+    pub(super) fn ld16_nn_sp(&mut self) {
         let val = self.reg.sp;
         let addr = self.imm16();
         self.write_mem(addr, (val & 0xff) as u8);
         self.write_mem(addr.wrapping_add(1), (val >> 8) as u8);
     }
 
-    pub fn add16_sp_dd(&mut self) {
+    pub(super) fn add16_sp_dd(&mut self) {
         let offset = self.imm8() as i8 as u16;
         let sp = self.reg.sp;
         let val = sp.wrapping_add(offset);
@@ -424,7 +424,7 @@ impl Gb {
         self.tick_t_cycle();
     }
 
-    pub fn add_hl(&mut self, reg: Reg16) {
+    pub(super) fn add_hl(&mut self, reg: Reg16) {
         let hl = self.reg.read16(HL);
         let val = self.reg.read16(reg);
         let res = hl.wrapping_add(val);
@@ -442,7 +442,7 @@ impl Gb {
         self.tick_t_cycle();
     }
 
-    pub fn rlc<GS>(&mut self, rhs: GS)
+    pub(super) fn rlc<GS>(&mut self, rhs: GS)
     where
         GS: Get<u8> + Set<u8>,
     {
@@ -451,7 +451,7 @@ impl Gb {
         rhs.set(self, val);
     }
 
-    pub fn rl<GS>(&mut self, rhs: GS)
+    pub(super) fn rl<GS>(&mut self, rhs: GS)
     where
         GS: Get<u8> + Set<u8>,
     {
@@ -460,7 +460,7 @@ impl Gb {
         rhs.set(self, val);
     }
 
-    pub fn rrc<GS>(&mut self, rhs: GS)
+    pub(super) fn rrc<GS>(&mut self, rhs: GS)
     where
         GS: Get<u8> + Set<u8>,
     {
@@ -469,7 +469,7 @@ impl Gb {
         rhs.set(self, val);
     }
 
-    pub fn rr<GS>(&mut self, rhs: GS)
+    pub(super) fn rr<GS>(&mut self, rhs: GS)
     where
         GS: Get<u8> + Set<u8>,
     {
@@ -478,7 +478,7 @@ impl Gb {
         rhs.set(self, val);
     }
 
-    pub fn sla<GS>(&mut self, rhs: GS)
+    pub(super) fn sla<GS>(&mut self, rhs: GS)
     where
         GS: Get<u8> + Set<u8>,
     {
@@ -492,7 +492,7 @@ impl Gb {
         rhs.set(self, val);
     }
 
-    pub fn sra<GS>(&mut self, rhs: GS)
+    pub(super) fn sra<GS>(&mut self, rhs: GS)
     where
         GS: Get<u8> + Set<u8>,
     {
@@ -508,7 +508,7 @@ impl Gb {
         rhs.set(self, val);
     }
 
-    pub fn srl<GS>(&mut self, rhs: GS)
+    pub(super) fn srl<GS>(&mut self, rhs: GS)
     where
         GS: Get<u8> + Set<u8>,
     {
@@ -522,7 +522,7 @@ impl Gb {
         rhs.set(self, val);
     }
 
-    pub fn swap<GS>(&mut self, rhs: GS)
+    pub(super) fn swap<GS>(&mut self, rhs: GS)
     where
         GS: Get<u8> + Set<u8>,
     {
@@ -535,7 +535,7 @@ impl Gb {
         rhs.set(self, val);
     }
 
-    pub fn bit<G>(&mut self, rhs: G, bit: usize)
+    pub(super) fn bit<G>(&mut self, rhs: G, bit: usize)
     where
         G: Get<u8>,
     {
@@ -546,7 +546,7 @@ impl Gb {
         self.reg.set_hf(true);
     }
 
-    pub fn set<GS>(&mut self, rhs: GS, bit: usize)
+    pub(super) fn set<GS>(&mut self, rhs: GS, bit: usize)
     where
         GS: Get<u8> + Set<u8>,
     {
@@ -555,7 +555,7 @@ impl Gb {
         rhs.set(self, val);
     }
 
-    pub fn res<GS>(&mut self, rhs: GS, bit: usize)
+    pub(super) fn res<GS>(&mut self, rhs: GS, bit: usize)
     where
         GS: Get<u8> + Set<u8>,
     {

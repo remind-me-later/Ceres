@@ -158,7 +158,7 @@ pub enum JumpCondition {
 }
 
 impl JumpCondition {
-    pub fn check(self, gb: &Gb) -> bool {
+    pub(super) fn check(self, gb: &Gb) -> bool {
         use JumpCondition::{Carry, NotCarry, NotZero, Zero};
         match self {
             Zero => gb.reg.zf(),

@@ -28,7 +28,7 @@ impl Gb {
     }
 
     fn draw_bg(&mut self, bg_priority: &mut [Priority; PX_WIDTH as usize], base_idx: usize) {
-        if self.bg_enabled(self.function_mode) {
+        if self.bg_enabled() {
             let y = self.ly.wrapping_add(self.scy);
             let row = (y / 8) as u16 * 32;
             let line = ((y % 8) * 2) as u16;
@@ -69,9 +69,9 @@ impl Gb {
                 let rgb = match self.function_mode {
                     FunctionMode::Dmg => Self::get_mono_color(shade_index(self.bgp, color)),
                     FunctionMode::Compat => self
-                        .cgb_bg_palette
+                        .bcp
                         .get_color(attr & BG_PAL, shade_index(self.bgp, color)),
-                    FunctionMode::Cgb => self.cgb_bg_palette.get_color(attr & BG_PAL, color),
+                    FunctionMode::Cgb => self.bcp.get_color(attr & BG_PAL, color),
                 };
 
                 self.rgba_buf.set_px(base_idx + i as usize, rgb);
@@ -88,9 +88,9 @@ impl Gb {
     }
 
     fn draw_win(&mut self, bg_priority: &mut [Priority; PX_WIDTH as usize], base_idx: usize) {
-        if self.win_enabled(self.function_mode) && self.wy <= self.ly {
+        if self.win_enabled() && self.wy <= self.ly {
             let wx = self.wx.saturating_sub(7);
-            let y = ((self.ly - self.wy) as u16).wrapping_sub(self.window_lines_skipped) as u8;
+            let y = ((self.ly - self.wy) as u16).wrapping_sub(self.win_lines_skipped) as u8;
             let row = (y / 8) as u16 * 32;
             let line = ((y % 8) * 2) as u16;
 
@@ -132,9 +132,9 @@ impl Gb {
                 let rgb = match self.function_mode {
                     FunctionMode::Dmg => Self::get_mono_color(shade_index(self.bgp, color)),
                     FunctionMode::Compat => self
-                        .cgb_bg_palette
+                        .bcp
                         .get_color(attr & BG_PAL, shade_index(self.bgp, color)),
-                    FunctionMode::Cgb => self.cgb_bg_palette.get_color(attr & BG_PAL, color),
+                    FunctionMode::Cgb => self.bcp.get_color(attr & BG_PAL, color),
                 };
 
                 bg_priority[i as usize] = if color == 0 {
@@ -150,7 +150,7 @@ impl Gb {
         }
 
         if self.win_in_frame && !self.win_in_ly {
-            self.window_lines_skipped += 1;
+            self.win_lines_skipped += 1;
         }
     }
 
@@ -244,7 +244,7 @@ impl Gb {
                     let x = obj.x.wrapping_add(7 - xi);
 
                     if x >= PX_WIDTH
-                        || (!self.cgb_master_priority(self.function_mode)
+                        || (!self.cgb_master_priority()
                             && (bg_priority[x as usize] == Priority::Bg
                                 || obj.attr & SPR_BG_FIRST != 0
                                     && bg_priority[x as usize] == Priority::Normal))
@@ -285,12 +285,11 @@ impl Gb {
                                 self.obp1
                             };
 
-                            self.cgb_obj_palette
-                                .get_color(0, shade_index(palette, color))
+                            self.ocp.get_color(0, shade_index(palette, color))
                         }
                         FunctionMode::Cgb => {
                             let cgb_palette = obj.attr & SPR_CGB_PAL;
-                            self.cgb_obj_palette.get_color(cgb_palette, color)
+                            self.ocp.get_color(cgb_palette, color)
                         }
                     };
 

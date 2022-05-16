@@ -1,166 +1,150 @@
-#[derive(Default)]
-pub struct Dma {
-    on: bool,
-    src: u8,
-    addr: u16,
-    restarting: bool,
-    t_cycles: i8,
-}
+use crate::{ppu::Mode, Gb};
 
-impl Dma {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn read(&self) -> u8 {
-        self.src
-    }
-
-    pub fn write(&mut self, val: u8) {
-        if self.on {
-            self.restarting = true;
-        }
-
-        self.t_cycles = -8; // two m-cycles delay
-        self.src = val;
-        self.addr = u16::from(val) << 8;
-        self.on = true;
-    }
-
-    pub fn emulate(&mut self) -> Option<u16> {
-        self.t_cycles = self.t_cycles.wrapping_add(4);
-
-        if self.on && self.t_cycles >= 4 {
-            self.t_cycles -= 4;
-            let addr = self.addr;
-            self.addr = self.addr.wrapping_add(1);
-            if self.addr & 0xff >= 0xa0 {
-                self.on = false;
-                self.restarting = false;
-            }
-            Some(addr)
-        } else {
-            None
-        }
-    }
-
-    pub fn is_active(&self) -> bool {
-        self.on && (self.t_cycles > 0 || self.restarting)
-    }
-}
-
-enum State {
+#[derive(PartialEq, Eq)]
+pub enum HdmaState {
     Sleep,
-    HBlankAwait,
-    HBlankCopy { bytes: u8 },
+    HBlank,
     HBlankDone,
     General,
 }
 
-impl Default for State {
-    fn default() -> Self {
-        Self::Sleep
-    }
-}
+impl Gb {
+    pub(crate) fn write_dma(&mut self, val: u8) {
+        if self.dma_on {
+            self.dma_restarting = true;
+        }
 
-#[derive(Default)]
-pub struct Hdma {
-    src: u16,
-    dst: u16,
-    len: u16,
-    state: State,
-    hdma5: u8, // stores only low 7 bits
-}
-
-impl Hdma {
-    pub fn new() -> Self {
-        Self::default()
+        self.dma_cycles = -8; // two m-cycles delay
+        self.dma = val;
+        self.dma_addr = u16::from(val) << 8;
+        self.dma_on = true;
     }
 
-    pub fn write_hdma1(&mut self, val: u8) {
-        self.src = u16::from(val) << 8 | self.src & 0xf0;
+    // FIXME: sprites are not displayed during OAM DMA
+    pub(crate) fn emulate_dma(&mut self) {
+        self.dma_cycles = self.dma_cycles.wrapping_add(4);
+
+        if !self.dma_on || self.dma_cycles < 4 {
+            return;
+        }
+
+        self.dma_cycles -= 4;
+        let src = self.dma_addr;
+
+        let val = match src >> 8 {
+            0x00..=0x7f => self.cart.read_rom(src),
+            0x80..=0x9f => self.read_vram(src),
+            0xa0..=0xbf => self.cart.read_ram(src),
+            0xc0..=0xcf | 0xe0..=0xef => self.read_ram(src),
+            0xd0..=0xdf | 0xf0..=0xff => self.read_bank_ram(src),
+            _ => panic!("Illegal source addr for OAM DMA transfer"),
+        };
+
+        // mode doesn't matter writes from DMA can always access OAM
+        self.oam[((src & 0xff) as u8) as usize] = val;
+
+        self.dma_addr = self.dma_addr.wrapping_add(1);
+        if self.dma_addr & 0xff >= 0xa0 {
+            self.dma_on = false;
+            self.dma_restarting = false;
+        }
     }
 
-    pub fn write_hdma2(&mut self, val: u8) {
-        self.src = self.src & 0xff00 | u16::from(val) & 0xf0;
+    pub(crate) fn dma_active(&self) -> bool {
+        self.dma_on && (self.dma_cycles > 0 || self.dma_restarting)
     }
 
-    pub fn write_hdma3(&mut self, val: u8) {
-        self.dst = u16::from(val & 0x1f) << 8 | self.dst & 0xf0;
+    pub(crate) fn write_hdma1(&mut self, val: u8) {
+        self.hdma_src = u16::from(val) << 8 | self.hdma_src & 0xf0;
     }
 
-    pub fn write_hdma4(&mut self, val: u8) {
-        self.dst = self.dst & 0x1f00 | u16::from(val) & 0xf0;
+    pub(crate) fn write_hdma2(&mut self, val: u8) {
+        self.hdma_src = self.hdma_src & 0xff00 | u16::from(val) & 0xf0;
     }
 
-    fn is_active(&self) -> bool {
-        !matches!(self.state, State::Sleep)
+    pub(crate) fn write_hdma3(&mut self, val: u8) {
+        self.hdma_dst = u16::from(val & 0x1f) << 8 | self.hdma_dst & 0xf0;
     }
 
-    pub fn read_hdma5(&self) -> u8 {
+    pub(crate) fn write_hdma4(&mut self, val: u8) {
+        self.hdma_dst = self.hdma_dst & 0x1f00 | u16::from(val) & 0xf0;
+    }
+
+    fn hdma_active(&self) -> bool {
+        !matches!(self.hdma_state, HdmaState::Sleep)
+    }
+
+    pub(crate) fn read_hdma5(&self) -> u8 {
         // active on low
-        let is_active_bit = u8::from(!self.is_active()) << 7;
+        let is_active_bit = u8::from(!self.hdma_active()) << 7;
         is_active_bit | self.hdma5
     }
 
-    pub fn write_hdma5(&mut self, val: u8) {
+    pub(crate) fn write_hdma5(&mut self, val: u8) {
         // stop current transfer
-        if self.is_active() && val & 0x80 == 0 {
-            self.state = State::Sleep;
+        if self.hdma_active() && val & 0x80 == 0 {
+            self.hdma_state = HdmaState::Sleep;
             return;
         }
 
         self.hdma5 = val & !0x80;
         let transfer_blocks = val & 0x7f;
-        self.len = (u16::from(transfer_blocks) + 1) * 0x10;
-        self.state = match val >> 7 {
-            0 => State::General,
-            1 => State::HBlankAwait,
+        self.hdma_len = (u16::from(transfer_blocks) + 1) * 0x10;
+        self.hdma_state = match val >> 7 {
+            0 => HdmaState::General,
+            1 => HdmaState::HBlank,
             _ => unreachable!(),
         };
     }
 
-    pub fn start(&mut self, hblank: bool) -> bool {
-        match self.state {
-            State::General => true,
-            State::HBlankDone if hblank => {
-                self.state = State::HBlankAwait;
-                false
+    pub(crate) fn emulate_hdma(&mut self) {
+        match self.hdma_state {
+            HdmaState::General => (),
+            HdmaState::HBlank if self.ppu_mode() == Mode::HBlank => (),
+            HdmaState::HBlankDone if self.ppu_mode() != Mode::HBlank => {
+                self.hdma_state = HdmaState::HBlank;
+                return;
             }
-            State::HBlankAwait if hblank => {
-                self.state = State::HBlankCopy { bytes: 0x10 };
-                true
-            }
-            State::HBlankCopy { .. } => unreachable!(),
-            _ => false,
+            _ => return,
         }
-    }
 
-    pub fn is_transfer_done(&self) -> bool {
-        matches!(self.state, State::Sleep | State::HBlankDone)
-    }
-
-    pub fn transfer(&mut self) -> (u16, u16) {
-        let hdma_transfer = (self.src, self.dst);
-
-        self.dst += 1;
-        self.src += 1;
-        self.len -= 1;
-
-        if self.len == 0 {
-            self.state = State::Sleep;
+        let len = if self.hdma_state == HdmaState::HBlank {
+            self.hdma_state = HdmaState::HBlankDone;
+            self.hdma5 = (self.hdma_len / 0x10).wrapping_sub(1) as u8;
+            self.hdma_len -= 0x10;
+            0x10
+        } else {
+            self.hdma_state = HdmaState::Sleep;
             self.hdma5 = 0xff;
-        } else if let State::HBlankCopy { mut bytes } = self.state {
-            bytes -= 1;
+            let len = self.hdma_len;
+            self.hdma_len = 0;
+            len
+        };
 
-            if bytes == 0 {
-                self.state = State::HBlankDone;
-                self.hdma5 = (self.len / 0x10).wrapping_sub(1) as u8;
-            } else {
-                self.state = State::HBlankCopy { bytes };
-            }
+        for _ in 0..len {
+            let val = match self.hdma_src >> 8 {
+                0x00..=0x7f => self.cart.read_rom(self.hdma_src),
+                // TODO: should copy garbage
+                0x80..=0x9f => 0xff,
+                0xa0..=0xbf => self.cart.read_ram(self.hdma_src),
+                0xc0..=0xcf => self.read_ram(self.hdma_src),
+                0xd0..=0xdf => self.read_bank_ram(self.hdma_src),
+                _ => panic!("Illegal source addr for HDMA transfer"),
+            };
+
+            self.emulate_dma();
+            self.tick_ppu();
+            self.tick_timer();
+            self.tick_apu();
+
+            self.write_vram(self.hdma_dst, val);
+
+            self.hdma_dst += 1;
+            self.hdma_src += 1;
         }
 
-        hdma_transfer
+        if self.hdma_len == 0 {
+            self.hdma_state = HdmaState::Sleep;
+        }
     }
 }

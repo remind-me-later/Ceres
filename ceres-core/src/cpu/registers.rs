@@ -38,11 +38,11 @@ pub struct Regs {
 }
 
 impl Regs {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn read16(&self, reg: Reg16) -> u16 {
+    pub(super) fn read16(&self, reg: Reg16) -> u16 {
         match reg {
             Reg16::AF => u16::from_be_bytes([self.a, self.f]),
             Reg16::BC => u16::from_be_bytes([self.b, self.c]),
@@ -52,7 +52,7 @@ impl Regs {
         }
     }
 
-    pub fn write16(&mut self, reg: Reg16, val: u16) {
+    pub(super) fn write16(&mut self, reg: Reg16, val: u16) {
         match reg {
             Reg16::AF => {
                 let [hi, lo] = u16::to_be_bytes(val);
@@ -78,39 +78,39 @@ impl Regs {
         }
     }
 
-    pub fn inc_pc(&mut self) {
+    pub(super) fn inc_pc(&mut self) {
         self.pc = self.pc.wrapping_add(1);
     }
 
-    pub fn dec_pc(&mut self) {
+    pub(super) fn dec_pc(&mut self) {
         self.pc = self.pc.wrapping_sub(1);
     }
 
-    pub fn inc_sp(&mut self) {
+    pub(super) fn inc_sp(&mut self) {
         self.sp = self.sp.wrapping_add(1);
     }
 
-    pub fn dec_sp(&mut self) {
+    pub(super) fn dec_sp(&mut self) {
         self.sp = self.sp.wrapping_sub(1);
     }
 
-    pub fn zf(&self) -> bool {
+    pub(super) fn zf(&self) -> bool {
         self.f & ZF_FLAG != 0
     }
 
-    pub fn nf(&self) -> bool {
+    pub(super) fn nf(&self) -> bool {
         self.f & NF_FLAG != 0
     }
 
-    pub fn hf(&self) -> bool {
+    pub(super) fn hf(&self) -> bool {
         self.f & HF_FLAG != 0
     }
 
-    pub fn cf(&self) -> bool {
+    pub(super) fn cf(&self) -> bool {
         self.f & CF_FLAG != 0
     }
 
-    pub fn set_zf(&mut self, zf: bool) {
+    pub(super) fn set_zf(&mut self, zf: bool) {
         if zf {
             self.f |= ZF_FLAG;
         } else {
@@ -118,7 +118,7 @@ impl Regs {
         }
     }
 
-    pub fn set_nf(&mut self, nf: bool) {
+    pub(super) fn set_nf(&mut self, nf: bool) {
         if nf {
             self.f |= NF_FLAG;
         } else {
@@ -126,7 +126,7 @@ impl Regs {
         }
     }
 
-    pub fn set_hf(&mut self, hf: bool) {
+    pub(super) fn set_hf(&mut self, hf: bool) {
         if hf {
             self.f |= HF_FLAG;
         } else {
@@ -134,7 +134,7 @@ impl Regs {
         }
     }
 
-    pub fn set_cf(&mut self, cf: bool) {
+    pub(super) fn set_cf(&mut self, cf: bool) {
         if cf {
             self.f |= CF_FLAG;
         } else {

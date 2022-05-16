@@ -1,4 +1,4 @@
-use crate::interrupts::{Interrupts, JOYPAD_INT};
+use crate::{interrupts::JOYPAD_INT, Gb};
 
 #[derive(Clone, Copy)]
 pub enum Button {
@@ -12,43 +12,33 @@ pub enum Button {
     Start  = 0x80,
 }
 
-#[derive(Default)]
-pub struct Joypad {
-    btns: u8,
-    dirs: bool,
-    acts: bool,
-}
+impl Gb {
+    pub fn press(&mut self, button: Button) {
+        self.joy_btns |= button as u8;
 
-impl Joypad {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn press(&mut self, ints: &mut Interrupts, button: Button) {
-        self.btns |= button as u8;
-
-        if button as u8 & 0x0f != 0 && self.dirs {
-            ints.req(JOYPAD_INT);
+        if button as u8 & 0x0f != 0 && self.joy_dirs {
+            self.req_interrupt(JOYPAD_INT);
         }
 
-        if button as u8 & 0xf0 != 0 && self.acts {
-            ints.req(JOYPAD_INT);
+        if button as u8 & 0xf0 != 0 && self.joy_acts {
+            self.req_interrupt(JOYPAD_INT);
         }
     }
 
     pub fn release(&mut self, button: Button) {
-        self.btns &= !(button as u8);
+        self.joy_btns &= !(button as u8);
     }
 
-    pub const fn read(&self) -> u8 {
-        let act_bits = if self.acts {
-            self.btns >> 4 | 1 << 5
+    #[must_use]
+    pub(crate) fn read_joy(&self) -> u8 {
+        let act_bits = if self.joy_acts {
+            self.joy_btns >> 4 | 1 << 5
         } else {
             0
         };
 
-        let dir_bits = if self.dirs {
-            self.btns & 0xf | 1 << 4
+        let dir_bits = if self.joy_dirs {
+            self.joy_btns & 0xf | 1 << 4
         } else {
             0
         };
@@ -57,8 +47,8 @@ impl Joypad {
         !(act_bits | dir_bits)
     }
 
-    pub fn write(&mut self, val: u8) {
-        self.acts = (val >> 5) & 1 == 0;
-        self.dirs = (val >> 4) & 1 == 0;
+    pub(crate) fn write_joy(&mut self, val: u8) {
+        self.joy_acts = (val >> 5) & 1 == 0;
+        self.joy_dirs = (val >> 4) & 1 == 0;
     }
 }
