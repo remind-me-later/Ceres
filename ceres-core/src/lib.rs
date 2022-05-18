@@ -87,7 +87,6 @@ const IO_WX: u8 = 0x4b;
 const IO_OPRI: u8 = 0x6c;
 
 const IO_IF: u8 = 0x0f;
-const IO_IE: u8 = 0xff;
 
 const IO_HDMA5: u8 = 0x55;
 
@@ -120,6 +119,7 @@ pub struct Gb {
 
     // interrupts
     ime: bool,
+    ie: u8,
 
     // memory
     wram: [u8; WRAM_SIZE_CGB],
@@ -259,6 +259,7 @@ impl Gb {
             hdma_len: 0,
             hdma_state: HdmaState::Sleep,
             apu_cap: 0.0,
+            ie: 0,
         }
     }
 

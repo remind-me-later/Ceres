@@ -1,8 +1,8 @@
 use {
     super::KEY1_SWITCH,
     crate::{
-        FunctionMode, Gb, Model::Cgb, IO_BGP, IO_DMA, IO_IE, IO_IF, IO_LCDC, IO_LY, IO_LYC,
-        IO_NR51, IO_OBP0, IO_OBP1, IO_OPRI, IO_SCX, IO_SCY, IO_STAT, IO_WX, IO_WY,
+        FunctionMode, Gb, Model::Cgb, IO_BGP, IO_DMA, IO_IF, IO_LCDC, IO_LY, IO_LYC, IO_NR51,
+        IO_OBP0, IO_OBP1, IO_OPRI, IO_SCX, IO_SCY, IO_STAT, IO_WX, IO_WY,
     },
     core::intrinsics::unlikely,
 };
@@ -102,8 +102,9 @@ impl Gb {
             0x70 if self.model == Cgb => self.mem_tick(|gb: &mut Gb| gb.svbk | 0xf8),
             0x80..=0xfe => self.mem_tick(|gb| gb.hram[(addr & 0x7f) as usize]),
             0x30..=0x3f => self.apu_tick(|gb| gb.apu_ch3.read_wave_ram(addr)),
+            0xff => self.mem_tick(|gb| gb.ie),
             IO_LCDC | IO_STAT | IO_SCX | IO_SCY | IO_LY | IO_LYC | IO_WY | IO_WX | IO_BGP
-            | IO_OBP0 | IO_OBP1 | IO_OPRI | IO_DMA | IO_IE | IO_NR51 => {
+            | IO_OBP0 | IO_OBP1 | IO_OPRI | IO_DMA | IO_NR51 => {
                 self.mem_tick(|gb| gb.io[addr as usize])
             }
             _ => self.mem_tick(|_| 0xff),
@@ -263,9 +264,11 @@ impl Gb {
                 gb.svbk = tmp;
                 gb.svbk_true = if tmp == 0 { 1 } else { tmp };
             }),
+            0xff => self.mem_tick(|gb| gb.ie = val),
             0x80..=0xfe => self.mem_tick(|gb| gb.hram[(addr & 0x7f) as usize] = val),
-            IO_SCX | IO_SCY | IO_LYC | IO_WY | IO_WX | IO_BGP | IO_OBP0 | IO_OBP1 | IO_OPRI
-            | IO_IE => self.mem_tick(|gb| gb.io[addr as usize] = val),
+            IO_SCX | IO_SCY | IO_LYC | IO_WY | IO_WX | IO_BGP | IO_OBP0 | IO_OBP1 | IO_OPRI => {
+                self.mem_tick(|gb| gb.io[addr as usize] = val);
+            }
             _ => self.tick_t_cycle(),
         }
     }

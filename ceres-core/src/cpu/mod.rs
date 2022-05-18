@@ -1,6 +1,6 @@
 pub use registers::Regs;
 
-use crate::{Gb, IF_P1_B, IF_SERIAL_B, IF_TIMER_B, IF_LCD_B, IF_VBLANK_B, IO_IE, IO_IF};
+use crate::{Gb, IF_LCD_B, IF_P1_B, IF_SERIAL_B, IF_TIMER_B, IF_VBLANK_B, IO_IF};
 
 mod execute;
 mod instructions;
@@ -45,7 +45,7 @@ impl Gb {
             self.internal_push(pc);
 
             let interrupt = {
-                let pending = self.io[IO_IF as usize] & self.io[IO_IE as usize] & 0x1f;
+                let pending = self.io[IO_IF as usize] & self.ie & 0x1f;
 
                 if pending == 0 {
                     0
@@ -72,7 +72,7 @@ impl Gb {
 
     #[must_use]
     fn any_interrrupt(&self) -> bool {
-        self.io[IO_IF as usize] & self.io[IO_IE as usize] & 0x1f != 0
+        self.io[IO_IF as usize] & self.ie & 0x1f != 0
     }
 
     fn imm8(&mut self) -> u8 {
