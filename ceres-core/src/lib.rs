@@ -66,32 +66,6 @@ enum FunctionMode {
     Cgb,
 }
 
-// IO addresses
-const IO_TIMA: u8 = 0x05;
-const IO_TMA: u8 = 0x06;
-const IO_TAC: u8 = 0x07;
-
-const IO_LCDC: u8 = 0x40;
-const IO_STAT: u8 = 0x41;
-const IO_SCY: u8 = 0x42;
-const IO_SCX: u8 = 0x43;
-const IO_LY: u8 = 0x44;
-const IO_LYC: u8 = 0x45;
-const IO_DMA: u8 = 0x46;
-const IO_BGP: u8 = 0x47;
-const IO_OBP0: u8 = 0x48;
-const IO_OBP1: u8 = 0x49;
-const IO_WY: u8 = 0x4a;
-const IO_WX: u8 = 0x4b;
-
-const IO_OPRI: u8 = 0x6c;
-
-const IO_IF: u8 = 0x0f;
-
-const IO_HDMA5: u8 = 0x55;
-
-const IO_NR51: u8 = 0x25;
-
 pub struct Gb {
     // general
     exit_run: bool,
@@ -119,29 +93,43 @@ pub struct Gb {
 
     // interrupts
     ime: bool,
+    ifr: u8,
     ie: u8,
 
     // memory
     wram: [u8; WRAM_SIZE_CGB],
     hram: [u8; HIGH_RAM_SIZE],
-    // TODO: move everything here
-    io: [u8; 0x70],
     svbk: u8,
     svbk_true: u8, // true selected bank, between 1 and 7
 
     // -- dma
+    dma: u8,
     dma_on: bool,
     dma_addr: u16,
     dma_restarting: bool,
     dma_cycles: i8,
 
     // -- hdma
+    hdma5: u8,
     hdma_src: u16,
     hdma_dst: u16,
     hdma_len: u16,
     hdma_state: HdmaState,
 
     // ppu
+    lcdc: u8,
+    stat: u8,
+    scy: u8,
+    scx: u8,
+    ly: u8,
+    lyc: u8,
+    bgp: u8,
+    obp0: u8,
+    obp1: u8,
+    wy: u8,
+    wx: u8,
+    opri: u8,
+
     vram: [u8; VRAM_SIZE_CGB],
     oam: [u8; OAM_SIZE],
     rgba_buf: RgbaBuf,
@@ -155,11 +143,17 @@ pub struct Gb {
     vbk: u8,
 
     // clock
+    tima: u8,
+    tma: u8,
+    tac: u8,
+
     clk_on: bool,
     clk_overflow: bool,
     clk_wide: u16,
 
     // apu
+    nr51: u8,
+
     apu_on: bool,
     apu_r_vol: u8,
     apu_l_vol: u8,
@@ -201,7 +195,10 @@ impl Gb {
         let cycles_to_render = (*audio_callbacks).cycles_to_render();
 
         Self {
-            io: [0; 0x70],
+            opri: 0,
+            nr51: 0,
+            hdma5: 0,
+            ifr: 0,
             reg: Regs::new(),
             cpu_ei_delay: false,
             ime: false,
@@ -260,6 +257,21 @@ impl Gb {
             hdma_state: HdmaState::Sleep,
             apu_cap: 0.0,
             ie: 0,
+            tima: 0,
+            tma: 0,
+            tac: 0,
+            lcdc: 0,
+            stat: 0,
+            scy: 0,
+            scx: 0,
+            ly: 0,
+            lyc: 0,
+            dma: 0,
+            bgp: 0,
+            obp0: 0,
+            obp1: 0,
+            wy: 0,
+            wx: 0,
         }
     }
 

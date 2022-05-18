@@ -1,4 +1,4 @@
-use crate::{Gb, IF_P1_B, IO_IF};
+use crate::{Gb, IF_P1_B};
 
 #[derive(Clone, Copy)]
 pub enum Button {
@@ -18,7 +18,7 @@ impl Gb {
         self.p1_btn |= b;
 
         if b & 0x0f != 0 && self.p1_dirs || b & 0xf0 != 0 && self.p1_acts {
-            self.io[IO_IF as usize] |= IF_P1_B;
+            self.ifr |= IF_P1_B;
         }
     }
 

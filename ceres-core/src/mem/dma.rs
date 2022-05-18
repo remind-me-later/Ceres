@@ -1,4 +1,4 @@
-use crate::{ppu::Mode, Gb, IO_DMA, IO_HDMA5};
+use crate::{ppu::Mode, Gb};
 
 #[derive(PartialEq, Eq)]
 pub enum HdmaState {
@@ -15,7 +15,7 @@ impl Gb {
         }
 
         self.dma_cycles = -8; // two m-cycles delay
-        self.io[IO_DMA as usize] = val;
+        self.dma = val;
         self.dma_addr = u16::from(val) << 8;
         self.dma_on = true;
     }
@@ -76,7 +76,7 @@ impl Gb {
 
     pub(crate) fn read_hdma5(&self) -> u8 {
         // active on low
-        ((!self.hdma_on()) as u8) << 7 | self.io[IO_HDMA5 as usize]
+        ((!self.hdma_on()) as u8) << 7 | self.hdma5
     }
 
     pub(crate) fn write_hdma5(&mut self, val: u8) {
@@ -86,7 +86,7 @@ impl Gb {
             return;
         }
 
-        self.io[IO_HDMA5 as usize] = val & !0x80;
+        self.hdma5 = val & !0x80;
         let transfer_blocks = val & 0x7f;
         self.hdma_len = (u16::from(transfer_blocks) + 1) * 0x10;
         self.hdma_state = if val & 0x80 == 0 {
@@ -109,12 +109,12 @@ impl Gb {
 
         let len = if self.hdma_state == HdmaState::HBlank {
             self.hdma_state = HdmaState::HBlankDone;
-            self.io[IO_HDMA5 as usize] = (self.hdma_len / 0x10).wrapping_sub(1) as u8;
+            self.hdma5 = (self.hdma_len / 0x10).wrapping_sub(1) as u8;
             self.hdma_len -= 0x10;
             0x10
         } else {
             self.hdma_state = HdmaState::Sleep;
-            self.io[IO_HDMA5 as usize] = 0xff;
+            self.hdma5 = 0xff;
             let len = self.hdma_len;
             self.hdma_len = 0;
             len

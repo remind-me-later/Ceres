@@ -1,10 +1,10 @@
-use crate::{Gb, IF_TIMER_B, IO_IF, IO_TAC, IO_TIMA, IO_TMA};
+use crate::{Gb, IF_TIMER_B};
 
 const TAC_ENABLE: u8 = 4;
 
 impl Gb {
     fn counter_mask(&self) -> u16 {
-        match self.io[IO_TAC as usize] & 3 {
+        match self.tac & 3 {
             3 => 1 << 5,
             2 => 1 << 3,
             1 => 1 << 1,
@@ -18,16 +18,16 @@ impl Gb {
     }
 
     fn inc_timer(&mut self) {
-        let (counter, overflow) = self.io[IO_TIMA as usize].overflowing_add(1);
-        self.io[IO_TIMA as usize] = counter;
+        let (counter, overflow) = self.tima.overflowing_add(1);
+        self.tima = counter;
         self.clk_overflow = overflow;
     }
 
     pub(crate) fn tick_timer(&mut self) {
         if self.clk_overflow {
             self.clk_wide = self.clk_wide.wrapping_add(1);
-            self.io[IO_TIMA as usize] = self.io[IO_TMA as usize];
-            self.io[IO_IF as usize] |= IF_TIMER_B;
+            self.tima = self.tma;
+            self.ifr |= IF_TIMER_B;
             self.clk_overflow = false;
         } else if self.clk_on && self.counter_bit() {
             self.clk_wide = self.clk_wide.wrapping_add(1);
@@ -47,17 +47,17 @@ impl Gb {
 
     pub(crate) fn read_tima(&mut self) -> u8 {
         self.tick_timer();
-        self.io[IO_TIMA as usize]
+        self.tima
     }
 
     pub(crate) fn read_tma(&mut self) -> u8 {
         self.tick_timer();
-        self.io[IO_TMA as usize]
+        self.tma
     }
 
     pub(crate) fn read_tac(&mut self) -> u8 {
         self.tick_timer();
-        0xf8 | self.io[IO_TAC as usize]
+        0xf8 | self.tac
     }
 
     pub(crate) fn write_div(&mut self) {
@@ -76,7 +76,7 @@ impl Gb {
 
         if !overflow {
             self.clk_overflow = false;
-            self.io[IO_TIMA as usize] = val;
+            self.tima = val;
         }
     }
 
@@ -84,10 +84,10 @@ impl Gb {
         let overflow = self.clk_overflow;
 
         self.tick_timer();
-        self.io[IO_TMA as usize] = val;
+        self.tma = val;
 
         if overflow {
-            self.io[IO_TIMA as usize] = val;
+            self.tima = val;
         }
     }
 
@@ -95,7 +95,7 @@ impl Gb {
         self.tick_timer();
 
         let old_bit = self.clk_on && self.counter_bit();
-        self.io[IO_TAC as usize] = val & 7;
+        self.tac = val & 7;
         self.clk_on = val & TAC_ENABLE != 0;
         let new_bit = self.clk_on && self.counter_bit();
 

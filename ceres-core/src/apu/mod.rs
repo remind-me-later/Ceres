@@ -3,7 +3,7 @@ pub use self::{
     square::{Ch1, Ch2},
     wave::Wave,
 };
-use crate::{Gb, IO_NR51, TC_SEC};
+use crate::{Gb, TC_SEC};
 
 mod ccore;
 mod envelope;
@@ -126,7 +126,7 @@ impl Gb {
         self.apu_l_vin = false;
         self.apu_r_vol = 0;
         self.apu_r_vin = false;
-        self.io[IO_NR51 as usize] = 0;
+        self.nr51 = 0;
     }
 
     #[must_use]
@@ -162,7 +162,7 @@ impl Gb {
 
     pub fn write_nr51(&mut self, val: u8) {
         if self.apu_on {
-            self.io[IO_NR51 as usize] = val;
+            self.nr51 = val;
         }
     }
 
@@ -195,8 +195,8 @@ impl<'a> Iterator for ChOutIter<'a> {
             _ => return None,
         };
 
-        let ch_r_on = self.gb.io[IO_NR51 as usize] & (1 << self.i) != 0;
-        let ch_l_on = self.gb.io[IO_NR51 as usize] & (1 << (self.i + 4)) != 0;
+        let ch_r_on = self.gb.nr51 & (1 << self.i) != 0;
+        let ch_l_on = self.gb.nr51 & (1 << (self.i + 4)) != 0;
 
         self.i += 1;
 
