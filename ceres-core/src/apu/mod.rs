@@ -5,36 +5,28 @@ pub use self::{
 };
 use crate::{Gb, TC_SEC};
 
-mod ccore;
+mod common;
 mod envelope;
-mod freq;
 mod noise;
 mod square;
 mod wave;
 
-pub const APU_TIMER_RES: u16 = (TC_SEC / 512) as u16;
-
-pub trait AudioCallbacks {
-    fn sample_rate(&self) -> u32;
-    fn push_frame(&mut self, l: Sample, r: Sample);
-
-    fn cycles_to_render(&self) -> u32 {
-        TC_SEC / self.sample_rate()
-    }
-}
-
-pub type Sample = f32;
+const APU_TIMER_RES: u16 = (TC_SEC / 512) as u16;
 
 impl Gb {
+    fn period(&self) -> u32 {
+        unsafe { TC_SEC / (*self.apu_callbacks).sample_rate() }
+    }
+
     pub fn tick_apu(&mut self) {
-        let mut mus_elapsed = self.t_elapsed();
+        let mut t_elapsed = self.t_elapsed();
 
         if !self.apu_on {
             return;
         }
 
-        while mus_elapsed > 0 {
-            mus_elapsed -= 1;
+        while t_elapsed > 0 {
+            t_elapsed -= 1;
 
             self.apu_timer -= 1;
             if self.apu_timer == 0 {
@@ -47,16 +39,16 @@ impl Gb {
             self.apu_ch3.step_sample();
             self.apu_ch4.step_sample();
 
-            self.apu_cycles_until_render -= 1;
-            if self.apu_cycles_until_render == 0 {
-                self.apu_cycles_until_render = self.apu_render_period;
+            self.apu_render_timer -= 1;
+            if self.apu_render_timer == 0 {
+                self.apu_render_timer = self.period();
                 self.mix_and_render();
             }
         }
     }
 
     fn step(&mut self) {
-        if self.apu_counter & 1 == 0 {
+        if self.apu_seq_step & 1 == 0 {
             self.apu_ch1.step_len();
             self.apu_ch2.step_len();
             self.apu_ch3.step_len();
@@ -67,7 +59,7 @@ impl Gb {
             self.set_period_half(1);
         }
 
-        match self.apu_counter {
+        match self.apu_seq_step {
             2 | 6 => self.apu_ch1.step_sweep(),
             7 => {
                 self.apu_ch1.step_envelope();
@@ -77,14 +69,14 @@ impl Gb {
             _ => (),
         }
 
-        self.apu_counter = (self.apu_counter + 1) & 7;
+        self.apu_seq_step = (self.apu_seq_step + 1) & 7;
     }
 
     fn set_period_half(&mut self, period_half: u8) {
-        self.apu_ch1.mut_core().set_period_half(period_half);
-        self.apu_ch2.mut_core().set_period_half(period_half);
-        self.apu_ch3.mut_core().set_period_half(period_half);
-        self.apu_ch4.mut_core().set_period_half(period_half);
+        self.apu_ch1.mut_com().set_period_half(period_half);
+        self.apu_ch2.mut_com().set_period_half(period_half);
+        self.apu_ch3.mut_com().set_period_half(period_half);
+        self.apu_ch4.mut_com().set_period_half(period_half);
     }
 
     fn mix_and_render(&mut self) {
@@ -117,7 +109,7 @@ impl Gb {
     }
 
     fn reset(&mut self) {
-        self.apu_cycles_until_render = self.apu_render_period;
+        self.apu_render_timer = self.period();
         self.apu_ch1.reset();
         self.apu_ch2.reset();
         self.apu_ch3.reset();

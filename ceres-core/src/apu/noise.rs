@@ -1,9 +1,9 @@
-use super::{ccore::Ccore, envelope::Envelope};
+use super::{common::Common, envelope::Envelope};
 
-const MAX_NOISE_CHANNEL_LENGTH: u16 = 64;
+const NOISE_MAX_LEN: u16 = 64;
 
 pub struct Noise {
-    core: Ccore<MAX_NOISE_CHANNEL_LENGTH>,
+    com: Common<NOISE_MAX_LEN>,
     env: Envelope,
     current_timer_cycle: u16,
     internal_timer_period: u16,
@@ -16,7 +16,7 @@ pub struct Noise {
 impl Noise {
     pub fn new() -> Self {
         Self {
-            core: Ccore::new(),
+            com: Common::new(),
             env: Envelope::new(),
             current_timer_cycle: 1,
             internal_timer_period: 0,
@@ -28,7 +28,7 @@ impl Noise {
     }
 
     pub fn reset(&mut self) {
-        self.core.reset();
+        self.com.reset();
         self.env.reset();
         self.internal_timer_period = 0;
         self.current_timer_cycle = 1;
@@ -47,15 +47,15 @@ impl Noise {
     }
 
     pub fn read_nr44(&self) -> u8 {
-        self.core.read()
+        self.com.read()
     }
 
     pub fn write_nr41(&mut self, val: u8) {
-        self.core.write_len(val);
+        self.com.write_len(val);
     }
 
     pub fn write_nr42(&mut self, val: u8) {
-        self.env.write(val, &mut self.core);
+        self.env.write(val, &mut self.com);
     }
 
     pub fn write_nr43(&mut self, val: u8) {
@@ -79,7 +79,7 @@ impl Noise {
     }
 
     pub fn write_nr44(&mut self, val: u8) {
-        if self.core.write_control(val) {
+        if self.com.write_control(val) {
             self.trigger();
         }
     }
@@ -91,7 +91,7 @@ impl Noise {
     }
 
     pub fn step_envelope(&mut self) {
-        self.env.step(&mut self.core);
+        self.env.step(&mut self.com);
     }
 
     pub fn step_sample(&mut self) {
@@ -118,18 +118,18 @@ impl Noise {
     }
 
     pub fn out(&self) -> u8 {
-        self.out * self.env.volume()
+        self.out * self.env.vol
     }
 
     pub fn on(&self) -> bool {
-        self.core.on()
+        self.com.on()
     }
 
     pub fn step_len(&mut self) {
-        self.core.step_len();
+        self.com.step_len();
     }
 
-    pub fn mut_core(&mut self) -> &mut Ccore<MAX_NOISE_CHANNEL_LENGTH> {
-        &mut self.core
+    pub fn mut_com(&mut self) -> &mut Common<NOISE_MAX_LEN> {
+        &mut self.com
     }
 }

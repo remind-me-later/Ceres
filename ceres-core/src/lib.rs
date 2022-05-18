@@ -12,21 +12,20 @@
 
 extern crate alloc;
 
-pub use {
-    apu::{AudioCallbacks, Sample},
-    cart::Cartridge,
-    error::Error,
-    joypad::Button,
-    ppu::{VideoCallbacks, PX_HEIGHT, PX_WIDTH},
-};
 use {
-    apu::{Ch1, Ch2, Noise, Wave, APU_TIMER_RES},
+    apu::{Ch1, Ch2, Noise, Wave},
     bootrom::BootRom,
     core::time::Duration,
     cpu::Regs,
-    mem::{HdmaState, HIGH_RAM_SIZE, WRAM_SIZE_CGB},
+    memory::HdmaState,
     ppu::{ColorPalette, Mode, RgbaBuf, OAM_SIZE, VRAM_SIZE_CGB},
     serial::Serial,
+};
+pub use {
+    cart::Cartridge,
+    error::Error,
+    joypad::Button,
+    ppu::{PX_HEIGHT, PX_WIDTH},
 };
 
 mod apu;
@@ -35,7 +34,7 @@ mod cart;
 mod cpu;
 mod error;
 mod joypad;
-mod mem;
+mod memory;
 mod ppu;
 mod serial;
 mod timer;
@@ -51,6 +50,23 @@ const IF_LCD_B: u8 = 2;
 const IF_TIMER_B: u8 = 4;
 const IF_SERIAL_B: u8 = 8;
 const IF_P1_B: u8 = 0x10;
+
+const KEY1_SPEED_B: u8 = 0x80;
+const KEY1_SWITCH_B: u8 = 1;
+const HIGH_RAM_SIZE: usize = 0x80;
+const WRAM_SIZE: usize = 0x2000;
+const WRAM_SIZE_CGB: usize = WRAM_SIZE * 4;
+
+pub trait AudioCallbacks {
+    fn sample_rate(&self) -> u32;
+    fn push_frame(&mut self, l: Sample, r: Sample);
+}
+
+pub type Sample = f32;
+
+pub trait VideoCallbacks {
+    fn draw(&mut self, rgba_data: &[u8]);
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Model {
@@ -70,7 +86,7 @@ pub struct Gb {
     // general
     exit_run: bool,
     cart: Cartridge,
-    brom: BootRom,
+    rom: BootRom,
     model: Model,
     function_mode: FunctionMode,
 
@@ -129,6 +145,9 @@ pub struct Gb {
     wy: u8,
     wx: u8,
     opri: u8,
+    vbk: u8,
+    bcp: ColorPalette,
+    ocp: ColorPalette,
 
     vram: [u8; VRAM_SIZE_CGB],
     oam: [u8; OAM_SIZE],
@@ -138,9 +157,6 @@ pub struct Gb {
     ppu_win_in_ly: bool,
     ppu_win_skipped: u16,
     ppu_callbacks: *mut dyn VideoCallbacks,
-    bcp: ColorPalette,
-    ocp: ColorPalette,
-    vbk: u8,
 
     // clock
     tima: u8,
@@ -160,19 +176,15 @@ pub struct Gb {
     apu_r_vin: bool,
     apu_l_vin: bool,
 
-    // -- channels
     apu_ch1: Ch1,
     apu_ch2: Ch2,
     apu_ch3: Wave,
     apu_ch4: Noise,
 
-    // -- sequencer
     apu_timer: u16,
-    apu_counter: u8,
-
-    apu_render_period: u32,
-    apu_cycles_until_render: u32,
+    apu_render_timer: u32,
     apu_callbacks: *mut dyn AudioCallbacks,
+    apu_seq_step: u8,
     apu_cap: f32,
 }
 
@@ -192,8 +204,6 @@ impl Gb {
             Model::Cgb => FunctionMode::Cgb,
         };
 
-        let cycles_to_render = (*audio_callbacks).cycles_to_render();
-
         Self {
             opri: 0,
             nr51: 0,
@@ -211,7 +221,7 @@ impl Gb {
             svbk: 0,
             svbk_true: 1,
             serial: Serial::new(),
-            brom: BootRom::new(model),
+            rom: BootRom::new(model),
             model,
             double_speed: false,
             key1: 0,
@@ -237,16 +247,15 @@ impl Gb {
             apu_ch2: Ch2::new(),
             apu_ch3: Wave::new(),
             apu_ch4: Noise::new(),
-            apu_render_period: cycles_to_render,
-            apu_cycles_until_render: cycles_to_render,
+            apu_render_timer: 0,
             apu_callbacks: audio_callbacks,
             apu_on: false,
             apu_r_vol: 0,
             apu_l_vol: 0,
             apu_r_vin: false,
             apu_l_vin: false,
-            apu_timer: APU_TIMER_RES,
-            apu_counter: 0,
+            apu_timer: 0,
+            apu_seq_step: 0,
             dma_on: false,
             dma_addr: 0,
             dma_restarting: false,

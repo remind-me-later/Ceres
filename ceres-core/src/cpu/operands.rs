@@ -3,21 +3,21 @@ use {
     crate::Gb,
 };
 
-pub trait Get<T: Copy>
+pub trait Get
 where
     Self: Copy,
 {
-    fn get(self, gb: &mut Gb) -> T;
+    fn get(self, gb: &mut Gb) -> u8;
 }
 
-pub trait Set<T: Copy>
+pub trait Set
 where
     Self: Copy,
 {
-    fn set(self, gb: &mut Gb, val: T);
+    fn set(self, gb: &mut Gb, val: u8);
 }
 
-impl Get<u8> for Reg8 {
+impl Get for Reg8 {
     fn get(self, gb: &mut Gb) -> u8 {
         match self {
             Reg8::A => gb.reg.a,
@@ -31,7 +31,7 @@ impl Get<u8> for Reg8 {
     }
 }
 
-impl Set<u8> for Reg8 {
+impl Set for Reg8 {
     fn set(self, gb: &mut Gb, val: u8) {
         match self {
             Reg8::A => gb.reg.a = val,
@@ -45,30 +45,12 @@ impl Set<u8> for Reg8 {
     }
 }
 
-impl Get<u16> for Reg16 {
-    fn get(self, gb: &mut Gb) -> u16 {
-        gb.reg.read16(self)
-    }
-}
-
-impl Set<u16> for Reg16 {
-    fn set(self, gb: &mut Gb, val: u16) {
-        gb.reg.write16(self, val);
-    }
-}
-
 #[derive(Clone, Copy)]
 pub struct Imm;
 
-impl Get<u8> for Imm {
+impl Get for Imm {
     fn get(self, gb: &mut Gb) -> u8 {
         gb.imm8()
-    }
-}
-
-impl Get<u16> for Imm {
-    fn get(self, gb: &mut Gb) -> u16 {
-        gb.imm16()
     }
 }
 
@@ -95,76 +77,16 @@ impl Indirect {
     }
 }
 
-impl Get<u8> for Indirect {
+impl Get for Indirect {
     fn get(self, gb: &mut Gb) -> u8 {
         let addr = self.into_addr(gb);
         gb.read_mem(addr)
     }
 }
 
-impl Set<u8> for Indirect {
+impl Set for Indirect {
     fn set(self, gb: &mut Gb, val: u8) {
         let addr = self.into_addr(gb);
         gb.write_mem(addr, val);
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct IndirectIncreaseHL;
-
-impl Get<u8> for IndirectIncreaseHL {
-    fn get(self, gb: &mut Gb) -> u8 {
-        let addr = gb.reg.read16(Reg16::HL);
-        let ret = gb.read_mem(addr);
-        gb.reg.write16(Reg16::HL, addr.wrapping_add(1));
-        ret
-    }
-}
-
-impl Set<u8> for IndirectIncreaseHL {
-    fn set(self, gb: &mut Gb, val: u8) {
-        let addr = gb.reg.read16(Reg16::HL);
-        gb.write_mem(addr, val);
-        gb.reg.write16(Reg16::HL, addr.wrapping_add(1));
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct IndirectDecreaseHL;
-
-impl Get<u8> for IndirectDecreaseHL {
-    fn get(self, gb: &mut Gb) -> u8 {
-        let addr = gb.reg.read16(Reg16::HL);
-        let ret = gb.read_mem(addr);
-        gb.reg.write16(Reg16::HL, addr.wrapping_sub(1));
-        ret
-    }
-}
-
-impl Set<u8> for IndirectDecreaseHL {
-    fn set(self, gb: &mut Gb, val: u8) {
-        let addr = gb.reg.read16(Reg16::HL);
-        gb.write_mem(addr, val);
-        gb.reg.write16(Reg16::HL, addr.wrapping_sub(1));
-    }
-}
-
-#[derive(Clone, Copy)]
-pub enum JumpCondition {
-    Zero,
-    NotZero,
-    Carry,
-    NotCarry,
-}
-
-impl JumpCondition {
-    pub(super) fn check(self, gb: &Gb) -> bool {
-        use JumpCondition::{Carry, NotCarry, NotZero, Zero};
-        match self {
-            Zero => gb.reg.zf(),
-            NotZero => !gb.reg.zf(),
-            Carry => gb.reg.cf(),
-            NotCarry => !gb.reg.cf(),
-        }
     }
 }

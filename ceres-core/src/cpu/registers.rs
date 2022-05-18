@@ -1,7 +1,7 @@
-const ZF_FLAG: u8 = 0x80;
-const NF_FLAG: u8 = 0x40;
-const HF_FLAG: u8 = 0x20;
-const CF_FLAG: u8 = 0x10;
+pub const ZF_FLAG: u8 = 0x80;
+pub const NF_FLAG: u8 = 0x40;
+pub const HF_FLAG: u8 = 0x20;
+pub const CF_FLAG: u8 = 0x10;
 
 #[derive(Clone, Copy)]
 pub enum Reg8 {
@@ -92,10 +92,6 @@ impl Regs {
 
     pub(super) fn dec_sp(&mut self) {
         self.sp = self.sp.wrapping_sub(1);
-    }
-
-    pub(super) fn zf(&self) -> bool {
-        self.f & ZF_FLAG != 0
     }
 
     pub(super) fn nf(&self) -> bool {

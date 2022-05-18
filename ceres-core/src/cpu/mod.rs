@@ -15,7 +15,7 @@ impl Gb {
         }
 
         if self.cpu_halted {
-            self.tick_t_cycle();
+            self.tick();
         } else {
             let opcode = self.imm8();
 
@@ -39,7 +39,7 @@ impl Gb {
         if self.ime {
             self.ime = false;
 
-            self.tick_t_cycle();
+            self.tick();
 
             let pc = self.reg.pc;
             self.internal_push(pc);
@@ -64,7 +64,7 @@ impl Gb {
                 _ => unreachable!(),
             };
 
-            self.tick_t_cycle();
+            self.tick();
             // acknoledge
             self.ifr &= !interrupt;
         }
@@ -97,7 +97,7 @@ impl Gb {
 
     fn internal_push(&mut self, val: u16) {
         let [lo, hi] = u16::to_le_bytes(val);
-        self.tick_t_cycle();
+        self.tick();
         self.reg.dec_sp();
         self.write_mem(self.reg.sp, hi);
         self.reg.dec_sp();

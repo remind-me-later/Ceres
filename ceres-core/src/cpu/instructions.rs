@@ -1,33 +1,57 @@
 use {
     super::{
-        operands::{Get, JumpCondition, Set},
-        registers::Reg16::{self, HL},
+        operands::{Get, Set},
+        registers::{
+            Reg16::{self, HL},
+            CF_FLAG, ZF_FLAG,
+        },
     },
-    crate::{
-        mem::{KEY1_SPEED, KEY1_SWITCH},
-        Gb,
-    },
+    crate::{Gb, KEY1_SPEED_B, KEY1_SWITCH_B},
 };
 
 impl Gb {
     pub(super) fn ld<G, S>(&mut self, lhs: S, rhs: G)
     where
-        G: Get<u8>,
-        S: Set<u8>,
+        G: Get,
+        S: Set,
     {
         let val = rhs.get(self);
         lhs.set(self, val);
     }
 
+    pub(super) fn ld_dhli_a(&mut self) {
+        let addr = self.reg.read16(Reg16::HL);
+        self.write_mem(addr, self.reg.a);
+        self.reg.write16(Reg16::HL, addr.wrapping_add(1));
+    }
+
+    pub(super) fn ld_dhld_a(&mut self) {
+        let addr = self.reg.read16(Reg16::HL);
+        self.write_mem(addr, self.reg.a);
+        self.reg.write16(Reg16::HL, addr.wrapping_sub(1));
+    }
+
+    pub(super) fn ld_a_dhli(&mut self) {
+        let addr = self.reg.read16(Reg16::HL);
+        self.reg.a = self.read_mem(addr);
+        self.reg.write16(Reg16::HL, addr.wrapping_add(1));
+    }
+
+    pub(super) fn ld_a_dhld(&mut self) {
+        let addr = self.reg.read16(Reg16::HL);
+        self.reg.a = self.read_mem(addr);
+        self.reg.write16(Reg16::HL, addr.wrapping_sub(1));
+    }
+
     pub(super) fn ld16_sp_hl(&mut self) {
         let val = self.reg.read16(HL);
         self.reg.sp = val;
-        self.tick_t_cycle();
+        self.tick();
     }
 
     pub(super) fn add<G>(&mut self, rhs: G)
     where
-        G: Get<u8>,
+        G: Get,
     {
         let a = self.reg.a;
         let val = rhs.get(self);
@@ -41,7 +65,7 @@ impl Gb {
 
     pub(super) fn adc<G>(&mut self, rhs: G)
     where
-        G: Get<u8>,
+        G: Get,
     {
         let a = self.reg.a;
         let cy = u8::from(self.reg.cf());
@@ -57,7 +81,7 @@ impl Gb {
 
     pub(super) fn sub<G>(&mut self, rhs: G)
     where
-        G: Get<u8>,
+        G: Get,
     {
         let a = self.reg.a;
         let val = rhs.get(self);
@@ -71,7 +95,7 @@ impl Gb {
 
     pub(super) fn sbc<G>(&mut self, rhs: G)
     where
-        G: Get<u8>,
+        G: Get,
     {
         let a = self.reg.a;
         let cy = u8::from(self.reg.cf());
@@ -87,7 +111,7 @@ impl Gb {
 
     pub(super) fn cp<G>(&mut self, rhs: G)
     where
-        G: Get<u8>,
+        G: Get,
     {
         let a = self.reg.a;
         let val = rhs.get(self);
@@ -101,7 +125,7 @@ impl Gb {
 
     pub(super) fn and<G>(&mut self, rhs: G)
     where
-        G: Get<u8>,
+        G: Get,
     {
         let val = rhs.get(self);
         let a = self.reg.a & val;
@@ -114,7 +138,7 @@ impl Gb {
 
     pub(super) fn or<G>(&mut self, rhs: G)
     where
-        G: Get<u8>,
+        G: Get,
     {
         let val = rhs.get(self);
         let a = self.reg.a | val;
@@ -127,7 +151,7 @@ impl Gb {
 
     pub(super) fn xor<G>(&mut self, rhs: G)
     where
-        G: Get<u8>,
+        G: Get,
     {
         let read = rhs.get(self);
         let a = self.reg.a ^ read;
@@ -140,7 +164,7 @@ impl Gb {
 
     pub(super) fn inc<GS>(&mut self, rhs: GS)
     where
-        GS: Get<u8> + Set<u8>,
+        GS: Get + Set,
     {
         let read = rhs.get(self);
         let val = read.wrapping_add(1);
@@ -154,12 +178,12 @@ impl Gb {
         let read = self.reg.read16(reg);
         let val = read.wrapping_add(1);
         self.reg.write16(reg, val);
-        self.tick_t_cycle();
+        self.tick();
     }
 
     pub(super) fn dec<GS>(&mut self, rhs: GS)
     where
-        GS: Get<u8> + Set<u8>,
+        GS: Get + Set,
     {
         let read = rhs.get(self);
         let val = read.wrapping_sub(1);
@@ -173,7 +197,7 @@ impl Gb {
         let read = self.reg.read16(reg);
         let val = read.wrapping_sub(1);
         self.reg.write16(reg, val);
-        self.tick_t_cycle();
+        self.tick();
     }
 
     pub(super) fn ld16_hl_sp_dd(&mut self) {
@@ -186,7 +210,7 @@ impl Gb {
         self.reg.set_nf(false);
         self.reg.set_hf((tmp & 0x10) == 0x10);
         self.reg.set_cf((tmp & 0x100) == 0x100);
-        self.tick_t_cycle();
+        self.tick();
     }
 
     pub(super) fn rlca(&mut self) {
@@ -216,21 +240,21 @@ impl Gb {
     pub(super) fn do_jump_to_immediate(&mut self) {
         let addr = self.imm16();
         self.reg.pc = addr;
-        self.tick_t_cycle();
+        self.tick();
     }
 
     pub(super) fn jp_nn(&mut self) {
         self.do_jump_to_immediate();
     }
 
-    pub(super) fn jp_f(&mut self, condition: JumpCondition) {
-        if condition.check(self) {
+    pub(super) fn jp_f(&mut self, opcode: u8) {
+        if self.condition(opcode) {
             self.do_jump_to_immediate();
         } else {
             let pc = self.reg.pc.wrapping_add(2);
             self.reg.pc = pc;
-            self.tick_t_cycle();
-            self.tick_t_cycle();
+            self.tick();
+            self.tick();
         }
     }
 
@@ -243,19 +267,19 @@ impl Gb {
         let relative_addr = self.imm8() as i8 as u16;
         let pc = self.reg.pc.wrapping_add(relative_addr);
         self.reg.pc = pc;
-        self.tick_t_cycle();
+        self.tick();
     }
 
     pub(super) fn jr_d(&mut self) {
         self.do_jump_relative();
     }
 
-    pub(super) fn jr_f(&mut self, condition: JumpCondition) {
-        if condition.check(self) {
+    pub(super) fn jr_f(&mut self, opcode: u8) {
+        if self.condition(opcode) {
             self.do_jump_relative();
         } else {
             self.reg.inc_pc();
-            self.tick_t_cycle();
+            self.tick();
         }
     }
 
@@ -270,31 +294,41 @@ impl Gb {
         self.do_call();
     }
 
-    pub(super) fn call_f_nn(&mut self, condition: JumpCondition) {
-        if condition.check(self) {
+    pub(super) fn call_f_nn(&mut self, opcode: u8) {
+        if self.condition(opcode) {
             self.do_call();
         } else {
             let pc = self.reg.pc.wrapping_add(2);
             self.reg.pc = pc;
-            self.tick_t_cycle();
-            self.tick_t_cycle();
+            self.tick();
+            self.tick();
         }
     }
 
     fn do_return(&mut self) {
         let pc = self.internal_pop();
         self.reg.pc = pc;
-        self.tick_t_cycle();
+        self.tick();
     }
 
     pub(super) fn ret(&mut self) {
         self.do_return();
     }
 
-    pub(super) fn ret_f(&mut self, condition: JumpCondition) {
-        self.tick_t_cycle();
-        if condition.check(self) {
+    pub(super) fn ret_f(&mut self, opcode: u8) {
+        self.tick();
+        if self.condition(opcode) {
             self.do_return();
+        }
+    }
+
+    fn condition(&self, opcode: u8) -> bool {
+        match (opcode >> 3) & 0x3 {
+            0 => self.reg.f & ZF_FLAG == 0,
+            1 => self.reg.f & ZF_FLAG != 0,
+            2 => self.reg.f & CF_FLAG == 0,
+            3 => self.reg.f & CF_FLAG != 0,
+            _ => unreachable!(),
         }
     }
 
@@ -321,13 +355,13 @@ impl Gb {
     pub(super) fn stop(&mut self) {
         self.imm8();
 
-        if self.key1 & KEY1_SWITCH == 0 {
+        if self.key1 & KEY1_SWITCH_B == 0 {
             self.cpu_halted = true;
         } else {
             self.double_speed = !self.double_speed;
 
-            self.key1 &= !KEY1_SWITCH;
-            self.key1 ^= KEY1_SPEED;
+            self.key1 &= !KEY1_SWITCH_B;
+            self.key1 ^= KEY1_SPEED_B;
         }
     }
 
@@ -418,8 +452,8 @@ impl Gb {
         self.reg.set_nf(false);
         self.reg.set_hf((tmp & 0x10) == 0x10);
         self.reg.set_cf((tmp & 0x100) == 0x100);
-        self.tick_t_cycle();
-        self.tick_t_cycle();
+        self.tick();
+        self.tick();
     }
 
     pub(super) fn add_hl(&mut self, reg: Reg16) {
@@ -437,12 +471,12 @@ impl Gb {
         self.reg.set_hf(half_carry);
         self.reg.set_cf(hl > 0xffff - val);
 
-        self.tick_t_cycle();
+        self.tick();
     }
 
     pub(super) fn rlc<GS>(&mut self, rhs: GS)
     where
-        GS: Get<u8> + Set<u8>,
+        GS: Get + Set,
     {
         let read = rhs.get(self);
         let val = self.internal_rlc(read);
@@ -451,7 +485,7 @@ impl Gb {
 
     pub(super) fn rl<GS>(&mut self, rhs: GS)
     where
-        GS: Get<u8> + Set<u8>,
+        GS: Get + Set,
     {
         let read = rhs.get(self);
         let val = self.internal_rl(read);
@@ -460,7 +494,7 @@ impl Gb {
 
     pub(super) fn rrc<GS>(&mut self, rhs: GS)
     where
-        GS: Get<u8> + Set<u8>,
+        GS: Get + Set,
     {
         let read = rhs.get(self);
         let val = self.internal_rrc(read);
@@ -469,7 +503,7 @@ impl Gb {
 
     pub(super) fn rr<GS>(&mut self, rhs: GS)
     where
-        GS: Get<u8> + Set<u8>,
+        GS: Get + Set,
     {
         let read = rhs.get(self);
         let val = self.internal_rr(read);
@@ -478,7 +512,7 @@ impl Gb {
 
     pub(super) fn sla<GS>(&mut self, rhs: GS)
     where
-        GS: Get<u8> + Set<u8>,
+        GS: Get + Set,
     {
         let read = rhs.get(self);
         let val = read << 1;
@@ -492,7 +526,7 @@ impl Gb {
 
     pub(super) fn sra<GS>(&mut self, rhs: GS)
     where
-        GS: Get<u8> + Set<u8>,
+        GS: Get + Set,
     {
         let read = rhs.get(self);
         let hi = read & 0x80;
@@ -508,7 +542,7 @@ impl Gb {
 
     pub(super) fn srl<GS>(&mut self, rhs: GS)
     where
-        GS: Get<u8> + Set<u8>,
+        GS: Get + Set,
     {
         let read = rhs.get(self);
         let val = read >> 1;
@@ -522,7 +556,7 @@ impl Gb {
 
     pub(super) fn swap<GS>(&mut self, rhs: GS)
     where
-        GS: Get<u8> + Set<u8>,
+        GS: Get + Set,
     {
         let read = rhs.get(self);
         let val = (read >> 4) | (read << 4);
@@ -535,7 +569,7 @@ impl Gb {
 
     pub(super) fn bit<G>(&mut self, rhs: G, bit: usize)
     where
-        G: Get<u8>,
+        G: Get,
     {
         let read = rhs.get(self);
         let val = read & (1 << bit);
@@ -546,7 +580,7 @@ impl Gb {
 
     pub(super) fn set<GS>(&mut self, rhs: GS, bit: usize)
     where
-        GS: Get<u8> + Set<u8>,
+        GS: Get + Set,
     {
         let read = rhs.get(self);
         let val = read | (1 << bit);
@@ -555,7 +589,7 @@ impl Gb {
 
     pub(super) fn res<GS>(&mut self, rhs: GS, bit: usize)
     where
-        GS: Get<u8> + Set<u8>,
+        GS: Get + Set,
     {
         let read = rhs.get(self);
         let val = read & !(1 << bit);
