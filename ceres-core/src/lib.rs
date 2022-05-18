@@ -8,26 +8,23 @@
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::struct_excessive_bools)]
 #![allow(clippy::similar_names)]
-
-use {
-    apu::{Ch1, Ch2, HighPassFilter, Noise, Wave, TIMER_RESET_VALUE},
-    mem::HdmaState,
-};
+#![allow(clippy::too_many_lines)]
 
 extern crate alloc;
 
 pub use {
-    apu::{AudioCallbacks, Frame, Sample},
-    cart::{Cartridge, Header},
+    apu::{AudioCallbacks, Sample},
+    cart::Cartridge,
     error::Error,
     joypad::Button,
     ppu::{VideoCallbacks, PX_HEIGHT, PX_WIDTH},
 };
 use {
+    apu::{Ch1, Ch2, Noise, Wave, APU_TIMER_RES},
     bootrom::BootRom,
     core::time::Duration,
     cpu::Regs,
-    mem::{HIGH_RAM_SIZE, WRAM_SIZE_CGB},
+    mem::{HdmaState, HIGH_RAM_SIZE, WRAM_SIZE_CGB},
     ppu::{ColorPalette, Mode, RgbaBuf, OAM_SIZE, VRAM_SIZE_CGB},
     serial::Serial,
 };
@@ -37,17 +34,23 @@ mod bootrom;
 mod cart;
 mod cpu;
 mod error;
-mod interrupts;
 mod joypad;
 mod mem;
 mod ppu;
 mod serial;
 mod timer;
 
+const FRAME_NANOS: u64 = 16_750_418;
 // 59.7 fps
-pub const FRAME_DURATION: Duration = Duration::from_nanos(NANOS_PER_FRAME);
-const NANOS_PER_FRAME: u64 = 16_750_418;
-const T_CYCLES_PER_SECOND: u32 = 4_194_304;
+pub const FRAME_DUR: Duration = Duration::from_nanos(FRAME_NANOS);
+// t-cycles per second
+const TC_SEC: u32 = 4_194_304;
+
+const IF_VBLANK_B: u8 = 1;
+const IF_LCD_B: u8 = 2;
+const IF_TIMER_B: u8 = 4;
+const IF_SERIAL_B: u8 = 8;
+const IF_P1_B: u8 = 0x10;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Model {
@@ -63,105 +66,120 @@ enum FunctionMode {
     Cgb,
 }
 
+// IO addresses
+const IO_TIMA: u8 = 0x05;
+const IO_TMA: u8 = 0x06;
+const IO_TAC: u8 = 0x07;
+
+const IO_LCDC: u8 = 0x40;
+const IO_STAT: u8 = 0x41;
+const IO_SCY: u8 = 0x42;
+const IO_SCX: u8 = 0x43;
+const IO_LY: u8 = 0x44;
+const IO_LYC: u8 = 0x45;
+const IO_DMA: u8 = 0x46;
+const IO_BGP: u8 = 0x47;
+const IO_OBP0: u8 = 0x48;
+const IO_OBP1: u8 = 0x49;
+const IO_WY: u8 = 0x4a;
+const IO_WX: u8 = 0x4b;
+
+const IO_OPRI: u8 = 0x6c;
+
+const IO_IF: u8 = 0x0f;
+const IO_IE: u8 = 0xff;
+
+const IO_HDMA5: u8 = 0x55;
+
+const IO_NR51: u8 = 0x25;
+
 pub struct Gb {
-    exit: bool,
-    reg: Regs,
-    ei_delay: bool,
-    halted: bool,
-    halt_bug: bool,
-    key1: u8,
+    // general
+    exit_run: bool,
     cart: Cartridge,
-    serial: Serial,
-    boot_rom: BootRom,
+    brom: BootRom,
     model: Model,
-    double_speed: bool,
     function_mode: FunctionMode,
 
+    double_speed: bool,
+    key1: u8,
+
+    // cpu
+    reg: Regs,
+    cpu_ei_delay: bool,
+    cpu_halted: bool,
+    cpu_halt_bug: bool,
+
+    // serial
+    serial: Serial,
+
     // joypad
-    joy_btns: u8,
-    joy_dirs: bool,
-    joy_acts: bool,
+    p1_btn: u8,
+    p1_dirs: bool,
+    p1_acts: bool,
 
     // interrupts
     ime: bool,
-    interrupt_flag: u8,
-    interrupt_enable: u8,
 
     // memory
     wram: [u8; WRAM_SIZE_CGB],
     hram: [u8; HIGH_RAM_SIZE],
+    // TODO: move everything here
+    io: [u8; 0x70],
     svbk: u8,
-    svbk_bank: u8, // true selected bank, between 1 and 7
+    svbk_true: u8, // true selected bank, between 1 and 7
 
+    // -- dma
+    dma_on: bool,
+    dma_addr: u16,
+    dma_restarting: bool,
+    dma_cycles: i8,
+
+    // -- hdma
     hdma_src: u16,
     hdma_dst: u16,
     hdma_len: u16,
     hdma_state: HdmaState,
-    hdma5: u8, // stores only low 7 bits
 
     // ppu
     vram: [u8; VRAM_SIZE_CGB],
     oam: [u8; OAM_SIZE],
-    cycles: i16,
     rgba_buf: RgbaBuf,
-    win_in_frame: bool,
-    win_in_ly: bool,
-    win_lines_skipped: u16,
-    video_callbacks: *mut dyn VideoCallbacks,
-    lcdc: u8,
-    stat: u8,
-    scy: u8,
-    scx: u8,
-    ly: u8,
-    lyc: u8,
-    wy: u8,
-    wx: u8,
-    opri: u8,
-    bgp: u8,
-    obp0: u8,
-    obp1: u8,
+    ppu_cycles: i16,
+    ppu_win_in_frame: bool,
+    ppu_win_in_ly: bool,
+    ppu_win_skipped: u16,
+    ppu_callbacks: *mut dyn VideoCallbacks,
     bcp: ColorPalette,
     ocp: ColorPalette,
-    vbk: u8, // 0 or 1
+    vbk: u8,
 
     // clock
-    clock_on: bool,
-    internal_counter: u16,
-
-    // clock registers
-    counter: u8,
-    modulo: u8,
-    tac: u8,
-    overflow: bool,
+    clk_on: bool,
+    clk_overflow: bool,
+    clk_wide: u16,
 
     // apu
-    ch1: Ch1,
-    ch2: Ch2,
-    ch3: Wave,
-    ch4: Noise,
+    apu_on: bool,
+    apu_r_vol: u8,
+    apu_l_vol: u8,
+    apu_r_vin: bool,
+    apu_l_vin: bool,
 
-    // sequencer
-    timer: u16,
+    // -- channels
+    apu_ch1: Ch1,
+    apu_ch2: Ch2,
+    apu_ch3: Wave,
+    apu_ch4: Noise,
+
+    // -- sequencer
+    apu_timer: u16,
     apu_counter: u8,
 
     apu_render_period: u32,
     apu_cycles_until_render: u32,
-    audio_callbacks: *mut dyn AudioCallbacks,
-    high_pass_filter: HighPassFilter,
-
-    apu_on: bool,
-    nr51: u8,
-    right_volume: u8,
-    left_volume: u8,
-    right_vin_on: bool,
-    left_vin_on: bool,
-
-    // dma
-    dma_on: bool,
-    dma: u8,
-    dma_addr: u16,
-    dma_restarting: bool,
-    dma_cycles: i8,
+    apu_callbacks: *mut dyn AudioCallbacks,
+    apu_cap: f32,
 }
 
 impl Gb {
@@ -183,18 +201,20 @@ impl Gb {
         let cycles_to_render = (*audio_callbacks).cycles_to_render();
 
         Self {
+            io: [0; 0x70],
             reg: Regs::new(),
-            ei_delay: false,
+            cpu_ei_delay: false,
             ime: false,
-            halted: false,
-            halt_bug: false,
+            cpu_halted: false,
+            cpu_halt_bug: false,
             cart,
             hram: [0; HIGH_RAM_SIZE],
             wram: [0; WRAM_SIZE_CGB],
+            vbk: 0,
             svbk: 0,
-            svbk_bank: 1,
+            svbk_true: 1,
             serial: Serial::new(),
-            boot_rom: BootRom::new(model),
+            brom: BootRom::new(model),
             model,
             double_speed: false,
             key1: 0,
@@ -202,56 +222,35 @@ impl Gb {
             vram: [0; VRAM_SIZE_CGB],
             oam: [0; OAM_SIZE],
             rgba_buf: RgbaBuf::new(),
-            cycles: Mode::HBlank.cycles(0),
-            win_in_frame: false,
-            win_lines_skipped: 0,
-            win_in_ly: false,
-            video_callbacks,
-            lcdc: 0,
-            stat: 0,
-            scy: 0,
-            scx: 0,
-            ly: 0,
-            lyc: 0,
-            wy: 0,
-            wx: 0,
-            bgp: 0,
-            obp0: 0,
-            obp1: 0,
+            ppu_cycles: Mode::HBlank.cycles(0),
+            ppu_win_in_frame: false,
+            ppu_win_skipped: 0,
+            ppu_win_in_ly: false,
+            ppu_callbacks: video_callbacks,
             bcp: ColorPalette::new(),
             ocp: ColorPalette::new(),
-            opri: 0,
-            vbk: 0,
-            exit: false,
-            interrupt_enable: 0,
-            interrupt_flag: 0,
-            clock_on: false,
-            internal_counter: 0,
-            counter: 0,
-            modulo: 0,
-            tac: 0,
-            overflow: false,
-            joy_btns: 0,
-            joy_dirs: false,
-            joy_acts: false,
-            ch1: Ch1::new(),
-            ch2: Ch2::new(),
-            ch3: Wave::new(),
-            ch4: Noise::new(),
+            exit_run: false,
+            clk_on: false,
+            clk_wide: 0,
+            clk_overflow: false,
+            p1_btn: 0,
+            p1_dirs: false,
+            p1_acts: false,
+            apu_ch1: Ch1::new(),
+            apu_ch2: Ch2::new(),
+            apu_ch3: Wave::new(),
+            apu_ch4: Noise::new(),
             apu_render_period: cycles_to_render,
             apu_cycles_until_render: cycles_to_render,
-            audio_callbacks,
-            high_pass_filter: HighPassFilter::new(),
+            apu_callbacks: audio_callbacks,
             apu_on: false,
-            nr51: 0,
-            right_volume: 0,
-            left_volume: 0,
-            right_vin_on: false,
-            left_vin_on: false,
-            timer: TIMER_RESET_VALUE,
+            apu_r_vol: 0,
+            apu_l_vol: 0,
+            apu_r_vin: false,
+            apu_l_vin: false,
+            apu_timer: APU_TIMER_RES,
             apu_counter: 0,
             dma_on: false,
-            dma: 0,
             dma_addr: 0,
             dma_restarting: false,
             dma_cycles: 0,
@@ -259,14 +258,14 @@ impl Gb {
             hdma_dst: 0,
             hdma_len: 0,
             hdma_state: HdmaState::Sleep,
-            hdma5: 0,
+            apu_cap: 0.0,
         }
     }
 
     pub fn run_frame(&mut self) {
-        self.exit = false;
+        self.exit_run = false;
 
-        while !self.exit {
+        while !self.exit_run {
             self.run();
         }
     }

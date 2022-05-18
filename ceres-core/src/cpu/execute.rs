@@ -16,7 +16,6 @@ impl Gb {
     /// # Panics
     ///
     /// will panic on illegal opcode
-    #[allow(clippy::too_many_lines)]
     pub(super) fn exec(&mut self, opcode: u8) {
         match opcode {
             0x7f => self.ld(A, A),
@@ -235,7 +234,7 @@ impl Gb {
             0xfb => self.ei(),
             0x3f => self.ccf(),
             0x37 => self.scf(),
-            0x00 => self.nop(),
+            0x00 => Self::nop(),
             0x27 => self.daa(),
             0x2f => self.cpl(),
             0x01 => self.ld16_nn(BC),
@@ -273,7 +272,6 @@ impl Gb {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
     fn exec_cb(&mut self) {
         let opcode = self.imm8();
         match opcode {

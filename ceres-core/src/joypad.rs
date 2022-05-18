@@ -1,4 +1,4 @@
-use crate::{interrupts::JOYPAD_INT, Gb};
+use crate::{Gb, IF_P1_B, IO_IF};
 
 #[derive(Clone, Copy)]
 pub enum Button {
@@ -14,41 +14,38 @@ pub enum Button {
 
 impl Gb {
     pub fn press(&mut self, button: Button) {
-        self.joy_btns |= button as u8;
+        let b = button as u8;
+        self.p1_btn |= b;
 
-        if button as u8 & 0x0f != 0 && self.joy_dirs {
-            self.req_interrupt(JOYPAD_INT);
-        }
-
-        if button as u8 & 0xf0 != 0 && self.joy_acts {
-            self.req_interrupt(JOYPAD_INT);
+        if b & 0x0f != 0 && self.p1_dirs || b & 0xf0 != 0 && self.p1_acts {
+            self.io[IO_IF as usize] |= IF_P1_B;
         }
     }
 
     pub fn release(&mut self, button: Button) {
-        self.joy_btns &= !(button as u8);
+        self.p1_btn &= !(button as u8);
     }
 
     #[must_use]
-    pub(crate) fn read_joy(&self) -> u8 {
-        let act_bits = if self.joy_acts {
-            self.joy_btns >> 4 | 1 << 5
+    pub(crate) fn read_p1(&self) -> u8 {
+        let act = if self.p1_acts {
+            self.p1_btn >> 4 | 1 << 5
         } else {
             0
         };
 
-        let dir_bits = if self.joy_dirs {
-            self.joy_btns & 0xf | 1 << 4
+        let dir = if self.p1_dirs {
+            self.p1_btn & 0xf | 1 << 4
         } else {
             0
         };
 
         // pressed on low
-        !(act_bits | dir_bits)
+        !(act | dir)
     }
 
     pub(crate) fn write_joy(&mut self, val: u8) {
-        self.joy_acts = (val >> 5) & 1 == 0;
-        self.joy_dirs = (val >> 4) & 1 == 0;
+        self.p1_acts = val & 0x20 == 0;
+        self.p1_dirs = val & 0x10 == 0;
     }
 }

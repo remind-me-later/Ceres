@@ -1,5 +1,9 @@
 use {
-    crate::{ppu::LCD_ENABLE, FunctionMode, Gb, Model::Cgb},
+    super::KEY1_SWITCH,
+    crate::{
+        FunctionMode, Gb, Model::Cgb, IO_BGP, IO_DMA, IO_IE, IO_IF, IO_LCDC, IO_LY, IO_LYC,
+        IO_NR51, IO_OBP0, IO_OBP1, IO_OPRI, IO_SCX, IO_SCY, IO_STAT, IO_WX, IO_WY,
+    },
     core::intrinsics::unlikely,
 };
 
@@ -37,8 +41,8 @@ impl Gb {
     }
 
     fn brom_or_rom(&mut self, addr: u16) -> u8 {
-        if unlikely(self.boot_rom.is_mapped()) {
-            return self.boot_rom.read(addr);
+        if unlikely(self.brom.is_mapped()) {
+            return self.brom.read(addr);
         }
 
         self.cart.read_rom(addr)
@@ -65,49 +69,29 @@ impl Gb {
 
     fn read_high(&mut self, addr: u8) -> u8 {
         match addr {
-            0x00 => self.mem_tick(|gb| gb.read_joy()),
+            0x00 => self.mem_tick(|gb| gb.read_p1()),
             0x01 => self.mem_tick(|gb| gb.serial.read_sb()),
             0x02 => self.mem_tick(|gb| gb.serial.read_sc()),
             0x04 => self.timer_tick(Self::read_div),
             0x05 => self.timer_tick(Self::read_tima),
             0x06 => self.timer_tick(Self::read_tma),
             0x07 => self.timer_tick(Self::read_tac),
-            0x0f => self.mem_tick(|gb| gb.interrupt_flag | 0xe0),
-            0x10 => self.apu_tick(|gb| gb.ch1.read_nr10()),
-            0x11 => self.apu_tick(|gb| gb.ch1.read_nr11()),
-            0x12 => self.apu_tick(|gb| gb.ch1.read_nr12()),
-            0x14 => self.apu_tick(|gb| gb.ch1.read_nr14()),
-            0x16 => self.apu_tick(|gb| gb.ch2.read_nr21()),
-            0x17 => self.apu_tick(|gb| gb.ch2.read_nr22()),
-            0x19 => self.apu_tick(|gb| gb.ch2.read_nr24()),
-            0x1a => self.apu_tick(|gb| gb.ch3.read_nr30()),
-            0x1c => self.apu_tick(|gb| gb.ch3.read_nr32()),
-            0x1e => self.apu_tick(|gb| gb.ch3.read_nr34()),
-            0x21 => self.apu_tick(|gb| gb.ch4.read_nr42()),
-            0x22 => self.apu_tick(|gb| gb.ch4.read_nr43()),
-            0x23 => self.apu_tick(|gb| gb.ch4.read_nr44()),
+            IO_IF => self.mem_tick(|gb| gb.io[IO_IF as usize] | 0xe0),
+            0x10 => self.apu_tick(|gb| gb.apu_ch1.read_nr10()),
+            0x11 => self.apu_tick(|gb| gb.apu_ch1.read_nr11()),
+            0x12 => self.apu_tick(|gb| gb.apu_ch1.read_nr12()),
+            0x14 => self.apu_tick(|gb| gb.apu_ch1.read_nr14()),
+            0x16 => self.apu_tick(|gb| gb.apu_ch2.read_nr21()),
+            0x17 => self.apu_tick(|gb| gb.apu_ch2.read_nr22()),
+            0x19 => self.apu_tick(|gb| gb.apu_ch2.read_nr24()),
+            0x1a => self.apu_tick(|gb| gb.apu_ch3.read_nr30()),
+            0x1c => self.apu_tick(|gb| gb.apu_ch3.read_nr32()),
+            0x1e => self.apu_tick(|gb| gb.apu_ch3.read_nr34()),
+            0x21 => self.apu_tick(|gb| gb.apu_ch4.read_nr42()),
+            0x22 => self.apu_tick(|gb| gb.apu_ch4.read_nr43()),
+            0x23 => self.apu_tick(|gb| gb.apu_ch4.read_nr44()),
             0x24 => self.apu_tick(|gb| gb.read_nr50()),
-            0x25 => self.apu_tick(|gb| gb.nr51),
             0x26 => self.apu_tick(|gb| gb.read_nr52()),
-            0x30..=0x3f => self.apu_tick(|gb| gb.ch3.read_wave_ram(addr)),
-            0x40 => self.mem_tick(|gb| gb.lcdc),
-            0x41 => self.mem_tick(|gb| {
-                if gb.lcdc & LCD_ENABLE == 0 {
-                    0x80
-                } else {
-                    gb.stat | 0x80
-                }
-            }),
-            0x42 => self.mem_tick(|gb| gb.scy),
-            0x43 => self.mem_tick(|gb| gb.scx),
-            0x44 => self.mem_tick(|gb| gb.ly),
-            0x45 => self.mem_tick(|gb| gb.lyc),
-            0x46 => self.mem_tick(|gb| gb.dma),
-            0x47 => self.mem_tick(|gb| gb.bgp),
-            0x48 => self.mem_tick(|gb| gb.obp0),
-            0x49 => self.mem_tick(|gb| gb.obp1),
-            0x4a => self.mem_tick(|gb| gb.wy),
-            0x4b => self.mem_tick(|gb| gb.wx),
             0x4d if self.model == Cgb => self.mem_tick(|gb| 0x7e | gb.key1),
             0x4f if self.model == Cgb => self.mem_tick(|gb| gb.vbk | 0xfe),
             0x55 if self.model == Cgb => self.mem_tick(|gb| gb.read_hdma5()),
@@ -115,10 +99,13 @@ impl Gb {
             0x69 if self.model == Cgb => self.mem_tick(|gb| gb.bcp.data()),
             0x6a if self.model == Cgb => self.mem_tick(|gb| gb.ocp.spec()),
             0x6b if self.model == Cgb => self.mem_tick(|gb| gb.ocp.data()),
-            0x6c if self.model == Cgb => self.mem_tick(|gb| gb.opri),
             0x70 if self.model == Cgb => self.mem_tick(|gb: &mut Gb| gb.svbk | 0xf8),
             0x80..=0xfe => self.mem_tick(|gb| gb.hram[(addr & 0x7f) as usize]),
-            0xff => self.mem_tick(|gb| gb.interrupt_enable),
+            0x30..=0x3f => self.apu_tick(|gb| gb.apu_ch3.read_wave_ram(addr)),
+            IO_LCDC | IO_STAT | IO_SCX | IO_SCY | IO_LY | IO_LYC | IO_WY | IO_WX | IO_BGP
+            | IO_OBP0 | IO_OBP1 | IO_OPRI | IO_DMA | IO_IE | IO_NR51 => {
+                self.mem_tick(|gb| gb.io[addr as usize])
+            }
             _ => self.mem_tick(|_| 0xff),
         }
     }
@@ -142,7 +129,6 @@ impl Gb {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
     fn write_high(&mut self, addr: u8, val: u8) {
         match addr {
             0x00 => self.mem_tick(|gb| gb.write_joy(val)),
@@ -152,120 +138,115 @@ impl Gb {
             0x05 => self.timer_tick(|gb| gb.write_tima(val)),
             0x06 => self.timer_tick(|gb| gb.write_tma(val)),
             0x07 => self.timer_tick(|gb| gb.write_tac(val)),
-            0x0f => self.mem_tick(|gb| gb.interrupt_flag = val & 0x1f),
+            IO_IF => self.mem_tick(|gb| gb.io[IO_IF as usize] = val & 0x1f),
             0x10 => self.apu_tick(|gb| {
                 if gb.apu_on {
-                    gb.ch1.write_nr10(val);
+                    gb.apu_ch1.write_nr10(val);
                 }
             }),
             0x11 => self.apu_tick(|gb| {
                 if gb.apu_on {
-                    gb.ch1.write_nr11(val);
+                    gb.apu_ch1.write_nr11(val);
                 }
             }),
             0x12 => self.apu_tick(|gb| {
                 if gb.apu_on {
-                    gb.ch1.write_nr12(val);
+                    gb.apu_ch1.write_nr12(val);
                 }
             }),
             0x13 => self.apu_tick(|gb| {
                 if gb.apu_on {
-                    gb.ch1.write_nr13(val);
+                    gb.apu_ch1.write_nr13(val);
                 }
             }),
             0x14 => self.apu_tick(|gb| {
                 if gb.apu_on {
-                    gb.ch1.write_nr14(val);
+                    gb.apu_ch1.write_nr14(val);
                 }
             }),
             0x16 => self.apu_tick(|gb| {
                 if gb.apu_on {
-                    gb.ch2.write_nr21(val);
+                    gb.apu_ch2.write_nr21(val);
                 }
             }),
             0x17 => self.apu_tick(|gb| {
                 if gb.apu_on {
-                    gb.ch2.write_nr22(val);
+                    gb.apu_ch2.write_nr22(val);
                 }
             }),
             0x18 => self.apu_tick(|gb| {
                 if gb.apu_on {
-                    gb.ch2.write_nr23(val);
+                    gb.apu_ch2.write_nr23(val);
                 }
             }),
             0x19 => self.apu_tick(|gb| {
                 if gb.apu_on {
-                    gb.ch2.write_nr24(val);
+                    gb.apu_ch2.write_nr24(val);
                 }
             }),
             0x1a => self.apu_tick(|gb| {
                 if gb.apu_on {
-                    gb.ch3.write_nr30(val);
+                    gb.apu_ch3.write_nr30(val);
                 }
             }),
             0x1b => self.apu_tick(|gb| {
                 if gb.apu_on {
-                    gb.ch3.write_nr31(val);
+                    gb.apu_ch3.write_nr31(val);
                 }
             }),
             0x1c => self.apu_tick(|gb| {
                 if gb.apu_on {
-                    gb.ch3.write_nr32(val);
+                    gb.apu_ch3.write_nr32(val);
                 }
             }),
             0x1d => self.apu_tick(|gb| {
                 if gb.apu_on {
-                    gb.ch3.write_nr33(val);
+                    gb.apu_ch3.write_nr33(val);
                 }
             }),
             0x1e => self.apu_tick(|gb| {
                 if gb.apu_on {
-                    gb.ch3.write_nr34(val);
+                    gb.apu_ch3.write_nr34(val);
                 }
             }),
             0x20 => self.apu_tick(|gb| {
                 if gb.apu_on {
-                    gb.ch4.write_nr41(val);
+                    gb.apu_ch4.write_nr41(val);
                 }
             }),
             0x21 => self.apu_tick(|gb| {
                 if gb.apu_on {
-                    gb.ch4.write_nr42(val);
+                    gb.apu_ch4.write_nr42(val);
                 }
             }),
             0x22 => self.apu_tick(|gb| {
                 if gb.apu_on {
-                    gb.ch4.write_nr43(val);
+                    gb.apu_ch4.write_nr43(val);
                 }
             }),
             0x23 => self.apu_tick(|gb| {
                 if gb.apu_on {
-                    gb.ch4.write_nr44(val);
+                    gb.apu_ch4.write_nr44(val);
                 }
             }),
             0x24 => self.apu_tick(|gb| gb.write_nr50(val)),
             0x25 => self.apu_tick(|gb| gb.write_nr51(val)),
             0x26 => self.apu_tick(|gb| gb.write_nr52(val)),
             0x30..=0x3f => self.apu_tick(|gb| gb.write_wave(addr, val)),
-            0x40 => self.mem_tick(|gb| gb.write_lcdc(val)),
-            0x41 => self.mem_tick(|gb| gb.write_stat(val)),
-            0x42 => self.mem_tick(|gb| gb.scy = val),
-            0x43 => self.mem_tick(|gb| gb.scx = val),
-            0x45 => self.mem_tick(|gb| gb.lyc = val),
+            IO_LCDC => self.mem_tick(|gb| gb.write_lcdc(val)),
+            IO_STAT => self.mem_tick(|gb| gb.write_stat(val)),
             0x46 => self.mem_tick(|gb| gb.write_dma(val)),
-            0x47 => self.mem_tick(|gb| gb.bgp = val),
-            0x48 => self.mem_tick(|gb| gb.obp0 = val),
-            0x49 => self.mem_tick(|gb| gb.obp1 = val),
-            0x4a => self.mem_tick(|gb| gb.wy = val),
-            0x4b => self.mem_tick(|gb| gb.wx = val),
-            0x4c if self.model == Cgb && self.boot_rom.is_mapped() && val == 4 => {
+            0x4c if self.model == Cgb && self.brom.is_mapped() && val == 4 => {
                 self.function_mode = FunctionMode::Compat;
             }
-            0x4d if self.model == Cgb => self.mem_tick(|gb| gb.key1 = val & 1),
+            0x4d if self.model == Cgb => self.mem_tick(|gb| {
+                gb.key1 &= !KEY1_SWITCH;
+                gb.key1 |= val & KEY1_SWITCH;
+            }),
             0x4f if self.model == Cgb => self.mem_tick(|gb| gb.vbk = val & 1),
             0x50 => self.mem_tick(|gb| {
                 if val & 1 != 0 {
-                    gb.boot_rom.unmap();
+                    gb.brom.unmap();
                 }
             }),
             0x51 if self.model == Cgb => self.mem_tick(|gb| gb.write_hdma1(val)),
@@ -277,14 +258,14 @@ impl Gb {
             0x69 if self.model == Cgb => self.mem_tick(|gb| gb.bcp.set_data(val)),
             0x6a if self.model == Cgb => self.mem_tick(|gb| gb.ocp.set_spec(val)),
             0x6b if self.model == Cgb => self.mem_tick(|gb| gb.ocp.set_data(val)),
-            0x6c if self.model == Cgb => self.mem_tick(|gb| gb.opri = val),
             0x70 if self.model == Cgb => self.mem_tick(|gb| {
                 let tmp = val & 7;
                 gb.svbk = tmp;
-                gb.svbk_bank = if tmp == 0 { 1 } else { tmp };
+                gb.svbk_true = if tmp == 0 { 1 } else { tmp };
             }),
             0x80..=0xfe => self.mem_tick(|gb| gb.hram[(addr & 0x7f) as usize] = val),
-            0xff => self.mem_tick(|gb| gb.interrupt_enable = val),
+            IO_SCX | IO_SCY | IO_LYC | IO_WY | IO_WX | IO_BGP | IO_OBP0 | IO_OBP1 | IO_OPRI
+            | IO_IE => self.mem_tick(|gb| gb.io[addr as usize] = val),
             _ => self.tick_t_cycle(),
         }
     }

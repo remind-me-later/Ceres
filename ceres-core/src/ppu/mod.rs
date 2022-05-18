@@ -1,7 +1,6 @@
 use {
     crate::{
-        interrupts::{LCD_STAT_INT, VBLANK_INT},
-        FunctionMode, Gb,
+        FunctionMode, Gb, IF_LCD_B, IF_VBLANK_B, IO_IF, IO_LCDC, IO_LY, IO_LYC, IO_SCX, IO_STAT,
     },
     core::hint::unreachable_unchecked,
 };
@@ -20,14 +19,14 @@ const HBLANK_CYCLES: i16 = 204; // Variable, maximum ammount
 const VBLANK_CYCLES: i16 = 456; // Constant
 
 // LCDC bits
-const BACKGROUND_ENABLED: u8 = 1;
-const OBJ_ENABLED: u8 = 1 << 1;
-const LARGE_SPRITES: u8 = 1 << 2;
-const BG_TILE_MAP_AREA: u8 = 1 << 3;
-const BG_WINDOW_TILE_DATA_AREA: u8 = 1 << 4;
-const WINDOW_ENABLED: u8 = 1 << 5;
-const WINDOW_TILE_MAP_AREA: u8 = 1 << 6;
-pub const LCD_ENABLE: u8 = 1 << 7;
+const LCDC_BG_B: u8 = 1;
+const LCDC_OBJ_B: u8 = 1 << 1;
+const LCDC_OBJL_B: u8 = 1 << 2;
+const LCDC_BG_TILE_MAP_AREA: u8 = 1 << 3;
+const LCDC_BG_WINDOW_TILE_DATA_AREA: u8 = 1 << 4;
+const LCDC_WIN_ENA: u8 = 1 << 5;
+const LCDC_WINDOW_TILE_MAP_AREA: u8 = 1 << 6;
+pub const LCDC_ENA_B: u8 = 1 << 7;
 
 // STAT bits
 const MODE_BITS: u8 = 3;
@@ -197,23 +196,23 @@ struct Obj {
 impl Gb {
     pub(crate) fn tick_ppu(&mut self) {
         fn check_lyc(gb: &mut Gb) {
-            gb.stat &= !LY_EQUALS_LYC;
+            gb.io[IO_STAT as usize] &= !LY_EQUALS_LYC;
 
-            if gb.ly == gb.lyc {
-                gb.stat |= LY_EQUALS_LYC;
-                if gb.stat & LY_EQUALS_LYC_INTERRUPT != 0 {
-                    gb.req_interrupt(LCD_STAT_INT);
+            if gb.io[IO_LY as usize] == gb.io[IO_LYC as usize] {
+                gb.io[IO_STAT as usize] |= LY_EQUALS_LYC;
+                if gb.io[IO_STAT as usize] & LY_EQUALS_LYC_INTERRUPT != 0 {
+                    gb.io[IO_IF as usize] |= IF_LCD_B;
                 }
             }
         }
 
-        if self.lcdc & LCD_ENABLE == 0 {
+        if self.io[IO_LCDC as usize] & LCDC_ENA_B == 0 {
             return;
         }
 
-        self.cycles -= self.t_elapsed() as i16;
+        self.ppu_cycles -= self.t_elapsed() as i16;
 
-        if self.cycles > 0 {
+        if self.ppu_cycles > 0 {
             return;
         }
 
@@ -224,8 +223,8 @@ impl Gb {
                 self.switch_mode(Mode::HBlank);
             }
             Mode::HBlank => {
-                self.ly += 1;
-                if self.ly < 144 {
+                self.io[IO_LY as usize] += 1;
+                if self.io[IO_LY as usize] < 144 {
                     self.switch_mode(Mode::OamScan);
                 } else {
                     self.switch_mode(Mode::VBlank);
@@ -233,17 +232,17 @@ impl Gb {
                 check_lyc(self);
             }
             Mode::VBlank => {
-                self.ly += 1;
-                if self.ly > 153 {
-                    self.ly = 0;
+                self.io[IO_LY as usize] += 1;
+                if self.io[IO_LY as usize] > 153 {
+                    self.io[IO_LY as usize] = 0;
                     self.switch_mode(Mode::OamScan);
-                    self.exit = true;
+                    self.exit_run = true;
                     unsafe {
-                        (*self.video_callbacks).draw(&self.rgba_buf.data);
+                        (*self.ppu_callbacks).draw(&self.rgba_buf.data);
                     }
                 } else {
-                    let scx = self.scx;
-                    self.cycles += self.ppu_mode().cycles(scx);
+                    let scx = self.io[IO_SCX as usize];
+                    self.ppu_cycles += self.ppu_mode().cycles(scx);
                 }
                 check_lyc(self);
             }
@@ -252,7 +251,7 @@ impl Gb {
 
     #[must_use]
     pub(crate) fn ppu_mode(&self) -> Mode {
-        match self.stat & 3 {
+        match self.io[IO_STAT as usize] & 3 {
             0 => Mode::HBlank,
             1 => Mode::VBlank,
             2 => Mode::OamScan,
@@ -276,27 +275,28 @@ impl Gb {
     }
 
     pub(crate) fn write_lcdc(&mut self, val: u8) {
-        if val & LCD_ENABLE == 0 && self.lcdc & LCD_ENABLE != 0 {
+        if val & LCDC_ENA_B == 0 && self.io[IO_LCDC as usize] & LCDC_ENA_B != 0 {
             debug_assert!(self.ppu_mode() == Mode::VBlank);
-            self.ly = 0;
+            self.io[IO_LY as usize] = 0;
         }
 
-        if val & LCD_ENABLE != 0 && self.lcdc & LCD_ENABLE == 0 {
+        if val & LCDC_ENA_B != 0 && self.io[IO_LCDC as usize] & LCDC_ENA_B == 0 {
             self.set_mode(Mode::HBlank);
-            self.stat |= LY_EQUALS_LYC;
-            self.cycles = Mode::OamScan.cycles(self.scx);
+            self.io[IO_STAT as usize] &= !LY_EQUALS_LYC;
+            self.io[IO_STAT as usize] |= LY_EQUALS_LYC;
+            self.ppu_cycles = Mode::OamScan.cycles(self.io[IO_SCX as usize]);
         }
 
-        self.lcdc = val;
+        self.io[IO_LCDC as usize] = val;
     }
 
     pub(crate) fn write_stat(&mut self, val: u8) {
-        let ly_equals_lyc = self.stat & LY_EQUALS_LYC;
+        let ly_equals_lyc = self.io[IO_STAT as usize] & LY_EQUALS_LYC;
         let mode: u8 = self.ppu_mode() as u8;
 
-        self.stat = val;
-        self.stat &= !(LY_EQUALS_LYC | MODE_BITS);
-        self.stat |= ly_equals_lyc | mode;
+        self.io[IO_STAT as usize] = val;
+        self.io[IO_STAT as usize] &= !(LY_EQUALS_LYC | MODE_BITS);
+        self.io[IO_STAT as usize] |= ly_equals_lyc | mode;
     }
 
     pub(crate) fn write_vram(&mut self, addr: u16, val: u8) {
@@ -314,8 +314,8 @@ impl Gb {
     }
 
     fn set_mode(&mut self, mode: Mode) {
-        let bits: u8 = self.stat & !MODE_BITS;
-        self.stat = bits | (mode as u8);
+        let bits: u8 = self.io[IO_STAT as usize] & !MODE_BITS;
+        self.io[IO_STAT as usize] = bits | (mode as u8);
     }
 
     fn get_mono_color(index: u8) -> (u8, u8, u8) {
@@ -324,35 +324,35 @@ impl Gb {
 
     fn switch_mode(&mut self, mode: Mode) {
         self.set_mode(mode);
-        let scx = self.scx;
-        self.cycles += mode.cycles(scx);
+        let scx = self.io[IO_SCX as usize];
+        self.ppu_cycles += mode.cycles(scx);
 
         match mode {
             Mode::OamScan => {
-                if self.stat & OAM_INTERRUPT != 0 {
-                    self.req_interrupt(LCD_STAT_INT);
+                if self.io[IO_STAT as usize] & OAM_INTERRUPT != 0 {
+                    self.io[IO_IF as usize] |= IF_LCD_B;
                 }
 
-                self.win_in_ly = false;
+                self.ppu_win_in_ly = false;
             }
             Mode::VBlank => {
-                self.req_interrupt(VBLANK_INT);
+                self.io[IO_IF as usize] |= IF_VBLANK_B;
 
-                if self.stat & VBLANK_INTERRUPT != 0 {
-                    self.req_interrupt(LCD_STAT_INT);
+                if self.io[IO_STAT as usize] & VBLANK_INTERRUPT != 0 {
+                    self.io[IO_IF as usize] |= IF_LCD_B;
                 }
 
-                if self.stat & OAM_INTERRUPT != 0 {
-                    self.req_interrupt(LCD_STAT_INT);
+                if self.io[IO_STAT as usize] & OAM_INTERRUPT != 0 {
+                    self.io[IO_IF as usize] |= IF_LCD_B;
                 }
 
-                self.win_lines_skipped = 0;
-                self.win_in_frame = false;
+                self.ppu_win_skipped = 0;
+                self.ppu_win_in_frame = false;
             }
             Mode::Drawing => (),
             Mode::HBlank => {
-                if self.stat & HBLANK_INTERRUPT != 0 {
-                    self.req_interrupt(LCD_STAT_INT);
+                if self.io[IO_STAT as usize] & HBLANK_INTERRUPT != 0 {
+                    self.io[IO_IF as usize] |= IF_LCD_B;
                 }
             }
         }
@@ -361,15 +361,16 @@ impl Gb {
     fn win_enabled(&self) -> bool {
         match self.function_mode {
             FunctionMode::Dmg | FunctionMode::Compat => {
-                (self.lcdc & BACKGROUND_ENABLED != 0) && (self.lcdc & WINDOW_ENABLED != 0)
+                (self.io[IO_LCDC as usize] & LCDC_BG_B != 0)
+                    && (self.io[IO_LCDC as usize] & LCDC_WIN_ENA != 0)
             }
-            FunctionMode::Cgb => self.lcdc & WINDOW_ENABLED != 0,
+            FunctionMode::Cgb => self.io[IO_LCDC as usize] & LCDC_WIN_ENA != 0,
         }
     }
 
     fn bg_enabled(&self) -> bool {
         match self.function_mode {
-            FunctionMode::Dmg | FunctionMode::Compat => self.lcdc & BACKGROUND_ENABLED != 0,
+            FunctionMode::Dmg | FunctionMode::Compat => self.io[IO_LCDC as usize] & LCDC_BG_B != 0,
             FunctionMode::Cgb => true,
         }
     }
@@ -377,16 +378,16 @@ impl Gb {
     fn cgb_master_priority(&self) -> bool {
         match self.function_mode {
             FunctionMode::Dmg | FunctionMode::Compat => false,
-            FunctionMode::Cgb => self.lcdc & BACKGROUND_ENABLED == 0,
+            FunctionMode::Cgb => self.io[IO_LCDC as usize] & LCDC_BG_B == 0,
         }
     }
 
     fn signed_byte_for_tile_offset(&self) -> bool {
-        self.lcdc & BG_WINDOW_TILE_DATA_AREA == 0
+        self.io[IO_LCDC as usize] & LCDC_BG_WINDOW_TILE_DATA_AREA == 0
     }
 
     fn bg_tile_map(&self) -> u16 {
-        if self.lcdc & BG_TILE_MAP_AREA == 0 {
+        if self.io[IO_LCDC as usize] & LCDC_BG_TILE_MAP_AREA == 0 {
             0x9800
         } else {
             0x9c00
@@ -394,7 +395,7 @@ impl Gb {
     }
 
     fn win_tile_map(&self) -> u16 {
-        if self.lcdc & WINDOW_TILE_MAP_AREA == 0 {
+        if self.io[IO_LCDC as usize] & LCDC_WINDOW_TILE_MAP_AREA == 0 {
             0x9800
         } else {
             0x9c00
@@ -402,7 +403,7 @@ impl Gb {
     }
 
     fn tile_addr(&self, tile_number: u8) -> u16 {
-        let base = if self.lcdc & BG_WINDOW_TILE_DATA_AREA == 0 {
+        let base = if self.io[IO_LCDC as usize] & LCDC_BG_WINDOW_TILE_DATA_AREA == 0 {
             0x8800
         } else {
             0x8000

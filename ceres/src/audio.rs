@@ -1,6 +1,9 @@
-use sdl2::{
-    audio::{AudioQueue, AudioSpecDesired},
-    Sdl,
+use {
+    ceres_core::Sample,
+    sdl2::{
+        audio::{AudioQueue, AudioSpecDesired},
+        Sdl,
+    },
 };
 
 const FREQ: u32 = 41800;
@@ -39,14 +42,14 @@ impl ceres_core::AudioCallbacks for Renderer {
         FREQ
     }
 
-    fn push_frame(&mut self, frame: ceres_core::Frame) {
+    fn push_frame(&mut self, left: Sample, right: Sample) {
         // TODO: wtf???
         if self.stream.size() > FREQ {
             return;
         }
 
-        self.buf[self.buf_pos] = frame.left();
-        self.buf[self.buf_pos + 1] = frame.right();
+        self.buf[self.buf_pos] = left;
+        self.buf[self.buf_pos + 1] = right;
         self.buf_pos += 2;
 
         if self.buf_pos == AUDIO_BUFFER_SIZE {

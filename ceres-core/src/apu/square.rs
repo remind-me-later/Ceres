@@ -281,7 +281,7 @@ impl Ch1 {
         self.common.on()
     }
 
-    pub fn step_length(&mut self) {
+    pub fn step_len(&mut self) {
         self.common.step_length();
     }
 
@@ -355,7 +355,7 @@ impl Ch2 {
         self.common.on()
     }
 
-    pub fn step_length(&mut self) {
+    pub fn step_len(&mut self) {
         self.common.step_length();
     }
 

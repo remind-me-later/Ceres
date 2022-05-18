@@ -1,9 +1,6 @@
 pub use registers::Regs;
 
-use crate::{
-    interrupts::{JOYPAD_INT, LCD_STAT_INT, SERIAL_INT, TIMER_INT, VBLANK_INT},
-    Gb,
-};
+use crate::{Gb, IF_P1_B, IF_SERIAL_B, IF_TIMER_B, IF_LCD_B, IF_VBLANK_B, IO_IE, IO_IF};
 
 mod execute;
 mod instructions;
@@ -12,19 +9,19 @@ mod registers;
 
 impl Gb {
     pub(crate) fn run(&mut self) {
-        if self.ei_delay {
+        if self.cpu_ei_delay {
             self.ime = true;
-            self.ei_delay = false;
+            self.cpu_ei_delay = false;
         }
 
-        if self.halted {
+        if self.cpu_halted {
             self.tick_t_cycle();
         } else {
             let opcode = self.imm8();
 
-            if self.halt_bug {
+            if self.cpu_halt_bug {
                 self.reg.dec_pc();
-                self.halt_bug = false;
+                self.cpu_halt_bug = false;
             }
 
             self.exec(opcode);
@@ -35,8 +32,8 @@ impl Gb {
         }
 
         // handle interrupt
-        if self.halted {
-            self.halted = false;
+        if self.cpu_halted {
+            self.cpu_halted = false;
         }
 
         if self.ime {
@@ -48,7 +45,7 @@ impl Gb {
             self.internal_push(pc);
 
             let interrupt = {
-                let pending = self.interrupt_flag & self.interrupt_enable & 0x1f;
+                let pending = self.io[IO_IF as usize] & self.io[IO_IE as usize] & 0x1f;
 
                 if pending == 0 {
                     0
@@ -59,18 +56,23 @@ impl Gb {
             };
 
             self.reg.pc = match interrupt {
-                VBLANK_INT => 0x40,
-                LCD_STAT_INT => 0x48,
-                TIMER_INT => 0x50,
-                SERIAL_INT => 0x58,
-                JOYPAD_INT => 0x60,
+                IF_VBLANK_B => 0x40,
+                IF_LCD_B => 0x48,
+                IF_TIMER_B => 0x50,
+                IF_SERIAL_B => 0x58,
+                IF_P1_B => 0x60,
                 _ => unreachable!(),
             };
 
             self.tick_t_cycle();
             // acknoledge
-            self.interrupt_flag &= !interrupt;
+            self.io[IO_IF as usize] &= !interrupt;
         }
+    }
+
+    #[must_use]
+    fn any_interrrupt(&self) -> bool {
+        self.io[IO_IF as usize] & self.io[IO_IE as usize] & 0x1f != 0
     }
 
     fn imm8(&mut self) -> u8 {

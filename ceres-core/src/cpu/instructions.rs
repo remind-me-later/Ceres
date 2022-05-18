@@ -157,7 +157,6 @@ impl Gb {
         self.tick_t_cycle();
     }
 
-    #[allow(clippy::verbose_bit_mask)]
     pub(super) fn dec<GS>(&mut self, rhs: GS)
     where
         GS: Get<u8> + Set<u8>,
@@ -166,7 +165,7 @@ impl Gb {
         let val = read.wrapping_sub(1);
         self.reg.set_zf(val == 0);
         self.reg.set_nf(true);
-        self.reg.set_hf(read & 0xf == 0);
+        self.reg.set_hf(read.trailing_zeros() >= 4);
         rhs.set(self, val);
     }
 
@@ -311,11 +310,11 @@ impl Gb {
     }
 
     pub(super) fn halt(&mut self) {
-        self.halted = true;
+        self.cpu_halted = true;
 
         if self.any_interrrupt() && !self.ime {
-            self.halted = false;
-            self.halt_bug = true;
+            self.cpu_halted = false;
+            self.cpu_halt_bug = true;
         }
     }
 
@@ -323,7 +322,7 @@ impl Gb {
         self.imm8();
 
         if self.key1 & KEY1_SWITCH == 0 {
-            self.halted = true;
+            self.cpu_halted = true;
         } else {
             self.double_speed = !self.double_speed;
 
@@ -337,7 +336,7 @@ impl Gb {
     }
 
     pub(super) fn ei(&mut self) {
-        self.ei_delay = true;
+        self.cpu_ei_delay = true;
     }
 
     pub(super) fn ccf(&mut self) {
@@ -352,8 +351,7 @@ impl Gb {
         self.reg.set_cf(true);
     }
 
-    #[allow(clippy::unused_self)]
-    pub(super) fn nop(&mut self) {}
+    pub(super) fn nop() {}
 
     pub(super) fn daa(&mut self) {
         // DAA table in page 110 of the official "Game Boy Programming Manual"

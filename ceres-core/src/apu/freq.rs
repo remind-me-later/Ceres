@@ -1,7 +1,6 @@
-// 11 bit frequency data
 #[derive(Clone, Copy, Default)]
 pub struct Freq<const MUL: u16> {
-    pub val: u16,
+    pub val: u16, // 11 bit frequency data
 }
 
 impl<const MUL: u16> Freq<MUL> {

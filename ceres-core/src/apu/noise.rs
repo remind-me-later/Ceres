@@ -125,7 +125,7 @@ impl Noise {
         self.core.on()
     }
 
-    pub fn step_length(&mut self) {
+    pub fn step_len(&mut self) {
         self.core.step_len();
     }
 

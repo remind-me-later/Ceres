@@ -1,9 +1,12 @@
 use {
     super::{
-        Obj, BG_PAL, BG_TO_OAM_PR, BG_X_FLIP, BG_Y_FLIP, LARGE_SPRITES, OAM_SIZE, OBJ_ENABLED,
+        Obj, BG_PAL, BG_TO_OAM_PR, BG_X_FLIP, BG_Y_FLIP, LCDC_OBJL_B, OAM_SIZE, LCDC_OBJ_B,
         SPR_BG_FIRST, SPR_CGB_PAL, SPR_FLIP_X, SPR_FLIP_Y, SPR_PAL,
     },
-    crate::{FunctionMode, Gb, PX_WIDTH},
+    crate::{
+        FunctionMode, Gb, IO_BGP, IO_LCDC, IO_LY, IO_OBP0, IO_OBP1, IO_SCX, IO_SCY, IO_WX, IO_WY,
+        PX_WIDTH,
+    },
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -20,7 +23,7 @@ fn shade_index(reg: u8, color: u8) -> u8 {
 impl Gb {
     pub(crate) fn draw_scanline(&mut self) {
         let mut bg_priority = [Priority::Normal; PX_WIDTH as usize];
-        let base_idx = PX_WIDTH as usize * self.ly as usize;
+        let base_idx = PX_WIDTH as usize * self.io[IO_LY as usize] as usize;
 
         self.draw_bg(&mut bg_priority, base_idx);
         self.draw_win(&mut bg_priority, base_idx);
@@ -29,12 +32,12 @@ impl Gb {
 
     fn draw_bg(&mut self, bg_priority: &mut [Priority; PX_WIDTH as usize], base_idx: usize) {
         if self.bg_enabled() {
-            let y = self.ly.wrapping_add(self.scy);
+            let y = self.io[IO_LY as usize].wrapping_add(self.io[IO_SCY as usize]);
             let row = (y / 8) as u16 * 32;
             let line = ((y % 8) * 2) as u16;
 
             for i in 0..PX_WIDTH {
-                let x = i.wrapping_add(self.scx);
+                let x = i.wrapping_add(self.io[IO_SCX as usize]);
                 let col = (x / 8) as u16;
 
                 let tile_map = self.bg_tile_map() + row + col;
@@ -67,10 +70,12 @@ impl Gb {
                 };
 
                 let rgb = match self.function_mode {
-                    FunctionMode::Dmg => Self::get_mono_color(shade_index(self.bgp, color)),
+                    FunctionMode::Dmg => {
+                        Self::get_mono_color(shade_index(self.io[IO_BGP as usize], color))
+                    }
                     FunctionMode::Compat => self
                         .bcp
-                        .get_color(attr & BG_PAL, shade_index(self.bgp, color)),
+                        .get_color(attr & BG_PAL, shade_index(self.io[IO_BGP as usize], color)),
                     FunctionMode::Cgb => self.bcp.get_color(attr & BG_PAL, color),
                 };
 
@@ -88,15 +93,16 @@ impl Gb {
     }
 
     fn draw_win(&mut self, bg_priority: &mut [Priority; PX_WIDTH as usize], base_idx: usize) {
-        if self.win_enabled() && self.wy <= self.ly {
-            let wx = self.wx.saturating_sub(7);
-            let y = ((self.ly - self.wy) as u16).wrapping_sub(self.win_lines_skipped) as u8;
+        if self.win_enabled() && self.io[IO_WY as usize] <= self.io[IO_LY as usize] {
+            let wx = self.io[IO_WX as usize].saturating_sub(7);
+            let y = ((self.io[IO_LY as usize] - self.io[IO_WY as usize]) as u16)
+                .wrapping_sub(self.ppu_win_skipped) as u8;
             let row = (y / 8) as u16 * 32;
             let line = ((y % 8) * 2) as u16;
 
             for i in wx..PX_WIDTH {
-                self.win_in_frame = true;
-                self.win_in_ly = true;
+                self.ppu_win_in_frame = true;
+                self.ppu_win_in_ly = true;
 
                 let x = i.wrapping_sub(wx);
                 let col = (x / 8) as u16;
@@ -130,10 +136,12 @@ impl Gb {
                 };
 
                 let rgb = match self.function_mode {
-                    FunctionMode::Dmg => Self::get_mono_color(shade_index(self.bgp, color)),
+                    FunctionMode::Dmg => {
+                        Self::get_mono_color(shade_index(self.io[IO_BGP as usize], color))
+                    }
                     FunctionMode::Compat => self
                         .bcp
-                        .get_color(attr & BG_PAL, shade_index(self.bgp, color)),
+                        .get_color(attr & BG_PAL, shade_index(self.io[IO_BGP as usize], color)),
                     FunctionMode::Cgb => self.bcp.get_color(attr & BG_PAL, color),
                 };
 
@@ -149,8 +157,8 @@ impl Gb {
             }
         }
 
-        if self.win_in_frame && !self.win_in_ly {
-            self.win_lines_skipped += 1;
+        if self.ppu_win_in_frame && !self.ppu_win_in_ly {
+            self.ppu_win_skipped += 1;
         }
     }
 
@@ -173,7 +181,7 @@ impl Gb {
         for i in (0..OAM_SIZE).step_by(4) {
             let y = self.oam[i].wrapping_sub(16);
 
-            if self.ly.wrapping_sub(y) < height {
+            if self.io[IO_LY as usize].wrapping_sub(y) < height {
                 let attr = Obj {
                     y,
                     x: self.oam[i + 1].wrapping_sub(8),
@@ -215,9 +223,9 @@ impl Gb {
     }
 
     fn draw_obj(&mut self, bg_priority: &mut [Priority; PX_WIDTH as usize], base_idx: usize) {
-        if self.lcdc & OBJ_ENABLED != 0 {
-            let large = self.lcdc & LARGE_SPRITES != 0;
-            let height = if large { 16 } else { 8 };
+        if self.io[IO_LCDC as usize] & LCDC_OBJ_B != 0 {
+            let large = self.io[IO_LCDC as usize] & LCDC_OBJL_B != 0;
+            let height = 8 * (large as u8 + 1);
 
             let (objs, len) = self.objs_in_ly(height, self.function_mode);
 
@@ -230,9 +238,11 @@ impl Gb {
                     };
 
                     let offset = if obj.attr & SPR_FLIP_Y == 0 {
-                        self.ly.wrapping_sub(obj.y) as u16 * 2
+                        self.io[IO_LY as usize].wrapping_sub(obj.y) as u16 * 2
                     } else {
-                        (height as u16 - 1).wrapping_sub((self.ly.wrapping_sub(obj.y)) as u16) * 2
+                        (height as u16 - 1)
+                            .wrapping_sub((self.io[IO_LY as usize].wrapping_sub(obj.y)) as u16)
+                            * 2
                     };
 
                     (tile_number as u16 * 16).wrapping_add(offset)
@@ -271,18 +281,18 @@ impl Gb {
                     let rgb = match self.function_mode {
                         FunctionMode::Dmg => {
                             let palette = if obj.attr & SPR_PAL == 0 {
-                                self.obp0
+                                self.io[IO_OBP0 as usize]
                             } else {
-                                self.obp1
+                                self.io[IO_OBP1 as usize]
                             };
 
                             Self::get_mono_color(shade_index(palette, color))
                         }
                         FunctionMode::Compat => {
                             let palette = if obj.attr & SPR_PAL == 0 {
-                                self.obp0
+                                self.io[IO_OBP0 as usize]
                             } else {
-                                self.obp1
+                                self.io[IO_OBP1 as usize]
                             };
 
                             self.ocp.get_color(0, shade_index(palette, color))

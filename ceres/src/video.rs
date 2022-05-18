@@ -80,6 +80,6 @@ impl<const W: u32, const H: u32, const MUL: u32> VideoCallbacks for Renderer<W, 
             .unwrap();
         self.canvas.present();
 
-        self.next_frame += ceres_core::FRAME_DURATION;
+        self.next_frame += ceres_core::FRAME_DUR;
     }
 }

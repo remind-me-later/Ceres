@@ -1,4 +1,4 @@
-use crate::{ppu::Mode, Gb};
+use crate::{ppu::Mode, Gb, IO_DMA, IO_HDMA5};
 
 #[derive(PartialEq, Eq)]
 pub enum HdmaState {
@@ -15,14 +15,14 @@ impl Gb {
         }
 
         self.dma_cycles = -8; // two m-cycles delay
-        self.dma = val;
+        self.io[IO_DMA as usize] = val;
         self.dma_addr = u16::from(val) << 8;
         self.dma_on = true;
     }
 
     // FIXME: sprites are not displayed during OAM DMA
     pub(crate) fn emulate_dma(&mut self) {
-        self.dma_cycles = self.dma_cycles.wrapping_add(4);
+        self.dma_cycles += 4;
 
         if !self.dma_on || self.dma_cycles < 4 {
             return;
@@ -70,30 +70,29 @@ impl Gb {
         self.hdma_dst = self.hdma_dst & 0x1f00 | u16::from(val) & 0xf0;
     }
 
-    fn hdma_active(&self) -> bool {
+    fn hdma_on(&self) -> bool {
         !matches!(self.hdma_state, HdmaState::Sleep)
     }
 
     pub(crate) fn read_hdma5(&self) -> u8 {
         // active on low
-        let is_active_bit = u8::from(!self.hdma_active()) << 7;
-        is_active_bit | self.hdma5
+        ((!self.hdma_on()) as u8) << 7 | self.io[IO_HDMA5 as usize]
     }
 
     pub(crate) fn write_hdma5(&mut self, val: u8) {
         // stop current transfer
-        if self.hdma_active() && val & 0x80 == 0 {
+        if self.hdma_on() && val & 0x80 == 0 {
             self.hdma_state = HdmaState::Sleep;
             return;
         }
 
-        self.hdma5 = val & !0x80;
+        self.io[IO_HDMA5 as usize] = val & !0x80;
         let transfer_blocks = val & 0x7f;
         self.hdma_len = (u16::from(transfer_blocks) + 1) * 0x10;
-        self.hdma_state = match val >> 7 {
-            0 => HdmaState::General,
-            1 => HdmaState::HBlank,
-            _ => unreachable!(),
+        self.hdma_state = if val & 0x80 == 0 {
+            HdmaState::General
+        } else {
+            HdmaState::HBlank
         };
     }
 
@@ -110,12 +109,12 @@ impl Gb {
 
         let len = if self.hdma_state == HdmaState::HBlank {
             self.hdma_state = HdmaState::HBlankDone;
-            self.hdma5 = (self.hdma_len / 0x10).wrapping_sub(1) as u8;
+            self.io[IO_HDMA5 as usize] = (self.hdma_len / 0x10).wrapping_sub(1) as u8;
             self.hdma_len -= 0x10;
             0x10
         } else {
             self.hdma_state = HdmaState::Sleep;
-            self.hdma5 = 0xff;
+            self.io[IO_HDMA5 as usize] = 0xff;
             let len = self.hdma_len;
             self.hdma_len = 0;
             len

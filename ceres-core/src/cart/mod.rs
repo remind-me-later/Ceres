@@ -23,18 +23,6 @@ pub enum Mbc {
     Five { mbc: Mbc5, has_rumble: bool },
 }
 
-impl core::fmt::Display for Mbc {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Mbc::None => write!(f, "no MBC"),
-            Mbc::One(_) => write!(f, "MBC 1"),
-            Mbc::Two(_) => write!(f, "MBC 2"),
-            Mbc::Three(_) => write!(f, "MBC 3"),
-            Mbc::Five { .. } => write!(f, "MBC 5"),
-        }
-    }
-}
-
 pub struct Cartridge {
     mbc: Mbc,
     rom: Box<[u8]>,
@@ -231,23 +219,5 @@ impl Cartridge {
     #[must_use]
     pub fn ram(&self) -> &[u8] {
         &self.ram
-    }
-}
-
-impl core::fmt::Display for Cartridge {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let has_rumble = match self.mbc {
-            Mbc::Five { has_rumble, .. } => has_rumble,
-            _ => false,
-        };
-
-        write!(
-            f,
-            "{}\n{}\nBattery: {}, Rumble: {}\n",
-            self.mbc,
-            self.header_info(),
-            self.has_battery,
-            has_rumble
-        )
     }
 }
