@@ -1,7 +1,9 @@
-pub const ZF_FLAG: u8 = 0x80;
-pub const NF_FLAG: u8 = 0x40;
-pub const HF_FLAG: u8 = 0x20;
-pub const CF_FLAG: u8 = 0x10;
+use crate::Gb;
+
+pub const ZF_FLAG: u16 = 0x80;
+pub const NF_FLAG: u16 = 0x40;
+pub const HF_FLAG: u16 = 0x20;
+pub const CF_FLAG: u16 = 0x10;
 
 #[derive(Clone, Copy)]
 pub enum Reg8 {
@@ -24,56 +26,34 @@ pub enum Reg16 {
 }
 
 #[derive(Default)]
-pub struct Regs {
-    pub pc: u16,
-    pub sp: u16,
-    pub a: u8,
-    pub f: u8,
-    pub b: u8,
-    pub c: u8,
-    pub d: u8,
-    pub e: u8,
-    pub h: u8,
-    pub l: u8,
-}
+pub struct Regs {}
 
-impl Regs {
-    pub(crate) fn new() -> Self {
-        Self::default()
+impl Gb {
+    pub(crate) fn a(&self) -> u8 {
+        (self.af >> 8) as u8
     }
 
-    pub(super) fn read16(&self, reg: Reg16) -> u16 {
+    pub(crate) fn set_a(&mut self, val: u8) {
+        self.af &= 0x00ff;
+        self.af |= (val as u16) << 8;
+    }
+
+    pub(super) fn rreg16(&self, reg: Reg16) -> u16 {
         match reg {
-            Reg16::AF => u16::from_be_bytes([self.a, self.f]),
-            Reg16::BC => u16::from_be_bytes([self.b, self.c]),
-            Reg16::DE => u16::from_be_bytes([self.d, self.e]),
-            Reg16::HL => u16::from_be_bytes([self.h, self.l]),
+            Reg16::AF => self.af,
+            Reg16::BC => self.bc,
+            Reg16::DE => self.de,
+            Reg16::HL => self.hl,
             Reg16::SP => self.sp,
         }
     }
 
-    pub(super) fn write16(&mut self, reg: Reg16, val: u16) {
+    pub(super) fn wreg16(&mut self, reg: Reg16, val: u16) {
         match reg {
-            Reg16::AF => {
-                let [hi, lo] = u16::to_be_bytes(val);
-                self.a = hi;
-                self.f = lo & 0xf0;
-            }
-            Reg16::BC => {
-                let [hi, lo] = u16::to_be_bytes(val);
-                self.b = hi;
-                self.c = lo;
-            }
-            Reg16::DE => {
-                let [hi, lo] = u16::to_be_bytes(val);
-                self.d = hi;
-                self.e = lo;
-            }
-            Reg16::HL => {
-                let [hi, lo] = u16::to_be_bytes(val);
-                self.h = hi;
-                self.l = lo;
-            }
+            Reg16::AF => self.af = val & 0xfff0,
+            Reg16::BC => self.bc = val,
+            Reg16::DE => self.de = val,
+            Reg16::HL => self.hl = val,
             Reg16::SP => self.sp = val,
         }
     }
@@ -94,47 +74,43 @@ impl Regs {
         self.sp = self.sp.wrapping_sub(1);
     }
 
-    pub(super) fn nf(&self) -> bool {
-        self.f & NF_FLAG != 0
-    }
-
     pub(super) fn hf(&self) -> bool {
-        self.f & HF_FLAG != 0
+        self.af & HF_FLAG != 0
     }
 
     pub(super) fn cf(&self) -> bool {
-        self.f & CF_FLAG != 0
+        self.af & CF_FLAG != 0
     }
 
     pub(super) fn set_zf(&mut self, zf: bool) {
         if zf {
-            self.f |= ZF_FLAG;
+            self.af |= ZF_FLAG;
         } else {
-            self.f &= !ZF_FLAG;
+            self.af &= !ZF_FLAG;
         }
     }
 
     pub(super) fn set_nf(&mut self, nf: bool) {
         if nf {
-            self.f |= NF_FLAG;
+            self.af |= NF_FLAG;
         } else {
-            self.f &= !NF_FLAG;
+            self.af &= !NF_FLAG;
         }
     }
 
     pub(super) fn set_hf(&mut self, hf: bool) {
         if hf {
-            self.f |= HF_FLAG;
+            self.af |= HF_FLAG;
         } else {
-            self.f &= !HF_FLAG;
+            self.af &= !HF_FLAG;
         }
     }
 
     pub(super) fn set_cf(&mut self, cf: bool) {
         if cf {
-            self.f |= CF_FLAG;
+            self.af |= CF_FLAG;
         } else {
-            self.f &= !CF_FLAG;
+            self.af &= !CF_FLAG;
         }
     }
 }

@@ -17,7 +17,6 @@ use {
     apu::{Ch1, Ch2, Noise, Wave},
     bootrom::BootRom,
     core::time::Duration,
-    cpu::Regs,
     memory::HdmaState,
     ppu::{ColorPalette, Mode, RgbaBuf, OAM_SIZE, VRAM_SIZE_CGB},
     serial::Serial,
@@ -95,7 +94,13 @@ pub struct Gb {
     key1: u8,
 
     // cpu
-    reg: Regs,
+    af: u16,
+    bc: u16,
+    de: u16,
+    hl: u16,
+    sp: u16,
+    pc: u16,
+
     cpu_ei_delay: bool,
     cpu_halted: bool,
     cpu_halt_bug: bool,
@@ -210,7 +215,6 @@ impl Gb {
             nr51: 0,
             hdma5: 0,
             ifr: 0,
-            reg: Regs::new(),
             cpu_ei_delay: false,
             ime: false,
             cpu_halted: false,
@@ -282,6 +286,12 @@ impl Gb {
             obp1: 0,
             wy: 0,
             wx: 0,
+            af: 0,
+            bc: 0,
+            de: 0,
+            hl: 0,
+            sp: 0,
+            pc: 0,
         }
     }
 

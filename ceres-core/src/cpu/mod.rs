@@ -20,7 +20,7 @@ impl Gb {
             let opcode = self.imm8();
 
             if self.cpu_halt_bug {
-                self.reg.dec_pc();
+                self.dec_pc();
                 self.cpu_halt_bug = false;
             }
 
@@ -41,7 +41,7 @@ impl Gb {
 
             self.tick();
 
-            let pc = self.reg.pc;
+            let pc = self.pc;
             self.internal_push(pc);
 
             let interrupt = {
@@ -55,7 +55,7 @@ impl Gb {
                 }
             };
 
-            self.reg.pc = match interrupt {
+            self.pc = match interrupt {
                 IF_VBLANK_B => 0x40,
                 IF_LCD_B => 0x48,
                 IF_TIMER_B => 0x50,
@@ -76,8 +76,8 @@ impl Gb {
     }
 
     fn imm8(&mut self) -> u8 {
-        let addr = self.reg.pc;
-        self.reg.inc_pc();
+        let addr = self.pc;
+        self.inc_pc();
         self.read_mem(addr)
     }
 
@@ -88,61 +88,61 @@ impl Gb {
     }
 
     fn internal_pop(&mut self) -> u16 {
-        let lo = self.read_mem(self.reg.sp);
-        self.reg.inc_sp();
-        let hi = self.read_mem(self.reg.sp);
-        self.reg.inc_sp();
+        let lo = self.read_mem(self.sp);
+        self.inc_sp();
+        let hi = self.read_mem(self.sp);
+        self.inc_sp();
         u16::from_le_bytes([lo, hi])
     }
 
     fn internal_push(&mut self, val: u16) {
         let [lo, hi] = u16::to_le_bytes(val);
         self.tick();
-        self.reg.dec_sp();
-        self.write_mem(self.reg.sp, hi);
-        self.reg.dec_sp();
-        self.write_mem(self.reg.sp, lo);
+        self.dec_sp();
+        self.write_mem(self.sp, hi);
+        self.dec_sp();
+        self.write_mem(self.sp, lo);
     }
 
     fn internal_rl(&mut self, val: u8) -> u8 {
-        let ci = u8::from(self.reg.cf());
+        let ci = u8::from(self.cf());
         let co = val & 0x80;
         let res = (val << 1) | ci;
-        self.reg.set_zf(res == 0);
-        self.reg.set_nf(false);
-        self.reg.set_hf(false);
-        self.reg.set_cf(co != 0);
+        self.set_zf(res == 0);
+        self.set_nf(false);
+        self.set_hf(false);
+        self.set_cf(co != 0);
         res
     }
 
     fn internal_rlc(&mut self, val: u8) -> u8 {
         let co = val & 0x80;
         let res = val.rotate_left(1);
-        self.reg.set_zf(res == 0);
-        self.reg.set_nf(false);
-        self.reg.set_hf(false);
-        self.reg.set_cf(co != 0);
+        self.set_zf(res == 0);
+        self.set_nf(false);
+        self.set_hf(false);
+        self.set_cf(co != 0);
         res
     }
 
     fn internal_rr(&mut self, val: u8) -> u8 {
-        let ci = u8::from(self.reg.cf());
+        let ci = u8::from(self.cf());
         let co = val & 0x01;
         let res = (val >> 1) | (ci << 7);
-        self.reg.set_zf(res == 0);
-        self.reg.set_nf(false);
-        self.reg.set_hf(false);
-        self.reg.set_cf(co != 0);
+        self.set_zf(res == 0);
+        self.set_nf(false);
+        self.set_hf(false);
+        self.set_cf(co != 0);
         res
     }
 
     fn internal_rrc(&mut self, val: u8) -> u8 {
         let co = val & 0x01;
         let res = val.rotate_right(1);
-        self.reg.set_zf(res == 0);
-        self.reg.set_nf(false);
-        self.reg.set_hf(false);
-        self.reg.set_cf(co != 0);
+        self.set_zf(res == 0);
+        self.set_nf(false);
+        self.set_hf(false);
+        self.set_cf(co != 0);
         res
     }
 }

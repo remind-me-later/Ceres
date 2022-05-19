@@ -20,13 +20,13 @@ where
 impl Get for Reg8 {
     fn get(self, gb: &mut Gb) -> u8 {
         match self {
-            Reg8::A => gb.reg.a,
-            Reg8::B => gb.reg.b,
-            Reg8::C => gb.reg.c,
-            Reg8::D => gb.reg.d,
-            Reg8::E => gb.reg.e,
-            Reg8::H => gb.reg.h,
-            Reg8::L => gb.reg.l,
+            Reg8::A => (gb.af >> 8) as u8,
+            Reg8::B => (gb.bc >> 8) as u8,
+            Reg8::C => gb.bc as u8,
+            Reg8::D => (gb.de >> 8) as u8,
+            Reg8::E => gb.de as u8,
+            Reg8::H => (gb.hl >> 8) as u8,
+            Reg8::L => gb.hl as u8,
         }
     }
 }
@@ -34,13 +34,34 @@ impl Get for Reg8 {
 impl Set for Reg8 {
     fn set(self, gb: &mut Gb, val: u8) {
         match self {
-            Reg8::A => gb.reg.a = val,
-            Reg8::B => gb.reg.b = val,
-            Reg8::C => gb.reg.c = val,
-            Reg8::D => gb.reg.d = val,
-            Reg8::E => gb.reg.e = val,
-            Reg8::H => gb.reg.h = val,
-            Reg8::L => gb.reg.l = val,
+            Reg8::A => {
+                gb.af &= 0x00ff;
+                gb.af |= (val as u16) << 8;
+            }
+            Reg8::B => {
+                gb.bc &= 0x00ff;
+                gb.bc |= (val as u16) << 8;
+            }
+            Reg8::C => {
+                gb.bc &= 0xff00;
+                gb.bc |= val as u16;
+            }
+            Reg8::D => {
+                gb.de &= 0x00ff;
+                gb.de |= (val as u16) << 8;
+            }
+            Reg8::E => {
+                gb.de &= 0xff00;
+                gb.de |= val as u16;
+            }
+            Reg8::H => {
+                gb.hl &= 0x00ff;
+                gb.hl |= (val as u16) << 8;
+            }
+            Reg8::L => {
+                gb.hl &= 0xff00;
+                gb.hl |= val as u16;
+            }
         }
     }
 }
@@ -67,12 +88,12 @@ pub enum Indirect {
 impl Indirect {
     fn into_addr(self, gb: &mut Gb) -> u16 {
         match self {
-            Indirect::BC => gb.reg.read16(Reg16::BC),
-            Indirect::DE => gb.reg.read16(Reg16::DE),
-            Indirect::HL => gb.reg.read16(Reg16::HL),
+            Indirect::BC => gb.rreg16(Reg16::BC),
+            Indirect::DE => gb.rreg16(Reg16::DE),
+            Indirect::HL => gb.rreg16(Reg16::HL),
             Indirect::Immediate => gb.imm16(),
-            Indirect::HighC => u16::from(gb.reg.c) | 0xff00,
-            Indirect::HighImmediate => u16::from(gb.imm8()) | 0xff00,
+            Indirect::HighC => gb.bc | 0xff00,
+            Indirect::HighImmediate => gb.imm8() as u16 | 0xff00,
         }
     }
 }
