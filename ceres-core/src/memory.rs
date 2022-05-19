@@ -100,9 +100,13 @@ impl Gb {
 
     // FIXME: sprites are not displayed during OAM DMA
     pub(crate) fn tick_dma(&mut self) {
+        if !self.dma_on {
+            return;
+        }
+
         self.dma_cycles += 4;
 
-        if !self.dma_on || self.dma_cycles < 4 {
+        if self.dma_cycles < 4 {
             return;
         }
 
@@ -163,7 +167,7 @@ impl Gb {
             self.hdma_state = HdmaState::Sleep;
             return;
         }
-
+ 
         self.hdma5 = val & !0x80;
         let transfer_blocks = val & 0x7f;
         self.hdma_len = (u16::from(transfer_blocks) + 1) * 0x10;

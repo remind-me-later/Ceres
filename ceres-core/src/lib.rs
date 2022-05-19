@@ -9,6 +9,7 @@
 #![allow(clippy::struct_excessive_bools)]
 #![allow(clippy::similar_names)]
 #![allow(clippy::too_many_lines)]
+#![allow(clippy::verbose_bit_mask)]
 
 extern crate alloc;
 
