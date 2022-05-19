@@ -28,9 +28,9 @@ impl Gb {
         while t_elapsed > 0 {
             t_elapsed -= 1;
 
-            self.apu_timer -= 1;
-            if self.apu_timer == 0 {
-                self.apu_timer = APU_TIMER_RES;
+            self.apu_timer += 1;
+            if self.apu_timer == APU_TIMER_RES {
+                self.apu_timer = 0;
                 self.step();
             }
 
@@ -39,9 +39,9 @@ impl Gb {
             self.apu_ch3.step_sample();
             self.apu_ch4.step_sample();
 
-            self.apu_render_timer -= 1;
-            if self.apu_render_timer == 0 {
-                self.apu_render_timer = self.period();
+            self.apu_render_timer += 1;
+            if self.apu_render_timer == self.period() {
+                self.apu_render_timer = 0;
                 self.mix_and_render();
             }
         }
