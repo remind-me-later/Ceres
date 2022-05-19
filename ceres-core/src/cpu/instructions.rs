@@ -1,10 +1,7 @@
 use {
     super::{
         operands::{Get, Set},
-        registers::{
-            Reg16::{self, HL},
-            CF_FLAG, NF_FLAG, ZF_FLAG,
-        },
+        registers::{CF_FLAG, NF_FLAG, ZF_FLAG},
     },
     crate::{Gb, KEY1_SPEED_B, KEY1_SWITCH_B},
 };
@@ -20,33 +17,33 @@ impl Gb {
     }
 
     pub(super) fn ld_dhli_a(&mut self) {
-        let addr = self.rreg16(Reg16::HL);
+        let addr = self.hl;
         self.write_mem(addr, self.a());
-        self.wreg16(Reg16::HL, addr.wrapping_add(1));
+        self.hl = addr.wrapping_add(1);
     }
 
     pub(super) fn ld_dhld_a(&mut self) {
-        let addr = self.rreg16(Reg16::HL);
+        let addr = self.hl;
         self.write_mem(addr, self.a());
-        self.wreg16(Reg16::HL, addr.wrapping_sub(1));
+        self.hl = addr.wrapping_sub(1);
     }
 
     pub(super) fn ld_a_dhli(&mut self) {
-        let addr = self.rreg16(Reg16::HL);
+        let addr = self.hl;
         let val = self.read_mem(addr);
         self.set_a(val);
-        self.wreg16(Reg16::HL, addr.wrapping_add(1));
+        self.hl = addr.wrapping_add(1);
     }
 
     pub(super) fn ld_a_dhld(&mut self) {
-        let addr = self.rreg16(Reg16::HL);
+        let addr = self.hl;
         let val = self.read_mem(addr);
         self.set_a(val);
-        self.wreg16(Reg16::HL, addr.wrapping_sub(1));
+        self.hl = addr.wrapping_sub(1);
     }
 
     pub(super) fn ld16_sp_hl(&mut self) {
-        let val = self.rreg16(HL);
+        let val = self.hl;
         self.sp = val;
         self.tick();
     }
@@ -173,10 +170,10 @@ impl Gb {
         rhs.set(self, val);
     }
 
-    pub(super) fn inc16(&mut self, reg: Reg16) {
-        let read = self.rreg16(reg);
-        let val = read.wrapping_add(1);
-        self.wreg16(reg, val);
+    pub(super) fn inc16(&mut self, opcode: u8) {
+        let register_id = (opcode >> 4) + 1;
+        let reg = self.rid16(register_id);
+        *reg = reg.wrapping_add(1);
         self.tick();
     }
 
@@ -192,10 +189,10 @@ impl Gb {
         rhs.set(self, val);
     }
 
-    pub(super) fn dec16(&mut self, reg: Reg16) {
-        let read = self.rreg16(reg);
-        let val = read.wrapping_sub(1);
-        self.wreg16(reg, val);
+    pub(super) fn dec16(&mut self, opcode: u8) {
+        let register_id = (opcode >> 4) + 1;
+        let reg = self.rid16(register_id);
+        *reg = reg.wrapping_sub(1);
         self.tick();
     }
 
@@ -204,7 +201,7 @@ impl Gb {
         let sp = self.sp;
         let val = sp.wrapping_add(offset);
         let tmp = sp ^ val ^ offset;
-        self.wreg16(HL, val);
+        self.hl = val;
         self.set_zf(false);
         self.set_nf(false);
         self.set_hf((tmp & 0x10) == 0x10);
@@ -258,7 +255,7 @@ impl Gb {
     }
 
     pub(super) fn jp_hl(&mut self) {
-        let addr = self.rreg16(HL);
+        let addr = self.hl;
         self.pc = addr;
     }
 
@@ -416,19 +413,23 @@ impl Gb {
         self.set_hf(true);
     }
 
-    pub(super) fn push(&mut self, reg: Reg16) {
-        let val = self.rreg16(reg);
+    pub(super) fn push(&mut self, opcode: u8) {
+        let register_id = ((opcode >> 4) + 1) & 3;
+        let val = *self.rid16(register_id);
         self.internal_push(val);
     }
 
-    pub(super) fn pop(&mut self, reg: Reg16) {
+    pub(super) fn pop(&mut self, opcode: u8) {
         let val = self.internal_pop();
-        self.wreg16(reg, val);
+        let register_id = ((opcode >> 4) + 1) & 3;
+        *self.rid16(register_id) = val;
+        self.af &= 0xfff0;
     }
 
-    pub(super) fn ld16_nn(&mut self, reg: Reg16) {
+    pub(super) fn ld16_nn(&mut self, opcode: u8) {
+        let register_id = (opcode >> 4) + 1;
         let val = self.imm16();
-        self.wreg16(reg, val);
+        *self.rid16(register_id) = val;
     }
 
     pub(super) fn ld16_nn_sp(&mut self) {
@@ -452,11 +453,12 @@ impl Gb {
         self.tick();
     }
 
-    pub(super) fn add_hl(&mut self, reg: Reg16) {
-        let hl = self.rreg16(HL);
-        let val = self.rreg16(reg);
+    pub(super) fn add_hl(&mut self, opcode: u8) {
+        let register_id = (opcode >> 4) + 1;
+        let hl = self.hl;
+        let val = *self.rid16(register_id);
         let res = hl.wrapping_add(val);
-        self.wreg16(HL, res);
+        self.hl = res;
 
         self.set_nf(false);
 

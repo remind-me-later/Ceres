@@ -1,7 +1,4 @@
-use {
-    super::registers::{Reg16, Reg8},
-    crate::Gb,
-};
+use {super::registers::Reg8, crate::Gb};
 
 pub trait Get
 where
@@ -88,9 +85,9 @@ pub enum Indirect {
 impl Indirect {
     fn into_addr(self, gb: &mut Gb) -> u16 {
         match self {
-            Indirect::BC => gb.rreg16(Reg16::BC),
-            Indirect::DE => gb.rreg16(Reg16::DE),
-            Indirect::HL => gb.rreg16(Reg16::HL),
+            Indirect::BC => gb.bc,
+            Indirect::DE => gb.de,
+            Indirect::HL => gb.hl,
             Indirect::Immediate => gb.imm16(),
             Indirect::HighC => gb.bc | 0xff00,
             Indirect::HighImmediate => gb.imm8() as u16 | 0xff00,

@@ -16,15 +16,6 @@ pub enum Reg8 {
     L,
 }
 
-#[derive(Clone, Copy)]
-pub enum Reg16 {
-    AF,
-    BC,
-    DE,
-    HL,
-    SP,
-}
-
 #[derive(Default)]
 pub struct Regs {}
 
@@ -38,23 +29,14 @@ impl Gb {
         self.af |= (val as u16) << 8;
     }
 
-    pub(super) fn rreg16(&self, reg: Reg16) -> u16 {
-        match reg {
-            Reg16::AF => self.af,
-            Reg16::BC => self.bc,
-            Reg16::DE => self.de,
-            Reg16::HL => self.hl,
-            Reg16::SP => self.sp,
-        }
-    }
-
-    pub(super) fn wreg16(&mut self, reg: Reg16, val: u16) {
-        match reg {
-            Reg16::AF => self.af = val & 0xfff0,
-            Reg16::BC => self.bc = val,
-            Reg16::DE => self.de = val,
-            Reg16::HL => self.hl = val,
-            Reg16::SP => self.sp = val,
+    pub(super) fn rid16(&mut self, id: u8) -> &mut u16 {
+        match id {
+            0 => &mut self.af,
+            1 => &mut self.bc,
+            2 => &mut self.de,
+            3 => &mut self.hl,
+            4 => &mut self.sp,
+            _ => unreachable!(),
         }
     }
 
