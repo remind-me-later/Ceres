@@ -146,9 +146,9 @@ impl Gb {
     pub fn write_nr50(&mut self, val: u8) {
         if self.apu_on {
             self.apu_r_vol = val & 7;
-            self.apu_r_vin = val & (1 << 3) != 0;
+            self.apu_r_vin = val & 8 != 0;
             self.apu_l_vol = (val >> 4) & 7;
-            self.apu_l_vin = val & (1 << 7) != 0;
+            self.apu_l_vin = val & 0x80 != 0;
         }
     }
 

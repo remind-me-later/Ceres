@@ -1,5 +1,4 @@
 // utilities common to all channels
-#[derive(Default)]
 pub struct Common<const N: u16> {
     on: bool,
     dac_on: bool,
@@ -10,7 +9,13 @@ pub struct Common<const N: u16> {
 
 impl<const N: u16> Common<N> {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            on: false,
+            dac_on: true,
+            len: 0,
+            use_len: false,
+            p_half: 0, // doesn't matter
+        }
     }
 
     // returns true if write should trigger an apu event
