@@ -64,47 +64,16 @@ impl Set for Reg8 {
 }
 
 #[derive(Clone, Copy)]
-pub struct Imm;
+pub struct Dhl;
 
-impl Get for Imm {
+impl Get for Dhl {
     fn get(self, gb: &mut Gb) -> u8 {
-        gb.imm8()
+        gb.read_mem(gb.hl)
     }
 }
 
-#[derive(Clone, Copy)]
-pub enum Indirect {
-    BC,
-    DE,
-    HL,
-    Immediate,
-    HighC,
-    HighImmediate,
-}
-
-impl Indirect {
-    fn into_addr(self, gb: &mut Gb) -> u16 {
-        match self {
-            Indirect::BC => gb.bc,
-            Indirect::DE => gb.de,
-            Indirect::HL => gb.hl,
-            Indirect::Immediate => gb.imm16(),
-            Indirect::HighC => gb.bc | 0xff00,
-            Indirect::HighImmediate => gb.imm8() as u16 | 0xff00,
-        }
-    }
-}
-
-impl Get for Indirect {
-    fn get(self, gb: &mut Gb) -> u8 {
-        let addr = self.into_addr(gb);
-        gb.read_mem(addr)
-    }
-}
-
-impl Set for Indirect {
+impl Set for Dhl {
     fn set(self, gb: &mut Gb, val: u8) {
-        let addr = self.into_addr(gb);
-        gb.write_mem(addr, val);
+        gb.write_mem(gb.hl, val);
     }
 }

@@ -1,6 +1,6 @@
 use {
     super::{
-        operands::{Get, Imm, Indirect, Set},
+        operands::{Dhl, Get, Set},
         registers::Reg8::{A, B, C, D, E, H, L},
         CF_B, HF_B, NF_B, ZF_B,
     },
@@ -52,6 +52,30 @@ impl Gb {
         lhs.set(self, val);
     }
 
+    fn ld_a_drr(&mut self, opcode: u8) {
+        let register_id = (opcode >> 4) + 1;
+        self.af &= 0xFF;
+        let tmp = *self.rid16(register_id);
+        self.af |= (self.read_mem(tmp) as u16) << 8;
+    }
+
+    fn ld_drr_a(&mut self, opcode: u8) {
+        let register_id = (opcode >> 4) + 1;
+        let tmp = *self.rid16(register_id);
+        self.write_mem(tmp, (self.af >> 8) as u8);
+    }
+
+    fn ld_da16_a(&mut self) {
+        let addr = self.imm16();
+        self.write_mem(addr, (self.af >> 8) as u8);
+    }
+
+    fn ld_a_da16(&mut self) {
+        self.af &= 0xFF;
+        let addr = self.imm16();
+        self.af |= (self.read_mem(addr) as u16) << 8;
+    }
+
     fn ld_dhli_a(&mut self) {
         let addr = self.hl;
         self.write_mem(addr, self.a());
@@ -78,154 +102,364 @@ impl Gb {
         self.hl = addr.wrapping_sub(1);
     }
 
+    fn ld_da8_a(&mut self) {
+        let temp = self.imm8();
+        self.write_mem(0xFF00 | temp as u16, (self.af >> 8) as u8);
+    }
+
+    fn ld_a_da8(&mut self) {
+        self.af &= 0xFF;
+        let temp = self.imm8();
+        self.af |= (self.read_mem(0xFF00 | temp as u16) as u16) << 8;
+    }
+
+    fn ld_dc_a(&mut self) {
+        self.write_mem(0xFF00 | (self.bc & 0xFF), (self.af >> 8) as u8);
+    }
+
+    fn ld_a_dc(&mut self) {
+        self.af &= 0xFF;
+        self.af |= (self.read_mem(0xFF00 | (self.bc & 0xFF)) as u16) << 8;
+    }
+
+    fn ld_hr_d8(&mut self, opcode: u8) {
+        let register_id = ((opcode >> 4) + 1) & 0x03;
+        *self.rid16(register_id) &= 0xFF;
+        let tmp = self.imm8() as u16;
+        *self.rid16(register_id) |= tmp << 8;
+    }
+
+    fn ld_lr_d8(&mut self, opcode: u8) {
+        let register_id = (opcode >> 4) + 1;
+        *self.rid16(register_id) &= 0xFF00;
+        let tmp = self.imm8() as u16;
+        *self.rid16(register_id) |= tmp;
+    }
+
+    fn ld_dhl_d8(&mut self) {
+        let data = self.imm8();
+        self.write_mem(self.hl, data);
+    }
+
     fn ld16_sp_hl(&mut self) {
         let val = self.hl;
         self.sp = val;
         self.tick();
     }
 
-    fn add<G>(&mut self, rhs: G)
-    where
-        G: Get,
-    {
-        let a = self.a();
-        let val = rhs.get(self);
-        let (output, carry) = a.overflowing_add(val);
-        self.set_zf(output == 0);
-        self.set_nf(false);
-        self.set_hf((a & 0xf) + (val & 0xf) > 0xf);
-        self.set_cf(carry);
-        self.set_a(output);
+    fn add_a_r(&mut self, opcode: u8) {
+        let value = self.get_src_value(opcode) as u16;
+        let a = self.af >> 8;
+        self.af = (a + value) << 8;
+        if (a + value) as u8 == 0 {
+            self.af |= ZF_B;
+        }
+        if (a & 0xF) + (value & 0xF) > 0x0F {
+            self.af |= HF_B;
+        }
+        if (a as u16) + (value as u16) > 0xFF {
+            self.af |= CF_B;
+        }
     }
 
-    fn adc<G>(&mut self, rhs: G)
-    where
-        G: Get,
-    {
-        let a = self.a();
-        let cy = u8::from(self.cf());
-        let val = rhs.get(self);
-        let output = a.wrapping_add(val).wrapping_add(cy);
-        self.set_zf(output == 0);
-        self.set_nf(false);
-        self.set_hf((a & 0xf) + (val & 0xf) + cy > 0xf);
-        self.set_cf(u16::from(a) + u16::from(val) + u16::from(cy) > 0xff);
-        self.set_a(output);
+    fn sub_a_r(&mut self, opcode: u8) {
+        let value = self.get_src_value(opcode) as u16;
+        let a = self.af >> 8;
+        self.af = (a.wrapping_sub(value) << 8) | NF_B;
+        if a == value {
+            self.af |= ZF_B;
+        }
+        if (a & 0xF) < (value & 0xF) {
+            self.af |= HF_B;
+        }
+        if a < value {
+            self.af |= CF_B;
+        }
     }
 
-    fn sub<G>(&mut self, rhs: G)
-    where
-        G: Get,
-    {
-        let a = self.a();
-        let val = rhs.get(self);
-        let (output, carry) = a.overflowing_sub(val);
-        self.set_zf(output == 0);
-        self.set_nf(true);
-        self.set_hf(a & 0xf < val & 0xf);
-        self.set_cf(carry);
-        self.set_a(output);
+    fn sub_a_d8(&mut self) {
+        let value = self.imm8() as u16;
+        let a = self.af >> 8;
+        self.af = (a.wrapping_sub(value) << 8) | NF_B;
+        if a == value {
+            self.af |= ZF_B;
+        }
+        if (a & 0xF) < (value & 0xF) {
+            self.af |= HF_B;
+        }
+        if a < value {
+            self.af |= CF_B;
+        }
     }
 
-    fn sbc<G>(&mut self, rhs: G)
-    where
-        G: Get,
-    {
-        let a = self.a();
-        let cy = u8::from(self.cf());
-        let val = rhs.get(self);
-        let output = a.wrapping_sub(val).wrapping_sub(cy);
-        self.set_zf(output == 0);
-        self.set_nf(true);
-        self.set_hf(a & 0xf < (val & 0xf) + cy);
-        self.set_cf(u16::from(a) < u16::from(val) + u16::from(cy));
-        self.set_a(output);
+    fn sbc_a_r(&mut self, opcode: u8) {
+        let value = self.get_src_value(opcode) as u16;
+        let a = self.af >> 8;
+        let carry = ((self.af & CF_B) != 0) as u16;
+        let res = a.wrapping_sub(value).wrapping_sub(carry);
+        self.af = (res << 8) | NF_B;
+
+        if res as u8 == 0 {
+            self.af |= ZF_B;
+        }
+        if (a & 0xF) < (value & 0xF) + carry {
+            self.af |= HF_B;
+        }
+        if res > 0xFF {
+            self.af |= CF_B;
+        }
     }
 
-    fn cp<G>(&mut self, rhs: G)
-    where
-        G: Get,
-    {
-        let a = self.a();
-        let val = rhs.get(self);
-        let result = a.wrapping_sub(val);
-        self.set_zf(result == 0);
-        self.set_nf(true);
-        self.set_hf((a & 0xf).wrapping_sub(val & 0xf) & (0xf + 1) != 0);
-        self.set_cf(a < val);
+    fn sbc_a_d8(&mut self) {
+        let value = self.imm8() as u16;
+        let a = self.af >> 8;
+        let carry = ((self.af & CF_B) != 0) as u16;
+        let res = a.wrapping_sub(value).wrapping_sub(carry);
+        self.af = (res << 8) | NF_B;
+
+        if res as u8 == 0 {
+            self.af |= ZF_B;
+        }
+        if (a & 0xF) < (value & 0xF) + carry {
+            self.af |= HF_B;
+        }
+        if res > 0xFF {
+            self.af |= CF_B;
+        }
     }
 
-    fn and<G>(&mut self, rhs: G)
-    where
-        G: Get,
-    {
-        let val = rhs.get(self);
-        let a = self.a() & val;
-        self.set_a(a);
-        self.set_zf(a == 0);
-        self.set_nf(false);
-        self.set_hf(true);
-        self.set_cf(false);
+    fn add_a_d8(&mut self) {
+        let value = self.imm8() as u16;
+        let a = self.af >> 8;
+        self.af = (a + value) << 8;
+        if (a + value) as u8 == 0 {
+            self.af |= ZF_B;
+        }
+        if (a & 0xF) + (value & 0xF) > 0x0F {
+            self.af |= HF_B;
+        }
+        if a + value > 0xFF {
+            self.af |= CF_B;
+        }
     }
 
-    fn or<G>(&mut self, rhs: G)
-    where
-        G: Get,
-    {
-        let val = rhs.get(self);
-        let a = self.a() | val;
-        self.set_a(a);
-        self.set_zf(a == 0);
-        self.set_nf(false);
-        self.set_hf(false);
-        self.set_cf(false);
+    fn adc_a_r(&mut self, opcode: u8) {
+        let value = self.get_src_value(opcode) as u16;
+        let a = self.af >> 8;
+        let carry = ((self.af & CF_B) != 0) as u16;
+        self.af = (a + value + carry) << 8;
+        if (a + value + carry) as u8 == 0 {
+            self.af |= ZF_B;
+        }
+        if (a & 0xF) + (value & 0xF) + carry > 0x0F {
+            self.af |= HF_B;
+        }
+        if a + value + carry > 0xFF {
+            self.af |= CF_B;
+        }
     }
 
-    fn xor<G>(&mut self, rhs: G)
-    where
-        G: Get,
-    {
-        let read = rhs.get(self);
-        let a = self.a() ^ read;
-        self.set_a(a);
-        self.set_zf(a == 0);
-        self.set_nf(false);
-        self.set_hf(false);
-        self.set_cf(false);
+    fn adc_a_d8(&mut self) {
+        let value = self.imm8() as u16;
+        let a = self.af >> 8;
+        let carry = ((self.af & CF_B) != 0) as u16;
+        self.af = (a + value + carry) << 8;
+        if (a + value + carry) as u8 == 0 {
+            self.af |= ZF_B;
+        }
+        if (a & 0xF) + (value & 0xF) + carry > 0x0F {
+            self.af |= HF_B;
+        }
+        if a + value + carry > 0xFF {
+            self.af |= CF_B;
+        }
     }
 
-    fn inc<GS>(&mut self, rhs: GS)
-    where
-        GS: Get + Set,
-    {
-        let read = rhs.get(self);
-        let val = read.wrapping_add(1);
-        self.set_zf(val == 0);
-        self.set_nf(false);
-        self.set_hf(read & 0xf == 0xf);
-        rhs.set(self, val);
+    fn or_a_r(&mut self, opcode: u8) {
+        let value = self.get_src_value(opcode) as u16;
+        let a = self.af >> 8;
+        self.af = (a | value) << 8;
+        if (a | value) == 0 {
+            self.af |= ZF_B;
+        }
     }
 
-    fn inc16(&mut self, opcode: u8) {
+    fn or_a_d8(&mut self) {
+        let value = self.imm8() as u16;
+        let a = self.af >> 8;
+        self.af = (a | value) << 8;
+        if (a | value) == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
+    fn xor_a_r(&mut self, opcode: u8) {
+        let value = self.get_src_value(opcode) as u16;
+        let a = self.af >> 8;
+        self.af = (a ^ value) << 8;
+        if (a ^ value) == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
+    fn xor_a_d8(&mut self) {
+        let value = self.imm8() as u16;
+        let a = self.af >> 8;
+        self.af = (a ^ value) << 8;
+        if (a ^ value) == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
+    fn and_a_r(&mut self, opcode: u8) {
+        let value = self.get_src_value(opcode) as u16;
+        let a = self.af >> 8;
+        self.af = ((a & value) << 8) | HF_B;
+        if (a & value) == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
+    fn and_a_d8(&mut self) {
+        let value = self.imm8() as u16;
+        let a = self.af >> 8;
+        self.af = ((a & value) << 8) | HF_B;
+        if (a & value) == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
+    fn cp_a_r(&mut self, opcode: u8) {
+        let value = self.get_src_value(opcode) as u16;
+        let a = self.af >> 8;
+        self.af &= 0xFF00;
+        self.af |= NF_B;
+        if a == value {
+            self.af |= ZF_B;
+        }
+        if (a & 0xF) < (value & 0xF) {
+            self.af |= HF_B;
+        }
+        if a < value {
+            self.af |= CF_B;
+        }
+    }
+
+    fn cp_a_d8(&mut self) {
+        let value = self.imm8() as u16;
+        let a = self.af >> 8;
+        self.af &= 0xFF00;
+        self.af |= NF_B;
+        if a == value {
+            self.af |= ZF_B;
+        }
+        if (a & 0xF) < (value & 0xF) {
+            self.af |= HF_B;
+        }
+        if a < value {
+            self.af |= CF_B;
+        }
+    }
+
+    fn inc_lr(&mut self, opcode: u8) {
+        let register_id = (opcode >> 4) + 1;
+        let value = (*self.rid16(register_id) + 1) & 0xff;
+        *self.rid16(register_id) = (*self.rid16(register_id) & 0xFF00) | value;
+
+        self.af &= !(NF_B | ZF_B | HF_B);
+
+        if ((*self.rid16(register_id)) & 0x0F) == 0 {
+            self.af |= HF_B;
+        }
+
+        if ((*self.rid16(register_id)) & 0xFF) == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
+    fn dec_lr(&mut self, opcode: u8) {
+        let register_id = (opcode >> 4) + 1;
+        let value = (*self.rid16(register_id)).wrapping_sub(1) & 0xff;
+        (*self.rid16(register_id)) = ((*self.rid16(register_id)) & 0xFF00) | value;
+
+        self.af &= !(ZF_B | HF_B);
+        self.af |= NF_B;
+
+        if ((*self.rid16(register_id)) & 0x0F) == 0xF {
+            self.af |= HF_B;
+        }
+
+        if ((*self.rid16(register_id)) & 0xFF) == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
+    fn inc_hr(&mut self, opcode: u8) {
+        let register_id = ((opcode >> 4) + 1) & 0x03;
+        *self.rid16(register_id) = (*self.rid16(register_id)).wrapping_add(0x100);
+        self.af &= !(NF_B | ZF_B | HF_B);
+
+        if ((*self.rid16(register_id)) & 0x0F00) == 0 {
+            self.af |= HF_B;
+        }
+
+        if ((*self.rid16(register_id)) & 0xFF00) == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
+    fn dec_hr(&mut self, opcode: u8) {
+        let register_id = ((opcode >> 4) + 1) & 0x03;
+        *self.rid16(register_id) = (*self.rid16(register_id)).wrapping_sub(0x100);
+        self.af &= !(ZF_B | HF_B);
+        self.af |= NF_B;
+
+        if ((*self.rid16(register_id)) & 0x0F00) == 0xF00 {
+            self.af |= HF_B;
+        }
+
+        if ((*self.rid16(register_id)) & 0xFF00) == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
+    fn inc_dhl(&mut self) {
+        let value = self.read_mem(self.hl).wrapping_add(1);
+        self.write_mem(self.hl, value);
+
+        self.af &= !(NF_B | ZF_B | HF_B);
+        if (value & 0x0F) == 0 {
+            self.af |= HF_B;
+        }
+
+        if value == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
+    fn dec_dhl(&mut self) {
+        let value = self.read_mem(self.hl).wrapping_sub(1);
+        self.write_mem(self.hl, value);
+
+        self.af &= !(ZF_B | HF_B);
+        self.af |= NF_B;
+        if (value & 0x0F) == 0x0F {
+            self.af |= HF_B;
+        }
+
+        if value == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
+    fn inc_rr(&mut self, opcode: u8) {
         let register_id = (opcode >> 4) + 1;
         let reg = self.rid16(register_id);
         *reg = reg.wrapping_add(1);
         self.tick();
     }
 
-    fn dec<GS>(&mut self, rhs: GS)
-    where
-        GS: Get + Set,
-    {
-        let read = rhs.get(self);
-        let val = read.wrapping_sub(1);
-        self.set_zf(val == 0);
-        self.set_nf(true);
-        self.set_hf(read.trailing_zeros() >= 4);
-        rhs.set(self, val);
-    }
-
-    fn dec16(&mut self, opcode: u8) {
+    fn dec_rr(&mut self, opcode: u8) {
         let register_id = (opcode >> 4) + 1;
         let reg = self.rid16(register_id);
         *reg = reg.wrapping_sub(1);
@@ -376,10 +610,12 @@ impl Gb {
         self.ei();
     }
 
-    fn rst(&mut self, addr: u16) {
-        let pc = self.pc;
-        self.internal_push(pc);
-        self.pc = addr;
+    fn rst(&mut self, opcode: u8) {
+        self.sp = self.sp.wrapping_sub(1);
+        self.write_mem(self.sp, ((self.pc) >> 8) as u8);
+        self.sp = self.sp.wrapping_sub(1);
+        self.write_mem(self.sp, ((self.pc) & 0xFF) as u8);
+        self.pc = opcode as u16 ^ 0xC7;
     }
 
     fn halt(&mut self) {
@@ -677,8 +913,7 @@ impl Gb {
             0x7b => self.ld(A, E),
             0x7c => self.ld(A, H),
             0x7d => self.ld(A, L),
-            0x3e => self.ld(A, Imm),
-            0x7e => self.ld(A, Indirect::HL),
+            0x7e => self.ld(A, Dhl),
             0x47 => self.ld(B, A),
             0x40 => {
                 // TODO: debugger
@@ -689,8 +924,7 @@ impl Gb {
             0x43 => self.ld(B, E),
             0x44 => self.ld(B, H),
             0x45 => self.ld(B, L),
-            0x06 => self.ld(B, Imm),
-            0x46 => self.ld(B, Indirect::HL),
+            0x46 => self.ld(B, Dhl),
             0x4f => self.ld(C, A),
             0x48 => self.ld(C, B),
             0x49 => self.ld(C, C),
@@ -698,8 +932,7 @@ impl Gb {
             0x4b => self.ld(C, E),
             0x4c => self.ld(C, H),
             0x4d => self.ld(C, L),
-            0x0e => self.ld(C, Imm),
-            0x4e => self.ld(C, Indirect::HL),
+            0x4e => self.ld(C, Dhl),
             0x57 => self.ld(D, A),
             0x50 => self.ld(D, B),
             0x51 => self.ld(D, C),
@@ -707,8 +940,7 @@ impl Gb {
             0x53 => self.ld(D, E),
             0x54 => self.ld(D, H),
             0x55 => self.ld(D, L),
-            0x16 => self.ld(D, Imm),
-            0x56 => self.ld(D, Indirect::HL),
+            0x56 => self.ld(D, Dhl),
             0x5f => self.ld(E, A),
             0x58 => self.ld(E, B),
             0x59 => self.ld(E, C),
@@ -716,8 +948,7 @@ impl Gb {
             0x5b => self.ld(E, E),
             0x5c => self.ld(E, H),
             0x5d => self.ld(E, L),
-            0x1e => self.ld(E, Imm),
-            0x5e => self.ld(E, Indirect::HL),
+            0x5e => self.ld(E, Dhl),
             0x67 => self.ld(H, A),
             0x60 => self.ld(H, B),
             0x61 => self.ld(H, C),
@@ -725,8 +956,7 @@ impl Gb {
             0x63 => self.ld(H, E),
             0x64 => self.ld(H, H),
             0x65 => self.ld(H, L),
-            0x26 => self.ld(H, Imm),
-            0x66 => self.ld(H, Indirect::HL),
+            0x66 => self.ld(H, Dhl),
             0x6f => self.ld(L, A),
             0x68 => self.ld(L, B),
             0x69 => self.ld(L, C),
@@ -734,118 +964,51 @@ impl Gb {
             0x6b => self.ld(L, E),
             0x6c => self.ld(L, H),
             0x6d => self.ld(L, L),
-            0x2e => self.ld(L, Imm),
-            0x6e => self.ld(L, Indirect::HL),
-            0x77 => self.ld(Indirect::HL, A),
-            0x70 => self.ld(Indirect::HL, B),
-            0x71 => self.ld(Indirect::HL, C),
-            0x72 => self.ld(Indirect::HL, D),
-            0x73 => self.ld(Indirect::HL, E),
-            0x74 => self.ld(Indirect::HL, H),
-            0x75 => self.ld(Indirect::HL, L),
-            0x36 => self.ld(Indirect::HL, Imm),
-            0x0a => self.ld(A, Indirect::BC),
-            0x02 => self.ld(Indirect::BC, A),
-            0x1a => self.ld(A, Indirect::DE),
-            0x12 => self.ld(Indirect::DE, A),
-            0xfa => self.ld(A, Indirect::Immediate),
-            0xea => self.ld(Indirect::Immediate, A),
+            0x6e => self.ld(L, Dhl),
+            0x77 => self.ld(Dhl, A),
+            0x70 => self.ld(Dhl, B),
+            0x71 => self.ld(Dhl, C),
+            0x72 => self.ld(Dhl, D),
+            0x73 => self.ld(Dhl, E),
+            0x74 => self.ld(Dhl, H),
+            0x75 => self.ld(Dhl, L),
+            0x3e | 0x06 | 0x16 | 0x26 => self.ld_hr_d8(opcode),
+            0x0e | 0x1e | 0x2e => self.ld_lr_d8(opcode),
+            0x36 => self.ld_dhl_d8(),
+            0x0a | 0x1a => self.ld_a_drr(opcode),
+            0x02 | 0x12 => self.ld_drr_a(opcode),
+            0xfa => self.ld_a_da16(),
+            0xea => self.ld_da16_a(),
             0x3a => self.ld_a_dhld(),
             0x32 => self.ld_dhld_a(),
             0x2a => self.ld_a_dhli(),
             0x22 => self.ld_dhli_a(),
-            0xf2 => self.ld(A, Indirect::HighC),
-            0xe2 => self.ld(Indirect::HighC, A),
-            0xf0 => self.ld(A, Indirect::HighImmediate),
-            0xe0 => self.ld(Indirect::HighImmediate, A),
-            0x87 => self.add(A),
-            0x80 => self.add(B),
-            0x81 => self.add(C),
-            0x82 => self.add(D),
-            0x83 => self.add(E),
-            0x84 => self.add(H),
-            0x85 => self.add(L),
-            0x86 => self.add(Indirect::HL),
-            0xc6 => self.add(Imm),
-            0x8f => self.adc(A),
-            0x88 => self.adc(B),
-            0x89 => self.adc(C),
-            0x8a => self.adc(D),
-            0x8b => self.adc(E),
-            0x8c => self.adc(H),
-            0x8d => self.adc(L),
-            0x8e => self.adc(Indirect::HL),
-            0xce => self.adc(Imm),
-            0x97 => self.sub(A),
-            0x90 => self.sub(B),
-            0x91 => self.sub(C),
-            0x92 => self.sub(D),
-            0x93 => self.sub(E),
-            0x94 => self.sub(H),
-            0x95 => self.sub(L),
-            0x96 => self.sub(Indirect::HL),
-            0xd6 => self.sub(Imm),
-            0x9f => self.sbc(A),
-            0x98 => self.sbc(B),
-            0x99 => self.sbc(C),
-            0x9a => self.sbc(D),
-            0x9b => self.sbc(E),
-            0x9c => self.sbc(H),
-            0x9d => self.sbc(L),
-            0x9e => self.sbc(Indirect::HL),
-            0xde => self.sbc(Imm),
-            0xbf => self.cp(A),
-            0xb8 => self.cp(B),
-            0xb9 => self.cp(C),
-            0xba => self.cp(D),
-            0xbb => self.cp(E),
-            0xbc => self.cp(H),
-            0xbd => self.cp(L),
-            0xbe => self.cp(Indirect::HL),
-            0xfe => self.cp(Imm),
-            0xa7 => self.and(A),
-            0xa0 => self.and(B),
-            0xa1 => self.and(C),
-            0xa2 => self.and(D),
-            0xa3 => self.and(E),
-            0xa4 => self.and(H),
-            0xa5 => self.and(L),
-            0xa6 => self.and(Indirect::HL),
-            0xe6 => self.and(Imm),
-            0xb7 => self.or(A),
-            0xb0 => self.or(B),
-            0xb1 => self.or(C),
-            0xb2 => self.or(D),
-            0xb3 => self.or(E),
-            0xb4 => self.or(H),
-            0xb5 => self.or(L),
-            0xb6 => self.or(Indirect::HL),
-            0xf6 => self.or(Imm),
-            0xaf => self.xor(A),
-            0xa8 => self.xor(B),
-            0xa9 => self.xor(C),
-            0xaa => self.xor(D),
-            0xab => self.xor(E),
-            0xac => self.xor(H),
-            0xad => self.xor(L),
-            0xae => self.xor(Indirect::HL),
-            0xee => self.xor(Imm),
-            0x3c => self.inc(A),
-            0x04 => self.inc(B),
-            0x0c => self.inc(C),
-            0x14 => self.inc(D),
-            0x1c => self.inc(E),
-            0x24 => self.inc(H),
-            0x2c => self.inc(L),
-            0x34 => self.inc(Indirect::HL),
-            0x3d => self.dec(A),
-            0x05 => self.dec(B),
-            0x0d => self.dec(C),
-            0x15 => self.dec(D),
-            0x1d => self.dec(E),
-            0x25 => self.dec(H),
-            0x2d => self.dec(L),
-            0x35 => self.dec(Indirect::HL),
+            0xf2 => self.ld_a_dc(),
+            0xe2 => self.ld_dc_a(),
+            0xf0 => self.ld_a_da8(),
+            0xe0 => self.ld_da8_a(),
+            0x87 | 0x80 | 0x81 | 0x82 | 0x83 | 0x84 | 0x85 | 0x86 => self.add_a_r(opcode),
+            0xc6 => self.add_a_d8(),
+            0x8f | 0x88 | 0x89 | 0x8a | 0x8b | 0x8c | 0x8d | 0x8e => self.adc_a_r(opcode),
+            0xce => self.adc_a_d8(),
+            0x97 | 0x90 | 0x91 | 0x92 | 0x93 | 0x94 | 0x95 | 0x96 => self.sub_a_r(opcode),
+            0xd6 => self.sub_a_d8(),
+            0x9f | 0x98 | 0x99 | 0x9a | 0x9b | 0x9c | 0x9d | 0x9e => self.sbc_a_r(opcode),
+            0xde => self.sbc_a_d8(),
+            0xbf | 0xb8 | 0xb9 | 0xba | 0xbb | 0xbc | 0xbd | 0xbe => self.cp_a_r(opcode),
+            0xfe => self.cp_a_d8(),
+            0xa7 | 0xa0 | 0xa1 | 0xa2 | 0xa3 | 0xa4 | 0xa5 | 0xa6 => self.and_a_r(opcode),
+            0xe6 => self.and_a_d8(),
+            0xb7 | 0xb0 | 0xb1 | 0xb2 | 0xb3 | 0xb4 | 0xb5 | 0xb6 => self.or_a_r(opcode),
+            0xf6 => self.or_a_d8(),
+            0xaf | 0xa8 | 0xa9 | 0xaa | 0xab | 0xac | 0xad | 0xae => self.xor_a_r(opcode),
+            0xee => self.xor_a_d8(),
+            0x3c | 0x04 | 0x14 | 0x24 => self.inc_hr(opcode),
+            0x3d | 0x05 | 0x15 | 0x25 => self.dec_hr(opcode),
+            0x0c | 0x1c | 0x2c => self.inc_lr(opcode),
+            0x0d | 0x1d | 0x2d => self.dec_lr(opcode),
+            0x34 => self.inc_dhl(),
+            0x35 => self.dec_dhl(),
             0x07 => self.rlca(),
             0x17 => self.rla(),
             0x0f => self.rrca(),
@@ -860,14 +1023,7 @@ impl Gb {
             0x20 | 0x28 | 0x30 | 0x38 => self.jr_f(opcode),
             0xc4 | 0xcc | 0xd4 | 0xdc => self.call_f_nn(opcode),
             0xc0 | 0xc8 | 0xd0 | 0xd8 => self.ret_f(opcode),
-            0xc7 => self.rst(0x00),
-            0xcf => self.rst(0x08),
-            0xd7 => self.rst(0x10),
-            0xdf => self.rst(0x18),
-            0xe7 => self.rst(0x20),
-            0xef => self.rst(0x28),
-            0xf7 => self.rst(0x30),
-            0xff => self.rst(0x38),
+            0xc7 | 0xcf | 0xd7 | 0xdf | 0xe7 | 0xef | 0xf7 | 0xff => self.rst(opcode),
             0x76 => self.halt(),
             0x10 => self.stop(),
             0xf3 => self.di(),
@@ -885,12 +1041,10 @@ impl Gb {
             0xc1 | 0xd1 | 0xe1 | 0xf1 => self.pop(opcode),
             0x09 | 0x19 | 0x29 | 0x39 => self.add_hl(opcode),
             0xe8 => self.add16_sp_dd(),
-            0x03 | 0x13 | 0x23 | 0x33 => self.inc16(opcode),
-            0x0b | 0x1b | 0x2b | 0x3b => self.dec16(opcode),
+            0x03 | 0x13 | 0x23 | 0x33 => self.inc_rr(opcode),
+            0x0b | 0x1b | 0x2b | 0x3b => self.dec_rr(opcode),
             0xcb => self.exec_cb(),
-            0xd3 | 0xdb | 0xdd | 0xe3 | 0xe4 | 0xeb | 0xec | 0xed | 0xf4 | 0xfc | 0xfd => {
-                panic!("Illegal opcode {}", opcode)
-            }
+            _ => panic!("Illegal opcode {}", opcode),
         }
     }
 
