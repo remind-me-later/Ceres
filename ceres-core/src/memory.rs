@@ -167,7 +167,7 @@ impl Gb {
             self.hdma_state = HdmaState::Sleep;
             return;
         }
- 
+
         self.hdma5 = val & !0x80;
         let transfer_blocks = val & 0x7f;
         self.hdma_len = (u16::from(transfer_blocks) + 1) * 0x10;

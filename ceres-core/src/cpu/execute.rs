@@ -1,12 +1,670 @@
 use {
     super::{
-        operands::{Imm, Indirect},
+        operands::{Get, Imm, Indirect, Set},
         registers::Reg8::{A, B, C, D, E, H, L},
+        CF_B, HF_B, NF_B, ZF_B,
     },
-    crate::Gb,
+    crate::{Gb, KEY1_SPEED_B, KEY1_SWITCH_B},
 };
 
 impl Gb {
+    fn get_src_value(&mut self, opcode: u8) -> u8 {
+        let reg_id = ((opcode >> 1) + 1) & 3;
+        let lo = opcode & 1 != 0;
+        if reg_id == 0 {
+            if lo {
+                return (self.af >> 8) as u8;
+            }
+            return self.read_mem(self.hl);
+        }
+        if lo {
+            return *self.rid16(reg_id) as u8;
+        }
+        return (*self.rid16(reg_id) >> 8) as u8;
+    }
+
+    fn set_src_value(&mut self, opcode: u8, value: u8) {
+        let reg_id = ((opcode >> 1) + 1) & 3;
+        let lo = opcode & 1 != 0;
+
+        if reg_id == 0 {
+            if lo {
+                self.af &= 0xFF;
+                self.af |= (value as u16) << 8;
+            } else {
+                self.write_mem(self.hl, value);
+            }
+        } else if lo {
+            *self.rid16(reg_id) &= 0xFF00;
+            *self.rid16(reg_id) |= value as u16;
+        } else {
+            *self.rid16(reg_id) &= 0xFF;
+            *self.rid16(reg_id) |= (value as u16) << 8;
+        }
+    }
+
+    fn ld<G, S>(&mut self, lhs: S, rhs: G)
+    where
+        G: Get,
+        S: Set,
+    {
+        let val = rhs.get(self);
+        lhs.set(self, val);
+    }
+
+    fn ld_dhli_a(&mut self) {
+        let addr = self.hl;
+        self.write_mem(addr, self.a());
+        self.hl = addr.wrapping_add(1);
+    }
+
+    fn ld_dhld_a(&mut self) {
+        let addr = self.hl;
+        self.write_mem(addr, self.a());
+        self.hl = addr.wrapping_sub(1);
+    }
+
+    fn ld_a_dhli(&mut self) {
+        let addr = self.hl;
+        let val = self.read_mem(addr);
+        self.set_a(val);
+        self.hl = addr.wrapping_add(1);
+    }
+
+    fn ld_a_dhld(&mut self) {
+        let addr = self.hl;
+        let val = self.read_mem(addr);
+        self.set_a(val);
+        self.hl = addr.wrapping_sub(1);
+    }
+
+    fn ld16_sp_hl(&mut self) {
+        let val = self.hl;
+        self.sp = val;
+        self.tick();
+    }
+
+    fn add<G>(&mut self, rhs: G)
+    where
+        G: Get,
+    {
+        let a = self.a();
+        let val = rhs.get(self);
+        let (output, carry) = a.overflowing_add(val);
+        self.set_zf(output == 0);
+        self.set_nf(false);
+        self.set_hf((a & 0xf) + (val & 0xf) > 0xf);
+        self.set_cf(carry);
+        self.set_a(output);
+    }
+
+    fn adc<G>(&mut self, rhs: G)
+    where
+        G: Get,
+    {
+        let a = self.a();
+        let cy = u8::from(self.cf());
+        let val = rhs.get(self);
+        let output = a.wrapping_add(val).wrapping_add(cy);
+        self.set_zf(output == 0);
+        self.set_nf(false);
+        self.set_hf((a & 0xf) + (val & 0xf) + cy > 0xf);
+        self.set_cf(u16::from(a) + u16::from(val) + u16::from(cy) > 0xff);
+        self.set_a(output);
+    }
+
+    fn sub<G>(&mut self, rhs: G)
+    where
+        G: Get,
+    {
+        let a = self.a();
+        let val = rhs.get(self);
+        let (output, carry) = a.overflowing_sub(val);
+        self.set_zf(output == 0);
+        self.set_nf(true);
+        self.set_hf(a & 0xf < val & 0xf);
+        self.set_cf(carry);
+        self.set_a(output);
+    }
+
+    fn sbc<G>(&mut self, rhs: G)
+    where
+        G: Get,
+    {
+        let a = self.a();
+        let cy = u8::from(self.cf());
+        let val = rhs.get(self);
+        let output = a.wrapping_sub(val).wrapping_sub(cy);
+        self.set_zf(output == 0);
+        self.set_nf(true);
+        self.set_hf(a & 0xf < (val & 0xf) + cy);
+        self.set_cf(u16::from(a) < u16::from(val) + u16::from(cy));
+        self.set_a(output);
+    }
+
+    fn cp<G>(&mut self, rhs: G)
+    where
+        G: Get,
+    {
+        let a = self.a();
+        let val = rhs.get(self);
+        let result = a.wrapping_sub(val);
+        self.set_zf(result == 0);
+        self.set_nf(true);
+        self.set_hf((a & 0xf).wrapping_sub(val & 0xf) & (0xf + 1) != 0);
+        self.set_cf(a < val);
+    }
+
+    fn and<G>(&mut self, rhs: G)
+    where
+        G: Get,
+    {
+        let val = rhs.get(self);
+        let a = self.a() & val;
+        self.set_a(a);
+        self.set_zf(a == 0);
+        self.set_nf(false);
+        self.set_hf(true);
+        self.set_cf(false);
+    }
+
+    fn or<G>(&mut self, rhs: G)
+    where
+        G: Get,
+    {
+        let val = rhs.get(self);
+        let a = self.a() | val;
+        self.set_a(a);
+        self.set_zf(a == 0);
+        self.set_nf(false);
+        self.set_hf(false);
+        self.set_cf(false);
+    }
+
+    fn xor<G>(&mut self, rhs: G)
+    where
+        G: Get,
+    {
+        let read = rhs.get(self);
+        let a = self.a() ^ read;
+        self.set_a(a);
+        self.set_zf(a == 0);
+        self.set_nf(false);
+        self.set_hf(false);
+        self.set_cf(false);
+    }
+
+    fn inc<GS>(&mut self, rhs: GS)
+    where
+        GS: Get + Set,
+    {
+        let read = rhs.get(self);
+        let val = read.wrapping_add(1);
+        self.set_zf(val == 0);
+        self.set_nf(false);
+        self.set_hf(read & 0xf == 0xf);
+        rhs.set(self, val);
+    }
+
+    fn inc16(&mut self, opcode: u8) {
+        let register_id = (opcode >> 4) + 1;
+        let reg = self.rid16(register_id);
+        *reg = reg.wrapping_add(1);
+        self.tick();
+    }
+
+    fn dec<GS>(&mut self, rhs: GS)
+    where
+        GS: Get + Set,
+    {
+        let read = rhs.get(self);
+        let val = read.wrapping_sub(1);
+        self.set_zf(val == 0);
+        self.set_nf(true);
+        self.set_hf(read.trailing_zeros() >= 4);
+        rhs.set(self, val);
+    }
+
+    fn dec16(&mut self, opcode: u8) {
+        let register_id = (opcode >> 4) + 1;
+        let reg = self.rid16(register_id);
+        *reg = reg.wrapping_sub(1);
+        self.tick();
+    }
+
+    fn ld16_hl_sp_dd(&mut self) {
+        let offset = self.imm8() as i8 as u16;
+        let sp = self.sp;
+        let val = sp.wrapping_add(offset);
+        let tmp = sp ^ val ^ offset;
+        self.hl = val;
+        self.set_zf(false);
+        self.set_nf(false);
+        self.set_hf((tmp & 0x10) == 0x10);
+        self.set_cf((tmp & 0x100) == 0x100);
+        self.tick();
+    }
+
+    fn rlca(&mut self) {
+        let carry = (self.af & 0x8000) != 0;
+
+        self.af = (self.af & 0xFF00) << 1;
+        if carry {
+            self.af |= CF_B | 0x0100;
+        }
+    }
+
+    fn rrca(&mut self) {
+        let carry = (self.af & 0x100) != 0;
+        self.af = (self.af >> 1) & 0xFF00;
+        if carry {
+            self.af |= CF_B | 0x8000;
+        }
+    }
+
+    fn rrc_r(&mut self, opcode: u8) {
+        let value = self.get_src_value(opcode);
+        let carry = (value & 0x01) != 0;
+        self.af &= 0xFF00;
+        let val = value >> 1 | (carry as u8) << 7;
+        self.set_src_value(opcode, val);
+        if carry {
+            self.af |= CF_B;
+        }
+        if val == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
+    fn do_jump_to_immediate(&mut self) {
+        let addr = self.imm16();
+        self.pc = addr;
+        self.tick();
+    }
+
+    fn jp_nn(&mut self) {
+        self.do_jump_to_immediate();
+    }
+
+    fn jp_f(&mut self, opcode: u8) {
+        if self.condition(opcode) {
+            self.do_jump_to_immediate();
+        } else {
+            let pc = self.pc.wrapping_add(2);
+            self.pc = pc;
+            self.tick();
+            self.tick();
+        }
+    }
+
+    fn jp_hl(&mut self) {
+        let addr = self.hl;
+        self.pc = addr;
+    }
+
+    fn do_jump_relative(&mut self) {
+        let relative_addr = self.imm8() as i8 as u16;
+        let pc = self.pc.wrapping_add(relative_addr);
+        self.pc = pc;
+        self.tick();
+    }
+
+    fn jr_d(&mut self) {
+        self.do_jump_relative();
+    }
+
+    fn jr_f(&mut self, opcode: u8) {
+        if self.condition(opcode) {
+            self.do_jump_relative();
+        } else {
+            self.pc = self.pc.wrapping_add(1);
+            self.tick();
+        }
+    }
+
+    fn do_call(&mut self) {
+        let addr = self.imm16();
+        let pc = self.pc;
+        self.internal_push(pc);
+        self.pc = addr;
+    }
+
+    fn call_nn(&mut self) {
+        self.do_call();
+    }
+
+    fn call_f_nn(&mut self, opcode: u8) {
+        if self.condition(opcode) {
+            self.do_call();
+        } else {
+            let pc = self.pc.wrapping_add(2);
+            self.pc = pc;
+            self.tick();
+            self.tick();
+        }
+    }
+
+    fn do_return(&mut self) {
+        let pc = self.internal_pop();
+        self.pc = pc;
+        self.tick();
+    }
+
+    fn ret(&mut self) {
+        self.do_return();
+    }
+
+    fn ret_f(&mut self, opcode: u8) {
+        self.tick();
+        if self.condition(opcode) {
+            self.do_return();
+        }
+    }
+
+    fn condition(&self, opcode: u8) -> bool {
+        match (opcode >> 3) & 0x3 {
+            0 => self.af & ZF_B == 0,
+            1 => self.af & ZF_B != 0,
+            2 => self.af & CF_B == 0,
+            3 => self.af & CF_B != 0,
+            _ => unreachable!(),
+        }
+    }
+
+    fn reti(&mut self) {
+        self.ret();
+        self.ei();
+    }
+
+    fn rst(&mut self, addr: u16) {
+        let pc = self.pc;
+        self.internal_push(pc);
+        self.pc = addr;
+    }
+
+    fn halt(&mut self) {
+        self.cpu_halted = true;
+
+        if self.any_interrrupt() && !self.ime {
+            self.cpu_halted = false;
+            self.cpu_halt_bug = true;
+        }
+    }
+
+    fn stop(&mut self) {
+        self.imm8();
+
+        if self.key1 & KEY1_SWITCH_B == 0 {
+            self.cpu_halted = true;
+        } else {
+            self.double_speed = !self.double_speed;
+
+            self.key1 &= !KEY1_SWITCH_B;
+            self.key1 ^= KEY1_SPEED_B;
+        }
+    }
+
+    fn di(&mut self) {
+        self.ime = false;
+    }
+
+    fn ei(&mut self) {
+        self.cpu_ei_delay = true;
+    }
+
+    fn ccf(&mut self) {
+        self.set_nf(false);
+        self.set_hf(false);
+        self.set_cf(!self.cf());
+    }
+
+    fn scf(&mut self) {
+        self.set_nf(false);
+        self.set_hf(false);
+        self.set_cf(true);
+    }
+
+    fn nop() {}
+
+    fn daa(&mut self) {
+        let mut result = self.af >> 8;
+
+        self.af &= !(0xFF00 | ZF_B);
+
+        if self.af & NF_B == 0 {
+            if self.af & HF_B != 0 || (result & 0x0F) > 0x09 {
+                result += 0x06;
+            }
+
+            if self.af & CF_B != 0 || result > 0x9F {
+                result += 0x60;
+            }
+        } else {
+            if self.af & HF_B != 0 {
+                result = result.wrapping_sub(0x06) & 0xFF;
+            }
+
+            if self.af & CF_B != 0 {
+                result = result.wrapping_sub(0x60);
+            }
+        }
+
+        if (result & 0xFF) == 0 {
+            self.af |= ZF_B;
+        }
+
+        if (result & 0x100) == 0x100 {
+            self.af |= CF_B;
+        }
+
+        self.af &= !HF_B;
+        self.af |= result << 8;
+    }
+
+    fn cpl(&mut self) {
+        let a = self.a();
+        self.set_a(!a);
+        self.set_nf(true);
+        self.set_hf(true);
+    }
+
+    fn push(&mut self, opcode: u8) {
+        let register_id = ((opcode >> 4) + 1) & 3;
+        let val = *self.rid16(register_id);
+        self.internal_push(val);
+    }
+
+    fn pop(&mut self, opcode: u8) {
+        let val = self.internal_pop();
+        let register_id = ((opcode >> 4) + 1) & 3;
+        *self.rid16(register_id) = val;
+        self.af &= 0xfff0;
+    }
+
+    fn ld16_nn(&mut self, opcode: u8) {
+        let register_id = (opcode >> 4) + 1;
+        let val = self.imm16();
+        *self.rid16(register_id) = val;
+    }
+
+    fn ld16_nn_sp(&mut self) {
+        let val = self.sp;
+        let addr = self.imm16();
+        self.write_mem(addr, (val & 0xff) as u8);
+        self.write_mem(addr.wrapping_add(1), (val >> 8) as u8);
+    }
+
+    fn add16_sp_dd(&mut self) {
+        let offset = self.imm8() as i8 as u16;
+        let sp = self.sp;
+        let val = sp.wrapping_add(offset);
+        let tmp = sp ^ val ^ offset;
+        self.sp = val;
+        self.set_zf(false);
+        self.set_nf(false);
+        self.set_hf((tmp & 0x10) == 0x10);
+        self.set_cf((tmp & 0x100) == 0x100);
+        self.tick();
+        self.tick();
+    }
+
+    fn add_hl(&mut self, opcode: u8) {
+        let register_id = (opcode >> 4) + 1;
+        let hl = self.hl;
+        let val = *self.rid16(register_id);
+        let res = hl.wrapping_add(val);
+        self.hl = res;
+
+        self.set_nf(false);
+
+        // check carry from bit 11
+        let mask = 0x7FF;
+        let half_carry = (hl & mask) + (val & mask) > mask;
+
+        self.set_hf(half_carry);
+        self.set_cf(hl > 0xffff - val);
+
+        self.tick();
+    }
+
+    fn rlc_r(&mut self, opcode: u8) {
+        let value = self.get_src_value(opcode);
+        let carry = (value & 0x80) != 0;
+        self.af &= 0xFF00;
+        self.set_src_value(opcode, (value << 1) | (carry as u8));
+        if carry {
+            self.af |= CF_B;
+        }
+        if value == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
+    fn rra(&mut self) {
+        let bit1 = (self.af & 0x0100) != 0;
+        let carry = (self.af & CF_B) != 0;
+
+        self.af = (self.af >> 1) & 0xFF00;
+        if carry {
+            self.af |= 0x8000;
+        }
+        if bit1 {
+            self.af |= CF_B;
+        }
+    }
+
+    fn rr_r(&mut self, opcode: u8) {
+        let value = self.get_src_value(opcode);
+        let carry = (self.af & CF_B) != 0;
+        let bit1 = (value & 0x1) != 0;
+
+        self.af &= 0xFF00;
+        let value = (value >> 1) | ((carry as u8) << 7);
+        self.set_src_value(opcode, value);
+        if bit1 {
+            self.af |= CF_B;
+        }
+        if value == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
+    fn sla_r(&mut self, opcode: u8) {
+        let value = self.get_src_value(opcode);
+        let carry = (value & 0x80) != 0;
+        self.af &= 0xFF00;
+        self.set_src_value(opcode, value << 1);
+        if carry {
+            self.af |= CF_B;
+        }
+        if value & 0x7F == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
+    fn sra_r(&mut self, opcode: u8) {
+        let value = self.get_src_value(opcode);
+        let bit7 = value & 0x80;
+        self.af &= 0xFF00;
+        if value & 1 != 0 {
+            self.af |= CF_B;
+        }
+        let value = (value >> 1) | bit7;
+        self.set_src_value(opcode, value);
+        if value == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
+    fn srl_r(&mut self, opcode: u8) {
+        let value = self.get_src_value(opcode);
+        self.af &= 0xFF00;
+        self.set_src_value(opcode, value >> 1);
+        if value & 1 != 0 {
+            self.af |= CF_B;
+        }
+        if value >> 1 == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
+    fn swap_r(&mut self, opcode: u8) {
+        let value = self.get_src_value(opcode);
+        self.af &= 0xFF00;
+        self.set_src_value(opcode, (value >> 4) | (value << 4));
+        if value == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
+    fn bit_r(&mut self, opcode: u8) {
+        let value = self.get_src_value(opcode);
+        let bit = 1 << ((opcode >> 3) & 7);
+        if opcode & 0xC0 == 0x40 {
+            /* Bit */
+            self.af &= 0xFF00 | CF_B;
+            self.af |= HF_B;
+            if bit & value == 0 {
+                self.af |= ZF_B;
+            }
+        } else if opcode & 0xC0 == 0x80 {
+            /* res */
+            self.set_src_value(opcode, value & !bit);
+        } else if opcode & 0xC0 == 0xC0 {
+            /* set */
+            self.set_src_value(opcode, value | bit);
+        }
+    }
+
+    fn rla(&mut self) {
+        let bit7 = (self.af & 0x8000) != 0;
+        let carry = (self.af & CF_B) != 0;
+
+        self.af = (self.af & 0xFF00) << 1;
+        if carry {
+            self.af |= 0x0100;
+        }
+        if bit7 {
+            self.af |= CF_B;
+        }
+    }
+
+    fn rl_r(&mut self, opcode: u8) {
+        let value = self.get_src_value(opcode);
+        let carry = (self.af & CF_B) != 0;
+        let bit7 = (value & 0x80) != 0;
+
+        self.af &= 0xFF00;
+        let value = (value << 1) | carry as u8;
+        self.set_src_value(opcode, value);
+        if bit7 {
+            self.af |= CF_B;
+        }
+        if value == 0 {
+            self.af |= ZF_B;
+        }
+    }
+
     /// # Panics
     ///
     /// will panic on illegal opcode
@@ -238,263 +896,16 @@ impl Gb {
 
     fn exec_cb(&mut self) {
         let opcode = self.imm8();
-        match opcode {
-            0x07 => self.rlc(A),
-            0x00 => self.rlc(B),
-            0x01 => self.rlc(C),
-            0x02 => self.rlc(D),
-            0x03 => self.rlc(E),
-            0x04 => self.rlc(H),
-            0x05 => self.rlc(L),
-            0x06 => self.rlc(Indirect::HL),
-            0x17 => self.rl(A),
-            0x10 => self.rl(B),
-            0x11 => self.rl(C),
-            0x12 => self.rl(D),
-            0x13 => self.rl(E),
-            0x14 => self.rl(H),
-            0x15 => self.rl(L),
-            0x16 => self.rl(Indirect::HL),
-            0x0f => self.rrc(A),
-            0x08 => self.rrc(B),
-            0x09 => self.rrc(C),
-            0x0a => self.rrc(D),
-            0x0b => self.rrc(E),
-            0x0c => self.rrc(H),
-            0x0d => self.rrc(L),
-            0x0e => self.rrc(Indirect::HL),
-            0x1f => self.rr(A),
-            0x18 => self.rr(B),
-            0x19 => self.rr(C),
-            0x1a => self.rr(D),
-            0x1b => self.rr(E),
-            0x1c => self.rr(H),
-            0x1d => self.rr(L),
-            0x1e => self.rr(Indirect::HL),
-            0x27 => self.sla(A),
-            0x20 => self.sla(B),
-            0x21 => self.sla(C),
-            0x22 => self.sla(D),
-            0x23 => self.sla(E),
-            0x24 => self.sla(H),
-            0x25 => self.sla(L),
-            0x26 => self.sla(Indirect::HL),
-            0x2f => self.sra(A),
-            0x28 => self.sra(B),
-            0x29 => self.sra(C),
-            0x2a => self.sra(D),
-            0x2b => self.sra(E),
-            0x2c => self.sra(H),
-            0x2d => self.sra(L),
-            0x2e => self.sra(Indirect::HL),
-            0x3f => self.srl(A),
-            0x38 => self.srl(B),
-            0x39 => self.srl(C),
-            0x3a => self.srl(D),
-            0x3b => self.srl(E),
-            0x3c => self.srl(H),
-            0x3d => self.srl(L),
-            0x3e => self.srl(Indirect::HL),
-            0x37 => self.swap(A),
-            0x30 => self.swap(B),
-            0x31 => self.swap(C),
-            0x32 => self.swap(D),
-            0x33 => self.swap(E),
-            0x34 => self.swap(H),
-            0x35 => self.swap(L),
-            0x36 => self.swap(Indirect::HL),
-            0x47 => self.bit(A, 0),
-            0x4f => self.bit(A, 1),
-            0x57 => self.bit(A, 2),
-            0x5f => self.bit(A, 3),
-            0x67 => self.bit(A, 4),
-            0x6f => self.bit(A, 5),
-            0x77 => self.bit(A, 6),
-            0x7f => self.bit(A, 7),
-            0x40 => self.bit(B, 0),
-            0x48 => self.bit(B, 1),
-            0x50 => self.bit(B, 2),
-            0x58 => self.bit(B, 3),
-            0x60 => self.bit(B, 4),
-            0x68 => self.bit(B, 5),
-            0x70 => self.bit(B, 6),
-            0x78 => self.bit(B, 7),
-            0x41 => self.bit(C, 0),
-            0x49 => self.bit(C, 1),
-            0x51 => self.bit(C, 2),
-            0x59 => self.bit(C, 3),
-            0x61 => self.bit(C, 4),
-            0x69 => self.bit(C, 5),
-            0x71 => self.bit(C, 6),
-            0x79 => self.bit(C, 7),
-            0x42 => self.bit(D, 0),
-            0x4a => self.bit(D, 1),
-            0x52 => self.bit(D, 2),
-            0x5a => self.bit(D, 3),
-            0x62 => self.bit(D, 4),
-            0x6a => self.bit(D, 5),
-            0x72 => self.bit(D, 6),
-            0x7a => self.bit(D, 7),
-            0x43 => self.bit(E, 0),
-            0x4b => self.bit(E, 1),
-            0x53 => self.bit(E, 2),
-            0x5b => self.bit(E, 3),
-            0x63 => self.bit(E, 4),
-            0x6b => self.bit(E, 5),
-            0x73 => self.bit(E, 6),
-            0x7b => self.bit(E, 7),
-            0x44 => self.bit(H, 0),
-            0x4c => self.bit(H, 1),
-            0x54 => self.bit(H, 2),
-            0x5c => self.bit(H, 3),
-            0x64 => self.bit(H, 4),
-            0x6c => self.bit(H, 5),
-            0x74 => self.bit(H, 6),
-            0x7c => self.bit(H, 7),
-            0x45 => self.bit(L, 0),
-            0x4d => self.bit(L, 1),
-            0x55 => self.bit(L, 2),
-            0x5d => self.bit(L, 3),
-            0x65 => self.bit(L, 4),
-            0x6d => self.bit(L, 5),
-            0x75 => self.bit(L, 6),
-            0x7d => self.bit(L, 7),
-            0x46 => self.bit(Indirect::HL, 0),
-            0x4e => self.bit(Indirect::HL, 1),
-            0x56 => self.bit(Indirect::HL, 2),
-            0x5e => self.bit(Indirect::HL, 3),
-            0x66 => self.bit(Indirect::HL, 4),
-            0x6e => self.bit(Indirect::HL, 5),
-            0x76 => self.bit(Indirect::HL, 6),
-            0x7e => self.bit(Indirect::HL, 7),
-            0xc7 => self.set(A, 0),
-            0xcf => self.set(A, 1),
-            0xd7 => self.set(A, 2),
-            0xdf => self.set(A, 3),
-            0xe7 => self.set(A, 4),
-            0xef => self.set(A, 5),
-            0xf7 => self.set(A, 6),
-            0xff => self.set(A, 7),
-            0xc0 => self.set(B, 0),
-            0xc8 => self.set(B, 1),
-            0xd0 => self.set(B, 2),
-            0xd8 => self.set(B, 3),
-            0xe0 => self.set(B, 4),
-            0xe8 => self.set(B, 5),
-            0xf0 => self.set(B, 6),
-            0xf8 => self.set(B, 7),
-            0xc1 => self.set(C, 0),
-            0xc9 => self.set(C, 1),
-            0xd1 => self.set(C, 2),
-            0xd9 => self.set(C, 3),
-            0xe1 => self.set(C, 4),
-            0xe9 => self.set(C, 5),
-            0xf1 => self.set(C, 6),
-            0xf9 => self.set(C, 7),
-            0xc2 => self.set(D, 0),
-            0xca => self.set(D, 1),
-            0xd2 => self.set(D, 2),
-            0xda => self.set(D, 3),
-            0xe2 => self.set(D, 4),
-            0xea => self.set(D, 5),
-            0xf2 => self.set(D, 6),
-            0xfa => self.set(D, 7),
-            0xc3 => self.set(E, 0),
-            0xcb => self.set(E, 1),
-            0xd3 => self.set(E, 2),
-            0xdb => self.set(E, 3),
-            0xe3 => self.set(E, 4),
-            0xeb => self.set(E, 5),
-            0xf3 => self.set(E, 6),
-            0xfb => self.set(E, 7),
-            0xc4 => self.set(H, 0),
-            0xcc => self.set(H, 1),
-            0xd4 => self.set(H, 2),
-            0xdc => self.set(H, 3),
-            0xe4 => self.set(H, 4),
-            0xec => self.set(H, 5),
-            0xf4 => self.set(H, 6),
-            0xfc => self.set(H, 7),
-            0xc5 => self.set(L, 0),
-            0xcd => self.set(L, 1),
-            0xd5 => self.set(L, 2),
-            0xdd => self.set(L, 3),
-            0xe5 => self.set(L, 4),
-            0xed => self.set(L, 5),
-            0xf5 => self.set(L, 6),
-            0xfd => self.set(L, 7),
-            0xc6 => self.set(Indirect::HL, 0),
-            0xce => self.set(Indirect::HL, 1),
-            0xd6 => self.set(Indirect::HL, 2),
-            0xde => self.set(Indirect::HL, 3),
-            0xe6 => self.set(Indirect::HL, 4),
-            0xee => self.set(Indirect::HL, 5),
-            0xf6 => self.set(Indirect::HL, 6),
-            0xfe => self.set(Indirect::HL, 7),
-            0x87 => self.res(A, 0),
-            0x8f => self.res(A, 1),
-            0x97 => self.res(A, 2),
-            0x9f => self.res(A, 3),
-            0xa7 => self.res(A, 4),
-            0xaf => self.res(A, 5),
-            0xb7 => self.res(A, 6),
-            0xbf => self.res(A, 7),
-            0x80 => self.res(B, 0),
-            0x88 => self.res(B, 1),
-            0x90 => self.res(B, 2),
-            0x98 => self.res(B, 3),
-            0xa0 => self.res(B, 4),
-            0xa8 => self.res(B, 5),
-            0xb0 => self.res(B, 6),
-            0xb8 => self.res(B, 7),
-            0x81 => self.res(C, 0),
-            0x89 => self.res(C, 1),
-            0x91 => self.res(C, 2),
-            0x99 => self.res(C, 3),
-            0xa1 => self.res(C, 4),
-            0xa9 => self.res(C, 5),
-            0xb1 => self.res(C, 6),
-            0xb9 => self.res(C, 7),
-            0x82 => self.res(D, 0),
-            0x8a => self.res(D, 1),
-            0x92 => self.res(D, 2),
-            0x9a => self.res(D, 3),
-            0xa2 => self.res(D, 4),
-            0xaa => self.res(D, 5),
-            0xb2 => self.res(D, 6),
-            0xba => self.res(D, 7),
-            0x83 => self.res(E, 0),
-            0x8b => self.res(E, 1),
-            0x93 => self.res(E, 2),
-            0x9b => self.res(E, 3),
-            0xa3 => self.res(E, 4),
-            0xab => self.res(E, 5),
-            0xb3 => self.res(E, 6),
-            0xbb => self.res(E, 7),
-            0x84 => self.res(H, 0),
-            0x8c => self.res(H, 1),
-            0x94 => self.res(H, 2),
-            0x9c => self.res(H, 3),
-            0xa4 => self.res(H, 4),
-            0xac => self.res(H, 5),
-            0xb4 => self.res(H, 6),
-            0xbc => self.res(H, 7),
-            0x85 => self.res(L, 0),
-            0x8d => self.res(L, 1),
-            0x95 => self.res(L, 2),
-            0x9d => self.res(L, 3),
-            0xa5 => self.res(L, 4),
-            0xad => self.res(L, 5),
-            0xb5 => self.res(L, 6),
-            0xbd => self.res(L, 7),
-            0x86 => self.res(Indirect::HL, 0),
-            0x8e => self.res(Indirect::HL, 1),
-            0x96 => self.res(Indirect::HL, 2),
-            0x9e => self.res(Indirect::HL, 3),
-            0xa6 => self.res(Indirect::HL, 4),
-            0xae => self.res(Indirect::HL, 5),
-            0xb6 => self.res(Indirect::HL, 6),
-            0xbe => self.res(Indirect::HL, 7),
+        match opcode >> 3 {
+            0 => self.rlc_r(opcode),
+            1 => self.rrc_r(opcode),
+            2 => self.rl_r(opcode),
+            3 => self.rr_r(opcode),
+            4 => self.sla_r(opcode),
+            5 => self.sra_r(opcode),
+            6 => self.swap_r(opcode),
+            7 => self.srl_r(opcode),
+            _ => self.bit_r(opcode),
         }
     }
 }

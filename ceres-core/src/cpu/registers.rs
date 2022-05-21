@@ -1,9 +1,7 @@
-use crate::Gb;
-
-pub const ZF_FLAG: u16 = 0x80;
-pub const NF_FLAG: u16 = 0x40;
-pub const HF_FLAG: u16 = 0x20;
-pub const CF_FLAG: u16 = 0x10;
+use {
+    super::{CF_B, HF_B, NF_B, ZF_B},
+    crate::Gb,
+};
 
 #[derive(Clone, Copy)]
 pub enum Reg8 {
@@ -15,9 +13,6 @@ pub enum Reg8 {
     H,
     L,
 }
-
-#[derive(Default)]
-pub struct Regs {}
 
 impl Gb {
     pub(crate) fn a(&self) -> u8 {
@@ -40,59 +35,39 @@ impl Gb {
         }
     }
 
-    pub(super) fn inc_pc(&mut self) {
-        self.pc = self.pc.wrapping_add(1);
-    }
-
-    pub(super) fn dec_pc(&mut self) {
-        self.pc = self.pc.wrapping_sub(1);
-    }
-
-    pub(super) fn inc_sp(&mut self) {
-        self.sp = self.sp.wrapping_add(1);
-    }
-
-    pub(super) fn dec_sp(&mut self) {
-        self.sp = self.sp.wrapping_sub(1);
-    }
-
-    pub(super) fn hf(&self) -> bool {
-        self.af & HF_FLAG != 0
-    }
-
     pub(super) fn cf(&self) -> bool {
-        self.af & CF_FLAG != 0
+        self.af & CF_B != 0
     }
 
     pub(super) fn set_zf(&mut self, zf: bool) {
         if zf {
-            self.af |= ZF_FLAG;
+            self.af |= ZF_B;
         } else {
-            self.af &= !ZF_FLAG;
+            self.af &= !ZF_B;
         }
     }
 
     pub(super) fn set_nf(&mut self, nf: bool) {
         if nf {
-            self.af |= NF_FLAG;
+            self.af |= NF_B;
         } else {
-            self.af &= !NF_FLAG;
+            self.af &= !NF_B;
         }
     }
 
     pub(super) fn set_hf(&mut self, hf: bool) {
         if hf {
-            self.af |= HF_FLAG;
+            self.af |= HF_B;
         } else {
-            self.af &= !HF_FLAG;
+            self.af &= !HF_B;
         }
     }
 
     pub(super) fn set_cf(&mut self, cf: bool) {
         if cf {
-            self.af |= CF_FLAG;
+            self.af |= CF_B;
         } else {
-            self.af &= !CF_FLAG;
+            self.af &= !CF_B;
         }
     }
 }
