@@ -12,13 +12,13 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 name = "ceres"
 version = "0.1.0"
 dependencies = [
- "ceres-core",
+ "ceres_core",
  "pico-args",
  "sdl2",
 ]
 
 [[package]]
-name = "ceres-core"
+name = "ceres_core"
 version = "0.1.0"
 
 [[package]]

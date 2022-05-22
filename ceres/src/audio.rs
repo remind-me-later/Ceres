@@ -43,8 +43,7 @@ impl ceres_core::AudioCallbacks for Renderer {
     }
 
     fn push_frame(&mut self, left: Sample, right: Sample) {
-        // TODO: wtf???
-        if self.stream.size() > FREQ {
+        if self.stream.size() > FREQ / 2 {
             return;
         }
 

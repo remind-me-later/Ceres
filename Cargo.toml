@@ -1,5 +1,5 @@
 [workspace]
-members = ["ceres-core", "ceres"]
+members = ["ceres_core", "ceres"]
 default-members = ["ceres"]
 
 [profile.dev]
