@@ -37,10 +37,10 @@ impl<const N: u16> Common<N> {
                 self.len = N;
             }
 
-            true
-        } else {
-            false
+            return true;
         }
+
+        false
     }
 
     pub fn read(&self) -> u8 {
@@ -48,7 +48,7 @@ impl<const N: u16> Common<N> {
     }
 
     pub fn write_len(&mut self, val: u8) {
-        self.len = N - (val as u16 & (N - 1));
+        self.len = N - ((val as u16) & (N - 1));
     }
 
     pub fn reset(&mut self) {
@@ -59,7 +59,8 @@ impl<const N: u16> Common<N> {
     }
 
     pub fn set_period_half(&mut self, p_half: u8) {
-        self.p_half = p_half & 1;
+        debug_assert!(p_half == 0 || p_half == 1);
+        self.p_half = p_half;
     }
 
     pub fn step_len(&mut self) {

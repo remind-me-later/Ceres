@@ -147,7 +147,7 @@ impl Gb {
             };
 
             self.tick();
-            // acknoledge
+            // acknowledge
             self.ifr &= !interrupt;
         }
     }

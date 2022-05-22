@@ -8,29 +8,26 @@ pub struct Envelope {
     period: u8,
     timer: u8,
 }
-impl Default for Envelope {
-    fn default() -> Self {
-        let period = 8;
-        let timer = period;
-
-        Self {
-            on: false,
-            base_vol: 0,
-            period,
-            vol: 0,
-            timer,
-            inc: false,
-        }
-    }
-}
 
 impl Envelope {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            on: false,
+            base_vol: 0,
+            period: 8,
+            vol: 0,
+            timer: 8,
+            inc: false,
+        }
     }
 
     pub fn reset(&mut self) {
-        *self = Self::default();
+        self.period = 8;
+        self.timer = 8;
+        self.inc = false;
+        self.base_vol = 0;
+        self.vol = 0;
+        self.on = false;
     }
 
     pub fn read(&self) -> u8 {
@@ -38,7 +35,7 @@ impl Envelope {
     }
 
     pub fn write(&mut self, val: u8, com: &mut Common<64>) {
-        // value == 0x7 || value == 0x0 to pass Blargg 2 test
+        // TODO: likely wrong, value == 0x7 || value == 0x0 to pass Blargg 2 test
         if val == 7 {
             com.disable_dac();
         }
@@ -51,7 +48,7 @@ impl Envelope {
         self.on = self.period != 0;
         if self.period == 0 {
             self.period = 8;
-        };
+        }
         self.timer = self.period;
         self.inc = val & 8 != 0;
         self.base_vol = val >> 4;
@@ -76,7 +73,7 @@ impl Envelope {
                 self.vol += 1;
             } else {
                 self.vol -= 1;
-            };
+            }
         }
     }
 

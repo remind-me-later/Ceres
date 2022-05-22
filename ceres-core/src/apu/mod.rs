@@ -29,7 +29,7 @@ impl Gb {
             t_elapsed -= 1;
 
             self.apu_timer += 1;
-            if self.apu_timer == APU_TIMER_RES {
+            if self.apu_timer == APU_TIMER_RES + 1 {
                 self.apu_timer = 0;
                 self.step();
             }
@@ -40,7 +40,7 @@ impl Gb {
             self.apu_ch4.step_sample();
 
             self.apu_render_timer += 1;
-            if self.apu_render_timer == self.period() {
+            if self.apu_render_timer == self.period() + 1 {
                 self.apu_render_timer = 0;
                 self.mix_and_render();
             }
@@ -159,7 +159,7 @@ impl Gb {
     }
 
     pub fn write_nr52(&mut self, val: u8) {
-        self.apu_on = val & (1 << 7) != 0;
+        self.apu_on = val & 0x80 != 0;
         if !self.apu_on {
             self.reset();
         }
@@ -187,11 +187,11 @@ impl<'a> Iterator for ChOutIter<'a> {
             _ => return None,
         };
 
-        let ch_r_on = self.gb.nr51 & (1 << self.i) != 0;
-        let ch_l_on = self.gb.nr51 & (1 << (self.i + 4)) != 0;
+        let ch_r_on = (self.gb.nr51 & (1 << self.i) != 0) as u8;
+        let ch_l_on = (self.gb.nr51 & (1 << (self.i + 4)) != 0) as u8;
 
         self.i += 1;
 
-        Some((ch_l_on as u8 * out, ch_r_on as u8 * out))
+        Some((ch_l_on * out, ch_r_on * out))
     }
 }

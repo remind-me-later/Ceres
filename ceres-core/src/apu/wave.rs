@@ -72,7 +72,7 @@ impl Wave {
 
     pub fn write_nr30(&mut self, val: u8) {
         self.nr30 = val;
-        if val & (1 << 7) == 0 {
+        if val & 0x80 == 0 {
             self.com.disable_dac();
         } else {
             self.com.enable_dac();
