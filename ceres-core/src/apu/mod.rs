@@ -29,7 +29,7 @@ impl Gb {
             t_elapsed -= 1;
 
             self.apu_timer += 1;
-            if self.apu_timer == APU_TIMER_RES + 1 {
+            if self.apu_timer == APU_TIMER_RES {
                 self.apu_timer = 0;
                 self.step();
             }

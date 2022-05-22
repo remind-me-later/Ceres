@@ -41,28 +41,22 @@ impl Gb {
     }
 
     pub(crate) fn read_div(&mut self) -> u8 {
-        self.tick_timer();
         ((self.clk_wide >> 6) & 0xff) as u8
     }
 
     pub(crate) fn read_tima(&mut self) -> u8 {
-        self.tick_timer();
         self.tima
     }
 
     pub(crate) fn read_tma(&mut self) -> u8 {
-        self.tick_timer();
         self.tma
     }
 
     pub(crate) fn read_tac(&mut self) -> u8 {
-        self.tick_timer();
         0xf8 | self.tac
     }
 
     pub(crate) fn write_div(&mut self) {
-        self.tick_timer();
-
         if self.counter_bit() {
             self.inc_timer();
         }
@@ -72,7 +66,6 @@ impl Gb {
 
     pub(crate) fn write_tima(&mut self, val: u8) {
         let overflow = self.clk_overflow;
-        self.tick_timer();
 
         if !overflow {
             self.clk_overflow = false;
@@ -83,7 +76,6 @@ impl Gb {
     pub(crate) fn write_tma(&mut self, val: u8) {
         let overflow = self.clk_overflow;
 
-        self.tick_timer();
         self.tma = val;
 
         if overflow {
@@ -92,8 +84,6 @@ impl Gb {
     }
 
     pub(crate) fn write_tac(&mut self, val: u8) {
-        self.tick_timer();
-
         let old_bit = self.clk_on && self.counter_bit();
         self.tac = val & 7;
         self.clk_on = val & TAC_ENABLE != 0;

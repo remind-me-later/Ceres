@@ -2,7 +2,8 @@ use {
     crate::{
         Gb, IF_LCD_B, IF_P1_B, IF_SERIAL_B, IF_TIMER_B, IF_VBLANK_B, KEY1_SPEED_B, KEY1_SWITCH_B,
     },
-    Reg8::{A, B, C, D, E, H, L},
+    core::intrinsics::unlikely,
+    Ld8::{Dhl, A, B, C, D, E, H, L},
 };
 
 const ZF_B: u16 = 0x80;
@@ -10,16 +11,7 @@ const NF_B: u16 = 0x40;
 const HF_B: u16 = 0x20;
 const CF_B: u16 = 0x10;
 
-trait Ld
-where
-    Self: Copy,
-{
-    fn get(self, gb: &mut Gb) -> u8;
-    fn set(self, gb: &mut Gb, val: u8);
-}
-
-#[derive(Clone, Copy)]
-enum Reg8 {
+enum Ld8 {
     A,
     B,
     C,
@@ -27,65 +19,55 @@ enum Reg8 {
     E,
     H,
     L,
+    Dhl,
 }
 
-impl Ld for Reg8 {
+impl Ld8 {
     fn get(self, gb: &mut Gb) -> u8 {
         match self {
-            Reg8::A => (gb.af >> 8) as u8,
-            Reg8::B => (gb.bc >> 8) as u8,
-            Reg8::C => gb.bc as u8,
-            Reg8::D => (gb.de >> 8) as u8,
-            Reg8::E => gb.de as u8,
-            Reg8::H => (gb.hl >> 8) as u8,
-            Reg8::L => gb.hl as u8,
+            Ld8::A => (gb.af >> 8) as u8,
+            Ld8::B => (gb.bc >> 8) as u8,
+            Ld8::C => gb.bc as u8,
+            Ld8::D => (gb.de >> 8) as u8,
+            Ld8::E => gb.de as u8,
+            Ld8::H => (gb.hl >> 8) as u8,
+            Ld8::L => gb.hl as u8,
+            Ld8::Dhl => gb.read_mem(gb.hl),
         }
     }
 
     fn set(self, gb: &mut Gb, val: u8) {
         match self {
-            Reg8::A => {
+            Ld8::A => {
                 gb.af &= 0x00ff;
                 gb.af |= (val as u16) << 8;
             }
-            Reg8::B => {
+            Ld8::B => {
                 gb.bc &= 0x00ff;
                 gb.bc |= (val as u16) << 8;
             }
-            Reg8::C => {
+            Ld8::C => {
                 gb.bc &= 0xff00;
                 gb.bc |= val as u16;
             }
-            Reg8::D => {
+            Ld8::D => {
                 gb.de &= 0x00ff;
                 gb.de |= (val as u16) << 8;
             }
-            Reg8::E => {
+            Ld8::E => {
                 gb.de &= 0xff00;
                 gb.de |= val as u16;
             }
-            Reg8::H => {
+            Ld8::H => {
                 gb.hl &= 0x00ff;
                 gb.hl |= (val as u16) << 8;
             }
-            Reg8::L => {
+            Ld8::L => {
                 gb.hl &= 0xff00;
                 gb.hl |= val as u16;
             }
+            Ld8::Dhl => gb.write_mem(gb.hl, val),
         }
-    }
-}
-
-#[derive(Clone, Copy)]
-struct Dhl;
-
-impl Ld for Dhl {
-    fn get(self, gb: &mut Gb) -> u8 {
-        gb.read_mem(gb.hl)
-    }
-
-    fn set(self, gb: &mut Gb, val: u8) {
-        gb.write_mem(gb.hl, val);
     }
 }
 
@@ -101,7 +83,7 @@ impl Gb {
         } else {
             let opcode = self.imm8();
 
-            if self.cpu_halt_bug {
+            if unlikely(self.cpu_halt_bug) {
                 self.pc = self.pc.wrapping_sub(1);
                 self.cpu_halt_bug = false;
             }
@@ -123,8 +105,10 @@ impl Gb {
 
             self.tick();
 
-            let pc = self.pc;
-            self.internal_push(pc);
+            self.sp = self.sp.wrapping_sub(1);
+            self.write_mem(self.sp, (self.pc >> 8) as u8);
+            self.sp = self.sp.wrapping_sub(1);
+            self.write_mem(self.sp, (self.pc & 0xFF) as u8);
 
             let interrupt = {
                 let pending = self.ifr & self.ie & 0x1f;
@@ -167,23 +151,6 @@ impl Gb {
         let lo = self.imm8();
         let hi = self.imm8();
         u16::from_le_bytes([lo, hi])
-    }
-
-    fn internal_pop(&mut self) -> u16 {
-        let lo = self.read_mem(self.sp);
-        self.sp = self.sp.wrapping_add(1);
-        let hi = self.read_mem(self.sp);
-        self.sp = self.sp.wrapping_add(1);
-        u16::from_le_bytes([lo, hi])
-    }
-
-    fn internal_push(&mut self, val: u16) {
-        let [lo, hi] = u16::to_le_bytes(val);
-        self.tick();
-        self.sp = self.sp.wrapping_sub(1);
-        self.write_mem(self.sp, hi);
-        self.sp = self.sp.wrapping_sub(1);
-        self.write_mem(self.sp, lo);
     }
 
     fn regid2reg(&mut self, id: u8) -> &mut u16 {
@@ -232,11 +199,7 @@ impl Gb {
         }
     }
 
-    fn ld<L, R>(&mut self, lhs: R, rhs: L)
-    where
-        L: Ld,
-        R: Ld,
-    {
+    fn ld(&mut self, lhs: Ld8, rhs: Ld8) {
         let val = rhs.get(self);
         lhs.set(self, val);
     }
@@ -751,8 +714,10 @@ impl Gb {
 
     fn do_call(&mut self) {
         let addr = self.imm16();
-        let pc = self.pc;
-        self.internal_push(pc);
+        self.sp = self.sp.wrapping_sub(1);
+        self.write_mem(self.sp, ((self.pc) >> 8) as u8);
+        self.sp = self.sp.wrapping_sub(1);
+        self.write_mem(self.sp, (self.pc & 0xFF) as u8);
         self.pc = addr;
     }
 
@@ -771,20 +736,25 @@ impl Gb {
         }
     }
 
-    fn do_return(&mut self) {
-        let pc = self.internal_pop();
-        self.pc = pc;
-        self.tick();
-    }
-
     fn ret(&mut self) {
-        self.do_return();
+        self.pc = self.read_mem(self.sp) as u16;
+        self.sp = self.sp.wrapping_add(1);
+        self.pc |= (self.read_mem(self.sp) as u16) << 8;
+        self.sp = self.sp.wrapping_add(1);
+        self.tick();
     }
 
-    fn ret_f(&mut self, opcode: u8) {
-        self.tick();
+    fn reti(&mut self) {
+        self.ret();
+        self.ime = true;
+    }
+
+    fn ret_cc(&mut self, opcode: u8) {
         if self.condition(opcode) {
-            self.do_return();
+            self.tick();
+            self.ret();
+        } else {
+            self.tick();
         }
     }
 
@@ -796,11 +766,6 @@ impl Gb {
             3 => self.af & CF_B != 0,
             _ => unreachable!(),
         }
-    }
-
-    fn reti(&mut self) {
-        self.ret();
-        self.ei();
     }
 
     fn rst(&mut self, opcode: u8) {
@@ -896,11 +861,18 @@ impl Gb {
     fn push(&mut self, opcode: u8) {
         let register_id = ((opcode >> 4) + 1) & 3;
         let val = *self.regid2reg(register_id);
-        self.internal_push(val);
+        self.sp = self.sp.wrapping_sub(1);
+        self.write_mem(self.sp, (val >> 8) as u8);
+        self.sp = self.sp.wrapping_sub(1);
+        self.write_mem(self.sp, (val & 0xFF) as u8);
     }
 
     fn pop(&mut self, opcode: u8) {
-        let val = self.internal_pop();
+        let mut val = self.read_mem(self.sp) as u16;
+        self.sp = self.sp.wrapping_add(1);
+        val |= (self.read_mem(self.sp) as u16) << 8;
+        self.sp = self.sp.wrapping_add(1);
+
         let register_id = ((opcode >> 4) + 1) & 3;
         *self.regid2reg(register_id) = val;
         self.af &= 0xfff0;
@@ -1094,9 +1066,11 @@ impl Gb {
         }
     }
 
-    /// # Panics
-    ///
-    /// will panic on illegal opcode
+    fn ill(&mut self) {
+        self.ie = 0;
+        self.cpu_halted = true;
+    }
+
     fn exec(&mut self, opcode: u8) {
         match opcode {
             0x7f => self.ld(A, A),
@@ -1215,7 +1189,7 @@ impl Gb {
             0xc2 | 0xca | 0xd2 | 0xda => self.jp_f(opcode),
             0x20 | 0x28 | 0x30 | 0x38 => self.jr_f(opcode),
             0xc4 | 0xcc | 0xd4 | 0xdc => self.call_f_nn(opcode),
-            0xc0 | 0xc8 | 0xd0 | 0xd8 => self.ret_f(opcode),
+            0xc0 | 0xc8 | 0xd0 | 0xd8 => self.ret_cc(opcode),
             0xc7 | 0xcf | 0xd7 | 0xdf | 0xe7 | 0xef | 0xf7 | 0xff => self.rst(opcode),
             0x76 => self.halt(),
             0x10 => self.stop(),
@@ -1237,7 +1211,7 @@ impl Gb {
             0x03 | 0x13 | 0x23 | 0x33 => self.inc_rr(opcode),
             0x0b | 0x1b | 0x2b | 0x3b => self.dec_rr(opcode),
             0xcb => self.exec_cb(),
-            _ => panic!("Illegal opcode {}", opcode),
+            _ => self.ill(),
         }
     }
 
