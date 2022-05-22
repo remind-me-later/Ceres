@@ -28,10 +28,11 @@ impl Gb {
         while t_elapsed > 0 {
             t_elapsed -= 1;
 
-            self.apu_timer += 1;
             if self.apu_timer == APU_TIMER_RES {
                 self.apu_timer = 0;
                 self.step();
+            } else {
+                self.apu_timer += 1;
             }
 
             self.apu_ch1.step_sample();
@@ -39,10 +40,11 @@ impl Gb {
             self.apu_ch3.step_sample();
             self.apu_ch4.step_sample();
 
-            self.apu_render_timer += 1;
-            if self.apu_render_timer == self.period() + 1 {
+            if self.apu_render_timer == self.period() {
                 self.apu_render_timer = 0;
                 self.mix_and_render();
+            } else {
+                self.apu_render_timer += 1;
             }
         }
     }
@@ -97,7 +99,6 @@ impl Gb {
 
     fn high_pass_filter(&mut self, sample: i16) -> f32 {
         let charge_factor = 0.998_943;
-        // TODO: amplification
         if self.apu_on {
             let input = (sample * 32) as f32 / 32768.0;
             let output = input - self.apu_cap;

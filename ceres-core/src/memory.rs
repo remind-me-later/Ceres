@@ -238,7 +238,6 @@ impl Gb {
     }
 
     pub(crate) fn read_mem(&mut self, addr: u16) -> u8 {
-        self.tick();
         match addr {
             0x0000..=0x00ff | 0x0200..=0x08ff => self.read_rom_or_cart(addr),
             0x0100..=0x01ff | 0x0900..=0x7fff => self.cart.read_rom(addr),
@@ -307,7 +306,6 @@ impl Gb {
     }
 
     pub(crate) fn write_mem(&mut self, addr: u16, val: u8) {
-        self.tick();
         match addr {
             // assume bootrom doesn't write to rom
             0x0000..=0x08ff | 0x0900..=0x7fff => self.cart.write_rom(addr, val),

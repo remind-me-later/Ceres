@@ -103,7 +103,6 @@ pub struct Gb {
 
     cpu_ei_delay: bool,
     cpu_halted: bool,
-    cpu_halt_bug: bool,
 
     // serial
     serial: Serial,
@@ -218,7 +217,6 @@ impl Gb {
             cpu_ei_delay: false,
             ime: false,
             cpu_halted: false,
-            cpu_halt_bug: false,
             cart,
             hram: [0; HIGH_RAM_SIZE],
             wram: [0; WRAM_SIZE_CGB],

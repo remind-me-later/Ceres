@@ -6,7 +6,7 @@ use {
     },
 };
 
-const FREQ: u32 = 41800;
+const FREQ: u32 = 96000;
 const AUDIO_BUFFER_SIZE: usize = 512 * 2;
 
 pub struct Renderer {
