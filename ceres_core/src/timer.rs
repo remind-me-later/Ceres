@@ -3,6 +3,22 @@ use crate::{Gb, IF_TIMER_B};
 const TAC_ENABLE: u8 = 4;
 
 impl Gb {
+    pub(crate) fn advance_cycle(&mut self) {
+        // affeected by speed boost
+        self.tick_dma();
+        self.tick_timer();
+
+        // not affected by speed boost
+        let mut cycles = 4;
+
+        if self.double_speed {
+            cycles >>= 1;
+        }
+
+        self.tick_apu(cycles);
+        self.tick_ppu(cycles);
+    }
+
     fn counter_mask(&self) -> u16 {
         match self.tac & 3 {
             3 => 1 << 5,
@@ -14,7 +30,7 @@ impl Gb {
     }
 
     fn counter_bit(&self) -> bool {
-        (self.clk_wide & self.counter_mask()) != 0
+        self.clk_wide & self.counter_mask() != 0
     }
 
     fn inc_timer(&mut self) {
@@ -38,22 +54,6 @@ impl Gb {
         } else {
             self.clk_wide = self.clk_wide.wrapping_add(1);
         }
-    }
-
-    pub(crate) fn read_div(&mut self) -> u8 {
-        ((self.clk_wide >> 6) & 0xff) as u8
-    }
-
-    pub(crate) fn read_tima(&mut self) -> u8 {
-        self.tima
-    }
-
-    pub(crate) fn read_tma(&mut self) -> u8 {
-        self.tma
-    }
-
-    pub(crate) fn read_tac(&mut self) -> u8 {
-        0xf8 | self.tac
     }
 
     pub(crate) fn write_div(&mut self) {

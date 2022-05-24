@@ -73,20 +73,6 @@ impl Gb {
         self.wram[(addr & 0xfff | (self.svbk_true as u16 * 0x1000)) as usize] = val;
     }
 
-    // tick one t cycle
-    pub(crate) fn tick(&mut self) {
-        self.tick_dma();
-        self.tick_hdma();
-        self.tick_ppu();
-        self.tick_timer();
-        self.tick_apu();
-    }
-
-    #[must_use]
-    pub(crate) fn t_elapsed(&self) -> u8 {
-        if self.double_speed { 2 } else { 4 }
-    }
-
     pub(crate) fn write_dma(&mut self, val: u8) {
         if self.dma_on {
             self.dma_restarting = true;
@@ -178,7 +164,7 @@ impl Gb {
         };
     }
 
-    pub(crate) fn tick_hdma(&mut self) {
+    pub(crate) fn run_hdma(&mut self) {
         match self.hdma_state {
             HdmaState::General => (),
             HdmaState::HBlank if self.ppu_mode() == Mode::HBlank => (),
@@ -213,10 +199,7 @@ impl Gb {
                 _ => panic!("Illegal source addr for HDMA transfer"),
             };
 
-            self.tick_dma();
-            self.tick_ppu();
-            self.tick_timer();
-            self.tick_apu();
+            self.advance_cycle();
 
             self.write_vram(self.hdma_dst, val);
 
@@ -230,7 +213,7 @@ impl Gb {
     }
 
     fn read_rom_or_cart(&mut self, addr: u16) -> u8 {
-        if unlikely(self.rom.is_mapped()) {
+        if unlikely(self.rom.is_mapped) {
             return self.rom.read(addr);
         }
 
@@ -256,10 +239,10 @@ impl Gb {
             P1 => self.read_p1(),
             SB => self.serial.read_sb(),
             SC => self.serial.read_sc(),
-            DIV => self.read_div(),
-            TIMA => self.read_tima(),
-            TMA => self.read_tma(),
-            TAC => self.read_tac(),
+            DIV => ((self.clk_wide >> 6) & 0xff) as u8,
+            TIMA => self.tima,
+            TMA => self.tma,
+            TAC => 0xf8 | self.tac,
             IF => self.ifr | 0xe0,
             0x10 => self.apu_ch1.read_nr10(),
             0x11 => self.apu_ch1.read_nr11(),
@@ -364,7 +347,7 @@ impl Gb {
             OBP1 => self.obp1 = val,
             WY => self.wy = val,
             WX => self.wx = val,
-            KEY0 if self.model == Cgb && self.rom.is_mapped() && val == 4 => {
+            KEY0 if self.model == Cgb && self.rom.is_mapped && val == 4 => {
                 self.function_mode = FunctionMode::Compat;
             }
             KEY1 if self.model == Cgb => {
@@ -374,7 +357,7 @@ impl Gb {
             VBK if self.model == Cgb => self.vbk = val & 1,
             0x50 => {
                 if val & 1 != 0 {
-                    self.rom.unmap();
+                    self.rom.is_mapped = false;
                 }
             }
             HDMA1 if self.model == Cgb => self.write_hdma1(val),
@@ -394,7 +377,7 @@ impl Gb {
             }
             0x80..=0xfe => self.hram[(addr & 0x7f) as usize] = val,
             0xff => self.ie = val,
-            _ => self.tick(),
+            _ => self.advance_cycle(),
         }
     }
 }

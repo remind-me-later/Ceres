@@ -73,18 +73,6 @@ impl Ld8 {
 }
 
 impl Gb {
-    #[inline]
-    fn cpu_write(&mut self, addr: u16, val: u8) {
-        self.tick();
-        self.write_mem(addr, val);
-    }
-
-    #[inline]
-    fn cpu_read(&mut self, addr: u16) -> u8 {
-        self.tick();
-        self.read_mem(addr)
-    }
-
     pub(crate) fn run(&mut self) {
         if self.cpu_ei_delay {
             self.ime = true;
@@ -92,9 +80,12 @@ impl Gb {
         }
 
         if self.cpu_halted {
-            self.tick();
+            self.advance_cycle();
         } else {
             let opcode = self.imm_u8();
+
+            self.run_hdma();
+
             self.exec(opcode);
         }
 
@@ -110,7 +101,7 @@ impl Gb {
         if self.ime {
             self.ime = false;
 
-            self.tick();
+            self.advance_cycle();
 
             self.sp = self.sp.wrapping_sub(1);
             self.cpu_write(self.sp, (self.pc >> 8) as u8);
@@ -137,10 +128,22 @@ impl Gb {
                 _ => unreachable!(),
             };
 
-            self.tick();
+            self.advance_cycle();
             // acknowledge
             self.ifr &= !interrupt;
         }
+    }
+
+    #[inline]
+    fn cpu_write(&mut self, addr: u16, val: u8) {
+        self.advance_cycle();
+        self.write_mem(addr, val);
+    }
+
+    #[inline]
+    fn cpu_read(&mut self, addr: u16) -> u8 {
+        self.advance_cycle();
+        self.read_mem(addr)
     }
 
     #[inline]
@@ -322,7 +325,7 @@ impl Gb {
     fn ld16_sp_hl(&mut self) {
         let val = self.hl;
         self.sp = val;
-        self.tick();
+        self.advance_cycle();
     }
 
     #[inline]
@@ -657,7 +660,7 @@ impl Gb {
         let reg_id = (opcode >> 4) + 1;
         let reg = self.regid2reg(reg_id);
         *reg = reg.wrapping_add(1);
-        self.tick();
+        self.advance_cycle();
     }
 
     #[inline]
@@ -665,14 +668,14 @@ impl Gb {
         let reg_id = (opcode >> 4) + 1;
         let reg = self.regid2reg(reg_id);
         *reg = reg.wrapping_sub(1);
-        self.tick();
+        self.advance_cycle();
     }
 
     #[inline]
     fn ld_hl_sp_r8(&mut self) {
         self.af &= 0xFF00;
         let offset = self.imm_u8() as i8 as u16;
-        self.tick();
+        self.advance_cycle();
         self.hl = self.sp.wrapping_add(offset);
 
         if (self.sp & 0xF) + (offset & 0xF) > 0xF {
@@ -722,7 +725,7 @@ impl Gb {
     fn do_jump_to_immediate(&mut self) {
         let addr = self.imm_u16();
         self.pc = addr;
-        self.tick();
+        self.advance_cycle();
     }
 
     #[inline]
@@ -737,8 +740,8 @@ impl Gb {
         } else {
             let pc = self.pc.wrapping_add(2);
             self.pc = pc;
-            self.tick();
-            self.tick();
+            self.advance_cycle();
+            self.advance_cycle();
         }
     }
 
@@ -753,7 +756,7 @@ impl Gb {
         let relative_addr = self.imm_u8() as i8 as u16;
         let pc = self.pc.wrapping_add(relative_addr);
         self.pc = pc;
-        self.tick();
+        self.advance_cycle();
     }
 
     #[inline]
@@ -767,7 +770,7 @@ impl Gb {
             self.do_jump_relative();
         } else {
             self.pc = self.pc.wrapping_add(1);
-            self.tick();
+            self.advance_cycle();
         }
     }
 
@@ -793,8 +796,8 @@ impl Gb {
         } else {
             let pc = self.pc.wrapping_add(2);
             self.pc = pc;
-            self.tick();
-            self.tick();
+            self.advance_cycle();
+            self.advance_cycle();
         }
     }
 
@@ -804,7 +807,7 @@ impl Gb {
         self.sp = self.sp.wrapping_add(1);
         self.pc |= (self.cpu_read(self.sp) as u16) << 8;
         self.sp = self.sp.wrapping_add(1);
-        self.tick();
+        self.advance_cycle();
     }
 
     #[inline]
@@ -815,7 +818,7 @@ impl Gb {
 
     #[inline]
     fn ret_cc(&mut self, opcode: u8) {
-        self.tick();
+        self.advance_cycle();
 
         if self.condition(opcode) {
             self.ret();
@@ -974,8 +977,8 @@ impl Gb {
     fn add_sp_r8(&mut self) {
         let sp = self.sp;
         let offset = self.imm_u8() as i8 as u16;
-        self.tick();
-        self.tick();
+        self.advance_cycle();
+        self.advance_cycle();
         self.sp = self.sp.wrapping_add(offset);
         self.af &= 0xFF00;
 
@@ -1005,7 +1008,7 @@ impl Gb {
             self.af |= CF_B;
         }
 
-        self.tick();
+        self.advance_cycle();
     }
 
     #[inline]

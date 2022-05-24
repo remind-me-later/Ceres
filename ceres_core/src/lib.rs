@@ -22,7 +22,7 @@ use {
     serial::Serial,
 };
 pub use {
-    cart::Cartridge,
+    cartridge::Cartridge,
     error::Error,
     joypad::Button,
     ppu::{PX_HEIGHT, PX_WIDTH},
@@ -30,7 +30,7 @@ pub use {
 
 mod apu;
 mod bootrom;
-mod cart;
+mod cartridge;
 mod cpu;
 mod error;
 mod joypad;

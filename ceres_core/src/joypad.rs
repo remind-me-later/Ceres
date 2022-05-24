@@ -15,10 +15,13 @@ pub enum Button {
 impl Gb {
     pub fn press(&mut self, button: Button) {
         let b = button as u8;
-        self.p1_btn |= b;
 
-        if b & 0x0f != 0 && self.p1_dirs || b & 0xf0 != 0 && self.p1_acts {
-            self.ifr |= IF_P1_B;
+        if self.p1_btn & b == 0 {
+            self.p1_btn |= b;
+
+            if b & 0x0f != 0 && self.p1_dirs || b & 0xf0 != 0 && self.p1_acts {
+                self.ifr |= IF_P1_B;
+            }
         }
     }
 

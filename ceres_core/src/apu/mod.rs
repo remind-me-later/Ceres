@@ -18,15 +18,13 @@ impl Gb {
         unsafe { TC_SEC / (*self.apu_callbacks).sample_rate() }
     }
 
-    pub fn tick_apu(&mut self) {
-        let mut t_elapsed = self.t_elapsed();
-
+    pub fn tick_apu(&mut self, mut cycles: i16) {
         if !self.apu_on {
             return;
         }
 
-        while t_elapsed > 0 {
-            t_elapsed -= 1;
+        while cycles > 0 {
+            cycles -= 1;
 
             if self.apu_timer == APU_TIMER_RES {
                 self.apu_timer = 0;

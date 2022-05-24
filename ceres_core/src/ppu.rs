@@ -197,7 +197,7 @@ struct Obj {
 }
 
 impl Gb {
-    pub(crate) fn tick_ppu(&mut self) {
+    pub(crate) fn tick_ppu(&mut self, cycles: i16) {
         fn check_lyc(gb: &mut Gb) {
             gb.stat &= !STAT_LYC_B;
 
@@ -213,7 +213,7 @@ impl Gb {
             return;
         }
 
-        self.ppu_cycles -= self.t_elapsed() as i16;
+        self.ppu_cycles -= cycles;
 
         if self.ppu_cycles > 0 {
             return;
