@@ -15,7 +15,7 @@ const APU_TIMER_RES: u16 = (TC_SEC / 512) as u16;
 
 impl Gb {
     fn period(&self) -> u32 {
-        unsafe { TC_SEC / (*self.apu_callbacks).sample_rate() }
+        TC_SEC / (*self.apu_callbacks).sample_rate()
     }
 
     pub fn tick_apu(&mut self, mut cycles: i16) {
@@ -92,7 +92,7 @@ impl Gb {
         let l = self.high_pass_filter(l);
         let r = self.high_pass_filter(r);
 
-        unsafe { (*self.apu_callbacks).push_frame(l, r) };
+        self.apu_callbacks.push_frame(l, r);
     }
 
     fn high_pass_filter(&mut self, sample: i16) -> f32 {

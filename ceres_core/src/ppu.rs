@@ -1,7 +1,4 @@
-use {
-    crate::{FunctionMode, Gb, IF_LCD_B, IF_VBLANK_B},
-    core::hint::unreachable_unchecked,
-};
+use crate::{FunctionMode, Gb, IF_LCD_B, IF_VBLANK_B};
 
 pub const PX_WIDTH: u8 = 160;
 pub const PX_HEIGHT: u8 = 144;
@@ -240,9 +237,7 @@ impl Gb {
                     self.ly = 0;
                     self.switch_mode(Mode::OamScan);
                     self.exit_run = true;
-                    unsafe {
-                        (*self.ppu_callbacks).draw(&self.rgba_buf.data);
-                    }
+                    self.ppu_callbacks.draw(&self.rgba_buf.data);
                 } else {
                     let scx = self.scx;
                     self.ppu_cycles += self.ppu_mode().cycles(scx);
@@ -259,7 +254,7 @@ impl Gb {
             1 => Mode::VBlank,
             2 => Mode::OamScan,
             3 => Mode::Drawing,
-            _ => unsafe { unreachable_unchecked() },
+            _ => unreachable!(),
         }
     }
 

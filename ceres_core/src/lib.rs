@@ -1,4 +1,5 @@
 #![no_std]
+#![forbid(unsafe_code)]
 #![feature(core_intrinsics)]
 // clippy
 #![warn(clippy::pedantic)]
@@ -10,6 +11,8 @@
 #![allow(clippy::similar_names)]
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::verbose_bit_mask)]
+
+use alloc::boxed::Box;
 
 extern crate alloc;
 
@@ -166,7 +169,7 @@ pub struct Gb {
     ppu_win_in_frame: bool,
     ppu_win_in_ly: bool,
     ppu_win_skipped: u16,
-    ppu_callbacks: *mut dyn VideoCallbacks,
+    ppu_callbacks: Box<dyn VideoCallbacks>,
 
     // clock
     tima: u8,
@@ -193,21 +196,18 @@ pub struct Gb {
 
     apu_timer: u16,
     apu_render_timer: u32,
-    apu_callbacks: *mut dyn AudioCallbacks,
+    apu_callbacks: Box<dyn AudioCallbacks>,
     apu_seq_step: u8,
     apu_cap: f32,
 }
 
 impl Gb {
-    /// # Safety
-    ///
-    /// `audio_callbacks` and `video_callbacks` should not be dropped before the struct
-    /// and be in the heap, so that their position doesn't change
-    pub unsafe fn new(
+    #[must_use]
+    pub fn new(
         model: Model,
         cart: Cartridge,
-        audio_callbacks: *mut dyn AudioCallbacks,
-        video_callbacks: *mut dyn VideoCallbacks,
+        audio_callbacks: Box<dyn AudioCallbacks>,
+        video_callbacks: Box<dyn VideoCallbacks>,
     ) -> Self {
         let function_mode = match model {
             Model::Dmg | Model::Mgb => FunctionMode::Dmg,
