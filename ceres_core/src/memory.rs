@@ -64,7 +64,7 @@ const HDMA3: u8 = 0x53;
 const HDMA4: u8 = 0x54;
 const HDMA5: u8 = 0x55;
 const BCPS: u8 = 0x68;
-const BCPD: u8 = 0x68;
+const BCPD: u8 = 0x69;
 const OCPS: u8 = 0x6a;
 const OCPD: u8 = 0x6b;
 const OPRI: u8 = 0x6c;
@@ -232,8 +232,8 @@ impl Gb {
     }
 
     fn read_rom_or_cart(&mut self, addr: u16) -> u8 {
-        if unlikely(self.rom.is_mapped) {
-            return self.rom.read(addr);
+        if unlikely(self.boot_rom_mapped) {
+            return self.boot_rom[addr as usize];
         }
 
         self.cart.read_rom(addr)
@@ -366,7 +366,7 @@ impl Gb {
             OBP1 => self.obp1 = val,
             WY => self.wy = val,
             WX => self.wx = val,
-            KEY0 if self.model == Cgb && self.rom.is_mapped && val == 4 => {
+            KEY0 if self.model == Cgb && self.boot_rom_mapped && val == 4 => {
                 self.function_mode = FunctionMode::Compat;
             }
             KEY1 if self.model == Cgb => {
@@ -376,7 +376,7 @@ impl Gb {
             VBK if self.model == Cgb => self.vbk = val & 1,
             0x50 => {
                 if val & 1 != 0 {
-                    self.rom.is_mapped = false;
+                    self.boot_rom_mapped = false;
                 }
             }
             HDMA1 if self.model == Cgb => self.write_hdma1(val),

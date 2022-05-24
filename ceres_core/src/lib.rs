@@ -15,7 +15,6 @@ extern crate alloc;
 
 use {
     apu::{Ch1, Ch2, Noise, Wave},
-    bootrom::BootRom,
     core::time::Duration,
     memory::HdmaState,
     ppu::{ColorPalette, Mode, RgbaBuf, OAM_SIZE, VRAM_SIZE_CGB},
@@ -29,7 +28,6 @@ pub use {
 };
 
 mod apu;
-mod bootrom;
 mod cartridge;
 mod cpu;
 mod error;
@@ -38,6 +36,10 @@ mod memory;
 mod ppu;
 mod serial;
 mod timer;
+
+const DMG_BOOTROM: &[u8] = include_bytes!("../bootroms/bin/dmg_boot.bin");
+const MGB_BOOTROM: &[u8] = include_bytes!("../bootroms/bin/mgb_boot.bin");
+const CGB_BOOTROM: &[u8] = include_bytes!("../bootroms/bin/cgb_boot_fast.bin");
 
 const FRAME_NANOS: u64 = 16_750_418;
 // 59.7 fps
@@ -86,12 +88,15 @@ pub struct Gb {
     // general
     exit_run: bool,
     cart: Cartridge,
-    rom: BootRom,
     model: Model,
     function_mode: FunctionMode,
 
     double_speed: bool,
     key1: u8,
+
+    // boot rom
+    boot_rom: &'static [u8],
+    boot_rom_mapped: bool,
 
     // cpu
     af: u16,
@@ -209,6 +214,12 @@ impl Gb {
             Model::Cgb => FunctionMode::Cgb,
         };
 
+        let boot_rom = match model {
+            Model::Dmg => DMG_BOOTROM,
+            Model::Mgb => MGB_BOOTROM,
+            Model::Cgb => CGB_BOOTROM,
+        };
+
         Self {
             opri: 0,
             nr51: 0,
@@ -224,7 +235,6 @@ impl Gb {
             svbk: 0,
             svbk_true: 1,
             serial: Serial::new(),
-            rom: BootRom::new(model),
             model,
             double_speed: false,
             key1: 0,
@@ -290,6 +300,8 @@ impl Gb {
             hl: 0,
             sp: 0,
             pc: 0,
+            boot_rom,
+            boot_rom_mapped: true,
         }
     }
 
