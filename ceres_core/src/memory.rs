@@ -15,15 +15,34 @@ pub enum HdmaState {
 const P1: u8 = 0x00;
 const SB: u8 = 0x01;
 const SC: u8 = 0x02;
-
 const DIV: u8 = 0x04;
 const TIMA: u8 = 0x05;
 const TMA: u8 = 0x06;
 const TAC: u8 = 0x07;
-
+const IF: u8 = 0x0f;
+const NR10: u8 = 0x10;
+const NR11: u8 = 0x11;
+const NR12: u8 = 0x12;
+const NR13: u8 = 0x13;
+const NR14: u8 = 0x14;
+const NR21: u8 = 0x16;
+const NR22: u8 = 0x17;
+const NR23: u8 = 0x18;
+const NR24: u8 = 0x19;
+const NR30: u8 = 0x1a;
+const NR31: u8 = 0x1b;
+const NR32: u8 = 0x1c;
+const NR33: u8 = 0x1d;
+const NR34: u8 = 0x1e;
+const NR41: u8 = 0x20;
+const NR42: u8 = 0x21;
+const NR43: u8 = 0x22;
+const NR44: u8 = 0x23;
+const NR50: u8 = 0x24;
+const NR51: u8 = 0x25;
+const NR52: u8 = 0x26;
 const WAV_BEGIN: u8 = 0x30;
 const WAV_END: u8 = 0x3f;
-
 const LCDC: u8 = 0x40;
 const STAT: u8 = 0x41;
 const SCY: u8 = 0x42;
@@ -36,23 +55,23 @@ const OBP0: u8 = 0x48;
 const OBP1: u8 = 0x49;
 const WY: u8 = 0x4a;
 const WX: u8 = 0x4b;
-
 const KEY0: u8 = 0x4c;
 const KEY1: u8 = 0x4d;
 const VBK: u8 = 0x4f;
-
-const OPRI: u8 = 0x6c;
-
-const IF: u8 = 0x0f;
-const IE: u8 = 0xff;
-
 const HDMA1: u8 = 0x51;
 const HDMA2: u8 = 0x52;
 const HDMA3: u8 = 0x53;
 const HDMA4: u8 = 0x54;
 const HDMA5: u8 = 0x55;
-
-const NR51: u8 = 0x25;
+const BCPS: u8 = 0x68;
+const BCPD: u8 = 0x68;
+const OCPS: u8 = 0x6a;
+const OCPD: u8 = 0x6b;
+const OPRI: u8 = 0x6c;
+const SVBK: u8 = 0x70;
+const HRAM_BEG: u8 = 0x80;
+const HRAM_END: u8 = 0xfe;
+const IE: u8 = 0xff;
 
 impl Gb {
     #[must_use]
@@ -244,22 +263,22 @@ impl Gb {
             TMA => self.tma,
             TAC => 0xf8 | self.tac,
             IF => self.ifr | 0xe0,
-            0x10 => self.apu_ch1.read_nr10(),
-            0x11 => self.apu_ch1.read_nr11(),
-            0x12 => self.apu_ch1.read_nr12(),
-            0x14 => self.apu_ch1.read_nr14(),
-            0x16 => self.apu_ch2.read_nr21(),
-            0x17 => self.apu_ch2.read_nr22(),
-            0x19 => self.apu_ch2.read_nr24(),
-            0x1a => self.apu_ch3.read_nr30(),
-            0x1c => self.apu_ch3.read_nr32(),
-            0x1e => self.apu_ch3.read_nr34(),
-            0x21 => self.apu_ch4.read_nr42(),
-            0x22 => self.apu_ch4.read_nr43(),
-            0x23 => self.apu_ch4.read_nr44(),
-            0x24 => self.read_nr50(),
+            NR10 => self.apu_ch1.read_nr10(),
+            NR11 => self.apu_ch1.read_nr11(),
+            NR12 => self.apu_ch1.read_nr12(),
+            NR14 => self.apu_ch1.read_nr14(),
+            NR21 => self.apu_ch2.read_nr21(),
+            NR22 => self.apu_ch2.read_nr22(),
+            NR24 => self.apu_ch2.read_nr24(),
+            NR30 => self.apu_ch3.read_nr30(),
+            NR32 => self.apu_ch3.read_nr32(),
+            NR34 => self.apu_ch3.read_nr34(),
+            NR42 => self.apu_ch4.read_nr42(),
+            NR43 => self.apu_ch4.read_nr43(),
+            NR44 => self.apu_ch4.read_nr44(),
+            NR50 => self.read_nr50(),
             NR51 => self.nr51,
-            0x26 => self.read_nr52(),
+            NR52 => self.read_nr52(),
             WAV_BEGIN..=WAV_END => self.apu_ch3.read_wave_ram(addr),
             LCDC => self.lcdc,
             STAT => self.stat | 0x80,
@@ -274,15 +293,15 @@ impl Gb {
             WY => self.wy,
             WX => self.wx,
             KEY1 if self.model == Cgb => 0x7e | self.key1,
-            0x4f if self.model == Cgb => self.vbk | 0xfe,
+            VBK if self.model == Cgb => self.vbk | 0xfe,
             HDMA5 if self.model == Cgb => self.read_hdma5(),
-            0x68 if self.model == Cgb => self.bcp.spec(),
-            0x69 if self.model == Cgb => self.bcp.data(),
-            0x6a if self.model == Cgb => self.ocp.spec(),
-            0x6b if self.model == Cgb => self.ocp.data(),
+            BCPS if self.model == Cgb => self.bcp.spec(),
+            BCPD if self.model == Cgb => self.bcp.data(),
+            OCPS if self.model == Cgb => self.ocp.spec(),
+            OCPD if self.model == Cgb => self.ocp.data(),
             OPRI if self.model == Cgb => self.opri,
-            0x70 if self.model == Cgb => self.svbk | 0xf8,
-            0x80..=0xfe => self.hram[(addr & 0x7f) as usize],
+            SVBK if self.model == Cgb => self.svbk | 0xf8,
+            HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7f) as usize],
             IE => self.ie,
             _ => 0xff,
         }
@@ -314,27 +333,27 @@ impl Gb {
             TMA => self.write_tma(val),
             TAC => self.write_tac(val),
             IF => self.ifr = val & 0x1f,
-            0x10 if self.apu_on => self.apu_ch1.write_nr10(val),
-            0x11 if self.apu_on => self.apu_ch1.write_nr11(val),
-            0x12 if self.apu_on => self.apu_ch1.write_nr12(val),
-            0x13 if self.apu_on => self.apu_ch1.write_nr13(val),
-            0x14 if self.apu_on => self.apu_ch1.write_nr14(val),
-            0x16 if self.apu_on => self.apu_ch2.write_nr21(val),
-            0x17 if self.apu_on => self.apu_ch2.write_nr22(val),
-            0x18 if self.apu_on => self.apu_ch2.write_nr23(val),
-            0x19 if self.apu_on => self.apu_ch2.write_nr24(val),
-            0x1a if self.apu_on => self.apu_ch3.write_nr30(val),
-            0x1b if self.apu_on => self.apu_ch3.write_nr31(val),
-            0x1c if self.apu_on => self.apu_ch3.write_nr32(val),
-            0x1d if self.apu_on => self.apu_ch3.write_nr33(val),
-            0x1e if self.apu_on => self.apu_ch3.write_nr34(val),
-            0x20 if self.apu_on => self.apu_ch4.write_nr41(val),
-            0x21 if self.apu_on => self.apu_ch4.write_nr42(val),
-            0x22 if self.apu_on => self.apu_ch4.write_nr43(val),
-            0x23 if self.apu_on => self.apu_ch4.write_nr44(val),
-            0x24 => self.write_nr50(val),
+            NR10 if self.apu_on => self.apu_ch1.write_nr10(val),
+            NR11 if self.apu_on => self.apu_ch1.write_nr11(val),
+            NR12 if self.apu_on => self.apu_ch1.write_nr12(val),
+            NR13 if self.apu_on => self.apu_ch1.write_nr13(val),
+            NR14 if self.apu_on => self.apu_ch1.write_nr14(val),
+            NR21 if self.apu_on => self.apu_ch2.write_nr21(val),
+            NR22 if self.apu_on => self.apu_ch2.write_nr22(val),
+            NR23 if self.apu_on => self.apu_ch2.write_nr23(val),
+            NR24 if self.apu_on => self.apu_ch2.write_nr24(val),
+            NR30 if self.apu_on => self.apu_ch3.write_nr30(val),
+            NR31 if self.apu_on => self.apu_ch3.write_nr31(val),
+            NR32 if self.apu_on => self.apu_ch3.write_nr32(val),
+            NR33 if self.apu_on => self.apu_ch3.write_nr33(val),
+            NR34 if self.apu_on => self.apu_ch3.write_nr34(val),
+            NR41 if self.apu_on => self.apu_ch4.write_nr41(val),
+            NR42 if self.apu_on => self.apu_ch4.write_nr42(val),
+            NR43 if self.apu_on => self.apu_ch4.write_nr43(val),
+            NR44 if self.apu_on => self.apu_ch4.write_nr44(val),
+            NR50 => self.write_nr50(val),
             NR51 => self.write_nr51(val),
-            0x26 => self.write_nr52(val),
+            NR52 => self.write_nr52(val),
             WAV_BEGIN..=WAV_END => self.write_wave(addr, val),
             LCDC => self.write_lcdc(val),
             STAT => self.write_stat(val),
@@ -365,18 +384,18 @@ impl Gb {
             HDMA3 if self.model == Cgb => self.write_hdma3(val),
             HDMA4 if self.model == Cgb => self.write_hdma4(val),
             HDMA5 if self.model == Cgb => self.write_hdma5(val),
-            0x68 if self.model == Cgb => self.bcp.set_spec(val),
-            0x69 if self.model == Cgb => self.bcp.set_data(val),
-            0x6a if self.model == Cgb => self.ocp.set_spec(val),
-            0x6b if self.model == Cgb => self.ocp.set_data(val),
-            0x6c if self.model == Cgb => self.opri = val,
-            0x70 if self.model == Cgb => {
+            BCPS if self.model == Cgb => self.bcp.set_spec(val),
+            BCPD if self.model == Cgb => self.bcp.set_data(val),
+            OCPS if self.model == Cgb => self.ocp.set_spec(val),
+            OCPD if self.model == Cgb => self.ocp.set_data(val),
+            OPRI if self.model == Cgb => self.opri = val,
+            SVBK if self.model == Cgb => {
                 let tmp = val & 7;
                 self.svbk = tmp;
                 self.svbk_true = if tmp == 0 { 1 } else { tmp };
             }
-            0x80..=0xfe => self.hram[(addr & 0x7f) as usize] = val,
-            0xff => self.ie = val,
+            HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7f) as usize] = val,
+            IE => self.ie = val,
             _ => self.advance_cycle(),
         }
     }
