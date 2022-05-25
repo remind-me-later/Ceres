@@ -2,18 +2,8 @@
 members = ["ceres_core", "ceres"]
 default-members = ["ceres"]
 
-[profile.dev]
-opt-level = 0
-debug = 2
-
-[profile.test]
-opt-level = 3
-debug = 0
-
 [profile.release]
 opt-level = 3
-debug = 0
 lto = "fat"
 panic = "abort"
-incremental = true
 strip = true

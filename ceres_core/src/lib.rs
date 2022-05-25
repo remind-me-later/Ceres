@@ -17,11 +17,10 @@ use alloc::boxed::Box;
 extern crate alloc;
 
 use {
-    apu::{Ch1, Ch2, Noise, Wave},
+    apu::{Noise, Square1, Square2, Wave},
     core::time::Duration,
     memory::HdmaState,
     ppu::{ColorPalette, Mode, RgbaBuf, OAM_SIZE, VRAM_SIZE_CGB},
-    serial::Serial,
 };
 pub use {
     cartridge::Cartridge,
@@ -37,7 +36,6 @@ mod error;
 mod joypad;
 mod memory;
 mod ppu;
-mod serial;
 mod timer;
 
 const DMG_BOOTROM: &[u8] = include_bytes!("../bootroms/bin/dmg_boot.bin");
@@ -113,7 +111,8 @@ pub struct Gb {
     cpu_halted: bool,
 
     // serial
-    serial: Serial,
+    sb: u8,
+    sc: u8,
 
     // joypad
     p1_btn: u8,
@@ -189,8 +188,8 @@ pub struct Gb {
     apu_r_vin: bool,
     apu_l_vin: bool,
 
-    apu_ch1: Ch1,
-    apu_ch2: Ch2,
+    apu_ch1: Square1,
+    apu_ch2: Square2,
     apu_ch3: Wave,
     apu_ch4: Noise,
 
@@ -221,6 +220,8 @@ impl Gb {
         };
 
         Self {
+            sb: 0,
+            sc: 0,
             opri: 0,
             nr51: 0,
             hdma5: 0,
@@ -234,7 +235,6 @@ impl Gb {
             vbk: 0,
             svbk: 0,
             svbk_true: 1,
-            serial: Serial::new(),
             model,
             double_speed: false,
             key1: 0,
@@ -256,8 +256,8 @@ impl Gb {
             p1_btn: 0,
             p1_dirs: false,
             p1_acts: false,
-            apu_ch1: Ch1::new(),
-            apu_ch2: Ch2::new(),
+            apu_ch1: Square1::new(),
+            apu_ch2: Square2::new(),
             apu_ch3: Wave::new(),
             apu_ch4: Noise::new(),
             apu_render_timer: 0,

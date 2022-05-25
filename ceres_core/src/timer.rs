@@ -1,7 +1,5 @@
 use crate::{Gb, IF_TIMER_B};
 
-const TAC_ENABLE: u8 = 4;
-
 impl Gb {
     pub(crate) fn advance_cycle(&mut self) {
         // affeected by speed boost
@@ -86,7 +84,7 @@ impl Gb {
     pub(crate) fn write_tac(&mut self, val: u8) {
         let old_bit = self.clk_on && self.counter_bit();
         self.tac = val & 7;
-        self.clk_on = val & TAC_ENABLE != 0;
+        self.clk_on = val & 4 != 0;
         let new_bit = self.clk_on && self.counter_bit();
 
         if old_bit && !new_bit {
