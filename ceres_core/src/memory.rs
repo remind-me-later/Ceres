@@ -1,5 +1,5 @@
 use {
-    crate::{ppu::Mode, FunctionMode, Gb, Model::Cgb, KEY1_SWITCH_B},
+    crate::{FunctionMode, Gb, Model::Cgb, KEY1_SWITCH_B},
     core::intrinsics::unlikely,
 };
 
@@ -79,163 +79,31 @@ impl Gb {
         self.wram[(addr & 0xfff) as usize]
     }
 
-    pub(crate) fn write_ram(&mut self, addr: u16, val: u8) {
-        self.wram[(addr & 0xfff) as usize] = val;
-    }
-
     #[must_use]
     pub(crate) fn read_bank_ram(&self, addr: u16) -> u8 {
         self.wram[(addr & 0xfff | (self.svbk_true as u16 * 0x1000)) as usize]
     }
 
-    pub(crate) fn write_bank_ram(&mut self, addr: u16, val: u8) {
+    fn write_ram(&mut self, addr: u16, val: u8) {
+        self.wram[(addr & 0xfff) as usize] = val;
+    }
+
+    fn write_bank_ram(&mut self, addr: u16, val: u8) {
         self.wram[(addr & 0xfff | (self.svbk_true as u16 * 0x1000)) as usize] = val;
     }
 
-    pub(crate) fn write_dma(&mut self, val: u8) {
-        if self.dma_on {
-            self.dma_restarting = true;
-        }
-
-        self.dma_cycles = -8; // two m-cycles delay
-        self.dma = val;
-        self.dma_addr = u16::from(val) << 8;
-        self.dma_on = true;
-    }
-
-    // FIXME: sprites are not displayed during OAM DMA
-    pub(crate) fn tick_dma(&mut self) {
-        if !self.dma_on {
-            return;
-        }
-
-        self.dma_cycles += 4;
-
-        if self.dma_cycles < 4 {
-            return;
-        }
-
-        self.dma_cycles -= 4;
-        let src = self.dma_addr;
-
-        let val = match src >> 8 {
-            0x00..=0x7f => self.cart.read_rom(src),
-            0x80..=0x9f => self.read_vram(src),
-            0xa0..=0xbf => self.cart.read_ram(src),
-            0xc0..=0xcf | 0xe0..=0xef => self.read_ram(src),
-            0xd0..=0xdf | 0xf0..=0xff => self.read_bank_ram(src),
-            _ => panic!("Illegal source addr for OAM DMA transfer"),
-        };
-
-        // mode doesn't matter writes from DMA can always access OAM
-        self.oam[((src & 0xff) as u8) as usize] = val;
-
-        self.dma_addr = self.dma_addr.wrapping_add(1);
-        if self.dma_addr & 0xff >= 0xa0 {
-            self.dma_on = false;
-            self.dma_restarting = false;
-        }
-    }
-
-    pub(crate) fn dma_active(&self) -> bool {
+    fn dma_active(&self) -> bool {
         self.dma_on && (self.dma_cycles > 0 || self.dma_restarting)
-    }
-
-    pub(crate) fn write_hdma1(&mut self, val: u8) {
-        self.hdma_src = u16::from(val) << 8 | self.hdma_src & 0xf0;
-    }
-
-    pub(crate) fn write_hdma2(&mut self, val: u8) {
-        self.hdma_src = self.hdma_src & 0xff00 | u16::from(val) & 0xf0;
-    }
-
-    pub(crate) fn write_hdma3(&mut self, val: u8) {
-        self.hdma_dst = u16::from(val & 0x1f) << 8 | self.hdma_dst & 0xf0;
-    }
-
-    pub(crate) fn write_hdma4(&mut self, val: u8) {
-        self.hdma_dst = self.hdma_dst & 0x1f00 | u16::from(val) & 0xf0;
     }
 
     fn hdma_on(&self) -> bool {
         !matches!(self.hdma_state, HdmaState::Sleep)
     }
 
-    pub(crate) fn read_hdma5(&self) -> u8 {
-        // active on low
-        ((!self.hdma_on()) as u8) << 7 | self.hdma5
-    }
-
-    pub(crate) fn write_hdma5(&mut self, val: u8) {
-        // stop current transfer
-        if self.hdma_on() && val & 0x80 == 0 {
-            self.hdma_state = HdmaState::Sleep;
-            return;
-        }
-
-        self.hdma5 = val & !0x80;
-        let transfer_blocks = val & 0x7f;
-        self.hdma_len = (u16::from(transfer_blocks) + 1) * 0x10;
-        self.hdma_state = if val & 0x80 == 0 {
-            HdmaState::General
-        } else {
-            HdmaState::HBlank
-        };
-    }
-
-    pub(crate) fn run_hdma(&mut self) {
-        match self.hdma_state {
-            HdmaState::General => (),
-            HdmaState::HBlank if self.ppu_mode() == Mode::HBlank => (),
-            HdmaState::HBlankDone if self.ppu_mode() != Mode::HBlank => {
-                self.hdma_state = HdmaState::HBlank;
-                return;
-            }
-            _ => return,
-        }
-
-        let len = if self.hdma_state == HdmaState::HBlank {
-            self.hdma_state = HdmaState::HBlankDone;
-            self.hdma5 = (self.hdma_len / 0x10).wrapping_sub(1) as u8;
-            self.hdma_len -= 0x10;
-            0x10
-        } else {
-            self.hdma_state = HdmaState::Sleep;
-            self.hdma5 = 0xff;
-            let len = self.hdma_len;
-            self.hdma_len = 0;
-            len
-        };
-
-        for _ in 0..len {
-            let val = match self.hdma_src >> 8 {
-                0x00..=0x7f => self.cart.read_rom(self.hdma_src),
-                // TODO: should copy garbage
-                0x80..=0x9f => 0xff,
-                0xa0..=0xbf => self.cart.read_ram(self.hdma_src),
-                0xc0..=0xcf => self.read_ram(self.hdma_src),
-                0xd0..=0xdf => self.read_bank_ram(self.hdma_src),
-                _ => panic!("Illegal source addr for HDMA transfer"),
-            };
-
-            self.advance_cycle();
-
-            self.write_vram(self.hdma_dst, val);
-
-            self.hdma_dst += 1;
-            self.hdma_src += 1;
-        }
-
-        if self.hdma_len == 0 {
-            self.hdma_state = HdmaState::Sleep;
-        }
-    }
-
     fn read_rom_or_cart(&mut self, addr: u16) -> u8 {
         if unlikely(self.boot_rom_mapped) {
             return self.boot_rom[addr as usize];
         }
-
         self.cart.read_rom(addr)
     }
 
@@ -294,7 +162,10 @@ impl Gb {
             WX => self.wx,
             KEY1 if self.model == Cgb => 0x7e | self.key1,
             VBK if self.model == Cgb => self.vbk | 0xfe,
-            HDMA5 if self.model == Cgb => self.read_hdma5(),
+            HDMA5 if self.model == Cgb => {
+                // active on low
+                ((!self.hdma_on()) as u8) << 7 | self.hdma5
+            }
             BCPS if self.model == Cgb => self.bcp.spec(),
             BCPD if self.model == Cgb => self.bcp.data(),
             OCPS if self.model == Cgb => self.ocp.spec(),
@@ -360,7 +231,16 @@ impl Gb {
             SCY => self.scy = val,
             SCX => self.scx = val,
             LYC => self.lyc = val,
-            DMA => self.write_dma(val),
+            DMA => {
+                if self.dma_on {
+                    self.dma_restarting = true;
+                }
+
+                self.dma_cycles = -8; // two m-cycles delay
+                self.dma = val;
+                self.dma_addr = u16::from(val) << 8;
+                self.dma_on = true;
+            }
             BGP => self.bgp = val,
             OBP0 => self.obp0 = val,
             OBP1 => self.obp1 = val,
@@ -379,11 +259,34 @@ impl Gb {
                     self.boot_rom_mapped = false;
                 }
             }
-            HDMA1 if self.model == Cgb => self.write_hdma1(val),
-            HDMA2 if self.model == Cgb => self.write_hdma2(val),
-            HDMA3 if self.model == Cgb => self.write_hdma3(val),
-            HDMA4 if self.model == Cgb => self.write_hdma4(val),
-            HDMA5 if self.model == Cgb => self.write_hdma5(val),
+            HDMA1 if self.model == Cgb => {
+                self.hdma_src = u16::from(val) << 8 | self.hdma_src & 0xf0;
+            }
+            HDMA2 if self.model == Cgb => {
+                self.hdma_src = self.hdma_src & 0xff00 | u16::from(val) & 0xf0;
+            }
+            HDMA3 if self.model == Cgb => {
+                self.hdma_dst = u16::from(val & 0x1f) << 8 | self.hdma_dst & 0xf0;
+            }
+            HDMA4 if self.model == Cgb => {
+                self.hdma_dst = self.hdma_dst & 0x1f00 | u16::from(val) & 0xf0;
+            }
+            HDMA5 if self.model == Cgb => {
+                // stop current transfer
+                if self.hdma_on() && val & 0x80 == 0 {
+                    self.hdma_state = HdmaState::Sleep;
+                    return;
+                }
+
+                self.hdma5 = val & !0x80;
+                let transfer_blocks = val & 0x7f;
+                self.hdma_len = (u16::from(transfer_blocks) + 1) * 0x10;
+                self.hdma_state = if val & 0x80 == 0 {
+                    HdmaState::General
+                } else {
+                    HdmaState::HBlank
+                };
+            }
             BCPS if self.model == Cgb => self.bcp.set_spec(val),
             BCPD if self.model == Cgb => self.bcp.set_data(val),
             OCPS if self.model == Cgb => self.ocp.set_spec(val),

@@ -3,7 +3,8 @@ members = ["ceres_core", "ceres_sdl"]
 default-members = ["ceres_sdl"]
 
 [profile.release]
-opt-level = 3
-lto = "fat"
+opt-level = "s"
 panic = "abort"
 strip = true
+lto = true
+codegen-units = 1

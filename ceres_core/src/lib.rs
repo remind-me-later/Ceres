@@ -35,7 +35,7 @@ mod error;
 mod joypad;
 mod memory;
 mod ppu;
-mod timer;
+mod timing;
 
 const DMG_BOOTROM: &[u8] = include_bytes!("../bootroms/bin/dmg_boot.bin");
 const MGB_BOOTROM: &[u8] = include_bytes!("../bootroms/bin/mgb_boot.bin");
