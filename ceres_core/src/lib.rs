@@ -55,7 +55,7 @@ const IF_P1_B: u8 = 0x10;
 
 const KEY1_SPEED_B: u8 = 0x80;
 const KEY1_SWITCH_B: u8 = 1;
-const HIGH_RAM_SIZE: usize = 0x80;
+const HRAM_SIZE: usize = 0x80;
 const WRAM_SIZE: usize = 0x2000;
 const WRAM_SIZE_CGB: usize = WRAM_SIZE * 4;
 
@@ -125,7 +125,7 @@ pub struct Gb {
 
     // memory
     wram: [u8; WRAM_SIZE_CGB],
-    hram: [u8; HIGH_RAM_SIZE],
+    hram: [u8; HRAM_SIZE],
     svbk: u8,
     svbk_true: u8, // true selected bank, between 1 and 7
 
@@ -229,7 +229,7 @@ impl Gb {
             ime: false,
             cpu_halted: false,
             cart,
-            hram: [0; HIGH_RAM_SIZE],
+            hram: [0; HRAM_SIZE],
             wram: [0; WRAM_SIZE_CGB],
             vbk: 0,
             svbk: 0,
