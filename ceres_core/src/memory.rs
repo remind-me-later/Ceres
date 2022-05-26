@@ -307,7 +307,7 @@ impl Gb {
             }
             HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7f) as usize] = val,
             IE => self.ie = val,
-            _ => self.advance_cycle(),
+            _ => (),
         }
     }
 }

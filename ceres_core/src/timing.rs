@@ -1,20 +1,22 @@
 use crate::{memory::HdmaState, ppu::Mode, Gb, IF_TIMER_B};
 
 impl Gb {
-    pub(crate) fn advance_cycle(&mut self) {
-        // affeected by speed boost
-        self.run_dma();
-        self.tick_timer();
+    pub(crate) fn advance_cycles(&mut self, cycles: u32) {
+        for _ in 0..cycles {
+            // affeected by speed boost
+            self.run_dma();
+            self.tick_timer();
 
-        // not affected by speed boost
-        let mut cycles = 4;
+            // not affected by speed boost
+            let mut cycles = 4;
 
-        if self.double_speed {
-            cycles >>= 1;
+            if self.double_speed {
+                cycles >>= 1;
+            }
+
+            self.tick_apu(cycles);
+            self.tick_ppu(cycles);
         }
-
-        self.tick_apu(cycles);
-        self.tick_ppu(cycles);
     }
 
     // FIXME: sprites are not displayed during OAM DMA
@@ -86,7 +88,7 @@ impl Gb {
                 _ => panic!("Illegal source addr for HDMA transfer"),
             };
 
-            self.advance_cycle();
+            self.advance_cycles(1);
 
             self.write_vram(self.hdma_dst, val);
 

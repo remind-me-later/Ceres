@@ -106,6 +106,7 @@ pub struct Gb {
     sp: u16,
     pc: u16,
 
+    stolen_cycles: u32,
     cpu_ei_delay: bool,
     cpu_halted: bool,
 
@@ -219,6 +220,7 @@ impl Gb {
         };
 
         Self {
+            stolen_cycles: 0,
             sb: 0,
             sc: 0,
             opri: 0,
