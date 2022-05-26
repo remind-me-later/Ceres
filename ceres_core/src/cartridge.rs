@@ -1,6 +1,7 @@
 use {
     crate::Error,
     alloc::{boxed::Box, vec},
+    core::str,
     Mbc::{Mbc1, Mbc2, Mbc3, Mbc5, MbcNone},
 };
 
@@ -51,7 +52,7 @@ impl Cartridge {
     /// illegal value
     pub fn new(rom: Box<[u8]>, ram: Option<Box<[u8]>>) -> Result<Cartridge, Error> {
         let header_info = Header::new(&rom)?;
-        let mbc30 = header_info.ram_size().number_of_banks() >= 8;
+        let mbc30 = header_info.ram_size().num_banks() >= 8;
         let rom_bank_mask = header_info.rom_size().bank_bit_mask();
 
         let (mbc, has_battery) = match rom[0x147] {
@@ -289,7 +290,6 @@ pub struct Header {
     title: [u8; 15],
     ram_size: RAMSize,
     rom_size: ROMSize,
-    _licensee_code: LicenseeCode,
     cgb_flag: CgbFlag,
 }
 
@@ -299,20 +299,22 @@ impl Header {
     /// Will return `Err` if the ROM header contains some
     /// illegal value
     pub fn new(rom: &[u8]) -> Result<Self, Error> {
-        let licensee_code = LicenseeCode::new(rom);
         let cgb_flag = CgbFlag::new(rom);
         let rom_size = ROMSize::new(rom)?;
         let ram_size = RAMSize::new(rom)?;
         let mut title: [u8; 15] = [0; 15];
 
-        match licensee_code {
-            LicenseeCode::Old(_) => title.copy_from_slice(&rom[TITLE_START..OLD_TITLE_END]),
-            LicenseeCode::New(_) => title[..(NEW_TITLE_END - TITLE_START)]
+        // length of title depends on licensee code format:
+        // - 0x33: new value, short title
+        // - any other: old value, long title
+        match rom[0x14b] {
+            0x33 => title[..(NEW_TITLE_END - TITLE_START)]
                 .copy_from_slice(&rom[TITLE_START..NEW_TITLE_END]),
+            _ => title.copy_from_slice(&rom[TITLE_START..OLD_TITLE_END]),
         };
 
         // Check title is valid ascii
-        let _ = core::str::from_utf8(&title).map_err(|utf8_error| {
+        let _ = str::from_utf8(&title).map_err(|utf8_error| {
             let invalid_byte_position = TITLE_START + utf8_error.valid_up_to();
             let invalid_byte = rom[TITLE_START + invalid_byte_position];
             Error::InvalidTitleString {
@@ -327,7 +329,6 @@ impl Header {
             title,
             ram_size,
             rom_size,
-            _licensee_code: licensee_code,
             cgb_flag,
         })
     }
@@ -348,13 +349,13 @@ impl Header {
     }
 
     #[must_use]
-    pub fn ram_size(&self) -> &RAMSize {
-        &self.ram_size
+    pub fn ram_size(&self) -> RAMSize {
+        self.ram_size
     }
 
     #[must_use]
-    pub fn cgb_flag(&self) -> &CgbFlag {
-        &self.cgb_flag
+    pub fn cgb_flag(&self) -> CgbFlag {
+        self.cgb_flag
     }
 
     /// # Panics
@@ -362,7 +363,7 @@ impl Header {
     /// panics on invalid ASCII title in header
     #[must_use]
     pub fn title(&self) -> &str {
-        core::str::from_utf8(&self.title).unwrap()
+        str::from_utf8(&self.title).unwrap()
     }
 
     #[must_use]
@@ -373,15 +374,15 @@ impl Header {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ROMSize {
-    Kb32,
-    Kb64,
-    Kb128,
-    Kb256,
-    Kb512,
-    Mb1,
-    Mb2,
-    Mb4,
-    Mb8,
+    Kb32  = 0,
+    Kb64  = 1,
+    Kb128 = 2,
+    Kb256 = 3,
+    Kb512 = 4,
+    Mb1   = 5,
+    Mb2   = 6,
+    Mb4   = 7,
+    Mb8   = 8,
 }
 
 impl ROMSize {
@@ -404,51 +405,18 @@ impl ROMSize {
         Ok(rom_size)
     }
 
-    pub fn total_size_in_bytes(self) -> usize {
-        const KIB_32_AS_BYTES: usize = 1 << 15;
-
-        let exponent = match self {
-            ROMSize::Kb32 => 0,
-            ROMSize::Kb64 => 1,
-            ROMSize::Kb128 => 2,
-            ROMSize::Kb256 => 3,
-            ROMSize::Kb512 => 4,
-            ROMSize::Mb1 => 5,
-            ROMSize::Mb2 => 6,
-            ROMSize::Mb4 => 7,
-            ROMSize::Mb8 => 8,
-        };
-
-        KIB_32_AS_BYTES << exponent
+    // total size in  bytes
+    pub fn size_bytes(self) -> usize {
+        let kib_32 = 1 << 15;
+        kib_32 << (self as usize)
     }
 
-    pub fn number_of_banks(self) -> usize {
-        match self {
-            ROMSize::Kb32 => 2,
-            ROMSize::Kb64 => 4,
-            ROMSize::Kb128 => 8,
-            ROMSize::Kb256 => 16,
-            ROMSize::Kb512 => 32,
-            ROMSize::Mb1 => 64,
-            ROMSize::Mb2 => 128,
-            ROMSize::Mb4 => 256,
-            ROMSize::Mb8 => 512,
-        }
+    pub fn num_banks(self) -> usize {
+        2 << (self as usize)
     }
 
     pub fn bank_bit_mask(self) -> usize {
-        // log2(number_of_banks) - 1
-        match self {
-            ROMSize::Kb32 => 0x1,
-            ROMSize::Kb64 => 0x3,
-            ROMSize::Kb128 => 0x7,
-            ROMSize::Kb256 => 0xf,
-            ROMSize::Kb512 => 0x1f,
-            ROMSize::Mb1 => 0x3f,
-            ROMSize::Mb2 => 0x7f,
-            ROMSize::Mb4 => 0xff,
-            ROMSize::Mb8 => 0x1ff,
-        }
+        (2 << (self as usize)) - 1
     }
 }
 
@@ -479,10 +447,10 @@ impl RAMSize {
     }
 
     pub fn total_size_in_bytes(self) -> usize {
-        self.number_of_banks() as usize * self.bank_size_in_bytes() as usize
+        self.num_banks() as usize * self.bank_size_in_bytes() as usize
     }
 
-    pub fn number_of_banks(self) -> usize {
+    pub fn num_banks(self) -> usize {
         match self {
             RAMSize::None => 0,
             RAMSize::Kb2 | RAMSize::Kb8 => 1,
@@ -493,26 +461,11 @@ impl RAMSize {
     }
 
     pub fn bank_size_in_bytes(self) -> usize {
+        use RAMSize::{Kb128, Kb2, Kb32, Kb64, Kb8, None};
         match self {
-            RAMSize::None => 0,
-            RAMSize::Kb2 => 0x800,
-            RAMSize::Kb8 | RAMSize::Kb32 | RAMSize::Kb128 | RAMSize::Kb64 => 0x2000,
-        }
-    }
-}
-
-pub enum LicenseeCode {
-    Old(u8),
-    New([u8; 2]),
-}
-
-impl LicenseeCode {
-    pub fn new(rom: &[u8]) -> Self {
-        use LicenseeCode::{New, Old};
-
-        match rom[0x14b] {
-            0x33 => New([rom[0x144], rom[0x145]]),
-            code => Old(code),
+            None => 0,
+            Kb2 => 0x800,
+            Kb8 | Kb32 | Kb128 | Kb64 => 0x2000,
         }
     }
 }
