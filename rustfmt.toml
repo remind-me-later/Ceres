@@ -6,3 +6,5 @@ enum_discrim_align_threshold = 20
 format_strings = true
 version = "Two"
 trailing_semicolon = true
+wrap_comments = true
+comment_width = 60

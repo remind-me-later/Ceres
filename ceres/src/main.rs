@@ -37,7 +37,8 @@ struct AppArgs {
 fn parse_args() -> Result<AppArgs, pico_args::Error> {
     let mut pargs = pico_args::Arguments::from_env();
 
-    // Help has a higher priority and should be handled separately.
+    // Help has a higher priority and should be handled
+    // separately.
     if pargs.contains(["-h", "--help"]) {
         print!("{}", HELP);
         std::process::exit(0);
@@ -50,7 +51,8 @@ fn parse_args() -> Result<AppArgs, pico_args::Error> {
         rom: pargs.free_from_str()?,
     };
 
-    // FIXME: It's up to the caller what to do with the remaining arguments.
+    // FIXME: It's up to the caller what to do with the
+    // remaining arguments.
     let remaining = pargs.finish();
     if !remaining.is_empty() {
         eprintln!("Warning: unused arguments left: {:?}.", remaining);

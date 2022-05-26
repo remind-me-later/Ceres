@@ -1,5 +1,6 @@
 use {
     ceres_core::VideoCallbacks,
+    core::cmp::min,
     sdl2::{
         rect::{Point, Rect},
         render::{Canvas, Texture, TextureCreator},
@@ -9,7 +10,11 @@ use {
     std::time::Instant,
 };
 
-pub struct Renderer<const W: u32, const H: u32, const MUL: u32> {
+const MUL: u32 = 4;
+const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
+const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
+
+pub struct Renderer {
     canvas: Canvas<Window>,
     _texture_creator: TextureCreator<WindowContext>,
     texture: Texture,
@@ -17,10 +22,10 @@ pub struct Renderer<const W: u32, const H: u32, const MUL: u32> {
     next_frame: Instant,
 }
 
-impl<'a, const W: u32, const H: u32, const MUL: u32> Renderer<W, H, MUL> {
-    pub fn new(title: &str, video_subsystem: &'a VideoSubsystem) -> Self {
+impl Renderer {
+    pub fn new(title: &str, video_subsystem: &VideoSubsystem) -> Self {
         let window = video_subsystem
-            .window(title, W * MUL, H * MUL)
+            .window(title, PX_WIDTH * MUL, PX_HEIGHT * MUL)
             .position_centered()
             .resizable()
             .build()
@@ -31,10 +36,10 @@ impl<'a, const W: u32, const H: u32, const MUL: u32> Renderer<W, H, MUL> {
         let texture_creator = canvas.texture_creator();
 
         let texture = texture_creator
-            .create_texture_streaming(sdl2::pixels::PixelFormatEnum::RGBA32, W, H)
+            .create_texture_streaming(sdl2::pixels::PixelFormatEnum::RGBA32, PX_WIDTH, PX_HEIGHT)
             .unwrap();
 
-        let render_rect = Self::resize_texture(W * MUL, H * MUL);
+        let render_rect = Self::resize_texture(PX_WIDTH * MUL, PX_HEIGHT * MUL);
 
         Self {
             canvas,
@@ -50,21 +55,21 @@ impl<'a, const W: u32, const H: u32, const MUL: u32> Renderer<W, H, MUL> {
     }
 
     fn resize_texture(width: u32, height: u32) -> Rect {
-        let multiplier = core::cmp::min(width / W, height / H);
-        let surface_width = W * multiplier;
-        let surface_height = H * multiplier;
+        let multiplier = min(width / PX_WIDTH, height / PX_HEIGHT);
+        let surface_width = PX_WIDTH * multiplier;
+        let surface_height = PX_HEIGHT * multiplier;
         let center = Point::new(width as i32 / 2, height as i32 / 2);
 
         Rect::from_center(center, surface_width, surface_height)
     }
 }
 
-impl<const W: u32, const H: u32, const MUL: u32> VideoCallbacks for Renderer<W, H, MUL> {
+impl VideoCallbacks for Renderer {
     fn draw(&mut self, rgba_data: &[u8]) {
         self.texture
             .with_lock(None, move |buf, _pitch| {
-                buf[..(W as usize * H as usize * 4)]
-                    .copy_from_slice(&rgba_data[..(W as usize * H as usize * 4)]);
+                buf[..(PX_WIDTH as usize * PX_HEIGHT as usize * 4)]
+                    .copy_from_slice(&rgba_data[..(PX_WIDTH as usize * PX_HEIGHT as usize * 4)]);
             })
             .unwrap();
 

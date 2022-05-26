@@ -28,7 +28,9 @@ pub struct Cartridge {
     rom_bank_lo: u8,
     rom_bank_hi: u8,
     rom_offsets: (usize, usize),
-    total_rom_banks_mask: usize, // TODO: think better name
+    // bit mask of rom bank, anded with the rom bank selected gets
+    // the actual rom bank depending on the ROM size
+    rom_bank_mask: usize,
 
     ram: Box<[u8]>,
     ram_enabled: bool,
@@ -45,11 +47,12 @@ pub struct Cartridge {
 impl Cartridge {
     /// # Errors
     ///
-    /// Will return `Err` if the ROM header contains some illegal value
+    /// Will return `Err` if the ROM header contains some
+    /// illegal value
     pub fn new(rom: Box<[u8]>, ram: Option<Box<[u8]>>) -> Result<Cartridge, Error> {
         let header_info = Header::new(&rom)?;
         let mbc30 = header_info.ram_size().number_of_banks() >= 8;
-        let rom_bit_mask = header_info.rom_size().banks_bit_mask();
+        let rom_bank_mask = header_info.rom_size().bank_bit_mask();
 
         let (mbc, has_battery) = match rom[0x147] {
             0x00 => (MbcNone, false),
@@ -88,7 +91,7 @@ impl Cartridge {
             rom_bank_hi: 0,
             mbc1_bank_mode: false,
             mbc1_multicart: false,
-            total_rom_banks_mask: rom_bit_mask,
+            rom_bank_mask,
             ram_bank: 0,
         })
     }
@@ -181,7 +184,7 @@ impl Cartridge {
     fn mbc5_rom_offsets(&self) -> (usize, usize) {
         let lower_bits = self.rom_bank_lo as usize;
         let upper_bits = (self.rom_bank_hi as usize) << 8;
-        let rom_bank = (upper_bits | lower_bits) & self.total_rom_banks_mask;
+        let rom_bank = (upper_bits | lower_bits) & self.rom_bank_mask;
         // let rom_bank = if rom_bank == 0 { 1 } else { rom_bank };
         (0x0000, ROM_BANK_SIZE * rom_bank)
     }
@@ -293,7 +296,8 @@ pub struct Header {
 impl Header {
     /// # Errors
     ///
-    /// Will return `Err` if the ROM header contains some illegal value
+    /// Will return `Err` if the ROM header contains some
+    /// illegal value
     pub fn new(rom: &[u8]) -> Result<Self, Error> {
         let licensee_code = LicenseeCode::new(rom);
         let cgb_flag = CgbFlag::new(rom);
@@ -432,7 +436,7 @@ impl ROMSize {
         }
     }
 
-    pub fn banks_bit_mask(self) -> usize {
+    pub fn bank_bit_mask(self) -> usize {
         // log2(number_of_banks) - 1
         match self {
             ROMSize::Kb32 => 0x1,
@@ -521,7 +525,8 @@ pub enum CgbFlag {
 }
 
 impl CgbFlag {
-    // Since both cgb flags are outside the ASCII range we don't need to check if the header is new or old
+    // Since both cgb flags are outside the ASCII range we don't
+    // need to check if the header is new or old
     #[must_use]
     pub fn new(rom: &[u8]) -> Self {
         use CgbFlag::{CgbFunctions, CgbOnly, NonCgb};

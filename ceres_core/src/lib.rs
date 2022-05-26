@@ -12,11 +12,10 @@
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::verbose_bit_mask)]
 
-use alloc::boxed::Box;
-
 extern crate alloc;
 
 use {
+    alloc::boxed::Box,
     apu::{Noise, Square1, Square2, Wave},
     core::time::Duration,
     memory::HdmaState,

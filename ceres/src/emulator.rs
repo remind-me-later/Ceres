@@ -1,6 +1,6 @@
 use {
     crate::{audio, video},
-    ceres_core::{Cartridge, Gb, Model, PX_HEIGHT, PX_WIDTH},
+    ceres_core::{Cartridge, Gb, Model},
     sdl2::{
         controller::GameController,
         event::{Event, WindowEvent},
@@ -20,7 +20,7 @@ pub struct Emulator {
     gb: Gb,
     has_focus: bool,
     sav_path: PathBuf,
-    video: *mut video::Renderer<{ PX_WIDTH as u32 }, { PX_HEIGHT as u32 }, 4>,
+    video: *mut video::Renderer,
 }
 
 impl Emulator {
