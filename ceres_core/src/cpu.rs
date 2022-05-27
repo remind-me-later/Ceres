@@ -1,7 +1,5 @@
 use {
-    crate::{
-        Gb, IF_LCD_B, IF_P1_B, IF_SERIAL_B, IF_TIMER_B, IF_VBLANK_B, KEY1_SPEED_B, KEY1_SWITCH_B,
-    },
+    crate::{Gb, KEY1_SPEED_B, KEY1_SWITCH_B},
     Ld8::{Dhl, A, B, C, D, E, H, L},
 };
 
@@ -74,66 +72,52 @@ impl Ld8 {
 
 impl Gb {
     pub(crate) fn run(&mut self) {
-        if self.cpu_ei_delay {
-            self.ime = true;
-            self.cpu_ei_delay = false;
-        }
-
         if self.cpu_halted {
             self.empty_cycle();
         } else {
+            if self.cpu_ei_delay {
+                self.ime = true;
+                self.cpu_ei_delay = false;
+            }
+
             let opcode = self.imm_u8();
-
             self.run_hdma();
-
             self.exec(opcode);
         }
 
         self.catch_up();
 
+        // any interrupts?
         if self.ifr & self.ie & 0x1f == 0 {
             return;
         }
 
-        // handle interrupt
-        if self.cpu_halted {
-            self.cpu_halted = false;
+        // interrupt exits halt
+        self.cpu_halted = false;
+
+        if !self.ime {
+            return;
         }
 
-        if self.ime {
-            self.ime = false;
+        // push pc to stack
+        self.empty_cycle();
+        self.sp = self.sp.wrapping_sub(1);
+        self.cpu_write(self.sp, (self.pc >> 8) as u8);
+        self.sp = self.sp.wrapping_sub(1);
+        self.cpu_write(self.sp, (self.pc & 0xFF) as u8);
+        self.empty_cycle();
 
-            self.empty_cycle();
-
-            self.sp = self.sp.wrapping_sub(1);
-            self.cpu_write(self.sp, (self.pc >> 8) as u8);
-            self.sp = self.sp.wrapping_sub(1);
-            self.cpu_write(self.sp, (self.pc & 0xFF) as u8);
-
-            let interrupt = {
-                let pending = self.ifr & self.ie & 0x1f;
-
-                if pending == 0 {
-                    0
-                } else {
-                    // get rightmost interrupt
-                    1 << pending.trailing_zeros()
-                }
-            };
-
-            self.pc = match interrupt {
-                IF_VBLANK_B => 0x40,
-                IF_LCD_B => 0x48,
-                IF_TIMER_B => 0x50,
-                IF_SERIAL_B => 0x58,
-                IF_P1_B => 0x60,
-                _ => unreachable!(),
-            };
-
-            self.empty_cycle();
-            // acknowledge
-            self.ifr &= !interrupt;
-        }
+        // disallow double fault
+        self.ime = false;
+        // recompute, maybe ifr changed
+        let ints = self.ifr & self.ie & 0x1f;
+        let trail_zeros = ints.trailing_zeros();
+        // get rightmost interrupt
+        let int = ((ints != 0) as u8) << trail_zeros;
+        // compute direction of interrupt vector
+        self.pc = 0x40 | (trail_zeros << 3) as u16;
+        // acknowledge
+        self.ifr &= !int;
     }
 
     #[inline]
@@ -152,13 +136,13 @@ impl Gb {
 
     #[inline]
     fn catch_up(&mut self) {
-        self.advance_cycles(self.stolen_cycles);
-        self.stolen_cycles = 0;
+        self.advance_cycles(self.delay_cycles);
+        self.delay_cycles = 0;
     }
 
     #[inline]
     fn empty_cycle(&mut self) {
-        self.stolen_cycles += 1;
+        self.delay_cycles += 1;
     }
 
     #[inline]
@@ -347,14 +331,32 @@ impl Gb {
     fn add_a_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode) as u16;
         let a = self.af >> 8;
-        self.af = (a + val) << 8;
-        if (a + val) as u8 == 0 {
+        let res = a + val;
+        self.af = res << 8;
+        if res & 0xff == 0 {
             self.af |= ZF_B;
         }
         if (a & 0xF) + (val & 0xF) > 0x0F {
             self.af |= HF_B;
         }
-        if (a as u16) + (val as u16) > 0xFF {
+        if res > 0xFF {
+            self.af |= CF_B;
+        }
+    }
+
+    #[inline]
+    fn add_a_d8(&mut self) {
+        let val = self.imm_u8() as u16;
+        let a = self.af >> 8;
+        let res = a + val;
+        self.af = res << 8;
+        if res & 0xff == 0 {
+            self.af |= ZF_B;
+        }
+        if (a & 0xF) + (val & 0xF) > 0x0F {
+            self.af |= HF_B;
+        }
+        if res > 0xFF {
             self.af |= CF_B;
         }
     }
@@ -399,7 +401,7 @@ impl Gb {
         let res = a.wrapping_sub(val).wrapping_sub(carry);
         self.af = (res << 8) | NF_B;
 
-        if res as u8 == 0 {
+        if res & 0xff == 0 {
             self.af |= ZF_B;
         }
         if (a & 0xF) < (val & 0xF) + carry {
@@ -418,7 +420,7 @@ impl Gb {
         let res = a.wrapping_sub(val).wrapping_sub(carry);
         self.af = (res << 8) | NF_B;
 
-        if res as u8 == 0 {
+        if res & 0xff == 0 {
             self.af |= ZF_B;
         }
         if (a & 0xF) < (val & 0xF) + carry {
@@ -430,34 +432,19 @@ impl Gb {
     }
 
     #[inline]
-    fn add_a_d8(&mut self) {
-        let val = self.imm_u8() as u16;
-        let a = self.af >> 8;
-        self.af = (a + val) << 8;
-        if (a + val) as u8 == 0 {
-            self.af |= ZF_B;
-        }
-        if (a & 0xF) + (val & 0xF) > 0x0F {
-            self.af |= HF_B;
-        }
-        if a + val > 0xFF {
-            self.af |= CF_B;
-        }
-    }
-
-    #[inline]
     fn adc_a_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode) as u16;
         let a = self.af >> 8;
         let carry = ((self.af & CF_B) != 0) as u16;
-        self.af = (a + val + carry) << 8;
-        if (a + val + carry) as u8 == 0 {
+        let res = a + val + carry;
+        self.af = res << 8;
+        if res & 0xff == 0 {
             self.af |= ZF_B;
         }
         if (a & 0xF) + (val & 0xF) + carry > 0x0F {
             self.af |= HF_B;
         }
-        if a + val + carry > 0xFF {
+        if res > 0xFF {
             self.af |= CF_B;
         }
     }
@@ -467,14 +454,15 @@ impl Gb {
         let val = self.imm_u8() as u16;
         let a = self.af >> 8;
         let carry = ((self.af & CF_B) != 0) as u16;
-        self.af = (a + val + carry) << 8;
-        if (a + val + carry) as u8 == 0 {
+        let res = a + val + carry;
+        self.af = res << 8;
+        if res & 0xff == 0 {
             self.af |= ZF_B;
         }
         if (a & 0xF) + (val & 0xF) + carry > 0x0F {
             self.af |= HF_B;
         }
-        if a + val + carry > 0xFF {
+        if res > 0xFF {
             self.af |= CF_B;
         }
     }
@@ -1056,7 +1044,7 @@ impl Gb {
     fn rr_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode);
         let carry = (self.af & CF_B) != 0;
-        let bit1 = (val & 0x1) != 0;
+        let bit1 = (val & 1) != 0;
 
         self.af &= 0xFF00;
         let val = val >> 1 | (carry as u8) << 7;
@@ -1072,13 +1060,14 @@ impl Gb {
     #[inline]
     fn sla_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode);
-        let carry = (val & 0x80) != 0;
+        let carry = val & 0x80 != 0;
         self.af &= 0xFF00;
-        self.set_src_val(opcode, val << 1);
+        let res = val << 1;
+        self.set_src_val(opcode, res);
         if carry {
             self.af |= CF_B;
         }
-        if val & 0x7F == 0 {
+        if res == 0 {
             self.af |= ZF_B;
         }
     }
@@ -1156,11 +1145,11 @@ impl Gb {
     #[inline]
     fn rl_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode);
-        let carry = (self.af & CF_B) != 0;
-        let bit7 = (val & 0x80) != 0;
+        let carry = self.af & CF_B != 0;
+        let bit7 = val & 0x80 != 0;
 
         self.af &= 0xFF00;
-        let val = (val << 1) | carry as u8;
+        let val = val << 1 | carry as u8;
         self.set_src_val(opcode, val);
         if bit7 {
             self.af |= CF_B;

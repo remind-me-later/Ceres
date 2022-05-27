@@ -50,7 +50,7 @@ const TC_SEC: u32 = 4_194_304;
 const IF_VBLANK_B: u8 = 1;
 const IF_LCD_B: u8 = 2;
 const IF_TIMER_B: u8 = 4;
-const IF_SERIAL_B: u8 = 8;
+//const IF_SERIAL_B: u8 = 8;
 const IF_P1_B: u8 = 0x10;
 
 const KEY1_SPEED_B: u8 = 0x80;
@@ -106,7 +106,7 @@ pub struct Gb {
     sp: u16,
     pc: u16,
 
-    stolen_cycles: u32,
+    delay_cycles: u32,
     cpu_ei_delay: bool,
     cpu_halted: bool,
 
@@ -220,7 +220,7 @@ impl Gb {
         };
 
         Self {
-            stolen_cycles: 0,
+            delay_cycles: 0,
             sb: 0,
             sc: 0,
             opri: 0,
