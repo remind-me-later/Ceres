@@ -3,7 +3,7 @@ members = ["ceres_core", "ceres_sdl", "ceres_glutin"]
 default-members = ["ceres_sdl"]
 
 [profile.release]
-opt-level = "s"
+opt-level = 3
 panic = "abort"
 strip = true
 lto = true

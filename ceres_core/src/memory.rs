@@ -1,5 +1,5 @@
 use {
-    crate::{FunctionMode, Gb, Model::Cgb, KEY1_SWITCH_B},
+    crate::{CompatMode, Gb, Model::Cgb, KEY1_SWITCH_B},
     core::intrinsics::unlikely,
 };
 
@@ -255,7 +255,7 @@ impl Gb {
             WY => self.wy = val,
             WX => self.wx = val,
             KEY0 if self.model == Cgb && self.boot_rom_mapped && val == 4 => {
-                self.function_mode = FunctionMode::Compat;
+                self.compat_mode = CompatMode::Compat;
             }
             KEY1 if self.model == Cgb => {
                 self.key1 &= KEY1_SWITCH_B;

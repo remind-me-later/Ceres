@@ -3,7 +3,7 @@ use crate::{memory::HdmaState, ppu::Mode, Gb, IF_TIMER_B};
 impl Gb {
     pub(crate) fn advance_cycles(&mut self, cycles: u32) {
         for _ in 0..cycles {
-            // affeected by speed boost
+            // affected by speed boost
             self.run_dma();
             self.tick_timer();
 

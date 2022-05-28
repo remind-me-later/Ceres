@@ -78,7 +78,7 @@ pub enum Model {
 }
 
 #[derive(Clone, Copy)]
-enum FunctionMode {
+enum CompatMode {
     Dmg,
     Compat,
     Cgb,
@@ -89,7 +89,7 @@ pub struct Gb {
     exit_run: bool,
     cart: Cartridge,
     model: Model,
-    function_mode: FunctionMode,
+    compat_mode: CompatMode,
 
     double_speed: bool,
     key1: u8,
@@ -209,8 +209,8 @@ impl Gb {
         video_callbacks: Box<dyn VideoCallbacks>,
     ) -> Self {
         let function_mode = match model {
-            Model::Dmg | Model::Mgb => FunctionMode::Dmg,
-            Model::Cgb => FunctionMode::Cgb,
+            Model::Dmg | Model::Mgb => CompatMode::Dmg,
+            Model::Cgb => CompatMode::Cgb,
         };
 
         let boot_rom = match model {
@@ -239,7 +239,7 @@ impl Gb {
             model,
             double_speed: false,
             key1: 0,
-            function_mode,
+            compat_mode: function_mode,
             vram: [0; VRAM_SIZE_CGB],
             oam: [0; OAM_SIZE],
             rgba_buf: RgbaBuf::new(),
