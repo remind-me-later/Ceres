@@ -1,25 +1,24 @@
 use crate::{memory::HdmaState, ppu::Mode, Gb, IF_TIMER_B};
 
 impl Gb {
-    pub(crate) fn advance_cycles(&mut self, cycles: u32) {
+    pub(crate) fn advance_cycles(&mut self, mut cycles: u32) {
         for _ in 0..cycles {
             // affected by speed boost
             self.run_dma();
-            self.tick_timer();
-
-            // not affected by speed boost
-            let mut cycles = 4;
-
-            if self.double_speed {
-                cycles >>= 1;
-            }
-
-            self.tick_apu(cycles);
-            self.tick_ppu(cycles);
+            self.run_timer();
         }
+
+        // not affected by speed boost
+        if self.double_speed {
+            cycles <<= 1;
+        } else {
+            cycles <<= 2;
+        }
+
+        self.run_ppu(cycles);
+        self.run_apu(cycles);
     }
 
-    // FIXME: sprites are not displayed during OAM DMA
     fn run_dma(&mut self) {
         if !self.dma_on {
             return;
@@ -32,19 +31,17 @@ impl Gb {
         }
 
         self.dma_cycles -= 4;
-        let src = self.dma_addr;
 
-        let val = match src >> 8 {
-            0x00..=0x7f => self.cart.read_rom(src),
-            0x80..=0x9f => self.read_vram(src),
-            0xa0..=0xbf => self.cart.read_ram(src),
-            0xc0..=0xcf | 0xe0..=0xef => self.read_ram(src),
-            0xd0..=0xdf | 0xf0..=0xff => self.read_bank_ram(src),
-            _ => panic!("Illegal source addr for OAM DMA transfer"),
-        };
+        // TODO: reading some ranges should cause problems, $DF is
+        // the maximum value accesible to OAM DMA (probably reads
+        // from echo RAM should work too, RESEARCH).
+        // what happens if reading from IO range? (garbage? 0xff?)
+        let val = self.read_mem(self.dma_addr);
 
-        // mode doesn't matter writes from DMA can always access OAM
-        self.oam[((src & 0xff) as u8) as usize] = val;
+        // TODO: writes from DMA can access OAM on modes 2 and 3
+        // with some glitches (RESEARCH) and without trouble during
+        // VBLANK (what happens in HBLANK?)
+        self.oam[(self.dma_addr & 0xff) as usize] = val;
 
         self.dma_addr = self.dma_addr.wrapping_add(1);
         if self.dma_addr & 0xff >= 0xa0 {
@@ -65,9 +62,13 @@ impl Gb {
         }
 
         let len = if self.hdma_state == HdmaState::HBlank {
-            self.hdma_state = HdmaState::HBlankDone;
-            self.hdma5 = (self.hdma_len / 0x10).wrapping_sub(1) as u8;
             self.hdma_len -= 0x10;
+            self.hdma_state = if self.hdma_len == 0 {
+                HdmaState::Sleep
+            } else {
+                HdmaState::HBlankDone
+            };
+            self.hdma5 = (self.hdma_len / 0x10).wrapping_sub(1) as u8;
             0x10
         } else {
             self.hdma_state = HdmaState::Sleep;
@@ -78,27 +79,19 @@ impl Gb {
         };
 
         for _ in 0..len {
-            let val = match self.hdma_src >> 8 {
-                0x00..=0x7f => self.cart.read_rom(self.hdma_src),
-                // TODO: should copy garbage
-                0x80..=0x9f => 0xff,
-                0xa0..=0xbf => self.cart.read_ram(self.hdma_src),
-                0xc0..=0xcf => self.read_ram(self.hdma_src),
-                0xd0..=0xdf => self.read_bank_ram(self.hdma_src),
-                _ => panic!("Illegal source addr for HDMA transfer"),
-            };
-
-            self.advance_cycles(1);
-
+            // TODO: the same problems as normal DMA plus reading from
+            // VRAM should copy garbage
+            let val = self.read_mem(self.hdma_src);
             self.write_vram(self.hdma_dst, val);
-
             self.hdma_dst += 1;
             self.hdma_src += 1;
         }
 
-        if self.hdma_len == 0 {
-            self.hdma_state = HdmaState::Sleep;
-        }
+        // can be outside of loop because HDMA should not
+        // access IO range (clk registers, ifr,
+        // etc..). If the PPU reads VRAM during an HDMA transfer it
+        // should be glitchy anyways
+        self.advance_cycles(len as u32);
     }
 
     fn counter_bit(&self) -> bool {
@@ -121,7 +114,7 @@ impl Gb {
         self.clk_overflow = overflow;
     }
 
-    pub(crate) fn tick_timer(&mut self) {
+    pub(crate) fn run_timer(&mut self) {
         if self.clk_overflow {
             self.clk_wide = self.clk_wide.wrapping_add(1);
             self.tima = self.tma;

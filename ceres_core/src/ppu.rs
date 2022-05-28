@@ -6,10 +6,10 @@ pub const PX_HEIGHT: u8 = 144;
 const PX_TOTAL: u16 = PX_WIDTH as u16 * PX_HEIGHT as u16;
 
 // Mode timings
-const OAM_SCAN_CYCLES: i16 = 80; // Constant
-const DRAWING_CYCLES: i16 = 172; // Variable, minimum ammount
-const HBLANK_CYCLES: i16 = 204; // Variable, maximum ammount
-const VBLANK_CYCLES: i16 = 456; // Constant
+const OAM_SCAN_CYCLES: u32 = 80; // Constant
+const DRAWING_CYCLES: u32 = 172; // Variable, minimum ammount
+const HBLANK_CYCLES: u32 = 204; // Variable, maximum ammount
+const VBLANK_CYCLES: u32 = 456; // Constant
 
 // LCDC bits
 const LCDC_BG_B: u8 = 1;
@@ -93,8 +93,8 @@ pub enum Mode {
 }
 
 impl Mode {
-    pub(crate) fn cycles(self, scroll_x: u8) -> i16 {
-        let scroll_adjust = (scroll_x & 7) as i16 * 4;
+    pub(crate) fn cycles(self, scroll_x: u8) -> u32 {
+        let scroll_adjust = (scroll_x & 7) as u32 * 4;
         match self {
             Mode::OamScan => OAM_SCAN_CYCLES,
             Mode::Drawing => DRAWING_CYCLES + scroll_adjust,
@@ -197,7 +197,7 @@ struct Obj {
 }
 
 impl Gb {
-    pub(crate) fn tick_ppu(&mut self, cycles: i16) {
+    pub(crate) fn run_ppu(&mut self, cycles: u32) {
         fn check_lyc(gb: &mut Gb) {
             gb.stat &= !STAT_LYC_B;
 
@@ -213,39 +213,52 @@ impl Gb {
             return;
         }
 
-        self.ppu_cycles -= cycles;
+        // advance in 0x40 t-cycle chunks to avoid skipping a state
+        // machine transition
+        // TODO: think of something more elegant
+        let chunks = (cycles >> 6) + 1;
 
-        if self.ppu_cycles > 0 {
-            return;
-        }
+        for i in 0..chunks {
+            let (new_cycles, overflow) = if i == chunks - 1 {
+                // last iteration
+                self.ppu_cycles.overflowing_sub(cycles & 0x3f)
+            } else {
+                self.ppu_cycles.overflowing_sub(0x40)
+            };
+            self.ppu_cycles = new_cycles;
 
-        match self.ppu_mode() {
-            Mode::OamScan => self.switch_mode(Mode::Drawing),
-            Mode::Drawing => {
-                self.draw_scanline();
-                self.switch_mode(Mode::HBlank);
+            if !overflow {
+                continue;
             }
-            Mode::HBlank => {
-                self.ly += 1;
-                if self.ly < 144 {
-                    self.switch_mode(Mode::OamScan);
-                } else {
-                    self.switch_mode(Mode::VBlank);
+
+            match self.ppu_mode() {
+                Mode::OamScan => self.switch_mode(Mode::Drawing),
+                Mode::Drawing => {
+                    self.draw_scanline();
+                    self.switch_mode(Mode::HBlank);
                 }
-                check_lyc(self);
-            }
-            Mode::VBlank => {
-                self.ly += 1;
-                if self.ly > 153 {
-                    self.ly = 0;
-                    self.switch_mode(Mode::OamScan);
-                    self.exit_run = true;
-                    self.ppu_callbacks.draw(&self.rgba_buf.data);
-                } else {
-                    let scx = self.scx;
-                    self.ppu_cycles += self.ppu_mode().cycles(scx);
+                Mode::HBlank => {
+                    self.ly += 1;
+                    if self.ly < 144 {
+                        self.switch_mode(Mode::OamScan);
+                    } else {
+                        self.switch_mode(Mode::VBlank);
+                    }
+                    check_lyc(self);
                 }
-                check_lyc(self);
+                Mode::VBlank => {
+                    self.ly += 1;
+                    if self.ly > 153 {
+                        self.ly = 0;
+                        self.switch_mode(Mode::OamScan);
+                        self.exit_run = true;
+                        self.ppu_callbacks.draw(&self.rgba_buf.data);
+                    } else {
+                        let scx = self.scx;
+                        self.ppu_cycles = self.ppu_cycles.wrapping_add(self.ppu_mode().cycles(scx));
+                    }
+                    check_lyc(self);
+                }
             }
         }
     }
@@ -327,7 +340,7 @@ impl Gb {
     fn switch_mode(&mut self, mode: Mode) {
         self.set_mode(mode);
         let scx = self.scx;
-        self.ppu_cycles += mode.cycles(scx);
+        self.ppu_cycles = self.ppu_cycles.wrapping_add(mode.cycles(scx));
 
         match mode {
             Mode::OamScan => {

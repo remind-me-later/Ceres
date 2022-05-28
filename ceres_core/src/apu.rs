@@ -18,7 +18,7 @@ impl Gb {
         TC_SEC / (*self.apu_callbacks).sample_rate()
     }
 
-    pub fn tick_apu(&mut self, mut cycles: i16) {
+    pub fn run_apu(&mut self, mut cycles: u32) {
         if !self.apu_on {
             return;
         }

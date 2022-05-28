@@ -164,7 +164,7 @@ pub struct Gb {
     vram: [u8; VRAM_SIZE_CGB],
     oam: [u8; OAM_SIZE],
     rgba_buf: RgbaBuf,
-    ppu_cycles: i16,
+    ppu_cycles: u32,
     ppu_win_in_frame: bool,
     ppu_win_in_ly: bool,
     ppu_win_skipped: u16,
