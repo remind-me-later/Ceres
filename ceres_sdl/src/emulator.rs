@@ -20,7 +20,8 @@ pub struct Emulator {
     gb: Gb,
     has_focus: bool,
     sav_path: PathBuf,
-    video: *mut video::Renderer,
+    video: Box<video::Renderer>,
+    _audio: Box<audio::Renderer>,
 }
 
 impl Emulator {
@@ -36,12 +37,13 @@ impl Emulator {
             Cartridge::new(rom, ram).unwrap()
         };
 
-        let audio_callbacks = Box::new(audio::Renderer::new(&sdl));
-        let mut video_callbacks =
-            Box::new(video::Renderer::new(super::CERES_STR, &video_subsystem));
-        let video: *mut _ = video_callbacks.as_mut();
+        let audio = audio::Renderer::new(&sdl);
+        let video = video::Renderer::new(super::CERES_STR, &video_subsystem);
 
-        let gb = Gb::new(model, cart, audio_callbacks, video_callbacks);
+        let mut gb = Gb::new(model, cart);
+        gb.set_ppu_frame_callback(video::ppu_frame_callback);
+        gb.set_sample_rate(audio.sample_rate());
+        gb.set_apu_frame_callback(audio::apu_frame_callback);
 
         Self {
             sdl,
@@ -49,6 +51,7 @@ impl Emulator {
             has_focus: false,
             sav_path,
             video,
+            _audio: audio,
         }
     }
 
@@ -72,9 +75,9 @@ impl Emulator {
                 match event {
                     Event::Quit { .. } => break 'main_loop,
                     Event::Window { win_event, .. } => match win_event {
-                        WindowEvent::Resized(width, height) => unsafe {
-                            (*self.video).resize(width as u32, height as u32);
-                        },
+                        WindowEvent::Resized(width, height) => {
+                            self.video.resize(width as u32, height as u32)
+                        }
                         WindowEvent::Close => break 'main_loop,
                         WindowEvent::FocusGained => self.has_focus = true,
                         WindowEvent::FocusLost => self.has_focus = false,

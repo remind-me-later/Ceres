@@ -14,10 +14,6 @@ const WAV_PERIOD_MUL: u16 = 2;
 const NOISE_MAX_LEN: u16 = 64;
 
 impl Gb {
-    fn period(&self) -> u32 {
-        TC_SEC / (*self.apu_callbacks).sample_rate()
-    }
-
     pub fn run_apu(&mut self, mut cycles: u32) {
         if !self.apu_on {
             return;
@@ -38,7 +34,7 @@ impl Gb {
             self.apu_ch3.step_sample();
             self.apu_ch4.step_sample();
 
-            if self.apu_render_timer == self.period() {
+            if self.apu_render_timer == self.apu_sample_period {
                 self.apu_render_timer = 0;
                 self.mix_and_render();
             } else {
@@ -85,14 +81,14 @@ impl Gb {
             .fold((0, 0), |(l, r), (lp, rp)| (l + lp, r + rp));
 
         // transform to i16 sample
-        let l = (0xf - l as i16 * 2) * self.apu_l_vol as i16;
-        let r = (0xf - r as i16 * 2) * self.apu_r_vol as i16;
+        let l = (0xF - l as i16 * 2) * self.apu_l_vol as i16;
+        let r = (0xF - r as i16 * 2) * self.apu_r_vol as i16;
 
         // filter and transform to f32
         let l = self.high_pass_filter(l);
         let r = self.high_pass_filter(r);
 
-        self.apu_callbacks.push_frame(l, r);
+        (self.apu_frame_callback)(l, r);
     }
 
     fn high_pass_filter(&mut self, sample: i16) -> f32 {
@@ -108,7 +104,7 @@ impl Gb {
     }
 
     fn reset(&mut self) {
-        self.apu_render_timer = self.period();
+        self.apu_render_timer = self.apu_sample_period;
         self.apu_ch1.reset();
         self.apu_ch2.reset();
         self.apu_ch3.reset();
@@ -282,10 +278,10 @@ impl Square1 {
             self.sw_shadow_freq + tmp
         };
 
-        if self.sw_shadow_freq > 0x7ff {
+        if self.sw_shadow_freq > 0x7FF {
             self.on = false;
         } else if self.sw_shift != 0 {
-            self.freq = self.sw_shadow_freq & 0x7ff;
+            self.freq = self.sw_shadow_freq & 0x7FF;
         }
     }
 
@@ -294,7 +290,7 @@ impl Square1 {
     }
 
     pub fn read_nr11(&self) -> u8 {
-        0x3f | ((self.duty as u8) << 6)
+        0x3F | ((self.duty as u8) << 6)
     }
 
     pub fn read_nr12(&self) -> u8 {
@@ -302,7 +298,7 @@ impl Square1 {
     }
 
     pub fn read_nr14(&self) -> u8 {
-        0xbf | ((self.snd_counter as u8) << 6)
+        0xBF | ((self.snd_counter as u8) << 6)
     }
 
     pub fn write_nr10(&mut self, val: u8) {
@@ -320,7 +316,8 @@ impl Square1 {
     }
 
     pub fn write_nr12(&mut self, val: u8) {
-        // TODO: likely wrong, value == 0x7 || value == 0x0 to pass Blargg 2 test
+        // TODO: likely wrong, value == 0x7 || value == 0x0 to pass
+        // Blargg 2 test
         if val == 7 {
             self.on = false;
             self.dac_on = false;
@@ -346,7 +343,7 @@ impl Square1 {
     }
 
     pub fn write_nr14(&mut self, val: u8) {
-        self.freq = (val as u16 & 7) << 8 | (self.freq & 0xff);
+        self.freq = (val as u16 & 7) << 8 | (self.freq & 0xFF);
         self.snd_counter = val & 0x40 != 0;
 
         if self.snd_counter && self.p_half == 0 {
@@ -517,7 +514,7 @@ impl Square2 {
     }
 
     pub fn read_nr21(&self) -> u8 {
-        0x3f | ((self.duty as u8) << 6)
+        0x3F | ((self.duty as u8) << 6)
     }
 
     pub fn read_nr22(&self) -> u8 {
@@ -525,7 +522,7 @@ impl Square2 {
     }
 
     pub fn read_nr24(&self) -> u8 {
-        0xbf | ((self.snd_counter as u8) << 6)
+        0xBF | ((self.snd_counter as u8) << 6)
     }
 
     pub fn write_nr21(&mut self, val: u8) {
@@ -534,7 +531,8 @@ impl Square2 {
     }
 
     pub fn write_nr22(&mut self, val: u8) {
-        // TODO: likely wrong, value == 0x7 || value == 0x0 to pass Blargg 2 test
+        // TODO: likely wrong, value == 0x7 || value == 0x0 to pass
+        // Blargg 2 test
         if val == 7 {
             self.on = false;
             self.dac_on = false;
@@ -560,7 +558,7 @@ impl Square2 {
     }
 
     pub fn write_nr24(&mut self, val: u8) {
-        self.freq = (val as u16 & 7) << 8 | (self.freq & 0xff);
+        self.freq = (val as u16 & 7) << 8 | (self.freq & 0xFF);
         self.snd_counter = val & 0x40 != 0;
 
         if self.snd_counter && self.p_half == 0 {
@@ -708,19 +706,19 @@ impl Wave {
         self.ram[index] = val;
         // upper 4 bits first
         self.samples[index * 2] = val >> 4;
-        self.samples[index * 2 + 1] = val & 0xf;
+        self.samples[index * 2 + 1] = val & 0xF;
     }
 
     pub fn read_nr30(&self) -> u8 {
-        self.nr30 | 0x7f
+        self.nr30 | 0x7F
     }
 
     pub fn read_nr32(&self) -> u8 {
-        0x9f | (self.vol << 5)
+        0x9F | (self.vol << 5)
     }
 
     pub fn read_nr34(&self) -> u8 {
-        0xbf | ((self.use_len as u8) << 6)
+        0xBF | ((self.use_len as u8) << 6)
     }
 
     pub fn write_nr30(&mut self, val: u8) {
@@ -746,7 +744,7 @@ impl Wave {
     }
 
     pub fn write_nr34(&mut self, val: u8) {
-        self.freq = (val as u16 & 7) << 8 | (self.freq & 0xff);
+        self.freq = (val as u16 & 7) << 8 | (self.freq & 0xFF);
         self.use_len = val & 0x40 != 0;
 
         if self.use_len && self.p_half == 0 {
@@ -844,7 +842,7 @@ impl Noise {
             env_inc: false,
             timer: 1,
             timer_period: 0,
-            lfsr: 0x7fff,
+            lfsr: 0x7FFF,
             wide_step: false,
             out: 0,
             nr43: 0,
@@ -866,7 +864,7 @@ impl Noise {
 
         self.timer_period = 0;
         self.timer = 1;
-        self.lfsr = 0x7fff;
+        self.lfsr = 0x7FFF;
         self.wide_step = false;
         self.out = 0;
         self.nr43 = 0;
@@ -881,7 +879,7 @@ impl Noise {
     }
 
     pub fn read_nr44(&self) -> u8 {
-        0xbf | ((self.snd_counter as u8) << 6)
+        0xBF | ((self.snd_counter as u8) << 6)
     }
 
     pub fn write_nr41(&mut self, val: u8) {
@@ -889,7 +887,8 @@ impl Noise {
     }
 
     pub fn write_nr42(&mut self, val: u8) {
-        // TODO: likely wrong, value == 0x7 || value == 0x0 to pass Blargg 2 test
+        // TODO: likely wrong, value == 0x7 || value == 0x0 to pass
+        // Blargg 2 test
         if val == 7 {
             self.on = false;
             self.dac_on = false;
@@ -948,7 +947,7 @@ impl Noise {
             }
 
             self.timer = self.timer_period;
-            self.lfsr = 0x7fff;
+            self.lfsr = 0x7FFF;
             self.env_timer = self.env_period;
             self.env_vol = self.env_base_vol;
         }

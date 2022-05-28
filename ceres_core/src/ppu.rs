@@ -55,8 +55,8 @@ const PAL_RAM_SIZE_COLORS: usize = PAL_RAM_SIZE * 3;
 
 // DMG palette colors RGB
 const GRAYSCALE_PALETTE: [(u8, u8, u8); 4] = [
-    (0xff, 0xff, 0xff),
-    (0xcc, 0xcc, 0xcc),
+    (0xFF, 0xFF, 0xFF),
+    (0xCC, 0xCC, 0xCC),
     (0x77, 0x77, 0x77),
     (0x00, 0x00, 0x00),
 ];
@@ -71,7 +71,7 @@ impl RgbaBuf {
     #[must_use]
     pub(crate) fn new() -> Self {
         Self {
-            data: [0xff; RGBA_BUF_SIZE],
+            data: [0xFF; RGBA_BUF_SIZE],
         }
     }
 
@@ -133,7 +133,7 @@ impl ColorPalette {
 
     #[inline]
     pub(crate) fn set_spec(&mut self, val: u8) {
-        self.idx = val & 0x3f;
+        self.idx = val & 0x3F;
         self.inc = val & 0x80 != 0;
     }
 
@@ -161,16 +161,16 @@ impl ColorPalette {
             // red
             self.col[i] = val & 0x1F;
             // green
-            self.col[i + 1] = ((self.col[i + 1] & 3) << 3) | ((val & 0xe0) >> 5);
+            self.col[i + 1] = ((self.col[i + 1] & 3) << 3) | ((val & 0xE0) >> 5);
         } else {
             // green
             self.col[i + 1] = (self.col[i + 1] & 7) | ((val & 3) << 3);
             // blue
-            self.col[i + 2] = (val & 0x7c) >> 2;
+            self.col[i + 2] = (val & 0x7C) >> 2;
         }
 
         if self.inc {
-            self.idx = (self.idx + 1) & 0x3f;
+            self.idx = (self.idx + 1) & 0x3F;
         }
     }
 
@@ -221,7 +221,7 @@ impl Gb {
         for i in 0..chunks {
             let (new_cycles, overflow) = if i == chunks - 1 {
                 // last iteration
-                self.ppu_cycles.overflowing_sub(cycles & 0x3f)
+                self.ppu_cycles.overflowing_sub(cycles & 0x3F)
             } else {
                 self.ppu_cycles.overflowing_sub(0x40)
             };
@@ -252,7 +252,7 @@ impl Gb {
                         self.ly = 0;
                         self.switch_mode(Mode::OamScan);
                         self.exit_run = true;
-                        self.ppu_callbacks.draw(&self.rgba_buf.data);
+                        (self.ppu_frame_callback)(&self.rgba_buf.data);
                     } else {
                         let scx = self.scx;
                         self.ppu_cycles = self.ppu_cycles.wrapping_add(self.ppu_mode().cycles(scx));
@@ -276,15 +276,15 @@ impl Gb {
 
     pub(crate) fn read_vram(&mut self, addr: u16) -> u8 {
         match self.ppu_mode() {
-            Mode::Drawing => 0xff,
-            _ => self.vram[((addr & 0x1fff) + self.vbk as u16 * VRAM_SIZE as u16) as usize],
+            Mode::Drawing => 0xFF,
+            _ => self.vram[((addr & 0x1FFF) + self.vbk as u16 * VRAM_SIZE as u16) as usize],
         }
     }
 
     pub(crate) fn read_oam(&mut self, addr: u16) -> u8 {
         match self.ppu_mode() {
-            Mode::HBlank | Mode::VBlank if !self.dma_on => self.oam[(addr & 0xff) as usize],
-            _ => 0xff,
+            Mode::HBlank | Mode::VBlank if !self.dma_on => self.oam[(addr & 0xFF) as usize],
+            _ => 0xFF,
         }
     }
 
@@ -316,13 +316,13 @@ impl Gb {
     pub(crate) fn write_vram(&mut self, addr: u16, val: u8) {
         match self.ppu_mode() {
             Mode::Drawing => (),
-            _ => self.vram[((addr & 0x1fff) + self.vbk as u16 * VRAM_SIZE as u16) as usize] = val,
+            _ => self.vram[((addr & 0x1FFF) + self.vbk as u16 * VRAM_SIZE as u16) as usize] = val,
         };
     }
 
     pub(crate) fn write_oam(&mut self, addr: u16, val: u8, dma_active: bool) {
         match self.ppu_mode() {
-            Mode::HBlank | Mode::VBlank if !dma_active => self.oam[(addr & 0xff) as usize] = val,
+            Mode::HBlank | Mode::VBlank if !dma_active => self.oam[(addr & 0xFF) as usize] = val,
             _ => (),
         };
     }
@@ -424,7 +424,7 @@ impl Gb {
 
     #[inline]
     fn vram_at_bank(&self, addr: u16, bank: u8) -> u8 {
-        self.vram[((addr & 0x1fff) + bank as u16 * VRAM_SIZE as u16) as usize]
+        self.vram[((addr & 0x1FFF) + bank as u16 * VRAM_SIZE as u16) as usize]
     }
 
     #[inline]

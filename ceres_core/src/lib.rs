@@ -15,7 +15,6 @@
 extern crate alloc;
 
 use {
-    alloc::boxed::Box,
     apu::{Noise, Square1, Square2, Wave},
     core::time::Duration,
     memory::HdmaState,
@@ -59,16 +58,7 @@ const HRAM_SIZE: usize = 0x80;
 const WRAM_SIZE: usize = 0x2000;
 const WRAM_SIZE_CGB: usize = WRAM_SIZE * 4;
 
-pub trait AudioCallbacks {
-    fn sample_rate(&self) -> u32;
-    fn push_frame(&mut self, l: Sample, r: Sample);
-}
-
 pub type Sample = f32;
-
-pub trait VideoCallbacks {
-    fn draw(&mut self, rgba_data: &[u8]);
-}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Model {
@@ -168,8 +158,7 @@ pub struct Gb {
     ppu_win_in_frame: bool,
     ppu_win_in_ly: bool,
     ppu_win_skipped: u16,
-    ppu_callbacks: Box<dyn VideoCallbacks>,
-
+    ppu_frame_callback: fn(rgba_data: &[u8]),
     // clock
     tima: u8,
     tma: u8,
@@ -195,19 +184,19 @@ pub struct Gb {
 
     apu_timer: u16,
     apu_render_timer: u32,
-    apu_callbacks: Box<dyn AudioCallbacks>,
+    apu_sample_rate: u32,
+    apu_sample_period: u32,
+    apu_frame_callback: fn(l: Sample, r: Sample),
     apu_seq_step: u8,
     apu_cap: f32,
 }
 
+fn default_ppu_frame_callback(_: &[u8]) {}
+fn default_apu_frame_callback(_: Sample, _: Sample) {}
+
 impl Gb {
     #[must_use]
-    pub fn new(
-        model: Model,
-        cart: Cartridge,
-        audio_callbacks: Box<dyn AudioCallbacks>,
-        video_callbacks: Box<dyn VideoCallbacks>,
-    ) -> Self {
+    pub fn new(model: Model, cart: Cartridge) -> Self {
         let function_mode = match model {
             Model::Dmg | Model::Mgb => CompatMode::Dmg,
             Model::Cgb => CompatMode::Cgb,
@@ -247,7 +236,7 @@ impl Gb {
             ppu_win_in_frame: false,
             ppu_win_skipped: 0,
             ppu_win_in_ly: false,
-            ppu_callbacks: video_callbacks,
+            ppu_frame_callback: default_ppu_frame_callback,
             bcp: ColorPalette::new(),
             ocp: ColorPalette::new(),
             exit_run: false,
@@ -262,7 +251,6 @@ impl Gb {
             apu_ch3: Wave::new(),
             apu_ch4: Noise::new(),
             apu_render_timer: 0,
-            apu_callbacks: audio_callbacks,
             apu_on: false,
             apu_r_vol: 0,
             apu_l_vol: 0,
@@ -303,7 +291,23 @@ impl Gb {
             pc: 0,
             boot_rom,
             boot_rom_mapped: true,
+            apu_sample_rate: 0,
+            apu_sample_period: 0,
+            apu_frame_callback: default_apu_frame_callback,
         }
+    }
+
+    pub fn set_ppu_frame_callback(&mut self, ppu_frame_callback: fn(rgba_data: &[u8])) {
+        self.ppu_frame_callback = ppu_frame_callback;
+    }
+
+    pub fn set_apu_frame_callback(&mut self, apu_frame_callback: fn(l: Sample, r: Sample)) {
+        self.apu_frame_callback = apu_frame_callback;
+    }
+
+    pub fn set_sample_rate(&mut self, sample_rate: u32) {
+        self.apu_sample_rate = sample_rate;
+        self.apu_sample_period = TC_SEC / sample_rate;
     }
 
     pub fn run_frame(&mut self) {

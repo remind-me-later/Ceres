@@ -7,7 +7,7 @@ use {
 
 const TITLE_START: usize = 0x134;
 const OLD_TITLE_END: usize = 0x143;
-const NEW_TITLE_END: usize = 0x13f;
+const NEW_TITLE_END: usize = 0x13F;
 
 const ROM_BANK_SIZE: usize = 0x4000;
 const RAM_BANK_SIZE: usize = 0x2000;
@@ -61,10 +61,10 @@ impl Cartridge {
             0x03 => (Mbc1, true),
             0x05 => (Mbc2, false),
             0x06 => (Mbc2, true),
-            0x0f | 0x10 | 0x13 => (Mbc3, true),
+            0x0F | 0x10 | 0x13 => (Mbc3, true),
             0x11 | 0x12 => (Mbc3, false),
-            0x19 | 0x1a | 0x1c | 0x1d => (Mbc5, false),
-            0x1b | 0x1e => (Mbc5, true),
+            0x19 | 0x1A | 0x1C | 0x1D => (Mbc5, false),
+            0x1B | 0x1E => (Mbc5, true),
             mbc_byte => return Err(Error::InvalidMBC { mbc_byte }),
         };
 
@@ -110,13 +110,13 @@ impl Cartridge {
     #[must_use]
     pub fn read_rom(&self, addr: u16) -> u8 {
         let bank_addr = match addr {
-            0x0000..=0x3fff => {
+            0x0000..=0x3FFF => {
                 let (rom_lower, _) = self.rom_offsets;
-                rom_lower as usize | (addr as usize & 0x3fff)
+                rom_lower as usize | (addr as usize & 0x3FFF)
             }
-            0x4000..=0x7fff => {
+            0x4000..=0x7FFF => {
                 let (_, rom_upper) = self.rom_offsets;
-                rom_upper as usize | (addr as usize & 0x3fff)
+                rom_upper as usize | (addr as usize & 0x3FFF)
             }
             _ => 0,
         };
@@ -126,7 +126,7 @@ impl Cartridge {
 
     #[must_use]
     pub fn ram_addr(&self, addr: u16) -> usize {
-        self.ram_offset | (addr as usize & 0x1fff)
+        self.ram_offset | (addr as usize & 0x1FFF)
     }
 
     fn mbc_read_ram(&self, ram_enabled: bool, addr: u16) -> u8 {
@@ -134,20 +134,20 @@ impl Cartridge {
             let addr = self.ram_addr(addr);
             self.ram[addr]
         } else {
-            0xff
+            0xFF
         }
     }
 
     #[must_use]
     pub fn read_ram(&self, addr: u16) -> u8 {
         match self.mbc {
-            MbcNone => 0xff,
+            MbcNone => 0xFF,
             Mbc1 | Mbc5 => self.mbc_read_ram(self.ram_enabled, addr),
-            Mbc2 => (self.mbc_read_ram(self.ram_enabled, addr) & 0xf) | 0xf0,
+            Mbc2 => (self.mbc_read_ram(self.ram_enabled, addr) & 0xF) | 0xF0,
             Mbc3 => match self.ram_bank {
                 0x00..=0x03 => self.mbc_read_ram(self.ram_enabled, addr),
                 0x04..=0x07 => self.mbc_read_ram(self.ram_enabled && self.mbc30, addr),
-                _ => 0xff,
+                _ => 0xFF,
             },
         }
     }
@@ -159,7 +159,7 @@ impl Cartridge {
             self.rom_bank_hi << 5
         };
         let lower_bits = if self.mbc1_multicart {
-            self.rom_bank_lo & 0xf
+            self.rom_bank_lo & 0xF
         } else {
             self.rom_bank_lo
         };
@@ -194,18 +194,18 @@ impl Cartridge {
         match self.mbc {
             MbcNone => (),
             Mbc1 => match addr {
-                0x0000..=0x1fff => self.ram_enabled = (val & 0xf) == 0xa,
-                0x2000..=0x3fff => {
-                    let val = val & 0x1f;
+                0x0000..=0x1FFF => self.ram_enabled = (val & 0xF) == 0xA,
+                0x2000..=0x3FFF => {
+                    let val = val & 0x1F;
                     self.rom_bank_lo = if val == 0 { 1 } else { val };
                     self.rom_offsets = self.mbc1_rom_offsets();
                 }
-                0x4000..=0x5fff => {
+                0x4000..=0x5FFF => {
                     self.rom_bank_hi = val & 3;
                     self.rom_offsets = self.mbc1_rom_offsets();
                     self.ram_offset = self.mbc1_ram_offset();
                 }
-                0x6000..=0x7fff => {
+                0x6000..=0x7FFF => {
                     self.mbc1_bank_mode = (val & 1) == 1;
                     self.rom_offsets = self.mbc1_rom_offsets();
                     self.ram_offset = self.mbc1_ram_offset();
@@ -213,23 +213,23 @@ impl Cartridge {
                 _ => (),
             },
             Mbc2 => {
-                if addr <= 0x3fff {
+                if addr <= 0x3FFF {
                     if (addr >> 8) & 1 == 0 {
-                        self.ram_enabled = (val & 0xf) == 0xa;
+                        self.ram_enabled = (val & 0xF) == 0xA;
                     } else {
-                        let val = val & 0xf;
+                        let val = val & 0xF;
                         self.rom_bank_lo = if val == 0 { 1 } else { val };
                         self.rom_offsets = (0x0000, ROM_BANK_SIZE * self.rom_bank_lo as usize);
                     }
                 }
             }
             Mbc3 => match addr {
-                0x0000..=0x1fff => self.ram_enabled = (val & 0x0f) == 0x0a,
-                0x2000..=0x3fff => {
-                    self.rom_bank_lo = if val == 0 { 1 } else { val & 0x7f };
+                0x0000..=0x1FFF => self.ram_enabled = (val & 0x0F) == 0x0A,
+                0x2000..=0x3FFF => {
+                    self.rom_bank_lo = if val == 0 { 1 } else { val & 0x7F };
                     self.rom_offsets = (0x0000, ROM_BANK_SIZE * self.rom_bank_lo as usize);
                 }
-                0x4000..=0x5fff => {
+                0x4000..=0x5FFF => {
                     self.ram_bank = val & 0x7;
                     if self.mbc30 {
                         self.ram_offset = RAM_BANK_SIZE * self.ram_bank as usize;
@@ -241,17 +241,17 @@ impl Cartridge {
                 _ => (),
             },
             Mbc5 => match addr {
-                0x0000..=0x1fff => self.ram_enabled = val & 0xf == 0xa,
-                0x2000..=0x2fff => {
+                0x0000..=0x1FFF => self.ram_enabled = val & 0xF == 0xA,
+                0x2000..=0x2FFF => {
                     self.rom_bank_lo = val;
                     self.rom_offsets = self.mbc5_rom_offsets();
                 }
-                0x3000..=0x3fff => {
+                0x3000..=0x3FFF => {
                     self.rom_bank_hi = val & 1;
                     self.rom_offsets = self.mbc5_rom_offsets();
                 }
-                0x4000..=0x5fff => {
-                    self.ram_bank = val & 0xf;
+                0x4000..=0x5FFF => {
+                    self.ram_bank = val & 0xF;
                     self.ram_offset = RAM_BANK_SIZE * self.ram_bank as usize;
                 }
                 _ => (),
@@ -307,7 +307,7 @@ impl Header {
         // length of title depends on licensee code format:
         // - 0x33: new value, short title
         // - any other: old value, long title
-        match rom[0x14b] {
+        match rom[0x14B] {
             0x33 => title[..(NEW_TITLE_END - TITLE_START)]
                 .copy_from_slice(&rom[TITLE_START..NEW_TITLE_END]),
             _ => title.copy_from_slice(&rom[TITLE_START..OLD_TITLE_END]),
@@ -334,10 +334,10 @@ impl Header {
     }
 
     fn check_checksum(rom: &[u8]) -> Result<(), Error> {
-        let expected = rom[0x14d];
+        let expected = rom[0x14D];
         let mut computed: u8 = 0;
 
-        for &byte in rom.iter().take(0x14c + 1).skip(0x134) {
+        for &byte in rom.iter().take(0x14C + 1).skip(0x134) {
             computed = computed.wrapping_sub(byte).wrapping_sub(1);
         }
 
@@ -485,7 +485,7 @@ impl CgbFlag {
         use CgbFlag::{CgbFunctions, CgbOnly, NonCgb};
         match rom[0x143] {
             0x80 => CgbFunctions,
-            0xc0 => CgbOnly,
+            0xC0 => CgbOnly,
             _ => NonCgb,
         }
     }

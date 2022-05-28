@@ -38,31 +38,31 @@ impl Ld8 {
     fn write(self, gb: &mut Gb, val: u8) {
         match self {
             Ld8::A => {
-                gb.af &= 0x00ff;
+                gb.af &= 0x00FF;
                 gb.af |= (val as u16) << 8;
             }
             Ld8::B => {
-                gb.bc &= 0x00ff;
+                gb.bc &= 0x00FF;
                 gb.bc |= (val as u16) << 8;
             }
             Ld8::C => {
-                gb.bc &= 0xff00;
+                gb.bc &= 0xFF00;
                 gb.bc |= val as u16;
             }
             Ld8::D => {
-                gb.de &= 0x00ff;
+                gb.de &= 0x00FF;
                 gb.de |= (val as u16) << 8;
             }
             Ld8::E => {
-                gb.de &= 0xff00;
+                gb.de &= 0xFF00;
                 gb.de |= val as u16;
             }
             Ld8::H => {
-                gb.hl &= 0x00ff;
+                gb.hl &= 0x00FF;
                 gb.hl |= (val as u16) << 8;
             }
             Ld8::L => {
-                gb.hl &= 0xff00;
+                gb.hl &= 0xFF00;
                 gb.hl |= val as u16;
             }
             Ld8::Dhl => gb.cpu_write(gb.hl, val),
@@ -88,7 +88,7 @@ impl Gb {
         self.catch_up();
 
         // any interrupts?
-        if self.ifr & self.ie & 0x1f == 0 {
+        if self.ifr & self.ie & 0x1F == 0 {
             return;
         }
 
@@ -110,7 +110,7 @@ impl Gb {
         // disallow double fault
         self.ime = false;
         // recompute, maybe ifr changed
-        let ints = self.ifr & self.ie & 0x1f;
+        let ints = self.ifr & self.ie & 0x1F;
         let trail_zeros = ints.trailing_zeros();
         // get rightmost interrupt
         let int = ((ints != 0) as u8) << trail_zeros;
@@ -333,7 +333,7 @@ impl Gb {
         let a = self.af >> 8;
         let res = a + val;
         self.af = res << 8;
-        if res & 0xff == 0 {
+        if res & 0xFF == 0 {
             self.af |= ZF_B;
         }
         if (a & 0xF) + (val & 0xF) > 0x0F {
@@ -350,7 +350,7 @@ impl Gb {
         let a = self.af >> 8;
         let res = a + val;
         self.af = res << 8;
-        if res & 0xff == 0 {
+        if res & 0xFF == 0 {
             self.af |= ZF_B;
         }
         if (a & 0xF) + (val & 0xF) > 0x0F {
@@ -401,7 +401,7 @@ impl Gb {
         let res = a.wrapping_sub(val).wrapping_sub(carry);
         self.af = (res << 8) | NF_B;
 
-        if res & 0xff == 0 {
+        if res & 0xFF == 0 {
             self.af |= ZF_B;
         }
         if (a & 0xF) < (val & 0xF) + carry {
@@ -420,7 +420,7 @@ impl Gb {
         let res = a.wrapping_sub(val).wrapping_sub(carry);
         self.af = (res << 8) | NF_B;
 
-        if res & 0xff == 0 {
+        if res & 0xFF == 0 {
             self.af |= ZF_B;
         }
         if (a & 0xF) < (val & 0xF) + carry {
@@ -438,7 +438,7 @@ impl Gb {
         let carry = ((self.af & CF_B) != 0) as u16;
         let res = a + val + carry;
         self.af = res << 8;
-        if res & 0xff == 0 {
+        if res & 0xFF == 0 {
             self.af |= ZF_B;
         }
         if (a & 0xF) + (val & 0xF) + carry > 0x0F {
@@ -456,7 +456,7 @@ impl Gb {
         let carry = ((self.af & CF_B) != 0) as u16;
         let res = a + val + carry;
         self.af = res << 8;
-        if res & 0xff == 0 {
+        if res & 0xFF == 0 {
             self.af |= ZF_B;
         }
         if (a & 0xF) + (val & 0xF) + carry > 0x0F {
@@ -564,7 +564,7 @@ impl Gb {
     #[inline]
     fn inc_lr(&mut self, opcode: u8) {
         let reg_id = (opcode >> 4) + 1;
-        let val = (*self.regid2reg(reg_id) + 1) & 0xff;
+        let val = (*self.regid2reg(reg_id) + 1) & 0xFF;
         *self.regid2reg(reg_id) = (*self.regid2reg(reg_id) & 0xFF00) | val;
 
         self.af &= !(NF_B | ZF_B | HF_B);
@@ -581,7 +581,7 @@ impl Gb {
     #[inline]
     fn dec_lr(&mut self, opcode: u8) {
         let reg_id = (opcode >> 4) + 1;
-        let val = (*self.regid2reg(reg_id)).wrapping_sub(1) & 0xff;
+        let val = (*self.regid2reg(reg_id)).wrapping_sub(1) & 0xFF;
         (*self.regid2reg(reg_id)) = ((*self.regid2reg(reg_id)) & 0xFF00) | val;
 
         self.af &= !(ZF_B | HF_B);
@@ -959,7 +959,7 @@ impl Gb {
         self.sp = self.sp.wrapping_add(1);
         let reg_id = ((opcode >> 4) + 1) & 3;
         *self.regid2reg(reg_id) = val;
-        self.af &= 0xfff0;
+        self.af &= 0xFFF0;
     }
 
     #[inline]
@@ -972,7 +972,7 @@ impl Gb {
     fn ld_da16_sp(&mut self) {
         let val = self.sp;
         let addr = self.imm_u16();
-        self.cpu_write(addr, (val & 0xff) as u8);
+        self.cpu_write(addr, (val & 0xFF) as u8);
         self.cpu_write(addr.wrapping_add(1), (val >> 8) as u8);
     }
 
@@ -1168,57 +1168,57 @@ impl Gb {
     #[inline]
     fn exec(&mut self, opcode: u8) {
         match opcode {
-            0x00 | 0x7f | 0x49 | 0x52 | 0x5b | 0x64 | 0x6d => self.nop(),
+            0x00 | 0x7F | 0x49 | 0x52 | 0x5B | 0x64 | 0x6D => self.nop(),
             0x40 => self.ld_b_b(),
             0x78 => self.ld(A, B),
             0x79 => self.ld(A, C),
-            0x7a => self.ld(A, D),
-            0x7b => self.ld(A, E),
-            0x7c => self.ld(A, H),
-            0x7d => self.ld(A, L),
+            0x7A => self.ld(A, D),
+            0x7B => self.ld(A, E),
+            0x7C => self.ld(A, H),
+            0x7D => self.ld(A, L),
             0x47 => self.ld(B, A),
             0x41 => self.ld(B, C),
             0x42 => self.ld(B, D),
             0x43 => self.ld(B, E),
             0x44 => self.ld(B, H),
             0x45 => self.ld(B, L),
-            0x4f => self.ld(C, A),
+            0x4F => self.ld(C, A),
             0x48 => self.ld(C, B),
-            0x4a => self.ld(C, D),
-            0x4b => self.ld(C, E),
-            0x4c => self.ld(C, H),
-            0x4d => self.ld(C, L),
+            0x4A => self.ld(C, D),
+            0x4B => self.ld(C, E),
+            0x4C => self.ld(C, H),
+            0x4D => self.ld(C, L),
             0x57 => self.ld(D, A),
             0x50 => self.ld(D, B),
             0x51 => self.ld(D, C),
             0x53 => self.ld(D, E),
             0x54 => self.ld(D, H),
             0x55 => self.ld(D, L),
-            0x5f => self.ld(E, A),
+            0x5F => self.ld(E, A),
             0x58 => self.ld(E, B),
             0x59 => self.ld(E, C),
-            0x5a => self.ld(E, D),
-            0x5c => self.ld(E, H),
-            0x5d => self.ld(E, L),
+            0x5A => self.ld(E, D),
+            0x5C => self.ld(E, H),
+            0x5D => self.ld(E, L),
             0x67 => self.ld(H, A),
             0x60 => self.ld(H, B),
             0x61 => self.ld(H, C),
             0x62 => self.ld(H, D),
             0x63 => self.ld(H, E),
             0x65 => self.ld(H, L),
-            0x6f => self.ld(L, A),
+            0x6F => self.ld(L, A),
             0x68 => self.ld(L, B),
             0x69 => self.ld(L, C),
-            0x6a => self.ld(L, D),
-            0x6b => self.ld(L, E),
-            0x6c => self.ld(L, H),
-            0x7e => self.ld(A, Dhl),
+            0x6A => self.ld(L, D),
+            0x6B => self.ld(L, E),
+            0x6C => self.ld(L, H),
+            0x7E => self.ld(A, Dhl),
             0x46 => self.ld(B, Dhl),
-            0x4e => self.ld(C, Dhl),
+            0x4E => self.ld(C, Dhl),
             0x56 => self.ld(D, Dhl),
-            0x5e => self.ld(E, Dhl),
+            0x5E => self.ld(E, Dhl),
             0x66 => self.ld(H, Dhl),
-            0x6e => self.ld(L, Dhl),
+            0x6E => self.ld(L, Dhl),
             0x77 => self.ld(Dhl, A),
             0x70 => self.ld(Dhl, B),
             0x71 => self.ld(Dhl, C),
@@ -1226,77 +1226,77 @@ impl Gb {
             0x73 => self.ld(Dhl, E),
             0x74 => self.ld(Dhl, H),
             0x75 => self.ld(Dhl, L),
-            0x3e | 0x06 | 0x16 | 0x26 => self.ld_hr_d8(opcode),
-            0x0e | 0x1e | 0x2e => self.ld_lr_d8(opcode),
+            0x3E | 0x06 | 0x16 | 0x26 => self.ld_hr_d8(opcode),
+            0x0E | 0x1E | 0x2E => self.ld_lr_d8(opcode),
             0x36 => self.ld_dhl_d8(),
-            0x0a | 0x1a => self.ld_a_drr(opcode),
+            0x0A | 0x1A => self.ld_a_drr(opcode),
             0x02 | 0x12 => self.ld_drr_a(opcode),
-            0xfa => self.ld_a_da16(),
-            0xea => self.ld_da16_a(),
-            0x3a => self.ld_a_dhld(),
+            0xFA => self.ld_a_da16(),
+            0xEA => self.ld_da16_a(),
+            0x3A => self.ld_a_dhld(),
             0x32 => self.ld_dhld_a(),
-            0x2a => self.ld_a_dhli(),
+            0x2A => self.ld_a_dhli(),
             0x22 => self.ld_dhli_a(),
-            0xf2 => self.ld_a_dc(),
-            0xe2 => self.ld_dc_a(),
-            0xf0 => self.ld_a_da8(),
-            0xe0 => self.ld_da8_a(),
+            0xF2 => self.ld_a_dc(),
+            0xE2 => self.ld_dc_a(),
+            0xF0 => self.ld_a_da8(),
+            0xE0 => self.ld_da8_a(),
             0x87 | 0x80 | 0x81 | 0x82 | 0x83 | 0x84 | 0x85 | 0x86 => self.add_a_r(opcode),
-            0xc6 => self.add_a_d8(),
-            0x8f | 0x88 | 0x89 | 0x8a | 0x8b | 0x8c | 0x8d | 0x8e => self.adc_a_r(opcode),
-            0xce => self.adc_a_d8(),
+            0xC6 => self.add_a_d8(),
+            0x8F | 0x88 | 0x89 | 0x8A | 0x8B | 0x8C | 0x8D | 0x8E => self.adc_a_r(opcode),
+            0xCE => self.adc_a_d8(),
             0x97 | 0x90 | 0x91 | 0x92 | 0x93 | 0x94 | 0x95 | 0x96 => self.sub_a_r(opcode),
-            0xd6 => self.sub_a_d8(),
-            0x9f | 0x98 | 0x99 | 0x9a | 0x9b | 0x9c | 0x9d | 0x9e => self.sbc_a_r(opcode),
-            0xde => self.sbc_a_d8(),
-            0xbf | 0xb8 | 0xb9 | 0xba | 0xbb | 0xbc | 0xbd | 0xbe => self.cp_a_r(opcode),
-            0xfe => self.cp_a_d8(),
-            0xa7 | 0xa0 | 0xa1 | 0xa2 | 0xa3 | 0xa4 | 0xa5 | 0xa6 => self.and_a_r(opcode),
-            0xe6 => self.and_a_d8(),
-            0xb7 | 0xb0 | 0xb1 | 0xb2 | 0xb3 | 0xb4 | 0xb5 | 0xb6 => self.or_a_r(opcode),
-            0xf6 => self.or_a_d8(),
-            0xaf | 0xa8 | 0xa9 | 0xaa | 0xab | 0xac | 0xad | 0xae => self.xor_a_r(opcode),
-            0xee => self.xor_a_d8(),
-            0x3c | 0x04 | 0x14 | 0x24 => self.inc_hr(opcode),
-            0x3d | 0x05 | 0x15 | 0x25 => self.dec_hr(opcode),
-            0x0c | 0x1c | 0x2c => self.inc_lr(opcode),
-            0x0d | 0x1d | 0x2d => self.dec_lr(opcode),
+            0xD6 => self.sub_a_d8(),
+            0x9F | 0x98 | 0x99 | 0x9A | 0x9B | 0x9C | 0x9D | 0x9E => self.sbc_a_r(opcode),
+            0xDE => self.sbc_a_d8(),
+            0xBF | 0xB8 | 0xB9 | 0xBA | 0xBB | 0xBC | 0xBD | 0xBE => self.cp_a_r(opcode),
+            0xFE => self.cp_a_d8(),
+            0xA7 | 0xA0 | 0xA1 | 0xA2 | 0xA3 | 0xA4 | 0xA5 | 0xA6 => self.and_a_r(opcode),
+            0xE6 => self.and_a_d8(),
+            0xB7 | 0xB0 | 0xB1 | 0xB2 | 0xB3 | 0xB4 | 0xB5 | 0xB6 => self.or_a_r(opcode),
+            0xF6 => self.or_a_d8(),
+            0xAF | 0xA8 | 0xA9 | 0xAA | 0xAB | 0xAC | 0xAD | 0xAE => self.xor_a_r(opcode),
+            0xEE => self.xor_a_d8(),
+            0x3C | 0x04 | 0x14 | 0x24 => self.inc_hr(opcode),
+            0x3D | 0x05 | 0x15 | 0x25 => self.dec_hr(opcode),
+            0x0C | 0x1C | 0x2C => self.inc_lr(opcode),
+            0x0D | 0x1D | 0x2D => self.dec_lr(opcode),
             0x34 => self.inc_dhl(),
             0x35 => self.dec_dhl(),
             0x07 => self.rlca(),
             0x17 => self.rla(),
-            0x0f => self.rrca(),
-            0x1f => self.rra(),
-            0xc3 => self.jp_a16(),
-            0xe9 => self.jp_hl(),
+            0x0F => self.rrca(),
+            0x1F => self.rra(),
+            0xC3 => self.jp_a16(),
+            0xE9 => self.jp_hl(),
             0x18 => self.jr_d(),
-            0xcd => self.call_nn(),
-            0xc9 => self.ret(),
-            0xd9 => self.reti(),
-            0xc2 | 0xca | 0xd2 | 0xda => self.jp_cc(opcode),
+            0xCD => self.call_nn(),
+            0xC9 => self.ret(),
+            0xD9 => self.reti(),
+            0xC2 | 0xCA | 0xD2 | 0xDA => self.jp_cc(opcode),
             0x20 | 0x28 | 0x30 | 0x38 => self.jr_cc(opcode),
-            0xc4 | 0xcc | 0xd4 | 0xdc => self.call_cc_a16(opcode),
-            0xc0 | 0xc8 | 0xd0 | 0xd8 => self.ret_cc(opcode),
-            0xc7 | 0xcf | 0xd7 | 0xdf | 0xe7 | 0xef | 0xf7 | 0xff => self.rst(opcode),
+            0xC4 | 0xCC | 0xD4 | 0xDC => self.call_cc_a16(opcode),
+            0xC0 | 0xC8 | 0xD0 | 0xD8 => self.ret_cc(opcode),
+            0xC7 | 0xCF | 0xD7 | 0xDF | 0xE7 | 0xEF | 0xF7 | 0xFF => self.rst(opcode),
             0x76 => self.halt(),
             0x10 => self.stop(),
-            0xf3 => self.di(),
-            0xfb => self.ei(),
-            0x3f => self.ccf(),
+            0xF3 => self.di(),
+            0xFB => self.ei(),
+            0x3F => self.ccf(),
             0x37 => self.scf(),
             0x27 => self.daa(),
-            0x2f => self.cpl(),
+            0x2F => self.cpl(),
             0x01 | 0x11 | 0x21 | 0x31 => self.ld_rr_d16(opcode),
             0x08 => self.ld_da16_sp(),
-            0xf9 => self.ld16_sp_hl(),
-            0xf8 => self.ld_hl_sp_r8(),
-            0xc5 | 0xd5 | 0xe5 | 0xf5 => self.push_rr(opcode),
-            0xc1 | 0xd1 | 0xe1 | 0xf1 => self.pop_rr(opcode),
+            0xF9 => self.ld16_sp_hl(),
+            0xF8 => self.ld_hl_sp_r8(),
+            0xC5 | 0xD5 | 0xE5 | 0xF5 => self.push_rr(opcode),
+            0xC1 | 0xD1 | 0xE1 | 0xF1 => self.pop_rr(opcode),
             0x09 | 0x19 | 0x29 | 0x39 => self.add_hl_rr(opcode),
-            0xe8 => self.add_sp_r8(),
+            0xE8 => self.add_sp_r8(),
             0x03 | 0x13 | 0x23 | 0x33 => self.inc_rr(opcode),
-            0x0b | 0x1b | 0x2b | 0x3b => self.dec_rr(opcode),
-            0xcb => self.exec_cb(),
+            0x0B | 0x1B | 0x2B | 0x3B => self.dec_rr(opcode),
+            0xCB => self.exec_cb(),
             _ => self.ill(),
         }
     }

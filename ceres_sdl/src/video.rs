@@ -1,5 +1,4 @@
 use {
-    ceres_core::VideoCallbacks,
     core::cmp::min,
     sdl2::{
         rect::{Point, Rect},
@@ -7,12 +6,14 @@ use {
         video::{Window, WindowContext},
         VideoSubsystem,
     },
-    std::time::Instant,
+    std::{ptr, time::Instant},
 };
 
 const MUL: u32 = 4;
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
 const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
+
+static mut VREND: *mut Renderer = ptr::null_mut();
 
 pub struct Renderer {
     canvas: Canvas<Window>,
@@ -23,7 +24,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(title: &str, video_subsystem: &VideoSubsystem) -> Self {
+    pub fn new(title: &str, video_subsystem: &VideoSubsystem) -> Box<Self> {
         let window = video_subsystem
             .window(title, PX_WIDTH * MUL, PX_HEIGHT * MUL)
             .position_centered()
@@ -41,13 +42,19 @@ impl Renderer {
 
         let render_rect = Self::resize_texture(PX_WIDTH * MUL, PX_HEIGHT * MUL);
 
-        Self {
+        let mut rend = Box::new(Self {
             canvas,
             _texture_creator: texture_creator,
             texture,
             render_rect,
             next_frame: Instant::now(),
+        });
+
+        unsafe {
+            VREND = rend.as_mut();
         }
+
+        rend
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -64,9 +71,10 @@ impl Renderer {
     }
 }
 
-impl VideoCallbacks for Renderer {
-    fn draw(&mut self, rgba_data: &[u8]) {
-        self.texture
+pub fn ppu_frame_callback(rgba_data: &[u8]) {
+    unsafe {
+        (*VREND)
+            .texture
             .with_lock(None, move |buf, _pitch| {
                 buf[..(PX_WIDTH as usize * PX_HEIGHT as usize * 4)]
                     .copy_from_slice(&rgba_data[..(PX_WIDTH as usize * PX_HEIGHT as usize * 4)]);
@@ -75,16 +83,17 @@ impl VideoCallbacks for Renderer {
 
         let now = Instant::now();
 
-        if now < self.next_frame {
-            std::thread::sleep(self.next_frame - now);
+        if now < (*VREND).next_frame {
+            std::thread::sleep((*VREND).next_frame - now);
         }
 
-        self.canvas.clear();
-        self.canvas
-            .copy(&self.texture, None, self.render_rect)
+        (*VREND).canvas.clear();
+        (*VREND)
+            .canvas
+            .copy(&(*VREND).texture, None, (*VREND).render_rect)
             .unwrap();
-        self.canvas.present();
+        (*VREND).canvas.present();
 
-        self.next_frame += ceres_core::FRAME_DUR;
+        (*VREND).next_frame += ceres_core::FRAME_DUR;
     }
 }

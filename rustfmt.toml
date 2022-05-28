@@ -8,3 +8,5 @@ version = "Two"
 trailing_semicolon = true
 wrap_comments = true
 comment_width = 60
+hex_literal_case = "Upper"
+edition = "2021"

@@ -41,10 +41,10 @@ impl Gb {
         // TODO: writes from DMA can access OAM on modes 2 and 3
         // with some glitches (RESEARCH) and without trouble during
         // VBLANK (what happens in HBLANK?)
-        self.oam[(self.dma_addr & 0xff) as usize] = val;
+        self.oam[(self.dma_addr & 0xFF) as usize] = val;
 
         self.dma_addr = self.dma_addr.wrapping_add(1);
-        if self.dma_addr & 0xff >= 0xa0 {
+        if self.dma_addr & 0xFF >= 0xA0 {
             self.dma_on = false;
             self.dma_restarting = false;
         }
@@ -72,7 +72,7 @@ impl Gb {
             0x10
         } else {
             self.hdma_state = HdmaState::Sleep;
-            self.hdma5 = 0xff;
+            self.hdma5 = 0xFF;
             let len = self.hdma_len;
             self.hdma_len = 0;
             len

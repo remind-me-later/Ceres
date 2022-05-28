@@ -19,7 +19,7 @@ impl Gb {
         if self.p1_btn & b == 0 {
             self.p1_btn |= b;
 
-            if b & 0x0f != 0 && self.p1_dirs || b & 0xf0 != 0 && self.p1_acts {
+            if b & 0x0F != 0 && self.p1_dirs || b & 0xF0 != 0 && self.p1_acts {
                 self.ifr |= IF_P1_B;
             }
         }
@@ -38,7 +38,7 @@ impl Gb {
         };
 
         let dir = if self.p1_dirs {
-            self.p1_btn & 0xf | 1 << 4
+            self.p1_btn & 0xF | 1 << 4
         } else {
             0
         };
