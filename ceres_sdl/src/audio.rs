@@ -6,13 +6,14 @@ use {
     },
 };
 
-const FREQ: u32 = 96000;
-const AUDIO_BUFFER_SIZE: usize = 512 * 2;
+const FREQ: i32 = 96000;
+const AUDIO_BUFFER_SIZE: usize = 512;
 
 pub struct Renderer {
     stream: AudioQueue<f32>,
     buf: [ceres_core::Sample; AUDIO_BUFFER_SIZE],
     buf_pos: usize,
+    freq: u32,
 }
 
 impl Renderer {
@@ -20,19 +21,22 @@ impl Renderer {
         let audio_subsystem = sdl.audio().unwrap();
 
         let desired_spec = AudioSpecDesired {
-            freq: Some(FREQ as i32),
+            freq: Some(FREQ),
             channels: Some(2),
             samples: Some(512),
         };
 
         let queue = audio_subsystem.open_queue(None, &desired_spec).unwrap();
 
+        let obtained_spec = queue.spec();
+        let freq = obtained_spec.freq as u32;
         queue.resume();
 
         Self {
             stream: queue,
             buf: [ceres_core::Sample::default(); AUDIO_BUFFER_SIZE],
             buf_pos: 0,
+            freq,
         }
     }
 
@@ -44,7 +48,8 @@ impl Renderer {
         if self.buf_pos == AUDIO_BUFFER_SIZE {
             self.buf_pos = 0;
 
-            if self.stream.size() / 4 > FREQ / 4 {
+            // we're running too fast, skip this batch
+            if self.stream.size() / 4 > self.freq / 4 {
                 return;
             }
 
@@ -53,6 +58,6 @@ impl Renderer {
     }
 
     pub fn sample_rate(&self) -> u32 {
-        FREQ
+        self.freq
     }
 }

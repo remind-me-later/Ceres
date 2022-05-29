@@ -1,9 +1,11 @@
 use {
+    ceres_core::FRAME_DUR,
     core::cmp::min,
     sdl2::{
+        pixels::Color,
         rect::{Point, Rect},
-        render::{Canvas, Texture},
-        video::Window,
+        render::{Canvas, Texture, TextureCreator},
+        video::{Window, WindowContext},
         Sdl,
     },
     std::time::Instant,
@@ -15,8 +17,9 @@ const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
 
 pub struct Renderer {
     canvas: Canvas<Window>,
+    _tc: TextureCreator<WindowContext>,
     texture: Texture,
-    render_rect: Rect,
+    dst_rect: Rect,
     next_frame: Instant,
 }
 
@@ -28,32 +31,27 @@ impl Renderer {
             .window(crate::CERES_STR, PX_WIDTH * MUL, PX_HEIGHT * MUL)
             .position_centered()
             .resizable()
+            .opengl()
             .build()
             .unwrap();
-
-        let canvas = window
-            .into_canvas()
-            .present_vsync()
-            .accelerated()
-            .build()
-            .unwrap();
-        let texture = canvas
-            .texture_creator()
+        let canvas = window.into_canvas().present_vsync().build().unwrap();
+        let tc = canvas.texture_creator();
+        let texture = tc
             .create_texture_streaming(sdl2::pixels::PixelFormatEnum::RGBA32, PX_WIDTH, PX_HEIGHT)
             .unwrap();
-
         let render_rect = Self::resize_rect(PX_WIDTH * MUL, PX_HEIGHT * MUL);
 
         Self {
+            _tc: tc,
             canvas,
             texture,
-            render_rect,
+            dst_rect: render_rect,
             next_frame: Instant::now(),
         }
     }
 
     pub fn resize_viewport(&mut self, width: u32, height: u32) {
-        self.render_rect = Self::resize_rect(width, height);
+        self.dst_rect = Self::resize_rect(width, height);
     }
 
     fn resize_rect(win_width: u32, win_height: u32) -> Rect {
@@ -66,7 +64,7 @@ impl Renderer {
 
     pub fn draw_frame(&mut self, rgba: &[u8]) {
         self.texture
-            .with_lock(None, |t, _| t.copy_from_slice(rgba))
+            .with_lock(None, move |t, _| t.copy_from_slice(rgba))
             .unwrap();
 
         let now = Instant::now();
@@ -74,12 +72,13 @@ impl Renderer {
             std::thread::sleep(self.next_frame - now);
         }
 
+        self.canvas.set_draw_color(Color::RGB(0, 0, 0));
         self.canvas.clear();
         self.canvas
-            .copy(&self.texture, None, self.render_rect)
+            .copy(&self.texture, None, self.dst_rect)
             .unwrap();
         self.canvas.present();
 
-        self.next_frame += ceres_core::FRAME_DUR;
+        self.next_frame += FRAME_DUR;
     }
 }

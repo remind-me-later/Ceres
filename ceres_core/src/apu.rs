@@ -34,7 +34,7 @@ impl Gb {
             self.apu_ch3.step_sample();
             self.apu_ch4.step_sample();
 
-            if self.apu_render_timer == self.apu_sample_period {
+            if self.apu_render_timer == self.apu_ext_sample_period {
                 self.apu_render_timer = 0;
                 self.mix_and_render();
             } else {
@@ -104,7 +104,7 @@ impl Gb {
     }
 
     fn reset(&mut self) {
-        self.apu_render_timer = self.apu_sample_period;
+        self.apu_render_timer = self.apu_ext_sample_period;
         self.apu_ch1.reset();
         self.apu_ch2.reset();
         self.apu_ch3.reset();
