@@ -184,7 +184,6 @@ pub struct Gb {
 
     apu_timer: u16,
     apu_render_timer: u32,
-    apu_sample_rate: u32,
     apu_sample_period: u32,
     apu_frame_callback: fn(l: Sample, r: Sample),
     apu_seq_step: u8,
@@ -291,7 +290,6 @@ impl Gb {
             pc: 0,
             boot_rom,
             boot_rom_mapped: true,
-            apu_sample_rate: 0,
             apu_sample_period: 0,
             apu_frame_callback: default_apu_frame_callback,
         }
@@ -306,8 +304,9 @@ impl Gb {
     }
 
     pub fn set_sample_rate(&mut self, sample_rate: u32) {
-        self.apu_sample_rate = sample_rate;
-        self.apu_sample_period = TC_SEC / sample_rate;
+        // add 21700 to account for difference between 60 and 59.7
+        // fps
+        self.apu_sample_period = (TC_SEC + 21070) / sample_rate;
     }
 
     pub fn run_frame(&mut self) {

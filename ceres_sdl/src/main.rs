@@ -1,8 +1,21 @@
 mod audio;
-mod emulator;
 mod video;
 
-use {ceres_core::Model, emulator::Emulator, std::path::Path};
+use {
+    ceres_core::{Cartridge, Gb, Model, Sample},
+    sdl2::{
+        controller::GameController,
+        event::{Event, WindowEvent},
+        keyboard::Scancode,
+        Sdl,
+    },
+    std::{
+        fs::{self, File},
+        io::{Read, Write},
+        path::{Path, PathBuf},
+        ptr::null_mut,
+    },
+};
 
 const CERES_STR: &str = "Ceres";
 const HELP: &str = "TODO";
@@ -24,7 +37,7 @@ fn main() {
     });
 
     let rom_path = Path::new(&args.rom).to_path_buf();
-    let emulator = Emulator::new(model, &rom_path);
+    let emulator = Emu::new(model, &rom_path);
 
     emulator.run();
 }
@@ -59,4 +72,196 @@ fn parse_args() -> Result<AppArgs, pico_args::Error> {
     }
 
     Ok(args)
+}
+
+static mut EMU: *mut Emu = null_mut();
+
+pub struct Emu {
+    sdl: Sdl,
+    gb: Gb,
+    has_focus: bool,
+    sav_path: PathBuf,
+    quit: bool,
+    video: video::Renderer,
+    audio: audio::Renderer,
+}
+
+impl Emu {
+    pub fn new(model: Model, rom_path: &Path) -> Box<Self> {
+        let sdl = sdl2::init().unwrap();
+
+        let sav_path = rom_path.with_extension("sav");
+        let cart = {
+            let rom = read_file(rom_path).unwrap();
+            let ram = read_file(&sav_path).ok();
+            Cartridge::new(rom, ram).unwrap()
+        };
+
+        let audio = audio::Renderer::new(&sdl);
+        let video = video::Renderer::new(&sdl);
+
+        let mut gb = Gb::new(model, cart);
+        gb.set_ppu_frame_callback(ppu_frame_callback);
+        gb.set_sample_rate(audio.sample_rate());
+        gb.set_apu_frame_callback(apu_frame_callback);
+
+        let res = Self {
+            sdl,
+            gb,
+            has_focus: false,
+            sav_path,
+            video,
+            audio,
+            quit: false,
+        };
+        let mut boxed = Box::new(res);
+
+        unsafe {
+            EMU = boxed.as_mut();
+        }
+
+        boxed
+    }
+
+    pub fn run(mut self) {
+        let _controller = self.init_controller();
+        let mut events = self.sdl.event_pump().unwrap();
+
+        while !self.quit {
+            events.poll_iter().for_each(|e| self.handle_event(e));
+            self.gb.run_frame();
+        }
+
+        if let Some(cart_ram) = self.gb.save_data() {
+            let mut f = File::create(self.sav_path).unwrap();
+            f.write_all(cart_ram).unwrap();
+        }
+    }
+
+    fn init_controller(&self) -> Option<GameController> {
+        let gcs = self.sdl.game_controller().unwrap();
+        let avail = gcs.num_joysticks().unwrap();
+
+        (0..avail).find_map(|id| {
+            gcs.is_game_controller(id)
+                .then(|| gcs.open(id).ok())
+                .flatten()
+        })
+    }
+
+    fn handle_event(&mut self, event: Event) {
+        match event {
+            Event::Quit { .. } => self.quit = true,
+            Event::Window { win_event, .. } => match win_event {
+                WindowEvent::Resized(width, height) => {
+                    self.video.resize_viewport(width as u32, height as u32)
+                }
+                WindowEvent::Close => self.quit = true,
+                WindowEvent::FocusGained => self.has_focus = true,
+                WindowEvent::FocusLost => self.has_focus = false,
+                _ => (),
+            },
+            Event::ControllerButtonDown { button, .. } => {
+                use {ceres_core::Button, sdl2::controller};
+
+                if !self.has_focus {
+                    return;
+                }
+
+                match button {
+                    controller::Button::DPadUp => self.gb.press(Button::Up),
+                    controller::Button::DPadLeft => self.gb.press(Button::Left),
+                    controller::Button::DPadDown => self.gb.press(Button::Down),
+                    controller::Button::DPadRight => self.gb.press(Button::Right),
+                    controller::Button::B => self.gb.press(Button::B),
+                    controller::Button::A => self.gb.press(Button::A),
+                    controller::Button::Start => self.gb.press(Button::Start),
+                    controller::Button::Back => self.gb.press(Button::Select),
+                    _ => (),
+                }
+            }
+            Event::ControllerButtonUp { button, .. } => {
+                use {ceres_core::Button, sdl2::controller};
+
+                if !self.has_focus {
+                    return;
+                }
+
+                match button {
+                    controller::Button::DPadUp => self.gb.release(Button::Up),
+                    controller::Button::DPadLeft => self.gb.release(Button::Left),
+                    controller::Button::DPadDown => self.gb.release(Button::Down),
+                    controller::Button::DPadRight => self.gb.release(Button::Right),
+                    controller::Button::B => self.gb.release(Button::B),
+                    controller::Button::A => self.gb.release(Button::A),
+                    controller::Button::Start => self.gb.release(Button::Start),
+                    controller::Button::Back => self.gb.release(Button::Select),
+                    _ => (),
+                }
+            }
+            Event::KeyDown { scancode, .. } => {
+                use ceres_core::Button;
+
+                if !self.has_focus {
+                    return;
+                }
+
+                if let Some(key) = scancode {
+                    match key {
+                        Scancode::W => self.gb.press(Button::Up),
+                        Scancode::A => self.gb.press(Button::Left),
+                        Scancode::S => self.gb.press(Button::Down),
+                        Scancode::D => self.gb.press(Button::Right),
+                        Scancode::K => self.gb.press(Button::A),
+                        Scancode::L => self.gb.press(Button::B),
+                        Scancode::Return => self.gb.press(Button::Start),
+                        Scancode::Backspace => self.gb.press(Button::Select),
+                        _ => (),
+                    }
+                }
+            }
+            Event::KeyUp { scancode, .. } => {
+                use ceres_core::Button;
+
+                if !self.has_focus {
+                    return;
+                }
+
+                if let Some(key) = scancode {
+                    match key {
+                        Scancode::W => self.gb.release(Button::Up),
+                        Scancode::A => self.gb.release(Button::Left),
+                        Scancode::S => self.gb.release(Button::Down),
+                        Scancode::D => self.gb.release(Button::Right),
+                        Scancode::K => self.gb.release(Button::A),
+                        Scancode::L => self.gb.release(Button::B),
+                        Scancode::Return => self.gb.release(Button::Start),
+                        Scancode::Backspace => self.gb.release(Button::Select),
+                        _ => (),
+                    }
+                }
+            }
+            _ => (),
+        }
+    }
+}
+
+fn read_file(path: &Path) -> Result<Box<[u8]>, ()> {
+    let mut f = File::open(path).map_err(|_| ())?;
+    let metadata = fs::metadata(&path).unwrap();
+    let mut buffer = vec![0; metadata.len() as usize];
+    f.read_exact(&mut buffer).unwrap();
+    Ok(buffer.into_boxed_slice())
+}
+
+fn apu_frame_callback(l: Sample, r: Sample) {
+    unsafe {
+        (*EMU).audio.push_frame(l, r);
+    }
+}
+
+fn ppu_frame_callback(rgba: &[u8]) {
+    unsafe {
+        (*EMU).video.draw_frame(rgba);
+    }
 }

@@ -4,13 +4,10 @@ use {
         audio::{AudioQueue, AudioSpecDesired},
         Sdl,
     },
-    std::ptr,
 };
 
 const FREQ: u32 = 96000;
 const AUDIO_BUFFER_SIZE: usize = 512 * 2;
-
-static mut AREND: *mut Renderer = ptr::null_mut();
 
 pub struct Renderer {
     stream: AudioQueue<f32>,
@@ -19,7 +16,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(sdl: &Sdl) -> Box<Self> {
+    pub fn new(sdl: &Sdl) -> Self {
         let audio_subsystem = sdl.audio().unwrap();
 
         let desired_spec = AudioSpecDesired {
@@ -32,37 +29,30 @@ impl Renderer {
 
         queue.resume();
 
-        let mut rend = Box::new(Self {
+        Self {
             stream: queue,
             buf: [ceres_core::Sample::default(); AUDIO_BUFFER_SIZE],
             buf_pos: 0,
-        });
-
-        unsafe {
-            AREND = rend.as_mut();
         }
+    }
 
-        rend
+    pub fn push_frame(&mut self, l: Sample, r: Sample) {
+        self.buf[self.buf_pos] = l;
+        self.buf[self.buf_pos + 1] = r;
+        self.buf_pos += 2;
+
+        if self.buf_pos == AUDIO_BUFFER_SIZE {
+            self.buf_pos = 0;
+
+            if self.stream.size() / 4 > FREQ / 4 {
+                return;
+            }
+
+            self.stream.queue_audio(&self.buf).unwrap();
+        }
     }
 
     pub fn sample_rate(&self) -> u32 {
         FREQ
-    }
-}
-
-pub fn apu_frame_callback(left: Sample, right: Sample) {
-    unsafe {
-        if (*AREND).stream.size() > FREQ / 2 {
-            return;
-        }
-
-        (*AREND).buf[(*AREND).buf_pos] = left;
-        (*AREND).buf[(*AREND).buf_pos + 1] = right;
-        (*AREND).buf_pos += 2;
-
-        if (*AREND).buf_pos == AUDIO_BUFFER_SIZE {
-            (*AREND).stream.queue_audio(&(*AREND).buf).unwrap();
-            (*AREND).buf_pos = 0;
-        }
     }
 }
