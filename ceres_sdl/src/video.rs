@@ -6,42 +6,34 @@ use {
     },
     std::{
         cmp::min,
-        ffi::{c_void, CString},
+        ffi::{CStr, CString},
         mem::size_of,
         ptr,
         time::Instant,
     },
 };
 
-const INDICES: [GLubyte; 6] = [
-    0, 1, 3, // first triangle
-    1, 2, 3, // second triangle
+const VERTICES: [GLbyte; 8] = [
+    -1, -1, // bottom left
+    -1, 1, // top left
+    1, -1, // bottom right
+    1, 1, // top right
 ];
 
-const VERTICES: [GLfloat; 16] = [
-    // positions  // texture coords
-    1.0, 1.0, 1.0, 0.0, // top right
-    1.0, -1.0, 1.0, 1.0, // bottom right
-    -1.0, -1.0, 0.0, 1.0, // bottom left
-    -1.0, 1.0, 0.0, 0.0, // top left
-];
-
-const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
-const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
+const PX_WIDTH: u32 = ceres_core::PX_WIDTH as _;
+const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as _;
 const MUL: u32 = 4;
 
 pub struct Renderer {
-    window: Window,
+    win: Window,
     next_frame: Instant,
     vbo: GLuint,
     vao: GLuint,
-    ebo: GLuint,
-    program: GlProgram,
+    program: Shader,
     texture: GLuint,
-    transform_loc: GLint,
     // keep them safe and cozy
     _video: VideoSubsystem,
-    _context: GLContext,
+    _ctx: GLContext,
 }
 
 impl Renderer {
@@ -59,25 +51,21 @@ impl Renderer {
                 gl_attr.set_context_no_error(true);
             }
 
-            let mut window = video
+            let mut win = video
                 .window(crate::CERES_STR, PX_WIDTH * MUL, PX_HEIGHT * MUL)
                 .opengl()
                 .position_centered()
                 .resizable()
                 .build()
                 .unwrap();
+            win.set_minimum_size(PX_WIDTH, PX_HEIGHT).unwrap();
 
-            window.set_minimum_size(PX_WIDTH, PX_HEIGHT).unwrap();
-
-            let context = window.gl_create_context().unwrap();
-            window.gl_make_current(&context).unwrap();
+            let ctx = win.gl_create_context().unwrap();
+            win.gl_make_current(&ctx).unwrap();
 
             gl::load_with(|s| video.gl_get_proc_address(s).cast());
 
-            let program = GlProgram::new(
-                include_str!("shader/vs.vert"),
-                include_str!("shader/fs.frag"),
-            );
+            let program = Shader::new();
 
             let mut vao = 0;
             gl::GenVertexArrays(1, &mut vao);
@@ -88,60 +76,32 @@ impl Renderer {
             gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
             gl::BufferData(
                 gl::ARRAY_BUFFER,
-                (VERTICES.len() * size_of::<GLfloat>()) as GLsizeiptr,
+                (VERTICES.len() * size_of::<GLfloat>()) as _,
                 VERTICES.as_ptr().cast(),
                 gl::STATIC_DRAW,
             );
 
-            let mut ebo = 0;
-            gl::GenBuffers(1, &mut ebo);
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
-            gl::BufferData(
-                gl::ELEMENT_ARRAY_BUFFER,
-                (INDICES.len() * size_of::<GLubyte>()) as GLsizeiptr,
-                INDICES.as_ptr().cast(),
-                gl::STATIC_DRAW,
-            );
-
             // position attribute
-            let stride = (4 * size_of::<GLfloat>()) as GLsizei;
-            gl::VertexAttribPointer(0, 2, gl::FLOAT, gl::FALSE, stride, ptr::null());
+            let stride = (2 * size_of::<GLbyte>()) as _;
+            gl::VertexAttribPointer(0, 2, gl::BYTE, gl::FALSE, stride, ptr::null());
             gl::EnableVertexAttribArray(0);
-
-            // texture coordinates attribute
-            gl::VertexAttribPointer(
-                1,
-                2,
-                gl::FLOAT,
-                gl::FALSE,
-                stride,
-                (2 * size_of::<GLfloat>()) as *const c_void,
-            );
-            gl::EnableVertexAttribArray(1);
 
             // create texture
             let mut texture = 0;
             gl::GenTextures(1, &mut texture);
             gl::BindTexture(gl::TEXTURE_2D, texture);
-
-            // scaling behaviour
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
-
-            // get transform pointer
-            let transform_loc = program.get_uniform_location(b"transform\0".as_ptr().cast());
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as _);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as _);
 
             let mut video_renderer = Renderer {
-                window,
+                win,
                 vbo,
                 vao,
-                ebo,
                 program,
                 texture,
-                transform_loc,
                 next_frame: Instant::now(),
                 _video: video,
-                _context: context,
+                _ctx: ctx,
             };
 
             video_renderer.resize_viewport(PX_WIDTH * MUL, PX_HEIGHT * MUL);
@@ -150,48 +110,35 @@ impl Renderer {
         }
     }
 
-    pub fn resize_viewport(&mut self, width: u32, height: u32) {
-        let multiplier = min(width / PX_WIDTH, height / PX_HEIGHT);
-        let surface_width = PX_WIDTH * multiplier;
-        let surface_height = PX_HEIGHT * multiplier;
-
-        let x = surface_width as f32 / width as f32;
-        let y = surface_height as f32 / height as f32;
-
-        // hand-written scale matrix
-        let t = [
-            x, 0.0, 0.0, 0.0, //
-            0.0, y, 0.0, 0.0, //
-            0.0, 0.0, 1.0, 0.0, //
-            0.0, 0.0, 0.0, 1.0,
-        ];
+    pub fn resize_viewport(&mut self, w: u32, h: u32) {
+        let mul = min(w / PX_WIDTH, h / PX_HEIGHT);
+        let img_w = PX_WIDTH * mul;
+        let img_h = PX_HEIGHT * mul;
+        let a = img_w as f32 / w as f32;
+        let b = img_h as f32 / h as f32;
 
         unsafe {
-            gl::Viewport(0, 0, width as i32, height as i32);
+            gl::Viewport(0, 0, w as i32, h as i32);
             self.program.bind();
-            gl::UniformMatrix4fv(self.transform_loc, 1, gl::FALSE, t.as_ptr());
+            gl::Uniform2f(self.program.transform_loc, a, b);
         }
-    }
-
-    unsafe fn update_texture(&mut self, rgba: &[u8]) {
-        // TODO: texture streaming
-        gl::BindTexture(gl::TEXTURE_2D, self.texture);
-        gl::TexImage2D(
-            gl::TEXTURE_2D,
-            0,
-            gl::RGBA as GLint,
-            ceres_core::PX_WIDTH as GLint,
-            ceres_core::PX_HEIGHT as GLint,
-            0,
-            gl::RGBA,
-            gl::UNSIGNED_BYTE,
-            rgba.as_ptr().cast(),
-        );
     }
 
     pub fn draw_frame(&mut self, rgba: &[u8]) {
         unsafe {
-            self.update_texture(rgba);
+            // TODO: texture streaming
+            gl::BindTexture(gl::TEXTURE_2D, self.texture);
+            gl::TexImage2D(
+                gl::TEXTURE_2D,
+                0,
+                gl::RGBA as _,
+                PX_WIDTH as _,
+                PX_HEIGHT as _,
+                0,
+                gl::RGBA,
+                gl::UNSIGNED_BYTE,
+                rgba.as_ptr().cast(),
+            );
 
             let now = Instant::now();
             if now < self.next_frame {
@@ -202,9 +149,9 @@ impl Renderer {
             gl::Clear(gl::COLOR_BUFFER_BIT);
             self.program.bind();
             gl::BindVertexArray(self.vao);
-            gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_BYTE, ptr::null());
+            gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
 
-            self.window.gl_swap_window();
+            self.win.gl_swap_window();
 
             self.next_frame += ceres_core::FRAME_DUR;
         }
@@ -215,95 +162,92 @@ impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
             gl::DeleteBuffers(1, &self.vbo);
-            gl::DeleteBuffers(1, &self.ebo);
             gl::DeleteVertexArrays(1, &self.vao);
         }
     }
 }
 
-struct GlProgram {
+struct Shader {
     id: GLuint,
-    vert_shader: GLuint,
-    frag_shader: GLuint,
+    transform_loc: GLint,
+    vert_id: GLuint,
+    frag_id: GLuint,
 }
 
-impl GlProgram {
-    pub unsafe fn new(vert_src: &str, frag_src: &str) -> Self {
+impl Shader {
+    pub unsafe fn new() -> Self {
+        // compile fragment shader
+        let vert_id = gl::CreateShader(gl::VERTEX_SHADER);
+        let src = CString::new(include_str!("shader/vs.vert")).unwrap();
+        gl::ShaderSource(vert_id, 1, &(src.as_ptr().cast()), ptr::null());
+        gl::CompileShader(vert_id);
+        Self::check_compile(vert_id, true);
+
+        // compile fragment shader
+        let frag_id = gl::CreateShader(gl::FRAGMENT_SHADER);
+        let src = CString::new(include_str!("shader/fs.frag")).unwrap();
+        gl::ShaderSource(frag_id, 1, &(src.as_ptr().cast()), ptr::null());
+        gl::CompileShader(frag_id);
+        Self::check_compile(frag_id, true);
+
+        // link program
         let id = gl::CreateProgram();
-        let vert_shader = Self::shader_from_src(vert_src, gl::VERTEX_SHADER);
-        let frag_shader = Self::shader_from_src(frag_src, gl::FRAGMENT_SHADER);
-
-        gl::AttachShader(id, vert_shader);
-        gl::AttachShader(id, frag_shader);
+        gl::AttachShader(id, vert_id);
+        gl::AttachShader(id, frag_id);
         gl::LinkProgram(id);
-        // Get the link status
-        let mut status = gl::FALSE as GLint;
-        gl::GetProgramiv(id, gl::LINK_STATUS, &mut status);
+        Self::check_compile(id, false);
 
-        if status != gl::TRUE as GLint {
-            let mut len: GLint = 0;
-            gl::GetProgramiv(id, gl::INFO_LOG_LENGTH, &mut len);
-            let mut buf = Vec::with_capacity(len as usize);
-            gl::GetProgramInfoLog(id, len, ptr::null_mut(), buf.as_mut_ptr() as *mut GLchar);
-            buf.pop(); // ignore '/0'
-
-            let msg = core::str::from_utf8(&buf)
-                .unwrap_or("ShaderInfoLog not valid utf8")
-                .to_owned();
-
-            panic!("{msg}");
-        }
+        // get transform
+        let transform_loc = gl::GetUniformLocation(id, b"transform\0".as_ptr().cast());
 
         Self {
             id,
-            vert_shader,
-            frag_shader,
+            transform_loc,
+            vert_id,
+            frag_id,
         }
     }
 
-    unsafe fn shader_from_src(src: &str, shader_type: GLenum) -> GLuint {
-        let id = gl::CreateShader(shader_type);
-        // Attempt to compile the shader
-        let c_string = CString::new(src).unwrap();
-        gl::ShaderSource(id, 1, &(c_string.as_ptr().cast()), ptr::null());
-        gl::CompileShader(id);
+    unsafe fn check_compile(id: GLuint, is_shader: bool) {
+        let mut status = gl::FALSE as _;
 
-        // Get the compile status
-        let mut status = gl::FALSE as GLint;
-        gl::GetShaderiv(id, gl::COMPILE_STATUS, &mut status);
-
-        if status != gl::TRUE as GLint {
-            let mut len = 0;
-            gl::GetShaderiv(id, gl::INFO_LOG_LENGTH, &mut len);
-            let mut buf = Vec::with_capacity(len as usize);
-            gl::GetShaderInfoLog(id, len, ptr::null_mut(), buf.as_mut_ptr() as *mut GLchar);
-            buf.pop(); // ignore '/0'
-
-            let msg = core::str::from_utf8(&buf)
-                .unwrap_or("ShaderInfoLog not valid utf8")
-                .to_owned();
-
-            panic!("{msg}");
+        if is_shader {
+            gl::GetShaderiv(id, gl::COMPILE_STATUS, &mut status);
+        } else {
+            gl::GetProgramiv(id, gl::LINK_STATUS, &mut status);
         }
 
-        id
+        if status == gl::TRUE as _ {
+            return;
+        }
+
+        let mut buf = [0; 1024];
+
+        if is_shader {
+            gl::GetShaderInfoLog(id, 1024, ptr::null_mut(), buf.as_mut_ptr() as _);
+        } else {
+            gl::GetProgramInfoLog(id, 1024, ptr::null_mut(), buf.as_mut_ptr() as _);
+        }
+
+        let msg = CStr::from_bytes_with_nul(&buf)
+            .expect("ShaderInfoLog not valid utf8")
+            .to_str()
+            .unwrap();
+
+        panic!("{msg}");
     }
 
     pub unsafe fn bind(&self) {
         gl::UseProgram(self.id);
     }
-
-    pub unsafe fn get_uniform_location(&self, name: *const GLchar) -> GLint {
-        gl::GetUniformLocation(self.id, name)
-    }
 }
 
-impl Drop for GlProgram {
+impl Drop for Shader {
     fn drop(&mut self) {
         unsafe {
             gl::DeleteProgram(self.id);
-            gl::DeleteShader(self.vert_shader);
-            gl::DeleteShader(self.frag_shader);
+            gl::DeleteShader(self.vert_id);
+            gl::DeleteShader(self.frag_id);
         }
     }
 }

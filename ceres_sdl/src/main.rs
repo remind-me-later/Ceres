@@ -1,8 +1,6 @@
-mod audio;
-mod video;
-
 use {
     ceres_core::{Cartridge, Gb, Model, Sample},
+    pico_args::Arguments,
     sdl2::{
         controller::GameController,
         event::{Event, WindowEvent},
@@ -16,6 +14,9 @@ use {
         ptr::null_mut,
     },
 };
+
+mod audio;
+mod video;
 
 const CERES_STR: &str = "Ceres";
 const HELP: &str = "TODO";
@@ -48,7 +49,7 @@ struct AppArgs {
 }
 
 fn parse_args() -> Result<AppArgs, pico_args::Error> {
-    let mut pargs = pico_args::Arguments::from_env();
+    let mut pargs = Arguments::from_env();
 
     // Help has a higher priority and should be handled
     // separately.

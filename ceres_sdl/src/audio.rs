@@ -10,8 +10,8 @@ const FREQ: i32 = 96000;
 const AUDIO_BUFFER_SIZE: usize = 512;
 
 pub struct Renderer {
-    stream: AudioQueue<f32>,
-    buf: [ceres_core::Sample; AUDIO_BUFFER_SIZE],
+    stream: AudioQueue<Sample>,
+    buf: [Sample; AUDIO_BUFFER_SIZE],
     buf_pos: usize,
     freq: u32,
 }
@@ -34,7 +34,7 @@ impl Renderer {
 
         Self {
             stream: queue,
-            buf: [ceres_core::Sample::default(); AUDIO_BUFFER_SIZE],
+            buf: [Sample::default(); AUDIO_BUFFER_SIZE],
             buf_pos: 0,
             freq,
         }
