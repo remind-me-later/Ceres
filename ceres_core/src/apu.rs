@@ -14,7 +14,7 @@ const WAV_PERIOD_MUL: u16 = 2;
 const NOISE_MAX_LEN: u16 = 64;
 
 impl Gb {
-    pub fn run_apu(&mut self, mut cycles: u32) {
+    pub(crate) fn run_apu(&mut self, mut cycles: u32) {
         if !self.apu_on {
             return;
         }
@@ -117,7 +117,7 @@ impl Gb {
     }
 
     #[must_use]
-    pub fn read_nr50(&self) -> u8 {
+    pub(crate) fn read_nr50(&self) -> u8 {
         self.apu_r_vol
             | (self.apu_r_vin as u8) << 3
             | self.apu_l_vol << 4
@@ -125,7 +125,7 @@ impl Gb {
     }
 
     #[must_use]
-    pub fn read_nr52(&self) -> u8 {
+    pub(crate) fn read_nr52(&self) -> u8 {
         (self.apu_on as u8) << 7
             | 0x70
             | (self.apu_ch4.on() as u8) << 3
@@ -134,11 +134,7 @@ impl Gb {
             | self.apu_ch1.on() as u8
     }
 
-    pub fn write_wave(&mut self, addr: u8, val: u8) {
-        self.apu_ch3.write_wave_ram(addr, val);
-    }
-
-    pub fn write_nr50(&mut self, val: u8) {
+    pub(crate) fn write_nr50(&mut self, val: u8) {
         if self.apu_on {
             self.apu_r_vol = val & 7;
             self.apu_r_vin = val & 8 != 0;
@@ -147,13 +143,13 @@ impl Gb {
         }
     }
 
-    pub fn write_nr51(&mut self, val: u8) {
+    pub(crate) fn write_nr51(&mut self, val: u8) {
         if self.apu_on {
             self.nr51 = val;
         }
     }
 
-    pub fn write_nr52(&mut self, val: u8) {
+    pub(crate) fn write_nr52(&mut self, val: u8) {
         self.apu_on = val & 0x80 != 0;
         if !self.apu_on {
             self.reset();
@@ -191,7 +187,7 @@ impl<'a> Iterator for ChOutIter<'a> {
     }
 }
 
-pub struct Square1 {
+pub(crate) struct Square1 {
     on: bool,
     dac_on: bool,
     snd_counter: bool,
@@ -222,7 +218,7 @@ pub struct Square1 {
 }
 
 impl Square1 {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             sw_period: 8,
             sw_dec: false,
@@ -249,7 +245,7 @@ impl Square1 {
         }
     }
 
-    pub fn reset(&mut self) {
+    fn reset(&mut self) {
         self.on = false;
         self.dac_on = true;
         self.snd_len = 0;
@@ -285,23 +281,23 @@ impl Square1 {
         }
     }
 
-    pub fn read_nr10(&self) -> u8 {
+    pub(crate) fn read_nr10(&self) -> u8 {
         0x80 | ((self.sw_period as u8 & 7) << 4) | ((!self.sw_dec as u8) << 3) | self.sw_shift
     }
 
-    pub fn read_nr11(&self) -> u8 {
+    pub(crate) fn read_nr11(&self) -> u8 {
         0x3F | ((self.duty as u8) << 6)
     }
 
-    pub fn read_nr12(&self) -> u8 {
+    pub(crate) fn read_nr12(&self) -> u8 {
         self.env_base_vol << 4 | self.env_inc as u8 | self.env_period & 7
     }
 
-    pub fn read_nr14(&self) -> u8 {
+    pub(crate) fn read_nr14(&self) -> u8 {
         0xBF | ((self.snd_counter as u8) << 6)
     }
 
-    pub fn write_nr10(&mut self, val: u8) {
+    pub(crate) fn write_nr10(&mut self, val: u8) {
         self.sw_period = (val >> 4) & 7;
         if self.sw_period == 0 {
             self.sw_period = 8;
@@ -310,12 +306,12 @@ impl Square1 {
         self.sw_shift = val & 7;
     }
 
-    pub fn write_nr11(&mut self, val: u8) {
+    pub(crate) fn write_nr11(&mut self, val: u8) {
         self.duty = (val >> 6) & 3;
         self.snd_len = SQ_MAX_LEN - ((val as u16) & (SQ_MAX_LEN - 1));
     }
 
-    pub fn write_nr12(&mut self, val: u8) {
+    pub(crate) fn write_nr12(&mut self, val: u8) {
         // TODO: likely wrong, value == 0x7 || value == 0x0 to pass
         // Blargg 2 test
         if val == 7 {
@@ -338,11 +334,11 @@ impl Square1 {
         self.env_vol = self.env_base_vol;
     }
 
-    pub fn write_nr13(&mut self, val: u8) {
+    pub(crate) fn write_nr13(&mut self, val: u8) {
         self.freq = (self.freq & 0x700) | (val as u16);
     }
 
-    pub fn write_nr14(&mut self, val: u8) {
+    pub(crate) fn write_nr14(&mut self, val: u8) {
         self.freq = (val as u16 & 7) << 8 | (self.freq & 0xFF);
         self.snd_counter = val & 0x40 != 0;
 
@@ -375,7 +371,7 @@ impl Square1 {
         }
     }
 
-    pub fn step_sample(&mut self) {
+    fn step_sample(&mut self) {
         if !(self.on && self.dac_on) {
             return;
         }
@@ -395,7 +391,7 @@ impl Square1 {
         }
     }
 
-    pub fn step_sweep(&mut self) {
+    fn step_sweep(&mut self) {
         if self.on() {
             self.sw_timer -= 1;
             if self.sw_timer == 0 {
@@ -407,7 +403,7 @@ impl Square1 {
         }
     }
 
-    pub fn step_envelope(&mut self) {
+    fn step_envelope(&mut self) {
         if !(self.env_on && self.on && self.dac_on) {
             return;
         }
@@ -429,15 +425,15 @@ impl Square1 {
         }
     }
 
-    pub fn out(&self) -> u8 {
+    fn out(&self) -> u8 {
         self.out * self.env_vol
     }
 
-    pub fn on(&self) -> bool {
+    fn on(&self) -> bool {
         self.on && self.dac_on
     }
 
-    pub fn step_len(&mut self) {
+    fn step_len(&mut self) {
         if self.snd_counter && self.snd_len > 0 {
             self.snd_len -= 1;
 
@@ -447,13 +443,13 @@ impl Square1 {
         }
     }
 
-    pub fn set_period_half(&mut self, p_half: u8) {
+    fn set_period_half(&mut self, p_half: u8) {
         debug_assert!(p_half == 0 || p_half == 1);
         self.p_half = p_half;
     }
 }
 
-pub struct Square2 {
+pub(crate) struct Square2 {
     on: bool,
     dac_on: bool,
     snd_counter: bool,
@@ -476,7 +472,7 @@ pub struct Square2 {
 }
 
 impl Square2 {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             freq: 0,
             period: SQ_FREQ_P_MUL * 2048,
@@ -497,7 +493,7 @@ impl Square2 {
         }
     }
 
-    pub fn reset(&mut self) {
+    fn reset(&mut self) {
         self.on = false;
         self.dac_on = true;
         self.snd_len = 0;
@@ -513,24 +509,24 @@ impl Square2 {
         self.env_on = false;
     }
 
-    pub fn read_nr21(&self) -> u8 {
+    pub(crate) fn read_nr21(&self) -> u8 {
         0x3F | ((self.duty as u8) << 6)
     }
 
-    pub fn read_nr22(&self) -> u8 {
+    pub(crate) fn read_nr22(&self) -> u8 {
         self.env_base_vol << 4 | self.env_inc as u8 | self.env_period & 7
     }
 
-    pub fn read_nr24(&self) -> u8 {
+    pub(crate) fn read_nr24(&self) -> u8 {
         0xBF | ((self.snd_counter as u8) << 6)
     }
 
-    pub fn write_nr21(&mut self, val: u8) {
+    pub(crate) fn write_nr21(&mut self, val: u8) {
         self.duty = (val >> 6) & 3;
         self.snd_len = SQ_MAX_LEN - ((val as u16) & (SQ_MAX_LEN - 1));
     }
 
-    pub fn write_nr22(&mut self, val: u8) {
+    pub(crate) fn write_nr22(&mut self, val: u8) {
         // TODO: likely wrong, value == 0x7 || value == 0x0 to pass
         // Blargg 2 test
         if val == 7 {
@@ -553,11 +549,11 @@ impl Square2 {
         self.env_vol = self.env_base_vol;
     }
 
-    pub fn write_nr23(&mut self, val: u8) {
+    pub(crate) fn write_nr23(&mut self, val: u8) {
         self.freq = (self.freq & 0x700) | (val as u16);
     }
 
-    pub fn write_nr24(&mut self, val: u8) {
+    pub(crate) fn write_nr24(&mut self, val: u8) {
         self.freq = (val as u16 & 7) << 8 | (self.freq & 0xFF);
         self.snd_counter = val & 0x40 != 0;
 
@@ -582,7 +578,7 @@ impl Square2 {
         }
     }
 
-    pub fn step_sample(&mut self) {
+    fn step_sample(&mut self) {
         if !(self.on && self.dac_on) {
             return;
         }
@@ -602,7 +598,7 @@ impl Square2 {
         }
     }
 
-    pub fn step_envelope(&mut self) {
+    fn step_envelope(&mut self) {
         if !(self.env_on && self.on && self.dac_on) {
             return;
         }
@@ -624,15 +620,15 @@ impl Square2 {
         }
     }
 
-    pub fn out(&self) -> u8 {
+    fn out(&self) -> u8 {
         self.out * self.env_vol
     }
 
-    pub fn on(&self) -> bool {
+    fn on(&self) -> bool {
         self.on && self.dac_on
     }
 
-    pub fn step_len(&mut self) {
+    fn step_len(&mut self) {
         if self.snd_counter && self.snd_len > 0 {
             self.snd_len -= 1;
 
@@ -642,13 +638,13 @@ impl Square2 {
         }
     }
 
-    pub fn set_period_half(&mut self, p_half: u8) {
+    fn set_period_half(&mut self, p_half: u8) {
         debug_assert!(p_half == 0 || p_half == 1);
         self.p_half = p_half;
     }
 }
 
-pub struct Wave {
+pub(crate) struct Wave {
     on: bool,
     dac_on: bool,
     use_len: bool,
@@ -665,7 +661,7 @@ pub struct Wave {
 }
 
 impl Wave {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             ram: [0; WAV_RAM_SIZE as usize],
             vol: 0,
@@ -683,7 +679,7 @@ impl Wave {
         }
     }
 
-    pub fn reset(&mut self) {
+    fn reset(&mut self) {
         self.on = false;
         self.dac_on = true;
         self.snd_len = 0;
@@ -696,12 +692,12 @@ impl Wave {
         self.nr30 = 0;
     }
 
-    pub fn read_wave_ram(&self, addr: u8) -> u8 {
+    pub(crate) fn read_wave_ram(&self, addr: u8) -> u8 {
         let index = (addr - 0x30) as usize;
         self.ram[index]
     }
 
-    pub fn write_wave_ram(&mut self, addr: u8, val: u8) {
+    pub(crate) fn write_wave_ram(&mut self, addr: u8, val: u8) {
         let index = (addr - 0x30) as usize;
         self.ram[index] = val;
         // upper 4 bits first
@@ -709,19 +705,19 @@ impl Wave {
         self.samples[index * 2 + 1] = val & 0xF;
     }
 
-    pub fn read_nr30(&self) -> u8 {
+    pub(crate) fn read_nr30(&self) -> u8 {
         self.nr30 | 0x7F
     }
 
-    pub fn read_nr32(&self) -> u8 {
+    pub(crate) fn read_nr32(&self) -> u8 {
         0x9F | (self.vol << 5)
     }
 
-    pub fn read_nr34(&self) -> u8 {
+    pub(crate) fn read_nr34(&self) -> u8 {
         0xBF | ((self.use_len as u8) << 6)
     }
 
-    pub fn write_nr30(&mut self, val: u8) {
+    pub(crate) fn write_nr30(&mut self, val: u8) {
         self.nr30 = val;
         if val & 0x80 == 0 {
             self.on = false;
@@ -731,19 +727,19 @@ impl Wave {
         }
     }
 
-    pub fn write_nr31(&mut self, val: u8) {
+    pub(crate) fn write_nr31(&mut self, val: u8) {
         self.snd_len = WAV_MAX_LENGTH - ((val as u16) & (WAV_MAX_LENGTH - 1));
     }
 
-    pub fn write_nr32(&mut self, val: u8) {
+    pub(crate) fn write_nr32(&mut self, val: u8) {
         self.vol = (val >> 5) & 3;
     }
 
-    pub fn write_nr33(&mut self, val: u8) {
+    pub(crate) fn write_nr33(&mut self, val: u8) {
         self.freq = (self.freq & 0x700) | (val as u16);
     }
 
-    pub fn write_nr34(&mut self, val: u8) {
+    pub(crate) fn write_nr34(&mut self, val: u8) {
         self.freq = (val as u16 & 7) << 8 | (self.freq & 0xFF);
         self.use_len = val & 0x40 != 0;
 
@@ -766,7 +762,7 @@ impl Wave {
         }
     }
 
-    pub fn step_sample(&mut self) {
+    fn step_sample(&mut self) {
         if !self.on() {
             return;
         }
@@ -780,15 +776,15 @@ impl Wave {
         self.period -= 1;
     }
 
-    pub fn out(&self) -> u8 {
+    fn out(&self) -> u8 {
         self.sample_buffer >> (self.vol.wrapping_sub(1) & 7)
     }
 
-    pub fn on(&self) -> bool {
+    fn on(&self) -> bool {
         self.on && self.dac_on
     }
 
-    pub fn step_len(&mut self) {
+    fn step_len(&mut self) {
         if self.use_len && self.snd_len > 0 {
             self.snd_len -= 1;
 
@@ -798,13 +794,13 @@ impl Wave {
         }
     }
 
-    pub fn set_period_half(&mut self, p_half: u8) {
+    fn set_period_half(&mut self, p_half: u8) {
         debug_assert!(p_half == 0 || p_half == 1);
         self.p_half = p_half;
     }
 }
 
-pub struct Noise {
+pub(crate) struct Noise {
     on: bool,
     dac_on: bool,
     snd_counter: bool,
@@ -827,7 +823,7 @@ pub struct Noise {
 }
 
 impl Noise {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             on: false,
             dac_on: true,
@@ -849,7 +845,7 @@ impl Noise {
         }
     }
 
-    pub fn reset(&mut self) {
+    fn reset(&mut self) {
         self.on = false;
         self.dac_on = true;
         self.snd_len = 0;
@@ -870,23 +866,23 @@ impl Noise {
         self.nr43 = 0;
     }
 
-    pub fn read_nr42(&self) -> u8 {
+    pub(crate) fn read_nr42(&self) -> u8 {
         self.env_base_vol << 4 | self.env_inc as u8 | self.env_period & 7
     }
 
-    pub fn read_nr43(&self) -> u8 {
+    pub(crate) fn read_nr43(&self) -> u8 {
         self.nr43
     }
 
-    pub fn read_nr44(&self) -> u8 {
+    pub(crate) fn read_nr44(&self) -> u8 {
         0xBF | ((self.snd_counter as u8) << 6)
     }
 
-    pub fn write_nr41(&mut self, val: u8) {
+    pub(crate) fn write_nr41(&mut self, val: u8) {
         self.snd_len = NOISE_MAX_LEN - ((val as u16) & (NOISE_MAX_LEN - 1));
     }
 
-    pub fn write_nr42(&mut self, val: u8) {
+    pub(crate) fn write_nr42(&mut self, val: u8) {
         // TODO: likely wrong, value == 0x7 || value == 0x0 to pass
         // Blargg 2 test
         if val == 7 {
@@ -909,7 +905,7 @@ impl Noise {
         self.env_vol = self.env_base_vol;
     }
 
-    pub fn write_nr43(&mut self, val: u8) {
+    pub(crate) fn write_nr43(&mut self, val: u8) {
         self.nr43 = val;
         self.wide_step = val & 8 != 0;
 
@@ -929,7 +925,7 @@ impl Noise {
         self.timer = 1;
     }
 
-    pub fn write_nr44(&mut self, val: u8) {
+    pub(crate) fn write_nr44(&mut self, val: u8) {
         self.snd_counter = val & 0x40 != 0;
 
         if self.snd_counter && self.p_half == 0 {
@@ -953,7 +949,7 @@ impl Noise {
         }
     }
 
-    pub fn step_envelope(&mut self) {
+    fn step_envelope(&mut self) {
         if !(self.env_on && self.on && self.dac_on) {
             return;
         }
@@ -975,7 +971,7 @@ impl Noise {
         }
     }
 
-    pub fn step_sample(&mut self) {
+    fn step_sample(&mut self) {
         if !self.on() {
             return;
         }
@@ -998,15 +994,15 @@ impl Noise {
         }
     }
 
-    pub fn out(&self) -> u8 {
+    fn out(&self) -> u8 {
         self.out * self.env_vol
     }
 
-    pub fn on(&self) -> bool {
+    fn on(&self) -> bool {
         self.on && self.dac_on
     }
 
-    pub fn step_len(&mut self) {
+    fn step_len(&mut self) {
         if self.snd_counter && self.snd_len > 0 {
             self.snd_len -= 1;
 
@@ -1016,7 +1012,7 @@ impl Noise {
         }
     }
 
-    pub fn set_period_half(&mut self, p_half: u8) {
+    fn set_period_half(&mut self, p_half: u8) {
         debug_assert!(p_half == 0 || p_half == 1);
         self.p_half = p_half;
     }

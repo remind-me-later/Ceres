@@ -7,7 +7,7 @@ use {
     std::{
         cmp::min,
         ffi::{CStr, CString},
-        mem::size_of,
+        mem::{size_of, ManuallyDrop},
         ptr,
         time::Instant,
     },
@@ -31,15 +31,14 @@ pub struct Renderer {
     vao: GLuint,
     program: Shader,
     texture: GLuint,
-    // keep them safe and cozy
-    _video: VideoSubsystem,
-    _ctx: GLContext,
+    video: ManuallyDrop<VideoSubsystem>,
+    ctx: ManuallyDrop<GLContext>,
 }
 
 impl Renderer {
     pub fn new(sdl: &Sdl) -> Renderer {
         unsafe {
-            let video = sdl.video().unwrap();
+            let video = ManuallyDrop::new(sdl.video().unwrap());
 
             let gl_attr = video.gl_attr();
             gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
@@ -60,7 +59,7 @@ impl Renderer {
                 .unwrap();
             win.set_minimum_size(PX_WIDTH, PX_HEIGHT).unwrap();
 
-            let ctx = win.gl_create_context().unwrap();
+            let ctx = ManuallyDrop::new(win.gl_create_context().unwrap());
             win.gl_make_current(&ctx).unwrap();
 
             gl::load_with(|s| video.gl_get_proc_address(s).cast());
@@ -100,8 +99,8 @@ impl Renderer {
                 program,
                 texture,
                 next_frame: Instant::now(),
-                _video: video,
-                _ctx: ctx,
+                video,
+                ctx,
             };
 
             video_renderer.resize_viewport(PX_WIDTH * MUL, PX_HEIGHT * MUL);
@@ -163,6 +162,8 @@ impl Drop for Renderer {
         unsafe {
             gl::DeleteBuffers(1, &self.vbo);
             gl::DeleteVertexArrays(1, &self.vao);
+            ManuallyDrop::drop(&mut self.ctx);
+            ManuallyDrop::drop(&mut self.video);
         }
     }
 }

@@ -1,5 +1,4 @@
 #![no_std]
-#![forbid(unsafe_code)]
 #![feature(core_intrinsics)]
 // clippy
 #![warn(clippy::pedantic)]
@@ -11,6 +10,8 @@
 #![allow(clippy::similar_names)]
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::verbose_bit_mask)]
+
+use core::mem::ManuallyDrop;
 
 extern crate alloc;
 
@@ -74,6 +75,32 @@ enum CompatMode {
     Cgb,
 }
 
+#[derive(Default)]
+struct Reg16 {
+    af: u16,
+    bc: u16,
+    de: u16,
+    hl: u16,
+}
+
+// little endian
+#[derive(Default)]
+struct Reg8 {
+    _f: u8,
+    a: u8,
+    c: u8,
+    b: u8,
+    e: u8,
+    d: u8,
+    l: u8,
+    h: u8,
+}
+
+union Regs {
+    r16: ManuallyDrop<Reg16>,
+    r8: ManuallyDrop<Reg8>,
+}
+
 pub struct Gb {
     // general
     exit_run: bool,
@@ -89,10 +116,7 @@ pub struct Gb {
     boot_rom_mapped: bool,
 
     // cpu
-    af: u16,
-    bc: u16,
-    de: u16,
-    hl: u16,
+    regs: Regs,
     sp: u16,
     pc: u16,
 
@@ -283,16 +307,15 @@ impl Gb {
             obp1: 0,
             wy: 0,
             wx: 0,
-            af: 0,
-            bc: 0,
-            de: 0,
-            hl: 0,
             sp: 0,
             pc: 0,
             boot_rom,
             boot_rom_mapped: true,
             apu_ext_sample_period: 0,
             apu_frame_callback: default_apu_frame_callback,
+            regs: Regs {
+                r16: ManuallyDrop::default(),
+            },
         }
     }
 
@@ -321,5 +344,13 @@ impl Gb {
     #[must_use]
     pub fn save_data(&self) -> Option<&[u8]> {
         self.cart.has_battery().then_some(self.cart.ram())
+    }
+}
+
+impl Drop for Regs {
+    fn drop(&mut self) {
+        unsafe {
+            ManuallyDrop::drop(&mut self.r16);
+        }
     }
 }

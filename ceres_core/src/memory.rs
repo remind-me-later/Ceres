@@ -233,7 +233,7 @@ impl Gb {
             NR50 => self.write_nr50(val),
             NR51 => self.write_nr51(val),
             NR52 => self.write_nr52(val),
-            WAV_BEGIN..=WAV_END => self.write_wave(addr, val),
+            WAV_BEGIN..=WAV_END => self.apu_ch3.write_wave_ram(addr, val),
             LCDC => self.write_lcdc(val),
             STAT => self.write_stat(val),
             SCY => self.scy = val,
