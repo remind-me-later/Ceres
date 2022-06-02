@@ -314,14 +314,9 @@ impl Header {
         };
 
         // Check title is valid ascii
-        let _ = str::from_utf8(&title).map_err(|utf8_error| {
-            let invalid_byte_position = TITLE_START + utf8_error.valid_up_to();
-            let invalid_byte = rom[TITLE_START + invalid_byte_position];
-            Error::InvalidTitleString {
-                invalid_byte,
-                invalid_byte_position,
-            }
-        })?;
+        if !title.is_ascii() {
+            return Err(Error::NonAsciiTitleString);
+        };
 
         Self::check_checksum(rom)?;
 
@@ -358,12 +353,9 @@ impl Header {
         self.cgb_flag
     }
 
-    /// # Panics
-    ///
-    /// panics on invalid ASCII title in header
     #[must_use]
     pub fn title(&self) -> &str {
-        str::from_utf8(&self.title).unwrap()
+        unsafe { str::from_utf8_unchecked(&self.title) }
     }
 
     #[must_use]

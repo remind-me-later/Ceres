@@ -1,5 +1,6 @@
 #![no_std]
 #![feature(core_intrinsics)]
+#![feature(slice_swap_unchecked)]
 // clippy
 #![warn(clippy::pedantic)]
 #![allow(clippy::cast_lossless)]
@@ -11,13 +12,9 @@
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::verbose_bit_mask)]
 
-use core::mem::ManuallyDrop;
-
-extern crate alloc;
-
 use {
     apu::{Noise, Square1, Square2, Wave},
-    core::time::Duration,
+    core::{mem::ManuallyDrop, time::Duration},
     memory::HdmaState,
     ppu::{ColorPalette, Mode, RgbaBuf, OAM_SIZE, VRAM_SIZE_CGB},
 };
@@ -27,6 +24,8 @@ pub use {
     joypad::Button,
     ppu::{PX_HEIGHT, PX_WIDTH},
 };
+
+extern crate alloc;
 
 mod apu;
 mod cartridge;
@@ -84,7 +83,6 @@ struct Reg16 {
 }
 
 // little endian
-#[derive(Default)]
 struct Reg8 {
     _f: u8,
     a: u8,
@@ -101,12 +99,20 @@ union Regs {
     r8: ManuallyDrop<Reg8>,
 }
 
+impl Drop for Regs {
+    fn drop(&mut self) {
+        unsafe {
+            ManuallyDrop::drop(&mut self.r16);
+        }
+    }
+}
+
 pub struct Gb {
     // general
-    exit_run: bool,
     cart: Cartridge,
     model: Model,
     compat_mode: CompatMode,
+    quit_callback: fn() -> bool,
 
     double_speed: bool,
     key1: u8,
@@ -217,6 +223,9 @@ pub struct Gb {
 
 fn default_ppu_frame_callback(_: &[u8]) {}
 fn default_apu_frame_callback(_: Sample, _: Sample) {}
+fn default_exit() -> bool {
+    true
+}
 
 impl Gb {
     #[must_use]
@@ -263,7 +272,6 @@ impl Gb {
             ppu_frame_callback: default_ppu_frame_callback,
             bcp: ColorPalette::new(),
             ocp: ColorPalette::new(),
-            exit_run: false,
             clk_on: false,
             clk_wide: 0,
             clk_overflow: false,
@@ -316,6 +324,7 @@ impl Gb {
             regs: Regs {
                 r16: ManuallyDrop::default(),
             },
+            quit_callback: default_exit,
         }
     }
 
@@ -327,6 +336,10 @@ impl Gb {
         self.apu_frame_callback = apu_frame_callback;
     }
 
+    pub fn set_quit_callback(&mut self, quit_callback: fn() -> bool) {
+        self.quit_callback = quit_callback;
+    }
+
     pub fn set_sample_rate(&mut self, sample_rate: u32) {
         // account for difference between 60 and 59.73 fps
         let k = TC_SEC + 0x4A10 /* magic */;
@@ -334,9 +347,7 @@ impl Gb {
     }
 
     pub fn run_frame(&mut self) {
-        self.exit_run = false;
-
-        while !self.exit_run {
+        while !(self.quit_callback)() {
             self.run();
         }
     }
@@ -344,13 +355,5 @@ impl Gb {
     #[must_use]
     pub fn save_data(&self) -> Option<&[u8]> {
         self.cart.has_battery().then_some(self.cart.ram())
-    }
-}
-
-impl Drop for Regs {
-    fn drop(&mut self) {
-        unsafe {
-            ManuallyDrop::drop(&mut self.r16);
-        }
     }
 }

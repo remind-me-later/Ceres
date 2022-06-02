@@ -77,22 +77,33 @@ impl Gb {
     #[inline]
     #[must_use]
     pub(crate) fn read_ram(&self, addr: u16) -> u8 {
-        self.wram[(addr & 0xFFF) as usize]
+        unsafe { *self.wram.get_unchecked((addr & 0xFFF) as usize) }
     }
     #[inline]
     #[must_use]
     pub(crate) fn read_bank_ram(&self, addr: u16) -> u8 {
-        self.wram[(addr & 0xFFF | (self.svbk_true as u16 * 0x1000)) as usize]
+        unsafe {
+            *self
+                .wram
+                .get_unchecked((addr & 0xFFF | (self.svbk_true as u16 * 0x1000)) as usize)
+        }
     }
 
     #[inline]
     fn write_ram(&mut self, addr: u16, val: u8) {
-        self.wram[(addr & 0xFFF) as usize] = val;
+        unsafe {
+            *self.wram.get_unchecked_mut((addr & 0xFFF) as usize) = val;
+        }
     }
 
     #[inline]
     fn write_bank_ram(&mut self, addr: u16, val: u8) {
-        self.wram[(addr & 0xFFF | (self.svbk_true as u16 * 0x1000)) as usize] = val;
+        unsafe {
+            *self
+                .wram
+                .get_unchecked_mut((addr & 0xFFF | (self.svbk_true as u16 * 0x1000)) as usize) =
+                val;
+        }
     }
 
     #[inline]
@@ -108,7 +119,9 @@ impl Gb {
     #[inline]
     fn read_rom_or_cart(&mut self, addr: u16) -> u8 {
         if unlikely(self.boot_rom_mapped) {
-            return self.boot_rom[addr as usize];
+            unsafe {
+                return *self.boot_rom.get_unchecked(addr as usize);
+            }
         }
         self.cart.read_rom(addr)
     }
@@ -179,7 +192,7 @@ impl Gb {
             OCPD if self.model == Cgb => self.ocp.data(),
             OPRI if self.model == Cgb => self.opri,
             SVBK if self.model == Cgb => self.svbk | 0xF8,
-            HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize],
+            HRAM_BEG..=HRAM_END => unsafe { *self.hram.get_unchecked((addr & 0x7F) as usize) },
             IE => self.ie,
             _ => 0xFF,
         }
@@ -246,7 +259,7 @@ impl Gb {
 
                 self.dma_cycles = -8; // two m-cycles delay
                 self.dma = val;
-                self.dma_addr = u16::from(val) << 8;
+                self.dma_addr = (val as u16) << 8;
                 self.dma_on = true;
             }
             BGP => self.bgp = val,
@@ -268,16 +281,16 @@ impl Gb {
                 }
             }
             HDMA1 if self.model == Cgb => {
-                self.hdma_src = u16::from(val) << 8 | self.hdma_src & 0xF0;
+                self.hdma_src = (val as u16) << 8 | self.hdma_src & 0xF0;
             }
             HDMA2 if self.model == Cgb => {
-                self.hdma_src = self.hdma_src & 0xFF00 | u16::from(val) & 0xF0;
+                self.hdma_src = self.hdma_src & 0xFF00 | (val as u16) & 0xF0;
             }
             HDMA3 if self.model == Cgb => {
-                self.hdma_dst = u16::from(val & 0x1F) << 8 | self.hdma_dst & 0xF0;
+                self.hdma_dst = ((val & 0x1F) as u16) << 8 | self.hdma_dst & 0xF0;
             }
             HDMA4 if self.model == Cgb => {
-                self.hdma_dst = self.hdma_dst & 0x1F00 | u16::from(val) & 0xF0;
+                self.hdma_dst = self.hdma_dst & 0x1F00 | (val as u16) & 0xF0;
             }
             HDMA5 if self.model == Cgb => {
                 // stop current transfer
@@ -288,7 +301,7 @@ impl Gb {
 
                 self.hdma5 = val & !0x80;
                 let transfer_blocks = val & 0x7F;
-                self.hdma_len = (u16::from(transfer_blocks) + 1) * 0x10;
+                self.hdma_len = (transfer_blocks as u16 + 1) * 0x10;
                 self.hdma_state = if val & 0x80 == 0 {
                     HdmaState::General
                 } else {
@@ -305,7 +318,9 @@ impl Gb {
                 self.svbk = tmp;
                 self.svbk_true = if tmp == 0 { 1 } else { tmp };
             }
-            HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize] = val,
+            HRAM_BEG..=HRAM_END => unsafe {
+                *self.hram.get_unchecked_mut((addr & 0x7F) as usize) = val;
+            },
             IE => self.ie = val,
             _ => (),
         }

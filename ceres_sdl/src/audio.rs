@@ -41,8 +41,11 @@ impl Renderer {
     }
 
     pub fn push_frame(&mut self, l: Sample, r: Sample) {
-        self.buf[self.buf_pos] = l;
-        self.buf[self.buf_pos + 1] = r;
+        unsafe {
+            *self.buf.get_unchecked_mut(self.buf_pos) = l;
+            *self.buf.get_unchecked_mut(self.buf_pos + 1) = r;
+        }
+
         self.buf_pos += 2;
 
         if self.buf_pos == AUDIO_BUFFER_SIZE {

@@ -5,7 +5,7 @@ use {
         controller::GameController,
         event::{Event, WindowEvent},
         keyboard::Scancode,
-        Sdl,
+        EventPump, Sdl,
     },
     std::{
         fs::{self, File},
@@ -38,7 +38,7 @@ fn main() {
     });
 
     let rom_path = Path::new(&args.rom).to_path_buf();
-    let emulator = Emu::new(model, &rom_path);
+    let mut emulator = Emu::new(model, &rom_path);
 
     emulator.run();
 }
@@ -76,6 +76,7 @@ fn parse_args() -> Result<AppArgs, pico_args::Error> {
 }
 
 static mut EMU: *mut Emu = null_mut();
+static mut EVENTS: *mut EventPump = null_mut();
 
 pub struct Emu {
     sdl: Sdl,
@@ -100,11 +101,17 @@ impl Emu {
 
         let audio = audio::Renderer::new(&sdl);
         let video = video::Renderer::new(&sdl);
+        unsafe {
+            let mut boxed = Box::new(sdl.event_pump().unwrap());
+            EVENTS = boxed.as_mut();
+            Box::leak(boxed);
+        }
 
         let mut gb = Gb::new(model, cart);
         gb.set_ppu_frame_callback(ppu_frame_callback);
         gb.set_sample_rate(audio.sample_rate());
         gb.set_apu_frame_callback(apu_frame_callback);
+        gb.set_quit_callback(quit_callback);
 
         let res = Self {
             sdl,
@@ -115,8 +122,10 @@ impl Emu {
             audio,
             quit: false,
         };
-        let mut boxed = Box::new(res);
 
+        let _controller = res.init_controller();
+
+        let mut boxed = Box::new(res);
         unsafe {
             EMU = boxed.as_mut();
         }
@@ -124,18 +133,10 @@ impl Emu {
         boxed
     }
 
-    pub fn run(mut self) {
-        let _controller = self.init_controller();
-        let mut events = self.sdl.event_pump().unwrap();
-
-        while !self.quit {
-            events.poll_iter().for_each(|e| self.handle_event(e));
-            self.gb.run_frame();
-        }
-
-        if let Some(cart_ram) = self.gb.save_data() {
-            let mut f = File::create(self.sav_path).unwrap();
-            f.write_all(cart_ram).unwrap();
+    pub fn run(&mut self) {
+        self.gb.run_frame();
+        unsafe {
+            Box::from_raw(EVENTS);
         }
     }
 
@@ -152,12 +153,12 @@ impl Emu {
 
     fn handle_event(&mut self, event: Event) {
         match event {
-            Event::Quit { .. } => self.quit = true,
+            Event::Quit { .. } => self.quit(),
             Event::Window { win_event, .. } => match win_event {
                 WindowEvent::Resized(width, height) => {
                     self.video.resize_viewport(width as u32, height as u32)
                 }
-                WindowEvent::Close => self.quit = true,
+                WindowEvent::Close => self.quit(),
                 WindowEvent::FocusGained => self.has_focus = true,
                 WindowEvent::FocusLost => self.has_focus = false,
                 _ => (),
@@ -245,6 +246,14 @@ impl Emu {
             _ => (),
         }
     }
+
+    fn quit(&mut self) {
+        self.quit = true;
+        if let Some(cart_ram) = self.gb.save_data() {
+            let mut f = File::create(self.sav_path.clone()).unwrap();
+            f.write_all(cart_ram).unwrap();
+        }
+    }
 }
 
 fn read_file(path: &Path) -> Result<Box<[u8]>, ()> {
@@ -255,14 +264,25 @@ fn read_file(path: &Path) -> Result<Box<[u8]>, ()> {
     Ok(buffer.into_boxed_slice())
 }
 
+#[inline]
 fn apu_frame_callback(l: Sample, r: Sample) {
     unsafe {
         (*EMU).audio.push_frame(l, r);
     }
 }
 
+#[inline]
 fn ppu_frame_callback(rgba: &[u8]) {
     unsafe {
+        for e in (*EVENTS).poll_iter() {
+            (*EMU).handle_event(e);
+        }
+
         (*EMU).video.draw_frame(rgba);
     }
+}
+
+#[inline]
+fn quit_callback() -> bool {
+    unsafe { (*EMU).quit }
 }
