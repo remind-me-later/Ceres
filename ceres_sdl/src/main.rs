@@ -1,3 +1,21 @@
+// clippy
+#![warn(clippy::pedantic)]
+#![warn(clippy::nursery)]
+#![allow(clippy::cast_lossless)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::struct_excessive_bools)]
+#![allow(clippy::similar_names)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::verbose_bit_mask)]
+#![allow(clippy::missing_const_for_fn)]
+#![allow(clippy::branches_sharing_code)]
+#![allow(clippy::only_used_in_recursion)]
+#![allow(clippy::cognitive_complexity)]
+#![allow(clippy::missing_panics_doc)]
+
 use {
     ceres_core::{Cartridge, Gb, Model, Sample},
     pico_args::Arguments,
@@ -142,12 +160,12 @@ impl Emu {
         })
     }
 
-    fn handle_event(&mut self, event: Event) {
+    fn handle_event(&mut self, event: &Event) {
         match event {
             Event::Quit { .. } => self.quit(),
             Event::Window { win_event, .. } => match win_event {
                 WindowEvent::Resized(width, height) => {
-                    self.video.resize_viewport(width as u32, height as u32)
+                    self.video.resize_viewport(*width as u32, *height as u32);
                 }
                 WindowEvent::Close => self.quit(),
                 WindowEvent::FocusGained => self.has_focus = true,
@@ -267,7 +285,7 @@ fn apu_frame_callback(l: Sample, r: Sample) {
 fn ppu_frame_callback(rgba: &[u8]) {
     unsafe {
         for e in (*EMU).events.poll_iter() {
-            (*EMU).handle_event(e);
+            (*EMU).handle_event(&e);
         }
 
         (*EMU).video.draw_frame(rgba);

@@ -97,10 +97,10 @@ impl Mode {
     pub(crate) fn cycles(self, scroll_x: u8) -> u32 {
         let scroll_adjust = (scroll_x & 7) as u32 * 4;
         match self {
-            Mode::OamScan => OAM_SCAN_CYCLES,
-            Mode::Drawing => DRAWING_CYCLES + scroll_adjust,
-            Mode::HBlank => HBLANK_CYCLES - scroll_adjust,
-            Mode::VBlank => VBLANK_CYCLES,
+            Self::OamScan => OAM_SCAN_CYCLES,
+            Self::Drawing => DRAWING_CYCLES + scroll_adjust,
+            Self::HBlank => HBLANK_CYCLES - scroll_adjust,
+            Self::VBlank => VBLANK_CYCLES,
         }
     }
 }

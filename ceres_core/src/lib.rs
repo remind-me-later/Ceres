@@ -4,7 +4,9 @@
 #![feature(slice_swap_unchecked)]
 // clippy
 #![warn(clippy::pedantic)]
+#![warn(clippy::nursery)]
 #![allow(clippy::cast_lossless)]
+#![allow(clippy::cast_precision_loss)]
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::cast_possible_wrap)]
@@ -12,6 +14,10 @@
 #![allow(clippy::similar_names)]
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::verbose_bit_mask)]
+#![allow(clippy::missing_const_for_fn)]
+#![allow(clippy::branches_sharing_code)]
+#![allow(clippy::only_used_in_recursion)]
+#![allow(clippy::cognitive_complexity)]
 
 use {
     apu::{Noise, Square1, Square2, Wave},

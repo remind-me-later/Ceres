@@ -1,5 +1,5 @@
 use {
-    gl::types::*,
+    gl::types::{GLbyte, GLfloat, GLint, GLuint},
     sdl2::{
         video::{GLContext, Window},
         Sdl, VideoSubsystem,
@@ -36,7 +36,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(sdl: &Sdl) -> Renderer {
+    pub fn new(sdl: &Sdl) -> Self {
         unsafe {
             let video = ManuallyDrop::new(sdl.video().unwrap());
 
@@ -92,7 +92,7 @@ impl Renderer {
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as _);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as _);
 
-            let mut video_renderer = Renderer {
+            let mut video_renderer = Self {
                 win,
                 vbo,
                 vao,
@@ -225,9 +225,9 @@ impl Shader {
         let mut buf = [0; 1024];
 
         if is_shader {
-            gl::GetShaderInfoLog(id, 1024, ptr::null_mut(), buf.as_mut_ptr() as _);
+            gl::GetShaderInfoLog(id, 1024, ptr::null_mut(), buf.as_mut_ptr().cast());
         } else {
-            gl::GetProgramInfoLog(id, 1024, ptr::null_mut(), buf.as_mut_ptr() as _);
+            gl::GetProgramInfoLog(id, 1024, ptr::null_mut(), buf.as_mut_ptr().cast());
         }
 
         let msg = CStr::from_bytes_with_nul(&buf)

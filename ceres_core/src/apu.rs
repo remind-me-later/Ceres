@@ -187,7 +187,7 @@ impl<'a> Iterator for ChOutIter<'a> {
     }
 }
 
-pub(crate) struct Square1 {
+pub struct Square1 {
     on: bool,
     dac_on: bool,
     snd_counter: bool,
@@ -449,7 +449,7 @@ impl Square1 {
     }
 }
 
-pub(crate) struct Square2 {
+pub struct Square2 {
     on: bool,
     dac_on: bool,
     snd_counter: bool,
@@ -644,7 +644,7 @@ impl Square2 {
     }
 }
 
-pub(crate) struct Wave {
+pub struct Wave {
     on: bool,
     dac_on: bool,
     use_len: bool,
@@ -800,7 +800,7 @@ impl Wave {
     }
 }
 
-pub(crate) struct Noise {
+pub struct Noise {
     on: bool,
     dac_on: bool,
     snd_counter: bool,

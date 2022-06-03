@@ -23,49 +23,49 @@ impl Ld8 {
     #[inline]
     fn read(self, gb: &mut Gb) -> u8 {
         match self {
-            Ld8::A => (gb.af >> 8) as u8,
-            Ld8::B => (gb.bc >> 8) as u8,
-            Ld8::C => gb.bc as u8,
-            Ld8::D => (gb.de >> 8) as u8,
-            Ld8::E => gb.de as u8,
-            Ld8::H => (gb.hl >> 8) as u8,
-            Ld8::L => gb.hl as u8,
-            Ld8::Dhl => gb.cpu_read(gb.hl),
+            Self::A => (gb.af >> 8) as u8,
+            Self::B => (gb.bc >> 8) as u8,
+            Self::C => gb.bc as u8,
+            Self::D => (gb.de >> 8) as u8,
+            Self::E => gb.de as u8,
+            Self::H => (gb.hl >> 8) as u8,
+            Self::L => gb.hl as u8,
+            Self::Dhl => gb.cpu_read(gb.hl),
         }
     }
 
     #[inline]
     fn write(self, gb: &mut Gb, val: u8) {
         match self {
-            Ld8::A => {
+            Self::A => {
                 gb.af &= 0x00FF;
                 gb.af |= (val as u16) << 8;
             }
-            Ld8::B => {
+            Self::B => {
                 gb.bc &= 0x00FF;
                 gb.bc |= (val as u16) << 8;
             }
-            Ld8::C => {
+            Self::C => {
                 gb.bc &= 0xFF00;
                 gb.bc |= val as u16;
             }
-            Ld8::D => {
+            Self::D => {
                 gb.de &= 0x00FF;
                 gb.de |= (val as u16) << 8;
             }
-            Ld8::E => {
+            Self::E => {
                 gb.de &= 0xFF00;
                 gb.de |= val as u16;
             }
-            Ld8::H => {
+            Self::H => {
                 gb.hl &= 0x00FF;
                 gb.hl |= (val as u16) << 8;
             }
-            Ld8::L => {
+            Self::L => {
                 gb.hl &= 0xFF00;
                 gb.hl |= val as u16;
             }
-            Ld8::Dhl => gb.cpu_write(gb.hl, val),
+            Self::Dhl => gb.cpu_write(gb.hl, val),
         }
     }
 }

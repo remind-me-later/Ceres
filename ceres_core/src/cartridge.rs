@@ -50,7 +50,7 @@ impl Cartridge {
     ///
     /// Will return `Err` if the ROM header contains some
     /// illegal value
-    pub fn new(rom: Box<[u8]>, ram: Option<Box<[u8]>>) -> Result<Cartridge, Error> {
+    pub fn new(rom: Box<[u8]>, ram: Option<Box<[u8]>>) -> Result<Self, Error> {
         let header_info = Header::new(&rom)?;
         let mbc30 = header_info.ram_size().num_banks() >= 8;
         let rom_bank_mask = header_info.rom_size().bank_bit_mask();
@@ -68,12 +68,10 @@ impl Cartridge {
             mbc_byte => return Err(Error::InvalidMBC { mbc_byte }),
         };
 
-        let ram = if let Some(ram) = ram {
-            ram
-        } else {
+        let ram = ram.unwrap_or_else(|| {
             let cap = header_info.ram_size().total_size_in_bytes();
             vec![0; cap].into_boxed_slice()
-        };
+        });
 
         let rom_offsets = (0x0000, 0x4000);
         let ram_offset = 0;
@@ -445,11 +443,11 @@ impl RAMSize {
 
     pub fn num_banks(self) -> usize {
         match self {
-            RAMSize::None => 0,
-            RAMSize::Kb2 | RAMSize::Kb8 => 1,
-            RAMSize::Kb32 => 4,
-            RAMSize::Kb128 => 16,
-            RAMSize::Kb64 => 8,
+            Self::None => 0,
+            Self::Kb2 | Self::Kb8 => 1,
+            Self::Kb32 => 4,
+            Self::Kb128 => 16,
+            Self::Kb64 => 8,
         }
     }
 
