@@ -1,8 +1,7 @@
-#version 450
+#version 310 es
 
-out vec2 TexCoord;
-
-uniform vec2 transform;
+layout(location = 0) out vec2 TexCoord;
+layout(location = 1) uniform vec2 transform;
 
 const vec2 verts[4] =
     vec2[4](vec2(-1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, -1.0), vec2(1.0, 1.0));

@@ -31,7 +31,7 @@ impl Renderer {
 
         let gl_attr = video.gl_attr();
         gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
-        gl_attr.set_context_version(4, 5);
+        gl_attr.set_context_version(4, 6);
         gl_attr.set_depth_size(0);
         gl_attr.set_context_flags().forward_compatible().set();
 
