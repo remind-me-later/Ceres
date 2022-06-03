@@ -315,6 +315,7 @@ impl Gb {
         self.apu_ext_sample_period = k / sample_rate;
     }
 
+    #[inline]
     pub fn run_frame(&mut self) -> ! {
         self.run_cpu();
     }

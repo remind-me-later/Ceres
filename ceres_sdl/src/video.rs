@@ -35,41 +35,43 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(sdl: &Sdl) -> Self {
+        let video = ManuallyDrop::new(sdl.video().unwrap());
+
+        let gl_attr = video.gl_attr();
+        gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
+        gl_attr.set_context_version(3, 3);
+        gl_attr.set_depth_size(0);
+        gl_attr.set_context_flags().forward_compatible().set();
+
+        if !cfg!(debug_assertions) {
+            gl_attr.set_context_no_error(true);
+        }
+
+        let mut win = video
+            .window(crate::CERES_STR, PX_WIDTH * MUL, PX_HEIGHT * MUL)
+            .opengl()
+            .position_centered()
+            .resizable()
+            .build()
+            .unwrap();
+        win.set_minimum_size(PX_WIDTH, PX_HEIGHT).unwrap();
+
+        let ctx = ManuallyDrop::new(win.gl_create_context().unwrap());
+        win.gl_make_current(&ctx).unwrap();
+        video.gl_set_swap_interval(SwapInterval::VSync).unwrap();
+
+        gl::load_with(|s| video.gl_get_proc_address(s).cast());
+
+        let program = Shader::new();
+
+        let mut vao = 0;
+        let mut vbo = 0;
+        let mut texture = 0;
+
         unsafe {
-            let video = ManuallyDrop::new(sdl.video().unwrap());
-
-            let gl_attr = video.gl_attr();
-            gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
-            gl_attr.set_context_version(3, 3);
-            gl_attr.set_depth_size(0);
-            gl_attr.set_context_flags().forward_compatible().set();
-
-            if !cfg!(debug_assertions) {
-                gl_attr.set_context_no_error(true);
-            }
-
-            let mut win = video
-                .window(crate::CERES_STR, PX_WIDTH * MUL, PX_HEIGHT * MUL)
-                .opengl()
-                .position_centered()
-                .resizable()
-                .build()
-                .unwrap();
-            win.set_minimum_size(PX_WIDTH, PX_HEIGHT).unwrap();
-
-            let ctx = ManuallyDrop::new(win.gl_create_context().unwrap());
-            win.gl_make_current(&ctx).unwrap();
-            video.gl_set_swap_interval(SwapInterval::Immediate).unwrap();
-
-            gl::load_with(|s| video.gl_get_proc_address(s).cast());
-
-            let program = Shader::new();
-
-            let mut vao = 0;
             gl::GenVertexArrays(1, &mut vao);
             gl::BindVertexArray(vao);
 
-            let mut vbo = 0;
             gl::GenBuffers(1, &mut vbo);
             gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
             gl::BufferData(
@@ -80,31 +82,36 @@ impl Renderer {
             );
 
             // position attribute
-            let stride = (2 * size_of::<GLbyte>()) as _;
-            gl::VertexAttribPointer(0, 2, gl::BYTE, gl::FALSE, stride, ptr::null());
+            gl::VertexAttribPointer(
+                0,
+                2,
+                gl::BYTE,
+                gl::FALSE,
+                (2 * size_of::<GLbyte>()) as _,
+                ptr::null(),
+            );
             gl::EnableVertexAttribArray(0);
 
             // create texture
-            let mut texture = 0;
             gl::GenTextures(1, &mut texture);
             gl::BindTexture(gl::TEXTURE_2D, texture);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as _);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as _);
-
-            let mut video_renderer = Self {
-                win,
-                vbo,
-                vao,
-                program,
-                texture,
-                video,
-                ctx,
-            };
-
-            video_renderer.resize_viewport(PX_WIDTH * MUL, PX_HEIGHT * MUL);
-
-            video_renderer
         }
+
+        let mut res = Self {
+            win,
+            vbo,
+            vao,
+            program,
+            texture,
+            video,
+            ctx,
+        };
+
+        res.resize_viewport(PX_WIDTH * MUL, PX_HEIGHT * MUL);
+
+        res
     }
 
     pub fn resize_viewport(&mut self, w: u32, h: u32) {
@@ -142,9 +149,9 @@ impl Renderer {
             self.program.bind();
             gl::BindVertexArray(self.vao);
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
-
-            self.win.gl_swap_window();
         }
+
+        self.win.gl_swap_window();
     }
 }
 
@@ -167,36 +174,38 @@ struct Shader {
 }
 
 impl Shader {
-    pub unsafe fn new() -> Self {
-        // compile fragment shader
-        let vert_id = gl::CreateShader(gl::VERTEX_SHADER);
-        let src = CString::new(include_str!("shader/vs.vert")).unwrap();
-        gl::ShaderSource(vert_id, 1, &(src.as_ptr().cast()), ptr::null());
-        gl::CompileShader(vert_id);
-        Self::check_compile(vert_id, true);
+    pub fn new() -> Self {
+        unsafe {
+            // compile fragment shader
+            let vert_id = gl::CreateShader(gl::VERTEX_SHADER);
+            let src = CString::new(include_str!("shader/vs.vert")).unwrap();
+            gl::ShaderSource(vert_id, 1, &(src.as_ptr().cast()), ptr::null());
+            gl::CompileShader(vert_id);
+            Self::check_compile(vert_id, true);
 
-        // compile fragment shader
-        let frag_id = gl::CreateShader(gl::FRAGMENT_SHADER);
-        let src = CString::new(include_str!("shader/fs.frag")).unwrap();
-        gl::ShaderSource(frag_id, 1, &(src.as_ptr().cast()), ptr::null());
-        gl::CompileShader(frag_id);
-        Self::check_compile(frag_id, true);
+            // compile fragment shader
+            let frag_id = gl::CreateShader(gl::FRAGMENT_SHADER);
+            let src = CString::new(include_str!("shader/fs.frag")).unwrap();
+            gl::ShaderSource(frag_id, 1, &(src.as_ptr().cast()), ptr::null());
+            gl::CompileShader(frag_id);
+            Self::check_compile(frag_id, true);
 
-        // link program
-        let id = gl::CreateProgram();
-        gl::AttachShader(id, vert_id);
-        gl::AttachShader(id, frag_id);
-        gl::LinkProgram(id);
-        Self::check_compile(id, false);
+            // link program
+            let id = gl::CreateProgram();
+            gl::AttachShader(id, vert_id);
+            gl::AttachShader(id, frag_id);
+            gl::LinkProgram(id);
+            Self::check_compile(id, false);
 
-        // get transform
-        let transform_loc = gl::GetUniformLocation(id, b"transform\0".as_ptr().cast());
+            // get transform
+            let transform_loc = gl::GetUniformLocation(id, b"transform\0".as_ptr().cast());
 
-        Self {
-            id,
-            transform_loc,
-            vert_id,
-            frag_id,
+            Self {
+                id,
+                transform_loc,
+                vert_id,
+                frag_id,
+            }
         }
     }
 

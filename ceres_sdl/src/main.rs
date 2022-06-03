@@ -104,7 +104,7 @@ pub struct Emu {
     sav_path: PathBuf,
     video: video::Renderer,
     audio: audio::Renderer,
-    next_frame: Instant,
+    last_frame: Instant,
 }
 
 impl Emu {
@@ -135,7 +135,7 @@ impl Emu {
             sav_path,
             video,
             audio,
-            next_frame: Instant::now(),
+            last_frame: Instant::now(),
         };
 
         let _controller = res.init_controller();
@@ -148,6 +148,7 @@ impl Emu {
         boxed
     }
 
+    #[inline]
     pub fn run(&mut self) -> ! {
         self.gb.run_frame();
     }
@@ -163,99 +164,100 @@ impl Emu {
         })
     }
 
-    fn handle_event(&mut self, event: &Event) {
-        match event {
-            Event::Quit { .. } => self.quit(),
-            Event::Window { win_event, .. } => match win_event {
-                WindowEvent::Resized(width, height) => {
-                    self.video.resize_viewport(*width as u32, *height as u32);
+    fn handle_events(&mut self) {
+        for event in self.events.poll_iter() {
+            match event {
+                Event::Quit { .. } => self.quit(),
+                Event::Window { win_event, .. } => match win_event {
+                    WindowEvent::Resized(width, height) => {
+                        self.video.resize_viewport(width as u32, height as u32);
+                    }
+                    WindowEvent::FocusGained => self.has_focus = true,
+                    WindowEvent::FocusLost => self.has_focus = false,
+                    _ => (),
+                },
+                Event::ControllerButtonDown { button, .. } => {
+                    use {ceres_core::Button, sdl2::controller};
+
+                    if !self.has_focus {
+                        return;
+                    }
+
+                    match button {
+                        controller::Button::DPadUp => self.gb.press(Button::Up),
+                        controller::Button::DPadLeft => self.gb.press(Button::Left),
+                        controller::Button::DPadDown => self.gb.press(Button::Down),
+                        controller::Button::DPadRight => self.gb.press(Button::Right),
+                        controller::Button::B => self.gb.press(Button::B),
+                        controller::Button::A => self.gb.press(Button::A),
+                        controller::Button::Start => self.gb.press(Button::Start),
+                        controller::Button::Back => self.gb.press(Button::Select),
+                        _ => (),
+                    }
                 }
-                WindowEvent::Close => self.quit(),
-                WindowEvent::FocusGained => self.has_focus = true,
-                WindowEvent::FocusLost => self.has_focus = false,
+                Event::ControllerButtonUp { button, .. } => {
+                    use {ceres_core::Button, sdl2::controller};
+
+                    if !self.has_focus {
+                        return;
+                    }
+
+                    match button {
+                        controller::Button::DPadUp => self.gb.release(Button::Up),
+                        controller::Button::DPadLeft => self.gb.release(Button::Left),
+                        controller::Button::DPadDown => self.gb.release(Button::Down),
+                        controller::Button::DPadRight => self.gb.release(Button::Right),
+                        controller::Button::B => self.gb.release(Button::B),
+                        controller::Button::A => self.gb.release(Button::A),
+                        controller::Button::Start => self.gb.release(Button::Start),
+                        controller::Button::Back => self.gb.release(Button::Select),
+                        _ => (),
+                    }
+                }
+                Event::KeyDown { scancode, .. } => {
+                    use ceres_core::Button;
+
+                    if !self.has_focus {
+                        return;
+                    }
+
+                    if let Some(key) = scancode {
+                        match key {
+                            Scancode::W => self.gb.press(Button::Up),
+                            Scancode::A => self.gb.press(Button::Left),
+                            Scancode::S => self.gb.press(Button::Down),
+                            Scancode::D => self.gb.press(Button::Right),
+                            Scancode::K => self.gb.press(Button::A),
+                            Scancode::L => self.gb.press(Button::B),
+                            Scancode::Return => self.gb.press(Button::Start),
+                            Scancode::Backspace => self.gb.press(Button::Select),
+                            _ => (),
+                        }
+                    }
+                }
+                Event::KeyUp { scancode, .. } => {
+                    use ceres_core::Button;
+
+                    if !self.has_focus {
+                        return;
+                    }
+
+                    if let Some(key) = scancode {
+                        match key {
+                            Scancode::W => self.gb.release(Button::Up),
+                            Scancode::A => self.gb.release(Button::Left),
+                            Scancode::S => self.gb.release(Button::Down),
+                            Scancode::D => self.gb.release(Button::Right),
+                            Scancode::K => self.gb.release(Button::A),
+                            Scancode::L => self.gb.release(Button::B),
+                            Scancode::Return => self.gb.release(Button::Start),
+                            Scancode::Backspace => self.gb.release(Button::Select),
+                            _ => (),
+                        }
+                    }
+                }
                 _ => (),
-            },
-            Event::ControllerButtonDown { button, .. } => {
-                use {ceres_core::Button, sdl2::controller};
-
-                if !self.has_focus {
-                    return;
-                }
-
-                match button {
-                    controller::Button::DPadUp => self.gb.press(Button::Up),
-                    controller::Button::DPadLeft => self.gb.press(Button::Left),
-                    controller::Button::DPadDown => self.gb.press(Button::Down),
-                    controller::Button::DPadRight => self.gb.press(Button::Right),
-                    controller::Button::B => self.gb.press(Button::B),
-                    controller::Button::A => self.gb.press(Button::A),
-                    controller::Button::Start => self.gb.press(Button::Start),
-                    controller::Button::Back => self.gb.press(Button::Select),
-                    _ => (),
-                }
             }
-            Event::ControllerButtonUp { button, .. } => {
-                use {ceres_core::Button, sdl2::controller};
-
-                if !self.has_focus {
-                    return;
-                }
-
-                match button {
-                    controller::Button::DPadUp => self.gb.release(Button::Up),
-                    controller::Button::DPadLeft => self.gb.release(Button::Left),
-                    controller::Button::DPadDown => self.gb.release(Button::Down),
-                    controller::Button::DPadRight => self.gb.release(Button::Right),
-                    controller::Button::B => self.gb.release(Button::B),
-                    controller::Button::A => self.gb.release(Button::A),
-                    controller::Button::Start => self.gb.release(Button::Start),
-                    controller::Button::Back => self.gb.release(Button::Select),
-                    _ => (),
-                }
-            }
-            Event::KeyDown { scancode, .. } => {
-                use ceres_core::Button;
-
-                if !self.has_focus {
-                    return;
-                }
-
-                if let Some(key) = scancode {
-                    match key {
-                        Scancode::W => self.gb.press(Button::Up),
-                        Scancode::A => self.gb.press(Button::Left),
-                        Scancode::S => self.gb.press(Button::Down),
-                        Scancode::D => self.gb.press(Button::Right),
-                        Scancode::K => self.gb.press(Button::A),
-                        Scancode::L => self.gb.press(Button::B),
-                        Scancode::Return => self.gb.press(Button::Start),
-                        Scancode::Backspace => self.gb.press(Button::Select),
-                        _ => (),
-                    }
-                }
-            }
-            Event::KeyUp { scancode, .. } => {
-                use ceres_core::Button;
-
-                if !self.has_focus {
-                    return;
-                }
-
-                if let Some(key) = scancode {
-                    match key {
-                        Scancode::W => self.gb.release(Button::Up),
-                        Scancode::A => self.gb.release(Button::Left),
-                        Scancode::S => self.gb.release(Button::Down),
-                        Scancode::D => self.gb.release(Button::Right),
-                        Scancode::K => self.gb.release(Button::A),
-                        Scancode::L => self.gb.release(Button::B),
-                        Scancode::Return => self.gb.release(Button::Start),
-                        Scancode::Backspace => self.gb.release(Button::Select),
-                        _ => (),
-                    }
-                }
-            }
-            _ => (),
         }
     }
 
@@ -287,16 +289,13 @@ fn apu_frame_callback(l: Sample, r: Sample) {
 fn ppu_frame_callback(rgba: &[u8]) {
     let emu = unsafe { &mut *EMU };
 
-    let events: Vec<_> = emu.events.poll_iter().collect();
-    for e in events {
-        emu.handle_event(&e);
+    emu.handle_events();
+
+    let elapsed = emu.last_frame.elapsed();
+    if elapsed < ceres_core::FRAME_DUR {
+        std::thread::sleep(ceres_core::FRAME_DUR - elapsed);
+        emu.last_frame = Instant::now();
     }
 
-    let now = Instant::now();
-    if now < emu.next_frame {
-        std::thread::sleep(emu.next_frame - now);
-    }
-
-    emu.next_frame += ceres_core::FRAME_DUR;
     emu.video.draw_frame(rgba);
 }
