@@ -30,6 +30,7 @@ use {
         io::{Read, Write},
         path::{Path, PathBuf},
         ptr::null_mut,
+        time::Instant,
     },
 };
 
@@ -103,6 +104,7 @@ pub struct Emu {
     sav_path: PathBuf,
     video: video::Renderer,
     audio: audio::Renderer,
+    next_frame: Instant,
 }
 
 impl Emu {
@@ -133,6 +135,7 @@ impl Emu {
             sav_path,
             video,
             audio,
+            next_frame: Instant::now(),
         };
 
         let _controller = res.init_controller();
@@ -276,18 +279,24 @@ fn read_file(path: &Path) -> Result<Box<[u8]>, ()> {
 
 #[inline]
 fn apu_frame_callback(l: Sample, r: Sample) {
-    unsafe {
-        (*EMU).audio.push_frame(l, r);
-    }
+    let emu = unsafe { &mut *EMU };
+    emu.audio.push_frame(l, r);
 }
 
 #[inline]
 fn ppu_frame_callback(rgba: &[u8]) {
-    unsafe {
-        for e in (*EMU).events.poll_iter() {
-            (*EMU).handle_event(&e);
-        }
+    let emu = unsafe { &mut *EMU };
 
-        (*EMU).video.draw_frame(rgba);
+    let events: Vec<_> = emu.events.poll_iter().collect();
+    for e in events {
+        emu.handle_event(&e);
     }
+
+    let now = Instant::now();
+    if now < emu.next_frame {
+        std::thread::sleep(emu.next_frame - now);
+    }
+
+    emu.next_frame += ceres_core::FRAME_DUR;
+    emu.video.draw_frame(rgba);
 }

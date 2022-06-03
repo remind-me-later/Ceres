@@ -1,7 +1,7 @@
 use {
     gl::types::{GLbyte, GLfloat, GLint, GLuint},
     sdl2::{
-        video::{GLContext, Window},
+        video::{GLContext, SwapInterval, Window},
         Sdl, VideoSubsystem,
     },
     std::{
@@ -9,7 +9,6 @@ use {
         ffi::{CStr, CString},
         mem::{size_of, ManuallyDrop},
         ptr,
-        time::Instant,
     },
 };
 
@@ -26,7 +25,6 @@ const MUL: u32 = 4;
 
 pub struct Renderer {
     win: Window,
-    next_frame: Instant,
     vbo: GLuint,
     vao: GLuint,
     program: Shader,
@@ -61,6 +59,7 @@ impl Renderer {
 
             let ctx = ManuallyDrop::new(win.gl_create_context().unwrap());
             win.gl_make_current(&ctx).unwrap();
+            video.gl_set_swap_interval(SwapInterval::Immediate).unwrap();
 
             gl::load_with(|s| video.gl_get_proc_address(s).cast());
 
@@ -98,7 +97,6 @@ impl Renderer {
                 vao,
                 program,
                 texture,
-                next_frame: Instant::now(),
                 video,
                 ctx,
             };
@@ -139,11 +137,6 @@ impl Renderer {
                 rgba.as_ptr().cast(),
             );
 
-            let now = Instant::now();
-            if now < self.next_frame {
-                std::thread::sleep(self.next_frame - now);
-            }
-
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
             self.program.bind();
@@ -151,8 +144,6 @@ impl Renderer {
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
 
             self.win.gl_swap_window();
-
-            self.next_frame += ceres_core::FRAME_DUR;
         }
     }
 }

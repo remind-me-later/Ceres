@@ -316,9 +316,7 @@ impl Gb {
     }
 
     pub fn run_frame(&mut self) -> ! {
-        loop {
-            self.run();
-        }
+        self.run_cpu();
     }
 
     #[must_use]

@@ -79,10 +79,12 @@ impl Gb {
     pub(crate) fn read_ram(&self, addr: u16) -> u8 {
         self.wram[(addr & 0xFFF) as usize]
     }
+
     #[inline]
     #[must_use]
     pub(crate) fn read_bank_ram(&self, addr: u16) -> u8 {
-        self.wram[(addr & 0xFFF | (self.svbk_true as u16 * 0x1000)) as usize]
+        let bank = self.svbk_true as u16 * 0x1000;
+        self.wram[(addr & 0xFFF | bank) as usize]
     }
 
     #[inline]
@@ -92,7 +94,8 @@ impl Gb {
 
     #[inline]
     fn write_bank_ram(&mut self, addr: u16, val: u8) {
-        self.wram[(addr & 0xFFF | (self.svbk_true as u16 * 0x1000)) as usize] = val;
+        let bank = self.svbk_true as u16 * 0x1000;
+        self.wram[(addr & 0xFFF | bank) as usize] = val;
     }
 
     #[inline]

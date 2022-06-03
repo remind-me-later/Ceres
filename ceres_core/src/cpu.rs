@@ -1,5 +1,6 @@
 use {
     crate::{Gb, KEY1_SPEED_B, KEY1_SWITCH_B},
+    core::intrinsics::unlikely,
     Ld8::{Dhl, A, B, C, D, E, H, L},
 };
 
@@ -71,53 +72,54 @@ impl Ld8 {
 }
 
 impl Gb {
-    pub(crate) fn run(&mut self) {
-        if self.cpu_halted {
-            self.empty_cycle();
-        } else {
-            if self.cpu_ei_delay {
-                self.ime = true;
-                self.cpu_ei_delay = false;
+    pub(crate) fn run_cpu(&mut self) -> ! {
+        loop {
+            if unlikely(self.cpu_halted) {
+                self.empty_cycle();
+            } else {
+                if self.cpu_ei_delay {
+                    self.ime = true;
+                    self.cpu_ei_delay = false;
+                }
+
+                let opcode = self.imm_u8();
+                self.run_hdma();
+                self.exec(opcode);
             }
 
-            let opcode = self.imm_u8();
-            self.run_hdma();
-            self.exec(opcode);
+            self.catch_up();
+
+            // any interrupts?
+            if self.ifr & self.ie & 0x1F == 0 {
+                continue;
+            }
+
+            // interrupt exits halt
+            self.cpu_halted = false;
+
+            if !self.ime {
+                continue;
+            }
+
+            // push pc to stack
+            self.empty_cycle();
+            self.sp = self.sp.wrapping_sub(1);
+            self.cpu_write(self.sp, (self.pc >> 8) as u8);
+            self.sp = self.sp.wrapping_sub(1);
+            self.cpu_write(self.sp, (self.pc & 0xFF) as u8);
+            self.empty_cycle();
+
+            self.ime = false;
+            // recompute, maybe ifr changed
+            let ints = self.ifr & self.ie & 0x1F;
+            let trail_zeros = ints.trailing_zeros();
+            // get rightmost interrupt
+            let int = ((ints != 0) as u8) << trail_zeros;
+            // compute direction of interrupt vector
+            self.pc = 0x40 | (trail_zeros << 3) as u16;
+            // acknowledge
+            self.ifr &= !int;
         }
-
-        self.catch_up();
-
-        // any interrupts?
-        if self.ifr & self.ie & 0x1F == 0 {
-            return;
-        }
-
-        // interrupt exits halt
-        self.cpu_halted = false;
-
-        if !self.ime {
-            return;
-        }
-
-        // push pc to stack
-        self.empty_cycle();
-        self.sp = self.sp.wrapping_sub(1);
-        self.cpu_write(self.sp, (self.pc >> 8) as u8);
-        self.sp = self.sp.wrapping_sub(1);
-        self.cpu_write(self.sp, (self.pc & 0xFF) as u8);
-        self.empty_cycle();
-
-        // disallow double fault
-        self.ime = false;
-        // recompute, maybe ifr changed
-        let ints = self.ifr & self.ie & 0x1F;
-        let trail_zeros = ints.trailing_zeros();
-        // get rightmost interrupt
-        let int = ((ints != 0) as u8) << trail_zeros;
-        // compute direction of interrupt vector
-        self.pc = 0x40 | (trail_zeros << 3) as u16;
-        // acknowledge
-        self.ifr &= !int;
     }
 
     #[inline]
