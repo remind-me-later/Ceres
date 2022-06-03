@@ -1,5 +1,5 @@
 use {
-    gl::types::{GLbyte, GLfloat, GLint, GLuint},
+    gl::types::{GLint, GLuint},
     sdl2::{
         video::{GLContext, SwapInterval, Window},
         Sdl, VideoSubsystem,
@@ -7,17 +7,10 @@ use {
     std::{
         cmp::min,
         ffi::{CStr, CString},
-        mem::{size_of, ManuallyDrop},
+        mem::ManuallyDrop,
         ptr,
     },
 };
-
-const VERTICES: [GLbyte; 8] = [
-    -1, -1, // bottom left
-    -1, 1, // top left
-    1, -1, // bottom right
-    1, 1, // top right
-];
 
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as _;
 const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as _;
@@ -25,7 +18,6 @@ const MUL: u32 = 4;
 
 pub struct Renderer {
     win: Window,
-    vbo: GLuint,
     vao: GLuint,
     program: Shader,
     texture: GLuint,
@@ -39,7 +31,7 @@ impl Renderer {
 
         let gl_attr = video.gl_attr();
         gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
-        gl_attr.set_context_version(3, 3);
+        gl_attr.set_context_version(4, 5);
         gl_attr.set_depth_size(0);
         gl_attr.set_context_flags().forward_compatible().set();
 
@@ -65,32 +57,12 @@ impl Renderer {
         let program = Shader::new();
 
         let mut vao = 0;
-        let mut vbo = 0;
         let mut texture = 0;
 
         unsafe {
+            // create vao
             gl::GenVertexArrays(1, &mut vao);
             gl::BindVertexArray(vao);
-
-            gl::GenBuffers(1, &mut vbo);
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-            gl::BufferData(
-                gl::ARRAY_BUFFER,
-                (VERTICES.len() * size_of::<GLfloat>()) as _,
-                VERTICES.as_ptr().cast(),
-                gl::STATIC_DRAW,
-            );
-
-            // position attribute
-            gl::VertexAttribPointer(
-                0,
-                2,
-                gl::BYTE,
-                gl::FALSE,
-                (2 * size_of::<GLbyte>()) as _,
-                ptr::null(),
-            );
-            gl::EnableVertexAttribArray(0);
 
             // create texture
             gl::GenTextures(1, &mut texture);
@@ -101,7 +73,6 @@ impl Renderer {
 
         let mut res = Self {
             win,
-            vbo,
             vao,
             program,
             texture,
@@ -112,6 +83,21 @@ impl Renderer {
         res.resize_viewport(PX_WIDTH * MUL, PX_HEIGHT * MUL);
 
         res
+    }
+
+    pub fn toggle_fullscreen(&mut self, on: bool) {
+        if on {
+            self.win
+                .set_fullscreen(sdl2::video::FullscreenType::Desktop)
+                .unwrap();
+        } else {
+            self.win
+                .set_fullscreen(sdl2::video::FullscreenType::Off)
+                .unwrap();
+        }
+
+        let (w, h) = self.win.size();
+        self.resize_viewport(w, h);
     }
 
     pub fn resize_viewport(&mut self, w: u32, h: u32) {
@@ -158,7 +144,6 @@ impl Renderer {
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
-            gl::DeleteBuffers(1, &self.vbo);
             gl::DeleteVertexArrays(1, &self.vao);
             ManuallyDrop::drop(&mut self.ctx);
             ManuallyDrop::drop(&mut self.video);

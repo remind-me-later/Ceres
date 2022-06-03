@@ -105,6 +105,7 @@ pub struct Emu {
     video: video::Renderer,
     audio: audio::Renderer,
     last_frame: Instant,
+    fullscreen: bool,
 }
 
 impl Emu {
@@ -136,6 +137,7 @@ impl Emu {
             video,
             audio,
             last_frame: Instant::now(),
+            fullscreen: false,
         };
 
         let _controller = res.init_controller();
@@ -231,6 +233,11 @@ impl Emu {
                             Scancode::L => self.gb.press(Button::B),
                             Scancode::Return => self.gb.press(Button::Start),
                             Scancode::Backspace => self.gb.press(Button::Select),
+                            // Gui
+                            Scancode::F => {
+                                self.fullscreen = !self.fullscreen;
+                                self.video.toggle_fullscreen(self.fullscreen);
+                            }
                             _ => (),
                         }
                     }
