@@ -355,7 +355,8 @@ impl Header {
 
     #[must_use]
     pub fn title(&self) -> &str {
-        unsafe { str::from_utf8_unchecked(&self.title) }
+        // checked it is ASCII on new
+        str::from_utf8(&self.title).unwrap()
     }
 
     #[must_use]

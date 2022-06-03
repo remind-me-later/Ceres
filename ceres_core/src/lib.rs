@@ -1,4 +1,5 @@
 #![no_std]
+#![deny(unsafe_code)]
 #![feature(core_intrinsics)]
 #![feature(slice_swap_unchecked)]
 // clippy
@@ -14,7 +15,7 @@
 
 use {
     apu::{Noise, Square1, Square2, Wave},
-    core::{mem::ManuallyDrop, time::Duration},
+    core::time::Duration,
     memory::HdmaState,
     ppu::{ColorPalette, Mode, RgbaBuf, OAM_SIZE, VRAM_SIZE_CGB},
 };
@@ -74,39 +75,6 @@ enum CompatMode {
     Cgb,
 }
 
-#[derive(Default)]
-struct Reg16 {
-    af: u16,
-    bc: u16,
-    de: u16,
-    hl: u16,
-}
-
-// little endian
-struct Reg8 {
-    _f: u8,
-    a: u8,
-    c: u8,
-    b: u8,
-    e: u8,
-    d: u8,
-    l: u8,
-    h: u8,
-}
-
-union Regs {
-    r16: ManuallyDrop<Reg16>,
-    r8: ManuallyDrop<Reg8>,
-}
-
-impl Drop for Regs {
-    fn drop(&mut self) {
-        unsafe {
-            ManuallyDrop::drop(&mut self.r16);
-        }
-    }
-}
-
 pub struct Gb {
     // general
     cart: Cartridge,
@@ -121,7 +89,10 @@ pub struct Gb {
     boot_rom_mapped: bool,
 
     // cpu
-    regs: Regs,
+    af: u16,
+    bc: u16,
+    de: u16,
+    hl: u16,
     sp: u16,
     pc: u16,
 
@@ -238,6 +209,10 @@ impl Gb {
         };
 
         Self {
+            af: 0,
+            bc: 0,
+            de: 0,
+            hl: 0,
             delay_cycles: 0,
             sb: 0,
             sc: 0,
@@ -317,9 +292,6 @@ impl Gb {
             boot_rom_mapped: true,
             apu_ext_sample_period: 0,
             apu_frame_callback: default_apu_frame_callback,
-            regs: Regs {
-                r16: ManuallyDrop::default(),
-            },
         }
     }
 

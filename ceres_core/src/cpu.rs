@@ -8,62 +8,6 @@ const NF_B: u16 = 0x40;
 const HF_B: u16 = 0x20;
 const CF_B: u16 = 0x10;
 
-macro_rules! af {
-    ($gb:expr) => {
-        (*$gb.regs.r16).af
-    };
-}
-macro_rules! bc {
-    ($gb:expr) => {
-        (*$gb.regs.r16).bc
-    };
-}
-macro_rules! de {
-    ($gb:expr) => {
-        (*$gb.regs.r16).de
-    };
-}
-macro_rules! hl {
-    ($gb:expr) => {
-        (*$gb.regs.r16).hl
-    };
-}
-macro_rules! a {
-    ($gb:expr) => {
-        (*$gb.regs.r8).a
-    };
-}
-macro_rules! b {
-    ($gb:expr) => {
-        (*$gb.regs.r8).b
-    };
-}
-macro_rules! c {
-    ($gb:expr) => {
-        (*$gb.regs.r8).c
-    };
-}
-macro_rules! d {
-    ($gb:expr) => {
-        (*$gb.regs.r8).d
-    };
-}
-macro_rules! e {
-    ($gb:expr) => {
-        (*$gb.regs.r8).e
-    };
-}
-macro_rules! h {
-    ($gb:expr) => {
-        (*$gb.regs.r8).h
-    };
-}
-macro_rules! l {
-    ($gb:expr) => {
-        (*$gb.regs.r8).l
-    };
-}
-
 enum Ld8 {
     A,
     B,
@@ -77,146 +21,165 @@ enum Ld8 {
 
 impl Ld8 {
     #[inline]
-    unsafe fn read(self, gb: &mut Gb) -> u8 {
+    fn read(self, gb: &mut Gb) -> u8 {
         match self {
-            Ld8::A => a!(gb),
-            Ld8::B => b!(gb),
-            Ld8::C => c!(gb),
-            Ld8::D => d!(gb),
-            Ld8::E => e!(gb),
-            Ld8::H => h!(gb),
-            Ld8::L => l!(gb),
-            Ld8::Dhl => gb.cpu_read(hl!(gb)),
+            Ld8::A => (gb.af >> 8) as u8,
+            Ld8::B => (gb.bc >> 8) as u8,
+            Ld8::C => gb.bc as u8,
+            Ld8::D => (gb.de >> 8) as u8,
+            Ld8::E => gb.de as u8,
+            Ld8::H => (gb.hl >> 8) as u8,
+            Ld8::L => gb.hl as u8,
+            Ld8::Dhl => gb.cpu_read(gb.hl),
         }
     }
 
     #[inline]
-    unsafe fn write(self, gb: &mut Gb, val: u8) {
+    fn write(self, gb: &mut Gb, val: u8) {
         match self {
-            Ld8::A => a!(gb) = val,
-            Ld8::B => b!(gb) = val,
-            Ld8::C => c!(gb) = val,
-            Ld8::D => d!(gb) = val,
-            Ld8::E => e!(gb) = val,
-            Ld8::H => h!(gb) = val,
-            Ld8::L => l!(gb) = val,
-            Ld8::Dhl => gb.cpu_write(hl!(gb), val),
+            Ld8::A => {
+                gb.af &= 0x00FF;
+                gb.af |= (val as u16) << 8;
+            }
+            Ld8::B => {
+                gb.bc &= 0x00FF;
+                gb.bc |= (val as u16) << 8;
+            }
+            Ld8::C => {
+                gb.bc &= 0xFF00;
+                gb.bc |= val as u16;
+            }
+            Ld8::D => {
+                gb.de &= 0x00FF;
+                gb.de |= (val as u16) << 8;
+            }
+            Ld8::E => {
+                gb.de &= 0xFF00;
+                gb.de |= val as u16;
+            }
+            Ld8::H => {
+                gb.hl &= 0x00FF;
+                gb.hl |= (val as u16) << 8;
+            }
+            Ld8::L => {
+                gb.hl &= 0xFF00;
+                gb.hl |= val as u16;
+            }
+            Ld8::Dhl => gb.cpu_write(gb.hl, val),
         }
     }
 }
 
 impl Gb {
     pub(crate) fn run(&mut self) {
-        unsafe {
-            if self.cpu_halted {
-                self.empty_cycle();
-            } else {
-                if self.cpu_ei_delay {
-                    self.ime = true;
-                    self.cpu_ei_delay = false;
-                }
-
-                let opcode = self.imm_u8();
-                self.run_hdma();
-                self.exec(opcode);
-            }
-
-            self.catch_up();
-
-            // any interrupts?
-            if self.ifr & self.ie & 0x1F == 0 {
-                return;
-            }
-
-            // interrupt exits halt
-            self.cpu_halted = false;
-
-            if !self.ime {
-                return;
-            }
-
-            // push pc to stack
+        if self.cpu_halted {
             self.empty_cycle();
-            self.sp = self.sp.wrapping_sub(1);
-            self.cpu_write(self.sp, (self.pc >> 8) as u8);
-            self.sp = self.sp.wrapping_sub(1);
-            self.cpu_write(self.sp, (self.pc & 0xFF) as u8);
-            self.empty_cycle();
+        } else {
+            if self.cpu_ei_delay {
+                self.ime = true;
+                self.cpu_ei_delay = false;
+            }
 
-            // disallow double fault
-            self.ime = false;
-            // recompute, maybe ifr changed
-            let ints = self.ifr & self.ie & 0x1F;
-            let trail_zeros = ints.trailing_zeros();
-            // get rightmost interrupt
-            let int = ((ints != 0) as u8) << trail_zeros;
-            // compute direction of interrupt vector
-            self.pc = 0x40 | (trail_zeros << 3) as u16;
-            // acknowledge
-            self.ifr &= !int;
+            let opcode = self.imm_u8();
+            self.run_hdma();
+            self.exec(opcode);
         }
+
+        self.catch_up();
+
+        // any interrupts?
+        if self.ifr & self.ie & 0x1F == 0 {
+            return;
+        }
+
+        // interrupt exits halt
+        self.cpu_halted = false;
+
+        if !self.ime {
+            return;
+        }
+
+        // push pc to stack
+        self.empty_cycle();
+        self.sp = self.sp.wrapping_sub(1);
+        self.cpu_write(self.sp, (self.pc >> 8) as u8);
+        self.sp = self.sp.wrapping_sub(1);
+        self.cpu_write(self.sp, (self.pc & 0xFF) as u8);
+        self.empty_cycle();
+
+        // disallow double fault
+        self.ime = false;
+        // recompute, maybe ifr changed
+        let ints = self.ifr & self.ie & 0x1F;
+        let trail_zeros = ints.trailing_zeros();
+        // get rightmost interrupt
+        let int = ((ints != 0) as u8) << trail_zeros;
+        // compute direction of interrupt vector
+        self.pc = 0x40 | (trail_zeros << 3) as u16;
+        // acknowledge
+        self.ifr &= !int;
     }
 
     #[inline]
-    unsafe fn cpu_write(&mut self, addr: u16, val: u8) {
+    fn cpu_write(&mut self, addr: u16, val: u8) {
         self.empty_cycle();
         self.catch_up();
         self.write_mem(addr, val);
     }
 
     #[inline]
-    unsafe fn cpu_read(&mut self, addr: u16) -> u8 {
+    fn cpu_read(&mut self, addr: u16) -> u8 {
         self.empty_cycle();
         self.catch_up();
         self.read_mem(addr)
     }
 
     #[inline]
-    unsafe fn catch_up(&mut self) {
+    fn catch_up(&mut self) {
         self.advance_cycles(self.delay_cycles);
         self.delay_cycles = 0;
     }
 
     #[inline]
-    unsafe fn empty_cycle(&mut self) {
+    fn empty_cycle(&mut self) {
         self.delay_cycles += 1;
     }
 
     #[inline]
-    unsafe fn imm_u8(&mut self) -> u8 {
+    fn imm_u8(&mut self) -> u8 {
         let val = self.cpu_read(self.pc);
         self.pc = self.pc.wrapping_add(1);
         val
     }
 
     #[inline]
-    unsafe fn imm_u16(&mut self) -> u16 {
+    fn imm_u16(&mut self) -> u16 {
         let lo = self.imm_u8() as u16;
         let hi = self.imm_u8() as u16;
         hi << 8 | lo
     }
 
     #[inline]
-    unsafe fn regid2reg(&mut self, id: u8) -> &mut u16 {
+    fn regid2reg(&mut self, id: u8) -> &mut u16 {
         match id {
-            0 => &mut af!(self),
-            1 => &mut bc!(self),
-            2 => &mut de!(self),
-            3 => &mut hl!(self),
+            0 => &mut self.af,
+            1 => &mut self.bc,
+            2 => &mut self.de,
+            3 => &mut self.hl,
             4 => &mut self.sp,
             _ => unreachable!(),
         }
     }
 
     #[inline]
-    unsafe fn get_src_val(&mut self, opcode: u8) -> u8 {
+    fn get_src_val(&mut self, opcode: u8) -> u8 {
         let reg_id = ((opcode >> 1) + 1) & 3;
         let lo = opcode & 1 != 0;
         if reg_id == 0 {
             if lo {
-                return (af!(self) >> 8) as u8;
+                return (self.af >> 8) as u8;
             }
-            return self.cpu_read(hl!(self));
+            return self.cpu_read(self.hl);
         }
         if lo {
             return *self.regid2reg(reg_id) as u8;
@@ -225,16 +188,16 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn set_src_val(&mut self, opcode: u8, val: u8) {
+    fn set_src_val(&mut self, opcode: u8, val: u8) {
         let reg_id = ((opcode >> 1) + 1) & 3;
         let lo = opcode & 1 != 0;
 
         if reg_id == 0 {
             if lo {
-                af!(self) &= 0xFF;
-                af!(self) |= (val as u16) << 8;
+                self.af &= 0xFF;
+                self.af |= (val as u16) << 8;
             } else {
-                self.cpu_write(hl!(self), val);
+                self.cpu_write(self.hl, val);
             }
         } else if lo {
             *self.regid2reg(reg_id) &= 0xFF00;
@@ -246,97 +209,97 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn ld(&mut self, t: Ld8, s: Ld8) {
+    fn ld(&mut self, t: Ld8, s: Ld8) {
         let val = s.read(self);
         t.write(self, val);
     }
 
     #[inline]
-    unsafe fn ld_a_drr(&mut self, opcode: u8) {
+    fn ld_a_drr(&mut self, opcode: u8) {
         let reg_id = (opcode >> 4) + 1;
-        af!(self) &= 0xFF;
+        self.af &= 0xFF;
         let tmp = *self.regid2reg(reg_id);
-        af!(self) |= (self.cpu_read(tmp) as u16) << 8;
+        self.af |= (self.cpu_read(tmp) as u16) << 8;
     }
 
     #[inline]
-    unsafe fn ld_drr_a(&mut self, opcode: u8) {
+    fn ld_drr_a(&mut self, opcode: u8) {
         let reg_id = (opcode >> 4) + 1;
         let tmp = *self.regid2reg(reg_id);
-        self.cpu_write(tmp, (af!(self) >> 8) as u8);
+        self.cpu_write(tmp, (self.af >> 8) as u8);
     }
 
     #[inline]
-    unsafe fn ld_da16_a(&mut self) {
+    fn ld_da16_a(&mut self) {
         let addr = self.imm_u16();
-        self.cpu_write(addr, (af!(self) >> 8) as u8);
+        self.cpu_write(addr, (self.af >> 8) as u8);
     }
 
     #[inline]
-    unsafe fn ld_a_da16(&mut self) {
-        af!(self) &= 0xFF;
+    fn ld_a_da16(&mut self) {
+        self.af &= 0xFF;
         let addr = self.imm_u16();
-        af!(self) |= (self.cpu_read(addr) as u16) << 8;
+        self.af |= (self.cpu_read(addr) as u16) << 8;
     }
 
     #[inline]
-    unsafe fn ld_dhli_a(&mut self) {
-        let addr = hl!(self);
-        self.cpu_write(addr, (af!(self) >> 8) as u8);
-        hl!(self) = addr.wrapping_add(1);
+    fn ld_dhli_a(&mut self) {
+        let addr = self.hl;
+        self.cpu_write(addr, (self.af >> 8) as u8);
+        self.hl = addr.wrapping_add(1);
     }
 
     #[inline]
-    unsafe fn ld_dhld_a(&mut self) {
-        let addr = hl!(self);
-        self.cpu_write(addr, (af!(self) >> 8) as u8);
-        hl!(self) = addr.wrapping_sub(1);
+    fn ld_dhld_a(&mut self) {
+        let addr = self.hl;
+        self.cpu_write(addr, (self.af >> 8) as u8);
+        self.hl = addr.wrapping_sub(1);
     }
 
     #[inline]
-    unsafe fn ld_a_dhli(&mut self) {
-        let addr = hl!(self);
+    fn ld_a_dhli(&mut self) {
+        let addr = self.hl;
         let val = self.cpu_read(addr) as u16;
-        af!(self) &= 0xFF;
-        af!(self) |= val << 8;
-        hl!(self) = addr.wrapping_add(1);
+        self.af &= 0xFF;
+        self.af |= val << 8;
+        self.hl = addr.wrapping_add(1);
     }
 
     #[inline]
-    unsafe fn ld_a_dhld(&mut self) {
-        let addr = hl!(self);
+    fn ld_a_dhld(&mut self) {
+        let addr = self.hl;
         let val = self.cpu_read(addr) as u16;
-        af!(self) &= 0xFF;
-        af!(self) |= val << 8;
-        hl!(self) = addr.wrapping_sub(1);
+        self.af &= 0xFF;
+        self.af |= val << 8;
+        self.hl = addr.wrapping_sub(1);
     }
 
     #[inline]
-    unsafe fn ld_da8_a(&mut self) {
+    fn ld_da8_a(&mut self) {
         let tmp = self.imm_u8() as u16;
-        self.cpu_write(0xFF00 | tmp, (af!(self) >> 8) as u8);
+        self.cpu_write(0xFF00 | tmp, (self.af >> 8) as u8);
     }
 
     #[inline]
-    unsafe fn ld_a_da8(&mut self) {
+    fn ld_a_da8(&mut self) {
         let tmp = self.imm_u8() as u16;
-        af!(self) &= 0xFF;
-        af!(self) |= (self.cpu_read(0xFF00 | tmp) as u16) << 8;
+        self.af &= 0xFF;
+        self.af |= (self.cpu_read(0xFF00 | tmp) as u16) << 8;
     }
 
     #[inline]
-    unsafe fn ld_dc_a(&mut self) {
-        self.cpu_write(0xFF00 | bc!(self) & 0xFF, (af!(self) >> 8) as u8);
+    fn ld_dc_a(&mut self) {
+        self.cpu_write(0xFF00 | self.bc & 0xFF, (self.af >> 8) as u8);
     }
 
     #[inline]
-    unsafe fn ld_a_dc(&mut self) {
-        af!(self) &= 0xFF;
-        af!(self) |= (self.cpu_read(0xFF00 | bc!(self) & 0xFF) as u16) << 8;
+    fn ld_a_dc(&mut self) {
+        self.af &= 0xFF;
+        self.af |= (self.cpu_read(0xFF00 | self.bc & 0xFF) as u16) << 8;
     }
 
     #[inline]
-    unsafe fn ld_hr_d8(&mut self, opcode: u8) {
+    fn ld_hr_d8(&mut self, opcode: u8) {
         let reg_id = ((opcode >> 4) + 1) & 0x03;
         *self.regid2reg(reg_id) &= 0xFF;
         let tmp = self.imm_u8() as u16;
@@ -344,7 +307,7 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn ld_lr_d8(&mut self, opcode: u8) {
+    fn ld_lr_d8(&mut self, opcode: u8) {
         let reg_id = (opcode >> 4) + 1;
         *self.regid2reg(reg_id) &= 0xFF00;
         let tmp = self.imm_u8() as u16;
@@ -352,351 +315,351 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn ld_dhl_d8(&mut self) {
+    fn ld_dhl_d8(&mut self) {
         let tmp = self.imm_u8();
-        self.cpu_write(hl!(self), tmp);
+        self.cpu_write(self.hl, tmp);
     }
 
     #[inline]
-    unsafe fn ld16_sp_hl(&mut self) {
-        let val = hl!(self);
+    fn ld16_sp_hl(&mut self) {
+        let val = self.hl;
         self.sp = val;
         self.empty_cycle();
     }
 
     #[inline]
-    unsafe fn add_a_r(&mut self, opcode: u8) {
+    fn add_a_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode) as u16;
-        let a = af!(self) >> 8;
+        let a = self.af >> 8;
         let res = a + val;
-        af!(self) = res << 8;
+        self.af = res << 8;
         if res & 0xFF == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
         if (a & 0xF) + (val & 0xF) > 0x0F {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
         if res > 0xFF {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
     }
 
     #[inline]
-    unsafe fn add_a_d8(&mut self) {
+    fn add_a_d8(&mut self) {
         let val = self.imm_u8() as u16;
-        let a = af!(self) >> 8;
+        let a = self.af >> 8;
         let res = a + val;
-        af!(self) = res << 8;
+        self.af = res << 8;
         if res & 0xFF == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
         if (a & 0xF) + (val & 0xF) > 0x0F {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
         if res > 0xFF {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
     }
 
     #[inline]
-    unsafe fn sub_a_r(&mut self, opcode: u8) {
+    fn sub_a_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode) as u16;
-        let a = af!(self) >> 8;
-        af!(self) = (a.wrapping_sub(val) << 8) | NF_B;
+        let a = self.af >> 8;
+        self.af = (a.wrapping_sub(val) << 8) | NF_B;
         if a == val {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
         if (a & 0xF) < (val & 0xF) {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
         if a < val {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
     }
 
     #[inline]
-    unsafe fn sub_a_d8(&mut self) {
+    fn sub_a_d8(&mut self) {
         let val = self.imm_u8() as u16;
-        let a = af!(self) >> 8;
-        af!(self) = (a.wrapping_sub(val) << 8) | NF_B;
+        let a = self.af >> 8;
+        self.af = (a.wrapping_sub(val) << 8) | NF_B;
         if a == val {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
         if (a & 0xF) < (val & 0xF) {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
         if a < val {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
     }
 
     #[inline]
-    unsafe fn sbc_a_r(&mut self, opcode: u8) {
+    fn sbc_a_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode) as u16;
-        let a = af!(self) >> 8;
-        let carry = ((af!(self) & CF_B) != 0) as u16;
+        let a = self.af >> 8;
+        let carry = ((self.af & CF_B) != 0) as u16;
         let res = a.wrapping_sub(val).wrapping_sub(carry);
-        af!(self) = (res << 8) | NF_B;
+        self.af = (res << 8) | NF_B;
 
         if res & 0xFF == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
         if (a & 0xF) < (val & 0xF) + carry {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
         if res > 0xFF {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
     }
 
     #[inline]
-    unsafe fn sbc_a_d8(&mut self) {
+    fn sbc_a_d8(&mut self) {
         let val = self.imm_u8() as u16;
-        let a = af!(self) >> 8;
-        let carry = ((af!(self) & CF_B) != 0) as u16;
+        let a = self.af >> 8;
+        let carry = ((self.af & CF_B) != 0) as u16;
         let res = a.wrapping_sub(val).wrapping_sub(carry);
-        af!(self) = (res << 8) | NF_B;
+        self.af = (res << 8) | NF_B;
 
         if res & 0xFF == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
         if (a & 0xF) < (val & 0xF) + carry {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
         if res > 0xFF {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
     }
 
     #[inline]
-    unsafe fn adc_a_r(&mut self, opcode: u8) {
+    fn adc_a_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode) as u16;
-        let a = af!(self) >> 8;
-        let carry = ((af!(self) & CF_B) != 0) as u16;
+        let a = self.af >> 8;
+        let carry = ((self.af & CF_B) != 0) as u16;
         let res = a + val + carry;
-        af!(self) = res << 8;
+        self.af = res << 8;
         if res & 0xFF == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
         if (a & 0xF) + (val & 0xF) + carry > 0x0F {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
         if res > 0xFF {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
     }
 
     #[inline]
-    unsafe fn adc_a_d8(&mut self) {
+    fn adc_a_d8(&mut self) {
         let val = self.imm_u8() as u16;
-        let a = af!(self) >> 8;
-        let carry = ((af!(self) & CF_B) != 0) as u16;
+        let a = self.af >> 8;
+        let carry = ((self.af & CF_B) != 0) as u16;
         let res = a + val + carry;
-        af!(self) = res << 8;
+        self.af = res << 8;
         if res & 0xFF == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
         if (a & 0xF) + (val & 0xF) + carry > 0x0F {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
         if res > 0xFF {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
     }
 
     #[inline]
-    unsafe fn or_a_r(&mut self, opcode: u8) {
+    fn or_a_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode) as u16;
-        let a = af!(self) >> 8;
-        af!(self) = (a | val) << 8;
+        let a = self.af >> 8;
+        self.af = (a | val) << 8;
         if (a | val) == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn or_a_d8(&mut self) {
+    fn or_a_d8(&mut self) {
         let val = self.imm_u8() as u16;
-        let a = af!(self) >> 8;
-        af!(self) = (a | val) << 8;
+        let a = self.af >> 8;
+        self.af = (a | val) << 8;
         if (a | val) == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn xor_a_r(&mut self, opcode: u8) {
+    fn xor_a_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode) as u16;
-        let a = af!(self) >> 8;
-        af!(self) = (a ^ val) << 8;
+        let a = self.af >> 8;
+        self.af = (a ^ val) << 8;
         if (a ^ val) == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn xor_a_d8(&mut self) {
+    fn xor_a_d8(&mut self) {
         let val = self.imm_u8() as u16;
-        let a = af!(self) >> 8;
-        af!(self) = (a ^ val) << 8;
+        let a = self.af >> 8;
+        self.af = (a ^ val) << 8;
         if (a ^ val) == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn and_a_r(&mut self, opcode: u8) {
+    fn and_a_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode) as u16;
-        let a = af!(self) >> 8;
-        af!(self) = ((a & val) << 8) | HF_B;
+        let a = self.af >> 8;
+        self.af = ((a & val) << 8) | HF_B;
         if (a & val) == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn and_a_d8(&mut self) {
+    fn and_a_d8(&mut self) {
         let val = self.imm_u8() as u16;
-        let a = af!(self) >> 8;
-        af!(self) = ((a & val) << 8) | HF_B;
+        let a = self.af >> 8;
+        self.af = ((a & val) << 8) | HF_B;
         if (a & val) == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn cp_a_r(&mut self, opcode: u8) {
+    fn cp_a_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode) as u16;
-        let a = af!(self) >> 8;
-        af!(self) &= 0xFF00;
-        af!(self) |= NF_B;
+        let a = self.af >> 8;
+        self.af &= 0xFF00;
+        self.af |= NF_B;
         if a == val {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
         if (a & 0xF) < (val & 0xF) {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
         if a < val {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
     }
 
     #[inline]
-    unsafe fn cp_a_d8(&mut self) {
+    fn cp_a_d8(&mut self) {
         let val = self.imm_u8() as u16;
-        let a = af!(self) >> 8;
-        af!(self) &= 0xFF00;
-        af!(self) |= NF_B;
+        let a = self.af >> 8;
+        self.af &= 0xFF00;
+        self.af |= NF_B;
         if a == val {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
         if (a & 0xF) < (val & 0xF) {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
         if a < val {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
     }
 
     #[inline]
-    unsafe fn inc_lr(&mut self, opcode: u8) {
+    fn inc_lr(&mut self, opcode: u8) {
         let reg_id = (opcode >> 4) + 1;
         let val = (*self.regid2reg(reg_id) + 1) & 0xFF;
         *self.regid2reg(reg_id) = (*self.regid2reg(reg_id) & 0xFF00) | val;
 
-        af!(self) &= !(NF_B | ZF_B | HF_B);
+        self.af &= !(NF_B | ZF_B | HF_B);
 
         if ((*self.regid2reg(reg_id)) & 0x0F) == 0 {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
 
         if ((*self.regid2reg(reg_id)) & 0xFF) == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn dec_lr(&mut self, opcode: u8) {
+    fn dec_lr(&mut self, opcode: u8) {
         let reg_id = (opcode >> 4) + 1;
         let val = (*self.regid2reg(reg_id)).wrapping_sub(1) & 0xFF;
         (*self.regid2reg(reg_id)) = ((*self.regid2reg(reg_id)) & 0xFF00) | val;
 
-        af!(self) &= !(ZF_B | HF_B);
-        af!(self) |= NF_B;
+        self.af &= !(ZF_B | HF_B);
+        self.af |= NF_B;
 
         if ((*self.regid2reg(reg_id)) & 0x0F) == 0xF {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
 
         if ((*self.regid2reg(reg_id)) & 0xFF) == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn inc_hr(&mut self, opcode: u8) {
+    fn inc_hr(&mut self, opcode: u8) {
         let reg_id = ((opcode >> 4) + 1) & 0x03;
         *self.regid2reg(reg_id) = (*self.regid2reg(reg_id)).wrapping_add(0x100);
-        af!(self) &= !(NF_B | ZF_B | HF_B);
+        self.af &= !(NF_B | ZF_B | HF_B);
 
         if ((*self.regid2reg(reg_id)) & 0x0F00) == 0 {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
 
         if ((*self.regid2reg(reg_id)) & 0xFF00) == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn dec_hr(&mut self, opcode: u8) {
+    fn dec_hr(&mut self, opcode: u8) {
         let reg_id = ((opcode >> 4) + 1) & 0x03;
         *self.regid2reg(reg_id) = (*self.regid2reg(reg_id)).wrapping_sub(0x100);
-        af!(self) &= !(ZF_B | HF_B);
-        af!(self) |= NF_B;
+        self.af &= !(ZF_B | HF_B);
+        self.af |= NF_B;
 
         if ((*self.regid2reg(reg_id)) & 0x0F00) == 0xF00 {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
 
         if ((*self.regid2reg(reg_id)) & 0xFF00) == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn inc_dhl(&mut self) {
-        let val = self.cpu_read(hl!(self)).wrapping_add(1);
-        self.cpu_write(hl!(self), val);
+    fn inc_dhl(&mut self) {
+        let val = self.cpu_read(self.hl).wrapping_add(1);
+        self.cpu_write(self.hl, val);
 
-        af!(self) &= !(NF_B | ZF_B | HF_B);
+        self.af &= !(NF_B | ZF_B | HF_B);
         if (val & 0x0F) == 0 {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
 
         if val == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn dec_dhl(&mut self) {
-        let val = self.cpu_read(hl!(self)).wrapping_sub(1);
-        self.cpu_write(hl!(self), val);
+    fn dec_dhl(&mut self) {
+        let val = self.cpu_read(self.hl).wrapping_sub(1);
+        self.cpu_write(self.hl, val);
 
-        af!(self) &= !(ZF_B | HF_B);
-        af!(self) |= NF_B;
+        self.af &= !(ZF_B | HF_B);
+        self.af |= NF_B;
         if (val & 0x0F) == 0x0F {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
 
         if val == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn inc_rr(&mut self, opcode: u8) {
+    fn inc_rr(&mut self, opcode: u8) {
         let reg_id = (opcode >> 4) + 1;
         let reg = self.regid2reg(reg_id);
         *reg = reg.wrapping_add(1);
@@ -704,7 +667,7 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn dec_rr(&mut self, opcode: u8) {
+    fn dec_rr(&mut self, opcode: u8) {
         let reg_id = (opcode >> 4) + 1;
         let reg = self.regid2reg(reg_id);
         *reg = reg.wrapping_sub(1);
@@ -712,69 +675,69 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn ld_hl_sp_r8(&mut self) {
-        af!(self) &= 0xFF00;
+    fn ld_hl_sp_r8(&mut self) {
+        self.af &= 0xFF00;
         let offset = self.imm_u8() as i8 as u16;
         self.empty_cycle();
-        hl!(self) = self.sp.wrapping_add(offset);
+        self.hl = self.sp.wrapping_add(offset);
 
         if (self.sp & 0xF) + (offset & 0xF) > 0xF {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
 
         if (self.sp & 0xFF) + (offset & 0xFF) > 0xFF {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
     }
 
     #[inline]
-    unsafe fn rlca(&mut self) {
-        let carry = (af!(self) & 0x8000) != 0;
+    fn rlca(&mut self) {
+        let carry = (self.af & 0x8000) != 0;
 
-        af!(self) = (af!(self) & 0xFF00) << 1;
+        self.af = (self.af & 0xFF00) << 1;
         if carry {
-            af!(self) |= CF_B | 0x0100;
+            self.af |= CF_B | 0x0100;
         }
     }
 
     #[inline]
-    unsafe fn rrca(&mut self) {
-        let carry = (af!(self) & 0x100) != 0;
-        af!(self) = (af!(self) >> 1) & 0xFF00;
+    fn rrca(&mut self) {
+        let carry = (self.af & 0x100) != 0;
+        self.af = (self.af >> 1) & 0xFF00;
         if carry {
-            af!(self) |= CF_B | 0x8000;
+            self.af |= CF_B | 0x8000;
         }
     }
 
     #[inline]
-    unsafe fn rrc_r(&mut self, opcode: u8) {
+    fn rrc_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode);
         let carry = (val & 0x01) != 0;
-        af!(self) &= 0xFF00;
+        self.af &= 0xFF00;
         let val = val >> 1 | (carry as u8) << 7;
         self.set_src_val(opcode, val);
         if carry {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
         if val == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn do_jump_to_immediate(&mut self) {
+    fn do_jump_to_immediate(&mut self) {
         let addr = self.imm_u16();
         self.pc = addr;
         self.empty_cycle();
     }
 
     #[inline]
-    unsafe fn jp_a16(&mut self) {
+    fn jp_a16(&mut self) {
         self.do_jump_to_immediate();
     }
 
     #[inline]
-    unsafe fn jp_cc(&mut self, opcode: u8) {
+    fn jp_cc(&mut self, opcode: u8) {
         if self.condition(opcode) {
             self.do_jump_to_immediate();
         } else {
@@ -786,13 +749,13 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn jp_hl(&mut self) {
-        let addr = hl!(self);
+    fn jp_hl(&mut self) {
+        let addr = self.hl;
         self.pc = addr;
     }
 
     #[inline]
-    unsafe fn do_jump_relative(&mut self) {
+    fn do_jump_relative(&mut self) {
         let relative_addr = self.imm_u8() as i8 as u16;
         let pc = self.pc.wrapping_add(relative_addr);
         self.pc = pc;
@@ -800,12 +763,12 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn jr_d(&mut self) {
+    fn jr_d(&mut self) {
         self.do_jump_relative();
     }
 
     #[inline]
-    unsafe fn jr_cc(&mut self, opcode: u8) {
+    fn jr_cc(&mut self, opcode: u8) {
         if self.condition(opcode) {
             self.do_jump_relative();
         } else {
@@ -815,7 +778,7 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn do_call(&mut self) {
+    fn do_call(&mut self) {
         let addr = self.imm_u16();
         self.sp = self.sp.wrapping_sub(1);
         self.cpu_write(self.sp, ((self.pc) >> 8) as u8);
@@ -825,12 +788,12 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn call_nn(&mut self) {
+    fn call_nn(&mut self) {
         self.do_call();
     }
 
     #[inline]
-    unsafe fn call_cc_a16(&mut self, opcode: u8) {
+    fn call_cc_a16(&mut self, opcode: u8) {
         if self.condition(opcode) {
             self.do_call();
         } else {
@@ -842,7 +805,7 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn ret(&mut self) {
+    fn ret(&mut self) {
         self.pc = self.cpu_read(self.sp) as u16;
         self.sp = self.sp.wrapping_add(1);
         self.pc |= (self.cpu_read(self.sp) as u16) << 8;
@@ -851,13 +814,13 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn reti(&mut self) {
+    fn reti(&mut self) {
         self.ret();
         self.ime = true;
     }
 
     #[inline]
-    unsafe fn ret_cc(&mut self, opcode: u8) {
+    fn ret_cc(&mut self, opcode: u8) {
         self.empty_cycle();
 
         if self.condition(opcode) {
@@ -866,18 +829,18 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn condition(&self, opcode: u8) -> bool {
+    fn condition(&self, opcode: u8) -> bool {
         match (opcode >> 3) & 0x3 {
-            0 => af!(self) & ZF_B == 0,
-            1 => af!(self) & ZF_B != 0,
-            2 => af!(self) & CF_B == 0,
-            3 => af!(self) & CF_B != 0,
+            0 => self.af & ZF_B == 0,
+            1 => self.af & ZF_B != 0,
+            2 => self.af & CF_B == 0,
+            3 => self.af & CF_B != 0,
             _ => unreachable!(),
         }
     }
 
     #[inline]
-    unsafe fn rst(&mut self, opcode: u8) {
+    fn rst(&mut self, opcode: u8) {
         self.sp = self.sp.wrapping_sub(1);
         self.cpu_write(self.sp, ((self.pc) >> 8) as u8);
         self.sp = self.sp.wrapping_sub(1);
@@ -886,12 +849,12 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn halt(&mut self) {
+    fn halt(&mut self) {
         self.cpu_halted = true;
     }
 
     #[inline]
-    unsafe fn stop(&mut self) {
+    fn stop(&mut self) {
         self.imm_u8();
 
         if self.key1 & KEY1_SWITCH_B == 0 {
@@ -905,81 +868,81 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn di(&mut self) {
+    fn di(&mut self) {
         self.ime = false;
     }
 
     #[inline]
-    unsafe fn ei(&mut self) {
+    fn ei(&mut self) {
         self.cpu_ei_delay = true;
     }
 
     #[inline]
-    unsafe fn ccf(&mut self) {
-        af!(self) ^= CF_B;
-        af!(self) &= !(HF_B | NF_B);
+    fn ccf(&mut self) {
+        self.af ^= CF_B;
+        self.af &= !(HF_B | NF_B);
     }
 
     #[inline]
-    unsafe fn scf(&mut self) {
-        af!(self) |= CF_B;
-        af!(self) &= !(HF_B | NF_B);
+    fn scf(&mut self) {
+        self.af |= CF_B;
+        self.af &= !(HF_B | NF_B);
     }
 
     #[inline]
     #[allow(clippy::unused_self)]
-    unsafe fn nop(&mut self) {}
+    fn nop(&mut self) {}
 
     // TODO: debugger breakpoint
     #[inline]
-    unsafe fn ld_b_b(&mut self) {
+    fn ld_b_b(&mut self) {
         self.nop();
     }
 
     #[inline]
-    unsafe fn daa(&mut self) {
-        let mut result = af!(self) >> 8;
+    fn daa(&mut self) {
+        let mut result = self.af >> 8;
 
-        af!(self) &= !(0xFF00 | ZF_B);
+        self.af &= !(0xFF00 | ZF_B);
 
-        if af!(self) & NF_B == 0 {
-            if af!(self) & HF_B != 0 || result & 0x0F > 0x09 {
+        if self.af & NF_B == 0 {
+            if self.af & HF_B != 0 || result & 0x0F > 0x09 {
                 result += 0x06;
             }
 
-            if af!(self) & CF_B != 0 || result > 0x9F {
+            if self.af & CF_B != 0 || result > 0x9F {
                 result += 0x60;
             }
         } else {
-            if af!(self) & HF_B != 0 {
+            if self.af & HF_B != 0 {
                 result = result.wrapping_sub(0x06) & 0xFF;
             }
 
-            if af!(self) & CF_B != 0 {
+            if self.af & CF_B != 0 {
                 result = result.wrapping_sub(0x60);
             }
         }
 
         if result & 0xFF == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
 
         if result & 0x100 == 0x100 {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
 
-        af!(self) &= !HF_B;
-        af!(self) |= result << 8;
+        self.af &= !HF_B;
+        self.af |= result << 8;
     }
 
     #[inline]
-    unsafe fn cpl(&mut self) {
-        af!(self) ^= 0xFF00;
-        af!(self) |= HF_B | NF_B;
+    fn cpl(&mut self) {
+        self.af ^= 0xFF00;
+        self.af |= HF_B | NF_B;
     }
 
     #[inline]
-    unsafe fn push_rr(&mut self, opcode: u8) {
+    fn push_rr(&mut self, opcode: u8) {
         let reg_id = ((opcode >> 4) + 1) & 3;
         let val = *self.regid2reg(reg_id);
         self.sp = self.sp.wrapping_sub(1);
@@ -989,24 +952,24 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn pop_rr(&mut self, opcode: u8) {
+    fn pop_rr(&mut self, opcode: u8) {
         let mut val = self.cpu_read(self.sp) as u16;
         self.sp = self.sp.wrapping_add(1);
         val |= (self.cpu_read(self.sp) as u16) << 8;
         self.sp = self.sp.wrapping_add(1);
         let reg_id = ((opcode >> 4) + 1) & 3;
         *self.regid2reg(reg_id) = val;
-        af!(self) &= 0xFFF0;
+        self.af &= 0xFFF0;
     }
 
     #[inline]
-    unsafe fn ld_rr_d16(&mut self, opcode: u8) {
+    fn ld_rr_d16(&mut self, opcode: u8) {
         let reg_id = (opcode >> 4) + 1;
         *self.regid2reg(reg_id) = self.imm_u16();
     }
 
     #[inline]
-    unsafe fn ld_da16_sp(&mut self) {
+    fn ld_da16_sp(&mut self) {
         let val = self.sp;
         let addr = self.imm_u16();
         self.cpu_write(addr, (val & 0xFF) as u8);
@@ -1014,149 +977,149 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn add_sp_r8(&mut self) {
+    fn add_sp_r8(&mut self) {
         let sp = self.sp;
         let offset = self.imm_u8() as i8 as u16;
         self.empty_cycle();
         self.empty_cycle();
         self.sp = self.sp.wrapping_add(offset);
-        af!(self) &= 0xFF00;
+        self.af &= 0xFF00;
 
         if (sp & 0xF) + (offset & 0xF) > 0xF {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
 
         if (sp & 0xFF) + (offset & 0xFF) > 0xFF {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
     }
 
     #[inline]
-    unsafe fn add_hl_rr(&mut self, opcode: u8) {
+    fn add_hl_rr(&mut self, opcode: u8) {
         let reg_id = (opcode >> 4) + 1;
-        let hl = hl!(self);
+        let hl = self.hl;
         let rr = *self.regid2reg(reg_id);
-        hl!(self) = hl.wrapping_add(rr);
+        self.hl = hl.wrapping_add(rr);
 
-        af!(self) &= !(NF_B | CF_B | HF_B);
+        self.af &= !(NF_B | CF_B | HF_B);
 
         if ((hl & 0xFFF) + (rr & 0xFFF)) & 0x1000 != 0 {
-            af!(self) |= HF_B;
+            self.af |= HF_B;
         }
 
         if (hl as u32 + rr as u32) & 0x10000 != 0 {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
 
         self.empty_cycle();
     }
 
     #[inline]
-    unsafe fn rlc_r(&mut self, opcode: u8) {
+    fn rlc_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode);
         let carry = val & 0x80 != 0;
-        af!(self) &= 0xFF00;
+        self.af &= 0xFF00;
         self.set_src_val(opcode, val << 1 | carry as u8);
         if carry {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
         if val == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn rra(&mut self) {
-        let bit1 = af!(self) & 0x0100 != 0;
-        let carry = af!(self) & CF_B != 0;
+    fn rra(&mut self) {
+        let bit1 = self.af & 0x0100 != 0;
+        let carry = self.af & CF_B != 0;
 
-        af!(self) = (af!(self) >> 1) & 0xFF00 | (carry as u16) << 15;
+        self.af = (self.af >> 1) & 0xFF00 | (carry as u16) << 15;
 
         if bit1 {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
     }
 
     #[inline]
-    unsafe fn rr_r(&mut self, opcode: u8) {
+    fn rr_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode);
-        let carry = (af!(self) & CF_B) != 0;
+        let carry = (self.af & CF_B) != 0;
         let bit1 = (val & 1) != 0;
 
-        af!(self) &= 0xFF00;
+        self.af &= 0xFF00;
         let val = val >> 1 | (carry as u8) << 7;
         self.set_src_val(opcode, val);
         if bit1 {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
         if val == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn sla_r(&mut self, opcode: u8) {
+    fn sla_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode);
         let carry = val & 0x80 != 0;
-        af!(self) &= 0xFF00;
+        self.af &= 0xFF00;
         let res = val << 1;
         self.set_src_val(opcode, res);
         if carry {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
         if res == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn sra_r(&mut self, opcode: u8) {
+    fn sra_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode);
         let bit7 = val & 0x80;
-        af!(self) &= 0xFF00;
+        self.af &= 0xFF00;
         if val & 1 != 0 {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
         let val = (val >> 1) | bit7;
         self.set_src_val(opcode, val);
         if val == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn srl_r(&mut self, opcode: u8) {
+    fn srl_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode);
-        af!(self) &= 0xFF00;
+        self.af &= 0xFF00;
         self.set_src_val(opcode, val >> 1);
         if val & 1 != 0 {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
         if val >> 1 == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn swap_r(&mut self, opcode: u8) {
+    fn swap_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode);
-        af!(self) &= 0xFF00;
+        self.af &= 0xFF00;
         self.set_src_val(opcode, (val >> 4) | (val << 4));
         if val == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn bit_r(&mut self, opcode: u8) {
+    fn bit_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode);
         let bit = 1 << ((opcode >> 3) & 7);
         if opcode & 0xC0 == 0x40 {
             // bit
-            af!(self) &= 0xFF00 | CF_B;
-            af!(self) |= HF_B;
+            self.af &= 0xFF00 | CF_B;
+            self.af |= HF_B;
             if bit & val == 0 {
-                af!(self) |= ZF_B;
+                self.af |= ZF_B;
             }
         } else if opcode & 0xC0 == 0x80 {
             // res
@@ -1168,42 +1131,42 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn rla(&mut self) {
-        let bit7 = (af!(self) & 0x8000) != 0;
-        let carry = (af!(self) & CF_B) != 0;
+    fn rla(&mut self) {
+        let bit7 = (self.af & 0x8000) != 0;
+        let carry = (self.af & CF_B) != 0;
 
-        af!(self) = (af!(self) & 0xFF00) << 1 | (carry as u16) << 8;
+        self.af = (self.af & 0xFF00) << 1 | (carry as u16) << 8;
 
         if bit7 {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
     }
 
     #[inline]
-    unsafe fn rl_r(&mut self, opcode: u8) {
+    fn rl_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode);
-        let carry = af!(self) & CF_B != 0;
+        let carry = self.af & CF_B != 0;
         let bit7 = val & 0x80 != 0;
 
-        af!(self) &= 0xFF00;
+        self.af &= 0xFF00;
         let val = val << 1 | carry as u8;
         self.set_src_val(opcode, val);
         if bit7 {
-            af!(self) |= CF_B;
+            self.af |= CF_B;
         }
         if val == 0 {
-            af!(self) |= ZF_B;
+            self.af |= ZF_B;
         }
     }
 
     #[inline]
-    unsafe fn ill(&mut self) {
+    fn ill(&mut self) {
         self.ie = 0;
         self.cpu_halted = true;
     }
 
     #[inline]
-    unsafe fn exec(&mut self, opcode: u8) {
+    fn exec(&mut self, opcode: u8) {
         match opcode {
             0x00 | 0x7F | 0x49 | 0x52 | 0x5B | 0x64 | 0x6D => self.nop(),
             0x40 => self.ld_b_b(),
@@ -1339,7 +1302,7 @@ impl Gb {
     }
 
     #[inline]
-    unsafe fn exec_cb(&mut self) {
+    fn exec_cb(&mut self) {
         let opcode = self.imm_u8();
         match opcode >> 3 {
             0 => self.rlc_r(opcode),

@@ -77,33 +77,22 @@ impl Gb {
     #[inline]
     #[must_use]
     pub(crate) fn read_ram(&self, addr: u16) -> u8 {
-        unsafe { *self.wram.get_unchecked((addr & 0xFFF) as usize) }
+        self.wram[(addr & 0xFFF) as usize]
     }
     #[inline]
     #[must_use]
     pub(crate) fn read_bank_ram(&self, addr: u16) -> u8 {
-        unsafe {
-            *self
-                .wram
-                .get_unchecked((addr & 0xFFF | (self.svbk_true as u16 * 0x1000)) as usize)
-        }
+        self.wram[(addr & 0xFFF | (self.svbk_true as u16 * 0x1000)) as usize]
     }
 
     #[inline]
     fn write_ram(&mut self, addr: u16, val: u8) {
-        unsafe {
-            *self.wram.get_unchecked_mut((addr & 0xFFF) as usize) = val;
-        }
+        self.wram[(addr & 0xFFF) as usize] = val;
     }
 
     #[inline]
     fn write_bank_ram(&mut self, addr: u16, val: u8) {
-        unsafe {
-            *self
-                .wram
-                .get_unchecked_mut((addr & 0xFFF | (self.svbk_true as u16 * 0x1000)) as usize) =
-                val;
-        }
+        self.wram[(addr & 0xFFF | (self.svbk_true as u16 * 0x1000)) as usize] = val;
     }
 
     #[inline]
@@ -119,9 +108,7 @@ impl Gb {
     #[inline]
     fn read_rom_or_cart(&mut self, addr: u16) -> u8 {
         if unlikely(self.boot_rom_mapped) {
-            unsafe {
-                return *self.boot_rom.get_unchecked(addr as usize);
-            }
+            return self.boot_rom[addr as usize];
         }
         self.cart.read_rom(addr)
     }
@@ -192,7 +179,7 @@ impl Gb {
             OCPD if self.model == Cgb => self.ocp.data(),
             OPRI if self.model == Cgb => self.opri,
             SVBK if self.model == Cgb => self.svbk | 0xF8,
-            HRAM_BEG..=HRAM_END => unsafe { *self.hram.get_unchecked((addr & 0x7F) as usize) },
+            HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize],
             IE => self.ie,
             _ => 0xFF,
         }
@@ -318,9 +305,7 @@ impl Gb {
                 self.svbk = tmp;
                 self.svbk_true = if tmp == 0 { 1 } else { tmp };
             }
-            HRAM_BEG..=HRAM_END => unsafe {
-                *self.hram.get_unchecked_mut((addr & 0x7F) as usize) = val;
-            },
+            HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize] = val,
             IE => self.ie = val,
             _ => (),
         }

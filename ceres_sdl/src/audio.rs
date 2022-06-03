@@ -6,7 +6,7 @@ use {
     },
 };
 
-const FREQ: i32 = 96000;
+const FREQ: i32 = 48000;
 const AUDIO_BUFFER_SIZE: usize = 512;
 
 pub struct Renderer {
@@ -41,10 +41,8 @@ impl Renderer {
     }
 
     pub fn push_frame(&mut self, l: Sample, r: Sample) {
-        unsafe {
-            *self.buf.get_unchecked_mut(self.buf_pos) = l;
-            *self.buf.get_unchecked_mut(self.buf_pos + 1) = r;
-        }
+        self.buf[self.buf_pos] = l;
+        self.buf[self.buf_pos + 1] = r;
 
         self.buf_pos += 2;
 

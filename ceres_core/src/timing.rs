@@ -41,9 +41,7 @@ impl Gb {
         // TODO: writes from DMA can access OAM on modes 2 and 3
         // with some glitches (RESEARCH) and without trouble during
         // VBLANK (what happens in HBLANK?)
-        unsafe {
-            *self.oam.get_unchecked_mut((self.dma_addr & 0xFF) as usize) = val;
-        }
+        self.oam[(self.dma_addr & 0xFF) as usize] = val;
 
         self.dma_addr = self.dma_addr.wrapping_add(1);
         if self.dma_addr & 0xFF >= 0xA0 {

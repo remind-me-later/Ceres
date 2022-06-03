@@ -79,12 +79,9 @@ impl RgbaBuf {
     fn set_px(&mut self, i: usize, rgb: (u8, u8, u8)) {
         // manual bound check
         let base = i * 4;
-        debug_assert!(base + 3 < RGBA_BUF_SIZE);
-        unsafe {
-            *self.data.get_unchecked_mut(base) = rgb.0;
-            *self.data.get_unchecked_mut(base + 1) = rgb.1;
-            *self.data.get_unchecked_mut(base + 2) = rgb.2;
-        }
+        self.data[base] = rgb.0;
+        self.data[base + 1] = rgb.1;
+        self.data[base + 2] = rgb.2;
     }
 }
 
@@ -148,41 +145,35 @@ impl ColorPalette {
 
     pub(crate) fn data(&self) -> u8 {
         let i = (self.idx as usize / 2) * 3;
-        debug_assert!(i + 2 < PAL_RAM_SIZE_COLORS);
 
-        unsafe {
-            if self.idx & 1 == 0 {
-                // red and green
-                let r = *self.col.get_unchecked(i);
-                let g = *self.col.get_unchecked(i + 1) << 5;
-                r | g
-            } else {
-                // green and blue
-                let g = *self.col.get_unchecked(i + 1) >> 3;
-                let b = *self.col.get_unchecked(i + 2) << 2;
-                g | b
-            }
+        if self.idx & 1 == 0 {
+            // red and green
+            let r = self.col[i];
+            let g = self.col[i + 1] << 5;
+            r | g
+        } else {
+            // green and blue
+            let g = self.col[i + 1] >> 3;
+            let b = self.col[i + 2] << 2;
+            g | b
         }
     }
 
     pub(crate) fn set_data(&mut self, val: u8) {
         let i = (self.idx as usize / 2) * 3;
-        debug_assert!(i + 2 < PAL_RAM_SIZE_COLORS);
 
-        unsafe {
-            if self.idx & 1 == 0 {
-                // red
-                *self.col.get_unchecked_mut(i) = val & 0x1F;
-                // green
-                let tmp = (*self.col.get_unchecked(i + 1) & 3) << 3;
-                *self.col.get_unchecked_mut(i + 1) = tmp | (val & 0xE0) >> 5;
-            } else {
-                // green
-                let tmp = *self.col.get_unchecked(i + 1) & 7;
-                *self.col.get_unchecked_mut(i + 1) = tmp | (val & 3) << 3;
-                // blue
-                *self.col.get_unchecked_mut(i + 2) = (val & 0x7C) >> 2;
-            }
+        if self.idx & 1 == 0 {
+            // red
+            self.col[i] = val & 0x1F;
+            // green
+            let tmp = (self.col[i + 1] & 3) << 3;
+            self.col[i + 1] = tmp | (val & 0xE0) >> 5;
+        } else {
+            // green
+            let tmp = self.col[i + 1] & 7;
+            self.col[i + 1] = tmp | (val & 3) << 3;
+            // blue
+            self.col[i + 2] = (val & 0x7C) >> 2;
         }
 
         // if auto-increment is enabled increment index with
@@ -200,14 +191,11 @@ impl ColorPalette {
         }
 
         let i = (palette as usize * 4 + color as usize) * 3;
-        debug_assert!(i + 2 < PAL_RAM_SIZE_COLORS);
-        unsafe {
-            let r = *self.col.get_unchecked(i);
-            let g = *self.col.get_unchecked(i + 1);
-            let b = *self.col.get_unchecked(i + 2);
+        let r = self.col[i];
+        let g = self.col[i + 1];
+        let b = self.col[i + 2];
 
-            (scale_channel(r), scale_channel(g), scale_channel(b))
-        }
+        (scale_channel(r), scale_channel(g), scale_channel(b))
     }
 }
 
@@ -300,19 +288,15 @@ impl Gb {
         if self.ppu_mode() == Mode::Drawing {
             0xFF
         } else {
-            unsafe {
-                let bank = self.vbk as u16 * VRAM_SIZE as u16;
-                let i = (addr & 0x1FFF) + bank;
-                *self.vram.get_unchecked(i as usize)
-            }
+            let bank = self.vbk as u16 * VRAM_SIZE as u16;
+            let i = (addr & 0x1FFF) + bank;
+            self.vram[i as usize]
         }
     }
 
     pub(crate) fn read_oam(&mut self, addr: u16) -> u8 {
         match self.ppu_mode() {
-            Mode::HBlank | Mode::VBlank if !self.dma_on => unsafe {
-                *self.oam.get_unchecked((addr & 0xFF) as usize)
-            },
+            Mode::HBlank | Mode::VBlank if !self.dma_on => self.oam[(addr & 0xFF) as usize],
             _ => 0xFF,
         }
     }
@@ -344,19 +328,17 @@ impl Gb {
 
     pub(crate) fn write_vram(&mut self, addr: u16, val: u8) {
         if self.ppu_mode() != Mode::Drawing {
-            unsafe {
-                let bank = self.vbk as u16 * VRAM_SIZE as u16;
-                let i = (addr & 0x1FFF) + bank;
-                *self.vram.get_unchecked_mut(i as usize) = val;
-            }
+            let bank = self.vbk as u16 * VRAM_SIZE as u16;
+            let i = (addr & 0x1FFF) + bank;
+            self.vram[i as usize] = val;
         }
     }
 
     pub(crate) fn write_oam(&mut self, addr: u16, val: u8, dma_active: bool) {
         match self.ppu_mode() {
-            Mode::HBlank | Mode::VBlank if !dma_active => unsafe {
-                *self.oam.get_unchecked_mut((addr & 0xFF) as usize) = val;
-            },
+            Mode::HBlank | Mode::VBlank if !dma_active => {
+                self.oam[(addr & 0xFF) as usize] = val;
+            }
             _ => (),
         };
     }
@@ -368,8 +350,7 @@ impl Gb {
 
     #[inline]
     fn mono_rgb(index: u8) -> (u8, u8, u8) {
-        debug_assert!(index < 4);
-        unsafe { *GRAYSCALE_PALETTE.get_unchecked(index as usize) }
+        GRAYSCALE_PALETTE[index as usize]
     }
 
     fn switch_mode(&mut self, mode: Mode) {
@@ -654,24 +635,24 @@ impl Gb {
         }
 
         match self.compat_mode {
-            CompatMode::Cgb => unsafe {
+            CompatMode::Cgb => {
                 for i in 1..len {
                     let mut j = i;
                     while j > 0 {
-                        obj.swap_unchecked(j - 1, j);
+                        obj.swap(j - 1, j);
                         j -= 1;
                     }
                 }
-            },
-            _ => unsafe {
+            }
+            _ => {
                 for i in 1..len {
                     let mut j = i;
                     while j > 0 && obj[j - 1].x <= obj[j].x {
-                        obj.swap_unchecked(j - 1, j);
+                        obj.swap(j - 1, j);
                         j -= 1;
                     }
                 }
-            },
+            }
         }
 
         (obj, len)
