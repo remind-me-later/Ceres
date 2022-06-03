@@ -76,14 +76,13 @@ fn parse_args() -> Result<AppArgs, pico_args::Error> {
 }
 
 static mut EMU: *mut Emu = null_mut();
-static mut EVENTS: *mut EventPump = null_mut();
 
 pub struct Emu {
     sdl: Sdl,
+    events: EventPump,
     gb: Gb,
     has_focus: bool,
     sav_path: PathBuf,
-    quit: bool,
     video: video::Renderer,
     audio: audio::Renderer,
 }
@@ -101,26 +100,21 @@ impl Emu {
 
         let audio = audio::Renderer::new(&sdl);
         let video = video::Renderer::new(&sdl);
-        unsafe {
-            let mut boxed = Box::new(sdl.event_pump().unwrap());
-            EVENTS = boxed.as_mut();
-            Box::leak(boxed);
-        }
+        let events = sdl.event_pump().unwrap();
 
         let mut gb = Gb::new(model, cart);
         gb.set_ppu_frame_callback(ppu_frame_callback);
         gb.set_sample_rate(audio.sample_rate());
         gb.set_apu_frame_callback(apu_frame_callback);
-        gb.set_quit_callback(quit_callback);
 
         let res = Self {
             sdl,
+            events,
             gb,
             has_focus: false,
             sav_path,
             video,
             audio,
-            quit: false,
         };
 
         let _controller = res.init_controller();
@@ -133,11 +127,8 @@ impl Emu {
         boxed
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> ! {
         self.gb.run_frame();
-        unsafe {
-            Box::from_raw(EVENTS);
-        }
     }
 
     fn init_controller(&self) -> Option<GameController> {
@@ -247,12 +238,13 @@ impl Emu {
         }
     }
 
-    fn quit(&mut self) {
-        self.quit = true;
+    fn quit(&mut self) -> ! {
         if let Some(cart_ram) = self.gb.save_data() {
             let mut f = File::create(self.sav_path.clone()).unwrap();
             f.write_all(cart_ram).unwrap();
         }
+
+        std::process::exit(0);
     }
 }
 
@@ -274,15 +266,10 @@ fn apu_frame_callback(l: Sample, r: Sample) {
 #[inline]
 fn ppu_frame_callback(rgba: &[u8]) {
     unsafe {
-        for e in (*EVENTS).poll_iter() {
+        for e in (*EMU).events.poll_iter() {
             (*EMU).handle_event(e);
         }
 
         (*EMU).video.draw_frame(rgba);
     }
-}
-
-#[inline]
-fn quit_callback() -> bool {
-    unsafe { (*EMU).quit }
 }

@@ -112,7 +112,6 @@ pub struct Gb {
     cart: Cartridge,
     model: Model,
     compat_mode: CompatMode,
-    quit_callback: fn() -> bool,
 
     double_speed: bool,
     key1: u8,
@@ -223,9 +222,6 @@ pub struct Gb {
 
 fn default_ppu_frame_callback(_: &[u8]) {}
 fn default_apu_frame_callback(_: Sample, _: Sample) {}
-fn default_exit() -> bool {
-    true
-}
 
 impl Gb {
     #[must_use]
@@ -324,7 +320,6 @@ impl Gb {
             regs: Regs {
                 r16: ManuallyDrop::default(),
             },
-            quit_callback: default_exit,
         }
     }
 
@@ -336,18 +331,14 @@ impl Gb {
         self.apu_frame_callback = apu_frame_callback;
     }
 
-    pub fn set_quit_callback(&mut self, quit_callback: fn() -> bool) {
-        self.quit_callback = quit_callback;
-    }
-
     pub fn set_sample_rate(&mut self, sample_rate: u32) {
         // account for difference between 60 and 59.73 fps
         let k = TC_SEC + 0x4A10 /* magic */;
         self.apu_ext_sample_period = k / sample_rate;
     }
 
-    pub fn run_frame(&mut self) {
-        while !(self.quit_callback)() {
+    pub fn run_frame(&mut self) -> ! {
+        loop {
             self.run();
         }
     }
