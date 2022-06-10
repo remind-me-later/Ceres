@@ -26,10 +26,10 @@ use {
         EventPump, Sdl,
     },
     std::{
-        fs::{self, File},
+        fs::File,
         io::{Read, Write},
+        mem::MaybeUninit,
         path::{Path, PathBuf},
-        ptr::null_mut,
         time::Instant,
     },
 };
@@ -39,6 +39,8 @@ mod video;
 
 const CERES_STR: &str = "Ceres";
 const HELP: &str = "TODO";
+
+static mut EMU: MaybeUninit<Emu> = MaybeUninit::<Emu>::uninit();
 
 fn main() {
     let args = match parse_args() {
@@ -57,9 +59,11 @@ fn main() {
     });
 
     let rom_path = Path::new(&args.rom).to_path_buf();
-    let mut emulator = Emu::new(model, &rom_path);
+    Emu::init(model, &rom_path);
 
-    emulator.run();
+    unsafe {
+        EMU.assume_init_mut().run();
+    }
 }
 
 struct AppArgs {
@@ -94,8 +98,6 @@ fn parse_args() -> Result<AppArgs, pico_args::Error> {
     Ok(args)
 }
 
-static mut EMU: *mut Emu = null_mut();
-
 pub struct Emu {
     sdl: Sdl,
     events: EventPump,
@@ -109,14 +111,21 @@ pub struct Emu {
 }
 
 impl Emu {
-    pub fn new(model: Model, rom_path: &Path) -> Box<Self> {
+    pub fn init(model: Model, rom_path: &Path) {
         let sdl = sdl2::init().unwrap();
 
         let sav_path = rom_path.with_extension("sav");
         let cart = {
-            let rom = read_file(rom_path).unwrap();
-            let ram = read_file(&sav_path).ok();
-            Cartridge::new(rom, ram).unwrap()
+            fn read_file_into(path: &Path, buf: &mut [u8]) -> Result<(), ()> {
+                let mut f = File::open(path).map_err(|_| ())?;
+                let _ = f.read(buf).unwrap();
+                Ok(())
+            }
+
+            read_file_into(rom_path, Cartridge::mut_rom()).unwrap();
+            read_file_into(&sav_path, Cartridge::mut_ram()).ok();
+
+            Cartridge::new().unwrap()
         };
 
         let audio = audio::Renderer::new(&sdl);
@@ -141,13 +150,9 @@ impl Emu {
         };
 
         let _controller = res.init_controller();
-
-        let mut boxed = Box::new(res);
         unsafe {
-            EMU = boxed.as_mut();
+            EMU.write(res);
         }
-
-        boxed
     }
 
     #[inline]
@@ -278,23 +283,15 @@ impl Emu {
     }
 }
 
-fn read_file(path: &Path) -> Result<Box<[u8]>, ()> {
-    let mut f = File::open(path).map_err(|_| ())?;
-    let metadata = fs::metadata(&path).unwrap();
-    let mut buffer = vec![0; metadata.len() as usize];
-    f.read_exact(&mut buffer).unwrap();
-    Ok(buffer.into_boxed_slice())
-}
-
 #[inline]
 fn apu_frame_callback(l: Sample, r: Sample) {
-    let emu = unsafe { &mut *EMU };
+    let emu = unsafe { EMU.assume_init_mut() };
     emu.audio.push_frame(l, r);
 }
 
 #[inline]
-fn ppu_frame_callback(rgba: &[u8]) {
-    let emu = unsafe { &mut *EMU };
+fn ppu_frame_callback(rgba: *const u8) {
+    let emu = unsafe { EMU.assume_init_mut() };
 
     emu.handle_events();
 

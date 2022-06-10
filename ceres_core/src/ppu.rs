@@ -262,7 +262,7 @@ impl Gb {
                     if self.ly > 153 {
                         self.ly = 0;
                         self.switch_mode(Mode::OamScan);
-                        (self.ppu_frame_callback)(&self.rgba_buf.data);
+                        (self.ppu_frame_callback)(self.rgba_buf.data.as_ptr());
                     } else {
                         let scx = self.scx;
                         self.ppu_cycles = self.ppu_cycles.wrapping_add(self.ppu_mode().cycles(scx));

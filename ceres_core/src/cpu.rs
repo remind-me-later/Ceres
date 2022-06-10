@@ -1,6 +1,5 @@
 use {
     crate::{Gb, KEY1_SPEED_B, KEY1_SWITCH_B},
-    core::intrinsics::unlikely,
     Ld8::{Dhl, A, B, C, D, E, H, L},
 };
 
@@ -74,7 +73,7 @@ impl Ld8 {
 impl Gb {
     pub(crate) fn run_cpu(&mut self) -> ! {
         loop {
-            if unlikely(self.cpu_halted) {
+            if self.cpu_halted {
                 self.empty_cycle();
             } else {
                 if self.cpu_ei_delay {

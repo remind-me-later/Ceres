@@ -1,7 +1,4 @@
 #![no_std]
-#![deny(unsafe_code)]
-#![feature(core_intrinsics)]
-#![feature(slice_swap_unchecked)]
 // clippy
 #![warn(clippy::pedantic)]
 #![warn(clippy::nursery)]
@@ -31,8 +28,6 @@ pub use {
     joypad::Button,
     ppu::{PX_HEIGHT, PX_WIDTH},
 };
-
-extern crate alloc;
 
 mod apu;
 mod cartridge;
@@ -164,7 +159,7 @@ pub struct Gb {
     ppu_win_in_frame: bool,
     ppu_win_in_ly: bool,
     ppu_win_skipped: u16,
-    ppu_frame_callback: fn(rgba_data: &[u8]),
+    ppu_frame_callback: fn(rgba_data: *const u8),
 
     // clock
     tima: u8,
@@ -197,7 +192,7 @@ pub struct Gb {
     apu_cap: f32,
 }
 
-fn default_ppu_frame_callback(_: &[u8]) {}
+fn default_ppu_frame_callback(_: *const u8) {}
 fn default_apu_frame_callback(_: Sample, _: Sample) {}
 
 impl Gb {
@@ -301,7 +296,7 @@ impl Gb {
         }
     }
 
-    pub fn set_ppu_frame_callback(&mut self, ppu_frame_callback: fn(rgba_data: &[u8])) {
+    pub fn set_ppu_frame_callback(&mut self, ppu_frame_callback: fn(rgba_data: *const u8)) {
         self.ppu_frame_callback = ppu_frame_callback;
     }
 
@@ -322,6 +317,6 @@ impl Gb {
 
     #[must_use]
     pub fn save_data(&self) -> Option<&[u8]> {
-        self.cart.has_battery().then_some(self.cart.ram())
+        self.cart.has_battery().then_some(Cartridge::ram())
     }
 }

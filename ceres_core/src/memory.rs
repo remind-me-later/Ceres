@@ -1,7 +1,4 @@
-use {
-    crate::{CompatMode, Gb, Model::Cgb, KEY1_SWITCH_B},
-    core::intrinsics::unlikely,
-};
+use crate::{CompatMode, Gb, Model::Cgb, KEY1_SWITCH_B};
 
 #[derive(PartialEq, Eq)]
 pub enum HdmaState {
@@ -110,7 +107,7 @@ impl Gb {
 
     #[inline]
     fn read_rom_or_cart(&mut self, addr: u16) -> u8 {
-        if unlikely(self.boot_rom_mapped) {
+        if self.boot_rom_mapped {
             return self.boot_rom[addr as usize];
         }
         self.cart.read_rom(addr)

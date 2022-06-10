@@ -114,7 +114,7 @@ impl Renderer {
         }
     }
 
-    pub fn draw_frame(&mut self, rgba: &[u8]) {
+    pub fn draw_frame(&mut self, rgba: *const u8) {
         unsafe {
             // TODO: texture streaming
             gl::BindTexture(gl::TEXTURE_2D, self.texture);
@@ -127,7 +127,7 @@ impl Renderer {
                 0,
                 gl::RGBA,
                 gl::UNSIGNED_BYTE,
-                rgba.as_ptr().cast(),
+                rgba.cast(),
             );
 
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
