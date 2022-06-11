@@ -1,6 +1,6 @@
 use crate::{Gb, TC_SEC};
 
-const APU_TIMER_RES: u16 = (TC_SEC / 512) as u16;
+const APU_TIMER_RES: u16 = ((TC_SEC / 512) & 0xFFFF) as u16;
 
 const SQ_MAX_LEN: u16 = 64;
 const SQ_FREQ_P_MUL: u16 = 4;
@@ -88,7 +88,9 @@ impl Gb {
         let l = self.high_pass_filter(l);
         let r = self.high_pass_filter(r);
 
-        (self.apu_frame_callback)(l, r);
+        unsafe {
+            (self.apu_frame_callback.unwrap_unchecked())(l, r);
+        }
     }
 
     fn high_pass_filter(&mut self, sample: i16) -> f32 {

@@ -1,20 +1,14 @@
 #![no_std]
 // clippy
 #![warn(clippy::pedantic)]
-#![warn(clippy::nursery)]
-#![allow(clippy::cast_lossless)]
-#![allow(clippy::cast_precision_loss)]
-#![allow(clippy::cast_possible_truncation)]
-#![allow(clippy::cast_sign_loss)]
-#![allow(clippy::cast_possible_wrap)]
-#![allow(clippy::struct_excessive_bools)]
-#![allow(clippy::similar_names)]
-#![allow(clippy::too_many_lines)]
-#![allow(clippy::verbose_bit_mask)]
-#![allow(clippy::missing_const_for_fn)]
-#![allow(clippy::branches_sharing_code)]
-#![allow(clippy::only_used_in_recursion)]
-#![allow(clippy::cognitive_complexity)]
+#![allow(
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::struct_excessive_bools,
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::verbose_bit_mask
+)]
 
 use {
     apu::{Noise, Square1, Square2, Wave},
@@ -158,8 +152,8 @@ pub struct Gb {
     ppu_cycles: u32,
     ppu_win_in_frame: bool,
     ppu_win_in_ly: bool,
-    ppu_win_skipped: u16,
-    ppu_frame_callback: fn(rgba_data: *const u8),
+    ppu_win_skipped: u8,
+    ppu_frame_callback: Option<fn(rgba_data: *const u8)>,
 
     // clock
     tima: u8,
@@ -187,13 +181,10 @@ pub struct Gb {
     apu_timer: u16,
     apu_render_timer: u32,
     apu_ext_sample_period: u32,
-    apu_frame_callback: fn(l: Sample, r: Sample),
+    apu_frame_callback: Option<fn(l: Sample, r: Sample)>,
     apu_seq_step: u8,
     apu_cap: f32,
 }
-
-fn default_ppu_frame_callback(_: *const u8) {}
-fn default_apu_frame_callback(_: Sample, _: Sample) {}
 
 impl Gb {
     #[must_use]
@@ -241,7 +232,7 @@ impl Gb {
             ppu_win_in_frame: false,
             ppu_win_skipped: 0,
             ppu_win_in_ly: false,
-            ppu_frame_callback: default_ppu_frame_callback,
+            ppu_frame_callback: None,
             bcp: ColorPalette::new(),
             ocp: ColorPalette::new(),
             clk_on: false,
@@ -292,16 +283,16 @@ impl Gb {
             boot_rom,
             boot_rom_mapped: true,
             apu_ext_sample_period: 0,
-            apu_frame_callback: default_apu_frame_callback,
+            apu_frame_callback: None,
         }
     }
 
     pub fn set_ppu_frame_callback(&mut self, ppu_frame_callback: fn(rgba_data: *const u8)) {
-        self.ppu_frame_callback = ppu_frame_callback;
+        self.ppu_frame_callback = Some(ppu_frame_callback);
     }
 
     pub fn set_apu_frame_callback(&mut self, apu_frame_callback: fn(l: Sample, r: Sample)) {
-        self.apu_frame_callback = apu_frame_callback;
+        self.apu_frame_callback = Some(apu_frame_callback);
     }
 
     pub fn set_sample_rate(&mut self, sample_rate: u32) {
@@ -310,8 +301,14 @@ impl Gb {
         self.apu_ext_sample_period = k / sample_rate;
     }
 
+    /// # Panics
+    ///
+    /// Will panic if apu or ppu callbacks are not set
     #[inline]
     pub fn run_frame(&mut self) -> ! {
+        assert!(self.apu_frame_callback.is_some());
+        assert!(self.ppu_frame_callback.is_some());
+
         self.run_cpu();
     }
 

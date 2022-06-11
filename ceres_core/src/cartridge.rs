@@ -3,10 +3,6 @@ use {
     Mbc::{Mbc1, Mbc2, Mbc3, Mbc5, MbcNone},
 };
 
-const TITLE_START: usize = 0x134;
-const OLD_TITLE_END: usize = 0x143;
-const NEW_TITLE_END: usize = 0x13F;
-
 const ROM_BANK_SIZE: usize = 0x4000;
 const RAM_BANK_SIZE: usize = 0x2000;
 
@@ -20,15 +16,14 @@ enum Mbc {
 }
 
 const ROM_SIZE: usize = ROMSize::Mb8.size_bytes();
-static mut ROM: [u8; ROM_SIZE] = [0; ROM_SIZE];
+type Rom = [u8; ROM_SIZE];
+static mut ROM: Rom = [0; ROM_SIZE];
 
 const RAM_SIZE: usize = RAMSize::Kb128.total_size_in_bytes();
-static mut RAM: [u8; RAM_SIZE] = [0; RAM_SIZE];
-
-static mut EXISTS_CART: bool = false;
+type Ram = [u8; RAM_SIZE];
+static mut RAM: Ram = [0; RAM_SIZE];
 
 pub struct Cartridge {
-    header_info: Header,
     mbc: Mbc,
 
     rom_bank_lo: u8,
@@ -61,59 +56,67 @@ impl Cartridge {
     /// Will return `Err` if the ROM header contains some
     /// illegal value
     pub fn new() -> Result<Self, Error> {
-        unsafe {
-            assert!(!EXISTS_CART, "A cartridge is already in use");
+        let rom = unsafe { &ROM };
 
-            let header_info = Header::new()?;
-            let mbc30 = header_info.ram_size().num_banks() >= 8;
-            let rom_bank_mask = header_info.rom_size().bank_bit_mask();
-            let has_ram = header_info.ram_size != RAMSize::None;
+        Self::check_checksum(rom).unwrap();
 
-            let (mbc, has_battery) = match ROM[0x147] {
-                0x00 => (MbcNone, false),
-                0x01 | 0x02 => (Mbc1, false),
-                0x03 => (Mbc1, true),
-                0x05 => (Mbc2, false),
-                0x06 => (Mbc2, true),
-                0x0F | 0x10 | 0x13 => (Mbc3, true),
-                0x11 | 0x12 => (Mbc3, false),
-                0x19 | 0x1A | 0x1C | 0x1D => (Mbc5, false),
-                0x1B | 0x1E => (Mbc5, true),
-                mbc_byte => return Err(Error::InvalidMBC { mbc_byte }),
-            };
+        let rom_size = ROMSize::new(rom).unwrap();
+        let ram_size = RAMSize::new(rom).unwrap();
+        let mbc30 = ram_size.num_banks() >= 8;
+        let rom_bank_mask = rom_size.bank_bit_mask();
+        let has_ram = ram_size != RAMSize::None;
 
-            let rom_offsets = (0x0000, 0x4000);
-            let ram_offset = 0;
+        let (mbc, has_battery) = match rom[0x147] {
+            0x00 => (MbcNone, false),
+            0x01 | 0x02 => (Mbc1, false),
+            0x03 => (Mbc1, true),
+            0x05 => (Mbc2, false),
+            0x06 => (Mbc2, true),
+            0x0F | 0x10 | 0x13 => (Mbc3, true),
+            0x11 | 0x12 => (Mbc3, false),
+            0x19 | 0x1A | 0x1C | 0x1D => (Mbc5, false),
+            0x1B | 0x1E => (Mbc5, true),
+            _ => return Err(Error::InvalidMBC),
+        };
 
-            EXISTS_CART = true;
+        let rom_offsets = (0x0000, 0x4000);
+        let ram_offset = 0;
 
-            Ok(Self {
-                mbc,
-                header_info,
-                has_battery,
-                has_ram,
-                rom_offsets,
-                ram_offset,
-                ram_enabled: false,
-                mbc30,
-                rom_bank_lo: 1,
-                rom_bank_hi: 0,
-                mbc1_bank_mode: false,
-                mbc1_multicart: false,
-                rom_bank_mask,
-                ram_bank: 0,
-            })
+        Ok(Self {
+            mbc,
+            has_battery,
+            has_ram,
+            rom_offsets,
+            ram_offset,
+            ram_enabled: false,
+            mbc30,
+            rom_bank_lo: 1,
+            rom_bank_hi: 0,
+            mbc1_bank_mode: false,
+            mbc1_multicart: false,
+            rom_bank_mask,
+            ram_bank: 0,
+        })
+    }
+
+    fn check_checksum(rom: &Rom) -> Result<(), Error> {
+        let expected = rom[0x14D];
+        let mut computed: u8 = 0;
+
+        for &byte in rom.iter().take(0x14C + 1).skip(0x134) {
+            computed = computed.wrapping_sub(byte).wrapping_sub(1);
+        }
+
+        if expected == computed {
+            Ok(())
+        } else {
+            Err(Error::InvalidChecksum)
         }
     }
 
     #[must_use]
     pub fn has_battery(&self) -> bool {
         self.has_battery
-    }
-
-    #[must_use]
-    pub fn header_info(&self) -> &Header {
-        &self.header_info
     }
 
     #[must_use]
@@ -309,95 +312,8 @@ impl Cartridge {
     }
 }
 
-impl Drop for Cartridge {
-    fn drop(&mut self) {
-        unsafe {
-            EXISTS_CART = false;
-        }
-    }
-}
-
-pub struct Header {
-    title: [u8; 15],
-    ram_size: RAMSize,
-    rom_size: ROMSize,
-    cgb_flag: CgbFlag,
-}
-
-impl Header {
-    /// # Errors
-    ///
-    /// Will return `Err` if the ROM header contains some
-    /// illegal value
-    unsafe fn new() -> Result<Self, Error> {
-        let cgb_flag = CgbFlag::new();
-        let rom_size = ROMSize::new()?;
-        let ram_size = RAMSize::new()?;
-        let mut title: [u8; 15] = [0; 15];
-
-        // length of title depends on licensee code format:
-        // - 0x33: new value, short title
-        // - any other: old value, long title
-        match ROM[0x14B] {
-            0x33 => title[..(NEW_TITLE_END - TITLE_START)]
-                .copy_from_slice(&ROM[TITLE_START..NEW_TITLE_END]),
-            _ => title.copy_from_slice(&ROM[TITLE_START..OLD_TITLE_END]),
-        };
-
-        // Check title is valid ascii
-        if !title.is_ascii() {
-            return Err(Error::NonAsciiTitleString);
-        };
-
-        Self::check_checksum()?;
-
-        Ok(Self {
-            title,
-            ram_size,
-            rom_size,
-            cgb_flag,
-        })
-    }
-
-    unsafe fn check_checksum() -> Result<(), Error> {
-        let expected = ROM[0x14D];
-        let mut computed: u8 = 0;
-
-        for &byte in ROM.iter().take(0x14C + 1).skip(0x134) {
-            computed = computed.wrapping_sub(byte).wrapping_sub(1);
-        }
-
-        if expected == computed {
-            Ok(())
-        } else {
-            Err(Error::InvalidChecksum { expected, computed })
-        }
-    }
-
-    #[must_use]
-    pub fn ram_size(&self) -> RAMSize {
-        self.ram_size
-    }
-
-    #[must_use]
-    pub fn cgb_flag(&self) -> CgbFlag {
-        self.cgb_flag
-    }
-
-    #[must_use]
-    pub fn title(&self) -> &str {
-        // checked it is ASCII on new
-        unsafe { core::str::from_utf8_unchecked(&self.title) }
-    }
-
-    #[must_use]
-    pub fn rom_size(&self) -> ROMSize {
-        self.rom_size
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum ROMSize {
+#[derive(PartialEq, Eq)]
+enum ROMSize {
     Kb32  = 0,
     Kb64  = 1,
     Kb128 = 2,
@@ -410,9 +326,9 @@ pub enum ROMSize {
 }
 
 impl ROMSize {
-    unsafe fn new() -> Result<Self, Error> {
+    const fn new(rom: &Rom) -> Result<Self, Error> {
         use ROMSize::{Kb128, Kb256, Kb32, Kb512, Kb64, Mb1, Mb2, Mb4, Mb8};
-        let rom_size_byte = ROM[0x148];
+        let rom_size_byte = rom[0x148];
         let rom_size = match rom_size_byte {
             0 => Kb32,
             1 => Kb64,
@@ -423,7 +339,7 @@ impl ROMSize {
             6 => Mb2,
             7 => Mb4,
             8 => Mb8,
-            _ => return Err(Error::InvalidRomSize { rom_size_byte }),
+            _ => return Err(Error::InvalidRomSize),
         };
 
         Ok(rom_size)
@@ -441,7 +357,7 @@ impl ROMSize {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum RAMSize {
+enum RAMSize {
     None,
     Kb2,
     Kb8,
@@ -451,9 +367,9 @@ pub enum RAMSize {
 }
 
 impl RAMSize {
-    unsafe fn new() -> Result<Self, Error> {
+    const fn new(rom: &Rom) -> Result<Self, Error> {
         use RAMSize::{Kb128, Kb2, Kb32, Kb64, Kb8, None};
-        let ram_size_byte = ROM[0x149];
+        let ram_size_byte = rom[0x149];
         let ram_size = match ram_size_byte {
             0 => None,
             1 => Kb2,
@@ -461,8 +377,9 @@ impl RAMSize {
             3 => Kb32,
             4 => Kb128,
             5 => Kb64,
-            _ => return Err(Error::InvalidRamSize { ram_size_byte }),
+            _ => return Err(Error::InvalidRamSize),
         };
+
         Ok(ram_size)
     }
 
@@ -486,27 +403,6 @@ impl RAMSize {
             None => 0,
             Kb2 => 0x800,
             Kb8 | Kb32 | Kb128 | Kb64 => 0x2000,
-        }
-    }
-}
-
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub enum CgbFlag {
-    NonCgb,
-    CgbOnly,
-    CgbFunctions,
-}
-
-impl CgbFlag {
-    // Since both cgb flags are outside the ASCII range we don't
-    // need to check if the header is new or old
-    #[must_use]
-    unsafe fn new() -> Self {
-        use CgbFlag::{CgbFunctions, CgbOnly, NonCgb};
-        match ROM[0x143] {
-            0x80 => CgbFunctions,
-            0xC0 => CgbOnly,
-            _ => NonCgb,
         }
     }
 }

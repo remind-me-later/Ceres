@@ -25,11 +25,11 @@ impl Ld8 {
         match self {
             Self::A => (gb.af >> 8) as u8,
             Self::B => (gb.bc >> 8) as u8,
-            Self::C => gb.bc as u8,
+            Self::C => (gb.bc & 0xFF) as u8,
             Self::D => (gb.de >> 8) as u8,
-            Self::E => gb.de as u8,
+            Self::E => (gb.de & 0xFF) as u8,
             Self::H => (gb.hl >> 8) as u8,
-            Self::L => gb.hl as u8,
+            Self::L => (gb.hl & 0xFF) as u8,
             Self::Dhl => gb.cpu_read(gb.hl),
         }
     }
@@ -111,11 +111,11 @@ impl Gb {
             self.ime = false;
             // recompute, maybe ifr changed
             let ints = self.ifr & self.ie & 0x1F;
-            let trail_zeros = ints.trailing_zeros();
+            let trail_zeros = (ints.trailing_zeros() & 7) as u16;
             // get rightmost interrupt
             let int = ((ints != 0) as u8) << trail_zeros;
             // compute direction of interrupt vector
-            self.pc = 0x40 | (trail_zeros << 3) as u16;
+            self.pc = 0x40 | trail_zeros << 3;
             // acknowledge
             self.ifr &= !int;
         }
@@ -183,7 +183,7 @@ impl Gb {
             return self.cpu_read(self.hl);
         }
         if lo {
-            return *self.regid2reg(reg_id) as u8;
+            return (*self.regid2reg(reg_id) & 0xFF) as u8;
         }
         return (*self.regid2reg(reg_id) >> 8) as u8;
     }

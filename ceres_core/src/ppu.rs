@@ -38,8 +38,8 @@ const BG_PR_B: u8 = 0x80;
 
 pub const OAM_SIZE: usize = 0x100;
 
-const VRAM_SIZE: usize = 0x2000;
-pub const VRAM_SIZE_CGB: usize = VRAM_SIZE * 2;
+const VRAM_SIZE: u16 = 0x2000;
+pub const VRAM_SIZE_CGB: usize = VRAM_SIZE as usize * 2;
 
 // Sprite attributes bites
 const SPR_CGB_PAL: u8 = 0x7;
@@ -262,7 +262,11 @@ impl Gb {
                     if self.ly > 153 {
                         self.ly = 0;
                         self.switch_mode(Mode::OamScan);
-                        (self.ppu_frame_callback)(self.rgba_buf.data.as_ptr());
+                        unsafe {
+                            (self.ppu_frame_callback.unwrap_unchecked())(
+                                self.rgba_buf.data.as_ptr(),
+                            );
+                        }
                     } else {
                         let scx = self.scx;
                         self.ppu_cycles = self.ppu_cycles.wrapping_add(self.ppu_mode().cycles(scx));
@@ -288,7 +292,7 @@ impl Gb {
         if self.ppu_mode() == Mode::Drawing {
             0xFF
         } else {
-            let bank = self.vbk as u16 * VRAM_SIZE as u16;
+            let bank = self.vbk as u16 * VRAM_SIZE;
             let i = (addr & 0x1FFF) + bank;
             self.vram[i as usize]
         }
@@ -430,7 +434,7 @@ impl Gb {
         let signed = self.lcdc & LCDC_BG_SIGNED == 0;
         let base = 0x8000 | (signed as u16) << 11;
         let offset = if signed {
-            ((tile_num as i8 as i16) + 128) as u16
+            ((tile_num as i8 as i16) + 0x80) as u16
         } else {
             tile_num as u16
         };
@@ -540,7 +544,7 @@ impl Gb {
         }
 
         let wx = self.wx.saturating_sub(7);
-        let y = ((self.ly - self.wy) as u16).wrapping_sub(self.ppu_win_skipped) as u8;
+        let y = (self.ly - self.wy).wrapping_sub(self.ppu_win_skipped) as u8;
         let row = (y / 8) as u16 * 32;
         let line = ((y & 7) * 2) as u16;
 

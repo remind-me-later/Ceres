@@ -68,7 +68,7 @@ impl Gb {
             } else {
                 HdmaState::HBlankDone
             };
-            self.hdma5 = (self.hdma_len / 0x10).wrapping_sub(1) as u8;
+            self.hdma5 = ((self.hdma_len / 0x10).wrapping_sub(1) & 0xFF) as u8;
             0x10
         } else {
             self.hdma_state = HdmaState::Sleep;

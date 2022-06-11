@@ -7,6 +7,6 @@ description = "A Gameboy/Color emulator"
 
 [dependencies]
 ceres_core = { path = "../ceres_core" }
-sdl2 = "*"
+sdl2 = { version = "*" }
 gl = "*"
 pico-args = "*"

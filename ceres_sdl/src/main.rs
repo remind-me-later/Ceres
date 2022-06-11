@@ -1,20 +1,12 @@
 // clippy
 #![warn(clippy::pedantic)]
-#![warn(clippy::nursery)]
-#![allow(clippy::cast_lossless)]
-#![allow(clippy::cast_precision_loss)]
-#![allow(clippy::cast_possible_truncation)]
-#![allow(clippy::cast_sign_loss)]
-#![allow(clippy::cast_possible_wrap)]
-#![allow(clippy::struct_excessive_bools)]
-#![allow(clippy::similar_names)]
-#![allow(clippy::too_many_lines)]
-#![allow(clippy::verbose_bit_mask)]
-#![allow(clippy::missing_const_for_fn)]
-#![allow(clippy::branches_sharing_code)]
-#![allow(clippy::only_used_in_recursion)]
-#![allow(clippy::cognitive_complexity)]
-#![allow(clippy::missing_panics_doc)]
+#![allow(
+    clippy::cast_lossless,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 
 use {
     ceres_core::{Cartridge, Gb, Model, Sample},
@@ -40,7 +32,7 @@ mod video;
 const CERES_STR: &str = "Ceres";
 const HELP: &str = "TODO";
 
-static mut EMU: MaybeUninit<Emu> = MaybeUninit::<Emu>::uninit();
+static mut EMU: MaybeUninit<Emu> = MaybeUninit::uninit();
 
 fn main() {
     let args = match parse_args() {
@@ -111,6 +103,9 @@ pub struct Emu {
 }
 
 impl Emu {
+    /// # Panics
+    ///
+    /// Will panic on invalid rom or ram file
     pub fn init(model: Model, rom_path: &Path) {
         let sdl = sdl2::init().unwrap();
 
