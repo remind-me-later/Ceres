@@ -50,11 +50,8 @@ fn main() {
     });
 
     let rom_path = Path::new(&args.rom).to_path_buf();
-    Emu::init(model, &rom_path);
-
-    unsafe {
-        EMU.assume_init_mut().run();
-    }
+    let emu = Emu::init(model, &rom_path);
+    emu.run();
 }
 
 struct AppArgs {
@@ -105,21 +102,23 @@ impl Emu {
     /// # Panics
     ///
     /// Will panic on invalid rom or ram file
-    pub fn init(model: Model, rom_path: &Path) {
+    pub fn init(model: Model, rom_path: &Path) -> &'static mut Self {
         let sdl = sdl2::init().unwrap();
 
         let sav_path = rom_path.with_extension("sav");
         let cart = {
-            fn read_file_into(path: &Path, buf: &mut [u8]) -> Result<(), ()> {
-                let mut f = File::open(path).map_err(|_| ())?;
+            fn read_file_into(path: &Path, buf: &mut [u8]) -> Result<(), std::io::Error> {
+                let mut f = File::open(path)?;
                 let _ = f.read(buf).unwrap();
                 Ok(())
             }
 
-            read_file_into(rom_path, Cartridge::mut_rom()).unwrap();
-            read_file_into(&sav_path, Cartridge::mut_ram()).ok();
+            let cart = Cartridge::unique();
+            read_file_into(rom_path, cart.mut_rom()).unwrap();
+            read_file_into(&sav_path, cart.mut_ram()).ok();
 
-            Cartridge::new().unwrap()
+            cart.init().unwrap();
+            cart
         };
 
         let audio = audio::Renderer::new(&sdl);
@@ -147,8 +146,10 @@ impl Emu {
         };
 
         let _controller = res.init_controller();
+
         unsafe {
             EMU.write(res);
+            EMU.assume_init_mut()
         }
     }
 

@@ -2,10 +2,10 @@ use crate::{CompatMode, Gb, Model::Cgb, KEY1_SWITCH_B};
 
 #[derive(PartialEq, Eq)]
 pub enum HdmaState {
-    Sleep,
-    HBlank,
-    HBlankDone,
-    General,
+    Sleep      = 0,
+    HBlank     = 1,
+    HBlankDone = 2,
+    General    = 3,
 }
 
 // IO addresses

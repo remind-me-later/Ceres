@@ -1,4 +1,5 @@
 #![no_std]
+#![feature(const_maybe_uninit_zeroed)]
 #![warn(clippy::pedantic)]
 #![allow(
     clippy::cast_lossless,
@@ -72,7 +73,7 @@ enum CompatMode {
 
 pub struct Gb {
     // general
-    cart: Cartridge,
+    cart: &'static mut Cartridge,
     model: Model,
     compat_mode: CompatMode,
 
@@ -190,7 +191,7 @@ impl Gb {
     #[must_use]
     pub fn new(
         model: Model,
-        cart: Cartridge,
+        cart: &'static mut Cartridge,
         ppu_frame_callback: fn(rgba_data: *const u8),
         apu_frame_callback: fn(l: Sample, r: Sample),
         sample_rate: u32,
@@ -323,6 +324,6 @@ impl Gb {
 
     #[must_use]
     pub fn save_data(&self) -> Option<&[u8]> {
-        self.cart.has_battery().then_some(Cartridge::ram())
+        self.cart.has_battery().then_some(self.cart.ram())
     }
 }

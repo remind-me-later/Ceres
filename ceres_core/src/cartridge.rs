@@ -1,5 +1,6 @@
 use {
     crate::Error,
+    core::mem::MaybeUninit,
     Mbc::{Mbc1, Mbc2, Mbc3, Mbc5, MbcNone},
 };
 
@@ -7,12 +8,12 @@ const ROM_BANK_SIZE: usize = 0x4000;
 const RAM_BANK_SIZE: usize = 0x2000;
 
 const ROM_SIZE: usize = ROMSize::Mb8.size_bytes();
-type Rom = [u8; ROM_SIZE];
-static mut ROM: Rom = [0; ROM_SIZE];
-
 const RAM_SIZE: usize = RAMSize::Kb128.total_size_in_bytes();
+
+type Rom = [u8; ROM_SIZE];
 type Ram = [u8; RAM_SIZE];
-static mut RAM: Ram = [0; RAM_SIZE];
+
+static mut CART: MaybeUninit<Cartridge> = MaybeUninit::zeroed();
 
 #[allow(clippy::enum_variant_names)]
 enum Mbc {
@@ -25,6 +26,9 @@ enum Mbc {
 
 pub struct Cartridge {
     mbc: Mbc,
+
+    rom: Rom,
+    ram: Ram,
 
     rom_bank_lo: u8,
     rom_bank_hi: u8,
@@ -46,22 +50,23 @@ pub struct Cartridge {
 }
 
 impl Cartridge {
-    /// # Panics
-    ///
-    /// Will panic if trying to create more than one
-    /// cartridge at the same time
-    ///
+    #[must_use]
+    pub fn unique() -> &'static mut Self {
+        unsafe { CART.assume_init_mut() }
+    }
+
     /// # Errors
     ///
     /// Will return `Err` if the ROM header contains some
-    /// illegal value
-    pub fn new() -> Result<Self, Error> {
-        let rom = unsafe { &ROM };
+    /// illegal value. This can happen if the ROM is corrupt
+    /// or has not been initialized.
+    pub fn init(&mut self) -> Result<(), Error> {
+        let rom = &mut self.rom;
 
-        Self::check_checksum(rom).unwrap();
+        Self::check_checksum(rom)?;
 
-        let rom_size = ROMSize::new(rom).unwrap();
-        let ram_size = RAMSize::new(rom).unwrap();
+        let rom_size = ROMSize::new(rom)?;
+        let ram_size = RAMSize::new(rom)?;
         let mbc30 = ram_size.num_banks() >= 8;
         let rom_bank_mask = rom_size.bank_bit_mask();
         let has_ram = ram_size != RAMSize::None;
@@ -82,21 +87,17 @@ impl Cartridge {
         let rom_offsets = (0x0000, 0x4000);
         let ram_offset = 0;
 
-        Ok(Self {
-            mbc,
-            has_battery,
-            has_ram,
-            rom_offsets,
-            ram_offset,
-            ram_enabled: false,
-            mbc30,
-            rom_bank_lo: 1,
-            rom_bank_hi: 0,
-            mbc1_bank_mode: false,
-            mbc1_multicart: false,
-            rom_bank_mask,
-            ram_bank: 0,
-        })
+        self.mbc = mbc;
+        self.has_battery = has_battery;
+        self.has_ram = has_ram;
+        self.rom_offsets = rom_offsets;
+        self.ram_offset = ram_offset;
+        self.mbc30 = mbc30;
+
+        self.rom_bank_lo = 1;
+        self.rom_bank_mask = rom_bank_mask;
+
+        Ok(())
     }
 
     fn check_checksum(rom: &Rom) -> Result<(), Error> {
@@ -133,7 +134,7 @@ impl Cartridge {
             _ => 0,
         };
 
-        unsafe { ROM[bank_addr as usize] }
+        self.rom[bank_addr as usize]
     }
 
     #[must_use]
@@ -143,10 +144,8 @@ impl Cartridge {
 
     fn mbc_read_ram(&self, ram_enabled: bool, addr: u16) -> u8 {
         if self.has_ram && ram_enabled {
-            unsafe {
-                let addr = self.ram_addr(addr);
-                RAM[addr]
-            }
+            let addr = self.ram_addr(addr);
+            self.ram[addr]
         } else {
             0xFF
         }
@@ -275,10 +274,8 @@ impl Cartridge {
 
     pub fn mbc_write_ram(&mut self, ram_enabled: bool, addr: u16, val: u8) {
         if self.has_ram && ram_enabled {
-            unsafe {
-                let addr = self.ram_addr(addr);
-                RAM[addr] = val;
-            }
+            let addr = self.ram_addr(addr);
+            self.ram[addr] = val;
         }
     }
 
@@ -297,18 +294,18 @@ impl Cartridge {
     }
 
     #[must_use]
-    pub fn ram() -> &'static [u8] {
-        unsafe { &RAM }
+    pub fn ram(&self) -> &[u8] {
+        &self.ram
     }
 
     #[must_use]
-    pub fn mut_ram() -> &'static mut [u8] {
-        unsafe { &mut RAM }
+    pub fn mut_ram(&mut self) -> &mut [u8] {
+        &mut self.ram
     }
 
     #[must_use]
-    pub fn mut_rom() -> &'static mut [u8] {
-        unsafe { &mut ROM }
+    pub fn mut_rom(&mut self) -> &mut [u8] {
+        &mut self.rom
     }
 }
 
