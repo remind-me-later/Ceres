@@ -2,6 +2,7 @@
 // clippy
 #![warn(clippy::pedantic)]
 #![allow(
+    clippy::cast_lossless,
     clippy::cast_sign_loss,
     clippy::cast_possible_wrap,
     clippy::struct_excessive_bools,
