@@ -1,4 +1,3 @@
-// clippy
 #![warn(clippy::pedantic)]
 #![allow(
     clippy::cast_lossless,
@@ -127,10 +126,13 @@ impl Emu {
         let video = video::Renderer::new(&sdl);
         let events = sdl.event_pump().unwrap();
 
-        let mut gb = Gb::new(model, cart);
-        gb.set_ppu_frame_callback(ppu_frame_callback);
-        gb.set_sample_rate(audio.sample_rate());
-        gb.set_apu_frame_callback(apu_frame_callback);
+        let gb = Gb::new(
+            model,
+            cart,
+            ppu_frame_callback,
+            apu_frame_callback,
+            audio.sample_rate(),
+        );
 
         let res = Self {
             sdl,
@@ -152,7 +154,7 @@ impl Emu {
 
     #[inline]
     pub fn run(&mut self) -> ! {
-        self.gb.run_frame();
+        self.gb.run();
     }
 
     fn init_controller(&self) -> Option<GameController> {

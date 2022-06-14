@@ -6,6 +6,14 @@ use {
 const ROM_BANK_SIZE: usize = 0x4000;
 const RAM_BANK_SIZE: usize = 0x2000;
 
+const ROM_SIZE: usize = ROMSize::Mb8.size_bytes();
+type Rom = [u8; ROM_SIZE];
+static mut ROM: Rom = [0; ROM_SIZE];
+
+const RAM_SIZE: usize = RAMSize::Kb128.total_size_in_bytes();
+type Ram = [u8; RAM_SIZE];
+static mut RAM: Ram = [0; RAM_SIZE];
+
 #[allow(clippy::enum_variant_names)]
 enum Mbc {
     MbcNone,
@@ -14,14 +22,6 @@ enum Mbc {
     Mbc3,
     Mbc5,
 }
-
-const ROM_SIZE: usize = ROMSize::Mb8.size_bytes();
-type Rom = [u8; ROM_SIZE];
-static mut ROM: Rom = [0; ROM_SIZE];
-
-const RAM_SIZE: usize = RAMSize::Kb128.total_size_in_bytes();
-type Ram = [u8; RAM_SIZE];
-static mut RAM: Ram = [0; RAM_SIZE];
 
 pub struct Cartridge {
     mbc: Mbc,

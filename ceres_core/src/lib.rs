@@ -1,5 +1,4 @@
 #![no_std]
-// clippy
 #![warn(clippy::pedantic)]
 #![allow(
     clippy::cast_lossless,
@@ -189,7 +188,13 @@ pub struct Gb {
 
 impl Gb {
     #[must_use]
-    pub fn new(model: Model, cart: Cartridge) -> Self {
+    pub fn new(
+        model: Model,
+        cart: Cartridge,
+        ppu_frame_callback: fn(rgba_data: *const u8),
+        apu_frame_callback: fn(l: Sample, r: Sample),
+        sample_rate: u32,
+    ) -> Self {
         let function_mode = match model {
             Model::Dmg | Model::Mgb => CompatMode::Dmg,
             Model::Cgb => CompatMode::Cgb,
@@ -201,7 +206,7 @@ impl Gb {
             Model::Cgb => CGB_BOOTROM,
         };
 
-        Self {
+        let mut gb = Self {
             af: 0,
             bc: 0,
             de: 0,
@@ -285,7 +290,13 @@ impl Gb {
             boot_rom_mapped: true,
             apu_ext_sample_period: 0,
             apu_frame_callback: None,
-        }
+        };
+
+        gb.set_ppu_frame_callback(ppu_frame_callback);
+        gb.set_apu_frame_callback(apu_frame_callback);
+        gb.set_sample_rate(sample_rate);
+
+        gb
     }
 
     pub fn set_ppu_frame_callback(&mut self, ppu_frame_callback: fn(rgba_data: *const u8)) {
@@ -306,10 +317,7 @@ impl Gb {
     ///
     /// Will panic if apu or ppu callbacks are not set
     #[inline]
-    pub fn run_frame(&mut self) -> ! {
-        assert!(self.apu_frame_callback.is_some());
-        assert!(self.ppu_frame_callback.is_some());
-
+    pub fn run(&mut self) -> ! {
         self.run_cpu();
     }
 
