@@ -12,8 +12,8 @@ use {
     },
 };
 
-const PX_WIDTH: u32 = ceres_core::PX_WIDTH as _;
-const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as _;
+const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
+const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
 const MUL: u32 = 4;
 
 pub struct Renderer {
@@ -67,8 +67,8 @@ impl Renderer {
             // create texture
             gl::GenTextures(1, &mut texture);
             gl::BindTexture(gl::TEXTURE_2D, texture);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as _);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as _);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
         }
 
         let mut res = Self {
@@ -121,9 +121,9 @@ impl Renderer {
             gl::TexImage2D(
                 gl::TEXTURE_2D,
                 0,
-                gl::RGBA as _,
-                PX_WIDTH as _,
-                PX_HEIGHT as _,
+                gl::RGBA as i32,
+                PX_WIDTH as i32,
+                PX_HEIGHT as i32,
                 0,
                 gl::RGBA,
                 gl::UNSIGNED_BYTE,
@@ -163,15 +163,15 @@ impl Shader {
         unsafe {
             // compile fragment shader
             let vert_id = gl::CreateShader(gl::VERTEX_SHADER);
-            let src = CString::new(include_str!("shader/vs.vert")).unwrap();
-            gl::ShaderSource(vert_id, 1, &(src.as_ptr().cast()), ptr::null());
+            let vert_src = CString::new(include_str!("shader/vs.vert")).unwrap();
+            gl::ShaderSource(vert_id, 1, &(vert_src.as_ptr().cast()), ptr::null());
             gl::CompileShader(vert_id);
             Self::check_compile(vert_id, true);
 
             // compile fragment shader
             let frag_id = gl::CreateShader(gl::FRAGMENT_SHADER);
-            let src = CString::new(include_str!("shader/fs.frag")).unwrap();
-            gl::ShaderSource(frag_id, 1, &(src.as_ptr().cast()), ptr::null());
+            let frag_src = CString::new(include_str!("shader/fs.frag")).unwrap();
+            gl::ShaderSource(frag_id, 1, &(frag_src.as_ptr().cast()), ptr::null());
             gl::CompileShader(frag_id);
             Self::check_compile(frag_id, true);
 
@@ -195,7 +195,7 @@ impl Shader {
     }
 
     unsafe fn check_compile(id: GLuint, is_shader: bool) {
-        let mut status = gl::FALSE as _;
+        let mut status = gl::FALSE as i32;
 
         if is_shader {
             gl::GetShaderiv(id, gl::COMPILE_STATUS, &mut status);
@@ -203,7 +203,7 @@ impl Shader {
             gl::GetProgramiv(id, gl::LINK_STATUS, &mut status);
         }
 
-        if status == gl::TRUE as _ {
+        if status == gl::TRUE as i32 {
             return;
         }
 

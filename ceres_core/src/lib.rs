@@ -1,8 +1,40 @@
 #![no_std]
+#![feature(core_intrinsics)]
 #![feature(const_maybe_uninit_zeroed)]
-#![warn(clippy::pedantic)]
+#![warn(
+    clippy::pedantic,
+    clippy::as_underscore,
+    clippy::clone_on_ref_ptr,
+    clippy::decimal_literal_representation,
+    clippy::deref_by_slicing,
+    clippy::empty_drop,
+    clippy::empty_structs_with_brackets,
+    clippy::float_cmp_const,
+    clippy::fn_to_numeric_cast_any,
+    clippy::get_unwrap,
+    clippy::if_then_some_else_none,
+    clippy::let_underscore_must_use,
+    clippy::lossy_float_literal,
+    clippy::map_err_ignore,
+    clippy::mem_forget,
+    clippy::mixed_read_write_in_expression,
+    clippy::modulo_arithmetic,
+    clippy::non_ascii_literal,
+    clippy::rc_buffer,
+    clippy::rc_mutex,
+    clippy::rest_pat_in_fully_bound_structs,
+    clippy::same_name_method,
+    clippy::self_named_module_files,
+    clippy::shadow_unrelated,
+    clippy::str_to_string,
+    clippy::string_add,
+    clippy::string_slice,
+    clippy::string_to_string,
+    clippy::try_err,
+    clippy::unnecessary_self_imports,
+    clippy::unneeded_field_pattern
+)]
 #![allow(
-    clippy::cast_lossless,
     clippy::cast_sign_loss,
     clippy::cast_possible_wrap,
     clippy::struct_excessive_bools,
@@ -41,7 +73,7 @@ const FRAME_NANOS: u64 = 16_750_418;
 // 59.7 fps
 pub const FRAME_DUR: Duration = Duration::from_nanos(FRAME_NANOS);
 // t-cycles per second
-const TC_SEC: u32 = 4_194_304;
+const TC_SEC: u32 = 0x0040_0000;
 
 const IF_VBLANK_B: u8 = 1;
 const IF_LCD_B: u8 = 2;
@@ -154,7 +186,7 @@ pub struct Gb {
     ppu_win_in_frame: bool,
     ppu_win_in_ly: bool,
     ppu_win_skipped: u8,
-    ppu_frame_callback: Option<fn(rgba_data: *const u8)>,
+    ppu_frame_callback: Option<fn(*const u8)>,
 
     // clock
     tima: u8,
@@ -182,7 +214,7 @@ pub struct Gb {
     apu_timer: u16,
     apu_render_timer: u32,
     apu_ext_sample_period: u32,
-    apu_frame_callback: Option<fn(l: Sample, r: Sample)>,
+    apu_frame_callback: Option<fn(Sample, Sample)>,
     apu_seq_step: u8,
     apu_cap: f32,
 }
@@ -192,8 +224,8 @@ impl Gb {
     pub fn new(
         model: Model,
         cart: &'static mut Cartridge,
-        ppu_frame_callback: fn(rgba_data: *const u8),
-        apu_frame_callback: fn(l: Sample, r: Sample),
+        ppu_frame_callback: fn(*const u8),
+        apu_frame_callback: fn(Sample, Sample),
         sample_rate: u32,
     ) -> Self {
         let function_mode = match model {
@@ -300,11 +332,11 @@ impl Gb {
         gb
     }
 
-    pub fn set_ppu_frame_callback(&mut self, ppu_frame_callback: fn(rgba_data: *const u8)) {
+    pub fn set_ppu_frame_callback(&mut self, ppu_frame_callback: fn(*const u8)) {
         self.ppu_frame_callback = Some(ppu_frame_callback);
     }
 
-    pub fn set_apu_frame_callback(&mut self, apu_frame_callback: fn(l: Sample, r: Sample)) {
+    pub fn set_apu_frame_callback(&mut self, apu_frame_callback: fn(Sample, Sample)) {
         self.apu_frame_callback = Some(apu_frame_callback);
     }
 
@@ -314,9 +346,6 @@ impl Gb {
         self.apu_ext_sample_period = k / sample_rate;
     }
 
-    /// # Panics
-    ///
-    /// Will panic if apu or ppu callbacks are not set
     #[inline]
     pub fn run(&mut self) -> ! {
         self.run_cpu();

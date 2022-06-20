@@ -1,6 +1,6 @@
 use {
     crate::Error,
-    core::mem::MaybeUninit,
+    core::{intrinsics::assert_zero_valid, mem::MaybeUninit},
     Mbc::{Mbc1, Mbc2, Mbc3, Mbc5, MbcNone},
 };
 
@@ -52,7 +52,10 @@ pub struct Cartridge {
 impl Cartridge {
     #[must_use]
     pub fn unique() -> &'static mut Self {
-        unsafe { CART.assume_init_mut() }
+        unsafe {
+            assert_zero_valid::<Cartridge>();
+            CART.assume_init_mut()
+        }
     }
 
     /// # Errors
