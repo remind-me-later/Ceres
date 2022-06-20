@@ -39,31 +39,31 @@ impl Ld8 {
         match self {
             Self::A => {
                 gb.af &= 0x00FF;
-                gb.af |= (val as u16) << 8;
+                gb.af |= u16::from(val) << 8;
             }
             Self::B => {
                 gb.bc &= 0x00FF;
-                gb.bc |= (val as u16) << 8;
+                gb.bc |= u16::from(val) << 8;
             }
             Self::C => {
                 gb.bc &= 0xFF00;
-                gb.bc |= val as u16;
+                gb.bc |= u16::from(val);
             }
             Self::D => {
                 gb.de &= 0x00FF;
-                gb.de |= (val as u16) << 8;
+                gb.de |= u16::from(val) << 8;
             }
             Self::E => {
                 gb.de &= 0xFF00;
-                gb.de |= val as u16;
+                gb.de |= u16::from(val);
             }
             Self::H => {
                 gb.hl &= 0x00FF;
-                gb.hl |= (val as u16) << 8;
+                gb.hl |= u16::from(val) << 8;
             }
             Self::L => {
                 gb.hl &= 0xFF00;
-                gb.hl |= val as u16;
+                gb.hl |= u16::from(val);
             }
             Self::Dhl => gb.cpu_write(gb.hl, val),
         }
@@ -113,7 +113,7 @@ impl Gb {
             let ints = self.ifr & self.ie & 0x1F;
             let trail_zeros = (ints.trailing_zeros() & 7) as u16;
             // get rightmost interrupt
-            let int = ((ints != 0) as u8) << trail_zeros;
+            let int = u8::from(ints != 0) << trail_zeros;
             // compute direction of interrupt vector
             self.pc = 0x40 | trail_zeros << 3;
             // acknowledge
@@ -155,8 +155,8 @@ impl Gb {
 
     #[inline]
     fn imm_u16(&mut self) -> u16 {
-        let lo = self.imm_u8() as u16;
-        let hi = self.imm_u8() as u16;
+        let lo = u16::from(self.imm_u8());
+        let hi = u16::from(self.imm_u8());
         hi << 8 | lo
     }
 
@@ -196,16 +196,16 @@ impl Gb {
         if reg_id == 0 {
             if lo {
                 self.af &= 0xFF;
-                self.af |= (val as u16) << 8;
+                self.af |= u16::from(val) << 8;
             } else {
                 self.cpu_write(self.hl, val);
             }
         } else if lo {
             *self.regid2reg(reg_id) &= 0xFF00;
-            *self.regid2reg(reg_id) |= val as u16;
+            *self.regid2reg(reg_id) |= u16::from(val);
         } else {
             *self.regid2reg(reg_id) &= 0xFF;
-            *self.regid2reg(reg_id) |= (val as u16) << 8;
+            *self.regid2reg(reg_id) |= u16::from(val) << 8;
         }
     }
 
@@ -220,7 +220,7 @@ impl Gb {
         let reg_id = (opcode >> 4) + 1;
         self.af &= 0xFF;
         let tmp = *self.regid2reg(reg_id);
-        self.af |= (self.cpu_read(tmp) as u16) << 8;
+        self.af |= u16::from(self.cpu_read(tmp)) << 8;
     }
 
     #[inline]
@@ -240,7 +240,7 @@ impl Gb {
     fn ld_a_da16(&mut self) {
         self.af &= 0xFF;
         let addr = self.imm_u16();
-        self.af |= (self.cpu_read(addr) as u16) << 8;
+        self.af |= u16::from(self.cpu_read(addr)) << 8;
     }
 
     #[inline]
@@ -260,7 +260,7 @@ impl Gb {
     #[inline]
     fn ld_a_dhli(&mut self) {
         let addr = self.hl;
-        let val = self.cpu_read(addr) as u16;
+        let val = u16::from(self.cpu_read(addr));
         self.af &= 0xFF;
         self.af |= val << 8;
         self.hl = addr.wrapping_add(1);
@@ -269,7 +269,7 @@ impl Gb {
     #[inline]
     fn ld_a_dhld(&mut self) {
         let addr = self.hl;
-        let val = self.cpu_read(addr) as u16;
+        let val = u16::from(self.cpu_read(addr));
         self.af &= 0xFF;
         self.af |= val << 8;
         self.hl = addr.wrapping_sub(1);
@@ -277,15 +277,15 @@ impl Gb {
 
     #[inline]
     fn ld_da8_a(&mut self) {
-        let tmp = self.imm_u8() as u16;
+        let tmp = u16::from(self.imm_u8());
         self.cpu_write(0xFF00 | tmp, (self.af >> 8) as u8);
     }
 
     #[inline]
     fn ld_a_da8(&mut self) {
-        let tmp = self.imm_u8() as u16;
+        let tmp = u16::from(self.imm_u8());
         self.af &= 0xFF;
-        self.af |= (self.cpu_read(0xFF00 | tmp) as u16) << 8;
+        self.af |= u16::from(self.cpu_read(0xFF00 | tmp)) << 8;
     }
 
     #[inline]
@@ -296,14 +296,14 @@ impl Gb {
     #[inline]
     fn ld_a_dc(&mut self) {
         self.af &= 0xFF;
-        self.af |= (self.cpu_read(0xFF00 | self.bc & 0xFF) as u16) << 8;
+        self.af |= u16::from(self.cpu_read(0xFF00 | self.bc & 0xFF)) << 8;
     }
 
     #[inline]
     fn ld_hr_d8(&mut self, opcode: u8) {
         let reg_id = ((opcode >> 4) + 1) & 0x03;
         *self.regid2reg(reg_id) &= 0xFF;
-        let tmp = self.imm_u8() as u16;
+        let tmp = u16::from(self.imm_u8());
         *self.regid2reg(reg_id) |= tmp << 8;
     }
 
@@ -311,7 +311,7 @@ impl Gb {
     fn ld_lr_d8(&mut self, opcode: u8) {
         let reg_id = (opcode >> 4) + 1;
         *self.regid2reg(reg_id) &= 0xFF00;
-        let tmp = self.imm_u8() as u16;
+        let tmp = u16::from(self.imm_u8());
         *self.regid2reg(reg_id) |= tmp;
     }
 
@@ -330,7 +330,7 @@ impl Gb {
 
     #[inline]
     fn add_a_r(&mut self, opcode: u8) {
-        let val = self.get_src_val(opcode) as u16;
+        let val = u16::from(self.get_src_val(opcode));
         let a = self.af >> 8;
         let res = a + val;
         self.af = res << 8;
@@ -347,7 +347,7 @@ impl Gb {
 
     #[inline]
     fn add_a_d8(&mut self) {
-        let val = self.imm_u8() as u16;
+        let val = u16::from(self.imm_u8());
         let a = self.af >> 8;
         let res = a + val;
         self.af = res << 8;
@@ -364,7 +364,7 @@ impl Gb {
 
     #[inline]
     fn sub_a_r(&mut self, opcode: u8) {
-        let val = self.get_src_val(opcode) as u16;
+        let val = u16::from(self.get_src_val(opcode));
         let a = self.af >> 8;
         self.af = (a.wrapping_sub(val) << 8) | NF_B;
         if a == val {
@@ -380,7 +380,7 @@ impl Gb {
 
     #[inline]
     fn sub_a_d8(&mut self) {
-        let val = self.imm_u8() as u16;
+        let val = u16::from(self.imm_u8());
         let a = self.af >> 8;
         self.af = (a.wrapping_sub(val) << 8) | NF_B;
         if a == val {
@@ -396,9 +396,9 @@ impl Gb {
 
     #[inline]
     fn sbc_a_r(&mut self, opcode: u8) {
-        let val = self.get_src_val(opcode) as u16;
+        let val = u16::from(self.get_src_val(opcode));
         let a = self.af >> 8;
-        let carry = ((self.af & CF_B) != 0) as u16;
+        let carry = u16::from((self.af & CF_B) != 0);
         let res = a.wrapping_sub(val).wrapping_sub(carry);
         self.af = (res << 8) | NF_B;
 
@@ -415,9 +415,9 @@ impl Gb {
 
     #[inline]
     fn sbc_a_d8(&mut self) {
-        let val = self.imm_u8() as u16;
+        let val = u16::from(self.imm_u8());
         let a = self.af >> 8;
-        let carry = ((self.af & CF_B) != 0) as u16;
+        let carry = u16::from((self.af & CF_B) != 0);
         let res = a.wrapping_sub(val).wrapping_sub(carry);
         self.af = (res << 8) | NF_B;
 
@@ -434,9 +434,9 @@ impl Gb {
 
     #[inline]
     fn adc_a_r(&mut self, opcode: u8) {
-        let val = self.get_src_val(opcode) as u16;
+        let val = u16::from(self.get_src_val(opcode));
         let a = self.af >> 8;
-        let carry = ((self.af & CF_B) != 0) as u16;
+        let carry = u16::from((self.af & CF_B) != 0);
         let res = a + val + carry;
         self.af = res << 8;
         if res & 0xFF == 0 {
@@ -452,9 +452,9 @@ impl Gb {
 
     #[inline]
     fn adc_a_d8(&mut self) {
-        let val = self.imm_u8() as u16;
+        let val = u16::from(self.imm_u8());
         let a = self.af >> 8;
-        let carry = ((self.af & CF_B) != 0) as u16;
+        let carry = u16::from((self.af & CF_B) != 0);
         let res = a + val + carry;
         self.af = res << 8;
         if res & 0xFF == 0 {
@@ -470,7 +470,7 @@ impl Gb {
 
     #[inline]
     fn or_a_r(&mut self, opcode: u8) {
-        let val = self.get_src_val(opcode) as u16;
+        let val = u16::from(self.get_src_val(opcode));
         let a = self.af >> 8;
         self.af = (a | val) << 8;
         if (a | val) == 0 {
@@ -480,7 +480,7 @@ impl Gb {
 
     #[inline]
     fn or_a_d8(&mut self) {
-        let val = self.imm_u8() as u16;
+        let val = u16::from(self.imm_u8());
         let a = self.af >> 8;
         self.af = (a | val) << 8;
         if (a | val) == 0 {
@@ -490,7 +490,7 @@ impl Gb {
 
     #[inline]
     fn xor_a_r(&mut self, opcode: u8) {
-        let val = self.get_src_val(opcode) as u16;
+        let val = u16::from(self.get_src_val(opcode));
         let a = self.af >> 8;
         self.af = (a ^ val) << 8;
         if (a ^ val) == 0 {
@@ -500,7 +500,7 @@ impl Gb {
 
     #[inline]
     fn xor_a_d8(&mut self) {
-        let val = self.imm_u8() as u16;
+        let val = u16::from(self.imm_u8());
         let a = self.af >> 8;
         self.af = (a ^ val) << 8;
         if (a ^ val) == 0 {
@@ -510,7 +510,7 @@ impl Gb {
 
     #[inline]
     fn and_a_r(&mut self, opcode: u8) {
-        let val = self.get_src_val(opcode) as u16;
+        let val = u16::from(self.get_src_val(opcode));
         let a = self.af >> 8;
         self.af = ((a & val) << 8) | HF_B;
         if (a & val) == 0 {
@@ -520,7 +520,7 @@ impl Gb {
 
     #[inline]
     fn and_a_d8(&mut self) {
-        let val = self.imm_u8() as u16;
+        let val = u16::from(self.imm_u8());
         let a = self.af >> 8;
         self.af = ((a & val) << 8) | HF_B;
         if (a & val) == 0 {
@@ -530,7 +530,7 @@ impl Gb {
 
     #[inline]
     fn cp_a_r(&mut self, opcode: u8) {
-        let val = self.get_src_val(opcode) as u16;
+        let val = u16::from(self.get_src_val(opcode));
         let a = self.af >> 8;
         self.af &= 0xFF00;
         self.af |= NF_B;
@@ -547,7 +547,7 @@ impl Gb {
 
     #[inline]
     fn cp_a_d8(&mut self) {
-        let val = self.imm_u8() as u16;
+        let val = u16::from(self.imm_u8());
         let a = self.af >> 8;
         self.af &= 0xFF00;
         self.af |= NF_B;
@@ -678,6 +678,7 @@ impl Gb {
     #[inline]
     fn ld_hl_sp_r8(&mut self) {
         self.af &= 0xFF00;
+        #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
         let offset = self.imm_u8() as i8 as u16;
         self.empty_cycle();
         self.hl = self.sp.wrapping_add(offset);
@@ -715,7 +716,7 @@ impl Gb {
         let val = self.get_src_val(opcode);
         let carry = (val & 0x01) != 0;
         self.af &= 0xFF00;
-        let val = val >> 1 | (carry as u8) << 7;
+        let val = val >> 1 | u8::from(carry) << 7;
         self.set_src_val(opcode, val);
         if carry {
             self.af |= CF_B;
@@ -757,6 +758,7 @@ impl Gb {
 
     #[inline]
     fn do_jump_relative(&mut self) {
+        #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
         let relative_addr = self.imm_u8() as i8 as u16;
         let pc = self.pc.wrapping_add(relative_addr);
         self.pc = pc;
@@ -807,9 +809,9 @@ impl Gb {
 
     #[inline]
     fn ret(&mut self) {
-        self.pc = self.cpu_read(self.sp) as u16;
+        self.pc = u16::from(self.cpu_read(self.sp));
         self.sp = self.sp.wrapping_add(1);
-        self.pc |= (self.cpu_read(self.sp) as u16) << 8;
+        self.pc |= u16::from(self.cpu_read(self.sp)) << 8;
         self.sp = self.sp.wrapping_add(1);
         self.empty_cycle();
     }
@@ -846,7 +848,7 @@ impl Gb {
         self.cpu_write(self.sp, ((self.pc) >> 8) as u8);
         self.sp = self.sp.wrapping_sub(1);
         self.cpu_write(self.sp, ((self.pc) & 0xFF) as u8);
-        self.pc = opcode as u16 ^ 0xC7;
+        self.pc = u16::from(opcode) ^ 0xC7;
     }
 
     #[inline]
@@ -954,9 +956,9 @@ impl Gb {
 
     #[inline]
     fn pop_rr(&mut self, opcode: u8) {
-        let mut val = self.cpu_read(self.sp) as u16;
+        let mut val = u16::from(self.cpu_read(self.sp));
         self.sp = self.sp.wrapping_add(1);
-        val |= (self.cpu_read(self.sp) as u16) << 8;
+        val |= u16::from(self.cpu_read(self.sp)) << 8;
         self.sp = self.sp.wrapping_add(1);
         let reg_id = ((opcode >> 4) + 1) & 3;
         *self.regid2reg(reg_id) = val;
@@ -980,6 +982,7 @@ impl Gb {
     #[inline]
     fn add_sp_r8(&mut self) {
         let sp = self.sp;
+        #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
         let offset = self.imm_u8() as i8 as u16;
         self.empty_cycle();
         self.empty_cycle();
@@ -1008,7 +1011,7 @@ impl Gb {
             self.af |= HF_B;
         }
 
-        if (hl as u32 + rr as u32) & 0x10000 != 0 {
+        if (u32::from(hl) + u32::from(rr)) & 0x10000 != 0 {
             self.af |= CF_B;
         }
 
@@ -1020,7 +1023,7 @@ impl Gb {
         let val = self.get_src_val(opcode);
         let carry = val & 0x80 != 0;
         self.af &= 0xFF00;
-        self.set_src_val(opcode, val << 1 | carry as u8);
+        self.set_src_val(opcode, val << 1 | u8::from(carry));
         if carry {
             self.af |= CF_B;
         }
@@ -1034,7 +1037,7 @@ impl Gb {
         let bit1 = self.af & 0x0100 != 0;
         let carry = self.af & CF_B != 0;
 
-        self.af = (self.af >> 1) & 0xFF00 | (carry as u16) << 15;
+        self.af = (self.af >> 1) & 0xFF00 | u16::from(carry) << 15;
 
         if bit1 {
             self.af |= CF_B;
@@ -1048,7 +1051,7 @@ impl Gb {
         let bit1 = (val & 1) != 0;
 
         self.af &= 0xFF00;
-        let val = val >> 1 | (carry as u8) << 7;
+        let val = val >> 1 | u8::from(carry) << 7;
         self.set_src_val(opcode, val);
         if bit1 {
             self.af |= CF_B;
@@ -1136,7 +1139,7 @@ impl Gb {
         let bit7 = (self.af & 0x8000) != 0;
         let carry = (self.af & CF_B) != 0;
 
-        self.af = (self.af & 0xFF00) << 1 | (carry as u16) << 8;
+        self.af = (self.af & 0xFF00) << 1 | u16::from(carry) << 8;
 
         if bit7 {
             self.af |= CF_B;
@@ -1150,7 +1153,7 @@ impl Gb {
         let bit7 = val & 0x80 != 0;
 
         self.af &= 0xFF00;
-        let val = val << 1 | carry as u8;
+        let val = val << 1 | u8::from(carry);
         self.set_src_val(opcode, val);
         if bit7 {
             self.af |= CF_B;
@@ -1166,6 +1169,7 @@ impl Gb {
         self.cpu_halted = true;
     }
 
+    #[allow(clippy::too_many_lines)]
     #[inline]
     fn exec(&mut self, opcode: u8) {
         match opcode {

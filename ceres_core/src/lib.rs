@@ -9,6 +9,7 @@
     clippy::deref_by_slicing,
     clippy::empty_drop,
     clippy::empty_structs_with_brackets,
+    clippy::float_arithmetic,
     clippy::float_cmp_const,
     clippy::fn_to_numeric_cast_any,
     clippy::get_unwrap,
@@ -35,11 +36,8 @@
     clippy::unneeded_field_pattern
 )]
 #![allow(
-    clippy::cast_sign_loss,
-    clippy::cast_possible_wrap,
     clippy::struct_excessive_bools,
     clippy::similar_names,
-    clippy::too_many_lines,
     clippy::verbose_bit_mask
 )]
 
@@ -87,7 +85,7 @@ const HRAM_SIZE: usize = 0x80;
 const WRAM_SIZE: usize = 0x2000;
 const WRAM_SIZE_CGB: usize = WRAM_SIZE * 4;
 
-pub type Sample = f32;
+pub type Sample = i16;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Model {
@@ -216,7 +214,6 @@ pub struct Gb {
     apu_ext_sample_period: u32,
     apu_frame_callback: Option<fn(Sample, Sample)>,
     apu_seq_step: u8,
-    apu_cap: f32,
 }
 
 impl Gb {
@@ -300,7 +297,6 @@ impl Gb {
             hdma_dst: 0,
             hdma_len: 0,
             hdma_state: HdmaState::Sleep,
-            apu_cap: 0.0,
             ie: 0,
             tima: 0,
             tma: 0,

@@ -95,7 +95,7 @@ pub enum Mode {
 
 impl Mode {
     pub(crate) fn cycles(self, scroll_x: u8) -> u32 {
-        let scroll_adjust = (scroll_x & 7) as u32 * 4;
+        let scroll_adjust = u32::from(scroll_x & 7) * 4;
         match self {
             Self::OamScan => OAM_SCAN_CYCLES,
             Self::Drawing => DRAWING_CYCLES + scroll_adjust,
@@ -140,7 +140,7 @@ impl ColorPalette {
 
     #[inline]
     pub(crate) fn spec(&self) -> u8 {
-        self.idx | 0x40 | ((self.inc as u8) << 7)
+        self.idx | 0x40 | (u8::from(self.inc) << 7)
     }
 
     pub(crate) fn data(&self) -> u8 {
@@ -181,7 +181,7 @@ impl ColorPalette {
         // if self.inc {
         //     self.idx = (self.idx + 1) & 0x3F;
         // }
-        let mask = (self.inc as u8).wrapping_sub(1);
+        let mask = u8::from(self.inc).wrapping_sub(1);
         self.idx = ((self.idx + 1) & 0x3F) & !mask | self.idx & mask;
     }
 
@@ -292,7 +292,7 @@ impl Gb {
         if self.ppu_mode() == Mode::Drawing {
             0xFF
         } else {
-            let bank = self.vbk as u16 * VRAM_SIZE;
+            let bank = u16::from(self.vbk) * VRAM_SIZE;
             let i = (addr & 0x1FFF) + bank;
             self.vram[i as usize]
         }
@@ -332,7 +332,7 @@ impl Gb {
 
     pub(crate) fn write_vram(&mut self, addr: u16, val: u8) {
         if self.ppu_mode() != Mode::Drawing {
-            let bank = self.vbk as u16 * VRAM_SIZE as u16;
+            let bank = u16::from(self.vbk) * VRAM_SIZE as u16;
             let i = (addr & 0x1FFF) + bank;
             self.vram[i as usize] = val;
         }
@@ -421,22 +421,24 @@ impl Gb {
 
     #[inline]
     fn bg_tile_map(&self) -> u16 {
-        0x9800 | ((self.lcdc & LCDC_BG_AREA != 0) as u16) << 10
+        0x9800 | u16::from(self.lcdc & LCDC_BG_AREA != 0) << 10
     }
 
     #[inline]
     fn win_tile_map(&self) -> u16 {
-        0x9800 | ((self.lcdc & LCDC_WIN_AREA != 0) as u16) << 10
+        0x9800 | u16::from(self.lcdc & LCDC_WIN_AREA != 0) << 10
     }
 
     #[inline]
     fn tile_addr(&self, tile_num: u8) -> u16 {
         let signed = self.lcdc & LCDC_BG_SIGNED == 0;
-        let base = 0x8000 | (signed as u16) << 11;
+        let base = 0x8000 | u16::from(signed) << 11;
+
+        #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
         let offset = if signed {
-            ((tile_num as i8 as i16) + 0x80) as u16
+            (i16::from(tile_num as i8) + 0x80) as u16
         } else {
-            tile_num as u16
+            u16::from(tile_num)
         };
 
         base + offset * 16
@@ -444,12 +446,12 @@ impl Gb {
 
     #[inline]
     fn vram_at_bank(&self, addr: u16, bank: u8) -> u8 {
-        self.vram[((addr & 0x1FFF) + bank as u16 * VRAM_SIZE as u16) as usize]
+        self.vram[((addr & 0x1FFF) + u16::from(bank) * VRAM_SIZE as u16) as usize]
     }
 
     #[inline]
     fn bg_tile(&self, tile_addr: u16, attr: u8) -> (u8, u8) {
-        let bank = (attr & BG_VBK_B != 0) as u8;
+        let bank = u8::from(attr & BG_VBK_B != 0);
         let lo = self.vram_at_bank(tile_addr, bank);
         let hi = self.vram_at_bank(tile_addr + 1, bank);
         (lo, hi)
@@ -457,7 +459,7 @@ impl Gb {
 
     #[inline]
     fn obj_tile(&self, tile_addr: u16, obj: &Obj) -> (u8, u8) {
-        let bank = (obj.attr & SPR_TILE_BANK != 0) as u8;
+        let bank = u8::from(obj.attr & SPR_TILE_BANK != 0);
         let lo = self.vram_at_bank(tile_addr, bank);
         let hi = self.vram_at_bank(tile_addr + 1, bank);
         (lo, hi)
@@ -480,12 +482,12 @@ impl Gb {
         }
 
         let y = self.ly.wrapping_add(self.scy);
-        let row = (y / 8) as u16 * 32;
-        let line = ((y & 7) * 2) as u16;
+        let row = u16::from(y / 8) * 32;
+        let line = u16::from((y & 7) * 2);
 
         for i in 0..PX_WIDTH {
             let x = i.wrapping_add(self.scx);
-            let col = (x / 8) as u16;
+            let col = u16::from(x / 8);
 
             let tile_map = self.bg_tile_map() + row + col;
 
@@ -512,7 +514,7 @@ impl Gb {
                 }
                 let bit = 1 << bit;
 
-                ((hi & bit != 0) as u8) << 1 | (lo & bit != 0) as u8
+                u8::from(hi & bit != 0) << 1 | u8::from(lo & bit != 0)
             };
 
             let rgb = match self.compat_mode {
@@ -545,15 +547,15 @@ impl Gb {
 
         let wx = self.wx.saturating_sub(7);
         let y = (self.ly - self.wy).wrapping_sub(self.ppu_win_skipped) as u8;
-        let row = (y / 8) as u16 * 32;
-        let line = ((y & 7) * 2) as u16;
+        let row = u16::from(y / 8) * 32;
+        let line = u16::from((y & 7) * 2);
 
         for i in wx..PX_WIDTH {
             self.ppu_win_in_frame = true;
             self.ppu_win_in_ly = true;
 
             let x = i.wrapping_sub(wx);
-            let col = (x / 8) as u16;
+            let col = u16::from(x / 8);
 
             let tile_map = self.win_tile_map() + row + col;
 
@@ -580,7 +582,7 @@ impl Gb {
                 }
                 let bit = 1 << bit;
 
-                ((hi & bit != 0) as u8) << 1 | (lo & bit != 0) as u8
+                u8::from(hi & bit != 0) << 1 | u8::from(lo & bit != 0)
             };
 
             let rgb = match self.compat_mode {
@@ -669,7 +671,7 @@ impl Gb {
         }
 
         let large = self.lcdc & LCDC_OBJL_B != 0;
-        let height = 8 * (large as u8 + 1);
+        let height = 8 * (u8::from(large) + 1);
 
         let (objs, len) = self.objs_in_ly(height);
 
@@ -682,12 +684,12 @@ impl Gb {
                 };
 
                 let offset = if obj.attr & SPR_FLIP_Y == 0 {
-                    self.ly.wrapping_sub(obj.y) as u16 * 2
+                    u16::from(self.ly.wrapping_sub(obj.y)) * 2
                 } else {
-                    (height as u16 - 1).wrapping_sub((self.ly.wrapping_sub(obj.y)) as u16) * 2
+                    (u16::from(height) - 1).wrapping_sub(u16::from(self.ly.wrapping_sub(obj.y))) * 2
                 };
 
-                (tile_number as u16 * 16).wrapping_add(offset)
+                (u16::from(tile_number) * 16).wrapping_add(offset)
             };
 
             let (lo, hi) = self.obj_tile(tile_addr, obj);
@@ -710,7 +712,7 @@ impl Gb {
                 }
                 let bit = 1 << bit;
 
-                let color = ((hi & bit != 0) as u8) << 1 | (lo & bit != 0) as u8;
+                let color = u8::from(hi & bit != 0) << 1 | u8::from(lo & bit != 0);
 
                 // transparent
                 if color == 0 {

@@ -83,7 +83,7 @@ impl Gb {
     #[inline]
     #[must_use]
     pub(crate) fn read_bank_ram(&self, addr: u16) -> u8 {
-        let bank = self.svbk_true as u16 * 0x1000;
+        let bank = u16::from(self.svbk_true) * 0x1000;
         self.wram[(addr & 0xFFF | bank) as usize]
     }
 
@@ -94,7 +94,7 @@ impl Gb {
 
     #[inline]
     fn write_bank_ram(&mut self, addr: u16, val: u8) {
-        let bank = self.svbk_true as u16 * 0x1000;
+        let bank = u16::from(self.svbk_true) * 0x1000;
         self.wram[(addr & 0xFFF | bank) as usize] = val;
     }
 
@@ -174,7 +174,7 @@ impl Gb {
             VBK if self.model == Cgb => self.vbk | 0xFE,
             HDMA5 if self.model == Cgb => {
                 // active on low
-                ((!self.hdma_on()) as u8) << 7 | self.hdma5
+                u8::from(!self.hdma_on()) << 7 | self.hdma5
             }
             BCPS if self.model == Cgb => self.bcp.spec(),
             BCPD if self.model == Cgb => self.bcp.data(),
@@ -204,6 +204,7 @@ impl Gb {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     #[inline]
     fn write_high(&mut self, addr: u8, val: u8) {
         match addr {
@@ -249,7 +250,7 @@ impl Gb {
 
                 self.dma_cycles = -8; // two m-cycles delay
                 self.dma = val;
-                self.dma_addr = (val as u16) << 8;
+                self.dma_addr = u16::from(val) << 8;
                 self.dma_on = true;
             }
             BGP => self.bgp = val,
@@ -271,16 +272,16 @@ impl Gb {
                 }
             }
             HDMA1 if self.model == Cgb => {
-                self.hdma_src = (val as u16) << 8 | self.hdma_src & 0xF0;
+                self.hdma_src = u16::from(val) << 8 | self.hdma_src & 0xF0;
             }
             HDMA2 if self.model == Cgb => {
-                self.hdma_src = self.hdma_src & 0xFF00 | (val as u16) & 0xF0;
+                self.hdma_src = self.hdma_src & 0xFF00 | u16::from(val) & 0xF0;
             }
             HDMA3 if self.model == Cgb => {
-                self.hdma_dst = ((val & 0x1F) as u16) << 8 | self.hdma_dst & 0xF0;
+                self.hdma_dst = u16::from(val & 0x1F) << 8 | self.hdma_dst & 0xF0;
             }
             HDMA4 if self.model == Cgb => {
-                self.hdma_dst = self.hdma_dst & 0x1F00 | (val as u16) & 0xF0;
+                self.hdma_dst = self.hdma_dst & 0x1F00 | u16::from(val) & 0xF0;
             }
             HDMA5 if self.model == Cgb => {
                 // stop current transfer
@@ -291,7 +292,7 @@ impl Gb {
 
                 self.hdma5 = val & !0x80;
                 let transfer_blocks = val & 0x7F;
-                self.hdma_len = (transfer_blocks as u16 + 1) * 0x10;
+                self.hdma_len = (u16::from(transfer_blocks) + 1) * 0x10;
                 self.hdma_state = if val & 0x80 == 0 {
                     HdmaState::General
                 } else {

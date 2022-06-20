@@ -81,27 +81,11 @@ impl Gb {
             .fold((0, 0), |(l, r), (lp, rp)| (l + lp, r + rp));
 
         // transform to i16 sample
-        let l = (0xF - l as i16 * 2) * self.apu_l_vol as i16;
-        let r = (0xF - r as i16 * 2) * self.apu_r_vol as i16;
-
-        // filter and transform to f32
-        let l = self.high_pass_filter(l);
-        let r = self.high_pass_filter(r);
+        let l = (0xF - i16::from(l) * 2) * i16::from(self.apu_l_vol);
+        let r = (0xF - i16::from(r) * 2) * i16::from(self.apu_r_vol);
 
         unsafe {
             (self.apu_frame_callback.unwrap_unchecked())(l, r);
-        }
-    }
-
-    fn high_pass_filter(&mut self, sample: i16) -> f32 {
-        let charge_factor = 0.998_943;
-        if self.apu_on {
-            let input = (sample * 32) as f32 / 32768.0;
-            let output = input - self.apu_cap;
-            self.apu_cap = input - output * charge_factor;
-            output
-        } else {
-            0.0
         }
     }
 
@@ -121,19 +105,19 @@ impl Gb {
     #[must_use]
     pub(crate) fn read_nr50(&self) -> u8 {
         self.apu_r_vol
-            | (self.apu_r_vin as u8) << 3
+            | u8::from(self.apu_r_vin) << 3
             | self.apu_l_vol << 4
-            | (self.apu_l_vin as u8) << 7
+            | u8::from(self.apu_l_vin) << 7
     }
 
     #[must_use]
     pub(crate) fn read_nr52(&self) -> u8 {
-        (self.apu_on as u8) << 7
+        u8::from(self.apu_on) << 7
             | 0x70
-            | (self.apu_ch4.on() as u8) << 3
-            | (self.apu_ch3.on() as u8) << 2
-            | (self.apu_ch2.on() as u8) << 1
-            | self.apu_ch1.on() as u8
+            | u8::from(self.apu_ch4.on()) << 3
+            | u8::from(self.apu_ch3.on()) << 2
+            | u8::from(self.apu_ch2.on()) << 1
+            | u8::from(self.apu_ch1.on())
     }
 
     pub(crate) fn write_nr50(&mut self, val: u8) {
@@ -173,15 +157,15 @@ impl<'a> Iterator for ChOutIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let out = match self.i {
-            0 => self.gb.apu_ch1.out() * self.gb.apu_ch1.on() as u8,
-            1 => self.gb.apu_ch2.out() * self.gb.apu_ch2.on() as u8,
-            2 => self.gb.apu_ch3.out() * self.gb.apu_ch3.on() as u8,
-            3 => self.gb.apu_ch4.out() * self.gb.apu_ch4.on() as u8,
+            0 => self.gb.apu_ch1.out() * u8::from(self.gb.apu_ch1.on()),
+            1 => self.gb.apu_ch2.out() * u8::from(self.gb.apu_ch2.on()),
+            2 => self.gb.apu_ch3.out() * u8::from(self.gb.apu_ch3.on()),
+            3 => self.gb.apu_ch4.out() * u8::from(self.gb.apu_ch4.on()),
             _ => return None,
         };
 
-        let ch_r_on = (self.gb.nr51 & (1 << self.i) != 0) as u8;
-        let ch_l_on = (self.gb.nr51 & (1 << (self.i + 4)) != 0) as u8;
+        let ch_r_on = u8::from(self.gb.nr51 & (1 << self.i) != 0);
+        let ch_l_on = u8::from(self.gb.nr51 & (1 << (self.i + 4)) != 0);
 
         self.i += 1;
 
@@ -284,7 +268,7 @@ impl Square1 {
     }
 
     pub(crate) fn read_nr10(&self) -> u8 {
-        0x80 | ((self.sw_period as u8 & 7) << 4) | ((!self.sw_dec as u8) << 3) | self.sw_shift
+        0x80 | ((self.sw_period as u8 & 7) << 4) | (u8::from(!self.sw_dec) << 3) | self.sw_shift
     }
 
     pub(crate) fn read_nr11(&self) -> u8 {
@@ -292,11 +276,11 @@ impl Square1 {
     }
 
     pub(crate) fn read_nr12(&self) -> u8 {
-        self.env_base_vol << 4 | self.env_inc as u8 | self.env_period & 7
+        self.env_base_vol << 4 | u8::from(self.env_inc) | self.env_period & 7
     }
 
     pub(crate) fn read_nr14(&self) -> u8 {
-        0xBF | ((self.snd_counter as u8) << 6)
+        0xBF | (u8::from(self.snd_counter) << 6)
     }
 
     pub(crate) fn write_nr10(&mut self, val: u8) {
@@ -310,7 +294,7 @@ impl Square1 {
 
     pub(crate) fn write_nr11(&mut self, val: u8) {
         self.duty = (val >> 6) & 3;
-        self.snd_len = SQ_MAX_LEN - ((val as u16) & (SQ_MAX_LEN - 1));
+        self.snd_len = SQ_MAX_LEN - (u16::from(val) & (SQ_MAX_LEN - 1));
     }
 
     pub(crate) fn write_nr12(&mut self, val: u8) {
@@ -337,11 +321,11 @@ impl Square1 {
     }
 
     pub(crate) fn write_nr13(&mut self, val: u8) {
-        self.freq = (self.freq & 0x700) | (val as u16);
+        self.freq = (self.freq & 0x700) | u16::from(val);
     }
 
     pub(crate) fn write_nr14(&mut self, val: u8) {
-        self.freq = (val as u16 & 7) << 8 | (self.freq & 0xFF);
+        self.freq = (u16::from(val) & 7) << 8 | (self.freq & 0xFF);
         self.snd_counter = val & 0x40 != 0;
 
         if self.snd_counter && self.p_half == 0 {
@@ -516,16 +500,16 @@ impl Square2 {
     }
 
     pub(crate) fn read_nr22(&self) -> u8 {
-        self.env_base_vol << 4 | self.env_inc as u8 | self.env_period & 7
+        self.env_base_vol << 4 | u8::from(self.env_inc) | self.env_period & 7
     }
 
     pub(crate) fn read_nr24(&self) -> u8 {
-        0xBF | ((self.snd_counter as u8) << 6)
+        0xBF | (u8::from(self.snd_counter) << 6)
     }
 
     pub(crate) fn write_nr21(&mut self, val: u8) {
         self.duty = (val >> 6) & 3;
-        self.snd_len = SQ_MAX_LEN - ((val as u16) & (SQ_MAX_LEN - 1));
+        self.snd_len = SQ_MAX_LEN - (u16::from(val) & (SQ_MAX_LEN - 1));
     }
 
     pub(crate) fn write_nr22(&mut self, val: u8) {
@@ -552,11 +536,11 @@ impl Square2 {
     }
 
     pub(crate) fn write_nr23(&mut self, val: u8) {
-        self.freq = (self.freq & 0x700) | (val as u16);
+        self.freq = (self.freq & 0x700) | u16::from(val);
     }
 
     pub(crate) fn write_nr24(&mut self, val: u8) {
-        self.freq = (val as u16 & 7) << 8 | (self.freq & 0xFF);
+        self.freq = (u16::from(val) & 7) << 8 | (self.freq & 0xFF);
         self.snd_counter = val & 0x40 != 0;
 
         if self.snd_counter && self.p_half == 0 {
@@ -716,7 +700,7 @@ impl Wave {
     }
 
     pub(crate) fn read_nr34(&self) -> u8 {
-        0xBF | ((self.use_len as u8) << 6)
+        0xBF | (u8::from(self.use_len) << 6)
     }
 
     pub(crate) fn write_nr30(&mut self, val: u8) {
@@ -730,7 +714,7 @@ impl Wave {
     }
 
     pub(crate) fn write_nr31(&mut self, val: u8) {
-        self.snd_len = WAV_MAX_LENGTH - ((val as u16) & (WAV_MAX_LENGTH - 1));
+        self.snd_len = WAV_MAX_LENGTH - (u16::from(val) & (WAV_MAX_LENGTH - 1));
     }
 
     pub(crate) fn write_nr32(&mut self, val: u8) {
@@ -738,11 +722,11 @@ impl Wave {
     }
 
     pub(crate) fn write_nr33(&mut self, val: u8) {
-        self.freq = (self.freq & 0x700) | (val as u16);
+        self.freq = (self.freq & 0x700) | u16::from(val);
     }
 
     pub(crate) fn write_nr34(&mut self, val: u8) {
-        self.freq = (val as u16 & 7) << 8 | (self.freq & 0xFF);
+        self.freq = (u16::from(val) & 7) << 8 | (self.freq & 0xFF);
         self.use_len = val & 0x40 != 0;
 
         if self.use_len && self.p_half == 0 {
@@ -869,7 +853,7 @@ impl Noise {
     }
 
     pub(crate) fn read_nr42(&self) -> u8 {
-        self.env_base_vol << 4 | self.env_inc as u8 | self.env_period & 7
+        self.env_base_vol << 4 | u8::from(self.env_inc) | self.env_period & 7
     }
 
     pub(crate) fn read_nr43(&self) -> u8 {
@@ -877,11 +861,11 @@ impl Noise {
     }
 
     pub(crate) fn read_nr44(&self) -> u8 {
-        0xBF | ((self.snd_counter as u8) << 6)
+        0xBF | (u8::from(self.snd_counter) << 6)
     }
 
     pub(crate) fn write_nr41(&mut self, val: u8) {
-        self.snd_len = NOISE_MAX_LEN - ((val as u16) & (NOISE_MAX_LEN - 1));
+        self.snd_len = NOISE_MAX_LEN - (u16::from(val) & (NOISE_MAX_LEN - 1));
     }
 
     pub(crate) fn write_nr42(&mut self, val: u8) {

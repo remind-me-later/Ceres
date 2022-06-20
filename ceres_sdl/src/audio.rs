@@ -10,8 +10,8 @@ const FREQ: i32 = 48000;
 const AUDIO_BUFFER_SIZE: usize = 512;
 
 pub struct Renderer {
-    stream: AudioQueue<Sample>,
-    buf: [Sample; AUDIO_BUFFER_SIZE],
+    stream: AudioQueue<f32>,
+    buf: [f32; AUDIO_BUFFER_SIZE],
     buf_pos: usize,
     freq: u32,
 }
@@ -34,13 +34,17 @@ impl Renderer {
 
         Self {
             stream: queue,
-            buf: [Sample::default(); AUDIO_BUFFER_SIZE],
+            buf: [f32::default(); AUDIO_BUFFER_SIZE],
             buf_pos: 0,
             freq,
         }
     }
 
     pub fn push_frame(&mut self, l: Sample, r: Sample) {
+        //  transform to f32
+        let l = f32::from(l * 32) / 32768.0;
+        let r = f32::from(r * 32) / 32768.0;
+
         self.buf[self.buf_pos] = l;
         self.buf[self.buf_pos + 1] = r;
 
