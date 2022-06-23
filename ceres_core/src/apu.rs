@@ -84,9 +84,21 @@ impl Gb {
         let l = (0xF - i16::from(l) * 2) * i16::from(self.apu_l_vol);
         let r = (0xF - i16::from(r) * 2) * i16::from(self.apu_r_vol);
 
+        // filter and transform to f32
+        let l = self.high_pass_filter(l);
+        let r = self.high_pass_filter(r);
+
         unsafe {
             (self.apu_frame_callback.unwrap_unchecked())(l, r);
         }
+    }
+
+    fn high_pass_filter(&mut self, sample: i16) -> f32 {
+        let charge_factor = 0.998_943;
+        let input = f32::from(sample * 32) / 32768.0;
+        let output = input - self.apu_cap;
+        self.apu_cap = input - output * charge_factor;
+        output
     }
 
     fn reset(&mut self) {

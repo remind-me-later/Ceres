@@ -223,9 +223,7 @@ impl Gb {
             }
         }
 
-        let draw = self.lcdc & LCDC_ON_B != 0 && !self.lcdc_delay;
-
-        if draw {
+        if self.lcdc & LCDC_ON_B != 0 && !self.lcdc_delay {
             // advance in 0x40 t-cycle chunks to avoid skipping a state
             // machine transition
             // TODO: think of something more elegant
@@ -323,6 +321,7 @@ impl Gb {
             debug_assert!(self.ppu_mode() == Mode::VBlank);
             self.ly = 0;
             self.rgba_buf.clear();
+            self.frame_dots = 0;
         }
 
         // turn on
@@ -332,6 +331,7 @@ impl Gb {
             self.stat |= STAT_LYC_B;
             self.ppu_cycles = Mode::OamScan.cycles(self.scx);
             self.lcdc_delay = true;
+            self.frame_dots = 0;
         }
 
         self.lcdc = val;

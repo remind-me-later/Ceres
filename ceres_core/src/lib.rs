@@ -9,7 +9,6 @@
     clippy::deref_by_slicing,
     clippy::empty_drop,
     clippy::empty_structs_with_brackets,
-    clippy::float_arithmetic,
     clippy::float_cmp_const,
     clippy::fn_to_numeric_cast_any,
     clippy::get_unwrap,
@@ -85,7 +84,7 @@ const HRAM_SIZE: usize = 0x80;
 const WRAM_SIZE: usize = 0x2000;
 const WRAM_SIZE_CGB: usize = WRAM_SIZE * 4;
 
-pub type Sample = i16;
+pub type Sample = f32;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Model {
@@ -211,6 +210,7 @@ pub struct Gb {
     apu_ch3: Wave,
     apu_ch4: Noise,
 
+    apu_cap: f32,
     apu_timer: u16,
     apu_render_timer: u32,
     apu_ext_sample_period: u32,
@@ -239,6 +239,7 @@ impl Gb {
         };
 
         let mut gb = Self {
+            apu_cap: 0.0,
             lcdc_delay: false,
             frame_dots: 0,
             af: 0,
