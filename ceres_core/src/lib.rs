@@ -177,6 +177,8 @@ pub struct Gb {
     bcp: ColorPalette,
     ocp: ColorPalette,
 
+    frame_dots: u32,
+    lcdc_delay: bool,
     vram: [u8; VRAM_SIZE_CGB],
     oam: [u8; OAM_SIZE],
     rgba_buf: RgbaBuf,
@@ -237,6 +239,8 @@ impl Gb {
         };
 
         let mut gb = Self {
+            lcdc_delay: false,
+            frame_dots: 0,
             af: 0,
             bc: 0,
             de: 0,
@@ -338,7 +342,7 @@ impl Gb {
 
     pub fn set_sample_rate(&mut self, sample_rate: u32) {
         // account for difference between 60 and 59.73 fps
-        let k = TC_SEC + 0x4A10 /* magic */;
+        let k = TC_SEC; //+ 0x4A10 /* magic */;
         self.apu_ext_sample_period = k / sample_rate;
     }
 

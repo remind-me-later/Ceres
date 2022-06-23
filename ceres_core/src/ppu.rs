@@ -77,11 +77,14 @@ impl RgbaBuf {
 
     #[inline]
     fn set_px(&mut self, i: usize, rgb: (u8, u8, u8)) {
-        // manual bound check
         let base = i * 4;
         self.data[base] = rgb.0;
         self.data[base + 1] = rgb.1;
         self.data[base + 2] = rgb.2;
+    }
+
+    fn clear(&mut self) {
+        self.data = [0xFF; RGBA_BUF_SIZE];
     }
 }
 
@@ -220,60 +223,69 @@ impl Gb {
             }
         }
 
-        if self.lcdc & LCDC_ON_B == 0 {
-            return;
+        let draw = self.lcdc & LCDC_ON_B != 0 && !self.lcdc_delay;
+
+        if draw {
+            // advance in 0x40 t-cycle chunks to avoid skipping a state
+            // machine transition
+            // TODO: think of something more elegant
+            let chunks = (cycles >> 6) + 1;
+
+            for i in 0..chunks {
+                let (new_cycles, overflow) = if i == chunks - 1 {
+                    // last iteration
+                    self.ppu_cycles.overflowing_sub(cycles & 0x3F)
+                } else {
+                    self.ppu_cycles.overflowing_sub(0x40)
+                };
+                self.ppu_cycles = new_cycles;
+
+                if !overflow {
+                    continue;
+                }
+
+                match self.ppu_mode() {
+                    Mode::OamScan => self.switch_mode(Mode::Drawing),
+                    Mode::Drawing => {
+                        self.draw_scanline();
+                        self.switch_mode(Mode::HBlank);
+                    }
+                    Mode::HBlank => {
+                        self.ly += 1;
+                        if self.ly < 144 {
+                            self.switch_mode(Mode::OamScan);
+                        } else {
+                            self.switch_mode(Mode::VBlank);
+                        }
+                        check_lyc(self);
+                    }
+                    Mode::VBlank => {
+                        self.ly += 1;
+                        if self.ly > 153 {
+                            self.ly = 0;
+                            self.switch_mode(Mode::OamScan);
+                        } else {
+                            let scx = self.scx;
+                            self.ppu_cycles =
+                                self.ppu_cycles.wrapping_add(self.ppu_mode().cycles(scx));
+                        }
+                        check_lyc(self);
+                    }
+                }
+            }
         }
 
-        // advance in 0x40 t-cycle chunks to avoid skipping a state
-        // machine transition
-        // TODO: think of something more elegant
-        let chunks = (cycles >> 6) + 1;
+        self.frame_dots += cycles;
 
-        for i in 0..chunks {
-            let (new_cycles, overflow) = if i == chunks - 1 {
-                // last iteration
-                self.ppu_cycles.overflowing_sub(cycles & 0x3F)
-            } else {
-                self.ppu_cycles.overflowing_sub(0x40)
-            };
-            self.ppu_cycles = new_cycles;
-
-            if !overflow {
-                continue;
+        if self.frame_dots >= 70224 {
+            if self.lcdc_delay {
+                self.lcdc_delay = false;
             }
 
-            match self.ppu_mode() {
-                Mode::OamScan => self.switch_mode(Mode::Drawing),
-                Mode::Drawing => {
-                    self.draw_scanline();
-                    self.switch_mode(Mode::HBlank);
-                }
-                Mode::HBlank => {
-                    self.ly += 1;
-                    if self.ly < 144 {
-                        self.switch_mode(Mode::OamScan);
-                    } else {
-                        self.switch_mode(Mode::VBlank);
-                    }
-                    check_lyc(self);
-                }
-                Mode::VBlank => {
-                    self.ly += 1;
-                    if self.ly > 153 {
-                        self.ly = 0;
-                        self.switch_mode(Mode::OamScan);
-                        unsafe {
-                            (self.ppu_frame_callback.unwrap_unchecked())(
-                                self.rgba_buf.data.as_ptr(),
-                            );
-                        }
-                    } else {
-                        let scx = self.scx;
-                        self.ppu_cycles = self.ppu_cycles.wrapping_add(self.ppu_mode().cycles(scx));
-                    }
-                    check_lyc(self);
-                }
+            unsafe {
+                (self.ppu_frame_callback.unwrap_unchecked())(self.rgba_buf.data.as_ptr());
             }
+            self.frame_dots -= 70224;
         }
     }
 
@@ -306,16 +318,20 @@ impl Gb {
     }
 
     pub(crate) fn write_lcdc(&mut self, val: u8) {
+        // turn off
         if val & LCDC_ON_B == 0 && self.lcdc & LCDC_ON_B != 0 {
             debug_assert!(self.ppu_mode() == Mode::VBlank);
             self.ly = 0;
+            self.rgba_buf.clear();
         }
 
+        // turn on
         if val & LCDC_ON_B != 0 && self.lcdc & LCDC_ON_B == 0 {
             self.set_mode(Mode::HBlank);
             self.stat &= !STAT_LYC_B;
             self.stat |= STAT_LYC_B;
             self.ppu_cycles = Mode::OamScan.cycles(self.scx);
+            self.lcdc_delay = true;
         }
 
         self.lcdc = val;
