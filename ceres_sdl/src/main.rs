@@ -145,7 +145,7 @@ impl Emu {
                 Ok(())
             }
 
-            let cart = Cartridge::unique();
+            let cart = unsafe { Cartridge::unique() };
             read_file_into(rom_path, cart.mut_rom()).unwrap();
             read_file_into(&sav_path, cart.mut_ram()).ok();
 

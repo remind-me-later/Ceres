@@ -1,6 +1,9 @@
 use crate::{CompatMode, Gb, IF_LCD_B, IF_VBLANK_B};
 
+/// `GameBoy` screen width in pixels.
 pub const PX_WIDTH: u8 = 160;
+
+/// `GameBoy` screen height in pixels.
 pub const PX_HEIGHT: u8 = 144;
 
 const PX_TOTAL: u16 = PX_WIDTH as u16 * PX_HEIGHT as u16;

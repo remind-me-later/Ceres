@@ -1,5 +1,6 @@
 use crate::{Gb, IF_P1_B};
 
+/// Represents a `GameBoy` physical button.
 #[derive(Clone, Copy)]
 pub enum Button {
     Right  = 0x01,
@@ -13,6 +14,7 @@ pub enum Button {
 }
 
 impl Gb {
+    /// Press the `button` button.
     pub fn press(&mut self, button: Button) {
         let b = button as u8;
 
@@ -23,6 +25,7 @@ impl Gb {
         }
     }
 
+    /// Release the `button` button.
     pub fn release(&mut self, button: Button) {
         self.p1_btn &= !(button as u8);
     }

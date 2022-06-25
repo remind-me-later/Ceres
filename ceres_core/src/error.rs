@@ -1,9 +1,9 @@
+/// Represents a cartridge initialization error.
+#[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
-pub enum Error {
+pub enum CartridgeInitError {
     InvalidRomSize,
     InvalidRamSize,
     NonAsciiTitleString,
-    InvalidMBC,
-    InvalidChecksum,
-    InvalidLicenseeCode,
+    UnsupportedMBC,
 }

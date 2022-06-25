@@ -867,6 +867,8 @@ impl Gb {
 
             self.key1 &= !KEY1_SWITCH_B;
             self.key1 ^= KEY1_SPEED_B;
+
+            self.advance_cycles(2050);
         }
     }
 

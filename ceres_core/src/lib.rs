@@ -1,6 +1,11 @@
+//! A library to make ``GameBoy`` Color emulators.
+//! This library is pretty low level and should be usable
+//! with a C as well as Rust frontend.
+
 #![no_std]
 #![feature(core_intrinsics)]
 #![feature(const_maybe_uninit_zeroed)]
+#![feature(negative_impls)]
 #![warn(
     clippy::pedantic,
     clippy::as_underscore,
@@ -48,7 +53,7 @@ use {
 };
 pub use {
     cartridge::Cartridge,
-    error::Error,
+    error::CartridgeInitError,
     joypad::Button,
     ppu::{PX_HEIGHT, PX_WIDTH},
 };
@@ -67,7 +72,8 @@ const MGB_BOOTROM: &[u8] = include_bytes!("../bootroms/bin/mgb_boot.bin");
 const CGB_BOOTROM: &[u8] = include_bytes!("../bootroms/bin/cgb_boot_fast.bin");
 
 const FRAME_NANOS: u64 = 16_750_418;
-// 59.7 fps
+/// `GameBoy` frame duration in nanoseconds, the `GameBoy`
+/// framerate is 59.7 fps.
 pub const FRAME_DUR: Duration = Duration::from_nanos(FRAME_NANOS);
 // t-cycles per second
 const TC_SEC: u32 = 0x0040_0000;
@@ -84,8 +90,10 @@ const HRAM_SIZE: usize = 0x80;
 const WRAM_SIZE: usize = 0x2000;
 const WRAM_SIZE_CGB: usize = WRAM_SIZE * 4;
 
+/// Audio sample type.
 pub type Sample = f32;
 
+/// ``GameBoy`` model to emulate.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Model {
     Dmg,
@@ -100,6 +108,11 @@ enum CompatMode {
     Cgb,
 }
 
+/// The ``GameBoy`` struct is the main struct in the
+/// library. The `run` method never returns and calls a PPU
+/// "graphical" callback every frame and an APU "audio"
+/// callback every sample. These callbacks are passed to
+/// the `new` function, which returns a `GameBoy` struct.
 pub struct Gb {
     // general
     cart: &'static mut Cartridge,
@@ -219,6 +232,9 @@ pub struct Gb {
 }
 
 impl Gb {
+    /// Create a new ``GameBoy`` instance, specifying a PPU
+    /// callback, an APU callback and a sampling rate. Of
+    /// course, a cartridge is also needed.
     #[must_use]
     pub fn new(
         model: Model,
@@ -333,25 +349,27 @@ impl Gb {
         gb
     }
 
-    pub fn set_ppu_frame_callback(&mut self, ppu_frame_callback: fn(*const u8)) {
+    fn set_ppu_frame_callback(&mut self, ppu_frame_callback: fn(*const u8)) {
         self.ppu_frame_callback = Some(ppu_frame_callback);
     }
 
-    pub fn set_apu_frame_callback(&mut self, apu_frame_callback: fn(Sample, Sample)) {
+    fn set_apu_frame_callback(&mut self, apu_frame_callback: fn(Sample, Sample)) {
         self.apu_frame_callback = Some(apu_frame_callback);
     }
 
-    pub fn set_sample_rate(&mut self, sample_rate: u32) {
-        // account for difference between 60 and 59.73 fps
-        let k = TC_SEC; //+ 0x4A10 /* magic */;
-        self.apu_ext_sample_period = k / sample_rate;
+    fn set_sample_rate(&mut self, sample_rate: u32) {
+        // maybe account for difference between 59.7 and 60 Hz?
+        self.apu_ext_sample_period = TC_SEC / sample_rate;
     }
 
+    /// Initiates the main emulation loop, never returns.
     #[inline]
     pub fn run(&mut self) -> ! {
         self.run_cpu();
     }
 
+    /// Returns cartridge RAM if cartridge has battery, null
+    /// otherwise
     #[must_use]
     pub fn save_data(&self) -> Option<&[u8]> {
         self.cart.has_battery().then_some(self.cart.ram())
