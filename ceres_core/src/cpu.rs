@@ -1,9 +1,9 @@
 #[cfg(feature = "debugging_capability")]
-use core::println;
+use std::println;
 
 use {
     crate::{Gb, KEY1_SPEED_B, KEY1_SWITCH_B},
-    core::fmt::Display,
+    core::{fmt::Display, intrinsics::unlikely},
     Ld8::{Dhl, A, B, C, D, E, H, L},
 };
 
@@ -93,16 +93,22 @@ impl Ld8 {
 impl Gb {
     pub(crate) fn run_cpu(&mut self) -> ! {
         loop {
-            if self.cpu_halted {
+            if self.cpu_ei_delay {
+                self.ime = true;
+                self.cpu_ei_delay = false;
+            }
+
+            if unlikely(self.cpu_halted) {
                 self.empty_cycle();
             } else {
-                if self.cpu_ei_delay {
-                    self.ime = true;
-                    self.cpu_ei_delay = false;
-                }
-
                 let opcode = self.imm_u8();
                 self.run_hdma();
+
+                if unlikely(self.halt_bug) {
+                    self.pc = self.pc.wrapping_sub(1);
+                    self.halt_bug = false;
+                }
+
                 self.exec(opcode);
             }
 
@@ -1196,7 +1202,17 @@ impl Gb {
 
     #[inline]
     fn halt(&mut self) {
-        self.cpu_halted = true;
+        self.catch_up();
+
+        if self.ie & self.ifr & 0x1F == 0 {
+            self.cpu_halted = true;
+        } else if self.ime {
+            self.cpu_halted = false;
+            self.pc = self.pc.wrapping_sub(1);
+        } else {
+            self.cpu_halted = false;
+            self.halt_bug = true;
+        }
 
         #[cfg(feature = "debugging_capability")]
         {

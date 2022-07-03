@@ -151,6 +151,7 @@ pub struct Gb {
     p1_acts: bool,
 
     // interrupts
+    halt_bug: bool,
     ime: bool,
     ifr: u8,
     ie: u8,
@@ -239,6 +240,7 @@ impl Gb {
     /// callback, an APU callback and a sampling rate. Of
     /// course, a cartridge is also needed.
     #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub fn new(
         model: Model,
         cart: &'static mut Cartridge,
@@ -258,6 +260,7 @@ impl Gb {
         };
 
         let mut gb = Self {
+            halt_bug: false,
             apu_cap: 0.0,
             lcdc_delay: false,
             frame_dots: 0,

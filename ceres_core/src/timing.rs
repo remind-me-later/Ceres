@@ -92,11 +92,11 @@ impl Gb {
         // etc..). If the PPU reads VRAM during an HDMA transfer it
         // should be glitchy anyways
 
-        if self.double_speed {
-            self.advance_cycles(u32::from(len) * 2);
-        } else {
-            self.advance_cycles(u32::from(len));
-        }
+        // if self.double_speed {
+        //     self.advance_cycles(u32::from(len) * 2);
+        // } else {
+        //     self.advance_cycles(u32::from(len));
+        // }
     }
 
     fn counter_bit(&self) -> bool {
