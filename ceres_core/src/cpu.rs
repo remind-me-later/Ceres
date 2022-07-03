@@ -1,5 +1,9 @@
+#[cfg(feature = "debugging_capability")]
+use core::println;
+
 use {
     crate::{Gb, KEY1_SPEED_B, KEY1_SWITCH_B},
+    core::fmt::Display,
     Ld8::{Dhl, A, B, C, D, E, H, L},
 };
 
@@ -8,6 +12,7 @@ const NF_B: u16 = 0x40;
 const HF_B: u16 = 0x20;
 const CF_B: u16 = 0x10;
 
+#[derive(Clone, Copy)]
 enum Ld8 {
     A,
     B,
@@ -17,6 +22,21 @@ enum Ld8 {
     H,
     L,
     Dhl,
+}
+
+impl Display for Ld8 {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            A => write!(f, "A"),
+            B => write!(f, "B"),
+            C => write!(f, "C"),
+            D => write!(f, "D"),
+            E => write!(f, "E"),
+            H => write!(f, "H"),
+            L => write!(f, "L"),
+            Dhl => write!(f, "(HL)"),
+        }
+    }
 }
 
 impl Ld8 {
@@ -172,6 +192,66 @@ impl Gb {
         }
     }
 
+    #[cfg(feature = "debugging_capability")]
+    fn regid2regname(id: u8) -> &'static str {
+        match id {
+            0 => "AF",
+            1 => "BC",
+            2 => "DE",
+            3 => "HL",
+            4 => "SP",
+            _ => unreachable!(),
+        }
+    }
+
+    #[cfg(feature = "debugging_capability")]
+    fn get_src_name(opcode: u8) -> &'static str {
+        let reg_id = ((opcode >> 1) + 1) & 3;
+        let lo = opcode & 1 != 0;
+        if reg_id == 0 {
+            if lo {
+                return "A";
+            }
+            return "(HL)";
+        }
+        if lo {
+            return Self::regid2reglowname(reg_id);
+        }
+        Self::regid2reghighname(reg_id)
+    }
+
+    #[cfg(feature = "debugging_capability")]
+    fn regid2reghighname(id: u8) -> &'static str {
+        match id {
+            0 => "A",
+            1 => "B",
+            2 => "D",
+            3 => "H",
+            _ => unreachable!(),
+        }
+    }
+
+    #[cfg(feature = "debugging_capability")]
+    fn get_condition_name(opcode: u8) -> &'static str {
+        match (opcode >> 3) & 0x3 {
+            0 => "NZ",
+            1 => "Z",
+            2 => "NC",
+            3 => "C",
+            _ => unreachable!(),
+        }
+    }
+
+    #[cfg(feature = "debugging_capability")]
+    fn regid2reglowname(id: u8) -> &'static str {
+        match id {
+            1 => "C",
+            2 => "E",
+            3 => "L",
+            _ => unreachable!(),
+        }
+    }
+
     #[inline]
     fn get_src_val(&mut self, opcode: u8) -> u8 {
         let reg_id = ((opcode >> 1) + 1) & 3;
@@ -185,7 +265,7 @@ impl Gb {
         if lo {
             return (*self.regid2reg(reg_id) & 0xFF) as u8;
         }
-        return (*self.regid2reg(reg_id) >> 8) as u8;
+        (*self.regid2reg(reg_id) >> 8) as u8
     }
 
     #[inline]
@@ -209,10 +289,19 @@ impl Gb {
         }
     }
 
+    // ###########
+    // # Opcodes #
+    // ###########
+
     #[inline]
     fn ld(&mut self, t: Ld8, s: Ld8) {
         let val = s.read(self);
         t.write(self, val);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ld {t}, {s}");
+        }
     }
 
     #[inline]
@@ -221,6 +310,11 @@ impl Gb {
         self.af &= 0xFF;
         let tmp = *self.regid2reg(reg_id);
         self.af |= u16::from(self.cpu_read(tmp)) << 8;
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ld A, ({})", Self::regid2regname(reg_id));
+        }
     }
 
     #[inline]
@@ -228,12 +322,22 @@ impl Gb {
         let reg_id = (opcode >> 4) + 1;
         let tmp = *self.regid2reg(reg_id);
         self.cpu_write(tmp, (self.af >> 8) as u8);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ld ({}), A", Self::regid2regname(reg_id));
+        }
     }
 
     #[inline]
     fn ld_da16_a(&mut self) {
         let addr = self.imm_u16();
         self.cpu_write(addr, (self.af >> 8) as u8);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ld ({:#06x}), A", addr);
+        }
     }
 
     #[inline]
@@ -241,6 +345,11 @@ impl Gb {
         self.af &= 0xFF;
         let addr = self.imm_u16();
         self.af |= u16::from(self.cpu_read(addr)) << 8;
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ld A, ({:#06x})", addr);
+        }
     }
 
     #[inline]
@@ -248,6 +357,11 @@ impl Gb {
         let addr = self.hl;
         self.cpu_write(addr, (self.af >> 8) as u8);
         self.hl = addr.wrapping_add(1);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ld (HL+), A");
+        }
     }
 
     #[inline]
@@ -255,6 +369,11 @@ impl Gb {
         let addr = self.hl;
         self.cpu_write(addr, (self.af >> 8) as u8);
         self.hl = addr.wrapping_sub(1);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ld (HL-), A");
+        }
     }
 
     #[inline]
@@ -264,6 +383,11 @@ impl Gb {
         self.af &= 0xFF;
         self.af |= val << 8;
         self.hl = addr.wrapping_add(1);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ld A, (HL+)");
+        }
     }
 
     #[inline]
@@ -273,30 +397,56 @@ impl Gb {
         self.af &= 0xFF;
         self.af |= val << 8;
         self.hl = addr.wrapping_sub(1);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ld A, (HL-)");
+        }
     }
 
     #[inline]
-    fn ld_da8_a(&mut self) {
+    fn ldh_da8_a(&mut self) {
         let tmp = u16::from(self.imm_u8());
-        self.cpu_write(0xFF00 | tmp, (self.af >> 8) as u8);
+        let a = (self.af >> 8) as u8;
+        self.cpu_write(0xFF00 | tmp, a);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ldh ({:#04x}), A", tmp);
+        }
     }
 
     #[inline]
-    fn ld_a_da8(&mut self) {
+    fn ldh_a_da8(&mut self) {
         let tmp = u16::from(self.imm_u8());
         self.af &= 0xFF;
         self.af |= u16::from(self.cpu_read(0xFF00 | tmp)) << 8;
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ldh A, ({:#04x})", tmp);
+        }
     }
 
     #[inline]
-    fn ld_dc_a(&mut self) {
+    fn ldh_dc_a(&mut self) {
         self.cpu_write(0xFF00 | self.bc & 0xFF, (self.af >> 8) as u8);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ldh (C), A");
+        }
     }
 
     #[inline]
-    fn ld_a_dc(&mut self) {
+    fn ldh_a_dc(&mut self) {
         self.af &= 0xFF;
         self.af |= u16::from(self.cpu_read(0xFF00 | self.bc & 0xFF)) << 8;
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ldh A, (C)");
+        }
     }
 
     #[inline]
@@ -305,6 +455,11 @@ impl Gb {
         *self.regid2reg(reg_id) &= 0xFF;
         let tmp = u16::from(self.imm_u8());
         *self.regid2reg(reg_id) |= tmp << 8;
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ld {}, {:#04x}", Self::regid2reghighname(reg_id), tmp);
+        }
     }
 
     #[inline]
@@ -313,12 +468,22 @@ impl Gb {
         *self.regid2reg(reg_id) &= 0xFF00;
         let tmp = u16::from(self.imm_u8());
         *self.regid2reg(reg_id) |= tmp;
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ld {}, {:#04x}", Self::regid2reglowname(reg_id), tmp);
+        }
     }
 
     #[inline]
     fn ld_dhl_d8(&mut self) {
         let tmp = self.imm_u8();
         self.cpu_write(self.hl, tmp);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ld (HL), {:#02x}", tmp);
+        }
     }
 
     #[inline]
@@ -326,11 +491,15 @@ impl Gb {
         let val = self.hl;
         self.sp = val;
         self.empty_cycle();
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ld SP, HL");
+        }
     }
 
     #[inline]
-    fn add_a_r(&mut self, opcode: u8) {
-        let val = u16::from(self.get_src_val(opcode));
+    fn add(&mut self, val: u16) {
         let a = self.af >> 8;
         let res = a + val;
         self.af = res << 8;
@@ -346,18 +515,38 @@ impl Gb {
     }
 
     #[inline]
+    fn add_a_r(&mut self, opcode: u8) {
+        let val = u16::from(self.get_src_val(opcode));
+        self.add(val);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("add A, {}", Self::get_src_name(opcode));
+        }
+    }
+
+    #[inline]
     fn add_a_d8(&mut self) {
         let val = u16::from(self.imm_u8());
+        self.add(val);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("add A, {:#02x}", val);
+        }
+    }
+
+    #[inline]
+    fn sub(&mut self, val: u16) {
         let a = self.af >> 8;
-        let res = a + val;
-        self.af = res << 8;
-        if res & 0xFF == 0 {
+        self.af = (a.wrapping_sub(val) << 8) | NF_B;
+        if a == val {
             self.af |= ZF_B;
         }
-        if (a & 0xF) + (val & 0xF) > 0x0F {
+        if (a & 0xF) < (val & 0xF) {
             self.af |= HF_B;
         }
-        if res > 0xFF {
+        if a < val {
             self.af |= CF_B;
         }
     }
@@ -365,38 +554,27 @@ impl Gb {
     #[inline]
     fn sub_a_r(&mut self, opcode: u8) {
         let val = u16::from(self.get_src_val(opcode));
-        let a = self.af >> 8;
-        self.af = (a.wrapping_sub(val) << 8) | NF_B;
-        if a == val {
-            self.af |= ZF_B;
-        }
-        if (a & 0xF) < (val & 0xF) {
-            self.af |= HF_B;
-        }
-        if a < val {
-            self.af |= CF_B;
+        self.sub(val);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("sub A, {}", Self::get_src_name(opcode));
         }
     }
 
     #[inline]
     fn sub_a_d8(&mut self) {
         let val = u16::from(self.imm_u8());
-        let a = self.af >> 8;
-        self.af = (a.wrapping_sub(val) << 8) | NF_B;
-        if a == val {
-            self.af |= ZF_B;
-        }
-        if (a & 0xF) < (val & 0xF) {
-            self.af |= HF_B;
-        }
-        if a < val {
-            self.af |= CF_B;
+        self.sub(val);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("sub A, {:#02x}", val);
         }
     }
 
     #[inline]
-    fn sbc_a_r(&mut self, opcode: u8) {
-        let val = u16::from(self.get_src_val(opcode));
+    fn sbc(&mut self, val: u16) {
         let a = self.af >> 8;
         let carry = u16::from((self.af & CF_B) != 0);
         let res = a.wrapping_sub(val).wrapping_sub(carry);
@@ -414,17 +592,37 @@ impl Gb {
     }
 
     #[inline]
+    fn sbc_a_r(&mut self, opcode: u8) {
+        let val = u16::from(self.get_src_val(opcode));
+        self.sbc(val);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("sbc A, {}", Self::get_src_name(opcode));
+        }
+    }
+
+    #[inline]
     fn sbc_a_d8(&mut self) {
         let val = u16::from(self.imm_u8());
+        self.sbc(val);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("sbc A, {:#02x}", val);
+        }
+    }
+
+    #[inline]
+    fn adc(&mut self, val: u16) {
         let a = self.af >> 8;
         let carry = u16::from((self.af & CF_B) != 0);
-        let res = a.wrapping_sub(val).wrapping_sub(carry);
-        self.af = (res << 8) | NF_B;
-
+        let res = a + val + carry;
+        self.af = res << 8;
         if res & 0xFF == 0 {
             self.af |= ZF_B;
         }
-        if (a & 0xF) < (val & 0xF) + carry {
+        if (a & 0xF) + (val & 0xF) + carry > 0x0F {
             self.af |= HF_B;
         }
         if res > 0xFF {
@@ -435,55 +633,62 @@ impl Gb {
     #[inline]
     fn adc_a_r(&mut self, opcode: u8) {
         let val = u16::from(self.get_src_val(opcode));
-        let a = self.af >> 8;
-        let carry = u16::from((self.af & CF_B) != 0);
-        let res = a + val + carry;
-        self.af = res << 8;
-        if res & 0xFF == 0 {
-            self.af |= ZF_B;
-        }
-        if (a & 0xF) + (val & 0xF) + carry > 0x0F {
-            self.af |= HF_B;
-        }
-        if res > 0xFF {
-            self.af |= CF_B;
+        self.adc(val);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("adc A, {}", Self::get_src_name(opcode));
         }
     }
 
     #[inline]
     fn adc_a_d8(&mut self) {
         let val = u16::from(self.imm_u8());
+        self.adc(val);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("adc A, {:#02x}", val);
+        }
+    }
+
+    #[inline]
+    fn or(&mut self, val: u16) {
         let a = self.af >> 8;
-        let carry = u16::from((self.af & CF_B) != 0);
-        let res = a + val + carry;
-        self.af = res << 8;
-        if res & 0xFF == 0 {
+        self.af = (a | val) << 8;
+        if (a | val) == 0 {
             self.af |= ZF_B;
-        }
-        if (a & 0xF) + (val & 0xF) + carry > 0x0F {
-            self.af |= HF_B;
-        }
-        if res > 0xFF {
-            self.af |= CF_B;
         }
     }
 
     #[inline]
     fn or_a_r(&mut self, opcode: u8) {
         let val = u16::from(self.get_src_val(opcode));
-        let a = self.af >> 8;
-        self.af = (a | val) << 8;
-        if (a | val) == 0 {
-            self.af |= ZF_B;
+        self.or(val);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("or A, {}", Self::get_src_name(opcode));
         }
     }
 
     #[inline]
     fn or_a_d8(&mut self) {
         let val = u16::from(self.imm_u8());
+        self.or(val);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("or A, {:#02x}", val);
+        }
+    }
+
+    #[inline]
+    fn xor(&mut self, val: u16) {
         let a = self.af >> 8;
-        self.af = (a | val) << 8;
-        if (a | val) == 0 {
+        let a = a ^ val;
+        self.af = a << 8;
+        if a == 0 {
             self.af |= ZF_B;
         }
     }
@@ -491,19 +696,31 @@ impl Gb {
     #[inline]
     fn xor_a_r(&mut self, opcode: u8) {
         let val = u16::from(self.get_src_val(opcode));
-        let a = self.af >> 8;
-        self.af = (a ^ val) << 8;
-        if (a ^ val) == 0 {
-            self.af |= ZF_B;
+        self.xor(val);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("xor A, {}", Self::get_src_name(opcode));
         }
     }
 
     #[inline]
     fn xor_a_d8(&mut self) {
         let val = u16::from(self.imm_u8());
+        self.xor(val);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("xor A, {:#02x}", val);
+        }
+    }
+
+    #[inline]
+    fn and(&mut self, val: u16) {
         let a = self.af >> 8;
-        self.af = (a ^ val) << 8;
-        if (a ^ val) == 0 {
+        let a = a & val;
+        self.af = (a << 8) | HF_B;
+        if a == 0 {
             self.af |= ZF_B;
         }
     }
@@ -511,54 +728,60 @@ impl Gb {
     #[inline]
     fn and_a_r(&mut self, opcode: u8) {
         let val = u16::from(self.get_src_val(opcode));
-        let a = self.af >> 8;
-        self.af = ((a & val) << 8) | HF_B;
-        if (a & val) == 0 {
-            self.af |= ZF_B;
+        self.and(val);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("and A, {}", Self::get_src_name(opcode));
         }
     }
 
     #[inline]
     fn and_a_d8(&mut self) {
         let val = u16::from(self.imm_u8());
+        self.and(val);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("and A, {:#02x}", val);
+        }
+    }
+
+    #[inline]
+    fn cp(&mut self, val: u16) {
         let a = self.af >> 8;
-        self.af = ((a & val) << 8) | HF_B;
-        if (a & val) == 0 {
+        self.af &= 0xFF00;
+        self.af |= NF_B;
+        if a == val {
             self.af |= ZF_B;
+        }
+        if (a & 0xF) < (val & 0xF) {
+            self.af |= HF_B;
+        }
+        if a < val {
+            self.af |= CF_B;
         }
     }
 
     #[inline]
     fn cp_a_r(&mut self, opcode: u8) {
         let val = u16::from(self.get_src_val(opcode));
-        let a = self.af >> 8;
-        self.af &= 0xFF00;
-        self.af |= NF_B;
-        if a == val {
-            self.af |= ZF_B;
-        }
-        if (a & 0xF) < (val & 0xF) {
-            self.af |= HF_B;
-        }
-        if a < val {
-            self.af |= CF_B;
+        self.cp(val);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("cp A, {}", Self::get_src_name(opcode));
         }
     }
 
     #[inline]
     fn cp_a_d8(&mut self) {
         let val = u16::from(self.imm_u8());
-        let a = self.af >> 8;
-        self.af &= 0xFF00;
-        self.af |= NF_B;
-        if a == val {
-            self.af |= ZF_B;
-        }
-        if (a & 0xF) < (val & 0xF) {
-            self.af |= HF_B;
-        }
-        if a < val {
-            self.af |= CF_B;
+        self.cp(val);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("cp A, {:#02x}", val);
         }
     }
 
@@ -576,6 +799,11 @@ impl Gb {
 
         if ((*self.regid2reg(reg_id)) & 0xFF) == 0 {
             self.af |= ZF_B;
+        }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("inc {}", Self::regid2reglowname(reg_id));
         }
     }
 
@@ -595,6 +823,11 @@ impl Gb {
         if ((*self.regid2reg(reg_id)) & 0xFF) == 0 {
             self.af |= ZF_B;
         }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("dec {}", Self::regid2reglowname(reg_id));
+        }
     }
 
     #[inline]
@@ -609,6 +842,11 @@ impl Gb {
 
         if ((*self.regid2reg(reg_id)) & 0xFF00) == 0 {
             self.af |= ZF_B;
+        }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("inc {}", Self::regid2reghighname(reg_id));
         }
     }
 
@@ -626,6 +864,11 @@ impl Gb {
         if ((*self.regid2reg(reg_id)) & 0xFF00) == 0 {
             self.af |= ZF_B;
         }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("dec {}", Self::regid2reghighname(reg_id));
+        }
     }
 
     #[inline]
@@ -640,6 +883,11 @@ impl Gb {
 
         if val == 0 {
             self.af |= ZF_B;
+        }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("inc (HL)");
         }
     }
 
@@ -657,6 +905,11 @@ impl Gb {
         if val == 0 {
             self.af |= ZF_B;
         }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("dec (HL)");
+        }
     }
 
     #[inline]
@@ -665,6 +918,11 @@ impl Gb {
         let reg = self.regid2reg(reg_id);
         *reg = reg.wrapping_add(1);
         self.empty_cycle();
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("inc {}", Self::regid2regname(reg_id));
+        }
     }
 
     #[inline]
@@ -673,13 +931,20 @@ impl Gb {
         let reg = self.regid2reg(reg_id);
         *reg = reg.wrapping_sub(1);
         self.empty_cycle();
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("dec {}", Self::regid2regname(reg_id));
+        }
     }
 
     #[inline]
     fn ld_hl_sp_r8(&mut self) {
         self.af &= 0xFF00;
-        #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
-        let offset = self.imm_u8() as i8 as u16;
+        #[allow(clippy::cast_possible_wrap)]
+        let offset_signed = self.imm_u8() as i8;
+        #[allow(clippy::cast_sign_loss)]
+        let offset = offset_signed as u16;
         self.empty_cycle();
         self.hl = self.sp.wrapping_add(offset);
 
@@ -689,6 +954,11 @@ impl Gb {
 
         if (self.sp & 0xFF) + (offset & 0xFF) > 0xFF {
             self.af |= CF_B;
+        }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ld (HL), SP+{:#02x}", offset_signed);
         }
     }
 
@@ -700,6 +970,11 @@ impl Gb {
         if carry {
             self.af |= CF_B | 0x0100;
         }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("rlca");
+        }
     }
 
     #[inline]
@@ -708,6 +983,11 @@ impl Gb {
         self.af = (self.af >> 1) & 0xFF00;
         if carry {
             self.af |= CF_B | 0x8000;
+        }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("rrca");
         }
     }
 
@@ -724,6 +1004,11 @@ impl Gb {
         if val == 0 {
             self.af |= ZF_B;
         }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("rrc {}", Self::get_src_name(opcode));
+        }
     }
 
     #[inline]
@@ -731,6 +1016,11 @@ impl Gb {
         let addr = self.imm_u16();
         self.pc = addr;
         self.empty_cycle();
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("jp {:#06x}", addr);
+        }
     }
 
     #[inline]
@@ -748,21 +1038,39 @@ impl Gb {
             self.empty_cycle();
             self.empty_cycle();
         }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("jp {}", Self::get_condition_name(opcode));
+        }
     }
 
     #[inline]
     fn jp_hl(&mut self) {
         let addr = self.hl;
         self.pc = addr;
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("jp (HL)");
+        }
     }
 
     #[inline]
     fn do_jump_relative(&mut self) {
-        #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
-        let relative_addr = self.imm_u8() as i8 as u16;
+        #[allow(clippy::cast_possible_wrap)]
+        let relative_addr_signed = self.imm_u8() as i8;
+        #[allow(clippy::cast_sign_loss)]
+        let relative_addr = relative_addr_signed as u16;
+
         let pc = self.pc.wrapping_add(relative_addr);
         self.pc = pc;
         self.empty_cycle();
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("jr {:#02x}", relative_addr_signed);
+        }
     }
 
     #[inline]
@@ -778,6 +1086,11 @@ impl Gb {
             self.pc = self.pc.wrapping_add(1);
             self.empty_cycle();
         }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("jr {}", Self::get_condition_name(opcode));
+        }
     }
 
     #[inline]
@@ -788,6 +1101,11 @@ impl Gb {
         self.sp = self.sp.wrapping_sub(1);
         self.cpu_write(self.sp, (self.pc & 0xFF) as u8);
         self.pc = addr;
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("call {:#06x}", addr);
+        }
     }
 
     #[inline]
@@ -805,6 +1123,11 @@ impl Gb {
             self.empty_cycle();
             self.empty_cycle();
         }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("call {}", Self::get_condition_name(opcode));
+        }
     }
 
     #[inline]
@@ -814,12 +1137,22 @@ impl Gb {
         self.pc |= u16::from(self.cpu_read(self.sp)) << 8;
         self.sp = self.sp.wrapping_add(1);
         self.empty_cycle();
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ret");
+        }
     }
 
     #[inline]
     fn reti(&mut self) {
         self.ret();
         self.ime = true;
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("reti");
+        }
     }
 
     #[inline]
@@ -828,6 +1161,11 @@ impl Gb {
 
         if self.condition(opcode) {
             self.ret();
+        }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ret {}", Self::get_condition_name(opcode));
         }
     }
 
@@ -849,11 +1187,21 @@ impl Gb {
         self.sp = self.sp.wrapping_sub(1);
         self.cpu_write(self.sp, ((self.pc) & 0xFF) as u8);
         self.pc = u16::from(opcode) ^ 0xC7;
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("rst {:#02x}", opcode);
+        }
     }
 
     #[inline]
     fn halt(&mut self) {
         self.cpu_halted = true;
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("halt");
+        }
     }
 
     #[inline]
@@ -870,33 +1218,63 @@ impl Gb {
 
             self.advance_cycles(2050);
         }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("stop");
+        }
     }
 
     #[inline]
     fn di(&mut self) {
         self.ime = false;
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("di");
+        }
     }
 
     #[inline]
     fn ei(&mut self) {
         self.cpu_ei_delay = true;
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ei");
+        }
     }
 
     #[inline]
     fn ccf(&mut self) {
         self.af ^= CF_B;
         self.af &= !(HF_B | NF_B);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ccf");
+        }
     }
 
     #[inline]
     fn scf(&mut self) {
         self.af |= CF_B;
         self.af &= !(HF_B | NF_B);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("scf");
+        }
     }
 
     #[inline]
     #[allow(clippy::unused_self)]
-    fn nop(&mut self) {}
+    fn nop(&mut self) {
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("nop");
+        }
+    }
 
     // TODO: debugger breakpoint
     #[inline]
@@ -938,12 +1316,22 @@ impl Gb {
 
         self.af &= !HF_B;
         self.af |= result << 8;
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("daa");
+        }
     }
 
     #[inline]
     fn cpl(&mut self) {
         self.af ^= 0xFF00;
         self.af |= HF_B | NF_B;
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("cpl");
+        }
     }
 
     #[inline]
@@ -954,6 +1342,11 @@ impl Gb {
         self.cpu_write(self.sp, (val >> 8) as u8);
         self.sp = self.sp.wrapping_sub(1);
         self.cpu_write(self.sp, (val & 0xFF) as u8);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("push {}", Self::regid2regname(reg_id));
+        }
     }
 
     #[inline]
@@ -965,12 +1358,23 @@ impl Gb {
         let reg_id = ((opcode >> 4) + 1) & 3;
         *self.regid2reg(reg_id) = val;
         self.af &= 0xFFF0;
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("pop {}", Self::regid2regname(reg_id));
+        }
     }
 
     #[inline]
     fn ld_rr_d16(&mut self, opcode: u8) {
         let reg_id = (opcode >> 4) + 1;
-        *self.regid2reg(reg_id) = self.imm_u16();
+        let imm = self.imm_u16();
+        *self.regid2reg(reg_id) = imm;
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ld {}, {:#06x}", Self::regid2regname(reg_id), imm);
+        }
     }
 
     #[inline]
@@ -979,13 +1383,20 @@ impl Gb {
         let addr = self.imm_u16();
         self.cpu_write(addr, (val & 0xFF) as u8);
         self.cpu_write(addr.wrapping_add(1), (val >> 8) as u8);
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ld ({:#06x}), SP", addr);
+        }
     }
 
     #[inline]
     fn add_sp_r8(&mut self) {
         let sp = self.sp;
-        #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
-        let offset = self.imm_u8() as i8 as u16;
+        #[allow(clippy::cast_possible_wrap)]
+        let offset_signed = self.imm_u8() as i8;
+        #[allow(clippy::cast_sign_loss)]
+        let offset = offset_signed as u16;
         self.empty_cycle();
         self.empty_cycle();
         self.sp = self.sp.wrapping_add(offset);
@@ -997,6 +1408,11 @@ impl Gb {
 
         if (sp & 0xFF) + (offset & 0xFF) > 0xFF {
             self.af |= CF_B;
+        }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("add SP, {:#04x}", offset_signed);
         }
     }
 
@@ -1018,6 +1434,11 @@ impl Gb {
         }
 
         self.empty_cycle();
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("add HL, {}", Self::regid2regname(reg_id));
+        }
     }
 
     #[inline]
@@ -1032,6 +1453,11 @@ impl Gb {
         if val == 0 {
             self.af |= ZF_B;
         }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("rlc {}", Self::get_src_name(opcode));
+        }
     }
 
     #[inline]
@@ -1043,6 +1469,11 @@ impl Gb {
 
         if bit1 {
             self.af |= CF_B;
+        }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("rra");
         }
     }
 
@@ -1061,6 +1492,11 @@ impl Gb {
         if val == 0 {
             self.af |= ZF_B;
         }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("rr {}", Self::get_src_name(opcode));
+        }
     }
 
     #[inline]
@@ -1075,6 +1511,11 @@ impl Gb {
         }
         if res == 0 {
             self.af |= ZF_B;
+        }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("sla {}", Self::get_src_name(opcode));
         }
     }
 
@@ -1091,6 +1532,11 @@ impl Gb {
         if val == 0 {
             self.af |= ZF_B;
         }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("sra {}", Self::get_src_name(opcode));
+        }
     }
 
     #[inline]
@@ -1104,6 +1550,11 @@ impl Gb {
         if val >> 1 == 0 {
             self.af |= ZF_B;
         }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("srl {}", Self::get_src_name(opcode));
+        }
     }
 
     #[inline]
@@ -1114,12 +1565,18 @@ impl Gb {
         if val == 0 {
             self.af |= ZF_B;
         }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("swap {}", Self::get_src_name(opcode));
+        }
     }
 
     #[inline]
     fn bit_r(&mut self, opcode: u8) {
         let val = self.get_src_val(opcode);
-        let bit = 1 << ((opcode >> 3) & 7);
+        let bit_no = (opcode >> 3) & 7;
+        let bit = 1 << bit_no;
         if opcode & 0xC0 == 0x40 {
             // bit
             self.af &= 0xFF00 | CF_B;
@@ -1127,12 +1584,27 @@ impl Gb {
             if bit & val == 0 {
                 self.af |= ZF_B;
             }
+
+            #[cfg(feature = "debugging_capability")]
+            {
+                println!("bit {}, {}", bit_no, Self::get_src_name(opcode));
+            }
         } else if opcode & 0xC0 == 0x80 {
             // res
             self.set_src_val(opcode, val & !bit);
+
+            #[cfg(feature = "debugging_capability")]
+            {
+                println!("res {}, {}", bit_no, Self::get_src_name(opcode));
+            }
         } else {
             // set
             self.set_src_val(opcode, val | bit);
+
+            #[cfg(feature = "debugging_capability")]
+            {
+                println!("set {}, {}", bit_no, Self::get_src_name(opcode));
+            }
         }
     }
 
@@ -1145,6 +1617,11 @@ impl Gb {
 
         if bit7 {
             self.af |= CF_B;
+        }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("rla");
         }
     }
 
@@ -1163,12 +1640,22 @@ impl Gb {
         if val == 0 {
             self.af |= ZF_B;
         }
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("rl {}", Self::get_src_name(opcode));
+        }
     }
 
     #[inline]
     fn ill(&mut self) {
         self.ie = 0;
         self.cpu_halted = true;
+
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("illegal opcode");
+        }
     }
 
     #[allow(clippy::too_many_lines)]
@@ -1244,10 +1731,10 @@ impl Gb {
             0x32 => self.ld_dhld_a(),
             0x2A => self.ld_a_dhli(),
             0x22 => self.ld_dhli_a(),
-            0xF2 => self.ld_a_dc(),
-            0xE2 => self.ld_dc_a(),
-            0xF0 => self.ld_a_da8(),
-            0xE0 => self.ld_da8_a(),
+            0xF2 => self.ldh_a_dc(),
+            0xE2 => self.ldh_dc_a(),
+            0xF0 => self.ldh_a_da8(),
+            0xE0 => self.ldh_da8_a(),
             0x87 | 0x80 | 0x81 | 0x82 | 0x83 | 0x84 | 0x85 | 0x86 => self.add_a_r(opcode),
             0xC6 => self.add_a_d8(),
             0x8F | 0x88 | 0x89 | 0x8A | 0x8B | 0x8C | 0x8D | 0x8E => self.adc_a_r(opcode),

@@ -45,6 +45,9 @@
     clippy::verbose_bit_mask
 )]
 
+#[cfg(feature = "debugging_capability")]
+extern crate std;
+
 use {
     apu::{Noise, Square1, Square2, Wave},
     core::time::Duration,
