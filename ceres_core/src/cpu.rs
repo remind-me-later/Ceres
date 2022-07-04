@@ -169,7 +169,7 @@ impl Gb {
 
     #[inline]
     fn empty_cycle(&mut self) {
-        self.delay_cycles += 4;
+        self.delay_cycles += 1;
     }
 
     #[inline]
@@ -1231,8 +1231,6 @@ impl Gb {
 
             self.key1 &= !KEY1_SWITCH_B;
             self.key1 ^= KEY1_SPEED_B;
-
-            self.advance_cycles(2050);
         }
 
         #[cfg(feature = "debugging_capability")]
