@@ -92,11 +92,11 @@ impl Gb {
         // etc..). If the PPU reads VRAM during an HDMA transfer it
         // should be glitchy anyways
 
-        // if self.double_speed {
-        //     self.advance_cycles(u32::from(len) * 2);
-        // } else {
-        //     self.advance_cycles(u32::from(len));
-        // }
+        if self.double_speed {
+            self.advance_cycles(u32::from(len) * 2);
+        } else {
+            self.advance_cycles(u32::from(len));
+        }
     }
 
     fn counter_bit(&self) -> bool {
@@ -120,19 +120,17 @@ impl Gb {
     }
 
     pub(crate) fn run_timer(&mut self) {
+        self.clk_wide = self.clk_wide.wrapping_add(1);
+
         if self.clk_overflow {
-            self.clk_wide = self.clk_wide.wrapping_add(1);
             self.tima = self.tma;
             self.ifr |= IF_TIMER_B;
             self.clk_overflow = false;
         } else if self.clk_on && self.counter_bit() {
-            self.clk_wide = self.clk_wide.wrapping_add(1);
             let new_bit = self.counter_bit();
             if !new_bit {
                 self.inc_timer();
             }
-        } else {
-            self.clk_wide = self.clk_wide.wrapping_add(1);
         }
     }
 
