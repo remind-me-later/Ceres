@@ -169,7 +169,7 @@ impl Gb {
 
     #[inline]
     fn empty_cycle(&mut self) {
-        self.delay_cycles += 1;
+        self.delay_cycles += 4;
     }
 
     #[inline]

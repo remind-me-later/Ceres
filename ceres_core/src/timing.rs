@@ -2,51 +2,49 @@ use crate::{memory::HdmaState, ppu::Mode, Gb, IF_TIMER_B};
 
 impl Gb {
     pub(crate) fn advance_cycles(&mut self, mut cycles: u32) {
-        for _ in 0..cycles {
-            // affected by speed boost
-            self.run_dma();
-            self.run_timer();
-        }
+        // affected by speed boost
+        self.run_timer(cycles);
+        self.run_dma(cycles);
 
         // not affected by speed boost
         if self.double_speed {
-            cycles <<= 1;
-        } else {
-            cycles <<= 2;
+            cycles >>= 1;
         }
 
         self.run_ppu(cycles);
         self.run_apu(cycles);
     }
 
-    fn run_dma(&mut self) {
+    fn run_dma(&mut self, cycles: u32) {
         if !self.dma_on {
             return;
         }
 
-        self.dma_cycles += 4;
+        self.dma_cycles += cycles as i32;
 
         if self.dma_cycles < 4 {
             return;
         }
 
-        self.dma_cycles -= 4;
+        while self.dma_cycles > 0 {
+            self.dma_cycles -= 4;
 
-        // TODO: reading some ranges should cause problems, $DF is
-        // the maximum value accesible to OAM DMA (probably reads
-        // from echo RAM should work too, RESEARCH).
-        // what happens if reading from IO range? (garbage? 0xff?)
-        let val = self.read_mem(self.dma_addr);
+            // TODO: reading some ranges should cause problems, $DF is
+            // the maximum value accesible to OAM DMA (probably reads
+            // from echo RAM should work too, RESEARCH).
+            // what happens if reading from IO range? (garbage? 0xff?)
+            let val = self.read_mem(self.dma_addr);
 
-        // TODO: writes from DMA can access OAM on modes 2 and 3
-        // with some glitches (RESEARCH) and without trouble during
-        // VBLANK (what happens in HBLANK?)
-        self.oam[(self.dma_addr & 0xFF) as usize] = val;
+            // TODO: writes from DMA can access OAM on modes 2 and 3
+            // with some glitches (RESEARCH) and without trouble during
+            // VBLANK (what happens in HBLANK?)
+            self.oam[(self.dma_addr & 0xFF) as usize] = val;
 
-        self.dma_addr = self.dma_addr.wrapping_add(1);
-        if self.dma_addr & 0xFF >= 0xA0 {
-            self.dma_on = false;
-            self.dma_restarting = false;
+            self.dma_addr = self.dma_addr.wrapping_add(1);
+            if self.dma_addr & 0xFF >= 0xA0 {
+                self.dma_on = false;
+                self.dma_restarting = false;
+            }
         }
     }
 
@@ -119,17 +117,19 @@ impl Gb {
         self.clk_overflow = overflow;
     }
 
-    pub(crate) fn run_timer(&mut self) {
-        self.clk_wide = self.clk_wide.wrapping_add(1);
+    pub(crate) fn run_timer(&mut self, cycles: u32) {
+        for _ in 0..cycles / 4 {
+            self.clk_wide = self.clk_wide.wrapping_add(1);
 
-        if self.clk_overflow {
-            self.tima = self.tma;
-            self.ifr |= IF_TIMER_B;
-            self.clk_overflow = false;
-        } else if self.clk_on && self.counter_bit() {
-            let new_bit = self.counter_bit();
-            if !new_bit {
-                self.inc_timer();
+            if self.clk_overflow {
+                self.tima = self.tma;
+                self.ifr |= IF_TIMER_B;
+                self.clk_overflow = false;
+            } else if self.clk_on && self.counter_bit() {
+                let new_bit = self.counter_bit();
+                if !new_bit {
+                    self.inc_timer();
+                }
             }
         }
     }

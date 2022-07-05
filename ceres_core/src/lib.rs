@@ -167,7 +167,7 @@ pub struct Gb {
     dma_on: bool,
     dma_addr: u16,
     dma_restarting: bool,
-    dma_cycles: i8,
+    dma_cycles: i32,
 
     // -- hdma
     hdma5: u8,
