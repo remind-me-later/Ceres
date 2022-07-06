@@ -3,8 +3,8 @@ use crate::{memory::HdmaState, ppu::Mode, Gb, IF_TIMER_B};
 impl Gb {
     pub(crate) fn advance_cycles(&mut self, mut cycles: u32) {
         // affected by speed boost
-        self.run_timer(cycles);
-        self.run_dma(cycles);
+        self.run_timers(cycles);
+        self.dma_cycles += cycles as i32;
 
         // not affected by speed boost
         if self.double_speed {
@@ -12,21 +12,16 @@ impl Gb {
         }
 
         self.run_ppu(cycles);
+        self.run_dma();
         self.run_apu(cycles);
     }
 
-    fn run_dma(&mut self, cycles: u32) {
+    fn run_dma(&mut self) {
         if !self.dma_on {
             return;
         }
 
-        self.dma_cycles += cycles as i32;
-
-        if self.dma_cycles < 4 {
-            return;
-        }
-
-        while self.dma_cycles > 0 {
+        while self.dma_cycles >= 4 {
             self.dma_cycles -= 4;
 
             // TODO: reading some ranges should cause problems, $DF is
@@ -89,7 +84,6 @@ impl Gb {
         // access IO range (clk registers, ifr,
         // etc..). If the PPU reads VRAM during an HDMA transfer it
         // should be glitchy anyways
-
         if self.double_speed {
             self.advance_cycles(u32::from(len) * 2);
         } else {
@@ -97,78 +91,82 @@ impl Gb {
         }
     }
 
-    fn counter_bit(&self) -> bool {
+    fn tac_mux(&self) -> bool {
         let mask = {
             match self.tac & 3 {
-                3 => 1 << 5,
-                2 => 1 << 3,
-                1 => 1 << 1,
-                0 => 1 << 7,
+                0 => 1 << 9,
+                3 => 1 << 7,
+                2 => 1 << 5,
+                1 => 1 << 3,
                 _ => unreachable!(),
             }
         };
 
-        self.clk_wide & mask != 0
+        self.system_clk & mask != 0
     }
 
-    fn inc_timer(&mut self) {
-        let (counter, overflow) = self.tima.overflowing_add(1);
-        self.tima = counter;
-        self.clk_overflow = overflow;
+    fn inc_tima(&mut self) {
+        let (tima, tima_overflow) = self.tima.overflowing_add(1);
+        self.tima = tima;
+        self.tima_overflow = tima_overflow;
     }
 
-    pub(crate) fn run_timer(&mut self, cycles: u32) {
-        for _ in 0..cycles / 4 {
-            self.clk_wide = self.clk_wide.wrapping_add(1);
+    pub(crate) fn run_timers(&mut self, cycles: u32) {
+        for _ in 0..cycles {
+            let old_bit = self.tac_mux();
 
-            if self.clk_overflow {
-                self.tima = self.tma;
-                self.ifr |= IF_TIMER_B;
-                self.clk_overflow = false;
-            } else if self.clk_on && self.counter_bit() {
-                let new_bit = self.counter_bit();
-                if !new_bit {
-                    self.inc_timer();
+            self.system_clk = self.system_clk.wrapping_add(1);
+
+            if self.tima_overflow {
+                self.do_tima_overflow();
+            } else {
+                let new_bit = self.tac_mux();
+
+                // increase TIMA on falling edge of TAC mux
+                if self.tac_enable && old_bit && !new_bit {
+                    self.inc_tima();
                 }
             }
         }
     }
 
+    fn do_tima_overflow(&mut self) {
+        self.tima = self.tma;
+        self.ifr |= IF_TIMER_B;
+        self.tima_overflow = false;
+    }
+
     pub(crate) fn write_div(&mut self) {
-        if self.counter_bit() {
-            self.inc_timer();
+        if self.tac_mux() {
+            self.inc_tima();
         }
 
-        self.clk_wide = 0;
+        self.system_clk = 0;
     }
 
     pub(crate) fn write_tima(&mut self, val: u8) {
-        let overflow = self.clk_overflow;
-
-        if !overflow {
-            self.clk_overflow = false;
+        if !self.tima_overflow {
+            self.tima_overflow = false;
             self.tima = val;
         }
     }
 
     pub(crate) fn write_tma(&mut self, val: u8) {
-        let overflow = self.clk_overflow;
+        if self.tima_overflow {
+            self.do_tima_overflow();
+        }
 
         self.tma = val;
-
-        if overflow {
-            self.tima = val;
-        }
     }
 
     pub(crate) fn write_tac(&mut self, val: u8) {
-        let old_bit = self.clk_on && self.counter_bit();
+        let old_bit = self.tac_enable && self.tac_mux();
         self.tac = val & 7;
-        self.clk_on = val & 4 != 0;
-        let new_bit = self.clk_on && self.counter_bit();
+        self.tac_enable = val & 4 != 0;
+        let new_bit = self.tac_enable && self.tac_mux();
 
         if old_bit && !new_bit {
-            self.inc_timer();
+            self.inc_tima();
         }
     }
 }

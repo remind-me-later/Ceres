@@ -2,7 +2,7 @@
 //! This library is pretty low level and should be usable
 //! with a C as well as Rust frontend.
 
-#![no_std]
+//#![no_std]
 #![feature(core_intrinsics)]
 #![feature(const_maybe_uninit_zeroed)]
 #![feature(negative_impls)]
@@ -209,9 +209,9 @@ pub struct Gb {
     tma: u8,
     tac: u8,
 
-    clk_on: bool,
-    clk_overflow: bool,
-    clk_wide: u16,
+    tac_enable: bool,
+    tima_overflow: bool,
+    system_clk: u16,
 
     // apu
     nr51: u8,
@@ -298,9 +298,9 @@ impl Gb {
             ppu_frame_callback: None,
             bcp: ColorPalette::new(),
             ocp: ColorPalette::new(),
-            clk_on: false,
-            clk_wide: 0,
-            clk_overflow: false,
+            tac_enable: false,
+            system_clk: 0,
+            tima_overflow: false,
             p1_btn: 0,
             p1_dirs: false,
             p1_acts: false,
