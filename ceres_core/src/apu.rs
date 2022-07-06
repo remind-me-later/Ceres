@@ -14,7 +14,7 @@ const WAV_PERIOD_MUL: u16 = 2;
 const NOISE_MAX_LEN: u16 = 64;
 
 impl Gb {
-    pub(crate) fn run_apu(&mut self, mut cycles: u32) {
+    pub(crate) fn run_apu(&mut self, mut cycles: i32) {
         if !self.apu_on {
             return;
         }

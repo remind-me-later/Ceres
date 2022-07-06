@@ -9,10 +9,10 @@ pub const PX_HEIGHT: u8 = 144;
 const PX_TOTAL: u16 = PX_WIDTH as u16 * PX_HEIGHT as u16;
 
 // Mode timings
-const OAM_SCAN_CYCLES: u32 = 80; // Constant
-const DRAWING_CYCLES: u32 = 172; // Variable, minimum ammount
-const HBLANK_CYCLES: u32 = 204; // Variable, maximum ammount
-const VBLANK_CYCLES: u32 = 456; // Constant
+const OAM_SCAN_CYCLES: i32 = 80; // Constant
+const DRAWING_CYCLES: i32 = 172; // Variable, minimum ammount
+const HBLANK_CYCLES: i32 = 204; // Variable, maximum ammount
+const VBLANK_CYCLES: i32 = 456; // Constant
 
 // LCDC bits
 const LCDC_BG_B: u8 = 1;
@@ -100,8 +100,8 @@ pub enum Mode {
 }
 
 impl Mode {
-    pub(crate) fn cycles(self, scroll_x: u8) -> u32 {
-        let scroll_adjust = u32::from(scroll_x & 7) * 4;
+    pub(crate) fn cycles(self, scroll_x: u8) -> i32 {
+        let scroll_adjust = i32::from(scroll_x & 7) * 4;
         match self {
             Self::OamScan => OAM_SCAN_CYCLES,
             Self::Drawing => DRAWING_CYCLES + scroll_adjust,
@@ -214,7 +214,7 @@ struct Obj {
 }
 
 impl Gb {
-    pub(crate) fn run_ppu(&mut self, cycles: u32) {
+    pub(crate) fn run_ppu(&mut self, cycles: i32) {
         fn check_lyc(gb: &mut Gb) {
             gb.stat &= !STAT_LYC_B;
 
@@ -233,15 +233,16 @@ impl Gb {
             let chunks = (cycles >> 6) + 1;
 
             for i in 0..chunks {
-                let (new_cycles, overflow) = if i == chunks - 1 {
+                // TODO: WTF?????
+                let new_cycles = if i == chunks - 1 {
                     // last iteration
-                    self.ppu_cycles.overflowing_sub(cycles & 0x3F)
+                    self.ppu_cycles - (cycles & 0x3F)
                 } else {
-                    self.ppu_cycles.overflowing_sub(0x40)
+                    self.ppu_cycles - 0x40
                 };
                 self.ppu_cycles = new_cycles;
 
-                if !overflow {
+                if new_cycles >= 0 {
                     continue;
                 }
 

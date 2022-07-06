@@ -1,6 +1,6 @@
 //! A library to make ``GameBoy`` Color emulators.
-//! This library is pretty low level and should be usable
-//! with a C as well as Rust frontend.
+//! This library is pretty low level and uses unsafe to
+//! avoid allocations.
 
 //#![no_std]
 #![feature(core_intrinsics)]
@@ -45,6 +45,7 @@
     clippy::verbose_bit_mask
 )]
 
+// For internal debugging purposes.
 #[cfg(feature = "debugging_capability")]
 extern crate std;
 
@@ -137,7 +138,7 @@ pub struct Gb {
     sp: u16,
     pc: u16,
 
-    delay_cycles: u32,
+    delay_cycles: i32,
     cpu_ei_delay: bool,
     cpu_halted: bool,
 
@@ -193,12 +194,12 @@ pub struct Gb {
     bcp: ColorPalette,
     ocp: ColorPalette,
 
-    frame_dots: u32,
+    frame_dots: i32,
     lcdc_delay: bool,
     vram: [u8; VRAM_SIZE_CGB],
     oam: [u8; OAM_SIZE],
     rgba_buf: RgbaBuf,
-    ppu_cycles: u32,
+    ppu_cycles: i32,
     ppu_win_in_frame: bool,
     ppu_win_in_ly: bool,
     ppu_win_skipped: u8,

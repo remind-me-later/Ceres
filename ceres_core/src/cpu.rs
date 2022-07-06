@@ -295,9 +295,9 @@ impl Gb {
         }
     }
 
-    // ###########
-    // # Opcodes #
-    // ###########
+    // ***********
+    // * Opcodes *
+    // ***********
 
     #[inline]
     fn ld(&mut self, t: Ld8, s: Ld8) {
@@ -1671,6 +1671,10 @@ impl Gb {
             println!("illegal opcode");
         }
     }
+
+    // ****************
+    // * Giant switch *
+    // ****************
 
     #[allow(clippy::too_many_lines)]
     #[inline]

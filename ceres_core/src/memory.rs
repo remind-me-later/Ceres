@@ -1,5 +1,5 @@
 use {
-    crate::{CompatMode, Gb, Model::Cgb, KEY1_SWITCH_B},
+    crate::{ppu::Mode, CompatMode, Gb, Model::Cgb, KEY1_SWITCH_B},
     core::intrinsics::unlikely,
 };
 
@@ -115,6 +115,10 @@ impl Gb {
         }
         self.cart.read_rom(addr)
     }
+
+    // **************
+    // * Memory map *
+    // **************
 
     pub(crate) fn read_mem(&mut self, addr: u16) -> u8 {
         match addr {
@@ -312,6 +316,85 @@ impl Gb {
             HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize] = val,
             IE => self.ie = val,
             _ => (),
+        }
+    }
+
+    // *******
+    // * DMA *
+    // *******
+
+    pub(crate) fn run_dma(&mut self) {
+        if !self.dma_on {
+            return;
+        }
+
+        while self.dma_cycles >= 4 {
+            self.dma_cycles -= 4;
+
+            // TODO: reading some ranges should cause problems, $DF is
+            // the maximum value accesible to OAM DMA (probably reads
+            // from echo RAM should work too, RESEARCH).
+            // what happens if reading from IO range? (garbage? 0xff?)
+            let val = self.read_mem(self.dma_addr);
+
+            // TODO: writes from DMA can access OAM on modes 2 and 3
+            // with some glitches (RESEARCH) and without trouble during
+            // VBLANK (what happens in HBLANK?)
+            self.oam[(self.dma_addr & 0xFF) as usize] = val;
+
+            self.dma_addr = self.dma_addr.wrapping_add(1);
+            if self.dma_addr & 0xFF >= 0xA0 {
+                self.dma_on = false;
+                self.dma_restarting = false;
+            }
+        }
+    }
+
+    pub(crate) fn run_hdma(&mut self) {
+        match self.hdma_state {
+            HdmaState::General => (),
+            HdmaState::HBlank if self.ppu_mode() == Mode::HBlank => (),
+            HdmaState::HBlankDone if self.ppu_mode() != Mode::HBlank => {
+                self.hdma_state = HdmaState::HBlank;
+                return;
+            }
+            _ => return,
+        }
+
+        let len = if self.hdma_state == HdmaState::HBlank {
+            self.hdma_len -= 0x10;
+            self.hdma_state = if self.hdma_len == 0 {
+                HdmaState::Sleep
+            } else {
+                HdmaState::HBlankDone
+            };
+            self.hdma5 = ((self.hdma_len / 0x10).wrapping_sub(1) & 0xFF) as u8;
+            0x10
+        } else {
+            self.hdma_state = HdmaState::Sleep;
+            self.hdma5 = 0xFF;
+            let len = self.hdma_len;
+            self.hdma_len = 0;
+            len
+        };
+
+        for _ in 0..len {
+            // TODO: the same problems as normal DMA plus reading from
+            // VRAM should copy garbage
+            let val = self.read_mem(self.hdma_src);
+            self.write_vram(self.hdma_dst, val);
+            self.hdma_dst += 1;
+            self.hdma_src += 1;
+        }
+
+        // can be outside of loop because HDMA should not
+        // access IO range (clk registers, ifr,
+        // etc..). If the PPU reads VRAM during an HDMA transfer it
+        // should be glitchy anyways
+        if self.double_speed {
+            self.advance_cycles(i32::from(len) * 2);
+        } else {
+            self.advance_cycles(i32::from(len));
         }
     }
 }
