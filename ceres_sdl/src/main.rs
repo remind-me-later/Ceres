@@ -40,7 +40,7 @@
 )]
 
 use {
-    ceres_core::{Cartridge, Gb, Model, Sample},
+    ceres_core::{Gb, Model, Sample},
     pico_args::Arguments,
     sdl2::{
         controller::GameController,
@@ -134,24 +134,23 @@ impl Emu {
     /// # Panics
     ///
     /// Will panic on invalid rom or ram file
+    #[must_use]
     pub fn init(model: Model, rom_path: &Path) -> &'static mut Self {
         let sdl = sdl2::init().unwrap();
 
         let sav_path = rom_path.with_extension("sav");
-        let cart = {
+
+        {
+            // initialize cartridge
             fn read_file_into(path: &Path, buf: &mut [u8]) -> Result<(), std::io::Error> {
                 let mut f = File::open(path)?;
                 let _ = f.read(buf).unwrap();
                 Ok(())
             }
 
-            let cart = unsafe { Cartridge::unique() };
-            read_file_into(rom_path, cart.mut_rom()).unwrap();
-            read_file_into(&sav_path, cart.mut_ram()).ok();
-
-            cart.init().unwrap();
-            cart
-        };
+            read_file_into(rom_path, Gb::cartridge_rom_mut()).unwrap();
+            read_file_into(&sav_path, Gb::cartridge_ram_mut()).ok();
+        }
 
         let audio = audio::Renderer::new(&sdl);
         let video = video::Renderer::new(&sdl);
@@ -159,11 +158,11 @@ impl Emu {
 
         let gb = Gb::new(
             model,
-            cart,
             ppu_frame_callback,
             apu_frame_callback,
             audio.sample_rate(),
-        );
+        )
+        .unwrap();
 
         let res = Self {
             sdl,
@@ -304,9 +303,9 @@ impl Emu {
     }
 
     fn quit(&mut self) -> ! {
-        if let Some(cart_ram) = self.gb.save_data() {
+        if Gb::cartridge_has_battery() {
             let mut f = File::create(self.sav_path.clone()).unwrap();
-            f.write_all(cart_ram).unwrap();
+            f.write_all(Gb::cartridge_ram()).unwrap();
         }
 
         std::process::exit(0);

@@ -2,10 +2,9 @@
 //! This library is pretty low level and uses unsafe to
 //! avoid allocations.
 
-//#![no_std]
+#![no_std]
 #![feature(core_intrinsics)]
 #![feature(const_maybe_uninit_zeroed)]
-#![feature(negative_impls)]
 #![warn(
     clippy::pedantic,
     clippy::as_underscore,
@@ -46,6 +45,8 @@
 )]
 
 // For internal debugging purposes.
+
+use {cartridge::CARTRIDGE, core::mem::MaybeUninit};
 #[cfg(feature = "debugging_capability")]
 extern crate std;
 
@@ -56,7 +57,6 @@ use {
     ppu::{ColorPalette, Mode, RgbaBuf, OAM_SIZE, VRAM_SIZE_CGB},
 };
 pub use {
-    cartridge::Cartridge,
     error::CartridgeInitError,
     joypad::Button,
     ppu::{PX_HEIGHT, PX_WIDTH},
@@ -119,7 +119,6 @@ enum CompatMode {
 /// the `new` function, which returns a `GameBoy` struct.
 pub struct Gb {
     // general
-    cart: &'static mut Cartridge,
     model: Model,
     compat_mode: CompatMode,
 
@@ -127,8 +126,7 @@ pub struct Gb {
     key1: u8,
 
     // boot rom
-    boot_rom: &'static [u8],
-    boot_rom_mapped: bool,
+    boot_rom: Option<&'static [u8]>,
 
     // cpu
     af: u16,
@@ -238,122 +236,60 @@ pub struct Gb {
 
 impl Gb {
     /// Create a new ``GameBoy`` instance, specifying a PPU
-    /// callback, an APU callback and a sampling rate. Of
-    /// course, a cartridge is also needed.
-    #[must_use]
-    #[allow(clippy::too_many_lines)]
+    /// callback, an APU callback and a sampling rate.
+    /// It assumes a cartridge has been set up prior to this
+    /// call.
+    ///
+    /// # Errors
+    ///
+    /// Will return `Err` if the ROM header contains some
+    /// unsupported MBC value. This can happen if the ROM is
+    /// corrupt, has not been initialized or we simply don't
+    /// support its MBC yet.
     pub fn new(
         model: Model,
-        cart: &'static mut Cartridge,
         ppu_frame_callback: fn(*const u8),
         apu_frame_callback: fn(Sample, Sample),
         sample_rate: u32,
-    ) -> Self {
-        let function_mode = match model {
+    ) -> Result<Self, CartridgeInitError> {
+        unsafe {
+            CARTRIDGE.init()?;
+        }
+
+        let mut gb: Gb = unsafe { MaybeUninit::zeroed().assume_init() };
+
+        // custom initilization
+        gb.model = model;
+
+        gb.compat_mode = match model {
             Model::Dmg | Model::Mgb => CompatMode::Dmg,
             Model::Cgb => CompatMode::Cgb,
         };
 
-        let boot_rom = match model {
+        gb.boot_rom = Some(match model {
             Model::Dmg => DMG_BOOTROM,
             Model::Mgb => MGB_BOOTROM,
             Model::Cgb => CGB_BOOTROM,
-        };
+        });
 
-        let mut gb = Self {
-            halt_bug: false,
-            apu_cap: 0.0,
-            lcdc_delay: false,
-            frame_dots: 0,
-            af: 0,
-            bc: 0,
-            de: 0,
-            hl: 0,
-            delay_cycles: 0,
-            sb: 0,
-            sc: 0,
-            opri: 0,
-            nr51: 0,
-            hdma5: 0,
-            ifr: 0,
-            cpu_ei_delay: false,
-            ime: false,
-            cpu_halted: false,
-            cart,
-            hram: [0; HRAM_SIZE],
-            wram: [0; WRAM_SIZE_CGB],
-            vbk: 0,
-            svbk: 0,
-            svbk_true: 1,
-            model,
-            double_speed: false,
-            key1: 0,
-            compat_mode: function_mode,
-            vram: [0; VRAM_SIZE_CGB],
-            oam: [0; OAM_SIZE],
-            rgba_buf: RgbaBuf::new(),
-            ppu_cycles: Mode::HBlank.cycles(0),
-            ppu_win_in_frame: false,
-            ppu_win_skipped: 0,
-            ppu_win_in_ly: false,
-            ppu_frame_callback: None,
-            bcp: ColorPalette::new(),
-            ocp: ColorPalette::new(),
-            tac_enable: false,
-            system_clk: 0,
-            tima_overflow: false,
-            p1_btn: 0,
-            p1_dirs: false,
-            p1_acts: false,
-            apu_ch1: Square1::new(),
-            apu_ch2: Square2::new(),
-            apu_ch3: Wave::new(),
-            apu_ch4: Noise::new(),
-            apu_render_timer: 0,
-            apu_on: false,
-            apu_r_vol: 0,
-            apu_l_vol: 0,
-            apu_r_vin: false,
-            apu_l_vin: false,
-            apu_timer: 0,
-            apu_seq_step: 0,
-            dma_on: false,
-            dma_addr: 0,
-            dma_restarting: false,
-            dma_cycles: 0,
-            hdma_src: 0,
-            hdma_dst: 0,
-            hdma_len: 0,
-            hdma_state: HdmaState::Sleep,
-            ie: 0,
-            tima: 0,
-            tma: 0,
-            tac: 0,
-            lcdc: 0,
-            stat: 0,
-            scy: 0,
-            scx: 0,
-            ly: 0,
-            lyc: 0,
-            dma: 0,
-            bgp: 0,
-            obp0: 0,
-            obp1: 0,
-            wy: 0,
-            wx: 0,
-            sp: 0,
-            pc: 0,
-            boot_rom,
-            boot_rom_mapped: true,
-            apu_ext_sample_period: 0,
-            apu_frame_callback: None,
-        };
+        gb.svbk_true = 1;
+        gb.ppu_cycles = Mode::HBlank.cycles(0);
 
         gb.set_ppu_frame_callback(ppu_frame_callback);
         gb.set_apu_frame_callback(apu_frame_callback);
         gb.set_sample_rate(sample_rate);
 
-        gb
+        // Default like
+        gb.rgba_buf = RgbaBuf::default();
+        gb.bcp = ColorPalette::default();
+        gb.ocp = ColorPalette::default();
+        gb.apu_ch1 = Square1::default();
+        gb.apu_ch2 = Square2::default();
+        gb.apu_ch3 = Wave::default();
+        gb.apu_ch4 = Noise::default();
+        gb.hdma_state = HdmaState::default();
+
+        Ok(gb)
     }
 
     fn set_ppu_frame_callback(&mut self, ppu_frame_callback: fn(*const u8)) {
@@ -375,10 +311,34 @@ impl Gb {
         self.run_cpu();
     }
 
-    /// Returns cartridge RAM if cartridge has battery, null
+    /// Returns true if cartridge has battery, false
     /// otherwise
     #[must_use]
-    pub fn save_data(&self) -> Option<&[u8]> {
-        self.cart.has_battery().then_some(self.cart.ram())
+    pub fn cartridge_has_battery() -> bool {
+        unsafe { CARTRIDGE.has_battery() }
+    }
+
+    /// Returns reference to static RAM slice.
+    #[must_use]
+    pub fn cartridge_ram() -> &'static [u8] {
+        unsafe { CARTRIDGE.ram() }
+    }
+
+    /// Returns mutable reference to static RAM slice.
+    ///
+    /// Modifying the RAM contents while the Gb is running
+    /// could lead to undesirable results.
+    #[must_use]
+    pub fn cartridge_ram_mut() -> &'static mut [u8] {
+        unsafe { CARTRIDGE.mut_ram() }
+    }
+
+    /// Returns mutable reference to static ROM slice.
+    ///
+    /// Modifying the ROM contents while the Gb is running
+    /// could lead to undesirable results.
+    #[must_use]
+    pub fn cartridge_rom_mut() -> &'static mut [u8] {
+        unsafe { CARTRIDGE.mut_rom() }
     }
 }

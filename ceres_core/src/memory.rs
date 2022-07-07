@@ -1,10 +1,11 @@
 use {
-    crate::{ppu::Mode, CompatMode, Gb, Model::Cgb, KEY1_SWITCH_B},
+    crate::{cartridge::CARTRIDGE, ppu::Mode, CompatMode, Gb, Model::Cgb, KEY1_SWITCH_B},
     core::intrinsics::unlikely,
 };
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Default)]
 pub enum HdmaState {
+    #[default]
     Sleep      = 0,
     HBlank     = 1,
     HBlankDone = 2,
@@ -110,10 +111,11 @@ impl Gb {
 
     #[inline]
     fn read_rom_or_cart(&mut self, addr: u16) -> u8 {
-        if unlikely(self.boot_rom_mapped) {
-            return self.boot_rom[addr as usize];
+        if unlikely(self.boot_rom.is_some()) {
+            return self.boot_rom.unwrap()[addr as usize];
         }
-        self.cart.read_rom(addr)
+
+        unsafe { CARTRIDGE.read_rom(addr) }
     }
 
     // **************
@@ -123,9 +125,9 @@ impl Gb {
     pub(crate) fn read_mem(&mut self, addr: u16) -> u8 {
         match addr {
             0x0000..=0x00FF | 0x0200..=0x08FF => self.read_rom_or_cart(addr),
-            0x0100..=0x01FF | 0x0900..=0x7FFF => self.cart.read_rom(addr),
+            0x0100..=0x01FF | 0x0900..=0x7FFF => unsafe { CARTRIDGE.read_rom(addr) },
             0x8000..=0x9FFF => self.read_vram(addr),
-            0xA000..=0xBFFF => self.cart.read_ram(addr),
+            0xA000..=0xBFFF => unsafe { CARTRIDGE.read_ram(addr) },
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.read_ram(addr),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.read_bank_ram(addr),
             0xFE00..=0xFE9F => self.read_oam(addr),
@@ -195,9 +197,9 @@ impl Gb {
     pub(crate) fn write_mem(&mut self, addr: u16, val: u8) {
         match addr {
             // assume bootrom doesn't write to rom
-            0x0000..=0x08FF | 0x0900..=0x7FFF => self.cart.write_rom(addr, val),
+            0x0000..=0x08FF | 0x0900..=0x7FFF => unsafe { CARTRIDGE.write_rom(addr, val) },
             0x8000..=0x9FFF => self.write_vram(addr, val),
-            0xA000..=0xBFFF => self.cart.write_ram(addr, val),
+            0xA000..=0xBFFF => unsafe { CARTRIDGE.write_ram(addr, val) },
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.write_ram(addr, val),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.write_bank_ram(addr, val),
             0xFE00..=0xFE9F => {
@@ -262,7 +264,7 @@ impl Gb {
             OBP1 => self.obp1 = val,
             WY => self.wy = val,
             WX => self.wx = val,
-            KEY0 if self.model == Cgb && self.boot_rom_mapped && val == 4 => {
+            KEY0 if self.model == Cgb && self.boot_rom.is_some() && val == 4 => {
                 self.compat_mode = CompatMode::Compat;
             }
             KEY1 if self.model == Cgb => {
@@ -272,7 +274,7 @@ impl Gb {
             VBK if self.model == Cgb => self.vbk = val & 1,
             0x50 => {
                 if val & 1 != 0 {
-                    self.boot_rom_mapped = false;
+                    self.boot_rom = None;
                 }
             }
             HDMA1 if self.model == Cgb => {

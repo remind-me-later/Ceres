@@ -1,6 +1,6 @@
 use {
     crate::CartridgeInitError,
-    core::{intrinsics::assert_zero_valid, mem::MaybeUninit},
+    core::mem::MaybeUninit,
     Mbc::{Mbc1, Mbc2, Mbc3, Mbc5, MbcNone},
 };
 
@@ -13,7 +13,7 @@ const RAM_SIZE: usize = RAMSize::Kb128.total_size_in_bytes();
 type Rom = [u8; ROM_SIZE];
 type Ram = [u8; RAM_SIZE];
 
-static mut CART: MaybeUninit<Cartridge> = MaybeUninit::zeroed();
+pub static mut CARTRIDGE: Cartridge = unsafe { MaybeUninit::zeroed().assume_init() };
 
 #[allow(clippy::enum_variant_names)]
 enum Mbc {
@@ -52,30 +52,7 @@ pub struct Cartridge {
     mbc1_multicart: bool,
 }
 
-impl !Sync for Cartridge {}
-
 impl Cartridge {
-    /// Gets a reference to the static cartridge.
-    ///
-    /// # Safety
-    /// This function should be called only once in the
-    /// program.
-    #[must_use]
-    pub unsafe fn unique() -> &'static mut Self {
-        assert_zero_valid::<Cartridge>();
-        CART.assume_init_mut()
-    }
-
-    /// Initialize the cartridge, using the
-    /// ROM and RAM values set, to get the MBC type we
-    /// should emulate.
-    ///
-    /// # Errors
-    ///
-    /// Will return `Err` if the ROM header contains some
-    /// unsupported MBC value. This can happen if the ROM is
-    /// corrupt, has not been initialized or we simply don't
-    /// support its MBC yet.
     pub fn init(&mut self) -> Result<(), CartridgeInitError> {
         let rom = &mut self.rom;
 
@@ -116,12 +93,12 @@ impl Cartridge {
 
     /// Returns true if the cartridge has a battery.
     #[must_use]
-    pub(crate) fn has_battery(&self) -> bool {
+    pub fn has_battery(&self) -> bool {
         self.has_battery
     }
 
     #[must_use]
-    pub(crate) fn read_rom(&self, addr: u16) -> u8 {
+    pub fn read_rom(&self, addr: u16) -> u8 {
         let bank_addr = match addr {
             0x0000..=0x3FFF => {
                 let (rom_lower, _) = self.rom_offsets;
@@ -152,7 +129,7 @@ impl Cartridge {
     }
 
     #[must_use]
-    pub(crate) fn read_ram(&self, addr: u16) -> u8 {
+    pub fn read_ram(&self, addr: u16) -> u8 {
         match self.mbc {
             MbcNone => 0xFF,
             Mbc1 | Mbc5 => self.mbc_read_ram(self.ram_enabled, addr),
@@ -203,7 +180,7 @@ impl Cartridge {
         (0x0000, ROM_BANK_SIZE * rom_bank)
     }
 
-    pub(crate) fn write_rom(&mut self, addr: u16, val: u8) {
+    pub fn write_rom(&mut self, addr: u16, val: u8) {
         match self.mbc {
             MbcNone => (),
             Mbc1 => match addr {
@@ -279,7 +256,7 @@ impl Cartridge {
         }
     }
 
-    pub(crate) fn write_ram(&mut self, addr: u16, val: u8) {
+    pub fn write_ram(&mut self, addr: u16, val: u8) {
         match self.mbc {
             MbcNone => (),
             Mbc1 | Mbc2 | Mbc5 => {

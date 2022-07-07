@@ -215,8 +215,8 @@ pub struct Square1 {
     sw_shadow_freq: u16,
 }
 
-impl Square1 {
-    pub(crate) fn new() -> Self {
+impl Default for Square1 {
+    fn default() -> Self {
         Self {
             sw_period: 8,
             sw_dec: false,
@@ -242,7 +242,9 @@ impl Square1 {
             env_inc: false,
         }
     }
+}
 
+impl Square1 {
     fn reset(&mut self) {
         self.on = false;
         self.dac_on = true;
@@ -469,8 +471,8 @@ pub struct Square2 {
     env_timer: u8,
 }
 
-impl Square2 {
-    pub(crate) fn new() -> Self {
+impl Default for Square2 {
+    fn default() -> Self {
         Self {
             freq: 0,
             period: SQ_FREQ_P_MUL * 2048,
@@ -490,7 +492,9 @@ impl Square2 {
             env_inc: false,
         }
     }
+}
 
+impl Square2 {
     fn reset(&mut self) {
         self.on = false;
         self.dac_on = true;
@@ -658,8 +662,8 @@ pub struct Wave {
     nr30: u8,
 }
 
-impl Wave {
-    pub(crate) fn new() -> Self {
+impl Default for Wave {
+    fn default() -> Self {
         Self {
             ram: [0; WAV_RAM_SIZE as usize],
             vol: 0,
@@ -676,7 +680,9 @@ impl Wave {
             nr30: 0,
         }
     }
+}
 
+impl Wave {
     fn reset(&mut self) {
         self.on = false;
         self.dac_on = true;
@@ -820,8 +826,8 @@ pub struct Noise {
     env_timer: u8,
 }
 
-impl Noise {
-    pub(crate) fn new() -> Self {
+impl Default for Noise {
+    fn default() -> Self {
         Self {
             on: false,
             dac_on: true,
@@ -842,7 +848,9 @@ impl Noise {
             nr43: 0,
         }
     }
+}
 
+impl Noise {
     fn reset(&mut self) {
         self.on = false;
         self.dac_on = true;

@@ -70,14 +70,15 @@ pub struct RgbaBuf {
     data: [u8; RGBA_BUF_SIZE],
 }
 
-impl RgbaBuf {
-    #[must_use]
-    pub(crate) fn new() -> Self {
-        Self {
+impl Default for RgbaBuf {
+    fn default() -> Self {
+        RgbaBuf {
             data: [0xFF; RGBA_BUF_SIZE],
         }
     }
+}
 
+impl RgbaBuf {
     #[inline]
     fn set_px(&mut self, i: usize, rgb: (u8, u8, u8)) {
         let base = i * 4;
@@ -129,15 +130,17 @@ pub struct ColorPalette {
     inc: bool, // increment after write
 }
 
-impl ColorPalette {
-    pub(crate) fn new() -> Self {
+impl Default for ColorPalette {
+    fn default() -> Self {
         Self {
             col: [0; PAL_RAM_SIZE_COLORS],
             idx: 0,
             inc: false,
         }
     }
+}
 
+impl ColorPalette {
     #[inline]
     pub(crate) fn set_spec(&mut self, val: u8) {
         self.idx = val & 0x3F;
