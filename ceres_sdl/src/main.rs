@@ -118,10 +118,10 @@ fn parse_args() -> Result<AppArgs, pico_args::Error> {
     Ok(args)
 }
 
-pub struct Emu {
+pub struct Emu<'a> {
     sdl: Sdl,
     events: EventPump,
-    gb: Gb,
+    gb: &'a mut Gb,
     has_focus: bool,
     sav_path: PathBuf,
     video: video::Renderer,
@@ -130,7 +130,7 @@ pub struct Emu {
     fullscreen: bool,
 }
 
-impl Emu {
+impl<'a> Emu<'a> {
     /// # Panics
     ///
     /// Will panic on invalid rom or ram file

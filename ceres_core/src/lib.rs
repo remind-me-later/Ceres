@@ -46,7 +46,7 @@
 
 // For internal debugging purposes.
 
-use {cartridge::CARTRIDGE, core::mem::MaybeUninit};
+use {cartridge::Cartridge, core::mem::MaybeUninit};
 #[cfg(feature = "debugging_capability")]
 extern crate std;
 
@@ -57,7 +57,7 @@ use {
     ppu::{ColorPalette, Mode, RgbaBuf, OAM_SIZE, VRAM_SIZE_CGB},
 };
 pub use {
-    error::CartridgeInitError,
+    cartridge::InitializationError,
     joypad::Button,
     ppu::{PX_HEIGHT, PX_WIDTH},
 };
@@ -65,7 +65,6 @@ pub use {
 mod apu;
 mod cartridge;
 mod cpu;
-mod error;
 mod joypad;
 mod memory;
 mod ppu;
@@ -112,6 +111,8 @@ enum CompatMode {
     Cgb,
 }
 
+pub static mut GAME_BOY: Gb = unsafe { MaybeUninit::zeroed().assume_init() };
+
 /// The ``GameBoy`` struct is the main struct in the
 /// library. The `run` method never returns and calls a PPU
 /// "graphical" callback every frame and an APU "audio"
@@ -125,7 +126,8 @@ pub struct Gb {
     double_speed: bool,
     key1: u8,
 
-    // boot rom
+    // cartridge
+    cart: Cartridge,
     boot_rom: Option<&'static [u8]>,
 
     // cpu
@@ -251,12 +253,10 @@ impl Gb {
         ppu_frame_callback: fn(*const u8),
         apu_frame_callback: fn(Sample, Sample),
         sample_rate: u32,
-    ) -> Result<Self, CartridgeInitError> {
-        unsafe {
-            CARTRIDGE.init()?;
-        }
+    ) -> Result<&'static mut Self, InitializationError> {
+        let mut gb = unsafe { &mut GAME_BOY };
 
-        let mut gb: Gb = unsafe { MaybeUninit::zeroed().assume_init() };
+        gb.cart.init()?;
 
         // custom initilization
         gb.model = model;
@@ -315,13 +315,13 @@ impl Gb {
     /// otherwise
     #[must_use]
     pub fn cartridge_has_battery() -> bool {
-        unsafe { CARTRIDGE.has_battery() }
+        unsafe { GAME_BOY.cart.has_battery() }
     }
 
     /// Returns reference to static RAM slice.
     #[must_use]
     pub fn cartridge_ram() -> &'static [u8] {
-        unsafe { CARTRIDGE.ram() }
+        unsafe { GAME_BOY.cart.ram() }
     }
 
     /// Returns mutable reference to static RAM slice.
@@ -330,7 +330,7 @@ impl Gb {
     /// could lead to undesirable results.
     #[must_use]
     pub fn cartridge_ram_mut() -> &'static mut [u8] {
-        unsafe { CARTRIDGE.mut_ram() }
+        unsafe { GAME_BOY.cart.mut_ram() }
     }
 
     /// Returns mutable reference to static ROM slice.
@@ -339,6 +339,6 @@ impl Gb {
     /// could lead to undesirable results.
     #[must_use]
     pub fn cartridge_rom_mut() -> &'static mut [u8] {
-        unsafe { CARTRIDGE.mut_rom() }
+        unsafe { GAME_BOY.cart.mut_rom() }
     }
 }

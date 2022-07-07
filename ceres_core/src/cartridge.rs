@@ -1,8 +1,4 @@
-use {
-    crate::CartridgeInitError,
-    core::mem::MaybeUninit,
-    Mbc::{Mbc1, Mbc2, Mbc3, Mbc5, MbcNone},
-};
+use Mbc::{Mbc1, Mbc2, Mbc3, Mbc5, None};
 
 const ROM_BANK_SIZE: usize = 0x4000;
 const RAM_BANK_SIZE: usize = 0x2000;
@@ -13,20 +9,23 @@ const RAM_SIZE: usize = RAMSize::Kb128.total_size_in_bytes();
 type Rom = [u8; ROM_SIZE];
 type Ram = [u8; RAM_SIZE];
 
-pub static mut CARTRIDGE: Cartridge = unsafe { MaybeUninit::zeroed().assume_init() };
-
-#[allow(clippy::enum_variant_names)]
 enum Mbc {
-    MbcNone,
+    None,
     Mbc1,
     Mbc2,
     Mbc3,
     Mbc5,
 }
 
-/// A unique cartridge mapped to static memory. This is done
-/// to remove the dependency on liballoc. Downsides are that
-/// this struct cannot be Sync.
+/// Represents a cartridge initialization error.
+#[derive(Debug)]
+pub enum InitializationError {
+    InvalidRomSize,
+    InvalidRamSize,
+    NonAsciiTitleString,
+    UnsupportedMBC,
+}
+
 pub struct Cartridge {
     mbc: Mbc,
 
@@ -53,7 +52,7 @@ pub struct Cartridge {
 }
 
 impl Cartridge {
-    pub fn init(&mut self) -> Result<(), CartridgeInitError> {
+    pub fn init(&mut self) -> Result<(), InitializationError> {
         let rom = &mut self.rom;
 
         let rom_size = ROMSize::new(rom)?;
@@ -63,7 +62,7 @@ impl Cartridge {
         let has_ram = ram_size != RAMSize::None;
 
         let (mbc, has_battery) = match rom[0x147] {
-            0x00 => (MbcNone, false),
+            0x00 => (None, false),
             0x01 | 0x02 => (Mbc1, false),
             0x03 => (Mbc1, true),
             0x05 => (Mbc2, false),
@@ -72,7 +71,7 @@ impl Cartridge {
             0x11 | 0x12 => (Mbc3, false),
             0x19 | 0x1A | 0x1C | 0x1D => (Mbc5, false),
             0x1B | 0x1E => (Mbc5, true),
-            _ => return Err(CartridgeInitError::UnsupportedMBC),
+            _ => return Err(InitializationError::UnsupportedMBC),
         };
 
         let rom_offsets = (0x0000, 0x4000);
@@ -91,7 +90,6 @@ impl Cartridge {
         Ok(())
     }
 
-    /// Returns true if the cartridge has a battery.
     #[must_use]
     pub fn has_battery(&self) -> bool {
         self.has_battery
@@ -131,7 +129,7 @@ impl Cartridge {
     #[must_use]
     pub fn read_ram(&self, addr: u16) -> u8 {
         match self.mbc {
-            MbcNone => 0xFF,
+            None => 0xFF,
             Mbc1 | Mbc5 => self.mbc_read_ram(self.ram_enabled, addr),
             Mbc2 => (self.mbc_read_ram(self.ram_enabled, addr) & 0xF) | 0xF0,
             Mbc3 => match self.ram_bank {
@@ -182,7 +180,7 @@ impl Cartridge {
 
     pub fn write_rom(&mut self, addr: u16, val: u8) {
         match self.mbc {
-            MbcNone => (),
+            None => (),
             Mbc1 => match addr {
                 0x0000..=0x1FFF => self.ram_enabled = (val & 0xF) == 0xA,
                 0x2000..=0x3FFF => {
@@ -258,7 +256,7 @@ impl Cartridge {
 
     pub fn write_ram(&mut self, addr: u16, val: u8) {
         match self.mbc {
-            MbcNone => (),
+            None => (),
             Mbc1 | Mbc2 | Mbc5 => {
                 self.mbc_write_ram(self.ram_enabled, addr, val);
             }
@@ -270,25 +268,16 @@ impl Cartridge {
         }
     }
 
-    /// Returns reference to static RAM slice.
     #[must_use]
     pub fn ram(&self) -> &[u8] {
         &self.ram
     }
 
-    /// Returns mutable reference to static RAM slice.
-    ///
-    /// Modifying the RAM contents while the Gb is running
-    /// could lead to undesirable results.
     #[must_use]
     pub fn mut_ram(&mut self) -> &mut [u8] {
         &mut self.ram
     }
 
-    /// Returns mutable reference to static ROM slice.
-    ///
-    /// Modifying the ROM contents while the Gb is running
-    /// could lead to undesirable results.
     #[must_use]
     pub fn mut_rom(&mut self) -> &mut [u8] {
         &mut self.rom
@@ -309,7 +298,7 @@ enum ROMSize {
 }
 
 impl ROMSize {
-    const fn new(rom: &Rom) -> Result<Self, CartridgeInitError> {
+    const fn new(rom: &Rom) -> Result<Self, InitializationError> {
         use ROMSize::{Kb128, Kb256, Kb32, Kb512, Kb64, Mb1, Mb2, Mb4, Mb8};
         let rom_size_byte = rom[0x148];
         let rom_size = match rom_size_byte {
@@ -322,7 +311,7 @@ impl ROMSize {
             6 => Mb2,
             7 => Mb4,
             8 => Mb8,
-            _ => return Err(CartridgeInitError::InvalidRomSize),
+            _ => return Err(InitializationError::InvalidRomSize),
         };
 
         Ok(rom_size)
@@ -350,7 +339,7 @@ enum RAMSize {
 }
 
 impl RAMSize {
-    const fn new(rom: &Rom) -> Result<Self, CartridgeInitError> {
+    const fn new(rom: &Rom) -> Result<Self, InitializationError> {
         use RAMSize::{Kb128, Kb2, Kb32, Kb64, Kb8, None};
         let ram_size_byte = rom[0x149];
         let ram_size = match ram_size_byte {
@@ -360,7 +349,7 @@ impl RAMSize {
             3 => Kb32,
             4 => Kb128,
             5 => Kb64,
-            _ => return Err(CartridgeInitError::InvalidRamSize),
+            _ => return Err(InitializationError::InvalidRamSize),
         };
 
         Ok(ram_size)
