@@ -194,7 +194,7 @@ impl Cartridge {
                     self.ram_offset = self.mbc1_ram_offset();
                 }
                 0x6000..=0x7FFF => {
-                    self.mbc1_bank_mode = (val & 1) == 1;
+                    self.mbc1_bank_mode = val & 1 != 0;
                     self.rom_offsets = self.mbc1_rom_offsets();
                     self.ram_offset = self.mbc1_ram_offset();
                 }

@@ -457,9 +457,12 @@ impl Gb {
         let signed = self.lcdc & LCDC_BG_SIGNED == 0;
         let base = 0x8000 | u16::from(signed) << 11;
 
-        #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
         let offset = if signed {
-            (i16::from(tile_num as i8) + 0x80) as u16
+            #[allow(clippy::cast_possible_wrap)]
+            let tile_num = tile_num as i8;
+            #[allow(clippy::cast_sign_loss)]
+            let tile_num = (i16::from(tile_num) + 0x80) as u16;
+            tile_num
         } else {
             u16::from(tile_num)
         };

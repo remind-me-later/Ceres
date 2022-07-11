@@ -45,14 +45,13 @@
 )]
 
 // For internal debugging purposes.
-
-use {cartridge::Cartridge, core::mem::MaybeUninit};
 #[cfg(feature = "debugging_capability")]
 extern crate std;
 
 use {
     apu::{Noise, Square1, Square2, Wave},
-    core::time::Duration,
+    cartridge::Cartridge,
+    core::{mem::MaybeUninit, time::Duration},
     memory::HdmaState,
     ppu::{ColorPalette, Mode, RgbaBuf, OAM_SIZE, VRAM_SIZE_CGB},
 };
