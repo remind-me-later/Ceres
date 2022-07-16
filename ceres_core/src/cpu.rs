@@ -571,6 +571,7 @@ impl Gb {
     #[inline]
     fn sub_a_d8(&mut self) {
         let val = u16::from(self.imm_u8());
+
         self.sub(val);
 
         #[cfg(feature = "debugging_capability")]
@@ -1036,6 +1037,11 @@ impl Gb {
 
     #[inline]
     fn jp_cc(&mut self, opcode: u8) {
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("jp {}", Self::get_condition_name(opcode));
+        }
+
         if self.condition(opcode) {
             self.do_jump_to_immediate();
         } else {
@@ -1044,17 +1050,11 @@ impl Gb {
             self.empty_cycle();
             self.empty_cycle();
         }
-
-        #[cfg(feature = "debugging_capability")]
-        {
-            println!("jp {}", Self::get_condition_name(opcode));
-        }
     }
 
     #[inline]
     fn jp_hl(&mut self) {
-        let addr = self.hl;
-        self.pc = addr;
+        self.pc = self.hl;
 
         #[cfg(feature = "debugging_capability")]
         {
@@ -1107,6 +1107,7 @@ impl Gb {
         self.sp = self.sp.wrapping_sub(1);
         self.cpu_write(self.sp, (self.pc & 0xFF) as u8);
         self.pc = addr;
+        self.empty_cycle();
 
         #[cfg(feature = "debugging_capability")]
         {
@@ -1163,15 +1164,15 @@ impl Gb {
 
     #[inline]
     fn ret_cc(&mut self, opcode: u8) {
+        #[cfg(feature = "debugging_capability")]
+        {
+            println!("ret {}", Self::get_condition_name(opcode));
+        }
+
         self.empty_cycle();
 
         if self.condition(opcode) {
             self.ret();
-        }
-
-        #[cfg(feature = "debugging_capability")]
-        {
-            println!("ret {}", Self::get_condition_name(opcode));
         }
     }
 
@@ -1193,6 +1194,7 @@ impl Gb {
         self.sp = self.sp.wrapping_sub(1);
         self.cpu_write(self.sp, ((self.pc) & 0xFF) as u8);
         self.pc = u16::from(opcode) ^ 0xC7;
+        self.empty_cycle();
 
         #[cfg(feature = "debugging_capability")]
         {
@@ -1356,6 +1358,7 @@ impl Gb {
         self.cpu_write(self.sp, (val >> 8) as u8);
         self.sp = self.sp.wrapping_sub(1);
         self.cpu_write(self.sp, (val & 0xFF) as u8);
+        self.empty_cycle();
 
         #[cfg(feature = "debugging_capability")]
         {

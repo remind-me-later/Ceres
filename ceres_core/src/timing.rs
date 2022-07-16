@@ -34,26 +34,24 @@ impl Gb {
     fn inc_tima(&mut self) {
         let (tima, tima_overflow) = self.tima.overflowing_add(1);
         self.tima = tima;
-        self.tima_overflow = tima_overflow;
+
+        if tima_overflow {
+            // Fixme: a full m-cycle should pass between overflow and
+            // tima reset
+            self.reset_tima_overflow();
+        }
     }
 
     pub(crate) fn run_timers(&mut self, cycles: i32) {
         for _ in 0..cycles {
-            if self.tima_overflow {
-                // Fixme: a full m-cycle should pass between overflow and
-                // tima reset
-                self.system_clk = self.system_clk.wrapping_add(1);
-                self.reset_tima_overflow();
-            } else {
-                // Falling edge detector
-                let old_bit = self.tac_enable && self.sys_clk_tac_mux();
-                self.system_clk = self.system_clk.wrapping_add(1);
-                let new_bit = self.tac_enable && self.sys_clk_tac_mux();
+            // Falling edge detector
+            let old_bit = self.tac_enable && self.sys_clk_tac_mux();
+            self.system_clk = self.system_clk.wrapping_add(1);
+            let new_bit = self.tac_enable && self.sys_clk_tac_mux();
 
-                // increase TIMA on falling edge of TAC mux
-                if old_bit && !new_bit {
-                    self.inc_tima();
-                }
+            // increase TIMA on falling edge of TAC mux
+            if old_bit && !new_bit {
+                self.inc_tima();
             }
         }
     }
@@ -61,7 +59,6 @@ impl Gb {
     fn reset_tima_overflow(&mut self) {
         self.tima = self.tma;
         self.ifr |= IF_TIMER_B;
-        self.tima_overflow = false;
     }
 
     pub(crate) fn write_div(&mut self) {
@@ -73,17 +70,10 @@ impl Gb {
     }
 
     pub(crate) fn write_tima(&mut self, val: u8) {
-        if !self.tima_overflow {
-            self.tima_overflow = false;
-            self.tima = val;
-        }
+        self.tima = val;
     }
 
     pub(crate) fn write_tma(&mut self, val: u8) {
-        if self.tima_overflow {
-            self.reset_tima_overflow();
-        }
-
         self.tma = val;
     }
 

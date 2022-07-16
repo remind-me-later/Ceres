@@ -210,7 +210,6 @@ pub struct Gb {
     tac: u8,
 
     tac_enable: bool,
-    tima_overflow: bool,
     system_clk: u16,
 
     // apu
