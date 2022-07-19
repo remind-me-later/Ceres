@@ -44,8 +44,7 @@
     clippy::verbose_bit_mask
 )]
 
-// For internal debugging purposes.
-#[cfg(feature = "debugging_capability")]
+#[cfg(feature = "disassembler")]
 extern crate std;
 
 use {
@@ -137,7 +136,7 @@ pub struct Gb {
     sp: u16,
     pc: u16,
 
-    delay_cycles: i32,
+    stolen_cycles: i32,
     cpu_ei_delay: bool,
     cpu_halted: bool,
 
