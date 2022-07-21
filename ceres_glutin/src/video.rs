@@ -91,23 +91,20 @@ impl Renderer {
         self.resize_viewport(size.width, size.height);
     }
 
-    pub fn resize_viewport(&mut self, w: u32, h: u32) {
-        let mul = min(w / PX_WIDTH, h / PX_HEIGHT);
+    pub fn resize_viewport(&mut self, width: u32, height: u32) {
+        let mul = min(width / PX_WIDTH, height / PX_HEIGHT);
         let img_w = PX_WIDTH * mul;
         let img_h = PX_HEIGHT * mul;
-        let a = img_w as f32 / w as f32;
-        let b = img_h as f32 / h as f32;
+        let a = img_w as f32 / width as f32;
+        let b = img_h as f32 / height as f32;
 
         unsafe {
-            gl::Viewport(0, 0, w as i32, h as i32);
+            gl::Viewport(0, 0, width as i32, height as i32);
             self.program.bind();
             gl::Uniform2f(self.program.transform_loc, a, b);
         }
 
-        self.ctx.resize(PhysicalSize {
-            width: w,
-            height: h,
-        });
+        self.ctx.resize(PhysicalSize { width, height });
     }
 
     pub fn draw_frame(&mut self, rgba: *const u8) {

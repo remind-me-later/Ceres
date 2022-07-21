@@ -8,13 +8,13 @@ use {
     std::sync::Arc,
 };
 
-const BUFFER_SIZE: cpal::FrameCount = 2048;
+const BUFFER_SIZE: cpal::FrameCount = 1024;
 const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
 const SAMPLE_RATE: u32 = 48000;
 
 pub struct Renderer {
     ring_buffer: Arc<Mutex<Bounded<Box<[ceres_core::Sample]>>>>,
-    _stream: cpal::Stream,
+    stream: cpal::Stream,
 }
 
 impl Renderer {
@@ -48,18 +48,20 @@ impl Renderer {
         stream.play().expect("AudioError playing sound");
 
         Self {
-            _stream: stream,
             ring_buffer,
+            stream,
         }
     }
 
-    // pub fn play(&mut self) {
-    //     self.stream.play().unwrap();
-    // }
+    #[allow(dead_code)]
+    pub fn play(&mut self) {
+        self.stream.play().unwrap();
+    }
 
-    // pub fn pause(&mut self) {
-    //     self.stream.pause().unwrap();
-    // }
+    #[allow(dead_code)]
+    pub fn pause(&mut self) {
+        self.stream.pause().unwrap();
+    }
 
     pub fn sample_rate() -> u32 {
         SAMPLE_RATE
