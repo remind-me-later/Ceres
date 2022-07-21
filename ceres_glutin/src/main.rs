@@ -237,7 +237,7 @@ impl Emu {
 
                     let rgba = self.gb.pixel_data();
 
-                    self.video.draw_frame(rgba.as_ptr());
+                    self.video.draw_frame(rgba);
                 }
                 _ => (),
             });

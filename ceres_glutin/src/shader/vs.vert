@@ -1,4 +1,4 @@
-#version 310 es
+#version 460
 
 layout(location = 0) out vec2 TexCoord;
 layout(location = 1) uniform vec2 transform;
