@@ -1,0 +1,15 @@
+[package]
+name = "ceres_glutin"
+version = "0.1.0"
+license = "MIT"
+edition = "2021"
+description = "A Gameboy/Color emulator"
+
+[dependencies]
+ceres_core = { path = "../ceres_core" }
+glutin = "*"
+gl = "*"
+pico-args = "*"
+cpal = "*"
+dasp_ring_buffer = "*"
+parking_lot = "*"
