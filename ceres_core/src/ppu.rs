@@ -90,6 +90,10 @@ impl RgbaBuf {
     fn clear(&mut self) {
         self.data = [0xFF; RGBA_BUF_SIZE];
     }
+
+    pub fn pixel_data(&self) -> &[u8] {
+        &self.data
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -287,9 +291,7 @@ impl Gb {
                 self.lcdc_delay = false;
             }
 
-            unsafe {
-                (self.ppu_frame_callback.unwrap_unchecked())(self.rgba_buf.data.as_ptr());
-            }
+            self.running_frame = false;
             self.frame_dots -= 70224;
         }
     }

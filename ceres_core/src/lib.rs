@@ -120,7 +120,9 @@ pub struct Gb {
     // general
     model: Model,
     compat_mode: CompatMode,
+    running_frame: bool,
 
+    // double speed
     double_speed: bool,
     key1: u8,
 
@@ -201,7 +203,6 @@ pub struct Gb {
     ppu_win_in_frame: bool,
     ppu_win_in_ly: bool,
     ppu_win_skipped: u8,
-    ppu_frame_callback: Option<fn(*const u8)>,
 
     // clock
     tima: u8,
@@ -234,11 +235,6 @@ pub struct Gb {
 }
 
 impl Gb {
-    /// Create a new ``GameBoy`` instance, specifying a PPU
-    /// callback, an APU callback and a sampling rate.
-    /// It assumes a cartridge has been set up prior to this
-    /// call.
-    ///
     /// # Errors
     ///
     /// Will return `Err` if the ROM header contains some
@@ -247,7 +243,6 @@ impl Gb {
     /// support its MBC yet.
     pub fn new(
         model: Model,
-        ppu_frame_callback: fn(*const u8),
         apu_frame_callback: fn(Sample, Sample),
         sample_rate: u32,
     ) -> Result<&'static mut Self, InitializationError> {
@@ -272,7 +267,6 @@ impl Gb {
         gb.svbk_true = 1;
         gb.ppu_cycles = Mode::HBlank.cycles(0);
 
-        gb.set_ppu_frame_callback(ppu_frame_callback);
         gb.set_apu_frame_callback(apu_frame_callback);
         gb.set_sample_rate(sample_rate);
 
@@ -289,10 +283,6 @@ impl Gb {
         Ok(gb)
     }
 
-    fn set_ppu_frame_callback(&mut self, ppu_frame_callback: fn(*const u8)) {
-        self.ppu_frame_callback = Some(ppu_frame_callback);
-    }
-
     fn set_apu_frame_callback(&mut self, apu_frame_callback: fn(Sample, Sample)) {
         self.apu_frame_callback = Some(apu_frame_callback);
     }
@@ -304,8 +294,17 @@ impl Gb {
 
     /// Initiates the main emulation loop, never returns.
     #[inline]
-    pub fn run(&mut self) -> ! {
-        self.run_cpu();
+    pub fn run_frame(&mut self) {
+        self.running_frame = true;
+
+        while self.running_frame {
+            self.run_cpu();
+        }
+    }
+
+    #[must_use]
+    pub fn pixel_data(&self) -> &[u8] {
+        self.rgba_buf.pixel_data()
     }
 
     /// Returns true if cartridge has battery, false

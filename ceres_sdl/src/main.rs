@@ -128,6 +128,7 @@ pub struct Emu<'a> {
     audio: audio::Renderer,
     last_frame: Instant,
     fullscreen: bool,
+    quit: bool,
 }
 
 impl<'a> Emu<'a> {
@@ -156,13 +157,7 @@ impl<'a> Emu<'a> {
         let video = video::Renderer::new(&sdl);
         let events = sdl.event_pump().unwrap();
 
-        let gb = Gb::new(
-            model,
-            ppu_frame_callback,
-            apu_frame_callback,
-            audio.sample_rate(),
-        )
-        .unwrap();
+        let gb = Gb::new(model, apu_frame_callback, audio.sample_rate()).unwrap();
 
         let res = Self {
             sdl,
@@ -174,6 +169,7 @@ impl<'a> Emu<'a> {
             audio,
             last_frame: Instant::now(),
             fullscreen: false,
+            quit: false,
         };
 
         let _controller = res.init_controller();
@@ -185,8 +181,24 @@ impl<'a> Emu<'a> {
     }
 
     #[inline]
-    pub fn run(&mut self) -> ! {
-        self.gb.run();
+    pub fn run(&mut self) {
+        let emu = unsafe { EMU.assume_init_mut() };
+
+        while !self.quit {
+            emu.handle_events();
+
+            self.gb.run_frame();
+
+            let elapsed = emu.last_frame.elapsed();
+            if elapsed < ceres_core::FRAME_DUR {
+                std::thread::sleep(ceres_core::FRAME_DUR - elapsed);
+                emu.last_frame = Instant::now();
+            }
+
+            let rgba = self.gb.pixel_data();
+
+            emu.video.draw_frame(rgba.as_ptr());
+        }
     }
 
     fn init_controller(&self) -> Option<GameController> {
@@ -203,7 +215,14 @@ impl<'a> Emu<'a> {
     fn handle_events(&mut self) {
         for event in self.events.poll_iter() {
             match event {
-                Event::Quit { .. } => self.quit(),
+                Event::Quit { .. } => {
+                    if Gb::cartridge_has_battery() {
+                        let mut f = File::create(self.sav_path.clone()).unwrap();
+                        f.write_all(Gb::cartridge_ram()).unwrap();
+                    }
+
+                    self.quit = true;
+                }
                 Event::Window { win_event, .. } => match win_event {
                     WindowEvent::Resized(width, height) => {
                         self.video.resize_viewport(width as u32, height as u32);
@@ -301,34 +320,10 @@ impl<'a> Emu<'a> {
             }
         }
     }
-
-    fn quit(&mut self) -> ! {
-        if Gb::cartridge_has_battery() {
-            let mut f = File::create(self.sav_path.clone()).unwrap();
-            f.write_all(Gb::cartridge_ram()).unwrap();
-        }
-
-        std::process::exit(0);
-    }
 }
 
 #[inline]
 fn apu_frame_callback(l: Sample, r: Sample) {
     let emu = unsafe { EMU.assume_init_mut() };
     emu.audio.push_frame(l, r);
-}
-
-#[inline]
-fn ppu_frame_callback(rgba: *const u8) {
-    let emu = unsafe { EMU.assume_init_mut() };
-
-    emu.handle_events();
-
-    let elapsed = emu.last_frame.elapsed();
-    if elapsed < ceres_core::FRAME_DUR {
-        std::thread::sleep(ceres_core::FRAME_DUR - elapsed);
-        emu.last_frame = Instant::now();
-    }
-
-    emu.video.draw_frame(rgba);
 }
