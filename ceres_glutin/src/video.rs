@@ -4,7 +4,7 @@ use {
         dpi::PhysicalSize,
         event_loop::EventLoop,
         window::{Fullscreen, WindowBuilder},
-        ContextBuilder, PossiblyCurrent, WindowedContext,
+        ContextBuilder, GlProfile, GlRequest, PossiblyCurrent, Robustness, WindowedContext,
     },
     std::cmp::min,
 };
@@ -14,7 +14,7 @@ const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
 const MUL: u32 = 4;
 
 pub struct Renderer {
-    ctx: WindowedContext<PossiblyCurrent>,
+    ctx_wrapper: WindowedContext<PossiblyCurrent>,
     gl: Context,
     program: NativeProgram,
     vao: NativeVertexArray,
@@ -24,28 +24,31 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(event_loop: &EventLoop<()>) -> Self {
-        let window_builder = WindowBuilder::new()
-            .with_title(super::CERES_STR)
-            .with_inner_size(PhysicalSize {
-                width: PX_WIDTH as i32 * 4,
-                height: PX_HEIGHT as i32 * 4,
-            })
-            .with_min_inner_size(PhysicalSize {
-                width: PX_WIDTH as i32,
-                height: PX_HEIGHT as i32,
-            });
+        unsafe {
+            let window_builder = WindowBuilder::new()
+                .with_title(super::CERES_STR)
+                .with_inner_size(PhysicalSize {
+                    width: PX_WIDTH as i32 * 4,
+                    height: PX_HEIGHT as i32 * 4,
+                })
+                .with_min_inner_size(PhysicalSize {
+                    width: PX_WIDTH as i32,
+                    height: PX_HEIGHT as i32,
+                });
 
-        let ctx = unsafe {
-            ContextBuilder::new()
+            let ctx_wrapper = ContextBuilder::new()
+                .with_gl(GlRequest::Latest)
+                .with_gl_profile(GlProfile::Core)
+                .with_gl_robustness(Robustness::NotRobust)
                 .with_vsync(true)
                 .build_windowed(window_builder, event_loop)
                 .unwrap()
                 .make_current()
-                .unwrap()
-        };
-        let gl = unsafe { glow::Context::from_loader_function(|s| ctx.get_proc_address(s).cast()) };
+                .unwrap();
 
-        unsafe {
+            let gl =
+                glow::Context::from_loader_function(|s| ctx_wrapper.get_proc_address(s).cast());
+
             // create vao
             let vao = gl
                 .create_vertex_array()
@@ -106,7 +109,7 @@ impl Renderer {
                 .expect("couldn't get location of uniform");
 
             let mut res = Self {
-                ctx,
+                ctx_wrapper,
                 gl,
                 program,
                 vao,
@@ -121,17 +124,17 @@ impl Renderer {
     }
 
     pub fn toggle_fullscreen(&mut self) {
-        let in_fullscreen = self.ctx.window().fullscreen();
+        let in_fullscreen = self.ctx_wrapper.window().fullscreen();
 
         match in_fullscreen {
-            Some(_) => self.ctx.window().set_fullscreen(None),
+            Some(_) => self.ctx_wrapper.window().set_fullscreen(None),
             None => self
-                .ctx
+                .ctx_wrapper
                 .window()
                 .set_fullscreen(Some(Fullscreen::Borderless(None))),
         }
 
-        let size = self.ctx.window().inner_size();
+        let size = self.ctx_wrapper.window().inner_size();
         self.resize_viewport(size.width, size.height);
     }
 
@@ -139,16 +142,17 @@ impl Renderer {
         let mul = min(width / PX_WIDTH, height / PX_HEIGHT);
         let img_w = PX_WIDTH * mul;
         let img_h = PX_HEIGHT * mul;
-        let a = img_w as f32 / width as f32;
-        let b = img_h as f32 / height as f32;
+        let uniform_x = img_w as f32 / width as f32;
+        let uniform_y = img_h as f32 / height as f32;
 
         unsafe {
             self.gl.viewport(0, 0, width as i32, height as i32);
             self.gl.use_program(Some(self.program));
-            self.gl.uniform_2_f32(Some(&self.uniform_loc), a, b);
+            self.gl
+                .uniform_2_f32(Some(&self.uniform_loc), uniform_x, uniform_y);
         }
 
-        self.ctx.resize(PhysicalSize { width, height });
+        self.ctx_wrapper.resize(PhysicalSize { width, height });
     }
 
     pub fn draw_frame(&mut self, rgba: &[u8]) {
@@ -174,6 +178,6 @@ impl Renderer {
             self.gl.draw_arrays(glow::TRIANGLE_STRIP, 0, 4);
         }
 
-        self.ctx.swap_buffers().unwrap();
+        self.ctx_wrapper.swap_buffers().unwrap();
     }
 }
