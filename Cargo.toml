@@ -7,4 +7,3 @@ opt-level = 3
 panic = "abort"
 strip = true
 lto = true
-codegen-units = 1

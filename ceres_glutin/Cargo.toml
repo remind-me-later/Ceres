@@ -8,8 +8,9 @@ description = "A Gameboy/Color emulator"
 [dependencies]
 ceres_core = { path = "../ceres_core" }
 glutin = "*"
-pico-args = "*"
+glow = "*"
 cpal = "*"
 dasp_ring_buffer = "*"
 parking_lot = "*"
-glow = "*"
+clap = { version = "*", features = ["derive"] }
+rfd = { version = "*", default-features = false, features = ["xdg-portal"] }

@@ -139,20 +139,18 @@ impl Renderer {
     }
 
     pub fn resize_viewport(&mut self, width: u32, height: u32) {
-        let mul = min(width / PX_WIDTH, height / PX_HEIGHT);
-        let img_w = PX_WIDTH * mul;
-        let img_h = PX_HEIGHT * mul;
-        let uniform_x = img_w as f32 / width as f32;
-        let uniform_y = img_h as f32 / height as f32;
-
         unsafe {
             self.gl.viewport(0, 0, width as i32, height as i32);
-            self.gl.use_program(Some(self.program));
-            self.gl
-                .uniform_2_f32(Some(&self.uniform_loc), uniform_x, uniform_y);
-        }
+            self.ctx_wrapper.resize(PhysicalSize { width, height });
 
-        self.ctx_wrapper.resize(PhysicalSize { width, height });
+            self.gl.use_program(Some(self.program));
+
+            let mul = min(width / PX_WIDTH, height / PX_HEIGHT);
+            let x = (PX_WIDTH * mul) as f32 / width as f32;
+            let y = (PX_HEIGHT * mul) as f32 / height as f32;
+
+            self.gl.uniform_2_f32(Some(&self.uniform_loc), x, y);
+        }
     }
 
     pub fn draw_frame(&mut self, rgba: &[u8]) {

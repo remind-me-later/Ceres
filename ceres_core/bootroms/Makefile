@@ -13,7 +13,7 @@ obj/SameBoyLogo.pb12: obj/SameBoyLogo.2bpp $(PB12_COMPRESS)
 	
 $(PB12_COMPRESS): pb12.c
 	cc -std=c99 -Wall -Werror $< -o $@
-
+ 
 bin/%.bin: %.asm obj/SameBoyLogo.pb12
 	@mkdir -p $(dir $@)
 	rgbasm -i obj/ -o $@.tmp $<

@@ -41,11 +41,12 @@
 
 use {
     ceres_core::{Gb, Model, Sample},
+    clap::{ArgEnum, Parser},
     glutin::{
         event::{ElementState, Event, VirtualKeyCode, WindowEvent},
         event_loop::{ControlFlow, EventLoop},
     },
-    pico_args::Arguments,
+    rfd::FileDialog,
     std::{
         fs::File,
         io::{Read, Write},
@@ -59,59 +60,44 @@ mod audio;
 mod video;
 
 const CERES_STR: &str = "Ceres";
-const HELP: &str = "TODO";
+
+#[derive(Parser)]
+#[clap(author, version, about, long_about = None)]
+struct Cli {
+    rom_path: Option<String>,
+
+    #[clap(short, long, arg_enum)]
+    model: Option<CliModel>,
+}
+
+#[derive(Clone, ArgEnum)]
+enum CliModel {
+    Dmg,
+    Mgb,
+    Cgb,
+}
 
 fn main() {
-    let args = match parse_args() {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("Error: {}", e);
-            std::process::exit(1);
-        }
-    };
+    let cli = Cli::parse();
 
-    let model = args.model.map_or(Model::Cgb, |s| match s.as_str() {
-        "dmg" => Model::Dmg,
-        "mgb" => Model::Mgb,
-        "cgb" => Model::Cgb,
-        _ => panic!("invalid model"),
+    let model = cli.model.map_or(Model::Cgb, |s| match s {
+        CliModel::Dmg => Model::Dmg,
+        CliModel::Mgb => Model::Mgb,
+        CliModel::Cgb => Model::Cgb,
     });
 
-    let rom_path = Path::new(&args.rom).to_path_buf();
-    let emu = Emu::init(model, &rom_path);
-    emu.run();
-}
+    let rom_path = cli.rom_path.map_or_else(
+        || {
+            FileDialog::new()
+                .add_filter("GameBoy rom files", &["gb", "gbc"])
+                .pick_file()
+        },
+        |p| Some(PathBuf::from(p)),
+    );
 
-struct AppArgs {
-    rom: String,
-    model: Option<String>,
-}
-
-fn parse_args() -> Result<AppArgs, pico_args::Error> {
-    let mut pargs = Arguments::from_env();
-
-    // Help has a higher priority and should be handled
-    // separately.
-    if pargs.contains(["-h", "--help"]) {
-        print!("{}", HELP);
-        std::process::exit(0);
+    if let Some(rom_path) = rom_path {
+        Emu::init(model, &rom_path).run();
     }
-
-    let args = AppArgs {
-        // Parses an optional value that implements `FromStr`.
-        model: pargs.opt_value_from_str(["-m", "--model"])?,
-        // Parses an optional value from `&str` using a specified function.
-        rom: pargs.free_from_str()?,
-    };
-
-    // FIXME: It's up to the caller what to do with the
-    // remaining arguments.
-    let remaining = pargs.finish();
-    if !remaining.is_empty() {
-        eprintln!("Warning: unused arguments left: {:?}.", remaining);
-    }
-
-    Ok(args)
 }
 
 static mut EMU: *mut Emu = null_mut();
