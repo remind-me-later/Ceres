@@ -1,6 +1,6 @@
 [workspace]
-members = ["ceres_core", "ceres_glutin"]
-default-members = ["ceres_glutin"]
+members = ["ceres_core", "ceres_glutin", "ceres_adwaita"]
+default-members = ["ceres_adwaita"]
 
 [profile.release]
 opt-level = 3

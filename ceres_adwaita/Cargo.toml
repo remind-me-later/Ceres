@@ -1,0 +1,12 @@
+[package]
+name = "ceres_adwaita"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+libadwaita = "*"
+ceres_core = { path = "../ceres_core" }
+cpal = "*"
+dasp_ring_buffer = "*"
+parking_lot = "*"
+once_cell = "*"
