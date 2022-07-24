@@ -26,8 +26,4 @@ impl CeresArea {
     pub fn set_rom_path(&self, path: &Path) {
         self.imp().set_rom_path(path);
     }
-
-    pub fn get_frame(&self) {
-        self.imp().get_frame();
-    }
 }

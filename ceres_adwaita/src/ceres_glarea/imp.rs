@@ -1,16 +1,12 @@
 use {
     ceres_core::{Gb, Sample},
     gtk::{gdk, gdk_pixbuf, glib, graphene, prelude::*, subclass::prelude::*},
-    libadwaita::{
-        gdk::Key,
-        glib::Bytes,
-        gtk::{self, EventControllerKey, Inhibit},
-    },
+    libadwaita::{glib::Bytes, gtk},
     std::{cell::RefCell, fs::File, io::Read, path::Path, rc::Rc},
 };
 
 pub struct CeresAreaData {
-    gb: &'static mut Gb,
+    pub gb: &'static mut Gb,
 }
 
 impl CeresAreaData {
@@ -37,7 +33,7 @@ impl CeresAreaData {
 
 #[derive(Default)]
 pub struct CeresArea {
-    data: Rc<RefCell<Option<CeresAreaData>>>,
+    pub data: Rc<RefCell<Option<CeresAreaData>>>,
 }
 
 #[glib::object_subclass]
@@ -64,71 +60,7 @@ impl CeresArea {
 
 impl WidgetImpl for CeresArea {}
 
-impl ObjectImpl for CeresArea {
-    fn constructed(&self, obj: &Self::Type) {
-        self.parent_constructed(obj);
-
-        obj.set_focusable(true);
-        obj.set_receives_default(true);
-
-        let rc_clone1 = Rc::clone(&self.data);
-        let rc_clone2 = Rc::clone(&self.data);
-
-        let keys = EventControllerKey::new();
-
-        keys.connect_key_pressed(move |_, keyval, _keycode, _state| {
-            match keyval {
-                Key::K => rc_clone1
-                    .borrow_mut()
-                    .as_mut()
-                    .unwrap()
-                    .gb
-                    .press(ceres_core::Button::A),
-                Key::L => rc_clone1
-                    .borrow_mut()
-                    .as_mut()
-                    .unwrap()
-                    .gb
-                    .press(ceres_core::Button::B),
-                Key::H => rc_clone1
-                    .borrow_mut()
-                    .as_mut()
-                    .unwrap()
-                    .gb
-                    .press(ceres_core::Button::Start),
-                _ => (),
-            };
-
-            Inhibit(false)
-        });
-
-        keys.connect_key_released(move |_, keyval, _keycode, _state| {
-            match keyval {
-                Key::K => rc_clone2
-                    .borrow_mut()
-                    .as_mut()
-                    .unwrap()
-                    .gb
-                    .release(ceres_core::Button::A),
-                Key::L => rc_clone2
-                    .borrow_mut()
-                    .as_mut()
-                    .unwrap()
-                    .gb
-                    .release(ceres_core::Button::B),
-                Key::H => rc_clone2
-                    .borrow_mut()
-                    .as_mut()
-                    .unwrap()
-                    .gb
-                    .release(ceres_core::Button::Start),
-                _ => (),
-            };
-        });
-
-        obj.add_controller(&keys);
-    }
-}
+impl ObjectImpl for CeresArea {}
 
 impl PaintableImpl for CeresArea {
     fn flags(&self, _paintable: &Self::Type) -> gdk::PaintableFlags {
@@ -145,6 +77,8 @@ impl PaintableImpl for CeresArea {
 
     fn snapshot(&self, _paintable: &Self::Type, snapshot: &gdk::Snapshot, width: f64, height: f64) {
         if let Some(data) = self.data.borrow_mut().as_mut() {
+            data.gb.run_frame();
+
             let snapshot = snapshot.downcast_ref::<gtk::Snapshot>().unwrap();
 
             let bytes = &Bytes::from(data.gb.pixel_data());
