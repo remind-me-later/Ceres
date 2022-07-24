@@ -117,7 +117,7 @@ impl Renderer {
                 uniform_loc,
             };
 
-            res.resize_viewport(PX_WIDTH * MUL, PX_HEIGHT * MUL);
+            res.resize(PX_WIDTH * MUL, PX_HEIGHT * MUL);
 
             res
         }
@@ -135,10 +135,10 @@ impl Renderer {
         }
 
         let size = self.ctx_wrapper.window().inner_size();
-        self.resize_viewport(size.width, size.height);
+        self.resize(size.width, size.height);
     }
 
-    pub fn resize_viewport(&mut self, width: u32, height: u32) {
+    pub fn resize(&mut self, width: u32, height: u32) {
         unsafe {
             self.gl.viewport(0, 0, width as i32, height as i32);
             self.ctx_wrapper.resize(PhysicalSize { width, height });

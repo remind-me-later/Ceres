@@ -1,4 +1,5 @@
 use {
+    ceres_core::Sample,
     cpal::{
         traits::{DeviceTrait, HostTrait, StreamTrait},
         SampleRate,
@@ -13,7 +14,7 @@ const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
 const SAMPLE_RATE: u32 = 48000;
 
 pub struct Renderer {
-    ring_buffer: Arc<Mutex<Bounded<Box<[ceres_core::Sample]>>>>,
+    ring_buffer: Arc<Mutex<Bounded<[Sample; RING_BUFFER_SIZE]>>>,
     stream: cpal::Stream,
 }
 
@@ -28,9 +29,7 @@ impl Renderer {
             buffer_size: cpal::BufferSize::Fixed(BUFFER_SIZE),
         };
 
-        let ring_buffer = Arc::new(Mutex::new(Bounded::from(
-            vec![0.0; RING_BUFFER_SIZE].into_boxed_slice(),
-        )));
+        let ring_buffer = Arc::new(Mutex::new(Bounded::from([0.0; RING_BUFFER_SIZE])));
         let error_callback = |err| panic!("an AudioError occurred on stream: {}", err);
         let ring_buffer_arc = Arc::clone(&ring_buffer);
         let data_callback = move |output: &mut [f32], _: &_| {
@@ -67,7 +66,7 @@ impl Renderer {
         SAMPLE_RATE
     }
 
-    pub fn push_frame(&mut self, l: ceres_core::Sample, r: ceres_core::Sample) {
+    pub fn push_frame(&mut self, l: Sample, r: Sample) {
         let mut buf = self.ring_buffer.lock();
         buf.push(l);
         buf.push(r);
