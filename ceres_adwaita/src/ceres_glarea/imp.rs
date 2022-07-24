@@ -1,31 +1,37 @@
 use {
+    crate::audio,
     ceres_core::{Gb, Sample},
     gtk::{gdk, gdk_pixbuf, glib, graphene, prelude::*, subclass::prelude::*},
     libadwaita::{glib::Bytes, gtk},
-    std::{cell::RefCell, fs::File, io::Read, path::Path, rc::Rc},
+    std::{cell::RefCell, fs::File, io::Read, path::Path},
 };
 
-pub struct CeresAreaData {
-    pub gb: &'static mut Gb,
+pub struct CeresAreaInner {
+    gb: &'static mut Gb,
 }
 
-impl CeresAreaData {
-    pub fn new(path: &std::path::Path, _context: super::CeresArea) -> Self {
+impl CeresAreaInner {
+    pub fn new(path: &std::path::Path) -> Self {
+        audio::Renderer::init();
+
         let sav_path = path.with_extension("sav");
 
-        {
-            // initialize cartridge
-            fn read_file_into(path: &Path, buf: &mut [u8]) -> Result<(), std::io::Error> {
-                let mut f = File::open(path)?;
-                let _ = f.read(buf).unwrap();
-                Ok(())
-            }
-
-            read_file_into(path, Gb::cartridge_rom_mut()).unwrap();
-            read_file_into(&sav_path, Gb::cartridge_ram_mut()).ok();
+        // initialize cartridge
+        fn read_file_into(path: &Path, buf: &mut [u8]) -> Result<(), std::io::Error> {
+            let mut f = File::open(path)?;
+            let _ = f.read(buf).unwrap();
+            Ok(())
         }
 
-        let gb = Gb::new(ceres_core::Model::Cgb, apu_frame_callback, 48000).unwrap();
+        read_file_into(path, Gb::cartridge_rom_mut()).unwrap();
+        read_file_into(&sav_path, Gb::cartridge_ram_mut()).ok();
+
+        let gb = Gb::new(
+            ceres_core::Model::Cgb,
+            apu_frame_callback,
+            audio::Renderer::sample_rate(),
+        )
+        .unwrap();
 
         Self { gb }
     }
@@ -33,7 +39,7 @@ impl CeresAreaData {
 
 #[derive(Default)]
 pub struct CeresArea {
-    pub data: Rc<RefCell<Option<CeresAreaData>>>,
+    data: RefCell<Option<CeresAreaInner>>,
 }
 
 #[glib::object_subclass]
@@ -46,14 +52,19 @@ impl ObjectSubclass for CeresArea {
 
 impl CeresArea {
     pub fn set_rom_path(&self, path: &std::path::Path) {
-        let context = self.instance();
-        let data = CeresAreaData::new(path, context);
+        let data = CeresAreaInner::new(path);
         *self.data.borrow_mut() = Some(data);
     }
 
-    pub fn get_frame(&self) {
-        if let Some(data) = self.data.borrow_mut().as_mut() {
-            data.gb.run_frame();
+    pub fn press(&self, button: ceres_core::Button) {
+        if let Some(inner) = self.data.borrow_mut().as_mut() {
+            inner.gb.press(button);
+        }
+    }
+
+    pub fn release(&self, button: ceres_core::Button) {
+        if let Some(inner) = self.data.borrow_mut().as_mut() {
+            inner.gb.release(button);
         }
     }
 }
@@ -106,7 +117,7 @@ impl PaintableImpl for CeresArea {
 }
 
 #[inline]
-fn apu_frame_callback(_l: Sample, _r: Sample) {
-    // let audio = unsafe { &mut *AUDIO };
-    // audio.push_frame(l, r);
+pub fn apu_frame_callback(l: Sample, r: Sample) {
+    let audio = audio::Renderer::get_mut();
+    audio.push_frame(l, r);
 }

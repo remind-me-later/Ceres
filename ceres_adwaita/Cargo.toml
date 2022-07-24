@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-libadwaita = "*"
+libadwaita = { version = "*" }
 ceres_core = { path = "../ceres_core" }
 cpal = "*"
 dasp_ring_buffer = "*"

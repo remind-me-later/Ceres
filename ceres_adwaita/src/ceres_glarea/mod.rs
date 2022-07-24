@@ -26,4 +26,12 @@ impl CeresArea {
     pub fn set_rom_path(&self, path: &Path) {
         self.imp().set_rom_path(path);
     }
+
+    pub fn press(&self, button: ceres_core::Button) {
+        self.imp().press(button);
+    }
+
+    pub fn release(&self, button: ceres_core::Button) {
+        self.imp().release(button);
+    }
 }
