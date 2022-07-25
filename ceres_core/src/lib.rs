@@ -36,7 +36,8 @@
     clippy::string_to_string,
     clippy::try_err,
     clippy::unnecessary_self_imports,
-    clippy::unneeded_field_pattern
+    clippy::unneeded_field_pattern,
+    clippy::float_arithmetic
 )]
 #![allow(
     clippy::struct_excessive_bools,
@@ -92,7 +93,7 @@ const WRAM_SIZE: usize = 0x2000;
 const WRAM_SIZE_CGB: usize = WRAM_SIZE * 4;
 
 /// Audio sample type.
-pub type Sample = f32;
+pub type Sample = i16;
 
 /// ``GameBoy`` model to emulate.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -226,7 +227,6 @@ pub struct Gb {
     apu_ch3: Wave,
     apu_ch4: Noise,
 
-    apu_cap: f32,
     apu_timer: u16,
     apu_render_timer: u32,
     apu_ext_sample_period: u32,

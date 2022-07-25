@@ -9,7 +9,7 @@ use {
     std::sync::Arc,
 };
 
-const BUFFER_SIZE: cpal::FrameCount = 1024;
+const BUFFER_SIZE: cpal::FrameCount = 512;
 const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
 const SAMPLE_RATE: u32 = 48000;
 
@@ -29,11 +29,13 @@ impl Renderer {
             buffer_size: cpal::BufferSize::Fixed(BUFFER_SIZE),
         };
 
-        let rbuf = Arc::new(Mutex::new(Bounded::from([0.0; RING_BUFFER_SIZE])));
+        let rbuf = Arc::new(Mutex::new(Bounded::from(
+            [Default::default(); RING_BUFFER_SIZE],
+        )));
 
         let data_callback = {
             let rbuf = Arc::clone(&rbuf);
-            move |output: &mut [f32], _: &_| {
+            move |output: &mut [Sample], _: &_| {
                 let mut buf = rbuf.lock();
                 output
                     .iter_mut()

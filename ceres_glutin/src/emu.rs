@@ -30,8 +30,7 @@ impl Emu {
     /// # Panics
     ///
     /// Will panic on invalid rom or ram file
-    #[must_use]
-    pub fn init(model: Model, rom_path: &Path) -> Self {
+    pub fn run(model: Model, rom_path: &Path) -> ! {
         let event_loop = EventLoop::new();
 
         let sav_path = rom_path.with_extension("sav");
@@ -48,7 +47,6 @@ impl Emu {
             read_file_into(&sav_path, Gb::cartridge_ram_mut()).ok();
         }
 
-        //let audio = audio::Renderer::new(&sdl);
         let video = video::Renderer::init(&event_loop);
         let audio = audio::Renderer::init();
 
@@ -68,10 +66,10 @@ impl Emu {
             EMU = &mut res;
         }
 
-        res
+        res.main_loop();
     }
 
-    pub fn run(mut self) -> ! {
+    fn main_loop(mut self) -> ! {
         self.audio.play();
 
         self.event_loop
