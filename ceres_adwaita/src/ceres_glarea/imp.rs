@@ -3,16 +3,19 @@ use {
     ceres_core::{Gb, Sample},
     gtk::{gdk, gdk_pixbuf, glib, graphene, prelude::*, subclass::prelude::*},
     libadwaita::{glib::Bytes, gtk},
-    std::{cell::RefCell, fs::File, io::Read, path::Path},
+    std::{cell::RefCell, fs::File, io::Read, path::Path, ptr::null_mut},
 };
+
+static mut INNER: *mut CeresAreaInner = null_mut();
 
 pub struct CeresAreaInner {
     gb: &'static mut Gb,
+    audio: audio::Renderer,
 }
 
 impl CeresAreaInner {
     pub fn new(path: &std::path::Path) -> Self {
-        audio::Renderer::init();
+        let audio = audio::Renderer::new();
 
         let sav_path = path.with_extension("sav");
 
@@ -33,7 +36,13 @@ impl CeresAreaInner {
         )
         .unwrap();
 
-        Self { gb }
+        let mut res = Self { gb, audio };
+
+        unsafe {
+            INNER = &mut res;
+        }
+
+        res
     }
 }
 
@@ -118,6 +127,6 @@ impl PaintableImpl for CeresArea {
 
 #[inline]
 pub fn apu_frame_callback(l: Sample, r: Sample) {
-    let audio = audio::Renderer::get_mut();
-    audio.push_frame(l, r);
+    let inner = unsafe { &mut *INNER };
+    inner.audio.push_frame(l, r);
 }
