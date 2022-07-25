@@ -43,7 +43,6 @@
 use {
     ceres_core::Model,
     clap::{ArgEnum, Parser},
-    emu::Emu,
     std::path::PathBuf,
 };
 
@@ -81,6 +80,6 @@ fn main() {
     let rom_path = Some(PathBuf::from(cli.rom_path));
 
     if let Some(rom_path) = rom_path {
-        Emu::run(model, rom_path);
+        emu::run(model, rom_path);
     }
 }
