@@ -36,10 +36,10 @@ impl Renderer {
         let data_callback = {
             let rbuf = Arc::clone(&rbuf);
             move |output: &mut [Sample], _: &_| {
-                let mut buf = rbuf.lock();
+                let mut b = rbuf.lock();
                 output
                     .iter_mut()
-                    .zip(buf.drain())
+                    .zip(b.drain())
                     .for_each(|(out_sample, gb_sample)| *out_sample = gb_sample);
             }
         };
