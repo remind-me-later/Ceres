@@ -10,7 +10,6 @@ use {
         io::{Read, Write},
         path::{Path, PathBuf},
         ptr::null_mut,
-        time::{Duration, Instant},
     },
 };
 
@@ -22,10 +21,9 @@ pub struct Emu {
     gb: &'static mut Gb,
     sav_path: PathBuf,
     video: video::Renderer,
-    //audio: audio::Renderer,
-    last_frame: Instant,
     has_focus: bool,
     audio: audio::Renderer,
+    paused: bool,
 }
 
 impl Emu {
@@ -51,8 +49,8 @@ impl Emu {
         }
 
         //let audio = audio::Renderer::new(&sdl);
-        let video = video::Renderer::new(&event_loop);
-        let audio = audio::Renderer::new();
+        let video = video::Renderer::init(&event_loop);
+        let audio = audio::Renderer::init();
 
         let gb = Gb::new(model, apu_frame_callback, audio::Renderer::sample_rate()).unwrap();
 
@@ -61,9 +59,9 @@ impl Emu {
             gb,
             sav_path,
             video,
-            last_frame: Instant::now(),
             has_focus: true,
             audio,
+            paused: false,
         };
 
         unsafe {
@@ -74,6 +72,8 @@ impl Emu {
     }
 
     pub fn run(mut self) -> ! {
+        self.audio.play();
+
         self.event_loop
             .run(move |event, _, control_flow| match event {
                 Event::LoopDestroyed => {
@@ -108,6 +108,16 @@ impl Emu {
                                     VirtualKeyCode::Back => self.gb.press(Button::Select),
                                     // System
                                     VirtualKeyCode::F => self.video.toggle_fullscreen(),
+                                    VirtualKeyCode::Space => {
+                                        // Pause
+                                        if self.paused {
+                                            self.paused = false;
+                                            self.audio.play();
+                                        } else {
+                                            self.paused = true;
+                                            self.audio.pause();
+                                        }
+                                    }
                                     _ => (),
                                 },
                                 ElementState::Released => match key {
@@ -127,16 +137,13 @@ impl Emu {
                     _ => (),
                 },
                 Event::MainEventsCleared => {
-                    self.gb.run_frame();
-
-                    let elapsed = self.last_frame.elapsed();
-                    if elapsed < ceres_core::FRAME_DUR {
-                        std::thread::sleep(ceres_core::FRAME_DUR - elapsed - Duration::MILLISECOND);
-                        self.last_frame = Instant::now();
+                    if self.paused {
+                        *control_flow = ControlFlow::Wait;
+                        return;
                     }
 
+                    self.gb.run_frame();
                     let rgba = self.gb.pixel_data();
-
                     self.video.draw_frame(rgba);
                 }
                 _ => (),

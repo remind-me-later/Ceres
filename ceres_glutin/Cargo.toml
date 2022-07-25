@@ -13,4 +13,3 @@ cpal = "*"
 dasp_ring_buffer = "*"
 parking_lot = "*"
 clap = { version = "*", features = ["derive"] }
-rfd = { version = "*", default-features = false, features = ["xdg-portal"] }

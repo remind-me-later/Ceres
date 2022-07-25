@@ -43,7 +43,6 @@
 use {
     ceres_core::Model,
     clap::{ArgEnum, Parser},
-    rfd::FileDialog,
     std::path::PathBuf,
 };
 
@@ -56,7 +55,7 @@ const CERES_STR: &str = "Ceres";
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
 struct Cli {
-    rom_path: Option<String>,
+    rom_path: String,
 
     #[clap(short, long, arg_enum)]
     model: Option<CliModel>,
@@ -78,11 +77,7 @@ fn main() {
         CliModel::Cgb => Model::Cgb,
     });
 
-    let file_dialog = FileDialog::new().add_filter("GameBoy rom", &["gb", "gbc"]);
-
-    let rom_path = cli
-        .rom_path
-        .map_or_else(|| file_dialog.pick_file(), |p| Some(PathBuf::from(p)));
+    let rom_path = Some(PathBuf::from(cli.rom_path));
 
     if let Some(rom_path) = &rom_path {
         emu::Emu::init(model, rom_path).run();

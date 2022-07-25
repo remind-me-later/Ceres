@@ -23,7 +23,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(event_loop: &EventLoop<()>) -> Self {
+    pub fn init(event_loop: &EventLoop<()>) -> Self {
         unsafe {
             let window_builder = WindowBuilder::new()
                 .with_title(super::CERES_STR)

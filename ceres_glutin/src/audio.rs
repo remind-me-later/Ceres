@@ -19,7 +19,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new() -> Self {
+    pub fn init() -> Self {
         let host = cpal::default_host();
         let device = host.default_output_device().unwrap();
 
@@ -29,35 +29,37 @@ impl Renderer {
             buffer_size: cpal::BufferSize::Fixed(BUFFER_SIZE),
         };
 
-        let ring_buffer = Arc::new(Mutex::new(Bounded::from([0.0; RING_BUFFER_SIZE])));
-        let error_callback = |err| panic!("an AudioError occurred on stream: {}", err);
-        let ring_buffer_arc = Arc::clone(&ring_buffer);
-        let data_callback = move |output: &mut [f32], _: &_| {
-            let mut buf = ring_buffer_arc.lock();
-            output
-                .iter_mut()
-                .zip(buf.drain())
-                .for_each(|(out_sample, gb_sample)| *out_sample = gb_sample);
+        let rbuf = Arc::new(Mutex::new(Bounded::from([0.0; RING_BUFFER_SIZE])));
+
+        let data_callback = {
+            let rbuf = Arc::clone(&rbuf);
+            move |output: &mut [f32], _: &_| {
+                let mut buf = rbuf.lock();
+                output
+                    .iter_mut()
+                    .zip(buf.drain())
+                    .for_each(|(out_sample, gb_sample)| *out_sample = gb_sample);
+            }
         };
+
+        let error_callback = |e| panic!("an AudioError occurred on stream: {}", e);
 
         let stream = device
             .build_output_stream(&desired_config, data_callback, error_callback)
             .unwrap();
 
-        stream.play().expect("AudioError playing sound");
+        stream.pause().unwrap();
 
         Self {
-            ring_buffer,
+            ring_buffer: rbuf,
             stream,
         }
     }
 
-    #[allow(dead_code)]
     pub fn play(&mut self) {
         self.stream.play().unwrap();
     }
 
-    #[allow(dead_code)]
     pub fn pause(&mut self) {
         self.stream.pause().unwrap();
     }
