@@ -9,7 +9,7 @@ use {
     std::sync::Arc,
 };
 
-const BUFFER_SIZE: cpal::FrameCount = 512;
+const BUFFER_SIZE: cpal::FrameCount = 1024;
 const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
 const SAMPLE_RATE: u32 = 48000;
 
