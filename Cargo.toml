@@ -1,5 +1,5 @@
 [workspace]
-members = ["ceres_core", "ceres_glutin"]
+members = ["ceres_core", "ceres_glutin", "ceres_test" ]
 default-members = ["ceres_glutin"]
 
 [profile.release]
@@ -7,3 +7,4 @@ opt-level = 3
 strip = true
 lto = true
 debug = 0
+
