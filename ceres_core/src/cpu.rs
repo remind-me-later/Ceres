@@ -3,7 +3,7 @@ use std::println;
 
 use {
     crate::{Gb, KEY1_SPEED_B, KEY1_SWITCH_B},
-    core::{fmt::Display, intrinsics::unlikely},
+    core::fmt::Display,
     Ld8::{Dhl, A, B, C, D, E, H, L},
 };
 
@@ -97,13 +97,13 @@ impl Gb {
             self.cpu_ei_delay = false;
         }
 
-        if unlikely(self.cpu_halted) {
+        if self.cpu_halted {
             self.tick_m_cycle();
         } else {
             let opcode = self.imm_u8();
             self.run_hdma();
 
-            if unlikely(self.halt_bug) {
+            if self.halt_bug {
                 self.pc = self.pc.wrapping_sub(1);
                 self.halt_bug = false;
             }

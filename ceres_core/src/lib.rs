@@ -3,7 +3,6 @@
 //! avoid allocations.
 
 #![no_std]
-#![feature(core_intrinsics)]
 #![feature(const_maybe_uninit_zeroed)]
 #![warn(
     clippy::pedantic,
