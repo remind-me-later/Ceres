@@ -337,4 +337,19 @@ impl Gb {
     pub fn cartridge_rom_mut() -> &'static mut [u8] {
         unsafe { GAME_BOY.cart.mut_rom() }
     }
+
+    // This is used for the test suite
+    // The test is considered to be running
+    // until registers have the following values
+    // B = 3, C = 5, D = 8, E = 13, H = 21
+    // L = 0 if test suceeded and non-zero otherwise
+    pub fn test_running(&mut self) -> bool {
+        // TODO: Make this understandable by humans
+        return self.bc != 773 || self.de != 2061 || (self.hl & 65280) != 5376;
+    }
+
+    pub fn get_test_result(&mut self) -> u16 {
+        // l is the lower 8 bits of 16-bit register hl
+        return self.hl & 255;
+    }
 }
