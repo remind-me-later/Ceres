@@ -288,10 +288,11 @@ impl Gb {
 
     fn set_sample_rate(&mut self, sample_rate: u32) {
         // maybe account for difference between 59.7 and 60 Hz?
-        self.apu_ext_sample_period = TC_SEC / sample_rate;
+        let x = (600 * TC_SEC) / 597;
+        self.apu_ext_sample_period = x / sample_rate;
     }
 
-    /// Initiates the main emulation loop, never returns.
+    /// Runs 1 frame
     #[inline]
     pub fn run_frame(&mut self) {
         self.running_frame = true;
