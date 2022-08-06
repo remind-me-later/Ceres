@@ -180,7 +180,7 @@ impl<'a> Iterator for ChOutIter<'a> {
 pub struct Square1 {
     on: bool,
     dac_on: bool,
-    snd_counter: bool,
+    use_len: bool,
     snd_len: u16,
     p_half: u8, // period half: 0 or 1
 
@@ -223,7 +223,7 @@ impl Default for Square1 {
             on: false,
             dac_on: true,
             snd_len: 0,
-            snd_counter: false,
+            use_len: false,
             p_half: 0, // doesn't matter
             out: 0,
             env_on: false,
@@ -241,7 +241,7 @@ impl Square1 {
         self.on = false;
         self.dac_on = true;
         self.snd_len = 0;
-        self.snd_counter = false;
+        self.use_len = false;
         self.freq = 0;
         self.duty = SQ_DUTY_TABLE[0];
         self.duty_bit = 0;
@@ -286,7 +286,7 @@ impl Square1 {
     }
 
     pub(crate) fn read_nr14(&self) -> u8 {
-        0xBF | (u8::from(self.snd_counter) << 6)
+        0xBF | (u8::from(self.use_len) << 6)
     }
 
     pub(crate) fn write_nr10(&mut self, val: u8) {
@@ -330,12 +330,11 @@ impl Square1 {
 
     pub(crate) fn write_nr14(&mut self, val: u8) {
         self.freq = (u16::from(val) & 7) << 8 | (self.freq & 0xFF);
-        self.snd_counter = val & 0x40 != 0;
 
-        if self.snd_counter && self.p_half == 0 {
-            self.step_len();
-        }
+        let old_len = self.use_len;
+        self.use_len = val & 0x40 != 0;
 
+        // trigger
         if val & 0x80 != 0 {
             if self.dac_on {
                 self.on = true;
@@ -358,6 +357,10 @@ impl Square1 {
             if self.sw_shift != 0 {
                 self.calculate_sweep();
             }
+        }
+
+        if self.use_len && !old_len && self.p_half == 0 {
+            self.step_len();
         }
     }
 
@@ -424,7 +427,7 @@ impl Square1 {
     }
 
     fn step_len(&mut self) {
-        if self.snd_counter && self.snd_len > 0 {
+        if self.use_len && self.snd_len > 0 {
             self.snd_len -= 1;
 
             if self.snd_len == 0 {
@@ -442,7 +445,7 @@ impl Square1 {
 pub struct Square2 {
     on: bool,
     dac_on: bool,
-    snd_counter: bool,
+    use_len: bool,
     snd_len: u16,
     p_half: u8, // period half: 0 or 1
 
@@ -471,7 +474,7 @@ impl Default for Square2 {
             on: false,
             dac_on: true,
             snd_len: 0,
-            snd_counter: false,
+            use_len: false,
             p_half: 0, // doesn't matter
             out: 0,
             env_on: false,
@@ -489,7 +492,7 @@ impl Square2 {
         self.on = false;
         self.dac_on = true;
         self.snd_len = 0;
-        self.snd_counter = false;
+        self.use_len = false;
         self.freq = 0;
         self.duty = SQ_DUTY_TABLE[0];
         self.duty_bit = 0;
@@ -510,7 +513,7 @@ impl Square2 {
     }
 
     pub(crate) fn read_nr24(&self) -> u8 {
-        0xBF | (u8::from(self.snd_counter) << 6)
+        0xBF | (u8::from(self.use_len) << 6)
     }
 
     pub(crate) fn write_nr21(&mut self, val: u8) {
@@ -545,11 +548,9 @@ impl Square2 {
 
     pub(crate) fn write_nr24(&mut self, val: u8) {
         self.freq = (u16::from(val) & 7) << 8 | (self.freq & 0xFF);
-        self.snd_counter = val & 0x40 != 0;
 
-        if self.snd_counter && self.p_half == 0 {
-            self.step_len();
-        }
+        let old_len = self.use_len;
+        self.use_len = val & 0x40 != 0;
 
         if val & 0x80 != 0 {
             if self.dac_on {
@@ -565,6 +566,10 @@ impl Square2 {
             self.duty_bit = 0;
             self.env_timer = self.env_period;
             self.env_vol = self.env_base_vol;
+        }
+
+        if self.use_len && !old_len && self.p_half == 0 {
+            self.step_len();
         }
     }
 
@@ -619,7 +624,7 @@ impl Square2 {
     }
 
     fn step_len(&mut self) {
-        if self.snd_counter && self.snd_len > 0 {
+        if self.use_len && self.snd_len > 0 {
             self.snd_len -= 1;
 
             if self.snd_len == 0 {
@@ -733,11 +738,9 @@ impl Wave {
 
     pub(crate) fn write_nr34(&mut self, val: u8) {
         self.freq = (u16::from(val) & 7) << 8 | (self.freq & 0xFF);
-        self.use_len = val & 0x40 != 0;
 
-        if self.use_len && self.p_half == 0 {
-            self.step_len();
-        }
+        let old_len = self.use_len;
+        self.use_len = val & 0x40 != 0;
 
         // trigger channel reset?
         if val & 0x80 != 0 {
@@ -751,6 +754,10 @@ impl Wave {
 
             self.period = WAV_PERIOD_MUL * (2048 - self.freq);
             self.sample_idx = 0;
+        }
+
+        if self.use_len && !old_len && self.p_half == 0 {
+            self.step_len();
         }
     }
 
@@ -795,7 +802,7 @@ impl Wave {
 pub struct Noise {
     on: bool,
     dac_on: bool,
-    snd_counter: bool,
+    use_len: bool,
     snd_len: u16,
     p_half: u8, // period half: 0 or 1
     timer: u16,
@@ -820,7 +827,7 @@ impl Default for Noise {
             on: false,
             dac_on: true,
             snd_len: 0,
-            snd_counter: false,
+            use_len: false,
             p_half: 0, // doesn't matter
             env_period: 8,
             env_timer: 8,
@@ -843,7 +850,7 @@ impl Noise {
         self.on = false;
         self.dac_on = true;
         self.snd_len = 0;
-        self.snd_counter = false;
+        self.use_len = false;
 
         self.env_period = 8;
         self.env_timer = 8;
@@ -869,7 +876,7 @@ impl Noise {
     }
 
     pub(crate) fn read_nr44(&self) -> u8 {
-        0xBF | (u8::from(self.snd_counter) << 6)
+        0xBF | (u8::from(self.use_len) << 6)
     }
 
     pub(crate) fn write_nr41(&mut self, val: u8) {
@@ -918,11 +925,8 @@ impl Noise {
     }
 
     pub(crate) fn write_nr44(&mut self, val: u8) {
-        self.snd_counter = val & 0x40 != 0;
-
-        if self.snd_counter && self.p_half == 0 {
-            self.step_len();
-        }
+        let old_len = self.use_len;
+        self.use_len = val & 0x40 != 0;
 
         // trigger channel reset?
         if val & 0x80 != 0 {
@@ -938,6 +942,10 @@ impl Noise {
             self.lfsr = 0x7FFF;
             self.env_timer = self.env_period;
             self.env_vol = self.env_base_vol;
+        }
+
+        if self.use_len && !old_len && self.p_half == 0 {
+            self.step_len();
         }
     }
 
@@ -995,7 +1003,7 @@ impl Noise {
     }
 
     fn step_len(&mut self) {
-        if self.snd_counter && self.snd_len > 0 {
+        if self.use_len && self.snd_len > 0 {
             self.snd_len -= 1;
 
             if self.snd_len == 0 {
