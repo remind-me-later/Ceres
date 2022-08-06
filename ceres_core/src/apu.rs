@@ -1,7 +1,4 @@
-use {
-    crate::{Gb, TC_SEC},
-    std::println,
-};
+use crate::{Gb, TC_SEC};
 
 const APU_TIMER_RES: u16 = ((TC_SEC / 512) & 0xFFFF) as u16;
 
@@ -15,6 +12,9 @@ const WAV_SAMPLE_SIZE: u8 = WAV_RAM_SIZE * 2;
 const WAV_PERIOD_MUL: u16 = 2;
 
 const NOISE_MAX_LEN: u16 = 64;
+
+/// Audio sample type.
+pub type Sample = i16;
 
 impl Gb {
     pub(crate) fn run_apu(&mut self, mut cycles: i32) {

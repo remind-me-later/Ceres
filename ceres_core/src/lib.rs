@@ -36,7 +36,10 @@
     clippy::try_err,
     clippy::unnecessary_self_imports,
     clippy::unneeded_field_pattern,
-    clippy::float_arithmetic
+    clippy::float_arithmetic,
+    clippy::unwrap_used,
+    clippy::std_instead_of_core,
+    clippy::std_instead_of_alloc
 )]
 #![allow(
     clippy::struct_excessive_bools,
@@ -49,17 +52,18 @@ extern crate std;
 
 extern crate std;
 
+pub use {
+    apu::Sample,
+    cartridge::InitializationError,
+    joypad::Button,
+    ppu::{PX_HEIGHT, PX_WIDTH},
+};
 use {
     apu::{Noise, Square1, Square2, Wave},
     cartridge::Cartridge,
     core::{mem::MaybeUninit, time::Duration},
     memory::HdmaState,
     ppu::{ColorPalette, Mode, RgbaBuf, OAM_SIZE, VRAM_SIZE_CGB},
-};
-pub use {
-    cartridge::InitializationError,
-    joypad::Button,
-    ppu::{PX_HEIGHT, PX_WIDTH},
 };
 
 mod apu;
@@ -92,9 +96,6 @@ const KEY1_SWITCH_B: u8 = 1;
 const HRAM_SIZE: usize = 0x80;
 const WRAM_SIZE: usize = 0x2000;
 const WRAM_SIZE_CGB: usize = WRAM_SIZE * 4;
-
-/// Audio sample type.
-pub type Sample = i16;
 
 /// ``GameBoy`` model to emulate.
 #[derive(Clone, Copy, PartialEq, Eq)]

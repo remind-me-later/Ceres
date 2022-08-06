@@ -108,11 +108,8 @@ impl Gb {
 
     #[inline]
     fn read_rom_or_cart(&mut self, addr: u16) -> u8 {
-        if self.boot_rom.is_some() {
-            return self.boot_rom.unwrap()[addr as usize];
-        }
-
-        self.cart.read_rom(addr)
+        self.boot_rom
+            .map_or_else(|| self.cart.read_rom(addr), |b| b[addr as usize])
     }
 
     // **************

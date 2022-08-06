@@ -72,7 +72,7 @@ pub struct RgbaBuf {
 
 impl Default for RgbaBuf {
     fn default() -> Self {
-        RgbaBuf {
+        Self {
             data: [0xFF; RGBA_BUF_SIZE],
         }
     }
