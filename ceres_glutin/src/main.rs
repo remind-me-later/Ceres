@@ -42,7 +42,7 @@
 
 use {
     ceres_core::Model,
-    clap::{ArgEnum, Parser},
+    clap::{arg, builder::PossibleValuesParser},
     std::path::PathBuf,
 };
 
@@ -52,32 +52,27 @@ mod video;
 
 const CERES_STR: &str = "Ceres";
 
-#[derive(Parser)]
-#[clap(author, version, about, long_about = None)]
-struct Cli {
-    rom_path: String,
-
-    #[clap(short = 'm', long = "model", arg_enum)]
-    model: Option<CliModel>,
-}
-
-#[derive(Clone, ArgEnum)]
-enum CliModel {
-    Dmg,
-    Mgb,
-    Cgb,
-}
-
 fn main() {
-    let cli = Cli::parse();
+    let cli = clap::Command::new("ceres")
+        .bin_name("ceres")
+        .arg(arg!([rom] "rom to emulate"))
+        .arg(
+            arg!(-m --model <MODEL> "GB model to emulate")
+                .value_parser(PossibleValuesParser::new(["dmg", "mgb", "cgb"]))
+                .default_value("cgb")
+                .required(false),
+        )
+        .get_matches();
 
-    let model = cli.model.map_or(Model::Cgb, move |s| match s {
-        CliModel::Dmg => Model::Dmg,
-        CliModel::Mgb => Model::Mgb,
-        CliModel::Cgb => Model::Cgb,
-    });
+    let model_str = cli.get_one::<String>("model").unwrap();
+    let model = match model_str.as_str() {
+        "dmg" => Model::Dmg,
+        "mgb" => Model::Mgb,
+        "cgb" => Model::Cgb,
+        _ => unreachable!(),
+    };
 
-    let rom_path = Some(PathBuf::from(cli.rom_path));
+    let rom_path = Some(PathBuf::from(cli.get_one::<String>("rom").unwrap()));
 
     if let Some(rom_path) = rom_path {
         let emu = emu::Emu::init(model, rom_path);
