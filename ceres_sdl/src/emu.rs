@@ -44,19 +44,21 @@ impl<'a> Emu<'a> {
 
         let sdl = sdl2::init().unwrap();
 
+        let audio = audio::Renderer::new(&sdl);
+        let gb = Gb::new(model, apu_frame_callback, audio.sample_rate());
+
         // initialize cartridge
-        read_file_into(&rom_path, Gb::cartridge_rom_mut()).unwrap();
+        read_file_into(&rom_path, gb.cartridge_rom_mut()).unwrap();
 
         rom_path.set_extension("sav");
         let sav_path = rom_path;
 
-        read_file_into(&sav_path, Gb::cartridge_ram_mut()).ok();
+        read_file_into(&sav_path, gb.cartridge_ram_mut()).ok();
 
-        let audio = audio::Renderer::new(&sdl);
         let video = video::Renderer::new(&sdl);
         let events = sdl.event_pump().unwrap();
 
-        let gb = Gb::new(model, apu_frame_callback, audio.sample_rate()).unwrap();
+        gb.init().unwrap();
 
         let res = Self {
             sdl,
@@ -99,9 +101,9 @@ impl<'a> Emu<'a> {
         }
 
         // save
-        if Gb::cartridge_has_battery() {
+        if self.gb.cartridge_has_battery() {
             let mut f = File::create(self.sav_path.clone()).unwrap();
-            f.write_all(Gb::cartridge_ram()).unwrap();
+            f.write_all(self.gb.cartridge_ram()).unwrap();
         }
     }
 

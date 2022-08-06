@@ -18,13 +18,11 @@ fn main() -> ExitCode {
 
     let path = &args[1];
 
-    fn read_file_into(path: &Path, buf: &mut [u8]) -> Result<(), std::io::Error> {
-        let mut f = File::open(path)?;
-        let _ = f.read(buf).unwrap();
-        Ok(())
-    }
-    read_file_into(&PathBuf::from(path), Gb::cartridge_rom_mut()).unwrap();
-    let gb = Gb::new(Model::Cgb, |_, _| {}, 1).unwrap();
+    let gb = Gb::new(Model::Cgb, |_, _| {}, 1);
+
+    read_file_into(&PathBuf::from(path), gb.cartridge_rom_mut()).unwrap();
+
+    gb.init().unwrap();
 
     while gb.test_running() {
         gb.run_frame();
@@ -37,4 +35,10 @@ fn main() -> ExitCode {
         println!("FAILED!");
         ExitCode::FAILURE
     }
+}
+
+fn read_file_into(path: &Path, buf: &mut [u8]) -> Result<(), std::io::Error> {
+    let mut f = File::open(path)?;
+    let _ = f.read(buf).unwrap();
+    Ok(())
 }

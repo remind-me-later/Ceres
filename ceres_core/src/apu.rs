@@ -87,9 +87,7 @@ impl Gb {
         let l = (0xF - i16::from(l) * 2) * i16::from(self.apu_l_vol);
         let r = (0xF - i16::from(r) * 2) * i16::from(self.apu_r_vol);
 
-        unsafe {
-            (self.apu_frame_callback.unwrap_unchecked())(l, r);
-        }
+        (self.apu_callback.unwrap())(l, r);
     }
 
     fn reset(&mut self) {

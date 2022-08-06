@@ -5,13 +5,14 @@
 #![no_std]
 #![feature(const_maybe_uninit_zeroed)]
 #![warn(
-    clippy::pedantic,
+    unsafe_code,
     clippy::as_underscore,
     clippy::clone_on_ref_ptr,
     clippy::decimal_literal_representation,
     clippy::deref_by_slicing,
     clippy::empty_drop,
     clippy::empty_structs_with_brackets,
+    clippy::float_arithmetic,
     clippy::float_cmp_const,
     clippy::fn_to_numeric_cast_any,
     clippy::get_unwrap,
@@ -23,27 +24,26 @@
     clippy::mixed_read_write_in_expression,
     clippy::modulo_arithmetic,
     clippy::non_ascii_literal,
+    clippy::pedantic,
     clippy::rc_buffer,
     clippy::rc_mutex,
     clippy::rest_pat_in_fully_bound_structs,
     clippy::same_name_method,
     clippy::self_named_module_files,
     clippy::shadow_unrelated,
+    clippy::std_instead_of_alloc,
+    clippy::std_instead_of_core,
     clippy::str_to_string,
     clippy::string_add,
     clippy::string_slice,
     clippy::string_to_string,
     clippy::try_err,
     clippy::unnecessary_self_imports,
-    clippy::unneeded_field_pattern,
-    clippy::float_arithmetic,
-    clippy::unwrap_used,
-    clippy::std_instead_of_core,
-    clippy::std_instead_of_alloc
+    clippy::unneeded_field_pattern
 )]
 #![allow(
-    clippy::struct_excessive_bools,
     clippy::similar_names,
+    clippy::struct_excessive_bools,
     clippy::verbose_bit_mask
 )]
 
@@ -112,7 +112,7 @@ enum CompatMode {
     Cgb,
 }
 
-pub static mut GAME_BOY: Gb = unsafe { MaybeUninit::zeroed().assume_init() };
+pub static mut GAME_BOY: MaybeUninit<Gb> = MaybeUninit::zeroed();
 
 /// The ``GameBoy`` struct is the main struct in the
 /// library. The `run` method never returns and calls a PPU
@@ -232,25 +232,18 @@ pub struct Gb {
     apu_timer: u16,
     apu_render_timer: u32,
     apu_ext_sample_period: u32,
-    apu_frame_callback: Option<fn(Sample, Sample)>,
+    apu_callback: Option<fn(Sample, Sample)>,
     apu_seq_step: u8,
 }
 
 impl Gb {
-    /// # Errors
-    ///
-    /// Will return `Err` if the ROM header contains some
-    /// unsupported MBC value. This can happen if the ROM is
-    /// corrupt, has not been initialized or we simply don't
-    /// support its MBC yet.
+    #[must_use]
     pub fn new(
         model: Model,
-        apu_frame_callback: fn(Sample, Sample),
+        apu_callback: fn(Sample, Sample),
         sample_rate: u32,
-    ) -> Result<&'static mut Self, InitializationError> {
-        let mut gb = unsafe { &mut GAME_BOY };
-
-        gb.cart.init()?;
+    ) -> &'static mut Self {
+        let mut gb = unsafe { GAME_BOY.assume_init_mut() };
 
         // custom initilization
         gb.model = model;
@@ -269,7 +262,7 @@ impl Gb {
         gb.svbk_true = 1;
         gb.ppu_cycles = Mode::HBlank.cycles(0);
 
-        gb.set_apu_frame_callback(apu_frame_callback);
+        gb.set_apu_callback(apu_callback);
         gb.set_sample_rate(sample_rate);
 
         // Default like
@@ -282,11 +275,21 @@ impl Gb {
         gb.apu_ch4 = Noise::default();
         gb.hdma_state = HdmaState::default();
 
-        Ok(gb)
+        gb
     }
 
-    fn set_apu_frame_callback(&mut self, apu_frame_callback: fn(Sample, Sample)) {
-        self.apu_frame_callback = Some(apu_frame_callback);
+    /// # Errors
+    ///
+    /// Will return `Err` if the ROM header contains some
+    /// unsupported MBC value. This can happen if the ROM is
+    /// corrupt, has not been initialized or we simply don't
+    /// support its MBC yet.
+    pub fn init(&mut self) -> Result<(), InitializationError> {
+        self.cart.init()
+    }
+
+    fn set_apu_callback(&mut self, apu_callback: fn(Sample, Sample)) {
+        self.apu_callback = Some(apu_callback);
     }
 
     fn set_sample_rate(&mut self, sample_rate: u32) {
@@ -313,14 +316,14 @@ impl Gb {
     /// Returns true if cartridge has battery, false
     /// otherwise
     #[must_use]
-    pub fn cartridge_has_battery() -> bool {
-        unsafe { GAME_BOY.cart.has_battery() }
+    pub fn cartridge_has_battery(&self) -> bool {
+        self.cart.has_battery()
     }
 
     /// Returns reference to static RAM slice.
     #[must_use]
-    pub fn cartridge_ram() -> &'static [u8] {
-        unsafe { GAME_BOY.cart.ram() }
+    pub fn cartridge_ram(&self) -> &[u8] {
+        self.cart.ram()
     }
 
     /// Returns mutable reference to static RAM slice.
@@ -328,8 +331,8 @@ impl Gb {
     /// Modifying the RAM contents while the Gb is running
     /// could lead to undesirable results.
     #[must_use]
-    pub fn cartridge_ram_mut() -> &'static mut [u8] {
-        unsafe { GAME_BOY.cart.mut_ram() }
+    pub fn cartridge_ram_mut(&mut self) -> &mut [u8] {
+        self.cart.mut_ram()
     }
 
     /// Returns mutable reference to static ROM slice.
@@ -337,8 +340,8 @@ impl Gb {
     /// Modifying the ROM contents while the Gb is running
     /// could lead to undesirable results.
     #[must_use]
-    pub fn cartridge_rom_mut() -> &'static mut [u8] {
-        unsafe { GAME_BOY.cart.mut_rom() }
+    pub fn cartridge_rom_mut(&mut self) -> &mut [u8] {
+        self.cart.mut_rom()
     }
 
     // This is used for the test suite
