@@ -304,7 +304,7 @@ impl Square1 {
     }
 
     pub(crate) fn write_nr12(&mut self, val: u8) {
-        if val == 7 || val == 0 {
+        if val & 0xF8 == 0 {
             self.on = false;
             self.dac_on = false;
         }
@@ -519,7 +519,7 @@ impl Square2 {
     }
 
     pub(crate) fn write_nr22(&mut self, val: u8) {
-        if val == 7 || val == 0 {
+        if val & 0xF8 == 0 {
             self.on = false;
             self.dac_on = false;
         }
@@ -877,7 +877,7 @@ impl Noise {
     }
 
     pub(crate) fn write_nr42(&mut self, val: u8) {
-        if val == 7 || val == 0 {
+        if val & 0xF8 == 0 {
             self.on = false;
             self.dac_on = false;
         }
