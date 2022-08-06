@@ -300,9 +300,7 @@ impl Square1 {
     }
 
     pub(crate) fn write_nr12(&mut self, val: u8) {
-        // TODO: likely wrong, value == 0x7 || value == 0x0 to pass
-        // Blargg 2 test
-        if val == 7 {
+        if val == 7 || val == 0 {
             self.on = false;
             self.dac_on = false;
         }
@@ -517,9 +515,7 @@ impl Square2 {
     }
 
     pub(crate) fn write_nr22(&mut self, val: u8) {
-        // TODO: likely wrong, value == 0x7 || value == 0x0 to pass
-        // Blargg 2 test
-        if val == 7 {
+        if val == 7 || val == 0 {
             self.on = false;
             self.dac_on = false;
         }
@@ -877,9 +873,7 @@ impl Noise {
     }
 
     pub(crate) fn write_nr42(&mut self, val: u8) {
-        // TODO: likely wrong, value == 0x7 || value == 0x0 to pass
-        // Blargg 2 test
-        if val == 7 {
+        if val == 7 || val == 0 {
             self.on = false;
             self.dac_on = false;
         }

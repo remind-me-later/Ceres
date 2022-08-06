@@ -57,7 +57,7 @@ const CERES_STR: &str = "Ceres";
 struct Cli {
     rom_path: String,
 
-    #[clap(short, long, arg_enum)]
+    #[clap(short = 'm', long = "model", arg_enum)]
     model: Option<CliModel>,
 }
 
