@@ -1,191 +1,224 @@
 use {
     crate::{audio, video},
-    ceres_core::{Gb, Model},
-    glutin::event_loop::EventLoop,
+    ceres_core::{Gb, Model, Sample},
+    sdl2::{
+        controller::GameController,
+        event::{Event, WindowEvent},
+        keyboard::Scancode,
+        EventPump, Sdl,
+    },
     std::{
         fs::File,
-        io::Read,
+        io::{Read, Write},
+        mem::MaybeUninit,
         path::{Path, PathBuf},
+        time::Instant,
     },
 };
 
-/// # Panics
-///
-/// Will panic on invalid rom or ram file
-pub fn run(model: Model, mut rom_path: PathBuf) -> ! {
-    fn read_file_into(path: &Path, buf: &mut [u8]) -> Result<(), std::io::Error> {
-        let mut f = File::open(path)?;
-        let _ = f.read(buf).unwrap();
-        Ok(())
-    }
+static mut EMU: MaybeUninit<Emu> = MaybeUninit::uninit();
 
-    read_file_into(&rom_path, Gb::cartridge_rom_mut()).unwrap();
-
-    let sav_path = {
-        rom_path.set_extension("sav");
-        rom_path
-    };
-
-    read_file_into(&sav_path, Gb::cartridge_ram_mut()).ok();
-
-    let audio = audio::Renderer::init();
-
-    let gb = Gb::new(
-        model,
-        imp::apu_frame_callback,
-        audio::Renderer::sample_rate(),
-    )
-    .unwrap();
-
-    let event_loop = EventLoop::new();
-    let video = video::Renderer::init(&event_loop);
-
-    let mut emu = imp::Emu::new(gb, video, audio, sav_path);
-
-    event_loop.run(move |event, _, control_flow| emu.main_loop(event, control_flow));
+pub struct Emu<'a> {
+    sdl: Sdl,
+    events: EventPump,
+    gb: &'a mut Gb,
+    has_focus: bool,
+    sav_path: PathBuf,
+    video: video::Renderer,
+    audio: audio::Renderer,
+    last_frame: Instant,
+    quit: bool,
 }
 
-mod imp {
-    use {
-        crate::{audio, video},
-        ceres_core::{Gb, Sample},
-        glutin::{
-            event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
-            event_loop::ControlFlow,
-        },
-        std::{fs::File, io::Write, path::PathBuf, ptr::null_mut},
-    };
-
-    static mut EMU: *mut Emu = null_mut();
-
-    pub struct Emu {
-        gb: &'static mut Gb,
-        video: video::Renderer,
-        audio: audio::Renderer,
-
-        sav_path: PathBuf,
-        has_focus: bool,
-        paused: bool,
-    }
-
-    impl Emu {
-        pub fn new(
-            gb: &'static mut Gb,
-            video: video::Renderer,
-            audio: audio::Renderer,
-            sav_path: PathBuf,
-        ) -> Self {
-            let mut emu = Emu {
-                gb,
-                sav_path,
-                video,
-                has_focus: true,
-                audio,
-                paused: false,
-            };
-
-            unsafe {
-                EMU = &mut emu;
-            };
-
-            emu.audio.play();
-
-            emu
+impl<'a> Emu<'a> {
+    /// # Panics
+    ///
+    /// Will panic on invalid rom or ram file
+    #[must_use]
+    pub fn init(model: Model, mut rom_path: PathBuf) -> &'static mut Self {
+        fn read_file_into(path: &Path, buf: &mut [u8]) -> Result<(), std::io::Error> {
+            let mut f = File::open(path)?;
+            let _ = f.read(buf).unwrap();
+            Ok(())
         }
 
-        pub fn main_loop(&mut self, event: Event<()>, control_flow: &mut ControlFlow) {
-            match event {
-                Event::LoopDestroyed => self.save(),
-                Event::WindowEvent { event, .. } => match event {
-                    WindowEvent::Resized(s) => self.resize(s.width as u32, s.height as u32),
-                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                    WindowEvent::Focused(is_focused) => self.focus(is_focused),
-                    WindowEvent::KeyboardInput { input, .. } => self.key_input(input),
-                    _ => (),
-                },
-                Event::MainEventsCleared => self.main_cleared(control_flow),
-                _ => (),
-            }
-        }
+        let sdl = sdl2::init().unwrap();
 
-        pub fn resize(&mut self, width: u32, height: u32) {
-            self.video.resize(width, height);
-        }
+        // initialize cartridge
+        read_file_into(&rom_path, Gb::cartridge_rom_mut()).unwrap();
 
-        pub fn main_cleared(&mut self, control_flow: &mut ControlFlow) {
-            if self.paused {
-                *control_flow = ControlFlow::Wait;
-                return;
-            }
+        rom_path.set_extension("sav");
+        let sav_path = rom_path;
 
-            self.gb.run_frame();
-            let rgba = self.gb.pixel_data();
-            self.video.draw_frame(rgba);
-        }
+        read_file_into(&sav_path, Gb::cartridge_ram_mut()).ok();
 
-        pub fn key_input(&mut self, input: KeyboardInput) {
-            use ceres_core::Button;
+        let audio = audio::Renderer::new(&sdl);
+        let video = video::Renderer::new(&sdl);
+        let events = sdl.event_pump().unwrap();
 
-            if !self.has_focus {
-                return;
-            }
+        let gb = Gb::new(model, apu_frame_callback, audio.sample_rate()).unwrap();
 
-            if let Some(key) = input.virtual_keycode {
-                match input.state {
-                    ElementState::Pressed => match key {
-                        VirtualKeyCode::W => self.gb.press(Button::Up),
-                        VirtualKeyCode::A => self.gb.press(Button::Left),
-                        VirtualKeyCode::S => self.gb.press(Button::Down),
-                        VirtualKeyCode::D => self.gb.press(Button::Right),
-                        VirtualKeyCode::K => self.gb.press(Button::A),
-                        VirtualKeyCode::L => self.gb.press(Button::B),
-                        VirtualKeyCode::Return => self.gb.press(Button::Start),
-                        VirtualKeyCode::Back => self.gb.press(Button::Select),
-                        // System
-                        VirtualKeyCode::F => self.video.toggle_fullscreen(),
-                        VirtualKeyCode::Space => self.toggle_pause(),
-                        _ => (),
-                    },
-                    ElementState::Released => match key {
-                        VirtualKeyCode::W => self.gb.release(Button::Up),
-                        VirtualKeyCode::A => self.gb.release(Button::Left),
-                        VirtualKeyCode::S => self.gb.release(Button::Down),
-                        VirtualKeyCode::D => self.gb.release(Button::Right),
-                        VirtualKeyCode::K => self.gb.release(Button::A),
-                        VirtualKeyCode::L => self.gb.release(Button::B),
-                        VirtualKeyCode::Return => self.gb.release(Button::Start),
-                        VirtualKeyCode::Back => self.gb.release(Button::Select),
-                        _ => (),
-                    },
-                }
-            }
-        }
+        let res = Self {
+            sdl,
+            events,
+            gb,
+            has_focus: false,
+            sav_path,
+            video,
+            audio,
+            last_frame: Instant::now(),
+            quit: false,
+        };
 
-        pub fn focus(&mut self, is_focused: bool) {
-            self.has_focus = is_focused;
-        }
+        let _controller = res.init_controller();
 
-        pub fn save(&mut self) {
-            if Gb::cartridge_has_battery() {
-                let mut f = File::create(&self.sav_path).unwrap();
-                f.write_all(Gb::cartridge_ram()).unwrap();
-            }
-        }
-
-        pub fn toggle_pause(&mut self) {
-            if self.paused {
-                self.paused = false;
-                self.audio.play();
-            } else {
-                self.paused = true;
-                self.audio.pause();
-            }
+        unsafe {
+            EMU.write(res);
+            EMU.assume_init_mut()
         }
     }
 
     #[inline]
-    pub fn apu_frame_callback(l: Sample, r: Sample) {
-        let emu = unsafe { &mut *EMU };
-        emu.audio.push_frame(l, r);
+    pub fn run(&mut self) {
+        let emu = unsafe { EMU.assume_init_mut() };
+
+        while !self.quit {
+            emu.handle_events();
+
+            self.gb.run_frame();
+
+            let elapsed = emu.last_frame.elapsed();
+            if elapsed < ceres_core::FRAME_DUR {
+                std::thread::sleep(ceres_core::FRAME_DUR - elapsed);
+                emu.last_frame = Instant::now();
+            }
+
+            let rgba = self.gb.pixel_data();
+
+            emu.video.draw_frame(rgba);
+        }
+
+        // save
+        if Gb::cartridge_has_battery() {
+            let mut f = File::create(self.sav_path.clone()).unwrap();
+            f.write_all(Gb::cartridge_ram()).unwrap();
+        }
     }
+
+    fn init_controller(&self) -> Option<GameController> {
+        let gcs = self.sdl.game_controller().unwrap();
+        let avail = gcs.num_joysticks().unwrap();
+
+        (0..avail).find_map(|id| {
+            gcs.is_game_controller(id)
+                .then(|| gcs.open(id).ok())
+                .flatten()
+        })
+    }
+
+    fn handle_events(&mut self) {
+        for event in self.events.poll_iter() {
+            match event {
+                Event::Quit { .. } => self.quit = true,
+                Event::Window { win_event, .. } => match win_event {
+                    WindowEvent::Resized(width, height) => {
+                        self.video.resize(width as u32, height as u32);
+                    }
+                    WindowEvent::FocusGained => self.has_focus = true,
+                    WindowEvent::FocusLost => self.has_focus = false,
+                    WindowEvent::Close => self.quit = true,
+                    _ => (),
+                },
+                Event::ControllerButtonDown { button, .. } => {
+                    use {ceres_core::Button, sdl2::controller};
+
+                    if !self.has_focus {
+                        return;
+                    }
+
+                    match button {
+                        controller::Button::DPadUp => self.gb.press(Button::Up),
+                        controller::Button::DPadLeft => self.gb.press(Button::Left),
+                        controller::Button::DPadDown => self.gb.press(Button::Down),
+                        controller::Button::DPadRight => self.gb.press(Button::Right),
+                        controller::Button::B => self.gb.press(Button::B),
+                        controller::Button::A => self.gb.press(Button::A),
+                        controller::Button::Start => self.gb.press(Button::Start),
+                        controller::Button::Back => self.gb.press(Button::Select),
+                        _ => (),
+                    }
+                }
+                Event::ControllerButtonUp { button, .. } => {
+                    use {ceres_core::Button, sdl2::controller};
+
+                    if !self.has_focus {
+                        return;
+                    }
+
+                    match button {
+                        controller::Button::DPadUp => self.gb.release(Button::Up),
+                        controller::Button::DPadLeft => self.gb.release(Button::Left),
+                        controller::Button::DPadDown => self.gb.release(Button::Down),
+                        controller::Button::DPadRight => self.gb.release(Button::Right),
+                        controller::Button::B => self.gb.release(Button::B),
+                        controller::Button::A => self.gb.release(Button::A),
+                        controller::Button::Start => self.gb.release(Button::Start),
+                        controller::Button::Back => self.gb.release(Button::Select),
+                        _ => (),
+                    }
+                }
+                Event::KeyDown { scancode, .. } => {
+                    use ceres_core::Button;
+
+                    if !self.has_focus {
+                        return;
+                    }
+
+                    if let Some(key) = scancode {
+                        match key {
+                            Scancode::W => self.gb.press(Button::Up),
+                            Scancode::A => self.gb.press(Button::Left),
+                            Scancode::S => self.gb.press(Button::Down),
+                            Scancode::D => self.gb.press(Button::Right),
+                            Scancode::K => self.gb.press(Button::A),
+                            Scancode::L => self.gb.press(Button::B),
+                            Scancode::Return => self.gb.press(Button::Start),
+                            Scancode::Backspace => self.gb.press(Button::Select),
+                            // Gui
+                            Scancode::F => self.video.toggle_fullscreen(),
+                            _ => (),
+                        }
+                    }
+                }
+                Event::KeyUp { scancode, .. } => {
+                    use ceres_core::Button;
+
+                    if !self.has_focus {
+                        return;
+                    }
+
+                    if let Some(key) = scancode {
+                        match key {
+                            Scancode::W => self.gb.release(Button::Up),
+                            Scancode::A => self.gb.release(Button::Left),
+                            Scancode::S => self.gb.release(Button::Down),
+                            Scancode::D => self.gb.release(Button::Right),
+                            Scancode::K => self.gb.release(Button::A),
+                            Scancode::L => self.gb.release(Button::B),
+                            Scancode::Return => self.gb.release(Button::Start),
+                            Scancode::Backspace => self.gb.release(Button::Select),
+                            _ => (),
+                        }
+                    }
+                }
+                _ => (),
+            }
+        }
+    }
+}
+
+#[inline]
+fn apu_frame_callback(l: Sample, r: Sample) {
+    let emu = unsafe { EMU.assume_init_mut() };
+    emu.audio.push_frame(l, r);
 }

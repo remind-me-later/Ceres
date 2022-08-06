@@ -80,6 +80,7 @@ fn main() {
     let rom_path = Some(PathBuf::from(cli.rom_path));
 
     if let Some(rom_path) = rom_path {
-        emu::run(model, rom_path);
+        let emu = emu::Emu::init(model, rom_path);
+        emu.run();
     }
 }

@@ -87,10 +87,6 @@ impl Gb {
         let l = (0xF - i16::from(l) * 2) * i16::from(self.apu_l_vol);
         let r = (0xF - i16::from(r) * 2) * i16::from(self.apu_r_vol);
 
-        // amplify
-        let l = l * 16;
-        let r = r * 16;
-
         unsafe {
             (self.apu_frame_callback.unwrap_unchecked())(l, r);
         }

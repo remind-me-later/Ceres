@@ -1,12 +1,10 @@
 use {
     glow::{Context, HasContext, NativeProgram, NativeTexture, NativeVertexArray, UniformLocation},
-    glutin::{
-        dpi::PhysicalSize,
-        event_loop::EventLoop,
-        window::{Fullscreen, WindowBuilder},
-        ContextBuilder, GlProfile, GlRequest, PossiblyCurrent, Robustness, WindowedContext,
+    sdl2::{
+        video::{FullscreenType, GLContext, SwapInterval, Window},
+        Sdl, VideoSubsystem,
     },
-    std::cmp::min,
+    std::{cmp::min, mem::ManuallyDrop},
 };
 
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
@@ -14,40 +12,48 @@ const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
 const MUL: u32 = 4;
 
 pub struct Renderer {
-    ctx_wrapper: WindowedContext<PossiblyCurrent>,
+    // Glow
     gl: Context,
     program: NativeProgram,
     vao: NativeVertexArray,
     texture: NativeTexture,
     uniform_loc: UniformLocation,
+
+    // SDL
+    win: Window,
+    video: ManuallyDrop<VideoSubsystem>,
+    ctx: ManuallyDrop<GLContext>,
 }
 
 impl Renderer {
-    pub fn init(event_loop: &EventLoop<()>) -> Self {
+    pub fn new(sdl: &Sdl) -> Self {
         unsafe {
-            let window_builder = WindowBuilder::new()
-                .with_title(super::CERES_STR)
-                .with_inner_size(PhysicalSize {
-                    width: PX_WIDTH as i32 * 4,
-                    height: PX_HEIGHT as i32 * 4,
-                })
-                .with_min_inner_size(PhysicalSize {
-                    width: PX_WIDTH as i32,
-                    height: PX_HEIGHT as i32,
-                });
+            let video = ManuallyDrop::new(sdl.video().unwrap());
 
-            let ctx_wrapper = ContextBuilder::new()
-                .with_gl(GlRequest::Latest)
-                .with_gl_profile(GlProfile::Core)
-                .with_gl_robustness(Robustness::NotRobust)
-                .with_vsync(true)
-                .build_windowed(window_builder, event_loop)
-                .unwrap()
-                .make_current()
+            let gl_attr = video.gl_attr();
+            gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
+            gl_attr.set_context_version(4, 6);
+            gl_attr.set_depth_size(0);
+            gl_attr.set_context_flags().forward_compatible().set();
+
+            if !cfg!(debug_assertions) {
+                gl_attr.set_context_no_error(true);
+            }
+
+            let mut win = video
+                .window(crate::CERES_STR, PX_WIDTH * MUL, PX_HEIGHT * MUL)
+                .opengl()
+                .position_centered()
+                .resizable()
+                .build()
                 .unwrap();
+            win.set_minimum_size(PX_WIDTH, PX_HEIGHT).unwrap();
 
-            let gl =
-                glow::Context::from_loader_function(|s| ctx_wrapper.get_proc_address(s).cast());
+            let ctx = ManuallyDrop::new(win.gl_create_context().unwrap());
+            win.gl_make_current(&ctx).unwrap();
+            video.gl_set_swap_interval(SwapInterval::VSync).unwrap();
+
+            let gl = glow::Context::from_loader_function(|s| video.gl_get_proc_address(s).cast());
 
             // create vao
             let vao = gl
@@ -109,12 +115,14 @@ impl Renderer {
                 .expect("couldn't get location of uniform");
 
             let mut res = Self {
-                ctx_wrapper,
                 gl,
                 program,
                 vao,
                 texture,
                 uniform_loc,
+                win,
+                video,
+                ctx,
             };
 
             res.resize(PX_WIDTH * MUL, PX_HEIGHT * MUL);
@@ -124,24 +132,21 @@ impl Renderer {
     }
 
     pub fn toggle_fullscreen(&mut self) {
-        let in_fullscreen = self.ctx_wrapper.window().fullscreen();
+        let in_fullscreen = self.win.fullscreen_state();
 
         match in_fullscreen {
-            Some(_) => self.ctx_wrapper.window().set_fullscreen(None),
-            None => self
-                .ctx_wrapper
-                .window()
-                .set_fullscreen(Some(Fullscreen::Borderless(None))),
+            FullscreenType::Off => self.win.set_fullscreen(FullscreenType::Desktop).unwrap(),
+            _ => self.win.set_fullscreen(FullscreenType::Off).unwrap(),
         }
 
-        let size = self.ctx_wrapper.window().inner_size();
-        self.resize(size.width, size.height);
+        let (w, h) = self.win.size();
+        self.resize(w, h);
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
         unsafe {
             self.gl.viewport(0, 0, width as i32, height as i32);
-            self.ctx_wrapper.resize(PhysicalSize { width, height });
+            self.win.set_size(width, height).unwrap();
 
             self.gl.use_program(Some(self.program));
 
@@ -176,6 +181,15 @@ impl Renderer {
             self.gl.draw_arrays(glow::TRIANGLE_STRIP, 0, 4);
         }
 
-        self.ctx_wrapper.swap_buffers().unwrap();
+        self.win.gl_swap_window();
+    }
+}
+
+impl Drop for Renderer {
+    fn drop(&mut self) {
+        unsafe {
+            ManuallyDrop::drop(&mut self.ctx);
+            ManuallyDrop::drop(&mut self.video);
+        }
     }
 }

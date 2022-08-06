@@ -1,78 +1,68 @@
 use {
     ceres_core::Sample,
-    cpal::{
-        traits::{DeviceTrait, HostTrait, StreamTrait},
-        SampleRate,
+    sdl2::{
+        audio::{AudioQueue, AudioSpecDesired},
+        Sdl,
     },
-    dasp_ring_buffer::Bounded,
-    parking_lot::Mutex,
-    std::sync::Arc,
 };
 
-const BUFFER_SIZE: cpal::FrameCount = 1024;
-const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
-const SAMPLE_RATE: u32 = 48000;
+const FREQ: i32 = 48000;
+const BUF_SIZE: usize = 1024;
+const AUDIO_BUFFER_SIZE: usize = BUF_SIZE * 4;
 
 pub struct Renderer {
-    ring_buffer: Arc<Mutex<Bounded<[Sample; RING_BUFFER_SIZE]>>>,
-    stream: cpal::Stream,
+    stream: AudioQueue<f32>,
+    buf: [f32; AUDIO_BUFFER_SIZE],
+    buf_pos: usize,
+    freq: u32,
 }
 
 impl Renderer {
-    pub fn init() -> Self {
-        let host = cpal::default_host();
-        let device = host.default_output_device().unwrap();
+    pub fn new(sdl: &Sdl) -> Self {
+        let audio_subsystem = sdl.audio().unwrap();
 
-        let desired_config = cpal::StreamConfig {
-            channels: 2,
-            sample_rate: SampleRate(SAMPLE_RATE),
-            buffer_size: cpal::BufferSize::Fixed(BUFFER_SIZE),
+        let desired_spec = AudioSpecDesired {
+            freq: Some(FREQ),
+            channels: Some(2),
+            samples: Some(BUF_SIZE as u16),
         };
 
-        let rbuf = Arc::new(Mutex::new(Bounded::from(
-            [Default::default(); RING_BUFFER_SIZE],
-        )));
+        let queue = audio_subsystem.open_queue(None, &desired_spec).unwrap();
 
-        let data_callback = {
-            let rbuf = Arc::clone(&rbuf);
-            move |output: &mut [Sample], _: &_| {
-                let mut b = rbuf.lock();
-                output
-                    .iter_mut()
-                    .zip(b.drain())
-                    .for_each(|(out_sample, gb_sample)| *out_sample = gb_sample);
-            }
-        };
-
-        let error_callback = |e| panic!("an AudioError occurred on stream: {}", e);
-
-        let stream = device
-            .build_output_stream(&desired_config, data_callback, error_callback)
-            .unwrap();
-
-        stream.pause().unwrap();
+        let obtained_spec = queue.spec();
+        let freq = obtained_spec.freq as u32;
+        queue.resume();
 
         Self {
-            ring_buffer: rbuf,
-            stream,
+            stream: queue,
+            buf: [f32::default(); AUDIO_BUFFER_SIZE],
+            buf_pos: 0,
+            freq,
         }
     }
 
-    pub fn play(&mut self) {
-        self.stream.play().unwrap();
-    }
-
-    pub fn pause(&mut self) {
-        self.stream.pause().unwrap();
-    }
-
-    pub fn sample_rate() -> u32 {
-        SAMPLE_RATE
-    }
-
     pub fn push_frame(&mut self, l: Sample, r: Sample) {
-        let mut buf = self.ring_buffer.lock();
-        buf.push(l);
-        buf.push(r);
+        let l = f32::from(l * 32) / 32768.0;
+        let r = f32::from(r * 32) / 32768.0;
+
+        self.buf[self.buf_pos] = l;
+        self.buf[self.buf_pos + 1] = r;
+
+        self.buf_pos += 2;
+
+        if self.buf_pos == AUDIO_BUFFER_SIZE {
+            self.buf_pos = 0;
+
+            // we're running too fast, skip this batch
+            if self.stream.size() / 4 > self.freq / 4 {
+                return;
+            }
+
+            self.stream.queue_audio(&self.buf).unwrap();
+        }
+    }
+
+    pub fn sample_rate(&self) -> u32 {
+        self.freq
     }
 }
