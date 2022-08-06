@@ -8,5 +8,5 @@ description = "A Gameboy/Color emulator"
 [dependencies]
 ceres_core = { path = "../ceres_core" }
 glow = "*"
-clap = "*"
+clap = { version = "*", default-features = false, features = ["std"] }
 sdl2 = "*"
