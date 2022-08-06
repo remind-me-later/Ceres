@@ -1,4 +1,7 @@
-use crate::{Gb, TC_SEC};
+use {
+    crate::{Gb, TC_SEC},
+    std::println,
+};
 
 const APU_TIMER_RES: u16 = ((TC_SEC / 512) & 0xFFFF) as u16;
 
@@ -294,7 +297,7 @@ impl Square1 {
         if self.sw_period == 0 {
             self.sw_period = 8;
         }
-        self.sw_dec = (val & 8) != 0;
+        self.sw_dec = val & 8 != 0;
         self.sw_shift = val & 7;
     }
 
@@ -304,6 +307,8 @@ impl Square1 {
     }
 
     pub(crate) fn write_nr12(&mut self, val: u8) {
+        // println!("write nr12: {:x}", val);
+
         if val & 0xF8 == 0 {
             self.on = false;
             self.dac_on = false;
@@ -334,14 +339,28 @@ impl Square1 {
         let old_len = self.use_len;
         self.use_len = val & 0x40 != 0;
 
+        // println!("write nr14: {:x}", val);
+
+        if self.use_len && !old_len && self.p_half == 0 {
+            self.step_len();
+            // println!("step enabled, len: {}", self.snd_len);
+        }
+
         // trigger
         if val & 0x80 != 0 {
+            // println!("trigger");
+
             if self.dac_on {
                 self.on = true;
             }
 
             if self.snd_len == 0 {
+                // println!("reset len");
                 self.snd_len = SQ_MAX_LEN;
+                if self.use_len && self.p_half == 0 {
+                    // println!("freeze step enabled, len: {}", self.snd_len);
+                    self.step_len();
+                }
             }
 
             self.period = SQ_FREQ_P_MUL * (2048 - self.freq);
@@ -357,10 +376,6 @@ impl Square1 {
             if self.sw_shift != 0 {
                 self.calculate_sweep();
             }
-        }
-
-        if self.use_len && !old_len && self.p_half == 0 {
-            self.step_len();
         }
     }
 
@@ -552,6 +567,11 @@ impl Square2 {
         let old_len = self.use_len;
         self.use_len = val & 0x40 != 0;
 
+        if self.use_len && !old_len && self.p_half == 0 {
+            self.step_len();
+        }
+
+        // trigger
         if val & 0x80 != 0 {
             if self.dac_on {
                 self.on = true;
@@ -559,6 +579,9 @@ impl Square2 {
 
             if self.snd_len == 0 {
                 self.snd_len = SQ_MAX_LEN;
+                if self.use_len && self.p_half == 0 {
+                    self.step_len();
+                }
             }
 
             self.period = SQ_FREQ_P_MUL * (2048 - self.freq);
@@ -566,10 +589,6 @@ impl Square2 {
             self.duty_bit = 0;
             self.env_timer = self.env_period;
             self.env_vol = self.env_base_vol;
-        }
-
-        if self.use_len && !old_len && self.p_half == 0 {
-            self.step_len();
         }
     }
 
@@ -742,7 +761,11 @@ impl Wave {
         let old_len = self.use_len;
         self.use_len = val & 0x40 != 0;
 
-        // trigger channel reset?
+        if self.use_len && !old_len && self.p_half == 0 {
+            self.step_len();
+        }
+
+        // trigger
         if val & 0x80 != 0 {
             if self.dac_on {
                 self.on = true;
@@ -750,14 +773,14 @@ impl Wave {
 
             if self.snd_len == 0 {
                 self.snd_len = WAV_MAX_LENGTH;
+                if self.use_len && self.p_half == 0 {
+                    // println!("freeze step enabled, len: {}", self.snd_len);
+                    self.step_len();
+                }
             }
 
             self.period = WAV_PERIOD_MUL * (2048 - self.freq);
             self.sample_idx = 0;
-        }
-
-        if self.use_len && !old_len && self.p_half == 0 {
-            self.step_len();
         }
     }
 
@@ -928,7 +951,11 @@ impl Noise {
         let old_len = self.use_len;
         self.use_len = val & 0x40 != 0;
 
-        // trigger channel reset?
+        if self.use_len && !old_len && self.p_half == 0 {
+            self.step_len();
+        }
+
+        // trigger
         if val & 0x80 != 0 {
             if self.dac_on {
                 self.on = true;
@@ -936,16 +963,15 @@ impl Noise {
 
             if self.snd_len == 0 {
                 self.snd_len = NOISE_MAX_LEN;
+                if self.use_len && !old_len && self.p_half == 0 {
+                    self.step_len();
+                }
             }
 
             self.timer = self.timer_period;
             self.lfsr = 0x7FFF;
             self.env_timer = self.env_period;
             self.env_vol = self.env_base_vol;
-        }
-
-        if self.use_len && !old_len && self.p_half == 0 {
-            self.step_len();
         }
     }
 

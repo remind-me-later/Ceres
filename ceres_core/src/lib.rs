@@ -47,6 +47,8 @@
 #[cfg(feature = "disassembler")]
 extern crate std;
 
+extern crate std;
+
 use {
     apu::{Noise, Square1, Square2, Wave},
     cartridge::Cartridge,
