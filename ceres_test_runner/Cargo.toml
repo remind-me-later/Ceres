@@ -1,12 +1,9 @@
 [package]
-name = "ceres_glutin"
+name = "ceres_test_runner"
 version = "0.1.0"
 license = "MIT"
 edition = "2021"
-description = "A Gameboy/Color emulator"
+description = "Test utility for Ceres emulator"
 
 [dependencies]
 ceres_core = { path = "../ceres_core" }
-glow = "*"
-clap = "*"
-sdl2 = "*"

@@ -36,7 +36,7 @@ name = "ceres_core"
 version = "0.1.0"
 
 [[package]]
-name = "ceres_glutin"
+name = "ceres_sdl"
 version = "0.1.0"
 dependencies = [
  "ceres_core",
@@ -46,7 +46,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ceres_test"
+name = "ceres_test_runner"
 version = "0.1.0"
 dependencies = [
  "ceres_core",
