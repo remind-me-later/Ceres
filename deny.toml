@@ -12,6 +12,7 @@ copyleft = "deny"
 allow-osi-fsf-free = "both"
 default = "deny"
 confidence-threshold = 0.9
+allow = ["Unicode-DFS-2016"]
 
 [bans]
 multiple-versions = "warn"
