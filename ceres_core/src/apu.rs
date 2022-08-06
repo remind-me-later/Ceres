@@ -312,9 +312,7 @@ impl Square1 {
         if val & 0xF8 == 0 {
             self.on = false;
             self.dac_on = false;
-        }
-
-        if val == 0x10 {
+        } else {
             self.dac_on = true;
         }
 
@@ -343,7 +341,8 @@ impl Square1 {
 
         if self.use_len && !old_len && self.p_half == 0 {
             self.step_len();
-            // println!("step enabled, len: {}", self.snd_len);
+            // println!("step enabled, len: {}",
+            // self.snd_len);
         }
 
         // trigger
@@ -540,9 +539,7 @@ impl Square2 {
         if val & 0xF8 == 0 {
             self.on = false;
             self.dac_on = false;
-        }
-
-        if val == 0x10 {
+        } else {
             self.dac_on = true;
         }
 
@@ -910,9 +907,7 @@ impl Noise {
         if val & 0xF8 == 0 {
             self.on = false;
             self.dac_on = false;
-        }
-
-        if val == 0x10 {
+        } else {
             self.dac_on = true;
         }
 
