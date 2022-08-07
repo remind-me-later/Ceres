@@ -1,6 +1,6 @@
 # Ceres
 
-![logo](./media/ceres.png)
+![logo](./media/ceres.webp)
 
 A (very experimental) GameBoy/Color emulator written in rust with a CLI frontend.
 
