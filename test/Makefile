@@ -12,7 +12,7 @@ bin/%.gb: %.asm
 	rgbfix -v -p 0 $@
 
 test: all
-	cd test_runner && cargo run --quiet && cd ..
+	cd test_runner && cargo run --quiet
 
 clean:
 	rm -rf bin

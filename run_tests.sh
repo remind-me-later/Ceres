@@ -1,3 +1,1 @@
-cd test
-make test
-cd ..
+cd test && make test
