@@ -1,4 +1,4 @@
-use crate::{Gb, IF_P1_B};
+use crate::{Audio, Gb, IF_P1_B};
 
 /// Represents a `GameBoy` physical button.
 #[derive(Clone, Copy)]
@@ -13,7 +13,7 @@ pub enum Button {
     Start  = 0x80,
 }
 
-impl Gb {
+impl<A: Audio> Gb<A> {
     /// Press the `button` button.
     pub fn press(&mut self, button: Button) {
         let b = button as u8;

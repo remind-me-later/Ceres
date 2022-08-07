@@ -1,6 +1,6 @@
 use {
     crate::{audio, video},
-    ceres_core::{Cartridge, Gb, Model, Sample},
+    ceres_core::{Cartridge, Gb, Model},
     sdl2::{
         controller::GameController,
         event::{Event, WindowEvent},
@@ -10,22 +10,18 @@ use {
     std::{
         fs::File,
         io::{Read, Write},
-        mem::MaybeUninit,
         path::{Path, PathBuf},
         time::Instant,
     },
 };
 
-static mut EMU: MaybeUninit<Emu> = MaybeUninit::uninit();
-
 pub struct Emu {
     sdl: Sdl,
     events: EventPump,
-    gb: Gb,
+    gb: Gb<audio::Renderer>,
     has_focus: bool,
     sav_path: PathBuf,
     video: video::Renderer,
-    audio: audio::Renderer,
     last_frame: Instant,
     quit: bool,
 }
@@ -35,7 +31,7 @@ impl Emu {
     ///
     /// Will panic on invalid rom or ram file
     #[must_use]
-    pub fn init(model: Model, mut path: PathBuf) -> &'static mut Self {
+    pub fn new(model: Model, mut path: PathBuf) -> Self {
         fn read_file_into(path: &Path) -> Result<Box<[u8]>, std::io::Error> {
             let mut f = File::open(path)?;
             let metadata = f.metadata().unwrap();
@@ -57,7 +53,8 @@ impl Emu {
 
         let video = video::Renderer::new(&sdl);
         let audio = audio::Renderer::new(&sdl);
-        let gb = Gb::new(model, apu_frame_callback, audio.sample_rate(), cart);
+        let sample_rate = audio.sample_rate();
+        let gb = Gb::new(model, audio, sample_rate, cart);
 
         let events = sdl.event_pump().unwrap();
 
@@ -68,37 +65,31 @@ impl Emu {
             has_focus: false,
             sav_path: path,
             video,
-            audio,
             last_frame: Instant::now(),
             quit: false,
         };
 
         let _controller = res.init_controller();
 
-        unsafe {
-            EMU.write(res);
-            EMU.assume_init_mut()
-        }
+        res
     }
 
     #[inline]
     pub fn run(&mut self) {
-        let emu = unsafe { EMU.assume_init_mut() };
-
         while !self.quit {
-            emu.handle_events();
+            self.handle_events();
 
             self.gb.run_frame();
 
-            let elapsed = emu.last_frame.elapsed();
+            let elapsed = self.last_frame.elapsed();
             if elapsed < ceres_core::FRAME_DUR {
                 std::thread::sleep(ceres_core::FRAME_DUR - elapsed);
-                emu.last_frame = Instant::now();
+                self.last_frame = Instant::now();
             }
 
             let rgba = self.gb.pixel_data();
 
-            emu.video.draw_frame(rgba);
+            self.video.draw_frame(rgba);
         }
 
         // save
@@ -218,10 +209,4 @@ impl Emu {
             }
         }
     }
-}
-
-#[inline]
-fn apu_frame_callback(l: Sample, r: Sample) {
-    let emu = unsafe { EMU.assume_init_mut() };
-    emu.audio.push_frame(l, r);
 }

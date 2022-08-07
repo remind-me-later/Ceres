@@ -105,7 +105,7 @@ fn main() {
     let rom_path = Some(PathBuf::from(cli.get_one::<String>("rom").unwrap()));
 
     if let Some(rom_path) = rom_path {
-        let emu = emu::Emu::init(model, rom_path);
+        let mut emu = emu::Emu::new(model, rom_path);
         emu.run();
     }
 }

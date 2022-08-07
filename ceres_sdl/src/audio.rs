@@ -66,3 +66,9 @@ impl Renderer {
         self.freq
     }
 }
+
+impl ceres_core::Audio for Renderer {
+    fn play(&mut self, l: Sample, r: Sample) {
+        self.push_frame(l, r);
+    }
+}

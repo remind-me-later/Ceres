@@ -14,7 +14,7 @@ fn main() {
         let path = path.unwrap().path();
         let rom = read_file_into(&path).unwrap();
         let cart = Cartridge::new(rom, None).unwrap();
-        let mut gb = Gb::new(Model::Cgb, |_, _| {}, 1, cart);
+        let mut gb = Gb::new(Model::Cgb, DummyAudio, 1, cart);
 
         while gb.test_running() {
             gb.run_frame();
@@ -36,4 +36,10 @@ fn read_file_into(path: &Path) -> Result<Box<[u8]>, std::io::Error> {
     let mut buf = vec![0; len as usize].into_boxed_slice();
     let _ = f.read(&mut buf).unwrap();
     Ok(buf)
+}
+
+pub struct DummyAudio;
+
+impl ceres_core::Audio for DummyAudio {
+    fn play(&mut self, _: ceres_core::Sample, _: ceres_core::Sample) {}
 }

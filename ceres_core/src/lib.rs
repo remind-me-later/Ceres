@@ -51,10 +51,9 @@
 extern crate std;
 
 extern crate alloc;
-extern crate std;
 
 pub use {
-    apu::Sample,
+    apu::{Audio, Sample},
     cartridge::{Cartridge, InitializationError},
     joypad::Button,
     ppu::{PX_HEIGHT, PX_WIDTH},
@@ -117,7 +116,7 @@ enum CompatMode {
 /// "graphical" callback every frame and an APU "audio"
 /// callback every sample. These callbacks are passed to
 /// the `new` function, which returns a `GameBoy` struct.
-pub struct Gb {
+pub struct Gb<A: Audio> {
     // general
     model: Model,
     compat_mode: CompatMode,
@@ -230,19 +229,14 @@ pub struct Gb {
     apu_timer: u16,
     apu_render_timer: u32,
     apu_ext_sample_period: u32,
-    apu_callback: Option<fn(Sample, Sample)>,
+    apu_renderer: A,
     apu_seq_step: u8,
 }
 
-impl Gb {
+impl<A: Audio> Gb<A> {
     #[allow(clippy::too_many_lines)]
     #[must_use]
-    pub fn new(
-        model: Model,
-        apu_callback: fn(Sample, Sample),
-        sample_rate: u32,
-        cart: Cartridge,
-    ) -> Self {
+    pub fn new(model: Model, apu_renderer: A, sample_rate: u32, cart: Cartridge) -> Self {
         // custom initilization
         let compat_mode = match model {
             Model::Dmg | Model::Mgb => CompatMode::Dmg,
@@ -337,18 +331,13 @@ impl Gb {
             apu_timer: Default::default(),
             apu_render_timer: Default::default(),
             apu_ext_sample_period: Default::default(),
-            apu_callback: Option::default(),
+            apu_renderer,
             apu_seq_step: Default::default(),
         };
 
         gb.set_sample_rate(sample_rate);
-        gb.set_apu_callback(apu_callback);
 
         gb
-    }
-
-    fn set_apu_callback(&mut self, apu_callback: fn(Sample, Sample)) {
-        self.apu_callback = Some(apu_callback);
     }
 
     fn set_sample_rate(&mut self, sample_rate: u32) {

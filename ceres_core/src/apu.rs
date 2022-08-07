@@ -16,7 +16,11 @@ const NOISE_MAX_LEN: u16 = 64;
 /// Audio sample type.
 pub type Sample = i16;
 
-impl Gb {
+pub trait Audio {
+    fn play(&mut self, l: Sample, r: Sample);
+}
+
+impl<A: Audio> Gb<A> {
     pub(crate) fn run_apu(&mut self, mut cycles: i32) {
         if !self.apu_on {
             return;
@@ -87,7 +91,7 @@ impl Gb {
         let l = (0xF - i16::from(l) * 2) * i16::from(self.apu_l_vol);
         let r = (0xF - i16::from(r) * 2) * i16::from(self.apu_r_vol);
 
-        (self.apu_callback.unwrap())(l, r);
+        self.apu_renderer.play(l, r);
     }
 
     fn reset(&mut self) {
@@ -143,17 +147,17 @@ impl Gb {
         }
     }
 
-    fn ch_out_iter(&self) -> ChOutIter {
+    fn ch_out_iter(&self) -> ChOutIter<A> {
         ChOutIter { i: 0, gb: self }
     }
 }
 
-struct ChOutIter<'a> {
+struct ChOutIter<'a, A: Audio> {
     i: u8,
-    gb: &'a Gb,
+    gb: &'a Gb<A>,
 }
 
-impl<'a> Iterator for ChOutIter<'a> {
+impl<'a, A: Audio> Iterator for ChOutIter<'a, A> {
     type Item = (u8, u8);
 
     fn next(&mut self) -> Option<Self::Item> {

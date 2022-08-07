@@ -1,4 +1,4 @@
-use crate::{ppu::Mode, CompatMode, Gb, Model::Cgb, KEY1_SWITCH_B};
+use crate::{ppu::Mode, Audio, CompatMode, Gb, Model::Cgb, KEY1_SWITCH_B};
 
 #[derive(PartialEq, Eq, Default)]
 pub enum HdmaState {
@@ -71,7 +71,7 @@ const HRAM_BEG: u8 = 0x80;
 const HRAM_END: u8 = 0xFE;
 const IE: u8 = 0xFF;
 
-impl Gb {
+impl<A: Audio> Gb<A> {
     #[inline]
     #[must_use]
     pub(crate) fn read_ram(&self, addr: u16) -> u8 {

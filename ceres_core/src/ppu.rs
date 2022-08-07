@@ -1,4 +1,4 @@
-use crate::{CompatMode, Gb, IF_LCD_B, IF_VBLANK_B};
+use crate::{Audio, CompatMode, Gb, IF_LCD_B, IF_VBLANK_B};
 
 /// `GameBoy` screen width in pixels.
 pub const PX_WIDTH: u8 = 160;
@@ -220,9 +220,9 @@ struct Obj {
     pub attr: u8,
 }
 
-impl Gb {
+impl<A: Audio> Gb<A> {
     pub(crate) fn run_ppu(&mut self, cycles: i32) {
-        fn check_lyc(gb: &mut Gb) {
+        fn check_lyc<A: Audio>(gb: &mut Gb<A>) {
             gb.stat &= !STAT_LYC_B;
 
             if gb.ly == gb.lyc {

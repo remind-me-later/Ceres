@@ -1,6 +1,6 @@
-use crate::{Gb, IF_TIMER_B};
+use crate::{Audio, Gb, IF_TIMER_B};
 
-impl Gb {
+impl<A: Audio> Gb<A> {
     pub(crate) fn advance_cycles(&mut self, mut cycles: i32) {
         // affected by speed boost
         self.run_timers(cycles);
