@@ -1,5 +1,5 @@
 [workspace]
-members = ["ceres_core", "ceres_sdl", "ceres_test_runner"]
+members = ["ceres_core", "ceres_sdl"]
 default-members = ["ceres_sdl"]
 
 [profile.release]

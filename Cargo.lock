@@ -36,13 +36,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ceres_test_runner"
-version = "0.1.0"
-dependencies = [
- "ceres_core",
-]
-
-[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
