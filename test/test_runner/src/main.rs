@@ -1,39 +1,34 @@
 use {
     ceres_core::{Gb, Model},
     std::{
-        env,
-        fs::File,
+        fs::{self, File},
         io::Read,
-        path::{Path, PathBuf},
-        process::ExitCode,
+        path::Path,
     },
 };
 
-fn main() -> ExitCode {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        println!("Invalid number of arguments.. ABORTING");
-        return ExitCode::FAILURE;
-    }
+fn main() {
+    let paths = fs::read_dir("../bin/").unwrap();
 
-    let path = &args[1];
+    for path in paths {
+        let path = path.unwrap().path();
 
-    let gb = Gb::new(Model::Cgb, |_, _| {}, 1);
+        let gb = Gb::new(Model::Cgb, |_, _| {}, 1);
 
-    read_file_into(&PathBuf::from(path), gb.cartridge_rom_mut()).unwrap();
+        read_file_into(&path, gb.cartridge_rom_mut()).unwrap();
 
-    gb.init().unwrap();
+        gb.init().unwrap();
 
-    while gb.test_running() {
-        gb.run_frame();
-    }
+        while gb.test_running() {
+            gb.run_frame();
+        }
 
-    if gb.get_test_result() == 0 {
-        println!("OK!");
-        ExitCode::SUCCESS
-    } else {
-        println!("FAILED!");
-        ExitCode::FAILURE
+        print!("{}:\t", path.to_string_lossy());
+        if gb.get_test_result() == 0 {
+            println!("OK");
+        } else {
+            println!("FAILED");
+        }
     }
 }
 

@@ -11,5 +11,8 @@ bin/%.gb: %.asm
 	rgblink -o $@ $@
 	rgbfix -v -p 0 $@
 
+test: all
+	cd test_runner && cargo run --quiet && cd ..
+
 clean:
 	rm -rf bin

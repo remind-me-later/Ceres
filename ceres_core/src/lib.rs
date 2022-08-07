@@ -259,6 +259,13 @@ impl Gb {
             Model::Cgb => CGB_BOOTROM,
         });
 
+        gb.af = 0;
+        gb.bc = 0;
+        gb.de = 0;
+        gb.hl = 0;
+        gb.sp = 0;
+        gb.pc = 0;
+
         gb.svbk_true = 1;
         gb.ppu_cycles = Mode::HBlank.cycles(0);
 
