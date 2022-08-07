@@ -1,4 +1,4 @@
-cd ceres_test
+cd ceres_test_runner
 FILES="../tests/*"
 for f in $FILES
 do

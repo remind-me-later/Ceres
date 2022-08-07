@@ -5,7 +5,7 @@
 #![no_std]
 #![feature(const_maybe_uninit_zeroed)]
 #![warn(
-    unsafe_code,
+    // unsafe_code,
     clippy::as_underscore,
     clippy::clone_on_ref_ptr,
     clippy::decimal_literal_representation,
