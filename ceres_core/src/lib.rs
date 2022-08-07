@@ -4,8 +4,8 @@
 
 #![no_std]
 #![feature(const_maybe_uninit_zeroed)]
+#![forbid(unsafe_code)]
 #![warn(
-    unsafe_code,
     clippy::as_underscore,
     clippy::clone_on_ref_ptr,
     clippy::decimal_literal_representation,
@@ -229,15 +229,14 @@ pub struct Gb<A: Audio> {
     apu_timer: u16,
     apu_render_timer: u32,
     apu_ext_sample_period: u32,
-    apu_renderer: A,
+    audio: A,
     apu_seq_step: u8,
 }
 
 impl<A: Audio> Gb<A> {
     #[allow(clippy::too_many_lines)]
     #[must_use]
-    pub fn new(model: Model, apu_renderer: A, sample_rate: u32, cart: Cartridge) -> Self {
-        // custom initilization
+    pub fn new(model: Model, audio: A, sample_rate: u32, cart: Cartridge) -> Self {
         let compat_mode = match model {
             Model::Dmg | Model::Mgb => CompatMode::Dmg,
             Model::Cgb => CompatMode::Cgb,
@@ -252,11 +251,24 @@ impl<A: Audio> Gb<A> {
         let mut gb = Self {
             model,
             compat_mode,
+            cart,
+            boot_rom,
+            audio,
+
+            // Custom
+            svbk_true: 1,
+            ppu_cycles: Mode::HBlank.cycles(0),
+
+            // Slices
+            wram: [0; WRAM_SIZE_CGB],
+            hram: [0; HRAM_SIZE],
+            vram: [0; VRAM_SIZE_CGB],
+            oam: [0; OAM_SIZE],
+
+            // Default
             running_frame: Default::default(),
             double_speed: Default::default(),
             key1: Default::default(),
-            cart,
-            boot_rom,
             af: Default::default(),
             bc: Default::default(),
             de: Default::default(),
@@ -275,10 +287,7 @@ impl<A: Audio> Gb<A> {
             ime: Default::default(),
             ifr: Default::default(),
             ie: Default::default(),
-            wram: [0; WRAM_SIZE_CGB],
-            hram: [0; HRAM_SIZE],
             svbk: Default::default(),
-            svbk_true: 1,
             dma: Default::default(),
             dma_on: Default::default(),
             dma_addr: Default::default(),
@@ -306,10 +315,7 @@ impl<A: Audio> Gb<A> {
             ocp: ColorPalette::default(),
             frame_dots: Default::default(),
             lcdc_delay: Default::default(),
-            vram: [0; VRAM_SIZE_CGB],
-            oam: [0; OAM_SIZE],
             rgba_buf: RgbaBuf::default(),
-            ppu_cycles: Mode::HBlank.cycles(0),
             ppu_win_in_frame: Default::default(),
             ppu_win_in_ly: Default::default(),
             ppu_win_skipped: Default::default(),
@@ -331,7 +337,6 @@ impl<A: Audio> Gb<A> {
             apu_timer: Default::default(),
             apu_render_timer: Default::default(),
             apu_ext_sample_period: Default::default(),
-            apu_renderer,
             apu_seq_step: Default::default(),
         };
 

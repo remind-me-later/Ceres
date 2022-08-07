@@ -91,7 +91,7 @@ impl<A: Audio> Gb<A> {
         let l = (0xF - i16::from(l) * 2) * i16::from(self.apu_l_vol);
         let r = (0xF - i16::from(r) * 2) * i16::from(self.apu_r_vol);
 
-        self.apu_renderer.play(l, r);
+        self.audio.play(l, r);
     }
 
     fn reset(&mut self) {
