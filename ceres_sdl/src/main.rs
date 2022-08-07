@@ -42,7 +42,8 @@
 
 use {
     ceres_core::Model,
-    clap::{arg, builder::PossibleValuesParser},
+    clap::{builder::PossibleValuesParser, Arg},
+    const_format::formatcp,
     std::path::PathBuf,
 };
 
@@ -50,14 +51,42 @@ mod audio;
 mod emu;
 mod video;
 
-const CERES_STR: &str = "Ceres";
+const CERES_BIN: &str = "ceres";
+const CERES_STYLIZED: &str = "Ceres";
+const GB_STYLIZED: &str = "Game Boy";
+const GBC_STYLIZED: &str = formatcp!("{GB_STYLIZED}/Color");
+const ABOUT: &str = formatcp!("A (very experimental) {GBC_STYLIZED} emulator.");
+const AFTER_HELP: &str = formatcp!(
+    "KEY BINDINGS:
+
+    | Gameboy | Emulator  |
+    | ------- | --------- |
+    | Dpad    | WASD      |
+    | A       | K         |
+    | B       | L         |
+    | Start   | Return    |
+    | Select  | Backspace |"
+);
 
 fn main() {
-    let cli = clap::Command::new("ceres")
-        .bin_name("ceres")
-        .arg(arg!([rom] "rom to emulate"))
+    let cli = clap::Command::new(CERES_BIN)
+        .bin_name(CERES_BIN)
+        .about(ABOUT)
+        .after_help(AFTER_HELP)
         .arg(
-            arg!(-m --model <MODEL> "GB model to emulate")
+            Arg::new("rom")
+                .help("{GBC_STYLIZED} rom to emulate.")
+                .long_help(formatcp!(
+                    "{GBC_STYLIZED} rom to emulate. Extension doesn't matter, the emulator will \
+                     check the file is a valid {GB_STYLIZED} ROM reading it's header. Doesn't \
+                     accept compressed (zip) files."
+                )),
+        )
+        .arg(
+            Arg::new("model")
+                .short('m')
+                .long("model")
+                .help(formatcp!("{GB_STYLIZED} model to emulate"))
                 .value_parser(PossibleValuesParser::new(["dmg", "mgb", "cgb"]))
                 .default_value("cgb")
                 .required(false),

@@ -1,4 +1,5 @@
 use {
+    crate::CERES_STYLIZED,
     glow::{Context, HasContext, NativeProgram, NativeTexture, NativeVertexArray, UniformLocation},
     sdl2::{
         video::{FullscreenType, GLContext, SwapInterval, Window},
@@ -41,7 +42,7 @@ impl Renderer {
             }
 
             let mut win = video
-                .window(crate::CERES_STR, PX_WIDTH * MUL, PX_HEIGHT * MUL)
+                .window(CERES_STYLIZED, PX_WIDTH * MUL, PX_HEIGHT * MUL)
                 .opengl()
                 .position_centered()
                 .resizable()
