@@ -1,10 +1,6 @@
 # Ceres
 
-GameBoy/Color emulator written in rust with a CLI frontend.
-
-## Compatibility
-
-Passes all of [blargg's test ROMs](https://gbdev.gg8.se/wiki/articles/Test_ROMs#Blargg.27s_tests) and many of [mooneye-gb](https://github.com/Gekkio/mooneye-gb) tests, so compatibility should be pretty high.
+A (very experimental) GameBoy/Color emulator written in rust with a CLI frontend.
 
 ## Build
 
@@ -13,10 +9,12 @@ To build the [SameBoy](https://github.com/LIJI32/SameBoy) bootroms is necessary 
 ## Run
 
 To run a given `rom.gb` just type `cargo run rom.gb`.
+To see usage of the program: `cargo run -- --help`.
 
 ## Platforms
 
-The project is developed in Linux but all graphics and sound libraries are cross compatible with all major operating systems so it should be easy to build for them, although it's not tested.
+We use SDL and OpenGL so the emulator should be compatible with almost anything,
+with maybe a bit of massaging :)
 
 ## Keys
 
@@ -28,17 +26,22 @@ The project is developed in Linux but all graphics and sound libraries are cross
 | Start   | Return    |
 | Select  | Backspace |
 
-## Documentation used
+## Thanks
+
+### Documentation
 
 - [Pan Docs](https://gbdev.io/pandocs/)
 - [Gameboy Development Wiki](https://gbdev.gg8.se/wiki/articles/Main_Page)
 - [Gameboy Bootstrap ROM](https://gbdev.gg8.se/wiki/articles/Gameboy_Bootstrap_ROM#Contents_of_the_ROM)
 
-## Thanks
+### Tests
+
+- [Game Boy Test Roms](https://github.com/c-sp/gameboy-test-roms)
+
+### Reference
 
 - [retrio/gb](https://github.com/retrio/gb)
 - [Mooneye GB](https://github.com/Gekkio/mooneye-gb)
 - [GoBoy](https://github.com/Humpheh/goboy)
 - [Gameboy Emulator in C# 8](https://github.com/DaveTCode/gameboy-emulator-dotnet)
 - [SameBoy](https://github.com/LIJI32/SameBoy)
-- [Game Boy Test Roms](https://github.com/c-sp/gameboy-test-roms)
