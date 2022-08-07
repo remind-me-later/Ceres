@@ -5,7 +5,7 @@
 #![no_std]
 #![feature(const_maybe_uninit_zeroed)]
 #![warn(
-    // unsafe_code,
+    unsafe_code,
     clippy::as_underscore,
     clippy::clone_on_ref_ptr,
     clippy::decimal_literal_representation,
@@ -50,18 +50,18 @@
 #[cfg(feature = "disassembler")]
 extern crate std;
 
+extern crate alloc;
 extern crate std;
 
 pub use {
     apu::Sample,
-    cartridge::InitializationError,
+    cartridge::{Cartridge, InitializationError},
     joypad::Button,
     ppu::{PX_HEIGHT, PX_WIDTH},
 };
 use {
     apu::{Noise, Square1, Square2, Wave},
-    cartridge::Cartridge,
-    core::{mem::MaybeUninit, time::Duration},
+    core::time::Duration,
     memory::HdmaState,
     ppu::{ColorPalette, Mode, RgbaBuf, OAM_SIZE, VRAM_SIZE_CGB},
 };
@@ -111,8 +111,6 @@ enum CompatMode {
     Compat,
     Cgb,
 }
-
-pub static mut GAME_BOY: MaybeUninit<Gb> = MaybeUninit::zeroed();
 
 /// The ``GameBoy`` struct is the main struct in the
 /// library. The `run` method never returns and calls a PPU
@@ -237,62 +235,116 @@ pub struct Gb {
 }
 
 impl Gb {
+    #[allow(clippy::too_many_lines)]
     #[must_use]
     pub fn new(
         model: Model,
         apu_callback: fn(Sample, Sample),
         sample_rate: u32,
-    ) -> &'static mut Self {
-        let mut gb = unsafe { GAME_BOY.assume_init_mut() };
-
+        cart: Cartridge,
+    ) -> Self {
         // custom initilization
-        gb.model = model;
-
-        gb.compat_mode = match model {
+        let compat_mode = match model {
             Model::Dmg | Model::Mgb => CompatMode::Dmg,
             Model::Cgb => CompatMode::Cgb,
         };
 
-        gb.boot_rom = Some(match model {
+        let boot_rom = Some(match model {
             Model::Dmg => DMG_BOOTROM,
             Model::Mgb => MGB_BOOTROM,
             Model::Cgb => CGB_BOOTROM,
         });
 
-        gb.af = 0;
-        gb.bc = 0;
-        gb.de = 0;
-        gb.hl = 0;
-        gb.sp = 0;
-        gb.pc = 0;
+        let mut gb = Self {
+            model,
+            compat_mode,
+            running_frame: Default::default(),
+            double_speed: Default::default(),
+            key1: Default::default(),
+            cart,
+            boot_rom,
+            af: Default::default(),
+            bc: Default::default(),
+            de: Default::default(),
+            hl: Default::default(),
+            sp: Default::default(),
+            pc: Default::default(),
+            stolen_cycles: Default::default(),
+            cpu_ei_delay: Default::default(),
+            cpu_halted: Default::default(),
+            sb: Default::default(),
+            sc: Default::default(),
+            p1_btn: Default::default(),
+            p1_dirs: Default::default(),
+            p1_acts: Default::default(),
+            halt_bug: Default::default(),
+            ime: Default::default(),
+            ifr: Default::default(),
+            ie: Default::default(),
+            wram: [0; WRAM_SIZE_CGB],
+            hram: [0; HRAM_SIZE],
+            svbk: Default::default(),
+            svbk_true: 1,
+            dma: Default::default(),
+            dma_on: Default::default(),
+            dma_addr: Default::default(),
+            dma_restarting: Default::default(),
+            dma_cycles: Default::default(),
+            hdma5: Default::default(),
+            hdma_src: Default::default(),
+            hdma_dst: Default::default(),
+            hdma_len: Default::default(),
+            hdma_state: HdmaState::default(),
+            lcdc: Default::default(),
+            stat: Default::default(),
+            scy: Default::default(),
+            scx: Default::default(),
+            ly: Default::default(),
+            lyc: Default::default(),
+            bgp: Default::default(),
+            obp0: Default::default(),
+            obp1: Default::default(),
+            wy: Default::default(),
+            wx: Default::default(),
+            opri: Default::default(),
+            vbk: Default::default(),
+            bcp: ColorPalette::default(),
+            ocp: ColorPalette::default(),
+            frame_dots: Default::default(),
+            lcdc_delay: Default::default(),
+            vram: [0; VRAM_SIZE_CGB],
+            oam: [0; OAM_SIZE],
+            rgba_buf: RgbaBuf::default(),
+            ppu_cycles: Mode::HBlank.cycles(0),
+            ppu_win_in_frame: Default::default(),
+            ppu_win_in_ly: Default::default(),
+            ppu_win_skipped: Default::default(),
+            tima: Default::default(),
+            tma: Default::default(),
+            tac: Default::default(),
+            tac_enable: Default::default(),
+            system_clk: Default::default(),
+            nr51: Default::default(),
+            apu_on: Default::default(),
+            apu_r_vol: Default::default(),
+            apu_l_vol: Default::default(),
+            apu_r_vin: Default::default(),
+            apu_l_vin: Default::default(),
+            apu_ch1: Square1::default(),
+            apu_ch2: Square2::default(),
+            apu_ch3: Wave::default(),
+            apu_ch4: Noise::default(),
+            apu_timer: Default::default(),
+            apu_render_timer: Default::default(),
+            apu_ext_sample_period: Default::default(),
+            apu_callback: Option::default(),
+            apu_seq_step: Default::default(),
+        };
 
-        gb.svbk_true = 1;
-        gb.ppu_cycles = Mode::HBlank.cycles(0);
-
-        gb.set_apu_callback(apu_callback);
         gb.set_sample_rate(sample_rate);
-
-        // Default like
-        gb.rgba_buf = RgbaBuf::default();
-        gb.bcp = ColorPalette::default();
-        gb.ocp = ColorPalette::default();
-        gb.apu_ch1 = Square1::default();
-        gb.apu_ch2 = Square2::default();
-        gb.apu_ch3 = Wave::default();
-        gb.apu_ch4 = Noise::default();
-        gb.hdma_state = HdmaState::default();
+        gb.set_apu_callback(apu_callback);
 
         gb
-    }
-
-    /// # Errors
-    ///
-    /// Will return `Err` if the ROM header contains some
-    /// unsupported MBC value. This can happen if the ROM is
-    /// corrupt, has not been initialized or we simply don't
-    /// support its MBC yet.
-    pub fn init(&mut self) -> Result<(), InitializationError> {
-        self.cart.init()
     }
 
     fn set_apu_callback(&mut self, apu_callback: fn(Sample, Sample)) {
@@ -316,6 +368,11 @@ impl Gb {
     }
 
     #[must_use]
+    pub fn cartridge_ram(&self) -> &[u8] {
+        self.cart.ram()
+    }
+
+    #[must_use]
     pub fn pixel_data(&self) -> &[u8] {
         self.rgba_buf.pixel_data()
     }
@@ -325,30 +382,6 @@ impl Gb {
     #[must_use]
     pub fn cartridge_has_battery(&self) -> bool {
         self.cart.has_battery()
-    }
-
-    /// Returns reference to static RAM slice.
-    #[must_use]
-    pub fn cartridge_ram(&self) -> &[u8] {
-        self.cart.ram()
-    }
-
-    /// Returns mutable reference to static RAM slice.
-    ///
-    /// Modifying the RAM contents while the Gb is running
-    /// could lead to undesirable results.
-    #[must_use]
-    pub fn cartridge_ram_mut(&mut self) -> &mut [u8] {
-        self.cart.mut_ram()
-    }
-
-    /// Returns mutable reference to static ROM slice.
-    ///
-    /// Modifying the ROM contents while the Gb is running
-    /// could lead to undesirable results.
-    #[must_use]
-    pub fn cartridge_rom_mut(&mut self) -> &mut [u8] {
-        self.cart.mut_rom()
     }
 
     // This is used for the test suite

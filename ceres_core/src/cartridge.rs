@@ -1,13 +1,13 @@
-use Mbc::{Mbc1, Mbc2, Mbc3, Mbc5, None};
+use {
+    alloc::{boxed::Box, vec::Vec},
+    Mbc::{Mbc1, Mbc2, Mbc3, Mbc5, None},
+};
 
 const ROM_BANK_SIZE: usize = 0x4000;
 const RAM_BANK_SIZE: usize = 0x2000;
 
-const ROM_SIZE: usize = ROMSize::Mb8.size_bytes();
-const RAM_SIZE: usize = RAMSize::Kb128.total_size_in_bytes();
-
-type Rom = [u8; ROM_SIZE];
-type Ram = [u8; RAM_SIZE];
+type Rom = Box<[u8]>;
+type Ram = Box<[u8]>;
 
 enum Mbc {
     None,
@@ -52,11 +52,10 @@ pub struct Cartridge {
 }
 
 impl Cartridge {
-    pub fn init(&mut self) -> Result<(), InitializationError> {
-        let rom = &mut self.rom;
-
-        let rom_size = ROMSize::new(rom)?;
-        let ram_size = RAMSize::new(rom)?;
+    /// # Errors
+    pub fn new(rom: Rom, ram: Option<Ram>) -> Result<Self, InitializationError> {
+        let rom_size = ROMSize::new(&rom)?;
+        let ram_size = RAMSize::new(&rom)?;
         let mbc30 = ram_size.num_banks() >= 8;
         let rom_bank_mask = rom_size.bank_bit_mask();
         let has_ram = ram_size != RAMSize::None;
@@ -74,20 +73,34 @@ impl Cartridge {
             _ => return Err(InitializationError::UnsupportedMBC),
         };
 
-        let rom_offsets = (0x0000, 0x4000);
-        let ram_offset = 0;
+        let ram = if let Some(ram) = ram {
+            ram
+        } else {
+            Vec::with_capacity(ram_size.size_in_bytes()).into_boxed_slice()
+        };
 
-        self.mbc = mbc;
-        self.has_battery = has_battery;
-        self.has_ram = has_ram;
-        self.rom_offsets = rom_offsets;
-        self.ram_offset = ram_offset;
-        self.mbc30 = mbc30;
+        Ok(Self {
+            mbc,
+            rom,
+            ram,
+            rom_bank_lo: 1,
+            rom_bank_hi: 0,
+            rom_offsets: (0x0000, 0x4000),
+            rom_bank_mask,
+            ram_enabled: false,
+            ram_bank: 0,
+            ram_offset: 0,
+            mbc1_bank_mode: false,
+            has_battery,
+            has_ram,
+            mbc30,
+            mbc1_multicart: false,
+        })
+    }
 
-        self.rom_bank_lo = 1;
-        self.rom_bank_mask = rom_bank_mask;
-
-        Ok(())
+    #[must_use]
+    pub fn ram(&self) -> &[u8] {
+        &self.ram
     }
 
     #[must_use]
@@ -267,21 +280,6 @@ impl Cartridge {
             },
         }
     }
-
-    #[must_use]
-    pub fn ram(&self) -> &[u8] {
-        &self.ram
-    }
-
-    #[must_use]
-    pub fn mut_ram(&mut self) -> &mut [u8] {
-        &mut self.ram
-    }
-
-    #[must_use]
-    pub fn mut_rom(&mut self) -> &mut [u8] {
-        &mut self.rom
-    }
 }
 
 #[derive(PartialEq, Eq)]
@@ -298,7 +296,7 @@ enum ROMSize {
 }
 
 impl ROMSize {
-    const fn new(rom: &Rom) -> Result<Self, InitializationError> {
+    fn new(rom: &Rom) -> Result<Self, InitializationError> {
         use ROMSize::{Kb128, Kb256, Kb32, Kb512, Kb64, Mb1, Mb2, Mb4, Mb8};
         let rom_size_byte = rom[0x148];
         let rom_size = match rom_size_byte {
@@ -317,6 +315,7 @@ impl ROMSize {
         Ok(rom_size)
     }
 
+    #[allow(dead_code)]
     // total size in  bytes
     const fn size_bytes(self) -> usize {
         let kib_32 = 1 << 15;
@@ -355,7 +354,7 @@ impl RAMSize {
         Ok(ram_size)
     }
 
-    const fn total_size_in_bytes(self) -> usize {
+    const fn size_in_bytes(self) -> usize {
         self.num_banks() as usize * self.bank_size_in_bytes() as usize
     }
 

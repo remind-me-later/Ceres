@@ -1,6 +1,6 @@
 use {
     crate::{audio, video},
-    ceres_core::{Gb, Model, Sample},
+    ceres_core::{Cartridge, Gb, Model, Sample},
     sdl2::{
         controller::GameController,
         event::{Event, WindowEvent},
@@ -18,10 +18,10 @@ use {
 
 static mut EMU: MaybeUninit<Emu> = MaybeUninit::uninit();
 
-pub struct Emu<'a> {
+pub struct Emu {
     sdl: Sdl,
     events: EventPump,
-    gb: &'a mut Gb,
+    gb: Gb,
     has_focus: bool,
     sav_path: PathBuf,
     video: video::Renderer,
@@ -30,42 +30,43 @@ pub struct Emu<'a> {
     quit: bool,
 }
 
-impl<'a> Emu<'a> {
+impl Emu {
     /// # Panics
     ///
     /// Will panic on invalid rom or ram file
     #[must_use]
-    pub fn init(model: Model, mut rom_path: PathBuf) -> &'static mut Self {
-        fn read_file_into(path: &Path, buf: &mut [u8]) -> Result<(), std::io::Error> {
+    pub fn init(model: Model, mut path: PathBuf) -> &'static mut Self {
+        fn read_file_into(path: &Path) -> Result<Box<[u8]>, std::io::Error> {
             let mut f = File::open(path)?;
-            let _ = f.read(buf).unwrap();
-            Ok(())
+            let metadata = f.metadata().unwrap();
+            let len = metadata.len();
+            let mut buf = vec![0; len as usize].into_boxed_slice();
+            let _ = f.read(&mut buf).unwrap();
+            Ok(buf)
         }
 
         let sdl = sdl2::init().unwrap();
 
-        let audio = audio::Renderer::new(&sdl);
-        let gb = Gb::new(model, apu_frame_callback, audio.sample_rate());
-
         // initialize cartridge
-        read_file_into(&rom_path, gb.cartridge_rom_mut()).unwrap();
+        let rom = read_file_into(&path).unwrap();
 
-        rom_path.set_extension("sav");
-        let sav_path = rom_path;
+        path.set_extension("sav");
+        let ram = read_file_into(&path).ok();
 
-        read_file_into(&sav_path, gb.cartridge_ram_mut()).ok();
+        let cart = Cartridge::new(rom, ram).unwrap();
 
         let video = video::Renderer::new(&sdl);
-        let events = sdl.event_pump().unwrap();
+        let audio = audio::Renderer::new(&sdl);
+        let gb = Gb::new(model, apu_frame_callback, audio.sample_rate(), cart);
 
-        gb.init().unwrap();
+        let events = sdl.event_pump().unwrap();
 
         let res = Self {
             sdl,
             events,
             gb,
             has_focus: false,
-            sav_path,
+            sav_path: path,
             video,
             audio,
             last_frame: Instant::now(),

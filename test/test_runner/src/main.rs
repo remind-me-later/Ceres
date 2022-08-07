@@ -1,5 +1,5 @@
 use {
-    ceres_core::{Gb, Model},
+    ceres_core::{Cartridge, Gb, Model},
     std::{
         fs::{self, File},
         io::Read,
@@ -12,12 +12,9 @@ fn main() {
 
     for path in paths {
         let path = path.unwrap().path();
-
-        let gb = Gb::new(Model::Cgb, |_, _| {}, 1);
-
-        read_file_into(&path, gb.cartridge_rom_mut()).unwrap();
-
-        gb.init().unwrap();
+        let rom = read_file_into(&path).unwrap();
+        let cart = Cartridge::new(rom, None).unwrap();
+        let mut gb = Gb::new(Model::Cgb, |_, _| {}, 1, cart);
 
         while gb.test_running() {
             gb.run_frame();
@@ -32,8 +29,11 @@ fn main() {
     }
 }
 
-fn read_file_into(path: &Path, buf: &mut [u8]) -> Result<(), std::io::Error> {
+fn read_file_into(path: &Path) -> Result<Box<[u8]>, std::io::Error> {
     let mut f = File::open(path)?;
-    let _ = f.read(buf).unwrap();
-    Ok(())
+    let metadata = f.metadata().unwrap();
+    let len = metadata.len();
+    let mut buf = vec![0; len as usize].into_boxed_slice();
+    let _ = f.read(&mut buf).unwrap();
+    Ok(buf)
 }
