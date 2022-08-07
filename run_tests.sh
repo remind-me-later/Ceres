@@ -1,17 +1,13 @@
-cd test/test_runner
-FILES="../*.asm"
+cd test
+make
+
+cd test_runner
+
+FILES="../bin/*.gb"
 
 for f in $FILES; do
-	cp $f test.asm
-	rgbasm test.asm -o obj.o
-	rgblink obj.o -o obj.gb
-	rgbfix -v -p 0 obj.gb
 	echo -n "Running $f... "
-	cargo run --quiet obj.gb
+	cargo run --quiet $f
 done
-
-rm test.asm
-rm obj.o
-rm obj.gb
 
 cd ../..
