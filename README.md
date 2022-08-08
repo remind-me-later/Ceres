@@ -2,11 +2,20 @@
 
 ![logo](./images/ceres.webp)
 
-A (very experimental) GameBoy/Color emulator written in rust with a CLI frontend.
+A (very experimental) GameBoy/Color emulator written in rust.
 
 ## Build
 
-To build the [SameBoy](https://github.com/LIJI32/SameBoy) bootroms is necessary a C compiler as well as the [RGBDS](https://rgbds.gbdev.io/) toolchain. To build them run `make` in the `ceres_core/bootroms` directory. After that `cargo build` to build. [The nightly version of the Rust compiler is needed](https://www.oreilly.com/library/view/rust-programming-by/9781788390637/e07dc768-de29-482e-804b-0274b4bef418.xhtml).
+### Required
+
+- A C compiler
+- [RGBDS toolchain](https://rgbds.gbdev.io/)
+- [Nightly Rust compiler](https://rust-lang.github.io/rustup/concepts/channels.html).
+
+### Steps
+
+1. Build the bootroms: `cd ceres_core/bootroms && make && cd ../../`
+2. Build the emulator: `cargo build`
 
 ## Run
 
@@ -16,7 +25,7 @@ To see usage of the program: `cargo run -- --help`.
 ## Platforms
 
 We use SDL and OpenGL so the emulator should be compatible with almost anything,
-with maybe a bit of massaging :)
+with maybe a bit of massaging.
 
 ## Keys
 
