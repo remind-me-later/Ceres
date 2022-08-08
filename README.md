@@ -15,12 +15,12 @@ A (very experimental) GameBoy/Color emulator written in rust.
 ### Steps
 
 1. Build the bootroms: `cd ceres_core/bootroms && make && cd ../../`
-2. Build the emulator: `cargo build`
+2. Build the emulator: `cargo build --relase`
 
 ## Run
 
-To run a given `rom.gb` just type `cargo run rom.gb`.
-To see usage of the program: `cargo run -- --help`.
+To run a given `rom.gb` just type `cargo run --release rom.gb`.
+To see usage of the program: `cargo run --release -- --help`.
 
 ## Platforms
 
