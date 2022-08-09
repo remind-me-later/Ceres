@@ -2,6 +2,10 @@
 members = ["ceres_core", "ceres_sdl", "test/test_runner"]
 default-members = ["ceres_sdl"]
 
+[profile.dev]
+opt-level = 2
+debug = 0
+
 [profile.release]
 opt-level = 3
 strip = true
