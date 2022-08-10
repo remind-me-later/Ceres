@@ -43,7 +43,7 @@
 
 use {
     ceres_core::Model,
-    clap::{builder::PossibleValuesParser, Arg},
+    clap::{builder::PossibleValuesParser, Arg, Command},
     const_format::formatcp,
     std::path::PathBuf,
 };
@@ -70,17 +70,18 @@ const AFTER_HELP: &str = formatcp!(
 );
 
 fn main() {
-    let cli = clap::Command::new(CERES_BIN)
+    let args = Command::new(CERES_BIN)
         .bin_name(CERES_BIN)
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .arg(
-            Arg::new("rom")
-                .help("{GBC_STYLIZED} rom to emulate.")
+            Arg::new("file")
+                .required(true)
+                .help("{GBC_STYLIZED} ROM file to emulate.")
                 .long_help(formatcp!(
-                    "{GBC_STYLIZED} rom to emulate. Extension doesn't matter, the emulator will \
-                     check the file is a valid {GB_STYLIZED} ROM reading it's header. Doesn't \
-                     accept compressed (zip) files."
+                    "{GBC_STYLIZED} ROM file to emulate. Extension doesn't matter, the emulator \
+                     will check the file is a valid {GB_STYLIZED} ROM reading it's header. \
+                     Doesn't accept compressed (zip) files."
                 )),
         )
         .arg(
@@ -94,7 +95,7 @@ fn main() {
         )
         .get_matches();
 
-    let model_str = cli.get_one::<String>("model").unwrap();
+    let model_str = args.get_one::<String>("model").unwrap();
     let model = match model_str.as_str() {
         "dmg" => Model::Dmg,
         "mgb" => Model::Mgb,
@@ -102,10 +103,7 @@ fn main() {
         _ => unreachable!(),
     };
 
-    let rom_path = Some(PathBuf::from(cli.get_one::<String>("rom").unwrap()));
-
-    if let Some(rom_path) = rom_path {
-        let mut emu = emu::Emu::new(model, rom_path);
-        emu.run();
-    }
+    let path = PathBuf::from(args.get_one::<String>("file").unwrap());
+    let mut emu = emu::Emu::new(model, path);
+    emu.run();
 }

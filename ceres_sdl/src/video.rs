@@ -2,10 +2,10 @@ use {
     crate::CERES_STYLIZED,
     glow::{Context, HasContext, NativeProgram, NativeTexture, NativeVertexArray, UniformLocation},
     sdl2::{
-        video::{FullscreenType, GLContext, SwapInterval, Window},
-        Sdl, VideoSubsystem,
+        video::{FullscreenType, GLContext, Window},
+        Sdl,
     },
-    std::{cmp::min, mem::ManuallyDrop},
+    std::cmp::min,
 };
 
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
@@ -22,24 +22,19 @@ pub struct Renderer {
 
     // SDL
     win: Window,
-    video: ManuallyDrop<VideoSubsystem>,
-    ctx: ManuallyDrop<GLContext>,
+    _ctx: GLContext,
 }
 
 impl Renderer {
     pub fn new(sdl: &Sdl) -> Self {
         unsafe {
-            let video = ManuallyDrop::new(sdl.video().unwrap());
+            let video = sdl.video().unwrap();
 
             let gl_attr = video.gl_attr();
             gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
             gl_attr.set_context_version(4, 6);
             gl_attr.set_depth_size(0);
             gl_attr.set_context_flags().forward_compatible().set();
-
-            if !cfg!(debug_assertions) {
-                gl_attr.set_context_no_error(true);
-            }
 
             let mut win = video
                 .window(CERES_STYLIZED, PX_WIDTH * MUL, PX_HEIGHT * MUL)
@@ -50,9 +45,8 @@ impl Renderer {
                 .unwrap();
             win.set_minimum_size(PX_WIDTH, PX_HEIGHT).unwrap();
 
-            let ctx = ManuallyDrop::new(win.gl_create_context().unwrap());
+            let ctx = win.gl_create_context().unwrap();
             win.gl_make_current(&ctx).unwrap();
-            video.gl_set_swap_interval(SwapInterval::VSync).unwrap();
 
             let gl = glow::Context::from_loader_function(|s| video.gl_get_proc_address(s).cast());
 
@@ -122,8 +116,7 @@ impl Renderer {
                 texture,
                 uniform_loc,
                 win,
-                video,
-                ctx,
+                _ctx: ctx,
             };
 
             res.resize(PX_WIDTH * MUL, PX_HEIGHT * MUL);
@@ -159,20 +152,20 @@ impl Renderer {
         }
     }
 
-    pub fn draw_frame(&mut self, rgba: &[u8]) {
+    pub fn draw_frame(&mut self, rgb: &[u8]) {
         unsafe {
             // TODO: texture streaming
             self.gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
             self.gl.tex_image_2d(
                 glow::TEXTURE_2D,
                 0,
-                glow::RGBA as i32,
+                glow::RGB as i32,
                 PX_WIDTH as i32,
                 PX_HEIGHT as i32,
                 0,
-                glow::RGBA,
+                glow::RGB,
                 glow::UNSIGNED_BYTE,
-                Some(rgba),
+                Some(rgb),
             );
 
             self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
@@ -183,14 +176,5 @@ impl Renderer {
         }
 
         self.win.gl_swap_window();
-    }
-}
-
-impl Drop for Renderer {
-    fn drop(&mut self) {
-        unsafe {
-            ManuallyDrop::drop(&mut self.ctx);
-            ManuallyDrop::drop(&mut self.video);
-        }
     }
 }

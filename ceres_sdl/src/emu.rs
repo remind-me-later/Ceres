@@ -7,6 +7,7 @@ use {
         keyboard::Scancode,
         EventPump, Sdl,
     },
+    spin_sleep::sleep,
     std::{
         fs::File,
         io::{Read, Write},
@@ -78,18 +79,14 @@ impl Emu {
     pub fn run(&mut self) {
         while !self.quit {
             self.handle_events();
-
             self.gb.run_frame();
+            self.video.draw_frame(self.gb.pixel_data_rgb());
 
             let elapsed = self.last_frame.elapsed();
             if elapsed < ceres_core::FRAME_DUR {
-                std::thread::sleep(ceres_core::FRAME_DUR - elapsed);
+                sleep(ceres_core::FRAME_DUR - elapsed);
                 self.last_frame = Instant::now();
             }
-
-            let rgba = self.gb.pixel_data();
-
-            self.video.draw_frame(rgba);
         }
 
         // save

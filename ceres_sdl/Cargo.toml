@@ -11,3 +11,4 @@ glow = "*"
 clap = { version = "*", default-features = false, features = ["std"] }
 sdl2 = "*"
 const_format = "*"
+spin_sleep = "*"

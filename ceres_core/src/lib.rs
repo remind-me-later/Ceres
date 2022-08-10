@@ -62,7 +62,7 @@ use {
     apu::{Noise, Square1, Square2, Wave},
     core::time::Duration,
     memory::HdmaState,
-    ppu::{ColorPalette, Mode, RgbaBuf, OAM_SIZE, VRAM_SIZE_CGB},
+    ppu::{ColorPalette, Mode, RgbBuf, OAM_SIZE, VRAM_SIZE_CGB},
 };
 
 mod apu;
@@ -198,7 +198,7 @@ pub struct Gb<A: Audio> {
     lcdc_delay: bool,
     vram: [u8; VRAM_SIZE_CGB],
     oam: [u8; OAM_SIZE],
-    rgba_buf: RgbaBuf,
+    rgba_buf: RgbBuf,
     ppu_cycles: i32,
     ppu_win_in_frame: bool,
     ppu_win_in_ly: bool,
@@ -315,7 +315,7 @@ impl<A: Audio> Gb<A> {
             ocp: ColorPalette::default(),
             frame_dots: Default::default(),
             lcdc_delay: Default::default(),
-            rgba_buf: RgbaBuf::default(),
+            rgba_buf: RgbBuf::default(),
             ppu_win_in_frame: Default::default(),
             ppu_win_in_ly: Default::default(),
             ppu_win_skipped: Default::default(),
@@ -346,9 +346,8 @@ impl<A: Audio> Gb<A> {
     }
 
     fn set_sample_rate(&mut self, sample_rate: u32) {
-        // maybe account for difference between 59.7 and 60 Hz?
-        let x = (600 * TC_SEC) / 597;
-        self.apu_ext_sample_period = x / sample_rate;
+        // maybe account for difference between 59.7 and target Hz?
+        self.apu_ext_sample_period = TC_SEC / sample_rate;
     }
 
     /// Runs 1 frame
@@ -367,7 +366,7 @@ impl<A: Audio> Gb<A> {
     }
 
     #[must_use]
-    pub fn pixel_data(&self) -> &[u8] {
+    pub fn pixel_data_rgb(&self) -> &[u8] {
         self.rgba_buf.pixel_data()
     }
 
