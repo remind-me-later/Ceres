@@ -376,19 +376,4 @@ impl<A: Audio> Gb<A> {
     pub fn cartridge_has_battery(&self) -> bool {
         self.cart.has_battery()
     }
-
-    // This is used for the test suite
-    // The test is considered to be running
-    // until registers have the following values
-    // B = 3, C = 5, D = 8, E = 13, H = 21
-    // L = 0 if test suceeded and non-zero otherwise
-    pub fn test_running(&mut self) -> bool {
-        // TODO: Make this understandable by humans
-        self.bc != 773 || self.de != 2061 || (self.hl & 0xFF00) != 5376
-    }
-
-    pub fn get_test_result(&mut self) -> u16 {
-        // l is the lower 8 bits of 16-bit register hl
-        self.hl & 255
-    }
 }

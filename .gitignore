@@ -40,3 +40,6 @@ log/
 # Build directories
 **/bin/
 **/obj/
+
+# Test files
+test/blargg_runner/blargg/

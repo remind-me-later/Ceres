@@ -35,6 +35,10 @@ with maybe a bit of massaging.
 | Start   | Return    |
 | Select  | Backspace |
 
+## Run tests
+
+`cargo test --workspace`.
+
 ## Thanks
 
 ### Documentation

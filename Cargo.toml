@@ -1,9 +1,13 @@
 [workspace]
-members = ["ceres_core", "ceres_sdl", "test/test_runner"]
+members = ["ceres_core", "ceres_sdl", "test/blargg_runner"]
 default-members = ["ceres_sdl"]
 
 [profile.dev]
 opt-level = 2
+debug = 0
+
+[profile.test]
+opt-level = 3
 debug = 0
 
 [profile.release]
