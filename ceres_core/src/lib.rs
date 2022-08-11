@@ -1,7 +1,3 @@
-//! A library to make ``GameBoy`` Color emulators.
-//! This library is pretty low level and uses unsafe to
-//! avoid allocations.
-
 #![no_std]
 #![feature(const_maybe_uninit_zeroed)]
 #![forbid(unsafe_code)]
@@ -111,11 +107,6 @@ enum CompatMode {
     Cgb,
 }
 
-/// The ``GameBoy`` struct is the main struct in the
-/// library. The `run` method never returns and calls a PPU
-/// "graphical" callback every frame and an APU "audio"
-/// callback every sample. These callbacks are passed to
-/// the `new` function, which returns a `GameBoy` struct.
 pub struct Gb<A: Audio> {
     // general
     model: Model,
