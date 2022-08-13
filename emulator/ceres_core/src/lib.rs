@@ -68,9 +68,9 @@ mod memory;
 mod ppu;
 mod timing;
 
-const DMG_BOOTROM: &[u8] = include_bytes!("../bootroms/bin/dmg_boot.bin");
-const MGB_BOOTROM: &[u8] = include_bytes!("../bootroms/bin/mgb_boot.bin");
-const CGB_BOOTROM: &[u8] = include_bytes!("../bootroms/bin/cgb_boot_fast.bin");
+const DMG_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/dmg_boot.bin");
+const MGB_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/mgb_boot.bin");
+const CGB_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/cgb_boot_fast.bin");
 
 const FRAME_NANOS: u64 = 16_750_418;
 /// `GameBoy` frame duration in nanoseconds, the `GameBoy`

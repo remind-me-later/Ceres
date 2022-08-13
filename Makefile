@@ -1,9 +1,9 @@
 .PHONY: all test clean
 
 all:
-	$(MAKE) -C ceres_core/bootroms
-	cargo build --release
+	$(MAKE) -C bootroms
+	cd emulator && cargo build --release
 
 clean:
-	$(MAKE) -C ceres_core/bootroms clean
-	cargo clean
+	$(MAKE) -C bootroms clean
+	cd emulator && cargo clean

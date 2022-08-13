@@ -6,5 +6,9 @@ edition = "2021"
 description = "Test utility for Ceres emulator"
 
 [dependencies]
-ceres_core = { path = "../../ceres_core" }
+ceres_core = { path = "../../emulator/ceres_core" }
 crc = "*"
+
+[profile.release]
+opt-level = 3
+lto = true

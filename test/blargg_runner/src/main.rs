@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use {
     ceres_core::{Cartridge, Gb, Model},
     crc::{Crc, CRC_64_ECMA_182},
@@ -11,25 +13,25 @@ pub const CRC64: Crc<u64> = Crc::<u64>::new(&CRC_64_ECMA_182);
 const TESTS: [BlarggTest; 4] = [
     BlarggTest {
         name: r"cpu_instrs.gb",
-        rom_path: r"test/blargg_runner/blargg/cpu_instrs/cpu_instrs.gb",
+        rom_path: r"blargg/cpu_instrs/cpu_instrs.gb",
         duration_secs: 31,
         crc_expect: 15902498174298407339,
     },
     BlarggTest {
         name: r"mem_timing.gb",
-        rom_path: r"test/blargg_runner/blargg/mem_timing/mem_timing.gb",
+        rom_path: r"blargg/mem_timing/mem_timing.gb",
         duration_secs: 3,
         crc_expect: 3467152117817621442,
     },
     BlarggTest {
         name: r"instr_timing.gb",
-        rom_path: r"test/blargg_runner/blargg/instr_timing/instr_timing.gb",
+        rom_path: r"blargg/instr_timing/instr_timing.gb",
         duration_secs: 1,
         crc_expect: 15573883656270665917,
     },
     BlarggTest {
         name: r"halt_bug.gb",
-        rom_path: r"test/blargg_runner/blargg/halt_bug.gb",
+        rom_path: r"blargg/halt_bug.gb",
         duration_secs: 2,
         crc_expect: 12606407190118406814,
     },
@@ -81,7 +83,12 @@ fn read_file_into(path: &Path) -> Result<Box<[u8]>, std::io::Error> {
 }
 
 fn main() -> ExitCode {
-    if TESTS.iter().map(BlarggTest::run).any(|e| e.is_err()) {
+    let start = Instant::now();
+    let any_err = TESTS.iter().map(BlarggTest::run).any(|e| e.is_err());
+
+    println!("Duration: {:?}", start.elapsed());
+
+    if any_err {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS
