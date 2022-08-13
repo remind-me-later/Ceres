@@ -1,4 +1,3 @@
-#![feature(duration_constants)]
 #![warn(
     clippy::pedantic,
     clippy::as_underscore,

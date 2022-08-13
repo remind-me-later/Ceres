@@ -1,5 +1,4 @@
 #![no_std]
-#![feature(const_maybe_uninit_zeroed)]
 #![forbid(unsafe_code)]
 #![warn(
     clippy::as_underscore,
