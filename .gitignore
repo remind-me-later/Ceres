@@ -42,4 +42,4 @@ log/
 **/obj/
 
 # Test files
-test/blargg_runner/blargg/
+emulator/tests/blargg_runner/blargg/

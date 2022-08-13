@@ -1,5 +1,5 @@
 [workspace]
-members = ["ceres_core", "ceres_sdl"]
+members = ["ceres_core", "ceres_sdl", "tests/blargg_runner"]
 default-members = ["ceres_sdl"]
 
 [profile.dev]

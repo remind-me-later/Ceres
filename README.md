@@ -15,9 +15,13 @@ To build just `make`.
 
 ## Quick start
 
-To run a given `rom.gb` just type `cargo run --release rom.gb`.
+- Enter the `emulator` directory.
+- To run a given `rom.gb` just type `cargo run --release rom.gb`.
+- To see usage of the program: `cargo run --release -- --help`.
 
-To see usage of the program: `cargo run --release -- --help`.
+## Run tests
+
+From the `emulator` directory run `cargo run --release blargg_runner`.
 
 ## Platforms
 
