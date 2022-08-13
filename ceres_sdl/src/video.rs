@@ -2,7 +2,7 @@ use {
     crate::CERES_STYLIZED,
     glow::{Context, HasContext, NativeProgram, NativeTexture, NativeVertexArray, UniformLocation},
     sdl2::{
-        video::{FullscreenType, GLContext, Window},
+        video::{FullscreenType, GLContext, SwapInterval, Window},
         Sdl,
     },
     std::cmp::min,
@@ -47,6 +47,8 @@ impl Renderer {
 
             let ctx = win.gl_create_context().unwrap();
             win.gl_make_current(&ctx).unwrap();
+
+            video.gl_set_swap_interval(SwapInterval::VSync).unwrap();
 
             let gl = glow::Context::from_loader_function(|s| video.gl_get_proc_address(s).cast());
 

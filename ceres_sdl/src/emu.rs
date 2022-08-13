@@ -7,12 +7,11 @@ use {
         keyboard::Scancode,
         EventPump, Sdl,
     },
-    spin_sleep::sleep,
     std::{
         fs::File,
         io::{Read, Write},
         path::{Path, PathBuf},
-        time::Instant,
+        time::{Duration, Instant},
     },
 };
 
@@ -66,7 +65,7 @@ impl Emu {
             has_focus: false,
             sav_path: path,
             video,
-            last_frame: Instant::now(),
+            last_frame: Instant::now() - Duration::from_secs(1),
             quit: false,
         };
 
@@ -78,13 +77,11 @@ impl Emu {
     #[inline]
     pub fn run(&mut self) {
         while !self.quit {
-            self.handle_events();
-            self.gb.run_frame();
-            self.video.draw_frame(self.gb.pixel_data_rgb());
-
             let elapsed = self.last_frame.elapsed();
-            if elapsed < ceres_core::FRAME_DUR {
-                sleep(ceres_core::FRAME_DUR - elapsed);
+            if elapsed >= ceres_core::FRAME_DUR - Duration::from_millis(4) {
+                self.handle_events();
+                self.gb.run_frame();
+                self.video.draw_frame(self.gb.pixel_data_rgb());
                 self.last_frame = Instant::now();
             }
         }
