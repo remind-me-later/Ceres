@@ -3,10 +3,10 @@ use crate::{ppu::Mode, Audio, CompatMode, Gb, Model::Cgb, KEY1_SWITCH_B};
 #[derive(PartialEq, Eq, Default)]
 pub enum HdmaState {
     #[default]
-    Sleep      = 0,
-    HBlank     = 1,
+    Sleep = 0,
+    HBlank = 1,
     HBlankDone = 2,
-    General    = 3,
+    General = 3,
 }
 
 // IO addresses

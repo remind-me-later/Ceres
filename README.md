@@ -10,7 +10,6 @@ Required:
 
 - A C compiler
 - [RGBDS toolchain](https://rgbds.gbdev.io/)
-- [Nightly Rust compiler](https://rust-lang.github.io/rustup/concepts/channels.html).
 
 To build just `make`.
 

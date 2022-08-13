@@ -3,14 +3,14 @@ use crate::{Audio, Gb, IF_P1_B};
 /// Represents a `GameBoy` physical button.
 #[derive(Clone, Copy)]
 pub enum Button {
-    Right  = 0x01,
-    Left   = 0x02,
-    Up     = 0x04,
-    Down   = 0x08,
-    A      = 0x10,
-    B      = 0x20,
+    Right = 0x01,
+    Left = 0x02,
+    Up = 0x04,
+    Down = 0x08,
+    A = 0x10,
+    B = 0x20,
     Select = 0x40,
-    Start  = 0x80,
+    Start = 0x80,
 }
 
 impl<A: Audio> Gb<A> {

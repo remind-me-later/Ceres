@@ -284,15 +284,15 @@ impl Cartridge {
 
 #[derive(PartialEq, Eq)]
 enum ROMSize {
-    Kb32  = 0,
-    Kb64  = 1,
+    Kb32 = 0,
+    Kb64 = 1,
     Kb128 = 2,
     Kb256 = 3,
     Kb512 = 4,
-    Mb1   = 5,
-    Mb2   = 6,
-    Mb4   = 7,
-    Mb8   = 8,
+    Mb1 = 5,
+    Mb2 = 6,
+    Mb4 = 7,
+    Mb8 = 8,
 }
 
 impl ROMSize {
