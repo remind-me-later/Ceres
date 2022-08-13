@@ -6,8 +6,8 @@ use {
     },
 };
 
-const FREQ: u16 = 48000;
-const BUF_SIZE: u16 = 1024;
+const FREQ: i32 = 48000;
+const BUF_SIZE: u16 = 512 * 2;
 
 pub struct Renderer {
     stream: AudioQueue<f32>,
@@ -21,9 +21,9 @@ impl Renderer {
         let audio_subsystem = sdl.audio().unwrap();
 
         let desired_spec = AudioSpecDesired {
-            freq: Some(FREQ as i32),
+            freq: Some(FREQ),
             channels: Some(2),
-            samples: Some(BUF_SIZE as u16),
+            samples: Some(BUF_SIZE),
         };
 
         let queue = audio_subsystem.open_queue(None, &desired_spec).unwrap();
