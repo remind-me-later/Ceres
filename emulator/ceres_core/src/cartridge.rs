@@ -1,5 +1,6 @@
+use alloc::vec;
 use {
-    alloc::{boxed::Box, vec::Vec},
+    alloc::boxed::Box,
     Mbc::{Mbc1, Mbc2, Mbc3, Mbc5, None},
 };
 
@@ -76,7 +77,7 @@ impl Cartridge {
         let ram = if let Some(ram) = ram {
             ram
         } else {
-            Vec::with_capacity(ram_size.size_in_bytes()).into_boxed_slice()
+            vec![0; ram_size.size_in_bytes()].into_boxed_slice()
         };
 
         Ok(Self {
