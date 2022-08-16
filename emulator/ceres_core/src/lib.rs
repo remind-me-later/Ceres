@@ -216,9 +216,9 @@ pub struct Gb<A: Audio> {
     apu_ch3: Wave,
     apu_ch4: Noise,
 
-    apu_timer: u16,
-    apu_render_timer: u32,
-    apu_ext_sample_period: u32,
+    apu_timer: i32,
+    apu_render_timer: i32,
+    apu_ext_sample_period: i32,
     audio: A,
     apu_seq_step: u8,
 }
@@ -226,7 +226,7 @@ pub struct Gb<A: Audio> {
 impl<A: Audio> Gb<A> {
     #[allow(clippy::too_many_lines)]
     #[must_use]
-    pub fn new(model: Model, audio: A, sample_rate: u32, cart: Cartridge) -> Self {
+    pub fn new(model: Model, audio: A, sample_rate: i32, cart: Cartridge) -> Self {
         let compat_mode = match model {
             Model::Dmg | Model::Mgb => CompatMode::Dmg,
             Model::Cgb => CompatMode::Cgb,
@@ -335,9 +335,9 @@ impl<A: Audio> Gb<A> {
         gb
     }
 
-    fn set_sample_rate(&mut self, sample_rate: u32) {
+    fn set_sample_rate(&mut self, sample_rate: i32) {
         // maybe account for difference between 59.7 and target Hz?
-        self.apu_ext_sample_period = TC_SEC / sample_rate;
+        self.apu_ext_sample_period = (TC_SEC as i32) / sample_rate;
     }
 
     /// Runs 1 frame

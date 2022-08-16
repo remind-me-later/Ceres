@@ -1,6 +1,6 @@
 use crate::{Gb, TC_SEC};
 
-const APU_TIMER_RES: u16 = ((TC_SEC / 512) & 0xFFFF) as u16;
+const APU_TIMER_RES: i32 = ((TC_SEC / 512) & 0xFFFF) as i32;
 
 const SQ_MAX_LEN: u16 = 64;
 const SQ_FREQ_P_MUL: u16 = 4;
@@ -21,32 +21,28 @@ pub trait Audio {
 }
 
 impl<A: Audio> Gb<A> {
-    pub(crate) fn run_apu(&mut self, mut cycles: i32) {
+    pub(crate) fn run_apu(&mut self, cycles: i32) {
         if !self.apu_on {
             return;
         }
 
-        while cycles > 0 {
-            cycles -= 1;
+        if self.apu_timer >= APU_TIMER_RES {
+            self.apu_timer -= APU_TIMER_RES;
+            self.step();
+        } else {
+            self.apu_timer += cycles;
+        }
 
-            if self.apu_timer == APU_TIMER_RES {
-                self.apu_timer = 0;
-                self.step();
-            } else {
-                self.apu_timer += 1;
-            }
+        self.apu_ch1.step_sample(cycles);
+        self.apu_ch2.step_sample(cycles);
+        self.apu_ch3.step_sample(cycles);
+        self.apu_ch4.step_sample(cycles);
 
-            self.apu_ch1.step_sample();
-            self.apu_ch2.step_sample();
-            self.apu_ch3.step_sample();
-            self.apu_ch4.step_sample();
-
-            if self.apu_render_timer == self.apu_ext_sample_period {
-                self.apu_render_timer = 0;
-                self.mix_and_render();
-            } else {
-                self.apu_render_timer += 1;
-            }
+        if self.apu_render_timer >= self.apu_ext_sample_period {
+            self.apu_render_timer -= self.apu_ext_sample_period;
+            self.mix_and_render();
+        } else {
+            self.apu_render_timer += cycles;
         }
     }
 
@@ -188,7 +184,7 @@ pub struct Square1 {
     freq: u16, // 11 bit frequency data
     duty: u8,
     duty_bit: u8,
-    period: u16,
+    period: i32,
     out: u8,
 
     // envelope
@@ -218,7 +214,7 @@ impl Default for Square1 {
             sw_shadow_freq: 0,
             sw_on: false,
             freq: 0,
-            period: SQ_FREQ_P_MUL * 2048,
+            period: SQ_FREQ_P_MUL as i32 * 2048,
             duty: SQ_DUTY_TABLE[0],
             duty_bit: 0,
             on: false,
@@ -360,7 +356,7 @@ impl Square1 {
                 }
             }
 
-            self.period = SQ_FREQ_P_MUL * (2048 - self.freq);
+            self.period = (SQ_FREQ_P_MUL * (2048 - self.freq)) as i32;
             self.out = 0;
             self.duty_bit = 0;
             self.env_timer = self.env_period;
@@ -376,23 +372,17 @@ impl Square1 {
         }
     }
 
-    fn step_sample(&mut self) {
+    fn step_sample(&mut self, cycles: i32) {
         if !(self.on && self.dac_on) {
             return;
         }
 
-        let (period, overflow) = self.period.overflowing_sub(1);
+        self.period -= cycles;
 
-        if overflow {
-            self.period = SQ_FREQ_P_MUL * (2048 - self.freq);
-
-            if self.on && self.dac_on {
-                self.out =
-                    (SQ_DUTY_TABLE[self.duty as usize] & (1 << self.duty_bit)) >> self.duty_bit;
-                self.duty_bit = (self.duty_bit + 1) & 7;
-            }
-        } else {
-            self.period = period;
+        if self.period < 0 {
+            self.period += (SQ_FREQ_P_MUL * (2048 - self.freq)) as i32;
+            self.out = (SQ_DUTY_TABLE[self.duty as usize] & (1 << self.duty_bit)) >> self.duty_bit;
+            self.duty_bit = (self.duty_bit + 1) & 7;
         }
     }
 
@@ -464,7 +454,7 @@ pub struct Square2 {
     freq: u16, // 11 bit frequency data
     duty: u8,
     duty_bit: u8,
-    period: u16,
+    period: i32,
     out: u8,
 
     // envelope
@@ -480,7 +470,7 @@ impl Default for Square2 {
     fn default() -> Self {
         Self {
             freq: 0,
-            period: SQ_FREQ_P_MUL * 2048,
+            period: SQ_FREQ_P_MUL as i32 * 2048,
             duty: SQ_DUTY_TABLE[0],
             duty_bit: 0,
             on: false,
@@ -579,7 +569,7 @@ impl Square2 {
                 }
             }
 
-            self.period = SQ_FREQ_P_MUL * (2048 - self.freq);
+            self.period = (SQ_FREQ_P_MUL * (2048 - self.freq)) as i32;
             self.out = 0;
             self.duty_bit = 0;
             self.env_timer = self.env_period;
@@ -587,23 +577,17 @@ impl Square2 {
         }
     }
 
-    fn step_sample(&mut self) {
+    fn step_sample(&mut self, cycles: i32) {
         if !(self.on && self.dac_on) {
             return;
         }
 
-        let (period, overflow) = self.period.overflowing_sub(1);
+        self.period -= cycles;
 
-        if overflow {
-            self.period = SQ_FREQ_P_MUL * (2048 - self.freq);
-
-            if self.on && self.dac_on {
-                self.out =
-                    (SQ_DUTY_TABLE[self.duty as usize] & (1 << self.duty_bit)) >> self.duty_bit;
-                self.duty_bit = (self.duty_bit + 1) & 7;
-            }
-        } else {
-            self.period = period;
+        if self.period < 0 {
+            self.period += (SQ_FREQ_P_MUL * (2048 - self.freq)) as i32;
+            self.out = (SQ_DUTY_TABLE[self.duty as usize] & (1 << self.duty_bit)) >> self.duty_bit;
+            self.duty_bit = (self.duty_bit + 1) & 7;
         }
     }
 
@@ -660,7 +644,7 @@ pub struct Wave {
     snd_len: u16,
     p_half: u8, // period half: 0 or 1
     freq: u16,  // 11 bit frequency data
-    period: u16,
+    period: i32,
     sample_buffer: u8,
     ram: [u8; WAV_RAM_SIZE as usize],
     samples: [u8; WAV_SAMPLE_SIZE as usize],
@@ -680,7 +664,7 @@ impl Default for Wave {
             use_len: false,
             p_half: 0, // doesn't matter
             freq: 0,
-            period: WAV_PERIOD_MUL * 2048,
+            period: WAV_PERIOD_MUL as i32 * 2048,
             sample_buffer: 0,
             samples: [0; WAV_SAMPLE_SIZE as usize],
             sample_idx: 0,
@@ -774,23 +758,23 @@ impl Wave {
                 }
             }
 
-            self.period = WAV_PERIOD_MUL * (2048 - self.freq);
+            self.period = (WAV_PERIOD_MUL * (2048 - self.freq)) as i32;
             self.sample_idx = 0;
         }
     }
 
-    fn step_sample(&mut self) {
+    fn step_sample(&mut self, cycles: i32) {
         if !self.on() {
             return;
         }
 
-        if self.period == 0 {
-            self.period = WAV_PERIOD_MUL * (2048 - self.freq);
+        self.period -= cycles;
+
+        if self.period < 0 {
+            self.period += (WAV_PERIOD_MUL * (2048 - self.freq)) as i32;
             self.sample_idx = (self.sample_idx + 1) % WAV_SAMPLE_SIZE;
             self.sample_buffer = self.samples[self.sample_idx as usize];
         }
-
-        self.period -= 1;
     }
 
     fn out(&self) -> u8 {
@@ -823,7 +807,7 @@ pub struct Noise {
     use_len: bool,
     snd_len: u16,
     p_half: u8, // period half: 0 or 1
-    timer: u16,
+    timer: i32,
     timer_period: u16,
     lfsr: u16,
     wide_step: bool,
@@ -961,7 +945,7 @@ impl Noise {
                 }
             }
 
-            self.timer = self.timer_period;
+            self.timer = self.timer_period as i32;
             self.lfsr = 0x7FFF;
             self.env_timer = self.env_period;
             self.env_vol = self.env_base_vol;
@@ -990,15 +974,15 @@ impl Noise {
         }
     }
 
-    fn step_sample(&mut self) {
+    fn step_sample(&mut self, cycles: i32) {
         if !self.on() {
             return;
         }
 
-        let (new_timer_cycle, overflow) = self.timer.overflowing_sub(1);
+        self.timer -= cycles;
 
-        if overflow {
-            self.timer = self.timer_period;
+        if self.timer < 0 {
+            self.timer += self.timer_period as i32;
 
             let xor_bit = (self.lfsr & 1) ^ ((self.lfsr & 2) >> 1);
             self.lfsr >>= 1;
@@ -1008,8 +992,6 @@ impl Noise {
             }
 
             self.out = if self.lfsr & 1 == 0 { 1 } else { 0 };
-        } else {
-            self.timer = new_timer_cycle;
         }
     }
 

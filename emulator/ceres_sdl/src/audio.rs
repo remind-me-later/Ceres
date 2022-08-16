@@ -13,7 +13,6 @@ pub struct Renderer {
     stream: AudioQueue<f32>,
     buf: [f32; BUF_SIZE as usize],
     buf_pos: usize,
-    freq: u32,
 }
 
 impl Renderer {
@@ -28,15 +27,12 @@ impl Renderer {
 
         let queue = audio_subsystem.open_queue(None, &desired_spec).unwrap();
 
-        let obtained_spec = queue.spec();
-        let freq = obtained_spec.freq as u32;
         queue.resume();
 
         Self {
             stream: queue,
             buf: [Default::default(); BUF_SIZE as usize],
             buf_pos: 0,
-            freq,
         }
     }
 
@@ -55,8 +51,8 @@ impl Renderer {
         }
     }
 
-    pub fn sample_rate(&self) -> u32 {
-        self.freq
+    pub fn sample_rate(&self) -> i32 {
+        FREQ
     }
 }
 
