@@ -7,7 +7,7 @@ use {
 };
 
 const FREQ: i32 = 48000;
-const BUF_SIZE: u16 = 512 * 2;
+const BUF_SIZE: u16 = 512;
 
 pub struct Renderer {
     stream: AudioQueue<f32>,

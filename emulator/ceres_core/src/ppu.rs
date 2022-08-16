@@ -234,25 +234,9 @@ impl<A: Audio> Gb<A> {
         }
 
         if self.lcdc & LCDC_ON_B != 0 && !self.lcdc_delay {
-            // advance in 0x40 t-cycle chunks to avoid skipping a state
-            // machine transition
-            // TODO: think of something more elegant
-            let chunks = (cycles >> 6) + 1;
+            self.ppu_cycles -= cycles;
 
-            for i in 0..chunks {
-                // TODO: WTF?????
-                let new_cycles = if i == chunks - 1 {
-                    // last iteration
-                    self.ppu_cycles - (cycles & 0x3F)
-                } else {
-                    self.ppu_cycles - 0x40
-                };
-                self.ppu_cycles = new_cycles;
-
-                if new_cycles >= 0 {
-                    continue;
-                }
-
+            if self.ppu_cycles <= 0 {
                 match self.ppu_mode() {
                     Mode::OamScan => self.switch_mode(Mode::Drawing),
                     Mode::Drawing => {
