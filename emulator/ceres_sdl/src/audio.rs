@@ -7,7 +7,7 @@ use {
 };
 
 const FREQ: i32 = 48000;
-const BUF_SIZE: u16 = 512;
+const BUF_SIZE: u16 = 512 * 2;
 
 pub struct Renderer {
     stream: AudioQueue<f32>,
@@ -36,6 +36,7 @@ impl Renderer {
         }
     }
 
+    #[inline]
     pub fn push_frame(&mut self, l: Sample, r: Sample) {
         let l = f32::from(l * 32) / 32768.0;
         let r = f32::from(r * 32) / 32768.0;
@@ -51,6 +52,8 @@ impl Renderer {
         }
     }
 
+    #[inline]
+    #[allow(clippy::unused_self)]
     pub fn sample_rate(&self) -> i32 {
         FREQ
     }

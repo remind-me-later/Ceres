@@ -26,8 +26,6 @@
     clippy::same_name_method,
     clippy::self_named_module_files,
     clippy::shadow_unrelated,
-    clippy::std_instead_of_alloc,
-    clippy::std_instead_of_core,
     clippy::str_to_string,
     clippy::string_add,
     clippy::string_slice,
@@ -77,7 +75,7 @@ const FRAME_NANOS: u64 = 16_750_418;
 /// framerate is 59.7 fps.
 pub const FRAME_DUR: Duration = Duration::from_nanos(FRAME_NANOS);
 // t-cycles per second
-const TC_SEC: u32 = 0x0040_0000;
+const TC_SEC: i32 = 0x0040_0000;
 
 const IF_VBLANK_B: u8 = 1;
 const IF_LCD_B: u8 = 2;
@@ -337,7 +335,7 @@ impl<A: Audio> Gb<A> {
 
     fn set_sample_rate(&mut self, sample_rate: i32) {
         // maybe account for difference between 59.7 and target Hz?
-        self.apu_ext_sample_period = (TC_SEC as i32) / sample_rate;
+        self.apu_ext_sample_period = TC_SEC / sample_rate;
     }
 
     /// Runs 1 frame

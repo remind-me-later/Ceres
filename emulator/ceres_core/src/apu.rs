@@ -214,7 +214,7 @@ impl Default for Square1 {
             sw_shadow_freq: 0,
             sw_on: false,
             freq: 0,
-            period: SQ_FREQ_P_MUL as i32 * 2048,
+            period: i32::from(SQ_FREQ_P_MUL) * 2048,
             duty: SQ_DUTY_TABLE[0],
             duty_bit: 0,
             on: false,
@@ -356,7 +356,7 @@ impl Square1 {
                 }
             }
 
-            self.period = (SQ_FREQ_P_MUL * (2048 - self.freq)) as i32;
+            self.period = i32::from(SQ_FREQ_P_MUL * (2048 - self.freq));
             self.out = 0;
             self.duty_bit = 0;
             self.env_timer = self.env_period;
@@ -380,7 +380,7 @@ impl Square1 {
         self.period -= cycles;
 
         if self.period < 0 {
-            self.period += (SQ_FREQ_P_MUL * (2048 - self.freq)) as i32;
+            self.period += i32::from(SQ_FREQ_P_MUL * (2048 - self.freq));
             self.out = (SQ_DUTY_TABLE[self.duty as usize] & (1 << self.duty_bit)) >> self.duty_bit;
             self.duty_bit = (self.duty_bit + 1) & 7;
         }
@@ -470,7 +470,7 @@ impl Default for Square2 {
     fn default() -> Self {
         Self {
             freq: 0,
-            period: SQ_FREQ_P_MUL as i32 * 2048,
+            period: i32::from(SQ_FREQ_P_MUL) * 2048,
             duty: SQ_DUTY_TABLE[0],
             duty_bit: 0,
             on: false,
@@ -569,7 +569,7 @@ impl Square2 {
                 }
             }
 
-            self.period = (SQ_FREQ_P_MUL * (2048 - self.freq)) as i32;
+            self.period = i32::from(SQ_FREQ_P_MUL * (2048 - self.freq));
             self.out = 0;
             self.duty_bit = 0;
             self.env_timer = self.env_period;
@@ -585,7 +585,7 @@ impl Square2 {
         self.period -= cycles;
 
         if self.period < 0 {
-            self.period += (SQ_FREQ_P_MUL * (2048 - self.freq)) as i32;
+            self.period += i32::from(SQ_FREQ_P_MUL * (2048 - self.freq));
             self.out = (SQ_DUTY_TABLE[self.duty as usize] & (1 << self.duty_bit)) >> self.duty_bit;
             self.duty_bit = (self.duty_bit + 1) & 7;
         }
@@ -664,7 +664,7 @@ impl Default for Wave {
             use_len: false,
             p_half: 0, // doesn't matter
             freq: 0,
-            period: WAV_PERIOD_MUL as i32 * 2048,
+            period: i32::from(WAV_PERIOD_MUL) * 2048,
             sample_buffer: 0,
             samples: [0; WAV_SAMPLE_SIZE as usize],
             sample_idx: 0,
@@ -758,7 +758,7 @@ impl Wave {
                 }
             }
 
-            self.period = (WAV_PERIOD_MUL * (2048 - self.freq)) as i32;
+            self.period = i32::from(WAV_PERIOD_MUL * (2048 - self.freq));
             self.sample_idx = 0;
         }
     }
@@ -771,7 +771,7 @@ impl Wave {
         self.period -= cycles;
 
         if self.period < 0 {
-            self.period += (WAV_PERIOD_MUL * (2048 - self.freq)) as i32;
+            self.period += i32::from(WAV_PERIOD_MUL * (2048 - self.freq));
             self.sample_idx = (self.sample_idx + 1) % WAV_SAMPLE_SIZE;
             self.sample_buffer = self.samples[self.sample_idx as usize];
         }
@@ -945,7 +945,7 @@ impl Noise {
                 }
             }
 
-            self.timer = self.timer_period as i32;
+            self.timer = i32::from(self.timer_period);
             self.lfsr = 0x7FFF;
             self.env_timer = self.env_period;
             self.env_vol = self.env_base_vol;
@@ -982,7 +982,7 @@ impl Noise {
         self.timer -= cycles;
 
         if self.timer < 0 {
-            self.timer += self.timer_period as i32;
+            self.timer += i32::from(self.timer_period);
 
             let xor_bit = (self.lfsr & 1) ^ ((self.lfsr & 2) >> 1);
             self.lfsr >>= 1;
