@@ -7,7 +7,7 @@ use {
 };
 
 const FREQ: i32 = 48000;
-const BUF_SIZE: u16 = 512;
+const BUF_SIZE: usize = 512;
 
 pub struct Renderer {
     stream: AudioQueue<f32>,
@@ -22,7 +22,7 @@ impl Renderer {
         let desired_spec = AudioSpecDesired {
             freq: Some(FREQ),
             channels: Some(2),
-            samples: Some(BUF_SIZE),
+            samples: Some(BUF_SIZE as u16),
         };
 
         let queue = audio_subsystem.open_queue(None, &desired_spec).unwrap();
@@ -31,13 +31,17 @@ impl Renderer {
 
         Self {
             stream: queue,
-            buf: [Default::default(); BUF_SIZE as usize],
+            buf: [Default::default(); BUF_SIZE],
             buf_pos: 0,
         }
     }
 
-    #[inline]
     pub fn push_frame(&mut self, l: Sample, r: Sample) {
+        // we're running too fast, skip this sample
+        if self.stream.size() / 4 > (FREQ as u32 / 4) {
+            return;
+        }
+
         let l = f32::from(l * 32) / 32768.0;
         let r = f32::from(r * 32) / 32768.0;
 
@@ -46,7 +50,7 @@ impl Renderer {
 
         self.buf_pos += 2;
 
-        if self.buf_pos == BUF_SIZE as usize {
+        if self.buf_pos == BUF_SIZE {
             self.buf_pos = 0;
             self.stream.queue_audio(&self.buf).unwrap();
         }
