@@ -29,9 +29,8 @@ impl<A: Audio> Gb<A> {
         if self.apu_timer >= APU_TIMER_RES {
             self.apu_timer -= APU_TIMER_RES;
             self.step();
-        } else {
-            self.apu_timer += cycles;
         }
+        self.apu_timer += cycles;
 
         self.apu_ch1.step_sample(cycles);
         self.apu_ch2.step_sample(cycles);
@@ -41,9 +40,8 @@ impl<A: Audio> Gb<A> {
         if self.apu_render_timer >= self.apu_ext_sample_period {
             self.apu_render_timer -= self.apu_ext_sample_period;
             self.mix_and_render();
-        } else {
-            self.apu_render_timer += cycles;
         }
+        self.apu_render_timer += cycles;
     }
 
     fn step(&mut self) {

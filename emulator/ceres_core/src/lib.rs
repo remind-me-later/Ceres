@@ -81,7 +81,7 @@ const IF_VBLANK_B: u8 = 1;
 const IF_LCD_B: u8 = 2;
 const IF_TIMER_B: u8 = 4;
 //const IF_SERIAL_B: u8 = 8;
-const IF_P1_B: u8 = 0x10;
+const IF_P1_B: u8 = 16;
 
 const KEY1_SPEED_B: u8 = 0x80;
 const KEY1_SWITCH_B: u8 = 1;
