@@ -1,7 +1,7 @@
 use {
     crate::{audio, video},
     ceres_core::{Button, Cartridge, Gb, Model},
-    quanta::Instant,
+    quanta::Clock,
     sdl2::{
         controller::{self, GameController},
         event::{Event, WindowEvent},
@@ -22,8 +22,9 @@ pub struct Emu {
     has_focus: bool,
     sav_path: PathBuf,
     video: video::Renderer,
-    next: Instant,
+    last_frame: u64,
     quit: bool,
+    clock: Clock,
 }
 
 impl Emu {
@@ -57,6 +58,7 @@ impl Emu {
         let gb = Gb::new(model, audio, sample_rate, cart);
 
         let events = sdl.event_pump().unwrap();
+        let clock = Clock::new();
 
         let res = Self {
             sdl,
@@ -65,8 +67,9 @@ impl Emu {
             has_focus: false,
             sav_path: path,
             video,
-            next: Instant::recent() + ceres_core::FRAME_DUR,
+            last_frame: clock.raw(),
             quit: false,
+            clock,
         };
 
         let _controller = res.init_controller();
@@ -77,13 +80,17 @@ impl Emu {
     #[inline]
     pub fn run(&mut self) {
         while !self.quit {
-            let recent = Instant::recent();
-            if recent >= self.next {
-                self.handle_events();
-                self.gb.run_frame();
-                self.video.draw_frame(self.gb.pixel_data_rgb());
-                self.next = recent + ceres_core::FRAME_DUR;
+            let end = self.clock.raw();
+            let elapsed = self.clock.delta(self.last_frame, end);
+
+            if elapsed < ceres_core::FRAME_DUR {
+                std::thread::sleep(ceres_core::FRAME_DUR - elapsed);
             }
+
+            self.handle_events();
+            self.gb.run_frame();
+            self.video.draw_frame(self.gb.pixel_data_rgb());
+            self.last_frame = end;
         }
 
         // save
