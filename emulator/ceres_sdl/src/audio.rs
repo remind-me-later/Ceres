@@ -45,8 +45,10 @@ impl Renderer {
         let l = f32::from(l * 32) / 32768.0;
         let r = f32::from(r * 32) / 32768.0;
 
-        self.buf[self.buf_pos] = l;
-        self.buf[self.buf_pos + 1] = r;
+        unsafe {
+            *self.buf.get_unchecked_mut(self.buf_pos) = l;
+            *self.buf.get_unchecked_mut(self.buf_pos + 1) = r;
+        }
 
         self.buf_pos += 2;
 

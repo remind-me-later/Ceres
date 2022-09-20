@@ -1,8 +1,9 @@
 use {
     crate::{audio, video},
-    ceres_core::{Cartridge, Gb, Model},
+    ceres_core::{Button, Cartridge, Gb, Model},
+    quanta::Instant,
     sdl2::{
-        controller::GameController,
+        controller::{self, GameController},
         event::{Event, WindowEvent},
         keyboard::Scancode,
         EventPump, Sdl,
@@ -11,7 +12,6 @@ use {
         fs::File,
         io::{Read, Write},
         path::{Path, PathBuf},
-        time::{Duration, Instant},
     },
 };
 
@@ -22,7 +22,7 @@ pub struct Emu {
     has_focus: bool,
     sav_path: PathBuf,
     video: video::Renderer,
-    last_frame: Instant,
+    next: Instant,
     quit: bool,
 }
 
@@ -65,7 +65,7 @@ impl Emu {
             has_focus: false,
             sav_path: path,
             video,
-            last_frame: Instant::now() - Duration::from_secs(1),
+            next: Instant::recent() + ceres_core::FRAME_DUR,
             quit: false,
         };
 
@@ -77,12 +77,12 @@ impl Emu {
     #[inline]
     pub fn run(&mut self) {
         while !self.quit {
-            let elapsed = self.last_frame.elapsed();
-            if elapsed >= ceres_core::FRAME_DUR - Duration::from_millis(4) {
+            let recent = Instant::recent();
+            if recent >= self.next {
                 self.handle_events();
                 self.gb.run_frame();
                 self.video.draw_frame(self.gb.pixel_data_rgb());
-                self.last_frame = Instant::now();
+                self.next = recent + ceres_core::FRAME_DUR;
             }
         }
 
@@ -117,88 +117,60 @@ impl Emu {
                     WindowEvent::Close => self.quit = true,
                     _ => (),
                 },
-                Event::ControllerButtonDown { button, .. } => {
-                    use {ceres_core::Button, sdl2::controller};
-
-                    if !self.has_focus {
-                        return;
-                    }
-
-                    match button {
-                        controller::Button::DPadUp => self.gb.press(Button::Up),
-                        controller::Button::DPadLeft => self.gb.press(Button::Left),
-                        controller::Button::DPadDown => self.gb.press(Button::Down),
-                        controller::Button::DPadRight => self.gb.press(Button::Right),
-                        controller::Button::B => self.gb.press(Button::B),
-                        controller::Button::A => self.gb.press(Button::A),
-                        controller::Button::Start => self.gb.press(Button::Start),
-                        controller::Button::Back => self.gb.press(Button::Select),
+                Event::ControllerButtonDown { button, .. } if self.has_focus => match button {
+                    controller::Button::DPadUp => self.gb.press(Button::Up),
+                    controller::Button::DPadLeft => self.gb.press(Button::Left),
+                    controller::Button::DPadDown => self.gb.press(Button::Down),
+                    controller::Button::DPadRight => self.gb.press(Button::Right),
+                    controller::Button::B => self.gb.press(Button::B),
+                    controller::Button::A => self.gb.press(Button::A),
+                    controller::Button::Start => self.gb.press(Button::Start),
+                    controller::Button::Back => self.gb.press(Button::Select),
+                    _ => (),
+                },
+                Event::ControllerButtonUp { button, .. } if self.has_focus => match button {
+                    controller::Button::DPadUp => self.gb.release(Button::Up),
+                    controller::Button::DPadLeft => self.gb.release(Button::Left),
+                    controller::Button::DPadDown => self.gb.release(Button::Down),
+                    controller::Button::DPadRight => self.gb.release(Button::Right),
+                    controller::Button::B => self.gb.release(Button::B),
+                    controller::Button::A => self.gb.release(Button::A),
+                    controller::Button::Start => self.gb.release(Button::Start),
+                    controller::Button::Back => self.gb.release(Button::Select),
+                    _ => (),
+                },
+                Event::KeyDown {
+                    scancode: Some(key),
+                    ..
+                } if self.has_focus => {
+                    match key {
+                        Scancode::W => self.gb.press(Button::Up),
+                        Scancode::A => self.gb.press(Button::Left),
+                        Scancode::S => self.gb.press(Button::Down),
+                        Scancode::D => self.gb.press(Button::Right),
+                        Scancode::K => self.gb.press(Button::A),
+                        Scancode::L => self.gb.press(Button::B),
+                        Scancode::Return => self.gb.press(Button::Start),
+                        Scancode::Backspace => self.gb.press(Button::Select),
+                        // Gui
+                        Scancode::F => self.video.toggle_fullscreen(),
                         _ => (),
                     }
                 }
-                Event::ControllerButtonUp { button, .. } => {
-                    use {ceres_core::Button, sdl2::controller};
-
-                    if !self.has_focus {
-                        return;
-                    }
-
-                    match button {
-                        controller::Button::DPadUp => self.gb.release(Button::Up),
-                        controller::Button::DPadLeft => self.gb.release(Button::Left),
-                        controller::Button::DPadDown => self.gb.release(Button::Down),
-                        controller::Button::DPadRight => self.gb.release(Button::Right),
-                        controller::Button::B => self.gb.release(Button::B),
-                        controller::Button::A => self.gb.release(Button::A),
-                        controller::Button::Start => self.gb.release(Button::Start),
-                        controller::Button::Back => self.gb.release(Button::Select),
-                        _ => (),
-                    }
-                }
-                Event::KeyDown { scancode, .. } => {
-                    use ceres_core::Button;
-
-                    if !self.has_focus {
-                        return;
-                    }
-
-                    if let Some(key) = scancode {
-                        match key {
-                            Scancode::W => self.gb.press(Button::Up),
-                            Scancode::A => self.gb.press(Button::Left),
-                            Scancode::S => self.gb.press(Button::Down),
-                            Scancode::D => self.gb.press(Button::Right),
-                            Scancode::K => self.gb.press(Button::A),
-                            Scancode::L => self.gb.press(Button::B),
-                            Scancode::Return => self.gb.press(Button::Start),
-                            Scancode::Backspace => self.gb.press(Button::Select),
-                            // Gui
-                            Scancode::F => self.video.toggle_fullscreen(),
-                            _ => (),
-                        }
-                    }
-                }
-                Event::KeyUp { scancode, .. } => {
-                    use ceres_core::Button;
-
-                    if !self.has_focus {
-                        return;
-                    }
-
-                    if let Some(key) = scancode {
-                        match key {
-                            Scancode::W => self.gb.release(Button::Up),
-                            Scancode::A => self.gb.release(Button::Left),
-                            Scancode::S => self.gb.release(Button::Down),
-                            Scancode::D => self.gb.release(Button::Right),
-                            Scancode::K => self.gb.release(Button::A),
-                            Scancode::L => self.gb.release(Button::B),
-                            Scancode::Return => self.gb.release(Button::Start),
-                            Scancode::Backspace => self.gb.release(Button::Select),
-                            _ => (),
-                        }
-                    }
-                }
+                Event::KeyUp {
+                    scancode: Some(key),
+                    ..
+                } if self.has_focus => match key {
+                    Scancode::W => self.gb.release(Button::Up),
+                    Scancode::A => self.gb.release(Button::Left),
+                    Scancode::S => self.gb.release(Button::Down),
+                    Scancode::D => self.gb.release(Button::Right),
+                    Scancode::K => self.gb.release(Button::A),
+                    Scancode::L => self.gb.release(Button::B),
+                    Scancode::Return => self.gb.release(Button::Start),
+                    Scancode::Backspace => self.gb.release(Button::Select),
+                    _ => (),
+                },
                 _ => (),
             }
         }

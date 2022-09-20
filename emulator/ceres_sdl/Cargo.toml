@@ -11,3 +11,4 @@ glow = { git = "https://github.com/grovesNL/glow.git" }
 clap = { version = "*", default-features = false, features = ["std"] }
 sdl2 = { git = "https://github.com/Rust-SDL2/rust-sdl2.git" }
 const_format = "*"
+quanta = "*"
