@@ -1,9 +1,11 @@
 use {
     crate::CERES_STYLIZED,
     glow::{Context, HasContext, NativeProgram, NativeTexture, NativeVertexArray, UniformLocation},
-    sdl2::{
-        video::{FullscreenType, GLContext, SwapInterval, Window},
-        Sdl,
+    glutin::{
+        dpi::PhysicalSize,
+        event_loop::EventLoop,
+        window::{Fullscreen, WindowBuilder},
+        ContextBuilder, GlProfile, GlRequest, PossiblyCurrent, Robustness, WindowedContext,
     },
     std::cmp::min,
 };
@@ -16,41 +18,40 @@ pub struct Renderer {
     // Glow
     gl: Context,
     program: NativeProgram,
-    vao: NativeVertexArray,
-    texture: NativeTexture,
+    _vao: NativeVertexArray,
+    _texture: NativeTexture,
     uniform_loc: UniformLocation,
 
-    // SDL
-    win: Window,
-    _ctx: GLContext,
+    // Context
+    ctx_wrapper: WindowedContext<PossiblyCurrent>,
 }
 
 impl Renderer {
-    pub fn new(sdl: &Sdl) -> Self {
+    pub fn new(events: &EventLoop<()>) -> Self {
         unsafe {
-            let video = sdl.video().unwrap();
+            let window_builder = WindowBuilder::new()
+                .with_title(CERES_STYLIZED)
+                .with_inner_size(PhysicalSize {
+                    width: PX_WIDTH as i32 * 4,
+                    height: PX_HEIGHT as i32 * 4,
+                })
+                .with_min_inner_size(PhysicalSize {
+                    width: PX_WIDTH as i32,
+                    height: PX_HEIGHT as i32,
+                });
 
-            let gl_attr = video.gl_attr();
-            gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
-            gl_attr.set_context_version(4, 6);
-            gl_attr.set_depth_size(0);
-            gl_attr.set_context_flags().forward_compatible().set();
-
-            let mut win = video
-                .window(CERES_STYLIZED, PX_WIDTH * MUL, PX_HEIGHT * MUL)
-                .opengl()
-                .position_centered()
-                .resizable()
-                .build()
+            let ctx_wrapper = ContextBuilder::new()
+                .with_gl(GlRequest::Latest)
+                .with_gl_profile(GlProfile::Core)
+                .with_gl_robustness(Robustness::NotRobust)
+                .with_vsync(true)
+                .build_windowed(window_builder, events)
+                .unwrap()
+                .make_current()
                 .unwrap();
-            win.set_minimum_size(PX_WIDTH, PX_HEIGHT).unwrap();
 
-            let ctx = win.gl_create_context().unwrap();
-            win.gl_make_current(&ctx).unwrap();
-
-            video.gl_set_swap_interval(SwapInterval::VSync).unwrap();
-
-            let gl = glow::Context::from_loader_function(|s| video.gl_get_proc_address(s).cast());
+            let gl =
+                glow::Context::from_loader_function(|s| ctx_wrapper.get_proc_address(s).cast());
 
             // create vao
             let vao = gl
@@ -62,8 +63,8 @@ impl Renderer {
             let program = gl.create_program().expect("Cannot create program");
 
             let shader_sources = [
-                (glow::VERTEX_SHADER, include_str!("shader/vs.vert")),
-                (glow::FRAGMENT_SHADER, include_str!("shader/fs.frag")),
+                (glow::VERTEX_SHADER, include_str!("../shader/vs.vert")),
+                (glow::FRAGMENT_SHADER, include_str!("../shader/fs.frag")),
             ];
 
             let mut shaders = Vec::with_capacity(shader_sources.len());
@@ -111,14 +112,15 @@ impl Renderer {
                 .get_uniform_location(program, "transform")
                 .expect("couldn't get location of uniform");
 
+            gl.clear_color(0.0, 0.0, 0.0, 1.0);
+
             let mut res = Self {
                 gl,
                 program,
-                vao,
-                texture,
+                _vao: vao,
+                _texture: texture,
                 uniform_loc,
-                win,
-                _ctx: ctx,
+                ctx_wrapper,
             };
 
             res.resize(PX_WIDTH * MUL, PX_HEIGHT * MUL);
@@ -128,21 +130,24 @@ impl Renderer {
     }
 
     pub fn toggle_fullscreen(&mut self) {
-        let in_fullscreen = self.win.fullscreen_state();
+        let in_fullscreen = self.ctx_wrapper.window().fullscreen();
 
         match in_fullscreen {
-            FullscreenType::Off => self.win.set_fullscreen(FullscreenType::Desktop).unwrap(),
-            _ => self.win.set_fullscreen(FullscreenType::Off).unwrap(),
+            Some(_) => self.ctx_wrapper.window().set_fullscreen(None),
+            None => self
+                .ctx_wrapper
+                .window()
+                .set_fullscreen(Some(Fullscreen::Borderless(None))),
         }
 
-        let (w, h) = self.win.size();
-        self.resize(w, h);
+        let size = self.ctx_wrapper.window().inner_size();
+        self.resize(size.width, size.height);
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
         unsafe {
             self.gl.viewport(0, 0, width as i32, height as i32);
-            self.win.set_size(width, height).unwrap();
+            self.ctx_wrapper.resize(PhysicalSize { width, height });
 
             self.gl.use_program(Some(self.program));
 
@@ -157,7 +162,7 @@ impl Renderer {
     pub fn draw_frame(&mut self, rgb: &[u8]) {
         unsafe {
             // TODO: texture streaming
-            self.gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
+            //self.gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
             self.gl.tex_image_2d(
                 glow::TEXTURE_2D,
                 0,
@@ -170,13 +175,12 @@ impl Renderer {
                 Some(rgb),
             );
 
-            self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
             self.gl.clear(glow::COLOR_BUFFER_BIT);
-            self.gl.use_program(Some(self.program));
-            self.gl.bind_vertex_array(Some(self.vao));
+            //self.gl.use_program(Some(self.program));
+            //self.gl.bind_vertex_array(Some(self.vao));
             self.gl.draw_arrays(glow::TRIANGLE_STRIP, 0, 4);
-        }
 
-        self.win.gl_swap_window();
+            self.ctx_wrapper.swap_buffers().unwrap();
+        }
     }
 }

@@ -4,6 +4,8 @@ default-members = ["ceres_sdl"]
 
 [profile.dev]
 opt-level = 2
+strip = false
+lto = false
 debug = true
 
 [profile.test]

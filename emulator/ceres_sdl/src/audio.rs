@@ -1,67 +1,81 @@
+use cpal::{BufferSize, StreamConfig};
 use {
     ceres_core::Sample,
-    sdl2::{
-        audio::{AudioQueue, AudioSpecDesired},
-        Sdl,
+    cpal::{
+        traits::{DeviceTrait, HostTrait, StreamTrait},
+        SampleRate,
     },
+    dasp_ring_buffer::Bounded,
+    parking_lot::Mutex,
+    std::sync::Arc,
 };
 
-const FREQ: i32 = 48000;
-const BUF_SIZE: usize = 512;
+const BUFFER_SIZE: cpal::FrameCount = 512 * 2;
+const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 16;
+const SAMPLE_RATE: i32 = 48000;
 
 pub struct Renderer {
-    stream: AudioQueue<f32>,
-    buf: [f32; BUF_SIZE as usize],
-    buf_pos: usize,
+    ring_buffer: Arc<Mutex<Bounded<Box<[Sample]>>>>,
+    stream: cpal::Stream,
 }
 
 impl Renderer {
-    pub fn new(sdl: &Sdl) -> Self {
-        let audio_subsystem = sdl.audio().unwrap();
+    pub fn new() -> Self {
+        let host = cpal::default_host();
+        let dev = host.default_output_device().unwrap();
 
-        let desired_spec = AudioSpecDesired {
-            freq: Some(FREQ),
-            channels: Some(2),
-            samples: Some(BUF_SIZE as u16),
+        let config = StreamConfig {
+            channels: 2,
+            sample_rate: SampleRate(SAMPLE_RATE as u32),
+            buffer_size: BufferSize::Fixed(BUFFER_SIZE),
         };
 
-        let queue = audio_subsystem.open_queue(None, &desired_spec).unwrap();
+        let ring_buffer = Arc::new(Mutex::new(Bounded::from(
+            vec![Default::default(); RING_BUFFER_SIZE].into_boxed_slice(),
+        )));
 
-        queue.resume();
+        let error_callback = |err| panic!("an AudioError occurred on stream: {}", err);
+        let ring_buffer_arc = Arc::clone(&ring_buffer);
+        let data_callback = move |output: &mut [Sample], _: &_| {
+            let mut buf = ring_buffer_arc.lock();
+            output
+                .iter_mut()
+                .zip(buf.drain())
+                .for_each(|(out_sample, gb_sample)| *out_sample = gb_sample);
+        };
+
+        let stream = dev
+            .build_output_stream(&config, data_callback, error_callback)
+            .unwrap();
+
+        stream.play().expect("AudioError playing sound");
 
         Self {
-            stream: queue,
-            buf: [Default::default(); BUF_SIZE],
-            buf_pos: 0,
+            ring_buffer,
+            stream,
         }
     }
 
-    pub fn push_frame(&mut self, l: Sample, r: Sample) {
-        // we're running too fast, skip this sample
-        if self.stream.size() / 4 > (FREQ as u32 / 4) {
-            return;
-        }
+    #[allow(dead_code)]
+    pub fn play(&mut self) {
+        self.stream.play().unwrap();
+    }
 
-        let l = f32::from(l * 32) / 32768.0;
-        let r = f32::from(r * 32) / 32768.0;
-
-        unsafe {
-            *self.buf.get_unchecked_mut(self.buf_pos) = l;
-            *self.buf.get_unchecked_mut(self.buf_pos + 1) = r;
-        }
-
-        self.buf_pos += 2;
-
-        if self.buf_pos == BUF_SIZE {
-            self.buf_pos = 0;
-            self.stream.queue_audio(&self.buf).unwrap();
-        }
+    #[allow(dead_code)]
+    pub fn pause(&mut self) {
+        self.stream.pause().unwrap();
     }
 
     #[inline]
     #[allow(clippy::unused_self)]
     pub fn sample_rate(&self) -> i32 {
-        FREQ
+        SAMPLE_RATE
+    }
+
+    pub fn push_frame(&mut self, l: Sample, r: Sample) {
+        let mut buf = self.ring_buffer.lock();
+        buf.push(l);
+        buf.push(r);
     }
 }
 

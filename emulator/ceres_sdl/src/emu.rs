@@ -1,13 +1,12 @@
 use {
     crate::{audio, video},
     ceres_core::{Button, Cartridge, Gb, Model},
-    quanta::Clock,
-    sdl2::{
-        controller::{self, GameController},
-        event::{Event, WindowEvent},
-        keyboard::Scancode,
-        EventPump, Sdl,
+    glutin::event_loop::EventLoop,
+    glutin::{
+        event::{ElementState, Event, VirtualKeyCode, WindowEvent},
+        event_loop::ControlFlow,
     },
+    quanta::Clock,
     std::{
         fs::File,
         io::{Read, Write},
@@ -16,14 +15,11 @@ use {
 };
 
 pub struct Emu {
-    sdl: Sdl,
-    events: EventPump,
     gb: Gb<audio::Renderer>,
     has_focus: bool,
     sav_path: PathBuf,
     video: video::Renderer,
     last_frame: u64,
-    quit: bool,
     clock: Clock,
 }
 
@@ -31,8 +27,7 @@ impl Emu {
     /// # Panics
     ///
     /// Will panic on invalid rom or ram file
-    #[must_use]
-    pub fn new(model: Model, mut path: PathBuf) -> Self {
+    pub fn run(model: Model, mut path: PathBuf) -> ! {
         fn read_file_into(path: &Path) -> Result<Box<[u8]>, std::io::Error> {
             let mut f = File::open(path)?;
             let metadata = f.metadata().unwrap();
@@ -42,8 +37,6 @@ impl Emu {
             Ok(buf)
         }
 
-        let sdl = sdl2::init().unwrap();
-
         // initialize cartridge
         let rom = read_file_into(&path).unwrap();
 
@@ -52,134 +45,85 @@ impl Emu {
 
         let cart = Cartridge::new(rom, ram).unwrap();
 
-        let video = video::Renderer::new(&sdl);
-        let audio = audio::Renderer::new(&sdl);
+        let events = EventLoop::new();
+
+        let video = video::Renderer::new(&events);
+        let audio = audio::Renderer::new();
         let sample_rate = audio.sample_rate();
         let gb = Gb::new(model, audio, sample_rate, cart);
 
-        let events = sdl.event_pump().unwrap();
         let clock = Clock::new();
 
-        let res = Self {
-            sdl,
-            events,
+        let mut emu = Self {
             gb,
             has_focus: false,
             sav_path: path,
             video,
             last_frame: clock.raw(),
-            quit: false,
             clock,
         };
 
-        let _controller = res.init_controller();
-
-        res
-    }
-
-    #[inline]
-    pub fn run(&mut self) {
-        while !self.quit {
-            let end = self.clock.raw();
-            let elapsed = self.clock.delta(self.last_frame, end);
-
-            if elapsed < ceres_core::FRAME_DUR {
-                std::thread::sleep(ceres_core::FRAME_DUR - elapsed);
+        events.run(move |event, _, control_flow| match event {
+            Event::LoopDestroyed => {
+                // save
+                if emu.gb.cartridge_has_battery() {
+                    let mut f = File::create(emu.sav_path.clone()).unwrap();
+                    f.write_all(emu.gb.cartridge_ram()).unwrap();
+                }
             }
-
-            self.handle_events();
-            self.gb.run_frame();
-            self.video.draw_frame(self.gb.pixel_data_rgb());
-            self.last_frame = end;
-        }
-
-        // save
-        if self.gb.cartridge_has_battery() {
-            let mut f = File::create(self.sav_path.clone()).unwrap();
-            f.write_all(self.gb.cartridge_ram()).unwrap();
-        }
-    }
-
-    fn init_controller(&self) -> Option<GameController> {
-        let gcs = self.sdl.game_controller().unwrap();
-        let avail = gcs.num_joysticks().unwrap();
-
-        (0..avail).find_map(|id| {
-            gcs.is_game_controller(id)
-                .then(|| gcs.open(id).ok())
-                .flatten()
-        })
-    }
-
-    fn handle_events(&mut self) {
-        for event in self.events.poll_iter() {
-            match event {
-                Event::Quit { .. } => self.quit = true,
-                Event::Window { win_event, .. } => match win_event {
-                    WindowEvent::Resized(width, height) => {
-                        self.video.resize(width as u32, height as u32);
+            Event::WindowEvent { event, .. } => match event {
+                WindowEvent::Resized(s) => emu.video.resize(s.width, s.height),
+                WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                WindowEvent::Focused(is_focused) => emu.has_focus = is_focused,
+                WindowEvent::KeyboardInput { input, .. } => {
+                    if !emu.has_focus {
+                        return;
                     }
-                    WindowEvent::FocusGained => self.has_focus = true,
-                    WindowEvent::FocusLost => self.has_focus = false,
-                    WindowEvent::Close => self.quit = true,
-                    _ => (),
-                },
-                Event::ControllerButtonDown { button, .. } if self.has_focus => match button {
-                    controller::Button::DPadUp => self.gb.press(Button::Up),
-                    controller::Button::DPadLeft => self.gb.press(Button::Left),
-                    controller::Button::DPadDown => self.gb.press(Button::Down),
-                    controller::Button::DPadRight => self.gb.press(Button::Right),
-                    controller::Button::B => self.gb.press(Button::B),
-                    controller::Button::A => self.gb.press(Button::A),
-                    controller::Button::Start => self.gb.press(Button::Start),
-                    controller::Button::Back => self.gb.press(Button::Select),
-                    _ => (),
-                },
-                Event::ControllerButtonUp { button, .. } if self.has_focus => match button {
-                    controller::Button::DPadUp => self.gb.release(Button::Up),
-                    controller::Button::DPadLeft => self.gb.release(Button::Left),
-                    controller::Button::DPadDown => self.gb.release(Button::Down),
-                    controller::Button::DPadRight => self.gb.release(Button::Right),
-                    controller::Button::B => self.gb.release(Button::B),
-                    controller::Button::A => self.gb.release(Button::A),
-                    controller::Button::Start => self.gb.release(Button::Start),
-                    controller::Button::Back => self.gb.release(Button::Select),
-                    _ => (),
-                },
-                Event::KeyDown {
-                    scancode: Some(key),
-                    ..
-                } if self.has_focus => {
-                    match key {
-                        Scancode::W => self.gb.press(Button::Up),
-                        Scancode::A => self.gb.press(Button::Left),
-                        Scancode::S => self.gb.press(Button::Down),
-                        Scancode::D => self.gb.press(Button::Right),
-                        Scancode::K => self.gb.press(Button::A),
-                        Scancode::L => self.gb.press(Button::B),
-                        Scancode::Return => self.gb.press(Button::Start),
-                        Scancode::Backspace => self.gb.press(Button::Select),
-                        // Gui
-                        Scancode::F => self.video.toggle_fullscreen(),
-                        _ => (),
+
+                    if let Some(key) = input.virtual_keycode {
+                        match input.state {
+                            ElementState::Pressed => match key {
+                                VirtualKeyCode::W => emu.gb.press(Button::Up),
+                                VirtualKeyCode::A => emu.gb.press(Button::Left),
+                                VirtualKeyCode::S => emu.gb.press(Button::Down),
+                                VirtualKeyCode::D => emu.gb.press(Button::Right),
+                                VirtualKeyCode::K => emu.gb.press(Button::A),
+                                VirtualKeyCode::L => emu.gb.press(Button::B),
+                                VirtualKeyCode::Return => emu.gb.press(Button::Start),
+                                VirtualKeyCode::Back => emu.gb.press(Button::Select),
+                                // System
+                                VirtualKeyCode::F => emu.video.toggle_fullscreen(),
+                                _ => (),
+                            },
+                            ElementState::Released => match key {
+                                VirtualKeyCode::W => emu.gb.release(Button::Up),
+                                VirtualKeyCode::A => emu.gb.release(Button::Left),
+                                VirtualKeyCode::S => emu.gb.release(Button::Down),
+                                VirtualKeyCode::D => emu.gb.release(Button::Right),
+                                VirtualKeyCode::K => emu.gb.release(Button::A),
+                                VirtualKeyCode::L => emu.gb.release(Button::B),
+                                VirtualKeyCode::Return => emu.gb.release(Button::Start),
+                                VirtualKeyCode::Back => emu.gb.release(Button::Select),
+                                _ => (),
+                            },
+                        }
                     }
                 }
-                Event::KeyUp {
-                    scancode: Some(key),
-                    ..
-                } if self.has_focus => match key {
-                    Scancode::W => self.gb.release(Button::Up),
-                    Scancode::A => self.gb.release(Button::Left),
-                    Scancode::S => self.gb.release(Button::Down),
-                    Scancode::D => self.gb.release(Button::Right),
-                    Scancode::K => self.gb.release(Button::A),
-                    Scancode::L => self.gb.release(Button::B),
-                    Scancode::Return => self.gb.release(Button::Start),
-                    Scancode::Backspace => self.gb.release(Button::Select),
-                    _ => (),
-                },
                 _ => (),
+            },
+            Event::MainEventsCleared => {
+                let end = emu.clock.raw();
+                let elapsed = emu.clock.delta(emu.last_frame, end);
+
+                if elapsed < ceres_core::FRAME_DUR {
+                    std::thread::sleep(ceres_core::FRAME_DUR - elapsed);
+                }
+
+                emu.gb.run_frame();
+                emu.video.draw_frame(emu.gb.pixel_data_rgb());
+                emu.last_frame = end;
             }
-        }
+            _ => (),
+        });
     }
 }

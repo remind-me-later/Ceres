@@ -103,6 +103,5 @@ fn main() {
     };
 
     let path = PathBuf::from(args.get_one::<String>("file").unwrap());
-    let mut emu = emu::Emu::new(model, path);
-    emu.run();
+    emu::Emu::run(model, path);
 }
