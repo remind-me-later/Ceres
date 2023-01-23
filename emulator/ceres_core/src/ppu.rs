@@ -341,7 +341,7 @@ impl<A: Audio> Gb<A> {
 
     pub(crate) fn write_vram(&mut self, addr: u16, val: u8) {
         if self.ppu_mode() != Mode::Drawing {
-            let bank = u16::from(self.vbk) * VRAM_SIZE as u16;
+            let bank = u16::from(self.vbk) * VRAM_SIZE;
             let i = (addr & 0x1FFF) + bank;
             self.vram[i as usize] = val;
         }
@@ -458,7 +458,7 @@ impl<A: Audio> Gb<A> {
 
     #[inline]
     fn vram_at_bank(&self, addr: u16, bank: u8) -> u8 {
-        self.vram[((addr & 0x1FFF) + u16::from(bank) * VRAM_SIZE as u16) as usize]
+        self.vram[((addr & 0x1FFF) + u16::from(bank) * VRAM_SIZE) as usize]
     }
 
     #[inline]
@@ -558,7 +558,7 @@ impl<A: Audio> Gb<A> {
         }
 
         let wx = self.wx.saturating_sub(7);
-        let y = (self.ly - self.wy).wrapping_sub(self.ppu_win_skipped) as u8;
+        let y = (self.ly - self.wy).wrapping_sub(self.ppu_win_skipped);
         let row = u16::from(y / 8) * 32;
         let line = u16::from((y & 7) * 2);
 
@@ -618,19 +618,8 @@ impl<A: Audio> Gb<A> {
     #[inline]
     fn objs_in_ly(&mut self, height: u8) -> ([Obj; 10], usize) {
         let mut len = 0;
-        // TODO: not pretty
-        let mut obj = [
-            Obj::default(),
-            Obj::default(),
-            Obj::default(),
-            Obj::default(),
-            Obj::default(),
-            Obj::default(),
-            Obj::default(),
-            Obj::default(),
-            Obj::default(),
-            Obj::default(),
-        ];
+
+        let mut obj: [Obj; 10] = Default::default();
 
         for i in (0..OAM_SIZE).step_by(4) {
             let y = self.oam[i].wrapping_sub(16);

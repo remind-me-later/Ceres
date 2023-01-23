@@ -34,7 +34,7 @@ impl Renderer {
             vec![Default::default(); RING_BUFFER_SIZE].into_boxed_slice(),
         )));
 
-        let error_callback = |err| panic!("an AudioError occurred on stream: {}", err);
+        let error_callback = |err| panic!("an AudioError occurred on stream: {err}");
         let ring_buffer_arc = Arc::clone(&ring_buffer);
         let data_callback = move |output: &mut [Sample], _: &_| {
             let mut buf = ring_buffer_arc.lock();
@@ -57,7 +57,7 @@ impl Renderer {
     }
 
     #[allow(dead_code)]
-    pub fn play(&mut self) {
+    pub fn resume(&mut self) {
         self.stream.play().unwrap();
     }
 

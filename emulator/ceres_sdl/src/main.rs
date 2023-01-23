@@ -49,7 +49,7 @@ use {
 
 mod audio;
 mod emu;
-mod video;
+mod opengl;
 
 const CERES_BIN: &str = "ceres";
 const CERES_STYLIZED: &str = "Ceres";
@@ -103,5 +103,7 @@ fn main() {
     };
 
     let path = PathBuf::from(args.get_one::<String>("file").unwrap());
-    emu::Emu::run(model, path);
+
+    let emu = emu::Emu::new(model, path);
+    emu.run();
 }

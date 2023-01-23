@@ -114,16 +114,16 @@ impl Cartridge {
         let bank_addr = match addr {
             0x0000..=0x3FFF => {
                 let (rom_lower, _) = self.rom_offsets;
-                rom_lower as usize | (addr as usize & 0x3FFF)
+                rom_lower | (addr as usize & 0x3FFF)
             }
             0x4000..=0x7FFF => {
                 let (_, rom_upper) = self.rom_offsets;
-                rom_upper as usize | (addr as usize & 0x3FFF)
+                rom_upper | (addr as usize & 0x3FFF)
             }
             _ => 0,
         };
 
-        self.rom[bank_addr as usize]
+        self.rom[bank_addr]
     }
 
     #[must_use]
@@ -356,7 +356,7 @@ impl RAMSize {
     }
 
     const fn size_in_bytes(self) -> usize {
-        self.num_banks() as usize * self.bank_size_in_bytes() as usize
+        self.num_banks() * self.bank_size_in_bytes()
     }
 
     const fn num_banks(self) -> usize {

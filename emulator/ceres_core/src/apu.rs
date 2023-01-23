@@ -1,6 +1,6 @@
 use crate::{Gb, TC_SEC};
 
-const APU_TIMER_RES: i32 = ((TC_SEC / 512) & 0xFFFF) as i32;
+const APU_TIMER_RES: i32 = (TC_SEC / 512) & 0xFFFF;
 
 const SQ_MAX_LEN: u16 = 64;
 const SQ_FREQ_P_MUL: u16 = 4;
@@ -273,11 +273,11 @@ impl Square1 {
     }
 
     pub(crate) fn read_nr10(&self) -> u8 {
-        0x80 | ((self.sw_period as u8 & 7) << 4) | (u8::from(!self.sw_dec) << 3) | self.sw_shift
+        0x80 | ((self.sw_period & 7) << 4) | (u8::from(!self.sw_dec) << 3) | self.sw_shift
     }
 
     pub(crate) fn read_nr11(&self) -> u8 {
-        0x3F | ((self.duty as u8) << 6)
+        0x3F | (self.duty << 6)
     }
 
     pub(crate) fn read_nr12(&self) -> u8 {
@@ -509,7 +509,7 @@ impl Square2 {
     }
 
     pub(crate) fn read_nr21(&self) -> u8 {
-        0x3F | ((self.duty as u8) << 6)
+        0x3F | (self.duty << 6)
     }
 
     pub(crate) fn read_nr22(&self) -> u8 {
@@ -993,7 +993,7 @@ impl Noise {
                 self.lfsr |= xor_bit << 6;
             }
 
-            self.out = if self.lfsr & 1 == 0 { 1 } else { 0 };
+            self.out = u8::from(self.lfsr & 1 == 0);
         }
     }
 

@@ -1,12 +1,14 @@
+use glutin::{
+    config::Config,
+    display::GetGlDisplay,
+    prelude::GlDisplay,
+    surface::{Surface, SurfaceAttributesBuilder, WindowSurface},
+};
+use raw_window_handle::HasRawWindowHandle;
+use std::{ffi::CString, num::NonZeroU32};
+use winit::window::Window;
 use {
-    crate::CERES_STYLIZED,
     glow::{Context, HasContext, NativeProgram, NativeTexture, NativeVertexArray, UniformLocation},
-    glutin::{
-        dpi::PhysicalSize,
-        event_loop::EventLoop,
-        window::{Fullscreen, WindowBuilder},
-        ContextBuilder, GlProfile, GlRequest, PossiblyCurrent, Robustness, WindowedContext,
-    },
     std::cmp::min,
 };
 
@@ -21,37 +23,15 @@ pub struct Renderer {
     _vao: NativeVertexArray,
     _texture: NativeTexture,
     uniform_loc: UniformLocation,
-
-    // Context
-    ctx_wrapper: WindowedContext<PossiblyCurrent>,
 }
 
 impl Renderer {
-    pub fn new(events: &EventLoop<()>) -> Self {
+    pub fn new<D: GlDisplay>(gl_display: &D) -> Self {
         unsafe {
-            let window_builder = WindowBuilder::new()
-                .with_title(CERES_STYLIZED)
-                .with_inner_size(PhysicalSize {
-                    width: PX_WIDTH as i32 * 4,
-                    height: PX_HEIGHT as i32 * 4,
-                })
-                .with_min_inner_size(PhysicalSize {
-                    width: PX_WIDTH as i32,
-                    height: PX_HEIGHT as i32,
-                });
-
-            let ctx_wrapper = ContextBuilder::new()
-                .with_gl(GlRequest::Latest)
-                .with_gl_profile(GlProfile::Core)
-                .with_gl_robustness(Robustness::NotRobust)
-                .with_vsync(true)
-                .build_windowed(window_builder, events)
-                .unwrap()
-                .make_current()
-                .unwrap();
-
-            let gl =
-                glow::Context::from_loader_function(|s| ctx_wrapper.get_proc_address(s).cast());
+            let gl = glow::Context::from_loader_function(|symbol| {
+                let symbol = CString::new(symbol).unwrap();
+                gl_display.get_proc_address(symbol.as_c_str()).cast()
+            });
 
             // create vao
             let vao = gl
@@ -114,13 +94,12 @@ impl Renderer {
 
             gl.clear_color(0.0, 0.0, 0.0, 1.0);
 
-            let mut res = Self {
+            let res = Self {
                 gl,
                 program,
                 _vao: vao,
                 _texture: texture,
                 uniform_loc,
-                ctx_wrapper,
             };
 
             res.resize(PX_WIDTH * MUL, PX_HEIGHT * MUL);
@@ -129,25 +108,9 @@ impl Renderer {
         }
     }
 
-    pub fn toggle_fullscreen(&mut self) {
-        let in_fullscreen = self.ctx_wrapper.window().fullscreen();
-
-        match in_fullscreen {
-            Some(_) => self.ctx_wrapper.window().set_fullscreen(None),
-            None => self
-                .ctx_wrapper
-                .window()
-                .set_fullscreen(Some(Fullscreen::Borderless(None))),
-        }
-
-        let size = self.ctx_wrapper.window().inner_size();
-        self.resize(size.width, size.height);
-    }
-
-    pub fn resize(&mut self, width: u32, height: u32) {
+    pub fn resize(&self, width: u32, height: u32) {
         unsafe {
             self.gl.viewport(0, 0, width as i32, height as i32);
-            self.ctx_wrapper.resize(PhysicalSize { width, height });
 
             self.gl.use_program(Some(self.program));
 
@@ -159,7 +122,7 @@ impl Renderer {
         }
     }
 
-    pub fn draw_frame(&mut self, rgb: &[u8]) {
+    pub fn draw_frame(&self, rgb: &[u8]) {
         unsafe {
             // TODO: texture streaming
             //self.gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
@@ -179,8 +142,34 @@ impl Renderer {
             //self.gl.use_program(Some(self.program));
             //self.gl.bind_vertex_array(Some(self.vao));
             self.gl.draw_arrays(glow::TRIANGLE_STRIP, 0, 4);
-
-            self.ctx_wrapper.swap_buffers().unwrap();
         }
+    }
+}
+
+pub struct GlWindow {
+    // XXX the surface must be dropped before the window.
+    pub surface: Surface<WindowSurface>,
+
+    pub window: Window,
+}
+
+impl GlWindow {
+    pub fn new(window: Window, config: &Config) -> Self {
+        let (width, height): (u32, u32) = window.inner_size().into();
+        let raw_window_handle = window.raw_window_handle();
+        let attrs = SurfaceAttributesBuilder::<WindowSurface>::new().build(
+            raw_window_handle,
+            NonZeroU32::new(width).unwrap(),
+            NonZeroU32::new(height).unwrap(),
+        );
+
+        let surface = unsafe {
+            config
+                .display()
+                .create_window_surface(config, &attrs)
+                .unwrap()
+        };
+
+        Self { surface, window }
     }
 }
