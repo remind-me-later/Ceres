@@ -2,7 +2,7 @@
 use std::println;
 
 use {
-    crate::{Audio, Gb, KEY1_SPEED_B, KEY1_SWITCH_B},
+    crate::{Audio, Gb},
     core::fmt::Display,
     Ld8::{Dhl, A, B, C, D, E, H, L},
 };
@@ -1209,13 +1209,11 @@ impl<A: Audio> Gb<A> {
     fn stop(&mut self) {
         self.imm_u8();
 
-        if self.key1 & KEY1_SWITCH_B == 0 {
-            self.cpu_halted = true;
-        } else {
+        if self.double_speed_request {
             self.double_speed = !self.double_speed;
-
-            self.key1 &= !KEY1_SWITCH_B;
-            self.key1 ^= KEY1_SPEED_B;
+            self.double_speed_request = false;
+        } else {
+            self.cpu_halted = true;
         }
 
         #[cfg(feature = "disassembler")]

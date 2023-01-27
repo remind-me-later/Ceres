@@ -77,9 +77,24 @@ impl<A: Audio> Gb<A> {
     }
 
     fn mix_and_render(&mut self) {
-        let (l, r) = self
-            .ch_out_iter()
-            .fold((0, 0), |(l, r), (lp, rp)| (l + lp, r + rp));
+        let mut l = 0;
+        let mut r = 0;
+
+        for i in 0..4 {
+            let out = match i {
+                0 => self.apu_ch1.out() * u8::from(self.apu_ch1.on()),
+                1 => self.apu_ch2.out() * u8::from(self.apu_ch2.on()),
+                2 => self.apu_ch3.out() * u8::from(self.apu_ch3.on()),
+                3 => self.apu_ch4.out() * u8::from(self.apu_ch4.on()),
+                _ => break,
+            };
+
+            let ch_r_on = u8::from(self.nr51 & (1 << i) != 0);
+            let ch_l_on = u8::from(self.nr51 & (1 << (i + 4)) != 0);
+
+            l += ch_l_on * out;
+            r += ch_r_on * out;
+        }
 
         // transform to i16 sample
         let l = (0xF - i16::from(l) * 2) * i16::from(self.apu_l_vol);
@@ -143,36 +158,6 @@ impl<A: Audio> Gb<A> {
         if !self.apu_on {
             self.reset();
         }
-    }
-
-    fn ch_out_iter(&self) -> ChOutIter<A> {
-        ChOutIter { i: 0, gb: self }
-    }
-}
-
-struct ChOutIter<'a, A: Audio> {
-    i: u8,
-    gb: &'a Gb<A>,
-}
-
-impl<'a, A: Audio> Iterator for ChOutIter<'a, A> {
-    type Item = (u8, u8);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let out = match self.i {
-            0 => self.gb.apu_ch1.out() * u8::from(self.gb.apu_ch1.on()),
-            1 => self.gb.apu_ch2.out() * u8::from(self.gb.apu_ch2.on()),
-            2 => self.gb.apu_ch3.out() * u8::from(self.gb.apu_ch3.on()),
-            3 => self.gb.apu_ch4.out() * u8::from(self.gb.apu_ch4.on()),
-            _ => return None,
-        };
-
-        let ch_r_on = u8::from(self.gb.nr51 & (1 << self.i) != 0);
-        let ch_l_on = u8::from(self.gb.nr51 & (1 << (self.i + 4)) != 0);
-
-        self.i += 1;
-
-        Some((ch_l_on * out, ch_r_on * out))
     }
 }
 

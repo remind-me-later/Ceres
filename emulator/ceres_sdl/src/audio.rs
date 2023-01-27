@@ -1,3 +1,5 @@
+use std::sync::Mutex;
+
 use cpal::{BufferSize, StreamConfig};
 use {
     ceres_core::Sample,
@@ -6,7 +8,6 @@ use {
         SampleRate,
     },
     dasp_ring_buffer::Bounded,
-    parking_lot::Mutex,
     std::sync::Arc,
 };
 
@@ -37,11 +38,12 @@ impl Renderer {
         let error_callback = |err| panic!("an AudioError occurred on stream: {err}");
         let ring_buffer_arc = Arc::clone(&ring_buffer);
         let data_callback = move |output: &mut [Sample], _: &_| {
-            let mut buf = ring_buffer_arc.lock();
-            output
-                .iter_mut()
-                .zip(buf.drain())
-                .for_each(|(out_sample, gb_sample)| *out_sample = gb_sample);
+            if let Ok(mut buf) = ring_buffer_arc.lock() {
+                output
+                    .iter_mut()
+                    .zip(buf.drain())
+                    .for_each(|(out_sample, gb_sample)| *out_sample = gb_sample);
+            }
         };
 
         let stream = dev
@@ -73,9 +75,10 @@ impl Renderer {
     }
 
     pub fn push_frame(&mut self, l: Sample, r: Sample) {
-        let mut buf = self.ring_buffer.lock();
-        buf.push(l);
-        buf.push(r);
+        if let Ok(mut buf) = self.ring_buffer.lock() {
+            buf.push(l);
+            buf.push(r);
+        }
     }
 }
 

@@ -11,7 +11,6 @@ use {
         surface::{GlSurface, SwapInterval},
     },
     glutin_winit::DisplayBuilder,
-    quanta::Clock,
     std::{
         fs::File,
         io::{Read, Write},
@@ -29,8 +28,6 @@ use {
 
 pub struct Emu {
     gb: Gb<audio::Renderer>,
-    clock: Clock,
-    last_frame: u64,
     has_focus: bool,
     sav_path: PathBuf,
     state: Option<(PossiblyCurrentContext, opengl::GlWindow)>,
@@ -137,8 +134,6 @@ impl Emu {
             Gb::new(model, audio, sample_rate, cart)
         };
 
-        let clock: Clock = Clock::new();
-        let last_frame: u64 = clock.raw();
         let has_focus: bool = false;
         let sav_path: PathBuf = path;
 
@@ -147,8 +142,6 @@ impl Emu {
 
         Self {
             gb,
-            clock,
-            last_frame,
             has_focus,
             sav_path,
             state,
@@ -265,13 +258,6 @@ impl Emu {
                 },
                 Event::MainEventsCleared => {
                     if let Some((gl_context, gl_window)) = &self.state {
-                        let end = self.clock.raw();
-                        let elapsed = self.clock.delta(self.last_frame, end);
-
-                        if elapsed < ceres_core::FRAME_DUR {
-                            std::thread::sleep(ceres_core::FRAME_DUR - elapsed);
-                        }
-
                         self.gb.run_frame();
 
                         let renderer = self.renderer.as_ref().unwrap();
@@ -280,8 +266,6 @@ impl Emu {
                         gl_window.window.request_redraw();
 
                         gl_window.surface.swap_buffers(gl_context).unwrap();
-
-                        self.last_frame = end;
                     }
                 }
                 _ => (),

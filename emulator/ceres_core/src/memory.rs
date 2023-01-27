@@ -1,4 +1,6 @@
-use crate::{ppu::Mode, Audio, CompatMode, Gb, Model::Cgb, KEY1_SWITCH_B};
+use core::num::NonZeroU8;
+
+use crate::{ppu::Mode, Audio, CompatMode, Gb, Model::Cgb};
 
 #[derive(PartialEq, Eq, Default)]
 pub enum HdmaState {
@@ -81,7 +83,7 @@ impl<A: Audio> Gb<A> {
     #[inline]
     #[must_use]
     pub(crate) fn read_bank_ram(&self, addr: u16) -> u8 {
-        let bank = u16::from(self.svbk_true) * 0x1000;
+        let bank = u16::from(self.svbk_true.get()) * 0x1000;
         self.wram[(addr & 0xFFF | bank) as usize]
     }
 
@@ -92,7 +94,7 @@ impl<A: Audio> Gb<A> {
 
     #[inline]
     fn write_bank_ram(&mut self, addr: u16, val: u8) {
-        let bank = u16::from(self.svbk_true) * 0x1000;
+        let bank = u16::from(self.svbk_true.get()) * 0x1000;
         self.wram[(addr & 0xFFF | bank) as usize] = val;
     }
 
@@ -170,8 +172,10 @@ impl<A: Audio> Gb<A> {
             OBP1 => self.obp1,
             WY => self.wy,
             WX => self.wx,
-            KEY1 if self.model == Cgb => 0x7E | self.key1,
-            VBK if self.model == Cgb => self.vbk | 0xFE,
+            KEY1 if self.model == Cgb => {
+                0x7E | (u8::from(self.double_speed) << 7) | u8::from(self.double_speed_request)
+            }
+            VBK if self.model == Cgb => u8::from(self.vbk) | 0xFE,
             HDMA5 if self.model == Cgb => {
                 // active on low
                 u8::from(!self.hdma_on()) << 7 | self.hdma5
@@ -259,11 +263,8 @@ impl<A: Audio> Gb<A> {
             KEY0 if self.model == Cgb && self.boot_rom.is_some() && val == 4 => {
                 self.compat_mode = CompatMode::Compat;
             }
-            KEY1 if self.model == Cgb => {
-                self.key1 &= KEY1_SWITCH_B;
-                self.key1 |= val & KEY1_SWITCH_B;
-            }
-            VBK if self.model == Cgb => self.vbk = val & 1,
+            KEY1 if self.model == Cgb => self.double_speed_request = val & 1 != 0,
+            VBK if self.model == Cgb => self.vbk = val & 1 != 0,
             0x50 => {
                 if val & 1 != 0 {
                     self.boot_rom = None;
@@ -305,7 +306,7 @@ impl<A: Audio> Gb<A> {
             SVBK if self.model == Cgb => {
                 let tmp = val & 7;
                 self.svbk = tmp;
-                self.svbk_true = if tmp == 0 { 1 } else { tmp };
+                self.svbk_true = NonZeroU8::new(if tmp == 0 { 1 } else { tmp }).unwrap();
             }
             HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize] = val,
             IE => self.ie = val,

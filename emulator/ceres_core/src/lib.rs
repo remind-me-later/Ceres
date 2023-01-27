@@ -40,6 +40,8 @@
     clippy::verbose_bit_mask
 )]
 
+use core::num::NonZeroU8;
+
 #[cfg(feature = "disassembler")]
 extern crate std;
 
@@ -83,8 +85,6 @@ const IF_TIMER_B: u8 = 4;
 //const IF_SERIAL_B: u8 = 8;
 const IF_P1_B: u8 = 16;
 
-const KEY1_SPEED_B: u8 = 0x80;
-const KEY1_SWITCH_B: u8 = 1;
 const HRAM_SIZE: usize = 0x80;
 const WRAM_SIZE: usize = 0x2000;
 const WRAM_SIZE_CGB: usize = WRAM_SIZE * 4;
@@ -112,7 +112,8 @@ pub struct Gb<A: Audio> {
 
     // double speed
     double_speed: bool,
-    key1: u8,
+    double_speed_request: bool,
+    // key1: u8,
 
     // cartridge
     cart: Cartridge,
@@ -149,7 +150,7 @@ pub struct Gb<A: Audio> {
     wram: [u8; WRAM_SIZE_CGB],
     hram: [u8; HRAM_SIZE],
     svbk: u8,
-    svbk_true: u8, // true selected bank, between 1 and 7
+    svbk_true: NonZeroU8, // true selected bank, between 1 and 7
 
     // -- dma
     dma: u8,
@@ -178,7 +179,7 @@ pub struct Gb<A: Audio> {
     wy: u8,
     wx: u8,
     opri: u8,
-    vbk: u8,
+    vbk: bool,
     bcp: ColorPalette,
     ocp: ColorPalette,
 
@@ -224,6 +225,7 @@ pub struct Gb<A: Audio> {
 impl<A: Audio> Gb<A> {
     #[allow(clippy::too_many_lines)]
     #[must_use]
+    /// # Panics
     pub fn new(model: Model, audio: A, sample_rate: i32, cart: Cartridge) -> Self {
         let compat_mode = match model {
             Model::Dmg | Model::Mgb => CompatMode::Dmg,
@@ -236,7 +238,7 @@ impl<A: Audio> Gb<A> {
             Model::Cgb => CGB_BOOTROM,
         });
 
-        let mut gb = Self {
+        Self {
             model,
             compat_mode,
             cart,
@@ -244,7 +246,7 @@ impl<A: Audio> Gb<A> {
             audio,
 
             // Custom
-            svbk_true: 1,
+            svbk_true: NonZeroU8::new(1).unwrap(),
             ppu_cycles: Mode::HBlank.cycles(0),
 
             // Slices
@@ -253,10 +255,13 @@ impl<A: Audio> Gb<A> {
             vram: [0; VRAM_SIZE_CGB],
             oam: [0; OAM_SIZE],
 
+            // Sound
+            apu_ext_sample_period: Self::sample_period_from_rate(sample_rate),
+
             // Default
             running_frame: Default::default(),
             double_speed: Default::default(),
-            key1: Default::default(),
+            double_speed_request: Default::default(),
             af: Default::default(),
             bc: Default::default(),
             de: Default::default(),
@@ -324,18 +329,13 @@ impl<A: Audio> Gb<A> {
             apu_ch4: Noise::default(),
             apu_timer: Default::default(),
             apu_render_timer: Default::default(),
-            apu_ext_sample_period: Default::default(),
             apu_seq_step: Default::default(),
-        };
-
-        gb.set_sample_rate(sample_rate);
-
-        gb
+        }
     }
 
-    fn set_sample_rate(&mut self, sample_rate: i32) {
+    const fn sample_period_from_rate(sample_rate: i32) -> i32 {
         // maybe account for difference between 59.7 and target Hz?
-        self.apu_ext_sample_period = TC_SEC / sample_rate;
+        TC_SEC / sample_rate
     }
 
     /// Runs 1 frame
