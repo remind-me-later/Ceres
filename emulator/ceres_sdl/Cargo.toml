@@ -11,7 +11,6 @@ glow = "*"
 clap = { version = "*", default-features = false, features = ["std"] }
 const_format = "*"
 cpal = "*"
-dasp_ring_buffer = "*"
 glutin = { version = "*" }
 winit = { version = "*" }
 glutin-winit = { version = "*" }

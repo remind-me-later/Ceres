@@ -16,11 +16,7 @@ const NOISE_MAX_LEN: u16 = 64;
 /// Audio sample type
 pub type Sample = i16;
 
-pub trait Audio {
-    fn play(&mut self, l: Sample, r: Sample);
-}
-
-impl<A: Audio> Gb<A> {
+impl Gb {
     pub(crate) fn run_apu(&mut self, cycles: i32) {
         if !self.apu_on {
             return;
@@ -101,10 +97,10 @@ impl<A: Audio> Gb<A> {
         let r = (0xF - i16::from(r) * 2) * i16::from(self.apu_r_vol);
 
         // amplify
-        let l = l * 32;
-        let r = r * 32;
+        self.apu_l_out = l * 32;
+        self.apu_r_out = r * 32;
 
-        self.audio.play(l, r);
+        self.samples_run += 2;
     }
 
     fn reset(&mut self) {

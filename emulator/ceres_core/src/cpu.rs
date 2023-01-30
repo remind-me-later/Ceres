@@ -2,7 +2,7 @@
 use std::println;
 
 use {
-    crate::{Audio, Gb},
+    crate::Gb,
     core::fmt::Display,
     Ld8::{Dhl, A, B, C, D, E, H, L},
 };
@@ -41,7 +41,7 @@ impl Display for Ld8 {
 
 impl Ld8 {
     #[inline]
-    fn read<A: Audio>(self, gb: &mut Gb<A>) -> u8 {
+    fn read(self, gb: &mut Gb) -> u8 {
         match self {
             Self::A => (gb.af >> 8) as u8,
             Self::B => (gb.bc >> 8) as u8,
@@ -55,7 +55,7 @@ impl Ld8 {
     }
 
     #[inline]
-    fn write<A: Audio>(self, gb: &mut Gb<A>, val: u8) {
+    fn write(self, gb: &mut Gb, val: u8) {
         match self {
             Self::A => {
                 gb.af &= 0x00FF;
@@ -90,7 +90,7 @@ impl Ld8 {
     }
 }
 
-impl<A: Audio> Gb<A> {
+impl Gb {
     pub(crate) fn run_cpu(&mut self) {
         if self.cpu_ei_delay {
             self.ime = true;

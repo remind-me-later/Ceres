@@ -1,4 +1,4 @@
-use crate::{Audio, CompatMode, Gb, IF_LCD_B, IF_VBLANK_B};
+use crate::{CompatMode, Gb, IF_LCD_B, IF_VBLANK_B};
 
 /// `GameBoy` screen width in pixels.
 pub const PX_WIDTH: u8 = 160;
@@ -220,9 +220,9 @@ struct Obj {
     pub attr: u8,
 }
 
-impl<A: Audio> Gb<A> {
+impl Gb {
     pub(crate) fn run_ppu(&mut self, cycles: i32) {
-        fn check_lyc<A: Audio>(gb: &mut Gb<A>) {
+        fn check_lyc(gb: &mut Gb) {
             gb.stat &= !STAT_LYC_B;
 
             if gb.ly == gb.lyc {
@@ -275,7 +275,9 @@ impl<A: Audio> Gb<A> {
                 self.lcdc_delay = false;
             }
 
-            self.running_frame = false;
+            // self.running_frame = false;
+
+            self.rgb_buf_present.data = self.rgb_buf.data;
             self.frame_dots -= 70224;
         }
     }
@@ -313,7 +315,7 @@ impl<A: Audio> Gb<A> {
         if val & LCDC_ON_B == 0 && self.lcdc & LCDC_ON_B != 0 {
             debug_assert!(self.ppu_mode() == Mode::VBlank);
             self.ly = 0;
-            self.rgba_buf.clear();
+            self.rgb_buf.clear();
             self.frame_dots = 0;
         }
 
@@ -535,7 +537,7 @@ impl<A: Audio> Gb<A> {
                 CompatMode::Cgb => self.bcp.rgb(attr & BG_PAL_B, color),
             };
 
-            self.rgba_buf.set_px(base_idx + i as usize, rgb);
+            self.rgb_buf.set_px(base_idx + i as usize, rgb);
 
             bg_priority[i as usize] = if color == 0 {
                 Priority::Sprites
@@ -611,7 +613,7 @@ impl<A: Audio> Gb<A> {
                 Priority::Normal
             };
 
-            self.rgba_buf.set_px(base_idx + i as usize, rgb);
+            self.rgb_buf.set_px(base_idx + i as usize, rgb);
         }
     }
 
@@ -745,7 +747,7 @@ impl<A: Audio> Gb<A> {
                     }
                 };
 
-                self.rgba_buf.set_px(base_idx + x as usize, rgb);
+                self.rgb_buf.set_px(base_idx + x as usize, rgb);
             }
         }
     }

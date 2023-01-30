@@ -48,7 +48,7 @@ extern crate std;
 extern crate alloc;
 
 pub use {
-    apu::{Audio, Sample},
+    apu::Sample,
     cartridge::{Cartridge, InitializationError},
     joypad::Button,
     ppu::{PX_HEIGHT, PX_WIDTH},
@@ -104,11 +104,12 @@ enum CompatMode {
     Cgb,
 }
 
-pub struct Gb<A: Audio> {
+pub struct Gb {
     // general
     model: Model,
     compat_mode: CompatMode,
-    running_frame: bool,
+    // running_frame: bool,
+    samples_run: usize,
 
     // double speed
     double_speed: bool,
@@ -187,7 +188,8 @@ pub struct Gb<A: Audio> {
     lcdc_delay: bool,
     vram: [u8; VRAM_SIZE_CGB],
     oam: [u8; OAM_SIZE],
-    rgba_buf: RgbBuf,
+    rgb_buf: RgbBuf,
+    rgb_buf_present: RgbBuf,
     ppu_cycles: i32,
     ppu_win_in_frame: bool,
     ppu_win_in_ly: bool,
@@ -218,15 +220,17 @@ pub struct Gb<A: Audio> {
     apu_timer: i32,
     apu_render_timer: i32,
     apu_ext_sample_period: i32,
-    audio: A,
     apu_seq_step: u8,
+
+    apu_l_out: i16,
+    apu_r_out: i16,
 }
 
-impl<A: Audio> Gb<A> {
+impl Gb {
     #[allow(clippy::too_many_lines)]
     #[must_use]
     /// # Panics
-    pub fn new(model: Model, audio: A, sample_rate: i32, cart: Cartridge) -> Self {
+    pub fn new(model: Model, sample_rate: i32, cart: Cartridge) -> Self {
         let compat_mode = match model {
             Model::Dmg | Model::Mgb => CompatMode::Dmg,
             Model::Cgb => CompatMode::Cgb,
@@ -243,7 +247,6 @@ impl<A: Audio> Gb<A> {
             compat_mode,
             cart,
             boot_rom,
-            audio,
 
             // Custom
             svbk_true: NonZeroU8::new(1).unwrap(),
@@ -259,7 +262,7 @@ impl<A: Audio> Gb<A> {
             apu_ext_sample_period: Self::sample_period_from_rate(sample_rate),
 
             // Default
-            running_frame: Default::default(),
+            // running_frame: Default::default(),
             double_speed: Default::default(),
             double_speed_request: Default::default(),
             af: Default::default(),
@@ -308,7 +311,8 @@ impl<A: Audio> Gb<A> {
             ocp: ColorPalette::default(),
             frame_dots: Default::default(),
             lcdc_delay: Default::default(),
-            rgba_buf: RgbBuf::default(),
+            rgb_buf: RgbBuf::default(),
+            rgb_buf_present: RgbBuf::default(),
             ppu_win_in_frame: Default::default(),
             ppu_win_in_ly: Default::default(),
             ppu_win_skipped: Default::default(),
@@ -330,6 +334,9 @@ impl<A: Audio> Gb<A> {
             apu_timer: Default::default(),
             apu_render_timer: Default::default(),
             apu_seq_step: Default::default(),
+            samples_run: Default::default(),
+            apu_l_out: Default::default(),
+            apu_r_out: Default::default(),
         }
     }
 
@@ -339,13 +346,25 @@ impl<A: Audio> Gb<A> {
     }
 
     /// Runs 1 frame
-    #[inline]
-    pub fn run_frame(&mut self) {
-        self.running_frame = true;
+    // #[inline]
+    // pub fn run_frame(&mut self) {
+    //     self.running_frame = true;
 
-        while self.running_frame {
+    //     while self.running_frame {
+    //         self.run_cpu();
+    //     }
+    // }
+
+    /// Runs samples
+    #[inline]
+    pub fn run_samples(&mut self) -> (i16, i16) {
+        while self.samples_run == 0 {
             self.run_cpu();
         }
+
+        self.samples_run = 0;
+
+        (self.apu_l_out, self.apu_r_out)
     }
 
     #[must_use]
@@ -355,7 +374,7 @@ impl<A: Audio> Gb<A> {
 
     #[must_use]
     pub fn pixel_data_rgb(&self) -> &[u8] {
-        self.rgba_buf.pixel_data()
+        self.rgb_buf_present.pixel_data()
     }
 
     /// Returns true if cartridge has battery, false

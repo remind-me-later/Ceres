@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use {
     crate::{audio, opengl, CERES_STYLIZED},
     ceres_core::{Button, Cartridge, Gb, Model},
@@ -26,8 +28,62 @@ use {
     },
 };
 
+struct InputBuffer {
+    press_vec: [ceres_core::Button; 16],
+    press_idx: usize,
+
+    rel_vec: [ceres_core::Button; 16],
+    rel_idx: usize,
+}
+
+impl InputBuffer {
+    fn new() -> InputBuffer {
+        let press_vec = [Button::A; 16];
+        let rel_vec = [Button::A; 16];
+
+        InputBuffer {
+            press_vec,
+            press_idx: 0,
+
+            rel_vec,
+            rel_idx: 0,
+        }
+    }
+
+    fn press(&mut self, button: Button) {
+        if self.press_idx >= 16 {
+            return;
+        }
+
+        self.press_vec[self.press_idx] = button;
+        self.press_idx += 1;
+    }
+
+    fn release(&mut self, button: Button) {
+        if self.rel_idx >= 16 {
+            return;
+        }
+
+        self.rel_vec[self.rel_idx] = button;
+        self.rel_idx += 1;
+    }
+
+    fn flush(&mut self, gb: &mut Gb) {
+        for i in 0..self.press_idx {
+            gb.press(self.press_vec[i]);
+        }
+
+        for i in 0..self.rel_idx {
+            gb.release(self.rel_vec[i]);
+        }
+
+        self.press_idx = 0;
+        self.rel_idx = 0;
+    }
+}
+
 pub struct Emu {
-    gb: Gb<audio::Renderer>,
+    gb: Arc<Mutex<Gb>>,
     has_focus: bool,
     sav_path: PathBuf,
     state: Option<(PossiblyCurrentContext, opengl::GlWindow)>,
@@ -37,6 +93,8 @@ pub struct Emu {
     gl_config: Config,
     not_current_gl_context: Option<NotCurrentContext>,
     gl_display: Display,
+    _audio: audio::Renderer,
+    in_buf: InputBuffer,
 }
 
 impl Emu {
@@ -129,9 +187,13 @@ impl Emu {
         // ############################################# END COPYPASTA
 
         let gb = {
-            let audio = audio::Renderer::new();
-            let sample_rate = audio.sample_rate();
-            Gb::new(model, audio, sample_rate, cart)
+            let sample_rate = audio::Renderer::sample_rate();
+            Arc::new(Mutex::new(Gb::new(model, sample_rate, cart)))
+        };
+
+        let audio = {
+            let gb = Arc::clone(&gb);
+            audio::Renderer::new(gb)
         };
 
         let has_focus: bool = false;
@@ -151,6 +213,8 @@ impl Emu {
             gl_config,
             not_current_gl_context,
             gl_display,
+            _audio: audio,
+            in_buf: InputBuffer::new(),
         }
     }
 
@@ -159,6 +223,8 @@ impl Emu {
         self.event_loop
             .run(move |event, window_target, control_flow| match event {
                 Event::Resumed => {
+                    control_flow.set_poll();
+
                     let window = self.window.take().unwrap_or_else(|| {
                         let window_builder = WindowBuilder::new().with_transparent(true);
                         glutin_winit::finalize_window(
@@ -197,9 +263,11 @@ impl Emu {
                 }
                 Event::LoopDestroyed => {
                     // save
-                    if self.gb.cartridge_has_battery() {
-                        let mut f = File::create(self.sav_path.clone()).unwrap();
-                        f.write_all(self.gb.cartridge_ram()).unwrap();
+                    if let Ok(gb) = self.gb.lock() {
+                        if gb.cartridge_has_battery() {
+                            let mut f = File::create(self.sav_path.clone()).unwrap();
+                            f.write_all(gb.cartridge_ram()).unwrap();
+                        }
                     }
                 }
                 Event::WindowEvent { event: e, .. } => match e {
@@ -230,25 +298,25 @@ impl Emu {
                         if let Some(key) = input.virtual_keycode {
                             match input.state {
                                 ElementState::Pressed => match key {
-                                    VirtualKeyCode::W => self.gb.press(Button::Up),
-                                    VirtualKeyCode::A => self.gb.press(Button::Left),
-                                    VirtualKeyCode::S => self.gb.press(Button::Down),
-                                    VirtualKeyCode::D => self.gb.press(Button::Right),
-                                    VirtualKeyCode::K => self.gb.press(Button::A),
-                                    VirtualKeyCode::L => self.gb.press(Button::B),
-                                    VirtualKeyCode::Return => self.gb.press(Button::Start),
-                                    VirtualKeyCode::Back => self.gb.press(Button::Select),
+                                    VirtualKeyCode::W => self.in_buf.press(Button::Up),
+                                    VirtualKeyCode::A => self.in_buf.press(Button::Left),
+                                    VirtualKeyCode::S => self.in_buf.press(Button::Down),
+                                    VirtualKeyCode::D => self.in_buf.press(Button::Right),
+                                    VirtualKeyCode::K => self.in_buf.press(Button::A),
+                                    VirtualKeyCode::L => self.in_buf.press(Button::B),
+                                    VirtualKeyCode::Return => self.in_buf.press(Button::Start),
+                                    VirtualKeyCode::Back => self.in_buf.press(Button::Select),
                                     _ => (),
                                 },
                                 ElementState::Released => match key {
-                                    VirtualKeyCode::W => self.gb.release(Button::Up),
-                                    VirtualKeyCode::A => self.gb.release(Button::Left),
-                                    VirtualKeyCode::S => self.gb.release(Button::Down),
-                                    VirtualKeyCode::D => self.gb.release(Button::Right),
-                                    VirtualKeyCode::K => self.gb.release(Button::A),
-                                    VirtualKeyCode::L => self.gb.release(Button::B),
-                                    VirtualKeyCode::Return => self.gb.release(Button::Start),
-                                    VirtualKeyCode::Back => self.gb.release(Button::Select),
+                                    VirtualKeyCode::W => self.in_buf.release(Button::Up),
+                                    VirtualKeyCode::A => self.in_buf.release(Button::Left),
+                                    VirtualKeyCode::S => self.in_buf.release(Button::Down),
+                                    VirtualKeyCode::D => self.in_buf.release(Button::Right),
+                                    VirtualKeyCode::K => self.in_buf.release(Button::A),
+                                    VirtualKeyCode::L => self.in_buf.release(Button::B),
+                                    VirtualKeyCode::Return => self.in_buf.release(Button::Start),
+                                    VirtualKeyCode::Back => self.in_buf.release(Button::Select),
                                     _ => (),
                                 },
                             }
@@ -258,15 +326,14 @@ impl Emu {
                 },
                 Event::MainEventsCleared => {
                     if let Some((gl_context, gl_window)) = &self.state {
-                        self.gb.run_frame();
-
                         let renderer = self.renderer.as_ref().unwrap();
-                        renderer.draw_frame(self.gb.pixel_data_rgb());
 
-                        // gl_window.window.request_redraw();
+                        if let Ok(mut gb) = self.gb.lock() {
+                            self.in_buf.flush(&mut gb);
+                            renderer.draw_frame(gb.pixel_data_rgb());
+                        }
 
                         gl_window.surface.swap_buffers(gl_context).unwrap();
-                        control_flow.set_poll();
                     }
                 }
                 _ => (),
