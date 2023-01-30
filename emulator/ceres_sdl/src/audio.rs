@@ -1,23 +1,20 @@
 use std::sync::Mutex;
 
-use cpal::{BufferSize, StreamConfig};
+use cpal::{BufferSize, SampleRate, StreamConfig};
 use {
-    ceres_core::Sample,
-    cpal::{
-        traits::{DeviceTrait, HostTrait, StreamTrait},
-        SampleRate,
-    },
+    cpal::traits::{DeviceTrait, HostTrait, StreamTrait},
     dasp_ring_buffer::Bounded,
     std::sync::Arc,
 };
 
-const BUFFER_SIZE: cpal::FrameCount = 512 * 2;
-const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 16;
+const BUFFER_SIZE: cpal::FrameCount = 512;
+const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 32;
 const SAMPLE_RATE: i32 = 48000;
 
 pub struct Renderer {
-    ring_buffer: Arc<Mutex<Bounded<Box<[Sample]>>>>,
+    ring_buffer: Arc<Mutex<Bounded<Box<[f32]>>>>,
     stream: cpal::Stream,
+    capacitor: f32,
 }
 
 impl Renderer {
@@ -37,8 +34,12 @@ impl Renderer {
 
         let error_callback = |err| panic!("an AudioError occurred on stream: {err}");
         let ring_buffer_arc = Arc::clone(&ring_buffer);
-        let data_callback = move |output: &mut [Sample], _: &_| {
+        let data_callback = move |output: &mut [f32], _: &_| {
             if let Ok(mut buf) = ring_buffer_arc.lock() {
+                if buf.len() < output.len() {
+                    println!("underrun");
+                }
+
                 output
                     .iter_mut()
                     .zip(buf.drain())
@@ -55,6 +56,7 @@ impl Renderer {
         Self {
             ring_buffer,
             stream,
+            capacitor: 0.0,
         }
     }
 
@@ -74,8 +76,28 @@ impl Renderer {
         SAMPLE_RATE
     }
 
-    pub fn push_frame(&mut self, l: Sample, r: Sample) {
+    pub fn push_frame(&mut self, l: ceres_core::Sample, r: ceres_core::Sample) {
+        fn tof32(s: i16) -> f32 {
+            f32::from(s) / f32::from(i16::MAX)
+        }
+
+        fn high_pass(capacitor: &mut f32, s: f32) -> f32 {
+            let out: f32 = s - *capacitor;
+
+            // capacitor slowly charges to 'in' via their difference
+            *capacitor = s - out * 0.999_958; // use 0.998943 for MGB&CGB
+
+            out
+        }
+
         if let Ok(mut buf) = self.ring_buffer.lock() {
+            // if buf.is_full() {
+            //     return;
+            // }
+
+            let l = high_pass(&mut self.capacitor, tof32(l));
+            let r = high_pass(&mut self.capacitor, tof32(r));
+
             buf.push(l);
             buf.push(r);
         }
@@ -83,7 +105,7 @@ impl Renderer {
 }
 
 impl ceres_core::Audio for Renderer {
-    fn play(&mut self, l: Sample, r: Sample) {
+    fn play(&mut self, l: ceres_core::Sample, r: ceres_core::Sample) {
         self.push_frame(l, r);
     }
 }

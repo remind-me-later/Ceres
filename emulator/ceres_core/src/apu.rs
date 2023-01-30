@@ -13,7 +13,7 @@ const WAV_PERIOD_MUL: u16 = 2;
 
 const NOISE_MAX_LEN: u16 = 64;
 
-/// Audio sample type.
+/// Audio sample type
 pub type Sample = i16;
 
 pub trait Audio {
@@ -28,7 +28,7 @@ impl<A: Audio> Gb<A> {
 
         if self.apu_timer >= APU_TIMER_RES {
             self.apu_timer -= APU_TIMER_RES;
-            self.step();
+            self.step_seq();
         }
         self.apu_timer += cycles;
 
@@ -37,14 +37,14 @@ impl<A: Audio> Gb<A> {
         self.apu_ch3.step_sample(cycles);
         self.apu_ch4.step_sample(cycles);
 
-        if self.apu_render_timer >= self.apu_ext_sample_period {
+        while self.apu_render_timer >= self.apu_ext_sample_period {
             self.apu_render_timer -= self.apu_ext_sample_period;
             self.mix_and_render();
         }
         self.apu_render_timer += cycles;
     }
 
-    fn step(&mut self) {
+    fn step_seq(&mut self) {
         if self.apu_seq_step & 1 == 0 {
             self.apu_ch1.step_len();
             self.apu_ch2.step_len();
@@ -108,7 +108,7 @@ impl<A: Audio> Gb<A> {
     }
 
     fn reset(&mut self) {
-        self.apu_render_timer = self.apu_ext_sample_period;
+        self.apu_render_timer = 0;
         self.apu_ch1.reset();
         self.apu_ch2.reset();
         self.apu_ch3.reset();
@@ -132,10 +132,10 @@ impl<A: Audio> Gb<A> {
     pub(crate) fn read_nr52(&self) -> u8 {
         u8::from(self.apu_on) << 7
             | 0x70
-            | u8::from(self.apu_ch4.on()) << 3
-            | u8::from(self.apu_ch3.on()) << 2
-            | u8::from(self.apu_ch2.on()) << 1
-            | u8::from(self.apu_ch1.on())
+            | u8::from(self.apu_ch4.on) << 3
+            | u8::from(self.apu_ch3.on) << 2
+            | u8::from(self.apu_ch2.on) << 1
+            | u8::from(self.apu_ch1.on)
     }
 
     pub(crate) fn write_nr50(&mut self, val: u8) {
@@ -326,36 +326,38 @@ impl Square1 {
             // self.snd_len);
         }
 
+        if val & 0x80 == 0 {
+            return;
+        }
+
         // trigger
-        if val & 0x80 != 0 {
-            // println!("trigger");
+        // println!("trigger");
 
-            if self.dac_on {
-                self.on = true;
+        if self.dac_on {
+            self.on = true;
+        }
+
+        if self.snd_len == 0 {
+            // println!("reset len");
+            self.snd_len = SQ_MAX_LEN;
+            if self.use_len && self.p_half == 0 {
+                // println!("freeze step enabled, len: {}", self.snd_len);
+                self.step_len();
             }
+        }
 
-            if self.snd_len == 0 {
-                // println!("reset len");
-                self.snd_len = SQ_MAX_LEN;
-                if self.use_len && self.p_half == 0 {
-                    // println!("freeze step enabled, len: {}", self.snd_len);
-                    self.step_len();
-                }
-            }
+        self.period = i32::from(SQ_FREQ_P_MUL * (2048 - self.freq));
+        self.out = 0;
+        // self.duty_bit = 0;
+        self.env_timer = self.env_period;
+        self.env_vol = self.env_base_vol;
 
-            self.period = i32::from(SQ_FREQ_P_MUL * (2048 - self.freq));
-            self.out = 0;
-            self.duty_bit = 0;
-            self.env_timer = self.env_period;
-            self.env_vol = self.env_base_vol;
+        self.sw_shadow_freq = self.freq;
+        self.sw_timer = self.sw_period;
+        self.sw_on = self.sw_period != 8 && self.sw_shift != 0;
 
-            self.sw_shadow_freq = self.freq;
-            self.sw_timer = self.sw_period;
-            self.sw_on = self.sw_period != 8 && self.sw_shift != 0;
-
-            if self.sw_shift != 0 {
-                self.calculate_sweep();
-            }
+        if self.sw_shift != 0 {
+            self.calculate_sweep();
         }
     }
 
@@ -558,7 +560,7 @@ impl Square2 {
 
             self.period = i32::from(SQ_FREQ_P_MUL * (2048 - self.freq));
             self.out = 0;
-            self.duty_bit = 0;
+            // self.duty_bit = 0;
             self.env_timer = self.env_period;
             self.env_vol = self.env_base_vol;
         }
@@ -765,7 +767,7 @@ impl Wave {
     }
 
     fn out(&self) -> u8 {
-        self.sample_buffer >> (self.vol.wrapping_sub(1) & 7)
+        self.sample_buffer >> self.vol.wrapping_sub(1)
     }
 
     fn on(&self) -> bool {

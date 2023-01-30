@@ -263,9 +263,10 @@ impl Emu {
                         let renderer = self.renderer.as_ref().unwrap();
                         renderer.draw_frame(self.gb.pixel_data_rgb());
 
-                        gl_window.window.request_redraw();
+                        // gl_window.window.request_redraw();
 
                         gl_window.surface.swap_buffers(gl_context).unwrap();
+                        control_flow.set_poll();
                     }
                 }
                 _ => (),
