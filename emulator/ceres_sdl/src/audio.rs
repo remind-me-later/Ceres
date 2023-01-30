@@ -1,7 +1,6 @@
-use std::sync::Mutex;
-
-use ceres_core::Gb;
+use ceres_core::{Gb, Sample};
 use cpal::{BufferSize, SampleRate, StreamConfig};
+use std::sync::Mutex;
 use {
     cpal::traits::{DeviceTrait, HostTrait, StreamTrait},
     std::sync::Arc,
@@ -26,26 +25,15 @@ impl Renderer {
         };
 
         let error_callback = |err| panic!("an AudioError occurred on stream: {err}");
-        let data_callback = move |output: &mut [f32], _: &_| {
-            fn tof32(s: i16) -> f32 {
-                f32::from(s) / f32::from(i16::MAX)
-            }
-
-            // fn high_pass(capacitor: &mut f32, s: f32) -> f32 {
-            //     let out: f32 = s - *capacitor;
-            //     *capacitor = s - out * 0.999_958; // use 0.998943 for MGB&CGB
-
-            //     out
-            // }
-
+        let data_callback = move |out: &mut [Sample], _: &_| {
             if let Ok(mut gb) = gb.lock() {
                 let mut i = 0;
-                let len = output.len();
+                let len = out.len();
 
                 while i < len {
                     let (l, r) = gb.run_samples();
-                    output[i] = tof32(l);
-                    output[i + 1] = tof32(r);
+                    out[i] = l;
+                    out[i + 1] = r;
 
                     i += 2;
                 }

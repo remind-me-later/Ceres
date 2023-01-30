@@ -14,7 +14,7 @@ const WAV_PERIOD_MUL: u16 = 2;
 const NOISE_MAX_LEN: u16 = 64;
 
 /// Audio sample type
-pub type Sample = i16;
+pub type Sample = f32;
 
 impl Gb {
     pub(crate) fn run_apu(&mut self, cycles: i32) {
@@ -97,10 +97,28 @@ impl Gb {
         let r = (0xF - i16::from(r) * 2) * i16::from(self.apu_r_vol);
 
         // amplify
-        self.apu_l_out = l * 32;
-        self.apu_r_out = r * 32;
+        let l = l * 32;
+        let r = r * 32;
+
+        // transform to f32 sample
+        let l = f32::from(l) / f32::from(i16::MAX);
+        let r = f32::from(r) / f32::from(i16::MAX);
+
+        // high pass
+        let l = self.high_pass(l);
+        let r = self.high_pass(r);
+
+        self.apu_l_out = l;
+        self.apu_r_out = r;
 
         self.samples_run += 2;
+    }
+
+    fn high_pass(&mut self, s: f32) -> f32 {
+        let out: f32 = s - self.apu_cap;
+        self.apu_cap = s - out * 0.999_958; // use 0.998943 for MGB&CGB
+
+        out
     }
 
     fn reset(&mut self) {

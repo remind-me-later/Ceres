@@ -7,7 +7,6 @@
     clippy::deref_by_slicing,
     clippy::empty_drop,
     clippy::empty_structs_with_brackets,
-    clippy::float_arithmetic,
     clippy::float_cmp_const,
     clippy::fn_to_numeric_cast_any,
     clippy::get_unwrap,
@@ -222,8 +221,10 @@ pub struct Gb {
     apu_ext_sample_period: i32,
     apu_seq_step: u8,
 
-    apu_l_out: i16,
-    apu_r_out: i16,
+    apu_l_out: Sample,
+    apu_r_out: Sample,
+
+    apu_cap: Sample,
 }
 
 impl Gb {
@@ -263,6 +264,7 @@ impl Gb {
 
             // Default
             // running_frame: Default::default(),
+            apu_cap: Default::default(),
             double_speed: Default::default(),
             double_speed_request: Default::default(),
             af: Default::default(),
@@ -357,7 +359,7 @@ impl Gb {
 
     /// Runs samples
     #[inline]
-    pub fn run_samples(&mut self) -> (i16, i16) {
+    pub fn run_samples(&mut self) -> (Sample, Sample) {
         while self.samples_run == 0 {
             self.run_cpu();
         }
