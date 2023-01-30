@@ -41,7 +41,7 @@ impl Renderer {
         };
 
         let stream = dev
-            .build_output_stream(&config, data_callback, error_callback)
+            .build_output_stream(&config, data_callback, error_callback, None)
             .unwrap();
 
         stream.play().expect("AudioError playing sound");
