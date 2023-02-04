@@ -1,15 +1,14 @@
-use std::sync::{Arc, Mutex};
-
+use parking_lot::Mutex;
+use raw_window_handle::HasRawWindowHandle;
+use std::sync::Arc;
 use {
-    crate::{audio, opengl, CERES_STYLIZED},
+    crate::{audio, video, CERES_STYLIZED},
     ceres_core::{Button, Cartridge, Gb, Model},
     glutin::{
         config::{Config, ConfigTemplateBuilder},
-        context::{
-            ContextApi, ContextAttributesBuilder, NotCurrentContext, PossiblyCurrentContext,
-        },
+        context::{ContextAttributesBuilder, NotCurrentContext, PossiblyCurrentContext},
         display::{Display, GetGlDisplay},
-        prelude::{GlConfig, GlDisplay, NotCurrentGlContextSurfaceAccessor},
+        prelude::{GlDisplay, NotCurrentGlContextSurfaceAccessor},
         surface::{GlSurface, SwapInterval},
     },
     glutin_winit::DisplayBuilder,
@@ -30,10 +29,10 @@ use {
 
 struct InputBuffer {
     press_vec: [ceres_core::Button; 16],
-    press_idx: usize,
+    press_idx: u8,
 
     rel_vec: [ceres_core::Button; 16],
-    rel_idx: usize,
+    rel_idx: u8,
 }
 
 impl InputBuffer {
@@ -55,7 +54,7 @@ impl InputBuffer {
             return;
         }
 
-        self.press_vec[self.press_idx] = button;
+        self.press_vec[self.press_idx as usize] = button;
         self.press_idx += 1;
     }
 
@@ -64,17 +63,17 @@ impl InputBuffer {
             return;
         }
 
-        self.rel_vec[self.rel_idx] = button;
+        self.rel_vec[self.rel_idx as usize] = button;
         self.rel_idx += 1;
     }
 
     fn flush(&mut self, gb: &mut Gb) {
         for i in 0..self.press_idx {
-            gb.press(self.press_vec[i]);
+            gb.press(self.press_vec[i as usize]);
         }
 
         for i in 0..self.rel_idx {
-            gb.release(self.rel_vec[i]);
+            gb.release(self.rel_vec[i as usize]);
         }
 
         self.press_idx = 0;
@@ -86,15 +85,11 @@ pub struct Emu {
     gb: Arc<Mutex<Gb>>,
     has_focus: bool,
     sav_path: PathBuf,
-    state: Option<(PossiblyCurrentContext, opengl::GlWindow)>,
-    renderer: Option<opengl::Renderer>,
-    event_loop: EventLoop<()>,
-    window: Option<Window>,
-    gl_config: Config,
-    not_current_gl_context: Option<NotCurrentContext>,
-    gl_display: Display,
+    renderer: Option<video::Renderer>,
     _audio: audio::Renderer,
     in_buf: InputBuffer,
+
+    ctx: GlutinCtx,
 }
 
 impl Emu {
@@ -113,78 +108,11 @@ impl Emu {
 
         // initialize cartridge
         let rom = read_file_into(&path).unwrap();
-
         path.set_extension("sav");
         let ram = read_file_into(&path).ok();
-
         let cart = Cartridge::new(rom, ram).unwrap();
 
-        let event_loop = EventLoop::new();
-
-        // ################################################### BEGIN COPYPASTA
-
-        let window_builder = Some(
-            WindowBuilder::new()
-                .with_title(CERES_STYLIZED)
-                .with_inner_size(PhysicalSize {
-                    width: ceres_core::PX_WIDTH as i32 * 4,
-                    height: ceres_core::PX_HEIGHT as i32 * 4,
-                })
-                .with_min_inner_size(PhysicalSize {
-                    width: ceres_core::PX_WIDTH as i32,
-                    height: ceres_core::PX_HEIGHT as i32,
-                }),
-        );
-
-        let template = ConfigTemplateBuilder::new();
-        let display_builder = DisplayBuilder::new().with_window_builder(window_builder);
-
-        let (window, gl_config) = display_builder
-            .build(&event_loop, template, |configs| {
-                // Find the config with the maximum number of samples, so our triangle will
-                // be smooth.
-                configs
-                    .reduce(|accum, config| {
-                        if config.num_samples() > accum.num_samples() {
-                            config
-                        } else {
-                            accum
-                        }
-                    })
-                    .unwrap()
-            })
-            .unwrap();
-
-        let raw_window_handle = window
-            .as_ref()
-            .map(raw_window_handle::HasRawWindowHandle::raw_window_handle);
-
-        // XXX The display could be obtained from the any object created by it, so we
-        // can query it from the config.docs.rs/winit/
-        let gl_display = gl_config.display();
-
-        // The context creation part. It can be created before surface and that's how
-        // it's expected in multithreaded + multiwindow operation mode, since you
-        // can send NotCurrentContext, but not Surface.
-        let context_attributes = ContextAttributesBuilder::new().build(raw_window_handle);
-
-        // Since glutin by default tries to create OpenGL core context, which may not be
-        // present we should try gles.
-        let fallback_context_attributes = ContextAttributesBuilder::new()
-            .with_context_api(ContextApi::Gles(None))
-            .build(raw_window_handle);
-
-        let not_current_gl_context = Some(unsafe {
-            gl_display
-                .create_context(&gl_config, &context_attributes)
-                .unwrap_or_else(|_| {
-                    gl_display
-                        .create_context(&gl_config, &fallback_context_attributes)
-                        .expect("failed to create context")
-                })
-        });
-
-        // ############################################# END COPYPASTA
+        let ctx = GlutinCtx::new();
 
         let gb = {
             let sample_rate = audio::Renderer::sample_rate();
@@ -196,49 +124,34 @@ impl Emu {
             audio::Renderer::new(gb)
         };
 
-        let has_focus: bool = false;
         let sav_path: PathBuf = path;
 
-        let state: Option<(PossiblyCurrentContext, opengl::GlWindow)> = None;
-        let renderer: Option<opengl::Renderer> = None;
+        let renderer: Option<video::Renderer> = None;
 
         Self {
             gb,
-            has_focus,
+            has_focus: false,
             sav_path,
-            state,
             renderer,
-            event_loop,
-            window,
-            gl_config,
-            not_current_gl_context,
-            gl_display,
             _audio: audio,
             in_buf: InputBuffer::new(),
+            ctx,
         }
     }
 
     #[allow(clippy::too_many_lines)]
     pub fn run(mut self) -> ! {
-        self.event_loop
-            .run(move |event, window_target, control_flow| match event {
+        self.ctx
+            .event_loop
+            .run(move |event, _, control_flow| match event {
                 Event::Resumed => {
                     control_flow.set_poll();
 
-                    let window = self.window.take().unwrap_or_else(|| {
-                        let window_builder = WindowBuilder::new().with_transparent(true);
-                        glutin_winit::finalize_window(
-                            window_target,
-                            window_builder,
-                            &self.gl_config,
-                        )
-                        .unwrap()
-                    });
+                    let gl_window =
+                        video::GlWindow::new(self.ctx.window.take().unwrap(), &self.ctx.gl_config);
 
-                    let gl_window = opengl::GlWindow::new(window, &self.gl_config);
-
-                    // Make it current.
                     let gl_context = self
+                        .ctx
                         .not_current_gl_context
                         .take()
                         .unwrap()
@@ -249,7 +162,7 @@ impl Emu {
                     // buffers. It also performs function loading, which needs a current context on
                     // WGL.
                     self.renderer
-                        .get_or_insert_with(|| opengl::Renderer::new(&self.gl_display));
+                        .get_or_insert_with(|| video::Renderer::new(&self.ctx.gl_display));
 
                     // Try setting vsync.
                     if let Err(res) = gl_window.surface.set_swap_interval(
@@ -259,25 +172,20 @@ impl Emu {
                         eprintln!("Error setting vsync: {res:?}");
                     }
 
-                    assert!(self.state.replace((gl_context, gl_window)).is_none());
+                    assert!(self.ctx.state.replace((gl_context, gl_window)).is_none());
                 }
                 Event::LoopDestroyed => {
                     // save
-                    if let Ok(gb) = self.gb.lock() {
-                        if gb.cartridge_has_battery() {
-                            let mut f = File::create(self.sav_path.clone()).unwrap();
-                            f.write_all(gb.cartridge_ram()).unwrap();
-                        }
+                    let gb = self.gb.lock();
+                    if gb.cartridge_has_battery() {
+                        let mut f = File::create(self.sav_path.clone()).unwrap();
+                        f.write_all(gb.cartridge_ram()).unwrap();
                     }
                 }
                 Event::WindowEvent { event: e, .. } => match e {
                     WindowEvent::Resized(size) => {
                         if size.width != 0 && size.height != 0 {
-                            // Some platforms like EGL require resizing GL surface to update the size
-                            // Notable platforms here are Wayland and macOS, other don't require it
-                            // and the function is no-op, but it's wise to resize it for portability
-                            // reasons.
-                            if let Some((gl_context, gl_window)) = &self.state {
+                            if let Some((gl_context, gl_window)) = &self.ctx.state {
                                 gl_window.surface.resize(
                                     gl_context,
                                     NonZeroU32::new(size.width).unwrap(),
@@ -325,10 +233,11 @@ impl Emu {
                     _ => (),
                 },
                 Event::MainEventsCleared => {
-                    if let Some((gl_context, gl_window)) = &self.state {
+                    if let Some((gl_context, gl_window)) = &self.ctx.state {
                         let renderer = self.renderer.as_ref().unwrap();
 
-                        if let Ok(mut gb) = self.gb.lock() {
+                        {
+                            let mut gb = self.gb.lock();
                             self.in_buf.flush(&mut gb);
                             renderer.draw_frame(gb.pixel_data_rgb());
                         }
@@ -338,5 +247,58 @@ impl Emu {
                 }
                 _ => (),
             });
+    }
+}
+
+struct GlutinCtx {
+    event_loop: EventLoop<()>,
+    window: Option<Window>,
+    gl_config: Config,
+    not_current_gl_context: Option<NotCurrentContext>,
+    gl_display: Display,
+    state: Option<(PossiblyCurrentContext, video::GlWindow)>,
+}
+
+impl GlutinCtx {
+    fn new() -> Self {
+        let event_loop = EventLoop::new();
+
+        let window_builder = WindowBuilder::new()
+            .with_title(CERES_STYLIZED)
+            .with_inner_size(PhysicalSize {
+                width: ceres_core::PX_WIDTH as i32 * 4,
+                height: ceres_core::PX_HEIGHT as i32 * 4,
+            })
+            .with_min_inner_size(PhysicalSize {
+                width: ceres_core::PX_WIDTH as i32,
+                height: ceres_core::PX_HEIGHT as i32,
+            });
+
+        let template = ConfigTemplateBuilder::new();
+        let display_builder = DisplayBuilder::new().with_window_builder(Some(window_builder));
+
+        let (window, gl_config) = display_builder
+            .build(&event_loop, template, |mut confs| confs.next().unwrap())
+            .unwrap();
+
+        let raw_window_handle = window.as_ref().map(HasRawWindowHandle::raw_window_handle);
+        let gl_display = gl_config.display();
+        let context_attributes = ContextAttributesBuilder::new().build(raw_window_handle);
+        let not_current_gl_context = Some(unsafe {
+            gl_display
+                .create_context(&gl_config, &context_attributes)
+                .expect("failed to create context")
+        });
+
+        let state = None;
+
+        Self {
+            event_loop,
+            window,
+            gl_config,
+            not_current_gl_context,
+            gl_display,
+            state,
+        }
     }
 }

@@ -1,6 +1,6 @@
 [workspace]
-members = ["ceres_core", "ceres_sdl"]
-default-members = ["ceres_sdl"]
+members = ["ceres_core", "ceres_front"]
+default-members = ["ceres_front"]
 
 [profile.dev]
 opt-level = 2

@@ -49,7 +49,7 @@ use {
 
 mod audio;
 mod emu;
-mod opengl;
+mod video;
 
 const CERES_BIN: &str = "ceres";
 const CERES_STYLIZED: &str = "Ceres";

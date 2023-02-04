@@ -149,7 +149,6 @@ impl Renderer {
 pub struct GlWindow {
     // XXX the surface must be dropped before the window.
     pub surface: Surface<WindowSurface>,
-
     pub window: Window,
 }
 

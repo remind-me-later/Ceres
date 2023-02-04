@@ -1,6 +1,6 @@
 use ceres_core::{Gb, Sample};
 use cpal::{BufferSize, SampleRate, StreamConfig};
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use {
     cpal::traits::{DeviceTrait, HostTrait, StreamTrait},
     std::sync::Arc,
@@ -25,18 +25,17 @@ impl Renderer {
         };
 
         let error_callback = |err| panic!("an AudioError occurred on stream: {err}");
-        let data_callback = move |out: &mut [Sample], _: &_| {
-            if let Ok(mut gb) = gb.lock() {
-                let mut i = 0;
-                let len = out.len();
+        let data_callback = move |b: &mut [Sample], _: &_| {
+            let mut gb = gb.lock();
+            let mut i = 0;
+            let len = b.len();
 
-                while i < len {
-                    let (l, r) = gb.run_samples();
-                    out[i] = l;
-                    out[i + 1] = r;
+            while i < len {
+                let (l, r) = gb.run_samples();
+                b[i] = l;
+                b[i + 1] = r;
 
-                    i += 2;
-                }
+                i += 2;
             }
         };
 

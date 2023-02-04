@@ -1,0 +1,23 @@
+[package]
+name = "ceres_front"
+version = "0.1.0"
+license = "MIT"
+edition = "2021"
+description = "A Gameboy/Color emulator"
+
+[dependencies]
+ceres_core = { path = "../ceres_core" }
+glow = { version = "*", default-features = false }
+clap = { version = "*", default-features = false, features = ["std"] }
+const_format = { version = "*", default-features = false }
+cpal = { version = "*", default-features = false }
+glutin = { version = "*", default-features = false, features = ["wayland"] }
+winit = { version = "*", default-features = false, features = [
+    "wayland-csd-adwaita",
+] }
+glutin-winit = { version = "*", default-features = false, features = [
+    "wayland",
+    "egl",
+] }
+raw-window-handle = { version = "*", default-features = false }
+parking_lot = { version = "*", default-features = false }
