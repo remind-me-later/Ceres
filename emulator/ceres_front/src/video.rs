@@ -3,10 +3,7 @@ use sdl2::{
     video::{GLContext, GLProfile, SwapInterval, Window},
     Sdl,
 };
-use std::{
-    cmp::min,
-    ffi::{CStr, CString},
-};
+use std::ffi::{CStr, CString};
 
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
 const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
@@ -63,25 +60,27 @@ impl Renderer {
             gl::GenVertexArrays(1, &mut vao);
             gl::BindVertexArray(vao);
 
-            let vs = Shader::from_vert_source(
+            let vs = Shader::new(
                 CStr::from_bytes_with_nul(
                     concat!(include_str!("../shader/vs.vert"), '\0').as_bytes(),
                 )
                 .unwrap(),
+                gl::VERTEX_SHADER,
             )
             .unwrap();
-            let fs = Shader::from_frag_source(
+            let fs = Shader::new(
                 CStr::from_bytes_with_nul(
                     concat!(include_str!("../shader/fs.frag"), '\0').as_bytes(),
                 )
                 .unwrap(),
+                gl::FRAGMENT_SHADER,
             )
             .unwrap();
 
             let shaders = vec![vs, fs];
 
             // create program
-            let program = Program::from_shaders(&shaders).unwrap();
+            let program = Program::new(&shaders).unwrap();
             program.use_program();
 
             // create texture
@@ -119,7 +118,7 @@ impl Renderer {
             self.program.use_program();
 
             let (x, y) = if self.pixel_perfect {
-                let mul = min(width / PX_WIDTH, height / PX_HEIGHT);
+                let mul = std::cmp::min(width / PX_WIDTH, height / PX_HEIGHT);
                 let x = (PX_WIDTH * mul) as f32 / width as f32;
                 let y = (PX_HEIGHT * mul) as f32 / height as f32;
                 (x, y)
@@ -167,7 +166,7 @@ pub struct Program {
 }
 
 impl Program {
-    pub fn from_shaders(shaders: &[Shader]) -> Result<Program, String> {
+    pub fn new(shaders: &[Shader]) -> Result<Program, String> {
         let program_id = unsafe { gl::CreateProgram() };
 
         for shader in shaders {
@@ -191,7 +190,10 @@ impl Program {
                 gl::GetProgramiv(program_id, gl::INFO_LOG_LENGTH, &mut len);
             }
 
-            let error = create_whitespace_cstring_with_len(len as usize);
+            let error = {
+                let len = len as usize;
+                unsafe { CString::from_vec_unchecked(vec![b' '; len + 1]) }
+            };
 
             unsafe {
                 gl::GetProgramInfoLog(
@@ -238,17 +240,42 @@ pub struct Shader {
 }
 
 impl Shader {
-    pub fn from_source(source: &CStr, kind: gl::types::GLenum) -> Result<Shader, String> {
-        let id = shader_from_source(source, kind)?;
+    pub fn new(source: &CStr, kind: gl::types::GLenum) -> Result<Shader, String> {
+        let id = unsafe { gl::CreateShader(kind) };
+        unsafe {
+            gl::ShaderSource(id, 1, &source.as_ptr(), std::ptr::null());
+            gl::CompileShader(id);
+        }
+
+        let mut success: gl::types::GLint = 1;
+        unsafe {
+            gl::GetShaderiv(id, gl::COMPILE_STATUS, &mut success);
+        }
+
+        if success == 0 {
+            let mut len: gl::types::GLint = 0;
+            unsafe {
+                gl::GetShaderiv(id, gl::INFO_LOG_LENGTH, &mut len);
+            }
+
+            let error = {
+                let len = len as usize;
+                unsafe { CString::from_vec_unchecked(vec![b' '; len + 1]) }
+            };
+
+            unsafe {
+                gl::GetShaderInfoLog(
+                    id,
+                    len,
+                    std::ptr::null_mut(),
+                    error.as_ptr() as *mut gl::types::GLchar,
+                );
+            }
+
+            return Err(error.to_string_lossy().into_owned());
+        }
+
         Ok(Shader { id })
-    }
-
-    pub fn from_vert_source(source: &CStr) -> Result<Shader, String> {
-        Shader::from_source(source, gl::VERTEX_SHADER)
-    }
-
-    pub fn from_frag_source(source: &CStr) -> Result<Shader, String> {
-        Shader::from_source(source, gl::FRAGMENT_SHADER)
     }
 
     pub fn id(&self) -> gl::types::GLuint {
@@ -262,48 +289,4 @@ impl Drop for Shader {
             gl::DeleteShader(self.id);
         }
     }
-}
-
-fn shader_from_source(source: &CStr, kind: gl::types::GLenum) -> Result<gl::types::GLuint, String> {
-    let id = unsafe { gl::CreateShader(kind) };
-    unsafe {
-        gl::ShaderSource(id, 1, &source.as_ptr(), std::ptr::null());
-        gl::CompileShader(id);
-    }
-
-    let mut success: gl::types::GLint = 1;
-    unsafe {
-        gl::GetShaderiv(id, gl::COMPILE_STATUS, &mut success);
-    }
-
-    if success == 0 {
-        let mut len: gl::types::GLint = 0;
-        unsafe {
-            gl::GetShaderiv(id, gl::INFO_LOG_LENGTH, &mut len);
-        }
-
-        let error = create_whitespace_cstring_with_len(len as usize);
-
-        unsafe {
-            gl::GetShaderInfoLog(
-                id,
-                len,
-                std::ptr::null_mut(),
-                error.as_ptr() as *mut gl::types::GLchar,
-            );
-        }
-
-        return Err(error.to_string_lossy().into_owned());
-    }
-
-    Ok(id)
-}
-
-fn create_whitespace_cstring_with_len(len: usize) -> CString {
-    // allocate buffer of correct size
-    let mut buffer: Vec<u8> = Vec::with_capacity(len + 1);
-    // fill it with len spaces
-    buffer.extend([b' '].iter().cycle().take(len));
-    // convert buffer to CString
-    unsafe { CString::from_vec_unchecked(buffer) }
 }

@@ -43,7 +43,6 @@
 use {
     ceres_core::Model,
     clap::{builder::PossibleValuesParser, Arg, Command},
-    const_format::formatcp,
     std::path::PathBuf,
 };
 
@@ -53,11 +52,8 @@ mod video;
 
 const CERES_BIN: &str = "ceres";
 const CERES_STYLIZED: &str = "Ceres";
-const GB_STYLIZED: &str = "Game Boy";
-const GBC_STYLIZED: &str = formatcp!("{GB_STYLIZED}/Color");
-const ABOUT: &str = formatcp!("A (very experimental) {GBC_STYLIZED} emulator.");
-const AFTER_HELP: &str = formatcp!(
-    "KEY BINDINGS:
+const ABOUT: &str = "A (very experimental) Game Boy/Color emulator.";
+const AFTER_HELP: &str = "KEY BINDINGS:
 
     | Gameboy | Emulator  |
     | ------- | --------- |
@@ -65,8 +61,7 @@ const AFTER_HELP: &str = formatcp!(
     | A       | K         |
     | B       | L         |
     | Start   | Return    |
-    | Select  | Backspace |"
-);
+    | Select  | Backspace |";
 
 fn main() {
     let args = Command::new(CERES_BIN)
@@ -76,18 +71,18 @@ fn main() {
         .arg(
             Arg::new("file")
                 .required(true)
-                .help("{GBC_STYLIZED} ROM file to emulate.")
-                .long_help(formatcp!(
-                    "{GBC_STYLIZED} ROM file to emulate. Extension doesn't matter, the emulator \
-                     will check the file is a valid {GB_STYLIZED} ROM reading it's header. \
-                     Doesn't accept compressed (zip) files."
-                )),
+                .help("Game Boy/Color ROM file to emulate.")
+                .long_help(
+                    "Game Boy/Color ROM file to emulate. Extension doesn't matter, the emulator \
+                     will check the file is a valid Game Boy ROM reading it's header. \
+                     Doesn't accept compressed (zip) files.",
+                ),
         )
         .arg(
             Arg::new("model")
                 .short('m')
                 .long("model")
-                .help(formatcp!("{GB_STYLIZED} model to emulate"))
+                .help("Game Boy model to emulate")
                 .value_parser(PossibleValuesParser::new(["dmg", "mgb", "cgb"]))
                 .default_value("cgb")
                 .required(false),

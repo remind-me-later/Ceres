@@ -781,7 +781,9 @@ impl Wave {
     }
 
     fn out(&self) -> u8 {
-        self.sample_buffer >> self.vol.wrapping_sub(1)
+        // wrapping_shr is necessary because (vol - 1) can be -1
+        self.sample_buffer
+            .wrapping_shr(u32::from(self.vol.wrapping_sub(1)))
     }
 
     fn on(&self) -> bool {

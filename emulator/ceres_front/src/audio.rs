@@ -6,7 +6,7 @@ use sdl2::{
 use std::sync::Arc;
 use std::sync::Mutex;
 
-const BUFFER_SIZE: u16 = 512;
+const BUFFER_SIZE: u16 = 1024;
 const SAMPLE_RATE: i32 = 48000;
 
 struct Cb {
@@ -18,16 +18,11 @@ impl AudioCallback for Cb {
 
     fn callback(&mut self, b: &mut [Self::Channel]) {
         if let Ok(mut gb) = self.gb.lock() {
-            let mut i = 0;
-            let len = b.len();
-
-            while i < len {
+            b.chunks_exact_mut(2).for_each(|w| {
                 let (l, r) = gb.run_samples();
-                b[i] = l;
-                b[i + 1] = r;
-
-                i += 2;
-            }
+                w[0] = l;
+                w[1] = r;
+            });
         }
     }
 }
@@ -42,15 +37,14 @@ impl Renderer {
 
         let desired_spec = AudioSpecDesired {
             freq: Some(SAMPLE_RATE),
-            channels: Some(2),          // mono
-            samples: Some(BUFFER_SIZE), // default sample size
+            channels: Some(2),
+            samples: Some(BUFFER_SIZE),
         };
 
         let device = audio_subsystem
             .open_playback(None, &desired_spec, |_| Cb { gb })
             .unwrap();
 
-        // Start playback
         device.resume();
 
         Self { device }

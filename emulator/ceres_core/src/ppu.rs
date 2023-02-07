@@ -191,11 +191,11 @@ impl ColorPalette {
 
         // if auto-increment is enabled increment index with
         // some branchless trickery, reference code:
-        // if self.inc {
-        //     self.idx = (self.idx + 1) & 0x3F;
-        // }
-        let mask = u8::from(self.inc).wrapping_sub(1);
-        self.idx = ((self.idx + 1) & 0x3F) & !mask | self.idx & mask;
+        if self.inc {
+            self.idx = (self.idx + 1) & 0x3F;
+        }
+        // let mask = u8::from(self.inc).wrapping_sub(1);
+        // self.idx = ((self.idx + 1) & 0x3F) & !mask | self.idx & mask;
     }
 
     fn rgb(&self, palette: u8, color: u8) -> (u8, u8, u8) {

@@ -107,7 +107,6 @@ pub struct Gb {
     // general
     model: Model,
     compat_mode: CompatMode,
-    // running_frame: bool,
     samples_run: usize,
 
     // double speed
@@ -263,7 +262,6 @@ impl Gb {
             apu_ext_sample_period: Self::sample_period_from_rate(sample_rate),
 
             // Default
-            // running_frame: Default::default(),
             apu_cap: Default::default(),
             double_speed: Default::default(),
             double_speed_request: Default::default(),
@@ -347,17 +345,7 @@ impl Gb {
         TC_SEC / sample_rate
     }
 
-    /// Runs 1 frame
-    // #[inline]
-    // pub fn run_frame(&mut self) {
-    //     self.running_frame = true;
-
-    //     while self.running_frame {
-    //         self.run_cpu();
-    //     }
-    // }
-
-    /// Runs samples
+    /// Run samples
     #[inline]
     pub fn run_samples(&mut self) -> (Sample, Sample) {
         while self.samples_run == 0 {
@@ -379,8 +367,7 @@ impl Gb {
         self.rgb_buf_present.pixel_data()
     }
 
-    /// Returns true if cartridge has battery, false
-    /// otherwise
+    /// Returns true if cartridge has battery, false otherwise
     #[must_use]
     pub fn cartridge_has_battery(&self) -> bool {
         self.cart.has_battery()

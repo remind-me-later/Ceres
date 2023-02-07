@@ -109,7 +109,7 @@ impl Emu {
             }
 
             // TODO: sleep better
-            std::thread::sleep(std::time::Duration::new(0, 1_000_000_000u32 / 120));
+            std::thread::sleep(std::time::Duration::new(0, 1_000_000_000u32 / 60));
         }
 
         // Cleanup
