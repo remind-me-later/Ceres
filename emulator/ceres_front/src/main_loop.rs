@@ -57,7 +57,6 @@ impl Emu {
         let mut video = video::Renderer::new(&sdl_context);
         let mut event_pump = sdl_context.event_pump().unwrap();
         let mut is_focused = true;
-        let mut resize_req = None;
 
         'running: loop {
             if let Ok(mut gb) = self.gb.lock() {
@@ -97,8 +96,8 @@ impl Emu {
                         Event::Window { win_event, .. } => match win_event {
                             WindowEvent::FocusGained => is_focused = true,
                             WindowEvent::FocusLost => is_focused = false,
-                            WindowEvent::Resized(width, height) => {
-                                resize_req = Some((width, height));
+                            WindowEvent::Resized(width, height) if width != 0 && height != 0 => {
+                                video.resize(width as u32, height as u32);
                             }
                             _ => (),
                         },
@@ -106,21 +105,15 @@ impl Emu {
                     }
                 }
 
-                let buf = gb.pixel_data_rgb();
-
-                if let Some((width, height)) = resize_req {
-                    video.resize(width as u32, height as u32);
-                }
-
-                video.render(buf);
+                video.render(gb.pixel_data_rgb());
             }
 
-            ::std::thread::sleep(std::time::Duration::new(0, 1_000_000_000u32 / 60));
+            // TODO: sleep better
+            std::thread::sleep(std::time::Duration::new(0, 1_000_000_000u32 / 120));
         }
 
         // Cleanup
         audio.pause();
-        std::mem::drop(audio);
 
         if let Ok(gb) = self.gb.lock() {
             if gb.cartridge_has_battery() {
