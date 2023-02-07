@@ -1,6 +1,7 @@
 [workspace]
 members = ["ceres_core", "ceres_front"]
 default-members = ["ceres_front"]
+resolver = "2"
 
 [profile.dev]
 opt-level = 2

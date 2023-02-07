@@ -48,8 +48,8 @@ use {
 };
 
 mod audio;
-mod winit;
-mod gl;
+mod main_loop;
+mod video;
 
 const CERES_BIN: &str = "ceres";
 const CERES_STYLIZED: &str = "Ceres";
@@ -104,6 +104,6 @@ fn main() {
 
     let path = PathBuf::from(args.get_one::<String>("file").unwrap());
 
-    let emu = winit::Emu::new(model, path);
+    let emu = main_loop::Emu::new(model, path);
     emu.run();
 }

@@ -1,32 +1,23 @@
-use ceres_core::{Gb, Sample};
-use cpal::{BufferSize, SampleRate, StreamConfig};
-use parking_lot::Mutex;
-use {
-    cpal::traits::{DeviceTrait, HostTrait, StreamTrait},
-    std::sync::Arc,
+use ceres_core::Gb;
+use sdl2::{
+    audio::{AudioCallback, AudioDevice, AudioSpecDesired},
+    Sdl,
 };
+use std::sync::Arc;
+use std::sync::Mutex;
 
-const BUFFER_SIZE: cpal::FrameCount = 512;
+const BUFFER_SIZE: u16 = 512;
 const SAMPLE_RATE: i32 = 48000;
 
-pub struct Renderer {
-    stream: cpal::Stream,
+struct Cb {
+    gb: Arc<Mutex<Gb>>,
 }
 
-impl Renderer {
-    pub fn new(gb: Arc<Mutex<Gb>>) -> Self {
-        let host = cpal::default_host();
-        let dev = host.default_output_device().unwrap();
+impl AudioCallback for Cb {
+    type Channel = ceres_core::Sample;
 
-        let config = StreamConfig {
-            channels: 2,
-            sample_rate: SampleRate(SAMPLE_RATE as u32),
-            buffer_size: BufferSize::Fixed(BUFFER_SIZE),
-        };
-
-        let error_callback = |err| panic!("an AudioError occurred on stream: {err}");
-        let data_callback = move |b: &mut [Sample], _: &_| {
-            let mut gb = gb.lock();
+    fn callback(&mut self, b: &mut [Self::Channel]) {
+        if let Ok(mut gb) = self.gb.lock() {
             let mut i = 0;
             let len = b.len();
 
@@ -37,25 +28,42 @@ impl Renderer {
 
                 i += 2;
             }
+        }
+    }
+}
+
+pub struct Renderer {
+    device: AudioDevice<Cb>,
+}
+
+impl Renderer {
+    pub fn new(sdl_context: &Sdl, gb: Arc<Mutex<Gb>>) -> Self {
+        let audio_subsystem = sdl_context.audio().unwrap();
+
+        let desired_spec = AudioSpecDesired {
+            freq: Some(SAMPLE_RATE),
+            channels: Some(2),          // mono
+            samples: Some(BUFFER_SIZE), // default sample size
         };
 
-        let stream = dev
-            .build_output_stream(&config, data_callback, error_callback, None)
+        let device = audio_subsystem
+            .open_playback(None, &desired_spec, |_| Cb { gb })
             .unwrap();
 
-        stream.play().expect("AudioError playing sound");
+        // Start playback
+        device.resume();
 
-        Self { stream }
+        Self { device }
     }
 
     #[allow(dead_code)]
     pub fn resume(&mut self) {
-        self.stream.play().unwrap();
+        self.device.resume();
     }
 
     #[allow(dead_code)]
     pub fn pause(&mut self) {
-        self.stream.pause().unwrap();
+        self.device.pause();
     }
 
     #[inline]
