@@ -35,8 +35,8 @@ impl Emu {
         // initialize cartridge
         let rom = read_file_into(&path).unwrap();
         path.set_extension("sav");
-        let ram = read_file_into(&path).ok();
-        let cart = Cartridge::new(rom, ram).unwrap();
+        let save_file = read_file_into(&path).ok();
+        let cart = Cartridge::new(rom, save_file).unwrap();
 
         let gb = {
             let sample_rate = audio::Renderer::sample_rate();

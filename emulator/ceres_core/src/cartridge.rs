@@ -1,7 +1,7 @@
 use alloc::vec;
 use {
     alloc::boxed::Box,
-    Mbc::{Mbc1, Mbc2, Mbc3, Mbc5, None},
+    Mbc::{Mbc1, Mbc2, Mbc3, Mbc5, NoMbc},
 };
 
 const ROM_BANK_SIZE: usize = 0x4000;
@@ -10,12 +10,64 @@ const RAM_BANK_SIZE: usize = 0x2000;
 type Rom = Box<[u8]>;
 type Ram = Box<[u8]>;
 
+#[allow(clippy::enum_variant_names)]
 enum Mbc {
-    None,
-    Mbc1,
+    NoMbc,
+    Mbc1 {
+        // 1 MiB Multi-Game Compilation Carts
+        multicart: bool,
+        bank_mode: bool,
+    },
     Mbc2,
-    Mbc3,
+    Mbc3 {
+        // Only used in japanese Pokemon Crystal, 64 KiB SRAM,
+        // double of the normal ammount
+        mbc30: bool,
+        rtc: Option<Mbc3RTC>,
+    },
     Mbc5,
+}
+
+impl Mbc {
+    fn mbc_and_battery(
+        mbc_byte: u8,
+        number_of_banks: usize,
+    ) -> Result<(Self, bool), InitializationError> {
+        let mbc30 = number_of_banks >= 8;
+        let res = match mbc_byte {
+            0x00 => (NoMbc, false),
+            0x01 | 0x02 => (
+                Mbc1 {
+                    multicart: false,
+                    bank_mode: false,
+                },
+                false,
+            ),
+            0x03 => (
+                Mbc1 {
+                    multicart: false,
+                    bank_mode: false,
+                },
+                true,
+            ),
+            0x05 => (Mbc2, false),
+            0x06 => (Mbc2, true),
+            0x0F | 0x10 => (
+                Mbc3 {
+                    mbc30,
+                    rtc: Some(Mbc3RTC::default()),
+                },
+                true,
+            ),
+            0x11 | 0x12 => (Mbc3 { mbc30, rtc: None }, false),
+            0x13 => (Mbc3 { mbc30, rtc: None }, true),
+            0x19 | 0x1A | 0x1C | 0x1D => (Mbc5, false),
+            0x1B | 0x1E => (Mbc5, true),
+            _ => return Err(InitializationError::UnsupportedMBC),
+        };
+
+        Ok(res)
+    }
 }
 
 /// Represents a cartridge initialization error.
@@ -44,41 +96,21 @@ pub struct Cartridge {
     ram_bank: u8,
     ram_offset: usize,
 
-    mbc1_bank_mode: bool,
     has_battery: bool,
     has_ram: bool,
-
-    mbc30: bool,
-    mbc1_multicart: bool,
 }
 
 impl Cartridge {
     /// # Errors
-    pub fn new(rom: Rom, ram: Option<Ram>) -> Result<Self, InitializationError> {
+    pub fn new(rom: Rom, save_data: Option<Box<[u8]>>) -> Result<Self, InitializationError> {
         let rom_size = ROMSize::new(&rom)?;
         let ram_size = RAMSize::new(&rom)?;
-        let mbc30 = ram_size.num_banks() >= 8;
         let rom_bank_mask = rom_size.bank_bit_mask();
-        let has_ram = ram_size != RAMSize::None;
+        let has_ram = ram_size != RAMSize::NoRAM;
+        let number_of_banks = ram_size.num_banks();
+        let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], number_of_banks)?;
 
-        let (mbc, has_battery) = match rom[0x147] {
-            0x00 => (None, false),
-            0x01 | 0x02 => (Mbc1, false),
-            0x03 => (Mbc1, true),
-            0x05 => (Mbc2, false),
-            0x06 => (Mbc2, true),
-            0x0F | 0x10 | 0x13 => (Mbc3, true),
-            0x11 | 0x12 => (Mbc3, false),
-            0x19 | 0x1A | 0x1C | 0x1D => (Mbc5, false),
-            0x1B | 0x1E => (Mbc5, true),
-            _ => return Err(InitializationError::UnsupportedMBC),
-        };
-
-        let ram = if let Some(ram) = ram {
-            ram
-        } else {
-            vec![0; ram_size.size_in_bytes()].into_boxed_slice()
-        };
+        let ram = save_data.unwrap_or_else(|| vec![0; ram_size.size_bytes()].into_boxed_slice());
 
         Ok(Self {
             mbc,
@@ -91,11 +123,8 @@ impl Cartridge {
             ram_enabled: false,
             ram_bank: 0,
             ram_offset: 0,
-            mbc1_bank_mode: false,
             has_battery,
             has_ram,
-            mbc30,
-            mbc1_multicart: false,
         })
     }
 
@@ -110,7 +139,7 @@ impl Cartridge {
     }
 
     #[must_use]
-    pub fn read_rom(&self, addr: u16) -> u8 {
+    pub(crate) fn read_rom(&self, addr: u16) -> u8 {
         let bank_addr = match addr {
             0x0000..=0x3FFF => {
                 let (rom_lower, _) = self.rom_offsets;
@@ -127,93 +156,87 @@ impl Cartridge {
     }
 
     #[must_use]
-    fn ram_addr(&self, addr: u16) -> usize {
-        self.ram_offset | (addr as usize & 0x1FFF)
-    }
-
-    fn mbc_read_ram(&self, ram_enabled: bool, addr: u16) -> u8 {
-        if self.has_ram && ram_enabled {
-            let addr = self.ram_addr(addr);
-            self.ram[addr]
-        } else {
-            0xFF
+    pub(crate) fn read_ram(&self, addr: u16) -> u8 {
+        fn mbc_read_ram(cart: &Cartridge, ram_enabled: bool, addr: u16) -> u8 {
+            if cart.has_ram && ram_enabled {
+                let addr = cart.ram_addr(addr);
+                cart.ram[addr]
+            } else {
+                0xFF
+            }
         }
-    }
 
-    #[must_use]
-    pub fn read_ram(&self, addr: u16) -> u8 {
         match self.mbc {
-            None => 0xFF,
-            Mbc1 | Mbc5 => self.mbc_read_ram(self.ram_enabled, addr),
-            Mbc2 => (self.mbc_read_ram(self.ram_enabled, addr) & 0xF) | 0xF0,
-            Mbc3 => match self.ram_bank {
-                0x00..=0x03 => self.mbc_read_ram(self.ram_enabled, addr),
-                0x04..=0x07 => self.mbc_read_ram(self.ram_enabled && self.mbc30, addr),
+            NoMbc => 0xFF,
+            Mbc1 { .. } | Mbc5 => mbc_read_ram(self, self.ram_enabled, addr),
+            Mbc2 => (mbc_read_ram(self, self.ram_enabled, addr) & 0xF) | 0xF0,
+            Mbc3 { mbc30, .. } => match self.ram_bank {
+                0x00..=0x03 => mbc_read_ram(self, self.ram_enabled, addr),
+                0x04..=0x07 => mbc_read_ram(self, self.ram_enabled && mbc30, addr),
                 _ => 0xFF,
             },
         }
     }
 
-    fn mbc1_rom_offsets(&self) -> (usize, usize) {
-        let upper_bits = if self.mbc1_multicart {
-            self.rom_bank_hi << 4
-        } else {
-            self.rom_bank_hi << 5
-        };
-        let lower_bits = if self.mbc1_multicart {
-            self.rom_bank_lo & 0xF
-        } else {
-            self.rom_bank_lo
-        };
-
-        let lower_bank = if self.mbc1_bank_mode {
-            upper_bits as usize
-        } else {
-            0
-        };
-        let upper_bank = (upper_bits | lower_bits) as usize;
-        (ROM_BANK_SIZE * lower_bank, ROM_BANK_SIZE * upper_bank)
-    }
-
-    fn mbc1_ram_offset(&self) -> usize {
-        let bank = if self.mbc1_bank_mode {
-            self.rom_bank_hi as usize
-        } else {
-            0
-        };
-        RAM_BANK_SIZE * bank
-    }
-
-    fn mbc5_rom_offsets(&self) -> (usize, usize) {
-        let lower_bits = self.rom_bank_lo as usize;
-        let upper_bits = (self.rom_bank_hi as usize) << 8;
-        let rom_bank = (upper_bits | lower_bits) & self.rom_bank_mask;
-        // let rom_bank = if rom_bank == 0 { 1 } else { rom_bank };
-        (0x0000, ROM_BANK_SIZE * rom_bank)
-    }
-
-    pub fn write_rom(&mut self, addr: u16, val: u8) {
+    #[allow(clippy::too_many_lines)]
+    pub(crate) fn write_rom(&mut self, addr: u16, val: u8) {
         match self.mbc {
-            None => (),
-            Mbc1 => match addr {
-                0x0000..=0x1FFF => self.ram_enabled = (val & 0xF) == 0xA,
-                0x2000..=0x3FFF => {
-                    let val = val & 0x1F;
-                    self.rom_bank_lo = if val == 0 { 1 } else { val };
-                    self.rom_offsets = self.mbc1_rom_offsets();
+            NoMbc => (),
+            Mbc1 {
+                multicart,
+                bank_mode,
+            } => {
+                fn mbc1_rom_offsets(
+                    cart: &Cartridge,
+                    multicart: bool,
+                    bank_mode: bool,
+                ) -> (usize, usize) {
+                    let (upper_bits, lower_bits) = if multicart {
+                        (cart.rom_bank_hi << 4, cart.rom_bank_lo & 0xF)
+                    } else {
+                        (cart.rom_bank_hi << 5, cart.rom_bank_lo)
+                    };
+
+                    let lower_bank = if bank_mode { upper_bits as usize } else { 0 };
+                    let upper_bank = (upper_bits | lower_bits) as usize;
+
+                    (ROM_BANK_SIZE * lower_bank, ROM_BANK_SIZE * upper_bank)
                 }
-                0x4000..=0x5FFF => {
-                    self.rom_bank_hi = val & 3;
-                    self.rom_offsets = self.mbc1_rom_offsets();
-                    self.ram_offset = self.mbc1_ram_offset();
+
+                fn mbc1_ram_offset(cart: &Cartridge, bank_mode: bool) -> usize {
+                    let bank = if bank_mode {
+                        cart.rom_bank_hi as usize
+                    } else {
+                        0
+                    };
+
+                    RAM_BANK_SIZE * bank
                 }
-                0x6000..=0x7FFF => {
-                    self.mbc1_bank_mode = val & 1 != 0;
-                    self.rom_offsets = self.mbc1_rom_offsets();
-                    self.ram_offset = self.mbc1_ram_offset();
+
+                match addr {
+                    0x0000..=0x1FFF => self.ram_enabled = (val & 0xF) == 0xA,
+                    0x2000..=0x3FFF => {
+                        let val = val & 0x1F;
+                        self.rom_bank_lo = if val == 0 { 1 } else { val };
+                        self.rom_offsets = mbc1_rom_offsets(self, multicart, bank_mode);
+                    }
+                    0x4000..=0x5FFF => {
+                        self.rom_bank_hi = val & 3;
+                        self.rom_offsets = mbc1_rom_offsets(self, multicart, bank_mode);
+                        self.ram_offset = mbc1_ram_offset(self, bank_mode);
+                    }
+                    0x6000..=0x7FFF => {
+                        let new_bank_mode = val & 1 != 0;
+                        self.rom_offsets = mbc1_rom_offsets(self, multicart, new_bank_mode);
+                        self.ram_offset = mbc1_ram_offset(self, new_bank_mode);
+                        self.mbc = Mbc1 {
+                            multicart,
+                            bank_mode: new_bank_mode,
+                        }
+                    }
+                    _ => (),
                 }
-                _ => (),
-            },
+            }
             Mbc2 => {
                 if addr <= 0x3FFF {
                     if (addr >> 8) & 1 == 0 {
@@ -225,7 +248,7 @@ impl Cartridge {
                     }
                 }
             }
-            Mbc3 => match addr {
+            Mbc3 { mbc30, .. } => match addr {
                 0x0000..=0x1FFF => self.ram_enabled = (val & 0x0F) == 0x0A,
                 0x2000..=0x3FFF => {
                     self.rom_bank_lo = if val == 0 { 1 } else { val & 0x7F };
@@ -233,7 +256,7 @@ impl Cartridge {
                 }
                 0x4000..=0x5FFF => {
                     self.ram_bank = val & 0x7;
-                    if self.mbc30 {
+                    if mbc30 {
                         self.ram_offset = RAM_BANK_SIZE * self.ram_bank as usize;
                     } else {
                         self.ram_offset = RAM_BANK_SIZE * (self.ram_bank & 0x3) as usize;
@@ -242,44 +265,59 @@ impl Cartridge {
 
                 _ => (),
             },
-            Mbc5 => match addr {
-                0x0000..=0x1FFF => self.ram_enabled = val & 0xF == 0xA,
-                0x2000..=0x2FFF => {
-                    self.rom_bank_lo = val;
-                    self.rom_offsets = self.mbc5_rom_offsets();
+            Mbc5 => {
+                fn mbc5_rom_offsets(cart: &Cartridge) -> (usize, usize) {
+                    let lower_bits = cart.rom_bank_lo as usize;
+                    let upper_bits = (cart.rom_bank_hi as usize) << 8;
+                    let rom_bank = (upper_bits | lower_bits) & cart.rom_bank_mask;
+                    // let rom_bank = if rom_bank == 0 { 1 } else { rom_bank };
+                    (0x0000, ROM_BANK_SIZE * rom_bank)
                 }
-                0x3000..=0x3FFF => {
-                    self.rom_bank_hi = val & 1;
-                    self.rom_offsets = self.mbc5_rom_offsets();
-                }
-                0x4000..=0x5FFF => {
-                    self.ram_bank = val & 0xF;
-                    self.ram_offset = RAM_BANK_SIZE * self.ram_bank as usize;
-                }
-                _ => (),
-            },
-        }
-    }
 
-    fn mbc_write_ram(&mut self, ram_enabled: bool, addr: u16, val: u8) {
-        if self.has_ram && ram_enabled {
-            let addr = self.ram_addr(addr);
-            self.ram[addr] = val;
-        }
-    }
-
-    pub fn write_ram(&mut self, addr: u16, val: u8) {
-        match self.mbc {
-            None => (),
-            Mbc1 | Mbc2 | Mbc5 => {
-                self.mbc_write_ram(self.ram_enabled, addr, val);
+                match addr {
+                    0x0000..=0x1FFF => self.ram_enabled = val & 0xF == 0xA,
+                    0x2000..=0x2FFF => {
+                        self.rom_bank_lo = val;
+                        self.rom_offsets = mbc5_rom_offsets(self);
+                    }
+                    0x3000..=0x3FFF => {
+                        self.rom_bank_hi = val & 1;
+                        self.rom_offsets = mbc5_rom_offsets(self);
+                    }
+                    0x4000..=0x5FFF => {
+                        self.ram_bank = val & 0xF;
+                        self.ram_offset = RAM_BANK_SIZE * self.ram_bank as usize;
+                    }
+                    _ => (),
+                }
             }
-            Mbc3 => match self.ram_bank {
-                0x00..=0x03 => self.mbc_write_ram(self.ram_enabled, addr, val),
-                0x04..=0x07 => self.mbc_write_ram(self.ram_enabled && self.mbc30, addr, val),
+        }
+    }
+
+    pub(crate) fn write_ram(&mut self, addr: u16, val: u8) {
+        fn mbc_write_ram(cart: &mut Cartridge, ram_enabled: bool, addr: u16, val: u8) {
+            if cart.has_ram && ram_enabled {
+                let addr = cart.ram_addr(addr);
+                cart.ram[addr] = val;
+            }
+        }
+
+        match self.mbc {
+            NoMbc => (),
+            Mbc1 { .. } | Mbc2 | Mbc5 => {
+                mbc_write_ram(self, self.ram_enabled, addr, val);
+            }
+            Mbc3 { mbc30, .. } => match self.ram_bank {
+                0x00..=0x03 => mbc_write_ram(self, self.ram_enabled, addr, val),
+                0x04..=0x07 => mbc_write_ram(self, self.ram_enabled && mbc30, addr, val),
                 _ => (),
             },
         }
+    }
+
+    #[must_use]
+    fn ram_addr(&self, addr: u16) -> usize {
+        self.ram_offset | (addr as usize & 0x1FFF)
     }
 }
 
@@ -330,7 +368,7 @@ impl ROMSize {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum RAMSize {
-    None,
+    NoRAM,
     Kb2,
     Kb8,
     Kb32,
@@ -340,10 +378,10 @@ enum RAMSize {
 
 impl RAMSize {
     const fn new(rom: &Rom) -> Result<Self, InitializationError> {
-        use RAMSize::{Kb128, Kb2, Kb32, Kb64, Kb8, None};
+        use RAMSize::{Kb128, Kb2, Kb32, Kb64, Kb8, NoRAM};
         let ram_size_byte = rom[0x149];
         let ram_size = match ram_size_byte {
-            0 => None,
+            0 => NoRAM,
             1 => Kb2,
             2 => Kb8,
             3 => Kb32,
@@ -355,13 +393,13 @@ impl RAMSize {
         Ok(ram_size)
     }
 
-    const fn size_in_bytes(self) -> usize {
+    const fn size_bytes(self) -> usize {
         self.num_banks() * self.bank_size_in_bytes()
     }
 
     const fn num_banks(self) -> usize {
         match self {
-            Self::None => 0,
+            Self::NoRAM => 0,
             Self::Kb2 | Self::Kb8 => 1,
             Self::Kb32 => 4,
             Self::Kb128 => 16,
@@ -370,11 +408,104 @@ impl RAMSize {
     }
 
     const fn bank_size_in_bytes(self) -> usize {
-        use RAMSize::{Kb128, Kb2, Kb32, Kb64, Kb8, None};
+        use RAMSize::{Kb128, Kb2, Kb32, Kb64, Kb8, NoRAM};
         match self {
-            None => 0,
+            NoRAM => 0,
             Kb2 => 0x800,
             Kb8 | Kb32 | Kb128 | Kb64 => 0x2000,
+        }
+    }
+}
+
+#[derive(Default)]
+struct Mbc3RTC {
+    cycle_timer: i32,
+    timer: [u8; 5],
+    latched: [u8; 5],
+    last_written: u8,
+    mapped_reg: Option<u8>,
+    halt: bool,
+    carry: bool,
+}
+
+impl Mbc3RTC {
+    fn update_t_cycle(&mut self) {
+        if self.halt {
+            return;
+        }
+
+        if self.cycle_timer == crate::TC_SEC {
+            self.cycle_timer = 0;
+
+            // advance RTC
+            #[allow(clippy::if_not_else)]
+            if self.timer[0] >= 60 {
+                self.timer[0] = 0;
+                if self.timer[1] >= 60 {
+                    self.timer[1] = 0;
+                    if self.timer[2] >= 24 {
+                        self.timer[2] = 0;
+                        if self.timer[3] == 255 {
+                            self.timer[3] = 0;
+                            if self.timer[4] != 0 {
+                                self.timer[4] = 0;
+                                self.carry = true;
+                            } else {
+                                self.timer[4] += 1;
+                            }
+                        } else {
+                            self.timer[3] += 1;
+                        }
+                    } else {
+                        self.timer[2] += 1;
+                    }
+                } else {
+                    self.timer[1] += 1;
+                }
+            } else {
+                self.timer[0] += 1;
+            }
+        } else {
+            self.cycle_timer += 1;
+        }
+    }
+
+    fn write_latch(&mut self, data: u8) {
+        if self.last_written == 0 && data == 1 {
+            self.latched.copy_from_slice(&self.timer);
+        }
+
+        self.last_written = data;
+    }
+
+    fn read(&self) -> Option<u8> {
+        self.mapped_reg.map(|m| match m {
+            0x8 => self.latched[0],
+            0x9 => self.latched[1],
+            0xa => self.latched[2],
+            0xb => self.latched[3],
+            0xc => self.latched[4] | (u8::from(self.halt) << 6) | (u8::from(self.halt) << 7),
+            _ => unreachable!("Not a valid RTC register"),
+        })
+    }
+
+    fn write(&mut self, val: u8) -> Option<()> {
+        if let Some(mapped) = self.mapped_reg {
+            match mapped {
+                0x8 => self.latched[0] = val,
+                0x9 => self.latched[1] = val,
+                0xa => self.latched[2] = val,
+                0xb => self.latched[3] = val,
+                0xc => {
+                    self.latched[4] = val;
+                    self.carry = val & 0x80 != 0;
+                    self.halt = val & 0x40 != 0;
+                }
+                _ => unreachable!("Not a valid RTC register"),
+            }
+            Option::Some(())
+        } else {
+            Option::None
         }
     }
 }

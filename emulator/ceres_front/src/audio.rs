@@ -6,7 +6,7 @@ use sdl2::{
 use std::sync::Arc;
 use std::sync::Mutex;
 
-const BUFFER_SIZE: u16 = 1024;
+const BUFFER_SIZE: u16 = 512;
 const SAMPLE_RATE: i32 = 48000;
 
 struct Cb {
