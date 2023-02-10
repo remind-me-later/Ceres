@@ -20,9 +20,6 @@ enum Mbc {
     },
     Mbc2,
     Mbc3 {
-        // Only used in japanese Pokemon Crystal, 64 KiB SRAM,
-        // double of the normal ammount
-        mbc30: bool,
         // Real time clock
         rtc: Option<Mbc3RTC>,
     },
@@ -30,11 +27,7 @@ enum Mbc {
 }
 
 impl Mbc {
-    fn mbc_and_battery(
-        mbc_byte: u8,
-        number_of_banks: usize,
-    ) -> Result<(Self, bool), InitializationError> {
-        let mbc30 = number_of_banks >= 8;
+    fn mbc_and_battery(mbc_byte: u8) -> Result<(Self, bool), InitializationError> {
         let res = match mbc_byte {
             0x00 => (NoMbc, false),
             0x01 | 0x02 => (
@@ -55,13 +48,12 @@ impl Mbc {
             0x06 => (Mbc2, true),
             0x0F | 0x10 => (
                 Mbc3 {
-                    mbc30,
                     rtc: Some(Mbc3RTC::default()),
                 },
                 true,
             ),
-            0x11 | 0x12 => (Mbc3 { mbc30, rtc: None }, false),
-            0x13 => (Mbc3 { mbc30, rtc: None }, true),
+            0x11 | 0x12 => (Mbc3 { rtc: None }, false),
+            0x13 => (Mbc3 { rtc: None }, true),
             0x19 | 0x1A | 0x1C | 0x1D => (Mbc5, false),
             0x1B | 0x1E => (Mbc5, true),
             _ => return Err(InitializationError::UnsupportedMBC),
@@ -108,12 +100,11 @@ impl Cartridge {
         let ram_size = RAMSize::new(&rom)?;
         let rom_bank_mask = rom_size.bank_bit_mask();
         let has_ram = ram_size != RAMSize::NoRAM;
-        let number_of_banks = ram_size.num_banks();
-        let (mut mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], number_of_banks)?;
+        let (mut mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147])?;
 
         let ram = save_data.unwrap_or_else(|| vec![0; ram_size.size_bytes()].into_boxed_slice());
 
-        if let Mbc3 { rtc: Some(rtc), .. } = &mut mbc {
+        if let Mbc3 { rtc: Some(rtc) } = &mut mbc {
             rtc.timer.copy_from_slice(&ram[ram.len() - 5..]);
         }
 
@@ -140,7 +131,7 @@ impl Cartridge {
 
     #[must_use]
     pub fn clock(&self) -> Option<&[u8]> {
-        if let Mbc3 { rtc: Some(rtc), .. } = &self.mbc {
+        if let Mbc3 { rtc: Some(rtc) } = &self.mbc {
             Some(&rtc.timer)
         } else {
             None
@@ -153,7 +144,7 @@ impl Cartridge {
     }
 
     pub(crate) fn run_cycles(&mut self, cycles: i32) {
-        if let Mbc3 { rtc: Some(rtc), .. } = &mut self.mbc {
+        if let Mbc3 { rtc: Some(rtc) } = &mut self.mbc {
             rtc.run_cycles(cycles);
         }
     }
@@ -190,12 +181,11 @@ impl Cartridge {
             NoMbc => 0xFF,
             Mbc1 { .. } | Mbc5 => mbc_read_ram(self, self.ram_enabled, addr),
             Mbc2 => (mbc_read_ram(self, self.ram_enabled, addr) & 0xF) | 0xF0,
-            Mbc3 { mbc30, rtc } => rtc
+            Mbc3 { rtc } => rtc
                 .as_ref()
                 .and_then(|r| r.read(self.ram_enabled))
                 .unwrap_or_else(|| match self.ram_bank {
-                    0x00..=0x03 => mbc_read_ram(self, self.ram_enabled, addr),
-                    0x04..=0x07 => mbc_read_ram(self, self.ram_enabled && *mbc30, addr),
+                    0x00..=0x07 => mbc_read_ram(self, self.ram_enabled, addr),
                     _ => 0xFF,
                 }),
         }
@@ -276,28 +266,24 @@ impl Cartridge {
                     }
                 }
             }
-            Mbc3 { mbc30, rtc } => match addr {
+            Mbc3 { rtc } => match addr {
                 0x0000..=0x1FFF => self.ram_enabled = (val & 0x0F) == 0x0A,
                 0x2000..=0x3FFF => {
                     self.rom_bank_lo = if val == 0 { 1 } else { val & 0x7F };
                     self.rom_offsets = (0x0000, ROM_BANK_SIZE * self.rom_bank_lo as usize);
                 }
                 0x4000..=0x5FFF => {
-                    if val <= 0x7 {
-                        self.ram_bank = val & 0x7;
-                        if *mbc30 {
-                            self.ram_offset = RAM_BANK_SIZE * self.ram_bank as usize;
-                        } else {
-                            self.ram_offset = RAM_BANK_SIZE * (self.ram_bank & 0x3) as usize;
-                        }
-
-                        if let Some(r) = rtc.as_mut() {
-                            r.mapped_reg = None;
-                        }
-                    } else if val <= 0xC {
+                    if val > 0x7 && val <= 0xC {
                         if let Some(r) = rtc.as_mut() {
                             r.mapped_reg = Some(val);
                         }
+                    }
+
+                    self.ram_bank = val & 0x7;
+                    self.ram_offset = RAM_BANK_SIZE * self.ram_bank as usize;
+
+                    if let Some(r) = rtc.as_mut() {
+                        r.mapped_reg = None;
                     }
                 }
                 0x6000..=0x7FFF => {
@@ -349,19 +335,14 @@ impl Cartridge {
             Mbc1 { .. } | Mbc2 | Mbc5 => {
                 mbc_write_ram(self, self.ram_enabled, addr, val);
             }
-            Mbc3 { mbc30, rtc } => {
+            Mbc3 { rtc } => {
                 if rtc
                     .as_mut()
                     .and_then(|r| r.write(self.ram_enabled, val))
                     .is_none()
                 {
-                    match self.ram_bank {
-                        0x00..=0x03 => mbc_write_ram(self, self.ram_enabled, addr, val),
-                        0x04..=0x07 => {
-                            let mbc30 = *mbc30;
-                            mbc_write_ram(self, self.ram_enabled && mbc30, addr, val);
-                        }
-                        _ => (),
+                    if let 0x00..=0x07 = self.ram_bank {
+                        mbc_write_ram(self, self.ram_enabled, addr, val);
                     }
                 }
             }
