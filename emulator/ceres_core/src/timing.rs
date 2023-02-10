@@ -15,6 +15,7 @@ impl Gb {
         self.run_ppu(cycles);
         self.run_dma();
         self.run_apu(cycles);
+        self.cart.run_cycles(cycles);
     }
 
     fn sys_clk_tac_mux(&self) -> bool {
