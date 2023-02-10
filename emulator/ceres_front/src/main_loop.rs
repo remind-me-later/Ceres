@@ -119,6 +119,10 @@ impl Emu {
             if gb.cartridge_has_battery() {
                 let mut f = File::create(self.sav_path.clone()).unwrap();
                 f.write_all(gb.cartridge_ram()).unwrap();
+
+                if let Some(clock) = gb.cartridge_clock() {
+                    f.write_all(clock).unwrap();
+                }
             }
         }
     }

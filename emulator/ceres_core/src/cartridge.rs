@@ -23,6 +23,7 @@ enum Mbc {
         // Only used in japanese Pokemon Crystal, 64 KiB SRAM,
         // double of the normal ammount
         mbc30: bool,
+        // Real time clock
         rtc: Option<Mbc3RTC>,
     },
     Mbc5,
@@ -108,9 +109,13 @@ impl Cartridge {
         let rom_bank_mask = rom_size.bank_bit_mask();
         let has_ram = ram_size != RAMSize::NoRAM;
         let number_of_banks = ram_size.num_banks();
-        let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], number_of_banks)?;
+        let (mut mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], number_of_banks)?;
 
         let ram = save_data.unwrap_or_else(|| vec![0; ram_size.size_bytes()].into_boxed_slice());
+
+        if let Mbc3 { rtc: Some(rtc), .. } = &mut mbc {
+            rtc.timer.copy_from_slice(&ram[ram.len() - 5..]);
+        }
 
         Ok(Self {
             mbc,
@@ -131,6 +136,15 @@ impl Cartridge {
     #[must_use]
     pub fn ram(&self) -> &[u8] {
         &self.ram
+    }
+
+    #[must_use]
+    pub fn clock(&self) -> Option<&[u8]> {
+        if let Mbc3 { rtc: Some(rtc), .. } = &self.mbc {
+            Some(&rtc.timer)
+        } else {
+            None
+        }
     }
 
     #[must_use]

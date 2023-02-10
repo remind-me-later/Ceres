@@ -358,6 +358,11 @@ impl Gb {
     }
 
     #[must_use]
+    pub fn cartridge_clock(&self) -> Option<&[u8]> {
+        self.cart.clock()
+    }
+
+    #[must_use]
     pub fn cartridge_ram(&self) -> &[u8] {
         self.cart.ram()
     }
