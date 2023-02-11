@@ -290,6 +290,8 @@ impl Cartridge {
                         if let Some(r) = rtc.as_mut() {
                             r.mapped_reg = Some(val);
                         }
+
+                        return;
                     }
 
                     self.ram_bank = val & 0x7;
@@ -590,35 +592,35 @@ impl Mbc3RTC {
     }
 
     fn serialize(&self, buf: &mut [u8]) {
-        // let start = std::time::SystemTime::now();
-        // let now: [u8; 8] = start
-        //     .duration_since(std::time::UNIX_EPOCH)
-        //     .expect("Time went backwards")
-        //     .as_secs()
-        //     .to_be_bytes();
+        let start = std::time::SystemTime::now();
+        let now: [u8; 8] = start
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs()
+            .to_be_bytes();
 
         // copy into buffer
         buf[0..5].copy_from_slice(&self.timer);
-        // buf[5..(5 + 8)].copy_from_slice(&now);
+        buf[5..(5 + 8)].copy_from_slice(&now);
     }
 
     fn deserialize(&mut self, buf: &[u8]) {
         self.timer.copy_from_slice(&buf[0..5]);
 
-        // let mut saved_time: [u8; 8] = [0; 8];
-        // saved_time.copy_from_slice(&buf[5..(5 + 8)]);
+        let mut saved_time: [u8; 8] = [0; 8];
+        saved_time.copy_from_slice(&buf[5..(5 + 8)]);
 
-        // let start = std::time::SystemTime::now();
-        // let now = start
-        //     .duration_since(std::time::UNIX_EPOCH)
-        //     .expect("Time went backwards");
+        let start = std::time::SystemTime::now();
+        let now = start
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("Time went backwards");
 
-        // let saved_time = std::time::Duration::from_secs(u64::from_be_bytes(saved_time));
+        let saved_time = std::time::Duration::from_secs(u64::from_be_bytes(saved_time));
 
-        // let secs = (now - saved_time).as_secs();
+        let secs = (now - saved_time).as_secs();
 
-        // for _ in 0..secs {
-        //     self.update_secs();
-        // }
+        for _ in 0..secs {
+            self.update_secs();
+        }
     }
 }
