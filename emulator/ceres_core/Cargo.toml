@@ -6,5 +6,7 @@ description = "A library to make Gameboy/Color emulators"
 license = "MIT"
 
 [features]
-# default = ["disassembler"]
-disassembler = []
+default = ["rtc"]
+std = []
+disassembler = ["std"]
+rtc = ["std"]

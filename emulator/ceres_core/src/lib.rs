@@ -1,4 +1,4 @@
-//#![no_std]
+#![no_std]
 #![forbid(unsafe_code)]
 #![warn(
     clippy::as_underscore,
@@ -41,7 +41,7 @@
 
 use core::num::NonZeroU8;
 
-#[cfg(feature = "disassembler")]
+#[cfg(feature = "std")]
 extern crate std;
 
 extern crate alloc;
