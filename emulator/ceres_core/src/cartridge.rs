@@ -13,6 +13,7 @@ enum Mbc {
     Mbc1 {
         // 1 MiB Multi-Game Compilation Carts
         multicart: bool,
+        // Alternative MBC1 wiring allows to address up to 2MB of ROM
         bank_mode: bool,
     },
     Mbc2,
@@ -24,20 +25,26 @@ enum Mbc {
 }
 
 impl Mbc {
-    fn mbc_and_battery(mbc_byte: u8) -> Result<(Self, bool), InitializationError> {
+    fn mbc_and_battery(
+        mbc_byte: u8,
+        rom_size: ROMSize,
+    ) -> Result<(Self, bool), InitializationError> {
+        let bank_mode = rom_size >= ROMSize::Mb1;
+        let multicart = false;
+
         let res = match mbc_byte {
             0x00 => (NoMbc, false),
             0x01 | 0x02 => (
                 Mbc1 {
-                    multicart: false,
-                    bank_mode: false,
+                    multicart,
+                    bank_mode,
                 },
                 false,
             ),
             0x03 => (
                 Mbc1 {
-                    multicart: false,
-                    bank_mode: false,
+                    multicart,
+                    bank_mode,
                 },
                 true,
             ),
@@ -97,7 +104,7 @@ impl Cartridge {
         let ram_size = RAMSize::new(&rom)?;
         let rom_bank_mask = rom_size.bank_bit_mask();
         let has_ram = ram_size != RAMSize::NoRAM;
-        let (mut mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147])?;
+        let (mut mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], rom_size)?;
 
         let ram = if let Some(save_data) = save_data {
             if let Mbc3 { rtc: Some(rtc) } = &mut mbc {
@@ -370,7 +377,7 @@ impl Cartridge {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 enum ROMSize {
     Kb32 = 0,
     Kb64 = 1,
@@ -415,7 +422,7 @@ impl ROMSize {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum RAMSize {
     NoRAM,
     Kb2,
