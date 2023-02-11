@@ -111,8 +111,6 @@ impl Gb {
             self.exec(opcode);
         }
 
-        self.catch_up();
-
         // any interrupts?
         if self.ifr & self.ie & 0x1F == 0 {
             return;
@@ -144,26 +142,18 @@ impl Gb {
     #[inline]
     fn cpu_write(&mut self, addr: u16, val: u8) {
         self.tick_m_cycle();
-        self.catch_up();
         self.write_mem(addr, val);
     }
 
     #[inline]
     fn cpu_read(&mut self, addr: u16) -> u8 {
         self.tick_m_cycle();
-        self.catch_up();
         self.read_mem(addr)
     }
 
     #[inline]
-    fn catch_up(&mut self) {
-        self.advance_cycles(self.stolen_cycles);
-        self.stolen_cycles = 0;
-    }
-
-    #[inline]
     fn tick_m_cycle(&mut self) {
-        self.stolen_cycles += 4;
+        self.advance_t_cycles(4);
     }
 
     #[inline]
@@ -1187,8 +1177,6 @@ impl Gb {
 
     #[inline]
     fn halt(&mut self) {
-        self.catch_up();
-
         if self.ie & self.ifr & 0x1F == 0 {
             self.cpu_halted = true;
         } else if self.ime {

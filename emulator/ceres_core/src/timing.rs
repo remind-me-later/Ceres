@@ -1,7 +1,7 @@
 use crate::{Gb, IF_TIMER_B};
 
 impl Gb {
-    pub(crate) fn advance_cycles(&mut self, mut cycles: i32) {
+    pub(crate) fn advance_t_cycles(&mut self, mut cycles: i32) {
         // affected by speed boost
         self.run_timers(cycles);
         self.dma_cycles += cycles;
@@ -11,7 +11,7 @@ impl Gb {
             cycles >>= 1;
         }
 
-        // TODO: is this order right?
+        // TODO: is this order right?I
         self.run_ppu(cycles);
         self.run_dma();
         self.run_apu(cycles);

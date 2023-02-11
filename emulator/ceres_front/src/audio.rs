@@ -51,11 +51,13 @@ impl Renderer {
     }
 
     #[allow(dead_code)]
+    #[inline]
     pub fn resume(&mut self) {
         self.device.resume();
     }
 
     #[allow(dead_code)]
+    #[inline]
     pub fn pause(&mut self) {
         self.device.pause();
     }

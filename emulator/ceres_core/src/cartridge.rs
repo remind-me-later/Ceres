@@ -599,26 +599,32 @@ impl Mbc3RTC {
     }
 
     fn serialize(&self, buf: &mut [u8]) {
-        let now: [u8; 8] = Self::timestamp().as_secs().to_be_bytes();
-        // copy into buffer
         buf[0..5].copy_from_slice(&self.timer);
-        buf[5..(5 + 8)].copy_from_slice(&now);
+
+        #[cfg(feature = "rtc")]
+        {
+            let now: [u8; 8] = Self::timestamp().as_secs().to_be_bytes();
+            buf[5..(5 + 8)].copy_from_slice(&now);
+        }
     }
 
     fn deserialize(&mut self, buf: &[u8]) {
         self.timer.copy_from_slice(&buf[0..5]);
 
-        let saved_stamp = {
-            let mut saved_time: [u8; 8] = [0; 8];
-            saved_time.copy_from_slice(&buf[5..(5 + 8)]);
-            core::time::Duration::from_secs(u64::from_be_bytes(saved_time))
-        };
+        #[cfg(feature = "rtc")]
+        {
+            let saved_stamp = {
+                let mut saved_time: [u8; 8] = [0; 8];
+                saved_time.copy_from_slice(&buf[5..(5 + 8)]);
+                core::time::Duration::from_secs(u64::from_be_bytes(saved_time))
+            };
 
-        let now = Self::timestamp();
-        let secs_elapsed = (now - saved_stamp).as_secs();
+            let now = Self::timestamp();
+            let secs_elapsed = (now - saved_stamp).as_secs();
 
-        for _ in 0..secs_elapsed {
-            self.update_secs();
+            for _ in 0..secs_elapsed {
+                self.update_secs();
+            }
         }
     }
 
@@ -627,10 +633,5 @@ impl Mbc3RTC {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("Time went backwards")
-    }
-
-    #[cfg(not(feature = "rtc"))]
-    fn timestamp() -> core::time::Duration {
-        core::time::Duration::ZERO
     }
 }

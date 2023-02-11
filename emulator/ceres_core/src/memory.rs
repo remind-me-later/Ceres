@@ -387,9 +387,9 @@ impl Gb {
         // etc..). If the PPU reads VRAM during an HDMA transfer it
         // should be glitchy anyways
         if self.double_speed {
-            self.advance_cycles(i32::from(len) * 2);
+            self.advance_t_cycles(i32::from(len) * 2);
         } else {
-            self.advance_cycles(i32::from(len));
+            self.advance_t_cycles(i32::from(len));
         }
     }
 }

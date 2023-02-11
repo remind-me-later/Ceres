@@ -126,7 +126,6 @@ pub struct Gb {
     sp: u16,
     pc: u16,
 
-    stolen_cycles: i32,
     cpu_ei_delay: bool,
     cpu_halted: bool,
 
@@ -271,7 +270,6 @@ impl Gb {
             hl: Default::default(),
             sp: Default::default(),
             pc: Default::default(),
-            stolen_cycles: Default::default(),
             cpu_ei_delay: Default::default(),
             cpu_halted: Default::default(),
             sb: Default::default(),
