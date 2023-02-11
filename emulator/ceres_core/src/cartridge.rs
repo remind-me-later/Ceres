@@ -7,9 +7,6 @@ use {
 const ROM_BANK_SIZE: usize = 0x4000;
 const RAM_BANK_SIZE: usize = 0x2000;
 
-type Rom = Box<[u8]>;
-type Ram = Box<[u8]>;
-
 #[allow(clippy::enum_variant_names)]
 enum Mbc {
     NoMbc,
@@ -75,8 +72,8 @@ pub enum InitializationError {
 pub struct Cartridge {
     mbc: Mbc,
 
-    rom: Rom,
-    ram: Ram,
+    rom: Box<[u8]>,
+    ram: Box<[u8]>,
 
     rom_bank_lo: u8,
     rom_bank_hi: u8,
@@ -95,18 +92,27 @@ pub struct Cartridge {
 
 impl Cartridge {
     /// # Errors
-    pub fn new(rom: Rom, save_data: Option<Box<[u8]>>) -> Result<Self, InitializationError> {
+    pub fn new(rom: Box<[u8]>, save_data: Option<Box<[u8]>>) -> Result<Self, InitializationError> {
         let rom_size = ROMSize::new(&rom)?;
         let ram_size = RAMSize::new(&rom)?;
         let rom_bank_mask = rom_size.bank_bit_mask();
         let has_ram = ram_size != RAMSize::NoRAM;
         let (mut mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147])?;
 
-        let ram = save_data.unwrap_or_else(|| vec![0; ram_size.size_bytes()].into_boxed_slice());
+        let ram = if let Some(save_data) = save_data {
+            if let Mbc3 { rtc: Some(rtc) } = &mut mbc {
+                rtc.deserialize(&save_data[save_data.len() - Mbc3RTC::serialize_len()..]);
+            }
+            save_data
+        } else {
+            let mut ram_len = ram_size.size_bytes();
 
-        if let Mbc3 { rtc: Some(rtc) } = &mut mbc {
-            rtc.timer.copy_from_slice(&ram[ram.len() - 5..]);
-        }
+            if let Mbc3 { rtc: Some(_) } = &mut mbc {
+                ram_len += Mbc3RTC::serialize_len();
+            }
+
+            vec![0; ram_len].into_boxed_slice()
+        };
 
         Ok(Self {
             mbc,
@@ -125,8 +131,15 @@ impl Cartridge {
     }
 
     #[must_use]
-    pub fn ram(&self) -> &[u8] {
-        &self.ram
+    pub fn save_data(&mut self) -> Option<&[u8]> {
+        self.has_battery.then(|| {
+            if let Mbc3 { rtc: Some(rtc) } = &self.mbc {
+                let len = self.ram.len();
+                rtc.serialize(&mut self.ram[len - Mbc3RTC::serialize_len()..]);
+            }
+
+            self.ram.as_ref()
+        })
     }
 
     #[must_use]
@@ -369,7 +382,7 @@ enum ROMSize {
 }
 
 impl ROMSize {
-    fn new(rom: &Rom) -> Result<Self, InitializationError> {
+    fn new(rom: &[u8]) -> Result<Self, InitializationError> {
         use ROMSize::{Kb128, Kb256, Kb32, Kb512, Kb64, Mb1, Mb2, Mb4, Mb8};
         let rom_size_byte = rom[0x148];
         let rom_size = match rom_size_byte {
@@ -411,7 +424,7 @@ enum RAMSize {
 }
 
 impl RAMSize {
-    const fn new(rom: &Rom) -> Result<Self, InitializationError> {
+    const fn new(rom: &[u8]) -> Result<Self, InitializationError> {
         use RAMSize::{Kb128, Kb2, Kb32, Kb64, Kb8, NoRAM};
         let ram_size_byte = rom[0x149];
         let ram_size = match ram_size_byte {
@@ -476,37 +489,39 @@ impl Mbc3RTC {
 
         if self.cycle_timer == crate::TC_SEC {
             self.cycle_timer = 0;
-
-            // advance RTC
-            #[allow(clippy::if_not_else)]
-            if self.timer[0] >= 60 {
-                self.timer[0] = 0;
-                if self.timer[1] >= 60 {
-                    self.timer[1] = 0;
-                    if self.timer[2] >= 24 {
-                        self.timer[2] = 0;
-                        if self.timer[3] == 255 {
-                            self.timer[3] = 0;
-                            if self.timer[4] != 0 {
-                                self.timer[4] = 0;
-                                self.carry = true;
-                            } else {
-                                self.timer[4] += 1;
-                            }
-                        } else {
-                            self.timer[3] += 1;
-                        }
-                    } else {
-                        self.timer[2] += 1;
-                    }
-                } else {
-                    self.timer[1] += 1;
-                }
-            } else {
-                self.timer[0] += 1;
-            }
+            self.update_secs();
         } else {
             self.cycle_timer += 1;
+        }
+    }
+
+    fn update_secs(&mut self) {
+        #[allow(clippy::if_not_else)]
+        if self.timer[0] > 60 {
+            self.timer[0] = 0;
+            if self.timer[1] > 60 {
+                self.timer[1] = 0;
+                if self.timer[2] > 24 {
+                    self.timer[2] = 0;
+                    if self.timer[3] == 255 {
+                        self.timer[3] = 0;
+                        if self.timer[4] != 0 {
+                            self.timer[4] = 0;
+                            self.carry = true;
+                        } else {
+                            self.timer[4] += 1;
+                        }
+                    } else {
+                        self.timer[3] += 1;
+                    }
+                } else {
+                    self.timer[2] += 1;
+                }
+            } else {
+                self.timer[1] += 1;
+            }
+        } else {
+            self.timer[0] += 1;
         }
     }
 
@@ -540,11 +555,24 @@ impl Mbc3RTC {
 
         if let Some(mapped) = self.mapped_reg {
             match mapped {
-                0x8 => self.latched[0] = val,
-                0x9 => self.latched[1] = val,
-                0xa => self.latched[2] = val,
-                0xb => self.latched[3] = val,
+                0x8 => {
+                    self.timer[0] = val;
+                    self.latched[0] = val;
+                }
+                0x9 => {
+                    self.timer[1] = val;
+                    self.latched[1] = val;
+                }
+                0xa => {
+                    self.timer[2] = val;
+                    self.latched[2] = val;
+                }
+                0xb => {
+                    self.timer[3] = val;
+                    self.latched[3] = val;
+                }
                 0xc => {
+                    self.timer[4] = val;
                     self.latched[4] = val;
                     self.carry = val & 0x80 != 0;
                     self.halt = val & 0x40 != 0;
@@ -555,5 +583,42 @@ impl Mbc3RTC {
         } else {
             Option::None
         }
+    }
+
+    const fn serialize_len() -> usize {
+        5 + 8
+    }
+
+    fn serialize(&self, buf: &mut [u8]) {
+        // let start = std::time::SystemTime::now();
+        // let now: [u8; 8] = start
+        //     .duration_since(std::time::UNIX_EPOCH)
+        //     .expect("Time went backwards")
+        //     .as_secs()
+        //     .to_be_bytes();
+
+        // copy into buffer
+        buf[0..5].copy_from_slice(&self.timer);
+        // buf[5..(5 + 8)].copy_from_slice(&now);
+    }
+
+    fn deserialize(&mut self, buf: &[u8]) {
+        self.timer.copy_from_slice(&buf[0..5]);
+
+        // let mut saved_time: [u8; 8] = [0; 8];
+        // saved_time.copy_from_slice(&buf[5..(5 + 8)]);
+
+        // let start = std::time::SystemTime::now();
+        // let now = start
+        //     .duration_since(std::time::UNIX_EPOCH)
+        //     .expect("Time went backwards");
+
+        // let saved_time = std::time::Duration::from_secs(u64::from_be_bytes(saved_time));
+
+        // let secs = (now - saved_time).as_secs();
+
+        // for _ in 0..secs {
+        //     self.update_secs();
+        // }
     }
 }

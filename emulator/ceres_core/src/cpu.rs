@@ -789,7 +789,7 @@ impl Gb {
     #[inline]
     fn inc_lr(&mut self, opcode: u8) {
         let reg_id = (opcode >> 4) + 1;
-        let val = (*self.regid2reg(reg_id) + 1) & 0xFF;
+        let val = (self.regid2reg(reg_id).wrapping_add(1)) & 0xFF;
         *self.regid2reg(reg_id) = (*self.regid2reg(reg_id) & 0xFF00) | val;
 
         self.af &= !(NF_B | ZF_B | HF_B);

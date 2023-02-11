@@ -115,14 +115,10 @@ impl Emu {
         // Cleanup
         audio.pause();
 
-        if let Ok(gb) = self.gb.lock() {
-            if gb.cartridge_has_battery() {
+        if let Ok(mut gb) = self.gb.lock() {
+            if let Some(save_data) = gb.cartridge().save_data() {
                 let mut f = File::create(self.sav_path.clone()).unwrap();
-                f.write_all(gb.cartridge_ram()).unwrap();
-
-                if let Some(clock) = gb.cartridge_clock() {
-                    f.write_all(clock).unwrap();
-                }
+                f.write_all(save_data).unwrap();
             }
         }
     }
