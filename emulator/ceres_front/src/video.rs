@@ -62,7 +62,7 @@ impl Renderer {
 
             let vs = Shader::new(
                 CStr::from_bytes_with_nul(
-                    concat!(include_str!("../shader/vs.vert"), '\0').as_bytes(),
+                    concat!(include_str!("../shader/near.vert"), '\0').as_bytes(),
                 )
                 .unwrap(),
                 gl::VERTEX_SHADER,
@@ -70,7 +70,7 @@ impl Renderer {
             .unwrap();
             let fs = Shader::new(
                 CStr::from_bytes_with_nul(
-                    concat!(include_str!("../shader/fs.frag"), '\0').as_bytes(),
+                    concat!(include_str!("../shader/near.frag"), '\0').as_bytes(),
                 )
                 .unwrap(),
                 gl::FRAGMENT_SHADER,
