@@ -1,4 +1,5 @@
 #![no_std]
+#![forbid(unsafe_code)]
 #![warn(
   clippy::pedantic,
   // restriction
@@ -17,21 +18,13 @@
   clippy::filetype_is_file,
   clippy::float_cmp_const,
   clippy::fn_to_numeric_cast_any,
-  clippy::fn_to_numeric_cast_any,
   clippy::format_push_string,
   clippy::get_unwrap,
-  clippy::get_unwrap,
-  clippy::if_then_some_else_none,
   clippy::if_then_some_else_none,
   clippy::let_underscore_must_use,
-  clippy::let_underscore_must_use,
-  clippy::lossy_float_literal,
   clippy::lossy_float_literal,
   clippy::map_err_ignore,
-  clippy::map_err_ignore,
   clippy::mem_forget,
-  clippy::mem_forget,
-  clippy::mixed_read_write_in_expression,
   clippy::mixed_read_write_in_expression,
   clippy::modulo_arithmetic,
   clippy::non_ascii_literal,
@@ -40,8 +33,6 @@
   clippy::rc_buffer,
   clippy::rc_mutex,
   clippy::rest_pat_in_fully_bound_structs,
-  clippy::rest_pat_in_fully_bound_structs,
-  clippy::same_name_method,
   clippy::same_name_method,
   clippy::self_named_module_files,
   clippy::shadow_unrelated,
@@ -55,7 +46,7 @@
   clippy::unnecessary_self_imports,
   clippy::unneeded_field_pattern,
   clippy::unseparated_literal_suffix,
-  clippy::unwrap_used,
+  // clippy::unwrap_used,
   clippy::verbose_file_reads,
   // nursery
   clippy::useless_let_if_seq,
@@ -73,8 +64,6 @@
 )]
 
 extern crate alloc;
-#[cfg(feature = "std")]
-extern crate std;
 
 pub use {
   apu::Sample,
@@ -280,7 +269,7 @@ impl Gb {
       boot_rom,
 
       // Custom
-      svbk_true: unsafe { NonZeroU8::new_unchecked(1) },
+      svbk_true: NonZeroU8::new(1).unwrap(),
       ppu_cycles: Mode::HBlank.cycles(0),
 
       // Slices

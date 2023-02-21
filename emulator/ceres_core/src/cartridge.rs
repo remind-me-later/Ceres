@@ -122,24 +122,10 @@ impl Cartridge {
     let ram_size = RAMSize::new(&rom)?;
     let rom_bank_mask = rom_size.bank_bit_mask();
     let has_ram = ram_size != RAMSize::NoRAM;
-    let (mut mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], rom_size)?;
+    let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], rom_size)?;
 
-    let ram = if let Some(save_data) = save_data {
-      if let Mbc3 { rtc: Some(rtc) } = &mut mbc {
-        rtc.deserialize(
-          &save_data[save_data.len() - Mbc3RTC::serialize_len()..],
-        );
-      }
-      save_data
-    } else {
-      let mut ram_len = ram_size.size_bytes();
-
-      if let Mbc3 { rtc: Some(_) } = &mut mbc {
-        ram_len += Mbc3RTC::serialize_len();
-      }
-
-      vec![0; ram_len].into_boxed_slice()
-    };
+    let ram = save_data
+      .unwrap_or_else(|| vec![0; ram_size.size_bytes()].into_boxed_slice());
 
     Ok(Self {
       mbc,
@@ -159,14 +145,7 @@ impl Cartridge {
 
   #[must_use]
   pub fn save_data(&mut self) -> Option<&[u8]> {
-    self.has_battery.then(|| {
-      if let Mbc3 { rtc: Some(rtc) } = &self.mbc {
-        let len = self.ram.len();
-        rtc.serialize(&mut self.ram[len - Mbc3RTC::serialize_len()..]);
-      }
-
-      self.ram.as_ref()
-    })
+    self.has_battery.then(|| self.ram.as_ref())
   }
 
   #[must_use]
@@ -574,99 +553,53 @@ impl Mbc3RTC {
   }
 
   fn read(&self, ram_enabled: bool) -> Option<u8> {
-    if !ram_enabled {
-      return None;
-    }
-
-    self.mapped_reg.map(|m| match m {
-      0x8 => self.latched[0],
-      0x9 => self.latched[1],
-      0xA => self.latched[2],
-      0xB => self.latched[3],
-      0xC => {
-        self.latched[4]
-          | (u8::from(self.halt) << 6)
-          | (u8::from(self.halt) << 7)
-      }
-      _ => unreachable!("Not a valid RTC register"),
-    })
+    ram_enabled
+      .then(|| {
+        self.mapped_reg.map(|m| match m {
+          0x8 => self.latched[0],
+          0x9 => self.latched[1],
+          0xA => self.latched[2],
+          0xB => self.latched[3],
+          0xC => {
+            self.latched[4]
+              | (u8::from(self.halt) << 6)
+              | (u8::from(self.halt) << 7)
+          }
+          _ => unreachable!("Not a valid RTC register"),
+        })
+      })
+      .flatten()
   }
 
   fn write(&mut self, ram_enabled: bool, val: u8) -> Option<()> {
-    if !ram_enabled {
-      return None;
-    }
-
-    if let Some(mapped) = self.mapped_reg {
-      match mapped {
-        0x8 => {
-          self.timer[0] = val;
-          self.latched[0] = val;
-        }
-        0x9 => {
-          self.timer[1] = val;
-          self.latched[1] = val;
-        }
-        0xA => {
-          self.timer[2] = val;
-          self.latched[2] = val;
-        }
-        0xB => {
-          self.timer[3] = val;
-          self.latched[3] = val;
-        }
-        0xC => {
-          self.timer[4] = val;
-          self.latched[4] = val;
-          self.carry = val & 0x80 != 0;
-          self.halt = val & 0x40 != 0;
-        }
-        _ => unreachable!("Not a valid RTC register"),
-      }
-      Option::Some(())
-    } else {
-      Option::None
-    }
-  }
-
-  const fn serialize_len() -> usize {
-    5 + 8
-  }
-
-  fn serialize(&self, buf: &mut [u8]) {
-    buf[0..5].copy_from_slice(&self.timer);
-
-    #[cfg(feature = "rtc")]
-    {
-      let now: [u8; 8] = Self::timestamp().as_secs().to_be_bytes();
-      buf[5..(5 + 8)].copy_from_slice(&now);
-    }
-  }
-
-  fn deserialize(&mut self, buf: &[u8]) {
-    self.timer.copy_from_slice(&buf[0..5]);
-
-    #[cfg(feature = "rtc")]
-    {
-      let saved_stamp = {
-        let mut saved_time: [u8; 8] = [0; 8];
-        saved_time.copy_from_slice(&buf[5..(5 + 8)]);
-        core::time::Duration::from_secs(u64::from_be_bytes(saved_time))
-      };
-
-      let now = Self::timestamp();
-      let secs_elapsed = (now - saved_stamp).as_secs();
-
-      for _ in 0..secs_elapsed {
-        self.update_secs();
-      }
-    }
-  }
-
-  #[cfg(feature = "rtc")]
-  fn timestamp() -> core::time::Duration {
-    std::time::SystemTime::now()
-      .duration_since(std::time::UNIX_EPOCH)
-      .expect("Time went backwards")
+    ram_enabled
+      .then(|| {
+        self.mapped_reg.map(|m| match m {
+          0x8 => {
+            self.timer[0] = val;
+            self.latched[0] = val;
+          }
+          0x9 => {
+            self.timer[1] = val;
+            self.latched[1] = val;
+          }
+          0xA => {
+            self.timer[2] = val;
+            self.latched[2] = val;
+          }
+          0xB => {
+            self.timer[3] = val;
+            self.latched[3] = val;
+          }
+          0xC => {
+            self.timer[4] = val;
+            self.latched[4] = val;
+            self.carry = val & 0x80 != 0;
+            self.halt = val & 0x40 != 0;
+          }
+          _ => unreachable!("Not a valid RTC register"),
+        })
+      })
+      .flatten()
   }
 }

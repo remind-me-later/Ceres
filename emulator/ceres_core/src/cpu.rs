@@ -1,6 +1,3 @@
-#[cfg(feature = "disassembler")]
-use std::println;
-
 use {
   crate::Gb,
   core::fmt::Display,
@@ -182,66 +179,6 @@ impl Gb {
     }
   }
 
-  #[cfg(feature = "disassembler")]
-  fn regid2regname(id: u8) -> &'static str {
-    match id {
-      0 => "AF",
-      1 => "BC",
-      2 => "DE",
-      3 => "HL",
-      4 => "SP",
-      _ => unreachable!(),
-    }
-  }
-
-  #[cfg(feature = "disassembler")]
-  fn get_src_name(opcode: u8) -> &'static str {
-    let reg_id = ((opcode >> 1) + 1) & 3;
-    let lo = opcode & 1 != 0;
-    if reg_id == 0 {
-      if lo {
-        return "A";
-      }
-      return "(HL)";
-    }
-    if lo {
-      return Self::regid2reglowname(reg_id);
-    }
-    Self::regid2reghighname(reg_id)
-  }
-
-  #[cfg(feature = "disassembler")]
-  fn regid2reghighname(id: u8) -> &'static str {
-    match id {
-      0 => "A",
-      1 => "B",
-      2 => "D",
-      3 => "H",
-      _ => unreachable!(),
-    }
-  }
-
-  #[cfg(feature = "disassembler")]
-  fn get_condition_name(opcode: u8) -> &'static str {
-    match (opcode >> 3) & 0x3 {
-      0 => "NZ",
-      1 => "Z",
-      2 => "NC",
-      3 => "C",
-      _ => unreachable!(),
-    }
-  }
-
-  #[cfg(feature = "disassembler")]
-  fn regid2reglowname(id: u8) -> &'static str {
-    match id {
-      1 => "C",
-      2 => "E",
-      3 => "L",
-      _ => unreachable!(),
-    }
-  }
-
   #[inline]
   fn get_src_val(&mut self, opcode: u8) -> u8 {
     let reg_id = ((opcode >> 1) + 1) & 3;
@@ -287,11 +224,6 @@ impl Gb {
   fn ld(&mut self, t: Ld8, s: Ld8) {
     let val = s.read(self);
     t.write(self, val);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ld {t}, {s}");
-    }
   }
 
   #[inline]
@@ -300,11 +232,6 @@ impl Gb {
     self.af &= 0xFF;
     let tmp = *self.regid2reg(reg_id);
     self.af |= u16::from(self.cpu_read(tmp)) << 8;
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ld A, ({})", Self::regid2regname(reg_id));
-    }
   }
 
   #[inline]
@@ -312,22 +239,12 @@ impl Gb {
     let reg_id = (opcode >> 4) + 1;
     let tmp = *self.regid2reg(reg_id);
     self.cpu_write(tmp, (self.af >> 8) as u8);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ld ({}), A", Self::regid2regname(reg_id));
-    }
   }
 
   #[inline]
   fn ld_da16_a(&mut self) {
     let addr = self.imm_u16();
     self.cpu_write(addr, (self.af >> 8) as u8);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ld ({:#06x}), A", addr);
-    }
   }
 
   #[inline]
@@ -335,11 +252,6 @@ impl Gb {
     self.af &= 0xFF;
     let addr = self.imm_u16();
     self.af |= u16::from(self.cpu_read(addr)) << 8;
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ld A, ({:#06x})", addr);
-    }
   }
 
   #[inline]
@@ -347,11 +259,6 @@ impl Gb {
     let addr = self.hl;
     self.cpu_write(addr, (self.af >> 8) as u8);
     self.hl = addr.wrapping_add(1);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ld (HL+), A");
-    }
   }
 
   #[inline]
@@ -359,11 +266,6 @@ impl Gb {
     let addr = self.hl;
     self.cpu_write(addr, (self.af >> 8) as u8);
     self.hl = addr.wrapping_sub(1);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ld (HL-), A");
-    }
   }
 
   #[inline]
@@ -373,11 +275,6 @@ impl Gb {
     self.af &= 0xFF;
     self.af |= val << 8;
     self.hl = addr.wrapping_add(1);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ld A, (HL+)");
-    }
   }
 
   #[inline]
@@ -387,11 +284,6 @@ impl Gb {
     self.af &= 0xFF;
     self.af |= val << 8;
     self.hl = addr.wrapping_sub(1);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ld A, (HL-)");
-    }
   }
 
   #[inline]
@@ -399,11 +291,6 @@ impl Gb {
     let tmp = u16::from(self.imm_u8());
     let a = (self.af >> 8) as u8;
     self.cpu_write(0xFF00 | tmp, a);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ldh ({:#04x}), A", tmp);
-    }
   }
 
   #[inline]
@@ -411,32 +298,17 @@ impl Gb {
     let tmp = u16::from(self.imm_u8());
     self.af &= 0xFF;
     self.af |= u16::from(self.cpu_read(0xFF00 | tmp)) << 8;
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ldh A, ({:#04x})", tmp);
-    }
   }
 
   #[inline]
   fn ldh_dc_a(&mut self) {
     self.cpu_write(0xFF00 | self.bc & 0xFF, (self.af >> 8) as u8);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ldh (C), A");
-    }
   }
 
   #[inline]
   fn ldh_a_dc(&mut self) {
     self.af &= 0xFF;
     self.af |= u16::from(self.cpu_read(0xFF00 | self.bc & 0xFF)) << 8;
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ldh A, (C)");
-    }
   }
 
   #[inline]
@@ -445,11 +317,6 @@ impl Gb {
     *self.regid2reg(reg_id) &= 0xFF;
     let tmp = u16::from(self.imm_u8());
     *self.regid2reg(reg_id) |= tmp << 8;
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ld {}, {:#04x}", Self::regid2reghighname(reg_id), tmp);
-    }
   }
 
   #[inline]
@@ -458,22 +325,12 @@ impl Gb {
     *self.regid2reg(reg_id) &= 0xFF00;
     let tmp = u16::from(self.imm_u8());
     *self.regid2reg(reg_id) |= tmp;
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ld {}, {:#04x}", Self::regid2reglowname(reg_id), tmp);
-    }
   }
 
   #[inline]
   fn ld_dhl_d8(&mut self) {
     let tmp = self.imm_u8();
     self.cpu_write(self.hl, tmp);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ld (HL), {:#02x}", tmp);
-    }
   }
 
   #[inline]
@@ -481,11 +338,6 @@ impl Gb {
     let val = self.hl;
     self.sp = val;
     self.tick_m_cycle();
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ld SP, HL");
-    }
   }
 
   #[inline]
@@ -508,22 +360,12 @@ impl Gb {
   fn add_a_r(&mut self, opcode: u8) {
     let val = u16::from(self.get_src_val(opcode));
     self.add(val);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("add A, {}", Self::get_src_name(opcode));
-    }
   }
 
   #[inline]
   fn add_a_d8(&mut self) {
     let val = u16::from(self.imm_u8());
     self.add(val);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("add A, {:#02x}", val);
-    }
   }
 
   #[inline]
@@ -545,11 +387,6 @@ impl Gb {
   fn sub_a_r(&mut self, opcode: u8) {
     let val = u16::from(self.get_src_val(opcode));
     self.sub(val);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("sub A, {}", Self::get_src_name(opcode));
-    }
   }
 
   #[inline]
@@ -557,11 +394,6 @@ impl Gb {
     let val = u16::from(self.imm_u8());
 
     self.sub(val);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("sub A, {:#02x}", val);
-    }
   }
 
   #[inline]
@@ -586,22 +418,12 @@ impl Gb {
   fn sbc_a_r(&mut self, opcode: u8) {
     let val = u16::from(self.get_src_val(opcode));
     self.sbc(val);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("sbc A, {}", Self::get_src_name(opcode));
-    }
   }
 
   #[inline]
   fn sbc_a_d8(&mut self) {
     let val = u16::from(self.imm_u8());
     self.sbc(val);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("sbc A, {:#02x}", val);
-    }
   }
 
   #[inline]
@@ -625,22 +447,12 @@ impl Gb {
   fn adc_a_r(&mut self, opcode: u8) {
     let val = u16::from(self.get_src_val(opcode));
     self.adc(val);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("adc A, {}", Self::get_src_name(opcode));
-    }
   }
 
   #[inline]
   fn adc_a_d8(&mut self) {
     let val = u16::from(self.imm_u8());
     self.adc(val);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("adc A, {:#02x}", val);
-    }
   }
 
   #[inline]
@@ -656,22 +468,12 @@ impl Gb {
   fn or_a_r(&mut self, opcode: u8) {
     let val = u16::from(self.get_src_val(opcode));
     self.or(val);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("or A, {}", Self::get_src_name(opcode));
-    }
   }
 
   #[inline]
   fn or_a_d8(&mut self) {
     let val = u16::from(self.imm_u8());
     self.or(val);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("or A, {:#02x}", val);
-    }
   }
 
   #[inline]
@@ -688,22 +490,12 @@ impl Gb {
   fn xor_a_r(&mut self, opcode: u8) {
     let val = u16::from(self.get_src_val(opcode));
     self.xor(val);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("xor A, {}", Self::get_src_name(opcode));
-    }
   }
 
   #[inline]
   fn xor_a_d8(&mut self) {
     let val = u16::from(self.imm_u8());
     self.xor(val);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("xor A, {:#02x}", val);
-    }
   }
 
   #[inline]
@@ -720,22 +512,12 @@ impl Gb {
   fn and_a_r(&mut self, opcode: u8) {
     let val = u16::from(self.get_src_val(opcode));
     self.and(val);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("and A, {}", Self::get_src_name(opcode));
-    }
   }
 
   #[inline]
   fn and_a_d8(&mut self) {
     let val = u16::from(self.imm_u8());
     self.and(val);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("and A, {:#02x}", val);
-    }
   }
 
   #[inline]
@@ -758,22 +540,12 @@ impl Gb {
   fn cp_a_r(&mut self, opcode: u8) {
     let val = u16::from(self.get_src_val(opcode));
     self.cp(val);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("cp A, {}", Self::get_src_name(opcode));
-    }
   }
 
   #[inline]
   fn cp_a_d8(&mut self) {
     let val = u16::from(self.imm_u8());
     self.cp(val);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("cp A, {:#02x}", val);
-    }
   }
 
   #[inline]
@@ -790,11 +562,6 @@ impl Gb {
 
     if ((*self.regid2reg(reg_id)) & 0xFF) == 0 {
       self.af |= ZF_B;
-    }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("inc {}", Self::regid2reglowname(reg_id));
     }
   }
 
@@ -814,11 +581,6 @@ impl Gb {
     if ((*self.regid2reg(reg_id)) & 0xFF) == 0 {
       self.af |= ZF_B;
     }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("dec {}", Self::regid2reglowname(reg_id));
-    }
   }
 
   #[inline]
@@ -833,11 +595,6 @@ impl Gb {
 
     if ((*self.regid2reg(reg_id)) & 0xFF00) == 0 {
       self.af |= ZF_B;
-    }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("inc {}", Self::regid2reghighname(reg_id));
     }
   }
 
@@ -855,11 +612,6 @@ impl Gb {
     if ((*self.regid2reg(reg_id)) & 0xFF00) == 0 {
       self.af |= ZF_B;
     }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("dec {}", Self::regid2reghighname(reg_id));
-    }
   }
 
   #[inline]
@@ -874,11 +626,6 @@ impl Gb {
 
     if val == 0 {
       self.af |= ZF_B;
-    }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("inc (HL)");
     }
   }
 
@@ -896,11 +643,6 @@ impl Gb {
     if val == 0 {
       self.af |= ZF_B;
     }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("dec (HL)");
-    }
   }
 
   #[inline]
@@ -909,11 +651,6 @@ impl Gb {
     let reg = self.regid2reg(reg_id);
     *reg = reg.wrapping_add(1);
     self.tick_m_cycle();
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("inc {}", Self::regid2regname(reg_id));
-    }
   }
 
   #[inline]
@@ -922,11 +659,6 @@ impl Gb {
     let reg = self.regid2reg(reg_id);
     *reg = reg.wrapping_sub(1);
     self.tick_m_cycle();
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("dec {}", Self::regid2regname(reg_id));
-    }
   }
 
   #[inline]
@@ -946,11 +678,6 @@ impl Gb {
     if (self.sp & 0xFF) + (offset & 0xFF) > 0xFF {
       self.af |= CF_B;
     }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ld (HL), SP+{:#02x}", offset_signed);
-    }
   }
 
   #[inline]
@@ -961,11 +688,6 @@ impl Gb {
     if carry {
       self.af |= CF_B | 0x0100;
     }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("rlca");
-    }
   }
 
   #[inline]
@@ -974,11 +696,6 @@ impl Gb {
     self.af = (self.af >> 1) & 0xFF00;
     if carry {
       self.af |= CF_B | 0x8000;
-    }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("rrca");
     }
   }
 
@@ -995,11 +712,6 @@ impl Gb {
     if val == 0 {
       self.af |= ZF_B;
     }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("rrc {}", Self::get_src_name(opcode));
-    }
   }
 
   #[inline]
@@ -1007,11 +719,6 @@ impl Gb {
     let addr = self.imm_u16();
     self.pc = addr;
     self.tick_m_cycle();
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("jp {:#06x}", addr);
-    }
   }
 
   #[inline]
@@ -1021,11 +728,6 @@ impl Gb {
 
   #[inline]
   fn jp_cc(&mut self, opcode: u8) {
-    #[cfg(feature = "disassembler")]
-    {
-      println!("jp {}", Self::get_condition_name(opcode));
-    }
-
     if self.condition(opcode) {
       self.do_jump_to_immediate();
     } else {
@@ -1039,11 +741,6 @@ impl Gb {
   #[inline]
   fn jp_hl(&mut self) {
     self.pc = self.hl;
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("jp (HL)");
-    }
   }
 
   #[inline]
@@ -1056,11 +753,6 @@ impl Gb {
     let pc = self.pc.wrapping_add(relative_addr);
     self.pc = pc;
     self.tick_m_cycle();
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("jr {:#02x}", relative_addr_signed);
-    }
   }
 
   #[inline]
@@ -1076,11 +768,6 @@ impl Gb {
       self.pc = self.pc.wrapping_add(1);
       self.tick_m_cycle();
     }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("jr {}", Self::get_condition_name(opcode));
-    }
   }
 
   #[inline]
@@ -1088,11 +775,6 @@ impl Gb {
     let addr = self.imm_u16();
     self.push(self.pc);
     self.pc = addr;
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("call {:#06x}", addr);
-    }
   }
 
   #[inline]
@@ -1110,42 +792,22 @@ impl Gb {
       self.tick_m_cycle();
       self.tick_m_cycle();
     }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("call {}", Self::get_condition_name(opcode));
-    }
   }
 
   #[inline]
   fn ret(&mut self) {
     self.pc = self.pop();
     self.tick_m_cycle();
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ret");
-    }
   }
 
   #[inline]
   fn reti(&mut self) {
     self.ret();
     self.ime = true;
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("reti");
-    }
   }
 
   #[inline]
   fn ret_cc(&mut self, opcode: u8) {
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ret {}", Self::get_condition_name(opcode));
-    }
-
     self.tick_m_cycle();
 
     if self.condition(opcode) {
@@ -1168,11 +830,6 @@ impl Gb {
   fn rst(&mut self, opcode: u8) {
     self.push(self.pc);
     self.pc = u16::from(opcode) ^ 0xC7;
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("rst {:#02x}", opcode);
-    }
   }
 
   #[inline]
@@ -1186,11 +843,6 @@ impl Gb {
       self.cpu_halted = false;
       self.halt_bug = true;
     }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("halt");
-    }
   }
 
   #[inline]
@@ -1203,63 +855,33 @@ impl Gb {
     } else {
       self.cpu_halted = true;
     }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("stop");
-    }
   }
 
   #[inline]
   fn di(&mut self) {
     self.ime = false;
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("di");
-    }
   }
 
   #[inline]
   fn ei(&mut self) {
     self.cpu_ei_delay = true;
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ei");
-    }
   }
 
   #[inline]
   fn ccf(&mut self) {
     self.af ^= CF_B;
     self.af &= !(HF_B | NF_B);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ccf");
-    }
   }
 
   #[inline]
   fn scf(&mut self) {
     self.af |= CF_B;
     self.af &= !(HF_B | NF_B);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("scf");
-    }
   }
 
   #[inline]
   #[allow(clippy::unused_self)]
-  fn nop(&mut self) {
-    #[cfg(feature = "disassembler")]
-    {
-      println!("nop");
-    }
-  }
+  fn nop(&mut self) {}
 
   // TODO: debugger breakpoint
   #[inline]
@@ -1303,22 +925,12 @@ impl Gb {
 
     self.af &= !HF_B;
     self.af |= res << 8;
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("daa");
-    }
   }
 
   #[inline]
   fn cpl(&mut self) {
     self.af ^= 0xFF00;
     self.af |= HF_B | NF_B;
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("cpl");
-    }
   }
 
   #[inline]
@@ -1335,11 +947,6 @@ impl Gb {
     let reg_id = ((opcode >> 4) + 1) & 3;
     let val = *self.regid2reg(reg_id);
     self.push(val);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("push {}", Self::regid2regname(reg_id));
-    }
   }
 
   #[inline]
@@ -1357,11 +964,6 @@ impl Gb {
     let reg_id = ((opcode >> 4) + 1) & 3;
     *self.regid2reg(reg_id) = val;
     self.af &= 0xFFF0;
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("pop {}", Self::regid2regname(reg_id));
-    }
   }
 
   #[inline]
@@ -1369,11 +971,6 @@ impl Gb {
     let reg_id = (opcode >> 4) + 1;
     let imm = self.imm_u16();
     *self.regid2reg(reg_id) = imm;
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ld {}, {:#06x}", Self::regid2regname(reg_id), imm);
-    }
   }
 
   #[inline]
@@ -1382,11 +979,6 @@ impl Gb {
     let addr = self.imm_u16();
     self.cpu_write(addr, (val & 0xFF) as u8);
     self.cpu_write(addr.wrapping_add(1), (val >> 8) as u8);
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("ld ({:#06x}), SP", addr);
-    }
   }
 
   #[inline]
@@ -1408,11 +1000,6 @@ impl Gb {
     if (sp & 0xFF) + (offset & 0xFF) > 0xFF {
       self.af |= CF_B;
     }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("add SP, {:#04x}", offset_signed);
-    }
   }
 
   #[inline]
@@ -1433,11 +1020,6 @@ impl Gb {
     }
 
     self.tick_m_cycle();
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("add HL, {}", Self::regid2regname(reg_id));
-    }
   }
 
   #[inline]
@@ -1452,11 +1034,6 @@ impl Gb {
     if val == 0 {
       self.af |= ZF_B;
     }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("rlc {}", Self::get_src_name(opcode));
-    }
   }
 
   #[inline]
@@ -1468,11 +1045,6 @@ impl Gb {
 
     if bit1 {
       self.af |= CF_B;
-    }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("rra");
     }
   }
 
@@ -1491,11 +1063,6 @@ impl Gb {
     if val == 0 {
       self.af |= ZF_B;
     }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("rr {}", Self::get_src_name(opcode));
-    }
   }
 
   #[inline]
@@ -1510,11 +1077,6 @@ impl Gb {
     }
     if res == 0 {
       self.af |= ZF_B;
-    }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("sla {}", Self::get_src_name(opcode));
     }
   }
 
@@ -1531,11 +1093,6 @@ impl Gb {
     if val == 0 {
       self.af |= ZF_B;
     }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("sra {}", Self::get_src_name(opcode));
-    }
   }
 
   #[inline]
@@ -1549,11 +1106,6 @@ impl Gb {
     if val >> 1 == 0 {
       self.af |= ZF_B;
     }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("srl {}", Self::get_src_name(opcode));
-    }
   }
 
   #[inline]
@@ -1563,11 +1115,6 @@ impl Gb {
     self.set_src_val(opcode, (val >> 4) | (val << 4));
     if val == 0 {
       self.af |= ZF_B;
-    }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("swap {}", Self::get_src_name(opcode));
     }
   }
 
@@ -1583,27 +1130,12 @@ impl Gb {
       if bit & val == 0 {
         self.af |= ZF_B;
       }
-
-      #[cfg(feature = "disassembler")]
-      {
-        println!("bit {}, {}", bit_no, Self::get_src_name(opcode));
-      }
     } else if opcode & 0xC0 == 0x80 {
       // res
       self.set_src_val(opcode, val & !bit);
-
-      #[cfg(feature = "disassembler")]
-      {
-        println!("res {}, {}", bit_no, Self::get_src_name(opcode));
-      }
     } else {
       // set
       self.set_src_val(opcode, val | bit);
-
-      #[cfg(feature = "disassembler")]
-      {
-        println!("set {}, {}", bit_no, Self::get_src_name(opcode));
-      }
     }
   }
 
@@ -1616,11 +1148,6 @@ impl Gb {
 
     if bit7 {
       self.af |= CF_B;
-    }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("rla");
     }
   }
 
@@ -1639,22 +1166,12 @@ impl Gb {
     if val == 0 {
       self.af |= ZF_B;
     }
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("rl {}", Self::get_src_name(opcode));
-    }
   }
 
   #[inline]
   fn ill(&mut self) {
     self.ie = 0;
     self.cpu_halted = true;
-
-    #[cfg(feature = "disassembler")]
-    {
-      println!("illegal opcode");
-    }
   }
 
   // ****************

@@ -4,9 +4,3 @@ version = "0.1.0"
 edition = "2021"
 description = "A library to make Gameboy/Color emulators"
 license = "MIT"
-
-[features]
-default = ["rtc"]
-std = []
-disassembler = ["std"]
-rtc = ["std"]

@@ -311,7 +311,7 @@ impl Gb {
         let tmp = val & 7;
         self.svbk = tmp;
         self.svbk_true =
-          unsafe { NonZeroU8::new_unchecked(if tmp == 0 { 1 } else { tmp }) };
+          NonZeroU8::new(if tmp == 0 { 1 } else { tmp }).unwrap();
       }
       HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize] = val,
       IE => self.ie = val,
