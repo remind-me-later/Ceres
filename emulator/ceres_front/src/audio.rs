@@ -1,69 +1,70 @@
-use ceres_core::Gb;
-use sdl2::{
+use {
+  ceres_core::Gb,
+  sdl2::{
     audio::{AudioCallback, AudioDevice, AudioSpecDesired},
     Sdl,
+  },
+  std::sync::{Arc, Mutex},
 };
-use std::sync::Arc;
-use std::sync::Mutex;
 
 const BUFFER_SIZE: u16 = 512;
 const SAMPLE_RATE: i32 = 48000;
 
 struct Cb {
-    gb: Arc<Mutex<Gb>>,
+  gb: Arc<Mutex<Gb>>,
 }
 
 impl AudioCallback for Cb {
-    type Channel = ceres_core::Sample;
+  type Channel = ceres_core::Sample;
 
-    fn callback(&mut self, b: &mut [Self::Channel]) {
-        if let Ok(mut gb) = self.gb.lock() {
-            b.chunks_exact_mut(2).for_each(|w| {
-                let (l, r) = gb.run_samples();
-                w[0] = l;
-                w[1] = r;
-            });
-        }
+  fn callback(&mut self, b: &mut [Self::Channel]) {
+    if let Ok(mut gb) = self.gb.lock() {
+      b.chunks_exact_mut(2).for_each(|w| {
+        let (l, r) = gb.run_samples();
+        w[0] = l;
+        w[1] = r;
+      });
     }
+  }
 }
 
 pub struct Renderer {
-    device: AudioDevice<Cb>,
+  device: AudioDevice<Cb>,
 }
 
 impl Renderer {
-    pub fn new(sdl_context: &Sdl, gb: Arc<Mutex<Gb>>) -> Self {
-        let audio_subsystem = sdl_context.audio().unwrap();
+  pub fn new(sdl_context: &Sdl, gb: Arc<Mutex<Gb>>) -> Self {
+    let audio_subsystem = sdl_context.audio().unwrap();
 
-        let desired_spec = AudioSpecDesired {
-            freq: Some(SAMPLE_RATE),
-            channels: Some(2),
-            samples: Some(BUFFER_SIZE),
-        };
+    let desired_spec = AudioSpecDesired {
+      freq:     Some(SAMPLE_RATE),
+      channels: Some(2),
+      samples:  Some(BUFFER_SIZE),
+    };
 
-        let device = audio_subsystem
-            .open_playback(None, &desired_spec, |_| Cb { gb })
-            .unwrap();
+    let device = audio_subsystem
+      .open_playback(None, &desired_spec, |_| Cb { gb })
+      .unwrap();
 
-        device.resume();
+    device.resume();
 
-        Self { device }
-    }
+    Self { device }
+  }
 
-    #[allow(dead_code)]
-    #[inline]
-    pub fn resume(&mut self) {
-        self.device.resume();
-    }
+  #[allow(dead_code)]
+  #[inline]
+  pub fn resume(&mut self) {
+    self.device.resume();
+  }
 
-    #[allow(dead_code)]
-    #[inline]
-    pub fn pause(&mut self) {
-        self.device.pause();
-    }
+  #[allow(dead_code)]
+  #[inline]
+  pub fn pause(&mut self) {
+    self.device.pause();
+  }
 
-    #[inline]
-    pub fn sample_rate() -> i32 {
-        SAMPLE_RATE
-    }
+  #[inline]
+  pub const fn sample_rate() -> i32 {
+    SAMPLE_RATE
+  }
 }

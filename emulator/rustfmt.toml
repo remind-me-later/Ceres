@@ -1,0 +1,14 @@
+enum_discrim_align_threshold = 20
+struct_field_align_threshold = 20
+wrap_comments = true
+group_imports = "StdExternalCrate"
+imports_granularity = "One"
+condense_wildcard_suffixes = true
+hex_literal_case = "Upper"
+normalize_comments = true
+reorder_impl_items = true
+struct_lit_single_line = true
+version = "Two"
+max_width = 80
+tab_spaces = 2
+format_strings = true
