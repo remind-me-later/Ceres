@@ -19,25 +19,39 @@ pub type Sample = f32;
 
 impl Gb {
   pub(crate) fn run_apu(&mut self, cycles: i32) {
-    if !self.apu_on {
-      return;
-    }
+    if self.apu_on {
+      if self.apu_timer >= APU_TIMER_RES {
+        self.apu_timer -= APU_TIMER_RES;
+        self.step_seq();
+      }
+      self.apu_timer += cycles;
 
-    if self.apu_timer >= APU_TIMER_RES {
-      self.apu_timer -= APU_TIMER_RES;
-      self.step_seq();
+      self.apu_ch1.step_sample(cycles);
+      self.apu_ch2.step_sample(cycles);
+      self.apu_ch3.step_sample(cycles);
+      self.apu_ch4.step_sample(cycles);
     }
-    self.apu_timer += cycles;
-
-    self.apu_ch1.step_sample(cycles);
-    self.apu_ch2.step_sample(cycles);
-    self.apu_ch3.step_sample(cycles);
-    self.apu_ch4.step_sample(cycles);
 
     while self.apu_render_timer >= self.apu_ext_sample_period {
       self.apu_render_timer -= self.apu_ext_sample_period;
-      self.mix_and_render();
+
+      if self.apu_on {
+        let (l, r) = self.mix_and_render();
+
+        // high pass
+        let l = self.high_pass(l);
+        let r = self.high_pass(r);
+
+        self.apu_l_out = l;
+        self.apu_r_out = r;
+      } else {
+        self.apu_l_out = 0.0;
+        self.apu_r_out = 0.0;
+      }
+
+      self.samples_run += 2;
     }
+
     self.apu_render_timer += cycles;
   }
 
@@ -73,7 +87,7 @@ impl Gb {
     self.apu_ch4.set_period_half(p_half);
   }
 
-  fn mix_and_render(&mut self) {
+  fn mix_and_render(&self) -> (Sample, Sample) {
     let mut l = 0;
     let mut r = 0;
 
@@ -105,14 +119,7 @@ impl Gb {
     let l = f32::from(l) / f32::from(i16::MAX);
     let r = f32::from(r) / f32::from(i16::MAX);
 
-    // high pass
-    let l = self.high_pass(l);
-    let r = self.high_pass(r);
-
-    self.apu_l_out = l;
-    self.apu_r_out = r;
-
-    self.samples_run += 2;
+    (l, r)
   }
 
   fn high_pass(&mut self, s: f32) -> f32 {
