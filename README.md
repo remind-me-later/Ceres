@@ -19,25 +19,6 @@ To build just `make`.
 - To run a given `rom.gb` just type `cargo run --release rom.gb`.
 - To see usage of the program: `cargo run --release -- --help`.
 
-## Run tests
-
-From the `emulator` directory run `cargo run --release blargg_runner`.
-
-## Platforms
-
-We use SDL and OpenGL so the emulator should be compatible with almost anything,
-with maybe a bit of massaging.
-
-## Keys
-
-| Gameboy | Emulator  |
-| ------- | --------- |
-| Dpad    | WASD      |
-| A       | K         |
-| B       | L         |
-| Start   | Return    |
-| Select  | Backspace |
-
 ## Thanks
 
 ### Documentation
