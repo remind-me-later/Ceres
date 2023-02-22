@@ -23,9 +23,9 @@ To build just `make`.
 
 ### Documentation
 
-- [Pan Docs](https://gbdev.io/pandocs/)
-- [Gameboy Development Wiki](https://gbdev.gg8.se/wiki/articles/Main_Page)
 - [Gameboy Bootstrap ROM](https://gbdev.gg8.se/wiki/articles/Gameboy_Bootstrap_ROM#Contents_of_the_ROM)
+- [Gameboy Development Wiki](https://gbdev.gg8.se/wiki/articles/Main_Page)
+- [Pan Docs](https://gbdev.io/pandocs/)
 
 ### Tests
 
@@ -33,8 +33,8 @@ To build just `make`.
 
 ### Reference
 
-- [retrio/gb](https://github.com/retrio/gb)
-- [Mooneye GB](https://github.com/Gekkio/mooneye-gb)
-- [GoBoy](https://github.com/Humpheh/goboy)
 - [Gameboy Emulator in C# 8](https://github.com/DaveTCode/gameboy-emulator-dotnet)
+- [GoBoy](https://github.com/Humpheh/goboy)
+- [Mooneye GB](https://github.com/Gekkio/mooneye-gb)
+- [retrio/gb](https://github.com/retrio/gb)
 - [SameBoy](https://github.com/LIJI32/SameBoy)
