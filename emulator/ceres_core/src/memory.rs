@@ -1,15 +1,15 @@
 use {
-  crate::{ppu::Mode, CompatMode, Gb, Model::Cgb},
-  core::num::NonZeroU8,
+    crate::{ppu::Mode, CompatMode, Gb, Model::Cgb},
+    core::num::NonZeroU8,
 };
 
 #[derive(PartialEq, Eq, Default)]
 pub enum HdmaState {
-  #[default]
-  Sleep      = 0,
-  HBlank     = 1,
-  HBlankDone = 2,
-  General    = 3,
+    #[default]
+    Sleep      = 0,
+    HBlank     = 1,
+    HBlankDone = 2,
+    General    = 3,
 }
 
 // IO addresses
@@ -75,326 +75,322 @@ const HRAM_END: u8 = 0xFE;
 const IE: u8 = 0xFF;
 
 impl Gb {
-  #[inline]
-  #[must_use]
-  pub(crate) const fn read_ram(&self, addr: u16) -> u8 {
-    self.wram[(addr & 0xFFF) as usize]
-  }
-
-  #[inline]
-  #[must_use]
-  pub(crate) fn read_bank_ram(&self, addr: u16) -> u8 {
-    let bank = u16::from(self.svbk_true.get()) * 0x1000;
-    self.wram[(addr & 0xFFF | bank) as usize]
-  }
-
-  #[inline]
-  fn write_ram(&mut self, addr: u16, val: u8) {
-    self.wram[(addr & 0xFFF) as usize] = val;
-  }
-
-  #[inline]
-  fn write_bank_ram(&mut self, addr: u16, val: u8) {
-    let bank = u16::from(self.svbk_true.get()) * 0x1000;
-    self.wram[(addr & 0xFFF | bank) as usize] = val;
-  }
-
-  #[inline]
-  const fn dma_active(&self) -> bool {
-    self.dma_on && (self.dma_cycles > 0 || self.dma_restarting)
-  }
-
-  #[inline]
-  const fn hdma_on(&self) -> bool {
-    !matches!(self.hdma_state, HdmaState::Sleep)
-  }
-
-  #[inline]
-  fn read_rom_or_cart(&mut self, addr: u16) -> u8 {
-    self
-      .boot_rom
-      .map_or_else(|| self.cart.read_rom(addr), |b| b[addr as usize])
-  }
-
-  // **************
-  // * Memory map *
-  // **************
-
-  pub(crate) fn read_mem(&mut self, addr: u16) -> u8 {
-    match addr {
-      0x0000..=0x00FF | 0x0200..=0x08FF => self.read_rom_or_cart(addr),
-      0x0100..=0x01FF | 0x0900..=0x7FFF => self.cart.read_rom(addr),
-      0x8000..=0x9FFF => self.read_vram(addr),
-      0xA000..=0xBFFF => self.cart.read_ram(addr),
-      0xC000..=0xCFFF | 0xE000..=0xEFFF => self.read_ram(addr),
-      0xD000..=0xDFFF | 0xF000..=0xFDFF => self.read_bank_ram(addr),
-      0xFE00..=0xFE9F => self.read_oam(addr),
-      0xFEA0..=0xFEFF => 0xFF,
-      0xFF00..=0xFFFF => self.read_high((addr & 0xFF) as u8),
+    #[inline]
+    #[must_use]
+    pub(crate) const fn read_ram(&self, addr: u16) -> u8 {
+        self.wram[(addr & 0xFFF) as usize]
     }
-  }
 
-  #[inline]
-  fn read_high(&mut self, addr: u8) -> u8 {
-    match addr {
-      P1 => self.read_p1(),
-      SB => self.sb,
-      SC => self.sc | 0x7E,
-      DIV => ((self.system_clk >> 8) & 0xFF) as u8,
-      TIMA => self.tima,
-      TMA => self.tma,
-      TAC => 0xF8 | self.tac,
-      IF => self.ifr | 0xE0,
-      NR10 => self.apu_ch1.read_nr10(),
-      NR11 => self.apu_ch1.read_nr11(),
-      NR12 => self.apu_ch1.read_nr12(),
-      NR14 => self.apu_ch1.read_nr14(),
-      NR21 => self.apu_ch2.read_nr21(),
-      NR22 => self.apu_ch2.read_nr22(),
-      NR24 => self.apu_ch2.read_nr24(),
-      NR30 => self.apu_ch3.read_nr30(),
-      NR32 => self.apu_ch3.read_nr32(),
-      NR34 => self.apu_ch3.read_nr34(),
-      NR42 => self.apu_ch4.read_nr42(),
-      NR43 => self.apu_ch4.read_nr43(),
-      NR44 => self.apu_ch4.read_nr44(),
-      NR50 => self.read_nr50(),
-      NR51 => self.nr51,
-      NR52 => self.read_nr52(),
-      WAV_BEGIN..=WAV_END => self.apu_ch3.read_wave_ram(addr),
-      LCDC => self.lcdc,
-      STAT => self.stat | 0x80,
-      SCY => self.scy,
-      SCX => self.scx,
-      LY => self.ly,
-      LYC => self.lyc,
-      DMA => self.dma,
-      BGP => self.bgp,
-      OBP0 => self.obp0,
-      OBP1 => self.obp1,
-      WY => self.wy,
-      WX => self.wx,
-      KEY1 if self.model == Cgb => {
-        0x7E
-          | (u8::from(self.double_speed) << 7)
-          | u8::from(self.double_speed_request)
-      }
-      VBK if self.model == Cgb => u8::from(self.vbk) | 0xFE,
-      HDMA5 if self.model == Cgb => {
-        // active on low
-        u8::from(!self.hdma_on()) << 7 | self.hdma5
-      }
-      BCPS if self.model == Cgb => self.bcp.spec(),
-      BCPD if self.model == Cgb => self.bcp.data(),
-      OCPS if self.model == Cgb => self.ocp.spec(),
-      OCPD if self.model == Cgb => self.ocp.data(),
-      OPRI if self.model == Cgb => self.opri,
-      SVBK if self.model == Cgb => self.svbk | 0xF8,
-      HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize],
-      IE => self.ie,
-      _ => 0xFF,
+    #[inline]
+    #[must_use]
+    pub(crate) fn read_bank_ram(&self, addr: u16) -> u8 {
+        let bank = u16::from(self.svbk_true.get()) * 0x1000;
+        self.wram[(addr & 0xFFF | bank) as usize]
     }
-  }
 
-  pub(crate) fn write_mem(&mut self, addr: u16, val: u8) {
-    match addr {
-      // assume bootrom doesn't write to rom
-      0x0000..=0x08FF | 0x0900..=0x7FFF => self.cart.write_rom(addr, val),
-      0x8000..=0x9FFF => self.write_vram(addr, val),
-      0xA000..=0xBFFF => self.cart.write_ram(addr, val),
-      0xC000..=0xCFFF | 0xE000..=0xEFFF => self.write_ram(addr, val),
-      0xD000..=0xDFFF | 0xF000..=0xFDFF => self.write_bank_ram(addr, val),
-      0xFE00..=0xFE9F => self.write_oam(addr, val, self.dma_active()),
-      0xFEA0..=0xFEFF => (),
-      0xFF00..=0xFFFF => self.write_high((addr & 0xFF) as u8, val),
+    #[inline]
+    fn write_ram(&mut self, addr: u16, val: u8) {
+        self.wram[(addr & 0xFFF) as usize] = val;
     }
-  }
 
-  #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
-  #[inline]
-  fn write_high(&mut self, addr: u8, val: u8) {
-    match addr {
-      P1 => self.write_joy(val),
-      SB => self.sb = val,
-      SC => self.sc = val,
-      DIV => self.write_div(),
-      TIMA => self.write_tima(val),
-      TMA => self.write_tma(val),
-      TAC => self.write_tac(val),
-      IF => self.ifr = val & 0x1F,
-      NR10 if self.apu_on => self.apu_ch1.write_nr10(val),
-      NR11 if self.apu_on => self.apu_ch1.write_nr11(val),
-      NR12 if self.apu_on => self.apu_ch1.write_nr12(val),
-      NR13 if self.apu_on => self.apu_ch1.write_nr13(val),
-      NR14 if self.apu_on => self.apu_ch1.write_nr14(val),
-      NR21 if self.apu_on => self.apu_ch2.write_nr21(val),
-      NR22 if self.apu_on => self.apu_ch2.write_nr22(val),
-      NR23 if self.apu_on => self.apu_ch2.write_nr23(val),
-      NR24 if self.apu_on => self.apu_ch2.write_nr24(val),
-      NR30 if self.apu_on => self.apu_ch3.write_nr30(val),
-      NR31 if self.apu_on => self.apu_ch3.write_nr31(val),
-      NR32 if self.apu_on => self.apu_ch3.write_nr32(val),
-      NR33 if self.apu_on => self.apu_ch3.write_nr33(val),
-      NR34 if self.apu_on => self.apu_ch3.write_nr34(val),
-      NR41 if self.apu_on => self.apu_ch4.write_nr41(val),
-      NR42 if self.apu_on => self.apu_ch4.write_nr42(val),
-      NR43 if self.apu_on => self.apu_ch4.write_nr43(val),
-      NR44 if self.apu_on => self.apu_ch4.write_nr44(val),
-      NR50 => self.write_nr50(val),
-      NR51 => self.write_nr51(val),
-      NR52 => self.write_nr52(val),
-      WAV_BEGIN..=WAV_END => self.apu_ch3.write_wave_ram(addr, val),
-      LCDC => self.write_lcdc(val),
-      STAT => self.write_stat(val),
-      SCY => self.scy = val,
-      SCX => self.scx = val,
-      LYC => self.lyc = val,
-      DMA => {
-        if self.dma_on {
-          self.dma_restarting = true;
+    #[inline]
+    fn write_bank_ram(&mut self, addr: u16, val: u8) {
+        let bank = u16::from(self.svbk_true.get()) * 0x1000;
+        self.wram[(addr & 0xFFF | bank) as usize] = val;
+    }
+
+    #[inline]
+    const fn dma_active(&self) -> bool {
+        self.dma_on && (self.dma_cycles > 0 || self.dma_restarting)
+    }
+
+    #[inline]
+    const fn hdma_on(&self) -> bool {
+        !matches!(self.hdma_state, HdmaState::Sleep)
+    }
+
+    #[inline]
+    fn read_rom_or_cart(&mut self, addr: u16) -> u8 {
+        self.boot_rom
+            .map_or_else(|| self.cart.read_rom(addr), |b| b[addr as usize])
+    }
+
+    // **************
+    // * Memory map *
+    // **************
+
+    pub(crate) fn read_mem(&mut self, addr: u16) -> u8 {
+        match addr {
+            0x0000..=0x00FF | 0x0200..=0x08FF => self.read_rom_or_cart(addr),
+            0x0100..=0x01FF | 0x0900..=0x7FFF => self.cart.read_rom(addr),
+            0x8000..=0x9FFF => self.read_vram(addr),
+            0xA000..=0xBFFF => self.cart.read_ram(addr),
+            0xC000..=0xCFFF | 0xE000..=0xEFFF => self.read_ram(addr),
+            0xD000..=0xDFFF | 0xF000..=0xFDFF => self.read_bank_ram(addr),
+            0xFE00..=0xFE9F => self.read_oam(addr),
+            0xFEA0..=0xFEFF => 0xFF,
+            0xFF00..=0xFFFF => self.read_high((addr & 0xFF) as u8),
+        }
+    }
+
+    #[inline]
+    fn read_high(&mut self, addr: u8) -> u8 {
+        match addr {
+            P1 => self.read_p1(),
+            SB => self.sb,
+            SC => self.sc | 0x7E,
+            DIV => ((self.system_clk >> 8) & 0xFF) as u8,
+            TIMA => self.tima,
+            TMA => self.tma,
+            TAC => 0xF8 | self.tac,
+            IF => self.ifr | 0xE0,
+            NR10 => self.apu_ch1.read_nr10(),
+            NR11 => self.apu_ch1.read_nr11(),
+            NR12 => self.apu_ch1.read_nr12(),
+            NR14 => self.apu_ch1.read_nr14(),
+            NR21 => self.apu_ch2.read_nr21(),
+            NR22 => self.apu_ch2.read_nr22(),
+            NR24 => self.apu_ch2.read_nr24(),
+            NR30 => self.apu_ch3.read_nr30(),
+            NR32 => self.apu_ch3.read_nr32(),
+            NR34 => self.apu_ch3.read_nr34(),
+            NR42 => self.apu_ch4.read_nr42(),
+            NR43 => self.apu_ch4.read_nr43(),
+            NR44 => self.apu_ch4.read_nr44(),
+            NR50 => self.read_nr50(),
+            NR51 => self.nr51,
+            NR52 => self.read_nr52(),
+            WAV_BEGIN..=WAV_END => self.apu_ch3.read_wave_ram(addr),
+            LCDC => self.lcdc,
+            STAT => self.stat | 0x80,
+            SCY => self.scy,
+            SCX => self.scx,
+            LY => self.ly,
+            LYC => self.lyc,
+            DMA => self.dma,
+            BGP => self.bgp,
+            OBP0 => self.obp0,
+            OBP1 => self.obp1,
+            WY => self.wy,
+            WX => self.wx,
+            KEY1 if self.model == Cgb => {
+                0x7E | (u8::from(self.double_speed) << 7) | u8::from(self.double_speed_request)
+            }
+            VBK if self.model == Cgb => u8::from(self.vbk) | 0xFE,
+            HDMA5 if self.model == Cgb => {
+                // active on low
+                u8::from(!self.hdma_on()) << 7 | self.hdma5
+            }
+            BCPS if self.model == Cgb => self.bcp.spec(),
+            BCPD if self.model == Cgb => self.bcp.data(),
+            OCPS if self.model == Cgb => self.ocp.spec(),
+            OCPD if self.model == Cgb => self.ocp.data(),
+            OPRI if self.model == Cgb => self.opri,
+            SVBK if self.model == Cgb => self.svbk | 0xF8,
+            HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize],
+            IE => self.ie,
+            _ => 0xFF,
+        }
+    }
+
+    pub(crate) fn write_mem(&mut self, addr: u16, val: u8) {
+        match addr {
+            // assume bootrom doesn't write to rom
+            0x0000..=0x08FF | 0x0900..=0x7FFF => self.cart.write_rom(addr, val),
+            0x8000..=0x9FFF => self.write_vram(addr, val),
+            0xA000..=0xBFFF => self.cart.write_ram(addr, val),
+            0xC000..=0xCFFF | 0xE000..=0xEFFF => self.write_ram(addr, val),
+            0xD000..=0xDFFF | 0xF000..=0xFDFF => self.write_bank_ram(addr, val),
+            0xFE00..=0xFE9F => self.write_oam(addr, val, self.dma_active()),
+            0xFEA0..=0xFEFF => (),
+            0xFF00..=0xFFFF => self.write_high((addr & 0xFF) as u8, val),
+        }
+    }
+
+    #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
+    #[inline]
+    fn write_high(&mut self, addr: u8, val: u8) {
+        match addr {
+            P1 => self.write_joy(val),
+            SB => self.sb = val,
+            SC => self.sc = val,
+            DIV => self.write_div(),
+            TIMA => self.write_tima(val),
+            TMA => self.write_tma(val),
+            TAC => self.write_tac(val),
+            IF => self.ifr = val & 0x1F,
+            NR10 if self.apu_on => self.apu_ch1.write_nr10(val),
+            NR11 if self.apu_on => self.apu_ch1.write_nr11(val),
+            NR12 if self.apu_on => self.apu_ch1.write_nr12(val),
+            NR13 if self.apu_on => self.apu_ch1.write_nr13(val),
+            NR14 if self.apu_on => self.apu_ch1.write_nr14(val),
+            NR21 if self.apu_on => self.apu_ch2.write_nr21(val),
+            NR22 if self.apu_on => self.apu_ch2.write_nr22(val),
+            NR23 if self.apu_on => self.apu_ch2.write_nr23(val),
+            NR24 if self.apu_on => self.apu_ch2.write_nr24(val),
+            NR30 if self.apu_on => self.apu_ch3.write_nr30(val),
+            NR31 if self.apu_on => self.apu_ch3.write_nr31(val),
+            NR32 if self.apu_on => self.apu_ch3.write_nr32(val),
+            NR33 if self.apu_on => self.apu_ch3.write_nr33(val),
+            NR34 if self.apu_on => self.apu_ch3.write_nr34(val),
+            NR41 if self.apu_on => self.apu_ch4.write_nr41(val),
+            NR42 if self.apu_on => self.apu_ch4.write_nr42(val),
+            NR43 if self.apu_on => self.apu_ch4.write_nr43(val),
+            NR44 if self.apu_on => self.apu_ch4.write_nr44(val),
+            NR50 => self.write_nr50(val),
+            NR51 => self.write_nr51(val),
+            NR52 => self.write_nr52(val),
+            WAV_BEGIN..=WAV_END => self.apu_ch3.write_wave_ram(addr, val),
+            LCDC => self.write_lcdc(val),
+            STAT => self.write_stat(val),
+            SCY => self.scy = val,
+            SCX => self.scx = val,
+            LYC => self.lyc = val,
+            DMA => {
+                if self.dma_on {
+                    self.dma_restarting = true;
+                }
+
+                self.dma_cycles = -8; // two m-cycles delay
+                self.dma = val;
+                self.dma_addr = u16::from(val) << 8;
+                self.dma_on = true;
+            }
+            BGP => self.bgp = val,
+            OBP0 => self.obp0 = val,
+            OBP1 => self.obp1 = val,
+            WY => self.wy = val,
+            WX => self.wx = val,
+            KEY0 if self.model == Cgb && self.boot_rom.is_some() && val == 4 => {
+                self.compat_mode = CompatMode::Compat;
+            }
+            KEY1 if self.model == Cgb => self.double_speed_request = val & 1 != 0,
+            VBK if self.model == Cgb => self.vbk = val & 1 != 0,
+            0x50 => {
+                if val & 1 != 0 {
+                    self.boot_rom = None;
+                }
+            }
+            HDMA1 if self.model == Cgb => {
+                self.hdma_src = u16::from(val) << 8 | self.hdma_src & 0xF0;
+            }
+            HDMA2 if self.model == Cgb => {
+                self.hdma_src = self.hdma_src & 0xFF00 | u16::from(val) & 0xF0;
+            }
+            HDMA3 if self.model == Cgb => {
+                self.hdma_dst = u16::from(val & 0x1F) << 8 | self.hdma_dst & 0xF0;
+            }
+            HDMA4 if self.model == Cgb => {
+                self.hdma_dst = self.hdma_dst & 0x1F00 | u16::from(val) & 0xF0;
+            }
+            HDMA5 if self.model == Cgb => {
+                // stop current transfer
+                if self.hdma_on() && val & 0x80 == 0 {
+                    self.hdma_state = HdmaState::Sleep;
+                    return;
+                }
+
+                self.hdma5 = val & !0x80;
+                let transfer_blocks = val & 0x7F;
+                self.hdma_len = (u16::from(transfer_blocks) + 1) * 0x10;
+                self.hdma_state = if val & 0x80 == 0 {
+                    HdmaState::General
+                } else {
+                    HdmaState::HBlank
+                };
+            }
+            BCPS if self.model == Cgb => self.bcp.set_spec(val),
+            BCPD if self.model == Cgb => self.bcp.set_data(val),
+            OCPS if self.model == Cgb => self.ocp.set_spec(val),
+            OCPD if self.model == Cgb => self.ocp.set_data(val),
+            OPRI if self.model == Cgb => self.opri = val,
+            SVBK if self.model == Cgb => {
+                let tmp = val & 7;
+                self.svbk = tmp;
+                self.svbk_true = NonZeroU8::new(if tmp == 0 { 1 } else { tmp }).unwrap();
+            }
+            HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize] = val,
+            IE => self.ie = val,
+            _ => (),
+        }
+    }
+
+    // *******
+    // * DMA *
+    // *******
+
+    pub(crate) fn run_dma(&mut self) {
+        if !self.dma_on {
+            return;
         }
 
-        self.dma_cycles = -8; // two m-cycles delay
-        self.dma = val;
-        self.dma_addr = u16::from(val) << 8;
-        self.dma_on = true;
-      }
-      BGP => self.bgp = val,
-      OBP0 => self.obp0 = val,
-      OBP1 => self.obp1 = val,
-      WY => self.wy = val,
-      WX => self.wx = val,
-      KEY0 if self.model == Cgb && self.boot_rom.is_some() && val == 4 => {
-        self.compat_mode = CompatMode::Compat;
-      }
-      KEY1 if self.model == Cgb => self.double_speed_request = val & 1 != 0,
-      VBK if self.model == Cgb => self.vbk = val & 1 != 0,
-      0x50 => {
-        if val & 1 != 0 {
-          self.boot_rom = None;
+        while self.dma_cycles >= 4 {
+            self.dma_cycles -= 4;
+
+            // TODO: reading some ranges should cause problems, $DF is
+            // the maximum value accesible to OAM DMA (probably reads
+            // from echo RAM should work too, RESEARCH).
+            // what happens if reading from IO range? (garbage? 0xff?)
+            let val = self.read_mem(self.dma_addr);
+
+            // TODO: writes from DMA can access OAM on modes 2 and 3
+            // with some glitches (RESEARCH) and without trouble during
+            // VBLANK (what happens in HBLANK?)
+            self.oam[(self.dma_addr & 0xFF) as usize] = val;
+
+            self.dma_addr = self.dma_addr.wrapping_add(1);
+            if self.dma_addr & 0xFF >= 0xA0 {
+                self.dma_on = false;
+                self.dma_restarting = false;
+            }
         }
-      }
-      HDMA1 if self.model == Cgb => {
-        self.hdma_src = u16::from(val) << 8 | self.hdma_src & 0xF0;
-      }
-      HDMA2 if self.model == Cgb => {
-        self.hdma_src = self.hdma_src & 0xFF00 | u16::from(val) & 0xF0;
-      }
-      HDMA3 if self.model == Cgb => {
-        self.hdma_dst = u16::from(val & 0x1F) << 8 | self.hdma_dst & 0xF0;
-      }
-      HDMA4 if self.model == Cgb => {
-        self.hdma_dst = self.hdma_dst & 0x1F00 | u16::from(val) & 0xF0;
-      }
-      HDMA5 if self.model == Cgb => {
-        // stop current transfer
-        if self.hdma_on() && val & 0x80 == 0 {
-          self.hdma_state = HdmaState::Sleep;
-          return;
+    }
+
+    pub(crate) fn run_hdma(&mut self) {
+        match self.hdma_state {
+            HdmaState::General => (),
+            HdmaState::HBlank if self.ppu_mode() == Mode::HBlank => (),
+            HdmaState::HBlankDone if self.ppu_mode() != Mode::HBlank => {
+                self.hdma_state = HdmaState::HBlank;
+                return;
+            }
+            _ => return,
         }
 
-        self.hdma5 = val & !0x80;
-        let transfer_blocks = val & 0x7F;
-        self.hdma_len = (u16::from(transfer_blocks) + 1) * 0x10;
-        self.hdma_state = if val & 0x80 == 0 {
-          HdmaState::General
+        let len = if self.hdma_state == HdmaState::HBlank {
+            self.hdma_len -= 0x10;
+            self.hdma_state = if self.hdma_len == 0 {
+                HdmaState::Sleep
+            } else {
+                HdmaState::HBlankDone
+            };
+            self.hdma5 = ((self.hdma_len / 0x10).wrapping_sub(1) & 0xFF) as u8;
+            0x10
         } else {
-          HdmaState::HBlank
+            self.hdma_state = HdmaState::Sleep;
+            self.hdma5 = 0xFF;
+            let len = self.hdma_len;
+            self.hdma_len = 0;
+            len
         };
-      }
-      BCPS if self.model == Cgb => self.bcp.set_spec(val),
-      BCPD if self.model == Cgb => self.bcp.set_data(val),
-      OCPS if self.model == Cgb => self.ocp.set_spec(val),
-      OCPD if self.model == Cgb => self.ocp.set_data(val),
-      OPRI if self.model == Cgb => self.opri = val,
-      SVBK if self.model == Cgb => {
-        let tmp = val & 7;
-        self.svbk = tmp;
-        self.svbk_true =
-          NonZeroU8::new(if tmp == 0 { 1 } else { tmp }).unwrap();
-      }
-      HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize] = val,
-      IE => self.ie = val,
-      _ => (),
+
+        for _ in 0..len {
+            // TODO: the same problems as normal DMA plus reading from
+            // VRAM should copy garbage
+            let val = self.read_mem(self.hdma_src);
+            self.write_vram(self.hdma_dst, val);
+            self.hdma_dst += 1;
+            self.hdma_src += 1;
+        }
+
+        // can be outside of loop because HDMA should not
+        // access IO range (clk registers, ifr,
+        // etc..). If the PPU reads VRAM during an HDMA transfer it
+        // should be glitchy anyways
+        if self.double_speed {
+            self.advance_t_cycles(i32::from(len) * 2);
+        } else {
+            self.advance_t_cycles(i32::from(len));
+        }
     }
-  }
-
-  // *******
-  // * DMA *
-  // *******
-
-  pub(crate) fn run_dma(&mut self) {
-    if !self.dma_on {
-      return;
-    }
-
-    while self.dma_cycles >= 4 {
-      self.dma_cycles -= 4;
-
-      // TODO: reading some ranges should cause problems, $DF is
-      // the maximum value accesible to OAM DMA (probably reads
-      // from echo RAM should work too, RESEARCH).
-      // what happens if reading from IO range? (garbage? 0xff?)
-      let val = self.read_mem(self.dma_addr);
-
-      // TODO: writes from DMA can access OAM on modes 2 and 3
-      // with some glitches (RESEARCH) and without trouble during
-      // VBLANK (what happens in HBLANK?)
-      self.oam[(self.dma_addr & 0xFF) as usize] = val;
-
-      self.dma_addr = self.dma_addr.wrapping_add(1);
-      if self.dma_addr & 0xFF >= 0xA0 {
-        self.dma_on = false;
-        self.dma_restarting = false;
-      }
-    }
-  }
-
-  pub(crate) fn run_hdma(&mut self) {
-    match self.hdma_state {
-      HdmaState::General => (),
-      HdmaState::HBlank if self.ppu_mode() == Mode::HBlank => (),
-      HdmaState::HBlankDone if self.ppu_mode() != Mode::HBlank => {
-        self.hdma_state = HdmaState::HBlank;
-        return;
-      }
-      _ => return,
-    }
-
-    let len = if self.hdma_state == HdmaState::HBlank {
-      self.hdma_len -= 0x10;
-      self.hdma_state = if self.hdma_len == 0 {
-        HdmaState::Sleep
-      } else {
-        HdmaState::HBlankDone
-      };
-      self.hdma5 = ((self.hdma_len / 0x10).wrapping_sub(1) & 0xFF) as u8;
-      0x10
-    } else {
-      self.hdma_state = HdmaState::Sleep;
-      self.hdma5 = 0xFF;
-      let len = self.hdma_len;
-      self.hdma_len = 0;
-      len
-    };
-
-    for _ in 0..len {
-      // TODO: the same problems as normal DMA plus reading from
-      // VRAM should copy garbage
-      let val = self.read_mem(self.hdma_src);
-      self.write_vram(self.hdma_dst, val);
-      self.hdma_dst += 1;
-      self.hdma_src += 1;
-    }
-
-    // can be outside of loop because HDMA should not
-    // access IO range (clk registers, ifr,
-    // etc..). If the PPU reads VRAM during an HDMA transfer it
-    // should be glitchy anyways
-    if self.double_speed {
-      self.advance_t_cycles(i32::from(len) * 2);
-    } else {
-      self.advance_t_cycles(i32::from(len));
-    }
-  }
 }
