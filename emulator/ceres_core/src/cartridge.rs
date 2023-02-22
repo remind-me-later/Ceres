@@ -1,6 +1,6 @@
 use {
   alloc::{boxed::Box, vec},
-  core::fmt::Display,
+  core::{fmt::Display, num::NonZeroU8},
   Mbc::{Mbc1, Mbc2, Mbc3, Mbc5, NoMbc},
 };
 
@@ -119,18 +119,18 @@ impl Cartridge {
     save_data: Option<Box<[u8]>>,
   ) -> Result<Self, Error> {
     let rom_size = ROMSize::new(&rom)?;
-    let ram_size = RAMSize::new(&rom)?;
+    let mem_size = RAMSize::new(&rom)?;
     let rom_bank_mask = rom_size.bank_bit_mask();
-    let has_ram = ram_size != RAMSize::NoRAM;
+    let has_ram = mem_size != RAMSize::NoRAM;
     let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], rom_size)?;
 
-    let ram = save_data
-      .unwrap_or_else(|| vec![0; ram_size.size_bytes()].into_boxed_slice());
+    let mem = save_data
+      .unwrap_or_else(|| vec![0; mem_size.size_bytes()].into_boxed_slice());
 
     Ok(Self {
       mbc,
       rom,
-      ram,
+      ram: mem,
       rom_bank_lo: 1,
       rom_bank_hi: 0,
       rom_offsets: (0x0000, 0x4000),
@@ -151,7 +151,7 @@ impl Cartridge {
   #[must_use]
   pub const fn clock(&self) -> Option<&[u8]> {
     if let Mbc3 { rtc: Some(rtc) } = &self.mbc {
-      Some(&rtc.timer)
+      Some(&rtc.regs)
     } else {
       None
     }
@@ -207,10 +207,7 @@ impl Cartridge {
       Mbc3 { rtc } => rtc
         .as_ref()
         .and_then(|r| r.read(self.ram_enabled))
-        .unwrap_or_else(|| match self.ram_bank {
-          0x00..=0x07 => mbc_read_ram(self, self.ram_enabled, addr),
-          _ => 0xFF,
-        }),
+        .unwrap_or_else(|| mbc_read_ram(self, self.ram_enabled, addr)),
     }
   }
 
@@ -297,25 +294,23 @@ impl Cartridge {
             (0x0000, ROM_BANK_SIZE * self.rom_bank_lo as usize);
         }
         0x4000..=0x5FFF => {
-          if val > 0x7 && val <= 0xC {
+          if (0x8..=0xC).contains(&val) {
+            // Write to RTC registers
             if let Some(r) = rtc.as_mut() {
-              r.mapped_reg = Some(val);
+              r.map_reg(val);
             }
+          } else {
+            // Choose RAM bank
+            self.ram_bank = val & 0x7;
+            self.ram_offset = RAM_BANK_SIZE * self.ram_bank as usize;
 
-            return;
-          }
-
-          self.ram_bank = val & 0x7;
-          self.ram_offset = RAM_BANK_SIZE * self.ram_bank as usize;
-
-          if let Some(r) = rtc.as_mut() {
-            r.mapped_reg = None;
+            if let Some(r) = rtc.as_mut() {
+              r.unmap_reg();
+            }
           }
         }
         0x6000..=0x7FFF => {
-          if let Some(r) = rtc.as_mut() {
-            r.write_latch(val);
-          }
+          // No need to latch
         }
         _ => (),
       },
@@ -366,17 +361,10 @@ impl Cartridge {
       Mbc1 { .. } | Mbc2 | Mbc5 => {
         mbc_write_ram(self, self.ram_enabled, addr, val);
       }
-      Mbc3 { rtc } => {
-        if rtc
-          .as_mut()
-          .and_then(|r| r.write(self.ram_enabled, val))
-          .is_none()
-        {
-          if let 0x00..=0x07 = self.ram_bank {
-            mbc_write_ram(self, self.ram_enabled, addr, val);
-          }
-        }
-      }
+      Mbc3 { rtc } => rtc
+        .as_mut()
+        .and_then(|r| r.write(self.ram_enabled, val))
+        .unwrap_or_else(|| mbc_write_ram(self, self.ram_enabled, addr, val)),
     }
   }
 
@@ -484,16 +472,22 @@ impl RAMSize {
 
 #[derive(Default)]
 struct Mbc3RTC {
-  cycle_timer:  i32,
-  timer:        [u8; 5],
-  latched:      [u8; 5],
-  last_written: u8,
-  mapped_reg:   Option<u8>,
-  halt:         bool,
-  carry:        bool,
+  t_cycles: i32,
+  regs:     [u8; 5],
+  mapped:   Option<NonZeroU8>,
+  halt:     bool,
+  carry:    bool,
 }
 
 impl Mbc3RTC {
+  fn map_reg(&mut self, val: u8) {
+    self.mapped = Some(NonZeroU8::new(val).unwrap());
+  }
+
+  fn unmap_reg(&mut self) {
+    self.mapped = None;
+  }
+
   fn run_cycles(&mut self, cycles: i32) {
     for _ in 0..cycles {
       self.update_t_cycle();
@@ -505,62 +499,49 @@ impl Mbc3RTC {
       return;
     }
 
-    if self.cycle_timer == crate::TC_SEC {
-      self.cycle_timer = 0;
+    if self.t_cycles == crate::TC_SEC {
+      self.t_cycles = 0;
       self.update_secs();
     } else {
-      self.cycle_timer += 1;
+      self.t_cycles += 1;
     }
   }
 
   fn update_secs(&mut self) {
-    #[allow(clippy::if_not_else)]
-    if self.timer[0] == 59 {
-      self.timer[0] = 0;
-      if self.timer[1] == 59 {
-        self.timer[1] = 0;
-        if self.timer[2] == 23 {
-          self.timer[2] = 0;
-          if self.timer[3] == 255 {
-            self.timer[3] = 0;
-            if self.timer[4] != 0 {
-              self.timer[4] = 0;
+    self.regs[0] = (self.regs[0] + 1) & 0x3F;
+    if self.regs[0] == 60 {
+      self.regs[0] = 0;
+
+      self.regs[1] = (self.regs[1] + 1) & 0x3F;
+      if self.regs[1] == 60 {
+        self.regs[1] = 0;
+
+        self.regs[2] = (self.regs[2] + 1) & 0x1F;
+        if self.regs[2] == 24 {
+          self.regs[2] = 0;
+
+          self.regs[3] = self.regs[3].wrapping_add(1);
+          if self.regs[3] == 0 {
+            self.regs[4] = (self.regs[4] + 1) & 1;
+            if self.regs[4] == 0 {
               self.carry = true;
-            } else {
-              self.timer[4] = self.timer[4].wrapping_add(1) & 1;
             }
-          } else {
-            self.timer[3] = self.timer[3].wrapping_add(1);
           }
-        } else {
-          self.timer[2] = self.timer[2].wrapping_add(1) & 0x1F;
         }
-      } else {
-        self.timer[1] = self.timer[1].wrapping_add(1) & 0x3F;
       }
-    } else {
-      self.timer[0] = self.timer[0].wrapping_add(1) & 0x3F;
     }
-  }
-
-  fn write_latch(&mut self, val: u8) {
-    if self.last_written == 0 && val == 1 {
-      self.latched.copy_from_slice(&self.timer);
-    }
-
-    self.last_written = val;
   }
 
   fn read(&self, ram_enabled: bool) -> Option<u8> {
     ram_enabled
       .then(|| {
-        self.mapped_reg.map(|m| match m {
-          0x8 => self.latched[0],
-          0x9 => self.latched[1],
-          0xA => self.latched[2],
-          0xB => self.latched[3],
+        self.mapped.map(|m| match m.get() {
+          0x8 => self.regs[0],
+          0x9 => self.regs[1],
+          0xA => self.regs[2],
+          0xB => self.regs[3],
           0xC => {
-            self.latched[4]
+            self.regs[4]
               | (u8::from(self.halt) << 6)
               | (u8::from(self.carry) << 7)
           }
@@ -573,30 +554,14 @@ impl Mbc3RTC {
   fn write(&mut self, ram_enabled: bool, val: u8) -> Option<()> {
     ram_enabled
       .then(|| {
-        self.mapped_reg.map(|m| match m {
-          0x8 => {
-            let val = val & 0x3F;
-            self.timer[0] = val;
-            self.latched[0] = val;
-          }
-          0x9 => {
-            let val = val & 0x3F;
-            self.timer[1] = val;
-            self.latched[1] = val;
-          }
-          0xA => {
-            let val = val & 0x1F;
-            self.timer[2] = val;
-            self.latched[2] = val;
-          }
-          0xB => {
-            self.timer[3] = val;
-            self.latched[3] = val;
-          }
+        self.mapped.map(|m| match m.get() {
+          0x8 => self.regs[0] = val & 0x3F,
+          0x9 => self.regs[1] = val & 0x3F,
+          0xA => self.regs[2] = val & 0x1F,
+          0xB => self.regs[3] = val,
           0xC => {
             let val = val & 0xC1;
-            self.timer[4] = val;
-            self.latched[4] = val;
+            self.regs[4] = val;
             self.carry = val & 0x80 != 0;
             self.halt = val & 0x40 != 0;
           }

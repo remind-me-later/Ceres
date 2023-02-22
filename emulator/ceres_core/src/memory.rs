@@ -210,7 +210,7 @@ impl Gb {
     }
   }
 
-  #[allow(clippy::too_many_lines)]
+  #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
   #[inline]
   fn write_high(&mut self, addr: u8, val: u8) {
     match addr {

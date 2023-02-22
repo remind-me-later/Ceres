@@ -1,12 +1,12 @@
-#![no_std]
+// #![no_std]
 #![forbid(unsafe_code)]
 #![warn(
   clippy::pedantic,
+  clippy::nursery,
   // restriction
-  // clippy::float_arithmetic,
-  clippy::assertions_on_result_states,
   clippy::alloc_instead_of_core,
   clippy::as_underscore,
+  clippy::assertions_on_result_states,
   clippy::clone_on_ref_ptr,
   clippy::decimal_literal_representation,
   clippy::default_union_representation,
@@ -16,6 +16,7 @@
   clippy::empty_structs_with_brackets,
   clippy::exit,
   clippy::filetype_is_file,
+  // clippy::float_arithmetic,
   clippy::float_cmp_const,
   clippy::fn_to_numeric_cast_any,
   clippy::format_push_string,
@@ -48,20 +49,8 @@
   clippy::unseparated_literal_suffix,
   // clippy::unwrap_used,
   clippy::verbose_file_reads,
-  // nursery
-  clippy::useless_let_if_seq,
-  clippy::use_self,
-  // clippy::cognitive_complexity,
-  clippy::missing_const_for_fn,
-  clippy::nonstandard_macro_braces,
-  clippy::option_if_let_else,
-  clippy::suspicious_operation_groupings,
 )]
-#![allow(
-  clippy::similar_names,
-  clippy::struct_excessive_bools,
-  clippy::verbose_bit_mask
-)]
+#![allow(clippy::struct_excessive_bools, clippy::verbose_bit_mask)]
 
 extern crate alloc;
 

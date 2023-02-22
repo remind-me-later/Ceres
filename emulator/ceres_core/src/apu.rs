@@ -100,11 +100,11 @@ impl Gb {
         _ => break,
       };
 
-      let ch_r_on = u8::from(self.nr51 & (1 << i) != 0);
-      let ch_l_on = u8::from(self.nr51 & (1 << (i + 4)) != 0);
+      let right_on = u8::from(self.nr51 & (1 << i) != 0);
+      let left_on = u8::from(self.nr51 & (1 << (i + 4)) != 0);
 
-      l += ch_l_on * out;
-      r += ch_r_on * out;
+      l += left_on * out;
+      r += right_on * out;
     }
 
     // transform to i16 sample
@@ -124,7 +124,7 @@ impl Gb {
 
   fn high_pass(&mut self, s: f32) -> f32 {
     let out: f32 = s - self.apu_cap;
-    self.apu_cap = s - out * 0.999_958; // use 0.998943 for MGB&CGB
+    self.apu_cap = out.mul_add(-0.999_958, s); // use 0.998943 for MGB&CGB
 
     out
   }
