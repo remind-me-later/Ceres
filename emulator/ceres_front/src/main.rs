@@ -124,7 +124,7 @@ fn main() {
     let path = PathBuf::from(args.get_one::<String>("file").unwrap());
 
     if let Err(err) = run(model, path) {
-        println!("Error: {err}");
+        println!("error: {err}");
     }
 }
 
