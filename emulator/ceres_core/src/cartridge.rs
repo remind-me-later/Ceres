@@ -216,7 +216,6 @@ impl Cartridge {
 
   #[allow(clippy::too_many_lines)]
   pub(crate) fn write_rom(&mut self, addr: u16, val: u8) {
-    // TODO: &mut
     match &mut self.mbc {
       NoMbc => (),
       Mbc1 {
@@ -516,11 +515,11 @@ impl Mbc3RTC {
 
   fn update_secs(&mut self) {
     #[allow(clippy::if_not_else)]
-    if self.timer[0] > 60 {
+    if self.timer[0] == 59 {
       self.timer[0] = 0;
-      if self.timer[1] > 60 {
+      if self.timer[1] == 59 {
         self.timer[1] = 0;
-        if self.timer[2] > 24 {
+        if self.timer[2] == 23 {
           self.timer[2] = 0;
           if self.timer[3] == 255 {
             self.timer[3] = 0;
@@ -528,19 +527,19 @@ impl Mbc3RTC {
               self.timer[4] = 0;
               self.carry = true;
             } else {
-              self.timer[4] += 1;
+              self.timer[4] = self.timer[4].wrapping_add(1) & 1;
             }
           } else {
-            self.timer[3] += 1;
+            self.timer[3] = self.timer[3].wrapping_add(1);
           }
         } else {
-          self.timer[2] += 1;
+          self.timer[2] = self.timer[2].wrapping_add(1) & 0x1F;
         }
       } else {
-        self.timer[1] += 1;
+        self.timer[1] = self.timer[1].wrapping_add(1) & 0x3F;
       }
     } else {
-      self.timer[0] += 1;
+      self.timer[0] = self.timer[0].wrapping_add(1) & 0x3F;
     }
   }
 
@@ -563,7 +562,7 @@ impl Mbc3RTC {
           0xC => {
             self.latched[4]
               | (u8::from(self.halt) << 6)
-              | (u8::from(self.halt) << 7)
+              | (u8::from(self.carry) << 7)
           }
           _ => unreachable!("Not a valid RTC register"),
         })
@@ -576,14 +575,17 @@ impl Mbc3RTC {
       .then(|| {
         self.mapped_reg.map(|m| match m {
           0x8 => {
+            let val = val & 0x3F;
             self.timer[0] = val;
             self.latched[0] = val;
           }
           0x9 => {
+            let val = val & 0x3F;
             self.timer[1] = val;
             self.latched[1] = val;
           }
           0xA => {
+            let val = val & 0x1F;
             self.timer[2] = val;
             self.latched[2] = val;
           }
@@ -592,6 +594,7 @@ impl Mbc3RTC {
             self.latched[3] = val;
           }
           0xC => {
+            let val = val & 0xC1;
             self.timer[4] = val;
             self.latched[4] = val;
             self.carry = val & 0x80 != 0;

@@ -385,10 +385,4 @@ impl Gb {
   pub const fn pixel_data_rgb(&self) -> &[u8] {
     self.rgb_buf_present.pixel_data()
   }
-
-  /// Returns true if cartridge has battery, false otherwise
-  #[must_use]
-  pub const fn cartridge_has_battery(&self) -> bool {
-    self.cart.has_battery()
-  }
 }
