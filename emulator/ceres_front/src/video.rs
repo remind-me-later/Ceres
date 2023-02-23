@@ -1,286 +1,422 @@
-use {
-    core::num::NonZeroU32,
-    glow::HasContext,
-    glutin::{
-        config::{Config, ConfigTemplateBuilder},
-        context::{ContextAttributesBuilder, NotCurrentContext, PossiblyCurrentContext},
-        display::{Display, GetGlDisplay},
-        prelude::{GlDisplay, NotCurrentGlContextSurfaceAccessor},
-        surface::{GlSurface, Surface, SurfaceAttributesBuilder, SwapInterval, WindowSurface},
-    },
-    raw_window_handle::HasRawWindowHandle,
-    std::ffi::CString,
-    winit::{
-        event_loop::EventLoop,
-        window::{Window, WindowBuilder},
-    },
-};
+use {core::num::NonZeroU32, wgpu::util::DeviceExt};
 
-const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
-const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
-
-struct Renderer {
-    gl:            glow::Context,
-    program:       glow::NativeProgram,
-    _vao:          glow::NativeVertexArray,
-    _texture:      glow::NativeTexture,
-    uniform_loc:   glow::UniformLocation,
-    pixel_perfect: bool,
+#[allow(clippy::unused_)]
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct Vertex {
+    position:   [f32; 2],
+    tex_coords: [f32; 2],
 }
 
-impl Renderer {
-    unsafe fn new<D>(gl_display: &D) -> Self
-    where
-        D: GlDisplay,
-    {
-        let gl = glow::Context::from_loader_function(|symbol| {
-            let symbol = CString::new(symbol).unwrap();
-            gl_display.get_proc_address(symbol.as_c_str()).cast()
+impl Vertex {
+    #[allow(clippy::too_many_lines)]
+    const fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        use core::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+            step_mode:    wgpu::VertexStepMode::Vertex,
+            attributes:   &[
+                wgpu::VertexAttribute {
+                    offset:          0,
+                    shader_location: 0,
+                    format:          wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset:          mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format:          wgpu::VertexFormat::Float32x2,
+                },
+            ],
+        }
+    }
+}
+
+const INDICES: &[u16] = &[0, 1, 3, 0, 3, 2, /* padding */ 0];
+#[allow(clippy::cast_possible_truncation)]
+const NUM_INDICES: u32 = INDICES.len() as u32;
+
+pub struct State {
+    surface:            wgpu::Surface,
+    device:             wgpu::Device,
+    queue:              wgpu::Queue,
+    config:             wgpu::SurfaceConfiguration,
+    size:               winit::dpi::PhysicalSize<u32>,
+    render_pipeline:    wgpu::RenderPipeline,
+    vertex_buffer:      wgpu::Buffer,
+    index_buffer:       wgpu::Buffer,
+    diffuse_texture:    Texture,
+    diffuse_bind_group: wgpu::BindGroup,
+    window:             winit::window::Window,
+}
+
+impl State {
+    #[allow(clippy::too_many_lines)]
+    pub async fn new(window: winit::window::Window, width: u32, height: u32) -> Self {
+        let size = window.inner_size();
+
+        // The instance is a handle to our GPU
+        // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            ..Default::default()
         });
 
-        // create vao
-        let vao = gl
-            .create_vertex_array()
-            .expect("Cannot create vertex array");
-        gl.bind_vertex_array(Some(vao));
+        // # Safety
+        //
+        // The surface needs to live as long as the window that created it.
+        // State owns the window so this should be safe.
+        let surface = unsafe { instance.create_surface(&window) }.unwrap();
 
-        // create program
-        let program = gl.create_program().expect("Cannot create program");
-
-        let shader_sources = [
-            (glow::VERTEX_SHADER, include_str!("../shader/near.vert")),
-            (glow::FRAGMENT_SHADER, include_str!("../shader/near.frag")),
-        ];
-
-        let mut shaders = Vec::with_capacity(shader_sources.len());
-
-        for (shader_type, shader_source) in &shader_sources {
-            let shader = gl
-                .create_shader(*shader_type)
-                .expect("Cannot create shader");
-            gl.shader_source(shader, shader_source);
-            gl.compile_shader(shader);
-            assert!(
-                gl.get_shader_compile_status(shader),
-                "{}",
-                gl.get_shader_info_log(shader)
-            );
-            gl.attach_shader(program, shader);
-            shaders.push(shader);
-        }
-
-        gl.link_program(program);
-        assert!(
-            gl.get_program_link_status(program),
-            "{}",
-            gl.get_program_info_log(program)
-        );
-
-        for shader in shaders {
-            gl.detach_shader(program, shader);
-            gl.delete_shader(shader);
-        }
-
-        gl.use_program(Some(program));
-
-        // create texture
-        let texture = gl.create_texture().expect("cannot create texture");
-        gl.bind_texture(glow::TEXTURE_2D, Some(texture));
-        gl.tex_parameter_i32(
-            glow::TEXTURE_2D,
-            glow::TEXTURE_MIN_FILTER,
-            glow::NEAREST as i32,
-        );
-        gl.tex_parameter_i32(
-            glow::TEXTURE_2D,
-            glow::TEXTURE_MAG_FILTER,
-            glow::NEAREST as i32,
-        );
-
-        let uniform_loc = gl
-            .get_uniform_location(program, "transform")
-            .expect("couldn't get location of uniform");
-
-        gl.clear_color(0.0, 0.0, 0.0, 1.0);
-
-        Self {
-            gl,
-            program,
-            _vao: vao,
-            _texture: texture,
-            uniform_loc,
-            pixel_perfect: false,
-        }
-    }
-
-    unsafe fn resize(&self, width: u32, height: u32) {
-        self.gl.viewport(0, 0, width as i32, height as i32);
-
-        self.gl.use_program(Some(self.program));
-
-        let (x, y) = if self.pixel_perfect {
-            let mul = (width / PX_WIDTH).min(height / PX_HEIGHT);
-            let x = (PX_WIDTH * mul) as f32 / width as f32;
-            let y = (PX_HEIGHT * mul) as f32 / height as f32;
-            (x, y)
-        } else {
-            let mul = (width as f32 / PX_WIDTH as f32).min(height as f32 / PX_HEIGHT as f32);
-            let x = (PX_WIDTH as f32 * mul) / width as f32;
-            let y = (PX_HEIGHT as f32 * mul) / height as f32;
-            (x, y)
-        };
-
-        self.gl.uniform_2_f32(Some(&self.uniform_loc), x, y);
-    }
-
-    unsafe fn render(&self, rgb: &[u8]) {
-        // TODO: texture streaming
-        // self.gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
-        self.gl.tex_image_2d(
-            glow::TEXTURE_2D,
-            0,
-            glow::RGB as i32,
-            PX_WIDTH as i32,
-            PX_HEIGHT as i32,
-            0,
-            glow::RGB,
-            glow::UNSIGNED_BYTE,
-            Some(rgb),
-        );
-
-        self.gl.clear(glow::COLOR_BUFFER_BIT);
-        // self.gl.use_program(Some(self.program));
-        // self.gl.bind_vertex_array(Some(self.vao));
-        self.gl.draw_arrays(glow::TRIANGLE_STRIP, 0, 4);
-    }
-}
-
-struct CurrentGl {
-    context:  PossiblyCurrentContext,
-    renderer: Renderer,
-    surface:  Surface<WindowSurface>,
-}
-
-impl CurrentGl {
-    fn new(
-        window: &Window,
-        config: &Config,
-        not_current_gl_context: NotCurrentContext,
-        display: &Display,
-    ) -> Self {
-        let (width, height): (u32, u32) = window.inner_size().into();
-        let raw_window_handle = window.raw_window_handle();
-        let attrs = SurfaceAttributesBuilder::<WindowSurface>::new().build(
-            raw_window_handle,
-            NonZeroU32::new(width).unwrap(),
-            NonZeroU32::new(height).unwrap(),
-        );
-
-        let surface = unsafe {
-            config
-                .display()
-                .create_window_surface(config, &attrs)
-                .unwrap()
-        };
-
-        let gl_context = not_current_gl_context.make_current(&surface).unwrap();
-
-        // Try setting vsync.
-        if let Err(res) =
-            surface.set_swap_interval(&gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
-        {
-            eprintln!("Error setting vsync: {res:?}");
-        }
-
-        // The context needs to be current for the Renderer to set up shaders and
-        // buffers. It also performs function loading, which needs a current context on
-        // WGL.
-        let renderer = unsafe { Renderer::new(display) };
-
-        Self {
-            renderer,
-            context: gl_context,
-            surface,
-        }
-    }
-}
-
-pub struct Video {
-    gl_config:              Config,
-    gl_display:             Display,
-    not_current_gl_context: Option<NotCurrentContext>,
-    current:                Option<CurrentGl>,
-    // XXX the surface must be dropped before the window.
-    maybe_window:           Window,
-}
-
-impl Video {
-    pub fn new(event_loop: &EventLoop<()>, window_builder: WindowBuilder) -> Self {
-        let display_builder =
-            glutin_winit::DisplayBuilder::new().with_window_builder(Some(window_builder));
-
-        let template = ConfigTemplateBuilder::new();
-
-        let (maybe_window, gl_config) = display_builder
-            .build(event_loop, template, |mut confs| confs.next().unwrap())
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference:       wgpu::PowerPreference::default(),
+                compatible_surface:     Some(&surface),
+                force_fallback_adapter: false,
+            })
+            .await
+            .unwrap();
+        let (device, queue) = adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label:    None,
+                    features: wgpu::Features::empty(),
+                    limits:   wgpu::Limits::default(),
+                },
+                None,
+            )
+            .await
             .unwrap();
 
-        let raw_window_handle = maybe_window
-            .as_ref()
-            .map(HasRawWindowHandle::raw_window_handle);
-        let gl_display = gl_config.display();
-        let context_attributes = ContextAttributesBuilder::new().build(raw_window_handle);
-        let not_current_gl_context = Some(unsafe {
-            gl_display
-                .create_context(&gl_config, &context_attributes)
-                .expect("failed to create context")
+        let surface_caps = surface.get_capabilities(&adapter);
+        // Shader code in this tutorial assumes an Srgb surface texture. Using a
+        // different one will result all the colors comming out darker. If you
+        // want to support non Srgb surfaces, you'll need to account for that
+        // when drawing to the frame.
+        let surface_format = surface_caps
+            .formats
+            .iter()
+            .copied()
+            .find(|f| f.describe().srgb)
+            .unwrap_or(surface_caps.formats[0]);
+        let config = wgpu::SurfaceConfiguration {
+            usage:        wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format:       surface_format,
+            width:        size.width,
+            height:       size.height,
+            present_mode: surface_caps.present_modes[0],
+            alpha_mode:   surface_caps.alpha_modes[0],
+            view_formats: vec![],
+        };
+        surface.configure(&device, &config);
+
+        let diffuse_texture = Texture::new(&device, width, height, None);
+
+        let texture_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding:    0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty:         wgpu::BindingType::Texture {
+                            multisampled:   false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type:    wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count:      None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding:    1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty:         wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count:      None,
+                    },
+                ],
+                label:   Some("texture_bind_group_layout"),
+            });
+
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+        let diffuse_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout:  &texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding:  0,
+                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding:  1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+            label:   Some("diffuse_bind_group"),
+        });
+
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label:  Some("Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shader/near.wgsl").into()),
+        });
+
+        let render_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label:                Some("Render Pipeline Layout"),
+                bind_group_layouts:   &[&texture_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label:         Some("Render Pipeline"),
+            layout:        Some(&render_pipeline_layout),
+            vertex:        wgpu::VertexState {
+                module:      &shader,
+                entry_point: "vs_main",
+                buffers:     &[Vertex::desc()],
+            },
+            fragment:      Some(wgpu::FragmentState {
+                module:      &shader,
+                entry_point: "fs_main",
+                targets:     &[Some(wgpu::ColorTargetState {
+                    format:     config.format,
+                    blend:      Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent::REPLACE,
+                        alpha: wgpu::BlendComponent::REPLACE,
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive:     wgpu::PrimitiveState {
+                topology:           wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face:         wgpu::FrontFace::Ccw,
+                cull_mode:          Some(wgpu::Face::Back),
+                // Setting this to anything other than Fill requires Features::POLYGON_MODE_LINE
+                // or Features::POLYGON_MODE_POINT
+                polygon_mode:       wgpu::PolygonMode::Fill,
+                // Requires Features::DEPTH_CLIP_CONTROL
+                unclipped_depth:    false,
+                // Requires Features::CONSERVATIVE_RASTERIZATION
+                conservative:       false,
+            },
+            depth_stencil: None,
+            multisample:   wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            // If the pipeline will be used with a multiview render pass, this
+            // indicates how many array layers the attachments will have.
+            multiview:     None,
+        });
+
+        let vertices: &[Vertex] = &[
+            Vertex {
+                position:   [1.0, 1.0],
+                tex_coords: [1.0, 0.0],
+            },
+            Vertex {
+                position:   [-1.0, 1.0],
+                tex_coords: [0.0, 0.0],
+            },
+            Vertex {
+                position:   [1.0, -1.0],
+                tex_coords: [1.0, 1.0],
+            },
+            Vertex {
+                position:   [-1.0, -1.0],
+                tex_coords: [0.0, 1.0],
+            },
+        ];
+
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label:    Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(vertices),
+            usage:    wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label:    Some("Index Buffer"),
+            contents: bytemuck::cast_slice(INDICES),
+            usage:    wgpu::BufferUsages::INDEX,
         });
 
         Self {
-            gl_config,
-            gl_display,
-            maybe_window: maybe_window.unwrap(),
-            not_current_gl_context,
-            current: None,
+            surface,
+            device,
+            queue,
+            config,
+            size,
+            render_pipeline,
+            vertex_buffer,
+            index_buffer,
+            diffuse_texture,
+            diffuse_bind_group,
+            window,
         }
     }
 
-    pub fn make_current(&mut self) {
-        let current = CurrentGl::new(
-            &self.maybe_window,
-            &self.gl_config,
-            self.not_current_gl_context.take().unwrap(),
-            &self.gl_display,
+    pub const fn window(&self) -> &winit::window::Window {
+        &self.window
+    }
+
+    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+        if new_size.width > 0 && new_size.height > 0 {
+            const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
+            const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
+            let width = new_size.width;
+            let height = new_size.height;
+
+            let (x, y) = {
+                let mul = (width / PX_WIDTH).min(height / PX_HEIGHT);
+                let x = (PX_WIDTH * mul) as f32 / width as f32;
+                let y = (PX_HEIGHT * mul) as f32 / height as f32;
+                (x, y)
+            };
+
+            let vertices = &[
+                Vertex {
+                    position:   [x, y],
+                    tex_coords: [1.0, 0.0],
+                },
+                Vertex {
+                    position:   [-x, y],
+                    tex_coords: [0.0, 0.0],
+                },
+                Vertex {
+                    position:   [x, -y],
+                    tex_coords: [1.0, 1.0],
+                },
+                Vertex {
+                    position:   [-x, -y],
+                    tex_coords: [0.0, 1.0],
+                },
+            ];
+
+            self.queue
+                .write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(vertices));
+
+            self.size = new_size;
+            self.config.width = new_size.width;
+            self.config.height = new_size.height;
+            self.surface.configure(&self.device, &self.config);
+        }
+    }
+
+    pub fn on_lost(&mut self) {
+        self.resize(self.size);
+    }
+
+    pub fn update(&mut self, rgba: &[u8]) {
+        self.diffuse_texture.update_rgba(&self.queue, rgba);
+    }
+
+    pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+        let output = self.surface.get_current_texture()?;
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label:                    Some("Render Pass"),
+                color_attachments:        &[Some(wgpu::RenderPassColorAttachment {
+                    view:           &view,
+                    resolve_target: None,
+                    ops:            wgpu::Operations {
+                        load:  wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
+                            a: 1.0,
+                        }),
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
+
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..NUM_INDICES, 0, 0..1);
+        }
+
+        self.queue.submit(core::iter::once(encoder.finish()));
+        output.present();
+
+        Ok(())
+    }
+}
+
+struct Texture {
+    texture: wgpu::Texture,
+    view:    wgpu::TextureView,
+    width:   u32,
+    height:  u32,
+}
+
+impl Texture {
+    fn new(device: &wgpu::Device, width: u32, height: u32, label: Option<&str>) -> Self {
+        let size = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label,
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        Self {
+            texture,
+            view,
+            width,
+            height,
+        }
+    }
+
+    fn update_rgba(&mut self, queue: &wgpu::Queue, rgba: &[u8]) {
+        let size = wgpu::Extent3d {
+            width:                 self.width,
+            height:                self.height,
+            depth_or_array_layers: 1,
+        };
+
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                aspect:    wgpu::TextureAspect::All,
+                texture:   &self.texture,
+                mip_level: 0,
+                origin:    wgpu::Origin3d::ZERO,
+            },
+            rgba,
+            wgpu::ImageDataLayout {
+                offset:         0,
+                bytes_per_row:  NonZeroU32::new(4 * self.width),
+                rows_per_image: NonZeroU32::new(self.height),
+            },
+            size,
         );
-
-        assert!(self.current.replace(current).is_none());
-    }
-
-    pub fn resize(&mut self, width: u32, height: u32) {
-        if width != 0 && height != 0 {
-            if let Some(c) = &mut self.current {
-                c.surface.resize(
-                    &c.context,
-                    NonZeroU32::new(width).unwrap(),
-                    NonZeroU32::new(height).unwrap(),
-                );
-                unsafe { c.renderer.resize(width, height) };
-            }
-        }
-    }
-
-    pub fn render<F>(&mut self, mut f: F)
-    where
-        F: FnMut() -> *const [u8],
-    {
-        if let Some(c) = &mut self.current {
-            let rgb = unsafe { &*f() };
-            unsafe { c.renderer.render(rgb) };
-            c.surface.swap_buffers(&c.context).unwrap();
-        }
-    }
-
-    pub fn request_redraw(&mut self) {
-        self.maybe_window.request_redraw();
     }
 }

@@ -1,6 +1,6 @@
 #![warn(
     clippy::pedantic,
-    clippy::nursery,
+    // clippy::nursery,
     // restriction
     clippy::alloc_instead_of_core,
     clippy::as_underscore,
@@ -69,7 +69,7 @@ use {
     winit::{
         dpi::PhysicalSize,
         event::{ElementState, Event, VirtualKeyCode as VKC, WindowEvent},
-        event_loop::EventLoop,
+        event_loop::{ControlFlow, EventLoop},
         window::WindowBuilder,
     },
 };
@@ -126,23 +126,29 @@ fn main() {
 
     let path = PathBuf::from(args.get_one::<String>("file").unwrap());
 
-    if let Err(err) = run(model, path) {
-        println!("error: {err}");
-    }
+    pollster::block_on(run(model, path));
+}
+
+fn print_err<E>(err: E)
+where
+    E: core::fmt::Display,
+{
+    println!("error: {err}");
 }
 
 /// # Errors
 /// # Panics
-pub fn run(model: Model, mut path: PathBuf) -> Result<(), String> {
+#[allow(clippy::too_many_lines)]
+pub async fn run(model: Model, mut path: PathBuf) {
     fn read_file(path: &Path) -> Result<Box<[u8]>, std::io::Error> {
         fs::read(path).map(Vec::into_boxed_slice)
     }
 
     // initialize cartridge
-    let rom = read_file(&path).map_err(|e| e.to_string())?;
+    let rom = read_file(&path).map_err(print_err).unwrap();
     path.set_extension("sav");
     let save_file = read_file(&path).ok();
-    let cart = Cartridge::new(rom, save_file).map_err(|e| e.to_string())?;
+    let cart = Cartridge::new(rom, save_file).map_err(print_err).unwrap();
 
     let gb = {
         let sample_rate = audio::Renderer::sample_rate();
@@ -161,7 +167,7 @@ pub fn run(model: Model, mut path: PathBuf) -> Result<(), String> {
     let init_width = i32::from(ceres_core::PX_WIDTH) * 4;
     let init_height = i32::from(ceres_core::PX_HEIGHT) * 4;
 
-    let window_builder = WindowBuilder::new()
+    let window = WindowBuilder::new()
         .with_title(CERES_STYLIZED)
         .with_inner_size(PhysicalSize {
             width:  init_width,
@@ -170,18 +176,27 @@ pub fn run(model: Model, mut path: PathBuf) -> Result<(), String> {
         .with_min_inner_size(PhysicalSize {
             width:  i32::from(ceres_core::PX_WIDTH),
             height: i32::from(ceres_core::PX_HEIGHT),
-        });
+        })
+        .build(&event_loop)
+        .unwrap();
 
-    let mut video = video::Video::new(&event_loop, window_builder);
-    video.resize(init_width as u32, init_height as u32);
+    let mut video = video::State::new(
+        window,
+        u32::from(ceres_core::PX_WIDTH),
+        u32::from(ceres_core::PX_HEIGHT),
+    )
+    .await;
+
+    video.resize(PhysicalSize {
+        width:  init_width as u32,
+        height: init_height as u32,
+    });
+
     let mut is_focused = true;
     let mut in_buf = InputBuffer::new();
 
     event_loop.run(move |event, _, control_flow| match event {
-        Event::Resumed => {
-            control_flow.set_poll();
-            video.make_current();
-        }
+        Event::Resumed => control_flow.set_poll(),
         Event::LoopDestroyed => {
             audio.pause();
             // save
@@ -196,7 +211,7 @@ pub fn run(model: Model, mut path: PathBuf) -> Result<(), String> {
         }
         Event::WindowEvent { event: e, .. } => match e {
             WindowEvent::Resized(size) => {
-                video.resize(size.width, size.height);
+                video.resize(size);
             }
             WindowEvent::CloseRequested => control_flow.set_exit(),
             WindowEvent::Focused(f) => is_focused = f,
@@ -234,15 +249,22 @@ pub fn run(model: Model, mut path: PathBuf) -> Result<(), String> {
             }
             _ => (),
         },
-        Event::RedrawRequested(_) => {
-            video.render(|| {
-                let mut gb = gb.lock();
-                in_buf.flush(&mut gb);
-                gb.pixel_data_rgb()
-            });
+        Event::RedrawRequested(window_id) if window_id == video.window().id() => {
+            match video.render() {
+                Ok(_) => {}
+                // Reconfigure the surface if it's lost or outdated
+                Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => video.on_lost(),
+                // The system is out of memory, we should probably quit
+                Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                // We're ignoring timeouts
+                Err(wgpu::SurfaceError::Timeout) => println!("Surface timeout"),
+            }
         }
         Event::MainEventsCleared => {
-            video.request_redraw();
+            let mut gb = gb.lock();
+            in_buf.flush(&mut gb);
+            video.update(gb.pixel_data_rgb());
+            video.window().request_redraw();
         }
         _ => (),
     });

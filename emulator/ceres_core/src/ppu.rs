@@ -64,7 +64,7 @@ const GRAYSCALE_PALETTE: [(u8, u8, u8); 4] = [
     (0x00, 0x00, 0x00),
 ];
 
-const RGB_BUF_SIZE: usize = PX_TOTAL as usize * 3;
+const RGB_BUF_SIZE: usize = PX_TOTAL as usize * 4;
 
 pub struct RgbBuf {
     data: [u8; RGB_BUF_SIZE],
@@ -81,7 +81,7 @@ impl Default for RgbBuf {
 impl RgbBuf {
     #[inline]
     fn set_px(&mut self, i: usize, rgb: (u8, u8, u8)) {
-        let base = i * 3;
+        let base = i * 4;
         self.data[base] = rgb.0;
         self.data[base + 1] = rgb.1;
         self.data[base + 2] = rgb.2;
