@@ -27,7 +27,7 @@
     clippy::mixed_read_write_in_expression,
     clippy::modulo_arithmetic,
     clippy::non_ascii_literal,
-    clippy::panic,
+    // clippy::panic,
     clippy::partial_pub_fields,
     clippy::rc_buffer,
     clippy::rc_mutex,
@@ -59,15 +59,18 @@
 use {
     ceres_core::{Button, Cartridge, Gb, Model},
     clap::{builder::PossibleValuesParser, Arg, Command},
-    sdl2::{
-        event::{Event, WindowEvent},
-        keyboard::Keycode,
-    },
+    parking_lot::Mutex,
     std::{
         fs::{self, File},
         io::Write,
         path::{Path, PathBuf},
-        sync::{Arc, Mutex},
+        sync::Arc,
+    },
+    winit::{
+        dpi::PhysicalSize,
+        event::{ElementState, Event, VirtualKeyCode as VKC, WindowEvent},
+        event_loop::EventLoop,
+        window::WindowBuilder,
     },
 };
 
@@ -129,6 +132,7 @@ fn main() {
 }
 
 /// # Errors
+/// # Panics
 pub fn run(model: Model, mut path: PathBuf) -> Result<(), String> {
     fn read_file(path: &Path) -> Result<Box<[u8]>, std::io::Error> {
         fs::read(path).map(Vec::into_boxed_slice)
@@ -147,78 +151,153 @@ pub fn run(model: Model, mut path: PathBuf) -> Result<(), String> {
 
     let sav_path: PathBuf = path;
 
-    let sdl_context = sdl2::init()?;
     let mut audio = {
         let gb = Arc::clone(&gb);
-        audio::Renderer::new(&sdl_context, gb)
+        audio::Renderer::new(gb)
     };
-    let mut video = video::Renderer::new(&sdl_context);
-    let mut event_pump = sdl_context.event_pump()?;
-    let mut is_focused = true;
 
-    'running: loop {
-        if let Ok(mut gb) = gb.lock() {
-            for event in event_pump.poll_iter() {
-                match event {
-                    Event::Quit { .. } => break 'running,
-                    Event::KeyDown {
-                        keycode: Some(keycode),
-                        repeat: false,
-                        ..
-                    } if is_focused => match keycode {
-                        Keycode::W => gb.press(Button::Up),
-                        Keycode::A => gb.press(Button::Left),
-                        Keycode::S => gb.press(Button::Down),
-                        Keycode::D => gb.press(Button::Right),
-                        Keycode::K => gb.press(Button::A),
-                        Keycode::L => gb.press(Button::B),
-                        Keycode::Return => gb.press(Button::Start),
-                        Keycode::Backspace => gb.press(Button::Select),
-                        _ => (),
-                    },
-                    Event::KeyUp {
-                        keycode: Some(keycode),
-                        repeat: false,
-                        ..
-                    } if is_focused => match keycode {
-                        Keycode::W => gb.release(Button::Up),
-                        Keycode::A => gb.release(Button::Left),
-                        Keycode::S => gb.release(Button::Down),
-                        Keycode::D => gb.release(Button::Right),
-                        Keycode::K => gb.release(Button::A),
-                        Keycode::L => gb.release(Button::B),
-                        Keycode::Return => gb.release(Button::Start),
-                        Keycode::Backspace => gb.release(Button::Select),
-                        _ => (),
-                    },
-                    Event::Window { win_event, .. } => match win_event {
-                        WindowEvent::FocusGained => is_focused = true,
-                        WindowEvent::FocusLost => is_focused = false,
-                        WindowEvent::Resized(width, height) if width != 0 && height != 0 => {
-                            video.resize(width as u32, height as u32);
-                        }
-                        _ => (),
-                    },
-                    _ => (),
+    let event_loop = EventLoop::new();
+
+    let init_width = i32::from(ceres_core::PX_WIDTH) * 4;
+    let init_height = i32::from(ceres_core::PX_HEIGHT) * 4;
+
+    let window_builder = WindowBuilder::new()
+        .with_title(CERES_STYLIZED)
+        .with_inner_size(PhysicalSize {
+            width:  init_width,
+            height: init_height,
+        })
+        .with_min_inner_size(PhysicalSize {
+            width:  i32::from(ceres_core::PX_WIDTH),
+            height: i32::from(ceres_core::PX_HEIGHT),
+        });
+
+    let mut video = video::Video::new(&event_loop, window_builder);
+    video.resize(init_width as u32, init_height as u32);
+    let mut is_focused = true;
+    let mut in_buf = InputBuffer::new();
+
+    event_loop.run(move |event, _, control_flow| match event {
+        Event::Resumed => {
+            control_flow.set_poll();
+            video.make_current();
+        }
+        Event::LoopDestroyed => {
+            audio.pause();
+            // save
+            let mut gb = gb.lock();
+
+            if let Some(save_data) = gb.cartridge().save_data() {
+                let mut f = File::create(sav_path.clone())
+                    .map_err(|e| e.to_string())
+                    .unwrap();
+                f.write_all(save_data).map_err(|e| e.to_string()).unwrap();
+            }
+        }
+        Event::WindowEvent { event: e, .. } => match e {
+            WindowEvent::Resized(size) => {
+                video.resize(size.width, size.height);
+            }
+            WindowEvent::CloseRequested => control_flow.set_exit(),
+            WindowEvent::Focused(f) => is_focused = f,
+            WindowEvent::KeyboardInput { input, .. } => {
+                if !is_focused {
+                    return;
+                }
+
+                if let Some(key) = input.virtual_keycode {
+                    match input.state {
+                        ElementState::Pressed => match key {
+                            VKC::W => in_buf.press(Button::Up),
+                            VKC::A => in_buf.press(Button::Left),
+                            VKC::S => in_buf.press(Button::Down),
+                            VKC::D => in_buf.press(Button::Right),
+                            VKC::K => in_buf.press(Button::A),
+                            VKC::L => in_buf.press(Button::B),
+                            VKC::Return => in_buf.press(Button::Start),
+                            VKC::Back => in_buf.press(Button::Select),
+                            _ => (),
+                        },
+                        ElementState::Released => match key {
+                            VKC::W => in_buf.release(Button::Up),
+                            VKC::A => in_buf.release(Button::Left),
+                            VKC::S => in_buf.release(Button::Down),
+                            VKC::D => in_buf.release(Button::Right),
+                            VKC::K => in_buf.release(Button::A),
+                            VKC::L => in_buf.release(Button::B),
+                            VKC::Return => in_buf.release(Button::Start),
+                            VKC::Back => in_buf.release(Button::Select),
+                            _ => (),
+                        },
+                    }
                 }
             }
-
-            video.render(gb.pixel_data_rgb());
+            _ => (),
+        },
+        Event::RedrawRequested(_) => {
+            video.render(|| {
+                let mut gb = gb.lock();
+                in_buf.flush(&mut gb);
+                gb.pixel_data_rgb()
+            });
         }
+        Event::MainEventsCleared => {
+            video.request_redraw();
+        }
+        _ => (),
+    });
+}
 
-        // TODO: sleep better
-        std::thread::sleep(core::time::Duration::new(0, 1_000_000_000_u32 / 60));
+struct InputBuffer {
+    press_vec: [ceres_core::Button; 16],
+    press_idx: u8,
+
+    rel_vec: [ceres_core::Button; 16],
+    rel_idx: u8,
+}
+
+impl InputBuffer {
+    const fn new() -> Self {
+        let press_vec = [Button::A; 16];
+        let rel_vec = [Button::A; 16];
+
+        Self {
+            press_vec,
+            press_idx: 0,
+
+            rel_vec,
+            rel_idx: 0,
+        }
     }
 
-    // Cleanup
-    audio.pause();
-
-    if let Ok(mut gb) = gb.lock() {
-        if let Some(save_data) = gb.cartridge().save_data() {
-            let mut f = File::create(sav_path).map_err(|e| e.to_string())?;
-            f.write_all(save_data).map_err(|e| e.to_string())?;
+    fn press(&mut self, button: Button) {
+        if self.press_idx >= 16 {
+            return;
         }
+
+        self.press_vec[self.press_idx as usize] = button;
+        self.press_idx += 1;
     }
 
-    Ok(())
+    fn release(&mut self, button: Button) {
+        if self.rel_idx >= 16 {
+            return;
+        }
+
+        self.rel_vec[self.rel_idx as usize] = button;
+        self.rel_idx += 1;
+    }
+
+    fn flush(&mut self, gb: &mut Gb) {
+        for i in 0..self.press_idx {
+            gb.press(self.press_vec[i as usize]);
+        }
+
+        for i in 0..self.rel_idx {
+            gb.release(self.rel_vec[i as usize]);
+        }
+
+        self.press_idx = 0;
+        self.rel_idx = 0;
+    }
 }

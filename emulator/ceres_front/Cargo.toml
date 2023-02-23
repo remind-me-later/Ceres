@@ -8,5 +8,11 @@ description = "A Gameboy/Color emulator"
 [dependencies]
 ceres_core = { path = "../ceres_core" }
 clap = { version = "*", default-features = false, features = ["std", "help"] }
-gl = { version = "*", default-features = false }
-sdl2 = { version = "*", default-features = false }
+cpal = { version = "*", default-features = false }
+parking_lot = "*"
+
+glow = { version = "*", default-features = false }
+raw-window-handle = { version = "*", default-features = false }
+winit = { version = "*", default-features = false, features = ["x11"] }
+glutin-winit = { version = "*", default-features = false, features = ["glx"] }
+glutin = { version = "*", default-features = false }
