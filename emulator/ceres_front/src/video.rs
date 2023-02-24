@@ -1,6 +1,5 @@
 use {core::num::NonZeroU32, wgpu::util::DeviceExt};
 
-#[allow(clippy::unused_)]
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
@@ -31,10 +30,6 @@ impl Vertex {
     }
 }
 
-const INDICES: &[u16] = &[0, 1, 3, 0, 3, 2, /* padding */ 0];
-#[allow(clippy::cast_possible_truncation)]
-const NUM_INDICES: u32 = INDICES.len() as u32;
-
 pub struct State {
     surface:            wgpu::Surface,
     device:             wgpu::Device,
@@ -43,7 +38,6 @@ pub struct State {
     size:               winit::dpi::PhysicalSize<u32>,
     render_pipeline:    wgpu::RenderPipeline,
     vertex_buffer:      wgpu::Buffer,
-    index_buffer:       wgpu::Buffer,
     diffuse_texture:    Texture,
     diffuse_bind_group: wgpu::BindGroup,
     window:             winit::window::Window,
@@ -54,10 +48,8 @@ impl State {
     pub async fn new(window: winit::window::Window, width: u32, height: u32) -> Self {
         let size = window.inner_size();
 
-        // The instance is a handle to our GPU
-        // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
+            backends: wgpu::Backends::VULKAN,
             ..Default::default()
         });
 
@@ -75,12 +67,13 @@ impl State {
             })
             .await
             .unwrap();
+
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label:    None,
                     features: wgpu::Features::empty(),
-                    limits:   wgpu::Limits::default(),
+                    limits:   wgpu::Limits::downlevel_webgl2_defaults(),
                 },
                 None,
             )
@@ -135,12 +128,8 @@ impl State {
             });
 
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
             mag_filter: wgpu::FilterMode::Nearest,
             min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
 
@@ -192,16 +181,12 @@ impl State {
                 })],
             }),
             primitive:     wgpu::PrimitiveState {
-                topology:           wgpu::PrimitiveTopology::TriangleList,
+                topology:           wgpu::PrimitiveTopology::TriangleStrip,
                 strip_index_format: None,
                 front_face:         wgpu::FrontFace::Ccw,
-                cull_mode:          Some(wgpu::Face::Back),
-                // Setting this to anything other than Fill requires Features::POLYGON_MODE_LINE
-                // or Features::POLYGON_MODE_POINT
+                cull_mode:          None,
                 polygon_mode:       wgpu::PolygonMode::Fill,
-                // Requires Features::DEPTH_CLIP_CONTROL
                 unclipped_depth:    false,
-                // Requires Features::CONSERVATIVE_RASTERIZATION
                 conservative:       false,
             },
             depth_stencil: None,
@@ -210,8 +195,6 @@ impl State {
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
-            // If the pipeline will be used with a multiview render pass, this
-            // indicates how many array layers the attachments will have.
             multiview:     None,
         });
 
@@ -239,11 +222,6 @@ impl State {
             contents: bytemuck::cast_slice(vertices),
             usage:    wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         });
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label:    Some("Index Buffer"),
-            contents: bytemuck::cast_slice(INDICES),
-            usage:    wgpu::BufferUsages::INDEX,
-        });
 
         Self {
             surface,
@@ -253,7 +231,6 @@ impl State {
             size,
             render_pipeline,
             vertex_buffer,
-            index_buffer,
             diffuse_texture,
             diffuse_bind_group,
             window,
@@ -312,7 +289,7 @@ impl State {
     }
 
     pub fn update(&mut self, rgba: &[u8]) {
-        self.diffuse_texture.update_rgba(&self.queue, rgba);
+        self.diffuse_texture.update(&self.queue, rgba);
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -349,8 +326,7 @@ impl State {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..NUM_INDICES, 0, 0..1);
+            render_pass.draw(0..4, 0..1);
         }
 
         self.queue.submit(core::iter::once(encoder.finish()));
@@ -396,7 +372,7 @@ impl Texture {
         }
     }
 
-    fn update_rgba(&mut self, queue: &wgpu::Queue, rgba: &[u8]) {
+    fn update(&mut self, queue: &wgpu::Queue, rgba: &[u8]) {
         let size = wgpu::Extent3d {
             width:                 self.width,
             height:                self.height,
