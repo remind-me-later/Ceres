@@ -38,7 +38,7 @@ pub struct State {
     size:               winit::dpi::PhysicalSize<u32>,
     render_pipeline:    wgpu::RenderPipeline,
     vertex_buffer:      wgpu::Buffer,
-    diffuse_texture:    Texture,
+    texture:            Texture,
     diffuse_bind_group: wgpu::BindGroup,
     window:             winit::window::Window,
 }
@@ -48,10 +48,7 @@ impl State {
     pub async fn new(window: winit::window::Window, width: u32, height: u32) -> Self {
         let size = window.inner_size();
 
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN,
-            ..Default::default()
-        });
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
 
         // # Safety
         //
@@ -61,7 +58,7 @@ impl State {
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference:       wgpu::PowerPreference::default(),
+                power_preference:       wgpu::PowerPreference::LowPower,
                 compatible_surface:     Some(&surface),
                 force_fallback_adapter: false,
             })
@@ -81,28 +78,20 @@ impl State {
             .unwrap();
 
         let surface_caps = surface.get_capabilities(&adapter);
-        // Shader code in this tutorial assumes an Srgb surface texture. Using a
-        // different one will result all the colors comming out darker. If you
-        // want to support non Srgb surfaces, you'll need to account for that
-        // when drawing to the frame.
-        let surface_format = surface_caps
-            .formats
-            .iter()
-            .copied()
-            .find(|f| f.describe().srgb)
-            .unwrap_or(surface_caps.formats[0]);
+
         let config = wgpu::SurfaceConfiguration {
             usage:        wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format:       surface_format,
+            format:       wgpu::TextureFormat::Bgra8Unorm,
             width:        size.width,
             height:       size.height,
             present_mode: surface_caps.present_modes[0],
-            alpha_mode:   surface_caps.alpha_modes[0],
+            alpha_mode:   wgpu::CompositeAlphaMode::Auto,
             view_formats: vec![],
         };
+
         surface.configure(&device, &config);
 
-        let diffuse_texture = Texture::new(&device, width, height, None);
+        let texture = Texture::new(&device, width, height, None);
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -113,32 +102,30 @@ impl State {
                         ty:         wgpu::BindingType::Texture {
                             multisampled:   false,
                             view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type:    wgpu::TextureSampleType::Float { filterable: true },
+                            sample_type:    wgpu::TextureSampleType::Float { filterable: false },
                         },
                         count:      None,
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding:    1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty:         wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        ty:         wgpu::BindingType::Sampler(
+                            wgpu::SamplerBindingType::NonFiltering,
+                        ),
                         count:      None,
                     },
                 ],
                 label:   Some("texture_bind_group_layout"),
             });
 
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
 
         let diffuse_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout:  &texture_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding:  0,
-                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
+                    resource: wgpu::BindingResource::TextureView(&texture.view),
                 },
                 wgpu::BindGroupEntry {
                     binding:  1,
@@ -173,28 +160,16 @@ impl State {
                 entry_point: "fs_main",
                 targets:     &[Some(wgpu::ColorTargetState {
                     format:     config.format,
-                    blend:      Some(wgpu::BlendState {
-                        color: wgpu::BlendComponent::REPLACE,
-                        alpha: wgpu::BlendComponent::REPLACE,
-                    }),
+                    blend:      Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
             primitive:     wgpu::PrimitiveState {
-                topology:           wgpu::PrimitiveTopology::TriangleStrip,
-                strip_index_format: None,
-                front_face:         wgpu::FrontFace::Ccw,
-                cull_mode:          None,
-                polygon_mode:       wgpu::PolygonMode::Fill,
-                unclipped_depth:    false,
-                conservative:       false,
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                ..Default::default()
             },
             depth_stencil: None,
-            multisample:   wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
+            multisample:   wgpu::MultisampleState::default(),
             multiview:     None,
         });
 
@@ -231,7 +206,7 @@ impl State {
             size,
             render_pipeline,
             vertex_buffer,
-            diffuse_texture,
+            texture,
             diffuse_bind_group,
             window,
         }
@@ -289,7 +264,7 @@ impl State {
     }
 
     pub fn update(&mut self, rgba: &[u8]) {
-        self.diffuse_texture.update(&self.queue, rgba);
+        self.texture.update(&self.queue, rgba);
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -311,12 +286,7 @@ impl State {
                     view:           &view,
                     resolve_target: None,
                     ops:            wgpu::Operations {
-                        load:  wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
-                            g: 0.0,
-                            b: 0.0,
-                            a: 1.0,
-                        }),
+                        load:  wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                         store: true,
                     },
                 })],
@@ -350,7 +320,7 @@ impl Texture {
             height,
             depth_or_array_layers: 1,
         };
-        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let format = wgpu::TextureFormat::Bgra8Unorm;
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label,
             size,

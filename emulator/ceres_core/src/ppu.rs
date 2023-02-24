@@ -82,9 +82,9 @@ impl RgbBuf {
     #[inline]
     fn set_px(&mut self, i: usize, rgb: (u8, u8, u8)) {
         let base = i * 4;
-        self.data[base] = rgb.0;
+        self.data[base] = rgb.2;
         self.data[base + 1] = rgb.1;
-        self.data[base + 2] = rgb.2;
+        self.data[base + 2] = rgb.0;
     }
 
     fn clear(&mut self) {
