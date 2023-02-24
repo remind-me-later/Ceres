@@ -312,8 +312,6 @@ impl State {
 struct Texture {
     texture: wgpu::Texture,
     view:    wgpu::TextureView,
-    width:   u32,
-    height:  u32,
 }
 
 impl Texture {
@@ -337,21 +335,10 @@ impl Texture {
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        Self {
-            texture,
-            view,
-            width,
-            height,
-        }
+        Self { texture, view }
     }
 
     fn update(&mut self, queue: &wgpu::Queue, rgba: &[u8]) {
-        let size = wgpu::Extent3d {
-            width:                 self.width,
-            height:                self.height,
-            depth_or_array_layers: 1,
-        };
-
         queue.write_texture(
             wgpu::ImageCopyTexture {
                 aspect:    wgpu::TextureAspect::All,
@@ -362,10 +349,10 @@ impl Texture {
             rgba,
             wgpu::ImageDataLayout {
                 offset:         0,
-                bytes_per_row:  NonZeroU32::new(4 * self.width),
-                rows_per_image: NonZeroU32::new(self.height),
+                bytes_per_row:  NonZeroU32::new(4 * self.texture.width()),
+                rows_per_image: NonZeroU32::new(self.texture.height()),
             },
-            size,
+            self.texture.size(),
         );
     }
 }

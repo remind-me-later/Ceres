@@ -71,7 +71,7 @@ use {
         dpi::PhysicalSize,
         event::{ElementState, Event, VirtualKeyCode as VKC, WindowEvent},
         event_loop::{ControlFlow, EventLoop},
-        window::WindowBuilder,
+        window::{Fullscreen, WindowBuilder},
     },
 };
 
@@ -158,7 +158,7 @@ pub async fn run(model: Model, mut path: PathBuf) -> anyhow::Result<()> {
 
     let sav_path: PathBuf = path;
 
-    let mut audio = {
+    let _audio = {
         let gb = Arc::clone(&gb);
         audio::Renderer::new(gb)
     };
@@ -194,13 +194,9 @@ pub async fn run(model: Model, mut path: PathBuf) -> anyhow::Result<()> {
         height: init_height as u32,
     });
 
-    let mut is_focused = true;
-    let mut in_buf = InputBuffer::new();
-
     event_loop.run(move |event, _, control_flow| match event {
         Event::Resumed => control_flow.set_poll(),
         Event::LoopDestroyed => {
-            audio.pause();
             // save
             let mut gb = gb.lock();
 
@@ -220,44 +216,40 @@ pub async fn run(model: Model, mut path: PathBuf) -> anyhow::Result<()> {
                 video.resize(**new_inner_size);
             }
             WindowEvent::CloseRequested => control_flow.set_exit(),
-            WindowEvent::Focused(f) => is_focused = *f,
             WindowEvent::KeyboardInput { input, .. } => {
-                if !is_focused {
+                if !video.window().has_focus() {
                     return;
                 }
 
                 if let Some(key) = input.virtual_keycode {
                     match input.state {
                         ElementState::Pressed => match key {
-                            VKC::W => in_buf.press(Button::Up),
-                            VKC::A => in_buf.press(Button::Left),
-                            VKC::S => in_buf.press(Button::Down),
-                            VKC::D => in_buf.press(Button::Right),
-                            VKC::K => in_buf.press(Button::A),
-                            VKC::L => in_buf.press(Button::B),
-                            VKC::Return => in_buf.press(Button::Start),
-                            VKC::Back => in_buf.press(Button::Select),
-                            // Others
-                            VKC::F => {
-                                let fs = video.window().fullscreen();
-                                match fs {
-                                    Some(_) => video.window().set_fullscreen(None),
-                                    None => video.window().set_fullscreen(Some(
-                                        winit::window::Fullscreen::Borderless(None),
-                                    )),
-                                }
-                            }
+                            VKC::W => gb.lock().press(Button::Up),
+                            VKC::A => gb.lock().press(Button::Left),
+                            VKC::S => gb.lock().press(Button::Down),
+                            VKC::D => gb.lock().press(Button::Right),
+                            VKC::K => gb.lock().press(Button::A),
+                            VKC::L => gb.lock().press(Button::B),
+                            VKC::Return => gb.lock().press(Button::Start),
+                            VKC::Back => gb.lock().press(Button::Select),
+                            // System
+                            VKC::F => match video.window().fullscreen() {
+                                Some(_) => video.window().set_fullscreen(None),
+                                None => video
+                                    .window()
+                                    .set_fullscreen(Some(Fullscreen::Borderless(None))),
+                            },
                             _ => (),
                         },
                         ElementState::Released => match key {
-                            VKC::W => in_buf.release(Button::Up),
-                            VKC::A => in_buf.release(Button::Left),
-                            VKC::S => in_buf.release(Button::Down),
-                            VKC::D => in_buf.release(Button::Right),
-                            VKC::K => in_buf.release(Button::A),
-                            VKC::L => in_buf.release(Button::B),
-                            VKC::Return => in_buf.release(Button::Start),
-                            VKC::Back => in_buf.release(Button::Select),
+                            VKC::W => gb.lock().release(Button::Up),
+                            VKC::A => gb.lock().release(Button::Left),
+                            VKC::S => gb.lock().release(Button::Down),
+                            VKC::D => gb.lock().release(Button::Right),
+                            VKC::K => gb.lock().release(Button::A),
+                            VKC::L => gb.lock().release(Button::B),
+                            VKC::Return => gb.lock().release(Button::Start),
+                            VKC::Back => gb.lock().release(Button::Select),
                             _ => (),
                         },
                     }
@@ -268,74 +260,15 @@ pub async fn run(model: Model, mut path: PathBuf) -> anyhow::Result<()> {
         Event::RedrawRequested(window_id) if window_id == video.window().id() => {
             match video.render() {
                 Ok(_) => {}
-                // Reconfigure the surface if it's lost or outdated
                 Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => video.on_lost(),
-                // The system is out of memory, we should probably quit
                 Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                // We're ignoring timeouts
                 Err(wgpu::SurfaceError::Timeout) => println!("Surface timeout"),
             }
         }
         Event::MainEventsCleared => {
-            let mut gb = gb.lock();
-            in_buf.flush(&mut gb);
-            video.update(gb.pixel_data_rgb());
+            video.update(gb.lock().pixel_data_rgb());
             video.window().request_redraw();
         }
         _ => (),
     });
-}
-
-struct InputBuffer {
-    press_vec: [ceres_core::Button; 16],
-    press_idx: u8,
-
-    rel_vec: [ceres_core::Button; 16],
-    rel_idx: u8,
-}
-
-impl InputBuffer {
-    const fn new() -> Self {
-        let press_vec = [Button::A; 16];
-        let rel_vec = [Button::A; 16];
-
-        Self {
-            press_vec,
-            press_idx: 0,
-
-            rel_vec,
-            rel_idx: 0,
-        }
-    }
-
-    fn press(&mut self, button: Button) {
-        if self.press_idx >= 16 {
-            return;
-        }
-
-        self.press_vec[self.press_idx as usize] = button;
-        self.press_idx += 1;
-    }
-
-    fn release(&mut self, button: Button) {
-        if self.rel_idx >= 16 {
-            return;
-        }
-
-        self.rel_vec[self.rel_idx as usize] = button;
-        self.rel_idx += 1;
-    }
-
-    fn flush(&mut self, gb: &mut Gb) {
-        for i in 0..self.press_idx {
-            gb.press(self.press_vec[i as usize]);
-        }
-
-        for i in 0..self.rel_idx {
-            gb.release(self.rel_vec[i as usize]);
-        }
-
-        self.press_idx = 0;
-        self.rel_idx = 0;
-    }
 }

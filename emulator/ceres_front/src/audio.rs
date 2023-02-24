@@ -12,7 +12,7 @@ const BUFFER_SIZE: cpal::FrameCount = 512;
 const SAMPLE_RATE: i32 = 48000;
 
 pub struct Renderer {
-    stream: cpal::Stream,
+    _stream: cpal::Stream,
 }
 
 impl Renderer {
@@ -43,17 +43,7 @@ impl Renderer {
 
         stream.play().expect("AudioError playing sound");
 
-        Self { stream }
-    }
-
-    #[allow(dead_code)]
-    pub fn resume(&mut self) {
-        self.stream.play().unwrap();
-    }
-
-    #[allow(dead_code)]
-    pub fn pause(&mut self) {
-        self.stream.pause().unwrap();
+        Self { _stream: stream }
     }
 
     #[inline]
