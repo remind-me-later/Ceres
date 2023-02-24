@@ -237,6 +237,16 @@ pub async fn run(model: Model, mut path: PathBuf) -> anyhow::Result<()> {
                             VKC::L => in_buf.press(Button::B),
                             VKC::Return => in_buf.press(Button::Start),
                             VKC::Back => in_buf.press(Button::Select),
+                            // Others
+                            VKC::F => {
+                                let fs = video.window().fullscreen();
+                                match fs {
+                                    Some(_) => video.window().set_fullscreen(None),
+                                    None => video.window().set_fullscreen(Some(
+                                        winit::window::Fullscreen::Borderless(None),
+                                    )),
+                                }
+                            }
                             _ => (),
                         },
                         ElementState::Released => match key {
