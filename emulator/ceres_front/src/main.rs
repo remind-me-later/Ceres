@@ -51,12 +51,13 @@
 #![allow(
     clippy::cast_precision_loss,
     clippy::cast_sign_loss,
-    clippy::cast_possible_wrap
+    clippy::cast_possible_wrap,
+    // TODO: Weird warning on bytemuck derive
+    clippy::extra_unused_type_parameters
 )]
 
-// )]
-
 use {
+    anyhow::Context,
     ceres_core::{Button, Cartridge, Gb, Model},
     clap::{builder::PossibleValuesParser, Arg, Command},
     parking_lot::Mutex,
@@ -90,7 +91,7 @@ const AFTER_HELP: &str = "KEY BINDINGS:
     | Start   | Return    |
     | Select  | Backspace |";
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let args = Command::new(CERES_BIN)
         .bin_name(CERES_BIN)
         .about(ABOUT)
@@ -116,6 +117,8 @@ fn main() {
         )
         .get_matches();
 
+    // TODO: this unwrap should be correct as we assign a default value to the
+    // argument
     let model_str = args.get_one::<String>("model").unwrap();
     let model = match model_str.as_str() {
         "dmg" => Model::Dmg,
@@ -126,29 +129,27 @@ fn main() {
 
     let path = PathBuf::from(args.get_one::<String>("file").unwrap());
 
-    pollster::block_on(run(model, path));
-}
-
-fn print_err<E>(err: E)
-where
-    E: core::fmt::Display,
-{
-    println!("error: {err}");
+    pollster::block_on(run(model, path))
 }
 
 /// # Errors
 /// # Panics
 #[allow(clippy::too_many_lines)]
-pub async fn run(model: Model, mut path: PathBuf) {
+pub async fn run(model: Model, mut path: PathBuf) -> anyhow::Result<()> {
     fn read_file(path: &Path) -> Result<Box<[u8]>, std::io::Error> {
         fs::read(path).map(Vec::into_boxed_slice)
     }
 
     // initialize cartridge
-    let rom = read_file(&path).map_err(print_err).unwrap();
+    let rom = read_file(&path).with_context(|| {
+        format!(
+            "couldn't open rom file in path: '{}'",
+            path.to_str().unwrap_or("couldn't get path string")
+        )
+    })?;
     path.set_extension("sav");
     let save_file = read_file(&path).ok();
-    let cart = Cartridge::new(rom, save_file).map_err(print_err).unwrap();
+    let cart = Cartridge::new(rom, save_file).context("invalid cartridge")?;
 
     let gb = {
         let sample_rate = audio::Renderer::sample_rate();
@@ -185,7 +186,8 @@ pub async fn run(model: Model, mut path: PathBuf) {
         u32::from(ceres_core::PX_WIDTH),
         u32::from(ceres_core::PX_HEIGHT),
     )
-    .await;
+    .await
+    .context("couldn't initialize wgpu")?;
 
     video.resize(PhysicalSize {
         width:  init_width as u32,
@@ -209,12 +211,16 @@ pub async fn run(model: Model, mut path: PathBuf) {
                 f.write_all(save_data).map_err(|e| e.to_string()).unwrap();
             }
         }
-        Event::WindowEvent { event: e, .. } => match e {
+        Event::WindowEvent { event: ref e, .. } => match e {
             WindowEvent::Resized(size) => {
-                video.resize(size);
+                video.resize(*size);
+            }
+            WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                // new_inner_size is &mut so w have to dereference it twice
+                video.resize(**new_inner_size);
             }
             WindowEvent::CloseRequested => control_flow.set_exit(),
-            WindowEvent::Focused(f) => is_focused = f,
+            WindowEvent::Focused(f) => is_focused = *f,
             WindowEvent::KeyboardInput { input, .. } => {
                 if !is_focused {
                     return;

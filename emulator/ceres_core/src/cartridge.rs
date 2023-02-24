@@ -90,6 +90,8 @@ impl Display for Error {
     }
 }
 
+impl core::error::Error for Error {}
+
 pub struct Cartridge {
     mbc: Mbc,
 

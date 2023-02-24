@@ -9,8 +9,10 @@ description = "A Gameboy/Color emulator"
 ceres_core = { path = "../ceres_core" }
 clap = { version = "*", default-features = false, features = ["std", "help"] }
 cpal = { version = "*", default-features = false }
-parking_lot = "*"
-wgpu = "*"
-winit = "*"
+parking_lot = { version = "*", default-features = false }
+anyhow = { version = "*" }
+wgpu = { version = "*", default-features = false, features = ["wgsl"] }
+# TODO: wait for better wayland decoration support
+winit = { version = "*", default-features = false, features = ["x11"] }
 pollster = { version = "*", default-features = false }
 bytemuck = { version = "*", features = ["derive"] }

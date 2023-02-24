@@ -4,7 +4,7 @@ default-members = ["ceres_front"]
 resolver = "2"
 
 [profile.dev]
-opt-level = 2
+opt-level = 1
 
 [profile.test]
 opt-level = 3

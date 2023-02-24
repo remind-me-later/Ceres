@@ -1,4 +1,4 @@
-use {core::num::NonZeroU32, wgpu::util::DeviceExt};
+use {anyhow::Context, core::num::NonZeroU32, wgpu::util::DeviceExt};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -45,7 +45,11 @@ pub struct State {
 
 impl State {
     #[allow(clippy::too_many_lines)]
-    pub async fn new(window: winit::window::Window, width: u32, height: u32) -> Self {
+    pub async fn new(
+        window: winit::window::Window,
+        width: u32,
+        height: u32,
+    ) -> anyhow::Result<Self> {
         let size = window.inner_size();
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
@@ -54,7 +58,7 @@ impl State {
         //
         // The surface needs to live as long as the window that created it.
         // State owns the window so this should be safe.
-        let surface = unsafe { instance.create_surface(&window) }.unwrap();
+        let surface = unsafe { instance.create_surface(&window) }?;
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -63,7 +67,7 @@ impl State {
                 force_fallback_adapter: false,
             })
             .await
-            .unwrap();
+            .context("unable to obtain wgpu adapter")?;
 
         let (device, queue) = adapter
             .request_device(
@@ -74,8 +78,7 @@ impl State {
                 },
                 None,
             )
-            .await
-            .unwrap();
+            .await?;
 
         let surface_caps = surface.get_capabilities(&adapter);
 
@@ -198,7 +201,7 @@ impl State {
             usage:    wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         });
 
-        Self {
+        Ok(Self {
             surface,
             device,
             queue,
@@ -209,7 +212,7 @@ impl State {
             texture,
             diffuse_bind_group,
             window,
-        }
+        })
     }
 
     pub const fn window(&self) -> &winit::window::Window {

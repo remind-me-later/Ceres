@@ -51,6 +51,7 @@
   clippy::verbose_file_reads,
 )]
 #![allow(clippy::struct_excessive_bools, clippy::verbose_bit_mask)]
+#![feature(error_in_core)]
 
 extern crate alloc;
 
