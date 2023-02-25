@@ -120,6 +120,7 @@ impl Gb {
 
         // push pc to stack
         self.tick_m_cycle();
+        self.tick_m_cycle();
         self.push(self.pc);
 
         self.ime = false;
