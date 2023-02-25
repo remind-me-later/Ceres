@@ -1,12 +1,4 @@
-use {
-    ceres_core::Gb,
-    cpal::{
-        traits::{DeviceTrait, HostTrait, StreamTrait},
-        BufferSize, SampleRate, StreamConfig,
-    },
-    parking_lot::Mutex,
-    std::sync::Arc,
-};
+use {ceres_core::Gb, parking_lot::Mutex, std::sync::Arc};
 
 const BUFFER_SIZE: cpal::FrameCount = 512;
 const SAMPLE_RATE: i32 = 48000;
@@ -17,13 +9,15 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(gb: Arc<Mutex<Gb>>) -> Self {
+        use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+
         let host = cpal::default_host();
         let dev = host.default_output_device().unwrap();
 
-        let config = StreamConfig {
+        let config = cpal::StreamConfig {
             channels:    2,
-            sample_rate: SampleRate(SAMPLE_RATE as u32),
-            buffer_size: BufferSize::Fixed(BUFFER_SIZE),
+            sample_rate: cpal::SampleRate(SAMPLE_RATE as u32),
+            buffer_size: cpal::BufferSize::Fixed(BUFFER_SIZE),
         };
 
         let error_callback = |err| panic!("an AudioError occurred on stream: {err}");

@@ -1,5 +1,3 @@
-use {anyhow::Context, core::num::NonZeroU32, wgpu::util::DeviceExt};
-
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
@@ -50,6 +48,8 @@ impl State {
         width: u32,
         height: u32,
     ) -> anyhow::Result<Self> {
+        use {anyhow::Context, wgpu::util::DeviceExt};
+
         let size = window.inner_size();
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
@@ -336,6 +336,8 @@ impl Texture {
     }
 
     fn update(&mut self, queue: &wgpu::Queue, rgba: &[u8]) {
+        use core::num::NonZeroU32;
+
         queue.write_texture(
             wgpu::ImageCopyTexture {
                 aspect:    wgpu::TextureAspect::All,
