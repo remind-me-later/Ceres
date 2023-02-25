@@ -319,8 +319,10 @@ impl Gb {
         // turn on
         if val & LCDC_ON_B != 0 && self.lcdc & LCDC_ON_B == 0 {
             self.set_mode(Mode::HBlank);
+            // FIXME: wtf?
             self.stat &= !STAT_LYC_B;
             self.stat |= STAT_LYC_B;
+            self.set_mode(Mode::OamScan);
             self.ppu_cycles = Mode::OamScan.cycles(self.scx);
             self.lcdc_delay = true;
             self.frame_dots = 0;

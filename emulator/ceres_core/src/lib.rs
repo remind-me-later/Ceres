@@ -106,7 +106,7 @@ pub enum Model {
     Cgb,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum CompatMode {
     Dmg,
     Compat,

@@ -18,7 +18,7 @@ pub type Sample = i16;
 impl Gb {
     pub(crate) fn run_apu(&mut self, cycles: i32) {
         if self.apu_on {
-            if self.apu_timer >= APU_TIMER_RES {
+            if self.apu_timer > APU_TIMER_RES {
                 self.apu_timer -= APU_TIMER_RES;
                 self.step_seq();
             }
@@ -30,7 +30,7 @@ impl Gb {
             self.apu_ch4.step_sample(cycles);
         }
 
-        while self.apu_render_timer >= self.apu_ext_sample_period {
+        while self.apu_render_timer > self.apu_ext_sample_period {
             self.apu_render_timer -= self.apu_ext_sample_period;
 
             if self.apu_on {

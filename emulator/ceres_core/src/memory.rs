@@ -165,20 +165,20 @@ impl Gb {
             OBP1 => self.obp1,
             WY => self.wy,
             WX => self.wx,
-            KEY1 if self.model == Cgb => {
+            KEY1 if self.compat_mode == CompatMode::Cgb => {
                 0x7E | (u8::from(self.double_speed) << 7) | u8::from(self.double_speed_request)
             }
-            VBK if self.model == Cgb => u8::from(self.vbk) | 0xFE,
-            HDMA5 if self.model == Cgb => {
+            VBK if self.compat_mode == CompatMode::Cgb => u8::from(self.vbk) | 0xFE,
+            HDMA5 if self.compat_mode == CompatMode::Cgb => {
                 // active on low
                 u8::from(!self.hdma_on()) << 7 | self.hdma5
             }
-            BCPS if self.model == Cgb => self.bcp.spec(),
-            BCPD if self.model == Cgb => self.bcp.data(),
-            OCPS if self.model == Cgb => self.ocp.spec(),
-            OCPD if self.model == Cgb => self.ocp.data(),
-            OPRI if self.model == Cgb => self.opri,
-            SVBK if self.model == Cgb => self.svbk | 0xF8,
+            BCPS if self.compat_mode == CompatMode::Cgb => self.bcp.spec(),
+            BCPD if self.compat_mode == CompatMode::Cgb => self.bcp.data(),
+            OCPS if self.compat_mode == CompatMode::Cgb => self.ocp.spec(),
+            OCPD if self.compat_mode == CompatMode::Cgb => self.ocp.data(),
+            OPRI if self.compat_mode == CompatMode::Cgb => self.opri,
+            SVBK if self.compat_mode == CompatMode::Cgb => self.svbk | 0xF8,
             HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize],
             IE => self.ie,
             _ => 0xFF,
@@ -256,47 +256,44 @@ impl Gb {
             KEY0 if self.model == Cgb && self.boot_rom.is_some() && val == 4 => {
                 self.compat_mode = CompatMode::Compat;
             }
-            KEY1 if self.model == Cgb => self.double_speed_request = val & 1 != 0,
-            VBK if self.model == Cgb => self.vbk = val & 1 != 0,
+            KEY1 if self.compat_mode == CompatMode::Cgb => self.double_speed_request = val & 1 != 0,
+            VBK if self.compat_mode == CompatMode::Cgb => self.vbk = val & 1 != 0,
             0x50 => {
                 if val & 1 != 0 {
                     self.boot_rom = None;
                 }
             }
-            HDMA1 if self.model == Cgb => {
-                self.hdma_src = u16::from(val) << 8 | self.hdma_src & 0xF0;
+            HDMA1 if self.compat_mode == CompatMode::Cgb => {
+                self.hdma_src = (u16::from(val) << 8) | (self.hdma_src & 0xF0);
             }
-            HDMA2 if self.model == Cgb => {
-                self.hdma_src = self.hdma_src & 0xFF00 | u16::from(val) & 0xF0;
+            HDMA2 if self.compat_mode == CompatMode::Cgb => {
+                self.hdma_src = (self.hdma_src & 0xFF00) | u16::from(val & 0xF0);
             }
-            HDMA3 if self.model == Cgb => {
-                self.hdma_dst = u16::from(val & 0x1F) << 8 | self.hdma_dst & 0xF0;
+            HDMA3 if self.compat_mode == CompatMode::Cgb => {
+                self.hdma_dst = (u16::from(val & 0x1F) << 8) | (self.hdma_dst & 0xF0);
             }
-            HDMA4 if self.model == Cgb => {
-                self.hdma_dst = self.hdma_dst & 0x1F00 | u16::from(val) & 0xF0;
+            HDMA4 if self.compat_mode == CompatMode::Cgb => {
+                self.hdma_dst = (self.hdma_dst & 0x1F00) | u16::from(val & 0xF0);
             }
-            HDMA5 if self.model == Cgb => {
+            HDMA5 if self.compat_mode == CompatMode::Cgb => {
+                use HdmaState::{General, HBlank, Sleep};
+
                 // stop current transfer
                 if self.hdma_on() && val & 0x80 == 0 {
-                    self.hdma_state = HdmaState::Sleep;
+                    self.hdma_state = Sleep;
                     return;
                 }
 
-                self.hdma5 = val & !0x80;
-                let transfer_blocks = val & 0x7F;
-                self.hdma_len = (u16::from(transfer_blocks) + 1) * 0x10;
-                self.hdma_state = if val & 0x80 == 0 {
-                    HdmaState::General
-                } else {
-                    HdmaState::HBlank
-                };
+                self.hdma5 = val & 0x7F;
+                self.hdma_len = (u16::from(self.hdma5) + 1) * 0x10;
+                self.hdma_state = if val & 0x80 == 0 { General } else { HBlank };
             }
-            BCPS if self.model == Cgb => self.bcp.set_spec(val),
-            BCPD if self.model == Cgb => self.bcp.set_data(val),
-            OCPS if self.model == Cgb => self.ocp.set_spec(val),
-            OCPD if self.model == Cgb => self.ocp.set_data(val),
-            OPRI if self.model == Cgb => self.opri = val,
-            SVBK if self.model == Cgb => {
+            BCPS if self.compat_mode == CompatMode::Cgb => self.bcp.set_spec(val),
+            BCPD if self.compat_mode == CompatMode::Cgb => self.bcp.set_data(val),
+            OCPS if self.compat_mode == CompatMode::Cgb => self.ocp.set_spec(val),
+            OCPD if self.compat_mode == CompatMode::Cgb => self.ocp.set_data(val),
+            OPRI if self.compat_mode == CompatMode::Cgb => self.opri = val,
+            SVBK if self.compat_mode == CompatMode::Cgb => {
                 let tmp = val & 7;
                 self.svbk = tmp;
                 self.svbk_true = NonZeroU8::new(if tmp == 0 { 1 } else { tmp }).unwrap();
@@ -339,27 +336,29 @@ impl Gb {
     }
 
     pub(crate) fn run_hdma(&mut self) {
+        use HdmaState::{General, HBlank, HBlankDone, Sleep};
+
         match self.hdma_state {
-            HdmaState::General => (),
-            HdmaState::HBlank if self.ppu_mode() == Mode::HBlank => (),
-            HdmaState::HBlankDone if self.ppu_mode() != Mode::HBlank => {
-                self.hdma_state = HdmaState::HBlank;
+            General => (),
+            HBlank if self.ppu_mode() == Mode::HBlank => (),
+            HBlankDone if self.ppu_mode() != Mode::HBlank => {
+                self.hdma_state = HBlank;
                 return;
             }
             _ => return,
         }
 
-        let len = if self.hdma_state == HdmaState::HBlank {
+        let len = if self.hdma_state == HBlank {
             self.hdma_len -= 0x10;
             self.hdma_state = if self.hdma_len == 0 {
-                HdmaState::Sleep
+                Sleep
             } else {
-                HdmaState::HBlankDone
+                HBlankDone
             };
             self.hdma5 = ((self.hdma_len / 0x10).wrapping_sub(1) & 0xFF) as u8;
             0x10
         } else {
-            self.hdma_state = HdmaState::Sleep;
+            self.hdma_state = Sleep;
             self.hdma5 = 0xFF;
             let len = self.hdma_len;
             self.hdma_len = 0;
