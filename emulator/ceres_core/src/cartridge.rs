@@ -1,5 +1,4 @@
 use {
-    alloc::{boxed::Box, vec},
     core::{fmt::Display, num::NonZeroU8},
     Mbc::{Mbc0, Mbc1, Mbc2, Mbc3, Mbc5},
 };
@@ -63,7 +62,6 @@ impl Mbc {
     }
 }
 
-/// Represents a cartridge initialization error.
 #[derive(Debug)]
 pub enum Error {
     InvalidRomSize,
@@ -92,11 +90,14 @@ impl Display for Error {
 
 impl core::error::Error for Error {}
 
+static mut ONE_ROM: [u8; ROMSize::MAX] = [0; ROMSize::MAX];
+static mut ONE_RAM: [u8; RAMSize::MAX] = [0; RAMSize::MAX];
+
 pub struct Cartridge {
     mbc: Mbc,
 
-    rom: Box<[u8]>,
-    ram: Box<[u8]>,
+    rom: &'static mut [u8; ROMSize::MAX],
+    ram: &'static mut [u8; RAMSize::MAX],
 
     rom_bank_lo:   u8,
     rom_bank_hi:   u8,
@@ -114,20 +115,17 @@ pub struct Cartridge {
 }
 
 impl Cartridge {
-    /// # Errors
-    pub fn new(rom: Box<[u8]>, save_data: Option<Box<[u8]>>) -> Result<Self, Error> {
-        let rom_size = ROMSize::new(&rom)?;
-        let mem_size = RAMSize::new(&rom)?;
+    pub unsafe fn new() -> Result<Self, Error> {
+        let rom_size = ROMSize::new(&ONE_ROM)?;
+        let mem_size = RAMSize::new(&ONE_ROM)?;
         let rom_bank_mask = rom_size.bank_bit_mask();
         let has_ram = mem_size != RAMSize::NoRAM;
-        let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], rom_size)?;
-
-        let mem = save_data.unwrap_or_else(|| vec![0; mem_size.size_bytes()].into_boxed_slice());
+        let (mbc, has_battery) = Mbc::mbc_and_battery(ONE_ROM[0x147], rom_size)?;
 
         Ok(Self {
             mbc,
-            rom,
-            ram: mem,
+            rom: &mut ONE_ROM,
+            ram: &mut ONE_RAM,
             rom_bank_lo: 1,
             rom_bank_hi: 0,
             rom_offsets: (0x0000, 0x4000),
@@ -138,6 +136,14 @@ impl Cartridge {
             has_battery,
             has_ram,
         })
+    }
+
+    pub unsafe fn mut_ram() -> &'static mut [u8] {
+        &mut ONE_RAM
+    }
+
+    pub unsafe fn mut_rom() -> &'static mut [u8] {
+        &mut ONE_ROM
     }
 
     #[must_use]
@@ -360,6 +366,8 @@ impl Cartridge {
     }
 }
 
+impl !Sync for Cartridge {}
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 enum ROMSize {
     Kb32  = 0,
@@ -374,6 +382,8 @@ enum ROMSize {
 }
 
 impl ROMSize {
+    const MAX: usize = Self::Mb8.size_bytes();
+
     const fn new(rom: &[u8]) -> Result<Self, Error> {
         use ROMSize::{Kb128, Kb256, Kb32, Kb512, Kb64, Mb1, Mb2, Mb4, Mb8};
         let rom_size_byte = rom[0x148];
@@ -393,8 +403,6 @@ impl ROMSize {
         Ok(rom_size)
     }
 
-    #[allow(dead_code)]
-    // total size in  bytes
     const fn size_bytes(self) -> usize {
         let kib_32 = 1 << 15;
         kib_32 << (self as usize)
@@ -416,6 +424,8 @@ enum RAMSize {
 }
 
 impl RAMSize {
+    const MAX: usize = Self::Kb128.size_bytes();
+
     const fn new(rom: &[u8]) -> Result<Self, Error> {
         use RAMSize::{Kb128, Kb2, Kb32, Kb64, Kb8, NoRAM};
         let ram_size_byte = rom[0x149];

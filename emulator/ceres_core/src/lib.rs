@@ -1,5 +1,4 @@
 #![no_std]
-#![forbid(unsafe_code)]
 #![warn(
   clippy::pedantic,
   clippy::nursery,
@@ -50,10 +49,14 @@
   // clippy::unwrap_used,
   clippy::verbose_file_reads,
 )]
-#![allow(clippy::struct_excessive_bools, clippy::verbose_bit_mask)]
-#![feature(error_in_core)]
-
-extern crate alloc;
+#![allow(
+    clippy::struct_excessive_bools,
+    clippy::verbose_bit_mask,
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc,
+    clippy::missing_safety_doc
+)]
+#![feature(error_in_core, negative_impls)]
 
 pub use {
     apu::Sample,
@@ -81,8 +84,7 @@ const MGB_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/mgb_boot.bin");
 const CGB_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/cgb_boot_fast.bin");
 
 const FRAME_NANOS: u64 = 16_750_418;
-/// `GameBoy` frame duration in nanoseconds, the `GameBoy`
-/// framerate is 59.7 fps.
+// frame duration in nanoseconds, the GameBoy framerate is 59.7 fps.
 pub const FRAME_DUR: Duration = Duration::from_nanos(FRAME_NANOS);
 // t-cycles per second
 const TC_SEC: i32 = 0x0040_0000;
@@ -97,7 +99,6 @@ const HRAM_SIZE: usize = 0x80;
 const WRAM_SIZE: usize = 0x2000;
 const WRAM_SIZE_CGB: usize = WRAM_SIZE * 4;
 
-/// ``GameBoy`` model to emulate.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Model {
     Dmg,
@@ -236,7 +237,6 @@ pub struct Gb {
 impl Gb {
     #[allow(clippy::too_many_lines)]
     #[must_use]
-    /// # Panics
     pub fn new(model: Model, sample_rate: i32, cart: Cartridge) -> Self {
         let compat_mode = match model {
             Model::Dmg | Model::Mgb => CompatMode::Dmg,
@@ -350,7 +350,6 @@ impl Gb {
         TC_SEC / sample_rate + 1
     }
 
-    /// Run samples
     #[inline]
     pub fn run_samples(&mut self) -> (Sample, Sample) {
         while self.samples_run == 0 {

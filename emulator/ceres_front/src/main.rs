@@ -53,15 +53,18 @@
     clippy::cast_sign_loss,
     clippy::cast_possible_wrap,
     // TODO: Weird warning on bytemuck derive
-    clippy::extra_unused_type_parameters
+    clippy::extra_unused_type_parameters,
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc
 )]
 
 use {
     ceres_core::Gb,
     clap::{builder::PossibleValuesParser, Arg, Command},
     std::{
-        fs::{self, File},
+        fs::File,
         io::Write,
+        os::unix::prelude::FileExt,
         path::{Path, PathBuf},
         sync::Arc,
     },
@@ -130,26 +133,28 @@ fn main() -> anyhow::Result<()> {
     pollster::block_on(run(model, path))
 }
 
-/// # Errors
-/// # Panics
 #[allow(clippy::too_many_lines)]
 pub async fn run(model: ceres_core::Model, mut path: PathBuf) -> anyhow::Result<()> {
     use anyhow::Context;
 
-    let (gb, sav_path) = {
-        fn read_file(path: &Path) -> Result<Box<[u8]>, std::io::Error> {
-            fs::read(path).map(Vec::into_boxed_slice)
+    let (gb, sav_path) = unsafe {
+        fn read_file(path: &Path, buf: &mut [u8]) -> Result<(), std::io::Error> {
+            let file = File::open(path)?;
+            file.read_at(buf, 0)?;
+
+            Ok(())
         }
 
-        let rom = read_file(&path).with_context(|| {
+        read_file(&path, ceres_core::Cartridge::mut_rom()).with_context(|| {
             format!(
                 "couldn't open rom file in path: '{}'",
                 path.to_str().unwrap_or("couldn't get path string")
             )
         })?;
         path.set_extension("sav");
-        let save_file = read_file(&path).ok();
-        let cart = ceres_core::Cartridge::new(rom, save_file).context("invalid cartridge")?;
+        read_file(&path, ceres_core::Cartridge::mut_ram()).ok();
+
+        let cart = ceres_core::Cartridge::new().context("invalid cartridge")?;
 
         let gb = {
             let sample_rate = audio::Renderer::sample_rate();

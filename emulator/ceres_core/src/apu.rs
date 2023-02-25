@@ -13,7 +13,6 @@ const WAV_PERIOD_MUL: u16 = 2;
 
 const NOISE_MAX_LEN: u16 = 64;
 
-/// Audio sample type
 pub type Sample = i16;
 
 impl Gb {
