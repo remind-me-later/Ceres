@@ -138,10 +138,7 @@ impl State {
             label:   Some("diffuse_bind_group"),
         });
 
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label:  Some("Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../shader/near.wgsl").into()),
-        });
+        let shader = device.create_shader_module(wgpu::include_spirv!("../shader/near.spv"));
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -179,19 +176,19 @@ impl State {
         let vertices: &[Vertex] = &[
             Vertex {
                 position:   [1.0, 1.0],
-                tex_coords: [1.0, 0.0],
-            },
-            Vertex {
-                position:   [-1.0, 1.0],
-                tex_coords: [0.0, 0.0],
-            },
-            Vertex {
-                position:   [1.0, -1.0],
                 tex_coords: [1.0, 1.0],
             },
             Vertex {
-                position:   [-1.0, -1.0],
+                position:   [-1.0, 1.0],
                 tex_coords: [0.0, 1.0],
+            },
+            Vertex {
+                position:   [1.0, -1.0],
+                tex_coords: [1.0, 0.0],
+            },
+            Vertex {
+                position:   [-1.0, -1.0],
+                tex_coords: [0.0, 0.0],
             },
         ];
 
@@ -236,19 +233,19 @@ impl State {
             let vertices = &[
                 Vertex {
                     position:   [x, y],
-                    tex_coords: [1.0, 0.0],
-                },
-                Vertex {
-                    position:   [-x, y],
-                    tex_coords: [0.0, 0.0],
-                },
-                Vertex {
-                    position:   [x, -y],
                     tex_coords: [1.0, 1.0],
                 },
                 Vertex {
-                    position:   [-x, -y],
+                    position:   [-x, y],
                     tex_coords: [0.0, 1.0],
+                },
+                Vertex {
+                    position:   [x, -y],
+                    tex_coords: [1.0, 0.0],
+                },
+                Vertex {
+                    position:   [-x, -y],
+                    tex_coords: [0.0, 0.0],
                 },
             ];
 
