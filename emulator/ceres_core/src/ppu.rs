@@ -79,7 +79,6 @@ impl Default for RgbBuf {
 }
 
 impl RgbBuf {
-    #[inline]
     fn set_px(&mut self, i: usize, rgb: (u8, u8, u8)) {
         let base = i * 4;
         self.data[base] = rgb.2;
@@ -145,13 +144,11 @@ impl Default for ColorPalette {
 }
 
 impl ColorPalette {
-    #[inline]
     pub(crate) fn set_spec(&mut self, val: u8) {
         self.idx = val & 0x3F;
         self.inc = val & 0x80 != 0;
     }
 
-    #[inline]
     pub(crate) fn spec(&self) -> u8 {
         self.idx | 0x40 | (u8::from(self.inc) << 7)
     }
@@ -358,12 +355,10 @@ impl Gb {
         };
     }
 
-    #[inline]
     fn set_mode(&mut self, mode: Mode) {
         self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
     }
 
-    #[inline]
     const fn mono_rgb(index: u8) -> (u8, u8, u8) {
         GRAYSCALE_PALETTE[index as usize]
     }
@@ -404,7 +399,6 @@ impl Gb {
         }
     }
 
-    #[inline]
     const fn win_enabled(&self) -> bool {
         match self.compat_mode {
             CompatMode::Dmg | CompatMode::Compat => {
@@ -414,7 +408,6 @@ impl Gb {
         }
     }
 
-    #[inline]
     const fn bg_enabled(&self) -> bool {
         match self.compat_mode {
             CompatMode::Dmg | CompatMode::Compat => self.lcdc & LCDC_BG_B != 0,
@@ -422,7 +415,6 @@ impl Gb {
         }
     }
 
-    #[inline]
     const fn cgb_master_priority(&self) -> bool {
         match self.compat_mode {
             CompatMode::Dmg | CompatMode::Compat => false,
@@ -430,17 +422,14 @@ impl Gb {
         }
     }
 
-    #[inline]
     fn bg_tile_map(&self) -> u16 {
         0x9800 | u16::from(self.lcdc & LCDC_BG_AREA != 0) << 10
     }
 
-    #[inline]
     fn win_tile_map(&self) -> u16 {
         0x9800 | u16::from(self.lcdc & LCDC_WIN_AREA != 0) << 10
     }
 
-    #[inline]
     fn tile_addr(&self, tile_num: u8) -> u16 {
         let signed = self.lcdc & LCDC_BG_SIGNED == 0;
         let base = 0x8000 | u16::from(signed) << 11;
@@ -458,12 +447,10 @@ impl Gb {
         base + offset * 16
     }
 
-    #[inline]
     fn vram_at_bank(&self, addr: u16, bank: u8) -> u8 {
         self.vram[((addr & 0x1FFF) + u16::from(bank) * VRAM_SIZE) as usize]
     }
 
-    #[inline]
     fn bg_tile(&self, tile_addr: u16, attr: u8) -> (u8, u8) {
         let bank = u8::from(attr & BG_VBK_B != 0);
         let lo = self.vram_at_bank(tile_addr, bank);
@@ -471,7 +458,6 @@ impl Gb {
         (lo, hi)
     }
 
-    #[inline]
     fn obj_tile(&self, tile_addr: u16, obj: &Obj) -> (u8, u8) {
         let bank = u8::from(obj.attr & SPR_TILE_BANK != 0);
         let lo = self.vram_at_bank(tile_addr, bank);
@@ -479,7 +465,6 @@ impl Gb {
         (lo, hi)
     }
 
-    #[inline]
     fn draw_scanline(&mut self) {
         let mut bg_priority = [Priority::Normal; PX_WIDTH as usize];
         let base_idx = PX_WIDTH as usize * self.ly as usize;
@@ -489,7 +474,6 @@ impl Gb {
         self.draw_obj(&mut bg_priority, base_idx);
     }
 
-    #[inline]
     fn draw_bg(&mut self, bg_priority: &mut [Priority; PX_WIDTH as usize], base_idx: usize) {
         if !self.bg_enabled() {
             return;
@@ -549,7 +533,6 @@ impl Gb {
         }
     }
 
-    #[inline]
     fn draw_win(&mut self, bg_priority: &mut [Priority; PX_WIDTH as usize], base_idx: usize) {
         // not so sure about last condition...
         if !(self.win_enabled() && self.wy <= self.ly && self.wx < PX_WIDTH) {
@@ -617,7 +600,6 @@ impl Gb {
         }
     }
 
-    #[inline]
     fn objs_in_ly(&mut self, height: u8) -> ([Obj; 10], usize) {
         let mut len = 0;
 
@@ -667,7 +649,6 @@ impl Gb {
         (obj, len)
     }
 
-    #[inline]
     fn draw_obj(&mut self, bg_priority: &mut [Priority; PX_WIDTH as usize], base_idx: usize) {
         if self.lcdc & LCDC_OBJ_B == 0 {
             return;

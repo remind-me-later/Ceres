@@ -75,41 +75,34 @@ const HRAM_END: u8 = 0xFE;
 const IE: u8 = 0xFF;
 
 impl Gb {
-    #[inline]
     #[must_use]
     pub(crate) const fn read_ram(&self, addr: u16) -> u8 {
         self.wram[(addr & 0xFFF) as usize]
     }
 
-    #[inline]
     #[must_use]
     pub(crate) fn read_bank_ram(&self, addr: u16) -> u8 {
         let bank = u16::from(self.svbk_true.get()) * 0x1000;
         self.wram[(addr & 0xFFF | bank) as usize]
     }
 
-    #[inline]
     fn write_ram(&mut self, addr: u16, val: u8) {
         self.wram[(addr & 0xFFF) as usize] = val;
     }
 
-    #[inline]
     fn write_bank_ram(&mut self, addr: u16, val: u8) {
         let bank = u16::from(self.svbk_true.get()) * 0x1000;
         self.wram[(addr & 0xFFF | bank) as usize] = val;
     }
 
-    #[inline]
     const fn dma_active(&self) -> bool {
         self.dma_on && (self.dma_cycles > 0 || self.dma_restarting)
     }
 
-    #[inline]
     const fn hdma_on(&self) -> bool {
         !matches!(self.hdma_state, HdmaState::Sleep)
     }
 
-    #[inline]
     fn read_rom_or_cart(&mut self, addr: u16) -> u8 {
         self.boot_rom
             .map_or_else(|| self.cart.read_rom(addr), |b| b[addr as usize])
@@ -133,7 +126,6 @@ impl Gb {
         }
     }
 
-    #[inline]
     fn read_high(&mut self, addr: u8) -> u8 {
         match addr {
             P1 => self.read_p1(),
@@ -208,7 +200,7 @@ impl Gb {
     }
 
     #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
-    #[inline]
+
     fn write_high(&mut self, addr: u8, val: u8) {
         match addr {
             P1 => self.write_joy(val),

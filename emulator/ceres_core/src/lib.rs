@@ -350,7 +350,6 @@ impl Gb {
         TC_SEC / sample_rate + 1
     }
 
-    #[inline]
     pub fn run_samples(&mut self) -> (Sample, Sample) {
         while self.samples_run == 0 {
             self.run_cpu();

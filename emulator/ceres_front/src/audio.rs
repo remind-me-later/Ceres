@@ -40,7 +40,6 @@ impl Renderer {
         Self { _stream: stream }
     }
 
-    #[inline]
     pub const fn sample_rate() -> i32 {
         SAMPLE_RATE
     }
