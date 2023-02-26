@@ -12,3 +12,4 @@ format_strings = true
 unstable_features = true
 tab_spaces = 2
 max_width = 79
+fn_single_line = true

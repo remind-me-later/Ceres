@@ -65,11 +65,7 @@ pub use {
   ppu::{PX_HEIGHT, PX_WIDTH},
 };
 use {
-  apu::{
-    noise::Noise,
-    square::{Square1, Square2},
-    wave::Wave,
-  },
+  apu::{Noise, Square1, Square2, Wave},
   core::{num::NonZeroU8, time::Duration},
   memory::HdmaState,
   ppu::{ColorPalette, Mode, RgbBuf, OAM_SIZE, VRAM_SIZE_CGB},
@@ -368,9 +364,7 @@ impl Gb {
   }
 
   #[must_use]
-  pub fn cartridge(&mut self) -> &mut Cartridge {
-    &mut self.cart
-  }
+  pub fn cartridge(&mut self) -> &mut Cartridge { &mut self.cart }
 
   #[must_use]
   pub const fn pixel_data_rgb(&self) -> &[u8] {
