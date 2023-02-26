@@ -50,25 +50,29 @@
   clippy::verbose_file_reads,
 )]
 #![allow(
-    clippy::struct_excessive_bools,
-    clippy::verbose_bit_mask,
-    clippy::missing_errors_doc,
-    clippy::missing_panics_doc,
-    clippy::missing_safety_doc
+  clippy::struct_excessive_bools,
+  clippy::verbose_bit_mask,
+  clippy::missing_errors_doc,
+  clippy::missing_panics_doc,
+  clippy::missing_safety_doc
 )]
 #![feature(error_in_core, negative_impls)]
 
 pub use {
-    apu::Sample,
-    cartridge::{Cartridge, Error},
-    joypad::Button,
-    ppu::{PX_HEIGHT, PX_WIDTH},
+  apu::Sample,
+  cartridge::{Cartridge, Error},
+  joypad::Button,
+  ppu::{PX_HEIGHT, PX_WIDTH},
 };
 use {
-    apu::{Noise, Square1, Square2, Wave},
-    core::{num::NonZeroU8, time::Duration},
-    memory::HdmaState,
-    ppu::{ColorPalette, Mode, RgbBuf, OAM_SIZE, VRAM_SIZE_CGB},
+  apu::{
+    noise::Noise,
+    square::{Square1, Square2},
+    wave::Wave,
+  },
+  core::{num::NonZeroU8, time::Duration},
+  memory::HdmaState,
+  ppu::{ColorPalette, Mode, RgbBuf, OAM_SIZE, VRAM_SIZE_CGB},
 };
 
 mod apu;
@@ -78,10 +82,6 @@ mod joypad;
 mod memory;
 mod ppu;
 mod timing;
-
-const DMG_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/dmg_boot.bin");
-const MGB_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/mgb_boot.bin");
-const CGB_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/cgb_boot_fast.bin");
 
 const FRAME_NANOS: u64 = 16_750_418;
 // frame duration in nanoseconds, the GameBoy framerate is 59.7 fps.
@@ -101,272 +101,279 @@ const WRAM_SIZE_CGB: usize = WRAM_SIZE * 4;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Model {
-    Dmg,
-    Mgb,
-    Cgb,
+  Dmg,
+  Mgb,
+  Cgb,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum CompatMode {
-    Dmg,
-    Compat,
-    Cgb,
+  Dmg,
+  Compat,
+  Cgb,
 }
 
 pub struct Gb {
-    // general
-    model:       Model,
-    compat_mode: CompatMode,
-    samples_run: usize,
+  // general
+  model:       Model,
+  compat_mode: CompatMode,
+  samples_run: usize,
 
-    // double speed
-    double_speed:         bool,
-    double_speed_request: bool,
+  // double speed
+  double_speed:         bool,
+  double_speed_request: bool,
 
-    // key1: u8,
+  // key1: u8,
 
-    // cartridge
-    cart:     Cartridge,
-    boot_rom: Option<&'static [u8]>,
+  // cartridge
+  cart:     Cartridge,
+  boot_rom: Option<&'static [u8]>,
 
-    // cpu
-    af: u16,
-    bc: u16,
-    de: u16,
-    hl: u16,
-    sp: u16,
-    pc: u16,
+  // cpu
+  af: u16,
+  bc: u16,
+  de: u16,
+  hl: u16,
+  sp: u16,
+  pc: u16,
 
-    cpu_ei_delay: bool,
-    cpu_halted:   bool,
+  cpu_ei_delay: bool,
+  cpu_halted:   bool,
 
-    // serial
-    sb: u8,
-    sc: u8,
+  // serial
+  sb: u8,
+  sc: u8,
 
-    // joypad
-    p1_btn:  u8,
-    p1_dirs: bool,
-    p1_acts: bool,
+  // joypad
+  p1_btn:  u8,
+  p1_dirs: bool,
+  p1_acts: bool,
 
-    // interrupts
-    halt_bug: bool,
-    ime:      bool,
-    ifr:      u8,
-    ie:       u8,
+  // interrupts
+  halt_bug: bool,
+  ime:      bool,
+  ifr:      u8,
+  ie:       u8,
 
-    // memory
-    wram:      [u8; WRAM_SIZE_CGB],
-    hram:      [u8; HRAM_SIZE],
-    svbk:      u8,
-    svbk_true: NonZeroU8, // true selected bank, between 1 and 7
+  // memory
+  wram:      [u8; WRAM_SIZE_CGB],
+  hram:      [u8; HRAM_SIZE],
+  svbk:      u8,
+  svbk_true: NonZeroU8, // true selected bank, between 1 and 7
 
-    // -- dma
-    dma:            u8,
-    dma_on:         bool,
-    dma_addr:       u16,
-    dma_restarting: bool,
-    dma_cycles:     i32,
+  // -- dma
+  dma:            u8,
+  dma_on:         bool,
+  dma_addr:       u16,
+  dma_restarting: bool,
+  dma_cycles:     i32,
 
-    // -- hdma
-    hdma5:      u8,
-    hdma_src:   u16,
-    hdma_dst:   u16,
-    hdma_len:   u16,
-    hdma_state: HdmaState,
+  // -- hdma
+  hdma5:      u8,
+  hdma_src:   u16,
+  hdma_dst:   u16,
+  hdma_len:   u16,
+  hdma_state: HdmaState,
 
-    // ppu
-    lcdc: u8,
-    stat: u8,
-    scy:  u8,
-    scx:  u8,
-    ly:   u8,
-    lyc:  u8,
-    bgp:  u8,
-    obp0: u8,
-    obp1: u8,
-    wy:   u8,
-    wx:   u8,
-    opri: u8,
-    vbk:  bool,
-    bcp:  ColorPalette,
-    ocp:  ColorPalette,
+  // ppu
+  lcdc: u8,
+  stat: u8,
+  scy:  u8,
+  scx:  u8,
+  ly:   u8,
+  lyc:  u8,
+  bgp:  u8,
+  obp0: u8,
+  obp1: u8,
+  wy:   u8,
+  wx:   u8,
+  opri: u8,
+  vbk:  bool,
+  bcp:  ColorPalette,
+  ocp:  ColorPalette,
 
-    frame_dots:       i32,
-    lcdc_delay:       bool,
-    vram:             [u8; VRAM_SIZE_CGB],
-    oam:              [u8; OAM_SIZE],
-    rgb_buf:          RgbBuf,
-    rgb_buf_present:  RgbBuf,
-    ppu_cycles:       i32,
-    ppu_win_in_frame: bool,
-    ppu_win_in_ly:    bool,
-    ppu_win_skipped:  u8,
+  frame_dots:       i32,
+  lcdc_delay:       bool,
+  vram:             [u8; VRAM_SIZE_CGB],
+  oam:              [u8; OAM_SIZE],
+  rgb_buf:          RgbBuf,
+  rgb_buf_present:  RgbBuf,
+  ppu_cycles:       i32,
+  ppu_win_in_frame: bool,
+  ppu_win_in_ly:    bool,
+  ppu_win_skipped:  u8,
 
-    // clock
-    tima: u8,
-    tma:  u8,
-    tac:  u8,
+  // clock
+  tima: u8,
+  tma:  u8,
+  tac:  u8,
 
-    tac_enable: bool,
-    system_clk: u16,
+  tac_enable: bool,
+  system_clk: u16,
 
-    // apu
-    nr51: u8,
+  // apu
+  nr51: u8,
 
-    apu_on:    bool,
-    apu_r_vol: u8,
-    apu_l_vol: u8,
-    apu_r_vin: bool,
-    apu_l_vin: bool,
+  apu_on:    bool,
+  apu_r_vol: u8,
+  apu_l_vol: u8,
+  apu_r_vin: bool,
+  apu_l_vin: bool,
 
-    apu_ch1: Square1,
-    apu_ch2: Square2,
-    apu_ch3: Wave,
-    apu_ch4: Noise,
+  apu_ch1: Square1,
+  apu_ch2: Square2,
+  apu_ch3: Wave,
+  apu_ch4: Noise,
 
-    apu_timer:             i32,
-    apu_render_timer:      i32,
-    apu_ext_sample_period: i32,
-    apu_seq_step:          u8,
+  apu_timer:             i32,
+  apu_render_timer:      i32,
+  apu_ext_sample_period: i32,
+  apu_seq_step:          u8,
 
-    apu_l_out: Sample,
-    apu_r_out: Sample,
+  apu_l_out: Sample,
+  apu_r_out: Sample,
 }
 
 impl Gb {
-    #[allow(clippy::too_many_lines)]
-    #[must_use]
-    pub fn new(model: Model, sample_rate: i32, cart: Cartridge) -> Self {
-        let compat_mode = match model {
-            Model::Dmg | Model::Mgb => CompatMode::Dmg,
-            Model::Cgb => CompatMode::Cgb,
-        };
+  #[allow(clippy::too_many_lines)]
+  #[must_use]
+  pub fn new(model: Model, sample_rate: i32, cart: Cartridge) -> Self {
+    const DMG_BOOTROM: &[u8] =
+      include_bytes!("../../../bootroms/bin/dmg_boot.bin");
+    const MGB_BOOTROM: &[u8] =
+      include_bytes!("../../../bootroms/bin/mgb_boot.bin");
+    const CGB_BOOTROM: &[u8] =
+      include_bytes!("../../../bootroms/bin/cgb_boot_fast.bin");
 
-        let boot_rom = Some(match model {
-            Model::Dmg => DMG_BOOTROM,
-            Model::Mgb => MGB_BOOTROM,
-            Model::Cgb => CGB_BOOTROM,
-        });
+    let compat_mode = match model {
+      Model::Dmg | Model::Mgb => CompatMode::Dmg,
+      Model::Cgb => CompatMode::Cgb,
+    };
 
-        Self {
-            model,
-            compat_mode,
-            cart,
-            boot_rom,
+    let boot_rom = Some(match model {
+      Model::Dmg => DMG_BOOTROM,
+      Model::Mgb => MGB_BOOTROM,
+      Model::Cgb => CGB_BOOTROM,
+    });
 
-            // Custom
-            svbk_true: NonZeroU8::new(1).unwrap(),
-            ppu_cycles: Mode::HBlank.cycles(0),
+    Self {
+      model,
+      compat_mode,
+      cart,
+      boot_rom,
 
-            // Slices
-            wram: [0; WRAM_SIZE_CGB],
-            hram: [0; HRAM_SIZE],
-            vram: [0; VRAM_SIZE_CGB],
-            oam: [0; OAM_SIZE],
+      // Custom
+      svbk_true: NonZeroU8::new(1).unwrap(),
+      ppu_cycles: Mode::HBlank.cycles(0),
 
-            // Sound
-            apu_ext_sample_period: Self::sample_period_from_rate(sample_rate),
+      // Slices
+      wram: [0; WRAM_SIZE_CGB],
+      hram: [0; HRAM_SIZE],
+      vram: [0; VRAM_SIZE_CGB],
+      oam: [0; OAM_SIZE],
 
-            // Default
-            double_speed: Default::default(),
-            double_speed_request: Default::default(),
-            af: Default::default(),
-            bc: Default::default(),
-            de: Default::default(),
-            hl: Default::default(),
-            sp: Default::default(),
-            pc: Default::default(),
-            cpu_ei_delay: Default::default(),
-            cpu_halted: Default::default(),
-            sb: Default::default(),
-            sc: Default::default(),
-            p1_btn: Default::default(),
-            p1_dirs: Default::default(),
-            p1_acts: Default::default(),
-            halt_bug: Default::default(),
-            ime: Default::default(),
-            ifr: Default::default(),
-            ie: Default::default(),
-            svbk: Default::default(),
-            dma: Default::default(),
-            dma_on: Default::default(),
-            dma_addr: Default::default(),
-            dma_restarting: Default::default(),
-            dma_cycles: Default::default(),
-            hdma5: Default::default(),
-            hdma_src: Default::default(),
-            hdma_dst: Default::default(),
-            hdma_len: Default::default(),
-            hdma_state: HdmaState::default(),
-            lcdc: Default::default(),
-            stat: Default::default(),
-            scy: Default::default(),
-            scx: Default::default(),
-            ly: Default::default(),
-            lyc: Default::default(),
-            bgp: Default::default(),
-            obp0: Default::default(),
-            obp1: Default::default(),
-            wy: Default::default(),
-            wx: Default::default(),
-            opri: Default::default(),
-            vbk: Default::default(),
-            bcp: ColorPalette::default(),
-            ocp: ColorPalette::default(),
-            frame_dots: Default::default(),
-            lcdc_delay: Default::default(),
-            rgb_buf: RgbBuf::default(),
-            rgb_buf_present: RgbBuf::default(),
-            ppu_win_in_frame: Default::default(),
-            ppu_win_in_ly: Default::default(),
-            ppu_win_skipped: Default::default(),
-            tima: Default::default(),
-            tma: Default::default(),
-            tac: Default::default(),
-            tac_enable: Default::default(),
-            system_clk: Default::default(),
-            nr51: Default::default(),
-            apu_on: Default::default(),
-            apu_r_vol: Default::default(),
-            apu_l_vol: Default::default(),
-            apu_r_vin: Default::default(),
-            apu_l_vin: Default::default(),
-            apu_ch1: Square1::default(),
-            apu_ch2: Square2::default(),
-            apu_ch3: Wave::default(),
-            apu_ch4: Noise::default(),
-            apu_timer: Default::default(),
-            apu_render_timer: Default::default(),
-            apu_seq_step: Default::default(),
-            samples_run: Default::default(),
-            apu_l_out: Default::default(),
-            apu_r_out: Default::default(),
-        }
+      // Sound
+      apu_ext_sample_period: Self::sample_period_from_rate(sample_rate),
+
+      // Default
+      double_speed: Default::default(),
+      double_speed_request: Default::default(),
+      af: Default::default(),
+      bc: Default::default(),
+      de: Default::default(),
+      hl: Default::default(),
+      sp: Default::default(),
+      pc: Default::default(),
+      cpu_ei_delay: Default::default(),
+      cpu_halted: Default::default(),
+      sb: Default::default(),
+      sc: Default::default(),
+      p1_btn: Default::default(),
+      p1_dirs: Default::default(),
+      p1_acts: Default::default(),
+      halt_bug: Default::default(),
+      ime: Default::default(),
+      ifr: Default::default(),
+      ie: Default::default(),
+      svbk: Default::default(),
+      dma: Default::default(),
+      dma_on: Default::default(),
+      dma_addr: Default::default(),
+      dma_restarting: Default::default(),
+      dma_cycles: Default::default(),
+      hdma5: Default::default(),
+      hdma_src: Default::default(),
+      hdma_dst: Default::default(),
+      hdma_len: Default::default(),
+      hdma_state: HdmaState::default(),
+      lcdc: Default::default(),
+      stat: Default::default(),
+      scy: Default::default(),
+      scx: Default::default(),
+      ly: Default::default(),
+      lyc: Default::default(),
+      bgp: Default::default(),
+      obp0: Default::default(),
+      obp1: Default::default(),
+      wy: Default::default(),
+      wx: Default::default(),
+      opri: Default::default(),
+      vbk: Default::default(),
+      bcp: ColorPalette::default(),
+      ocp: ColorPalette::default(),
+      frame_dots: Default::default(),
+      lcdc_delay: Default::default(),
+      rgb_buf: RgbBuf::default(),
+      rgb_buf_present: RgbBuf::default(),
+      ppu_win_in_frame: Default::default(),
+      ppu_win_in_ly: Default::default(),
+      ppu_win_skipped: Default::default(),
+      tima: Default::default(),
+      tma: Default::default(),
+      tac: Default::default(),
+      tac_enable: Default::default(),
+      system_clk: Default::default(),
+      nr51: Default::default(),
+      apu_on: Default::default(),
+      apu_r_vol: Default::default(),
+      apu_l_vol: Default::default(),
+      apu_r_vin: Default::default(),
+      apu_l_vin: Default::default(),
+      apu_ch1: Square1::default(),
+      apu_ch2: Square2::default(),
+      apu_ch3: Wave::default(),
+      apu_ch4: Noise::default(),
+      apu_timer: Default::default(),
+      apu_render_timer: Default::default(),
+      apu_seq_step: Default::default(),
+      samples_run: Default::default(),
+      apu_l_out: Default::default(),
+      apu_r_out: Default::default(),
+    }
+  }
+
+  const fn sample_period_from_rate(sample_rate: i32) -> i32 {
+    // maybe account for difference between 59.7 and target Hz?
+    TC_SEC / sample_rate + 1
+  }
+
+  pub fn run_samples(&mut self) -> (Sample, Sample) {
+    while self.samples_run == 0 {
+      self.run_cpu();
     }
 
-    const fn sample_period_from_rate(sample_rate: i32) -> i32 {
-        // maybe account for difference between 59.7 and target Hz?
-        TC_SEC / sample_rate + 1
-    }
+    self.samples_run = 0;
 
-    pub fn run_samples(&mut self) -> (Sample, Sample) {
-        while self.samples_run == 0 {
-            self.run_cpu();
-        }
+    (self.apu_l_out, self.apu_r_out)
+  }
 
-        self.samples_run = 0;
+  #[must_use]
+  pub fn cartridge(&mut self) -> &mut Cartridge {
+    &mut self.cart
+  }
 
-        (self.apu_l_out, self.apu_r_out)
-    }
-
-    #[must_use]
-    pub fn cartridge(&mut self) -> &mut Cartridge {
-        &mut self.cart
-    }
-
-    #[must_use]
-    pub const fn pixel_data_rgb(&self) -> &[u8] {
-        self.rgb_buf_present.pixel_data()
-    }
+  #[must_use]
+  pub const fn pixel_data_rgb(&self) -> &[u8] {
+    self.rgb_buf_present.pixel_data()
+  }
 }

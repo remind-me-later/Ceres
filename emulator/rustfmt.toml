@@ -10,3 +10,5 @@ reorder_impl_items = true
 version = "Two"
 format_strings = true
 unstable_features = true
+tab_spaces = 2
+max_width = 79
