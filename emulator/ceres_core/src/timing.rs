@@ -14,6 +14,7 @@ impl Gb {
     // TODO: is this order right?I
     self.run_ppu(cycles);
     self.run_dma();
+
     self.run_apu(cycles);
     self.cart.run_cycles(cycles);
   }
@@ -44,14 +45,24 @@ impl Gb {
 
   pub(crate) fn run_timers(&mut self, cycles: i32) {
     for _ in 0..cycles {
-      // Falling edge detector
+      let old_apu_div =
+        self.system_clk & if self.double_speed { 0x2000 } else { 0x1000 } != 0;
       let old_bit = self.tac_enable && self.sys_clk_tac_mux();
+
       self.system_clk = self.system_clk.wrapping_add(1);
+
       let new_bit = self.tac_enable && self.sys_clk_tac_mux();
+      let new_apu_div =
+        self.system_clk & if self.double_speed { 0x2000 } else { 0x1000 } != 0;
 
       // increase TIMA on falling edge of TAC mux
       if old_bit && !new_bit {
         self.inc_tima();
+      }
+
+      // advance APU on falling edge of APU_DIV bit
+      if old_apu_div && !new_apu_div {
+        self.apu_step_seq();
       }
     }
   }
@@ -69,13 +80,9 @@ impl Gb {
     self.system_clk = 0;
   }
 
-  pub(crate) fn write_tima(&mut self, val: u8) {
-    self.tima = val;
-  }
+  pub(crate) fn write_tima(&mut self, val: u8) { self.tima = val; }
 
-  pub(crate) fn write_tma(&mut self, val: u8) {
-    self.tma = val;
-  }
+  pub(crate) fn write_tma(&mut self, val: u8) { self.tma = val; }
 
   pub(crate) fn write_tac(&mut self, val: u8) {
     let old_bit = self.tac_enable && self.sys_clk_tac_mux();

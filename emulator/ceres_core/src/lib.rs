@@ -221,7 +221,6 @@ pub struct Gb {
   apu_ch3: Wave,
   apu_ch4: Noise,
 
-  apu_timer:             i32,
   apu_render_timer:      i32,
   apu_ext_sample_period: i32,
   apu_seq_step:          u8,
@@ -339,7 +338,6 @@ impl Gb {
       apu_ch2: Square2::default(),
       apu_ch3: Wave::default(),
       apu_ch4: Noise::default(),
-      apu_timer: Default::default(),
       apu_render_timer: Default::default(),
       apu_seq_step: Default::default(),
       samples_run: Default::default(),
