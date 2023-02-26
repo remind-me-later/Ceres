@@ -750,7 +750,6 @@ impl Wave {
             if self.snd_len == 0 {
                 self.snd_len = WAV_MAX_LENGTH;
                 if self.use_len && self.p_half == 0 {
-                    // println!("freeze step enabled, len: {}", self.snd_len);
                     self.step_len();
                 }
             }
@@ -939,7 +938,7 @@ impl Noise {
 
             if self.snd_len == 0 {
                 self.snd_len = NOISE_MAX_LEN;
-                if self.use_len && !old_len && self.p_half == 0 {
+                if self.use_len && self.p_half == 0 {
                     self.step_len();
                 }
             }
