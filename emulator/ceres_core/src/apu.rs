@@ -53,6 +53,10 @@ impl Gb {
       gb.apu_ch4.set_period_half(p_half);
     }
 
+    // if !self.apu_on {
+    //   return;
+    // }
+
     if self.apu_seq_step & 1 == 0 {
       self.apu_ch1.step_len();
       self.apu_ch2.step_len();
@@ -435,7 +439,7 @@ mod channel {
       use {super::Envelope, crate::apu::PHalf};
 
       const MAX_LEN: u16 = 64;
-      const P_MUL: u16 = 4;
+      const P_MUL: u16 = 16;
       // Shape of the duty waveform for a certain duty
       const DUTY_WAV: [u8; 4] = [
         // _______- : 12.5%
@@ -459,6 +463,8 @@ mod channel {
         duty:     u8,
         duty_bit: u8,
         period:   i32,
+        // period timer
+        ptimer:   i32,
         out:      u8,
       }
 
@@ -475,6 +481,7 @@ mod channel {
             ltimer:   LengthTimer::default(),
             out:      0,
             env:      Envelope::default(),
+            ptimer:   0,
           }
         }
       }
@@ -489,6 +496,8 @@ mod channel {
           self.duty_bit = 0;
           self.env = Envelope::default();
           self.sweep.reset();
+          self.period = i32::from(P_MUL * (2048 - self.freq));
+          self.ptimer = 0;
         }
 
         fn read0(&self) -> u8 { self.sweep.read() }
@@ -536,7 +545,6 @@ mod channel {
 
             self.period = i32::from(P_MUL * (2048 - self.freq));
             self.out = 0;
-            // self.duty_bit = 0;
             self.env.trigger();
             self.sweep.trigger(&mut self.freq, &mut self.on);
           }
@@ -547,12 +555,13 @@ mod channel {
             return;
           }
 
-          self.period -= cycles;
+          self.ptimer += cycles;
 
-          if self.period < 0 {
-            self.period += i32::from(P_MUL * (2048 - self.freq));
-            self.out = (DUTY_WAV[self.duty as usize] & (1 << self.duty_bit))
-              >> self.duty_bit;
+          if self.ptimer > self.period {
+            self.ptimer = 0;
+            self.out = u8::from(
+              (DUTY_WAV[self.duty as usize] & (1 << self.duty_bit)) != 0,
+            );
             self.duty_bit = (self.duty_bit + 1) & 7;
           }
         }

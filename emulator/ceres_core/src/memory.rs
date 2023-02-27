@@ -188,7 +188,7 @@ impl Gb {
         self.apu_ch1.out() | (self.apu_ch2.out() << 4)
       }
       PCM34 if self.compat_mode == CompatMode::Cgb => {
-        self.apu_ch3.out() | (self.apu_ch3.out() << 4)
+        self.apu_ch3.out() | (self.apu_ch4.out() << 4)
       }
       HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize],
       IE => self.ie,

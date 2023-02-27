@@ -23,7 +23,10 @@ enum Mbc {
 }
 
 impl Mbc {
-  fn mbc_and_battery(mbc_byte: u8, rom_size: ROMSize) -> Result<(Self, bool), Error> {
+  fn mbc_and_battery(
+    mbc_byte: u8,
+    rom_size: ROMSize,
+  ) -> Result<(Self, bool), Error> {
     let bank_mode = rom_size >= ROMSize::Mb1;
     let multicart = false;
 
@@ -81,7 +84,8 @@ impl Display for Error {
       }
       Self::NonAsciiTitleString => write!(
         f,
-        "invalid title string in cartridge header, contains non ASCII characters"
+        "invalid title string in cartridge header, contains non ASCII \
+         characters"
       ),
       Self::UnsupportedMBC => write!(f, "unsupported MBC"),
     }
@@ -96,8 +100,8 @@ static mut ONE_RAM: [u8; RAMSize::MAX] = [0; RAMSize::MAX];
 pub struct Cartridge {
   mbc: Mbc,
 
-  rom: &'static mut [u8; ROMSize::MAX],
-  ram: &'static mut [u8; RAMSize::MAX],
+  rom: &'static mut [u8],
+  ram: &'static mut [u8],
 
   rom_bank_lo:   u8,
   rom_bank_hi:   u8,
@@ -117,15 +121,15 @@ pub struct Cartridge {
 impl Cartridge {
   pub unsafe fn new() -> Result<Self, Error> {
     let rom_size = ROMSize::new(&ONE_ROM)?;
-    let mem_size = RAMSize::new(&ONE_ROM)?;
+    let ram_size = RAMSize::new(&ONE_ROM)?;
     let rom_bank_mask = rom_size.bank_bit_mask();
-    let has_ram = mem_size != RAMSize::NoRAM;
+    let has_ram = ram_size != RAMSize::NoRAM;
     let (mbc, has_battery) = Mbc::mbc_and_battery(ONE_ROM[0x147], rom_size)?;
 
     Ok(Self {
       mbc,
-      rom: &mut ONE_ROM,
-      ram: &mut ONE_RAM,
+      rom: &mut ONE_ROM[0..rom_size.size_bytes()],
+      ram: &mut ONE_RAM[0..ram_size.size_bytes()],
       rom_bank_lo: 1,
       rom_bank_hi: 0,
       rom_offsets: (0x0000, 0x4000),
@@ -138,17 +142,13 @@ impl Cartridge {
     })
   }
 
-  pub unsafe fn mut_ram() -> &'static mut [u8] {
-    &mut ONE_RAM
-  }
+  pub unsafe fn mut_ram() -> &'static mut [u8] { &mut ONE_RAM }
 
-  pub unsafe fn mut_rom() -> &'static mut [u8] {
-    &mut ONE_ROM
-  }
+  pub unsafe fn mut_rom() -> &'static mut [u8] { &mut ONE_ROM }
 
   #[must_use]
   pub fn save_data(&mut self) -> Option<&[u8]> {
-    self.has_battery.then(|| self.ram.as_ref())
+    self.has_battery.then_some(&*self.ram)
   }
 
   #[must_use]
@@ -161,9 +161,7 @@ impl Cartridge {
   }
 
   #[must_use]
-  pub const fn has_battery(&self) -> bool {
-    self.has_battery
-  }
+  pub const fn has_battery(&self) -> bool { self.has_battery }
 
   pub(crate) fn run_cycles(&mut self, cycles: i32) {
     if let Mbc3 { rtc: Some(rtc) } = &mut self.mbc {
@@ -190,7 +188,11 @@ impl Cartridge {
 
   #[must_use]
   pub(crate) fn read_ram(&self, addr: u16) -> u8 {
-    const fn mbc_read_ram(cart: &Cartridge, ram_enabled: bool, addr: u16) -> u8 {
+    const fn mbc_read_ram(
+      cart: &Cartridge,
+      ram_enabled: bool,
+      addr: u16,
+    ) -> u8 {
       if cart.has_ram && ram_enabled {
         let addr = cart.ram_addr(addr);
         cart.ram[addr]
@@ -280,7 +282,8 @@ impl Cartridge {
           } else {
             let val = val & 0xF;
             self.rom_bank_lo = if val == 0 { 1 } else { val };
-            self.rom_offsets = (0x0000, ROM_BANK_SIZE * self.rom_bank_lo as usize);
+            self.rom_offsets =
+              (0x0000, ROM_BANK_SIZE * self.rom_bank_lo as usize);
           }
         }
       }
@@ -288,7 +291,8 @@ impl Cartridge {
         0x0000..=0x1FFF => self.ram_enabled = (val & 0x0F) == 0x0A,
         0x2000..=0x3FFF => {
           self.rom_bank_lo = if val == 0 { 1 } else { val & 0x7F };
-          self.rom_offsets = (0x0000, ROM_BANK_SIZE * self.rom_bank_lo as usize);
+          self.rom_offsets =
+            (0x0000, ROM_BANK_SIZE * self.rom_bank_lo as usize);
         }
         0x4000..=0x5FFF => {
           if (0x8..=0xC).contains(&val) {
@@ -341,7 +345,12 @@ impl Cartridge {
   }
 
   pub(crate) fn write_ram(&mut self, addr: u16, val: u8) {
-    fn mbc_write_ram(cart: &mut Cartridge, ram_enabled: bool, addr: u16, val: u8) {
+    fn mbc_write_ram(
+      cart: &mut Cartridge,
+      ram_enabled: bool,
+      addr: u16,
+      val: u8,
+    ) {
       if cart.has_ram && ram_enabled {
         let addr = cart.ram_addr(addr);
         cart.ram[addr] = val;
@@ -408,9 +417,7 @@ impl ROMSize {
     kib_32 << (self as usize)
   }
 
-  const fn bank_bit_mask(self) -> usize {
-    (2 << (self as usize)) - 1
-  }
+  const fn bank_bit_mask(self) -> usize { (2 << (self as usize)) - 1 }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -480,9 +487,7 @@ impl Mbc3RTC {
     self.mapped = Some(NonZeroU8::new(val).unwrap());
   }
 
-  fn unmap_reg(&mut self) {
-    self.mapped = None;
-  }
+  fn unmap_reg(&mut self) { self.mapped = None; }
 
   fn run_cycles(&mut self, cycles: i32) {
     for _ in 0..cycles {
@@ -536,7 +541,11 @@ impl Mbc3RTC {
           0x9 => self.regs[1],
           0xA => self.regs[2],
           0xB => self.regs[3],
-          0xC => self.regs[4] | (u8::from(self.halt) << 6) | (u8::from(self.carry) << 7),
+          0xC => {
+            self.regs[4]
+              | (u8::from(self.halt) << 6)
+              | (u8::from(self.carry) << 7)
+          }
           _ => unreachable!("Not a valid RTC register"),
         })
       })

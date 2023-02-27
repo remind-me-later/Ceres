@@ -54,7 +54,8 @@
   clippy::verbose_bit_mask,
   clippy::missing_errors_doc,
   clippy::missing_panics_doc,
-  clippy::missing_safety_doc
+  clippy::missing_safety_doc,
+  clippy::similar_names
 )]
 #![feature(error_in_core, negative_impls)]
 
