@@ -20,7 +20,8 @@ impl Renderer {
       buffer_size: cpal::BufferSize::Fixed(BUFFER_SIZE),
     };
 
-    let error_callback = |err| panic!("an AudioError occurred on stream: {err}");
+    let error_callback =
+      |err| panic!("an AudioError occurred on stream: {err}");
     let data_callback = move |b: &mut [ceres_core::Sample], _: &_| {
       let mut gb = gb.lock();
 
@@ -40,7 +41,5 @@ impl Renderer {
     Self { _stream: stream }
   }
 
-  pub const fn sample_rate() -> i32 {
-    SAMPLE_RATE
-  }
+  pub const fn sample_rate() -> i32 { SAMPLE_RATE }
 }

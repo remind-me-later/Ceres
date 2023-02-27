@@ -15,8 +15,8 @@ impl Gb {
     self.run_ppu(cycles);
     self.run_dma();
 
-    self.run_apu(cycles);
-    self.cart.run_cycles(cycles);
+    self.apu.run(cycles);
+    self.cart.run(cycles);
   }
 
   const fn sys_clk_tac_mux(&self) -> bool {
@@ -62,7 +62,7 @@ impl Gb {
 
       // advance APU on falling edge of APU_DIV bit
       if old_apu_div && !new_apu_div {
-        self.apu_step_seq();
+        self.apu.step_seq();
       }
     }
   }

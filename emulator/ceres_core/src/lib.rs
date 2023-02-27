@@ -60,17 +60,17 @@
 )]
 #![feature(error_in_core, negative_impls)]
 
+use {
+  apu::Apu,
+  core::{num::NonZeroU8, time::Duration},
+  memory::HdmaState,
+  ppu::{ColorPalette, Mode, RgbBuf, OAM_SIZE, VRAM_SIZE_CGB},
+};
 pub use {
   apu::Sample,
   cartridge::{Cartridge, Error},
   joypad::Button,
   ppu::{PX_HEIGHT, PX_WIDTH},
-};
-use {
-  apu::{Noise, Square1, Square2, Wave},
-  core::{num::NonZeroU8, time::Duration},
-  memory::HdmaState,
-  ppu::{ColorPalette, Mode, RgbBuf, OAM_SIZE, VRAM_SIZE_CGB},
 };
 
 mod apu;
@@ -115,7 +115,6 @@ pub struct Gb {
   // general
   model:       Model,
   compat_mode: CompatMode,
-  samples_run: usize,
 
   // double speed
   double_speed:         bool,
@@ -209,26 +208,7 @@ pub struct Gb {
   tac_enable: bool,
   system_clk: u16,
 
-  // apu
-  nr51: u8,
-
-  apu_on:    bool,
-  apu_r_vol: u8,
-  apu_l_vol: u8,
-  apu_r_vin: bool,
-  apu_l_vin: bool,
-
-  apu_ch1: Square1,
-  apu_ch2: Square2,
-  apu_ch3: Wave,
-  apu_ch4: Noise,
-
-  apu_render_timer:      i32,
-  apu_ext_sample_period: i32,
-  apu_seq_step:          u8,
-
-  apu_l_out: Sample,
-  apu_r_out: Sample,
+  apu: Apu,
 }
 
 impl Gb {
@@ -269,8 +249,7 @@ impl Gb {
       vram: [0; VRAM_SIZE_CGB],
       oam: [0; OAM_SIZE],
 
-      // Sound
-      apu_ext_sample_period: Self::sample_period_from_rate(sample_rate),
+      apu: Apu::new(sample_rate),
 
       // Default
       double_speed: Default::default(),
@@ -330,37 +309,17 @@ impl Gb {
       tac: Default::default(),
       tac_enable: Default::default(),
       system_clk: Default::default(),
-      nr51: Default::default(),
-      apu_on: Default::default(),
-      apu_r_vol: Default::default(),
-      apu_l_vol: Default::default(),
-      apu_r_vin: Default::default(),
-      apu_l_vin: Default::default(),
-      apu_ch1: Square1::default(),
-      apu_ch2: Square2::default(),
-      apu_ch3: Wave::default(),
-      apu_ch4: Noise::default(),
-      apu_render_timer: Default::default(),
-      apu_seq_step: Default::default(),
-      samples_run: Default::default(),
-      apu_l_out: Default::default(),
-      apu_r_out: Default::default(),
     }
-  }
-
-  const fn sample_period_from_rate(sample_rate: i32) -> i32 {
-    // maybe account for difference between 59.7 and target Hz?
-    TC_SEC / sample_rate + 1
   }
 
   pub fn run_samples(&mut self) -> (Sample, Sample) {
-    while self.samples_run == 0 {
+    while self.apu.samples_run() == 0 {
       self.run_cpu();
     }
 
-    self.samples_run = 0;
+    self.apu.reset_samples_run();
 
-    (self.apu_l_out, self.apu_r_out)
+    self.apu.out()
   }
 
   #[must_use]

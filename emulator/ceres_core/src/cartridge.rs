@@ -163,7 +163,7 @@ impl Cartridge {
   #[must_use]
   pub const fn has_battery(&self) -> bool { self.has_battery }
 
-  pub(crate) fn run_cycles(&mut self, cycles: i32) {
+  pub(crate) fn run(&mut self, cycles: i32) {
     if let Mbc3 { rtc: Some(rtc) } = &mut self.mbc {
       rtc.run_cycles(cycles);
     }
