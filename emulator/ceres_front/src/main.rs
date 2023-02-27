@@ -61,6 +61,7 @@
 use {
   ceres_core::Gb,
   clap::{builder::PossibleValuesParser, Arg, Command},
+  core::time::Duration,
   std::{
     fs::File,
     io::Write,
@@ -97,9 +98,9 @@ fn main() -> anyhow::Result<()> {
         .required(true)
         .help("Game Boy/Color ROM file to emulate.")
         .long_help(
-          "Game Boy/Color ROM file to emulate. Extension doesn't matter, the emulator will check \
-           the file is a valid Game Boy ROM reading its header. Doesn't accept compressed (zip) \
-           files.",
+          "Game Boy/Color ROM file to emulate. Extension doesn't matter, the \
+           emulator will check the file is a valid Game Boy ROM reading its \
+           header. Doesn't accept compressed (zip) files.",
         ),
     )
     .arg(
@@ -134,7 +135,10 @@ fn main() -> anyhow::Result<()> {
 }
 
 #[allow(clippy::too_many_lines)]
-pub async fn run(model: ceres_core::Model, mut path: PathBuf) -> anyhow::Result<()> {
+pub async fn run(
+  model: ceres_core::Model,
+  mut path: PathBuf,
+) -> anyhow::Result<()> {
   use anyhow::Context;
 
   let (gb, sav_path) = unsafe {
@@ -233,7 +237,9 @@ pub async fn run(model: ceres_core::Model, mut path: PathBuf) -> anyhow::Result<
             video.resize(**new_inner_size);
           }
           WindowEvent::CloseRequested => control_flow.set_exit(),
-          WindowEvent::KeyboardInput { input, .. } if video.window().has_focus() => {
+          WindowEvent::KeyboardInput { input, .. }
+            if video.window().has_focus() =>
+          {
             if let Some(key) = input.virtual_keycode {
               use {
                 ceres_core::Button as B,
@@ -253,9 +259,9 @@ pub async fn run(model: ceres_core::Model, mut path: PathBuf) -> anyhow::Result<
                   // System
                   KC::F => match video.window().fullscreen() {
                     Some(_) => video.window().set_fullscreen(None),
-                    None => video
-                      .window()
-                      .set_fullscreen(Some(window::Fullscreen::Borderless(None))),
+                    None => video.window().set_fullscreen(Some(
+                      window::Fullscreen::Borderless(None),
+                    )),
                   },
                   _ => (),
                 },
@@ -277,7 +283,9 @@ pub async fn run(model: ceres_core::Model, mut path: PathBuf) -> anyhow::Result<
           _ => (),
         }
       }
-      Event::RedrawRequested(window_id) if window_id == video.window().id() => {
+      Event::RedrawRequested(window_id)
+        if window_id == video.window().id() =>
+      {
         use wgpu::SurfaceError::{Lost, OutOfMemory, Outdated, Timeout};
         match video.render() {
           Ok(_) => {}
@@ -289,6 +297,7 @@ pub async fn run(model: ceres_core::Model, mut path: PathBuf) -> anyhow::Result<
       Event::MainEventsCleared => {
         video.update(gb.lock().pixel_data_rgb());
         video.window().request_redraw();
+        std::thread::sleep(Duration::from_nanos((1000 * 1_000_000) / 60));
       }
       _ => (),
     }
