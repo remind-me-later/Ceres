@@ -70,6 +70,8 @@ const OCPS: u8 = 0x6A;
 const OCPD: u8 = 0x6B;
 const OPRI: u8 = 0x6C;
 const SVBK: u8 = 0x70;
+const PCM12: u8 = 0x76;
+const PCM34: u8 = 0x77;
 const HRAM_BEG: u8 = 0x80;
 const HRAM_END: u8 = 0xFE;
 const IE: u8 = 0xFF;
@@ -182,6 +184,12 @@ impl Gb {
       OCPD if self.compat_mode == CompatMode::Cgb => self.ocp.data(),
       OPRI if self.compat_mode == CompatMode::Cgb => self.opri,
       SVBK if self.compat_mode == CompatMode::Cgb => self.svbk | 0xF8,
+      PCM12 if self.compat_mode == CompatMode::Cgb => {
+        self.apu_ch1.out() | (self.apu_ch2.out() << 4)
+      }
+      PCM34 if self.compat_mode == CompatMode::Cgb => {
+        self.apu_ch3.out() | (self.apu_ch3.out() << 4)
+      }
       HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize],
       IE => self.ie,
       _ => 0xFF,

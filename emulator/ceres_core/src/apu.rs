@@ -608,6 +608,8 @@ mod channel {
 
         pub(crate) fn write_nr14(&mut self, val: u8) { self.ab.write4(val); }
 
+        pub(crate) const fn out(&self) -> u8 { self.ab.out() }
+
         pub(in crate::apu) fn reset(&mut self) { self.ab.reset(); }
 
         pub(in crate::apu) fn step_sample(&mut self, cycles: i32) {
@@ -617,8 +619,6 @@ mod channel {
         pub(in crate::apu) fn step_sweep(&mut self) { self.ab.step_sweep(); }
 
         pub(in crate::apu) fn step_env(&mut self) { self.ab.step_env(); }
-
-        pub(in crate::apu) const fn out(&self) -> u8 { self.ab.out() }
 
         pub(in crate::apu) const fn true_on(&self) -> bool {
           self.ab.true_on()
@@ -653,6 +653,8 @@ mod channel {
 
         pub(crate) fn write_nr24(&mut self, val: u8) { self.ab.write4(val); }
 
+        pub(crate) const fn out(&self) -> u8 { self.ab.out() }
+
         pub(in crate::apu) fn reset(&mut self) { self.ab.reset(); }
 
         pub(in crate::apu) fn step_sample(&mut self, cycles: i32) {
@@ -660,8 +662,6 @@ mod channel {
         }
 
         pub(in crate::apu) fn step_env(&mut self) { self.ab.step_env(); }
-
-        pub(in crate::apu) const fn out(&self) -> u8 { self.ab.out() }
 
         pub(in crate::apu) const fn true_on(&self) -> bool {
           self.ab.true_on()
@@ -775,6 +775,8 @@ mod channel {
           }
         }
 
+        pub(crate) const fn out(&self) -> u8 { self.out * self.env.vol() }
+
         pub(in crate::apu) fn reset(&mut self) {
           self.on = false;
           self.dac_on = true;
@@ -816,10 +818,6 @@ mod channel {
 
             self.out = u8::from(self.lfsr & 1 == 0);
           }
-        }
-
-        pub(in crate::apu) const fn out(&self) -> u8 {
-          self.out * self.env.vol()
         }
 
         pub(in crate::apu) const fn true_on(&self) -> bool {
@@ -940,6 +938,13 @@ mod channel {
         }
       }
 
+      pub(crate) fn out(&self) -> u8 {
+        // wrapping_shr is necessary because (vol - 1) can be -1
+        self
+          .sample_buffer
+          .wrapping_shr(u32::from(self.vol.wrapping_sub(1)))
+      }
+
       pub(in crate::apu) fn reset(&mut self) {
         self.on = false;
         self.dac_on = true;
@@ -964,13 +969,6 @@ mod channel {
           self.sample_idx = (self.sample_idx + 1) % SAMPLE_LEN;
           self.sample_buffer = self.samples[self.sample_idx as usize];
         }
-      }
-
-      pub(in crate::apu) fn out(&self) -> u8 {
-        // wrapping_shr is necessary because (vol - 1) can be -1
-        self
-          .sample_buffer
-          .wrapping_shr(u32::from(self.vol.wrapping_sub(1)))
       }
 
       pub(in crate::apu) const fn true_on(&self) -> bool {
