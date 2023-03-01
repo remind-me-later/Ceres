@@ -205,7 +205,7 @@ impl Apu {
 
   pub const fn on(&self) -> bool { self.on }
 
-  pub const fn pcm12(&self) -> u8 { self.ch1.out() | (self.ch1.out() << 4) }
+  pub const fn pcm12(&self) -> u8 { self.ch1.out() | (self.ch2.out() << 4) }
 
   pub fn pcm34(&self) -> u8 { self.ch3.out() | (self.ch4.out() << 4) }
 
@@ -456,147 +456,148 @@ mod channel {
 
   #[allow(clippy::module_name_repetitions)]
   pub mod square {
-    use crate::apu::channel::{LengthTimer, WaveLength};
+    use {
+      super::Envelope,
+      crate::apu::{
+        channel::{LengthTimer, WaveLength},
+        PHalf,
+      },
+      core::num::NonZeroU8,
+    };
 
-    mod sweep {
-      use core::num::NonZeroU8;
+    pub(super) trait SweepTrait: Sized + Default {
+      fn reset(&mut self);
+      fn calculate_sweep(&mut self, freq: &mut u16, on: &mut bool);
+      fn read(&self) -> u8;
+      fn write(&mut self, val: u8);
+      fn step(&mut self, freq: &mut u16, on: &mut bool);
+      fn trigger(&mut self, freq: &mut u16, on: &mut bool);
+    }
 
-      pub(super) trait SweepTrait: Sized + Default {
-        fn reset(&mut self);
-        fn calculate_sweep(&mut self, freq: &mut u16, on: &mut bool);
-        fn read(&self) -> u8;
-        fn write(&mut self, val: u8);
-        fn step(&mut self, freq: &mut u16, on: &mut bool);
-        fn trigger(&mut self, freq: &mut u16, on: &mut bool);
+    #[derive(Clone, Copy, Default)]
+    enum SweepDirection {
+      #[default]
+      Add = 0,
+      Sub = 1,
+    }
+
+    impl SweepDirection {
+      const fn from_u8(val: u8) -> Self {
+        if val & 8 == 0 { Self::Add } else { Self::Sub }
       }
 
-      #[derive(Clone, Copy, Default)]
-      enum SweepDirection {
-        #[default]
-        Add = 0,
-        Sub = 1,
+      const fn to_u8(self) -> u8 { (self as u8) << 3 }
+    }
+
+    pub(in crate::apu) struct Sweep {
+      // TODO: check on behaviour
+      on:          bool,
+      dir:         SweepDirection,
+      // 0 is treated as 8
+      period:      NonZeroU8,
+      // shift between 0 and 7
+      shift:       u8,
+      timer:       u8,
+      // Shadow frequency
+      shadow_freq: u16,
+    }
+
+    impl SweepTrait for Sweep {
+      fn reset(&mut self) {
+        self.period = NonZeroU8::new(8).unwrap();
+        self.timer = 0;
+        self.dir = SweepDirection::default();
+        self.shift = 0;
+        self.on = false;
       }
 
-      impl SweepDirection {
-        const fn from_u8(val: u8) -> Self {
-          if val & 8 == 0 { Self::Add } else { Self::Sub }
+      fn calculate_sweep(&mut self, freq: &mut u16, on: &mut bool) {
+        let tmp = self.shadow_freq >> self.shift;
+        self.shadow_freq = match self.dir {
+          SweepDirection::Sub => self.shadow_freq - tmp,
+          SweepDirection::Add => self.shadow_freq + tmp,
+        };
+
+        if self.shadow_freq > 0x7FF {
+          // self.on = false;
+          *on = false;
+          return;
         }
 
-        const fn to_u8(self) -> u8 { (self as u8) << 3 }
+        if self.shift != 0 {
+          *freq = self.shadow_freq & 0x7FF;
+        }
       }
 
-      pub(in crate::apu) struct Sweep {
-        // TODO: check on behaviour
-        on:          bool,
-        dir:         SweepDirection,
-        // 0 is treated as 8
-        period:      NonZeroU8,
-        // shift between 0 and 7
-        shift:       u8,
-        timer:       u8,
-        // Shadow frequency
-        shadow_freq: u16,
+      fn read(&self) -> u8 {
+        // we treat 0 period as 8 so mask it
+        0x80 | ((self.period.get() & 7) << 4) | self.dir.to_u8() | self.shift
       }
 
-      impl SweepTrait for Sweep {
-        fn reset(&mut self) {
-          self.period = NonZeroU8::new(8).unwrap();
+      fn write(&mut self, val: u8) {
+        let period = (val >> 4) & 7;
+        self.period = if period == 0 {
+          NonZeroU8::new(8).unwrap()
+        } else {
+          NonZeroU8::new(period).unwrap()
+        };
+
+        self.dir = SweepDirection::from_u8(val);
+        self.shift = val & 7;
+      }
+
+      fn step(&mut self, freq: &mut u16, on: &mut bool) {
+        self.timer += 1;
+        if self.timer > self.period.get() {
           self.timer = 0;
-          self.dir = SweepDirection::default();
-          self.shift = 0;
-          self.on = false;
-        }
-
-        fn calculate_sweep(&mut self, freq: &mut u16, on: &mut bool) {
-          let tmp = self.shadow_freq >> self.shift;
-          self.shadow_freq = match self.dir {
-            SweepDirection::Sub => self.shadow_freq - tmp,
-            SweepDirection::Add => self.shadow_freq + tmp,
-          };
-
-          if self.shadow_freq > 0x7FF {
-            // self.on = false;
-            *on = false;
-            return;
-          }
-
-          if self.shift != 0 {
-            *freq = self.shadow_freq & 0x7FF;
-          }
-        }
-
-        fn read(&self) -> u8 {
-          // we treat 0 period as 8 so mask it
-          0x80 | ((self.period.get() & 7) << 4) | self.dir.to_u8() | self.shift
-        }
-
-        fn write(&mut self, val: u8) {
-          let period = (val >> 4) & 7;
-          self.period = if period == 0 {
-            NonZeroU8::new(8).unwrap()
-          } else {
-            NonZeroU8::new(period).unwrap()
-          };
-
-          self.dir = SweepDirection::from_u8(val);
-          self.shift = val & 7;
-        }
-
-        fn step(&mut self, freq: &mut u16, on: &mut bool) {
-          self.timer += 1;
-          if self.timer > self.period.get() {
-            self.timer = 0;
-            if self.on {
-              self.calculate_sweep(freq, on);
-            }
-          }
-        }
-
-        fn trigger(&mut self, freq: &mut u16, on: &mut bool) {
-          self.shadow_freq = *freq;
-          self.timer = 0;
-          self.on = self.period.get() != 8 && self.shift != 0;
-
-          if self.shift != 0 {
+          if self.on {
             self.calculate_sweep(freq, on);
           }
         }
       }
 
-      impl Default for Sweep {
-        fn default() -> Self {
-          Self {
-            period:      NonZeroU8::new(8).unwrap(),
-            dir:         SweepDirection::default(),
-            shift:       0,
-            timer:       0,
-            shadow_freq: 0,
-            on:          false,
-          }
+      fn trigger(&mut self, freq: &mut u16, on: &mut bool) {
+        self.shadow_freq = *freq;
+        self.timer = 0;
+        self.on = self.period.get() != 8 && self.shift != 0;
+
+        if self.shift != 0 {
+          self.calculate_sweep(freq, on);
         }
-      }
-
-      #[derive(Default)]
-      pub(super) struct NoSweep;
-
-      impl SweepTrait for NoSweep {
-        fn reset(&mut self) {}
-
-        fn calculate_sweep(&mut self, _: &mut u16, _: &mut bool) {}
-
-        fn read(&self) -> u8 { 0xFF }
-
-        fn write(&mut self, _: u8) {}
-
-        fn step(&mut self, _: &mut u16, _: &mut bool) {}
-
-        fn trigger(&mut self, _: &mut u16, _: &mut bool) {}
       }
     }
 
-    use {super::Envelope, crate::apu::PHalf};
+    impl Default for Sweep {
+      fn default() -> Self {
+        Self {
+          period:      NonZeroU8::new(8).unwrap(),
+          dir:         SweepDirection::default(),
+          shift:       0,
+          timer:       0,
+          shadow_freq: 0,
+          on:          false,
+        }
+      }
+    }
 
-    struct AbstractSquare<Sweep: sweep::SweepTrait> {
+    #[derive(Default)]
+    struct NoSweep;
+
+    impl SweepTrait for NoSweep {
+      fn reset(&mut self) {}
+
+      fn calculate_sweep(&mut self, _: &mut u16, _: &mut bool) {}
+
+      fn read(&self) -> u8 { 0xFF }
+
+      fn write(&mut self, _: u8) {}
+
+      fn step(&mut self, _: &mut u16, _: &mut bool) {}
+
+      fn trigger(&mut self, _: &mut u16, _: &mut bool) {}
+    }
+
+    struct AbstractSquare<Sweep: SweepTrait> {
       ltimer: LengthTimer<64>,
       wvf:    WaveLength<4>,
       env:    Envelope,
@@ -611,11 +612,11 @@ mod channel {
       duty_bit: u8,
     }
 
-    impl<Sweep: sweep::SweepTrait> Default for AbstractSquare<Sweep> {
+    impl<S: SweepTrait> Default for AbstractSquare<S> {
       fn default() -> Self {
         let freq = 0;
         Self {
-          sweep: Sweep::default(),
+          sweep: S::default(),
           freq,
           wvf: WaveLength::new(freq),
           duty: 0,
@@ -629,7 +630,7 @@ mod channel {
       }
     }
 
-    impl<Sw: sweep::SweepTrait> AbstractSquare<Sw> {
+    impl<S: SweepTrait> AbstractSquare<S> {
       fn read0(&self) -> u8 { self.sweep.read() }
 
       const fn read1(&self) -> u8 { 0x3F | (self.duty << 6) }
@@ -746,7 +747,7 @@ mod channel {
 
     #[derive(Default)]
     pub struct Square1 {
-      ab: AbstractSquare<sweep::Sweep>,
+      ab: AbstractSquare<Sweep>,
     }
 
     impl Square1 {
@@ -803,7 +804,7 @@ mod channel {
 
     #[derive(Default)]
     pub struct Square2 {
-      ab: AbstractSquare<sweep::NoSweep>,
+      ab: AbstractSquare<NoSweep>,
     }
 
     impl Square2 {

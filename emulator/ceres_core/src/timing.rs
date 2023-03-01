@@ -43,27 +43,32 @@ impl Gb {
     }
   }
 
+  // only modify clock inside this function
+  fn set_system_clk(&mut self, val: u16) {
+    let old_apu_div =
+      self.system_clk & if self.double_speed { 0x2000 } else { 0x1000 } != 0;
+    let old_bit = self.tac_enable && self.sys_clk_tac_mux();
+
+    self.system_clk = val;
+
+    let new_bit = self.tac_enable && self.sys_clk_tac_mux();
+    let new_apu_div =
+      self.system_clk & if self.double_speed { 0x2000 } else { 0x1000 } != 0;
+
+    // increase TIMA on falling edge of TAC mux
+    if old_bit && !new_bit {
+      self.inc_tima();
+    }
+
+    // advance APU on falling edge of APU_DIV bit
+    if old_apu_div && !new_apu_div {
+      self.apu.step_seq();
+    }
+  }
+
   pub(crate) fn run_timers(&mut self, cycles: i32) {
     for _ in 0..cycles {
-      let old_apu_div =
-        self.system_clk & if self.double_speed { 0x2000 } else { 0x1000 } != 0;
-      let old_bit = self.tac_enable && self.sys_clk_tac_mux();
-
-      self.system_clk = self.system_clk.wrapping_add(1);
-
-      let new_bit = self.tac_enable && self.sys_clk_tac_mux();
-      let new_apu_div =
-        self.system_clk & if self.double_speed { 0x2000 } else { 0x1000 } != 0;
-
-      // increase TIMA on falling edge of TAC mux
-      if old_bit && !new_bit {
-        self.inc_tima();
-      }
-
-      // advance APU on falling edge of APU_DIV bit
-      if old_apu_div && !new_apu_div {
-        self.apu.step_seq();
-      }
+      self.set_system_clk(self.system_clk.wrapping_add(1));
     }
   }
 
@@ -77,7 +82,7 @@ impl Gb {
       self.inc_tima();
     }
 
-    self.system_clk = 0;
+    self.set_system_clk(0);
   }
 
   pub(crate) fn write_tima(&mut self, val: u8) { self.tima = val; }
