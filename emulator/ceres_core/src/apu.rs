@@ -60,6 +60,37 @@ impl Apu {
   pub const fn out(&self) -> (Sample, Sample) { (self.l_out, self.r_out) }
 
   pub fn run(&mut self, cycles: i32) {
+    fn mix_and_render(apu: &mut Apu) -> (Sample, Sample) {
+      let mut l = 0;
+      let mut r = 0;
+
+      for i in 0..4 {
+        let out = match i {
+          0 => apu.ch1.out() * u8::from(apu.ch1.true_on()),
+          1 => apu.ch2.out() * u8::from(apu.ch2.true_on()),
+          2 => apu.ch3.out() * u8::from(apu.ch3.true_on()),
+          3 => apu.ch4.out() * u8::from(apu.ch4.true_on()),
+          _ => break,
+        };
+
+        let right_on = u8::from(apu.nr51 & (1 << i) != 0);
+        let left_on = u8::from(apu.nr51 & (1 << (i + 4)) != 0);
+
+        l += left_on * out;
+        r += right_on * out;
+      }
+
+      // transform to i16 sample
+      let l = (0xF - i16::from(l) * 2) * i16::from(apu.l_vol);
+      let r = (0xF - i16::from(r) * 2) * i16::from(apu.r_vol);
+
+      // amplify
+      let l = l * 32;
+      let r = r * 32;
+
+      (l, r)
+    }
+
     if self.on {
       self.ch1.step_sample(cycles);
       self.ch2.step_sample(cycles);
@@ -72,7 +103,7 @@ impl Apu {
       self.render_timer -= self.ext_sample_period;
 
       if self.on {
-        let (l, r) = self.mix_and_render();
+        let (l, r) = mix_and_render(self);
 
         self.l_out = l;
         self.r_out = r;
@@ -117,50 +148,7 @@ impl Apu {
     self.seq_step = (self.seq_step + 1) & 7;
   }
 
-  fn mix_and_render(&self) -> (Sample, Sample) {
-    let mut l = 0;
-    let mut r = 0;
-
-    for i in 0..4 {
-      let out = match i {
-        0 => self.ch1.out() * u8::from(self.ch1.true_on()),
-        1 => self.ch2.out() * u8::from(self.ch2.true_on()),
-        2 => self.ch3.out() * u8::from(self.ch3.true_on()),
-        3 => self.ch4.out() * u8::from(self.ch4.true_on()),
-        _ => break,
-      };
-
-      let right_on = u8::from(self.nr51 & (1 << i) != 0);
-      let left_on = u8::from(self.nr51 & (1 << (i + 4)) != 0);
-
-      l += left_on * out;
-      r += right_on * out;
-    }
-
-    // transform to i16 sample
-    let l = (0xF - i16::from(l) * 2) * i16::from(self.l_vol);
-    let r = (0xF - i16::from(r) * 2) * i16::from(self.r_vol);
-
-    // amplify
-    let l = l * 32;
-    let r = r * 32;
-
-    (l, r)
-  }
-
-  fn reset(&mut self) {
-    self.render_timer = 0;
-    self.ch1.reset();
-    self.ch2.reset();
-    self.ch3.reset();
-    self.ch4.reset();
-    self.l_vol = 0;
-    self.l_vin = false;
-    self.r_vol = 0;
-    self.r_vin = false;
-    self.nr51 = 0;
-  }
-
+  // IO
   #[must_use]
   pub fn read_nr50(&self) -> u8 {
     self.r_vol
@@ -199,19 +187,29 @@ impl Apu {
 
   pub fn write_nr52(&mut self, val: u8) {
     self.on = val & 0x80 != 0;
+
     if !self.on {
-      self.reset();
+      // reset
+      self.render_timer = 0;
+      self.ch1.reset();
+      self.ch2.reset();
+      self.ch3.reset();
+      self.ch4.reset();
+      self.l_vol = 0;
+      self.l_vin = false;
+      self.r_vol = 0;
+      self.r_vin = false;
+      self.nr51 = 0;
     }
   }
 
-  // IO
   pub const fn on(&self) -> bool { self.on }
 
   pub const fn pcm12(&self) -> u8 { self.ch1.out() | (self.ch1.out() << 4) }
 
   pub fn pcm34(&self) -> u8 { self.ch3.out() | (self.ch4.out() << 4) }
 
-  // Channel 1
+  // Channel 1 IO
   pub fn read_nr10(&self) -> u8 { self.ch1.read_nr10() }
 
   pub const fn read_nr11(&self) -> u8 { self.ch1.read_nr11() }
@@ -230,7 +228,7 @@ impl Apu {
 
   pub fn write_nr14(&mut self, val: u8) { self.ch1.write_nr14(val); }
 
-  // Channel 2
+  // Channel 2 IO
   pub const fn read_nr21(&self) -> u8 { self.ch2.read_nr21() }
 
   pub const fn read_nr22(&self) -> u8 { self.ch2.read_nr22() }
@@ -245,7 +243,7 @@ impl Apu {
 
   pub fn write_nr24(&mut self, val: u8) { self.ch2.write_nr24(val); }
 
-  // Channel 3
+  // Channel 3 IO
   pub const fn read_nr30(&self) -> u8 { self.ch3.read_nr30() }
 
   pub const fn read_nr32(&self) -> u8 { self.ch3.read_nr32() }
@@ -270,7 +268,7 @@ impl Apu {
     self.ch3.write_wave_ram(addr, val);
   }
 
-  // Channel 4
+  // Channel 4 IO
   pub const fn read_nr42(&self) -> u8 { self.ch4.read_nr42() }
 
   pub const fn read_nr43(&self) -> u8 { self.ch4.read_nr43() }
@@ -295,9 +293,7 @@ mod channel {
 
   impl<const PERIOD_MUL: u16> WaveLength<PERIOD_MUL> {
     const fn new(freq: u16) -> Self {
-      Self {
-        period: Self::calc_period(freq),
-      }
+      Self { period: Self::calc_period(freq) }
     }
 
     fn trigger(&mut self, freq: u16) { self.reset(freq); }
@@ -321,27 +317,17 @@ mod channel {
     }
   }
 
-  // TODO: wiki says max is 64 for all
-  struct LengthTimer<const MAX_LEN: u8> {
+  #[derive(Default)]
+  struct LengthTimer<const MAX_LEN: u16> {
     on:     bool,
-    len:    u8,
+    len:    u16,
     p_half: PHalf,
   }
 
-  impl<const MAX_LEN: u8> Default for LengthTimer<MAX_LEN> {
-    fn default() -> Self {
-      Self {
-        on:     false,
-        len:    MAX_LEN,
-        p_half: PHalf::default(),
-      }
-    }
-  }
-
-  impl<const MAX_LEN: u8> LengthTimer<MAX_LEN> {
+  impl<const MAX_LEN: u16> LengthTimer<MAX_LEN> {
     fn reset(&mut self) {
       self.on = false;
-      self.len = MAX_LEN;
+      self.len = 0;
     }
 
     fn read_on(&self) -> u8 { u8::from(self.on) << 6 }
@@ -355,11 +341,13 @@ mod channel {
       }
     }
 
-    fn write_len(&mut self, val: u8) { self.len = val; }
+    fn write_len(&mut self, val: u8) {
+      self.len = MAX_LEN - (u16::from(val) & (MAX_LEN - 1));
+    }
 
     fn trigger(&mut self, on: &mut bool) {
-      if self.len > MAX_LEN {
-        self.len = 0;
+      if self.len == 0 {
+        self.len = MAX_LEN;
         if self.on && self.p_half == PHalf::First {
           self.step(on);
         }
@@ -367,10 +355,10 @@ mod channel {
     }
 
     fn step(&mut self, on: &mut bool) {
-      if self.on && self.len <= MAX_LEN {
-        self.len += 1;
+      if self.on && self.len > 0 {
+        self.len -= 1;
 
-        if self.len > MAX_LEN {
+        if self.len == 0 {
           *on = false;
         }
       }
@@ -527,7 +515,7 @@ mod channel {
           };
 
           if self.shadow_freq > 0x7FF {
-            self.on = false;
+            // self.on = false;
             *on = false;
             return;
           }
@@ -608,11 +596,11 @@ mod channel {
 
     use {super::Envelope, crate::apu::PHalf};
 
-    struct AbstractSquare<Sw: sweep::SweepTrait> {
+    struct AbstractSquare<Sweep: sweep::SweepTrait> {
       ltimer: LengthTimer<64>,
       wvf:    WaveLength<4>,
       env:    Envelope,
-      sweep:  Sw,
+      sweep:  Sweep,
 
       on:     bool,
       dac_on: bool,
@@ -623,11 +611,11 @@ mod channel {
       duty_bit: u8,
     }
 
-    impl<Sw: sweep::SweepTrait> Default for AbstractSquare<Sw> {
+    impl<Sweep: sweep::SweepTrait> Default for AbstractSquare<Sweep> {
       fn default() -> Self {
         let freq = 0;
         Self {
-          sweep: Sw::default(),
+          sweep: Sweep::default(),
           freq,
           wvf: WaveLength::new(freq),
           duty: 0,
@@ -684,9 +672,9 @@ mod channel {
           }
 
           self.out = 0;
-          self.ltimer.trigger(&mut self.on);
           self.wvf.trigger(self.freq);
           self.env.trigger();
+          self.ltimer.trigger(&mut self.on);
           self.sweep.trigger(&mut self.freq, &mut self.on);
         }
       }
@@ -1034,7 +1022,7 @@ mod channel {
     const SAMPLE_LEN: u8 = RAM_LEN * 2;
 
     pub struct Wave {
-      ltimer: LengthTimer<64>,
+      ltimer: LengthTimer<256>,
 
       on:            bool,
       dac_on:        bool,
@@ -1132,9 +1120,7 @@ mod channel {
 
       pub(in crate::apu) fn out(&self) -> u8 {
         // wrapping_shr is necessary because (vol - 1) can be -1
-        self
-          .sample_buffer
-          .wrapping_shr(u32::from(self.vol.wrapping_sub(1)))
+        self.sample_buffer.wrapping_shr(u32::from(self.vol.wrapping_sub(1)))
       }
 
       pub(in crate::apu) fn reset(&mut self) {
