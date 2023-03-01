@@ -104,12 +104,8 @@ impl Apu {
 
       if self.on {
         let (l, r) = mix_and_render(self);
-
         self.l_out = l;
         self.r_out = r;
-      } else {
-        self.l_out = 0;
-        self.r_out = 0;
       }
 
       self.samples_run += 2;
@@ -124,6 +120,11 @@ impl Apu {
       apu.ch4.set_period_half(p_half);
     }
 
+    // TODO: is this ok?
+    if !self.on() {
+      return;
+    }
+
     if self.seq_step & 1 == 0 {
       self.ch1.step_len();
       self.ch2.step_len();
@@ -136,7 +137,7 @@ impl Apu {
     }
 
     match self.seq_step {
-      2 | 6 => self.ch1.step_sweep(),
+      0 | 4 => self.ch1.step_sweep(),
       7 => {
         self.ch1.step_env();
         self.ch2.step_env();
@@ -191,15 +192,18 @@ impl Apu {
     if !self.on {
       // reset
       self.render_timer = 0;
-      self.ch1.reset();
-      self.ch2.reset();
+      self.ch1 = Square1::default();
+      self.ch2 = Square2::default();
       self.ch3.reset();
-      self.ch4.reset();
+      self.ch4 = Noise::default();
       self.l_vol = 0;
       self.l_vin = false;
       self.r_vol = 0;
       self.r_vin = false;
       self.nr51 = 0;
+      self.l_out = 0;
+      self.r_out = 0;
+      self.seq_step = 0;
     }
   }
 
@@ -291,14 +295,12 @@ mod channel {
     period: i32,
   }
 
+  impl<const PERIOD_MUL: u16> Default for WaveLength<PERIOD_MUL> {
+    fn default() -> Self { Self { period: Self::calc_period(0) } }
+  }
+
   impl<const PERIOD_MUL: u16> WaveLength<PERIOD_MUL> {
-    const fn new(freq: u16) -> Self {
-      Self { period: Self::calc_period(freq) }
-    }
-
-    fn trigger(&mut self, freq: u16) { self.reset(freq); }
-
-    fn reset(&mut self, freq: u16) { self.period = Self::calc_period(freq); }
+    fn trigger(&mut self, freq: u16) { self.period = Self::calc_period(freq); }
 
     fn step(&mut self, t_cycles: i32, freq: u16) -> bool {
       self.period -= t_cycles;
@@ -325,11 +327,6 @@ mod channel {
   }
 
   impl<const MAX_LEN: u16> LengthTimer<MAX_LEN> {
-    fn reset(&mut self) {
-      self.on = false;
-      self.len = 0;
-    }
-
     fn read_on(&self) -> u8 { u8::from(self.on) << 6 }
 
     fn write_on(&mut self, val: u8, on: &mut bool) {
@@ -466,8 +463,6 @@ mod channel {
     };
 
     pub(super) trait SweepTrait: Sized + Default {
-      fn reset(&mut self);
-      fn calculate_sweep(&mut self, freq: &mut u16, on: &mut bool);
       fn read(&self) -> u8;
       fn write(&mut self, val: u8);
       fn step(&mut self, freq: &mut u16, on: &mut bool);
@@ -491,75 +486,67 @@ mod channel {
 
     pub(in crate::apu) struct Sweep {
       // TODO: check on behaviour
-      on:          bool,
-      dir:         SweepDirection,
+      on:    bool,
+      dir:   SweepDirection,
       // 0 is treated as 8
-      period:      NonZeroU8,
+      pace:  NonZeroU8,
       // shift between 0 and 7
-      shift:       u8,
-      timer:       u8,
+      shift: u8,
+      timer: u8,
       // Shadow frequency
-      shadow_freq: u16,
+      shwf:  u16,
     }
 
-    impl SweepTrait for Sweep {
-      fn reset(&mut self) {
-        self.period = NonZeroU8::new(8).unwrap();
-        self.timer = 0;
-        self.dir = SweepDirection::default();
-        self.shift = 0;
-        self.on = false;
-      }
-
+    impl Sweep {
       fn calculate_sweep(&mut self, freq: &mut u16, on: &mut bool) {
-        let tmp = self.shadow_freq >> self.shift;
-        self.shadow_freq = match self.dir {
-          SweepDirection::Sub => self.shadow_freq - tmp,
-          SweepDirection::Add => self.shadow_freq + tmp,
-        };
+        {
+          let t = self.shwf >> self.shift;
+          self.shwf = match self.dir {
+            SweepDirection::Sub => self.shwf - t,
+            SweepDirection::Add => self.shwf + t,
+          };
+        }
 
-        if self.shadow_freq > 0x7FF {
-          // self.on = false;
+        if self.shwf > 0x7FF {
           *on = false;
           return;
         }
 
         if self.shift != 0 {
-          *freq = self.shadow_freq & 0x7FF;
+          *freq = self.shwf & 0x7FF;
         }
       }
+    }
 
+    impl SweepTrait for Sweep {
       fn read(&self) -> u8 {
-        // we treat 0 period as 8 so mask it
-        0x80 | ((self.period.get() & 7) << 4) | self.dir.to_u8() | self.shift
+        // we treat 0 pace as 8 so mask it
+        0x80 | ((self.pace.get() & 7) << 4) | self.dir.to_u8() | self.shift
       }
 
       fn write(&mut self, val: u8) {
-        let period = (val >> 4) & 7;
-        self.period = if period == 0 {
-          NonZeroU8::new(8).unwrap()
-        } else {
-          NonZeroU8::new(period).unwrap()
-        };
-
+        let p = (val >> 4) & 7;
+        self.pace = NonZeroU8::new(if p == 0 { 8 } else { p }).unwrap();
         self.dir = SweepDirection::from_u8(val);
         self.shift = val & 7;
       }
 
       fn step(&mut self, freq: &mut u16, on: &mut bool) {
+        if !self.on {
+          return;
+        }
+
         self.timer += 1;
-        if self.timer > self.period.get() {
+        if self.timer > self.pace.get() {
           self.timer = 0;
-          if self.on {
-            self.calculate_sweep(freq, on);
-          }
+          self.calculate_sweep(freq, on);
         }
       }
 
       fn trigger(&mut self, freq: &mut u16, on: &mut bool) {
-        self.shadow_freq = *freq;
+        self.shwf = *freq;
         self.timer = 0;
-        self.on = self.period.get() != 8 && self.shift != 0;
+        self.on = self.pace.get() != 8 && self.shift != 0;
 
         if self.shift != 0 {
           self.calculate_sweep(freq, on);
@@ -570,12 +557,12 @@ mod channel {
     impl Default for Sweep {
       fn default() -> Self {
         Self {
-          period:      NonZeroU8::new(8).unwrap(),
-          dir:         SweepDirection::default(),
-          shift:       0,
-          timer:       0,
-          shadow_freq: 0,
-          on:          false,
+          pace:  NonZeroU8::new(8).unwrap(),
+          dir:   SweepDirection::default(),
+          shift: 0,
+          timer: 0,
+          shwf:  0,
+          on:    false,
         }
       }
     }
@@ -584,10 +571,6 @@ mod channel {
     struct NoSweep;
 
     impl SweepTrait for NoSweep {
-      fn reset(&mut self) {}
-
-      fn calculate_sweep(&mut self, _: &mut u16, _: &mut bool) {}
-
       fn read(&self) -> u8 { 0xFF }
 
       fn write(&mut self, _: u8) {}
@@ -599,7 +582,7 @@ mod channel {
 
     struct AbstractSquare<Sweep: SweepTrait> {
       ltimer: LengthTimer<64>,
-      wvf:    WaveLength<4>,
+      wl:     WaveLength<4>,
       env:    Envelope,
       sweep:  Sweep,
 
@@ -614,18 +597,17 @@ mod channel {
 
     impl<S: SweepTrait> Default for AbstractSquare<S> {
       fn default() -> Self {
-        let freq = 0;
         Self {
-          sweep: S::default(),
-          freq,
-          wvf: WaveLength::new(freq),
-          duty: 0,
+          sweep:    S::default(),
+          freq:     0,
+          wl:       WaveLength::default(),
+          duty:     0,
           duty_bit: 0,
-          on: false,
-          dac_on: true,
-          ltimer: LengthTimer::default(),
-          env: Envelope::default(),
-          out: 0,
+          on:       false,
+          dac_on:   true,
+          ltimer:   LengthTimer::default(),
+          env:      Envelope::default(),
+          out:      0,
         }
       }
     }
@@ -662,7 +644,7 @@ mod channel {
       }
 
       fn write4(&mut self, val: u8) {
-        self.freq = ((u16::from(val) & 7) << 8) | (self.freq & 0xFF);
+        self.freq = (u16::from(val & 7) << 8) | (self.freq & 0xFF);
 
         self.ltimer.write_on(val, &mut self.on);
 
@@ -673,24 +655,11 @@ mod channel {
           }
 
           self.out = 0;
-          self.wvf.trigger(self.freq);
+          self.wl.trigger(self.freq);
           self.env.trigger();
           self.ltimer.trigger(&mut self.on);
           self.sweep.trigger(&mut self.freq, &mut self.on);
         }
-      }
-
-      fn reset(&mut self) {
-        self.on = false;
-        self.dac_on = true;
-        self.ltimer.reset();
-        self.freq = 0;
-        self.duty = 0;
-        self.duty_bit = 0;
-        self.env = Envelope::default();
-        self.sweep.reset();
-        self.wvf.reset(self.freq);
-        self.out = 0;
       }
 
       fn step_sample(&mut self, cycles: i32) {
@@ -706,11 +675,7 @@ mod channel {
           0b0111_1110,
         ];
 
-        if !self.on {
-          return;
-        }
-
-        if self.wvf.step(cycles, self.freq) {
+        if self.wl.step(cycles, self.freq) {
           self.duty_bit = (self.duty_bit + 1) & 7;
           self.out = u8::from(
             (DUTY_WAV[self.duty as usize] & (1 << self.duty_bit)) != 0,
@@ -725,11 +690,9 @@ mod channel {
       }
 
       fn step_env(&mut self) {
-        if !(self.env.on() && self.on) {
-          return;
+        if self.env.on() && self.on {
+          self.env.step();
         }
-
-        self.env.step();
       }
 
       const fn out(&self) -> u8 { self.out * self.env.vol() }
@@ -781,8 +744,6 @@ mod channel {
 
       pub(in crate::apu) const fn out(&self) -> u8 { self.ab.out() }
 
-      pub(in crate::apu) fn reset(&mut self) { self.ab.reset(); }
-
       pub(in crate::apu) fn step_sample(&mut self, cycles: i32) {
         self.ab.step_sample(cycles);
       }
@@ -832,8 +793,6 @@ mod channel {
 
       pub(in crate::apu) const fn out(&self) -> u8 { self.ab.out() }
 
-      pub(in crate::apu) fn reset(&mut self) { self.ab.reset(); }
-
       pub(in crate::apu) fn step_sample(&mut self, cycles: i32) {
         self.ab.step_sample(cycles);
       }
@@ -866,6 +825,7 @@ mod channel {
       dac_on:       bool,
       timer:        i32,
       timer_period: u16,
+      // linear feedback shift register
       lfsr:         u16,
       wide_step:    bool,
       out:          u8,
@@ -954,20 +914,6 @@ mod channel {
         self.out * self.env.vol()
       }
 
-      pub(in crate::apu) fn reset(&mut self) {
-        self.on = false;
-        self.dac_on = true;
-        self.ltimer.reset();
-        self.env = Envelope::default();
-        self.timer_period = 0;
-        self.timer = 1;
-        // linear feedback shift register
-        self.lfsr = 0x7FFF;
-        self.wide_step = false;
-        self.out = 0;
-        self.nr43 = 0;
-      }
-
       pub(in crate::apu) fn step_env(&mut self) {
         if !(self.env.on() && self.on && self.dac_on) {
           return;
@@ -1025,33 +971,32 @@ mod channel {
     pub struct Wave {
       ltimer: LengthTimer<256>,
 
-      on:            bool,
-      dac_on:        bool,
-      freq:          u16, // 11 bit frequency data
-      wvf:           WaveLength<2>,
-      sample_buffer: u8,
-      ram:           [u8; RAM_LEN as usize],
-      samples:       [u8; SAMPLE_LEN as usize],
-      sample_idx:    u8,
-      vol:           u8,
-      nr30:          u8,
+      on:         bool,
+      dac_on:     bool,
+      freq:       u16, // 11 bit frequency data
+      wl:         WaveLength<2>,
+      sample_buf: u8,
+      ram:        [u8; RAM_LEN as usize],
+      samples:    [u8; SAMPLE_LEN as usize],
+      sample_idx: u8,
+      vol:        u8,
+      nr30:       u8,
     }
 
     impl Default for Wave {
       fn default() -> Self {
-        let freq = 0;
         Self {
-          ram: [0; RAM_LEN as usize],
-          vol: 0,
-          on: false,
-          dac_on: true,
-          ltimer: LengthTimer::default(),
-          freq,
-          sample_buffer: 0,
-          samples: [0; SAMPLE_LEN as usize],
+          ram:        [0; RAM_LEN as usize],
+          vol:        0,
+          on:         false,
+          dac_on:     true,
+          ltimer:     LengthTimer::default(),
+          freq:       0,
+          sample_buf: 0,
+          samples:    [0; SAMPLE_LEN as usize],
           sample_idx: 0,
-          nr30: 0,
-          wvf: WaveLength::new(freq),
+          nr30:       0,
+          wl:         WaveLength::default(),
         }
       }
     }
@@ -1114,26 +1059,14 @@ mod channel {
           }
 
           self.ltimer.trigger(&mut self.on);
-          self.wvf.trigger(self.freq);
+          self.wl.trigger(self.freq);
           self.sample_idx = 0;
         }
       }
 
       pub(in crate::apu) fn out(&self) -> u8 {
         // wrapping_shr is necessary because (vol - 1) can be -1
-        self.sample_buffer.wrapping_shr(u32::from(self.vol.wrapping_sub(1)))
-      }
-
-      pub(in crate::apu) fn reset(&mut self) {
-        self.on = false;
-        self.dac_on = true;
-        self.ltimer.reset();
-        self.freq = 0;
-        self.vol = 0;
-        self.sample_idx = 0;
-        self.wvf.reset(self.freq);
-        self.sample_buffer = 0;
-        self.nr30 = 0;
+        self.sample_buf.wrapping_shr(u32::from(self.vol.wrapping_sub(1)))
       }
 
       pub(in crate::apu) fn step_sample(&mut self, cycles: i32) {
@@ -1141,9 +1074,9 @@ mod channel {
           return;
         }
 
-        if self.wvf.step(cycles, self.freq) {
+        if self.wl.step(cycles, self.freq) {
           self.sample_idx = (self.sample_idx + 1) % SAMPLE_LEN;
-          self.sample_buffer = self.samples[self.sample_idx as usize];
+          self.sample_buf = self.samples[self.sample_idx as usize];
         }
       }
 
@@ -1157,6 +1090,19 @@ mod channel {
 
       pub(in crate::apu) fn set_period_half(&mut self, p_half: PHalf) {
         self.ltimer.set_phalf(p_half);
+      }
+
+      pub(in crate::apu) fn reset(&mut self) {
+        self.vol = 0;
+        self.on = false;
+        self.dac_on = true;
+        self.ltimer = LengthTimer::default();
+        self.freq = 0;
+        self.sample_buf = 0;
+        self.samples = [0; SAMPLE_LEN as usize];
+        self.sample_idx = 0;
+        self.nr30 = 0;
+        self.wl = WaveLength::default();
       }
 
       pub(in crate::apu) const fn on(&self) -> bool { self.on }
