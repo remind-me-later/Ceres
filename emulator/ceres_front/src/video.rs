@@ -43,7 +43,11 @@ pub struct State {
 
 impl State {
   #[allow(clippy::too_many_lines)]
-  pub async fn new(window: winit::window::Window, width: u32, height: u32) -> anyhow::Result<Self> {
+  pub async fn new(
+    window: winit::window::Window,
+    width: u32,
+    height: u32,
+  ) -> anyhow::Result<Self> {
     use {anyhow::Context, wgpu::util::DeviceExt};
 
     let size = window.inner_size();
@@ -101,14 +105,18 @@ impl State {
             ty:         wgpu::BindingType::Texture {
               multisampled:   false,
               view_dimension: wgpu::TextureViewDimension::D2,
-              sample_type:    wgpu::TextureSampleType::Float { filterable: false },
+              sample_type:    wgpu::TextureSampleType::Float {
+                filterable: false,
+              },
             },
             count:      None,
           },
           wgpu::BindGroupLayoutEntry {
             binding:    1,
             visibility: wgpu::ShaderStages::FRAGMENT,
-            ty:         wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
+            ty:         wgpu::BindingType::Sampler(
+              wgpu::SamplerBindingType::NonFiltering,
+            ),
             count:      None,
           },
         ],
@@ -117,79 +125,72 @@ impl State {
 
     let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
 
-    let diffuse_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-      layout:  &texture_bind_group_layout,
-      entries: &[
-        wgpu::BindGroupEntry {
-          binding:  0,
-          resource: wgpu::BindingResource::TextureView(&texture.view),
+    let diffuse_bind_group =
+      device.create_bind_group(&wgpu::BindGroupDescriptor {
+        layout:  &texture_bind_group_layout,
+        entries: &[
+          wgpu::BindGroupEntry {
+            binding:  0,
+            resource: wgpu::BindingResource::TextureView(&texture.view),
+          },
+          wgpu::BindGroupEntry {
+            binding:  1,
+            resource: wgpu::BindingResource::Sampler(&sampler),
+          },
+        ],
+        label:   Some("diffuse_bind_group"),
+      });
+
+    let shader =
+      device.create_shader_module(wgpu::include_spirv!("../shader/near.spv"));
+
+    let render_pipeline_layout =
+      device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label:                Some("Render Pipeline Layout"),
+        bind_group_layouts:   &[&texture_bind_group_layout],
+        push_constant_ranges: &[],
+      });
+
+    let render_pipeline =
+      device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label:         Some("Render Pipeline"),
+        layout:        Some(&render_pipeline_layout),
+        vertex:        wgpu::VertexState {
+          module:      &shader,
+          entry_point: "vs_main",
+          buffers:     &[Vertex::desc()],
         },
-        wgpu::BindGroupEntry {
-          binding:  1,
-          resource: wgpu::BindingResource::Sampler(&sampler),
+        fragment:      Some(wgpu::FragmentState {
+          module:      &shader,
+          entry_point: "fs_main",
+          targets:     &[Some(wgpu::ColorTargetState {
+            format:     config.format,
+            blend:      Some(wgpu::BlendState::REPLACE),
+            write_mask: wgpu::ColorWrites::ALL,
+          })],
+        }),
+        primitive:     wgpu::PrimitiveState {
+          topology: wgpu::PrimitiveTopology::TriangleStrip,
+          ..Default::default()
         },
-      ],
-      label:   Some("diffuse_bind_group"),
-    });
-
-    let shader = device.create_shader_module(wgpu::include_spirv!("../shader/near.spv"));
-
-    let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-      label:                Some("Render Pipeline Layout"),
-      bind_group_layouts:   &[&texture_bind_group_layout],
-      push_constant_ranges: &[],
-    });
-
-    let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-      label:         Some("Render Pipeline"),
-      layout:        Some(&render_pipeline_layout),
-      vertex:        wgpu::VertexState {
-        module:      &shader,
-        entry_point: "vs_main",
-        buffers:     &[Vertex::desc()],
-      },
-      fragment:      Some(wgpu::FragmentState {
-        module:      &shader,
-        entry_point: "fs_main",
-        targets:     &[Some(wgpu::ColorTargetState {
-          format:     config.format,
-          blend:      Some(wgpu::BlendState::REPLACE),
-          write_mask: wgpu::ColorWrites::ALL,
-        })],
-      }),
-      primitive:     wgpu::PrimitiveState {
-        topology: wgpu::PrimitiveTopology::TriangleStrip,
-        ..Default::default()
-      },
-      depth_stencil: None,
-      multisample:   wgpu::MultisampleState::default(),
-      multiview:     None,
-    });
+        depth_stencil: None,
+        multisample:   wgpu::MultisampleState::default(),
+        multiview:     None,
+      });
 
     let vertices: &[Vertex] = &[
-      Vertex {
-        position:   [1.0, 1.0],
-        tex_coords: [1.0, 1.0],
-      },
-      Vertex {
-        position:   [-1.0, 1.0],
-        tex_coords: [0.0, 1.0],
-      },
-      Vertex {
-        position:   [1.0, -1.0],
-        tex_coords: [1.0, 0.0],
-      },
-      Vertex {
-        position:   [-1.0, -1.0],
-        tex_coords: [0.0, 0.0],
-      },
+      Vertex { position: [1.0, 1.0], tex_coords: [1.0, 1.0] },
+      Vertex { position: [-1.0, 1.0], tex_coords: [0.0, 1.0] },
+      Vertex { position: [1.0, -1.0], tex_coords: [1.0, 0.0] },
+      Vertex { position: [-1.0, -1.0], tex_coords: [0.0, 0.0] },
     ];
 
-    let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-      label:    Some("Vertex Buffer"),
-      contents: bytemuck::cast_slice(vertices),
-      usage:    wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-    });
+    let vertex_buffer =
+      device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label:    Some("Vertex Buffer"),
+        contents: bytemuck::cast_slice(vertices),
+        usage:    wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+      });
 
     Ok(Self {
       surface,
@@ -205,9 +206,7 @@ impl State {
     })
   }
 
-  pub const fn window(&self) -> &winit::window::Window {
-    &self.window
-  }
+  pub const fn window(&self) -> &winit::window::Window { &self.window }
 
   pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
     if new_size.width > 0 && new_size.height > 0 {
@@ -224,27 +223,17 @@ impl State {
       };
 
       let vertices = &[
-        Vertex {
-          position:   [x, y],
-          tex_coords: [1.0, 1.0],
-        },
-        Vertex {
-          position:   [-x, y],
-          tex_coords: [0.0, 1.0],
-        },
-        Vertex {
-          position:   [x, -y],
-          tex_coords: [1.0, 0.0],
-        },
-        Vertex {
-          position:   [-x, -y],
-          tex_coords: [0.0, 0.0],
-        },
+        Vertex { position: [x, y], tex_coords: [1.0, 1.0] },
+        Vertex { position: [-x, y], tex_coords: [0.0, 1.0] },
+        Vertex { position: [x, -y], tex_coords: [1.0, 0.0] },
+        Vertex { position: [-x, -y], tex_coords: [0.0, 0.0] },
       ];
 
-      self
-        .queue
-        .write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(vertices));
+      self.queue.write_buffer(
+        &self.vertex_buffer,
+        0,
+        bytemuck::cast_slice(vertices),
+      );
 
       self.size = new_size;
       self.config.width = new_size.width;
@@ -253,9 +242,7 @@ impl State {
     }
   }
 
-  pub fn on_lost(&mut self) {
-    self.resize(self.size);
-  }
+  pub fn on_lost(&mut self) { self.resize(self.size); }
 
   pub fn update(&mut self, rgba: &[u8]) {
     self.texture.update(&self.queue, rgba);
@@ -263,29 +250,28 @@ impl State {
 
   pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
     let output = self.surface.get_current_texture()?;
-    let view = output
-      .texture
-      .create_view(&wgpu::TextureViewDescriptor::default());
+    let view =
+      output.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-    let mut encoder = self
-      .device
-      .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+    let mut encoder =
+      self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Render Encoder"),
       });
 
     {
-      let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label:                    Some("Render Pass"),
-        color_attachments:        &[Some(wgpu::RenderPassColorAttachment {
-          view:           &view,
-          resolve_target: None,
-          ops:            wgpu::Operations {
-            load:  wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-            store: true,
-          },
-        })],
-        depth_stencil_attachment: None,
-      });
+      let mut render_pass =
+        encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+          label:                    Some("Render Pass"),
+          color_attachments:        &[Some(wgpu::RenderPassColorAttachment {
+            view:           &view,
+            resolve_target: None,
+            ops:            wgpu::Operations {
+              load:  wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+              store: true,
+            },
+          })],
+          depth_stencil_attachment: None,
+        });
 
       render_pass.set_pipeline(&self.render_pipeline);
       render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
@@ -306,12 +292,13 @@ struct Texture {
 }
 
 impl Texture {
-  fn new(device: &wgpu::Device, width: u32, height: u32, label: Option<&str>) -> Self {
-    let size = wgpu::Extent3d {
-      width,
-      height,
-      depth_or_array_layers: 1,
-    };
+  fn new(
+    device: &wgpu::Device,
+    width: u32,
+    height: u32,
+    label: Option<&str>,
+  ) -> Self {
+    let size = wgpu::Extent3d { width, height, depth_or_array_layers: 1 };
     let format = wgpu::TextureFormat::Bgra8Unorm;
     let texture = device.create_texture(&wgpu::TextureDescriptor {
       label,
@@ -320,7 +307,8 @@ impl Texture {
       sample_count: 1,
       dimension: wgpu::TextureDimension::D2,
       format,
-      usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+      usage: wgpu::TextureUsages::TEXTURE_BINDING
+        | wgpu::TextureUsages::COPY_DST,
       view_formats: &[],
     });
 

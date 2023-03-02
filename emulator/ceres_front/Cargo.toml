@@ -10,9 +10,9 @@ ceres_core = { path = "../ceres_core" }
 clap = { version = "*", default-features = false, features = ["std", "help"] }
 cpal = { version = "*", default-features = false }
 parking_lot = { version = "*", default-features = false }
-anyhow = { version = "*" }
+anyhow = { version = "*", default-features = false, features = ["std"] }
 wgpu = { version = "*", default-features = false, features = ["spirv"] }
 # TODO: wait for better wayland decoration support
 winit = { version = "*", default-features = false, features = ["x11"] }
 pollster = { version = "*", default-features = false }
-bytemuck = { version = "*", features = ["derive"] }
+bytemuck = { version = "*", default-features = false, features = ["derive"] }

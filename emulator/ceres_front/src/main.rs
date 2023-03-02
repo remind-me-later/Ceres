@@ -55,7 +55,8 @@
     // TODO: Weird warning on bytemuck derive
     clippy::extra_unused_type_parameters,
     clippy::missing_errors_doc,
-    clippy::missing_panics_doc
+    clippy::missing_panics_doc,
+    clippy::similar_names
 )]
 
 use {
@@ -63,9 +64,9 @@ use {
   clap::{builder::PossibleValuesParser, Arg, Command},
   core::time::Duration,
   std::{
+    fs,
     fs::File,
     io::Write,
-    os::unix::prelude::FileExt,
     path::{Path, PathBuf},
     sync::Arc,
   },
@@ -141,24 +142,22 @@ pub async fn run(
 ) -> anyhow::Result<()> {
   use anyhow::Context;
 
-  let (gb, sav_path) = unsafe {
-    fn read_file(path: &Path, buf: &mut [u8]) -> Result<(), std::io::Error> {
-      let file = File::open(path)?;
-      file.read_at(buf, 0)?;
-
-      Ok(())
+  let (gb, sav_path) = {
+    fn read_file(path: &Path) -> Result<Vec<u8>, std::io::Error> {
+      fs::read(path)
     }
 
-    read_file(&path, ceres_core::Cartridge::mut_rom()).with_context(|| {
+    let rom = read_file(&path).with_context(|| {
       format!(
         "couldn't open rom file in path: '{}'",
         path.to_str().unwrap_or("couldn't get path string")
       )
     })?;
     path.set_extension("sav");
-    read_file(&path, ceres_core::Cartridge::mut_ram()).ok();
+    let ram = read_file(&path).ok();
 
-    let cart = ceres_core::Cartridge::new().context("invalid cartridge")?;
+    let cart =
+      ceres_core::Cartridge::new(rom, ram).context("invalid cartridge")?;
 
     let gb = {
       let sample_rate = audio::Renderer::sample_rate();
@@ -196,10 +195,7 @@ pub async fn run(
       .await
       .context("couldn't initialize wgpu")?;
 
-    video.resize(PhysicalSize {
-      width:  INIT_WIDTH,
-      height: INIT_HEIGHT,
-    });
+    video.resize(PhysicalSize { width: INIT_WIDTH, height: INIT_HEIGHT });
 
     video
   };
@@ -219,9 +215,8 @@ pub async fn run(
         let mut gb = gb.lock();
 
         if let Some(save_data) = gb.cartridge().save_data() {
-          let mut f = File::create(sav_path.clone())
-            .map_err(|e| e.to_string())
-            .unwrap();
+          let mut f =
+            File::create(sav_path.clone()).map_err(|e| e.to_string()).unwrap();
           f.write_all(save_data).map_err(|e| e.to_string()).unwrap();
         }
       }

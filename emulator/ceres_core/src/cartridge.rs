@@ -1,4 +1,5 @@
 use {
+  alloc::{boxed::Box, vec::Vec},
   core::{fmt::Display, num::NonZeroU8},
   Mbc::{Mbc0, Mbc1, Mbc2, Mbc3, Mbc5},
 };
@@ -32,28 +33,11 @@ impl Mbc {
 
     let res = match mbc_byte {
       0x00 => (Mbc0, false),
-      0x01 | 0x02 => (
-        Mbc1 {
-          multicart,
-          bank_mode,
-        },
-        false,
-      ),
-      0x03 => (
-        Mbc1 {
-          multicart,
-          bank_mode,
-        },
-        true,
-      ),
+      0x01 | 0x02 => (Mbc1 { multicart, bank_mode }, false),
+      0x03 => (Mbc1 { multicart, bank_mode }, true),
       0x05 => (Mbc2, false),
       0x06 => (Mbc2, true),
-      0x0F | 0x10 => (
-        Mbc3 {
-          rtc: Some(Mbc3RTC::default()),
-        },
-        true,
-      ),
+      0x0F | 0x10 => (Mbc3 { rtc: Some(Mbc3RTC::default()) }, true),
       0x11 | 0x12 => (Mbc3 { rtc: None }, false),
       0x13 => (Mbc3 { rtc: None }, true),
       0x19 | 0x1A | 0x1C | 0x1D => (Mbc5, false),
@@ -94,14 +78,11 @@ impl Display for Error {
 
 impl core::error::Error for Error {}
 
-static mut ONE_ROM: [u8; ROMSize::MAX] = [0; ROMSize::MAX];
-static mut ONE_RAM: [u8; RAMSize::MAX] = [0; RAMSize::MAX];
-
 pub struct Cartridge {
   mbc: Mbc,
 
-  rom: &'static mut [u8],
-  ram: &'static mut [u8],
+  rom: Box<[u8]>,
+  ram: Box<[u8]>,
 
   rom_bank_lo:   u8,
   rom_bank_hi:   u8,
@@ -119,17 +100,30 @@ pub struct Cartridge {
 }
 
 impl Cartridge {
-  pub unsafe fn new() -> Result<Self, Error> {
-    let rom_size = ROMSize::new(&ONE_ROM)?;
-    let ram_size = RAMSize::new(&ONE_ROM)?;
+  pub fn new(mut rom: Vec<u8>, ram: Option<Vec<u8>>) -> Result<Self, Error> {
+    let rom_size = ROMSize::new(&rom)?;
+    let ram_size = RAMSize::new(&rom)?;
     let rom_bank_mask = rom_size.bank_bit_mask();
     let has_ram = ram_size != RAMSize::NoRAM;
-    let (mbc, has_battery) = Mbc::mbc_and_battery(ONE_ROM[0x147], rom_size)?;
+    let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], rom_size)?;
+
+    rom.truncate(rom_size.size_bytes());
+    let rom = rom.into_boxed_slice();
+
+    let ram = ram
+      .map_or_else(
+        || alloc::vec![0; ram_size.size_bytes()],
+        |mut r| {
+          r.truncate(ram_size.size_bytes());
+          r
+        },
+      )
+      .into_boxed_slice();
 
     Ok(Self {
       mbc,
-      rom: &mut ONE_ROM[0..rom_size.size_bytes()],
-      ram: &mut ONE_RAM[0..ram_size.size_bytes()],
+      rom,
+      ram,
       rom_bank_lo: 1,
       rom_bank_hi: 0,
       rom_offsets: (0x0000, 0x4000),
@@ -141,10 +135,6 @@ impl Cartridge {
       has_ram,
     })
   }
-
-  pub unsafe fn mut_ram() -> &'static mut [u8] { &mut ONE_RAM }
-
-  pub unsafe fn mut_rom() -> &'static mut [u8] { &mut ONE_ROM }
 
   #[must_use]
   pub fn save_data(&mut self) -> Option<&[u8]> {
@@ -216,10 +206,7 @@ impl Cartridge {
   pub(crate) fn write_rom(&mut self, addr: u16, val: u8) {
     match &mut self.mbc {
       Mbc0 => (),
-      Mbc1 {
-        multicart,
-        bank_mode,
-      } => {
+      Mbc1 { multicart, bank_mode } => {
         const fn mbc1_rom_offsets(
           cart: &Cartridge,
           multicart: bool,
@@ -238,11 +225,7 @@ impl Cartridge {
         }
 
         const fn mbc1_ram_offset(cart: &Cartridge, bank_mode: bool) -> usize {
-          let bank = if bank_mode {
-            cart.rom_bank_hi as usize
-          } else {
-            0
-          };
+          let bank = if bank_mode { cart.rom_bank_hi as usize } else { 0 };
 
           RAM_BANK_SIZE * bank
         }
@@ -391,8 +374,6 @@ enum ROMSize {
 }
 
 impl ROMSize {
-  const MAX: usize = Self::Mb8.size_bytes();
-
   const fn new(rom: &[u8]) -> Result<Self, Error> {
     use ROMSize::{Kb128, Kb256, Kb32, Kb512, Kb64, Mb1, Mb2, Mb4, Mb8};
     let rom_size_byte = rom[0x148];
@@ -431,8 +412,6 @@ enum RAMSize {
 }
 
 impl RAMSize {
-  const MAX: usize = Self::Kb128.size_bytes();
-
   const fn new(rom: &[u8]) -> Result<Self, Error> {
     use RAMSize::{Kb128, Kb2, Kb32, Kb64, Kb8, NoRAM};
     let ram_size_byte = rom[0x149];

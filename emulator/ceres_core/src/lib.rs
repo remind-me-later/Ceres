@@ -1,5 +1,5 @@
 #![no_std]
-// #![forbid(unsafe_code)]
+#![forbid(unsafe_code)]
 #![warn(
   clippy::pedantic,
   clippy::nursery,
@@ -59,6 +59,8 @@
   clippy::similar_names
 )]
 #![feature(error_in_core, negative_impls)]
+
+extern crate alloc;
 
 use {
   apu::Apu,
