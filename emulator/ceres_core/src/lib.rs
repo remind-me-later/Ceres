@@ -11,7 +11,7 @@
   clippy::decimal_literal_representation,
   clippy::default_union_representation,
   clippy::deref_by_slicing,
-  clippy::else_if_without_else,
+  // clippy::else_if_without_else,
   clippy::empty_drop,
   clippy::empty_structs_with_brackets,
   clippy::exit,
