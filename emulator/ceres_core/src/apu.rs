@@ -325,10 +325,10 @@ impl<const MAX_LEN: u16> LengthTimer<MAX_LEN> {
   fn read_on(&self) -> u8 { u8::from(self.on) << 6 }
 
   fn write_on(&mut self, val: u8, on: &mut bool) {
-    let old_len = self.on;
+    let was_off = !self.on;
     self.on = val & 0x40 != 0;
 
-    if self.on && !old_len && self.p_half == PHalf::First {
+    if was_off && self.p_half == PHalf::First {
       self.step(on);
     }
   }
@@ -340,18 +340,18 @@ impl<const MAX_LEN: u16> LengthTimer<MAX_LEN> {
   fn trigger(&mut self, on: &mut bool) {
     if self.len == 0 {
       self.len = MAX_LEN;
-      if self.on && self.p_half == PHalf::First {
+      if self.p_half == PHalf::First {
         self.step(on);
       }
     }
   }
 
   fn step(&mut self, on: &mut bool) {
-    if self.on && self.len > 0 {
-      self.len -= 1;
-
+    if self.on {
       if self.len == 0 {
         *on = false;
+      } else {
+        self.len -= 1;
       }
     }
   }
@@ -1055,7 +1055,7 @@ pub mod wave {
     pub(in crate::apu) fn reset(&mut self) {
       self.vol = 0;
       self.on = false;
-      self.dac_on = true;
+      self.dac_on = false;
       self.ltimer = LengthTimer::default();
       self.freq = 0;
       self.sample_buf = 0;
