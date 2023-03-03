@@ -160,17 +160,13 @@ impl Cartridge {
   }
 
   #[must_use]
-  pub(crate) const fn read_rom(&self, addr: u16) -> u8 {
+  pub(crate) fn read_rom(&self, addr: u16) -> u8 {
+    let (rom_lower, rom_upper) = self.rom_offsets;
+
     let bank_addr = match addr {
-      0x0000..=0x3FFF => {
-        let (rom_lower, _) = self.rom_offsets;
-        rom_lower | (addr as usize & 0x3FFF)
-      }
-      0x4000..=0x7FFF => {
-        let (_, rom_upper) = self.rom_offsets;
-        rom_upper | (addr as usize & 0x3FFF)
-      }
-      _ => 0,
+      0x0000..=0x3FFF => rom_lower | (addr as usize & 0x3FFF),
+      0x4000..=0x7FFF => rom_upper | (addr as usize & 0x3FFF),
+      _ => unreachable!(),
     };
 
     self.rom[bank_addr]
@@ -218,8 +214,13 @@ impl Cartridge {
             (cart.rom_bank_hi << 5, cart.rom_bank_lo)
           };
 
-          let lower_bank = if bank_mode { upper_bits as usize } else { 0 };
-          let upper_bank = (upper_bits | lower_bits) as usize;
+          let lower_bank = if bank_mode {
+            upper_bits as usize & cart.rom_bank_mask
+          } else {
+            0
+          };
+          let upper_bank =
+            (upper_bits | lower_bits) as usize & cart.rom_bank_mask;
 
           (ROM_BANK_SIZE * lower_bank, ROM_BANK_SIZE * upper_bank)
         }

@@ -105,7 +105,7 @@ impl Gb {
     !matches!(self.hdma_state, HdmaState::Sleep)
   }
 
-  fn read_rom_or_cart(&mut self, addr: u16) -> u8 {
+  fn read_boot_or_cart(&mut self, addr: u16) -> u8 {
     self
       .boot_rom
       .map_or_else(|| self.cart.read_rom(addr), |b| b[addr as usize])
@@ -117,7 +117,7 @@ impl Gb {
 
   pub(crate) fn read_mem(&mut self, addr: u16) -> u8 {
     match addr {
-      0x0000..=0x00FF | 0x0200..=0x08FF => self.read_rom_or_cart(addr),
+      0x0000..=0x00FF | 0x0200..=0x08FF => self.read_boot_or_cart(addr),
       0x0100..=0x01FF | 0x0900..=0x7FFF => self.cart.read_rom(addr),
       0x8000..=0x9FFF => self.read_vram(addr),
       0xA000..=0xBFFF => self.cart.read_ram(addr),

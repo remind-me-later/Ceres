@@ -71,11 +71,7 @@ pub struct RgbBuf {
 }
 
 impl Default for RgbBuf {
-  fn default() -> Self {
-    Self {
-      data: [0xFF; RGB_BUF_SIZE],
-    }
-  }
+  fn default() -> Self { Self { data: [0xFF; RGB_BUF_SIZE] } }
 }
 
 impl RgbBuf {
@@ -86,13 +82,11 @@ impl RgbBuf {
     self.data[base + 2] = rgb.0;
   }
 
-  fn clear(&mut self) {
-    self.data = [0xFF; RGB_BUF_SIZE];
-  }
+  // fn clear(&mut self) {
+  //   self.data = [0xFF; RGB_BUF_SIZE];
+  // }
 
-  pub const fn pixel_data(&self) -> &[u8] {
-    &self.data
-  }
+  pub const fn pixel_data(&self) -> &[u8] { &self.data }
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -135,11 +129,7 @@ pub struct ColorPalette {
 
 impl Default for ColorPalette {
   fn default() -> Self {
-    Self {
-      col: [0; PAL_RAM_SIZE_COLORS],
-      idx: 0,
-      inc: false,
-    }
+    Self { col: [0; PAL_RAM_SIZE_COLORS], idx: 0, inc: false }
   }
 }
 
@@ -196,9 +186,7 @@ impl ColorPalette {
   }
 
   const fn rgb(&self, palette: u8, color: u8) -> (u8, u8, u8) {
-    const fn scale_channel(c: u8) -> u8 {
-      (c << 3) | (c >> 2)
-    }
+    const fn scale_channel(c: u8) -> u8 { (c << 3) | (c >> 2) }
 
     let i = (palette as usize * 4 + color as usize) * 3;
     let r = self.col[i];
@@ -505,11 +493,7 @@ impl Gb {
         let tile_num = self.vram_at_bank(tile_map, 0);
 
         let tile_addr = self.tile_addr(tile_num)
-          + if attr & BG_Y_FLIP_B == 0 {
-            line
-          } else {
-            14 - line
-          };
+          + if attr & BG_Y_FLIP_B == 0 { line } else { 14 - line };
 
         let (lo, hi) = self.bg_tile(tile_addr, attr);
 
@@ -578,11 +562,7 @@ impl Gb {
         let tile_num = self.vram_at_bank(tile_map, 0);
 
         let tile_addr = self.tile_addr(tile_num)
-          + if attr & BG_Y_FLIP_B == 0 {
-            line
-          } else {
-            14 - line
-          };
+          + if attr & BG_Y_FLIP_B == 0 { line } else { 14 - line };
 
         let (lo, hi) = self.bg_tile(tile_addr, attr);
 
@@ -680,11 +660,8 @@ impl Gb {
 
     for obj in objs.iter().take(len) {
       let tile_addr = {
-        let tile_number = if large {
-          obj.tile_index & !1
-        } else {
-          obj.tile_index
-        };
+        let tile_number =
+          if large { obj.tile_index & !1 } else { obj.tile_index };
 
         let offset = if obj.attr & SPR_FLIP_Y == 0 {
           u16::from(self.ly.wrapping_sub(obj.y)) * 2
@@ -726,20 +703,14 @@ impl Gb {
 
         let rgb = match self.compat_mode {
           CompatMode::Dmg => {
-            let palette = if obj.attr & SPR_PAL == 0 {
-              self.obp0
-            } else {
-              self.obp1
-            };
+            let palette =
+              if obj.attr & SPR_PAL == 0 { self.obp0 } else { self.obp1 };
 
             Self::mono_rgb(shade_index(palette, color))
           }
           CompatMode::Compat => {
-            let palette = if obj.attr & SPR_PAL == 0 {
-              self.obp0
-            } else {
-              self.obp1
-            };
+            let palette =
+              if obj.attr & SPR_PAL == 0 { self.obp0 } else { self.obp1 };
 
             self.ocp.rgb(0, shade_index(palette, color))
           }

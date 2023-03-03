@@ -23,23 +23,13 @@ impl Gb {
     }
   }
 
-  pub fn release(&mut self, button: Button) {
-    self.p1_btn &= !(button as u8);
-  }
+  pub fn release(&mut self, button: Button) { self.p1_btn &= !(button as u8); }
 
   #[must_use]
   pub(crate) const fn read_p1(&self) -> u8 {
-    let act = if self.p1_acts {
-      self.p1_btn >> 4 | 1 << 5
-    } else {
-      0
-    };
+    let act = if self.p1_acts { self.p1_btn >> 4 | 1 << 5 } else { 0 };
 
-    let dir = if self.p1_dirs {
-      self.p1_btn & 0xF | 1 << 4
-    } else {
-      0
-    };
+    let dir = if self.p1_dirs { self.p1_btn & 0xF | 1 << 4 } else { 0 };
 
     // pressed on low
     !(act | dir)
