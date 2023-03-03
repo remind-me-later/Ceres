@@ -28,9 +28,10 @@ pub struct Apu {
   ch3: Wave,
   ch4: Noise,
 
+  div_divider: u8,
+
   render_timer:      i32,
   ext_sample_period: i32,
-  seq_step:          u8,
 
   l_out: Sample,
   r_out: Sample,
@@ -119,11 +120,19 @@ impl Apu {
     }
 
     // TODO: is this ok?
-    if !self.on() {
-      return;
+    // if !self.on() {
+    //   return;
+    // }
+
+    self.div_divider = self.div_divider.wrapping_add(1);
+
+    if self.div_divider & 7 == 7 {
+      self.ch1.step_env();
+      self.ch2.step_env();
+      self.ch4.step_env();
     }
 
-    if self.seq_step & 1 == 0 {
+    if self.div_divider & 1 == 1 {
       self.ch1.step_len();
       self.ch2.step_len();
       self.ch3.step_len();
@@ -134,17 +143,9 @@ impl Apu {
       set_period_half(self, PHalf::Second);
     }
 
-    match self.seq_step {
-      0 | 4 => self.ch1.step_sweep(),
-      7 => {
-        self.ch1.step_env();
-        self.ch2.step_env();
-        self.ch4.step_env();
-      }
-      _ => (),
+    if self.div_divider & 3 == 3 {
+      self.ch1.step_sweep();
     }
-
-    self.seq_step = (self.seq_step + 1) & 7;
   }
 
   // IO
@@ -201,7 +202,7 @@ impl Apu {
       self.nr51 = 0;
       self.l_out = 0;
       self.r_out = 0;
-      self.seq_step = 0;
+      self.div_divider = 0;
     }
   }
 
@@ -347,11 +348,13 @@ impl<const MAX_LEN: u16> LengthTimer<MAX_LEN> {
   }
 
   fn step(&mut self, on: &mut bool) {
-    if self.on {
+    // WARN: looks wrong but sameboy does it this way
+    // https://github.com/LIJI32/SameBoy/blob/master/Core/apu.c line 528,
+    // also "fixing" it breaks blargg cgb sound test 3
+    if self.on && self.len > 0 {
+      self.len -= 1;
       if self.len == 0 {
         *on = false;
-      } else {
-        self.len -= 1;
       }
     }
   }
@@ -578,7 +581,7 @@ pub mod square {
 
   #[derive(Default)]
   struct AbstractSquare<S: sweep::SweepTrait> {
-    ltimer: LengthTimer<64>,
+    ltimer: LengthTimer<0x40>,
     wl:     WaveLength<4>,
     env:    Envelope,
     sweep:  S,
@@ -797,7 +800,7 @@ pub mod noise {
   };
 
   pub struct Noise {
-    ltimer: LengthTimer<64>,
+    ltimer: LengthTimer<0x40>,
     env:    Envelope,
 
     on:           bool,
@@ -947,7 +950,7 @@ pub mod wave {
 
   #[derive(Default)]
   pub struct Wave {
-    ltimer: LengthTimer<256>,
+    ltimer: LengthTimer<0x100>,
 
     on:         bool,
     dac_on:     bool,

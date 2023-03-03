@@ -52,8 +52,11 @@
     clippy::cast_precision_loss,
     clippy::cast_sign_loss,
     clippy::cast_possible_wrap,
+
     // TODO: Weird warning on bytemuck derive
     clippy::extra_unused_type_parameters,
+    clippy::let_underscore_untyped,
+
     clippy::missing_errors_doc,
     clippy::missing_panics_doc,
     clippy::similar_names
