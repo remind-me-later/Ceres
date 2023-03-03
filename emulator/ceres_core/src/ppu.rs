@@ -313,7 +313,7 @@ impl Gb {
     if val & LCDC_ON_B == 0 && self.lcdc & LCDC_ON_B != 0 {
       debug_assert!(self.ppu_mode() == Mode::VBlank);
       self.ly = 0;
-      self.rgb_buf.clear();
+      // self.rgb_buf.clear();
       self.frame_dots = 0;
     }
 

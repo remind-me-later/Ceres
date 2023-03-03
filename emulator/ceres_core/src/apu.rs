@@ -1,5 +1,6 @@
 use {
   crate::TC_SEC,
+  core::num::NonZeroU8,
   noise::Noise,
   square::{Square1, Square2},
   wave::Wave,
@@ -287,30 +288,183 @@ impl Apu {
   pub fn write_nr44(&mut self, val: u8) { self.ch4.write_nr44(val); }
 }
 
-struct WaveLength<const PERIOD_MUL: u16> {
+trait SweepTrait: Sized + Default {
+  fn read(&self) -> u8;
+  fn write(&mut self, val: u8);
+  fn step(&mut self, freq: &mut u16, on: &mut bool);
+  fn trigger(&mut self, freq: &mut u16, on: &mut bool);
+}
+
+#[derive(Clone, Copy, Default)]
+enum SweepDirection {
+  #[default]
+  Add = 0,
+  Sub = 1,
+}
+
+impl SweepDirection {
+  const fn from_u8(val: u8) -> Self {
+    if val & 8 == 0 { Self::Add } else { Self::Sub }
+  }
+
+  const fn to_u8(self) -> u8 { (self as u8) << 3 }
+}
+
+struct Sweep {
+  // TODO: check on behaviour
+  on:  bool,
+  dir: SweepDirection,
+
+  // between 0 and 7
+  pace:  u8,
+  // 0 is treated as 8
+  shpc:  NonZeroU8,
+  // shift between 0 and 7
+  shift: u8,
+  timer: u8,
+  // Shadow frequency
+  shwf:  u16,
+}
+
+impl Sweep {
+  fn calculate_sweep(&mut self, freq: &mut u16, on: &mut bool) {
+    {
+      let t = self.shwf >> self.shift;
+      self.shwf = match self.dir {
+        SweepDirection::Sub => self.shwf - t,
+        SweepDirection::Add => self.shwf + t,
+      };
+    }
+
+    if self.shwf > 0x7FF {
+      *on = false;
+      return;
+    }
+
+    if self.shift != 0 {
+      *freq = self.shwf & 0x7FF;
+    }
+  }
+}
+
+impl SweepTrait for Sweep {
+  fn read(&self) -> u8 {
+    0x80 | (self.pace << 4) | self.dir.to_u8() | self.shift
+  }
+
+  fn write(&mut self, val: u8) {
+    self.pace = (val >> 4) & 7;
+
+    if self.pace == 0 {
+      self.on = false;
+    } else if self.shpc.get() == 8 {
+      self.shpc = NonZeroU8::new(self.pace).unwrap();
+    }
+
+    self.dir = SweepDirection::from_u8(val);
+    self.shift = val & 7;
+  }
+
+  fn step(&mut self, freq: &mut u16, on: &mut bool) {
+    if !self.on {
+      return;
+    }
+
+    self.timer += 1;
+    if self.timer > self.shpc.get() {
+      self.timer = 0;
+      self.calculate_sweep(freq, on);
+      self.shpc =
+        NonZeroU8::new(if self.pace == 0 { 8 } else { self.pace }).unwrap();
+    }
+  }
+
+  fn trigger(&mut self, freq: &mut u16, on: &mut bool) {
+    self.shwf = *freq;
+    self.timer = 0;
+    self.on = self.pace > 0 && self.shift != 0;
+    self.shpc =
+      NonZeroU8::new(if self.pace == 0 { 8 } else { self.pace }).unwrap();
+
+    if self.shift != 0 {
+      self.calculate_sweep(freq, on);
+    }
+  }
+}
+
+impl Default for Sweep {
+  fn default() -> Self {
+    Self {
+      shpc:  NonZeroU8::new(8).unwrap(),
+      pace:  0,
+      dir:   SweepDirection::default(),
+      shift: 0,
+      timer: 0,
+      shwf:  0,
+      on:    false,
+    }
+  }
+}
+
+impl SweepTrait for () {
+  fn read(&self) -> u8 { 0xFF }
+
+  fn write(&mut self, _: u8) {}
+
+  fn step(&mut self, _: &mut u16, _: &mut bool) {}
+
+  fn trigger(&mut self, _: &mut u16, _: &mut bool) {}
+}
+
+struct WaveLength<const PERIOD_MUL: u16, S: SweepTrait> {
   period: i32,
+  freq:   u16, // 11 bit
+  sweep:  S,
 }
 
-impl<const PERIOD_MUL: u16> Default for WaveLength<PERIOD_MUL> {
-  fn default() -> Self { Self { period: Self::calc_period(0) } }
+impl<const PERIOD_MUL: u16, S: SweepTrait> Default
+  for WaveLength<PERIOD_MUL, S>
+{
+  fn default() -> Self {
+    Self { period: Self::calc_period(0), freq: 0, sweep: S::default() }
+  }
 }
 
-impl<const PERIOD_MUL: u16> WaveLength<PERIOD_MUL> {
-  fn trigger(&mut self, freq: u16) { self.period = Self::calc_period(freq); }
+impl<const PERIOD_MUL: u16, S: SweepTrait> WaveLength<PERIOD_MUL, S> {
+  fn read_sweep(&self) -> u8 { self.sweep.read() }
 
-  fn step(&mut self, t_cycles: i32, freq: u16) -> bool {
+  fn write_sweep(&mut self, val: u8) { self.sweep.write(val); }
+
+  fn write_low(&mut self, val: u8) {
+    self.freq = (self.freq & 0x700) | u16::from(val);
+  }
+
+  fn write_high(&mut self, val: u8) {
+    self.freq = (u16::from(val) & 7) << 8 | (self.freq & 0xFF);
+  }
+
+  fn trigger(&mut self, on: &mut bool) {
+    self.period = Self::calc_period(self.freq);
+    self.sweep.trigger(&mut self.freq, on);
+  }
+
+  fn step(&mut self, t_cycles: i32) -> bool {
     self.period -= t_cycles;
 
     if self.period < 0 {
-      self.period += Self::calc_period(freq);
+      self.period += Self::calc_period(self.freq);
       return true;
     }
 
     false
   }
 
+  fn step_sweep(&mut self, on: &mut bool) {
+    self.sweep.step(&mut self.freq, on);
+  }
+
   const fn calc_period(freq: u16) -> i32 {
-    const MAX_FREQ: u16 = 2048;
+    const MAX_FREQ: u16 = 0x800; // 2^11
     (PERIOD_MUL * (MAX_FREQ - freq)) as i32
   }
 }
@@ -446,169 +600,34 @@ pub mod square {
     crate::apu::{LengthTimer, PHalf, WaveLength},
   };
 
-  mod sweep {
-    use core::num::NonZeroU8;
-
-    pub(super) trait SweepTrait: Sized + Default {
-      fn read(&self) -> u8;
-      fn write(&mut self, val: u8);
-      fn step(&mut self, freq: &mut u16, on: &mut bool);
-      fn trigger(&mut self, freq: &mut u16, on: &mut bool);
-    }
-
-    #[derive(Clone, Copy, Default)]
-    enum SweepDirection {
-      #[default]
-      Add = 0,
-      Sub = 1,
-    }
-
-    impl SweepDirection {
-      const fn from_u8(val: u8) -> Self {
-        if val & 8 == 0 { Self::Add } else { Self::Sub }
-      }
-
-      const fn to_u8(self) -> u8 { (self as u8) << 3 }
-    }
-
-    pub(in crate::apu) struct Sweep {
-      // TODO: check on behaviour
-      on:  bool,
-      dir: SweepDirection,
-
-      // between 0 and 7
-      pace:  u8,
-      // 0 is treated as 8
-      shpc:  NonZeroU8,
-      // shift between 0 and 7
-      shift: u8,
-      timer: u8,
-      // Shadow frequency
-      shwf:  u16,
-    }
-
-    impl Sweep {
-      fn calculate_sweep(&mut self, freq: &mut u16, on: &mut bool) {
-        {
-          let t = self.shwf >> self.shift;
-          self.shwf = match self.dir {
-            SweepDirection::Sub => self.shwf - t,
-            SweepDirection::Add => self.shwf + t,
-          };
-        }
-
-        if self.shwf > 0x7FF {
-          *on = false;
-          return;
-        }
-
-        if self.shift != 0 {
-          *freq = self.shwf & 0x7FF;
-        }
-      }
-    }
-
-    impl SweepTrait for Sweep {
-      fn read(&self) -> u8 {
-        0x80 | (self.pace << 4) | self.dir.to_u8() | self.shift
-      }
-
-      fn write(&mut self, val: u8) {
-        self.pace = (val >> 4) & 7;
-
-        if self.pace == 0 {
-          self.on = false;
-        } else if self.shpc.get() == 8 {
-          self.shpc = NonZeroU8::new(self.pace).unwrap();
-        }
-
-        self.dir = SweepDirection::from_u8(val);
-        self.shift = val & 7;
-      }
-
-      fn step(&mut self, freq: &mut u16, on: &mut bool) {
-        if !self.on {
-          return;
-        }
-
-        self.timer += 1;
-        if self.timer > self.shpc.get() {
-          self.timer = 0;
-          self.calculate_sweep(freq, on);
-          self.shpc =
-            NonZeroU8::new(if self.pace == 0 { 8 } else { self.pace })
-              .unwrap();
-        }
-      }
-
-      fn trigger(&mut self, freq: &mut u16, on: &mut bool) {
-        self.shwf = *freq;
-        self.timer = 0;
-        self.on = self.pace > 0 && self.shift != 0;
-        self.shpc =
-          NonZeroU8::new(if self.pace == 0 { 8 } else { self.pace }).unwrap();
-
-        if self.shift != 0 {
-          self.calculate_sweep(freq, on);
-        }
-      }
-    }
-
-    impl Default for Sweep {
-      fn default() -> Self {
-        Self {
-          shpc:  NonZeroU8::new(8).unwrap(),
-          pace:  0,
-          dir:   SweepDirection::default(),
-          shift: 0,
-          timer: 0,
-          shwf:  0,
-          on:    false,
-        }
-      }
-    }
-
-    impl SweepTrait for () {
-      fn read(&self) -> u8 { 0xFF }
-
-      fn write(&mut self, _: u8) {}
-
-      fn step(&mut self, _: &mut u16, _: &mut bool) {}
-
-      fn trigger(&mut self, _: &mut u16, _: &mut bool) {}
-    }
-  }
-
   #[derive(Default)]
-  struct AbstractSquare<S: sweep::SweepTrait> {
-    ltimer: LengthTimer<0x40>,
-    wl:     WaveLength<4>,
-    env:    Envelope,
-    sweep:  S,
+  struct AbstractSquare<S: super::SweepTrait> {
+    ltim: LengthTimer<0x40>,
+    wl:   WaveLength<4, S>,
+    env:  Envelope,
 
     on:     bool,
     dac_on: bool,
     out:    u8,
 
-    freq:     u16, // 11 bit frequency data
     duty:     u8,
     duty_bit: u8,
   }
 
-  impl<S: sweep::SweepTrait> AbstractSquare<S> {
-    fn read_nrx0(&self) -> u8 { self.sweep.read() }
+  impl<S: super::SweepTrait> AbstractSquare<S> {
+    fn read_nrx0(&self) -> u8 { self.wl.read_sweep() }
 
     const fn read_nrx1(&self) -> u8 { 0x3F | (self.duty << 6) }
 
     const fn read_nrx2(&self) -> u8 { self.env.read() }
 
-    fn read_nrx4(&self) -> u8 { 0xBF | self.ltimer.read_on() }
+    fn read_nrx4(&self) -> u8 { 0xBF | self.ltim.read_on() }
 
-    fn write_nrx0(&mut self, val: u8) { self.sweep.write(val); }
+    fn write_nrx0(&mut self, val: u8) { self.wl.write_sweep(val); }
 
     fn write_nrx1(&mut self, val: u8) {
       self.duty = (val >> 6) & 3;
-      self.ltimer.write_len(val);
+      self.ltim.write_len(val);
     }
 
     fn write_nrx2(&mut self, val: u8) {
@@ -622,14 +641,11 @@ pub mod square {
       self.env.write(val);
     }
 
-    fn write_nrx3(&mut self, val: u8) {
-      self.freq = (self.freq & 0x700) | u16::from(val);
-    }
+    fn write_nrx3(&mut self, val: u8) { self.wl.write_low(val); }
 
     fn write_nrx4(&mut self, val: u8) {
-      self.freq = (u16::from(val & 7) << 8) | (self.freq & 0xFF);
-
-      self.ltimer.write_on(val, &mut self.on);
+      self.wl.write_high(val);
+      self.ltim.write_on(val, &mut self.on);
 
       // trigger
       if val & 0x80 != 0 {
@@ -637,11 +653,9 @@ pub mod square {
           self.on = true;
         }
 
-        self.out = 0;
-        self.wl.trigger(self.freq);
         self.env.trigger();
-        self.ltimer.trigger(&mut self.on);
-        self.sweep.trigger(&mut self.freq, &mut self.on);
+        self.wl.trigger(&mut self.on);
+        self.ltim.trigger(&mut self.on);
       }
     }
 
@@ -658,7 +672,11 @@ pub mod square {
         0b0111_1110,
       ];
 
-      if self.wl.step(cycles, self.freq) {
+      if !self.on() {
+        return;
+      }
+
+      if self.wl.step(cycles) {
         self.duty_bit = (self.duty_bit + 1) & 7;
         self.out =
           u8::from((DUTY_WAV[self.duty as usize] & (1 << self.duty_bit)) != 0);
@@ -667,7 +685,7 @@ pub mod square {
 
     fn step_sweep(&mut self) {
       if self.on {
-        self.sweep.step(&mut self.freq, &mut self.on);
+        self.wl.step_sweep(&mut self.on);
       }
     }
 
@@ -681,10 +699,10 @@ pub mod square {
 
     const fn true_on(&self) -> bool { self.on && self.dac_on }
 
-    fn step_len(&mut self) { self.ltimer.step(&mut self.on); }
+    fn step_len(&mut self) { self.ltim.step(&mut self.on); }
 
     fn set_period_half(&mut self, p_half: PHalf) {
-      self.ltimer.set_phalf(p_half);
+      self.ltim.set_phalf(p_half);
     }
 
     const fn on(&self) -> bool { self.on }
@@ -692,7 +710,7 @@ pub mod square {
 
   #[derive(Default)]
   pub struct Square1 {
-    ab: AbstractSquare<sweep::Sweep>,
+    ab: AbstractSquare<super::Sweep>,
   }
 
   impl Square1 {
@@ -950,12 +968,11 @@ pub mod wave {
 
   #[derive(Default)]
   pub struct Wave {
-    ltimer: LengthTimer<0x100>,
+    ltim: LengthTimer<0x100>,
 
     on:         bool,
     dac_on:     bool,
-    freq:       u16, // 11 bit frequency data
-    wl:         WaveLength<2>,
+    wl:         WaveLength<2, ()>,
     sample_buf: u8,
     ram:        [u8; RAM_LEN as usize],
     samples:    [u8; SAMPLE_LEN as usize],
@@ -984,9 +1001,7 @@ pub mod wave {
       0x9F | (self.vol << 5)
     }
 
-    pub(in crate::apu) fn read_nr34(&self) -> u8 {
-      0xBF | self.ltimer.read_on()
-    }
+    pub(in crate::apu) fn read_nr34(&self) -> u8 { 0xBF | self.ltim.read_on() }
 
     pub(in crate::apu) fn write_nr30(&mut self, val: u8) {
       self.nr30 = val;
@@ -999,7 +1014,7 @@ pub mod wave {
     }
 
     pub(in crate::apu) fn write_nr31(&mut self, val: u8) {
-      self.ltimer.write_len(val);
+      self.ltim.write_len(val);
     }
 
     pub(in crate::apu) fn write_nr32(&mut self, val: u8) {
@@ -1007,13 +1022,12 @@ pub mod wave {
     }
 
     pub(in crate::apu) fn write_nr33(&mut self, val: u8) {
-      self.freq = (self.freq & 0x700) | u16::from(val);
+      self.wl.write_low(val);
     }
 
     pub(in crate::apu) fn write_nr34(&mut self, val: u8) {
-      self.freq = (u16::from(val) & 7) << 8 | (self.freq & 0xFF);
-
-      self.ltimer.write_on(val, &mut self.on);
+      self.wl.write_high(val);
+      self.ltim.write_on(val, &mut self.on);
 
       // trigger
       if val & 0x80 != 0 {
@@ -1021,8 +1035,8 @@ pub mod wave {
           self.on = true;
         }
 
-        self.ltimer.trigger(&mut self.on);
-        self.wl.trigger(self.freq);
+        self.ltim.trigger(&mut self.on);
+        self.wl.trigger(&mut self.on);
         self.sample_idx = 0;
       }
     }
@@ -1033,12 +1047,12 @@ pub mod wave {
     }
 
     pub(in crate::apu) fn step_sample(&mut self, cycles: i32) {
-      if !self.true_on() {
+      if !self.on() {
         return;
       }
 
-      if self.wl.step(cycles, self.freq) {
-        self.sample_idx = (self.sample_idx + 1) % SAMPLE_LEN;
+      if self.wl.step(cycles) {
+        self.sample_idx = (self.sample_idx + 1) & (SAMPLE_LEN - 1);
         self.sample_buf = self.samples[self.sample_idx as usize];
       }
     }
@@ -1047,20 +1061,17 @@ pub mod wave {
       self.on && self.dac_on
     }
 
-    pub(in crate::apu) fn step_len(&mut self) {
-      self.ltimer.step(&mut self.on);
-    }
+    pub(in crate::apu) fn step_len(&mut self) { self.ltim.step(&mut self.on); }
 
     pub(in crate::apu) fn set_period_half(&mut self, p_half: PHalf) {
-      self.ltimer.set_phalf(p_half);
+      self.ltim.set_phalf(p_half);
     }
 
     pub(in crate::apu) fn reset(&mut self) {
       self.vol = 0;
       self.on = false;
       self.dac_on = false;
-      self.ltimer = LengthTimer::default();
-      self.freq = 0;
+      self.ltim = LengthTimer::default();
       self.sample_buf = 0;
       self.samples = [0; SAMPLE_LEN as usize];
       self.sample_idx = 0;

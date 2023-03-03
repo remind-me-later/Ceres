@@ -145,9 +145,7 @@ impl Gb {
     self.read_mem(addr)
   }
 
-  fn tick_m_cycle(&mut self) {
-    self.advance_t_cycles(4);
-  }
+  fn tick_m_cycle(&mut self) { self.advance_t_cycles(4); }
 
   fn imm_u8(&mut self) -> u8 {
     let val = self.cpu_read(self.pc);
@@ -658,9 +656,7 @@ impl Gb {
     self.tick_m_cycle();
   }
 
-  fn jp_a16(&mut self) {
-    self.do_jump_to_immediate();
-  }
+  fn jp_a16(&mut self) { self.do_jump_to_immediate(); }
 
   fn jp_cc(&mut self, opcode: u8) {
     if self.condition(opcode) {
@@ -673,9 +669,7 @@ impl Gb {
     }
   }
 
-  fn jp_hl(&mut self) {
-    self.pc = self.hl;
-  }
+  fn jp_hl(&mut self) { self.pc = self.hl; }
 
   fn do_jump_relative(&mut self) {
     #[allow(clippy::cast_possible_wrap)]
@@ -688,9 +682,7 @@ impl Gb {
     self.tick_m_cycle();
   }
 
-  fn jr_d(&mut self) {
-    self.do_jump_relative();
-  }
+  fn jr_d(&mut self) { self.do_jump_relative(); }
 
   fn jr_cc(&mut self, opcode: u8) {
     if self.condition(opcode) {
@@ -707,9 +699,7 @@ impl Gb {
     self.pc = addr;
   }
 
-  fn call_nn(&mut self) {
-    self.do_call();
-  }
+  fn call_nn(&mut self) { self.do_call(); }
 
   fn call_cc_a16(&mut self, opcode: u8) {
     if self.condition(opcode) {
@@ -772,18 +762,19 @@ impl Gb {
     if self.double_speed_request {
       self.double_speed = !self.double_speed;
       self.double_speed_request = false;
+
+      // TODO: div should not tick
+      for _ in 0..2050 {
+        self.tick_m_cycle();
+      }
     } else {
       self.cpu_halted = true;
     }
   }
 
-  fn di(&mut self) {
-    self.ime = false;
-  }
+  fn di(&mut self) { self.ime = false; }
 
-  fn ei(&mut self) {
-    self.cpu_ei_delay = true;
-  }
+  fn ei(&mut self) { self.cpu_ei_delay = true; }
 
   fn ccf(&mut self) {
     self.af ^= CF_B;
@@ -800,9 +791,7 @@ impl Gb {
 
   // TODO: debugger breakpoint
 
-  fn ld_b_b(&mut self) {
-    self.nop();
-  }
+  fn ld_b_b(&mut self) { self.nop(); }
 
   fn daa(&mut self) {
     let mut res = self.af >> 8;

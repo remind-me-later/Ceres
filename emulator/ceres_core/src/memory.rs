@@ -360,11 +360,7 @@ impl Gb {
 
     let len = if self.hdma_state == HBlank {
       self.hdma_len -= 0x10;
-      self.hdma_state = if self.hdma_len == 0 {
-        Sleep
-      } else {
-        HBlankDone
-      };
+      self.hdma_state = if self.hdma_len == 0 { Sleep } else { HBlankDone };
       self.hdma5 = ((self.hdma_len / 0x10).wrapping_sub(1) & 0xFF) as u8;
       0x10
     } else {
