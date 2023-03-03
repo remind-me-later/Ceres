@@ -1,12 +1,11 @@
 use {
   alloc::{boxed::Box, vec::Vec},
   core::{fmt::Display, num::NonZeroU8},
+  std::println,
   Mbc::{Mbc0, Mbc1, Mbc2, Mbc3, Mbc5},
 };
 
-const ROM_BANK_SIZE: usize = 0x4000;
-const RAM_BANK_SIZE: usize = 0x2000;
-
+#[derive(Debug)]
 enum Mbc {
   Mbc0,
   Mbc1 {
@@ -84,28 +83,29 @@ pub struct Cartridge {
   rom: Box<[u8]>,
   ram: Box<[u8]>,
 
-  rom_bank_lo:   u8,
-  rom_bank_hi:   u8,
-  rom_offsets:   (usize, usize),
-  // bit mask of rom bank, anded with the rom bank selected gets
-  // the actual rom bank depending on the ROM size
-  rom_bank_mask: usize,
+  rom_bank_lo: u8,
+  rom_bank_hi: u8,
+  rom_offsets: (usize, usize),
 
   ram_enabled: bool,
   ram_bank:    u8,
   ram_offset:  usize,
 
   has_battery: bool,
-  has_ram:     bool,
+
+  ram_size: RAMSize,
+  rom_size: ROMSize,
 }
 
 impl Cartridge {
   pub fn new(mut rom: Vec<u8>, ram: Option<Vec<u8>>) -> Result<Self, Error> {
     let rom_size = ROMSize::new(&rom)?;
     let ram_size = RAMSize::new(&rom)?;
-    let rom_bank_mask = rom_size.bank_bit_mask();
-    let has_ram = ram_size != RAMSize::NoRAM;
     let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], rom_size)?;
+
+    println!("{mbc:?}");
+    println!("{rom_size:?}");
+    println!("{ram_size:?}");
 
     rom.truncate(rom_size.size_bytes());
     let rom = rom.into_boxed_slice();
@@ -127,12 +127,12 @@ impl Cartridge {
       rom_bank_lo: 1,
       rom_bank_hi: 0,
       rom_offsets: (0x0000, 0x4000),
-      rom_bank_mask,
+      ram_size,
+      rom_size,
       ram_enabled: false,
       ram_bank: 0,
       ram_offset: 0,
       has_battery,
-      has_ram,
     })
   }
 
@@ -161,11 +161,11 @@ impl Cartridge {
 
   #[must_use]
   pub(crate) fn read_rom(&self, addr: u16) -> u8 {
-    let (rom_lower, rom_upper) = self.rom_offsets;
+    let (lo, hi) = self.rom_offsets;
 
     let bank_addr = match addr {
-      0x0000..=0x3FFF => rom_lower | (addr as usize & 0x3FFF),
-      0x4000..=0x7FFF => rom_upper | (addr as usize & 0x3FFF),
+      0x0000..=0x3FFF => lo | (addr as usize & 0x3FFF),
+      0x4000..=0x7FFF => hi | (addr as usize & 0x3FFF),
       _ => unreachable!(),
     };
 
@@ -179,7 +179,7 @@ impl Cartridge {
       ram_enabled: bool,
       addr: u16,
     ) -> u8 {
-      if cart.has_ram && ram_enabled {
+      if cart.ram_size.any() && ram_enabled {
         let addr = cart.ram_addr(addr);
         cart.ram[addr]
       } else {
@@ -208,27 +208,22 @@ impl Cartridge {
           multicart: bool,
           bank_mode: bool,
         ) -> (usize, usize) {
-          let (upper_bits, lower_bits) = if multicart {
+          let (hi, lo) = if multicart {
             (cart.rom_bank_hi << 4, cart.rom_bank_lo & 0xF)
           } else {
             (cart.rom_bank_hi << 5, cart.rom_bank_lo)
           };
 
-          let lower_bank = if bank_mode {
-            upper_bits as usize & cart.rom_bank_mask
-          } else {
-            0
-          };
-          let upper_bank =
-            (upper_bits | lower_bits) as usize & cart.rom_bank_mask;
+          let lower_bank =
+            if bank_mode { hi as usize & cart.rom_size.mask() } else { 0 };
+          let upper_bank = (hi | lo) as usize & cart.rom_size.mask();
 
-          (ROM_BANK_SIZE * lower_bank, ROM_BANK_SIZE * upper_bank)
+          (ROMSize::BANK_SIZE * lower_bank, ROMSize::BANK_SIZE * upper_bank)
         }
 
         const fn mbc1_ram_offset(cart: &Cartridge, bank_mode: bool) -> usize {
           let bank = if bank_mode { cart.rom_bank_hi as usize } else { 0 };
-
-          RAM_BANK_SIZE * bank
+          RAMSize::BANK_SIZE * bank
         }
 
         let multicart = *multicart;
@@ -267,7 +262,7 @@ impl Cartridge {
             let val = val & 0xF;
             self.rom_bank_lo = if val == 0 { 1 } else { val };
             self.rom_offsets =
-              (0x0000, ROM_BANK_SIZE * self.rom_bank_lo as usize);
+              (0x0000, ROMSize::BANK_SIZE * self.rom_bank_lo as usize);
           }
         }
       }
@@ -276,7 +271,7 @@ impl Cartridge {
         0x2000..=0x3FFF => {
           self.rom_bank_lo = if val == 0 { 1 } else { val & 0x7F };
           self.rom_offsets =
-            (0x0000, ROM_BANK_SIZE * self.rom_bank_lo as usize);
+            (0x0000, ROMSize::BANK_SIZE * self.rom_bank_lo as usize);
         }
         0x4000..=0x5FFF => {
           if (0x8..=0xC).contains(&val) {
@@ -287,7 +282,8 @@ impl Cartridge {
           } else {
             // Choose RAM bank
             self.ram_bank = val & 0x7;
-            self.ram_offset = RAM_BANK_SIZE * self.ram_bank as usize;
+            self.ram_offset = RAMSize::BANK_SIZE
+              * (self.ram_bank as usize & self.ram_size.mask());
 
             if let Some(r) = rtc.as_mut() {
               r.unmap_reg();
@@ -301,26 +297,30 @@ impl Cartridge {
       },
       Mbc5 => {
         const fn mbc5_rom_offsets(cart: &Cartridge) -> (usize, usize) {
-          let lower_bits = cart.rom_bank_lo as usize;
-          let upper_bits = (cart.rom_bank_hi as usize) << 8;
-          let rom_bank = (upper_bits | lower_bits) & cart.rom_bank_mask;
-          // let rom_bank = if rom_bank == 0 { 1 } else { rom_bank };
-          (0x0000, ROM_BANK_SIZE * rom_bank)
+          let lo = cart.rom_bank_lo as usize;
+          let hi = (cart.rom_bank_hi as usize) << 8;
+          let rom_bank = (hi | lo) & cart.rom_size.mask();
+          (0x0000, ROMSize::BANK_SIZE * rom_bank)
         }
 
         match addr {
           0x0000..=0x1FFF => self.ram_enabled = val & 0xF == 0xA,
           0x2000..=0x2FFF => {
+            // println!("0x2000 reg, val: {val:0x}");
             self.rom_bank_lo = val;
             self.rom_offsets = mbc5_rom_offsets(self);
           }
           0x3000..=0x3FFF => {
+            // println!("0x3000 reg, val: {val:0x}");
             self.rom_bank_hi = val & 1;
             self.rom_offsets = mbc5_rom_offsets(self);
           }
           0x4000..=0x5FFF => {
+            // println!("0x4000 reg, val: {val:0x}");
+            // debug_assert!(val & 0xF < self.ram_bank_mask);
             self.ram_bank = val & 0xF;
-            self.ram_offset = RAM_BANK_SIZE * self.ram_bank as usize;
+            self.ram_offset = RAMSize::BANK_SIZE
+              * (self.ram_bank as usize & self.ram_size.mask());
           }
           _ => (),
         }
@@ -335,7 +335,7 @@ impl Cartridge {
       addr: u16,
       val: u8,
     ) {
-      if cart.has_ram && ram_enabled {
+      if cart.ram_size.any() && ram_enabled {
         let addr = cart.ram_addr(addr);
         cart.ram[addr] = val;
       }
@@ -361,7 +361,7 @@ impl Cartridge {
 
 impl !Sync for Cartridge {}
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 enum ROMSize {
   Kb32  = 0,
   Kb64  = 1,
@@ -375,6 +375,8 @@ enum ROMSize {
 }
 
 impl ROMSize {
+  const BANK_SIZE: usize = 0x4000;
+
   const fn new(rom: &[u8]) -> Result<Self, Error> {
     use ROMSize::{Kb128, Kb256, Kb32, Kb512, Kb64, Mb1, Mb2, Mb4, Mb8};
     let rom_size_byte = rom[0x148];
@@ -399,13 +401,12 @@ impl ROMSize {
     kib_32 << (self as usize)
   }
 
-  const fn bank_bit_mask(self) -> usize { (2 << (self as usize)) - 1 }
+  const fn mask(self) -> usize { (2 << (self as usize)) - 1 }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum RAMSize {
   NoRAM,
-  Kb2,
   Kb8,
   Kb32,
   Kb128,
@@ -413,12 +414,13 @@ enum RAMSize {
 }
 
 impl RAMSize {
+  const BANK_SIZE: usize = 0x2000;
+
   const fn new(rom: &[u8]) -> Result<Self, Error> {
-    use RAMSize::{Kb128, Kb2, Kb32, Kb64, Kb8, NoRAM};
+    use RAMSize::{Kb128, Kb32, Kb64, Kb8, NoRAM};
     let ram_size_byte = rom[0x149];
     let ram_size = match ram_size_byte {
       0 => NoRAM,
-      1 => Kb2,
       2 => Kb8,
       3 => Kb32,
       4 => Kb128,
@@ -429,31 +431,24 @@ impl RAMSize {
     Ok(ram_size)
   }
 
-  const fn size_bytes(self) -> usize {
-    self.num_banks() * self.bank_size_in_bytes()
-  }
+  const fn any(self) -> bool { !matches!(self, Self::NoRAM) }
+
+  const fn size_bytes(self) -> usize { self.num_banks() * Self::BANK_SIZE }
 
   const fn num_banks(self) -> usize {
     match self {
       Self::NoRAM => 0,
-      Self::Kb2 | Self::Kb8 => 1,
+      Self::Kb8 => 1,
       Self::Kb32 => 4,
       Self::Kb128 => 16,
       Self::Kb64 => 8,
     }
   }
 
-  const fn bank_size_in_bytes(self) -> usize {
-    use RAMSize::{Kb128, Kb2, Kb32, Kb64, Kb8, NoRAM};
-    match self {
-      NoRAM => 0,
-      Kb2 => 0x800,
-      Kb8 | Kb32 | Kb128 | Kb64 => 0x2000,
-    }
-  }
+  const fn mask(self) -> usize { self.num_banks().ilog2() as usize }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct Mbc3RTC {
   t_cycles: i32,
   regs:     [u8; 5],
