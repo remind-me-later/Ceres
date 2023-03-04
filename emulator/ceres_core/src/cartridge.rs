@@ -1,7 +1,6 @@
 use {
   alloc::{boxed::Box, vec::Vec},
   core::{fmt::Display, num::NonZeroU8},
-  std::println,
   Mbc::{Mbc0, Mbc1, Mbc2, Mbc3, Mbc5},
 };
 
@@ -103,9 +102,9 @@ impl Cartridge {
     let ram_size = RAMSize::new(&rom)?;
     let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], rom_size)?;
 
-    println!("{mbc:?}");
-    println!("{rom_size:?}");
-    println!("{ram_size:?}");
+    // println!("{mbc:?}");
+    // println!("{rom_size:?}");
+    // println!("{ram_size:?}");
 
     rom.truncate(rom_size.size_bytes());
     let rom = rom.into_boxed_slice();

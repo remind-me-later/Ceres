@@ -1,4 +1,4 @@
-// #![no_std]
+#![no_std]
 #![forbid(unsafe_code)]
 #![warn(
   clippy::pedantic,
@@ -59,6 +59,8 @@
   clippy::similar_names
 )]
 #![feature(error_in_core, negative_impls)]
+
+use timing::TIMAState;
 
 extern crate alloc;
 
@@ -207,8 +209,10 @@ pub struct Gb {
   tma:  u8,
   tac:  u8,
 
-  tac_enable: bool,
-  system_clk: u16,
+  tima_state: TIMAState,
+
+  tac_enable:       bool,
+  wide_div_counter: u16,
 
   apu: Apu,
 }
@@ -254,6 +258,7 @@ impl Gb {
       apu: Apu::new(sample_rate),
 
       // Default
+      tima_state: TIMAState::default(),
       double_speed: Default::default(),
       double_speed_request: Default::default(),
       af: Default::default(),
@@ -310,7 +315,7 @@ impl Gb {
       tma: Default::default(),
       tac: Default::default(),
       tac_enable: Default::default(),
-      system_clk: Default::default(),
+      wide_div_counter: Default::default(),
     }
   }
 

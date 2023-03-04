@@ -134,7 +134,7 @@ impl Gb {
       P1 => self.read_p1(),
       SB => self.sb,
       SC => self.sc | 0x7E,
-      DIV => ((self.system_clk >> 8) & 0xFF) as u8,
+      DIV => ((self.wide_div_counter >> 8) & 0xFF) as u8,
       TIMA => self.tima,
       TMA => self.tma,
       TAC => 0xF8 | self.tac,
