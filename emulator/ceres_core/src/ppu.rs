@@ -64,22 +64,22 @@ const GRAYSCALE_PALETTE: [(u8, u8, u8); 4] = [
   (0x00, 0x00, 0x00),
 ];
 
-const RGB_BUF_SIZE: usize = PX_TOTAL as usize * 4;
+const RGBA_BUF_SIZE: usize = PX_TOTAL as usize * 4;
 
-pub struct RgbBuf {
-  data: [u8; RGB_BUF_SIZE],
+pub struct RgbaBuf {
+  data: [u8; RGBA_BUF_SIZE],
 }
 
-impl Default for RgbBuf {
-  fn default() -> Self { Self { data: [0xFF; RGB_BUF_SIZE] } }
+impl Default for RgbaBuf {
+  fn default() -> Self { Self { data: [0xFF; RGBA_BUF_SIZE] } }
 }
 
-impl RgbBuf {
+impl RgbaBuf {
   fn set_px(&mut self, i: usize, rgb: (u8, u8, u8)) {
     let base = i * 4;
-    self.data[base] = rgb.2;
+    self.data[base] = rgb.0;
     self.data[base + 1] = rgb.1;
-    self.data[base + 2] = rgb.0;
+    self.data[base + 2] = rgb.2;
   }
 
   // fn clear(&mut self) {

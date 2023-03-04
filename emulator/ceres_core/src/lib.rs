@@ -68,7 +68,7 @@ use {
   apu::Apu,
   core::{num::NonZeroU8, time::Duration},
   memory::HdmaState,
-  ppu::{ColorPalette, Mode, RgbBuf, OAM_SIZE, VRAM_SIZE_CGB},
+  ppu::{ColorPalette, Mode, RgbaBuf, OAM_SIZE, VRAM_SIZE_CGB},
 };
 pub use {
   apu::Sample,
@@ -197,8 +197,8 @@ pub struct Gb {
   lcdc_delay:       bool,
   vram:             [u8; VRAM_SIZE_CGB],
   oam:              [u8; OAM_SIZE],
-  rgb_buf:          RgbBuf,
-  rgb_buf_present:  RgbBuf,
+  rgb_buf:          RgbaBuf,
+  rgb_buf_present:  RgbaBuf,
   ppu_cycles:       i32,
   ppu_win_in_frame: bool,
   ppu_win_in_ly:    bool,
@@ -214,6 +214,7 @@ pub struct Gb {
   tac_enable:       bool,
   wide_div_counter: u16,
 
+  // apu
   apu: Apu,
 }
 
@@ -306,8 +307,8 @@ impl Gb {
       ocp: ColorPalette::default(),
       frame_dots: Default::default(),
       lcdc_delay: Default::default(),
-      rgb_buf: RgbBuf::default(),
-      rgb_buf_present: RgbBuf::default(),
+      rgb_buf: RgbaBuf::default(),
+      rgb_buf_present: RgbaBuf::default(),
       ppu_win_in_frame: Default::default(),
       ppu_win_in_ly: Default::default(),
       ppu_win_skipped: Default::default(),

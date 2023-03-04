@@ -299,7 +299,7 @@ impl Texture {
     label: Option<&str>,
   ) -> Self {
     let size = wgpu::Extent3d { width, height, depth_or_array_layers: 1 };
-    let format = wgpu::TextureFormat::Bgra8Unorm;
+    let format = wgpu::TextureFormat::Rgba8Unorm;
     let texture = device.create_texture(&wgpu::TextureDescriptor {
       label,
       size,

@@ -65,10 +65,9 @@
 use {
   ceres_core::Gb,
   clap::{builder::PossibleValuesParser, Arg, Command},
-  core::time::Duration,
+  core::{str::FromStr, time::Duration},
   std::{
-    fs,
-    fs::File,
+    fs::{self, File},
     io::Write,
     path::{Path, PathBuf},
     sync::Arc,
@@ -261,6 +260,33 @@ pub async fn run(
                       window::Fullscreen::Borderless(None),
                     )),
                   },
+                  KC::P => {
+                    // Screenshot
+
+                    let time = chrono::Local::now();
+
+                    let mut stem = sav_path.file_stem().unwrap().to_owned();
+                    stem.push(" - ");
+                    stem.push(time.to_string());
+
+                    let img_path = PathBuf::from_str(stem.to_str().unwrap())
+                      .unwrap()
+                      .with_extension("png");
+
+                    // println!("{img_path:?}");
+
+                    let gb = gb.lock();
+
+                    image::save_buffer_with_format(
+                      img_path,
+                      gb.pixel_data_rgb(),
+                      u32::from(ceres_core::PX_WIDTH),
+                      u32::from(ceres_core::PX_HEIGHT),
+                      image::ColorType::Rgba8,
+                      image::ImageFormat::Png,
+                    )
+                    .unwrap();
+                  }
                   _ => (),
                 },
                 ElementState::Released => match key {

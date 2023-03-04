@@ -4,6 +4,15 @@
 
 A (very experimental) GameBoy/Color emulator written in rust.
 
+## Screenshots
+
+<p align="center" width="100%">
+    <img width="25%" src="./images/pokemon_crystal.webp"> 
+    <img width="25%" src="./images/pokemon_silver.webp"> 
+    <img width="25%" src="./images/zelda_yume_1.webp"> 
+    <img width="25%" src="./images/zelda_yume_2.webp"> 
+</p>
+
 ## Build
 
 Required:

@@ -16,3 +16,7 @@ wgpu = { version = "*", default-features = false, features = ["spirv"] }
 winit = { version = "*", default-features = false, features = ["x11"] }
 pollster = { version = "*", default-features = false }
 bytemuck = { version = "*", default-features = false, features = ["derive"] }
+
+# Screenshots
+image = { version = "*", default-features = false, features = ["png"] }
+chrono = { version = "*" }
