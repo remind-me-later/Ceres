@@ -175,9 +175,6 @@ pub struct Gb {
   hdma_len:   u16,
   hdma_state: HdmaState,
 
-  // ppu
-  ppu: Ppu,
-
   // clock
   tima: u8,
   tma:  u8,
@@ -187,6 +184,9 @@ pub struct Gb {
 
   tac_enable:       bool,
   wide_div_counter: u16,
+
+  // ppu
+  ppu: Ppu,
 
   // apu
   apu: Apu,
