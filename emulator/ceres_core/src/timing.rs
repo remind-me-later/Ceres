@@ -20,7 +20,7 @@ impl Gb {
     }
 
     // TODO: is this order right?I
-    self.run_ppu(cycles);
+    self.ppu.run_ppu(cycles, &mut self.ifr, self.compat_mode);
     self.run_dma();
 
     self.apu.run(cycles);

@@ -279,7 +279,7 @@ pub async fn run(
 
                     image::save_buffer_with_format(
                       img_path,
-                      gb.pixel_data_rgb(),
+                      gb.pixel_data_rgba(),
                       u32::from(ceres_core::PX_WIDTH),
                       u32::from(ceres_core::PX_HEIGHT),
                       image::ColorType::Rgba8,
@@ -319,7 +319,7 @@ pub async fn run(
         }
       }
       Event::MainEventsCleared => {
-        video.update(gb.lock().pixel_data_rgb());
+        video.update(gb.lock().pixel_data_rgba());
         video.window().request_redraw();
         std::thread::sleep(Duration::from_nanos((1000 * 1_000_000) / 60));
       }

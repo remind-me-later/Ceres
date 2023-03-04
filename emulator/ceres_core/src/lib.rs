@@ -60,7 +60,7 @@
 )]
 #![feature(error_in_core, negative_impls)]
 
-use timing::TIMAState;
+use {ppu::Ppu, timing::TIMAState};
 
 extern crate alloc;
 
@@ -68,7 +68,6 @@ use {
   apu::Apu,
   core::{num::NonZeroU8, time::Duration},
   memory::HdmaState,
-  ppu::{ColorPalette, Mode, RgbaBuf, OAM_SIZE, VRAM_SIZE_CGB},
 };
 pub use {
   apu::Sample,
@@ -177,32 +176,7 @@ pub struct Gb {
   hdma_state: HdmaState,
 
   // ppu
-  lcdc: u8,
-  stat: u8,
-  scy:  u8,
-  scx:  u8,
-  ly:   u8,
-  lyc:  u8,
-  bgp:  u8,
-  obp0: u8,
-  obp1: u8,
-  wy:   u8,
-  wx:   u8,
-  opri: u8,
-  vbk:  bool,
-  bcp:  ColorPalette,
-  ocp:  ColorPalette,
-
-  frame_dots:       i32,
-  lcdc_delay:       bool,
-  vram:             [u8; VRAM_SIZE_CGB],
-  oam:              [u8; OAM_SIZE],
-  rgb_buf:          RgbaBuf,
-  rgb_buf_present:  RgbaBuf,
-  ppu_cycles:       i32,
-  ppu_win_in_frame: bool,
-  ppu_win_in_ly:    bool,
-  ppu_win_skipped:  u8,
+  ppu: Ppu,
 
   // clock
   tima: u8,
@@ -248,17 +222,15 @@ impl Gb {
 
       // Custom
       svbk_true: NonZeroU8::new(1).unwrap(),
-      ppu_cycles: Mode::HBlank.cycles(0),
 
       // Slices
       wram: [0; WRAM_SIZE_CGB],
       hram: [0; HRAM_SIZE],
-      vram: [0; VRAM_SIZE_CGB],
-      oam: [0; OAM_SIZE],
 
       apu: Apu::new(sample_rate),
 
       // Default
+      ppu: Ppu::default(),
       tima_state: TIMAState::default(),
       double_speed: Default::default(),
       double_speed_request: Default::default(),
@@ -290,28 +262,7 @@ impl Gb {
       hdma_dst: Default::default(),
       hdma_len: Default::default(),
       hdma_state: HdmaState::default(),
-      lcdc: Default::default(),
-      stat: Default::default(),
-      scy: Default::default(),
-      scx: Default::default(),
-      ly: Default::default(),
-      lyc: Default::default(),
-      bgp: Default::default(),
-      obp0: Default::default(),
-      obp1: Default::default(),
-      wy: Default::default(),
-      wx: Default::default(),
-      opri: Default::default(),
-      vbk: Default::default(),
-      bcp: ColorPalette::default(),
-      ocp: ColorPalette::default(),
-      frame_dots: Default::default(),
-      lcdc_delay: Default::default(),
-      rgb_buf: RgbaBuf::default(),
-      rgb_buf_present: RgbaBuf::default(),
-      ppu_win_in_frame: Default::default(),
-      ppu_win_in_ly: Default::default(),
-      ppu_win_skipped: Default::default(),
+
       tima: Default::default(),
       tma: Default::default(),
       tac: Default::default(),
@@ -334,7 +285,5 @@ impl Gb {
   pub fn cartridge(&mut self) -> &mut Cartridge { &mut self.cart }
 
   #[must_use]
-  pub const fn pixel_data_rgb(&self) -> &[u8] {
-    self.rgb_buf_present.pixel_data()
-  }
+  pub const fn pixel_data_rgba(&self) -> &[u8] { self.ppu.pixel_data_rgb() }
 }

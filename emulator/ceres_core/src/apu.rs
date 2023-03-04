@@ -148,8 +148,10 @@ impl Apu {
       self.ch1.step_sweep();
     }
   }
+}
 
-  // IO
+// IO
+impl Apu {
   #[must_use]
   pub fn read_nr50(&self) -> u8 {
     self.r_vol

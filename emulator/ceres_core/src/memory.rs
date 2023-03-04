@@ -119,11 +119,11 @@ impl Gb {
     match addr {
       0x0000..=0x00FF | 0x0200..=0x08FF => self.read_boot_or_cart(addr),
       0x0100..=0x01FF | 0x0900..=0x7FFF => self.cart.read_rom(addr),
-      0x8000..=0x9FFF => self.read_vram(addr),
+      0x8000..=0x9FFF => self.ppu.read_vram(addr),
       0xA000..=0xBFFF => self.cart.read_ram(addr),
       0xC000..=0xCFFF | 0xE000..=0xEFFF => self.read_ram(addr),
       0xD000..=0xDFFF | 0xF000..=0xFDFF => self.read_bank_ram(addr),
-      0xFE00..=0xFE9F => self.read_oam(addr),
+      0xFE00..=0xFE9F => self.ppu.read_oam(addr, self.dma_on),
       0xFEA0..=0xFEFF => 0xFF,
       0xFF00..=0xFFFF => self.read_high((addr & 0xFF) as u8),
     }
@@ -156,33 +156,33 @@ impl Gb {
       NR51 => self.apu.read_nr51(),
       NR52 => self.apu.read_nr52(),
       WAV_BEGIN..=WAV_END => self.apu.read_wave_ram(addr),
-      LCDC => self.lcdc,
-      STAT => self.stat | 0x80,
-      SCY => self.scy,
-      SCX => self.scx,
-      LY => self.ly,
-      LYC => self.lyc,
+      LCDC => self.ppu.read_lcdc(),
+      STAT => self.ppu.read_stat(),
+      SCY => self.ppu.read_scy(),
+      SCX => self.ppu.read_scx(),
+      LY => self.ppu.read_ly(),
+      LYC => self.ppu.read_lyc(),
       DMA => self.dma,
-      BGP => self.bgp,
-      OBP0 => self.obp0,
-      OBP1 => self.obp1,
-      WY => self.wy,
-      WX => self.wx,
+      BGP => self.ppu.read_bgp(),
+      OBP0 => self.ppu.read_obp0(),
+      OBP1 => self.ppu.read_obp1(),
+      WY => self.ppu.read_wy(),
+      WX => self.ppu.read_wx(),
       KEY1 if self.compat_mode == CompatMode::Cgb => {
         0x7E
           | (u8::from(self.double_speed) << 7)
           | u8::from(self.double_speed_request)
       }
-      VBK if self.compat_mode == CompatMode::Cgb => u8::from(self.vbk) | 0xFE,
+      VBK if self.compat_mode == CompatMode::Cgb => self.ppu.read_vbk(),
       HDMA5 if self.compat_mode == CompatMode::Cgb => {
         // active on low
         u8::from(!self.hdma_on()) << 7 | self.hdma5
       }
-      BCPS if self.compat_mode == CompatMode::Cgb => self.bcp.spec(),
-      BCPD if self.compat_mode == CompatMode::Cgb => self.bcp.data(),
-      OCPS if self.compat_mode == CompatMode::Cgb => self.ocp.spec(),
-      OCPD if self.compat_mode == CompatMode::Cgb => self.ocp.data(),
-      OPRI if self.compat_mode == CompatMode::Cgb => self.opri,
+      BCPS if self.compat_mode == CompatMode::Cgb => self.ppu.bcp().spec(),
+      BCPD if self.compat_mode == CompatMode::Cgb => self.ppu.bcp().data(),
+      OCPS if self.compat_mode == CompatMode::Cgb => self.ppu.ocp().spec(),
+      OCPD if self.compat_mode == CompatMode::Cgb => self.ppu.ocp().data(),
+      OPRI if self.compat_mode == CompatMode::Cgb => self.ppu.read_opri(),
       SVBK if self.compat_mode == CompatMode::Cgb => self.svbk | 0xF8,
       PCM12 if self.compat_mode == CompatMode::Cgb => self.apu.pcm12(),
       PCM34 if self.compat_mode == CompatMode::Cgb => self.apu.pcm34(),
@@ -196,11 +196,11 @@ impl Gb {
     match addr {
       // assume bootrom doesn't write to rom
       0x0000..=0x08FF | 0x0900..=0x7FFF => self.cart.write_rom(addr, val),
-      0x8000..=0x9FFF => self.write_vram(addr, val),
+      0x8000..=0x9FFF => self.ppu.write_vram(addr, val),
       0xA000..=0xBFFF => self.cart.write_ram(addr, val),
       0xC000..=0xCFFF | 0xE000..=0xEFFF => self.write_ram(addr, val),
       0xD000..=0xDFFF | 0xF000..=0xFDFF => self.write_bank_ram(addr, val),
-      0xFE00..=0xFE9F => self.write_oam(addr, val, self.dma_active()),
+      0xFE00..=0xFE9F => self.ppu.write_oam(addr, val, self.dma_active()),
       0xFEA0..=0xFEFF => (),
       0xFF00..=0xFFFF => self.write_high((addr & 0xFF) as u8, val),
     }
@@ -240,11 +240,11 @@ impl Gb {
       NR51 => self.apu.write_nr51(val),
       NR52 => self.apu.write_nr52(val),
       WAV_BEGIN..=WAV_END => self.apu.write_wave_ram(addr, val),
-      LCDC => self.write_lcdc(val),
-      STAT => self.write_stat(val),
-      SCY => self.scy = val,
-      SCX => self.scx = val,
-      LYC => self.lyc = val,
+      LCDC => self.ppu.write_lcdc(val),
+      STAT => self.ppu.write_stat(val),
+      SCY => self.ppu.write_scy(val),
+      SCX => self.ppu.write_scx(val),
+      LYC => self.ppu.write_lyc(val),
       DMA => {
         if self.dma_on {
           self.dma_restarting = true;
@@ -255,18 +255,18 @@ impl Gb {
         self.dma_addr = u16::from(val) << 8;
         self.dma_on = true;
       }
-      BGP => self.bgp = val,
-      OBP0 => self.obp0 = val,
-      OBP1 => self.obp1 = val,
-      WY => self.wy = val,
-      WX => self.wx = val,
+      BGP => self.ppu.write_bgp(val),
+      OBP0 => self.ppu.write_obp0(val),
+      OBP1 => self.ppu.write_obp1(val),
+      WY => self.ppu.write_wy(val),
+      WX => self.ppu.write_wx(val),
       KEY0 if self.model == Cgb && self.boot_rom.is_some() && val == 4 => {
         self.compat_mode = CompatMode::Compat;
       }
       KEY1 if self.compat_mode == CompatMode::Cgb => {
         self.double_speed_request = val & 1 != 0;
       }
-      VBK if self.compat_mode == CompatMode::Cgb => self.vbk = val & 1 != 0,
+      VBK if self.compat_mode == CompatMode::Cgb => self.ppu.write_vbk(val),
       0x50 => {
         if val & 1 != 0 {
           self.boot_rom = None;
@@ -297,11 +297,19 @@ impl Gb {
         self.hdma_len = (u16::from(self.hdma5) + 1) * 0x10;
         self.hdma_state = if val & 0x80 == 0 { General } else { HBlank };
       }
-      BCPS if self.compat_mode == CompatMode::Cgb => self.bcp.set_spec(val),
-      BCPD if self.compat_mode == CompatMode::Cgb => self.bcp.set_data(val),
-      OCPS if self.compat_mode == CompatMode::Cgb => self.ocp.set_spec(val),
-      OCPD if self.compat_mode == CompatMode::Cgb => self.ocp.set_data(val),
-      OPRI if self.compat_mode == CompatMode::Cgb => self.opri = val,
+      BCPS if self.compat_mode == CompatMode::Cgb => {
+        self.ppu.bcp_mut().set_spec(val);
+      }
+      BCPD if self.compat_mode == CompatMode::Cgb => {
+        self.ppu.bcp_mut().set_data(val);
+      }
+      OCPS if self.compat_mode == CompatMode::Cgb => {
+        self.ppu.ocp_mut().set_spec(val);
+      }
+      OCPD if self.compat_mode == CompatMode::Cgb => {
+        self.ppu.ocp_mut().set_data(val);
+      }
+      OPRI if self.compat_mode == CompatMode::Cgb => self.ppu.write_opri(val),
       SVBK if self.compat_mode == CompatMode::Cgb => {
         let tmp = val & 7;
         self.svbk = tmp;
@@ -335,7 +343,7 @@ impl Gb {
       // TODO: writes from DMA can access OAM on modes 2 and 3
       // with some glitches (RESEARCH) and without trouble during
       // VBLANK (what happens in HBLANK?)
-      self.oam[(self.dma_addr & 0xFF) as usize] = val;
+      self.ppu.write_oam_direct(self.dma_addr, val);
 
       self.dma_addr = self.dma_addr.wrapping_add(1);
       if self.dma_addr & 0xFF >= 0xA0 {
@@ -350,8 +358,8 @@ impl Gb {
 
     match self.hdma_state {
       General => (),
-      HBlank if self.ppu_mode() == Mode::HBlank => (),
-      HBlankDone if self.ppu_mode() != Mode::HBlank => {
+      HBlank if self.ppu.ppu_mode() == Mode::HBlank => (),
+      HBlankDone if self.ppu.ppu_mode() != Mode::HBlank => {
         self.hdma_state = HBlank;
         return;
       }
@@ -375,7 +383,7 @@ impl Gb {
       // TODO: the same problems as normal DMA plus reading from
       // VRAM should copy garbage
       let val = self.read_mem(self.hdma_src);
-      self.write_vram(self.hdma_dst, val);
+      self.ppu.write_vram(self.hdma_dst, val);
       self.hdma_dst += 1;
       self.hdma_src += 1;
     }

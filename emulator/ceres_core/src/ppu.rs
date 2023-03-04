@@ -1,4 +1,4 @@
-use crate::{CompatMode, Gb, IF_LCD_B, IF_VBLANK_B};
+use crate::{CompatMode, IF_LCD_B, IF_VBLANK_B};
 
 /// `GameBoy` screen width in pixels.
 pub const PX_WIDTH: u8 = 160;
@@ -39,10 +39,10 @@ const BG_X_FLIP_B: u8 = 0x20;
 const BG_Y_FLIP_B: u8 = 0x40;
 const BG_PR_B: u8 = 0x80;
 
-pub const OAM_SIZE: usize = 0x100;
+const OAM_SIZE: usize = 0x100;
 
 const VRAM_SIZE: u16 = 0x2000;
-pub const VRAM_SIZE_CGB: usize = VRAM_SIZE as usize * 2;
+const VRAM_SIZE_CGB: usize = VRAM_SIZE as usize * 2;
 
 // Sprite attributes bites
 const SPR_CGB_PAL: u8 = 0x7;
@@ -56,17 +56,9 @@ const SPR_BG_FIRST: u8 = 0x80;
 const PAL_RAM_SIZE: usize = 0x20;
 const PAL_RAM_SIZE_COLORS: usize = PAL_RAM_SIZE * 3;
 
-// DMG palette colors RGB
-const GRAYSCALE_PALETTE: [(u8, u8, u8); 4] = [
-  (0xFF, 0xFF, 0xFF),
-  (0xCC, 0xCC, 0xCC),
-  (0x77, 0x77, 0x77),
-  (0x00, 0x00, 0x00),
-];
-
 const RGBA_BUF_SIZE: usize = PX_TOTAL as usize * 4;
 
-pub struct RgbaBuf {
+struct RgbaBuf {
   data: [u8; RGBA_BUF_SIZE],
 }
 
@@ -86,7 +78,7 @@ impl RgbaBuf {
   //   self.data = [0xFF; RGB_BUF_SIZE];
   // }
 
-  pub const fn pixel_data(&self) -> &[u8] { &self.data }
+  pub(crate) const fn pixel_data(&self) -> &[u8] { &self.data }
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -199,83 +191,129 @@ impl ColorPalette {
 
 #[derive(Default)]
 struct Obj {
-  pub x:          u8,
-  pub y:          u8,
-  pub tile_index: u8,
-  pub attr:       u8,
+  x:          u8,
+  y:          u8,
+  tile_index: u8,
+  attr:       u8,
 }
 
-impl Gb {
-  pub(crate) fn run_ppu(&mut self, cycles: i32) {
-    fn check_lyc(gb: &mut Gb) {
-      gb.stat &= !STAT_LYC_B;
+pub struct Ppu {
+  lcdc: u8,
+  stat: u8,
+  scy:  u8,
+  scx:  u8,
+  ly:   u8,
+  lyc:  u8,
+  bgp:  u8,
+  obp0: u8,
+  obp1: u8,
+  wy:   u8,
+  wx:   u8,
+  opri: u8,
+  vbk:  bool,
+  bcp:  ColorPalette,
+  ocp:  ColorPalette,
 
-      if gb.ly == gb.lyc {
-        gb.stat |= STAT_LYC_B;
-        if gb.stat & STAT_IF_LYC_B != 0 {
-          gb.ifr |= IF_LCD_B;
-        }
-      }
-    }
+  frame_dots:       i32,
+  lcdc_delay:       bool,
+  vram:             [u8; VRAM_SIZE_CGB],
+  oam:              [u8; OAM_SIZE],
+  rgb_buf:          RgbaBuf,
+  rgba_buf_present: RgbaBuf,
+  ppu_cycles:       i32,
+  ppu_win_in_frame: bool,
+  ppu_win_in_ly:    bool,
+  ppu_win_skipped:  u8,
+}
 
-    if self.lcdc & LCDC_ON_B != 0 && !self.lcdc_delay {
-      self.ppu_cycles -= cycles;
-
-      if self.ppu_cycles <= 0 {
-        match self.ppu_mode() {
-          Mode::OamScan => self.switch_mode(Mode::Drawing),
-          Mode::Drawing => {
-            self.draw_scanline();
-            self.switch_mode(Mode::HBlank);
-          }
-          Mode::HBlank => {
-            self.ly += 1;
-            if self.ly < 144 {
-              self.switch_mode(Mode::OamScan);
-            } else {
-              self.switch_mode(Mode::VBlank);
-            }
-            check_lyc(self);
-          }
-          Mode::VBlank => {
-            self.ly += 1;
-            if self.ly > 153 {
-              self.ly = 0;
-              self.switch_mode(Mode::OamScan);
-            } else {
-              let scx = self.scx;
-              self.ppu_cycles =
-                self.ppu_cycles.wrapping_add(self.ppu_mode().cycles(scx));
-            }
-            check_lyc(self);
-          }
-        }
-      }
-    }
-
-    self.frame_dots += cycles;
-
-    if self.frame_dots >= 70224 {
-      if self.lcdc_delay {
-        self.lcdc_delay = false;
-      }
-
-      // self.running_frame = false;
-
-      self.rgb_buf_present.data = self.rgb_buf.data;
-      self.frame_dots -= 70224;
-    }
-  }
-
-  #[must_use]
-  pub(crate) const fn ppu_mode(&self) -> Mode {
-    match self.stat & 3 {
-      0 => Mode::HBlank,
-      1 => Mode::VBlank,
-      2 => Mode::OamScan,
-      _ => Mode::Drawing,
+impl Default for Ppu {
+  fn default() -> Self {
+    Self {
+      vram:             [0; VRAM_SIZE_CGB],
+      oam:              [0; OAM_SIZE],
+      ppu_cycles:       Mode::HBlank.cycles(0),
+      // Default
+      lcdc:             Default::default(),
+      stat:             Default::default(),
+      scy:              Default::default(),
+      scx:              Default::default(),
+      ly:               Default::default(),
+      lyc:              Default::default(),
+      bgp:              Default::default(),
+      obp0:             Default::default(),
+      obp1:             Default::default(),
+      wy:               Default::default(),
+      wx:               Default::default(),
+      opri:             Default::default(),
+      vbk:              Default::default(),
+      bcp:              ColorPalette::default(),
+      ocp:              ColorPalette::default(),
+      frame_dots:       Default::default(),
+      lcdc_delay:       Default::default(),
+      rgb_buf:          RgbaBuf::default(),
+      rgba_buf_present: RgbaBuf::default(),
+      ppu_win_in_frame: Default::default(),
+      ppu_win_in_ly:    Default::default(),
+      ppu_win_skipped:  Default::default(),
     }
   }
+}
+
+// IO
+impl Ppu {
+  pub(crate) fn ocp_mut(&mut self) -> &mut ColorPalette { &mut self.ocp }
+
+  pub(crate) fn bcp_mut(&mut self) -> &mut ColorPalette { &mut self.bcp }
+
+  pub(crate) const fn ocp(&self) -> &ColorPalette { &self.ocp }
+
+  pub(crate) const fn bcp(&self) -> &ColorPalette { &self.bcp }
+
+  pub(crate) fn read_lcdc(&mut self) -> u8 { self.lcdc }
+
+  pub(crate) fn read_stat(&mut self) -> u8 { self.stat | 0x80 }
+
+  pub(crate) fn read_ly(&mut self) -> u8 { self.ly }
+
+  pub(crate) fn write_opri(&mut self, val: u8) { self.opri = val }
+
+  pub(crate) fn read_opri(&mut self) -> u8 { self.opri }
+
+  pub(crate) fn write_vbk(&mut self, val: u8) { self.vbk = val & 1 != 0 }
+
+  pub(crate) fn read_vbk(&self) -> u8 { u8::from(self.vbk) | 0xFE }
+
+  pub(crate) fn write_scx(&mut self, val: u8) { self.scx = val }
+
+  pub(crate) const fn read_scx(&self) -> u8 { self.scx }
+
+  pub(crate) fn write_scy(&mut self, val: u8) { self.scy = val }
+
+  pub(crate) const fn read_scy(&self) -> u8 { self.scy }
+
+  pub(crate) fn write_lyc(&mut self, val: u8) { self.lyc = val }
+
+  pub(crate) const fn read_lyc(&self) -> u8 { self.lyc }
+
+  pub(crate) fn write_bgp(&mut self, val: u8) { self.bgp = val }
+
+  pub(crate) const fn read_bgp(&self) -> u8 { self.bgp }
+
+  pub(crate) fn write_obp0(&mut self, val: u8) { self.obp0 = val }
+
+  pub(crate) const fn read_obp0(&self) -> u8 { self.obp0 }
+
+  pub(crate) fn write_obp1(&mut self, val: u8) { self.obp1 = val }
+
+  pub(crate) const fn read_obp1(&self) -> u8 { self.obp1 }
+
+  pub(crate) fn write_wy(&mut self, val: u8) { self.wy = val }
+
+  pub(crate) const fn read_wy(&self) -> u8 { self.wy }
+
+  pub(crate) fn write_wx(&mut self, val: u8) { self.wx = val }
+
+  pub(crate) const fn read_wx(&self) -> u8 { self.wx }
 
   pub(crate) fn read_vram(&mut self, addr: u16) -> u8 {
     if self.ppu_mode() == Mode::Drawing {
@@ -287,9 +325,9 @@ impl Gb {
     }
   }
 
-  pub(crate) fn read_oam(&mut self, addr: u16) -> u8 {
+  pub(crate) fn read_oam(&mut self, addr: u16, dma_on: bool) -> u8 {
     match self.ppu_mode() {
-      Mode::HBlank | Mode::VBlank if !self.dma_on => {
+      Mode::HBlank | Mode::VBlank if !dma_on => {
         self.oam[(addr & 0xFF) as usize]
       }
       _ => 0xFF,
@@ -307,10 +345,6 @@ impl Gb {
 
     // turn on
     if val & LCDC_ON_B != 0 && self.lcdc & LCDC_ON_B == 0 {
-      self.set_mode(Mode::HBlank);
-      // FIXME: wtf?
-      self.stat &= !STAT_LYC_B;
-      self.stat |= STAT_LYC_B;
       self.set_mode(Mode::OamScan);
       self.ppu_cycles = Mode::OamScan.cycles(self.scx);
       self.lcdc_delay = true;
@@ -346,15 +380,111 @@ impl Gb {
     };
   }
 
+  pub(crate) fn write_oam_direct(&mut self, addr: u16, val: u8) {
+    self.oam[(addr & 0xFF) as usize] = val;
+  }
+}
+
+// Details
+impl Ppu {
+  #[must_use]
+  pub(crate) const fn pixel_data_rgb(&self) -> &[u8] {
+    self.rgba_buf_present.pixel_data()
+  }
+
+  pub(crate) fn run_ppu(
+    &mut self,
+    cycles: i32,
+    ifr: &mut u8,
+    compat_mode: CompatMode,
+  ) {
+    fn check_lyc(ppu: &mut Ppu, ifr: &mut u8) {
+      ppu.stat &= !STAT_LYC_B;
+
+      if ppu.ly == ppu.lyc {
+        ppu.stat |= STAT_LYC_B;
+        if ppu.stat & STAT_IF_LYC_B != 0 {
+          *ifr |= IF_LCD_B;
+        }
+      }
+    }
+
+    if self.lcdc & LCDC_ON_B != 0 && !self.lcdc_delay {
+      self.ppu_cycles -= cycles;
+
+      if self.ppu_cycles <= 0 {
+        match self.ppu_mode() {
+          Mode::OamScan => self.switch_mode(Mode::Drawing, ifr),
+          Mode::Drawing => {
+            self.draw_scanline(compat_mode);
+            self.switch_mode(Mode::HBlank, ifr);
+          }
+          Mode::HBlank => {
+            self.ly += 1;
+            if self.ly < 144 {
+              self.switch_mode(Mode::OamScan, ifr);
+            } else {
+              self.switch_mode(Mode::VBlank, ifr);
+            }
+            check_lyc(self, ifr);
+          }
+          Mode::VBlank => {
+            self.ly += 1;
+            if self.ly > 153 {
+              self.ly = 0;
+              self.switch_mode(Mode::OamScan, ifr);
+            } else {
+              let scx = self.scx;
+              self.ppu_cycles =
+                self.ppu_cycles.wrapping_add(self.ppu_mode().cycles(scx));
+            }
+            check_lyc(self, ifr);
+          }
+        }
+      }
+    }
+
+    self.frame_dots += cycles;
+
+    if self.frame_dots >= 70224 {
+      if self.lcdc_delay {
+        self.lcdc_delay = false;
+      }
+
+      // self.running_frame = false;
+
+      self.rgba_buf_present.data = self.rgb_buf.data;
+      self.frame_dots -= 70224;
+    }
+  }
+
+  #[must_use]
+  pub(crate) const fn ppu_mode(&self) -> Mode {
+    match self.stat & 3 {
+      0 => Mode::HBlank,
+      1 => Mode::VBlank,
+      2 => Mode::OamScan,
+      _ => Mode::Drawing,
+    }
+  }
+
   fn set_mode(&mut self, mode: Mode) {
     self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
   }
 
   const fn mono_rgb(index: u8) -> (u8, u8, u8) {
+    // DMG palette colors RGB
+    const GRAYSCALE_PALETTE: [(u8, u8, u8); 4] = [
+      (0xFF, 0xFF, 0xFF),
+      (0xCC, 0xCC, 0xCC),
+      (0x77, 0x77, 0x77),
+      (0x00, 0x00, 0x00),
+    ];
+
     GRAYSCALE_PALETTE[index as usize]
   }
 
-  fn switch_mode(&mut self, mode: Mode) {
+  fn switch_mode(&mut self, mode: Mode, ifr: &mut u8) {
     self.set_mode(mode);
     let scx = self.scx;
     self.ppu_cycles = self.ppu_cycles.wrapping_add(mode.cycles(scx));
@@ -362,20 +492,20 @@ impl Gb {
     match mode {
       Mode::OamScan => {
         if self.stat & STAT_IF_OAM_B != 0 {
-          self.ifr |= IF_LCD_B;
+          *ifr |= IF_LCD_B;
         }
 
         self.ppu_win_in_ly = false;
       }
       Mode::VBlank => {
-        self.ifr |= IF_VBLANK_B;
+        *ifr |= IF_VBLANK_B;
 
         if self.stat & STAT_IF_VBLANK_B != 0 {
-          self.ifr |= IF_LCD_B;
+          *ifr |= IF_LCD_B;
         }
 
         if self.stat & STAT_IF_OAM_B != 0 {
-          self.ifr |= IF_LCD_B;
+          *ifr |= IF_LCD_B;
         }
 
         self.ppu_win_skipped = 0;
@@ -384,14 +514,14 @@ impl Gb {
       Mode::Drawing => (),
       Mode::HBlank => {
         if self.stat & STAT_IF_HBLANK_B != 0 {
-          self.ifr |= IF_LCD_B;
+          *ifr |= IF_LCD_B;
         }
       }
     }
   }
 
-  const fn win_enabled(&self) -> bool {
-    match self.compat_mode {
+  const fn win_enabled(&self, compat_mode: CompatMode) -> bool {
+    match compat_mode {
       CompatMode::Dmg | CompatMode::Compat => {
         self.lcdc & (LCDC_BG_B | LCDC_WIN_B) == (LCDC_BG_B | LCDC_WIN_B)
       }
@@ -399,15 +529,15 @@ impl Gb {
     }
   }
 
-  const fn bg_enabled(&self) -> bool {
-    match self.compat_mode {
+  const fn bg_enabled(&self, compat_mode: CompatMode) -> bool {
+    match compat_mode {
       CompatMode::Dmg | CompatMode::Compat => self.lcdc & LCDC_BG_B != 0,
       CompatMode::Cgb => true,
     }
   }
 
-  const fn cgb_master_priority(&self) -> bool {
-    match self.compat_mode {
+  const fn cgb_master_priority(&self, compat_mode: CompatMode) -> bool {
+    match compat_mode {
       CompatMode::Dmg | CompatMode::Compat => false,
       CompatMode::Cgb => self.lcdc & LCDC_BG_B == 0,
     }
@@ -456,21 +586,22 @@ impl Gb {
     (lo, hi)
   }
 
-  fn draw_scanline(&mut self) {
+  fn draw_scanline(&mut self, compat_mode: CompatMode) {
     let mut bg_priority = [Priority::Normal; PX_WIDTH as usize];
     let base_idx = PX_WIDTH as usize * self.ly as usize;
 
-    self.draw_bg(&mut bg_priority, base_idx);
-    self.draw_win(&mut bg_priority, base_idx);
-    self.draw_obj(&mut bg_priority, base_idx);
+    self.draw_bg(&mut bg_priority, base_idx, compat_mode);
+    self.draw_win(&mut bg_priority, base_idx, compat_mode);
+    self.draw_obj(&mut bg_priority, base_idx, compat_mode);
   }
 
   fn draw_bg(
     &mut self,
     bg_priority: &mut [Priority; PX_WIDTH as usize],
     base_idx: usize,
+    compat_mode: CompatMode,
   ) {
-    if !self.bg_enabled() {
+    if !self.bg_enabled(compat_mode) {
       return;
     }
 
@@ -484,7 +615,7 @@ impl Gb {
 
       let tile_map = self.bg_tile_map() + row + col;
 
-      let attr = match self.compat_mode {
+      let attr = match compat_mode {
         CompatMode::Dmg | CompatMode::Compat => 0,
         CompatMode::Cgb => self.vram_at_bank(tile_map, 1),
       };
@@ -506,7 +637,7 @@ impl Gb {
         u8::from(hi & bit != 0) << 1 | u8::from(lo & bit != 0)
       };
 
-      let rgb = match self.compat_mode {
+      let rgb = match compat_mode {
         CompatMode::Dmg => Self::mono_rgb(shade_index(self.bgp, color)),
         CompatMode::Compat => {
           self.bcp.rgb(attr & BG_PAL_B, shade_index(self.bgp, color))
@@ -530,9 +661,13 @@ impl Gb {
     &mut self,
     bg_priority: &mut [Priority; PX_WIDTH as usize],
     base_idx: usize,
+    compat_mode: CompatMode,
   ) {
     // not so sure about last condition...
-    if !(self.win_enabled() && self.wy <= self.ly && self.wx < PX_WIDTH) {
+    if !(self.win_enabled(compat_mode)
+      && self.wy <= self.ly
+      && self.wx < PX_WIDTH)
+    {
       if self.ppu_win_in_frame {
         self.ppu_win_skipped += 1;
       }
@@ -553,7 +688,7 @@ impl Gb {
 
       let tile_map = self.win_tile_map() + row + col;
 
-      let attr = match self.compat_mode {
+      let attr = match compat_mode {
         CompatMode::Dmg | CompatMode::Compat => 0,
         CompatMode::Cgb => self.vram_at_bank(tile_map, 1),
       };
@@ -575,7 +710,7 @@ impl Gb {
         u8::from(hi & bit != 0) << 1 | u8::from(lo & bit != 0)
       };
 
-      let rgb = match self.compat_mode {
+      let rgb = match compat_mode {
         CompatMode::Dmg => Self::mono_rgb(shade_index(self.bgp, color)),
         CompatMode::Compat => {
           self.bcp.rgb(attr & BG_PAL_B, shade_index(self.bgp, color))
@@ -595,7 +730,11 @@ impl Gb {
     }
   }
 
-  fn objs_in_ly(&mut self, height: u8) -> ([Obj; 10], usize) {
+  fn objs_in_ly(
+    &mut self,
+    height: u8,
+    compat_mode: CompatMode,
+  ) -> ([Obj; 10], usize) {
     let mut len = 0;
 
     let mut obj: [Obj; 10] = Default::default();
@@ -620,7 +759,7 @@ impl Gb {
       }
     }
 
-    match self.compat_mode {
+    match compat_mode {
       CompatMode::Cgb => {
         for i in 1..len {
           let mut j = i;
@@ -648,6 +787,7 @@ impl Gb {
     &mut self,
     bg_priority: &mut [Priority; PX_WIDTH as usize],
     base_idx: usize,
+    compat_mode: CompatMode,
   ) {
     if self.lcdc & LCDC_OBJ_B == 0 {
       return;
@@ -656,7 +796,7 @@ impl Gb {
     let large = self.lcdc & LCDC_OBJL_B != 0;
     let height = 8 * (u8::from(large) + 1);
 
-    let (objs, len) = self.objs_in_ly(height);
+    let (objs, len) = self.objs_in_ly(height, compat_mode);
 
     for obj in objs.iter().take(len) {
       let tile_addr = {
@@ -680,7 +820,7 @@ impl Gb {
         let x = obj.x.wrapping_add(7 - xi);
 
         if x >= PX_WIDTH
-          || (!self.cgb_master_priority()
+          || (!self.cgb_master_priority(compat_mode)
             && (bg_priority[x as usize] == Priority::Bg
               || obj.attr & SPR_BG_FIRST != 0
                 && bg_priority[x as usize] == Priority::Normal))
@@ -701,7 +841,7 @@ impl Gb {
           continue;
         }
 
-        let rgb = match self.compat_mode {
+        let rgb = match compat_mode {
           CompatMode::Dmg => {
             let palette =
               if obj.attr & SPR_PAL == 0 { self.obp0 } else { self.obp1 };
