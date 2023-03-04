@@ -19,4 +19,4 @@ bytemuck = { version = "*", default-features = false, features = ["derive"] }
 
 # Screenshots
 image = { version = "*", default-features = false, features = ["png"] }
-chrono = { version = "*" }
+chrono = { version = "*", default-features = false, features = ["clock"] }

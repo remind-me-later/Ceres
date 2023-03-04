@@ -7,10 +7,11 @@ A (very experimental) GameBoy/Color emulator written in rust.
 ## Screenshots
 
 <p align="center" width="100%">
-    <img width="24%" src="./images/pokemon_crystal.webp"> 
-    <img width="24%" src="./images/pokemon_silver.webp"> 
-    <img width="24%" src="./images/zelda_yume_1.webp"> 
-    <img width="24%" src="./images/zelda_yume_2.webp"> 
+    <img width="30%" src="./images/pokemon_crystal.webp"> 
+    <img width="30%" src="./images/pokemon_silver.webp"> 
+    <img width="30%" src="./images/zelda_yume_1.webp"> 
+    <img width="30%" src="./images/zelda_yume_2.webp"> 
+    <img width="30%" src="./images/kirby_dream.webp"> 
 </p>
 
 ## Build
