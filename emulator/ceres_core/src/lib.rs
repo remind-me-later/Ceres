@@ -1,4 +1,4 @@
-#![no_std]
+// #![no_std]
 #![forbid(unsafe_code)]
 #![warn(
   clippy::pedantic,
@@ -58,16 +58,14 @@
   clippy::missing_safety_doc,
   clippy::similar_names
 )]
-#![feature(error_in_core, negative_impls)]
-
-use {ppu::Ppu, timing::TIMAState};
-
-extern crate alloc;
+#![feature(error_in_core)]
 
 use {
   apu::Apu,
   core::{num::NonZeroU8, time::Duration},
   memory::HdmaState,
+  ppu::Ppu,
+  timing::TIMAState,
 };
 pub use {
   apu::Sample,
@@ -75,6 +73,8 @@ pub use {
   joypad::Button,
   ppu::{PX_HEIGHT, PX_WIDTH},
 };
+
+extern crate alloc;
 
 mod apu;
 mod cartridge;
@@ -96,9 +96,9 @@ const IF_TIMER_B: u8 = 4;
 // const IF_SERIAL_B: u8 = 8;
 const IF_P1_B: u8 = 16;
 
-const HRAM_SIZE: usize = 0x80;
-const WRAM_SIZE: usize = 0x2000;
-const WRAM_SIZE_CGB: usize = WRAM_SIZE * 4;
+const HRAM_SIZE: u8 = 0x80;
+const WRAM_SIZE: u16 = 0x2000;
+const WRAM_SIZE_CGB: u16 = WRAM_SIZE * 4;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Model {
@@ -156,8 +156,8 @@ pub struct Gb {
   ie:       u8,
 
   // memory
-  wram:      [u8; WRAM_SIZE_CGB],
-  hram:      [u8; HRAM_SIZE],
+  wram:      [u8; WRAM_SIZE_CGB as usize],
+  hram:      [u8; HRAM_SIZE as usize],
   svbk:      u8,
   svbk_true: NonZeroU8, // true selected bank, between 1 and 7
 
@@ -224,8 +224,8 @@ impl Gb {
       svbk_true: NonZeroU8::new(1).unwrap(),
 
       // Slices
-      wram: [0; WRAM_SIZE_CGB],
-      hram: [0; HRAM_SIZE],
+      wram: [0; WRAM_SIZE_CGB as usize],
+      hram: [0; HRAM_SIZE as usize],
 
       apu: Apu::new(sample_rate),
 

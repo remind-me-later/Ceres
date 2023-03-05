@@ -9,10 +9,10 @@ const SAMPLE_LEN: u8 = RAM_LEN * 2;
 #[derive(Default)]
 pub(super) struct Wave {
   ltim: LengthTimer<0x100>,
+  wl:   WaveLength<2, ()>,
 
   on:         bool,
   dac_on:     bool,
-  wl:         WaveLength<2, ()>,
   sample_buf: u8,
   ram:        [u8; RAM_LEN as usize],
   samples:    [u8; SAMPLE_LEN as usize],
@@ -23,16 +23,16 @@ pub(super) struct Wave {
 
 impl Wave {
   pub(super) const fn read_wave_ram(&self, addr: u8) -> u8 {
-    let index = (addr - 0x30) as usize;
-    self.ram[index]
+    let index = addr - 0x30;
+    self.ram[index as usize]
   }
 
   pub(super) fn write_wave_ram(&mut self, addr: u8, val: u8) {
-    let index = (addr - 0x30) as usize;
-    self.ram[index] = val;
+    let index = addr - 0x30;
+    self.ram[index as usize] = val;
     // upper 4 bits first
-    self.samples[index * 2] = val >> 4;
-    self.samples[index * 2 + 1] = val & 0xF;
+    self.samples[index as usize * 2] = val >> 4;
+    self.samples[index as usize * 2 + 1] = val & 0xF;
   }
 
   pub(super) const fn read_nr30(&self) -> u8 { self.nr30 | 0x7F }

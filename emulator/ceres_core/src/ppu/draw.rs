@@ -121,7 +121,7 @@ impl Ppu {
 
   pub(super) fn draw_scanline(&mut self, compat_mode: CompatMode) {
     let mut bg_priority = [Priority::Normal; PX_WIDTH as usize];
-    let base_idx = PX_WIDTH as usize * self.ly as usize;
+    let base_idx = u32::from(PX_WIDTH) * u32::from(self.ly);
 
     self.draw_bg(&mut bg_priority, base_idx, compat_mode);
     self.draw_win(&mut bg_priority, base_idx, compat_mode);
@@ -131,7 +131,7 @@ impl Ppu {
   fn draw_bg(
     &mut self,
     bg_priority: &mut [Priority; PX_WIDTH as usize],
-    base_idx: usize,
+    base_idx: u32,
     compat_mode: CompatMode,
   ) {
     if !self.bg_enabled(compat_mode) {
@@ -178,7 +178,7 @@ impl Ppu {
         CompatMode::Cgb => self.bcp.rgb(attr & BG_PAL_B, color),
       };
 
-      self.rgb_buf.set_px(base_idx + i as usize, rgb);
+      self.rgb_buf.set_px(base_idx + u32::from(i), rgb);
 
       bg_priority[i as usize] = if color == 0 {
         Priority::Sprites
@@ -193,7 +193,7 @@ impl Ppu {
   fn draw_win(
     &mut self,
     bg_priority: &mut [Priority; PX_WIDTH as usize],
-    base_idx: usize,
+    base_idx: u32,
     compat_mode: CompatMode,
   ) {
     // not so sure about last condition...
@@ -259,20 +259,16 @@ impl Ppu {
         Priority::Normal
       };
 
-      self.rgb_buf.set_px(base_idx + i as usize, rgb);
+      self.rgb_buf.set_px(base_idx + u32::from(i), rgb);
     }
   }
 
-  fn objs_in_ly(
-    &mut self,
-    height: u8,
-    compat_mode: CompatMode,
-  ) -> ([Obj; 10], usize) {
-    let mut len = 0;
+  fn objs_in_ly(&mut self, height: u8, compat: CompatMode) -> ([Obj; 10], u8) {
+    let mut len: u8 = 0;
 
     let mut obj: [Obj; 10] = Default::default();
 
-    for i in (0..OAM_SIZE).step_by(4) {
+    for i in (0..OAM_SIZE as usize).step_by(4) {
       let y = self.oam[i].wrapping_sub(16);
 
       if self.ly.wrapping_sub(y) < height {
@@ -283,7 +279,7 @@ impl Ppu {
           attr: self.oam[i + 3],
         };
 
-        obj[len] = attr;
+        obj[len as usize] = attr;
         len += 1;
 
         if len == 10 {
@@ -292,10 +288,10 @@ impl Ppu {
       }
     }
 
-    match compat_mode {
+    match compat {
       CompatMode::Cgb => {
         for i in 1..len {
-          let mut j = i;
+          let mut j = i as usize;
           while j > 0 {
             obj.swap(j - 1, j);
             j -= 1;
@@ -304,7 +300,7 @@ impl Ppu {
       }
       _ => {
         for i in 1..len {
-          let mut j = i;
+          let mut j = i as usize;
           while j > 0 && obj[j - 1].x <= obj[j].x {
             obj.swap(j - 1, j);
             j -= 1;
@@ -319,7 +315,7 @@ impl Ppu {
   fn draw_obj(
     &mut self,
     bg_priority: &mut [Priority; PX_WIDTH as usize],
-    base_idx: usize,
+    base_idx: u32,
     compat_mode: CompatMode,
   ) {
     if self.lcdc & LCDC_OBJ_B == 0 {
@@ -331,7 +327,7 @@ impl Ppu {
 
     let (objs, len) = self.objs_in_ly(height, compat_mode);
 
-    for obj in objs.iter().take(len) {
+    for obj in objs.iter().take(len as usize) {
       let tile_addr = {
         let tile_number =
           if large { obj.tile_index & !1 } else { obj.tile_index };
@@ -393,7 +389,7 @@ impl Ppu {
           }
         };
 
-        self.rgb_buf.set_px(base_idx + x as usize, rgb);
+        self.rgb_buf.set_px(base_idx + u32::from(x), rgb);
       }
     }
   }

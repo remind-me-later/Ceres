@@ -36,9 +36,9 @@ const STAT_IF_OAM_B: u8 = 0x20;
 const STAT_IF_LYC_B: u8 = 0x40;
 
 // Sizes
-const OAM_SIZE: usize = 0x100;
+const OAM_SIZE: u16 = 0x100;
 const VRAM_SIZE: u16 = 0x2000;
-const VRAM_SIZE_CGB: usize = VRAM_SIZE as usize * 2;
+const VRAM_SIZE_CGB: u16 = VRAM_SIZE * 2;
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Mode {
@@ -79,8 +79,8 @@ pub struct Ppu {
 
   frame_dots:       i32,
   lcdc_delay:       bool,
-  vram:             [u8; VRAM_SIZE_CGB],
-  oam:              [u8; OAM_SIZE],
+  vram:             [u8; VRAM_SIZE_CGB as usize],
+  oam:              [u8; OAM_SIZE as usize],
   rgb_buf:          RgbaBuf,
   rgba_buf_present: RgbaBuf,
   ppu_cycles:       i32,
@@ -92,8 +92,8 @@ pub struct Ppu {
 impl Default for Ppu {
   fn default() -> Self {
     Self {
-      vram:             [0; VRAM_SIZE_CGB],
-      oam:              [0; OAM_SIZE],
+      vram:             [0; VRAM_SIZE_CGB as usize],
+      oam:              [0; OAM_SIZE as usize],
       ppu_cycles:       Mode::HBlank.cycles(0),
       // Default
       lcdc:             Default::default(),
@@ -337,8 +337,7 @@ impl Ppu {
 
   fn switch_mode(&mut self, mode: Mode, ifr: &mut u8) {
     self.set_mode(mode);
-    let scx = self.scx;
-    self.ppu_cycles = self.ppu_cycles.wrapping_add(mode.cycles(scx));
+    self.ppu_cycles = self.ppu_cycles.wrapping_add(mode.cycles(self.scx));
 
     match mode {
       Mode::OamScan => {
@@ -355,9 +354,10 @@ impl Ppu {
           *ifr |= IF_LCD_B;
         }
 
-        if self.stat & STAT_IF_OAM_B != 0 {
-          *ifr |= IF_LCD_B;
-        }
+        // TODO: why?
+        // if self.stat & STAT_IF_OAM_B != 0 {
+        //   *ifr |= IF_LCD_B;
+        // }
 
         self.ppu_win_skipped = 0;
         self.ppu_win_in_frame = false;

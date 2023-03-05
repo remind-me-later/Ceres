@@ -1,17 +1,17 @@
 // CGB palette RAM
-const PAL_RAM_SIZE: usize = 0x20;
-const PAL_RAM_SIZE_COLORS: usize = PAL_RAM_SIZE * 3;
+const PAL_RAM_SIZE: u8 = 0x20;
+const PAL_RAM_SIZE_COLORS: u8 = PAL_RAM_SIZE * 3;
 
 pub struct ColorPalette {
   // Rgb color ram
-  col: [u8; PAL_RAM_SIZE_COLORS],
+  col: [u8; PAL_RAM_SIZE_COLORS as usize],
   idx: u8,
   inc: bool, // increment after write
 }
 
 impl Default for ColorPalette {
   fn default() -> Self {
-    Self { col: [0; PAL_RAM_SIZE_COLORS], idx: 0, inc: false }
+    Self { col: [0; PAL_RAM_SIZE_COLORS as usize], idx: 0, inc: false }
   }
 }
 

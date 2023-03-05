@@ -6,10 +6,10 @@ use {
 #[derive(PartialEq, Eq, Default)]
 pub enum HdmaState {
   #[default]
-  Sleep      = 0,
-  HBlank     = 1,
-  HBlankDone = 2,
-  General    = 3,
+  Sleep,
+  WaitHBlank,
+  HBlankDone,
+  General,
 }
 
 // IO addresses
@@ -285,7 +285,9 @@ impl Gb {
         self.hdma_dst = (self.hdma_dst & 0x1F00) | u16::from(val & 0xF0);
       }
       HDMA5 if self.compat_mode == CompatMode::Cgb => {
-        use HdmaState::{General, HBlank, Sleep};
+        use HdmaState::{General, Sleep, WaitHBlank};
+
+        debug_assert!(!matches!(self.hdma_state, HdmaState::General));
 
         // stop current transfer
         if self.hdma_on() && val & 0x80 == 0 {
@@ -295,7 +297,7 @@ impl Gb {
 
         self.hdma5 = val & 0x7F;
         self.hdma_len = (u16::from(self.hdma5) + 1) * 0x10;
-        self.hdma_state = if val & 0x80 == 0 { General } else { HBlank };
+        self.hdma_state = if val & 0x80 == 0 { General } else { WaitHBlank };
       }
       BCPS if self.compat_mode == CompatMode::Cgb => {
         self.ppu.bcp_mut().set_spec(val);
@@ -354,19 +356,19 @@ impl Gb {
   }
 
   pub(crate) fn run_hdma(&mut self) {
-    use HdmaState::{General, HBlank, HBlankDone, Sleep};
+    use HdmaState::{General, HBlankDone, Sleep, WaitHBlank};
 
     match self.hdma_state {
       General => (),
-      HBlank if self.ppu.ppu_mode() == Mode::HBlank => (),
+      WaitHBlank if self.ppu.ppu_mode() == Mode::HBlank => (),
       HBlankDone if self.ppu.ppu_mode() != Mode::HBlank => {
-        self.hdma_state = HBlank;
+        self.hdma_state = WaitHBlank;
         return;
       }
       _ => return,
     }
 
-    let len = if self.hdma_state == HBlank {
+    let len = if self.hdma_state == WaitHBlank {
       self.hdma_len -= 0x10;
       self.hdma_state = if self.hdma_len == 0 { Sleep } else { HBlankDone };
       self.hdma5 = ((self.hdma_len / 0x10).wrapping_sub(1) & 0xFF) as u8;
@@ -392,10 +394,11 @@ impl Gb {
     // access IO range (clk registers, ifr,
     // etc..). If the PPU reads VRAM during an HDMA transfer it
     // should be glitchy anyways
+    // TODO: check these timings
     if self.double_speed {
-      self.advance_t_cycles(i32::from(len) * 2);
+      self.advance_t_cycles(i32::from(len) * 2 * 2);
     } else {
-      self.advance_t_cycles(i32::from(len));
+      self.advance_t_cycles(i32::from(len) * 2);
     }
   }
 }
