@@ -64,7 +64,7 @@ impl Apu {
   pub fn reset_samples_run(&mut self) { self.samples_run = 0; }
 
   const fn sample_period_from_rate(sample_rate: i32) -> i32 {
-    // maybe account for difference between 59.7 and target Hz?
+    // TODO: maybe account for difference between 59.7 and target Hz?
     TC_SEC / sample_rate + 1
   }
 

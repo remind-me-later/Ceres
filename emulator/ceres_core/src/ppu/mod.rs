@@ -77,8 +77,6 @@ pub struct Ppu {
   bcp:  ColorPalette,
   ocp:  ColorPalette,
 
-  frame_dots:       i32,
-  lcdc_delay:       bool,
   vram:             [u8; VRAM_SIZE_CGB as usize],
   oam:              [u8; OAM_SIZE as usize],
   rgb_buf:          RgbaBuf,
@@ -94,10 +92,10 @@ impl Default for Ppu {
     Self {
       vram:             [0; VRAM_SIZE_CGB as usize],
       oam:              [0; OAM_SIZE as usize],
-      ppu_cycles:       Mode::HBlank.cycles(0),
+      ppu_cycles:       Mode::OamScan.cycles(0),
       // Default
       lcdc:             Default::default(),
-      stat:             Default::default(),
+      stat:             STAT_LYC_B | Mode::OamScan as u8,
       scy:              Default::default(),
       scx:              Default::default(),
       ly:               Default::default(),
@@ -111,8 +109,6 @@ impl Default for Ppu {
       vbk:              Default::default(),
       bcp:              ColorPalette::default(),
       ocp:              ColorPalette::default(),
-      frame_dots:       Default::default(),
-      lcdc_delay:       Default::default(),
       rgb_buf:          RgbaBuf::default(),
       rgba_buf_present: RgbaBuf::default(),
       ppu_win_in_frame: Default::default(),
@@ -131,8 +127,6 @@ impl Ppu {
   pub(crate) const fn ocp(&self) -> &ColorPalette { &self.ocp }
 
   pub(crate) const fn bcp(&self) -> &ColorPalette { &self.bcp }
-
-  pub(crate) fn read_lcdc(&mut self) -> u8 { self.lcdc }
 
   pub(crate) fn read_stat(&mut self) -> u8 { self.stat | 0x80 }
 
@@ -178,40 +172,23 @@ impl Ppu {
 
   pub(crate) const fn read_wx(&self) -> u8 { self.wx }
 
-  pub(crate) fn read_vram(&mut self, addr: u16) -> u8 {
-    if self.ppu_mode() == Mode::Drawing {
-      0xFF
-    } else {
-      let bank = u16::from(self.vbk) * VRAM_SIZE;
-      let i = (addr & 0x1FFF) + bank;
-      self.vram[i as usize]
-    }
-  }
+  pub(crate) fn read_lcdc(&mut self) -> u8 { self.lcdc }
 
-  pub(crate) fn read_oam(&mut self, addr: u16, dma_on: bool) -> u8 {
-    match self.ppu_mode() {
-      Mode::HBlank | Mode::VBlank if !dma_on => {
-        self.oam[(addr & 0xFF) as usize]
-      }
-      _ => 0xFF,
-    }
-  }
-
-  pub(crate) fn write_lcdc(&mut self, val: u8) {
+  pub(crate) fn write_lcdc(&mut self, val: u8, ifr: &mut u8) {
     // turn off
     if val & LCDC_ON_B == 0 && self.lcdc & LCDC_ON_B != 0 {
-      debug_assert!(self.ppu_mode() == Mode::VBlank);
-      self.ly = 0;
+      // debug_assert!(self.ppu_mode() == Mode::VBlank);
+      // self.scx = 0;
       // self.rgb_buf.clear();
-      self.frame_dots = 0;
+      self.ly = 0;
     }
 
     // turn on
     if val & LCDC_ON_B != 0 && self.lcdc & LCDC_ON_B == 0 {
-      self.set_mode(Mode::OamScan);
+      self.set_mode_stat(Mode::OamScan);
       self.ppu_cycles = Mode::OamScan.cycles(self.scx);
-      self.lcdc_delay = true;
-      self.frame_dots = 0;
+      self.ly = 0;
+      self.check_lyc(ifr);
     }
 
     self.lcdc = val;
@@ -226,11 +203,30 @@ impl Ppu {
     self.stat |= ly_equals_lyc | mode;
   }
 
+  pub(crate) fn read_vram(&mut self, addr: u16) -> u8 {
+    if self.ppu_mode() == Mode::Drawing {
+      0xFF
+    } else {
+      let bank = u16::from(self.vbk) * VRAM_SIZE;
+      let i = (addr & 0x1FFF) + bank;
+      self.vram[i as usize]
+    }
+  }
+
   pub(crate) fn write_vram(&mut self, addr: u16, val: u8) {
     if self.ppu_mode() != Mode::Drawing {
       let bank = u16::from(self.vbk) * VRAM_SIZE;
       let i = (addr & 0x1FFF) + bank;
       self.vram[i as usize] = val;
+    }
+  }
+
+  pub(crate) fn read_oam(&mut self, addr: u16, dma_on: bool) -> u8 {
+    match self.ppu_mode() {
+      Mode::HBlank | Mode::VBlank if !dma_on => {
+        self.oam[(addr & 0xFF) as usize]
+      }
+      _ => 0xFF,
     }
   }
 
@@ -250,74 +246,56 @@ impl Ppu {
 
 // General
 impl Ppu {
-  #[must_use]
-  pub(crate) const fn pixel_data_rgb(&self) -> &[u8] {
-    self.rgba_buf_present.pixel_data()
-  }
-
   pub(crate) fn run(
     &mut self,
     cycles: i32,
     ifr: &mut u8,
     compat_mode: CompatMode,
   ) {
-    fn check_lyc(ppu: &mut Ppu, ifr: &mut u8) {
-      ppu.stat &= !STAT_LYC_B;
-
-      if ppu.ly == ppu.lyc {
-        ppu.stat |= STAT_LYC_B;
-        if ppu.stat & STAT_IF_LYC_B != 0 {
-          *ifr |= IF_LCD_B;
-        }
-      }
-    }
-
-    if self.lcdc & LCDC_ON_B != 0 && !self.lcdc_delay {
+    if self.lcdc & LCDC_ON_B != 0 {
       self.ppu_cycles -= cycles;
 
-      if self.ppu_cycles <= 0 {
+      if self.ppu_cycles < 0 {
         match self.ppu_mode() {
-          Mode::OamScan => self.switch_mode(Mode::Drawing, ifr),
+          Mode::OamScan => self.enter_mode(Mode::Drawing, ifr),
           Mode::Drawing => {
             self.draw_scanline(compat_mode);
-            self.switch_mode(Mode::HBlank, ifr);
+            self.enter_mode(Mode::HBlank, ifr);
           }
           Mode::HBlank => {
             self.ly += 1;
             if self.ly < 144 {
-              self.switch_mode(Mode::OamScan, ifr);
+              self.enter_mode(Mode::OamScan, ifr);
             } else {
-              self.switch_mode(Mode::VBlank, ifr);
+              self.enter_mode(Mode::VBlank, ifr);
             }
-            check_lyc(self, ifr);
+            self.check_lyc(ifr);
           }
           Mode::VBlank => {
             self.ly += 1;
             if self.ly > 153 {
               self.ly = 0;
-              self.switch_mode(Mode::OamScan, ifr);
+              self.rgba_buf_present = self.rgb_buf.clone();
+              self.enter_mode(Mode::OamScan, ifr);
             } else {
-              let scx = self.scx;
               self.ppu_cycles =
-                self.ppu_cycles.wrapping_add(self.ppu_mode().cycles(scx));
+                self.ppu_cycles.wrapping_add(self.ppu_mode().cycles(self.scx));
             }
-            check_lyc(self, ifr);
+            self.check_lyc(ifr);
           }
         }
       }
     }
+  }
 
-    self.frame_dots += cycles;
+  fn check_lyc(&mut self, ifr: &mut u8) {
+    self.stat &= !STAT_LYC_B;
 
-    if self.frame_dots >= 70224 {
-      if self.lcdc_delay {
-        self.lcdc_delay = false;
+    if self.ly == self.lyc {
+      self.stat |= STAT_LYC_B;
+      if self.stat & STAT_IF_LYC_B != 0 {
+        *ifr |= IF_LCD_B;
       }
-
-      // self.running_frame = false;
-
-      self.rgba_buf_present = self.rgb_buf.clone();
-      self.frame_dots -= 70224;
     }
   }
 
@@ -331,12 +309,12 @@ impl Ppu {
     }
   }
 
-  fn set_mode(&mut self, mode: Mode) {
+  fn set_mode_stat(&mut self, mode: Mode) {
     self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
   }
 
-  fn switch_mode(&mut self, mode: Mode, ifr: &mut u8) {
-    self.set_mode(mode);
+  fn enter_mode(&mut self, mode: Mode, ifr: &mut u8) {
+    self.set_mode_stat(mode);
     self.ppu_cycles = self.ppu_cycles.wrapping_add(mode.cycles(self.scx));
 
     match mode {
@@ -369,5 +347,10 @@ impl Ppu {
         }
       }
     }
+  }
+
+  #[must_use]
+  pub(crate) const fn pixel_data_rgb(&self) -> &[u8] {
+    self.rgba_buf_present.pixel_data()
   }
 }

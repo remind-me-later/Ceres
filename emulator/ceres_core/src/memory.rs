@@ -240,7 +240,7 @@ impl Gb {
       NR51 => self.apu.write_nr51(val),
       NR52 => self.apu.write_nr52(val),
       WAV_BEGIN..=WAV_END => self.apu.write_wave_ram(addr, val),
-      LCDC => self.ppu.write_lcdc(val),
+      LCDC => self.ppu.write_lcdc(val, &mut self.ifr),
       STAT => self.ppu.write_stat(val),
       SCY => self.ppu.write_scy(val),
       SCX => self.ppu.write_scx(val),
