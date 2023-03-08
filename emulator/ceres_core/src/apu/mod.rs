@@ -176,6 +176,8 @@ impl Apu {
 
   #[must_use]
   pub fn read_nr52(&self) -> u8 {
+    // println!("read nr52, ch2: {}", self.ch1.on());
+
     u8::from(self.on) << 7
       | 0x70
       | u8::from(self.ch4.on()) << 3

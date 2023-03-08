@@ -19,8 +19,8 @@ pub(super) struct Envelope {
   inc: EnvelopeDirection,
 
   // between 0 and F
-  vol:     u8,
-  vol_reg: u8,
+  vol:      u8,
+  vol_init: u8,
 
   period: u8,
   timer:  u8,
@@ -28,7 +28,7 @@ pub(super) struct Envelope {
 
 impl Envelope {
   pub(super) const fn read(&self) -> u8 {
-    self.vol_reg << 4 | self.inc.to_u8() | self.period
+    self.vol_init << 4 | self.inc.to_u8() | self.period
   }
 
   pub(super) fn write(&mut self, val: u8) {
@@ -37,8 +37,8 @@ impl Envelope {
 
     self.timer = 0;
     self.inc = EnvelopeDirection::from_u8(val);
-    self.vol_reg = val >> 4;
-    self.vol = self.vol_reg;
+    self.vol_init = val >> 4;
+    self.vol = self.vol_init;
   }
 
   pub(super) fn step(&mut self) {
@@ -67,7 +67,7 @@ impl Envelope {
 
   pub(super) fn trigger(&mut self) {
     self.timer = 0;
-    self.vol = self.vol_reg;
+    self.vol = self.vol_init;
   }
 
   pub(super) const fn vol(&self) -> u8 { self.vol }

@@ -8,8 +8,6 @@ use {
 enum Mbc {
   Mbc0,
   Mbc1 {
-    // 1 MiB Multi-Game Compilation Carts
-    multicart: bool,
     // Alternative MBC1 wiring allows to address up to 2MB of ROM
     bank_mode: bool,
   },
@@ -27,19 +25,21 @@ impl Mbc {
     rom_size: ROMSize,
   ) -> Result<(Self, bool), Error> {
     let bank_mode = rom_size >= ROMSize::Mb1;
-    let multicart = false;
 
     let res = match mbc_byte {
       0x00 => (Mbc0, false),
-      0x01 | 0x02 => (Mbc1 { multicart, bank_mode }, false),
-      0x03 => (Mbc1 { multicart, bank_mode }, true),
+      0x01 | 0x02 => (Mbc1 { bank_mode }, false),
+      0x03 => (Mbc1 { bank_mode }, true),
       0x05 => (Mbc2, false),
       0x06 => (Mbc2, true),
       0x0F | 0x10 => (Mbc3 { rtc: Some(Mbc3RTC::default()) }, true),
       0x11 | 0x12 => (Mbc3 { rtc: None }, false),
       0x13 => (Mbc3 { rtc: None }, true),
-      0x19 | 0x1A | 0x1C | 0x1D => (Mbc5, false),
-      0x1B | 0x1E => (Mbc5, true),
+      0x19 | 0x1A => (Mbc5, false),
+      // rumble
+      // 0x1C | 0x1D => (Mbc5, false),
+      // 0x1E => (Mbc5, true),
+      0x1B => (Mbc5, true),
       _ => return Err(Error::UnsupportedMBC),
     };
 
@@ -125,7 +125,7 @@ impl Cartridge {
       ram,
       rom_bank_lo: 1,
       rom_bank_hi: 0,
-      rom_offsets: (0x0000, 0x4000),
+      rom_offsets: (0, u32::from(ROMSize::BANK_SIZE)),
       ram_size,
       rom_size,
       ram_enabled: false,
@@ -201,25 +201,20 @@ impl Cartridge {
   pub(crate) fn write_rom(&mut self, addr: u16, val: u8) {
     match &mut self.mbc {
       Mbc0 => (),
-      Mbc1 { multicart, bank_mode } => {
+      Mbc1 { bank_mode } => {
         const fn mbc1_rom_offsets(
-          cart: &Cartridge,
-          multicart: bool,
+          c: &Cartridge,
           bank_mode: bool,
         ) -> (u32, u32) {
-          let (hi, lo) = if multicart {
-            (cart.rom_bank_hi << 4, cart.rom_bank_lo & 0xF)
-          } else {
-            (cart.rom_bank_hi << 5, cart.rom_bank_lo)
-          };
+          let (lo, hi) = (c.rom_bank_lo, c.rom_bank_hi << 5);
 
-          let lower_bank =
-            if bank_mode { hi as u16 & cart.rom_size.mask() } else { 0 };
-          let upper_bank = (hi | lo) as u16 & cart.rom_size.mask();
+          let lo_bank =
+            if bank_mode { hi as u16 & c.rom_size.mask() } else { 0 };
+          let hi_bank = (hi | lo) as u16 & c.rom_size.mask();
 
           (
-            ROMSize::BANK_SIZE as u32 * lower_bank as u32,
-            ROMSize::BANK_SIZE as u32 * upper_bank as u32,
+            ROMSize::BANK_SIZE as u32 * lo_bank as u32,
+            ROMSize::BANK_SIZE as u32 * hi_bank as u32,
           )
         }
 
@@ -227,8 +222,6 @@ impl Cartridge {
           let bank = if bank_mode { cart.rom_bank_hi as u32 } else { 0 };
           RAMSize::BANK_SIZE as u32 * bank
         }
-
-        let multicart = *multicart;
 
         match addr {
           0x0000..=0x1FFF => {
@@ -239,20 +232,20 @@ impl Cartridge {
 
             let val = val & 0x1F;
             self.rom_bank_lo = if val == 0 { 1 } else { val };
-            self.rom_offsets = mbc1_rom_offsets(self, multicart, bank_mode);
+            self.rom_offsets = mbc1_rom_offsets(self, bank_mode);
           }
           0x4000..=0x5FFF => {
             let bank_mode = *bank_mode;
 
             self.rom_bank_hi = val & 3;
-            self.rom_offsets = mbc1_rom_offsets(self, multicart, bank_mode);
+            self.rom_offsets = mbc1_rom_offsets(self, bank_mode);
             self.ram_offset = mbc1_ram_offset(self, bank_mode);
           }
           0x6000..=0x7FFF => {
             *bank_mode = val & 1 != 0;
             let bank_mode = *bank_mode;
 
-            self.rom_offsets = mbc1_rom_offsets(self, multicart, bank_mode);
+            self.rom_offsets = mbc1_rom_offsets(self, bank_mode);
             self.ram_offset = mbc1_ram_offset(self, bank_mode);
           }
           _ => (),
@@ -275,8 +268,11 @@ impl Cartridge {
           self.ram_enabled = (val & 0x0F) == 0x0A && self.ram_size.is_any();
         }
         0x2000..=0x3FFF => {
-          self.rom_bank_lo =
-            if val == 0 { 1 } else { val & 0x7F & self.rom_size.mask() as u8 };
+          self.rom_bank_lo = if val == 0 {
+            1
+          } else {
+            val & (self.rom_size.mask() & 0x7F) as u8
+          };
           self.rom_offsets =
             (0, u32::from(ROMSize::BANK_SIZE) * u32::from(self.rom_bank_lo));
         }
@@ -313,23 +309,18 @@ impl Cartridge {
 
         match addr {
           0x0000..=0x1FFF => {
-            // println!("MEM: 0x0000 reg, val: {val:0x}");
             self.ram_enabled = val & 0xF == 0xA && self.ram_size.is_any();
           }
           0x2000..=0x2FFF => {
-            // println!("0x2000 reg, val: {val:0x}");
             self.rom_bank_lo = val;
             self.rom_offsets = mbc5_rom_offsets(self);
           }
           0x3000..=0x3FFF => {
-            // println!("0x3000 reg, val: {val:0x}");
-            self.rom_bank_hi = val & 1;
+            self.rom_bank_hi = val;
             self.rom_offsets = mbc5_rom_offsets(self);
           }
           0x4000..=0x5FFF => {
-            // println!("0x4000 reg, val: {val:0x}");
-            // debug_assert!(val & 0xF < self.ram_bank_mask);
-            self.ram_bank = val & 0xF & self.ram_size.mask();
+            self.ram_bank = val & (0xF & self.ram_size.mask());
             self.ram_offset =
               u32::from(RAMSize::BANK_SIZE) * u32::from(self.ram_bank);
           }
@@ -405,14 +396,13 @@ impl ROMSize {
     Ok(rom_size)
   }
 
-  // maximum is (1 << 15) << 8 = 0x80_0000
+  // maximum is 0x8000 << 8 = 0x80_0000
   const fn size_bytes(self) -> u32 {
-    let kib_32 = 1 << 0xF;
-    kib_32 << (self as u8)
+    (Self::BANK_SIZE as u32 * 2) << (self as u8)
   }
 
   // maximum is 2 << 8 - 1 = 1FF
-  const fn mask(self) -> u16 { (2 << (self as u8)) - 1 }
+  const fn mask(self) -> u16 { (2_u16 << (self as u8)) - 1 }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -461,8 +451,7 @@ impl RAMSize {
 
   const fn mask(self) -> u8 {
     match self {
-      Self::NoRAM => 0x0,
-      Self::Kb8 => 0x1,
+      Self::NoRAM | Self::Kb8 => 0x0,
       Self::Kb32 => 0x3,
       Self::Kb128 => 0xF,
       Self::Kb64 => 0x7,
