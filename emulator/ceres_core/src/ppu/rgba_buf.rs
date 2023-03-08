@@ -5,24 +5,26 @@ const RGBA_BUF_SIZE: u32 = PX_TOTAL as u32 * 4;
 
 #[derive(Clone)]
 pub(super) struct RgbaBuf {
-  data: [u8; RGBA_BUF_SIZE as usize],
+    data: [u8; RGBA_BUF_SIZE as usize],
 }
 
 impl Default for RgbaBuf {
-  fn default() -> Self { Self { data: [0xFF; RGBA_BUF_SIZE as usize] } }
+    fn default() -> Self {
+        Self {
+            data: [0xFF; RGBA_BUF_SIZE as usize],
+        }
+    }
 }
 
 impl RgbaBuf {
-  pub(super) fn set_px(&mut self, i: u32, rgb: (u8, u8, u8)) {
-    let base = i * 4;
-    self.data[base as usize] = rgb.0;
-    self.data[base as usize + 1] = rgb.1;
-    self.data[base as usize + 2] = rgb.2;
-  }
+    pub(super) fn set_px(&mut self, i: u32, rgb: (u8, u8, u8)) {
+        let base = i * 4;
+        self.data[base as usize] = rgb.0;
+        self.data[base as usize + 1] = rgb.1;
+        self.data[base as usize + 2] = rgb.2;
+    }
 
-  // fn clear(&mut self) {
-  //   self.data = [0xFF; RGB_BUF_SIZE];
-  // }
-
-  pub(crate) const fn pixel_data(&self) -> &[u8] { &self.data }
+    pub(crate) const fn pixel_data(&self) -> &[u8] {
+        &self.data
+    }
 }

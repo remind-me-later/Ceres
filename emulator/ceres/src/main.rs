@@ -52,27 +52,22 @@
     clippy::cast_precision_loss,
     clippy::cast_sign_loss,
     clippy::cast_possible_wrap,
-
-    // TODO: Weird warning on bytemuck derive
-    clippy::extra_unused_type_parameters,
-    clippy::let_underscore_untyped,
-
     clippy::missing_errors_doc,
     clippy::missing_panics_doc,
     clippy::similar_names
 )]
 
 use {
-  ceres_core::Gb,
-  clap::{builder::PossibleValuesParser, Arg, Command},
-  core::{str::FromStr, time::Duration},
-  std::{
-    fs::{self, File},
-    io::Write,
-    path::{Path, PathBuf},
-    sync::Arc,
-  },
-  winit::{event_loop, window},
+    ceres_core::Gb,
+    clap::{builder::PossibleValuesParser, Arg, Command},
+    core::{str::FromStr, time::Duration},
+    std::{
+        fs::{self, File},
+        io::Write,
+        path::{Path, PathBuf},
+        sync::Arc,
+    },
+    winit::{event_loop, window},
 };
 
 mod audio;
@@ -92,238 +87,235 @@ const AFTER_HELP: &str = "KEY BINDINGS:
     | Select  | Backspace |";
 
 fn main() -> anyhow::Result<()> {
-  let args = Command::new(CERES_BIN)
-    .bin_name(CERES_BIN)
-    .about(ABOUT)
-    .after_help(AFTER_HELP)
-    .arg(
-      Arg::new("file")
-        .required(true)
-        .help("Game Boy/Color ROM file to emulate.")
-        .long_help(
-          "Game Boy/Color ROM file to emulate. Extension doesn't matter, the \
+    let args = Command::new(CERES_BIN)
+        .bin_name(CERES_BIN)
+        .about(ABOUT)
+        .after_help(AFTER_HELP)
+        .arg(
+            Arg::new("file")
+                .required(true)
+                .help("Game Boy/Color ROM file to emulate.")
+                .long_help(
+                    "Game Boy/Color ROM file to emulate. Extension doesn't matter, the \
            emulator will check the file is a valid Game Boy ROM reading its \
            header. Doesn't accept compressed (zip) files.",
-        ),
-    )
-    .arg(
-      Arg::new("model")
-        .short('m')
-        .long("model")
-        .help("Game Boy model to emulate")
-        .value_parser(PossibleValuesParser::new(["dmg", "mgb", "cgb"]))
-        .default_value("cgb")
-        .required(false),
-    )
-    .get_matches();
+                ),
+        )
+        .arg(
+            Arg::new("model")
+                .short('m')
+                .long("model")
+                .help("Game Boy model to emulate")
+                .value_parser(PossibleValuesParser::new(["dmg", "mgb", "cgb"]))
+                .default_value("cgb")
+                .required(false),
+        )
+        .get_matches();
 
-  let model = {
-    // TODO: this unwrap should be correct as we assign a default value to the
-    // argument
-    let model_str = args.get_one::<String>("model").unwrap();
+    let model = {
+        // TODO: this unwrap should be correct as we assign a default value to the
+        // argument
+        let model_str = args.get_one::<String>("model").unwrap();
 
-    let model = match model_str.as_str() {
-      "dmg" => ceres_core::Model::Dmg,
-      "mgb" => ceres_core::Model::Mgb,
-      "cgb" => ceres_core::Model::Cgb,
-      _ => unreachable!(),
+        let model = match model_str.as_str() {
+            "dmg" => ceres_core::Model::Dmg,
+            "mgb" => ceres_core::Model::Mgb,
+            "cgb" => ceres_core::Model::Cgb,
+            _ => unreachable!(),
+        };
+
+        model
     };
 
-    model
-  };
+    let path = PathBuf::from(args.get_one::<String>("file").unwrap());
 
-  let path = PathBuf::from(args.get_one::<String>("file").unwrap());
-
-  pollster::block_on(run(model, path))
+    pollster::block_on(run(model, path))
 }
 
 #[allow(clippy::too_many_lines)]
-pub async fn run(
-  model: ceres_core::Model,
-  mut path: PathBuf,
-) -> anyhow::Result<()> {
-  use anyhow::Context;
+pub async fn run(model: ceres_core::Model, mut path: PathBuf) -> anyhow::Result<()> {
+    use anyhow::Context;
 
-  let (gb, sav_path) = {
-    fn read_file(path: &Path) -> Result<Vec<u8>, std::io::Error> {
-      fs::read(path)
-    }
+    let (gb, sav_path) = {
+        fn read_file(path: &Path) -> Result<Vec<u8>, std::io::Error> {
+            fs::read(path)
+        }
 
-    let rom = read_file(&path).with_context(|| {
-      format!(
-        "couldn't open rom file in path: '{}'",
-        path.to_str().unwrap_or("couldn't get path string")
-      )
-    })?;
-    path.set_extension("sav");
-    let ram = read_file(&path).ok();
+        let rom = read_file(&path).with_context(|| {
+            format!(
+                "couldn't open rom file in path: '{}'",
+                path.to_str().unwrap_or("couldn't get path string")
+            )
+        })?;
+        path.set_extension("sav");
+        let ram = read_file(&path).ok();
 
-    let cart =
-      ceres_core::Cartridge::new(rom, ram).context("invalid cartridge")?;
+        // TODO: Error in core?
+        let cart = ceres_core::Cartridge::new(rom, ram).unwrap();
 
-    let gb = {
-      let sample_rate = audio::Renderer::sample_rate();
-      Arc::new(parking_lot::Mutex::new(Gb::new(model, sample_rate, cart)))
+        let gb = {
+            let sample_rate = audio::Renderer::sample_rate();
+            Arc::new(parking_lot::Mutex::new(Gb::new(model, sample_rate, cart)))
+        };
+
+        (gb, path)
     };
 
-    (gb, path)
-  };
+    let event_loop = event_loop::EventLoop::new();
 
-  let event_loop = event_loop::EventLoop::new();
+    let mut video = {
+        use winit::dpi::PhysicalSize;
 
-  let mut video = {
-    use winit::dpi::PhysicalSize;
+        const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
+        const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
+        const MUL: u32 = 4;
+        const INIT_WIDTH: u32 = PX_WIDTH * MUL;
+        const INIT_HEIGHT: u32 = PX_HEIGHT * MUL;
 
-    const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
-    const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
-    const MUL: u32 = 4;
-    const INIT_WIDTH: u32 = PX_WIDTH * MUL;
-    const INIT_HEIGHT: u32 = PX_HEIGHT * MUL;
+        let window = window::WindowBuilder::new()
+            .with_title(CERES_STYLIZED)
+            .with_inner_size(PhysicalSize {
+                width: INIT_WIDTH,
+                height: INIT_HEIGHT,
+            })
+            .with_min_inner_size(PhysicalSize {
+                width: PX_WIDTH,
+                height: PX_HEIGHT,
+            })
+            .build(&event_loop)
+            .unwrap();
 
-    let window = window::WindowBuilder::new()
-      .with_title(CERES_STYLIZED)
-      .with_inner_size(PhysicalSize {
-        width:  INIT_WIDTH,
-        height: INIT_HEIGHT,
-      })
-      .with_min_inner_size(PhysicalSize {
-        width:  PX_WIDTH,
-        height: PX_HEIGHT,
-      })
-      .build(&event_loop)
-      .unwrap();
+        let mut video = video::State::new(window, PX_WIDTH, PX_HEIGHT)
+            .await
+            .context("couldn't initialize wgpu")?;
 
-    let mut video = video::State::new(window, PX_WIDTH, PX_HEIGHT)
-      .await
-      .context("couldn't initialize wgpu")?;
+        video.resize(PhysicalSize {
+            width: INIT_WIDTH,
+            height: INIT_HEIGHT,
+        });
 
-    video.resize(PhysicalSize { width: INIT_WIDTH, height: INIT_HEIGHT });
+        video
+    };
 
-    video
-  };
+    let _audio = {
+        let gb = Arc::clone(&gb);
+        audio::Renderer::new(gb)
+    };
 
-  let _audio = {
-    let gb = Arc::clone(&gb);
-    audio::Renderer::new(gb)
-  };
+    event_loop.run(move |event, _, control_flow| {
+        use winit::event::Event;
 
-  event_loop.run(move |event, _, control_flow| {
-    use winit::event::Event;
+        match event {
+            Event::Resumed => control_flow.set_poll(),
+            Event::LoopDestroyed => {
+                // save
+                let mut gb = gb.lock();
 
-    match event {
-      Event::Resumed => control_flow.set_poll(),
-      Event::LoopDestroyed => {
-        // save
-        let mut gb = gb.lock();
-
-        if let Some(save_data) = gb.cartridge().save_data() {
-          let mut f =
-            File::create(sav_path.clone()).map_err(|e| e.to_string()).unwrap();
-          f.write_all(save_data).map_err(|e| e.to_string()).unwrap();
-        }
-      }
-      Event::WindowEvent { event: ref e, .. } => {
-        use winit::event::WindowEvent;
-
-        match e {
-          WindowEvent::Resized(size) => {
-            video.resize(*size);
-          }
-          WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-            // new_inner_size is &mut so w have to dereference it twice
-            video.resize(**new_inner_size);
-          }
-          WindowEvent::CloseRequested => control_flow.set_exit(),
-          WindowEvent::KeyboardInput { input, .. }
-            if video.window().has_focus() =>
-          {
-            if let Some(key) = input.virtual_keycode {
-              use {
-                ceres_core::Button as B,
-                winit::event::{ElementState, VirtualKeyCode as KC},
-              };
-
-              match input.state {
-                ElementState::Pressed => match key {
-                  KC::W => gb.lock().press(B::Up),
-                  KC::A => gb.lock().press(B::Left),
-                  KC::S => gb.lock().press(B::Down),
-                  KC::D => gb.lock().press(B::Right),
-                  KC::K => gb.lock().press(B::A),
-                  KC::L => gb.lock().press(B::B),
-                  KC::Return => gb.lock().press(B::Start),
-                  KC::Back => gb.lock().press(B::Select),
-                  // System
-                  KC::F => match video.window().fullscreen() {
-                    Some(_) => video.window().set_fullscreen(None),
-                    None => video.window().set_fullscreen(Some(
-                      window::Fullscreen::Borderless(None),
-                    )),
-                  },
-                  KC::P => {
-                    // Screenshot
-
-                    let time = chrono::Local::now();
-
-                    let mut stem = sav_path.file_stem().unwrap().to_owned();
-                    stem.push(" - ");
-                    stem.push(time.to_string());
-
-                    let img_path = PathBuf::from_str(stem.to_str().unwrap())
-                      .unwrap()
-                      .with_extension("png");
-
-                    // println!("{img_path:?}");
-
-                    let gb = gb.lock();
-
-                    image::save_buffer_with_format(
-                      img_path,
-                      gb.pixel_data_rgba(),
-                      u32::from(ceres_core::PX_WIDTH),
-                      u32::from(ceres_core::PX_HEIGHT),
-                      image::ColorType::Rgba8,
-                      image::ImageFormat::Png,
-                    )
-                    .unwrap();
-                  }
-                  _ => (),
-                },
-                ElementState::Released => match key {
-                  KC::W => gb.lock().release(B::Up),
-                  KC::A => gb.lock().release(B::Left),
-                  KC::S => gb.lock().release(B::Down),
-                  KC::D => gb.lock().release(B::Right),
-                  KC::K => gb.lock().release(B::A),
-                  KC::L => gb.lock().release(B::B),
-                  KC::Return => gb.lock().release(B::Start),
-                  KC::Back => gb.lock().release(B::Select),
-                  _ => (),
-                },
-              }
+                if let Some(save_data) = gb.cartridge().save_data() {
+                    let mut f = File::create(sav_path.clone())
+                        .map_err(|e| e.to_string())
+                        .unwrap();
+                    f.write_all(save_data).map_err(|e| e.to_string()).unwrap();
+                }
             }
-          }
+            Event::WindowEvent { event: ref e, .. } => {
+                use winit::event::WindowEvent;
 
-          _ => (),
+                match e {
+                    WindowEvent::Resized(size) => {
+                        video.resize(*size);
+                    }
+                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                        // new_inner_size is &mut so w have to dereference it twice
+                        video.resize(**new_inner_size);
+                    }
+                    WindowEvent::CloseRequested => control_flow.set_exit(),
+                    WindowEvent::KeyboardInput { input, .. } if video.window().has_focus() => {
+                        if let Some(key) = input.virtual_keycode {
+                            use {
+                                ceres_core::Button as B,
+                                winit::event::{ElementState, VirtualKeyCode as KC},
+                            };
+
+                            match input.state {
+                                ElementState::Pressed => match key {
+                                    KC::W => gb.lock().press(B::Up),
+                                    KC::A => gb.lock().press(B::Left),
+                                    KC::S => gb.lock().press(B::Down),
+                                    KC::D => gb.lock().press(B::Right),
+                                    KC::K => gb.lock().press(B::A),
+                                    KC::L => gb.lock().press(B::B),
+                                    KC::Return => gb.lock().press(B::Start),
+                                    KC::Back => gb.lock().press(B::Select),
+                                    // System
+                                    KC::F => match video.window().fullscreen() {
+                                        Some(_) => video.window().set_fullscreen(None),
+                                        None => video.window().set_fullscreen(Some(
+                                            window::Fullscreen::Borderless(None),
+                                        )),
+                                    },
+                                    KC::P => {
+                                        // Screenshot
+
+                                        let time = chrono::Local::now();
+
+                                        let mut stem = sav_path.file_stem().unwrap().to_owned();
+                                        stem.push(" - ");
+                                        stem.push(time.to_string());
+
+                                        let img_path = PathBuf::from_str(stem.to_str().unwrap())
+                                            .unwrap()
+                                            .with_extension("png");
+
+                                        // println!("{img_path:?}");
+
+                                        let gb = gb.lock();
+
+                                        image::save_buffer_with_format(
+                                            img_path,
+                                            gb.pixel_data_rgba(),
+                                            u32::from(ceres_core::PX_WIDTH),
+                                            u32::from(ceres_core::PX_HEIGHT),
+                                            image::ColorType::Rgba8,
+                                            image::ImageFormat::Png,
+                                        )
+                                        .unwrap();
+                                    }
+                                    _ => (),
+                                },
+                                ElementState::Released => match key {
+                                    KC::W => gb.lock().release(B::Up),
+                                    KC::A => gb.lock().release(B::Left),
+                                    KC::S => gb.lock().release(B::Down),
+                                    KC::D => gb.lock().release(B::Right),
+                                    KC::K => gb.lock().release(B::A),
+                                    KC::L => gb.lock().release(B::B),
+                                    KC::Return => gb.lock().release(B::Start),
+                                    KC::Back => gb.lock().release(B::Select),
+                                    _ => (),
+                                },
+                            }
+                        }
+                    }
+
+                    _ => (),
+                }
+            }
+            Event::RedrawRequested(window_id) if window_id == video.window().id() => {
+                use wgpu::SurfaceError::{Lost, OutOfMemory, Outdated, Timeout};
+                match video.render() {
+                    Ok(_) => {}
+                    Err(Lost | Outdated) => video.on_lost(),
+                    Err(OutOfMemory) => control_flow.set_exit(),
+                    Err(Timeout) => println!("Surface timeout"),
+                }
+            }
+            Event::MainEventsCleared => {
+                video.update(gb.lock().pixel_data_rgba());
+                video.window().request_redraw();
+                std::thread::sleep(Duration::from_nanos((1000 * 1_000_000) / 60));
+            }
+            _ => (),
         }
-      }
-      Event::RedrawRequested(window_id)
-        if window_id == video.window().id() =>
-      {
-        use wgpu::SurfaceError::{Lost, OutOfMemory, Outdated, Timeout};
-        match video.render() {
-          Ok(_) => {}
-          Err(Lost | Outdated) => video.on_lost(),
-          Err(OutOfMemory) => control_flow.set_exit(),
-          Err(Timeout) => println!("Surface timeout"),
-        }
-      }
-      Event::MainEventsCleared => {
-        video.update(gb.lock().pixel_data_rgba());
-        video.window().request_redraw();
-        std::thread::sleep(Duration::from_nanos((1000 * 1_000_000) / 60));
-      }
-      _ => (),
-    }
-  });
+    });
 }

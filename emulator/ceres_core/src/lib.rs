@@ -51,27 +51,26 @@
   clippy::verbose_file_reads,
 )]
 #![allow(
-  clippy::struct_excessive_bools,
-  clippy::verbose_bit_mask,
-  clippy::missing_errors_doc,
-  clippy::missing_panics_doc,
-  clippy::missing_safety_doc,
-  clippy::similar_names
+    clippy::struct_excessive_bools,
+    clippy::verbose_bit_mask,
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc,
+    clippy::missing_safety_doc,
+    clippy::similar_names
 )]
-#![feature(error_in_core)]
 
 use {
-  apu::Apu,
-  core::{num::NonZeroU8, time::Duration},
-  memory::HdmaState,
-  ppu::Ppu,
-  timing::TIMAState,
+    apu::Apu,
+    core::{num::NonZeroU8, time::Duration},
+    memory::HdmaState,
+    ppu::Ppu,
+    timing::TIMAState,
 };
 pub use {
-  apu::Sample,
-  cartridge::{Cartridge, Error},
-  joypad::Button,
-  ppu::{PX_HEIGHT, PX_WIDTH},
+    apu::Sample,
+    cartridge::{Cartridge, Error},
+    joypad::Button,
+    ppu::{PX_HEIGHT, PX_WIDTH},
 };
 
 extern crate alloc;
@@ -102,188 +101,189 @@ const WRAM_SIZE_CGB: u16 = WRAM_SIZE * 4;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Model {
-  Dmg,
-  Mgb,
-  Cgb,
+    Dmg,
+    Mgb,
+    Cgb,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum CompatMode {
-  Dmg,
-  Compat,
-  Cgb,
+    Dmg,
+    Compat,
+    Cgb,
 }
 
 pub struct Gb {
-  // general
-  model:       Model,
-  compat_mode: CompatMode,
+    // general
+    model: Model,
+    compat_mode: CompatMode,
 
-  // double speed
-  double_speed:         bool,
-  double_speed_request: bool,
+    // double speed
+    double_speed: bool,
+    double_speed_request: bool,
 
-  // key1: u8,
+    // key1: u8,
 
-  // cartridge
-  cart:     Cartridge,
-  boot_rom: Option<&'static [u8]>,
+    // cartridge
+    cart: Cartridge,
+    boot_rom: Option<&'static [u8]>,
 
-  // cpu
-  af: u16,
-  bc: u16,
-  de: u16,
-  hl: u16,
-  sp: u16,
-  pc: u16,
+    // cpu
+    af: u16,
+    bc: u16,
+    de: u16,
+    hl: u16,
+    sp: u16,
+    pc: u16,
 
-  cpu_ei_delay: bool,
-  cpu_halted:   bool,
+    cpu_ei_delay: bool,
+    cpu_halted: bool,
 
-  // serial
-  sb: u8,
-  sc: u8,
+    // serial
+    sb: u8,
+    sc: u8,
 
-  // joypad
-  p1_btn:  u8,
-  p1_dirs: bool,
-  p1_acts: bool,
+    // joypad
+    p1_btn: u8,
+    p1_dirs: bool,
+    p1_acts: bool,
 
-  // interrupts
-  halt_bug: bool,
-  ime:      bool,
-  ifr:      u8,
-  ie:       u8,
+    // interrupts
+    halt_bug: bool,
+    ime: bool,
+    ifr: u8,
+    ie: u8,
 
-  // memory
-  wram:      [u8; WRAM_SIZE_CGB as usize],
-  hram:      [u8; HRAM_SIZE as usize],
-  svbk:      u8,
-  svbk_true: NonZeroU8, // true selected bank, between 1 and 7
+    // memory
+    wram: [u8; WRAM_SIZE_CGB as usize],
+    hram: [u8; HRAM_SIZE as usize],
+    svbk: u8,
+    svbk_true: NonZeroU8, // true selected bank, between 1 and 7
 
-  // -- dma
-  dma:            u8,
-  dma_on:         bool,
-  dma_addr:       u16,
-  dma_restarting: bool,
-  dma_cycles:     i32,
+    // -- dma
+    dma: u8,
+    dma_on: bool,
+    dma_addr: u16,
+    dma_restarting: bool,
+    dma_cycles: i32,
 
-  // -- hdma
-  hdma5:      u8,
-  hdma_src:   u16,
-  hdma_dst:   u16,
-  hdma_len:   u16,
-  hdma_state: HdmaState,
+    // -- hdma
+    hdma5: u8,
+    hdma_src: u16,
+    hdma_dst: u16,
+    hdma_len: u16,
+    hdma_state: HdmaState,
 
-  // clock
-  tima: u8,
-  tma:  u8,
-  tac:  u8,
+    // clock
+    tima: u8,
+    tma: u8,
+    tac: u8,
 
-  tima_state: TIMAState,
+    tima_state: TIMAState,
 
-  tac_enable:       bool,
-  wide_div_counter: u16,
+    tac_enable: bool,
+    wide_div_counter: u16,
 
-  // ppu
-  ppu: Ppu,
+    // ppu
+    ppu: Ppu,
 
-  // apu
-  apu: Apu,
+    // apu
+    apu: Apu,
 }
 
 impl Gb {
-  #[allow(clippy::too_many_lines)]
-  #[must_use]
-  pub fn new(model: Model, sample_rate: i32, cart: Cartridge) -> Self {
-    const DMG_BOOTROM: &[u8] =
-      include_bytes!("../../../bootroms/bin/dmg_boot.bin");
-    const MGB_BOOTROM: &[u8] =
-      include_bytes!("../../../bootroms/bin/mgb_boot.bin");
-    const CGB_BOOTROM: &[u8] =
-      include_bytes!("../../../bootroms/bin/cgb_boot_fast.bin");
+    #[allow(clippy::too_many_lines)]
+    #[must_use]
+    pub fn new(model: Model, sample_rate: i32, cart: Cartridge) -> Self {
+        const DMG_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/dmg_boot.bin");
+        const MGB_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/mgb_boot.bin");
+        const CGB_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/cgb_boot_fast.bin");
 
-    let compat_mode = match model {
-      Model::Dmg | Model::Mgb => CompatMode::Dmg,
-      Model::Cgb => CompatMode::Cgb,
-    };
+        let compat_mode = match model {
+            Model::Dmg | Model::Mgb => CompatMode::Dmg,
+            Model::Cgb => CompatMode::Cgb,
+        };
 
-    let boot_rom = Some(match model {
-      Model::Dmg => DMG_BOOTROM,
-      Model::Mgb => MGB_BOOTROM,
-      Model::Cgb => CGB_BOOTROM,
-    });
+        let boot_rom = Some(match model {
+            Model::Dmg => DMG_BOOTROM,
+            Model::Mgb => MGB_BOOTROM,
+            Model::Cgb => CGB_BOOTROM,
+        });
 
-    Self {
-      model,
-      compat_mode,
-      cart,
-      boot_rom,
+        Self {
+            model,
+            compat_mode,
+            cart,
+            boot_rom,
 
-      // Custom
-      svbk_true: NonZeroU8::new(1).unwrap(),
+            // Custom
+            svbk_true: NonZeroU8::new(1).unwrap(),
 
-      // Slices
-      wram: [0; WRAM_SIZE_CGB as usize],
-      hram: [0; HRAM_SIZE as usize],
+            // Slices
+            wram: [0; WRAM_SIZE_CGB as usize],
+            hram: [0; HRAM_SIZE as usize],
 
-      apu: Apu::new(sample_rate),
+            apu: Apu::new(sample_rate),
 
-      // Default
-      ppu: Ppu::default(),
-      tima_state: TIMAState::default(),
-      double_speed: Default::default(),
-      double_speed_request: Default::default(),
-      af: Default::default(),
-      bc: Default::default(),
-      de: Default::default(),
-      hl: Default::default(),
-      sp: Default::default(),
-      pc: Default::default(),
-      cpu_ei_delay: Default::default(),
-      cpu_halted: Default::default(),
-      sb: Default::default(),
-      sc: Default::default(),
-      p1_btn: Default::default(),
-      p1_dirs: Default::default(),
-      p1_acts: Default::default(),
-      halt_bug: Default::default(),
-      ime: Default::default(),
-      ifr: Default::default(),
-      ie: Default::default(),
-      svbk: Default::default(),
-      dma: Default::default(),
-      dma_on: Default::default(),
-      dma_addr: Default::default(),
-      dma_restarting: Default::default(),
-      dma_cycles: Default::default(),
-      hdma5: Default::default(),
-      hdma_src: Default::default(),
-      hdma_dst: Default::default(),
-      hdma_len: Default::default(),
-      hdma_state: HdmaState::default(),
+            // Default
+            ppu: Ppu::default(),
+            tima_state: TIMAState::default(),
+            double_speed: Default::default(),
+            double_speed_request: Default::default(),
+            af: Default::default(),
+            bc: Default::default(),
+            de: Default::default(),
+            hl: Default::default(),
+            sp: Default::default(),
+            pc: Default::default(),
+            cpu_ei_delay: Default::default(),
+            cpu_halted: Default::default(),
+            sb: Default::default(),
+            sc: Default::default(),
+            p1_btn: Default::default(),
+            p1_dirs: Default::default(),
+            p1_acts: Default::default(),
+            halt_bug: Default::default(),
+            ime: Default::default(),
+            ifr: Default::default(),
+            ie: Default::default(),
+            svbk: Default::default(),
+            dma: Default::default(),
+            dma_on: Default::default(),
+            dma_addr: Default::default(),
+            dma_restarting: Default::default(),
+            dma_cycles: Default::default(),
+            hdma5: Default::default(),
+            hdma_src: Default::default(),
+            hdma_dst: Default::default(),
+            hdma_len: Default::default(),
+            hdma_state: HdmaState::default(),
 
-      tima: Default::default(),
-      tma: Default::default(),
-      tac: Default::default(),
-      tac_enable: Default::default(),
-      wide_div_counter: Default::default(),
-    }
-  }
-
-  pub fn run_samples(&mut self) -> (Sample, Sample) {
-    while self.apu.samples_run() == 0 {
-      self.run_cpu();
+            tima: Default::default(),
+            tma: Default::default(),
+            tac: Default::default(),
+            tac_enable: Default::default(),
+            wide_div_counter: Default::default(),
+        }
     }
 
-    self.apu.reset_samples_run();
+    pub fn run_samples(&mut self) -> (Sample, Sample) {
+        while self.apu.samples_run() == 0 {
+            self.run_cpu();
+        }
 
-    self.apu.out()
-  }
+        self.apu.reset_samples_run();
 
-  #[must_use]
-  pub fn cartridge(&mut self) -> &mut Cartridge { &mut self.cart }
+        self.apu.out()
+    }
 
-  #[must_use]
-  pub const fn pixel_data_rgba(&self) -> &[u8] { self.ppu.pixel_data_rgb() }
+    #[must_use]
+    pub fn cartridge(&mut self) -> &mut Cartridge {
+        &mut self.cart
+    }
+
+    #[must_use]
+    pub const fn pixel_data_rgba(&self) -> &[u8] {
+        self.ppu.pixel_data_rgb()
+    }
 }
