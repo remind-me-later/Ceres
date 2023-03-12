@@ -151,7 +151,7 @@ pub async fn run(model: ceres_core::Model, mut path: PathBuf) -> anyhow::Result<
         let ram = read_file(&path).ok();
 
         // TODO: Error in core?
-        let cart = ceres_core::Cartridge::new(rom, ram).unwrap();
+        let cart = ceres_core::Cart::new(rom, ram).unwrap();
 
         let gb = {
             let sample_rate = audio::Renderer::sample_rate();

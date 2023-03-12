@@ -59,16 +59,10 @@
     clippy::similar_names
 )]
 
-use {
-    apu::Apu,
-    core::{num::NonZeroU8, time::Duration},
-    memory::HdmaState,
-    ppu::Ppu,
-    timing::TIMAState,
-};
+use {apu::Apu, core::num::NonZeroU8, memory::HdmaState, ppu::Ppu, timing::TIMAState};
 pub use {
     apu::Sample,
-    cartridge::{Cartridge, Error},
+    cart::{Cart, Error},
     joypad::Button,
     ppu::{PX_HEIGHT, PX_WIDTH},
 };
@@ -76,18 +70,15 @@ pub use {
 extern crate alloc;
 
 mod apu;
-mod cartridge;
+mod cart;
 mod cpu;
 mod joypad;
 mod memory;
 mod ppu;
 mod timing;
 
-const FRAME_NANOS: u64 = 16_750_418;
-// frame duration in nanoseconds, the GameBoy framerate is 59.7 fps.
-pub const FRAME_DUR: Duration = Duration::from_nanos(FRAME_NANOS);
 // t-cycles per second
-const TC_SEC: i32 = 0x0040_0000;
+const TC_SEC: i32 = 0x40_0000;
 
 const IF_VBLANK_B: u8 = 1;
 const IF_LCD_B: u8 = 2;
@@ -125,7 +116,7 @@ pub struct Gb {
     // key1: u8,
 
     // cartridge
-    cart: Cartridge,
+    cart: Cart,
     boot_rom: Option<&'static [u8]>,
 
     // cpu
@@ -136,7 +127,7 @@ pub struct Gb {
     sp: u16,
     pc: u16,
 
-    cpu_ei_delay: bool,
+    ei_delay: bool,
     cpu_halted: bool,
 
     // serial
@@ -194,7 +185,7 @@ pub struct Gb {
 impl Gb {
     #[allow(clippy::too_many_lines)]
     #[must_use]
-    pub fn new(model: Model, sample_rate: i32, cart: Cartridge) -> Self {
+    pub fn new(model: Model, sample_rate: i32, cart: Cart) -> Self {
         const DMG_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/dmg_boot.bin");
         const MGB_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/mgb_boot.bin");
         const CGB_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/cgb_boot_fast.bin");
@@ -236,7 +227,7 @@ impl Gb {
             hl: Default::default(),
             sp: Default::default(),
             pc: Default::default(),
-            cpu_ei_delay: Default::default(),
+            ei_delay: Default::default(),
             cpu_halted: Default::default(),
             sb: Default::default(),
             sc: Default::default(),
@@ -278,7 +269,7 @@ impl Gb {
     }
 
     #[must_use]
-    pub fn cartridge(&mut self) -> &mut Cartridge {
+    pub fn cartridge(&mut self) -> &mut Cart {
         &mut self.cart
     }
 

@@ -76,7 +76,7 @@ impl Display for Error {
     }
 }
 
-pub struct Cartridge {
+pub struct Cart {
     mbc: Mbc,
 
     rom: Box<[u8]>,
@@ -96,7 +96,7 @@ pub struct Cartridge {
     rom_size: ROMSize,
 }
 
-impl Cartridge {
+impl Cart {
     pub fn new(mut rom: Vec<u8>, ram: Option<Vec<u8>>) -> Result<Self, Error> {
         let rom_size = ROMSize::new(&rom)?;
         let ram_size = RAMSize::new(&rom)?;
@@ -175,7 +175,7 @@ impl Cartridge {
 
     #[must_use]
     pub(crate) fn read_ram(&self, addr: u16) -> u8 {
-        const fn mbc_read_ram(cart: &Cartridge, ram_enabled: bool, addr: u16) -> u8 {
+        const fn mbc_read_ram(cart: &Cart, ram_enabled: bool, addr: u16) -> u8 {
             if cart.ram_size.is_any() && ram_enabled {
                 let addr = cart.ram_addr(addr);
                 cart.ram[addr as usize]
@@ -200,7 +200,7 @@ impl Cartridge {
         match &mut self.mbc {
             Mbc0 => (),
             Mbc1 { bank_mode } => {
-                const fn mbc1_rom_offsets(c: &Cartridge, bank_mode: bool) -> (u32, u32) {
+                const fn mbc1_rom_offsets(c: &Cart, bank_mode: bool) -> (u32, u32) {
                     let (lo, hi) = (c.rom_bank_lo, c.rom_bank_hi << 5);
 
                     let lo_bank = if bank_mode {
@@ -216,7 +216,7 @@ impl Cartridge {
                     )
                 }
 
-                const fn mbc1_ram_offset(cart: &Cartridge, bank_mode: bool) -> u32 {
+                const fn mbc1_ram_offset(cart: &Cart, bank_mode: bool) -> u32 {
                     let bank = if bank_mode {
                         cart.rom_bank_hi as u32
                     } else {
@@ -304,7 +304,7 @@ impl Cartridge {
                 _ => (),
             },
             Mbc5 => {
-                const fn mbc5_rom_offsets(cart: &Cartridge) -> (u32, u32) {
+                const fn mbc5_rom_offsets(cart: &Cart) -> (u32, u32) {
                     let lo = cart.rom_bank_lo as u16;
                     let hi = (cart.rom_bank_hi as u16) << 8;
                     let rom_bank = (hi | lo) & cart.rom_size.mask();
@@ -334,7 +334,7 @@ impl Cartridge {
     }
 
     pub(crate) fn write_ram(&mut self, addr: u16, val: u8) {
-        fn mbc_write_ram(cart: &mut Cartridge, ram_enabled: bool, addr: u16, val: u8) {
+        fn mbc_write_ram(cart: &mut Cart, ram_enabled: bool, addr: u16, val: u8) {
             if ram_enabled {
                 let addr = cart.ram_addr(addr);
                 cart.ram[addr as usize] = val;
