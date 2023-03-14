@@ -90,15 +90,15 @@ const HRAM_SIZE: u8 = 0x80;
 const WRAM_SIZE: u16 = 0x2000;
 const WRAM_SIZE_CGB: u16 = WRAM_SIZE * 4;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub enum Model {
     Dmg,
     Mgb,
     Cgb,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum CompatMode {
+#[derive(Clone, Copy)]
+enum CMode {
     Dmg,
     Compat,
     Cgb,
@@ -107,11 +107,12 @@ enum CompatMode {
 pub struct Gb {
     // general
     model: Model,
-    compat_mode: CompatMode,
+    // CGB compatibility mode
+    cmode: CMode,
 
     // double speed
     double_speed: bool,
-    double_speed_request: bool,
+    key1_req: bool,
 
     // key1: u8,
 
@@ -191,8 +192,8 @@ impl Gb {
         const CGB_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/cgb_boot_fast.bin");
 
         let compat_mode = match model {
-            Model::Dmg | Model::Mgb => CompatMode::Dmg,
-            Model::Cgb => CompatMode::Cgb,
+            Model::Dmg | Model::Mgb => CMode::Dmg,
+            Model::Cgb => CMode::Cgb,
         };
 
         let boot_rom = Some(match model {
@@ -203,7 +204,7 @@ impl Gb {
 
         Self {
             model,
-            compat_mode,
+            cmode: compat_mode,
             cart,
             boot_rom,
 
@@ -220,7 +221,7 @@ impl Gb {
             ppu: Ppu::default(),
             tima_state: TIMAState::default(),
             double_speed: Default::default(),
-            double_speed_request: Default::default(),
+            key1_req: Default::default(),
             af: Default::default(),
             bc: Default::default(),
             de: Default::default(),

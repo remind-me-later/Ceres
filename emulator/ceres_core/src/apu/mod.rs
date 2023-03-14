@@ -18,7 +18,7 @@ mod wave_length;
 
 pub type Sample = i16;
 
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Default)]
 enum PHalf {
     #[default]
     First,
@@ -180,15 +180,15 @@ impl Apu {
     }
 
     #[must_use]
-    pub fn read_nr52(&self) -> u8 {
+    pub const fn read_nr52(&self) -> u8 {
         // println!("read nr52, ch2: {}", self.ch1.on());
 
-        u8::from(self.on) << 7
+        (self.on as u8) << 7
             | 0x70
-            | u8::from(self.ch4.on()) << 3
-            | u8::from(self.ch3.on()) << 2
-            | u8::from(self.ch2.on()) << 1
-            | u8::from(self.ch1.on())
+            | (self.ch4.on() as u8) << 3
+            | (self.ch3.on() as u8) << 2
+            | (self.ch2.on() as u8) << 1
+            | (self.ch1.on() as u8)
     }
 
     pub fn write_nr50(&mut self, val: u8) {
@@ -235,7 +235,7 @@ impl Apu {
         self.ch1.out() | (self.ch2.out() << 4)
     }
 
-    pub fn pcm34(&self) -> u8 {
+    pub const fn pcm34(&self) -> u8 {
         self.ch3.out() | (self.ch4.out() << 4)
     }
 

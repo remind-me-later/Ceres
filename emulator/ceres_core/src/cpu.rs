@@ -757,9 +757,9 @@ impl Gb {
     fn stop(&mut self) {
         self.imm8();
 
-        if self.double_speed_request {
+        if self.key1_req {
             self.double_speed = !self.double_speed;
-            self.double_speed_request = false;
+            self.key1_req = false;
 
             // TODO: div should not tick
             for _ in 0..2050 {

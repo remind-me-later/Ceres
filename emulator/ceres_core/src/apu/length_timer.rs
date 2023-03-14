@@ -16,7 +16,7 @@ impl<const MAX_LEN: u16> LengthTimer<MAX_LEN> {
         let was_off = !self.on;
         self.on = val & 0x40 != 0;
 
-        if was_off && self.p_half == PHalf::First {
+        if was_off && matches!(self.p_half, PHalf::First) {
             self.step(on);
         }
     }
@@ -28,7 +28,7 @@ impl<const MAX_LEN: u16> LengthTimer<MAX_LEN> {
     pub(super) fn trigger(&mut self, on: &mut bool) {
         if self.len == 0 {
             self.len = MAX_LEN;
-            if self.p_half == PHalf::First {
+            if matches!(self.p_half, PHalf::First) {
                 self.step(on);
             }
         }

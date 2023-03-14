@@ -161,12 +161,12 @@ impl Cart {
     }
 
     #[must_use]
-    pub(crate) fn read_rom(&self, addr: u16) -> u8 {
+    pub(crate) const fn read_rom(&self, addr: u16) -> u8 {
         let (lo, hi) = self.rom_offsets;
 
         let bank_addr = match addr {
-            0x0000..=0x3FFF => lo | u32::from(addr & 0x3FFF),
-            0x4000..=0x7FFF => hi | u32::from(addr & 0x3FFF),
+            0x0000..=0x3FFF => lo | (addr & 0x3FFF) as u32,
+            0x4000..=0x7FFF => hi | (addr & 0x3FFF) as u32,
             _ => unreachable!(),
         };
 
@@ -335,7 +335,7 @@ impl Cart {
 
     pub(crate) fn write_ram(&mut self, addr: u16, val: u8) {
         fn mbc_write_ram(cart: &mut Cart, ram_enabled: bool, addr: u16, val: u8) {
-            if ram_enabled {
+            if cart.ram_size.is_any() && ram_enabled {
                 let addr = cart.ram_addr(addr);
                 cart.ram[addr as usize] = val;
             }

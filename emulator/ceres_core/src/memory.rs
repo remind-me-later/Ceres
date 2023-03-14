@@ -1,9 +1,9 @@
 use {
-    crate::{ppu::Mode, CompatMode, Gb, Model::Cgb},
+    crate::{ppu::Mode, CMode, Gb, Model::Cgb},
     core::num::NonZeroU8,
 };
 
-#[derive(PartialEq, Eq, Default, Debug)]
+#[derive(Default, Debug)]
 pub enum HdmaState {
     #[default]
     Sleep,
@@ -13,14 +13,19 @@ pub enum HdmaState {
 }
 
 // IO addresses
+// JoyP
 const P1: u8 = 0x00;
+// Serial
 const SB: u8 = 0x01;
 const SC: u8 = 0x02;
+// Timer
 const DIV: u8 = 0x04;
 const TIMA: u8 = 0x05;
 const TMA: u8 = 0x06;
 const TAC: u8 = 0x07;
+// IF
 const IF: u8 = 0x0F;
+// APU
 const NR10: u8 = 0x10;
 const NR11: u8 = 0x11;
 const NR12: u8 = 0x12;
@@ -44,6 +49,7 @@ const NR51: u8 = 0x25;
 const NR52: u8 = 0x26;
 const WAV_BEGIN: u8 = 0x30;
 const WAV_END: u8 = 0x3F;
+// PPU
 const LCDC: u8 = 0x40;
 const STAT: u8 = 0x41;
 const SCY: u8 = 0x42;
@@ -54,45 +60,52 @@ const DMA: u8 = 0x46;
 const BGP: u8 = 0x47;
 const OBP0: u8 = 0x48;
 const OBP1: u8 = 0x49;
+const BANK: u8 = 0x50;
 const WY: u8 = 0x4A;
 const WX: u8 = 0x4B;
 const KEY0: u8 = 0x4C;
 const KEY1: u8 = 0x4D;
 const VBK: u8 = 0x4F;
+// HDMA
 const HDMA1: u8 = 0x51;
 const HDMA2: u8 = 0x52;
 const HDMA3: u8 = 0x53;
 const HDMA4: u8 = 0x54;
 const HDMA5: u8 = 0x55;
+// Palettes
 const BCPS: u8 = 0x68;
 const BCPD: u8 = 0x69;
 const OCPS: u8 = 0x6A;
 const OCPD: u8 = 0x6B;
 const OPRI: u8 = 0x6C;
+// WRAM select
 const SVBK: u8 = 0x70;
+// APU digital out
 const PCM12: u8 = 0x76;
 const PCM34: u8 = 0x77;
+// HRAM
 const HRAM_BEG: u8 = 0x80;
 const HRAM_END: u8 = 0xFE;
+// IE
 const IE: u8 = 0xFF;
 
 impl Gb {
     #[must_use]
-    pub(crate) const fn read_ram(&self, addr: u16) -> u8 {
+    pub(crate) const fn read_wram_lo(&self, addr: u16) -> u8 {
         self.wram[(addr & 0xFFF) as usize]
     }
 
     #[must_use]
-    pub(crate) fn read_bank_ram(&self, addr: u16) -> u8 {
-        let bank = u16::from(self.svbk_true.get()) * 0x1000;
+    pub(crate) const fn read_wram_hi(&self, addr: u16) -> u8 {
+        let bank = (self.svbk_true.get() as u16) * 0x1000;
         self.wram[(addr & 0xFFF | bank) as usize]
     }
 
-    fn write_ram(&mut self, addr: u16, val: u8) {
+    fn write_wram_lo(&mut self, addr: u16, val: u8) {
         self.wram[(addr & 0xFFF) as usize] = val;
     }
 
-    fn write_bank_ram(&mut self, addr: u16, val: u8) {
+    fn write_wram_hi(&mut self, addr: u16, val: u8) {
         let bank = u16::from(self.svbk_true.get()) * 0x1000;
         self.wram[(addr & 0xFFF | bank) as usize] = val;
     }
@@ -105,30 +118,33 @@ impl Gb {
         !matches!(self.hdma_state, HdmaState::Sleep)
     }
 
-    fn read_boot_or_cart(&mut self, addr: u16) -> u8 {
-        self.boot_rom
-            .map_or_else(|| self.cart.read_rom(addr), |b| b[addr as usize])
+    const fn read_boot_or_cart(&self, addr: u16) -> u8 {
+        if let Some(b) = self.boot_rom {
+            b[addr as usize]
+        } else {
+            self.cart.read_rom(addr)
+        }
     }
 
     // **************
     // * Memory map *
     // **************
 
-    pub(crate) fn read_mem(&mut self, addr: u16) -> u8 {
+    pub(crate) fn read_mem(&self, addr: u16) -> u8 {
         match addr {
             0x0000..=0x00FF | 0x0200..=0x08FF => self.read_boot_or_cart(addr),
             0x0100..=0x01FF | 0x0900..=0x7FFF => self.cart.read_rom(addr),
             0x8000..=0x9FFF => self.ppu.read_vram(addr),
             0xA000..=0xBFFF => self.cart.read_ram(addr),
-            0xC000..=0xCFFF | 0xE000..=0xEFFF => self.read_ram(addr),
-            0xD000..=0xDFFF | 0xF000..=0xFDFF => self.read_bank_ram(addr),
+            0xC000..=0xCFFF | 0xE000..=0xEFFF => self.read_wram_lo(addr),
+            0xD000..=0xDFFF | 0xF000..=0xFDFF => self.read_wram_hi(addr),
             0xFE00..=0xFE9F => self.ppu.read_oam(addr, self.dma_on),
             0xFEA0..=0xFEFF => 0xFF,
             0xFF00..=0xFFFF => self.read_high((addr & 0xFF) as u8),
         }
     }
 
-    fn read_high(&mut self, addr: u8) -> u8 {
+    fn read_high(&self, addr: u8) -> u8 {
         match addr {
             P1 => self.read_p1(),
             SB => self.sb,
@@ -167,22 +183,22 @@ impl Gb {
             OBP1 => self.ppu.read_obp1(),
             WY => self.ppu.read_wy(),
             WX => self.ppu.read_wx(),
-            KEY1 if self.compat_mode == CompatMode::Cgb => {
-                0x7E | (u8::from(self.double_speed) << 7) | u8::from(self.double_speed_request)
+            KEY1 if matches!(self.cmode, CMode::Cgb) => {
+                0x7E | (u8::from(self.double_speed) << 7) | u8::from(self.key1_req)
             }
-            VBK if self.compat_mode == CompatMode::Cgb => self.ppu.read_vbk(),
-            HDMA5 if self.compat_mode == CompatMode::Cgb => {
+            VBK if matches!(self.cmode, CMode::Cgb) => self.ppu.read_vbk(),
+            HDMA5 if matches!(self.cmode, CMode::Cgb) => {
                 // active on low
                 u8::from(!self.hdma_on()) << 7 | self.hdma5
             }
-            BCPS if self.compat_mode == CompatMode::Cgb => self.ppu.bcp().spec(),
-            BCPD if self.compat_mode == CompatMode::Cgb => self.ppu.bcp().data(),
-            OCPS if self.compat_mode == CompatMode::Cgb => self.ppu.ocp().spec(),
-            OCPD if self.compat_mode == CompatMode::Cgb => self.ppu.ocp().data(),
-            OPRI if self.compat_mode == CompatMode::Cgb => self.ppu.read_opri(),
-            SVBK if self.compat_mode == CompatMode::Cgb => self.svbk | 0xF8,
-            PCM12 if self.compat_mode == CompatMode::Cgb => self.apu.pcm12(),
-            PCM34 if self.compat_mode == CompatMode::Cgb => self.apu.pcm34(),
+            BCPS if matches!(self.cmode, CMode::Cgb) => self.ppu.bcp().spec(),
+            BCPD if matches!(self.cmode, CMode::Cgb) => self.ppu.bcp().data(),
+            OCPS if matches!(self.cmode, CMode::Cgb) => self.ppu.ocp().spec(),
+            OCPD if matches!(self.cmode, CMode::Cgb) => self.ppu.ocp().data(),
+            OPRI if matches!(self.cmode, CMode::Cgb) => self.ppu.read_opri(),
+            SVBK if matches!(self.cmode, CMode::Cgb) => self.svbk | 0xF8,
+            PCM12 if matches!(self.cmode, CMode::Cgb) => self.apu.pcm12(),
+            PCM34 if matches!(self.cmode, CMode::Cgb) => self.apu.pcm34(),
             HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize],
             IE => self.ie,
             _ => 0xFF,
@@ -197,13 +213,9 @@ impl Gb {
             }
             0x8000..=0x9FFF => self.ppu.write_vram(addr, val),
             0xA000..=0xBFFF => self.cart.write_ram(addr, val),
-            0xC000..=0xCFFF | 0xE000..=0xEFFF => self.write_ram(addr, val),
-            0xD000..=0xDFFF | 0xF000..=0xFDFF => {
-                self.write_bank_ram(addr, val);
-            }
-            0xFE00..=0xFE9F => {
-                self.ppu.write_oam(addr, val, self.dma_active());
-            }
+            0xC000..=0xCFFF | 0xE000..=0xEFFF => self.write_wram_lo(addr, val),
+            0xD000..=0xDFFF | 0xF000..=0xFDFF => self.write_wram_hi(addr, val),
+            0xFE00..=0xFE9F => self.ppu.write_oam(addr, val, self.dma_active()),
             0xFEA0..=0xFEFF => (),
             0xFF00..=0xFFFF => self.write_high((addr & 0xFF) as u8, val),
         }
@@ -262,33 +274,29 @@ impl Gb {
             OBP1 => self.ppu.write_obp1(val),
             WY => self.ppu.write_wy(val),
             WX => self.ppu.write_wx(val),
-            KEY0 if self.model == Cgb && self.boot_rom.is_some() && val == 4 => {
-                self.compat_mode = CompatMode::Compat;
+            KEY0 if matches!(self.model, Cgb) && self.boot_rom.is_some() && val == 4 => {
+                self.cmode = CMode::Compat;
             }
-            KEY1 if self.compat_mode == CompatMode::Cgb => {
-                self.double_speed_request = val & 1 != 0;
-            }
-            VBK if self.compat_mode == CompatMode::Cgb => {
-                self.ppu.write_vbk(val);
-            }
-            0x50 => {
+            KEY1 if matches!(self.cmode, CMode::Cgb) => self.key1_req = val & 1 != 0,
+            VBK if matches!(self.cmode, CMode::Cgb) => self.ppu.write_vbk(val),
+            BANK => {
                 if val & 1 != 0 {
                     self.boot_rom = None;
                 }
             }
-            HDMA1 if self.compat_mode == CompatMode::Cgb => {
+            HDMA1 if matches!(self.cmode, CMode::Cgb) => {
                 self.hdma_src = (u16::from(val) << 8) | (self.hdma_src & 0xF0);
             }
-            HDMA2 if self.compat_mode == CompatMode::Cgb => {
+            HDMA2 if matches!(self.cmode, CMode::Cgb) => {
                 self.hdma_src = (self.hdma_src & 0xFF00) | u16::from(val & 0xF0);
             }
-            HDMA3 if self.compat_mode == CompatMode::Cgb => {
+            HDMA3 if matches!(self.cmode, CMode::Cgb) => {
                 self.hdma_dst = (u16::from(val & 0x1F) << 8) | (self.hdma_dst & 0xF0);
             }
-            HDMA4 if self.compat_mode == CompatMode::Cgb => {
+            HDMA4 if matches!(self.cmode, CMode::Cgb) => {
                 self.hdma_dst = (self.hdma_dst & 0x1F00) | u16::from(val & 0xF0);
             }
-            HDMA5 if self.compat_mode == CompatMode::Cgb => {
+            HDMA5 if matches!(self.cmode, CMode::Cgb) => {
                 use HdmaState::{General, Sleep, WaitHBlank};
 
                 debug_assert!(!matches!(self.hdma_state, HdmaState::General));
@@ -309,22 +317,12 @@ impl Gb {
                 // println!("hdma dst: {:#0x}", self.hdma_dst);
                 // println!();
             }
-            BCPS if self.compat_mode == CompatMode::Cgb => {
-                self.ppu.bcp_mut().set_spec(val);
-            }
-            BCPD if self.compat_mode == CompatMode::Cgb => {
-                self.ppu.bcp_mut().set_data(val);
-            }
-            OCPS if self.compat_mode == CompatMode::Cgb => {
-                self.ppu.ocp_mut().set_spec(val);
-            }
-            OCPD if self.compat_mode == CompatMode::Cgb => {
-                self.ppu.ocp_mut().set_data(val);
-            }
-            OPRI if self.compat_mode == CompatMode::Cgb => {
-                self.ppu.write_opri(val);
-            }
-            SVBK if self.compat_mode == CompatMode::Cgb => {
+            BCPS if matches!(self.cmode, CMode::Cgb) => self.ppu.bcp_mut().set_spec(val),
+            BCPD if matches!(self.cmode, CMode::Cgb) => self.ppu.bcp_mut().set_data(val),
+            OCPS if matches!(self.cmode, CMode::Cgb) => self.ppu.ocp_mut().set_spec(val),
+            OCPD if matches!(self.cmode, CMode::Cgb) => self.ppu.ocp_mut().set_data(val),
+            OPRI if matches!(self.cmode, CMode::Cgb) => self.ppu.write_opri(val),
+            SVBK if matches!(self.cmode, CMode::Cgb) => {
                 let tmp = val & 7;
                 self.svbk = tmp;
                 self.svbk_true = NonZeroU8::new(if tmp == 0 { 1 } else { tmp }).unwrap();
@@ -371,15 +369,15 @@ impl Gb {
 
         match self.hdma_state {
             General => (),
-            WaitHBlank if self.ppu.ppu_mode() == Mode::HBlank => (),
-            HBlankDone if self.ppu.ppu_mode() != Mode::HBlank => {
+            WaitHBlank if matches!(self.ppu.ppu_mode(), Mode::HBlank) => (),
+            HBlankDone if !matches!(self.ppu.ppu_mode(), Mode::HBlank) => {
                 self.hdma_state = WaitHBlank;
                 return;
             }
             _ => return,
         }
 
-        let len = if self.hdma_state == WaitHBlank {
+        let len = if matches!(self.hdma_state, WaitHBlank) {
             self.hdma_len -= 0x10;
             self.hdma_state = if self.hdma_len == 0 {
                 Sleep

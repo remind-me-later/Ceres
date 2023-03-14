@@ -3,7 +3,7 @@ use {
         Ppu, LCDC_BG_AREA, LCDC_BG_B, LCDC_BG_SIGNED, LCDC_OBJL_B, LCDC_OBJ_B, LCDC_WIN_AREA,
         LCDC_WIN_B, OAM_SIZE, VRAM_SIZE,
     },
-    crate::{CompatMode, PX_WIDTH},
+    crate::{CMode, PX_WIDTH},
 };
 
 // Sprite attributes bites
@@ -53,26 +53,26 @@ impl Ppu {
         GRAYSCALE_PALETTE[index as usize]
     }
 
-    const fn win_enabled(&self, compat_mode: CompatMode) -> bool {
+    const fn win_enabled(&self, compat_mode: CMode) -> bool {
         match compat_mode {
-            CompatMode::Dmg | CompatMode::Compat => {
+            CMode::Dmg | CMode::Compat => {
                 self.lcdc & (LCDC_BG_B | LCDC_WIN_B) == (LCDC_BG_B | LCDC_WIN_B)
             }
-            CompatMode::Cgb => self.lcdc & LCDC_WIN_B != 0,
+            CMode::Cgb => self.lcdc & LCDC_WIN_B != 0,
         }
     }
 
-    const fn bg_enabled(&self, compat_mode: CompatMode) -> bool {
+    const fn bg_enabled(&self, compat_mode: CMode) -> bool {
         match compat_mode {
-            CompatMode::Dmg | CompatMode::Compat => self.lcdc & LCDC_BG_B != 0,
-            CompatMode::Cgb => true,
+            CMode::Dmg | CMode::Compat => self.lcdc & LCDC_BG_B != 0,
+            CMode::Cgb => true,
         }
     }
 
-    const fn cgb_master_priority(&self, compat_mode: CompatMode) -> bool {
+    const fn cgb_master_priority(&self, compat_mode: CMode) -> bool {
         match compat_mode {
-            CompatMode::Dmg | CompatMode::Compat => false,
-            CompatMode::Cgb => self.lcdc & LCDC_BG_B == 0,
+            CMode::Dmg | CMode::Compat => false,
+            CMode::Cgb => self.lcdc & LCDC_BG_B == 0,
         }
     }
 
@@ -119,7 +119,7 @@ impl Ppu {
         (lo, hi)
     }
 
-    pub(super) fn draw_scanline(&mut self, compat_mode: CompatMode) {
+    pub(super) fn draw_scanline(&mut self, compat_mode: CMode) {
         let mut bg_priority = [Priority::Normal; PX_WIDTH as usize];
         let base_idx = u32::from(PX_WIDTH) * u32::from(self.ly);
 
@@ -132,7 +132,7 @@ impl Ppu {
         &mut self,
         bg_priority: &mut [Priority; PX_WIDTH as usize],
         base_idx: u32,
-        compat_mode: CompatMode,
+        compat_mode: CMode,
     ) {
         if !self.bg_enabled(compat_mode) {
             return;
@@ -149,8 +149,8 @@ impl Ppu {
             let tile_map = self.bg_tile_map() + row + col;
 
             let attr = match compat_mode {
-                CompatMode::Dmg | CompatMode::Compat => 0,
-                CompatMode::Cgb => self.vram_at_bank(tile_map, 1),
+                CMode::Dmg | CMode::Compat => 0,
+                CMode::Cgb => self.vram_at_bank(tile_map, 1),
             };
 
             let color = {
@@ -175,9 +175,9 @@ impl Ppu {
             };
 
             let rgb = match compat_mode {
-                CompatMode::Dmg => Self::mono_rgb(shade_index(self.bgp, color)),
-                CompatMode::Compat => self.bcp.rgb(attr & BG_PAL_B, shade_index(self.bgp, color)),
-                CompatMode::Cgb => self.bcp.rgb(attr & BG_PAL_B, color),
+                CMode::Dmg => Self::mono_rgb(shade_index(self.bgp, color)),
+                CMode::Compat => self.bcp.rgb(attr & BG_PAL_B, shade_index(self.bgp, color)),
+                CMode::Cgb => self.bcp.rgb(attr & BG_PAL_B, color),
             };
 
             self.rgb_buf.set_px(base_idx + u32::from(i), rgb);
@@ -196,7 +196,7 @@ impl Ppu {
         &mut self,
         bg_priority: &mut [Priority; PX_WIDTH as usize],
         base_idx: u32,
-        compat_mode: CompatMode,
+        compat_mode: CMode,
     ) {
         // not so sure about last condition...
         if !(self.win_enabled(compat_mode) && self.wy <= self.ly && self.wx < PX_WIDTH) {
@@ -221,8 +221,8 @@ impl Ppu {
             let tile_map = self.win_tile_map() + row + col;
 
             let attr = match compat_mode {
-                CompatMode::Dmg | CompatMode::Compat => 0,
-                CompatMode::Cgb => self.vram_at_bank(tile_map, 1),
+                CMode::Dmg | CMode::Compat => 0,
+                CMode::Cgb => self.vram_at_bank(tile_map, 1),
             };
 
             let color = {
@@ -247,9 +247,9 @@ impl Ppu {
             };
 
             let rgb = match compat_mode {
-                CompatMode::Dmg => Self::mono_rgb(shade_index(self.bgp, color)),
-                CompatMode::Compat => self.bcp.rgb(attr & BG_PAL_B, shade_index(self.bgp, color)),
-                CompatMode::Cgb => self.bcp.rgb(attr & BG_PAL_B, color),
+                CMode::Dmg => Self::mono_rgb(shade_index(self.bgp, color)),
+                CMode::Compat => self.bcp.rgb(attr & BG_PAL_B, shade_index(self.bgp, color)),
+                CMode::Cgb => self.bcp.rgb(attr & BG_PAL_B, color),
             };
 
             bg_priority[i as usize] = if color == 0 {
@@ -264,7 +264,7 @@ impl Ppu {
         }
     }
 
-    fn objs_in_ly(&mut self, height: u8, compat: CompatMode) -> ([Obj; 10], u8) {
+    fn objs_in_ly(&mut self, height: u8, compat: CMode) -> ([Obj; 10], u8) {
         let mut len: u8 = 0;
 
         let mut obj: [Obj; 10] = Default::default();
@@ -290,7 +290,7 @@ impl Ppu {
         }
 
         match compat {
-            CompatMode::Cgb => {
+            CMode::Cgb => {
                 for i in 1..len {
                     let mut j = i as usize;
                     while j > 0 {
@@ -317,7 +317,7 @@ impl Ppu {
         &mut self,
         bg_priority: &mut [Priority; PX_WIDTH as usize],
         base_idx: u32,
-        compat_mode: CompatMode,
+        compat_mode: CMode,
     ) {
         if self.lcdc & LCDC_OBJ_B == 0 {
             return;
@@ -373,7 +373,7 @@ impl Ppu {
                 }
 
                 let rgb = match compat_mode {
-                    CompatMode::Dmg => {
+                    CMode::Dmg => {
                         let palette = if obj.attr & SPR_PAL == 0 {
                             self.obp0
                         } else {
@@ -382,7 +382,7 @@ impl Ppu {
 
                         Self::mono_rgb(shade_index(palette, color))
                     }
-                    CompatMode::Compat => {
+                    CMode::Compat => {
                         let palette = if obj.attr & SPR_PAL == 0 {
                             self.obp0
                         } else {
@@ -391,7 +391,7 @@ impl Ppu {
 
                         self.ocp.rgb(0, shade_index(palette, color))
                     }
-                    CompatMode::Cgb => {
+                    CMode::Cgb => {
                         let cgb_palette = obj.attr & SPR_CGB_PAL;
                         self.ocp.rgb(cgb_palette, color)
                     }

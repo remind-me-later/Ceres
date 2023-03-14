@@ -85,10 +85,10 @@ impl Wave {
         }
     }
 
-    pub(super) fn out(&self) -> u8 {
+    pub(super) const fn out(&self) -> u8 {
         // wrapping_shr is necessary because (vol - 1) can be -1
         self.sample_buf
-            .wrapping_shr(u32::from(self.vol.wrapping_sub(1)))
+            .wrapping_shr(self.vol.wrapping_sub(1) as u32)
     }
 
     pub(super) fn step_sample(&mut self, cycles: i32) {

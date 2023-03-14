@@ -1,6 +1,6 @@
 use {
     self::color_palette::ColorPalette,
-    crate::{CompatMode, IF_LCD_B, IF_VBLANK_B},
+    crate::{CMode, IF_LCD_B, IF_VBLANK_B},
     rgba_buf::RgbaBuf,
 };
 
@@ -40,7 +40,7 @@ const OAM_SIZE: u16 = 0x100;
 const VRAM_SIZE: u16 = 0x2000;
 const VRAM_SIZE_CGB: u16 = VRAM_SIZE * 2;
 
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub enum Mode {
     HBlank = 0,
     VBlank = 1,
@@ -136,11 +136,11 @@ impl Ppu {
         &self.bcp
     }
 
-    pub(crate) fn read_stat(&mut self) -> u8 {
+    pub(crate) const fn read_stat(&self) -> u8 {
         self.stat | 0x80
     }
 
-    pub(crate) fn read_ly(&mut self) -> u8 {
+    pub(crate) const fn read_ly(&self) -> u8 {
         self.ly
     }
 
@@ -148,7 +148,7 @@ impl Ppu {
         self.opri = val;
     }
 
-    pub(crate) fn read_opri(&mut self) -> u8 {
+    pub(crate) const fn read_opri(&self) -> u8 {
         self.opri
     }
 
@@ -156,8 +156,8 @@ impl Ppu {
         self.vbk = val & 1 != 0;
     }
 
-    pub(crate) fn read_vbk(&self) -> u8 {
-        u8::from(self.vbk) | 0xFE
+    pub(crate) const fn read_vbk(&self) -> u8 {
+        (self.vbk as u8) | 0xFE
     }
 
     pub(crate) fn write_scx(&mut self, val: u8) {
@@ -224,7 +224,7 @@ impl Ppu {
         self.wx
     }
 
-    pub(crate) fn read_lcdc(&mut self) -> u8 {
+    pub(crate) const fn read_lcdc(&self) -> u8 {
         self.lcdc
     }
 
@@ -257,25 +257,27 @@ impl Ppu {
         self.stat |= ly_equals_lyc | mode;
     }
 
-    pub(crate) fn read_vram(&mut self, addr: u16) -> u8 {
-        if self.ppu_mode() == Mode::Drawing {
-            0xFF
-        } else {
-            let bank = u16::from(self.vbk) * VRAM_SIZE;
-            let i = (addr & 0x1FFF) + bank;
-            self.vram[i as usize]
+    pub(crate) const fn read_vram(&self, addr: u16) -> u8 {
+        #[allow(clippy::single_match_else)]
+        match self.ppu_mode() {
+            Mode::Drawing => 0xFF,
+            _ => {
+                let bank = self.vbk as u16 * VRAM_SIZE;
+                let i = (addr & 0x1FFF) + bank;
+                self.vram[i as usize]
+            }
         }
     }
 
     pub(crate) fn write_vram(&mut self, addr: u16, val: u8) {
-        if self.ppu_mode() != Mode::Drawing {
+        if !matches!(self.ppu_mode(), Mode::Drawing) {
             let bank = u16::from(self.vbk) * VRAM_SIZE;
             let i = (addr & 0x1FFF) + bank;
             self.vram[i as usize] = val;
         }
     }
 
-    pub(crate) fn read_oam(&mut self, addr: u16, dma_on: bool) -> u8 {
+    pub(crate) const fn read_oam(&self, addr: u16, dma_on: bool) -> u8 {
         match self.ppu_mode() {
             Mode::HBlank | Mode::VBlank if !dma_on => self.oam[(addr & 0xFF) as usize],
             _ => 0xFF,
@@ -298,7 +300,7 @@ impl Ppu {
 
 // General
 impl Ppu {
-    pub(crate) fn run(&mut self, cycles: i32, ifr: &mut u8, compat_mode: CompatMode) {
+    pub(crate) fn run(&mut self, cycles: i32, ifr: &mut u8, compat_mode: CMode) {
         if self.lcdc & LCDC_ON_B == 0 {
             return;
         }

@@ -25,8 +25,8 @@ impl ColorPalette {
         self.inc = val & 0x80 != 0;
     }
 
-    pub(crate) fn spec(&self) -> u8 {
-        self.idx | 0x40 | (u8::from(self.inc) << 7)
+    pub(crate) const fn spec(&self) -> u8 {
+        self.idx | 0x40 | ((self.inc as u8) << 7)
     }
 
     pub(crate) const fn data(&self) -> u8 {
