@@ -1,9 +1,9 @@
 use crate::Gb;
 
-const ZF_B: u16 = 0x80;
-const NF_B: u16 = 0x40;
-const HF_B: u16 = 0x20;
-const CF_B: u16 = 0x10;
+const ZF: u16 = 0x80;
+const NF: u16 = 0x40;
+const HF: u16 = 0x20;
+const CF: u16 = 0x10;
 
 impl Gb {
     pub(crate) fn run_cpu(&mut self) {
@@ -85,13 +85,25 @@ impl Gb {
     }
 
     #[inline]
-    fn rr(&mut self, id: u8) -> &mut u16 {
+    fn set_rr(&mut self, id: u8, val: u16) {
         match id {
-            0 => &mut self.af,
-            1 => &mut self.bc,
-            2 => &mut self.de,
-            3 => &mut self.hl,
-            4 => &mut self.sp,
+            0 => self.af = val,
+            1 => self.bc = val,
+            2 => self.de = val,
+            3 => self.hl = val,
+            4 => self.sp = val,
+            _ => unreachable!(),
+        }
+    }
+
+    #[inline]
+    fn get_rr(&self, id: u8) -> u16 {
+        match id {
+            0 => self.af,
+            1 => self.bc,
+            2 => self.de,
+            3 => self.hl,
+            4 => self.sp,
             _ => unreachable!(),
         }
     }
@@ -106,9 +118,9 @@ impl Gb {
                 self.read(self.hl)
             }
         } else if lo {
-            (*self.rr(id) & 0xFF) as u8
+            (self.get_rr(id) & 0xFF) as u8
         } else {
-            (*self.rr(id) >> 8) as u8
+            (self.get_rr(id) >> 8) as u8
         }
     }
 
@@ -122,11 +134,9 @@ impl Gb {
                 self.cpu_write(self.hl, val);
             }
         } else if lo {
-            let rr = self.rr(id);
-            *rr = u16::from(val) | *rr & 0xFF00;
+            self.set_rr(id, u16::from(val) | self.get_rr(id) & 0xFF00);
         } else {
-            let rr = self.rr(id);
-            *rr = u16::from(val) << 8 | *rr & 0xFF;
+            self.set_rr(id, u16::from(val) << 8 | self.get_rr(id) & 0xFF);
         }
     }
 
@@ -138,17 +148,17 @@ impl Gb {
 
     #[inline]
     fn ld_a_drr(&mut self, op: u8) {
-        let reg_id = (op >> 4) + 1;
+        let id = (op >> 4) + 1;
         self.af &= 0xFF;
-        let tmp = *self.rr(reg_id);
-        self.af |= u16::from(self.read(tmp)) << 8;
+        let addr = self.get_rr(id);
+        self.af |= u16::from(self.read(addr)) << 8;
     }
 
     #[inline]
     fn ld_drr_a(&mut self, op: u8) {
-        let reg_id = (op >> 4) + 1;
-        let tmp = *self.rr(reg_id);
-        self.cpu_write(tmp, (self.af >> 8) as u8);
+        let id = (op >> 4) + 1;
+        let addr = self.get_rr(id);
+        self.cpu_write(addr, (self.af >> 8) as u8);
     }
 
     #[inline]
@@ -223,18 +233,16 @@ impl Gb {
 
     #[inline]
     fn ld_hr_d8(&mut self, op: u8) {
-        let reg_id = ((op >> 4) + 1) & 0x03;
-        *self.rr(reg_id) &= 0xFF;
-        let tmp = u16::from(self.imm8());
-        *self.rr(reg_id) |= tmp << 8;
+        let id = ((op >> 4) + 1) & 0x03;
+        let hi = u16::from(self.imm8());
+        self.set_rr(id, (hi << 8) | self.get_rr(id) & 0xFF);
     }
 
     #[inline]
     fn ld_lr_d8(&mut self, op: u8) {
-        let reg_id = (op >> 4) + 1;
-        *self.rr(reg_id) &= 0xFF00;
-        let tmp = u16::from(self.imm8());
-        *self.rr(reg_id) |= tmp;
+        let id = (op >> 4) + 1;
+        let lo = u16::from(self.imm8());
+        self.set_rr(id, self.get_rr(id) & 0xFF00 | lo);
     }
 
     #[inline]
@@ -256,13 +264,13 @@ impl Gb {
         let res = a + val;
         self.af = res << 8;
         if res & 0xFF == 0 {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
         if (a & 0xF) + (val & 0xF) > 0x0F {
-            self.af |= HF_B;
+            self.af |= HF;
         }
         if res > 0xFF {
-            self.af |= CF_B;
+            self.af |= CF;
         }
     }
 
@@ -281,15 +289,15 @@ impl Gb {
     #[inline]
     fn sub(&mut self, val: u16) {
         let a = self.af >> 8;
-        self.af = (a.wrapping_sub(val) << 8) | NF_B;
+        self.af = (a.wrapping_sub(val) << 8) | NF;
         if a == val {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
         if (a & 0xF) < (val & 0xF) {
-            self.af |= HF_B;
+            self.af |= HF;
         }
         if a < val {
-            self.af |= CF_B;
+            self.af |= CF;
         }
     }
 
@@ -308,18 +316,18 @@ impl Gb {
     #[inline]
     fn sbc(&mut self, val: u16) {
         let a = self.af >> 8;
-        let carry = u16::from((self.af & CF_B) != 0);
+        let carry = u16::from((self.af & CF) != 0);
         let res = a.wrapping_sub(val).wrapping_sub(carry);
-        self.af = (res << 8) | NF_B;
+        self.af = (res << 8) | NF;
 
         if res & 0xFF == 0 {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
         if (a & 0xF) < (val & 0xF) + carry {
-            self.af |= HF_B;
+            self.af |= HF;
         }
         if res > 0xFF {
-            self.af |= CF_B;
+            self.af |= CF;
         }
     }
 
@@ -338,17 +346,17 @@ impl Gb {
     #[inline]
     fn adc(&mut self, val: u16) {
         let a = self.af >> 8;
-        let carry = u16::from((self.af & CF_B) != 0);
+        let carry = u16::from((self.af & CF) != 0);
         let res = a + val + carry;
         self.af = res << 8;
         if res & 0xFF == 0 {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
         if (a & 0xF) + (val & 0xF) + carry > 0x0F {
-            self.af |= HF_B;
+            self.af |= HF;
         }
         if res > 0xFF {
-            self.af |= CF_B;
+            self.af |= CF;
         }
     }
 
@@ -369,7 +377,7 @@ impl Gb {
         let a = self.af >> 8;
         self.af = (a | val) << 8;
         if (a | val) == 0 {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
     }
 
@@ -391,7 +399,7 @@ impl Gb {
         let a = a ^ val;
         self.af = a << 8;
         if a == 0 {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
     }
 
@@ -411,9 +419,9 @@ impl Gb {
     fn and(&mut self, val: u16) {
         let a = self.af >> 8;
         let a = a & val;
-        self.af = (a << 8) | HF_B;
+        self.af = (a << 8) | HF;
         if a == 0 {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
     }
 
@@ -433,15 +441,15 @@ impl Gb {
     fn cp(&mut self, val: u16) {
         let a = self.af >> 8;
         self.af &= 0xFF00;
-        self.af |= NF_B;
+        self.af |= NF;
         if a == val {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
         if (a & 0xF) < (val & 0xF) {
-            self.af |= HF_B;
+            self.af |= HF;
         }
         if a < val {
-            self.af |= CF_B;
+            self.af |= CF;
         }
     }
 
@@ -459,67 +467,71 @@ impl Gb {
 
     #[inline]
     fn inc_lr(&mut self, op: u8) {
-        let reg_id = (op >> 4) + 1;
-        let val = self.rr(reg_id).wrapping_add(1) & 0xFF;
-        *self.rr(reg_id) = (*self.rr(reg_id) & 0xFF00) | val;
+        let id = (op >> 4) + 1;
+        let val = self.get_rr(id).wrapping_add(1) & 0xFF;
+        let rr = self.get_rr(id) & 0xFF00 | val;
+        self.set_rr(id, rr);
 
-        self.af &= !(NF_B | ZF_B | HF_B);
+        self.af &= !(NF | ZF | HF);
 
-        if ((*self.rr(reg_id)) & 0x0F) == 0 {
-            self.af |= HF_B;
+        if (rr & 0x0F) == 0 {
+            self.af |= HF;
         }
 
-        if ((*self.rr(reg_id)) & 0xFF) == 0 {
-            self.af |= ZF_B;
+        if (rr & 0xFF) == 0 {
+            self.af |= ZF;
         }
     }
 
     #[inline]
     fn dec_lr(&mut self, op: u8) {
-        let reg_id = (op >> 4) + 1;
-        let val = (*self.rr(reg_id)).wrapping_sub(1) & 0xFF;
-        (*self.rr(reg_id)) = ((*self.rr(reg_id)) & 0xFF00) | val;
+        let id = (op >> 4) + 1;
+        let val = self.get_rr(id).wrapping_sub(1) & 0xFF;
+        let rr = self.get_rr(id) & 0xFF00 | val;
+        self.set_rr(id, rr);
 
-        self.af &= !(ZF_B | HF_B);
-        self.af |= NF_B;
+        self.af &= !(ZF | HF);
+        self.af |= NF;
 
-        if ((*self.rr(reg_id)) & 0x0F) == 0xF {
-            self.af |= HF_B;
+        if rr & 0x0F == 0xF {
+            self.af |= HF;
         }
 
-        if ((*self.rr(reg_id)) & 0xFF) == 0 {
-            self.af |= ZF_B;
+        if rr & 0xFF == 0 {
+            self.af |= ZF;
         }
     }
 
     #[inline]
     fn inc_hr(&mut self, op: u8) {
-        let reg_id = ((op >> 4) + 1) & 0x03;
-        *self.rr(reg_id) = (*self.rr(reg_id)).wrapping_add(0x100);
-        self.af &= !(NF_B | ZF_B | HF_B);
+        let id = ((op >> 4) + 1) & 0x03;
+        let rr = self.get_rr(id).wrapping_add(0x100);
+        self.set_rr(id, rr);
+        self.af &= !(NF | ZF | HF);
 
-        if ((*self.rr(reg_id)) & 0x0F00) == 0 {
-            self.af |= HF_B;
+        if rr & 0x0F00 == 0 {
+            self.af |= HF;
         }
 
-        if ((*self.rr(reg_id)) & 0xFF00) == 0 {
-            self.af |= ZF_B;
+        if rr & 0xFF00 == 0 {
+            self.af |= ZF;
         }
     }
 
     #[inline]
     fn dec_hr(&mut self, op: u8) {
-        let reg_id = ((op >> 4) + 1) & 0x03;
-        *self.rr(reg_id) = (*self.rr(reg_id)).wrapping_sub(0x100);
-        self.af &= !(ZF_B | HF_B);
-        self.af |= NF_B;
+        let id = ((op >> 4) + 1) & 0x03;
+        let rr = self.get_rr(id).wrapping_sub(0x100);
+        self.set_rr(id, rr);
+        self.af &= !(ZF | HF);
+        self.af |= NF;
 
-        if ((*self.rr(reg_id)) & 0x0F00) == 0xF00 {
-            self.af |= HF_B;
+        if rr & 0x0F00 == 0xF00 {
+            self.af |= HF;
         }
 
-        if ((*self.rr(reg_id)) & 0xFF00) == 0 {
-            self.af |= ZF_B;
+        if rr & 0xFF00 == 0 {
+            self.af |= ZF;
         }
     }
 
@@ -528,13 +540,13 @@ impl Gb {
         let val = self.read(self.hl).wrapping_add(1);
         self.cpu_write(self.hl, val);
 
-        self.af &= !(NF_B | ZF_B | HF_B);
+        self.af &= !(NF | ZF | HF);
         if (val & 0x0F) == 0 {
-            self.af |= HF_B;
+            self.af |= HF;
         }
 
         if val == 0 {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
     }
 
@@ -543,30 +555,28 @@ impl Gb {
         let val = self.read(self.hl).wrapping_sub(1);
         self.cpu_write(self.hl, val);
 
-        self.af &= !(ZF_B | HF_B);
-        self.af |= NF_B;
+        self.af &= !(ZF | HF);
+        self.af |= NF;
         if (val & 0x0F) == 0x0F {
-            self.af |= HF_B;
+            self.af |= HF;
         }
 
         if val == 0 {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
     }
 
     #[inline]
     fn inc_rr(&mut self, op: u8) {
-        let reg_id = (op >> 4) + 1;
-        let reg = self.rr(reg_id);
-        *reg = reg.wrapping_add(1);
+        let id = (op >> 4) + 1;
+        self.set_rr(id, self.get_rr(id).wrapping_add(1));
         self.tick_m_cycle();
     }
 
     #[inline]
     fn dec_rr(&mut self, op: u8) {
-        let reg_id = (op >> 4) + 1;
-        let reg = self.rr(reg_id);
-        *reg = reg.wrapping_sub(1);
+        let id = (op >> 4) + 1;
+        self.set_rr(id, self.get_rr(id).wrapping_sub(1));
         self.tick_m_cycle();
     }
 
@@ -581,11 +591,11 @@ impl Gb {
         self.hl = self.sp.wrapping_add(offset);
 
         if (self.sp & 0xF) + (offset & 0xF) > 0xF {
-            self.af |= HF_B;
+            self.af |= HF;
         }
 
         if (self.sp & 0xFF) + (offset & 0xFF) > 0xFF {
-            self.af |= CF_B;
+            self.af |= CF;
         }
     }
 
@@ -595,7 +605,7 @@ impl Gb {
 
         self.af = (self.af & 0xFF00) << 1;
         if carry {
-            self.af |= CF_B | 0x0100;
+            self.af |= CF | 0x0100;
         }
     }
 
@@ -604,7 +614,7 @@ impl Gb {
         let carry = self.af & 0x100 != 0;
         self.af = (self.af >> 1) & 0xFF00;
         if carry {
-            self.af |= CF_B | 0x8000;
+            self.af |= CF | 0x8000;
         }
     }
 
@@ -616,10 +626,10 @@ impl Gb {
         let val = val >> 1 | u8::from(carry) << 7;
         self.set_r(op, val);
         if carry {
-            self.af |= CF_B;
+            self.af |= CF;
         }
         if val == 0 {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
     }
 
@@ -726,10 +736,10 @@ impl Gb {
 
     const fn condition(&self, op: u8) -> bool {
         match (op >> 3) & 3 {
-            0 => self.af & ZF_B == 0,
-            1 => self.af & ZF_B != 0,
-            2 => self.af & CF_B == 0,
-            3 => self.af & CF_B != 0,
+            0 => self.af & ZF == 0,
+            1 => self.af & ZF != 0,
+            2 => self.af & CF == 0,
+            3 => self.af & CF != 0,
             _ => unreachable!(),
         }
     }
@@ -782,14 +792,14 @@ impl Gb {
 
     #[inline]
     fn ccf(&mut self) {
-        self.af ^= CF_B;
-        self.af &= !(HF_B | NF_B);
+        self.af ^= CF;
+        self.af &= !(HF | NF);
     }
 
     #[inline]
     fn scf(&mut self) {
-        self.af |= CF_B;
-        self.af &= !(HF_B | NF_B);
+        self.af |= CF;
+        self.af &= !(HF | NF);
     }
 
     #[allow(clippy::unused_self)]
@@ -807,22 +817,22 @@ impl Gb {
     fn daa(&mut self) {
         let mut res = self.af >> 8;
 
-        self.af &= !(0xFF00 | ZF_B);
+        self.af &= !(0xFF00 | ZF);
 
-        if self.af & NF_B == 0 {
-            if self.af & HF_B != 0 || res & 0x0F > 0x09 {
+        if self.af & NF == 0 {
+            if self.af & HF != 0 || res & 0x0F > 0x09 {
                 res += 0x06;
             }
 
-            if self.af & CF_B != 0 || res > 0x9F {
+            if self.af & CF != 0 || res > 0x9F {
                 res += 0x60;
             }
         } else {
-            if self.af & HF_B != 0 {
+            if self.af & HF != 0 {
                 res = res.wrapping_sub(0x06) & 0xFF;
             }
 
-            if self.af & CF_B != 0 {
+            if self.af & CF != 0 {
                 res = res.wrapping_sub(0x60);
             }
         }
@@ -830,21 +840,21 @@ impl Gb {
         let res = res;
 
         if res & 0xFF == 0 {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
 
         if res & 0x100 == 0x100 {
-            self.af |= CF_B;
+            self.af |= CF;
         }
 
-        self.af &= !HF_B;
+        self.af &= !HF;
         self.af |= res << 8;
     }
 
     #[inline]
     fn cpl(&mut self) {
         self.af ^= 0xFF00;
-        self.af |= HF_B | NF_B;
+        self.af |= HF | NF;
     }
 
     #[inline]
@@ -858,9 +868,8 @@ impl Gb {
 
     #[inline]
     fn push_rr(&mut self, op: u8) {
-        let reg_id = ((op >> 4) + 1) & 3;
-        let val = *self.rr(reg_id);
-        self.push(val);
+        let id = ((op >> 4) + 1) & 3;
+        self.push(self.get_rr(id));
     }
 
     #[inline]
@@ -875,16 +884,16 @@ impl Gb {
     #[inline]
     fn pop_rr(&mut self, op: u8) {
         let val = self.pop();
-        let reg_id = ((op >> 4) + 1) & 3;
-        *self.rr(reg_id) = val;
+        let id = ((op >> 4) + 1) & 3;
+        self.set_rr(id, val);
         self.af &= 0xFFF0;
     }
 
     #[inline]
     fn ld_rr_d16(&mut self, op: u8) {
-        let reg_id = (op >> 4) + 1;
+        let id = (op >> 4) + 1;
         let imm = self.imm16();
-        *self.rr(reg_id) = imm;
+        self.set_rr(id, imm);
     }
 
     #[inline]
@@ -908,29 +917,29 @@ impl Gb {
         self.af &= 0xFF00;
 
         if (sp & 0xF) + (offset & 0xF) > 0xF {
-            self.af |= HF_B;
+            self.af |= HF;
         }
 
         if (sp & 0xFF) + (offset & 0xFF) > 0xFF {
-            self.af |= CF_B;
+            self.af |= CF;
         }
     }
 
     #[inline]
     fn add_hl_rr(&mut self, op: u8) {
-        let reg_id = (op >> 4) + 1;
+        let id = (op >> 4) + 1;
         let hl = self.hl;
-        let rr = *self.rr(reg_id);
+        let rr = self.get_rr(id);
         self.hl = hl.wrapping_add(rr);
 
-        self.af &= !(NF_B | CF_B | HF_B);
+        self.af &= !(NF | CF | HF);
 
         if ((hl & 0xFFF) + (rr & 0xFFF)) & 0x1000 != 0 {
-            self.af |= HF_B;
+            self.af |= HF;
         }
 
         if (u32::from(hl) + u32::from(rr)) & 0x10000 != 0 {
-            self.af |= CF_B;
+            self.af |= CF;
         }
 
         self.tick_m_cycle();
@@ -943,39 +952,39 @@ impl Gb {
         self.af &= 0xFF00;
         self.set_r(op, val << 1 | u8::from(carry));
         if carry {
-            self.af |= CF_B;
+            self.af |= CF;
         }
         if val == 0 {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
     }
 
     #[inline]
     fn rra(&mut self) {
         let bit1 = self.af & 0x0100 != 0;
-        let carry = self.af & CF_B != 0;
+        let carry = self.af & CF != 0;
 
         self.af = (self.af >> 1) & 0xFF00 | u16::from(carry) << 15;
 
         if bit1 {
-            self.af |= CF_B;
+            self.af |= CF;
         }
     }
 
     #[inline]
     fn rr_r(&mut self, op: u8) {
         let val = self.get_r(op);
-        let carry = (self.af & CF_B) != 0;
+        let carry = (self.af & CF) != 0;
         let bit1 = (val & 1) != 0;
 
         self.af &= 0xFF00;
         let val = val >> 1 | u8::from(carry) << 7;
         self.set_r(op, val);
         if bit1 {
-            self.af |= CF_B;
+            self.af |= CF;
         }
         if val == 0 {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
     }
 
@@ -987,10 +996,10 @@ impl Gb {
         let res = val << 1;
         self.set_r(op, res);
         if carry {
-            self.af |= CF_B;
+            self.af |= CF;
         }
         if res == 0 {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
     }
 
@@ -1000,12 +1009,12 @@ impl Gb {
         let bit7 = val & 0x80;
         self.af &= 0xFF00;
         if val & 1 != 0 {
-            self.af |= CF_B;
+            self.af |= CF;
         }
         let val = (val >> 1) | bit7;
         self.set_r(op, val);
         if val == 0 {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
     }
 
@@ -1015,10 +1024,10 @@ impl Gb {
         self.af &= 0xFF00;
         self.set_r(op, val >> 1);
         if val & 1 != 0 {
-            self.af |= CF_B;
+            self.af |= CF;
         }
         if val >> 1 == 0 {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
     }
 
@@ -1028,7 +1037,7 @@ impl Gb {
         self.af &= 0xFF00;
         self.set_r(op, (val >> 4) | (val << 4));
         if val == 0 {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
     }
 
@@ -1039,10 +1048,10 @@ impl Gb {
         let bit = 1 << bit_no;
         if op & 0xC0 == 0x40 {
             // bit
-            self.af &= 0xFF00 | CF_B;
-            self.af |= HF_B;
+            self.af &= 0xFF00 | CF;
+            self.af |= HF;
             if bit & val == 0 {
-                self.af |= ZF_B;
+                self.af |= ZF;
             }
         } else if op & 0xC0 == 0x80 {
             // res
@@ -1056,29 +1065,29 @@ impl Gb {
     #[inline]
     fn rla(&mut self) {
         let bit7 = (self.af & 0x8000) != 0;
-        let carry = (self.af & CF_B) != 0;
+        let carry = (self.af & CF) != 0;
 
         self.af = (self.af & 0xFF00) << 1 | u16::from(carry) << 8;
 
         if bit7 {
-            self.af |= CF_B;
+            self.af |= CF;
         }
     }
 
     #[inline]
     fn rl_r(&mut self, op: u8) {
         let val = self.get_r(op);
-        let carry = self.af & CF_B != 0;
+        let carry = self.af & CF != 0;
         let bit7 = val & 0x80 != 0;
 
         self.af &= 0xFF00;
         let val = val << 1 | u8::from(carry);
         self.set_r(op, val);
         if bit7 {
-            self.af |= CF_B;
+            self.af |= CF;
         }
         if val == 0 {
-            self.af |= ZF_B;
+            self.af |= ZF;
         }
     }
 
