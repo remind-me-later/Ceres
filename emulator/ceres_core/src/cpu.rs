@@ -758,7 +758,7 @@ impl Gb {
         self.imm8();
 
         if self.key1_req {
-            self.double_speed = !self.double_speed;
+            self.key1_ena = !self.key1_ena;
             self.key1_req = false;
 
             // TODO: div should not tick

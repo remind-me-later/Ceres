@@ -184,7 +184,7 @@ impl Gb {
             WY => self.ppu.read_wy(),
             WX => self.ppu.read_wx(),
             KEY1 if matches!(self.cmode, CMode::Cgb) => {
-                0x7E | (u8::from(self.double_speed) << 7) | u8::from(self.key1_req)
+                0x7E | (u8::from(self.key1_ena) << 7) | u8::from(self.key1_req)
             }
             VBK if matches!(self.cmode, CMode::Cgb) => self.ppu.read_vbk(),
             HDMA5 if matches!(self.cmode, CMode::Cgb) => {
@@ -408,7 +408,7 @@ impl Gb {
         // etc..). If the PPU reads VRAM during an HDMA transfer it
         // should be glitchy anyways
         // TODO: check these timings
-        if self.double_speed {
+        if self.key1_ena {
             self.advance_t_cycles(i32::from(len) * 2 * 2);
         } else {
             self.advance_t_cycles(i32::from(len) * 2);

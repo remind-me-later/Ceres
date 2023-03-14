@@ -15,7 +15,7 @@ impl Gb {
         self.dma_cycles += cycles;
 
         // not affected by speed boost
-        if self.double_speed {
+        if self.key1_ena {
             cycles >>= 1;
         }
 
@@ -25,6 +25,7 @@ impl Gb {
 
         self.apu.run(cycles);
         self.cart.run(cycles);
+        self.run_serial(cycles);
     }
 
     const fn sys_clk_tac_mux(&self) -> u16 {
@@ -62,7 +63,7 @@ impl Gb {
     // TODO: this could be optimized
     fn set_system_clk(&mut self, val: u16) {
         let triggers = self.wide_div_counter & !val;
-        let apu_bit = if self.double_speed { 0x2000 } else { 0x1000 };
+        let apu_bit = if self.key1_ena { 0x2000 } else { 0x1000 };
 
         // increase TIMA on falling edge of TAC mux
         if self.tac_enable && (triggers & self.sys_clk_tac_mux() != 0) {

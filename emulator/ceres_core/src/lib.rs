@@ -75,6 +75,7 @@ mod cpu;
 mod joypad;
 mod memory;
 mod ppu;
+mod serial;
 mod timing;
 
 // t-cycles per second
@@ -83,7 +84,7 @@ const TC_SEC: i32 = 0x40_0000;
 const IF_VBLANK_B: u8 = 1;
 const IF_LCD_B: u8 = 2;
 const IF_TIMER_B: u8 = 4;
-// const IF_SERIAL_B: u8 = 8;
+const IF_SERIAL_B: u8 = 8;
 const IF_P1_B: u8 = 16;
 
 const HRAM_SIZE: u8 = 0x80;
@@ -111,7 +112,7 @@ pub struct Gb {
     cmode: CMode,
 
     // double speed
-    double_speed: bool,
+    key1_ena: bool,
     key1_req: bool,
 
     // key1: u8,
@@ -134,6 +135,7 @@ pub struct Gb {
     // serial
     sb: u8,
     sc: u8,
+    serial_bit: u8,
 
     // joypad
     p1_btn: u8,
@@ -218,9 +220,10 @@ impl Gb {
             apu: Apu::new(sample_rate),
 
             // Default
+            serial_bit: Default::default(),
             ppu: Ppu::default(),
             tima_state: TIMAState::default(),
-            double_speed: Default::default(),
+            key1_ena: Default::default(),
             key1_req: Default::default(),
             af: Default::default(),
             bc: Default::default(),
