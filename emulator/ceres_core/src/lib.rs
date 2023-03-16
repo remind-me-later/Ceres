@@ -90,8 +90,8 @@ const IF_SERIAL_B: u8 = 8;
 const IF_P1_B: u8 = 16;
 
 const HRAM_SIZE: u8 = 0x80;
-const WRAM_SIZE: u16 = 0x2000;
-const WRAM_SIZE_CGB: u16 = WRAM_SIZE * 4;
+const WRAM_SIZE_GB: u16 = 0x2000;
+const WRAM_SIZE: u16 = WRAM_SIZE_GB * 4;
 
 #[derive(Clone, Copy)]
 pub enum Model {
@@ -149,7 +149,7 @@ pub struct Gb {
     ie: u8,
 
     // memory
-    wram: [u8; WRAM_SIZE_CGB as usize],
+    wram: [u8; WRAM_SIZE as usize],
     hram: [u8; HRAM_SIZE as usize],
     svbk: u8,
     svbk_true: NonZeroU8, // true selected bank, between 1 and 7
@@ -211,13 +211,12 @@ impl Gb {
             boot_rom,
 
             // Custom
+            apu: Apu::new(sample_rate),
             svbk_true: NonZeroU8::new(1).unwrap(),
 
             // Slices
-            wram: [0; WRAM_SIZE_CGB as usize],
+            wram: [0; WRAM_SIZE as usize],
             hram: [0; HRAM_SIZE as usize],
-
-            apu: Apu::new(sample_rate),
 
             // Default
             serial: Serial::default(),

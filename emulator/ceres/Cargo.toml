@@ -22,5 +22,12 @@ bytemuck = { version = "*", default-features = false, features = ["derive"] }
 winit = { version = "*", default-features = false, features = ["x11"] }
 
 # screenshots
-image = { version = "*", default-features = false, features = ["png"] }
-chrono = { version = "*", default-features = false, features = ["clock"] }
+image = { version = "*", default-features = false, features = [
+    "png",
+], optional = true }
+chrono = { version = "*", default-features = false, features = [
+    "clock",
+], optional = true }
+
+[features]
+screenshot = ["image", "chrono"]

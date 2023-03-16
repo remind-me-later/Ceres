@@ -60,7 +60,7 @@
 use {
     ceres_core::Gb,
     clap::{builder::PossibleValuesParser, Arg, Command},
-    core::{str::FromStr, time::Duration},
+    core::time::Duration,
     std::{
         fs::{self, File},
         io::Write,
@@ -255,31 +255,35 @@ pub async fn run(model: ceres_core::Model, mut path: PathBuf) -> anyhow::Result<
                                         )),
                                     },
                                     KC::P => {
-                                        // Screenshot
+                                        #[cfg(feature = "screenshot")]
+                                        {
+                                            use core::str::FromStr;
 
-                                        let time = chrono::Local::now();
+                                            let time = chrono::Local::now();
 
-                                        let mut stem = sav_path.file_stem().unwrap().to_owned();
-                                        stem.push(" - ");
-                                        stem.push(time.to_string());
+                                            let mut stem = sav_path.file_stem().unwrap().to_owned();
+                                            stem.push(" - ");
+                                            stem.push(time.to_string());
 
-                                        let img_path = PathBuf::from_str(stem.to_str().unwrap())
-                                            .unwrap()
-                                            .with_extension("png");
+                                            let img_path =
+                                                PathBuf::from_str(stem.to_str().unwrap())
+                                                    .unwrap()
+                                                    .with_extension("png");
 
-                                        // println!("{img_path:?}");
+                                            // println!("{img_path:?}");
 
-                                        let gb = gb.lock();
+                                            let gb = gb.lock();
 
-                                        image::save_buffer_with_format(
-                                            img_path,
-                                            gb.pixel_data_rgba(),
-                                            u32::from(ceres_core::PX_WIDTH),
-                                            u32::from(ceres_core::PX_HEIGHT),
-                                            image::ColorType::Rgba8,
-                                            image::ImageFormat::Png,
-                                        )
-                                        .unwrap();
+                                            image::save_buffer_with_format(
+                                                img_path,
+                                                gb.pixel_data_rgba(),
+                                                u32::from(ceres_core::PX_WIDTH),
+                                                u32::from(ceres_core::PX_HEIGHT),
+                                                image::ColorType::Rgba8,
+                                                image::ImageFormat::Png,
+                                            )
+                                            .unwrap();
+                                        }
                                     }
                                     _ => (),
                                 },
