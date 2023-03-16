@@ -1,3 +1,5 @@
+use anyhow::Context;
+
 use {ceres_core::Gb, parking_lot::Mutex, std::sync::Arc};
 
 const BUFFER_SIZE: cpal::FrameCount = 512;
@@ -8,11 +10,13 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(gb: Arc<Mutex<Gb>>) -> Self {
+    pub fn new(gb: Arc<Mutex<Gb>>) -> anyhow::Result<Self> {
         use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
         let host = cpal::default_host();
-        let dev = host.default_output_device().unwrap();
+        let dev = host
+            .default_output_device()
+            .context("cpal couldn't get default output device")?;
 
         let config = cpal::StreamConfig {
             channels: 2,
@@ -20,7 +24,7 @@ impl Renderer {
             buffer_size: cpal::BufferSize::Fixed(BUFFER_SIZE),
         };
 
-        let error_callback = |err| panic!("an AudioError occurred on stream: {err}");
+        let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
         let data_callback = move |b: &mut [ceres_core::Sample], _: &_| {
             let mut gb = gb.lock();
 
@@ -31,13 +35,11 @@ impl Renderer {
             });
         };
 
-        let stream = dev
-            .build_output_stream(&config, data_callback, error_callback, None)
-            .unwrap();
+        let stream = dev.build_output_stream(&config, data_callback, error_callback, None)?;
 
-        stream.play().expect("AudioError playing sound");
+        stream.play()?;
 
-        Self { _stream: stream }
+        Ok(Self { _stream: stream })
     }
 
     pub const fn sample_rate() -> i32 {

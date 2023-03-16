@@ -75,7 +75,9 @@ impl SweepTrait for Sweep {
 
         if self.pace == 0 {
             self.on = false;
-        } else if self.shpc.get() == 8 {
+        }
+
+        if self.pace != 0 && self.shpc.get() == 8 {
             self.shpc = NonZeroU8::new(self.pace).unwrap();
         }
 

@@ -47,6 +47,8 @@
     clippy::unseparated_literal_suffix,
     // clippy::unwrap_used,
     clippy::verbose_file_reads,
+    clippy::panic,
+    clippy::unwrap_used,
 )]
 #![allow(
     clippy::cast_precision_loss,
@@ -56,6 +58,8 @@
     clippy::missing_panics_doc,
     clippy::similar_names
 )]
+
+use anyhow::Context;
 
 use {
     ceres_core::Gb,
@@ -115,7 +119,9 @@ fn main() -> anyhow::Result<()> {
     let model = {
         // TODO: this unwrap should be correct as we assign a default value to the
         // argument
-        let model_str = args.get_one::<String>("model").unwrap();
+        let model_str = args
+            .get_one::<String>("model")
+            .context("couldn't get model string")?;
 
         let model = match model_str.as_str() {
             "dmg" => ceres_core::Model::Dmg,
@@ -127,15 +133,16 @@ fn main() -> anyhow::Result<()> {
         model
     };
 
-    let path = PathBuf::from(args.get_one::<String>("file").unwrap());
+    let path = PathBuf::from(
+        args.get_one::<String>("file")
+            .context("couldn't get file string")?,
+    );
 
     pollster::block_on(run(model, path))
 }
 
 #[allow(clippy::too_many_lines)]
 pub async fn run(model: ceres_core::Model, mut path: PathBuf) -> anyhow::Result<()> {
-    use anyhow::Context;
-
     let (gb, sav_path) = {
         fn read_file(path: &Path) -> Result<Vec<u8>, std::io::Error> {
             fs::read(path)
@@ -150,8 +157,7 @@ pub async fn run(model: ceres_core::Model, mut path: PathBuf) -> anyhow::Result<
         path.set_extension("sav");
         let ram = read_file(&path).ok();
 
-        // TODO: Error in core?
-        let cart = ceres_core::Cart::new(rom, ram).unwrap();
+        let cart = ceres_core::Cart::new(rom, ram)?;
 
         let gb = {
             let sample_rate = audio::Renderer::sample_rate();
@@ -183,7 +189,7 @@ pub async fn run(model: ceres_core::Model, mut path: PathBuf) -> anyhow::Result<
                 height: PX_HEIGHT,
             })
             .build(&event_loop)
-            .unwrap();
+            .context("couldn't create window")?;
 
         let mut video = video::State::new(window, PX_WIDTH, PX_HEIGHT)
             .await
@@ -212,10 +218,17 @@ pub async fn run(model: ceres_core::Model, mut path: PathBuf) -> anyhow::Result<
                 let mut gb = gb.lock();
 
                 if let Some(save_data) = gb.cartridge().save_data() {
-                    let mut f = File::create(sav_path.clone())
-                        .map_err(|e| e.to_string())
-                        .unwrap();
-                    f.write_all(save_data).map_err(|e| e.to_string()).unwrap();
+                    let sav_file = File::create(sav_path.clone());
+                    match sav_file {
+                        Ok(mut f) => {
+                            if let Err(e) = f.write_all(save_data) {
+                                eprintln!("couldn't save data in save file: {e}");
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("couldn't open save file: {e}");
+                        }
+                    }
                 }
             }
             Event::WindowEvent { event: ref e, .. } => {
@@ -317,7 +330,7 @@ pub async fn run(model: ceres_core::Model, mut path: PathBuf) -> anyhow::Result<
             Event::MainEventsCleared => {
                 video.update(gb.lock().pixel_data_rgba());
                 video.window().request_redraw();
-                std::thread::sleep(Duration::from_nanos((1000 * 1_000_000) / 60));
+                std::thread::sleep(Duration::from_millis(1000 / 60));
             }
             _ => (),
         }

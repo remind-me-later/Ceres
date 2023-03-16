@@ -8,7 +8,7 @@ const CF: u16 = 0x10;
 impl Gb {
     pub(crate) fn run_cpu(&mut self) {
         if self.ei_delay {
-            self.ime = true;
+            self.ints.enable();
             self.ei_delay = false;
         }
 
@@ -28,27 +28,17 @@ impl Gb {
             self.exec(op);
         }
 
-        // any interrupts?
-        if self.ifr & self.ie & 0x1F != 0 {
-            // interrupt exits halt
+        if self.ints.any() {
             self.cpu_halted = false;
 
-            if self.ime {
+            if self.ints.enabled() {
                 self.tick_m_cycle();
                 self.tick_m_cycle();
 
                 self.push(self.pc);
 
-                self.ime = false;
-                // recompute, maybe ifr changed
-                let ints = self.ifr & self.ie & 0x1F;
-                let tz = (ints.trailing_zeros() & 7) as u16;
-                // get rightmost interrupt
-                let int = u8::from(ints != 0) << tz;
-                // compute direction of interrupt vector
-                self.pc = 0x40 | tz << 3;
-                // acknowledge
-                self.ifr &= !int;
+                self.ints.disable();
+                self.pc = self.ints.handle();
             }
         }
     }
@@ -716,7 +706,7 @@ impl Gb {
     #[inline]
     fn reti(&mut self) {
         self.ret();
-        self.ime = true;
+        self.ints.enable();
     }
 
     #[inline]
@@ -746,9 +736,9 @@ impl Gb {
 
     #[inline]
     fn halt(&mut self) {
-        if self.ie & self.ifr & 0x1F == 0 {
+        if !self.ints.any() {
             self.cpu_halted = true;
-        } else if self.ime {
+        } else if self.ints.enabled() {
             self.cpu_halted = false;
             self.pc = self.pc.wrapping_sub(1);
         } else {
@@ -776,7 +766,7 @@ impl Gb {
 
     #[inline]
     fn di(&mut self) {
-        self.ime = false;
+        self.ints.disable();
     }
 
     #[inline]
@@ -1084,7 +1074,7 @@ impl Gb {
 
     #[inline]
     fn ill(&mut self, _op: u8) {
-        self.ie = 0;
+        self.ints.ill();
         self.cpu_halted = true;
     }
 

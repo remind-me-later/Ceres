@@ -1,8 +1,6 @@
-use {
-    self::color_palette::ColorPalette,
-    crate::{CMode, IF_LCD_B, IF_VBLANK_B},
-    rgba_buf::RgbaBuf,
-};
+use crate::interrupts::Interrupts;
+
+use {self::color_palette::ColorPalette, crate::CMode, rgba_buf::RgbaBuf};
 
 mod color_palette;
 mod draw;
@@ -228,7 +226,7 @@ impl Ppu {
         self.lcdc
     }
 
-    pub(crate) fn write_lcdc(&mut self, val: u8, ifr: &mut u8) {
+    pub(crate) fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts) {
         // turn off
         if val & LCDC_ON_B == 0 && self.lcdc & LCDC_ON_B != 0 {
             // debug_assert!(self.ppu_mode() == Mode::VBlank);
@@ -242,7 +240,7 @@ impl Ppu {
             self.set_mode_stat(Mode::OamScan);
             self.ppu_cycles = Mode::OamScan.cycles(self.scx);
             self.ly = 0;
-            self.check_lyc(ifr);
+            self.check_lyc(ints);
         }
 
         self.lcdc = val;
@@ -300,7 +298,7 @@ impl Ppu {
 
 // General
 impl Ppu {
-    pub(crate) fn run(&mut self, cycles: i32, ifr: &mut u8, compat_mode: CMode) {
+    pub(crate) fn run(&mut self, cycles: i32, ints: &mut Interrupts, compat_mode: CMode) {
         if self.lcdc & LCDC_ON_B == 0 {
             return;
         }
@@ -309,44 +307,44 @@ impl Ppu {
 
         if self.ppu_cycles < 0 {
             match self.ppu_mode() {
-                Mode::OamScan => self.enter_mode(Mode::Drawing, ifr),
+                Mode::OamScan => self.enter_mode(Mode::Drawing, ints),
                 Mode::Drawing => {
                     self.draw_scanline(compat_mode);
-                    self.enter_mode(Mode::HBlank, ifr);
+                    self.enter_mode(Mode::HBlank, ints);
                 }
                 Mode::HBlank => {
                     self.ly += 1;
                     if self.ly < 144 {
-                        self.enter_mode(Mode::OamScan, ifr);
+                        self.enter_mode(Mode::OamScan, ints);
                     } else {
-                        self.enter_mode(Mode::VBlank, ifr);
+                        self.enter_mode(Mode::VBlank, ints);
                     }
-                    self.check_lyc(ifr);
+                    self.check_lyc(ints);
                 }
                 Mode::VBlank => {
                     self.ly += 1;
                     if self.ly > 153 {
                         self.ly = 0;
                         self.rgba_buf_present = self.rgb_buf.clone();
-                        self.enter_mode(Mode::OamScan, ifr);
+                        self.enter_mode(Mode::OamScan, ints);
                     } else {
                         self.ppu_cycles = self
                             .ppu_cycles
                             .wrapping_add(self.ppu_mode().cycles(self.scx));
                     }
-                    self.check_lyc(ifr);
+                    self.check_lyc(ints);
                 }
             }
         }
     }
 
-    fn check_lyc(&mut self, ifr: &mut u8) {
+    fn check_lyc(&mut self, ints: &mut Interrupts) {
         self.stat &= !STAT_LYC_B;
 
         if self.ly == self.lyc {
             self.stat |= STAT_LYC_B;
             if self.stat & STAT_IF_LYC_B != 0 {
-                *ifr |= IF_LCD_B;
+                ints.req_lcd();
             }
         }
     }
@@ -365,23 +363,23 @@ impl Ppu {
         self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
     }
 
-    fn enter_mode(&mut self, mode: Mode, ifr: &mut u8) {
+    fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
         self.set_mode_stat(mode);
         self.ppu_cycles = self.ppu_cycles.wrapping_add(mode.cycles(self.scx));
 
         match mode {
             Mode::OamScan => {
                 if self.stat & STAT_IF_OAM_B != 0 {
-                    *ifr |= IF_LCD_B;
+                    ints.req_lcd();
                 }
 
                 self.ppu_win_in_ly = false;
             }
             Mode::VBlank => {
-                *ifr |= IF_VBLANK_B;
+                ints.req_vblank();
 
                 if self.stat & STAT_IF_VBLANK_B != 0 {
-                    *ifr |= IF_LCD_B;
+                    ints.req_lcd();
                 }
 
                 // TODO: why?
@@ -395,7 +393,7 @@ impl Ppu {
             Mode::Drawing => (),
             Mode::HBlank => {
                 if self.stat & STAT_IF_HBLANK_B != 0 {
-                    *ifr |= IF_LCD_B;
+                    ints.req_lcd();
                 }
             }
         }

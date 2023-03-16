@@ -153,7 +153,7 @@ impl Gb {
             TIMA => self.tima,
             TMA => self.tma,
             TAC => 0xF8 | self.tac,
-            IF => self.ifr | 0xE0,
+            IF => self.ints.read_if(),
             NR10 => self.apu.read_nr10(),
             NR11 => self.apu.read_nr11(),
             NR12 => self.apu.read_nr12(),
@@ -200,7 +200,7 @@ impl Gb {
             PCM12 if matches!(self.cmode, CMode::Cgb) => self.apu.pcm12(),
             PCM34 if matches!(self.cmode, CMode::Cgb) => self.apu.pcm34(),
             HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize],
-            IE => self.ie,
+            IE => self.ints.read_ie(),
             _ => 0xFF,
         }
     }
@@ -226,12 +226,12 @@ impl Gb {
         match addr {
             P1 => self.write_joy(val),
             SB => self.serial.write_sb(val),
-            SC => self.serial.write_sc(val, &mut self.ifr, self.cmode),
+            SC => self.serial.write_sc(val, &mut self.ints, self.cmode),
             DIV => self.write_div(),
             TIMA => self.write_tima(val),
             TMA => self.write_tma(val),
             TAC => self.write_tac(val),
-            IF => self.ifr = val & 0x1F,
+            IF => self.ints.write_if(val),
             NR10 if self.apu.on() => self.apu.write_nr10(val),
             NR11 if self.apu.on() => self.apu.write_nr11(val),
             NR12 if self.apu.on() => self.apu.write_nr12(val),
@@ -254,7 +254,7 @@ impl Gb {
             NR51 => self.apu.write_nr51(val),
             NR52 => self.apu.write_nr52(val),
             WAV_BEGIN..=WAV_END => self.apu.write_wave_ram(addr, val),
-            LCDC => self.ppu.write_lcdc(val, &mut self.ifr),
+            LCDC => self.ppu.write_lcdc(val, &mut self.ints),
             STAT => self.ppu.write_stat(val),
             SCY => self.ppu.write_scy(val),
             SCX => self.ppu.write_scx(val),
@@ -328,7 +328,7 @@ impl Gb {
                 self.svbk_true = NonZeroU8::new(if tmp == 0 { 1 } else { tmp }).unwrap();
             }
             HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize] = val,
-            IE => self.ie = val,
+            IE => self.ints.write_ie(val),
             _ => (),
         }
     }

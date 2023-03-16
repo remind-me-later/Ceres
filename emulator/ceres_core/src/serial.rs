@@ -1,4 +1,4 @@
-use crate::{CMode, IF_SERIAL_B};
+use crate::{interrupts::Interrupts, CMode};
 
 const START: u8 = 0x80;
 const SPEED: u8 = 0x2;
@@ -15,14 +15,14 @@ pub struct Serial {
 }
 
 impl Serial {
-    pub(crate) fn run_master(&mut self, ifr: &mut u8) {
+    pub(crate) fn run_master(&mut self, ints: &mut Interrupts) {
         self.master_clock ^= true;
 
         if !self.master_clock && (self.sc & (START | SHIFT) == (START | SHIFT)) {
             self.count += 1;
             if self.count > 7 {
                 self.count = 0;
-                *ifr |= IF_SERIAL_B;
+                ints.req_serial();
                 self.sc &= !START;
             }
 
@@ -49,7 +49,7 @@ impl Serial {
         self.sb = val;
     }
 
-    pub(crate) fn write_sc(&mut self, mut val: u8, ifr: &mut u8, mode: CMode) {
+    pub(crate) fn write_sc(&mut self, mut val: u8, ints: &mut Interrupts, mode: CMode) {
         self.count = 0;
 
         if matches!(mode, CMode::Cgb) {
@@ -64,7 +64,7 @@ impl Serial {
         };
 
         if self.master_clock {
-            self.run_master(ifr);
+            self.run_master(ints);
         }
     }
 }

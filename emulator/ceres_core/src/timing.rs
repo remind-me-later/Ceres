@@ -1,4 +1,4 @@
-use crate::{Gb, IF_TIMER_B};
+use crate::Gb;
 
 #[derive(Clone, Copy, Default)]
 pub enum TIMAState {
@@ -20,7 +20,7 @@ impl Gb {
         }
 
         // TODO: is this order right?I
-        self.ppu.run(cycles, &mut self.ifr, self.cmode);
+        self.ppu.run(cycles, &mut self.ints, self.cmode);
         self.run_dma();
 
         self.apu.run(cycles);
@@ -39,7 +39,7 @@ impl Gb {
     fn advance_tima_state(&mut self) {
         match self.tima_state {
             TIMAState::Reloading => {
-                self.ifr |= IF_TIMER_B;
+                self.ints.req_timer();
                 self.tima_state = TIMAState::Reloaded;
             }
             TIMAState::Reloaded => {
@@ -71,7 +71,7 @@ impl Gb {
 
         // advance serial master clock
         if triggers & u16::from(self.serial.div_mask()) != 0 {
-            self.serial.run_master(&mut self.ifr);
+            self.serial.run_master(&mut self.ints);
         }
 
         // advance APU on falling edge of APU_DIV bit

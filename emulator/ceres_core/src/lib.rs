@@ -1,4 +1,3 @@
-// #![no_std]
 #![forbid(unsafe_code)]
 #![warn(
   clippy::pedantic,
@@ -8,13 +7,16 @@
   clippy::as_underscore,
   clippy::assertions_on_result_states,
   clippy::clone_on_ref_ptr,
+  clippy::create_dir,
+  clippy::dbg_macro,
   clippy::decimal_literal_representation,
   clippy::default_union_representation,
   clippy::deref_by_slicing,
-  // clippy::else_if_without_else,
+  clippy::else_if_without_else,
   clippy::empty_drop,
   clippy::empty_structs_with_brackets,
   clippy::exit,
+  clippy::expect_used,
   clippy::filetype_is_file,
   clippy::float_arithmetic,
   clippy::float_cmp_const,
@@ -28,9 +30,12 @@
   clippy::mem_forget,
   clippy::mixed_read_write_in_expression,
   clippy::modulo_arithmetic,
+  clippy::mutex_atomic,
   clippy::non_ascii_literal,
   clippy::panic,
   clippy::partial_pub_fields,
+  clippy::print_stderr,
+  clippy::print_stdout,
   clippy::rc_buffer,
   clippy::rc_mutex,
   clippy::rest_pat_in_fully_bound_structs,
@@ -43,22 +48,28 @@
   clippy::string_add,
   clippy::string_slice,
   clippy::string_to_string,
+  clippy::todo,
   clippy::try_err,
+  clippy::unimplemented,
   clippy::unnecessary_self_imports,
   clippy::unneeded_field_pattern,
   clippy::unseparated_literal_suffix,
-  // clippy::unwrap_used,
+  clippy::use_debug,
   clippy::verbose_file_reads,
+// clippy::indexing_slicing,
+// clippy::unwrap_used,
+// clippy::integer_division,
 )]
 #![allow(
-    clippy::struct_excessive_bools,
-    clippy::verbose_bit_mask,
     clippy::missing_errors_doc,
     clippy::missing_panics_doc,
     clippy::missing_safety_doc,
-    clippy::similar_names
+    clippy::similar_names,
+    clippy::struct_excessive_bools,
+    clippy::verbose_bit_mask
 )]
 
+use interrupts::Interrupts;
 use serial::Serial;
 
 use {apu::Apu, core::num::NonZeroU8, memory::HdmaState, ppu::Ppu, timing::TIMAState};
@@ -74,6 +85,7 @@ extern crate alloc;
 mod apu;
 mod cart;
 mod cpu;
+mod interrupts;
 mod joypad;
 mod memory;
 mod ppu;
@@ -82,12 +94,6 @@ mod timing;
 
 // t-cycles per second
 const TC_SEC: i32 = 0x40_0000;
-
-const IF_VBLANK_B: u8 = 1;
-const IF_LCD_B: u8 = 2;
-const IF_TIMER_B: u8 = 4;
-const IF_SERIAL_B: u8 = 8;
-const IF_P1_B: u8 = 16;
 
 const HRAM_SIZE: u8 = 0x80;
 const WRAM_SIZE_GB: u16 = 0x2000;
@@ -108,7 +114,6 @@ enum CMode {
 }
 
 pub struct Gb {
-    // general
     model: Model,
     // CGB compatibility mode
     cmode: CMode,
@@ -134,6 +139,10 @@ pub struct Gb {
     ei_delay: bool,
     cpu_halted: bool,
 
+    // interrupts
+    halt_bug: bool,
+    ints: Interrupts,
+
     // serial
     serial: Serial,
 
@@ -141,12 +150,6 @@ pub struct Gb {
     p1_btn: u8,
     p1_dirs: bool,
     p1_acts: bool,
-
-    // interrupts
-    halt_bug: bool,
-    ime: bool,
-    ifr: u8,
-    ie: u8,
 
     // memory
     wram: [u8; WRAM_SIZE as usize],
@@ -219,6 +222,7 @@ impl Gb {
             hram: [0; HRAM_SIZE as usize],
 
             // Default
+            halt_bug: Default::default(),
             serial: Serial::default(),
             ppu: Ppu::default(),
             tima_state: TIMAState::default(),
@@ -235,10 +239,7 @@ impl Gb {
             p1_btn: Default::default(),
             p1_dirs: Default::default(),
             p1_acts: Default::default(),
-            halt_bug: Default::default(),
-            ime: Default::default(),
-            ifr: Default::default(),
-            ie: Default::default(),
+            ints: Interrupts::default(),
             svbk: Default::default(),
             dma: Default::default(),
             dma_on: Default::default(),
