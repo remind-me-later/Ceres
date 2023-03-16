@@ -147,8 +147,8 @@ impl Gb {
     fn read_high(&self, addr: u8) -> u8 {
         match addr {
             P1 => self.read_p1(),
-            SB => self.sb,
-            SC => self.sc | 0x7E,
+            SB => self.serial.read_sb(),
+            SC => self.serial.read_sc(),
             DIV => ((self.wide_div_counter >> 8) & 0xFF) as u8,
             TIMA => self.tima,
             TMA => self.tma,
@@ -225,8 +225,8 @@ impl Gb {
     fn write_high(&mut self, addr: u8, val: u8) {
         match addr {
             P1 => self.write_joy(val),
-            SB => self.sb = val,
-            SC => self.sc = val,
+            SB => self.serial.write_sb(val),
+            SC => self.serial.write_sc(val, &mut self.ifr, self.cmode),
             DIV => self.write_div(),
             TIMA => self.write_tima(val),
             TMA => self.write_tma(val),

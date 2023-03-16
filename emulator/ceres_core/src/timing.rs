@@ -25,7 +25,6 @@ impl Gb {
 
         self.apu.run(cycles);
         self.cart.run(cycles);
-        self.run_serial(cycles);
     }
 
     const fn sys_clk_tac_mux(&self) -> u16 {
@@ -68,6 +67,11 @@ impl Gb {
         // increase TIMA on falling edge of TAC mux
         if self.tac_enable && (triggers & self.sys_clk_tac_mux() != 0) {
             self.inc_tima();
+        }
+
+        // advance serial master clock
+        if triggers & u16::from(self.serial.div_mask()) != 0 {
+            self.serial.run_master(&mut self.ifr);
         }
 
         // advance APU on falling edge of APU_DIV bit

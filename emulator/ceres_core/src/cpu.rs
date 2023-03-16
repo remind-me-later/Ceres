@@ -583,10 +583,8 @@ impl Gb {
     #[inline]
     fn ld_hl_sp_r8(&mut self) {
         self.af &= 0xFF00;
-        #[allow(clippy::cast_possible_wrap)]
-        let offset_signed = self.imm8() as i8;
-        #[allow(clippy::cast_sign_loss)]
-        let offset = offset_signed as u16;
+        #[allow(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
+        let offset = self.imm8() as i8 as u16;
         self.tick_m_cycle();
         self.hl = self.sp.wrapping_add(offset);
 
@@ -647,7 +645,7 @@ impl Gb {
 
     #[inline]
     fn jp_cc(&mut self, op: u8) {
-        if self.condition(op) {
+        if self.br_cc(op) {
             self.do_jump_to_immediate();
         } else {
             let pc = self.pc.wrapping_add(2);
@@ -664,13 +662,9 @@ impl Gb {
 
     #[inline]
     fn do_jump_relative(&mut self) {
-        #[allow(clippy::cast_possible_wrap)]
-        let relative_addr_signed = self.imm8() as i8;
-        #[allow(clippy::cast_sign_loss)]
-        let relative_addr = relative_addr_signed as u16;
-
-        let pc = self.pc.wrapping_add(relative_addr);
-        self.pc = pc;
+        #[allow(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
+        let offset = self.imm8() as i8 as u16;
+        self.pc = self.pc.wrapping_add(offset);
         self.tick_m_cycle();
     }
 
@@ -681,7 +675,7 @@ impl Gb {
 
     #[inline]
     fn jr_cc(&mut self, op: u8) {
-        if self.condition(op) {
+        if self.br_cc(op) {
             self.do_jump_relative();
         } else {
             self.pc = self.pc.wrapping_add(1);
@@ -703,7 +697,7 @@ impl Gb {
 
     #[inline]
     fn call_cc_a16(&mut self, op: u8) {
-        if self.condition(op) {
+        if self.br_cc(op) {
             self.do_call();
         } else {
             let pc = self.pc.wrapping_add(2);
@@ -729,12 +723,12 @@ impl Gb {
     fn ret_cc(&mut self, op: u8) {
         self.tick_m_cycle();
 
-        if self.condition(op) {
+        if self.br_cc(op) {
             self.ret();
         }
     }
 
-    const fn condition(&self, op: u8) -> bool {
+    const fn br_cc(&self, op: u8) -> bool {
         match (op >> 3) & 3 {
             0 => self.af & ZF == 0,
             1 => self.af & ZF != 0,
@@ -804,7 +798,7 @@ impl Gb {
 
     #[allow(clippy::unused_self)]
     #[inline]
-    fn nop(&mut self) {}
+    const fn nop(&self) {}
 
     // TODO: debugger breakpoint
 
@@ -815,40 +809,39 @@ impl Gb {
 
     #[inline]
     fn daa(&mut self) {
-        let mut res = self.af >> 8;
+        let a = {
+            let mut a = self.af >> 8;
 
-        self.af &= !(0xFF00 | ZF);
-
-        if self.af & NF == 0 {
-            if self.af & HF != 0 || res & 0x0F > 0x09 {
-                res += 0x06;
+            if self.af & NF == 0 {
+                if self.af & HF != 0 || a & 0x0F > 0x09 {
+                    a += 0x06;
+                }
+                if self.af & CF != 0 || a > 0x9F {
+                    a += 0x60;
+                }
+            } else {
+                if self.af & HF != 0 {
+                    a = a.wrapping_sub(0x06) & 0xFF;
+                }
+                if self.af & CF != 0 {
+                    a = a.wrapping_sub(0x60);
+                }
             }
 
-            if self.af & CF != 0 || res > 0x9F {
-                res += 0x60;
-            }
-        } else {
-            if self.af & HF != 0 {
-                res = res.wrapping_sub(0x06) & 0xFF;
-            }
+            a
+        };
 
-            if self.af & CF != 0 {
-                res = res.wrapping_sub(0x60);
-            }
-        }
+        self.af &= !(0xFF00 | ZF | HF);
 
-        let res = res;
-
-        if res & 0xFF == 0 {
+        if a & 0xFF == 0 {
             self.af |= ZF;
         }
 
-        if res & 0x100 == 0x100 {
+        if a & 0x100 == 0x100 {
             self.af |= CF;
         }
 
-        self.af &= !HF;
-        self.af |= res << 8;
+        self.af |= a << 8;
     }
 
     #[inline]
@@ -907,10 +900,8 @@ impl Gb {
     #[inline]
     fn add_sp_r8(&mut self) {
         let sp = self.sp;
-        #[allow(clippy::cast_possible_wrap)]
-        let offset_signed = self.imm8() as i8;
-        #[allow(clippy::cast_sign_loss)]
-        let offset = offset_signed as u16;
+        #[allow(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
+        let offset = self.imm8() as i8 as u16;
         self.tick_m_cycle();
         self.tick_m_cycle();
         self.sp = self.sp.wrapping_add(offset);
@@ -965,7 +956,6 @@ impl Gb {
         let carry = self.af & CF != 0;
 
         self.af = (self.af >> 1) & 0xFF00 | u16::from(carry) << 15;
-
         if bit1 {
             self.af |= CF;
         }
@@ -974,12 +964,12 @@ impl Gb {
     #[inline]
     fn rr_r(&mut self, op: u8) {
         let val = self.get_r(op);
-        let carry = (self.af & CF) != 0;
-        let bit1 = (val & 1) != 0;
-
-        self.af &= 0xFF00;
+        let carry = self.af & CF != 0;
+        let bit1 = val & 1 != 0;
         let val = val >> 1 | u8::from(carry) << 7;
         self.set_r(op, val);
+
+        self.af &= 0xFF00;
         if bit1 {
             self.af |= CF;
         }
@@ -992,9 +982,10 @@ impl Gb {
     fn sla_r(&mut self, op: u8) {
         let val = self.get_r(op);
         let carry = val & 0x80 != 0;
-        self.af &= 0xFF00;
         let res = val << 1;
         self.set_r(op, res);
+
+        self.af &= 0xFF00;
         if carry {
             self.af |= CF;
         }
@@ -1064,8 +1055,8 @@ impl Gb {
 
     #[inline]
     fn rla(&mut self) {
-        let bit7 = (self.af & 0x8000) != 0;
-        let carry = (self.af & CF) != 0;
+        let bit7 = self.af & 0x8000 != 0;
+        let carry = self.af & CF != 0;
 
         self.af = (self.af & 0xFF00) << 1 | u16::from(carry) << 8;
 

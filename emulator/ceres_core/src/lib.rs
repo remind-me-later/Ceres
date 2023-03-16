@@ -59,6 +59,8 @@
     clippy::similar_names
 )]
 
+use serial::Serial;
+
 use {apu::Apu, core::num::NonZeroU8, memory::HdmaState, ppu::Ppu, timing::TIMAState};
 pub use {
     apu::Sample,
@@ -133,9 +135,7 @@ pub struct Gb {
     cpu_halted: bool,
 
     // serial
-    sb: u8,
-    sc: u8,
-    serial_bit: u8,
+    serial: Serial,
 
     // joypad
     p1_btn: u8,
@@ -220,7 +220,7 @@ impl Gb {
             apu: Apu::new(sample_rate),
 
             // Default
-            serial_bit: Default::default(),
+            serial: Serial::default(),
             ppu: Ppu::default(),
             tima_state: TIMAState::default(),
             key1_ena: Default::default(),
@@ -233,8 +233,6 @@ impl Gb {
             pc: Default::default(),
             ei_delay: Default::default(),
             cpu_halted: Default::default(),
-            sb: Default::default(),
-            sc: Default::default(),
             p1_btn: Default::default(),
             p1_dirs: Default::default(),
             p1_acts: Default::default(),
