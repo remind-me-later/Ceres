@@ -1,7 +1,7 @@
 use {
     super::{
         Ppu, LCDC_BG_AREA, LCDC_BG_B, LCDC_BG_SIGNED, LCDC_OBJL_B, LCDC_OBJ_B, LCDC_WIN_AREA,
-        LCDC_WIN_B, OAM_SIZE, VRAM_SIZE,
+        LCDC_WIN_B, OAM_SIZE, VRAM_SIZE_GB,
     },
     crate::{CMode, PX_WIDTH},
 };
@@ -102,7 +102,7 @@ impl Ppu {
     }
 
     fn vram_at_bank(&self, addr: u16, bank: u8) -> u8 {
-        self.vram[((addr & 0x1FFF) + u16::from(bank) * VRAM_SIZE) as usize]
+        self.vram[((addr & 0x1FFF) + u16::from(bank) * VRAM_SIZE_GB) as usize]
     }
 
     fn bg_tile(&self, tile_addr: u16, attr: u8) -> (u8, u8) {

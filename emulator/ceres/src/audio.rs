@@ -1,6 +1,6 @@
 use anyhow::Context;
 
-use {ceres_core::Gb, parking_lot::Mutex, std::sync::Arc};
+use {alloc::sync::Arc, ceres_core::Gb, parking_lot::Mutex};
 
 const BUFFER_SIZE: cpal::FrameCount = 512;
 const SAMPLE_RATE: i32 = 48000;

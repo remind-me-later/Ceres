@@ -223,7 +223,9 @@ impl State {
 
             let (x, y) = {
                 let mul = (width / PX_WIDTH).min(height / PX_HEIGHT);
+                #[allow(clippy::cast_precision_loss)]
                 let x = (PX_WIDTH * mul) as f32 / width as f32;
+                #[allow(clippy::cast_precision_loss)]
                 let y = (PX_HEIGHT * mul) as f32 / height as f32;
                 (x, y)
             };

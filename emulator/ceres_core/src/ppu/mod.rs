@@ -16,27 +16,27 @@ const HBLANK_CYCLES: i32 = 204; // Variable, maximum ammount
 const VBLANK_CYCLES: i32 = 456; // Constant
 
 // LCDC bits
-const LCDC_BG_B: u8 = 1;
-const LCDC_OBJ_B: u8 = 1 << 1;
-const LCDC_OBJL_B: u8 = 1 << 2;
-const LCDC_BG_AREA: u8 = 1 << 3;
-const LCDC_BG_SIGNED: u8 = 1 << 4;
-const LCDC_WIN_B: u8 = 1 << 5;
-const LCDC_WIN_AREA: u8 = 1 << 6;
-const LCDC_ON_B: u8 = 1 << 7;
+const LCDC_BG_B: u8 = 0x1;
+const LCDC_OBJ_B: u8 = 0x2;
+const LCDC_OBJL_B: u8 = 0x4;
+const LCDC_BG_AREA: u8 = 0x8;
+const LCDC_BG_SIGNED: u8 = 0x10;
+const LCDC_WIN_B: u8 = 0x20;
+const LCDC_WIN_AREA: u8 = 0x40;
+const LCDC_ON_B: u8 = 0x80;
 
 // STAT bits
-const STAT_MODE_B: u8 = 3;
-const STAT_LYC_B: u8 = 4;
-const STAT_IF_HBLANK_B: u8 = 8;
+const STAT_MODE_B: u8 = 0x3;
+const STAT_LYC_B: u8 = 0x4;
+const STAT_IF_HBLANK_B: u8 = 0x8;
 const STAT_IF_VBLANK_B: u8 = 0x10;
 const STAT_IF_OAM_B: u8 = 0x20;
 const STAT_IF_LYC_B: u8 = 0x40;
 
 // Sizes
 const OAM_SIZE: u16 = 0x100;
-const VRAM_SIZE: u16 = 0x2000;
-const VRAM_SIZE_CGB: u16 = VRAM_SIZE * 2;
+const VRAM_SIZE_GB: u16 = 0x2000;
+const VRAM_SIZE_CGB: u16 = VRAM_SIZE_GB * 2;
 
 #[derive(Clone, Copy)]
 pub enum Mode {
@@ -260,7 +260,7 @@ impl Ppu {
         match self.ppu_mode() {
             Mode::Drawing => 0xFF,
             _ => {
-                let bank = self.vbk as u16 * VRAM_SIZE;
+                let bank = self.vbk as u16 * VRAM_SIZE_GB;
                 let i = (addr & 0x1FFF) + bank;
                 self.vram[i as usize]
             }
@@ -269,7 +269,7 @@ impl Ppu {
 
     pub(crate) fn write_vram(&mut self, addr: u16, val: u8) {
         if !matches!(self.ppu_mode(), Mode::Drawing) {
-            let bank = u16::from(self.vbk) * VRAM_SIZE;
+            let bank = u16::from(self.vbk) * VRAM_SIZE_GB;
             let i = (addr & 0x1FFF) + bank;
             self.vram[i as usize] = val;
         }
