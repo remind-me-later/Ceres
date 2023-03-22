@@ -31,3 +31,4 @@ chrono = { version = "*", default-features = false, features = [
 
 [features]
 screenshot = ["image", "chrono"]
+# default = ["screenshot"]
