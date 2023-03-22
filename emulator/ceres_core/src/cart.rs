@@ -4,7 +4,6 @@ use {
     Mbc::{Mbc0, Mbc1, Mbc2, Mbc3, Mbc5},
 };
 
-#[derive(Debug)]
 enum Mbc {
     Mbc0,
     Mbc1 {
@@ -21,7 +20,12 @@ enum Mbc {
 
 impl Mbc {
     fn mbc_and_battery(mbc_byte: u8, rom_size: ROMSize) -> Result<(Self, bool), Error> {
-        let bank_mode = rom_size >= ROMSize::Mb1;
+        let bank_mode = match rom_size {
+            ROMSize::Kb32 | ROMSize::Kb64 | ROMSize::Kb128 | ROMSize::Kb256 | ROMSize::Kb512 => {
+                false
+            }
+            ROMSize::Mb1 | ROMSize::Mb2 | ROMSize::Mb4 | ROMSize::Mb8 => true,
+        };
 
         let res = match mbc_byte {
             0x00 => (Mbc0, false),
@@ -363,7 +367,7 @@ impl Cart {
     }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 enum ROMSize {
     Kb32 = 0,
     Kb64 = 1,
@@ -409,7 +413,7 @@ impl ROMSize {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, Copy)]
 enum RAMSize {
     NoRAM,
     Kb8,
@@ -465,7 +469,7 @@ impl RAMSize {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 struct Mbc3RTC {
     t_cycles: i32,
     regs: [u8; 5],

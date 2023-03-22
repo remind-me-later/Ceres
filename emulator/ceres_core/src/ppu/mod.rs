@@ -1,6 +1,6 @@
 use crate::interrupts::Interrupts;
 
-use {self::color_palette::ColorPalette, crate::CMode, rgba_buf::RgbaBuf};
+use {self::color_palette::ColorPalette, crate::CgbMode, rgba_buf::RgbaBuf};
 
 mod color_palette;
 mod draw;
@@ -70,7 +70,7 @@ pub struct Ppu {
     obp1: u8,
     wy: u8,
     wx: u8,
-    opri: u8,
+    opri: bool,
     vbk: bool,
     bcp: ColorPalette,
     ocp: ColorPalette,
@@ -143,11 +143,11 @@ impl Ppu {
     }
 
     pub(crate) fn write_opri(&mut self, val: u8) {
-        self.opri = val;
+        self.opri = val & 1 != 0;
     }
 
     pub(crate) const fn read_opri(&self) -> u8 {
-        self.opri
+        self.opri as u8 | 0xFE
     }
 
     pub(crate) fn write_vbk(&mut self, val: u8) {
@@ -298,7 +298,7 @@ impl Ppu {
 
 // General
 impl Ppu {
-    pub(crate) fn run(&mut self, cycles: i32, ints: &mut Interrupts, compat_mode: CMode) {
+    pub(crate) fn run(&mut self, cycles: i32, ints: &mut Interrupts, cgb_mode: &CgbMode) {
         if self.lcdc & LCDC_ON_B == 0 {
             return;
         }
@@ -309,7 +309,7 @@ impl Ppu {
             match self.ppu_mode() {
                 Mode::OamScan => self.enter_mode(Mode::Drawing, ints),
                 Mode::Drawing => {
-                    self.draw_scanline(compat_mode);
+                    self.draw_scanline(cgb_mode);
                     self.enter_mode(Mode::HBlank, ints);
                 }
                 Mode::HBlank => {

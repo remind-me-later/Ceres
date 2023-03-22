@@ -1,64 +1,64 @@
 #![forbid(unsafe_code)]
 #![warn(
-  clippy::pedantic,
-  clippy::nursery,
-  // restriction
-  clippy::alloc_instead_of_core,
-  clippy::as_underscore,
-  clippy::assertions_on_result_states,
-  clippy::clone_on_ref_ptr,
-  clippy::create_dir,
-  clippy::dbg_macro,
-  clippy::decimal_literal_representation,
-  clippy::default_union_representation,
-  clippy::deref_by_slicing,
-  clippy::else_if_without_else,
-  clippy::empty_drop,
-  clippy::empty_structs_with_brackets,
-  clippy::exit,
-  clippy::expect_used,
-  clippy::filetype_is_file,
-  clippy::float_arithmetic,
-  clippy::float_cmp_const,
-  clippy::fn_to_numeric_cast_any,
-  clippy::format_push_string,
-  clippy::get_unwrap,
-  clippy::if_then_some_else_none,
-  clippy::let_underscore_must_use,
-  clippy::lossy_float_literal,
-  clippy::map_err_ignore,
-  clippy::mem_forget,
-  clippy::mixed_read_write_in_expression,
-  clippy::modulo_arithmetic,
-  clippy::mutex_atomic,
-  clippy::non_ascii_literal,
-  clippy::panic,
-  clippy::partial_pub_fields,
-  clippy::print_stderr,
-  clippy::print_stdout,
-  clippy::rc_buffer,
-  clippy::rc_mutex,
-  clippy::rest_pat_in_fully_bound_structs,
-  clippy::same_name_method,
-  clippy::self_named_module_files,
-  clippy::shadow_unrelated,
-  clippy::std_instead_of_alloc,
-  clippy::std_instead_of_core,
-  clippy::str_to_string,
-  clippy::string_add,
-  clippy::string_slice,
-  clippy::string_to_string,
-  clippy::todo,
-  clippy::try_err,
-  clippy::unimplemented,
-  clippy::unnecessary_self_imports,
-  clippy::unneeded_field_pattern,
-  clippy::unseparated_literal_suffix,
-  clippy::use_debug,
-  clippy::verbose_file_reads,
-// clippy::indexing_slicing,
-// clippy::unwrap_used,
-// clippy::integer_division,
+    clippy::pedantic,
+    clippy::nursery,
+    // restriction
+    clippy::alloc_instead_of_core,
+    clippy::as_underscore,
+    clippy::assertions_on_result_states,
+    clippy::clone_on_ref_ptr,
+    clippy::create_dir,
+    clippy::dbg_macro,
+    clippy::decimal_literal_representation,
+    clippy::default_union_representation,
+    clippy::deref_by_slicing,
+    clippy::else_if_without_else,
+    clippy::empty_drop,
+    clippy::empty_structs_with_brackets,
+    clippy::exit,
+    clippy::expect_used,
+    clippy::filetype_is_file,
+    clippy::float_arithmetic,
+    clippy::float_cmp_const,
+    clippy::fn_to_numeric_cast_any,
+    clippy::format_push_string,
+    clippy::get_unwrap,
+    clippy::if_then_some_else_none,
+    clippy::let_underscore_must_use,
+    clippy::lossy_float_literal,
+    clippy::map_err_ignore,
+    clippy::mem_forget,
+    clippy::mixed_read_write_in_expression,
+    clippy::modulo_arithmetic,
+    clippy::mutex_atomic,
+    clippy::non_ascii_literal,
+    clippy::panic,
+    clippy::partial_pub_fields,
+    clippy::print_stderr,
+    clippy::print_stdout,
+    clippy::rc_buffer,
+    clippy::rc_mutex,
+    clippy::rest_pat_in_fully_bound_structs,
+    clippy::same_name_method,
+    clippy::self_named_module_files,
+    clippy::shadow_unrelated,
+    clippy::std_instead_of_alloc,
+    clippy::std_instead_of_core,
+    clippy::str_to_string,
+    clippy::string_add,
+    clippy::string_slice,
+    clippy::string_to_string,
+    clippy::todo,
+    clippy::try_err,
+    clippy::unimplemented,
+    clippy::unnecessary_self_imports,
+    clippy::unneeded_field_pattern,
+    clippy::unseparated_literal_suffix,
+    clippy::use_debug,
+    clippy::verbose_file_reads,
+    // clippy::indexing_slicing,
+    // clippy::unwrap_used,
+    // clippy::integer_division,
 )]
 #![allow(
     clippy::missing_errors_doc,
@@ -70,9 +70,10 @@
 )]
 
 use interrupts::Interrupts;
+use joypad::Joypad;
+use memory::{Key1, Svbk};
 use serial::Serial;
-
-use {apu::Apu, core::num::NonZeroU8, memory::HdmaState, ppu::Ppu, timing::TIMAState};
+use {apu::Apu, memory::HdmaState, ppu::Ppu, timing::TIMAState};
 pub use {
     apu::Sample,
     cart::{Cart, Error},
@@ -94,39 +95,16 @@ mod timing;
 
 // t-cycles per second
 const TC_SEC: i32 = 0x40_0000;
-
 const HRAM_SIZE: u8 = 0x80;
-const WRAM_SIZE_GB: u16 = 0x2000;
-const WRAM_SIZE: u16 = WRAM_SIZE_GB * 4;
-
-#[derive(Clone, Copy)]
-pub enum Model {
-    Dmg,
-    Mgb,
-    Cgb,
-}
-
-#[derive(Clone, Copy)]
-enum CMode {
-    Dmg,
-    Compat,
-    Cgb,
-}
+const WRAM_SIZE: u16 = 0x2000 * 4;
 
 pub struct Gb {
     model: Model,
-    // CGB compatibility mode
-    cmode: CMode,
-
-    // double speed
-    key1_ena: bool,
-    key1_req: bool,
-
-    // key1: u8,
+    cgb_mode: CgbMode,
 
     // cartridge
     cart: Cart,
-    boot_rom: Option<&'static [u8]>,
+    bootrom: Option<&'static [u8]>,
 
     // cpu
     af: u16,
@@ -138,24 +116,13 @@ pub struct Gb {
 
     ei_delay: bool,
     cpu_halted: bool,
-
-    // interrupts
     halt_bug: bool,
-    ints: Interrupts,
-
-    // serial
-    serial: Serial,
-
-    // joypad
-    p1_btn: u8,
-    p1_dirs: bool,
-    p1_acts: bool,
 
     // memory
     wram: [u8; WRAM_SIZE as usize],
     hram: [u8; HRAM_SIZE as usize],
-    svbk: u8,
-    svbk_true: NonZeroU8, // true selected bank, between 1 and 7
+    svbk: Svbk,
+    key1: Key1,
 
     // -- dma
     dma: u8,
@@ -175,33 +142,31 @@ pub struct Gb {
     tima: u8,
     tma: u8,
     tac: u8,
-
     tima_state: TIMAState,
-
     tac_enable: bool,
     wide_div_counter: u16,
 
-    // ppu
+    // peripherals
     ppu: Ppu,
-
-    // apu
     apu: Apu,
+    serial: Serial,
+    ints: Interrupts,
+    joy: Joypad,
 }
 
 impl Gb {
-    #[allow(clippy::too_many_lines)]
     #[must_use]
     pub fn new(model: Model, sample_rate: i32, cart: Cart) -> Self {
         const DMG_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/dmg_boot.bin");
         const MGB_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/mgb_boot.bin");
         const CGB_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/cgb_boot_fast.bin");
 
-        let compat_mode = match model {
-            Model::Dmg | Model::Mgb => CMode::Dmg,
-            Model::Cgb => CMode::Cgb,
+        let cgb_mode = match model {
+            Model::Dmg | Model::Mgb => CgbMode::Dmg,
+            Model::Cgb => CgbMode::Cgb,
         };
 
-        let boot_rom = Some(match model {
+        let bootrom = Some(match model {
             Model::Dmg => DMG_BOOTROM,
             Model::Mgb => MGB_BOOTROM,
             Model::Cgb => CGB_BOOTROM,
@@ -209,53 +174,43 @@ impl Gb {
 
         Self {
             model,
-            cmode: compat_mode,
+            cgb_mode,
             cart,
-            boot_rom,
-
-            // Custom
+            bootrom,
             apu: Apu::new(sample_rate),
-            svbk_true: NonZeroU8::new(1).unwrap(),
 
-            // Slices
             wram: [0; WRAM_SIZE as usize],
             hram: [0; HRAM_SIZE as usize],
-
-            // Default
-            halt_bug: Default::default(),
-            serial: Serial::default(),
-            ppu: Ppu::default(),
-            tima_state: TIMAState::default(),
-            key1_ena: Default::default(),
-            key1_req: Default::default(),
             af: Default::default(),
             bc: Default::default(),
-            de: Default::default(),
-            hl: Default::default(),
-            sp: Default::default(),
-            pc: Default::default(),
-            ei_delay: Default::default(),
             cpu_halted: Default::default(),
-            p1_btn: Default::default(),
-            p1_dirs: Default::default(),
-            p1_acts: Default::default(),
-            ints: Interrupts::default(),
-            svbk: Default::default(),
-            dma: Default::default(),
-            dma_on: Default::default(),
+            de: Default::default(),
             dma_addr: Default::default(),
-            dma_restarting: Default::default(),
             dma_cycles: Default::default(),
-            hdma5: Default::default(),
-            hdma_src: Default::default(),
+            dma_on: Default::default(),
+            dma_restarting: Default::default(),
+            dma: Default::default(),
+            ei_delay: Default::default(),
+            halt_bug: Default::default(),
             hdma_dst: Default::default(),
             hdma_len: Default::default(),
+            hdma_src: Default::default(),
             hdma_state: HdmaState::default(),
-
+            hdma5: Default::default(),
+            hl: Default::default(),
+            ints: Interrupts::default(),
+            joy: Joypad::default(),
+            key1: Key1::default(),
+            pc: Default::default(),
+            ppu: Ppu::default(),
+            serial: Serial::default(),
+            sp: Default::default(),
+            svbk: Svbk::default(),
+            tac_enable: Default::default(),
+            tac: Default::default(),
+            tima_state: TIMAState::default(),
             tima: Default::default(),
             tma: Default::default(),
-            tac: Default::default(),
-            tac_enable: Default::default(),
             wide_div_counter: Default::default(),
         }
     }
@@ -279,4 +234,24 @@ impl Gb {
     pub const fn pixel_data_rgba(&self) -> &[u8] {
         self.ppu.pixel_data_rgb()
     }
+
+    pub fn press(&mut self, button: Button) {
+        self.joy.press(button, &mut self.ints);
+    }
+
+    pub fn release(&mut self, button: Button) {
+        self.joy.release(button);
+    }
+}
+
+pub enum Model {
+    Dmg,
+    Mgb,
+    Cgb,
+}
+
+enum CgbMode {
+    Dmg,
+    Compat,
+    Cgb,
 }

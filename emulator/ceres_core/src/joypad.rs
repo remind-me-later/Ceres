@@ -1,4 +1,4 @@
-use crate::Gb;
+use crate::interrupts::Interrupts;
 
 #[derive(Clone, Copy)]
 pub enum Button {
@@ -12,18 +12,25 @@ pub enum Button {
     Start = 0x80,
 }
 
-impl Gb {
-    pub fn press(&mut self, button: Button) {
+#[derive(Default)]
+pub struct Joypad {
+    p1_btn: u8,
+    p1_dirs: bool,
+    p1_acts: bool,
+}
+
+impl Joypad {
+    pub(crate) fn press(&mut self, button: Button, ints: &mut Interrupts) {
         let b = button as u8;
 
         self.p1_btn |= b;
 
         if b & 0x0F != 0 && self.p1_dirs || b & 0xF0 != 0 && self.p1_acts {
-            self.ints.req_p1();
+            ints.req_p1();
         }
     }
 
-    pub fn release(&mut self, button: Button) {
+    pub(crate) fn release(&mut self, button: Button) {
         self.p1_btn &= !(button as u8);
     }
 

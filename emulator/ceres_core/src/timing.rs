@@ -15,12 +15,12 @@ impl Gb {
         self.dma_cycles += cycles;
 
         // not affected by speed boost
-        if self.key1_ena {
+        if self.key1.enabled() {
             cycles >>= 1;
         }
 
-        // TODO: is this order right?I
-        self.ppu.run(cycles, &mut self.ints, self.cmode);
+        // TODO: is this order right?
+        self.ppu.run(cycles, &mut self.ints, &self.cgb_mode);
         self.run_dma();
 
         self.apu.run(cycles);
@@ -62,7 +62,7 @@ impl Gb {
     // TODO: this could be optimized
     fn set_system_clk(&mut self, val: u16) {
         let triggers = self.wide_div_counter & !val;
-        let apu_bit = if self.key1_ena { 0x2000 } else { 0x1000 };
+        let apu_bit = if self.key1.enabled() { 0x2000 } else { 0x1000 };
 
         // increase TIMA on falling edge of TAC mux
         if self.tac_enable && (triggers & self.sys_clk_tac_mux() != 0) {

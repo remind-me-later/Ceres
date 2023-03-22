@@ -239,7 +239,9 @@ impl Emu {
 
     fn run(mut self) {
         let event_loop = self.event_loop.take().unwrap();
-        event_loop.run(move |event, _, control_flow| self.loop_cb(&event, control_flow));
+        event_loop.run(move |event, _, control_flow| {
+            self.loop_cb(&event, control_flow);
+        });
     }
 
     fn loop_cb(&mut self, event: &Event<()>, control_flow: &mut ControlFlow) {
@@ -274,49 +276,51 @@ impl Emu {
     }
 
     fn handle_key(&mut self, input: &KeyboardInput) {
-        if self.video.window().has_focus() {
-            if let Some(key) = input.virtual_keycode {
-                use {
-                    ceres_core::Button as B,
-                    winit::event::{ElementState, VirtualKeyCode as KC},
-                };
+        if !self.video.window().has_focus() {
+            return;
+        }
 
-                match input.state {
-                    ElementState::Pressed => match key {
-                        KC::W => self.gb.lock().press(B::Up),
-                        KC::A => self.gb.lock().press(B::Left),
-                        KC::S => self.gb.lock().press(B::Down),
-                        KC::D => self.gb.lock().press(B::Right),
-                        KC::K => self.gb.lock().press(B::A),
-                        KC::L => self.gb.lock().press(B::B),
-                        KC::Return => self.gb.lock().press(B::Start),
-                        KC::Back => self.gb.lock().press(B::Select),
-                        // System
-                        KC::F => match self.video.window().fullscreen() {
-                            Some(_) => self.video.window().set_fullscreen(None),
-                            None => self
-                                .video
-                                .window()
-                                .set_fullscreen(Some(Fullscreen::Borderless(None))),
-                        },
-                        KC::P => {
-                            #[cfg(feature = "screenshot")]
-                            self.screenshot();
-                        }
-                        _ => (),
+        if let Some(key) = input.virtual_keycode {
+            use {
+                ceres_core::Button as B,
+                winit::event::{ElementState, VirtualKeyCode as KC},
+            };
+
+            match input.state {
+                ElementState::Pressed => match key {
+                    KC::W => self.gb.lock().press(B::Up),
+                    KC::A => self.gb.lock().press(B::Left),
+                    KC::S => self.gb.lock().press(B::Down),
+                    KC::D => self.gb.lock().press(B::Right),
+                    KC::K => self.gb.lock().press(B::A),
+                    KC::L => self.gb.lock().press(B::B),
+                    KC::Return => self.gb.lock().press(B::Start),
+                    KC::Back => self.gb.lock().press(B::Select),
+                    // System
+                    KC::F => match self.video.window().fullscreen() {
+                        Some(_) => self.video.window().set_fullscreen(None),
+                        None => self
+                            .video
+                            .window()
+                            .set_fullscreen(Some(Fullscreen::Borderless(None))),
                     },
-                    ElementState::Released => match key {
-                        KC::W => self.gb.lock().release(B::Up),
-                        KC::A => self.gb.lock().release(B::Left),
-                        KC::S => self.gb.lock().release(B::Down),
-                        KC::D => self.gb.lock().release(B::Right),
-                        KC::K => self.gb.lock().release(B::A),
-                        KC::L => self.gb.lock().release(B::B),
-                        KC::Return => self.gb.lock().release(B::Start),
-                        KC::Back => self.gb.lock().release(B::Select),
-                        _ => (),
-                    },
-                }
+                    KC::P => {
+                        #[cfg(feature = "screenshot")]
+                        self.screenshot();
+                    }
+                    _ => (),
+                },
+                ElementState::Released => match key {
+                    KC::W => self.gb.lock().release(B::Up),
+                    KC::A => self.gb.lock().release(B::Left),
+                    KC::S => self.gb.lock().release(B::Down),
+                    KC::D => self.gb.lock().release(B::Right),
+                    KC::K => self.gb.lock().release(B::A),
+                    KC::L => self.gb.lock().release(B::B),
+                    KC::Return => self.gb.lock().release(B::Start),
+                    KC::Back => self.gb.lock().release(B::Select),
+                    _ => (),
+                },
             }
         }
     }
