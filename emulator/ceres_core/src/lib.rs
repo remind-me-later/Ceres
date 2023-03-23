@@ -142,8 +142,8 @@ pub struct Gb {
     tima: u8,
     tma: u8,
     tac: u8,
+    div: u16,
     tima_state: TIMAState,
-    wide_div_counter: u16,
 
     // peripherals
     ppu: Ppu,
@@ -209,7 +209,7 @@ impl Gb {
             tima_state: TIMAState::default(),
             tima: Default::default(),
             tma: Default::default(),
-            wide_div_counter: Default::default(),
+            div: Default::default(),
         }
     }
 

@@ -65,7 +65,7 @@ impl Gb {
             }
         }
 
-        let triggers = self.wide_div_counter & !val;
+        let triggers = self.div & !val;
         let apu_bit = if self.key1.enabled() { 0x2000 } else { 0x1000 };
 
         // increase TIMA on falling edge of TAC mux
@@ -83,15 +83,21 @@ impl Gb {
             self.apu.step_seq();
         }
 
-        self.wide_div_counter = val;
+        self.div = val;
     }
 
     #[inline]
     pub(crate) fn run_timers(&mut self, cycles: i32) {
         for _ in 0..cycles / 4 {
             self.advance_tima_state();
-            self.set_system_clk(self.wide_div_counter.wrapping_add(4));
+            self.set_system_clk(self.div.wrapping_add(4));
         }
+    }
+
+    #[must_use]
+    #[inline]
+    pub(crate) const fn read_div(&self) -> u8 {
+        ((self.div >> 8) & 0xFF) as u8
     }
 
     #[inline]

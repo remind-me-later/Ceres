@@ -219,20 +219,20 @@ impl Ppu {
     ) {
         // not so sure about last condition...
         if !(self.win_enabled(cgb_mode) && self.wy <= self.ly && self.wx < PX_WIDTH) {
-            if self.ppu_win_in_frame {
-                self.ppu_win_skipped += 1;
+            if self.win_in_frame {
+                self.win_skipped += 1;
             }
             return;
         }
 
         let wx = self.wx.saturating_sub(7);
-        let y = (self.ly - self.wy).wrapping_sub(self.ppu_win_skipped);
+        let y = (self.ly - self.wy).wrapping_sub(self.win_skipped);
         let row = u16::from(y / 8) * 32;
         let line = u16::from((y & 7) * 2);
 
         for i in wx..PX_WIDTH {
-            self.ppu_win_in_frame = true;
-            self.ppu_win_in_ly = true;
+            self.win_in_frame = true;
+            self.win_in_ly = true;
 
             let x = i.wrapping_sub(wx);
             let col = u16::from(x / 8);

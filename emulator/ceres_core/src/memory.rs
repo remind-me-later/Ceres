@@ -181,7 +181,7 @@ impl Gb {
             P1 => self.joy.read_p1(),
             SB => self.serial.read_sb(),
             SC => self.serial.read_sc(),
-            DIV => ((self.wide_div_counter >> 8) & 0xFF) as u8,
+            DIV => self.read_div(),
             TIMA => self.tima,
             TMA => self.tma,
             TAC => self.read_tac(),
@@ -405,8 +405,8 @@ impl Gb {
 
         match self.hdma_state {
             General => (),
-            WaitHBlank if matches!(self.ppu.ppu_mode(), Mode::HBlank) => (),
-            HBlankDone if !matches!(self.ppu.ppu_mode(), Mode::HBlank) => {
+            WaitHBlank if matches!(self.ppu.mode(), Mode::HBlank) => (),
+            HBlankDone if !matches!(self.ppu.mode(), Mode::HBlank) => {
                 self.hdma_state = WaitHBlank;
                 return;
             }

@@ -79,10 +79,10 @@ pub struct Ppu {
     oam: [u8; OAM_SIZE as usize],
     rgb_buf: RgbaBuf,
     rgba_buf_present: RgbaBuf,
-    ppu_cycles: i32,
-    ppu_win_in_frame: bool,
-    ppu_win_in_ly: bool,
-    ppu_win_skipped: u8,
+    cycles: i32,
+    win_in_frame: bool,
+    win_in_ly: bool,
+    win_skipped: u8,
 }
 
 impl Default for Ppu {
@@ -90,7 +90,7 @@ impl Default for Ppu {
         Self {
             vram: [0; VRAM_SIZE_CGB as usize],
             oam: [0; OAM_SIZE as usize],
-            ppu_cycles: Mode::OamScan.cycles(0),
+            cycles: Mode::OamScan.cycles(0),
             // Default
             lcdc: Default::default(),
             stat: STAT_LYC_B | Mode::OamScan as u8,
@@ -109,9 +109,9 @@ impl Default for Ppu {
             ocp: ColorPalette::default(),
             rgb_buf: RgbaBuf::default(),
             rgba_buf_present: RgbaBuf::default(),
-            ppu_win_in_frame: Default::default(),
-            ppu_win_in_ly: Default::default(),
-            ppu_win_skipped: Default::default(),
+            win_in_frame: Default::default(),
+            win_in_ly: Default::default(),
+            win_skipped: Default::default(),
         }
     }
 }
@@ -271,7 +271,7 @@ impl Ppu {
     pub(crate) fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts) {
         // turn off
         if val & LCDC_ON_B == 0 && self.lcdc & LCDC_ON_B != 0 {
-            // debug_assert!(self.ppu_mode() == Mode::VBlank);
+            // debug_assert!(self.mode() == Mode::VBlank);
             // self.scx = 0;
             // self.rgb_buf.clear();
             self.ly = 0;
@@ -280,7 +280,7 @@ impl Ppu {
         // turn on
         if val & LCDC_ON_B != 0 && self.lcdc & LCDC_ON_B == 0 {
             self.set_mode_stat(Mode::OamScan);
-            self.ppu_cycles = Mode::OamScan.cycles(self.scx);
+            self.cycles = Mode::OamScan.cycles(self.scx);
             self.ly = 0;
             self.check_lyc(ints);
         }
@@ -291,7 +291,7 @@ impl Ppu {
     #[inline]
     pub(crate) fn write_stat(&mut self, val: u8) {
         let ly_equals_lyc = self.stat & STAT_LYC_B;
-        let mode: u8 = self.ppu_mode() as u8;
+        let mode: u8 = self.mode() as u8;
 
         self.stat = val;
         self.stat &= !(STAT_LYC_B | STAT_MODE_B);
@@ -302,7 +302,7 @@ impl Ppu {
     #[inline]
     pub(crate) const fn read_vram(&self, addr: u16) -> u8 {
         #[allow(clippy::single_match_else)]
-        match self.ppu_mode() {
+        match self.mode() {
             Mode::Drawing => 0xFF,
             _ => {
                 let bank = self.vbk as u16 * VRAM_SIZE_GB;
@@ -313,7 +313,7 @@ impl Ppu {
     }
 
     pub(crate) fn write_vram(&mut self, addr: u16, val: u8) {
-        if !matches!(self.ppu_mode(), Mode::Drawing) {
+        if !matches!(self.mode(), Mode::Drawing) {
             let bank = u16::from(self.vbk) * VRAM_SIZE_GB;
             let i = (addr & 0x1FFF) + bank;
             self.vram[i as usize] = val;
@@ -323,7 +323,7 @@ impl Ppu {
     #[must_use]
     #[inline]
     pub(crate) const fn read_oam(&self, addr: u16, dma_on: bool) -> u8 {
-        match self.ppu_mode() {
+        match self.mode() {
             Mode::HBlank | Mode::VBlank if !dma_on => self.oam[(addr & 0xFF) as usize],
             _ => 0xFF,
         }
@@ -331,7 +331,7 @@ impl Ppu {
 
     #[inline]
     pub(crate) fn write_oam(&mut self, addr: u16, val: u8, dma_active: bool) {
-        match self.ppu_mode() {
+        match self.mode() {
             Mode::HBlank | Mode::VBlank if !dma_active => {
                 self.oam[(addr & 0xFF) as usize] = val;
             }
@@ -352,10 +352,10 @@ impl Ppu {
             return;
         }
 
-        self.ppu_cycles -= cycles;
+        self.cycles -= cycles;
 
-        if self.ppu_cycles < 0 {
-            match self.ppu_mode() {
+        if self.cycles < 0 {
+            match self.mode() {
                 Mode::OamScan => self.enter_mode(Mode::Drawing, ints),
                 Mode::Drawing => {
                     self.draw_scanline(cgb_mode);
@@ -377,9 +377,7 @@ impl Ppu {
                         self.rgba_buf_present = self.rgb_buf.clone();
                         self.enter_mode(Mode::OamScan, ints);
                     } else {
-                        self.ppu_cycles = self
-                            .ppu_cycles
-                            .wrapping_add(self.ppu_mode().cycles(self.scx));
+                        self.cycles = self.cycles.wrapping_add(self.mode().cycles(self.scx));
                     }
                     self.check_lyc(ints);
                 }
@@ -400,7 +398,7 @@ impl Ppu {
 
     #[must_use]
     #[inline]
-    pub(crate) const fn ppu_mode(&self) -> Mode {
+    pub(crate) const fn mode(&self) -> Mode {
         match self.stat & 3 {
             0 => Mode::HBlank,
             1 => Mode::VBlank,
@@ -416,7 +414,7 @@ impl Ppu {
 
     fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
         self.set_mode_stat(mode);
-        self.ppu_cycles = self.ppu_cycles.wrapping_add(mode.cycles(self.scx));
+        self.cycles = self.cycles.wrapping_add(mode.cycles(self.scx));
 
         match mode {
             Mode::OamScan => {
@@ -424,7 +422,7 @@ impl Ppu {
                     ints.req_lcd();
                 }
 
-                self.ppu_win_in_ly = false;
+                self.win_in_ly = false;
             }
             Mode::VBlank => {
                 ints.req_vblank();
@@ -438,8 +436,8 @@ impl Ppu {
                 //   *ifr |= IF_LCD_B;
                 // }
 
-                self.ppu_win_skipped = 0;
-                self.ppu_win_in_frame = false;
+                self.win_skipped = 0;
+                self.win_in_frame = false;
             }
             Mode::Drawing => (),
             Mode::HBlank => {

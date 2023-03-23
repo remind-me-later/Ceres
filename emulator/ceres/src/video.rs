@@ -28,6 +28,24 @@ impl Vertex {
     }
 }
 
+#[derive(Default)]
+pub enum Scaling {
+    #[default]
+    Nearest,
+    Scale2x,
+    Scale3x,
+}
+
+impl Scaling {
+    const fn entry_point(self) -> &'static str {
+        match self {
+            Scaling::Nearest => "fs_near",
+            Scaling::Scale2x => "fs_scale2x",
+            Scaling::Scale3x => "fs_scale3x",
+        }
+    }
+}
+
 pub struct State {
     surface: wgpu::Surface,
     device: wgpu::Device,
@@ -47,6 +65,7 @@ impl State {
         window: winit::window::Window,
         width: u32,
         height: u32,
+        scaling: Scaling,
     ) -> anyhow::Result<Self> {
         use {anyhow::Context, wgpu::util::DeviceExt};
 
@@ -136,7 +155,7 @@ impl State {
             label: Some("diffuse_bind_group"),
         });
 
-        let shader = device.create_shader_module(wgpu::include_spirv!("../shader/near.spv"));
+        let shader = device.create_shader_module(wgpu::include_spirv!("../shader/shader.spv"));
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -155,7 +174,7 @@ impl State {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: "fs_main",
+                entry_point: scaling.entry_point(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
                     blend: Some(wgpu::BlendState::REPLACE),

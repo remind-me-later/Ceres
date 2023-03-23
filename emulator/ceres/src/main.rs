@@ -74,6 +74,8 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::Fullscreen,
 };
+
+use crate::video::Scaling;
 use {
     alloc::sync::Arc,
     anyhow::Context,
@@ -130,6 +132,15 @@ fn main() -> anyhow::Result<()> {
                 .default_value("cgb")
                 .required(false),
         )
+        .arg(
+            Arg::new("scaling")
+                .short('s')
+                .long("scaling")
+                .help("Scaling algorithm used")
+                .value_parser(PossibleValuesParser::new(["nearest", "scale2x", "scale3x"]))
+                .default_value("nearest")
+                .required(false),
+        )
         .get_matches();
 
     let model = {
@@ -147,12 +158,27 @@ fn main() -> anyhow::Result<()> {
         model
     };
 
+    let scaling = {
+        let scaling_str = args
+            .get_one::<String>("scaling")
+            .context("couldn't get scaling string")?;
+
+        let scaling = match scaling_str.as_str() {
+            "nearest" => Scaling::Nearest,
+            "scale2x" => Scaling::Scale2x,
+            "scale3x" => Scaling::Scale3x,
+            _ => unreachable!(),
+        };
+
+        scaling
+    };
+
     let pathbuf = PathBuf::from(
         args.get_one::<String>("file")
             .context("couldn't get file string")?,
     );
 
-    let emu = pollster::block_on(Emu::new(model, pathbuf))?;
+    let emu = pollster::block_on(Emu::new(model, pathbuf, scaling))?;
     emu.run();
 
     Ok(())
@@ -168,8 +194,15 @@ struct Emu {
 }
 
 impl Emu {
-    async fn new(model: ceres_core::Model, rom_path: PathBuf) -> anyhow::Result<Self> {
-        async fn init_video(event_loop: &EventLoop<()>) -> anyhow::Result<video::State> {
+    async fn new(
+        model: ceres_core::Model,
+        rom_path: PathBuf,
+        scaling: Scaling,
+    ) -> anyhow::Result<Self> {
+        async fn init_video(
+            event_loop: &EventLoop<()>,
+            scaling: Scaling,
+        ) -> anyhow::Result<video::State> {
             use winit::dpi::PhysicalSize;
 
             const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
@@ -191,7 +224,7 @@ impl Emu {
                 .build(event_loop)
                 .context("couldn't create window")?;
 
-            let mut video = video::State::new(window, PX_WIDTH, PX_HEIGHT)
+            let mut video = video::State::new(window, PX_WIDTH, PX_HEIGHT, scaling)
                 .await
                 .context("couldn't initialize wgpu")?;
 
@@ -221,7 +254,7 @@ impl Emu {
         }
 
         let event_loop = EventLoop::new();
-        let video = init_video(&event_loop).await?;
+        let video = init_video(&event_loop, scaling).await?;
 
         let sav_path = rom_path.with_extension("sav");
         let gb = init_gb(model, &rom_path, &sav_path)?;
