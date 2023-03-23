@@ -1,33 +1,3 @@
-#[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
-    position: [f32; 2],
-    tex_coords: [f32; 2],
-}
-
-impl Vertex {
-    #[allow(clippy::too_many_lines)]
-    const fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        use core::mem;
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-            ],
-        }
-    }
-}
-
 #[derive(Default)]
 pub enum Scaling {
     #[default]
@@ -53,7 +23,8 @@ pub struct State {
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
     render_pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
+    uniform_buffer: wgpu::Buffer,
+    uniform_bind_group: wgpu::BindGroup,
     texture: Texture,
     diffuse_bind_group: wgpu::BindGroup,
     window: winit::window::Window,
@@ -135,7 +106,7 @@ impl State {
                         count: None,
                     },
                 ],
-                label: Some("texture_bind_group_layout"),
+                label: None,
             });
 
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
@@ -152,25 +123,55 @@ impl State {
                     resource: wgpu::BindingResource::Sampler(&sampler),
                 },
             ],
-            label: Some("diffuse_bind_group"),
+            label: None,
         });
 
-        let shader = device.create_shader_module(wgpu::include_spirv!("../shader/shader.spv"));
+        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&[0.0, 0.0]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let uniform_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: None,
+            });
+
+        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &uniform_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            }],
+            label: None,
+        });
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[&texture_bind_group_layout],
+                label: None,
+                bind_group_layouts: &[&texture_bind_group_layout, &uniform_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
+        let shader = device.create_shader_module(wgpu::include_spirv!("../shader/shader.spv"));
+
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
+            label: None,
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[Vertex::desc()],
+                buffers: &[],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -190,31 +191,6 @@ impl State {
             multiview: None,
         });
 
-        let vertices: &[Vertex] = &[
-            Vertex {
-                position: [1.0, 1.0],
-                tex_coords: [1.0, 1.0],
-            },
-            Vertex {
-                position: [-1.0, 1.0],
-                tex_coords: [0.0, 1.0],
-            },
-            Vertex {
-                position: [1.0, -1.0],
-                tex_coords: [1.0, 0.0],
-            },
-            Vertex {
-                position: [-1.0, -1.0],
-                tex_coords: [0.0, 0.0],
-            },
-        ];
-
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(vertices),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        });
-
         Ok(Self {
             surface,
             device,
@@ -222,7 +198,8 @@ impl State {
             config,
             size,
             render_pipeline,
-            vertex_buffer,
+            uniform_buffer,
+            uniform_bind_group,
             texture,
             diffuse_bind_group,
             window,
@@ -249,27 +226,8 @@ impl State {
                 (x, y)
             };
 
-            let vertices = &[
-                Vertex {
-                    position: [x, y],
-                    tex_coords: [1.0, 1.0],
-                },
-                Vertex {
-                    position: [-x, y],
-                    tex_coords: [0.0, 1.0],
-                },
-                Vertex {
-                    position: [x, -y],
-                    tex_coords: [1.0, 0.0],
-                },
-                Vertex {
-                    position: [-x, -y],
-                    tex_coords: [0.0, 0.0],
-                },
-            ];
-
             self.queue
-                .write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(vertices));
+                .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[x, y]));
 
             self.size = new_size;
             self.config.width = new_size.width;
@@ -294,13 +252,11 @@ impl State {
 
         let mut encoder = self
             .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
+                label: None,
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
@@ -314,7 +270,7 @@ impl State {
 
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
             render_pass.draw(0..4, 0..1);
         }
 

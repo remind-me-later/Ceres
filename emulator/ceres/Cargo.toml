@@ -17,7 +17,7 @@ cpal = { version = "*", default-features = false }
 # video
 wgpu = { version = "*", default-features = false, features = ["spirv"] }
 pollster = { version = "*", default-features = false }
-bytemuck = { version = "*", default-features = false, features = ["derive"] }
+bytemuck = { version = "*", default-features = false }
 # TODO: wait for better wayland decoration support
 winit = { version = "*", default-features = false, features = ["x11"] }
 
