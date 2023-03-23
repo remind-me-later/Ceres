@@ -20,6 +20,7 @@ pub struct Joypad {
 }
 
 impl Joypad {
+    #[inline]
     pub(crate) fn press(&mut self, button: Button, ints: &mut Interrupts) {
         let b = button as u8;
 
@@ -30,11 +31,13 @@ impl Joypad {
         }
     }
 
+    #[inline]
     pub(crate) fn release(&mut self, button: Button) {
         self.p1_btn &= !(button as u8);
     }
 
     #[must_use]
+    #[inline]
     pub(crate) const fn read_p1(&self) -> u8 {
         let act = if self.p1_acts {
             self.p1_btn >> 4 | 1 << 5
@@ -52,6 +55,7 @@ impl Joypad {
         !(act | dir)
     }
 
+    #[inline]
     pub(crate) fn write_joy(&mut self, val: u8) {
         self.p1_acts = val & 0x20 == 0;
         self.p1_dirs = val & 0x10 == 0;

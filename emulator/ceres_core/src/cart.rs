@@ -104,8 +104,8 @@ pub struct Cart {
 
 impl Cart {
     pub fn new(mut rom: Vec<u8>, ram: Option<Vec<u8>>) -> Result<Self, Error> {
-        let rom_size = ROMSize::new(&rom)?;
-        let ram_size = RAMSize::new(&rom)?;
+        let rom_size = ROMSize::new(rom[0x148])?;
+        let ram_size = RAMSize::new(rom[0x149])?;
         let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], rom_size)?;
 
         // println!("{mbc:?}");
@@ -142,11 +142,13 @@ impl Cart {
     }
 
     #[must_use]
+    #[inline]
     pub fn save_data(&mut self) -> Option<&[u8]> {
         self.has_battery.then_some(&*self.ram)
     }
 
     #[must_use]
+    #[inline]
     pub const fn clock(&self) -> Option<&[u8]> {
         if let Mbc3 { rtc: Some(rtc) } = &self.mbc {
             Some(&rtc.regs)
@@ -156,11 +158,12 @@ impl Cart {
     }
 
     #[must_use]
+    #[inline]
     pub const fn has_battery(&self) -> bool {
         self.has_battery
     }
 
-    pub(crate) fn run(&mut self, cycles: i32) {
+    pub(crate) fn run_rtc(&mut self, cycles: i32) {
         if let Mbc3 { rtc: Some(rtc) } = &mut self.mbc {
             rtc.run_cycles(cycles);
         }
@@ -180,6 +183,7 @@ impl Cart {
     }
 
     #[must_use]
+    #[inline]
     pub(crate) fn read_ram(&self, addr: u16) -> u8 {
         const fn mbc_read_ram(cart: &Cart, ram_enabled: bool, addr: u16) -> u8 {
             if cart.ram_size.is_any() && ram_enabled {
@@ -202,6 +206,7 @@ impl Cart {
     }
 
     #[allow(clippy::too_many_lines)]
+    #[inline]
     pub(crate) fn write_rom(&mut self, addr: u16, val: u8) {
         match &mut self.mbc {
             Mbc0 => (),
@@ -339,6 +344,7 @@ impl Cart {
         }
     }
 
+    #[inline]
     pub(crate) fn write_ram(&mut self, addr: u16, val: u8) {
         fn mbc_write_ram(cart: &mut Cart, ram_enabled: bool, addr: u16, val: u8) {
             if cart.ram_size.is_any() && ram_enabled {
@@ -362,6 +368,7 @@ impl Cart {
     }
 
     #[must_use]
+    #[inline]
     const fn ram_addr(&self, addr: u16) -> u32 {
         self.ram_offset | (addr & 0x1FFF) as u32
     }
@@ -383,10 +390,10 @@ enum ROMSize {
 impl ROMSize {
     const BANK_SIZE: u16 = 0x4000;
 
-    const fn new(rom: &[u8]) -> Result<Self, Error> {
+    #[inline]
+    const fn new(byte: u8) -> Result<Self, Error> {
         use ROMSize::{Kb128, Kb256, Kb32, Kb512, Kb64, Mb1, Mb2, Mb4, Mb8};
-        let rom_size_byte = rom[0x148];
-        let rom_size = match rom_size_byte {
+        let rom_size = match byte {
             0 => Kb32,
             1 => Kb64,
             2 => Kb128,
@@ -402,13 +409,17 @@ impl ROMSize {
         Ok(rom_size)
     }
 
-    // maximum is 0x8000 << 8 = 0x80_0000
+    #[must_use]
+    #[inline]
     const fn size_bytes(self) -> u32 {
+        // maximum is 0x8000 << 8 = 0x80_0000
         (Self::BANK_SIZE as u32 * 2) << (self as u8)
     }
 
-    // maximum is 2 << 8 - 1 = 1FF
+    #[must_use]
+    #[inline]
     const fn mask(self) -> u16 {
+        // maximum is 2 << 8 - 1 = 1FF
         (2_u16 << (self as u8)) - 1
     }
 }
@@ -425,10 +436,10 @@ enum RAMSize {
 impl RAMSize {
     const BANK_SIZE: u16 = 0x2000;
 
-    const fn new(rom: &[u8]) -> Result<Self, Error> {
+    #[inline]
+    const fn new(byte: u8) -> Result<Self, Error> {
         use RAMSize::{Kb128, Kb32, Kb64, Kb8, NoRAM};
-        let ram_size_byte = rom[0x149];
-        let ram_size = match ram_size_byte {
+        let ram_size = match byte {
             0 => NoRAM,
             2 => Kb8,
             3 => Kb32,
@@ -440,15 +451,21 @@ impl RAMSize {
         Ok(ram_size)
     }
 
+    #[must_use]
+    #[inline]
     const fn is_any(self) -> bool {
         !matches!(self, Self::NoRAM)
     }
 
-    // Max size is 0x2000 * 0x10 = 0x20000 so it fits in a u32
+    #[must_use]
+    #[inline]
     const fn size_bytes(self) -> u32 {
+        // Max size is 0x2000 * 0x10 = 0x20000 so it fits in a u32
         self.num_banks() as u32 * Self::BANK_SIZE as u32
     }
 
+    #[must_use]
+    #[inline]
     const fn num_banks(self) -> u8 {
         match self {
             Self::NoRAM => 0x0,
@@ -459,6 +476,8 @@ impl RAMSize {
         }
     }
 
+    #[must_use]
+    #[inline]
     const fn mask(self) -> u8 {
         match self {
             Self::NoRAM | Self::Kb8 => 0x0,
@@ -479,32 +498,30 @@ struct Mbc3RTC {
 }
 
 impl Mbc3RTC {
+    #[inline]
     fn map_reg(&mut self, val: u8) {
         self.mapped = Some(NonZeroU8::new(val).unwrap());
     }
 
+    #[inline]
     fn unmap_reg(&mut self) {
         self.mapped = None;
     }
 
     fn run_cycles(&mut self, cycles: i32) {
-        for _ in 0..cycles {
-            self.update_t_cycle();
-        }
-    }
-
-    fn update_t_cycle(&mut self) {
         if self.halt {
             return;
         }
 
-        self.t_cycles += 1;
-        if self.t_cycles == crate::TC_SEC + 1 {
-            self.t_cycles = 0;
+        self.t_cycles += cycles;
+        // TODO: this while is not at all necessary
+        while self.t_cycles > crate::TC_SEC {
+            self.t_cycles -= crate::TC_SEC + 1;
             self.update_secs();
         }
     }
 
+    #[inline]
     fn update_secs(&mut self) {
         self.regs[0] = (self.regs[0] + 1) & 0x3F;
         if self.regs[0] == 60 {
@@ -530,6 +547,7 @@ impl Mbc3RTC {
         }
     }
 
+    #[inline]
     fn read(&self, ram_enabled: bool) -> Option<u8> {
         ram_enabled
             .then(|| {
@@ -545,6 +563,7 @@ impl Mbc3RTC {
             .flatten()
     }
 
+    #[must_use]
     fn write(&mut self, ram_enabled: bool, val: u8) -> Option<()> {
         ram_enabled
             .then(|| {

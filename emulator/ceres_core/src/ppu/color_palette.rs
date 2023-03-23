@@ -5,34 +5,47 @@ const PAL_RAM_SIZE_COLORS: u8 = PAL_RAM_SIZE * 3;
 pub struct ColorPalette {
     // Rgb color ram
     col: [u8; PAL_RAM_SIZE_COLORS as usize],
-    idx: u8,
-    inc: bool, // increment after write
+    spec: u8,
 }
 
 impl Default for ColorPalette {
     fn default() -> Self {
         Self {
             col: [0; PAL_RAM_SIZE_COLORS as usize],
-            idx: 0,
-            inc: false,
+            spec: 0,
         }
     }
 }
 
 impl ColorPalette {
+    #[inline]
     pub(crate) fn set_spec(&mut self, val: u8) {
-        self.idx = val & 0x3F;
-        self.inc = val & 0x80 != 0;
+        self.spec = val;
     }
 
+    #[must_use]
+    #[inline]
     pub(crate) const fn spec(&self) -> u8 {
-        self.idx | 0x40 | ((self.inc as u8) << 7)
+        self.spec | 0x40
     }
 
-    pub(crate) const fn data(&self) -> u8 {
-        let i = (self.idx as usize / 2) * 3;
+    #[must_use]
+    #[inline]
+    const fn idx(&self) -> u8 {
+        self.spec & 0x3F
+    }
 
-        if self.idx & 1 == 0 {
+    #[must_use]
+    #[inline]
+    const fn inc(&self) -> bool {
+        self.spec & 0x80 != 0
+    }
+
+    #[must_use]
+    pub(crate) const fn data(&self) -> u8 {
+        let i = (self.idx() as usize / 2) * 3;
+
+        if self.idx() & 1 == 0 {
             // red and green
             let r = self.col[i];
             let g = self.col[i + 1] << 5;
@@ -46,9 +59,9 @@ impl ColorPalette {
     }
 
     pub(crate) fn set_data(&mut self, val: u8) {
-        let i = (self.idx as usize / 2) * 3;
+        let i = (self.idx() as usize / 2) * 3;
 
-        if self.idx & 1 == 0 {
+        if self.idx() & 1 == 0 {
             // red
             self.col[i] = val & 0x1F;
             // green
@@ -62,11 +75,12 @@ impl ColorPalette {
             self.col[i + 2] = (val & 0x7C) >> 2;
         }
 
-        if self.inc {
-            self.idx = (self.idx + 1) & 0x3F;
+        if self.inc() {
+            self.spec = (self.spec & 0x80) | (self.idx() + 1) & 0x3F;
         }
     }
 
+    #[must_use]
     pub(super) const fn rgb(&self, palette: u8, color: u8) -> (u8, u8, u8) {
         const fn scale_channel(c: u8) -> u8 {
             (c << 3) | (c >> 2)

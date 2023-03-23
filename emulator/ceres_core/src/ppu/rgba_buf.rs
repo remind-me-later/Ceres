@@ -17,6 +17,7 @@ impl Default for RgbaBuf {
 }
 
 impl RgbaBuf {
+    #[inline]
     pub(super) fn set_px(&mut self, i: u32, rgb: (u8, u8, u8)) {
         let base = i * 4;
         self.data[base as usize] = rgb.0;
@@ -24,6 +25,8 @@ impl RgbaBuf {
         self.data[base as usize + 2] = rgb.2;
     }
 
+    #[must_use]
+    #[inline]
     pub(crate) const fn pixel_data(&self) -> &[u8] {
         &self.data
     }

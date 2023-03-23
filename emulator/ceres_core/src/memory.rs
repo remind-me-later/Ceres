@@ -1,6 +1,5 @@
 use crate::Model;
 use crate::{ppu::Mode, CgbMode, Gb, Model::Cgb};
-use core::num::NonZeroU8;
 
 #[derive(Default, Debug)]
 pub enum HdmaState {
@@ -90,31 +89,41 @@ const IE: u8 = 0xFF;
 
 impl Gb {
     #[must_use]
+    #[inline]
     pub(crate) const fn read_wram_lo(&self, addr: u16) -> u8 {
         self.wram[(addr & 0xFFF) as usize]
     }
 
+    #[inline]
     fn write_wram_lo(&mut self, addr: u16, val: u8) {
         self.wram[(addr & 0xFFF) as usize] = val;
     }
 
     #[must_use]
+    #[inline]
     pub(crate) const fn read_wram_hi(&self, addr: u16) -> u8 {
         self.wram[(addr & 0xFFF | self.svbk.bank_offset()) as usize]
     }
 
+    #[inline]
     fn write_wram_hi(&mut self, addr: u16, val: u8) {
         self.wram[(addr & 0xFFF | self.svbk.bank_offset()) as usize] = val;
     }
 
+    #[must_use]
+    #[inline]
     const fn dma_active(&self) -> bool {
         self.dma_on && (self.dma_cycles > 0 || self.dma_restarting)
     }
 
+    #[must_use]
+    #[inline]
     const fn hdma_on(&self) -> bool {
         !matches!(self.hdma_state, HdmaState::Sleep)
     }
 
+    #[must_use]
+    #[inline]
     const fn read_boot_or_cart(&self, addr: u16) -> u8 {
         if let Some(b) = self.bootrom {
             // TODO: as long as the bootrom is correct should be in bounds
@@ -128,6 +137,7 @@ impl Gb {
     // * Memory map *
     // **************
 
+    #[must_use]
     pub(crate) fn read_mem(&self, addr: u16) -> u8 {
         match addr {
             0x0000..=0x00FF => self.read_boot_or_cart(addr),
@@ -149,6 +159,7 @@ impl Gb {
         }
     }
 
+    #[inline]
     pub(crate) fn write_mem(&mut self, addr: u16, val: u8) {
         match addr {
             // FIXME: assume bootrom doesn't write to rom
@@ -163,6 +174,8 @@ impl Gb {
         }
     }
 
+    #[must_use]
+    #[inline]
     fn read_high(&self, addr: u8) -> u8 {
         match addr {
             P1 => self.joy.read_p1(),
@@ -171,7 +184,7 @@ impl Gb {
             DIV => ((self.wide_div_counter >> 8) & 0xFF) as u8,
             TIMA => self.tima,
             TMA => self.tma,
-            TAC => 0xF8 | self.tac,
+            TAC => self.read_tac(),
             IF => self.ints.read_if(),
             NR10 => self.apu.read_nr10(),
             NR11 => self.apu.read_nr11(),
@@ -220,6 +233,7 @@ impl Gb {
     }
 
     #[allow(clippy::cognitive_complexity)]
+    #[inline]
     fn write_high(&mut self, addr: u8, val: u8) {
         match addr {
             P1 => self.joy.write_joy(val),
@@ -301,6 +315,7 @@ impl Gb {
     // * DMA *
     // *******
 
+    #[inline]
     fn write_dma(&mut self, val: u8) {
         if self.dma_on {
             self.dma_restarting = true;
@@ -312,6 +327,7 @@ impl Gb {
         self.dma_on = true;
     }
 
+    #[inline]
     pub(crate) fn run_dma(&mut self) {
         if !self.dma_on {
             return;
@@ -329,7 +345,7 @@ impl Gb {
             // TODO: writes from DMA can access OAM on modes 2 and 3
             // with some glitches (RESEARCH) and without trouble during
             // VBLANK (what happens in HBLANK?)
-            self.ppu.write_oam_direct(self.dma_addr, val);
+            self.ppu.write_oam_by_dma(self.dma_addr, val);
 
             self.dma_addr = self.dma_addr.wrapping_add(1);
             if self.dma_addr & 0xFF > 0x9F {
@@ -339,27 +355,34 @@ impl Gb {
         }
     }
 
+    #[inline]
     fn write_hdma1(&mut self, val: u8) {
         self.hdma_src = (u16::from(val) << 8) | (self.hdma_src & 0xF0);
     }
 
+    #[inline]
     fn write_hdma2(&mut self, val: u8) {
         self.hdma_src = (self.hdma_src & 0xFF00) | u16::from(val & 0xF0);
     }
 
+    #[inline]
     fn write_hdma3(&mut self, val: u8) {
         self.hdma_dst = (u16::from(val & 0x1F) << 8) | (self.hdma_dst & 0xF0);
     }
 
+    #[inline]
     fn write_hdma4(&mut self, val: u8) {
         self.hdma_dst = (self.hdma_dst & 0x1F00) | u16::from(val & 0xF0);
     }
 
+    #[must_use]
+    #[inline]
     const fn read_hdma5(&self) -> u8 {
         // active on low
         (!self.hdma_on() as u8) << 7 | self.hdma5
     }
 
+    #[inline]
     fn write_hdma5(&mut self, val: u8) {
         use HdmaState::{General, Sleep, WaitHBlank};
 
@@ -376,6 +399,7 @@ impl Gb {
         self.hdma_state = if val & 0x80 == 0 { General } else { WaitHBlank };
     }
 
+    #[inline]
     pub(crate) fn run_hdma(&mut self) {
         use HdmaState::{General, HBlankDone, Sleep, WaitHBlank};
 
@@ -428,62 +452,63 @@ impl Gb {
     }
 }
 
+#[derive(Default)]
 pub struct Svbk {
     svbk: u8,
-    svbk_true: NonZeroU8, // true selected bank, between 1 and 7
 }
 
 impl Svbk {
+    #[must_use]
+    #[inline]
     pub const fn read(&self) -> u8 {
         self.svbk | 0xF8
     }
 
+    #[inline]
     pub fn write(&mut self, val: u8) {
-        let tmp = val & 7;
-        self.svbk = tmp;
-        self.svbk_true = NonZeroU8::new(if tmp == 0 { 1 } else { tmp }).unwrap();
+        self.svbk = val & 7;
     }
 
-    // Return value between 0x1000 and 0x7000
+    #[must_use]
+    #[inline]
     pub const fn bank_offset(&self) -> u16 {
-        (self.svbk_true.get() as u16) * 0x1000
-    }
-}
-
-impl Default for Svbk {
-    fn default() -> Self {
-        Self {
-            svbk: 0,
-            svbk_true: NonZeroU8::new(1).unwrap(),
-        }
+        // Return value between 0x1000 and 0x7000
+        (if self.svbk == 0 { 1 } else { self.svbk } as u16) * 0x1000
     }
 }
 
 #[derive(Default)]
 pub struct Key1 {
-    enabled: bool,
-    requested: bool,
+    key1: u8,
 }
 
 impl Key1 {
+    #[must_use]
+    #[inline]
     pub const fn read(&self) -> u8 {
-        0x7E | ((self.enabled as u8) << 7) | (self.requested as u8)
+        self.key1 | 0x7E
     }
 
+    #[inline]
     pub fn write(&mut self, val: u8) {
-        self.requested = val & 1 != 0;
+        self.key1 = val;
     }
 
+    #[must_use]
+    #[inline]
     pub const fn enabled(&self) -> bool {
-        self.enabled
+        self.key1 & 0x80 != 0
     }
 
+    #[must_use]
+    #[inline]
     pub const fn requested(&self) -> bool {
-        self.requested
+        self.key1 & 1 != 0
     }
 
+    #[inline]
     pub fn change_speed(&mut self) {
-        self.enabled = !self.enabled;
-        self.requested = false;
+        debug_assert!(self.requested());
+        self.key1 = !self.key1;
     }
 }

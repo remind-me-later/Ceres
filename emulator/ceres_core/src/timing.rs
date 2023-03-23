@@ -24,18 +24,10 @@ impl Gb {
         self.run_dma();
 
         self.apu.run(cycles);
-        self.cart.run(cycles);
+        self.cart.run_rtc(cycles);
     }
 
-    const fn sys_clk_tac_mux(&self) -> u16 {
-        match self.tac & 3 {
-            0 => 1 << 9,
-            1 => 1 << 3,
-            2 => 1 << 5,
-            _ => 1 << 7,
-        }
-    }
-
+    #[inline]
     fn advance_tima_state(&mut self) {
         match self.tima_state {
             TIMAState::Reloading => {
@@ -49,6 +41,7 @@ impl Gb {
         }
     }
 
+    #[inline]
     fn inc_tima(&mut self) {
         self.tima = self.tima.wrapping_add(1);
 
@@ -61,11 +54,22 @@ impl Gb {
     // only modify div inside this function
     // TODO: this could be optimized
     fn set_system_clk(&mut self, val: u16) {
+        #[must_use]
+        #[inline]
+        const fn sys_clk_tac_mux(tac: u8) -> u16 {
+            match tac & 3 {
+                0 => 1 << 9,
+                1 => 1 << 3,
+                2 => 1 << 5,
+                _ => 1 << 7,
+            }
+        }
+
         let triggers = self.wide_div_counter & !val;
         let apu_bit = if self.key1.enabled() { 0x2000 } else { 0x1000 };
 
         // increase TIMA on falling edge of TAC mux
-        if self.tac_enable && (triggers & self.sys_clk_tac_mux() != 0) {
+        if self.tac_enabled() && (triggers & sys_clk_tac_mux(self.tac) != 0) {
             self.inc_tima();
         }
 
@@ -82,6 +86,7 @@ impl Gb {
         self.wide_div_counter = val;
     }
 
+    #[inline]
     pub(crate) fn run_timers(&mut self, cycles: i32) {
         for _ in 0..cycles / 4 {
             self.advance_tima_state();
@@ -89,20 +94,35 @@ impl Gb {
         }
     }
 
+    #[inline]
     pub(crate) fn write_div(&mut self) {
         self.set_system_clk(0);
     }
 
+    #[inline]
     pub(crate) fn write_tima(&mut self, val: u8) {
         self.tima = val;
     }
 
+    #[inline]
     pub(crate) fn write_tma(&mut self, val: u8) {
         self.tma = val;
     }
 
+    #[must_use]
+    #[inline]
+    pub(crate) const fn read_tac(&self) -> u8 {
+        0xF8 | self.tac
+    }
+
+    #[inline]
     pub(crate) fn write_tac(&mut self, val: u8) {
-        self.tac = val & 7;
-        self.tac_enable = val & 4 != 0;
+        self.tac = val;
+    }
+
+    #[must_use]
+    #[inline]
+    const fn tac_enabled(&self) -> bool {
+        self.tac & 4 != 0
     }
 }

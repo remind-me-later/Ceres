@@ -143,7 +143,6 @@ pub struct Gb {
     tma: u8,
     tac: u8,
     tima_state: TIMAState,
-    tac_enable: bool,
     wide_div_counter: u16,
 
     // peripherals
@@ -206,7 +205,6 @@ impl Gb {
             serial: Serial::default(),
             sp: Default::default(),
             svbk: Svbk::default(),
-            tac_enable: Default::default(),
             tac: Default::default(),
             tima_state: TIMAState::default(),
             tima: Default::default(),
@@ -215,6 +213,7 @@ impl Gb {
         }
     }
 
+    #[inline]
     pub fn run_samples(&mut self) -> (Sample, Sample) {
         while self.apu.samples_run() == 0 {
             self.run_cpu();
@@ -226,19 +225,23 @@ impl Gb {
     }
 
     #[must_use]
+    #[inline]
     pub fn cartridge(&mut self) -> &mut Cart {
         &mut self.cart
     }
 
     #[must_use]
+    #[inline]
     pub const fn pixel_data_rgba(&self) -> &[u8] {
         self.ppu.pixel_data_rgb()
     }
 
+    #[inline]
     pub fn press(&mut self, button: Button) {
         self.joy.press(button, &mut self.ints);
     }
 
+    #[inline]
     pub fn release(&mut self, button: Button) {
         self.joy.release(button);
     }

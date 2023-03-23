@@ -12,10 +12,13 @@ pub struct Interrupts {
 }
 
 impl Interrupts {
+    #[inline]
     pub(crate) fn ill(&mut self) {
         self.ie = 0;
     }
 
+    #[must_use]
+    #[inline]
     pub(crate) fn handle(&mut self) -> u16 {
         let ints = self.ifr & self.ie;
         let tz = (ints.trailing_zeros() & 7) as u16;
@@ -27,54 +30,71 @@ impl Interrupts {
         0x40 | tz << 3
     }
 
+    #[must_use]
+    #[inline]
     pub(crate) const fn any(&self) -> bool {
         self.ifr & self.ie != 0
     }
 
+    #[inline]
     pub(crate) fn enable(&mut self) {
         self.ime = true;
     }
 
+    #[inline]
     pub(crate) fn disable(&mut self) {
         self.ime = false;
     }
 
+    #[must_use]
+    #[inline]
     pub(crate) const fn enabled(&self) -> bool {
         self.ime
     }
 
+    #[inline]
     pub(crate) fn req_p1(&mut self) {
         self.ifr |= P1;
     }
 
+    #[inline]
     pub(crate) fn req_serial(&mut self) {
         self.ifr |= SERIAL;
     }
 
+    #[inline]
     pub(crate) fn req_vblank(&mut self) {
         self.ifr |= VBLANK;
     }
 
+    #[inline]
     pub(crate) fn req_lcd(&mut self) {
         self.ifr |= LCD;
     }
 
+    #[inline]
     pub(crate) fn req_timer(&mut self) {
         self.ifr |= TIMER;
     }
 
+    #[must_use]
+    #[inline]
     pub(crate) const fn read_if(&self) -> u8 {
         self.ifr | 0xE0
     }
 
+    #[must_use]
+    #[inline]
     pub(crate) const fn read_ie(&self) -> u8 {
         self.ie
     }
 
+    #[inline]
     pub(crate) fn write_if(&mut self, val: u8) {
         self.ifr = val & 0x1F;
     }
 
+    #[inline]
     pub(crate) fn write_ie(&mut self, val: u8) {
         self.ie = val;
     }

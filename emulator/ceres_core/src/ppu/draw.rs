@@ -53,6 +53,8 @@ impl Ppu {
         GRAYSCALE_PALETTE[index as usize]
     }
 
+    #[must_use]
+    #[inline]
     const fn win_enabled(&self, cgb_mode: &CgbMode) -> bool {
         match cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => {
@@ -62,6 +64,8 @@ impl Ppu {
         }
     }
 
+    #[must_use]
+    #[inline]
     const fn bg_enabled(&self, cgb_mode: &CgbMode) -> bool {
         match cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => self.lcdc & LCDC_BG_B != 0,
@@ -69,6 +73,8 @@ impl Ppu {
         }
     }
 
+    #[must_use]
+    #[inline]
     const fn cgb_master_priority(&self, cgb_mode: &CgbMode) -> bool {
         match cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => false,
@@ -76,14 +82,18 @@ impl Ppu {
         }
     }
 
+    #[must_use]
+    #[inline]
     fn bg_tile_map(&self) -> u16 {
         0x9800 | u16::from(self.lcdc & LCDC_BG_AREA != 0) << 10
     }
 
+    #[must_use]
+    #[inline]
     fn win_tile_map(&self) -> u16 {
         0x9800 | u16::from(self.lcdc & LCDC_WIN_AREA != 0) << 10
     }
-
+    #[must_use]
     fn tile_addr(&self, tile_num: u8) -> u16 {
         let signed = self.lcdc & LCDC_BG_SIGNED == 0;
         let base = 0x8000 | u16::from(signed) << 11;
@@ -101,10 +111,14 @@ impl Ppu {
         base + offset * 16
     }
 
+    #[must_use]
+    #[inline]
     fn vram_at_bank(&self, addr: u16, bank: u8) -> u8 {
         self.vram[((addr & 0x1FFF) + u16::from(bank) * VRAM_SIZE_GB) as usize]
     }
 
+    #[must_use]
+    #[inline]
     fn bg_tile(&self, tile_addr: u16, attr: u8) -> (u8, u8) {
         let bank = u8::from(attr & BG_VBK_B != 0);
         let lo = self.vram_at_bank(tile_addr, bank);
@@ -112,6 +126,8 @@ impl Ppu {
         (lo, hi)
     }
 
+    #[must_use]
+    #[inline]
     fn obj_tile(&self, tile_addr: u16, obj: &Obj) -> (u8, u8) {
         let bank = u8::from(obj.attr & SPR_TILE_BANK != 0);
         let lo = self.vram_at_bank(tile_addr, bank);
@@ -119,6 +135,7 @@ impl Ppu {
         (lo, hi)
     }
 
+    #[inline]
     pub(super) fn draw_scanline(&mut self, cgb_mode: &CgbMode) {
         let mut bg_priority = [Priority::Normal; PX_WIDTH as usize];
         let base_idx = u32::from(PX_WIDTH) * u32::from(self.ly);
@@ -128,6 +145,7 @@ impl Ppu {
         self.draw_obj(&mut bg_priority, base_idx, cgb_mode);
     }
 
+    #[inline]
     fn draw_bg(
         &mut self,
         bg_priority: &mut [Priority; PX_WIDTH as usize],
@@ -192,6 +210,7 @@ impl Ppu {
         }
     }
 
+    #[inline]
     fn draw_win(
         &mut self,
         bg_priority: &mut [Priority; PX_WIDTH as usize],
@@ -264,6 +283,8 @@ impl Ppu {
         }
     }
 
+    #[must_use]
+    #[inline]
     fn objs_in_ly(&mut self, height: u8, cgb_mode: &CgbMode) -> ([Obj; 10], u8) {
         let mut len: u8 = 0;
         let mut obj: [Obj; 10] = Default::default();
@@ -297,6 +318,7 @@ impl Ppu {
         (obj, len)
     }
 
+    #[inline]
     fn draw_obj(
         &mut self,
         bg_priority: &mut [Priority; PX_WIDTH as usize],
