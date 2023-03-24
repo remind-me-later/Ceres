@@ -108,6 +108,8 @@ const AFTER_HELP: &str = "KEY BINDINGS:
     | Start   | Return    |
     | Select  | Backspace |";
 
+const SCREEN_MUL: u32 = 3;
+
 fn main() -> anyhow::Result<()> {
     let args = Command::new(CERES_BIN)
         .bin_name(CERES_BIN)
@@ -207,9 +209,8 @@ impl Emu {
 
             const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
             const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
-            const MUL: u32 = 4;
-            const INIT_WIDTH: u32 = PX_WIDTH * MUL;
-            const INIT_HEIGHT: u32 = PX_HEIGHT * MUL;
+            const INIT_WIDTH: u32 = PX_WIDTH * SCREEN_MUL;
+            const INIT_HEIGHT: u32 = PX_HEIGHT * SCREEN_MUL;
 
             let window = window::WindowBuilder::new()
                 .with_title(CERES_STYLIZED)
@@ -337,6 +338,9 @@ impl Emu {
                             .window()
                             .set_fullscreen(Some(Fullscreen::Borderless(None))),
                     },
+                    KC::Z => {
+                        self.video.cycle_scale_mode();
+                    }
                     KC::P => {
                         #[cfg(feature = "screenshot")]
                         self.screenshot();

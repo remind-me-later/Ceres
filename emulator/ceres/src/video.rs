@@ -1,17 +1,17 @@
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub enum Scaling {
     #[default]
-    Nearest,
-    Scale2x,
-    Scale3x,
+    Nearest = 0,
+    Scale2x = 1,
+    Scale3x = 2,
 }
 
 impl Scaling {
-    const fn entry_point(self) -> &'static str {
+    pub fn next(self) -> Self {
         match self {
-            Scaling::Nearest => "fs_near",
-            Scaling::Scale2x => "fs_scale2x",
-            Scaling::Scale3x => "fs_scale3x",
+            Scaling::Nearest => Scaling::Scale2x,
+            Scaling::Scale2x => Scaling::Scale3x,
+            Scaling::Scale3x => Scaling::Nearest,
         }
     }
 }
@@ -20,14 +20,17 @@ pub struct State {
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
+    window: winit::window::Window,
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
+
     render_pipeline: wgpu::RenderPipeline,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
+    scaling: Scaling,
+    scale_uniform_buffer: wgpu::Buffer,
     texture: Texture,
     diffuse_bind_group: wgpu::BindGroup,
-    window: winit::window::Window,
 }
 
 impl State {
@@ -105,11 +108,27 @@ impl State {
                         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
                         count: None,
                     },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
                 ],
                 label: None,
             });
 
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
+
+        let scale_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&[scaling as u32]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
 
         let diffuse_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &texture_bind_group_layout,
@@ -121,6 +140,10 @@ impl State {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: scale_uniform_buffer.as_entire_binding(),
                 },
             ],
             label: None,
@@ -175,7 +198,7 @@ impl State {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: scaling.entry_point(),
+                entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
@@ -195,19 +218,31 @@ impl State {
             surface,
             device,
             queue,
+            window,
             config,
             size,
             render_pipeline,
             uniform_buffer,
             uniform_bind_group,
+            scaling,
+            scale_uniform_buffer,
             texture,
             diffuse_bind_group,
-            window,
         })
     }
 
     pub const fn window(&self) -> &winit::window::Window {
         &self.window
+    }
+
+    pub fn cycle_scale_mode(&mut self) {
+        self.scaling = self.scaling.next();
+
+        self.queue.write_buffer(
+            &self.scale_uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[self.scaling as u32]),
+        );
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {

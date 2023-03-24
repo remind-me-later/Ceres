@@ -38,97 +38,110 @@ fn vs_main(in: Vertexinput) -> VertexOutput {
 var t_diffuse: texture_2d<f32>;
 @group(0)@binding(1)
 var s_diffuse: sampler;
+@group(0)@binding(2)
+var<uniform> s_type: u32;
 
 @fragment
-fn fs_near(in: VertexOutput) -> @location(0) vec4<f32> {
-    return textureSample(t_diffuse, s_diffuse, in.tex_coords);
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    var ret: vec4<f32>;
+
+    switch s_type {
+        default: {
+            // nearest neighbour
+            ret = textureSample(t_diffuse, s_diffuse, in.tex_coords);
+        }
+        case 1u: {
+            // scale2x
+            ret = fs_scale2x(in.tex_coords);
+        }
+         case 2u: {
+            // scale3x
+            ret = fs_scale3x(in.tex_coords);
+        }
+    };
+
+    return ret;
 }
 
-@fragment
-fn fs_scale2x(in: VertexOutput) -> @location(0) vec4<f32> {
+fn fs_scale2x(tex_coords: vec2<f32>) -> vec4<f32> {
     let dims = vec2<f32>(textureDimensions(t_diffuse));
     // offsets
     let off = vec2(1.0, 1.0) / dims;
-    /*
-		  a		    p0 p1
-		c p b		p2 p3
-		  d
-	*/
+    
+	//	  a         p0 p1
+	//	c p b       p2 p3
+	//	  d
 
-    let tc = in.tex_coords;
+    let tc = tex_coords;
 
     let p = textureSample(t_diffuse, s_diffuse, tc).xyz;
-	let a = textureSample(t_diffuse, s_diffuse, tc + vec2(0.0, -off.y)).xyz;
+    let a = textureSample(t_diffuse, s_diffuse, tc + vec2(0.0, -off.y)).xyz;
     let c = textureSample(t_diffuse, s_diffuse, tc + vec2(-off.x, 0.0)).xyz;
     let b = textureSample(t_diffuse, s_diffuse, tc + vec2(off.x, 0.0)).xyz;
     let d = textureSample(t_diffuse, s_diffuse, tc + vec2(0.0, off.y)).xyz;
     
     // subpixel position
-    let pp = floor(2.0 * fract(in.tex_coords * dims));
+    let pp = floor(2.0 * fract(tc * dims));
     let ret = select(
         select(
-                select(p, d, all(b == d) && any(b != a) && any(d != c)),
-                select(p, c, all(d == c) && any(d != b) && any(c != a)),
-                pp.x == 0.0),
+            select(p, d, all(b == d) && any(b != a) && any(d != c)),
+            select(p, c, all(d == c) && any(d != b) && any(c != a)),
+            pp.x == 0.0
+        ),
         select(
-                select(p, b, all(a == b) && any(a != c) && any(b != d)),
-                select(p, a, all(c == a) && any(c != d) && any(a != b)),
-                pp.x == 0.0),
-        pp.y == 0.0);
+            select(p, b, all(a == b) && any(a != c) && any(b != d)),
+            select(p, a, all(c == a) && any(c != d) && any(a != b)),
+            pp.x == 0.0
+        ),
+        pp.y == 0.0
+    );
     return vec4(ret, 1.0);
 }
 
-@fragment
-fn fs_scale3x(in: VertexOutput) -> @location(0) vec4<f32> {
+fn fs_scale3x(tex_coords: vec2<f32>) -> vec4<f32> {
     let dims = vec2<f32>(textureDimensions(t_diffuse));
     // offsets
     let off = vec2(1.0, 1.0) / dims;
-    /*
-        get texels:
+    
+	//	a b c	    p0 p1 p2
+	//	d p f		p3 p4 p5
+	//	g h i       p6 p7 p8
 
-		a b c	    p0 p1 p2
-		d p f		p3 p4 p5
-		g h i       p6 p7 p8
-	*/
-    let tc = in.tex_coords;
+    let tc = tex_coords;
 
     let p = textureSample(t_diffuse, s_diffuse, tc).xyz;
-	let a = textureSample(t_diffuse, s_diffuse, tc + vec2(-off.x, -off.y)).xyz;
+    let a = textureSample(t_diffuse, s_diffuse, tc + vec2(-off.x, -off.y)).xyz;
     let b = textureSample(t_diffuse, s_diffuse, tc + vec2(0.0, -off.y)).xyz;
     let c = textureSample(t_diffuse, s_diffuse, tc + vec2(off.x, -off.y)).xyz;
     let d = textureSample(t_diffuse, s_diffuse, tc + vec2(-off.x, 0.0)).xyz;
     let f = textureSample(t_diffuse, s_diffuse, tc + vec2(off.x, 0.0)).xyz;
     let g = textureSample(t_diffuse, s_diffuse, tc + vec2(-off.x, off.y)).xyz;
-    let h = textureSample(t_diffuse, s_diffuse, tc + vec2( 0.0, off.y)).xyz;
+    let h = textureSample(t_diffuse, s_diffuse, tc + vec2(0.0, off.y)).xyz;
     let i = textureSample(t_diffuse, s_diffuse, tc + vec2(off.x, off.y)).xyz;
 
     // subpixel position
-    let pp = floor(3.0 * fract(in.tex_coords * dims));
+    let pp = floor(3.0 * fract(tc * dims));
     let ret = select(
         select(
-            select(
-                select(
-                    select(p, f, all(f == h) && any(f != b) && any(h != d)), 
-                    select(p, h, (all(f == h) && any(f != b) && any(h != d) && any(p != g)) || (all(h == d) && any(h != f) && any(d != b) && any(p != i))), 
-                    pp.x == 1.0), 
-                select(p, d, all(h == d) && any(h != f) && any(d != b)), 
-                pp.x == 0.0),  
-            select(
-                select(
-                    select(p, f, (all(b == f) && any(b != d) && any(f != h) && any(p != i)) || (all(f == h) && any(f != b) && any(h != d) && any(p != c))),
-                    p,
-                    pp.x == 1.0),  
-                select(p, d, (all(h == d) && any(h != f) && any(d != b) && any(p != a)) || (all(d == b) && any(d != h) && any(b != f) && any(p != g))), 
-                pp.x == 0.0), 
-            pp.y == 1.0),  
-        select(
-            select(
-                select(p, f, all(b == f) && any(b != d) && any(f != h)), 
-                select(p, b, (all(d == b) && any(d != h) && any(b != f) && any(p != c)) || (all(b == f) && any(b != d) && any(f != h) && any(p != a))), 
-                pp.x == 1.0),
-            select(p, d, all(d == b) && any(d != h) && any(b != f)), 
-            pp.x == 0.0), 
-        pp.y == 0.0);
-    
+            select(select(
+                select(p, f, all(f == h) && any(f != b) && any(h != d)),
+                select(p, h, (all(f == h) && any(f != b) && any(h != d) && any(p != g)) || (all(h == d) && any(h != f) && any(d != b) && any(p != i))),
+                pp.x == 1.0
+            ), select(p, d, all(h == d) && any(h != f) && any(d != b)), pp.x == 0.0),
+            select(select(
+                select(p, f, (all(b == f) && any(b != d) && any(f != h) && any(p != i)) || (all(f == h) && any(f != b) && any(h != d) && any(p != c))),
+                p,
+                pp.x == 1.0
+            ), select(p, d, (all(h == d) && any(h != f) && any(d != b) && any(p != a)) || (all(d == b) && any(d != h) && any(b != f) && any(p != g))), pp.x == 0.0),
+            pp.y == 1.0
+        ),
+        select(select(
+            select(p, f, all(b == f) && any(b != d) && any(f != h)),
+            select(p, b, (all(d == b) && any(d != h) && any(b != f) && any(p != c)) || (all(b == f) && any(b != d) && any(f != h) && any(p != a))),
+            pp.x == 1.0
+        ), select(p, d, all(d == b) && any(d != h) && any(b != f)), pp.x == 0.0),
+        pp.y == 0.0
+    );
+
     return vec4(ret, 1.0);
 }
