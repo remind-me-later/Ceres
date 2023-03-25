@@ -25,10 +25,14 @@ pub struct State {
     size: winit::dpi::PhysicalSize<u32>,
 
     render_pipeline: wgpu::RenderPipeline,
-    uniform_buffer: wgpu::Buffer,
+
+    // Shader config binds
+    dim_uniform: wgpu::Buffer,
+    scale_type_uniform: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     scaling: Scaling,
-    scale_uniform_buffer: wgpu::Buffer,
+
+    // Texture binds
     texture: Texture,
     diffuse_bind_group: wgpu::BindGroup,
 }
@@ -108,27 +112,11 @@ impl State {
                         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
                         count: None,
                     },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
                 ],
                 label: None,
             });
 
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
-
-        let scale_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&[scaling as u32]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
 
         let diffuse_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &texture_bind_group_layout,
@@ -141,13 +129,36 @@ impl State {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&sampler),
                 },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: scale_uniform_buffer.as_entire_binding(),
-                },
             ],
             label: None,
         });
+
+        let uniform_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+                label: None,
+            });
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
@@ -155,27 +166,24 @@ impl State {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let uniform_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-                label: None,
-            });
+        let scale_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&[scaling as u32]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
 
         let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &uniform_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: scale_uniform_buffer.as_entire_binding(),
+                },
+            ],
             label: None,
         });
 
@@ -222,10 +230,10 @@ impl State {
             config,
             size,
             render_pipeline,
-            uniform_buffer,
+            dim_uniform: uniform_buffer,
             uniform_bind_group,
             scaling,
-            scale_uniform_buffer,
+            scale_type_uniform: scale_uniform_buffer,
             texture,
             diffuse_bind_group,
         })
@@ -239,7 +247,7 @@ impl State {
         self.scaling = self.scaling.next();
 
         self.queue.write_buffer(
-            &self.scale_uniform_buffer,
+            &self.scale_type_uniform,
             0,
             bytemuck::cast_slice(&[self.scaling as u32]),
         );
@@ -262,7 +270,7 @@ impl State {
             };
 
             self.queue
-                .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[x, y]));
+                .write_buffer(&self.dim_uniform, 0, bytemuck::cast_slice(&[x, y]));
 
             self.size = new_size;
             self.config.width = new_size.width;

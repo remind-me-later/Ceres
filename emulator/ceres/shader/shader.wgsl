@@ -1,6 +1,16 @@
-// Vertex shader
+// Globals
+
+@group(0) @binding(0)
+var txt: texture_2d<f32>;
+@group(0)@binding(1)
+var smpl: sampler;
+
 @group(1) @binding(0)
-var<uniform> unif: vec2<f32>;
+var<uniform> dims: vec2<f32>;
+@group(1)@binding(1)
+var<uniform> scale_type: u32;
+
+// Vertex shader
 
 struct Vertexinput {
     @builtin(vertex_index) vert_idx: u32,
@@ -28,27 +38,21 @@ fn vs_main(in: Vertexinput) -> VertexOutput {
     );
 
     var out: VertexOutput;
-    out.clip_position = vec4(vert_coord * unif, 0.0, 1.0);
+    out.clip_position = vec4(vert_coord * dims, 0.0, 1.0);
     out.tex_coords = saturate(vert_coord);
     return out;
 }
 
 // fragment shader
-@group(0) @binding(0)
-var t_diffuse: texture_2d<f32>;
-@group(0)@binding(1)
-var s_diffuse: sampler;
-@group(0)@binding(2)
-var<uniform> s_type: u32;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var ret: vec4<f32>;
 
-    switch s_type {
+    switch scale_type {
         default: {
             // nearest neighbour
-            ret = textureSample(t_diffuse, s_diffuse, in.tex_coords);
+            ret = textureSample(txt, smpl, in.tex_coords);
         }
         case 1u: {
             // scale2x
@@ -64,7 +68,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 
 fn fs_scale2x(tex_coords: vec2<f32>) -> vec4<f32> {
-    let dims = vec2<f32>(textureDimensions(t_diffuse));
+    let dims = vec2<f32>(textureDimensions(txt));
     // offsets
     let off = vec2(1.0, 1.0) / dims;
     
@@ -74,11 +78,11 @@ fn fs_scale2x(tex_coords: vec2<f32>) -> vec4<f32> {
 
     let tc = tex_coords;
 
-    let p = textureSample(t_diffuse, s_diffuse, tc).xyz;
-    let a = textureSample(t_diffuse, s_diffuse, tc + vec2(0.0, -off.y)).xyz;
-    let c = textureSample(t_diffuse, s_diffuse, tc + vec2(-off.x, 0.0)).xyz;
-    let b = textureSample(t_diffuse, s_diffuse, tc + vec2(off.x, 0.0)).xyz;
-    let d = textureSample(t_diffuse, s_diffuse, tc + vec2(0.0, off.y)).xyz;
+    let p = textureSample(txt, smpl, tc).xyz;
+    let a = textureSample(txt, smpl, tc + vec2(0.0, -off.y)).xyz;
+    let c = textureSample(txt, smpl, tc + vec2(-off.x, 0.0)).xyz;
+    let b = textureSample(txt, smpl, tc + vec2(off.x, 0.0)).xyz;
+    let d = textureSample(txt, smpl, tc + vec2(0.0, off.y)).xyz;
     
     // subpixel position
     let pp = floor(2.0 * fract(tc * dims));
@@ -99,7 +103,7 @@ fn fs_scale2x(tex_coords: vec2<f32>) -> vec4<f32> {
 }
 
 fn fs_scale3x(tex_coords: vec2<f32>) -> vec4<f32> {
-    let dims = vec2<f32>(textureDimensions(t_diffuse));
+    let dims = vec2<f32>(textureDimensions(txt));
     // offsets
     let off = vec2(1.0, 1.0) / dims;
     
@@ -109,15 +113,15 @@ fn fs_scale3x(tex_coords: vec2<f32>) -> vec4<f32> {
 
     let tc = tex_coords;
 
-    let p = textureSample(t_diffuse, s_diffuse, tc).xyz;
-    let a = textureSample(t_diffuse, s_diffuse, tc + vec2(-off.x, -off.y)).xyz;
-    let b = textureSample(t_diffuse, s_diffuse, tc + vec2(0.0, -off.y)).xyz;
-    let c = textureSample(t_diffuse, s_diffuse, tc + vec2(off.x, -off.y)).xyz;
-    let d = textureSample(t_diffuse, s_diffuse, tc + vec2(-off.x, 0.0)).xyz;
-    let f = textureSample(t_diffuse, s_diffuse, tc + vec2(off.x, 0.0)).xyz;
-    let g = textureSample(t_diffuse, s_diffuse, tc + vec2(-off.x, off.y)).xyz;
-    let h = textureSample(t_diffuse, s_diffuse, tc + vec2(0.0, off.y)).xyz;
-    let i = textureSample(t_diffuse, s_diffuse, tc + vec2(off.x, off.y)).xyz;
+    let p = textureSample(txt, smpl, tc).xyz;
+    let a = textureSample(txt, smpl, tc + vec2(-off.x, -off.y)).xyz;
+    let b = textureSample(txt, smpl, tc + vec2(0.0, -off.y)).xyz;
+    let c = textureSample(txt, smpl, tc + vec2(off.x, -off.y)).xyz;
+    let d = textureSample(txt, smpl, tc + vec2(-off.x, 0.0)).xyz;
+    let f = textureSample(txt, smpl, tc + vec2(off.x, 0.0)).xyz;
+    let g = textureSample(txt, smpl, tc + vec2(-off.x, off.y)).xyz;
+    let h = textureSample(txt, smpl, tc + vec2(0.0, off.y)).xyz;
+    let i = textureSample(txt, smpl, tc + vec2(off.x, off.y)).xyz;
 
     // subpixel position
     let pp = floor(3.0 * fract(tc * dims));
