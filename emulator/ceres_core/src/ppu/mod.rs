@@ -38,7 +38,7 @@ const OAM_SIZE: u16 = 0x100;
 const VRAM_SIZE_GB: u16 = 0x2000;
 const VRAM_SIZE_CGB: u16 = VRAM_SIZE_GB * 2;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Mode {
     HBlank = 0,
     VBlank = 1,
@@ -87,16 +87,18 @@ pub struct Ppu {
 
 impl Default for Ppu {
     fn default() -> Self {
+        let mode = Mode::HBlank;
+
         Self {
             vram: [0; VRAM_SIZE_CGB as usize],
             oam: [0; OAM_SIZE as usize],
-            cycles: Mode::OamScan.cycles(0),
+            cycles: mode.cycles(0),
             // Default
             lcdc: Default::default(),
-            stat: STAT_LYC_B | Mode::OamScan as u8,
+            stat: mode as u8,
             scy: Default::default(),
             scx: Default::default(),
-            ly: Default::default(),
+            ly: 0,
             lyc: Default::default(),
             bgp: Default::default(),
             obp0: Default::default(),
@@ -271,16 +273,24 @@ impl Ppu {
     pub(crate) fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts) {
         // turn off
         if val & LCDC_ON_B == 0 && self.lcdc & LCDC_ON_B != 0 {
-            // debug_assert!(self.mode() == Mode::VBlank);
-            // self.scx = 0;
-            // self.rgb_buf.clear();
+            // FIXME: breaks 'alone in the dark' and the menu fade out in 'Links awakening' among others
+            // debug_assert!(
+            //     matches!(self.mode(), Mode::VBlank),
+            //     "current mode = {:?}, cycles = {}, ly = {}",
+            //     self.mode(),
+            //     self.cycles,
+            //     self.ly
+            // );
+
             self.ly = 0;
         }
 
         // turn on
         if val & LCDC_ON_B != 0 && self.lcdc & LCDC_ON_B == 0 {
-            self.set_mode_stat(Mode::OamScan);
-            self.cycles = Mode::OamScan.cycles(self.scx);
+            let mode = Mode::HBlank;
+
+            self.set_mode_stat(mode);
+            self.cycles = mode.cycles(self.scx);
             self.ly = 0;
             self.check_lyc(ints);
         }
@@ -356,28 +366,34 @@ impl Ppu {
 
         if self.cycles < 0 {
             match self.mode() {
-                Mode::OamScan => self.enter_mode(Mode::Drawing, ints),
+                Mode::OamScan => {
+                    debug_assert!(self.ly <= 143);
+                    self.enter_mode(Mode::Drawing, ints);
+                }
                 Mode::Drawing => {
+                    debug_assert!(self.ly <= 143);
                     self.draw_scanline(cgb_mode);
                     self.enter_mode(Mode::HBlank, ints);
                 }
                 Mode::HBlank => {
+                    debug_assert!(self.ly <= 143);
                     self.ly += 1;
-                    if self.ly < 144 {
-                        self.enter_mode(Mode::OamScan, ints);
-                    } else {
+                    if self.ly > 143 {
                         self.enter_mode(Mode::VBlank, ints);
+                    } else {
+                        self.enter_mode(Mode::OamScan, ints);
                     }
                     self.check_lyc(ints);
                 }
                 Mode::VBlank => {
+                    debug_assert!(self.ly >= 144 && self.ly <= 153);
                     self.ly += 1;
                     if self.ly > 153 {
                         self.ly = 0;
                         self.rgba_buf_present = self.rgb_buf.clone();
                         self.enter_mode(Mode::OamScan, ints);
                     } else {
-                        self.cycles = self.cycles.wrapping_add(self.mode().cycles(self.scx));
+                        self.cycles += self.mode().cycles(self.scx);
                     }
                     self.check_lyc(ints);
                 }
@@ -414,7 +430,7 @@ impl Ppu {
 
     fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
         self.set_mode_stat(mode);
-        self.cycles = self.cycles.wrapping_add(mode.cycles(self.scx));
+        self.cycles += self.mode().cycles(self.scx);
 
         match mode {
             Mode::OamScan => {
@@ -433,7 +449,7 @@ impl Ppu {
 
                 // TODO: why?
                 // if self.stat & STAT_IF_OAM_B != 0 {
-                //   *ifr |= IF_LCD_B;
+                //     ints.req_lcd();
                 // }
 
                 self.win_skipped = 0;

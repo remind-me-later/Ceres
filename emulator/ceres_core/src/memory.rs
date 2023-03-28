@@ -491,7 +491,7 @@ impl Key1 {
 
     #[inline]
     pub fn write(&mut self, val: u8) {
-        self.key1 = val;
+        self.key1 = self.key1 & 0x80 | val & 1;
     }
 
     #[must_use]

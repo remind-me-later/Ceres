@@ -1,5 +1,5 @@
 use {
-    alloc::{boxed::Box, vec::Vec},
+    alloc::boxed::Box,
     core::{fmt::Display, num::NonZeroU8},
     Mbc::{Mbc0, Mbc1, Mbc2, Mbc3, Mbc5},
 };
@@ -20,12 +20,10 @@ enum Mbc {
 
 impl Mbc {
     fn mbc_and_battery(mbc_byte: u8, rom_size: ROMSize) -> Result<(Self, bool), Error> {
-        let bank_mode = match rom_size {
-            ROMSize::Kb32 | ROMSize::Kb64 | ROMSize::Kb128 | ROMSize::Kb256 | ROMSize::Kb512 => {
-                false
-            }
-            ROMSize::Mb1 | ROMSize::Mb2 | ROMSize::Mb4 | ROMSize::Mb8 => true,
-        };
+        let bank_mode = matches!(
+            rom_size,
+            ROMSize::Mb1 | ROMSize::Mb2 | ROMSize::Mb4 | ROMSize::Mb8
+        );
 
         let res = match mbc_byte {
             0x00 => (Mbc0, false),
@@ -59,6 +57,8 @@ pub enum Error {
     InvalidRamSize,
     NonAsciiTitleString,
     UnsupportedMBC,
+    RomSizeDifferentThanActual,
+    RamSizeDifferentThanActual,
 }
 
 impl Display for Error {
@@ -76,6 +76,14 @@ impl Display for Error {
          characters"
             ),
             Self::UnsupportedMBC => write!(f, "unsupported MBC"),
+            Self::RomSizeDifferentThanActual => write!(
+                f,
+                "header ROM size is different from the size of the supplied file"
+            ),
+            Self::RamSizeDifferentThanActual => write!(
+                f,
+                "header RAM size is different from the size of the supplied file"
+            ),
         }
     }
 }
@@ -103,7 +111,7 @@ pub struct Cart {
 }
 
 impl Cart {
-    pub fn new(mut rom: Vec<u8>, ram: Option<Vec<u8>>) -> Result<Self, Error> {
+    pub fn new(rom: Box<[u8]>, ram: Option<Box<[u8]>>) -> Result<Self, Error> {
         let rom_size = ROMSize::new(rom[0x148])?;
         let ram_size = RAMSize::new(rom[0x149])?;
         let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], rom_size)?;
@@ -112,18 +120,18 @@ impl Cart {
         // println!("{rom_size:?}");
         // println!("{ram_size:?}");
 
-        rom.truncate(rom_size.size_bytes() as usize);
-        let rom = rom.into_boxed_slice();
+        if rom_size.size_bytes() as usize != rom.len() {
+            return Err(Error::RomSizeDifferentThanActual);
+        }
 
-        let ram = ram
-            .map_or_else(
-                || alloc::vec![0xFF; ram_size.size_bytes() as usize],
-                |mut r| {
-                    r.truncate(ram_size.size_bytes() as usize);
-                    r
-                },
-            )
-            .into_boxed_slice();
+        let ram = if let Some(ram) = ram {
+            if ram_size.size_bytes() as usize != ram.len() {
+                return Err(Error::RamSizeDifferentThanActual);
+            }
+            ram
+        } else {
+            alloc::vec![0xFF; ram_size.size_bytes() as usize].into_boxed_slice()
+        };
 
         Ok(Self {
             mbc,

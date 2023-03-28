@@ -49,6 +49,7 @@ impl Gb {
         self.write_mem(addr, val);
     }
 
+    #[must_use]
     #[inline]
     fn read(&mut self, addr: u16) -> u8 {
         self.tick_m_cycle();
@@ -60,6 +61,7 @@ impl Gb {
         self.advance_t_cycles(4);
     }
 
+    #[must_use]
     #[inline]
     fn imm8(&mut self) -> u8 {
         let val = self.read(self.pc);
@@ -67,6 +69,7 @@ impl Gb {
         val
     }
 
+    #[must_use]
     #[inline]
     fn imm16(&mut self) -> u16 {
         let lo = u16::from(self.imm8());
@@ -86,8 +89,9 @@ impl Gb {
         }
     }
 
+    #[must_use]
     #[inline]
-    fn get_rr(&self, id: u8) -> u16 {
+    const fn get_rr(&self, id: u8) -> u16 {
         match id {
             0 => self.af,
             1 => self.bc,
@@ -98,6 +102,7 @@ impl Gb {
         }
     }
 
+    #[must_use]
     fn get_r(&mut self, op: u8) -> u8 {
         let id = ((op >> 1) + 1) & 3;
         let lo = op & 1 != 0;
@@ -366,7 +371,7 @@ impl Gb {
     fn or(&mut self, val: u16) {
         let a = self.af >> 8;
         self.af = (a | val) << 8;
-        if (a | val) == 0 {
+        if a | val == 0 {
             self.af |= ZF;
         }
     }
@@ -435,7 +440,7 @@ impl Gb {
         if a == val {
             self.af |= ZF;
         }
-        if (a & 0xF) < (val & 0xF) {
+        if a & 0xF < val & 0xF {
             self.af |= HF;
         }
         if a < val {
@@ -464,11 +469,11 @@ impl Gb {
 
         self.af &= !(NF | ZF | HF);
 
-        if (rr & 0x0F) == 0 {
+        if rr & 0x0F == 0 {
             self.af |= HF;
         }
 
-        if (rr & 0xFF) == 0 {
+        if rr & 0xFF == 0 {
             self.af |= ZF;
         }
     }
@@ -718,6 +723,8 @@ impl Gb {
         }
     }
 
+    #[must_use]
+    #[inline]
     const fn br_cc(&self, op: u8) -> bool {
         match (op >> 3) & 3 {
             0 => self.af & ZF == 0,
@@ -749,10 +756,14 @@ impl Gb {
 
     #[inline]
     fn stop(&mut self) {
-        self.imm8();
+        #[allow(unused_must_use)]
+        {
+            self.imm8();
+        }
 
         if self.key1.requested() {
             self.key1.change_speed();
+            self.write_div();
 
             // TODO: div should not tick
             for _ in 0..2050 {
@@ -854,6 +865,7 @@ impl Gb {
         self.push(self.get_rr(id));
     }
 
+    #[must_use]
     #[inline]
     fn pop(&mut self) -> u16 {
         let val = u16::from(self.read(self.sp));

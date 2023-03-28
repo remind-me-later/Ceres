@@ -101,6 +101,7 @@ impl SweepTrait for Sweep {
     fn trigger(&mut self, freq: &mut u16, on: &mut bool) {
         self.shwf = *freq;
         self.timer = 0;
+        // restart
         self.on = self.pace > 0 && self.shift != 0;
         self.shpc = NonZeroU8::new(if self.pace == 0 { 8 } else { self.pace }).unwrap();
 

@@ -246,8 +246,10 @@ impl Emu {
             rom_path: &Path,
             sav_path: &Path,
         ) -> anyhow::Result<Arc<Mutex<Gb>>> {
-            let rom = fs::read(rom_path).context("couldn't open rom file")?;
-            let ram = fs::read(sav_path).ok();
+            let rom = fs::read(rom_path)
+                .context("couldn't open rom file")?
+                .into_boxed_slice();
+            let ram = fs::read(sav_path).map(Vec::into_boxed_slice).ok();
             let cart = ceres_core::Cart::new(rom, ram).context("invalid rom header")?;
             let sample_rate = audio::Renderer::sample_rate();
 
