@@ -1,9 +1,9 @@
 .PHONY: all test clean
 
 all:
-	$(MAKE) -C bootroms
+	$(MAKE) -C gb-bootroms
 	cd emulator && cargo build --release
 
 clean:
-	$(MAKE) -C bootroms clean
+	$(MAKE) -C gb-bootroms clean
 	cd emulator && cargo clean
