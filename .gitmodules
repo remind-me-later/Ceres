@@ -1,3 +1,6 @@
 [submodule "gb-bootroms"]
 	path = gb-bootroms
 	url = git@github.com:ISSOtm/gb-bootroms.git
+[submodule "ceres-images"]
+	path = ceres-images
+	url = git@github.com:remind-me-later/ceres-images.git

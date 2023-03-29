@@ -1,3 +1,5 @@
+use alloc::borrow::Cow;
+
 #[derive(Default, Clone, Copy)]
 pub enum Scaling {
     #[default]
@@ -194,7 +196,10 @@ impl State {
                 push_constant_ranges: &[],
             });
 
-        let shader = device.create_shader_module(wgpu::include_spirv!("../shader/shader.spv"));
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("../shader/shader.wgsl"))),
+        });
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: None,

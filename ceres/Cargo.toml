@@ -15,7 +15,7 @@ anyhow = { version = "*", default-features = false, features = ["std"] }
 cpal = { version = "*", default-features = false }
 
 # video
-wgpu = { version = "*", default-features = false, features = ["spirv"] }
+wgpu = { version = "*" }
 pollster = { version = "*", default-features = false }
 bytemuck = { version = "*", default-features = false }
 # TODO: wait for better wayland decoration support

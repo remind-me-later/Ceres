@@ -39,7 +39,8 @@ fn vs_main(in: Vertexinput) -> VertexOutput {
 
     var out: VertexOutput;
     out.clip_position = vec4(vert_coord * dims, 0.0, 1.0);
-    out.tex_coords = saturate(vert_coord);
+    // FIXME: ugly hack
+    out.tex_coords = saturate(vec2(vert_coord.x, -vert_coord.y));
     return out;
 }
 
