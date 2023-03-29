@@ -156,9 +156,9 @@ pub struct Gb {
 impl Gb {
     #[must_use]
     pub fn new(model: Model, sample_rate: i32, cart: Cart) -> Self {
-        const DMG_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/dmg_boot.bin");
-        const MGB_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/mgb_boot.bin");
-        const CGB_BOOTROM: &[u8] = include_bytes!("../../../bootroms/bin/cgb_boot_fast.bin");
+        const DMG_BOOTROM: &[u8] = include_bytes!("../../../gb-bootroms/bin/dmg.bin");
+        const MGB_BOOTROM: &[u8] = include_bytes!("../../../gb-bootroms/bin/mgb.bin");
+        const CGB_BOOTROM: &[u8] = include_bytes!("../../../gb-bootroms/bin/cgb.bin");
 
         let cgb_mode = match model {
             Model::Dmg | Model::Mgb => CgbMode::Dmg,
