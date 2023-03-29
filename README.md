@@ -18,14 +18,15 @@ A (very experimental) GameBoy/Color emulator written in rust.
 
 Required:
 
-- A C compiler
 - [RGBDS toolchain](https://rgbds.gbdev.io/)
 
-To build just `make`.
+To build just:
+
+- Enter the `gb-bootroms` directory and `make`.
+- In the root directory `cargo build --release`
 
 ## Quick start
 
-- Enter the `emulator` directory.
 - To run a given `rom.gb` just type `cargo run --release rom.gb`.
 - To see usage of the program: `cargo run --release -- --help`.
 
