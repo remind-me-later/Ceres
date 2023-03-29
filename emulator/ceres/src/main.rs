@@ -256,12 +256,14 @@ impl Emu {
             Ok(Arc::new(Mutex::new(Gb::new(model, sample_rate, cart))))
         }
 
-        let event_loop = EventLoop::new();
-        let video = init_video(&event_loop, scaling).await?;
-
+        // Try to create GB before creating window
         let sav_path = rom_path.with_extension("sav");
         let gb = init_gb(model, &rom_path, &sav_path)?;
+
         let audio = init_audio(&gb)?;
+
+        let event_loop = EventLoop::new();
+        let video = init_video(&event_loop, scaling).await?;
 
         Ok(Self {
             event_loop: Some(event_loop),
