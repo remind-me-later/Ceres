@@ -67,6 +67,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     return ret;
 }
 
+fn eq(a: vec3<f32>, b: vec3<f32>) -> bool {
+    return all(a == b);
+}
+
+fn neq(a: vec3<f32>, b: vec3<f32>) -> bool {
+    return any(a != b);
+}
+
 fn fs_scale2x(tex_coords: vec2<f32>) -> vec4<f32> {
     let dims = vec2<f32>(textureDimensions(txt));
     // offsets
@@ -83,22 +91,20 @@ fn fs_scale2x(tex_coords: vec2<f32>) -> vec4<f32> {
     let c = textureSample(txt, smpl, tc + vec2(-off.x, 0.0)).xyz;
     let b = textureSample(txt, smpl, tc + vec2(off.x, 0.0)).xyz;
     let d = textureSample(txt, smpl, tc + vec2(0.0, off.y)).xyz;
-    
+
+    let p0 = select(p, a, eq(c, a) && neq(c, d) && neq(a, b));
+    let p1 = select(p, b, eq(a, b) && neq(a, c) && neq(b, d));
+    let p2 = select(p, c, eq(d, c) && neq(d, b) && neq(c, a)) ;
+    let p3 = select(p, d, eq(b, d) && neq(b, a) && neq(d, c));
+
     // subpixel position
     let pp = floor(2.0 * fract(tc * dims));
     let ret = select(
-        select(
-            select(p, d, all(b == d) && any(b != a) && any(d != c)),
-            select(p, c, all(d == c) && any(d != b) && any(c != a)),
-            pp.x == 0.0
-        ),
-        select(
-            select(p, b, all(a == b) && any(a != c) && any(b != d)),
-            select(p, a, all(c == a) && any(c != d) && any(a != b)),
-            pp.x == 0.0
-        ),
+        select(p3, p2, pp.x == 0.0),
+        select(p1, p0, pp.x == 0.0),
         pp.y == 0.0
     );
+
     return vec4(ret, 1.0);
 }
 
@@ -108,7 +114,7 @@ fn fs_scale3x(tex_coords: vec2<f32>) -> vec4<f32> {
     let off = vec2(1.0, 1.0) / dims;
     
 	//	a b c	    p0 p1 p2
-	//	d p f		p3 p4 p5
+	//	d p f		p3 p  p5
 	//	g h i       p6 p7 p8
 
     let tc = tex_coords;
@@ -123,27 +129,24 @@ fn fs_scale3x(tex_coords: vec2<f32>) -> vec4<f32> {
     let h = textureSample(txt, smpl, tc + vec2(0.0, off.y)).xyz;
     let i = textureSample(txt, smpl, tc + vec2(off.x, off.y)).xyz;
 
+    let p0 = select(p, d, eq(d, b) && neq(d, h) && neq(b, f));
+    let p1 = select(p, b, (eq(d, b) && neq(d, h) && neq(b, f) && neq(p, c)) || (eq(b, f) && neq(b, d) && neq(f, h) && neq(p, a)));
+    let p2 = select(p, f, eq(b, f) && neq(b, d) && neq(f, h));
+    let p3 = select(p, d, (eq(h, d) && neq(h, f) && neq(d, b) && neq(p, a)) || (eq(d, b) && neq(d, h) && neq(b, f) && neq(p, g)));
+    let p5 = select(p, f, (eq(b, f) && neq(b, d) && neq(f, h) && neq(p, i)) || (eq(f, h) && neq(f, b) && neq(h, d) && neq(p, c)));
+    let p6 = select(p, d, eq(h, d) && neq(h, f) && neq(d, b));
+    let p7 = select(p, h, (eq(f, h) && neq(f, b) && neq(h, d) && neq(p, g)) || (eq(h, d) && neq(h, f) && neq(d, b) && neq(p, i)));
+    let p8 = select(p, f, eq(f, h) && neq(f, b) && neq(h, d));
+
     // subpixel position
     let pp = floor(3.0 * fract(tc * dims));
     let ret = select(
         select(
-            select(select(
-                select(p, f, all(f == h) && any(f != b) && any(h != d)),
-                select(p, h, (all(f == h) && any(f != b) && any(h != d) && any(p != g)) || (all(h == d) && any(h != f) && any(d != b) && any(p != i))),
-                pp.x == 1.0
-            ), select(p, d, all(h == d) && any(h != f) && any(d != b)), pp.x == 0.0),
-            select(select(
-                select(p, f, (all(b == f) && any(b != d) && any(f != h) && any(p != i)) || (all(f == h) && any(f != b) && any(h != d) && any(p != c))),
-                p,
-                pp.x == 1.0
-            ), select(p, d, (all(h == d) && any(h != f) && any(d != b) && any(p != a)) || (all(d == b) && any(d != h) && any(b != f) && any(p != g))), pp.x == 0.0),
+            select(select(p8, p7, pp.x == 1.0), p6, pp.x == 0.0),
+            select(select(p5, p, pp.x == 1.0), p3, pp.x == 0.0),
             pp.y == 1.0
         ),
-        select(select(
-            select(p, f, all(b == f) && any(b != d) && any(f != h)),
-            select(p, b, (all(d == b) && any(d != h) && any(b != f) && any(p != c)) || (all(b == f) && any(b != d) && any(f != h) && any(p != a))),
-            pp.x == 1.0
-        ), select(p, d, all(d == b) && any(d != h) && any(b != f)), pp.x == 0.0),
+        select(select(p2, p1, pp.x == 1.0), p0, pp.x == 0.0),
         pp.y == 0.0
     );
 
