@@ -98,7 +98,7 @@ extern crate alloc;
 const CERES_BIN: &str = "ceres";
 const CERES_STYLIZED: &str = "Ceres";
 const ABOUT: &str = "A (very experimental) Game Boy/Color emulator.";
-const AFTER_HELP: &str = "KEY BINDINGS:
+const AFTER_HELP: &str = "GB bindings:
 
     | Gameboy | Emulator  |
     | ------- | --------- |
@@ -106,7 +106,16 @@ const AFTER_HELP: &str = "KEY BINDINGS:
     | A       | K         |
     | B       | L         |
     | Start   | Return    |
-    | Select  | Backspace |";
+    | Select  | Backspace |
+    
+Other binsings:
+
+    | System       | Emulator |
+    | ------------ | -------- |
+    | Fullscreen   | F        |
+    | Open file    | O        |
+    | Scale filter | Z        |
+";
 
 const SCREEN_MUL: u32 = 3;
 
