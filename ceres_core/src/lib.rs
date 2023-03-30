@@ -247,6 +247,7 @@ impl Gb {
     }
 }
 
+#[derive(Clone, Copy)]
 pub enum Model {
     Dmg,
     Mgb,

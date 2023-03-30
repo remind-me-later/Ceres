@@ -1,4 +1,5 @@
 use anyhow::Context;
+use cpal::traits::StreamTrait;
 
 use {alloc::sync::Arc, ceres_core::Gb, parking_lot::Mutex};
 
@@ -6,12 +7,12 @@ const BUFFER_SIZE: cpal::FrameCount = 512;
 const SAMPLE_RATE: i32 = 48000;
 
 pub struct Renderer {
-    _stream: cpal::Stream,
+    stream: cpal::Stream,
 }
 
 impl Renderer {
     pub fn new(gb: Arc<Mutex<Gb>>) -> anyhow::Result<Self> {
-        use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+        use cpal::traits::{DeviceTrait, HostTrait};
 
         let host = cpal::default_host();
         let dev = host
@@ -39,7 +40,15 @@ impl Renderer {
 
         stream.play()?;
 
-        Ok(Self { _stream: stream })
+        Ok(Self { stream })
+    }
+
+    pub fn pause(&mut self) {
+        self.stream.pause().unwrap();
+    }
+
+    pub fn resume(&mut self) {
+        self.stream.play().unwrap();
     }
 
     pub const fn sample_rate() -> i32 {

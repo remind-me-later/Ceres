@@ -1,5 +1,8 @@
 use alloc::borrow::Cow;
 
+const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
+const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
+
 #[derive(Default, Clone, Copy)]
 pub enum Scaling {
     #[default]
@@ -18,7 +21,7 @@ impl Scaling {
     }
 }
 
-pub struct State {
+pub struct Renderer {
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -39,14 +42,9 @@ pub struct State {
     diffuse_bind_group: wgpu::BindGroup,
 }
 
-impl State {
+impl Renderer {
     #[allow(clippy::too_many_lines)]
-    pub async fn new(
-        window: winit::window::Window,
-        width: u32,
-        height: u32,
-        scaling: Scaling,
-    ) -> anyhow::Result<Self> {
+    pub async fn new(window: winit::window::Window, scaling: Scaling) -> anyhow::Result<Self> {
         use {anyhow::Context, wgpu::util::DeviceExt};
 
         let size = window.inner_size();
@@ -93,7 +91,7 @@ impl State {
 
         surface.configure(&device, &config);
 
-        let texture = Texture::new(&device, width, height, None);
+        let texture = Texture::new(&device, PX_WIDTH, PX_HEIGHT, None);
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -260,8 +258,6 @@ impl State {
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
-            const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
-            const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
             let width = new_size.width;
             let height = new_size.height;
 

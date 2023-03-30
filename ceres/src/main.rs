@@ -117,7 +117,7 @@ fn main() -> anyhow::Result<()> {
         .after_help(AFTER_HELP)
         .arg(
             Arg::new("file")
-                .required(true)
+                .required(false)
                 .help("Game Boy/Color ROM file to emulate.")
                 .long_help(
                     "Game Boy/Color ROM file to emulate. Extension doesn't matter, the \
@@ -175,10 +175,7 @@ fn main() -> anyhow::Result<()> {
         scaling
     };
 
-    let pathbuf = PathBuf::from(
-        args.get_one::<String>("file")
-            .context("couldn't get file string")?,
-    );
+    let pathbuf = args.get_one::<String>("file").map(PathBuf::from);
 
     let emu = pollster::block_on(Emu::new(model, pathbuf, scaling))?;
     emu.run();
@@ -188,23 +185,23 @@ fn main() -> anyhow::Result<()> {
 
 struct Emu {
     event_loop: Option<EventLoop<()>>,
+    video: video::Renderer,
+    audio: audio::Renderer,
     gb: Arc<Mutex<Gb>>,
-    video: video::State,
-    _audio: audio::Renderer,
-    _rom_path: PathBuf,
-    sav_path: PathBuf,
+    rom_path: Option<PathBuf>,
+    model: ceres_core::Model,
 }
 
 impl Emu {
     async fn new(
         model: ceres_core::Model,
-        rom_path: PathBuf,
+        rom_path: Option<PathBuf>,
         scaling: Scaling,
     ) -> anyhow::Result<Self> {
         async fn init_video(
             event_loop: &EventLoop<()>,
             scaling: Scaling,
-        ) -> anyhow::Result<video::State> {
+        ) -> anyhow::Result<video::Renderer> {
             use winit::dpi::PhysicalSize;
 
             const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
@@ -225,7 +222,7 @@ impl Emu {
                 .build(event_loop)
                 .context("couldn't create window")?;
 
-            let mut video = video::State::new(window, PX_WIDTH, PX_HEIGHT, scaling)
+            let mut video = video::Renderer::new(window, scaling)
                 .await
                 .context("couldn't initialize wgpu")?;
 
@@ -241,24 +238,14 @@ impl Emu {
             audio::Renderer::new(Arc::clone(gb))
         }
 
-        fn init_gb(
-            model: ceres_core::Model,
-            rom_path: &Path,
-            sav_path: &Path,
-        ) -> anyhow::Result<Arc<Mutex<Gb>>> {
-            let rom = fs::read(rom_path)
-                .context("couldn't open rom file")?
-                .into_boxed_slice();
-            let ram = fs::read(sav_path).map(Vec::into_boxed_slice).ok();
-            let cart = ceres_core::Cart::new(rom, ram).context("invalid rom header")?;
-            let sample_rate = audio::Renderer::sample_rate();
-
-            Ok(Arc::new(Mutex::new(Gb::new(model, sample_rate, cart))))
-        }
-
         // Try to create GB before creating window
-        let sav_path = rom_path.with_extension("sav");
-        let gb = init_gb(model, &rom_path, &sav_path)?;
+        let gb = if let Some(rom_path) = &rom_path {
+            Self::init_gb(model, Some(rom_path))?
+        } else {
+            Self::init_gb(model, None)?
+        };
+
+        let gb = Arc::new(Mutex::new(gb));
 
         let audio = init_audio(&gb)?;
 
@@ -269,10 +256,28 @@ impl Emu {
             event_loop: Some(event_loop),
             gb,
             video,
-            _audio: audio,
-            _rom_path: rom_path,
-            sav_path,
+            audio,
+            rom_path,
+            model,
         })
+    }
+
+    fn init_gb(model: ceres_core::Model, rom_path: Option<&Path>) -> anyhow::Result<Gb> {
+        let rom = rom_path.map(|p| fs::read(p).map(Vec::into_boxed_slice).unwrap());
+
+        let ram = rom_path
+            .map(|p| p.with_extension("sav"))
+            .and_then(|p| fs::read(p).map(Vec::into_boxed_slice).ok());
+
+        let cart = if let Some(rom) = rom {
+            ceres_core::Cart::new(rom, ram).context("invalid rom header")?
+        } else {
+            ceres_core::Cart::default()
+        };
+
+        let sample_rate = audio::Renderer::sample_rate();
+
+        Ok(Gb::new(model, sample_rate, cart))
     }
 
     fn run(mut self) {
@@ -349,6 +354,23 @@ impl Emu {
                         #[cfg(feature = "screenshot")]
                         self.screenshot();
                     }
+                    KC::O => {
+                        self.audio.pause();
+
+                        let file = rfd::FileDialog::new()
+                            .add_filter("gameboy", &["gb", "gbc"])
+                            .pick_file();
+
+                        if let Some(f) = file {
+                            let rf = &f;
+                            if let Ok(mut gb) = Self::init_gb(self.model, Some(rf)) {
+                                let mut lock = self.gb.lock();
+                                core::mem::swap(&mut *lock, &mut gb);
+                            }
+                        }
+
+                        self.audio.resume();
+                    }
                     _ => (),
                 },
                 ElementState::Released => match key {
@@ -370,15 +392,18 @@ impl Emu {
         let mut gb = self.gb.lock();
 
         if let Some(save_data) = gb.cartridge().save_data() {
-            let sav_file = File::create(&self.sav_path);
-            match sav_file {
-                Ok(mut f) => {
-                    if let Err(e) = f.write_all(save_data) {
-                        eprintln!("couldn't save data in save file: {e}");
+            if let Some(path) = &self.rom_path {
+                let sav_path = path.with_extension("sav");
+                let sav_file = File::create(sav_path);
+                match sav_file {
+                    Ok(mut f) => {
+                        if let Err(e) = f.write_all(save_data) {
+                            eprintln!("couldn't save data in save file: {e}");
+                        }
                     }
-                }
-                Err(e) => {
-                    eprintln!("couldn't open save file: {e}");
+                    Err(e) => {
+                        eprintln!("couldn't open save file: {e}");
+                    }
                 }
             }
         }

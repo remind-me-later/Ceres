@@ -110,6 +110,32 @@ pub struct Cart {
     rom_size: ROMSize,
 }
 
+impl Default for Cart {
+    fn default() -> Self {
+        let rom_size = ROMSize::new(0).unwrap();
+        let ram_size = RAMSize::new(0).unwrap();
+        let (mbc, has_battery) = Mbc::mbc_and_battery(0, rom_size).unwrap();
+
+        let rom = alloc::vec![0xFF; rom_size.size_bytes() as usize].into_boxed_slice();
+        let ram = alloc::vec![0xFF; ram_size.size_bytes() as usize].into_boxed_slice();
+
+        Self {
+            mbc,
+            rom,
+            ram,
+            rom_bank_lo: 1,
+            rom_bank_hi: 0,
+            rom_offsets: (0, u32::from(ROMSize::BANK_SIZE)),
+            ram_size,
+            rom_size,
+            ram_enabled: false,
+            ram_bank: 0,
+            ram_offset: 0,
+            has_battery,
+        }
+    }
+}
+
 impl Cart {
     pub fn new(rom: Box<[u8]>, ram: Option<Box<[u8]>>) -> Result<Self, Error> {
         let rom_size = ROMSize::new(rom[0x148])?;

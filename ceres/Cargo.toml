@@ -10,6 +10,7 @@ ceres_core = { path = "../ceres_core" }
 clap = { version = "*", default-features = false, features = ["std", "help"] }
 parking_lot = { version = "*", default-features = false }
 anyhow = { version = "*", default-features = false, features = ["std"] }
+rfd = { version = "*", default-features = false, features = ["xdg-portal"] }
 
 # audio
 cpal = { version = "*", default-features = false }
