@@ -108,8 +108,8 @@ const AFTER_HELP: &str = "GB bindings:
     | Dpad    | WASD      |
     | A       | K         |
     | B       | L         |
-    | Start   | Return    |
-    | Select  | Backspace |
+    | Start   | M         |
+    | Select  | N         |
     
 Other binsings:
 

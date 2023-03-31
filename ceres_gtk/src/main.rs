@@ -78,8 +78,8 @@ fn build_ui(application: &adw::Application) {
         match key {
             Key::k => lock.press(ceres_core::Button::A),
             Key::l => lock.press(ceres_core::Button::B),
-            Key::p => lock.press(ceres_core::Button::Start),
-            Key::o => lock.press(ceres_core::Button::Select),
+            Key::m => lock.press(ceres_core::Button::Start),
+            Key::n => lock.press(ceres_core::Button::Select),
             Key::w => lock.press(ceres_core::Button::Up),
             Key::a => lock.press(ceres_core::Button::Left),
             Key::s => lock.press(ceres_core::Button::Down),
@@ -96,8 +96,8 @@ fn build_ui(application: &adw::Application) {
         match key {
             Key::k => lock.release(ceres_core::Button::A),
             Key::l => lock.release(ceres_core::Button::B),
-            Key::p => lock.release(ceres_core::Button::Start),
-            Key::o => lock.release(ceres_core::Button::Select),
+            Key::m => lock.release(ceres_core::Button::Start),
+            Key::n => lock.release(ceres_core::Button::Select),
             Key::w => lock.release(ceres_core::Button::Up),
             Key::a => lock.release(ceres_core::Button::Left),
             Key::s => lock.release(ceres_core::Button::Down),
