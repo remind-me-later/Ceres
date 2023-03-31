@@ -68,6 +68,9 @@
     clippy::verbose_bit_mask
 )]
 
+use core::time::Duration;
+use std::thread;
+
 use ceres_core::Button;
 use parking_lot::Mutex;
 use sdl2::{
@@ -210,11 +213,10 @@ impl Emu {
             .build()
             .unwrap();
 
-        let mut canvas = window.into_canvas().present_vsync().build().unwrap();
+        let mut canvas = window.into_canvas().build().unwrap();
 
         canvas.set_draw_color(Color::BLACK);
         canvas.clear();
-        canvas.present();
 
         let creator = canvas.texture_creator();
         let texture =
@@ -336,7 +338,7 @@ impl Emu {
                 self.canvas.present();
             }
 
-            std::thread::sleep(core::time::Duration::new(0, 1_000_000_000_u32 / 60));
+            thread::sleep(Duration::from_millis(1000 / 60));
         }
 
         // Cleanup

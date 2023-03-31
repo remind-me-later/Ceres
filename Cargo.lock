@@ -109,17 +109,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ceres"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ceres_core",
- "clap",
- "parking_lot",
- "sdl2",
-]
-
-[[package]]
 name = "ceres_core"
 version = "0.1.0"
 
@@ -137,6 +126,17 @@ dependencies = [
  "libadwaita",
  "libloading",
  "parking_lot",
+]
+
+[[package]]
+name = "ceres_sdl"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ceres_core",
+ "clap",
+ "parking_lot",
+ "sdl2",
 ]
 
 [[package]]
@@ -1155,8 +1155,7 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 [[package]]
 name = "sdl2"
 version = "0.35.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7959277b623f1fb9e04aea73686c3ca52f01b2145f8ea16f4ff30d8b7623b1a"
+source = "git+https://github.com/Rust-SDL2/rust-sdl2#ffa4eb0b15439463561014f2d3c9d9171059d492"
 dependencies = [
  "bitflags",
  "lazy_static",
@@ -1167,8 +1166,7 @@ dependencies = [
 [[package]]
 name = "sdl2-sys"
 version = "0.35.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3586be2cf6c0a8099a79a12b4084357aa9b3e0b0d7980e3b67aaf7a9d55f9f0"
+source = "git+https://github.com/Rust-SDL2/rust-sdl2#ffa4eb0b15439463561014f2d3c9d9171059d492"
 dependencies = [
  "cfg-if",
  "libc",

@@ -1,5 +1,5 @@
 [package]
-name = "ceres"
+name = "ceres_sdl"
 version = "0.1.0"
 license = "MIT"
 edition = "2021"
@@ -10,4 +10,6 @@ ceres_core = { path = "../ceres_core" }
 clap = { version = "*", default-features = false, features = ["std", "help"] }
 parking_lot = { version = "*", default-features = false }
 anyhow = { version = "*", default-features = false, features = ["std"] }
-sdl2 = { version = "*", features = ["unsafe_textures"] }
+sdl2 = { git = "https://github.com/Rust-SDL2/rust-sdl2", default-features = false, features = [
+    "unsafe_textures",
+] }
