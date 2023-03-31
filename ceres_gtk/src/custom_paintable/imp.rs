@@ -1,4 +1,5 @@
 use super::renderer::Renderer;
+use super::renderer::ScaleMode;
 use crate::audio;
 use ceres_core::Gb;
 use gtk::glib;
@@ -12,6 +13,8 @@ pub struct GlArea {
     pub gb: Arc<Mutex<Gb>>,
     pub audio: Arc<Mutex<audio::Renderer>>,
     pub renderer: RefCell<Option<Renderer>>,
+    pub scale_mode: RefCell<ScaleMode>,
+    pub scale_changed: RefCell<bool>,
 }
 
 impl Default for GlArea {
@@ -39,6 +42,8 @@ impl ObjectSubclass for GlArea {
             gb,
             audio,
             renderer: Default::default(),
+            scale_mode: Default::default(),
+            scale_changed: Default::default(),
         }
     }
 }
@@ -74,7 +79,7 @@ impl WidgetImpl for GlArea {
         //
         // We will also ensure glium's context does not outlive the GdkGLContext by destroying it in
         // `unrealize()`.
-        GLAreaExt::make_current(widget.as_ref());
+        widget.make_current();
 
         *self.renderer.borrow_mut() = Some(Renderer::new());
     }
@@ -113,13 +118,18 @@ impl WidgetImpl for GlArea {
 
 impl GLAreaImpl for GlArea {
     fn render(&self, _context: &gtk::gdk::GLContext) -> bool {
+        let mut rf = self.renderer.borrow_mut();
+        let rend = rf.as_mut().unwrap();
+
+        if *self.scale_changed.borrow() {
+            rend.choose_scale_mode(*self.scale_mode.borrow());
+            *self.scale_changed.borrow_mut() = false;
+        }
+
         let gb = self.gb.lock();
         let rgba = gb.pixel_data_rgba();
-        self.renderer
-            .borrow_mut()
-            .as_mut()
-            .unwrap()
-            .draw_frame(rgba);
+
+        rend.draw_frame(rgba);
 
         true
     }

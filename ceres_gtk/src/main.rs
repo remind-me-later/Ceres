@@ -42,10 +42,28 @@ fn main() -> glib::ExitCode {
 }
 
 fn build_ui(application: &adw::Application) {
-    let gl_area = GlArea::new();
+    let gl_area = Rc::new(GlArea::new());
 
     let open_button = gtk::Button::builder()
         .icon_name("document-open-symbolic")
+        .build();
+
+    // Menu
+    let scale_button = gtk::ToggleButton::builder().label("2x scale").build();
+
+    {
+        let gl_area = Rc::clone(&gl_area);
+        scale_button.connect_clicked(move |_| {
+            gl_area.toggle_scale_mode();
+        });
+    }
+
+    let popover = gtk::Popover::new();
+    popover.set_child(Some(&scale_button));
+
+    let menu_button = gtk::MenuButton::builder()
+        .icon_name("open-menu-symbolic")
+        .popover(&popover)
         .build();
 
     /////////////////////////////
@@ -92,12 +110,13 @@ fn build_ui(application: &adw::Application) {
 
     let header_bar = adw::HeaderBar::new();
     header_bar.pack_start(&open_button);
+    header_bar.pack_end(&menu_button);
 
     // Combine the content in a box
     let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
     // Adwaitas' ApplicationWindow does not include a HeaderBar
     content.append(&header_bar);
-    content.append(&gl_area);
+    content.append(gl_area.as_ref());
 
     let window = Rc::new(
         adw::ApplicationWindow::builder()
@@ -138,9 +157,6 @@ async fn dialog<W: IsA<gtk::Window>>(window: Rc<W>, gb: Arc<Mutex<Gb>>) {
         let mut lock = gb.lock();
         core::mem::swap(&mut *lock, &mut new_gb);
     }
-
-    // file_dialog.run_future().await;
-    // file_dialog.close();
 }
 
 fn init_gb(model: ceres_core::Model, rom_path: Option<&Path>) -> anyhow::Result<ceres_core::Gb> {

@@ -3,6 +3,13 @@ use {
     std::cmp::min,
 };
 
+#[derive(Clone, Copy, Default)]
+pub enum ScaleMode {
+    #[default]
+    Nearest = 0,
+    Scale2x = 1,
+}
+
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
 const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
 
@@ -11,7 +18,8 @@ pub struct Renderer {
     program: NativeProgram,
     vao: NativeVertexArray,
     texture: NativeTexture,
-    uniform_loc: UniformLocation,
+    dims_unif: UniformLocation,
+    scale_unif: UniformLocation,
 }
 
 impl Renderer {
@@ -30,8 +38,8 @@ impl Renderer {
             let program = gl.create_program().expect("Cannot create program");
 
             let shader_sources = [
-                (glow::VERTEX_SHADER, include_str!("../shader/vs.vert")),
-                (glow::FRAGMENT_SHADER, include_str!("../shader/fs.frag")),
+                (glow::VERTEX_SHADER, include_str!("../../shader/vs.vert")),
+                (glow::FRAGMENT_SHADER, include_str!("../../shader/fs.frag")),
             ];
 
             let mut shaders = Vec::with_capacity(shader_sources.len());
@@ -75,17 +83,33 @@ impl Renderer {
                 glow::NEAREST as i32,
             );
 
-            let uniform_loc = gl
-                .get_uniform_location(program, "transform")
-                .expect("couldn't get location of uniform");
+            let dims_unif = gl
+                .get_uniform_location(program, "vp_dims")
+                .expect("couldn't get location of dimensions uniform");
+
+            let scale_unif = gl
+                .get_uniform_location(program, "scale_mode")
+                .expect("couldn't get location of scale uniform");
+
+            // Init scale uniform
+            gl.uniform_1_u32_slice(Some(&scale_unif), &[ScaleMode::Nearest as u32]);
 
             Self {
                 gl,
                 program,
                 vao,
                 texture,
-                uniform_loc,
+                dims_unif,
+                scale_unif,
             }
+        }
+    }
+
+    pub fn choose_scale_mode(&mut self, scale_mode: ScaleMode) {
+        unsafe {
+            self.gl.use_program(Some(self.program));
+            self.gl
+                .uniform_1_u32_slice(Some(&self.scale_unif), &[scale_mode as u32]);
         }
     }
 
@@ -100,7 +124,7 @@ impl Renderer {
             self.gl.viewport(0, 0, width as i32, height as i32);
             self.gl.use_program(Some(self.program));
             self.gl
-                .uniform_2_f32(Some(&self.uniform_loc), uniform_x, uniform_y);
+                .uniform_2_f32(Some(&self.dims_unif), uniform_x, uniform_y);
         }
     }
 
