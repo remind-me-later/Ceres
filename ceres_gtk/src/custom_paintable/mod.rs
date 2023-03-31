@@ -1,4 +1,5 @@
 mod imp;
+mod renderer;
 
 use std::sync::Arc;
 
@@ -7,17 +8,17 @@ use gtk::{glib, subclass::prelude::ObjectSubclassIsExt};
 use parking_lot::Mutex;
 
 glib::wrapper! {
-    pub struct CustomPaintable(ObjectSubclass<imp::CustomPaintable>)
+    pub struct GlArea(ObjectSubclass<imp::GlArea>)
         @extends gtk::Widget, gtk::GLArea;
 }
 
-impl Default for CustomPaintable {
+impl Default for GlArea {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl CustomPaintable {
+impl GlArea {
     pub fn new() -> Self {
         glib::Object::new()
     }

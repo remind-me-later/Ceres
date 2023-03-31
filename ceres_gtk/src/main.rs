@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use ceres_core::Gb;
-use custom_paintable::CustomPaintable;
+use custom_paintable::GlArea;
 use gtk::gdk::Key;
 use gtk::glib;
 use gtk::prelude::*;
@@ -42,7 +42,7 @@ fn main() -> glib::ExitCode {
 }
 
 fn build_ui(application: &adw::Application) {
-    let gl_area = CustomPaintable::new();
+    let gl_area = GlArea::new();
 
     let open_button = gtk::Button::builder()
         .icon_name("document-open-symbolic")
@@ -91,7 +91,7 @@ fn build_ui(application: &adw::Application) {
     /////////////////////////
 
     let header_bar = adw::HeaderBar::new();
-    header_bar.pack_end(&open_button);
+    header_bar.pack_start(&open_button);
 
     // Combine the content in a box
     let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -103,9 +103,6 @@ fn build_ui(application: &adw::Application) {
         adw::ApplicationWindow::builder()
             .application(application)
             .title("Ceres")
-            .default_width(ceres_core::PX_WIDTH as i32 * 3)
-            .default_height(ceres_core::PX_HEIGHT as i32 * 3)
-            // add content to window
             .content(&content)
             .visible(true)
             .build(),
