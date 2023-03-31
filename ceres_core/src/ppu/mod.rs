@@ -1,10 +1,10 @@
 use crate::interrupts::Interrupts;
 
-use {self::color_palette::ColorPalette, crate::CgbMode, rgba_buf::RgbaBuf};
+use {self::color_palette::ColorPalette, crate::CgbMode, rgb_buf::RgbaBuf};
 
 mod color_palette;
 mod draw;
-mod rgba_buf;
+mod rgb_buf;
 
 pub const PX_WIDTH: u8 = 160;
 pub const PX_HEIGHT: u8 = 144;

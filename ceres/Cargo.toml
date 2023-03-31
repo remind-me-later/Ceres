@@ -10,26 +10,4 @@ ceres_core = { path = "../ceres_core" }
 clap = { version = "*", default-features = false, features = ["std", "help"] }
 parking_lot = { version = "*", default-features = false }
 anyhow = { version = "*", default-features = false, features = ["std"] }
-rfd = { version = "*", default-features = false, features = ["xdg-portal"] }
-
-# audio
-cpal = { version = "*", default-features = false }
-
-# video
-wgpu = { version = "*" }
-pollster = { version = "*", default-features = false }
-bytemuck = { version = "*", default-features = false }
-# TODO: wait for better wayland decoration support
-winit = { version = "*", default-features = false, features = ["x11"] }
-
-# screenshots
-image = { version = "*", default-features = false, features = [
-    "png",
-], optional = true }
-chrono = { version = "*", default-features = false, features = [
-    "clock",
-], optional = true }
-
-[features]
-screenshot = ["image", "chrono"]
-# default = ["screenshot"]
+sdl2 = { version = "*", features = ["unsafe_textures"] }

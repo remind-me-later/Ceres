@@ -5,7 +5,7 @@ precision mediump float;
 layout(location = 0) in vec2 TexCoord;
 layout(location = 0) out vec4 FragColor;
 
-uniform uint scale_mode;
+layout(location = 2) uniform uint scale_mode;
 
 uniform sampler2D img;
 

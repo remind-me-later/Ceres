@@ -1,7 +1,7 @@
 #version 310 es
 
 layout(location = 0) out vec2 TexCoord;
-uniform vec2 vp_dims;
+layout(location = 1) uniform vec2 vp_dims;
 
 void main() {
   vec2 v_coor = gl_VertexID == 0

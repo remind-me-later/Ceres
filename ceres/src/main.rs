@@ -68,30 +68,30 @@
     clippy::verbose_bit_mask
 )]
 
+use ceres_core::Button;
 use parking_lot::Mutex;
-use winit::{
-    event::{Event, KeyboardInput, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    window::Fullscreen,
+use sdl2::{
+    event::{Event, WindowEvent},
+    keyboard::Keycode,
+    pixels::{Color, PixelFormatEnum},
+    rect::Rect,
+    render::{Canvas, Texture, TextureCreator},
+    video::{FullscreenType, Window, WindowContext},
+    EventPump,
 };
-
-use crate::video::Scaling;
 use {
     alloc::sync::Arc,
     anyhow::Context,
     ceres_core::Gb,
     clap::{builder::PossibleValuesParser, Arg, Command},
-    core::time::Duration,
     std::{
         fs::{self, File},
         io::Write,
         path::{Path, PathBuf},
     },
-    winit::window,
 };
 
 mod audio;
-mod video;
 
 extern crate alloc;
 
@@ -113,10 +113,10 @@ Other binsings:
     | System       | Emulator |
     | ------------ | -------- |
     | Fullscreen   | F        |
-    | Open file    | O        |
-    | Scale filter | Z        |
 ";
 
+const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
+const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
 const SCREEN_MUL: u32 = 3;
 
 fn main() -> anyhow::Result<()> {
@@ -126,7 +126,7 @@ fn main() -> anyhow::Result<()> {
         .after_help(AFTER_HELP)
         .arg(
             Arg::new("file")
-                .required(false)
+                .required(true)
                 .help("Game Boy/Color ROM file to emulate.")
                 .long_help(
                     "Game Boy/Color ROM file to emulate. Extension doesn't matter, the \
@@ -141,15 +141,6 @@ fn main() -> anyhow::Result<()> {
                 .help("Game Boy model to emulate")
                 .value_parser(PossibleValuesParser::new(["dmg", "mgb", "cgb"]))
                 .default_value("cgb")
-                .required(false),
-        )
-        .arg(
-            Arg::new("scaling")
-                .short('s')
-                .long("scaling")
-                .help("Scaling algorithm used")
-                .value_parser(PossibleValuesParser::new(["nearest", "scale2x", "scale3x"]))
-                .default_value("nearest")
                 .required(false),
         )
         .get_matches();
@@ -169,281 +160,205 @@ fn main() -> anyhow::Result<()> {
         model
     };
 
-    let scaling = {
-        let scaling_str = args
-            .get_one::<String>("scaling")
-            .context("couldn't get scaling string")?;
+    let pathbuf = args.get_one::<String>("file").map(PathBuf::from).unwrap();
 
-        let scaling = match scaling_str.as_str() {
-            "nearest" => Scaling::Nearest,
-            "scale2x" => Scaling::Scale2x,
-            "scale3x" => Scaling::Scale3x,
-            _ => unreachable!(),
-        };
-
-        scaling
-    };
-
-    let pathbuf = args.get_one::<String>("file").map(PathBuf::from);
-
-    let emu = pollster::block_on(Emu::new(model, pathbuf, scaling))?;
+    let mut emu = Emu::new(model, pathbuf)?;
     emu.run();
 
     Ok(())
 }
 
 struct Emu {
-    event_loop: Option<EventLoop<()>>,
-    video: video::Renderer,
-    audio: audio::Renderer,
+    _audio: audio::Renderer,
     gb: Arc<Mutex<Gb>>,
-    rom_path: Option<PathBuf>,
-    model: ceres_core::Model,
+    rom_path: PathBuf,
+    is_focused: bool,
+    do_resize: bool,
+    event_pump: EventPump,
+    canvas: Canvas<Window>,
+    texture: Texture,
+    _creator: TextureCreator<WindowContext>,
+    blit_rect: Rect,
 }
 
 impl Emu {
-    async fn new(
-        model: ceres_core::Model,
-        rom_path: Option<PathBuf>,
-        scaling: Scaling,
-    ) -> anyhow::Result<Self> {
-        async fn init_video(
-            event_loop: &EventLoop<()>,
-            scaling: Scaling,
-        ) -> anyhow::Result<video::Renderer> {
-            use winit::dpi::PhysicalSize;
-
-            const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
-            const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
-            const INIT_WIDTH: u32 = PX_WIDTH * SCREEN_MUL;
-            const INIT_HEIGHT: u32 = PX_HEIGHT * SCREEN_MUL;
-
-            let window = window::WindowBuilder::new()
-                .with_title(CERES_STYLIZED)
-                .with_inner_size(PhysicalSize {
-                    width: INIT_WIDTH,
-                    height: INIT_HEIGHT,
-                })
-                .with_min_inner_size(PhysicalSize {
-                    width: PX_WIDTH,
-                    height: PX_HEIGHT,
-                })
-                .build(event_loop)
-                .context("couldn't create window")?;
-
-            let mut video = video::Renderer::new(window, scaling)
-                .await
-                .context("couldn't initialize wgpu")?;
-
-            video.resize(PhysicalSize {
-                width: INIT_WIDTH,
-                height: INIT_HEIGHT,
-            });
-
-            Ok(video)
-        }
-
-        fn init_audio(gb: &Arc<Mutex<Gb>>) -> anyhow::Result<audio::Renderer> {
-            audio::Renderer::new(Arc::clone(gb))
-        }
-
+    fn new(model: ceres_core::Model, rom_path: PathBuf) -> anyhow::Result<Self> {
         // Try to create GB before creating window
-        let gb = if let Some(rom_path) = &rom_path {
-            Self::init_gb(model, Some(rom_path))?
-        } else {
-            Self::init_gb(model, None)?
-        };
+        let gb = Self::init_gb(model, &rom_path)?;
 
         let gb = Arc::new(Mutex::new(gb));
 
-        let audio = init_audio(&gb)?;
+        let sdl_context = sdl2::init().unwrap();
 
-        let event_loop = EventLoop::new();
-        let video = init_video(&event_loop, scaling).await?;
+        let audio = {
+            let gb = Arc::clone(&gb);
+            audio::Renderer::new(&sdl_context, gb)
+        };
+
+        let event_pump = sdl_context.event_pump().unwrap();
+
+        let video_subsystem = sdl_context.video().unwrap();
+
+        let window = video_subsystem
+            .window(
+                CERES_STYLIZED,
+                PX_WIDTH * SCREEN_MUL,
+                PX_HEIGHT * SCREEN_MUL,
+            )
+            .position_centered()
+            .resizable()
+            .build()
+            .unwrap();
+
+        let mut canvas = window.into_canvas().present_vsync().build().unwrap();
+
+        canvas.set_draw_color(Color::BLACK);
+        canvas.clear();
+        canvas.present();
+
+        let creator = canvas.texture_creator();
+        let texture =
+            creator.create_texture_streaming(PixelFormatEnum::RGB24, PX_WIDTH, PX_HEIGHT)?;
 
         Ok(Self {
-            event_loop: Some(event_loop),
+            _audio: audio,
             gb,
-            video,
-            audio,
             rom_path,
-            model,
+            is_focused: true,
+            do_resize: true,
+            event_pump,
+            canvas,
+            texture,
+            _creator: creator,
+            blit_rect: Rect::new(0, 0, 0, 0),
         })
     }
 
-    fn init_gb(model: ceres_core::Model, rom_path: Option<&Path>) -> anyhow::Result<Gb> {
-        let rom = rom_path.map(|p| fs::read(p).map(Vec::into_boxed_slice).unwrap());
+    fn init_gb(model: ceres_core::Model, rom_path: &Path) -> anyhow::Result<Gb> {
+        let rom = fs::read(rom_path).map(Vec::into_boxed_slice)?;
 
-        let ram = rom_path
-            .map(|p| p.with_extension("sav"))
-            .and_then(|p| fs::read(p).map(Vec::into_boxed_slice).ok());
+        let ram = fs::read(rom_path.with_extension("sav"))
+            .map(Vec::into_boxed_slice)
+            .ok();
 
-        let cart = if let Some(rom) = rom {
-            ceres_core::Cart::new(rom, ram).context("invalid rom header")?
-        } else {
-            ceres_core::Cart::default()
-        };
-
+        let cart = ceres_core::Cart::new(rom, ram).context("invalid rom header")?;
         let sample_rate = audio::Renderer::sample_rate();
 
         Ok(Gb::new(model, sample_rate, cart))
     }
 
-    fn run(mut self) {
-        let event_loop = self.event_loop.take().unwrap();
-        event_loop.run(move |event, _, control_flow| {
-            self.loop_cb(&event, control_flow);
-        });
-    }
+    pub fn run(&mut self) {
+        'running: loop {
+            {
+                let mut gb = self.gb.lock();
 
-    fn loop_cb(&mut self, event: &Event<()>, control_flow: &mut ControlFlow) {
-        match event {
-            Event::Resumed => control_flow.set_poll(),
-            Event::LoopDestroyed => self.save_data(),
-            Event::WindowEvent { event: ref e, .. } => match e {
-                WindowEvent::Resized(size) => self.video.resize(*size),
-                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                    self.video.resize(**new_inner_size);
-                }
-                WindowEvent::CloseRequested => control_flow.set_exit(),
-                WindowEvent::KeyboardInput { input, .. } => self.handle_key(input),
-                _ => (),
-            },
-            Event::RedrawRequested(window_id) if *window_id == self.video.window().id() => {
-                use wgpu::SurfaceError::{Lost, OutOfMemory, Outdated, Timeout};
-                match self.video.render() {
-                    Ok(_) => {}
-                    Err(Lost | Outdated) => self.video.on_lost(),
-                    Err(OutOfMemory) => control_flow.set_exit(),
-                    Err(Timeout) => eprintln!("Surface timeout"),
-                }
-            }
-            Event::MainEventsCleared => {
-                self.video.update(self.gb.lock().pixel_data_rgba());
-                self.video.window().request_redraw();
-                std::thread::sleep(Duration::from_millis(1000 / 60));
-            }
-            _ => (),
-        }
-    }
+                for event in self.event_pump.poll_iter() {
+                    match event {
+                        Event::Quit { .. } => break 'running,
+                        Event::KeyDown {
+                            keycode: Some(keycode),
+                            repeat: false,
+                            ..
+                        } if self.is_focused => match keycode {
+                            Keycode::W => gb.press(Button::Up),
+                            Keycode::A => gb.press(Button::Left),
+                            Keycode::S => gb.press(Button::Down),
+                            Keycode::D => gb.press(Button::Right),
+                            Keycode::K => gb.press(Button::A),
+                            Keycode::L => gb.press(Button::B),
+                            Keycode::M => gb.press(Button::Start),
+                            Keycode::N => gb.press(Button::Select),
+                            // system
+                            Keycode::F => {
+                                let win = self.canvas.window_mut();
+                                let fs = win.fullscreen_state();
+                                let fs = match fs {
+                                    FullscreenType::Off => FullscreenType::Desktop,
+                                    FullscreenType::True | FullscreenType::Desktop => {
+                                        FullscreenType::Off
+                                    }
+                                };
 
-    fn handle_key(&mut self, input: &KeyboardInput) {
-        if !self.video.window().has_focus() {
-            return;
-        }
-
-        if let Some(key) = input.virtual_keycode {
-            use {
-                ceres_core::Button as B,
-                winit::event::{ElementState, VirtualKeyCode as KC},
-            };
-
-            match input.state {
-                ElementState::Pressed => match key {
-                    KC::W => self.gb.lock().press(B::Up),
-                    KC::A => self.gb.lock().press(B::Left),
-                    KC::S => self.gb.lock().press(B::Down),
-                    KC::D => self.gb.lock().press(B::Right),
-                    KC::K => self.gb.lock().press(B::A),
-                    KC::L => self.gb.lock().press(B::B),
-                    KC::Return => self.gb.lock().press(B::Start),
-                    KC::Back => self.gb.lock().press(B::Select),
-                    // System
-                    KC::F => match self.video.window().fullscreen() {
-                        Some(_) => self.video.window().set_fullscreen(None),
-                        None => self
-                            .video
-                            .window()
-                            .set_fullscreen(Some(Fullscreen::Borderless(None))),
-                    },
-                    KC::Z => {
-                        self.video.cycle_scale_mode();
-                    }
-                    KC::P => {
-                        #[cfg(feature = "screenshot")]
-                        self.screenshot();
-                    }
-                    KC::O => {
-                        self.audio.pause();
-
-                        let file = rfd::FileDialog::new()
-                            .add_filter("gameboy", &["gb", "gbc"])
-                            .pick_file();
-
-                        if let Some(f) = file {
-                            let rf = &f;
-                            if let Ok(mut gb) = Self::init_gb(self.model, Some(rf)) {
-                                let mut lock = self.gb.lock();
-                                core::mem::swap(&mut *lock, &mut gb);
+                                win.set_fullscreen(fs).unwrap();
                             }
-                        }
-
-                        self.audio.resume();
+                            _ => (),
+                        },
+                        Event::KeyUp {
+                            keycode: Some(keycode),
+                            repeat: false,
+                            ..
+                        } if self.is_focused => match keycode {
+                            Keycode::W => gb.release(Button::Up),
+                            Keycode::A => gb.release(Button::Left),
+                            Keycode::S => gb.release(Button::Down),
+                            Keycode::D => gb.release(Button::Right),
+                            Keycode::K => gb.release(Button::A),
+                            Keycode::L => gb.release(Button::B),
+                            Keycode::M => gb.release(Button::Start),
+                            Keycode::N => gb.release(Button::Select),
+                            _ => (),
+                        },
+                        Event::Window { win_event, .. } => match win_event {
+                            WindowEvent::FocusGained => self.is_focused = true,
+                            WindowEvent::FocusLost => self.is_focused = false,
+                            WindowEvent::Resized(..) => {
+                                self.do_resize = true;
+                            }
+                            _ => (),
+                        },
+                        _ => (),
                     }
-                    _ => (),
-                },
-                ElementState::Released => match key {
-                    KC::W => self.gb.lock().release(B::Up),
-                    KC::A => self.gb.lock().release(B::Left),
-                    KC::S => self.gb.lock().release(B::Down),
-                    KC::D => self.gb.lock().release(B::Right),
-                    KC::K => self.gb.lock().release(B::A),
-                    KC::L => self.gb.lock().release(B::B),
-                    KC::Return => self.gb.lock().release(B::Start),
-                    KC::Back => self.gb.lock().release(B::Select),
-                    _ => (),
-                },
+                }
+
+                let buf = gb.pixel_data_rgba();
+                self.texture
+                    .update(None, buf, 3 * PX_WIDTH as usize)
+                    .unwrap();
+
+                self.canvas.clear();
+
+                if self.do_resize {
+                    let viewport = self.canvas.viewport();
+
+                    let mul =
+                        core::cmp::min(viewport.width() / PX_WIDTH, viewport.height() / PX_HEIGHT);
+                    let width = PX_WIDTH * mul;
+                    let height = PX_HEIGHT * mul;
+
+                    self.blit_rect = Rect::from_center(viewport.center(), width, height);
+                    self.do_resize = false;
+                }
+
+                self.canvas
+                    .copy(&self.texture, None, self.blit_rect)
+                    .unwrap();
+
+                self.canvas.present();
             }
+
+            std::thread::sleep(core::time::Duration::new(0, 1_000_000_000_u32 / 60));
         }
+
+        // Cleanup
+        self.save_data();
     }
 
     fn save_data(&self) {
         let mut gb = self.gb.lock();
 
         if let Some(save_data) = gb.cartridge().save_data() {
-            if let Some(path) = &self.rom_path {
-                let sav_path = path.with_extension("sav");
-                let sav_file = File::create(sav_path);
-                match sav_file {
-                    Ok(mut f) => {
-                        if let Err(e) = f.write_all(save_data) {
-                            eprintln!("couldn't save data in save file: {e}");
-                        }
+            let sav_path = self.rom_path.with_extension("sav");
+            let sav_file = File::create(sav_path);
+            match sav_file {
+                Ok(mut f) => {
+                    if let Err(e) = f.write_all(save_data) {
+                        eprintln!("couldn't save data in save file: {e}");
                     }
-                    Err(e) => {
-                        eprintln!("couldn't open save file: {e}");
-                    }
+                }
+                Err(e) => {
+                    eprintln!("couldn't open save file: {e}");
                 }
             }
         }
-    }
-
-    #[cfg(feature = "screenshot")]
-    fn screenshot(&self) {
-        use core::str::FromStr;
-
-        let time = chrono::Local::now();
-
-        let mut stem = self.sav_path.file_stem().unwrap().to_owned();
-        stem.push(" - ");
-        stem.push(time.to_string());
-
-        let img_path = PathBuf::from_str(stem.to_str().unwrap())
-            .unwrap()
-            .with_extension("png");
-
-        // println!("{img_path:?}");
-
-        let gb = self.gb.lock();
-
-        image::save_buffer_with_format(
-            img_path,
-            gb.pixel_data_rgba(),
-            u32::from(ceres_core::PX_WIDTH),
-            u32::from(ceres_core::PX_HEIGHT),
-            image::ColorType::Rgba8,
-            image::ImageFormat::Png,
-        )
-        .unwrap();
     }
 }

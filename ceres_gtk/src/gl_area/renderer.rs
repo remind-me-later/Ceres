@@ -38,8 +38,14 @@ impl Renderer {
             let program = gl.create_program().expect("Cannot create program");
 
             let shader_sources = [
-                (glow::VERTEX_SHADER, include_str!("../../shader/vs.vert")),
-                (glow::FRAGMENT_SHADER, include_str!("../../shader/fs.frag")),
+                (
+                    glow::VERTEX_SHADER,
+                    include_str!("../../shader/shader.vert"),
+                ),
+                (
+                    glow::FRAGMENT_SHADER,
+                    include_str!("../../shader/shader.frag"),
+                ),
             ];
 
             let mut shaders = Vec::with_capacity(shader_sources.len());

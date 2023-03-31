@@ -1,5 +1,5 @@
 mod audio;
-mod custom_paintable;
+mod gl_area;
 
 use std::fs;
 use std::path::Path;
@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use ceres_core::Gb;
-use custom_paintable::GlArea;
+use gl_area::GlArea;
 use gtk::gdk::Key;
 use gtk::glib;
 use gtk::prelude::*;
