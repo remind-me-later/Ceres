@@ -141,11 +141,11 @@ impl Renderer {
             self.gl.tex_image_2d(
                 glow::TEXTURE_2D,
                 0,
-                glow::RGBA as i32,
+                glow::RGB as i32,
                 PX_WIDTH as i32,
                 PX_HEIGHT as i32,
                 0,
-                glow::RGBA,
+                glow::RGB,
                 glow::UNSIGNED_BYTE,
                 Some(rgba),
             );
