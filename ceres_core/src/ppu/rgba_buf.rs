@@ -11,7 +11,7 @@ pub(super) struct RgbaBuf {
 impl Default for RgbaBuf {
     fn default() -> Self {
         Self {
-            data: [0; RGBA_BUF_SIZE as usize],
+            data: [0xff; RGBA_BUF_SIZE as usize],
         }
     }
 }

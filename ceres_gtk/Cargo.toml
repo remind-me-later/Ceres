@@ -1,0 +1,25 @@
+[package]
+name = "ceres_gtk"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ceres_core = { path = "../ceres_core" }
+clap = { version = "*", default-features = false, features = ["std", "help"] }
+parking_lot = { version = "*", default-features = false }
+anyhow = { version = "*", default-features = false, features = ["std"] }
+epoxy = { version = "0.1.0" }
+libloading = { version = "0.7.0" }
+glow = { version = "*" }
+
+# audio
+cpal = { version = "*", default-features = false }
+
+[dependencies.adw]
+package = "libadwaita"
+version = "*"
+
+[dependencies.gtk]
+version = "*"
+package = "gtk4"
+features = ["v4_10"]
