@@ -8,6 +8,7 @@ pub enum PxScaleMode {
     #[default]
     Nearest = 0,
     Scale2x = 1,
+    Scale3x = 2,
 }
 
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;

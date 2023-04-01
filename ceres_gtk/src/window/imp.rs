@@ -137,6 +137,7 @@ impl ObjectImpl for Window {
                 let px_scale_mode = match parameter.as_str() {
                     "Nearest" => PxScaleMode::Nearest,
                     "Scale2x" => PxScaleMode::Scale2x,
+                    "Scale3x" => PxScaleMode::Scale3x,
                     _ => unreachable!()
                 };
 

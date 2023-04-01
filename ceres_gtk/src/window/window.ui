@@ -13,6 +13,11 @@
         <attribute name="action">win.px_scale</attribute>
         <attribute name="target">Scale2x</attribute>
       </item>
+      <item>
+        <attribute name="label" translatable="yes">_Scale 3x</attribute>
+        <attribute name="action">win.px_scale</attribute>
+        <attribute name="target">Scale3x</attribute>
+      </item>
     </section>
     <section>
       <item>
