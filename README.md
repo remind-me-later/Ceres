@@ -23,12 +23,21 @@ Required:
 To build just:
 
 - Enter the `gb-bootroms` directory and `make`.
-- In the root directory `cargo build --release`
+- In the root directory `cargo build --release --bin ceres_gtk`
 
 ## Quick start
 
-- To run a given `rom.gb` just type `cargo run --release rom.gb`.
-- To see usage of the program: `cargo run --release -- --help`.
+- In the root directory `cargo run --release --bin ceres_gtk`
+
+## Key bindings
+
+| Gameboy | Emulator |
+| ------- | -------- |
+| Dpad    | WASD     |
+| A       | K        |
+| B       | L        |
+| Start   | M        |
+| Select  | N        |
 
 ## Thanks
 
