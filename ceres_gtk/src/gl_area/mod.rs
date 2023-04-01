@@ -1,13 +1,12 @@
 mod imp;
 mod renderer;
 
-use std::sync::Arc;
-
 use ceres_core::Gb;
 use gtk::{glib, subclass::prelude::ObjectSubclassIsExt, traits::GLAreaExt};
 use parking_lot::Mutex;
+use std::sync::Arc;
 
-use self::renderer::ScaleMode;
+pub use renderer::PxScaleMode;
 
 glib::wrapper! {
     pub struct GlArea(ObjectSubclass<imp::GlArea>)
@@ -40,16 +39,9 @@ impl GlArea {
     //     }
     // }
 
-    pub fn toggle_scale_mode(&self) {
+    pub fn set_scale_mode(&self, mode: PxScaleMode) {
         let imp = self.imp();
-
-        let cur_scale = *imp.scale_mode.borrow();
-        let new_scale = match cur_scale {
-            ScaleMode::Nearest => ScaleMode::Scale2x,
-            ScaleMode::Scale2x => ScaleMode::Nearest,
-        };
-
-        *imp.scale_mode.borrow_mut() = new_scale;
+        *imp.scale_mode.borrow_mut() = mode;
         *imp.scale_changed.borrow_mut() = true;
 
         // rend.choose_scale_mode(new_scale);

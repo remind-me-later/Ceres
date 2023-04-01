@@ -4,7 +4,7 @@ use {
 };
 
 #[derive(Clone, Copy, Default)]
-pub enum ScaleMode {
+pub enum PxScaleMode {
     #[default]
     Nearest = 0,
     Scale2x = 1,
@@ -98,7 +98,7 @@ impl Renderer {
                 .expect("couldn't get location of scale uniform");
 
             // Init scale uniform
-            gl.uniform_1_u32_slice(Some(&scale_unif), &[ScaleMode::Nearest as u32]);
+            gl.uniform_1_u32_slice(Some(&scale_unif), &[PxScaleMode::Nearest as u32]);
 
             Self {
                 gl,
@@ -111,7 +111,7 @@ impl Renderer {
         }
     }
 
-    pub fn choose_scale_mode(&mut self, scale_mode: ScaleMode) {
+    pub fn choose_scale_mode(&mut self, scale_mode: PxScaleMode) {
         unsafe {
             self.gl.use_program(Some(self.program));
             self.gl
@@ -134,7 +134,7 @@ impl Renderer {
         }
     }
 
-    pub fn draw_frame(&mut self, rgba: &[u8]) {
+    pub fn draw_frame(&mut self, rgb: &[u8]) {
         unsafe {
             // TODO: texture streaming
             self.gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
@@ -147,7 +147,7 @@ impl Renderer {
                 0,
                 glow::RGB,
                 glow::UNSIGNED_BYTE,
-                Some(rgba),
+                Some(rgb),
             );
 
             self.gl.clear_color(0.0, 0.0, 0.0, 1.0);

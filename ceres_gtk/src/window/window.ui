@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <menu id='app-menu'>
+    <section>
+      <attribute name="label" translatable="yes">Pixel upscale filter</attribute>
+      <item>
+        <attribute name="label" translatable="yes">_Nearest neighbour</attribute>
+        <attribute name="action">win.px_scale</attribute>
+        <attribute name="target">Nearest</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_Scale 2x</attribute>
+        <attribute name="action">win.px_scale</attribute>
+        <attribute name="target">Scale2x</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
+        <attribute name='label' translatable='yes'>_About</attribute>
+        <!-- TODO: -->
+        <attribute name='action'>app.about</attribute>
+      </item>
+    </section>
+  </menu>
+  <template class="CeresWindow" parent="GtkApplicationWindow">
+    <property name="title">Ceres</property>
+    <child type="titlebar">
+      <object class="GtkHeaderBar">
+        <property name="show-title-buttons">True</property>
+        <child type="start">
+          <object class="GtkButton">
+            <property name="action-name">win.open</property>
+            <property name="icon-name">document-open-symbolic</property>
+          </object>
+        </child>
+        <child type="end">
+          <object class="GtkMenuButton">
+            <property name="icon-name">open-menu-symbolic</property>
+            <property name="menu-model">app-menu</property>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child>
+      <object class="CeresGlArea" id="gb_area"></object>
+    </child>
+  </template>
+</interface>

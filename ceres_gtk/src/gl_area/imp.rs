@@ -1,5 +1,5 @@
 use super::renderer::Renderer;
-use super::renderer::ScaleMode;
+use super::renderer::PxScaleMode;
 use crate::audio;
 use ceres_core::Gb;
 use gtk::glib;
@@ -13,7 +13,7 @@ pub struct GlArea {
     pub gb: Arc<Mutex<Gb>>,
     pub audio: Arc<Mutex<audio::Renderer>>,
     pub renderer: RefCell<Option<Renderer>>,
-    pub scale_mode: RefCell<ScaleMode>,
+    pub scale_mode: RefCell<PxScaleMode>,
     pub scale_changed: RefCell<bool>,
 }
 
