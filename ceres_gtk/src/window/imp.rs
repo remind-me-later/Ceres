@@ -56,10 +56,25 @@ impl ObjectSubclass for Window {
                     let filename = file.path().expect("Couldn't get file path");
 
                     // TODO: gracefully handle invalid files
-                    let mut new_gb = init_gb(ceres_core::Model::Cgb, Some(&filename)).unwrap();
+                    match init_gb(ceres_core::Model::Cgb, Some(&filename)) {
+                        Ok(mut new_gb) => {
+                            // Swap the GB instances
+                            let mut lock = win.imp().gb_area.gb().lock();
+                            core::mem::swap(&mut *lock, &mut new_gb);
+                        }
+                        Err(err) => {
+                            let info_dialog = gtk::MessageDialog::builder()
+                                .transient_for(&win)
+                                .modal(true)
+                                .buttons(gtk::ButtonsType::Close)
+                                .text("Unable to open ROM file")
+                                .secondary_text(format!("{err}"))
+                                .build();
 
-                    let mut lock = win.imp().gb_area.gb().lock();
-                    core::mem::swap(&mut *lock, &mut new_gb);
+                            info_dialog.run_future().await;
+                            info_dialog.close();
+                        }
+                    }
                 }
             },
         );

@@ -17,6 +17,7 @@ cpal = { version = "*", default-features = false }
 [dependencies.adw]
 package = "libadwaita"
 version = "*"
+features = ["v1_3"]
 
 [dependencies.gtk]
 version = "*"
