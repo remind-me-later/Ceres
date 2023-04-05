@@ -1,17 +1,17 @@
 # Ceres
 
-![logo](https://github.com/remind-me-later/ceres-images/blob/main/ceres.webp?raw=true)
-
 A (very experimental) GameBoy/Color emulator written in rust.
+
+![logo](https://github.com/remind-me-later/ceres-images/blob/main/ceres.webp?raw=true)
 
 ## Screenshots
 
 <p align="center" width="100%">
-    <img width="30%" src="https://github.com/remind-me-later/ceres-images/blob/main/kirby_dream.webp?raw=true"> 
-    <img width="30%" src="https://github.com/remind-me-later/ceres-images/blob/main/pokemon_silver.webp?raw=true"> 
-    <img width="30%" src="https://github.com/remind-me-later/ceres-images/blob/main/pokemon_crystal.webp?raw=true">   
-    <img width="30%" src="https://github.com/remind-me-later/ceres-images/blob/main/zelda_yume_1.webp?raw=true"> 
-    <img width="30%" src="https://github.com/remind-me-later/ceres-images/blob/main/zelda_yume_2.webp?raw=true"> 
+    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/kirby_dream.webp?raw=true"> 
+    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/pokemon_silver.webp?raw=true"> 
+    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/pokemon_crystal.webp?raw=true">   
+    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/zelda_yume_1.webp?raw=true"> 
+    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/zelda_yume_2.webp?raw=true"> 
 </p>
 
 ## Build

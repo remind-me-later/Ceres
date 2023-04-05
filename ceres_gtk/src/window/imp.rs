@@ -2,7 +2,6 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::Context;
 use gtk::gdk::Key;
 use gtk::subclass::prelude::*;
 use gtk::{glib, prelude::*, CompositeTemplate};
@@ -153,7 +152,10 @@ impl WidgetImpl for Window {}
 impl WindowImpl for Window {}
 impl ApplicationWindowImpl for Window {}
 
-fn init_gb(model: ceres_core::Model, rom_path: Option<&Path>) -> anyhow::Result<ceres_core::Gb> {
+fn init_gb(
+    model: ceres_core::Model,
+    rom_path: Option<&Path>,
+) -> Result<ceres_core::Gb, ceres_core::Error> {
     let rom = rom_path.map(|p| fs::read(p).map(Vec::into_boxed_slice).unwrap());
 
     let ram = rom_path
@@ -161,7 +163,7 @@ fn init_gb(model: ceres_core::Model, rom_path: Option<&Path>) -> anyhow::Result<
         .and_then(|p| fs::read(p).map(Vec::into_boxed_slice).ok());
 
     let cart = if let Some(rom) = rom {
-        ceres_core::Cart::new(rom, ram).context("invalid rom header")?
+        ceres_core::Cart::new(rom, ram)?
     } else {
         ceres_core::Cart::default()
     };

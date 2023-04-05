@@ -1,4 +1,3 @@
-use anyhow::Context;
 use cpal::traits::StreamTrait;
 
 use {alloc::sync::Arc, ceres_core::Gb, parking_lot::Mutex};
@@ -11,13 +10,13 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(gb: Arc<Mutex<Gb>>) -> anyhow::Result<Self> {
+    pub fn new(gb: Arc<Mutex<Gb>>) -> Self {
         use cpal::traits::{DeviceTrait, HostTrait};
 
         let host = cpal::default_host();
         let dev = host
             .default_output_device()
-            .context("cpal couldn't get default output device")?;
+            .expect("cpal couldn't get default output device");
 
         let config = cpal::StreamConfig {
             channels: 2,
@@ -36,11 +35,13 @@ impl Renderer {
             });
         };
 
-        let stream = dev.build_output_stream(&config, data_callback, error_callback, None)?;
+        let stream = dev
+            .build_output_stream(&config, data_callback, error_callback, None)
+            .unwrap();
 
-        stream.play()?;
+        stream.play().unwrap();
 
-        Ok(Self { stream })
+        Self { stream }
     }
 
     pub fn pause(&mut self) {

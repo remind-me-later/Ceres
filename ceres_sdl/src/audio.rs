@@ -1,73 +1,60 @@
-use alloc::sync::Arc;
-use ceres_core::Gb;
-use parking_lot::Mutex;
-use sdl2::{
-    audio::{AudioCallback, AudioDevice, AudioSpecDesired},
-    Sdl,
-};
+use cpal::traits::StreamTrait;
 
-const BUFFER_SIZE: u16 = 512;
+use {alloc::sync::Arc, ceres_core::Gb, parking_lot::Mutex};
+
+const BUFFER_SIZE: cpal::FrameCount = 512;
 const SAMPLE_RATE: i32 = 48000;
 
-struct Cb {
-    gb: Arc<Mutex<Gb>>,
-}
-
-impl AudioCallback for Cb {
-    type Channel = ceres_core::Sample;
-
-    fn callback(&mut self, b: &mut [Self::Channel]) {
-        let mut gb = self.gb.lock();
-
-        let mut i = 0;
-        let len = b.len();
-
-        while i < len {
-            let (l, r) = gb.run_samples();
-            b[i] = l;
-            b[i + 1] = r;
-
-            i += 2;
-        }
-    }
-}
-
 pub struct Renderer {
-    device: AudioDevice<Cb>,
+    stream: cpal::Stream,
 }
 
 impl Renderer {
-    pub fn new(sdl_context: &Sdl, gb: Arc<Mutex<Gb>>) -> Self {
-        let audio_subsystem = sdl_context.audio().unwrap();
+    pub fn new(gb: Arc<Mutex<Gb>>) -> Self {
+        use cpal::traits::{DeviceTrait, HostTrait};
 
-        let desired_spec = AudioSpecDesired {
-            freq: Some(SAMPLE_RATE),
-            channels: Some(2),          // mono
-            samples: Some(BUFFER_SIZE), // default sample size
+        let host = cpal::default_host();
+        let dev = host
+            .default_output_device()
+            .expect("cpal couldn't get default output device");
+
+        let config = cpal::StreamConfig {
+            channels: 2,
+            sample_rate: cpal::SampleRate(SAMPLE_RATE as u32),
+            buffer_size: cpal::BufferSize::Fixed(BUFFER_SIZE),
         };
 
-        let device = audio_subsystem
-            .open_playback(None, &desired_spec, |_| Cb { gb })
+        let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
+        let data_callback = move |b: &mut [ceres_core::Sample], _: &_| {
+            let mut gb = gb.lock();
+
+            b.chunks_exact_mut(2).for_each(|w| {
+                let (l, r) = gb.run_samples();
+                w[0] = l;
+                w[1] = r;
+            });
+        };
+
+        let stream = dev
+            .build_output_stream(&config, data_callback, error_callback, None)
             .unwrap();
 
-        // Start playback
-        device.resume();
+        stream.play().unwrap();
 
-        Self { device }
-    }
-
-    #[allow(dead_code)]
-    pub fn resume(&mut self) {
-        self.device.resume();
+        Self { stream }
     }
 
     #[allow(dead_code)]
     pub fn pause(&mut self) {
-        self.device.pause();
+        self.stream.pause().unwrap();
     }
 
-    #[inline]
-    pub fn sample_rate() -> i32 {
+    #[allow(dead_code)]
+    pub fn resume(&mut self) {
+        self.stream.play().unwrap();
+    }
+
+    pub const fn sample_rate() -> i32 {
         SAMPLE_RATE
     }
 }

@@ -1,5 +1,5 @@
-use super::renderer::Renderer;
 use super::renderer::PxScaleMode;
+use super::renderer::Renderer;
 use crate::audio;
 use ceres_core::Gb;
 use gtk::glib;
@@ -36,7 +36,7 @@ impl ObjectSubclass for GlArea {
             audio::Renderer::sample_rate(),
             cart,
         )));
-        let audio = Arc::new(Mutex::new(audio::Renderer::new(Arc::clone(&gb)).unwrap()));
+        let audio = Arc::new(Mutex::new(audio::Renderer::new(Arc::clone(&gb))));
 
         Self {
             gb,

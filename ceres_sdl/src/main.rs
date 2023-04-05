@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 #![warn(
     clippy::pedantic,
     // clippy::nursery,
@@ -15,7 +16,7 @@
     clippy::empty_drop,
     clippy::empty_structs_with_brackets,
     clippy::exit,
-    clippy::expect_used,
+    // clippy::expect_used,
     clippy::filetype_is_file,
     // clippy::float_arithmetic,
     clippy::float_cmp_const,
@@ -78,13 +79,12 @@ use sdl2::{
     keyboard::Keycode,
     pixels::{Color, PixelFormatEnum},
     rect::Rect,
-    render::{Canvas, Texture, TextureCreator},
+    render::{Canvas, TextureCreator},
     video::{FullscreenType, Window, WindowContext},
     EventPump,
 };
 use {
     alloc::sync::Arc,
-    anyhow::Context,
     ceres_core::Gb,
     clap::{builder::PossibleValuesParser, Arg, Command},
     std::{
@@ -122,7 +122,7 @@ const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
 const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
 const SCREEN_MUL: u32 = 3;
 
-fn main() -> anyhow::Result<()> {
+fn main() {
     let args = Command::new(CERES_BIN)
         .bin_name(CERES_BIN)
         .about(ABOUT)
@@ -151,7 +151,7 @@ fn main() -> anyhow::Result<()> {
     let model = {
         let model_str = args
             .get_one::<String>("model")
-            .context("couldn't get model string")?;
+            .expect("couldn't get model string");
 
         let model = match model_str.as_str() {
             "dmg" => ceres_core::Model::Dmg,
@@ -165,10 +165,8 @@ fn main() -> anyhow::Result<()> {
 
     let pathbuf = args.get_one::<String>("file").map(PathBuf::from).unwrap();
 
-    let mut emu = Emu::new(model, pathbuf)?;
+    let mut emu = Emu::new(model, pathbuf);
     emu.run();
-
-    Ok(())
 }
 
 struct Emu {
@@ -179,15 +177,14 @@ struct Emu {
     do_resize: bool,
     event_pump: EventPump,
     canvas: Canvas<Window>,
-    texture: Texture,
-    _creator: TextureCreator<WindowContext>,
+    creator: TextureCreator<WindowContext>,
     blit_rect: Rect,
 }
 
 impl Emu {
-    fn new(model: ceres_core::Model, rom_path: PathBuf) -> anyhow::Result<Self> {
+    fn new(model: ceres_core::Model, rom_path: PathBuf) -> Self {
         // Try to create GB before creating window
-        let gb = Self::init_gb(model, &rom_path)?;
+        let gb = Self::init_gb(model, &rom_path).unwrap();
 
         let gb = Arc::new(Mutex::new(gb));
 
@@ -195,7 +192,7 @@ impl Emu {
 
         let audio = {
             let gb = Arc::clone(&gb);
-            audio::Renderer::new(&sdl_context, gb)
+            audio::Renderer::new(gb)
         };
 
         let event_pump = sdl_context.event_pump().unwrap();
@@ -219,10 +216,8 @@ impl Emu {
         canvas.clear();
 
         let creator = canvas.texture_creator();
-        let texture =
-            creator.create_texture_streaming(PixelFormatEnum::RGB24, PX_WIDTH, PX_HEIGHT)?;
 
-        Ok(Self {
+        Self {
             _audio: audio,
             gb,
             rom_path,
@@ -230,26 +225,32 @@ impl Emu {
             do_resize: true,
             event_pump,
             canvas,
-            texture,
-            _creator: creator,
+            creator,
             blit_rect: Rect::new(0, 0, 0, 0),
-        })
+        }
     }
 
-    fn init_gb(model: ceres_core::Model, rom_path: &Path) -> anyhow::Result<Gb> {
-        let rom = fs::read(rom_path).map(Vec::into_boxed_slice)?;
+    fn init_gb(model: ceres_core::Model, rom_path: &Path) -> Result<Gb, ceres_core::Error> {
+        let rom = fs::read(rom_path)
+            .map(Vec::into_boxed_slice)
+            .expect("unable to open ROM file");
 
         let ram = fs::read(rom_path.with_extension("sav"))
             .map(Vec::into_boxed_slice)
             .ok();
 
-        let cart = ceres_core::Cart::new(rom, ram).context("invalid rom header")?;
+        let cart = ceres_core::Cart::new(rom, ram)?;
         let sample_rate = audio::Renderer::sample_rate();
 
         Ok(Gb::new(model, sample_rate, cart))
     }
 
     pub fn run(&mut self) {
+        let mut texture = self
+            .creator
+            .create_texture_streaming(PixelFormatEnum::RGB24, PX_WIDTH, PX_HEIGHT)
+            .unwrap();
+
         'running: loop {
             {
                 let mut gb = self.gb.lock();
@@ -313,9 +314,7 @@ impl Emu {
                 }
 
                 let buf = gb.pixel_data_rgba();
-                self.texture
-                    .update(None, buf, 3 * PX_WIDTH as usize)
-                    .unwrap();
+                texture.update(None, buf, 3 * PX_WIDTH as usize).unwrap();
 
                 self.canvas.clear();
 
@@ -331,9 +330,7 @@ impl Emu {
                     self.do_resize = false;
                 }
 
-                self.canvas
-                    .copy(&self.texture, None, self.blit_rect)
-                    .unwrap();
+                self.canvas.copy(&texture, None, self.blit_rect).unwrap();
 
                 self.canvas.present();
             }
