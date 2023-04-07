@@ -39,6 +39,12 @@ To build just:
 | Start   | M        |
 | Select  | N        |
 
+## Folder organization
+
+- `ceres_core` contains the core emulator logic, such as cpu, apu and ppu emulation.
+- `ceres_sdl` contains an sdl frontend with a cli interface.
+- `ceres_gtk` contains a gtk frontend with a gui.
+
 ## Thanks
 
 ### Documentation
