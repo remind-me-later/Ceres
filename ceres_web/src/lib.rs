@@ -100,6 +100,15 @@ pub fn run_sample(emulator: *mut Emulator) -> AudioSamples {
     }
 }
 
+#[wasm_bindgen]
+pub fn run_n_samples(emulator: *mut Emulator, num_samples : i32) {
+    unsafe {
+        for _ in 0..num_samples {
+            (*emulator).emulator.run_samples();
+        }
+    }
+}
+
 fn u8_to_button(value: u8) -> Button {
     match value {
         0x01 => Button::Right,
