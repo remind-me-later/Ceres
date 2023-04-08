@@ -1,7 +1,7 @@
 // @generated file from wasmbuild -- do not edit
 // deno-lint-ignore-file
 // deno-fmt-ignore-file
-// source-hash: 6b9d57848648f19f3abf9494b922793c8d09a831
+// source-hash: 031339f62a97860c37a9d0304b03de7cf80e47c6
 let wasm;
 
 const cachedTextDecoder = new TextDecoder("utf-8", {
@@ -55,6 +55,14 @@ function _assertClass(instance, klass) {
     throw new Error(`expected instance of ${klass.name}`);
   }
   return instance.ptr;
+}
+/**
+ * @param {GbHandle} emulator
+ */
+export function free_gb(emulator) {
+  _assertClass(emulator, GbHandle);
+  var ptr0 = emulator.__destroy_into_raw();
+  wasm.free_gb(ptr0);
 }
 
 let cachedInt32Memory0 = null;
@@ -243,7 +251,7 @@ let lastLoadPromise;
  * @param {InstantiateOptions=} opts
  * @returns {Promise<{
  *   instance: WebAssembly.Instance;
- *   exports: { init_emulator: typeof init_emulator; init_emulator_with_rom: typeof init_emulator_with_rom; get_framebuffer: typeof get_framebuffer; run_sample: typeof run_sample; run_n_samples: typeof run_n_samples; press_button: typeof press_button; release_button: typeof release_button; AudioSamples : typeof AudioSamples ; GbHandle : typeof GbHandle  }
+ *   exports: { init_emulator: typeof init_emulator; init_emulator_with_rom: typeof init_emulator_with_rom; free_gb: typeof free_gb; get_framebuffer: typeof get_framebuffer; run_sample: typeof run_sample; run_n_samples: typeof run_n_samples; press_button: typeof press_button; release_button: typeof release_button; AudioSamples : typeof AudioSamples ; GbHandle : typeof GbHandle  }
  * }>}
  */
 export function instantiateWithInstance(opts) {
@@ -274,6 +282,7 @@ function getWasmInstanceExports() {
   return {
     init_emulator,
     init_emulator_with_rom,
+    free_gb,
     get_framebuffer,
     run_sample,
     run_n_samples,

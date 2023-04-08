@@ -57,7 +57,7 @@ function main() {
         let arrayBuffer = this.result;
         let array = new Uint8Array(arrayBuffer);
 
-        gb.destroy_emulator(emulator);
+        gb.free_gb(emulator);
         emulator = gb.init_emulator_with_rom(array);
 
         console.log(array);
