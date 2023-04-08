@@ -1,8 +1,6 @@
-mod utils;
-
-use wasm_bindgen::prelude::*;
 use ceres_core::{Button, Cart, Gb, Model};
 use either::Either;
+use wasm_bindgen::prelude::*;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -11,7 +9,7 @@ use either::Either;
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 #[wasm_bindgen]
-extern {
+extern "C" {
     fn alert(s: &str);
 }
 
@@ -22,7 +20,7 @@ pub fn greet(s: &str) {
 
 #[wasm_bindgen]
 pub struct Emulator {
-    emulator: Gb
+    emulator: Gb,
 }
 
 #[wasm_bindgen]
@@ -31,8 +29,8 @@ pub fn init_emulator() -> *mut Emulator {
     let sample_rate = 48000;
 
     let cart = Cart::default();
-    let emulator = Box::new( Emulator {
-        emulator: Gb::new(model, sample_rate, cart)
+    let emulator = Box::new(Emulator {
+        emulator: Gb::new(model, sample_rate, cart),
     });
 
     Box::leak(emulator)
@@ -46,8 +44,8 @@ pub fn init_emulator_with_rom(rom: Vec<u8>) -> *mut Emulator {
     // TODO: Handle errors more gracefully
     let cart = Cart::new(rom.into_boxed_slice(), None).unwrap();
 
-    let emulator = Box::new( Emulator {
-        emulator: Gb::new(model, sample_rate, cart)
+    let emulator = Box::new(Emulator {
+        emulator: Gb::new(model, sample_rate, cart),
     });
 
     Box::leak(emulator)
@@ -65,43 +63,42 @@ pub fn destroy_emulator(emulator: *mut Emulator) {
 pub fn get_framebuffer(emulator: *const Emulator) -> Vec<u8> {
     unsafe {
         // We need to add the alpha (255 value)
-        (*emulator).emulator.pixel_data_rgba().iter()
+        (*emulator)
+            .emulator
+            .pixel_data_rgba()
+            .iter()
             .copied()
             .enumerate()
             .flat_map(|(i, c)| {
                 if i % 3 == 0 {
                     // Either::Left([255u8, c].iter())
-                    Either::Left(
-                        std::iter::once(255u8).chain(
-                            std::iter::once(c)
-                        )
-                    )
+                    Either::Left(std::iter::once(255u8).chain(std::iter::once(c)))
                 } else {
                     Either::Right(std::iter::once(c))
                 }
-            }).chain(std::iter::once(255u8)).skip(1).collect()
+            })
+            .chain(std::iter::once(255u8))
+            .skip(1)
+            .collect()
     }
 }
 
 #[wasm_bindgen]
 pub struct AudioSamples {
     pub left: i16,
-    pub right: i16
+    pub right: i16,
 }
 
 #[wasm_bindgen]
 pub fn run_sample(emulator: *mut Emulator) -> AudioSamples {
     unsafe {
         let (a, b) = (*emulator).emulator.run_samples();
-        AudioSamples {
-            left: a,
-            right: b
-        }
+        AudioSamples { left: a, right: b }
     }
 }
 
 #[wasm_bindgen]
-pub fn run_n_samples(emulator: *mut Emulator, num_samples : i32) {
+pub fn run_n_samples(emulator: *mut Emulator, num_samples: i32) {
     unsafe {
         for _ in 0..num_samples {
             (*emulator).emulator.run_samples();
@@ -120,7 +117,7 @@ fn u8_to_button(value: u8) -> Button {
         0x40 => Button::Select,
         0x80 => Button::Start,
 
-        _ => unreachable!()
+        _ => unreachable!(),
     }
 }
 

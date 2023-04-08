@@ -1,5 +1,5 @@
 [workspace]
-members = ["ceres_core", "ceres_sdl", "ceres_gtk", "ceres_web"]
+members = ["ceres_core", "ceres_sdl", "ceres_gtk"]
 default-members = ["ceres_gtk", "ceres_sdl"]
 resolver = "2"
 

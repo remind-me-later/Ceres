@@ -1,0 +1,13 @@
+body {
+  font-family: sans-serif;
+}
+
+#myCanvas {
+  width: 480px;
+  height: 432px;
+
+  /* Firefox */
+  image-rendering: crisp-edges;
+  /* Chromium + Safari */
+  image-rendering: pixelated;
+}
