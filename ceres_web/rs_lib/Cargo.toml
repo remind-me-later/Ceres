@@ -10,9 +10,10 @@ crate_type = ["cdylib"]
 codegen-units = 1
 incremental = true
 lto = true
-opt-level = "z"
+opt-level = "s"
 
 [dependencies]
-wasm-bindgen = "=0.2.84"
+wasm-bindgen = "*"
 ceres_core = { path = "../../ceres_core" }
-either = "1.8.1"
+either = "*"
+wee_alloc = "*"

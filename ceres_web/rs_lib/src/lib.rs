@@ -1,26 +1,19 @@
+#![no_std]
+
+use alloc::{boxed::Box, vec::Vec};
 use ceres_core::{Button, Cart, Gb, Model};
+use core::iter;
 use either::Either;
 use wasm_bindgen::prelude::*;
 
-// When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
-// allocator.
-#[cfg(feature = "wee_alloc")]
+extern crate alloc;
+
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 #[wasm_bindgen]
-extern "C" {
-    fn alert(s: &str);
-}
-
-#[wasm_bindgen]
-pub fn greet(s: &str) {
-    alert(&format!("Hello, {}!", s));
-}
-
-#[wasm_bindgen]
 pub struct Emulator {
-    emulator: Gb,
+    gb: Gb,
 }
 
 #[wasm_bindgen]
@@ -30,7 +23,7 @@ pub fn init_emulator() -> *mut Emulator {
 
     let cart = Cart::default();
     let emulator = Box::new(Emulator {
-        emulator: Gb::new(model, sample_rate, cart),
+        gb: Gb::new(model, sample_rate, cart),
     });
 
     Box::leak(emulator)
@@ -42,45 +35,41 @@ pub fn init_emulator_with_rom(rom: Vec<u8>) -> *mut Emulator {
     let sample_rate = 48000;
 
     // TODO: Handle errors more gracefully
-    let cart = Cart::new(rom.into_boxed_slice(), None).unwrap();
+    let cart = Cart::new(rom.into_boxed_slice(), None).unwrap_or_default();
 
     let emulator = Box::new(Emulator {
-        emulator: Gb::new(model, sample_rate, cart),
+        gb: Gb::new(model, sample_rate, cart),
     });
 
     Box::leak(emulator)
 }
 
 #[wasm_bindgen]
-pub fn destroy_emulator(emulator: *mut Emulator) {
-    unsafe {
-        drop(Box::from_raw(emulator));
-    }
+pub unsafe fn destroy_emulator(emulator: *mut Emulator) {
+    drop(Box::from_raw(emulator));
 }
 
 // TODO: Maybe avoid the copy into a Vec<u8>?
 #[wasm_bindgen]
-pub fn get_framebuffer(emulator: *const Emulator) -> Vec<u8> {
-    unsafe {
-        // We need to add the alpha (255 value)
-        (*emulator)
-            .emulator
-            .pixel_data_rgba()
-            .iter()
-            .copied()
-            .enumerate()
-            .flat_map(|(i, c)| {
-                if i % 3 == 0 {
-                    // Either::Left([255u8, c].iter())
-                    Either::Left(std::iter::once(255u8).chain(std::iter::once(c)))
-                } else {
-                    Either::Right(std::iter::once(c))
-                }
-            })
-            .chain(std::iter::once(255u8))
-            .skip(1)
-            .collect()
-    }
+pub unsafe fn get_framebuffer(emulator: *const Emulator) -> Vec<u8> {
+    // We need to add the alpha (255 value)
+    (*emulator)
+        .gb
+        .pixel_data_rgba()
+        .iter()
+        .copied()
+        .enumerate()
+        .flat_map(|(i, c)| {
+            if i % 3 == 0 {
+                // Either::Left([255u8, c].iter())
+                Either::Left(iter::once(255u8).chain(iter::once(c)))
+            } else {
+                Either::Right(iter::once(c))
+            }
+        })
+        .chain(iter::once(255u8))
+        .skip(1)
+        .collect()
 }
 
 #[wasm_bindgen]
@@ -90,19 +79,15 @@ pub struct AudioSamples {
 }
 
 #[wasm_bindgen]
-pub fn run_sample(emulator: *mut Emulator) -> AudioSamples {
-    unsafe {
-        let (a, b) = (*emulator).emulator.run_samples();
-        AudioSamples { left: a, right: b }
-    }
+pub unsafe fn run_sample(emulator: *mut Emulator) -> AudioSamples {
+    let (a, b) = (*emulator).gb.run_samples();
+    AudioSamples { left: a, right: b }
 }
 
 #[wasm_bindgen]
-pub fn run_n_samples(emulator: *mut Emulator, num_samples: i32) {
-    unsafe {
-        for _ in 0..num_samples {
-            (*emulator).emulator.run_samples();
-        }
+pub unsafe fn run_n_samples(emulator: *mut Emulator, num_samples: i32) {
+    for _ in 0..num_samples {
+        (*emulator).gb.run_samples();
     }
 }
 
@@ -116,22 +101,17 @@ fn u8_to_button(value: u8) -> Button {
         0x20 => Button::B,
         0x40 => Button::Select,
         0x80 => Button::Start,
-
         _ => unreachable!(),
     }
 }
 
 // The button index is the same as Specified in Button enum
 #[wasm_bindgen]
-pub fn press_button(emulator: *mut Emulator, button: u8) {
-    unsafe {
-        (*emulator).emulator.press(u8_to_button(button));
-    }
+pub unsafe fn press_button(emulator: *mut Emulator, button: u8) {
+    (*emulator).gb.press(u8_to_button(button));
 }
 
 #[wasm_bindgen]
-pub fn release_button(emulator: *mut Emulator, button: u8) {
-    unsafe {
-        (*emulator).emulator.release(u8_to_button(button));
-    }
+pub unsafe fn release_button(emulator: *mut Emulator, button: u8) {
+    (*emulator).gb.release(u8_to_button(button));
 }
