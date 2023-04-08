@@ -1,6 +1,7 @@
 {
   "tasks": {
-    "wasmbuild": "deno run -A https://deno.land/x/wasmbuild/main.ts",
-    "start": "deno run --allow-net --allow-read=. https://deno.land/std/http/file_server.ts"
+    "wasmbuild": "deno run -A https://deno.land/x/wasmbuild/main.ts --out ./www",
+    "start": "deno run --allow-net --allow-read=. https://deno.land/std/http/file_server.ts ./www",
+    "bundle": "esbuild www/main.js --bundle --minify --format=esm --outfile=www/bundle.js"
   }
 }

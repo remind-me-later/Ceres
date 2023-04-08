@@ -1,6 +1,6 @@
-import { instantiate } from "./lib/rs_lib.generated.js";
+import { instantiate } from "./rs_lib.generated.js";
 
-const wasm = await instantiate();
+const gb = await instantiate();
 
 var emulator = undefined;
 var start = undefined;
@@ -30,9 +30,9 @@ function step(timestamp) {
   start = timestamp;
 
   let num_samples_to_run = Math.round((elapsed * sample_rate) / 1000);
-  wasm.run_n_samples(emulator, num_samples_to_run);
+  gb.run_n_samples(emulator, num_samples_to_run);
 
-  let fb = wasm.get_framebuffer(emulator);
+  let fb = gb.get_framebuffer(emulator);
   let image_data = new ImageData(new Uint8ClampedArray(fb), 160, 144);
 
   ctx.putImageData(image_data, 0, 0);
@@ -40,8 +40,8 @@ function step(timestamp) {
   window.requestAnimationFrame(step);
 }
 
-function init() {
-  emulator = wasm.init_emulator();
+function main() {
+  emulator = gb.init_emulator();
 
   canvas = document.getElementById("myCanvas");
   ctx = canvas.getContext("2d");
@@ -57,8 +57,8 @@ function init() {
         let arrayBuffer = this.result;
         let array = new Uint8Array(arrayBuffer);
 
-        wasm.destroy_emulator(emulator);
-        emulator = wasm.init_emulator_with_rom(array);
+        gb.destroy_emulator(emulator);
+        emulator = gb.init_emulator_with_rom(array);
 
         console.log(array);
       };
@@ -73,7 +73,7 @@ function init() {
     (e) => {
       let n = gb_key_map[e.key];
       if (n != undefined) {
-        wasm.press_button(emulator, n);
+        gb.press_button(emulator, n);
       }
     },
     false
@@ -84,7 +84,7 @@ function init() {
     (e) => {
       let n = gb_key_map[e.key];
       if (n != undefined) {
-        wasm.release_button(emulator, n);
+        gb.release_button(emulator, n);
       }
     },
     false
@@ -94,4 +94,4 @@ function init() {
   window.requestAnimationFrame(step);
 }
 
-init();
+main();
