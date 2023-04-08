@@ -8,9 +8,6 @@ use wasm_bindgen::prelude::*;
 
 extern crate alloc;
 
-#[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-
 #[wasm_bindgen]
 pub struct Emulator {
     gb: Gb,
