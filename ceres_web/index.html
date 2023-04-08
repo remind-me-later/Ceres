@@ -10,54 +10,57 @@
   </head>
 
   <body>
-    <main>
-      <h1>Ceres Emulator</h1>
-      <p>
-        Ceres is an experimental GameBoy/Color emulator written using Rust and
-        WebAssembly. It has backends for SDL, GTK and WebAssembly. The source
-        code can be found in
-        <a href="https://github.com/remind-me-later/Ceres" target="_blank"
-          >GitHub</a
-        >.
-      </p>
+    <div class="flex-container">
+      <div class="sidebar">
+        <h1>Ceres Emulator</h1>
+        <p>
+          Ceres is an experimental GameBoy/Color emulator written using Rust and
+          WebAssembly. It has backends for SDL, GTK and WebAssembly. The source
+          code can be found in
+          <a href="https://github.com/remind-me-later/Ceres" target="_blank"
+            >GitHub</a
+          >.
+        </p>
 
-      <h2>Keybindings</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>GB Key</th>
-            <th>Emulator</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>DPad</td>
-            <td>WASD</td>
-          </tr>
-          <tr>
-            <td>A</td>
-            <td>K</td>
-          </tr>
-          <tr>
-            <td>B</td>
-            <td>L</td>
-          </tr>
-          <tr>
-            <td>N</td>
-            <td>Select</td>
-          </tr>
-          <tr>
-            <td>M</td>
-            <td>Start</td>
-          </tr>
-        </tbody>
-      </table>
+        <h2>Keybindings</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>GB Key</th>
+              <th>Emulator</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>DPad</td>
+              <td>WASD</td>
+            </tr>
+            <tr>
+              <td>A</td>
+              <td>K</td>
+            </tr>
+            <tr>
+              <td>B</td>
+              <td>L</td>
+            </tr>
+            <tr>
+              <td>N</td>
+              <td>Select</td>
+            </tr>
+            <tr>
+              <td>M</td>
+              <td>Start</td>
+            </tr>
+          </tbody>
+        </table>
 
-      <canvas id="myCanvas" width="160" height="144"></canvas>
-
-      <div class="buttons">
+        <h2>Open file</h2>
         <input type="file" id="load_btn" />
       </div>
-    </main>
+
+      <div class="content">
+        <canvas id="myCanvas" width="160" height="144"></canvas>
+      </div>
+    </div>
   </body>
 </html>
