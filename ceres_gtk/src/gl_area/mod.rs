@@ -32,18 +32,17 @@ impl GlArea {
         GLAreaExt::make_current(self);
     }
 
-    // pub fn choose_scale_mode(&self, scale_mode: ScaleMode) {
-    //     if let Some(rend) = self.imp().renderer.borrow_mut().as_mut() {
-    //         // self.make_current();
-    //         rend.choose_scale_mode(scale_mode);
-    //     }
-    // }
+    pub fn pause(&self) {
+        self.imp().pause();
+    }
+
+    pub fn play(&self) {
+        self.imp().play();
+    }
 
     pub fn set_scale_mode(&self, mode: PxScaleMode) {
         let imp = self.imp();
         *imp.scale_mode.borrow_mut() = mode;
         *imp.scale_changed.borrow_mut() = true;
-
-        // rend.choose_scale_mode(new_scale);
     }
 }

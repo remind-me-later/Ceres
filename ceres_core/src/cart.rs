@@ -75,7 +75,7 @@ impl Display for Error {
                 "invalid title string in cartridge header, contains non ASCII \
          characters"
             ),
-            Self::UnsupportedMBC(byte) => write!(f, "unsupported MBC: rom[0x147] = {byte:#0x}"),
+            Self::UnsupportedMBC(byte) => write!(f, "unsupported MBC: {byte:#0x}"),
             Self::RomSizeDifferentThanActual => write!(
                 f,
                 "header ROM size is different from the size of the supplied file"

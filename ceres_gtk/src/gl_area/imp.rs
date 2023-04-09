@@ -5,6 +5,7 @@ use ceres_core::Gb;
 use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
+use gtk::TickCallbackId;
 use parking_lot::Mutex;
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -15,6 +16,28 @@ pub struct GlArea {
     pub renderer: RefCell<Option<Renderer>>,
     pub scale_mode: RefCell<PxScaleMode>,
     pub scale_changed: RefCell<bool>,
+    pub tick_id: RefCell<Option<TickCallbackId>>,
+}
+
+impl GlArea {
+    pub fn play(&self) {
+        let widget = self.obj();
+
+        *self.tick_id.borrow_mut() = Some(widget.add_tick_callback(move |gl_area, _| {
+            gl_area.queue_draw();
+            glib::Continue(true)
+        }));
+
+        self.audio.lock().resume();
+    }
+
+    pub fn pause(&self) {
+        if let Some(tick_id) = self.tick_id.borrow_mut().take() {
+            tick_id.remove();
+        }
+
+        self.audio.lock().pause();
+    }
 }
 
 impl Default for GlArea {
@@ -44,6 +67,7 @@ impl ObjectSubclass for GlArea {
             renderer: Default::default(),
             scale_mode: Default::default(),
             scale_changed: Default::default(),
+            tick_id: Default::default(),
         }
     }
 }
@@ -51,13 +75,7 @@ impl ObjectSubclass for GlArea {
 impl ObjectImpl for GlArea {
     fn constructed(&self) {
         self.parent_constructed();
-
-        let widget = self.obj();
-
-        widget.add_tick_callback(move |p, _| {
-            p.queue_draw();
-            glib::Continue(true)
-        });
+        self.play();
     }
 }
 

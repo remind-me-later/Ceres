@@ -2,10 +2,11 @@ import { instantiate } from "./rs_lib.generated.js";
 
 const gb = await instantiate();
 
-var emulator = undefined;
+var emulator = gb.init_emulator();
+var canvas = document.getElementById("myCanvas");
+var ctx = canvas.getContext("2d");
+
 var start = undefined;
-var canvas = undefined;
-var ctx = undefined;
 
 const sample_rate = 48000;
 
@@ -41,13 +42,7 @@ function step(timestamp) {
 }
 
 function main() {
-  emulator = gb.init_emulator();
-
-  canvas = document.getElementById("myCanvas");
-  ctx = canvas.getContext("2d");
-
   // Input file
-
   let input_file_button = document.getElementById("load_btn");
   input_file_button.addEventListener(
     "change",

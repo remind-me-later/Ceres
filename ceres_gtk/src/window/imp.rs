@@ -2,6 +2,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
+use adw::prelude::MessageDialogExtManual;
 use gtk::gdk::Key;
 use gtk::subclass::prelude::*;
 use gtk::{glib, prelude::*, CompositeTemplate};
@@ -14,6 +15,8 @@ use crate::gl_area::{GlArea, PxScaleMode};
 pub struct Window {
     #[template_child(id = "gb_area")]
     pub gb_area: TemplateChild<GlArea>,
+    #[template_child(id = "pause_button")]
+    pub pause_button: TemplateChild<gtk::ToggleButton>,
     pub dialog: gtk::FileDialog,
 }
 
@@ -39,6 +42,7 @@ impl ObjectSubclass for Window {
         Self {
             dialog: file_dialog,
             gb_area: TemplateChild::default(),
+            pause_button: TemplateChild::default(),
         }
     }
 
@@ -63,18 +67,35 @@ impl ObjectSubclass for Window {
                             core::mem::swap(&mut *lock, &mut new_gb);
                         }
                         Err(err) => {
-                            let info_dialog = gtk::MessageDialog::builder()
+                            let info_dialog = adw::MessageDialog::builder()
                                 .transient_for(&win)
                                 .modal(true)
-                                .buttons(gtk::ButtonsType::Close)
-                                .text("Unable to open ROM file")
-                                .secondary_text(format!("{err}"))
+                                .heading("Unable to open ROM file")
+                                .body(format!("{err}"))
                                 .build();
 
-                            info_dialog.run_future().await;
-                            info_dialog.close();
+                            info_dialog.add_responses(&[("cancel", "_Ok")]);
+
+                            info_dialog.choose_future().await;
                         }
                     }
+                }
+            },
+        );
+
+        klass.install_action_async(
+            "win.pause",
+            None,
+            |win, _action_name, _action_target| async move {
+                let imp = win.imp();
+                let button = &imp.pause_button;
+
+                if button.is_active() {
+                    imp.gb_area.play();
+                    button.set_active(false);
+                } else {
+                    imp.gb_area.pause();
+                    button.set_active(true);
                 }
             },
         );

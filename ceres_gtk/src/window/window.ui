@@ -45,6 +45,12 @@
             <property name="primary">true</property>
           </object>
         </child>
+        <child type="end">
+          <object class="GtkToggleButton" id="pause_button">
+            <property name="action-name">win.pause</property>
+            <property name="icon-name">media-playback-pause-symbolic</property>
+          </object>
+        </child>
       </object>
     </child>
     <child>
