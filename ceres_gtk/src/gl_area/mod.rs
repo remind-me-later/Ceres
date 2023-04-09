@@ -40,6 +40,10 @@ impl GlArea {
         self.imp().play();
     }
 
+    pub fn clone_volume(&self) -> Arc<Mutex<f32>> {
+        Arc::clone(self.imp().audio.lock().volume())
+    }
+
     pub fn set_scale_mode(&self, mode: PxScaleMode) {
         let imp = self.imp();
         *imp.scale_mode.borrow_mut() = mode;

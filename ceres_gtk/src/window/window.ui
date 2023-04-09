@@ -46,6 +46,19 @@
           </object>
         </child>
         <child type="end">
+          <object class="GtkScaleButton" id="volume_button">
+            <property name="adjustment">
+              <object class="GtkAdjustment">
+                <property name="lower">0.0</property>
+                <property name="upper">1.0</property>
+                <property name="step-increment">0.1</property>
+                <property name="page-increment">0.1</property>
+                <property name="value">1.0</property>
+              </object>
+            </property>
+          </object>
+        </child>
+        <child type="end">
           <object class="GtkToggleButton" id="pause_button">
             <property name="action-name">win.pause</property>
             <property name="icon-name">media-playback-pause-symbolic</property>

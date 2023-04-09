@@ -19,6 +19,8 @@ pub struct Window {
     pub gb_area: TemplateChild<GlArea>,
     #[template_child(id = "pause_button")]
     pub pause_button: TemplateChild<gtk::ToggleButton>,
+    #[template_child(id = "volume_button")]
+    pub volume_button: TemplateChild<gtk::ScaleButton>,
     pub dialog: gtk::FileDialog,
     pub rom_path: RefCell<Option<PathBuf>>,
 }
@@ -76,6 +78,7 @@ impl ObjectSubclass for Window {
             gb_area: TemplateChild::default(),
             pause_button: TemplateChild::default(),
             rom_path: Default::default(),
+            volume_button: Default::default(),
         }
     }
 
@@ -216,6 +219,21 @@ impl ObjectImpl for Window {
         }));
 
         self.obj().add_action(&action_px_scale);
+
+        let volume = self.gb_area.clone_volume();
+
+        self.volume_button
+            .connect_value_changed(move |_, new_volume| {
+                *volume.lock() = new_volume as f32;
+            });
+
+        // TODO: do this in XML
+        self.volume_button.set_icons(&[
+            "audio-volume-muted-symbolic",
+            "audio-volume-high-symbolic",
+            "audio-volume-low-symbolic",
+            "audio-volume-medium-symbolic",
+        ]);
     }
 
     fn dispose(&self) {
