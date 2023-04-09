@@ -1,5 +1,7 @@
-use std::fs;
-use std::path::Path;
+use std::cell::RefCell;
+use std::fs::{self, File};
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use adw::prelude::MessageDialogExtManual;
@@ -18,6 +20,36 @@ pub struct Window {
     #[template_child(id = "pause_button")]
     pub pause_button: TemplateChild<gtk::ToggleButton>,
     pub dialog: gtk::FileDialog,
+    pub rom_path: RefCell<Option<PathBuf>>,
+}
+
+impl Window {
+    fn save_data(&self) {
+        let mut gb = self.gb_area.gb().lock();
+
+        if let Some(save_data) = gb.cartridge().save_data() {
+            // TODO: if rom can be saved rom_path should be Some
+            if let Some(sav_path) = self
+                .rom_path
+                .borrow()
+                .as_ref()
+                .map(|p| p.with_extension("sav"))
+            {
+                let sav_file = File::create(sav_path);
+                match sav_file {
+                    // TODO: pretty errors
+                    Ok(mut f) => {
+                        if let Err(e) = f.write_all(save_data) {
+                            eprintln!("couldn't save data in save file: {e}");
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("couldn't open save file: {e}");
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[glib::object_subclass]
@@ -43,6 +75,7 @@ impl ObjectSubclass for Window {
             dialog: file_dialog,
             gb_area: TemplateChild::default(),
             pause_button: TemplateChild::default(),
+            rom_path: Default::default(),
         }
     }
 
@@ -57,11 +90,12 @@ impl ObjectSubclass for Window {
                 let res = file_dialog.open_future(Some(&win)).await;
 
                 if let Ok(file) = res {
-                    let filename = file.path().expect("Couldn't get file path");
+                    let pathbuf = file.path().expect("Couldn't get file path");
 
                     // TODO: gracefully handle invalid files
-                    match init_gb(ceres_core::Model::Cgb, Some(&filename)) {
+                    match init_gb(ceres_core::Model::Cgb, Some(&pathbuf)) {
                         Ok(mut new_gb) => {
+                            *win.imp().rom_path.borrow_mut() = Some(pathbuf);
                             // Swap the GB instances
                             let mut lock = win.imp().gb_area.gb().lock();
                             core::mem::swap(&mut *lock, &mut new_gb);
@@ -182,6 +216,10 @@ impl ObjectImpl for Window {
         }));
 
         self.obj().add_action(&action_px_scale);
+    }
+
+    fn dispose(&self) {
+        self.save_data();
     }
 }
 impl WidgetImpl for Window {}
