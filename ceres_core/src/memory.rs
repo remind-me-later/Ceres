@@ -162,7 +162,7 @@ impl Gb {
     #[inline]
     pub(crate) fn write_mem(&mut self, addr: u16, val: u8) {
         match addr {
-            // FIXME: assume bootrom doesn't write to rom
+            // FIXME: we assume bootrom doesn't write to rom
             0x0000..=0x08FF | 0x0900..=0x7FFF => self.cart.write_rom(addr, val),
             0x8000..=0x9FFF => self.ppu.write_vram(addr, val),
             0xA000..=0xBFFF => self.cart.write_ram(addr, val),

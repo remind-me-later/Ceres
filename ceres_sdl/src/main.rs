@@ -73,7 +73,6 @@ use core::time::Duration;
 use std::thread;
 
 use ceres_core::Button;
-use parking_lot::Mutex;
 use sdl2::{
     event::{Event, WindowEvent},
     keyboard::Keycode,
@@ -91,6 +90,7 @@ use {
         fs::{self, File},
         io::Write,
         path::{Path, PathBuf},
+        sync::Mutex,
     },
 };
 
@@ -252,9 +252,7 @@ impl Emu {
             .unwrap();
 
         'running: loop {
-            {
-                let mut gb = self.gb.lock();
-
+            if let Ok(mut gb) = self.gb.lock() {
                 for event in self.event_pump.poll_iter() {
                     match event {
                         Event::Quit { .. } => break 'running,
@@ -343,19 +341,19 @@ impl Emu {
     }
 
     fn save_data(&self) {
-        let mut gb = self.gb.lock();
-
-        if let Some(save_data) = gb.cartridge().save_data() {
-            let sav_path = self.rom_path.with_extension("sav");
-            let sav_file = File::create(sav_path);
-            match sav_file {
-                Ok(mut f) => {
-                    if let Err(e) = f.write_all(save_data) {
-                        eprintln!("couldn't save data in save file: {e}");
+        if let Ok(mut gb) = self.gb.lock() {
+            if let Some(save_data) = gb.cartridge().save_data() {
+                let sav_path = self.rom_path.with_extension("sav");
+                let sav_file = File::create(sav_path);
+                match sav_file {
+                    Ok(mut f) => {
+                        if let Err(e) = f.write_all(save_data) {
+                            eprintln!("couldn't save data in save file: {e}");
+                        }
                     }
-                }
-                Err(e) => {
-                    eprintln!("couldn't open save file: {e}");
+                    Err(e) => {
+                        eprintln!("couldn't open save file: {e}");
+                    }
                 }
             }
         }

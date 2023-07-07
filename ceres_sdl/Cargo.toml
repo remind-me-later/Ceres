@@ -8,7 +8,6 @@ description = "A Gameboy/Color emulator"
 [dependencies]
 ceres_core = { path = "../ceres_core" }
 clap = { version = "*", default-features = false, features = ["std", "help"] }
-parking_lot = { version = "*", default-features = false }
 sdl2 = { version = "*", default-features = false }
 # sdls audio is not that good
 cpal = "*"
