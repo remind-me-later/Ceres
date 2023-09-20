@@ -1,6 +1,6 @@
 use cpal::traits::StreamTrait;
 
-use {alloc::sync::Arc, ceres_core::Gb, parking_lot::Mutex};
+use {alloc::sync::Arc, ceres_core::Gb, std::sync::Mutex};
 
 const BUFFER_SIZE: cpal::FrameCount = 512;
 const SAMPLE_RATE: i32 = 48000;
@@ -31,14 +31,15 @@ impl Renderer {
             let volume = Arc::clone(&volume);
             let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
             let data_callback = move |b: &mut [f32], _: &_| {
-                let volume = *volume.lock();
-                let mut gb = gb.lock();
-
-                b.chunks_exact_mut(2).for_each(|w| {
-                    let (l, r) = gb.run_samples();
-                    w[0] = (l as f32 / i16::MAX as f32) * volume;
-                    w[1] = (r as f32 / i16::MAX as f32) * volume;
-                });
+                if let Ok(volume) = volume.lock() {
+                    if let Ok(mut gb) = gb.lock() {
+                        b.chunks_exact_mut(2).for_each(|w| {
+                            let (l, r) = gb.run_samples();
+                            w[0] = (l as f32 / i16::MAX as f32) * *volume;
+                            w[1] = (r as f32 / i16::MAX as f32) * *volume;
+                        });
+                    }
+                }
             };
 
             dev.build_output_stream(&config, data_callback, error_callback, None)

@@ -3,8 +3,7 @@ mod renderer;
 
 use ceres_core::Gb;
 use gtk::{glib, subclass::prelude::ObjectSubclassIsExt, traits::GLAreaExt};
-use parking_lot::Mutex;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub use renderer::PxScaleMode;
 
@@ -41,7 +40,7 @@ impl GlArea {
     }
 
     pub fn clone_volume(&self) -> Arc<Mutex<f32>> {
-        Arc::clone(self.imp().audio.lock().volume())
+        Arc::clone(self.imp().audio.lock().unwrap().volume())
     }
 
     pub fn set_scale_mode(&self, mode: PxScaleMode) {

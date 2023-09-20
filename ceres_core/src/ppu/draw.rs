@@ -22,7 +22,7 @@ const BG_Y_FLIP_B: u8 = 0x40;
 const BG_PR_B: u8 = 0x80;
 
 #[derive(Clone, Copy)]
-enum Priority {
+enum PxPrio {
     Sprites,
     Bg,
     Normal,
@@ -137,7 +137,7 @@ impl Ppu {
 
     #[inline]
     pub(super) fn draw_scanline(&mut self, cgb_mode: &CgbMode) {
-        let mut bg_priority = [Priority::Normal; PX_WIDTH as usize];
+        let mut bg_priority = [PxPrio::Normal; PX_WIDTH as usize];
         let base_idx = u32::from(PX_WIDTH) * u32::from(self.ly);
 
         self.draw_bg(&mut bg_priority, base_idx, cgb_mode);
@@ -148,7 +148,7 @@ impl Ppu {
     #[inline]
     fn draw_bg(
         &mut self,
-        bg_priority: &mut [Priority; PX_WIDTH as usize],
+        bg_priority: &mut [PxPrio; PX_WIDTH as usize],
         base_idx: u32,
         cgb_mode: &CgbMode,
     ) {
@@ -201,11 +201,11 @@ impl Ppu {
             self.rgb_buf.set_px(base_idx + u32::from(i), rgb);
 
             bg_priority[i as usize] = if color == 0 {
-                Priority::Sprites
+                PxPrio::Sprites
             } else if attr & BG_PR_B != 0 {
-                Priority::Bg
+                PxPrio::Bg
             } else {
-                Priority::Normal
+                PxPrio::Normal
             };
         }
     }
@@ -213,7 +213,7 @@ impl Ppu {
     #[inline]
     fn draw_win(
         &mut self,
-        bg_priority: &mut [Priority; PX_WIDTH as usize],
+        bg_priority: &mut [PxPrio; PX_WIDTH as usize],
         base_idx: u32,
         cgb_mode: &CgbMode,
     ) {
@@ -272,11 +272,11 @@ impl Ppu {
             };
 
             bg_priority[i as usize] = if color == 0 {
-                Priority::Sprites
+                PxPrio::Sprites
             } else if attr & BG_PR_B != 0 {
-                Priority::Bg
+                PxPrio::Bg
             } else {
-                Priority::Normal
+                PxPrio::Normal
             };
 
             self.rgb_buf.set_px(base_idx + u32::from(i), rgb);
@@ -321,7 +321,7 @@ impl Ppu {
     #[inline]
     fn draw_obj(
         &mut self,
-        bg_priority: &mut [Priority; PX_WIDTH as usize],
+        bg_priority: &mut [PxPrio; PX_WIDTH as usize],
         base_idx: u32,
         cgb_mode: &CgbMode,
     ) {
@@ -358,9 +358,9 @@ impl Ppu {
 
                 if x >= PX_WIDTH
                     || (!self.cgb_master_priority(cgb_mode)
-                        && (matches!(bg_priority[x as usize], Priority::Bg)
+                        && (matches!(bg_priority[x as usize], PxPrio::Bg)
                             || obj.attr & SPR_BG_FIRST != 0
-                                && matches!(bg_priority[x as usize], Priority::Normal)))
+                                && matches!(bg_priority[x as usize], PxPrio::Normal)))
                 {
                     continue;
                 }

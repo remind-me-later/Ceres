@@ -6,9 +6,8 @@ use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::TickCallbackId;
-use parking_lot::Mutex;
 use std::cell::RefCell;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub struct GlArea {
     pub gb: Arc<Mutex<Gb>>,
@@ -25,10 +24,10 @@ impl GlArea {
 
         *self.tick_id.borrow_mut() = Some(widget.add_tick_callback(move |gl_area, _| {
             gl_area.queue_draw();
-            glib::Continue(true)
+            glib::ControlFlow::Continue
         }));
 
-        self.audio.lock().resume();
+        self.audio.lock().unwrap().resume();
     }
 
     pub fn pause(&self) {
@@ -36,7 +35,7 @@ impl GlArea {
             tick_id.remove();
         }
 
-        self.audio.lock().pause();
+        self.audio.lock().unwrap().pause();
     }
 }
 
@@ -144,10 +143,11 @@ impl GLAreaImpl for GlArea {
             *self.scale_changed.borrow_mut() = false;
         }
 
-        let gb = self.gb.lock();
-        let rgba = gb.pixel_data_rgba();
+        if let Ok(gb) = self.gb.lock() {
+            let rgba = gb.pixel_data_rgba();
 
-        rend.draw_frame(rgba);
+            rend.draw_frame(rgba);
+        }
 
         true
     }

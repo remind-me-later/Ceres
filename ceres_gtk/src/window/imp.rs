@@ -27,9 +27,9 @@ pub struct Window {
 
 impl Window {
     fn save_data(&self) {
-        let mut gb = self.gb_area.gb().lock();
+        let gb = self.gb_area.gb().lock();
 
-        if let Some(save_data) = gb.cartridge().save_data() {
+        if let Some(save_data) = gb.unwrap().cartridge().save_data() {
             // TODO: if rom can be saved rom_path should be Some
             if let Some(sav_path) = self
                 .rom_path
@@ -100,7 +100,7 @@ impl ObjectSubclass for Window {
                         Ok(mut new_gb) => {
                             *win.imp().rom_path.borrow_mut() = Some(pathbuf);
                             // Swap the GB instances
-                            let mut lock = win.imp().gb_area.gb().lock();
+                            let mut lock = win.imp().gb_area.gb().lock().unwrap();
                             core::mem::swap(&mut *lock, &mut new_gb);
                         }
                         Err(err) => {
@@ -155,36 +155,38 @@ impl ObjectImpl for Window {
 
         let gb = Arc::clone(gl_area.gb());
         keys.connect_key_pressed(move |_, key, _keycode, _state| {
-            let mut lock = gb.lock();
-            match key {
-                Key::k => lock.press(ceres_core::Button::A),
-                Key::l => lock.press(ceres_core::Button::B),
-                Key::m => lock.press(ceres_core::Button::Start),
-                Key::n => lock.press(ceres_core::Button::Select),
-                Key::w => lock.press(ceres_core::Button::Up),
-                Key::a => lock.press(ceres_core::Button::Left),
-                Key::s => lock.press(ceres_core::Button::Down),
-                Key::d => lock.press(ceres_core::Button::Right),
-                _ => (),
-            };
+            if let Ok(mut lock) = gb.lock() {
+                match key {
+                    Key::k => lock.press(ceres_core::Button::A),
+                    Key::l => lock.press(ceres_core::Button::B),
+                    Key::m => lock.press(ceres_core::Button::Start),
+                    Key::n => lock.press(ceres_core::Button::Select),
+                    Key::w => lock.press(ceres_core::Button::Up),
+                    Key::a => lock.press(ceres_core::Button::Left),
+                    Key::s => lock.press(ceres_core::Button::Down),
+                    Key::d => lock.press(ceres_core::Button::Right),
+                    _ => (),
+                };
+            }
 
-            gtk::Inhibit(true)
+            glib::signal::Propagation::Stop
         });
 
         let gb = Arc::clone(gl_area.gb());
         keys.connect_key_released(move |_, key, _keycode, _state| {
-            let mut lock = gb.lock();
-            match key {
-                Key::k => lock.release(ceres_core::Button::A),
-                Key::l => lock.release(ceres_core::Button::B),
-                Key::m => lock.release(ceres_core::Button::Start),
-                Key::n => lock.release(ceres_core::Button::Select),
-                Key::w => lock.release(ceres_core::Button::Up),
-                Key::a => lock.release(ceres_core::Button::Left),
-                Key::s => lock.release(ceres_core::Button::Down),
-                Key::d => lock.release(ceres_core::Button::Right),
-                _ => (),
-            };
+            if let Ok(mut lock) = gb.lock() {
+                match key {
+                    Key::k => lock.release(ceres_core::Button::A),
+                    Key::l => lock.release(ceres_core::Button::B),
+                    Key::m => lock.release(ceres_core::Button::Start),
+                    Key::n => lock.release(ceres_core::Button::Select),
+                    Key::w => lock.release(ceres_core::Button::Up),
+                    Key::a => lock.release(ceres_core::Button::Left),
+                    Key::s => lock.release(ceres_core::Button::Down),
+                    Key::d => lock.release(ceres_core::Button::Right),
+                    _ => (),
+                };
+            }
         });
 
         self.obj().add_controller(keys);
@@ -195,7 +197,7 @@ impl ObjectImpl for Window {
         let action_px_scale = gtk::gio::SimpleAction::new_stateful(
             "px_scale",
             Some(&String::static_variant_type()),
-            "Nearest".to_variant(),
+            &"Nearest".to_variant(),
         );
 
         action_px_scale.connect_activate(glib::clone!(@weak rend =>
@@ -215,7 +217,7 @@ impl ObjectImpl for Window {
 
                 // Set orientation and save state
                 rend.obj().set_scale_mode(px_scale_mode);
-                action.set_state(parameter.to_variant());
+                action.set_state(&parameter.to_variant());
         }));
 
         self.obj().add_action(&action_px_scale);
@@ -224,7 +226,7 @@ impl ObjectImpl for Window {
 
         self.volume_button
             .connect_value_changed(move |_, new_volume| {
-                *volume.lock() = new_volume as f32;
+                *volume.lock().unwrap() = new_volume as f32;
             });
 
         // TODO: do this in XML
