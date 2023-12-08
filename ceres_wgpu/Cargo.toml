@@ -1,0 +1,25 @@
+[package]
+name = "ceres_wgpu"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ceres_core = { path = "../ceres_core" }
+clap = { version = "*", default-features = false, features = ["std", "help"] }
+parking_lot = { version = "*", default-features = false }
+anyhow = { version = "*", default-features = false, features = ["std"] }
+
+# audio
+cpal = { version = "*", default-features = false }
+
+# video
+wgpu = { version = "*" }
+pollster = { version = "*", default-features = false }
+bytemuck = { version = "*", default-features = false }
+# TODO: wait for better wayland decoration support
+winit = { version = "*", default-features = false, features = [
+    "wayland",
+    "wayland-dlopen",
+    "wayland-csd-adwaita",
+    "rwh_05",
+] }

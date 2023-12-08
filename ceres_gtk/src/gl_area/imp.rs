@@ -7,11 +7,12 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::TickCallbackId;
 use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 pub struct GlArea {
     pub gb: Arc<Mutex<Gb>>,
-    pub audio: Arc<Mutex<audio::Renderer>>,
+    pub audio: Rc<RefCell<audio::Renderer>>,
     pub renderer: RefCell<Option<Renderer>>,
     pub scale_mode: RefCell<PxScaleMode>,
     pub scale_changed: RefCell<bool>,
@@ -27,7 +28,7 @@ impl GlArea {
             glib::ControlFlow::Continue
         }));
 
-        self.audio.lock().unwrap().resume();
+        self.audio.borrow_mut().resume();
     }
 
     pub fn pause(&self) {
@@ -35,7 +36,7 @@ impl GlArea {
             tick_id.remove();
         }
 
-        self.audio.lock().unwrap().pause();
+        self.audio.borrow_mut().pause();
     }
 }
 
@@ -58,7 +59,7 @@ impl ObjectSubclass for GlArea {
             audio::Renderer::sample_rate(),
             cart,
         )));
-        let audio = Arc::new(Mutex::new(audio::Renderer::new(Arc::clone(&gb))));
+        let audio = Rc::new(RefCell::new(audio::Renderer::new(Arc::clone(&gb))));
 
         Self {
             gb,

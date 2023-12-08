@@ -142,7 +142,7 @@ impl Ppu {
 
         self.draw_bg(&mut bg_priority, base_idx, cgb_mode);
         self.draw_win(&mut bg_priority, base_idx, cgb_mode);
-        self.draw_obj(&mut bg_priority, base_idx, cgb_mode);
+        self.draw_obj(&bg_priority, base_idx, cgb_mode);
     }
 
     #[inline]
@@ -321,7 +321,7 @@ impl Ppu {
     #[inline]
     fn draw_obj(
         &mut self,
-        bg_priority: &mut [PxPrio; PX_WIDTH as usize],
+        bg_priority: &[PxPrio; PX_WIDTH as usize],
         base_idx: u32,
         cgb_mode: &CgbMode,
     ) {

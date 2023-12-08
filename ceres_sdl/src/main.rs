@@ -3,6 +3,7 @@
     clippy::pedantic,
     // clippy::nursery,
     // restriction
+    // clippy::absolute_paths,
     clippy::alloc_instead_of_core,
     clippy::as_underscore,
     clippy::assertions_on_result_states,
@@ -15,6 +16,7 @@
     clippy::else_if_without_else,
     clippy::empty_drop,
     clippy::empty_structs_with_brackets,
+    // clippy::error_impl_error,
     clippy::exit,
     // clippy::expect_used,
     clippy::filetype_is_file,
@@ -73,12 +75,12 @@ use core::time::Duration;
 use std::thread;
 
 use ceres_core::Button;
-use sdl2::{
+use sdl3::{
     event::{Event, WindowEvent},
     keyboard::Keycode,
     pixels::{Color, PixelFormatEnum},
     rect::Rect,
-    render::{Canvas, TextureCreator},
+    render::{Canvas, FRect, TextureCreator},
     video::{FullscreenType, Window, WindowContext},
     EventPump,
 };
@@ -178,7 +180,7 @@ struct Emu {
     event_pump: EventPump,
     canvas: Canvas<Window>,
     creator: TextureCreator<WindowContext>,
-    blit_rect: Rect,
+    blit_rect: FRect,
 }
 
 impl Emu {
@@ -188,7 +190,7 @@ impl Emu {
 
         let gb = Arc::new(Mutex::new(gb));
 
-        let sdl_context = sdl2::init().unwrap();
+        let sdl_context = sdl3::init().unwrap();
 
         let audio = {
             let gb = Arc::clone(&gb);
@@ -226,7 +228,7 @@ impl Emu {
             event_pump,
             canvas,
             creator,
-            blit_rect: Rect::new(0, 0, 0, 0),
+            blit_rect: FRect::new(0.0, 0.0, 0.0, 0.0),
         }
     }
 
@@ -273,13 +275,7 @@ impl Emu {
                             Keycode::F => {
                                 let win = self.canvas.window_mut();
                                 let fs = win.fullscreen_state();
-                                let fs = match fs {
-                                    FullscreenType::Off => FullscreenType::Desktop,
-                                    FullscreenType::True | FullscreenType::Desktop => {
-                                        FullscreenType::Off
-                                    }
-                                };
-
+                                let fs = matches!(fs, FullscreenType::Off);
                                 win.set_fullscreen(fs).unwrap();
                             }
                             _ => (),
@@ -324,7 +320,8 @@ impl Emu {
                     let width = PX_WIDTH * mul;
                     let height = PX_HEIGHT * mul;
 
-                    self.blit_rect = Rect::from_center(viewport.center(), width, height);
+                    self.blit_rect =
+                        FRect::from(Rect::from_center(viewport.center(), width, height));
                     self.do_resize = false;
                 }
 

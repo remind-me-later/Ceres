@@ -40,7 +40,7 @@ impl GlArea {
     }
 
     pub fn clone_volume(&self) -> Arc<Mutex<f32>> {
-        Arc::clone(self.imp().audio.lock().unwrap().volume())
+        Arc::clone(self.imp().audio.borrow().volume())
     }
 
     pub fn set_scale_mode(&self, mode: PxScaleMode) {

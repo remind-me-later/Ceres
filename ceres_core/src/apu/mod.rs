@@ -77,7 +77,7 @@ impl Apu {
     }
 
     pub fn run(&mut self, cycles: i32) {
-        fn mix_and_render(apu: &mut Apu) -> (Sample, Sample) {
+        fn mix_and_render(apu: &Apu) -> (Sample, Sample) {
             let mut l = 0;
             let mut r = 0;
 
