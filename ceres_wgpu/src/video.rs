@@ -357,20 +357,28 @@ impl Texture {
     }
 
     fn update(&mut self, queue: &wgpu::Queue, rgba: &[u8]) {
+        // TODO: awful way of transforming rgb to rgba
         let rgba_new = {
+            const S: usize = (PX_HEIGHT * PX_WIDTH * 4) as usize;
+            let mut rgba_new: [u8; S] = [0; S];
+
             let mut i = 0;
-            let mut v = Vec::new();
+            let mut j = 0;
             for &p in rgba {
-                v.push(p);
+                rgba_new[j] = p;
 
                 i += 1;
+                j += 1;
                 if i == 3 {
                     i = 0;
-                    v.push(0xff);
+                    rgba_new[j] = 0xff;
+                    j += 1;
                 }
             }
-            v
+
+            rgba_new
         };
+
         queue.write_texture(
             wgpu::ImageCopyTexture {
                 aspect: wgpu::TextureAspect::All,

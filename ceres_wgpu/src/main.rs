@@ -1,81 +1,10 @@
-#![warn(
-    clippy::pedantic,
-    // clippy::nursery,
-    // restriction
-    clippy::alloc_instead_of_core,
-    clippy::as_underscore,
-    clippy::assertions_on_result_states,
-    clippy::clone_on_ref_ptr,
-    clippy::create_dir,
-    clippy::dbg_macro,
-    clippy::decimal_literal_representation,
-    clippy::default_union_representation,
-    clippy::deref_by_slicing,
-    clippy::else_if_without_else,
-    clippy::empty_drop,
-    clippy::empty_structs_with_brackets,
-    clippy::exit,
-    clippy::expect_used,
-    clippy::filetype_is_file,
-    // clippy::float_arithmetic,
-    clippy::float_cmp_const,
-    clippy::fn_to_numeric_cast_any,
-    clippy::format_push_string,
-    clippy::get_unwrap,
-    clippy::if_then_some_else_none,
-    clippy::let_underscore_must_use,
-    clippy::lossy_float_literal,
-    clippy::map_err_ignore,
-    clippy::mem_forget,
-    clippy::mixed_read_write_in_expression,
-    clippy::modulo_arithmetic,
-    clippy::mutex_atomic,
-    clippy::non_ascii_literal,
-    clippy::panic,
-    clippy::partial_pub_fields,
-    // clippy::print_stderr,
-    // clippy::print_stdout,
-    clippy::rc_buffer,
-    clippy::rc_mutex,
-    clippy::rest_pat_in_fully_bound_structs,
-    clippy::same_name_method,
-    clippy::self_named_module_files,
-    clippy::shadow_unrelated,
-    clippy::std_instead_of_alloc,
-    clippy::std_instead_of_core,
-    clippy::str_to_string,
-    clippy::string_add,
-    clippy::string_slice,
-    clippy::string_to_string,
-    clippy::todo,
-    clippy::try_err,
-    clippy::unimplemented,
-    clippy::unnecessary_self_imports,
-    clippy::unneeded_field_pattern,
-    clippy::unseparated_literal_suffix,
-    clippy::use_debug,
-    clippy::verbose_file_reads,
-    // clippy::indexing_slicing,
-    // clippy::unwrap_used,
-    // clippy::integer_division,
-)]
-#![allow(
-    clippy::missing_errors_doc,
-    clippy::missing_panics_doc,
-    clippy::missing_safety_doc,
-    clippy::similar_names,
-    clippy::struct_excessive_bools,
-    clippy::verbose_bit_mask
-)]
-
 use parking_lot::Mutex;
+use video::Scaling;
 use winit::{
     event::{Event, KeyEvent, WindowEvent},
     event_loop::{ControlFlow, EventLoop, EventLoopWindowTarget},
     window::Fullscreen,
 };
-
-use crate::video::Scaling;
 use {
     alloc::sync::Arc,
     anyhow::Context,
@@ -113,7 +42,6 @@ Other binsings:
     | System       | Emulator |
     | ------------ | -------- |
     | Fullscreen   | F        |
-    | Open file    | O        |
     | Scale filter | Z        |
 ";
 
@@ -126,7 +54,7 @@ fn main() -> anyhow::Result<()> {
         .after_help(AFTER_HELP)
         .arg(
             Arg::new("file")
-                .required(false)
+                .required(true)
                 .help("Game Boy/Color ROM file to emulate.")
                 .long_help(
                     "Game Boy/Color ROM file to emulate. Extension doesn't matter, the \
@@ -184,7 +112,10 @@ fn main() -> anyhow::Result<()> {
         scaling
     };
 
-    let pathbuf = args.get_one::<String>("file").map(PathBuf::from);
+    let pathbuf = args
+        .get_one::<String>("file")
+        .map(PathBuf::from)
+        .context("no path provided")?;
 
     let emu = pollster::block_on(Emu::new(model, pathbuf, scaling))?;
     emu.run();
@@ -197,14 +128,14 @@ struct Emu {
     video: video::Renderer,
     audio: audio::Renderer,
     gb: Arc<Mutex<Gb>>,
-    rom_path: Option<PathBuf>,
+    rom_path: PathBuf,
     model: ceres_core::Model,
 }
 
 impl Emu {
     async fn new(
         model: ceres_core::Model,
-        rom_path: Option<PathBuf>,
+        rom_path: PathBuf,
         scaling: Scaling,
     ) -> anyhow::Result<Self> {
         async fn init_video(
@@ -248,11 +179,7 @@ impl Emu {
         }
 
         // Try to create GB before creating window
-        let gb = if let Some(rom_path) = &rom_path {
-            Self::init_gb(model, Some(rom_path))?
-        } else {
-            Self::init_gb(model, None)?
-        };
+        let gb = Self::init_gb(model, &rom_path)?;
 
         let gb = Arc::new(Mutex::new(gb));
 
@@ -271,18 +198,18 @@ impl Emu {
         })
     }
 
-    fn init_gb(model: ceres_core::Model, rom_path: Option<&Path>) -> anyhow::Result<Gb> {
-        let rom = rom_path.map(|p| fs::read(p).map(Vec::into_boxed_slice).unwrap());
-
-        let ram = rom_path
-            .map(|p| p.with_extension("sav"))
-            .and_then(|p| fs::read(p).map(Vec::into_boxed_slice).ok());
-
-        let cart = if let Some(rom) = rom {
-            ceres_core::Cart::new(rom, ram).unwrap()
-        } else {
-            ceres_core::Cart::default()
+    fn init_gb(model: ceres_core::Model, rom_path: &Path) -> anyhow::Result<Gb> {
+        let rom = {
+            fs::read(rom_path)
+                .map(Vec::into_boxed_slice)
+                .context("no such file")?
         };
+
+        let ram = fs::read(rom_path.with_extension("sav"))
+            .map(Vec::into_boxed_slice)
+            .ok();
+
+        let cart = ceres_core::Cart::new(rom, ram).unwrap();
 
         let sample_rate = audio::Renderer::sample_rate();
 
@@ -298,34 +225,29 @@ impl Emu {
             .unwrap();
     }
 
-    fn loop_cb(&mut self, event: &Event<()>, elwt: &EventLoopWindowTarget<()>) {
-        let mut close_requested = false;
+    fn loop_cb(&mut self, key_event: &Event<()>, elwt: &EventLoopWindowTarget<()>) {
         elwt.set_control_flow(ControlFlow::Poll);
 
-        match event {
+        match key_event {
             Event::WindowEvent { event: ref e, .. } => match e {
                 WindowEvent::Resized(size) => self.video.resize(*size),
                 WindowEvent::CloseRequested => {
                     self.save_data();
-                    close_requested = true;
+                    elwt.exit();
                 }
                 WindowEvent::KeyboardInput { event, .. } => self.handle_key(event),
                 WindowEvent::RedrawRequested => {
                     use wgpu::SurfaceError::{Lost, OutOfMemory, Outdated, Timeout};
                     match self.video.render() {
-                        Ok(_) => {}
+                        Ok(()) => {}
                         Err(Lost | Outdated) => self.video.on_lost(),
-                        Err(OutOfMemory) => close_requested = true,
+                        Err(OutOfMemory) => elwt.exit(),
                         Err(Timeout) => eprintln!("Surface timeout"),
                     }
                 }
                 _ => (),
             },
             Event::AboutToWait => {
-                if close_requested {
-                    elwt.exit();
-                }
-
                 self.video.update(self.gb.lock().pixel_data_rgba());
                 self.video.window().request_redraw();
                 std::thread::sleep(Duration::from_millis(1000 / 60));
@@ -382,18 +304,18 @@ impl Emu {
         let mut gb = self.gb.lock();
 
         if let Some(save_data) = gb.cartridge().save_data() {
-            if let Some(path) = &self.rom_path {
-                let sav_path = path.with_extension("sav");
-                let sav_file = File::create(sav_path);
-                match sav_file {
-                    Ok(mut f) => {
-                        if let Err(e) = f.write_all(save_data) {
-                            eprintln!("couldn't save data in save file: {e}");
-                        }
+            let path = &self.rom_path;
+
+            let sav_path = path.with_extension("sav");
+            let sav_file = File::create(sav_path);
+            match sav_file {
+                Ok(mut f) => {
+                    if let Err(e) = f.write_all(save_data) {
+                        eprintln!("couldn't save data in save file: {e}");
                     }
-                    Err(e) => {
-                        eprintln!("couldn't open save file: {e}");
-                    }
+                }
+                Err(e) => {
+                    eprintln!("couldn't open save file: {e}");
                 }
             }
         }
