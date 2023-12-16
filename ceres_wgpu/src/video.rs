@@ -77,15 +77,15 @@ impl Renderer {
             )
             .await?;
 
-        let surface_caps = surface.get_capabilities(&adapter);
+        // let surface_caps = surface.get_capabilities(&adapter);
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: wgpu::TextureFormat::Bgra8Unorm,
             width: size.width,
             height: size.height,
-            present_mode: surface_caps.present_modes[0],
-            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            present_mode: wgpu::PresentMode::Mailbox,
+            alpha_mode: wgpu::CompositeAlphaMode::Opaque,
             view_formats: vec![],
         };
 
@@ -356,7 +356,7 @@ impl Texture {
         Self { texture, view }
     }
 
-    fn update(&mut self, queue: &wgpu::Queue, rgba: &[u8]) {
+    fn update(&mut self, queue: &wgpu::Queue, rgb: &[u8]) {
         // TODO: awful way of transforming rgb to rgba
         let rgba_new = {
             const S: usize = (PX_HEIGHT * PX_WIDTH * 4) as usize;
@@ -364,7 +364,7 @@ impl Texture {
 
             let mut i = 0;
             let mut j = 0;
-            for &p in rgba {
+            for &p in rgb {
                 rgba_new[j] = p;
 
                 i += 1;

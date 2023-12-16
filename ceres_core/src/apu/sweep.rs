@@ -46,13 +46,12 @@ pub(super) struct Sweep {
 
 impl Sweep {
     fn calculate_sweep(&mut self, freq: &mut u16, on: &mut bool) {
-        {
-            let t = self.shwf >> self.shift;
-            self.shwf = match self.dir {
-                SweepDirection::Sub => self.shwf - t,
-                SweepDirection::Add => self.shwf + t,
-            };
-        }
+        let t = self.shwf >> self.shift;
+        
+        self.shwf = match self.dir {
+            SweepDirection::Sub => self.shwf - t,
+            SweepDirection::Add => self.shwf + t,
+        };
 
         if self.shwf > 0x7FF {
             *on = false;

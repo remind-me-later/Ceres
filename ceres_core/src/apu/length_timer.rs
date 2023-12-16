@@ -1,13 +1,13 @@
 use super::PHalf;
 
 #[derive(Default)]
-pub(super) struct LengthTimer<const MAX_LEN: u16> {
+pub(super) struct LengthTimer<const LEN_MASK: u8> {
     on: bool,
-    len: u16,
+    len: u8,
     p_half: PHalf,
 }
 
-impl<const MAX_LEN: u16> LengthTimer<MAX_LEN> {
+impl<const LEN_MASK: u8> LengthTimer<LEN_MASK> {
     pub(super) fn read_on(&self) -> u8 {
         u8::from(self.on) << 6
     }
@@ -22,12 +22,12 @@ impl<const MAX_LEN: u16> LengthTimer<MAX_LEN> {
     }
 
     pub(super) fn write_len(&mut self, val: u8) {
-        self.len = MAX_LEN - (u16::from(val) & (MAX_LEN - 1));
+        self.len = val & LEN_MASK;
     }
 
     pub(super) fn trigger(&mut self, on: &mut bool) {
-        if self.len == 0 {
-            self.len = MAX_LEN;
+        if self.len == LEN_MASK {
+            self.len = 0;
             if matches!(self.p_half, PHalf::First) {
                 self.step(on);
             }
@@ -38,9 +38,9 @@ impl<const MAX_LEN: u16> LengthTimer<MAX_LEN> {
         // WARN: looks wrong but sameboy does it this way
         // https://github.com/LIJI32/SameBoy/blob/master/Core/apu.c line 528,
         // also "fixing" it breaks blargg cgb sound test 3
-        if self.on && self.len > 0 {
-            self.len -= 1;
-            if self.len == 0 {
+        if self.on && self.len < LEN_MASK {
+            self.len += 1;
+            if self.len == LEN_MASK {
                 *on = false;
             }
         }

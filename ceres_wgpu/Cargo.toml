@@ -10,7 +10,7 @@ parking_lot = { version = "*", default-features = false }
 anyhow = { version = "*", default-features = false, features = ["std"] }
 
 # audio
-cpal = { version = "*", default-features = false }
+cpal = { git = "https://github.com/rustaudio/cpal", default-features = false }
 
 # video
 wgpu = { version = "0.18" }

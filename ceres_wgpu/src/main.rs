@@ -129,7 +129,6 @@ struct Emu {
     audio: audio::Renderer,
     gb: Arc<Mutex<Gb>>,
     rom_path: PathBuf,
-    model: ceres_core::Model,
 }
 
 impl Emu {
@@ -179,9 +178,7 @@ impl Emu {
         }
 
         // Try to create GB before creating window
-        let gb = Self::init_gb(model, &rom_path)?;
-
-        let gb = Arc::new(Mutex::new(gb));
+        let gb = Arc::new(Mutex::new(Self::init_gb(model, &rom_path)?));
 
         let audio = init_audio(&gb)?;
 
@@ -194,7 +191,6 @@ impl Emu {
             video,
             audio,
             rom_path,
-            model,
         })
     }
 
@@ -205,10 +201,12 @@ impl Emu {
                 .context("no such file")?
         };
 
+        // TODO: similar names is allowed, maybe a bug?
         let ram = fs::read(rom_path.with_extension("sav"))
             .map(Vec::into_boxed_slice)
             .ok();
 
+        // TODO: core error
         let cart = ceres_core::Cart::new(rom, ram).unwrap();
 
         let sample_rate = audio::Renderer::sample_rate();
@@ -304,10 +302,7 @@ impl Emu {
         let mut gb = self.gb.lock();
 
         if let Some(save_data) = gb.cartridge().save_data() {
-            let path = &self.rom_path;
-
-            let sav_path = path.with_extension("sav");
-            let sav_file = File::create(sav_path);
+            let sav_file = File::create(self.rom_path.with_extension("sav"));
             match sav_file {
                 Ok(mut f) => {
                     if let Err(e) = f.write_all(save_data) {

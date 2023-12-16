@@ -8,7 +8,7 @@ const SAMPLE_LEN: u8 = RAM_LEN * 2;
 
 #[derive(Default)]
 pub(super) struct Wave {
-    ltim: LengthTimer<0x100>,
+    ltim: LengthTimer<0xFF>,
     wl: WaveLength<2, ()>,
 
     on: bool,

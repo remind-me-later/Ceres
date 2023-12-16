@@ -4,7 +4,7 @@ use {
 };
 
 pub(super) struct Noise {
-    ltimer: LengthTimer<0x40>,
+    ltimer: LengthTimer<0x3F>,
     env: Envelope,
 
     on: bool,

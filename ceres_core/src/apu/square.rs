@@ -6,7 +6,7 @@ use {
 
 #[derive(Default)]
 struct AbstractSquare<S: super::SweepTrait> {
-    ltim: LengthTimer<0x40>,
+    ltim: LengthTimer<0x3F>,
     wl: WaveLength<4, S>,
     env: Envelope,
 
