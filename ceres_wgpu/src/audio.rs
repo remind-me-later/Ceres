@@ -3,11 +3,14 @@ use cpal::traits::StreamTrait;
 
 use {alloc::sync::Arc, ceres_core::Gb, parking_lot::Mutex};
 
+// Buffer size is the number of samples per channel per callback
 const BUFFER_SIZE: cpal::FrameCount = 512;
 const SAMPLE_RATE: i32 = 48000;
 
+// Stream is not Send, so we can't use it directly in the renderer struct
 pub struct Renderer {
     stream: cpal::Stream,
+    paused: bool,
 }
 
 impl Renderer {
@@ -40,15 +43,30 @@ impl Renderer {
 
         stream.play()?;
 
-        Ok(Self { stream })
+        Ok(Self {
+            stream,
+            paused: false,
+        })
     }
 
-    pub fn pause(&mut self) {
-        self.stream.pause().unwrap();
+    pub fn pause(&mut self) -> anyhow::Result<()> {
+        self.stream.pause().context("couldn't pause stream")
     }
 
-    pub fn resume(&mut self) {
-        self.stream.play().unwrap();
+    pub fn resume(&mut self) -> anyhow::Result<()> {
+        self.stream.play().context("couldn't resume stream")
+    }
+
+    pub fn toggle(&mut self) -> anyhow::Result<()> {
+        if self.paused {
+            self.resume()?;
+            self.paused = false;
+        } else {
+            self.pause()?;
+            self.paused = true;
+        }
+
+        Ok(())
     }
 
     pub const fn sample_rate() -> i32 {

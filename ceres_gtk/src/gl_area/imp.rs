@@ -3,6 +3,7 @@ use super::renderer::Renderer;
 use crate::audio;
 use ceres_core::Gb;
 use gtk::glib;
+use gtk::glib::Propagation;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::TickCallbackId;
@@ -135,7 +136,7 @@ impl WidgetImpl for GlArea {
 }
 
 impl GLAreaImpl for GlArea {
-    fn render(&self, _context: &gtk::gdk::GLContext) -> bool {
+    fn render(&self, _context: &gtk::gdk::GLContext) -> Propagation {
         let mut rf = self.renderer.borrow_mut();
         let rend = rf.as_mut().unwrap();
 
@@ -150,7 +151,7 @@ impl GLAreaImpl for GlArea {
             rend.draw_frame(rgba);
         }
 
-        true
+        Propagation::Proceed
     }
 
     fn resize(&self, width: i32, height: i32) {

@@ -1,22 +1,8 @@
-use parking_lot::Mutex;
 use video::Scaling;
-use winit::{
-    event::{Event, KeyEvent, WindowEvent},
-    event_loop::{ControlFlow, EventLoop, EventLoopWindowTarget},
-    window::Fullscreen,
-};
 use {
-    alloc::sync::Arc,
     anyhow::Context,
-    ceres_core::Gb,
     clap::{builder::PossibleValuesParser, Arg, Command},
-    core::time::Duration,
-    std::{
-        fs::{self, File},
-        io::Write,
-        path::{Path, PathBuf},
-    },
-    winit::window,
+    std::path::PathBuf,
 };
 
 mod audio;
@@ -117,81 +103,87 @@ fn main() -> anyhow::Result<()> {
         .map(PathBuf::from)
         .context("no path provided")?;
 
-    let emu = pollster::block_on(Emu::new(model, pathbuf, scaling))?;
-    emu.run();
-
-    Ok(())
+    pollster::block_on(emu::run(model, pathbuf, scaling))
 }
 
-struct Emu {
-    event_loop: Option<EventLoop<()>>,
-    video: video::Renderer,
-    audio: audio::Renderer,
-    gb: Arc<Mutex<Gb>>,
-    rom_path: PathBuf,
-}
+mod emu {
+    use crate::{
+        audio,
+        video::{self, Scaling},
+        CERES_STYLIZED, SCREEN_MUL,
+    };
+    use parking_lot::Mutex;
+    use winit::{
+        event::{Event, KeyEvent, WindowEvent},
+        event_loop::{ControlFlow, EventLoop, EventLoopWindowTarget},
+        keyboard::NamedKey,
+        window::Fullscreen,
+    };
+    use {
+        alloc::sync::Arc,
+        anyhow::Context,
+        ceres_core::Gb,
+        core::time::Duration,
+        std::{
+            fs::{self, File},
+            io::Write,
+            path::{Path, PathBuf},
+        },
+        winit::window,
+    };
 
-impl Emu {
-    async fn new(
+    pub async fn run(
         model: ceres_core::Model,
         rom_path: PathBuf,
         scaling: Scaling,
-    ) -> anyhow::Result<Self> {
-        async fn init_video(
-            event_loop: &EventLoop<()>,
-            scaling: Scaling,
-        ) -> anyhow::Result<video::Renderer> {
-            use winit::dpi::PhysicalSize;
+    ) -> anyhow::Result<()> {
+        use winit::dpi::PhysicalSize;
 
-            const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
-            const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
-            const INIT_WIDTH: u32 = PX_WIDTH * SCREEN_MUL;
-            const INIT_HEIGHT: u32 = PX_HEIGHT * SCREEN_MUL;
-
-            let window = window::WindowBuilder::new()
-                .with_title(CERES_STYLIZED)
-                .with_inner_size(PhysicalSize {
-                    width: INIT_WIDTH,
-                    height: INIT_HEIGHT,
-                })
-                .with_min_inner_size(PhysicalSize {
-                    width: PX_WIDTH,
-                    height: PX_HEIGHT,
-                })
-                .build(event_loop)
-                .context("couldn't create window")?;
-
-            let mut video = video::Renderer::new(window, scaling)
-                .await
-                .context("couldn't initialize wgpu")?;
-
-            video.resize(PhysicalSize {
-                width: INIT_WIDTH,
-                height: INIT_HEIGHT,
-            });
-
-            Ok(video)
-        }
-
-        fn init_audio(gb: &Arc<Mutex<Gb>>) -> anyhow::Result<audio::Renderer> {
-            audio::Renderer::new(Arc::clone(gb))
-        }
+        const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
+        const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
+        const INIT_WIDTH: u32 = PX_WIDTH * SCREEN_MUL;
+        const INIT_HEIGHT: u32 = PX_HEIGHT * SCREEN_MUL;
 
         // Try to create GB before creating window
-        let gb = Arc::new(Mutex::new(Self::init_gb(model, &rom_path)?));
+        let gb = Arc::new(Mutex::new(init_gb(model, &rom_path)?));
 
-        let audio = init_audio(&gb)?;
+        let mut audio = init_audio(&gb)?;
 
         let event_loop = EventLoop::new().unwrap();
-        let video = init_video(&event_loop, scaling).await?;
 
-        Ok(Self {
-            event_loop: Some(event_loop),
-            gb,
-            video,
-            audio,
-            rom_path,
-        })
+        let window = window::WindowBuilder::new()
+            .with_title(CERES_STYLIZED)
+            .with_inner_size(PhysicalSize {
+                width: INIT_WIDTH,
+                height: INIT_HEIGHT,
+            })
+            .with_min_inner_size(PhysicalSize {
+                width: PX_WIDTH,
+                height: PX_HEIGHT,
+            })
+            .build(&event_loop)
+            .context("couldn't create window")?;
+
+        let mut video = video::Renderer::new(window, scaling)
+            .await
+            .context("couldn't initialize wgpu")?;
+
+        video.resize(PhysicalSize {
+            width: INIT_WIDTH,
+            height: INIT_HEIGHT,
+        });
+
+        event_loop
+            .run(move |event, elwt| {
+                loop_cb(&mut video, &mut audio, &gb, &rom_path, &event, elwt);
+            })
+            .unwrap();
+
+        Ok(())
+    }
+
+    fn init_audio(gb: &Arc<Mutex<Gb>>) -> anyhow::Result<audio::Renderer> {
+        audio::Renderer::new(Arc::clone(gb))
     }
 
     fn init_gb(model: ceres_core::Model, rom_path: &Path) -> anyhow::Result<Gb> {
@@ -214,31 +206,29 @@ impl Emu {
         Ok(Gb::new(model, sample_rate, cart))
     }
 
-    fn run(mut self) {
-        let event_loop = self.event_loop.take().unwrap();
-        event_loop
-            .run(move |event, elwt| {
-                self.loop_cb(&event, elwt);
-            })
-            .unwrap();
-    }
-
-    fn loop_cb(&mut self, key_event: &Event<()>, elwt: &EventLoopWindowTarget<()>) {
+    fn loop_cb(
+        video: &mut video::Renderer,
+        audio: &mut audio::Renderer,
+        gb: &Arc<Mutex<Gb>>,
+        rom_path: &Path,
+        key_event: &Event<()>,
+        elwt: &EventLoopWindowTarget<()>,
+    ) {
         elwt.set_control_flow(ControlFlow::Poll);
 
         match key_event {
             Event::WindowEvent { event: ref e, .. } => match e {
-                WindowEvent::Resized(size) => self.video.resize(*size),
+                WindowEvent::Resized(size) => video.resize(*size),
                 WindowEvent::CloseRequested => {
-                    self.save_data();
+                    save_data(gb, rom_path);
                     elwt.exit();
                 }
-                WindowEvent::KeyboardInput { event, .. } => self.handle_key(event),
+                WindowEvent::KeyboardInput { event, .. } => handle_key(event, video, audio, gb),
                 WindowEvent::RedrawRequested => {
                     use wgpu::SurfaceError::{Lost, OutOfMemory, Outdated, Timeout};
-                    match self.video.render() {
+                    match video.render() {
                         Ok(()) => {}
-                        Err(Lost | Outdated) => self.video.on_lost(),
+                        Err(Lost | Outdated) => video.on_lost(),
                         Err(OutOfMemory) => elwt.exit(),
                         Err(Timeout) => eprintln!("Surface timeout"),
                     }
@@ -246,18 +236,23 @@ impl Emu {
                 _ => (),
             },
             Event::AboutToWait => {
-                self.video.update(self.gb.lock().pixel_data_rgba());
-                self.video.window().request_redraw();
+                video.update(gb.lock().pixel_data_rgba());
+                video.window().request_redraw();
                 std::thread::sleep(Duration::from_millis(1000 / 60));
             }
             _ => (),
         }
     }
 
-    fn handle_key(&mut self, event: &KeyEvent) {
+    fn handle_key(
+        event: &KeyEvent,
+        video: &mut video::Renderer,
+        audio: &mut audio::Renderer,
+        gb: &Arc<Mutex<Gb>>,
+    ) {
         use {ceres_core::Button as B, winit::event::ElementState, winit::keyboard::Key};
 
-        if !self.video.window().has_focus() {
+        if !video.window().has_focus() {
             return;
         }
 
@@ -265,44 +260,46 @@ impl Emu {
 
         match event.state {
             ElementState::Pressed => match key.as_ref() {
-                Key::Character("w") => self.gb.lock().press(B::Up),
-                Key::Character("a") => self.gb.lock().press(B::Left),
-                Key::Character("s") => self.gb.lock().press(B::Down),
-                Key::Character("d") => self.gb.lock().press(B::Right),
-                Key::Character("k") => self.gb.lock().press(B::A),
-                Key::Character("l") => self.gb.lock().press(B::B),
-                Key::Character("n") => self.gb.lock().press(B::Start),
-                Key::Character("m") => self.gb.lock().press(B::Select),
+                Key::Character("w") => gb.lock().press(B::Up),
+                Key::Character("a") => gb.lock().press(B::Left),
+                Key::Character("s") => gb.lock().press(B::Down),
+                Key::Character("d") => gb.lock().press(B::Right),
+                Key::Character("k") => gb.lock().press(B::A),
+                Key::Character("l") => gb.lock().press(B::B),
+                Key::Character("n") => gb.lock().press(B::Start),
+                Key::Character("m") => gb.lock().press(B::Select),
                 // System
-                Key::Character("f") => match self.video.window().fullscreen() {
-                    Some(_) => self.video.window().set_fullscreen(None),
-                    None => self
-                        .video
+                Key::Character("f") => match video.window().fullscreen() {
+                    Some(_) => video.window().set_fullscreen(None),
+                    None => video
                         .window()
                         .set_fullscreen(Some(Fullscreen::Borderless(None))),
                 },
-                Key::Character("z") => self.video.cycle_scale_mode(),
+                Key::Character("z") => video.cycle_scale_mode(),
+                Key::Named(NamedKey::Space) => {
+                    audio.toggle().unwrap();
+                }
                 _ => (),
             },
             ElementState::Released => match key.as_ref() {
-                Key::Character("w") => self.gb.lock().release(B::Up),
-                Key::Character("a") => self.gb.lock().release(B::Left),
-                Key::Character("s") => self.gb.lock().release(B::Down),
-                Key::Character("d") => self.gb.lock().release(B::Right),
-                Key::Character("k") => self.gb.lock().release(B::A),
-                Key::Character("l") => self.gb.lock().release(B::B),
-                Key::Character("n") => self.gb.lock().release(B::Start),
-                Key::Character("m") => self.gb.lock().release(B::Select),
+                Key::Character("w") => gb.lock().release(B::Up),
+                Key::Character("a") => gb.lock().release(B::Left),
+                Key::Character("s") => gb.lock().release(B::Down),
+                Key::Character("d") => gb.lock().release(B::Right),
+                Key::Character("k") => gb.lock().release(B::A),
+                Key::Character("l") => gb.lock().release(B::B),
+                Key::Character("n") => gb.lock().release(B::Start),
+                Key::Character("m") => gb.lock().release(B::Select),
                 _ => (),
             },
         }
     }
 
-    fn save_data(&self) {
-        let mut gb = self.gb.lock();
+    fn save_data(gb: &Arc<Mutex<Gb>>, rom_path: &Path) {
+        let mut gb = gb.lock();
 
         if let Some(save_data) = gb.cartridge().save_data() {
-            let sav_file = File::create(self.rom_path.with_extension("sav"));
+            let sav_file = File::create(rom_path.with_extension("sav"));
             match sav_file {
                 Ok(mut f) => {
                     if let Err(e) = f.write_all(save_data) {

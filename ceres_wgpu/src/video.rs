@@ -1,3 +1,5 @@
+use alloc::sync::Arc;
+
 use alloc::borrow::Cow;
 
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
@@ -21,11 +23,11 @@ impl Scaling {
     }
 }
 
-pub struct Renderer {
-    surface: wgpu::Surface,
+pub struct Renderer<'a> {
+    surface: wgpu::Surface<'a>,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    window: winit::window::Window,
+    window: Arc<winit::window::Window>,
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
 
@@ -42,7 +44,7 @@ pub struct Renderer {
     diffuse_bind_group: wgpu::BindGroup,
 }
 
-impl Renderer {
+impl<'a> Renderer<'a> {
     #[allow(clippy::too_many_lines)]
     pub async fn new(window: winit::window::Window, scaling: Scaling) -> anyhow::Result<Self> {
         use {anyhow::Context, wgpu::util::DeviceExt};
@@ -51,11 +53,15 @@ impl Renderer {
 
         let instance = wgpu::Instance::default();
 
+        let arcwin = Arc::new(window);
+
+        let arcwinsfc = Arc::clone(&arcwin);
+
         // # Safety
         //
         // The surface needs to live as long as the window that created it.
         // State owns the window so this should be safe.
-        let surface = unsafe { instance.create_surface(&window) }?;
+        let surface = instance.create_surface(arcwinsfc)?;
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -70,8 +76,8 @@ impl Renderer {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    features: wgpu::Features::empty(),
-                    limits: wgpu::Limits::downlevel_webgl2_defaults(),
+                    required_features: wgpu::Features::empty(),
+                    required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
                 },
                 None,
             )
@@ -87,6 +93,7 @@ impl Renderer {
             present_mode: wgpu::PresentMode::Mailbox,
             alpha_mode: wgpu::CompositeAlphaMode::Opaque,
             view_formats: vec![],
+            desired_maximum_frame_latency: 1,
         };
 
         surface.configure(&device, &config);
@@ -229,7 +236,7 @@ impl Renderer {
             surface,
             device,
             queue,
-            window,
+            window: arcwin,
             config,
             size,
             render_pipeline,
@@ -242,7 +249,7 @@ impl Renderer {
         })
     }
 
-    pub const fn window(&self) -> &winit::window::Window {
+    pub const fn window(&self) -> &Arc<winit::window::Window> {
         &self.window
     }
 

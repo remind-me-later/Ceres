@@ -13,16 +13,11 @@ anyhow = { version = "*", default-features = false, features = ["std"] }
 cpal = { git = "https://github.com/rustaudio/cpal", default-features = false }
 
 # video
-wgpu = { version = "0.18" }
+wgpu = { version = "0.19" }
 pollster = { version = "*", default-features = false }
 bytemuck = { version = "*", default-features = false }
 # TODO: wait for better wayland decoration support
-winit = { version = "*", default-features = false, features = [
-    "wayland",
-    "wayland-dlopen",
-    "wayland-csd-adwaita",
-    "rwh_05",
-] }
+winit = { version = "0.29" }
 
 [lints.clippy]
 # warn

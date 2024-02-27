@@ -2,7 +2,7 @@ mod imp;
 mod renderer;
 
 use ceres_core::Gb;
-use gtk::{glib, subclass::prelude::ObjectSubclassIsExt, traits::GLAreaExt};
+use gtk::{glib, prelude::*, subclass::prelude::ObjectSubclassIsExt};
 use std::sync::{Arc, Mutex};
 
 pub use renderer::PxScaleMode;
