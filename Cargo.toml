@@ -9,7 +9,7 @@ incremental = true
 rpath = false
 
 [profile.release]
-opt-level = 3
+opt-level = "s"
 strip = true
 lto = true
 debug = false
@@ -18,3 +18,4 @@ debug-assertions = false
 overflow-checks = false
 incremental = false
 rpath = false
+codegen-units = 1

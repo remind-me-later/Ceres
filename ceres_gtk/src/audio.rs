@@ -31,14 +31,12 @@ impl Renderer {
             let volume = Arc::clone(&volume);
             let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
             let data_callback = move |b: &mut [f32], _: &_| {
-                if let Ok(volume) = volume.lock() {
-                    if let Ok(mut gb) = gb.lock() {
-                        b.chunks_exact_mut(2).for_each(|w| {
-                            let (l, r) = gb.run_samples();
-                            w[0] = (l as f32 / i16::MAX as f32) * *volume;
-                            w[1] = (r as f32 / i16::MAX as f32) * *volume;
-                        });
-                    }
+                if let (Ok(volume), Ok(mut gb)) = (volume.lock(), gb.lock()) {
+                    b.chunks_exact_mut(2).for_each(|w| {
+                        let (l, r) = gb.run_samples();
+                        w[0] = (l as f32 / i16::MAX as f32) * *volume;
+                        w[1] = (r as f32 / i16::MAX as f32) * *volume;
+                    });
                 }
             };
 

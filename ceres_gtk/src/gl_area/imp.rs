@@ -17,7 +17,7 @@ pub struct GlArea {
     pub renderer: RefCell<Option<Renderer>>,
     pub scale_mode: RefCell<PxScaleMode>,
     pub scale_changed: RefCell<bool>,
-    pub tick_id: RefCell<Option<TickCallbackId>>,
+    tick_id: RefCell<Option<TickCallbackId>>,
 }
 
 impl GlArea {

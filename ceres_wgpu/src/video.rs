@@ -1,6 +1,5 @@
-use alloc::sync::Arc;
-
 use alloc::borrow::Cow;
+use alloc::sync::Arc;
 
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
 const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
@@ -53,15 +52,13 @@ impl<'a> Renderer<'a> {
 
         let instance = wgpu::Instance::default();
 
-        let arcwin = Arc::new(window);
-
-        let arcwinsfc = Arc::clone(&arcwin);
+        let window = Arc::new(window);
 
         // # Safety
         //
         // The surface needs to live as long as the window that created it.
         // State owns the window so this should be safe.
-        let surface = instance.create_surface(arcwinsfc)?;
+        let surface = instance.create_surface(Arc::clone(&window))?;
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -236,7 +233,7 @@ impl<'a> Renderer<'a> {
             surface,
             device,
             queue,
-            window: arcwin,
+            window,
             config,
             size,
             render_pipeline,

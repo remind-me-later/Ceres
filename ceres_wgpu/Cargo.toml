@@ -10,17 +10,16 @@ parking_lot = { version = "*", default-features = false }
 anyhow = { version = "*", default-features = false, features = ["std"] }
 
 # audio
-cpal = { git = "https://github.com/rustaudio/cpal", default-features = false }
+cpal = { version = "*", default-features = false }
 
 # video
-wgpu = { version = "0.19" }
+wgpu = { version = "*" }
 pollster = { version = "*", default-features = false }
 bytemuck = { version = "*", default-features = false }
 # TODO: wait for better wayland decoration support
-winit = { version = "0.29" }
+winit = { version = "*" }
 
 [lints.clippy]
-# warn
 pedantic = "warn"
 alloc_instead_of_core = "warn"
 as_underscore = "warn"
@@ -72,10 +71,10 @@ unneeded_field_pattern = "warn"
 unseparated_literal_suffix = "warn"
 use_debug = "warn"
 verbose_file_reads = "warn"
-# allow
+
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 missing_safety_doc = "allow"
-similar_names = "allow"
+similar_names = { level = "allow", priority = 1 }
 struct_excessive_bools = "allow"
 verbose_bit_mask = "allow"
