@@ -200,7 +200,9 @@ impl ObjectImpl for Window {
             &"Nearest".to_variant(),
         );
 
-        action_px_scale.connect_activate(glib::clone!(@weak rend =>
+        action_px_scale.connect_activate(glib::clone!(
+            #[weak]
+            rend,
             move |action, parameter| {
                 // Get parameter
                 let parameter = parameter
@@ -212,13 +214,14 @@ impl ObjectImpl for Window {
                     "Nearest" => PxScaleMode::Nearest,
                     "Scale2x" => PxScaleMode::Scale2x,
                     "Scale3x" => PxScaleMode::Scale3x,
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 };
 
                 // Set orientation and save state
                 rend.obj().set_scale_mode(px_scale_mode);
                 action.set_state(&parameter.to_variant());
-        }));
+            }
+        ));
 
         self.obj().add_action(&action_px_scale);
 
