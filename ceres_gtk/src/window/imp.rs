@@ -153,41 +153,45 @@ impl ObjectImpl for Window {
         let keys = gtk::EventControllerKey::new();
         keys.set_propagation_phase(gtk::PropagationPhase::Capture);
 
-        let gb = Arc::clone(gl_area.gb());
-        keys.connect_key_pressed(move |_, key, _keycode, _state| {
-            if let Ok(mut lock) = gb.lock() {
-                match key {
-                    Key::k => lock.press(ceres_core::Button::A),
-                    Key::l => lock.press(ceres_core::Button::B),
-                    Key::m => lock.press(ceres_core::Button::Start),
-                    Key::n => lock.press(ceres_core::Button::Select),
-                    Key::w => lock.press(ceres_core::Button::Up),
-                    Key::a => lock.press(ceres_core::Button::Left),
-                    Key::s => lock.press(ceres_core::Button::Down),
-                    Key::d => lock.press(ceres_core::Button::Right),
-                    _ => (),
-                };
-            }
+        {
+            let gb = Arc::clone(gl_area.gb());
+            keys.connect_key_pressed(move |_, key, _keycode, _state| {
+                if let Ok(mut lock) = gb.lock() {
+                    match key {
+                        Key::k => lock.press(ceres_core::Button::A),
+                        Key::l => lock.press(ceres_core::Button::B),
+                        Key::m => lock.press(ceres_core::Button::Start),
+                        Key::n => lock.press(ceres_core::Button::Select),
+                        Key::w => lock.press(ceres_core::Button::Up),
+                        Key::a => lock.press(ceres_core::Button::Left),
+                        Key::s => lock.press(ceres_core::Button::Down),
+                        Key::d => lock.press(ceres_core::Button::Right),
+                        _ => (),
+                    };
+                }
 
-            glib::signal::Propagation::Stop
-        });
+                glib::signal::Propagation::Stop
+            });
+        }
 
-        let gb = Arc::clone(gl_area.gb());
-        keys.connect_key_released(move |_, key, _keycode, _state| {
-            if let Ok(mut lock) = gb.lock() {
-                match key {
-                    Key::k => lock.release(ceres_core::Button::A),
-                    Key::l => lock.release(ceres_core::Button::B),
-                    Key::m => lock.release(ceres_core::Button::Start),
-                    Key::n => lock.release(ceres_core::Button::Select),
-                    Key::w => lock.release(ceres_core::Button::Up),
-                    Key::a => lock.release(ceres_core::Button::Left),
-                    Key::s => lock.release(ceres_core::Button::Down),
-                    Key::d => lock.release(ceres_core::Button::Right),
-                    _ => (),
-                };
-            }
-        });
+        {
+            let gb = Arc::clone(gl_area.gb());
+            keys.connect_key_released(move |_, key, _keycode, _state| {
+                if let Ok(mut lock) = gb.lock() {
+                    match key {
+                        Key::k => lock.release(ceres_core::Button::A),
+                        Key::l => lock.release(ceres_core::Button::B),
+                        Key::m => lock.release(ceres_core::Button::Start),
+                        Key::n => lock.release(ceres_core::Button::Select),
+                        Key::w => lock.release(ceres_core::Button::Up),
+                        Key::a => lock.release(ceres_core::Button::Left),
+                        Key::s => lock.release(ceres_core::Button::Down),
+                        Key::d => lock.release(ceres_core::Button::Right),
+                        _ => (),
+                    };
+                }
+            });
+        }
 
         self.obj().add_controller(keys);
 

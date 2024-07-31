@@ -178,7 +178,7 @@ impl Cart {
 
     #[must_use]
     #[inline]
-    pub fn save_data(&mut self) -> Option<&[u8]> {
+    pub fn save_data(&self) -> Option<&[u8]> {
         self.has_battery.then_some(&*self.ram)
     }
 

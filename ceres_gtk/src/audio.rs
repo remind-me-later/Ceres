@@ -1,6 +1,6 @@
 use cpal::traits::StreamTrait;
 
-use {alloc::sync::Arc, ceres_core::Gb, std::sync::Mutex};
+use {ceres_core::Gb, std::sync::Arc, std::sync::Mutex};
 
 const BUFFER_SIZE: cpal::FrameCount = 512;
 const SAMPLE_RATE: i32 = 48000;
@@ -49,15 +49,15 @@ impl Renderer {
         Self { stream, volume }
     }
 
-    pub fn pause(&mut self) {
+    pub fn pause(&self) {
         self.stream.pause().unwrap();
     }
 
-    pub fn resume(&mut self) {
+    pub fn resume(&self) {
         self.stream.play().unwrap();
     }
 
-    pub fn volume(&self) -> &Arc<Mutex<f32>> {
+    pub const fn volume(&self) -> &Arc<Mutex<f32>> {
         &self.volume
     }
 

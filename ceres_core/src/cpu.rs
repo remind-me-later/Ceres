@@ -803,6 +803,7 @@ impl Gb {
     // TODO: debugger breakpoint
 
     #[inline]
+    #[allow(clippy::needless_pass_by_ref_mut)]
     fn ld_b_b(&mut self) {
         self.nop();
     }

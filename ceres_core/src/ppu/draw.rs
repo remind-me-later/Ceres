@@ -285,7 +285,7 @@ impl Ppu {
 
     #[must_use]
     #[inline]
-    fn objs_in_ly(&mut self, height: u8, cgb_mode: &CgbMode) -> ([Obj; 10], u8) {
+    fn objs_in_ly(&self, height: u8, cgb_mode: &CgbMode) -> ([Obj; 10], u8) {
         let mut len: u8 = 0;
         let mut obj: [Obj; 10] = Default::default();
 

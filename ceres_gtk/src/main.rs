@@ -6,8 +6,6 @@ use gtk::glib;
 use gtk::prelude::*;
 use window::Window;
 
-extern crate alloc;
-
 fn main() -> glib::ExitCode {
     {
         #[cfg(target_os = "macos")]
