@@ -1,4 +1,5 @@
 use video::Scaling;
+use winit::event_loop::EventLoop;
 use {
     anyhow::Context,
     clap::{builder::PossibleValuesParser, Arg, Command},
@@ -103,7 +104,11 @@ fn main() -> anyhow::Result<()> {
         .map(PathBuf::from)
         .context("no path provided")?;
 
-    pollster::block_on(emu::run(model, pathbuf, scaling))
+    let event_loop = EventLoop::new()?;
+    let mut emu = emu::Emu::new(model, pathbuf, scaling)?;
+    event_loop.run_app(&mut emu)?;
+
+    Ok(())
 }
 
 mod emu {
@@ -114,8 +119,9 @@ mod emu {
     };
     use parking_lot::Mutex;
     use winit::{
-        event::{Event, KeyEvent, WindowEvent},
-        event_loop::{ControlFlow, EventLoop, EventLoopWindowTarget},
+        dpi::PhysicalSize,
+        event::{KeyEvent, WindowEvent},
+        event_loop::ControlFlow,
         keyboard::NamedKey,
         window::Fullscreen,
     };
@@ -132,54 +138,38 @@ mod emu {
         winit::window,
     };
 
-    pub async fn run(
-        model: ceres_core::Model,
-        rom_path: PathBuf,
+    const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
+    const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
+    const INIT_WIDTH: u32 = PX_WIDTH * SCREEN_MUL;
+    const INIT_HEIGHT: u32 = PX_HEIGHT * SCREEN_MUL;
+
+    #[derive(Default)]
+    pub struct Emu<'a> {
+        video: Option<video::Renderer<'a>>,
+        audio: Option<audio::Renderer>,
+        gb: Option<Arc<Mutex<Gb>>>,
         scaling: Scaling,
-    ) -> anyhow::Result<()> {
-        use winit::dpi::PhysicalSize;
+        rom_path: PathBuf,
+    }
 
-        const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
-        const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
-        const INIT_WIDTH: u32 = PX_WIDTH * SCREEN_MUL;
-        const INIT_HEIGHT: u32 = PX_HEIGHT * SCREEN_MUL;
+    impl<'a> Emu<'a> {
+        pub fn new(
+            model: ceres_core::Model,
+            rom_path: PathBuf,
+            scaling: Scaling,
+        ) -> anyhow::Result<Self> {
+            // Try to create GB before creating window
+            let gb = Arc::new(Mutex::new(init_gb(model, &rom_path)?));
+            let audio = init_audio(&gb)?;
 
-        // Try to create GB before creating window
-        let gb = Arc::new(Mutex::new(init_gb(model, &rom_path)?));
-
-        let mut audio = init_audio(&gb)?;
-
-        let event_loop = EventLoop::new().unwrap();
-
-        let window = window::WindowBuilder::new()
-            .with_title(CERES_STYLIZED)
-            .with_inner_size(PhysicalSize {
-                width: INIT_WIDTH,
-                height: INIT_HEIGHT,
+            Ok(Self {
+                gb: Some(gb),
+                audio: Some(audio),
+                scaling,
+                rom_path,
+                ..Default::default()
             })
-            .with_min_inner_size(PhysicalSize {
-                width: PX_WIDTH,
-                height: PX_HEIGHT,
-            })
-            .build(&event_loop)
-            .context("couldn't create window")?;
-
-        let mut video = video::Renderer::new(window, scaling)
-            .await
-            .context("couldn't initialize wgpu")?;
-
-        video.resize(PhysicalSize {
-            width: INIT_WIDTH,
-            height: INIT_HEIGHT,
-        });
-
-        event_loop
-            .run(move |event, elwt| {
-                loop_cb(&mut video, &mut audio, &gb, &rom_path, &event, elwt);
-            })
-            .unwrap();
-
-        Ok(())
+        }
     }
 
     fn init_audio(gb: &Arc<Mutex<Gb>>) -> anyhow::Result<audio::Renderer> {
@@ -204,44 +194,6 @@ mod emu {
         let sample_rate = audio::Renderer::sample_rate();
 
         Ok(Gb::new(model, sample_rate, cart))
-    }
-
-    fn loop_cb(
-        video: &mut video::Renderer,
-        audio: &mut audio::Renderer,
-        gb: &Arc<Mutex<Gb>>,
-        rom_path: &Path,
-        key_event: &Event<()>,
-        elwt: &EventLoopWindowTarget<()>,
-    ) {
-        elwt.set_control_flow(ControlFlow::Poll);
-
-        match key_event {
-            Event::WindowEvent { event: ref e, .. } => match e {
-                WindowEvent::Resized(size) => video.resize(*size),
-                WindowEvent::CloseRequested => {
-                    save_data(gb, rom_path);
-                    elwt.exit();
-                }
-                WindowEvent::KeyboardInput { event, .. } => handle_key(event, video, audio, gb),
-                WindowEvent::RedrawRequested => {
-                    use wgpu::SurfaceError::{Lost, OutOfMemory, Outdated, Timeout};
-                    match video.render() {
-                        Ok(()) => {}
-                        Err(Lost | Outdated) => video.on_lost(),
-                        Err(OutOfMemory) => elwt.exit(),
-                        Err(Timeout) => eprintln!("Surface timeout"),
-                    }
-                }
-                _ => (),
-            },
-            Event::AboutToWait => {
-                video.update(gb.lock().pixel_data_rgba());
-                video.window().request_redraw();
-                std::thread::sleep(Duration::from_millis(1000 / 60));
-            }
-            _ => (),
-        }
     }
 
     fn handle_key(
@@ -309,6 +261,80 @@ mod emu {
                 Err(e) => {
                     eprintln!("couldn't open save file: {e}");
                 }
+            }
+        }
+    }
+
+    impl winit::application::ApplicationHandler for Emu<'_> {
+        fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+            let window_attributes = winit::window::Window::default_attributes()
+                .with_title(CERES_STYLIZED)
+                .with_inner_size(PhysicalSize {
+                    width: INIT_WIDTH,
+                    height: INIT_HEIGHT,
+                })
+                .with_min_inner_size(PhysicalSize {
+                    width: PX_WIDTH,
+                    height: PX_HEIGHT,
+                });
+
+            let window = event_loop.create_window(window_attributes).unwrap();
+
+            let mut video = pollster::block_on(video::Renderer::new(window, self.scaling)).unwrap();
+
+            video.resize(PhysicalSize {
+                width: INIT_WIDTH,
+                height: INIT_HEIGHT,
+            });
+
+            self.video = Some(video);
+
+            event_loop.set_control_flow(ControlFlow::Poll);
+        }
+
+        fn window_event(
+            &mut self,
+            event_loop: &winit::event_loop::ActiveEventLoop,
+            _: window::WindowId,
+            event: WindowEvent,
+        ) {
+            if let Some(video) = self.video.as_mut() {
+                if let Some(gb) = self.gb.as_ref() {
+                    match event {
+                        WindowEvent::Resized(size) => video.resize(size),
+                        WindowEvent::CloseRequested => {
+                            save_data(gb, &self.rom_path);
+                            event_loop.exit();
+                        }
+                        WindowEvent::KeyboardInput {
+                            event: key_event, ..
+                        } => {
+                            if let Some(audio) = self.audio.as_mut() {
+                                handle_key(&key_event, video, audio, gb);
+                            }
+                        }
+                        WindowEvent::RedrawRequested => {
+                            use wgpu::SurfaceError::{Lost, OutOfMemory, Outdated, Timeout};
+                            match video.render() {
+                                Ok(()) => {}
+                                Err(Lost | Outdated) => video.on_lost(),
+                                Err(OutOfMemory) => event_loop.exit(),
+                                Err(Timeout) => eprintln!("Surface timeout"),
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+            }
+        }
+
+        fn about_to_wait(&mut self, _: &winit::event_loop::ActiveEventLoop) {
+            if let Some(video) = self.video.as_mut() {
+                if let Some(gb) = self.gb.as_ref() {
+                    video.update(gb.lock().pixel_data_rgba());
+                    video.window().request_redraw();
+                }
+                std::thread::sleep(Duration::from_millis(1000 / 60));
             }
         }
     }
