@@ -1,4 +1,4 @@
-use crate::Gb;
+use crate::{AudioCallback, Gb};
 
 #[derive(Clone, Copy, Default)]
 pub enum TIMAState {
@@ -8,7 +8,7 @@ pub enum TIMAState {
     Running,
 }
 
-impl Gb {
+impl<C: AudioCallback> Gb<C> {
     pub(crate) fn advance_t_cycles(&mut self, mut cycles: i32) {
         // affected by speed boost
         self.run_timers(cycles);

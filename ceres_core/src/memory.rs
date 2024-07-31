@@ -1,5 +1,5 @@
-use crate::Model;
 use crate::{ppu::Mode, CgbMode, Gb, Model::Cgb};
+use crate::{AudioCallback, Model};
 
 #[derive(Default, Debug)]
 pub enum HdmaState {
@@ -87,7 +87,7 @@ const HRAM_END: u8 = 0xFE;
 // IE
 const IE: u8 = 0xFF;
 
-impl Gb {
+impl<C: AudioCallback> Gb<C> {
     #[must_use]
     #[inline]
     pub(crate) const fn read_wram_lo(&self, addr: u16) -> u8 {

@@ -3,7 +3,7 @@ use crate::{
     video::{self, Scaling},
     CERES_STYLIZED, SCREEN_MUL,
 };
-use parking_lot::Mutex;
+use std::sync::Mutex;
 use winit::{
     dpi::PhysicalSize,
     event::{KeyEvent, WindowEvent},
@@ -32,7 +32,7 @@ const INIT_HEIGHT: u32 = PX_HEIGHT * SCREEN_MUL;
 pub struct App<'a> {
     video: Option<video::Renderer<'a>>,
     audio: audio::Renderer,
-    gb: Arc<Mutex<Gb>>,
+    gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
     scaling: Scaling,
     rom_path: PathBuf,
 }
@@ -43,11 +43,11 @@ impl<'a> App<'a> {
         rom_path: PathBuf,
         scaling: Scaling,
     ) -> anyhow::Result<Self> {
-        fn init_audio(gb: &Arc<Mutex<Gb>>) -> anyhow::Result<audio::Renderer> {
-            audio::Renderer::new(Arc::clone(gb))
-        }
-
-        fn init_gb(model: ceres_core::Model, rom_path: &Path) -> anyhow::Result<Gb> {
+        fn init_gb(
+            model: ceres_core::Model,
+            rom_path: &Path,
+            audio_callback: audio::RingBuffer,
+        ) -> anyhow::Result<Gb<audio::RingBuffer>> {
             let rom = {
                 fs::read(rom_path)
                     .map(Vec::into_boxed_slice)
@@ -63,11 +63,13 @@ impl<'a> App<'a> {
 
             let sample_rate = audio::Renderer::sample_rate();
 
-            Ok(Gb::new(model, sample_rate, cart))
+            Ok(Gb::new(model, sample_rate, cart, audio_callback))
         }
 
-        let gb = Arc::new(Mutex::new(init_gb(model, &rom_path)?));
-        let audio = init_audio(&gb)?;
+        let audio = audio::Renderer::new()?;
+        let ring_buffer = audio.get_ring_buffer();
+
+        let gb = Arc::new(Mutex::new(init_gb(model, &rom_path, ring_buffer)?));
 
         Ok(Self {
             gb,
@@ -86,59 +88,61 @@ impl<'a> App<'a> {
                 return;
             }
 
-            let key = &event.logical_key;
+            if let Ok(mut gb) = self.gb.lock() {
+                let key = &event.logical_key;
 
-            match event.state {
-                ElementState::Pressed => match key.as_ref() {
-                    Key::Character("w") => self.gb.lock().press(B::Up),
-                    Key::Character("a") => self.gb.lock().press(B::Left),
-                    Key::Character("s") => self.gb.lock().press(B::Down),
-                    Key::Character("d") => self.gb.lock().press(B::Right),
-                    Key::Character("k") => self.gb.lock().press(B::A),
-                    Key::Character("l") => self.gb.lock().press(B::B),
-                    Key::Character("n") => self.gb.lock().press(B::Start),
-                    Key::Character("m") => self.gb.lock().press(B::Select),
-                    // System
-                    Key::Character("f") => match video.window().fullscreen() {
-                        Some(_) => video.window().set_fullscreen(None),
-                        None => video
-                            .window()
-                            .set_fullscreen(Some(Fullscreen::Borderless(None))),
+                match event.state {
+                    ElementState::Pressed => match key.as_ref() {
+                        Key::Character("w") => gb.press(B::Up),
+                        Key::Character("a") => gb.press(B::Left),
+                        Key::Character("s") => gb.press(B::Down),
+                        Key::Character("d") => gb.press(B::Right),
+                        Key::Character("k") => gb.press(B::A),
+                        Key::Character("l") => gb.press(B::B),
+                        Key::Character("n") => gb.press(B::Start),
+                        Key::Character("m") => gb.press(B::Select),
+                        // System
+                        Key::Character("f") => match video.window().fullscreen() {
+                            Some(_) => video.window().set_fullscreen(None),
+                            None => video
+                                .window()
+                                .set_fullscreen(Some(Fullscreen::Borderless(None))),
+                        },
+                        Key::Character("z") => video.cycle_scale_mode(),
+                        Key::Named(NamedKey::Space) => {
+                            self.audio.toggle().unwrap();
+                        }
+                        _ => (),
                     },
-                    Key::Character("z") => video.cycle_scale_mode(),
-                    Key::Named(NamedKey::Space) => {
-                        self.audio.toggle().unwrap();
-                    }
-                    _ => (),
-                },
-                ElementState::Released => match key.as_ref() {
-                    Key::Character("w") => self.gb.lock().release(B::Up),
-                    Key::Character("a") => self.gb.lock().release(B::Left),
-                    Key::Character("s") => self.gb.lock().release(B::Down),
-                    Key::Character("d") => self.gb.lock().release(B::Right),
-                    Key::Character("k") => self.gb.lock().release(B::A),
-                    Key::Character("l") => self.gb.lock().release(B::B),
-                    Key::Character("n") => self.gb.lock().release(B::Start),
-                    Key::Character("m") => self.gb.lock().release(B::Select),
-                    _ => (),
-                },
+                    ElementState::Released => match key.as_ref() {
+                        Key::Character("w") => gb.release(B::Up),
+                        Key::Character("a") => gb.release(B::Left),
+                        Key::Character("s") => gb.release(B::Down),
+                        Key::Character("d") => gb.release(B::Right),
+                        Key::Character("k") => gb.release(B::A),
+                        Key::Character("l") => gb.release(B::B),
+                        Key::Character("n") => gb.release(B::Start),
+                        Key::Character("m") => gb.release(B::Select),
+                        _ => (),
+                    },
+                }
             }
         }
     }
 
     fn save_data(&self) {
-        let mut gb = self.gb.lock();
-
-        if let Some(save_data) = gb.cartridge().save_data() {
-            let sav_file = File::create(self.rom_path.with_extension("sav"));
-            match sav_file {
-                Ok(mut f) => {
-                    if let Err(e) = f.write_all(save_data) {
-                        eprintln!("couldn't save data in save file: {e}");
+        if let Ok(mut gb) = self.gb.lock() {
+            if let Some(save_data) = gb.cartridge().save_data() {
+                let sav_file = File::create(self.rom_path.with_extension("sav"));
+                match sav_file {
+                    Ok(mut f) => {
+                        if let Err(e) = f.write_all(save_data) {
+                            eprintln!("couldn't save data in save file: {e}");
+                        }
                     }
-                }
-                Err(e) => {
-                    eprintln!("couldn't open save file: {e}");
+                    Err(e) => {
+                        eprintln!("couldn't open save file: {e}");
+                    }
                 }
             }
         }
@@ -170,6 +174,10 @@ impl winit::application::ApplicationHandler for App<'_> {
         self.video = Some(video);
 
         event_loop.set_control_flow(ControlFlow::Poll);
+
+        if let Ok(mut gb) = self.gb.lock() {
+            gb.run_frame();
+        }
 
         self.audio.resume().unwrap();
     }
@@ -203,7 +211,11 @@ impl winit::application::ApplicationHandler for App<'_> {
 
     fn about_to_wait(&mut self, _: &winit::event_loop::ActiveEventLoop) {
         if let Some(video) = self.video.as_mut() {
-            video.update(self.gb.lock().pixel_data_rgba());
+            if let Ok(mut gb) = self.gb.lock() {
+                gb.run_frame();
+                video.update(gb.pixel_data_rgba());
+            }
+
             video.window().request_redraw();
 
             std::thread::sleep(Duration::from_millis(1000 / 60));

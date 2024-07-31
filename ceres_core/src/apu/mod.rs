@@ -18,6 +18,10 @@ mod wave_length;
 
 pub type Sample = i16;
 
+pub trait AudioCallback {
+    fn audio_sample(&self, l: Sample, r: Sample);
+}
+
 #[derive(Clone, Copy, Default)]
 enum PHalf {
     #[default]
@@ -25,8 +29,8 @@ enum PHalf {
     Second,
 }
 
-#[derive(Default)]
-pub struct Apu {
+// #[derive(Default)]
+pub struct Apu<C: AudioCallback> {
     nr51: u8,
 
     on: bool,
@@ -45,39 +49,38 @@ pub struct Apu {
     render_timer: i32,
     ext_sample_period: i32,
 
-    l_out: Sample,
-    r_out: Sample,
-
-    samples_run: usize,
+    audio_callback: C,
 }
 
-impl Apu {
-    pub fn new(sample_rate: i32) -> Self {
+impl<C: AudioCallback> Apu<C> {
+    pub fn new(sample_rate: i32, audio_callback: C) -> Self {
         Self {
             ext_sample_period: Self::sample_period_from_rate(sample_rate),
-            ..Default::default()
+            audio_callback,
+            nr51: 0,
+            on: false,
+            r_vol: 0,
+            l_vol: 0,
+            r_vin: false,
+            l_vin: false,
+            ch1: Square1::default(),
+            ch2: Square2::default(),
+            ch3: Wave::default(),
+            ch4: Noise::default(),
+            div_divider: 0,
+            render_timer: 0,
         }
-    }
-
-    pub const fn samples_run(&self) -> usize {
-        self.samples_run
-    }
-
-    pub fn reset_samples_run(&mut self) {
-        self.samples_run = 0;
     }
 
     const fn sample_period_from_rate(sample_rate: i32) -> i32 {
         // TODO: maybe account for difference between 59.7 and target Hz?
-        TC_SEC / sample_rate + 1
-    }
-
-    pub const fn out(&self) -> (Sample, Sample) {
-        (self.l_out, self.r_out)
+        // FIXME: definitely wrong, but avoids underrun
+        // check if frequency is too high
+        TC_SEC / sample_rate - 2
     }
 
     pub fn run(&mut self, cycles: i32) {
-        fn mix_and_render(apu: &Apu) -> (Sample, Sample) {
+        fn mix_and_render<C1: AudioCallback>(apu: &Apu<C1>) -> (Sample, Sample) {
             let mut l = 0;
             let mut r = 0;
 
@@ -121,16 +124,13 @@ impl Apu {
 
             if self.on {
                 let (l, r) = mix_and_render(self);
-                self.l_out = l;
-                self.r_out = r;
+                self.audio_callback.audio_sample(l, r);
             }
-
-            self.samples_run += 2;
         }
     }
 
     pub fn step_seq(&mut self) {
-        fn set_period_half(apu: &mut Apu, p_half: PHalf) {
+        fn set_period_half<C1: AudioCallback>(apu: &mut Apu<C1>, p_half: PHalf) {
             apu.ch1.set_period_half(p_half);
             apu.ch2.set_period_half(p_half);
             apu.ch3.set_period_half(p_half);
@@ -168,7 +168,7 @@ impl Apu {
 }
 
 // IO
-impl Apu {
+impl<C: AudioCallback> Apu<C> {
     #[must_use]
     pub fn read_nr50(&self) -> u8 {
         self.r_vol | u8::from(self.r_vin) << 3 | self.l_vol << 4 | u8::from(self.l_vin) << 7
@@ -221,8 +221,6 @@ impl Apu {
             self.r_vol = 0;
             self.r_vin = false;
             self.nr51 = 0;
-            self.l_out = 0;
-            self.r_out = 0;
             self.div_divider = 0;
         }
     }

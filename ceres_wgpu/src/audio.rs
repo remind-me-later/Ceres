@@ -1,20 +1,39 @@
 use anyhow::Context;
 use cpal::traits::StreamTrait;
+use dasp_ring_buffer::Bounded;
 
-use {alloc::sync::Arc, ceres_core::Gb, parking_lot::Mutex};
+use {alloc::sync::Arc, std::sync::Mutex};
 
 // Buffer size is the number of samples per channel per callback
-const BUFFER_SIZE: cpal::FrameCount = 512;
+const BUFFER_SIZE: cpal::FrameCount = 1024;
+const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 8;
 const SAMPLE_RATE: i32 = 48000;
+
+// RingBuffer is a wrapper around a bounded ring buffer
+// that implements the AudioCallback trait
+#[derive(Clone)]
+pub struct RingBuffer {
+    buffer: Arc<Mutex<Bounded<[f32; RING_BUFFER_SIZE]>>>,
+}
+
+impl ceres_core::AudioCallback for RingBuffer {
+    fn audio_sample(&self, l: ceres_core::Sample, r: ceres_core::Sample) {
+        if let Ok(mut buffer) = self.buffer.lock() {
+            buffer.push(l as f32 / i16::MAX as f32);
+            buffer.push(r as f32 / i16::MAX as f32);
+        }
+    }
+}
 
 // Stream is not Send, so we can't use it directly in the renderer struct
 pub struct Renderer {
     stream: cpal::Stream,
     paused: bool,
+    ring_buffer: RingBuffer,
 }
 
 impl Renderer {
-    pub fn new(gb: Arc<Mutex<Gb>>) -> anyhow::Result<Self> {
+    pub fn new() -> anyhow::Result<Self> {
         use cpal::traits::{DeviceTrait, HostTrait};
 
         let host = cpal::default_host();
@@ -28,15 +47,21 @@ impl Renderer {
             buffer_size: cpal::BufferSize::Fixed(BUFFER_SIZE),
         };
 
-        let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
-        let data_callback = move |b: &mut [ceres_core::Sample], _: &_| {
-            let mut gb = gb.lock();
+        let ring_buffer = Arc::new(Mutex::new(Bounded::from([0.0; RING_BUFFER_SIZE])));
+        let ring_buffer_clone = Arc::clone(&ring_buffer);
 
-            b.chunks_exact_mut(2).for_each(|w| {
-                let (l, r) = gb.run_samples();
-                w[0] = l;
-                w[1] = r;
-            });
+        let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
+        let data_callback = move |b: &mut [f32], _: &_| {
+            if let Ok(mut ring_buffer) = ring_buffer_clone.lock() {
+                // TODO: resampling
+                if ring_buffer.len() < b.len() {
+                    eprintln!("ring buffer underrun");
+                }
+
+                b.iter_mut()
+                    .zip(ring_buffer.drain())
+                    .for_each(|(b, s)| *b = s);
+            }
         };
 
         let stream = dev.build_output_stream(&config, data_callback, error_callback, None)?;
@@ -46,7 +71,14 @@ impl Renderer {
         Ok(Self {
             stream,
             paused: false,
+            ring_buffer: RingBuffer {
+                buffer: ring_buffer,
+            },
         })
+    }
+
+    pub fn get_ring_buffer(&self) -> RingBuffer {
+        self.ring_buffer.clone()
     }
 
     pub fn pause(&mut self) -> anyhow::Result<()> {

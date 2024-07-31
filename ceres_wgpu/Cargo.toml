@@ -6,11 +6,12 @@ edition = "2021"
 [dependencies]
 ceres_core = { path = "../ceres_core" }
 clap = { version = "*", default-features = false, features = ["std", "help"] }
-parking_lot = { version = "*", default-features = false }
+# parking_lot = { version = "*", default-features = false }
 anyhow = { version = "*", default-features = false, features = ["std"] }
 
 # audio
 cpal = { version = "*", default-features = false }
+dasp_ring_buffer = "*"
 
 # video
 wgpu = { version = "*" }

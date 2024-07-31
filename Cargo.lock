@@ -283,7 +283,7 @@ dependencies = [
  "ceres_core",
  "clap",
  "cpal",
- "parking_lot",
+ "dasp_ring_buffer",
  "pollster",
  "wgpu",
  "winit",
@@ -523,6 +523,12 @@ dependencies = [
  "libloading",
  "winapi",
 ]
+
+[[package]]
+name = "dasp_ring_buffer"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07d79e19b89618a543c4adec9c5a347fe378a19041699b3278e616e387511ea1"
 
 [[package]]
 name = "dasp_sample"

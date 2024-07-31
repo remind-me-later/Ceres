@@ -1,11 +1,11 @@
-use crate::Gb;
+use crate::{AudioCallback, Gb};
 
 const ZF: u16 = 0x80;
 const NF: u16 = 0x40;
 const HF: u16 = 0x20;
 const CF: u16 = 0x10;
 
-impl Gb {
+impl<C: AudioCallback> Gb<C> {
     pub(crate) fn run_cpu(&mut self) {
         if self.ei_delay {
             self.ints.enable();

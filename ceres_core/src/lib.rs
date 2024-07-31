@@ -6,7 +6,7 @@ use memory::{Key1, Svbk};
 use serial::Serial;
 use {apu::Apu, memory::HdmaState, ppu::Ppu, timing::TIMAState};
 pub use {
-    apu::Sample,
+    apu::{AudioCallback, Sample},
     cart::{Cart, Error},
     joypad::Button,
     ppu::{PX_HEIGHT, PX_WIDTH},
@@ -29,7 +29,7 @@ const TC_SEC: i32 = 0x40_0000;
 const HRAM_SIZE: u8 = 0x80;
 const WRAM_SIZE: u16 = 0x2000 * 4;
 
-pub struct Gb {
+pub struct Gb<C: AudioCallback> {
     model: Model,
     cgb_mode: CgbMode,
 
@@ -78,15 +78,15 @@ pub struct Gb {
 
     // peripherals
     ppu: Ppu,
-    apu: Apu,
+    apu: Apu<C>,
     serial: Serial,
     ints: Interrupts,
     joy: Joypad,
 }
 
-impl Gb {
+impl<C: AudioCallback> Gb<C> {
     #[must_use]
-    pub fn new(model: Model, sample_rate: i32, cart: Cart) -> Self {
+    pub fn new(model: Model, sample_rate: i32, cart: Cart, audio_callback: C) -> Self {
         const DMG_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/dmg.bin");
         const MGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/mgb.bin");
         const CGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/cgb.bin");
@@ -107,7 +107,7 @@ impl Gb {
             cgb_mode,
             cart,
             bootrom,
-            apu: Apu::new(sample_rate),
+            apu: Apu::new(sample_rate, audio_callback),
 
             wram: [0; WRAM_SIZE as usize],
             hram: [0; HRAM_SIZE as usize],
@@ -145,14 +145,12 @@ impl Gb {
     }
 
     #[inline]
-    pub fn run_samples(&mut self) -> (Sample, Sample) {
-        while self.apu.samples_run() == 0 {
+    pub fn run_frame(&mut self) {
+        while !self.ppu.frame_done() {
             self.run_cpu();
         }
 
-        self.apu.reset_samples_run();
-
-        self.apu.out()
+        self.ppu.reset_frame_done();
     }
 
     #[must_use]
