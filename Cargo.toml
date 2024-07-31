@@ -1,6 +1,6 @@
 [workspace]
-members = ["ceres_core", "ceres_gtk", "ceres_wgpu"]
-default-members = ["ceres_gtk", "ceres_wgpu"]
+members = ["ceres_core", "ceres_wgpu"]
+default-members = ["ceres_wgpu"]
 resolver = "2"
 
 [profile.dev]
@@ -11,8 +11,8 @@ rpath = false
 [profile.release]
 opt-level = "s"
 strip = true
-lto = true
-debug = false
+lto = "fat"
+debug = "none"
 panic = "abort"
 debug-assertions = false
 overflow-checks = false
