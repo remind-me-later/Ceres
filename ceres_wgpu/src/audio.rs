@@ -5,7 +5,7 @@ use dasp_ring_buffer::Bounded;
 use {alloc::sync::Arc, std::sync::Mutex};
 
 // Buffer size is the number of samples per channel per callback
-const BUFFER_SIZE: cpal::FrameCount = 512 * 4;
+const BUFFER_SIZE: cpal::FrameCount = 512 * 2;
 const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
 const SAMPLE_RATE: i32 = 48000;
 
@@ -55,7 +55,6 @@ impl Renderer {
         let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
         let data_callback = move |b: &mut [ceres_core::Sample], _: &_| {
             if let Ok(mut ring_buffer) = ring_buffer_clone.lock() {
-                // TODO: resampling
                 if ring_buffer.len() < b.len() {
                     eprintln!("ring buffer underrun");
                 }
@@ -67,8 +66,6 @@ impl Renderer {
         };
 
         let stream = dev.build_output_stream(&config, data_callback, error_callback, None)?;
-
-        stream.play()?;
 
         Ok(Self {
             stream,

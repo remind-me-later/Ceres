@@ -3,7 +3,7 @@ use crate::{
     video::{self, Scaling},
     CERES_STYLIZED, SCREEN_MUL,
 };
-use std::sync::Mutex;
+use std::{sync::Mutex, time::Instant};
 use winit::{
     dpi::PhysicalSize,
     event::{KeyEvent, WindowEvent},
@@ -35,6 +35,7 @@ pub struct App<'a> {
     gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
     scaling: Scaling,
     rom_path: PathBuf,
+    thread_handle: Option<std::thread::JoinHandle<()>>,
 }
 
 impl<'a> App<'a> {
@@ -70,6 +71,24 @@ impl<'a> App<'a> {
         let ring_buffer = audio.get_ring_buffer();
 
         let gb = Arc::new(Mutex::new(init_gb(model, &rom_path, ring_buffer)?));
+        let gb_clone = Arc::clone(&gb);
+
+        let thread_handle = std::thread::spawn(move || loop {
+            // TODO: kill thread gracefully
+
+            let frame_duration = Duration::from_secs_f32(1.0 / ceres_core::FPS);
+            let begin = std::time::Instant::now();
+
+            if let Ok(mut gb) = gb_clone.lock() {
+                gb.run_frame();
+            }
+
+            let elapsed = begin.elapsed();
+
+            if elapsed < frame_duration {
+                spin_sleep::sleep(frame_duration - elapsed);
+            }
+        });
 
         Ok(Self {
             gb,
@@ -77,6 +96,7 @@ impl<'a> App<'a> {
             scaling,
             rom_path,
             video: None,
+            thread_handle: Some(thread_handle),
         })
     }
 
@@ -173,13 +193,33 @@ impl winit::application::ApplicationHandler for App<'_> {
 
         self.video = Some(video);
 
-        event_loop.set_control_flow(ControlFlow::Poll);
-
-        if let Ok(mut gb) = self.gb.lock() {
-            gb.run_frame();
-        }
+        // event_loop.set_control_flow(ControlFlow::Poll);
+        event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now()));
 
         self.audio.resume().unwrap();
+    }
+
+    fn new_events(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        cause: winit::event::StartCause,
+    ) {
+        match cause {
+            winit::event::StartCause::ResumeTimeReached { .. } => {
+                if let Some(video) = self.video.as_mut() {
+                    if let Ok(gb) = self.gb.lock() {
+                        video.update(gb.pixel_data_rgba());
+                    }
+
+                    video.window().request_redraw();
+
+                    event_loop.set_control_flow(ControlFlow::wait_duration(
+                        Duration::from_secs_f64(1.0 / 60.0),
+                    ));
+                }
+            }
+            _ => {}
+        }
     }
 
     fn window_event(
@@ -197,6 +237,7 @@ impl winit::application::ApplicationHandler for App<'_> {
                 } => self.handle_key(&key_event),
                 WindowEvent::RedrawRequested => {
                     use wgpu::SurfaceError::{Lost, OutOfMemory, Outdated, Timeout};
+
                     match video.render() {
                         Ok(()) => {}
                         Err(Lost | Outdated) => video.on_lost(),
@@ -209,24 +250,12 @@ impl winit::application::ApplicationHandler for App<'_> {
         }
     }
 
-    fn about_to_wait(&mut self, _: &winit::event_loop::ActiveEventLoop) {
-        if let Some(video) = self.video.as_mut() {
-            if let Ok(mut gb) = self.gb.lock() {
-                gb.run_frame();
-                video.update(gb.pixel_data_rgba());
-            }
-
-            video.window().request_redraw();
-
-            std::thread::sleep(Duration::from_millis(1000 / 60));
-        }
-    }
-
     fn suspended(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         self.audio.pause().unwrap();
         self.video = None;
         event_loop.set_control_flow(ControlFlow::Wait);
     }
+
     fn exiting(&mut self, _: &winit::event_loop::ActiveEventLoop) {
         self.save_data();
         self.audio.pause().unwrap();

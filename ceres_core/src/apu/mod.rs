@@ -81,7 +81,7 @@ impl<C: AudioCallback> Apu<C> {
         // TODO: maybe account for difference between 59.7 and target Hz?
         // FIXME: definitely wrong, but avoids underrun
         // check if frequency is too high
-        ((TC_SEC / sample_rate) * 597) / 600 - 1
+        TC_SEC / sample_rate
     }
 
     pub fn run(&mut self, cycles: i32) {

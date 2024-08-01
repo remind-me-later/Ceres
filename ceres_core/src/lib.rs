@@ -24,10 +24,11 @@ mod ppu;
 mod serial;
 mod timing;
 
+pub const FPS: f32 = 59.7;
 // t-cycles per second
-const TC_SEC: i32 = 0x40_0000;
-const HRAM_SIZE: u8 = 0x80;
-const WRAM_SIZE: u16 = 0x2000 * 4;
+pub const TC_SEC: i32 = 0x40_0000;
+pub const HRAM_SIZE: u8 = 0x80;
+pub const WRAM_SIZE: u16 = 0x2000 * 4;
 
 pub struct Gb<C: AudioCallback> {
     model: Model,
