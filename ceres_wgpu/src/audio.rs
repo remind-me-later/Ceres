@@ -13,14 +13,14 @@ const SAMPLE_RATE: i32 = 48000;
 // that implements the AudioCallback trait
 #[derive(Clone)]
 pub struct RingBuffer {
-    buffer: Arc<Mutex<Bounded<[f32; RING_BUFFER_SIZE]>>>,
+    buffer: Arc<Mutex<Bounded<[ceres_core::Sample; RING_BUFFER_SIZE]>>>,
 }
 
 impl ceres_core::AudioCallback for RingBuffer {
     fn audio_sample(&self, l: ceres_core::Sample, r: ceres_core::Sample) {
         if let Ok(mut buffer) = self.buffer.lock() {
-            buffer.push(l as f32 / i16::MAX as f32);
-            buffer.push(r as f32 / i16::MAX as f32);
+            buffer.push(l);
+            buffer.push(r);
         }
     }
 }
@@ -47,11 +47,13 @@ impl Renderer {
             buffer_size: cpal::BufferSize::Fixed(BUFFER_SIZE),
         };
 
-        let ring_buffer = Arc::new(Mutex::new(Bounded::from([0.0; RING_BUFFER_SIZE])));
+        let ring_buffer = Arc::new(Mutex::new(Bounded::from(
+            [Default::default(); RING_BUFFER_SIZE],
+        )));
         let ring_buffer_clone = Arc::clone(&ring_buffer);
 
         let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
-        let data_callback = move |b: &mut [f32], _: &_| {
+        let data_callback = move |b: &mut [ceres_core::Sample], _: &_| {
             if let Ok(mut ring_buffer) = ring_buffer_clone.lock() {
                 // TODO: resampling
                 if ring_buffer.len() < b.len() {
