@@ -16,7 +16,7 @@ mod sweep;
 mod wave;
 mod wave_length;
 
-pub type Sample = i16;
+pub type Sample = f32;
 
 pub trait AudioCallback {
     fn audio_sample(&self, l: Sample, r: Sample);
@@ -50,6 +50,9 @@ pub struct Apu<C: AudioCallback> {
     ext_sample_period: i32,
 
     audio_callback: C,
+
+    capacitor_l: f32,
+    capacitor_r: f32,
 }
 
 impl<C: AudioCallback> Apu<C> {
@@ -69,6 +72,8 @@ impl<C: AudioCallback> Apu<C> {
             ch4: Noise::default(),
             div_divider: 0,
             render_timer: 0,
+            capacitor_l: 0.0,
+            capacitor_r: 0.0,
         }
     }
 
@@ -108,6 +113,10 @@ impl<C: AudioCallback> Apu<C> {
             let l = l * 32;
             let r = r * 32;
 
+            // transform to f32 sample
+            let l = l as f32 / i16::MAX as f32;
+            let r = r as f32 / i16::MAX as f32;
+
             (l, r)
         }
 
@@ -124,11 +133,28 @@ impl<C: AudioCallback> Apu<C> {
 
             if self.on {
                 let (l, r) = mix_and_render(self);
+                let (l, r) = self.high_pass(l, r);
+
                 self.audio_callback.audio_sample(l, r);
             } else {
-                self.audio_callback.audio_sample(0, 0);
+                self.audio_callback.audio_sample(0.0, 0.0);
             }
         }
+    }
+
+    fn high_pass(&mut self, l: Sample, r: Sample) -> (Sample, Sample) {
+        let mut outl = 0.0;
+        let mut outr = 0.0;
+
+        if self.ch1.on() || self.ch2.on() || self.ch3.on() || self.ch4.on() {
+            outl = l - self.capacitor_l;
+            outr = r - self.capacitor_r;
+
+            self.capacitor_l = l - outl * 0.999958;
+            self.capacitor_r = r - outr * 0.999958;
+        }
+
+        (outl, outr)
     }
 
     pub fn step_seq(&mut self) {
