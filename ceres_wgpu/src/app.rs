@@ -35,7 +35,7 @@ pub struct App<'a> {
     gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
     scaling: Scaling,
     rom_path: PathBuf,
-    thread_handle: Option<std::thread::JoinHandle<()>>,
+    _thread_handle: Option<std::thread::JoinHandle<()>>,
 }
 
 impl<'a> App<'a> {
@@ -96,7 +96,7 @@ impl<'a> App<'a> {
             scaling,
             rom_path,
             video: None,
-            thread_handle: Some(thread_handle),
+            _thread_handle: Some(thread_handle),
         })
     }
 
@@ -206,16 +206,16 @@ impl winit::application::ApplicationHandler for App<'_> {
     ) {
         match cause {
             winit::event::StartCause::ResumeTimeReached { .. } => {
+                event_loop.set_control_flow(ControlFlow::wait_duration(Duration::from_secs_f64(
+                    1.0 / 60.0,
+                )));
+
                 if let Some(video) = self.video.as_mut() {
                     if let Ok(gb) = self.gb.lock() {
                         video.update(gb.pixel_data_rgba());
                     }
 
                     video.window().request_redraw();
-
-                    event_loop.set_control_flow(ControlFlow::wait_duration(
-                        Duration::from_secs_f64(1.0 / 60.0),
-                    ));
                 }
             }
             _ => {}

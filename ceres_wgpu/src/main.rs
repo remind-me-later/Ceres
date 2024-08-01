@@ -107,8 +107,8 @@ fn main() -> anyhow::Result<()> {
         .context("no path provided")?;
 
     let event_loop = EventLoop::new()?;
-    let mut emu = App::new(model, pathbuf, scaling)?;
-    event_loop.run_app(&mut emu)?;
+    let mut app = App::new(model, pathbuf, scaling)?;
+    event_loop.run_app(&mut app)?;
 
     Ok(())
 }
