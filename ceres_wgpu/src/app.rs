@@ -1,7 +1,7 @@
 use crate::{
     audio,
-    video::{self, Scaling},
-    CERES_STYLIZED, SCREEN_MUL,
+    video::{self},
+    Scaling, CERES_STYLIZED, SCREEN_MUL,
 };
 use std::{sync::Mutex, time::Instant};
 use winit::{

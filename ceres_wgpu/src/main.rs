@@ -1,9 +1,9 @@
 use app::App;
-use video::Scaling;
+use clap::builder::EnumValueParser;
 use winit::event_loop::EventLoop;
 use {
     anyhow::Context,
-    clap::{builder::PossibleValuesParser, Arg, Command},
+    clap::{Arg, Command},
     std::path::PathBuf,
 };
 
@@ -36,6 +36,70 @@ Other binsings:
 
 const SCREEN_MUL: u32 = 3;
 
+#[derive(Default, Clone, Copy)]
+enum Model {
+    Dmg,
+    Mgb,
+    #[default]
+    Cgb,
+}
+
+impl clap::ValueEnum for Model {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[Self::Dmg, Self::Mgb, Self::Cgb]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        Some(match self {
+            Self::Dmg => clap::builder::PossibleValue::new("dmg"),
+            Self::Mgb => clap::builder::PossibleValue::new("mgb"),
+            Self::Cgb => clap::builder::PossibleValue::new("cgb"),
+        })
+    }
+}
+
+impl From<Model> for ceres_core::Model {
+    fn from(model: Model) -> ceres_core::Model {
+        match model {
+            Model::Dmg => ceres_core::Model::Dmg,
+            Model::Mgb => ceres_core::Model::Mgb,
+            Model::Cgb => ceres_core::Model::Cgb,
+        }
+    }
+}
+
+#[derive(Default, Clone, Copy)]
+pub enum Scaling {
+    #[default]
+    Nearest = 0,
+    Scale2x = 1,
+    Scale3x = 2,
+}
+
+impl Scaling {
+    pub fn next(self) -> Self {
+        match self {
+            Scaling::Nearest => Scaling::Scale2x,
+            Scaling::Scale2x => Scaling::Scale3x,
+            Scaling::Scale3x => Scaling::Nearest,
+        }
+    }
+}
+
+impl clap::ValueEnum for Scaling {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[Self::Nearest, Self::Scale2x, Self::Scale3x]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        Some(match self {
+            Self::Nearest => clap::builder::PossibleValue::new("nearest"),
+            Self::Scale2x => clap::builder::PossibleValue::new("scale2x"),
+            Self::Scale3x => clap::builder::PossibleValue::new("scale3x"),
+        })
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     let args = Command::new(CERES_BIN)
         .bin_name(CERES_BIN)
@@ -56,7 +120,7 @@ fn main() -> anyhow::Result<()> {
                 .short('m')
                 .long("model")
                 .help("Game Boy model to emulate")
-                .value_parser(PossibleValuesParser::new(["dmg", "mgb", "cgb"]))
+                .value_parser(EnumValueParser::<Model>::new())
                 .default_value("cgb")
                 .required(false),
         )
@@ -65,49 +129,27 @@ fn main() -> anyhow::Result<()> {
                 .short('s')
                 .long("scaling")
                 .help("Scaling algorithm used")
-                .value_parser(PossibleValuesParser::new(["nearest", "scale2x", "scale3x"]))
+                .value_parser(EnumValueParser::<Scaling>::new())
                 .default_value("nearest")
                 .required(false),
         )
         .get_matches();
 
-    let model = {
-        let model_str = args
-            .get_one::<String>("model")
-            .context("couldn't get model string")?;
+    let model = *args
+        .get_one::<Model>("model")
+        .context("couldn't get model string")?;
 
-        let model = match model_str.as_str() {
-            "dmg" => ceres_core::Model::Dmg,
-            "mgb" => ceres_core::Model::Mgb,
-            "cgb" => ceres_core::Model::Cgb,
-            _ => unreachable!(),
-        };
+    let scaling = *args
+        .get_one::<Scaling>("scaling")
+        .context("couldn't get scaling string")?;
 
-        model
-    };
-
-    let scaling = {
-        let scaling_str = args
-            .get_one::<String>("scaling")
-            .context("couldn't get scaling string")?;
-
-        let scaling = match scaling_str.as_str() {
-            "nearest" => Scaling::Nearest,
-            "scale2x" => Scaling::Scale2x,
-            "scale3x" => Scaling::Scale3x,
-            _ => unreachable!(),
-        };
-
-        scaling
-    };
-
-    let pathbuf = args
+    let rom_path = args
         .get_one::<String>("file")
         .map(PathBuf::from)
         .context("no path provided")?;
 
     let event_loop = EventLoop::new()?;
-    let mut app = App::new(model, pathbuf, scaling)?;
+    let mut app = App::new(model.into(), rom_path, scaling)?;
     event_loop.run_app(&mut app)?;
 
     Ok(())

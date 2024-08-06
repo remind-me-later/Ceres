@@ -1,26 +1,10 @@
 use alloc::borrow::Cow;
 use alloc::sync::Arc;
 
+use crate::Scaling;
+
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
 const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
-
-#[derive(Default, Clone, Copy)]
-pub enum Scaling {
-    #[default]
-    Nearest = 0,
-    Scale2x = 1,
-    Scale3x = 2,
-}
-
-impl Scaling {
-    pub fn next(self) -> Self {
-        match self {
-            Scaling::Nearest => Scaling::Scale2x,
-            Scaling::Scale2x => Scaling::Scale3x,
-            Scaling::Scale3x => Scaling::Nearest,
-        }
-    }
-}
 
 pub struct Renderer<'a> {
     surface: wgpu::Surface<'a>,
@@ -370,19 +354,15 @@ impl Texture {
             const S: usize = (PX_HEIGHT * PX_WIDTH * 4) as usize;
             let mut rgba_new: [u8; S] = [0; S];
 
-            let mut i = 0;
             let mut j = 0;
-            for &p in rgb {
-                rgba_new[j] = p;
 
-                i += 1;
-                j += 1;
-                if i == 3 {
-                    i = 0;
-                    rgba_new[j] = 0xff;
-                    j += 1;
-                }
-            }
+            rgb.chunks_exact(3).for_each(|p| {
+                rgba_new[j] = p[0];
+                rgba_new[j + 1] = p[1];
+                rgba_new[j + 2] = p[2];
+                rgba_new[j + 3] = 0xff;
+                j += 4;
+            });
 
             rgba_new
         };
