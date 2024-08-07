@@ -1,29 +1,31 @@
 [package]
-name = "ceres_wgpu"
+name = "ceres-gtk"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ceres_core = { path = "../ceres_core" }
+ceres-core = { path = "../ceres-core" }
 clap = { version = "*", default-features = false, features = ["std", "help"] }
-# parking_lot = { version = "*", default-features = false }
-anyhow = { version = "*", default-features = false, features = ["std"] }
-spin_sleep = { version = "*" }
+epoxy = { version = "*" }
+libloading = { version = "*" }
+glow = { version = "*" }
 
 # audio
 cpal = { version = "*", default-features = false }
-dasp_ring_buffer = "*"
 
-# video
-wgpu = { version = "*" }
-pollster = { version = "*", default-features = false }
-bytemuck = { version = "*", default-features = false }
-# TODO: wait for better wayland decoration support
-winit = { version = "*" }
+[dependencies.adw]
+package = "libadwaita"
+version = "*"
+features = ["v1_4"]
+
+[dependencies.gtk]
+version = "*"
+package = "gtk4"
+features = ["v4_12"]
 
 [lints.clippy]
-pedantic = "warn"
-alloc_instead_of_core = "warn"
+nursery = "warn"
+# restriction
 as_underscore = "warn"
 assertions_on_result_states = "warn"
 clone_on_ref_ptr = "warn"
@@ -36,8 +38,9 @@ else_if_without_else = "warn"
 empty_drop = "warn"
 empty_structs_with_brackets = "warn"
 exit = "warn"
-expect_used = "warn"
+# expect_used = "warn"
 filetype_is_file = "warn"
+# float_arithmetic = "warn"
 float_cmp_const = "warn"
 fn_to_numeric_cast_any = "warn"
 format_push_string = "warn"
@@ -50,17 +53,16 @@ mem_forget = "warn"
 mixed_read_write_in_expression = "warn"
 modulo_arithmetic = "warn"
 mutex_atomic = "warn"
-non_ascii_literal = "warn"
-panic = "warn"
+# panic = "warn"
 partial_pub_fields = "warn"
+# print_stderr = "warn"
+# print_stdout = "warn"
 rc_buffer = "warn"
 rc_mutex = "warn"
 rest_pat_in_fully_bound_structs = "warn"
-same_name_method = "warn"
+# same_name_method = "warn"
 self_named_module_files = "warn"
 shadow_unrelated = "warn"
-std_instead_of_alloc = "warn"
-std_instead_of_core = "warn"
 str_to_string = "warn"
 string_add = "warn"
 string_slice = "warn"
@@ -73,10 +75,10 @@ unneeded_field_pattern = "warn"
 unseparated_literal_suffix = "warn"
 use_debug = "warn"
 verbose_file_reads = "warn"
-
+# allow
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 missing_safety_doc = "allow"
-similar_names = { level = "allow", priority = 1 }
+similar_names = "allow"
 struct_excessive_bools = "allow"
 verbose_bit_mask = "allow"

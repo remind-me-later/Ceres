@@ -271,16 +271,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "ceres_core"
+name = "ceres-core"
 version = "0.1.0"
 
 [[package]]
-name = "ceres_wgpu"
+name = "ceres-wgpu"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytemuck",
- "ceres_core",
+ "ceres-core",
  "clap",
  "cpal",
  "dasp_ring_buffer",
