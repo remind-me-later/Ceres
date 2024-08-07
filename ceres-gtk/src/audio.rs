@@ -50,17 +50,21 @@ impl Renderer {
             [Default::default(); RING_BUFFER_SIZE],
         )));
         let ring_buffer_clone = Arc::clone(&ring_buffer);
+        let volume = Arc::new(Mutex::new(1.0));
+        let volume_clone = Arc::clone(&volume);
 
         let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
         let data_callback = move |b: &mut [ceres_core::Sample], _: &_| {
             if let Ok(mut ring_buffer) = ring_buffer_clone.lock() {
+                let volume = *volume_clone.lock().unwrap();
+
                 if ring_buffer.len() < b.len() {
                     eprintln!("ring buffer underrun");
                 }
 
                 b.iter_mut()
                     .zip(ring_buffer.drain())
-                    .for_each(|(b, s)| *b = s);
+                    .for_each(|(b, s)| *b = s * volume);
             }
         };
 
@@ -70,7 +74,7 @@ impl Renderer {
 
         Self {
             stream,
-            volume: Arc::new(Mutex::new(1.0)),
+            volume,
             ring_buffer: RingBuffer {
                 buffer: ring_buffer,
             },
