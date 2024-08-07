@@ -23,11 +23,11 @@ Required:
 To build just:
 
 - Enter the `gb-bootroms` directory and `make`.
-- In the root directory `cargo build --release --bin ceres_gtk`
+- In the root directory `cargo build --release --bin=ceres-gtk`
 
 ## Quick start
 
-- In the root directory `cargo run --release --bin ceres_gtk`
+- In the root directory `cargo run --release --bin=ceres-gtk`
 
 ## Key bindings
 
@@ -41,9 +41,9 @@ To build just:
 
 ## Folder organization
 
-- `ceres_core` contains the core emulator logic, such as cpu, apu and ppu emulation.
-- `ceres_sdl` contains an sdl frontend with a cli interface.
-- `ceres_gtk` contains a gtk frontend with a gui.
+- `ceres-core` contains the core emulator logic, such as cpu, apu and ppu emulation.
+- `ceres-wgpu` contains a `wgpu` frontend with a cli interface.
+- `ceres-gtk` contains a `gtk` frontend with a gui.
 
 ## Thanks
 
