@@ -12,7 +12,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 pub struct GlArea {
-    pub gb: Arc<Mutex<Gb>>,
+    pub gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
     pub audio: Rc<RefCell<audio::Renderer>>,
     pub renderer: RefCell<Option<Renderer>>,
     pub scale_mode: RefCell<PxScaleMode>,
@@ -55,12 +55,14 @@ impl ObjectSubclass for GlArea {
 
     fn new() -> Self {
         let cart = ceres_core::Cart::default();
+        let audio = Rc::new(RefCell::new(audio::Renderer::new()));
+
         let gb = Arc::new(Mutex::new(ceres_core::Gb::new(
             ceres_core::Model::Cgb,
             audio::Renderer::sample_rate(),
             cart,
+            audio.borrow().get_ring_buffer(),
         )));
-        let audio = Rc::new(RefCell::new(audio::Renderer::new(Arc::clone(&gb))));
 
         Self {
             gb,
@@ -101,6 +103,24 @@ impl WidgetImpl for GlArea {
         widget.make_current();
 
         *self.renderer.borrow_mut() = Some(Renderer::new());
+
+        let gb_clone = Arc::clone(&self.gb);
+
+        let thread_handle = std::thread::spawn(move || loop {
+            // TODO: kill thread gracefully
+
+            let begin = std::time::Instant::now();
+
+            if let Ok(mut gb) = gb_clone.lock() {
+                gb.run_frame();
+            }
+
+            let elapsed = begin.elapsed();
+
+            if elapsed < ceres_core::FRAME_DURATION {
+                spin_sleep::sleep(ceres_core::FRAME_DURATION - elapsed);
+            }
+        });
     }
 
     fn unrealize(&self) {

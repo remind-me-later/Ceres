@@ -9,9 +9,11 @@ clap = { version = "*", default-features = false, features = ["std", "help"] }
 epoxy = { version = "*" }
 libloading = { version = "*" }
 glow = { version = "*" }
+spin_sleep = { version = "*" }
 
 # audio
 cpal = { version = "*", default-features = false }
+dasp_ring_buffer = { version = "*" }
 
 [dependencies.adw]
 package = "libadwaita"

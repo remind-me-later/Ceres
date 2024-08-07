@@ -7,6 +7,8 @@ use std::sync::{Arc, Mutex};
 
 pub use renderer::PxScaleMode;
 
+use crate::audio;
+
 glib::wrapper! {
     pub struct GlArea(ObjectSubclass<imp::GlArea>)
         @extends gtk::Widget, gtk::GLArea;
@@ -23,7 +25,7 @@ impl GlArea {
         glib::Object::new()
     }
 
-    pub fn gb(&self) -> &Arc<Mutex<Gb>> {
+    pub fn gb(&self) -> &Arc<Mutex<Gb<audio::RingBuffer>>> {
         &self.imp().gb
     }
 

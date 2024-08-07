@@ -94,9 +94,10 @@ impl ObjectSubclass for Window {
 
                 if let Ok(file) = res {
                     let pathbuf = file.path().expect("Couldn't get file path");
+                    let audio = win.imp().gb_area.imp().audio.borrow().get_ring_buffer();
 
                     // TODO: gracefully handle invalid files
-                    match init_gb(ceres_core::Model::Cgb, Some(&pathbuf)) {
+                    match init_gb(ceres_core::Model::Cgb, Some(&pathbuf), audio) {
                         Ok(mut new_gb) => {
                             *win.imp().rom_path.borrow_mut() = Some(pathbuf);
                             // Swap the GB instances
@@ -256,7 +257,8 @@ impl ApplicationWindowImpl for Window {}
 fn init_gb(
     model: ceres_core::Model,
     rom_path: Option<&Path>,
-) -> Result<ceres_core::Gb, ceres_core::Error> {
+    audio: audio::RingBuffer,
+) -> Result<ceres_core::Gb<audio::RingBuffer>, ceres_core::Error> {
     let rom = rom_path.map(|p| fs::read(p).map(Vec::into_boxed_slice).unwrap());
 
     let ram = rom_path
@@ -271,5 +273,5 @@ fn init_gb(
 
     let sample_rate = audio::Renderer::sample_rate();
 
-    Ok(ceres_core::Gb::new(model, sample_rate, cart))
+    Ok(ceres_core::Gb::new(model, sample_rate, cart, audio))
 }
