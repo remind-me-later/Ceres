@@ -58,12 +58,12 @@ impl clap::ValueEnum for Model {
     }
 }
 
-impl From<Model> for ceres_core::Model {
-    fn from(model: Model) -> ceres_core::Model {
+impl From<Model> for ceresc::Model {
+    fn from(model: Model) -> ceresc::Model {
         match model {
-            Model::Dmg => ceres_core::Model::Dmg,
-            Model::Mgb => ceres_core::Model::Mgb,
-            Model::Cgb => ceres_core::Model::Cgb,
+            Model::Dmg => ceresc::Model::Dmg,
+            Model::Mgb => ceresc::Model::Mgb,
+            Model::Cgb => ceresc::Model::Cgb,
         }
     }
 }

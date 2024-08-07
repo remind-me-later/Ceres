@@ -3,8 +3,8 @@ use alloc::sync::Arc;
 
 use crate::Scaling;
 
-const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
-const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
+const PX_WIDTH: u32 = ceresc::PX_WIDTH as u32;
+const PX_HEIGHT: u32 = ceresc::PX_HEIGHT as u32;
 
 pub struct Renderer<'a> {
     surface: wgpu::Surface<'a>,

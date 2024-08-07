@@ -1,5 +1,7 @@
 #![no_std]
 
+use core::time::Duration;
+
 use interrupts::Interrupts;
 use joypad::Joypad;
 use memory::{Key1, Svbk};
@@ -25,6 +27,9 @@ mod serial;
 mod timing;
 
 pub const FPS: f32 = 59.7;
+pub const FRAME_DURATION: Duration =
+    Duration::new(0, (1_000_000_000_0u64 / ((FPS * 10.0) as u64)) as u32);
+
 // t-cycles per second
 pub const TC_SEC: i32 = 0x40_0000;
 pub const HRAM_SIZE: u8 = 0x80;

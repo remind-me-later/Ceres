@@ -3,6 +3,7 @@ use crate::{
     video::{self},
     Scaling, CERES_STYLIZED, SCREEN_MUL,
 };
+use ceresc::{Cart, FRAME_DURATION};
 use std::{sync::Mutex, time::Instant};
 use winit::{
     dpi::PhysicalSize,
@@ -14,7 +15,7 @@ use winit::{
 use {
     alloc::sync::Arc,
     anyhow::Context,
-    ceres_core::Gb,
+    ceresc::Gb,
     core::time::Duration,
     std::{
         fs::{self, File},
@@ -24,8 +25,8 @@ use {
     winit::window,
 };
 
-const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
-const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
+const PX_WIDTH: u32 = ceresc::PX_WIDTH as u32;
+const PX_HEIGHT: u32 = ceresc::PX_HEIGHT as u32;
 const INIT_WIDTH: u32 = PX_WIDTH * SCREEN_MUL;
 const INIT_HEIGHT: u32 = PX_HEIGHT * SCREEN_MUL;
 
@@ -39,13 +40,9 @@ pub struct App<'a> {
 }
 
 impl<'a> App<'a> {
-    pub fn new(
-        model: ceres_core::Model,
-        rom_path: PathBuf,
-        scaling: Scaling,
-    ) -> anyhow::Result<Self> {
+    pub fn new(model: ceresc::Model, rom_path: PathBuf, scaling: Scaling) -> anyhow::Result<Self> {
         fn init_gb(
-            model: ceres_core::Model,
+            model: ceresc::Model,
             rom_path: &Path,
             audio_callback: audio::RingBuffer,
         ) -> anyhow::Result<Gb<audio::RingBuffer>> {
@@ -60,7 +57,7 @@ impl<'a> App<'a> {
                 .ok();
 
             // TODO: core error
-            let cart = ceres_core::Cart::new(rom, ram).unwrap();
+            let cart = Cart::new(rom, ram).unwrap();
 
             let sample_rate = audio::Renderer::sample_rate();
 
@@ -76,7 +73,6 @@ impl<'a> App<'a> {
         let thread_handle = std::thread::spawn(move || loop {
             // TODO: kill thread gracefully
 
-            let frame_duration = Duration::from_secs_f32(1.0 / ceres_core::FPS);
             let begin = std::time::Instant::now();
 
             if let Ok(mut gb) = gb_clone.lock() {
@@ -85,8 +81,8 @@ impl<'a> App<'a> {
 
             let elapsed = begin.elapsed();
 
-            if elapsed < frame_duration {
-                spin_sleep::sleep(frame_duration - elapsed);
+            if elapsed < FRAME_DURATION {
+                spin_sleep::sleep(FRAME_DURATION - elapsed);
             }
         });
 
@@ -101,7 +97,7 @@ impl<'a> App<'a> {
     }
 
     fn handle_key(&mut self, event: &KeyEvent) {
-        use {ceres_core::Button as B, winit::event::ElementState, winit::keyboard::Key};
+        use {ceresc::Button as B, winit::event::ElementState, winit::keyboard::Key};
 
         if let Some(video) = &mut self.video {
             if !video.window().has_focus() {

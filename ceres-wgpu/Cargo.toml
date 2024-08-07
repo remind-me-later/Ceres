@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ceres-core = { path = "../ceres-core" }
+ceresc = { path = "../ceres-core", package = "ceres-core" }
 clap = { version = "*", default-features = false, features = ["std", "help"] }
 # parking_lot = { version = "*", default-features = false }
 anyhow = { version = "*", default-features = false, features = ["std"] }
