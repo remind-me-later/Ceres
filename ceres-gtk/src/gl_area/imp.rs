@@ -16,26 +16,38 @@ pub struct GlArea {
     pub renderer: RefCell<Option<Renderer>>,
     pub scale_mode: RefCell<PxScaleMode>,
     pub scale_changed: RefCell<bool>,
-    pub tick_id: RefCell<Option<TickCallbackId>>,
+    pub callbacks: RefCell<Option<(TickCallbackId, glib::SourceId)>>,
 }
 
 impl GlArea {
     pub fn play(&self) {
         let widget = self.obj();
+        let gb_clone = self.gb.clone();
 
-        *self.tick_id.borrow_mut() = Some(widget.add_tick_callback(move |gl_area, _| {
-            gl_area.gb().lock().unwrap().run_frame();
-            gl_area.queue_draw();
+        *self.callbacks.borrow_mut() = Some((
+            widget.add_tick_callback(move |gl_area, _| {
+                gl_area.queue_draw();
 
-            glib::ControlFlow::Continue
-        }));
+                glib::ControlFlow::Continue
+            }),
+            glib::timeout_add_full(
+                ceres_core::FRAME_DURATION,
+                glib::Priority::HIGH,
+                move || {
+                    gb_clone.lock().unwrap().run_frame();
+
+                    glib::ControlFlow::Continue
+                },
+            ),
+        ));
 
         self.audio.borrow_mut().resume();
     }
 
     pub fn pause(&self) {
-        if let Some(tick_id) = self.tick_id.borrow_mut().take() {
+        if let Some((tick_id, frame_id)) = self.callbacks.borrow_mut().take() {
             tick_id.remove();
+            frame_id.remove();
         }
 
         self.audio.borrow_mut().pause();
@@ -71,7 +83,7 @@ impl ObjectSubclass for GlArea {
             renderer: Default::default(),
             scale_mode: Default::default(),
             scale_changed: Default::default(),
-            tick_id: Default::default(),
+            callbacks: Default::default(),
         }
     }
 }
