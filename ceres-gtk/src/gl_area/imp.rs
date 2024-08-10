@@ -8,12 +8,11 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::TickCallbackId;
 use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 pub struct GlArea {
     pub gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
-    pub audio: Rc<RefCell<audio::Renderer>>,
+    pub audio: RefCell<audio::Renderer>,
     pub renderer: RefCell<Option<Renderer>>,
     pub scale_mode: RefCell<PxScaleMode>,
     pub scale_changed: RefCell<bool>,
@@ -25,7 +24,9 @@ impl GlArea {
         let widget = self.obj();
 
         *self.tick_id.borrow_mut() = Some(widget.add_tick_callback(move |gl_area, _| {
+            gl_area.gb().lock().unwrap().run_frame();
             gl_area.queue_draw();
+
             glib::ControlFlow::Continue
         }));
 
@@ -55,7 +56,7 @@ impl ObjectSubclass for GlArea {
 
     fn new() -> Self {
         let cart = ceres_core::Cart::default();
-        let audio = Rc::new(RefCell::new(audio::Renderer::new()));
+        let audio = RefCell::new(audio::Renderer::new());
 
         let gb = Arc::new(Mutex::new(ceres_core::Gb::new(
             ceres_core::Model::Cgb,
@@ -103,24 +104,6 @@ impl WidgetImpl for GlArea {
         widget.make_current();
 
         *self.renderer.borrow_mut() = Some(Renderer::new());
-
-        let gb_clone = Arc::clone(&self.gb);
-
-        let thread_handle = std::thread::spawn(move || loop {
-            // TODO: kill thread gracefully
-
-            let begin = std::time::Instant::now();
-
-            if let Ok(mut gb) = gb_clone.lock() {
-                gb.run_frame();
-            }
-
-            let elapsed = begin.elapsed();
-
-            if elapsed < ceres_core::FRAME_DURATION {
-                spin_sleep::sleep(ceres_core::FRAME_DURATION - elapsed);
-            }
-        });
     }
 
     fn unrealize(&self) {

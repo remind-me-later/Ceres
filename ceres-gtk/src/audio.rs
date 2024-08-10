@@ -72,6 +72,8 @@ impl Renderer {
             .build_output_stream(&config, data_callback, error_callback, None)
             .unwrap();
 
+        stream.pause().unwrap();
+
         Self {
             stream,
             volume,

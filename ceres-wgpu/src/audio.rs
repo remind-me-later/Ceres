@@ -67,6 +67,8 @@ impl Renderer {
 
         let stream = dev.build_output_stream(&config, data_callback, error_callback, None)?;
 
+        stream.pause().context("couldn't pause stream")?;
+
         Ok(Self {
             stream,
             paused: false,
