@@ -1,16 +1,27 @@
 use crate::{
     audio,
-    video::{self},
+    video::{self, Renderer},
     Scaling, CERES_STYLIZED, SCREEN_MUL,
 };
 use ceresc::{Cart, FRAME_DURATION};
-use std::{sync::Mutex, time::Instant};
+use glutin::{
+    config::{ConfigTemplateBuilder, GlConfig},
+    context::{
+        ContextApi, ContextAttributesBuilder, NotCurrentContext, PossiblyCurrentContext, Version,
+    },
+    display::GetGlDisplay,
+    prelude::{GlDisplay, NotCurrentGlContext, PossiblyCurrentGlContext},
+    surface::{GlSurface, Surface, SwapInterval, WindowSurface},
+};
+use glutin_winit::GlWindow;
+use std::{num::NonZeroU32, sync::Mutex, time::Instant};
 use winit::{
     dpi::PhysicalSize,
     event::{KeyEvent, WindowEvent},
     event_loop::ControlFlow,
     keyboard::NamedKey,
-    window::Fullscreen,
+    raw_window_handle::HasWindowHandle,
+    window::{Fullscreen, Window},
 };
 use {
     alloc::sync::Arc,
@@ -18,7 +29,7 @@ use {
     ceresc::Gb,
     core::time::Duration,
     std::{
-        fs::{self, File},
+        fs::File,
         io::Write,
         path::{Path, PathBuf},
     },
@@ -30,29 +41,67 @@ const PX_HEIGHT: u32 = ceresc::PX_HEIGHT as u32;
 const INIT_WIDTH: u32 = PX_WIDTH * SCREEN_MUL;
 const INIT_HEIGHT: u32 = PX_HEIGHT * SCREEN_MUL;
 
-pub struct App<'a> {
-    video: Option<video::Renderer<'a>>,
+struct AppState {
+    gl_context: PossiblyCurrentContext,
+    gl_surface: Surface<WindowSurface>,
+    // NOTE: Window should be dropped after all resources created using its
+    // raw-window-handle.
+    window: Window,
+}
+
+// Find the config with the maximum number of samples, so our triangle will be
+// smooth.
+pub fn gl_config_picker(
+    configs: Box<dyn Iterator<Item = glutin::config::Config> + '_>,
+) -> glutin::config::Config {
+    configs
+        .reduce(|accum, config| {
+            let transparency_check = config.supports_transparency().unwrap_or(false)
+                & !accum.supports_transparency().unwrap_or(false);
+
+            if transparency_check || config.num_samples() > accum.num_samples() {
+                config
+            } else {
+                accum
+            }
+        })
+        .unwrap()
+}
+
+pub struct App {
+    renderer: Option<video::Renderer>,
     audio: audio::Renderer,
     gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
     scaling: Scaling,
     rom_path: PathBuf,
+    display_builder: glutin_winit::DisplayBuilder,
+    not_current_gl_context: Option<NotCurrentContext>,
+    template: ConfigTemplateBuilder,
     _thread_handle: Option<std::thread::JoinHandle<()>>,
+    // NOTE: `AppState` carries the `Window`, thus it should be dropped after everything else.
+    state: Option<AppState>,
 }
 
-impl<'a> App<'a> {
-    pub fn new(model: ceresc::Model, rom_path: PathBuf, scaling: Scaling) -> anyhow::Result<Self> {
+impl App {
+    pub fn new(
+        model: ceresc::Model,
+        rom_path: PathBuf,
+        scaling: Scaling,
+        template: ConfigTemplateBuilder,
+        display_builder: glutin_winit::DisplayBuilder,
+    ) -> anyhow::Result<Self> {
         fn init_gb(
             model: ceresc::Model,
             rom_path: &Path,
             audio_callback: audio::RingBuffer,
         ) -> anyhow::Result<Gb<audio::RingBuffer>> {
             let rom = {
-                fs::read(rom_path)
+                std::fs::read(rom_path)
                     .map(Vec::into_boxed_slice)
                     .context("no such file")?
             };
 
-            let ram = fs::read(rom_path.with_extension("sav"))
+            let ram = std::fs::read(rom_path.with_extension("sav"))
                 .map(Vec::into_boxed_slice)
                 .ok();
 
@@ -91,16 +140,20 @@ impl<'a> App<'a> {
             audio,
             scaling,
             rom_path,
-            video: None,
+            renderer: None,
+            template,
+            display_builder,
             _thread_handle: Some(thread_handle),
+            state: None,
+            not_current_gl_context: None,
         })
     }
 
     fn handle_key(&mut self, event: &KeyEvent) {
         use {ceresc::Button as B, winit::event::ElementState, winit::keyboard::Key};
 
-        if let Some(video) = &mut self.video {
-            if !video.window().has_focus() {
+        if let Some(state) = &mut self.state {
+            if !state.window.has_focus() {
                 return;
             }
 
@@ -118,13 +171,19 @@ impl<'a> App<'a> {
                         Key::Character("n") => gb.press(B::Start),
                         Key::Character("m") => gb.press(B::Select),
                         // System
-                        Key::Character("f") => match video.window().fullscreen() {
-                            Some(_) => video.window().set_fullscreen(None),
-                            None => video
-                                .window()
+                        Key::Character("f") => match state.window.fullscreen() {
+                            Some(_) => state.window.set_fullscreen(None),
+                            None => state
+                                .window
                                 .set_fullscreen(Some(Fullscreen::Borderless(None))),
                         },
-                        Key::Character("z") => video.cycle_scale_mode(),
+                        Key::Character("z") => {
+                            self.scaling = self.scaling.next();
+                            self.renderer
+                                .as_mut()
+                                .unwrap()
+                                .choose_scale_mode(self.scaling);
+                        }
                         Key::Named(NamedKey::Space) => {
                             self.audio.toggle().unwrap();
                         }
@@ -165,29 +224,115 @@ impl<'a> App<'a> {
     }
 }
 
-impl winit::application::ApplicationHandler for App<'_> {
+impl winit::application::ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let window_attributes = winit::window::Window::default_attributes()
-            .with_title(CERES_STYLIZED)
-            .with_inner_size(PhysicalSize {
-                width: INIT_WIDTH,
-                height: INIT_HEIGHT,
-            })
-            .with_min_inner_size(PhysicalSize {
-                width: PX_WIDTH,
-                height: PX_HEIGHT,
+        let (mut window, gl_config) = match self.display_builder.clone().build(
+            event_loop,
+            self.template.clone(),
+            gl_config_picker,
+        ) {
+            Ok(ok) => ok,
+            Err(_e) => {
+                // self.exit_state = Err(e);
+                event_loop.exit();
+                return;
+            }
+        };
+
+        println!("Picked a config with {} samples", gl_config.num_samples());
+
+        let raw_window_handle = window
+            .as_ref()
+            .and_then(|window| window.window_handle().ok())
+            .map(|handle| handle.as_raw());
+
+        // XXX The display could be obtained from any object created by it, so we can
+        // query it from the config.
+        let gl_display = gl_config.display();
+
+        // The context creation part.
+        let context_attributes = ContextAttributesBuilder::new().build(raw_window_handle);
+
+        // Since glutin by default tries to create OpenGL core context, which may not be
+        // present we should try gles.
+        let fallback_context_attributes = ContextAttributesBuilder::new()
+            .with_context_api(ContextApi::Gles(None))
+            .build(raw_window_handle);
+
+        // There are also some old devices that support neither modern OpenGL nor GLES.
+        // To support these we can try and create a 2.1 context.
+        let legacy_context_attributes = ContextAttributesBuilder::new()
+            .with_context_api(ContextApi::OpenGl(Some(Version::new(3, 1))))
+            .build(raw_window_handle);
+
+        // Reuse the uncurrented context from a suspended() call if it exists, otherwise
+        // this is the first time resumed() is called, where the context still
+        // has to be created.
+        let not_current_gl_context = self
+            .not_current_gl_context
+            .take()
+            .unwrap_or_else(|| unsafe {
+                gl_display
+                    .create_context(&gl_config, &context_attributes)
+                    .unwrap_or_else(|_| {
+                        gl_display
+                            .create_context(&gl_config, &fallback_context_attributes)
+                            .unwrap_or_else(|_| {
+                                gl_display
+                                    .create_context(&gl_config, &legacy_context_attributes)
+                                    .expect("failed to create context")
+                            })
+                    })
             });
 
-        let window = event_loop.create_window(window_attributes).unwrap();
-
-        let mut video = pollster::block_on(video::Renderer::new(window, self.scaling)).unwrap();
-
-        video.resize(PhysicalSize {
-            width: INIT_WIDTH,
-            height: INIT_HEIGHT,
+        let window = window.take().unwrap_or_else(|| {
+            let window_attributes = winit::window::Window::default_attributes()
+                .with_title(CERES_STYLIZED)
+                .with_inner_size(PhysicalSize {
+                    width: INIT_WIDTH,
+                    height: INIT_HEIGHT,
+                })
+                .with_min_inner_size(PhysicalSize {
+                    width: PX_WIDTH,
+                    height: PX_HEIGHT,
+                });
+            glutin_winit::finalize_window(event_loop, window_attributes, &gl_config).unwrap()
         });
 
-        self.video = Some(video);
+        let attrs = window
+            .build_surface_attributes(Default::default())
+            .expect("Failed to build surface attributes");
+        let gl_surface = unsafe {
+            gl_config
+                .display()
+                .create_window_surface(&gl_config, &attrs)
+                .unwrap()
+        };
+
+        // Make it current.
+        let gl_context = not_current_gl_context.make_current(&gl_surface).unwrap();
+
+        // The context needs to be current for the Renderer to set up shaders and
+        // buffers. It also performs function loading, which needs a current context on
+        // WGL.
+        self.renderer
+            .get_or_insert_with(|| Renderer::new(&gl_display));
+
+        // Try setting vsync.
+        if let Err(res) = gl_surface
+            .set_swap_interval(&gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
+        {
+            eprintln!("Error setting vsync: {res:?}");
+        }
+
+        assert!(self
+            .state
+            .replace(AppState {
+                gl_context,
+                gl_surface,
+                window
+            })
+            .is_none());
 
         // event_loop.set_control_flow(ControlFlow::Poll);
         event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now()));
@@ -206,12 +351,21 @@ impl winit::application::ApplicationHandler for App<'_> {
                     1.0 / 60.0,
                 )));
 
-                if let Some(video) = self.video.as_mut() {
+                if let Some(AppState {
+                    gl_context,
+                    gl_surface,
+                    window,
+                }) = self.state.as_ref()
+                {
+                    let renderer = self.renderer.as_mut().unwrap();
+
                     if let Ok(gb) = self.gb.lock() {
-                        video.update(gb.pixel_data_rgba());
+                        renderer.draw_frame(gb.pixel_data_rgba());
                     }
 
-                    video.window().request_redraw();
+                    window.request_redraw();
+
+                    gl_surface.swap_buffers(gl_context).unwrap();
                 }
             }
             _ => {}
@@ -224,37 +378,57 @@ impl winit::application::ApplicationHandler for App<'_> {
         _: window::WindowId,
         event: WindowEvent,
     ) {
-        if let Some(video) = self.video.as_mut() {
-            match event {
-                WindowEvent::Resized(size) => video.resize(size),
-                WindowEvent::CloseRequested => event_loop.exit(),
-                WindowEvent::KeyboardInput {
-                    event: key_event, ..
-                } => self.handle_key(&key_event),
-                WindowEvent::RedrawRequested => {
-                    use wgpu::SurfaceError::{Lost, OutOfMemory, Outdated, Timeout};
-
-                    match video.render() {
-                        Ok(()) => {}
-                        Err(Lost | Outdated) => video.on_lost(),
-                        Err(OutOfMemory) => event_loop.exit(),
-                        Err(Timeout) => eprintln!("Surface timeout"),
+        match event {
+            WindowEvent::Resized(PhysicalSize { width, height }) => {
+                if width != 0 && height != 0 {
+                    // Some platforms like EGL require resizing GL surface to update the size
+                    // Notable platforms here are Wayland and macOS, other don't require it
+                    // and the function is no-op, but it's wise to resize it for portability
+                    // reasons.
+                    if let Some(AppState {
+                        gl_context,
+                        gl_surface,
+                        window: _,
+                    }) = self.state.as_ref()
+                    {
+                        gl_surface.resize(
+                            gl_context,
+                            NonZeroU32::new(width).unwrap(),
+                            NonZeroU32::new(height).unwrap(),
+                        );
+                        let renderer = self.renderer.as_mut().unwrap();
+                        renderer.resize_viewport(width, height);
                     }
                 }
-                _ => (),
             }
+            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::KeyboardInput {
+                event: key_event, ..
+            } => self.handle_key(&key_event),
+            _ => (),
         }
     }
 
     fn suspended(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        // This event is only raised on Android, where the backing NativeWindow for a GL
+        // Surface can appear and disappear at any moment.
+        println!("Android window removed");
+
+        // Destroy the GL Surface and un-current the GL Context before ndk-glue releases
+        // the window back to the system.
+        let gl_context = self.state.take().unwrap().gl_context;
+        assert!(self
+            .not_current_gl_context
+            .replace(gl_context.make_not_current().unwrap())
+            .is_none());
+
         self.audio.pause().unwrap();
-        self.video = None;
         event_loop.set_control_flow(ControlFlow::Wait);
     }
 
     fn exiting(&mut self, _: &winit::event_loop::ActiveEventLoop) {
         self.save_data();
         self.audio.pause().unwrap();
-        self.video = None;
+        self.renderer = None;
     }
 }
