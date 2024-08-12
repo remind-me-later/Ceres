@@ -295,6 +295,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ceres-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "ceres-core",
+ "clap",
+ "cpal",
+ "dasp_ring_buffer",
+ "pollster",
+ "spin_sleep",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
 name = "ceres-core"
 version = "0.1.0"
 
@@ -312,22 +328,6 @@ dependencies = [
  "libadwaita",
  "libloading",
  "spin_sleep",
-]
-
-[[package]]
-name = "ceres-wgpu"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytemuck",
- "ceres-core",
- "clap",
- "cpal",
- "dasp_ring_buffer",
- "pollster",
- "spin_sleep",
- "wgpu",
- "winit",
 ]
 
 [[package]]

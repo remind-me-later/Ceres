@@ -42,7 +42,7 @@ To build just:
 ## Folder organization
 
 - `ceres-core` contains the core emulator logic, such as cpu, apu and ppu emulation.
-- `ceres-wgpu` contains a `wgpu` frontend with a cli interface.
+- `ceres-cli` contains a `wgpu` frontend with a cli interface.
 - `ceres-gtk` contains a `gtk` frontend with a gui.
 
 ## Thanks

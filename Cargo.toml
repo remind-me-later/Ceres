@@ -1,6 +1,6 @@
 [workspace]
-members = ["ceres-core", "ceres-wgpu", "ceres-gtk"]
-default-members = ["ceres-wgpu", "ceres-gtk"]
+members = ["ceres-core", "ceres-cli", "ceres-gtk"]
+default-members = ["ceres-cli", "ceres-gtk"]
 resolver = "2"
 
 [profile.dev]
