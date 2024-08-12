@@ -128,7 +128,7 @@ impl<C: AudioCallback> Apu<C> {
         }
 
         self.render_timer += cycles;
-        while self.render_timer > self.ext_sample_period {
+        while self.render_timer >= self.ext_sample_period {
             self.render_timer -= self.ext_sample_period;
 
             if self.on {

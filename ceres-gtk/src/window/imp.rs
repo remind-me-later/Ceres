@@ -230,7 +230,7 @@ impl ObjectImpl for Window {
 
         self.obj().add_action(&action_px_scale);
 
-        let volume = self.gb_area.clone_volume();
+        let volume = self.gb_area.volume();
 
         self.volume_button
             .connect_value_changed(move |_, new_volume| {

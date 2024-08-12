@@ -2,7 +2,7 @@
 <interface>
   <menu id='app-menu'>
     <section>
-      <attribute name="label" translatable="yes">Pixel upscale filter</attribute>
+      <attribute name="label" translatable="yes">Upscale filter</attribute>
       <item>
         <attribute name="label" translatable="yes">_Nearest neighbour</attribute>
         <attribute name="action">win.px_scale</attribute>

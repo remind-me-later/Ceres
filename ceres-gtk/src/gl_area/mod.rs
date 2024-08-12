@@ -41,7 +41,7 @@ impl GlArea {
         self.imp().play();
     }
 
-    pub fn clone_volume(&self) -> Arc<Mutex<f32>> {
+    pub fn volume(&self) -> Arc<Mutex<f32>> {
         Arc::clone(self.imp().audio.borrow().volume())
     }
 
