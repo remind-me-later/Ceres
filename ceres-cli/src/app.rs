@@ -4,6 +4,7 @@ use crate::{
     Scaling, CERES_STYLIZED, SCREEN_MUL,
 };
 use ceresc::{Cart, FRAME_DURATION};
+use core::num::NonZeroU32;
 use glutin::{
     config::{ConfigTemplateBuilder, GlConfig},
     context::{
@@ -11,10 +12,11 @@ use glutin::{
     },
     display::GetGlDisplay,
     prelude::{GlDisplay, NotCurrentGlContext, PossiblyCurrentGlContext},
-    surface::{GlSurface, Surface, SwapInterval, WindowSurface},
+    surface::{GlSurface, Surface, SurfaceAttributesBuilder, SwapInterval, WindowSurface},
 };
 use glutin_winit::GlWindow;
-use std::{num::NonZeroU32, sync::Mutex, time::Instant};
+use std::sync::Mutex;
+use std::time::Instant;
 use winit::{
     dpi::PhysicalSize,
     event::{KeyEvent, WindowEvent},
@@ -243,7 +245,7 @@ impl winit::application::ApplicationHandler for App {
 
         let raw_window_handle = window
             .as_ref()
-            .and_then(|window| window.window_handle().ok())
+            .and_then(|w| w.window_handle().ok())
             .map(|handle| handle.as_raw());
 
         // XXX The display could be obtained from any object created by it, so we can
@@ -300,7 +302,7 @@ impl winit::application::ApplicationHandler for App {
         });
 
         let attrs = window
-            .build_surface_attributes(Default::default())
+            .build_surface_attributes(SurfaceAttributesBuilder::default())
             .expect("Failed to build surface attributes");
         let gl_surface = unsafe {
             gl_config
@@ -345,30 +347,27 @@ impl winit::application::ApplicationHandler for App {
         event_loop: &winit::event_loop::ActiveEventLoop,
         cause: winit::event::StartCause,
     ) {
-        match cause {
-            winit::event::StartCause::ResumeTimeReached { .. } => {
-                event_loop.set_control_flow(ControlFlow::wait_duration(Duration::from_secs_f64(
-                    1.0 / 60.0,
-                )));
+        if let winit::event::StartCause::ResumeTimeReached { .. } = cause {
+            event_loop.set_control_flow(ControlFlow::wait_duration(Duration::from_secs_f64(
+                1.0 / 60.0,
+            )));
 
-                if let Some(AppState {
-                    gl_context,
-                    gl_surface,
-                    window,
-                }) = self.state.as_ref()
-                {
-                    let renderer = self.renderer.as_mut().unwrap();
+            if let Some(AppState {
+                gl_context,
+                gl_surface,
+                window,
+            }) = self.state.as_ref()
+            {
+                let renderer = self.renderer.as_mut().unwrap();
 
-                    if let Ok(gb) = self.gb.lock() {
-                        renderer.draw_frame(gb.pixel_data_rgba());
-                    }
-
-                    window.request_redraw();
-
-                    gl_surface.swap_buffers(gl_context).unwrap();
+                if let Ok(gb) = self.gb.lock() {
+                    renderer.draw_frame(gb.pixel_data_rgba());
                 }
+
+                window.request_redraw();
+
+                gl_surface.swap_buffers(gl_context).unwrap();
             }
-            _ => {}
         }
     }
 
@@ -388,7 +387,7 @@ impl winit::application::ApplicationHandler for App {
                     if let Some(AppState {
                         gl_context,
                         gl_surface,
-                        window: _,
+                        ..
                     }) = self.state.as_ref()
                     {
                         gl_surface.resize(

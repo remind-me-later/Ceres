@@ -484,7 +484,7 @@ impl Ppu {
 
     #[must_use]
     #[inline]
-    pub fn frame_done(&self) -> bool {
+    pub const fn frame_done(&self) -> bool {
         self.frame_done
     }
 }

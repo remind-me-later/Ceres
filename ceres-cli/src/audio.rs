@@ -53,14 +53,15 @@ impl Renderer {
         let ring_buffer_clone = Arc::clone(&ring_buffer);
 
         let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
-        let data_callback = move |b: &mut [ceresc::Sample], _: &_| {
-            if let Ok(mut ring_buffer) = ring_buffer_clone.lock() {
-                if ring_buffer.len() < b.len() {
+        let data_callback = move |buffer: &mut [ceresc::Sample], _: &_| {
+            if let Ok(mut ring) = ring_buffer_clone.lock() {
+                if ring.len() < buffer.len() {
                     eprintln!("ring buffer underrun");
                 }
 
-                b.iter_mut()
-                    .zip(ring_buffer.drain())
+                buffer
+                    .iter_mut()
+                    .zip(ring.drain())
                     .for_each(|(b, s)| *b = s);
             }
         };

@@ -22,7 +22,7 @@ pub struct GlArea {
 impl GlArea {
     pub fn play(&self) {
         let widget = self.obj();
-        let gb_clone = self.gb.clone();
+        let gb_clone = Arc::clone(&self.gb);
 
         *self.callbacks.borrow_mut() = Some((
             widget.add_tick_callback(move |gl_area, _| {

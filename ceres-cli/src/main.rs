@@ -82,6 +82,7 @@ pub enum Scaling {
 }
 
 impl Scaling {
+    #[must_use]
     pub fn next(self) -> Self {
         match self {
             Scaling::Nearest => Scaling::Scale2x,

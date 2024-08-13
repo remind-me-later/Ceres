@@ -31,6 +31,12 @@ pub struct Renderer {
     ring_buffer: RingBuffer,
 }
 
+impl Default for Renderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Renderer {
     pub fn new() -> Self {
         use cpal::traits::{DeviceTrait, HostTrait};
@@ -54,17 +60,18 @@ impl Renderer {
         let volume_clone = Arc::clone(&volume);
 
         let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
-        let data_callback = move |b: &mut [ceres_core::Sample], _: &_| {
-            if let Ok(mut ring_buffer) = ring_buffer_clone.lock() {
-                let volume = *volume_clone.lock().unwrap();
+        let data_callback = move |buffer: &mut [ceres_core::Sample], _: &_| {
+            if let Ok(mut ring) = ring_buffer_clone.lock() {
+                let vol = *volume_clone.lock().unwrap();
 
-                if ring_buffer.len() < b.len() {
+                if ring.len() < buffer.len() {
                     eprintln!("ring buffer underrun");
                 }
 
-                b.iter_mut()
-                    .zip(ring_buffer.drain())
-                    .for_each(|(b, s)| *b = s * volume);
+                buffer
+                    .iter_mut()
+                    .zip(ring.drain())
+                    .for_each(|(b, s)| *b = s * vol);
             }
         };
 

@@ -27,8 +27,7 @@ mod serial;
 mod timing;
 
 pub const FPS: f32 = 59.7;
-pub const FRAME_DURATION: Duration =
-    Duration::new(0, (1_000_000_000_0u64 / ((FPS * 10.0) as u64)) as u32);
+pub const FRAME_DURATION: Duration = Duration::new(0, (10_000_000_000_u64 / 597) as u32);
 
 // t-cycles per second
 pub const TC_SEC: i32 = 0x40_0000; // 2^22
