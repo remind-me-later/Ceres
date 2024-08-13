@@ -1,6 +1,6 @@
 use core::num::NonZeroU8;
 
-pub(super) trait SweepTrait: Sized + Default {
+pub(super) trait SweepTrait: Default {
     fn read(&self) -> u8;
     fn write(&mut self, val: u8);
     fn step(&mut self, freq: &mut u16, on: &mut bool);
@@ -47,7 +47,7 @@ pub(super) struct Sweep {
 impl Sweep {
     fn calculate_sweep(&mut self, freq: &mut u16, on: &mut bool) {
         let t = self.shwf >> self.shift;
-        
+
         self.shwf = match self.dir {
             SweepDirection::Sub => self.shwf - t,
             SweepDirection::Add => self.shwf + t,

@@ -8,7 +8,7 @@ const SAMPLE_LEN: u8 = RAM_LEN * 2;
 
 #[derive(Default)]
 pub(super) struct Wave {
-    ltim: LengthTimer<0xFF>,
+    ltim: LengthTimer<0x3F>,
     wl: WaveLength<2, ()>,
 
     on: bool,
@@ -112,18 +112,6 @@ impl Wave {
 
     pub(super) fn set_period_half(&mut self, p_half: PHalf) {
         self.ltim.set_phalf(p_half);
-    }
-
-    pub(super) fn reset(&mut self) {
-        self.vol = 0;
-        self.on = false;
-        self.dac_on = false;
-        self.ltim = LengthTimer::default();
-        self.sample_buf = 0;
-        self.samples = [0; SAMPLE_LEN as usize];
-        self.sample_idx = 0;
-        self.nr30 = 0;
-        self.wl = WaveLength::default();
     }
 
     pub(super) const fn on(&self) -> bool {
