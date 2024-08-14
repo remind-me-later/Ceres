@@ -18,12 +18,12 @@ dasp_ring_buffer = { version = "*" }
 [dependencies.adw]
 package = "libadwaita"
 version = "*"
-features = ["v1_4"]
+features = ["v1_5"]
 
 [dependencies.gtk]
 version = "*"
 package = "gtk4"
-features = ["v4_12"]
+features = ["gnome_46"]
 
 [lints.clippy]
 nursery = "warn"

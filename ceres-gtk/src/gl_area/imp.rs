@@ -16,7 +16,27 @@ pub struct GlArea {
     pub renderer: RefCell<Option<Renderer>>,
     pub scale_mode: RefCell<PxScaleMode>,
     pub scale_changed: RefCell<bool>,
-    pub callbacks: RefCell<Option<(TickCallbackId, glib::SourceId)>>,
+    pub callbacks: RefCell<Option<TickCallbackId>>,
+    pub thread_handle: RefCell<Option<std::thread::JoinHandle<()>>>,
+    pub exit: Arc<Mutex<bool>>,
+}
+
+fn gb_loop(gb: Arc<Mutex<Gb<audio::RingBuffer>>>, exit: Arc<Mutex<bool>>) {
+    while !*exit.lock().unwrap() {
+        // TODO: kill thread gracefully
+
+        let begin = std::time::Instant::now();
+
+        if let Ok(mut gb) = gb.lock() {
+            gb.run_frame();
+        }
+
+        let elapsed = begin.elapsed();
+
+        if elapsed < ceres_core::FRAME_DURATION {
+            spin_sleep::sleep(ceres_core::FRAME_DURATION - elapsed);
+        }
+    }
 }
 
 impl GlArea {
@@ -24,33 +44,34 @@ impl GlArea {
         let widget = self.obj();
         let gb_clone = Arc::clone(&self.gb);
 
-        *self.callbacks.borrow_mut() = Some((
-            widget.add_tick_callback(move |gl_area, _| {
-                gl_area.queue_draw();
+        *self.callbacks.borrow_mut() = Some(widget.add_tick_callback(move |gl_area, _| {
+            gl_area.queue_draw();
 
-                glib::ControlFlow::Continue
-            }),
-            glib::timeout_add_full(
-                ceres_core::FRAME_DURATION,
-                glib::Priority::HIGH,
-                move || {
-                    gb_clone.lock().unwrap().run_frame();
+            glib::ControlFlow::Continue
+        }));
 
-                    glib::ControlFlow::Continue
-                },
-            ),
-        ));
+        *self.exit.lock().unwrap() = false;
+
+        let exit_clone = Arc::clone(&self.exit);
+
+        *self.thread_handle.borrow_mut() = Some(std::thread::spawn(move || {
+            gb_loop(gb_clone, exit_clone);
+        }));
 
         self.audio.borrow_mut().resume();
     }
 
     pub fn pause(&self) {
-        if let Some((tick_id, frame_id)) = self.callbacks.borrow_mut().take() {
+        self.audio.borrow_mut().pause();
+
+        if let Some(tick_id) = self.callbacks.borrow_mut().take() {
             tick_id.remove();
-            frame_id.remove();
         }
 
-        self.audio.borrow_mut().pause();
+        if let Some(handle) = self.thread_handle.take() {
+            *self.exit.lock().unwrap() = true;
+            handle.join().unwrap();
+        }
     }
 }
 
@@ -84,6 +105,8 @@ impl ObjectSubclass for GlArea {
             scale_mode: Default::default(),
             scale_changed: Default::default(),
             callbacks: Default::default(),
+            thread_handle: Default::default(),
+            exit: Arc::new(Mutex::new(false)),
         }
     }
 }

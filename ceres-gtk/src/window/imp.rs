@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use adw::prelude::MessageDialogExtManual;
+use adw::prelude::AlertDialogExtManual;
 use gtk::gdk::Key;
 use gtk::subclass::prelude::*;
 use gtk::{glib, prelude::*, CompositeTemplate};
@@ -105,16 +105,17 @@ impl ObjectSubclass for Window {
                             core::mem::swap(&mut *lock, &mut new_gb);
                         }
                         Err(err) => {
-                            let info_dialog = adw::MessageDialog::builder()
-                                .transient_for(&win)
-                                .modal(true)
+                            let info_dialog = adw::AlertDialog::builder()
                                 .heading("Unable to open ROM file")
                                 .body(format!("{err}"))
+                                .default_response("cancel")
+                                .close_response("cancel")
+                                .accessible_role(gtk::AccessibleRole::AlertDialog)
                                 .build();
 
                             info_dialog.add_responses(&[("cancel", "_Ok")]);
 
-                            info_dialog.choose_future().await;
+                            info_dialog.choose_future(&win).await;
                         }
                     }
                 }
