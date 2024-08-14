@@ -19,16 +19,21 @@ pub struct GlArea {
     pub callbacks: RefCell<Option<TickCallbackId>>,
     pub thread_handle: RefCell<Option<std::thread::JoinHandle<()>>>,
     pub exit: Arc<Mutex<bool>>,
+    pub pause_thread: Arc<Mutex<bool>>,
 }
 
-fn gb_loop(gb: Arc<Mutex<Gb<audio::RingBuffer>>>, exit: Arc<Mutex<bool>>) {
+fn gb_loop(
+    gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
+    exit: Arc<Mutex<bool>>,
+    pause_thread: Arc<Mutex<bool>>,
+) {
     while !*exit.lock().unwrap() {
-        // TODO: kill thread gracefully
-
         let begin = std::time::Instant::now();
 
-        if let Ok(mut gb) = gb.lock() {
-            gb.run_frame();
+        if !*pause_thread.lock().unwrap() {
+            if let Ok(mut gb) = gb.lock() {
+                gb.run_frame();
+            }
         }
 
         let elapsed = begin.elapsed();
@@ -42,7 +47,6 @@ fn gb_loop(gb: Arc<Mutex<Gb<audio::RingBuffer>>>, exit: Arc<Mutex<bool>>) {
 impl GlArea {
     pub fn play(&self) {
         let widget = self.obj();
-        let gb_clone = Arc::clone(&self.gb);
 
         *self.callbacks.borrow_mut() = Some(widget.add_tick_callback(move |gl_area, _| {
             gl_area.queue_draw();
@@ -50,13 +54,7 @@ impl GlArea {
             glib::ControlFlow::Continue
         }));
 
-        *self.exit.lock().unwrap() = false;
-
-        let exit_clone = Arc::clone(&self.exit);
-
-        *self.thread_handle.borrow_mut() = Some(std::thread::spawn(move || {
-            gb_loop(gb_clone, exit_clone);
-        }));
+        *self.pause_thread.lock().unwrap() = false;
 
         self.audio.borrow_mut().resume();
     }
@@ -64,13 +62,10 @@ impl GlArea {
     pub fn pause(&self) {
         self.audio.borrow_mut().pause();
 
+        *self.pause_thread.lock().unwrap() = true;
+
         if let Some(tick_id) = self.callbacks.borrow_mut().take() {
             tick_id.remove();
-        }
-
-        if let Some(handle) = self.thread_handle.take() {
-            *self.exit.lock().unwrap() = true;
-            handle.join().unwrap();
         }
     }
 }
@@ -98,6 +93,19 @@ impl ObjectSubclass for GlArea {
             audio.borrow().get_ring_buffer(),
         )));
 
+        let pause_thread = Arc::new(Mutex::new(true));
+        let exit = Arc::new(Mutex::new(false));
+
+        let thread_handle = {
+            let gb = gb.clone();
+            let exit = exit.clone();
+            let pause_thread = pause_thread.clone();
+
+            RefCell::new(Some(std::thread::spawn(move || {
+                gb_loop(gb, exit, pause_thread)
+            })))
+        };
+
         Self {
             gb,
             audio,
@@ -105,8 +113,9 @@ impl ObjectSubclass for GlArea {
             scale_mode: Default::default(),
             scale_changed: Default::default(),
             callbacks: Default::default(),
-            thread_handle: Default::default(),
-            exit: Arc::new(Mutex::new(false)),
+            thread_handle,
+            exit,
+            pause_thread,
         }
     }
 }
@@ -143,6 +152,14 @@ impl WidgetImpl for GlArea {
 
     fn unrealize(&self) {
         *self.renderer.borrow_mut() = None;
+
+        *self.exit.lock().unwrap() = true;
+
+        if let Some(tick_id) = self.callbacks.borrow_mut().take() {
+            tick_id.remove();
+        }
+
+        self.thread_handle.take().unwrap().join().unwrap();
 
         self.parent_unrealize();
     }
