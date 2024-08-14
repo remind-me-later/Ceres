@@ -1,10 +1,10 @@
 mod imp;
 
-use gtk::{gio, glib, prelude::*};
+use adw::{gio, glib, prelude::*};
 
 glib::wrapper! {
     pub struct Window(ObjectSubclass<imp::Window>)
-        @extends gtk::Widget, gtk::Window, gtk::ApplicationWindow,
+        @extends gtk::Widget, gtk::Window, adw::ApplicationWindow,
         @implements gio::ActionMap, gio::ActionGroup;
 }
 

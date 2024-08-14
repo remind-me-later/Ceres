@@ -33,7 +33,7 @@
       <object class="GtkHeaderBar">
         <property name="show-title-buttons">True</property>
         <child type="start">
-          <object class="GtkButton">
+          <object class="GtkButton" id="open_button">
             <property name="action-name">win.open</property>
             <property name="icon-name">document-open-symbolic</property>
           </object>

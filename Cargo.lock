@@ -320,6 +320,7 @@ dependencies = [
  "cpal",
  "dasp_ring_buffer",
  "epoxy",
+ "glib-build-tools",
  "glow",
  "gtk4",
  "libadwaita",
@@ -853,6 +854,15 @@ dependencies = [
  "libc",
  "memchr",
  "smallvec",
+]
+
+[[package]]
+name = "glib-build-tools"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7029c2651d9b5d5a3eea93ec8a1995665c6d3a69ce9bf6042ad9064d134736d8"
+dependencies = [
+ "gio",
 ]
 
 [[package]]

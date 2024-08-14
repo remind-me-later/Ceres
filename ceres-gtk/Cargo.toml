@@ -15,6 +15,7 @@ spin_sleep = { version = "*" }
 cpal = { version = "*", default-features = false }
 dasp_ring_buffer = { version = "*" }
 
+# Gtk
 [dependencies.adw]
 package = "libadwaita"
 version = "*"
@@ -24,6 +25,9 @@ features = ["v1_5"]
 version = "*"
 package = "gtk4"
 features = ["gnome_46"]
+
+[build-dependencies]
+glib-build-tools = "*"
 
 [lints.clippy]
 nursery = "warn"

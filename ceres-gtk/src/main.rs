@@ -2,8 +2,8 @@ mod audio;
 mod gl_area;
 mod window;
 
-use gtk::glib;
-use gtk::prelude::*;
+use adw::glib;
+use adw::prelude::*;
 use window::Window;
 
 fn main() -> glib::ExitCode {
@@ -24,13 +24,15 @@ fn main() -> glib::ExitCode {
         });
     }
 
+    adw::gio::resources_register_include!("ceres_gtk.gresource")
+        .expect("Failed to register resources.");
+
     let application = adw::Application::builder()
-        .application_id("com.github.remind-me-later.Ceres")
+        .application_id("com.github.remind-me-later.ceres-gtk")
         .build();
 
     application.connect_activate(|app| {
-        let win = Window::new(app);
-        win.set_visible(true);
+        Window::new(app).set_visible(true);
     });
 
     application.run()
