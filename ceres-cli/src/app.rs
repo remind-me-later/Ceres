@@ -151,8 +151,8 @@ impl App {
                         Key::Character("d") => gb.press(B::Right),
                         Key::Character("k") => gb.press(B::A),
                         Key::Character("l") => gb.press(B::B),
-                        Key::Character("n") => gb.press(B::Start),
-                        Key::Character("m") => gb.press(B::Select),
+                        Key::Character("m") => gb.press(B::Start),
+                        Key::Character("n") => gb.press(B::Select),
                         // System
                         Key::Character("f") => match state.window.fullscreen() {
                             Some(_) => state.window.set_fullscreen(None),
@@ -179,8 +179,8 @@ impl App {
                         Key::Character("d") => gb.release(B::Right),
                         Key::Character("k") => gb.release(B::A),
                         Key::Character("l") => gb.release(B::B),
-                        Key::Character("n") => gb.release(B::Start),
-                        Key::Character("m") => gb.release(B::Select),
+                        Key::Character("m") => gb.release(B::Start),
+                        Key::Character("n") => gb.release(B::Select),
                         _ => (),
                     },
                 }
