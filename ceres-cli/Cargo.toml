@@ -4,20 +4,27 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ceresc = { path = "../ceres-core", package = "ceres-core" }
+ceres-core = { path = "../ceres-core" }
 clap = { version = "*" }
 anyhow = { version = "*" }
 spin_sleep = { version = "*" }
 
 # audio
 cpal = { version = "*", default-features = false }
-dasp_ring_buffer = "*"
+dasp_ring_buffer = { version = "*", default-features = false }
 
 # video
-winit = { version = "*" }
-glow = { version = "*" }
-glutin-winit = { version = "*" }
-glutin = { version = "*" }
+winit = { version = "*", default-features = false, features = [
+    "wayland-csd-adwaita",
+] }
+glow = { version = "*", default-features = false }
+glutin-winit = { version = "*", default-features = false, features = [
+    "wayland",
+    "egl",
+    "wgl",
+    "glx",
+] }
+glutin = { version = "*", default-features = false }
 
 [lints.clippy]
 pedantic = "warn"

@@ -13,8 +13,8 @@ mod video;
 
 extern crate alloc;
 
-const PX_WIDTH: u32 = ceresc::PX_WIDTH as u32;
-const PX_HEIGHT: u32 = ceresc::PX_HEIGHT as u32;
+const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
+const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
 const INIT_WIDTH: u32 = PX_WIDTH * SCREEN_MUL;
 const INIT_HEIGHT: u32 = PX_HEIGHT * SCREEN_MUL;
 
@@ -63,12 +63,12 @@ impl clap::ValueEnum for Model {
     }
 }
 
-impl From<Model> for ceresc::Model {
-    fn from(model: Model) -> ceresc::Model {
+impl From<Model> for ceres_core::Model {
+    fn from(model: Model) -> ceres_core::Model {
         match model {
-            Model::Dmg => ceresc::Model::Dmg,
-            Model::Mgb => ceresc::Model::Mgb,
-            Model::Cgb => ceresc::Model::Cgb,
+            Model::Dmg => ceres_core::Model::Dmg,
+            Model::Mgb => ceres_core::Model::Mgb,
+            Model::Cgb => ceres_core::Model::Cgb,
         }
     }
 }

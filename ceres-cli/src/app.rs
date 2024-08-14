@@ -3,7 +3,7 @@ use crate::{
     video::{self, Renderer},
     Scaling, CERES_STYLIZED, SCREEN_MUL,
 };
-use ceresc::{Cart, FRAME_DURATION};
+use ceres_core::{Cart, FRAME_DURATION};
 use core::num::NonZeroU32;
 use glutin::{
     config::{ConfigTemplateBuilder, GlConfig},
@@ -28,7 +28,7 @@ use winit::{
 use {
     alloc::sync::Arc,
     anyhow::Context,
-    ceresc::Gb,
+    ceres_core::Gb,
     core::time::Duration,
     std::{
         fs::File,
@@ -38,8 +38,8 @@ use {
     winit::window,
 };
 
-const PX_WIDTH: u32 = ceresc::PX_WIDTH as u32;
-const PX_HEIGHT: u32 = ceresc::PX_HEIGHT as u32;
+const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
+const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
 const INIT_WIDTH: u32 = PX_WIDTH * SCREEN_MUL;
 const INIT_HEIGHT: u32 = PX_HEIGHT * SCREEN_MUL;
 
@@ -49,25 +49,6 @@ struct AppState {
     // NOTE: Window should be dropped after all resources created using its
     // raw-window-handle.
     window: Window,
-}
-
-// Find the config with the maximum number of samples, so our triangle will be
-// smooth.
-pub fn gl_config_picker(
-    configs: Box<dyn Iterator<Item = glutin::config::Config> + '_>,
-) -> glutin::config::Config {
-    configs
-        .reduce(|accum, config| {
-            let transparency_check = config.supports_transparency().unwrap_or(false)
-                & !accum.supports_transparency().unwrap_or(false);
-
-            if transparency_check || config.num_samples() > accum.num_samples() {
-                config
-            } else {
-                accum
-            }
-        })
-        .unwrap()
 }
 
 pub struct App {
@@ -86,14 +67,14 @@ pub struct App {
 
 impl App {
     pub fn new(
-        model: ceresc::Model,
+        model: ceres_core::Model,
         rom_path: PathBuf,
         scaling: Scaling,
         template: ConfigTemplateBuilder,
         display_builder: glutin_winit::DisplayBuilder,
     ) -> anyhow::Result<Self> {
         fn init_gb(
-            model: ceresc::Model,
+            model: ceres_core::Model,
             rom_path: &Path,
             audio_callback: audio::RingBuffer,
         ) -> anyhow::Result<Gb<audio::RingBuffer>> {
@@ -152,7 +133,7 @@ impl App {
     }
 
     fn handle_key(&mut self, event: &KeyEvent) {
-        use {ceresc::Button as B, winit::event::ElementState, winit::keyboard::Key};
+        use {ceres_core::Button as B, winit::event::ElementState, winit::keyboard::Key};
 
         if let Some(state) = &mut self.state {
             if !state.window.has_focus() {
@@ -228,20 +209,23 @@ impl App {
 
 impl winit::application::ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let (mut window, gl_config) = match self.display_builder.clone().build(
-            event_loop,
-            self.template.clone(),
-            gl_config_picker,
-        ) {
-            Ok(ok) => ok,
-            Err(_e) => {
-                // self.exit_state = Err(e);
-                event_loop.exit();
-                return;
-            }
-        };
-
-        println!("Picked a config with {} samples", gl_config.num_samples());
+        let (mut window, gl_config) =
+            match self
+                .display_builder
+                .clone()
+                .build(event_loop, self.template.clone(), |configs| {
+                    configs
+                        .filter(|c| c.hardware_accelerated())
+                        .min_by_key(|config| config.num_samples())
+                        .unwrap()
+                }) {
+                Ok(ok) => ok,
+                Err(_e) => {
+                    // self.exit_state = Err(e);
+                    event_loop.exit();
+                    return;
+                }
+            };
 
         let raw_window_handle = window
             .as_ref()
@@ -258,13 +242,7 @@ impl winit::application::ApplicationHandler for App {
         // Since glutin by default tries to create OpenGL core context, which may not be
         // present we should try gles.
         let fallback_context_attributes = ContextAttributesBuilder::new()
-            .with_context_api(ContextApi::Gles(None))
-            .build(raw_window_handle);
-
-        // There are also some old devices that support neither modern OpenGL nor GLES.
-        // To support these we can try and create a 2.1 context.
-        let legacy_context_attributes = ContextAttributesBuilder::new()
-            .with_context_api(ContextApi::OpenGl(Some(Version::new(3, 1))))
+            .with_context_api(ContextApi::Gles(Some(Version::new(3, 0))))
             .build(raw_window_handle);
 
         // Reuse the uncurrented context from a suspended() call if it exists, otherwise
@@ -279,11 +257,7 @@ impl winit::application::ApplicationHandler for App {
                     .unwrap_or_else(|_| {
                         gl_display
                             .create_context(&gl_config, &fallback_context_attributes)
-                            .unwrap_or_else(|_| {
-                                gl_display
-                                    .create_context(&gl_config, &legacy_context_attributes)
-                                    .expect("failed to create context")
-                            })
+                            .expect("failed to create context")
                     })
             });
 
