@@ -31,21 +31,21 @@ impl ColorPalette {
 
     #[must_use]
     #[inline]
-    const fn idx(&self) -> u8 {
+    const fn index(&self) -> u8 {
         self.spec & 0x3F
     }
 
     #[must_use]
     #[inline]
-    const fn inc(&self) -> bool {
+    const fn increment(&self) -> bool {
         self.spec & 0x80 != 0
     }
 
     #[must_use]
     pub(crate) const fn data(&self) -> u8 {
-        let i = (self.idx() as usize / 2) * 3;
+        let i = (self.index() as usize / 2) * 3;
 
-        if self.idx() & 1 == 0 {
+        if self.index() & 1 == 0 {
             // red and green
             let r = self.col[i];
             let g = self.col[i + 1] << 5;
@@ -59,9 +59,9 @@ impl ColorPalette {
     }
 
     pub(crate) fn set_data(&mut self, val: u8) {
-        let i = (self.idx() as usize / 2) * 3;
+        let i = (self.index() as usize / 2) * 3;
 
-        if self.idx() & 1 == 0 {
+        if self.index() & 1 == 0 {
             // red
             self.col[i] = val & 0x1F;
             // green
@@ -75,8 +75,8 @@ impl ColorPalette {
             self.col[i + 2] = (val & 0x7C) >> 2;
         }
 
-        if self.inc() {
-            self.spec = (self.spec & 0x80) | (self.idx() + 1) & 0x3F;
+        if self.increment() {
+            self.spec = (self.spec & 0x80) | (self.index() + 1) & 0x3F;
         }
     }
 

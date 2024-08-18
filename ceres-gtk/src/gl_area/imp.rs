@@ -201,7 +201,7 @@ impl GLAreaImpl for GlArea {
         }
 
         if let Ok(gb) = self.gb.lock() {
-            let rgba = gb.pixel_data_rgba();
+            let rgba = gb.pixel_data_rgb();
 
             rend.draw_frame(rgba);
         }

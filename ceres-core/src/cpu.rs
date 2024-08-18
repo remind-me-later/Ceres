@@ -5,7 +5,7 @@ const NF: u16 = 0x40;
 const HF: u16 = 0x20;
 const CF: u16 = 0x10;
 
-impl<C: AudioCallback> Gb<C> {
+impl<A: AudioCallback> Gb<A> {
     pub(crate) fn run_cpu(&mut self) {
         if self.ei_delay {
             self.ints.enable();

@@ -335,7 +335,7 @@ impl winit::application::ApplicationHandler for App {
                 let renderer = self.renderer.as_mut().unwrap();
 
                 if let Ok(gb) = self.gb.lock() {
-                    renderer.draw_frame(gb.pixel_data_rgba());
+                    renderer.draw_frame(gb.pixel_data_rgb());
                 }
 
                 window.request_redraw();

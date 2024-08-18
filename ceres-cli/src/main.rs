@@ -1,11 +1,7 @@
 use app::App;
-use clap::builder::EnumValueParser;
+use clap::Parser;
+use std::path::PathBuf;
 use winit::{dpi::PhysicalSize, event_loop::EventLoop};
-use {
-    anyhow::Context,
-    clap::{Arg, Command},
-    std::path::PathBuf,
-};
 
 mod app;
 mod audio;
@@ -28,8 +24,8 @@ const AFTER_HELP: &str = "GB bindings:
     | Dpad    | WASD      |
     | A       | K         |
     | B       | L         |
-    | Start   | Return    |
-    | Select  | Backspace |
+    | Start   | M         |
+    | Select  | N         |
     
 Other binsings:
 
@@ -41,26 +37,12 @@ Other binsings:
 
 const SCREEN_MUL: u32 = 3;
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, clap::ValueEnum)]
 enum Model {
     Dmg,
     Mgb,
     #[default]
     Cgb,
-}
-
-impl clap::ValueEnum for Model {
-    fn value_variants<'a>() -> &'a [Self] {
-        &[Self::Dmg, Self::Mgb, Self::Cgb]
-    }
-
-    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
-        Some(match self {
-            Self::Dmg => clap::builder::PossibleValue::new("dmg"),
-            Self::Mgb => clap::builder::PossibleValue::new("mgb"),
-            Self::Cgb => clap::builder::PossibleValue::new("cgb"),
-        })
-    }
 }
 
 impl From<Model> for ceres_core::Model {
@@ -73,7 +55,7 @@ impl From<Model> for ceres_core::Model {
     }
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, clap::ValueEnum)]
 pub enum Scaling {
     #[default]
     Nearest = 0,
@@ -92,67 +74,39 @@ impl Scaling {
     }
 }
 
-impl clap::ValueEnum for Scaling {
-    fn value_variants<'a>() -> &'a [Self] {
-        &[Self::Nearest, Self::Scale2x, Self::Scale3x]
-    }
-
-    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
-        Some(match self {
-            Self::Nearest => clap::builder::PossibleValue::new("nearest"),
-            Self::Scale2x => clap::builder::PossibleValue::new("scale2x"),
-            Self::Scale3x => clap::builder::PossibleValue::new("scale3x"),
-        })
-    }
+#[derive(clap::Parser)]
+#[command(name = CERES_BIN, about = ABOUT, after_help = AFTER_HELP)]
+struct Cli {
+    #[arg(
+        help = "Game Boy/Color ROM file to emulate.",
+        long_help = "Game Boy/Color ROM file to emulate. Extension doesn't matter, the \
+           emulator will check the file is a valid Game Boy ROM reading its \
+           header. Doesn't accept compressed (zip) files.",
+        required = true
+    )]
+    file: PathBuf,
+    #[arg(
+        short,
+        long,
+        help = "Game Boy model to emulate",
+        default_value = "cgb",
+        value_enum,
+        required = false
+    )]
+    model: Model,
+    #[arg(
+        short,
+        long,
+        help = "Scaling algorithm used",
+        default_value = "nearest",
+        value_enum,
+        required = false
+    )]
+    scaling: Scaling,
 }
 
 fn main() -> anyhow::Result<()> {
-    let args = Command::new(CERES_BIN)
-        .bin_name(CERES_BIN)
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .arg(
-            Arg::new("file")
-                .required(true)
-                .help("Game Boy/Color ROM file to emulate.")
-                .long_help(
-                    "Game Boy/Color ROM file to emulate. Extension doesn't matter, the \
-           emulator will check the file is a valid Game Boy ROM reading its \
-           header. Doesn't accept compressed (zip) files.",
-                ),
-        )
-        .arg(
-            Arg::new("model")
-                .short('m')
-                .long("model")
-                .help("Game Boy model to emulate")
-                .value_parser(EnumValueParser::<Model>::new())
-                .default_value("cgb")
-                .required(false),
-        )
-        .arg(
-            Arg::new("scaling")
-                .short('s')
-                .long("scaling")
-                .help("Scaling algorithm used")
-                .value_parser(EnumValueParser::<Scaling>::new())
-                .default_value("nearest")
-                .required(false),
-        )
-        .get_matches();
-
-    let model = *args
-        .get_one::<Model>("model")
-        .context("couldn't get model string")?;
-
-    let scaling = *args
-        .get_one::<Scaling>("scaling")
-        .context("couldn't get scaling string")?;
-
-    let rom_path = args
-        .get_one::<String>("file")
-        .map(PathBuf::from)
-        .context("no path provided")?;
+    let args = Cli::parse();
 
     let event_loop = EventLoop::new()?;
 
@@ -180,7 +134,14 @@ fn main() -> anyhow::Result<()> {
     let display_builder =
         glutin_winit::DisplayBuilder::new().with_window_attributes(Some(window_attributes));
 
-    let mut app = App::new(model.into(), rom_path, scaling, template, display_builder)?;
+    let mut app = App::new(
+        args.model.into(),
+        args.file,
+        args.scaling,
+        template,
+        display_builder,
+    )?;
+
     event_loop.run_app(&mut app)?;
 
     Ok(())

@@ -38,8 +38,9 @@ const OAM_SIZE: u16 = 0x100;
 const VRAM_SIZE_GB: u16 = 0x2000;
 const VRAM_SIZE_CGB: u16 = VRAM_SIZE_GB * 2;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub enum Mode {
+    #[default]
     HBlank = 0,
     VBlank = 1,
     OamScan = 2,
@@ -89,18 +90,16 @@ pub struct Ppu {
 
 impl Default for Ppu {
     fn default() -> Self {
-        let mode = Mode::HBlank;
-
         Self {
             vram: [0; VRAM_SIZE_CGB as usize],
             oam: [0; OAM_SIZE as usize],
-            cycles: mode.cycles(0),
+            cycles: Mode::default().cycles(0),
             // Default
             lcdc: Default::default(),
-            stat: mode as u8,
+            stat: Mode::default() as u8,
             scy: Default::default(),
             scx: Default::default(),
-            ly: 0,
+            ly: Default::default(),
             lyc: Default::default(),
             bgp: Default::default(),
             obp0: Default::default(),
@@ -116,7 +115,7 @@ impl Default for Ppu {
             win_in_frame: Default::default(),
             win_in_ly: Default::default(),
             win_skipped: Default::default(),
-            frame_done: false,
+            frame_done: Default::default(),
         }
     }
 }
@@ -317,14 +316,12 @@ impl Ppu {
     #[must_use]
     #[inline]
     pub(crate) const fn read_vram(&self, addr: u16) -> u8 {
-        #[allow(clippy::single_match_else)]
-        match self.mode() {
-            Mode::Drawing => 0xFF,
-            _ => {
-                let bank = self.vbk as u16 * VRAM_SIZE_GB;
-                let i = (addr & 0x1FFF) + bank;
-                self.vram[i as usize]
-            }
+        if let Mode::Drawing = self.mode() {
+            0xFF
+        } else {
+            let bank = self.vbk as u16 * VRAM_SIZE_GB;
+            let i = (addr & 0x1FFF) + bank;
+            self.vram[i as usize]
         }
     }
 
@@ -478,13 +475,13 @@ impl Ppu {
     }
 
     #[inline]
-    pub fn reset_frame_done(&mut self) {
+    pub(crate) fn reset_frame_done(&mut self) {
         self.frame_done = false;
     }
 
     #[must_use]
     #[inline]
-    pub const fn frame_done(&self) -> bool {
+    pub(crate) const fn frame_done(&self) -> bool {
         self.frame_done
     }
 }

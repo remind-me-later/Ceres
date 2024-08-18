@@ -8,7 +8,7 @@ pub enum TIMAState {
     Running,
 }
 
-impl<C: AudioCallback> Gb<C> {
+impl<A: AudioCallback> Gb<A> {
     pub(crate) fn advance_t_cycles(&mut self, mut cycles: i32) {
         // affected by speed boost
         self.run_timers(cycles);

@@ -87,7 +87,7 @@ const HRAM_END: u8 = 0xFE;
 // IE
 const IE: u8 = 0xFF;
 
-impl<C: AudioCallback> Gb<C> {
+impl<A: AudioCallback> Gb<A> {
     #[must_use]
     #[inline]
     pub(crate) const fn read_wram_lo(&self, addr: u16) -> u8 {
