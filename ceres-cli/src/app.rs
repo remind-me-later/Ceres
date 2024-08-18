@@ -3,7 +3,7 @@ use crate::{
     video::{self, Renderer},
     Scaling, CERES_STYLIZED, SCREEN_MUL,
 };
-use ceres_core::{Cart, FRAME_DURATION};
+use ceres_core::Cart;
 use core::num::NonZeroU32;
 use glutin::{
     config::{ConfigTemplateBuilder, GlConfig},
@@ -15,7 +15,8 @@ use glutin::{
     surface::{GlSurface, Surface, SurfaceAttributesBuilder, SwapInterval, WindowSurface},
 };
 use glutin_winit::GlWindow;
-use std::sync::Mutex;
+use std::sync::atomic::Ordering::Relaxed;
+use std::sync::{atomic::AtomicBool, Mutex};
 use std::time::Instant;
 use winit::{
     dpi::PhysicalSize,
@@ -60,7 +61,9 @@ pub struct App {
     display_builder: glutin_winit::DisplayBuilder,
     not_current_gl_context: Option<NotCurrentContext>,
     template: ConfigTemplateBuilder,
-    _thread_handle: Option<std::thread::JoinHandle<()>>,
+    thread_handle: Option<std::thread::JoinHandle<()>>,
+    exit: Arc<AtomicBool>,
+    pause_thread: Arc<AtomicBool>,
     // NOTE: `AppState` carries the `Window`, thus it should be dropped after everything else.
     state: Option<AppState>,
 }
@@ -96,27 +99,43 @@ impl App {
             Ok(Gb::new(model, sample_rate, cart, audio_callback))
         }
 
+        fn gb_loop(
+            gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
+            exit: Arc<AtomicBool>,
+            pause_thread: Arc<AtomicBool>,
+        ) {
+            while !exit.load(Relaxed) {
+                let begin = std::time::Instant::now();
+
+                if !pause_thread.load(Relaxed) {
+                    if let Ok(mut gb) = gb.lock() {
+                        gb.run_frame();
+                    }
+                }
+
+                let elapsed = begin.elapsed();
+
+                if elapsed < ceres_core::FRAME_DURATION {
+                    spin_sleep::sleep(ceres_core::FRAME_DURATION - elapsed);
+                }
+            }
+        }
+
         let audio = audio::Renderer::new()?;
         let ring_buffer = audio.get_ring_buffer();
 
         let gb = Arc::new(Mutex::new(init_gb(model, &rom_path, ring_buffer)?));
-        let gb_clone = Arc::clone(&gb);
 
-        let thread_handle = std::thread::spawn(move || loop {
-            // TODO: kill thread gracefully
+        let exit = Arc::new(AtomicBool::new(false));
+        let pause_thread = Arc::new(AtomicBool::new(true));
 
-            let begin = std::time::Instant::now();
+        let thread_handle = {
+            let gb = Arc::clone(&gb);
+            let exit = Arc::clone(&exit);
+            let pause_thread = Arc::clone(&pause_thread);
 
-            if let Ok(mut gb) = gb_clone.lock() {
-                gb.run_frame();
-            }
-
-            let elapsed = begin.elapsed();
-
-            if elapsed < FRAME_DURATION {
-                spin_sleep::sleep(FRAME_DURATION - elapsed);
-            }
-        });
+            std::thread::spawn(move || gb_loop(gb, exit, pause_thread))
+        };
 
         Ok(Self {
             gb,
@@ -126,9 +145,11 @@ impl App {
             renderer: None,
             template,
             display_builder,
-            _thread_handle: Some(thread_handle),
+            thread_handle: Some(thread_handle),
             state: None,
             not_current_gl_context: None,
+            exit,
+            pause_thread,
         })
     }
 
@@ -168,7 +189,15 @@ impl App {
                                 .choose_scale_mode(self.scaling);
                         }
                         Key::Named(NamedKey::Space) => {
-                            self.audio.toggle().unwrap();
+                            let is_paused = self.pause_thread.load(Relaxed);
+
+                            if is_paused {
+                                self.pause_thread.store(false, Relaxed);
+                                self.audio.resume().unwrap();
+                            } else {
+                                self.pause_thread.store(true, Relaxed);
+                                self.audio.pause().unwrap();
+                            }
                         }
                         _ => (),
                     },
@@ -215,8 +244,8 @@ impl winit::application::ApplicationHandler for App {
                 .clone()
                 .build(event_loop, self.template.clone(), |configs| {
                     configs
-                        .filter(|c| c.hardware_accelerated())
-                        .min_by_key(|config| config.num_samples())
+                        .filter(GlConfig::hardware_accelerated)
+                        .min_by_key(GlConfig::num_samples)
                         .unwrap()
                 }) {
                 Ok(ok) => ok,
@@ -310,6 +339,8 @@ impl winit::application::ApplicationHandler for App {
             })
             .is_none());
 
+        self.pause_thread.store(false, Relaxed);
+
         // event_loop.set_control_flow(ControlFlow::Poll);
         event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now()));
 
@@ -383,6 +414,10 @@ impl winit::application::ApplicationHandler for App {
     }
 
     fn suspended(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        self.audio.pause().unwrap();
+
+        self.pause_thread.store(true, Relaxed);
+
         // This event is only raised on Android, where the backing NativeWindow for a GL
         // Surface can appear and disappear at any moment.
         println!("Android window removed");
@@ -395,7 +430,6 @@ impl winit::application::ApplicationHandler for App {
             .replace(gl_context.make_not_current().unwrap())
             .is_none());
 
-        self.audio.pause().unwrap();
         event_loop.set_control_flow(ControlFlow::Wait);
     }
 
@@ -403,5 +437,12 @@ impl winit::application::ApplicationHandler for App {
         self.save_data();
         self.audio.pause().unwrap();
         self.renderer = None;
+    }
+}
+
+impl Drop for App {
+    fn drop(&mut self) {
+        self.exit.store(true, Relaxed);
+        self.thread_handle.take().unwrap().join().unwrap();
     }
 }

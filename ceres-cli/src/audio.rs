@@ -28,7 +28,6 @@ impl ceres_core::AudioCallback for RingBuffer {
 // Stream is not Send, so we can't use it directly in the renderer struct
 pub struct Renderer {
     stream: cpal::Stream,
-    paused: bool,
     ring_buffer: RingBuffer,
 }
 
@@ -72,7 +71,6 @@ impl Renderer {
 
         Ok(Self {
             stream,
-            paused: false,
             ring_buffer: RingBuffer {
                 buffer: ring_buffer,
             },
@@ -89,18 +87,6 @@ impl Renderer {
 
     pub fn resume(&mut self) -> anyhow::Result<()> {
         self.stream.play().context("couldn't resume stream")
-    }
-
-    pub fn toggle(&mut self) -> anyhow::Result<()> {
-        if self.paused {
-            self.resume()?;
-            self.paused = false;
-        } else {
-            self.pause()?;
-            self.paused = true;
-        }
-
-        Ok(())
     }
 
     pub const fn sample_rate() -> i32 {
