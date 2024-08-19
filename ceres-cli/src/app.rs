@@ -5,6 +5,8 @@ use crate::{
 };
 use ceres_core::Cart;
 use core::num::NonZeroU32;
+use core::sync::atomic::AtomicBool;
+use core::sync::atomic::Ordering::Relaxed;
 use glutin::{
     config::{ConfigTemplateBuilder, GlConfig},
     context::{
@@ -15,8 +17,7 @@ use glutin::{
     surface::{GlSurface, Surface, SurfaceAttributesBuilder, SwapInterval, WindowSurface},
 };
 use glutin_winit::GlWindow;
-use std::sync::atomic::Ordering::Relaxed;
-use std::sync::{atomic::AtomicBool, Mutex};
+use std::sync::RwLock;
 use std::time::Instant;
 use winit::{
     dpi::PhysicalSize,
@@ -55,7 +56,7 @@ struct AppState {
 pub struct App {
     renderer: Option<video::Renderer>,
     audio: audio::Renderer,
-    gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
+    gb: Arc<RwLock<Gb<audio::RingBuffer>>>,
     scaling: Scaling,
     rom_path: PathBuf,
     display_builder: glutin_winit::DisplayBuilder,
@@ -100,7 +101,7 @@ impl App {
         }
 
         fn gb_loop(
-            gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
+            gb: Arc<RwLock<Gb<audio::RingBuffer>>>,
             exit: Arc<AtomicBool>,
             pause_thread: Arc<AtomicBool>,
         ) {
@@ -108,7 +109,7 @@ impl App {
                 let begin = std::time::Instant::now();
 
                 if !pause_thread.load(Relaxed) {
-                    if let Ok(mut gb) = gb.lock() {
+                    if let Ok(mut gb) = gb.write() {
                         gb.run_frame();
                     }
                 }
@@ -119,12 +120,17 @@ impl App {
                     spin_sleep::sleep(ceres_core::FRAME_DURATION - elapsed);
                 }
             }
+
+            // Huh? Clippy says we are not consuming the ARCs unless we drop them.
+            drop(gb);
+            drop(exit);
+            drop(pause_thread);
         }
 
         let audio = audio::Renderer::new()?;
         let ring_buffer = audio.get_ring_buffer();
 
-        let gb = Arc::new(Mutex::new(init_gb(model, &rom_path, ring_buffer)?));
+        let gb = Arc::new(RwLock::new(init_gb(model, &rom_path, ring_buffer)?));
 
         let exit = Arc::new(AtomicBool::new(false));
         let pause_thread = Arc::new(AtomicBool::new(true));
@@ -161,7 +167,7 @@ impl App {
                 return;
             }
 
-            if let Ok(mut gb) = self.gb.lock() {
+            if let Ok(mut gb) = self.gb.write() {
                 let key = &event.logical_key;
 
                 match event.state {
@@ -218,7 +224,7 @@ impl App {
     }
 
     fn save_data(&self) {
-        if let Ok(mut gb) = self.gb.lock() {
+        if let Ok(gb) = self.gb.read() {
             if let Some(save_data) = gb.cartridge().save_data() {
                 let sav_file = File::create(self.rom_path.with_extension("sav"));
                 match sav_file {
@@ -238,6 +244,8 @@ impl App {
 
 impl winit::application::ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        self.pause_thread.store(false, Relaxed);
+
         let (mut window, gl_config) =
             match self
                 .display_builder
@@ -327,7 +335,7 @@ impl winit::application::ApplicationHandler for App {
         if let Err(res) = gl_surface
             .set_swap_interval(&gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
         {
-            eprintln!("Error setting vsync: {res:?}");
+            eprintln!("Error setting vsync: {res}");
         }
 
         assert!(self
@@ -338,8 +346,6 @@ impl winit::application::ApplicationHandler for App {
                 window
             })
             .is_none());
-
-        self.pause_thread.store(false, Relaxed);
 
         // event_loop.set_control_flow(ControlFlow::Poll);
         event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now()));
@@ -365,7 +371,7 @@ impl winit::application::ApplicationHandler for App {
             {
                 let renderer = self.renderer.as_mut().unwrap();
 
-                if let Ok(gb) = self.gb.lock() {
+                if let Ok(gb) = self.gb.read() {
                     renderer.draw_frame(gb.pixel_data_rgb());
                 }
 
@@ -434,14 +440,16 @@ impl winit::application::ApplicationHandler for App {
     }
 
     fn exiting(&mut self, _: &winit::event_loop::ActiveEventLoop) {
-        self.save_data();
         self.audio.pause().unwrap();
+        self.exit.store(true, Relaxed);
+        self.save_data();
         self.renderer = None;
     }
 }
 
 impl Drop for App {
     fn drop(&mut self) {
+        // Should already have exited but just in case.
         self.exit.store(true, Relaxed);
         self.thread_handle.take().unwrap().join().unwrap();
     }

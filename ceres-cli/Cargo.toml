@@ -4,8 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+clap = { version = "*", default-features = false, features = ["std", "derive"] }
+
 ceres-core = { path = "../ceres-core" }
-clap = { version = "*", features = ["derive"] }
 anyhow = { version = "*" }
 spin_sleep = { version = "*" }
 

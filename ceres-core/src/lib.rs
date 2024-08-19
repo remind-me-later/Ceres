@@ -160,8 +160,8 @@ impl<C: AudioCallback> Gb<C> {
 
     #[must_use]
     #[inline]
-    pub fn cartridge(&mut self) -> &mut Cart {
-        &mut self.cart
+    pub const fn cartridge(&self) -> &Cart {
+        &self.cart
     }
 
     #[must_use]

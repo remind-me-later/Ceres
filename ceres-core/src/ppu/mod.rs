@@ -316,7 +316,7 @@ impl Ppu {
     #[must_use]
     #[inline]
     pub(crate) const fn read_vram(&self, addr: u16) -> u8 {
-        if let Mode::Drawing = self.mode() {
+        if matches!(self.mode(), Mode::Drawing) {
             0xFF
         } else {
             let bank = self.vbk as u16 * VRAM_SIZE_GB;
