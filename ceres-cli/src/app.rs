@@ -46,6 +46,7 @@ const INIT_WIDTH: u32 = PX_WIDTH * SCREEN_MUL;
 const INIT_HEIGHT: u32 = PX_HEIGHT * SCREEN_MUL;
 
 struct AppState {
+    renderer: video::Renderer,
     gl_context: PossiblyCurrentContext,
     gl_surface: Surface<WindowSurface>,
     // NOTE: Window should be dropped after all resources created using its
@@ -53,8 +54,107 @@ struct AppState {
     window: Window,
 }
 
+impl AppState {
+    fn new(
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        display_builder: glutin_winit::DisplayBuilder,
+        template: ConfigTemplateBuilder,
+        not_current_gl_context: &mut Option<NotCurrentContext>,
+    ) -> Self {
+        let (mut window, gl_config) = match display_builder.build(event_loop, template, |configs| {
+            configs
+                .filter(GlConfig::hardware_accelerated)
+                .min_by_key(GlConfig::num_samples)
+                .unwrap()
+        }) {
+            Ok(ok) => ok,
+            Err(_e) => {
+                // self.exit_state = Err(e);
+                event_loop.exit();
+                panic!("Failed to create window");
+            }
+        };
+
+        let raw_window_handle = window
+            .as_ref()
+            .and_then(|w| w.window_handle().ok())
+            .map(|handle| handle.as_raw());
+
+        // XXX The display could be obtained from any object created by it, so we can
+        // query it from the config.
+        let gl_display = gl_config.display();
+
+        // The context creation part.
+        let context_attributes = ContextAttributesBuilder::new().build(raw_window_handle);
+
+        // Since glutin by default tries to create OpenGL core context, which may not be
+        // present we should try gles.
+        let fallback_context_attributes = ContextAttributesBuilder::new()
+            .with_context_api(ContextApi::Gles(Some(Version::new(3, 0))))
+            .build(raw_window_handle);
+
+        // Reuse the uncurrented context from a suspended() call if it exists, otherwise
+        // this is the first time resumed() is called, where the context still
+        // has to be created.
+        let not_current_gl_context = not_current_gl_context.take().unwrap_or_else(|| unsafe {
+            gl_display
+                .create_context(&gl_config, &context_attributes)
+                .unwrap_or_else(|_| {
+                    gl_display
+                        .create_context(&gl_config, &fallback_context_attributes)
+                        .expect("failed to create context")
+                })
+        });
+
+        let window = window.take().unwrap_or_else(|| {
+            let window_attributes = winit::window::Window::default_attributes()
+                .with_title(CERES_STYLIZED)
+                .with_inner_size(PhysicalSize {
+                    width: INIT_WIDTH,
+                    height: INIT_HEIGHT,
+                })
+                .with_min_inner_size(PhysicalSize {
+                    width: PX_WIDTH,
+                    height: PX_HEIGHT,
+                });
+            glutin_winit::finalize_window(event_loop, window_attributes, &gl_config).unwrap()
+        });
+
+        let attrs = window
+            .build_surface_attributes(SurfaceAttributesBuilder::default())
+            .expect("Failed to build surface attributes");
+        let gl_surface = unsafe {
+            gl_config
+                .display()
+                .create_window_surface(&gl_config, &attrs)
+                .unwrap()
+        };
+
+        // Make it current.
+        let gl_context = not_current_gl_context.make_current(&gl_surface).unwrap();
+
+        // The context needs to be current for the Renderer to set up shaders and
+        // buffers. It also performs function loading, which needs a current context on
+        // WGL.
+        let renderer = Renderer::new(&gl_display);
+
+        // Try setting vsync.
+        if let Err(res) = gl_surface
+            .set_swap_interval(&gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
+        {
+            eprintln!("Error setting vsync: {res}");
+        }
+
+        AppState {
+            renderer,
+            gl_context,
+            gl_surface,
+            window,
+        }
+    }
+}
+
 pub struct App {
-    renderer: Option<video::Renderer>,
     audio: audio::Renderer,
     gb: Arc<RwLock<Gb<audio::RingBuffer>>>,
     scaling: Scaling,
@@ -120,11 +220,6 @@ impl App {
                     spin_sleep::sleep(ceres_core::FRAME_DURATION - elapsed);
                 }
             }
-
-            // Huh? Clippy says we are not consuming the ARCs unless we drop them.
-            drop(gb);
-            drop(exit);
-            drop(pause_thread);
         }
 
         let audio = audio::Renderer::new()?;
@@ -148,7 +243,6 @@ impl App {
             audio,
             scaling,
             rom_path,
-            renderer: None,
             template,
             display_builder,
             thread_handle: Some(thread_handle),
@@ -189,10 +283,7 @@ impl App {
                         },
                         Key::Character("z") => {
                             self.scaling = self.scaling.next();
-                            self.renderer
-                                .as_mut()
-                                .unwrap()
-                                .choose_scale_mode(self.scaling);
+                            state.renderer.choose_scale_mode(self.scaling);
                         }
                         Key::Named(NamedKey::Space) => {
                             let is_paused = self.pause_thread.load(Relaxed);
@@ -246,106 +337,12 @@ impl winit::application::ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         self.pause_thread.store(false, Relaxed);
 
-        let (mut window, gl_config) =
-            match self
-                .display_builder
-                .clone()
-                .build(event_loop, self.template.clone(), |configs| {
-                    configs
-                        .filter(GlConfig::hardware_accelerated)
-                        .min_by_key(GlConfig::num_samples)
-                        .unwrap()
-                }) {
-                Ok(ok) => ok,
-                Err(_e) => {
-                    // self.exit_state = Err(e);
-                    event_loop.exit();
-                    return;
-                }
-            };
-
-        let raw_window_handle = window
-            .as_ref()
-            .and_then(|w| w.window_handle().ok())
-            .map(|handle| handle.as_raw());
-
-        // XXX The display could be obtained from any object created by it, so we can
-        // query it from the config.
-        let gl_display = gl_config.display();
-
-        // The context creation part.
-        let context_attributes = ContextAttributesBuilder::new().build(raw_window_handle);
-
-        // Since glutin by default tries to create OpenGL core context, which may not be
-        // present we should try gles.
-        let fallback_context_attributes = ContextAttributesBuilder::new()
-            .with_context_api(ContextApi::Gles(Some(Version::new(3, 0))))
-            .build(raw_window_handle);
-
-        // Reuse the uncurrented context from a suspended() call if it exists, otherwise
-        // this is the first time resumed() is called, where the context still
-        // has to be created.
-        let not_current_gl_context = self
-            .not_current_gl_context
-            .take()
-            .unwrap_or_else(|| unsafe {
-                gl_display
-                    .create_context(&gl_config, &context_attributes)
-                    .unwrap_or_else(|_| {
-                        gl_display
-                            .create_context(&gl_config, &fallback_context_attributes)
-                            .expect("failed to create context")
-                    })
-            });
-
-        let window = window.take().unwrap_or_else(|| {
-            let window_attributes = winit::window::Window::default_attributes()
-                .with_title(CERES_STYLIZED)
-                .with_inner_size(PhysicalSize {
-                    width: INIT_WIDTH,
-                    height: INIT_HEIGHT,
-                })
-                .with_min_inner_size(PhysicalSize {
-                    width: PX_WIDTH,
-                    height: PX_HEIGHT,
-                });
-            glutin_winit::finalize_window(event_loop, window_attributes, &gl_config).unwrap()
-        });
-
-        let attrs = window
-            .build_surface_attributes(SurfaceAttributesBuilder::default())
-            .expect("Failed to build surface attributes");
-        let gl_surface = unsafe {
-            gl_config
-                .display()
-                .create_window_surface(&gl_config, &attrs)
-                .unwrap()
-        };
-
-        // Make it current.
-        let gl_context = not_current_gl_context.make_current(&gl_surface).unwrap();
-
-        // The context needs to be current for the Renderer to set up shaders and
-        // buffers. It also performs function loading, which needs a current context on
-        // WGL.
-        self.renderer
-            .get_or_insert_with(|| Renderer::new(&gl_display));
-
-        // Try setting vsync.
-        if let Err(res) = gl_surface
-            .set_swap_interval(&gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
-        {
-            eprintln!("Error setting vsync: {res}");
-        }
-
-        assert!(self
-            .state
-            .replace(AppState {
-                gl_context,
-                gl_surface,
-                window
-            })
-            .is_none());
+        self.state.replace(AppState::new(
+            event_loop,
+            self.display_builder.clone(),
+            self.template.clone(),
+            &mut self.not_current_gl_context,
+        ));
 
         // event_loop.set_control_flow(ControlFlow::Poll);
         event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now()));
@@ -364,13 +361,12 @@ impl winit::application::ApplicationHandler for App {
             )));
 
             if let Some(AppState {
+                renderer,
                 gl_context,
                 gl_surface,
                 window,
-            }) = self.state.as_ref()
+            }) = self.state.as_mut()
             {
-                let renderer = self.renderer.as_mut().unwrap();
-
                 if let Ok(gb) = self.gb.read() {
                     renderer.draw_frame(gb.pixel_data_rgb());
                 }
@@ -396,17 +392,17 @@ impl winit::application::ApplicationHandler for App {
                     // and the function is no-op, but it's wise to resize it for portability
                     // reasons.
                     if let Some(AppState {
+                        renderer,
                         gl_context,
                         gl_surface,
                         ..
-                    }) = self.state.as_ref()
+                    }) = self.state.as_mut()
                     {
                         gl_surface.resize(
                             gl_context,
                             NonZeroU32::new(width).unwrap(),
                             NonZeroU32::new(height).unwrap(),
                         );
-                        let renderer = self.renderer.as_mut().unwrap();
                         renderer.resize_viewport(width, height);
                     }
                 }
@@ -443,14 +439,7 @@ impl winit::application::ApplicationHandler for App {
         self.audio.pause().unwrap();
         self.exit.store(true, Relaxed);
         self.save_data();
-        self.renderer = None;
-    }
-}
-
-impl Drop for App {
-    fn drop(&mut self) {
-        // Should already have exited but just in case.
-        self.exit.store(true, Relaxed);
+        self.state = None;
         self.thread_handle.take().unwrap().join().unwrap();
     }
 }
