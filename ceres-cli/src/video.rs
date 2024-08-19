@@ -16,6 +16,8 @@ pub struct Renderer {
     texture: NativeTexture,
     dims_unif: UniformLocation,
     scale_unif: UniformLocation,
+    new_size: Option<(u32, u32)>,
+    new_scale_mode: Option<Scaling>,
 }
 
 impl Renderer {
@@ -107,31 +109,18 @@ impl Renderer {
                 texture,
                 dims_unif,
                 scale_unif,
+                new_size: None,
+                new_scale_mode: None,
             }
         }
     }
 
     pub fn choose_scale_mode(&mut self, scale_mode: Scaling) {
-        unsafe {
-            self.gl.use_program(Some(self.program));
-            self.gl
-                .uniform_1_u32_slice(Some(&self.scale_unif), &[scale_mode as u32]);
-        }
+        self.new_scale_mode = Some(scale_mode);
     }
 
     pub fn resize_viewport(&mut self, width: u32, height: u32) {
-        let mul = min(width / PX_WIDTH, height / PX_HEIGHT);
-        let img_w = PX_WIDTH * mul;
-        let img_h = PX_HEIGHT * mul;
-        let uniform_x = img_w as f32 / width as f32;
-        let uniform_y = img_h as f32 / height as f32;
-
-        unsafe {
-            self.gl.viewport(0, 0, width as i32, height as i32);
-            self.gl.use_program(Some(self.program));
-            self.gl
-                .uniform_2_f32(Some(&self.dims_unif), uniform_x, uniform_y);
-        }
+        self.new_size = Some((width, height));
     }
 
     pub fn draw_frame(&mut self, rgb: &[u8]) {
@@ -153,6 +142,28 @@ impl Renderer {
             self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
             self.gl.clear(glow::COLOR_BUFFER_BIT);
             self.gl.use_program(Some(self.program));
+
+            if let Some((width, height)) = self.new_size.take() {
+                // resize image to fit the window
+                let mul = min(width / PX_WIDTH, height / PX_HEIGHT);
+                let img_w = PX_WIDTH * mul;
+                let img_h = PX_HEIGHT * mul;
+                let uniform_x = img_w as f32 / width as f32;
+                let uniform_y = img_h as f32 / height as f32;
+
+                self.gl.viewport(0, 0, width as i32, height as i32);
+                // self.gl.use_program(Some(self.program));
+                self.gl
+                    .uniform_2_f32(Some(&self.dims_unif), uniform_x, uniform_y);
+            }
+
+            if let Some(scale_mode) = self.new_scale_mode.take() {
+                // set scaling mode
+                // self.gl.use_program(Some(self.program));
+                self.gl
+                    .uniform_1_u32_slice(Some(&self.scale_unif), &[scale_mode as u32]);
+            }
+
             self.gl.bind_vertex_array(Some(self.vao));
             self.gl.draw_arrays(glow::TRIANGLE_STRIP, 0, 4);
         }
