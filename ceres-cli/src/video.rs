@@ -13,6 +13,7 @@ pub struct Renderer {
     gl: Context,
     program: NativeProgram,
     vao: NativeVertexArray,
+    pbo: glow::Buffer,
     texture: NativeTexture,
     dims_unif: UniformLocation,
     scale_unif: UniformLocation,
@@ -90,6 +91,11 @@ impl Renderer {
                 glow::TEXTURE_MAG_FILTER,
                 glow::NEAREST as i32,
             );
+            // gl.tex_parameter_i32(
+            //     glow::TEXTURE_2D,
+            //     glow::TEXTURE_INTERNAL_FORMAT,
+            //     glow::RGB as i32,
+            // );
 
             let dims_unif = gl
                 .get_uniform_location(program, "vp_dims")
@@ -102,10 +108,19 @@ impl Renderer {
             // Init scale uniform
             gl.uniform_1_u32_slice(Some(&scale_unif), &[Scaling::Nearest as u32]);
 
+            let pbo = gl.create_buffer().expect("cannot create pbo");
+            gl.bind_buffer(glow::PIXEL_UNPACK_BUFFER, Some(pbo));
+            gl.buffer_data_size(
+                glow::PIXEL_UNPACK_BUFFER,
+                (PX_WIDTH * PX_HEIGHT * 3) as i32,
+                glow::STREAM_DRAW,
+            );
+
             Self {
                 gl,
                 program,
                 vao,
+                pbo,
                 texture,
                 dims_unif,
                 scale_unif,
@@ -125,8 +140,22 @@ impl Renderer {
 
     pub fn draw_frame(&mut self, rgb: &[u8]) {
         unsafe {
-            // TODO: texture streaming
+            self.gl
+                .bind_buffer(glow::PIXEL_UNPACK_BUFFER, Some(self.pbo));
+
+            let buf = self.gl.map_buffer_range(
+                glow::PIXEL_UNPACK_BUFFER,
+                0,
+                rgb.len() as i32,
+                glow::MAP_WRITE_BIT | glow::MAP_INVALIDATE_BUFFER_BIT,
+            );
+
+            std::ptr::copy_nonoverlapping(rgb.as_ptr(), buf, rgb.len());
+
+            self.gl.unmap_buffer(glow::PIXEL_UNPACK_BUFFER);
+
             self.gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
+
             self.gl.tex_image_2d(
                 glow::TEXTURE_2D,
                 0,
@@ -136,11 +165,9 @@ impl Renderer {
                 0,
                 glow::RGB,
                 glow::UNSIGNED_BYTE,
-                Some(rgb),
+                None,
             );
 
-            self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
-            self.gl.clear(glow::COLOR_BUFFER_BIT);
             self.gl.use_program(Some(self.program));
 
             if let Some((width, height)) = self.new_size.take() {
@@ -152,19 +179,20 @@ impl Renderer {
                 let uniform_y = img_h as f32 / height as f32;
 
                 self.gl.viewport(0, 0, width as i32, height as i32);
-                // self.gl.use_program(Some(self.program));
                 self.gl
                     .uniform_2_f32(Some(&self.dims_unif), uniform_x, uniform_y);
             }
 
             if let Some(scale_mode) = self.new_scale_mode.take() {
                 // set scaling mode
-                // self.gl.use_program(Some(self.program));
                 self.gl
                     .uniform_1_u32_slice(Some(&self.scale_unif), &[scale_mode as u32]);
             }
 
             self.gl.bind_vertex_array(Some(self.vao));
+
+            self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
+            self.gl.clear(glow::COLOR_BUFFER_BIT);
             self.gl.draw_arrays(glow::TRIANGLE_STRIP, 0, 4);
         }
     }
