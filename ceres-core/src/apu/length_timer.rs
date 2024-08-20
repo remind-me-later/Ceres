@@ -1,13 +1,15 @@
 use super::PHalf;
 
+// LEN_MASK is the maximum length of the timer, 0x3F for all channels except wave, which is 0xFF
 #[derive(Default)]
-pub(super) struct LengthTimer<const LEN_MASK: u16> {
+pub(super) struct LengthTimer<const LEN_MASK: u8> {
     on: bool,
-    len: u16,
+    len: u8,
     p_half: PHalf,
+    carry: bool,
 }
 
-impl<const LEN_MASK: u16> LengthTimer<LEN_MASK> {
+impl<const LEN_MASK: u8> LengthTimer<LEN_MASK> {
     pub(super) fn read_on(&self) -> u8 {
         u8::from(self.on) << 6
     }
@@ -22,12 +24,14 @@ impl<const LEN_MASK: u16> LengthTimer<LEN_MASK> {
     }
 
     pub(super) fn write_len(&mut self, val: u8) {
-        self.len = val as u16 & LEN_MASK;
+        self.len = val & LEN_MASK;
+        self.carry = false;
     }
 
     pub(super) fn trigger(&mut self, on: &mut bool) {
-        if self.len > LEN_MASK {
+        if self.carry {
             self.len = 0;
+            self.carry = false;
             if matches!(self.p_half, PHalf::First) {
                 self.step(on);
             }
@@ -35,13 +39,12 @@ impl<const LEN_MASK: u16> LengthTimer<LEN_MASK> {
     }
 
     pub(super) fn step(&mut self, on: &mut bool) {
-        // WARN: looks wrong but sameboy does it this way
-        // https://github.com/LIJI32/SameBoy/blob/master/Core/apu.c line 528,
-        // also "fixing" it breaks blargg cgb sound test 3
-        if self.on && self.len <= LEN_MASK {
-            self.len += 1;
-            if self.len > LEN_MASK {
+        if self.on {
+            if self.len == LEN_MASK {
                 *on = false;
+                self.carry = true;
+            } else {
+                self.len += 1;
             }
         }
     }
