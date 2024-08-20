@@ -1,13 +1,13 @@
 use super::PHalf;
 
 #[derive(Default)]
-pub(super) struct LengthTimer<const LEN_MASK: u8> {
+pub(super) struct LengthTimer<const LEN_MASK: u16> {
     on: bool,
-    len: u8,
+    len: u16,
     p_half: PHalf,
 }
 
-impl<const LEN_MASK: u8> LengthTimer<LEN_MASK> {
+impl<const LEN_MASK: u16> LengthTimer<LEN_MASK> {
     pub(super) fn read_on(&self) -> u8 {
         u8::from(self.on) << 6
     }
@@ -22,11 +22,11 @@ impl<const LEN_MASK: u8> LengthTimer<LEN_MASK> {
     }
 
     pub(super) fn write_len(&mut self, val: u8) {
-        self.len = val & LEN_MASK;
+        self.len = val as u16 & LEN_MASK;
     }
 
     pub(super) fn trigger(&mut self, on: &mut bool) {
-        if self.len == 64 {
+        if self.len > LEN_MASK {
             self.len = 0;
             if matches!(self.p_half, PHalf::First) {
                 self.step(on);
@@ -40,7 +40,7 @@ impl<const LEN_MASK: u8> LengthTimer<LEN_MASK> {
         // also "fixing" it breaks blargg cgb sound test 3
         if self.on && self.len <= LEN_MASK {
             self.len += 1;
-            if self.len == LEN_MASK + 1 {
+            if self.len > LEN_MASK {
                 *on = false;
             }
         }
