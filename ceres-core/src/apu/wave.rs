@@ -117,4 +117,11 @@ impl Wave {
     pub(super) const fn on(&self) -> bool {
         self.on
     }
+
+    // Necessary because powering off the APU doesn't clear the wave RAM
+    pub(super) fn reset(&mut self) {
+        let ram = self.ram;
+        *self = Default::default();
+        self.ram = ram;
+    }
 }

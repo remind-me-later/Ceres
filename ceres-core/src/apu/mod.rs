@@ -242,7 +242,7 @@ impl<C: AudioCallback> Apu<C> {
             self.render_timer = 0;
             self.ch1 = Square1::default();
             self.ch2 = Square2::default();
-            self.ch3 = Wave::default();
+            self.ch3.reset();
             self.ch4 = Noise::default();
             self.l_vol = 0;
             self.l_vin = false;

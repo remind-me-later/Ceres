@@ -26,7 +26,7 @@ impl<const LEN_MASK: u8> LengthTimer<LEN_MASK> {
     }
 
     pub(super) fn trigger(&mut self, on: &mut bool) {
-        if self.len == LEN_MASK {
+        if self.len == 64 {
             self.len = 0;
             if matches!(self.p_half, PHalf::First) {
                 self.step(on);
@@ -38,9 +38,9 @@ impl<const LEN_MASK: u8> LengthTimer<LEN_MASK> {
         // WARN: looks wrong but sameboy does it this way
         // https://github.com/LIJI32/SameBoy/blob/master/Core/apu.c line 528,
         // also "fixing" it breaks blargg cgb sound test 3
-        if self.on && self.len < LEN_MASK {
+        if self.on && self.len <= LEN_MASK {
             self.len += 1;
-            if self.len == LEN_MASK {
+            if self.len == LEN_MASK + 1 {
                 *on = false;
             }
         }
