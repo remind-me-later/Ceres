@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_wrap)]
+
 use {
     crate::Scaling,
     core::cmp::min,
@@ -91,11 +93,6 @@ impl Renderer {
                 glow::TEXTURE_MAG_FILTER,
                 glow::NEAREST as i32,
             );
-            // gl.tex_parameter_i32(
-            //     glow::TEXTURE_2D,
-            //     glow::TEXTURE_INTERNAL_FORMAT,
-            //     glow::RGB as i32,
-            // );
 
             let dims_unif = gl
                 .get_uniform_location(program, "vp_dims")
@@ -143,6 +140,7 @@ impl Renderer {
             self.gl
                 .bind_buffer(glow::PIXEL_UNPACK_BUFFER, Some(self.pbo));
 
+            #[allow(clippy::cast_possible_truncation)]
             let buf = self.gl.map_buffer_range(
                 glow::PIXEL_UNPACK_BUFFER,
                 0,
@@ -170,6 +168,7 @@ impl Renderer {
 
             self.gl.use_program(Some(self.program));
 
+            #[allow(clippy::cast_precision_loss)]
             if let Some((width, height)) = self.new_size.take() {
                 // resize image to fit the window
                 let mul = min(width / PX_WIDTH, height / PX_HEIGHT);

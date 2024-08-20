@@ -220,6 +220,11 @@ impl App {
                     spin_sleep::sleep(ceres_core::FRAME_DURATION - elapsed);
                 }
             }
+
+            // FIXME: clippy says we have to drop
+            drop(gb);
+            drop(exit);
+            drop(pause_thread);
         }
 
         let audio = audio::Renderer::new()?;
