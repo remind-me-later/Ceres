@@ -5,7 +5,7 @@ use dasp_ring_buffer::Bounded;
 use {alloc::sync::Arc, std::sync::Mutex};
 
 // Buffer size is the number of samples per channel per callback
-const BUFFER_SIZE: cpal::FrameCount = 512;
+const BUFFER_SIZE: cpal::FrameCount = 512 * 2;
 const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
 const SAMPLE_RATE: i32 = 48000;
 

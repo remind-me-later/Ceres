@@ -207,17 +207,18 @@ impl App {
         ) {
             while !exit.load(Relaxed) {
                 let begin = std::time::Instant::now();
+                let mut duration = ceres_core::FRAME_DURATION;
 
                 if !pause_thread.load(Relaxed) {
                     if let Ok(mut gb) = gb.write() {
-                        gb.run_frame();
+                        duration = gb.run_frame();
                     }
                 }
 
                 let elapsed = begin.elapsed();
 
-                if elapsed < ceres_core::FRAME_DURATION {
-                    spin_sleep::sleep(ceres_core::FRAME_DURATION - elapsed);
+                if elapsed < duration {
+                    spin_sleep::sleep(duration - elapsed);
                 }
             }
 

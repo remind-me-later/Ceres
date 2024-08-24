@@ -25,6 +25,8 @@ impl<A: AudioCallback> Gb<A> {
 
         self.apu.run(cycles);
         self.cart.run_rtc(cycles);
+
+        self.dot_accumulator += cycles;
     }
 
     #[inline]

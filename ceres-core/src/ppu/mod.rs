@@ -84,8 +84,6 @@ pub struct Ppu {
     win_in_frame: bool,
     win_in_ly: bool,
     win_skipped: u8,
-
-    frame_done: bool,
 }
 
 impl Default for Ppu {
@@ -115,7 +113,6 @@ impl Default for Ppu {
             win_in_frame: Default::default(),
             win_in_ly: Default::default(),
             win_skipped: Default::default(),
-            frame_done: Default::default(),
         }
     }
 }
@@ -457,7 +454,6 @@ impl Ppu {
 
                 self.win_skipped = 0;
                 self.win_in_frame = false;
-                self.frame_done = true;
             }
             Mode::Drawing => (),
             Mode::HBlank => {
@@ -472,16 +468,5 @@ impl Ppu {
     #[inline]
     pub(crate) const fn pixel_data_rgb(&self) -> &[u8] {
         self.rgba_buf_present.pixel_data()
-    }
-
-    #[inline]
-    pub(crate) fn reset_frame_done(&mut self) {
-        self.frame_done = false;
-    }
-
-    #[must_use]
-    #[inline]
-    pub(crate) const fn frame_done(&self) -> bool {
-        self.frame_done
     }
 }

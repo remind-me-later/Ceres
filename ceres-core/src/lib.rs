@@ -26,8 +26,8 @@ mod ppu;
 mod serial;
 mod timing;
 
-pub const FPS: f32 = 59.7;
-pub const FRAME_DURATION: Duration = Duration::new(0, (10_000_000_000_u64 / 597) as u32);
+pub const FRAME_DURATION: Duration = Duration::new(0, 16742706);
+pub const TC_PER_FRAME: i32 = 70224; // t-cycles per frame
 
 // t-cycles per second
 pub const TC_SEC: i32 = 0x40_0000; // 2^22
@@ -37,6 +37,7 @@ pub const WRAM_SIZE: u16 = 0x2000 * 4;
 pub struct Gb<C: AudioCallback> {
     model: Model,
     cgb_mode: CgbMode,
+    dot_accumulator: i32,
 
     // cartridge
     cart: Cart,
@@ -146,16 +147,24 @@ impl<C: AudioCallback> Gb<C> {
             tima: Default::default(),
             tma: Default::default(),
             div: Default::default(),
+            dot_accumulator: Default::default(),
         }
     }
 
     #[inline]
-    pub fn run_frame(&mut self) {
-        while !self.ppu.frame_done() {
+    #[must_use]
+    pub fn run_frame(&mut self) -> Duration {
+        self.dot_accumulator = 0;
+
+        while self.dot_accumulator < TC_PER_FRAME {
             self.run_cpu();
         }
 
-        self.ppu.reset_frame_done();
+        let ret = Duration::from_secs_f32(self.dot_accumulator as f32 / TC_SEC as f32);
+
+        self.dot_accumulator -= TC_PER_FRAME;
+
+        ret
     }
 
     #[must_use]
