@@ -5,7 +5,7 @@ use dasp_ring_buffer::Bounded;
 use {alloc::sync::Arc, std::sync::Mutex};
 
 // Buffer size is the number of samples per channel per callback
-const BUFFER_SIZE: cpal::FrameCount = 512 * 2;
+const BUFFER_SIZE: cpal::FrameCount = 512;
 const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
 const SAMPLE_RATE: i32 = 48000;
 
@@ -19,6 +19,7 @@ pub struct RingBuffer {
 impl ceres_core::AudioCallback for RingBuffer {
     fn audio_sample(&self, l: ceres_core::Sample, r: ceres_core::Sample) {
         if let Ok(mut buffer) = self.buffer.lock() {
+            // TODO: why are we always overwriting the buffer?
             buffer.push(l);
             buffer.push(r);
         }

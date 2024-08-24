@@ -123,7 +123,7 @@ impl Wave {
         }
     }
 
-    pub(super) const fn true_on(&self) -> bool {
+    pub(super) const fn true_enabled(&self) -> bool {
         self.enabled && self.dac_enabled
     }
 

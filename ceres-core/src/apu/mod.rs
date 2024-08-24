@@ -46,8 +46,8 @@ pub struct Apu<C: AudioCallback> {
 
     div_divider: u8,
 
-    render_timer: i32,
-    ext_sample_period: i32,
+    render_timer: f32,
+    ext_sample_period: f32,
 
     audio_callback: C,
 
@@ -71,17 +71,15 @@ impl<C: AudioCallback> Apu<C> {
             ch3: Wave::default(),
             ch4: Noise::default(),
             div_divider: 0,
-            render_timer: 0,
+            render_timer: 0.0,
             capacitor_l: 0.0,
             capacitor_r: 0.0,
         }
     }
 
-    const fn sample_period_from_rate(sample_rate: i32) -> i32 {
-        // TODO: maybe account for difference between 59.7 and target Hz?
-        // FIXME: definitely wrong, but avoids underrun
-        // check if frequency is too high
-        TC_SEC / sample_rate
+    fn sample_period_from_rate(sample_rate: i32) -> f32 {
+        // Run at 59.7 hz even if we have to skip frames
+        (TC_SEC as f32 / sample_rate as f32) * (59.7 / 60.0)
     }
 
     pub fn run(&mut self, cycles: i32) {
@@ -93,8 +91,8 @@ impl<C: AudioCallback> Apu<C> {
                 let out = match i {
                     0 => apu.ch1.output() * u8::from(apu.ch1.true_enabled()),
                     1 => apu.ch2.output() * u8::from(apu.ch2.true_enabled()),
-                    2 => apu.ch3.output() * u8::from(apu.ch3.true_on()),
-                    3 => apu.ch4.output() * u8::from(apu.ch4.true_on()),
+                    2 => apu.ch3.output() * u8::from(apu.ch3.true_enabled()),
+                    3 => apu.ch4.output() * u8::from(apu.ch4.true_enabled()),
                     _ => break,
                 };
 
@@ -127,7 +125,7 @@ impl<C: AudioCallback> Apu<C> {
             self.ch4.step_sample(cycles);
         }
 
-        self.render_timer += cycles;
+        self.render_timer += cycles as f32;
         while self.render_timer >= self.ext_sample_period {
             self.render_timer -= self.ext_sample_period;
 
@@ -239,7 +237,7 @@ impl<C: AudioCallback> Apu<C> {
 
         if !self.enabled {
             // reset
-            self.render_timer = 0;
+            self.render_timer = 0.0;
             self.div_divider = 0;
             self.l_vol = 0;
             self.l_vin = false;

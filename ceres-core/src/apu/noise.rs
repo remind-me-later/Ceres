@@ -123,7 +123,7 @@ impl Noise {
     }
 
     pub(super) fn step_sample(&mut self, cycles: i32) {
-        if !self.true_on() {
+        if !self.true_enabled() {
             return;
         }
 
@@ -143,7 +143,7 @@ impl Noise {
         }
     }
 
-    pub(super) const fn true_on(&self) -> bool {
+    pub(super) const fn true_enabled(&self) -> bool {
         self.enabled && self.dac_enabled
     }
 
