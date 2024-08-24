@@ -3,8 +3,8 @@ use core::num::NonZeroU8;
 pub(super) trait SweepTrait: Default {
     fn read(&self) -> u8;
     fn write(&mut self, val: u8);
-    fn step(&mut self, freq: &mut u16, on: &mut bool);
-    fn trigger(&mut self, freq: &mut u16, on: &mut bool);
+    fn step(&mut self) -> SweepCalculationResult;
+    fn trigger(&mut self, period: u16) -> SweepCalculationResult;
 }
 
 #[derive(Clone, Copy, Default)]
@@ -28,84 +28,97 @@ impl SweepDirection {
     }
 }
 
+pub(super) enum SweepCalculationResult {
+    DisableChannel,
+    UpdatePeriod { period: u16 },
+    None,
+}
+
 pub(super) struct Sweep {
     // TODO: check on behaviour
-    on: bool,
+    enabled: bool,
     dir: SweepDirection,
 
     // between 0 and 7
     pace: u8,
     // 0 is treated as 8
-    shpc: NonZeroU8,
+    shadow_pace: NonZeroU8,
     // shift between 0 and 7
-    shift: u8,
+    individual_step: u8,
     timer: u8,
-    // Shadow frequency
-    shwf: u16,
+    // between 0 and 0x7FF
+    shadow_register: u16,
 }
 
 impl Sweep {
-    fn calculate_sweep(&mut self, freq: &mut u16, on: &mut bool) {
-        let t = self.shwf >> self.shift;
+    fn calculate_sweep(&mut self) -> SweepCalculationResult {
+        let t = self.shadow_register >> self.individual_step;
 
-        self.shwf = match self.dir {
-            SweepDirection::Sub => self.shwf - t,
-            SweepDirection::Add => self.shwf + t,
+        self.shadow_register = match self.dir {
+            SweepDirection::Sub => self.shadow_register - t,
+            SweepDirection::Add => self.shadow_register + t,
         };
 
-        if self.shwf > 0x7FF {
-            *on = false;
-            return;
+        if self.shadow_register > 0x7FF {
+            return SweepCalculationResult::DisableChannel;
         }
 
-        if self.shift != 0 {
-            *freq = self.shwf & 0x7FF;
+        if self.individual_step != 0 {
+            return SweepCalculationResult::UpdatePeriod {
+                period: self.shadow_register & 0x7FF,
+            };
         }
+
+        SweepCalculationResult::None
     }
 }
 
 impl SweepTrait for Sweep {
     fn read(&self) -> u8 {
-        0x80 | (self.pace << 4) | self.dir.to_u8() | self.shift
+        0x80 | (self.pace << 4) | self.dir.to_u8() | self.individual_step
     }
 
     fn write(&mut self, val: u8) {
         self.pace = (val >> 4) & 7;
 
         if self.pace == 0 {
-            self.on = false;
+            self.enabled = false;
         }
 
-        if self.pace != 0 && self.shpc.get() == 8 {
-            self.shpc = NonZeroU8::new(self.pace).unwrap();
+        if self.pace != 0 && self.shadow_pace.get() == 8 {
+            self.shadow_pace = NonZeroU8::new(self.pace).unwrap();
         }
 
         self.dir = SweepDirection::from_u8(val);
-        self.shift = val & 7;
+        self.individual_step = val & 7;
     }
 
-    fn step(&mut self, freq: &mut u16, on: &mut bool) {
-        if !self.on {
-            return;
+    fn step(&mut self) -> SweepCalculationResult {
+        if !self.enabled {
+            return SweepCalculationResult::None;
         }
 
         self.timer += 1;
-        if self.timer > self.shpc.get() {
+        if self.timer > self.shadow_pace.get() {
             self.timer = 0;
-            self.calculate_sweep(freq, on);
-            self.shpc = NonZeroU8::new(if self.pace == 0 { 8 } else { self.pace }).unwrap();
+            self.shadow_pace = NonZeroU8::new(if self.pace == 0 { 8 } else { self.pace }).unwrap();
+            self.calculate_sweep()
+        } else {
+            SweepCalculationResult::None
         }
     }
 
-    fn trigger(&mut self, freq: &mut u16, on: &mut bool) {
-        self.shwf = *freq;
+    fn trigger(&mut self, period: u16) -> SweepCalculationResult {
+        self.shadow_register = period;
         self.timer = 0;
         // restart
-        self.on = self.pace > 0 && self.shift != 0;
-        self.shpc = NonZeroU8::new(if self.pace == 0 { 8 } else { self.pace }).unwrap();
+        self.enabled = self.pace != 0 && self.individual_step != 0;
+        self.shadow_pace = NonZeroU8::new(if self.pace == 0 { 8 } else { self.pace }).unwrap();
 
-        if self.shift != 0 {
-            self.calculate_sweep(freq, on);
+        if self.individual_step != 0 {
+            self.calculate_sweep()
+        } else {
+            SweepCalculationResult::None
         }
     }
 }
@@ -113,13 +126,13 @@ impl SweepTrait for Sweep {
 impl Default for Sweep {
     fn default() -> Self {
         Self {
-            shpc: NonZeroU8::new(8).unwrap(),
+            shadow_pace: NonZeroU8::new(8).unwrap(),
             pace: 0,
             dir: SweepDirection::default(),
-            shift: 0,
+            individual_step: 0,
             timer: 0,
-            shwf: 0,
-            on: false,
+            shadow_register: 0,
+            enabled: false,
         }
     }
 }
@@ -131,7 +144,11 @@ impl SweepTrait for () {
 
     fn write(&mut self, _: u8) {}
 
-    fn step(&mut self, _: &mut u16, _: &mut bool) {}
+    fn step(&mut self) -> SweepCalculationResult {
+        SweepCalculationResult::None
+    }
 
-    fn trigger(&mut self, _: &mut u16, _: &mut bool) {}
+    fn trigger(&mut self, _: u16) -> SweepCalculationResult {
+        SweepCalculationResult::None
+    }
 }

@@ -2,7 +2,7 @@ use {
     crate::TC_SEC,
     length_timer::LengthTimer,
     noise::Noise,
-    square::{Square1, Square2},
+    square::Square,
     sweep::{Sweep, SweepTrait},
     wave::Wave,
     wave_length::WaveLength,
@@ -23,7 +23,7 @@ pub trait AudioCallback {
 }
 
 #[derive(Clone, Copy, Default)]
-enum PHalf {
+enum PeriodHalf {
     #[default]
     First,
     Second,
@@ -33,14 +33,14 @@ enum PHalf {
 pub struct Apu<C: AudioCallback> {
     nr51: u8,
 
-    on: bool,
+    enabled: bool,
     r_vol: u8,
     l_vol: u8,
     r_vin: bool,
     l_vin: bool,
 
-    ch1: Square1,
-    ch2: Square2,
+    ch1: Square<Sweep>,
+    ch2: Square<()>,
     ch3: Wave,
     ch4: Noise,
 
@@ -61,13 +61,13 @@ impl<C: AudioCallback> Apu<C> {
             ext_sample_period: Self::sample_period_from_rate(sample_rate),
             audio_callback,
             nr51: 0,
-            on: false,
+            enabled: false,
             r_vol: 0,
             l_vol: 0,
             r_vin: false,
             l_vin: false,
-            ch1: Square1::default(),
-            ch2: Square2::default(),
+            ch1: Square::default(),
+            ch2: Square::default(),
             ch3: Wave::default(),
             ch4: Noise::default(),
             div_divider: 0,
@@ -91,10 +91,10 @@ impl<C: AudioCallback> Apu<C> {
 
             for i in 0..4 {
                 let out = match i {
-                    0 => apu.ch1.out() * u8::from(apu.ch1.true_on()),
-                    1 => apu.ch2.out() * u8::from(apu.ch2.true_on()),
-                    2 => apu.ch3.out() * u8::from(apu.ch3.true_on()),
-                    3 => apu.ch4.out() * u8::from(apu.ch4.true_on()),
+                    0 => apu.ch1.output() * u8::from(apu.ch1.true_enabled()),
+                    1 => apu.ch2.output() * u8::from(apu.ch2.true_enabled()),
+                    2 => apu.ch3.output() * u8::from(apu.ch3.true_on()),
+                    3 => apu.ch4.output() * u8::from(apu.ch4.true_on()),
                     _ => break,
                 };
 
@@ -120,7 +120,7 @@ impl<C: AudioCallback> Apu<C> {
             (l, r)
         }
 
-        if self.on {
+        if self.enabled {
             self.ch1.step_sample(cycles);
             self.ch2.step_sample(cycles);
             self.ch3.step_sample(cycles);
@@ -131,7 +131,7 @@ impl<C: AudioCallback> Apu<C> {
         while self.render_timer >= self.ext_sample_period {
             self.render_timer -= self.ext_sample_period;
 
-            if self.on {
+            if self.enabled {
                 let (l, r) = mix_and_render(self);
                 let (l, r) = self.high_pass(l, r);
 
@@ -146,7 +146,7 @@ impl<C: AudioCallback> Apu<C> {
         let mut outl = 0.0;
         let mut outr = 0.0;
 
-        if self.ch1.on() || self.ch2.on() || self.ch3.on() || self.ch4.on() {
+        if self.ch1.enabled() || self.ch2.enabled() || self.ch3.enabled() || self.ch4.enabled() {
             outl = l - self.capacitor_l;
             outr = r - self.capacitor_r;
 
@@ -157,8 +157,8 @@ impl<C: AudioCallback> Apu<C> {
         (outl, outr)
     }
 
-    pub fn step_seq(&mut self) {
-        fn set_period_half<C1: AudioCallback>(apu: &mut Apu<C1>, p_half: PHalf) {
+    pub fn step_div_apu(&mut self) {
+        fn set_period_half<C1: AudioCallback>(apu: &mut Apu<C1>, p_half: PeriodHalf) {
             apu.ch1.set_period_half(p_half);
             apu.ch2.set_period_half(p_half);
             apu.ch3.set_period_half(p_half);
@@ -173,20 +173,20 @@ impl<C: AudioCallback> Apu<C> {
         self.div_divider = self.div_divider.wrapping_add(1);
 
         if self.div_divider & 7 == 7 {
-            self.ch1.step_env();
-            self.ch2.step_env();
-            self.ch4.step_env();
+            self.ch1.step_envelope();
+            self.ch2.step_envelope();
+            self.ch4.step_envelope();
         }
 
         if self.div_divider & 1 == 1 {
-            self.ch1.step_len();
-            self.ch2.step_len();
-            self.ch3.step_len();
-            self.ch4.step_len();
+            self.ch1.step_length_timer();
+            self.ch2.step_length_timer();
+            self.ch3.step_length_timer();
+            self.ch4.step_length_timer();
 
-            set_period_half(self, PHalf::First);
+            set_period_half(self, PeriodHalf::First);
         } else {
-            set_period_half(self, PHalf::Second);
+            set_period_half(self, PeriodHalf::Second);
         }
 
         if self.div_divider & 3 == 3 {
@@ -211,16 +211,16 @@ impl<C: AudioCallback> Apu<C> {
     pub const fn read_nr52(&self) -> u8 {
         // println!("read nr52, ch2: {}", self.ch1.on());
 
-        (self.on as u8) << 7
+        (self.enabled as u8) << 7
             | 0x70
-            | (self.ch4.on() as u8) << 3
-            | (self.ch3.on() as u8) << 2
-            | (self.ch2.on() as u8) << 1
-            | (self.ch1.on() as u8)
+            | (self.ch4.enabled() as u8) << 3
+            | (self.ch3.enabled() as u8) << 2
+            | (self.ch2.enabled() as u8) << 1
+            | (self.ch1.enabled() as u8)
     }
 
     pub fn write_nr50(&mut self, val: u8) {
-        if self.on {
+        if self.enabled {
             self.r_vol = val & 7;
             self.r_vin = val & 8 != 0;
             self.l_vol = (val >> 4) & 7;
@@ -229,106 +229,108 @@ impl<C: AudioCallback> Apu<C> {
     }
 
     pub fn write_nr51(&mut self, val: u8) {
-        if self.on {
+        if self.enabled {
             self.nr51 = val;
         }
     }
 
     pub fn write_nr52(&mut self, val: u8) {
-        self.on = val & 0x80 != 0;
+        self.enabled = val & 0x80 != 0;
 
-        if !self.on {
+        if !self.enabled {
             // reset
             self.render_timer = 0;
-            self.ch1 = Square1::default();
-            self.ch2 = Square2::default();
-            self.ch3.reset();
-            self.ch4 = Noise::default();
+            self.div_divider = 0;
             self.l_vol = 0;
             self.l_vin = false;
             self.r_vol = 0;
             self.r_vin = false;
+
+            // reset registers
+            self.ch1 = Square::default();
+            self.ch2 = Square::default();
+            self.ch3.reset();
+            self.ch4 = Noise::default();
             self.nr51 = 0;
-            self.div_divider = 0;
         }
     }
 
-    pub const fn on(&self) -> bool {
-        self.on
+    pub const fn enabled(&self) -> bool {
+        self.enabled
     }
 
     pub const fn pcm12(&self) -> u8 {
-        self.ch1.out() | (self.ch2.out() << 4)
+        self.ch1.output() | (self.ch2.output() << 4)
     }
 
     pub const fn pcm34(&self) -> u8 {
-        self.ch3.out() | (self.ch4.out() << 4)
+        self.ch3.output() | (self.ch4.output() << 4)
     }
 
     // Channel 1 IO
     pub fn read_nr10(&self) -> u8 {
-        self.ch1.read_nr10()
+        self.ch1.read_nrx0()
     }
 
     pub const fn read_nr11(&self) -> u8 {
-        self.ch1.read_nr11()
+        self.ch1.read_nrx1()
     }
 
     pub const fn read_nr12(&self) -> u8 {
-        self.ch1.read_nr12()
+        self.ch1.read_nrx2()
     }
 
     pub fn read_nr14(&self) -> u8 {
-        self.ch1.read_nr14()
+        self.ch1.read_nrx4()
     }
 
     pub fn write_nr10(&mut self, val: u8) {
-        self.ch1.write_nr10(val);
+        self.ch1.write_nrx0(val);
     }
 
     pub fn write_nr11(&mut self, val: u8) {
-        self.ch1.write_nr11(val);
+        self.ch1.write_nrx1(val);
     }
 
     pub fn write_nr12(&mut self, val: u8) {
-        self.ch1.write_nr12(val);
+        self.ch1.write_nrx2(val);
     }
 
     pub fn write_nr13(&mut self, val: u8) {
-        self.ch1.write_nr13(val);
+        self.ch1.write_nrx3(val);
     }
 
     pub fn write_nr14(&mut self, val: u8) {
-        self.ch1.write_nr14(val);
+        self.ch1.write_nrx4(val);
     }
 
     // Channel 2 IO
     pub const fn read_nr21(&self) -> u8 {
-        self.ch2.read_nr21()
+        self.ch2.read_nrx1()
     }
 
     pub const fn read_nr22(&self) -> u8 {
-        self.ch2.read_nr22()
+        self.ch2.read_nrx2()
     }
 
     pub fn read_nr24(&self) -> u8 {
-        self.ch2.read_nr24()
+        self.ch2.read_nrx4()
     }
 
     pub fn write_nr21(&mut self, val: u8) {
-        self.ch2.write_nr21(val);
+        self.ch2.write_nrx1(val);
     }
 
     pub fn write_nr22(&mut self, val: u8) {
-        self.ch2.write_nr22(val);
+        self.ch2.write_nrx2(val);
     }
 
     pub fn write_nr23(&mut self, val: u8) {
-        self.ch2.write_nr23(val);
+        self.ch2.write_nrx3(val);
     }
 
     pub fn write_nr24(&mut self, val: u8) {
-        self.ch2.write_nr24(val);
+        self.ch2.write_nrx4(val);
     }
 
     // Channel 3 IO

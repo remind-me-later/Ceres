@@ -1,16 +1,16 @@
 #[derive(Clone, Copy, Default)]
 enum EnvelopeDirection {
     #[default]
-    Dec = 0,
-    Inc = 1,
+    Decrease = 0,
+    Increase = 1,
 }
 
 impl EnvelopeDirection {
     const fn from_u8(val: u8) -> Self {
         if val & 8 == 0 {
-            Self::Dec
+            Self::Decrease
         } else {
-            Self::Inc
+            Self::Increase
         }
     }
 
@@ -21,12 +21,12 @@ impl EnvelopeDirection {
 
 #[derive(Default)]
 pub(super) struct Envelope {
-    on: bool,
-    dir: EnvelopeDirection,
+    enabled: bool,
+    direction: EnvelopeDirection,
 
     // between 0 and F
-    vol: u8,
-    vol_init: u8,
+    volume: u8,
+    initial_volume: u8,
 
     period: u8,
     timer: u8,
@@ -34,28 +34,30 @@ pub(super) struct Envelope {
 
 impl Envelope {
     pub(super) const fn read(&self) -> u8 {
-        self.vol_init << 4 | self.dir.to_u8() | self.period
+        self.initial_volume << 4 | self.direction.to_u8() | self.period
     }
 
     pub(super) fn write(&mut self, val: u8) {
         self.period = val & 7;
-        self.on = self.period != 0;
+        self.enabled = self.period != 0;
 
         self.timer = 0;
-        self.dir = EnvelopeDirection::from_u8(val);
-        self.vol_init = val >> 4;
-        self.vol = self.vol_init;
+        self.direction = EnvelopeDirection::from_u8(val);
+        self.initial_volume = val >> 4;
+        self.volume = self.initial_volume;
     }
 
     pub(super) fn step(&mut self) {
-        use EnvelopeDirection::{Dec, Inc};
+        use EnvelopeDirection::{Decrease, Increase};
 
-        if !self.on {
+        if !self.enabled {
             return;
         }
 
-        if matches!(self.dir, Inc) && self.vol == 0xF || matches!(self.dir, Dec) && self.vol == 0 {
-            self.on = false;
+        if matches!(self.direction, Increase) && self.volume == 0xF
+            || matches!(self.direction, Decrease) && self.volume == 0
+        {
+            self.enabled = false;
             return;
         }
 
@@ -64,19 +66,19 @@ impl Envelope {
         if self.timer > self.period {
             self.timer = 0;
 
-            match self.dir {
-                Inc => self.vol += 1,
-                Dec => self.vol -= 1,
+            match self.direction {
+                Increase => self.volume += 1,
+                Decrease => self.volume -= 1,
             }
         }
     }
 
     pub(super) fn trigger(&mut self) {
         self.timer = 0;
-        self.vol = self.vol_init;
+        self.volume = self.initial_volume;
     }
 
-    pub(super) const fn vol(&self) -> u8 {
-        self.vol
+    pub(super) const fn volume(&self) -> u8 {
+        self.volume
     }
 }

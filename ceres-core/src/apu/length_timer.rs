@@ -1,55 +1,66 @@
-use super::PHalf;
+use super::PeriodHalf;
+
+pub(super) enum LengthTimerCalculationResult {
+    DisableChannel,
+    None,
+}
 
 // LEN_MASK is the maximum length of the timer, 0x3F for all channels except wave, which is 0xFF
 #[derive(Default)]
-pub(super) struct LengthTimer<const LEN_MASK: u8> {
-    on: bool,
-    len: u8,
-    p_half: PHalf,
+pub(super) struct LengthTimer<const LENGTH_TIMER_MASK: u8> {
+    enabled: bool,
+    length: u8,
+    period_half: PeriodHalf,
     carry: bool,
 }
 
-impl<const LEN_MASK: u8> LengthTimer<LEN_MASK> {
-    pub(super) fn read_on(&self) -> u8 {
-        u8::from(self.on) << 6
+impl<const LENGTH_TIMER_MASK: u8> LengthTimer<LENGTH_TIMER_MASK> {
+    pub(super) fn read_enabled(&self) -> u8 {
+        u8::from(self.enabled) << 6
     }
 
-    pub(super) fn write_on(&mut self, val: u8, on: &mut bool) {
-        let was_off = !self.on;
-        self.on = val & 0x40 != 0;
+    pub(super) fn write_enabled(&mut self, val: u8) -> LengthTimerCalculationResult {
+        let was_disabled = !self.enabled;
+        self.enabled = val & 0x40 != 0;
 
-        if was_off && matches!(self.p_half, PHalf::First) {
-            self.step(on);
+        if was_disabled && matches!(self.period_half, PeriodHalf::First) {
+            self.step()
+        } else {
+            LengthTimerCalculationResult::None
         }
     }
 
     pub(super) fn write_len(&mut self, val: u8) {
-        self.len = val & LEN_MASK;
+        self.length = val & LENGTH_TIMER_MASK;
         self.carry = false;
     }
 
-    pub(super) fn trigger(&mut self, on: &mut bool) {
+    pub(super) fn trigger(&mut self) -> LengthTimerCalculationResult {
         if self.carry {
-            self.len = 0;
+            self.length = 0;
             self.carry = false;
-            if matches!(self.p_half, PHalf::First) {
-                self.step(on);
+            if matches!(self.period_half, PeriodHalf::First) {
+                return self.step();
             }
         }
+
+        LengthTimerCalculationResult::None
     }
 
-    pub(super) fn step(&mut self, on: &mut bool) {
-        if self.on {
-            if self.len == LEN_MASK {
-                *on = false;
+    pub(super) fn step(&mut self) -> LengthTimerCalculationResult {
+        if self.enabled {
+            if self.length == LENGTH_TIMER_MASK {
                 self.carry = true;
+                return LengthTimerCalculationResult::DisableChannel;
             } else {
-                self.len += 1;
+                self.length += 1;
             }
         }
+
+        LengthTimerCalculationResult::None
     }
 
-    pub(super) fn set_phalf(&mut self, p_half: PHalf) {
-        self.p_half = p_half;
+    pub(super) fn set_phalf(&mut self, p_half: PeriodHalf) {
+        self.period_half = p_half;
     }
 }

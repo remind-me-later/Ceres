@@ -1,6 +1,9 @@
 use {
-    super::{LengthTimer, WaveLength},
-    crate::apu::PHalf,
+    super::{
+        length_timer::LengthTimerCalculationResult, wave_length::WaveLengthCalculationResult,
+        LengthTimer, WaveLength,
+    },
+    crate::apu::PeriodHalf,
 };
 
 const RAM_LEN: u8 = 0x10;
@@ -8,16 +11,16 @@ const SAMPLE_LEN: u8 = RAM_LEN * 2;
 
 #[derive(Default)]
 pub(super) struct Wave {
-    ltim: LengthTimer<0xFF>,
-    wl: WaveLength<2, ()>,
+    length_timer: LengthTimer<0xFF>,
+    wave_length: WaveLength<2, ()>,
 
-    on: bool,
-    dac_on: bool,
-    sample_buf: u8,
+    enabled: bool,
+    dac_enabled: bool,
+    sample_buffer: u8,
     ram: [u8; RAM_LEN as usize],
     samples: [u8; SAMPLE_LEN as usize],
-    sample_idx: u8,
-    vol: u8,
+    sample_index: u8,
+    volume: u8,
     nr30: u8,
 }
 
@@ -40,82 +43,105 @@ impl Wave {
     }
 
     pub(super) const fn read_nr32(&self) -> u8 {
-        0x9F | (self.vol << 5)
+        0x9F | (self.volume << 5)
     }
 
     pub(super) fn read_nr34(&self) -> u8 {
-        0xBF | self.ltim.read_on()
+        0xBF | self.length_timer.read_enabled()
     }
 
     pub(super) fn write_nr30(&mut self, val: u8) {
         self.nr30 = val;
         if val & 0x80 == 0 {
-            self.on = false;
-            self.dac_on = false;
+            self.enabled = false;
+            self.dac_enabled = false;
         } else {
-            self.dac_on = true;
+            self.dac_enabled = true;
         }
     }
 
     pub(super) fn write_nr31(&mut self, val: u8) {
-        self.ltim.write_len(val);
+        self.length_timer.write_len(val);
     }
 
     pub(super) fn write_nr32(&mut self, val: u8) {
-        self.vol = (val >> 5) & 3;
+        self.volume = (val >> 5) & 3;
     }
 
     pub(super) fn write_nr33(&mut self, val: u8) {
-        self.wl.write_low(val);
+        self.wave_length.write_low(val);
     }
 
     pub(super) fn write_nr34(&mut self, val: u8) {
-        self.wl.write_high(val);
-        self.ltim.write_on(val, &mut self.on);
+        self.wave_length.write_high(val);
+
+        if matches!(
+            self.length_timer.write_enabled(val),
+            LengthTimerCalculationResult::DisableChannel
+        ) {
+            self.enabled = false;
+        }
 
         // trigger
         if val & 0x80 != 0 {
-            if self.dac_on {
-                self.on = true;
+            if self.dac_enabled {
+                self.enabled = true;
             }
 
-            self.ltim.trigger(&mut self.on);
-            self.wl.trigger(&mut self.on);
-            self.sample_idx = 0;
+            if matches!(
+                self.length_timer.trigger(),
+                LengthTimerCalculationResult::DisableChannel
+            ) {
+                self.enabled = false;
+            }
+
+            if matches!(
+                self.wave_length.trigger(),
+                WaveLengthCalculationResult::DisableChannel
+            ) {
+                self.enabled = false;
+            }
+
+            self.sample_index = 0;
         }
     }
 
-    pub(super) const fn out(&self) -> u8 {
+    pub(super) const fn output(&self) -> u8 {
         // wrapping_shr is necessary because (vol - 1) can be -1
-        self.sample_buf
-            .wrapping_shr(self.vol.wrapping_sub(1) as u32)
+        self.sample_buffer
+            .wrapping_shr(self.volume.wrapping_sub(1) as u32)
     }
 
     pub(super) fn step_sample(&mut self, cycles: i32) {
-        if !self.on() {
+        if !self.enabled() {
             return;
         }
 
-        if self.wl.step(cycles) {
-            self.sample_idx = (self.sample_idx + 1) & (SAMPLE_LEN - 1);
-            self.sample_buf = self.samples[self.sample_idx as usize];
+        if self.wave_length.step(cycles) {
+            self.sample_index = (self.sample_index + 1) & (SAMPLE_LEN - 1);
+            self.sample_buffer = self.samples[self.sample_index as usize];
         }
     }
 
     pub(super) const fn true_on(&self) -> bool {
-        self.on && self.dac_on
+        self.enabled && self.dac_enabled
     }
 
-    pub(super) fn step_len(&mut self) {
-        self.ltim.step(&mut self.on);
+    pub(super) fn step_length_timer(&mut self) {
+        if matches!(
+            self.length_timer.step(),
+            LengthTimerCalculationResult::DisableChannel
+        ) {
+            self.enabled = false;
+        }
     }
 
-    pub(super) fn set_period_half(&mut self, p_half: PHalf) {
-        self.ltim.set_phalf(p_half);
+    pub(super) fn set_period_half(&mut self, p_half: PeriodHalf) {
+        self.length_timer.set_phalf(p_half);
     }
 
-    pub(super) const fn on(&self) -> bool {
-        self.on
+    pub(super) const fn enabled(&self) -> bool {
+        self.enabled
     }
 
     // Necessary because powering off the APU doesn't clear the wave RAM

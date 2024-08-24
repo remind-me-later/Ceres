@@ -80,7 +80,7 @@ impl<A: AudioCallback> Gb<A> {
 
         // advance APU on falling edge of APU_DIV bit
         if triggers & apu_bit != 0 {
-            self.apu.step_seq();
+            self.apu.step_div_apu();
         }
 
         self.div = val;

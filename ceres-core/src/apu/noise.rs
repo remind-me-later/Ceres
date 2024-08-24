@@ -1,35 +1,35 @@
 use {
-    super::envelope::Envelope,
-    crate::apu::{LengthTimer, PHalf},
+    super::{envelope::Envelope, length_timer::LengthTimerCalculationResult},
+    crate::apu::{LengthTimer, PeriodHalf},
 };
 
 pub(super) struct Noise {
-    ltimer: LengthTimer<0x3F>,
-    env: Envelope,
+    length_timer: LengthTimer<0x3F>,
+    envelope: Envelope,
 
-    on: bool,
-    dac_on: bool,
+    enabled: bool,
+    dac_enabled: bool,
     timer: i32,
     timer_period: u16,
     // linear feedback shift register
     lfsr: u16,
     wide_step: bool,
-    out: u8,
+    output: u8,
     nr43: u8,
 }
 
 impl Default for Noise {
     fn default() -> Self {
         Self {
-            on: false,
-            dac_on: false,
-            ltimer: LengthTimer::default(),
-            env: Envelope::default(),
+            enabled: false,
+            dac_enabled: false,
+            length_timer: LengthTimer::default(),
+            envelope: Envelope::default(),
             timer: 1,
             timer_period: 0,
             lfsr: 0x7FFF,
             wide_step: false,
-            out: 0,
+            output: 0,
             nr43: 0,
         }
     }
@@ -37,7 +37,7 @@ impl Default for Noise {
 
 impl Noise {
     pub(super) const fn read_nr42(&self) -> u8 {
-        self.env.read()
+        self.envelope.read()
     }
 
     pub(super) const fn read_nr43(&self) -> u8 {
@@ -45,22 +45,22 @@ impl Noise {
     }
 
     pub(super) fn read_nr44(&self) -> u8 {
-        0xBF | self.ltimer.read_on()
+        0xBF | self.length_timer.read_enabled()
     }
 
     pub(super) fn write_nr41(&mut self, val: u8) {
-        self.ltimer.write_len(val);
+        self.length_timer.write_len(val);
     }
 
     pub(super) fn write_nr42(&mut self, val: u8) {
         if val & 0xF8 == 0 {
-            self.on = false;
-            self.dac_on = false;
+            self.enabled = false;
+            self.dac_enabled = false;
         } else {
-            self.dac_on = true;
+            self.dac_enabled = true;
         }
 
-        self.env.write(val);
+        self.envelope.write(val);
     }
 
     pub(super) fn write_nr43(&mut self, val: u8) {
@@ -84,32 +84,42 @@ impl Noise {
     }
 
     pub(super) fn write_nr44(&mut self, val: u8) {
-        self.ltimer.write_on(val, &mut self.on);
+        if matches!(
+            self.length_timer.write_enabled(val),
+            LengthTimerCalculationResult::DisableChannel
+        ) {
+            self.enabled = false;
+        }
 
         // trigger
         if val & 0x80 != 0 {
-            if self.dac_on {
-                self.on = true;
+            if self.dac_enabled {
+                self.enabled = true;
             }
 
-            self.ltimer.trigger(&mut self.on);
+            if matches!(
+                self.length_timer.trigger(),
+                LengthTimerCalculationResult::DisableChannel
+            ) {
+                self.enabled = false;
+            }
 
             self.timer = i32::from(self.timer_period);
             self.lfsr = 0x7FFF;
-            self.env.trigger();
+            self.envelope.trigger();
         }
     }
 
-    pub(super) const fn out(&self) -> u8 {
-        self.out * self.env.vol()
+    pub(super) const fn output(&self) -> u8 {
+        self.output * self.envelope.volume()
     }
 
-    pub(super) fn step_env(&mut self) {
-        if !self.on {
+    pub(super) fn step_envelope(&mut self) {
+        if !self.enabled {
             return;
         }
 
-        self.env.step();
+        self.envelope.step();
     }
 
     pub(super) fn step_sample(&mut self, cycles: i32) {
@@ -129,23 +139,28 @@ impl Noise {
                 self.lfsr |= xor_bit << 6;
             }
 
-            self.out = u8::from(self.lfsr & 1 == 0);
+            self.output = u8::from(self.lfsr & 1 == 0);
         }
     }
 
     pub(super) const fn true_on(&self) -> bool {
-        self.on && self.dac_on
+        self.enabled && self.dac_enabled
     }
 
-    pub(super) fn step_len(&mut self) {
-        self.ltimer.step(&mut self.on);
+    pub(super) fn step_length_timer(&mut self) {
+        if matches!(
+            self.length_timer.step(),
+            LengthTimerCalculationResult::DisableChannel
+        ) {
+            self.enabled = false;
+        }
     }
 
-    pub(super) fn set_period_half(&mut self, p_half: PHalf) {
-        self.ltimer.set_phalf(p_half);
+    pub(super) fn set_period_half(&mut self, p_half: PeriodHalf) {
+        self.length_timer.set_phalf(p_half);
     }
 
-    pub(super) const fn on(&self) -> bool {
-        self.on
+    pub(super) const fn enabled(&self) -> bool {
+        self.enabled
     }
 }

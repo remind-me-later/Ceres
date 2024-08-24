@@ -1,16 +1,21 @@
-use super::SweepTrait;
+use super::{sweep::SweepCalculationResult, SweepTrait};
 
-pub(super) struct WaveLength<const PERIOD_MUL: u16, S: SweepTrait> {
-    period: i32,
-    freq: u16, // 11 bit
-    sweep: S,
+pub(super) enum WaveLengthCalculationResult {
+    DisableChannel,
+    None,
 }
 
-impl<const PERIOD_MUL: u16, S: SweepTrait> Default for WaveLength<PERIOD_MUL, S> {
+pub(super) struct WaveLength<const PERIOD_MULTIPLIER: u16, Sweep: SweepTrait> {
+    timer: i32,
+    period: u16, // 11 bit
+    sweep: Sweep,
+}
+
+impl<const PERIOD_MULTIPLIER: u16, S: SweepTrait> Default for WaveLength<PERIOD_MULTIPLIER, S> {
     fn default() -> Self {
         Self {
-            period: Self::calc_period(0),
-            freq: 0,
+            timer: Self::calc_period(0),
+            period: 0,
             sweep: S::default(),
         }
     }
@@ -26,31 +31,45 @@ impl<const PERIOD_MUL: u16, S: SweepTrait> WaveLength<PERIOD_MUL, S> {
     }
 
     pub(super) fn write_low(&mut self, val: u8) {
-        self.freq = (self.freq & 0x700) | u16::from(val);
+        self.period = (self.period & 0x700) | u16::from(val);
     }
 
     pub(super) fn write_high(&mut self, val: u8) {
-        self.freq = (u16::from(val) & 7) << 8 | (self.freq & 0xFF);
+        self.period = (u16::from(val) & 7) << 8 | (self.period & 0xFF);
     }
 
-    pub(super) fn trigger(&mut self, on: &mut bool) {
-        self.period = Self::calc_period(self.freq);
-        self.sweep.trigger(&mut self.freq, on);
+    pub(super) fn trigger(&mut self) -> WaveLengthCalculationResult {
+        self.timer = Self::calc_period(self.period);
+        match self.sweep.trigger(self.period) {
+            SweepCalculationResult::DisableChannel => WaveLengthCalculationResult::DisableChannel,
+            SweepCalculationResult::UpdatePeriod { period } => {
+                self.period = period;
+                WaveLengthCalculationResult::None
+            }
+            SweepCalculationResult::None => WaveLengthCalculationResult::None,
+        }
     }
 
     pub(super) fn step(&mut self, t_cycles: i32) -> bool {
-        self.period -= t_cycles;
+        self.timer -= t_cycles;
 
-        if self.period < 0 {
-            self.period += Self::calc_period(self.freq);
+        if self.timer < 0 {
+            self.timer += Self::calc_period(self.period);
             return true;
         }
 
         false
     }
 
-    pub(super) fn step_sweep(&mut self, on: &mut bool) {
-        self.sweep.step(&mut self.freq, on);
+    pub(super) fn step_sweep(&mut self) -> WaveLengthCalculationResult {
+        match self.sweep.step() {
+            SweepCalculationResult::DisableChannel => WaveLengthCalculationResult::DisableChannel,
+            SweepCalculationResult::UpdatePeriod { period } => {
+                self.period = period;
+                WaveLengthCalculationResult::None
+            }
+            SweepCalculationResult::None => WaveLengthCalculationResult::None,
+        }
     }
 
     const fn calc_period(freq: u16) -> i32 {
