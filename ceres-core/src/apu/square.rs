@@ -1,15 +1,15 @@
 use {
     super::{
         envelope::Envelope, length_timer::LengthTimerCalculationResult,
-        wave_length::WaveLengthCalculationResult, SweepTrait,
+        period_counter::PeriodCalculationResult, SweepTrait,
     },
-    crate::apu::{LengthTimer, PeriodHalf, WaveLength},
+    crate::apu::{LengthTimer, PeriodCounter, PeriodHalf},
 };
 
 #[derive(Default)]
 pub(super) struct Square<Sweep: SweepTrait> {
     length_timer: LengthTimer<0x3F>,
-    wave_length: WaveLength<4, Sweep>,
+    period_counter: PeriodCounter<4, Sweep>,
     envelope: Envelope,
 
     enabled: bool,
@@ -22,7 +22,7 @@ pub(super) struct Square<Sweep: SweepTrait> {
 
 impl<S: SweepTrait> Square<S> {
     pub(super) fn read_nrx0(&self) -> u8 {
-        self.wave_length.read_sweep()
+        self.period_counter.read_sweep()
     }
 
     pub(super) const fn read_nrx1(&self) -> u8 {
@@ -38,7 +38,7 @@ impl<S: SweepTrait> Square<S> {
     }
 
     pub(super) fn write_nrx0(&mut self, val: u8) {
-        self.wave_length.write_sweep(val);
+        self.period_counter.write_sweep(val);
     }
 
     pub(super) fn write_nrx1(&mut self, val: u8) {
@@ -58,11 +58,11 @@ impl<S: SweepTrait> Square<S> {
     }
 
     pub(super) fn write_nrx3(&mut self, val: u8) {
-        self.wave_length.write_low(val);
+        self.period_counter.write_low(val);
     }
 
     pub(super) fn write_nrx4(&mut self, val: u8) {
-        self.wave_length.write_high(val);
+        self.period_counter.write_high(val);
         if matches!(
             self.length_timer.write_enabled(val),
             LengthTimerCalculationResult::DisableChannel
@@ -79,8 +79,8 @@ impl<S: SweepTrait> Square<S> {
             self.envelope.trigger();
 
             if matches!(
-                self.wave_length.trigger(),
-                WaveLengthCalculationResult::DisableChannel
+                self.period_counter.trigger(),
+                PeriodCalculationResult::DisableChannel
             ) {
                 self.enabled = false;
             }
@@ -107,7 +107,7 @@ impl<S: SweepTrait> Square<S> {
             return;
         }
 
-        if self.wave_length.step(cycles) {
+        if self.period_counter.step(cycles) {
             self.duty_bit = (self.duty_bit + 1) & 7;
             self.output = u8::from((DUTY_WAV[self.duty as usize] & (1 << self.duty_bit)) != 0);
         }
@@ -116,8 +116,8 @@ impl<S: SweepTrait> Square<S> {
     pub(super) fn step_sweep(&mut self) {
         if self.enabled
             && matches!(
-                self.wave_length.step_sweep(),
-                WaveLengthCalculationResult::DisableChannel
+                self.period_counter.step_sweep(),
+                PeriodCalculationResult::DisableChannel
             )
         {
             self.enabled = false;

@@ -1,7 +1,7 @@
 use {
     super::{
-        length_timer::LengthTimerCalculationResult, wave_length::WaveLengthCalculationResult,
-        LengthTimer, WaveLength,
+        length_timer::LengthTimerCalculationResult, period_counter::PeriodCalculationResult,
+        LengthTimer, PeriodCounter,
     },
     crate::apu::PeriodHalf,
 };
@@ -12,7 +12,7 @@ const SAMPLE_LEN: u8 = RAM_LEN * 2;
 #[derive(Default)]
 pub(super) struct Wave {
     length_timer: LengthTimer<0xFF>,
-    wave_length: WaveLength<2, ()>,
+    period_counter: PeriodCounter<2, ()>,
 
     enabled: bool,
     dac_enabled: bool,
@@ -69,11 +69,11 @@ impl Wave {
     }
 
     pub(super) fn write_nr33(&mut self, val: u8) {
-        self.wave_length.write_low(val);
+        self.period_counter.write_low(val);
     }
 
     pub(super) fn write_nr34(&mut self, val: u8) {
-        self.wave_length.write_high(val);
+        self.period_counter.write_high(val);
 
         if matches!(
             self.length_timer.write_enabled(val),
@@ -96,8 +96,8 @@ impl Wave {
             }
 
             if matches!(
-                self.wave_length.trigger(),
-                WaveLengthCalculationResult::DisableChannel
+                self.period_counter.trigger(),
+                PeriodCalculationResult::DisableChannel
             ) {
                 self.enabled = false;
             }
@@ -117,7 +117,7 @@ impl Wave {
             return;
         }
 
-        if self.wave_length.step(cycles) {
+        if self.period_counter.step(cycles) {
             self.sample_index = (self.sample_index + 1) & (SAMPLE_LEN - 1);
             self.sample_buffer = self.samples[self.sample_index as usize];
         }

@@ -2,19 +2,19 @@ use {
     crate::TC_SEC,
     length_timer::LengthTimer,
     noise::Noise,
+    period_counter::PeriodCounter,
     square::Square,
     sweep::{Sweep, SweepTrait},
     wave::Wave,
-    wave_length::WaveLength,
 };
 
 mod envelope;
 mod length_timer;
 mod noise;
+mod period_counter;
 mod square;
 mod sweep;
 mod wave;
-mod wave_length;
 
 pub type Sample = f32;
 
