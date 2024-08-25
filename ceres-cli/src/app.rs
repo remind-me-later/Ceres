@@ -19,6 +19,7 @@ use glutin::{
 use glutin_winit::GlWindow;
 use std::sync::RwLock;
 use std::time::Instant;
+use thread_priority::ThreadBuilderExt;
 use winit::{
     dpi::PhysicalSize,
     event::{KeyEvent, WindowEvent},
@@ -205,8 +206,13 @@ impl App {
             exit: Arc<AtomicBool>,
             pause_thread: Arc<AtomicBool>,
         ) {
-            while !exit.load(Relaxed) {
+            loop {
                 let begin = std::time::Instant::now();
+
+                if exit.load(Relaxed) {
+                    break;
+                }
+
                 let mut duration = ceres_core::FRAME_DURATION;
 
                 if !pause_thread.load(Relaxed) {
@@ -228,20 +234,28 @@ impl App {
             drop(pause_thread);
         }
 
-        let audio = audio::Renderer::new()?;
+        let exit = Arc::new(AtomicBool::new(false));
+        let pause_thread = Arc::new(AtomicBool::new(true));
+
+        let audio = {
+            let exit = Arc::clone(&exit);
+            audio::Renderer::new(exit)?
+        };
         let ring_buffer = audio.get_ring_buffer();
 
         let gb = Arc::new(RwLock::new(init_gb(model, &rom_path, ring_buffer)?));
 
-        let exit = Arc::new(AtomicBool::new(false));
-        let pause_thread = Arc::new(AtomicBool::new(true));
+        let thread_builder = std::thread::Builder::new().name("gb_loop".to_string());
 
         let thread_handle = {
             let gb = Arc::clone(&gb);
             let exit = Arc::clone(&exit);
             let pause_thread = Arc::clone(&pause_thread);
 
-            std::thread::spawn(move || gb_loop(gb, exit, pause_thread))
+            // std::thread::spawn(move || gb_loop(gb, exit, pause_thread))
+            thread_builder.spawn_with_priority(thread_priority::ThreadPriority::Max, move |_| {
+                gb_loop(gb, exit, pause_thread)
+            })?
         };
 
         Ok(Self {

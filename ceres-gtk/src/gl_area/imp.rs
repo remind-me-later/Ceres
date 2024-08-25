@@ -69,18 +69,19 @@ impl ObjectSubclass for GlArea {
             pause_thread: Arc<AtomicBool>,
         ) {
             while !exit.load(Relaxed) {
+                let mut duration = ceres_core::FRAME_DURATION;
                 let begin = std::time::Instant::now();
 
                 if !pause_thread.load(Relaxed) {
                     if let Ok(mut gb) = gb.lock() {
-                        gb.run_frame();
+                        duration = gb.run_frame();
                     }
                 }
 
                 let elapsed = begin.elapsed();
 
-                if elapsed < ceres_core::FRAME_DURATION {
-                    spin_sleep::sleep(ceres_core::FRAME_DURATION - elapsed);
+                if elapsed < duration {
+                    spin_sleep::sleep(duration - elapsed);
                 }
             }
         }

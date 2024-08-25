@@ -78,8 +78,8 @@ impl<C: AudioCallback> Apu<C> {
     }
 
     fn sample_period_from_rate(sample_rate: i32) -> f32 {
-        // Run at 59.7 hz even if we have to skip frames
-        (TC_SEC as f32 / sample_rate as f32) * (59.7 / 60.0)
+        // Add an error margin of 0.998 to avoid buffer underruns
+        (TC_SEC as f32 / sample_rate as f32) * 0.998
     }
 
     pub fn run(&mut self, cycles: i32) {
@@ -129,14 +129,10 @@ impl<C: AudioCallback> Apu<C> {
         while self.render_timer >= self.ext_sample_period {
             self.render_timer -= self.ext_sample_period;
 
-            if self.enabled {
-                let (l, r) = mix_and_render(self);
-                let (l, r) = self.high_pass(l, r);
+            let (l, r) = mix_and_render(self);
+            let (l, r) = self.high_pass(l, r);
 
-                self.audio_callback.audio_sample(l, r);
-            } else {
-                self.audio_callback.audio_sample(0.0, 0.0);
-            }
+            self.audio_callback.audio_sample(l, r);
         }
     }
 

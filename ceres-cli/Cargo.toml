@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "*", default-features = false, features = ["std", "derive"] }
+thread-priority = "*"
 
 ceres-core = { path = "../ceres-core" }
 anyhow = { version = "*" }

@@ -1,3 +1,5 @@
+use std::sync::atomic::{self, AtomicBool};
+
 use anyhow::Context;
 use cpal::traits::StreamTrait;
 use dasp_ring_buffer::Bounded;
@@ -5,23 +7,32 @@ use dasp_ring_buffer::Bounded;
 use {alloc::sync::Arc, std::sync::Mutex};
 
 // Buffer size is the number of samples per channel per callback
-const BUFFER_SIZE: cpal::FrameCount = 512 * 2;
-const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
+const BUFFER_SIZE: cpal::FrameCount = 512;
+const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 2;
 const SAMPLE_RATE: i32 = 48000;
 
 // RingBuffer is a wrapper around a bounded ring buffer
 // that implements the AudioCallback trait
 #[derive(Clone)]
 pub struct RingBuffer {
+    exit: Arc<AtomicBool>,
     buffer: Arc<Mutex<Bounded<[ceres_core::Sample; RING_BUFFER_SIZE]>>>,
 }
 
 impl ceres_core::AudioCallback for RingBuffer {
     fn audio_sample(&self, l: ceres_core::Sample, r: ceres_core::Sample) {
-        if let Ok(mut buffer) = self.buffer.lock() {
-            // TODO: why are we always overwriting the buffer?
-            buffer.push(l);
-            buffer.push(r);
+        // All of this to avoid overrunning the buffer
+        while !self.exit.load(atomic::Ordering::Relaxed) {
+            if let Ok(mut buffer) = self.buffer.lock() {
+                if !buffer.is_full() {
+                    buffer.push(l);
+                    buffer.push(r);
+
+                    break;
+                }
+            }
+
+            spin_sleep::sleep(std::time::Duration::from_micros(1000));
         }
     }
 }
@@ -33,7 +44,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new(exit: Arc<AtomicBool>) -> anyhow::Result<Self> {
         use cpal::traits::{DeviceTrait, HostTrait};
 
         let host = cpal::default_host();
@@ -74,6 +85,7 @@ impl Renderer {
             stream,
             ring_buffer: RingBuffer {
                 buffer: ring_buffer,
+                exit,
             },
         })
     }
