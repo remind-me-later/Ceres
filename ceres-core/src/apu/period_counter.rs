@@ -1,14 +1,19 @@
 use super::{sweep::SweepCalculationResult, SweepTrait};
 
-pub(super) enum PeriodCalculationResult {
+pub(super) enum PeriodTriggerResult {
     DisableChannel,
+    None,
+}
+
+pub(super) enum PeriodStepResult {
+    AdvanceFrequency,
     None,
 }
 
 pub(super) struct PeriodCounter<const PERIOD_MULTIPLIER: u16, Sweep: SweepTrait> {
     timer: i32,
     period: u16, // 11 bit
-    sweep: Sweep,
+    pub sweep: Sweep,
 }
 
 impl<const PERIOD_MULTIPLIER: u16, Sweep: SweepTrait> Default
@@ -42,37 +47,37 @@ impl<const PERIOD_MUL: u16, S: SweepTrait> PeriodCounter<PERIOD_MUL, S> {
         self.period = (u16::from(val) & 7) << 8 | (self.period & 0xFF);
     }
 
-    pub(super) fn trigger(&mut self) -> PeriodCalculationResult {
+    pub(super) fn trigger(&mut self) -> PeriodTriggerResult {
         self.timer = Self::timer_from_period(self.period);
         match self.sweep.trigger(self.period) {
-            SweepCalculationResult::DisableChannel => PeriodCalculationResult::DisableChannel,
+            SweepCalculationResult::DisableChannel => PeriodTriggerResult::DisableChannel,
             SweepCalculationResult::UpdatePeriod { period } => {
                 self.period = period;
-                PeriodCalculationResult::None
+                PeriodTriggerResult::None
             }
-            SweepCalculationResult::None => PeriodCalculationResult::None,
+            SweepCalculationResult::None => PeriodTriggerResult::None,
         }
     }
 
-    pub(super) fn step(&mut self, t_cycles: i32) -> bool {
+    pub(super) fn step(&mut self, t_cycles: i32) -> PeriodStepResult {
         self.timer -= t_cycles;
 
         if self.timer <= 0 {
             self.timer += Self::timer_from_period(self.period);
-            return true;
+            return PeriodStepResult::AdvanceFrequency;
         }
 
-        false
+        PeriodStepResult::None
     }
 
-    pub(super) fn step_sweep(&mut self) -> PeriodCalculationResult {
+    pub(super) fn step_sweep(&mut self) -> PeriodTriggerResult {
         match self.sweep.step() {
-            SweepCalculationResult::DisableChannel => PeriodCalculationResult::DisableChannel,
+            SweepCalculationResult::DisableChannel => PeriodTriggerResult::DisableChannel,
             SweepCalculationResult::UpdatePeriod { period } => {
                 self.period = period;
-                PeriodCalculationResult::None
+                PeriodTriggerResult::None
             }
-            SweepCalculationResult::None => PeriodCalculationResult::None,
+            SweepCalculationResult::None => PeriodTriggerResult::None,
         }
     }
 

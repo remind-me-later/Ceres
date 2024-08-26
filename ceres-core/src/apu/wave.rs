@@ -1,6 +1,7 @@
 use {
     super::{
-        length_timer::LengthTimerCalculationResult, period_counter::PeriodCalculationResult,
+        length_timer::LengthTimerCalculationResult,
+        period_counter::{PeriodStepResult, PeriodTriggerResult},
         LengthTimer, PeriodCounter,
     },
     crate::apu::PeriodHalf,
@@ -97,7 +98,7 @@ impl Wave {
 
             if matches!(
                 self.period_counter.trigger(),
-                PeriodCalculationResult::DisableChannel
+                PeriodTriggerResult::DisableChannel
             ) {
                 self.enabled = false;
             }
@@ -117,7 +118,7 @@ impl Wave {
             return;
         }
 
-        if self.period_counter.step(cycles) {
+        if let PeriodStepResult::AdvanceFrequency = self.period_counter.step(cycles) {
             self.sample_index = (self.sample_index + 1) & (SAMPLE_LEN - 1);
             self.sample_buffer = self.samples[self.sample_index as usize];
         }

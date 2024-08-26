@@ -125,9 +125,9 @@ impl<A: AudioCallback> Gb<A> {
     #[must_use]
     #[inline]
     const fn read_boot_or_cart(&self, addr: u16) -> u8 {
-        if let Some(b) = self.bootrom {
+        if let Some(bootrom) = self.bootrom {
             // TODO: as long as the bootrom is correct should be in bounds
-            b[addr as usize]
+            bootrom[addr as usize]
         } else {
             self.cart.read_rom(addr)
         }

@@ -1,15 +1,15 @@
 use {
     super::{
         envelope::Envelope, length_timer::LengthTimerCalculationResult,
-        period_counter::PeriodCalculationResult, SweepTrait,
+        period_counter::PeriodTriggerResult, SweepTrait,
     },
-    crate::apu::{LengthTimer, PeriodCounter, PeriodHalf},
+    crate::apu::{period_counter::PeriodStepResult, LengthTimer, PeriodCounter, PeriodHalf},
 };
 
 #[derive(Default)]
 pub(super) struct Square<Sweep: SweepTrait> {
-    length_timer: LengthTimer<0x3F>,
-    period_counter: PeriodCounter<4, Sweep>,
+    pub length_timer: LengthTimer<0x3F>,
+    pub period_counter: PeriodCounter<4, Sweep>,
     envelope: Envelope,
 
     enabled: bool,
@@ -80,7 +80,7 @@ impl<S: SweepTrait> Square<S> {
 
             if matches!(
                 self.period_counter.trigger(),
-                PeriodCalculationResult::DisableChannel
+                PeriodTriggerResult::DisableChannel
             ) {
                 self.enabled = false;
             }
@@ -107,7 +107,7 @@ impl<S: SweepTrait> Square<S> {
             return;
         }
 
-        if self.period_counter.step(cycles) {
+        if let PeriodStepResult::AdvanceFrequency = self.period_counter.step(cycles) {
             self.duty_bit = (self.duty_bit + 1) & 7;
             self.output = u8::from((DUTY_WAV[self.duty as usize] & (1 << self.duty_bit)) != 0);
         }
@@ -117,7 +117,7 @@ impl<S: SweepTrait> Square<S> {
         if self.enabled
             && matches!(
                 self.period_counter.step_sweep(),
-                PeriodCalculationResult::DisableChannel
+                PeriodTriggerResult::DisableChannel
             )
         {
             self.enabled = false;

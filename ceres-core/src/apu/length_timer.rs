@@ -9,7 +9,7 @@ pub(super) enum LengthTimerCalculationResult {
 #[derive(Default)]
 pub(super) struct LengthTimer<const LENGTH_TIMER_MASK: u8> {
     enabled: bool,
-    length: u8,
+    pub length: u8,
     period_half: PeriodHalf,
     carry: bool,
 }

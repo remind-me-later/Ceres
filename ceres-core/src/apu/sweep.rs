@@ -14,17 +14,19 @@ enum SweepDirection {
     Sub = 1,
 }
 
-impl SweepDirection {
-    const fn from_u8(val: u8) -> Self {
+impl From<u8> for SweepDirection {
+    fn from(val: u8) -> Self {
         if val & 8 == 0 {
             Self::Add
         } else {
             Self::Sub
         }
     }
+}
 
-    const fn to_u8(self) -> u8 {
-        (self as u8) << 3
+impl From<SweepDirection> for u8 {
+    fn from(val: SweepDirection) -> u8 {
+        (val as u8) << 3
     }
 }
 
@@ -37,15 +39,16 @@ pub(super) enum SweepCalculationResult {
 pub(super) struct Sweep {
     // TODO: check on behaviour
     enabled: bool,
+    update: bool,
     dir: SweepDirection,
 
     // between 0 and 7
     pace: u8,
     // 0 is treated as 8
-    shadow_pace: NonZeroU8,
+    pub shadow_pace: NonZeroU8,
     // shift between 0 and 7
     individual_step: u8,
-    timer: u8,
+    pub timer: u8,
     // between 0 and 0x7FF
     shadow_register: u16,
 }
@@ -75,7 +78,7 @@ impl Sweep {
 
 impl SweepTrait for Sweep {
     fn read(&self) -> u8 {
-        0x80 | (self.pace << 4) | self.dir.to_u8() | self.individual_step
+        0x80 | (self.pace << 4) | u8::from(self.dir) | self.individual_step
     }
 
     fn write(&mut self, val: u8) {
@@ -89,7 +92,7 @@ impl SweepTrait for Sweep {
             self.shadow_pace = NonZeroU8::new(self.pace).unwrap();
         }
 
-        self.dir = SweepDirection::from_u8(val);
+        self.dir = SweepDirection::from(val);
         self.individual_step = val & 7;
     }
 
@@ -99,10 +102,16 @@ impl SweepTrait for Sweep {
         }
 
         self.timer += 1;
-        if self.timer > self.shadow_pace.get() {
+        if self.timer >= self.shadow_pace.get() {
+            self.update = self.pace != 0; // (self.individual_step != 0);
             self.timer = 0;
             self.shadow_pace = NonZeroU8::new(if self.pace == 0 { 8 } else { self.pace }).unwrap();
-            self.calculate_sweep()
+
+            if !self.update {
+                SweepCalculationResult::None
+            } else {
+                self.calculate_sweep()
+            }
         } else {
             SweepCalculationResult::None
         }
@@ -112,7 +121,8 @@ impl SweepTrait for Sweep {
         self.shadow_register = period;
         self.timer = 0;
         // restart
-        self.enabled = self.pace != 0 && self.individual_step != 0;
+        self.enabled = self.pace != 0 || self.individual_step != 0;
+
         self.shadow_pace = NonZeroU8::new(if self.pace == 0 { 8 } else { self.pace }).unwrap();
 
         if self.individual_step != 0 {
@@ -126,6 +136,7 @@ impl SweepTrait for Sweep {
 impl Default for Sweep {
     fn default() -> Self {
         Self {
+            update: false,
             shadow_pace: NonZeroU8::new(8).unwrap(),
             pace: 0,
             dir: SweepDirection::default(),

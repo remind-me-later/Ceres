@@ -202,8 +202,16 @@ impl<C: AudioCallback> Apu<C> {
     }
 
     #[must_use]
-    pub const fn read_nr52(&self) -> u8 {
+    pub fn read_nr52(&self) -> u8 {
         // println!("read nr52, ch2: {}", self.ch1.on());
+        // println!(
+        //     "Ch1 length timer: {}, Max: {}",
+        //     self.ch1.length_timer.length, 0x3f
+        // );
+        // println!(
+        //     "Ch1 sweep timer: {}, shadow pace: {}",
+        //     self.ch1.period_counter.sweep.timer, self.ch1.period_counter.sweep.shadow_pace
+        // );
 
         (self.enabled as u8) << 7
             | 0x70
