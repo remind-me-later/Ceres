@@ -34,10 +34,10 @@ pub struct Apu<C: AudioCallback> {
     nr51: u8,
 
     enabled: bool,
-    r_vol: u8,
-    l_vol: u8,
-    r_vin: bool,
-    l_vin: bool,
+    right_volume: u8,
+    left_volume: u8,
+    right_vin: bool,
+    left_vin: bool,
 
     ch1: Square<Sweep>,
     ch2: Square<()>,
@@ -62,10 +62,10 @@ impl<C: AudioCallback> Apu<C> {
             audio_callback,
             nr51: 0,
             enabled: false,
-            r_vol: 0,
-            l_vol: 0,
-            r_vin: false,
-            l_vin: false,
+            right_volume: 0,
+            left_volume: 0,
+            right_vin: false,
+            left_vin: false,
             ch1: Square::default(),
             ch2: Square::default(),
             ch3: Wave::default(),
@@ -97,15 +97,15 @@ impl<C: AudioCallback> Apu<C> {
                 };
 
                 let right_on = u8::from(apu.nr51 & (1 << i) != 0);
-                let left_on = u8::from(apu.nr51 & (1 << (i + 4)) != 0);
+                let left_on = u8::from(apu.nr51 & (0x10 << i) != 0);
 
                 l += left_on * out;
                 r += right_on * out;
             }
 
             // transform to i16 sample
-            let l = (0xF - i16::from(l) * 2) * i16::from(apu.l_vol);
-            let r = (0xF - i16::from(r) * 2) * i16::from(apu.r_vol);
+            let l = (0xF - i16::from(l) * 2) * i16::from(apu.left_volume + 1);
+            let r = (0xF - i16::from(r) * 2) * i16::from(apu.right_volume + 1);
 
             // amplify
             let l = l * 32;
@@ -193,7 +193,10 @@ impl<C: AudioCallback> Apu<C> {
 impl<C: AudioCallback> Apu<C> {
     #[must_use]
     pub fn read_nr50(&self) -> u8 {
-        self.r_vol | u8::from(self.r_vin) << 3 | self.l_vol << 4 | u8::from(self.l_vin) << 7
+        self.right_volume
+            | u8::from(self.right_vin) << 3
+            | self.left_volume << 4
+            | u8::from(self.left_vin) << 7
     }
 
     #[must_use]
@@ -223,10 +226,10 @@ impl<C: AudioCallback> Apu<C> {
 
     pub fn write_nr50(&mut self, val: u8) {
         if self.enabled {
-            self.r_vol = val & 7;
-            self.r_vin = val & 8 != 0;
-            self.l_vol = (val >> 4) & 7;
-            self.l_vin = val & 0x80 != 0;
+            self.right_volume = val & 7;
+            self.right_vin = val & 8 != 0;
+            self.left_volume = (val >> 4) & 7;
+            self.left_vin = val & 0x80 != 0;
         }
     }
 
@@ -243,10 +246,10 @@ impl<C: AudioCallback> Apu<C> {
             // reset
             self.render_timer = 0.0;
             self.div_divider = 0;
-            self.l_vol = 0;
-            self.l_vin = false;
-            self.r_vol = 0;
-            self.r_vin = false;
+            self.left_volume = 0;
+            self.left_vin = false;
+            self.right_volume = 0;
+            self.right_vin = false;
 
             // reset registers
             self.ch1 = Square::default();

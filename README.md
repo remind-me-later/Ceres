@@ -7,11 +7,11 @@ A (very experimental) GameBoy/Color emulator written in rust.
 ## Screenshots
 
 <p align="center" width="100%">
-    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/kirby_dream.webp?raw=true"> 
-    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/pokemon_silver.webp?raw=true"> 
-    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/pokemon_crystal.webp?raw=true">   
-    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/zelda_yume_1.webp?raw=true"> 
-    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/zelda_yume_2.webp?raw=true"> 
+    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/kirby_dream.webp?raw=true">
+    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/pokemon_silver.webp?raw=true">
+    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/pokemon_crystal.webp?raw=true">
+    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/zelda_yume_1.webp?raw=true">
+    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/zelda_yume_2.webp?raw=true">
 </p>
 
 ## Build
@@ -64,3 +64,4 @@ To build just:
 - [Mooneye GB](https://github.com/Gekkio/mooneye-gb)
 - [retrio/gb](https://github.com/retrio/gb)
 - [SameBoy](https://github.com/LIJI32/SameBoy)
+- [GiiBiiAdvance](https://github.com/AntonioND/giibiiadvance)
