@@ -16,8 +16,16 @@ cpal = { version = "*", default-features = false }
 dasp_ring_buffer = { version = "*", default-features = false }
 
 # video
-winit = { version = "*" }
-wgpu = { version = "*" }
+winit = { version = "*", default-features = false, features = [
+    "rwh_06",
+    "wayland",
+    "wayland-csd-adwaita",
+] }
+wgpu = { version = "*", default-features = false, features = [
+    "dx12",
+    "metal",
+    "wgsl",
+] }
 pollster = { version = "*", default-features = false }
 bytemuck = { version = "*", default-features = false }
 
