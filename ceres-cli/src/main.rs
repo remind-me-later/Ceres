@@ -1,7 +1,7 @@
 use app::App;
 use clap::Parser;
 use std::path::PathBuf;
-use winit::{dpi::PhysicalSize, event_loop::EventLoop};
+use winit::event_loop::EventLoop;
 
 mod app;
 mod audio;
@@ -9,6 +9,7 @@ mod video;
 
 extern crate alloc;
 
+const SCREEN_MUL: u32 = 3;
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
 const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
 const INIT_WIDTH: u32 = PX_WIDTH * SCREEN_MUL;
@@ -26,7 +27,7 @@ const AFTER_HELP: &str = "GB bindings:
     | B       | L         |
     | Start   | M         |
     | Select  | N         |
-    
+
 Other binsings:
 
     | System       | Emulator |
@@ -34,8 +35,6 @@ Other binsings:
     | Fullscreen   | F        |
     | Scale filter | Z        |
 ";
-
-const SCREEN_MUL: u32 = 3;
 
 #[derive(Default, Clone, Copy, clap::ValueEnum)]
 enum Model {
@@ -107,40 +106,8 @@ struct Cli {
 
 fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
-
     let event_loop = EventLoop::new()?;
-
-    let window_attributes = winit::window::Window::default_attributes()
-        .with_title(CERES_STYLIZED)
-        .with_inner_size(PhysicalSize {
-            width: INIT_WIDTH,
-            height: INIT_HEIGHT,
-        })
-        .with_min_inner_size(PhysicalSize {
-            width: PX_WIDTH,
-            height: PX_HEIGHT,
-        });
-
-    // The template will match only the configurations supporting rendering
-    // to windows.
-    //
-    // XXX We force transparency only on macOS, given that EGL on X11 doesn't
-    // have it, but we still want to show window. The macOS situation is like
-    // that, because we can query only one config at a time on it, but all
-    // normal platforms will return multiple configs, so we can find the config
-    // with transparency ourselves inside the `reduce`.
-    let template = glutin::config::ConfigTemplateBuilder::new().with_transparency(false);
-
-    let display_builder =
-        glutin_winit::DisplayBuilder::new().with_window_attributes(Some(window_attributes));
-
-    let mut app = App::new(
-        args.model.into(),
-        args.file,
-        args.scaling,
-        template,
-        display_builder,
-    )?;
+    let mut app = App::new(args.model.into(), args.file, args.scaling)?;
 
     event_loop.run_app(&mut app)?;
 
