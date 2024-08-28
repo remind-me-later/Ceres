@@ -7,11 +7,11 @@ A (very experimental) GameBoy/Color emulator written in rust.
 ## Screenshots
 
 <p align="center" width="100%">
-    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/kirby_dream.webp?raw=true">
-    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/pokemon_silver.webp?raw=true">
-    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/pokemon_crystal.webp?raw=true">
-    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/zelda_yume_1.webp?raw=true">
-    <img width="20%" src="https://github.com/remind-me-later/ceres-images/blob/main/zelda_yume_2.webp?raw=true">
+    <img width="25%" src="https://github.com/remind-me-later/ceres-images/blob/main/kirby_dream.webp?raw=true">
+    <img width="25%" src="https://github.com/remind-me-later/ceres-images/blob/main/pokemon_silver.webp?raw=true">
+    <img width="25%" src="https://github.com/remind-me-later/ceres-images/blob/main/pokemon_crystal.webp?raw=true">
+    <img width="25%" src="https://github.com/remind-me-later/ceres-images/blob/main/zelda_yume_1.webp?raw=true">
+    <img width="25%" src="https://github.com/remind-me-later/ceres-images/blob/main/zelda_yume_2.webp?raw=true">
 </p>
 
 ## Build
@@ -20,14 +20,14 @@ Required:
 
 - [RGBDS toolchain](https://rgbds.gbdev.io/)
 
-To build just:
-
+To build:
+- After cloning the repo run `git submodule update --init --recursive`.
 - Enter the `gb-bootroms` directory and `make`.
-- In the root directory `cargo build --release --bin=ceres-gtk`
+- In the root directory `cargo build --release`
 
 ## Quick start
 
-- In the root directory `cargo run --release --bin=ceres-gtk`
+- In the root directory `cargo run --release <ROM path>`.
 
 ## Key bindings
 
