@@ -39,16 +39,15 @@ pub(super) enum SweepCalculationResult {
 pub(super) struct Sweep {
     // TODO: check on behaviour
     enabled: bool,
-    update: bool,
     dir: SweepDirection,
 
     // between 0 and 7
     pace: u8,
     // 0 is treated as 8
-    pub shadow_pace: NonZeroU8,
+    shadow_pace: NonZeroU8,
     // shift between 0 and 7
     individual_step: u8,
-    pub timer: u8,
+    timer: u8,
     // between 0 and 0x7FF
     shadow_register: u16,
 }
@@ -63,16 +62,12 @@ impl Sweep {
         };
 
         if self.shadow_register > 0x7FF {
-            return SweepCalculationResult::DisableChannel;
-        }
-
-        if self.individual_step != 0 {
-            return SweepCalculationResult::UpdatePeriod {
+            SweepCalculationResult::DisableChannel
+        } else {
+            SweepCalculationResult::UpdatePeriod {
                 period: self.shadow_register & 0x7FF,
-            };
+            }
         }
-
-        SweepCalculationResult::None
     }
 }
 
@@ -103,11 +98,10 @@ impl SweepTrait for Sweep {
 
         self.timer += 1;
         if self.timer >= self.shadow_pace.get() {
-            self.update = self.pace != 0; // (self.individual_step != 0);
             self.timer = 0;
             self.shadow_pace = NonZeroU8::new(if self.pace == 0 { 8 } else { self.pace }).unwrap();
 
-            if !self.update {
+            if self.pace == 0 {
                 SweepCalculationResult::None
             } else {
                 self.calculate_sweep()
@@ -136,7 +130,6 @@ impl SweepTrait for Sweep {
 impl Default for Sweep {
     fn default() -> Self {
         Self {
-            update: false,
             shadow_pace: NonZeroU8::new(8).unwrap(),
             pace: 0,
             dir: SweepDirection::default(),

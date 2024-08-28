@@ -8,8 +8,8 @@ use {
 
 #[derive(Default)]
 pub(super) struct Square<Sweep: SweepTrait> {
-    pub length_timer: LengthTimer<0x3F>,
-    pub period_counter: PeriodCounter<4, Sweep>,
+    length_timer: LengthTimer<0x3F>,
+    period_counter: PeriodCounter<4, Sweep>,
     envelope: Envelope,
 
     enabled: bool,
