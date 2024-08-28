@@ -107,7 +107,10 @@ impl<S: SweepTrait> Square<S> {
             return;
         }
 
-        if let PeriodStepResult::AdvanceFrequency = self.period_counter.step(cycles) {
+        if matches!(
+            self.period_counter.step(cycles),
+            PeriodStepResult::AdvanceFrequency
+        ) {
             self.duty_bit = (self.duty_bit + 1) & 7;
             self.output = u8::from((DUTY_WAV[self.duty as usize] & (1 << self.duty_bit)) != 0);
         }

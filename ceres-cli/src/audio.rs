@@ -1,4 +1,4 @@
-use std::sync::atomic::{self, AtomicBool};
+use core::sync::atomic::{self, AtomicBool};
 
 use anyhow::Context;
 use cpal::traits::StreamTrait;
@@ -32,7 +32,7 @@ impl ceres_core::AudioCallback for RingBuffer {
                 }
             }
 
-            spin_sleep::sleep(std::time::Duration::from_micros(1000));
+            spin_sleep::sleep(core::time::Duration::from_micros(1000));
         }
     }
 }

@@ -126,6 +126,7 @@ impl<C: AudioCallback> Apu<C> {
         }
 
         self.render_timer += cycles as f32;
+        #[allow(clippy::while_float)]
         while self.render_timer >= self.ext_sample_period {
             self.render_timer -= self.ext_sample_period;
 
@@ -205,7 +206,7 @@ impl<C: AudioCallback> Apu<C> {
     }
 
     #[must_use]
-    pub fn read_nr52(&self) -> u8 {
+    pub const fn read_nr52(&self) -> u8 {
         // println!("read nr52, ch2: {}", self.ch1.on());
         // println!(
         //     "Ch1 length timer: {}, Max: {}",

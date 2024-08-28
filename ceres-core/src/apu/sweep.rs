@@ -25,8 +25,8 @@ impl From<u8> for SweepDirection {
 }
 
 impl From<SweepDirection> for u8 {
-    fn from(val: SweepDirection) -> u8 {
-        (val as u8) << 3
+    fn from(val: SweepDirection) -> Self {
+        (val as Self) << 3
     }
 }
 

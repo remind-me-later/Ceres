@@ -118,7 +118,10 @@ impl Wave {
             return;
         }
 
-        if let PeriodStepResult::AdvanceFrequency = self.period_counter.step(cycles) {
+        if matches!(
+            self.period_counter.step(cycles),
+            PeriodStepResult::AdvanceFrequency
+        ) {
             self.sample_index = (self.sample_index + 1) & (SAMPLE_LEN - 1);
             self.sample_buffer = self.samples[self.sample_index as usize];
         }

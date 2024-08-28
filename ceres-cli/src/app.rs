@@ -245,7 +245,7 @@ impl App {
 
         let gb = Arc::new(RwLock::new(init_gb(model, &rom_path, ring_buffer)?));
 
-        let thread_builder = std::thread::Builder::new().name("gb_loop".to_string());
+        let thread_builder = std::thread::Builder::new().name("gb_loop".to_owned());
 
         let thread_handle = {
             let gb = Arc::clone(&gb);
@@ -254,7 +254,7 @@ impl App {
 
             // std::thread::spawn(move || gb_loop(gb, exit, pause_thread))
             thread_builder.spawn_with_priority(thread_priority::ThreadPriority::Max, move |_| {
-                gb_loop(gb, exit, pause_thread)
+                gb_loop(gb, exit, pause_thread);
             })?
         };
 
