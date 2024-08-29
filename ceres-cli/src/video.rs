@@ -7,7 +7,6 @@ pub struct Renderer<'a> {
     surface: wgpu::Surface<'a>,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    window: Arc<winit::window::Window>,
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
 
@@ -25,6 +24,11 @@ pub struct Renderer<'a> {
     // State
     new_size: Option<winit::dpi::PhysicalSize<u32>>,
     new_scaling: Option<Scaling>,
+
+    // Make sure that the winit window is last in the struct so that
+    // it is dropped after the wgpu surface is dropped, otherwise the
+    // program may crash when closed. This is probably a bug in wgpu.
+    window: Arc<winit::window::Window>,
 }
 
 impl<'a> Renderer<'a> {
