@@ -3,31 +3,77 @@ name = "ceres-cli"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
-clap = { version = "*", default-features = false, features = ["std", "derive"] }
-thread-priority = "*"
+# *******
+# * Cli *
+# *******
 
-ceres-core = { path = "../ceres-core" }
-anyhow = { version = "*" }
-spin_sleep = { version = "*" }
+[dependencies.clap]
+version = "*"
+default-features = false
+features = ["std", "derive"]
 
-# audio
-cpal = { version = "*", default-features = false }
-dasp_ring_buffer = { version = "*", default-features = false }
+[dependencies.anyhow]
+version = "*"
 
-# video
-winit = { version = "*", default-features = false, features = [
-    "rwh_06",
-    "wayland",
-    "wayland-csd-adwaita",
-] }
-wgpu = { version = "*", default-features = false, features = [
-    "dx12",
-    "metal",
-    "wgsl",
-] }
-pollster = { version = "*", default-features = false }
-bytemuck = { version = "*", default-features = false }
+# *******************
+# * Emulator thread *
+# *******************
+
+[dependencies.ceres-core]
+path = "../ceres-core"
+
+[dependencies.thread-priority]
+version = "*"
+default-features = false
+
+[dependencies.spin_sleep]
+version = "*"
+default-features = false
+
+# *********
+# * Audio *
+# *********
+
+[dependencies.cpal]
+version = "*"
+default-features = false
+
+[dependencies.dasp_ring_buffer]
+version = "*"
+default-features = false
+
+# *************
+# * windowing *
+# *************
+
+[dependencies.winit]
+version = "*"
+default-features = false
+features = ["rwh_06", "wayland", "wayland-csd-adwaita"]
+
+# ************
+# * graphics *
+# ************
+
+[dependencies.wgpu]
+version = "*"
+default-features = false
+features = ["dx12", "metal", "wgsl"]
+
+# Required to poll wgpu
+# TODO: maybe make all code async?
+[dependencies.pollster]
+version = "*"
+default-features = false
+
+# Required for wgpu safe byte manipulation
+[dependencies.bytemuck]
+version = "*"
+default-features = false
+
+# *********
+# * Lints *
+# *********
 
 [lints.clippy]
 pedantic = "warn"
