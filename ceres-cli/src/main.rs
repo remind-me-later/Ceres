@@ -109,7 +109,8 @@ struct Cli {
 fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
     let event_loop = EventLoop::new()?;
-    let project_dirs = directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_BIN).unwrap();
+    let project_dirs =
+        directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED).unwrap();
 
     let mut app = App::new(project_dirs, args.model.into(), &args.file, args.scaling)?;
 
