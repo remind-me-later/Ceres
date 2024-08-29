@@ -15,6 +15,8 @@ const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
 const INIT_WIDTH: u32 = PX_WIDTH * SCREEN_MUL;
 const INIT_HEIGHT: u32 = PX_HEIGHT * SCREEN_MUL;
 
+const QUALIFIER: &str = "com";
+const ORGANIZATION: &str = "remind-me-later";
 const CERES_BIN: &str = "ceres";
 const CERES_STYLIZED: &str = "Ceres";
 const ABOUT: &str = "A (very experimental) Game Boy/Color emulator.";
@@ -107,7 +109,9 @@ struct Cli {
 fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
     let event_loop = EventLoop::new()?;
-    let mut app = App::new(args.model.into(), args.file, args.scaling)?;
+    let project_dirs = directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_BIN).unwrap();
+
+    let mut app = App::new(project_dirs, args.model.into(), &args.file, args.scaling)?;
 
     event_loop.run_app(&mut app)?;
 

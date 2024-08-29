@@ -15,6 +15,9 @@ features = ["std", "derive"]
 [dependencies.anyhow]
 version = "*"
 
+[dependencies.directories]
+version = "*"
+
 # *******************
 # * Emulator thread *
 # *******************

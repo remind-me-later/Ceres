@@ -6,8 +6,8 @@ use crate::{
 use ceres_core::Cart;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
-use std::sync::RwLock;
 use std::time::Instant;
+use std::{io::Read, sync::RwLock};
 use thread_priority::ThreadBuilderExt;
 use winit::{
     dpi::PhysicalSize,
@@ -21,11 +21,7 @@ use {
     anyhow::Context,
     ceres_core::Gb,
     core::time::Duration,
-    std::{
-        fs::File,
-        io::Write,
-        path::{Path, PathBuf},
-    },
+    std::{fs::File, io::Write, path::Path},
     winit::window,
 };
 
@@ -61,10 +57,11 @@ impl<'a> AppState<'a> {
 }
 
 pub struct App<'a> {
+    project_dirs: directories::ProjectDirs,
     audio: audio::Renderer,
     gb: Arc<RwLock<Gb<audio::RingBuffer>>>,
     scaling: Scaling,
-    rom_path: PathBuf,
+    rom_ident: String,
     thread_handle: Option<std::thread::JoinHandle<()>>,
     exit: Arc<AtomicBool>,
     pause_thread: Arc<AtomicBool>,
@@ -74,31 +71,39 @@ pub struct App<'a> {
 
 impl<'a> App<'a> {
     pub fn new(
+        project_dirs: directories::ProjectDirs,
         model: ceres_core::Model,
-        rom_path: PathBuf,
+        rom_path: &Path,
         scaling: Scaling,
     ) -> anyhow::Result<Self> {
         fn init_gb(
             model: ceres_core::Model,
+            project_dirs: &directories::ProjectDirs,
             rom_path: &Path,
             audio_callback: audio::RingBuffer,
-        ) -> anyhow::Result<Gb<audio::RingBuffer>> {
+        ) -> anyhow::Result<(Gb<audio::RingBuffer>, String)> {
             let rom = {
                 std::fs::read(rom_path)
                     .map(Vec::into_boxed_slice)
                     .context("no such file")?
             };
 
-            let ram = std::fs::read(rom_path.with_extension("sav"))
-                .map(Vec::into_boxed_slice)
-                .ok();
-
             // TODO: core error
-            let cart = Cart::new(rom, ram).unwrap();
+            let mut cart = Cart::new(rom).unwrap();
+            let mut ident = String::new();
+            cart.ascii_title().read_to_string(&mut ident).unwrap();
+            ident.push_str(cart.checksum().to_string().as_str());
+
+            if let Ok(ram) =
+                std::fs::read(project_dirs.data_dir().join(&ident).with_extension("sav"))
+                    .map(Vec::into_boxed_slice)
+            {
+                cart.set_ram(ram).unwrap();
+            }
 
             let sample_rate = audio::Renderer::sample_rate();
 
-            Ok(Gb::new(model, sample_rate, cart, audio_callback))
+            Ok((Gb::new(model, sample_rate, cart, audio_callback), ident))
         }
 
         fn gb_loop(
@@ -143,7 +148,8 @@ impl<'a> App<'a> {
         };
         let ring_buffer = audio.get_ring_buffer();
 
-        let gb = Arc::new(RwLock::new(init_gb(model, &rom_path, ring_buffer)?));
+        let (gb, rom_ident) = init_gb(model, &project_dirs, rom_path, ring_buffer)?;
+        let gb = Arc::new(RwLock::new(gb));
 
         let thread_builder = std::thread::Builder::new().name("gb_loop".to_owned());
 
@@ -159,10 +165,11 @@ impl<'a> App<'a> {
         };
 
         Ok(Self {
+            project_dirs,
             gb,
             audio,
             scaling,
-            rom_path,
+            rom_ident,
             thread_handle: Some(thread_handle),
             state: None,
             exit,
@@ -234,7 +241,14 @@ impl<'a> App<'a> {
     fn save_data(&self) {
         if let Ok(gb) = self.gb.read() {
             if let Some(save_data) = gb.cartridge().save_data() {
-                let sav_file = File::create(self.rom_path.with_extension("sav"));
+                std::fs::create_dir_all(self.project_dirs.data_dir())
+                    .expect("couldn't create data directory");
+                let sav_file = File::create(
+                    self.project_dirs
+                        .data_dir()
+                        .join(&self.rom_ident)
+                        .with_extension("sav"),
+                );
                 match sav_file {
                     Ok(mut f) => {
                         if let Err(e) = f.write_all(save_data) {
