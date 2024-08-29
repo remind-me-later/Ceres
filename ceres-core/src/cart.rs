@@ -200,8 +200,18 @@ impl Cart {
     }
 
     #[must_use]
-    pub const fn checksum(&self) -> u8 {
+    pub const fn header_checksum(&self) -> u8 {
         self.rom[0x14D]
+    }
+
+    #[must_use]
+    pub const fn global_checksum(&self) -> u16 {
+        u16::from_be_bytes([self.rom[0x14E], self.rom[0x14F]])
+    }
+
+    #[must_use]
+    pub const fn version(&self) -> u8 {
+        self.rom[0x14C]
     }
 
     #[must_use]

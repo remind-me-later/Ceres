@@ -90,9 +90,18 @@ impl<'a> App<'a> {
 
             // TODO: core error
             let mut cart = Cart::new(rom).unwrap();
-            let mut ident = String::new();
-            cart.ascii_title().read_to_string(&mut ident).unwrap();
-            ident.push_str(cart.checksum().to_string().as_str());
+            let ident = {
+                let mut ident = String::new();
+                cart.ascii_title().read_to_string(&mut ident).unwrap();
+                ident.push('-');
+                ident.push_str(cart.version().to_string().as_str());
+                ident.push('-');
+                ident.push_str(cart.header_checksum().to_string().as_str());
+                ident.push('-');
+                ident.push_str(cart.global_checksum().to_string().as_str());
+
+                ident
+            };
 
             if let Ok(ram) =
                 std::fs::read(project_dirs.data_dir().join(&ident).with_extension("sav"))
