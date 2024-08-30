@@ -1,6 +1,6 @@
 use crate::{
     audio,
-    video::{self, Renderer},
+    video::{self, State},
     Scaling, CERES_STYLIZED, INIT_HEIGHT, INIT_WIDTH, PX_HEIGHT, PX_WIDTH,
 };
 use ceres_core::Cart;
@@ -26,7 +26,7 @@ use {
 };
 
 struct AppState<'a> {
-    renderer: video::Renderer<'a>,
+    renderer: video::State<'a>,
 }
 
 impl<'a> AppState<'a> {
@@ -45,7 +45,7 @@ impl<'a> AppState<'a> {
         let window = event_loop.create_window(window_attributes).unwrap();
 
         let mut video =
-            pollster::block_on(Renderer::new(window, scaling)).expect("Could not create renderer");
+            pollster::block_on(State::new(window, scaling)).expect("Could not create renderer");
 
         video.resize(PhysicalSize {
             width: INIT_WIDTH,

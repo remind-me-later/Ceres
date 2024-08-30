@@ -2,15 +2,13 @@
 
 @group(0) @binding(0)
 var txt: texture_2d<f32>;
-@group(0)@binding(1)
+@group(0) @binding(1)
 var smpl: sampler;
 
 @group(1) @binding(0)
 var<uniform> dims: vec2<f32>;
-@group(1)@binding(1)
+@group(1) @binding(1)
 var<uniform> scale_type: u32;
-
-// Vertex shader
 
 struct Vertexinput {
     @builtin(vertex_index) vert_idx: u32,
@@ -44,8 +42,6 @@ fn vs_main(in: Vertexinput) -> VertexOutput {
     return out;
 }
 
-// fragment shader
-
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var ret: vec4<f32>;
@@ -59,7 +55,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             // scale2x
             ret = fs_scale2x(in.tex_coords);
         }
-         case 2u: {
+        case 2u: {
             // scale3x
             ret = fs_scale3x(in.tex_coords);
         }
@@ -80,7 +76,7 @@ fn fs_scale2x(tex_coords: vec2<f32>) -> vec4<f32> {
     let dims = vec2<f32>(textureDimensions(txt));
     // offsets
     let off = vec2(1.0, 1.0) / dims;
-    
+
 	//	  a         p0 p1
 	//	c p b       p2 p3
 	//	  d
@@ -113,7 +109,7 @@ fn fs_scale3x(tex_coords: vec2<f32>) -> vec4<f32> {
     let dims = vec2<f32>(textureDimensions(txt));
     // offsets
     let off = vec2(1.0, 1.0) / dims;
-    
+
 	//	a b c	    p0 p1 p2
 	//	d p f		p3 p  p5
 	//	g h i       p6 p7 p8
