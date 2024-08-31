@@ -4,7 +4,6 @@ use crate::{
     video::{self, State},
     Scaling, CERES_STYLIZED, INIT_HEIGHT, INIT_WIDTH,
 };
-use core::sync::atomic::AtomicBool;
 use std::time::Instant;
 use winit::{
     dpi::PhysicalSize,
@@ -14,7 +13,6 @@ use winit::{
     window::Fullscreen,
 };
 use {
-    alloc::sync::Arc,
     core::time::Duration,
     std::{fs::File, io::Write, path::Path},
     winit::window,
@@ -24,7 +22,6 @@ pub struct App<'a> {
     // Config parameters
     project_dirs: directories::ProjectDirs,
     scaling: Scaling,
-    exiting: Arc<AtomicBool>,
 
     // Contexts
     gb_ctx: GbContext,
@@ -42,18 +39,12 @@ impl<'a> App<'a> {
         rom_path: &Path,
         scaling: Scaling,
     ) -> anyhow::Result<Self> {
-        let exiting = Arc::new(AtomicBool::new(false));
-
-        let audio = {
-            let exiting = Arc::clone(&exiting);
-            audio::Renderer::new(exiting)?
-        };
+        let audio = audio::Renderer::new()?;
         let ring_buffer = audio.get_ring_buffer();
 
         let gb_ctx = GbContext::new(model, &project_dirs, rom_path, ring_buffer)?;
 
         Ok(Self {
-            exiting,
             project_dirs,
             gb_ctx,
             audio,
@@ -216,8 +207,6 @@ impl<'a> winit::application::ApplicationHandler for App<'a> {
 
     fn exiting(&mut self, _: &winit::event_loop::ActiveEventLoop) {
         self.audio.pause().unwrap();
-        self.exiting
-            .store(true, core::sync::atomic::Ordering::Relaxed);
         self.save_data();
         self.video = None;
         self.gb_ctx.exit();
