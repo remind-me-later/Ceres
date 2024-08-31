@@ -24,10 +24,10 @@ pub struct App<'a> {
     scaling: Scaling,
 
     // Contexts
-    gb_ctx: GbContext,
+    gb_ctx: Option<GbContext>,
 
     // Rendering
-    audio: audio::Renderer,
+    _audio: audio::State,
     // NOTE: carries the `Window`, thus it should be dropped after everything else.
     video: Option<video::State<'a>>,
 }
@@ -39,15 +39,13 @@ impl<'a> App<'a> {
         rom_path: &Path,
         scaling: Scaling,
     ) -> anyhow::Result<Self> {
-        let audio = audio::Renderer::new()?;
-        let ring_buffer = audio.get_ring_buffer();
-
-        let gb_ctx = GbContext::new(model, &project_dirs, rom_path, ring_buffer)?;
+        let audio = audio::State::new()?;
+        let gb_ctx = GbContext::new(model, &project_dirs, rom_path, &audio)?;
 
         Ok(Self {
             project_dirs,
-            gb_ctx,
-            audio,
+            gb_ctx: Some(gb_ctx),
+            _audio: audio,
             scaling,
             video: None,
         })
@@ -74,43 +72,44 @@ impl<'a> App<'a> {
                         video.choose_scale_mode(self.scaling);
                     }
                     Key::Named(NamedKey::Space) => {
-                        let is_paused = self.gb_ctx.is_paused();
-
-                        if is_paused {
-                            self.gb_ctx.resume();
-                            self.audio.resume().unwrap();
-                        } else {
-                            self.gb_ctx.pause();
-                            self.audio.pause().unwrap();
+                        if let Some(gb_ctx) = &mut self.gb_ctx {
+                            if gb_ctx.is_paused() {
+                                gb_ctx.resume();
+                            } else {
+                                gb_ctx.pause();
+                            }
                         }
                     }
                     _ => (),
                 }
             }
-
-            self.gb_ctx.handle_key(event);
+            if let Some(gb_ctx) = &mut self.gb_ctx {
+                gb_ctx.handle_key(event);
+            }
         }
     }
 
     fn save_data(&self) {
-        let gb = self.gb_ctx.gb_lock();
-        if let Some(save_data) = gb.cartridge().save_data() {
-            std::fs::create_dir_all(self.project_dirs.data_dir())
-                .expect("couldn't create data directory");
-            let sav_file = File::create(
-                self.project_dirs
-                    .data_dir()
-                    .join(self.gb_ctx.rom_ident())
-                    .with_extension("sav"),
-            );
-            match sav_file {
-                Ok(mut f) => {
-                    if let Err(e) = f.write_all(save_data) {
-                        eprintln!("couldn't save data in save file: {e}");
+        if let Some(gb_ctx) = &self.gb_ctx {
+            let gb = gb_ctx.gb_lock();
+            if let Some(save_data) = gb.cartridge().save_data() {
+                std::fs::create_dir_all(self.project_dirs.data_dir())
+                    .expect("couldn't create data directory");
+                let sav_file = File::create(
+                    self.project_dirs
+                        .data_dir()
+                        .join(gb_ctx.rom_ident())
+                        .with_extension("sav"),
+                );
+                match sav_file {
+                    Ok(mut f) => {
+                        if let Err(e) = f.write_all(save_data) {
+                            eprintln!("couldn't save data in save file: {e}");
+                        }
                     }
-                }
-                Err(e) => {
-                    eprintln!("couldn't open save file: {e}");
+                    Err(e) => {
+                        eprintln!("couldn't open save file: {e}");
+                    }
                 }
             }
         }
@@ -119,8 +118,6 @@ impl<'a> App<'a> {
 
 impl<'a> winit::application::ApplicationHandler for App<'a> {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        self.gb_ctx.resume();
-
         let window_attributes = winit::window::Window::default_attributes()
             .with_title(CERES_STYLIZED)
             .with_inner_size(PhysicalSize {
@@ -137,7 +134,9 @@ impl<'a> winit::application::ApplicationHandler for App<'a> {
         // event_loop.set_control_flow(ControlFlow::Poll);
         event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now()));
 
-        self.audio.resume().unwrap();
+        if let Some(gb_ctx) = &mut self.gb_ctx {
+            gb_ctx.resume();
+        }
     }
 
     fn new_events(
@@ -151,8 +150,8 @@ impl<'a> winit::application::ApplicationHandler for App<'a> {
             )));
 
             if let Some(video) = self.video.as_mut() {
-                {
-                    let gb = self.gb_ctx.gb_lock();
+                if let Some(gb_ctx) = &self.gb_ctx {
+                    let gb = gb_ctx.gb_lock();
                     video.update_texture(gb.pixel_data_rgb());
                 }
 
@@ -199,16 +198,16 @@ impl<'a> winit::application::ApplicationHandler for App<'a> {
     }
 
     fn suspended(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        self.audio.pause().unwrap();
-        self.gb_ctx.pause();
+        if let Some(gb_ctx) = &mut self.gb_ctx {
+            gb_ctx.pause();
+        }
         self.video = None;
         event_loop.set_control_flow(ControlFlow::Wait);
     }
 
     fn exiting(&mut self, _: &winit::event_loop::ActiveEventLoop) {
-        self.audio.pause().unwrap();
         self.save_data();
         self.video = None;
-        self.gb_ctx.exit();
+        self.gb_ctx = None;
     }
 }

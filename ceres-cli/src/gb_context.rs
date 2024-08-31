@@ -15,6 +15,7 @@ pub struct GbContext {
     rom_ident: String,
     exiting: Arc<AtomicBool>,
     pause_thread: Arc<AtomicBool>,
+    audio_stream: audio::Stream,
     thread_handle: Option<std::thread::JoinHandle<()>>,
 }
 
@@ -23,7 +24,7 @@ impl GbContext {
         model: ceres_core::Model,
         project_dirs: &directories::ProjectDirs,
         rom_path: &Path,
-        audio_callback: audio::RingBuffer,
+        audio_state: &audio::State,
     ) -> anyhow::Result<Self> {
         fn gb_loop(
             gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
@@ -89,14 +90,11 @@ impl GbContext {
             cart.set_ram(ram).unwrap();
         }
 
-        let sample_rate = audio::Renderer::sample_rate();
+        let sample_rate = audio::Stream::sample_rate();
+        let audio_stream = audio::Stream::new(audio_state)?;
+        let ring_buffer = audio_stream.get_ring_buffer();
 
-        let gb = Arc::new(Mutex::new(Gb::new(
-            model,
-            sample_rate,
-            cart,
-            audio_callback,
-        )));
+        let gb = Arc::new(Mutex::new(Gb::new(model, sample_rate, cart, ring_buffer)));
 
         let pause_thread = Arc::new(AtomicBool::new(false));
 
@@ -121,6 +119,7 @@ impl GbContext {
             exiting,
             pause_thread,
             thread_handle: Some(thread_handle),
+            audio_stream,
         })
     }
 
@@ -161,12 +160,14 @@ impl GbContext {
         self.pause_thread.load(Relaxed)
     }
 
-    pub fn pause(&self) {
+    pub fn pause(&mut self) {
+        self.audio_stream.pause().unwrap();
         self.pause_thread.store(true, Relaxed);
     }
 
-    pub fn resume(&self) {
+    pub fn resume(&mut self) {
         self.pause_thread.store(false, Relaxed);
+        self.audio_stream.resume().unwrap();
     }
 
     pub fn rom_ident(&self) -> &str {
@@ -180,5 +181,12 @@ impl GbContext {
 
     pub fn gb_lock(&self) -> MutexGuard<Gb<audio::RingBuffer>> {
         self.gb.lock().unwrap()
+    }
+}
+
+impl Drop for GbContext {
+    fn drop(&mut self) {
+        self.audio_stream.pause().unwrap();
+        self.exit();
     }
 }
