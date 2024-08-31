@@ -128,7 +128,7 @@ unimplemented = "warn"
 unnecessary_self_imports = "warn"
 unneeded_field_pattern = "warn"
 unseparated_literal_suffix = "warn"
-use_debug = "warn"
+# use_debug = "warn"
 verbose_file_reads = "warn"
 
 missing_errors_doc = "allow"

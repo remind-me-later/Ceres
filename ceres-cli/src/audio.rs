@@ -1,9 +1,9 @@
-use core::sync::atomic::{self, AtomicBool};
-
 use anyhow::Context;
+use core::sync::atomic::AtomicBool;
+use core::time::Duration;
 use cpal::traits::StreamTrait;
 use dasp_ring_buffer::Bounded;
-
+use std::sync::Condvar;
 use {alloc::sync::Arc, std::sync::Mutex};
 
 // Buffer size is the number of samples per channel per callback
@@ -15,24 +15,32 @@ const SAMPLE_RATE: i32 = 48000;
 // that implements the AudioCallback trait
 #[derive(Clone)]
 pub struct RingBuffer {
-    exit: Arc<AtomicBool>,
-    buffer: Arc<Mutex<Bounded<[ceres_core::Sample; RING_BUFFER_SIZE]>>>,
+    exiting: Arc<AtomicBool>,
+    buffer: Arc<(
+        Mutex<Bounded<[ceres_core::Sample; RING_BUFFER_SIZE]>>,
+        Condvar,
+    )>,
 }
 
 impl ceres_core::AudioCallback for RingBuffer {
     fn audio_sample(&self, l: ceres_core::Sample, r: ceres_core::Sample) {
         // All of this to avoid overrunning the buffer
-        while !self.exit.load(atomic::Ordering::Relaxed) {
-            if let Ok(mut buffer) = self.buffer.lock() {
-                if !buffer.is_full() {
-                    buffer.push(l);
-                    buffer.push(r);
-
-                    break;
+        let (buffer, cvar) = &*self.buffer;
+        if let Ok(mut buffer) = buffer.lock() {
+            while buffer.is_full() {
+                if self.exiting.load(core::sync::atomic::Ordering::Relaxed) {
+                    return;
                 }
+
+                // Wait a little longer than a frame
+                buffer = cvar
+                    .wait_timeout(buffer, Duration::new(0, 20_000_000))
+                    .unwrap()
+                    .0;
             }
 
-            spin_sleep::sleep(core::time::Duration::from_micros(1000));
+            buffer.push(l);
+            buffer.push(r);
         }
     }
 }
@@ -44,7 +52,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(exit: Arc<AtomicBool>) -> anyhow::Result<Self> {
+    pub fn new(exiting: Arc<AtomicBool>) -> anyhow::Result<Self> {
         use cpal::traits::{DeviceTrait, HostTrait};
 
         let host = cpal::default_host();
@@ -58,14 +66,16 @@ impl Renderer {
             buffer_size: cpal::BufferSize::Fixed(BUFFER_SIZE),
         };
 
-        let ring_buffer = Arc::new(Mutex::new(Bounded::from(
-            [Default::default(); RING_BUFFER_SIZE],
-        )));
+        let ring_buffer = Arc::new((
+            Mutex::new(Bounded::from([Default::default(); RING_BUFFER_SIZE])),
+            Condvar::new(),
+        ));
         let ring_buffer_clone = Arc::clone(&ring_buffer);
 
         let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
         let data_callback = move |buffer: &mut [ceres_core::Sample], _: &_| {
-            if let Ok(mut ring) = ring_buffer_clone.lock() {
+            let (rb, cvar) = &*ring_buffer_clone;
+            if let Ok(mut ring) = rb.lock() {
                 if ring.len() < buffer.len() {
                     eprintln!("ring buffer underrun");
                 }
@@ -74,6 +84,8 @@ impl Renderer {
                     .iter_mut()
                     .zip(ring.drain())
                     .for_each(|(b, s)| *b = s);
+
+                cvar.notify_one();
             }
         };
 
@@ -84,8 +96,8 @@ impl Renderer {
         Ok(Self {
             stream,
             ring_buffer: RingBuffer {
+                exiting,
                 buffer: ring_buffer,
-                exit,
             },
         })
     }

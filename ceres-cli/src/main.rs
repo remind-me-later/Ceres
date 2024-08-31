@@ -1,13 +1,14 @@
+mod app;
+mod audio;
+mod gb_context;
+mod video;
+
+extern crate alloc;
+
 use app::App;
 use clap::Parser;
 use std::path::PathBuf;
 use winit::event_loop::EventLoop;
-
-mod app;
-mod audio;
-mod video;
-
-extern crate alloc;
 
 const SCREEN_MUL: u32 = 3;
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
