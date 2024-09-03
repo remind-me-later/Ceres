@@ -84,9 +84,9 @@ struct Cli {
         long_help = "Game Boy/Color ROM file to emulate. Extension doesn't matter, the \
            emulator will check the file is a valid Game Boy ROM reading its \
            header. Doesn't accept compressed (zip) files.",
-        required = true
+        required = false
     )]
-    file: PathBuf,
+    file: Option<PathBuf>,
     #[arg(
         short,
         long,
@@ -113,7 +113,12 @@ fn main() -> anyhow::Result<()> {
     let project_dirs =
         directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED).unwrap();
 
-    let mut app = App::new(project_dirs, args.model.into(), &args.file, args.scaling)?;
+    let mut app = App::new(
+        project_dirs,
+        args.model.into(),
+        args.file.as_deref(),
+        args.scaling,
+    )?;
 
     event_loop.run_app(&mut app)?;
 

@@ -36,7 +36,7 @@ impl<'a> App<'a> {
     pub fn new(
         project_dirs: directories::ProjectDirs,
         model: ceres_core::Model,
-        rom_path: &Path,
+        rom_path: Option<&Path>,
         scaling: Scaling,
     ) -> anyhow::Result<Self> {
         let audio = audio::State::new()?;

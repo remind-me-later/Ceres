@@ -23,7 +23,7 @@ impl GbContext {
     pub fn new(
         model: ceres_core::Model,
         project_dirs: &directories::ProjectDirs,
-        rom_path: &Path,
+        rom_path: Option<&Path>,
         audio_state: &audio::State,
     ) -> anyhow::Result<Self> {
         fn gb_loop(
@@ -63,32 +63,39 @@ impl GbContext {
             drop(pause_thread);
         }
 
-        let rom = {
-            std::fs::read(rom_path)
-                .map(Vec::into_boxed_slice)
-                .context("no such file")?
+        let (cart, ident) = if let Some(rom_path) = rom_path {
+            let rom = {
+                std::fs::read(rom_path)
+                    .map(Vec::into_boxed_slice)
+                    .context("no such file")?
+            };
+
+            // TODO: core error
+            let mut cart = Cart::new(rom).unwrap();
+            let ident = {
+                let mut ident = String::new();
+                cart.ascii_title().read_to_string(&mut ident).unwrap();
+                ident.push('-');
+                ident.push_str(cart.version().to_string().as_str());
+                ident.push('-');
+                ident.push_str(cart.header_checksum().to_string().as_str());
+                ident.push('-');
+                ident.push_str(cart.global_checksum().to_string().as_str());
+
+                ident
+            };
+
+            if let Ok(ram) =
+                std::fs::read(project_dirs.data_dir().join(&ident).with_extension("sav"))
+                    .map(Vec::into_boxed_slice)
+            {
+                cart.set_ram(ram).unwrap();
+            }
+
+            (cart, ident)
+        } else {
+            (Cart::default(), String::new())
         };
-
-        // TODO: core error
-        let mut cart = Cart::new(rom).unwrap();
-        let ident = {
-            let mut ident = String::new();
-            cart.ascii_title().read_to_string(&mut ident).unwrap();
-            ident.push('-');
-            ident.push_str(cart.version().to_string().as_str());
-            ident.push('-');
-            ident.push_str(cart.header_checksum().to_string().as_str());
-            ident.push('-');
-            ident.push_str(cart.global_checksum().to_string().as_str());
-
-            ident
-        };
-
-        if let Ok(ram) = std::fs::read(project_dirs.data_dir().join(&ident).with_extension("sav"))
-            .map(Vec::into_boxed_slice)
-        {
-            cart.set_ram(ram).unwrap();
-        }
 
         let sample_rate = audio::Stream::sample_rate();
         let audio_stream = audio::Stream::new(audio_state)?;
