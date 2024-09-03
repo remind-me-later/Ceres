@@ -14,8 +14,6 @@ pub struct App {
     // Rendering
     _audio: audio::State,
     screen: screen::GBScreen,
-
-    using_gui: bool,
 }
 
 impl App {
@@ -37,7 +35,6 @@ impl App {
             gb_ctx: Some(gb_ctx),
             _audio: audio,
             screen,
-            using_gui: false,
         }
     }
 
@@ -71,22 +68,23 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            if self.using_gui {
-                ui.heading("Ceres");
-                if ui.button("Open ROM file").clicked() {
-                    println!("Open ROM file");
-                }
+            ui.vertical_centered(|ui| {
+                ui.horizontal_top(|ui| {
+                    if ui.button("Open ROM file").clicked() {
+                        println!("Open ROM file");
+                    }
+                });
 
-                if ctx.input(|i| i.key_pressed(Key::Escape)) {
-                    self.using_gui = false;
-                }
-            } else {
-                self.screen.custom_painting(ui);
+                ui.separator();
 
-                if ctx.input(|i| i.key_pressed(Key::Escape)) {
-                    self.using_gui = true;
-                }
-            }
+                egui::Frame::canvas(ui.style()).show(ui, |ui| {
+                    self.screen.custom_painting(ui);
+                });
+            });
+
+            // if ctx.input(|i| i.key_pressed(Key::Escape)) {
+            //     self.using_gui = true;
+            // }
         });
     }
 }

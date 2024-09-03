@@ -85,7 +85,7 @@ struct Cli {
         long_help = "Game Boy/Color ROM file to emulate. Extension doesn't matter, the \
            emulator will check the file is a valid Game Boy ROM reading its \
            header. Doesn't accept compressed (zip) files.",
-        required = true
+        required = false
     )]
     file: PathBuf,
     #[arg(
@@ -115,11 +115,10 @@ fn main() -> eframe::Result {
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([INIT_WIDTH as f32, INIT_HEIGHT as f32])
+            .with_inner_size([INIT_WIDTH as f32 + 25.0, INIT_HEIGHT as f32 + 25.0])
             .with_min_inner_size([PX_WIDTH as f32, PX_HEIGHT as f32]),
         renderer: eframe::Renderer::Wgpu,
         vsync: true,
-
         ..Default::default()
     };
     eframe::run_native(
