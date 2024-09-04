@@ -34,6 +34,7 @@ pub const TC_SEC: i32 = 0x40_0000; // 2^22
 pub const HRAM_SIZE: u8 = 0x80;
 pub const WRAM_SIZE: u16 = 0x2000 * 4;
 
+#[derive(Debug)]
 pub struct Gb<C: AudioCallback> {
     model: Model,
     cgb_mode: CgbMode,
@@ -190,13 +191,14 @@ impl<C: AudioCallback> Gb<C> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum Model {
     Dmg,
     Mgb,
     Cgb,
 }
 
+#[derive(Debug, Clone, Copy)]
 enum CgbMode {
     Dmg,
     Compat,

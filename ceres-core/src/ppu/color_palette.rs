@@ -2,6 +2,7 @@
 const PAL_RAM_SIZE: u8 = 0x20;
 const PAL_RAM_SIZE_COLORS: u8 = PAL_RAM_SIZE * 3;
 
+#[derive(Debug)]
 pub struct ColorPalette {
     // Rgb color ram
     col: [u8; PAL_RAM_SIZE_COLORS as usize],

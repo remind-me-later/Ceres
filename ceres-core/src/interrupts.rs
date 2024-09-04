@@ -4,7 +4,7 @@ const TIMER: u8 = 4;
 const SERIAL: u8 = 8;
 const P1: u8 = 16;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Interrupts {
     ime: bool,
     ifr: u8,

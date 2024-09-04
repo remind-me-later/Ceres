@@ -22,7 +22,7 @@ pub trait AudioCallback {
     fn audio_sample(&self, l: Sample, r: Sample);
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug)]
 enum PeriodHalf {
     #[default]
     First,
@@ -30,6 +30,7 @@ enum PeriodHalf {
 }
 
 // #[derive(Default)]
+#[derive(Debug)]
 pub struct Apu<C: AudioCallback> {
     nr51: u8,
 

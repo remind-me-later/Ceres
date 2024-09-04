@@ -6,7 +6,7 @@ use {
     crate::apu::{period_counter::PeriodStepResult, LengthTimer, PeriodCounter, PeriodHalf},
 };
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub(super) struct Square<Sweep: SweepTrait> {
     length_timer: LengthTimer<0x3F>,
     period_counter: PeriodCounter<4, Sweep>,

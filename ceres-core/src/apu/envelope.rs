@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug)]
 enum EnvelopeDirection {
     #[default]
     Decrease = 0,
@@ -19,7 +19,7 @@ impl EnvelopeDirection {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub(super) struct Envelope {
     enabled: bool,
     direction: EnvelopeDirection,

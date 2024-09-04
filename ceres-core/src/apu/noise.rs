@@ -3,6 +3,7 @@ use {
     crate::apu::{LengthTimer, PeriodHalf},
 };
 
+#[derive(Debug)]
 pub(super) struct Noise {
     length_timer: LengthTimer<0x3F>,
     envelope: Envelope,

@@ -4,6 +4,7 @@ use {
     Mbc::{Mbc0, Mbc1, Mbc2, Mbc3, Mbc5},
 };
 
+#[derive(Debug)]
 enum Mbc {
     Mbc0,
     Mbc1 {
@@ -91,6 +92,7 @@ impl Display for Error {
 // TODO: core error
 // impl std::error::Error for Error {}
 
+#[derive(Debug)]
 pub struct Cart {
     mbc: Mbc,
 
@@ -447,7 +449,7 @@ impl Cart {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum ROMSize {
     Kb32 = 0,
     Kb64 = 1,
@@ -497,7 +499,7 @@ impl ROMSize {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum RAMSize {
     NoRAM,
     Kb8,
@@ -561,7 +563,7 @@ impl RAMSize {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct Mbc3RTC {
     t_cycles: i32,
     regs: [u8; 5],
