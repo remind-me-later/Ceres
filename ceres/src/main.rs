@@ -123,7 +123,7 @@ fn main() -> eframe::Result {
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([INIT_WIDTH as f32 + 25.0, INIT_HEIGHT as f32 + 100.0])
+            .with_inner_size([INIT_WIDTH as f32 + 20.0, INIT_HEIGHT as f32 + 70.0])
             .with_min_inner_size([PX_WIDTH as f32, PX_HEIGHT as f32]),
         renderer: eframe::Renderer::Wgpu,
         vsync: true,

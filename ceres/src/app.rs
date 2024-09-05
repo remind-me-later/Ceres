@@ -1,4 +1,5 @@
 use eframe::egui::{self, Key};
+use rfd::FileDialog;
 use std::{fs::File, io::Write};
 
 use crate::{audio, gb_context::GbContext, screen, Scaling};
@@ -8,7 +9,7 @@ pub struct App {
     project_dirs: directories::ProjectDirs,
 
     // Contexts
-    gb_ctx: Option<GbContext>,
+    gb_ctx: GbContext,
 
     // Rendering
     _audio: audio::State,
@@ -31,33 +32,31 @@ impl App {
 
         Self {
             project_dirs,
-            gb_ctx: Some(gb_ctx),
+            gb_ctx,
             _audio: audio,
             screen,
         }
     }
 
     fn save_data(&self) {
-        if let Some(gb_ctx) = &self.gb_ctx {
-            let gb = gb_ctx.gb_lock();
-            if let Some(save_data) = gb.cartridge().save_data() {
-                std::fs::create_dir_all(self.project_dirs.data_dir())
-                    .expect("couldn't create data directory");
-                let sav_file = File::create(
-                    self.project_dirs
-                        .data_dir()
-                        .join(gb_ctx.rom_ident())
-                        .with_extension("sav"),
-                );
-                match sav_file {
-                    Ok(mut f) => {
-                        if let Err(e) = f.write_all(save_data) {
-                            eprintln!("couldn't save data in save file: {e}");
-                        }
+        let gb = self.gb_ctx.gb_lock();
+        if let Some(save_data) = gb.cartridge().save_data() {
+            std::fs::create_dir_all(self.project_dirs.data_dir())
+                .expect("couldn't create data directory");
+            let sav_file = File::create(
+                self.project_dirs
+                    .data_dir()
+                    .join(self.gb_ctx.rom_ident())
+                    .with_extension("sav"),
+            );
+            match sav_file {
+                Ok(mut f) => {
+                    if let Err(e) = f.write_all(save_data) {
+                        eprintln!("couldn't save data in save file: {e}");
                     }
-                    Err(e) => {
-                        eprintln!("couldn't open save file: {e}");
-                    }
+                }
+                Err(e) => {
+                    eprintln!("couldn't open save file: {e}");
                 }
             }
         }
@@ -71,7 +70,13 @@ impl eframe::App for App {
                 egui::menu::bar(ui, |ui| {
                     ui.menu_button("File", |ui| {
                         if ui.button("Open ROM").clicked() {
-                            println!("Open ROM file");
+                            let file = FileDialog::new()
+                                .add_filter("gb", &["gb", "gbc"])
+                                .pick_file();
+
+                            if let Some(file) = file {
+                                self.gb_ctx.change_rom(&self.project_dirs, &file).unwrap();
+                            }
                         }
 
                         if ui.button("Export save").clicked() {
@@ -99,18 +104,16 @@ impl eframe::App for App {
                             );
                         });
 
-                    if let Some(gb_ctx) = &mut self.gb_ctx {
-                        let paused = gb_ctx.is_paused();
-                        if ui
-                            .button(if paused { "Play" } else { "Pause" })
-                            .on_hover_text("Pause the game")
-                            .clicked()
-                        {
-                            if paused {
-                                gb_ctx.resume();
-                            } else {
-                                gb_ctx.pause();
-                            }
+                    let paused = self.gb_ctx.is_paused();
+                    if ui
+                        .button(if paused { "Play" } else { "Pause" })
+                        .on_hover_text("Pause the game")
+                        .clicked()
+                    {
+                        if paused {
+                            self.gb_ctx.resume();
+                        } else {
+                            self.gb_ctx.pause();
                         }
                     }
                 });
@@ -121,72 +124,70 @@ impl eframe::App for App {
             });
 
             ctx.input(|i| {
-                if let Some(gb_ctx) = &mut self.gb_ctx {
-                    let mut gb = gb_ctx.mut_gb();
+                let mut gb = self.gb_ctx.mut_gb();
 
-                    if i.key_pressed(Key::W) {
-                        gb.press(ceres_core::Button::Up);
-                    }
+                if i.key_pressed(Key::W) {
+                    gb.press(ceres_core::Button::Up);
+                }
 
-                    if i.key_released(Key::W) {
-                        gb.release(ceres_core::Button::Up);
-                    }
+                if i.key_released(Key::W) {
+                    gb.release(ceres_core::Button::Up);
+                }
 
-                    if i.key_pressed(Key::A) {
-                        gb.press(ceres_core::Button::Left);
-                    }
+                if i.key_pressed(Key::A) {
+                    gb.press(ceres_core::Button::Left);
+                }
 
-                    if i.key_released(Key::A) {
-                        gb.release(ceres_core::Button::Left);
-                    }
+                if i.key_released(Key::A) {
+                    gb.release(ceres_core::Button::Left);
+                }
 
-                    if i.key_pressed(Key::S) {
-                        gb.press(ceres_core::Button::Down);
-                    }
+                if i.key_pressed(Key::S) {
+                    gb.press(ceres_core::Button::Down);
+                }
 
-                    if i.key_released(Key::S) {
-                        gb.release(ceres_core::Button::Down);
-                    }
+                if i.key_released(Key::S) {
+                    gb.release(ceres_core::Button::Down);
+                }
 
-                    if i.key_pressed(Key::D) {
-                        gb.press(ceres_core::Button::Right);
-                    }
+                if i.key_pressed(Key::D) {
+                    gb.press(ceres_core::Button::Right);
+                }
 
-                    if i.key_released(Key::D) {
-                        gb.release(ceres_core::Button::Right);
-                    }
+                if i.key_released(Key::D) {
+                    gb.release(ceres_core::Button::Right);
+                }
 
-                    if i.key_pressed(Key::L) {
-                        gb.press(ceres_core::Button::A);
-                    }
+                if i.key_pressed(Key::L) {
+                    gb.press(ceres_core::Button::A);
+                }
 
-                    if i.key_released(Key::L) {
-                        gb.release(ceres_core::Button::A);
-                    }
+                if i.key_released(Key::L) {
+                    gb.release(ceres_core::Button::A);
+                }
 
-                    if i.key_pressed(Key::K) {
-                        gb.press(ceres_core::Button::B);
-                    }
+                if i.key_pressed(Key::K) {
+                    gb.press(ceres_core::Button::B);
+                }
 
-                    if i.key_released(Key::K) {
-                        gb.release(ceres_core::Button::B);
-                    }
+                if i.key_released(Key::K) {
+                    gb.release(ceres_core::Button::B);
+                }
 
-                    if i.key_pressed(Key::M) {
-                        gb.press(ceres_core::Button::Start);
-                    }
+                if i.key_pressed(Key::M) {
+                    gb.press(ceres_core::Button::Start);
+                }
 
-                    if i.key_released(Key::M) {
-                        gb.release(ceres_core::Button::Start);
-                    }
+                if i.key_released(Key::M) {
+                    gb.release(ceres_core::Button::Start);
+                }
 
-                    if i.key_pressed(Key::N) {
-                        gb.press(ceres_core::Button::Select);
-                    }
+                if i.key_pressed(Key::N) {
+                    gb.press(ceres_core::Button::Select);
+                }
 
-                    if i.key_released(Key::N) {
-                        gb.release(ceres_core::Button::Select);
-                    }
+                if i.key_released(Key::N) {
+                    gb.release(ceres_core::Button::Select);
                 }
             });
         });

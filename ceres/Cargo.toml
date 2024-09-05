@@ -52,12 +52,15 @@ default-features = false
 [dependencies.eframe]
 version = "*"
 default-features = false
-features = ["default_fonts", "wgpu", "wayland"]
+features = ["default_fonts", "wgpu", "wayland", "accesskit"]
 
 [dependencies.winit]
 version = "*"
 default-features = false
 features = ["wayland", "wayland-csd-adwaita", "rwh_06"]
+
+[dependencies.rfd]
+version = "*"
 
 # Required for wgpu safe byte manipulation
 [dependencies.bytemuck]

@@ -22,7 +22,7 @@ pub struct Resources {
 pub struct GBScreen {
     gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
     scaling: Scaling,
-    size: (u32, u32),
+    size: (f32, f32),
 }
 
 impl GBScreen {
@@ -188,13 +188,14 @@ impl GBScreen {
         Self {
             gb,
             scaling,
-            size: (0, 0),
+            size: (0.0, 0.0),
         }
     }
 
     pub fn custom_painting(&mut self, ui: &mut egui::Ui) {
         let rect = ui.available_rect_before_wrap();
-        self.size = (rect.width() as u32, rect.height() as u32);
+
+        self.size = (rect.width(), rect.height());
 
         ui.painter()
             .add(eframe::egui_wgpu::Callback::new_paint_callback(
@@ -269,7 +270,9 @@ impl eframe::egui_wgpu::CallbackTrait for GBScreen {
             let width = self.size.0;
             let height = self.size.1;
             let (x, y) = {
-                let mul = (width / PX_WIDTH).min(height / PX_HEIGHT);
+                let mul = (width / PX_WIDTH as f32)
+                    .min(height / PX_HEIGHT as f32)
+                    .floor() as u32;
                 #[allow(clippy::cast_precision_loss)]
                 let x = (PX_WIDTH * mul) as f32 / width as f32;
                 #[allow(clippy::cast_precision_loss)]
