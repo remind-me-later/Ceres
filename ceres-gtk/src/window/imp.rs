@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use adw::gdk::Key;
-use adw::prelude::AdwDialogExt;
 use adw::prelude::AlertDialogExtManual;
 use adw::subclass::prelude::*;
 use adw::{glib, prelude::*};
@@ -156,15 +155,6 @@ impl ObjectSubclass for Window {
                 }
             },
         );
-
-        let about_dialog = gtk::Builder::from_resource("/org/remind-me-later/ceres-gtk/about.ui");
-        let about_dialog: adw::AboutDialog = about_dialog
-            .object("about_dialog")
-            .expect("Failed to find about_dialog in UI file");
-
-        klass.install_action("app.about", None, move |win, _, _| {
-            about_dialog.present(Some(win));
-        });
     }
 
     fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {

@@ -1,3 +1,4 @@
+mod app;
 mod audio;
 mod gl_area;
 mod window;
@@ -29,7 +30,7 @@ fn main() -> glib::ExitCode {
     adw::gio::resources_register_include!("ceres_gtk.gresource")
         .expect("Failed to register resources.");
 
-    let application = adw::Application::builder().application_id(APP_ID).build();
+    let application = app::Application::new();
 
     application.connect_activate(|app| {
         Window::new(app).set_visible(true);
