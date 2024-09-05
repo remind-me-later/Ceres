@@ -15,6 +15,19 @@ pub struct RingBuffer {
     buffer: Arc<Mutex<Bounded<[ceres_core::Sample; RING_BUFFER_SIZE]>>>,
 }
 
+impl RingBuffer {
+    pub fn new(buffer: Arc<Mutex<Bounded<[ceres_core::Sample; RING_BUFFER_SIZE]>>>) -> Self {
+        // FIll with silence
+        if let Ok(mut buffer) = buffer.lock() {
+            for _ in 0..buffer.max_len() {
+                buffer.push(Default::default());
+            }
+        }
+
+        Self { buffer }
+    }
+}
+
 impl ceres_core::AudioCallback for RingBuffer {
     fn audio_sample(&self, l: ceres_core::Sample, r: ceres_core::Sample) {
         if let Ok(mut buffer) = self.buffer.lock() {
@@ -84,9 +97,7 @@ impl Renderer {
         Self {
             stream,
             volume,
-            ring_buffer: RingBuffer {
-                buffer: ring_buffer,
-            },
+            ring_buffer: RingBuffer::new(ring_buffer),
         }
     }
 

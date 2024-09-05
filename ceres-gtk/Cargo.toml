@@ -10,6 +10,7 @@ epoxy = { version = "*" }
 libloading = { version = "*" }
 glow = { version = "*" }
 spin_sleep = { version = "*" }
+thread-priority = { version = "*" }
 
 # audio
 cpal = { version = "*", default-features = false }

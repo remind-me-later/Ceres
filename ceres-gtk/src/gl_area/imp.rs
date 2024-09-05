@@ -10,7 +10,9 @@ use gtk::TickCallbackId;
 use std::cell::RefCell;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
+use std::sync::Condvar;
 use std::sync::{Arc, Mutex};
+use thread_priority::ThreadBuilderExt;
 
 pub struct GlArea {
     pub gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
@@ -21,7 +23,7 @@ pub struct GlArea {
     pub callbacks: RefCell<Option<TickCallbackId>>,
     pub thread_handle: RefCell<Option<std::thread::JoinHandle<()>>>,
     pub exit: Arc<AtomicBool>,
-    pub pause_thread: Arc<AtomicBool>,
+    pub pause_thread: Arc<(Mutex<bool>, Condvar)>,
 }
 
 impl GlArea {
@@ -34,7 +36,13 @@ impl GlArea {
             glib::ControlFlow::Continue
         }));
 
-        self.pause_thread.store(false, Relaxed);
+        {
+            let (do_pause, cvar) = &*self.pause_thread;
+
+            *do_pause.lock().unwrap() = false;
+
+            cvar.notify_one();
+        }
 
         self.audio.borrow_mut().resume();
     }
@@ -42,7 +50,13 @@ impl GlArea {
     pub fn pause(&self) {
         self.audio.borrow_mut().pause();
 
-        self.pause_thread.store(true, Relaxed);
+        {
+            let (do_pause, cvar) = &*self.pause_thread;
+
+            *do_pause.lock().unwrap() = true;
+
+            cvar.notify_one();
+        }
 
         if let Some(tick_id) = self.callbacks.borrow_mut().take() {
             tick_id.remove();
@@ -66,16 +80,21 @@ impl ObjectSubclass for GlArea {
         fn gb_loop(
             gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
             exit: Arc<AtomicBool>,
-            pause_thread: Arc<AtomicBool>,
+            pause_thread: Arc<(Mutex<bool>, Condvar)>,
         ) {
             while !exit.load(Relaxed) {
+                {
+                    let (do_pause, cvar) = &*pause_thread;
+
+                    let _guard =
+                        cvar.wait_while(do_pause.lock().unwrap(), |&mut do_pause| do_pause);
+                }
+
                 let mut duration = ceres_core::FRAME_DURATION;
                 let begin = std::time::Instant::now();
 
-                if !pause_thread.load(Relaxed) {
-                    if let Ok(mut gb) = gb.lock() {
-                        duration = gb.run_frame();
-                    }
+                if let Ok(mut gb) = gb.lock() {
+                    duration = gb.run_frame();
                 }
 
                 let elapsed = begin.elapsed();
@@ -96,18 +115,24 @@ impl ObjectSubclass for GlArea {
             audio.borrow().get_ring_buffer(),
         )));
 
-        let pause_thread = Arc::new(AtomicBool::new(true));
+        let pause_thread = Arc::new((Mutex::new(false), Condvar::new()));
         let exit = Arc::new(AtomicBool::new(false));
 
         let thread_handle = {
             let gb = Arc::clone(&gb);
             let exit = Arc::clone(&exit);
             let pause_thread = Arc::clone(&pause_thread);
+            let thread_builder = std::thread::Builder::new().name("gb_loop".to_owned());
 
-            RefCell::new(Some(std::thread::spawn(move || {
-                gb_loop(gb, exit, pause_thread)
-            })))
+            // std::thread::spawn(move || gb_loop(gb, exit, pause_thread))
+            thread_builder
+                .spawn_with_priority(thread_priority::ThreadPriority::Max, move |_| {
+                    gb_loop(gb, exit, pause_thread);
+                })
+                .unwrap()
         };
+
+        let thread_handle = RefCell::new(Some(thread_handle));
 
         Self {
             gb,
