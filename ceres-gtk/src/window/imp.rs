@@ -277,7 +277,13 @@ fn init_gb(
         .and_then(|p| fs::read(p).map(Vec::into_boxed_slice).ok());
 
     let cart = if let Some(rom) = rom {
-        ceres_core::Cart::new(rom, ram)?
+        let mut cart = ceres_core::Cart::new(rom)?;
+
+        if let Some(ram) = ram {
+            cart.set_ram(ram)?;
+        }
+
+        cart
     } else {
         ceres_core::Cart::default()
     };

@@ -138,27 +138,16 @@ impl Default for Cart {
 }
 
 impl Cart {
-    pub fn new(rom: Box<[u8]>, ram: Option<Box<[u8]>>) -> Result<Self, Error> {
+    pub fn new(rom: Box<[u8]>) -> Result<Self, Error> {
         let rom_size = ROMSize::new(rom[0x148])?;
         let ram_size = RAMSize::new(rom[0x149])?;
         let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], rom_size)?;
-
-        // println!("{mbc:?}");
-        // println!("{rom_size:?}");
-        // println!("{ram_size:?}");
 
         if rom_size.size_bytes() as usize != rom.len() {
             return Err(Error::RomSizeDifferentThanActual);
         }
 
-        let ram = if let Some(ram) = ram {
-            if ram_size.size_bytes() as usize != ram.len() {
-                return Err(Error::RamSizeDifferentThanActual);
-            }
-            ram
-        } else {
-            alloc::vec![0xFF; ram_size.size_bytes() as usize].into_boxed_slice()
-        };
+        let ram = alloc::vec![0xFF; ram_size.size_bytes() as usize].into_boxed_slice();
 
         Ok(Self {
             mbc,
@@ -174,6 +163,55 @@ impl Cart {
             ram_offset: 0,
             has_battery,
         })
+    }
+
+    pub fn set_ram(&mut self, ram: Box<[u8]>) -> Result<(), Error> {
+        let ram_size = RAMSize::new(self.rom[0x149])?;
+
+        if ram_size.size_bytes() as usize != ram.len() {
+            return Err(Error::RamSizeDifferentThanActual);
+        }
+
+        self.ram = ram;
+
+        Ok(())
+    }
+
+    #[must_use]
+    pub const fn is_old_licensee_code(&self) -> bool {
+        let code = self.rom[0x14B];
+        code != 0x33
+    }
+
+    #[must_use]
+    pub fn ascii_title(&self) -> &[u8] {
+        let range = if self.is_old_licensee_code() {
+            0x134..0x144
+        } else {
+            0x134..0x13F
+        };
+
+        let title = &self.rom[range];
+        let mut i = 0;
+        while i < title.len() && title[i] != 0 {
+            i += 1;
+        }
+        &title[..i]
+    }
+
+    #[must_use]
+    pub const fn header_checksum(&self) -> u8 {
+        self.rom[0x14D]
+    }
+
+    #[must_use]
+    pub const fn global_checksum(&self) -> u16 {
+        u16::from_be_bytes([self.rom[0x14E], self.rom[0x14F]])
+    }
+
+    #[must_use]
+    pub const fn version(&self) -> u8 {
+        self.rom[0x14C]
     }
 
     #[must_use]
