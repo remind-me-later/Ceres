@@ -24,7 +24,7 @@ impl Scene {
     }
 
     pub fn scaling(&self) -> Scaling {
-        self.scaling()
+        self.scaling
     }
 }
 

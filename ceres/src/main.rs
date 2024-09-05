@@ -58,6 +58,8 @@ pub fn main() -> iced::Result {
                 width: INIT_WIDTH as f32,
                 height: INIT_HEIGHT as f32,
             },
+            resizable: true,
+            visible: true,
             ..iced::window::Settings::default()
         },
         default_font: iced::Font {
@@ -126,37 +128,6 @@ impl Application for App {
 
     fn view(&self) -> Element<Message> {
         let content = {
-            // let open_button = button("Open file")
-            //     .padding(10)
-            //     .on_press(Message::OpenButtonPressed);
-
-            // let export_button = button("Export save")
-            //     .padding(10)
-            //     .on_press(Message::OpenButtonPressed);
-
-            // column![
-            //     iced::widget::Text::new("Ceres")
-            //         .size(20)
-            //         .horizontal_alignment(iced::alignment::Horizontal::Left),
-            //     open_button,
-            //     export_button,
-            //     row![
-            //         text("Scaling mode"),
-            //         pick_list(
-            //             Scaling::ALL,
-            //             Some(self.widget.scaling()),
-            //             Message::ScalingChanged
-            //         )
-            //         .width(Length::Shrink)
-            //     ]
-            //     .align_items(Alignment::Center)
-            //     .spacing(20),
-            // ]
-            // .align_items(Alignment::Start)
-            // .spacing(10)
-            // .padding(10)
-            // .max_width(600)
-            //
             let top_row = row![
                 text("Scaling mode"),
                 pick_list(
@@ -174,16 +145,16 @@ impl Application for App {
             column![top_row, shader].spacing(20)
         };
 
-        container(content).into()
-            // .width(Length::Fill)
-            // .height(Length::Fill)
-            // .center_x()
-            // .center_y()
-            // .into()
+        container(content)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x()
+            .center_y()
+            .into()
     }
 
     fn theme(&self) -> Theme {
-        Theme::default()
+        Theme::GruvboxLight
     }
 
     fn subscription(&self) -> Subscription<Message> {
