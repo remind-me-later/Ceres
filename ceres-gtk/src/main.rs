@@ -6,6 +6,8 @@ use adw::glib;
 use adw::prelude::*;
 use window::Window;
 
+pub const APP_ID: &str = "com.github.remind-me-later.ceres-gtk";
+
 fn main() -> glib::ExitCode {
     {
         #[cfg(target_os = "macos")]
@@ -27,9 +29,7 @@ fn main() -> glib::ExitCode {
     adw::gio::resources_register_include!("ceres_gtk.gresource")
         .expect("Failed to register resources.");
 
-    let application = adw::Application::builder()
-        .application_id("com.github.remind-me-later.ceres-gtk")
-        .build();
+    let application = adw::Application::builder().application_id(APP_ID).build();
 
     application.connect_activate(|app| {
         Window::new(app).set_visible(true);

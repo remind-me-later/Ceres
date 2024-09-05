@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -9,10 +9,11 @@ use adw::prelude::AdwDialogExt;
 use adw::prelude::AlertDialogExtManual;
 use adw::subclass::prelude::*;
 use adw::{glib, prelude::*};
+use ceres_core::Cart;
 use gtk::CompositeTemplate;
 
-use crate::audio;
 use crate::gl_area::{GlArea, PxScaleMode};
+use crate::{audio, APP_ID};
 
 #[derive(Debug, CompositeTemplate)]
 #[template(resource = "/org/remind-me-later/ceres-gtk/window.ui")]
@@ -24,7 +25,7 @@ pub struct Window {
     #[template_child(id = "volume_button")]
     pub volume_button: TemplateChild<gtk::ScaleButton>,
     pub dialog: gtk::FileDialog,
-    pub rom_path: RefCell<Option<PathBuf>>,
+    pub rom_id: RefCell<String>,
 }
 
 impl Window {
@@ -32,27 +33,43 @@ impl Window {
         let gb = self.gb_area.gb().lock();
 
         if let Some(save_data) = gb.unwrap().cartridge().save_data() {
-            // TODO: if rom can be saved rom_path should be Some
-            if let Some(sav_path) = self
-                .rom_path
-                .borrow()
-                .as_ref()
-                .map(|p| p.with_extension("sav"))
-            {
-                let sav_file = File::create(sav_path);
-                match sav_file {
-                    // TODO: pretty errors
-                    Ok(mut f) => {
-                        if let Err(e) = f.write_all(save_data) {
-                            eprintln!("couldn't save data in save file: {e}");
-                        }
+            let sav_path = Self::data_path()
+                .join(self.rom_id.borrow().as_str())
+                .with_extension("sav");
+
+            let sav_file = File::create(sav_path);
+            match sav_file {
+                // TODO: pretty errors
+                Ok(mut f) => {
+                    if let Err(e) = f.write_all(save_data) {
+                        eprintln!("couldn't save data in save file: {e}");
                     }
-                    Err(e) => {
-                        eprintln!("couldn't open save file: {e}");
-                    }
+                }
+                Err(e) => {
+                    eprintln!("couldn't open save file: {e}");
                 }
             }
         }
+    }
+
+    pub fn data_path() -> PathBuf {
+        let mut path = glib::user_data_dir();
+        path.push(APP_ID);
+        std::fs::create_dir_all(&path).expect("Could not create directory.");
+        path
+    }
+
+    pub fn rom_id(cart: &Cart) -> String {
+        let mut ident = String::new();
+        cart.ascii_title().read_to_string(&mut ident).unwrap();
+        ident.push('-');
+        ident.push_str(cart.version().to_string().as_str());
+        ident.push('-');
+        ident.push_str(cart.header_checksum().to_string().as_str());
+        ident.push('-');
+        ident.push_str(cart.global_checksum().to_string().as_str());
+
+        ident
     }
 }
 
@@ -79,8 +96,8 @@ impl ObjectSubclass for Window {
             dialog: file_dialog,
             gb_area: TemplateChild::default(),
             pause_button: TemplateChild::default(),
-            rom_path: Default::default(),
             volume_button: Default::default(),
+            rom_id: RefCell::new("bootrom".to_owned()),
         }
     }
 
@@ -100,8 +117,8 @@ impl ObjectSubclass for Window {
 
                     // TODO: gracefully handle invalid files
                     match init_gb(ceres_core::Model::Cgb, Some(&pathbuf), audio) {
-                        Ok(mut new_gb) => {
-                            *win.imp().rom_path.borrow_mut() = Some(pathbuf);
+                        Ok((mut new_gb, id)) => {
+                            *win.imp().rom_id.borrow_mut() = id;
                             // Swap the GB instances
                             let mut lock = win.imp().gb_area.gb().lock().unwrap();
                             core::mem::swap(&mut *lock, &mut new_gb);
@@ -269,26 +286,31 @@ fn init_gb(
     model: ceres_core::Model,
     rom_path: Option<&Path>,
     audio: audio::RingBuffer,
-) -> Result<ceres_core::Gb<audio::RingBuffer>, ceres_core::Error> {
+) -> Result<(ceres_core::Gb<audio::RingBuffer>, String), ceres_core::Error> {
     let rom = rom_path.map(|p| fs::read(p).map(Vec::into_boxed_slice).unwrap());
 
-    let ram = rom_path
-        .map(|p| p.with_extension("sav"))
-        .and_then(|p| fs::read(p).map(Vec::into_boxed_slice).ok());
+    // let ram = rom_path
+    //     .map(|p| p.with_extension("sav"))
+    //     .and_then(|p| fs::read(p).map(Vec::into_boxed_slice).ok());
 
-    let cart = if let Some(rom) = rom {
+    let (cart, id) = if let Some(rom) = rom {
         let mut cart = ceres_core::Cart::new(rom)?;
+
+        let id = Window::rom_id(&cart);
+        let sav_path = Window::data_path().join(&id).with_extension("sav");
+
+        let ram = fs::read(sav_path).map(Vec::into_boxed_slice).ok();
 
         if let Some(ram) = ram {
             cart.set_ram(ram)?;
         }
 
-        cart
+        (cart, id)
     } else {
-        ceres_core::Cart::default()
+        (ceres_core::Cart::default(), String::new())
     };
 
     let sample_rate = audio::Renderer::sample_rate();
 
-    Ok(ceres_core::Gb::new(model, sample_rate, cart, audio))
+    Ok((ceres_core::Gb::new(model, sample_rate, cart, audio), id))
 }
