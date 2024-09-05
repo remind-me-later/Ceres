@@ -173,7 +173,7 @@ impl WidgetImpl for GlArea {
     }
 
     fn measure(&self, orientation: gtk::Orientation, _for_size: i32) -> (i32, i32, i32, i32) {
-        const MULTIPLIER: i32 = 3;
+        const MULTIPLIER: i32 = 2;
 
         match orientation {
             gtk::Orientation::Horizontal => {

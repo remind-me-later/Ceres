@@ -18,7 +18,7 @@ pub struct Renderer {
     gl: Context,
     program: NativeProgram,
     vao: NativeVertexArray,
-    pbo: glow::Buffer,
+    // pbo: glow::Buffer,
     texture: NativeTexture,
     dims_unif: UniformLocation,
     scale_unif: UniformLocation,
@@ -104,19 +104,19 @@ impl Renderer {
             // Init scale uniform
             gl.uniform_1_u32_slice(Some(&scale_unif), &[PxScaleMode::Nearest as u32]);
 
-            let pbo = gl.create_buffer().expect("cannot create pbo");
-            gl.bind_buffer(glow::PIXEL_UNPACK_BUFFER, Some(pbo));
-            gl.buffer_data_size(
-                glow::PIXEL_UNPACK_BUFFER,
-                (PX_WIDTH * PX_HEIGHT * 3) as i32,
-                glow::STREAM_DRAW,
-            );
+            // let pbo = gl.create_buffer().expect("cannot create pbo");
+            // gl.bind_buffer(glow::PIXEL_UNPACK_BUFFER, Some(pbo));
+            // gl.buffer_data_size(
+            //     glow::PIXEL_UNPACK_BUFFER,
+            //     (PX_WIDTH * PX_HEIGHT * 3) as i32,
+            //     glow::STREAM_DRAW,
+            // );
 
             Self {
                 gl,
                 program,
                 vao,
-                pbo,
+                // pbo,
                 texture,
                 dims_unif,
                 scale_unif,
@@ -136,20 +136,20 @@ impl Renderer {
 
     pub fn draw_frame(&mut self, rgb: &[u8]) {
         unsafe {
-            self.gl
-                .bind_buffer(glow::PIXEL_UNPACK_BUFFER, Some(self.pbo));
+            // self.gl
+            //     .bind_buffer(glow::PIXEL_UNPACK_BUFFER, Some(self.pbo));
 
-            #[allow(clippy::cast_possible_truncation)]
-            let buf = self.gl.map_buffer_range(
-                glow::PIXEL_UNPACK_BUFFER,
-                0,
-                rgb.len() as i32,
-                glow::MAP_WRITE_BIT | glow::MAP_INVALIDATE_BUFFER_BIT,
-            );
+            // #[allow(clippy::cast_possible_truncation)]
+            // let buf = self.gl.map_buffer_range(
+            //     glow::PIXEL_UNPACK_BUFFER,
+            //     0,
+            //     rgb.len() as i32,
+            //     glow::MAP_WRITE_BIT | glow::MAP_INVALIDATE_BUFFER_BIT,
+            // );
 
-            std::ptr::copy_nonoverlapping(rgb.as_ptr(), buf, rgb.len());
+            // std::ptr::copy_nonoverlapping(rgb.as_ptr(), buf, rgb.len());
 
-            self.gl.unmap_buffer(glow::PIXEL_UNPACK_BUFFER);
+            // self.gl.unmap_buffer(glow::PIXEL_UNPACK_BUFFER);
 
             self.gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
 
@@ -162,7 +162,7 @@ impl Renderer {
                 0,
                 glow::RGB,
                 glow::UNSIGNED_BYTE,
-                None,
+                Some(rgb),
             );
 
             self.gl.use_program(Some(self.program));
