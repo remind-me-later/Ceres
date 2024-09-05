@@ -30,6 +30,7 @@ impl GBScreen {
     pub fn new<'a>(
         cc: &'a eframe::CreationContext<'a>,
         gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
+        scaling: Scaling,
     ) -> Self {
         // Get the WGPU render state from the eframe creation context. This can also be retrieved
         // from `eframe::Frame` when you don't have a `CreationContext` available.
@@ -114,7 +115,7 @@ impl GBScreen {
 
         let scale_uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
-            contents: bytemuck::cast_slice(&[Scaling::default() as u32]),
+            contents: bytemuck::cast_slice(&[scaling as u32]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
@@ -186,7 +187,7 @@ impl GBScreen {
 
         Self {
             gb,
-            scaling: Default::default(),
+            scaling,
             size: (0, 0),
         }
     }
@@ -204,6 +205,14 @@ impl GBScreen {
                     size: self.size,
                 },
             ));
+    }
+
+    pub fn scaling(&self) -> Scaling {
+        self.scaling
+    }
+
+    pub fn mut_scaling(&mut self) -> &mut Scaling {
+        &mut self.scaling
     }
 }
 

@@ -1,8 +1,8 @@
 use crate::audio;
-use ceres_core::{Button, Cart};
+use ceres_core::Cart;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
-use eframe::egui::{self, Key};
+use eframe::egui::{self};
 use std::{
     io::Read,
     sync::{Mutex, MutexGuard},
@@ -23,7 +23,7 @@ impl GbContext {
     pub fn new(
         model: ceres_core::Model,
         project_dirs: &directories::ProjectDirs,
-        rom_path: &Path,
+        rom_path: Option<&Path>,
         audio_state: &audio::State,
         ctx: &egui::Context,
     ) -> anyhow::Result<Self> {
@@ -66,32 +66,39 @@ impl GbContext {
             drop(pause_thread);
         }
 
-        let rom = {
-            std::fs::read(rom_path)
-                .map(Vec::into_boxed_slice)
-                .context("no such file")?
+        let (cart, ident) = if let Some(rom_path) = rom_path {
+            let rom = {
+                std::fs::read(rom_path)
+                    .map(Vec::into_boxed_slice)
+                    .context("no such file")?
+            };
+
+            // TODO: core error
+            let mut cart = Cart::new(rom).unwrap();
+            let ident = {
+                let mut ident = String::new();
+                cart.ascii_title().read_to_string(&mut ident).unwrap();
+                ident.push('-');
+                ident.push_str(cart.version().to_string().as_str());
+                ident.push('-');
+                ident.push_str(cart.header_checksum().to_string().as_str());
+                ident.push('-');
+                ident.push_str(cart.global_checksum().to_string().as_str());
+
+                ident
+            };
+
+            if let Ok(ram) =
+                std::fs::read(project_dirs.data_dir().join(&ident).with_extension("sav"))
+                    .map(Vec::into_boxed_slice)
+            {
+                cart.set_ram(ram).unwrap();
+            }
+
+            (cart, ident)
+        } else {
+            (Cart::default(), String::from("bootrom"))
         };
-
-        // TODO: core error
-        let mut cart = Cart::new(rom).unwrap();
-        let ident = {
-            let mut ident = String::new();
-            cart.ascii_title().read_to_string(&mut ident).unwrap();
-            ident.push('-');
-            ident.push_str(cart.version().to_string().as_str());
-            ident.push('-');
-            ident.push_str(cart.header_checksum().to_string().as_str());
-            ident.push('-');
-            ident.push_str(cart.global_checksum().to_string().as_str());
-
-            ident
-        };
-
-        if let Ok(ram) = std::fs::read(project_dirs.data_dir().join(&ident).with_extension("sav"))
-            .map(Vec::into_boxed_slice)
-        {
-            cart.set_ram(ram).unwrap();
-        }
 
         let sample_rate = audio::Stream::sample_rate();
         let audio_stream = audio::Stream::new(audio_state)?;
@@ -127,36 +134,8 @@ impl GbContext {
         })
     }
 
-    pub fn on_key_press(&mut self, key: &Key) {
-        if let Ok(mut gb) = self.gb.lock() {
-            match key {
-                Key::W => gb.press(Button::Up),
-                Key::A => gb.press(Button::Left),
-                Key::S => gb.press(Button::Down),
-                Key::D => gb.press(Button::Right),
-                Key::L => gb.press(Button::A),
-                Key::K => gb.press(Button::B),
-                Key::M => gb.press(Button::Start),
-                Key::N => gb.press(Button::Select),
-                _ => (),
-            }
-        }
-    }
-
-    pub fn on_key_release(&mut self, key: &Key) {
-        if let Ok(mut gb) = self.gb.lock() {
-            match key {
-                Key::W => gb.release(Button::Up),
-                Key::A => gb.release(Button::Left),
-                Key::S => gb.release(Button::Down),
-                Key::D => gb.release(Button::Right),
-                Key::L => gb.release(Button::A),
-                Key::K => gb.release(Button::B),
-                Key::M => gb.release(Button::Start),
-                Key::N => gb.release(Button::Select),
-                _ => (),
-            }
-        }
+    pub fn mut_gb(&mut self) -> MutexGuard<Gb<audio::RingBuffer>> {
+        self.gb.lock().unwrap()
     }
 
     pub fn is_paused(&self) -> bool {

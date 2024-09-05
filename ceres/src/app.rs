@@ -1,6 +1,5 @@
-use eframe::egui::{self, Event, Key};
-use egui::mutex::Mutex;
-use std::{fs::File, io::Write, sync::Arc};
+use eframe::egui::{self, Key};
+use std::{fs::File, io::Write};
 
 use crate::{audio, gb_context::GbContext, screen, Scaling};
 
@@ -21,14 +20,14 @@ impl App {
         cc: &eframe::CreationContext<'_>,
         model: ceres_core::Model,
         project_dirs: directories::ProjectDirs,
-        rom_path: &std::path::Path,
+        rom_path: Option<&std::path::Path>,
         scaling: Scaling,
     ) -> Self {
         let ctx = &cc.egui_ctx;
         let audio = audio::State::new().unwrap();
         let gb_ctx = GbContext::new(model, &project_dirs, rom_path, &audio, ctx).unwrap();
         let gb_clone = gb_ctx.gb_clone();
-        let screen = screen::GBScreen::new(cc, gb_clone);
+        let screen = screen::GBScreen::new(cc, gb_clone, scaling);
 
         Self {
             project_dirs,
@@ -69,22 +68,142 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical_centered(|ui| {
-                ui.horizontal_top(|ui| {
-                    if ui.button("Open ROM file").clicked() {
-                        println!("Open ROM file");
+                egui::menu::bar(ui, |ui| {
+                    ui.menu_button("File", |ui| {
+                        if ui.button("Open ROM").clicked() {
+                            println!("Open ROM file");
+                        }
+
+                        if ui.button("Export save").clicked() {
+                            println!("Export save file");
+                        }
+                    });
+
+                    egui::ComboBox::from_label("Scaling")
+                        .selected_text(format!("{}", self.screen.scaling()))
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(
+                                self.screen.mut_scaling(),
+                                Scaling::Nearest,
+                                "Nearest",
+                            );
+                            ui.selectable_value(
+                                self.screen.mut_scaling(),
+                                Scaling::Scale2x,
+                                "Scale2x",
+                            );
+                            ui.selectable_value(
+                                self.screen.mut_scaling(),
+                                Scaling::Scale3x,
+                                "Scale3x",
+                            );
+                        });
+
+                    if let Some(gb_ctx) = &mut self.gb_ctx {
+                        let paused = gb_ctx.is_paused();
+                        if ui
+                            .button(if paused { "Play" } else { "Pause" })
+                            .on_hover_text("Pause the game")
+                            .clicked()
+                        {
+                            if paused {
+                                gb_ctx.resume();
+                            } else {
+                                gb_ctx.pause();
+                            }
+                        }
                     }
                 });
 
-                ui.separator();
+                // ui.separator();
 
-                egui::Frame::canvas(ui.style()).show(ui, |ui| {
-                    self.screen.custom_painting(ui);
-                });
+                self.screen.custom_painting(ui);
             });
 
-            // if ctx.input(|i| i.key_pressed(Key::Escape)) {
-            //     self.using_gui = true;
-            // }
+            ctx.input(|i| {
+                if let Some(gb_ctx) = &mut self.gb_ctx {
+                    let mut gb = gb_ctx.mut_gb();
+
+                    if i.key_pressed(Key::W) {
+                        gb.press(ceres_core::Button::Up);
+                    }
+
+                    if i.key_released(Key::W) {
+                        gb.release(ceres_core::Button::Up);
+                    }
+
+                    if i.key_pressed(Key::A) {
+                        gb.press(ceres_core::Button::Left);
+                    }
+
+                    if i.key_released(Key::A) {
+                        gb.release(ceres_core::Button::Left);
+                    }
+
+                    if i.key_pressed(Key::S) {
+                        gb.press(ceres_core::Button::Down);
+                    }
+
+                    if i.key_released(Key::S) {
+                        gb.release(ceres_core::Button::Down);
+                    }
+
+                    if i.key_pressed(Key::D) {
+                        gb.press(ceres_core::Button::Right);
+                    }
+
+                    if i.key_released(Key::D) {
+                        gb.release(ceres_core::Button::Right);
+                    }
+
+                    if i.key_pressed(Key::L) {
+                        gb.press(ceres_core::Button::A);
+                    }
+
+                    if i.key_released(Key::L) {
+                        gb.release(ceres_core::Button::A);
+                    }
+
+                    if i.key_pressed(Key::K) {
+                        gb.press(ceres_core::Button::B);
+                    }
+
+                    if i.key_released(Key::K) {
+                        gb.release(ceres_core::Button::B);
+                    }
+
+                    if i.key_pressed(Key::M) {
+                        gb.press(ceres_core::Button::Start);
+                    }
+
+                    if i.key_released(Key::M) {
+                        gb.release(ceres_core::Button::Start);
+                    }
+
+                    if i.key_pressed(Key::N) {
+                        gb.press(ceres_core::Button::Select);
+                    }
+
+                    if i.key_released(Key::N) {
+                        gb.release(ceres_core::Button::Select);
+                    }
+                }
+            });
         });
     }
+
+    fn on_exit(&mut self) {
+        self.save_data();
+    }
+
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        // NOTE: a bright gray makes the shadows of the windows look weird.
+        // We use a bit of transparency so that if the user switches on the
+        // `transparent()` option they get immediate results.
+        egui::Color32::from_rgba_unmultiplied(12, 12, 12, 180).to_normalized_gamma_f32()
+
+        // _visuals.window_fill() would also be a natural choice
+    }
+
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, _raw_input: &mut egui::RawInput) {}
 }

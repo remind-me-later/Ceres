@@ -11,7 +11,7 @@ use app::App;
 use clap::Parser;
 use std::path::PathBuf;
 
-const SCREEN_MUL: u32 = 3;
+const SCREEN_MUL: u32 = 2;
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
 const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
 const INIT_WIDTH: u32 = PX_WIDTH * SCREEN_MUL;
@@ -58,7 +58,7 @@ impl From<Model> for ceres_core::Model {
     }
 }
 
-#[derive(Default, Clone, Copy, clap::ValueEnum)]
+#[derive(Default, Clone, Copy, PartialEq, clap::ValueEnum)]
 pub enum Scaling {
     #[default]
     Nearest = 0,
@@ -77,6 +77,16 @@ impl Scaling {
     }
 }
 
+impl std::fmt::Display for Scaling {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Scaling::Nearest => write!(f, "Nearest"),
+            Scaling::Scale2x => write!(f, "Scale2x"),
+            Scaling::Scale3x => write!(f, "Scale3x"),
+        }
+    }
+}
+
 #[derive(clap::Parser)]
 #[command(name = CERES_BIN, about = ABOUT, after_help = AFTER_HELP)]
 struct Cli {
@@ -87,7 +97,7 @@ struct Cli {
            header. Doesn't accept compressed (zip) files.",
         required = false
     )]
-    file: PathBuf,
+    file: Option<PathBuf>,
     #[arg(
         short,
         long,
@@ -115,7 +125,7 @@ fn main() -> eframe::Result {
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([INIT_WIDTH as f32 + 25.0, INIT_HEIGHT as f32 + 25.0])
+            .with_inner_size([INIT_WIDTH as f32 + 25.0, INIT_HEIGHT as f32 + 100.0])
             .with_min_inner_size([PX_WIDTH as f32, PX_HEIGHT as f32]),
         renderer: eframe::Renderer::Wgpu,
         vsync: true,
@@ -129,7 +139,7 @@ fn main() -> eframe::Result {
                 cc,
                 args.model.into(),
                 project_dirs,
-                &args.file,
+                args.file.as_deref(),
                 args.scaling,
             )))
         }),
