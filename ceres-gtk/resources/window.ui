@@ -56,6 +56,10 @@
                 <property name="value">0.8</property>
               </object>
             </property>
+            <property name="icons">audio-volume-muted-symbolic
+audio-volume-high-symbolic
+audio-volume-low-symbolic
+audio-volume-medium-symbolic</property>
           </object>
         </child>
         <child type="end">

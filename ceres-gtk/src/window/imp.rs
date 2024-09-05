@@ -264,14 +264,6 @@ impl ObjectImpl for Window {
             .connect_value_changed(move |_, new_volume| {
                 *volume.lock().unwrap() = new_volume as f32;
             });
-
-        // TODO: do this in XML
-        self.volume_button.set_icons(&[
-            "audio-volume-muted-symbolic",
-            "audio-volume-high-symbolic",
-            "audio-volume-low-symbolic",
-            "audio-volume-medium-symbolic",
-        ]);
     }
 
     fn dispose(&self) {
