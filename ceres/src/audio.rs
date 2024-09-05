@@ -1,7 +1,7 @@
 use anyhow::Context;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use dasp_ring_buffer::Bounded;
-use {alloc::sync::Arc, std::sync::Mutex};
+use {std::sync::Arc, std::sync::Mutex};
 
 // Buffer size is the number of samples per channel per callback
 const BUFFER_SIZE: cpal::FrameCount = 512;

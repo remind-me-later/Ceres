@@ -8,7 +8,7 @@ use std::{
     sync::{Mutex, MutexGuard},
 };
 use thread_priority::ThreadBuilderExt;
-use {alloc::sync::Arc, anyhow::Context, ceres_core::Gb, std::path::Path};
+use {anyhow::Context, ceres_core::Gb, std::path::Path, std::sync::Arc};
 
 pub struct GbContext {
     gb: Arc<Mutex<Gb<audio::RingBuffer>>>,

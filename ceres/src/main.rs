@@ -3,8 +3,6 @@ mod audio;
 mod gb_context;
 mod screen;
 
-extern crate alloc;
-
 use eframe::egui;
 
 use app::App;
