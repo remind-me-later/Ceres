@@ -1,13 +1,9 @@
+mod app;
 mod audio;
 mod gb_widget;
 mod scene;
 
-use std::time::Instant;
-
-use iced::widget::{button, column, container, pick_list, row, shader, text};
-use iced::{
-    window, Alignment, Application, Command, Element, Length, Settings, Subscription, Theme,
-};
+use iced::{Application, Settings};
 
 const SCREEN_MUL: u32 = 3;
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
@@ -17,7 +13,7 @@ const INIT_HEIGHT: u32 = PX_HEIGHT * SCREEN_MUL;
 
 const QUALIFIER: &str = "com";
 const ORGANIZATION: &str = "remind-me-later";
-const CERES_BIN: &str = "ceres";
+// const CERES_BIN: &str = "ceres";
 const CERES_STYLIZED: &str = "Ceres";
 
 #[derive(Default, Clone, Copy, PartialEq, Debug)]
@@ -52,7 +48,7 @@ impl std::fmt::Display for Scaling {
 }
 
 pub fn main() -> iced::Result {
-    App::run(Settings {
+    app::App::run(Settings {
         window: iced::window::Settings {
             size: iced::Size {
                 width: INIT_WIDTH as f32,
@@ -68,96 +64,4 @@ pub fn main() -> iced::Result {
         },
         ..Settings::default()
     })
-}
-
-struct App {
-    widget: gb_widget::GbWidget,
-    _audio: audio::State,
-
-    project_dirs: directories::ProjectDirs,
-}
-
-impl Default for App {
-    fn default() -> Self {
-        let project_dirs =
-            directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED).unwrap();
-        let audio = audio::State::new();
-
-        App {
-            widget: gb_widget::GbWidget::new(ceres_core::Model::Cgb, &project_dirs, None, &audio),
-            _audio: audio,
-            project_dirs,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-enum Message {
-    ScalingChanged(Scaling),
-    OpenButtonPressed,
-    ExportButtonPressed,
-    Tick(Instant),
-}
-
-impl Application for App {
-    type Message = Message;
-    type Executor = iced::executor::Default;
-    type Theme = Theme;
-    type Flags = ();
-
-    fn new(_flags: Self::Flags) -> (Self, Command<Self::Message>) {
-        (App::default(), Command::none())
-    }
-
-    fn title(&self) -> String {
-        String::from("Ceres")
-    }
-
-    fn update(&mut self, message: Message) -> Command<Self::Message> {
-        match message {
-            Message::ScalingChanged(scaling) => {
-                self.widget.set_scaling(scaling);
-            }
-            Message::OpenButtonPressed => {}
-            Message::ExportButtonPressed => {}
-            Message::Tick(_) => {}
-        }
-
-        Command::none()
-    }
-
-    fn view(&self) -> Element<Message> {
-        let content = {
-            let top_row = row![
-                text("Scaling mode"),
-                pick_list(
-                    Scaling::ALL,
-                    Some(self.widget.scaling()),
-                    Message::ScalingChanged
-                )
-                .width(Length::Shrink)
-            ];
-
-            let shader = shader(self.widget.scene())
-                .width(Length::Fill)
-                .height(Length::Fill);
-
-            column![top_row, shader].spacing(20)
-        };
-
-        container(content)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x()
-            .center_y()
-            .into()
-    }
-
-    fn theme(&self) -> Theme {
-        Theme::GruvboxLight
-    }
-
-    fn subscription(&self) -> Subscription<Message> {
-        window::frames().map(Message::Tick)
-    }
 }
