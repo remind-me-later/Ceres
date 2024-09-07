@@ -2,6 +2,7 @@
 name = "ceres-gtk"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 
 [dependencies]
 ceres-core = { path = "../ceres-core" }
