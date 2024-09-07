@@ -44,6 +44,13 @@ impl ApplicationImpl for Application {
 
         app.add_action_entries([about_action]);
     }
+
+    fn activate(&self) {
+        let app = self.obj();
+        let window = crate::window::Window::new(app.as_ref());
+        window.present();
+        // app.add_window(&window);
+    }
 }
 
 impl GtkApplicationImpl for Application {}
