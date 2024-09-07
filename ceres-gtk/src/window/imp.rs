@@ -185,7 +185,10 @@ impl ObjectImpl for Window {
                         Key::a => lock.press(ceres_core::Button::Left),
                         Key::s => lock.press(ceres_core::Button::Down),
                         Key::d => lock.press(ceres_core::Button::Right),
-                        _ => (),
+                        _ => {
+                            // if the key is not handled, return Proceed to allow other handlers to run
+                            return glib::signal::Propagation::Proceed;
+                        }
                     };
                 }
 
