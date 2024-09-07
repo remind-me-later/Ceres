@@ -38,14 +38,7 @@
             <property name="icon-name">document-open-symbolic</property>
           </object>
         </child>
-        <child type="end">
-          <object class="GtkMenuButton">
-            <property name="icon-name">open-menu-symbolic</property>
-            <property name="menu-model">app-menu</property>
-            <property name="primary">true</property>
-          </object>
-        </child>
-        <child type="end">
+        <child type="start">
           <object class="GtkScaleButton" id="volume_button">
             <property name="adjustment">
               <object class="GtkAdjustment">
@@ -62,10 +55,17 @@ audio-volume-low-symbolic
 audio-volume-medium-symbolic</property>
           </object>
         </child>
-        <child type="end">
+        <child type="start">
           <object class="GtkToggleButton" id="pause_button">
             <property name="action-name">win.pause</property>
             <property name="icon-name">media-playback-pause-symbolic</property>
+          </object>
+        </child>
+        <child type="end">
+          <object class="GtkMenuButton">
+            <property name="icon-name">open-menu-symbolic</property>
+            <property name="menu-model">app-menu</property>
+            <property name="primary">true</property>
           </object>
         </child>
       </object>

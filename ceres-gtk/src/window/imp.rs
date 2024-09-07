@@ -175,22 +175,22 @@ impl ObjectImpl for Window {
         {
             let gb = Arc::clone(gl_area.gb());
             keys.connect_key_pressed(move |_, key, _keycode, _state| {
-                if let Ok(mut lock) = gb.lock() {
-                    match key {
-                        Key::l => lock.press(ceres_core::Button::A),
-                        Key::k => lock.press(ceres_core::Button::B),
-                        Key::m => lock.press(ceres_core::Button::Start),
-                        Key::n => lock.press(ceres_core::Button::Select),
-                        Key::w => lock.press(ceres_core::Button::Up),
-                        Key::a => lock.press(ceres_core::Button::Left),
-                        Key::s => lock.press(ceres_core::Button::Down),
-                        Key::d => lock.press(ceres_core::Button::Right),
-                        _ => {
-                            // if the key is not handled, return Proceed to allow other handlers to run
-                            return glib::signal::Propagation::Proceed;
-                        }
-                    };
-                }
+                let mut lock = gb.lock().unwrap();
+
+                match key {
+                    Key::l => lock.press(ceres_core::Button::A),
+                    Key::k => lock.press(ceres_core::Button::B),
+                    Key::m => lock.press(ceres_core::Button::Start),
+                    Key::n => lock.press(ceres_core::Button::Select),
+                    Key::w => lock.press(ceres_core::Button::Up),
+                    Key::a => lock.press(ceres_core::Button::Left),
+                    Key::s => lock.press(ceres_core::Button::Down),
+                    Key::d => lock.press(ceres_core::Button::Right),
+                    _ => {
+                        // if the key is not handled, return Proceed to allow other handlers to run
+                        return glib::signal::Propagation::Proceed;
+                    }
+                };
 
                 glib::signal::Propagation::Stop
             });
@@ -199,19 +199,19 @@ impl ObjectImpl for Window {
         {
             let gb = Arc::clone(gl_area.gb());
             keys.connect_key_released(move |_, key, _keycode, _state| {
-                if let Ok(mut lock) = gb.lock() {
-                    match key {
-                        Key::l => lock.release(ceres_core::Button::A),
-                        Key::k => lock.release(ceres_core::Button::B),
-                        Key::m => lock.release(ceres_core::Button::Start),
-                        Key::n => lock.release(ceres_core::Button::Select),
-                        Key::w => lock.release(ceres_core::Button::Up),
-                        Key::a => lock.release(ceres_core::Button::Left),
-                        Key::s => lock.release(ceres_core::Button::Down),
-                        Key::d => lock.release(ceres_core::Button::Right),
-                        _ => (),
-                    };
-                }
+                let mut lock = gb.lock().unwrap();
+
+                match key {
+                    Key::l => lock.release(ceres_core::Button::A),
+                    Key::k => lock.release(ceres_core::Button::B),
+                    Key::m => lock.release(ceres_core::Button::Start),
+                    Key::n => lock.release(ceres_core::Button::Select),
+                    Key::w => lock.release(ceres_core::Button::Up),
+                    Key::a => lock.release(ceres_core::Button::Left),
+                    Key::s => lock.release(ceres_core::Button::Down),
+                    Key::d => lock.release(ceres_core::Button::Right),
+                    _ => (),
+                };
             });
         }
 
@@ -266,6 +266,7 @@ impl ObjectImpl for Window {
 impl WidgetImpl for Window {}
 impl WindowImpl for Window {}
 impl ApplicationWindowImpl for Window {}
+impl AdwApplicationWindowImpl for Window {}
 
 fn init_gb(
     model: ceres_core::Model,

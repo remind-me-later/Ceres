@@ -4,8 +4,8 @@ use adw::{gio, glib, prelude::*};
 
 glib::wrapper! {
     pub struct Window(ObjectSubclass<imp::Window>)
-        @extends gtk::Widget, gtk::Window, adw::ApplicationWindow,
-        @implements gio::ActionMap, gio::ActionGroup;
+        @extends gtk::Widget, gtk::Window, gtk::ApplicationWindow, adw::ApplicationWindow,
+        @implements gio::ActionMap, gio::ActionGroup, gtk::Native, gtk::Root;
 }
 
 impl Window {
