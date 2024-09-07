@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+    <object class="AdwAboutDialog" id="about_dialog">
+        <property name="application-name">Ceres</property>
+        <property name="license-type">mit-x11</property>
+        <property name="version">0.1.0</property>
+        <property name="comments">A GTK+ 4.0 frontend for the Ceres GameBoy emulator</property>
+        <property name="website">github.com/remind-me-later/ceres</property>
+        <!-- <property name="website-label">GitHub</property> -->
+    </object>
+</interface>
