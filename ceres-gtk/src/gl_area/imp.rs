@@ -179,7 +179,18 @@ impl WidgetImpl for GlArea {
     }
 
     fn unrealize(&self) {
+        self.audio.borrow_mut().pause();
         *self.renderer.borrow_mut() = None;
+
+        {
+            // unpause the thread so it can exit
+
+            let (do_pause, cvar) = self.pause_thread.as_ref();
+
+            *do_pause.lock().unwrap() = false;
+
+            cvar.notify_one();
+        }
 
         self.exit.store(true, Relaxed);
 

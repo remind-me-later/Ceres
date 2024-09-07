@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
-  <menu id='app-menu'>
+  <menu id="app-menu">
     <section>
       <attribute name="label" translatable="yes">Upscale filter</attribute>
       <item>
@@ -21,9 +21,9 @@
     </section>
     <section>
       <item>
-        <attribute name='label' translatable='yes'>_About</attribute>
+        <attribute name="label" translatable="yes">_About</attribute>
         <!-- TODO: -->
-        <attribute name='action'>app.about</attribute>
+        <attribute name="action">app.about</attribute>
       </item>
     </section>
   </menu>
@@ -71,7 +71,7 @@ audio-volume-medium-symbolic</property>
       </object>
     </child>
     <child>
-      <object class="CeresGlArea" id="gb_area"></object>
+      <object class="CeresGlArea" id="gb_area"/>
     </child>
   </template>
 </interface>

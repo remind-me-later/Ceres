@@ -271,10 +271,6 @@ fn init_gb(
 ) -> Result<(ceres_core::Gb<audio::RingBuffer>, String), ceres_core::Error> {
     let rom = rom_path.map(|p| fs::read(p).map(Vec::into_boxed_slice).unwrap());
 
-    // let ram = rom_path
-    //     .map(|p| p.with_extension("sav"))
-    //     .and_then(|p| fs::read(p).map(Vec::into_boxed_slice).ok());
-
     let (cart, id) = if let Some(rom) = rom {
         let mut cart = ceres_core::Cart::new(rom)?;
 
