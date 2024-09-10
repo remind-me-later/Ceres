@@ -113,14 +113,47 @@ impl ObjectSubclass for Window {
                 if let Ok(file) = res {
                     let pathbuf = file.path().expect("Couldn't get file path");
                     let audio = win.imp().gb_area.imp().audio.borrow().get_ring_buffer();
+                    let id = {
+                        fn init_gb(
+                            model: ceres_core::Model,
+                            rom_path: Option<&Path>,
+                            audio: audio::RingBuffer,
+                            target_gb: &mut ceres_core::Gb<audio::RingBuffer>,
+                        ) -> Result<String, ceres_core::Error> {
+                            let rom =
+                                rom_path.map(|p| fs::read(p).map(Vec::into_boxed_slice).unwrap());
+
+                            let (cart, id) = if let Some(rom) = rom {
+                                let mut cart = ceres_core::Cart::new(rom)?;
+
+                                let id = Window::rom_id(&cart);
+                                let sav_path = Window::data_path().join(&id).with_extension("sav");
+
+                                let ram = fs::read(sav_path).map(Vec::into_boxed_slice).ok();
+
+                                if let Some(ram) = ram {
+                                    cart.set_ram(ram)?;
+                                }
+
+                                (cart, id)
+                            } else {
+                                (ceres_core::Cart::default(), String::new())
+                            };
+
+                            let sample_rate = audio::Renderer::sample_rate();
+                            *target_gb = ceres_core::Gb::new(model, sample_rate, cart, audio);
+
+                            Ok(id)
+                        }
+
+                        let mut lock = win.imp().gb_area.gb().lock().unwrap();
+                        init_gb(ceres_core::Model::Cgb, Some(&pathbuf), audio, &mut lock)
+                    };
 
                     // TODO: gracefully handle invalid files
-                    match init_gb(ceres_core::Model::Cgb, Some(&pathbuf), audio) {
-                        Ok((mut new_gb, id)) => {
+                    match id {
+                        Ok(id) => {
                             *win.imp().rom_id.borrow_mut() = id;
-                            // Swap the GB instances
-                            let mut lock = win.imp().gb_area.gb().lock().unwrap();
-                            core::mem::swap(&mut *lock, &mut new_gb);
                         }
                         Err(err) => {
                             let info_dialog = adw::AlertDialog::builder()
@@ -175,17 +208,15 @@ impl ObjectImpl for Window {
         {
             let gb = Arc::clone(gl_area.gb());
             keys.connect_key_pressed(move |_, key, _keycode, _state| {
-                let mut lock = gb.lock().unwrap();
-
                 match key {
-                    Key::l => lock.press(ceres_core::Button::A),
-                    Key::k => lock.press(ceres_core::Button::B),
-                    Key::m => lock.press(ceres_core::Button::Start),
-                    Key::n => lock.press(ceres_core::Button::Select),
-                    Key::w => lock.press(ceres_core::Button::Up),
-                    Key::a => lock.press(ceres_core::Button::Left),
-                    Key::s => lock.press(ceres_core::Button::Down),
-                    Key::d => lock.press(ceres_core::Button::Right),
+                    Key::l => gb.lock().unwrap().press(ceres_core::Button::A),
+                    Key::k => gb.lock().unwrap().press(ceres_core::Button::B),
+                    Key::m => gb.lock().unwrap().press(ceres_core::Button::Start),
+                    Key::n => gb.lock().unwrap().press(ceres_core::Button::Select),
+                    Key::w => gb.lock().unwrap().press(ceres_core::Button::Up),
+                    Key::a => gb.lock().unwrap().press(ceres_core::Button::Left),
+                    Key::s => gb.lock().unwrap().press(ceres_core::Button::Down),
+                    Key::d => gb.lock().unwrap().press(ceres_core::Button::Right),
                     _ => {
                         // if the key is not handled, return Proceed to allow other handlers to run
                         return glib::signal::Propagation::Proceed;
@@ -199,17 +230,15 @@ impl ObjectImpl for Window {
         {
             let gb = Arc::clone(gl_area.gb());
             keys.connect_key_released(move |_, key, _keycode, _state| {
-                let mut lock = gb.lock().unwrap();
-
                 match key {
-                    Key::l => lock.release(ceres_core::Button::A),
-                    Key::k => lock.release(ceres_core::Button::B),
-                    Key::m => lock.release(ceres_core::Button::Start),
-                    Key::n => lock.release(ceres_core::Button::Select),
-                    Key::w => lock.release(ceres_core::Button::Up),
-                    Key::a => lock.release(ceres_core::Button::Left),
-                    Key::s => lock.release(ceres_core::Button::Down),
-                    Key::d => lock.release(ceres_core::Button::Right),
+                    Key::l => gb.lock().unwrap().release(ceres_core::Button::A),
+                    Key::k => gb.lock().unwrap().release(ceres_core::Button::B),
+                    Key::m => gb.lock().unwrap().release(ceres_core::Button::Start),
+                    Key::n => gb.lock().unwrap().release(ceres_core::Button::Select),
+                    Key::w => gb.lock().unwrap().release(ceres_core::Button::Up),
+                    Key::a => gb.lock().unwrap().release(ceres_core::Button::Left),
+                    Key::s => gb.lock().unwrap().release(ceres_core::Button::Down),
+                    Key::d => gb.lock().unwrap().release(ceres_core::Button::Right),
                     _ => (),
                 };
             });
@@ -267,32 +296,3 @@ impl WidgetImpl for Window {}
 impl WindowImpl for Window {}
 impl ApplicationWindowImpl for Window {}
 impl AdwApplicationWindowImpl for Window {}
-
-fn init_gb(
-    model: ceres_core::Model,
-    rom_path: Option<&Path>,
-    audio: audio::RingBuffer,
-) -> Result<(ceres_core::Gb<audio::RingBuffer>, String), ceres_core::Error> {
-    let rom = rom_path.map(|p| fs::read(p).map(Vec::into_boxed_slice).unwrap());
-
-    let (cart, id) = if let Some(rom) = rom {
-        let mut cart = ceres_core::Cart::new(rom)?;
-
-        let id = Window::rom_id(&cart);
-        let sav_path = Window::data_path().join(&id).with_extension("sav");
-
-        let ram = fs::read(sav_path).map(Vec::into_boxed_slice).ok();
-
-        if let Some(ram) = ram {
-            cart.set_ram(ram)?;
-        }
-
-        (cart, id)
-    } else {
-        (ceres_core::Cart::default(), String::new())
-    };
-
-    let sample_rate = audio::Renderer::sample_rate();
-
-    Ok((ceres_core::Gb::new(model, sample_rate, cart, audio), id))
-}

@@ -9,7 +9,7 @@ use gtk::{
 
 #[derive(Default)]
 // #[properties(wrapper_type = super::Application)]
-pub struct Application {}
+pub struct Application;
 
 #[glib::object_subclass]
 impl ObjectSubclass for Application {
@@ -35,6 +35,7 @@ impl ApplicationImpl for Application {
         //     about_dialog.present(Some(win));
         // });
 
+        #[allow(clippy::shadow_unrelated)]
         let about_action = gio::ActionEntry::builder("about")
             .activate(move |app: &Self::Type, _, _| {
                 let window = app.active_window();

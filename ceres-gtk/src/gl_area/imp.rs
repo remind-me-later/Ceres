@@ -86,6 +86,7 @@ impl ObjectSubclass for GlArea {
                 {
                     let (do_pause, cvar) = &*pause_thread;
 
+                    #[allow(clippy::shadow_unrelated)]
                     let _guard =
                         cvar.wait_while(do_pause.lock().unwrap(), |&mut do_pause| do_pause);
                 }
@@ -115,6 +116,7 @@ impl ObjectSubclass for GlArea {
             audio.borrow().get_ring_buffer(),
         )));
 
+        #[allow(clippy::mutex_atomic)]
         let pause_thread = Arc::new((Mutex::new(false), Condvar::new()));
         let exit = Arc::new(AtomicBool::new(false));
 

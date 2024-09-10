@@ -11,8 +11,14 @@ glib::wrapper! {
 
 impl Application {
     pub fn new() -> Self {
-        glib::Object::builder::<Application>()
+        glib::Object::builder::<Self>()
             .property("application-id", crate::APP_ID)
             .build()
+    }
+}
+
+impl Default for Application {
+    fn default() -> Self {
+        Self::new()
     }
 }
