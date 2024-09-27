@@ -2,6 +2,5 @@
 <gresources>
     <gresource prefix="/org/remind-me-later/ceres-gtk/">
         <file compressed="true" preprocess="xml-stripblanks">window.ui</file>
-        <file compressed="true" preprocess="xml-stripblanks">about.ui</file>
     </gresource>
 </gresources>

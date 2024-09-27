@@ -6,7 +6,6 @@ license = "MIT"
 
 [dependencies]
 ceres-core = { path = "../ceres-core" }
-clap = { version = "*", default-features = false, features = ["std", "help"] }
 epoxy = { version = "*" }
 libloading = { version = "*" }
 glow = { version = "*" }
@@ -21,12 +20,12 @@ dasp_ring_buffer = { version = "*" }
 [dependencies.adw]
 package = "libadwaita"
 version = "*"
-features = ["v1_5"]
+features = ["v1_6"]
 
 [dependencies.gtk]
 version = "*"
 package = "gtk4"
-features = ["gnome_46"]
+features = ["v4_16", "xml_validation"]
 
 [build-dependencies]
 glib-build-tools = "*"

@@ -8,7 +8,6 @@ use gtk::{
 };
 
 #[derive(Default)]
-// #[properties(wrapper_type = super::Application)]
 pub struct Application;
 
 #[glib::object_subclass]
@@ -18,7 +17,6 @@ impl ObjectSubclass for Application {
     type Type = super::Application;
 }
 
-// #[glib::derived_properties]
 impl ObjectImpl for Application {}
 
 impl ApplicationImpl for Application {
@@ -26,19 +24,18 @@ impl ApplicationImpl for Application {
         self.parent_startup();
         let app = self.obj();
 
-        let about_dialog = gtk::Builder::from_resource("/org/remind-me-later/ceres-gtk/about.ui");
-        let about_dialog: adw::AboutDialog = about_dialog
-            .object("about_dialog")
-            .expect("Failed to find about_dialog in UI file");
-
-        // klass.install_action("app.about", None, move |win, _, _| {
-        //     about_dialog.present(Some(win));
-        // });
-
         #[allow(clippy::shadow_unrelated)]
         let about_action = gio::ActionEntry::builder("about")
             .activate(move |app: &Self::Type, _, _| {
                 let window = app.active_window();
+                let about_dialog = adw::AboutDialog::builder()
+                    .application_name("Ceres")
+                    .license_type(gtk::License::MitX11)
+                    .version("0.1.0")
+                    .comments("A GTK+ 4.0 frontend for the Ceres GameBoy emulator")
+                    .website("github.com/remind-me-later/ceres")
+                    .build();
+
                 about_dialog.present(window.as_ref());
             })
             .build();
@@ -50,7 +47,6 @@ impl ApplicationImpl for Application {
         let app = self.obj();
         let window = crate::window::Window::new(app.as_ref());
         window.present();
-        // app.add_window(&window);
     }
 }
 
