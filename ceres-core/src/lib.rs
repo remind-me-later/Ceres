@@ -152,19 +152,14 @@ impl<C: AudioCallback> Gb<C> {
     }
 
     #[inline]
-    #[must_use]
-    pub fn run_frame(&mut self) -> Duration {
+    pub fn run_frame(&mut self) {
         self.dot_accumulator = 0;
 
         while self.dot_accumulator < TC_PER_FRAME {
             self.run_cpu();
         }
 
-        let ret = Duration::from_secs_f32(self.dot_accumulator as f32 / TC_SEC as f32);
-
         self.dot_accumulator -= TC_PER_FRAME;
-
-        ret
     }
 
     #[must_use]

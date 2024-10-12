@@ -5,6 +5,7 @@ use core::sync::atomic::Ordering::Relaxed;
 use std::{
     io::Read,
     sync::{Mutex, MutexGuard},
+    time::Duration,
 };
 use thread_priority::ThreadBuilderExt;
 use winit::event::KeyEvent;
@@ -38,12 +39,11 @@ impl GbContext {
                     break;
                 }
 
-                let mut duration = ceres_core::FRAME_DURATION;
+                let duration = Duration::from_millis(1000 / 60);
 
                 if !pause_thread.load(Relaxed) {
-                    if let Ok(mut gb) = gb.lock() {
-                        duration = gb.run_frame();
-                    }
+                    let mut gb = gb.lock().unwrap();
+                    gb.run_frame();
                 }
 
                 let elapsed = begin.elapsed();

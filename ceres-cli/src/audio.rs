@@ -5,7 +5,7 @@ use {alloc::sync::Arc, std::sync::Mutex};
 
 // Buffer size is the number of samples per channel per callback
 const BUFFER_SIZE: cpal::FrameCount = 512;
-const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 8;
+const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 16;
 const SAMPLE_RATE: i32 = 48000;
 
 // RingBuffer is a wrapper around a bounded ring buffer
@@ -16,25 +16,25 @@ pub struct RingBuffer {
 }
 
 impl RingBuffer {
-    pub fn new() -> Self {
-        Self {
-            buffer: Arc::new(Mutex::new(Bounded::from(
-                [Default::default(); RING_BUFFER_SIZE],
-            ))),
-        }
-    }
+    pub fn new(buffer: Arc<Mutex<Bounded<[ceres_core::Sample; RING_BUFFER_SIZE]>>>) -> Self {
+        // FIll with silence
+        {
+            let mut buffer = buffer.lock().unwrap();
 
-    pub fn clone_buffer(&self) -> Arc<Mutex<Bounded<[ceres_core::Sample; RING_BUFFER_SIZE]>>> {
-        Arc::clone(&self.buffer)
+            for _ in 0..buffer.max_len() {
+                buffer.push(Default::default());
+            }
+        }
+
+        Self { buffer }
     }
 }
 
 impl ceres_core::AudioCallback for RingBuffer {
     fn audio_sample(&self, l: ceres_core::Sample, r: ceres_core::Sample) {
-        if let Ok(mut buffer) = self.buffer.lock() {
-            buffer.push(l);
-            buffer.push(r);
-        }
+        let mut buffer = self.buffer.lock().unwrap();
+        buffer.push(l);
+        buffer.push(r);
     }
 }
 
@@ -81,21 +81,26 @@ pub struct Stream {
 
 impl Stream {
     pub fn new(state: &State) -> anyhow::Result<Self> {
-        let ring_buffer = RingBuffer::new();
-        let ring_buffer_clone = ring_buffer.clone_buffer();
+        let ring_buffer = Arc::new(Mutex::new(Bounded::from(
+            [Default::default(); RING_BUFFER_SIZE],
+        )));
+        let ring_buffer_clone = Arc::clone(&ring_buffer);
 
         let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
         let data_callback = move |buffer: &mut [ceres_core::Sample], _: &_| {
-            if let Ok(mut ring) = ring_buffer_clone.lock() {
-                if ring.len() < buffer.len() {
-                    eprintln!("ring buffer underrun");
-                }
+            let mut ring = ring_buffer_clone.lock().unwrap();
 
-                buffer
-                    .iter_mut()
-                    .zip(ring.drain())
-                    .for_each(|(b, s)| *b = s);
+            if ring.len() < buffer.len() {
+                eprintln!("ring buffer underrun");
+                while !ring.is_full() {
+                    ring.push(Default::default());
+                }
             }
+
+            buffer
+                .iter_mut()
+                .zip(ring.drain())
+                .for_each(|(b, s)| *b = s);
         };
 
         let stream = state.device().build_output_stream(
@@ -109,7 +114,7 @@ impl Stream {
 
         Ok(Self {
             stream,
-            ring_buffer,
+            ring_buffer: RingBuffer::new(ring_buffer),
         })
     }
 
