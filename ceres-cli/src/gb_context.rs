@@ -39,7 +39,7 @@ impl GbContext {
                     break;
                 }
 
-                let duration = Duration::from_millis(1000 / 60);
+                let duration = ceres_core::FRAME_DURATION;
 
                 if !pause_thread.load(Relaxed) {
                     let mut gb = gb.lock().unwrap();
