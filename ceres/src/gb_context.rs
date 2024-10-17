@@ -6,6 +6,7 @@ use eframe::egui::{self};
 use std::{
     io::Read,
     sync::{Mutex, MutexGuard},
+    time::Duration,
 };
 use thread_priority::ThreadBuilderExt;
 use {anyhow::Context, ceres_core::Gb, std::path::Path, std::sync::Arc};
@@ -41,11 +42,15 @@ impl GbContext {
                     break;
                 }
 
-                let mut duration = ceres_core::FRAME_DURATION;
+                let duration = if cfg!(target_os = "macos") {
+                    Duration::from_millis(1000 / 60)
+                } else {
+                    ceres_core::FRAME_DURATION
+                };
 
                 if !pause_thread.load(Relaxed) {
                     if let Ok(mut gb) = gb.lock() {
-                        duration = gb.run_frame();
+                        gb.run_frame();
                     }
                     ctx.request_repaint();
                 }

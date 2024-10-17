@@ -144,7 +144,7 @@ impl GBScreen {
         let shader = device.create_shader_module(wgpu::include_wgsl!("../shader/gb_screen.wgsl"));
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            // cache: None,
+            cache: None,
             label: None,
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
@@ -218,11 +218,11 @@ impl GBScreen {
 }
 
 impl eframe::egui_wgpu::CallbackTrait for GBScreen {
-    fn paint<'a>(
-        &'a self,
+    fn paint(
+        &self,
         _info: eframe::egui::PaintCallbackInfo,
-        render_pass: &mut wgpu::RenderPass<'a>,
-        callback_resources: &'a eframe::egui_wgpu::CallbackResources,
+        render_pass: &mut wgpu::RenderPass<'static>,
+        callback_resources: &eframe::egui_wgpu::CallbackResources,
     ) {
         let resources: &Resources = callback_resources.get().unwrap();
 

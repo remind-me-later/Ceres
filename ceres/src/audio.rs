@@ -5,7 +5,7 @@ use {std::sync::Arc, std::sync::Mutex};
 
 // Buffer size is the number of samples per channel per callback
 const BUFFER_SIZE: cpal::FrameCount = 512;
-const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
+const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 16;
 const SAMPLE_RATE: i32 = 48000;
 
 // RingBuffer is a wrapper around a bounded ring buffer

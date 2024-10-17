@@ -152,7 +152,6 @@ impl<C: AudioCallback> Gb<C> {
     }
 
     #[inline]
-    #[must_use]
     pub fn run_frame(&mut self) -> Duration {
         self.dot_accumulator = 0;
 
