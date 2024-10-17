@@ -91,11 +91,18 @@ impl ObjectSubclass for GlArea {
                         cvar.wait_while(do_pause.lock().unwrap(), |&mut do_pause| do_pause);
                 }
 
-                let mut duration = ceres_core::FRAME_DURATION;
+                // TODO: find out why we need a framerate of 60 on mac while 59.7 on linux
+                // for the sound to be in sync
+                let duration = if cfg!(target_os = "macos") {
+                    std::time::Duration::from_millis(1000 / 60)
+                } else {
+                    ceres_core::FRAME_DURATION
+                };
+
                 let begin = std::time::Instant::now();
 
                 if let Ok(mut gb) = gb.lock() {
-                    duration = gb.run_frame();
+                    gb.run_frame();
                 }
 
                 let elapsed = begin.elapsed();

@@ -11,7 +11,9 @@ pub const APP_ID: &str = "com.github.remind-me-later.ceres-gtk";
 fn main() -> glib::ExitCode {
     {
         #[cfg(target_os = "macos")]
-        let library = unsafe { libloading::os::unix::Library::new("libepoxy.0.dylib") }.unwrap();
+        let library =
+            unsafe { libloading::os::unix::Library::new("/opt/homebrew/lib/libepoxy.0.dylib") }
+                .unwrap();
         #[cfg(all(unix, not(target_os = "macos")))]
         let library = unsafe { libloading::os::unix::Library::new("libepoxy.so.0") }.unwrap();
         #[cfg(windows)]

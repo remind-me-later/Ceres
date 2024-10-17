@@ -5,7 +5,6 @@ use core::sync::atomic::Ordering::Relaxed;
 use std::{
     io::Read,
     sync::{Mutex, MutexGuard},
-    time::Duration,
 };
 use thread_priority::ThreadBuilderExt;
 use winit::event::KeyEvent;
@@ -39,7 +38,13 @@ impl GbContext {
                     break;
                 }
 
-                let duration = ceres_core::FRAME_DURATION;
+                // TODO: find out why we need a framerate of 60 on mac while 59.7 on linux
+                // for the sound to be in sync
+                let duration = if cfg!(target_os = "macos") {
+                    std::time::Duration::from_millis(1000 / 60)
+                } else {
+                    ceres_core::FRAME_DURATION
+                };
 
                 if !pause_thread.load(Relaxed) {
                     let mut gb = gb.lock().unwrap();
