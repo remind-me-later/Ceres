@@ -288,15 +288,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ceres-audio"
+version = "0.1.0"
+dependencies = [
+ "ceres-core",
+ "cpal",
+ "dasp_ring_buffer",
+]
+
+[[package]]
 name = "ceres-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytemuck",
+ "ceres-audio",
  "ceres-core",
  "clap",
- "cpal",
- "dasp_ring_buffer",
  "directories",
  "pollster",
  "spin_sleep",
@@ -313,9 +321,8 @@ version = "0.1.0"
 name = "ceres-gtk"
 version = "0.1.0"
 dependencies = [
+ "ceres-audio",
  "ceres-core",
- "cpal",
- "dasp_ring_buffer",
  "epoxy",
  "glib-build-tools",
  "glow 0.15.0",

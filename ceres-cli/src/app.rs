@@ -1,5 +1,4 @@
 use crate::{
-    audio,
     gb_context::GbContext,
     video::{self, State},
     Scaling, CERES_STYLIZED, INIT_HEIGHT, INIT_WIDTH,
@@ -27,7 +26,7 @@ pub struct App<'a> {
     gb_ctx: Option<GbContext>,
 
     // Rendering
-    _audio: audio::State,
+    _audio: ceres_audio::State,
     // NOTE: carries the `Window`, thus it should be dropped after everything else.
     video: Option<video::State<'a>>,
 }
@@ -39,7 +38,7 @@ impl<'a> App<'a> {
         rom_path: Option<&Path>,
         scaling: Scaling,
     ) -> anyhow::Result<Self> {
-        let audio = audio::State::new()?;
+        let audio = ceres_audio::State::new().unwrap();
         let gb_ctx = GbContext::new(model, &project_dirs, rom_path, &audio)?;
 
         Ok(Self {

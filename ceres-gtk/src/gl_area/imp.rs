@@ -1,6 +1,5 @@
 use super::renderer::PxScaleMode;
 use super::renderer::Renderer;
-use crate::audio;
 use ceres_core::Gb;
 use gtk::glib;
 use gtk::glib::Propagation;
@@ -15,8 +14,9 @@ use std::sync::{Arc, Mutex};
 use thread_priority::ThreadBuilderExt;
 
 pub struct GlArea {
-    pub gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
-    pub audio: RefCell<audio::Renderer>,
+    pub gb: Arc<Mutex<Gb<ceres_audio::RingBuffer>>>,
+    pub audio_state: RefCell<ceres_audio::State>,
+    pub audio: RefCell<ceres_audio::Stream>,
     pub renderer: RefCell<Option<Renderer>>,
     pub scale_mode: RefCell<PxScaleMode>,
     pub scale_changed: RefCell<bool>,
@@ -78,7 +78,7 @@ impl ObjectSubclass for GlArea {
 
     fn new() -> Self {
         fn gb_loop(
-            gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
+            gb: Arc<Mutex<Gb<ceres_audio::RingBuffer>>>,
             exit: Arc<AtomicBool>,
             pause_thread: Arc<(Mutex<bool>, Condvar)>,
         ) {
@@ -114,11 +114,12 @@ impl ObjectSubclass for GlArea {
         }
 
         let cart = ceres_core::Cart::default();
-        let audio = RefCell::new(audio::Renderer::new());
+        let audio_state = RefCell::new(ceres_audio::State::new().unwrap());
+        let audio = RefCell::new(ceres_audio::Stream::new(&audio_state.borrow()));
 
         let gb = Arc::new(Mutex::new(ceres_core::Gb::new(
             ceres_core::Model::Cgb,
-            audio::Renderer::sample_rate(),
+            ceres_audio::Stream::sample_rate(),
             cart,
             audio.borrow().get_ring_buffer(),
         )));
@@ -145,6 +146,7 @@ impl ObjectSubclass for GlArea {
 
         Self {
             gb,
+            audio_state,
             audio,
             renderer: Default::default(),
             scale_mode: Default::default(),

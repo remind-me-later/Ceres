@@ -1,4 +1,3 @@
-use crate::audio;
 use ceres_core::Cart;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
@@ -11,11 +10,11 @@ use winit::event::KeyEvent;
 use {alloc::sync::Arc, anyhow::Context, ceres_core::Gb, std::path::Path};
 
 pub struct GbContext {
-    gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
+    gb: Arc<Mutex<Gb<ceres_audio::RingBuffer>>>,
     rom_ident: String,
     exiting: Arc<AtomicBool>,
     pause_thread: Arc<AtomicBool>,
-    audio_stream: audio::Stream,
+    audio_stream: ceres_audio::Stream,
     thread_handle: Option<std::thread::JoinHandle<()>>,
 }
 
@@ -24,10 +23,10 @@ impl GbContext {
         model: ceres_core::Model,
         project_dirs: &directories::ProjectDirs,
         rom_path: Option<&Path>,
-        audio_state: &audio::State,
+        audio_state: &ceres_audio::State,
     ) -> anyhow::Result<Self> {
         fn gb_loop(
-            gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
+            gb: Arc<Mutex<Gb<ceres_audio::RingBuffer>>>,
             exiting: Arc<AtomicBool>,
             pause_thread: Arc<AtomicBool>,
         ) {
@@ -102,8 +101,8 @@ impl GbContext {
             (Cart::default(), String::new())
         };
 
-        let sample_rate = audio::Stream::sample_rate();
-        let audio_stream = audio::Stream::new(audio_state)?;
+        let sample_rate = ceres_audio::Stream::sample_rate();
+        let audio_stream = ceres_audio::Stream::new(audio_state);
         let ring_buffer = audio_stream.get_ring_buffer();
 
         let gb = Arc::new(Mutex::new(Gb::new(model, sample_rate, cart, ring_buffer)));
@@ -173,13 +172,13 @@ impl GbContext {
     }
 
     pub fn pause(&mut self) {
-        self.audio_stream.pause().unwrap();
+        self.audio_stream.pause();
         self.pause_thread.store(true, Relaxed);
     }
 
     pub fn resume(&mut self) {
         self.pause_thread.store(false, Relaxed);
-        self.audio_stream.resume().unwrap();
+        self.audio_stream.resume();
     }
 
     pub fn rom_ident(&self) -> &str {
@@ -191,14 +190,14 @@ impl GbContext {
         self.thread_handle.take().unwrap().join().unwrap();
     }
 
-    pub fn gb_lock(&self) -> MutexGuard<Gb<audio::RingBuffer>> {
+    pub fn gb_lock(&self) -> MutexGuard<Gb<ceres_audio::RingBuffer>> {
         self.gb.lock().unwrap()
     }
 }
 
 impl Drop for GbContext {
     fn drop(&mut self) {
-        self.audio_stream.pause().unwrap();
+        self.audio_stream.pause();
         self.exit();
     }
 }

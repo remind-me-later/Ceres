@@ -1,0 +1,15 @@
+[package]
+name = "ceres-audio"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies.ceres-core]
+path = "../ceres-core"
+
+[dependencies.cpal]
+version = "*"
+default-features = false
+
+[dependencies.dasp_ring_buffer]
+version = "*"
+default-features = false

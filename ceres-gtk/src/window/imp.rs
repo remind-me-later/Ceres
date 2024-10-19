@@ -12,7 +12,7 @@ use ceres_core::Cart;
 use gtk::CompositeTemplate;
 
 use crate::gl_area::{GlArea, PxScaleMode};
-use crate::{audio, APP_ID};
+use crate::APP_ID;
 
 #[derive(Debug, CompositeTemplate)]
 #[template(resource = "/org/remind-me-later/ceres-gtk/window.ui")]
@@ -117,8 +117,8 @@ impl ObjectSubclass for Window {
                         fn init_gb(
                             model: ceres_core::Model,
                             rom_path: Option<&Path>,
-                            audio: audio::RingBuffer,
-                            target_gb: &mut ceres_core::Gb<audio::RingBuffer>,
+                            audio: ceres_audio::RingBuffer,
+                            target_gb: &mut ceres_core::Gb<ceres_audio::RingBuffer>,
                         ) -> Result<String, ceres_core::Error> {
                             let rom =
                                 rom_path.map(|p| fs::read(p).map(Vec::into_boxed_slice).unwrap());
@@ -140,7 +140,7 @@ impl ObjectSubclass for Window {
                                 (ceres_core::Cart::default(), String::new())
                             };
 
-                            let sample_rate = audio::Renderer::sample_rate();
+                            let sample_rate = ceres_audio::Stream::sample_rate();
                             *target_gb = ceres_core::Gb::new(model, sample_rate, cart, audio);
 
                             Ok(id)

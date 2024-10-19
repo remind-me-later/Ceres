@@ -13,8 +13,7 @@ spin_sleep = { version = "*" }
 thread-priority = { version = "*" }
 
 # audio
-cpal = { version = "*", default-features = false }
-dasp_ring_buffer = { version = "*" }
+ceres-audio = { path = "../ceres-audio" }
 
 # Gtk
 [dependencies.adw]

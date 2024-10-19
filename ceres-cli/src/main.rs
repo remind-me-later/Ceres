@@ -1,5 +1,4 @@
 mod app;
-mod audio;
 mod gb_context;
 mod video;
 
