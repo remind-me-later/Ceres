@@ -43,7 +43,7 @@ To build:
 
 - `ceres-core` contains the core emulator logic, such as cpu, apu and ppu emulation.
 - `ceres-cli` contains frontend with a cli interface.
-- `ceres-gtk` contains a `gtk` frontend with a gui.
+- `ceres-audio` contains the audio frontend.
 
 ## Thanks
 
