@@ -192,6 +192,11 @@ impl<'a> winit::application::ApplicationHandler for App<'a> {
                     }
                 }
             }
+            WindowEvent::DroppedFile(path) => {
+                if let Some(gb_ctx) = &mut self.gb_ctx {
+                    gb_ctx.change_rom(&path).unwrap();
+                }
+            }
             _ => (),
         }
     }

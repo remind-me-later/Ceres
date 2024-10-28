@@ -16,6 +16,7 @@ pub struct GbContext {
     pause_thread: Arc<AtomicBool>,
     audio_stream: ceres_audio::Stream,
     thread_handle: Option<std::thread::JoinHandle<()>>,
+    model: ceres_core::Model,
 }
 
 impl GbContext {
@@ -131,7 +132,52 @@ impl GbContext {
             pause_thread,
             thread_handle: Some(thread_handle),
             audio_stream,
+            model,
         })
+    }
+
+    pub fn change_rom(&mut self, rom_path: &Path) -> anyhow::Result<()> {
+        let rom = {
+            std::fs::read(rom_path)
+                .map(Vec::into_boxed_slice)
+                .context("no such file")?
+        };
+
+        let mut cart = Cart::new(rom).unwrap();
+        let ident = {
+            let mut ident = String::new();
+            cart.ascii_title().read_to_string(&mut ident).unwrap();
+            ident.push('-');
+            ident.push_str(cart.version().to_string().as_str());
+            ident.push('-');
+            ident.push_str(cart.header_checksum().to_string().as_str());
+            ident.push('-');
+            ident.push_str(cart.global_checksum().to_string().as_str());
+
+            ident
+        };
+
+        if let Ok(ram) = std::fs::read(
+            directories::ProjectDirs::from("com", "ceres", "ceres")
+                .unwrap()
+                .data_dir()
+                .join(&ident)
+                .with_extension("sav"),
+        )
+        .map(Vec::into_boxed_slice)
+        {
+            cart.set_ram(ram).unwrap();
+        }
+
+        let sample_rate = ceres_audio::Stream::sample_rate();
+        let ring_buffer = self.audio_stream.get_ring_buffer();
+
+        let mut gb = self.gb.lock().unwrap();
+        *gb = Gb::new(self.model, sample_rate, cart, ring_buffer);
+
+        self.rom_ident = ident;
+
+        Ok(())
     }
 
     pub fn handle_key(&mut self, event: &KeyEvent) {
