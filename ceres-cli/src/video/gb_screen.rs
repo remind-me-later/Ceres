@@ -134,13 +134,13 @@ impl GBScreen {
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
                 buffers: &[],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
@@ -173,15 +173,15 @@ impl GBScreen {
             const BUFFER_SIZE: usize = (PX_HEIGHT * PX_WIDTH * 4) as usize;
             let mut rgba: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
 
-            let mut j = 0;
-
-            rgb.chunks_exact(3).for_each(|p| {
-                rgba[j] = p[0];
-                rgba[j + 1] = p[1];
-                rgba[j + 2] = p[2];
-                // Ignore alpha channel since we set composition mode to opaque
-                j += 4;
-            });
+            rgba.chunks_exact_mut(4)
+                .zip(rgb.chunks_exact(3))
+                .for_each(|(q, p)| {
+                    q[0] = p[0];
+                    q[1] = p[1];
+                    q[2] = p[2];
+                    // Ignore alpha channel since we set composition mode to opaque
+                    // q[3] = 0xff;
+                });
 
             rgba
         };
