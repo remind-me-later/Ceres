@@ -103,7 +103,7 @@ impl GbContext {
         };
 
         let sample_rate = ceres_audio::Stream::sample_rate();
-        let audio_stream = ceres_audio::Stream::new(audio_state);
+        let audio_stream = ceres_audio::Stream::new(audio_state)?;
         let ring_buffer = audio_stream.get_ring_buffer();
 
         let gb = Arc::new(Mutex::new(Gb::new(model, sample_rate, cart, ring_buffer)));
@@ -218,22 +218,17 @@ impl GbContext {
     }
 
     pub fn pause(&mut self) {
-        self.audio_stream.pause();
+        self.audio_stream.pause().unwrap();
         self.pause_thread.store(true, Relaxed);
     }
 
     pub fn resume(&mut self) {
         self.pause_thread.store(false, Relaxed);
-        self.audio_stream.resume();
+        self.audio_stream.resume().unwrap();
     }
 
     pub fn rom_ident(&self) -> &str {
         &self.rom_ident
-    }
-
-    pub fn exit(&mut self) {
-        self.exiting.store(true, Relaxed);
-        self.thread_handle.take().unwrap().join().unwrap();
     }
 
     pub fn gb_lock(&self) -> MutexGuard<Gb<ceres_audio::RingBuffer>> {
@@ -243,7 +238,9 @@ impl GbContext {
 
 impl Drop for GbContext {
     fn drop(&mut self) {
-        self.audio_stream.pause();
-        self.exit();
+        // Probably drops before, knowing Rust semantics could be useful
+        // self.audio_stream.pause().unwrap();
+        self.exiting.store(true, Relaxed);
+        self.thread_handle.take().unwrap().join().unwrap();
     }
 }

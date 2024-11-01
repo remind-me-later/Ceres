@@ -17,9 +17,7 @@ pub struct RingBuffer {
 impl RingBuffer {
     pub fn new(buffer: Arc<Mutex<Bounded<[ceres_core::Sample; RING_BUFFER_SIZE]>>>) -> Self {
         // FIll with silence
-        {
-            let mut buffer = buffer.lock().unwrap();
-
+        if let Ok(mut buffer) = buffer.lock() {
             for _ in 0..buffer.max_len() {
                 buffer.push(Default::default());
             }
@@ -31,9 +29,10 @@ impl RingBuffer {
 
 impl ceres_core::AudioCallback for RingBuffer {
     fn audio_sample(&self, l: ceres_core::Sample, r: ceres_core::Sample) {
-        let mut buffer = self.buffer.lock().unwrap();
-        buffer.push(l);
-        buffer.push(r);
+        if let Ok(mut buffer) = self.buffer.lock() {
+            buffer.push(l);
+            buffer.push(r);
+        }
     }
 }
 
@@ -78,7 +77,7 @@ pub struct Stream {
 }
 
 impl Stream {
-    pub fn new(state: &State) -> Self {
+    pub fn new(state: &State) -> Result<Self, Error> {
         let ring_buffer = Arc::new(Mutex::new(Bounded::from(
             [Default::default(); RING_BUFFER_SIZE],
         )));
@@ -104,27 +103,29 @@ impl Stream {
         let stream = state
             .device()
             .build_output_stream(state.config(), data_callback, error_callback, None)
-            .unwrap();
+            .map_err(|_| Error::CouldntBuildStream)?;
 
-        stream.pause().expect("couldn't pause stream");
-
-        Self {
+        let mut res = Self {
             stream,
             ring_buffer: RingBuffer::new(ring_buffer),
             volume: Arc::new(Mutex::new(1.0)),
-        }
+        };
+
+        res.pause()?;
+
+        Ok(res)
     }
 
     pub fn get_ring_buffer(&self) -> RingBuffer {
         self.ring_buffer.clone()
     }
 
-    pub fn pause(&mut self) {
-        self.stream.pause().expect("couldn't pause stream");
+    pub fn pause(&mut self) -> Result<(), Error> {
+        self.stream.pause().map_err(|_| Error::CouldntPauseStream)
     }
 
-    pub fn resume(&mut self) {
-        self.stream.play().expect("couldn't play stream");
+    pub fn resume(&mut self) -> Result<(), Error> {
+        self.stream.play().map_err(|_| Error::CouldntPlayStream)
     }
 
     pub fn volume(&self) -> &Arc<Mutex<f32>> {
@@ -135,3 +136,22 @@ impl Stream {
         SAMPLE_RATE
     }
 }
+
+#[derive(Debug)]
+pub enum Error {
+    CouldntBuildStream,
+    CouldntPauseStream,
+    CouldntPlayStream,
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Error::CouldntBuildStream => write!(f, "couldn't build stream"),
+            Error::CouldntPauseStream => write!(f, "couldn't pause stream"),
+            Error::CouldntPlayStream => write!(f, "couldn't play stream"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
