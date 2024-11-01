@@ -76,7 +76,6 @@ default-features = false
 
 [lints.clippy]
 pedantic = "warn"
-alloc_instead_of_core = "warn"
 as_underscore = "warn"
 assertions_on_result_states = "warn"
 clone_on_ref_ptr = "warn"
@@ -112,8 +111,6 @@ rest_pat_in_fully_bound_structs = "warn"
 same_name_method = "warn"
 self_named_module_files = "warn"
 shadow_unrelated = "warn"
-std_instead_of_alloc = "warn"
-std_instead_of_core = "warn"
 str_to_string = "warn"
 string_add = "warn"
 string_slice = "warn"

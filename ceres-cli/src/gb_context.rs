@@ -7,7 +7,7 @@ use std::{
 };
 use thread_priority::ThreadBuilderExt;
 use winit::event::KeyEvent;
-use {alloc::sync::Arc, anyhow::Context, ceres_core::Gb, std::path::Path};
+use {std::sync::Arc, anyhow::Context, ceres_core::Gb, std::path::Path};
 
 pub struct GbContext {
     gb: Arc<Mutex<Gb<ceres_audio::RingBuffer>>>,

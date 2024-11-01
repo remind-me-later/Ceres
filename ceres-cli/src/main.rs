@@ -2,8 +2,6 @@ mod app;
 mod gb_context;
 mod video;
 
-extern crate alloc;
-
 use app::App;
 use clap::Parser;
 use std::path::PathBuf;

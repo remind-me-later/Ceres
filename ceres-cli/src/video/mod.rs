@@ -2,7 +2,7 @@ mod gb_screen;
 mod texture;
 
 use crate::Scaling;
-use alloc::sync::Arc;
+use std::sync::Arc;
 use gb_screen::GBScreen;
 
 // const RGB_BUFFER_SIZE: usize = (3 * PX_WIDTH * PX_HEIGHT) as usize;
