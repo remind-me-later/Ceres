@@ -43,9 +43,11 @@ pub struct State {
 }
 
 impl State {
-    pub fn new() -> Result<Self, ()> {
+    pub fn new() -> Result<Self, Error> {
         let host = cpal::default_host();
-        let device = host.default_output_device().ok_or(())?;
+        let device = host
+            .default_output_device()
+            .ok_or(Error::CouldntGetOutputDevice)?;
 
         let config = cpal::StreamConfig {
             channels: 2,
@@ -60,10 +62,12 @@ impl State {
         })
     }
 
+    #[must_use]
     pub fn device(&self) -> &cpal::Device {
         &self.device
     }
 
+    #[must_use]
     pub fn config(&self) -> &cpal::StreamConfig {
         &self.config
     }
@@ -85,25 +89,25 @@ impl Stream {
 
         let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
         let data_callback = move |buffer: &mut [ceres_core::Sample], _: &_| {
-            let mut ring = ring_buffer_clone.lock().unwrap();
-
-            if ring.len() < buffer.len() {
-                eprintln!("ring buffer underrun");
-                while !ring.is_full() {
-                    ring.push(Default::default());
+            if let Ok(mut ring) = ring_buffer_clone.lock() {
+                if ring.len() < buffer.len() {
+                    eprintln!("ring buffer underrun");
+                    while !ring.is_full() {
+                        ring.push(Default::default());
+                    }
                 }
-            }
 
-            buffer
-                .iter_mut()
-                .zip(ring.drain())
-                .for_each(|(b, s)| *b = s);
+                buffer
+                    .iter_mut()
+                    .zip(ring.drain())
+                    .for_each(|(b, s)| *b = s);
+            }
         };
 
         let stream = state
             .device()
             .build_output_stream(state.config(), data_callback, error_callback, None)
-            .map_err(|_| Error::CouldntBuildStream)?;
+            .map_err(|_err| Error::CouldntBuildStream)?;
 
         let mut res = Self {
             stream,
@@ -116,22 +120,25 @@ impl Stream {
         Ok(res)
     }
 
+    #[must_use]
     pub fn get_ring_buffer(&self) -> RingBuffer {
         self.ring_buffer.clone()
     }
 
     pub fn pause(&mut self) -> Result<(), Error> {
-        self.stream.pause().map_err(|_| Error::CouldntPauseStream)
+        self.stream.pause().map_err(|_err| Error::CouldntPauseStream)
     }
 
     pub fn resume(&mut self) -> Result<(), Error> {
-        self.stream.play().map_err(|_| Error::CouldntPlayStream)
+        self.stream.play().map_err(|_err| Error::CouldntPlayStream)
     }
 
+    #[must_use]
     pub fn volume(&self) -> &Arc<Mutex<f32>> {
         &self.volume
     }
 
+    #[must_use]
     pub const fn sample_rate() -> i32 {
         SAMPLE_RATE
     }
@@ -139,6 +146,7 @@ impl Stream {
 
 #[derive(Debug)]
 pub enum Error {
+    CouldntGetOutputDevice,
     CouldntBuildStream,
     CouldntPauseStream,
     CouldntPlayStream,
@@ -147,6 +155,7 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
+            Error::CouldntGetOutputDevice => write!(f, "couldn't get output device"),
             Error::CouldntBuildStream => write!(f, "couldn't build stream"),
             Error::CouldntPauseStream => write!(f, "couldn't pause stream"),
             Error::CouldntPlayStream => write!(f, "couldn't play stream"),

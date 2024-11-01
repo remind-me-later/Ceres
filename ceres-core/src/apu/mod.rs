@@ -77,7 +77,7 @@ impl<C: AudioCallback> Apu<C> {
         }
     }
 
-    fn sample_period_from_rate(sample_rate: i32) -> i32 {
+   const fn sample_period_from_rate(sample_rate: i32) -> i32 {
         // FIXME:
         // This is mostly correct, the underrun errors are due to the timing issues in the run thread
         // maybe account for difference in frame rate and sample rate?

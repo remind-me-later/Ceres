@@ -88,8 +88,7 @@ impl Display for Error {
     }
 }
 
-// TODO: core error
-// impl std::error::Error for Error {}
+impl core::error::Error for Error {}
 
 pub struct Cart {
     mbc: Mbc,

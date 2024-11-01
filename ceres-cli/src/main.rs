@@ -109,8 +109,10 @@ struct Cli {
 fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
     let event_loop = EventLoop::new()?;
-    let project_dirs =
-        directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED).unwrap();
+    let project_dirs = directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED)
+        .ok_or_else(|| {
+            anyhow::anyhow!("Failed to get project directories for '{}'", CERES_STYLIZED)
+        })?;
 
     let mut app = App::new(
         project_dirs,

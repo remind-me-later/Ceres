@@ -20,6 +20,20 @@ pub struct GbContext {
 }
 
 impl GbContext {
+    #[allow(clippy::unwrap_used)]
+    fn ident_from_cart(cart: &Cart) -> String {
+        let mut ident = String::new();
+        cart.ascii_title().read_to_string(&mut ident).unwrap();
+        ident.push('-');
+        ident.push_str(cart.version().to_string().as_str());
+        ident.push('-');
+        ident.push_str(cart.header_checksum().to_string().as_str());
+        ident.push('-');
+        ident.push_str(cart.global_checksum().to_string().as_str());
+
+        ident
+    }
+
     pub fn new(
         model: ceres_core::Model,
         project_dirs: &directories::ProjectDirs,
@@ -41,14 +55,15 @@ impl GbContext {
                 // TODO: find out why we need a framerate of 60 on mac while 59.7 on linux
                 // for the sound to be in sync
                 let duration = if cfg!(target_os = "macos") {
-                    std::time::Duration::from_millis(1000 / 60)
+                    core::time::Duration::from_millis(1000 / 60)
                 } else {
                     ceres_core::FRAME_DURATION
                 };
 
                 if !pause_thread.load(Relaxed) {
-                    let mut gb = gb.lock().unwrap();
-                    gb.run_frame();
+                    if let Ok(mut gb) = gb.lock() {
+                        gb.run_frame();
+                    }
                 }
 
                 let elapsed = begin.elapsed();
@@ -76,25 +91,14 @@ impl GbContext {
             };
 
             // TODO: core error
-            let mut cart = Cart::new(rom).unwrap();
-            let ident = {
-                let mut ident = String::new();
-                cart.ascii_title().read_to_string(&mut ident).unwrap();
-                ident.push('-');
-                ident.push_str(cart.version().to_string().as_str());
-                ident.push('-');
-                ident.push_str(cart.header_checksum().to_string().as_str());
-                ident.push('-');
-                ident.push_str(cart.global_checksum().to_string().as_str());
-
-                ident
-            };
+            let mut cart = Cart::new(rom)?;
+            let ident = Self::ident_from_cart(&cart);
 
             if let Ok(ram) =
                 std::fs::read(project_dirs.data_dir().join(&ident).with_extension("sav"))
                     .map(Vec::into_boxed_slice)
             {
-                cart.set_ram(ram).unwrap();
+                cart.set_ram(ram)?;
             }
 
             (cart, ident)
@@ -136,44 +140,32 @@ impl GbContext {
         })
     }
 
-    pub fn change_rom(&mut self, rom_path: &Path) -> anyhow::Result<()> {
+    pub fn change_rom(
+        &mut self,
+        rom_path: &Path,
+        project_dirs: &directories::ProjectDirs,
+    ) -> anyhow::Result<()> {
         let rom = {
             std::fs::read(rom_path)
                 .map(Vec::into_boxed_slice)
                 .context("no such file")?
         };
 
-        let mut cart = Cart::new(rom).unwrap();
-        let ident = {
-            let mut ident = String::new();
-            cart.ascii_title().read_to_string(&mut ident).unwrap();
-            ident.push('-');
-            ident.push_str(cart.version().to_string().as_str());
-            ident.push('-');
-            ident.push_str(cart.header_checksum().to_string().as_str());
-            ident.push('-');
-            ident.push_str(cart.global_checksum().to_string().as_str());
+        let mut cart = Cart::new(rom)?;
+        let ident = Self::ident_from_cart(&cart);
 
-            ident
-        };
-
-        if let Ok(ram) = std::fs::read(
-            directories::ProjectDirs::from("com", "ceres", "ceres")
-                .unwrap()
-                .data_dir()
-                .join(&ident)
-                .with_extension("sav"),
-        )
-        .map(Vec::into_boxed_slice)
+        if let Ok(ram) = std::fs::read(project_dirs.data_dir().join(&ident).with_extension("sav"))
+            .map(Vec::into_boxed_slice)
         {
-            cart.set_ram(ram).unwrap();
+            cart.set_ram(ram)?;
         }
 
         let sample_rate = ceres_audio::Stream::sample_rate();
         let ring_buffer = self.audio_stream.get_ring_buffer();
 
-        let mut gb = self.gb.lock().unwrap();
-        *gb = Gb::new(self.model, sample_rate, cart, ring_buffer);
+        if let Ok(mut gb) = self.gb.lock() {
+            *gb = Gb::new(self.model, sample_rate, cart, ring_buffer);
+        }
 
         self.rom_ident = ident;
 
@@ -217,30 +209,42 @@ impl GbContext {
         self.pause_thread.load(Relaxed)
     }
 
-    pub fn pause(&mut self) {
-        self.audio_stream.pause().unwrap();
+    pub fn pause(&mut self) -> anyhow::Result<()> {
+        self.audio_stream.pause()?;
         self.pause_thread.store(true, Relaxed);
+
+        Ok(())
     }
 
-    pub fn resume(&mut self) {
+    pub fn resume(&mut self) -> anyhow::Result<()> {
         self.pause_thread.store(false, Relaxed);
-        self.audio_stream.resume().unwrap();
+        self.audio_stream.resume()?;
+
+        Ok(())
     }
 
     pub fn rom_ident(&self) -> &str {
         &self.rom_ident
     }
 
-    pub fn gb_lock(&self) -> MutexGuard<Gb<ceres_audio::RingBuffer>> {
-        self.gb.lock().unwrap()
+    pub fn gb_lock(
+        &self,
+    ) -> Result<
+        MutexGuard<Gb<ceres_audio::RingBuffer>>,
+        std::sync::PoisonError<std::sync::MutexGuard<Gb<ceres_audio::RingBuffer>>>,
+    > {
+        self.gb.lock()
     }
 }
 
 impl Drop for GbContext {
+    #[allow(clippy::expect_used)]
     fn drop(&mut self) {
         // Probably drops before, knowing Rust semantics could be useful
         // self.audio_stream.pause().unwrap();
         self.exiting.store(true, Relaxed);
-        self.thread_handle.take().unwrap().join().unwrap();
+        if let Some(handle) = self.thread_handle.take() {
+            handle.join().expect("thread panicked");
+        }
     }
 }
