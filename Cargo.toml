@@ -1,6 +1,6 @@
 [workspace]
-members = ["ceres-core", "ceres-cli", "ceres-audio"]
-default-members = ["ceres-cli"]
+members = ["ceres-core", "ceres-cli", "ceres-audio", "ceres"]
+default-members = ["ceres"]
 resolver = "2"
 
 [profile.dev]
