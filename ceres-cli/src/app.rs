@@ -1,5 +1,5 @@
 use crate::{
-    gb_context::GbContext,
+    gb_area::GbArea,
     video::{self, State},
     Scaling, CERES_STYLIZED, INIT_HEIGHT, INIT_WIDTH,
 };
@@ -23,7 +23,7 @@ pub struct App<'a> {
     scaling: Scaling,
 
     // Contexts
-    gb_ctx: Option<GbContext>,
+    gb_ctx: Option<GbArea>,
 
     // Rendering
     _audio: ceres_audio::State,
@@ -39,7 +39,7 @@ impl<'a> App<'a> {
         scaling: Scaling,
     ) -> anyhow::Result<Self> {
         let audio = ceres_audio::State::new()?;
-        let gb_ctx = GbContext::new(model, &project_dirs, rom_path, &audio)?;
+        let gb_ctx = GbArea::new(model, &project_dirs, rom_path, &audio)?;
 
         Ok(Self {
             project_dirs,

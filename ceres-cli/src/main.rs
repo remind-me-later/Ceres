@@ -1,5 +1,5 @@
 mod app;
-mod gb_context;
+mod gb_area;
 mod video;
 
 use app::App;

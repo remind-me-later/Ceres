@@ -7,9 +7,9 @@ use std::{
 };
 use thread_priority::ThreadBuilderExt;
 use winit::event::KeyEvent;
-use {std::sync::Arc, anyhow::Context, ceres_core::Gb, std::path::Path};
+use {anyhow::Context, ceres_core::Gb, std::path::Path, std::sync::Arc};
 
-pub struct GbContext {
+pub struct GbArea {
     gb: Arc<Mutex<Gb<ceres_audio::RingBuffer>>>,
     rom_ident: String,
     exiting: Arc<AtomicBool>,
@@ -19,7 +19,7 @@ pub struct GbContext {
     model: ceres_core::Model,
 }
 
-impl GbContext {
+impl GbArea {
     #[allow(clippy::unwrap_used)]
     fn ident_from_cart(cart: &Cart) -> String {
         let mut ident = String::new();
@@ -237,7 +237,7 @@ impl GbContext {
     }
 }
 
-impl Drop for GbContext {
+impl Drop for GbArea {
     #[allow(clippy::expect_used)]
     fn drop(&mut self) {
         // Probably drops before, knowing Rust semantics could be useful
