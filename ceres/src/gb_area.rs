@@ -10,7 +10,7 @@ use std::{
 use thread_priority::ThreadBuilderExt;
 use {anyhow::Context, ceres_core::Gb, std::path::Path, std::sync::Arc};
 
-pub struct GbContext {
+pub struct GbArea {
     gb: Arc<Mutex<Gb<ceres_audio::RingBuffer>>>,
     model: ceres_core::Model,
     rom_ident: String,
@@ -20,7 +20,7 @@ pub struct GbContext {
     thread_handle: Option<std::thread::JoinHandle<()>>,
 }
 
-impl GbContext {
+impl GbArea {
     pub fn new(
         model: ceres_core::Model,
         project_dirs: &directories::ProjectDirs,
@@ -219,7 +219,7 @@ impl GbContext {
     }
 }
 
-impl Drop for GbContext {
+impl Drop for GbArea {
     fn drop(&mut self) {
         // self.audio_stream.pause().unwrap();
         self.exit();

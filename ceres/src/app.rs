@@ -2,14 +2,14 @@ use eframe::egui::{self, Key};
 use rfd::FileDialog;
 use std::{fs::File, io::Write};
 
-use crate::{gb_context::GbContext, screen, Scaling};
+use crate::{gb_area::GbArea, screen, Scaling};
 
 pub struct App {
     // Config parameters
     project_dirs: directories::ProjectDirs,
 
     // Contexts
-    gb_ctx: GbContext,
+    gb_area: GbArea,
 
     // Rendering
     _audio: ceres_audio::State,
@@ -28,13 +28,13 @@ impl App {
     ) -> Self {
         let ctx = &cc.egui_ctx;
         let audio = ceres_audio::State::new().unwrap();
-        let gb_ctx = GbContext::new(model, &project_dirs, rom_path, &audio, ctx).unwrap();
+        let gb_ctx = GbArea::new(model, &project_dirs, rom_path, &audio, ctx).unwrap();
         let gb_clone = gb_ctx.gb_clone();
         let screen = screen::GBScreen::new(cc, gb_clone, scaling);
 
         Self {
             project_dirs,
-            gb_ctx,
+            gb_area: gb_ctx,
             _audio: audio,
             screen,
             show_menu: false,
@@ -42,14 +42,14 @@ impl App {
     }
 
     fn save_data(&self) {
-        let gb = self.gb_ctx.gb_lock();
+        let gb = self.gb_area.gb_lock();
         if let Some(save_data) = gb.cartridge().save_data() {
             std::fs::create_dir_all(self.project_dirs.data_dir())
                 .expect("couldn't create data directory");
             let sav_file = File::create(
                 self.project_dirs
                     .data_dir()
-                    .join(self.gb_ctx.rom_ident())
+                    .join(self.gb_area.rom_ident())
                     .with_extension("sav"),
             );
             match sav_file {
@@ -79,7 +79,7 @@ impl eframe::App for App {
                             .pick_file();
 
                         if let Some(file) = file {
-                            self.gb_ctx.change_rom(&self.project_dirs, &file).unwrap();
+                            self.gb_area.change_rom(&self.project_dirs, &file).unwrap();
                         }
                     }
 
@@ -96,16 +96,16 @@ impl eframe::App for App {
                         ui.selectable_value(self.screen.mut_scaling(), Scaling::Scale3x, "Scale3x");
                     });
 
-                let paused = self.gb_ctx.is_paused();
+                let paused = self.gb_area.is_paused();
                 if ui
                     .button(if paused { "Play" } else { "Pause" })
                     .on_hover_text("Pause the game")
                     .clicked()
                 {
                     if paused {
-                        self.gb_ctx.resume();
+                        self.gb_area.resume();
                     } else {
-                        self.gb_ctx.pause();
+                        self.gb_area.pause();
                     }
                 }
             });
@@ -132,7 +132,7 @@ impl eframe::App for App {
                     self.show_menu = true;
                 }
 
-                let mut gb = self.gb_ctx.mut_gb();
+                let mut gb = self.gb_area.mut_gb();
 
                 if i.key_pressed(Key::W) {
                     gb.press(ceres_core::Button::Up);
