@@ -119,19 +119,6 @@ impl eframe::App for App {
                                 "Scale3x",
                             );
                         });
-
-                    let paused = self.gb_area.is_paused();
-                    if ui
-                        .button(if paused { "Play" } else { "Pause" })
-                        .on_hover_text("Pause the game")
-                        .clicked()
-                    {
-                        if paused {
-                            self.gb_area.resume();
-                        } else {
-                            self.gb_area.pause();
-                        }
-                    }
                 }
             });
 
@@ -156,71 +143,80 @@ impl eframe::App for App {
                 if i.key_pressed(Key::Escape) {
                     self.show_menu = true;
                 }
+                {
+                    let mut gb = self.gb_area.mut_gb();
 
-                let mut gb = self.gb_area.mut_gb();
+                    if i.key_pressed(Key::W) {
+                        gb.press(ceres_core::Button::Up);
+                    }
 
-                if i.key_pressed(Key::W) {
-                    gb.press(ceres_core::Button::Up);
+                    if i.key_released(Key::W) {
+                        gb.release(ceres_core::Button::Up);
+                    }
+
+                    if i.key_pressed(Key::A) {
+                        gb.press(ceres_core::Button::Left);
+                    }
+
+                    if i.key_released(Key::A) {
+                        gb.release(ceres_core::Button::Left);
+                    }
+
+                    if i.key_pressed(Key::S) {
+                        gb.press(ceres_core::Button::Down);
+                    }
+
+                    if i.key_released(Key::S) {
+                        gb.release(ceres_core::Button::Down);
+                    }
+
+                    if i.key_pressed(Key::D) {
+                        gb.press(ceres_core::Button::Right);
+                    }
+
+                    if i.key_released(Key::D) {
+                        gb.release(ceres_core::Button::Right);
+                    }
+
+                    if i.key_pressed(Key::L) {
+                        gb.press(ceres_core::Button::A);
+                    }
+
+                    if i.key_released(Key::L) {
+                        gb.release(ceres_core::Button::A);
+                    }
+
+                    if i.key_pressed(Key::K) {
+                        gb.press(ceres_core::Button::B);
+                    }
+
+                    if i.key_released(Key::K) {
+                        gb.release(ceres_core::Button::B);
+                    }
+
+                    if i.key_pressed(Key::M) {
+                        gb.press(ceres_core::Button::Start);
+                    }
+
+                    if i.key_released(Key::M) {
+                        gb.release(ceres_core::Button::Start);
+                    }
+
+                    if i.key_pressed(Key::N) {
+                        gb.press(ceres_core::Button::Select);
+                    }
+
+                    if i.key_released(Key::N) {
+                        gb.release(ceres_core::Button::Select);
+                    }
                 }
 
-                if i.key_released(Key::W) {
-                    gb.release(ceres_core::Button::Up);
-                }
-
-                if i.key_pressed(Key::A) {
-                    gb.press(ceres_core::Button::Left);
-                }
-
-                if i.key_released(Key::A) {
-                    gb.release(ceres_core::Button::Left);
-                }
-
-                if i.key_pressed(Key::S) {
-                    gb.press(ceres_core::Button::Down);
-                }
-
-                if i.key_released(Key::S) {
-                    gb.release(ceres_core::Button::Down);
-                }
-
-                if i.key_pressed(Key::D) {
-                    gb.press(ceres_core::Button::Right);
-                }
-
-                if i.key_released(Key::D) {
-                    gb.release(ceres_core::Button::Right);
-                }
-
-                if i.key_pressed(Key::L) {
-                    gb.press(ceres_core::Button::A);
-                }
-
-                if i.key_released(Key::L) {
-                    gb.release(ceres_core::Button::A);
-                }
-
-                if i.key_pressed(Key::K) {
-                    gb.press(ceres_core::Button::B);
-                }
-
-                if i.key_released(Key::K) {
-                    gb.release(ceres_core::Button::B);
-                }
-
-                if i.key_pressed(Key::M) {
-                    gb.press(ceres_core::Button::Start);
-                }
-
-                if i.key_released(Key::M) {
-                    gb.release(ceres_core::Button::Start);
-                }
-
-                if i.key_pressed(Key::N) {
-                    gb.press(ceres_core::Button::Select);
-                }
-
-                if i.key_released(Key::N) {
-                    gb.release(ceres_core::Button::Select);
+                if i.key_pressed(Key::Space) {
+                    if self.gb_area.is_paused() {
+                        self.gb_area.resume();
+                    } else {
+                        self.gb_area.pause();
+                    }
                 }
             });
         }
