@@ -32,6 +32,15 @@ impl App {
         let gb_clone = gb_ctx.gb_clone();
         let screen = screen::GBScreen::new(cc, gb_clone, scaling);
 
+        ctx.set_theme(egui::Theme::Light);
+        // ctx.set_style(egui::Style {
+        //     visuals: egui::Visuals {
+        //         dark_mode: false,
+        //         ..Default::default()
+        //     },
+        //     ..Default::default()
+        // });
+
         Self {
             project_dirs,
             gb_area: gb_ctx,
@@ -70,42 +79,58 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if self.show_menu {
             egui::CentralPanel::default().show(ctx, |ui| {
-                ui.heading("Ceres");
-                ui.separator();
-                ui.menu_button("File", |ui| {
-                    if ui.button("Open ROM").clicked() {
-                        let file = FileDialog::new()
-                            .add_filter("gb", &["gb", "gbc"])
-                            .pick_file();
-
-                        if let Some(file) = file {
-                            self.gb_area.change_rom(&self.project_dirs, &file).unwrap();
-                        }
-                    }
-
-                    if ui.button("Export save").clicked() {
-                        println!("Export save file");
-                    }
-                });
-                egui::ComboBox::from_label("Scaling")
-                    .selected_text(format!("{}", self.screen.scaling()))
-                    .wrap()
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(self.screen.mut_scaling(), Scaling::Nearest, "Nearest");
-                        ui.selectable_value(self.screen.mut_scaling(), Scaling::Scale2x, "Scale2x");
-                        ui.selectable_value(self.screen.mut_scaling(), Scaling::Scale3x, "Scale3x");
-                    });
-
-                let paused = self.gb_area.is_paused();
-                if ui
-                    .button(if paused { "Play" } else { "Pause" })
-                    .on_hover_text("Pause the game")
-                    .clicked()
                 {
-                    if paused {
-                        self.gb_area.resume();
-                    } else {
-                        self.gb_area.pause();
+                    // UI content
+
+                    ui.heading("Options");
+                    // ui.separator();
+                    ui.menu_button("File", |ui| {
+                        if ui.button("Open ROM").clicked() {
+                            let file = FileDialog::new()
+                                .add_filter("gb", &["gb", "gbc"])
+                                .pick_file();
+
+                            if let Some(file) = file {
+                                self.gb_area.change_rom(&self.project_dirs, &file).unwrap();
+                            }
+                        }
+
+                        if ui.button("Export save").clicked() {
+                            println!("Export save file");
+                        }
+                    });
+                    egui::ComboBox::from_label("Scaling")
+                        .selected_text(format!("{}", self.screen.scaling()))
+                        .wrap()
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(
+                                self.screen.mut_scaling(),
+                                Scaling::Nearest,
+                                "Nearest",
+                            );
+                            ui.selectable_value(
+                                self.screen.mut_scaling(),
+                                Scaling::Scale2x,
+                                "Scale2x",
+                            );
+                            ui.selectable_value(
+                                self.screen.mut_scaling(),
+                                Scaling::Scale3x,
+                                "Scale3x",
+                            );
+                        });
+
+                    let paused = self.gb_area.is_paused();
+                    if ui
+                        .button(if paused { "Play" } else { "Pause" })
+                        .on_hover_text("Pause the game")
+                        .clicked()
+                    {
+                        if paused {
+                            self.gb_area.resume();
+                        } else {
+                            self.gb_area.pause();
+                        }
                     }
                 }
             });
