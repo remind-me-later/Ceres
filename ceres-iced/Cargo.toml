@@ -19,13 +19,8 @@ default-features = false
 # * Audio *
 # *********
 
-[dependencies.cpal]
-version = "*"
-default-features = false
-
-[dependencies.dasp_ring_buffer]
-version = "*"
-default-features = false
+[dependencies.ceres-audio]
+path = "../ceres-audio"
 
 # *******************
 # * Emulator thread *

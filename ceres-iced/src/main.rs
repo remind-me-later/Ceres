@@ -1,5 +1,4 @@
 mod app;
-mod audio;
 mod gb_widget;
 mod scene;
 
@@ -57,5 +56,6 @@ pub fn main() -> iced::Result {
             height: INIT_HEIGHT as f32,
         })
         .resizable(true)
+        .scale_factor(|_| 0.8)
         .run()
 }

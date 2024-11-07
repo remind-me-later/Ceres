@@ -1,7 +1,5 @@
+use crate::{scene, Scaling};
 use ceres_core::{Cart, Gb};
-use thread_priority::ThreadBuilderExt;
-
-use crate::{audio, scene, Scaling};
 use std::{
     io::Read,
     path::Path,
@@ -10,13 +8,14 @@ use std::{
         Arc, Mutex,
     },
 };
+use thread_priority::ThreadBuilderExt;
 
 pub struct GbWidget {
     scene: scene::Scene,
     rom_ident: String,
     exiting: Arc<AtomicBool>,
     pause_thread: Arc<AtomicBool>,
-    audio_stream: audio::Stream,
+    audio_stream: ceres_audio::Stream,
     thread_handle: Option<std::thread::JoinHandle<()>>,
 }
 
@@ -25,10 +24,10 @@ impl GbWidget {
         model: ceres_core::Model,
         project_dirs: &directories::ProjectDirs,
         rom_path: Option<&Path>,
-        audio_state: &audio::State,
+        audio_state: &ceres_audio::State,
     ) -> Self {
         fn gb_loop(
-            gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
+            gb: Arc<Mutex<Gb<ceres_audio::RingBuffer>>>,
             exiting: Arc<AtomicBool>,
             pause_thread: Arc<AtomicBool>,
         ) {
@@ -98,8 +97,8 @@ impl GbWidget {
             (Cart::default(), String::new())
         };
 
-        let sample_rate = audio::Stream::sample_rate();
-        let mut audio_stream = audio::Stream::new(audio_state);
+        let sample_rate = ceres_audio::Stream::sample_rate();
+        let mut audio_stream = ceres_audio::Stream::new(audio_state).unwrap();
         let ring_buffer = audio_stream.get_ring_buffer();
 
         let gb = Arc::new(Mutex::new(Gb::new(model, sample_rate, cart, ring_buffer)));

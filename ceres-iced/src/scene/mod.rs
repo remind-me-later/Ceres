@@ -7,15 +7,15 @@ use ceres_core::{Button, Gb};
 use iced::{event, keyboard::Key, mouse, widget::shader, Rectangle};
 use pipeline::Pipeline;
 
-use crate::{audio, Scaling, PX_HEIGHT, PX_WIDTH};
+use crate::{Scaling, PX_HEIGHT, PX_WIDTH};
 
 pub struct Scene {
-    gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
+    gb: Arc<Mutex<Gb<ceres_audio::RingBuffer>>>,
     scaling: Scaling,
 }
 
 impl Scene {
-    pub fn new(gb: Arc<Mutex<Gb<audio::RingBuffer>>>, scaling: Scaling) -> Self {
+    pub fn new(gb: Arc<Mutex<Gb<ceres_audio::RingBuffer>>>, scaling: Scaling) -> Self {
         Self { gb, scaling }
     }
 
@@ -115,7 +115,7 @@ pub struct Primitive {
 }
 
 impl Primitive {
-    pub fn new(gb: &Gb<audio::RingBuffer>, scaling: Scaling) -> Self {
+    pub fn new(gb: &Gb<ceres_audio::RingBuffer>, scaling: Scaling) -> Self {
         let mut rgb = [0; PX_HEIGHT as usize * PX_WIDTH as usize * 3];
 
         rgb.copy_from_slice(gb.pixel_data_rgb());

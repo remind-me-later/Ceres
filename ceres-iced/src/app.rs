@@ -1,4 +1,4 @@
-use crate::{audio, gb_widget, Scaling, CERES_STYLIZED, ORGANIZATION, QUALIFIER};
+use crate::{gb_widget, Scaling, CERES_STYLIZED, ORGANIZATION, QUALIFIER};
 use iced::advanced::graphics::futures::event;
 use iced::widget::{column, container, pick_list, shader, text};
 use iced::{window, Alignment, Element, Length, Subscription, Theme};
@@ -6,7 +6,7 @@ use std::time::Instant;
 
 pub struct App {
     widget: gb_widget::GbWidget,
-    _audio: audio::State,
+    _audio: ceres_audio::State,
     show_menu: bool,
     project_dirs: directories::ProjectDirs,
 }
@@ -15,7 +15,7 @@ impl Default for App {
     fn default() -> Self {
         let project_dirs =
             directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED).unwrap();
-        let audio = audio::State::new();
+        let audio = ceres_audio::State::new().unwrap();
 
         App {
             widget: gb_widget::GbWidget::new(ceres_core::Model::Cgb, &project_dirs, None, &audio),

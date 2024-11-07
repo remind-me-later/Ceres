@@ -741,9 +741,8 @@ name = "ceres-iced"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+ "ceres-audio",
  "ceres-core",
- "cpal",
- "dasp_ring_buffer",
  "directories",
  "iced",
  "spin_sleep",
