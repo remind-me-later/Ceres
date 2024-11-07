@@ -4,13 +4,7 @@ mod texture;
 use std::sync::{Arc, Mutex};
 
 use ceres_core::{Button, Gb};
-use iced::{
-    event,
-    keyboard::{key::Named, Key},
-    mouse,
-    widget::shader,
-    Rectangle,
-};
+use iced::{event, keyboard::Key, mouse, widget::shader, Rectangle};
 use pipeline::Pipeline;
 
 use crate::{audio, Scaling, PX_HEIGHT, PX_WIDTH};

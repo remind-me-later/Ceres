@@ -9,7 +9,6 @@ use std::{
         atomic::{AtomicBool, Ordering::Relaxed},
         Arc, Mutex,
     },
-    time::Duration,
 };
 
 pub struct GbWidget {
@@ -136,27 +135,23 @@ impl GbWidget {
         }
     }
 
-    pub fn is_paused(&self) -> bool {
-        self.pause_thread.load(Relaxed)
-    }
+    // pub fn is_paused(&self) -> bool {
+    //     self.pause_thread.load(Relaxed)
+    // }
 
-    pub fn pause(&mut self) {
-        self.audio_stream.pause();
-        self.pause_thread.store(true, Relaxed);
-    }
+    // pub fn pause(&mut self) {
+    //     self.audio_stream.pause();
+    //     self.pause_thread.store(true, Relaxed);
+    // }
 
-    pub fn resume(&mut self) {
-        self.pause_thread.store(false, Relaxed);
-        self.audio_stream.resume();
-    }
+    // pub fn resume(&mut self) {
+    //     self.pause_thread.store(false, Relaxed);
+    //     self.audio_stream.resume();
+    // }
 
-    pub fn rom_ident(&self) -> &str {
-        &self.rom_ident
-    }
-
-    pub fn update(&mut self) {
-        // self.scene.update(time);
-    }
+    // pub fn rom_ident(&self) -> &str {
+    //     &self.rom_ident
+    // }
 
     pub fn scaling(&self) -> Scaling {
         self.scene.scaling()

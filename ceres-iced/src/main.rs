@@ -3,8 +3,6 @@ mod audio;
 mod gb_widget;
 mod scene;
 
-use iced::{Application, Settings};
-
 const SCREEN_MUL: u32 = 1;
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
 const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;

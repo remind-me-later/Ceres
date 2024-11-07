@@ -1,8 +1,7 @@
 use crate::{audio, gb_widget, Scaling, CERES_STYLIZED, ORGANIZATION, QUALIFIER};
 use iced::advanced::graphics::futures::event;
-use iced::widget::shader::Program;
-use iced::widget::{button, column, container, pick_list, row, shader, text};
-use iced::{window, Alignment, Application, Element, Length, Settings, Subscription, Theme};
+use iced::widget::{column, container, pick_list, shader, text};
+use iced::{window, Alignment, Element, Length, Subscription, Theme};
 use std::time::Instant;
 
 pub struct App {
@@ -38,10 +37,6 @@ pub enum Message {
 }
 
 impl App {
-    pub fn new() -> Self {
-        App::default()
-    }
-
     pub fn title(&self) -> String {
         String::from("Ceres")
     }
