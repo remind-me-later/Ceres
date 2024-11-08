@@ -49,7 +49,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     switch scale_type {
         default: {
             // nearest neighbour
-            ret = textureSample(txt, smpl, in.tex_coords);
+            ret = vec4(textureSample(txt, smpl, in.tex_coords).xyz, 1.0);
         }
         case 1u: {
             // scale2x

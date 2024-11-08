@@ -102,7 +102,7 @@ impl GbWidget {
         let ring_buffer = audio_stream.get_ring_buffer();
 
         let gb = Arc::new(Mutex::new(Gb::new(model, sample_rate, cart, ring_buffer)));
-        audio_stream.resume();
+        audio_stream.resume().unwrap();
 
         let pause_thread = Arc::new(AtomicBool::new(false));
 
@@ -122,7 +122,7 @@ impl GbWidget {
                 .expect("failed to spawn thread")
         };
 
-        let scene = scene::Scene::new(gb, Scaling::Scale2x);
+        let scene = scene::Scene::new(gb, Scaling::default());
 
         Self {
             scene,

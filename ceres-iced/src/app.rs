@@ -1,6 +1,6 @@
 use crate::{gb_widget, Scaling, CERES_STYLIZED, ORGANIZATION, QUALIFIER};
 use iced::advanced::graphics::futures::event;
-use iced::widget::{column, container, pick_list, shader, text};
+use iced::widget::{button, column, container, pick_list, shader, text};
 use iced::{window, Alignment, Element, Length, Subscription, Theme};
 use std::time::Instant;
 
@@ -38,7 +38,7 @@ pub enum Message {
 
 impl App {
     pub fn title(&self) -> String {
-        String::from("Ceres")
+        "Ceres".to_owned()
     }
 
     pub fn update(&mut self, message: Message) {
@@ -68,17 +68,17 @@ impl App {
 
     pub fn view(&self) -> Element<'_, Message> {
         if self.show_menu {
-            let content = {
-                column![
-                    text("Scaling mode"),
-                    pick_list(
-                        Scaling::ALL,
-                        Some(self.widget.scaling()),
-                        Message::ScalingChanged
-                    )
-                    .width(Length::Shrink)
-                ]
-            };
+            let content = column![
+                text("Options").size(20),
+                button("Open ROM").on_press(Message::OpenButtonPressed),
+                text("Scaling mode"),
+                pick_list(
+                    Scaling::ALL,
+                    Some(self.widget.scaling()),
+                    Message::ScalingChanged
+                )
+            ]
+            .spacing(10);
 
             container(content)
                 .width(Length::Fill)
