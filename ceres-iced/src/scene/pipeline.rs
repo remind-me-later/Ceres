@@ -186,15 +186,14 @@ impl Pipeline {
             const BUFFER_SIZE: usize = (PX_HEIGHT * PX_WIDTH * 4) as usize;
             let mut rgba: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
 
-            let mut j = 0;
-
-            rgb.chunks_exact(3).for_each(|p| {
-                rgba[j] = p[0];
-                rgba[j + 1] = p[1];
-                rgba[j + 2] = p[2];
-                // Ignore alpha channel since we set composition mode to opaque
-                j += 4;
-            });
+            rgb.chunks_exact(3)
+                .zip(rgba.chunks_exact_mut(4))
+                .for_each(|(p, q)| {
+                    q[0] = p[0];
+                    q[1] = p[1];
+                    q[2] = p[2];
+                    q[3] = 0xff;
+                });
 
             rgba
         };

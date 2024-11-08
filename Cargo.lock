@@ -740,11 +740,13 @@ version = "0.1.0"
 name = "ceres-iced"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bytemuck",
  "ceres-audio",
  "ceres-core",
  "directories",
  "iced",
+ "rfd",
  "spin_sleep",
  "thread-priority",
 ]

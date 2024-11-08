@@ -26,6 +26,10 @@ impl Scene {
     pub fn scaling(&self) -> Scaling {
         self.scaling
     }
+
+    pub fn replace_gb(&mut self, gb: Gb<ceres_audio::RingBuffer>) {
+        *self.gb.lock().unwrap() = gb;
+    }
 }
 
 impl<Message> shader::Program<Message> for Scene {

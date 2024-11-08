@@ -25,71 +25,12 @@ impl GbWidget {
         project_dirs: &directories::ProjectDirs,
         rom_path: Option<&Path>,
         audio_state: &ceres_audio::State,
-    ) -> Self {
-        fn gb_loop(
-            gb: Arc<Mutex<Gb<ceres_audio::RingBuffer>>>,
-            exiting: Arc<AtomicBool>,
-            pause_thread: Arc<AtomicBool>,
-        ) {
-            loop {
-                let begin = std::time::Instant::now();
-
-                if exiting.load(Relaxed) {
-                    break;
-                }
-
-                let duration = std::time::Duration::from_millis(1000 / 60);
-
-                if !pause_thread.load(Relaxed) {
-                    if let Ok(mut gb) = gb.lock() {
-                        gb.run_frame();
-                    }
-                }
-
-                let elapsed = begin.elapsed();
-
-                if elapsed < duration {
-                    spin_sleep::sleep(duration - elapsed);
-                }
-                // TODO: we're always running late
-                // else {
-                //     eprintln!("running late: {elapsed:?}");
-                // }
-            }
-
-            // FIXME: clippy says we have to drop
-            drop(gb);
-            drop(exiting);
-            drop(pause_thread);
-        }
-
+    ) -> anyhow::Result<Self> {
         let (cart, ident) = if let Some(rom_path) = rom_path {
-            let rom = {
-                std::fs::read(rom_path)
-                    .map(Vec::into_boxed_slice)
-                    .expect("no such file")
-            };
-
-            // TODO: core error
-            let mut cart = Cart::new(rom).unwrap();
-            let ident = {
-                let mut ident = String::new();
-                cart.ascii_title().read_to_string(&mut ident).unwrap();
-                ident.push('-');
-                ident.push_str(cart.version().to_string().as_str());
-                ident.push('-');
-                ident.push_str(cart.header_checksum().to_string().as_str());
-                ident.push('-');
-                ident.push_str(cart.global_checksum().to_string().as_str());
-
-                ident
-            };
-
-            if let Ok(ram) =
-                std::fs::read(project_dirs.data_dir().join(&ident).with_extension("sav"))
-                    .map(Vec::into_boxed_slice)
-            {
-                cart.set_ram(ram).unwrap();
+            let mut cart = Self::cart_from_path(rom_path)?;
+            let ident = Self::ident_from_cart(&cart)?;
+            if let Ok(ram) = Self::ram_from_dirs_ident(project_dirs, &ident) {
+                cart.set_ram(ram)?;
             }
 
             (cart, ident)
@@ -117,21 +58,21 @@ impl GbWidget {
             // std::thread::spawn(move || gb_loop(gb, exit, pause_thread))
             thread_builder
                 .spawn_with_priority(thread_priority::ThreadPriority::Max, move |_| {
-                    gb_loop(gb, exit, pause_thread);
+                    Self::gb_loop(gb, exit, pause_thread);
                 })
                 .expect("failed to spawn thread")
         };
 
         let scene = scene::Scene::new(gb, Scaling::default());
 
-        Self {
+        Ok(Self {
             scene,
             rom_ident: ident,
             exiting,
             pause_thread,
             thread_handle: Some(thread_handle),
             audio_stream,
-        }
+        })
     }
 
     // pub fn is_paused(&self) -> bool {
@@ -163,12 +104,103 @@ impl GbWidget {
     pub fn scene(&self) -> &scene::Scene {
         &self.scene
     }
+
+    pub fn change_rom(
+        &mut self,
+        project_dirs: &directories::ProjectDirs,
+        rom_path: &Path,
+        model: ceres_core::Model,
+    ) -> anyhow::Result<()> {
+        let mut cart = Self::cart_from_path(rom_path)?;
+        let ident = Self::ident_from_cart(&cart)?;
+
+        if let Ok(ram) = Self::ram_from_dirs_ident(project_dirs, &ident) {
+            cart.set_ram(ram).unwrap();
+        }
+
+        let sample_rate = ceres_audio::Stream::sample_rate();
+        let ring_buffer = self.audio_stream.get_ring_buffer();
+
+        let new_gb = Gb::new(model, sample_rate, cart, ring_buffer);
+        self.scene.replace_gb(new_gb);
+
+        Ok(())
+    }
 }
 
 impl Drop for GbWidget {
     fn drop(&mut self) {
-        self.audio_stream.pause();
         self.exiting.store(true, Relaxed);
         self.thread_handle.take().unwrap().join().unwrap();
+    }
+}
+
+impl GbWidget {
+    // In theory can't ever fail because ROM title is always ASCII, in practice I don't know if we check for that on Cart creation
+    fn ident_from_cart(cart: &ceres_core::Cart) -> anyhow::Result<String> {
+        let mut ident = String::new();
+        cart.ascii_title().read_to_string(&mut ident)?;
+        ident.push('-');
+        ident.push_str(cart.version().to_string().as_str());
+        ident.push('-');
+        ident.push_str(cart.header_checksum().to_string().as_str());
+        ident.push('-');
+        ident.push_str(cart.global_checksum().to_string().as_str());
+
+        Ok(ident)
+    }
+
+    fn cart_from_path(path: &Path) -> anyhow::Result<ceres_core::Cart> {
+        let rom = std::fs::read(path)
+            .map(Vec::into_boxed_slice)
+            .map_err(|e| anyhow::anyhow!(e))?;
+
+        ceres_core::Cart::new(rom).map_err(|e| e.into())
+    }
+
+    fn ram_from_dirs_ident(
+        project_dirs: &directories::ProjectDirs,
+        ident: &str,
+    ) -> anyhow::Result<Box<[u8]>> {
+        std::fs::read(project_dirs.data_dir().join(ident).with_extension("sav"))
+            .map(Vec::into_boxed_slice)
+            .map_err(|e| anyhow::anyhow!(e))
+    }
+
+    fn gb_loop(
+        gb: Arc<Mutex<Gb<ceres_audio::RingBuffer>>>,
+        exiting: Arc<AtomicBool>,
+        pause_thread: Arc<AtomicBool>,
+    ) {
+        loop {
+            let begin = std::time::Instant::now();
+
+            if exiting.load(Relaxed) {
+                break;
+            }
+
+            let duration = std::time::Duration::from_millis(1000 / 60);
+
+            if !pause_thread.load(Relaxed) {
+                if let Ok(mut gb) = gb.lock() {
+                    gb.run_frame();
+                }
+            }
+
+            let elapsed = begin.elapsed();
+
+            if elapsed < duration {
+                spin_sleep::sleep(duration - elapsed);
+            }
+            // TODO: we're always running late
+            // else {
+            //     eprintln!("running late: {elapsed:?}");
+            // }
+        }
+
+        // FIXME: clippy says we have to drop
+        drop(gb);
+        drop(exiting);
+        drop(pause_thread);
     }
 }

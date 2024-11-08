@@ -9,6 +9,7 @@ pub struct App {
     _audio: ceres_audio::State,
     show_menu: bool,
     project_dirs: directories::ProjectDirs,
+    model: ceres_core::Model,
 }
 
 impl Default for App {
@@ -16,12 +17,14 @@ impl Default for App {
         let project_dirs =
             directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED).unwrap();
         let audio = ceres_audio::State::new().unwrap();
+        let model = ceres_core::Model::Cgb;
 
         App {
-            widget: gb_widget::GbWidget::new(ceres_core::Model::Cgb, &project_dirs, None, &audio),
+            widget: gb_widget::GbWidget::new(model, &project_dirs, None, &audio).unwrap(),
             _audio: audio,
             project_dirs,
             show_menu: false,
+            model,
         }
     }
 }
@@ -46,7 +49,21 @@ impl App {
             Message::ScalingChanged(scaling) => {
                 self.widget.set_scaling(scaling);
             }
-            Message::OpenButtonPressed => {}
+            Message::OpenButtonPressed => {
+                let file = rfd::FileDialog::new()
+                    .add_filter("gb", &["gb", "gbc"])
+                    .pick_file();
+
+                if let Some(file) = file {
+                    match self
+                        .widget
+                        .change_rom(&self.project_dirs, &file, self.model)
+                    {
+                        Ok(_) => {}
+                        Err(e) => eprintln!("Error changing ROM: {}", e),
+                    }
+                }
+            }
             Message::ExportButtonPressed => {}
             Message::Tick(_) => {
                 // self.widget.update();
