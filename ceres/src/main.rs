@@ -1,12 +1,6 @@
 mod app;
-mod gb_area;
-mod screen;
-
-use eframe::egui;
-
-use app::App;
-use clap::Parser;
-use std::path::PathBuf;
+mod gb_widget;
+mod scene;
 
 const SCREEN_MUL: u32 = 1;
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
@@ -55,7 +49,7 @@ impl From<Model> for ceres_core::Model {
     }
 }
 
-#[derive(Default, Clone, Copy, PartialEq, clap::ValueEnum)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, clap::ValueEnum)]
 pub enum Scaling {
     #[default]
     Nearest = 0,
@@ -64,6 +58,8 @@ pub enum Scaling {
 }
 
 impl Scaling {
+    pub const ALL: [Scaling; 3] = [Scaling::Nearest, Scaling::Scale2x, Scaling::Scale3x];
+
     #[must_use]
     pub fn next(self) -> Self {
         match self {
@@ -94,7 +90,7 @@ struct Cli {
            header. Doesn't accept compressed (zip) files.",
         required = false
     )]
-    file: Option<PathBuf>,
+    file: Option<std::path::PathBuf>,
     #[arg(
         short,
         long,
@@ -115,30 +111,28 @@ struct Cli {
     scaling: Scaling,
 }
 
-fn main() -> eframe::Result {
-    let args = Cli::parse();
+pub fn main() -> iced::Result {
+    let args = <crate::Cli as clap::Parser>::parse();
     let project_dirs =
         directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED).unwrap();
 
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([INIT_WIDTH as f32, INIT_HEIGHT as f32])
-            .with_min_inner_size([PX_WIDTH as f32, PX_HEIGHT as f32]),
-        renderer: eframe::Renderer::Wgpu,
-        vsync: true,
-        ..Default::default()
-    };
-    eframe::run_native(
-        CERES_STYLIZED,
-        options,
-        Box::new(move |cc| {
-            Ok(Box::new(App::new(
-                cc,
-                args.model.into(),
-                project_dirs,
-                args.file.as_deref(),
-                args.scaling,
-            )))
-        }),
-    )
+    iced::application(app::App::title, app::App::update, app::App::view)
+        .subscription(app::App::subscription)
+        .default_font(iced::Font {
+            family: iced::font::Family::Monospace,
+            ..Default::default()
+        })
+        .window_size(iced::Size {
+            width: INIT_WIDTH as f32,
+            height: INIT_HEIGHT as f32,
+        })
+        .resizable(true)
+        .scale_factor(|_| 0.8)
+        .theme(app::App::theme)
+        .run_with(|| {
+            (
+                app::App::new(args, project_dirs).unwrap(),
+                iced::Task::none(),
+            )
+        })
 }

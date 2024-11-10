@@ -3,20 +3,34 @@ name = "ceres"
 version = "0.1.0"
 edition = "2021"
 
-# *******
-# * Cli *
-# *******
-
 [dependencies.clap]
 version = "*"
-default-features = false
-features = ["std", "derive"]
+features = ["derive"]
+
+[dependencies.iced]
+version = "*"
+features = ["advanced", "wgpu"]
 
 [dependencies.anyhow]
 version = "*"
 
 [dependencies.directories]
 version = "*"
+
+[dependencies.rfd]
+version = "*"
+
+# Required for wgpu safe byte manipulation
+[dependencies.bytemuck]
+version = "*"
+default-features = false
+
+# *********
+# * Audio *
+# *********
+
+[dependencies.ceres-audio]
+path = "../ceres-audio"
 
 # *******************
 # * Emulator thread *
@@ -30,35 +44,6 @@ version = "*"
 default-features = false
 
 [dependencies.spin_sleep]
-version = "*"
-default-features = false
-
-# *********
-# * Audio *
-# *********
-
-[dependencies.ceres-audio]
-path = "../ceres-audio"
-
-# *************
-# * windowing *
-# *************
-
-[dependencies.eframe]
-version = "*"
-default-features = false
-features = ["default_fonts", "wgpu", "wayland", "accesskit"]
-
-[dependencies.winit]
-version = "*"
-default-features = false
-features = ["wayland", "wayland-csd-adwaita", "rwh_06"]
-
-[dependencies.rfd]
-version = "*"
-
-# Required for wgpu safe byte manipulation
-[dependencies.bytemuck]
 version = "*"
 default-features = false
 

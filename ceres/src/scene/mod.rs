@@ -1,7 +1,7 @@
 mod pipeline;
 mod texture;
 
-use std::sync::{Arc, Mutex};
+use std::sync::{atomic::AtomicBool, Arc, Mutex};
 
 use ceres_core::{Button, Gb};
 use iced::{event, keyboard::Key, mouse, widget::shader, Rectangle};
@@ -12,11 +12,16 @@ use crate::{Scaling, PX_HEIGHT, PX_WIDTH};
 pub struct Scene {
     gb: Arc<Mutex<Gb<ceres_audio::RingBuffer>>>,
     scaling: Scaling,
+    pause_thread: Arc<AtomicBool>,
 }
 
 impl Scene {
     pub fn new(gb: Arc<Mutex<Gb<ceres_audio::RingBuffer>>>, scaling: Scaling) -> Self {
-        Self { gb, scaling }
+        Self {
+            gb,
+            scaling,
+            pause_thread: Arc::new(AtomicBool::new(false)),
+        }
     }
 
     pub fn set_scaling(&mut self, scaling: Scaling) {
@@ -29,6 +34,10 @@ impl Scene {
 
     pub fn replace_gb(&mut self, gb: Gb<ceres_audio::RingBuffer>) {
         *self.gb.lock().unwrap() = gb;
+    }
+
+    pub fn gb(&self) -> &Arc<Mutex<Gb<ceres_audio::RingBuffer>>> {
+        &self.gb
     }
 }
 
@@ -75,6 +84,13 @@ impl<Message> shader::Program<Message> for Scene {
                                 _ => return (event::Status::Ignored, None),
                             }
 
+                            return (event::Status::Captured, None);
+                        }
+                        Key::Named(iced::keyboard::key::Named::Space) => {
+                            self.pause_thread.store(
+                                !self.pause_thread.load(std::sync::atomic::Ordering::Relaxed),
+                                std::sync::atomic::Ordering::Relaxed,
+                            );
                             return (event::Status::Captured, None);
                         }
                         _ => {}

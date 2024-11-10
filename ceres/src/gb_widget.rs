@@ -14,7 +14,6 @@ pub struct GbWidget {
     scene: scene::Scene,
     rom_ident: String,
     exiting: Arc<AtomicBool>,
-    pause_thread: Arc<AtomicBool>,
     audio_stream: ceres_audio::Stream,
     thread_handle: Option<std::thread::JoinHandle<()>>,
 }
@@ -69,7 +68,6 @@ impl GbWidget {
             scene,
             rom_ident: ident,
             exiting,
-            pause_thread,
             thread_handle: Some(thread_handle),
             audio_stream,
         })
@@ -202,5 +200,30 @@ impl GbWidget {
         drop(gb);
         drop(exiting);
         drop(pause_thread);
+    }
+
+    pub fn save_data(&self, project_dirs: &directories::ProjectDirs) {
+        if let Ok(gb) = self.scene.gb().lock() {
+            if let Some(save_data) = gb.cartridge().save_data() {
+                std::fs::create_dir_all(project_dirs.data_dir())
+                    .expect("couldn't create data directory");
+                let sav_file = std::fs::File::create(
+                    project_dirs
+                        .data_dir()
+                        .join(&self.rom_ident)
+                        .with_extension("sav"),
+                );
+                match sav_file {
+                    Ok(mut f) => {
+                        if let Err(e) = std::io::Write::write_all(&mut f, save_data) {
+                            eprintln!("couldn't save data in save file: {e}");
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("couldn't open save file: {e}");
+                    }
+                }
+            }
+        }
     }
 }

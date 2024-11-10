@@ -1,239 +1,121 @@
-use eframe::egui::{self, Key};
-use rfd::FileDialog;
-use std::{fs::File, io::Write};
-
-use crate::{gb_area::GbArea, screen, Scaling};
+use crate::{gb_widget, Scaling};
+use iced::advanced::graphics::futures::event;
+use iced::widget::{button, column, container, pick_list, shader, text};
+use iced::{window, Alignment, Element, Length, Subscription, Theme};
 
 pub struct App {
-    // Config parameters
-    project_dirs: directories::ProjectDirs,
-
-    // Contexts
-    gb_area: GbArea,
-
-    // Rendering
+    widget: gb_widget::GbWidget,
     _audio: ceres_audio::State,
-    screen: screen::GBScreen,
-
     show_menu: bool,
+    project_dirs: directories::ProjectDirs,
+    model: ceres_core::Model,
+}
+
+#[derive(Debug, Clone)]
+pub enum Message {
+    ScalingChanged(Scaling),
+    OpenButtonPressed,
+    Tick,
+    EventOcurred(iced::Event),
 }
 
 impl App {
-    pub fn new(
-        cc: &eframe::CreationContext<'_>,
-        model: ceres_core::Model,
-        project_dirs: directories::ProjectDirs,
-        rom_path: Option<&std::path::Path>,
-        scaling: Scaling,
-    ) -> Self {
-        let ctx = &cc.egui_ctx;
-        let audio = ceres_audio::State::new().unwrap();
-        let gb_ctx = GbArea::new(model, &project_dirs, rom_path, &audio, ctx).unwrap();
-        let gb_clone = gb_ctx.gb_clone();
-        let screen = screen::GBScreen::new(cc, gb_clone, scaling);
-
-        ctx.set_theme(egui::Theme::Light);
-        // ctx.set_style(egui::Style {
-        //     visuals: egui::Visuals {
-        //         dark_mode: false,
-        //         ..Default::default()
-        //     },
-        //     ..Default::default()
-        // });
-
-        Self {
-            project_dirs,
-            gb_area: gb_ctx,
+    pub fn new(args: crate::Cli, project_dirs: directories::ProjectDirs) -> anyhow::Result<Self> {
+        let audio = ceres_audio::State::new()?;
+        Ok(App {
+            widget: gb_widget::GbWidget::new(args.model.into(), &project_dirs, None, &audio)?,
             _audio: audio,
-            screen,
+            project_dirs,
             show_menu: false,
-        }
+            model: args.model.into(),
+        })
     }
 
-    fn save_data(&self) {
-        let gb = self.gb_area.gb_lock();
-        if let Some(save_data) = gb.cartridge().save_data() {
-            std::fs::create_dir_all(self.project_dirs.data_dir())
-                .expect("couldn't create data directory");
-            let sav_file = File::create(
-                self.project_dirs
-                    .data_dir()
-                    .join(self.gb_area.rom_ident())
-                    .with_extension("sav"),
-            );
-            match sav_file {
-                Ok(mut f) => {
-                    if let Err(e) = f.write_all(save_data) {
-                        eprintln!("couldn't save data in save file: {e}");
+    pub fn title(&self) -> String {
+        "Ceres".to_owned()
+    }
+
+    pub fn update(&mut self, message: Message) {
+        match message {
+            Message::ScalingChanged(scaling) => {
+                self.widget.set_scaling(scaling);
+            }
+            Message::OpenButtonPressed => {
+                let file = rfd::FileDialog::new()
+                    .add_filter("gb", &["gb", "gbc"])
+                    .pick_file();
+
+                if let Some(file) = file {
+                    match self
+                        .widget
+                        .change_rom(&self.project_dirs, &file, self.model)
+                    {
+                        Ok(_) => {}
+                        Err(e) => eprintln!("Error changing ROM: {}", e),
                     }
-                }
-                Err(e) => {
-                    eprintln!("couldn't open save file: {e}");
                 }
             }
+            Message::Tick => {
+                // TODO: Why don't we need to do anything here?
+            }
+            Message::EventOcurred(event) => match event {
+                iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+                    key: iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape),
+                    ..
+                }) => {
+                    self.show_menu = !self.show_menu;
+                }
+                iced::Event::Window(window::Event::CloseRequested) => {
+                    self.widget.save_data(&self.project_dirs);
+                }
+                _ => (),
+            },
         }
     }
-}
 
-impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    pub fn view(&self) -> Element<Message> {
         if self.show_menu {
-            egui::CentralPanel::default().show(ctx, |ui| {
-                {
-                    // UI content
-
-                    ui.heading("Options");
-                    // ui.separator();
-                    ui.menu_button("File", |ui| {
-                        if ui.button("Open ROM").clicked() {
-                            let file = FileDialog::new()
-                                .add_filter("gb", &["gb", "gbc"])
-                                .pick_file();
-
-                            if let Some(file) = file {
-                                self.gb_area.change_rom(&self.project_dirs, &file).unwrap();
-                            }
-                        }
-
-                        if ui.button("Export save").clicked() {
-                            println!("Export save file");
-                        }
-                    });
-                    egui::ComboBox::from_label("Scaling")
-                        .selected_text(format!("{}", self.screen.scaling()))
-                        .wrap()
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(
-                                self.screen.mut_scaling(),
-                                Scaling::Nearest,
-                                "Nearest",
-                            );
-                            ui.selectable_value(
-                                self.screen.mut_scaling(),
-                                Scaling::Scale2x,
-                                "Scale2x",
-                            );
-                            ui.selectable_value(
-                                self.screen.mut_scaling(),
-                                Scaling::Scale3x,
-                                "Scale3x",
-                            );
-                        });
-                }
-            });
-
-            ctx.input(|i| {
-                if i.key_pressed(Key::Escape) {
-                    self.show_menu = false;
-                }
-            });
-        } else {
-            egui::containers::CentralPanel::default()
-                .frame(
-                    egui::containers::Frame::default()
-                        .fill(egui::Color32::BLACK)
-                        .inner_margin(0.0)
-                        .outer_margin(0.0),
+            let content = column![
+                text("Options").size(20),
+                button("Open ROM").on_press(Message::OpenButtonPressed),
+                text("Scaling mode"),
+                pick_list(
+                    Scaling::ALL,
+                    Some(self.widget.scaling()),
+                    Message::ScalingChanged
                 )
-                .show(ctx, |ui| {
-                    self.screen.custom_painting(ui);
-                });
+            ]
+            .spacing(10);
 
-            ctx.input(|i| {
-                if i.key_pressed(Key::Escape) {
-                    self.show_menu = true;
-                }
-                {
-                    let mut gb = self.gb_area.mut_gb();
+            container(content)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .align_x(Alignment::Center)
+                .align_y(Alignment::Center)
+                .into()
+        } else {
+            let shader = shader(self.widget.scene())
+                .height(Length::Fill)
+                .width(Length::Fill);
 
-                    if i.key_pressed(Key::W) {
-                        gb.press(ceres_core::Button::Up);
-                    }
-
-                    if i.key_released(Key::W) {
-                        gb.release(ceres_core::Button::Up);
-                    }
-
-                    if i.key_pressed(Key::A) {
-                        gb.press(ceres_core::Button::Left);
-                    }
-
-                    if i.key_released(Key::A) {
-                        gb.release(ceres_core::Button::Left);
-                    }
-
-                    if i.key_pressed(Key::S) {
-                        gb.press(ceres_core::Button::Down);
-                    }
-
-                    if i.key_released(Key::S) {
-                        gb.release(ceres_core::Button::Down);
-                    }
-
-                    if i.key_pressed(Key::D) {
-                        gb.press(ceres_core::Button::Right);
-                    }
-
-                    if i.key_released(Key::D) {
-                        gb.release(ceres_core::Button::Right);
-                    }
-
-                    if i.key_pressed(Key::L) {
-                        gb.press(ceres_core::Button::A);
-                    }
-
-                    if i.key_released(Key::L) {
-                        gb.release(ceres_core::Button::A);
-                    }
-
-                    if i.key_pressed(Key::K) {
-                        gb.press(ceres_core::Button::B);
-                    }
-
-                    if i.key_released(Key::K) {
-                        gb.release(ceres_core::Button::B);
-                    }
-
-                    if i.key_pressed(Key::M) {
-                        gb.press(ceres_core::Button::Start);
-                    }
-
-                    if i.key_released(Key::M) {
-                        gb.release(ceres_core::Button::Start);
-                    }
-
-                    if i.key_pressed(Key::N) {
-                        gb.press(ceres_core::Button::Select);
-                    }
-
-                    if i.key_released(Key::N) {
-                        gb.release(ceres_core::Button::Select);
-                    }
-                }
-
-                if i.key_pressed(Key::Space) {
-                    if self.gb_area.is_paused() {
-                        self.gb_area.resume();
-                    } else {
-                        self.gb_area.pause();
-                    }
-                }
-            });
+            container(shader)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .align_x(Alignment::Center)
+                .align_y(Alignment::Center)
+                .into()
         }
     }
 
-    fn on_exit(&mut self) {
-        self.save_data();
+    pub fn theme(&self) -> Theme {
+        Theme::GruvboxDark
     }
 
-    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
-        // NOTE: a bright gray makes the shadows of the windows look weird.
-        // We use a bit of transparency so that if the user switches on the
-        // `transparent()` option they get immediate results.
-        egui::Color32::from_rgba_unmultiplied(12, 12, 12, 180).to_normalized_gamma_f32()
-
-        // _visuals.window_fill() would also be a natural choice
+    pub fn subscription(&self) -> Subscription<Message> {
+        // window::frames().map(Message::Tick)
+        iced::Subscription::batch(vec![
+            window::frames().map(|_| Message::Tick),
+            event::listen().map(Message::EventOcurred),
+        ])
     }
-
-    fn raw_input_hook(&mut self, _ctx: &egui::Context, _raw_input: &mut egui::RawInput) {}
 }
