@@ -1,5 +1,5 @@
 mod app;
-mod gb_widget;
+mod gb_area;
 mod scene;
 
 const SCREEN_MUL: u32 = 1;
@@ -113,8 +113,6 @@ struct Cli {
 
 pub fn main() -> iced::Result {
     let args = <crate::Cli as clap::Parser>::parse();
-    let project_dirs =
-        directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED).unwrap();
 
     iced::application(app::App::title, app::App::update, app::App::view)
         .subscription(app::App::subscription)
@@ -129,10 +127,6 @@ pub fn main() -> iced::Result {
         .resizable(true)
         .scale_factor(|_| 0.8)
         .theme(app::App::theme)
-        .run_with(|| {
-            (
-                app::App::new(args, project_dirs).unwrap(),
-                iced::Task::none(),
-            )
-        })
+        .exit_on_close_request(true)
+        .run_with(|| (app::App::new(args).unwrap(), iced::Task::none()))
 }

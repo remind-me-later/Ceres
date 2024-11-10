@@ -1,13 +1,12 @@
-use crate::{gb_widget, Scaling};
+use crate::{gb_area, Scaling};
 use iced::advanced::graphics::futures::event;
 use iced::widget::{button, column, container, pick_list, shader, text};
 use iced::{window, Alignment, Element, Length, Subscription, Theme};
 
 pub struct App {
-    widget: gb_widget::GbWidget,
+    gb_area: gb_area::GbArea,
     _audio: ceres_audio::State,
     show_menu: bool,
-    project_dirs: directories::ProjectDirs,
     model: ceres_core::Model,
 }
 
@@ -20,17 +19,11 @@ pub enum Message {
 }
 
 impl App {
-    pub fn new(args: crate::Cli, project_dirs: directories::ProjectDirs) -> anyhow::Result<Self> {
+    pub fn new(args: crate::Cli) -> anyhow::Result<Self> {
         let audio = ceres_audio::State::new()?;
         Ok(App {
-            widget: gb_widget::GbWidget::new(
-                args.model.into(),
-                &project_dirs,
-                args.file.as_deref(),
-                &audio,
-            )?,
+            gb_area: gb_area::GbArea::new(args.model.into(), args.file.as_deref(), &audio)?,
             _audio: audio,
-            project_dirs,
             show_menu: false,
             model: args.model.into(),
         })
@@ -43,7 +36,7 @@ impl App {
     pub fn update(&mut self, message: Message) {
         match message {
             Message::ScalingChanged(scaling) => {
-                self.widget.set_scaling(scaling);
+                self.gb_area.set_scaling(scaling);
             }
             Message::OpenButtonPressed => {
                 let file = rfd::FileDialog::new()
@@ -51,10 +44,7 @@ impl App {
                     .pick_file();
 
                 if let Some(file) = file {
-                    match self
-                        .widget
-                        .change_rom(&self.project_dirs, &file, self.model)
-                    {
+                    match self.gb_area.change_rom(&file, self.model) {
                         Ok(_) => {}
                         Err(e) => eprintln!("Error changing ROM: {}", e),
                     }
@@ -70,9 +60,6 @@ impl App {
                 }) => {
                     self.show_menu = !self.show_menu;
                 }
-                iced::Event::Window(window::Event::CloseRequested) => {
-                    self.widget.save_data(&self.project_dirs);
-                }
                 _ => (),
             },
         }
@@ -86,7 +73,7 @@ impl App {
                 text("Scaling mode"),
                 pick_list(
                     Scaling::ALL,
-                    Some(self.widget.scaling()),
+                    Some(self.gb_area.scaling()),
                     Message::ScalingChanged
                 )
             ]
@@ -99,7 +86,7 @@ impl App {
                 .align_y(Alignment::Center)
                 .into()
         } else {
-            let shader = shader(self.widget.scene())
+            let shader = shader(self.gb_area.scene())
                 .height(Length::Fill)
                 .width(Length::Fill);
 

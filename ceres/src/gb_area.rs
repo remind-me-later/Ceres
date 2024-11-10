@@ -10,7 +10,7 @@ use std::{
 };
 use thread_priority::ThreadBuilderExt;
 
-pub struct GbWidget {
+pub struct GbArea {
     scene: scene::Scene,
     rom_ident: String,
     exiting: Arc<AtomicBool>,
@@ -18,18 +18,19 @@ pub struct GbWidget {
     thread_handle: Option<std::thread::JoinHandle<()>>,
 }
 
-impl GbWidget {
+impl GbArea {
     pub fn new(
         model: ceres_core::Model,
-        project_dirs: &directories::ProjectDirs,
         rom_path: Option<&Path>,
         audio_state: &ceres_audio::State,
     ) -> anyhow::Result<Self> {
-        let (cart, ident) = if let Some(rom_path) = rom_path {
+        let (cart, rom_ident) = if let Some(rom_path) = rom_path {
             let mut cart = Self::cart_from_path(rom_path)?;
             let ident = Self::ident_from_cart(&cart)?;
-            if let Ok(ram) = Self::ram_from_dirs_ident(project_dirs, &ident) {
+            if let Ok(ram) = Self::ram_from_dirs_ident(&ident) {
                 cart.set_ram(ram)?;
+            } else {
+                println!("No RAM found for cart {}", ident);
             }
 
             (cart, ident)
@@ -66,7 +67,7 @@ impl GbWidget {
 
         Ok(Self {
             scene,
-            rom_ident: ident,
+            rom_ident,
             exiting,
             thread_handle: Some(thread_handle),
             audio_stream,
@@ -103,16 +104,11 @@ impl GbWidget {
         &self.scene
     }
 
-    pub fn change_rom(
-        &mut self,
-        project_dirs: &directories::ProjectDirs,
-        rom_path: &Path,
-        model: ceres_core::Model,
-    ) -> anyhow::Result<()> {
+    pub fn change_rom(&mut self, rom_path: &Path, model: ceres_core::Model) -> anyhow::Result<()> {
         let mut cart = Self::cart_from_path(rom_path)?;
         let ident = Self::ident_from_cart(&cart)?;
 
-        if let Ok(ram) = Self::ram_from_dirs_ident(project_dirs, &ident) {
+        if let Ok(ram) = Self::ram_from_dirs_ident(&ident) {
             cart.set_ram(ram).unwrap();
         }
 
@@ -126,14 +122,7 @@ impl GbWidget {
     }
 }
 
-impl Drop for GbWidget {
-    fn drop(&mut self) {
-        self.exiting.store(true, Relaxed);
-        self.thread_handle.take().unwrap().join().unwrap();
-    }
-}
-
-impl GbWidget {
+impl GbArea {
     // In theory can't ever fail because ROM title is always ASCII, in practice I don't know if we check for that on Cart creation
     fn ident_from_cart(cart: &ceres_core::Cart) -> anyhow::Result<String> {
         let mut ident = String::new();
@@ -156,11 +145,19 @@ impl GbWidget {
         ceres_core::Cart::new(rom).map_err(|e| e.into())
     }
 
-    fn ram_from_dirs_ident(
-        project_dirs: &directories::ProjectDirs,
-        ident: &str,
-    ) -> anyhow::Result<Box<[u8]>> {
-        std::fs::read(project_dirs.data_dir().join(ident).with_extension("sav"))
+    fn ram_from_dirs_ident(ident: &str) -> anyhow::Result<Box<[u8]>> {
+        let directories = directories::ProjectDirs::from(
+            crate::QUALIFIER,
+            crate::ORGANIZATION,
+            crate::CERES_STYLIZED,
+        )
+        .unwrap();
+
+        let path = directories.data_dir().join(ident).with_extension("sav");
+
+        println!("Loading RAM from {:?}", path);
+
+        std::fs::read(path)
             .map(Vec::into_boxed_slice)
             .map_err(|e| anyhow::anyhow!(e))
     }
@@ -202,17 +199,28 @@ impl GbWidget {
         drop(pause_thread);
     }
 
-    pub fn save_data(&self, project_dirs: &directories::ProjectDirs) {
+    pub fn save_data(&self) {
         if let Ok(gb) = self.scene.gb().lock() {
             if let Some(save_data) = gb.cartridge().save_data() {
-                std::fs::create_dir_all(project_dirs.data_dir())
+                // FIXME: don't repeat this everywhere
+                let directories = directories::ProjectDirs::from(
+                    crate::QUALIFIER,
+                    crate::ORGANIZATION,
+                    crate::CERES_STYLIZED,
+                )
+                .unwrap();
+
+                std::fs::create_dir_all(directories.data_dir())
                     .expect("couldn't create data directory");
-                let sav_file = std::fs::File::create(
-                    project_dirs
-                        .data_dir()
-                        .join(&self.rom_ident)
-                        .with_extension("sav"),
-                );
+
+                let path = directories
+                    .data_dir()
+                    .join(&self.rom_ident)
+                    .with_extension("sav");
+
+                println!("Saving RAM to {:?}", path);
+
+                let sav_file = std::fs::File::create(path);
                 match sav_file {
                     Ok(mut f) => {
                         if let Err(e) = std::io::Write::write_all(&mut f, save_data) {
@@ -225,5 +233,13 @@ impl GbWidget {
                 }
             }
         }
+    }
+}
+
+impl Drop for GbArea {
+    fn drop(&mut self) {
+        self.exiting.store(true, Relaxed);
+        self.thread_handle.take().unwrap().join().unwrap();
+        self.save_data();
     }
 }
