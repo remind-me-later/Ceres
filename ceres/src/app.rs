@@ -23,7 +23,12 @@ impl App {
     pub fn new(args: crate::Cli, project_dirs: directories::ProjectDirs) -> anyhow::Result<Self> {
         let audio = ceres_audio::State::new()?;
         Ok(App {
-            widget: gb_widget::GbWidget::new(args.model.into(), &project_dirs, None, &audio)?,
+            widget: gb_widget::GbWidget::new(
+                args.model.into(),
+                &project_dirs,
+                args.file.as_deref(),
+                &audio,
+            )?,
             _audio: audio,
             project_dirs,
             show_menu: false,
