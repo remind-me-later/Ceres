@@ -30,7 +30,7 @@ impl GbArea {
             if let Ok(ram) = Self::ram_from_dirs_ident(&ident) {
                 cart.set_ram(ram)?;
             } else {
-                println!("No RAM found for cart {}", ident);
+                println!("No RAM found for cart {ident}");
             }
 
             (cart, ident)
@@ -142,7 +142,7 @@ impl GbArea {
             .map(Vec::into_boxed_slice)
             .map_err(|e| anyhow::anyhow!(e))?;
 
-        ceres_core::Cart::new(rom).map_err(|e| e.into())
+        ceres_core::Cart::new(rom).map_err(std::convert::Into::into)
     }
 
     fn ram_from_dirs_ident(ident: &str) -> anyhow::Result<Box<[u8]>> {
@@ -155,7 +155,7 @@ impl GbArea {
 
         let path = directories.data_dir().join(ident).with_extension("sav");
 
-        println!("Loading RAM from {:?}", path);
+        println!("Loading RAM from {path:?}");
 
         std::fs::read(path)
             .map(Vec::into_boxed_slice)
@@ -218,7 +218,7 @@ impl GbArea {
                     .join(&self.rom_ident)
                     .with_extension("sav");
 
-                println!("Saving RAM to {:?}", path);
+                println!("Saving RAM to {path:?}");
 
                 let sav_file = std::fs::File::create(path);
                 match sav_file {

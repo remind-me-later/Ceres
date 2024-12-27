@@ -64,8 +64,8 @@ impl<Message> shader::Program<Message> for Scene {
         _cursor: mouse::Cursor,
         _shell: &mut iced::advanced::Shell<'_, Message>,
     ) -> (event::Status, Option<Message>) {
-        match event {
-            shader::Event::Keyboard(e) => match e {
+        if let shader::Event::Keyboard(e) = event {
+            match e {
                 iced::keyboard::Event::KeyPressed { key, .. } => {
                     let mut gb = self.gb.lock().unwrap();
 
@@ -99,29 +99,25 @@ impl<Message> shader::Program<Message> for Scene {
                 iced::keyboard::Event::KeyReleased { key, .. } => {
                     let mut gb = self.gb.lock().unwrap();
 
-                    match key {
-                        Key::Character(c) => {
-                            // gb.press(Button::Up);
-                            match c.as_ref() {
-                                "w" => gb.release(Button::Up),
-                                "a" => gb.release(Button::Left),
-                                "s" => gb.release(Button::Down),
-                                "d" => gb.release(Button::Right),
-                                "l" => gb.release(Button::A),
-                                "k" => gb.release(Button::B),
-                                "n" => gb.release(Button::Select),
-                                "m" => gb.release(Button::Start),
-                                _ => return (event::Status::Ignored, None),
-                            }
-
-                            return (event::Status::Captured, None);
+                    if let Key::Character(c) = key {
+                        // gb.press(Button::Up);
+                        match c.as_ref() {
+                            "w" => gb.release(Button::Up),
+                            "a" => gb.release(Button::Left),
+                            "s" => gb.release(Button::Down),
+                            "d" => gb.release(Button::Right),
+                            "l" => gb.release(Button::A),
+                            "k" => gb.release(Button::B),
+                            "n" => gb.release(Button::Select),
+                            "m" => gb.release(Button::Start),
+                            _ => return (event::Status::Ignored, None),
                         }
-                        _ => {}
+
+                        return (event::Status::Captured, None);
                     }
                 }
-                _ => {}
-            },
-            _ => {}
+                iced::keyboard::Event::ModifiersChanged(_) => {}
+            }
         }
 
         (event::Status::Ignored, None)

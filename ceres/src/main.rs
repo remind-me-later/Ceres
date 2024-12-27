@@ -128,5 +128,5 @@ pub fn main() -> iced::Result {
         .scale_factor(|_| 0.8)
         .theme(app::App::theme)
         .exit_on_close_request(true)
-        .run_with(|| (app::App::new(args).unwrap(), iced::Task::none()))
+        .run_with(move || (app::App::new(&args).unwrap(), iced::Task::none()))
 }

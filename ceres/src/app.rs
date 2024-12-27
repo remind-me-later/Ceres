@@ -3,13 +3,6 @@ use iced::advanced::graphics::futures::event;
 use iced::widget::{button, column, container, pick_list, shader, text};
 use iced::{window, Alignment, Element, Length, Subscription, Theme};
 
-pub struct App {
-    gb_area: gb_area::GbArea,
-    _audio: ceres_audio::State,
-    show_menu: bool,
-    model: ceres_core::Model,
-}
-
 #[derive(Debug, Clone)]
 pub enum Message {
     ScalingChanged(Scaling),
@@ -18,8 +11,15 @@ pub enum Message {
     EventOcurred(iced::Event),
 }
 
+pub struct App {
+    gb_area: gb_area::GbArea,
+    _audio: ceres_audio::State,
+    show_menu: bool,
+    model: ceres_core::Model,
+}
+
 impl App {
-    pub fn new(args: crate::Cli) -> anyhow::Result<Self> {
+    pub fn new(args: &crate::Cli) -> anyhow::Result<Self> {
         let audio = ceres_audio::State::new()?;
         Ok(App {
             gb_area: gb_area::GbArea::new(args.model.into(), args.file.as_deref(), &audio)?,
@@ -45,23 +45,25 @@ impl App {
 
                 if let Some(file) = file {
                     match self.gb_area.change_rom(&file, self.model) {
-                        Ok(_) => {}
-                        Err(e) => eprintln!("Error changing ROM: {}", e),
+                        Ok(_) => {
+                            self.show_menu = false;
+                        }
+                        Err(e) => eprintln!("Error changing ROM: {e}"),
                     }
                 }
             }
             Message::Tick => {
                 // TODO: Why don't we need to do anything here?
             }
-            Message::EventOcurred(event) => match event {
-                iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+            Message::EventOcurred(event) => {
+                if let iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
                     key: iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape),
                     ..
-                }) => {
+                }) = event
+                {
                     self.show_menu = !self.show_menu;
                 }
-                _ => (),
-            },
+            }
         }
     }
 
@@ -69,13 +71,16 @@ impl App {
         if self.show_menu {
             let content = column![
                 text("Options").size(20),
-                button("Open ROM").on_press(Message::OpenButtonPressed),
+                button("Open ROM")
+                    .on_press(Message::OpenButtonPressed)
+                    .padding(5),
                 text("Scaling mode"),
                 pick_list(
                     Scaling::ALL,
                     Some(self.gb_area.scaling()),
                     Message::ScalingChanged
                 )
+                .padding(5),
             ]
             .spacing(10);
 
@@ -100,7 +105,7 @@ impl App {
     }
 
     pub fn theme(&self) -> Theme {
-        Theme::GruvboxDark
+        Theme::GruvboxLight
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
