@@ -1,10 +1,9 @@
 use super::texture::Texture;
 use crate::{Scaling, PX_HEIGHT, PX_WIDTH};
-use iced::{widget::shader::wgpu, Rectangle, Size};
 use wgpu::util::DeviceExt;
 
-pub(super) struct Pipeline {
-    render: wgpu::RenderPipeline,
+pub(super) struct GBScreen {
+    render_pipeline: wgpu::RenderPipeline,
 
     // Shader config binds
     dimensions_uniform: wgpu::Buffer,
@@ -14,19 +13,13 @@ pub(super) struct Pipeline {
     // Texture binds
     texture: Texture,
     diffuse_bind_group: wgpu::BindGroup,
-
-    // Size of the screen
-    size: Size<u32>,
-    scaling: Scaling,
 }
 
-impl Pipeline {
+impl GBScreen {
     #[allow(clippy::too_many_lines)]
-    pub fn new(
+    pub(super) fn new(
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        format: wgpu::TextureFormat,
-        target_size: Size<u32>,
+        config: &wgpu::SurfaceConfiguration,
         scaling: Scaling,
     ) -> Self {
         let texture = Texture::new(device, PX_WIDTH, PX_HEIGHT, None);
@@ -136,24 +129,24 @@ impl Pipeline {
             device.create_shader_module(wgpu::include_wgsl!("../../shader/gb_screen.wgsl"));
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            // cache: None,
+            cache: None,
             label: None,
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
                 buffers: &[],
-                // compilation_options: wgpu::PipelineCompilationOptions::default(),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format,
+                    format: config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
-                // compilation_options: wgpu::PipelineCompilationOptions::default(),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleStrip,
@@ -164,35 +157,30 @@ impl Pipeline {
             multiview: None,
         });
 
-        let mut res = Self {
-            render: render_pipeline,
+        Self {
+            render_pipeline,
             dimensions_uniform,
             scale_uniform,
             uniform_bind_group,
             texture,
             diffuse_bind_group,
-            size: target_size,
-            scaling,
-        };
-
-        res.resize(queue, target_size);
-
-        res
+        }
     }
 
-    fn update_screen_texture(&mut self, queue: &wgpu::Queue, rgb: &[u8]) {
+    pub(super) fn update_screen_texture(&mut self, queue: &wgpu::Queue, rgb: &[u8]) {
         // TODO: awful way of transforming rgb to rgba
         let rgba = {
             const BUFFER_SIZE: usize = (PX_HEIGHT * PX_WIDTH * 4) as usize;
             let mut rgba: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
 
-            rgb.chunks_exact(3)
-                .zip(rgba.chunks_exact_mut(4))
-                .for_each(|(p, q)| {
+            rgba.chunks_exact_mut(4)
+                .zip(rgb.chunks_exact(3))
+                .for_each(|(q, p)| {
                     q[0] = p[0];
                     q[1] = p[1];
                     q[2] = p[2];
-                    q[3] = 0xff;
+                    // Ignore alpha channel since we set composition mode to opaque
+                    // q[3] = 0xff;
                 });
 
             rgba
@@ -201,7 +189,7 @@ impl Pipeline {
         self.texture.update(queue, &rgba);
     }
 
-    fn scale(&mut self, queue: &wgpu::Queue, scaling: Scaling) {
+    pub(super) fn scale(&mut self, queue: &wgpu::Queue, scaling: Scaling) {
         queue.write_buffer(
             &self.scale_uniform,
             0,
@@ -209,7 +197,7 @@ impl Pipeline {
         );
     }
 
-    fn resize(&mut self, queue: &wgpu::Queue, new_size: Size<u32>) {
+    pub(super) fn resize(&mut self, queue: &wgpu::Queue, new_size: winit::dpi::PhysicalSize<u32>) {
         let width = new_size.width;
         let height = new_size.height;
 
@@ -225,50 +213,8 @@ impl Pipeline {
         queue.write_buffer(&self.dimensions_uniform, 0, bytemuck::cast_slice(&[x, y]));
     }
 
-    pub fn update(
-        &mut self,
-        _device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        target_size: Size<u32>,
-        scaling: Scaling,
-        rgb: &[u8],
-    ) {
-        if target_size != self.size {
-            self.resize(queue, target_size);
-            self.size = target_size;
-        }
-
-        if scaling != self.scaling {
-            self.scale(queue, scaling);
-            self.scaling = scaling;
-        }
-
-        self.update_screen_texture(queue, rgb);
-    }
-
-    pub(super) fn render(
-        &self,
-        encoder: &mut wgpu::CommandEncoder,
-        target: &wgpu::TextureView,
-        viewport: Rectangle<u32>,
-    ) {
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: None,
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: target,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            occlusion_query_set: None,
-            timestamp_writes: None,
-        });
-
-        render_pass.set_scissor_rect(viewport.x, viewport.y, viewport.width, viewport.height);
-        render_pass.set_pipeline(&self.render);
+    pub(super) fn render(&mut self, render_pass: &mut wgpu::RenderPass) {
+        render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
         render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
         render_pass.draw(0..4, 0..1);

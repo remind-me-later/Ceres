@@ -1,8 +1,13 @@
 mod app;
 mod gb_area;
-mod scene;
+mod video;
 
-const SCREEN_MUL: u32 = 1;
+use app::App;
+use clap::Parser;
+use std::path::PathBuf;
+use winit::event_loop::EventLoop;
+
+const SCREEN_MUL: u32 = 2;
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
 const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
 const INIT_WIDTH: u32 = PX_WIDTH * SCREEN_MUL;
@@ -49,7 +54,7 @@ impl From<Model> for ceres_core::Model {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, clap::ValueEnum)]
+#[derive(Default, Clone, Copy, clap::ValueEnum)]
 pub enum Scaling {
     #[default]
     Nearest = 0,
@@ -58,24 +63,12 @@ pub enum Scaling {
 }
 
 impl Scaling {
-    pub const ALL: [Scaling; 3] = [Scaling::Nearest, Scaling::Scale2x, Scaling::Scale3x];
-
     #[must_use]
     pub fn next(self) -> Self {
         match self {
             Scaling::Nearest => Scaling::Scale2x,
             Scaling::Scale2x => Scaling::Scale3x,
             Scaling::Scale3x => Scaling::Nearest,
-        }
-    }
-}
-
-impl std::fmt::Display for Scaling {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Scaling::Nearest => write!(f, "Nearest"),
-            Scaling::Scale2x => write!(f, "Scale2x"),
-            Scaling::Scale3x => write!(f, "Scale3x"),
         }
     }
 }
@@ -90,7 +83,7 @@ struct Cli {
            header. Doesn't accept compressed (zip) files.",
         required = false
     )]
-    file: Option<std::path::PathBuf>,
+    file: Option<PathBuf>,
     #[arg(
         short,
         long,
@@ -111,23 +104,24 @@ struct Cli {
     scaling: Scaling,
 }
 
-pub fn main() -> iced::Result {
-    let args = <crate::Cli as clap::Parser>::parse();
+fn main() -> anyhow::Result<()> {
+    let args = Cli::parse();
 
-    #[allow(clippy::cast_precision_loss)]
-    iced::application(app::App::title, app::App::update, app::App::view)
-        .subscription(app::App::subscription)
-        .default_font(iced::Font {
-            family: iced::font::Family::Monospace,
-            ..Default::default()
-        })
-        .window_size(iced::Size {
-            width: INIT_WIDTH as f32,
-            height: INIT_HEIGHT as f32,
-        })
-        .resizable(true)
-        .scale_factor(|_| 0.8)
-        .theme(app::App::theme)
-        .exit_on_close_request(true)
-        .run_with(move || (app::App::new(&args).unwrap(), iced::Task::none()))
+    let event_loop = EventLoop::new()?;
+
+    let project_dirs = directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED)
+        .ok_or_else(|| {
+            anyhow::anyhow!("Failed to get project directories for '{}'", CERES_STYLIZED)
+        })?;
+
+    let mut app = App::new(
+        project_dirs,
+        args.model.into(),
+        args.file.as_deref(),
+        args.scaling,
+    )?;
+
+    event_loop.run_app(&mut app)?;
+
+    Ok(())
 }

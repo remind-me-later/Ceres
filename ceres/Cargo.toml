@@ -2,35 +2,22 @@
 name = "ceres"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+
+# *******
+# * Cli *
+# *******
 
 [dependencies.clap]
 version = "*"
-features = ["derive"]
-
-[dependencies.iced]
-version = "*"
-features = ["advanced", "wgpu"]
+default-features = false
+features = ["std", "derive"]
 
 [dependencies.anyhow]
 version = "*"
 
 [dependencies.directories]
 version = "*"
-
-[dependencies.rfd]
-version = "*"
-
-# Required for wgpu safe byte manipulation
-[dependencies.bytemuck]
-version = "*"
-default-features = false
-
-# *********
-# * Audio *
-# *********
-
-[dependencies.ceres-audio]
-path = "../ceres-audio"
 
 # *******************
 # * Emulator thread *
@@ -48,12 +35,47 @@ version = "*"
 default-features = false
 
 # *********
+# * Audio *
+# *********
+
+[dependencies.ceres-audio]
+path = "../ceres-audio"
+
+# *************
+# * windowing *
+# *************
+
+[dependencies.winit]
+version = "*"
+default-features = false
+features = ["rwh_06", "wayland", "wayland-csd-adwaita"]
+
+# ************
+# * graphics *
+# ************
+
+[dependencies.wgpu]
+version = "*"
+default-features = false
+features = ["dx12", "metal", "wgsl"]
+
+# Required to poll wgpu
+# TODO: maybe make all code async?
+[dependencies.pollster]
+version = "*"
+default-features = false
+
+# Required for wgpu safe byte manipulation
+[dependencies.bytemuck]
+version = "*"
+default-features = false
+
+# *********
 # * Lints *
 # *********
 
 [lints.clippy]
 pedantic = "warn"
-alloc_instead_of_core = "warn"
 as_underscore = "warn"
 assertions_on_result_states = "warn"
 clone_on_ref_ptr = "warn"
@@ -66,7 +88,7 @@ else_if_without_else = "warn"
 empty_drop = "warn"
 empty_structs_with_brackets = "warn"
 exit = "warn"
-# expect_used = "warn"
+expect_used = "warn"
 filetype_is_file = "warn"
 float_cmp_const = "warn"
 fn_to_numeric_cast_any = "warn"
@@ -81,7 +103,7 @@ mixed_read_write_in_expression = "warn"
 modulo_arithmetic = "warn"
 mutex_atomic = "warn"
 non_ascii_literal = "warn"
-# panic = "warn"
+panic = "warn"
 partial_pub_fields = "warn"
 rc_buffer = "warn"
 rc_mutex = "warn"
@@ -89,8 +111,6 @@ rest_pat_in_fully_bound_structs = "warn"
 same_name_method = "warn"
 self_named_module_files = "warn"
 shadow_unrelated = "warn"
-# std_instead_of_alloc = "warn"
-# std_instead_of_core = "warn"
 str_to_string = "warn"
 string_add = "warn"
 string_slice = "warn"
@@ -101,8 +121,9 @@ unimplemented = "warn"
 unnecessary_self_imports = "warn"
 unneeded_field_pattern = "warn"
 unseparated_literal_suffix = "warn"
-# use_debug = "warn"
+use_debug = "warn"
 verbose_file_reads = "warn"
+unwrap_used = "warn"
 
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
