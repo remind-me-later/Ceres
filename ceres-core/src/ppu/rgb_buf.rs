@@ -4,7 +4,7 @@ const BPP: u32 = 3; // bytes per pixel
 const PX_TOTAL: u16 = PX_WIDTH as u16 * PX_HEIGHT as u16;
 const RGB_BUF_SIZE: u32 = PX_TOTAL as u32 * BPP;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(super) struct RgbaBuf {
     data: [u8; RGB_BUF_SIZE as usize],
 }

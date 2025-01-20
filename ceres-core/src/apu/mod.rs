@@ -22,14 +22,14 @@ pub trait AudioCallback {
     fn audio_sample(&self, l: Sample, r: Sample);
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug)]
 enum PeriodHalf {
     #[default]
     First,
     Second,
 }
 
-// #[derive(Default)]
+#[derive(Debug)]
 pub struct Apu<C: AudioCallback> {
     nr51: u8,
 
@@ -77,7 +77,7 @@ impl<C: AudioCallback> Apu<C> {
         }
     }
 
-   const fn sample_period_from_rate(sample_rate: i32) -> i32 {
+    const fn sample_period_from_rate(sample_rate: i32) -> i32 {
         // FIXME:
         // This is mostly correct, the underrun errors are due to the timing issues in the run thread
         // maybe account for difference in frame rate and sample rate?

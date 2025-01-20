@@ -29,6 +29,7 @@ impl App {
         })
     }
 
+    #[allow(clippy::unused_self)]
     pub fn title(&self) -> String {
         "Ceres".to_owned()
     }
@@ -45,7 +46,7 @@ impl App {
 
                 if let Some(file) = file {
                     match self.gb_area.change_rom(&file, self.model) {
-                        Ok(_) => {
+                        Ok(()) => {
                             self.show_menu = false;
                         }
                         Err(e) => eprintln!("Error changing ROM: {e}"),
@@ -104,10 +105,12 @@ impl App {
         }
     }
 
+    #[allow(clippy::unused_self)]
     pub fn theme(&self) -> Theme {
         Theme::GruvboxLight
     }
 
+    #[allow(clippy::unused_self)]
     pub fn subscription(&self) -> Subscription<Message> {
         // window::frames().map(Message::Tick)
         iced::Subscription::batch(vec![

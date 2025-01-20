@@ -12,7 +12,7 @@ pub enum Button {
     Start = 0x80,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Joypad {
     p1_btn: u8,
     p1_dirs: bool,

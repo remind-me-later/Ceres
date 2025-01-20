@@ -1,6 +1,6 @@
 use crate::{AudioCallback, Gb};
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug)]
 pub enum TIMAState {
     Reloading,
     Reloaded,

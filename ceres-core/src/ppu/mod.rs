@@ -59,6 +59,7 @@ impl Mode {
     }
 }
 
+#[derive(Debug)]
 pub struct Ppu {
     lcdc: u8,
     stat: u8,

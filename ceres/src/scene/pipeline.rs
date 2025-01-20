@@ -4,7 +4,7 @@ use iced::{widget::shader::wgpu, Rectangle, Size};
 use wgpu::util::DeviceExt;
 
 pub(super) struct Pipeline {
-    render_pipeline: wgpu::RenderPipeline,
+    render: wgpu::RenderPipeline,
 
     // Shader config binds
     dimensions_uniform: wgpu::Buffer,
@@ -165,7 +165,7 @@ impl Pipeline {
         });
 
         let mut res = Self {
-            render_pipeline,
+            render: render_pipeline,
             dimensions_uniform,
             scale_uniform,
             uniform_bind_group,
@@ -268,7 +268,7 @@ impl Pipeline {
         });
 
         render_pass.set_scissor_rect(viewport.x, viewport.y, viewport.width, viewport.height);
-        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_pipeline(&self.render);
         render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
         render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
         render_pass.draw(0..4, 0..1);

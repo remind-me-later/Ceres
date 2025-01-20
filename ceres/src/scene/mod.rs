@@ -7,7 +7,7 @@ use ceres_core::{Button, Gb};
 use iced::{event, keyboard::Key, mouse, widget::shader, Rectangle};
 use pipeline::Pipeline;
 
-use crate::{Scaling, PX_HEIGHT, PX_WIDTH};
+use crate::Scaling;
 
 pub struct Scene {
     gb: Arc<Mutex<Gb<ceres_audio::RingBuffer>>>,
@@ -51,9 +51,7 @@ impl<Message> shader::Program<Message> for Scene {
         _cursor: mouse::Cursor,
         _bounds: Rectangle,
     ) -> Self::Primitive {
-        let gb = self.gb.lock().unwrap();
-
-        Primitive::new(&gb, self.scaling)
+        Primitive::new(&self.gb, self.scaling)
     }
 
     fn update(
@@ -126,17 +124,16 @@ impl<Message> shader::Program<Message> for Scene {
 
 #[derive(Debug)]
 pub struct Primitive {
-    rgb: [u8; PX_HEIGHT as usize * PX_WIDTH as usize * 3],
+    gb: Arc<Mutex<ceres_core::Gb<ceres_audio::RingBuffer>>>,
     scaling: Scaling,
 }
 
 impl Primitive {
-    pub fn new(gb: &Gb<ceres_audio::RingBuffer>, scaling: Scaling) -> Self {
-        let mut rgb = [0; PX_HEIGHT as usize * PX_WIDTH as usize * 3];
-
-        rgb.copy_from_slice(gb.pixel_data_rgb());
-
-        Self { rgb, scaling }
+    pub fn new(gb: &Arc<Mutex<Gb<ceres_audio::RingBuffer>>>, scaling: Scaling) -> Self {
+        Self {
+            gb: Arc::clone(gb),
+            scaling,
+        }
     }
 }
 
@@ -168,7 +165,7 @@ impl shader::Primitive for Primitive {
             queue,
             viewport.physical_size(),
             self.scaling,
-            &self.rgb,
+            self.gb.lock().unwrap().pixel_data_rgb(),
         );
     }
 

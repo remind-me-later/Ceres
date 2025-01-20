@@ -9,13 +9,13 @@ const SAMPLE_RATE: i32 = 48000;
 
 // RingBuffer is a wrapper around a bounded ring buffer
 // that implements the AudioCallback trait
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct RingBuffer {
-    buffer: Arc<Mutex<Bounded<[ceres_core::Sample; RING_BUFFER_SIZE]>>>,
+    buffer: Arc<Mutex<Bounded<Box<[ceres_core::Sample]>>>>,
 }
 
 impl RingBuffer {
-    pub fn new(buffer: Arc<Mutex<Bounded<[ceres_core::Sample; RING_BUFFER_SIZE]>>>) -> Self {
+    pub fn new(buffer: Arc<Mutex<Bounded<Box<[ceres_core::Sample]>>>>) -> Self {
         // FIll with silence
         if let Ok(mut buffer) = buffer.lock() {
             for _ in 0..buffer.max_len() {
@@ -83,7 +83,7 @@ pub struct Stream {
 impl Stream {
     pub fn new(state: &State) -> Result<Self, Error> {
         let ring_buffer = Arc::new(Mutex::new(Bounded::from(
-            [Default::default(); RING_BUFFER_SIZE],
+            vec![Default::default(); RING_BUFFER_SIZE].into_boxed_slice(),
         )));
         let ring_buffer_clone = Arc::clone(&ring_buffer);
 
@@ -126,7 +126,9 @@ impl Stream {
     }
 
     pub fn pause(&mut self) -> Result<(), Error> {
-        self.stream.pause().map_err(|_err| Error::CouldntPauseStream)
+        self.stream
+            .pause()
+            .map_err(|_err| Error::CouldntPauseStream)
     }
 
     pub fn resume(&mut self) -> Result<(), Error> {

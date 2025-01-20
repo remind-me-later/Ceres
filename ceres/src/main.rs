@@ -114,6 +114,7 @@ struct Cli {
 pub fn main() -> iced::Result {
     let args = <crate::Cli as clap::Parser>::parse();
 
+    #[allow(clippy::cast_precision_loss)]
     iced::application(app::App::title, app::App::update, app::App::view)
         .subscription(app::App::subscription)
         .default_font(iced::Font {

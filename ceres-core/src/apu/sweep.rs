@@ -7,7 +7,7 @@ pub(super) trait SweepTrait: Default {
     fn trigger(&mut self, period: u16) -> SweepCalculationResult;
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug)]
 enum SweepDirection {
     #[default]
     Add = 0,
@@ -30,12 +30,14 @@ impl From<SweepDirection> for u8 {
     }
 }
 
+#[derive(Debug)]
 pub(super) enum SweepCalculationResult {
     DisableChannel,
     UpdatePeriod { period: u16 },
     None,
 }
 
+#[derive(Debug)]
 pub(super) struct Sweep {
     // TODO: check on behaviour
     enabled: bool,
