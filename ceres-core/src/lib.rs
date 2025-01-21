@@ -171,8 +171,8 @@ impl<C: AudioCallback> Gb<C> {
 
     #[must_use]
     #[inline]
-    pub const fn pixel_data_rgb(&self) -> &[u8] {
-        self.ppu.pixel_data_rgb()
+    pub const fn pixel_data_rgba(&self) -> &[u8] {
+        self.ppu.pixel_data_rgba()
     }
 
     #[inline]

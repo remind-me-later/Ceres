@@ -167,26 +167,8 @@ impl GBScreen {
         }
     }
 
-    pub(super) fn update_screen_texture(&mut self, queue: &wgpu::Queue, rgb: &[u8]) {
-        // TODO: awful way of transforming rgb to rgba
-        let rgba = {
-            const BUFFER_SIZE: usize = (PX_HEIGHT * PX_WIDTH * 4) as usize;
-            let mut rgba: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
-
-            rgba.chunks_exact_mut(4)
-                .zip(rgb.chunks_exact(3))
-                .for_each(|(q, p)| {
-                    q[0] = p[0];
-                    q[1] = p[1];
-                    q[2] = p[2];
-                    // Ignore alpha channel since we set composition mode to opaque
-                    // q[3] = 0xff;
-                });
-
-            rgba
-        };
-
-        self.texture.update(queue, &rgba);
+    pub(super) fn update_screen_texture(&mut self, queue: &wgpu::Queue, rgba: &[u8]) {
+        self.texture.update(queue, rgba);
     }
 
     pub(super) fn scale(&mut self, queue: &wgpu::Queue, scaling: Scaling) {

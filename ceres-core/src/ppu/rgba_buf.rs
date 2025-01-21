@@ -1,6 +1,6 @@
 use crate::{PX_HEIGHT, PX_WIDTH};
 
-const BPP: u32 = 3; // bytes per pixel
+const BPP: u32 = 4; // bytes per pixel
 const PX_TOTAL: u16 = PX_WIDTH as u16 * PX_HEIGHT as u16;
 const RGB_BUF_SIZE: u32 = PX_TOTAL as u32 * BPP;
 

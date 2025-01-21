@@ -1,10 +1,10 @@
 use crate::interrupts::Interrupts;
 
-use {self::color_palette::ColorPalette, crate::CgbMode, rgb_buf::RgbaBuf};
+use {self::color_palette::ColorPalette, crate::CgbMode, rgba_buf::RgbaBuf};
 
 mod color_palette;
 mod draw;
-mod rgb_buf;
+mod rgba_buf;
 
 pub const PX_WIDTH: u8 = 160;
 pub const PX_HEIGHT: u8 = 144;
@@ -467,7 +467,7 @@ impl Ppu {
 
     #[must_use]
     #[inline]
-    pub(crate) const fn pixel_data_rgb(&self) -> &[u8] {
+    pub(crate) const fn pixel_data_rgba(&self) -> &[u8] {
         self.rgba_buf_present.pixel_data()
     }
 }

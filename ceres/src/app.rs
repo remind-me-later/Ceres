@@ -126,7 +126,8 @@ impl winit::application::ApplicationHandler for App<'_> {
             .with_inner_size(PhysicalSize {
                 width: INIT_WIDTH,
                 height: INIT_HEIGHT,
-            });
+            })
+            .with_active(true);
 
         let window = event_loop
             .create_window(window_attributes)
@@ -157,7 +158,7 @@ impl winit::application::ApplicationHandler for App<'_> {
             if let Some(video) = self.video.as_mut() {
                 if let Some(gb_ctx) = &self.gb_ctx {
                     if let Ok(gb) = gb_ctx.gb_lock() {
-                        video.update_texture(gb.pixel_data_rgb());
+                        video.update_texture(gb.pixel_data_rgba());
                     }
                 }
 
