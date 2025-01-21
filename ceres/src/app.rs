@@ -127,6 +127,11 @@ impl winit::application::ApplicationHandler for App<'_> {
                 width: INIT_WIDTH,
                 height: INIT_HEIGHT,
             })
+            .with_min_inner_size(PhysicalSize {
+                width: ceres_core::PX_WIDTH,
+                height: ceres_core::PX_HEIGHT,
+            })
+            .with_resizable(true)
             .with_active(true);
 
         let window = event_loop
@@ -202,6 +207,10 @@ impl winit::application::ApplicationHandler for App<'_> {
                 }
             }
             WindowEvent::DroppedFile(path) => {
+                self.save_data().unwrap_or_else(|e| {
+                    eprintln!("Error saving data: {e}");
+                });
+
                 if let Some(gb_ctx) = &mut self.gb_ctx {
                     gb_ctx
                         .change_rom(&path, &self.project_dirs)
