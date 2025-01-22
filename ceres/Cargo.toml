@@ -11,7 +11,7 @@ license = "MIT"
 [dependencies.clap]
 version = "*"
 default-features = false
-features = ["std", "derive"]
+features = ["std", "derive", "help"]
 
 [dependencies.anyhow]
 version = "*"

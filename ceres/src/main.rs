@@ -28,7 +28,7 @@ const AFTER_HELP: &str = "GB bindings:
     | Start   | M         |
     | Select  | N         |
 
-Other binsings:
+Other bindings:
 
     | System       | Emulator |
     | ------------ | -------- |
