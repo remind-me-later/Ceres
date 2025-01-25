@@ -11,7 +11,7 @@ pub use {
     apu::{AudioCallback, Sample},
     cart::{Cart, Error},
     joypad::Button,
-    ppu::{PX_HEIGHT, PX_WIDTH},
+    ppu::{PX_HEIGHT, PX_WIDTH, VRAM_PX_HEIGHT, VRAM_PX_WIDTH},
 };
 
 extern crate alloc;
@@ -173,6 +173,12 @@ impl<C: AudioCallback> Gb<C> {
     #[inline]
     pub const fn pixel_data_rgba(&self) -> &[u8] {
         self.ppu.pixel_data_rgba()
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn vram_data_rgba(&self) -> &[u8] {
+        self.ppu.vram_data_rgba()
     }
 
     #[inline]

@@ -2,12 +2,10 @@ mod gb_screen;
 mod texture;
 
 use crate::Scaling;
-use gb_screen::GBScreen;
+use gb_screen::PipelineWrapper;
 use std::sync::Arc;
 
-// const RGB_BUFFER_SIZE: usize = (3 * PX_WIDTH * PX_HEIGHT) as usize;
-
-pub struct State<'a> {
+pub struct State<'a, const PX_WIDTH: u32, const PX_HEIGHT: u32> {
     surface: wgpu::Surface<'a>,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -16,7 +14,7 @@ pub struct State<'a> {
     new_size: Option<winit::dpi::PhysicalSize<u32>>,
     new_scaling: Option<Scaling>,
 
-    gb_screen: GBScreen,
+    gb_screen: PipelineWrapper<PX_WIDTH, PX_HEIGHT>,
 
     // Make sure that the winit window is last in the struct so that
     // it is dropped after the wgpu surface is dropped, otherwise the
@@ -24,7 +22,7 @@ pub struct State<'a> {
     window: Arc<winit::window::Window>,
 }
 
-impl State<'_> {
+impl<'a, const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
     pub async fn new(window: winit::window::Window, scaling: Scaling) -> anyhow::Result<Self> {
         use anyhow::Context;
 
@@ -74,7 +72,7 @@ impl State<'_> {
 
         surface.configure(&device, &config);
 
-        let gb_screen_renderer = GBScreen::new(&device, &config, scaling);
+        let gb_screen_renderer = PipelineWrapper::new(&device, &config, scaling);
 
         Ok(Self {
             surface,

@@ -1,8 +1,8 @@
 use super::texture::Texture;
-use crate::{Scaling, PX_HEIGHT, PX_WIDTH};
+use crate::Scaling;
 use wgpu::util::DeviceExt;
 
-pub(super) struct GBScreen {
+pub(super) struct PipelineWrapper<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
     render_pipeline: wgpu::RenderPipeline,
 
     // Shader config binds
@@ -15,7 +15,7 @@ pub(super) struct GBScreen {
     diffuse_bind_group: wgpu::BindGroup,
 }
 
-impl GBScreen {
+impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEIGHT> {
     #[allow(clippy::too_many_lines)]
     pub(super) fn new(
         device: &wgpu::Device,

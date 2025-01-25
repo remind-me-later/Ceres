@@ -10,8 +10,8 @@ use winit::event_loop::EventLoop;
 const SCREEN_MUL: u32 = 2;
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
 const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
-const INIT_WIDTH: u32 = PX_WIDTH * SCREEN_MUL;
-const INIT_HEIGHT: u32 = PX_HEIGHT * SCREEN_MUL;
+const VRAM_PX_WIDTH: u32 = ceres_core::VRAM_PX_WIDTH as u32;
+const VRAM_PX_HEIGHT: u32 = ceres_core::VRAM_PX_HEIGHT as u32;
 
 const QUALIFIER: &str = "com";
 const ORGANIZATION: &str = "remind-me-later";
@@ -107,21 +107,21 @@ struct Cli {
 fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
 
-    let event_loop = EventLoop::new()?;
+    let main_event_loop = EventLoop::new()?;
 
     let project_dirs = directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED)
         .ok_or_else(|| {
             anyhow::anyhow!("Failed to get project directories for '{}'", CERES_STYLIZED)
         })?;
 
-    let mut app = App::new(
+    let mut main_window = App::new(
         project_dirs,
         args.model.into(),
         args.file.as_deref(),
         args.scaling,
     )?;
 
-    event_loop.run_app(&mut app)?;
+    main_event_loop.run_app(&mut main_window)?;
 
     Ok(())
 }
