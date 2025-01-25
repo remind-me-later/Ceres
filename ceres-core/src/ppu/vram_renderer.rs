@@ -47,28 +47,31 @@ pub struct VramRenderer {
 
 impl VramRenderer {
     pub fn draw_vram(&mut self, vram: &[u8]) {
-        for tile in 0..TILE_TOTAL {
+        for tile in 0..TILE_TOTAL as usize {
             // Each tile occupies 16 bytes
             let tile_idx = tile * 16;
             for i in 0..8 {
-                let tile_idx = tile_idx + i * 2;
                 for j in 0..8 {
-                    let most_byte = vram[(tile_idx + j) as usize];
-                    let least_byte = vram[(tile_idx + j + 1) as usize];
+                    let most_byte = vram[tile_idx + 2 * i];
+                    let least_byte = vram[tile_idx + 2 * i + 1];
 
-                    for k in 0..8 {
-                        let bit = 1 << k;
-                        let color_idx = ((most_byte & bit) >> k) | ((least_byte & bit) >> k) << 1;
-                        let color = match color_idx {
-                            0 => (0xff, 0xff, 0xff),
-                            1 => (0xaa, 0xaa, 0xaa),
-                            2 => (0x55, 0x55, 0x55),
-                            3 => (0x00, 0x00, 0x00),
-                            _ => unreachable!(),
-                        };
-                        let px_idx = tile * PX_PER_TILE + i * 8 + j;
-                        self.rgba_buf.set_px(px_idx as u32, color);
-                    }
+                    let most_bit = (most_byte & (1 << (7 - j))) != 0;
+                    let least_bit = (least_byte & (1 << (7 - j))) != 0;
+                    let color = (most_bit as u8) << 1 | least_bit as u8;
+
+                    let color = match color {
+                        0 => (255, 255, 255),
+                        1 => (192, 192, 192),
+                        2 => (96, 96, 96),
+                        3 => (0, 0, 0),
+                        _ => unreachable!(),
+                    };
+
+                    let leftmost_px = tile as u32 % TILE_WIDTH as u32 * 8;
+                    let topmost_px = tile as u32 / TILE_WIDTH as u32 * 8;
+                    let px_idx =
+                        (topmost_px + i as u32) * VRAM_PX_WIDTH as u32 + leftmost_px + j as u32;
+                    self.rgba_buf.set_px(px_idx, color);
                 }
             }
         }
