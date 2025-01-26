@@ -57,15 +57,9 @@ impl VramRenderer {
 
                     let most_bit = (most_byte & (1 << (7 - j))) != 0;
                     let least_bit = (least_byte & (1 << (7 - j))) != 0;
-                    let color = (most_bit as u8) << 1 | least_bit as u8;
+                    let color_idx = (most_bit as u8) << 1 | least_bit as u8;
 
-                    let color = match color {
-                        0 => (255, 255, 255),
-                        1 => (192, 192, 192),
-                        2 => (96, 96, 96),
-                        3 => (0, 0, 0),
-                        _ => unreachable!(),
-                    };
+                    let color = super::color_palette::GRAYSCALE_PALETTE[color_idx as usize];
 
                     let leftmost_px = tile as u32 % TILE_WIDTH as u32 * 8;
                     let topmost_px = tile as u32 / TILE_WIDTH as u32 * 8;

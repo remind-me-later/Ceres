@@ -1,3 +1,11 @@
+// DMG palette colors RGB
+pub const GRAYSCALE_PALETTE: [(u8, u8, u8); 4] = [
+    (0xFF, 0xFF, 0xFF),
+    (0xCC, 0xCC, 0xCC),
+    (0x77, 0x77, 0x77),
+    (0x00, 0x00, 0x00),
+];
+
 // CGB palette RAM
 const PAL_RAM_SIZE: u8 = 0x20;
 const PAL_RAM_SIZE_COLORS: u8 = PAL_RAM_SIZE * 3;

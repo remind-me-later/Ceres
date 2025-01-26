@@ -17,6 +17,11 @@ use {
     winit::window,
 };
 
+struct Windows<'a> {
+    main: video::State<'a, { PX_WIDTH }, { PX_HEIGHT }>,
+    vram: video::State<'a, { VRAM_PX_WIDTH }, { VRAM_PX_HEIGHT }>,
+}
+
 pub struct App<'a> {
     // Config parameters
     project_dirs: directories::ProjectDirs,
@@ -28,8 +33,7 @@ pub struct App<'a> {
     // Rendering
     _audio: ceres_audio::State,
     // NOTE: carries the `Window`, thus it should be dropped after everything else.
-    main_window_state: Option<video::State<'a, { PX_WIDTH }, { PX_HEIGHT }>>,
-    vram_window_state: Option<video::State<'a, { VRAM_PX_WIDTH }, { VRAM_PX_HEIGHT }>>,
+    windows: Option<Windows<'a>>,
 }
 
 impl App<'_> {
@@ -47,8 +51,7 @@ impl App<'_> {
             gb_ctx: Some(gb_ctx),
             _audio: audio,
             scaling,
-            main_window_state: None,
-            vram_window_state: None,
+            windows: None,
         })
     }
 
@@ -56,22 +59,23 @@ impl App<'_> {
     fn handle_key(&mut self, event: &KeyEvent) {
         use {winit::event::ElementState, winit::keyboard::Key};
 
-        if let Some(video) = &mut self.main_window_state {
-            if !video.window().has_focus() {
+        if let Some(windows) = &mut self.windows {
+            if !windows.main.window().has_focus() {
                 return;
             }
 
             if let ElementState::Pressed = event.state {
                 match event.logical_key.as_ref() {
-                    Key::Character("f") => match video.window().fullscreen() {
-                        Some(_) => video.window().set_fullscreen(None),
-                        None => video
+                    Key::Character("f") => match windows.main.window().fullscreen() {
+                        Some(_) => windows.main.window().set_fullscreen(None),
+                        None => windows
+                            .main
                             .window()
                             .set_fullscreen(Some(Fullscreen::Borderless(None))),
                     },
                     Key::Character("z") => {
                         self.scaling = self.scaling.next();
-                        video.choose_scale_mode(self.scaling);
+                        windows.main.choose_scale_mode(self.scaling);
                     }
                     Key::Named(NamedKey::Space) => {
                         if let Some(gb_ctx) = &mut self.gb_ctx {
@@ -142,10 +146,8 @@ impl winit::application::ApplicationHandler for App<'_> {
         let main_window_state = pollster::block_on(State::new(main_window, self.scaling))
             .expect("Could not create renderer");
 
-        self.main_window_state.replace(main_window_state);
-
         let vram_window_attributes = winit::window::Window::default_attributes()
-            .with_title("VRAM")
+            .with_title(format!("{CERES_STYLIZED} - VRAM"))
             .with_inner_size(PhysicalSize {
                 width: VRAM_PX_WIDTH * SCREEN_MUL,
                 height: VRAM_PX_HEIGHT * SCREEN_MUL,
@@ -164,7 +166,10 @@ impl winit::application::ApplicationHandler for App<'_> {
         let vram_window_state = pollster::block_on(State::new(vram_window, self.scaling))
             .expect("Could not create renderer");
 
-        self.vram_window_state.replace(vram_window_state);
+        self.windows.replace(Windows {
+            main: main_window_state,
+            vram: vram_window_state,
+        });
 
         // event_loop.set_control_flow(ControlFlow::Poll);
         event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now()));
@@ -184,16 +189,16 @@ impl winit::application::ApplicationHandler for App<'_> {
                 1.0 / 60.0,
             )));
 
-            if let Some(main_window) = self.main_window_state.as_mut() {
+            if let Some(windows) = self.windows.as_mut() {
                 if let Some(gb_ctx) = &self.gb_ctx {
                     if let Ok(gb) = gb_ctx.gb_lock() {
-                        main_window.update_texture(gb.pixel_data_rgba());
-                        let vram_window = self.vram_window_state.as_mut().unwrap();
-                        vram_window.update_texture(gb.vram_data_rgba());
+                        windows.main.update_texture(gb.pixel_data_rgba());
+                        windows.vram.update_texture(gb.vram_data_rgba());
                     }
                 }
 
-                main_window.window().request_redraw();
+                windows.main.window().request_redraw();
+                windows.vram.window().request_redraw();
             }
         }
     }
@@ -211,15 +216,15 @@ impl winit::application::ApplicationHandler for App<'_> {
                     // Notable platforms here are Wayland and macOS, other don't require it
                     // and the function is no-op, but it's wise to resize it for portability
                     // reasons.
-                    if let Some(video) = self.main_window_state.as_mut() {
-                        if video.window().id() == win_id {
-                            video.resize(PhysicalSize { width, height });
-                        }
-                    }
-
-                    if let Some(video) = self.vram_window_state.as_mut() {
-                        if video.window().id() == win_id {
-                            video.resize(PhysicalSize { width, height });
+                    if let Some(windows) = self.windows.as_mut() {
+                        match win_id {
+                            id if id == windows.main.window().id() => {
+                                windows.main.resize(PhysicalSize { width, height });
+                            }
+                            id if id == windows.vram.window().id() => {
+                                windows.vram.resize(PhysicalSize { width, height });
+                            }
+                            _ => (),
                         }
                     }
                 }
@@ -230,23 +235,24 @@ impl winit::application::ApplicationHandler for App<'_> {
             } => self.handle_key(&key_event),
             WindowEvent::RedrawRequested => {
                 use wgpu::SurfaceError::{Lost, Other, OutOfMemory, Outdated, Timeout};
-                if let Some(main_window) = self.main_window_state.as_mut() {
-                    match main_window.render() {
-                        Ok(()) => {}
-                        Err(Lost | Outdated) => main_window.on_lost(),
-                        Err(OutOfMemory) => event_loop.exit(),
-                        Err(Timeout) => eprintln!("Surface timeout"),
-                        Err(Other) => eprintln!("Surface error: other"),
-                    }
-                }
 
-                if let Some(vram_window) = self.vram_window_state.as_mut() {
-                    match vram_window.render() {
-                        Ok(()) => {}
-                        Err(Lost | Outdated) => vram_window.on_lost(),
-                        Err(OutOfMemory) => event_loop.exit(),
-                        Err(Timeout) => eprintln!("Surface timeout"),
-                        Err(Other) => eprintln!("Surface error: other"),
+                if let Some(windows) = self.windows.as_mut() {
+                    match win_id {
+                        id if id == windows.main.window().id() => match windows.main.render() {
+                            Ok(()) => {}
+                            Err(Lost | Outdated) => windows.main.on_lost(),
+                            Err(OutOfMemory) => event_loop.exit(),
+                            Err(Timeout) => eprintln!("Surface timeout"),
+                            Err(Other) => eprintln!("Surface error: other"),
+                        },
+                        id if id == windows.vram.window().id() => match windows.vram.render() {
+                            Ok(()) => {}
+                            Err(Lost | Outdated) => windows.vram.on_lost(),
+                            Err(OutOfMemory) => event_loop.exit(),
+                            Err(Timeout) => eprintln!("Surface timeout"),
+                            Err(Other) => eprintln!("Surface error: other"),
+                        },
+                        _ => (),
                     }
                 }
             }
@@ -272,8 +278,7 @@ impl winit::application::ApplicationHandler for App<'_> {
         if let Some(gb_ctx) = &mut self.gb_ctx {
             gb_ctx.pause().expect("Couldn't pause");
         }
-        self.main_window_state = None;
-        self.vram_window_state = None;
+        self.windows = None;
         event_loop.set_control_flow(ControlFlow::Wait);
     }
 
@@ -281,8 +286,7 @@ impl winit::application::ApplicationHandler for App<'_> {
         self.save_data().unwrap_or_else(|e| {
             eprintln!("Error saving data: {e}");
         });
-        self.main_window_state = None;
-        self.vram_window_state = None;
+        self.windows = None;
         self.gb_ctx = None;
     }
 }

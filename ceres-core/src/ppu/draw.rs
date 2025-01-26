@@ -41,16 +41,10 @@ struct Obj {
 }
 
 impl Ppu {
+    #[must_use]
+    #[inline]
     const fn mono_rgb(index: u8) -> (u8, u8, u8) {
-        // DMG palette colors RGB
-        const GRAYSCALE_PALETTE: [(u8, u8, u8); 4] = [
-            (0xFF, 0xFF, 0xFF),
-            (0xCC, 0xCC, 0xCC),
-            (0x77, 0x77, 0x77),
-            (0x00, 0x00, 0x00),
-        ];
-
-        GRAYSCALE_PALETTE[index as usize]
+        super::color_palette::GRAYSCALE_PALETTE[index as usize]
     }
 
     #[must_use]

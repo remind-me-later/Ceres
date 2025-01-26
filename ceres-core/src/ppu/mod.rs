@@ -98,6 +98,7 @@ pub struct Ppu {
 }
 
 impl Default for Ppu {
+    #[allow(clippy::large_stack_frames)]
     fn default() -> Self {
         Self {
             vram: [0; VRAM_SIZE_CGB as usize],

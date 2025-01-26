@@ -1,7 +1,6 @@
 #![no_std]
 
 use core::time::Duration;
-
 use interrupts::Interrupts;
 use joypad::Joypad;
 use memory::{Key1, Svbk};

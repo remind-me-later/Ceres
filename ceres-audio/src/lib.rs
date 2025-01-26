@@ -11,11 +11,11 @@ const SAMPLE_RATE: i32 = 48000;
 // that implements the AudioCallback trait
 #[derive(Clone, Debug)]
 pub struct RingBuffer {
-    buffer: Arc<Mutex<Bounded<Box<[ceres_core::Sample]>>>>,
+    buffer: Arc<Mutex<Bounded<[ceres_core::Sample; RING_BUFFER_SIZE]>>>,
 }
 
 impl RingBuffer {
-    pub fn new(buffer: Arc<Mutex<Bounded<Box<[ceres_core::Sample]>>>>) -> Self {
+    pub fn new(buffer: Arc<Mutex<Bounded<[ceres_core::Sample; RING_BUFFER_SIZE]>>>) -> Self {
         // FIll with silence
         if let Ok(mut buffer) = buffer.lock() {
             for _ in 0..buffer.max_len() {
@@ -82,8 +82,9 @@ pub struct Stream {
 
 impl Stream {
     pub fn new(state: &State) -> Result<Self, Error> {
+        #[allow(clippy::large_stack_arrays)]
         let ring_buffer = Arc::new(Mutex::new(Bounded::from(
-            vec![Default::default(); RING_BUFFER_SIZE].into_boxed_slice(),
+            [Default::default(); RING_BUFFER_SIZE],
         )));
         let ring_buffer_clone = Arc::clone(&ring_buffer);
 
