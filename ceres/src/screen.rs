@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use crate::{Scaling, PX_HEIGHT, PX_WIDTH};
+use crate::Scaling;
 use ceres_audio as audio;
 use ceres_core::Gb;
 use eframe::egui;
@@ -20,13 +20,13 @@ pub struct Resources {
     diffuse_bind_group: wgpu::BindGroup,
 }
 
-pub struct GBScreen {
+pub struct GBScreen<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
     gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
     scaling: Scaling,
     size: (f32, f32),
 }
 
-impl GBScreen {
+impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
     #[allow(clippy::too_many_lines)]
     pub fn new<'a>(
         cc: &'a eframe::CreationContext<'a>,
@@ -194,19 +194,17 @@ impl GBScreen {
     }
 
     pub fn custom_painting(&mut self, ui: &mut egui::Ui) {
-        let rect = ui.available_rect_before_wrap();
+        let (response, painter) =
+            ui.allocate_painter(ui.available_size_before_wrap(), egui::Sense::drag());
 
-        self.size = (rect.width(), rect.height());
-
-        ui.painter()
-            .add(eframe::egui_wgpu::Callback::new_paint_callback(
-                rect,
-                Self {
-                    gb: Arc::clone(&self.gb),
-                    scaling: self.scaling,
-                    size: self.size,
-                },
-            ));
+        painter.add(eframe::egui_wgpu::Callback::new_paint_callback(
+            response.rect,
+            Self {
+                gb: Arc::clone(&self.gb),
+                scaling: self.scaling,
+                size: (response.rect.width(), response.rect.height()),
+            },
+        ));
     }
 
     pub fn scaling(&self) -> Scaling {
@@ -218,7 +216,9 @@ impl GBScreen {
     }
 }
 
-impl eframe::egui_wgpu::CallbackTrait for GBScreen {
+impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
+    for GBScreen<PX_WIDTH, PX_HEIGHT>
+{
     fn paint(
         &self,
         _info: eframe::egui::PaintCallbackInfo,

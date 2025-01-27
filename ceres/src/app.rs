@@ -1,6 +1,6 @@
 use crate::{gb_context::GbContext, screen, Scaling};
 use ceres_audio as audio;
-use eframe::egui::{self, Key};
+use eframe::egui::{self, Key, Vec2};
 use rfd::FileDialog;
 use std::{fs::File, io::Write};
 
@@ -13,7 +13,7 @@ pub struct App {
 
     // Rendering
     _audio: audio::State,
-    screen: screen::GBScreen,
+    screen: screen::GBScreen<{ ceres_core::PX_WIDTH as u32 }, { ceres_core::PX_HEIGHT as u32 }>,
 }
 
 impl App {
@@ -119,9 +119,15 @@ impl eframe::App for App {
                     }
                 });
 
-                // ui.separator();
-
-                self.screen.custom_painting(ui);
+                egui::Window::new("GameBoy")
+                    .resizable(true)
+                    .default_size(Vec2::new(
+                        ceres_core::PX_WIDTH as f32,
+                        ceres_core::PX_HEIGHT as f32,
+                    ))
+                    .show(ctx, |ui| {
+                        self.screen.custom_painting(ui);
+                    });
             });
 
             ctx.input(|i| {

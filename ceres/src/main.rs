@@ -8,12 +8,6 @@ use app::App;
 use clap::Parser;
 use std::path::PathBuf;
 
-const SCREEN_MUL: u32 = 2;
-const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
-const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
-const INIT_WIDTH: u32 = PX_WIDTH * SCREEN_MUL;
-const INIT_HEIGHT: u32 = PX_HEIGHT * SCREEN_MUL;
-
 const QUALIFIER: &str = "com";
 const ORGANIZATION: &str = "remind-me-later";
 const CERES_BIN: &str = "ceres";
@@ -122,9 +116,7 @@ fn main() -> eframe::Result {
 
     #[allow(clippy::cast_precision_loss)]
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([INIT_WIDTH as f32 + 20.0, INIT_HEIGHT as f32 + 70.0])
-            .with_min_inner_size([PX_WIDTH as f32, PX_HEIGHT as f32]),
+        viewport: egui::ViewportBuilder::default(),
         renderer: eframe::Renderer::Wgpu,
         vsync: true,
         ..Default::default()
