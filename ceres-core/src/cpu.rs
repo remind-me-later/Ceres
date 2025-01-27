@@ -1028,7 +1028,7 @@ impl<A: AudioCallback> Gb<A> {
     fn swap_r(&mut self, op: u8) {
         let val = self.get_r(op);
         self.af &= 0xFF00;
-        self.set_r(op, (val >> 4) | (val << 4));
+        self.set_r(op, val.rotate_left(4));
         if val == 0 {
             self.af |= ZF;
         }

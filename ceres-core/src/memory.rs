@@ -452,7 +452,7 @@ impl<A: AudioCallback> Gb<A> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Svbk {
     svbk: u8,
 }
@@ -477,7 +477,7 @@ impl Svbk {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Key1 {
     key1: u8,
 }

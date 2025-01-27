@@ -1,62 +1,18 @@
 [package]
-name = "ceres"
+name = "ceres-audio"
 version = "0.1.0"
 edition = "2021"
-
-# *******
-# * Cli *
-# *******
-
-[dependencies.clap]
-version = "*"
-default-features = false
-features = ["std", "derive"]
-
-[dependencies.anyhow]
-version = "*"
-
-[dependencies.directories]
-version = "*"
-
-# *******************
-# * Emulator thread *
-# *******************
 
 [dependencies.ceres-core]
 path = "../ceres-core"
 
-[dependencies.thread-priority]
-version = "*"
+[dependencies.cpal]
+git = "https://github.com/rustaudio/cpal"
 default-features = false
 
-[dependencies.spin_sleep]
+[dependencies.dasp_ring_buffer]
 version = "*"
 default-features = false
-
-# *************
-# * windowing *
-# *************
-
-[dependencies.eframe]
-version = "*"
-default-features = false
-features = ["default_fonts", "wgpu", "wayland", "accesskit"]
-
-[dependencies.winit]
-version = "*"
-default-features = false
-features = ["wayland", "wayland-csd-adwaita", "rwh_06"]
-
-[dependencies.rfd]
-version = "*"
-
-# Required for wgpu safe byte manipulation
-[dependencies.bytemuck]
-version = "*"
-default-features = false
-
-[dependencies.ceres-audio]
-path = "../ceres-audio"
 
 # *********
 # * Lints *
@@ -64,7 +20,7 @@ path = "../ceres-audio"
 
 [lints.clippy]
 pedantic = "warn"
-alloc_instead_of_core = "warn"
+# alloc_instead_of_core = "warn"
 as_underscore = "warn"
 assertions_on_result_states = "warn"
 clone_on_ref_ptr = "warn"
@@ -77,7 +33,7 @@ else_if_without_else = "warn"
 empty_drop = "warn"
 empty_structs_with_brackets = "warn"
 exit = "warn"
-# expect_used = "warn"
+expect_used = "warn"
 filetype_is_file = "warn"
 float_cmp_const = "warn"
 fn_to_numeric_cast_any = "warn"
@@ -92,7 +48,7 @@ mixed_read_write_in_expression = "warn"
 modulo_arithmetic = "warn"
 mutex_atomic = "warn"
 non_ascii_literal = "warn"
-# panic = "warn"
+panic = "warn"
 partial_pub_fields = "warn"
 rc_buffer = "warn"
 rc_mutex = "warn"
@@ -112,8 +68,9 @@ unimplemented = "warn"
 unnecessary_self_imports = "warn"
 unneeded_field_pattern = "warn"
 unseparated_literal_suffix = "warn"
-# use_debug = "warn"
+use_debug = "warn"
 verbose_file_reads = "warn"
+unwrap_used = "warn"
 
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"

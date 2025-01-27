@@ -1,7 +1,6 @@
 #![no_std]
 
 use core::time::Duration;
-
 use interrupts::Interrupts;
 use joypad::Joypad;
 use memory::{Key1, Svbk};
@@ -11,7 +10,7 @@ pub use {
     apu::{AudioCallback, Sample},
     cart::{Cart, Error},
     joypad::Button,
-    ppu::{PX_HEIGHT, PX_WIDTH},
+    ppu::{PX_HEIGHT, PX_WIDTH, VRAM_PX_HEIGHT, VRAM_PX_WIDTH},
 };
 
 extern crate alloc;
@@ -34,6 +33,7 @@ pub const TC_SEC: i32 = 0x40_0000; // 2^22
 pub const HRAM_SIZE: u8 = 0x80;
 pub const WRAM_SIZE: u16 = 0x2000 * 4;
 
+#[derive(Debug)]
 pub struct Gb<C: AudioCallback> {
     model: Model,
     cgb_mode: CgbMode,
@@ -152,18 +152,14 @@ impl<C: AudioCallback> Gb<C> {
     }
 
     #[inline]
-    pub fn run_frame(&mut self) -> Duration {
+    pub fn run_frame(&mut self) {
         self.dot_accumulator = 0;
 
         while self.dot_accumulator < TC_PER_FRAME {
             self.run_cpu();
         }
 
-        let ret = Duration::from_secs_f32(self.dot_accumulator as f32 / TC_SEC as f32);
-
         self.dot_accumulator -= TC_PER_FRAME;
-
-        ret
     }
 
     #[must_use]
@@ -174,8 +170,14 @@ impl<C: AudioCallback> Gb<C> {
 
     #[must_use]
     #[inline]
-    pub const fn pixel_data_rgb(&self) -> &[u8] {
-        self.ppu.pixel_data_rgb()
+    pub const fn pixel_data_rgba(&self) -> &[u8] {
+        self.ppu.pixel_data_rgba()
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn vram_data_rgba(&self) -> &[u8] {
+        self.ppu.vram_data_rgba()
     }
 
     #[inline]
@@ -189,13 +191,14 @@ impl<C: AudioCallback> Gb<C> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Model {
     Dmg,
     Mgb,
     Cgb,
 }
 
+#[derive(Clone, Copy, Debug)]
 enum CgbMode {
     Dmg,
     Compat,

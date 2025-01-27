@@ -5,7 +5,7 @@ const SPEED: u8 = 0x2;
 const SHIFT: u8 = 0x1;
 
 // TODO: always off
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Serial {
     sc: u8,
     sb: u8,

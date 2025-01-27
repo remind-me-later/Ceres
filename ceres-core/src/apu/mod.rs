@@ -22,14 +22,14 @@ pub trait AudioCallback {
     fn audio_sample(&self, l: Sample, r: Sample);
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug)]
 enum PeriodHalf {
     #[default]
     First,
     Second,
 }
 
-// #[derive(Default)]
+#[derive(Debug)]
 pub struct Apu<C: AudioCallback> {
     nr51: u8,
 
@@ -46,8 +46,8 @@ pub struct Apu<C: AudioCallback> {
 
     div_divider: u8,
 
-    render_timer: f32,
-    ext_sample_period: f32,
+    render_timer: i32,
+    ext_sample_period: i32,
 
     audio_callback: C,
 
@@ -71,15 +71,17 @@ impl<C: AudioCallback> Apu<C> {
             ch3: Wave::default(),
             ch4: Noise::default(),
             div_divider: 0,
-            render_timer: 0.0,
+            render_timer: 0,
             capacitor_l: 0.0,
             capacitor_r: 0.0,
         }
     }
 
-    fn sample_period_from_rate(sample_rate: i32) -> f32 {
-        // Add an error margin of 0.998 to avoid buffer underruns
-        (TC_SEC as f32 / sample_rate as f32) * 0.998
+    const fn sample_period_from_rate(sample_rate: i32) -> i32 {
+        // FIXME:
+        // This is mostly correct, the underrun errors are due to the timing issues in the run thread
+        // maybe account for difference in frame rate and sample rate?
+        TC_SEC / sample_rate
     }
 
     pub fn run(&mut self, cycles: i32) {
@@ -125,9 +127,9 @@ impl<C: AudioCallback> Apu<C> {
             self.ch4.step_sample(cycles);
         }
 
-        self.render_timer += cycles as f32;
+        self.render_timer += cycles;
         #[allow(clippy::while_float)]
-        while self.render_timer >= self.ext_sample_period {
+        if self.render_timer >= self.ext_sample_period {
             self.render_timer -= self.ext_sample_period;
 
             let (l, r) = mix_and_render(self);
@@ -245,7 +247,7 @@ impl<C: AudioCallback> Apu<C> {
 
         if !self.enabled {
             // reset
-            self.render_timer = 0.0;
+            // self.render_timer = 0;
             self.div_divider = 0;
             self.left_volume = 0;
             self.left_vin = false;

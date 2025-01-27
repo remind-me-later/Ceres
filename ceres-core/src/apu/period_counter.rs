@@ -10,6 +10,7 @@ pub(super) enum PeriodStepResult {
     None,
 }
 
+#[derive(Debug)]
 pub(super) struct PeriodCounter<const PERIOD_MULTIPLIER: u16, Sweep: SweepTrait> {
     timer: i32,
     period: u16, // 11 bit

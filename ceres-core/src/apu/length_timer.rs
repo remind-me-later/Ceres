@@ -6,7 +6,7 @@ pub(super) enum LengthTimerCalculationResult {
 }
 
 // LEN_MASK is the maximum length of the timer, 0x3F for all channels except wave, which is 0xFF
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub(super) struct LengthTimer<const LENGTH_TIMER_MASK: u8> {
     enabled: bool,
     length: u8,

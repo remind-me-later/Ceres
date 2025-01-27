@@ -1,10 +1,17 @@
 use crate::interrupts::Interrupts;
 
-use {self::color_palette::ColorPalette, crate::CgbMode, rgb_buf::RgbaBuf};
+use {
+    self::color_palette::ColorPalette, self::vram_renderer::VramRenderer, crate::CgbMode,
+    rgba_buf::RgbaBuf,
+};
+
+pub use vram_renderer::VRAM_PX_HEIGHT;
+pub use vram_renderer::VRAM_PX_WIDTH;
 
 mod color_palette;
 mod draw;
-mod rgb_buf;
+mod rgba_buf;
+mod vram_renderer;
 
 pub const PX_WIDTH: u8 = 160;
 pub const PX_HEIGHT: u8 = 144;
@@ -59,6 +66,7 @@ impl Mode {
     }
 }
 
+#[derive(Debug)]
 pub struct Ppu {
     lcdc: u8,
     stat: u8,
@@ -84,9 +92,13 @@ pub struct Ppu {
     win_in_frame: bool,
     win_in_ly: bool,
     win_skipped: u8,
+
+    // Debug utils
+    vram_renderer: VramRenderer,
 }
 
 impl Default for Ppu {
+    #[allow(clippy::large_stack_frames)]
     fn default() -> Self {
         Self {
             vram: [0; VRAM_SIZE_CGB as usize],
@@ -113,6 +125,7 @@ impl Default for Ppu {
             win_in_frame: Default::default(),
             win_in_ly: Default::default(),
             win_skipped: Default::default(),
+            vram_renderer: Default::default(),
         }
     }
 }
@@ -454,6 +467,8 @@ impl Ppu {
 
                 self.win_skipped = 0;
                 self.win_in_frame = false;
+
+                self.vram_renderer.draw_vram(&self.vram);
             }
             Mode::Drawing => (),
             Mode::HBlank => {
@@ -466,7 +481,13 @@ impl Ppu {
 
     #[must_use]
     #[inline]
-    pub(crate) const fn pixel_data_rgb(&self) -> &[u8] {
+    pub(crate) const fn pixel_data_rgba(&self) -> &[u8] {
         self.rgba_buf_present.pixel_data()
+    }
+
+    #[must_use]
+    #[inline]
+    pub(crate) const fn vram_data_rgba(&self) -> &[u8] {
+        self.vram_renderer.vram_data_rgba()
     }
 }

@@ -1,5 +1,4 @@
 mod app;
-mod audio;
 mod gb_context;
 mod screen;
 
@@ -121,6 +120,7 @@ fn main() -> eframe::Result {
     let project_dirs =
         directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED).unwrap();
 
+    #[allow(clippy::cast_precision_loss)]
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([INIT_WIDTH as f32 + 20.0, INIT_HEIGHT as f32 + 70.0])

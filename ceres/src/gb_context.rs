@@ -1,8 +1,8 @@
-use crate::audio;
+use ceres_audio as audio;
 use ceres_core::Cart;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
-use eframe::egui::{self};
+use eframe::egui;
 use std::{
     io::Read,
     sync::{Mutex, MutexGuard},
@@ -33,7 +33,7 @@ impl GbContext {
             gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
             exiting: Arc<AtomicBool>,
             pause_thread: Arc<AtomicBool>,
-            ctx: egui::Context,
+            ctx: &egui::Context,
         ) {
             loop {
                 let begin = std::time::Instant::now();
@@ -125,7 +125,7 @@ impl GbContext {
 
             // std::thread::spawn(move || gb_loop(gb, exit, pause_thread))
             thread_builder.spawn_with_priority(thread_priority::ThreadPriority::Max, move |_| {
-                gb_loop(gb, exit, pause_thread, ctx);
+                gb_loop(gb, exit, pause_thread, &ctx);
             })?
         };
 

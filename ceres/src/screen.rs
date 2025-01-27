@@ -1,10 +1,11 @@
 use std::sync::{Arc, Mutex};
 
-use crate::{audio, Scaling, PX_HEIGHT, PX_WIDTH};
+use crate::{Scaling, PX_HEIGHT, PX_WIDTH};
+use ceres_audio as audio;
 use ceres_core::Gb;
 use eframe::egui;
+use eframe::wgpu;
 use eframe::wgpu::util::DeviceExt;
-use eframe::wgpu::{self};
 
 pub struct Resources {
     render_pipeline: wgpu::RenderPipeline,
@@ -157,7 +158,7 @@ impl GBScreen {
                 module: &shader,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu_render_state.target_format.into(),
+                    format: wgpu_render_state.target_format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -201,7 +202,7 @@ impl GBScreen {
             .add(eframe::egui_wgpu::Callback::new_paint_callback(
                 rect,
                 Self {
-                    gb: self.gb.clone(),
+                    gb: Arc::clone(&self.gb),
                     scaling: self.scaling,
                     size: self.size,
                 },
@@ -244,39 +245,25 @@ impl eframe::egui_wgpu::CallbackTrait for GBScreen {
 
         if let Ok(gb) = self.gb.lock() {
             // TODO: awful way of transforming rgb to rgba
-            let rgba = {
-                let rgb = gb.pixel_data_rgb();
-
-                const BUFFER_SIZE: usize = (PX_HEIGHT * PX_WIDTH * 4) as usize;
-                let mut rgba: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
-
-                let mut j = 0;
-
-                rgb.chunks_exact(3).for_each(|p| {
-                    rgba[j] = p[0];
-                    rgba[j + 1] = p[1];
-                    rgba[j + 2] = p[2];
-                    // Ignore alpha channel since we set composition mode to opaque
-                    j += 4;
-                });
-
-                rgba
-            };
-
-            resources.texture.update(queue, &rgba);
+            resources.texture.update(queue, gb.pixel_data_rgba());
         }
 
         {
             let width = self.size.0;
             let height = self.size.1;
+            #[allow(
+                clippy::cast_precision_loss,
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss
+            )]
             let (x, y) = {
                 let mul = (width / PX_WIDTH as f32)
                     .min(height / PX_HEIGHT as f32)
                     .floor() as u32;
                 #[allow(clippy::cast_precision_loss)]
-                let x = (PX_WIDTH * mul) as f32 / width as f32;
+                let x = (PX_WIDTH * mul) as f32 / width;
                 #[allow(clippy::cast_precision_loss)]
-                let y = (PX_HEIGHT * mul) as f32 / height as f32;
+                let y = (PX_HEIGHT * mul) as f32 / height;
                 (x, y)
             };
 

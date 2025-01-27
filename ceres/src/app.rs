@@ -1,8 +1,8 @@
+use crate::{gb_context::GbContext, screen, Scaling};
+use ceres_audio as audio;
 use eframe::egui::{self, Key};
 use rfd::FileDialog;
 use std::{fs::File, io::Write};
-
-use crate::{audio, gb_context::GbContext, screen, Scaling};
 
 pub struct App {
     // Config parameters
@@ -64,6 +64,7 @@ impl App {
 }
 
 impl eframe::App for App {
+    #[allow(clippy::too_many_lines, clippy::shadow_unrelated)]
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical_centered(|ui| {
