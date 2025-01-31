@@ -114,9 +114,16 @@ fn main() -> eframe::Result {
     let project_dirs =
         directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED).unwrap();
 
-    #[allow(clippy::cast_precision_loss)]
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default(),
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([
+                f32::from(ceres_core::PX_WIDTH),
+                f32::from(ceres_core::PX_HEIGHT) + 22.0,
+            ])
+            .with_min_inner_size([
+                f32::from(ceres_core::PX_WIDTH),
+                f32::from(ceres_core::PX_HEIGHT) + 22.0,
+            ]),
         renderer: eframe::Renderer::Wgpu,
         vsync: true,
         ..Default::default()

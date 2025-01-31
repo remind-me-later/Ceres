@@ -1,6 +1,6 @@
 use crate::{gb_context::GbContext, screen, Scaling};
 use ceres_audio as audio;
-use eframe::egui::{self, Key, Vec2};
+use eframe::egui::{self, Key};
 use rfd::FileDialog;
 use std::{fs::File, io::Write};
 
@@ -66,44 +66,55 @@ impl App {
 impl eframe::App for App {
     #[allow(clippy::too_many_lines, clippy::shadow_unrelated)]
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.vertical_centered(|ui| {
-                egui::menu::bar(ui, |ui| {
-                    ui.menu_button("File", |ui| {
-                        if ui.button("Open ROM").clicked() {
-                            let file = FileDialog::new()
-                                .add_filter("gb", &["gb", "gbc"])
-                                .pick_file();
+        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+            egui::menu::bar(ui, |ui| {
+                ui.menu_button("File", |ui| {
+                    if ui.button("Open ROM").clicked() {
+                        let file = FileDialog::new()
+                            .add_filter("gb", &["gb", "gbc"])
+                            .pick_file();
 
-                            if let Some(file) = file {
-                                self.gb_ctx.change_rom(&self.project_dirs, &file).unwrap();
-                            }
+                        if let Some(file) = file {
+                            self.gb_ctx.change_rom(&self.project_dirs, &file).unwrap();
                         }
+                    }
 
-                        if ui.button("Export save").clicked() {
-                            println!("Export save file");
-                        }
-                    });
+                    if ui.button("Export save").clicked() {
+                        println!("Export save file");
+                    }
+                });
 
-                    egui::ComboBox::from_label("Scaling")
-                        .selected_text(format!("{}", self.screen.scaling()))
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(
-                                self.screen.mut_scaling(),
-                                Scaling::Nearest,
-                                "Nearest",
-                            );
-                            ui.selectable_value(
-                                self.screen.mut_scaling(),
-                                Scaling::Scale2x,
-                                "Scale2x",
-                            );
-                            ui.selectable_value(
-                                self.screen.mut_scaling(),
-                                Scaling::Scale3x,
-                                "Scale3x",
-                            );
-                        });
+                ui.menu_button("view", |ui| {
+                    ui.add(egui::Label::new("Scaling algorithm:"));
+
+                    let nearest_button = egui::RadioButton::new(
+                        self.screen.scaling() == Scaling::Nearest,
+                        "Nearest",
+                    );
+
+                    if ui.add(nearest_button).clicked() {
+                        *self.screen.mut_scaling() = Scaling::Nearest;
+                    }
+
+                    let scale2x_button = egui::RadioButton::new(
+                        self.screen.scaling() == Scaling::Scale2x,
+                        "Scale2x",
+                    );
+
+                    if ui.add(scale2x_button).clicked() {
+                        *self.screen.mut_scaling() = Scaling::Scale2x;
+                    }
+
+                    let scale3x_button = egui::RadioButton::new(
+                        self.screen.scaling() == Scaling::Scale3x,
+                        "Scale3x",
+                    );
+
+                    if ui.add(scale3x_button).clicked() {
+                        *self.screen.mut_scaling() = Scaling::Scale3x;
+                    }
+
+                    ui.separator();
 
                     let paused = self.gb_ctx.is_paused();
                     if ui
@@ -118,85 +129,88 @@ impl eframe::App for App {
                         }
                     }
                 });
+            });
+        });
 
-                egui::Window::new("GameBoy")
-                    .resizable(true)
-                    .default_size(Vec2::new(
-                        ceres_core::PX_WIDTH as f32,
-                        ceres_core::PX_HEIGHT as f32,
-                    ))
-                    .show(ctx, |ui| {
-                        self.screen.custom_painting(ui);
-                    });
+        egui::CentralPanel::default()
+            .frame(egui::Frame {
+                inner_margin: egui::Margin::default(),
+                outer_margin: egui::Margin::default(),
+                rounding: egui::Rounding::default(),
+                shadow: egui::Shadow::default(),
+                fill: egui::Color32::BLACK,
+                stroke: egui::Stroke::NONE,
+            })
+            .show(ctx, |ui| {
+                self.screen.custom_painting(ui);
             });
 
-            ctx.input(|i| {
-                let mut gb = self.gb_ctx.mut_gb();
+        ctx.input(|i| {
+            let mut gb = self.gb_ctx.mut_gb();
 
-                if i.key_pressed(Key::W) {
-                    gb.press(ceres_core::Button::Up);
-                }
+            if i.key_pressed(Key::W) {
+                gb.press(ceres_core::Button::Up);
+            }
 
-                if i.key_released(Key::W) {
-                    gb.release(ceres_core::Button::Up);
-                }
+            if i.key_released(Key::W) {
+                gb.release(ceres_core::Button::Up);
+            }
 
-                if i.key_pressed(Key::A) {
-                    gb.press(ceres_core::Button::Left);
-                }
+            if i.key_pressed(Key::A) {
+                gb.press(ceres_core::Button::Left);
+            }
 
-                if i.key_released(Key::A) {
-                    gb.release(ceres_core::Button::Left);
-                }
+            if i.key_released(Key::A) {
+                gb.release(ceres_core::Button::Left);
+            }
 
-                if i.key_pressed(Key::S) {
-                    gb.press(ceres_core::Button::Down);
-                }
+            if i.key_pressed(Key::S) {
+                gb.press(ceres_core::Button::Down);
+            }
 
-                if i.key_released(Key::S) {
-                    gb.release(ceres_core::Button::Down);
-                }
+            if i.key_released(Key::S) {
+                gb.release(ceres_core::Button::Down);
+            }
 
-                if i.key_pressed(Key::D) {
-                    gb.press(ceres_core::Button::Right);
-                }
+            if i.key_pressed(Key::D) {
+                gb.press(ceres_core::Button::Right);
+            }
 
-                if i.key_released(Key::D) {
-                    gb.release(ceres_core::Button::Right);
-                }
+            if i.key_released(Key::D) {
+                gb.release(ceres_core::Button::Right);
+            }
 
-                if i.key_pressed(Key::L) {
-                    gb.press(ceres_core::Button::A);
-                }
+            if i.key_pressed(Key::L) {
+                gb.press(ceres_core::Button::A);
+            }
 
-                if i.key_released(Key::L) {
-                    gb.release(ceres_core::Button::A);
-                }
+            if i.key_released(Key::L) {
+                gb.release(ceres_core::Button::A);
+            }
 
-                if i.key_pressed(Key::K) {
-                    gb.press(ceres_core::Button::B);
-                }
+            if i.key_pressed(Key::K) {
+                gb.press(ceres_core::Button::B);
+            }
 
-                if i.key_released(Key::K) {
-                    gb.release(ceres_core::Button::B);
-                }
+            if i.key_released(Key::K) {
+                gb.release(ceres_core::Button::B);
+            }
 
-                if i.key_pressed(Key::M) {
-                    gb.press(ceres_core::Button::Start);
-                }
+            if i.key_pressed(Key::M) {
+                gb.press(ceres_core::Button::Start);
+            }
 
-                if i.key_released(Key::M) {
-                    gb.release(ceres_core::Button::Start);
-                }
+            if i.key_released(Key::M) {
+                gb.release(ceres_core::Button::Start);
+            }
 
-                if i.key_pressed(Key::N) {
-                    gb.press(ceres_core::Button::Select);
-                }
+            if i.key_pressed(Key::N) {
+                gb.press(ceres_core::Button::Select);
+            }
 
-                if i.key_released(Key::N) {
-                    gb.release(ceres_core::Button::Select);
-                }
-            });
+            if i.key_released(Key::N) {
+                gb.release(ceres_core::Button::Select);
+            }
         });
     }
 
