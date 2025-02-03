@@ -126,6 +126,9 @@ fn main() -> eframe::Result {
             ]),
         renderer: eframe::Renderer::Wgpu,
         vsync: true,
+        depth_buffer: 0,
+        stencil_buffer: 0,
+        centered: true,
         ..Default::default()
     };
     eframe::run_native(

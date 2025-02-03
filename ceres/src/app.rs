@@ -26,9 +26,11 @@ impl App {
     ) -> Self {
         let ctx = &cc.egui_ctx;
         let audio = audio::State::new().unwrap();
-        let gb_ctx = GbContext::new(model, &project_dirs, rom_path, &audio, ctx).unwrap();
+        let mut gb_ctx = GbContext::new(model, &project_dirs, rom_path, &audio, ctx).unwrap();
         let gb_clone = gb_ctx.gb_clone();
         let screen = screen::GBScreen::new(cc, gb_clone, scaling);
+
+        gb_ctx.resume();
 
         Self {
             project_dirs,
@@ -217,15 +219,4 @@ impl eframe::App for App {
     fn on_exit(&mut self) {
         self.save_data();
     }
-
-    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
-        // NOTE: a bright gray makes the shadows of the windows look weird.
-        // We use a bit of transparency so that if the user switches on the
-        // `transparent()` option they get immediate results.
-        egui::Color32::from_rgba_unmultiplied(12, 12, 12, 180).to_normalized_gamma_f32()
-
-        // _visuals.window_fill() would also be a natural choice
-    }
-
-    fn raw_input_hook(&mut self, _ctx: &egui::Context, _raw_input: &mut egui::RawInput) {}
 }

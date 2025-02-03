@@ -237,6 +237,10 @@ impl Cart {
         self.has_battery
     }
 
+    pub const fn ram_size_bytes(&self) -> u32 {
+        self.ram_size.size_bytes()
+    }
+
     pub(crate) fn run_rtc(&mut self, cycles: i32) {
         if let Mbc3 { rtc: Some(rtc) } = &mut self.mbc {
             rtc.run_cycles(cycles);

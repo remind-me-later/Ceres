@@ -41,9 +41,9 @@ const STAT_IF_OAM_B: u8 = 0x20;
 const STAT_IF_LYC_B: u8 = 0x40;
 
 // Sizes
-const OAM_SIZE: u16 = 0x100;
-const VRAM_SIZE_GB: u16 = 0x2000;
-const VRAM_SIZE_CGB: u16 = VRAM_SIZE_GB * 2;
+pub const OAM_SIZE: u16 = 0xA0;
+pub const VRAM_SIZE_GB: u16 = 0x2000;
+pub const VRAM_SIZE_CGB: u16 = VRAM_SIZE_GB * 2;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub enum Mode {

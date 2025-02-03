@@ -7,7 +7,7 @@ edition = "2021"
 path = "../ceres-core"
 
 [dependencies.cpal]
-git = "https://github.com/rustaudio/cpal"
+version = "*"
 default-features = false
 
 [dependencies.dasp_ring_buffer]
