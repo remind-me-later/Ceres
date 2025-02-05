@@ -109,10 +109,10 @@ struct Cli {
     scaling: Scaling,
 }
 
-fn main() -> eframe::Result {
+fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
-    let project_dirs =
-        directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED).unwrap();
+    let project_dirs = directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED)
+        .ok_or_else(|| anyhow::anyhow!("couldn't get project directories"))?;
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -144,4 +144,5 @@ fn main() -> eframe::Result {
             )))
         }),
     )
+    .map_err(Into::into)
 }

@@ -79,8 +79,10 @@ impl GbContext {
                     .context("no such file")?
             };
 
-            // TODO: core error
+            #[expect(clippy::unwrap_used)]
             let mut cart = Cart::new(rom).unwrap();
+
+            #[expect(clippy::unwrap_used)]
             let ident = {
                 let mut ident = String::new();
                 cart.ascii_title().read_to_string(&mut ident).unwrap();
@@ -94,6 +96,7 @@ impl GbContext {
                 ident
             };
 
+            #[expect(clippy::unwrap_used)]
             if let Ok(ram) =
                 std::fs::read(project_dirs.data_dir().join(&ident).with_extension("sav"))
                     .map(Vec::into_boxed_slice)
@@ -152,7 +155,10 @@ impl GbContext {
                 .context("no such file")?
         };
 
+        #[expect(clippy::unwrap_used)]
         let mut cart = Cart::new(rom).unwrap();
+
+        #[expect(clippy::unwrap_used)]
         let ident = {
             let mut ident = String::new();
             cart.ascii_title().read_to_string(&mut ident).unwrap();
@@ -166,6 +172,7 @@ impl GbContext {
             ident
         };
 
+        #[expect(clippy::unwrap_used)]
         if let Ok(ram) = std::fs::read(project_dirs.data_dir().join(&ident).with_extension("sav"))
             .map(Vec::into_boxed_slice)
         {
@@ -182,6 +189,7 @@ impl GbContext {
         Ok(())
     }
 
+    #[expect(clippy::unwrap_used)]
     pub fn mut_gb(&mut self) -> MutexGuard<Gb<audio::RingBuffer>> {
         self.gb.lock().unwrap()
     }
@@ -190,11 +198,13 @@ impl GbContext {
         self.pause_thread.load(Relaxed)
     }
 
+    #[expect(clippy::unwrap_used)]
     pub fn pause(&mut self) {
         self.audio_stream.pause().unwrap();
         self.pause_thread.store(true, Relaxed);
     }
 
+    #[expect(clippy::unwrap_used)]
     pub fn resume(&mut self) {
         self.pause_thread.store(false, Relaxed);
         self.audio_stream.resume().unwrap();
@@ -204,11 +214,13 @@ impl GbContext {
         &self.rom_ident
     }
 
+    #[expect(clippy::unwrap_used)]
     pub fn exit(&mut self) {
         self.exiting.store(true, Relaxed);
         self.thread_handle.take().unwrap().join().unwrap();
     }
 
+    #[expect(clippy::unwrap_used)]
     pub fn gb_lock(&self) -> MutexGuard<Gb<audio::RingBuffer>> {
         self.gb.lock().unwrap()
     }
@@ -223,6 +235,7 @@ impl GbContext {
 }
 
 impl Drop for GbContext {
+    #[expect(clippy::unwrap_used)]
     fn drop(&mut self) {
         self.audio_stream.pause().unwrap();
         self.exit();

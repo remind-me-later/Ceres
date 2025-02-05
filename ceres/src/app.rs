@@ -25,7 +25,9 @@ impl App {
         scaling: Scaling,
     ) -> Self {
         let ctx = &cc.egui_ctx;
+        #[expect(clippy::unwrap_used)]
         let audio = audio::State::new().unwrap();
+        #[expect(clippy::unwrap_used)]
         let mut gb_ctx = GbContext::new(model, &project_dirs, rom_path, &audio, ctx).unwrap();
         let gb_clone = gb_ctx.gb_clone();
         let screen = screen::GBScreen::new(cc, gb_clone, scaling);
@@ -42,6 +44,7 @@ impl App {
 
     fn save_data(&self) {
         let gb = self.gb_ctx.gb_lock();
+        #[expect(clippy::expect_used)]
         if let Some(save_data) = gb.cartridge().save_data() {
             std::fs::create_dir_all(self.project_dirs.data_dir())
                 .expect("couldn't create data directory");
@@ -77,7 +80,9 @@ impl eframe::App for App {
                             .pick_file();
 
                         if let Some(file) = file {
-                            self.gb_ctx.change_rom(&self.project_dirs, &file).unwrap();
+                            if let Err(e) = self.gb_ctx.change_rom(&self.project_dirs, &file) {
+                                eprintln!("couldn't open ROM: {e}");
+                            }
                         }
                     }
 
@@ -132,7 +137,7 @@ impl eframe::App for App {
 
                     ui.add(egui::Label::new("Scaling algorithm"));
 
-                    let nearest_button = egui::RadioButton::new(
+                    let nearest_button = egui::SelectableLabel::new(
                         self.screen.scaling() == Scaling::Nearest,
                         "Nearest",
                     );
@@ -141,7 +146,7 @@ impl eframe::App for App {
                         *self.screen.mut_scaling() = Scaling::Nearest;
                     }
 
-                    let scale2x_button = egui::RadioButton::new(
+                    let scale2x_button = egui::SelectableLabel::new(
                         self.screen.scaling() == Scaling::Scale2x,
                         "Scale2x",
                     );
@@ -150,7 +155,7 @@ impl eframe::App for App {
                         *self.screen.mut_scaling() = Scaling::Scale2x;
                     }
 
-                    let scale3x_button = egui::RadioButton::new(
+                    let scale3x_button = egui::SelectableLabel::new(
                         self.screen.scaling() == Scaling::Scale3x,
                         "Scale3x",
                     );

@@ -27,7 +27,7 @@ pub struct GBScreen<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
 }
 
 impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
-    #[expect(clippy::too_many_lines)]
+    #[expect(clippy::too_many_lines, clippy::unwrap_used)]
     pub fn new<'a>(
         cc: &'a eframe::CreationContext<'a>,
         gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
@@ -219,6 +219,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
 impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
     for GBScreen<PX_WIDTH, PX_HEIGHT>
 {
+    #[expect(clippy::unwrap_used)]
     fn paint(
         &self,
         _info: eframe::egui::PaintCallbackInfo,
@@ -233,6 +234,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
         render_pass.draw(0..4, 0..1);
     }
 
+    #[expect(clippy::unwrap_used)]
     fn prepare(
         &self,
         _device: &wgpu::Device,
