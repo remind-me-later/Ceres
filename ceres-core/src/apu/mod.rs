@@ -128,7 +128,6 @@ impl<C: AudioCallback> Apu<C> {
         }
 
         self.render_timer += cycles;
-        #[allow(clippy::while_float)]
         if self.render_timer >= self.ext_sample_period {
             self.render_timer -= self.ext_sample_period;
 

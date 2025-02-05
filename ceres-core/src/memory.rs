@@ -232,7 +232,7 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[allow(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity)]
     #[inline]
     fn write_high(&mut self, addr: u8, val: u8) {
         match addr {

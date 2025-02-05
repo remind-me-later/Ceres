@@ -578,7 +578,7 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     fn ld_hl_sp_r8(&mut self) {
         self.af &= 0xFF00;
-        #[allow(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
+        #[expect(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
         let offset = self.imm8() as i8 as u16;
         self.tick_m_cycle();
         self.hl = self.sp.wrapping_add(offset);
@@ -657,7 +657,7 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     fn do_jump_relative(&mut self) {
-        #[allow(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
+        #[expect(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
         let offset = self.imm8() as i8 as u16;
         self.pc = self.pc.wrapping_add(offset);
         self.tick_m_cycle();
@@ -756,10 +756,7 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     fn stop(&mut self) {
-        #[allow(unused_must_use)]
-        {
-            self.imm8();
-        }
+        let _discard_byte = self.imm8();
 
         if self.key1.requested() {
             self.key1.change_speed();
@@ -796,14 +793,14 @@ impl<A: AudioCallback> Gb<A> {
         self.af &= !(HF | NF);
     }
 
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     #[inline]
     const fn nop(&self) {}
 
     // TODO: debugger breakpoint
 
     #[inline]
-    #[allow(clippy::needless_pass_by_ref_mut)]
+    #[expect(clippy::needless_pass_by_ref_mut)]
     fn ld_b_b(&mut self) {
         self.nop();
     }
@@ -902,7 +899,7 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     fn add_sp_r8(&mut self) {
         let sp = self.sp;
-        #[allow(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
+        #[expect(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
         let offset = self.imm8() as i8 as u16;
         self.tick_m_cycle();
         self.tick_m_cycle();

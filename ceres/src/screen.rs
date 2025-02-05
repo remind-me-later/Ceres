@@ -27,7 +27,7 @@ pub struct GBScreen<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
 }
 
 impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
-    #[allow(clippy::too_many_lines)]
+    #[expect(clippy::too_many_lines)]
     pub fn new<'a>(
         cc: &'a eframe::CreationContext<'a>,
         gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
@@ -251,7 +251,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
         {
             let width = self.size.0;
             let height = self.size.1;
-            #[allow(
+            #[expect(
                 clippy::cast_precision_loss,
                 clippy::cast_possible_truncation,
                 clippy::cast_sign_loss
@@ -260,9 +260,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
                 let mul = (width / PX_WIDTH as f32)
                     .min(height / PX_HEIGHT as f32)
                     .floor() as u32;
-                #[allow(clippy::cast_precision_loss)]
                 let x = (PX_WIDTH * mul) as f32 / width;
-                #[allow(clippy::cast_precision_loss)]
                 let y = (PX_HEIGHT * mul) as f32 / height;
                 (x, y)
             };
@@ -321,14 +319,14 @@ impl Texture {
 
     pub(super) fn update(&mut self, queue: &wgpu::Queue, rgba: &[u8]) {
         queue.write_texture(
-            wgpu::ImageCopyTexture {
+            wgpu::TexelCopyTextureInfo {
                 aspect: wgpu::TextureAspect::All,
                 texture: &self.texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
             },
             rgba,
-            wgpu::ImageDataLayout {
+            wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * self.texture.width()),
                 rows_per_image: Some(self.texture.height()),

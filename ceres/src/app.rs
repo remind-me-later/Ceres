@@ -66,7 +66,7 @@ impl App {
 }
 
 impl eframe::App for App {
-    #[allow(clippy::too_many_lines, clippy::shadow_unrelated)]
+    #[expect(clippy::too_many_lines, clippy::shadow_unrelated)]
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
@@ -87,7 +87,50 @@ impl eframe::App for App {
                 });
 
                 ui.menu_button("view", |ui| {
-                    ui.add(egui::Label::new("Scaling algorithm:"));
+                    ui.add(egui::Label::new("Volume"));
+
+                    ui.horizontal(|ui| {
+                        let paused = self.gb_ctx.is_paused();
+                        if ui
+                            .button(if paused { "\u{25b6}" } else { "\u{23f8}" })
+                            .on_hover_text("Pause the game")
+                            .clicked()
+                        {
+                            if paused {
+                                self.gb_ctx.resume();
+                            } else {
+                                self.gb_ctx.pause();
+                            }
+                        }
+
+                        ui.style_mut().spacing.slider_width = 50.0;
+
+                        let volume_slider = egui::Slider::from_get_set(0.0..=1.0, |volume| {
+                            let mut volume_ret = 0.0;
+
+                            if let Ok(mut volume_mutex) = self.gb_ctx.volume().lock() {
+                                #[expect(clippy::cast_possible_truncation)]
+                                if let Some(volume) = volume {
+                                    *volume_mutex = volume as f32;
+                                    volume_ret = *volume_mutex;
+                                } else {
+                                    volume_ret = *volume_mutex;
+                                }
+                            }
+
+                            f64::from(volume_ret)
+                        })
+                        .custom_formatter(
+                            // percentage
+                            |value, _| format!("{:.0}%", value * 100.0),
+                        );
+
+                        ui.add(volume_slider);
+                    });
+
+                    ui.separator();
+
+                    ui.add(egui::Label::new("Scaling algorithm"));
 
                     let nearest_button = egui::RadioButton::new(
                         self.screen.scaling() == Scaling::Nearest,
@@ -115,21 +158,6 @@ impl eframe::App for App {
                     if ui.add(scale3x_button).clicked() {
                         *self.screen.mut_scaling() = Scaling::Scale3x;
                     }
-
-                    ui.separator();
-
-                    let paused = self.gb_ctx.is_paused();
-                    if ui
-                        .button(if paused { "Play" } else { "Pause" })
-                        .on_hover_text("Pause the game")
-                        .clicked()
-                    {
-                        if paused {
-                            self.gb_ctx.resume();
-                        } else {
-                            self.gb_ctx.pause();
-                        }
-                    }
                 });
             });
         });
@@ -138,7 +166,7 @@ impl eframe::App for App {
             .frame(egui::Frame {
                 inner_margin: egui::Margin::default(),
                 outer_margin: egui::Margin::default(),
-                rounding: egui::Rounding::default(),
+                corner_radius: egui::CornerRadius::default(),
                 shadow: egui::Shadow::default(),
                 fill: egui::Color32::BLACK,
                 stroke: egui::Stroke::NONE,

@@ -12,10 +12,14 @@ const SAMPLE_RATE: i32 = 48000;
 #[derive(Clone, Debug)]
 pub struct RingBuffer {
     buffer: Arc<Mutex<Bounded<[ceres_core::Sample; RING_BUFFER_SIZE]>>>,
+    volume: Arc<Mutex<f32>>,
 }
 
 impl RingBuffer {
-    pub fn new(buffer: Arc<Mutex<Bounded<[ceres_core::Sample; RING_BUFFER_SIZE]>>>) -> Self {
+    pub fn new(
+        buffer: Arc<Mutex<Bounded<[ceres_core::Sample; RING_BUFFER_SIZE]>>>,
+        volume: Arc<Mutex<f32>>,
+    ) -> Self {
         // FIll with silence
         if let Ok(mut buffer) = buffer.lock() {
             for _ in 0..buffer.max_len() {
@@ -23,15 +27,20 @@ impl RingBuffer {
             }
         }
 
-        Self { buffer }
+        Self { buffer, volume }
     }
 }
 
 impl ceres_core::AudioCallback for RingBuffer {
     fn audio_sample(&self, l: ceres_core::Sample, r: ceres_core::Sample) {
         if let Ok(mut buffer) = self.buffer.lock() {
-            buffer.push(l);
-            buffer.push(r);
+            if let Ok(volume) = self.volume.lock() {
+                let l = l * *volume;
+                let r = r * *volume;
+
+                buffer.push(l);
+                buffer.push(r);
+            }
         }
     }
 }
@@ -82,7 +91,7 @@ pub struct Stream {
 
 impl Stream {
     pub fn new(state: &State) -> Result<Self, Error> {
-        #[allow(clippy::large_stack_arrays)]
+        #[expect(clippy::large_stack_arrays)]
         let ring_buffer = Arc::new(Mutex::new(Bounded::from(
             [Default::default(); RING_BUFFER_SIZE],
         )));
@@ -110,10 +119,13 @@ impl Stream {
             .build_output_stream(state.config(), data_callback, error_callback, None)
             .map_err(|_err| Error::CouldntBuildStream)?;
 
+        let volume = Arc::new(Mutex::new(1.0));
+        let buffer_volume = Arc::clone(&volume);
+
         let mut res = Self {
             stream,
-            ring_buffer: RingBuffer::new(ring_buffer),
-            volume: Arc::new(Mutex::new(1.0)),
+            ring_buffer: RingBuffer::new(ring_buffer, buffer_volume),
+            volume,
         };
 
         res.pause()?;

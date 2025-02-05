@@ -216,6 +216,10 @@ impl GbContext {
     pub fn gb_clone(&self) -> Arc<Mutex<Gb<audio::RingBuffer>>> {
         Arc::clone(&self.gb)
     }
+
+    pub fn volume(&self) -> &Arc<Mutex<f32>> {
+        self.audio_stream.volume()
+    }
 }
 
 impl Drop for GbContext {

@@ -113,6 +113,7 @@ pub struct Cart {
 }
 
 impl Default for Cart {
+    #[expect(clippy::unwrap_used)]
     fn default() -> Self {
         let rom_size = ROMSize::new(0).unwrap();
         let ram_size = RAMSize::new(0).unwrap();
@@ -283,7 +284,7 @@ impl Cart {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[expect(clippy::too_many_lines)]
     #[inline]
     pub(crate) fn write_rom(&mut self, addr: u16, val: u8) {
         match &mut self.mbc {
@@ -577,6 +578,7 @@ struct Mbc3RTC {
 
 impl Mbc3RTC {
     #[inline]
+    #[expect(clippy::unwrap_used)]
     fn map_reg(&mut self, val: u8) {
         self.mapped = Some(NonZeroU8::new(val).unwrap());
     }
