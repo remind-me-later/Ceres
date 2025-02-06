@@ -120,7 +120,7 @@ fn write_core_block<C: AudioCallback>(gb: &Gb<C>, iter: &mut IterMut<u8>) {
         }
 
         // IME
-        *iter.next().unwrap() = gb.ints.enabled() as u8;
+        *iter.next().unwrap() = gb.ints.are_enabled() as u8;
 
         // IE
         *iter.next().unwrap() = gb.ints.read_ie();

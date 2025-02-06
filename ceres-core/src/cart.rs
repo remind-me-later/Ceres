@@ -265,7 +265,7 @@ impl Cart {
     #[inline]
     pub(crate) fn read_ram(&self, addr: u16) -> u8 {
         const fn mbc_read_ram(cart: &Cart, ram_enabled: bool, addr: u16) -> u8 {
-            if cart.ram_size.is_any() && ram_enabled {
+            if cart.ram_size.has_ram() && ram_enabled {
                 let addr = cart.ram_addr(addr);
                 cart.ram[addr as usize]
             } else {
@@ -426,7 +426,7 @@ impl Cart {
     #[inline]
     pub(crate) fn write_ram(&mut self, addr: u16, val: u8) {
         fn mbc_write_ram(cart: &mut Cart, ram_enabled: bool, addr: u16, val: u8) {
-            if cart.ram_size.is_any() && ram_enabled {
+            if cart.ram_size.has_ram() && ram_enabled {
                 let addr = cart.ram_addr(addr);
                 cart.ram[addr as usize] = val;
             }
@@ -532,7 +532,7 @@ impl RAMSize {
 
     #[must_use]
     #[inline]
-    const fn is_any(self) -> bool {
+    const fn has_ram(self) -> bool {
         !matches!(self, Self::NoRAM)
     }
 

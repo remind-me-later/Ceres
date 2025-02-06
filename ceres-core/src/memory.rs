@@ -112,13 +112,13 @@ impl<A: AudioCallback> Gb<A> {
 
     #[must_use]
     #[inline]
-    const fn dma_active(&self) -> bool {
+    const fn is_dma_active(&self) -> bool {
         self.dma_on && (self.dma_cycles > 0 || self.dma_restarting)
     }
 
     #[must_use]
     #[inline]
-    const fn hdma_on(&self) -> bool {
+    const fn is_hdma_on(&self) -> bool {
         !matches!(self.hdma_state, HdmaState::Sleep)
     }
 
@@ -168,7 +168,7 @@ impl<A: AudioCallback> Gb<A> {
             0xA000..=0xBFFF => self.cart.write_ram(addr, val),
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.write_wram_lo(addr, val),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.write_wram_hi(addr, val),
-            0xFE00..=0xFE9F => self.ppu.write_oam(addr, val, self.dma_active()),
+            0xFE00..=0xFE9F => self.ppu.write_oam(addr, val, self.is_dma_active()),
             0xFEA0..=0xFEFF => (),
             0xFF00..=0xFFFF => self.write_high((addr & 0xFF) as u8, val),
         }
@@ -379,7 +379,7 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     const fn read_hdma5(&self) -> u8 {
         // active on low
-        (!self.hdma_on() as u8) << 7 | self.hdma5
+        (!self.is_hdma_on() as u8) << 7 | self.hdma5
     }
 
     #[inline]
@@ -389,7 +389,7 @@ impl<A: AudioCallback> Gb<A> {
         debug_assert!(!matches!(self.hdma_state, HdmaState::General));
 
         // stop current transfer
-        if self.hdma_on() && val & 0x80 == 0 {
+        if self.is_hdma_on() && val & 0x80 == 0 {
             self.hdma_state = Sleep;
             return;
         }
@@ -444,7 +444,7 @@ impl<A: AudioCallback> Gb<A> {
         // etc..). If the PPU reads VRAM during an HDMA transfer it
         // should be glitchy anyways
         // FIXME: timings
-        if self.key1.enabled() {
+        if self.key1.is_enabled() {
             self.advance_t_cycles(i32::from(len) * 2 * 2);
         } else {
             self.advance_t_cycles(i32::from(len) * 2);
@@ -496,19 +496,19 @@ impl Key1 {
 
     #[must_use]
     #[inline]
-    pub const fn enabled(&self) -> bool {
+    pub const fn is_enabled(&self) -> bool {
         self.key1 & 0x80 != 0
     }
 
     #[must_use]
     #[inline]
-    pub const fn requested(&self) -> bool {
+    pub const fn is_requested(&self) -> bool {
         self.key1 & 1 != 0
     }
 
     #[inline]
     pub fn change_speed(&mut self) {
-        debug_assert!(self.requested());
+        debug_assert!(self.is_requested());
         self.key1 = !self.key1;
     }
 }

@@ -91,10 +91,10 @@ impl<C: AudioCallback> Apu<C> {
 
             for i in 0..4 {
                 let out = match i {
-                    0 => apu.ch1.output() * u8::from(apu.ch1.true_enabled()),
-                    1 => apu.ch2.output() * u8::from(apu.ch2.true_enabled()),
-                    2 => apu.ch3.output() * u8::from(apu.ch3.true_enabled()),
-                    3 => apu.ch4.output() * u8::from(apu.ch4.true_enabled()),
+                    0 => apu.ch1.output() * u8::from(apu.ch1.is_truly_enabled()),
+                    1 => apu.ch2.output() * u8::from(apu.ch2.is_truly_enabled()),
+                    2 => apu.ch3.output() * u8::from(apu.ch3.is_truly_enabled()),
+                    3 => apu.ch4.output() * u8::from(apu.ch4.is_truly_enabled()),
                     _ => break,
                 };
 
@@ -142,7 +142,7 @@ impl<C: AudioCallback> Apu<C> {
         let mut outl = 0.0;
         let mut outr = 0.0;
 
-        if self.ch1.enabled() || self.ch2.enabled() || self.ch3.enabled() || self.ch4.enabled() {
+        if self.ch1.is_enabled() || self.ch2.is_enabled() || self.ch3.is_enabled() || self.ch4.is_enabled() {
             outl = l - self.capacitor_l;
             outr = r - self.capacitor_r;
 
@@ -220,10 +220,10 @@ impl<C: AudioCallback> Apu<C> {
 
         (self.enabled as u8) << 7
             | 0x70
-            | (self.ch4.enabled() as u8) << 3
-            | (self.ch3.enabled() as u8) << 2
-            | (self.ch2.enabled() as u8) << 1
-            | (self.ch1.enabled() as u8)
+            | (self.ch4.is_enabled() as u8) << 3
+            | (self.ch3.is_enabled() as u8) << 2
+            | (self.ch2.is_enabled() as u8) << 1
+            | (self.ch1.is_enabled() as u8)
     }
 
     pub fn write_nr50(&mut self, val: u8) {

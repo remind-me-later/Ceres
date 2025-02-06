@@ -27,7 +27,7 @@ impl Joypad {
         self.p1_btn |= b;
 
         if b & 0x0F != 0 && self.p1_dirs || b & 0xF0 != 0 && self.p1_acts {
-            ints.req_p1();
+            ints.request_p1();
         }
     }
 

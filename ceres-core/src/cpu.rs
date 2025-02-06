@@ -28,10 +28,10 @@ impl<A: AudioCallback> Gb<A> {
             self.exec(op);
         }
 
-        if self.ints.any() {
+        if self.ints.is_any_requested() {
             self.cpu_halted = false;
 
-            if self.ints.enabled() {
+            if self.ints.are_enabled() {
                 self.tick_m_cycle();
                 self.tick_m_cycle();
 
@@ -640,7 +640,7 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     fn jp_cc(&mut self, op: u8) {
-        if self.br_cc(op) {
+        if self.satisfies_branch_condition(op) {
             self.do_jump_to_immediate();
         } else {
             let pc = self.pc.wrapping_add(2);
@@ -670,7 +670,7 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     fn jr_cc(&mut self, op: u8) {
-        if self.br_cc(op) {
+        if self.satisfies_branch_condition(op) {
             self.do_jump_relative();
         } else {
             self.pc = self.pc.wrapping_add(1);
@@ -692,7 +692,7 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     fn call_cc_a16(&mut self, op: u8) {
-        if self.br_cc(op) {
+        if self.satisfies_branch_condition(op) {
             self.do_call();
         } else {
             let pc = self.pc.wrapping_add(2);
@@ -718,14 +718,14 @@ impl<A: AudioCallback> Gb<A> {
     fn ret_cc(&mut self, op: u8) {
         self.tick_m_cycle();
 
-        if self.br_cc(op) {
+        if self.satisfies_branch_condition(op) {
             self.ret();
         }
     }
 
     #[must_use]
     #[inline]
-    const fn br_cc(&self, op: u8) -> bool {
+    const fn satisfies_branch_condition(&self, op: u8) -> bool {
         match (op >> 3) & 3 {
             0 => self.af & ZF == 0,
             1 => self.af & ZF != 0,
@@ -743,9 +743,9 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     fn halt(&mut self) {
-        if !self.ints.any() {
+        if !self.ints.is_any_requested() {
             self.cpu_halted = true;
-        } else if self.ints.enabled() {
+        } else if self.ints.are_enabled() {
             self.cpu_halted = false;
             self.pc = self.pc.wrapping_sub(1);
         } else {
@@ -758,7 +758,7 @@ impl<A: AudioCallback> Gb<A> {
     fn stop(&mut self) {
         let _discard_byte = self.imm8();
 
-        if self.key1.requested() {
+        if self.key1.is_requested() {
             self.key1.change_speed();
             self.write_div();
 

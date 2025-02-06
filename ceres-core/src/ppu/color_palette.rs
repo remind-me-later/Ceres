@@ -46,7 +46,7 @@ impl ColorPalette {
 
     #[must_use]
     #[inline]
-    const fn increment(&self) -> bool {
+    const fn is_increment_enabled(&self) -> bool {
         self.spec & 0x80 != 0
     }
 
@@ -84,7 +84,7 @@ impl ColorPalette {
             self.col[i + 2] = (val & 0x7C) >> 2;
         }
 
-        if self.increment() {
+        if self.is_increment_enabled() {
             self.spec = (self.spec & 0x80) | (self.index() + 1) & 0x3F;
         }
     }

@@ -420,7 +420,7 @@ impl Ppu {
         if self.ly == self.lyc {
             self.stat |= STAT_LYC_B;
             if self.stat & STAT_IF_LYC_B != 0 {
-                ints.req_lcd();
+                ints.request_lcd();
             }
         }
     }
@@ -448,16 +448,16 @@ impl Ppu {
         match mode {
             Mode::OamScan => {
                 if self.stat & STAT_IF_OAM_B != 0 {
-                    ints.req_lcd();
+                    ints.request_lcd();
                 }
 
                 self.win_in_ly = false;
             }
             Mode::VBlank => {
-                ints.req_vblank();
+                ints.request_vblank();
 
                 if self.stat & STAT_IF_VBLANK_B != 0 {
-                    ints.req_lcd();
+                    ints.request_lcd();
                 }
 
                 // TODO: why?
@@ -473,7 +473,7 @@ impl Ppu {
             Mode::Drawing => (),
             Mode::HBlank => {
                 if self.stat & STAT_IF_HBLANK_B != 0 {
-                    ints.req_lcd();
+                    ints.request_lcd();
                 }
             }
         }

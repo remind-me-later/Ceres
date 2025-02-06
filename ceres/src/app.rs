@@ -128,7 +128,8 @@ impl eframe::App for App {
                         .custom_formatter(
                             // percentage
                             |value, _| format!("{:.0}%", value * 100.0),
-                        );
+                        )
+                        .trailing_fill(true);
 
                         ui.add(volume_slider);
                     });

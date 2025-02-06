@@ -22,7 +22,7 @@ impl Serial {
             self.count += 1;
             if self.count > 7 {
                 self.count = 0;
-                ints.req_serial();
+                ints.request_serial();
                 self.sc &= !START;
             }
 
