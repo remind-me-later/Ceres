@@ -1,5 +1,5 @@
 use ceres_audio as audio;
-use ceres_core::Cart;
+use ceres_core::{Cart, GbBuilder};
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
 use eframe::egui;
@@ -72,48 +72,11 @@ impl GbContext {
             drop(pause_thread);
         }
 
-        let (cart, ident) = if let Some(rom_path) = rom_path {
-            let rom = {
-                std::fs::read(rom_path)
-                    .map(Vec::into_boxed_slice)
-                    .context("no such file")?
-            };
-
-            #[expect(clippy::unwrap_used)]
-            let mut cart = Cart::new(rom).unwrap();
-
-            #[expect(clippy::unwrap_used)]
-            let ident = {
-                let mut ident = String::new();
-                cart.ascii_title().read_to_string(&mut ident).unwrap();
-                ident.push('-');
-                ident.push_str(cart.version().to_string().as_str());
-                ident.push('-');
-                ident.push_str(cart.header_checksum().to_string().as_str());
-                ident.push('-');
-                ident.push_str(cart.global_checksum().to_string().as_str());
-
-                ident
-            };
-
-            #[expect(clippy::unwrap_used)]
-            if let Ok(ram) =
-                std::fs::read(project_dirs.data_dir().join(&ident).with_extension("sav"))
-                    .map(Vec::into_boxed_slice)
-            {
-                cart.set_ram(ram).unwrap();
-            }
-
-            (cart, ident)
-        } else {
-            (Cart::default(), String::from("bootrom"))
-        };
-
-        let sample_rate = audio::Stream::sample_rate();
         let audio_stream = audio::Stream::new(audio_state)?;
         let ring_buffer = audio_stream.get_ring_buffer();
 
-        let gb = Arc::new(Mutex::new(Gb::new(model, sample_rate, cart, ring_buffer)));
+        let (gb, ident) = Self::create_new_gb(ring_buffer, model, rom_path, project_dirs)?;
+        let gb = Arc::new(Mutex::new(gb));
 
         let pause_thread = Arc::new(AtomicBool::new(false));
 
@@ -149,44 +112,68 @@ impl GbContext {
         project_dirs: &directories::ProjectDirs,
         rom_path: &Path,
     ) -> anyhow::Result<()> {
-        let rom = {
-            std::fs::read(rom_path)
-                .map(Vec::into_boxed_slice)
-                .context("no such file")?
-        };
-
-        #[expect(clippy::unwrap_used)]
-        let mut cart = Cart::new(rom).unwrap();
-
-        #[expect(clippy::unwrap_used)]
-        let ident = {
-            let mut ident = String::new();
-            cart.ascii_title().read_to_string(&mut ident).unwrap();
-            ident.push('-');
-            ident.push_str(cart.version().to_string().as_str());
-            ident.push('-');
-            ident.push_str(cart.header_checksum().to_string().as_str());
-            ident.push('-');
-            ident.push_str(cart.global_checksum().to_string().as_str());
-
-            ident
-        };
-
-        #[expect(clippy::unwrap_used)]
-        if let Ok(ram) = std::fs::read(project_dirs.data_dir().join(&ident).with_extension("sav"))
-            .map(Vec::into_boxed_slice)
-        {
-            cart.set_ram(ram).unwrap();
-        }
-
-        let sample_rate = audio::Stream::sample_rate();
         let ring_buffer = self.audio_stream.get_ring_buffer();
 
+        let (gb_new, ident) =
+            Self::create_new_gb(ring_buffer, self.model, Some(rom_path), project_dirs)?;
+
         if let Ok(mut gb) = self.gb.lock() {
-            *gb = Gb::new(self.model, sample_rate, cart, ring_buffer);
+            self.rom_ident = ident;
+            *gb = gb_new;
         }
 
         Ok(())
+    }
+
+    fn create_new_gb(
+        ring_buffer: audio::RingBuffer,
+        model: ceres_core::Model,
+        rom_path: Option<&Path>,
+        project_dirs: &directories::ProjectDirs,
+    ) -> anyhow::Result<(Gb<audio::RingBuffer>, String)> {
+        let sample_rate = audio::Stream::sample_rate();
+
+        let (gb_builder, ident) = if let Some(rom_path) = rom_path {
+            let rom = {
+                std::fs::read(rom_path)
+                    .map(Vec::into_boxed_slice)
+                    .context("no such file")?
+            };
+
+            #[expect(clippy::unwrap_used)]
+            let cart = Cart::new(rom).unwrap();
+
+            #[expect(clippy::unwrap_used)]
+            let ident = {
+                let mut ident = String::new();
+                cart.ascii_title().read_to_string(&mut ident).unwrap();
+                ident.push('-');
+                ident.push_str(cart.version().to_string().as_str());
+                ident.push('-');
+                ident.push_str(cart.header_checksum().to_string().as_str());
+                ident.push('-');
+                ident.push_str(cart.global_checksum().to_string().as_str());
+
+                ident
+            };
+
+            let mut gb_builder = GbBuilder::new(model, sample_rate, cart, ring_buffer);
+
+            if let Ok(ram) =
+                std::fs::read(project_dirs.data_dir().join(&ident).with_extension("sav"))
+            {
+                gb_builder.load_save_data(ram)?;
+            }
+
+            (gb_builder, ident)
+        } else {
+            (
+                GbBuilder::new(model, sample_rate, Cart::default(), ring_buffer),
+                String::from("bootrom"),
+            )
+        };
+
+        Ok((gb_builder.build(), ident))
     }
 
     #[expect(clippy::unwrap_used)]

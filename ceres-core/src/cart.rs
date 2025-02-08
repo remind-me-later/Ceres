@@ -58,8 +58,8 @@ pub enum Error {
     InvalidRamSize,
     NonAsciiTitleString,
     UnsupportedMBC(u8),
-    RomSizeDifferentThanActual,
-    RamSizeDifferentThanActual,
+    RomSizeDifferentThanActual { expected: u32, actual: u32 },
+    RamSizeDifferentThanActual { expected: u32, actual: u32 },
 }
 
 impl Display for Error {
@@ -77,13 +77,19 @@ impl Display for Error {
          characters"
             ),
             Self::UnsupportedMBC(byte) => write!(f, "unsupported MBC: {byte:#0x}"),
-            Self::RomSizeDifferentThanActual => write!(
+            Self::RomSizeDifferentThanActual{
+                expected,
+                actual
+            } => write!(
                 f,
-                "header ROM size is different from the size of the supplied file"
+                "header ROM size is different from the size of the supplied file: expected {expected} bytes, got {actual} bytes"
             ),
-            Self::RamSizeDifferentThanActual => write!(
+            Self::RamSizeDifferentThanActual {
+                expected,
+                actual
+            } => write!(
                 f,
-                "header RAM size is different from the size of the supplied file"
+                "header RAM size is different from the size of the supplied file: expected {expected} bytes, got {actual} bytes"
             ),
         }
     }
@@ -146,7 +152,10 @@ impl Cart {
         let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], rom_size)?;
 
         if rom_size.size_bytes() as usize != rom.len() {
-            return Err(Error::RomSizeDifferentThanActual);
+            return Err(Error::RomSizeDifferentThanActual {
+                expected: rom_size.size_bytes(),
+                actual: rom.len() as u32,
+            });
         }
 
         let ram = alloc::vec![0xFF; ram_size.size_bytes() as usize].into_boxed_slice();
@@ -168,10 +177,12 @@ impl Cart {
     }
 
     pub fn set_ram(&mut self, ram: Box<[u8]>) -> Result<(), Error> {
-        let ram_size = RAMSize::new(self.rom[0x149])?;
-
-        if ram_size.size_bytes() as usize != ram.len() {
-            return Err(Error::RamSizeDifferentThanActual);
+        if self.ram_size.size_bytes() as usize != ram.len() {
+            println!("ram size: {}", ram.len());
+            return Err(Error::RamSizeDifferentThanActual {
+                expected: self.ram_size.size_bytes(),
+                actual: ram.len() as u32,
+            });
         }
 
         self.ram = ram;
@@ -218,7 +229,7 @@ impl Cart {
 
     #[must_use]
     #[inline]
-    pub fn save_data(&self) -> Option<&[u8]> {
+    pub fn mbc_ram(&self) -> Option<&[u8]> {
         self.has_battery.then_some(&*self.ram)
     }
 

@@ -5,73 +5,60 @@ use crate::{
     ppu::{OAM_SIZE, VRAM_SIZE_CGB, VRAM_SIZE_GB},
     AudioCallback, Cart, CgbMode, Gb,
 };
-use core::slice::IterMut;
+use std::io::{Result, Write};
 
-fn write_footer(iter: &mut IterMut<u8>, offset_to_first_block: u32) {
+fn write_footer<W: Write>(writer: &mut W, offset_to_first_block: u32) -> Result<()> {
     const LITERAL: &str = "BESS";
 
-    for byte in offset_to_first_block.to_le_bytes() {
-        *iter.next().unwrap() = byte;
-    }
-
-    for byte in LITERAL.as_bytes() {
-        *iter.next().unwrap() = *byte;
-    }
+    writer.write_all(&offset_to_first_block.to_le_bytes())?;
+    writer.write_all(LITERAL.as_bytes())?;
+    Ok(())
 }
 
-fn write_block_header(iter: &mut IterMut<u8>, name: &str, size: u32) {
-    for byte in name.as_bytes() {
-        *iter.next().unwrap() = *byte;
-    }
-
-    for byte in size.to_le_bytes() {
-        *iter.next().unwrap() = byte;
-    }
+fn write_block_header<W: Write>(writer: &mut W, name: &str, size: u32) -> Result<()> {
+    writer.write_all(name.as_bytes())?;
+    writer.write_all(&size.to_le_bytes())?;
+    Ok(())
 }
 
-fn write_name_block(iter: &mut IterMut<u8>) {
+fn write_name_block<W: Write>(writer: &mut W) -> Result<()> {
     const EMULATOR_NAME: &str = "Ceres, 0.1.0";
 
-    write_block_header(iter, "NAME", EMULATOR_NAME.len() as u32);
-    for byte in EMULATOR_NAME.as_bytes() {
-        *iter.next().unwrap() = *byte;
-    }
+    write_block_header(writer, "NAME", EMULATOR_NAME.len() as u32)?;
+    writer.write_all(EMULATOR_NAME.as_bytes())?;
+    Ok(())
 }
 
-fn write_info_block(iter: &mut IterMut<u8>, cart: &Cart) {
+fn write_info_block<W: Write>(writer: &mut W, cart: &Cart) -> Result<()> {
     const INFO_BLOCK_SIZE: u32 = 0x12;
 
-    write_block_header(iter, "INFO", INFO_BLOCK_SIZE);
+    write_block_header(writer, "INFO", INFO_BLOCK_SIZE)?;
 
     // pad title to 0x10 bytes
     let mut title = [0; 0x10];
-    let title_len = cart.ascii_title().len();
-    title[0..title_len].copy_from_slice(cart.ascii_title());
+    let title_bytes = cart.ascii_title();
+    let title_len = title_bytes.len();
+    title[0..title_len].copy_from_slice(title_bytes);
 
-    for byte in title.iter() {
-        *iter.next().unwrap() = *byte;
-    }
-
-    for byte in cart.global_checksum().to_le_bytes() {
-        *iter.next().unwrap() = byte;
-    }
+    writer.write_all(&title)?;
+    writer.write_all(&cart.global_checksum().to_le_bytes())?;
+    Ok(())
 }
 
-fn write_core_block<C: AudioCallback>(gb: &Gb<C>, iter: &mut IterMut<u8>) {
-    write_block_header(iter, "CORE", 0xD0);
+fn write_core_block<C: AudioCallback, W: Write>(
+    gb: &Gb<C>,
+    sizes: Sizes,
+    writer: &mut W,
+) -> Result<()> {
+    write_block_header(writer, "CORE", 0xD0)?;
 
     // BESS Version
     {
         const MAJOR_VERSION: u16 = 1;
         const MINOR_VERSION: u16 = 1;
 
-        for byte in MAJOR_VERSION.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
-
-        for byte in MINOR_VERSION.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
+        writer.write_all(&MAJOR_VERSION.to_le_bytes())?;
+        writer.write_all(&MINOR_VERSION.to_le_bytes())?;
     }
 
     // Model
@@ -82,154 +69,167 @@ fn write_core_block<C: AudioCallback>(gb: &Gb<C>, iter: &mut IterMut<u8>) {
             crate::Model::Cgb => "CC  ",
         };
 
-        for byte in model.as_bytes() {
-            *iter.next().unwrap() = *byte;
-        }
+        writer.write_all(model.as_bytes())?;
     }
 
     // CPU Registers
     {
         // PC
-        for byte in gb.pc.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
+        writer.write_all(&gb.pc.to_le_bytes())?;
 
         // AF
-        for byte in gb.af.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
+        writer.write_all(&gb.af.to_le_bytes())?;
 
         // BC
-        for byte in gb.bc.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
+        writer.write_all(&gb.bc.to_le_bytes())?;
 
         // DE
-        for byte in gb.de.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
+        writer.write_all(&gb.de.to_le_bytes())?;
 
         // HL
-        for byte in gb.hl.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
+        writer.write_all(&gb.hl.to_le_bytes())?;
 
         // SP
-        for byte in gb.sp.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
+        writer.write_all(&gb.sp.to_le_bytes())?;
 
         // IME
-        *iter.next().unwrap() = gb.ints.are_enabled() as u8;
+        writer.write_all(&[gb.ints.are_enabled() as u8])?;
 
         // IE
-        *iter.next().unwrap() = gb.ints.read_ie();
+        writer.write_all(&[gb.ints.read_ie()])?;
 
-        // Excution state
-        // TODO: stopped
-        *iter.next().unwrap() = if gb.cpu_halted { 1 } else { 0 };
+        // Execution state (stopped TODO)
+        writer.write_all(&[if gb.cpu_halted { 1 } else { 0 }])?;
 
         // Reserved 0
-        *iter.next().unwrap() = 0;
+        writer.write_all(&[0])?;
 
         // Every memory mapped register
         for i in 0xFF00..0xFF80 {
-            *iter.next().unwrap() = gb.read_mem(i);
+            writer.write_all(&[gb.read_mem(i)])?;
         }
+    }
 
-        // Size of RAM, depends on CGB mode
-        let ram_size = match gb.cgb_mode {
-            CgbMode::Dmg | CgbMode::Compat => u32::from(crate::WRAM_SIZE_GB),
-            CgbMode::Cgb => u32::from(crate::WRAM_SIZE_CGB),
-        };
+    // Sizes
+    {
+        writer.write_all(&sizes.ram_size.to_le_bytes())?;
+        writer.write_all(&sizes.ram_offset().to_le_bytes())?;
+        writer.write_all(&sizes.vram_size.to_le_bytes())?;
+        writer.write_all(&sizes.vram_offset().to_le_bytes())?;
+        writer.write_all(&sizes.mbc_ram_size.to_le_bytes())?;
+        writer.write_all(&sizes.mbc_ram_offset().to_le_bytes())?;
+        writer.write_all(&sizes.oam_size.to_le_bytes())?;
+        writer.write_all(&sizes.oam_offset().to_le_bytes())?;
+        writer.write_all(&sizes.hram_size.to_le_bytes())?;
+        writer.write_all(&sizes.hram_offset().to_le_bytes())?;
+        writer.write_all(&sizes.bg_palette_size.to_le_bytes())?;
+        writer.write_all(&sizes.bg_palette_offset().to_le_bytes())?;
+    }
 
-        for byte in ram_size.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
+    Ok(())
+}
 
-        // Offset from file start to RAM, always 0
-        for byte in 0_u32.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
+fn write_end_block<W: Write>(writer: &mut W) -> Result<()> {
+    write_block_header(writer, "END ", 0)
+}
 
-        // Size of VRAM, depends only on CGB mode right now
-        let vram_size = match gb.cgb_mode {
-            CgbMode::Dmg | CgbMode::Compat => u32::from(VRAM_SIZE_GB),
-            CgbMode::Cgb => u32::from(VRAM_SIZE_CGB),
-        };
+struct Sizes {
+    ram_size: u32,
+    vram_size: u32,
+    mbc_ram_size: u32,
+    oam_size: u32,
+    hram_size: u32,
+    bg_palette_size: u32,
+}
 
-        for byte in vram_size.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
+impl Sizes {
+    fn total(&self) -> u32 {
+        self.ram_size
+            + self.vram_size
+            + self.mbc_ram_size
+            + self.oam_size
+            + self.hram_size
+            + self.bg_palette_size
+    }
 
-        // Offset to VRAM from file start, is stored right after RAM
-        let vram_offset = ram_size;
+    fn ram_offset(&self) -> u32 {
+        0
+    }
 
-        for byte in vram_offset.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
+    fn vram_offset(&self) -> u32 {
+        self.ram_size
+    }
 
-        // MBC RAM size
-        let mbc_ram_size = gb.cart.ram_size_bytes();
+    fn mbc_ram_offset(&self) -> u32 {
+        self.vram_offset() + self.vram_size
+    }
 
-        for byte in mbc_ram_size.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
+    fn oam_offset(&self) -> u32 {
+        self.mbc_ram_offset() + self.mbc_ram_size
+    }
 
-        // Offset to MBC RAM from file start, is stored right after VRAM
-        let mbc_ram_offset = vram_offset + vram_size;
+    fn hram_offset(&self) -> u32 {
+        self.oam_offset() + self.oam_size
+    }
 
-        for byte in mbc_ram_offset.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
-
-        // OAM Size, constant
-        let oam_size = u32::from(OAM_SIZE);
-
-        for byte in oam_size.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
-
-        // Offset to OAM from file start, is stored right after MBC RAM
-        let oam_offset = mbc_ram_offset + mbc_ram_size;
-
-        for byte in oam_offset.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
-
-        // HRAM Size, constant
-        let hram_size = u32::from(crate::HRAM_SIZE);
-
-        for byte in hram_size.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
-
-        // Offset to HRAM from file start, is stored right after OAM
-        let hram_offset = oam_offset + oam_size;
-
-        for byte in hram_offset.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
-
-        // Background Palette size, constant
-        let bg_palette_size = match gb.cgb_mode {
-            CgbMode::Dmg | CgbMode::Compat => 0_u32,
-            CgbMode::Cgb => 0x40_u32,
-        };
-
-        for byte in bg_palette_size.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
-
-        // Offset to Background Palette from file start, is stored right after HRAM
-        let bg_palette_offset = hram_offset + hram_size;
-
-        for byte in bg_palette_offset.to_le_bytes() {
-            *iter.next().unwrap() = byte;
-        }
+    fn bg_palette_offset(&self) -> u32 {
+        self.hram_offset() + self.hram_size
     }
 }
 
-fn write_end_block(iter: &mut IterMut<u8>) {
-    write_block_header(iter, "END ", 0);
+pub fn save_state<C: AudioCallback, W: std::io::Write>(
+    gb: &Gb<C>,
+    writer: &mut W,
+) -> std::io::Result<()> {
+    let sizes = Sizes {
+        ram_size: match gb.cgb_mode {
+            CgbMode::Dmg | CgbMode::Compat => u32::from(crate::WRAM_SIZE_GB),
+            CgbMode::Cgb => u32::from(crate::WRAM_SIZE_CGB),
+        },
+        vram_size: match gb.cgb_mode {
+            CgbMode::Dmg | CgbMode::Compat => u32::from(VRAM_SIZE_GB),
+            CgbMode::Cgb => u32::from(VRAM_SIZE_CGB),
+        },
+        mbc_ram_size: gb.cart.ram_size_bytes(),
+        oam_size: OAM_SIZE as u32,
+        hram_size: crate::HRAM_SIZE as u32,
+        bg_palette_size: match gb.cgb_mode {
+            CgbMode::Dmg | CgbMode::Compat => 0,
+            CgbMode::Cgb => 0x40,
+        },
+    };
+
+    // Write RAM
+    writer.write_all(&gb.wram[..sizes.ram_size as usize])?;
+
+    // Write VRAM
+    writer.write_all(&gb.ppu.vram()[..sizes.vram_size as usize])?;
+
+    // Write MBC RAM
+    if let Some(mbc_ram) = gb.cart.mbc_ram() {
+        writer.write_all(&mbc_ram[..sizes.mbc_ram_size as usize])?;
+    }
+
+    // Write OAM
+    writer.write_all(&gb.ppu.oam()[..sizes.oam_size as usize])?;
+
+    // Write HRAM
+    writer.write_all(&gb.hram)?;
+
+    // Write Background Palette
+    if let CgbMode::Cgb = gb.cgb_mode {
+        let (bcp, ocp) = gb.ppu.color_palette_buffers_bcp_ocp();
+        writer.write_all(bcp)?;
+        writer.write_all(ocp)?;
+    }
+
+    let offset_to_first_block = sizes.total();
+
+    write_name_block(writer)?;
+    write_info_block(writer, &gb.cart)?;
+    write_core_block(gb, sizes, writer)?;
+    write_end_block(writer)?;
+    write_footer(writer, offset_to_first_block)?;
+
+    Ok(())
 }

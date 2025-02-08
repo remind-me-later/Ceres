@@ -1,5 +1,7 @@
-#![no_std]
+// #![no_std]
+// TODO: Use borrowedBuf or something similar to avoid heap allocation (currently nightly only)
 
+use alloc::vec::Vec;
 use core::time::Duration;
 use interrupts::Interrupts;
 use joypad::Joypad;
@@ -34,6 +36,11 @@ pub const TC_SEC: i32 = 0x40_0000; // 2^22
 pub const HRAM_SIZE: u8 = 0x7F;
 pub const WRAM_SIZE_GB: u16 = 0x2000;
 pub const WRAM_SIZE_CGB: u16 = WRAM_SIZE_GB * 4;
+
+// Boot ROMs
+const DMG_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/dmg.bin");
+const MGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/mgb.bin");
+const CGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/cgb.bin");
 
 #[derive(Debug)]
 pub struct Gb<C: AudioCallback> {
@@ -94,11 +101,7 @@ pub struct Gb<C: AudioCallback> {
 
 impl<C: AudioCallback> Gb<C> {
     #[must_use]
-    pub fn new(model: Model, sample_rate: i32, cart: Cart, audio_callback: C) -> Self {
-        const DMG_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/dmg.bin");
-        const MGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/mgb.bin");
-        const CGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/cgb.bin");
-
+    fn new(model: Model, sample_rate: i32, cart: Cart, audio_callback: C) -> Self {
         let cgb_mode = match model {
             Model::Dmg | Model::Mgb => CgbMode::Dmg,
             Model::Cgb => CgbMode::Cgb,
@@ -166,12 +169,6 @@ impl<C: AudioCallback> Gb<C> {
 
     #[must_use]
     #[inline]
-    pub const fn cartridge(&self) -> &Cart {
-        &self.cart
-    }
-
-    #[must_use]
-    #[inline]
     pub const fn pixel_data_rgba(&self) -> &[u8] {
         self.ppu.pixel_data_rgba()
     }
@@ -191,6 +188,10 @@ impl<C: AudioCallback> Gb<C> {
     pub fn release(&mut self, button: Button) {
         self.joy.release(button);
     }
+
+    pub fn save_data<W: std::io::Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
+        bess::save_state(self, writer)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -205,4 +206,34 @@ enum CgbMode {
     Dmg,
     Compat,
     Cgb,
+}
+
+pub struct GbBuilder<C: AudioCallback> {
+    model: Model,
+    sample_rate: i32,
+    cart: Cart,
+    audio_callback: C,
+}
+
+impl<C: AudioCallback> GbBuilder<C> {
+    pub fn new(model: Model, sample_rate: i32, cart: Cart, audio_callback: C) -> Self {
+        Self {
+            model,
+            sample_rate,
+            cart,
+            audio_callback,
+        }
+    }
+
+    pub fn load_save_data(&mut self, mut save: Vec<u8>) -> Result<(), cart::Error> {
+        let size = self.cart.ram_size_bytes();
+
+        save.truncate(size as usize);
+
+        self.cart.set_ram(save.into_boxed_slice())
+    }
+
+    pub fn build(self) -> Gb<C> {
+        Gb::new(self.model, self.sample_rate, self.cart, self.audio_callback)
+    }
 }

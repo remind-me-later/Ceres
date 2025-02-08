@@ -2,7 +2,7 @@ use crate::{gb_context::GbContext, screen, Scaling};
 use ceres_audio as audio;
 use eframe::egui::{self, Key};
 use rfd::FileDialog;
-use std::{fs::File, io::Write};
+use std::fs::File;
 
 pub struct App {
     // Config parameters
@@ -45,7 +45,7 @@ impl App {
     fn save_data(&self) {
         let gb = self.gb_ctx.gb_lock();
         #[expect(clippy::expect_used)]
-        if let Some(save_data) = gb.cartridge().save_data() {
+        {
             std::fs::create_dir_all(self.project_dirs.data_dir())
                 .expect("couldn't create data directory");
             let sav_file = File::create(
@@ -56,9 +56,7 @@ impl App {
             );
             match sav_file {
                 Ok(mut f) => {
-                    if let Err(e) = f.write_all(save_data) {
-                        eprintln!("couldn't save data in save file: {e}");
-                    }
+                    gb.save_data(&mut f).expect("couldn't save data");
                 }
                 Err(e) => {
                     eprintln!("couldn't open save file: {e}");

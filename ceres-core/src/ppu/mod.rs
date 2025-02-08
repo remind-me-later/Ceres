@@ -366,6 +366,18 @@ impl Ppu {
     pub(crate) fn write_oam_by_dma(&mut self, addr: u16, val: u8) {
         self.oam[(addr & 0xFF) as usize] = val;
     }
+
+    pub(crate) fn vram(&self) -> &[u8] {
+        &self.vram
+    }
+
+    pub(crate) fn oam(&self) -> &[u8] {
+        &self.oam
+    }
+
+    pub(crate) fn color_palette_buffers_bcp_ocp(&self) -> (&[u8], &[u8]) {
+        (self.bcp.buffer(), self.ocp.buffer())
+    }
 }
 
 // General

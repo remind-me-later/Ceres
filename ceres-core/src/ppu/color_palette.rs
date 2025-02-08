@@ -13,14 +13,14 @@ const PAL_RAM_SIZE_COLORS: u8 = PAL_RAM_SIZE * 3;
 #[derive(Debug)]
 pub struct ColorPalette {
     // Rgb color ram
-    col: [u8; PAL_RAM_SIZE_COLORS as usize],
+    buffer: [u8; PAL_RAM_SIZE_COLORS as usize],
     spec: u8,
 }
 
 impl Default for ColorPalette {
     fn default() -> Self {
         Self {
-            col: [0; PAL_RAM_SIZE_COLORS as usize],
+            buffer: [0; PAL_RAM_SIZE_COLORS as usize],
             spec: 0,
         }
     }
@@ -56,13 +56,13 @@ impl ColorPalette {
 
         if self.index() & 1 == 0 {
             // red and green
-            let r = self.col[i];
-            let g = self.col[i + 1] << 5;
+            let r = self.buffer[i];
+            let g = self.buffer[i + 1] << 5;
             r | g
         } else {
             // green and blue
-            let g = self.col[i + 1] >> 3;
-            let b = self.col[i + 2] << 2;
+            let g = self.buffer[i + 1] >> 3;
+            let b = self.buffer[i + 2] << 2;
             g | b
         }
     }
@@ -72,16 +72,16 @@ impl ColorPalette {
 
         if self.index() & 1 == 0 {
             // red
-            self.col[i] = val & 0x1F;
+            self.buffer[i] = val & 0x1F;
             // green
-            let tmp = (self.col[i + 1] & 3) << 3;
-            self.col[i + 1] = tmp | (val & 0xE0) >> 5;
+            let tmp = (self.buffer[i + 1] & 3) << 3;
+            self.buffer[i + 1] = tmp | (val & 0xE0) >> 5;
         } else {
             // green
-            let tmp = self.col[i + 1] & 7;
-            self.col[i + 1] = tmp | (val & 3) << 3;
+            let tmp = self.buffer[i + 1] & 7;
+            self.buffer[i + 1] = tmp | (val & 3) << 3;
             // blue
-            self.col[i + 2] = (val & 0x7C) >> 2;
+            self.buffer[i + 2] = (val & 0x7C) >> 2;
         }
 
         if self.is_increment_enabled() {
@@ -96,10 +96,15 @@ impl ColorPalette {
         }
 
         let i = (palette as usize * 4 + color as usize) * 3;
-        let r = self.col[i];
-        let g = self.col[i + 1];
-        let b = self.col[i + 2];
+        let r = self.buffer[i];
+        let g = self.buffer[i + 1];
+        let b = self.buffer[i + 2];
 
         (scale_channel(r), scale_channel(g), scale_channel(b))
+    }
+
+    #[must_use]
+    pub(super) fn buffer(&self) -> &[u8] {
+        &self.buffer
     }
 }
