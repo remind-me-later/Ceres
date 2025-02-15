@@ -162,6 +162,28 @@ impl eframe::App for App {
                     if ui.add(scale3x_button).clicked() {
                         *self.screen.mut_scaling() = Scaling::Scale3x;
                     }
+
+                    ui.separator();
+
+                    ui.add(egui::Label::new("Pixel mode"));
+
+                    let pixel_perfect_button = egui::SelectableLabel::new(
+                        self.screen.pixel_mode() == screen::PixelMode::PixelPerfect,
+                        "Pixel perfect",
+                    );
+
+                    if ui.add(pixel_perfect_button).clicked() {
+                        *self.screen.mut_pixel_mode() = screen::PixelMode::PixelPerfect;
+                    }
+
+                    let fit_window_button = egui::SelectableLabel::new(
+                        self.screen.pixel_mode() == screen::PixelMode::FitWindow,
+                        "Fit window",
+                    );
+
+                    if ui.add(fit_window_button).clicked() {
+                        *self.screen.mut_pixel_mode() = screen::PixelMode::FitWindow;
+                    }
                 });
             });
         });

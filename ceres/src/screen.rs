@@ -7,6 +7,13 @@ use eframe::egui;
 use eframe::wgpu;
 use eframe::wgpu::util::DeviceExt;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PixelMode {
+    PixelPerfect,
+    #[default]
+    FitWindow,
+}
+
 pub struct Resources {
     render_pipeline: wgpu::RenderPipeline,
 
@@ -23,6 +30,7 @@ pub struct Resources {
 pub struct GBScreen<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
     gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
     scaling: Scaling,
+    pixel_mode: PixelMode,
     size: (f32, f32),
 }
 
@@ -190,6 +198,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
             gb,
             scaling,
             size: (0.0, 0.0),
+            pixel_mode: PixelMode::default(),
         }
     }
 
@@ -203,6 +212,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
                 gb: Arc::clone(&self.gb),
                 scaling: self.scaling,
                 size: (response.rect.width(), response.rect.height()),
+                pixel_mode: self.pixel_mode,
             },
         ));
     }
@@ -213,6 +223,14 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
 
     pub fn mut_scaling(&mut self) -> &mut Scaling {
         &mut self.scaling
+    }
+
+    pub fn pixel_mode(&self) -> PixelMode {
+        self.pixel_mode
+    }
+
+    pub fn mut_pixel_mode(&mut self) -> &mut PixelMode {
+        &mut self.pixel_mode
     }
 }
 
@@ -258,12 +276,17 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
                 clippy::cast_possible_truncation,
                 clippy::cast_sign_loss
             )]
-            let (x, y) = {
+            let (x, y) = if matches!(self.pixel_mode, PixelMode::PixelPerfect) {
                 let mul = (width / PX_WIDTH as f32)
                     .min(height / PX_HEIGHT as f32)
                     .floor() as u32;
                 let x = (PX_WIDTH * mul) as f32 / width;
                 let y = (PX_HEIGHT * mul) as f32 / height;
+                (x, y)
+            } else {
+                let mul = (width / PX_WIDTH as f32).min(height / PX_HEIGHT as f32);
+                let x = (PX_WIDTH as f32 * mul) / width;
+                let y = (PX_HEIGHT as f32 * mul) / height;
                 (x, y)
             };
 
