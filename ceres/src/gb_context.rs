@@ -4,6 +4,7 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
 use eframe::egui;
 use std::{
+    fs::File,
     io::Read,
     sync::{Mutex, MutexGuard},
     time::Duration,
@@ -133,7 +134,7 @@ impl GbContext {
     ) -> anyhow::Result<(Gb<audio::RingBuffer>, String)> {
         let sample_rate = audio::Stream::sample_rate();
 
-        let (gb_builder, ident) = if let Some(rom_path) = rom_path {
+        if let Some(rom_path) = rom_path {
             let rom = {
                 std::fs::read(rom_path)
                     .map(Vec::into_boxed_slice)
@@ -157,23 +158,21 @@ impl GbContext {
                 ident
             };
 
-            let mut gb_builder = GbBuilder::new(model, sample_rate, cart, ring_buffer);
+            let gb_builder = GbBuilder::new(model, sample_rate, cart, ring_buffer);
 
-            if let Ok(ram) =
-                std::fs::read(project_dirs.data_dir().join(&ident).with_extension("sav"))
-            {
-                gb_builder.load_save_data(ram)?;
+            let save_file = project_dirs.data_dir().join(&ident).with_extension("sav");
+            if let Ok(mut save_data) = File::open(&save_file) {
+                let gb = gb_builder.load_save_data(&mut save_data)?.build();
+                Ok((gb, ident))
+            } else {
+                Ok((gb_builder.build(), ident))
             }
-
-            (gb_builder, ident)
         } else {
-            (
-                GbBuilder::new(model, sample_rate, Cart::default(), ring_buffer),
+            Ok((
+                GbBuilder::new(model, sample_rate, Cart::default(), ring_buffer).build(),
                 String::from("bootrom"),
-            )
-        };
-
-        Ok((gb_builder.build(), ident))
+            ))
+        }
     }
 
     #[expect(clippy::unwrap_used)]

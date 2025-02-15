@@ -367,16 +367,25 @@ impl Ppu {
         self.oam[(addr & 0xFF) as usize] = val;
     }
 
+    // Getters and setters
+    #[must_use]
     pub(crate) fn vram(&self) -> &[u8] {
         &self.vram
     }
 
+    #[must_use]
+    pub(crate) fn vram_mut(&mut self) -> &mut [u8] {
+        &mut self.vram
+    }
+
+    #[must_use]
     pub(crate) fn oam(&self) -> &[u8] {
         &self.oam
     }
 
-    pub(crate) fn color_palette_buffers_bcp_ocp(&self) -> (&[u8], &[u8]) {
-        (self.bcp.buffer(), self.ocp.buffer())
+    #[must_use]
+    pub(crate) fn oam_mut(&mut self) -> &mut [u8] {
+        &mut self.oam
     }
 }
 

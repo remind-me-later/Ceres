@@ -102,9 +102,4 @@ impl ColorPalette {
 
         (scale_channel(r), scale_channel(g), scale_channel(b))
     }
-
-    #[must_use]
-    pub(super) fn buffer(&self) -> &[u8] {
-        &self.buffer
-    }
 }

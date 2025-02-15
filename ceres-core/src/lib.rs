@@ -1,7 +1,6 @@
 // #![no_std]
 // TODO: Use borrowedBuf or something similar to avoid heap allocation (currently nightly only)
 
-use alloc::vec::Vec;
 use core::time::Duration;
 use interrupts::Interrupts;
 use joypad::Joypad;
@@ -189,7 +188,10 @@ impl<C: AudioCallback> Gb<C> {
         self.joy.release(button);
     }
 
-    pub fn save_data<W: std::io::Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
+    pub fn save_data<W: std::io::Write + std::io::Seek>(
+        &self,
+        writer: &mut W,
+    ) -> Result<(), std::io::Error> {
         bess::save_state(self, writer)
     }
 }
@@ -209,31 +211,25 @@ enum CgbMode {
 }
 
 pub struct GbBuilder<C: AudioCallback> {
-    model: Model,
-    sample_rate: i32,
-    cart: Cart,
-    audio_callback: C,
+    gb: Gb<C>,
 }
 
 impl<C: AudioCallback> GbBuilder<C> {
     pub fn new(model: Model, sample_rate: i32, cart: Cart, audio_callback: C) -> Self {
         Self {
-            model,
-            sample_rate,
-            cart,
-            audio_callback,
+            gb: Gb::new(model, sample_rate, cart, audio_callback),
         }
     }
 
-    pub fn load_save_data(&mut self, mut save: Vec<u8>) -> Result<(), cart::Error> {
-        let size = self.cart.ram_size_bytes();
-
-        save.truncate(size as usize);
-
-        self.cart.set_ram(save.into_boxed_slice())
+    pub fn load_save_data<R: std::io::Read + std::io::Seek>(
+        mut self,
+        reader: &mut R,
+    ) -> Result<Self, std::io::Error> {
+        bess::load_state(&mut self.gb, reader)?;
+        Ok(self)
     }
 
     pub fn build(self) -> Gb<C> {
-        Gb::new(self.model, self.sample_rate, self.cart, self.audio_callback)
+        self.gb
     }
 }

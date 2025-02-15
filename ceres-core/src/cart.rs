@@ -234,6 +234,11 @@ impl Cart {
     }
 
     #[must_use]
+    pub(crate) fn mbc_ram_mut(&mut self) -> Option<&mut [u8]> {
+        self.has_battery.then_some(&mut *self.ram)
+    }
+
+    #[must_use]
     #[inline]
     pub const fn clock(&self) -> Option<&[u8]> {
         if let Mbc3 { rtc: Some(rtc) } = &self.mbc {
