@@ -41,9 +41,9 @@ const STAT_IF_OAM_B: u8 = 0x20;
 const STAT_IF_LYC_B: u8 = 0x40;
 
 // Sizes
-const OAM_SIZE: u16 = 0x100;
-const VRAM_SIZE_GB: u16 = 0x2000;
-const VRAM_SIZE_CGB: u16 = VRAM_SIZE_GB * 2;
+pub const OAM_SIZE: u16 = 0xA0;
+pub const VRAM_SIZE_GB: u16 = 0x2000;
+pub const VRAM_SIZE_CGB: u16 = VRAM_SIZE_GB * 2;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub enum Mode {
@@ -98,7 +98,7 @@ pub struct Ppu {
 }
 
 impl Default for Ppu {
-    #[allow(clippy::large_stack_frames)]
+    #[expect(clippy::large_stack_frames)]
     fn default() -> Self {
         Self {
             vram: [0; VRAM_SIZE_CGB as usize],
@@ -366,6 +366,27 @@ impl Ppu {
     pub(crate) fn write_oam_by_dma(&mut self, addr: u16, val: u8) {
         self.oam[(addr & 0xFF) as usize] = val;
     }
+
+    // Getters and setters
+    #[must_use]
+    pub(crate) fn vram(&self) -> &[u8] {
+        &self.vram
+    }
+
+    #[must_use]
+    pub(crate) fn vram_mut(&mut self) -> &mut [u8] {
+        &mut self.vram
+    }
+
+    #[must_use]
+    pub(crate) fn oam(&self) -> &[u8] {
+        &self.oam
+    }
+
+    #[must_use]
+    pub(crate) fn oam_mut(&mut self) -> &mut [u8] {
+        &mut self.oam
+    }
 }
 
 // General
@@ -420,7 +441,7 @@ impl Ppu {
         if self.ly == self.lyc {
             self.stat |= STAT_LYC_B;
             if self.stat & STAT_IF_LYC_B != 0 {
-                ints.req_lcd();
+                ints.request_lcd();
             }
         }
     }
@@ -448,16 +469,16 @@ impl Ppu {
         match mode {
             Mode::OamScan => {
                 if self.stat & STAT_IF_OAM_B != 0 {
-                    ints.req_lcd();
+                    ints.request_lcd();
                 }
 
                 self.win_in_ly = false;
             }
             Mode::VBlank => {
-                ints.req_vblank();
+                ints.request_vblank();
 
                 if self.stat & STAT_IF_VBLANK_B != 0 {
-                    ints.req_lcd();
+                    ints.request_lcd();
                 }
 
                 // TODO: why?
@@ -473,7 +494,7 @@ impl Ppu {
             Mode::Drawing => (),
             Mode::HBlank => {
                 if self.stat & STAT_IF_HBLANK_B != 0 {
-                    ints.req_lcd();
+                    ints.request_lcd();
                 }
             }
         }

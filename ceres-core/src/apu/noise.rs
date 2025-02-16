@@ -124,7 +124,7 @@ impl Noise {
     }
 
     pub(super) fn step_sample(&mut self, cycles: i32) {
-        if !self.true_enabled() {
+        if !self.is_truly_enabled() {
             return;
         }
 
@@ -144,7 +144,7 @@ impl Noise {
         }
     }
 
-    pub(super) const fn true_enabled(&self) -> bool {
+    pub(super) const fn is_truly_enabled(&self) -> bool {
         self.enabled && self.dac_enabled
     }
 
@@ -161,7 +161,7 @@ impl Noise {
         self.length_timer.set_phalf(p_half);
     }
 
-    pub(super) const fn enabled(&self) -> bool {
+    pub(super) const fn is_enabled(&self) -> bool {
         self.enabled
     }
 }

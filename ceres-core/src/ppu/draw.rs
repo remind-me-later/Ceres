@@ -49,7 +49,7 @@ impl Ppu {
 
     #[must_use]
     #[inline]
-    const fn win_enabled(&self, cgb_mode: &CgbMode) -> bool {
+    const fn is_window_enabled(&self, cgb_mode: &CgbMode) -> bool {
         match cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => {
                 self.lcdc & (LCDC_BG_B | LCDC_WIN_B) == (LCDC_BG_B | LCDC_WIN_B)
@@ -60,7 +60,7 @@ impl Ppu {
 
     #[must_use]
     #[inline]
-    const fn bg_enabled(&self, cgb_mode: &CgbMode) -> bool {
+    const fn is_bg_enabled(&self, cgb_mode: &CgbMode) -> bool {
         match cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => self.lcdc & LCDC_BG_B != 0,
             CgbMode::Cgb => true,
@@ -69,7 +69,7 @@ impl Ppu {
 
     #[must_use]
     #[inline]
-    const fn cgb_master_priority(&self, cgb_mode: &CgbMode) -> bool {
+    const fn is_cgb_master_priority(&self, cgb_mode: &CgbMode) -> bool {
         match cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => false,
             CgbMode::Cgb => self.lcdc & LCDC_BG_B == 0,
@@ -93,9 +93,9 @@ impl Ppu {
         let base = 0x8000 | u16::from(signed) << 11;
 
         let offset = if signed {
-            #[allow(clippy::cast_possible_wrap)]
+            #[expect(clippy::cast_possible_wrap)]
             let tile_num = tile_num as i8;
-            #[allow(clippy::cast_sign_loss)]
+            #[expect(clippy::cast_sign_loss)]
             let tile_num = (i16::from(tile_num) + 0x80) as u16;
             tile_num
         } else {
@@ -146,7 +146,7 @@ impl Ppu {
         base_idx: u32,
         cgb_mode: &CgbMode,
     ) {
-        if !self.bg_enabled(cgb_mode) {
+        if !self.is_bg_enabled(cgb_mode) {
             return;
         }
 
@@ -212,7 +212,7 @@ impl Ppu {
         cgb_mode: &CgbMode,
     ) {
         // not so sure about last condition...
-        if !(self.win_enabled(cgb_mode) && self.wy <= self.ly && self.wx < PX_WIDTH) {
+        if !(self.is_window_enabled(cgb_mode) && self.wy <= self.ly && self.wx < PX_WIDTH) {
             if self.win_in_frame {
                 self.win_skipped += 1;
             }
@@ -351,7 +351,7 @@ impl Ppu {
                 let x = obj.x.wrapping_add(7 - xi);
 
                 if x >= PX_WIDTH
-                    || (!self.cgb_master_priority(cgb_mode)
+                    || (!self.is_cgb_master_priority(cgb_mode)
                         && (matches!(bg_priority[x as usize], PxPrio::Bg)
                             || obj.attr & SPR_BG_FIRST != 0
                                 && matches!(bg_priority[x as usize], PxPrio::Normal)))

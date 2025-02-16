@@ -103,7 +103,7 @@ impl<S: SweepTrait> Square<S> {
             0b0111_1110, // _------_ : 75%
         ];
 
-        if !self.enabled() {
+        if !self.is_enabled() {
             return;
         }
 
@@ -137,7 +137,7 @@ impl<S: SweepTrait> Square<S> {
         self.output * self.envelope.volume()
     }
 
-    pub(super) const fn true_enabled(&self) -> bool {
+    pub(super) const fn is_truly_enabled(&self) -> bool {
         self.enabled && self.dac_enabled
     }
 
@@ -154,7 +154,7 @@ impl<S: SweepTrait> Square<S> {
         self.length_timer.set_phalf(p_half);
     }
 
-    pub(super) const fn enabled(&self) -> bool {
+    pub(super) const fn is_enabled(&self) -> bool {
         self.enabled
     }
 }

@@ -15,7 +15,7 @@ impl<A: AudioCallback> Gb<A> {
         self.dma_cycles += cycles;
 
         // not affected by speed boost
-        if self.key1.enabled() {
+        if self.key1.is_enabled() {
             cycles >>= 1;
         }
 
@@ -33,7 +33,7 @@ impl<A: AudioCallback> Gb<A> {
     fn advance_tima_state(&mut self) {
         match self.tima_state {
             TIMAState::Reloading => {
-                self.ints.req_timer();
+                self.ints.request_timer();
                 self.tima_state = TIMAState::Reloaded;
             }
             TIMAState::Reloaded => {
@@ -68,10 +68,10 @@ impl<A: AudioCallback> Gb<A> {
         }
 
         let triggers = self.div & !val;
-        let apu_bit = if self.key1.enabled() { 0x2000 } else { 0x1000 };
+        let apu_bit = if self.key1.is_enabled() { 0x2000 } else { 0x1000 };
 
         // increase TIMA on falling edge of TAC mux
-        if self.tac_enabled() && (triggers & sys_clk_tac_mux(self.tac) != 0) {
+        if self.is_tac_enabled() && (triggers & sys_clk_tac_mux(self.tac) != 0) {
             self.inc_tima();
         }
 
@@ -130,7 +130,7 @@ impl<A: AudioCallback> Gb<A> {
 
     #[must_use]
     #[inline]
-    const fn tac_enabled(&self) -> bool {
+    const fn is_tac_enabled(&self) -> bool {
         self.tac & 4 != 0
     }
 }

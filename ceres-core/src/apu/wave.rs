@@ -114,7 +114,7 @@ impl Wave {
     }
 
     pub(super) fn step_sample(&mut self, cycles: i32) {
-        if !self.enabled() {
+        if !self.is_enabled() {
             return;
         }
 
@@ -127,7 +127,7 @@ impl Wave {
         }
     }
 
-    pub(super) const fn true_enabled(&self) -> bool {
+    pub(super) const fn is_truly_enabled(&self) -> bool {
         self.enabled && self.dac_enabled
     }
 
@@ -144,7 +144,7 @@ impl Wave {
         self.length_timer.set_phalf(p_half);
     }
 
-    pub(super) const fn enabled(&self) -> bool {
+    pub(super) const fn is_enabled(&self) -> bool {
         self.enabled
     }
 

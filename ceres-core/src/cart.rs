@@ -58,8 +58,8 @@ pub enum Error {
     InvalidRamSize,
     NonAsciiTitleString,
     UnsupportedMBC(u8),
-    RomSizeDifferentThanActual,
-    RamSizeDifferentThanActual,
+    RomSizeDifferentThanActual { expected: u32, actual: u32 },
+    RamSizeDifferentThanActual { expected: u32, actual: u32 },
 }
 
 impl Display for Error {
@@ -77,13 +77,19 @@ impl Display for Error {
          characters"
             ),
             Self::UnsupportedMBC(byte) => write!(f, "unsupported MBC: {byte:#0x}"),
-            Self::RomSizeDifferentThanActual => write!(
+            Self::RomSizeDifferentThanActual{
+                expected,
+                actual
+            } => write!(
                 f,
-                "header ROM size is different from the size of the supplied file"
+                "header ROM size is different from the size of the supplied file: expected {expected} bytes, got {actual} bytes"
             ),
-            Self::RamSizeDifferentThanActual => write!(
+            Self::RamSizeDifferentThanActual {
+                expected,
+                actual
+            } => write!(
                 f,
-                "header RAM size is different from the size of the supplied file"
+                "header RAM size is different from the size of the supplied file: expected {expected} bytes, got {actual} bytes"
             ),
         }
     }
@@ -113,6 +119,7 @@ pub struct Cart {
 }
 
 impl Default for Cart {
+    #[expect(clippy::unwrap_used)]
     fn default() -> Self {
         let rom_size = ROMSize::new(0).unwrap();
         let ram_size = RAMSize::new(0).unwrap();
@@ -145,7 +152,10 @@ impl Cart {
         let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], rom_size)?;
 
         if rom_size.size_bytes() as usize != rom.len() {
-            return Err(Error::RomSizeDifferentThanActual);
+            return Err(Error::RomSizeDifferentThanActual {
+                expected: rom_size.size_bytes(),
+                actual: rom.len() as u32,
+            });
         }
 
         let ram = alloc::vec![0xFF; ram_size.size_bytes() as usize].into_boxed_slice();
@@ -167,10 +177,12 @@ impl Cart {
     }
 
     pub fn set_ram(&mut self, ram: Box<[u8]>) -> Result<(), Error> {
-        let ram_size = RAMSize::new(self.rom[0x149])?;
-
-        if ram_size.size_bytes() as usize != ram.len() {
-            return Err(Error::RamSizeDifferentThanActual);
+        if self.ram_size.size_bytes() as usize != ram.len() {
+            println!("ram size: {}", ram.len());
+            return Err(Error::RamSizeDifferentThanActual {
+                expected: self.ram_size.size_bytes(),
+                actual: ram.len() as u32,
+            });
         }
 
         self.ram = ram;
@@ -217,15 +229,29 @@ impl Cart {
 
     #[must_use]
     #[inline]
-    pub fn save_data(&self) -> Option<&[u8]> {
+    pub fn mbc_ram(&self) -> Option<&[u8]> {
         self.has_battery.then_some(&*self.ram)
     }
 
     #[must_use]
+    pub(crate) fn mbc_ram_mut(&mut self) -> Option<&mut [u8]> {
+        self.has_battery.then_some(&mut *self.ram)
+    }
+
+    #[must_use]
     #[inline]
-    pub const fn clock(&self) -> Option<&[u8]> {
+    pub(crate) const fn rtc(&self) -> Option<&Mbc3RTC> {
         if let Mbc3 { rtc: Some(rtc) } = &self.mbc {
-            Some(&rtc.regs)
+            Some(rtc)
+        } else {
+            None
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn rtc_mut(&mut self) -> Option<&mut Mbc3RTC> {
+        if let Mbc3 { rtc: Some(rtc) } = &mut self.mbc {
+            Some(rtc)
         } else {
             None
         }
@@ -235,6 +261,10 @@ impl Cart {
     #[inline]
     pub const fn has_battery(&self) -> bool {
         self.has_battery
+    }
+
+    pub const fn ram_size_bytes(&self) -> u32 {
+        self.ram_size.size_bytes()
     }
 
     pub(crate) fn run_rtc(&mut self, cycles: i32) {
@@ -260,7 +290,7 @@ impl Cart {
     #[inline]
     pub(crate) fn read_ram(&self, addr: u16) -> u8 {
         const fn mbc_read_ram(cart: &Cart, ram_enabled: bool, addr: u16) -> u8 {
-            if cart.ram_size.is_any() && ram_enabled {
+            if cart.ram_size.has_ram() && ram_enabled {
                 let addr = cart.ram_addr(addr);
                 cart.ram[addr as usize]
             } else {
@@ -279,7 +309,7 @@ impl Cart {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[expect(clippy::too_many_lines)]
     #[inline]
     pub(crate) fn write_rom(&mut self, addr: u16, val: u8) {
         match &mut self.mbc {
@@ -421,7 +451,7 @@ impl Cart {
     #[inline]
     pub(crate) fn write_ram(&mut self, addr: u16, val: u8) {
         fn mbc_write_ram(cart: &mut Cart, ram_enabled: bool, addr: u16, val: u8) {
-            if cart.ram_size.is_any() && ram_enabled {
+            if cart.ram_size.has_ram() && ram_enabled {
                 let addr = cart.ram_addr(addr);
                 cart.ram[addr as usize] = val;
             }
@@ -527,7 +557,7 @@ impl RAMSize {
 
     #[must_use]
     #[inline]
-    const fn is_any(self) -> bool {
+    const fn has_ram(self) -> bool {
         !matches!(self, Self::NoRAM)
     }
 
@@ -563,7 +593,7 @@ impl RAMSize {
 }
 
 #[derive(Default, Debug)]
-struct Mbc3RTC {
+pub(crate) struct Mbc3RTC {
     t_cycles: i32,
     regs: [u8; 5],
     mapped: Option<NonZeroU8>,
@@ -573,6 +603,7 @@ struct Mbc3RTC {
 
 impl Mbc3RTC {
     #[inline]
+    #[expect(clippy::unwrap_used)]
     fn map_reg(&mut self, val: u8) {
         self.mapped = Some(NonZeroU8::new(val).unwrap());
     }
@@ -656,5 +687,67 @@ impl Mbc3RTC {
                 })
             })
             .flatten()
+    }
+
+    pub(crate) fn seconds(&self) -> u8 {
+        self.regs[0]
+    }
+
+    pub(crate) fn minutes(&self) -> u8 {
+        self.regs[1]
+    }
+
+    pub(crate) fn hours(&self) -> u8 {
+        self.regs[2]
+    }
+
+    pub(crate) fn days(&self) -> u8 {
+        self.regs[3]
+    }
+
+    pub(crate) fn control(&self) -> u8 {
+        self.regs[4] | (u8::from(self.halt) << 6) | (u8::from(self.carry) << 7)
+    }
+
+    pub(crate) fn set_seconds(&mut self, val: u8) {
+        self.regs[0] = val;
+    }
+
+    pub(crate) fn set_minutes(&mut self, val: u8) {
+        self.regs[1] = val;
+    }
+
+    pub(crate) fn set_hours(&mut self, val: u8) {
+        self.regs[2] = val;
+    }
+
+    pub(crate) fn set_days(&mut self, val: u8) {
+        self.regs[3] = val;
+    }
+
+    pub(crate) fn set_control(&mut self, val: u8) {
+        let val = val & 0xC1;
+        self.regs[4] = val;
+        self.carry = val & 0x80 != 0;
+        self.halt = val & 0x40 != 0;
+    }
+
+    pub(crate) fn add_seconds(&mut self, val: u64) {
+        let secs = self.regs[0] as u64 + val;
+        self.regs[0] = (secs % 60) as u8;
+
+        let mins = self.regs[1] as u64 + secs / 60;
+        self.regs[1] = (mins % 60) as u8;
+
+        let hours = self.regs[2] as u64 + mins / 60;
+        self.regs[2] = (hours % 24) as u8;
+
+        let days = self.regs[3] as u64 + hours / 24;
+        self.regs[3] = (days % 256) as u8;
+
+        let carry = days / 256;
+        self.regs[4] = (self.regs[4] + carry as u8) & 0x1;
+
+        self.carry = carry != 0;
     }
 }

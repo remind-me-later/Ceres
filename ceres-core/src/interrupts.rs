@@ -32,7 +32,7 @@ impl Interrupts {
 
     #[must_use]
     #[inline]
-    pub(crate) const fn any(&self) -> bool {
+    pub(crate) const fn is_any_requested(&self) -> bool {
         self.ifr & self.ie != 0
     }
 
@@ -48,32 +48,32 @@ impl Interrupts {
 
     #[must_use]
     #[inline]
-    pub(crate) const fn enabled(&self) -> bool {
+    pub(crate) const fn are_enabled(&self) -> bool {
         self.ime
     }
 
     #[inline]
-    pub(crate) fn req_p1(&mut self) {
+    pub(crate) fn request_p1(&mut self) {
         self.ifr |= P1;
     }
 
     #[inline]
-    pub(crate) fn req_serial(&mut self) {
+    pub(crate) fn request_serial(&mut self) {
         self.ifr |= SERIAL;
     }
 
     #[inline]
-    pub(crate) fn req_vblank(&mut self) {
+    pub(crate) fn request_vblank(&mut self) {
         self.ifr |= VBLANK;
     }
 
     #[inline]
-    pub(crate) fn req_lcd(&mut self) {
+    pub(crate) fn request_lcd(&mut self) {
         self.ifr |= LCD;
     }
 
     #[inline]
-    pub(crate) fn req_timer(&mut self) {
+    pub(crate) fn request_timer(&mut self) {
         self.ifr |= TIMER;
     }
 

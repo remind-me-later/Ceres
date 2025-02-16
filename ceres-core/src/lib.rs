@@ -1,4 +1,5 @@
-#![no_std]
+// #![no_std]
+// TODO: Use borrowedBuf or something similar to avoid heap allocation (currently nightly only)
 
 use core::time::Duration;
 use interrupts::Interrupts;
@@ -16,6 +17,7 @@ pub use {
 extern crate alloc;
 
 mod apu;
+mod bess;
 mod cart;
 mod cpu;
 mod interrupts;
@@ -30,8 +32,14 @@ pub const TC_PER_FRAME: i32 = 70224; // t-cycles per frame
 
 // t-cycles per second
 pub const TC_SEC: i32 = 0x40_0000; // 2^22
-pub const HRAM_SIZE: u8 = 0x80;
-pub const WRAM_SIZE: u16 = 0x2000 * 4;
+pub const HRAM_SIZE: u8 = 0x7F;
+pub const WRAM_SIZE_GB: u16 = 0x2000;
+pub const WRAM_SIZE_CGB: u16 = WRAM_SIZE_GB * 4;
+
+// Boot ROMs
+const DMG_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/dmg.bin");
+const MGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/mgb.bin");
+const CGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/cgb.bin");
 
 #[derive(Debug)]
 pub struct Gb<C: AudioCallback> {
@@ -56,7 +64,7 @@ pub struct Gb<C: AudioCallback> {
     halt_bug: bool,
 
     // memory
-    wram: [u8; WRAM_SIZE as usize],
+    wram: [u8; WRAM_SIZE_CGB as usize],
     hram: [u8; HRAM_SIZE as usize],
     svbk: Svbk,
     key1: Key1,
@@ -92,11 +100,7 @@ pub struct Gb<C: AudioCallback> {
 
 impl<C: AudioCallback> Gb<C> {
     #[must_use]
-    pub fn new(model: Model, sample_rate: i32, cart: Cart, audio_callback: C) -> Self {
-        const DMG_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/dmg.bin");
-        const MGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/mgb.bin");
-        const CGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/cgb.bin");
-
+    fn new(model: Model, sample_rate: i32, cart: Cart, audio_callback: C) -> Self {
         let cgb_mode = match model {
             Model::Dmg | Model::Mgb => CgbMode::Dmg,
             Model::Cgb => CgbMode::Cgb,
@@ -115,7 +119,7 @@ impl<C: AudioCallback> Gb<C> {
             bootrom,
             apu: Apu::new(sample_rate, audio_callback),
 
-            wram: [0; WRAM_SIZE as usize],
+            wram: [0; WRAM_SIZE_CGB as usize],
             hram: [0; HRAM_SIZE as usize],
             af: Default::default(),
             bc: Default::default(),
@@ -164,12 +168,6 @@ impl<C: AudioCallback> Gb<C> {
 
     #[must_use]
     #[inline]
-    pub const fn cartridge(&self) -> &Cart {
-        &self.cart
-    }
-
-    #[must_use]
-    #[inline]
     pub const fn pixel_data_rgba(&self) -> &[u8] {
         self.ppu.pixel_data_rgba()
     }
@@ -189,6 +187,13 @@ impl<C: AudioCallback> Gb<C> {
     pub fn release(&mut self, button: Button) {
         self.joy.release(button);
     }
+
+    pub fn save_data<W: std::io::Write + std::io::Seek>(
+        &self,
+        writer: &mut W,
+    ) -> Result<(), std::io::Error> {
+        bess::save_state(self, writer)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -203,4 +208,28 @@ enum CgbMode {
     Dmg,
     Compat,
     Cgb,
+}
+
+pub struct GbBuilder<C: AudioCallback> {
+    gb: Gb<C>,
+}
+
+impl<C: AudioCallback> GbBuilder<C> {
+    pub fn new(model: Model, sample_rate: i32, cart: Cart, audio_callback: C) -> Self {
+        Self {
+            gb: Gb::new(model, sample_rate, cart, audio_callback),
+        }
+    }
+
+    pub fn load_save_data<R: std::io::Read + std::io::Seek>(
+        mut self,
+        reader: &mut R,
+    ) -> Result<Self, std::io::Error> {
+        bess::load_state(&mut self.gb, reader)?;
+        Ok(self)
+    }
+
+    pub fn build(self) -> Gb<C> {
+        self.gb
+    }
 }
