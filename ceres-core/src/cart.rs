@@ -240,9 +240,18 @@ impl Cart {
 
     #[must_use]
     #[inline]
-    pub const fn clock(&self) -> Option<&[u8]> {
+    pub(crate) const fn rtc(&self) -> Option<&Mbc3RTC> {
         if let Mbc3 { rtc: Some(rtc) } = &self.mbc {
-            Some(&rtc.regs)
+            Some(rtc)
+        } else {
+            None
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn rtc_mut(&mut self) -> Option<&mut Mbc3RTC> {
+        if let Mbc3 { rtc: Some(rtc) } = &mut self.mbc {
+            Some(rtc)
         } else {
             None
         }
@@ -584,7 +593,7 @@ impl RAMSize {
 }
 
 #[derive(Default, Debug)]
-struct Mbc3RTC {
+pub(crate) struct Mbc3RTC {
     t_cycles: i32,
     regs: [u8; 5],
     mapped: Option<NonZeroU8>,
@@ -678,5 +687,67 @@ impl Mbc3RTC {
                 })
             })
             .flatten()
+    }
+
+    pub(crate) fn seconds(&self) -> u8 {
+        self.regs[0]
+    }
+
+    pub(crate) fn minutes(&self) -> u8 {
+        self.regs[1]
+    }
+
+    pub(crate) fn hours(&self) -> u8 {
+        self.regs[2]
+    }
+
+    pub(crate) fn days(&self) -> u8 {
+        self.regs[3]
+    }
+
+    pub(crate) fn control(&self) -> u8 {
+        self.regs[4] | (u8::from(self.halt) << 6) | (u8::from(self.carry) << 7)
+    }
+
+    pub(crate) fn set_seconds(&mut self, val: u8) {
+        self.regs[0] = val;
+    }
+
+    pub(crate) fn set_minutes(&mut self, val: u8) {
+        self.regs[1] = val;
+    }
+
+    pub(crate) fn set_hours(&mut self, val: u8) {
+        self.regs[2] = val;
+    }
+
+    pub(crate) fn set_days(&mut self, val: u8) {
+        self.regs[3] = val;
+    }
+
+    pub(crate) fn set_control(&mut self, val: u8) {
+        let val = val & 0xC1;
+        self.regs[4] = val;
+        self.carry = val & 0x80 != 0;
+        self.halt = val & 0x40 != 0;
+    }
+
+    pub(crate) fn add_seconds(&mut self, val: u64) {
+        let secs = self.regs[0] as u64 + val;
+        self.regs[0] = (secs % 60) as u8;
+
+        let mins = self.regs[1] as u64 + secs / 60;
+        self.regs[1] = (mins % 60) as u8;
+
+        let hours = self.regs[2] as u64 + mins / 60;
+        self.regs[2] = (hours % 24) as u8;
+
+        let days = self.regs[3] as u64 + hours / 24;
+        self.regs[3] = (days % 256) as u8;
+
+        let carry = days / 256;
+        self.regs[4] = (self.regs[4] + carry as u8) & 0x1;
+
+        self.carry = carry != 0;
     }
 }

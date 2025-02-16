@@ -123,6 +123,41 @@ fn write_end_block<W: Write>(writer: &mut W) -> std::io::Result<()> {
     write_block_header(writer, b"END ", 0)
 }
 
+fn write_rtc_block<W: Write>(writer: &mut W, cart: &Cart) -> std::io::Result<()> {
+    if let Some(rtc) = cart.rtc() {
+        write_block_header(writer, b"RTC ", 0x28 + 0x8)?;
+
+        // FIXME: this are "latched" values, not the actual values
+        // Write seconds byte (0) and 3 bytes of padding
+        writer.write_all(&[rtc.seconds(), 0, 0, 0])?;
+        // Same for the rest
+        writer.write_all(&[rtc.minutes(), 0, 0, 0])?;
+        writer.write_all(&[rtc.hours(), 0, 0, 0])?;
+        writer.write_all(&[rtc.days(), 0, 0, 0])?;
+        writer.write_all(&[rtc.control(), 0, 0, 0])?;
+
+        // FIXME: for now write the same values as the latched ones
+        writer.write_all(&[rtc.seconds(), 0, 0, 0])?;
+        writer.write_all(&[rtc.minutes(), 0, 0, 0])?;
+        writer.write_all(&[rtc.hours(), 0, 0, 0])?;
+        writer.write_all(&[rtc.days(), 0, 0, 0])?;
+        writer.write_all(&[rtc.control(), 0, 0, 0])?;
+
+        // Unix timestamp
+        #[expect(clippy::unwrap_used)]
+        {
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+
+            writer.write_all(&timestamp.to_le_bytes())?;
+        }
+    }
+
+    Ok(())
+}
+
 #[derive(Default)]
 struct Sizes {
     ram_size: u32,
@@ -231,6 +266,7 @@ pub fn save_state<C: AudioCallback, W: Write + std::io::Seek>(
     write_name_block(writer)?;
     write_info_block(writer, &gb.cart)?;
     write_core_block(gb, sizes, writer)?;
+    write_rtc_block(writer, &gb.cart)?;
     write_end_block(writer)?;
     write_footer(writer, offset_to_first_block)?;
 
@@ -249,8 +285,11 @@ fn read_footer<R: std::io::Read + std::io::Seek>(reader: &mut R) -> std::io::Res
         ));
     }
 
-    // Read offset to first block
-    Ok(u32::from_le_bytes(footer[0..4].try_into().unwrap()))
+    #[expect(clippy::unwrap_used)]
+    {
+        // Read offset to first block
+        Ok(u32::from_le_bytes(footer[0..4].try_into().unwrap()))
+    }
 }
 
 fn read_block_header<R: std::io::Read>(
@@ -259,10 +298,15 @@ fn read_block_header<R: std::io::Read>(
     let mut header = [0; 8];
     reader.read_exact(&mut header)?;
 
-    let name = SmallVec::from_slice(&header[0..4]);
-    let size = u32::from_le_bytes(header[4..].try_into().unwrap());
+    #[expect(clippy::unwrap_used)]
+    {
+        let name = SmallVec::from_slice(&header[0..4]);
+        let size = u32::from_le_bytes(header[4..].try_into().unwrap());
 
-    Ok((name, size))
+        println!("Block: {}, size: {}", String::from_utf8_lossy(&name), size);
+
+        Ok((name, size))
+    }
 }
 
 fn read_name_block<R: std::io::Read + std::io::Seek>(
@@ -300,7 +344,7 @@ fn read_info_block<R: std::io::Read>(
 
 fn read_core_block<C: AudioCallback, R: std::io::Read + std::io::Seek>(
     reader: &mut R,
-    size: u32,
+    _size: u32,
     gb: &mut Gb<C>,
 ) -> std::io::Result<Sizes> {
     // Ignore version for now
@@ -376,6 +420,55 @@ fn read_core_block<C: AudioCallback, R: std::io::Read + std::io::Seek>(
     Ok(sizes)
 }
 
+fn read_rtc_block<R: std::io::Read + std::io::Seek>(
+    reader: &mut R,
+    cart: &mut Cart,
+) -> std::io::Result<()> {
+    if let Some(rtc) = cart.rtc_mut() {
+        let mut byte_buf = [0; 4];
+
+        reader.read_exact(&mut byte_buf)?;
+        rtc.set_seconds(byte_buf[0]);
+
+        reader.read_exact(&mut byte_buf)?;
+        rtc.set_minutes(byte_buf[0]);
+
+        reader.read_exact(&mut byte_buf)?;
+        rtc.set_hours(byte_buf[0]);
+
+        reader.read_exact(&mut byte_buf)?;
+        rtc.set_days(byte_buf[0]);
+
+        reader.read_exact(&mut byte_buf)?;
+        rtc.set_control(byte_buf[0]);
+
+        // Skip latched values
+        reader.read_exact(&mut byte_buf)?;
+        reader.read_exact(&mut byte_buf)?;
+        reader.read_exact(&mut byte_buf)?;
+        reader.read_exact(&mut byte_buf)?;
+        reader.read_exact(&mut byte_buf)?;
+
+        // Seconds since saved timestamp
+        #[expect(clippy::unwrap_used)]
+        {
+            let mut timestamp_buf = [0; 8];
+            reader.read_exact(&mut timestamp_buf)?;
+
+            let timestamp = u64::from_le_bytes(timestamp_buf);
+            let elapsed = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                - timestamp;
+
+            rtc.add_seconds(elapsed);
+        }
+    }
+
+    Ok(())
+}
+
 pub fn load_state<C: AudioCallback, R: std::io::Read + std::io::Seek>(
     gb: &mut Gb<C>,
     reader: &mut R,
@@ -396,6 +489,7 @@ pub fn load_state<C: AudioCallback, R: std::io::Read + std::io::Seek>(
                 read_info_block(reader, size)?;
             }
             b"CORE" => sizes = read_core_block(reader, size, gb)?,
+            b"RTC " => read_rtc_block(reader, &mut gb.cart)?,
             b"END " => break 'reading,
             _ => {
                 return Err(std::io::Error::new(
