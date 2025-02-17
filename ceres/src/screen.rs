@@ -35,7 +35,7 @@ pub struct GBScreen<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
 }
 
 impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
-    #[expect(clippy::too_many_lines, clippy::unwrap_used)]
+    #[expect(clippy::too_many_lines)]
     pub fn new<'a>(
         cc: &'a eframe::CreationContext<'a>,
         gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
@@ -43,156 +43,157 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
     ) -> Self {
         // Get the WGPU render state from the eframe creation context. This can also be retrieved
         // from `eframe::Frame` when you don't have a `CreationContext` available.
-        let wgpu_render_state = cc.wgpu_render_state.as_ref().unwrap();
+        if let Some(wgpu_render_state) = cc.wgpu_render_state.as_ref() {
+            let device = &wgpu_render_state.device;
 
-        let device = &wgpu_render_state.device;
+            let texture = Texture::new(device, PX_WIDTH, PX_HEIGHT, None);
 
-        let texture = Texture::new(device, PX_WIDTH, PX_HEIGHT, None);
-
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+            let texture_bind_group_layout =
+                device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            },
+                            count: None,
                         },
-                        count: None,
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
+                            count: None,
+                        },
+                    ],
+                    label: None,
+                });
+
+            let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
+
+            let diffuse_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &texture_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(texture.view()),
                     },
-                    wgpu::BindGroupLayoutEntry {
+                    wgpu::BindGroupEntry {
                         binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
-                        count: None,
+                        resource: wgpu::BindingResource::Sampler(&sampler),
                     },
                 ],
                 label: None,
             });
 
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
+            let uniform_bind_group_layout =
+                device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::VERTEX,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                    ],
+                    label: None,
+                });
 
-        let diffuse_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(texture.view()),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-            label: None,
-        });
+            let dimensions_uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(&[0.0, 0.0]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
 
-        let uniform_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            let scale_uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(&[scaling as u32]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+
+            let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &uniform_bind_group_layout,
                 entries: &[
-                    wgpu::BindGroupLayoutEntry {
+                    wgpu::BindGroupEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
+                        resource: dimensions_uniform.as_entire_binding(),
                     },
-                    wgpu::BindGroupLayoutEntry {
+                    wgpu::BindGroupEntry {
                         binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
+                        resource: scale_uniform.as_entire_binding(),
                     },
                 ],
                 label: None,
             });
 
-        let dimensions_uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&[0.0, 0.0]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
+            let render_pipeline_layout =
+                device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: None,
+                    bind_group_layouts: &[&texture_bind_group_layout, &uniform_bind_group_layout],
+                    push_constant_ranges: &[],
+                });
 
-        let scale_uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&[scaling as u32]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
+            let shader =
+                device.create_shader_module(wgpu::include_wgsl!("../shader/gb_screen.wgsl"));
 
-        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &uniform_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: dimensions_uniform.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: scale_uniform.as_entire_binding(),
-                },
-            ],
-            label: None,
-        });
-
-        let render_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                cache: None,
                 label: None,
-                bind_group_layouts: &[&texture_bind_group_layout, &uniform_bind_group_layout],
-                push_constant_ranges: &[],
+                layout: Some(&render_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &[],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu_render_state.target_format,
+                        blend: Some(wgpu::BlendState::REPLACE),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleStrip,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
             });
 
-        let shader = device.create_shader_module(wgpu::include_wgsl!("../shader/gb_screen.wgsl"));
-
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            cache: None,
-            label: None,
-            layout: Some(&render_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                buffers: &[],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu_render_state.target_format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleStrip,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            multiview: None,
-        });
-
-        wgpu_render_state
-            .renderer
-            .write()
-            .callback_resources
-            .insert(Resources {
-                render_pipeline,
-                dimensions_uniform,
-                scale_uniform,
-                uniform_bind_group,
-                texture,
-                diffuse_bind_group,
-            });
+            wgpu_render_state
+                .renderer
+                .write()
+                .callback_resources
+                .insert(Resources {
+                    render_pipeline,
+                    dimensions_uniform,
+                    scale_uniform,
+                    uniform_bind_group,
+                    texture,
+                    diffuse_bind_group,
+                });
+        }
 
         Self {
             gb,
@@ -237,22 +238,22 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
 impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
     for GBScreen<PX_WIDTH, PX_HEIGHT>
 {
-    #[expect(clippy::unwrap_used)]
     fn paint(
         &self,
         _info: eframe::egui::PaintCallbackInfo,
         render_pass: &mut wgpu::RenderPass<'static>,
         callback_resources: &eframe::egui_wgpu::CallbackResources,
     ) {
-        let resources: &Resources = callback_resources.get().unwrap();
-
-        render_pass.set_pipeline(&resources.render_pipeline);
-        render_pass.set_bind_group(0, &resources.diffuse_bind_group, &[]);
-        render_pass.set_bind_group(1, &resources.uniform_bind_group, &[]);
-        render_pass.draw(0..4, 0..1);
+        if let Some(resources) = callback_resources.get::<Resources>() {
+            render_pass.set_pipeline(&resources.render_pipeline);
+            render_pass.set_bind_group(0, &resources.diffuse_bind_group, &[]);
+            render_pass.set_bind_group(1, &resources.uniform_bind_group, &[]);
+            render_pass.draw(0..4, 0..1);
+        } else {
+            eprintln!("No resources found for GBScreen");
+        }
     }
 
-    #[expect(clippy::unwrap_used)]
     fn prepare(
         &self,
         _device: &wgpu::Device,
@@ -261,51 +262,53 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
         _egui_encoder: &mut wgpu::CommandEncoder,
         callback_resources: &mut eframe::egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
-        let resources: &mut Resources = callback_resources.get_mut().unwrap();
+        if let Some(resources) = callback_resources.get_mut::<Resources>() {
+            if let Ok(gb) = self.gb.lock() {
+                // TODO: awful way of transforming rgb to rgba
+                resources.texture.update(queue, gb.pixel_data_rgba());
+            }
 
-        if let Ok(gb) = self.gb.lock() {
-            // TODO: awful way of transforming rgb to rgba
-            resources.texture.update(queue, gb.pixel_data_rgba());
+            {
+                let width = self.size.0;
+                let height = self.size.1;
+                #[expect(
+                    clippy::cast_precision_loss,
+                    clippy::cast_possible_truncation,
+                    clippy::cast_sign_loss
+                )]
+                let (x, y) = if matches!(self.pixel_mode, PixelMode::PixelPerfect) {
+                    let mul = (width / PX_WIDTH as f32)
+                        .min(height / PX_HEIGHT as f32)
+                        .floor() as u32;
+                    let x = (PX_WIDTH * mul) as f32 / width;
+                    let y = (PX_HEIGHT * mul) as f32 / height;
+                    (x, y)
+                } else {
+                    let mul = (width / PX_WIDTH as f32).min(height / PX_HEIGHT as f32);
+                    let x = (PX_WIDTH as f32 * mul) / width;
+                    let y = (PX_HEIGHT as f32 * mul) / height;
+                    (x, y)
+                };
+
+                queue.write_buffer(
+                    &resources.dimensions_uniform,
+                    0,
+                    bytemuck::cast_slice(&[x, y]),
+                );
+            }
+            {
+                let scaling = self.scaling;
+                queue.write_buffer(
+                    &resources.scale_uniform,
+                    0,
+                    bytemuck::cast_slice(&[scaling as u32]),
+                );
+            }
+        } else {
+            eprintln!("No resources found for GBScreen");
         }
 
-        {
-            let width = self.size.0;
-            let height = self.size.1;
-            #[expect(
-                clippy::cast_precision_loss,
-                clippy::cast_possible_truncation,
-                clippy::cast_sign_loss
-            )]
-            let (x, y) = if matches!(self.pixel_mode, PixelMode::PixelPerfect) {
-                let mul = (width / PX_WIDTH as f32)
-                    .min(height / PX_HEIGHT as f32)
-                    .floor() as u32;
-                let x = (PX_WIDTH * mul) as f32 / width;
-                let y = (PX_HEIGHT * mul) as f32 / height;
-                (x, y)
-            } else {
-                let mul = (width / PX_WIDTH as f32).min(height / PX_HEIGHT as f32);
-                let x = (PX_WIDTH as f32 * mul) / width;
-                let y = (PX_HEIGHT as f32 * mul) / height;
-                (x, y)
-            };
-
-            queue.write_buffer(
-                &resources.dimensions_uniform,
-                0,
-                bytemuck::cast_slice(&[x, y]),
-            );
-        }
-        {
-            let scaling = self.scaling;
-            queue.write_buffer(
-                &resources.scale_uniform,
-                0,
-                bytemuck::cast_slice(&[scaling as u32]),
-            );
-        }
-
-        Vec::new()
+        Vec::with_capacity(0)
     }
 }
 

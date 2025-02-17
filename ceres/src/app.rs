@@ -23,57 +23,48 @@ impl App {
         project_dirs: directories::ProjectDirs,
         rom_path: Option<&std::path::Path>,
         scaling: Scaling,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let ctx = &cc.egui_ctx;
 
-        #[expect(clippy::unwrap_used)]
-        let audio = audio::State::new().unwrap();
-        #[expect(clippy::unwrap_used)]
-        let mut gb_ctx = GbContext::new(model, &project_dirs, rom_path, &audio, ctx).unwrap();
+        let audio = audio::State::new()?;
+        let mut gb_ctx = GbContext::new(model, &project_dirs, rom_path, &audio, ctx)?;
         let gb_clone = gb_ctx.gb_clone();
         let screen = screen::GBScreen::new(cc, gb_clone, scaling);
 
-        gb_ctx.resume();
+        gb_ctx.resume()?;
 
-        Self {
+        Ok(Self {
             project_dirs,
             gb_ctx,
             _audio: audio,
             screen,
-        }
+        })
     }
 
-    fn save_data(&self) {
-        let gb = self.gb_ctx.gb_lock();
-        #[expect(clippy::expect_used)]
-        {
-            std::fs::create_dir_all(self.project_dirs.data_dir())
-                .expect("couldn't create data directory");
+    fn save_data(&self) -> anyhow::Result<()> {
+        if let Ok(gb) = self.gb_ctx.gb_lock() {
+            std::fs::create_dir_all(self.project_dirs.data_dir())?;
             let sav_file = File::create(
                 self.project_dirs
                     .data_dir()
                     .join(self.gb_ctx.rom_ident())
                     .with_extension("sav"),
             );
-            match sav_file {
-                Ok(mut f) => {
-                    gb.save_data(&mut f).expect("couldn't save data");
-                }
-                Err(e) => {
-                    eprintln!("couldn't open save file: {e}");
-                }
-            }
+
+            gb.save_data(&mut sav_file?)?;
         }
+
+        Ok(())
     }
 }
 
 impl eframe::App for App {
-    #[expect(clippy::too_many_lines, clippy::shadow_unrelated)]
+    #[expect(clippy::too_many_lines)]
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            egui::menu::bar(ui, |ui| {
-                ui.menu_button("File", |ui| {
-                    if ui.button("Open ROM").clicked() {
+        egui::TopBottomPanel::top("top_panel").show(ctx, |top_panel_ui| {
+            egui::menu::bar(top_panel_ui, |menu_bar_ui| {
+                menu_bar_ui.menu_button("File", |menu_button_ui| {
+                    if menu_button_ui.button("Open ROM").clicked() {
                         let file = FileDialog::new()
                             .add_filter("gb", &["gb", "gbc"])
                             .pick_file();
@@ -85,29 +76,31 @@ impl eframe::App for App {
                         }
                     }
 
-                    if ui.button("Export save").clicked() {
+                    if menu_button_ui.button("Export save").clicked() {
                         println!("Export save file");
                     }
                 });
 
-                ui.menu_button("view", |ui| {
-                    ui.add(egui::Label::new("Volume"));
+                menu_bar_ui.menu_button("view", |menu_button_ui| {
+                    menu_button_ui.add(egui::Label::new("Volume"));
 
-                    ui.horizontal(|ui| {
+                    menu_button_ui.horizontal(|horizontal_ui| {
                         let paused = self.gb_ctx.is_paused();
-                        if ui
+                        if horizontal_ui
                             .button(if paused { "\u{25b6}" } else { "\u{23f8}" })
                             .on_hover_text("Pause the game")
                             .clicked()
                         {
-                            if paused {
-                                self.gb_ctx.resume();
+                            if let Err(e) = if paused {
+                                self.gb_ctx.resume()
                             } else {
-                                self.gb_ctx.pause();
+                                self.gb_ctx.pause()
+                            } {
+                                eprintln!("couldn't pause/resume: {e}");
                             }
                         }
 
-                        ui.style_mut().spacing.slider_width = 50.0;
+                        horizontal_ui.style_mut().spacing.slider_width = 50.0;
 
                         let volume_slider = egui::Slider::from_get_set(0.0..=1.0, |volume| {
                             let mut volume_ret = 0.0;
@@ -130,19 +123,19 @@ impl eframe::App for App {
                         )
                         .trailing_fill(true);
 
-                        ui.add(volume_slider);
+                        horizontal_ui.add(volume_slider);
                     });
 
-                    ui.separator();
+                    menu_button_ui.separator();
 
-                    ui.add(egui::Label::new("Scaling algorithm"));
+                    menu_button_ui.add(egui::Label::new("Scaling algorithm"));
 
                     let nearest_button = egui::SelectableLabel::new(
                         self.screen.scaling() == Scaling::Nearest,
                         "Nearest",
                     );
 
-                    if ui.add(nearest_button).clicked() {
+                    if menu_button_ui.add(nearest_button).clicked() {
                         *self.screen.mut_scaling() = Scaling::Nearest;
                     }
 
@@ -151,7 +144,7 @@ impl eframe::App for App {
                         "Scale2x",
                     );
 
-                    if ui.add(scale2x_button).clicked() {
+                    if menu_button_ui.add(scale2x_button).clicked() {
                         *self.screen.mut_scaling() = Scaling::Scale2x;
                     }
 
@@ -160,20 +153,20 @@ impl eframe::App for App {
                         "Scale3x",
                     );
 
-                    if ui.add(scale3x_button).clicked() {
+                    if menu_button_ui.add(scale3x_button).clicked() {
                         *self.screen.mut_scaling() = Scaling::Scale3x;
                     }
 
-                    ui.separator();
+                    menu_button_ui.separator();
 
-                    ui.add(egui::Label::new("Pixel mode"));
+                    menu_button_ui.add(egui::Label::new("Pixel mode"));
 
                     let pixel_perfect_button = egui::SelectableLabel::new(
                         self.screen.pixel_mode() == screen::PixelMode::PixelPerfect,
                         "Pixel perfect",
                     );
 
-                    if ui.add(pixel_perfect_button).clicked() {
+                    if menu_button_ui.add(pixel_perfect_button).clicked() {
                         *self.screen.mut_pixel_mode() = screen::PixelMode::PixelPerfect;
                     }
 
@@ -182,7 +175,7 @@ impl eframe::App for App {
                         "Fit window",
                     );
 
-                    if ui.add(fit_window_button).clicked() {
+                    if menu_button_ui.add(fit_window_button).clicked() {
                         *self.screen.mut_pixel_mode() = screen::PixelMode::FitWindow;
                     }
                 });
@@ -198,80 +191,82 @@ impl eframe::App for App {
                 fill: egui::Color32::BLACK,
                 stroke: egui::Stroke::NONE,
             })
-            .show(ctx, |ui| {
-                self.screen.custom_painting(ui);
+            .show(ctx, |central_panel_ui| {
+                self.screen.custom_painting(central_panel_ui);
             });
 
         ctx.input(|i| {
-            let mut gb = self.gb_ctx.mut_gb();
+            if let Ok(mut gb) = self.gb_ctx.mut_gb() {
+                if i.key_pressed(Key::W) {
+                    gb.press(ceres_core::Button::Up);
+                }
 
-            if i.key_pressed(Key::W) {
-                gb.press(ceres_core::Button::Up);
-            }
+                if i.key_released(Key::W) {
+                    gb.release(ceres_core::Button::Up);
+                }
 
-            if i.key_released(Key::W) {
-                gb.release(ceres_core::Button::Up);
-            }
+                if i.key_pressed(Key::A) {
+                    gb.press(ceres_core::Button::Left);
+                }
 
-            if i.key_pressed(Key::A) {
-                gb.press(ceres_core::Button::Left);
-            }
+                if i.key_released(Key::A) {
+                    gb.release(ceres_core::Button::Left);
+                }
 
-            if i.key_released(Key::A) {
-                gb.release(ceres_core::Button::Left);
-            }
+                if i.key_pressed(Key::S) {
+                    gb.press(ceres_core::Button::Down);
+                }
 
-            if i.key_pressed(Key::S) {
-                gb.press(ceres_core::Button::Down);
-            }
+                if i.key_released(Key::S) {
+                    gb.release(ceres_core::Button::Down);
+                }
 
-            if i.key_released(Key::S) {
-                gb.release(ceres_core::Button::Down);
-            }
+                if i.key_pressed(Key::D) {
+                    gb.press(ceres_core::Button::Right);
+                }
 
-            if i.key_pressed(Key::D) {
-                gb.press(ceres_core::Button::Right);
-            }
+                if i.key_released(Key::D) {
+                    gb.release(ceres_core::Button::Right);
+                }
 
-            if i.key_released(Key::D) {
-                gb.release(ceres_core::Button::Right);
-            }
+                if i.key_pressed(Key::L) {
+                    gb.press(ceres_core::Button::A);
+                }
 
-            if i.key_pressed(Key::L) {
-                gb.press(ceres_core::Button::A);
-            }
+                if i.key_released(Key::L) {
+                    gb.release(ceres_core::Button::A);
+                }
 
-            if i.key_released(Key::L) {
-                gb.release(ceres_core::Button::A);
-            }
+                if i.key_pressed(Key::K) {
+                    gb.press(ceres_core::Button::B);
+                }
 
-            if i.key_pressed(Key::K) {
-                gb.press(ceres_core::Button::B);
-            }
+                if i.key_released(Key::K) {
+                    gb.release(ceres_core::Button::B);
+                }
 
-            if i.key_released(Key::K) {
-                gb.release(ceres_core::Button::B);
-            }
+                if i.key_pressed(Key::M) {
+                    gb.press(ceres_core::Button::Start);
+                }
 
-            if i.key_pressed(Key::M) {
-                gb.press(ceres_core::Button::Start);
-            }
+                if i.key_released(Key::M) {
+                    gb.release(ceres_core::Button::Start);
+                }
 
-            if i.key_released(Key::M) {
-                gb.release(ceres_core::Button::Start);
-            }
+                if i.key_pressed(Key::N) {
+                    gb.press(ceres_core::Button::Select);
+                }
 
-            if i.key_pressed(Key::N) {
-                gb.press(ceres_core::Button::Select);
-            }
-
-            if i.key_released(Key::N) {
-                gb.release(ceres_core::Button::Select);
+                if i.key_released(Key::N) {
+                    gb.release(ceres_core::Button::Select);
+                }
             }
         });
     }
 
     fn on_exit(&mut self) {
-        self.save_data();
+        if let Err(e) = self.save_data() {
+            eprintln!("couldn't save data: {e}");
+        }
     }
 }

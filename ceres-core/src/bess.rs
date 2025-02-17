@@ -170,15 +170,15 @@ struct Sizes {
 }
 
 impl Sizes {
-    fn total(&self) -> u32 {
-        self.ram_size
-            + self.vram_size
-            + self.mbc_ram_size
-            + self.oam_size
-            + self.hram_size
-            + self.bg_palette_size
-            + self.obj_palette_size
-    }
+    // fn total(&self) -> u32 {
+    //     self.ram_size
+    //         + self.vram_size
+    //         + self.mbc_ram_size
+    //         + self.oam_size
+    //         + self.hram_size
+    //         + self.bg_palette_size
+    //         + self.obj_palette_size
+    // }
 
     fn ram_offset(&self) -> u32 {
         0
@@ -260,8 +260,8 @@ pub fn save_state<C: AudioCallback, W: Write + std::io::Seek>(
 
     let offset_to_first_block = writer.stream_position()? as u32;
 
-    println!("Offset to first block: {}", offset_to_first_block);
-    println!("Total size: {}", sizes.total());
+    // println!("Offset to first block: {}", offset_to_first_block);
+    // println!("Total size: {}", sizes.total());
 
     write_name_block(writer)?;
     write_info_block(writer, &gb.cart)?;
@@ -309,7 +309,7 @@ fn read_block_header<R: std::io::Read>(
         let name = SmallVec::from_slice(&header[0..4]);
         let size = u32::from_le_bytes(header[4..].try_into().unwrap());
 
-        println!("Block: {}, size: {}", String::from_utf8_lossy(&name), size);
+        // println!("Block: {}, size: {}", String::from_utf8_lossy(&name), size);
 
         Ok((name, size))
     }

@@ -141,7 +141,7 @@ fn main() -> anyhow::Result<()> {
                 project_dirs,
                 args.file.as_deref(),
                 args.scaling,
-            )))
+            )?))
         }),
     )
     .map_err(Into::into)

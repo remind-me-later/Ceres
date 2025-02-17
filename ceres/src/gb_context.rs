@@ -6,7 +6,7 @@ use eframe::egui;
 use std::{
     fs::File,
     io::Read,
-    sync::{Mutex, MutexGuard},
+    sync::{LockResult, Mutex, MutexGuard},
     time::Duration,
 };
 use thread_priority::ThreadBuilderExt;
@@ -141,13 +141,11 @@ impl GbContext {
                     .context("no such file")?
             };
 
-            #[expect(clippy::unwrap_used)]
-            let cart = Cart::new(rom).unwrap();
+            let cart = Cart::new(rom)?;
 
-            #[expect(clippy::unwrap_used)]
             let ident = {
                 let mut ident = String::new();
-                cart.ascii_title().read_to_string(&mut ident).unwrap();
+                cart.ascii_title().read_to_string(&mut ident)?;
                 ident.push('-');
                 ident.push_str(cart.version().to_string().as_str());
                 ident.push('-');
@@ -175,40 +173,42 @@ impl GbContext {
         }
     }
 
-    #[expect(clippy::unwrap_used)]
-    pub fn mut_gb(&mut self) -> MutexGuard<Gb<audio::RingBuffer>> {
-        self.gb.lock().unwrap()
+    pub fn mut_gb(&mut self) -> LockResult<MutexGuard<Gb<audio::RingBuffer>>> {
+        self.gb.lock()
     }
 
     pub fn is_paused(&self) -> bool {
         self.pause_thread.load(Relaxed)
     }
 
-    #[expect(clippy::unwrap_used)]
-    pub fn pause(&mut self) {
-        self.audio_stream.pause().unwrap();
+    pub fn pause(&mut self) -> anyhow::Result<()> {
+        self.audio_stream.pause()?;
         self.pause_thread.store(true, Relaxed);
+        Ok(())
     }
 
-    #[expect(clippy::unwrap_used)]
-    pub fn resume(&mut self) {
+    pub fn resume(&mut self) -> anyhow::Result<()> {
         self.pause_thread.store(false, Relaxed);
-        self.audio_stream.resume().unwrap();
+        self.audio_stream.resume()?;
+        Ok(())
     }
 
     pub fn rom_ident(&self) -> &str {
         &self.rom_ident
     }
 
-    #[expect(clippy::unwrap_used)]
-    pub fn exit(&mut self) {
+    pub fn exit(&mut self) -> anyhow::Result<()> {
         self.exiting.store(true, Relaxed);
-        self.thread_handle.take().unwrap().join().unwrap();
+        self.thread_handle
+            .take()
+            .ok_or(anyhow::anyhow!("thread_handle is None"))?
+            .join()
+            .map_err(|e| anyhow::anyhow!("error joining thread: {e:?}"))?;
+        Ok(())
     }
 
-    #[expect(clippy::unwrap_used)]
-    pub fn gb_lock(&self) -> MutexGuard<Gb<audio::RingBuffer>> {
-        self.gb.lock().unwrap()
+    pub fn gb_lock(&self) -> LockResult<MutexGuard<Gb<audio::RingBuffer>>> {
+        self.gb.lock()
     }
 
     pub fn gb_clone(&self) -> Arc<Mutex<Gb<audio::RingBuffer>>> {
@@ -221,9 +221,13 @@ impl GbContext {
 }
 
 impl Drop for GbContext {
-    #[expect(clippy::unwrap_used)]
     fn drop(&mut self) {
-        self.audio_stream.pause().unwrap();
-        self.exit();
+        if let Err(e) = self.audio_stream.pause() {
+            eprintln!("error pausing audio stream: {e}");
+        }
+
+        if let Err(e) = self.exit() {
+            eprintln!("error exiting gb_loop: {e}");
+        }
     }
 }
