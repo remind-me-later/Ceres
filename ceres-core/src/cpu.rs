@@ -716,7 +716,6 @@ impl<A: AudioCallback> Gb<A> {
     const fn nop(&self) {}
 
     // TODO: debugger breakpoint
-
     #[expect(clippy::needless_pass_by_ref_mut)]
     fn ld_b_b(&mut self) {
         self.nop();

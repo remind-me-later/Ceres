@@ -399,7 +399,9 @@ impl Cart {
                     if (0x8..=0xC).contains(&val) {
                         // Write to RTC registers
                         if let Some(r) = rtc.as_mut() {
-                            r.map_reg(val);
+                            if r.map_reg(val).is_err() {
+                                eprintln!("UNREACHABLE: tried to map RTC register 0");
+                            }
                         }
                     } else {
                         // Choose RAM bank
@@ -590,9 +592,9 @@ pub(crate) struct Mbc3RTC {
 }
 
 impl Mbc3RTC {
-    #[expect(clippy::unwrap_used)]
-    fn map_reg(&mut self, val: u8) {
-        self.mapped = Some(NonZeroU8::new(val).unwrap());
+    fn map_reg(&mut self, val: u8) -> Result<(), ()> {
+        self.mapped = Some(NonZeroU8::new(val).ok_or(())?);
+        Ok(())
     }
 
     fn unmap_reg(&mut self) {
