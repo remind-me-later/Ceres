@@ -285,7 +285,10 @@ fn read_footer<R: std::io::Read + std::io::Seek>(reader: &mut R) -> std::io::Res
         ));
     }
 
-    #[expect(clippy::unwrap_used)]
+    #[expect(
+        clippy::unwrap_used,
+        reason = "footer is 4 bytes long, so this will never panic"
+    )]
     {
         // Read offset to first block
         Ok(u32::from_le_bytes(footer[0..4].try_into().unwrap()))
@@ -298,7 +301,10 @@ fn read_block_header<R: std::io::Read>(
     let mut header = [0; 8];
     reader.read_exact(&mut header)?;
 
-    #[expect(clippy::unwrap_used)]
+    #[expect(
+        clippy::unwrap_used,
+        reason = "header is 8 bytes long, so this will never panic"
+    )]
     {
         let name = SmallVec::from_slice(&header[0..4]);
         let size = u32::from_le_bytes(header[4..].try_into().unwrap());
@@ -502,7 +508,7 @@ pub fn load_state<C: AudioCallback, R: std::io::Read + std::io::Seek>(
 
     // Read data
     reader.seek(std::io::SeekFrom::Start(sizes.ram_offset() as u64))?;
-    reader.read_exact(&mut gb.wram)?;
+    reader.read_exact(gb.wram.as_mut_slice())?;
 
     reader.seek(std::io::SeekFrom::Start(sizes.vram_offset() as u64))?;
     reader.read_exact(gb.ppu.vram_mut())?;

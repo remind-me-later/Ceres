@@ -1,3 +1,5 @@
+use std::vec;
+
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use dasp_ring_buffer::Bounded;
 use {std::sync::Arc, std::sync::Mutex};
@@ -11,13 +13,13 @@ const SAMPLE_RATE: i32 = 48000;
 // that implements the AudioCallback trait
 #[derive(Clone, Debug)]
 pub struct RingBuffer {
-    buffer: Arc<Mutex<Bounded<[ceres_core::Sample; RING_BUFFER_SIZE]>>>,
+    buffer: Arc<Mutex<Bounded<Box<[ceres_core::Sample]>>>>,
     volume: Arc<Mutex<f32>>,
 }
 
 impl RingBuffer {
     pub fn new(
-        buffer: Arc<Mutex<Bounded<[ceres_core::Sample; RING_BUFFER_SIZE]>>>,
+        buffer: Arc<Mutex<Bounded<Box<[ceres_core::Sample]>>>>,
         volume: Arc<Mutex<f32>>,
     ) -> Self {
         // FIll with silence
@@ -91,9 +93,8 @@ pub struct Stream {
 
 impl Stream {
     pub fn new(state: &State) -> Result<Self, Error> {
-        #[expect(clippy::large_stack_arrays)]
         let ring_buffer = Arc::new(Mutex::new(Bounded::from(
-            [Default::default(); RING_BUFFER_SIZE],
+            vec![Default::default(); RING_BUFFER_SIZE].into_boxed_slice(),
         )));
         let ring_buffer_clone = Arc::clone(&ring_buffer);
 

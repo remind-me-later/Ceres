@@ -89,41 +89,34 @@ const IE: u8 = 0xFF;
 
 impl<A: AudioCallback> Gb<A> {
     #[must_use]
-    #[inline]
     pub(crate) const fn read_wram_lo(&self, addr: u16) -> u8 {
         self.wram[(addr & 0xFFF) as usize]
     }
 
-    #[inline]
     fn write_wram_lo(&mut self, addr: u16, val: u8) {
         self.wram[(addr & 0xFFF) as usize] = val;
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_wram_hi(&self, addr: u16) -> u8 {
         self.wram[(addr & 0xFFF | self.svbk.bank_offset()) as usize]
     }
 
-    #[inline]
     fn write_wram_hi(&mut self, addr: u16, val: u8) {
         self.wram[(addr & 0xFFF | self.svbk.bank_offset()) as usize] = val;
     }
 
     #[must_use]
-    #[inline]
     const fn is_dma_active(&self) -> bool {
         self.dma_on && (self.dma_cycles > 0 || self.dma_restarting)
     }
 
     #[must_use]
-    #[inline]
     const fn is_hdma_on(&self) -> bool {
         !matches!(self.hdma_state, HdmaState::Sleep)
     }
 
     #[must_use]
-    #[inline]
     const fn read_boot_or_cart(&self, addr: u16) -> u8 {
         if let Some(bootrom) = self.bootrom {
             // TODO: as long as the bootrom is correct should be in bounds
@@ -159,7 +152,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     pub(crate) fn write_mem(&mut self, addr: u16, val: u8) {
         match addr {
             // FIXME: we assume bootrom doesn't write to rom
@@ -175,7 +167,6 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[must_use]
-    #[inline]
     fn read_high(&self, addr: u8) -> u8 {
         match addr {
             P1 => self.joy.read_p1(),
@@ -233,7 +224,6 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[expect(clippy::cognitive_complexity)]
-    #[inline]
     fn write_high(&mut self, addr: u8, val: u8) {
         match addr {
             P1 => self.joy.write_joy(val),
@@ -315,7 +305,6 @@ impl<A: AudioCallback> Gb<A> {
     // * DMA *
     // *******
 
-    #[inline]
     fn write_dma(&mut self, val: u8) {
         if self.dma_on {
             self.dma_restarting = true;
@@ -327,7 +316,6 @@ impl<A: AudioCallback> Gb<A> {
         self.dma_on = true;
     }
 
-    #[inline]
     pub(crate) fn run_dma(&mut self) {
         if !self.dma_on {
             return;
@@ -355,34 +343,28 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn write_hdma1(&mut self, val: u8) {
         self.hdma_src = (u16::from(val) << 8) | (self.hdma_src & 0xF0);
     }
 
-    #[inline]
     fn write_hdma2(&mut self, val: u8) {
         self.hdma_src = (self.hdma_src & 0xFF00) | u16::from(val & 0xF0);
     }
 
-    #[inline]
     fn write_hdma3(&mut self, val: u8) {
         self.hdma_dst = (u16::from(val & 0x1F) << 8) | (self.hdma_dst & 0xF0);
     }
 
-    #[inline]
     fn write_hdma4(&mut self, val: u8) {
         self.hdma_dst = (self.hdma_dst & 0x1F00) | u16::from(val & 0xF0);
     }
 
     #[must_use]
-    #[inline]
     const fn read_hdma5(&self) -> u8 {
         // active on low
         (!self.is_hdma_on() as u8) << 7 | self.hdma5
     }
 
-    #[inline]
     fn write_hdma5(&mut self, val: u8) {
         use HdmaState::{General, Sleep, WaitHBlank};
 
@@ -399,7 +381,6 @@ impl<A: AudioCallback> Gb<A> {
         self.hdma_state = if val & 0x80 == 0 { General } else { WaitHBlank };
     }
 
-    #[inline]
     pub(crate) fn run_hdma(&mut self) {
         use HdmaState::{General, HBlankDone, Sleep, WaitHBlank};
 
@@ -459,18 +440,15 @@ pub struct Svbk {
 
 impl Svbk {
     #[must_use]
-    #[inline]
     pub const fn read(&self) -> u8 {
         self.svbk | 0xF8
     }
 
-    #[inline]
     pub fn write(&mut self, val: u8) {
         self.svbk = val & 7;
     }
 
     #[must_use]
-    #[inline]
     pub const fn bank_offset(&self) -> u16 {
         // Return value between 0x1000 and 0x7000
         (if self.svbk == 0 { 1 } else { self.svbk } as u16) * 0x1000
@@ -484,29 +462,24 @@ pub struct Key1 {
 
 impl Key1 {
     #[must_use]
-    #[inline]
     pub const fn read(&self) -> u8 {
         self.key1 | 0x7E
     }
 
-    #[inline]
     pub fn write(&mut self, val: u8) {
         self.key1 = self.key1 & 0x80 | val & 1;
     }
 
     #[must_use]
-    #[inline]
     pub const fn is_enabled(&self) -> bool {
         self.key1 & 0x80 != 0
     }
 
     #[must_use]
-    #[inline]
     pub const fn is_requested(&self) -> bool {
         self.key1 & 1 != 0
     }
 
-    #[inline]
     pub fn change_speed(&mut self) {
         debug_assert!(self.is_requested());
         self.key1 = !self.key1;

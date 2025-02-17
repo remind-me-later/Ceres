@@ -64,7 +64,7 @@ pub struct Gb<C: AudioCallback> {
     halt_bug: bool,
 
     // memory
-    wram: [u8; WRAM_SIZE_CGB as usize],
+    wram: Box<[u8; WRAM_SIZE_CGB as usize]>,
     hram: [u8; HRAM_SIZE as usize],
     svbk: Svbk,
     key1: Key1,
@@ -119,7 +119,16 @@ impl<C: AudioCallback> Gb<C> {
             bootrom,
             apu: Apu::new(sample_rate, audio_callback),
 
-            wram: [0; WRAM_SIZE_CGB as usize],
+            wram: {
+                #[expect(
+                    clippy::unwrap_used,
+                    reason = "RGB_BUF_SIZE is a constant, so this will never panic."
+                )]
+                vec![0; WRAM_SIZE_CGB as usize]
+                    .into_boxed_slice()
+                    .try_into()
+                    .unwrap()
+            },
             hram: [0; HRAM_SIZE as usize],
             af: Default::default(),
             bc: Default::default(),
@@ -155,7 +164,6 @@ impl<C: AudioCallback> Gb<C> {
         }
     }
 
-    #[inline]
     pub fn run_frame(&mut self) {
         self.dot_accumulator = 0;
 
@@ -167,23 +175,19 @@ impl<C: AudioCallback> Gb<C> {
     }
 
     #[must_use]
-    #[inline]
     pub const fn pixel_data_rgba(&self) -> &[u8] {
         self.ppu.pixel_data_rgba()
     }
 
     #[must_use]
-    #[inline]
     pub const fn vram_data_rgba(&self) -> &[u8] {
         self.ppu.vram_data_rgba()
     }
 
-    #[inline]
     pub fn press(&mut self, button: Button) {
         self.joy.press(button, &mut self.ints);
     }
 
-    #[inline]
     pub fn release(&mut self, button: Button) {
         self.joy.release(button);
     }

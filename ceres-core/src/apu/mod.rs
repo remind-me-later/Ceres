@@ -142,7 +142,11 @@ impl<C: AudioCallback> Apu<C> {
         let mut outl = 0.0;
         let mut outr = 0.0;
 
-        if self.ch1.is_enabled() || self.ch2.is_enabled() || self.ch3.is_enabled() || self.ch4.is_enabled() {
+        if self.ch1.is_enabled()
+            || self.ch2.is_enabled()
+            || self.ch3.is_enabled()
+            || self.ch4.is_enabled()
+        {
             outl = l - self.capacitor_l;
             outr = r - self.capacitor_r;
 

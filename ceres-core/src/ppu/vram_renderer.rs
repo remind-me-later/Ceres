@@ -13,19 +13,25 @@ pub const VRAM_PX_HEIGHT: u16 = TILE_HEIGHT * 8;
 
 #[derive(Clone, Debug)]
 pub(super) struct RgbaBuf {
-    data: [u8; RGB_BUF_SIZE as usize],
+    data: Box<[u8; RGB_BUF_SIZE as usize]>,
 }
 
 impl Default for RgbaBuf {
     fn default() -> Self {
+        #[expect(
+            clippy::unwrap_used,
+            reason = "RGB_BUF_SIZE is a constant, so this will never panic."
+        )]
         Self {
-            data: [0xff; RGB_BUF_SIZE as usize],
+            data: vec![0xff; RGB_BUF_SIZE as usize]
+                .into_boxed_slice()
+                .try_into()
+                .unwrap(),
         }
     }
 }
 
 impl RgbaBuf {
-    #[inline]
     pub(super) fn set_px(&mut self, index: u32, rgb: (u8, u8, u8)) {
         let base = index * BPP;
         self.data[base as usize] = rgb.0;
@@ -34,9 +40,8 @@ impl RgbaBuf {
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn pixel_data(&self) -> &[u8] {
-        &self.data
+        self.data.as_slice()
     }
 }
 

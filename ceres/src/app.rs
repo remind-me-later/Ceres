@@ -25,6 +25,7 @@ impl App {
         scaling: Scaling,
     ) -> Self {
         let ctx = &cc.egui_ctx;
+
         #[expect(clippy::unwrap_used)]
         let audio = audio::State::new().unwrap();
         #[expect(clippy::unwrap_used)]

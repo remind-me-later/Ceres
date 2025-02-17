@@ -29,7 +29,6 @@ impl<A: AudioCallback> Gb<A> {
         self.dot_accumulator += cycles;
     }
 
-    #[inline]
     fn advance_tima_state(&mut self) {
         match self.tima_state {
             TIMAState::Reloading => {
@@ -43,7 +42,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn inc_tima(&mut self) {
         self.tima = self.tima.wrapping_add(1);
 
@@ -57,7 +55,6 @@ impl<A: AudioCallback> Gb<A> {
     // TODO: this could be optimized
     fn set_system_clk(&mut self, val: u16) {
         #[must_use]
-        #[inline]
         const fn sys_clk_tac_mux(tac: u8) -> u16 {
             match tac & 3 {
                 0 => 1 << 9,
@@ -68,7 +65,11 @@ impl<A: AudioCallback> Gb<A> {
         }
 
         let triggers = self.div & !val;
-        let apu_bit = if self.key1.is_enabled() { 0x2000 } else { 0x1000 };
+        let apu_bit = if self.key1.is_enabled() {
+            0x2000
+        } else {
+            0x1000
+        };
 
         // increase TIMA on falling edge of TAC mux
         if self.is_tac_enabled() && (triggers & sys_clk_tac_mux(self.tac) != 0) {
@@ -88,7 +89,6 @@ impl<A: AudioCallback> Gb<A> {
         self.div = val;
     }
 
-    #[inline]
     pub(crate) fn run_timers(&mut self, cycles: i32) {
         for _ in 0..cycles / 4 {
             self.advance_tima_state();
@@ -97,39 +97,32 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_div(&self) -> u8 {
         ((self.div >> 8) & 0xFF) as u8
     }
 
-    #[inline]
     pub(crate) fn write_div(&mut self) {
         self.set_system_clk(0);
     }
 
-    #[inline]
     pub(crate) fn write_tima(&mut self, val: u8) {
         self.tima = val;
     }
 
-    #[inline]
     pub(crate) fn write_tma(&mut self, val: u8) {
         self.tma = val;
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_tac(&self) -> u8 {
         0xF8 | self.tac
     }
 
-    #[inline]
     pub(crate) fn write_tac(&mut self, val: u8) {
         self.tac = val;
     }
 
     #[must_use]
-    #[inline]
     const fn is_tac_enabled(&self) -> bool {
         self.tac & 4 != 0
     }

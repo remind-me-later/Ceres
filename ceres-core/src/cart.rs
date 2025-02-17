@@ -119,7 +119,10 @@ pub struct Cart {
 }
 
 impl Default for Cart {
-    #[expect(clippy::unwrap_used)]
+    #[expect(
+        clippy::unwrap_used,
+        reason = "ROMSize::new and RAMSize::new are safe to unwrap"
+    )]
     fn default() -> Self {
         let rom_size = ROMSize::new(0).unwrap();
         let ram_size = RAMSize::new(0).unwrap();
@@ -228,7 +231,6 @@ impl Cart {
     }
 
     #[must_use]
-    #[inline]
     pub fn mbc_ram(&self) -> Option<&[u8]> {
         self.has_battery.then_some(&*self.ram)
     }
@@ -239,7 +241,6 @@ impl Cart {
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn rtc(&self) -> Option<&Mbc3RTC> {
         if let Mbc3 { rtc: Some(rtc) } = &self.mbc {
             Some(rtc)
@@ -258,7 +259,6 @@ impl Cart {
     }
 
     #[must_use]
-    #[inline]
     pub const fn has_battery(&self) -> bool {
         self.has_battery
     }
@@ -287,7 +287,6 @@ impl Cart {
     }
 
     #[must_use]
-    #[inline]
     pub(crate) fn read_ram(&self, addr: u16) -> u8 {
         const fn mbc_read_ram(cart: &Cart, ram_enabled: bool, addr: u16) -> u8 {
             if cart.ram_size.has_ram() && ram_enabled {
@@ -310,7 +309,6 @@ impl Cart {
     }
 
     #[expect(clippy::too_many_lines)]
-    #[inline]
     pub(crate) fn write_rom(&mut self, addr: u16, val: u8) {
         match &mut self.mbc {
             Mbc0 => (),
@@ -448,7 +446,6 @@ impl Cart {
         }
     }
 
-    #[inline]
     pub(crate) fn write_ram(&mut self, addr: u16, val: u8) {
         fn mbc_write_ram(cart: &mut Cart, ram_enabled: bool, addr: u16, val: u8) {
             if cart.ram_size.has_ram() && ram_enabled {
@@ -472,7 +469,6 @@ impl Cart {
     }
 
     #[must_use]
-    #[inline]
     const fn ram_addr(&self, addr: u16) -> u32 {
         self.ram_offset | (addr & 0x1FFF) as u32
     }
@@ -494,7 +490,6 @@ enum ROMSize {
 impl ROMSize {
     const BANK_SIZE: u16 = 0x4000;
 
-    #[inline]
     const fn new(byte: u8) -> Result<Self, Error> {
         use ROMSize::{Kb128, Kb256, Kb32, Kb512, Kb64, Mb1, Mb2, Mb4, Mb8};
         let rom_size = match byte {
@@ -514,14 +509,12 @@ impl ROMSize {
     }
 
     #[must_use]
-    #[inline]
     const fn size_bytes(self) -> u32 {
         // maximum is 0x8000 << 8 = 0x80_0000
         (Self::BANK_SIZE as u32 * 2) << (self as u8)
     }
 
     #[must_use]
-    #[inline]
     const fn mask(self) -> u16 {
         // maximum is 2 << 8 - 1 = 1FF
         (2_u16 << (self as u8)) - 1
@@ -540,7 +533,6 @@ enum RAMSize {
 impl RAMSize {
     const BANK_SIZE: u16 = 0x2000;
 
-    #[inline]
     const fn new(byte: u8) -> Result<Self, Error> {
         use RAMSize::{Kb128, Kb32, Kb64, Kb8, NoRAM};
         let ram_size = match byte {
@@ -556,20 +548,17 @@ impl RAMSize {
     }
 
     #[must_use]
-    #[inline]
     const fn has_ram(self) -> bool {
         !matches!(self, Self::NoRAM)
     }
 
     #[must_use]
-    #[inline]
     const fn size_bytes(self) -> u32 {
         // Max size is 0x2000 * 0x10 = 0x20000 so it fits in a u32
         self.num_banks() as u32 * Self::BANK_SIZE as u32
     }
 
     #[must_use]
-    #[inline]
     const fn num_banks(self) -> u8 {
         match self {
             Self::NoRAM => 0x0,
@@ -581,7 +570,6 @@ impl RAMSize {
     }
 
     #[must_use]
-    #[inline]
     const fn mask(self) -> u8 {
         match self {
             Self::NoRAM | Self::Kb8 => 0x0,
@@ -602,13 +590,11 @@ pub(crate) struct Mbc3RTC {
 }
 
 impl Mbc3RTC {
-    #[inline]
     #[expect(clippy::unwrap_used)]
     fn map_reg(&mut self, val: u8) {
         self.mapped = Some(NonZeroU8::new(val).unwrap());
     }
 
-    #[inline]
     fn unmap_reg(&mut self) {
         self.mapped = None;
     }
@@ -626,7 +612,6 @@ impl Mbc3RTC {
         }
     }
 
-    #[inline]
     fn update_secs(&mut self) {
         self.regs[0] = (self.regs[0] + 1) & 0x3F;
         if self.regs[0] == 60 {
@@ -652,7 +637,6 @@ impl Mbc3RTC {
         }
     }
 
-    #[inline]
     fn read(&self, ram_enabled: bool) -> Option<u8> {
         ram_enabled
             .then(|| {

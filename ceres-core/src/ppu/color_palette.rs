@@ -27,25 +27,21 @@ impl Default for ColorPalette {
 }
 
 impl ColorPalette {
-    #[inline]
     pub(crate) fn set_spec(&mut self, val: u8) {
         self.spec = val;
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn spec(&self) -> u8 {
         self.spec | 0x40
     }
 
     #[must_use]
-    #[inline]
     const fn index(&self) -> u8 {
         self.spec & 0x3F
     }
 
     #[must_use]
-    #[inline]
     const fn is_increment_enabled(&self) -> bool {
         self.spec & 0x80 != 0
     }

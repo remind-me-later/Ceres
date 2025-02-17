@@ -34,29 +34,24 @@ impl Serial {
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn div_mask(&self) -> u8 {
         self.div_mask
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_sb(&self) -> u8 {
         self.sb
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_sc(&self) -> u8 {
         self.sc
     }
 
-    #[inline]
     pub(crate) fn write_sb(&mut self, val: u8) {
         self.sb = val;
     }
 
-    #[inline]
     pub(crate) fn write_sc(&mut self, mut val: u8, ints: &mut Interrupts, cgb_mode: &CgbMode) {
         self.count = 0;
 

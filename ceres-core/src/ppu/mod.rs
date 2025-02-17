@@ -98,7 +98,6 @@ pub struct Ppu {
 }
 
 impl Default for Ppu {
-    #[expect(clippy::large_stack_frames)]
     fn default() -> Self {
         Self {
             vram: [0; VRAM_SIZE_CGB as usize],
@@ -133,158 +132,130 @@ impl Default for Ppu {
 // IO
 impl Ppu {
     #[must_use]
-    #[inline]
     pub(crate) fn ocp_mut(&mut self) -> &mut ColorPalette {
         &mut self.ocp
     }
 
     #[must_use]
-    #[inline]
     pub(crate) fn bcp_mut(&mut self) -> &mut ColorPalette {
         &mut self.bcp
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn ocp(&self) -> &ColorPalette {
         &self.ocp
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn bcp(&self) -> &ColorPalette {
         &self.bcp
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_stat(&self) -> u8 {
         self.stat | 0x80
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_ly(&self) -> u8 {
         self.ly
     }
 
-    #[inline]
     pub(crate) fn write_opri(&mut self, val: u8) {
         self.opri = val & 1 != 0;
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_opri(&self) -> u8 {
         self.opri as u8 | 0xFE
     }
 
-    #[inline]
     pub(crate) fn write_vbk(&mut self, val: u8) {
         self.vbk = val & 1 != 0;
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_vbk(&self) -> u8 {
         (self.vbk as u8) | 0xFE
     }
 
-    #[inline]
     pub(crate) fn write_scx(&mut self, val: u8) {
         self.scx = val;
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_scx(&self) -> u8 {
         self.scx
     }
 
-    #[inline]
     pub(crate) fn write_scy(&mut self, val: u8) {
         self.scy = val;
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_scy(&self) -> u8 {
         self.scy
     }
 
-    #[inline]
     pub(crate) fn write_lyc(&mut self, val: u8) {
         self.lyc = val;
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_lyc(&self) -> u8 {
         self.lyc
     }
 
-    #[inline]
     pub(crate) fn write_bgp(&mut self, val: u8) {
         self.bgp = val;
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_bgp(&self) -> u8 {
         self.bgp
     }
 
-    #[inline]
     pub(crate) fn write_obp0(&mut self, val: u8) {
         self.obp0 = val;
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_obp0(&self) -> u8 {
         self.obp0
     }
 
-    #[inline]
     pub(crate) fn write_obp1(&mut self, val: u8) {
         self.obp1 = val;
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_obp1(&self) -> u8 {
         self.obp1
     }
 
-    #[inline]
     pub(crate) fn write_wy(&mut self, val: u8) {
         self.wy = val;
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_wy(&self) -> u8 {
         self.wy
     }
 
-    #[inline]
     pub(crate) fn write_wx(&mut self, val: u8) {
         self.wx = val;
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_wx(&self) -> u8 {
         self.wx
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_lcdc(&self) -> u8 {
         self.lcdc
     }
 
-    #[inline]
     pub(crate) fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts) {
         // turn off
         if val & LCDC_ON_B == 0 && self.lcdc & LCDC_ON_B != 0 {
@@ -313,7 +284,6 @@ impl Ppu {
         self.lcdc = val;
     }
 
-    #[inline]
     pub(crate) fn write_stat(&mut self, val: u8) {
         let ly_equals_lyc = self.stat & STAT_LYC_B;
         let mode: u8 = self.mode() as u8;
@@ -324,7 +294,6 @@ impl Ppu {
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_vram(&self, addr: u16) -> u8 {
         if matches!(self.mode(), Mode::Drawing) {
             0xFF
@@ -344,7 +313,6 @@ impl Ppu {
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn read_oam(&self, addr: u16, dma_on: bool) -> u8 {
         match self.mode() {
             Mode::HBlank | Mode::VBlank if !dma_on => self.oam[(addr & 0xFF) as usize],
@@ -352,7 +320,6 @@ impl Ppu {
         }
     }
 
-    #[inline]
     pub(crate) fn write_oam(&mut self, addr: u16, val: u8, dma_active: bool) {
         match self.mode() {
             Mode::HBlank | Mode::VBlank if !dma_active => {
@@ -362,7 +329,6 @@ impl Ppu {
         };
     }
 
-    #[inline]
     pub(crate) fn write_oam_by_dma(&mut self, addr: u16, val: u8) {
         self.oam[(addr & 0xFF) as usize] = val;
     }
@@ -447,7 +413,6 @@ impl Ppu {
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn mode(&self) -> Mode {
         match self.stat & 3 {
             0 => Mode::HBlank,
@@ -457,7 +422,6 @@ impl Ppu {
         }
     }
 
-    #[inline]
     fn set_mode_stat(&mut self, mode: Mode) {
         self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
     }
@@ -501,13 +465,11 @@ impl Ppu {
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn pixel_data_rgba(&self) -> &[u8] {
         self.rgba_buf_present.pixel_data()
     }
 
     #[must_use]
-    #[inline]
     pub(crate) const fn vram_data_rgba(&self) -> &[u8] {
         self.vram_renderer.vram_data_rgba()
     }

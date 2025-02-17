@@ -43,26 +43,22 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn cpu_write(&mut self, addr: u16, val: u8) {
         self.tick_m_cycle();
         self.write_mem(addr, val);
     }
 
     #[must_use]
-    #[inline]
     fn read(&mut self, addr: u16) -> u8 {
         self.tick_m_cycle();
         self.read_mem(addr)
     }
 
-    #[inline]
     fn tick_m_cycle(&mut self) {
         self.advance_t_cycles(4);
     }
 
     #[must_use]
-    #[inline]
     fn imm8(&mut self) -> u8 {
         let val = self.read(self.pc);
         self.pc = self.pc.wrapping_add(1);
@@ -70,14 +66,12 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[must_use]
-    #[inline]
     fn imm16(&mut self) -> u16 {
         let lo = u16::from(self.imm8());
         let hi = u16::from(self.imm8());
         hi << 8 | lo
     }
 
-    #[inline]
     fn set_rr(&mut self, id: u8, val: u16) {
         match id {
             0 => self.af = val,
@@ -90,7 +84,6 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[must_use]
-    #[inline]
     const fn get_rr(&self, id: u8) -> u16 {
         match id {
             0 => self.af,
@@ -135,13 +128,11 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn ld(&mut self, op: u8) {
         let val = self.get_r(op);
         self.set_r(op >> 3, val);
     }
 
-    #[inline]
     fn ld_a_drr(&mut self, op: u8) {
         let id = (op >> 4) + 1;
         self.af &= 0xFF;
@@ -149,41 +140,35 @@ impl<A: AudioCallback> Gb<A> {
         self.af |= u16::from(self.read(addr)) << 8;
     }
 
-    #[inline]
     fn ld_drr_a(&mut self, op: u8) {
         let id = (op >> 4) + 1;
         let addr = self.get_rr(id);
         self.cpu_write(addr, (self.af >> 8) as u8);
     }
 
-    #[inline]
     fn ld_da16_a(&mut self) {
         let addr = self.imm16();
         self.cpu_write(addr, (self.af >> 8) as u8);
     }
 
-    #[inline]
     fn ld_a_da16(&mut self) {
         self.af &= 0xFF;
         let addr = self.imm16();
         self.af |= u16::from(self.read(addr)) << 8;
     }
 
-    #[inline]
     fn ld_dhli_a(&mut self) {
         let addr = self.hl;
         self.cpu_write(addr, (self.af >> 8) as u8);
         self.hl = addr.wrapping_add(1);
     }
 
-    #[inline]
     fn ld_dhld_a(&mut self) {
         let addr = self.hl;
         self.cpu_write(addr, (self.af >> 8) as u8);
         self.hl = addr.wrapping_sub(1);
     }
 
-    #[inline]
     fn ld_a_dhli(&mut self) {
         let addr = self.hl;
         let val = u16::from(self.read(addr));
@@ -192,7 +177,6 @@ impl<A: AudioCallback> Gb<A> {
         self.hl = addr.wrapping_add(1);
     }
 
-    #[inline]
     fn ld_a_dhld(&mut self) {
         let addr = self.hl;
         let val = u16::from(self.read(addr));
@@ -201,59 +185,50 @@ impl<A: AudioCallback> Gb<A> {
         self.hl = addr.wrapping_sub(1);
     }
 
-    #[inline]
     fn ldh_da8_a(&mut self) {
         let tmp = u16::from(self.imm8());
         let a = (self.af >> 8) as u8;
         self.cpu_write(0xFF00 | tmp, a);
     }
 
-    #[inline]
     fn ldh_a_da8(&mut self) {
         let tmp = u16::from(self.imm8());
         self.af &= 0xFF;
         self.af |= u16::from(self.read(0xFF00 | tmp)) << 8;
     }
 
-    #[inline]
     fn ldh_dc_a(&mut self) {
         self.cpu_write(0xFF00 | self.bc & 0xFF, (self.af >> 8) as u8);
     }
 
-    #[inline]
     fn ldh_a_dc(&mut self) {
         self.af &= 0xFF;
         self.af |= u16::from(self.read(0xFF00 | self.bc & 0xFF)) << 8;
     }
 
-    #[inline]
     fn ld_hr_d8(&mut self, op: u8) {
         let id = ((op >> 4) + 1) & 0x03;
         let hi = u16::from(self.imm8());
         self.set_rr(id, (hi << 8) | self.get_rr(id) & 0xFF);
     }
 
-    #[inline]
     fn ld_lr_d8(&mut self, op: u8) {
         let id = (op >> 4) + 1;
         let lo = u16::from(self.imm8());
         self.set_rr(id, self.get_rr(id) & 0xFF00 | lo);
     }
 
-    #[inline]
     fn ld_dhl_d8(&mut self) {
         let tmp = self.imm8();
         self.cpu_write(self.hl, tmp);
     }
 
-    #[inline]
     fn ld16_sp_hl(&mut self) {
         let val = self.hl;
         self.sp = val;
         self.tick_m_cycle();
     }
 
-    #[inline]
     fn add(&mut self, val: u16) {
         let a = self.af >> 8;
         let res = a + val;
@@ -269,19 +244,16 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn add_a_r(&mut self, op: u8) {
         let val = u16::from(self.get_r(op));
         self.add(val);
     }
 
-    #[inline]
     fn add_a_d8(&mut self) {
         let val = u16::from(self.imm8());
         self.add(val);
     }
 
-    #[inline]
     fn sub(&mut self, val: u16) {
         let a = self.af >> 8;
         self.af = (a.wrapping_sub(val) << 8) | NF;
@@ -296,19 +268,16 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn sub_a_r(&mut self, op: u8) {
         let val = u16::from(self.get_r(op));
         self.sub(val);
     }
 
-    #[inline]
     fn sub_a_d8(&mut self) {
         let val = u16::from(self.imm8());
         self.sub(val);
     }
 
-    #[inline]
     fn sbc(&mut self, val: u16) {
         let a = self.af >> 8;
         let carry = u16::from((self.af & CF) != 0);
@@ -326,19 +295,16 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn sbc_a_r(&mut self, op: u8) {
         let val = u16::from(self.get_r(op));
         self.sbc(val);
     }
 
-    #[inline]
     fn sbc_a_d8(&mut self) {
         let val = u16::from(self.imm8());
         self.sbc(val);
     }
 
-    #[inline]
     fn adc(&mut self, val: u16) {
         let a = self.af >> 8;
         let carry = u16::from((self.af & CF) != 0);
@@ -355,19 +321,16 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn adc_a_r(&mut self, op: u8) {
         let val = u16::from(self.get_r(op));
         self.adc(val);
     }
 
-    #[inline]
     fn adc_a_d8(&mut self) {
         let val = u16::from(self.imm8());
         self.adc(val);
     }
 
-    #[inline]
     fn or(&mut self, val: u16) {
         let a = self.af >> 8;
         self.af = (a | val) << 8;
@@ -376,19 +339,16 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn or_a_r(&mut self, op: u8) {
         let val = u16::from(self.get_r(op));
         self.or(val);
     }
 
-    #[inline]
     fn or_a_d8(&mut self) {
         let val = u16::from(self.imm8());
         self.or(val);
     }
 
-    #[inline]
     fn xor(&mut self, val: u16) {
         let a = self.af >> 8;
         let a = a ^ val;
@@ -398,19 +358,16 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn xor_a_r(&mut self, op: u8) {
         let val = u16::from(self.get_r(op));
         self.xor(val);
     }
 
-    #[inline]
     fn xor_a_d8(&mut self) {
         let val = u16::from(self.imm8());
         self.xor(val);
     }
 
-    #[inline]
     fn and(&mut self, val: u16) {
         let a = self.af >> 8;
         let a = a & val;
@@ -420,19 +377,16 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn and_a_r(&mut self, op: u8) {
         let val = u16::from(self.get_r(op));
         self.and(val);
     }
 
-    #[inline]
     fn and_a_d8(&mut self) {
         let val = u16::from(self.imm8());
         self.and(val);
     }
 
-    #[inline]
     fn cp(&mut self, val: u16) {
         let a = self.af >> 8;
         self.af &= 0xFF00;
@@ -448,19 +402,16 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn cp_a_r(&mut self, op: u8) {
         let val = u16::from(self.get_r(op));
         self.cp(val);
     }
 
-    #[inline]
     fn cp_a_d8(&mut self) {
         let val = u16::from(self.imm8());
         self.cp(val);
     }
 
-    #[inline]
     fn inc_lr(&mut self, op: u8) {
         let id = (op >> 4) + 1;
         let val = self.get_rr(id).wrapping_add(1) & 0xFF;
@@ -478,7 +429,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn dec_lr(&mut self, op: u8) {
         let id = (op >> 4) + 1;
         let val = self.get_rr(id).wrapping_sub(1) & 0xFF;
@@ -497,7 +447,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn inc_hr(&mut self, op: u8) {
         let id = ((op >> 4) + 1) & 0x03;
         let rr = self.get_rr(id).wrapping_add(0x100);
@@ -513,7 +462,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn dec_hr(&mut self, op: u8) {
         let id = ((op >> 4) + 1) & 0x03;
         let rr = self.get_rr(id).wrapping_sub(0x100);
@@ -530,7 +478,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn inc_dhl(&mut self) {
         let val = self.read(self.hl).wrapping_add(1);
         self.cpu_write(self.hl, val);
@@ -545,7 +492,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn dec_dhl(&mut self) {
         let val = self.read(self.hl).wrapping_sub(1);
         self.cpu_write(self.hl, val);
@@ -561,21 +507,18 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn inc_rr(&mut self, op: u8) {
         let id = (op >> 4) + 1;
         self.set_rr(id, self.get_rr(id).wrapping_add(1));
         self.tick_m_cycle();
     }
 
-    #[inline]
     fn dec_rr(&mut self, op: u8) {
         let id = (op >> 4) + 1;
         self.set_rr(id, self.get_rr(id).wrapping_sub(1));
         self.tick_m_cycle();
     }
 
-    #[inline]
     fn ld_hl_sp_r8(&mut self) {
         self.af &= 0xFF00;
         #[expect(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
@@ -592,7 +535,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn rlca(&mut self) {
         let carry = (self.af & 0x8000) != 0;
 
@@ -602,7 +544,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn rrca(&mut self) {
         let carry = self.af & 0x100 != 0;
         self.af = (self.af >> 1) & 0xFF00;
@@ -611,7 +552,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn rrc_r(&mut self, op: u8) {
         let val = self.get_r(op);
         let carry = (val & 0x01) != 0;
@@ -626,19 +566,16 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn do_jump_to_immediate(&mut self) {
         let addr = self.imm16();
         self.pc = addr;
         self.tick_m_cycle();
     }
 
-    #[inline]
     fn jp_a16(&mut self) {
         self.do_jump_to_immediate();
     }
 
-    #[inline]
     fn jp_cc(&mut self, op: u8) {
         if self.satisfies_branch_condition(op) {
             self.do_jump_to_immediate();
@@ -650,12 +587,10 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn jp_hl(&mut self) {
         self.pc = self.hl;
     }
 
-    #[inline]
     fn do_jump_relative(&mut self) {
         #[expect(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
         let offset = self.imm8() as i8 as u16;
@@ -663,12 +598,10 @@ impl<A: AudioCallback> Gb<A> {
         self.tick_m_cycle();
     }
 
-    #[inline]
     fn jr_d(&mut self) {
         self.do_jump_relative();
     }
 
-    #[inline]
     fn jr_cc(&mut self, op: u8) {
         if self.satisfies_branch_condition(op) {
             self.do_jump_relative();
@@ -678,19 +611,16 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn do_call(&mut self) {
         let addr = self.imm16();
         self.push(self.pc);
         self.pc = addr;
     }
 
-    #[inline]
     fn call_nn(&mut self) {
         self.do_call();
     }
 
-    #[inline]
     fn call_cc_a16(&mut self, op: u8) {
         if self.satisfies_branch_condition(op) {
             self.do_call();
@@ -702,19 +632,16 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn ret(&mut self) {
         self.pc = self.pop();
         self.tick_m_cycle();
     }
 
-    #[inline]
     fn reti(&mut self) {
         self.ret();
         self.ints.enable();
     }
 
-    #[inline]
     fn ret_cc(&mut self, op: u8) {
         self.tick_m_cycle();
 
@@ -724,7 +651,6 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[must_use]
-    #[inline]
     const fn satisfies_branch_condition(&self, op: u8) -> bool {
         match (op >> 3) & 3 {
             0 => self.af & ZF == 0,
@@ -735,13 +661,11 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn rst(&mut self, op: u8) {
         self.push(self.pc);
         self.pc = u16::from(op) ^ 0xC7;
     }
 
-    #[inline]
     fn halt(&mut self) {
         if !self.ints.is_any_requested() {
             self.cpu_halted = true;
@@ -754,7 +678,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn stop(&mut self) {
         let _discard_byte = self.imm8();
 
@@ -771,41 +694,34 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn di(&mut self) {
         self.ints.disable();
     }
 
-    #[inline]
     fn ei(&mut self) {
         self.ei_delay = true;
     }
 
-    #[inline]
     fn ccf(&mut self) {
         self.af ^= CF;
         self.af &= !(HF | NF);
     }
 
-    #[inline]
     fn scf(&mut self) {
         self.af |= CF;
         self.af &= !(HF | NF);
     }
 
     #[expect(clippy::unused_self)]
-    #[inline]
     const fn nop(&self) {}
 
     // TODO: debugger breakpoint
 
-    #[inline]
     #[expect(clippy::needless_pass_by_ref_mut)]
     fn ld_b_b(&mut self) {
         self.nop();
     }
 
-    #[inline]
     fn daa(&mut self) {
         let a = {
             let mut a = self.af >> 8;
@@ -842,13 +758,11 @@ impl<A: AudioCallback> Gb<A> {
         self.af |= a << 8;
     }
 
-    #[inline]
     fn cpl(&mut self) {
         self.af ^= 0xFF00;
         self.af |= HF | NF;
     }
 
-    #[inline]
     fn push(&mut self, val: u16) {
         self.sp = self.sp.wrapping_sub(1);
         self.cpu_write(self.sp, (val >> 8) as u8);
@@ -857,14 +771,12 @@ impl<A: AudioCallback> Gb<A> {
         self.tick_m_cycle();
     }
 
-    #[inline]
     fn push_rr(&mut self, op: u8) {
         let id = ((op >> 4) + 1) & 3;
         self.push(self.get_rr(id));
     }
 
     #[must_use]
-    #[inline]
     fn pop(&mut self) -> u16 {
         let val = u16::from(self.read(self.sp));
         self.sp = self.sp.wrapping_add(1);
@@ -873,7 +785,6 @@ impl<A: AudioCallback> Gb<A> {
         val
     }
 
-    #[inline]
     fn pop_rr(&mut self, op: u8) {
         let val = self.pop();
         let id = ((op >> 4) + 1) & 3;
@@ -881,14 +792,12 @@ impl<A: AudioCallback> Gb<A> {
         self.af &= 0xFFF0;
     }
 
-    #[inline]
     fn ld_rr_d16(&mut self, op: u8) {
         let id = (op >> 4) + 1;
         let imm = self.imm16();
         self.set_rr(id, imm);
     }
 
-    #[inline]
     fn ld_da16_sp(&mut self) {
         let val = self.sp;
         let addr = self.imm16();
@@ -896,7 +805,6 @@ impl<A: AudioCallback> Gb<A> {
         self.cpu_write(addr.wrapping_add(1), (val >> 8) as u8);
     }
 
-    #[inline]
     fn add_sp_r8(&mut self) {
         let sp = self.sp;
         #[expect(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
@@ -915,7 +823,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn add_hl_rr(&mut self, op: u8) {
         let id = (op >> 4) + 1;
         let hl = self.hl;
@@ -935,7 +842,6 @@ impl<A: AudioCallback> Gb<A> {
         self.tick_m_cycle();
     }
 
-    #[inline]
     fn rlc_r(&mut self, op: u8) {
         let val = self.get_r(op);
         let carry = val & 0x80 != 0;
@@ -949,7 +855,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn rra(&mut self) {
         let bit1 = self.af & 0x0100 != 0;
         let carry = self.af & CF != 0;
@@ -960,7 +865,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn rr_r(&mut self, op: u8) {
         let val = self.get_r(op);
         let carry = self.af & CF != 0;
@@ -977,7 +881,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn sla_r(&mut self, op: u8) {
         let val = self.get_r(op);
         let carry = val & 0x80 != 0;
@@ -993,7 +896,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn sra_r(&mut self, op: u8) {
         let val = self.get_r(op);
         let bit7 = val & 0x80;
@@ -1008,7 +910,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn srl_r(&mut self, op: u8) {
         let val = self.get_r(op);
         self.af &= 0xFF00;
@@ -1021,7 +922,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn swap_r(&mut self, op: u8) {
         let val = self.get_r(op);
         self.af &= 0xFF00;
@@ -1031,7 +931,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn bit_r(&mut self, op: u8) {
         let val = self.get_r(op);
         let bit_no = (op >> 3) & 7;
@@ -1052,7 +951,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn rla(&mut self) {
         let bit7 = self.af & 0x8000 != 0;
         let carry = self.af & CF != 0;
@@ -1064,7 +962,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn rl_r(&mut self, op: u8) {
         let val = self.get_r(op);
         let carry = self.af & CF != 0;
@@ -1081,13 +978,11 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn ill(&mut self, _op: u8) {
         self.ints.ill();
         self.cpu_halted = true;
     }
 
-    #[inline]
     fn exec(&mut self, op: u8) {
         match op {
             0x00 | 0x5B | 0x6D | 0x7F | 0x49 | 0x52 | 0x64 => self.nop(),
@@ -1172,7 +1067,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
     fn exec_cb(&mut self) {
         let op = self.imm8();
         match op >> 3 {
