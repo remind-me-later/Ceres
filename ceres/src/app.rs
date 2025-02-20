@@ -1,4 +1,4 @@
-use crate::{gb_context::GbContext, screen, Scaling};
+use crate::{gb_thread::GbThread, screen, Scaling};
 use ceres_audio as audio;
 use eframe::egui::{self, Key};
 use rfd::FileDialog;
@@ -9,7 +9,7 @@ pub struct App {
     project_dirs: directories::ProjectDirs,
 
     // Contexts
-    gb_ctx: GbContext,
+    gb_ctx: GbThread,
 
     // Rendering
     _audio: audio::State,
@@ -27,7 +27,7 @@ impl App {
         let ctx = &cc.egui_ctx;
 
         let audio = audio::State::new()?;
-        let mut gb_ctx = GbContext::new(model, &project_dirs, rom_path, &audio, ctx)?;
+        let mut gb_ctx = GbThread::new(model, &project_dirs, rom_path, &audio, ctx)?;
         let gb_clone = gb_ctx.gb_clone();
         let screen = screen::GBScreen::new(cc, gb_clone, scaling);
 

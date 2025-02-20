@@ -7,7 +7,7 @@ use crate::{
     ppu::{OAM_SIZE, VRAM_SIZE_CGB, VRAM_SIZE_GB},
     AudioCallback, Cart, CgbMode, Gb,
 };
-use std::io::Write;
+use std::io::{Read, Seek, Write};
 
 fn write_footer<W: Write>(writer: &mut W, offset_to_first_block: u32) -> std::io::Result<()> {
     const LITERAL: &[u8] = b"BESS";
@@ -49,7 +49,7 @@ fn write_info_block<W: Write>(writer: &mut W, cart: &Cart) -> std::io::Result<()
 
 fn write_core_block<C: AudioCallback, W: Write>(
     gb: &Gb<C>,
-    sizes: Sizes,
+    sizes: CreatedSizes,
     writer: &mut W,
 ) -> std::io::Result<()> {
     write_block_header(writer, b"CORE", 0xD0)?;
@@ -159,7 +159,7 @@ fn write_rtc_block<W: Write>(writer: &mut W, cart: &Cart) -> std::io::Result<()>
 }
 
 #[derive(Default)]
-struct Sizes {
+struct CreatedSizes {
     ram_size: u32,
     vram_size: u32,
     mbc_ram_size: u32,
@@ -169,7 +169,7 @@ struct Sizes {
     obj_palette_size: u32,
 }
 
-impl Sizes {
+impl CreatedSizes {
     // fn total(&self) -> u32 {
     //     self.ram_size
     //         + self.vram_size
@@ -209,11 +209,11 @@ impl Sizes {
     }
 }
 
-pub fn save_state<C: AudioCallback, W: Write + std::io::Seek>(
+pub fn save_state<C: AudioCallback, W: Write + Seek>(
     gb: &Gb<C>,
     writer: &mut W,
 ) -> std::io::Result<()> {
-    let sizes = Sizes {
+    let sizes = CreatedSizes {
         ram_size: match gb.cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => u32::from(crate::WRAM_SIZE_GB),
             CgbMode::Cgb => u32::from(crate::WRAM_SIZE_CGB),
@@ -273,7 +273,7 @@ pub fn save_state<C: AudioCallback, W: Write + std::io::Seek>(
     Ok(())
 }
 
-fn read_footer<R: std::io::Read + std::io::Seek>(reader: &mut R) -> std::io::Result<u32> {
+fn read_footer<R: Read + Seek>(reader: &mut R) -> std::io::Result<u32> {
     let mut footer = [0; 8];
     reader.seek(std::io::SeekFrom::End(-8))?;
     reader.read_exact(&mut footer)?;
@@ -295,9 +295,7 @@ fn read_footer<R: std::io::Read + std::io::Seek>(reader: &mut R) -> std::io::Res
     }
 }
 
-fn read_block_header<R: std::io::Read>(
-    reader: &mut R,
-) -> std::io::Result<(SmallVec<[u8; 4]>, u32)> {
+fn read_block_header<R: Read>(reader: &mut R) -> std::io::Result<(SmallVec<[u8; 4]>, u32)> {
     let mut header = [0; 8];
     reader.read_exact(&mut header)?;
 
@@ -315,16 +313,13 @@ fn read_block_header<R: std::io::Read>(
     }
 }
 
-fn read_name_block<R: std::io::Read + std::io::Seek>(
-    reader: &mut R,
-    size: u32,
-) -> std::io::Result<()> {
+fn read_name_block<R: Read + Seek>(reader: &mut R, size: u32) -> std::io::Result<()> {
     // Ignore for now
     reader.seek(std::io::SeekFrom::Current(i64::from(size)))?;
     Ok(())
 }
 
-fn read_info_block<R: std::io::Read>(
+fn read_info_block<R: Read>(
     reader: &mut R,
     size: u32,
 ) -> std::io::Result<(SmallVec<[u8; 4]>, u16)> {
@@ -348,11 +343,62 @@ fn read_info_block<R: std::io::Read>(
     Ok((title, global_checksum))
 }
 
-fn read_core_block<C: AudioCallback, R: std::io::Read + std::io::Seek>(
+#[derive(Default)]
+struct ReadSizes {
+    // sizes
+    ram_size: u32,
+    vram_size: u32,
+    mbc_ram_size: u32,
+    oam_size: u32,
+    hram_size: u32,
+    bg_palette_size: u32,
+    obj_palette_size: u32,
+
+    // offsets
+    ram_offset: u32,
+    vram_offset: u32,
+    mbc_ram_offset: u32,
+    oam_offset: u32,
+    hram_offset: u32,
+    bg_palette_offset: u32,
+    obj_palette_offset: u32,
+}
+
+impl ReadSizes {
+    fn ram_offset(&self) -> u32 {
+        self.ram_offset
+    }
+
+    fn vram_offset(&self) -> u32 {
+        self.vram_offset
+    }
+
+    fn mbc_ram_offset(&self) -> u32 {
+        self.mbc_ram_offset
+    }
+
+    fn oam_offset(&self) -> u32 {
+        self.oam_offset
+    }
+
+    fn hram_offset(&self) -> u32 {
+        self.hram_offset
+    }
+
+    fn bg_palette_offset(&self) -> u32 {
+        self.bg_palette_offset
+    }
+
+    fn obj_palette_offset(&self) -> u32 {
+        self.obj_palette_offset
+    }
+}
+
+fn read_core_block<C: AudioCallback, R: Read + Seek>(
     reader: &mut R,
     _size: u32,
     gb: &mut Gb<C>,
-) -> std::io::Result<Sizes> {
+) -> std::io::Result<ReadSizes> {
     // Ignore version for now
     reader.seek(std::io::SeekFrom::Current(4))?;
 
@@ -377,59 +423,56 @@ fn read_core_block<C: AudioCallback, R: std::io::Read + std::io::Seek>(
     reader.seek(std::io::SeekFrom::Current(0x91))?;
 
     // Read sizes into sizes struct
-    let mut sizes = Sizes::default();
+    let mut sizes = ReadSizes::default();
 
     let mut size_buf = [0; 4];
 
     reader.read_exact(&mut size_buf)?;
     sizes.ram_size = u32::from_le_bytes(size_buf);
 
-    // FIXME: discard offsets for now
-    reader.seek(std::io::SeekFrom::Current(4))?;
+    reader.read_exact(&mut size_buf)?;
+    sizes.ram_offset = u32::from_le_bytes(size_buf);
 
     reader.read_exact(&mut size_buf)?;
     sizes.vram_size = u32::from_le_bytes(size_buf);
 
-    // FIXME: discard offsets for now
-    reader.seek(std::io::SeekFrom::Current(4))?;
+    reader.read_exact(&mut size_buf)?;
+    sizes.vram_offset = u32::from_le_bytes(size_buf);
 
     reader.read_exact(&mut size_buf)?;
     sizes.mbc_ram_size = u32::from_le_bytes(size_buf);
 
-    // FIXME: discard offsets for now
-    reader.seek(std::io::SeekFrom::Current(4))?;
+    reader.read_exact(&mut size_buf)?;
+    sizes.mbc_ram_offset = u32::from_le_bytes(size_buf);
 
     reader.read_exact(&mut size_buf)?;
     sizes.oam_size = u32::from_le_bytes(size_buf);
 
-    // FIXME: discard offsets for now
-    reader.seek(std::io::SeekFrom::Current(4))?;
+    reader.read_exact(&mut size_buf)?;
+    sizes.oam_offset = u32::from_le_bytes(size_buf);
 
     reader.read_exact(&mut size_buf)?;
     sizes.hram_size = u32::from_le_bytes(size_buf);
 
-    // FIXME: discard offsets for now
-    reader.seek(std::io::SeekFrom::Current(4))?;
+    reader.read_exact(&mut size_buf)?;
+    sizes.hram_offset = u32::from_le_bytes(size_buf);
 
     reader.read_exact(&mut size_buf)?;
     sizes.bg_palette_size = u32::from_le_bytes(size_buf);
 
-    // FIXME: discard offsets for now
-    reader.seek(std::io::SeekFrom::Current(4))?;
+    reader.read_exact(&mut size_buf)?;
+    sizes.bg_palette_offset = u32::from_le_bytes(size_buf);
 
     reader.read_exact(&mut size_buf)?;
     sizes.obj_palette_size = u32::from_le_bytes(size_buf);
 
-    // FIXME: discard offsets for now
-    reader.seek(std::io::SeekFrom::Current(4))?;
+    reader.read_exact(&mut size_buf)?;
+    sizes.obj_palette_offset = u32::from_le_bytes(size_buf);
 
     Ok(sizes)
 }
 
-fn read_rtc_block<R: std::io::Read + std::io::Seek>(
-    reader: &mut R,
-    cart: &mut Cart,
-) -> std::io::Result<()> {
+fn read_rtc_block<R: Read + Seek>(reader: &mut R, cart: &mut Cart) -> std::io::Result<()> {
     if let Some(rtc) = cart.rtc_mut() {
         let mut byte_buf = [0; 4];
 
@@ -475,7 +518,7 @@ fn read_rtc_block<R: std::io::Read + std::io::Seek>(
     Ok(())
 }
 
-pub fn load_state<C: AudioCallback, R: std::io::Read + std::io::Seek>(
+pub fn load_state<C: AudioCallback, R: Read + Seek>(
     gb: &mut Gb<C>,
     reader: &mut R,
 ) -> std::io::Result<()> {
@@ -484,7 +527,7 @@ pub fn load_state<C: AudioCallback, R: std::io::Read + std::io::Seek>(
     // Read blocks
     reader.seek(std::io::SeekFrom::Start(u64::from(offset_to_first_block)))?;
 
-    let mut sizes = Sizes::default();
+    let mut sizes = ReadSizes::default();
 
     'reading: loop {
         let (name, size) = read_block_header(reader)?;

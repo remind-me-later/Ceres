@@ -12,7 +12,7 @@ use std::{
 use thread_priority::ThreadBuilderExt;
 use {anyhow::Context, ceres_core::Gb, std::path::Path, std::sync::Arc};
 
-pub struct GbContext {
+pub struct GbThread {
     gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
     model: ceres_core::Model,
     rom_ident: String,
@@ -22,7 +22,7 @@ pub struct GbContext {
     thread_handle: Option<std::thread::JoinHandle<()>>,
 }
 
-impl GbContext {
+impl GbThread {
     pub fn new(
         model: ceres_core::Model,
         project_dirs: &directories::ProjectDirs,
@@ -36,19 +36,17 @@ impl GbContext {
             pause_thread: Arc<AtomicBool>,
             ctx: &egui::Context,
         ) {
-            loop {
-                let begin = std::time::Instant::now();
-
-                if exiting.load(Relaxed) {
-                    break;
-                }
-
-                let duration = if cfg!(target_os = "macos") {
+            const DURATION: Duration =
+                // FIXME: use 16 millis on mac
+                if cfg!(target_os = "macos") {
                     Duration::from_millis(1000 / 60)
                 } else {
                     ceres_core::FRAME_DURATION
                 };
 
+            let mut last_loop = std::time::Instant::now();
+
+            while !exiting.load(Relaxed) {
                 if !pause_thread.load(Relaxed) {
                     if let Ok(mut gb) = gb.lock() {
                         gb.run_frame();
@@ -56,15 +54,13 @@ impl GbContext {
                     ctx.request_repaint();
                 }
 
-                let elapsed = begin.elapsed();
+                let elapsed = last_loop.elapsed();
 
-                if elapsed < duration {
-                    spin_sleep::sleep(duration - elapsed);
+                if elapsed < DURATION {
+                    spin_sleep::sleep(DURATION - elapsed);
                 }
-                // TODO: we're always running late
-                // else {
-                //     eprintln!("running late: {elapsed:?}");
-                // }
+
+                last_loop = std::time::Instant::now();
             }
 
             // FIXME: clippy says we have to drop
@@ -220,7 +216,7 @@ impl GbContext {
     }
 }
 
-impl Drop for GbContext {
+impl Drop for GbThread {
     fn drop(&mut self) {
         if let Err(e) = self.audio_stream.pause() {
             eprintln!("error pausing audio stream: {e}");
