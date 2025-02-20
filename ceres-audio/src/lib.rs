@@ -9,26 +9,40 @@ const BUFFER_SIZE: cpal::FrameCount = 512;
 const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 8;
 const SAMPLE_RATE: i32 = 48000;
 
+#[derive(Debug)]
+struct Buffers {
+    l: Bounded<Box<[ceres_core::Sample]>>,
+    r: Bounded<Box<[ceres_core::Sample]>>,
+}
+
+impl Buffers {
+    fn new() -> Self {
+        Self {
+            l: Bounded::from(vec![Default::default(); RING_BUFFER_SIZE / 2].into_boxed_slice()),
+            r: Bounded::from(vec![Default::default(); RING_BUFFER_SIZE / 2].into_boxed_slice()),
+        }
+    }
+
+    fn split_mut_borrow(
+        &mut self,
+    ) -> (
+        &mut Bounded<Box<[ceres_core::Sample]>>,
+        &mut Bounded<Box<[ceres_core::Sample]>>,
+    ) {
+        (&mut self.l, &mut self.r)
+    }
+}
+
 // RingBuffer is a wrapper around a bounded ring buffer
 // that implements the AudioCallback trait
 #[derive(Clone, Debug)]
 pub struct RingBuffer {
-    buffer: Arc<Mutex<Bounded<Box<[ceres_core::Sample]>>>>,
+    buffer: Arc<Mutex<Buffers>>,
     volume: Arc<Mutex<f32>>,
 }
 
 impl RingBuffer {
-    pub fn new(
-        buffer: Arc<Mutex<Bounded<Box<[ceres_core::Sample]>>>>,
-        volume: Arc<Mutex<f32>>,
-    ) -> Self {
-        // FIll with silence
-        if let Ok(mut buffer) = buffer.lock() {
-            for _ in 0..buffer.max_len() {
-                buffer.push(Default::default());
-            }
-        }
-
+    fn new(buffer: Arc<Mutex<Buffers>>, volume: Arc<Mutex<f32>>) -> Self {
         Self { buffer, volume }
     }
 }
@@ -40,8 +54,8 @@ impl ceres_core::AudioCallback for RingBuffer {
                 let l = l * *volume;
                 let r = r * *volume;
 
-                buffer.push(l);
-                buffer.push(r);
+                buffer.l.push(l);
+                buffer.r.push(r);
             }
         }
     }
@@ -93,25 +107,27 @@ pub struct Stream {
 
 impl Stream {
     pub fn new(state: &State) -> Result<Self, Error> {
-        let ring_buffer = Arc::new(Mutex::new(Bounded::from(
-            vec![Default::default(); RING_BUFFER_SIZE].into_boxed_slice(),
-        )));
+        let ring_buffer = Arc::new(Mutex::new(Buffers::new()));
+
         let ring_buffer_clone = Arc::clone(&ring_buffer);
 
         let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
         let data_callback = move |buffer: &mut [ceres_core::Sample], _: &_| {
             if let Ok(mut ring) = ring_buffer_clone.lock() {
-                if ring.len() < buffer.len() {
+                let (ring_l, ring_r) = ring.split_mut_borrow();
+
+                if ring_l.len() * 2 < buffer.len() {
                     eprintln!("ring buffer underrun");
-                    while !ring.is_full() {
-                        ring.push(Default::default());
-                    }
                 }
 
+                // Interleave the samples
                 buffer
-                    .iter_mut()
-                    .zip(ring.drain())
-                    .for_each(|(b, s)| *b = s);
+                    .chunks_exact_mut(2)
+                    .zip(ring_l.drain().zip(ring_r.drain()))
+                    .for_each(|(b, (l, r))| {
+                        b[0] = l;
+                        b[1] = r;
+                    });
             }
         };
 

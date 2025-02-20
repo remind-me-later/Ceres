@@ -17,3 +17,7 @@ default-features = false
 [dependencies.dasp_ring_buffer]
 version = "*"
 default-features = false
+
+[dependencies.rubato]
+version = "*"
+default-features = false
