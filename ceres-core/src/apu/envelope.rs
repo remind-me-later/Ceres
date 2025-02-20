@@ -34,7 +34,7 @@ pub(super) struct Envelope {
 
 impl Envelope {
     pub(super) const fn read(&self) -> u8 {
-        self.initial_volume << 4 | self.direction.to_u8() | self.period
+        (self.initial_volume << 4) | self.direction.to_u8() | self.period
     }
 
     pub(super) fn write(&mut self, val: u8) {

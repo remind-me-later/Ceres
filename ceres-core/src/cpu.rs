@@ -69,7 +69,7 @@ impl<A: AudioCallback> Gb<A> {
     fn imm16(&mut self) -> u16 {
         let lo = u16::from(self.imm8());
         let hi = u16::from(self.imm8());
-        hi << 8 | lo
+        (hi << 8) | lo
     }
 
     fn set_rr(&mut self, id: u8, val: u16) {
@@ -117,14 +117,14 @@ impl<A: AudioCallback> Gb<A> {
         let lo = op & 1 != 0;
         if id == 0 {
             if lo {
-                self.af = u16::from(val) << 8 | self.af & 0xFF;
+                self.af = (u16::from(val) << 8) | self.af & 0xFF;
             } else {
                 self.cpu_write(self.hl, val);
             }
         } else if lo {
             self.set_rr(id, u16::from(val) | self.get_rr(id) & 0xFF00);
         } else {
-            self.set_rr(id, u16::from(val) << 8 | self.get_rr(id) & 0xFF);
+            self.set_rr(id, (u16::from(val) << 8) | self.get_rr(id) & 0xFF);
         }
     }
 
@@ -556,7 +556,7 @@ impl<A: AudioCallback> Gb<A> {
         let val = self.get_r(op);
         let carry = (val & 0x01) != 0;
         self.af &= 0xFF00;
-        let val = val >> 1 | u8::from(carry) << 7;
+        let val = (val >> 1) | (u8::from(carry) << 7);
         self.set_r(op, val);
         if carry {
             self.af |= CF;
@@ -779,7 +779,7 @@ impl<A: AudioCallback> Gb<A> {
     fn pop(&mut self) -> u16 {
         let val = u16::from(self.read(self.sp));
         self.sp = self.sp.wrapping_add(1);
-        let val = val | u16::from(self.read(self.sp)) << 8;
+        let val = val | (u16::from(self.read(self.sp)) << 8);
         self.sp = self.sp.wrapping_add(1);
         val
     }
@@ -845,7 +845,7 @@ impl<A: AudioCallback> Gb<A> {
         let val = self.get_r(op);
         let carry = val & 0x80 != 0;
         self.af &= 0xFF00;
-        self.set_r(op, val << 1 | u8::from(carry));
+        self.set_r(op, (val << 1) | u8::from(carry));
         if carry {
             self.af |= CF;
         }
@@ -858,7 +858,7 @@ impl<A: AudioCallback> Gb<A> {
         let bit1 = self.af & 0x0100 != 0;
         let carry = self.af & CF != 0;
 
-        self.af = (self.af >> 1) & 0xFF00 | u16::from(carry) << 15;
+        self.af = (self.af >> 1) & 0xFF00 | (u16::from(carry) << 15);
         if bit1 {
             self.af |= CF;
         }
@@ -868,7 +868,7 @@ impl<A: AudioCallback> Gb<A> {
         let val = self.get_r(op);
         let carry = self.af & CF != 0;
         let bit1 = val & 1 != 0;
-        let val = val >> 1 | u8::from(carry) << 7;
+        let val = (val >> 1) | (u8::from(carry) << 7);
         self.set_r(op, val);
 
         self.af &= 0xFF00;
@@ -954,7 +954,7 @@ impl<A: AudioCallback> Gb<A> {
         let bit7 = self.af & 0x8000 != 0;
         let carry = self.af & CF != 0;
 
-        self.af = (self.af & 0xFF00) << 1 | u16::from(carry) << 8;
+        self.af = ((self.af & 0xFF00) << 1) | (u16::from(carry) << 8);
 
         if bit7 {
             self.af |= CF;
@@ -967,7 +967,7 @@ impl<A: AudioCallback> Gb<A> {
         let bit7 = val & 0x80 != 0;
 
         self.af &= 0xFF00;
-        let val = val << 1 | u8::from(carry);
+        let val = (val << 1) | u8::from(carry);
         self.set_r(op, val);
         if bit7 {
             self.af |= CF;

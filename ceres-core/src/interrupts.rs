@@ -25,7 +25,7 @@ impl Interrupts {
         // acknowledge
         self.ifr &= !int;
         // compute direction of interrupt vector
-        0x40 | tz << 3
+        0x40 | (tz << 3)
     }
 
     #[must_use]

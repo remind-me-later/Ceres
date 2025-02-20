@@ -37,13 +37,13 @@ impl Joypad {
     #[must_use]
     pub(crate) const fn read_p1(&self) -> u8 {
         let act = if self.p1_acts {
-            self.p1_btn >> 4 | 1 << 5
+            (self.p1_btn >> 4) | (1 << 5)
         } else {
             0
         };
 
         let dir = if self.p1_dirs {
-            self.p1_btn & 0xF | 1 << 4
+            self.p1_btn & 0xF | (1 << 4)
         } else {
             0
         };

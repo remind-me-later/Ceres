@@ -71,11 +71,11 @@ impl ColorPalette {
             self.buffer[i] = val & 0x1F;
             // green
             let tmp = (self.buffer[i + 1] & 3) << 3;
-            self.buffer[i + 1] = tmp | (val & 0xE0) >> 5;
+            self.buffer[i + 1] = tmp | ((val & 0xE0) >> 5);
         } else {
             // green
             let tmp = self.buffer[i + 1] & 7;
-            self.buffer[i + 1] = tmp | (val & 3) << 3;
+            self.buffer[i + 1] = tmp | ((val & 3) << 3);
             // blue
             self.buffer[i + 2] = (val & 0x7C) >> 2;
         }

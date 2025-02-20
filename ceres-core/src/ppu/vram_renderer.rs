@@ -62,7 +62,7 @@ impl VramRenderer {
 
                     let most_bit = (most_byte & (1 << (7 - j))) != 0;
                     let least_bit = (least_byte & (1 << (7 - j))) != 0;
-                    let color_idx = (most_bit as u8) << 1 | least_bit as u8;
+                    let color_idx = ((most_bit as u8) << 1) | least_bit as u8;
 
                     let color = super::color_palette::GRAYSCALE_PALETTE[color_idx as usize];
 

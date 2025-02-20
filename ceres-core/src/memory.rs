@@ -362,7 +362,7 @@ impl<A: AudioCallback> Gb<A> {
     #[must_use]
     const fn read_hdma5(&self) -> u8 {
         // active on low
-        (!self.is_hdma_on() as u8) << 7 | self.hdma5
+        ((!self.is_hdma_on() as u8) << 7) | self.hdma5
     }
 
     fn write_hdma5(&mut self, val: u8) {

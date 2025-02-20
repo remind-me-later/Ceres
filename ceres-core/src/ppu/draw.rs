@@ -74,18 +74,18 @@ impl Ppu {
 
     #[must_use]
     fn bg_tile_map(&self) -> u16 {
-        0x9800 | u16::from(self.lcdc & LCDC_BG_AREA != 0) << 10
+        0x9800 | (u16::from(self.lcdc & LCDC_BG_AREA != 0) << 10)
     }
 
     #[must_use]
     fn win_tile_map(&self) -> u16 {
-        0x9800 | u16::from(self.lcdc & LCDC_WIN_AREA != 0) << 10
+        0x9800 | (u16::from(self.lcdc & LCDC_WIN_AREA != 0) << 10)
     }
 
     #[must_use]
     fn tile_addr(&self, tile_num: u8) -> u16 {
         let signed = self.lcdc & LCDC_BG_SIGNED == 0;
-        let base = 0x8000 | u16::from(signed) << 11;
+        let base = 0x8000 | (u16::from(signed) << 11);
 
         let offset = if signed {
             #[expect(clippy::cast_possible_wrap)]
@@ -173,7 +173,7 @@ impl Ppu {
                 }
                 let bit = 1 << bit;
 
-                u8::from(hi & bit != 0) << 1 | u8::from(lo & bit != 0)
+                (u8::from(hi & bit != 0) << 1) | u8::from(lo & bit != 0)
             };
 
             let rgb = match cgb_mode {
@@ -245,7 +245,7 @@ impl Ppu {
                 }
                 let bit = 1 << bit;
 
-                u8::from(hi & bit != 0) << 1 | u8::from(lo & bit != 0)
+                (u8::from(hi & bit != 0) << 1) | u8::from(lo & bit != 0)
             };
 
             let rgb = match cgb_mode {
@@ -352,7 +352,7 @@ impl Ppu {
                 }
                 let bit = 1 << bit;
 
-                let color = u8::from(hi & bit != 0) << 1 | u8::from(lo & bit != 0);
+                let color = (u8::from(hi & bit != 0) << 1) | u8::from(lo & bit != 0);
 
                 // transparent
                 if color == 0 {

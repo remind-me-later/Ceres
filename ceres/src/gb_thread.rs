@@ -155,12 +155,12 @@ impl GbThread {
             let gb_builder = GbBuilder::new(model, sample_rate, cart, ring_buffer);
 
             let save_file = project_dirs.data_dir().join(&ident).with_extension("sav");
-            if let Ok(mut save_data) = File::open(&save_file) {
+            match File::open(&save_file) { Ok(mut save_data) => {
                 let gb = gb_builder.load_save_data(&mut save_data)?.build();
                 Ok((gb, ident))
-            } else {
+            } _ => {
                 Ok((gb_builder.build(), ident))
-            }
+            }}
         } else {
             Ok((
                 GbBuilder::new(model, sample_rate, Cart::default(), ring_buffer).build(),

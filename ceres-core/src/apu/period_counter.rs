@@ -45,7 +45,7 @@ impl<const PERIOD_MUL: u16, S: SweepTrait> PeriodCounter<PERIOD_MUL, S> {
     }
 
     pub(super) fn write_high(&mut self, val: u8) {
-        self.period = (u16::from(val) & 7) << 8 | (self.period & 0xFF);
+        self.period = ((u16::from(val) & 7) << 8) | (self.period & 0xFF);
     }
 
     pub(super) fn trigger(&mut self) -> PeriodTriggerResult {

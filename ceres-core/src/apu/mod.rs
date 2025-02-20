@@ -200,9 +200,9 @@ impl<C: AudioCallback> Apu<C> {
     #[must_use]
     pub fn read_nr50(&self) -> u8 {
         self.right_volume
-            | u8::from(self.right_vin) << 3
-            | self.left_volume << 4
-            | u8::from(self.left_vin) << 7
+            | (u8::from(self.right_vin) << 3)
+            | (self.left_volume << 4)
+            | (u8::from(self.left_vin) << 7)
     }
 
     #[must_use]
@@ -222,11 +222,10 @@ impl<C: AudioCallback> Apu<C> {
         //     self.ch1.period_counter.sweep.timer, self.ch1.period_counter.sweep.shadow_pace
         // );
 
-        (self.enabled as u8) << 7
-            | 0x70
-            | (self.ch4.is_enabled() as u8) << 3
-            | (self.ch3.is_enabled() as u8) << 2
-            | (self.ch2.is_enabled() as u8) << 1
+        ((self.enabled as u8) << 7) | 0x70
+            | ((self.ch4.is_enabled() as u8) << 3)
+            | ((self.ch3.is_enabled() as u8) << 2)
+            | ((self.ch2.is_enabled() as u8) << 1)
             | (self.ch1.is_enabled() as u8)
     }
 
