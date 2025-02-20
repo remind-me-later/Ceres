@@ -2,6 +2,7 @@ use std::vec;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use dasp_ring_buffer::Bounded;
+use rubato::FastFixedOut;
 use {std::sync::Arc, std::sync::Mutex};
 
 // Buffer size is the number of samples per channel per callback
@@ -11,25 +12,16 @@ const SAMPLE_RATE: i32 = 48000;
 
 #[derive(Debug)]
 struct Buffers {
-    l: Bounded<Box<[ceres_core::Sample]>>,
-    r: Bounded<Box<[ceres_core::Sample]>>,
+    lr: Bounded<Box<[(ceres_core::Sample, ceres_core::Sample)]>>,
 }
 
 impl Buffers {
     fn new() -> Self {
         Self {
-            l: Bounded::from(vec![Default::default(); RING_BUFFER_SIZE / 2].into_boxed_slice()),
-            r: Bounded::from(vec![Default::default(); RING_BUFFER_SIZE / 2].into_boxed_slice()),
+            lr: Bounded::from(
+                vec![(Default::default(), Default::default()); RING_BUFFER_SIZE].into_boxed_slice(),
+            ),
         }
-    }
-
-    fn split_mut_borrow(
-        &mut self,
-    ) -> (
-        &mut Bounded<Box<[ceres_core::Sample]>>,
-        &mut Bounded<Box<[ceres_core::Sample]>>,
-    ) {
-        (&mut self.l, &mut self.r)
     }
 }
 
@@ -54,8 +46,7 @@ impl ceres_core::AudioCallback for RingBuffer {
                 let l = l * *volume;
                 let r = r * *volume;
 
-                buffer.l.push(l);
-                buffer.r.push(r);
+                buffer.lr.push((l, r));
             }
         }
     }
@@ -114,16 +105,14 @@ impl Stream {
         let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
         let data_callback = move |buffer: &mut [ceres_core::Sample], _: &_| {
             if let Ok(mut ring) = ring_buffer_clone.lock() {
-                let (ring_l, ring_r) = ring.split_mut_borrow();
-
-                if ring_l.len() * 2 < buffer.len() {
+                if ring.lr.len() < buffer.len() {
                     eprintln!("ring buffer underrun");
                 }
 
                 // Interleave the samples
                 buffer
                     .chunks_exact_mut(2)
-                    .zip(ring_l.drain().zip(ring_r.drain()))
+                    .zip(ring.lr.drain())
                     .for_each(|(b, (l, r))| {
                         b[0] = l;
                         b[1] = r;
