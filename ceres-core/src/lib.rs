@@ -165,8 +165,6 @@ impl<C: AudioCallback> Gb<C> {
     }
 
     pub fn run_frame(&mut self) {
-        self.dot_accumulator = 0;
-
         while self.dot_accumulator < TC_PER_FRAME {
             self.run_cpu();
         }

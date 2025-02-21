@@ -1,27 +1,33 @@
 use std::vec;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use dasp_ring_buffer::Bounded;
-use rubato::FastFixedOut;
+use dasp_ring_buffer::Slice;
+use rubato::Resampler;
 use {std::sync::Arc, std::sync::Mutex};
 
 // Buffer size is the number of samples per channel per callback
 const BUFFER_SIZE: cpal::FrameCount = 512;
-const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 8;
+const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 16;
 const SAMPLE_RATE: i32 = 48000;
 
 #[derive(Debug)]
 struct Buffers {
-    lr: Bounded<Box<[(ceres_core::Sample, ceres_core::Sample)]>>,
+    // lr: Bounded<Box<[(ceres_core::Sample, ceres_core::Sample)]>>,
+    left: Vec<ceres_core::Sample>,
+    right: Vec<ceres_core::Sample>,
 }
 
 impl Buffers {
     fn new() -> Self {
         Self {
-            lr: Bounded::from(
-                vec![(Default::default(), Default::default()); RING_BUFFER_SIZE].into_boxed_slice(),
-            ),
+            left: vec![Default::default(); RING_BUFFER_SIZE],
+            right: vec![Default::default(); RING_BUFFER_SIZE],
         }
+    }
+
+    fn remove_first(&mut self, n: usize) {
+        self.left.drain(0..n);
+        self.right.drain(0..n);
     }
 }
 
@@ -42,11 +48,17 @@ impl RingBuffer {
 impl ceres_core::AudioCallback for RingBuffer {
     fn audio_sample(&self, l: ceres_core::Sample, r: ceres_core::Sample) {
         if let Ok(mut buffer) = self.buffer.lock() {
+            if buffer.left.len() >= RING_BUFFER_SIZE {
+                // println!("ring buffer full");
+                return;
+            }
+
             if let Ok(volume) = self.volume.lock() {
                 let l = l * *volume;
                 let r = r * *volume;
 
-                buffer.lr.push((l, r));
+                buffer.left.push(l);
+                buffer.right.push(r);
             }
         }
     }
@@ -102,21 +114,40 @@ impl Stream {
 
         let ring_buffer_clone = Arc::clone(&ring_buffer);
 
+        let mut resampler = rubato::FastFixedOut::<ceres_core::Sample>::new(
+            1.044,
+            2.0,
+            rubato::PolynomialDegree::Cubic,
+            BUFFER_SIZE as usize,
+            2,
+        )
+        .map_err(|_err| Error::CouldntBuildStream)?;
+
+        let mut output_buf: [[ceres_core::Sample; BUFFER_SIZE as usize]; 2] =
+            [[Default::default(); BUFFER_SIZE as usize]; 2];
+
         let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
         let data_callback = move |buffer: &mut [ceres_core::Sample], _: &_| {
             if let Ok(mut ring) = ring_buffer_clone.lock() {
-                if ring.lr.len() < buffer.len() {
-                    eprintln!("ring buffer underrun");
+                match resampler.process_into_buffer(
+                    &[ring.left.slice(), ring.right.slice()],
+                    &mut output_buf,
+                    None,
+                ) {
+                    Ok((consumed_in, _written_out)) => {
+                        ring.remove_first(consumed_in);
+                        buffer
+                            .chunks_exact_mut(2)
+                            .zip(output_buf[0].iter().zip(output_buf[1].iter()))
+                            .for_each(|(out, (&sample_l, &sample_r))| {
+                                out[0] = sample_l;
+                                out[1] = sample_r;
+                            });
+                    }
+                    Err(e) => {
+                        eprintln!("resampler error, possible underrun: {e}");
+                    }
                 }
-
-                // Interleave the samples
-                buffer
-                    .chunks_exact_mut(2)
-                    .zip(ring.lr.drain())
-                    .for_each(|(b, (l, r))| {
-                        b[0] = l;
-                        b[1] = r;
-                    });
             }
         };
 

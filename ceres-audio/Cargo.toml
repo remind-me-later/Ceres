@@ -20,4 +20,3 @@ default-features = false
 
 [dependencies.rubato]
 version = "*"
-default-features = false

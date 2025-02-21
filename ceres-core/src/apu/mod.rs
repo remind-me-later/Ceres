@@ -50,9 +50,6 @@ pub struct Apu<C: AudioCallback> {
     ext_sample_period: i32,
 
     audio_callback: C,
-
-    capacitor_l: f32,
-    capacitor_r: f32,
 }
 
 impl<C: AudioCallback> Apu<C> {
@@ -72,12 +69,10 @@ impl<C: AudioCallback> Apu<C> {
             ch4: Noise::default(),
             div_divider: 0,
             render_timer: 0,
-            capacitor_l: 0.0,
-            capacitor_r: 0.0,
         }
     }
 
-    const fn sample_period_from_rate(sample_rate: i32) -> i32 {
+    fn sample_period_from_rate(sample_rate: i32) -> i32 {
         // FIXME:
         // This is mostly correct, the underrun errors are due to the timing issues in the run thread
         // maybe account for difference in frame rate and sample rate?
@@ -132,29 +127,9 @@ impl<C: AudioCallback> Apu<C> {
             self.render_timer -= self.ext_sample_period;
 
             let (l, r) = mix_and_render(self);
-            let (l, r) = self.high_pass(l, r);
 
             self.audio_callback.audio_sample(l, r);
         }
-    }
-
-    fn high_pass(&mut self, l: Sample, r: Sample) -> (Sample, Sample) {
-        let mut outl = 0.0;
-        let mut outr = 0.0;
-
-        if self.ch1.is_enabled()
-            || self.ch2.is_enabled()
-            || self.ch3.is_enabled()
-            || self.ch4.is_enabled()
-        {
-            outl = l - self.capacitor_l;
-            outr = r - self.capacitor_r;
-
-            self.capacitor_l = l - outl * 0.999958;
-            self.capacitor_r = r - outr * 0.999958;
-        }
-
-        (outl, outr)
     }
 
     pub fn step_div_apu(&mut self) {
@@ -222,7 +197,8 @@ impl<C: AudioCallback> Apu<C> {
         //     self.ch1.period_counter.sweep.timer, self.ch1.period_counter.sweep.shadow_pace
         // );
 
-        ((self.enabled as u8) << 7) | 0x70
+        ((self.enabled as u8) << 7)
+            | 0x70
             | ((self.ch4.is_enabled() as u8) << 3)
             | ((self.ch3.is_enabled() as u8) << 2)
             | ((self.ch2.is_enabled() as u8) << 1)

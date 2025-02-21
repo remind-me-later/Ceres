@@ -36,13 +36,7 @@ impl GbThread {
             pause_thread: Arc<AtomicBool>,
             ctx: &egui::Context,
         ) {
-            const DURATION: Duration =
-                // FIXME: use 16 millis on mac
-                if cfg!(target_os = "macos") {
-                    Duration::from_millis(1000 / 60)
-                } else {
-                    ceres_core::FRAME_DURATION
-                };
+            const DURATION: Duration = ceres_core::FRAME_DURATION;
 
             let mut last_loop = std::time::Instant::now();
 
@@ -155,12 +149,13 @@ impl GbThread {
             let gb_builder = GbBuilder::new(model, sample_rate, cart, ring_buffer);
 
             let save_file = project_dirs.data_dir().join(&ident).with_extension("sav");
-            match File::open(&save_file) { Ok(mut save_data) => {
-                let gb = gb_builder.load_save_data(&mut save_data)?.build();
-                Ok((gb, ident))
-            } _ => {
-                Ok((gb_builder.build(), ident))
-            }}
+            match File::open(&save_file) {
+                Ok(mut save_data) => {
+                    let gb = gb_builder.load_save_data(&mut save_data)?.build();
+                    Ok((gb, ident))
+                }
+                _ => Ok((gb_builder.build(), ident)),
+            }
         } else {
             Ok((
                 GbBuilder::new(model, sample_rate, Cart::default(), ring_buffer).build(),
