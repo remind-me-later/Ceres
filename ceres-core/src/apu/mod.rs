@@ -30,6 +30,31 @@ enum PeriodHalf {
 }
 
 #[derive(Debug)]
+struct HighPassFilter {
+    capacitor_l: f32,
+    capacitor_r: f32,
+}
+
+impl HighPassFilter {
+    fn new() -> Self {
+        Self {
+            capacitor_l: 0.0,
+            capacitor_r: 0.0,
+        }
+    }
+
+    fn high_pass(&mut self, l: Sample, r: Sample) -> (Sample, Sample) {
+        let outl = l - self.capacitor_l;
+        let outr = r - self.capacitor_r;
+
+        self.capacitor_l = l - outl * 0.999958;
+        self.capacitor_r = r - outr * 0.999958;
+
+        (outl, outr)
+    }
+}
+
+#[derive(Debug)]
 pub struct Apu<C: AudioCallback> {
     nr51: u8,
 
@@ -50,6 +75,8 @@ pub struct Apu<C: AudioCallback> {
     ext_sample_period: i32,
 
     audio_callback: C,
+
+    hpf: HighPassFilter,
 }
 
 impl<C: AudioCallback> Apu<C> {
@@ -69,6 +96,7 @@ impl<C: AudioCallback> Apu<C> {
             ch4: Noise::default(),
             div_divider: 0,
             render_timer: 0,
+            hpf: HighPassFilter::new(),
         }
     }
 
@@ -124,6 +152,16 @@ impl<C: AudioCallback> Apu<C> {
             self.render_timer -= self.ext_sample_period;
 
             let (l, r) = mix_and_render(self);
+
+            let (l, r) = if self.ch1.is_enabled()
+                || self.ch2.is_enabled()
+                || self.ch3.is_enabled()
+                || self.ch4.is_enabled()
+            {
+                self.hpf.high_pass(l, r)
+            } else {
+                (l, r)
+            };
 
             self.audio_callback.audio_sample(l, r);
         }
