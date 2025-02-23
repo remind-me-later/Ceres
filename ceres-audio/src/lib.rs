@@ -1,64 +1,138 @@
-use std::vec;
-
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use dasp_ring_buffer::Slice;
+use ringbuf::{StaticRb, traits::Observer};
 use rubato::Resampler;
 use {std::sync::Arc, std::sync::Mutex};
 
 // Buffer size is the number of samples per channel per callback
 const BUFFER_SIZE: cpal::FrameCount = 512;
-const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 16;
+const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
 const SAMPLE_RATE: i32 = 48000;
 
-#[derive(Debug)]
+// Originally both the emulator and host platform output samples at the same rate,
+// as time passes one begins to shift away from the other, so we need to resample the emulator output
+const ORIG_RATIO: f64 = 1.0;
+const MAX_RESAMPLE_RATIO_RELATIVE: f64 = 2.0;
+
 struct Buffers {
-    // lr: Bounded<Box<[(ceres_core::Sample, ceres_core::Sample)]>>,
-    left: Vec<ceres_core::Sample>,
-    right: Vec<ceres_core::Sample>,
+    left: StaticRb<ceres_core::Sample, RING_BUFFER_SIZE>,
+    right: StaticRb<ceres_core::Sample, RING_BUFFER_SIZE>,
+    resampler: rubato::FastFixedOut<ceres_core::Sample>,
+    output_buf: [[ceres_core::Sample; BUFFER_SIZE as usize]; 2],
+    input_buf: [[ceres_core::Sample; BUFFER_SIZE as usize * 2]; 2],
 }
 
 impl Buffers {
-    fn new() -> Self {
-        Self {
-            left: vec![Default::default(); RING_BUFFER_SIZE],
-            right: vec![Default::default(); RING_BUFFER_SIZE],
+    fn new() -> Result<Self, Error> {
+        Ok(Self {
+            left: StaticRb::default(),
+            right: StaticRb::default(),
+            resampler: rubato::FastFixedOut::<ceres_core::Sample>::new(
+                ORIG_RATIO,
+                MAX_RESAMPLE_RATIO_RELATIVE,
+                rubato::PolynomialDegree::Cubic,
+                BUFFER_SIZE as usize,
+                2,
+            )
+            .map_err(|_err| Error::CouldntBuildStream)?,
+            output_buf: [[Default::default(); BUFFER_SIZE as usize]; 2],
+            input_buf: [[Default::default(); BUFFER_SIZE as usize * 2]; 2],
+        })
+    }
+
+    fn push_samples(&mut self, l: ceres_core::Sample, r: ceres_core::Sample) {
+        use ringbuf::traits::RingBuffer;
+
+        self.left.push_overwrite(l);
+        self.right.push_overwrite(r);
+    }
+
+    fn num_samples(&self) -> usize {
+        self.left.occupied_len()
+    }
+
+    fn write_samples_interleaved(&mut self, buffer: &mut [ceres_core::Sample]) {
+        use ringbuf::traits::Consumer;
+
+        let new_ratio = self.compute_resample_ratio();
+        self.resampler
+            .set_resample_ratio(new_ratio, true)
+            .unwrap_or_else(|e| eprintln!("Failed to set resample ratio: {e}"));
+
+        let needed = self.resampler.input_frames_next();
+        let got = self.num_samples();
+
+        if needed > got {
+            println!("needed: {needed}, got: {got}");
+            return;
+        }
+
+        let (input_buf_left, input_buf_right) = self.input_buf.split_at_mut(1);
+
+        for (l, r) in input_buf_left[0]
+            .iter_mut()
+            .zip(input_buf_right[0].iter_mut())
+            .take(needed)
+        {
+            *l = self.left.try_pop().unwrap_or_default();
+            *r = self.right.try_pop().unwrap_or_default();
+        }
+
+        match self
+            .resampler
+            .process_into_buffer(&self.input_buf, &mut self.output_buf, None)
+        {
+            Ok(_) => {
+                buffer
+                    .chunks_exact_mut(2)
+                    .zip(self.output_buf[0].iter().zip(self.output_buf[1].iter()))
+                    .for_each(|(out, (&sample_l, &sample_r))| {
+                        out[0] = sample_l;
+                        out[1] = sample_r;
+                    });
+            }
+            Err(e) => {
+                eprintln!("resampler error, possible underrun: {e}");
+            }
         }
     }
 
-    fn remove_first(&mut self, n: usize) {
-        self.left.drain(0..n);
-        self.right.drain(0..n);
+    fn compute_resample_ratio(&self) -> f64 {
+        let occupied = self.num_samples() as f64;
+        let target = RING_BUFFER_SIZE as f64;
+        let error = (occupied - target) / target;
+
+        // Adjust ratio based on buffer occupancy
+        // If buffer is too full, speed up playback (increase ratio)
+        // If buffer is too empty, slow down playback (decrease ratio)
+        let adjustment = -error * 0.1; // Small adjustment factor
+
+        (ORIG_RATIO * (1.0 + adjustment))
+            .clamp(ORIG_RATIO, ORIG_RATIO * MAX_RESAMPLE_RATIO_RELATIVE)
     }
 }
 
 // RingBuffer is a wrapper around a bounded ring buffer
 // that implements the AudioCallback trait
-#[derive(Clone, Debug)]
-pub struct RingBuffer {
+#[derive(Clone)]
+pub struct AudioCallbackImpl {
     buffer: Arc<Mutex<Buffers>>,
     volume: Arc<Mutex<f32>>,
 }
 
-impl RingBuffer {
+impl AudioCallbackImpl {
     fn new(buffer: Arc<Mutex<Buffers>>, volume: Arc<Mutex<f32>>) -> Self {
         Self { buffer, volume }
     }
 }
 
-impl ceres_core::AudioCallback for RingBuffer {
+impl ceres_core::AudioCallback for AudioCallbackImpl {
     fn audio_sample(&self, l: ceres_core::Sample, r: ceres_core::Sample) {
         if let Ok(mut buffer) = self.buffer.lock() {
-            if buffer.left.len() >= RING_BUFFER_SIZE {
-                // println!("ring buffer full");
-                return;
-            }
-
             if let Ok(volume) = self.volume.lock() {
                 let l = l * *volume;
                 let r = r * *volume;
 
-                buffer.left.push(l);
-                buffer.right.push(r);
+                buffer.push_samples(l, r);
             }
         }
     }
@@ -104,50 +178,19 @@ impl State {
 // Stream is not Send, so we can't use it directly in the renderer struct
 pub struct Stream {
     stream: cpal::Stream,
-    ring_buffer: RingBuffer,
+    ring_buffer: AudioCallbackImpl,
     volume: Arc<Mutex<f32>>,
 }
 
 impl Stream {
     pub fn new(state: &State) -> Result<Self, Error> {
-        let ring_buffer = Arc::new(Mutex::new(Buffers::new()));
-
+        let ring_buffer = Arc::new(Mutex::new(Buffers::new()?));
         let ring_buffer_clone = Arc::clone(&ring_buffer);
-
-        let mut resampler = rubato::FastFixedOut::<ceres_core::Sample>::new(
-            1.044,
-            2.0,
-            rubato::PolynomialDegree::Cubic,
-            BUFFER_SIZE as usize,
-            2,
-        )
-        .map_err(|_err| Error::CouldntBuildStream)?;
-
-        let mut output_buf: [[ceres_core::Sample; BUFFER_SIZE as usize]; 2] =
-            [[Default::default(); BUFFER_SIZE as usize]; 2];
 
         let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
         let data_callback = move |buffer: &mut [ceres_core::Sample], _: &_| {
             if let Ok(mut ring) = ring_buffer_clone.lock() {
-                match resampler.process_into_buffer(
-                    &[ring.left.slice(), ring.right.slice()],
-                    &mut output_buf,
-                    None,
-                ) {
-                    Ok((consumed_in, _written_out)) => {
-                        ring.remove_first(consumed_in);
-                        buffer
-                            .chunks_exact_mut(2)
-                            .zip(output_buf[0].iter().zip(output_buf[1].iter()))
-                            .for_each(|(out, (&sample_l, &sample_r))| {
-                                out[0] = sample_l;
-                                out[1] = sample_r;
-                            });
-                    }
-                    Err(e) => {
-                        eprintln!("resampler error, possible underrun: {e}");
-                    }
-                }
+                ring.write_samples_interleaved(buffer);
             }
         };
 
@@ -161,7 +204,7 @@ impl Stream {
 
         let mut res = Self {
             stream,
-            ring_buffer: RingBuffer::new(ring_buffer, buffer_volume),
+            ring_buffer: AudioCallbackImpl::new(ring_buffer, buffer_volume),
             volume,
         };
 
@@ -171,7 +214,7 @@ impl Stream {
     }
 
     #[must_use]
-    pub fn get_ring_buffer(&self) -> RingBuffer {
+    pub fn get_ring_buffer(&self) -> AudioCallbackImpl {
         self.ring_buffer.clone()
     }
 

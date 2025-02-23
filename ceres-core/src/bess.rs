@@ -389,9 +389,9 @@ impl ReadSizes {
         self.bg_palette_offset
     }
 
-    fn obj_palette_offset(&self) -> u32 {
-        self.obj_palette_offset
-    }
+    // fn obj_palette_offset(&self) -> u32 {
+    //     self.obj_palette_offset
+    // }
 }
 
 fn read_core_block<C: AudioCallback, R: Read + Seek>(

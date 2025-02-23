@@ -14,9 +14,8 @@ path = "../ceres-core"
 version = "*"
 default-features = false
 
-[dependencies.dasp_ring_buffer]
+[dependencies.ringbuf]
 version = "*"
-default-features = false
 
 [dependencies.rubato]
 version = "*"

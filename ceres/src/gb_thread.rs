@@ -13,7 +13,7 @@ use thread_priority::ThreadBuilderExt;
 use {anyhow::Context, ceres_core::Gb, std::path::Path, std::sync::Arc};
 
 pub struct GbThread {
-    gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
+    gb: Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
     model: ceres_core::Model,
     rom_ident: String,
     exiting: Arc<AtomicBool>,
@@ -31,7 +31,7 @@ impl GbThread {
         ctx: &egui::Context,
     ) -> anyhow::Result<Self> {
         fn gb_loop(
-            gb: Arc<Mutex<Gb<audio::RingBuffer>>>,
+            gb: Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
             exiting: Arc<AtomicBool>,
             pause_thread: Arc<AtomicBool>,
             ctx: &egui::Context,
@@ -117,13 +117,11 @@ impl GbThread {
     }
 
     fn create_new_gb(
-        ring_buffer: audio::RingBuffer,
+        ring_buffer: audio::AudioCallbackImpl,
         model: ceres_core::Model,
         rom_path: Option<&Path>,
         project_dirs: &directories::ProjectDirs,
-    ) -> anyhow::Result<(Gb<audio::RingBuffer>, String)> {
-        let sample_rate = audio::Stream::sample_rate();
-
+    ) -> anyhow::Result<(Gb<audio::AudioCallbackImpl>, String)> {
         if let Some(rom_path) = rom_path {
             let rom = {
                 std::fs::read(rom_path)
@@ -146,7 +144,7 @@ impl GbThread {
                 ident
             };
 
-            let gb_builder = GbBuilder::new(model, sample_rate, cart, ring_buffer);
+            let gb_builder = GbBuilder::new(model, audio::Stream::sample_rate(), cart, ring_buffer);
 
             let save_file = project_dirs.data_dir().join(&ident).with_extension("sav");
             match File::open(&save_file) {
@@ -158,13 +156,19 @@ impl GbThread {
             }
         } else {
             Ok((
-                GbBuilder::new(model, sample_rate, Cart::default(), ring_buffer).build(),
+                GbBuilder::new(
+                    model,
+                    audio::Stream::sample_rate(),
+                    Cart::default(),
+                    ring_buffer,
+                )
+                .build(),
                 String::from("bootrom"),
             ))
         }
     }
 
-    pub fn mut_gb(&mut self) -> LockResult<MutexGuard<Gb<audio::RingBuffer>>> {
+    pub fn mut_gb(&mut self) -> LockResult<MutexGuard<Gb<audio::AudioCallbackImpl>>> {
         self.gb.lock()
     }
 
@@ -198,11 +202,11 @@ impl GbThread {
         Ok(())
     }
 
-    pub fn gb_lock(&self) -> LockResult<MutexGuard<Gb<audio::RingBuffer>>> {
+    pub fn gb_lock(&self) -> LockResult<MutexGuard<Gb<audio::AudioCallbackImpl>>> {
         self.gb.lock()
     }
 
-    pub fn gb_clone(&self) -> Arc<Mutex<Gb<audio::RingBuffer>>> {
+    pub fn gb_clone(&self) -> Arc<Mutex<Gb<audio::AudioCallbackImpl>>> {
         Arc::clone(&self.gb)
     }
 

@@ -72,10 +72,7 @@ impl<C: AudioCallback> Apu<C> {
         }
     }
 
-    fn sample_period_from_rate(sample_rate: i32) -> i32 {
-        // FIXME:
-        // This is mostly correct, the underrun errors are due to the timing issues in the run thread
-        // maybe account for difference in frame rate and sample rate?
+    const fn sample_period_from_rate(sample_rate: i32) -> i32 {
         TC_SEC / sample_rate
     }
 
@@ -123,7 +120,7 @@ impl<C: AudioCallback> Apu<C> {
         }
 
         self.render_timer += cycles;
-        if self.render_timer >= self.ext_sample_period {
+        while self.render_timer >= self.ext_sample_period {
             self.render_timer -= self.ext_sample_period;
 
             let (l, r) = mix_and_render(self);
