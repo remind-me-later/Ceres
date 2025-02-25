@@ -1,5 +1,6 @@
 @group(0) @binding(0) var txt: texture_2d<f32>;
 @group(0) @binding(1) var smpl: sampler;
+@group(0) @binding(2) var prev_frame: texture_2d<f32>;
 
 @group(1) @binding(0) var<uniform> dims: vec2<f32>;
 @group(1) @binding(1) var<uniform> shader_opt: u32;
@@ -122,13 +123,13 @@ fn fs_scale3x(tex_coords: vec2<f32>) -> vec4<f32> {
 }
 
 fn fs_lcd(tex_coords: vec2<f32>) -> vec4<f32> {
-    const LCD_TINT_RED: f32 = 0.95;
-    const LCD_TINT_GREEN: f32 = 1.0;
-    const LCD_TINT_BLUE: f32 = 0.93;
+    const LCD_TINT_RED: f32 = 0.93;
+    const LCD_TINT_GREEN: f32 = 0.96;
+    const LCD_TINT_BLUE: f32 = 0.9;
 
     const GRID_GAP_START: f32 = 0.5;
     const GRID_GAP_END: f32 = 1.0;
-    const GRID_BASE_BRIGHTNESS: f32 = 0.8;
+    const GRID_BASE_BRIGHTNESS: f32 = 0.7;
     const GRID_MAX_DARKENING: f32 = 0.1;
     const GRID_BLEND_FACTOR: f32 = 0.5;
 
@@ -138,14 +139,34 @@ fn fs_lcd(tex_coords: vec2<f32>) -> vec4<f32> {
     const REFLECTION_END: f32 = 0.9;
     const REFLECTION_INTENSITY: f32 = 0.05;
 
+    const GHOSTING_FACTOR: f32 = 0.5;
+
     let dims = vec2<f32> (textureDimensions(txt));
-    let pixel = textureSample(txt, smpl, tex_coords);
+    let pixel_pos = tex_coords * dims;
+
+    // Subpixel offsets
+    // Subpixel pattern: R G B
+    // We choose 0.165 so that every "band" of 3 pixels is 1/3 of a pixel
+    const RED_SUBPIXEL_OFFSET: f32 = - 0.165;
+    // const GREEN_SUBPIXEL_OFFSET: f32 = 0.5;
+    const BLUE_SUBPIXEL_OFFSET: f32 = 0.165;
+
+    let red_offset = vec2<f32> (RED_SUBPIXEL_OFFSET / dims.x, 0.0);
+    let green_offset = vec2<f32> (0.0, 0.0);
+    let blue_offset = vec2<f32> (BLUE_SUBPIXEL_OFFSET / dims.x, 0.0);
+
+    // Sample the texture at subpixel positions
+    let red_sample = textureSample(txt, smpl, tex_coords + red_offset).r;
+    let green_sample = textureSample(txt, smpl, tex_coords + green_offset).g;
+    let blue_sample = textureSample(txt, smpl, tex_coords + blue_offset).b;
+
+    // Combine the subpixel samples
+    let pixel = vec3<f32> (red_sample, green_sample, blue_sample);
 
     // LCD green tint
     let lcd_tint = vec3<f32> (LCD_TINT_RED, LCD_TINT_GREEN, LCD_TINT_BLUE);
 
     // Create LCD pixel grid effect
-    let pixel_pos = tex_coords * dims;
     let grid = vec2<f32> (smoothstep(GRID_GAP_START, GRID_GAP_END, fract(pixel_pos.x)), smoothstep(GRID_GAP_START, GRID_GAP_END, fract(pixel_pos.y)));
     let grid_effect = GRID_BASE_BRIGHTNESS + (GRID_MAX_DARKENING * (1.0 - (grid.x + grid.y) * GRID_BLEND_FACTOR));
 
@@ -154,6 +175,13 @@ fn fs_lcd(tex_coords: vec2<f32>) -> vec4<f32> {
     let reflection = smoothstep(REFLECTION_START, REFLECTION_END, vignette) * REFLECTION_INTENSITY;
 
     // Combine effects
-    let final_color = pixel.rgb * lcd_tint * grid_effect;
-    return vec4(final_color + reflection, pixel.a);
+    let final_color = pixel * lcd_tint * grid_effect;
+
+    // Sample the previous frame
+    let prev_color = textureSample(prev_frame, smpl, tex_coords).rgb;
+
+    // Apply ghosting effect
+    let ghosted_color = mix(final_color, prev_color, GHOSTING_FACTOR);
+
+    return vec4(ghosted_color + reflection, 1.0);
 }

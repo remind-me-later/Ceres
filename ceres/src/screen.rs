@@ -22,8 +22,13 @@ pub struct Resources {
     uniform_bind_group: wgpu::BindGroup,
 
     // Texture binds
-    texture: Texture,
+    frame_texture: Texture,
+    prev_frame_texture: Texture,
     diffuse_bind_group: wgpu::BindGroup,
+    sampler: wgpu::Sampler,
+
+    // Bind group layout
+    texture_bind_group_layout: wgpu::BindGroupLayout,
 }
 
 pub struct GBScreen<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
@@ -45,7 +50,8 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
         if let Some(wgpu_render_state) = cc.wgpu_render_state.as_ref() {
             let device = &wgpu_render_state.device;
 
-            let texture = Texture::new(device, PX_WIDTH, PX_HEIGHT, None);
+            let frame_texture = Texture::new(device, PX_WIDTH, PX_HEIGHT, Some("current_frame"));
+            let prev_frame_texture = Texture::new(device, PX_WIDTH, PX_HEIGHT, Some("prev_frame"));
 
             let texture_bind_group_layout =
                 device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -66,6 +72,16 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
                             ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
                             count: None,
                         },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 2,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            },
+                            count: None,
+                        },
                     ],
                     label: None,
                 });
@@ -77,11 +93,15 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::TextureView(texture.view()),
+                        resource: wgpu::BindingResource::TextureView(frame_texture.view()),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
                         resource: wgpu::BindingResource::Sampler(&sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(prev_frame_texture.view()),
                     },
                 ],
                 label: None,
@@ -189,8 +209,11 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
                     dimensions_uniform,
                     scale_uniform,
                     uniform_bind_group,
-                    texture,
+                    frame_texture,
                     diffuse_bind_group,
+                    prev_frame_texture,
+                    texture_bind_group_layout,
+                    sampler,
                 });
         }
 
@@ -255,7 +278,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
 
     fn prepare(
         &self,
-        _device: &wgpu::Device,
+        device: &wgpu::Device,
         queue: &wgpu::Queue,
         _screen_descriptor: &eframe::egui_wgpu::ScreenDescriptor,
         _egui_encoder: &mut wgpu::CommandEncoder,
@@ -263,8 +286,39 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
     ) -> Vec<wgpu::CommandBuffer> {
         if let Some(resources) = callback_resources.get_mut::<Resources>() {
             if let Ok(gb) = self.gb.lock() {
-                // TODO: awful way of transforming rgb to rgba
-                resources.texture.update(queue, gb.pixel_data_rgba());
+                // Swap the frame textures
+                std::mem::swap(
+                    &mut resources.frame_texture,
+                    &mut resources.prev_frame_texture,
+                );
+
+                // Update the bind group with the new texture views
+                resources.diffuse_bind_group =
+                    device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        layout: &resources.texture_bind_group_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: wgpu::BindingResource::TextureView(
+                                    resources.frame_texture.view(),
+                                ),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: wgpu::BindingResource::Sampler(&resources.sampler),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 2,
+                                resource: wgpu::BindingResource::TextureView(
+                                    resources.prev_frame_texture.view(),
+                                ),
+                            },
+                        ],
+                        label: None,
+                    });
+
+                // Update the current frame texture
+                resources.frame_texture.update(queue, gb.pixel_data_rgba());
             }
 
             {
