@@ -3,6 +3,12 @@ members = ["ceres-core", "ceres", "ceres-std"]
 default-members = ["ceres"]
 resolver = "2"
 
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+license = "MIT"
+repository = "https://github.com/remind-me-later/Ceres"
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 

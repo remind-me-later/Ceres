@@ -38,6 +38,16 @@ enum Model {
     Cgb,
 }
 
+impl Model {
+    pub const fn str(self) -> &'static str {
+        match self {
+            Model::Dmg => "dmg",
+            Model::Mgb => "mgb",
+            Model::Cgb => "cgb",
+        }
+    }
+}
+
 impl From<Model> for ceres_core::Model {
     fn from(model: Model) -> ceres_core::Model {
         match model {
@@ -50,10 +60,10 @@ impl From<Model> for ceres_core::Model {
 
 #[derive(Default, Clone, Copy, PartialEq, clap::ValueEnum)]
 pub enum ShaderOption {
-    #[default]
     Nearest = 0,
     Scale2x = 1,
     Scale3x = 2,
+    #[default]
     Lcd = 3,
 }
 
@@ -67,16 +77,20 @@ impl ShaderOption {
             ShaderOption::Lcd => ShaderOption::Lcd,
         }
     }
+
+    pub const fn str(self) -> &'static str {
+        match self {
+            ShaderOption::Nearest => "nearest",
+            ShaderOption::Scale2x => "scale2x",
+            ShaderOption::Scale3x => "scale3x",
+            ShaderOption::Lcd => "lcd",
+        }
+    }
 }
 
 impl std::fmt::Display for ShaderOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ShaderOption::Nearest => write!(f, "Nearest"),
-            ShaderOption::Scale2x => write!(f, "Scale2x"),
-            ShaderOption::Scale3x => write!(f, "Scale3x"),
-            ShaderOption::Lcd => write!(f, "LCD"),
-        }
+        write!(f, "{}", self.str())
     }
 }
 
@@ -95,7 +109,7 @@ struct Cli {
         short,
         long,
         help = "Game Boy model to emulate",
-        default_value = "cgb",
+        default_value = Model::default().str(),
         value_enum,
         required = false
     )]
@@ -104,7 +118,7 @@ struct Cli {
         short,
         long,
         help = "Shader used",
-        default_value = "nearest",
+        default_value = ShaderOption::default().str(),
         value_enum,
         required = false
     )]

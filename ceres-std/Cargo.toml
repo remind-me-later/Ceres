@@ -1,8 +1,9 @@
 [package]
 name = "ceres-std"
-version = "0.1.0"
-edition = "2024"
-license = "MIT"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [lints]
 workspace = true

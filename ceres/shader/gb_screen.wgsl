@@ -1,10 +1,8 @@
-// Globals
-
 @group(0) @binding(0) var txt: texture_2d<f32>;
 @group(0) @binding(1) var smpl: sampler;
 
 @group(1) @binding(0) var<uniform> dims: vec2<f32>;
-@group(1) @binding(1) var<uniform> scale_type: u32;
+@group(1) @binding(1) var<uniform> shader_opt: u32;
 
 struct Vertexinput {
     @builtin(vertex_index) vert_idx: u32,
@@ -27,7 +25,7 @@ struct VertexOutput {
 @fragment fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var ret: vec4<f32>;
 
-    switch scale_type {
+    switch shader_opt {
         default : {
             // nearest neighbour
             ret = textureSample(txt, smpl, in.tex_coords);
@@ -45,7 +43,6 @@ struct VertexOutput {
             ret = fs_lcd(in.tex_coords);
         }
     }
-    ;
 
     return ret;
 }
@@ -130,16 +127,16 @@ fn fs_lcd(tex_coords: vec2<f32>) -> vec4<f32> {
     const LCD_TINT_BLUE: f32 = 0.93;
 
     const GRID_GAP_START: f32 = 0.5;
-    const GRID_GAP_END: f32 = 0.8;
-    const GRID_BASE_BRIGHTNESS: f32 = 0.75;
-    const GRID_MAX_DARKENING: f32 = 0.25;
+    const GRID_GAP_END: f32 = 1.0;
+    const GRID_BASE_BRIGHTNESS: f32 = 0.8;
+    const GRID_MAX_DARKENING: f32 = 0.1;
     const GRID_BLEND_FACTOR: f32 = 0.5;
 
     const VIGNETTE_CENTER_OFFSET: f32 = 0.5;
     const VIGNETTE_SCALE: f32 = 1.1;
     const REFLECTION_START: f32 = 0.0;
-    const REFLECTION_END: f32 = 0.8;
-    const REFLECTION_INTENSITY: f32 = 0.15;
+    const REFLECTION_END: f32 = 0.9;
+    const REFLECTION_INTENSITY: f32 = 0.05;
 
     let dims = vec2<f32> (textureDimensions(txt));
     let pixel = textureSample(txt, smpl, tex_coords);
