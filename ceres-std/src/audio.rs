@@ -138,13 +138,13 @@ impl ceres_core::AudioCallback for AudioCallbackImpl {
     }
 }
 
-pub struct State {
+pub struct AudioState {
     _host: cpal::Host,
     device: cpal::Device,
     config: cpal::StreamConfig,
 }
 
-impl State {
+impl AudioState {
     pub fn new() -> Result<Self, Error> {
         let host = cpal::default_host();
         let device = host
@@ -183,7 +183,7 @@ pub struct Stream {
 }
 
 impl Stream {
-    pub fn new(state: &State) -> Result<Self, Error> {
+    pub fn new(state: &AudioState) -> Result<Self, Error> {
         let ring_buffer = Arc::new(Mutex::new(Buffers::new()?));
         let ring_buffer_clone = Arc::clone(&ring_buffer);
 

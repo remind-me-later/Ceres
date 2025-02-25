@@ -1,21 +1,23 @@
-use ceres_audio as audio;
+use crate::audio;
 use ceres_core::{Cart, GbBuilder};
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
-use eframe::egui;
 use std::{
     fs::File,
-    io::Read,
     sync::{LockResult, Mutex, MutexGuard},
     time::Duration,
 };
 use thread_priority::ThreadBuilderExt;
-use {anyhow::Context, ceres_core::Gb, std::path::Path, std::sync::Arc};
+
+use {ceres_core::Gb, std::path::Path, std::sync::Arc};
+
+pub trait PainterCallback: Send {
+    fn repaint(&self);
+}
 
 pub struct GbThread {
     gb: Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
     model: ceres_core::Model,
-    rom_ident: String,
     exiting: Arc<AtomicBool>,
     pause_thread: Arc<AtomicBool>,
     audio_stream: audio::Stream,
@@ -23,18 +25,18 @@ pub struct GbThread {
 }
 
 impl GbThread {
-    pub fn new(
+    pub fn new<P: PainterCallback + 'static>(
         model: ceres_core::Model,
-        project_dirs: &directories::ProjectDirs,
+        sav_path: Option<&Path>,
         rom_path: Option<&Path>,
-        audio_state: &audio::State,
-        ctx: &egui::Context,
-    ) -> anyhow::Result<Self> {
-        fn gb_loop(
+        audio_state: &audio::AudioState,
+        ctx: P,
+    ) -> Result<Self, Error> {
+        fn gb_loop<P: PainterCallback>(
             gb: Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
             exiting: Arc<AtomicBool>,
             pause_thread: Arc<AtomicBool>,
-            ctx: &egui::Context,
+            ctx: P,
         ) {
             const DURATION: Duration = ceres_core::FRAME_DURATION;
 
@@ -45,7 +47,7 @@ impl GbThread {
                     if let Ok(mut gb) = gb.lock() {
                         gb.run_frame();
                     }
-                    ctx.request_repaint();
+                    ctx.repaint();
                 }
 
                 let elapsed = last_loop.elapsed();
@@ -63,10 +65,10 @@ impl GbThread {
             drop(pause_thread);
         }
 
-        let audio_stream = audio::Stream::new(audio_state)?;
+        let audio_stream = audio::Stream::new(audio_state).map_err(Error::Audio)?;
         let ring_buffer = audio_stream.get_ring_buffer();
 
-        let (gb, ident) = Self::create_new_gb(ring_buffer, model, rom_path, project_dirs)?;
+        let gb = Self::create_new_gb(ring_buffer, model, rom_path, sav_path)?;
         let gb = Arc::new(Mutex::new(gb));
 
         let pause_thread = Arc::new(AtomicBool::new(false));
@@ -78,18 +80,16 @@ impl GbThread {
             let gb = Arc::clone(&gb);
             let exit = Arc::clone(&exiting);
             let pause_thread = Arc::clone(&pause_thread);
-            let ctx = ctx.clone();
 
             // std::thread::spawn(move || gb_loop(gb, exit, pause_thread))
             thread_builder.spawn_with_priority(thread_priority::ThreadPriority::Max, move |_| {
-                gb_loop(gb, exit, pause_thread, &ctx);
+                gb_loop(gb, exit, pause_thread, ctx);
             })?
         };
 
         // Ok((Gb::new(model, sample_rate, cart, audio_callback), ident))
         Ok(Self {
             gb,
-            rom_ident: ident,
             exiting,
             pause_thread,
             thread_handle: Some(thread_handle),
@@ -98,18 +98,12 @@ impl GbThread {
         })
     }
 
-    pub fn change_rom(
-        &mut self,
-        project_dirs: &directories::ProjectDirs,
-        rom_path: &Path,
-    ) -> anyhow::Result<()> {
+    pub fn change_rom(&mut self, sav_path: Option<&Path>, rom_path: &Path) -> Result<(), Error> {
         let ring_buffer = self.audio_stream.get_ring_buffer();
 
-        let (gb_new, ident) =
-            Self::create_new_gb(ring_buffer, self.model, Some(rom_path), project_dirs)?;
+        let gb_new = Self::create_new_gb(ring_buffer, self.model, Some(rom_path), sav_path)?;
 
         if let Ok(mut gb) = self.gb.lock() {
-            self.rom_ident = ident;
             *gb = gb_new;
         }
 
@@ -120,51 +114,44 @@ impl GbThread {
         ring_buffer: audio::AudioCallbackImpl,
         model: ceres_core::Model,
         rom_path: Option<&Path>,
-        project_dirs: &directories::ProjectDirs,
-    ) -> anyhow::Result<(Gb<audio::AudioCallbackImpl>, String)> {
+        sav_path: Option<&Path>,
+    ) -> Result<Gb<audio::AudioCallbackImpl>, Error> {
         if let Some(rom_path) = rom_path {
             let rom = {
                 std::fs::read(rom_path)
                     .map(Vec::into_boxed_slice)
-                    .context("no such file")?
+                    .map_err(Error::Io)?
             };
 
             let cart = Cart::new(rom)?;
 
-            let ident = {
-                let mut ident = String::new();
-                cart.ascii_title().read_to_string(&mut ident)?;
-                ident.push('-');
-                ident.push_str(cart.version().to_string().as_str());
-                ident.push('-');
-                ident.push_str(cart.header_checksum().to_string().as_str());
-                ident.push('-');
-                ident.push_str(cart.global_checksum().to_string().as_str());
-
-                ident
-            };
+            let has_save = cart.has_battery();
 
             let gb_builder = GbBuilder::new(model, audio::Stream::sample_rate(), cart, ring_buffer);
 
-            let save_file = project_dirs.data_dir().join(&ident).with_extension("sav");
-            match File::open(&save_file) {
-                Ok(mut save_data) => {
-                    let gb = gb_builder.load_save_data(&mut save_data)?.build();
-                    Ok((gb, ident))
+            if !has_save {
+                return Ok(gb_builder.build());
+            }
+
+            if let Some(sav_path) = sav_path {
+                match File::open(sav_path) {
+                    Ok(mut save_data) => {
+                        let gb = gb_builder.load_save_data(&mut save_data)?.build();
+                        Ok(gb)
+                    }
+                    Err(_) => Ok(gb_builder.build()),
                 }
-                _ => Ok((gb_builder.build(), ident)),
+            } else {
+                Ok(gb_builder.build())
             }
         } else {
-            Ok((
-                GbBuilder::new(
-                    model,
-                    audio::Stream::sample_rate(),
-                    Cart::default(),
-                    ring_buffer,
-                )
-                .build(),
-                String::from("bootrom"),
-            ))
+            Ok(GbBuilder::new(
+                model,
+                audio::Stream::sample_rate(),
+                Cart::default(),
+                ring_buffer,
+            )
+            .build())
         }
     }
 
@@ -176,29 +163,25 @@ impl GbThread {
         self.pause_thread.load(Relaxed)
     }
 
-    pub fn pause(&mut self) -> anyhow::Result<()> {
+    pub fn pause(&mut self) -> Result<(), audio::Error> {
         self.audio_stream.pause()?;
         self.pause_thread.store(true, Relaxed);
         Ok(())
     }
 
-    pub fn resume(&mut self) -> anyhow::Result<()> {
+    pub fn resume(&mut self) -> Result<(), audio::Error> {
         self.pause_thread.store(false, Relaxed);
         self.audio_stream.resume()?;
         Ok(())
     }
 
-    pub fn rom_ident(&self) -> &str {
-        &self.rom_ident
-    }
-
-    pub fn exit(&mut self) -> anyhow::Result<()> {
+    pub fn exit(&mut self) -> Result<(), Error> {
         self.exiting.store(true, Relaxed);
         self.thread_handle
             .take()
-            .ok_or(anyhow::anyhow!("thread_handle is None"))?
+            .ok_or(Error::NoThreadRunning)?
             .join()
-            .map_err(|e| anyhow::anyhow!("error joining thread: {e:?}"))?;
+            .map_err(|_e| Error::ThreadJoin)?;
         Ok(())
     }
 
@@ -224,5 +207,37 @@ impl Drop for GbThread {
         if let Err(e) = self.exit() {
             eprintln!("error exiting gb_loop: {e}");
         }
+    }
+}
+
+#[derive(Debug)]
+pub enum Error {
+    Io(std::io::Error),
+    Gb(ceres_core::Error),
+    Audio(audio::Error),
+    ThreadJoin,
+    NoThreadRunning,
+}
+
+impl std::error::Error for Error {}
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Io(err) => write!(f, "os error: {err}"),
+            Self::Gb(err) => write!(f, "gb error: {err}"),
+            Self::ThreadJoin => write!(f, "thread join error"),
+            Self::NoThreadRunning => write!(f, "no thread running"),
+            Self::Audio(err) => write!(f, "audio error: {err}"),
+        }
+    }
+}
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Self::Io(err)
+    }
+}
+impl From<ceres_core::Error> for Error {
+    fn from(err: ceres_core::Error) -> Self {
+        Self::Gb(err)
     }
 }

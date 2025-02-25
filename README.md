@@ -41,8 +41,8 @@ To build:
 
 ## Folder organization
 
-- `ceres-core` contains the core emulator logic, such as cpu, apu and ppu emulation.
-- `ceres-audio` contains code for audio streaming abstractions for different front-ends.
+- `ceres-core` contains the core emulator logic, such as cpu, apu and ppu emulation can be used with only 'alloc'.
+- `ceres-std` contains code for audio and thread, for use with different frontends.
 - `ceres` contains a frontend with an egui interface.
 
 ## Thanks

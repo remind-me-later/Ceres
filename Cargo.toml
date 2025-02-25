@@ -1,5 +1,5 @@
 [workspace]
-members = ["ceres-core", "ceres", "ceres-audio"]
+members = ["ceres-core", "ceres", "ceres-std"]
 default-members = ["ceres"]
 resolver = "2"
 

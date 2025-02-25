@@ -658,25 +658,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytemuck",
- "ceres-audio",
  "ceres-core",
+ "ceres-std",
  "clap",
  "directories",
  "eframe",
  "rfd",
- "spin_sleep",
- "thread-priority",
  "winit",
-]
-
-[[package]]
-name = "ceres-audio"
-version = "0.1.0"
-dependencies = [
- "ceres-core",
- "cpal",
- "ringbuf",
- "rubato",
 ]
 
 [[package]]
@@ -684,6 +672,18 @@ name = "ceres-core"
 version = "0.1.0"
 dependencies = [
  "smallvec",
+]
+
+[[package]]
+name = "ceres-std"
+version = "0.1.0"
+dependencies = [
+ "ceres-core",
+ "cpal",
+ "ringbuf",
+ "rubato",
+ "spin_sleep",
+ "thread-priority",
 ]
 
 [[package]]
@@ -1273,9 +1273,9 @@ dependencies = [
 
 [[package]]
 name = "flate2"
-version = "1.0.35"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c936bfdafb507ebbf50b8074c54fa31c5be9a1e7e5f467dd659697041407d07c"
+checksum = "11faaf5a5236997af9848be0bef4db95824b1d534ebc64d0f0c6cf3e67bd38dc"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
@@ -2555,9 +2555,9 @@ checksum = "2f3a9f18d041e6d0e102a0a46750538147e5e8992d3b4873aaafee2520b00ce3"
 
 [[package]]
 name = "portable-atomic"
-version = "1.10.0"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "280dc24453071f1b63954171985a0b0d30058d287960968b9b2aca264c8d4ee6"
+checksum = "350e9b48cbc6b0e028b0473b114454c6316e57336ee184ceab6e53f72c178b3e"
 
 [[package]]
 name = "ppv-lite86"

@@ -1,5 +1,4 @@
 mod app;
-mod gb_thread;
 mod screen;
 
 use eframe::egui;

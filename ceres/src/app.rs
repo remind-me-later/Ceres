@@ -1,19 +1,31 @@
-use crate::{gb_thread::GbThread, screen, Scaling};
-use ceres_audio as audio;
+use crate::{Scaling, screen};
+use anyhow::Context;
+use ceres_std::GbThread;
 use eframe::egui::{self, Key};
 use rfd::FileDialog;
-use std::fs::File;
+use std::{fs::File, path::PathBuf};
+
+pub struct PainterCallbackImpl(egui::Context);
+
+impl PainterCallbackImpl {
+    pub fn new(ctx: &egui::Context) -> Self {
+        Self(ctx.clone())
+    }
+}
+
+impl ceres_std::PainterCallback for PainterCallbackImpl {
+    fn repaint(&self) {
+        self.0.request_repaint();
+    }
+}
 
 pub struct App {
-    // Config parameters
     project_dirs: directories::ProjectDirs,
-
-    // Contexts
-    gb_ctx: GbThread,
-
-    // Rendering
-    _audio: audio::State,
+    thread: GbThread,
+    _audio: ceres_std::AudioState,
     screen: screen::GBScreen<{ ceres_core::PX_WIDTH as u32 }, { ceres_core::PX_HEIGHT as u32 }>,
+    _rom_path: Option<PathBuf>,
+    sav_path: Option<PathBuf>,
 }
 
 impl App {
@@ -24,10 +36,27 @@ impl App {
         rom_path: Option<&std::path::Path>,
         scaling: Scaling,
     ) -> anyhow::Result<Self> {
-        let ctx = &cc.egui_ctx;
+        let audio = ceres_std::AudioState::new()?;
+        let sav_path = if let Some(rom_path) = rom_path {
+            let file_stem = rom_path.file_stem().context("couldn't get file stem")?;
 
-        let audio = audio::State::new()?;
-        let mut gb_ctx = GbThread::new(model, &project_dirs, rom_path, &audio, ctx)?;
+            Some(
+                project_dirs
+                    .data_dir()
+                    .join(file_stem)
+                    .with_extension("sav"),
+            )
+        } else {
+            None
+        };
+
+        let mut gb_ctx = GbThread::new(
+            model,
+            sav_path.as_deref(),
+            rom_path,
+            &audio,
+            PainterCallbackImpl::new(&cc.egui_ctx),
+        )?;
         let gb_clone = gb_ctx.gb_clone();
         let screen = screen::GBScreen::new(cc, gb_clone, scaling);
 
@@ -35,23 +64,21 @@ impl App {
 
         Ok(Self {
             project_dirs,
-            gb_ctx,
+            thread: gb_ctx,
             _audio: audio,
             screen,
+            _rom_path: rom_path.map(|path| path.to_path_buf()),
+            sav_path,
         })
     }
 
     fn save_data(&self) -> anyhow::Result<()> {
-        if let Ok(gb) = self.gb_ctx.gb_lock() {
+        if let Ok(gb) = self.thread.gb_lock() {
             std::fs::create_dir_all(self.project_dirs.data_dir())?;
-            let sav_file = File::create(
-                self.project_dirs
-                    .data_dir()
-                    .join(self.gb_ctx.rom_ident())
-                    .with_extension("sav"),
-            );
-
-            gb.save_data(&mut sav_file?)?;
+            if let Some(sav_path) = &self.sav_path {
+                let sav_file = File::create(sav_path);
+                gb.save_data(&mut sav_file?)?;
+            }
         }
 
         Ok(())
@@ -70,7 +97,8 @@ impl eframe::App for App {
                             .pick_file();
 
                         if let Some(file) = file {
-                            if let Err(e) = self.gb_ctx.change_rom(&self.project_dirs, &file) {
+                            if let Err(e) = self.thread.change_rom(self.sav_path.as_deref(), &file)
+                            {
                                 eprintln!("couldn't open ROM: {e}");
                             }
                         }
@@ -85,16 +113,16 @@ impl eframe::App for App {
                     menu_button_ui.add(egui::Label::new("Volume"));
 
                     menu_button_ui.horizontal(|horizontal_ui| {
-                        let paused = self.gb_ctx.is_paused();
+                        let paused = self.thread.is_paused();
                         if horizontal_ui
                             .button(if paused { "\u{25b6}" } else { "\u{23f8}" })
                             .on_hover_text("Pause the game")
                             .clicked()
                         {
                             if let Err(e) = if paused {
-                                self.gb_ctx.resume()
+                                self.thread.resume()
                             } else {
-                                self.gb_ctx.pause()
+                                self.thread.pause()
                             } {
                                 eprintln!("couldn't pause/resume: {e}");
                             }
@@ -105,7 +133,7 @@ impl eframe::App for App {
                         let volume_slider = egui::Slider::from_get_set(0.0..=1.0, |volume| {
                             let mut volume_ret = 0.0;
 
-                            if let Ok(mut volume_mutex) = self.gb_ctx.volume().lock() {
+                            if let Ok(mut volume_mutex) = self.thread.volume().lock() {
                                 #[expect(clippy::cast_possible_truncation)]
                                 if let Some(volume) = volume {
                                     *volume_mutex = volume as f32;
@@ -196,7 +224,7 @@ impl eframe::App for App {
             });
 
         ctx.input(|i| {
-            if let Ok(mut gb) = self.gb_ctx.mut_gb() {
+            if let Ok(mut gb) = self.thread.mut_gb() {
                 if i.key_pressed(Key::W) {
                     gb.press(ceres_core::Button::Up);
                 }

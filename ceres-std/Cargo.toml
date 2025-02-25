@@ -1,5 +1,5 @@
 [package]
-name = "ceres-audio"
+name = "ceres-std"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
@@ -19,3 +19,11 @@ version = "*"
 
 [dependencies.rubato]
 version = "*"
+
+[dependencies.thread-priority]
+version = "*"
+default-features = false
+
+[dependencies.spin_sleep]
+version = "*"
+default-features = false

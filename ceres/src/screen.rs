@@ -1,8 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::Scaling;
-use ceres_audio as audio;
-use ceres_core::Gb;
+use ceres_std::Gb;
 use eframe::egui;
 use eframe::wgpu;
 use eframe::wgpu::util::DeviceExt;
@@ -28,7 +27,7 @@ pub struct Resources {
 }
 
 pub struct GBScreen<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
-    gb: Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
+    gb: Arc<Mutex<Gb>>,
     scaling: Scaling,
     pixel_mode: PixelMode,
     size: (f32, f32),
@@ -38,7 +37,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
     #[expect(clippy::too_many_lines)]
     pub fn new<'a>(
         cc: &'a eframe::CreationContext<'a>,
-        gb: Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
+        gb: Arc<Mutex<Gb>>,
         scaling: Scaling,
     ) -> Self {
         // Get the WGPU render state from the eframe creation context. This can also be retrieved

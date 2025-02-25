@@ -7,10 +7,6 @@ license = "MIT"
 [lints]
 workspace = true
 
-# *******
-# * Cli *
-# *******
-
 [dependencies.clap]
 version = "*"
 default-features = false
@@ -22,24 +18,8 @@ version = "*"
 [dependencies.directories]
 version = "*"
 
-# *******************
-# * Emulator thread *
-# *******************
-
 [dependencies.ceres-core]
 path = "../ceres-core"
-
-[dependencies.thread-priority]
-version = "*"
-default-features = false
-
-[dependencies.spin_sleep]
-version = "*"
-default-features = false
-
-# *************
-# * windowing *
-# *************
 
 [dependencies.eframe]
 version = "*"
@@ -59,5 +39,5 @@ version = "*"
 version = "*"
 default-features = false
 
-[dependencies.ceres-audio]
-path = "../ceres-audio"
+[dependencies.ceres-std]
+path = "../ceres-std"
