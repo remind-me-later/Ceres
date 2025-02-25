@@ -49,30 +49,33 @@ impl From<Model> for ceres_core::Model {
 }
 
 #[derive(Default, Clone, Copy, PartialEq, clap::ValueEnum)]
-pub enum Scaling {
+pub enum ShaderOption {
     #[default]
     Nearest = 0,
     Scale2x = 1,
     Scale3x = 2,
+    Lcd = 3,
 }
 
-impl Scaling {
+impl ShaderOption {
     #[must_use]
     pub fn next(self) -> Self {
         match self {
-            Scaling::Nearest => Scaling::Scale2x,
-            Scaling::Scale2x => Scaling::Scale3x,
-            Scaling::Scale3x => Scaling::Nearest,
+            ShaderOption::Nearest => ShaderOption::Scale2x,
+            ShaderOption::Scale2x => ShaderOption::Scale3x,
+            ShaderOption::Scale3x => ShaderOption::Lcd,
+            ShaderOption::Lcd => ShaderOption::Lcd,
         }
     }
 }
 
-impl std::fmt::Display for Scaling {
+impl std::fmt::Display for ShaderOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Scaling::Nearest => write!(f, "Nearest"),
-            Scaling::Scale2x => write!(f, "Scale2x"),
-            Scaling::Scale3x => write!(f, "Scale3x"),
+            ShaderOption::Nearest => write!(f, "Nearest"),
+            ShaderOption::Scale2x => write!(f, "Scale2x"),
+            ShaderOption::Scale3x => write!(f, "Scale3x"),
+            ShaderOption::Lcd => write!(f, "LCD"),
         }
     }
 }
@@ -100,12 +103,12 @@ struct Cli {
     #[arg(
         short,
         long,
-        help = "Scaling algorithm used",
+        help = "Shader used",
         default_value = "nearest",
         value_enum,
         required = false
     )]
-    scaling: Scaling,
+    shader_option: ShaderOption,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -139,7 +142,7 @@ fn main() -> anyhow::Result<()> {
                 args.model.into(),
                 project_dirs,
                 args.file.as_deref(),
-                args.scaling,
+                args.shader_option,
             )?))
         }),
     )

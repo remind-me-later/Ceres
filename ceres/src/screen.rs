@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use crate::Scaling;
+use crate::ShaderOption;
 use ceres_std::Gb;
 use eframe::egui;
 use eframe::wgpu;
@@ -28,7 +28,7 @@ pub struct Resources {
 
 pub struct GBScreen<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
     gb: Arc<Mutex<Gb>>,
-    scaling: Scaling,
+    shader_option: ShaderOption,
     pixel_mode: PixelMode,
     size: (f32, f32),
 }
@@ -38,7 +38,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
     pub fn new<'a>(
         cc: &'a eframe::CreationContext<'a>,
         gb: Arc<Mutex<Gb>>,
-        scaling: Scaling,
+        shader_option: ShaderOption,
     ) -> Self {
         // Get the WGPU render state from the eframe creation context. This can also be retrieved
         // from `eframe::Frame` when you don't have a `CreationContext` available.
@@ -122,7 +122,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
 
             let scale_uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: None,
-                contents: bytemuck::cast_slice(&[scaling as u32]),
+                contents: bytemuck::cast_slice(&[shader_option as u32]),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
 
@@ -196,7 +196,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
 
         Self {
             gb,
-            scaling,
+            shader_option,
             size: (0.0, 0.0),
             pixel_mode: PixelMode::default(),
         }
@@ -210,19 +210,19 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
             response.rect,
             Self {
                 gb: Arc::clone(&self.gb),
-                scaling: self.scaling,
+                shader_option: self.shader_option,
                 size: (response.rect.width(), response.rect.height()),
                 pixel_mode: self.pixel_mode,
             },
         ));
     }
 
-    pub fn scaling(&self) -> Scaling {
-        self.scaling
+    pub fn shader_option(&self) -> ShaderOption {
+        self.shader_option
     }
 
-    pub fn mut_scaling(&mut self) -> &mut Scaling {
-        &mut self.scaling
+    pub fn shader_option_mut(&mut self) -> &mut ShaderOption {
+        &mut self.shader_option
     }
 
     pub fn pixel_mode(&self) -> PixelMode {
@@ -296,11 +296,10 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
                 );
             }
             {
-                let scaling = self.scaling;
                 queue.write_buffer(
                     &resources.scale_uniform,
                     0,
-                    bytemuck::cast_slice(&[scaling as u32]),
+                    bytemuck::cast_slice(&[self.shader_option as u32]),
                 );
             }
         } else {

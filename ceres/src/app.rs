@@ -1,4 +1,4 @@
-use crate::{Scaling, screen};
+use crate::{ShaderOption, screen};
 use anyhow::Context;
 use ceres_std::GbThread;
 use eframe::egui::{self, Key};
@@ -34,7 +34,7 @@ impl App {
         model: ceres_core::Model,
         project_dirs: directories::ProjectDirs,
         rom_path: Option<&std::path::Path>,
-        scaling: Scaling,
+        shader_option: ShaderOption,
     ) -> anyhow::Result<Self> {
         let audio = ceres_std::AudioState::new()?;
         let sav_path = if let Some(rom_path) = rom_path {
@@ -58,7 +58,7 @@ impl App {
             PainterCallbackImpl::new(&cc.egui_ctx),
         )?;
         let gb_clone = gb_ctx.gb_clone();
-        let screen = screen::GBScreen::new(cc, gb_clone, scaling);
+        let screen = screen::GBScreen::new(cc, gb_clone, shader_option);
 
         gb_ctx.resume()?;
 
@@ -156,33 +156,40 @@ impl eframe::App for App {
 
                     menu_button_ui.separator();
 
-                    menu_button_ui.add(egui::Label::new("Scaling algorithm"));
+                    menu_button_ui.add(egui::Label::new("Shader"));
 
                     let nearest_button = egui::SelectableLabel::new(
-                        self.screen.scaling() == Scaling::Nearest,
+                        self.screen.shader_option() == ShaderOption::Nearest,
                         "Nearest",
                     );
 
                     if menu_button_ui.add(nearest_button).clicked() {
-                        *self.screen.mut_scaling() = Scaling::Nearest;
+                        *self.screen.shader_option_mut() = ShaderOption::Nearest;
                     }
 
                     let scale2x_button = egui::SelectableLabel::new(
-                        self.screen.scaling() == Scaling::Scale2x,
+                        self.screen.shader_option() == ShaderOption::Scale2x,
                         "Scale2x",
                     );
 
                     if menu_button_ui.add(scale2x_button).clicked() {
-                        *self.screen.mut_scaling() = Scaling::Scale2x;
+                        *self.screen.shader_option_mut() = ShaderOption::Scale2x;
                     }
 
                     let scale3x_button = egui::SelectableLabel::new(
-                        self.screen.scaling() == Scaling::Scale3x,
+                        self.screen.shader_option() == ShaderOption::Scale3x,
                         "Scale3x",
                     );
 
                     if menu_button_ui.add(scale3x_button).clicked() {
-                        *self.screen.mut_scaling() = Scaling::Scale3x;
+                        *self.screen.shader_option_mut() = ShaderOption::Scale3x;
+                    }
+
+                    let lcd_button =
+                        egui::SelectableLabel::new(self.screen.shader_option() == ShaderOption::Lcd, "LCD");
+
+                    if menu_button_ui.add(lcd_button).clicked() {
+                        *self.screen.shader_option_mut() = ShaderOption::Lcd;
                     }
 
                     menu_button_ui.separator();
