@@ -1,17 +1,11 @@
 use std::sync::{Arc, Mutex};
 
+use crate::PixelMode;
 use crate::ShaderOption;
 use ceres_std::Gb;
 use eframe::egui;
 use eframe::wgpu;
 use eframe::wgpu::util::DeviceExt;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum PixelMode {
-    PixelPerfect,
-    #[default]
-    FitWindow,
-}
 
 pub struct Resources {
     render_pipeline: wgpu::RenderPipeline,

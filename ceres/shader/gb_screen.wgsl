@@ -43,6 +43,10 @@ struct VertexOutput {
             // lcd
             ret = fs_lcd(in.tex_coords);
         }
+        case 4u : {
+            // crt
+            ret = fs_crt(in.tex_coords);
+        }
     }
 
     return ret;
@@ -123,14 +127,15 @@ fn fs_scale3x(tex_coords: vec2<f32>) -> vec4<f32> {
 }
 
 fn fs_lcd(tex_coords: vec2<f32>) -> vec4<f32> {
+    // LCD parameters - can be adjusted for different effects
     const LCD_TINT_RED: f32 = 0.93;
     const LCD_TINT_GREEN: f32 = 0.96;
     const LCD_TINT_BLUE: f32 = 0.9;
 
-    const GRID_GAP_START: f32 = 0.5;
-    const GRID_GAP_END: f32 = 1.0;
-    const GRID_BASE_BRIGHTNESS: f32 = 0.7;
-    const GRID_MAX_DARKENING: f32 = 0.1;
+    const GRID_GAP_START: f32 = 0.4;
+    const GRID_GAP_END: f32 = 0.6;
+    const GRID_BASE_BRIGHTNESS: f32 = 0.5;
+    const GRID_MAX_DARKENING: f32 = 0.25;
     const GRID_BLEND_FACTOR: f32 = 0.5;
 
     const VIGNETTE_CENTER_OFFSET: f32 = 0.5;
@@ -148,7 +153,6 @@ fn fs_lcd(tex_coords: vec2<f32>) -> vec4<f32> {
     // Subpixel pattern: R G B
     // We choose 0.165 so that every "band" of 3 pixels is 1/3 of a pixel
     const RED_SUBPIXEL_OFFSET: f32 = - 0.165;
-    // const GREEN_SUBPIXEL_OFFSET: f32 = 0.5;
     const BLUE_SUBPIXEL_OFFSET: f32 = 0.165;
 
     let red_offset = vec2<f32> (RED_SUBPIXEL_OFFSET / dims.x, 0.0);
@@ -184,4 +188,78 @@ fn fs_lcd(tex_coords: vec2<f32>) -> vec4<f32> {
     let ghosted_color = mix(final_color, prev_color, GHOSTING_FACTOR);
 
     return vec4(ghosted_color + reflection, 1.0);
+}
+
+fn fs_crt(tex_coords: vec2<f32>) -> vec4<f32> {
+    // CRT parameters - can be adjusted for different effects
+    const CURVATURE: f32 = - 0.01;
+    const SCANLINE_INTENSITY: f32 = 0.15;
+    const SCANLINE_COUNT: f32 = 240.0;
+    const VIGNETTE_STRENGTH: f32 = 0.2;
+    const COLOR_BLEED: f32 = 0.5;
+    const BRIGHTNESS: f32 = 1.2;
+    const CONTRAST: f32 = 1.1;
+    const FLICKER_INTENSITY: f32 = 0.03;
+    const GHOST_INTENSITY: f32 = 0.06;
+    const RGB_SHIFT: f32 = 0.003;
+
+    // Center coordinates for distortion
+    let centered_coords = vec2(tex_coords - 0.5) * 2.0;
+
+    // Apply barrel distortion (CRT curvature)
+    let distort_strength = 1.0 - CURVATURE;
+    let dist = length(centered_coords);
+    let factor = dist * CURVATURE * (1.0 - dist * dist * 0.5);
+
+    // Calculate distorted texture coordinates
+    let distorted = centered_coords * (1.0 + factor * dist);
+    let distorted_coords = (distorted * 0.5) + 0.5;
+
+    // Check if we're out of bounds after distortion
+    if (any(distorted_coords.xy < vec2(0.0)) || any(distorted_coords.xy > vec2(1.0))) {
+        return vec4(0.0, 0.0, 0.0, 1.0);
+    }
+
+    // Apply RGB color shift (chromatic aberration)
+    let red_shift = vec2(RGB_SHIFT, 0.0);
+    let blue_shift = vec2(- RGB_SHIFT, 0.0);
+
+    let r = textureSample(txt, smpl, distorted_coords + red_shift).r;
+    let g = textureSample(txt, smpl, distorted_coords).g;
+    let b = textureSample(txt, smpl, distorted_coords + blue_shift).b;
+
+    // Create scanlines
+    let scanline = 0.5 + 0.5 * sin(distorted_coords.y * SCANLINE_COUNT * 3.14159);
+    let scanlines = 1.0 - SCANLINE_INTENSITY * scanline;
+
+    // Create vignette darkening at edges
+    let vignette = 1.0 - VIGNETTE_STRENGTH * pow(dist, 2.0);
+
+    // Generate pseudo-random flicker
+    let time_seed = f32(textureDimensions(txt).x % 100u) * 0.01;
+    let flicker = 1.0 - FLICKER_INTENSITY * (0.5 + 0.5 * sin(time_seed * 10.0));
+
+    // Get ghosting from previous frame
+    let ghost = textureSample(prev_frame, smpl, distorted_coords).rgb;
+
+    // Combine color with effects
+    var color = vec3(r, g, b);
+
+    // Apply color bleed (soft glow)
+    let blur1 = textureSample(txt, smpl, distorted_coords + vec2(0.001, 0.001)).rgb;
+    let blur2 = textureSample(txt, smpl, distorted_coords - vec2(0.001, 0.001)).rgb;
+    color = mix(color, (blur1 + blur2) * 0.5, COLOR_BLEED);
+
+    // Apply ghosting
+    color = mix(color, ghost, GHOST_INTENSITY);
+
+    // Apply brightness, contrast, scanlines, vignette and flicker
+    color = (color * BRIGHTNESS - 0.5) * CONTRAST + 0.5;
+    color *= scanlines * vignette * flicker;
+
+    // Add subtle noise for grain effect
+    let noise = fract(sin(dot(distorted_coords, vec2(12.9898, 78.233))) * 43758.5453);
+    color += (noise * 0.015 - 0.0075);
+
+    return vec4(color, 1.0);
 }

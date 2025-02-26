@@ -196,6 +196,18 @@ impl GbThread {
     pub fn volume(&self) -> &Arc<Mutex<f32>> {
         self.audio_stream.volume()
     }
+
+    pub fn is_muted(&self) -> bool {
+        self.audio_stream.is_muted()
+    }
+
+    pub fn toggle_mute(&mut self) {
+        if self.audio_stream.is_muted() {
+            self.audio_stream.unmute();
+        } else {
+            self.audio_stream.mute();
+        }
+    }
 }
 
 impl Drop for GbThread {

@@ -180,6 +180,7 @@ pub struct Stream {
     stream: cpal::Stream,
     ring_buffer: AudioCallbackImpl,
     volume: Arc<Mutex<f32>>,
+    volume_before_mute: Option<f32>,
 }
 
 impl Stream {
@@ -199,13 +200,15 @@ impl Stream {
             .build_output_stream(state.config(), data_callback, error_callback, None)
             .map_err(|_err| Error::CouldntBuildStream)?;
 
-        let volume = Arc::new(Mutex::new(1.0));
+        const INITIAL_VOLUME: f32 = 1.0;
+        let volume = Arc::new(Mutex::new(INITIAL_VOLUME));
         let buffer_volume = Arc::clone(&volume);
 
         let mut res = Self {
             stream,
             ring_buffer: AudioCallbackImpl::new(ring_buffer, buffer_volume),
             volume,
+            volume_before_mute: None,
         };
 
         res.pause()?;
@@ -231,6 +234,23 @@ impl Stream {
     #[must_use]
     pub fn volume(&self) -> &Arc<Mutex<f32>> {
         &self.volume
+    }
+
+    pub fn mute(&mut self) {
+        if let Ok(mut volume) = self.volume.lock() {
+            self.volume_before_mute = Some(*volume);
+            *volume = 0.0;
+        }
+    }
+
+    pub fn unmute(&mut self) {
+        if let Ok(mut volume) = self.volume.lock() {
+            *volume = self.volume_before_mute.take().unwrap_or(1.0);
+        }
+    }
+
+    pub fn is_muted(&self) -> bool {
+        self.volume_before_mute.is_some()
     }
 
     #[must_use]

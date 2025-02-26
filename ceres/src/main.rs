@@ -30,6 +30,11 @@ Other binsings:
     | Scale filter | Z        |
 ";
 
+trait AppOption: Default + Clone + Copy + clap::ValueEnum {
+    fn str(self) -> &'static str;
+    fn iter() -> impl Iterator<Item = Self>;
+}
+
 #[derive(Default, Clone, Copy, clap::ValueEnum)]
 enum Model {
     Dmg,
@@ -38,13 +43,17 @@ enum Model {
     Cgb,
 }
 
-impl Model {
-    pub const fn str(self) -> &'static str {
+impl AppOption for Model {
+    fn str(self) -> &'static str {
         match self {
             Model::Dmg => "dmg",
             Model::Mgb => "mgb",
             Model::Cgb => "cgb",
         }
+    }
+
+    fn iter() -> impl Iterator<Item = Self> {
+        [Model::Dmg, Model::Mgb, Model::Cgb].into_iter()
     }
 }
 
@@ -65,6 +74,7 @@ pub enum ShaderOption {
     Scale3x = 2,
     #[default]
     Lcd = 3,
+    Crt = 4,
 }
 
 impl ShaderOption {
@@ -74,23 +84,52 @@ impl ShaderOption {
             ShaderOption::Nearest => ShaderOption::Scale2x,
             ShaderOption::Scale2x => ShaderOption::Scale3x,
             ShaderOption::Scale3x => ShaderOption::Lcd,
-            ShaderOption::Lcd => ShaderOption::Lcd,
+            ShaderOption::Lcd => ShaderOption::Crt,
+            ShaderOption::Crt => ShaderOption::Nearest,
         }
     }
+}
 
-    pub const fn str(self) -> &'static str {
+impl AppOption for ShaderOption {
+    fn str(self) -> &'static str {
         match self {
             ShaderOption::Nearest => "nearest",
             ShaderOption::Scale2x => "scale2x",
             ShaderOption::Scale3x => "scale3x",
             ShaderOption::Lcd => "lcd",
+            ShaderOption::Crt => "crt",
         }
+    }
+
+    fn iter() -> impl Iterator<Item = Self> {
+        [
+            ShaderOption::Nearest,
+            ShaderOption::Scale2x,
+            ShaderOption::Scale3x,
+            ShaderOption::Lcd,
+            ShaderOption::Crt,
+        ]
+        .into_iter()
     }
 }
 
-impl std::fmt::Display for ShaderOption {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.str())
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
+pub enum PixelMode {
+    PixelPerfect,
+    #[default]
+    FitWindow,
+}
+
+impl AppOption for PixelMode {
+    fn str(self) -> &'static str {
+        match self {
+            PixelMode::PixelPerfect => "pixel-perfect",
+            PixelMode::FitWindow => "fit-window",
+        }
+    }
+
+    fn iter() -> impl Iterator<Item = Self> {
+        [PixelMode::PixelPerfect, PixelMode::FitWindow].into_iter()
     }
 }
 

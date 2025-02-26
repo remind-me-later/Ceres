@@ -1,4 +1,4 @@
-use crate::{ShaderOption, screen};
+use crate::{AppOption, PixelMode, ShaderOption, screen};
 use anyhow::Context;
 use ceres_std::GbThread;
 use eframe::egui::{self, Key};
@@ -152,66 +152,50 @@ impl eframe::App for App {
                         .trailing_fill(true);
 
                         horizontal_ui.add(volume_slider);
+
+                        let mute_button = egui::Button::new(if self.thread.is_muted() {
+                            "\u{1f507}"
+                        } else {
+                            "\u{1f50a}"
+                        });
+
+                        if horizontal_ui
+                            .add(mute_button)
+                            .on_hover_text("Mute the emulator")
+                            .clicked()
+                        {
+                            self.thread.toggle_mute();
+                        }
                     });
 
                     menu_button_ui.separator();
 
                     menu_button_ui.add(egui::Label::new("Shader"));
 
-                    let nearest_button = egui::SelectableLabel::new(
-                        self.screen.shader_option() == ShaderOption::Nearest,
-                        "Nearest",
-                    );
+                    for shader_option in ShaderOption::iter() {
+                        let shader_button = egui::SelectableLabel::new(
+                            self.screen.shader_option() == shader_option,
+                            shader_option.str(),
+                        );
 
-                    if menu_button_ui.add(nearest_button).clicked() {
-                        *self.screen.shader_option_mut() = ShaderOption::Nearest;
-                    }
-
-                    let scale2x_button = egui::SelectableLabel::new(
-                        self.screen.shader_option() == ShaderOption::Scale2x,
-                        "Scale2x",
-                    );
-
-                    if menu_button_ui.add(scale2x_button).clicked() {
-                        *self.screen.shader_option_mut() = ShaderOption::Scale2x;
-                    }
-
-                    let scale3x_button = egui::SelectableLabel::new(
-                        self.screen.shader_option() == ShaderOption::Scale3x,
-                        "Scale3x",
-                    );
-
-                    if menu_button_ui.add(scale3x_button).clicked() {
-                        *self.screen.shader_option_mut() = ShaderOption::Scale3x;
-                    }
-
-                    let lcd_button =
-                        egui::SelectableLabel::new(self.screen.shader_option() == ShaderOption::Lcd, "LCD");
-
-                    if menu_button_ui.add(lcd_button).clicked() {
-                        *self.screen.shader_option_mut() = ShaderOption::Lcd;
+                        if menu_button_ui.add(shader_button).clicked() {
+                            *self.screen.shader_option_mut() = shader_option;
+                        }
                     }
 
                     menu_button_ui.separator();
 
                     menu_button_ui.add(egui::Label::new("Pixel mode"));
 
-                    let pixel_perfect_button = egui::SelectableLabel::new(
-                        self.screen.pixel_mode() == screen::PixelMode::PixelPerfect,
-                        "Pixel perfect",
-                    );
+                    for pixel_mode in PixelMode::iter() {
+                        let pixel_button = egui::SelectableLabel::new(
+                            self.screen.pixel_mode() == pixel_mode,
+                            pixel_mode.str(),
+                        );
 
-                    if menu_button_ui.add(pixel_perfect_button).clicked() {
-                        *self.screen.mut_pixel_mode() = screen::PixelMode::PixelPerfect;
-                    }
-
-                    let fit_window_button = egui::SelectableLabel::new(
-                        self.screen.pixel_mode() == screen::PixelMode::FitWindow,
-                        "Fit window",
-                    );
-
-                    if menu_button_ui.add(fit_window_button).clicked() {
-                        *self.screen.mut_pixel_mode() = screen::PixelMode::FitWindow;
+                        if menu_button_ui.add(pixel_button).clicked() {
+                            *self.screen.mut_pixel_mode() = pixel_mode;
+                        }
                     }
                 });
             });
