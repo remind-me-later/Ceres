@@ -20,7 +20,7 @@ impl<A: AudioCallback> Gb<A> {
         }
 
         // TODO: is this order right?
-        self.ppu.run(cycles, &mut self.ints, &self.cgb_mode);
+        self.ppu.run(cycles, &mut self.ints, self.cgb_mode);
         self.run_dma();
 
         self.apu.run(cycles);

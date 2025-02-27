@@ -193,8 +193,12 @@ impl GbThread {
         Arc::clone(&self.gb)
     }
 
-    pub fn volume(&self) -> &Arc<Mutex<f32>> {
+    pub fn volume(&self) -> f32 {
         self.audio_stream.volume()
+    }
+
+    pub fn set_volume(&mut self, volume: f32) {
+        self.audio_stream.set_volume(volume);
     }
 
     pub fn is_muted(&self) -> bool {

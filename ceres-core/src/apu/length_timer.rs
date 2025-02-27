@@ -52,9 +52,8 @@ impl<const LENGTH_TIMER_MASK: u8> LengthTimer<LENGTH_TIMER_MASK> {
             if self.length == LENGTH_TIMER_MASK {
                 self.carry = true;
                 return LengthTimerCalculationResult::DisableChannel;
-            } else {
-                self.length += 1;
             }
+            self.length += 1;
         }
 
         LengthTimerCalculationResult::None

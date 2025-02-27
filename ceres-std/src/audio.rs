@@ -13,12 +13,14 @@ const SAMPLE_RATE: i32 = 48000;
 const ORIG_RATIO: f64 = 1.0;
 const MAX_RESAMPLE_RATIO_RELATIVE: f64 = 2.0;
 
+type ProcessSample = f32;
+
 struct Buffers {
     left: StaticRb<ceres_core::Sample, RING_BUFFER_SIZE>,
     right: StaticRb<ceres_core::Sample, RING_BUFFER_SIZE>,
-    resampler: rubato::FastFixedOut<ceres_core::Sample>,
-    output_buf: [[ceres_core::Sample; BUFFER_SIZE as usize]; 2],
-    input_buf: [[ceres_core::Sample; BUFFER_SIZE as usize * 2]; 2],
+    resampler: rubato::FastFixedOut<ProcessSample>,
+    output_buf: [[ProcessSample; BUFFER_SIZE as usize]; 2],
+    input_buf: [[ProcessSample; BUFFER_SIZE as usize * 2]; 2],
 }
 
 impl Buffers {
@@ -26,7 +28,7 @@ impl Buffers {
         Ok(Self {
             left: StaticRb::default(),
             right: StaticRb::default(),
-            resampler: rubato::FastFixedOut::<ceres_core::Sample>::new(
+            resampler: rubato::FastFixedOut::<ProcessSample>::new(
                 ORIG_RATIO,
                 MAX_RESAMPLE_RATIO_RELATIVE,
                 rubato::PolynomialDegree::Cubic,
@@ -50,7 +52,7 @@ impl Buffers {
         self.left.occupied_len()
     }
 
-    fn write_samples_interleaved(&mut self, buffer: &mut [ceres_core::Sample]) {
+    fn write_samples_interleaved(&mut self, buffer: &mut [ProcessSample]) {
         use ringbuf::traits::Consumer;
 
         let new_ratio = self.compute_resample_ratio();
@@ -73,8 +75,8 @@ impl Buffers {
             .zip(input_buf_right[0].iter_mut())
             .take(needed)
         {
-            *l = self.left.try_pop().unwrap_or_default();
-            *r = self.right.try_pop().unwrap_or_default();
+            *l = self.left.try_pop().unwrap_or_default() as f32 / i16::MAX as f32;
+            *r = self.right.try_pop().unwrap_or_default() as f32 / i16::MAX as f32;
         }
 
         match self
@@ -128,9 +130,9 @@ impl AudioCallbackImpl {
 impl ceres_core::AudioCallback for AudioCallbackImpl {
     fn audio_sample(&self, l: ceres_core::Sample, r: ceres_core::Sample) {
         if let Ok(mut buffer) = self.buffer.lock() {
-            if let Ok(volume) = self.volume.lock() {
-                let l = l * *volume;
-                let r = r * *volume;
+            if let Ok(vol) = self.volume.lock() {
+                let l = (l as f32 * *vol) as i16;
+                let r = (r as f32 * *vol) as i16;
 
                 buffer.push_samples(l, r);
             }
@@ -180,7 +182,7 @@ pub struct Stream {
     stream: cpal::Stream,
     ring_buffer: AudioCallbackImpl,
     volume: Arc<Mutex<f32>>,
-    volume_before_mute: Option<f32>,
+    volume_before_mute: Option<i16>,
 }
 
 impl Stream {
@@ -189,7 +191,7 @@ impl Stream {
         let ring_buffer_clone = Arc::clone(&ring_buffer);
 
         let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
-        let data_callback = move |buffer: &mut [ceres_core::Sample], _: &_| {
+        let data_callback = move |buffer: &mut [ProcessSample], _: &_| {
             if let Ok(mut ring) = ring_buffer_clone.lock() {
                 ring.write_samples_interleaved(buffer);
             }
@@ -232,20 +234,32 @@ impl Stream {
     }
 
     #[must_use]
-    pub fn volume(&self) -> &Arc<Mutex<f32>> {
-        &self.volume
+    pub fn volume(&self) -> f32 {
+        if let Ok(vol) = self.volume.lock() {
+            *vol
+        } else {
+            0.0
+        }
+    }
+
+    pub fn set_volume(&mut self, volume: f32) {
+        if let Ok(mut vol) = self.volume.lock() {
+            *vol = volume;
+        }
     }
 
     pub fn mute(&mut self) {
-        if let Ok(mut volume) = self.volume.lock() {
-            self.volume_before_mute = Some(*volume);
-            *volume = 0.0;
+        if let Ok(mut vol) = self.volume.lock() {
+            self.volume_before_mute = Some(*vol as i16);
+            *vol = 0.0;
         }
     }
 
     pub fn unmute(&mut self) {
-        if let Ok(mut volume) = self.volume.lock() {
-            *volume = self.volume_before_mute.take().unwrap_or(1.0);
+        if let Some(vol) = self.volume_before_mute {
+            if let Ok(mut v) = self.volume.lock() {
+                *v = vol as f32;
+            }
         }
     }
 

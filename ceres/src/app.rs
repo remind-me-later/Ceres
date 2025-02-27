@@ -131,19 +131,11 @@ impl eframe::App for App {
                         horizontal_ui.style_mut().spacing.slider_width = 50.0;
 
                         let volume_slider = egui::Slider::from_get_set(0.0..=1.0, |volume| {
-                            let mut volume_ret = 0.0;
-
-                            if let Ok(mut volume_mutex) = self.thread.volume().lock() {
-                                #[expect(clippy::cast_possible_truncation)]
-                                if let Some(volume) = volume {
-                                    *volume_mutex = volume as f32;
-                                    volume_ret = *volume_mutex;
-                                } else {
-                                    volume_ret = *volume_mutex;
-                                }
+                            if let Some(volume) = volume {
+                                self.thread.set_volume(volume as f32);
                             }
 
-                            f64::from(volume_ret)
+                            self.thread.volume().into()
                         })
                         .custom_formatter(
                             // percentage

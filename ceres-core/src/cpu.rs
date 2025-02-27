@@ -233,7 +233,7 @@ impl<A: AudioCallback> Gb<A> {
         let a = self.af >> 8;
         let res = a + val;
         self.af = res << 8;
-        if res & 0xFF == 0 {
+        if res.trailing_zeros() >= 8 {
             self.af |= ZF;
         }
         if (a & 0xF) + (val & 0xF) > 0x0F {
@@ -284,7 +284,7 @@ impl<A: AudioCallback> Gb<A> {
         let res = a.wrapping_sub(val).wrapping_sub(carry);
         self.af = (res << 8) | NF;
 
-        if res & 0xFF == 0 {
+        if res.trailing_zeros() >= 8 {
             self.af |= ZF;
         }
         if (a & 0xF) < (val & 0xF) + carry {
@@ -310,7 +310,7 @@ impl<A: AudioCallback> Gb<A> {
         let carry = u16::from((self.af & CF) != 0);
         let res = a + val + carry;
         self.af = res << 8;
-        if res & 0xFF == 0 {
+        if res.trailing_zeros() >= 8 {
             self.af |= ZF;
         }
         if (a & 0xF) + (val & 0xF) + carry > 0x0F {
@@ -420,11 +420,11 @@ impl<A: AudioCallback> Gb<A> {
 
         self.af &= !(NF | ZF | HF);
 
-        if rr & 0x0F == 0 {
+        if rr.trailing_zeros() >= 4 {
             self.af |= HF;
         }
 
-        if rr & 0xFF == 0 {
+        if rr.trailing_zeros() >= 8 {
             self.af |= ZF;
         }
     }
@@ -442,7 +442,7 @@ impl<A: AudioCallback> Gb<A> {
             self.af |= HF;
         }
 
-        if rr & 0xFF == 0 {
+        if rr.trailing_zeros() >= 8 {
             self.af |= ZF;
         }
     }
@@ -483,7 +483,7 @@ impl<A: AudioCallback> Gb<A> {
         self.cpu_write(self.hl, val);
 
         self.af &= !(NF | ZF | HF);
-        if (val & 0x0F) == 0 {
+        if val.trailing_zeros() >= 4 {
             self.af |= HF;
         }
 
@@ -746,7 +746,7 @@ impl<A: AudioCallback> Gb<A> {
 
         self.af &= !(0xFF00 | ZF | HF);
 
-        if a & 0xFF == 0 {
+        if a.trailing_zeros() >= 8 {
             self.af |= ZF;
         }
 

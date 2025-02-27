@@ -6,6 +6,7 @@ use interrupts::Interrupts;
 use joypad::Joypad;
 use memory::{Key1, Svbk};
 use serial::Serial;
+use std::io;
 use {apu::Apu, memory::HdmaState, ppu::Ppu, timing::TIMAState};
 pub use {
     apu::{AudioCallback, Sample},
@@ -27,7 +28,7 @@ mod ppu;
 mod serial;
 mod timing;
 
-pub const FRAME_DURATION: Duration = Duration::new(0, 16742706);
+pub const FRAME_DURATION: Duration = Duration::new(0, 16_742_706);
 pub const TC_PER_FRAME: i32 = 70224; // t-cycles per frame
 
 // t-cycles per second
@@ -41,6 +42,7 @@ const DMG_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/dmg.bin");
 const MGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/mgb.bin");
 const CGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/cgb.bin");
 
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Debug)]
 pub struct Gb<C: AudioCallback> {
     model: Model,
@@ -190,10 +192,7 @@ impl<C: AudioCallback> Gb<C> {
         self.joy.release(button);
     }
 
-    pub fn save_data<W: std::io::Write + std::io::Seek>(
-        &self,
-        writer: &mut W,
-    ) -> Result<(), std::io::Error> {
+    pub fn save_data<W: io::Write + io::Seek>(&self, writer: &mut W) -> Result<(), io::Error> {
         bess::save_state(self, writer)
     }
 }
@@ -223,10 +222,10 @@ impl<C: AudioCallback> GbBuilder<C> {
         }
     }
 
-    pub fn load_save_data<R: std::io::Read + std::io::Seek>(
+    pub fn load_save_data<R: io::Read + io::Seek>(
         mut self,
         reader: &mut R,
-    ) -> Result<Self, std::io::Error> {
+    ) -> Result<Self, io::Error> {
         bess::load_state(&mut self.gb, reader)?;
         Ok(self)
     }

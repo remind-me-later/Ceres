@@ -1,5 +1,5 @@
-use crate::{ppu::Mode, CgbMode, Gb, Model::Cgb};
 use crate::{AudioCallback, Model};
+use crate::{CgbMode, Gb, Model::Cgb, ppu::Mode};
 
 #[derive(Default, Debug)]
 pub enum HdmaState {
@@ -228,7 +228,7 @@ impl<A: AudioCallback> Gb<A> {
         match addr {
             P1 => self.joy.write_joy(val),
             SB => self.serial.write_sb(val),
-            SC => self.serial.write_sc(val, &mut self.ints, &self.cgb_mode),
+            SC => self.serial.write_sc(val, &mut self.ints, self.cgb_mode),
             DIV => self.write_div(),
             TIMA => self.write_tima(val),
             TMA => self.write_tma(val),
@@ -368,7 +368,10 @@ impl<A: AudioCallback> Gb<A> {
     fn write_hdma5(&mut self, val: u8) {
         use HdmaState::{General, Sleep, WaitHBlank};
 
-        debug_assert!(!matches!(self.hdma_state, HdmaState::General));
+        debug_assert!(
+            !matches!(self.hdma_state, HdmaState::General),
+            "HDMA transfer in progress, cannot write HDMA5"
+        );
 
         // stop current transfer
         if self.is_hdma_on() && val & 0x80 == 0 {
@@ -481,7 +484,7 @@ impl Key1 {
     }
 
     pub fn change_speed(&mut self) {
-        debug_assert!(self.is_requested());
+        debug_assert!(self.is_requested(), "KEY1 not requested");
         self.key1 = !self.key1;
     }
 }

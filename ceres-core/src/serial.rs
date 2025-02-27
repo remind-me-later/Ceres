@@ -1,4 +1,4 @@
-use crate::{interrupts::Interrupts, CgbMode};
+use crate::{CgbMode, interrupts::Interrupts};
 
 const START: u8 = 0x80;
 const SPEED: u8 = 0x2;
@@ -52,7 +52,7 @@ impl Serial {
         self.sb = val;
     }
 
-    pub(crate) fn write_sc(&mut self, mut val: u8, ints: &mut Interrupts, cgb_mode: &CgbMode) {
+    pub(crate) fn write_sc(&mut self, mut val: u8, ints: &mut Interrupts, cgb_mode: CgbMode) {
         self.count = 0;
 
         if matches!(cgb_mode, CgbMode::Cgb) {

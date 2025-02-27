@@ -1,7 +1,11 @@
 use {
-    alloc::boxed::Box,
-    core::{fmt::Display, num::NonZeroU8},
     Mbc::{Mbc0, Mbc1, Mbc2, Mbc3, Mbc5},
+    alloc::boxed::Box,
+    core::{
+        error,
+        fmt::{self, Display},
+        num::NonZeroU8,
+    },
 };
 
 #[derive(Debug)]
@@ -58,12 +62,12 @@ pub enum Error {
     InvalidRamSize,
     NonAsciiTitleString,
     UnsupportedMBC(u8),
-    RomSizeDifferentThanActual { expected: u32, actual: u32 },
-    RamSizeDifferentThanActual { expected: u32, actual: u32 },
+    RomSizeDifferentThanActual { expected: usize, actual: usize },
+    RamSizeDifferentThanActual { expected: usize, actual: usize },
 }
 
 impl Display for Error {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidRomSize => {
                 write!(f, "invalid ROM size in cartridge header")
@@ -77,17 +81,11 @@ impl Display for Error {
          characters"
             ),
             Self::UnsupportedMBC(byte) => write!(f, "unsupported MBC: {byte:#0x}"),
-            Self::RomSizeDifferentThanActual{
-                expected,
-                actual
-            } => write!(
+            Self::RomSizeDifferentThanActual { expected, actual } => write!(
                 f,
                 "header ROM size is different from the size of the supplied file: expected {expected} bytes, got {actual} bytes"
             ),
-            Self::RamSizeDifferentThanActual {
-                expected,
-                actual
-            } => write!(
+            Self::RamSizeDifferentThanActual { expected, actual } => write!(
                 f,
                 "header RAM size is different from the size of the supplied file: expected {expected} bytes, got {actual} bytes"
             ),
@@ -95,7 +93,7 @@ impl Display for Error {
     }
 }
 
-impl core::error::Error for Error {}
+impl error::Error for Error {}
 
 #[derive(Debug)]
 pub struct Cart {
@@ -156,8 +154,8 @@ impl Cart {
 
         if rom_size.size_bytes() as usize != rom.len() {
             return Err(Error::RomSizeDifferentThanActual {
-                expected: rom_size.size_bytes(),
-                actual: rom.len() as u32,
+                expected: rom_size.size_bytes() as usize,
+                actual: rom.len(),
             });
         }
 
@@ -183,8 +181,8 @@ impl Cart {
         if self.ram_size.size_bytes() as usize != ram.len() {
             println!("ram size: {}", ram.len());
             return Err(Error::RamSizeDifferentThanActual {
-                expected: self.ram_size.size_bytes(),
-                actual: ram.len() as u32,
+                expected: self.ram_size.size_bytes() as usize,
+                actual: ram.len(),
             });
         }
 
@@ -222,7 +220,7 @@ impl Cart {
 
     #[must_use]
     pub const fn global_checksum(&self) -> u16 {
-        u16::from_be_bytes([self.rom[0x14E], self.rom[0x14F]])
+        u16::from_le_bytes([self.rom[0x14F], self.rom[0x14E]])
     }
 
     #[must_use]
@@ -263,6 +261,7 @@ impl Cart {
         self.has_battery
     }
 
+    #[must_use]
     pub const fn ram_size_bytes(&self) -> u32 {
         self.ram_size.size_bytes()
     }
@@ -493,7 +492,7 @@ impl ROMSize {
     const BANK_SIZE: u16 = 0x4000;
 
     const fn new(byte: u8) -> Result<Self, Error> {
-        use ROMSize::{Kb128, Kb256, Kb32, Kb512, Kb64, Mb1, Mb2, Mb4, Mb8};
+        use ROMSize::{Kb32, Kb64, Kb128, Kb256, Kb512, Mb1, Mb2, Mb4, Mb8};
         let rom_size = match byte {
             0 => Kb32,
             1 => Kb64,
@@ -536,7 +535,7 @@ impl RAMSize {
     const BANK_SIZE: u16 = 0x2000;
 
     const fn new(byte: u8) -> Result<Self, Error> {
-        use RAMSize::{Kb128, Kb32, Kb64, Kb8, NoRAM};
+        use RAMSize::{Kb8, Kb32, Kb64, Kb128, NoRAM};
         let ram_size = match byte {
             0 => NoRAM,
             2 => Kb8,
@@ -583,7 +582,7 @@ impl RAMSize {
 }
 
 #[derive(Default, Debug)]
-pub(crate) struct Mbc3RTC {
+pub struct Mbc3RTC {
     t_cycles: i32,
     regs: [u8; 5],
     mapped: Option<NonZeroU8>,
@@ -675,19 +674,19 @@ impl Mbc3RTC {
             .flatten()
     }
 
-    pub(crate) fn seconds(&self) -> u8 {
+    pub(crate) const fn seconds(&self) -> u8 {
         self.regs[0]
     }
 
-    pub(crate) fn minutes(&self) -> u8 {
+    pub(crate) const fn minutes(&self) -> u8 {
         self.regs[1]
     }
 
-    pub(crate) fn hours(&self) -> u8 {
+    pub(crate) const fn hours(&self) -> u8 {
         self.regs[2]
     }
 
-    pub(crate) fn days(&self) -> u8 {
+    pub(crate) const fn days(&self) -> u8 {
         self.regs[3]
     }
 
@@ -718,17 +717,18 @@ impl Mbc3RTC {
         self.halt = val & 0x40 != 0;
     }
 
+    #[expect(clippy::cast_possible_truncation)]
     pub(crate) fn add_seconds(&mut self, val: u64) {
-        let secs = self.regs[0] as u64 + val;
+        let secs = u64::from(self.regs[0]) + val;
         self.regs[0] = (secs % 60) as u8;
 
-        let mins = self.regs[1] as u64 + secs / 60;
+        let mins = u64::from(self.regs[1]) + secs / 60;
         self.regs[1] = (mins % 60) as u8;
 
-        let hours = self.regs[2] as u64 + mins / 60;
+        let hours = u64::from(self.regs[2]) + mins / 60;
         self.regs[2] = (hours % 24) as u8;
 
-        let days = self.regs[3] as u64 + hours / 24;
+        let days = u64::from(self.regs[3]) + hours / 24;
         self.regs[3] = (days % 256) as u8;
 
         let carry = days / 256;

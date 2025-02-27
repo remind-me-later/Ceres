@@ -1,8 +1,8 @@
 use {
     super::{
+        LengthTimer, PeriodCounter,
         length_timer::LengthTimerCalculationResult,
         period_counter::{PeriodStepResult, PeriodTriggerResult},
-        LengthTimer, PeriodCounter,
     },
     crate::apu::PeriodHalf,
 };
@@ -151,7 +151,7 @@ impl Wave {
     // Necessary because powering off the APU doesn't clear the wave RAM
     pub(super) fn reset(&mut self) {
         let ram = self.ram;
-        *self = Default::default();
+        *self = Self::default();
         self.ram = ram;
     }
 }

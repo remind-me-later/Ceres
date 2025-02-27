@@ -103,7 +103,7 @@ impl SweepTrait for Sweep {
         self.timer += 1;
         if self.timer >= self.shadow_pace.get() {
             self.timer = 0;
-            #[allow(clippy::unwrap_used)]
+            #[expect(clippy::unwrap_used)]
             {
                 self.shadow_pace =
                     NonZeroU8::new(if self.pace == 0 { 8 } else { self.pace }).unwrap();
@@ -125,7 +125,7 @@ impl SweepTrait for Sweep {
         // restart
         self.enabled = self.pace != 0 || self.individual_step != 0;
 
-        #[allow(clippy::unwrap_used)]
+        #[expect(clippy::unwrap_used)]
         {
             self.shadow_pace = NonZeroU8::new(if self.pace == 0 { 8 } else { self.pace }).unwrap();
         }
@@ -140,7 +140,7 @@ impl SweepTrait for Sweep {
 
 impl Default for Sweep {
     fn default() -> Self {
-        #[allow(clippy::unwrap_used)]
+        #[expect(clippy::unwrap_used)]
         Self {
             shadow_pace: NonZeroU8::new(8).unwrap(),
             pace: 0,

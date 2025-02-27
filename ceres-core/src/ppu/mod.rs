@@ -66,6 +66,7 @@ impl Mode {
     }
 }
 
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Debug)]
 pub struct Ppu {
     lcdc: u8,
@@ -124,7 +125,7 @@ impl Default for Ppu {
             win_in_frame: Default::default(),
             win_in_ly: Default::default(),
             win_skipped: Default::default(),
-            vram_renderer: Default::default(),
+            vram_renderer: VramRenderer::default(),
         }
     }
 }
@@ -335,17 +336,17 @@ impl Ppu {
 
     // Getters and setters
     #[must_use]
-    pub(crate) fn vram(&self) -> &[u8] {
+    pub(crate) const fn vram(&self) -> &[u8] {
         &self.vram
     }
 
     #[must_use]
-    pub(crate) fn vram_mut(&mut self) -> &mut [u8] {
+    pub(crate) const fn vram_mut(&mut self) -> &mut [u8] {
         &mut self.vram
     }
 
     #[must_use]
-    pub(crate) fn oam(&self) -> &[u8] {
+    pub(crate) const fn oam(&self) -> &[u8] {
         &self.oam
     }
 
@@ -357,7 +358,7 @@ impl Ppu {
 
 // General
 impl Ppu {
-    pub(crate) fn run(&mut self, cycles: i32, ints: &mut Interrupts, cgb_mode: &CgbMode) {
+    pub(crate) fn run(&mut self, cycles: i32, ints: &mut Interrupts, cgb_mode: CgbMode) {
         if self.lcdc & LCDC_ON_B == 0 {
             return;
         }
@@ -367,16 +368,16 @@ impl Ppu {
         if self.cycles < 0 {
             match self.mode() {
                 Mode::OamScan => {
-                    debug_assert!(self.ly <= 143);
+                    debug_assert!(self.ly <= 143, "OAM scan, ly = {}", self.ly);
                     self.enter_mode(Mode::Drawing, ints);
                 }
                 Mode::Drawing => {
-                    debug_assert!(self.ly <= 143);
+                    debug_assert!(self.ly <= 143, "Drawing, ly = {}", self.ly);
                     self.draw_scanline(cgb_mode);
                     self.enter_mode(Mode::HBlank, ints);
                 }
                 Mode::HBlank => {
-                    debug_assert!(self.ly <= 143);
+                    debug_assert!(self.ly <= 143, "HBlank, ly = {}", self.ly);
                     self.ly += 1;
                     if self.ly > 143 {
                         self.enter_mode(Mode::VBlank, ints);
@@ -386,7 +387,7 @@ impl Ppu {
                     self.check_lyc(ints);
                 }
                 Mode::VBlank => {
-                    debug_assert!(self.ly >= 144 && self.ly <= 153);
+                    debug_assert!(self.ly >= 144 && self.ly <= 153, "VBlank, ly = {}", self.ly);
                     self.ly += 1;
                     if self.ly > 153 {
                         self.ly = 0;

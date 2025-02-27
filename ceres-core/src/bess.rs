@@ -4,12 +4,12 @@
 use smallvec::SmallVec;
 
 use crate::{
-    ppu::{OAM_SIZE, VRAM_SIZE_CGB, VRAM_SIZE_GB},
     AudioCallback, Cart, CgbMode, Gb,
+    ppu::{OAM_SIZE, VRAM_SIZE_CGB, VRAM_SIZE_GB},
 };
-use std::io::{Read, Seek, Write};
+use std::{io::{self, Read, Seek, Write}, time};
 
-fn write_footer<W: Write>(writer: &mut W, offset_to_first_block: u32) -> std::io::Result<()> {
+fn write_footer<W: Write>(writer: &mut W, offset_to_first_block: u32) -> io::Result<()> {
     const LITERAL: &[u8] = b"BESS";
 
     writer.write_all(&offset_to_first_block.to_le_bytes())?;
@@ -17,24 +17,25 @@ fn write_footer<W: Write>(writer: &mut W, offset_to_first_block: u32) -> std::io
     Ok(())
 }
 
-fn write_block_header<W: Write>(writer: &mut W, name: &[u8; 4], size: u32) -> std::io::Result<()> {
-    writer.write_all(name)?;
+fn write_block_header<W: Write>(writer: &mut W, name: [u8; 4], size: u32) -> io::Result<()> {
+    writer.write_all(&name)?;
     writer.write_all(&size.to_le_bytes())?;
     Ok(())
 }
 
-fn write_name_block<W: Write>(writer: &mut W) -> std::io::Result<()> {
+fn write_name_block<W: Write>(writer: &mut W) -> io::Result<()> {
     const EMULATOR_NAME: &str = "Ceres, 0.1.0";
 
-    write_block_header(writer, b"NAME", EMULATOR_NAME.len() as u32)?;
+    #[expect(clippy::cast_possible_truncation)]
+    write_block_header(writer, *b"NAME", EMULATOR_NAME.len() as u32)?;
     writer.write_all(EMULATOR_NAME.as_bytes())?;
     Ok(())
 }
 
-fn write_info_block<W: Write>(writer: &mut W, cart: &Cart) -> std::io::Result<()> {
+fn write_info_block<W: Write>(writer: &mut W, cart: &Cart) -> io::Result<()> {
     const INFO_BLOCK_SIZE: u32 = 0x12;
 
-    write_block_header(writer, b"INFO", INFO_BLOCK_SIZE)?;
+    write_block_header(writer, *b"INFO", INFO_BLOCK_SIZE)?;
 
     // pad title to 0x10 bytes
     let mut title = [0; 0x10];
@@ -49,10 +50,10 @@ fn write_info_block<W: Write>(writer: &mut W, cart: &Cart) -> std::io::Result<()
 
 fn write_core_block<C: AudioCallback, W: Write>(
     gb: &Gb<C>,
-    sizes: CreatedSizes,
+    sizes: &CreatedSizes,
     writer: &mut W,
-) -> std::io::Result<()> {
-    write_block_header(writer, b"CORE", 0xD0)?;
+) -> io::Result<()> {
+    write_block_header(writer, *b"CORE", 0xD0)?;
 
     // BESS Version
     {
@@ -82,12 +83,11 @@ fn write_core_block<C: AudioCallback, W: Write>(
         writer.write_all(&gb.de.to_le_bytes())?; // DE
         writer.write_all(&gb.hl.to_le_bytes())?; // HL
         writer.write_all(&gb.sp.to_le_bytes())?; // SP
-        writer.write_all(&[if gb.ints.are_enabled() { 1 } else { 0 }])?; // IME
+        writer.write_all(&[u8::from(gb.ints.are_enabled())])?; // IME
         writer.write_all(&[gb.ints.read_ie()])?; // IE
 
         // Execution state (TODO: stopped state)
-        let cpu_halted: u8 = if gb.cpu_halted { 1 } else { 0 };
-        writer.write_all(&[cpu_halted])?;
+        writer.write_all(&[u8::from(gb.cpu_halted)])?;
         // Reserved byte, must be zero according to BESS specification
         writer.write_all(&[0])?;
         writer.write_all(&[0])?;
@@ -119,13 +119,13 @@ fn write_core_block<C: AudioCallback, W: Write>(
     Ok(())
 }
 
-fn write_end_block<W: Write>(writer: &mut W) -> std::io::Result<()> {
-    write_block_header(writer, b"END ", 0)
+fn write_end_block<W: Write>(writer: &mut W) -> io::Result<()> {
+    write_block_header(writer, *b"END ", 0)
 }
 
-fn write_rtc_block<W: Write>(writer: &mut W, cart: &Cart) -> std::io::Result<()> {
+fn write_rtc_block<W: Write>(writer: &mut W, cart: &Cart) -> io::Result<()> {
     if let Some(rtc) = cart.rtc() {
-        write_block_header(writer, b"RTC ", 0x28 + 0x8)?;
+        write_block_header(writer, *b"RTC ", 0x28 + 0x8)?;
 
         // FIXME: this are "latched" values, not the actual values
         // Write seconds byte (0) and 3 bytes of padding
@@ -146,8 +146,8 @@ fn write_rtc_block<W: Write>(writer: &mut W, cart: &Cart) -> std::io::Result<()>
         // Unix timestamp
         #[expect(clippy::unwrap_used)]
         {
-            let timestamp = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            let timestamp = time::SystemTime::now()
+                .duration_since(time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs();
 
@@ -180,31 +180,32 @@ impl CreatedSizes {
     //         + self.obj_palette_size
     // }
 
-    fn ram_offset(&self) -> u32 {
+    #[expect(clippy::unused_self)]
+    const fn ram_offset(&self) -> u32 {
         0
     }
 
-    fn vram_offset(&self) -> u32 {
+    const fn vram_offset(&self) -> u32 {
         self.ram_size
     }
 
-    fn mbc_ram_offset(&self) -> u32 {
+    const fn mbc_ram_offset(&self) -> u32 {
         self.vram_offset() + self.vram_size
     }
 
-    fn oam_offset(&self) -> u32 {
+    const fn oam_offset(&self) -> u32 {
         self.mbc_ram_offset() + self.mbc_ram_size
     }
 
-    fn hram_offset(&self) -> u32 {
+    const fn hram_offset(&self) -> u32 {
         self.oam_offset() + self.oam_size
     }
 
-    fn bg_palette_offset(&self) -> u32 {
+    const fn bg_palette_offset(&self) -> u32 {
         self.hram_offset() + self.hram_size
     }
 
-    fn obj_palette_offset(&self) -> u32 {
+    const fn obj_palette_offset(&self) -> u32 {
         self.bg_palette_offset() + self.bg_palette_size
     }
 }
@@ -212,7 +213,7 @@ impl CreatedSizes {
 pub fn save_state<C: AudioCallback, W: Write + Seek>(
     gb: &Gb<C>,
     writer: &mut W,
-) -> std::io::Result<()> {
+) -> io::Result<()> {
     let sizes = CreatedSizes {
         ram_size: match gb.cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => u32::from(crate::WRAM_SIZE_GB),
@@ -223,8 +224,8 @@ pub fn save_state<C: AudioCallback, W: Write + Seek>(
             CgbMode::Cgb => u32::from(VRAM_SIZE_CGB),
         },
         mbc_ram_size: gb.cart.ram_size_bytes(),
-        oam_size: OAM_SIZE as u32,
-        hram_size: crate::HRAM_SIZE as u32,
+        oam_size: u32::from(OAM_SIZE),
+        hram_size: u32::from(crate::HRAM_SIZE),
         bg_palette_size: match gb.cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => 0,
             CgbMode::Cgb => 0x40,
@@ -253,19 +254,19 @@ pub fn save_state<C: AudioCallback, W: Write + Seek>(
     writer.write_all(&gb.hram)?;
 
     // Write Background Palette
-    if let CgbMode::Cgb = gb.cgb_mode {
+    if matches!(gb.cgb_mode, CgbMode::Cgb) {
         let dummy_palette = [0; 0x80];
         writer.write_all(&dummy_palette)?;
     }
-
-    let offset_to_first_block = writer.stream_position()? as u32;
+    #[expect(clippy::cast_possible_truncation)]
+    let offset_to_first_block = { writer.stream_position()? as u32 };
 
     // println!("Offset to first block: {}", offset_to_first_block);
     // println!("Total size: {}", sizes.total());
 
     write_name_block(writer)?;
     write_info_block(writer, &gb.cart)?;
-    write_core_block(gb, sizes, writer)?;
+    write_core_block(gb, &sizes, writer)?;
     write_rtc_block(writer, &gb.cart)?;
     write_end_block(writer)?;
     write_footer(writer, offset_to_first_block)?;
@@ -273,14 +274,14 @@ pub fn save_state<C: AudioCallback, W: Write + Seek>(
     Ok(())
 }
 
-fn read_footer<R: Read + Seek>(reader: &mut R) -> std::io::Result<u32> {
+fn read_footer<R: Read + Seek>(reader: &mut R) -> io::Result<u32> {
     let mut footer = [0; 8];
-    reader.seek(std::io::SeekFrom::End(-8))?;
+    reader.seek(io::SeekFrom::End(-8))?;
     reader.read_exact(&mut footer)?;
     // Check for BESS magic
     if &footer[4..] != b"BESS" {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
             "Invalid BESS footer",
         ));
     }
@@ -295,7 +296,7 @@ fn read_footer<R: Read + Seek>(reader: &mut R) -> std::io::Result<u32> {
     }
 }
 
-fn read_block_header<R: Read>(reader: &mut R) -> std::io::Result<(SmallVec<[u8; 4]>, u32)> {
+fn read_block_header<R: Read>(reader: &mut R) -> io::Result<(SmallVec<[u8; 4]>, u32)> {
     let mut header = [0; 8];
     reader.read_exact(&mut header)?;
 
@@ -313,19 +314,19 @@ fn read_block_header<R: Read>(reader: &mut R) -> std::io::Result<(SmallVec<[u8; 
     }
 }
 
-fn read_name_block<R: Read + Seek>(reader: &mut R, size: u32) -> std::io::Result<()> {
+fn read_name_block<R: Read + Seek>(reader: &mut R, size: u32) -> io::Result<()> {
     // Ignore for now
-    reader.seek(std::io::SeekFrom::Current(i64::from(size)))?;
+    reader.seek(io::SeekFrom::Current(i64::from(size)))?;
     Ok(())
 }
 
 fn read_info_block<R: Read>(
     reader: &mut R,
     size: u32,
-) -> std::io::Result<(SmallVec<[u8; 4]>, u16)> {
+) -> io::Result<(SmallVec<[u8; 4]>, u16)> {
     if size != 0x12 {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
             "Invalid INFO block size",
         ));
     }
@@ -365,27 +366,27 @@ struct ReadSizes {
 }
 
 impl ReadSizes {
-    fn ram_offset(&self) -> u32 {
+    const fn ram_offset(&self) -> u32 {
         self.ram_offset
     }
 
-    fn vram_offset(&self) -> u32 {
+    const fn vram_offset(&self) -> u32 {
         self.vram_offset
     }
 
-    fn mbc_ram_offset(&self) -> u32 {
+    const fn mbc_ram_offset(&self) -> u32 {
         self.mbc_ram_offset
     }
 
-    fn oam_offset(&self) -> u32 {
+    const fn oam_offset(&self) -> u32 {
         self.oam_offset
     }
 
-    fn hram_offset(&self) -> u32 {
+    const fn hram_offset(&self) -> u32 {
         self.hram_offset
     }
 
-    fn bg_palette_offset(&self) -> u32 {
+    const fn bg_palette_offset(&self) -> u32 {
         self.bg_palette_offset
     }
 
@@ -398,9 +399,9 @@ fn read_core_block<C: AudioCallback, R: Read + Seek>(
     reader: &mut R,
     _size: u32,
     gb: &mut Gb<C>,
-) -> std::io::Result<ReadSizes> {
+) -> io::Result<ReadSizes> {
     // Ignore version for now
-    reader.seek(std::io::SeekFrom::Current(4))?;
+    reader.seek(io::SeekFrom::Current(4))?;
 
     // Read model
     let mut model = [0; 4];
@@ -411,16 +412,16 @@ fn read_core_block<C: AudioCallback, R: Read + Seek>(
         b"GM  " => CgbMode::Compat,
         b"CC  " => CgbMode::Cgb,
         _ => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
                 "Invalid model",
-            ))
+            ));
         }
     };
 
     // Ignore CPU registers for now
     // FIXME: is this offset correct?
-    reader.seek(std::io::SeekFrom::Current(0x91))?;
+    reader.seek(io::SeekFrom::Current(0x91))?;
 
     // Read sizes into sizes struct
     let mut sizes = ReadSizes::default();
@@ -472,7 +473,7 @@ fn read_core_block<C: AudioCallback, R: Read + Seek>(
     Ok(sizes)
 }
 
-fn read_rtc_block<R: Read + Seek>(reader: &mut R, cart: &mut Cart) -> std::io::Result<()> {
+fn read_rtc_block<R: Read + Seek>(reader: &mut R, cart: &mut Cart) -> io::Result<()> {
     if let Some(rtc) = cart.rtc_mut() {
         let mut byte_buf = [0; 4];
 
@@ -505,8 +506,8 @@ fn read_rtc_block<R: Read + Seek>(reader: &mut R, cart: &mut Cart) -> std::io::R
             reader.read_exact(&mut timestamp_buf)?;
 
             let timestamp = u64::from_le_bytes(timestamp_buf);
-            let elapsed = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            let elapsed = time::SystemTime::now()
+                .duration_since(time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs()
                 - timestamp;
@@ -521,11 +522,11 @@ fn read_rtc_block<R: Read + Seek>(reader: &mut R, cart: &mut Cart) -> std::io::R
 pub fn load_state<C: AudioCallback, R: Read + Seek>(
     gb: &mut Gb<C>,
     reader: &mut R,
-) -> std::io::Result<()> {
+) -> io::Result<()> {
     let offset_to_first_block = read_footer(reader)?;
 
     // Read blocks
-    reader.seek(std::io::SeekFrom::Start(u64::from(offset_to_first_block)))?;
+    reader.seek(io::SeekFrom::Start(u64::from(offset_to_first_block)))?;
 
     let mut sizes = ReadSizes::default();
 
@@ -541,8 +542,8 @@ pub fn load_state<C: AudioCallback, R: Read + Seek>(
             b"RTC " => read_rtc_block(reader, &mut gb.cart)?,
             b"END " => break 'reading,
             _ => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
                     "Illegal block",
                 ));
             }
@@ -550,30 +551,30 @@ pub fn load_state<C: AudioCallback, R: Read + Seek>(
     }
 
     // Read data
-    reader.seek(std::io::SeekFrom::Start(sizes.ram_offset() as u64))?;
+    reader.seek(io::SeekFrom::Start(u64::from(sizes.ram_offset())))?;
     reader.read_exact(gb.wram.as_mut_slice())?;
 
-    reader.seek(std::io::SeekFrom::Start(sizes.vram_offset() as u64))?;
+    reader.seek(io::SeekFrom::Start(u64::from(sizes.vram_offset())))?;
     reader.read_exact(gb.ppu.vram_mut())?;
 
     if let Some(mbc_ram) = gb.cart.mbc_ram_mut() {
-        reader.seek(std::io::SeekFrom::Start(sizes.mbc_ram_offset() as u64))?;
+        reader.seek(io::SeekFrom::Start(u64::from(sizes.mbc_ram_offset())))?;
         reader.read_exact(mbc_ram)?;
     }
 
-    reader.seek(std::io::SeekFrom::Start(sizes.oam_offset() as u64))?;
+    reader.seek(io::SeekFrom::Start(u64::from(sizes.oam_offset())))?;
     reader.read_exact(gb.ppu.oam_mut())?;
 
-    reader.seek(std::io::SeekFrom::Start(sizes.hram_offset() as u64))?;
+    reader.seek(io::SeekFrom::Start(u64::from(sizes.hram_offset())))?;
     reader.read_exact(&mut gb.hram)?;
 
-    let skip_palette = if let CgbMode::Cgb = gb.cgb_mode {
+    let skip_palette = if matches!(gb.cgb_mode, CgbMode::Cgb) {
         sizes.bg_palette_offset() + sizes.bg_palette_size
     } else {
         sizes.bg_palette_offset()
     };
 
-    reader.seek(std::io::SeekFrom::Start(skip_palette as u64))?;
+    reader.seek(io::SeekFrom::Start(u64::from(skip_palette)))?;
 
     Ok(())
 }

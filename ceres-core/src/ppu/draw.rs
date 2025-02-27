@@ -1,7 +1,7 @@
 use {
     super::{
-        Ppu, LCDC_BG_AREA, LCDC_BG_B, LCDC_BG_SIGNED, LCDC_OBJL_B, LCDC_OBJ_B, LCDC_WIN_AREA,
-        LCDC_WIN_B, OAM_SIZE, VRAM_SIZE_GB,
+        LCDC_BG_AREA, LCDC_BG_B, LCDC_BG_SIGNED, LCDC_OBJ_B, LCDC_OBJL_B, LCDC_WIN_AREA,
+        LCDC_WIN_B, OAM_SIZE, Ppu, VRAM_SIZE_GB,
     },
     crate::{CgbMode, PX_WIDTH},
 };
@@ -47,7 +47,7 @@ impl Ppu {
     }
 
     #[must_use]
-    const fn is_window_enabled(&self, cgb_mode: &CgbMode) -> bool {
+    const fn is_window_enabled(&self, cgb_mode: CgbMode) -> bool {
         match cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => {
                 self.lcdc & (LCDC_BG_B | LCDC_WIN_B) == (LCDC_BG_B | LCDC_WIN_B)
@@ -57,7 +57,7 @@ impl Ppu {
     }
 
     #[must_use]
-    const fn is_bg_enabled(&self, cgb_mode: &CgbMode) -> bool {
+    const fn is_bg_enabled(&self, cgb_mode: CgbMode) -> bool {
         match cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => self.lcdc & LCDC_BG_B != 0,
             CgbMode::Cgb => true,
@@ -65,7 +65,7 @@ impl Ppu {
     }
 
     #[must_use]
-    const fn is_cgb_master_priority(&self, cgb_mode: &CgbMode) -> bool {
+    const fn is_cgb_master_priority(&self, cgb_mode: CgbMode) -> bool {
         match cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => false,
             CgbMode::Cgb => self.lcdc & LCDC_BG_B == 0,
@@ -121,7 +121,7 @@ impl Ppu {
         (lo, hi)
     }
 
-    pub(super) fn draw_scanline(&mut self, cgb_mode: &CgbMode) {
+    pub(super) fn draw_scanline(&mut self, cgb_mode: CgbMode) {
         let mut bg_priority = [PxPrio::Normal; PX_WIDTH as usize];
         let base_idx = u32::from(PX_WIDTH) * u32::from(self.ly);
 
@@ -134,7 +134,7 @@ impl Ppu {
         &mut self,
         bg_priority: &mut [PxPrio; PX_WIDTH as usize],
         base_idx: u32,
-        cgb_mode: &CgbMode,
+        cgb_mode: CgbMode,
     ) {
         if !self.is_bg_enabled(cgb_mode) {
             return;
@@ -198,7 +198,7 @@ impl Ppu {
         &mut self,
         bg_priority: &mut [PxPrio; PX_WIDTH as usize],
         base_idx: u32,
-        cgb_mode: &CgbMode,
+        cgb_mode: CgbMode,
     ) {
         // not so sure about last condition...
         if !(self.is_window_enabled(cgb_mode) && self.wy <= self.ly && self.wx < PX_WIDTH) {
@@ -267,7 +267,7 @@ impl Ppu {
     }
 
     #[must_use]
-    fn objs_in_ly(&self, height: u8, cgb_mode: &CgbMode) -> ([Obj; 10], u8) {
+    fn objs_in_ly(&self, height: u8, cgb_mode: CgbMode) -> ([Obj; 10], u8) {
         let mut len: u8 = 0;
         let mut obj: [Obj; 10] = Default::default();
 
@@ -304,7 +304,7 @@ impl Ppu {
         &mut self,
         bg_priority: &[PxPrio; PX_WIDTH as usize],
         base_idx: u32,
-        cgb_mode: &CgbMode,
+        cgb_mode: CgbMode,
     ) {
         if self.lcdc & LCDC_OBJ_B == 0 {
             return;

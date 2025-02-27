@@ -16,7 +16,7 @@ mod square;
 mod sweep;
 mod wave;
 
-pub type Sample = f32;
+pub type Sample = i16;
 
 pub trait AudioCallback {
     fn audio_sample(&self, l: Sample, r: Sample);
@@ -31,24 +31,37 @@ enum PeriodHalf {
 
 #[derive(Debug)]
 struct HighPassFilter {
-    capacitor_l: f32,
-    capacitor_r: f32,
+    capacitor_l: i32,
+    capacitor_r: i32,
 }
 
 impl HighPassFilter {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
-            capacitor_l: 0.0,
-            capacitor_r: 0.0,
+            capacitor_l: 0,
+            capacitor_r: 0,
         }
     }
 
     fn high_pass(&mut self, l: Sample, r: Sample) -> (Sample, Sample) {
-        let outl = l - self.capacitor_l;
-        let outr = r - self.capacitor_r;
+        // Using 16-bit fixed-point arithmetic
+        const FILTER_COEFF: i32 = 0xFFFE; // Q16 format of 0.999958
+        const PRECISION_BITS: i32 = 16;
 
-        self.capacitor_l = l - outl * 0.999958;
-        self.capacitor_r = r - outr * 0.999958;
+        // Convert samples to larger type to avoid overflow
+        let l_i32 = i32::from(l);
+        let r_i32 = i32::from(r);
+
+        let outl_i32 = l_i32 - self.capacitor_l;
+        let outr_i32 = r_i32 - self.capacitor_r;
+
+        self.capacitor_l = l_i32 - ((outl_i32 * FILTER_COEFF) >> PRECISION_BITS);
+        self.capacitor_r = r_i32 - ((outr_i32 * FILTER_COEFF) >> PRECISION_BITS);
+
+        #[expect(clippy::cast_possible_truncation)]
+        let outl = outl_i32.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
+        #[expect(clippy::cast_possible_truncation)]
+        let outr = outr_i32.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
 
         (outl, outr)
     }
@@ -134,8 +147,8 @@ impl<C: AudioCallback> Apu<C> {
             let r = r * 32;
 
             // transform to f32 sample
-            let l = l as f32 / i16::MAX as f32;
-            let r = r as f32 / i16::MAX as f32;
+            // let l = l as f32 / i16::MAX as f32;
+            // let r = r as f32 / i16::MAX as f32;
 
             (l, r)
         }
