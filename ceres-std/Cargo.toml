@@ -17,9 +17,12 @@ default-features = false
 
 [dependencies.ringbuf]
 version = "*"
+default-features = false
+features = ["std"]
 
 [dependencies.rubato]
 version = "*"
+default-features = false
 
 [dependencies.thread-priority]
 version = "*"

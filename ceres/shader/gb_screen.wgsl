@@ -47,6 +47,10 @@ struct VertexOutput {
             // crt
             ret = fs_crt(in.tex_coords);
         }
+        case 5u : {
+            // desaturated
+            ret = desaturated(in.tex_coords);
+        }
     }
 
     return ret;
@@ -139,10 +143,12 @@ fn fs_lcd(tex_coords: vec2<f32>) -> vec4<f32> {
     const GRID_BLEND_FACTOR: f32 = 0.5;
 
     const VIGNETTE_CENTER_OFFSET: f32 = 0.5;
-    const VIGNETTE_SCALE: f32 = 1.1;
+    const VIGNETTE_SCALE: f32 = 1.0;
+    // Add vignette darkness factor - higher value means darker edges
+    const VIGNETTE_DARKNESS: f32 = 0.9;
     const REFLECTION_START: f32 = 0.0;
     const REFLECTION_END: f32 = 0.9;
-    const REFLECTION_INTENSITY: f32 = 0.05;
+    const REFLECTION_INTENSITY: f32 = 0.1;
 
     const GHOSTING_FACTOR: f32 = 0.5;
 
@@ -151,18 +157,17 @@ fn fs_lcd(tex_coords: vec2<f32>) -> vec4<f32> {
 
     // Subpixel offsets
     // Subpixel pattern: R G B
-    // We choose 0.165 so that every "band" of 3 pixels is 1/3 of a pixel
-    const RED_SUBPIXEL_OFFSET: f32 = - 0.165;
-    const BLUE_SUBPIXEL_OFFSET: f32 = 0.165;
+    const RED_SUBPIXEL_OFFSET: f32 = - 0.3;
+    const BLUE_SUBPIXEL_OFFSET: f32 = 0.3;
 
     let red_offset = vec2<f32> (RED_SUBPIXEL_OFFSET / dims.x, 0.0);
     let green_offset = vec2<f32> (0.0, 0.0);
     let blue_offset = vec2<f32> (BLUE_SUBPIXEL_OFFSET / dims.x, 0.0);
 
     // Sample the texture at subpixel positions
-    let red_sample = textureSample(txt, smpl, tex_coords + red_offset).r;
-    let green_sample = textureSample(txt, smpl, tex_coords + green_offset).g;
-    let blue_sample = textureSample(txt, smpl, tex_coords + blue_offset).b;
+    let red_sample = desaturated(tex_coords + red_offset).r;
+    let green_sample = desaturated(tex_coords + green_offset).g;
+    let blue_sample = desaturated(tex_coords + blue_offset).b;
 
     // Combine the subpixel samples
     let pixel = vec3<f32> (red_sample, green_sample, blue_sample);
@@ -187,7 +192,11 @@ fn fs_lcd(tex_coords: vec2<f32>) -> vec4<f32> {
     // Apply ghosting effect
     let ghosted_color = mix(final_color, prev_color, GHOSTING_FACTOR);
 
-    return vec4(ghosted_color + reflection, 1.0);
+    // Apply vignette darkening effect
+    let vignette_effect = mix(VIGNETTE_DARKNESS, 1.0, vignette);
+    let vignetted_color = ghosted_color * vignette_effect;
+
+    return vec4(vignetted_color + reflection, 1.0);
 }
 
 fn fs_crt(tex_coords: vec2<f32>) -> vec4<f32> {
@@ -262,4 +271,17 @@ fn fs_crt(tex_coords: vec2<f32>) -> vec4<f32> {
     color += (noise * 0.015 - 0.0075);
 
     return vec4(color, 1.0);
+}
+
+fn desaturated(tex_coords: vec2<f32>) -> vec4<f32> {
+    let tex = textureSample(txt, smpl, tex_coords);
+    const SATURATION: f32 = 0.7;
+
+    // Calculate luminance (grayscale) using standard coefficients
+    let luminance = tex.r * 0.299 + tex.g * 0.587 + tex.b * 0.114;
+
+    // Mix between grayscale (0.0 saturation) and full color (1.0 saturation)
+    let desaturated_color = vec3(mix(luminance, tex.r, SATURATION), mix(luminance, tex.g, SATURATION), mix(luminance, tex.b, SATURATION));
+
+    return vec4(desaturated_color, tex.a);
 }

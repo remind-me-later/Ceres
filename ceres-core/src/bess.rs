@@ -1,8 +1,6 @@
 // Best Effort Save State (https://github.com/LIJI32/SameBoy/blob/master/BESS.md)
 // Every integer is in little-endian byte order
 
-use smallvec::SmallVec;
-
 use crate::{
     AudioCallback, Cart, CgbMode, Gb,
     ppu::{OAM_SIZE, VRAM_SIZE_CGB, VRAM_SIZE_GB},
@@ -296,7 +294,7 @@ fn read_footer<R: Read + Seek>(reader: &mut R) -> io::Result<u32> {
     }
 }
 
-fn read_block_header<R: Read>(reader: &mut R) -> io::Result<(SmallVec<[u8; 4]>, u32)> {
+fn read_block_header<R: Read>(reader: &mut R) -> io::Result<([u8; 4], u32)> {
     let mut header = [0; 8];
     reader.read_exact(&mut header)?;
 
@@ -305,12 +303,12 @@ fn read_block_header<R: Read>(reader: &mut R) -> io::Result<(SmallVec<[u8; 4]>, 
         reason = "header is 8 bytes long, so this will never panic"
     )]
     {
-        let name = SmallVec::from_slice(&header[0..4]);
+        let name = &header[0..4];
         let size = u32::from_le_bytes(header[4..].try_into().unwrap());
 
         // println!("Block: {}, size: {}", String::from_utf8_lossy(&name), size);
 
-        Ok((name, size))
+        Ok((name.try_into().unwrap(), size))
     }
 }
 
@@ -320,7 +318,7 @@ fn read_name_block<R: Read + Seek>(reader: &mut R, size: u32) -> io::Result<()> 
     Ok(())
 }
 
-fn read_info_block<R: Read>(reader: &mut R, size: u32) -> io::Result<(SmallVec<[u8; 4]>, u16)> {
+fn read_info_block<R: Read>(reader: &mut R, size: u32) -> io::Result<([u8; 0x10], u16)> {
     if size != 0x12 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -335,7 +333,6 @@ fn read_info_block<R: Read>(reader: &mut R, size: u32) -> io::Result<(SmallVec<[
     let mut global_checksum = [0; 2];
     reader.read_exact(&mut global_checksum)?;
 
-    let title = SmallVec::from_slice(&title);
     let global_checksum = u16::from_le_bytes(global_checksum);
 
     Ok((title, global_checksum))

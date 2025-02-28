@@ -75,19 +75,7 @@ pub enum ShaderOption {
     #[default]
     Lcd = 3,
     Crt = 4,
-}
-
-impl ShaderOption {
-    #[must_use]
-    pub fn next(self) -> Self {
-        match self {
-            ShaderOption::Nearest => ShaderOption::Scale2x,
-            ShaderOption::Scale2x => ShaderOption::Scale3x,
-            ShaderOption::Scale3x => ShaderOption::Lcd,
-            ShaderOption::Lcd => ShaderOption::Crt,
-            ShaderOption::Crt => ShaderOption::Nearest,
-        }
-    }
+    Desaturated = 5,
 }
 
 impl AppOption for ShaderOption {
@@ -98,6 +86,7 @@ impl AppOption for ShaderOption {
             ShaderOption::Scale3x => "scale3x",
             ShaderOption::Lcd => "lcd",
             ShaderOption::Crt => "crt",
+            ShaderOption::Desaturated => "desaturated",
         }
     }
 
@@ -108,6 +97,7 @@ impl AppOption for ShaderOption {
             ShaderOption::Scale3x,
             ShaderOption::Lcd,
             ShaderOption::Crt,
+            ShaderOption::Desaturated,
         ]
         .into_iter()
     }
@@ -162,6 +152,15 @@ struct Cli {
         required = false
     )]
     shader_option: ShaderOption,
+    #[arg(
+        short,
+        long,
+        help = "Pixel mode",
+        default_value = PixelMode::default().str(),
+        value_enum,
+        required = false
+    )]
+    pixel_mode: PixelMode,
 }
 
 fn main() -> anyhow::Result<()> {

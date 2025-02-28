@@ -8,6 +8,12 @@ repository.workspace = true
 [lints]
 workspace = true
 
+[dependencies.ceres-core]
+path = "../ceres-core"
+
+[dependencies.ceres-std]
+path = "../ceres-std"
+
 [dependencies.clap]
 version = "*"
 default-features = false
@@ -18,9 +24,6 @@ version = "*"
 
 [dependencies.directories]
 version = "*"
-
-[dependencies.ceres-core]
-path = "../ceres-core"
 
 [dependencies.eframe]
 version = "*"
@@ -39,6 +42,3 @@ version = "*"
 [dependencies.bytemuck]
 version = "*"
 default-features = false
-
-[dependencies.ceres-std]
-path = "../ceres-std"

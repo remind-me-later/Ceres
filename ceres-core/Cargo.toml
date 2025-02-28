@@ -84,7 +84,3 @@ missing_safety_doc = "allow"
 similar_names = { level = "allow", priority = 1 }
 struct_excessive_bools = "allow"
 struct_field_names = { level = "allow", priority = 1 }
-
-[dependencies.smallvec]
-version = "*"
-default-features = false
