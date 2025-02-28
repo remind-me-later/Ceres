@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::RwLock;
+use std::sync::Mutex;
 
 use crate::PixelMode;
 use crate::ShaderOption;
@@ -27,7 +27,7 @@ pub struct Resources {
 }
 
 pub struct GBScreen<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
-    gb: Arc<RwLock<Gb>>,
+    gb: Arc<Mutex<Gb>>,
     shader_option: ShaderOption,
     pixel_mode: PixelMode,
     size: (f32, f32),
@@ -37,7 +37,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
     #[expect(clippy::too_many_lines)]
     pub fn new<'a>(
         cc: &'a eframe::CreationContext<'a>,
-        gb: Arc<RwLock<Gb>>,
+        gb: Arc<Mutex<Gb>>,
         shader_option: ShaderOption,
     ) -> Self {
         // Get the WGPU render state from the eframe creation context. This can also be retrieved
@@ -280,7 +280,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
         callback_resources: &mut eframe::egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
         if let Some(resources) = callback_resources.get_mut::<Resources>() {
-            if let Ok(gb) = self.gb.read() {
+            if let Ok(gb) = self.gb.lock() {
                 // Swap the frame textures
                 std::mem::swap(
                     &mut resources.frame_texture,
