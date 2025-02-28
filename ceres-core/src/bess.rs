@@ -7,7 +7,10 @@ use crate::{
     AudioCallback, Cart, CgbMode, Gb,
     ppu::{OAM_SIZE, VRAM_SIZE_CGB, VRAM_SIZE_GB},
 };
-use std::{io::{self, Read, Seek, Write}, time};
+use std::{
+    io::{self, Read, Seek, Write},
+    time,
+};
 
 fn write_footer<W: Write>(writer: &mut W, offset_to_first_block: u32) -> io::Result<()> {
     const LITERAL: &[u8] = b"BESS";
@@ -210,10 +213,7 @@ impl CreatedSizes {
     }
 }
 
-pub fn save_state<C: AudioCallback, W: Write + Seek>(
-    gb: &Gb<C>,
-    writer: &mut W,
-) -> io::Result<()> {
+pub fn save_state<C: AudioCallback, W: Write + Seek>(gb: &Gb<C>, writer: &mut W) -> io::Result<()> {
     let sizes = CreatedSizes {
         ram_size: match gb.cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => u32::from(crate::WRAM_SIZE_GB),
@@ -320,10 +320,7 @@ fn read_name_block<R: Read + Seek>(reader: &mut R, size: u32) -> io::Result<()> 
     Ok(())
 }
 
-fn read_info_block<R: Read>(
-    reader: &mut R,
-    size: u32,
-) -> io::Result<(SmallVec<[u8; 4]>, u16)> {
+fn read_info_block<R: Read>(reader: &mut R, size: u32) -> io::Result<(SmallVec<[u8; 4]>, u16)> {
     if size != 0x12 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -412,10 +409,7 @@ fn read_core_block<C: AudioCallback, R: Read + Seek>(
         b"GM  " => CgbMode::Compat,
         b"CC  " => CgbMode::Cgb,
         _ => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Invalid model",
-            ));
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid model"));
         }
     };
 
@@ -542,10 +536,7 @@ pub fn load_state<C: AudioCallback, R: Read + Seek>(
             b"RTC " => read_rtc_block(reader, &mut gb.cart)?,
             b"END " => break 'reading,
             _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Illegal block",
-                ));
+                return Err(io::Error::new(io::ErrorKind::InvalidData, "Illegal block"));
             }
         }
     }

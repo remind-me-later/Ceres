@@ -1,4 +1,4 @@
-use super::{sweep::SweepCalculationResult, SweepTrait};
+use super::{SweepTrait, sweep::SweepCalculationResult};
 
 pub(super) enum PeriodTriggerResult {
     DisableChannel,

@@ -4,7 +4,7 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
 use std::{
     fs::File,
-    sync::{LockResult, Mutex, MutexGuard},
+    sync::{LockResult, RwLock, RwLockReadGuard, RwLockWriteGuard},
     time::Duration,
 };
 use thread_priority::ThreadBuilderExt;
@@ -16,7 +16,7 @@ pub trait PainterCallback: Send {
 }
 
 pub struct GbThread {
-    gb: Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
+    gb: Arc<RwLock<Gb<audio::AudioCallbackImpl>>>,
     model: ceres_core::Model,
     exiting: Arc<AtomicBool>,
     pause_thread: Arc<AtomicBool>,
@@ -33,7 +33,7 @@ impl GbThread {
         ctx: P,
     ) -> Result<Self, Error> {
         fn gb_loop<P: PainterCallback>(
-            gb: Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
+            gb: Arc<RwLock<Gb<audio::AudioCallbackImpl>>>,
             exiting: Arc<AtomicBool>,
             pause_thread: Arc<AtomicBool>,
             ctx: P,
@@ -44,7 +44,7 @@ impl GbThread {
 
             while !exiting.load(Relaxed) {
                 if !pause_thread.load(Relaxed) {
-                    if let Ok(mut gb) = gb.lock() {
+                    if let Ok(mut gb) = gb.write() {
                         gb.run_frame();
                     }
                     ctx.repaint();
@@ -69,7 +69,7 @@ impl GbThread {
         let ring_buffer = audio_stream.get_ring_buffer();
 
         let gb = Self::create_new_gb(ring_buffer, model, rom_path, sav_path)?;
-        let gb = Arc::new(Mutex::new(gb));
+        let gb = Arc::new(RwLock::new(gb));
 
         let pause_thread = Arc::new(AtomicBool::new(false));
 
@@ -103,7 +103,7 @@ impl GbThread {
 
         let gb_new = Self::create_new_gb(ring_buffer, self.model, Some(rom_path), sav_path)?;
 
-        if let Ok(mut gb) = self.gb.lock() {
+        if let Ok(mut gb) = self.gb.write() {
             *gb = gb_new;
         }
 
@@ -155,8 +155,8 @@ impl GbThread {
         }
     }
 
-    pub fn mut_gb(&mut self) -> LockResult<MutexGuard<Gb<audio::AudioCallbackImpl>>> {
-        self.gb.lock()
+    pub fn mut_gb(&mut self) -> LockResult<RwLockWriteGuard<Gb<audio::AudioCallbackImpl>>> {
+        self.gb.write()
     }
 
     pub fn is_paused(&self) -> bool {
@@ -185,11 +185,11 @@ impl GbThread {
         Ok(())
     }
 
-    pub fn gb_lock(&self) -> LockResult<MutexGuard<Gb<audio::AudioCallbackImpl>>> {
-        self.gb.lock()
+    pub fn gb_lock(&self) -> LockResult<RwLockReadGuard<Gb<audio::AudioCallbackImpl>>> {
+        self.gb.read()
     }
 
-    pub fn gb_clone(&self) -> Arc<Mutex<Gb<audio::AudioCallbackImpl>>> {
+    pub fn gb_clone(&self) -> Arc<RwLock<Gb<audio::AudioCallbackImpl>>> {
         Arc::clone(&self.gb)
     }
 

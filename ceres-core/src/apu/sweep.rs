@@ -16,11 +16,7 @@ enum SweepDirection {
 
 impl From<u8> for SweepDirection {
     fn from(val: u8) -> Self {
-        if val & 8 == 0 {
-            Self::Add
-        } else {
-            Self::Sub
-        }
+        if val & 8 == 0 { Self::Add } else { Self::Sub }
     }
 }
 

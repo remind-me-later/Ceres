@@ -1,9 +1,9 @@
 use {
     super::{
-        envelope::Envelope, length_timer::LengthTimerCalculationResult,
-        period_counter::PeriodTriggerResult, SweepTrait,
+        SweepTrait, envelope::Envelope, length_timer::LengthTimerCalculationResult,
+        period_counter::PeriodTriggerResult,
     },
-    crate::apu::{period_counter::PeriodStepResult, LengthTimer, PeriodCounter, PeriodHalf},
+    crate::apu::{LengthTimer, PeriodCounter, PeriodHalf, period_counter::PeriodStepResult},
 };
 
 #[derive(Default, Debug)]
