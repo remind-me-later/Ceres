@@ -35,8 +35,8 @@ pub struct GBScreen<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
 
 impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
     #[expect(clippy::too_many_lines)]
-    pub fn new<'a>(
-        cc: &'a eframe::CreationContext<'a>,
+    pub fn new(
+        cc: &eframe::CreationContext<'_>,
         gb: Arc<Mutex<Gb>>,
         shader_option: ShaderOption,
     ) -> Self {
@@ -359,13 +359,13 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
     }
 }
 
-pub(super) struct Texture {
+struct Texture {
     texture: wgpu::Texture,
     view: wgpu::TextureView,
 }
 
 impl Texture {
-    pub(super) fn new(device: &wgpu::Device, width: u32, height: u32, label: Option<&str>) -> Self {
+    fn new(device: &wgpu::Device, width: u32, height: u32, label: Option<&str>) -> Self {
         let size = wgpu::Extent3d {
             width,
             height,
@@ -388,11 +388,11 @@ impl Texture {
         Self { texture, view }
     }
 
-    pub(super) fn view(&self) -> &wgpu::TextureView {
+    fn view(&self) -> &wgpu::TextureView {
         &self.view
     }
 
-    pub(super) fn update(&mut self, queue: &wgpu::Queue, rgba: &[u8]) {
+    fn update(&mut self, queue: &wgpu::Queue, rgba: &[u8]) {
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 aspect: wgpu::TextureAspect::All,

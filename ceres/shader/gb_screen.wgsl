@@ -1,19 +1,26 @@
-@group(0) @binding(0) var txt: texture_2d<f32>;
-@group(0) @binding(1) var smpl: sampler;
-@group(0) @binding(2) var prev_frame: texture_2d<f32>;
+@group(0) @binding(0)
+var txt: texture_2d<f32>;
+@group(0) @binding(1)
+var smpl: sampler;
+@group(0) @binding(2)
+var prev_frame: texture_2d<f32>;
 
-@group(1) @binding(0) var<uniform> dims: vec2<f32>;
-@group(1) @binding(1) var<uniform> shader_opt: u32;
+@group(1) @binding(0)
+var<uniform> dims: vec2<f32>;
+@group(1) @binding(1)
+var<uniform> shader_opt: u32;
 
 struct Vertexinput {
     @builtin(vertex_index) vert_idx: u32,
 }
 
 struct VertexOutput {
-    @builtin(position) clip_position: vec4<f32>, @location(0) tex_coords: vec2<f32>,
+    @builtin(position) clip_position: vec4<f32>,
+    @location(0) tex_coords: vec2<f32>,
 }
 
-@vertex fn vs_main(in: Vertexinput) -> VertexOutput {
+@vertex
+fn vs_main(in: Vertexinput) -> VertexOutput {
     let vert_coord = select(select(select(vec2(1.0, 1.0), vec2(1.0, - 1.0), in.vert_idx == 2u), vec2(- 1.0, 1.0), in.vert_idx == 1u), vec2(- 1.0, - 1.0), in.vert_idx == 0u);
 
     var out: VertexOutput;
@@ -23,7 +30,8 @@ struct VertexOutput {
     return out;
 }
 
-@fragment fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var ret: vec4<f32>;
 
     switch shader_opt {
@@ -65,7 +73,7 @@ fn neq(a: vec3<f32>, b: vec3<f32>) -> bool {
 }
 
 fn fs_scale2x(tex_coords: vec2<f32>) -> vec4<f32> {
-    let dims = vec2<f32> (textureDimensions(txt));
+    let dims = vec2<f32>(textureDimensions(txt));
     // offsets
     let off = vec2(1.0, 1.0) / dims;
 
@@ -94,7 +102,7 @@ fn fs_scale2x(tex_coords: vec2<f32>) -> vec4<f32> {
 }
 
 fn fs_scale3x(tex_coords: vec2<f32>) -> vec4<f32> {
-    let dims = vec2<f32> (textureDimensions(txt));
+    let dims = vec2<f32>(textureDimensions(txt));
     // offsets
     let off = vec2(1.0, 1.0) / dims;
 
@@ -152,7 +160,7 @@ fn fs_lcd(tex_coords: vec2<f32>) -> vec4<f32> {
 
     const GHOSTING_FACTOR: f32 = 0.5;
 
-    let dims = vec2<f32> (textureDimensions(txt));
+    let dims = vec2<f32>(textureDimensions(txt));
     let pixel_pos = tex_coords * dims;
 
     // Subpixel offsets
@@ -160,9 +168,9 @@ fn fs_lcd(tex_coords: vec2<f32>) -> vec4<f32> {
     const RED_SUBPIXEL_OFFSET: f32 = - 0.3;
     const BLUE_SUBPIXEL_OFFSET: f32 = 0.3;
 
-    let red_offset = vec2<f32> (RED_SUBPIXEL_OFFSET / dims.x, 0.0);
-    let green_offset = vec2<f32> (0.0, 0.0);
-    let blue_offset = vec2<f32> (BLUE_SUBPIXEL_OFFSET / dims.x, 0.0);
+    let red_offset = vec2<f32>(RED_SUBPIXEL_OFFSET / dims.x, 0.0);
+    let green_offset = vec2<f32>(0.0, 0.0);
+    let blue_offset = vec2<f32>(BLUE_SUBPIXEL_OFFSET / dims.x, 0.0);
 
     // Sample the texture at subpixel positions
     let red_sample = desaturated(tex_coords + red_offset).r;
@@ -170,13 +178,13 @@ fn fs_lcd(tex_coords: vec2<f32>) -> vec4<f32> {
     let blue_sample = desaturated(tex_coords + blue_offset).b;
 
     // Combine the subpixel samples
-    let pixel = vec3<f32> (red_sample, green_sample, blue_sample);
+    let pixel = vec3<f32>(red_sample, green_sample, blue_sample);
 
     // LCD green tint
-    let lcd_tint = vec3<f32> (LCD_TINT_RED, LCD_TINT_GREEN, LCD_TINT_BLUE);
+    let lcd_tint = vec3<f32>(LCD_TINT_RED, LCD_TINT_GREEN, LCD_TINT_BLUE);
 
     // Create LCD pixel grid effect
-    let grid = vec2<f32> (smoothstep(GRID_GAP_START, GRID_GAP_END, fract(pixel_pos.x)), smoothstep(GRID_GAP_START, GRID_GAP_END, fract(pixel_pos.y)));
+    let grid = vec2<f32>(smoothstep(GRID_GAP_START, GRID_GAP_END, fract(pixel_pos.x)), smoothstep(GRID_GAP_START, GRID_GAP_END, fract(pixel_pos.y)));
     let grid_effect = GRID_BASE_BRIGHTNESS + (GRID_MAX_DARKENING * (1.0 - (grid.x + grid.y) * GRID_BLEND_FACTOR));
 
     // Simulate ambient light reflection
