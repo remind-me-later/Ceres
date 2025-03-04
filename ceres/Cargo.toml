@@ -8,9 +8,6 @@ repository.workspace = true
 [lints]
 workspace = true
 
-[dependencies.ceres-core]
-path = "../ceres-core"
-
 [dependencies.ceres-std]
 path = "../ceres-std"
 

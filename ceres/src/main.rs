@@ -57,12 +57,12 @@ impl AppOption for Model {
     }
 }
 
-impl From<Model> for ceres_core::Model {
-    fn from(model: Model) -> ceres_core::Model {
+impl From<Model> for ceres_std::Model {
+    fn from(model: Model) -> ceres_std::Model {
         match model {
-            Model::Dmg => ceres_core::Model::Dmg,
-            Model::Mgb => ceres_core::Model::Mgb,
-            Model::Cgb => ceres_core::Model::Cgb,
+            Model::Dmg => ceres_std::Model::Dmg,
+            Model::Mgb => ceres_std::Model::Mgb,
+            Model::Cgb => ceres_std::Model::Cgb,
         }
     }
 }
@@ -171,12 +171,12 @@ fn main() -> anyhow::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([
-                f32::from(ceres_core::PX_WIDTH),
-                f32::from(ceres_core::PX_HEIGHT) + 22.0,
+                f32::from(ceres_std::PX_WIDTH),
+                f32::from(ceres_std::PX_HEIGHT) + 22.0,
             ])
             .with_min_inner_size([
-                f32::from(ceres_core::PX_WIDTH),
-                f32::from(ceres_core::PX_HEIGHT) + 22.0,
+                f32::from(ceres_std::PX_WIDTH),
+                f32::from(ceres_std::PX_HEIGHT) + 22.0,
             ]),
         renderer: eframe::Renderer::Wgpu,
         vsync: true,

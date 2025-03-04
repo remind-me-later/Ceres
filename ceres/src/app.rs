@@ -3,19 +3,35 @@ use anyhow::Context;
 use ceres_std::GbThread;
 use eframe::egui::{self, Key};
 use rfd::FileDialog;
-use std::{fs::File, path::PathBuf};
+use std::{
+    fs::File,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
-pub struct PainterCallbackImpl(egui::Context);
+pub struct PainterCallbackImpl {
+    ctx: egui::Context,
+    buffer: Arc<Mutex<Box<[u8]>>>,
+}
 
 impl PainterCallbackImpl {
-    pub fn new(ctx: &egui::Context) -> Self {
-        Self(ctx.clone())
+    pub fn new(ctx: &egui::Context, buffer: Arc<Mutex<Box<[u8]>>>) -> Self {
+        Self {
+            ctx: ctx.clone(),
+            buffer,
+        }
     }
 }
 
 impl ceres_std::PainterCallback for PainterCallbackImpl {
-    fn repaint(&self) {
-        self.0.request_repaint();
+    fn paint(&self, pixel_data_rgba: &[u8]) {
+        if let Ok(mut buffer) = self.buffer.lock() {
+            buffer.copy_from_slice(pixel_data_rgba);
+        }
+    }
+
+    fn request_repaint(&self) {
+        self.ctx.request_repaint();
     }
 }
 
@@ -23,7 +39,7 @@ pub struct App {
     project_dirs: directories::ProjectDirs,
     thread: GbThread,
     _audio: ceres_std::AudioState,
-    screen: screen::GBScreen<{ ceres_core::PX_WIDTH as u32 }, { ceres_core::PX_HEIGHT as u32 }>,
+    screen: screen::GBScreen<{ ceres_std::PX_WIDTH as u32 }, { ceres_std::PX_HEIGHT as u32 }>,
     _rom_path: Option<PathBuf>,
     sav_path: Option<PathBuf>,
 }
@@ -31,7 +47,7 @@ pub struct App {
 impl App {
     pub fn new(
         cc: &eframe::CreationContext<'_>,
-        model: ceres_core::Model,
+        model: ceres_std::Model,
         project_dirs: directories::ProjectDirs,
         rom_path: Option<&std::path::Path>,
         shader_option: ShaderOption,
@@ -50,15 +66,19 @@ impl App {
             None
         };
 
+        let pixel_data_rgba = Arc::new(Mutex::new(
+            vec![0; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice(),
+        ));
+
         let mut gb_ctx = GbThread::new(
             model,
             sav_path.as_deref(),
             rom_path,
             &audio,
-            PainterCallbackImpl::new(&cc.egui_ctx),
+            PainterCallbackImpl::new(&cc.egui_ctx, Arc::clone(&pixel_data_rgba)),
         )?;
-        let gb_clone = gb_ctx.gb_clone();
-        let screen = screen::GBScreen::new(cc, gb_clone, shader_option);
+
+        let screen = screen::GBScreen::new(cc, pixel_data_rgba, shader_option);
 
         gb_ctx.resume()?;
 
@@ -73,12 +93,10 @@ impl App {
     }
 
     fn save_data(&self) -> anyhow::Result<()> {
-        if let Ok(gb) = self.thread.gb_lock() {
-            std::fs::create_dir_all(self.project_dirs.data_dir())?;
-            if let Some(sav_path) = &self.sav_path {
-                let sav_file = File::create(sav_path);
-                gb.save_data(&mut sav_file?)?;
-            }
+        std::fs::create_dir_all(self.project_dirs.data_dir())?;
+        if let Some(sav_path) = &self.sav_path {
+            let sav_file = File::create(sav_path);
+            self.thread.save_data(&mut sav_file?)?;
         }
 
         Ok(())
@@ -207,70 +225,68 @@ impl eframe::App for App {
             });
 
         ctx.input(|i| {
-            if let Ok(mut gb) = self.thread.mut_gb() {
-                if i.key_pressed(Key::W) {
-                    gb.press(ceres_core::Button::Up);
-                }
+            if i.key_pressed(Key::W) {
+                self.thread.press(ceres_std::Button::Up);
+            }
 
-                if i.key_released(Key::W) {
-                    gb.release(ceres_core::Button::Up);
-                }
+            if i.key_released(Key::W) {
+                self.thread.release(ceres_std::Button::Up);
+            }
 
-                if i.key_pressed(Key::A) {
-                    gb.press(ceres_core::Button::Left);
-                }
+            if i.key_pressed(Key::A) {
+                self.thread.press(ceres_std::Button::Left);
+            }
 
-                if i.key_released(Key::A) {
-                    gb.release(ceres_core::Button::Left);
-                }
+            if i.key_released(Key::A) {
+                self.thread.release(ceres_std::Button::Left);
+            }
 
-                if i.key_pressed(Key::S) {
-                    gb.press(ceres_core::Button::Down);
-                }
+            if i.key_pressed(Key::S) {
+                self.thread.press(ceres_std::Button::Down);
+            }
 
-                if i.key_released(Key::S) {
-                    gb.release(ceres_core::Button::Down);
-                }
+            if i.key_released(Key::S) {
+                self.thread.release(ceres_std::Button::Down);
+            }
 
-                if i.key_pressed(Key::D) {
-                    gb.press(ceres_core::Button::Right);
-                }
+            if i.key_pressed(Key::D) {
+                self.thread.press(ceres_std::Button::Right);
+            }
 
-                if i.key_released(Key::D) {
-                    gb.release(ceres_core::Button::Right);
-                }
+            if i.key_released(Key::D) {
+                self.thread.release(ceres_std::Button::Right);
+            }
 
-                if i.key_pressed(Key::L) {
-                    gb.press(ceres_core::Button::A);
-                }
+            if i.key_pressed(Key::L) {
+                self.thread.press(ceres_std::Button::A);
+            }
 
-                if i.key_released(Key::L) {
-                    gb.release(ceres_core::Button::A);
-                }
+            if i.key_released(Key::L) {
+                self.thread.release(ceres_std::Button::A);
+            }
 
-                if i.key_pressed(Key::K) {
-                    gb.press(ceres_core::Button::B);
-                }
+            if i.key_pressed(Key::K) {
+                self.thread.press(ceres_std::Button::B);
+            }
 
-                if i.key_released(Key::K) {
-                    gb.release(ceres_core::Button::B);
-                }
+            if i.key_released(Key::K) {
+                self.thread.release(ceres_std::Button::B);
+            }
 
-                if i.key_pressed(Key::M) {
-                    gb.press(ceres_core::Button::Start);
-                }
+            if i.key_pressed(Key::M) {
+                self.thread.press(ceres_std::Button::Start);
+            }
 
-                if i.key_released(Key::M) {
-                    gb.release(ceres_core::Button::Start);
-                }
+            if i.key_released(Key::M) {
+                self.thread.release(ceres_std::Button::Start);
+            }
 
-                if i.key_pressed(Key::N) {
-                    gb.press(ceres_core::Button::Select);
-                }
+            if i.key_pressed(Key::N) {
+                self.thread.press(ceres_std::Button::Select);
+            }
 
-                if i.key_released(Key::N) {
-                    gb.release(ceres_core::Button::Select);
-                }
+            if i.key_released(Key::N) {
+                self.thread.release(ceres_std::Button::Select);
             }
         });
     }

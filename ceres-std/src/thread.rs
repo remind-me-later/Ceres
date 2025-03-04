@@ -2,17 +2,14 @@ use crate::audio;
 use ceres_core::{Cart, GbBuilder};
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
-use std::{
-    fs::File,
-    sync::{LockResult, Mutex, MutexGuard},
-    time::Duration,
-};
+use std::{fs::File, sync::Mutex, time::Duration};
 use thread_priority::ThreadBuilderExt;
 
 use {ceres_core::Gb, std::path::Path, std::sync::Arc};
 
 pub trait PainterCallback: Send {
-    fn repaint(&self);
+    fn paint(&self, pixel_data_rgba: &[u8]);
+    fn request_repaint(&self);
 }
 
 pub struct GbThread {
@@ -46,8 +43,9 @@ impl GbThread {
                 if !pause_thread.load(Relaxed) {
                     if let Ok(mut gb) = gb.lock() {
                         gb.run_frame();
+                        ctx.paint(gb.pixel_data_rgba());
                     }
-                    ctx.repaint();
+                    ctx.request_repaint();
                 }
 
                 let elapsed = last_loop.elapsed();
@@ -155,10 +153,6 @@ impl GbThread {
         }
     }
 
-    pub fn mut_gb(&mut self) -> LockResult<MutexGuard<Gb<audio::AudioCallbackImpl>>> {
-        self.gb.lock()
-    }
-
     pub fn is_paused(&self) -> bool {
         self.pause_thread.load(Relaxed)
     }
@@ -185,14 +179,6 @@ impl GbThread {
         Ok(())
     }
 
-    pub fn gb_lock(&self) -> LockResult<MutexGuard<Gb<audio::AudioCallbackImpl>>> {
-        self.gb.lock()
-    }
-
-    pub fn gb_clone(&self) -> Arc<Mutex<Gb<audio::AudioCallbackImpl>>> {
-        Arc::clone(&self.gb)
-    }
-
     pub fn volume(&self) -> f32 {
         self.audio_stream.volume()
     }
@@ -210,6 +196,29 @@ impl GbThread {
             self.audio_stream.unmute();
         } else {
             self.audio_stream.mute();
+        }
+    }
+
+    pub fn press(&mut self, button: ceres_core::Button) {
+        if let Ok(mut gb) = self.gb.lock() {
+            gb.press(button);
+        }
+    }
+
+    pub fn release(&mut self, button: ceres_core::Button) {
+        if let Ok(mut gb) = self.gb.lock() {
+            gb.release(button);
+        }
+    }
+
+    pub fn save_data<W: std::io::Write + std::io::Seek>(
+        &self,
+        writer: &mut W,
+    ) -> Result<(), Error> {
+        if let Ok(gb) = self.gb.lock() {
+            gb.save_data(writer).map_err(Error::Io)
+        } else {
+            Err(Error::NoThreadRunning)
         }
     }
 }

@@ -3,7 +3,6 @@ use std::sync::Mutex;
 
 use crate::PixelMode;
 use crate::ShaderOption;
-use ceres_std::Gb;
 use eframe::egui;
 use eframe::wgpu;
 use eframe::wgpu::util::DeviceExt;
@@ -27,7 +26,7 @@ pub struct Resources {
 }
 
 pub struct GBScreen<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
-    gb: Arc<Mutex<Gb>>,
+    buffer: Arc<Mutex<Box<[u8]>>>,
     shader_option: ShaderOption,
     pixel_mode: PixelMode,
     size: (f32, f32),
@@ -37,7 +36,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
     #[expect(clippy::too_many_lines)]
     pub fn new(
         cc: &eframe::CreationContext<'_>,
-        gb: Arc<Mutex<Gb>>,
+        gb: Arc<Mutex<Box<[u8]>>>,
         shader_option: ShaderOption,
     ) -> Self {
         // Get the WGPU render state from the eframe creation context. This can also be retrieved
@@ -213,7 +212,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
         }
 
         Self {
-            gb,
+            buffer: gb,
             shader_option,
             size: (0.0, 0.0),
             pixel_mode: PixelMode::default(),
@@ -227,7 +226,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
         painter.add(eframe::egui_wgpu::Callback::new_paint_callback(
             response.rect,
             Self {
-                gb: Arc::clone(&self.gb),
+                buffer: Arc::clone(&self.buffer),
                 shader_option: self.shader_option,
                 size: (response.rect.width(), response.rect.height()),
                 pixel_mode: self.pixel_mode,
@@ -280,7 +279,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
         callback_resources: &mut eframe::egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
         if let Some(resources) = callback_resources.get_mut::<Resources>() {
-            if let Ok(gb) = self.gb.lock() {
+            if let Ok(buffer) = self.buffer.lock() {
                 // Swap the frame textures
                 std::mem::swap(
                     &mut resources.frame_texture,
@@ -313,7 +312,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
                     });
 
                 // Update the current frame texture
-                resources.frame_texture.update(queue, gb.pixel_data_rgba());
+                resources.frame_texture.update(queue, buffer.as_ref());
             }
 
             {
