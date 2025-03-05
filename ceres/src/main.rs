@@ -46,28 +46,28 @@ enum Model {
 impl AppOption for Model {
     fn str(self) -> &'static str {
         match self {
-            Model::Dmg => "dmg",
-            Model::Mgb => "mgb",
-            Model::Cgb => "cgb",
+            Self::Dmg => "dmg",
+            Self::Mgb => "mgb",
+            Self::Cgb => "cgb",
         }
     }
 
     fn iter() -> impl Iterator<Item = Self> {
-        [Model::Dmg, Model::Mgb, Model::Cgb].into_iter()
+        [Self::Dmg, Self::Mgb, Self::Cgb].into_iter()
     }
 }
 
 impl From<Model> for ceres_std::Model {
-    fn from(model: Model) -> ceres_std::Model {
+    fn from(model: Model) -> Self {
         match model {
-            Model::Dmg => ceres_std::Model::Dmg,
-            Model::Mgb => ceres_std::Model::Mgb,
-            Model::Cgb => ceres_std::Model::Cgb,
+            Model::Dmg => Self::Dmg,
+            Model::Mgb => Self::Mgb,
+            Model::Cgb => Self::Cgb,
         }
     }
 }
 
-#[derive(Default, Clone, Copy, PartialEq, clap::ValueEnum)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum ShaderOption {
     Nearest = 0,
     Scale2x = 1,
@@ -81,23 +81,23 @@ pub enum ShaderOption {
 impl AppOption for ShaderOption {
     fn str(self) -> &'static str {
         match self {
-            ShaderOption::Nearest => "nearest",
-            ShaderOption::Scale2x => "scale2x",
-            ShaderOption::Scale3x => "scale3x",
-            ShaderOption::Lcd => "lcd",
-            ShaderOption::Crt => "crt",
-            ShaderOption::Desaturated => "desaturated",
+            Self::Nearest => "nearest",
+            Self::Scale2x => "scale2x",
+            Self::Scale3x => "scale3x",
+            Self::Lcd => "lcd",
+            Self::Crt => "crt",
+            Self::Desaturated => "desaturated",
         }
     }
 
     fn iter() -> impl Iterator<Item = Self> {
         [
-            ShaderOption::Nearest,
-            ShaderOption::Scale2x,
-            ShaderOption::Scale3x,
-            ShaderOption::Lcd,
-            ShaderOption::Crt,
-            ShaderOption::Desaturated,
+            Self::Nearest,
+            Self::Scale2x,
+            Self::Scale3x,
+            Self::Lcd,
+            Self::Crt,
+            Self::Desaturated,
         ]
         .into_iter()
     }
@@ -113,13 +113,13 @@ pub enum PixelMode {
 impl AppOption for PixelMode {
     fn str(self) -> &'static str {
         match self {
-            PixelMode::PixelPerfect => "pixel-perfect",
-            PixelMode::FitWindow => "fit-window",
+            Self::PixelPerfect => "pixel-perfect",
+            Self::FitWindow => "fit-window",
         }
     }
 
     fn iter() -> impl Iterator<Item = Self> {
-        [PixelMode::PixelPerfect, PixelMode::FitWindow].into_iter()
+        [Self::PixelPerfect, Self::FitWindow].into_iter()
     }
 }
 

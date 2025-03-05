@@ -204,10 +204,10 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
                     scale_uniform,
                     uniform_bind_group,
                     frame_texture,
-                    diffuse_bind_group,
                     prev_frame_texture,
-                    texture_bind_group_layout,
+                    diffuse_bind_group,
                     sampler,
+                    texture_bind_group_layout,
                 });
         }
 
@@ -219,7 +219,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
         }
     }
 
-    pub fn custom_painting(&mut self, ui: &mut egui::Ui) {
+    pub fn custom_painting(&self, ui: &mut egui::Ui) {
         let (response, painter) =
             ui.allocate_painter(ui.available_size_before_wrap(), egui::Sense::drag());
 
@@ -234,7 +234,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
         ));
     }
 
-    pub fn shader_option(&self) -> ShaderOption {
+    pub const fn shader_option(&self) -> ShaderOption {
         self.shader_option
     }
 
@@ -242,7 +242,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
         &mut self.shader_option
     }
 
-    pub fn pixel_mode(&self) -> PixelMode {
+    pub const fn pixel_mode(&self) -> PixelMode {
         self.pixel_mode
     }
 
@@ -337,6 +337,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
                     (x, y)
                 };
 
+                #[expect(clippy::tuple_array_conversions)]
                 queue.write_buffer(
                     &resources.dimensions_uniform,
                     0,
@@ -387,11 +388,11 @@ impl Texture {
         Self { texture, view }
     }
 
-    fn view(&self) -> &wgpu::TextureView {
+    const fn view(&self) -> &wgpu::TextureView {
         &self.view
     }
 
-    fn update(&mut self, queue: &wgpu::Queue, rgba: &[u8]) {
+    fn update(&self, queue: &wgpu::Queue, rgba: &[u8]) {
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 aspect: wgpu::TextureAspect::All,

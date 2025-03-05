@@ -21,10 +21,11 @@ struct Buffers {
     resampler: rubato::FastFixedOut<ProcessSample>,
     output_buf: [[ProcessSample; BUFFER_SIZE as usize]; 2],
     input_buf: [[ProcessSample; BUFFER_SIZE as usize * 2]; 2],
+    volume: Arc<Mutex<f32>>,
 }
 
 impl Buffers {
-    fn new() -> Result<Self, Error> {
+    fn new(volume: Arc<Mutex<f32>>) -> Result<Self, Error> {
         Ok(Self {
             left: StaticRb::default(),
             right: StaticRb::default(),
@@ -38,6 +39,7 @@ impl Buffers {
             .map_err(|_err| Error::CouldntBuildStream)?,
             output_buf: [[Default::default(); BUFFER_SIZE as usize]; 2],
             input_buf: [[Default::default(); BUFFER_SIZE as usize * 2]; 2],
+            volume,
         })
     }
 
@@ -70,36 +72,42 @@ impl Buffers {
 
         let (input_buf_left, input_buf_right) = self.input_buf.split_at_mut(1);
 
-        for (l, r) in input_buf_left[0]
-            .iter_mut()
-            .zip(input_buf_right[0].iter_mut())
-            .take(needed)
-        {
-            *l = self.left.try_pop().unwrap_or_default() as f32 / i16::MAX as f32;
-            *r = self.right.try_pop().unwrap_or_default() as f32 / i16::MAX as f32;
-        }
-
-        match self
-            .resampler
-            .process_into_buffer(&self.input_buf, &mut self.output_buf, None)
-        {
-            Ok(_) => {
-                buffer
-                    .chunks_exact_mut(2)
-                    .zip(self.output_buf[0].iter().zip(self.output_buf[1].iter()))
-                    .for_each(|(out, (&sample_l, &sample_r))| {
-                        out[0] = sample_l;
-                        out[1] = sample_r;
-                    });
+        if let Ok(vol) = self.volume.lock() {
+            for (l, r) in input_buf_left[0]
+                .iter_mut()
+                .zip(input_buf_right[0].iter_mut())
+                .take(needed)
+            {
+                *l =
+                    f32::from(self.left.try_pop().unwrap_or_default()) / f32::from(i16::MAX) * *vol;
+                *r = f32::from(self.right.try_pop().unwrap_or_default()) / f32::from(i16::MAX)
+                    * *vol;
             }
-            Err(e) => {
-                eprintln!("resampler error, possible underrun: {e}");
+
+            match self
+                .resampler
+                .process_into_buffer(&self.input_buf, &mut self.output_buf, None)
+            {
+                Ok(_) => {
+                    buffer
+                        .chunks_exact_mut(2)
+                        .zip(self.output_buf[0].iter().zip(self.output_buf[1].iter()))
+                        .for_each(|(out, (&sample_l, &sample_r))| {
+                            out[0] = sample_l;
+                            out[1] = sample_r;
+                        });
+                }
+                Err(e) => {
+                    eprintln!("resampler error, possible underrun: {e}");
+                }
             }
         }
     }
 
     fn compute_resample_ratio(&self) -> f64 {
+        #[expect(clippy::cast_precision_loss)]
         let occupied = self.num_samples() as f64;
+        #[expect(clippy::cast_precision_loss)]
         let target = RING_BUFFER_SIZE as f64;
         let error = (occupied - target) / target;
 
@@ -113,29 +121,21 @@ impl Buffers {
     }
 }
 
-// RingBuffer is a wrapper around a bounded ring buffer
-// that implements the AudioCallback trait
 #[derive(Clone)]
 pub struct AudioCallbackImpl {
     buffer: Arc<Mutex<Buffers>>,
-    volume: Arc<Mutex<f32>>,
 }
 
 impl AudioCallbackImpl {
-    fn new(buffer: Arc<Mutex<Buffers>>, volume: Arc<Mutex<f32>>) -> Self {
-        Self { buffer, volume }
+    const fn new(buffer: Arc<Mutex<Buffers>>) -> Self {
+        Self { buffer }
     }
 }
 
 impl ceres_core::AudioCallback for AudioCallbackImpl {
     fn audio_sample(&self, l: ceres_core::Sample, r: ceres_core::Sample) {
         if let Ok(mut buffer) = self.buffer.lock() {
-            if let Ok(vol) = self.volume.lock() {
-                let l = (l as f32 * *vol) as i16;
-                let r = (r as f32 * *vol) as i16;
-
-                buffer.push_samples(l, r);
-            }
+            buffer.push_samples(l, r);
         }
     }
 }
@@ -167,12 +167,12 @@ impl AudioState {
     }
 
     #[must_use]
-    pub fn device(&self) -> &cpal::Device {
+    pub const fn device(&self) -> &cpal::Device {
         &self.device
     }
 
     #[must_use]
-    pub fn config(&self) -> &cpal::StreamConfig {
+    pub const fn config(&self) -> &cpal::StreamConfig {
         &self.config
     }
 }
@@ -182,12 +182,16 @@ pub struct Stream {
     stream: cpal::Stream,
     ring_buffer: AudioCallbackImpl,
     volume: Arc<Mutex<f32>>,
-    volume_before_mute: Option<i16>,
+    volume_before_mute: Option<f32>,
 }
 
 impl Stream {
     pub fn new(state: &AudioState) -> Result<Self, Error> {
-        let ring_buffer = Arc::new(Mutex::new(Buffers::new()?));
+        const INITIAL_VOLUME: f32 = 1.0;
+        let volume = Arc::new(Mutex::new(INITIAL_VOLUME));
+        let buffer_volume = Arc::clone(&volume);
+
+        let ring_buffer = Arc::new(Mutex::new(Buffers::new(buffer_volume)?));
         let ring_buffer_clone = Arc::clone(&ring_buffer);
 
         let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
@@ -202,13 +206,9 @@ impl Stream {
             .build_output_stream(state.config(), data_callback, error_callback, None)
             .map_err(|_err| Error::CouldntBuildStream)?;
 
-        const INITIAL_VOLUME: f32 = 1.0;
-        let volume = Arc::new(Mutex::new(INITIAL_VOLUME));
-        let buffer_volume = Arc::clone(&volume);
-
         let mut res = Self {
             stream,
-            ring_buffer: AudioCallbackImpl::new(ring_buffer, buffer_volume),
+            ring_buffer: AudioCallbackImpl::new(ring_buffer),
             volume,
             volume_before_mute: None,
         };
@@ -235,11 +235,7 @@ impl Stream {
 
     #[must_use]
     pub fn volume(&self) -> f32 {
-        if let Ok(vol) = self.volume.lock() {
-            *vol
-        } else {
-            0.0
-        }
+        self.volume.lock().map_or(0.0, |vol| *vol)
     }
 
     pub fn set_volume(&mut self, volume: f32) {
@@ -250,7 +246,7 @@ impl Stream {
 
     pub fn mute(&mut self) {
         if let Ok(mut vol) = self.volume.lock() {
-            self.volume_before_mute = Some(*vol as i16);
+            self.volume_before_mute = Some(*vol);
             *vol = 0.0;
         }
     }
@@ -258,12 +254,13 @@ impl Stream {
     pub fn unmute(&mut self) {
         if let Some(vol) = self.volume_before_mute {
             if let Ok(mut v) = self.volume.lock() {
-                *v = vol as f32;
+                *v = vol;
             }
         }
     }
 
-    pub fn is_muted(&self) -> bool {
+    #[must_use]
+    pub const fn is_muted(&self) -> bool {
         self.volume_before_mute.is_some()
     }
 
@@ -284,10 +281,10 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Error::CouldntGetOutputDevice => write!(f, "couldn't get output device"),
-            Error::CouldntBuildStream => write!(f, "couldn't build stream"),
-            Error::CouldntPauseStream => write!(f, "couldn't pause stream"),
-            Error::CouldntPlayStream => write!(f, "couldn't play stream"),
+            Self::CouldntGetOutputDevice => write!(f, "couldn't get output device"),
+            Self::CouldntBuildStream => write!(f, "couldn't build stream"),
+            Self::CouldntPauseStream => write!(f, "couldn't pause stream"),
+            Self::CouldntPlayStream => write!(f, "couldn't play stream"),
         }
     }
 }

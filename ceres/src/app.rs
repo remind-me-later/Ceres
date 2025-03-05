@@ -87,7 +87,7 @@ impl App {
             thread: gb_ctx,
             _audio: audio,
             screen,
-            _rom_path: rom_path.map(|path| path.to_path_buf()),
+            _rom_path: rom_path.map(std::path::Path::to_path_buf),
             sav_path,
         })
     }
@@ -150,6 +150,7 @@ impl eframe::App for App {
 
                         let volume_slider = egui::Slider::from_get_set(0.0..=1.0, |volume| {
                             if let Some(volume) = volume {
+                                #[expect(clippy::cast_possible_truncation)]
                                 self.thread.set_volume(volume as f32);
                             }
 

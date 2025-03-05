@@ -30,10 +30,10 @@ impl GbThread {
         ctx: P,
     ) -> Result<Self, Error> {
         fn gb_loop<P: PainterCallback>(
-            gb: Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
-            exiting: Arc<AtomicBool>,
-            pause_thread: Arc<AtomicBool>,
-            ctx: P,
+            gb: &Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
+            exiting: &Arc<AtomicBool>,
+            pause_thread: &Arc<AtomicBool>,
+            ctx: &P,
         ) {
             const DURATION: Duration = ceres_core::FRAME_DURATION;
 
@@ -56,11 +56,6 @@ impl GbThread {
 
                 last_loop = std::time::Instant::now();
             }
-
-            // FIXME: clippy says we have to drop
-            drop(gb);
-            drop(exiting);
-            drop(pause_thread);
         }
 
         let audio_stream = audio::Stream::new(audio_state).map_err(Error::Audio)?;
@@ -81,11 +76,10 @@ impl GbThread {
 
             // std::thread::spawn(move || gb_loop(gb, exit, pause_thread))
             thread_builder.spawn_with_priority(thread_priority::ThreadPriority::Max, move |_| {
-                gb_loop(gb, exit, pause_thread, ctx);
+                gb_loop(&gb, &exit, &pause_thread, &ctx);
             })?
         };
 
-        // Ok((Gb::new(model, sample_rate, cart, audio_callback), ident))
         Ok(Self {
             gb,
             exiting,
@@ -153,6 +147,7 @@ impl GbThread {
         }
     }
 
+    #[must_use]
     pub fn is_paused(&self) -> bool {
         self.pause_thread.load(Relaxed)
     }
@@ -179,6 +174,7 @@ impl GbThread {
         Ok(())
     }
 
+    #[must_use]
     pub fn volume(&self) -> f32 {
         self.audio_stream.volume()
     }
@@ -187,7 +183,8 @@ impl GbThread {
         self.audio_stream.set_volume(volume);
     }
 
-    pub fn is_muted(&self) -> bool {
+    #[must_use]
+    pub const fn is_muted(&self) -> bool {
         self.audio_stream.is_muted()
     }
 
@@ -215,11 +212,9 @@ impl GbThread {
         &self,
         writer: &mut W,
     ) -> Result<(), Error> {
-        if let Ok(gb) = self.gb.lock() {
+        self.gb.lock().map_or(Err(Error::NoThreadRunning), |gb| {
             gb.save_data(writer).map_err(Error::Io)
-        } else {
-            Err(Error::NoThreadRunning)
-        }
+        })
     }
 }
 
@@ -256,11 +251,13 @@ impl std::fmt::Display for Error {
         }
     }
 }
+
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
         Self::Io(err)
     }
 }
+
 impl From<ceres_core::Error> for Error {
     fn from(err: ceres_core::Error) -> Self {
         Self::Gb(err)

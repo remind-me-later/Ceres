@@ -13,7 +13,8 @@ repository = "https://github.com/remind-me-later/Ceres"
 unsafe_code = "forbid"
 
 [workspace.lints.clippy]
-# pedantic = "warn"
+pedantic = "warn"
+nursery = "warn"
 # std_instead_of_alloc = "warn"
 alloc_instead_of_core = "warn"
 as_underscore = "warn"
@@ -69,12 +70,12 @@ large_stack_frames = "warn"
 large_stack_arrays = "warn"
 cognitive_complexity = "warn"
 
-missing_errors_doc = "allow"
-missing_panics_doc = "allow"
-missing_safety_doc = "allow"
+missing_errors_doc = { level = "allow", priority = 1 }
+missing_panics_doc = { level = "allow", priority = 1 }
+missing_safety_doc = { level = "allow", priority = 1 }
 similar_names = { level = "allow", priority = 1 }
-struct_excessive_bools = "allow"
-verbose_bit_mask = "allow"
+struct_excessive_bools = { level = "allow", priority = 1 }
+verbose_bit_mask = { level = "allow", priority = 1 }
 
 [profile.dev]
 opt-level = 1
