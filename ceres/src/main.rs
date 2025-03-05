@@ -75,7 +75,6 @@ pub enum ShaderOption {
     #[default]
     Lcd = 3,
     Crt = 4,
-    Desaturated = 5,
 }
 
 impl AppOption for ShaderOption {
@@ -86,7 +85,6 @@ impl AppOption for ShaderOption {
             Self::Scale3x => "scale3x",
             Self::Lcd => "lcd",
             Self::Crt => "crt",
-            Self::Desaturated => "desaturated",
         }
     }
 
@@ -97,7 +95,6 @@ impl AppOption for ShaderOption {
             Self::Scale3x,
             Self::Lcd,
             Self::Crt,
-            Self::Desaturated,
         ]
         .into_iter()
     }

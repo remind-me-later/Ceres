@@ -18,7 +18,7 @@ fn setup_theme(ctx: &egui::Context) {
     // let red = egui::Color32::from_rgb(204, 36, 29); // Red accent
     let green = egui::Color32::from_rgb(152, 151, 26); // Green accent
     let yellow = egui::Color32::from_rgb(215, 153, 33); // Yellow accent
-    let orange = egui::Color32::from_rgb(214, 93, 14); // Orange accent
+    // let orange = egui::Color32::from_rgb(214, 93, 14); // Orange accent
     let blue = egui::Color32::from_rgb(69, 133, 136); // Blue accent
     // let aqua = egui::Color32::from_rgb(104, 157, 106); // Aqua accent
 
@@ -65,8 +65,8 @@ fn setup_theme(ctx: &egui::Context) {
     style.visuals.popup_shadow = shadow;
     style.visuals.window_shadow = shadow;
     style.visuals.handle_shape = HandleShape::Rect { aspect_ratio: 0.5 };
-
-    style.visuals.selection.bg_fill = orange;
+style.visuals.window_stroke = egui::Stroke::NONE;
+    style.visuals.selection.bg_fill = green;
     style.visuals.selection.stroke = egui::Stroke::new(1.0, yellow);
 
     style.visuals.hyperlink_color = blue;
@@ -197,12 +197,12 @@ impl eframe::App for App {
                     }
                 });
 
-                menu_bar_ui.menu_button("Media", |menu_button_ui| {
+                menu_bar_ui.menu_button("Control", |menu_button_ui| {
                     menu_button_ui.horizontal(|horizontal_ui| {
                         let paused = self.thread.is_paused();
                         if horizontal_ui
                             .selectable_label(paused, if paused { "\u{25b6}" } else { "\u{23f8}" })
-                            .on_hover_text("Pause the game")
+                            .on_hover_text("Pause")
                             .clicked()
                         {
                             if let Err(e) = if paused {
@@ -217,21 +217,24 @@ impl eframe::App for App {
                         let multiplier = self.thread.multiplier();
 
                         if horizontal_ui
-                            .selectable_label(multiplier == 1, "x1")
+                            .selectable_label(multiplier == 1, "1x")
+                            .on_hover_text("Speed 1x")
                             .clicked()
                         {
                             self.thread.set_multiplier(1);
                         }
 
                         if horizontal_ui
-                            .selectable_label(multiplier == 2, "x2")
+                            .selectable_label(multiplier == 2, "2x")
+                            .on_hover_text("Speed 2x")
                             .clicked()
                         {
                             self.thread.set_multiplier(2);
                         }
 
                         if horizontal_ui
-                            .selectable_label(multiplier == 4, "x4")
+                            .selectable_label(multiplier == 4, "4x")
+                            .on_hover_text("Speed 4x")
                             .clicked()
                         {
                             self.thread.set_multiplier(4);
@@ -243,7 +246,7 @@ impl eframe::App for App {
 
                         if horizontal_ui
                             .selectable_label(muted, if muted { "\u{1f507}" } else { "\u{1f50a}" })
-                            .on_hover_text("Mute the emulator")
+                            .on_hover_text("Mute")
                             .clicked()
                         {
                             self.thread.toggle_mute();

@@ -37,7 +37,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     switch shader_opt {
         default : {
             // nearest neighbour
-            ret = textureSample(txt, smpl, in.tex_coords);
+            ret = get_sample(in.tex_coords);
         }
         case 1u : {
             // scale2x
@@ -55,13 +55,17 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             // crt
             ret = fs_crt(in.tex_coords);
         }
-        case 5u : {
-            // desaturated
-            ret = desaturated(in.tex_coords);
-        }
     }
 
     return ret;
+}
+
+fn get_sample(tex_coords: vec2<f32>) -> vec4<f32> {
+    return desaturated(txt, tex_coords);
+}
+
+fn get_ghost_sample(tex_coords: vec2<f32>) -> vec4<f32> {
+    return desaturated(prev_frame, tex_coords);
 }
 
 fn eq(a: vec3<f32>, b: vec3<f32>) -> bool {
@@ -83,11 +87,11 @@ fn fs_scale2x(tex_coords: vec2<f32>) -> vec4<f32> {
 
     let tc = tex_coords;
 
-    let p = textureSample(txt, smpl, tc).xyz;
-    let a = textureSample(txt, smpl, tc + vec2(0.0, - off.y)).xyz;
-    let c = textureSample(txt, smpl, tc + vec2(- off.x, 0.0)).xyz;
-    let b = textureSample(txt, smpl, tc + vec2(off.x, 0.0)).xyz;
-    let d = textureSample(txt, smpl, tc + vec2(0.0, off.y)).xyz;
+    let p = get_sample(tc).xyz;
+    let a = get_sample(tc + vec2(0.0, - off.y)).xyz;
+    let c = get_sample(tc + vec2(- off.x, 0.0)).xyz;
+    let b = get_sample(tc + vec2(off.x, 0.0)).xyz;
+    let d = get_sample(tc + vec2(0.0, off.y)).xyz;
 
     let p0 = select(p, a, eq(c, a) && neq(c, d) && neq(a, b));
     let p1 = select(p, b, eq(a, b) && neq(a, c) && neq(b, d));
@@ -112,15 +116,15 @@ fn fs_scale3x(tex_coords: vec2<f32>) -> vec4<f32> {
 
     let tc = tex_coords;
 
-    let p = textureSample(txt, smpl, tc).xyz;
-    let a = textureSample(txt, smpl, tc + vec2(- off.x, - off.y)).xyz;
-    let b = textureSample(txt, smpl, tc + vec2(0.0, - off.y)).xyz;
-    let c = textureSample(txt, smpl, tc + vec2(off.x, - off.y)).xyz;
-    let d = textureSample(txt, smpl, tc + vec2(- off.x, 0.0)).xyz;
-    let f = textureSample(txt, smpl, tc + vec2(off.x, 0.0)).xyz;
-    let g = textureSample(txt, smpl, tc + vec2(- off.x, off.y)).xyz;
-    let h = textureSample(txt, smpl, tc + vec2(0.0, off.y)).xyz;
-    let i = textureSample(txt, smpl, tc + vec2(off.x, off.y)).xyz;
+    let p = get_sample(tc).xyz;
+    let a = get_sample(tc + vec2(- off.x, - off.y)).xyz;
+    let b = get_sample(tc + vec2(0.0, - off.y)).xyz;
+    let c = get_sample(tc + vec2(off.x, - off.y)).xyz;
+    let d = get_sample(tc + vec2(- off.x, 0.0)).xyz;
+    let f = get_sample(tc + vec2(off.x, 0.0)).xyz;
+    let g = get_sample(tc + vec2(- off.x, off.y)).xyz;
+    let h = get_sample(tc + vec2(0.0, off.y)).xyz;
+    let i = get_sample(tc + vec2(off.x, off.y)).xyz;
 
     let p0 = select(p, d, eq(d, b) && neq(d, h) && neq(b, f));
     let p1 = select(p, b, (eq(d, b) && neq(d, h) && neq(b, f) && neq(p, c)) || (eq(b, f) && neq(b, d) && neq(f, h) && neq(p, a)));
@@ -173,9 +177,9 @@ fn fs_lcd(tex_coords: vec2<f32>) -> vec4<f32> {
     let blue_offset = vec2<f32>(BLUE_SUBPIXEL_OFFSET / dims.x, 0.0);
 
     // Sample the texture at subpixel positions
-    let red_sample = desaturated(tex_coords + red_offset).r;
-    let green_sample = desaturated(tex_coords + green_offset).g;
-    let blue_sample = desaturated(tex_coords + blue_offset).b;
+    let red_sample = get_sample(tex_coords + red_offset).r;
+    let green_sample = get_sample(tex_coords + green_offset).g;
+    let blue_sample = get_sample(tex_coords + blue_offset).b;
 
     // Combine the subpixel samples
     let pixel = vec3<f32>(red_sample, green_sample, blue_sample);
@@ -195,7 +199,7 @@ fn fs_lcd(tex_coords: vec2<f32>) -> vec4<f32> {
     let final_color = pixel * lcd_tint * grid_effect;
 
     // Sample the previous frame
-    let prev_color = textureSample(prev_frame, smpl, tex_coords).rgb;
+    let prev_color = get_ghost_sample(tex_coords).rgb;
 
     // Apply ghosting effect
     let ghosted_color = mix(final_color, prev_color, GHOSTING_FACTOR);
@@ -241,9 +245,9 @@ fn fs_crt(tex_coords: vec2<f32>) -> vec4<f32> {
     let red_shift = vec2(RGB_SHIFT, 0.0);
     let blue_shift = vec2(- RGB_SHIFT, 0.0);
 
-    let r = textureSample(txt, smpl, distorted_coords + red_shift).r;
-    let g = textureSample(txt, smpl, distorted_coords).g;
-    let b = textureSample(txt, smpl, distorted_coords + blue_shift).b;
+    let r = get_sample(distorted_coords + red_shift).r;
+    let g = get_sample(distorted_coords).g;
+    let b = get_sample(distorted_coords + blue_shift).b;
 
     // Create scanlines
     let scanline = 0.5 + 0.5 * sin(distorted_coords.y * SCANLINE_COUNT * 3.14159);
@@ -257,14 +261,14 @@ fn fs_crt(tex_coords: vec2<f32>) -> vec4<f32> {
     let flicker = 1.0 - FLICKER_INTENSITY * (0.5 + 0.5 * sin(time_seed * 10.0));
 
     // Get ghosting from previous frame
-    let ghost = textureSample(prev_frame, smpl, distorted_coords).rgb;
+    let ghost = get_ghost_sample(distorted_coords).rgb;
 
     // Combine color with effects
     var color = vec3(r, g, b);
 
     // Apply color bleed (soft glow)
-    let blur1 = textureSample(txt, smpl, distorted_coords + vec2(0.001, 0.001)).rgb;
-    let blur2 = textureSample(txt, smpl, distorted_coords - vec2(0.001, 0.001)).rgb;
+    let blur1 = get_sample(distorted_coords + vec2(0.001, 0.001)).rgb;
+    let blur2 = get_sample(distorted_coords - vec2(0.001, 0.001)).rgb;
     color = mix(color, (blur1 + blur2) * 0.5, COLOR_BLEED);
 
     // Apply ghosting
@@ -281,7 +285,7 @@ fn fs_crt(tex_coords: vec2<f32>) -> vec4<f32> {
     return vec4(color, 1.0);
 }
 
-fn desaturated(tex_coords: vec2<f32>) -> vec4<f32> {
+fn desaturated(txt: texture_2d<f32>, tex_coords: vec2<f32>) -> vec4<f32> {
     let tex = textureSample(txt, smpl, tex_coords);
     const SATURATION: f32 = 0.7;
 
