@@ -65,7 +65,10 @@ fn setup_theme(ctx: &egui::Context) {
     style.visuals.popup_shadow = shadow;
     style.visuals.window_shadow = shadow;
     style.visuals.handle_shape = HandleShape::Rect { aspect_ratio: 0.5 };
-style.visuals.window_stroke = egui::Stroke::NONE;
+    style.visuals.window_stroke = egui::Stroke {
+        width: 1.0,
+        color: fg1,
+    };
     style.visuals.selection.bg_fill = green;
     style.visuals.selection.stroke = egui::Stroke::new(1.0, yellow);
 
@@ -197,7 +200,7 @@ impl eframe::App for App {
                     }
                 });
 
-                menu_bar_ui.menu_button("Control", |menu_button_ui| {
+                menu_bar_ui.menu_button("View", |menu_button_ui| {
                     menu_button_ui.horizontal(|horizontal_ui| {
                         let paused = self.thread.is_paused();
                         if horizontal_ui
@@ -270,36 +273,32 @@ impl eframe::App for App {
 
                         horizontal_ui.add(volume_slider);
                     });
-                });
 
-                menu_bar_ui.menu_button("View", |menu_button_ui| {
-                    menu_button_ui.add(egui::Label::new("Shader"));
+                    menu_button_ui.menu_button("Shader", |menu_button_ui| {
+                        for shader_option in ShaderOption::iter() {
+                            let shader_button = egui::SelectableLabel::new(
+                                self.screen.shader_option() == shader_option,
+                                shader_option.str(),
+                            );
 
-                    for shader_option in ShaderOption::iter() {
-                        let shader_button = egui::SelectableLabel::new(
-                            self.screen.shader_option() == shader_option,
-                            shader_option.str(),
-                        );
-
-                        if menu_button_ui.add(shader_button).clicked() {
-                            *self.screen.shader_option_mut() = shader_option;
+                            if menu_button_ui.add(shader_button).clicked() {
+                                *self.screen.shader_option_mut() = shader_option;
+                            }
                         }
-                    }
+                    });
 
-                    menu_button_ui.separator();
+                    menu_button_ui.menu_button("Scaling", |menu_button_ui| {
+                        for pixel_mode in ScalingOption::iter() {
+                            let pixel_button = egui::SelectableLabel::new(
+                                self.screen.pixel_mode() == pixel_mode,
+                                pixel_mode.str(),
+                            );
 
-                    menu_button_ui.add(egui::Label::new("Scaling"));
-
-                    for pixel_mode in ScalingOption::iter() {
-                        let pixel_button = egui::SelectableLabel::new(
-                            self.screen.pixel_mode() == pixel_mode,
-                            pixel_mode.str(),
-                        );
-
-                        if menu_button_ui.add(pixel_button).clicked() {
-                            *self.screen.mut_pixel_mode() = pixel_mode;
+                            if menu_button_ui.add(pixel_button).clicked() {
+                                *self.screen.mut_pixel_mode() = pixel_mode;
+                            }
                         }
-                    }
+                    });
                 });
             });
         });
