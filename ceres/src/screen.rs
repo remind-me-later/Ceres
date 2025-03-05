@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use crate::PixelMode;
+use crate::ScalingOption;
 use crate::ShaderOption;
 use eframe::egui;
 use eframe::wgpu;
@@ -28,7 +28,7 @@ pub struct Resources {
 pub struct GBScreen<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
     buffer: Arc<Mutex<Box<[u8]>>>,
     shader_option: ShaderOption,
-    pixel_mode: PixelMode,
+    pixel_mode: ScalingOption,
     size: (f32, f32),
 }
 
@@ -215,7 +215,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
             buffer: gb,
             shader_option,
             size: (0.0, 0.0),
-            pixel_mode: PixelMode::default(),
+            pixel_mode: ScalingOption::default(),
         }
     }
 
@@ -242,11 +242,11 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
         &mut self.shader_option
     }
 
-    pub const fn pixel_mode(&self) -> PixelMode {
+    pub const fn pixel_mode(&self) -> ScalingOption {
         self.pixel_mode
     }
 
-    pub fn mut_pixel_mode(&mut self) -> &mut PixelMode {
+    pub fn mut_pixel_mode(&mut self) -> &mut ScalingOption {
         &mut self.pixel_mode
     }
 }
@@ -323,7 +323,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
                     clippy::cast_possible_truncation,
                     clippy::cast_sign_loss
                 )]
-                let (x, y) = if matches!(self.pixel_mode, PixelMode::PixelPerfect) {
+                let (x, y) = if matches!(self.pixel_mode, ScalingOption::PixelPerfect) {
                     let mul = (width / PX_WIDTH as f32)
                         .min(height / PX_HEIGHT as f32)
                         .floor() as u32;

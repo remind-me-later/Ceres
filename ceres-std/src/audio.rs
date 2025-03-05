@@ -252,7 +252,7 @@ impl Stream {
     }
 
     pub fn unmute(&mut self) {
-        if let Some(vol) = self.volume_before_mute {
+        if let Some(vol) = self.volume_before_mute.take() {
             if let Ok(mut v) = self.volume.lock() {
                 *v = vol;
             }

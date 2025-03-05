@@ -104,13 +104,13 @@ impl AppOption for ShaderOption {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
-pub enum PixelMode {
+pub enum ScalingOption {
     PixelPerfect,
     #[default]
     FitWindow,
 }
 
-impl AppOption for PixelMode {
+impl AppOption for ScalingOption {
     fn str(self) -> &'static str {
         match self {
             Self::PixelPerfect => "pixel-perfect",
@@ -156,11 +156,11 @@ struct Cli {
         short,
         long,
         help = "Pixel mode",
-        default_value = PixelMode::default().str(),
+        default_value = ScalingOption::default().str(),
         value_enum,
         required = false
     )]
-    pixel_mode: PixelMode,
+    pixel_mode: ScalingOption,
 }
 
 fn main() -> anyhow::Result<()> {

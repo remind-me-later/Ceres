@@ -1,13 +1,80 @@
-use crate::{AppOption, PixelMode, ShaderOption, screen};
+use crate::{AppOption, ScalingOption, ShaderOption, screen};
 use anyhow::Context;
 use ceres_std::GbThread;
-use eframe::egui::{self, Key};
+use eframe::egui::{self, CornerRadius, Key, style::HandleShape};
 use rfd::FileDialog;
 use std::{
     fs::File,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
+
+fn setup_theme(ctx: &egui::Context) {
+    let bg0 = egui::Color32::from_rgb(40, 40, 40); // Background
+    let bg1 = egui::Color32::from_rgb(60, 56, 54); // Lighter background
+    let bg2 = egui::Color32::from_rgb(80, 73, 69); // Selection background
+    let fg0 = egui::Color32::from_rgb(251, 241, 199); // Main text
+    let fg1 = egui::Color32::from_rgb(235, 219, 178); // Secondary text
+    // let red = egui::Color32::from_rgb(204, 36, 29); // Red accent
+    let green = egui::Color32::from_rgb(152, 151, 26); // Green accent
+    let yellow = egui::Color32::from_rgb(215, 153, 33); // Yellow accent
+    let orange = egui::Color32::from_rgb(214, 93, 14); // Orange accent
+    let blue = egui::Color32::from_rgb(69, 133, 136); // Blue accent
+    // let aqua = egui::Color32::from_rgb(104, 157, 106); // Aqua accent
+
+    let mut style = (*ctx.style()).clone();
+
+    style.visuals.window_fill = bg0;
+    style.visuals.panel_fill = bg0;
+
+    style.visuals.widgets.inactive.bg_fill = bg0;
+    style.visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, fg1);
+    style.visuals.widgets.inactive.bg_stroke = egui::Stroke::NONE;
+    style.visuals.widgets.inactive.weak_bg_fill = bg0;
+
+    style.visuals.widgets.noninteractive.bg_fill = bg0;
+    style.visuals.widgets.noninteractive.bg_stroke = egui::Stroke::NONE;
+    style.visuals.widgets.noninteractive.weak_bg_fill = bg0;
+    style.visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.5, fg1);
+
+    style.visuals.widgets.hovered.bg_fill = bg1;
+    style.visuals.widgets.hovered.bg_stroke = egui::Stroke::NONE;
+    style.visuals.widgets.hovered.weak_bg_fill = bg1;
+    style.visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.5, fg0);
+
+    style.visuals.widgets.active.bg_fill = bg2;
+    style.visuals.widgets.active.bg_stroke = egui::Stroke::NONE;
+    style.visuals.widgets.active.weak_bg_fill = green;
+    style.visuals.widgets.active.fg_stroke = egui::Stroke::new(2.0, yellow);
+
+    style.visuals.widgets.open.bg_fill = bg1;
+    style.visuals.widgets.open.bg_stroke = egui::Stroke::NONE;
+    style.visuals.widgets.open.weak_bg_fill = green;
+    style.visuals.widgets.open.fg_stroke = egui::Stroke::new(1.0, fg0);
+
+    let corner_radius = CornerRadius::ZERO;
+    style.visuals.window_corner_radius = corner_radius;
+    style.visuals.menu_corner_radius = corner_radius;
+    style.visuals.widgets.noninteractive.corner_radius = corner_radius;
+    style.visuals.widgets.inactive.corner_radius = corner_radius;
+    style.visuals.widgets.hovered.corner_radius = corner_radius;
+    style.visuals.widgets.active.corner_radius = corner_radius;
+    style.visuals.widgets.open.corner_radius = corner_radius;
+
+    let shadow = egui::epaint::Shadow::NONE;
+    style.visuals.popup_shadow = shadow;
+    style.visuals.window_shadow = shadow;
+    style.visuals.handle_shape = HandleShape::Rect { aspect_ratio: 0.5 };
+
+    style.visuals.selection.bg_fill = orange;
+    style.visuals.selection.stroke = egui::Stroke::new(1.0, yellow);
+
+    style.visuals.hyperlink_color = blue;
+
+    style.visuals.override_text_color = Some(fg0);
+
+    ctx.set_style(style);
+}
 
 pub struct PainterCallbackImpl {
     ctx: egui::Context,
@@ -52,6 +119,9 @@ impl App {
         rom_path: Option<&std::path::Path>,
         shader_option: ShaderOption,
     ) -> anyhow::Result<Self> {
+        // Apply our minimal black and white theme
+        setup_theme(&cc.egui_ctx);
+
         let audio = ceres_std::AudioState::new()?;
         let sav_path = if let Some(rom_path) = rom_path {
             let file_stem = rom_path.file_stem().context("couldn't get file stem")?;
@@ -109,7 +179,7 @@ impl eframe::App for App {
         egui::TopBottomPanel::top("top_panel").show(ctx, |top_panel_ui| {
             egui::menu::bar(top_panel_ui, |menu_bar_ui| {
                 menu_bar_ui.menu_button("File", |menu_button_ui| {
-                    if menu_button_ui.button("Open ROM").clicked() {
+                    if menu_button_ui.button("Open").clicked() {
                         let file = FileDialog::new()
                             .add_filter("gb", &["gb", "gbc"])
                             .pick_file();
@@ -122,14 +192,12 @@ impl eframe::App for App {
                         }
                     }
 
-                    if menu_button_ui.button("Export save").clicked() {
+                    if menu_button_ui.button("Export").clicked() {
                         println!("Export save file");
                     }
                 });
 
-                menu_bar_ui.menu_button("view", |menu_button_ui| {
-                    menu_button_ui.add(egui::Label::new("Volume"));
-
+                menu_bar_ui.menu_button("Media", |menu_button_ui| {
                     menu_button_ui.horizontal(|horizontal_ui| {
                         let paused = self.thread.is_paused();
                         if horizontal_ui
@@ -144,6 +212,27 @@ impl eframe::App for App {
                             } {
                                 eprintln!("couldn't pause/resume: {e}");
                             }
+                        }
+
+                        horizontal_ui
+                            .button("x2")
+                            .on_hover_text("Speed up the game")
+                            .clicked();
+                    });
+
+                    menu_button_ui.horizontal(|horizontal_ui| {
+                        let mute_button = egui::Button::new(if self.thread.is_muted() {
+                            "\u{1f507}"
+                        } else {
+                            "\u{1f50a}"
+                        });
+
+                        if horizontal_ui
+                            .add(mute_button)
+                            .on_hover_text("Mute the emulator")
+                            .clicked()
+                        {
+                            self.thread.toggle_mute();
                         }
 
                         horizontal_ui.style_mut().spacing.slider_width = 50.0;
@@ -163,24 +252,10 @@ impl eframe::App for App {
                         .trailing_fill(true);
 
                         horizontal_ui.add(volume_slider);
-
-                        let mute_button = egui::Button::new(if self.thread.is_muted() {
-                            "\u{1f507}"
-                        } else {
-                            "\u{1f50a}"
-                        });
-
-                        if horizontal_ui
-                            .add(mute_button)
-                            .on_hover_text("Mute the emulator")
-                            .clicked()
-                        {
-                            self.thread.toggle_mute();
-                        }
                     });
+                });
 
-                    menu_button_ui.separator();
-
+                menu_bar_ui.menu_button("View", |menu_button_ui| {
                     menu_button_ui.add(egui::Label::new("Shader"));
 
                     for shader_option in ShaderOption::iter() {
@@ -196,9 +271,9 @@ impl eframe::App for App {
 
                     menu_button_ui.separator();
 
-                    menu_button_ui.add(egui::Label::new("Pixel mode"));
+                    menu_button_ui.add(egui::Label::new("Scaling"));
 
-                    for pixel_mode in PixelMode::iter() {
+                    for pixel_mode in ScalingOption::iter() {
                         let pixel_button = egui::SelectableLabel::new(
                             self.screen.pixel_mode() == pixel_mode,
                             pixel_mode.str(),
