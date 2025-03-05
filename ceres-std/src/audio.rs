@@ -5,13 +5,13 @@ use {std::sync::Arc, std::sync::Mutex};
 
 // Buffer size is the number of samples per channel per callback
 const BUFFER_SIZE: cpal::FrameCount = 512;
-const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
+const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 8;
 const SAMPLE_RATE: i32 = 48000;
 
 // Originally both the emulator and host platform output samples at the same rate,
 // as time passes one begins to shift away from the other, so we need to resample the emulator output
 const ORIG_RATIO: f64 = 1.0;
-const MAX_RESAMPLE_RATIO_RELATIVE: f64 = 2.0;
+const MAX_RESAMPLE_RATIO_RELATIVE: f64 = 10.0;
 
 type ProcessSample = f32;
 
@@ -183,6 +183,7 @@ pub struct Stream {
     ring_buffer: AudioCallbackImpl,
     volume: Arc<Mutex<f32>>,
     volume_before_mute: Option<f32>,
+    sample_rate: i32,
 }
 
 impl Stream {
@@ -211,6 +212,7 @@ impl Stream {
             ring_buffer: AudioCallbackImpl::new(ring_buffer),
             volume,
             volume_before_mute: None,
+            sample_rate: SAMPLE_RATE,
         };
 
         res.pause()?;
@@ -264,9 +266,13 @@ impl Stream {
         self.volume_before_mute.is_some()
     }
 
+    pub fn set_sample_rate(&mut self, sample_rate: i32) {
+        self.sample_rate = sample_rate;
+    }
+
     #[must_use]
-    pub const fn sample_rate() -> i32 {
-        SAMPLE_RATE
+    pub const fn sample_rate(&self) -> i32 {
+        self.sample_rate
     }
 }
 

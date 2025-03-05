@@ -201,7 +201,7 @@ impl eframe::App for App {
                     menu_button_ui.horizontal(|horizontal_ui| {
                         let paused = self.thread.is_paused();
                         if horizontal_ui
-                            .button(if paused { "\u{25b6}" } else { "\u{23f8}" })
+                            .selectable_label(paused, if paused { "\u{25b6}" } else { "\u{23f8}" })
                             .on_hover_text("Pause the game")
                             .clicked()
                         {
@@ -214,21 +214,35 @@ impl eframe::App for App {
                             }
                         }
 
-                        horizontal_ui
-                            .button("x2")
-                            .on_hover_text("Speed up the game")
-                            .clicked();
+                        let multiplier = self.thread.multiplier();
+
+                        if horizontal_ui
+                            .selectable_label(multiplier == 1, "x1")
+                            .clicked()
+                        {
+                            self.thread.set_multiplier(1);
+                        }
+
+                        if horizontal_ui
+                            .selectable_label(multiplier == 2, "x2")
+                            .clicked()
+                        {
+                            self.thread.set_multiplier(2);
+                        }
+
+                        if horizontal_ui
+                            .selectable_label(multiplier == 4, "x4")
+                            .clicked()
+                        {
+                            self.thread.set_multiplier(4);
+                        }
                     });
 
                     menu_button_ui.horizontal(|horizontal_ui| {
-                        let mute_button = egui::Button::new(if self.thread.is_muted() {
-                            "\u{1f507}"
-                        } else {
-                            "\u{1f50a}"
-                        });
+                        let muted = self.thread.is_muted();
 
                         if horizontal_ui
-                            .add(mute_button)
+                            .selectable_label(muted, if muted { "\u{1f507}" } else { "\u{1f50a}" })
                             .on_hover_text("Mute the emulator")
                             .clicked()
                         {

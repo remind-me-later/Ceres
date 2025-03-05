@@ -195,6 +195,10 @@ impl<C: AudioCallback> Gb<C> {
     pub fn save_data<W: io::Write + io::Seek>(&self, writer: &mut W) -> Result<(), io::Error> {
         bess::save_state(self, writer)
     }
+
+    pub fn set_sample_rate(&mut self, sample_rate: i32) {
+        self.apu.set_sample_rate(sample_rate);
+    }
 }
 
 #[derive(Clone, Copy, Debug)]

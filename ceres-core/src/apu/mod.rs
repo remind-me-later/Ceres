@@ -113,6 +113,10 @@ impl<C: AudioCallback> Apu<C> {
         }
     }
 
+    pub fn set_sample_rate(&mut self, sample_rate: i32) {
+        self.ext_sample_period = Self::sample_period_from_rate(sample_rate);
+    }
+
     const fn sample_period_from_rate(sample_rate: i32) -> i32 {
         TC_SEC / sample_rate
     }

@@ -2,7 +2,10 @@ use crate::audio;
 use ceres_core::{Cart, GbBuilder};
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
-use std::{fs::File, sync::Mutex, time::Duration};
+use std::{
+    fs::File,
+    sync::{Mutex, atomic::AtomicU32},
+};
 use thread_priority::ThreadBuilderExt;
 
 use {ceres_core::Gb, std::path::Path, std::sync::Arc};
@@ -19,6 +22,7 @@ pub struct GbThread {
     pause_thread: Arc<AtomicBool>,
     audio_stream: audio::Stream,
     thread_handle: Option<std::thread::JoinHandle<()>>,
+    multiplier: Arc<AtomicU32>,
 }
 
 impl GbThread {
@@ -33,9 +37,10 @@ impl GbThread {
             gb: &Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
             exiting: &Arc<AtomicBool>,
             pause_thread: &Arc<AtomicBool>,
+            multiplier: &Arc<AtomicU32>,
             ctx: &P,
         ) {
-            const DURATION: Duration = ceres_core::FRAME_DURATION;
+            let mut duration = ceres_core::FRAME_DURATION;
 
             let mut last_loop = std::time::Instant::now();
 
@@ -46,12 +51,13 @@ impl GbThread {
                         ctx.paint(gb.pixel_data_rgba());
                     }
                     ctx.request_repaint();
+                    duration = ceres_core::FRAME_DURATION / multiplier.load(Relaxed);
                 }
 
                 let elapsed = last_loop.elapsed();
 
-                if elapsed < DURATION {
-                    spin_sleep::sleep(DURATION - elapsed);
+                if elapsed < duration {
+                    spin_sleep::sleep(duration - elapsed);
                 }
 
                 last_loop = std::time::Instant::now();
@@ -61,22 +67,25 @@ impl GbThread {
         let audio_stream = audio::Stream::new(audio_state).map_err(Error::Audio)?;
         let ring_buffer = audio_stream.get_ring_buffer();
 
-        let gb = Self::create_new_gb(ring_buffer, model, rom_path, sav_path)?;
+        let gb = Self::create_new_gb(&audio_stream, ring_buffer, model, rom_path, sav_path)?;
         let gb = Arc::new(Mutex::new(gb));
 
         let pause_thread = Arc::new(AtomicBool::new(false));
 
         let exiting = Arc::new(AtomicBool::new(false));
 
+        let multiplier = Arc::new(AtomicU32::new(1));
+
         let thread_builder = std::thread::Builder::new().name("gb_loop".to_owned());
         let thread_handle = {
             let gb = Arc::clone(&gb);
             let exit = Arc::clone(&exiting);
             let pause_thread = Arc::clone(&pause_thread);
+            let multiplier = Arc::clone(&multiplier);
 
             // std::thread::spawn(move || gb_loop(gb, exit, pause_thread))
             thread_builder.spawn_with_priority(thread_priority::ThreadPriority::Max, move |_| {
-                gb_loop(&gb, &exit, &pause_thread, &ctx);
+                gb_loop(&gb, &exit, &pause_thread, &multiplier, &ctx);
             })?
         };
 
@@ -87,13 +96,31 @@ impl GbThread {
             thread_handle: Some(thread_handle),
             audio_stream,
             model,
+            multiplier,
         })
+    }
+
+    pub fn set_multiplier(&mut self, multiplier: u32) {
+        self.multiplier.store(multiplier, Relaxed);
+        #[expect(clippy::cast_possible_wrap)]
+        self.set_sample_rate(self.audio_stream.sample_rate() / multiplier as i32);
+    }
+
+    #[must_use]
+    pub fn multiplier(&self) -> u32 {
+        self.multiplier.load(Relaxed)
     }
 
     pub fn change_rom(&mut self, sav_path: Option<&Path>, rom_path: &Path) -> Result<(), Error> {
         let ring_buffer = self.audio_stream.get_ring_buffer();
 
-        let gb_new = Self::create_new_gb(ring_buffer, self.model, Some(rom_path), sav_path)?;
+        let gb_new = Self::create_new_gb(
+            &self.audio_stream,
+            ring_buffer,
+            self.model,
+            Some(rom_path),
+            sav_path,
+        )?;
 
         if let Ok(mut gb) = self.gb.lock() {
             *gb = gb_new;
@@ -103,6 +130,7 @@ impl GbThread {
     }
 
     fn create_new_gb(
+        audio_stream: &audio::Stream,
         ring_buffer: audio::AudioCallbackImpl,
         model: ceres_core::Model,
         rom_path: Option<&Path>,
@@ -119,7 +147,7 @@ impl GbThread {
 
             let has_save = cart.has_battery();
 
-            let gb_builder = GbBuilder::new(model, audio::Stream::sample_rate(), cart, ring_buffer);
+            let gb_builder = GbBuilder::new(model, audio_stream.sample_rate(), cart, ring_buffer);
 
             if !has_save {
                 return Ok(gb_builder.build());
@@ -139,11 +167,17 @@ impl GbThread {
         } else {
             Ok(GbBuilder::new(
                 model,
-                audio::Stream::sample_rate(),
+                audio_stream.sample_rate(),
                 Cart::default(),
                 ring_buffer,
             )
             .build())
+        }
+    }
+
+    fn set_sample_rate(&self, sample_rate: i32) {
+        if let Ok(mut gb) = self.gb.lock() {
+            gb.set_sample_rate(sample_rate);
         }
     }
 
