@@ -36,7 +36,7 @@ impl Buffers {
                 BUFFER_SIZE as usize,
                 2,
             )
-            .map_err(|_err| Error::CouldntBuildStream)?,
+            .map_err(|_err| Error::BuildStream)?,
             output_buf: [[Default::default(); BUFFER_SIZE as usize]; 2],
             input_buf: [[Default::default(); BUFFER_SIZE as usize * 2]; 2],
             volume,
@@ -149,9 +149,7 @@ pub struct AudioState {
 impl AudioState {
     pub fn new() -> Result<Self, Error> {
         let host = cpal::default_host();
-        let device = host
-            .default_output_device()
-            .ok_or(Error::CouldntGetOutputDevice)?;
+        let device = host.default_output_device().ok_or(Error::GetOutputDevice)?;
 
         let config = cpal::StreamConfig {
             channels: 2,
@@ -179,7 +177,7 @@ impl AudioState {
 
 // Stream is not Send, so we can't use it directly in the renderer struct
 pub struct Stream {
-    stream: cpal::Stream,
+    strm: cpal::Stream,
     ring_buffer: AudioCallbackImpl,
     volume: Arc<Mutex<f32>>,
     volume_before_mute: Option<f32>,
@@ -205,10 +203,10 @@ impl Stream {
         let stream = state
             .device()
             .build_output_stream(state.config(), data_callback, error_callback, None)
-            .map_err(|_err| Error::CouldntBuildStream)?;
+            .map_err(|_err| Error::BuildStream)?;
 
-        let mut res = Self {
-            stream,
+        let res = Self {
+            strm: stream,
             ring_buffer: AudioCallbackImpl::new(ring_buffer),
             volume,
             volume_before_mute: None,
@@ -225,14 +223,12 @@ impl Stream {
         self.ring_buffer.clone()
     }
 
-    pub fn pause(&mut self) -> Result<(), Error> {
-        self.stream
-            .pause()
-            .map_err(|_err| Error::CouldntPauseStream)
+    pub fn pause(&self) -> Result<(), Error> {
+        self.strm.pause().map_err(|_err| Error::PauseStream)
     }
 
-    pub fn resume(&mut self) -> Result<(), Error> {
-        self.stream.play().map_err(|_err| Error::CouldntPlayStream)
+    pub fn resume(&self) -> Result<(), Error> {
+        self.strm.play().map_err(|_err| Error::PlayStream)
     }
 
     #[must_use]
@@ -240,7 +236,7 @@ impl Stream {
         self.volume.lock().map_or(0.0, |vol| *vol)
     }
 
-    pub fn set_volume(&mut self, volume: f32) {
+    pub fn set_volume(&self, volume: f32) {
         if let Ok(mut vol) = self.volume.lock() {
             *vol = volume;
         }
@@ -266,9 +262,9 @@ impl Stream {
         self.volume_before_mute.is_some()
     }
 
-    pub fn set_sample_rate(&mut self, sample_rate: i32) {
-        self.sample_rate = sample_rate;
-    }
+    // pub fn set_sample_rate(&mut self, sample_rate: i32) {
+    //     self.sample_rate = sample_rate;
+    // }
 
     #[must_use]
     pub const fn sample_rate(&self) -> i32 {
@@ -278,19 +274,19 @@ impl Stream {
 
 #[derive(Debug)]
 pub enum Error {
-    CouldntGetOutputDevice,
-    CouldntBuildStream,
-    CouldntPauseStream,
-    CouldntPlayStream,
+    GetOutputDevice,
+    BuildStream,
+    PauseStream,
+    PlayStream,
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::CouldntGetOutputDevice => write!(f, "couldn't get output device"),
-            Self::CouldntBuildStream => write!(f, "couldn't build stream"),
-            Self::CouldntPauseStream => write!(f, "couldn't pause stream"),
-            Self::CouldntPlayStream => write!(f, "couldn't play stream"),
+            Self::GetOutputDevice => write!(f, "couldn't get output device"),
+            Self::BuildStream => write!(f, "couldn't build stream"),
+            Self::PauseStream => write!(f, "couldn't pause stream"),
+            Self::PlayStream => write!(f, "couldn't play stream"),
         }
     }
 }

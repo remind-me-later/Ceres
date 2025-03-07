@@ -113,7 +113,6 @@ impl ceres_std::PainterCallback for PainterCallbackImpl {
 pub struct App {
     project_dirs: directories::ProjectDirs,
     thread: GbThread,
-    _audio: ceres_std::AudioState,
     screen: screen::GBScreen<{ ceres_std::PX_WIDTH as u32 }, { ceres_std::PX_HEIGHT as u32 }>,
     _rom_path: Option<PathBuf>,
     sav_path: Option<PathBuf>,
@@ -130,7 +129,6 @@ impl App {
         // Apply our minimal black and white theme
         setup_theme(&cc.egui_ctx);
 
-        let audio = ceres_std::AudioState::new()?;
         let sav_path = if let Some(rom_path) = rom_path {
             let file_stem = rom_path.file_stem().context("couldn't get file stem")?;
 
@@ -152,7 +150,6 @@ impl App {
             model,
             sav_path.as_deref(),
             rom_path,
-            &audio,
             PainterCallbackImpl::new(&cc.egui_ctx, Arc::clone(&pixel_data_rgba)),
         )?;
 
@@ -163,7 +160,6 @@ impl App {
         Ok(Self {
             project_dirs,
             thread: gb_ctx,
-            _audio: audio,
             screen,
             _rom_path: rom_path.map(std::path::Path::to_path_buf),
             sav_path,

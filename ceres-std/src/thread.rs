@@ -20,6 +20,7 @@ pub struct GbThread {
     model: ceres_core::Model,
     exiting: Arc<AtomicBool>,
     pause_thread: Arc<AtomicBool>,
+    _audio_state: audio::AudioState,
     audio_stream: audio::Stream,
     thread_handle: Option<std::thread::JoinHandle<()>>,
     multiplier: Arc<AtomicU32>,
@@ -30,7 +31,6 @@ impl GbThread {
         model: ceres_core::Model,
         sav_path: Option<&Path>,
         rom_path: Option<&Path>,
-        audio_state: &audio::AudioState,
         ctx: P,
     ) -> Result<Self, Error> {
         fn gb_loop<P: PainterCallback>(
@@ -64,7 +64,9 @@ impl GbThread {
             }
         }
 
-        let audio_stream = audio::Stream::new(audio_state).map_err(Error::Audio)?;
+        let audio_state = audio::AudioState::new().map_err(Error::Audio)?;
+
+        let audio_stream = audio::Stream::new(&audio_state).map_err(Error::Audio)?;
         let ring_buffer = audio_stream.get_ring_buffer();
 
         let gb = Self::create_new_gb(&audio_stream, ring_buffer, model, rom_path, sav_path)?;
@@ -94,6 +96,7 @@ impl GbThread {
             exiting,
             pause_thread,
             thread_handle: Some(thread_handle),
+            _audio_state: audio_state,
             audio_stream,
             model,
             multiplier,
