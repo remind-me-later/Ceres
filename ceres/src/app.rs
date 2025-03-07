@@ -16,7 +16,7 @@ fn setup_theme(ctx: &egui::Context) {
     let fg0 = egui::Color32::from_rgb(251, 241, 199); // Main text
     let fg1 = egui::Color32::from_rgb(235, 219, 178); // Secondary text
     // let red = egui::Color32::from_rgb(204, 36, 29); // Red accent
-    let green = egui::Color32::from_rgb(152, 151, 26); // Green accent
+    // let green = egui::Color32::from_rgb(152, 151, 26); // Green accent
     let yellow = egui::Color32::from_rgb(215, 153, 33); // Yellow accent
     // let orange = egui::Color32::from_rgb(214, 93, 14); // Orange accent
     let blue = egui::Color32::from_rgb(69, 133, 136); // Blue accent
@@ -44,15 +44,15 @@ fn setup_theme(ctx: &egui::Context) {
 
     style.visuals.widgets.active.bg_fill = bg2;
     style.visuals.widgets.active.bg_stroke = egui::Stroke::NONE;
-    style.visuals.widgets.active.weak_bg_fill = green;
+    style.visuals.widgets.active.weak_bg_fill = bg2;
     style.visuals.widgets.active.fg_stroke = egui::Stroke::new(2.0, yellow);
 
     style.visuals.widgets.open.bg_fill = bg1;
     style.visuals.widgets.open.bg_stroke = egui::Stroke::NONE;
-    style.visuals.widgets.open.weak_bg_fill = green;
+    style.visuals.widgets.open.weak_bg_fill = bg1;
     style.visuals.widgets.open.fg_stroke = egui::Stroke::new(1.0, fg0);
 
-    let corner_radius = CornerRadius::ZERO;
+    let corner_radius = CornerRadius::same(2);
     style.visuals.window_corner_radius = corner_radius;
     style.visuals.menu_corner_radius = corner_radius;
     style.visuals.widgets.noninteractive.corner_radius = corner_radius;
@@ -61,7 +61,12 @@ fn setup_theme(ctx: &egui::Context) {
     style.visuals.widgets.active.corner_radius = corner_radius;
     style.visuals.widgets.open.corner_radius = corner_radius;
 
-    let shadow = egui::epaint::Shadow::NONE;
+    let shadow = egui::epaint::Shadow {
+        offset: [1, 1],
+        blur: 5,
+        spread: 0,
+        color: bg0,
+    };
     style.visuals.popup_shadow = shadow;
     style.visuals.window_shadow = shadow;
     style.visuals.handle_shape = HandleShape::Rect { aspect_ratio: 0.5 };
@@ -69,7 +74,7 @@ fn setup_theme(ctx: &egui::Context) {
         width: 1.0,
         color: fg1,
     };
-    style.visuals.selection.bg_fill = green;
+    style.visuals.selection.bg_fill = bg2;
     style.visuals.selection.stroke = egui::Stroke::new(1.0, yellow);
 
     style.visuals.hyperlink_color = blue;
