@@ -1,5 +1,6 @@
+use crate::{ScalingOption, ShaderOption};
+
 use super::texture::Texture;
-use crate::Scaling;
 use wgpu::util::DeviceExt;
 
 pub(super) struct PipelineWrapper<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
@@ -20,7 +21,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
     pub(super) fn new(
         device: &wgpu::Device,
         config: &wgpu::SurfaceConfiguration,
-        scaling: Scaling,
+        shader_option: ShaderOption,
     ) -> Self {
         let texture = Texture::new(device, PX_WIDTH, PX_HEIGHT, None);
 
@@ -43,6 +44,16 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
                         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
                         count: None,
                     },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        },
+                        count: None,
+                    },
                 ],
                 label: None,
             });
@@ -59,6 +70,10 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(texture.view()),
                 },
             ],
             label: None,
@@ -99,7 +114,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
 
         let scale_uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
-            contents: bytemuck::cast_slice(&[scaling as u32]),
+            contents: bytemuck::cast_slice(&[shader_option as u32]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
@@ -171,24 +186,37 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
         self.texture.update(queue, rgba);
     }
 
-    pub(super) fn scale(&mut self, queue: &wgpu::Queue, scaling: Scaling) {
+    pub(super) fn shader_option(&mut self, queue: &wgpu::Queue, shader_option: ShaderOption) {
         queue.write_buffer(
             &self.scale_uniform,
             0,
-            bytemuck::cast_slice(&[scaling as u32]),
+            bytemuck::cast_slice(&[shader_option as u32]),
         );
     }
 
-    pub(super) fn resize(&mut self, queue: &wgpu::Queue, new_size: winit::dpi::PhysicalSize<u32>) {
+    pub(super) fn resize(
+        &mut self,
+        scaling_option: ScalingOption,
+        queue: &wgpu::Queue,
+        new_size: winit::dpi::PhysicalSize<u32>,
+    ) {
         let width = new_size.width;
         let height = new_size.height;
 
-        let (x, y) = {
+        let (x, y) = if matches!(scaling_option, ScalingOption::PixelPerfect) {
             let mul = (width / PX_WIDTH).min(height / PX_HEIGHT);
             #[allow(clippy::cast_precision_loss)]
             let x = (PX_WIDTH * mul) as f32 / width as f32;
             #[allow(clippy::cast_precision_loss)]
             let y = (PX_HEIGHT * mul) as f32 / height as f32;
+            (x, y)
+        } else {
+            #[allow(clippy::cast_precision_loss)]
+            let mul = (width as f32 / PX_WIDTH as f32).min(height as f32 / PX_HEIGHT as f32);
+            #[allow(clippy::cast_precision_loss)]
+            let x = (PX_WIDTH as f32 * mul) / width as f32;
+            #[allow(clippy::cast_precision_loss)]
+            let y = (PX_HEIGHT as f32 * mul) / height as f32;
             (x, y)
         };
 

@@ -1,9 +1,10 @@
 mod gb_screen;
 mod texture;
 
-use crate::Scaling;
 use gb_screen::PipelineWrapper;
 use std::sync::Arc;
+
+use crate::{ScalingOption, ShaderOption};
 
 pub struct State<'a, const PX_WIDTH: u32, const PX_HEIGHT: u32> {
     surface: wgpu::Surface<'a>,
@@ -11,8 +12,9 @@ pub struct State<'a, const PX_WIDTH: u32, const PX_HEIGHT: u32> {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
+    scaling_option: ScalingOption,
     new_size: Option<winit::dpi::PhysicalSize<u32>>,
-    new_scaling: Option<Scaling>,
+    new_shader_option: Option<ShaderOption>,
 
     gb_screen: PipelineWrapper<PX_WIDTH, PX_HEIGHT>,
 
@@ -23,7 +25,11 @@ pub struct State<'a, const PX_WIDTH: u32, const PX_HEIGHT: u32> {
 }
 
 impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
-    pub async fn new(window: winit::window::Window, scaling: Scaling) -> anyhow::Result<Self> {
+    pub async fn new(
+        window: winit::window::Window,
+        shader_option: ShaderOption,
+        scaling_option: ScalingOption,
+    ) -> anyhow::Result<Self> {
         use anyhow::Context;
 
         let size = window.inner_size();
@@ -72,7 +78,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
 
         surface.configure(&device, &config);
 
-        let gb_screen_renderer = PipelineWrapper::new(&device, &config, scaling);
+        let gb_screen_renderer = PipelineWrapper::new(&device, &config, shader_option);
 
         Ok(Self {
             surface,
@@ -83,16 +89,13 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
             size,
             gb_screen: gb_screen_renderer,
             new_size: None,
-            new_scaling: None,
+            new_shader_option: None,
+            scaling_option,
         })
     }
 
     pub const fn window(&self) -> &Arc<winit::window::Window> {
         &self.window
-    }
-
-    pub fn choose_scale_mode(&mut self, scaling: Scaling) {
-        self.new_scaling = Some(scaling);
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
@@ -108,12 +111,13 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        if let Some(scaling) = self.new_scaling.take() {
-            self.gb_screen.scale(&self.queue, scaling);
+        if let Some(scaling) = self.new_shader_option.take() {
+            self.gb_screen.shader_option(&self.queue, scaling);
         }
 
         if let Some(new_size) = self.new_size.take() {
-            self.gb_screen.resize(&self.queue, new_size);
+            self.gb_screen
+                .resize(self.scaling_option, &self.queue, new_size);
             self.size = new_size;
             self.config.width = new_size.width;
             self.config.height = new_size.height;

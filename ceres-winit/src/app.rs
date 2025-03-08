@@ -1,9 +1,10 @@
 use crate::{
     video::{self, State},
-    Scaling, CERES_STYLIZED, PX_HEIGHT, PX_WIDTH, SCREEN_MUL,
+    ScalingOption, ShaderOption, CERES_STYLIZED,
 };
 use anyhow::Context;
 use ceres_std::GbThread;
+use ceres_std::{PX_HEIGHT, PX_WIDTH};
 use std::{
     sync::{Arc, Mutex},
     time::Instant,
@@ -41,13 +42,14 @@ impl ceres_std::PainterCallback for PainterCallbackImpl {
 }
 
 struct Windows<'a> {
-    main: video::State<'a, { PX_WIDTH }, { PX_HEIGHT }>,
+    main: video::State<'a, { PX_WIDTH as u32 }, { PX_HEIGHT as u32 }>,
 }
 
 pub struct App<'a> {
     // Config parameters
     project_dirs: directories::ProjectDirs,
-    scaling: Scaling,
+    shader_option: ShaderOption,
+    scaling_option: ScalingOption,
     sav_path: Option<std::path::PathBuf>,
     pixel_data_rgba: Arc<Mutex<Box<[u8]>>>,
 
@@ -63,7 +65,8 @@ impl App<'_> {
         project_dirs: directories::ProjectDirs,
         model: ceres_std::Model,
         rom_path: Option<&Path>,
-        scaling: Scaling,
+        shader_option: ShaderOption,
+        scaling_option: ScalingOption,
     ) -> anyhow::Result<Self> {
         let sav_path = if let Some(rom_path) = rom_path {
             let file_stem = rom_path.file_stem().context("couldn't get file stem")?;
@@ -94,10 +97,11 @@ impl App<'_> {
         Ok(Self {
             project_dirs,
             thread,
-            scaling,
+            shader_option,
             windows: None,
             sav_path,
             pixel_data_rgba,
+            scaling_option,
         })
     }
 
@@ -119,10 +123,6 @@ impl App<'_> {
                             .window()
                             .set_fullscreen(Some(Fullscreen::Borderless(None))),
                     },
-                    Key::Character("z") => {
-                        self.scaling = self.scaling.next();
-                        windows.main.choose_scale_mode(self.scaling);
-                    }
                     // TODO: keys
                     _ => (),
                 }
@@ -147,8 +147,8 @@ impl winit::application::ApplicationHandler for App<'_> {
         let main_window_attributes = winit::window::Window::default_attributes()
             .with_title(CERES_STYLIZED)
             .with_inner_size(PhysicalSize {
-                width: PX_WIDTH * SCREEN_MUL,
-                height: PX_HEIGHT * SCREEN_MUL,
+                width: PX_WIDTH,
+                height: PX_HEIGHT,
             })
             .with_min_inner_size(PhysicalSize {
                 width: ceres_std::PX_WIDTH,
@@ -160,8 +160,12 @@ impl winit::application::ApplicationHandler for App<'_> {
         let main_window = event_loop
             .create_window(main_window_attributes)
             .expect("Could not create window");
-        let main_window_state = pollster::block_on(State::new(main_window, self.scaling))
-            .expect("Could not create renderer");
+        let main_window_state = pollster::block_on(State::new(
+            main_window,
+            self.shader_option,
+            self.scaling_option,
+        ))
+        .expect("Could not create renderer");
 
         self.windows.replace(Windows {
             main: main_window_state,

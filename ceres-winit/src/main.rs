@@ -6,10 +6,6 @@ use clap::Parser;
 use std::path::PathBuf;
 use winit::event_loop::EventLoop;
 
-const SCREEN_MUL: u32 = 2;
-const PX_WIDTH: u32 = ceres_std::PX_WIDTH as u32;
-const PX_HEIGHT: u32 = ceres_std::PX_HEIGHT as u32;
-
 const QUALIFIER: &str = "com";
 const ORGANIZATION: &str = "remind-me-later";
 const CERES_BIN: &str = "ceres";
@@ -25,13 +21,17 @@ const AFTER_HELP: &str = "GB bindings:
     | Start   | M         |
     | Select  | N         |
 
-Other bindings:
+Other binsings:
 
     | System       | Emulator |
     | ------------ | -------- |
     | Fullscreen   | F        |
     | Scale filter | Z        |
 ";
+
+trait AppOption: Default + Clone + Copy + clap::ValueEnum {
+    fn str(self) -> &'static str;
+}
 
 #[derive(Default, Clone, Copy, clap::ValueEnum)]
 enum Model {
@@ -41,31 +41,60 @@ enum Model {
     Cgb,
 }
 
-impl From<Model> for ceres_std::Model {
-    fn from(model: Model) -> ceres_std::Model {
-        match model {
-            Model::Dmg => ceres_std::Model::Dmg,
-            Model::Mgb => ceres_std::Model::Mgb,
-            Model::Cgb => ceres_std::Model::Cgb,
+impl AppOption for Model {
+    fn str(self) -> &'static str {
+        match self {
+            Self::Dmg => "dmg",
+            Self::Mgb => "mgb",
+            Self::Cgb => "cgb",
         }
     }
 }
 
-#[derive(Default, Clone, Copy, clap::ValueEnum)]
-pub enum Scaling {
+impl From<Model> for ceres_std::Model {
+    fn from(model: Model) -> Self {
+        match model {
+            Model::Dmg => Self::Dmg,
+            Model::Mgb => Self::Mgb,
+            Model::Cgb => Self::Cgb,
+        }
+    }
+}
+
+#[derive(Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum ShaderOption {
     #[default]
     Nearest = 0,
     Scale2x = 1,
     Scale3x = 2,
+    Lcd = 3,
+    Crt = 4,
 }
 
-impl Scaling {
-    #[must_use]
-    pub fn next(self) -> Self {
+impl AppOption for ShaderOption {
+    fn str(self) -> &'static str {
         match self {
-            Scaling::Nearest => Scaling::Scale2x,
-            Scaling::Scale2x => Scaling::Scale3x,
-            Scaling::Scale3x => Scaling::Nearest,
+            Self::Nearest => "nearest",
+            Self::Scale2x => "scale2x",
+            Self::Scale3x => "scale3x",
+            Self::Lcd => "lcd",
+            Self::Crt => "crt",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
+pub enum ScalingOption {
+    PixelPerfect,
+    #[default]
+    FitWindow,
+}
+
+impl AppOption for ScalingOption {
+    fn str(self) -> &'static str {
+        match self {
+            Self::PixelPerfect => "pixel-perfect",
+            Self::FitWindow => "fit-window",
         }
     }
 }
@@ -85,22 +114,30 @@ struct Cli {
         short,
         long,
         help = "Game Boy model to emulate",
-        default_value = "cgb",
+        default_value = Model::default().str(),
         value_enum,
         required = false
     )]
     model: Model,
     #[arg(
-        short,
+        short = 'x',
         long,
-        help = "Scaling algorithm used",
-        default_value = "nearest",
+        help = "Shader used",
+        default_value = ShaderOption::default().str(),
         value_enum,
         required = false
     )]
-    scaling: Scaling,
+    shader_option: ShaderOption,
+    #[arg(
+        short = 's',
+        long,
+        help = "Pixel mode",
+        default_value = ScalingOption::default().str(),
+        value_enum,
+        required = false
+    )]
+    scaling_option: ScalingOption,
 }
-
 fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
 
@@ -115,7 +152,8 @@ fn main() -> anyhow::Result<()> {
         project_dirs,
         args.model.into(),
         args.file.as_deref(),
-        args.scaling,
+        args.shader_option,
+        args.scaling_option,
     )?;
 
     main_event_loop.run_app(&mut main_window)?;
