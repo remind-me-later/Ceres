@@ -146,7 +146,7 @@ impl App {
             vec![0; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice(),
         ));
 
-        let mut gb_ctx = GbThread::new(
+        let mut thread = GbThread::new(
             model,
             sav_path.as_deref(),
             rom_path,
@@ -155,11 +155,11 @@ impl App {
 
         let screen = screen::GBScreen::new(cc, pixel_data_rgba, shader_option);
 
-        gb_ctx.resume()?;
+        thread.resume()?;
 
         Ok(Self {
             project_dirs,
-            thread: gb_ctx,
+            thread,
             screen,
             _rom_path: rom_path.map(std::path::Path::to_path_buf),
             sav_path,

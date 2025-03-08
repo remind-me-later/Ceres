@@ -1,22 +1,43 @@
-[workspace]
-members = ["ceres-core", "ceres", "ceres-std", "ceres-winit"]
-default-members = ["ceres", "ceres-winit"]
-resolver = "2"
-
-[workspace.package]
-edition = "2024"
+[package]
+name = "ceres-winit"
 version = "0.1.0"
+edition = "2021"
 license = "MIT"
-repository = "https://github.com/remind-me-later/Ceres"
 
-[workspace.lints.rust]
-unsafe_code = "forbid"
+[dependencies.clap]
+version = "*"
+default-features = false
+features = ["std", "derive", "help"]
 
-[workspace.lints.clippy]
+[dependencies.anyhow]
+version = "*"
+
+[dependencies.directories]
+version = "*"
+
+[dependencies.ceres-std]
+path = "../ceres-std"
+
+[dependencies.winit]
+version = "*"
+default-features = false
+features = ["rwh_06", "wayland", "wayland-csd-adwaita"]
+
+[dependencies.wgpu]
+version = "*"
+default-features = false
+features = ["dx12", "metal", "wgsl"]
+
+[dependencies.pollster]
+version = "*"
+default-features = false
+
+[dependencies.bytemuck]
+version = "*"
+default-features = false
+
+[lints.clippy]
 pedantic = "warn"
-nursery = "warn"
-# std_instead_of_alloc = "warn"
-alloc_instead_of_core = "warn"
 as_underscore = "warn"
 assertions_on_result_states = "warn"
 clone_on_ref_ptr = "warn"
@@ -43,7 +64,6 @@ mem_forget = "warn"
 mixed_read_write_in_expression = "warn"
 modulo_arithmetic = "warn"
 mutex_atomic = "warn"
-mutex_integer = "warn"
 non_ascii_literal = "warn"
 panic = "warn"
 partial_pub_fields = "warn"
@@ -66,30 +86,10 @@ unseparated_literal_suffix = "warn"
 use_debug = "warn"
 verbose_file_reads = "warn"
 unwrap_used = "warn"
-large_stack_frames = "warn"
-large_stack_arrays = "warn"
-cognitive_complexity = "warn"
 
-missing_errors_doc = { level = "allow", priority = 1 }
-missing_panics_doc = { level = "allow", priority = 1 }
-missing_safety_doc = { level = "allow", priority = 1 }
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+missing_safety_doc = "allow"
 similar_names = { level = "allow", priority = 1 }
-struct_excessive_bools = { level = "allow", priority = 1 }
-verbose_bit_mask = { level = "allow", priority = 1 }
-
-[profile.dev]
-opt-level = 1
-incremental = true
-rpath = false
-
-[profile.release]
-opt-level = "s"
-strip = "symbols"
-lto = "fat"
-debug = "none"
-panic = "abort"
-debug-assertions = false
-overflow-checks = false
-incremental = false
-rpath = false
-codegen-units = 1
+struct_excessive_bools = "allow"
+verbose_bit_mask = "allow"

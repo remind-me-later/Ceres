@@ -1,20 +1,6 @@
 // #![no_std]
 // TODO: Use borrowedBuf or something similar to avoid heap allocation (currently nightly only)
 
-use core::time::Duration;
-use interrupts::Interrupts;
-use joypad::Joypad;
-use memory::{Key1, Svbk};
-use serial::Serial;
-use std::io;
-use {apu::Apu, memory::HdmaState, ppu::Ppu, timing::TIMAState};
-pub use {
-    apu::{AudioCallback, Sample},
-    cart::{Cart, Error},
-    joypad::Button,
-    ppu::{PX_HEIGHT, PX_WIDTH, VRAM_PX_HEIGHT, VRAM_PX_WIDTH},
-};
-
 extern crate alloc;
 
 mod apu;
@@ -28,6 +14,21 @@ mod ppu;
 mod serial;
 mod timing;
 
+use core::time::Duration;
+use interrupts::Interrupts;
+use joypad::Joypad;
+use memory::{Key1, Svbk};
+use serial::Serial;
+use std::io;
+use {apu::Apu, memory::HdmaState, ppu::Ppu, timing::TIMAState};
+
+pub use {
+    apu::{AudioCallback, Sample},
+    cart::{Cart, Error},
+    joypad::Button,
+    ppu::{PX_HEIGHT, PX_WIDTH, VRAM_PX_HEIGHT, VRAM_PX_WIDTH},
+};
+
 pub const FRAME_DURATION: Duration = Duration::new(0, 16_742_706);
 pub const TC_PER_FRAME: i32 = 70224; // t-cycles per frame
 
@@ -36,11 +37,6 @@ pub const TC_SEC: i32 = 0x40_0000; // 2^22
 pub const HRAM_SIZE: u8 = 0x7F;
 pub const WRAM_SIZE_GB: u16 = 0x2000;
 pub const WRAM_SIZE_CGB: u16 = WRAM_SIZE_GB * 4;
-
-// Boot ROMs
-const DMG_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/dmg.bin");
-const MGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/mgb.bin");
-const CGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/cgb.bin");
 
 #[expect(clippy::struct_excessive_bools)]
 #[derive(Debug)]
@@ -103,6 +99,11 @@ pub struct Gb<C: AudioCallback> {
 impl<C: AudioCallback> Gb<C> {
     #[must_use]
     fn new(model: Model, sample_rate: i32, cart: Cart, audio_callback: C) -> Self {
+        // Boot ROMs
+        const DMG_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/dmg.bin");
+        const MGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/mgb.bin");
+        const CGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/cgb.bin");
+
         let cgb_mode = match model {
             Model::Dmg | Model::Mgb => CgbMode::Dmg,
             Model::Cgb => CgbMode::Cgb,
