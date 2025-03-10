@@ -163,7 +163,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
                 });
 
             let shader =
-                device.create_shader_module(wgpu::include_wgsl!("../shader/gb_screen.wgsl"));
+                device.create_shader_module(wgpu::include_wgsl!("../../shader/gb_screen.wgsl"));
 
             let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 cache: None,
