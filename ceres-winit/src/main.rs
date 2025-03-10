@@ -1,6 +1,9 @@
 mod app;
 mod video;
 
+#[cfg(target_os = "macos")]
+mod macos;
+
 use app::App;
 use clap::Parser;
 use std::path::PathBuf;
@@ -99,6 +102,13 @@ impl AppOption for ScalingOption {
     }
 }
 
+#[derive(Clone)]
+pub enum CeresEvent {
+    ChangeShader(ShaderOption),
+    ChangeScaling(ScalingOption),
+    OpenRomFile(PathBuf),
+}
+
 #[derive(clap::Parser)]
 #[command(name = CERES_BIN, about = ABOUT, after_help = AFTER_HELP)]
 struct Cli {
@@ -141,7 +151,20 @@ struct Cli {
 fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
 
-    let main_event_loop = EventLoop::new()?;
+    let main_event_loop = if cfg!(target_os = "macos") {
+        use winit::platform::macos::EventLoopBuilderExtMacOS;
+        EventLoop::<CeresEvent>::with_user_event()
+            .with_default_menu(false)
+            .build()?
+    } else {
+        EventLoop::<CeresEvent>::with_user_event().build()?
+    };
+
+    #[cfg(target_os = "macos")]
+    {
+        macos::set_event_proxy(main_event_loop.create_proxy());
+        macos::create_menu_bar();
+    }
 
     let project_dirs = directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED)
         .ok_or_else(|| {

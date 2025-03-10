@@ -36,6 +36,15 @@ default-features = false
 version = "*"
 default-features = false
 
+[target.'cfg(target_os = "macos")'.dependencies.cocoa]
+version = "*"
+
+[target.'cfg(target_os = "macos")'.dependencies.objc]
+version = "*"
+
+[target.'cfg(target_os = "macos")'.dependencies.objc-encode]
+version = "*"
+
 [lints.clippy]
 pedantic = "warn"
 as_underscore = "warn"

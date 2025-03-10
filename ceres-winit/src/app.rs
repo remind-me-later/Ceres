@@ -1,6 +1,6 @@
 use crate::{
     video::{self, State},
-    ScalingOption, ShaderOption, CERES_STYLIZED,
+    CeresEvent, ScalingOption, ShaderOption, CERES_STYLIZED,
 };
 use anyhow::Context;
 use ceres_std::GbThread;
@@ -114,18 +114,41 @@ impl App<'_> {
                 return;
             }
 
-            if let ElementState::Pressed = event.state {
-                match event.logical_key.as_ref() {
-                    Key::Character("f") => match windows.main.window().fullscreen() {
-                        Some(_) => windows.main.window().set_fullscreen(None),
-                        None => windows
-                            .main
-                            .window()
-                            .set_fullscreen(Some(Fullscreen::Borderless(None))),
-                    },
-                    // TODO: keys
-                    _ => (),
+            match event.state {
+                ElementState::Pressed => {
+                    match event.logical_key.as_ref() {
+                        Key::Character("f") => match windows.main.window().fullscreen() {
+                            Some(_) => windows.main.window().set_fullscreen(None),
+                            None => windows
+                                .main
+                                .window()
+                                .set_fullscreen(Some(Fullscreen::Borderless(None))),
+                        },
+                        // TODO: keys
+                        Key::Character("a") => self.thread.press(ceres_std::Button::Left),
+                        Key::Character("d") => self.thread.press(ceres_std::Button::Right),
+                        Key::Character("w") => self.thread.press(ceres_std::Button::Up),
+                        Key::Character("s") => self.thread.press(ceres_std::Button::Down),
+                        Key::Character("l") => self.thread.press(ceres_std::Button::A),
+                        Key::Character("k") => self.thread.press(ceres_std::Button::B),
+                        Key::Character("n") => self.thread.press(ceres_std::Button::Select),
+                        Key::Character("m") => self.thread.press(ceres_std::Button::Start),
+
+                        _ => (),
+                    }
                 }
+                ElementState::Released => match event.logical_key.as_ref() {
+                    Key::Character("a") => self.thread.release(ceres_std::Button::Left),
+                    Key::Character("d") => self.thread.release(ceres_std::Button::Right),
+                    Key::Character("w") => self.thread.release(ceres_std::Button::Up),
+                    Key::Character("s") => self.thread.release(ceres_std::Button::Down),
+                    Key::Character("l") => self.thread.release(ceres_std::Button::A),
+                    Key::Character("k") => self.thread.release(ceres_std::Button::B),
+                    Key::Character("n") => self.thread.release(ceres_std::Button::Select),
+                    Key::Character("m") => self.thread.release(ceres_std::Button::Start),
+
+                    _ => (),
+                },
             }
         }
     }
@@ -141,7 +164,7 @@ impl App<'_> {
     }
 }
 
-impl winit::application::ApplicationHandler for App<'_> {
+impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
     #[allow(clippy::expect_used)]
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let main_window_attributes = winit::window::Window::default_attributes()
@@ -286,5 +309,57 @@ impl winit::application::ApplicationHandler for App<'_> {
             eprintln!("Error saving data: {e}");
         });
         self.windows = None;
+    }
+
+    fn user_event(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop, event: CeresEvent) {
+        match event {
+            CeresEvent::ChangeShader(shader_option) => {
+                self.shader_option = shader_option;
+                // Update shader on the window if needed
+                if let Some(windows) = &mut self.windows {
+                    windows.main.set_shader(shader_option);
+                    windows.main.window().request_redraw();
+                }
+            }
+            CeresEvent::ChangeScaling(scaling_option) => {
+                self.scaling_option = scaling_option;
+                // Update scaling on the window if needed
+                if let Some(windows) = &mut self.windows {
+                    windows.main.set_scaling(scaling_option);
+                    // Force a resize to apply the new scaling option
+                    if let Some(size) = windows.main.window().inner_size().into() {
+                        windows.main.resize(size);
+                    }
+                    windows.main.window().request_redraw();
+                }
+            }
+            CeresEvent::OpenRomFile(path) => {
+                // First save the current game data if needed
+                self.save_data().unwrap_or_else(|e| {
+                    eprintln!("Error saving data: {e}");
+                });
+
+                // Update sav_path for the new ROM
+                let file_stem = path
+                    .file_stem()
+                    .map(|stem| stem.to_string_lossy().to_string());
+
+                if let Some(file_stem) = file_stem {
+                    self.sav_path = Some(
+                        self.project_dirs
+                            .data_dir()
+                            .join(&file_stem)
+                            .with_extension("sav"),
+                    );
+
+                    // Load the new ROM
+                    self.thread
+                        .change_rom(self.sav_path.as_deref(), &path)
+                        .unwrap_or_else(|e| {
+                            eprintln!("Error loading ROM: {e}");
+                        });
+                }
+            }
+        }
     }
 }

@@ -1,7 +1,7 @@
-mod gb_screen;
+mod pipeline;
 mod texture;
 
-use gb_screen::PipelineWrapper;
+use pipeline::PipelineWrapper;
 use std::sync::Arc;
 
 use crate::{ScalingOption, ShaderOption};
@@ -159,5 +159,13 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
         output.present();
 
         Ok(())
+    }
+
+    pub fn set_shader(&mut self, shader_option: ShaderOption) {
+        self.new_shader_option = Some(shader_option);
+    }
+
+    pub fn set_scaling(&mut self, scaling_option: ScalingOption) {
+        self.scaling_option = scaling_option;
     }
 }
