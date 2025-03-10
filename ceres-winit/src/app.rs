@@ -333,6 +333,10 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
                     windows.main.window().request_redraw();
                 }
             }
+            CeresEvent::ChangeSpeed(speed_multiplier) => {
+                // Set the emulation speed
+                self.thread.set_multiplier(speed_multiplier);
+            }
             CeresEvent::OpenRomFile(path) => {
                 // First save the current game data if needed
                 self.save_data().unwrap_or_else(|e| {

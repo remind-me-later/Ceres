@@ -107,6 +107,7 @@ pub enum CeresEvent {
     ChangeShader(ShaderOption),
     ChangeScaling(ScalingOption),
     OpenRomFile(PathBuf),
+    ChangeSpeed(u32),
 }
 
 #[derive(clap::Parser)]
