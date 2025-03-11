@@ -170,8 +170,8 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
         let main_window_attributes = winit::window::Window::default_attributes()
             .with_title(CERES_STYLIZED)
             .with_inner_size(PhysicalSize {
-                width: PX_WIDTH,
-                height: PX_HEIGHT,
+                width: u32::from(PX_WIDTH) * crate::WIN_MULTIPLIER,
+                height: u32::from(PX_HEIGHT) * crate::WIN_MULTIPLIER,
             })
             .with_min_inner_size(PhysicalSize {
                 width: ceres_std::PX_WIDTH,
@@ -183,6 +183,17 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
         let main_window = event_loop
             .create_window(main_window_attributes)
             .expect("Could not create window");
+
+        // #[cfg(target_os = "macos")]
+        // {
+        //     use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+        //     if let RawWindowHandle::AppKit(handle) = main_window.window_handle().unwrap().as_raw() {
+        //         let ns_view = handle.ns_view.as_ptr().cast::<objc::runtime::Object>();
+
+        //     }
+        // }
+
         let main_window_state = pollster::block_on(State::new(
             main_window,
             self.shader_option,

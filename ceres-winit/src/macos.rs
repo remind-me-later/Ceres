@@ -1,17 +1,8 @@
-#![expect(unexpected_cfgs)]
-
 use crate::{CeresEvent, ScalingOption, ShaderOption};
-use cocoa::{
-    appkit::{NSApp, NSApplication, NSMenu, NSMenuItem, NSOpenPanel, NSSavePanel},
-    base::{id, nil},
-    foundation::{NSAutoreleasePool, NSString, NSURL},
-};
-use objc::{
-    class, msg_send,
-    runtime::{NO, YES},
-    sel, sel_impl,
-};
-use std::sync::OnceLock;
+use objc2::{class, ffi::class_addMethod, runtime::Sel, sel, Encoding};
+use objc2_app_kit::{NSApplication, NSMenu, NSMenuItem, NSModalResponseOK, NSOpenPanel};
+use objc2_foundation::{ns_string, MainThreadMarker, NSArray, NSString, NSURL};
+use std::{ptr, sync::OnceLock};
 use winit::event_loop::EventLoopProxy;
 
 // Store event proxy to send events back to the main thread
@@ -24,74 +15,72 @@ pub fn set_event_proxy(proxy: EventLoopProxy<CeresEvent>) {
 }
 
 // Callback handlers for shader menu items
-extern "C" fn change_shader_nearest() {
+extern "C-unwind" fn change_shader_nearest() {
     send_shader_event(ShaderOption::Nearest);
 }
 
-extern "C" fn change_shader_scale2x() {
+extern "C-unwind" fn change_shader_scale2x() {
     send_shader_event(ShaderOption::Scale2x);
 }
 
-extern "C" fn change_shader_scale3x() {
+extern "C-unwind" fn change_shader_scale3x() {
     send_shader_event(ShaderOption::Scale3x);
 }
 
-extern "C" fn change_shader_lcd() {
+extern "C-unwind" fn change_shader_lcd() {
     send_shader_event(ShaderOption::Lcd);
 }
 
-extern "C" fn change_shader_crt() {
+extern "C-unwind" fn change_shader_crt() {
     send_shader_event(ShaderOption::Crt);
 }
 
 // Callback handlers for scaling menu items
-extern "C" fn change_scaling_pixel_perfect() {
+extern "C-unwind" fn change_scaling_pixel_perfect() {
     send_scaling_event(ScalingOption::PixelPerfect);
 }
 
-extern "C" fn change_scaling_fit_window() {
+extern "C-unwind" fn change_scaling_fit_window() {
     send_scaling_event(ScalingOption::FitWindow);
 }
 
 // Callback handlers for speed menu items
-extern "C" fn change_speed_1x() {
+extern "C-unwind" fn change_speed_1x() {
     send_speed_event(1);
 }
 
-extern "C" fn change_speed_2x() {
+extern "C-unwind" fn change_speed_2x() {
     send_speed_event(2);
 }
 
-extern "C" fn change_speed_4x() {
+extern "C-unwind" fn change_speed_4x() {
     send_speed_event(4);
 }
 
 // Callback handler for open file menu item
-extern "C" fn open_rom_file() {
+extern "C-unwind" fn open_rom_file() {
     unsafe {
-        let pool = NSAutoreleasePool::new(nil);
+        #[expect(clippy::unwrap_used)]
+        let mtm: MainThreadMarker = MainThreadMarker::new().unwrap();
 
-        let open_panel = NSOpenPanel::openPanel(nil);
-        open_panel.setCanChooseFiles_(YES);
-        open_panel.setCanChooseDirectories_(NO);
-        open_panel.setAllowsMultipleSelection_(NO);
+        let open_panel = NSOpenPanel::openPanel(mtm);
+        open_panel.setCanChooseFiles(true);
+        open_panel.setCanChooseDirectories(false);
+        open_panel.setAllowsMultipleSelection(false);
 
-        // Set file types (GB and GBC ROMs)
-        let allowed_file_types = cocoa::foundation::NSArray::arrayWithObjects(
-            nil,
-            &[
-                NSString::alloc(nil).init_str("gb").autorelease(),
-                NSString::alloc(nil).init_str("gbc").autorelease(),
-                NSString::alloc(nil).init_str("rom").autorelease(),
-            ],
-        );
-        let _: () = msg_send![open_panel, setAllowedFileTypes:allowed_file_types];
+        #[expect(deprecated)]
+        open_panel.setAllowedFileTypes(Some(&NSArray::from_slice(&[
+            ns_string!("gb"),
+            ns_string!("gbc"),
+            ns_string!("rom"),
+        ])));
 
         // Show the panel
         let result = open_panel.runModal();
 
-        if result == cocoa::appkit::NSModalResponse::NSModalResponseOk {
-            let path_str = NSString::UTF8String(NSURL::path(open_panel.URL()));
+        if result == NSModalResponseOK {
+            #[expect(clippy::unwrap_used)]
+            let path_str = NSString::UTF8String(&NSURL::path(&open_panel.URL().unwrap()).unwrap());
             let path = std::path::PathBuf::from(
                 std::ffi::CStr::from_ptr(path_str)
                     .to_string_lossy()
@@ -102,8 +91,6 @@ extern "C" fn open_rom_file() {
                 proxy.send_event(CeresEvent::OpenRomFile(path)).ok();
             }
         }
-
-        pool.drain();
     }
 }
 
@@ -128,89 +115,70 @@ fn send_speed_event(speed: u32) {
 #[expect(clippy::too_many_lines)]
 pub fn create_menu_bar() {
     unsafe {
-        let pool = NSAutoreleasePool::new(nil);
+        #[expect(clippy::unwrap_used)]
+        let mtm = MainThreadMarker::new().unwrap();
+        let app = NSApplication::sharedApplication(mtm);
 
-        let app = NSApplication::sharedApplication(nil);
+        let menu_bar = NSMenu::new(mtm);
+        let app_menu_item = NSMenuItem::new(mtm);
 
-        let menu_bar = NSMenu::new(nil).autorelease();
-        let app_menu_item = NSMenuItem::new(nil).autorelease();
+        app.setMainMenu(Some(&menu_bar));
+        menu_bar.addItem(&app_menu_item);
 
-        app.setMainMenu_(menu_bar);
-        menu_bar.addItem_(app_menu_item);
+        let app_menu = NSMenu::new(mtm);
+        let quit_title = ns_string!("Quit");
 
-        let app_menu = NSMenu::new(nil).autorelease();
-        let quit_title = NSString::alloc(nil).init_str("Quit");
-
-        let about_title =
-            NSString::alloc(nil).init_str(&format!("About {}", crate::CERES_STYLIZED));
+        let about_title = ns_string!("About");
         let about_action = sel!(orderFrontStandardAboutPanel:);
-        let about_item = NSMenuItem::alloc(nil)
-            .initWithTitle_action_keyEquivalent_(
-                about_title,
-                about_action,
-                NSString::alloc(nil).init_str(""),
-            )
-            .autorelease();
-        app_menu.addItem_(about_item);
+        let about_item = NSMenuItem::new(mtm);
+        about_item.setTitle(about_title);
+        about_item.setAction(Some(about_action));
+        // about_item.setKeyEquivalent(ns_string!(""));
+
+        app_menu.addItem(&about_item);
 
         let quit_action = sel!(terminate:);
-        let quit_item = NSMenuItem::alloc(nil)
-            .initWithTitle_action_keyEquivalent_(
-                quit_title,
-                quit_action,
-                NSString::alloc(nil).init_str("q"),
-            )
-            .autorelease();
-        app_menu.addItem_(quit_item);
+        let quit_item = NSMenuItem::new(mtm);
+        quit_item.setTitle(quit_title);
+        quit_item.setAction(Some(quit_action));
+        quit_item.setKeyEquivalent(ns_string!("q"));
+        app_menu.addItem(&quit_item);
 
-        app_menu_item.setSubmenu_(app_menu);
+        app_menu_item.setSubmenu(Some(&app_menu));
 
-        let file_menu_item = NSMenuItem::new(nil).autorelease();
-        let file_menu = NSMenu::new(nil).autorelease();
-        let file_title = NSString::alloc(nil).init_str("File");
+        let file_menu_item = NSMenuItem::new(mtm);
+        let file_menu = NSMenu::new(mtm);
+        let file_title = ns_string!("File");
 
-        cocoa::appkit::NSButton::setTitle_(file_menu_item, file_title);
-        menu_bar.addItem_(file_menu_item);
+        file_menu_item.setTitle(file_title);
+        menu_bar.addItem(&file_menu_item);
 
         let cls = class!(NSObject);
         let sel_open_file = sel!(openRomFile:);
 
-        let types = format!(
-            "{}{}",
-            objc_encode::Encoding::Void,
-            objc_encode::Encoding::Object,
-        );
+        let types = format!("{}{}", Encoding::Void, Encoding::Object);
 
         // Add the open file method
-        let _ = objc::runtime::class_addMethod(
-            std::ptr::from_ref(cls).cast_mut(),
+        let _ = class_addMethod(
+            ptr::from_ref(cls).cast_mut(),
             sel_open_file,
             open_rom_file,
             types.as_ptr().cast(),
         );
 
         // "Open ROM..." menu item
-        let open_title = NSString::alloc(nil).init_str("Open...");
-        let open_item = NSMenuItem::alloc(nil)
-            .initWithTitle_action_keyEquivalent_(
-                open_title,
-                sel_open_file,
-                NSString::alloc(nil).init_str("o"), // Command+O shortcut
-            )
-            .autorelease();
-        open_item.setTarget_(NSApp());
-        file_menu.addItem_(open_item);
+        add_menu_item(&app, mtm, &file_menu, "Open...", sel_open_file, Some("o"));
 
         // Set the file menu
-        file_menu_item.setSubmenu_(file_menu);
+        file_menu_item.setSubmenu(Some(&file_menu));
 
         // Add a View menu with shader and scaling options
-        let view_menu_item = NSMenuItem::new(nil).autorelease();
-        let view_menu = NSMenu::new(nil).autorelease();
-        let view_title = NSString::alloc(nil).init_str("View");
+        let view_menu_item = NSMenuItem::new(mtm);
+        let view_menu = NSMenu::new(mtm);
+        let view_title = ns_string!("View");
 
-        cocoa::appkit::NSButton::setTitle_(view_menu_item, view_title);
-        menu_bar.addItem_(view_menu_item);
+        view_menu_item.setTitle(view_title);
+        menu_bar.addItem(&view_menu_item);
 
         // Register selectors
         let sel_nearest = sel!(changeShaderNearest:);
@@ -225,126 +193,171 @@ pub fn create_menu_bar() {
         let sel_speed_4x = sel!(changeSpeed4x:);
 
         // Register shader methods
-        let _ = objc::runtime::class_addMethod(
-            std::ptr::from_ref(cls).cast_mut(),
+        let _ = class_addMethod(
+            ptr::from_ref(cls).cast_mut(),
             sel_nearest,
             change_shader_nearest,
             types.as_ptr().cast(),
         );
-        let _ = objc::runtime::class_addMethod(
-            std::ptr::from_ref(cls).cast_mut(),
+        let _ = class_addMethod(
+            ptr::from_ref(cls).cast_mut(),
             sel_scale2x,
             change_shader_scale2x,
             types.as_ptr().cast(),
         );
-        let _ = objc::runtime::class_addMethod(
-            std::ptr::from_ref(cls).cast_mut(),
+        let _ = class_addMethod(
+            ptr::from_ref(cls).cast_mut(),
             sel_scale3x,
             change_shader_scale3x,
             types.as_ptr().cast(),
         );
-        let _ = objc::runtime::class_addMethod(
-            std::ptr::from_ref(cls).cast_mut(),
+        let _ = class_addMethod(
+            ptr::from_ref(cls).cast_mut(),
             sel_lcd,
             change_shader_lcd,
             types.as_ptr().cast(),
         );
-        let _ = objc::runtime::class_addMethod(
-            std::ptr::from_ref(cls).cast_mut(),
+        let _ = class_addMethod(
+            ptr::from_ref(cls).cast_mut(),
             sel_crt,
             change_shader_crt,
             types.as_ptr().cast(),
         );
 
         // Register scaling methods
-        let _ = objc::runtime::class_addMethod(
-            std::ptr::from_ref(cls).cast_mut(),
+        let _ = class_addMethod(
+            ptr::from_ref(cls).cast_mut(),
             sel_pixel_perfect,
             change_scaling_pixel_perfect,
             types.as_ptr().cast(),
         );
-        let _ = objc::runtime::class_addMethod(
-            std::ptr::from_ref(cls).cast_mut(),
+        let _ = class_addMethod(
+            ptr::from_ref(cls).cast_mut(),
             sel_fit_window,
             change_scaling_fit_window,
             types.as_ptr().cast(),
         );
 
         // Register speed methods
-        let _ = objc::runtime::class_addMethod(
-            std::ptr::from_ref(cls).cast_mut(),
+        let _ = class_addMethod(
+            ptr::from_ref(cls).cast_mut(),
             sel_speed_1x,
             change_speed_1x,
             types.as_ptr().cast(),
         );
-        let _ = objc::runtime::class_addMethod(
-            std::ptr::from_ref(cls).cast_mut(),
+        let _ = class_addMethod(
+            ptr::from_ref(cls).cast_mut(),
             sel_speed_2x,
             change_speed_2x,
             types.as_ptr().cast(),
         );
-        let _ = objc::runtime::class_addMethod(
-            std::ptr::from_ref(cls).cast_mut(),
+        let _ = class_addMethod(
+            ptr::from_ref(cls).cast_mut(),
             sel_speed_4x,
             change_speed_4x,
             types.as_ptr().cast(),
         );
 
         // Create shader submenu
-        let shader_submenu_item = NSMenuItem::new(nil).autorelease();
-        let shader_submenu = NSMenu::new(nil).autorelease();
-        let shader_title = NSString::alloc(nil).init_str("Shader");
-        cocoa::appkit::NSButton::setTitle_(shader_submenu_item, shader_title);
-        view_menu.addItem_(shader_submenu_item);
+        let shader_submenu_item = NSMenuItem::new(mtm);
+        let shader_submenu = NSMenu::new(mtm);
+        let shader_title = ns_string!("Shader");
+        // cocoa::appkit::NSButton::setTitle_(shader_submenu_item, shader_title);
+        shader_submenu_item.setTitle(shader_title);
+        view_menu.addItem(&shader_submenu_item);
 
-        add_menu_item(shader_submenu, "Nearest", sel_nearest, "1");
-        add_menu_item(shader_submenu, "Scale2x", sel_scale2x, "2");
-        add_menu_item(shader_submenu, "Scale3x", sel_scale3x, "3");
-        add_menu_item(shader_submenu, "LCD Effect", sel_lcd, "4");
-        add_menu_item(shader_submenu, "CRT Effect", sel_crt, "5");
+        add_menu_item(&app, mtm, &shader_submenu, "Nearest", sel_nearest, None);
+        add_menu_item(&app, mtm, &shader_submenu, "Scale2x", sel_scale2x, None);
+        add_menu_item(&app, mtm, &shader_submenu, "Scale3x", sel_scale3x, None);
+        add_menu_item(&app, mtm, &shader_submenu, "LCD Effect", sel_lcd, None);
+        add_menu_item(&app, mtm, &shader_submenu, "CRT Effect", sel_crt, None);
 
-        shader_submenu_item.setSubmenu_(shader_submenu);
+        shader_submenu_item.setSubmenu(Some(&shader_submenu));
 
-        let scaling_submenu_item = NSMenuItem::new(nil).autorelease();
-        let scaling_submenu = NSMenu::new(nil).autorelease();
-        let scaling_title = NSString::alloc(nil).init_str("Scaling");
-        cocoa::appkit::NSButton::setTitle_(scaling_submenu_item, scaling_title);
-        view_menu.addItem_(scaling_submenu_item);
+        let scaling_submenu_item = NSMenuItem::new(mtm);
+        let scaling_submenu = NSMenu::new(mtm);
+        let scaling_title = ns_string!("Scaling");
+        scaling_submenu_item.setTitle(scaling_title);
+        view_menu.addItem(&scaling_submenu_item);
 
-        add_menu_item(scaling_submenu, "Pixel Perfect", sel_pixel_perfect, "p");
-        add_menu_item(scaling_submenu, "Fit Window", sel_fit_window, "w");
+        add_menu_item(
+            &app,
+            mtm,
+            &scaling_submenu,
+            "Pixel Perfect",
+            sel_pixel_perfect,
+            None,
+        );
+        add_menu_item(
+            &app,
+            mtm,
+            &scaling_submenu,
+            "Fit Window",
+            sel_fit_window,
+            None,
+        );
 
-        scaling_submenu_item.setSubmenu_(scaling_submenu);
+        scaling_submenu_item.setSubmenu(Some(&scaling_submenu));
 
-        view_menu.addItem_(NSMenuItem::separatorItem(nil));
+        view_menu.addItem(&NSMenuItem::separatorItem(mtm));
 
-        let speed_submenu_item = NSMenuItem::new(nil).autorelease();
-        let speed_submenu = NSMenu::new(nil).autorelease();
-        let speed_title = NSString::alloc(nil).init_str("Speed");
-        cocoa::appkit::NSButton::setTitle_(speed_submenu_item, speed_title);
-        view_menu.addItem_(speed_submenu_item);
+        let speed_submenu_item = NSMenuItem::new(mtm);
+        let speed_submenu = NSMenu::new(mtm);
+        let speed_title = ns_string!("Speed");
+        speed_submenu_item.setTitle(speed_title);
+        view_menu.addItem(&speed_submenu_item);
 
-        add_menu_item(speed_submenu, "Normal Speed (1x)", sel_speed_1x, "1");
-        add_menu_item(speed_submenu, "Double Speed (2x)", sel_speed_2x, "2");
-        add_menu_item(speed_submenu, "Quadruple Speed (4x)", sel_speed_4x, "4");
+        add_menu_item(
+            &app,
+            mtm,
+            &speed_submenu,
+            "Normal Speed (1x)",
+            sel_speed_1x,
+            None,
+        );
+        add_menu_item(
+            &app,
+            mtm,
+            &speed_submenu,
+            "Double Speed (2x)",
+            sel_speed_2x,
+            None,
+        );
+        add_menu_item(
+            &app,
+            mtm,
+            &speed_submenu,
+            "Quadruple Speed (4x)",
+            sel_speed_4x,
+            None,
+        );
 
-        speed_submenu_item.setSubmenu_(speed_submenu);
+        speed_submenu_item.setSubmenu(Some(&speed_submenu));
 
-        view_menu_item.setSubmenu_(view_menu);
-
-        pool.drain();
+        view_menu_item.setSubmenu(Some(&view_menu));
     }
 }
 
-unsafe fn add_menu_item(menu: id, title: &str, action: objc::runtime::Sel, key_equivalent: &str) {
-    let title_str = NSString::alloc(nil).init_str(title);
-    let key_str = NSString::alloc(nil).init_str(key_equivalent);
+unsafe fn add_menu_item(
+    app: &NSApplication,
+    mtm: MainThreadMarker,
+    menu: &NSMenu,
+    title: &str,
+    action: Sel,
+    key_equivalent: Option<&str>,
+) {
+    let title_str = NSString::from_str(title);
 
-    let item = NSMenuItem::alloc(nil)
-        .initWithTitle_action_keyEquivalent_(title_str, action, key_str)
-        .autorelease();
+    let item = NSMenuItem::new(mtm);
+    item.setTitle(&title_str);
+    item.setAction(Some(action));
 
-    item.setTarget_(NSApp());
+    if let Some(key_equivalent) = key_equivalent {
+        let key_str = NSString::from_str(key_equivalent);
+        item.setKeyEquivalent(&key_str);
+    }
 
-    menu.addItem_(item);
+    item.setTarget(Some(app));
+
+    menu.addItem(&item);
 }

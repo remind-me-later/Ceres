@@ -9,6 +9,8 @@ use clap::Parser;
 use std::path::PathBuf;
 use winit::event_loop::EventLoop;
 
+const WIN_MULTIPLIER: u32 = 2;
+
 const QUALIFIER: &str = "com";
 const ORGANIZATION: &str = "remind-me-later";
 const CERES_BIN: &str = "ceres";
