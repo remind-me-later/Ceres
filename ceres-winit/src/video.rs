@@ -1,10 +1,28 @@
-mod pipeline;
-mod texture;
-
-use pipeline::PipelineWrapper;
+use ceres_wgpu::PipelineWrapper;
 use std::sync::Arc;
 
 use crate::{ScalingOption, ShaderOption};
+
+impl From<ShaderOption> for ceres_wgpu::ShaderOption {
+    fn from(shader: ShaderOption) -> Self {
+        match shader {
+            ShaderOption::Nearest => Self::Nearest,
+            ShaderOption::Scale2x => Self::Scale2x,
+            ShaderOption::Scale3x => Self::Scale3x,
+            ShaderOption::Lcd => Self::Lcd,
+            ShaderOption::Crt => Self::Crt,
+        }
+    }
+}
+
+impl From<ScalingOption> for ceres_wgpu::ScalingOption {
+    fn from(scaling: ScalingOption) -> Self {
+        match scaling {
+            ScalingOption::PixelPerfect => Self::PixelPerfect,
+            ScalingOption::Stretch => Self::Stretch,
+        }
+    }
+}
 
 pub struct State<'a, const PX_WIDTH: u32, const PX_HEIGHT: u32> {
     surface: wgpu::Surface<'a>,
@@ -78,7 +96,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
 
         surface.configure(&device, &config);
 
-        let gb_screen_renderer = PipelineWrapper::new(&device, &config, shader_option);
+        let gb_screen_renderer = PipelineWrapper::new(&device, config.format, shader_option.into());
 
         Ok(Self {
             surface,
@@ -107,17 +125,22 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
     }
 
     pub fn update_texture(&mut self, rgba: &[u8]) {
-        self.gb_screen.update_screen_texture(&self.queue, rgba);
+        self.gb_screen
+            .update_screen_texture(&self.device, &self.queue, rgba);
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         if let Some(scaling) = self.new_shader_option.take() {
-            self.gb_screen.shader_option(&self.queue, scaling);
+            self.gb_screen.shader_option(&self.queue, scaling.into());
         }
 
         if let Some(new_size) = self.new_size.take() {
-            self.gb_screen
-                .resize(self.scaling_option, &self.queue, new_size);
+            self.gb_screen.resize(
+                self.scaling_option.into(),
+                &self.queue,
+                new_size.width,
+                new_size.height,
+            );
             self.size = new_size;
             self.config.width = new_size.width;
             self.config.height = new_size.height;
@@ -150,7 +173,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
                     timestamp_writes: None,
                 });
 
-                self.gb_screen.render(&mut render_pass);
+                self.gb_screen.paint(&mut render_pass);
             }
 
             self.queue.submit(core::iter::once(encoder.finish()));

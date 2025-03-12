@@ -1,11 +1,10 @@
-use crate::{CeresEvent, ScalingOption, ShaderOption};
-use objc2::{class, ffi::class_addMethod, runtime::Sel, sel, Encoding};
+use crate::{AppOption, CeresEvent, ScalingOption, ShaderOption};
+use objc2::{Encoding, class, ffi::class_addMethod, runtime::Sel, sel};
 use objc2_app_kit::{NSApplication, NSMenu, NSMenuItem, NSModalResponseOK, NSOpenPanel};
-use objc2_foundation::{ns_string, MainThreadMarker, NSArray, NSString, NSURL};
+use objc2_foundation::{MainThreadMarker, NSArray, NSString, NSURL, ns_string};
 use std::{ptr, sync::OnceLock};
 use winit::event_loop::EventLoopProxy;
 
-// Store event proxy to send events back to the main thread
 static EVENT_PROXY: OnceLock<EventLoopProxy<CeresEvent>> = OnceLock::new();
 
 pub fn set_event_proxy(proxy: EventLoopProxy<CeresEvent>) {
@@ -14,7 +13,6 @@ pub fn set_event_proxy(proxy: EventLoopProxy<CeresEvent>) {
     }
 }
 
-// Callback handlers for shader menu items
 extern "C-unwind" fn change_shader_nearest() {
     send_shader_event(ShaderOption::Nearest);
 }
@@ -35,16 +33,14 @@ extern "C-unwind" fn change_shader_crt() {
     send_shader_event(ShaderOption::Crt);
 }
 
-// Callback handlers for scaling menu items
 extern "C-unwind" fn change_scaling_pixel_perfect() {
     send_scaling_event(ScalingOption::PixelPerfect);
 }
 
 extern "C-unwind" fn change_scaling_fit_window() {
-    send_scaling_event(ScalingOption::FitWindow);
+    send_scaling_event(ScalingOption::Stretch);
 }
 
-// Callback handlers for speed menu items
 extern "C-unwind" fn change_speed_1x() {
     send_speed_event(1);
 }
@@ -57,7 +53,6 @@ extern "C-unwind" fn change_speed_4x() {
     send_speed_event(4);
 }
 
-// Callback handler for open file menu item
 extern "C-unwind" fn open_rom_file() {
     unsafe {
         #[expect(clippy::unwrap_used)]
@@ -75,7 +70,6 @@ extern "C-unwind" fn open_rom_file() {
             ns_string!("rom"),
         ])));
 
-        // Show the panel
         let result = open_panel.runModal();
 
         if result == NSModalResponseOK {
@@ -133,7 +127,6 @@ pub fn create_menu_bar() {
         let about_item = NSMenuItem::new(mtm);
         about_item.setTitle(about_title);
         about_item.setAction(Some(about_action));
-        // about_item.setKeyEquivalent(ns_string!(""));
 
         app_menu.addItem(&about_item);
 
@@ -158,7 +151,6 @@ pub fn create_menu_bar() {
 
         let types = format!("{}{}", Encoding::Void, Encoding::Object);
 
-        // Add the open file method
         let _ = class_addMethod(
             ptr::from_ref(cls).cast_mut(),
             sel_open_file,
@@ -166,13 +158,10 @@ pub fn create_menu_bar() {
             types.as_ptr().cast(),
         );
 
-        // "Open ROM..." menu item
         add_menu_item(&app, mtm, &file_menu, "Open...", sel_open_file, Some("o"));
 
-        // Set the file menu
         file_menu_item.setSubmenu(Some(&file_menu));
 
-        // Add a View menu with shader and scaling options
         let view_menu_item = NSMenuItem::new(mtm);
         let view_menu = NSMenu::new(mtm);
         let view_title = ns_string!("View");
@@ -180,7 +169,6 @@ pub fn create_menu_bar() {
         view_menu_item.setTitle(view_title);
         menu_bar.addItem(&view_menu_item);
 
-        // Register selectors
         let sel_nearest = sel!(changeShaderNearest:);
         let sel_scale2x = sel!(changeShaderScale2x:);
         let sel_scale3x = sel!(changeShaderScale3x:);
@@ -192,7 +180,6 @@ pub fn create_menu_bar() {
         let sel_speed_2x = sel!(changeSpeed2x:);
         let sel_speed_4x = sel!(changeSpeed4x:);
 
-        // Register shader methods
         let _ = class_addMethod(
             ptr::from_ref(cls).cast_mut(),
             sel_nearest,
@@ -224,7 +211,6 @@ pub fn create_menu_bar() {
             types.as_ptr().cast(),
         );
 
-        // Register scaling methods
         let _ = class_addMethod(
             ptr::from_ref(cls).cast_mut(),
             sel_pixel_perfect,
@@ -238,7 +224,6 @@ pub fn create_menu_bar() {
             types.as_ptr().cast(),
         );
 
-        // Register speed methods
         let _ = class_addMethod(
             ptr::from_ref(cls).cast_mut(),
             sel_speed_1x,
@@ -258,19 +243,22 @@ pub fn create_menu_bar() {
             types.as_ptr().cast(),
         );
 
-        // Create shader submenu
         let shader_submenu_item = NSMenuItem::new(mtm);
         let shader_submenu = NSMenu::new(mtm);
         let shader_title = ns_string!("Shader");
-        // cocoa::appkit::NSButton::setTitle_(shader_submenu_item, shader_title);
         shader_submenu_item.setTitle(shader_title);
         view_menu.addItem(&shader_submenu_item);
 
-        add_menu_item(&app, mtm, &shader_submenu, "Nearest", sel_nearest, None);
-        add_menu_item(&app, mtm, &shader_submenu, "Scale2x", sel_scale2x, None);
-        add_menu_item(&app, mtm, &shader_submenu, "Scale3x", sel_scale3x, None);
-        add_menu_item(&app, mtm, &shader_submenu, "LCD Effect", sel_lcd, None);
-        add_menu_item(&app, mtm, &shader_submenu, "CRT Effect", sel_crt, None);
+        for shader in ShaderOption::iter() {
+            let action = match shader {
+                ShaderOption::Nearest => sel_nearest,
+                ShaderOption::Scale2x => sel_scale2x,
+                ShaderOption::Scale3x => sel_scale3x,
+                ShaderOption::Lcd => sel_lcd,
+                ShaderOption::Crt => sel_crt,
+            };
+            add_menu_item(&app, mtm, &shader_submenu, shader.str(), action, None);
+        }
 
         shader_submenu_item.setSubmenu(Some(&shader_submenu));
 
@@ -280,22 +268,13 @@ pub fn create_menu_bar() {
         scaling_submenu_item.setTitle(scaling_title);
         view_menu.addItem(&scaling_submenu_item);
 
-        add_menu_item(
-            &app,
-            mtm,
-            &scaling_submenu,
-            "Pixel Perfect",
-            sel_pixel_perfect,
-            None,
-        );
-        add_menu_item(
-            &app,
-            mtm,
-            &scaling_submenu,
-            "Fit Window",
-            sel_fit_window,
-            None,
-        );
+        for scaling in ScalingOption::iter() {
+            let action = match scaling {
+                ScalingOption::PixelPerfect => sel_pixel_perfect,
+                ScalingOption::Stretch => sel_fit_window,
+            };
+            add_menu_item(&app, mtm, &scaling_submenu, scaling.str(), action, None);
+        }
 
         scaling_submenu_item.setSubmenu(Some(&scaling_submenu));
 
@@ -346,18 +325,20 @@ unsafe fn add_menu_item(
     action: Sel,
     key_equivalent: Option<&str>,
 ) {
-    let title_str = NSString::from_str(title);
+    unsafe {
+        let title_str = NSString::from_str(title);
 
-    let item = NSMenuItem::new(mtm);
-    item.setTitle(&title_str);
-    item.setAction(Some(action));
+        let item = NSMenuItem::new(mtm);
+        item.setTitle(&title_str);
+        item.setAction(Some(action));
 
-    if let Some(key_equivalent) = key_equivalent {
-        let key_str = NSString::from_str(key_equivalent);
-        item.setKeyEquivalent(&key_str);
+        if let Some(key_equivalent) = key_equivalent {
+            let key_str = NSString::from_str(key_equivalent);
+            item.setKeyEquivalent(&key_str);
+        }
+
+        item.setTarget(Some(app));
+
+        menu.addItem(&item);
     }
-
-    item.setTarget(Some(app));
-
-    menu.addItem(&item);
 }

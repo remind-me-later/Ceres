@@ -249,9 +249,9 @@ dependencies = [
 
 [[package]]
 name = "ashpd"
-version = "0.10.2"
+version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9c39d707614dbcc6bed00015539f488d8e3fe3e66ed60961efc0c90f4b380b3"
+checksum = "de3d60bee1a1d38c2077030f4788e1b4e31058d2e79a8cfc8f2b440bd44db290"
 dependencies = [
  "async-fs",
  "async-net",
@@ -263,9 +263,6 @@ dependencies = [
  "serde",
  "serde_repr",
  "url",
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
  "zbus 5.5.0",
 ]
 
@@ -561,7 +558,7 @@ dependencies = [
 [[package]]
 name = "block2"
 version = "0.6.0"
-source = "git+https://github.com/madsmtm/objc2.git#f2c0deb628a9295dc89a4bd4a8c00b66952f2264"
+source = "git+https://github.com/madsmtm/objc2.git#1e8b141de08845404b7e44d656c958cc50fbb0ba"
 dependencies = [
  "objc2 0.6.0 (git+https://github.com/madsmtm/objc2.git)",
 ]
@@ -659,13 +656,12 @@ name = "ceres"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bytemuck",
  "ceres-std",
+ "ceres-wgpu",
  "clap",
  "directories",
  "eframe",
  "rfd",
- "winit",
 ]
 
 [[package]]
@@ -685,12 +681,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ceres-wgpu"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "wgpu",
+]
+
+[[package]]
 name = "ceres-winit"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bytemuck",
  "ceres-std",
+ "ceres-wgpu",
  "clap",
  "directories",
  "objc2 0.6.0 (git+https://github.com/madsmtm/objc2.git)",
@@ -2206,7 +2210,7 @@ dependencies = [
 [[package]]
 name = "objc2"
 version = "0.6.0"
-source = "git+https://github.com/madsmtm/objc2.git#f2c0deb628a9295dc89a4bd4a8c00b66952f2264"
+source = "git+https://github.com/madsmtm/objc2.git#1e8b141de08845404b7e44d656c958cc50fbb0ba"
 dependencies = [
  "objc2-encode 4.1.0 (git+https://github.com/madsmtm/objc2.git)",
 ]
@@ -2230,7 +2234,7 @@ dependencies = [
 [[package]]
 name = "objc2-app-kit"
 version = "0.3.0"
-source = "git+https://github.com/madsmtm/objc2.git#f2c0deb628a9295dc89a4bd4a8c00b66952f2264"
+source = "git+https://github.com/madsmtm/objc2.git#1e8b141de08845404b7e44d656c958cc50fbb0ba"
 dependencies = [
  "bitflags 2.9.0",
  "block2 0.6.0",
@@ -2261,7 +2265,7 @@ dependencies = [
 [[package]]
 name = "objc2-cloud-kit"
 version = "0.3.0"
-source = "git+https://github.com/madsmtm/objc2.git#f2c0deb628a9295dc89a4bd4a8c00b66952f2264"
+source = "git+https://github.com/madsmtm/objc2.git#1e8b141de08845404b7e44d656c958cc50fbb0ba"
 dependencies = [
  "bitflags 2.9.0",
  "objc2 0.6.0 (git+https://github.com/madsmtm/objc2.git)",
@@ -2294,7 +2298,7 @@ dependencies = [
 [[package]]
 name = "objc2-core-data"
 version = "0.3.0"
-source = "git+https://github.com/madsmtm/objc2.git#f2c0deb628a9295dc89a4bd4a8c00b66952f2264"
+source = "git+https://github.com/madsmtm/objc2.git#1e8b141de08845404b7e44d656c958cc50fbb0ba"
 dependencies = [
  "bitflags 2.9.0",
  "objc2 0.6.0 (git+https://github.com/madsmtm/objc2.git)",
@@ -2304,7 +2308,7 @@ dependencies = [
 [[package]]
 name = "objc2-core-foundation"
 version = "0.3.0"
-source = "git+https://github.com/madsmtm/objc2.git#f2c0deb628a9295dc89a4bd4a8c00b66952f2264"
+source = "git+https://github.com/madsmtm/objc2.git#1e8b141de08845404b7e44d656c958cc50fbb0ba"
 dependencies = [
  "bitflags 2.9.0",
  "objc2 0.6.0 (git+https://github.com/madsmtm/objc2.git)",
@@ -2313,7 +2317,7 @@ dependencies = [
 [[package]]
 name = "objc2-core-graphics"
 version = "0.3.0"
-source = "git+https://github.com/madsmtm/objc2.git#f2c0deb628a9295dc89a4bd4a8c00b66952f2264"
+source = "git+https://github.com/madsmtm/objc2.git#1e8b141de08845404b7e44d656c958cc50fbb0ba"
 dependencies = [
  "bitflags 2.9.0",
  "objc2 0.6.0 (git+https://github.com/madsmtm/objc2.git)",
@@ -2336,7 +2340,7 @@ dependencies = [
 [[package]]
 name = "objc2-core-image"
 version = "0.3.0"
-source = "git+https://github.com/madsmtm/objc2.git#f2c0deb628a9295dc89a4bd4a8c00b66952f2264"
+source = "git+https://github.com/madsmtm/objc2.git#1e8b141de08845404b7e44d656c958cc50fbb0ba"
 dependencies = [
  "objc2 0.6.0 (git+https://github.com/madsmtm/objc2.git)",
  "objc2-foundation 0.3.0 (git+https://github.com/madsmtm/objc2.git)",
@@ -2363,7 +2367,7 @@ checksum = "ef25abbcd74fb2609453eb695bd2f860d389e457f67dc17cafc8b8cbc89d0c33"
 [[package]]
 name = "objc2-encode"
 version = "4.1.0"
-source = "git+https://github.com/madsmtm/objc2.git#f2c0deb628a9295dc89a4bd4a8c00b66952f2264"
+source = "git+https://github.com/madsmtm/objc2.git#1e8b141de08845404b7e44d656c958cc50fbb0ba"
 
 [[package]]
 name = "objc2-foundation"
@@ -2391,7 +2395,7 @@ dependencies = [
 [[package]]
 name = "objc2-foundation"
 version = "0.3.0"
-source = "git+https://github.com/madsmtm/objc2.git#f2c0deb628a9295dc89a4bd4a8c00b66952f2264"
+source = "git+https://github.com/madsmtm/objc2.git#1e8b141de08845404b7e44d656c958cc50fbb0ba"
 dependencies = [
  "bitflags 2.9.0",
  "block2 0.6.0",
@@ -2403,7 +2407,7 @@ dependencies = [
 [[package]]
 name = "objc2-io-surface"
 version = "0.3.0"
-source = "git+https://github.com/madsmtm/objc2.git#f2c0deb628a9295dc89a4bd4a8c00b66952f2264"
+source = "git+https://github.com/madsmtm/objc2.git#1e8b141de08845404b7e44d656c958cc50fbb0ba"
 dependencies = [
  "bitflags 2.9.0",
  "objc2 0.6.0 (git+https://github.com/madsmtm/objc2.git)",
@@ -2450,7 +2454,7 @@ dependencies = [
 [[package]]
 name = "objc2-quartz-core"
 version = "0.3.0"
-source = "git+https://github.com/madsmtm/objc2.git#f2c0deb628a9295dc89a4bd4a8c00b66952f2264"
+source = "git+https://github.com/madsmtm/objc2.git#1e8b141de08845404b7e44d656c958cc50fbb0ba"
 dependencies = [
  "bitflags 2.9.0",
  "objc2 0.6.0 (git+https://github.com/madsmtm/objc2.git)",
@@ -2774,9 +2778,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.39"
+version = "1.0.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1f1914ce909e1658d9907913b4b91947430c7d9be598b15a1912935b8c04801"
+checksum = "1885c039570dc00dcb4ff087a89e185fd56bae234ddc7f056a945bf36467248d"
 dependencies = [
  "proc-macro2",
 ]
@@ -4223,9 +4227,9 @@ dependencies = [
 
 [[package]]
 name = "winnow"
-version = "0.7.3"
+version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e7f4ea97f6f78012141bcdb6a216b2609f0979ada50b20ca5b52dde2eac2bb1"
+checksum = "0e97b544156e9bebe1a0ffbc03484fc1ffe3100cbce3ffb17eac35f7cdd7ab36"
 dependencies = [
  "memchr",
 ]

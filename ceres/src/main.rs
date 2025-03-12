@@ -104,19 +104,19 @@ impl AppOption for ShaderOption {
 pub enum ScalingOption {
     PixelPerfect,
     #[default]
-    FitWindow,
+    Stretch,
 }
 
 impl AppOption for ScalingOption {
     fn str(self) -> &'static str {
         match self {
             Self::PixelPerfect => "pixel-perfect",
-            Self::FitWindow => "fit-window",
+            Self::Stretch => "stretch",
         }
     }
 
     fn iter() -> impl Iterator<Item = Self> {
-        [Self::PixelPerfect, Self::FitWindow].into_iter()
+        [Self::PixelPerfect, Self::Stretch].into_iter()
     }
 }
 

@@ -1,9 +1,24 @@
-use crate::{ScalingOption, ShaderOption};
+mod texture;
 
-use super::texture::Texture;
+use texture::Texture;
 use wgpu::util::DeviceExt;
 
-pub(super) struct PipelineWrapper<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ScalingOption {
+    PixelPerfect,
+    Stretch,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ShaderOption {
+    Nearest = 0,
+    Scale2x = 1,
+    Scale3x = 2,
+    Lcd = 3,
+    Crt = 4,
+}
+
+pub struct PipelineWrapper<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
     render_pipeline: wgpu::RenderPipeline,
 
     // Shader config binds
@@ -12,18 +27,25 @@ pub(super) struct PipelineWrapper<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
     uniform_bind_group: wgpu::BindGroup,
 
     // Texture binds
-    texture: Texture,
+    frame_texture: Texture,
     diffuse_bind_group: wgpu::BindGroup,
+    prev_frame_texture: Texture,
+    sampler: wgpu::Sampler,
+
+    // Bind group layout
+    texture_bind_group_layout: wgpu::BindGroupLayout,
 }
 
 impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEIGHT> {
     #[allow(clippy::too_many_lines)]
-    pub(super) fn new(
+    #[must_use]
+    pub fn new(
         device: &wgpu::Device,
-        config: &wgpu::SurfaceConfiguration,
+        target_format: wgpu::TextureFormat,
         shader_option: ShaderOption,
     ) -> Self {
-        let texture = Texture::new(device, PX_WIDTH, PX_HEIGHT, None);
+        let frame_texture = Texture::new(device, PX_WIDTH, PX_HEIGHT, Some("current_frame"));
+        let prev_frame_texture = Texture::new(device, PX_WIDTH, PX_HEIGHT, Some("prev_frame"));
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -65,7 +87,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(texture.view()),
+                    resource: wgpu::BindingResource::TextureView(frame_texture.view()),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -73,7 +95,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: wgpu::BindingResource::TextureView(texture.view()),
+                    resource: wgpu::BindingResource::TextureView(prev_frame_texture.view()),
                 },
             ],
             label: None,
@@ -140,8 +162,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
                 push_constant_ranges: &[],
             });
 
-        let shader =
-            device.create_shader_module(wgpu::include_wgsl!("../../../shader/gb_screen.wgsl"));
+        let shader = device.create_shader_module(wgpu::include_wgsl!("../shader/gb_screen.wgsl"));
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             cache: None,
@@ -157,7 +178,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
                 module: &shader,
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
+                    format: target_format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -177,16 +198,48 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
             dimensions_uniform,
             scale_uniform,
             uniform_bind_group,
-            texture,
+            frame_texture,
             diffuse_bind_group,
+            prev_frame_texture,
+            sampler,
+            texture_bind_group_layout,
         }
     }
 
-    pub(super) fn update_screen_texture(&mut self, queue: &wgpu::Queue, rgba: &[u8]) {
-        self.texture.update(queue, rgba);
+    pub fn update_screen_texture(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        rgba: &[u8],
+    ) {
+        // Swap the frame textures
+        std::mem::swap(&mut self.frame_texture, &mut self.prev_frame_texture);
+
+        // Update the bind group with the new texture views
+        self.diffuse_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &self.texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(self.frame_texture.view()),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(self.prev_frame_texture.view()),
+                },
+            ],
+            label: None,
+        });
+
+        // Update the current frame texture
+        self.frame_texture.update(queue, rgba);
     }
 
-    pub(super) fn shader_option(&mut self, queue: &wgpu::Queue, shader_option: ShaderOption) {
+    pub fn shader_option(&mut self, queue: &wgpu::Queue, shader_option: ShaderOption) {
         queue.write_buffer(
             &self.scale_uniform,
             0,
@@ -194,15 +247,13 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
         );
     }
 
-    pub(super) fn resize(
+    pub fn resize(
         &mut self,
         scaling_option: ScalingOption,
         queue: &wgpu::Queue,
-        new_size: winit::dpi::PhysicalSize<u32>,
+        width: u32,
+        height: u32,
     ) {
-        let width = new_size.width;
-        let height = new_size.height;
-
         let (x, y) = if matches!(scaling_option, ScalingOption::PixelPerfect) {
             let mul = (width / PX_WIDTH).min(height / PX_HEIGHT);
             #[allow(clippy::cast_precision_loss)]
@@ -220,10 +271,11 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
             (x, y)
         };
 
+        #[expect(clippy::tuple_array_conversions)]
         queue.write_buffer(&self.dimensions_uniform, 0, bytemuck::cast_slice(&[x, y]));
     }
 
-    pub(super) fn render(&mut self, render_pass: &mut wgpu::RenderPass) {
+    pub fn paint(&self, render_pass: &mut wgpu::RenderPass) {
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
         render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);

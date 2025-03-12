@@ -1,10 +1,10 @@
-pub(super) struct Texture {
+pub struct Texture {
     texture: wgpu::Texture,
     view: wgpu::TextureView,
 }
 
 impl Texture {
-    pub(super) fn new(device: &wgpu::Device, width: u32, height: u32, label: Option<&str>) -> Self {
+    pub fn new(device: &wgpu::Device, width: u32, height: u32, label: Option<&str>) -> Self {
         let size = wgpu::Extent3d {
             width,
             height,
@@ -27,11 +27,11 @@ impl Texture {
         Self { texture, view }
     }
 
-    pub(super) fn view(&self) -> &wgpu::TextureView {
+    pub const fn view(&self) -> &wgpu::TextureView {
         &self.view
     }
 
-    pub(super) fn update(&mut self, queue: &wgpu::Queue, rgba: &[u8]) {
+    pub fn update(&self, queue: &wgpu::Queue, rgba: &[u8]) {
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 aspect: wgpu::TextureAspect::All,

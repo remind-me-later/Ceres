@@ -36,6 +36,7 @@ Other binsings:
 
 trait AppOption: Default + Clone + Copy + clap::ValueEnum {
     fn str(self) -> &'static str;
+    fn iter() -> impl Iterator<Item = Self>;
 }
 
 #[derive(Default, Clone, Copy, clap::ValueEnum)]
@@ -54,6 +55,10 @@ impl AppOption for Model {
             Self::Cgb => "cgb",
         }
     }
+
+    fn iter() -> impl Iterator<Item = Self> {
+        [Self::Dmg, Self::Mgb, Self::Cgb].into_iter()
+    }
 }
 
 impl From<Model> for ceres_std::Model {
@@ -68,10 +73,10 @@ impl From<Model> for ceres_std::Model {
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum ShaderOption {
-    #[default]
     Nearest = 0,
     Scale2x = 1,
     Scale3x = 2,
+    #[default]
     Lcd = 3,
     Crt = 4,
 }
@@ -86,21 +91,36 @@ impl AppOption for ShaderOption {
             Self::Crt => "crt",
         }
     }
+
+    fn iter() -> impl Iterator<Item = Self> {
+        [
+            Self::Nearest,
+            Self::Scale2x,
+            Self::Scale3x,
+            Self::Lcd,
+            Self::Crt,
+        ]
+        .into_iter()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
 pub enum ScalingOption {
     PixelPerfect,
     #[default]
-    FitWindow,
+    Stretch,
 }
 
 impl AppOption for ScalingOption {
     fn str(self) -> &'static str {
         match self {
             Self::PixelPerfect => "pixel-perfect",
-            Self::FitWindow => "fit-window",
+            Self::Stretch => "stretch",
         }
+    }
+
+    fn iter() -> impl Iterator<Item = Self> {
+        [Self::PixelPerfect, Self::Stretch].into_iter()
     }
 }
 

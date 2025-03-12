@@ -1,0 +1,18 @@
+[package]
+name = "ceres-wgpu"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies.wgpu]
+version = "*"
+default-features = false
+features = ["dx12", "metal", "wgsl"]
+
+[dependencies.bytemuck]
+version = "*"
+default-features = false

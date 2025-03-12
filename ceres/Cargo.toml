@@ -11,6 +11,9 @@ workspace = true
 [dependencies.ceres-std]
 path = "../ceres-std"
 
+[dependencies.ceres-wgpu]
+path = "../ceres-wgpu"
+
 [dependencies.clap]
 version = "*"
 default-features = false
@@ -27,15 +30,5 @@ version = "*"
 default-features = false
 features = ["default_fonts", "wgpu", "wayland", "accesskit"]
 
-[dependencies.winit]
-version = "*"
-default-features = false
-features = ["wayland", "wayland-csd-adwaita", "rwh_06"]
-
 [dependencies.rfd]
 version = "*"
-
-# Required for wgpu safe byte manipulation
-[dependencies.bytemuck]
-version = "*"
-default-features = false

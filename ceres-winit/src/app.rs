@@ -1,6 +1,6 @@
 use crate::{
+    CERES_STYLIZED, CeresEvent, ScalingOption, ShaderOption,
     video::{self, State},
-    CeresEvent, ScalingOption, ShaderOption, CERES_STYLIZED,
 };
 use anyhow::Context;
 use ceres_std::GbThread;
@@ -26,7 +26,7 @@ pub struct PainterCallbackImpl {
 }
 
 impl PainterCallbackImpl {
-    pub fn new(buffer: Arc<Mutex<Box<[u8]>>>) -> Self {
+    pub const fn new(buffer: Arc<Mutex<Box<[u8]>>>) -> Self {
         Self { buffer }
     }
 }
