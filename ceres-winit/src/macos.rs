@@ -1,6 +1,14 @@
 use crate::{AppOption, CeresEvent, ScalingOption, ShaderOption};
-use objc2::{Encoding, class, ffi::class_addMethod, runtime::Sel, sel};
-use objc2_app_kit::{NSApplication, NSMenu, NSMenuItem, NSModalResponseOK, NSOpenPanel};
+use objc2::{
+    Encoding, class,
+    ffi::class_addMethod,
+    rc::Retained,
+    runtime::{AnyObject, Sel},
+    sel,
+};
+use objc2_app_kit::{
+    NSApplication, NSColor, NSMenu, NSMenuItem, NSModalResponseOK, NSOpenPanel, NSView,
+};
 use objc2_foundation::{MainThreadMarker, NSArray, NSString, NSURL, ns_string};
 use std::{ptr, sync::OnceLock};
 use winit::event_loop::EventLoopProxy;
@@ -51,6 +59,12 @@ extern "C-unwind" fn change_speed_2x() {
 
 extern "C-unwind" fn change_speed_4x() {
     send_speed_event(4);
+}
+
+extern "C-unwind" fn toggle_pause() {
+    if let Some(proxy) = EVENT_PROXY.get() {
+        proxy.send_event(CeresEvent::TogglePause).ok();
+    }
 }
 
 extern "C-unwind" fn open_rom_file() {
@@ -179,6 +193,7 @@ pub fn create_menu_bar() {
         let sel_speed_1x = sel!(changeSpeed1x:);
         let sel_speed_2x = sel!(changeSpeed2x:);
         let sel_speed_4x = sel!(changeSpeed4x:);
+        let sel_toggle_pause = sel!(togglePause:);
 
         let _ = class_addMethod(
             ptr::from_ref(cls).cast_mut(),
@@ -242,6 +257,12 @@ pub fn create_menu_bar() {
             change_speed_4x,
             types.as_ptr().cast(),
         );
+        let _ = class_addMethod(
+            ptr::from_ref(cls).cast_mut(),
+            sel_toggle_pause,
+            toggle_pause,
+            types.as_ptr().cast(),
+        );
 
         let shader_submenu_item = NSMenuItem::new(mtm);
         let shader_submenu = NSMenu::new(mtm);
@@ -286,6 +307,14 @@ pub fn create_menu_bar() {
         speed_submenu_item.setTitle(speed_title);
         view_menu.addItem(&speed_submenu_item);
 
+        add_menu_item(
+            &app,
+            mtm,
+            &speed_submenu,
+            "Pause",
+            sel_toggle_pause,
+            Some("p"),
+        );
         add_menu_item(
             &app,
             mtm,
@@ -340,5 +369,15 @@ unsafe fn add_menu_item(
         item.setTarget(Some(app));
 
         menu.addItem(&item);
+    }
+}
+
+pub fn setup_ns_view(ns_view: *mut AnyObject) {
+    unsafe {
+        let ns_view = Retained::retain(ns_view).unwrap();
+        let ns_view = ns_view.downcast::<NSView>().unwrap();
+        let window = ns_view.window().unwrap();
+
+        window.setBackgroundColor(Some(&NSColor::purpleColor()));
     }
 }

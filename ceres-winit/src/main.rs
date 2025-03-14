@@ -130,6 +130,7 @@ pub enum CeresEvent {
     ChangeScaling(ScalingOption),
     OpenRomFile(PathBuf),
     ChangeSpeed(u32),
+    TogglePause,
 }
 
 #[derive(clap::Parser)]

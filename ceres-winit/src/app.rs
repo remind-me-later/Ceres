@@ -184,15 +184,18 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
             .create_window(main_window_attributes)
             .expect("Could not create window");
 
-        // #[cfg(target_os = "macos")]
-        // {
-        //     use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+        #[cfg(target_os = "macos")]
+        {
+            use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-        //     if let RawWindowHandle::AppKit(handle) = main_window.window_handle().unwrap().as_raw() {
-        //         let ns_view = handle.ns_view.as_ptr().cast::<objc::runtime::Object>();
+            if let Ok(RawWindowHandle::AppKit(handle)) =
+                main_window.window_handle().map(|h| h.as_raw())
+            {
+                let ns_view = handle.ns_view.as_ptr().cast::<objc2::runtime::AnyObject>();
 
-        //     }
-        // }
+                crate::macos::setup_ns_view(ns_view);
+            }
+        }
 
         let main_window_state = pollster::block_on(State::new(
             main_window,
@@ -373,6 +376,13 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
                         .unwrap_or_else(|e| {
                             eprintln!("Error loading ROM: {e}");
                         });
+                }
+            }
+            CeresEvent::TogglePause => {
+                if self.thread.is_paused() {
+                    self.thread.resume().expect("Couldn't resume");
+                } else {
+                    self.thread.pause().expect("Couldn't pause");
                 }
             }
         }
