@@ -12,7 +12,7 @@ pub const VRAM_PX_WIDTH: u16 = TILE_WIDTH * 8;
 pub const VRAM_PX_HEIGHT: u16 = TILE_HEIGHT * 8;
 
 #[derive(Clone, Debug)]
-pub(super) struct RgbaBuf {
+pub struct RgbaBuf {
     data: Box<[u8; RGB_BUF_SIZE as usize]>,
 }
 
@@ -32,7 +32,7 @@ impl Default for RgbaBuf {
 }
 
 impl RgbaBuf {
-    pub(super) fn set_px(&mut self, index: u32, rgb: (u8, u8, u8)) {
+    pub fn set_px(&mut self, index: u32, rgb: (u8, u8, u8)) {
         let base = index * BPP;
         self.data[base as usize] = rgb.0;
         self.data[base as usize + 1] = rgb.1;
@@ -40,7 +40,7 @@ impl RgbaBuf {
     }
 
     #[must_use]
-    pub(crate) const fn pixel_data(&self) -> &[u8] {
+    pub const fn pixel_data(&self) -> &[u8] {
         self.data.as_slice()
     }
 }

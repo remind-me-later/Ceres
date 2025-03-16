@@ -6,7 +6,7 @@ const HF: u16 = 0x20;
 const CF: u16 = 0x10;
 
 impl<A: AudioCallback> Gb<A> {
-    pub(crate) fn run_cpu(&mut self) {
+    pub fn run_cpu(&mut self) {
         if self.ei_delay {
             self.ints.enable();
             self.ei_delay = false;
@@ -977,8 +977,8 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    fn ill(&mut self, _op: u8) {
-        self.ints.ill();
+    fn illegal(&mut self, _op: u8) {
+        self.ints.illegal();
         self.cpu_halted = true;
     }
 
@@ -1062,7 +1062,7 @@ impl<A: AudioCallback> Gb<A> {
             0xFA => self.ld_a_da16(),
             0xFB => self.ei(),
             0xFE => self.cp_a_d8(),
-            _ => self.ill(op),
+            _ => self.illegal(op),
         }
     }
 

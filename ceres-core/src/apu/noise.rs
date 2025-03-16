@@ -4,7 +4,7 @@ use {
 };
 
 #[derive(Debug)]
-pub(super) struct Noise {
+pub struct Noise {
     length_timer: LengthTimer<0x3F>,
     envelope: Envelope,
 
@@ -37,23 +37,23 @@ impl Default for Noise {
 }
 
 impl Noise {
-    pub(super) const fn read_nr42(&self) -> u8 {
+    pub const fn read_nr42(&self) -> u8 {
         self.envelope.read()
     }
 
-    pub(super) const fn read_nr43(&self) -> u8 {
+    pub const fn read_nr43(&self) -> u8 {
         self.nr43
     }
 
-    pub(super) fn read_nr44(&self) -> u8 {
+    pub fn read_nr44(&self) -> u8 {
         0xBF | self.length_timer.read_enabled()
     }
 
-    pub(super) fn write_nr41(&mut self, val: u8) {
+    pub fn write_nr41(&mut self, val: u8) {
         self.length_timer.write_len(val);
     }
 
-    pub(super) fn write_nr42(&mut self, val: u8) {
+    pub fn write_nr42(&mut self, val: u8) {
         if val & 0xF8 == 0 {
             self.enabled = false;
             self.dac_enabled = false;
@@ -64,7 +64,7 @@ impl Noise {
         self.envelope.write(val);
     }
 
-    pub(super) fn write_nr43(&mut self, val: u8) {
+    pub fn write_nr43(&mut self, val: u8) {
         self.nr43 = val;
         self.wide_step = val & 8 != 0;
 
@@ -84,7 +84,7 @@ impl Noise {
         self.timer = 1;
     }
 
-    pub(super) fn write_nr44(&mut self, val: u8) {
+    pub fn write_nr44(&mut self, val: u8) {
         if matches!(
             self.length_timer.write_enabled(val),
             LengthTimerCalculationResult::DisableChannel
@@ -111,11 +111,11 @@ impl Noise {
         }
     }
 
-    pub(super) const fn output(&self) -> u8 {
+    pub const fn output(&self) -> u8 {
         self.output * self.envelope.volume()
     }
 
-    pub(super) fn step_envelope(&mut self) {
+    pub fn step_envelope(&mut self) {
         if !self.enabled {
             return;
         }
@@ -123,7 +123,7 @@ impl Noise {
         self.envelope.step();
     }
 
-    pub(super) fn step_sample(&mut self, cycles: i32) {
+    pub fn step_sample(&mut self, cycles: i32) {
         if !self.is_truly_enabled() {
             return;
         }
@@ -144,11 +144,11 @@ impl Noise {
         }
     }
 
-    pub(super) const fn is_truly_enabled(&self) -> bool {
+    pub const fn is_truly_enabled(&self) -> bool {
         self.enabled && self.dac_enabled
     }
 
-    pub(super) fn step_length_timer(&mut self) {
+    pub fn step_length_timer(&mut self) {
         if matches!(
             self.length_timer.step(),
             LengthTimerCalculationResult::DisableChannel
@@ -157,11 +157,11 @@ impl Noise {
         }
     }
 
-    pub(super) fn set_period_half(&mut self, p_half: PeriodHalf) {
+    pub fn set_period_half(&mut self, p_half: PeriodHalf) {
         self.length_timer.set_phalf(p_half);
     }
 
-    pub(super) const fn is_enabled(&self) -> bool {
+    pub const fn is_enabled(&self) -> bool {
         self.enabled
     }
 }

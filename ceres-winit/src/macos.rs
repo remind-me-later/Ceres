@@ -374,10 +374,12 @@ unsafe fn add_menu_item(
 
 pub fn setup_ns_view(ns_view: *mut AnyObject) {
     unsafe {
-        let ns_view = Retained::retain(ns_view).unwrap();
-        let ns_view = ns_view.downcast::<NSView>().unwrap();
-        let window = ns_view.window().unwrap();
-
-        window.setBackgroundColor(Some(&NSColor::purpleColor()));
+        if let Some(ns_view) =
+            Retained::retain(ns_view).and_then(|ns_view| ns_view.downcast::<NSView>().ok())
+        {
+            if let Some(w) = ns_view.window() {
+                w.setBackgroundColor(Some(&NSColor::purpleColor()));
+            }
+        }
     }
 }

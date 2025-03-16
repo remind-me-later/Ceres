@@ -55,7 +55,7 @@ pub enum Mode {
 }
 
 impl Mode {
-    pub(crate) fn cycles(self, scroll_x: u8) -> i32 {
+    pub fn cycles(self, scroll_x: u8) -> i32 {
         let scroll_adjust = i32::from(scroll_x & 7) * 4;
         match self {
             Self::OamScan => OAM_SCAN_CYCLES,
@@ -133,131 +133,131 @@ impl Default for Ppu {
 // IO
 impl Ppu {
     #[must_use]
-    pub(crate) fn ocp_mut(&mut self) -> &mut ColorPalette {
+    pub fn ocp_mut(&mut self) -> &mut ColorPalette {
         &mut self.ocp
     }
 
     #[must_use]
-    pub(crate) fn bcp_mut(&mut self) -> &mut ColorPalette {
+    pub fn bcp_mut(&mut self) -> &mut ColorPalette {
         &mut self.bcp
     }
 
     #[must_use]
-    pub(crate) const fn ocp(&self) -> &ColorPalette {
+    pub const fn ocp(&self) -> &ColorPalette {
         &self.ocp
     }
 
     #[must_use]
-    pub(crate) const fn bcp(&self) -> &ColorPalette {
+    pub const fn bcp(&self) -> &ColorPalette {
         &self.bcp
     }
 
     #[must_use]
-    pub(crate) const fn read_stat(&self) -> u8 {
+    pub const fn read_stat(&self) -> u8 {
         self.stat | 0x80
     }
 
     #[must_use]
-    pub(crate) const fn read_ly(&self) -> u8 {
+    pub const fn read_ly(&self) -> u8 {
         self.ly
     }
 
-    pub(crate) fn write_opri(&mut self, val: u8) {
+    pub fn write_opri(&mut self, val: u8) {
         self.opri = val & 1 != 0;
     }
 
     #[must_use]
-    pub(crate) const fn read_opri(&self) -> u8 {
+    pub const fn read_opri(&self) -> u8 {
         self.opri as u8 | 0xFE
     }
 
-    pub(crate) fn write_vbk(&mut self, val: u8) {
+    pub fn write_vbk(&mut self, val: u8) {
         self.vbk = val & 1 != 0;
     }
 
     #[must_use]
-    pub(crate) const fn read_vbk(&self) -> u8 {
+    pub const fn read_vbk(&self) -> u8 {
         (self.vbk as u8) | 0xFE
     }
 
-    pub(crate) fn write_scx(&mut self, val: u8) {
+    pub fn write_scx(&mut self, val: u8) {
         self.scx = val;
     }
 
     #[must_use]
-    pub(crate) const fn read_scx(&self) -> u8 {
+    pub const fn read_scx(&self) -> u8 {
         self.scx
     }
 
-    pub(crate) fn write_scy(&mut self, val: u8) {
+    pub fn write_scy(&mut self, val: u8) {
         self.scy = val;
     }
 
     #[must_use]
-    pub(crate) const fn read_scy(&self) -> u8 {
+    pub const fn read_scy(&self) -> u8 {
         self.scy
     }
 
-    pub(crate) fn write_lyc(&mut self, val: u8) {
+    pub fn write_lyc(&mut self, val: u8) {
         self.lyc = val;
     }
 
     #[must_use]
-    pub(crate) const fn read_lyc(&self) -> u8 {
+    pub const fn read_lyc(&self) -> u8 {
         self.lyc
     }
 
-    pub(crate) fn write_bgp(&mut self, val: u8) {
+    pub fn write_bgp(&mut self, val: u8) {
         self.bgp = val;
     }
 
     #[must_use]
-    pub(crate) const fn read_bgp(&self) -> u8 {
+    pub const fn read_bgp(&self) -> u8 {
         self.bgp
     }
 
-    pub(crate) fn write_obp0(&mut self, val: u8) {
+    pub fn write_obp0(&mut self, val: u8) {
         self.obp0 = val;
     }
 
     #[must_use]
-    pub(crate) const fn read_obp0(&self) -> u8 {
+    pub const fn read_obp0(&self) -> u8 {
         self.obp0
     }
 
-    pub(crate) fn write_obp1(&mut self, val: u8) {
+    pub fn write_obp1(&mut self, val: u8) {
         self.obp1 = val;
     }
 
     #[must_use]
-    pub(crate) const fn read_obp1(&self) -> u8 {
+    pub const fn read_obp1(&self) -> u8 {
         self.obp1
     }
 
-    pub(crate) fn write_wy(&mut self, val: u8) {
+    pub fn write_wy(&mut self, val: u8) {
         self.wy = val;
     }
 
     #[must_use]
-    pub(crate) const fn read_wy(&self) -> u8 {
+    pub const fn read_wy(&self) -> u8 {
         self.wy
     }
 
-    pub(crate) fn write_wx(&mut self, val: u8) {
+    pub fn write_wx(&mut self, val: u8) {
         self.wx = val;
     }
 
     #[must_use]
-    pub(crate) const fn read_wx(&self) -> u8 {
+    pub const fn read_wx(&self) -> u8 {
         self.wx
     }
 
     #[must_use]
-    pub(crate) const fn read_lcdc(&self) -> u8 {
+    pub const fn read_lcdc(&self) -> u8 {
         self.lcdc
     }
 
-    pub(crate) fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts) {
+    pub fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts) {
         // turn off
         if val & LCDC_ON_B == 0 && self.lcdc & LCDC_ON_B != 0 {
             // FIXME: breaks 'alone in the dark' and the menu fade out in 'Links awakening' among others
@@ -285,7 +285,7 @@ impl Ppu {
         self.lcdc = val;
     }
 
-    pub(crate) fn write_stat(&mut self, val: u8) {
+    pub fn write_stat(&mut self, val: u8) {
         let ly_equals_lyc = self.stat & STAT_LYC_B;
         let mode: u8 = self.mode() as u8;
 
@@ -295,7 +295,7 @@ impl Ppu {
     }
 
     #[must_use]
-    pub(crate) const fn read_vram(&self, addr: u16) -> u8 {
+    pub const fn read_vram(&self, addr: u16) -> u8 {
         if matches!(self.mode(), Mode::Drawing) {
             0xFF
         } else {
@@ -305,7 +305,7 @@ impl Ppu {
         }
     }
 
-    pub(crate) fn write_vram(&mut self, addr: u16, val: u8) {
+    pub fn write_vram(&mut self, addr: u16, val: u8) {
         if !matches!(self.mode(), Mode::Drawing) {
             let bank = u16::from(self.vbk) * VRAM_SIZE_GB;
             let i = (addr & 0x1FFF) + bank;
@@ -314,14 +314,14 @@ impl Ppu {
     }
 
     #[must_use]
-    pub(crate) const fn read_oam(&self, addr: u16, dma_on: bool) -> u8 {
+    pub const fn read_oam(&self, addr: u16, dma_on: bool) -> u8 {
         match self.mode() {
             Mode::HBlank | Mode::VBlank if !dma_on => self.oam[(addr & 0xFF) as usize],
             _ => 0xFF,
         }
     }
 
-    pub(crate) fn write_oam(&mut self, addr: u16, val: u8, dma_active: bool) {
+    pub fn write_oam(&mut self, addr: u16, val: u8, dma_active: bool) {
         match self.mode() {
             Mode::HBlank | Mode::VBlank if !dma_active => {
                 self.oam[(addr & 0xFF) as usize] = val;
@@ -330,35 +330,35 @@ impl Ppu {
         };
     }
 
-    pub(crate) fn write_oam_by_dma(&mut self, addr: u16, val: u8) {
+    pub fn write_oam_by_dma(&mut self, addr: u16, val: u8) {
         self.oam[(addr & 0xFF) as usize] = val;
     }
 
     // Getters and setters
     #[must_use]
-    pub(crate) const fn vram(&self) -> &[u8] {
+    pub const fn vram(&self) -> &[u8] {
         &self.vram
     }
 
     #[must_use]
-    pub(crate) const fn vram_mut(&mut self) -> &mut [u8] {
+    pub const fn vram_mut(&mut self) -> &mut [u8] {
         &mut self.vram
     }
 
     #[must_use]
-    pub(crate) const fn oam(&self) -> &[u8] {
+    pub const fn oam(&self) -> &[u8] {
         &self.oam
     }
 
     #[must_use]
-    pub(crate) fn oam_mut(&mut self) -> &mut [u8] {
+    pub fn oam_mut(&mut self) -> &mut [u8] {
         &mut self.oam
     }
 }
 
 // General
 impl Ppu {
-    pub(crate) fn run(&mut self, cycles: i32, ints: &mut Interrupts, cgb_mode: CgbMode) {
+    pub fn run(&mut self, cycles: i32, ints: &mut Interrupts, cgb_mode: CgbMode) {
         if self.lcdc & LCDC_ON_B == 0 {
             return;
         }
@@ -414,7 +414,7 @@ impl Ppu {
     }
 
     #[must_use]
-    pub(crate) const fn mode(&self) -> Mode {
+    pub const fn mode(&self) -> Mode {
         match self.stat & 3 {
             0 => Mode::HBlank,
             1 => Mode::VBlank,
@@ -466,12 +466,12 @@ impl Ppu {
     }
 
     #[must_use]
-    pub(crate) const fn pixel_data_rgba(&self) -> &[u8] {
+    pub const fn pixel_data_rgba(&self) -> &[u8] {
         self.rgba_buf_present.pixel_data()
     }
 
     #[must_use]
-    pub(crate) const fn vram_data_rgba(&self) -> &[u8] {
+    pub const fn vram_data_rgba(&self) -> &[u8] {
         self.vram_renderer.vram_data_rgba()
     }
 }

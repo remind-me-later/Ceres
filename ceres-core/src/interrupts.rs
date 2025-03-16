@@ -12,12 +12,12 @@ pub struct Interrupts {
 }
 
 impl Interrupts {
-    pub(crate) fn ill(&mut self) {
+    pub fn illegal(&mut self) {
         self.ie = 0;
     }
 
     #[must_use]
-    pub(crate) fn handle(&mut self) -> u16 {
+    pub fn handle(&mut self) -> u16 {
         let ints = self.ifr & self.ie;
         let tz = (ints.trailing_zeros() & 7) as u16;
         // get rightmost interrupt
@@ -29,58 +29,58 @@ impl Interrupts {
     }
 
     #[must_use]
-    pub(crate) const fn is_any_requested(&self) -> bool {
+    pub const fn is_any_requested(&self) -> bool {
         self.ifr & self.ie != 0
     }
 
-    pub(crate) fn enable(&mut self) {
+    pub fn enable(&mut self) {
         self.ime = true;
     }
 
-    pub(crate) fn disable(&mut self) {
+    pub fn disable(&mut self) {
         self.ime = false;
     }
 
     #[must_use]
-    pub(crate) const fn are_enabled(&self) -> bool {
+    pub const fn are_enabled(&self) -> bool {
         self.ime
     }
 
-    pub(crate) fn request_p1(&mut self) {
+    pub fn request_p1(&mut self) {
         self.ifr |= P1;
     }
 
-    pub(crate) fn request_serial(&mut self) {
+    pub fn request_serial(&mut self) {
         self.ifr |= SERIAL;
     }
 
-    pub(crate) fn request_vblank(&mut self) {
+    pub fn request_vblank(&mut self) {
         self.ifr |= VBLANK;
     }
 
-    pub(crate) fn request_lcd(&mut self) {
+    pub fn request_lcd(&mut self) {
         self.ifr |= LCD;
     }
 
-    pub(crate) fn request_timer(&mut self) {
+    pub fn request_timer(&mut self) {
         self.ifr |= TIMER;
     }
 
     #[must_use]
-    pub(crate) const fn read_if(&self) -> u8 {
+    pub const fn read_if(&self) -> u8 {
         self.ifr | 0xE0
     }
 
     #[must_use]
-    pub(crate) const fn read_ie(&self) -> u8 {
+    pub const fn read_ie(&self) -> u8 {
         self.ie
     }
 
-    pub(crate) fn write_if(&mut self, val: u8) {
+    pub fn write_if(&mut self, val: u8) {
         self.ifr = val & 0x1F;
     }
 
-    pub(crate) fn write_ie(&mut self, val: u8) {
+    pub fn write_ie(&mut self, val: u8) {
         self.ie = val;
     }
 }

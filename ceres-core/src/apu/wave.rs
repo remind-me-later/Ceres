@@ -11,7 +11,7 @@ const RAM_LEN: u8 = 0x10;
 const SAMPLE_LEN: u8 = RAM_LEN * 2;
 
 #[derive(Default, Debug)]
-pub(super) struct Wave {
+pub struct Wave {
     length_timer: LengthTimer<0xFF>,
     period_counter: PeriodCounter<2, ()>,
 
@@ -26,12 +26,12 @@ pub(super) struct Wave {
 }
 
 impl Wave {
-    pub(super) const fn read_wave_ram(&self, addr: u8) -> u8 {
+    pub const fn read_wave_ram(&self, addr: u8) -> u8 {
         let index = addr - 0x30;
         self.ram[index as usize]
     }
 
-    pub(super) fn write_wave_ram(&mut self, addr: u8, val: u8) {
+    pub fn write_wave_ram(&mut self, addr: u8, val: u8) {
         let index = addr - 0x30;
         self.ram[index as usize] = val;
         // upper 4 bits first
@@ -39,19 +39,19 @@ impl Wave {
         self.samples[index as usize * 2 + 1] = val & 0xF;
     }
 
-    pub(super) const fn read_nr30(&self) -> u8 {
+    pub const fn read_nr30(&self) -> u8 {
         self.nr30 | 0x7F
     }
 
-    pub(super) const fn read_nr32(&self) -> u8 {
+    pub const fn read_nr32(&self) -> u8 {
         0x9F | (self.volume << 5)
     }
 
-    pub(super) fn read_nr34(&self) -> u8 {
+    pub fn read_nr34(&self) -> u8 {
         0xBF | self.length_timer.read_enabled()
     }
 
-    pub(super) fn write_nr30(&mut self, val: u8) {
+    pub fn write_nr30(&mut self, val: u8) {
         self.nr30 = val;
         if val & 0x80 == 0 {
             self.enabled = false;
@@ -61,19 +61,19 @@ impl Wave {
         }
     }
 
-    pub(super) fn write_nr31(&mut self, val: u8) {
+    pub fn write_nr31(&mut self, val: u8) {
         self.length_timer.write_len(val);
     }
 
-    pub(super) fn write_nr32(&mut self, val: u8) {
+    pub fn write_nr32(&mut self, val: u8) {
         self.volume = (val >> 5) & 3;
     }
 
-    pub(super) fn write_nr33(&mut self, val: u8) {
+    pub fn write_nr33(&mut self, val: u8) {
         self.period_counter.write_low(val);
     }
 
-    pub(super) fn write_nr34(&mut self, val: u8) {
+    pub fn write_nr34(&mut self, val: u8) {
         self.period_counter.write_high(val);
 
         if matches!(
@@ -107,13 +107,13 @@ impl Wave {
         }
     }
 
-    pub(super) const fn output(&self) -> u8 {
+    pub const fn output(&self) -> u8 {
         // wrapping_shr is necessary because (vol - 1) can be -1
         self.sample_buffer
             .wrapping_shr(self.volume.wrapping_sub(1) as u32)
     }
 
-    pub(super) fn step_sample(&mut self, cycles: i32) {
+    pub fn step_sample(&mut self, cycles: i32) {
         if !self.is_enabled() {
             return;
         }
@@ -127,11 +127,11 @@ impl Wave {
         }
     }
 
-    pub(super) const fn is_truly_enabled(&self) -> bool {
+    pub const fn is_truly_enabled(&self) -> bool {
         self.enabled && self.dac_enabled
     }
 
-    pub(super) fn step_length_timer(&mut self) {
+    pub fn step_length_timer(&mut self) {
         if matches!(
             self.length_timer.step(),
             LengthTimerCalculationResult::DisableChannel
@@ -140,16 +140,16 @@ impl Wave {
         }
     }
 
-    pub(super) fn set_period_half(&mut self, p_half: PeriodHalf) {
+    pub fn set_period_half(&mut self, p_half: PeriodHalf) {
         self.length_timer.set_phalf(p_half);
     }
 
-    pub(super) const fn is_enabled(&self) -> bool {
+    pub const fn is_enabled(&self) -> bool {
         self.enabled
     }
 
     // Necessary because powering off the APU doesn't clear the wave RAM
-    pub(super) fn reset(&mut self) {
+    pub fn reset(&mut self) {
         let ram = self.ram;
         *self = Self::default();
         self.ram = ram;

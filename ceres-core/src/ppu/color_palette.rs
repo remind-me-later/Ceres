@@ -27,12 +27,12 @@ impl Default for ColorPalette {
 }
 
 impl ColorPalette {
-    pub(crate) fn set_spec(&mut self, val: u8) {
+    pub fn set_spec(&mut self, val: u8) {
         self.spec = val;
     }
 
     #[must_use]
-    pub(crate) const fn spec(&self) -> u8 {
+    pub const fn spec(&self) -> u8 {
         self.spec | 0x40
     }
 
@@ -47,7 +47,7 @@ impl ColorPalette {
     }
 
     #[must_use]
-    pub(crate) const fn data(&self) -> u8 {
+    pub const fn data(&self) -> u8 {
         let i = (self.index() as usize / 2) * 3;
 
         if self.index() & 1 == 0 {
@@ -63,7 +63,7 @@ impl ColorPalette {
         }
     }
 
-    pub(crate) fn set_data(&mut self, val: u8) {
+    pub fn set_data(&mut self, val: u8) {
         let i = (self.index() as usize / 2) * 3;
 
         if self.index() & 1 == 0 {
@@ -86,7 +86,7 @@ impl ColorPalette {
     }
 
     #[must_use]
-    pub(super) const fn rgb(&self, palette: u8, color: u8) -> (u8, u8, u8) {
+    pub const fn rgb(&self, palette: u8, color: u8) -> (u8, u8, u8) {
         const fn scale_channel(c: u8) -> u8 {
             (c << 3) | (c >> 2)
         }

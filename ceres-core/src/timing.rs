@@ -9,7 +9,7 @@ pub enum TIMAState {
 }
 
 impl<A: AudioCallback> Gb<A> {
-    pub(crate) fn advance_t_cycles(&mut self, mut cycles: i32) {
+    pub fn advance_t_cycles(&mut self, mut cycles: i32) {
         // affected by speed boost
         self.run_timers(cycles);
         self.dma_cycles += cycles;
@@ -89,7 +89,7 @@ impl<A: AudioCallback> Gb<A> {
         self.div = val;
     }
 
-    pub(crate) fn run_timers(&mut self, cycles: i32) {
+    pub fn run_timers(&mut self, cycles: i32) {
         for _ in 0..cycles / 4 {
             self.advance_tima_state();
             self.set_system_clk(self.div.wrapping_add(4));
@@ -97,28 +97,28 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[must_use]
-    pub(crate) const fn read_div(&self) -> u8 {
+    pub const fn read_div(&self) -> u8 {
         ((self.div >> 8) & 0xFF) as u8
     }
 
-    pub(crate) fn write_div(&mut self) {
+    pub fn write_div(&mut self) {
         self.set_system_clk(0);
     }
 
-    pub(crate) fn write_tima(&mut self, val: u8) {
+    pub fn write_tima(&mut self, val: u8) {
         self.tima = val;
     }
 
-    pub(crate) fn write_tma(&mut self, val: u8) {
+    pub fn write_tma(&mut self, val: u8) {
         self.tma = val;
     }
 
     #[must_use]
-    pub(crate) const fn read_tac(&self) -> u8 {
+    pub const fn read_tac(&self) -> u8 {
         0xF8 | self.tac
     }
 
-    pub(crate) fn write_tac(&mut self, val: u8) {
+    pub fn write_tac(&mut self, val: u8) {
         self.tac = val;
     }
 

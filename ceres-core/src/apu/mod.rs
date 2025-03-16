@@ -1,5 +1,5 @@
 use {
-    crate::TC_SEC,
+    crate::{AudioCallback, Sample, TC_SEC},
     length_timer::LengthTimer,
     noise::Noise,
     period_counter::PeriodCounter,
@@ -15,12 +15,6 @@ mod period_counter;
 mod square;
 mod sweep;
 mod wave;
-
-pub type Sample = i16;
-
-pub trait AudioCallback {
-    fn audio_sample(&self, l: Sample, r: Sample);
-}
 
 #[derive(Clone, Copy, Default, Debug)]
 enum PeriodHalf {

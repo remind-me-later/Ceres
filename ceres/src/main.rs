@@ -69,12 +69,12 @@ impl From<Model> for ceres_std::Model {
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum ShaderOption {
-    Nearest = 0,
-    Scale2x = 1,
-    Scale3x = 2,
+    Nearest,
+    Scale2x,
+    Scale3x,
     #[default]
-    Lcd = 3,
-    Crt = 4,
+    Lcd,
+    Crt,
 }
 
 impl AppOption for ShaderOption {

@@ -1,5 +1,5 @@
 use crate::audio;
-use ceres_core::{Cart, GbBuilder};
+use ceres_core::GbBuilder;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
 use std::{
@@ -146,13 +146,10 @@ impl GbThread {
                     .map_err(Error::Io)?
             };
 
-            let cart = Cart::new(rom)?;
+            let gb_builder =
+                GbBuilder::new(model, audio_stream.sample_rate(), Some(rom), ring_buffer)?;
 
-            let has_save = cart.has_battery();
-
-            let gb_builder = GbBuilder::new(model, audio_stream.sample_rate(), cart, ring_buffer);
-
-            if !has_save {
+            if !gb_builder.can_load_save_data() {
                 return Ok(gb_builder.build());
             }
 
@@ -168,13 +165,7 @@ impl GbThread {
                 Ok(gb_builder.build())
             }
         } else {
-            Ok(GbBuilder::new(
-                model,
-                audio_stream.sample_rate(),
-                Cart::default(),
-                ring_buffer,
-            )
-            .build())
+            Ok(GbBuilder::new(model, audio_stream.sample_rate(), None, ring_buffer)?.build())
         }
     }
 

@@ -379,10 +379,12 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
                 }
             }
             CeresEvent::TogglePause => {
-                if self.thread.is_paused() {
-                    self.thread.resume().expect("Couldn't resume");
+                if let Err(e) = if self.thread.is_paused() {
+                    self.thread.resume()
                 } else {
-                    self.thread.pause().expect("Couldn't pause");
+                    self.thread.pause()
+                } {
+                    eprintln!("Error toggling pause: {e}");
                 }
             }
         }

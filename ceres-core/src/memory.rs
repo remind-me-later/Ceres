@@ -89,7 +89,7 @@ const IE: u8 = 0xFF;
 
 impl<A: AudioCallback> Gb<A> {
     #[must_use]
-    pub(crate) const fn read_wram_lo(&self, addr: u16) -> u8 {
+    pub const fn read_wram_lo(&self, addr: u16) -> u8 {
         self.wram[(addr & 0xFFF) as usize]
     }
 
@@ -98,7 +98,7 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[must_use]
-    pub(crate) const fn read_wram_hi(&self, addr: u16) -> u8 {
+    pub const fn read_wram_hi(&self, addr: u16) -> u8 {
         self.wram[(addr & 0xFFF | self.svbk.bank_offset()) as usize]
     }
 
@@ -131,7 +131,7 @@ impl<A: AudioCallback> Gb<A> {
     // **************
 
     #[must_use]
-    pub(crate) fn read_mem(&self, addr: u16) -> u8 {
+    pub fn read_mem(&self, addr: u16) -> u8 {
         match addr {
             0x0000..=0x00FF => self.read_boot_or_cart(addr),
             0x0200..=0x08FF => {
@@ -152,7 +152,7 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    pub(crate) fn write_mem(&mut self, addr: u16, val: u8) {
+    pub fn write_mem(&mut self, addr: u16, val: u8) {
         match addr {
             // FIXME: we assume bootrom doesn't write to rom
             0x0000..=0x7FFF => self.cart.write_rom(addr, val),
@@ -316,7 +316,7 @@ impl<A: AudioCallback> Gb<A> {
         self.dma_on = true;
     }
 
-    pub(crate) fn run_dma(&mut self) {
+    pub fn run_dma(&mut self) {
         if !self.dma_on {
             return;
         }
@@ -384,7 +384,7 @@ impl<A: AudioCallback> Gb<A> {
         self.hdma_state = if val & 0x80 == 0 { General } else { WaitHBlank };
     }
 
-    pub(crate) fn run_hdma(&mut self) {
+    pub fn run_hdma(&mut self) {
         use HdmaState::{General, HBlankDone, Sleep, WaitHBlank};
 
         match self.hdma_state {

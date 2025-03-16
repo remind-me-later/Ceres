@@ -20,7 +20,7 @@ impl EnvelopeDirection {
 }
 
 #[derive(Default, Debug)]
-pub(super) struct Envelope {
+pub struct Envelope {
     enabled: bool,
     direction: EnvelopeDirection,
 
@@ -33,11 +33,11 @@ pub(super) struct Envelope {
 }
 
 impl Envelope {
-    pub(super) const fn read(&self) -> u8 {
+    pub const fn read(&self) -> u8 {
         (self.initial_volume << 4) | self.direction.to_u8() | self.period
     }
 
-    pub(super) fn write(&mut self, val: u8) {
+    pub fn write(&mut self, val: u8) {
         self.period = val & 7;
         self.enabled = self.period != 0;
 
@@ -47,7 +47,7 @@ impl Envelope {
         self.volume = self.initial_volume;
     }
 
-    pub(super) fn step(&mut self) {
+    pub fn step(&mut self) {
         use EnvelopeDirection::{Decrease, Increase};
 
         if !self.enabled {
@@ -73,12 +73,12 @@ impl Envelope {
         }
     }
 
-    pub(super) fn trigger(&mut self) {
+    pub fn trigger(&mut self) {
         self.timer = 0;
         self.volume = self.initial_volume;
     }
 
-    pub(super) const fn volume(&self) -> u8 {
+    pub const fn volume(&self) -> u8 {
         self.volume
     }
 }

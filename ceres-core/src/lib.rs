@@ -1,12 +1,13 @@
 // #![no_std]
-// TODO: Use borrowedBuf or something similar to avoid heap allocation (currently nightly only)
+// TODO: Use borrowedBuf or something similar to avoid std io (currently nightly only)
 
 extern crate alloc;
 
 mod apu;
 mod bess;
-mod cart;
+mod cartridge;
 mod cpu;
+mod error;
 mod interrupts;
 mod joypad;
 mod memory;
@@ -14,6 +15,7 @@ mod ppu;
 mod serial;
 mod timing;
 
+use cartridge::Cartridge;
 use core::time::Duration;
 use interrupts::Interrupts;
 use joypad::Joypad;
@@ -23,8 +25,7 @@ use std::io;
 use {apu::Apu, memory::HdmaState, ppu::Ppu, timing::TIMAState};
 
 pub use {
-    apu::{AudioCallback, Sample},
-    cart::{Cart, Error},
+    error::Error,
     joypad::Button,
     ppu::{PX_HEIGHT, PX_WIDTH, VRAM_PX_HEIGHT, VRAM_PX_WIDTH},
 };
@@ -38,6 +39,12 @@ pub const HRAM_SIZE: u8 = 0x7F;
 pub const WRAM_SIZE_GB: u16 = 0x2000;
 pub const WRAM_SIZE_CGB: u16 = WRAM_SIZE_GB * 4;
 
+pub type Sample = i16;
+
+pub trait AudioCallback {
+    fn audio_sample(&self, l: Sample, r: Sample);
+}
+
 #[expect(clippy::struct_excessive_bools)]
 #[derive(Debug)]
 pub struct Gb<C: AudioCallback> {
@@ -46,7 +53,7 @@ pub struct Gb<C: AudioCallback> {
     dot_accumulator: i32,
 
     // cartridge
-    cart: Cart,
+    cart: Cartridge,
     bootrom: Option<&'static [u8]>,
 
     // cpu
@@ -98,7 +105,7 @@ pub struct Gb<C: AudioCallback> {
 
 impl<C: AudioCallback> Gb<C> {
     #[must_use]
-    fn new(model: Model, sample_rate: i32, cart: Cart, audio_callback: C) -> Self {
+    fn new(model: Model, sample_rate: i32, cart: Cartridge, audio_callback: C) -> Self {
         // Boot ROMs
         const DMG_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/dmg.bin");
         const MGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/mgb.bin");
@@ -200,6 +207,23 @@ impl<C: AudioCallback> Gb<C> {
     pub fn set_sample_rate(&mut self, sample_rate: i32) {
         self.apu.set_sample_rate(sample_rate);
     }
+
+    // Cartridge functions
+    pub fn title(&self) -> &[u8] {
+        self.cart.ascii_title()
+    }
+
+    pub const fn header_checksum(&self) -> u8 {
+        self.cart.header_checksum()
+    }
+
+    pub const fn version(&self) -> u8 {
+        self.cart.version()
+    }
+
+    pub const fn has_battery(&self) -> bool {
+        self.cart.has_battery()
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -221,10 +245,25 @@ pub struct GbBuilder<C: AudioCallback> {
 }
 
 impl<C: AudioCallback> GbBuilder<C> {
-    pub fn new(model: Model, sample_rate: i32, cart: Cart, audio_callback: C) -> Self {
-        Self {
+    pub fn new(
+        model: Model,
+        sample_rate: i32,
+        rom: Option<Box<[u8]>>,
+        audio_callback: C,
+    ) -> Result<Self, Error> {
+        let cart = if let Some(rom) = rom {
+            Cartridge::new(rom)?
+        } else {
+            Cartridge::default()
+        };
+
+        Ok(Self {
             gb: Gb::new(model, sample_rate, cart, audio_callback),
-        }
+        })
+    }
+
+    pub const fn can_load_save_data(&self) -> bool {
+        self.gb.cart.has_battery()
     }
 
     pub fn load_save_data<R: io::Read + io::Seek>(

@@ -15,7 +15,7 @@ pub struct Serial {
 }
 
 impl Serial {
-    pub(crate) fn run_master(&mut self, ints: &mut Interrupts) {
+    pub fn run_master(&mut self, ints: &mut Interrupts) {
         self.master_clock ^= true;
 
         if !self.master_clock && (self.sc & (START | SHIFT) == (START | SHIFT)) {
@@ -34,25 +34,25 @@ impl Serial {
     }
 
     #[must_use]
-    pub(crate) const fn div_mask(&self) -> u8 {
+    pub const fn div_mask(&self) -> u8 {
         self.div_mask
     }
 
     #[must_use]
-    pub(crate) const fn read_sb(&self) -> u8 {
+    pub const fn read_sb(&self) -> u8 {
         self.sb
     }
 
     #[must_use]
-    pub(crate) const fn read_sc(&self) -> u8 {
+    pub const fn read_sc(&self) -> u8 {
         self.sc
     }
 
-    pub(crate) fn write_sb(&mut self, val: u8) {
+    pub fn write_sb(&mut self, val: u8) {
         self.sb = val;
     }
 
-    pub(crate) fn write_sc(&mut self, mut val: u8, ints: &mut Interrupts, cgb_mode: CgbMode) {
+    pub fn write_sc(&mut self, mut val: u8, ints: &mut Interrupts, cgb_mode: CgbMode) {
         self.count = 0;
 
         if matches!(cgb_mode, CgbMode::Cgb) {

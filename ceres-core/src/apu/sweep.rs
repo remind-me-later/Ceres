@@ -1,6 +1,6 @@
 use core::num::NonZeroU8;
 
-pub(super) trait SweepTrait: Default {
+pub trait SweepTrait: Default {
     fn read(&self) -> u8;
     fn write(&mut self, val: u8);
     fn step(&mut self) -> SweepCalculationResult;
@@ -27,14 +27,14 @@ impl From<SweepDirection> for u8 {
 }
 
 #[derive(Debug)]
-pub(super) enum SweepCalculationResult {
+pub enum SweepCalculationResult {
     DisableChannel,
     UpdatePeriod { period: u16 },
     None,
 }
 
 #[derive(Debug)]
-pub(super) struct Sweep {
+pub struct Sweep {
     // TODO: check on behaviour
     enabled: bool,
     dir: SweepDirection,

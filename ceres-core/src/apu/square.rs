@@ -7,7 +7,7 @@ use {
 };
 
 #[derive(Default, Debug)]
-pub(super) struct Square<Sweep: SweepTrait> {
+pub struct Square<Sweep: SweepTrait> {
     length_timer: LengthTimer<0x3F>,
     period_counter: PeriodCounter<4, Sweep>,
     envelope: Envelope,
@@ -21,32 +21,32 @@ pub(super) struct Square<Sweep: SweepTrait> {
 }
 
 impl<S: SweepTrait> Square<S> {
-    pub(super) fn read_nrx0(&self) -> u8 {
+    pub fn read_nrx0(&self) -> u8 {
         self.period_counter.read_sweep()
     }
 
-    pub(super) const fn read_nrx1(&self) -> u8 {
+    pub const fn read_nrx1(&self) -> u8 {
         0x3F | (self.duty << 6)
     }
 
-    pub(super) const fn read_nrx2(&self) -> u8 {
+    pub const fn read_nrx2(&self) -> u8 {
         self.envelope.read()
     }
 
-    pub(super) fn read_nrx4(&self) -> u8 {
+    pub fn read_nrx4(&self) -> u8 {
         0xBF | self.length_timer.read_enabled()
     }
 
-    pub(super) fn write_nrx0(&mut self, val: u8) {
+    pub fn write_nrx0(&mut self, val: u8) {
         self.period_counter.write_sweep(val);
     }
 
-    pub(super) fn write_nrx1(&mut self, val: u8) {
+    pub fn write_nrx1(&mut self, val: u8) {
         self.duty = (val >> 6) & 3;
         self.length_timer.write_len(val);
     }
 
-    pub(super) fn write_nrx2(&mut self, val: u8) {
+    pub fn write_nrx2(&mut self, val: u8) {
         if val & 0xF8 == 0 {
             self.enabled = false;
             self.dac_enabled = false;
@@ -57,11 +57,11 @@ impl<S: SweepTrait> Square<S> {
         self.envelope.write(val);
     }
 
-    pub(super) fn write_nrx3(&mut self, val: u8) {
+    pub fn write_nrx3(&mut self, val: u8) {
         self.period_counter.write_low(val);
     }
 
-    pub(super) fn write_nrx4(&mut self, val: u8) {
+    pub fn write_nrx4(&mut self, val: u8) {
         self.period_counter.write_high(val);
         if matches!(
             self.length_timer.write_enabled(val),
@@ -94,7 +94,7 @@ impl<S: SweepTrait> Square<S> {
         }
     }
 
-    pub(super) fn step_sample(&mut self, cycles: i32) {
+    pub fn step_sample(&mut self, cycles: i32) {
         // Shape of the duty waveform for a certain duty
         const DUTY_WAV: [u8; 4] = [
             0b0000_0001, // _______- : 12.5%
@@ -116,7 +116,7 @@ impl<S: SweepTrait> Square<S> {
         }
     }
 
-    pub(super) fn step_sweep(&mut self) {
+    pub fn step_sweep(&mut self) {
         if self.enabled
             && matches!(
                 self.period_counter.step_sweep(),
@@ -127,21 +127,21 @@ impl<S: SweepTrait> Square<S> {
         }
     }
 
-    pub(super) fn step_envelope(&mut self) {
+    pub fn step_envelope(&mut self) {
         if self.enabled {
             self.envelope.step();
         }
     }
 
-    pub(super) const fn output(&self) -> u8 {
+    pub const fn output(&self) -> u8 {
         self.output * self.envelope.volume()
     }
 
-    pub(super) const fn is_truly_enabled(&self) -> bool {
+    pub const fn is_truly_enabled(&self) -> bool {
         self.enabled && self.dac_enabled
     }
 
-    pub(super) fn step_length_timer(&mut self) {
+    pub fn step_length_timer(&mut self) {
         if matches!(
             self.length_timer.step(),
             LengthTimerCalculationResult::DisableChannel
@@ -150,11 +150,11 @@ impl<S: SweepTrait> Square<S> {
         }
     }
 
-    pub(super) fn set_period_half(&mut self, p_half: PeriodHalf) {
+    pub fn set_period_half(&mut self, p_half: PeriodHalf) {
         self.length_timer.set_phalf(p_half);
     }
 
-    pub(super) const fn is_enabled(&self) -> bool {
+    pub const fn is_enabled(&self) -> bool {
         self.enabled
     }
 }

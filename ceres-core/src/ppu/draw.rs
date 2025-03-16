@@ -121,7 +121,7 @@ impl Ppu {
         (lo, hi)
     }
 
-    pub(super) fn draw_scanline(&mut self, cgb_mode: CgbMode) {
+    pub fn draw_scanline(&mut self, cgb_mode: CgbMode) {
         let mut bg_priority = [PxPrio::Normal; PX_WIDTH as usize];
         let base_idx = u32::from(PX_WIDTH) * u32::from(self.ly);
 

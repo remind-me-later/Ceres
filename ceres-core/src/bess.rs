@@ -2,7 +2,7 @@
 // Every integer is in little-endian byte order
 
 use crate::{
-    AudioCallback, Cart, CgbMode, Gb,
+    AudioCallback, Cartridge, CgbMode, Gb,
     ppu::{OAM_SIZE, VRAM_SIZE_CGB, VRAM_SIZE_GB},
 };
 use std::{
@@ -33,7 +33,7 @@ fn write_name_block<W: Write>(writer: &mut W) -> io::Result<()> {
     Ok(())
 }
 
-fn write_info_block<W: Write>(writer: &mut W, cart: &Cart) -> io::Result<()> {
+fn write_info_block<W: Write>(writer: &mut W, cart: &Cartridge) -> io::Result<()> {
     const INFO_BLOCK_SIZE: u32 = 0x12;
 
     write_block_header(writer, *b"INFO", INFO_BLOCK_SIZE)?;
@@ -124,7 +124,7 @@ fn write_end_block<W: Write>(writer: &mut W) -> io::Result<()> {
     write_block_header(writer, *b"END ", 0)
 }
 
-fn write_rtc_block<W: Write>(writer: &mut W, cart: &Cart) -> io::Result<()> {
+fn write_rtc_block<W: Write>(writer: &mut W, cart: &Cartridge) -> io::Result<()> {
     if let Some(rtc) = cart.rtc() {
         write_block_header(writer, *b"RTC ", 0x28 + 0x8)?;
 
@@ -464,7 +464,7 @@ fn read_core_block<C: AudioCallback, R: Read + Seek>(
     Ok(sizes)
 }
 
-fn read_rtc_block<R: Read + Seek>(reader: &mut R, cart: &mut Cart) -> io::Result<()> {
+fn read_rtc_block<R: Read + Seek>(reader: &mut R, cart: &mut Cartridge) -> io::Result<()> {
     if let Some(rtc) = cart.rtc_mut() {
         let mut byte_buf = [0; 4];
 
