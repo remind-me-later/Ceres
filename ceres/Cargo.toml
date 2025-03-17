@@ -1,9 +1,15 @@
 [package]
 name = "ceres"
+description = "An experimental GameBoy emulator"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
 repository.workspace = true
+
+[package.metadata.bundle]
+name = "Ceres"
+identifier = "com.github.remind-me-later.ceres"
+category = "public.app-category.games"
 
 [dependencies.clap]
 version = "*"
@@ -35,6 +41,9 @@ features = ["dx12", "metal", "wgsl"]
 [dependencies.pollster]
 version = "*"
 default-features = false
+
+[dependencies.rfd]
+version = "*"
 
 [target.'cfg(target_os = "macos")'.dependencies.objc2-app-kit]
 git = "https://github.com/madsmtm/objc2.git"

@@ -6,6 +6,7 @@ use anyhow::Context;
 use ceres_std::GbThread;
 use ceres_std::{PX_HEIGHT, PX_WIDTH};
 use std::{
+    path::PathBuf,
     sync::{Arc, Mutex},
     time::Instant,
 };
@@ -52,6 +53,7 @@ pub struct App<'a> {
     scaling_option: ScalingOption,
     sav_path: Option<std::path::PathBuf>,
     pixel_data_rgba: Arc<Mutex<Box<[u8]>>>,
+    rom_path: Option<PathBuf>,
 
     // Contexts
     thread: GbThread,
@@ -102,6 +104,7 @@ impl App<'_> {
             sav_path,
             pixel_data_rgba,
             scaling_option,
+            rom_path: rom_path.map(std::path::Path::to_path_buf),
         })
     }
 
@@ -355,31 +358,36 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
                 // Set the emulation speed
                 self.thread.set_multiplier(speed_multiplier);
             }
-            CeresEvent::OpenRomFile(path) => {
-                // First save the current game data if needed
-                self.save_data().unwrap_or_else(|e| {
-                    eprintln!("Error saving data: {e}");
-                });
+            CeresEvent::OpenRomFile => {
+                if let Some(path) = rfd::FileDialog::new()
+                    .add_filter("GameBoy", &["gbc", "gb"])
+                    .pick_file()
+                {
+                    // First save the current game data if needed
+                    self.save_data().unwrap_or_else(|e| {
+                        eprintln!("Error saving data: {e}");
+                    });
 
-                // Update sav_path for the new ROM
-                let file_stem = path
-                    .file_stem()
-                    .map(|stem| stem.to_string_lossy().to_string());
+                    // Update sav_path for the new ROM
+                    let file_stem = path
+                        .file_stem()
+                        .map(|stem| stem.to_string_lossy().to_string());
 
-                if let Some(file_stem) = file_stem {
-                    self.sav_path = Some(
-                        self.project_dirs
-                            .data_dir()
-                            .join(&file_stem)
-                            .with_extension("sav"),
-                    );
+                    if let Some(file_stem) = file_stem {
+                        self.sav_path = Some(
+                            self.project_dirs
+                                .data_dir()
+                                .join(&file_stem)
+                                .with_extension("sav"),
+                        );
 
-                    // Load the new ROM
-                    self.thread
-                        .change_rom(self.sav_path.as_deref(), &path)
-                        .unwrap_or_else(|e| {
-                            eprintln!("Error loading ROM: {e}");
-                        });
+                        // Load the new ROM
+                        self.thread
+                            .change_rom(self.sav_path.as_deref(), &path)
+                            .unwrap_or_else(|e| {
+                                eprintln!("Error loading ROM: {e}");
+                            });
+                    }
                 }
             }
             CeresEvent::TogglePause => {
@@ -390,6 +398,23 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
                 } {
                     eprintln!("Error toggling pause: {e}");
                 }
+            }
+            CeresEvent::ChangeModel(model) => {
+                // First save the current game data if needed
+                self.save_data().unwrap_or_else(|e| {
+                    eprintln!("Error saving data: {e}");
+                });
+
+                // Load the new ROM
+                self.thread
+                    .change_model(
+                        model.into(),
+                        self.sav_path.as_deref(),
+                        self.rom_path.as_deref(),
+                    )
+                    .unwrap_or_else(|e| {
+                        eprintln!("Error loading ROM: {e}");
+                    });
             }
         }
     }

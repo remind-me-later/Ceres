@@ -392,7 +392,7 @@ impl ReadSizes {
 fn read_core_block<C: AudioCallback, R: Read + Seek>(
     reader: &mut R,
     _size: u32,
-    gb: &mut Gb<C>,
+    _gb: &mut Gb<C>,
 ) -> io::Result<ReadSizes> {
     // Ignore version for now
     reader.seek(io::SeekFrom::Current(4))?;
@@ -401,14 +401,14 @@ fn read_core_block<C: AudioCallback, R: Read + Seek>(
     let mut model = [0; 4];
     reader.read_exact(&mut model)?;
 
-    gb.cgb_mode = match &model {
-        b"GD  " => CgbMode::Dmg,
-        b"GM  " => CgbMode::Compat,
-        b"CC  " => CgbMode::Cgb,
-        _ => {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid model"));
-        }
-    };
+    // gb.cgb_mode = match &model {
+    //     b"GD  " => CgbMode::Dmg,
+    //     b"GM  " => CgbMode::Compat,
+    //     b"CC  " => CgbMode::Cgb,
+    //     _ => {
+    //         return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid model"));
+    //     }
+    // };
 
     // Ignore CPU registers for now
     // FIXME: is this offset correct?

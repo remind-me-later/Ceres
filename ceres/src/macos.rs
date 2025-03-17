@@ -6,10 +6,8 @@ use objc2::{
     runtime::{AnyObject, Sel},
     sel,
 };
-use objc2_app_kit::{
-    NSApplication, NSColor, NSMenu, NSMenuItem, NSModalResponseOK, NSOpenPanel, NSView,
-};
-use objc2_foundation::{MainThreadMarker, NSArray, NSString, NSURL, ns_string};
+use objc2_app_kit::{NSApplication, NSColor, NSMenu, NSMenuItem, NSView};
+use objc2_foundation::{MainThreadMarker, NSString, ns_string};
 use std::{ptr, sync::OnceLock};
 use winit::event_loop::EventLoopProxy;
 
@@ -68,38 +66,21 @@ extern "C-unwind" fn toggle_pause() {
 }
 
 extern "C-unwind" fn open_rom_file() {
-    unsafe {
-        #[expect(clippy::unwrap_used)]
-        let mtm: MainThreadMarker = MainThreadMarker::new().unwrap();
-
-        let open_panel = NSOpenPanel::openPanel(mtm);
-        open_panel.setCanChooseFiles(true);
-        open_panel.setCanChooseDirectories(false);
-        open_panel.setAllowsMultipleSelection(false);
-
-        #[expect(deprecated)]
-        open_panel.setAllowedFileTypes(Some(&NSArray::from_slice(&[
-            ns_string!("gb"),
-            ns_string!("gbc"),
-            ns_string!("rom"),
-        ])));
-
-        let result = open_panel.runModal();
-
-        if result == NSModalResponseOK {
-            #[expect(clippy::unwrap_used)]
-            let path_str = NSString::UTF8String(&NSURL::path(&open_panel.URL().unwrap()).unwrap());
-            let path = std::path::PathBuf::from(
-                std::ffi::CStr::from_ptr(path_str)
-                    .to_string_lossy()
-                    .into_owned(),
-            );
-
-            if let Some(proxy) = EVENT_PROXY.get() {
-                proxy.send_event(CeresEvent::OpenRomFile(path)).ok();
-            }
-        }
+    if let Some(proxy) = EVENT_PROXY.get() {
+        proxy.send_event(CeresEvent::OpenRomFile).ok();
     }
+}
+
+extern "C-unwind" fn change_model_dmg() {
+    send_model_event(crate::Model::Dmg);
+}
+
+extern "C-unwind" fn change_model_mgb() {
+    send_model_event(crate::Model::Mgb);
+}
+
+extern "C-unwind" fn change_model_cgb() {
+    send_model_event(crate::Model::Cgb);
 }
 
 fn send_shader_event(shader: ShaderOption) {
@@ -117,6 +98,12 @@ fn send_scaling_event(scaling: ScalingOption) {
 fn send_speed_event(speed: u32) {
     if let Some(proxy) = EVENT_PROXY.get() {
         proxy.send_event(CeresEvent::ChangeSpeed(speed)).ok();
+    }
+}
+
+fn send_model_event(model: crate::Model) {
+    if let Some(proxy) = EVENT_PROXY.get() {
+        proxy.send_event(CeresEvent::ChangeModel(model)).ok();
     }
 }
 
@@ -194,6 +181,9 @@ pub fn create_menu_bar() {
         let sel_speed_2x = sel!(changeSpeed2x:);
         let sel_speed_4x = sel!(changeSpeed4x:);
         let sel_toggle_pause = sel!(togglePause:);
+        let sel_model_dmg = sel!(changeModelDmg:);
+        let sel_model_mgb = sel!(changeModelMgb:);
+        let sel_model_cgb = sel!(changeModelCgb:);
 
         let _ = class_addMethod(
             ptr::from_ref(cls).cast_mut(),
@@ -261,6 +251,25 @@ pub fn create_menu_bar() {
             ptr::from_ref(cls).cast_mut(),
             sel_toggle_pause,
             toggle_pause,
+            types.as_ptr().cast(),
+        );
+
+        let _ = class_addMethod(
+            ptr::from_ref(cls).cast_mut(),
+            sel_model_dmg,
+            change_model_dmg,
+            types.as_ptr().cast(),
+        );
+        let _ = class_addMethod(
+            ptr::from_ref(cls).cast_mut(),
+            sel_model_mgb,
+            change_model_mgb,
+            types.as_ptr().cast(),
+        );
+        let _ = class_addMethod(
+            ptr::from_ref(cls).cast_mut(),
+            sel_model_cgb,
+            change_model_cgb,
             types.as_ptr().cast(),
         );
 
@@ -343,6 +352,41 @@ pub fn create_menu_bar() {
         speed_submenu_item.setSubmenu(Some(&speed_submenu));
 
         view_menu_item.setSubmenu(Some(&view_menu));
+
+        // Create Model menu
+        let model_menu_item = NSMenuItem::new(mtm);
+        let model_menu = NSMenu::new(mtm);
+        let model_title = ns_string!("Model");
+        model_menu_item.setTitle(model_title);
+        menu_bar.addItem(&model_menu_item);
+
+        // Add model options to the model menu
+        add_menu_item(
+            &app,
+            mtm,
+            &model_menu,
+            "Game Boy (DMG)",
+            sel_model_dmg,
+            None,
+        );
+        add_menu_item(
+            &app,
+            mtm,
+            &model_menu,
+            "Game Boy Pocket (MGB)",
+            sel_model_mgb,
+            None,
+        );
+        add_menu_item(
+            &app,
+            mtm,
+            &model_menu,
+            "Game Boy Color (CGB)",
+            sel_model_cgb,
+            None,
+        );
+
+        model_menu_item.setSubmenu(Some(&model_menu));
     }
 }
 

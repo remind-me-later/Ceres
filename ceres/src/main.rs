@@ -12,7 +12,7 @@ use winit::event_loop::EventLoop;
 const WIN_MULTIPLIER: u32 = 2;
 
 const QUALIFIER: &str = "com";
-const ORGANIZATION: &str = "remind-me-later";
+const ORGANIZATION: &str = "github.remind-me-later";
 const CERES_BIN: &str = "ceres";
 const CERES_STYLIZED: &str = "Ceres";
 const ABOUT: &str = "A (very experimental) Game Boy/Color emulator.";
@@ -125,12 +125,13 @@ impl AppOption for ScalingOption {
 }
 
 #[derive(Clone)]
-pub enum CeresEvent {
+enum CeresEvent {
     ChangeShader(ShaderOption),
     ChangeScaling(ScalingOption),
-    OpenRomFile(PathBuf),
+    OpenRomFile,
     ChangeSpeed(u32),
     TogglePause,
+    ChangeModel(Model),
 }
 
 #[derive(clap::Parser)]
