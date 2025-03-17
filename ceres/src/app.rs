@@ -1,100 +1,33 @@
-use crate::{AppOption, ScalingOption, ShaderOption, screen};
+use crate::{
+    CERES_STYLIZED, CeresEvent, ScalingOption, ShaderOption,
+    video::{self, State},
+};
 use anyhow::Context;
 use ceres_std::GbThread;
-use eframe::egui::{self, CornerRadius, Key, style::HandleShape};
-use rfd::FileDialog;
+use ceres_std::{PX_HEIGHT, PX_WIDTH};
 use std::{
-    fs::File,
-    path::PathBuf,
     sync::{Arc, Mutex},
+    time::Instant,
+};
+use winit::{
+    dpi::PhysicalSize,
+    event::{KeyEvent, WindowEvent},
+    event_loop::ControlFlow,
+    window::Fullscreen,
+};
+use {
+    core::time::Duration,
+    std::{fs::File, path::Path},
+    winit::window,
 };
 
-fn setup_theme(ctx: &egui::Context) {
-    let bg0 = egui::Color32::from_rgb(40, 40, 40); // Background
-    let bg1 = egui::Color32::from_rgb(60, 56, 54); // Lighter background
-    let bg2 = egui::Color32::from_rgb(80, 73, 69); // Selection background
-    let fg0 = egui::Color32::from_rgb(251, 241, 199); // Main text
-    let fg1 = egui::Color32::from_rgb(235, 219, 178); // Secondary text
-    // let red = egui::Color32::from_rgb(204, 36, 29); // Red accent
-    // let green = egui::Color32::from_rgb(152, 151, 26); // Green accent
-    let yellow = egui::Color32::from_rgb(215, 153, 33); // Yellow accent
-    // let orange = egui::Color32::from_rgb(214, 93, 14); // Orange accent
-    let blue = egui::Color32::from_rgb(69, 133, 136); // Blue accent
-    // let aqua = egui::Color32::from_rgb(104, 157, 106); // Aqua accent
-
-    let mut style = (*ctx.style()).clone();
-
-    style.visuals.window_fill = bg0;
-    style.visuals.panel_fill = bg0;
-
-    style.visuals.widgets.inactive.bg_fill = bg0;
-    style.visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, fg1);
-    style.visuals.widgets.inactive.bg_stroke = egui::Stroke::NONE;
-    style.visuals.widgets.inactive.weak_bg_fill = bg0;
-
-    style.visuals.widgets.noninteractive.bg_fill = bg0;
-    style.visuals.widgets.noninteractive.bg_stroke = egui::Stroke::NONE;
-    style.visuals.widgets.noninteractive.weak_bg_fill = bg0;
-    style.visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.5, fg1);
-
-    style.visuals.widgets.hovered.bg_fill = bg1;
-    style.visuals.widgets.hovered.bg_stroke = egui::Stroke::NONE;
-    style.visuals.widgets.hovered.weak_bg_fill = bg1;
-    style.visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.5, fg0);
-
-    style.visuals.widgets.active.bg_fill = bg2;
-    style.visuals.widgets.active.bg_stroke = egui::Stroke::NONE;
-    style.visuals.widgets.active.weak_bg_fill = bg2;
-    style.visuals.widgets.active.fg_stroke = egui::Stroke::new(2.0, yellow);
-
-    style.visuals.widgets.open.bg_fill = bg1;
-    style.visuals.widgets.open.bg_stroke = egui::Stroke::NONE;
-    style.visuals.widgets.open.weak_bg_fill = bg1;
-    style.visuals.widgets.open.fg_stroke = egui::Stroke::new(1.0, fg0);
-
-    let corner_radius = CornerRadius::same(2);
-    style.visuals.window_corner_radius = corner_radius;
-    style.visuals.menu_corner_radius = corner_radius;
-    style.visuals.widgets.noninteractive.corner_radius = corner_radius;
-    style.visuals.widgets.inactive.corner_radius = corner_radius;
-    style.visuals.widgets.hovered.corner_radius = corner_radius;
-    style.visuals.widgets.active.corner_radius = corner_radius;
-    style.visuals.widgets.open.corner_radius = corner_radius;
-
-    let shadow = egui::epaint::Shadow {
-        offset: [1, 1],
-        blur: 5,
-        spread: 0,
-        color: bg0,
-    };
-    style.visuals.popup_shadow = shadow;
-    style.visuals.window_shadow = shadow;
-    style.visuals.handle_shape = HandleShape::Rect { aspect_ratio: 0.5 };
-    style.visuals.window_stroke = egui::Stroke {
-        width: 1.0,
-        color: fg1,
-    };
-    style.visuals.selection.bg_fill = bg2;
-    style.visuals.selection.stroke = egui::Stroke::new(1.0, yellow);
-
-    style.visuals.hyperlink_color = blue;
-
-    style.visuals.override_text_color = Some(fg0);
-
-    ctx.set_style(style);
-}
-
 pub struct PainterCallbackImpl {
-    ctx: egui::Context,
     buffer: Arc<Mutex<Box<[u8]>>>,
 }
 
 impl PainterCallbackImpl {
-    pub fn new(ctx: &egui::Context, buffer: Arc<Mutex<Box<[u8]>>>) -> Self {
-        Self {
-            ctx: ctx.clone(),
-            buffer,
-        }
+    pub const fn new(buffer: Arc<Mutex<Box<[u8]>>>) -> Self {
+        Self { buffer }
     }
 }
 
@@ -105,30 +38,36 @@ impl ceres_std::PainterCallback for PainterCallbackImpl {
         }
     }
 
-    fn request_repaint(&self) {
-        self.ctx.request_repaint();
-    }
+    fn request_repaint(&self) {}
 }
 
-pub struct App {
+struct Windows<'a> {
+    main: video::State<'a, { PX_WIDTH as u32 }, { PX_HEIGHT as u32 }>,
+}
+
+pub struct App<'a> {
+    // Config parameters
     project_dirs: directories::ProjectDirs,
+    shader_option: ShaderOption,
+    scaling_option: ScalingOption,
+    sav_path: Option<std::path::PathBuf>,
+    pixel_data_rgba: Arc<Mutex<Box<[u8]>>>,
+
+    // Contexts
     thread: GbThread,
-    screen: screen::GBScreen<{ ceres_std::PX_WIDTH as u32 }, { ceres_std::PX_HEIGHT as u32 }>,
-    _rom_path: Option<PathBuf>,
-    sav_path: Option<PathBuf>,
+
+    // NOTE: carries the `Window`, thus it should be dropped after everything else.
+    windows: Option<Windows<'a>>,
 }
 
-impl App {
+impl App<'_> {
     pub fn new(
-        cc: &eframe::CreationContext<'_>,
-        model: ceres_std::Model,
         project_dirs: directories::ProjectDirs,
-        rom_path: Option<&std::path::Path>,
+        model: ceres_std::Model,
+        rom_path: Option<&Path>,
         shader_option: ShaderOption,
+        scaling_option: ScalingOption,
     ) -> anyhow::Result<Self> {
-        // Apply our minimal black and white theme
-        setup_theme(&cc.egui_ctx);
-
         let sav_path = if let Some(rom_path) = rom_path {
             let file_stem = rom_path.file_stem().context("couldn't get file stem")?;
 
@@ -150,20 +89,72 @@ impl App {
             model,
             sav_path.as_deref(),
             rom_path,
-            PainterCallbackImpl::new(&cc.egui_ctx, Arc::clone(&pixel_data_rgba)),
+            PainterCallbackImpl::new(Arc::clone(&pixel_data_rgba)),
         )?;
-
-        let screen = screen::GBScreen::new(cc, pixel_data_rgba, shader_option);
 
         thread.resume()?;
 
         Ok(Self {
             project_dirs,
             thread,
-            screen,
-            _rom_path: rom_path.map(std::path::Path::to_path_buf),
+            shader_option,
+            windows: None,
             sav_path,
+            pixel_data_rgba,
+            scaling_option,
         })
+    }
+
+    #[allow(clippy::expect_used)]
+    fn handle_key(&mut self, event: &KeyEvent) {
+        use {winit::event::ElementState, winit::keyboard::Key};
+
+        if let Some(windows) = &mut self.windows {
+            if !windows.main.window().has_focus() {
+                return;
+            }
+
+            if event.state == ElementState::Pressed {
+                match event.logical_key.as_ref() {
+                    Key::Character("f") => match windows.main.window().fullscreen() {
+                        Some(_) => windows.main.window().set_fullscreen(None),
+                        None => windows
+                            .main
+                            .window()
+                            .set_fullscreen(Some(Fullscreen::Borderless(None))),
+                    },
+                    Key::Character("Escape") => {
+                        windows.main.window().set_fullscreen(None);
+                    }
+                    _ => (),
+                }
+            }
+
+            self.thread.press_release(|p| match event.state {
+                ElementState::Pressed => match event.logical_key.as_ref() {
+                    Key::Character("a") => p.press(ceres_std::Button::Left),
+                    Key::Character("d") => p.press(ceres_std::Button::Right),
+                    Key::Character("w") => p.press(ceres_std::Button::Up),
+                    Key::Character("s") => p.press(ceres_std::Button::Down),
+                    Key::Character("l") => p.press(ceres_std::Button::A),
+                    Key::Character("k") => p.press(ceres_std::Button::B),
+                    Key::Character("n") => p.press(ceres_std::Button::Select),
+                    Key::Character("m") => p.press(ceres_std::Button::Start),
+                    _ => (),
+                },
+                ElementState::Released => match event.logical_key.as_ref() {
+                    Key::Character("a") => p.release(ceres_std::Button::Left),
+                    Key::Character("d") => p.release(ceres_std::Button::Right),
+                    Key::Character("w") => p.release(ceres_std::Button::Up),
+                    Key::Character("s") => p.release(ceres_std::Button::Down),
+                    Key::Character("l") => p.release(ceres_std::Button::A),
+                    Key::Character("k") => p.release(ceres_std::Button::B),
+                    Key::Character("n") => p.release(ceres_std::Button::Select),
+                    Key::Character("m") => p.release(ceres_std::Button::Start),
+                    _ => (),
+                },
+            });
+        }
     }
 
     fn save_data(&self) -> anyhow::Result<()> {
@@ -177,216 +168,229 @@ impl App {
     }
 }
 
-impl eframe::App for App {
-    #[expect(clippy::too_many_lines)]
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::TopBottomPanel::top("top_panel").show(ctx, |top_panel_ui| {
-            egui::menu::bar(top_panel_ui, |menu_bar_ui| {
-                menu_bar_ui.menu_button("File", |menu_button_ui| {
-                    if menu_button_ui.button("Open").clicked() {
-                        let file = FileDialog::new()
-                            .add_filter("gb", &["gb", "gbc"])
-                            .pick_file();
-
-                        if let Some(file) = file {
-                            if let Err(e) = self.thread.change_rom(self.sav_path.as_deref(), &file)
-                            {
-                                eprintln!("couldn't open ROM: {e}");
-                            }
-                        }
-                    }
-
-                    if menu_button_ui.button("Export").clicked() {
-                        println!("Export save file");
-                    }
-                });
-
-                menu_bar_ui.menu_button("View", |menu_button_ui| {
-                    menu_button_ui.horizontal(|horizontal_ui| {
-                        let paused = self.thread.is_paused();
-                        if horizontal_ui
-                            .selectable_label(paused, if paused { "\u{25b6}" } else { "\u{23f8}" })
-                            .on_hover_text("Pause")
-                            .clicked()
-                        {
-                            if let Err(e) = if paused {
-                                self.thread.resume()
-                            } else {
-                                self.thread.pause()
-                            } {
-                                eprintln!("couldn't pause/resume: {e}");
-                            }
-                        }
-
-                        let multiplier = self.thread.multiplier();
-
-                        if horizontal_ui
-                            .selectable_label(multiplier == 1, "1x")
-                            .on_hover_text("Speed 1x")
-                            .clicked()
-                        {
-                            self.thread.set_multiplier(1);
-                        }
-
-                        if horizontal_ui
-                            .selectable_label(multiplier == 2, "2x")
-                            .on_hover_text("Speed 2x")
-                            .clicked()
-                        {
-                            self.thread.set_multiplier(2);
-                        }
-
-                        if horizontal_ui
-                            .selectable_label(multiplier == 4, "4x")
-                            .on_hover_text("Speed 4x")
-                            .clicked()
-                        {
-                            self.thread.set_multiplier(4);
-                        }
-                    });
-
-                    menu_button_ui.horizontal(|horizontal_ui| {
-                        let muted = self.thread.is_muted();
-
-                        if horizontal_ui
-                            .selectable_label(muted, if muted { "\u{1f507}" } else { "\u{1f50a}" })
-                            .on_hover_text("Mute")
-                            .clicked()
-                        {
-                            self.thread.toggle_mute();
-                        }
-
-                        horizontal_ui.style_mut().spacing.slider_width = 50.0;
-
-                        let volume_slider = egui::Slider::from_get_set(0.0..=1.0, |volume| {
-                            if let Some(volume) = volume {
-                                #[expect(clippy::cast_possible_truncation)]
-                                self.thread.set_volume(volume as f32);
-                            }
-
-                            self.thread.volume().into()
-                        })
-                        .custom_formatter(
-                            // percentage
-                            |value, _| format!("{:.0}%", value * 100.0),
-                        )
-                        .trailing_fill(true);
-
-                        horizontal_ui.add(volume_slider);
-                    });
-
-                    menu_button_ui.menu_button("Shader", |menu_button_ui| {
-                        for shader_option in ShaderOption::iter() {
-                            let shader_button = egui::SelectableLabel::new(
-                                self.screen.shader_option() == shader_option,
-                                shader_option.str(),
-                            );
-
-                            if menu_button_ui.add(shader_button).clicked() {
-                                *self.screen.shader_option_mut() = shader_option;
-                            }
-                        }
-                    });
-
-                    menu_button_ui.menu_button("Scaling", |menu_button_ui| {
-                        for pixel_mode in ScalingOption::iter() {
-                            let pixel_button = egui::SelectableLabel::new(
-                                self.screen.pixel_mode() == pixel_mode,
-                                pixel_mode.str(),
-                            );
-
-                            if menu_button_ui.add(pixel_button).clicked() {
-                                *self.screen.mut_pixel_mode() = pixel_mode;
-                            }
-                        }
-                    });
-                });
-            });
-        });
-
-        egui::CentralPanel::default()
-            .frame(egui::Frame {
-                inner_margin: egui::Margin::default(),
-                outer_margin: egui::Margin::default(),
-                corner_radius: egui::CornerRadius::default(),
-                shadow: egui::Shadow::default(),
-                fill: egui::Color32::BLACK,
-                stroke: egui::Stroke::NONE,
+impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
+    #[allow(clippy::expect_used)]
+    fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        let main_window_attributes = winit::window::Window::default_attributes()
+            .with_title(CERES_STYLIZED)
+            .with_inner_size(PhysicalSize {
+                width: u32::from(PX_WIDTH) * crate::WIN_MULTIPLIER,
+                height: u32::from(PX_HEIGHT) * crate::WIN_MULTIPLIER,
             })
-            .show(ctx, |central_panel_ui| {
-                self.screen.custom_painting(central_panel_ui);
-            });
+            .with_min_inner_size(PhysicalSize {
+                width: ceres_std::PX_WIDTH,
+                height: ceres_std::PX_HEIGHT,
+            })
+            .with_resizable(true)
+            .with_active(true);
 
-        ctx.input(|i| {
-            if i.key_pressed(Key::W) {
-                self.thread.press(ceres_std::Button::Up);
-            }
+        let main_window = event_loop
+            .create_window(main_window_attributes)
+            .expect("Could not create window");
 
-            if i.key_released(Key::W) {
-                self.thread.release(ceres_std::Button::Up);
-            }
+        #[cfg(target_os = "macos")]
+        {
+            use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-            if i.key_pressed(Key::A) {
-                self.thread.press(ceres_std::Button::Left);
-            }
+            if let Ok(RawWindowHandle::AppKit(handle)) =
+                main_window.window_handle().map(|h| h.as_raw())
+            {
+                let ns_view = handle.ns_view.as_ptr().cast::<objc2::runtime::AnyObject>();
 
-            if i.key_released(Key::A) {
-                self.thread.release(ceres_std::Button::Left);
+                crate::macos::setup_ns_view(ns_view);
             }
+        }
 
-            if i.key_pressed(Key::S) {
-                self.thread.press(ceres_std::Button::Down);
-            }
+        let main_window_state = pollster::block_on(State::new(
+            main_window,
+            self.shader_option,
+            self.scaling_option,
+        ))
+        .expect("Could not create renderer");
 
-            if i.key_released(Key::S) {
-                self.thread.release(ceres_std::Button::Down);
-            }
-
-            if i.key_pressed(Key::D) {
-                self.thread.press(ceres_std::Button::Right);
-            }
-
-            if i.key_released(Key::D) {
-                self.thread.release(ceres_std::Button::Right);
-            }
-
-            if i.key_pressed(Key::L) {
-                self.thread.press(ceres_std::Button::A);
-            }
-
-            if i.key_released(Key::L) {
-                self.thread.release(ceres_std::Button::A);
-            }
-
-            if i.key_pressed(Key::K) {
-                self.thread.press(ceres_std::Button::B);
-            }
-
-            if i.key_released(Key::K) {
-                self.thread.release(ceres_std::Button::B);
-            }
-
-            if i.key_pressed(Key::M) {
-                self.thread.press(ceres_std::Button::Start);
-            }
-
-            if i.key_released(Key::M) {
-                self.thread.release(ceres_std::Button::Start);
-            }
-
-            if i.key_pressed(Key::N) {
-                self.thread.press(ceres_std::Button::Select);
-            }
-
-            if i.key_released(Key::N) {
-                self.thread.release(ceres_std::Button::Select);
-            }
+        self.windows.replace(Windows {
+            main: main_window_state,
         });
+
+        // event_loop.set_control_flow(ControlFlow::Poll);
+        event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now()));
+
+        self.thread.resume().expect("Couldn't resume");
     }
 
-    fn on_exit(&mut self) {
-        if let Err(e) = self.save_data() {
-            eprintln!("couldn't save data: {e}");
+    fn new_events(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        cause: winit::event::StartCause,
+    ) {
+        if let winit::event::StartCause::ResumeTimeReached { .. } = cause {
+            event_loop.set_control_flow(ControlFlow::wait_duration(Duration::from_secs_f64(
+                1.0 / 60.0,
+            )));
+
+            if let Some(windows) = self.windows.as_mut() {
+                if let Ok(pixel_data_rgba) = self.pixel_data_rgba.lock() {
+                    windows.main.update_texture(&pixel_data_rgba);
+                }
+
+                windows.main.window().request_redraw();
+            }
+        }
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        win_id: window::WindowId,
+        event: WindowEvent,
+    ) {
+        match event {
+            WindowEvent::Resized(PhysicalSize { width, height }) => {
+                if width != 0 && height != 0 {
+                    // Some platforms like EGL require resizing GL surface to update the size
+                    // Notable platforms here are Wayland and macOS, other don't require it
+                    // and the function is no-op, but it's wise to resize it for portability
+                    // reasons.
+                    if let Some(windows) = self.windows.as_mut() {
+                        match win_id {
+                            id if id == windows.main.window().id() => {
+                                windows.main.resize(PhysicalSize { width, height });
+                            }
+                            _ => (),
+                        }
+                    }
+                }
+            }
+            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::KeyboardInput {
+                event: key_event, ..
+            } => self.handle_key(&key_event),
+            WindowEvent::RedrawRequested => {
+                use wgpu::SurfaceError::{Lost, Other, OutOfMemory, Outdated, Timeout};
+
+                if let Some(windows) = self.windows.as_mut() {
+                    match win_id {
+                        id if id == windows.main.window().id() => match windows.main.render() {
+                            Ok(()) => {}
+                            Err(Lost | Outdated) => windows.main.on_lost(),
+                            Err(OutOfMemory) => event_loop.exit(),
+                            Err(Timeout) => eprintln!("Surface timeout"),
+                            Err(Other) => eprintln!("Surface error: other"),
+                        },
+                        _ => (),
+                    }
+                }
+            }
+            WindowEvent::DroppedFile(path) => {
+                self.save_data().unwrap_or_else(|e| {
+                    eprintln!("Error saving data: {e}");
+                });
+
+                let sav_path = {
+                    let file_stem = path.file_stem().context("couldn't get file stem");
+
+                    let file_stem = if let Ok(file_stem) = file_stem {
+                        file_stem.to_string_lossy().to_string()
+                    } else {
+                        eprintln!("Couldn't get file stem");
+                        return;
+                    };
+
+                    Some(
+                        self.project_dirs
+                            .data_dir()
+                            .join(file_stem)
+                            .with_extension("sav"),
+                    )
+                };
+
+                self.thread
+                    .change_rom(sav_path.as_deref(), &path)
+                    .unwrap_or_else(|e| {
+                        eprintln!("Error loading ROM: {e}");
+                    });
+            }
+            _ => (),
+        }
+    }
+
+    #[allow(clippy::expect_used)]
+    fn suspended(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        self.thread.pause().expect("Couldn't pause");
+
+        self.windows = None;
+        event_loop.set_control_flow(ControlFlow::Wait);
+    }
+
+    fn exiting(&mut self, _: &winit::event_loop::ActiveEventLoop) {
+        self.save_data().unwrap_or_else(|e| {
+            eprintln!("Error saving data: {e}");
+        });
+        self.windows = None;
+    }
+
+    fn user_event(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop, event: CeresEvent) {
+        match event {
+            CeresEvent::ChangeShader(shader_option) => {
+                self.shader_option = shader_option;
+                // Update shader on the window if needed
+                if let Some(windows) = &mut self.windows {
+                    windows.main.set_shader(shader_option);
+                    windows.main.window().request_redraw();
+                }
+            }
+            CeresEvent::ChangeScaling(scaling_option) => {
+                self.scaling_option = scaling_option;
+                // Update scaling on the window if needed
+                if let Some(windows) = &mut self.windows {
+                    windows.main.set_scaling(scaling_option);
+                    // Force a resize to apply the new scaling option
+                    if let Some(size) = windows.main.window().inner_size().into() {
+                        windows.main.resize(size);
+                    }
+                    windows.main.window().request_redraw();
+                }
+            }
+            CeresEvent::ChangeSpeed(speed_multiplier) => {
+                // Set the emulation speed
+                self.thread.set_multiplier(speed_multiplier);
+            }
+            CeresEvent::OpenRomFile(path) => {
+                // First save the current game data if needed
+                self.save_data().unwrap_or_else(|e| {
+                    eprintln!("Error saving data: {e}");
+                });
+
+                // Update sav_path for the new ROM
+                let file_stem = path
+                    .file_stem()
+                    .map(|stem| stem.to_string_lossy().to_string());
+
+                if let Some(file_stem) = file_stem {
+                    self.sav_path = Some(
+                        self.project_dirs
+                            .data_dir()
+                            .join(&file_stem)
+                            .with_extension("sav"),
+                    );
+
+                    // Load the new ROM
+                    self.thread
+                        .change_rom(self.sav_path.as_deref(), &path)
+                        .unwrap_or_else(|e| {
+                            eprintln!("Error loading ROM: {e}");
+                        });
+                }
+            }
+            CeresEvent::TogglePause => {
+                if let Err(e) = if self.thread.is_paused() {
+                    self.thread.resume()
+                } else {
+                    self.thread.pause()
+                } {
+                    eprintln!("Error toggling pause: {e}");
+                }
+            }
         }
     }
 }

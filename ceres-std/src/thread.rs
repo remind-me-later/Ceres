@@ -224,15 +224,9 @@ impl GbThread {
         }
     }
 
-    pub fn press(&mut self, button: ceres_core::Button) {
+    pub fn press_release<F: FnOnce(&mut dyn Pressable)>(&mut self, f: F) {
         if let Ok(mut gb) = self.gb.lock() {
-            gb.press(button);
-        }
-    }
-
-    pub fn release(&mut self, button: ceres_core::Button) {
-        if let Ok(mut gb) = self.gb.lock() {
-            gb.release(button);
+            f(&mut *gb);
         }
     }
 
@@ -289,5 +283,20 @@ impl From<std::io::Error> for Error {
 impl From<ceres_core::Error> for Error {
     fn from(err: ceres_core::Error) -> Self {
         Self::Gb(err)
+    }
+}
+
+pub trait Pressable {
+    fn press(&mut self, button: ceres_core::Button);
+    fn release(&mut self, button: ceres_core::Button);
+}
+
+impl Pressable for Gb<audio::AudioCallbackImpl> {
+    fn press(&mut self, button: ceres_core::Button) {
+        self.press(button);
+    }
+
+    fn release(&mut self, button: ceres_core::Button) {
+        self.release(button);
     }
 }

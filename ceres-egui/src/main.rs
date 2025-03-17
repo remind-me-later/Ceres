@@ -1,15 +1,11 @@
 mod app;
-mod video;
+mod screen;
 
-#[cfg(target_os = "macos")]
-mod macos;
+use eframe::egui;
 
 use app::App;
 use clap::Parser;
 use std::path::PathBuf;
-use winit::event_loop::EventLoop;
-
-const WIN_MULTIPLIER: u32 = 2;
 
 const QUALIFIER: &str = "com";
 const ORGANIZATION: &str = "remind-me-later";
@@ -73,10 +69,10 @@ impl From<Model> for ceres_std::Model {
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum ShaderOption {
-    #[default]
     Nearest,
     Scale2x,
     Scale3x,
+    #[default]
     Lcd,
     Crt,
 }
@@ -124,15 +120,6 @@ impl AppOption for ScalingOption {
     }
 }
 
-#[derive(Clone)]
-pub enum CeresEvent {
-    ChangeShader(ShaderOption),
-    ChangeScaling(ScalingOption),
-    OpenRomFile(PathBuf),
-    ChangeSpeed(u32),
-    TogglePause,
-}
-
 #[derive(clap::Parser)]
 #[command(name = CERES_BIN, about = ABOUT, after_help = AFTER_HELP)]
 struct Cli {
@@ -154,7 +141,7 @@ struct Cli {
     )]
     model: Model,
     #[arg(
-        short = 'x',
+        short,
         long,
         help = "Shader used",
         default_value = ShaderOption::default().str(),
@@ -163,47 +150,50 @@ struct Cli {
     )]
     shader_option: ShaderOption,
     #[arg(
-        short = 's',
+        short,
         long,
         help = "Pixel mode",
         default_value = ScalingOption::default().str(),
         value_enum,
         required = false
     )]
-    scaling_option: ScalingOption,
+    pixel_mode: ScalingOption,
 }
+
 fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
-
-    let main_event_loop = if cfg!(target_os = "macos") {
-        use winit::platform::macos::EventLoopBuilderExtMacOS;
-        EventLoop::<CeresEvent>::with_user_event()
-            .with_default_menu(false)
-            .build()?
-    } else {
-        EventLoop::<CeresEvent>::with_user_event().build()?
-    };
-
-    #[cfg(target_os = "macos")]
-    {
-        macos::set_event_proxy(main_event_loop.create_proxy());
-        macos::create_menu_bar();
-    }
-
     let project_dirs = directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED)
-        .ok_or_else(|| {
-            anyhow::anyhow!("Failed to get project directories for '{}'", CERES_STYLIZED)
-        })?;
+        .ok_or_else(|| anyhow::anyhow!("couldn't get project directories"))?;
 
-    let mut main_window = App::new(
-        project_dirs,
-        args.model.into(),
-        args.file.as_deref(),
-        args.shader_option,
-        args.scaling_option,
-    )?;
-
-    main_event_loop.run_app(&mut main_window)?;
-
-    Ok(())
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([
+                f32::from(ceres_std::PX_WIDTH),
+                f32::from(ceres_std::PX_HEIGHT) + 22.0,
+            ])
+            .with_min_inner_size([
+                f32::from(ceres_std::PX_WIDTH),
+                f32::from(ceres_std::PX_HEIGHT) + 22.0,
+            ]),
+        renderer: eframe::Renderer::Wgpu,
+        vsync: true,
+        depth_buffer: 0,
+        stencil_buffer: 0,
+        centered: true,
+        ..Default::default()
+    };
+    eframe::run_native(
+        CERES_STYLIZED,
+        options,
+        Box::new(move |cc| {
+            Ok(Box::new(App::new(
+                cc,
+                args.model.into(),
+                project_dirs,
+                args.file.as_deref(),
+                args.shader_option,
+            )?))
+        }),
+    )
+    .map_err(Into::into)
 }
