@@ -146,6 +146,7 @@ impl GbThread {
 
         if let Ok(mut gb) = self.gb.lock() {
             *gb = gb_new;
+            self.model = model;
         }
 
         Ok(())

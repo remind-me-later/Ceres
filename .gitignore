@@ -11,3 +11,7 @@
 # IDE files
 .vscode/
 .idea/
+
+assets/
+
+**/.DS_Store

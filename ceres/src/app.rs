@@ -368,26 +368,23 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
                         eprintln!("Error saving data: {e}");
                     });
 
-                    // Update sav_path for the new ROM
-                    let file_stem = path
+                    self.sav_path = path
                         .file_stem()
-                        .map(|stem| stem.to_string_lossy().to_string());
-
-                    if let Some(file_stem) = file_stem {
-                        self.sav_path = Some(
+                        .map(|stem| stem.to_string_lossy().to_string())
+                        .map(|file_stem| {
                             self.project_dirs
                                 .data_dir()
                                 .join(&file_stem)
-                                .with_extension("sav"),
-                        );
+                                .with_extension("sav")
+                        });
 
-                        // Load the new ROM
-                        self.thread
-                            .change_rom(self.sav_path.as_deref(), &path)
-                            .unwrap_or_else(|e| {
-                                eprintln!("Error loading ROM: {e}");
-                            });
-                    }
+                    self.thread
+                        .change_rom(self.sav_path.as_deref(), &path)
+                        .unwrap_or_else(|e| {
+                            eprintln!("Error loading ROM: {e}");
+                        });
+
+                    self.rom_path = Some(path);
                 }
             }
             CeresEvent::TogglePause => {
