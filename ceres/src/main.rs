@@ -176,13 +176,12 @@ struct Cli {
 fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
 
-    let main_event_loop = if cfg!(target_os = "macos") {
+    #[cfg(target_os = "macos")]
+    let main_event_loop = {
         use winit::platform::macos::EventLoopBuilderExtMacOS;
         EventLoop::<CeresEvent>::with_user_event()
             .with_default_menu(false)
             .build()?
-    } else {
-        EventLoop::<CeresEvent>::with_user_event().build()?
     };
 
     #[cfg(target_os = "macos")]
@@ -190,6 +189,9 @@ fn main() -> anyhow::Result<()> {
         macos::set_event_proxy(main_event_loop.create_proxy());
         macos::create_menu_bar();
     }
+
+    #[cfg(not(target_os = "macos"))]
+    let main_event_loop = { EventLoop::<CeresEvent>::with_user_event().build()? };
 
     let project_dirs = directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED)
         .ok_or_else(|| {

@@ -11,7 +11,7 @@ const SAMPLE_RATE: i32 = 48000;
 // Originally both the emulator and host platform output samples at the same rate,
 // as time passes one begins to shift away from the other, so we need to resample the emulator output
 const ORIG_RATIO: f64 = 1.0;
-const MAX_RESAMPLE_RATIO_RELATIVE: f64 = 10.0;
+const MAX_RESAMPLE_RATIO_RELATIVE: f64 = 5.0;
 
 type ProcessSample = f32;
 
@@ -19,26 +19,31 @@ struct Buffers {
     left: StaticRb<ceres_core::Sample, RING_BUFFER_SIZE>,
     right: StaticRb<ceres_core::Sample, RING_BUFFER_SIZE>,
     resampler: rubato::FastFixedOut<ProcessSample>,
-    output_buf: [[ProcessSample; BUFFER_SIZE as usize]; 2],
-    input_buf: [[ProcessSample; BUFFER_SIZE as usize * 2]; 2],
+    output_buf: Vec<Vec<ProcessSample>>,
+    input_buf: Vec<Vec<ProcessSample>>,
     volume: Arc<Mutex<f32>>,
 }
 
 impl Buffers {
     fn new(volume: Arc<Mutex<f32>>) -> Result<Self, Error> {
+        let resampler = rubato::FastFixedOut::<ProcessSample>::new(
+            ORIG_RATIO,
+            MAX_RESAMPLE_RATIO_RELATIVE,
+            rubato::PolynomialDegree::Cubic,
+            BUFFER_SIZE as usize / 4,
+            2,
+        )
+        .map_err(|_err| Error::BuildStream)?;
+
+        let input_buf = resampler.input_buffer_allocate(true);
+        let output_buf = resampler.output_buffer_allocate(true);
+
         Ok(Self {
             left: StaticRb::default(),
             right: StaticRb::default(),
-            resampler: rubato::FastFixedOut::<ProcessSample>::new(
-                ORIG_RATIO,
-                MAX_RESAMPLE_RATIO_RELATIVE,
-                rubato::PolynomialDegree::Cubic,
-                BUFFER_SIZE as usize,
-                2,
-            )
-            .map_err(|_err| Error::BuildStream)?,
-            output_buf: [[Default::default(); BUFFER_SIZE as usize]; 2],
-            input_buf: [[Default::default(); BUFFER_SIZE as usize * 2]; 2],
+            resampler,
+            output_buf,
+            input_buf,
             volume,
         })
     }
@@ -89,6 +94,8 @@ impl Buffers {
                 .process_into_buffer(&self.input_buf, &mut self.output_buf, None)
             {
                 Ok(_) => {
+                    // println!("buffer length: {}", buffer.len());
+                    // println!("output length: {}", self.output_buf[0].len()*2);
                     buffer
                         .chunks_exact_mut(2)
                         .zip(self.output_buf[0].iter().zip(self.output_buf[1].iter()))
@@ -108,16 +115,20 @@ impl Buffers {
         #[expect(clippy::cast_precision_loss)]
         let occupied = self.num_samples() as f64;
         #[expect(clippy::cast_precision_loss)]
-        let target = RING_BUFFER_SIZE as f64;
+        let target = RING_BUFFER_SIZE as f64 / 2.0;
         let error = (occupied - target) / target;
+
+        if error.abs() < 0.1 {
+            return ORIG_RATIO;
+        }
 
         // Adjust ratio based on buffer occupancy
         // If buffer is too full, speed up playback (increase ratio)
         // If buffer is too empty, slow down playback (decrease ratio)
-        let adjustment = -error * 0.1; // Small adjustment factor
+        let adjustment = -error * 0.05;
 
         (ORIG_RATIO * (1.0 + adjustment))
-            .clamp(ORIG_RATIO, ORIG_RATIO * MAX_RESAMPLE_RATIO_RELATIVE)
+            .clamp(ORIG_RATIO * 0.85, ORIG_RATIO * MAX_RESAMPLE_RATIO_RELATIVE)
     }
 }
 
