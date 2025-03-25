@@ -317,70 +317,72 @@ impl eframe::App for App {
                 self.screen.custom_painting(central_panel_ui);
             });
 
-        ctx.input(|i| {
-            if i.key_pressed(Key::W) {
-                self.thread.press(ceres_std::Button::Up);
-            }
+        self.thread.press_release(|p| {
+            ctx.input(|i| {
+                if i.key_pressed(Key::W) {
+                    p.press(ceres_std::Button::Up);
+                }
 
-            if i.key_released(Key::W) {
-                self.thread.release(ceres_std::Button::Up);
-            }
+                if i.key_released(Key::W) {
+                    p.release(ceres_std::Button::Up);
+                }
 
-            if i.key_pressed(Key::A) {
-                self.thread.press(ceres_std::Button::Left);
-            }
+                if i.key_pressed(Key::A) {
+                    p.press(ceres_std::Button::Left);
+                }
 
-            if i.key_released(Key::A) {
-                self.thread.release(ceres_std::Button::Left);
-            }
+                if i.key_released(Key::A) {
+                    p.release(ceres_std::Button::Left);
+                }
 
-            if i.key_pressed(Key::S) {
-                self.thread.press(ceres_std::Button::Down);
-            }
+                if i.key_pressed(Key::S) {
+                    p.press(ceres_std::Button::Down);
+                }
 
-            if i.key_released(Key::S) {
-                self.thread.release(ceres_std::Button::Down);
-            }
+                if i.key_released(Key::S) {
+                    p.release(ceres_std::Button::Down);
+                }
 
-            if i.key_pressed(Key::D) {
-                self.thread.press(ceres_std::Button::Right);
-            }
+                if i.key_pressed(Key::D) {
+                    p.press(ceres_std::Button::Right);
+                }
 
-            if i.key_released(Key::D) {
-                self.thread.release(ceres_std::Button::Right);
-            }
+                if i.key_released(Key::D) {
+                    p.release(ceres_std::Button::Right);
+                }
 
-            if i.key_pressed(Key::L) {
-                self.thread.press(ceres_std::Button::A);
-            }
+                if i.key_pressed(Key::L) {
+                    p.press(ceres_std::Button::A);
+                }
 
-            if i.key_released(Key::L) {
-                self.thread.release(ceres_std::Button::A);
-            }
+                if i.key_released(Key::L) {
+                    p.release(ceres_std::Button::A);
+                }
 
-            if i.key_pressed(Key::K) {
-                self.thread.press(ceres_std::Button::B);
-            }
+                if i.key_pressed(Key::K) {
+                    p.press(ceres_std::Button::B);
+                }
 
-            if i.key_released(Key::K) {
-                self.thread.release(ceres_std::Button::B);
-            }
+                if i.key_released(Key::K) {
+                    p.release(ceres_std::Button::B);
+                }
 
-            if i.key_pressed(Key::M) {
-                self.thread.press(ceres_std::Button::Start);
-            }
+                if i.key_pressed(Key::M) {
+                    p.press(ceres_std::Button::Start);
+                }
 
-            if i.key_released(Key::M) {
-                self.thread.release(ceres_std::Button::Start);
-            }
+                if i.key_released(Key::M) {
+                    p.release(ceres_std::Button::Start);
+                }
 
-            if i.key_pressed(Key::N) {
-                self.thread.press(ceres_std::Button::Select);
-            }
+                if i.key_pressed(Key::N) {
+                    p.press(ceres_std::Button::Select);
+                }
 
-            if i.key_released(Key::N) {
-                self.thread.release(ceres_std::Button::Select);
-            }
+                if i.key_released(Key::N) {
+                    p.release(ceres_std::Button::Select);
+                }
+            });
         });
     }
 
