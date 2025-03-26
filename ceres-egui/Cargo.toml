@@ -30,5 +30,8 @@ version = "*"
 default-features = false
 features = ["default_fonts", "wgpu", "wayland", "accesskit"]
 
+[dependencies.winit]
+version = "*"
+
 [dependencies.rfd]
 version = "*"

@@ -26,11 +26,19 @@ struct Buffers {
 
 impl Buffers {
     fn new(volume: Arc<Mutex<f32>>) -> Result<Self, Error> {
+        // FIXME: Cpal doesn't support pipewire on Linux, this seems to match the returned buffer size by accident
+        // we have to way for cpal to have a nice way to get the supported buffer sizes or support pipewire
+        #[cfg(target_os = "linux")]
+        let chunk_size = BUFFER_SIZE as usize / 4;
+
+        #[cfg(not(target_os = "linux"))]
+        let chunk_size = BUFFER_SIZE as usize;
+
         let resampler = rubato::FastFixedOut::<ProcessSample>::new(
             ORIG_RATIO,
             MAX_RESAMPLE_RATIO_RELATIVE,
             rubato::PolynomialDegree::Cubic,
-            BUFFER_SIZE as usize / 4,
+            chunk_size,
             2,
         )
         .map_err(|_err| Error::BuildStream)?;
@@ -94,8 +102,6 @@ impl Buffers {
                 .process_into_buffer(&self.input_buf, &mut self.output_buf, None)
             {
                 Ok(_) => {
-                    // println!("buffer length: {}", buffer.len());
-                    // println!("output length: {}", self.output_buf[0].len()*2);
                     buffer
                         .chunks_exact_mut(2)
                         .zip(self.output_buf[0].iter().zip(self.output_buf[1].iter()))
