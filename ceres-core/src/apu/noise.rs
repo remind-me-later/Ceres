@@ -45,15 +45,15 @@ impl Noise {
         self.nr43
     }
 
-    pub fn read_nr44(&self) -> u8 {
+    pub const fn read_nr44(&self) -> u8 {
         0xBF | self.length_timer.read_enabled()
     }
 
-    pub fn write_nr41(&mut self, val: u8) {
+    pub const fn write_nr41(&mut self, val: u8) {
         self.length_timer.write_len(val);
     }
 
-    pub fn write_nr42(&mut self, val: u8) {
+    pub const fn write_nr42(&mut self, val: u8) {
         if val & 0xF8 == 0 {
             self.enabled = false;
             self.dac_enabled = false;
@@ -64,7 +64,7 @@ impl Noise {
         self.envelope.write(val);
     }
 
-    pub fn write_nr43(&mut self, val: u8) {
+    pub const fn write_nr43(&mut self, val: u8) {
         self.nr43 = val;
         self.wide_step = val & 8 != 0;
 
@@ -84,7 +84,7 @@ impl Noise {
         self.timer = 1;
     }
 
-    pub fn write_nr44(&mut self, val: u8) {
+    pub const fn write_nr44(&mut self, val: u8) {
         if matches!(
             self.length_timer.write_enabled(val),
             LengthTimerCalculationResult::DisableChannel
@@ -105,7 +105,7 @@ impl Noise {
                 self.enabled = false;
             }
 
-            self.timer = i32::from(self.timer_period);
+            self.timer = self.timer_period as i32;
             self.lfsr = 0x7FFF;
             self.envelope.trigger();
         }
@@ -115,7 +115,7 @@ impl Noise {
         self.output * self.envelope.volume()
     }
 
-    pub fn step_envelope(&mut self) {
+    pub const fn step_envelope(&mut self) {
         if !self.enabled {
             return;
         }
@@ -148,7 +148,7 @@ impl Noise {
         self.enabled && self.dac_enabled
     }
 
-    pub fn step_length_timer(&mut self) {
+    pub const fn step_length_timer(&mut self) {
         if matches!(
             self.length_timer.step(),
             LengthTimerCalculationResult::DisableChannel
@@ -157,7 +157,7 @@ impl Noise {
         }
     }
 
-    pub fn set_period_half(&mut self, p_half: PeriodHalf) {
+    pub const fn set_period_half(&mut self, p_half: PeriodHalf) {
         self.length_timer.set_phalf(p_half);
     }
 

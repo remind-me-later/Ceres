@@ -447,7 +447,7 @@ impl Svbk {
         self.svbk | 0xF8
     }
 
-    pub fn write(&mut self, val: u8) {
+    pub const fn write(&mut self, val: u8) {
         self.svbk = val & 7;
     }
 
@@ -469,7 +469,7 @@ impl Key1 {
         self.key1 | 0x7E
     }
 
-    pub fn write(&mut self, val: u8) {
+    pub const fn write(&mut self, val: u8) {
         self.key1 = self.key1 & 0x80 | val & 1;
     }
 

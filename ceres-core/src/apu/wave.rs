@@ -31,7 +31,7 @@ impl Wave {
         self.ram[index as usize]
     }
 
-    pub fn write_wave_ram(&mut self, addr: u8, val: u8) {
+    pub const fn write_wave_ram(&mut self, addr: u8, val: u8) {
         let index = addr - 0x30;
         self.ram[index as usize] = val;
         // upper 4 bits first
@@ -47,11 +47,11 @@ impl Wave {
         0x9F | (self.volume << 5)
     }
 
-    pub fn read_nr34(&self) -> u8 {
+    pub const fn read_nr34(&self) -> u8 {
         0xBF | self.length_timer.read_enabled()
     }
 
-    pub fn write_nr30(&mut self, val: u8) {
+    pub const fn write_nr30(&mut self, val: u8) {
         self.nr30 = val;
         if val & 0x80 == 0 {
             self.enabled = false;
@@ -61,11 +61,11 @@ impl Wave {
         }
     }
 
-    pub fn write_nr31(&mut self, val: u8) {
+    pub const fn write_nr31(&mut self, val: u8) {
         self.length_timer.write_len(val);
     }
 
-    pub fn write_nr32(&mut self, val: u8) {
+    pub const fn write_nr32(&mut self, val: u8) {
         self.volume = (val >> 5) & 3;
     }
 
@@ -113,7 +113,7 @@ impl Wave {
             .wrapping_shr(self.volume.wrapping_sub(1) as u32)
     }
 
-    pub fn step_sample(&mut self, cycles: i32) {
+    pub const fn step_sample(&mut self, cycles: i32) {
         if !self.is_enabled() {
             return;
         }
@@ -131,7 +131,7 @@ impl Wave {
         self.enabled && self.dac_enabled
     }
 
-    pub fn step_length_timer(&mut self) {
+    pub const fn step_length_timer(&mut self) {
         if matches!(
             self.length_timer.step(),
             LengthTimerCalculationResult::DisableChannel
@@ -140,7 +140,7 @@ impl Wave {
         }
     }
 
-    pub fn set_period_half(&mut self, p_half: PeriodHalf) {
+    pub const fn set_period_half(&mut self, p_half: PeriodHalf) {
         self.length_timer.set_phalf(p_half);
     }
 

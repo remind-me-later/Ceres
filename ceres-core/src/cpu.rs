@@ -229,7 +229,7 @@ impl<A: AudioCallback> Gb<A> {
         self.tick_m_cycle();
     }
 
-    fn add(&mut self, val: u16) {
+    const fn add(&mut self, val: u16) {
         let a = self.af >> 8;
         let res = a + val;
         self.af = res << 8;
@@ -254,7 +254,7 @@ impl<A: AudioCallback> Gb<A> {
         self.add(val);
     }
 
-    fn sub(&mut self, val: u16) {
+    const fn sub(&mut self, val: u16) {
         let a = self.af >> 8;
         self.af = (a.wrapping_sub(val) << 8) | NF;
         if a == val {
@@ -331,7 +331,7 @@ impl<A: AudioCallback> Gb<A> {
         self.adc(val);
     }
 
-    fn or(&mut self, val: u16) {
+    const fn or(&mut self, val: u16) {
         let a = self.af >> 8;
         self.af = (a | val) << 8;
         if a | val == 0 {
@@ -349,7 +349,7 @@ impl<A: AudioCallback> Gb<A> {
         self.or(val);
     }
 
-    fn xor(&mut self, val: u16) {
+    const fn xor(&mut self, val: u16) {
         let a = self.af >> 8;
         let a = a ^ val;
         self.af = a << 8;
@@ -368,7 +368,7 @@ impl<A: AudioCallback> Gb<A> {
         self.xor(val);
     }
 
-    fn and(&mut self, val: u16) {
+    const fn and(&mut self, val: u16) {
         let a = self.af >> 8;
         let a = a & val;
         self.af = (a << 8) | HF;
@@ -387,7 +387,7 @@ impl<A: AudioCallback> Gb<A> {
         self.and(val);
     }
 
-    fn cp(&mut self, val: u16) {
+    const fn cp(&mut self, val: u16) {
         let a = self.af >> 8;
         self.af &= 0xFF00;
         self.af |= NF;
@@ -535,7 +535,7 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    fn rlca(&mut self) {
+    const fn rlca(&mut self) {
         let carry = (self.af & 0x8000) != 0;
 
         self.af = (self.af & 0xFF00) << 1;
@@ -544,7 +544,7 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    fn rrca(&mut self) {
+    const fn rrca(&mut self) {
         let carry = self.af & 0x100 != 0;
         self.af = (self.af >> 1) & 0xFF00;
         if carry {
@@ -587,7 +587,7 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    fn jp_hl(&mut self) {
+    const fn jp_hl(&mut self) {
         self.pc = self.hl;
     }
 
@@ -666,7 +666,7 @@ impl<A: AudioCallback> Gb<A> {
         self.pc = u16::from(op) ^ 0xC7;
     }
 
-    fn halt(&mut self) {
+    const fn halt(&mut self) {
         if !self.ints.is_any_requested() {
             self.cpu_halted = true;
         } else if self.ints.are_enabled() {
@@ -694,20 +694,20 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    fn di(&mut self) {
+    const fn di(&mut self) {
         self.ints.disable();
     }
 
-    fn ei(&mut self) {
+    const fn ei(&mut self) {
         self.ei_delay = true;
     }
 
-    fn ccf(&mut self) {
+    const fn ccf(&mut self) {
         self.af ^= CF;
         self.af &= !(HF | NF);
     }
 
-    fn scf(&mut self) {
+    const fn scf(&mut self) {
         self.af |= CF;
         self.af &= !(HF | NF);
     }
@@ -717,11 +717,11 @@ impl<A: AudioCallback> Gb<A> {
 
     // TODO: debugger breakpoint
     #[expect(clippy::needless_pass_by_ref_mut)]
-    fn ld_b_b(&mut self) {
+    const fn ld_b_b(&mut self) {
         self.nop();
     }
 
-    fn daa(&mut self) {
+    const fn daa(&mut self) {
         let a = {
             let mut a = self.af >> 8;
 
@@ -757,7 +757,7 @@ impl<A: AudioCallback> Gb<A> {
         self.af |= a << 8;
     }
 
-    fn cpl(&mut self) {
+    const fn cpl(&mut self) {
         self.af ^= 0xFF00;
         self.af |= HF | NF;
     }
@@ -977,7 +977,7 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    fn illegal(&mut self, _op: u8) {
+    const fn illegal(&mut self, _op: u8) {
         self.ints.illegal();
         self.cpu_halted = true;
     }

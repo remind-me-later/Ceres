@@ -86,7 +86,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
         self.shader_option
     }
 
-    pub fn shader_option_mut(&mut self) -> &mut ShaderOption {
+    pub const fn shader_option_mut(&mut self) -> &mut ShaderOption {
         &mut self.shader_option
     }
 
@@ -94,7 +94,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
         self.pixel_mode
     }
 
-    pub fn mut_pixel_mode(&mut self) -> &mut ScalingOption {
+    pub const fn mut_pixel_mode(&mut self) -> &mut ScalingOption {
         &mut self.pixel_mode
     }
 }

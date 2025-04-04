@@ -51,7 +51,7 @@ pub struct Sweep {
 }
 
 impl Sweep {
-    fn calculate_sweep(&mut self) -> SweepCalculationResult {
+    const fn calculate_sweep(&mut self) -> SweepCalculationResult {
         let t = self.shadow_register >> self.individual_step;
 
         self.shadow_register = match self.dir {

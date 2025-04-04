@@ -149,7 +149,7 @@ impl Cartridge {
     }
 
     #[must_use]
-    pub fn rtc_mut(&mut self) -> Option<&mut Mbc3RTC> {
+    pub const fn rtc_mut(&mut self) -> Option<&mut Mbc3RTC> {
         if let Mbc::Mbc3 { rtc } = &mut self.mbc {
             rtc.as_mut()
         } else {
@@ -167,7 +167,7 @@ impl Cartridge {
         self.ram_size.size_bytes()
     }
 
-    pub fn run_rtc(&mut self, cycles: i32) {
+    pub const fn run_rtc(&mut self, cycles: i32) {
         if let Mbc::Mbc3 { rtc: Some(rtc) } = &mut self.mbc {
             rtc.run_cycles(cycles);
         }
@@ -288,7 +288,7 @@ impl Cartridge {
 
                     if self.rom_bank_lo == 0 {
                         self.rom_bank_lo = 1;
-                    };
+                    }
 
                     self.rom_offsets = (
                         0,

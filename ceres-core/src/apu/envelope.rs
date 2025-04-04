@@ -37,7 +37,7 @@ impl Envelope {
         (self.initial_volume << 4) | self.direction.to_u8() | self.period
     }
 
-    pub fn write(&mut self, val: u8) {
+    pub const fn write(&mut self, val: u8) {
         self.period = val & 7;
         self.enabled = self.period != 0;
 
@@ -47,7 +47,7 @@ impl Envelope {
         self.volume = self.initial_volume;
     }
 
-    pub fn step(&mut self) {
+    pub const fn step(&mut self) {
         use EnvelopeDirection::{Decrease, Increase};
 
         if !self.enabled {
@@ -73,7 +73,7 @@ impl Envelope {
         }
     }
 
-    pub fn trigger(&mut self) {
+    pub const fn trigger(&mut self) {
         self.timer = 0;
         self.volume = self.initial_volume;
     }

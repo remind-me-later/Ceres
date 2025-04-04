@@ -60,7 +60,7 @@ impl<const PERIOD_MUL: u16, S: SweepTrait> PeriodCounter<PERIOD_MUL, S> {
         }
     }
 
-    pub fn step(&mut self, t_cycles: i32) -> PeriodStepResult {
+    pub const fn step(&mut self, t_cycles: i32) -> PeriodStepResult {
         self.timer -= t_cycles;
 
         if self.timer <= 0 {

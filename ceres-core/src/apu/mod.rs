@@ -107,7 +107,7 @@ impl<C: AudioCallback> Apu<C> {
         }
     }
 
-    pub fn set_sample_rate(&mut self, sample_rate: i32) {
+    pub const fn set_sample_rate(&mut self, sample_rate: i32) {
         self.ext_sample_period = Self::sample_period_from_rate(sample_rate);
     }
 
@@ -179,7 +179,7 @@ impl<C: AudioCallback> Apu<C> {
     }
 
     pub fn step_div_apu(&mut self) {
-        fn set_period_half<C1: AudioCallback>(apu: &mut Apu<C1>, p_half: PeriodHalf) {
+        const fn set_period_half<C1: AudioCallback>(apu: &mut Apu<C1>, p_half: PeriodHalf) {
             apu.ch1.set_period_half(p_half);
             apu.ch2.set_period_half(p_half);
             apu.ch3.set_period_half(p_half);
@@ -251,7 +251,7 @@ impl<C: AudioCallback> Apu<C> {
             | (self.ch1.is_enabled() as u8)
     }
 
-    pub fn write_nr50(&mut self, val: u8) {
+    pub const fn write_nr50(&mut self, val: u8) {
         if self.enabled {
             self.right_volume = val & 7;
             self.right_vin = val & 8 != 0;
@@ -260,7 +260,7 @@ impl<C: AudioCallback> Apu<C> {
         }
     }
 
-    pub fn write_nr51(&mut self, val: u8) {
+    pub const fn write_nr51(&mut self, val: u8) {
         if self.enabled {
             self.nr51 = val;
         }
@@ -312,7 +312,7 @@ impl<C: AudioCallback> Apu<C> {
         self.ch1.read_nrx2()
     }
 
-    pub fn read_nr14(&self) -> u8 {
+    pub const fn read_nr14(&self) -> u8 {
         self.ch1.read_nrx4()
     }
 
@@ -320,11 +320,11 @@ impl<C: AudioCallback> Apu<C> {
         self.ch1.write_nrx0(val);
     }
 
-    pub fn write_nr11(&mut self, val: u8) {
+    pub const fn write_nr11(&mut self, val: u8) {
         self.ch1.write_nrx1(val);
     }
 
-    pub fn write_nr12(&mut self, val: u8) {
+    pub const fn write_nr12(&mut self, val: u8) {
         self.ch1.write_nrx2(val);
     }
 
@@ -345,15 +345,15 @@ impl<C: AudioCallback> Apu<C> {
         self.ch2.read_nrx2()
     }
 
-    pub fn read_nr24(&self) -> u8 {
+    pub const fn read_nr24(&self) -> u8 {
         self.ch2.read_nrx4()
     }
 
-    pub fn write_nr21(&mut self, val: u8) {
+    pub const fn write_nr21(&mut self, val: u8) {
         self.ch2.write_nrx1(val);
     }
 
-    pub fn write_nr22(&mut self, val: u8) {
+    pub const fn write_nr22(&mut self, val: u8) {
         self.ch2.write_nrx2(val);
     }
 
@@ -374,7 +374,7 @@ impl<C: AudioCallback> Apu<C> {
         self.ch3.read_nr32()
     }
 
-    pub fn read_nr34(&self) -> u8 {
+    pub const fn read_nr34(&self) -> u8 {
         self.ch3.read_nr34()
     }
 
@@ -382,15 +382,15 @@ impl<C: AudioCallback> Apu<C> {
         self.ch3.read_wave_ram(addr)
     }
 
-    pub fn write_nr30(&mut self, val: u8) {
+    pub const fn write_nr30(&mut self, val: u8) {
         self.ch3.write_nr30(val);
     }
 
-    pub fn write_nr31(&mut self, val: u8) {
+    pub const fn write_nr31(&mut self, val: u8) {
         self.ch3.write_nr31(val);
     }
 
-    pub fn write_nr32(&mut self, val: u8) {
+    pub const fn write_nr32(&mut self, val: u8) {
         self.ch3.write_nr32(val);
     }
 
@@ -402,7 +402,7 @@ impl<C: AudioCallback> Apu<C> {
         self.ch3.write_nr34(val);
     }
 
-    pub fn write_wave_ram(&mut self, addr: u8, val: u8) {
+    pub const fn write_wave_ram(&mut self, addr: u8, val: u8) {
         self.ch3.write_wave_ram(addr, val);
     }
 
@@ -415,23 +415,23 @@ impl<C: AudioCallback> Apu<C> {
         self.ch4.read_nr43()
     }
 
-    pub fn read_nr44(&self) -> u8 {
+    pub const fn read_nr44(&self) -> u8 {
         self.ch4.read_nr44()
     }
 
-    pub fn write_nr41(&mut self, val: u8) {
+    pub const fn write_nr41(&mut self, val: u8) {
         self.ch4.write_nr41(val);
     }
 
-    pub fn write_nr42(&mut self, val: u8) {
+    pub const fn write_nr42(&mut self, val: u8) {
         self.ch4.write_nr42(val);
     }
 
-    pub fn write_nr43(&mut self, val: u8) {
+    pub const fn write_nr43(&mut self, val: u8) {
         self.ch4.write_nr43(val);
     }
 
-    pub fn write_nr44(&mut self, val: u8) {
+    pub const fn write_nr44(&mut self, val: u8) {
         self.ch4.write_nr44(val);
     }
 }

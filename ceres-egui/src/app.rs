@@ -71,7 +71,7 @@ fn setup_theme(ctx: &egui::Context) {
     style.visuals.window_shadow = shadow;
     style.visuals.handle_shape = HandleShape::Rect { aspect_ratio: 0.5 };
     style.visuals.window_stroke = egui::Stroke {
-        width: 1.0,
+        width: 0.0,
         color: fg1,
     };
     style.visuals.selection.bg_fill = bg2;

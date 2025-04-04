@@ -192,11 +192,11 @@ impl<C: AudioCallback> Gb<C> {
         self.ppu.vram_data_rgba()
     }
 
-    pub fn press(&mut self, button: Button) {
+    pub const fn press(&mut self, button: Button) {
         self.joy.press(button, &mut self.ints);
     }
 
-    pub fn release(&mut self, button: Button) {
+    pub const fn release(&mut self, button: Button) {
         self.joy.release(button);
     }
 
@@ -204,7 +204,7 @@ impl<C: AudioCallback> Gb<C> {
         bess::save_state(self, writer)
     }
 
-    pub fn set_sample_rate(&mut self, sample_rate: i32) {
+    pub const fn set_sample_rate(&mut self, sample_rate: i32) {
         self.apu.set_sample_rate(sample_rate);
     }
 

@@ -72,11 +72,11 @@ impl Mbc3RTC {
         Ok(())
     }
 
-    pub fn unmap_reg(&mut self) {
+    pub const fn unmap_reg(&mut self) {
         self.mapped = None;
     }
 
-    pub fn run_cycles(&mut self, cycles: i32) {
+    pub const fn run_cycles(&mut self, cycles: i32) {
         if self.halt {
             return;
         }
@@ -89,7 +89,7 @@ impl Mbc3RTC {
         }
     }
 
-    fn update_secs(&mut self) {
+    const fn update_secs(&mut self) {
         self.regs[0] = (self.regs[0] + 1) & 0x3F;
         if self.regs[0] == 60 {
             self.regs[0] = 0;
@@ -170,23 +170,23 @@ impl Mbc3RTC {
         self.regs[4] | (u8::from(self.halt) << 6) | (u8::from(self.carry) << 7)
     }
 
-    pub fn set_seconds(&mut self, val: u8) {
+    pub const fn set_seconds(&mut self, val: u8) {
         self.regs[0] = val;
     }
 
-    pub fn set_minutes(&mut self, val: u8) {
+    pub const fn set_minutes(&mut self, val: u8) {
         self.regs[1] = val;
     }
 
-    pub fn set_hours(&mut self, val: u8) {
+    pub const fn set_hours(&mut self, val: u8) {
         self.regs[2] = val;
     }
 
-    pub fn set_days(&mut self, val: u8) {
+    pub const fn set_days(&mut self, val: u8) {
         self.regs[3] = val;
     }
 
-    pub fn set_control(&mut self, val: u8) {
+    pub const fn set_control(&mut self, val: u8) {
         let val = val & 0xC1;
         self.regs[4] = val;
         self.carry = val & 0x80 != 0;

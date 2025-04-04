@@ -27,7 +27,7 @@ impl Default for ColorPalette {
 }
 
 impl ColorPalette {
-    pub fn set_spec(&mut self, val: u8) {
+    pub const fn set_spec(&mut self, val: u8) {
         self.spec = val;
     }
 
@@ -63,7 +63,7 @@ impl ColorPalette {
         }
     }
 
-    pub fn set_data(&mut self, val: u8) {
+    pub const fn set_data(&mut self, val: u8) {
         let i = (self.index() as usize / 2) * 3;
 
         if self.index() & 1 == 0 {

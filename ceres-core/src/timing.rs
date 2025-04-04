@@ -29,7 +29,7 @@ impl<A: AudioCallback> Gb<A> {
         self.dot_accumulator += cycles;
     }
 
-    fn advance_tima_state(&mut self) {
+    const fn advance_tima_state(&mut self) {
         match self.tima_state {
             TIMAState::Reloading => {
                 self.ints.request_timer();
@@ -42,7 +42,7 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    fn inc_tima(&mut self) {
+    const fn inc_tima(&mut self) {
         self.tima = self.tima.wrapping_add(1);
 
         if self.tima == 0 {
@@ -105,11 +105,11 @@ impl<A: AudioCallback> Gb<A> {
         self.set_system_clk(0);
     }
 
-    pub fn write_tima(&mut self, val: u8) {
+    pub const fn write_tima(&mut self, val: u8) {
         self.tima = val;
     }
 
-    pub fn write_tma(&mut self, val: u8) {
+    pub const fn write_tma(&mut self, val: u8) {
         self.tma = val;
     }
 
@@ -118,7 +118,7 @@ impl<A: AudioCallback> Gb<A> {
         0xF8 | self.tac
     }
 
-    pub fn write_tac(&mut self, val: u8) {
+    pub const fn write_tac(&mut self, val: u8) {
         self.tac = val;
     }
 

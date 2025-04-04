@@ -133,12 +133,12 @@ impl Default for Ppu {
 // IO
 impl Ppu {
     #[must_use]
-    pub fn ocp_mut(&mut self) -> &mut ColorPalette {
+    pub const fn ocp_mut(&mut self) -> &mut ColorPalette {
         &mut self.ocp
     }
 
     #[must_use]
-    pub fn bcp_mut(&mut self) -> &mut ColorPalette {
+    pub const fn bcp_mut(&mut self) -> &mut ColorPalette {
         &mut self.bcp
     }
 
@@ -162,7 +162,7 @@ impl Ppu {
         self.ly
     }
 
-    pub fn write_opri(&mut self, val: u8) {
+    pub const fn write_opri(&mut self, val: u8) {
         self.opri = val & 1 != 0;
     }
 
@@ -171,7 +171,7 @@ impl Ppu {
         self.opri as u8 | 0xFE
     }
 
-    pub fn write_vbk(&mut self, val: u8) {
+    pub const fn write_vbk(&mut self, val: u8) {
         self.vbk = val & 1 != 0;
     }
 
@@ -180,7 +180,7 @@ impl Ppu {
         (self.vbk as u8) | 0xFE
     }
 
-    pub fn write_scx(&mut self, val: u8) {
+    pub const fn write_scx(&mut self, val: u8) {
         self.scx = val;
     }
 
@@ -189,7 +189,7 @@ impl Ppu {
         self.scx
     }
 
-    pub fn write_scy(&mut self, val: u8) {
+    pub const fn write_scy(&mut self, val: u8) {
         self.scy = val;
     }
 
@@ -198,7 +198,7 @@ impl Ppu {
         self.scy
     }
 
-    pub fn write_lyc(&mut self, val: u8) {
+    pub const fn write_lyc(&mut self, val: u8) {
         self.lyc = val;
     }
 
@@ -207,7 +207,7 @@ impl Ppu {
         self.lyc
     }
 
-    pub fn write_bgp(&mut self, val: u8) {
+    pub const fn write_bgp(&mut self, val: u8) {
         self.bgp = val;
     }
 
@@ -216,7 +216,7 @@ impl Ppu {
         self.bgp
     }
 
-    pub fn write_obp0(&mut self, val: u8) {
+    pub const fn write_obp0(&mut self, val: u8) {
         self.obp0 = val;
     }
 
@@ -225,7 +225,7 @@ impl Ppu {
         self.obp0
     }
 
-    pub fn write_obp1(&mut self, val: u8) {
+    pub const fn write_obp1(&mut self, val: u8) {
         self.obp1 = val;
     }
 
@@ -234,7 +234,7 @@ impl Ppu {
         self.obp1
     }
 
-    pub fn write_wy(&mut self, val: u8) {
+    pub const fn write_wy(&mut self, val: u8) {
         self.wy = val;
     }
 
@@ -243,7 +243,7 @@ impl Ppu {
         self.wy
     }
 
-    pub fn write_wx(&mut self, val: u8) {
+    pub const fn write_wx(&mut self, val: u8) {
         self.wx = val;
     }
 
@@ -285,7 +285,7 @@ impl Ppu {
         self.lcdc = val;
     }
 
-    pub fn write_stat(&mut self, val: u8) {
+    pub const fn write_stat(&mut self, val: u8) {
         let ly_equals_lyc = self.stat & STAT_LYC_B;
         let mode: u8 = self.mode() as u8;
 
@@ -321,16 +321,16 @@ impl Ppu {
         }
     }
 
-    pub fn write_oam(&mut self, addr: u16, val: u8, dma_active: bool) {
+    pub const fn write_oam(&mut self, addr: u16, val: u8, dma_active: bool) {
         match self.mode() {
             Mode::HBlank | Mode::VBlank if !dma_active => {
                 self.oam[(addr & 0xFF) as usize] = val;
             }
             _ => (),
-        };
+        }
     }
 
-    pub fn write_oam_by_dma(&mut self, addr: u16, val: u8) {
+    pub const fn write_oam_by_dma(&mut self, addr: u16, val: u8) {
         self.oam[(addr & 0xFF) as usize] = val;
     }
 
@@ -351,7 +351,7 @@ impl Ppu {
     }
 
     #[must_use]
-    pub fn oam_mut(&mut self) -> &mut [u8] {
+    pub const fn oam_mut(&mut self) -> &mut [u8] {
         &mut self.oam
     }
 }
@@ -402,7 +402,7 @@ impl Ppu {
         }
     }
 
-    fn check_lyc(&mut self, ints: &mut Interrupts) {
+    const fn check_lyc(&mut self, ints: &mut Interrupts) {
         self.stat &= !STAT_LYC_B;
 
         if self.ly == self.lyc {
@@ -423,7 +423,7 @@ impl Ppu {
         }
     }
 
-    fn set_mode_stat(&mut self, mode: Mode) {
+    const fn set_mode_stat(&mut self, mode: Mode) {
         self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
     }
 

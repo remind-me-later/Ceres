@@ -33,7 +33,7 @@ impl<S: SweepTrait> Square<S> {
         self.envelope.read()
     }
 
-    pub fn read_nrx4(&self) -> u8 {
+    pub const fn read_nrx4(&self) -> u8 {
         0xBF | self.length_timer.read_enabled()
     }
 
@@ -41,12 +41,12 @@ impl<S: SweepTrait> Square<S> {
         self.period_counter.write_sweep(val);
     }
 
-    pub fn write_nrx1(&mut self, val: u8) {
+    pub const fn write_nrx1(&mut self, val: u8) {
         self.duty = (val >> 6) & 3;
         self.length_timer.write_len(val);
     }
 
-    pub fn write_nrx2(&mut self, val: u8) {
+    pub const fn write_nrx2(&mut self, val: u8) {
         if val & 0xF8 == 0 {
             self.enabled = false;
             self.dac_enabled = false;
@@ -127,7 +127,7 @@ impl<S: SweepTrait> Square<S> {
         }
     }
 
-    pub fn step_envelope(&mut self) {
+    pub const fn step_envelope(&mut self) {
         if self.enabled {
             self.envelope.step();
         }
@@ -141,7 +141,7 @@ impl<S: SweepTrait> Square<S> {
         self.enabled && self.dac_enabled
     }
 
-    pub fn step_length_timer(&mut self) {
+    pub const fn step_length_timer(&mut self) {
         if matches!(
             self.length_timer.step(),
             LengthTimerCalculationResult::DisableChannel
@@ -150,7 +150,7 @@ impl<S: SweepTrait> Square<S> {
         }
     }
 
-    pub fn set_period_half(&mut self, p_half: PeriodHalf) {
+    pub const fn set_period_half(&mut self, p_half: PeriodHalf) {
         self.length_timer.set_phalf(p_half);
     }
 

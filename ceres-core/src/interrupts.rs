@@ -12,7 +12,7 @@ pub struct Interrupts {
 }
 
 impl Interrupts {
-    pub fn illegal(&mut self) {
+    pub const fn illegal(&mut self) {
         self.ie = 0;
     }
 
@@ -33,11 +33,11 @@ impl Interrupts {
         self.ifr & self.ie != 0
     }
 
-    pub fn enable(&mut self) {
+    pub const fn enable(&mut self) {
         self.ime = true;
     }
 
-    pub fn disable(&mut self) {
+    pub const fn disable(&mut self) {
         self.ime = false;
     }
 
@@ -46,23 +46,23 @@ impl Interrupts {
         self.ime
     }
 
-    pub fn request_p1(&mut self) {
+    pub const fn request_p1(&mut self) {
         self.ifr |= P1;
     }
 
-    pub fn request_serial(&mut self) {
+    pub const fn request_serial(&mut self) {
         self.ifr |= SERIAL;
     }
 
-    pub fn request_vblank(&mut self) {
+    pub const fn request_vblank(&mut self) {
         self.ifr |= VBLANK;
     }
 
-    pub fn request_lcd(&mut self) {
+    pub const fn request_lcd(&mut self) {
         self.ifr |= LCD;
     }
 
-    pub fn request_timer(&mut self) {
+    pub const fn request_timer(&mut self) {
         self.ifr |= TIMER;
     }
 
@@ -76,11 +76,11 @@ impl Interrupts {
         self.ie
     }
 
-    pub fn write_if(&mut self, val: u8) {
+    pub const fn write_if(&mut self, val: u8) {
         self.ifr = val & 0x1F;
     }
 
-    pub fn write_ie(&mut self, val: u8) {
+    pub const fn write_ie(&mut self, val: u8) {
         self.ie = val;
     }
 }
