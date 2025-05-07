@@ -167,6 +167,10 @@ impl App {
     }
 
     fn save_data(&self) -> anyhow::Result<()> {
+        if !self.thread.has_save_data() {
+            return Ok(());
+        }
+
         std::fs::create_dir_all(self.project_dirs.data_dir())?;
         if let Some(sav_path) = &self.sav_path {
             let sav_file = File::create(sav_path);

@@ -1,22 +1,35 @@
-[workspace]
-members = ["ceres-core", "ceres-std", "ceres-wgpu", "ceres-gtk"]
-default-members = ["ceres-gtk"]
-resolver = "3"
-
-[workspace.package]
-edition = "2024"
+[package]
+name = "ceres-gtk"
 version = "0.1.0"
+edition = "2021"
 license = "MIT"
-repository = "https://github.com/remind-me-later/Ceres"
 
-[workspace.lints.rust]
-unsafe_code = "forbid"
+[dependencies]
+ceres-core = { path = "../ceres-core" }
+epoxy = { version = "*" }
+libloading = { version = "*" }
+glow = { version = "*" }
+spin_sleep = { version = "*" }
+thread-priority = { version = "*" }
+ceres-std = { path = "../ceres-std" }
 
-[workspace.lints.clippy]
-pedantic = "warn"
+# Gtk
+[dependencies.adw]
+package = "libadwaita"
+version = "*"
+features = ["v1_6"]
+
+[dependencies.gtk]
+version = "*"
+package = "gtk4"
+features = ["v4_16", "xml_validation"]
+
+[build-dependencies]
+glib-build-tools = "*"
+
+[lints.clippy]
 nursery = "warn"
-# std_instead_of_alloc = "warn"
-alloc_instead_of_core = "warn"
+# restriction
 as_underscore = "warn"
 assertions_on_result_states = "warn"
 clone_on_ref_ptr = "warn"
@@ -29,8 +42,9 @@ else_if_without_else = "warn"
 empty_drop = "warn"
 empty_structs_with_brackets = "warn"
 exit = "warn"
-expect_used = "warn"
+# expect_used = "warn"
 filetype_is_file = "warn"
+# float_arithmetic = "warn"
 float_cmp_const = "warn"
 fn_to_numeric_cast_any = "warn"
 format_push_string = "warn"
@@ -43,14 +57,14 @@ mem_forget = "warn"
 mixed_read_write_in_expression = "warn"
 modulo_arithmetic = "warn"
 mutex_atomic = "warn"
-mutex_integer = "warn"
-non_ascii_literal = "warn"
-panic = "warn"
+# panic = "warn"
 partial_pub_fields = "warn"
+# print_stderr = "warn"
+# print_stdout = "warn"
 rc_buffer = "warn"
 rc_mutex = "warn"
 rest_pat_in_fully_bound_structs = "warn"
-same_name_method = "warn"
+# same_name_method = "warn"
 self_named_module_files = "warn"
 shadow_unrelated = "warn"
 str_to_string = "warn"
@@ -65,31 +79,10 @@ unneeded_field_pattern = "warn"
 unseparated_literal_suffix = "warn"
 use_debug = "warn"
 verbose_file_reads = "warn"
-unwrap_used = "warn"
-large_stack_frames = "warn"
-large_stack_arrays = "warn"
-cognitive_complexity = "warn"
-
-missing_errors_doc = { level = "allow", priority = 1 }
-missing_panics_doc = { level = "allow", priority = 1 }
-missing_safety_doc = { level = "allow", priority = 1 }
-similar_names = { level = "allow", priority = 1 }
-struct_excessive_bools = { level = "allow", priority = 1 }
-verbose_bit_mask = { level = "allow", priority = 1 }
-
-[profile.dev]
-opt-level = 1
-incremental = true
-rpath = false
-
-[profile.release]
-opt-level = "s"
-strip = "symbols"
-lto = "fat"
-debug = "none"
-panic = "abort"
-debug-assertions = false
-overflow-checks = false
-incremental = false
-rpath = false
-codegen-units = 1
+# allow
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+missing_safety_doc = "allow"
+similar_names = "allow"
+struct_excessive_bools = "allow"
+verbose_bit_mask = "allow"

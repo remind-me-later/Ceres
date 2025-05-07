@@ -44,6 +44,8 @@ impl GbThread {
 
             let mut last_loop = std::time::Instant::now();
 
+            // TODO: use condition variable
+
             while !exiting.load(Relaxed) {
                 if !pause_thread.load(Relaxed) {
                     if let Ok(mut gb) = gb.lock() {
@@ -244,10 +246,19 @@ impl GbThread {
         }
     }
 
-    pub fn press_release<F: FnOnce(&mut dyn Pressable)>(&mut self, f: F) {
+    pub fn press_release<F>(&mut self, f: F) -> bool
+    where
+        F: FnOnce(&mut dyn Pressable) -> bool,
+    {
         if let Ok(mut gb) = self.gb.lock() {
-            f(&mut *gb);
+            f(&mut *gb)
+        } else {
+            false
         }
+    }
+
+    pub fn has_save_data(&self) -> bool {
+        self.gb.lock().map_or(false, |gb| gb.has_battery())
     }
 
     pub fn save_data<W: std::io::Write + std::io::Seek>(

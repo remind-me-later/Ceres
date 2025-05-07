@@ -254,16 +254,14 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
         width: u32,
         height: u32,
     ) {
-        let (x, y) = if matches!(scaling_option, ScalingOption::PixelPerfect) {
-            let mul = (width / PX_WIDTH).min(height / PX_HEIGHT);
-            #[allow(clippy::cast_precision_loss)]
-            let x = (PX_WIDTH * mul) as f32 / width as f32;
-            #[allow(clippy::cast_precision_loss)]
-            let y = (PX_HEIGHT * mul) as f32 / height as f32;
-            (x, y)
-        } else {
-            #[allow(clippy::cast_precision_loss)]
-            let mul = (width as f32 / PX_WIDTH as f32).min(height as f32 / PX_HEIGHT as f32);
+        let (x, y) = {
+            let mul = if matches!(scaling_option, ScalingOption::PixelPerfect) {
+                (width / PX_WIDTH).min(height / PX_HEIGHT) as f32
+            } else {
+                #[allow(clippy::cast_precision_loss)]
+                (width as f32 / PX_WIDTH as f32).min(height as f32 / PX_HEIGHT as f32)
+            };
+
             #[allow(clippy::cast_precision_loss)]
             let x = (PX_WIDTH as f32 * mul) / width as f32;
             #[allow(clippy::cast_precision_loss)]
