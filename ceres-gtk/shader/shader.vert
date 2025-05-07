@@ -10,7 +10,7 @@ struct VertexOutput {
     vec4 clip_position;
     vec2 tex_coords;
 };
-uniform type_2_block_0Vertex { vec2 _group_1_binding_0_vs; };
+uniform vec2 _group_1_binding_0_vs;
 
 layout(location = 0) smooth out vec2 _vs2fs_location0;
 
@@ -32,7 +32,7 @@ void main() {
     VertexOutput _e39 = out_;
     gl_Position = _e39.clip_position;
     _vs2fs_location0 = _e39.tex_coords;
-    gl_Position.yz = vec2(-gl_Position.y, gl_Position.z * 2.0 - gl_Position.w);
+    gl_Position.yz = vec2(gl_Position.y, gl_Position.z * 2.0 - gl_Position.w);
     return;
 }
 

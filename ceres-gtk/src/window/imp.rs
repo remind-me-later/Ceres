@@ -230,6 +230,8 @@ impl ObjectImpl for Window {
                     "Nearest" => PxScaleMode::Nearest,
                     "Scale2x" => PxScaleMode::Scale2x,
                     "Scale3x" => PxScaleMode::Scale3x,
+                    "LCD" => PxScaleMode::Lcd,
+                    "CRT" => PxScaleMode::Crt,
                     _ => unreachable!(),
                 };
 

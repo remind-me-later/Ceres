@@ -18,6 +18,16 @@
         <attribute name="action">win.px_scale</attribute>
         <attribute name="target">Scale3x</attribute>
       </item>
+      <item>
+        <attribute name="label" translatable="yes">_LCD</attribute>
+        <attribute name="action">win.px_scale</attribute>
+        <attribute name="target">LCD</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_CRT</attribute>
+        <attribute name="action">win.px_scale</attribute>
+        <attribute name="target">CRT</attribute>
+      </item>
     </section>
     <section>
       <item>

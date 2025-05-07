@@ -81,6 +81,7 @@ impl Renderer {
 
             // create texture
             let texture = gl.create_texture().expect("cannot create texture");
+            gl.active_texture(glow::TEXTURE0);
             gl.bind_texture(glow::TEXTURE_2D, Some(texture));
             gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
@@ -92,8 +93,12 @@ impl Renderer {
                 glow::TEXTURE_MAG_FILTER,
                 glow::NEAREST as i32,
             );
+            let main_texture_unif = gl.get_uniform_location(program, "_group_0_binding_0_fs").expect("couldn't get location of main texture uniform");
+            gl.uniform_1_i32(Some(&main_texture_unif), 0);
+
 
             let texture_back = gl.create_texture().expect("cannot create texture");
+            gl.active_texture(glow::TEXTURE2);
             gl.bind_texture(glow::TEXTURE_2D, Some(texture_back));
             gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
@@ -105,13 +110,16 @@ impl Renderer {
                 glow::TEXTURE_MAG_FILTER,
                 glow::LINEAR as i32,
             );
+            let back_texture_unif = gl.get_uniform_location(program, "_group_0_binding_2_fs").expect("couldn't get location of back texture uniform");
+            gl.uniform_1_i32(Some(&back_texture_unif), 2);
+
 
             let dims_unif = gl
-                .get_uniform_location(program, "vp_dims")
+                .get_uniform_location(program, "_group_1_binding_0_vs")
                 .expect("couldn't get location of dimensions uniform");
 
             let scale_unif = gl
-                .get_uniform_location(program, "scale_mode")
+                .get_uniform_location(program, "_group_1_binding_1_fs")
                 .expect("couldn't get location of scale uniform");
 
             // Init scale uniform
@@ -165,6 +173,7 @@ impl Renderer {
 
             // self.gl.unmap_buffer(glow::PIXEL_UNPACK_BUFFER);
 
+            self.gl.active_texture(glow::TEXTURE0);
             self.gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
 
             self.gl.tex_image_2d(
@@ -179,6 +188,7 @@ impl Renderer {
                 glow::PixelUnpackData::Slice(Some(rgba)),
             );
 
+            self.gl.active_texture(glow::TEXTURE2);
             self.gl
                 .bind_texture(glow::TEXTURE_2D, Some(self.texture_back));
             self.gl.tex_image_2d(

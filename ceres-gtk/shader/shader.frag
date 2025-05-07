@@ -14,7 +14,7 @@ uniform highp sampler2D _group_0_binding_0_fs;
 
 uniform highp sampler2D _group_0_binding_2_fs;
 
-uniform type_3_block_0Fragment { uint _group_1_binding_1_fs; };
+uniform uint _group_1_binding_1_fs;
 
 layout(location = 0) smooth in vec2 _vs2fs_location0;
 layout(location = 0) out vec4 _fs2p_location0;
