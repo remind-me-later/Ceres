@@ -1,5 +1,7 @@
 mod texture;
 
+pub use wgpu;
+
 use texture::Texture;
 use wgpu::util::DeviceExt;
 

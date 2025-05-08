@@ -1,5 +1,12 @@
 [workspace]
-members = ["ceres-core", "ceres-std", "ceres-wgpu", "ceres-gtk"]
+members = [
+    "ceres-core",
+    "ceres-std",
+    "ceres-wgpu",
+    "ceres-gtk",
+    "ceres-egui",
+    "ceres",
+]
 default-members = ["ceres-gtk"]
 resolver = "3"
 

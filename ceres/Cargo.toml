@@ -33,11 +33,6 @@ version = "*"
 default-features = false
 features = ["rwh_06", "wayland", "wayland-csd-adwaita"]
 
-[dependencies.wgpu]
-version = "*"
-default-features = false
-features = ["dx12", "metal", "wgsl"]
-
 [dependencies.pollster]
 version = "*"
 default-features = false

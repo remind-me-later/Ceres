@@ -5,6 +5,7 @@ use crate::{
 use anyhow::Context;
 use ceres_std::GbThread;
 use ceres_std::{PX_HEIGHT, PX_WIDTH};
+use ceres_wgpu::wgpu;
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -133,29 +134,33 @@ impl App<'_> {
                 }
             }
 
-            self.thread.press_release(|p| match event.state {
-                ElementState::Pressed => match event.logical_key.as_ref() {
-                    Key::Character("a") => p.press(ceres_std::Button::Left),
-                    Key::Character("d") => p.press(ceres_std::Button::Right),
-                    Key::Character("w") => p.press(ceres_std::Button::Up),
-                    Key::Character("s") => p.press(ceres_std::Button::Down),
-                    Key::Character("l") => p.press(ceres_std::Button::A),
-                    Key::Character("k") => p.press(ceres_std::Button::B),
-                    Key::Character("n") => p.press(ceres_std::Button::Select),
-                    Key::Character("m") => p.press(ceres_std::Button::Start),
-                    _ => (),
-                },
-                ElementState::Released => match event.logical_key.as_ref() {
-                    Key::Character("a") => p.release(ceres_std::Button::Left),
-                    Key::Character("d") => p.release(ceres_std::Button::Right),
-                    Key::Character("w") => p.release(ceres_std::Button::Up),
-                    Key::Character("s") => p.release(ceres_std::Button::Down),
-                    Key::Character("l") => p.release(ceres_std::Button::A),
-                    Key::Character("k") => p.release(ceres_std::Button::B),
-                    Key::Character("n") => p.release(ceres_std::Button::Select),
-                    Key::Character("m") => p.release(ceres_std::Button::Start),
-                    _ => (),
-                },
+            self.thread.press_release(|p| {
+                match event.state {
+                    ElementState::Pressed => match event.logical_key.as_ref() {
+                        Key::Character("a") => p.press(ceres_std::Button::Left),
+                        Key::Character("d") => p.press(ceres_std::Button::Right),
+                        Key::Character("w") => p.press(ceres_std::Button::Up),
+                        Key::Character("s") => p.press(ceres_std::Button::Down),
+                        Key::Character("l") => p.press(ceres_std::Button::A),
+                        Key::Character("k") => p.press(ceres_std::Button::B),
+                        Key::Character("n") => p.press(ceres_std::Button::Select),
+                        Key::Character("m") => p.press(ceres_std::Button::Start),
+                        _ => return false,
+                    },
+                    ElementState::Released => match event.logical_key.as_ref() {
+                        Key::Character("a") => p.release(ceres_std::Button::Left),
+                        Key::Character("d") => p.release(ceres_std::Button::Right),
+                        Key::Character("w") => p.release(ceres_std::Button::Up),
+                        Key::Character("s") => p.release(ceres_std::Button::Down),
+                        Key::Character("l") => p.release(ceres_std::Button::A),
+                        Key::Character("k") => p.release(ceres_std::Button::B),
+                        Key::Character("n") => p.release(ceres_std::Button::Select),
+                        Key::Character("m") => p.release(ceres_std::Button::Start),
+                        _ => return false,
+                    },
+                }
+
+                return true;
             });
         }
     }

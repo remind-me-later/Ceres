@@ -387,6 +387,8 @@ impl eframe::App for App {
                     p.release(ceres_std::Button::Select);
                 }
             });
+
+            return true;
         });
     }
 

@@ -1,5 +1,6 @@
 use ceres_wgpu::PipelineWrapper;
 use std::sync::Arc;
+use ceres_wgpu::wgpu;
 
 use crate::{ScalingOption, ShaderOption};
 

@@ -9,7 +9,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies.wgpu]
-version = "*"
+version = "24"
 default-features = false
 features = ["dx12", "metal", "wgsl"]
 

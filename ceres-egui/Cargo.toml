@@ -26,7 +26,7 @@ version = "*"
 version = "*"
 
 [dependencies.eframe]
-version = "*"
+version = "0.31"
 default-features = false
 features = ["default_fonts", "wgpu", "wayland", "accesskit"]
 
