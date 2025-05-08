@@ -22,8 +22,8 @@ impl GlArea {
         glib::Object::new()
     }
 
-    pub fn gb(&self) -> &Rc<RefCell<ceres_std::GbThread>> {
-        &self.imp().gb
+    pub fn gb_thread(&self) -> &Rc<RefCell<ceres_std::GbThread>> {
+        &self.imp().gb_thread
     }
 
     fn make_current(&self) {

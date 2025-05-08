@@ -26,7 +26,7 @@ pub struct Window {
 impl Window {
     fn save_data(&self) {
         if let Some(path) = self.rom_path.borrow().as_ref() {
-            if !self.gb_area.gb().borrow().has_save_data() {
+            if !self.gb_area.gb_thread().borrow().has_save_data() {
                 return;
             }
 
@@ -36,7 +36,7 @@ impl Window {
             std::fs::create_dir_all(sav_path.parent().unwrap()).unwrap();
             let sav_file = File::create(sav_path);
             self.gb_area
-                .gb()
+                .gb_thread()
                 .borrow_mut()
                 .save_data(&mut sav_file.unwrap())
                 .unwrap();
@@ -101,7 +101,7 @@ impl ObjectSubclass for Window {
                     match win
                         .imp()
                         .gb_area
-                        .gb()
+                        .gb_thread()
                         .borrow_mut()
                         .change_rom(sav_path.as_deref(), &pathbuf)
                     {
@@ -159,7 +159,7 @@ impl ObjectImpl for Window {
         keys.set_propagation_phase(gtk::PropagationPhase::Capture);
 
         {
-            let thread_clone = gl_area.gb().clone();
+            let thread_clone = gl_area.gb_thread().clone();
             keys.connect_key_pressed(move |_, key, _keycode, _state| {
                 if thread_clone.borrow_mut().press_release(|k| {
                     match key {
@@ -185,7 +185,7 @@ impl ObjectImpl for Window {
         }
 
         {
-            let thread_clone = gl_area.gb().clone();
+            let thread_clone = gl_area.gb_thread().clone();
             keys.connect_key_released(move |_, key, _keycode, _state| {
                 thread_clone.borrow_mut().press_release(|k| {
                     match key {
@@ -243,7 +243,34 @@ impl ObjectImpl for Window {
 
         self.obj().add_action(&action_px_scale);
 
-        let thread_clone = self.gb_area.gb().clone();
+        let action_speed_multiplier = gtk::gio::SimpleAction::new_stateful(
+            "speed_multiplier",
+            Some(&String::static_variant_type()),
+            &"1".to_variant(),
+        );
+
+        action_speed_multiplier.connect_activate(glib::clone!(
+            #[weak]
+            rend,
+            move |action, parameter| {
+                // Get parameter
+                let parameter = parameter
+                    .expect("Could not get parameter.")
+                    .get::<String>()
+                    .expect("The value needs to be of type `String`.");
+
+                // Set orientation and save state
+                rend.obj()
+                    .gb_thread()
+                    .borrow_mut()
+                    .set_speed_multiplier(parameter.parse::<u32>().unwrap());
+                action.set_state(&parameter.to_variant());
+            }
+        ));
+
+        self.obj().add_action(&action_speed_multiplier);
+
+        let thread_clone = self.gb_area.gb_thread().clone();
 
         self.volume_button
             .connect_value_changed(move |_, new_volume| {

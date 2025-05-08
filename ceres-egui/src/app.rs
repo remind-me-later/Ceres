@@ -229,7 +229,7 @@ impl eframe::App for App {
                             .on_hover_text("Speed 1x")
                             .clicked()
                         {
-                            self.thread.set_multiplier(1);
+                            self.thread.set_speed_multiplier(1);
                         }
 
                         if horizontal_ui
@@ -237,7 +237,7 @@ impl eframe::App for App {
                             .on_hover_text("Speed 2x")
                             .clicked()
                         {
-                            self.thread.set_multiplier(2);
+                            self.thread.set_speed_multiplier(2);
                         }
 
                         if horizontal_ui
@@ -245,7 +245,7 @@ impl eframe::App for App {
                             .on_hover_text("Speed 4x")
                             .clicked()
                         {
-                            self.thread.set_multiplier(4);
+                            self.thread.set_speed_multiplier(4);
                         }
                     });
 

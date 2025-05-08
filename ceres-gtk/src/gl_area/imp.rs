@@ -30,7 +30,7 @@ impl ceres_std::PainterCallback for PainterCallbackImpl {
 }
 
 pub struct GlArea {
-    pub gb: Rc<RefCell<ceres_std::GbThread>>,
+    pub gb_thread: Rc<RefCell<ceres_std::GbThread>>,
     pub renderer: RefCell<Option<Renderer>>,
     pub scale_mode: RefCell<PxScaleMode>,
     pub scale_changed: RefCell<bool>,
@@ -48,11 +48,11 @@ impl GlArea {
             glib::ControlFlow::Continue
         }));
 
-        self.gb.borrow_mut().resume().unwrap();
+        self.gb_thread.borrow_mut().resume().unwrap();
     }
 
     pub fn pause(&self) {
-        self.gb.borrow_mut().pause().unwrap();
+        self.gb_thread.borrow_mut().pause().unwrap();
 
         if let Some(tick_id) = self.callbacks.borrow_mut().take() {
             tick_id.remove();
@@ -77,18 +77,18 @@ impl ObjectSubclass for GlArea {
             vec![0u8; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice(),
         ));
 
-        let gb = ceres_std::GbThread::new(
-            ceres_core::Model::Cgb,
-            None,
-            None,
-            PainterCallbackImpl::new(buffer.clone()),
-        )
-        .expect("Failed to create GbThread");
-
-        let gb = Rc::new(RefCell::new(gb));
+        let gb_thread = Rc::new(RefCell::new(
+            ceres_std::GbThread::new(
+                ceres_core::Model::Cgb,
+                None,
+                None,
+                PainterCallbackImpl::new(buffer.clone()),
+            )
+            .expect("Failed to create GbThread"),
+        ));
 
         Self {
-            gb,
+            gb_thread,
             buffer,
             renderer: Default::default(),
             scale_mode: Default::default(),
@@ -142,7 +142,7 @@ impl WidgetImpl for GlArea {
     }
 
     fn measure(&self, orientation: gtk::Orientation, _for_size: i32) -> (i32, i32, i32, i32) {
-        const MULTIPLIER: i32 = 2;
+        const MULTIPLIER: i32 = 1;
 
         match orientation {
             gtk::Orientation::Horizontal => {

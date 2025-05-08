@@ -105,7 +105,7 @@ impl GbThread {
         })
     }
 
-    pub fn set_multiplier(&mut self, multiplier: u32) {
+    pub fn set_speed_multiplier(&mut self, multiplier: u32) {
         self.multiplier.store(multiplier, Relaxed);
         #[expect(clippy::cast_possible_wrap)]
         self.set_sample_rate(self.audio_stream.sample_rate() / multiplier as i32);

@@ -2,6 +2,29 @@
 <interface>
   <menu id="app-menu">
     <section>
+      <attribute name="label" translatable="yes">Speed multiplier</attribute>
+      <item>
+        <attribute name="label" translatable="yes">_1x</attribute>
+        <attribute name="action">win.speed_multiplier</attribute>
+        <attribute name="target">1</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_2x</attribute>
+        <attribute name="action">win.speed_multiplier</attribute>
+        <attribute name="target">2</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_3x</attribute>
+        <attribute name="action">win.speed_multiplier</attribute>
+        <attribute name="target">4</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_4x</attribute>
+        <attribute name="action">win.speed_multiplier</attribute>
+        <attribute name="target">8</attribute>
+      </item>
+    </section>
+    <section>
       <attribute name="label" translatable="yes">Upscale filter</attribute>
       <item>
         <attribute name="label" translatable="yes">_Nearest neighbour</attribute>
@@ -81,7 +104,7 @@ audio-volume-medium-symbolic</property>
       </object>
     </child>
     <child>
-      <object class="CeresGlArea" id="gb_area"/>
+      <object class="CeresGlArea" id="gb_area" />
     </child>
   </template>
 </interface>

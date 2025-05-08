@@ -361,7 +361,7 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
             }
             CeresEvent::ChangeSpeed(speed_multiplier) => {
                 // Set the emulation speed
-                self.thread.set_multiplier(speed_multiplier);
+                self.thread.set_speed_multiplier(speed_multiplier);
             }
             CeresEvent::OpenRomFile => {
                 if let Some(path) = rfd::FileDialog::new()
