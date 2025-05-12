@@ -17,12 +17,12 @@ ceres-std = { path = "../ceres-std" }
 [dependencies.adw]
 package = "libadwaita"
 version = "*"
-features = ["v1_6"]
+features = ["v1_7"]
 
 [dependencies.gtk]
 version = "*"
 package = "gtk4"
-features = ["v4_16", "xml_validation"]
+features = ["v4_18", "xml_validation"]
 
 [build-dependencies]
 glib-build-tools = "*"

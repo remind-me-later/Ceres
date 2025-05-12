@@ -41,15 +41,15 @@ default-features = false
 version = "*"
 
 [target.'cfg(target_os = "macos")'.dependencies.objc2-app-kit]
-git = "https://github.com/madsmtm/objc2.git"
+version = "*"
 
 [target.'cfg(target_os = "macos")'.dependencies.objc2-foundation]
-git = "https://github.com/madsmtm/objc2.git"
+version = "*"
 default-features = true
 features = ["alloc"]
 
 [target.'cfg(target_os = "macos")'.dependencies.objc2]
-git = "https://github.com/madsmtm/objc2.git"
+version = "*"
 default-features = true
 features = ["std"]
 

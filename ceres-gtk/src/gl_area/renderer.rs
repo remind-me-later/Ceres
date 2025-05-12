@@ -1,4 +1,7 @@
-use glow::{Context, HasContext, NativeProgram, NativeTexture, NativeVertexArray, UniformLocation};
+use glow::{
+    Context, HasContext, NativeBuffer, NativeProgram, NativeTexture, NativeVertexArray,
+    UniformLocation,
+};
 
 #[derive(Clone, Copy, Default)]
 pub enum PxScaleMode {
@@ -12,14 +15,16 @@ pub enum PxScaleMode {
 
 const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
 const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
+const PBO_BUFFER_SIZE: i32 = (PX_WIDTH * PX_HEIGHT * 4) as i32;
+const INITIAL_TEXTURE_DATA_SIZE: usize = (PX_WIDTH * PX_HEIGHT * 4) as usize;
 
 pub struct Renderer {
     gl: Context,
     program: NativeProgram,
     vao: NativeVertexArray,
-    // pbo: glow::Buffer,
-    texture: NativeTexture,
-    texture_back: NativeTexture,
+    texture_current: NativeTexture,
+    texture_previous: NativeTexture,
+    pbo_upload_current: NativeBuffer,
     dims_unif: UniformLocation,
     scale_unif: UniformLocation,
     new_size: Option<(u32, u32)>,
@@ -32,13 +37,11 @@ impl Renderer {
         unsafe {
             let gl = glow::Context::from_loader_function(epoxy::get_proc_addr);
 
-            // create vao
             let vao = gl
                 .create_vertex_array()
                 .expect("Cannot create vertex array");
             gl.bind_vertex_array(Some(vao));
 
-            // create program
             let program = gl.create_program().expect("Cannot create program");
 
             let shader_sources = [
@@ -79,10 +82,11 @@ impl Renderer {
 
             gl.use_program(Some(program));
 
-            // create texture
-            let texture = gl.create_texture().expect("cannot create texture");
+            let initial_pixel_data: Vec<u8> = vec![0; INITIAL_TEXTURE_DATA_SIZE];
+
+            let texture_current = gl.create_texture().expect("cannot create current texture");
             gl.active_texture(glow::TEXTURE0);
-            gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+            gl.bind_texture(glow::TEXTURE_2D, Some(texture_current));
             gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
                 glow::TEXTURE_MIN_FILTER,
@@ -93,26 +97,61 @@ impl Renderer {
                 glow::TEXTURE_MAG_FILTER,
                 glow::NEAREST as i32,
             );
-            let main_texture_unif = gl.get_uniform_location(program, "_group_0_binding_0_fs").expect("couldn't get location of main texture uniform");
-            gl.uniform_1_i32(Some(&main_texture_unif), 0);
+            gl.tex_image_2d(
+                glow::TEXTURE_2D,
+                0,
+                glow::RGBA as i32,
+                PX_WIDTH as i32,
+                PX_HEIGHT as i32,
+                0,
+                glow::RGBA,
+                glow::UNSIGNED_BYTE,
+                glow::PixelUnpackData::Slice(Some(&initial_pixel_data)),
+            );
+            let current_texture_unif = gl
+                .get_uniform_location(program, "_group_0_binding_0_fs")
+                .expect("couldn't get location of current texture uniform");
+            gl.uniform_1_i32(Some(&current_texture_unif), 0);
 
-
-            let texture_back = gl.create_texture().expect("cannot create texture");
+            let texture_previous = gl.create_texture().expect("cannot create previous texture");
             gl.active_texture(glow::TEXTURE2);
-            gl.bind_texture(glow::TEXTURE_2D, Some(texture_back));
+            gl.bind_texture(glow::TEXTURE_2D, Some(texture_previous));
             gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
                 glow::TEXTURE_MIN_FILTER,
-                glow::LINEAR as i32,
+                glow::NEAREST as i32,
             );
             gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
                 glow::TEXTURE_MAG_FILTER,
-                glow::LINEAR as i32,
+                glow::NEAREST as i32,
             );
-            let back_texture_unif = gl.get_uniform_location(program, "_group_0_binding_2_fs").expect("couldn't get location of back texture uniform");
-            gl.uniform_1_i32(Some(&back_texture_unif), 2);
+            gl.tex_image_2d(
+                glow::TEXTURE_2D,
+                0,
+                glow::RGBA as i32,
+                PX_WIDTH as i32,
+                PX_HEIGHT as i32,
+                0,
+                glow::RGBA,
+                glow::UNSIGNED_BYTE,
+                glow::PixelUnpackData::Slice(Some(&initial_pixel_data)),
+            );
+            let previous_texture_unif = gl
+                .get_uniform_location(program, "_group_0_binding_2_fs")
+                .expect("couldn't get location of previous texture uniform");
+            gl.uniform_1_i32(Some(&previous_texture_unif), 2);
 
+            let pbo_upload_current = gl
+                .create_buffer()
+                .expect("cannot create PBO for current texture");
+            gl.bind_buffer(glow::PIXEL_UNPACK_BUFFER, Some(pbo_upload_current));
+            gl.buffer_data_size(
+                glow::PIXEL_UNPACK_BUFFER,
+                PBO_BUFFER_SIZE,
+                glow::STREAM_DRAW,
+            );
+            gl.bind_buffer(glow::PIXEL_UNPACK_BUFFER, None);
 
             let dims_unif = gl
                 .get_uniform_location(program, "_group_1_binding_0_vs")
@@ -122,24 +161,15 @@ impl Renderer {
                 .get_uniform_location(program, "_group_1_binding_1_fs")
                 .expect("couldn't get location of scale uniform");
 
-            // Init scale uniform
             gl.uniform_1_u32_slice(Some(&scale_unif), &[PxScaleMode::Nearest as u32]);
-
-            // let pbo = gl.create_buffer().expect("cannot create pbo");
-            // gl.bind_buffer(glow::PIXEL_UNPACK_BUFFER, Some(pbo));
-            // gl.buffer_data_size(
-            //     glow::PIXEL_UNPACK_BUFFER,
-            //     (PX_WIDTH * PX_HEIGHT * 3) as i32,
-            //     glow::STREAM_DRAW,
-            // );
 
             Self {
                 gl,
                 program,
                 vao,
-                // pbo,
-                texture,
-                texture_back,
+                texture_current,
+                texture_previous,
+                pbo_upload_current,
                 dims_unif,
                 scale_unif,
                 new_size: None,
@@ -158,50 +188,63 @@ impl Renderer {
 
     pub fn draw_frame(&mut self, rgba: &[u8]) {
         unsafe {
-            // self.gl
-            //     .bind_buffer(glow::PIXEL_UNPACK_BUFFER, Some(self.pbo));
+            // Copy current texture to previous texture
+            self.gl.copy_image_sub_data(
+                self.texture_current,
+                glow::TEXTURE_2D,
+                0,
+                0,
+                0,
+                0,
+                self.texture_previous,
+                glow::TEXTURE_2D,
+                0,
+                0,
+                0,
+                0,
+                PX_WIDTH as i32,
+                PX_HEIGHT as i32,
+                1,
+            );
 
-            // #[allow(clippy::cast_possible_truncation)]
-            // let buf = self.gl.map_buffer_range(
-            //     glow::PIXEL_UNPACK_BUFFER,
-            //     0,
-            //     rgb.len() as i32,
-            //     glow::MAP_WRITE_BIT | glow::MAP_INVALIDATE_BUFFER_BIT,
-            // );
-
-            // std::ptr::copy_nonoverlapping(rgb.as_ptr(), buf, rgb.len());
-
-            // self.gl.unmap_buffer(glow::PIXEL_UNPACK_BUFFER);
+            // Upload new rgba data to current texture via PBO
+            self.gl
+                .bind_buffer(glow::PIXEL_UNPACK_BUFFER, Some(self.pbo_upload_current));
+            let ptr = self.gl.map_buffer_range(
+                glow::PIXEL_UNPACK_BUFFER,
+                0,
+                PBO_BUFFER_SIZE,
+                glow::MAP_WRITE_BIT | glow::MAP_INVALIDATE_BUFFER_BIT,
+            );
+            if !ptr.is_null() {
+                let dest_slice =
+                    core::slice::from_raw_parts_mut(ptr.cast::<u8>(), PBO_BUFFER_SIZE as usize);
+                dest_slice.copy_from_slice(rgba);
+                self.gl.unmap_buffer(glow::PIXEL_UNPACK_BUFFER);
+            } else {
+                eprintln!("Failed to map PBO for current texture");
+            }
 
             self.gl.active_texture(glow::TEXTURE0);
-            self.gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
-
-            self.gl.tex_image_2d(
+            self.gl
+                .bind_texture(glow::TEXTURE_2D, Some(self.texture_current)); // Ensure correct texture is bound
+            self.gl.tex_sub_image_2d(
                 glow::TEXTURE_2D,
                 0,
-                glow::RGBA as i32,
+                0,
+                0,
                 PX_WIDTH as i32,
                 PX_HEIGHT as i32,
-                0,
                 glow::RGBA,
                 glow::UNSIGNED_BYTE,
-                glow::PixelUnpackData::Slice(Some(rgba)),
+                glow::PixelUnpackData::BufferOffset(0),
             );
+            self.gl.bind_buffer(glow::PIXEL_UNPACK_BUFFER, None);
 
+            // Ensure previous texture is active on its unit (though binding persists, good for clarity)
             self.gl.active_texture(glow::TEXTURE2);
             self.gl
-                .bind_texture(glow::TEXTURE_2D, Some(self.texture_back));
-            self.gl.tex_image_2d(
-                glow::TEXTURE_2D,
-                0,
-                glow::RGBA as i32,
-                PX_WIDTH as i32,
-                PX_HEIGHT as i32,
-                0,
-                glow::RGBA,
-                glow::UNSIGNED_BYTE,
-                glow::PixelUnpackData::Slice(Some(rgba)),
-            );
+                .bind_texture(glow::TEXTURE_2D, Some(self.texture_previous));
 
             self.gl.use_program(Some(self.program));
 
@@ -220,7 +263,6 @@ impl Renderer {
             }
 
             if let Some(scale_mode) = self.new_scale_mode.take() {
-                // set scaling mode
                 self.gl
                     .uniform_1_u32_slice(Some(&self.scale_unif), &[scale_mode as u32]);
             }
