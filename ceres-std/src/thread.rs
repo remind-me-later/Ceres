@@ -250,15 +250,12 @@ impl GbThread {
     where
         F: FnOnce(&mut dyn Pressable) -> bool,
     {
-        if let Ok(mut gb) = self.gb.lock() {
-            f(&mut *gb)
-        } else {
-            false
-        }
+        self.gb.lock().is_ok_and(|mut gb| f(&mut *gb))
     }
 
+    #[must_use]
     pub fn has_save_data(&self) -> bool {
-        self.gb.lock().map_or(false, |gb| gb.has_battery())
+        self.gb.lock().is_ok_and(|gb| gb.has_battery())
     }
 
     pub fn save_data<W: std::io::Write + std::io::Seek>(

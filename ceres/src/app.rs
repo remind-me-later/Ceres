@@ -160,7 +160,7 @@ impl App<'_> {
                     },
                 }
 
-                return true;
+                true
             });
         }
     }

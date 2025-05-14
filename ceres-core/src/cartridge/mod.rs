@@ -285,7 +285,10 @@ impl Cartridge {
                 }
                 0x2000..=0x3FFF => {
                     let mask = if *is_mbc30 { 0xFF } else { 0x7F };
-                    self.rom_bank_lo = val & (self.rom_size.mask() & mask) as u8;
+                    #[expect(clippy::cast_possible_truncation)]
+                    {
+                        self.rom_bank_lo = val & (self.rom_size.mask() & mask) as u8;
+                    }
 
                     if self.rom_bank_lo == 0 {
                         self.rom_bank_lo = 1;

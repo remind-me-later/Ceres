@@ -1,10 +1,10 @@
 use super::renderer::PxScaleMode;
 use super::renderer::Renderer;
+use gtk::TickCallbackId;
 use gtk::glib;
 use gtk::glib::Propagation;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
-use gtk::TickCallbackId;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -14,7 +14,7 @@ pub struct PainterCallbackImpl {
 }
 
 impl PainterCallbackImpl {
-    pub fn new(buffer: Arc<Mutex<Box<[u8]>>>) -> Self {
+    pub const fn new(buffer: Arc<Mutex<Box<[u8]>>>) -> Self {
         Self { buffer }
     }
 }
@@ -74,7 +74,7 @@ impl ObjectSubclass for GlArea {
 
     fn new() -> Self {
         let buffer = Arc::new(Mutex::new(
-            vec![0u8; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice(),
+            vec![0_u8; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice(),
         ));
 
         let gb_thread = Rc::new(RefCell::new(
@@ -82,7 +82,7 @@ impl ObjectSubclass for GlArea {
                 ceres_std::Model::Cgb,
                 None,
                 None,
-                PainterCallbackImpl::new(buffer.clone()),
+                PainterCallbackImpl::new(Arc::clone(&buffer)),
             )
             .expect("Failed to create GbThread"),
         ));

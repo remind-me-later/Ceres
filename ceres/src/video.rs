@@ -1,6 +1,6 @@
 use ceres_wgpu::PipelineWrapper;
-use std::sync::Arc;
 use ceres_wgpu::wgpu;
+use std::sync::Arc;
 
 use crate::{ScalingOption, ShaderOption};
 
@@ -117,11 +117,11 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
         &self.window
     }
 
-    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+    pub const fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         self.new_size = Some(new_size);
     }
 
-    pub fn on_lost(&mut self) {
+    pub const fn on_lost(&mut self) {
         self.resize(self.size);
     }
 
@@ -185,11 +185,11 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
         Ok(())
     }
 
-    pub fn set_shader(&mut self, shader_option: ShaderOption) {
+    pub const fn set_shader(&mut self, shader_option: ShaderOption) {
         self.new_shader_option = Some(shader_option);
     }
 
-    pub fn set_scaling(&mut self, scaling_option: ScalingOption) {
+    pub const fn set_scaling(&mut self, scaling_option: ScalingOption) {
         self.scaling_option = scaling_option;
     }
 }

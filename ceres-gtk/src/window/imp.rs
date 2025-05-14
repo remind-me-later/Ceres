@@ -6,9 +6,10 @@ use gtk::CompositeTemplate;
 use std::cell::RefCell;
 use std::fs::File;
 use std::path::PathBuf;
+use std::rc::Rc;
 
-use crate::gl_area::{GlArea, PxScaleMode};
 use crate::APP_ID;
+use crate::gl_area::{GlArea, PxScaleMode};
 
 #[derive(Debug, CompositeTemplate)]
 #[template(resource = "/org/remind-me-later/ceres-gtk/window.ui")]
@@ -98,13 +99,14 @@ impl ObjectSubclass for Window {
                     };
 
                     // TODO: gracefully handle invalid files
-                    match win
+                    let change_rom_res = win
                         .imp()
                         .gb_area
                         .gb_thread()
                         .borrow_mut()
-                        .change_rom(sav_path.as_deref(), &pathbuf)
-                    {
+                        .change_rom(sav_path.as_deref(), &pathbuf);
+
+                    match change_rom_res {
                         Ok(()) => {
                             *win.imp().rom_path.borrow_mut() = Some(pathbuf.clone());
                         }
@@ -159,7 +161,7 @@ impl ObjectImpl for Window {
         keys.set_propagation_phase(gtk::PropagationPhase::Capture);
 
         {
-            let thread_clone = gl_area.gb_thread().clone();
+            let thread_clone = Rc::clone(gl_area.gb_thread());
             keys.connect_key_pressed(move |_, key, _keycode, _state| {
                 if thread_clone.borrow_mut().press_release(|k| {
                     match key {
@@ -174,7 +176,7 @@ impl ObjectImpl for Window {
                         _ => return false,
                     };
 
-                    return true;
+                    true
                 }) {
                     glib::signal::Propagation::Stop
                 } else {
@@ -185,7 +187,7 @@ impl ObjectImpl for Window {
         }
 
         {
-            let thread_clone = gl_area.gb_thread().clone();
+            let thread_clone = Rc::clone(gl_area.gb_thread());
             keys.connect_key_released(move |_, key, _keycode, _state| {
                 thread_clone.borrow_mut().press_release(|k| {
                     match key {
@@ -200,7 +202,7 @@ impl ObjectImpl for Window {
                         _ => return false,
                     };
 
-                    return true;
+                    true
                 });
             });
         }
@@ -270,7 +272,7 @@ impl ObjectImpl for Window {
 
         self.obj().add_action(&action_speed_multiplier);
 
-        let thread_clone = self.gb_area.gb_thread().clone();
+        let thread_clone = Rc::clone(self.gb_area.gb_thread());
 
         self.volume_button
             .connect_value_changed(move |_, new_volume| {

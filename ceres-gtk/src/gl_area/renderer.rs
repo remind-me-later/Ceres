@@ -178,11 +178,11 @@ impl Renderer {
         }
     }
 
-    pub fn choose_scale_mode(&mut self, scale_mode: PxScaleMode) {
+    pub const fn choose_scale_mode(&mut self, scale_mode: PxScaleMode) {
         self.new_scale_mode = Some(scale_mode);
     }
 
-    pub fn resize_viewport(&mut self, width: u32, height: u32) {
+    pub const fn resize_viewport(&mut self, width: u32, height: u32) {
         self.new_size = Some((width, height));
     }
 
@@ -254,8 +254,8 @@ impl Renderer {
                 let mul = (width as f32 / PX_WIDTH as f32).min(height as f32 / PX_HEIGHT as f32);
                 let img_w = PX_WIDTH as f32 * mul;
                 let img_h = PX_HEIGHT as f32 * mul;
-                let uniform_x = img_w as f32 / width as f32;
-                let uniform_y = img_h as f32 / height as f32;
+                let uniform_x = img_w / width as f32;
+                let uniform_y = img_h / height as f32;
 
                 self.gl.viewport(0, 0, width as i32, height as i32);
                 self.gl
