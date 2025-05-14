@@ -46,7 +46,7 @@ impl Mbc {
                     rtc: Some(Mbc3RTC::default()),
                     is_mbc30: true,
                 },
-                false,
+                true,
             ),
             0x11 => (
                 Self::Mbc3 {
