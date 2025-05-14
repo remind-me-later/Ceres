@@ -114,8 +114,8 @@ impl WidgetImpl for GlArea {
             return;
         }
 
-        widget.set_vexpand(true);
-        widget.set_hexpand(true);
+        // widget.set_vexpand(true);
+        // widget.set_hexpand(true);
 
         // SAFETY: we know the GdkGLContext exists as we checked for errors above, and we haven't
         // done any operations on it which could lead to glium's state mismatch. (In theory, GTK

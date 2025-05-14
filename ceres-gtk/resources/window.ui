@@ -1,31 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
+  <menu id="speed-menu">
+    <item>
+      <attribute name="label" translatable="yes">_1x</attribute>
+      <attribute name="action">win.speed_multiplier</attribute>
+      <attribute name="target">1</attribute>
+    </item>
+    <item>
+      <attribute name="label" translatable="yes">_2x</attribute>
+      <attribute name="action">win.speed_multiplier</attribute>
+      <attribute name="target">2</attribute>
+    </item>
+    <item>
+      <attribute name="label" translatable="yes">_3x</attribute>
+      <attribute name="action">win.speed_multiplier</attribute>
+      <attribute name="target">4</attribute>
+    </item>
+    <item>
+      <attribute name="label" translatable="yes">_4x</attribute>
+      <attribute name="action">win.speed_multiplier</attribute>
+      <attribute name="target">8</attribute>
+    </item>
+  </menu>
   <menu id="app-menu">
     <section>
-      <attribute name="label" translatable="yes">Speed multiplier</attribute>
+      <!-- <attribute name="label" translatable="yes">File</attribute> -->
       <item>
-        <attribute name="label" translatable="yes">_1x</attribute>
-        <attribute name="action">win.speed_multiplier</attribute>
-        <attribute name="target">1</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">_2x</attribute>
-        <attribute name="action">win.speed_multiplier</attribute>
-        <attribute name="target">2</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">_3x</attribute>
-        <attribute name="action">win.speed_multiplier</attribute>
-        <attribute name="target">4</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">_4x</attribute>
-        <attribute name="action">win.speed_multiplier</attribute>
-        <attribute name="target">8</attribute>
+        <attribute name="label" translatable="yes">_Open</attribute>
+        <attribute name="action">win.open</attribute>
       </item>
     </section>
     <section>
-      <attribute name="label" translatable="yes">Upscale filter</attribute>
+      <!-- <attribute name="label" translatable="yes">Upscale filter</attribute> -->
       <item>
         <attribute name="label" translatable="yes">_Nearest neighbour</attribute>
         <attribute name="action">win.px_scale</attribute>
@@ -60,51 +66,57 @@
       </item>
     </section>
   </menu>
-  <template class="CeresWindow" parent="GtkApplicationWindow">
+  <template class="CeresWindow" parent="AdwApplicationWindow">
     <property name="title">Ceres</property>
-    <child type="titlebar">
-      <object class="GtkHeaderBar">
-        <property name="show-title-buttons">True</property>
-        <child type="start">
-          <object class="GtkButton" id="open_button">
-            <property name="action-name">win.open</property>
-            <property name="icon-name">document-open-symbolic</property>
-          </object>
-        </child>
-        <child type="start">
-          <object class="GtkScaleButton" id="volume_button">
-            <property name="adjustment">
-              <object class="GtkAdjustment">
-                <property name="lower">0.0</property>
-                <property name="upper">1.0</property>
-                <property name="step-increment">0.1</property>
-                <property name="page-increment">0.1</property>
-                <property name="value">0.8</property>
-              </object>
-            </property>
-            <property name="icons">audio-volume-muted-symbolic
+                        }
+                        Err(err) => {
+    <property name="content">
+      <object class="AdwToolbarView">
+        <child type="top">
+          <object class="AdwHeaderBar">
+            <!-- <child type="title"> -->
+              <!-- <object class="AdwWindowTitle"> -->
+                <!-- <property name="title">Ceres</property> -->
+                <!-- <property name="subtitle">Video player</property> -->
+              <!-- </object> -->
+            <!-- </child> -->
+            <child type="start">
+              <object class="GtkScaleButton" id="volume_button">
+                <property name="adjustment">
+                  <object class="GtkAdjustment">
+                    <property name="lower">0.0</property>
+                    <property name="upper">1.0</property>
+                    <property name="step-increment">0.1</property>
+                    <property name="page-increment">0.1</property>
+                    <property name="value">0.8</property>
+                  </object>
+                </property>
+                <property name="icons">audio-volume-muted-symbolic
 audio-volume-high-symbolic
 audio-volume-low-symbolic
 audio-volume-medium-symbolic</property>
+              </object>
+            </child>
+            <child type="start">
+              <object class="AdwSplitButton" id="pause_button">
+                <property name="action-name">win.pause</property>
+                <property name="icon-name">media-playback-pause-symbolic</property>
+                <property name="menu-model">speed-menu</property>
+              </object>
+            </child>
+            <child type="end">
+              <object class="GtkMenuButton">
+                <property name="icon-name">open-menu-symbolic</property>
+                <property name="menu-model">app-menu</property>
+                <property name="primary">true</property>
+              </object>
+            </child>
           </object>
         </child>
-        <child type="start">
-          <object class="GtkToggleButton" id="pause_button">
-            <property name="action-name">win.pause</property>
-            <property name="icon-name">media-playback-pause-symbolic</property>
-          </object>
-        </child>
-        <child type="end">
-          <object class="GtkMenuButton">
-            <property name="icon-name">open-menu-symbolic</property>
-            <property name="menu-model">app-menu</property>
-            <property name="primary">true</property>
-          </object>
-        </child>
+        <property name="content">
+          <object class="CeresGlArea" id="gb_area" />
+        </property>
       </object>
-    </child>
-    <child>
-      <object class="CeresGlArea" id="gb_area" />
-    </child>
+    </property>
   </template>
 </interface>

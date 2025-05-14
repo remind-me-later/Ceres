@@ -17,11 +17,12 @@ pub struct Window {
     #[template_child(id = "gb_area")]
     pub gb_area: TemplateChild<GlArea>,
     #[template_child(id = "pause_button")]
-    pub pause_button: TemplateChild<gtk::ToggleButton>,
+    pub pause_button: TemplateChild<adw::SplitButton>,
     #[template_child(id = "volume_button")]
     pub volume_button: TemplateChild<gtk::ScaleButton>,
     pub dialog: gtk::FileDialog,
     pub rom_path: RefCell<Option<PathBuf>>,
+    pub is_paused: RefCell<bool>,
 }
 
 impl Window {
@@ -56,7 +57,7 @@ impl Window {
 impl ObjectSubclass for Window {
     const NAME: &'static str = "CeresWindow";
     type Type = super::Window;
-    type ParentType = gtk::ApplicationWindow;
+    type ParentType = adw::ApplicationWindow;
 
     fn new() -> Self {
         let file_dialog = {
@@ -77,6 +78,7 @@ impl ObjectSubclass for Window {
             pause_button: TemplateChild::default(),
             volume_button: Default::default(),
             rom_path: RefCell::new(None),
+            is_paused: RefCell::new(false),
         }
     }
 
@@ -109,6 +111,10 @@ impl ObjectSubclass for Window {
                     match change_rom_res {
                         Ok(()) => {
                             *win.imp().rom_path.borrow_mut() = Some(pathbuf.clone());
+                            // set window title to path
+                            win.set_title(
+                                pathbuf.file_name().map(|s| s.to_string_lossy()).as_deref(),
+                            );
                         }
                         Err(err) => {
                             let info_dialog = adw::AlertDialog::builder()
@@ -134,12 +140,14 @@ impl ObjectSubclass for Window {
                 let imp = win.imp();
                 let button = &imp.pause_button;
 
-                if button.is_active() {
+                if *imp.is_paused.borrow() {
                     imp.gb_area.play();
-                    button.set_active(false);
+                    button.set_icon_name("media-playback-pause-symbolic");
+                    *imp.is_paused.borrow_mut() = false;
                 } else {
                     imp.gb_area.pause();
-                    button.set_active(true);
+                    button.set_icon_name("media-playback-start-symbolic");
+                    *imp.is_paused.borrow_mut() = true;
                 }
             },
         );
