@@ -163,14 +163,14 @@ impl ObjectImpl for Window {
             keys.connect_key_pressed(move |_, key, _keycode, _state| {
                 if thread_clone.borrow_mut().press_release(|k| {
                     match key {
-                        Key::l => k.press(ceres_core::Button::A),
-                        Key::k => k.press(ceres_core::Button::B),
-                        Key::m => k.press(ceres_core::Button::Start),
-                        Key::n => k.press(ceres_core::Button::Select),
-                        Key::w => k.press(ceres_core::Button::Up),
-                        Key::a => k.press(ceres_core::Button::Left),
-                        Key::s => k.press(ceres_core::Button::Down),
-                        Key::d => k.press(ceres_core::Button::Right),
+                        Key::l => k.press(ceres_std::Button::A),
+                        Key::k => k.press(ceres_std::Button::B),
+                        Key::m => k.press(ceres_std::Button::Start),
+                        Key::n => k.press(ceres_std::Button::Select),
+                        Key::w => k.press(ceres_std::Button::Up),
+                        Key::a => k.press(ceres_std::Button::Left),
+                        Key::s => k.press(ceres_std::Button::Down),
+                        Key::d => k.press(ceres_std::Button::Right),
                         _ => return false,
                     };
 
@@ -189,14 +189,14 @@ impl ObjectImpl for Window {
             keys.connect_key_released(move |_, key, _keycode, _state| {
                 thread_clone.borrow_mut().press_release(|k| {
                     match key {
-                        Key::l => k.release(ceres_core::Button::A),
-                        Key::k => k.release(ceres_core::Button::B),
-                        Key::m => k.release(ceres_core::Button::Start),
-                        Key::n => k.release(ceres_core::Button::Select),
-                        Key::w => k.release(ceres_core::Button::Up),
-                        Key::a => k.release(ceres_core::Button::Left),
-                        Key::s => k.release(ceres_core::Button::Down),
-                        Key::d => k.release(ceres_core::Button::Right),
+                        Key::l => k.release(ceres_std::Button::A),
+                        Key::k => k.release(ceres_std::Button::B),
+                        Key::m => k.release(ceres_std::Button::Start),
+                        Key::n => k.release(ceres_std::Button::Select),
+                        Key::w => k.release(ceres_std::Button::Up),
+                        Key::a => k.release(ceres_std::Button::Left),
+                        Key::s => k.release(ceres_std::Button::Down),
+                        Key::d => k.release(ceres_std::Button::Right),
                         _ => return false,
                     };
 

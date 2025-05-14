@@ -79,7 +79,7 @@ impl ObjectSubclass for GlArea {
 
         let gb_thread = Rc::new(RefCell::new(
             ceres_std::GbThread::new(
-                ceres_core::Model::Cgb,
+                ceres_std::Model::Cgb,
                 None,
                 None,
                 PainterCallbackImpl::new(buffer.clone()),
@@ -146,13 +146,13 @@ impl WidgetImpl for GlArea {
 
         match orientation {
             gtk::Orientation::Horizontal => {
-                let minimum_size = ceres_core::PX_WIDTH as i32;
+                let minimum_size = ceres_std::PX_WIDTH as i32;
                 let natural_size = minimum_size * MULTIPLIER;
 
                 (minimum_size, natural_size, -1, -1)
             }
             gtk::Orientation::Vertical => {
-                let minimum_size = ceres_core::PX_HEIGHT as i32;
+                let minimum_size = ceres_std::PX_HEIGHT as i32;
                 let natural_size = minimum_size * MULTIPLIER;
 
                 (minimum_size, natural_size, -1, -1)

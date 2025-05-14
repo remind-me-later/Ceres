@@ -13,8 +13,8 @@ pub enum PxScaleMode {
     Crt = 4,
 }
 
-const PX_WIDTH: u32 = ceres_core::PX_WIDTH as u32;
-const PX_HEIGHT: u32 = ceres_core::PX_HEIGHT as u32;
+const PX_WIDTH: u32 = ceres_std::PX_WIDTH as u32;
+const PX_HEIGHT: u32 = ceres_std::PX_HEIGHT as u32;
 const PBO_BUFFER_SIZE: i32 = (PX_WIDTH * PX_HEIGHT * 4) as i32;
 const INITIAL_TEXTURE_DATA_SIZE: usize = (PX_WIDTH * PX_HEIGHT * 4) as usize;
 

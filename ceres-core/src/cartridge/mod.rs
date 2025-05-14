@@ -141,7 +141,7 @@ impl Cartridge {
 
     #[must_use]
     pub const fn rtc(&self) -> Option<&Mbc3RTC> {
-        if let Mbc::Mbc3 { rtc: Some(rtc) } = &self.mbc {
+        if let Mbc::Mbc3 { rtc: Some(rtc), .. } = &self.mbc {
             Some(rtc)
         } else {
             None
@@ -150,7 +150,7 @@ impl Cartridge {
 
     #[must_use]
     pub const fn rtc_mut(&mut self) -> Option<&mut Mbc3RTC> {
-        if let Mbc::Mbc3 { rtc } = &mut self.mbc {
+        if let Mbc::Mbc3 { rtc, .. } = &mut self.mbc {
             rtc.as_mut()
         } else {
             None
@@ -168,7 +168,7 @@ impl Cartridge {
     }
 
     pub const fn run_rtc(&mut self, cycles: i32) {
-        if let Mbc::Mbc3 { rtc: Some(rtc) } = &mut self.mbc {
+        if let Mbc::Mbc3 { rtc: Some(rtc), .. } = &mut self.mbc {
             rtc.run_cycles(cycles);
         }
     }
@@ -201,7 +201,7 @@ impl Cartridge {
             Mbc::Mbc0 => 0xFF,
             Mbc::Mbc1 { .. } | Mbc::Mbc5 => mbc_read_ram(self, self.ram_enabled, addr),
             Mbc::Mbc2 => (mbc_read_ram(self, self.ram_enabled, addr) & 0xF) | 0xF0,
-            Mbc::Mbc3 { rtc } => rtc
+            Mbc::Mbc3 { rtc, .. } => rtc
                 .as_ref()
                 .and_then(|r| r.read(self.ram_enabled))
                 .unwrap_or_else(|| mbc_read_ram(self, self.ram_enabled, addr)),
@@ -279,12 +279,13 @@ impl Cartridge {
                     }
                 }
             }
-            Mbc::Mbc3 { rtc } => match addr {
+            Mbc::Mbc3 { rtc, is_mbc30 } => match addr {
                 0x0000..=0x1FFF => {
                     self.ram_enabled = (val & 0x0F) == 0x0A;
                 }
                 0x2000..=0x3FFF => {
-                    self.rom_bank_lo = val & (self.rom_size.mask() & 0x7F) as u8;
+                    let mask = if *is_mbc30 { 0xFF } else { 0x7F };
+                    self.rom_bank_lo = val & (self.rom_size.mask() & mask) as u8;
 
                     if self.rom_bank_lo == 0 {
                         self.rom_bank_lo = 1;
@@ -307,7 +308,8 @@ impl Cartridge {
                         }
                     } else {
                         // Choose RAM bank
-                        self.ram_bank = val & 0x7 & self.ram_size.mask();
+                        let mask = if *is_mbc30 { 0xF } else { 0x7 };
+                        self.ram_bank = val & mask & self.ram_size.mask();
                         self.ram_offset = u32::from(RAMSize::BANK_SIZE) * u32::from(self.ram_bank);
 
                         if let Some(r) = rtc.as_mut() {
@@ -363,7 +365,7 @@ impl Cartridge {
             Mbc::Mbc1 { .. } | Mbc::Mbc2 | Mbc::Mbc5 => {
                 mbc_write_ram(self, self.ram_enabled, addr, val);
             }
-            Mbc::Mbc3 { rtc } => rtc
+            Mbc::Mbc3 { rtc, .. } => rtc
                 .as_mut()
                 .and_then(|r| r.write(self.ram_enabled, val))
                 .unwrap_or_else(|| {

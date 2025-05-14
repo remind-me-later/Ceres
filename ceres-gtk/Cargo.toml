@@ -1,17 +1,15 @@
 [package]
 name = "ceres-gtk"
-version = "0.1.0"
-edition = "2021"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
-ceres-core = { path = "../ceres-core" }
+ceres-std = { path = "../ceres-std" }
 epoxy = { version = "*" }
 libloading = { version = "*" }
 glow = { version = "*" }
-spin_sleep = { version = "*" }
-thread-priority = { version = "*" }
-ceres-std = { path = "../ceres-std" }
 
 # Gtk
 [dependencies.adw]
