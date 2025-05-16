@@ -6,7 +6,7 @@ pub enum Error {
     InvalidRomSize,
     InvalidRamSize,
     NonAsciiTitleString,
-    UnsupportedMBC(u8),
+    UnsupportedMBC { mbc_hex_code: u8 },
     RomSizeDifferentThanActual { expected: usize, actual: usize },
     RamSizeDifferentThanActual { expected: usize, actual: usize },
 }
@@ -25,7 +25,9 @@ impl Display for Error {
                 "invalid title string in cartridge header, contains non ASCII \
          characters"
             ),
-            Self::UnsupportedMBC(byte) => write!(f, "unsupported MBC: {byte:#0x}"),
+            Self::UnsupportedMBC { mbc_hex_code } => {
+                write!(f, "unsupported MBC: {mbc_hex_code:#0x}")
+            }
             Self::RomSizeDifferentThanActual { expected, actual } => write!(
                 f,
                 "header ROM size is different from the size of the supplied file: expected {expected} bytes, got {actual} bytes"

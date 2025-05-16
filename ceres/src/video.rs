@@ -185,10 +185,12 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
         Ok(())
     }
 
+    #[cfg(target_os = "macos")]
     pub const fn set_shader(&mut self, shader_option: ShaderOption) {
         self.new_shader_option = Some(shader_option);
     }
 
+    #[cfg(target_os = "macos")]
     pub const fn set_scaling(&mut self, scaling_option: ScalingOption) {
         self.scaling_option = scaling_option;
     }

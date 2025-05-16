@@ -7,7 +7,6 @@ use ceres_std::GbThread;
 use ceres_std::{PX_HEIGHT, PX_WIDTH};
 use ceres_wgpu::wgpu;
 use std::{
-    path::PathBuf,
     sync::{Arc, Mutex},
     time::Instant,
 };
@@ -22,6 +21,9 @@ use {
     std::{fs::File, path::Path},
     winit::window,
 };
+
+#[cfg(target_os = "macos")]
+use std::path::PathBuf;
 
 pub struct PainterCallbackImpl {
     buffer: Arc<Mutex<Box<[u8]>>>,
@@ -54,6 +56,7 @@ pub struct App<'a> {
     scaling_option: ScalingOption,
     sav_path: Option<std::path::PathBuf>,
     pixel_data_rgba: Arc<Mutex<Box<[u8]>>>,
+    #[cfg(target_os = "macos")]
     rom_path: Option<PathBuf>,
 
     // Contexts
@@ -105,6 +108,7 @@ impl App<'_> {
             sav_path,
             pixel_data_rgba,
             scaling_option,
+            #[cfg(target_os = "macos")]
             rom_path: rom_path.map(std::path::Path::to_path_buf),
         })
     }
@@ -337,6 +341,7 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
         self.windows = None;
     }
 
+    #[cfg(target_os = "macos")]
     fn user_event(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop, event: CeresEvent) {
         match event {
             CeresEvent::ChangeShader(shader_option) => {

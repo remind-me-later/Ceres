@@ -9,12 +9,13 @@ pub const APP_ID: &str = "com.github.remind-me-later.ceres-gtk";
 
 fn main() -> glib::ExitCode {
     {
-        let library = unsafe { libloading::os::unix::Library::new("libepoxy.so.0") }.unwrap();
-
         epoxy::load_with(|name| {
-            unsafe { library.get::<_>(name.as_bytes()) }
-                .map(|symbol| *symbol)
-                .unwrap_or(core::ptr::null())
+            unsafe {
+                let library = libloading::os::unix::Library::new("libepoxy.so.0").unwrap();
+                library.get::<_>(name.as_bytes())
+            }
+            .map(|symbol| *symbol)
+            .unwrap_or(core::ptr::null())
         });
     }
 

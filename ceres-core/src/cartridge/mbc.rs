@@ -74,7 +74,11 @@ impl Mbc {
             // 0x1C | 0x1D => (Mbc5, false),
             // 0x1E => (Mbc5, true),
             0x1B => (Self::Mbc5, true),
-            _ => return Err(Error::UnsupportedMBC(mbc_byte)),
+            _ => {
+                return Err(Error::UnsupportedMBC {
+                    mbc_hex_code: mbc_byte,
+                });
+            }
         };
 
         Ok(res)

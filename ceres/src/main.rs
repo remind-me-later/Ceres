@@ -36,6 +36,7 @@ Other binsings:
 
 trait AppOption: Default + Clone + Copy + clap::ValueEnum {
     fn str(self) -> &'static str;
+    #[cfg(target_os = "macos")]
     fn iter() -> impl Iterator<Item = Self>;
 }
 
@@ -56,6 +57,7 @@ impl AppOption for Model {
         }
     }
 
+    #[cfg(target_os = "macos")]
     fn iter() -> impl Iterator<Item = Self> {
         [Self::Dmg, Self::Mgb, Self::Cgb].into_iter()
     }
@@ -92,6 +94,7 @@ impl AppOption for ShaderOption {
         }
     }
 
+    #[cfg(target_os = "macos")]
     fn iter() -> impl Iterator<Item = Self> {
         [
             Self::Nearest,
@@ -119,11 +122,13 @@ impl AppOption for ScalingOption {
         }
     }
 
+    #[cfg(target_os = "macos")]
     fn iter() -> impl Iterator<Item = Self> {
         [Self::PixelPerfect, Self::Stretch].into_iter()
     }
 }
 
+#[cfg(target_os = "macos")]
 #[derive(Clone)]
 enum CeresEvent {
     ChangeShader(ShaderOption),
@@ -133,6 +138,10 @@ enum CeresEvent {
     TogglePause,
     ChangeModel(Model),
 }
+
+#[cfg(not(target_os = "macos"))]
+#[derive(Clone)]
+enum CeresEvent {}
 
 #[derive(clap::Parser)]
 #[command(name = CERES_BIN, about = ABOUT, after_help = AFTER_HELP)]
