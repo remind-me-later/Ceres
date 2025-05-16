@@ -31,7 +31,7 @@
       </item>
     </section>
     <section>
-      <!-- <attribute name="label" translatable="yes">Upscale filter</attribute> -->
+      <attribute name="label" translatable="yes">Upscale filter</attribute>
       <item>
         <attribute name="label" translatable="yes">_Nearest neighbour</attribute>
         <attribute name="action">win.px_scale</attribute>
@@ -68,8 +68,6 @@
   </menu>
   <template class="CeresWindow" parent="AdwApplicationWindow">
     <property name="title">Ceres</property>
-                        }
-                        Err(err) => {
     <property name="content">
       <object class="AdwToolbarView">
         <child type="top">
