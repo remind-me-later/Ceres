@@ -144,23 +144,15 @@ fn fs_scale3x(tex_coords: vec2<f32>) -> vec4<f32> {
 
 fn fs_lcd(tex_coords: vec2<f32>) -> vec4<f32> {
     // LCD parameters - can be adjusted for different effects
-    const LCD_TINT_RED: f32 = 0.93;
+    const LCD_TINT_RED: f32 = 0.99;
     const LCD_TINT_GREEN: f32 = 0.96;
     const LCD_TINT_BLUE: f32 = 0.9;
 
-    const GRID_GAP_START: f32 = 0.4;
-    const GRID_GAP_END: f32 = 0.6;
+    const GRID_GAP_START: f32 = 0.6;
+    const GRID_GAP_END: f32 = 0.7;
     const GRID_BASE_BRIGHTNESS: f32 = 0.5;
-    const GRID_MAX_DARKENING: f32 = 0.25;
-    const GRID_BLEND_FACTOR: f32 = 0.5;
-
-    const VIGNETTE_CENTER_OFFSET: f32 = 0.5;
-    const VIGNETTE_SCALE: f32 = 1.0;
-    // Add vignette darkness factor - higher value means darker edges
-    const VIGNETTE_DARKNESS: f32 = 0.9;
-    const REFLECTION_START: f32 = 0.0;
-    const REFLECTION_END: f32 = 0.9;
-    const REFLECTION_INTENSITY: f32 = 0.1;
+    const GRID_MAX_DARKENING: f32 = 0.3;
+    const GRID_BLEND_FACTOR: f32 = 0.95;
 
     const GHOSTING_FACTOR: f32 = 0.5;
 
@@ -191,10 +183,6 @@ fn fs_lcd(tex_coords: vec2<f32>) -> vec4<f32> {
     let grid = vec2<f32>(smoothstep(GRID_GAP_START, GRID_GAP_END, fract(pixel_pos.x)), smoothstep(GRID_GAP_START, GRID_GAP_END, fract(pixel_pos.y)));
     let grid_effect = GRID_BASE_BRIGHTNESS + (GRID_MAX_DARKENING * (1.0 - (grid.x + grid.y) * GRID_BLEND_FACTOR));
 
-    // Simulate ambient light reflection
-    let vignette = 1.0 - length((tex_coords - VIGNETTE_CENTER_OFFSET) * VIGNETTE_SCALE);
-    let reflection = smoothstep(REFLECTION_START, REFLECTION_END, vignette) * REFLECTION_INTENSITY;
-
     // Combine effects
     let final_color = pixel * lcd_tint * grid_effect;
 
@@ -204,11 +192,7 @@ fn fs_lcd(tex_coords: vec2<f32>) -> vec4<f32> {
     // Apply ghosting effect
     let ghosted_color = mix(final_color, prev_color, GHOSTING_FACTOR);
 
-    // Apply vignette darkening effect
-    let vignette_effect = mix(VIGNETTE_DARKNESS, 1.0, vignette);
-    let vignetted_color = ghosted_color * vignette_effect;
-
-    return vec4(vignetted_color + reflection, 1.0);
+    return vec4(ghosted_color, 1.0);
 }
 
 fn fs_crt(tex_coords: vec2<f32>) -> vec4<f32> {
@@ -222,7 +206,7 @@ fn fs_crt(tex_coords: vec2<f32>) -> vec4<f32> {
     const CONTRAST: f32 = 1.1;
     const FLICKER_INTENSITY: f32 = 0.03;
     const GHOST_INTENSITY: f32 = 0.06;
-    const RGB_SHIFT: f32 = 0.003;
+    const RGB_SHIFT: f32 = 0.002;
 
     // Center coordinates for distortion
     let centered_coords = vec2(tex_coords - 0.5) * 2.0;

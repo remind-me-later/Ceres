@@ -162,25 +162,21 @@ vec4 fs_lcd(vec2 tex_coords_5) {
     vec2 red_offset = vec2((-0.3 / dims_3.x), 0.0);
     vec2 green_offset = vec2(0.0, 0.0);
     vec2 blue_offset = vec2((0.3 / dims_3.x), 0.0);
-    vec4 _e34 = get_sample((tex_coords_5 + red_offset));
-    float red_sample = _e34.x;
-    vec4 _e37 = get_sample((tex_coords_5 + green_offset));
-    float green_sample = _e37.y;
-    vec4 _e40 = get_sample((tex_coords_5 + blue_offset));
-    float blue_sample = _e40.z;
+    vec4 _e28 = get_sample((tex_coords_5 + red_offset));
+    float red_sample = _e28.x;
+    vec4 _e31 = get_sample((tex_coords_5 + green_offset));
+    float green_sample = _e31.y;
+    vec4 _e34 = get_sample((tex_coords_5 + blue_offset));
+    float blue_sample = _e34.z;
     vec3 pixel = vec3(red_sample, green_sample, blue_sample);
-    vec3 lcd_tint = vec3(0.93, 0.96, 0.9);
-    vec2 grid = vec2(smoothstep(0.4, 0.6, fract(pixel_pos.x)), smoothstep(0.4, 0.6, fract(pixel_pos.y)));
-    float grid_effect = (0.5 + (0.25 * (1.0 - ((grid.x + grid.y) * 0.5))));
-    float vignette = (1.0 - length(((tex_coords_5 - vec2(0.5)) * 1.0)));
-    float reflection = (smoothstep(0.0, 0.9, vignette) * 0.1);
+    vec3 lcd_tint = vec3(0.99, 0.96, 0.9);
+    vec2 grid = vec2(smoothstep(0.6, 0.7, fract(pixel_pos.x)), smoothstep(0.6, 0.7, fract(pixel_pos.y)));
+    float grid_effect = (0.5 + (0.3 * (1.0 - ((grid.x + grid.y) * 0.95))));
     vec3 final_color = ((pixel * lcd_tint) * grid_effect);
-    vec4 _e69 = get_ghost_sample(tex_coords_5);
-    vec3 prev_color = _e69.xyz;
+    vec4 _e55 = get_ghost_sample(tex_coords_5);
+    vec3 prev_color = _e55.xyz;
     vec3 ghosted_color = mix(final_color, prev_color, 0.5);
-    float vignette_effect = mix(0.9, 1.0, vignette);
-    vec3 vignetted_color = (ghosted_color * vignette_effect);
-    return vec4((vignetted_color + vec3(reflection)), 1.0);
+    return vec4(ghosted_color, 1.0);
 }
 
 vec4 fs_crt(vec2 tex_coords_6) {
@@ -193,8 +189,8 @@ vec4 fs_crt(vec2 tex_coords_6) {
     if ((any(lessThan(distorted_coords.xy, vec2(0.0))) || any(greaterThan(distorted_coords.xy, vec2(1.0))))) {
         return vec4(0.0, 0.0, 0.0, 1.0);
     }
-    vec2 red_shift = vec2(0.003, 0.0);
-    vec2 blue_shift = vec2(-0.003, 0.0);
+    vec2 red_shift = vec2(0.002, 0.0);
+    vec2 blue_shift = vec2(-0.002, 0.0);
     vec4 _e56 = get_sample((distorted_coords + red_shift));
     float r = _e56.x;
     vec4 _e58 = get_sample(distorted_coords);
@@ -203,7 +199,7 @@ vec4 fs_crt(vec2 tex_coords_6) {
     float b_4 = _e61.z;
     float scanline = (0.5 + (0.5 * sin(((distorted_coords.y * 240.0) * 3.14159))));
     float scanlines = (1.0 - (0.15 * scanline));
-    float vignette_1 = (1.0 - (0.2 * pow(dist, 2.0)));
+    float vignette = (1.0 - (0.2 * pow(dist, 2.0)));
     float time_seed = (float((uvec2(textureSize(_group_0_binding_0_fs, 0).xy).x % 100u)) * 0.01);
     float flicker = (1.0 - (0.03 * (0.5 + (0.5 * sin((time_seed * 10.0))))));
     vec4 _e98 = get_ghost_sample(distorted_coords);
@@ -220,7 +216,7 @@ vec4 fs_crt(vec2 tex_coords_6) {
     vec3 _e121 = color;
     color = ((((_e121 * 1.2) - vec3(0.5)) * 1.1) + vec3(0.5));
     vec3 _e132 = color;
-    color = (_e132 * ((scanlines * vignette_1) * flicker));
+    color = (_e132 * ((scanlines * vignette) * flicker));
     float noise = fract((sin(dot(distorted_coords, vec2(12.9898, 78.233))) * 43758.547));
     vec3 _e146 = color;
     color = (_e146 + vec3(((noise * 0.015) - 0.0075)));
