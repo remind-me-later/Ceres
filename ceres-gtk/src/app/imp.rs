@@ -41,6 +41,9 @@ impl ApplicationImpl for Application {
             .build();
 
         app.add_action_entries([about_action]);
+
+        app.set_accels_for_action("win.open", &["<Primary>o"]);
+        app.set_accels_for_action("win.pause", &["space"]);
     }
 
     fn activate(&self) {
