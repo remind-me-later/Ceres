@@ -18,7 +18,7 @@ type ProcessSample = f32;
 struct Buffers {
     left: StaticRb<ceres_core::Sample, RING_BUFFER_SIZE>,
     right: StaticRb<ceres_core::Sample, RING_BUFFER_SIZE>,
-    resampler: rubato::FastFixedOut<ProcessSample>,
+    resampler: rubato::SincFixedOut<ProcessSample>,
     output_buf: Vec<Vec<ProcessSample>>,
     input_buf: Vec<Vec<ProcessSample>>,
     volume: Arc<Mutex<f32>>,
@@ -34,10 +34,16 @@ impl Buffers {
         #[cfg(not(target_os = "linux"))]
         let chunk_size = BUFFER_SIZE as usize;
 
-        let resampler = rubato::FastFixedOut::<ProcessSample>::new(
+        let resampler = rubato::SincFixedOut::<ProcessSample>::new(
             ORIG_RATIO,
             MAX_RESAMPLE_RATIO_RELATIVE,
-            rubato::PolynomialDegree::Cubic,
+            rubato::SincInterpolationParameters {
+                sinc_len: 256,
+                f_cutoff: 0.95,
+                oversampling_factor: 128,
+                interpolation: rubato::SincInterpolationType::Cubic,
+                window: rubato::WindowFunction::Blackman,
+            },
             chunk_size,
             2,
         )
@@ -79,7 +85,7 @@ impl Buffers {
         let got = self.num_samples();
 
         if needed > got {
-            println!("needed: {needed}, got: {got}");
+            eprintln!("Buffer underrun, needed: {needed}, got: {got}");
             return;
         }
 
@@ -111,7 +117,7 @@ impl Buffers {
                         });
                 }
                 Err(e) => {
-                    eprintln!("resampler error, possible underrun: {e}");
+                    eprintln!("Resampler error: {e}");
                 }
             }
         }
