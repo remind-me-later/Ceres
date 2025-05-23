@@ -39,8 +39,6 @@ impl GlArea {
     }
 
     pub fn set_scale_mode(&self, mode: PxScaleMode) {
-        let imp = self.imp();
-        *imp.scale_mode.borrow_mut() = mode;
-        *imp.scale_changed.borrow_mut() = true;
+        self.imp().scale_mode_changed.borrow_mut().replace(mode);
     }
 }

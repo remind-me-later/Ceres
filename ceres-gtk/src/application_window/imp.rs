@@ -1,19 +1,12 @@
-use adw::gdk::Key;
-use adw::prelude::AlertDialogExtManual;
-use adw::subclass::prelude::*;
-use adw::{glib, prelude::*};
-use gtk::CompositeTemplate;
-use std::cell::RefCell;
-use std::fs::File;
-use std::path::PathBuf;
-use std::rc::Rc;
+use adw::{gdk, glib, prelude::*, subclass::prelude::*};
+use std::{cell::RefCell, fs::File, path::PathBuf, rc::Rc};
 
 use crate::APP_ID;
 use crate::gl_area::{GlArea, PxScaleMode};
 
-#[derive(Debug, CompositeTemplate)]
+#[derive(Debug, gtk::CompositeTemplate)]
 #[template(resource = "/org/remind-me-later/ceres-gtk/window.ui")]
-pub struct Window {
+pub struct ApplicationWindow {
     #[template_child(id = "gb_area")]
     pub gb_area: TemplateChild<GlArea>,
     #[template_child(id = "pause_button")]
@@ -25,7 +18,7 @@ pub struct Window {
     pub is_paused: RefCell<bool>,
 }
 
-impl Window {
+impl ApplicationWindow {
     fn save_data(&self) {
         if let Some(path) = self.rom_path.borrow().as_ref() {
             if !self.gb_area.gb_thread().borrow().has_save_data() {
@@ -54,15 +47,15 @@ impl Window {
 }
 
 #[glib::object_subclass]
-impl ObjectSubclass for Window {
+impl ObjectSubclass for ApplicationWindow {
     const NAME: &'static str = "CeresWindow";
-    type Type = super::Window;
+    type Type = crate::application_window::ApplicationWindow;
     type ParentType = adw::ApplicationWindow;
 
     fn new() -> Self {
         let file_dialog = {
             let gb_filter = gtk::FileFilter::new();
-            gb_filter.set_name(Some("GameBoy roms"));
+            gb_filter.set_name(Some("GameBoy ROMs"));
             gb_filter.add_suffix("gb");
             gb_filter.add_suffix("gbc");
 
@@ -133,24 +126,20 @@ impl ObjectSubclass for Window {
             },
         );
 
-        klass.install_action_async(
-            "win.pause",
-            None,
-            |win, _action_name, _action_target| async move {
-                let imp = win.imp();
-                let button = &imp.pause_button;
+        klass.install_action("win.pause", None, |win, _action_name, _action_target| {
+            let imp = win.imp();
+            let button = &imp.pause_button;
 
-                if *imp.is_paused.borrow() {
-                    imp.gb_area.play();
-                    button.set_icon_name("media-playback-pause-symbolic");
-                    *imp.is_paused.borrow_mut() = false;
-                } else {
-                    imp.gb_area.pause();
-                    button.set_icon_name("media-playback-start-symbolic");
-                    *imp.is_paused.borrow_mut() = true;
-                }
-            },
-        );
+            if *imp.is_paused.borrow() {
+                imp.gb_area.play();
+                button.set_icon_name("media-playback-pause-symbolic");
+                *imp.is_paused.borrow_mut() = false;
+            } else {
+                imp.gb_area.pause();
+                button.set_icon_name("media-playback-start-symbolic");
+                *imp.is_paused.borrow_mut() = true;
+            }
+        });
     }
 
     fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
@@ -158,7 +147,7 @@ impl ObjectSubclass for Window {
     }
 }
 
-impl ObjectImpl for Window {
+impl ObjectImpl for ApplicationWindow {
     fn constructed(&self) {
         self.parent_constructed();
 
@@ -173,14 +162,14 @@ impl ObjectImpl for Window {
             keys.connect_key_pressed(move |_, key, _keycode, _state| {
                 if thread_clone.borrow_mut().press_release(|k| {
                     match key {
-                        Key::l => k.press(ceres_std::Button::A),
-                        Key::k => k.press(ceres_std::Button::B),
-                        Key::m => k.press(ceres_std::Button::Start),
-                        Key::n => k.press(ceres_std::Button::Select),
-                        Key::w => k.press(ceres_std::Button::Up),
-                        Key::a => k.press(ceres_std::Button::Left),
-                        Key::s => k.press(ceres_std::Button::Down),
-                        Key::d => k.press(ceres_std::Button::Right),
+                        gdk::Key::l => k.press(ceres_std::Button::A),
+                        gdk::Key::k => k.press(ceres_std::Button::B),
+                        gdk::Key::m => k.press(ceres_std::Button::Start),
+                        gdk::Key::n => k.press(ceres_std::Button::Select),
+                        gdk::Key::w => k.press(ceres_std::Button::Up),
+                        gdk::Key::a => k.press(ceres_std::Button::Left),
+                        gdk::Key::s => k.press(ceres_std::Button::Down),
+                        gdk::Key::d => k.press(ceres_std::Button::Right),
                         _ => return false,
                     };
 
@@ -199,14 +188,14 @@ impl ObjectImpl for Window {
             keys.connect_key_released(move |_, key, _keycode, _state| {
                 thread_clone.borrow_mut().press_release(|k| {
                     match key {
-                        Key::l => k.release(ceres_std::Button::A),
-                        Key::k => k.release(ceres_std::Button::B),
-                        Key::m => k.release(ceres_std::Button::Start),
-                        Key::n => k.release(ceres_std::Button::Select),
-                        Key::w => k.release(ceres_std::Button::Up),
-                        Key::a => k.release(ceres_std::Button::Left),
-                        Key::s => k.release(ceres_std::Button::Down),
-                        Key::d => k.release(ceres_std::Button::Right),
+                        gdk::Key::l => k.release(ceres_std::Button::A),
+                        gdk::Key::k => k.release(ceres_std::Button::B),
+                        gdk::Key::m => k.release(ceres_std::Button::Start),
+                        gdk::Key::n => k.release(ceres_std::Button::Select),
+                        gdk::Key::w => k.release(ceres_std::Button::Up),
+                        gdk::Key::a => k.release(ceres_std::Button::Left),
+                        gdk::Key::s => k.release(ceres_std::Button::Down),
+                        gdk::Key::d => k.release(ceres_std::Button::Right),
                         _ => return false,
                     };
 
@@ -292,7 +281,7 @@ impl ObjectImpl for Window {
         self.save_data();
     }
 }
-impl WidgetImpl for Window {}
-impl WindowImpl for Window {}
-impl ApplicationWindowImpl for Window {}
-impl AdwApplicationWindowImpl for Window {}
+impl WidgetImpl for ApplicationWindow {}
+impl WindowImpl for ApplicationWindow {}
+impl ApplicationWindowImpl for ApplicationWindow {}
+impl AdwApplicationWindowImpl for ApplicationWindow {}

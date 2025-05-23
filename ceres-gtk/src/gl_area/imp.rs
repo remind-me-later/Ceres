@@ -1,13 +1,10 @@
-use super::renderer::PxScaleMode;
-use super::renderer::Renderer;
-use gtk::TickCallbackId;
-use gtk::glib;
-use gtk::glib::Propagation;
-use gtk::prelude::*;
-use gtk::subclass::prelude::*;
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use super::renderer::{PxScaleMode, Renderer};
+use gtk::{glib, prelude::*, subclass::prelude::*};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 pub struct PainterCallbackImpl {
     buffer: Arc<Mutex<Box<[u8]>>>,
@@ -32,9 +29,8 @@ impl ceres_std::PainterCallback for PainterCallbackImpl {
 pub struct GlArea {
     pub gb_thread: Rc<RefCell<ceres_std::GbThread>>,
     pub renderer: RefCell<Option<Renderer>>,
-    pub scale_mode: RefCell<PxScaleMode>,
-    pub scale_changed: RefCell<bool>,
-    pub callbacks: RefCell<Option<TickCallbackId>>,
+    pub scale_mode_changed: RefCell<Option<PxScaleMode>>,
+    pub callbacks: RefCell<Option<gtk::TickCallbackId>>,
     pub buffer: Arc<Mutex<Box<[u8]>>>,
 }
 
@@ -91,19 +87,13 @@ impl ObjectSubclass for GlArea {
             gb_thread,
             buffer,
             renderer: Default::default(),
-            scale_mode: Default::default(),
-            scale_changed: Default::default(),
+            scale_mode_changed: Default::default(),
             callbacks: Default::default(),
         }
     }
 }
 
-impl ObjectImpl for GlArea {
-    fn constructed(&self) {
-        self.parent_constructed();
-        self.play();
-    }
-}
+impl ObjectImpl for GlArea {}
 
 impl WidgetImpl for GlArea {
     fn realize(&self) {
@@ -114,8 +104,8 @@ impl WidgetImpl for GlArea {
             return;
         }
 
-        // widget.set_vexpand(true);
-        // widget.set_hexpand(true);
+        widget.set_vexpand(true);
+        widget.set_hexpand(true);
 
         // SAFETY: we know the GdkGLContext exists as we checked for errors above, and we haven't
         // done any operations on it which could lead to glium's state mismatch. (In theory, GTK
@@ -126,13 +116,12 @@ impl WidgetImpl for GlArea {
         widget.make_current();
 
         *self.renderer.borrow_mut() = Some(Renderer::new());
+
+        self.play();
     }
 
     fn unrealize(&self) {
-        if let Some(tick_id) = self.callbacks.borrow_mut().take() {
-            tick_id.remove();
-        }
-
+        self.pause();
         self.parent_unrealize();
     }
 
@@ -146,16 +135,16 @@ impl WidgetImpl for GlArea {
 
         match orientation {
             gtk::Orientation::Horizontal => {
-                let minimum_size = ceres_std::PX_WIDTH as i32;
-                let natural_size = minimum_size * MULTIPLIER;
+                const MINIMUM_SIZE: i32 = ceres_std::PX_WIDTH as i32;
+                const NATURAL_SIZE: i32 = MINIMUM_SIZE * MULTIPLIER;
 
-                (minimum_size, natural_size, -1, -1)
+                (MINIMUM_SIZE, NATURAL_SIZE, -1, -1)
             }
             gtk::Orientation::Vertical => {
-                let minimum_size = ceres_std::PX_HEIGHT as i32;
-                let natural_size = minimum_size * MULTIPLIER;
+                const MINIMUM_SIZE: i32 = ceres_std::PX_HEIGHT as i32;
+                const NATURAL_SIZE: i32 = MINIMUM_SIZE * MULTIPLIER;
 
-                (minimum_size, natural_size, -1, -1)
+                (MINIMUM_SIZE, NATURAL_SIZE, -1, -1)
             }
             _ => unreachable!(),
         }
@@ -163,20 +152,19 @@ impl WidgetImpl for GlArea {
 }
 
 impl GLAreaImpl for GlArea {
-    fn render(&self, _context: &gtk::gdk::GLContext) -> Propagation {
+    fn render(&self, _context: &gtk::gdk::GLContext) -> glib::Propagation {
         let mut rf = self.renderer.borrow_mut();
         let rend = rf.as_mut().unwrap();
 
-        if *self.scale_changed.borrow() {
-            rend.choose_scale_mode(*self.scale_mode.borrow());
-            *self.scale_changed.borrow_mut() = false;
+        if let Some(scale_mode) = self.scale_mode_changed.take() {
+            rend.choose_scale_mode(scale_mode);
         }
 
         if let Ok(rgba) = self.buffer.lock() {
             rend.draw_frame(&rgba);
         }
 
-        Propagation::Proceed
+        glib::Propagation::Proceed
     }
 
     fn resize(&self, width: i32, height: i32) {

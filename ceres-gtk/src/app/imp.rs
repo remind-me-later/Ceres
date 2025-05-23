@@ -48,7 +48,7 @@ impl ApplicationImpl for Application {
 
     fn activate(&self) {
         let app = self.obj();
-        let window = crate::window::Window::new(app.as_ref());
+        let window = crate::application_window::ApplicationWindow::new(app.as_ref());
         window.present();
     }
 }

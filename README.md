@@ -22,8 +22,7 @@ The emulator has 3 frontends:
     should work on Windows, Mac and Linux.
 - `egui` uses the closs-platform `egui` library, should work on Windows,
     Mac and Linux.
-- `gtk4` uses the `gtk4` toolkit, should work on Linux and Windows,
-    it uses OpenGl so *it's not supported on Mac*.
+- `gtk4` uses the `gtk4` toolkit, should work on Linux.
 
 ## Build
 
