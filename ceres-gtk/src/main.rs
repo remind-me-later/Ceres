@@ -1,12 +1,16 @@
+#[cfg(target_os = "linux")]
 mod app;
+#[cfg(target_os = "linux")]
 mod application_window;
+#[cfg(target_os = "linux")]
 mod gl_area;
 
-use adw::glib;
-use adw::prelude::*;
+#[cfg(target_os = "linux")]
+use adw::{glib, prelude::*};
 
 pub const APP_ID: &str = "com.github.remind-me-later.ceres";
 
+#[cfg(target_os = "linux")]
 fn main() -> glib::ExitCode {
     {
         epoxy::load_with(|name| {
@@ -23,4 +27,9 @@ fn main() -> glib::ExitCode {
         .expect("Failed to register resources.");
 
     app::Application::new().run()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn main() {
+    eprintln!("Ceres GTK is only supported on Linux.");
 }
