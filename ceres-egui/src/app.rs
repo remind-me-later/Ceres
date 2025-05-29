@@ -1,6 +1,6 @@
-use crate::{AppOption, ScalingOption, ShaderOption, screen};
 use anyhow::Context;
 use ceres_std::GbThread;
+use ceres_std::{AppOption, ScalingOption, ShaderOption};
 use eframe::egui::{self, CornerRadius, Key, style::HandleShape};
 use rfd::FileDialog;
 use std::{
@@ -8,6 +8,8 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
+
+use crate::screen;
 
 fn setup_theme(ctx: &egui::Context) {
     let bg0 = egui::Color32::from_rgb(40, 40, 40); // Background

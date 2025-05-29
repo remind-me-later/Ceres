@@ -10,14 +10,7 @@ workspace = true
 
 [dependencies.ceres-std]
 path = "../ceres-std"
-
-[dependencies.ceres-wgpu]
-path = "../ceres-wgpu"
-
-[dependencies.clap]
-version = "*"
-default-features = false
-features = ["std", "derive"]
+features = ["wgpu_renderer"]
 
 [dependencies.anyhow]
 version = "*"

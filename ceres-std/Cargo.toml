@@ -5,6 +5,9 @@ version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+wgpu_renderer = ["dep:wgpu"]
+
 [lints]
 workspace = true
 
@@ -29,5 +32,20 @@ version = "*"
 default-features = false
 
 [dependencies.spin_sleep]
+version = "*"
+default-features = false
+
+[dependencies.clap]
+version = "*"
+default-features = false
+features = ["std", "derive", "help"]
+
+[dependencies.wgpu]
+version = "24"
+optional = true
+default-features = false
+features = ["dx12", "metal", "wgsl"]
+
+[dependencies.bytemuck]
 version = "*"
 default-features = false

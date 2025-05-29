@@ -1,7 +1,6 @@
 use adw::{gdk, glib, prelude::*, subclass::prelude::*};
 use std::{cell::RefCell, fs::File, path::PathBuf, rc::Rc};
 
-use crate::APP_ID;
 use crate::gl_area::{GlArea, PxScaleMode};
 
 #[derive(Debug, gtk::CompositeTemplate)]
@@ -40,7 +39,7 @@ impl ApplicationWindow {
 
     pub fn data_path() -> PathBuf {
         let mut path = glib::user_data_dir();
-        path.push(APP_ID);
+        path.push(ceres_std::CERES_BIN);
         std::fs::create_dir_all(&path).expect("Could not create directory.");
         path
     }

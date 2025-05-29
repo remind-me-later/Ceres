@@ -1,11 +1,11 @@
 use crate::{
-    CERES_STYLIZED, CeresEvent, ScalingOption, ShaderOption,
+    CERES_STYLIZED, CeresEvent,
     video::{self, State},
 };
 use anyhow::Context;
-use ceres_std::GbThread;
+use ceres_std::wgpu_renderer;
+use ceres_std::{GbThread, ShaderOption, wgpu_renderer::ScalingOption};
 use ceres_std::{PX_HEIGHT, PX_WIDTH};
-use ceres_wgpu::wgpu;
 use std::{
     sync::{Arc, Mutex},
     time::Instant,
@@ -278,7 +278,9 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
                 event: key_event, ..
             } => self.handle_key(&key_event),
             WindowEvent::RedrawRequested => {
-                use wgpu::SurfaceError::{Lost, Other, OutOfMemory, Outdated, Timeout};
+                use wgpu_renderer::wgpu::SurfaceError::{
+                    Lost, Other, OutOfMemory, Outdated, Timeout,
+                };
 
                 if let Some(windows) = self.windows.as_mut() {
                     match win_id {

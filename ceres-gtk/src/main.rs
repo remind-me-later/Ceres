@@ -5,7 +5,7 @@ mod gl_area;
 use adw::glib;
 use adw::prelude::*;
 
-pub const APP_ID: &str = "com.github.remind-me-later.ceres-gtk";
+pub const APP_ID: &str = "com.github.remind-me-later.ceres";
 
 fn main() -> glib::ExitCode {
     {

@@ -1,29 +1,6 @@
-use ceres_wgpu::PipelineWrapper;
-use ceres_wgpu::wgpu;
+use ceres_std::{wgpu_renderer::{PipelineWrapper, ScalingOption}, ShaderOption};
+use ceres_std::wgpu_renderer::wgpu;
 use std::sync::Arc;
-
-use crate::{ScalingOption, ShaderOption};
-
-impl From<ShaderOption> for ceres_wgpu::ShaderOption {
-    fn from(shader: ShaderOption) -> Self {
-        match shader {
-            ShaderOption::Nearest => Self::Nearest,
-            ShaderOption::Scale2x => Self::Scale2x,
-            ShaderOption::Scale3x => Self::Scale3x,
-            ShaderOption::Lcd => Self::Lcd,
-            ShaderOption::Crt => Self::Crt,
-        }
-    }
-}
-
-impl From<ScalingOption> for ceres_wgpu::ScalingOption {
-    fn from(scaling: ScalingOption) -> Self {
-        match scaling {
-            ScalingOption::PixelPerfect => Self::PixelPerfect,
-            ScalingOption::Stretch => Self::Stretch,
-        }
-    }
-}
 
 pub struct State<'a, const PX_WIDTH: u32, const PX_HEIGHT: u32> {
     surface: wgpu::Surface<'a>,
@@ -137,7 +114,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
 
         if let Some(new_size) = self.new_size.take() {
             self.gb_screen.resize(
-                self.scaling_option.into(),
+                self.scaling_option,
                 &self.queue,
                 new_size.width,
                 new_size.height,

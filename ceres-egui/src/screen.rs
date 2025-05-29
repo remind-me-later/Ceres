@@ -1,32 +1,11 @@
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use crate::ScalingOption;
-use crate::ShaderOption;
-use ceres_wgpu::PipelineWrapper;
+use ceres_std::ScalingOption;
+use ceres_std::ShaderOption;
+use ceres_std::wgpu_renderer::PipelineWrapper;
 use eframe::egui;
 use eframe::wgpu;
-
-impl From<ShaderOption> for ceres_wgpu::ShaderOption {
-    fn from(shader: ShaderOption) -> Self {
-        match shader {
-            ShaderOption::Nearest => Self::Nearest,
-            ShaderOption::Scale2x => Self::Scale2x,
-            ShaderOption::Scale3x => Self::Scale3x,
-            ShaderOption::Lcd => Self::Lcd,
-            ShaderOption::Crt => Self::Crt,
-        }
-    }
-}
-
-impl From<ScalingOption> for ceres_wgpu::ScalingOption {
-    fn from(scaling: ScalingOption) -> Self {
-        match scaling {
-            ScalingOption::PixelPerfect => Self::PixelPerfect,
-            ScalingOption::Stretch => Self::Stretch,
-        }
-    }
-}
 
 pub struct GBScreen<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
     buffer: Arc<Mutex<Box<[u8]>>>,

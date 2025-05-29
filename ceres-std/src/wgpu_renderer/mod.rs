@@ -11,6 +11,15 @@ pub enum ScalingOption {
     Stretch,
 }
 
+impl From<crate::ScalingOption> for ScalingOption {
+    fn from(scaling_option: crate::ScalingOption) -> Self {
+        match scaling_option {
+            crate::ScalingOption::PixelPerfect => Self::PixelPerfect,
+            crate::ScalingOption::Stretch => Self::Stretch,
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ShaderOption {
     Nearest = 0,
@@ -18,6 +27,18 @@ pub enum ShaderOption {
     Scale3x = 2,
     Lcd = 3,
     Crt = 4,
+}
+
+impl From<crate::ShaderOption> for ShaderOption {
+    fn from(shader_option: crate::ShaderOption) -> Self {
+        match shader_option {
+            crate::ShaderOption::Nearest => Self::Nearest,
+            crate::ShaderOption::Scale2x => Self::Scale2x,
+            crate::ShaderOption::Scale3x => Self::Scale3x,
+            crate::ShaderOption::Lcd => Self::Lcd,
+            crate::ShaderOption::Crt => Self::Crt,
+        }
+    }
 }
 
 pub struct PipelineWrapper<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
@@ -164,7 +185,8 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
                 push_constant_ranges: &[],
             });
 
-        let shader = device.create_shader_module(wgpu::include_wgsl!("../shader/gb_screen.wgsl"));
+        let shader =
+            device.create_shader_module(wgpu::include_wgsl!("../../shader/gb_screen.wgsl"));
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             cache: None,
