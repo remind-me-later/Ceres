@@ -39,6 +39,11 @@ pub const HRAM_SIZE: u8 = 0x7F;
 pub const WRAM_SIZE_GB: u16 = 0x2000;
 pub const WRAM_SIZE_CGB: u16 = WRAM_SIZE_GB * 4;
 
+// Boot ROMs
+const DMG_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/dmg.bin");
+const MGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/mgb.bin");
+const CGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/cgb.bin");
+
 pub type Sample = i16;
 
 pub trait AudioCallback {
@@ -106,11 +111,6 @@ pub struct Gb<C: AudioCallback> {
 impl<C: AudioCallback> Gb<C> {
     #[must_use]
     fn new(model: Model, sample_rate: i32, cart: Cartridge, audio_callback: C) -> Self {
-        // Boot ROMs
-        const DMG_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/dmg.bin");
-        const MGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/mgb.bin");
-        const CGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/cgb.bin");
-
         let cgb_mode = match model {
             Model::Dmg | Model::Mgb => CgbMode::Dmg,
             Model::Cgb => CgbMode::Cgb,
@@ -172,6 +172,71 @@ impl<C: AudioCallback> Gb<C> {
             div: Default::default(),
             dot_accumulator: Default::default(),
         }
+    }
+
+    pub fn soft_reset(&mut self) {
+        self.bootrom = match self.model {
+            Model::Dmg => Some(DMG_BOOTROM),
+            Model::Mgb => Some(MGB_BOOTROM),
+            Model::Cgb => Some(CGB_BOOTROM),
+        };
+
+        self.af = Default::default();
+        self.bc = Default::default();
+        self.cpu_halted = Default::default();
+        self.de = Default::default();
+        self.dma_addr = Default::default();
+        self.dma_cycles = Default::default();
+        self.dma_on = Default::default();
+        self.dma_restarting = Default::default();
+        self.dma = Default::default();
+        self.ei_delay = Default::default();
+        self.halt_bug = Default::default();
+        self.hdma_dst = Default::default();
+        self.hdma_len = Default::default();
+        self.hdma_src = Default::default();
+        self.hdma_state = HdmaState::default();
+        self.hdma5 = Default::default();
+        self.hl = Default::default();
+        self.ints = Interrupts::default();
+        self.joy = Joypad::default();
+        self.key1 = Key1::default();
+        self.pc = Default::default();
+        self.ppu = Ppu::default();
+        self.serial = Serial::default();
+        self.sp = Default::default();
+        self.svbk = Svbk::default();
+        self.tac = Default::default();
+        self.tima_state = TIMAState::default();
+        self.tima = Default::default();
+        self.tma = Default::default();
+        self.div = Default::default();
+        self.dot_accumulator = Default::default();
+        self.ppu = Ppu::default();
+        self.apu.reset();
+        self.serial = Serial::default();
+        self.ints = Interrupts::default();
+        self.joy = Joypad::default();
+        self.dma_on = false;
+        self.dma_restarting = false;
+        self.dma_cycles = 0;
+        self.dma_addr = 0;
+        self.hdma_state = HdmaState::default();
+        self.hdma5 = 0;
+        self.hdma_src = 0;
+        self.hdma_dst = 0;
+        self.hdma_len = 0;
+        self.svbk = Svbk::default();
+        self.key1 = Key1::default();
+    }
+
+    pub fn change_model_and_soft_reset(&mut self, model: Model) {
+        self.model = model;
+        self.cgb_mode = match model {
+            Model::Dmg | Model::Mgb => CgbMode::Dmg,
+            Model::Cgb => CgbMode::Cgb,
+        };
+        self.soft_reset();
     }
 
     pub fn run_frame(&mut self) {

@@ -107,6 +107,27 @@ impl<C: AudioCallback> Apu<C> {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.enabled = false;
+        self.right_volume = 0;
+        self.left_volume = 0;
+        self.right_vin = false;
+        self.left_vin = false;
+
+        // reset registers
+        self.ch1 = Square::default();
+        self.ch2 = Square::default();
+        self.ch3.reset();
+        self.ch4 = Noise::default();
+        self.nr51 = 0;
+
+        // reset div divider
+        self.div_divider = 0;
+
+        // reset render timer
+        self.render_timer = 0;
+    }
+
     pub const fn set_sample_rate(&mut self, sample_rate: i32) {
         self.ext_sample_period = Self::sample_period_from_rate(sample_rate);
     }

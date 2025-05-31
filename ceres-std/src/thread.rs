@@ -135,23 +135,10 @@ impl GbThread {
     }
 
     // Resets the GB state and loads the same ROM
-    pub fn change_model(
-        &mut self,
-        model: ceres_core::Model,
-        sav_path: Option<&Path>,
-        rom_path: Option<&Path>,
-    ) -> Result<(), Error> {
-        let ring_buffer = self.audio_stream.get_ring_buffer();
-
-        let gb_new =
-            Self::create_new_gb(&self.audio_stream, ring_buffer, model, rom_path, sav_path)?;
-
+    pub fn change_model(&mut self, model: ceres_core::Model) {
         if let Ok(mut gb) = self.gb.lock() {
-            *gb = gb_new;
-            self.model = model;
+            gb.change_model_and_soft_reset(model);
         }
-
-        Ok(())
     }
 
     fn create_new_gb(

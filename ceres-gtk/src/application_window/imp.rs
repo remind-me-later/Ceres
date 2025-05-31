@@ -1,7 +1,7 @@
 use adw::{gdk, glib, prelude::*, subclass::prelude::*};
 use std::{cell::RefCell, fs::File, path::PathBuf, rc::Rc};
 
-use crate::gl_area::{GlArea, PxScaleMode};
+use crate::gl_area::GlArea;
 
 #[derive(Debug, gtk::CompositeTemplate)]
 #[template(resource = "/org/remind-me-later/ceres-gtk/window.ui")]
@@ -18,7 +18,7 @@ pub struct ApplicationWindow {
 }
 
 impl ApplicationWindow {
-    fn save_data(&self) {
+    pub fn save_data(&self) {
         if let Some(path) = self.rom_path.borrow().as_ref() {
             if !self.gb_area.gb_thread().borrow().has_save_data() {
                 return;
@@ -207,39 +207,6 @@ impl ObjectImpl for ApplicationWindow {
 
         // Actions
         let rend = self.gb_area.imp();
-
-        let action_px_scale = gtk::gio::SimpleAction::new_stateful(
-            "px_scale",
-            Some(&String::static_variant_type()),
-            &"Nearest".to_variant(),
-        );
-
-        action_px_scale.connect_activate(glib::clone!(
-            #[weak]
-            rend,
-            move |action, parameter| {
-                // Get parameter
-                let parameter = parameter
-                    .expect("Could not get parameter.")
-                    .get::<String>()
-                    .expect("The value needs to be of type `String`.");
-
-                let px_scale_mode = match parameter.as_str() {
-                    "Nearest" => PxScaleMode::Nearest,
-                    "Scale2x" => PxScaleMode::Scale2x,
-                    "Scale3x" => PxScaleMode::Scale3x,
-                    "LCD" => PxScaleMode::Lcd,
-                    "CRT" => PxScaleMode::Crt,
-                    _ => unreachable!(),
-                };
-
-                // Set orientation and save state
-                rend.obj().set_scale_mode(px_scale_mode);
-                action.set_state(&parameter.to_variant());
-            }
-        ));
-
-        self.obj().add_action(&action_px_scale);
 
         let action_speed_multiplier = gtk::gio::SimpleAction::new_stateful(
             "speed_multiplier",

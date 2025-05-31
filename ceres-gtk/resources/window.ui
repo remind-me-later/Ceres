@@ -31,34 +31,10 @@
       </item>
     </section>
     <section>
-      <attribute name="label" translatable="yes">Upscale filter</attribute>
       <item>
-        <attribute name="label" translatable="yes">_Nearest neighbour</attribute>
-        <attribute name="action">win.px_scale</attribute>
-        <attribute name="target">Nearest</attribute>
+        <attribute name="label" translatable="yes">_Preferences</attribute>
+        <attribute name="action">app.preferences</attribute>
       </item>
-      <item>
-        <attribute name="label" translatable="yes">_Scale 2x</attribute>
-        <attribute name="action">win.px_scale</attribute>
-        <attribute name="target">Scale2x</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">_Scale 3x</attribute>
-        <attribute name="action">win.px_scale</attribute>
-        <attribute name="target">Scale3x</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">_LCD</attribute>
-        <attribute name="action">win.px_scale</attribute>
-        <attribute name="target">LCD</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">_CRT</attribute>
-        <attribute name="action">win.px_scale</attribute>
-        <attribute name="target">CRT</attribute>
-      </item>
-    </section>
-    <section>
       <item>
         <attribute name="label" translatable="yes">_About</attribute>
         <!-- TODO: -->
@@ -73,10 +49,10 @@
         <child type="top">
           <object class="AdwHeaderBar">
             <!-- <child type="title"> -->
-              <!-- <object class="AdwWindowTitle"> -->
-                <!-- <property name="title">Ceres</property> -->
-                <!-- <property name="subtitle">Video player</property> -->
-              <!-- </object> -->
+            <!-- <object class="AdwWindowTitle"> -->
+            <!-- <property name="title">Ceres</property> -->
+            <!-- <property name="subtitle">Video player</property> -->
+            <!-- </object> -->
             <!-- </child> -->
             <child type="start">
               <object class="GtkScaleButton" id="volume_button">
@@ -86,7 +62,7 @@
                     <property name="upper">1.0</property>
                     <property name="step-increment">0.1</property>
                     <property name="page-increment">0.1</property>
-                    <property name="value">0.8</property>
+                    <property name="value">1.0</property>
                   </object>
                 </property>
                 <property name="icons">audio-volume-muted-symbolic

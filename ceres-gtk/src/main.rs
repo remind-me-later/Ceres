@@ -4,6 +4,8 @@ mod app;
 mod application_window;
 #[cfg(target_os = "linux")]
 mod gl_area;
+#[cfg(target_os = "linux")]
+mod preferences_dialog;
 
 #[cfg(target_os = "linux")]
 use adw::{glib, prelude::*};
