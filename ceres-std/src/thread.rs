@@ -137,6 +137,7 @@ impl GbThread {
     // Resets the GB state and loads the same ROM
     pub fn change_model(&mut self, model: ceres_core::Model) {
         if let Ok(mut gb) = self.gb.lock() {
+            self.model = model;
             gb.change_model_and_soft_reset(model);
         }
     }

@@ -268,6 +268,8 @@ impl<A: AudioCallback> Gb<A> {
             WY => self.ppu.write_wy(val),
             WX => self.ppu.write_wx(val),
             KEY0 if matches!(self.model, Cgb) => {
+                // FIXME: causes broken palettes on GB games played on CGB
+                // should we allow all cgb functions to be observable from a GB rom?
                 if self.bootrom.is_some() && val == 4 {
                     self.cgb_mode = CgbMode::Compat;
                 }
@@ -284,10 +286,11 @@ impl<A: AudioCallback> Gb<A> {
             HDMA3 if matches!(self.cgb_mode, CgbMode::Cgb) => self.write_hdma3(val),
             HDMA4 if matches!(self.cgb_mode, CgbMode::Cgb) => self.write_hdma4(val),
             HDMA5 if matches!(self.cgb_mode, CgbMode::Cgb) => self.write_hdma5(val),
-            BCPS if matches!(self.cgb_mode, CgbMode::Cgb) => self.ppu.bcp_mut().set_spec(val),
-            BCPD if matches!(self.cgb_mode, CgbMode::Cgb) => self.ppu.bcp_mut().set_data(val),
-            OCPS if matches!(self.cgb_mode, CgbMode::Cgb) => self.ppu.ocp_mut().set_spec(val),
-            OCPD if matches!(self.cgb_mode, CgbMode::Cgb) => self.ppu.ocp_mut().set_data(val),
+            // FIXME: should be only writable in CGB mode, maybe the bootrom writes to this?
+            BCPS => self.ppu.bcp_mut().set_spec(val),
+            BCPD => self.ppu.bcp_mut().set_data(val),
+            OCPS => self.ppu.ocp_mut().set_spec(val),
+            OCPD => self.ppu.ocp_mut().set_data(val),
             OPRI if matches!(self.model, Model::Cgb) => {
                 // FIXME: understand behaviour outside of bootrom
                 if self.bootrom.is_some() {
