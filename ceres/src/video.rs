@@ -1,5 +1,8 @@
-use ceres_std::{wgpu_renderer::{PipelineWrapper, ScalingOption}, ShaderOption};
 use ceres_std::wgpu_renderer::wgpu;
+use ceres_std::{
+    ShaderOption,
+    wgpu_renderer::{PipelineWrapper, ScalingOption},
+};
 use std::sync::Arc;
 
 pub struct State<'a, const PX_WIDTH: u32, const PX_HEIGHT: u32> {
