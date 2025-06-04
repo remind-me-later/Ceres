@@ -49,24 +49,26 @@ impl Ppu {
     #[must_use]
     const fn is_window_enabled(&self, cgb_mode: CgbMode) -> bool {
         match cgb_mode {
-            CgbMode::Dmg => self.lcdc & (LCDC_BG_B | LCDC_WIN_B) == (LCDC_BG_B | LCDC_WIN_B),
-            CgbMode::Cgb | CgbMode::Compat => self.lcdc & LCDC_WIN_B != 0,
+            CgbMode::Dmg | CgbMode::Compat => {
+                self.lcdc & (LCDC_BG_B | LCDC_WIN_B) == (LCDC_BG_B | LCDC_WIN_B)
+            }
+            CgbMode::Cgb => self.lcdc & LCDC_WIN_B != 0,
         }
     }
 
     #[must_use]
     const fn is_bg_enabled(&self, cgb_mode: CgbMode) -> bool {
         match cgb_mode {
-            CgbMode::Dmg => self.lcdc & LCDC_BG_B != 0,
-            CgbMode::Cgb | CgbMode::Compat => true,
+            CgbMode::Dmg | CgbMode::Compat => self.lcdc & LCDC_BG_B != 0,
+            CgbMode::Cgb => true,
         }
     }
 
     #[must_use]
     const fn is_cgb_master_priority(&self, cgb_mode: CgbMode) -> bool {
         match cgb_mode {
-            CgbMode::Dmg => false,
-            CgbMode::Cgb | CgbMode::Compat => self.lcdc & LCDC_BG_B == 0,
+            CgbMode::Dmg | CgbMode::Compat => false,
+            CgbMode::Cgb => self.lcdc & LCDC_BG_B == 0,
         }
     }
 
@@ -149,8 +151,8 @@ impl Ppu {
             let tile_map = self.bg_tile_map() + row + col;
 
             let attr = match cgb_mode {
-                CgbMode::Dmg => 0,
-                CgbMode::Cgb | CgbMode::Compat => self.vram_at_bank(tile_map, 1),
+                CgbMode::Dmg | CgbMode::Compat => 0,
+                CgbMode::Cgb => self.vram_at_bank(tile_map, 1),
             };
 
             let color = {
@@ -176,7 +178,8 @@ impl Ppu {
 
             let rgb = match cgb_mode {
                 CgbMode::Dmg => Self::mono_rgb(shade_index(self.bgp, color)),
-                CgbMode::Cgb | CgbMode::Compat => self.bcp.rgb(attr & BG_PAL_B, color),
+                CgbMode::Compat => self.bcp.rgb(attr & BG_PAL_B, shade_index(self.bgp, color)),
+                CgbMode::Cgb => self.bcp.rgb(attr & BG_PAL_B, color),
             };
 
             self.rgb_buf.set_px(base_idx + u32::from(i), rgb);
@@ -220,8 +223,8 @@ impl Ppu {
             let tile_map = self.win_tile_map() + row + col;
 
             let attr = match cgb_mode {
-                CgbMode::Dmg => 0,
-                CgbMode::Cgb | CgbMode::Compat => self.vram_at_bank(tile_map, 1),
+                CgbMode::Dmg | CgbMode::Compat => 0,
+                CgbMode::Cgb => self.vram_at_bank(tile_map, 1),
             };
 
             let color = {
@@ -247,7 +250,8 @@ impl Ppu {
 
             let rgb = match cgb_mode {
                 CgbMode::Dmg => Self::mono_rgb(shade_index(self.bgp, color)),
-                CgbMode::Cgb | CgbMode::Compat => self.bcp.rgb(attr & BG_PAL_B, color),
+                CgbMode::Compat => self.bcp.rgb(attr & BG_PAL_B, shade_index(self.bgp, color)),
+                CgbMode::Cgb => self.bcp.rgb(attr & BG_PAL_B, color),
             };
 
             bg_priority[i as usize] = if color == 0 {
@@ -365,7 +369,16 @@ impl Ppu {
 
                         Self::mono_rgb(shade_index(palette, color))
                     }
-                    CgbMode::Cgb | CgbMode::Compat => {
+                    CgbMode::Compat => {
+                        let palette = if obj.attr & SPR_PAL == 0 {
+                            self.obp0
+                        } else {
+                            self.obp1
+                        };
+
+                        self.ocp.rgb(0, shade_index(palette, color))
+                    }
+                    CgbMode::Cgb => {
                         let cgb_palette = obj.attr & SPR_CGB_PAL;
                         self.ocp.rgb(cgb_palette, color)
                     }

@@ -5,40 +5,84 @@ const NF: u16 = 0x40;
 const HF: u16 = 0x20;
 const CF: u16 = 0x10;
 
+#[derive(Debug, Default)]
+pub struct Cpu {
+    af: u16,
+    bc: u16,
+    de: u16,
+    hl: u16,
+    sp: u16,
+    pc: u16,
+
+    has_ei_delay: bool,
+    is_halted: bool,
+    is_halt_bug_triggered: bool,
+}
+
+impl Cpu {
+    pub const fn af(&self) -> u16 {
+        self.af
+    }
+
+    pub const fn bc(&self) -> u16 {
+        self.bc
+    }
+
+    pub const fn de(&self) -> u16 {
+        self.de
+    }
+
+    pub const fn hl(&self) -> u16 {
+        self.hl
+    }
+
+    pub const fn sp(&self) -> u16 {
+        self.sp
+    }
+
+    pub const fn pc(&self) -> u16 {
+        self.pc
+    }
+
+    pub const fn is_halted(&self) -> bool {
+        self.is_halted
+    }
+}
+
 impl<A: AudioCallback> Gb<A> {
     pub fn run_cpu(&mut self) {
-        if self.ei_delay {
+        if self.cpu.has_ei_delay {
             self.ints.enable();
-            self.ei_delay = false;
+            self.cpu.has_ei_delay = false;
         }
 
-        if self.cpu_halted {
+        if self.cpu.is_halted {
             self.tick_m_cycle();
         } else {
-            // println!("pc {:0x}", self.pc);
+            // println!("pc {:0x}", self.cpu.pc);
 
             let op = self.imm8();
             self.run_hdma();
 
-            if self.halt_bug {
-                self.pc = self.pc.wrapping_sub(1);
-                self.halt_bug = false;
+            if self.cpu.is_halt_bug_triggered {
+                self.cpu.pc = self.cpu.pc.wrapping_sub(1);
+                self.cpu.is_halt_bug_triggered = false;
             }
 
             self.exec(op);
         }
 
         if self.ints.is_any_requested() {
-            self.cpu_halted = false;
+            self.cpu.is_halted = false;
 
             if self.ints.are_enabled() {
                 self.tick_m_cycle();
                 self.tick_m_cycle();
 
-                self.push(self.pc);
+                self.push(self.cpu.pc);
 
                 self.ints.disable();
-                self.pc = self.ints.handle();
+                self.cpu.pc = self.ints.handle();
             }
         }
     }
@@ -60,8 +104,8 @@ impl<A: AudioCallback> Gb<A> {
 
     #[must_use]
     fn imm8(&mut self) -> u8 {
-        let val = self.read(self.pc);
-        self.pc = self.pc.wrapping_add(1);
+        let val = self.read(self.cpu.pc);
+        self.cpu.pc = self.cpu.pc.wrapping_add(1);
         val
     }
 
@@ -74,11 +118,11 @@ impl<A: AudioCallback> Gb<A> {
 
     fn set_rr(&mut self, id: u8, val: u16) {
         match id {
-            0 => self.af = val,
-            1 => self.bc = val,
-            2 => self.de = val,
-            3 => self.hl = val,
-            4 => self.sp = val,
+            0 => self.cpu.af = val,
+            1 => self.cpu.bc = val,
+            2 => self.cpu.de = val,
+            3 => self.cpu.hl = val,
+            4 => self.cpu.sp = val,
             _ => unreachable!(),
         }
     }
@@ -86,11 +130,11 @@ impl<A: AudioCallback> Gb<A> {
     #[must_use]
     const fn get_rr(&self, id: u8) -> u16 {
         match id {
-            0 => self.af,
-            1 => self.bc,
-            2 => self.de,
-            3 => self.hl,
-            4 => self.sp,
+            0 => self.cpu.af,
+            1 => self.cpu.bc,
+            2 => self.cpu.de,
+            3 => self.cpu.hl,
+            4 => self.cpu.sp,
             _ => unreachable!(),
         }
     }
@@ -101,9 +145,9 @@ impl<A: AudioCallback> Gb<A> {
         let lo = op & 1 != 0;
         if id == 0 {
             if lo {
-                (self.af >> 8) as u8
+                (self.cpu.af >> 8) as u8
             } else {
-                self.read(self.hl)
+                self.read(self.cpu.hl)
             }
         } else if lo {
             (self.get_rr(id) & 0xFF) as u8
@@ -117,9 +161,9 @@ impl<A: AudioCallback> Gb<A> {
         let lo = op & 1 != 0;
         if id == 0 {
             if lo {
-                self.af = (u16::from(val) << 8) | self.af & 0xFF;
+                self.cpu.af = (u16::from(val) << 8) | self.cpu.af & 0xFF;
             } else {
-                self.cpu_write(self.hl, val);
+                self.cpu_write(self.cpu.hl, val);
             }
         } else if lo {
             self.set_rr(id, u16::from(val) | self.get_rr(id) & 0xFF00);
@@ -135,75 +179,75 @@ impl<A: AudioCallback> Gb<A> {
 
     fn ld_a_drr(&mut self, op: u8) {
         let id = (op >> 4) + 1;
-        self.af &= 0xFF;
+        self.cpu.af &= 0xFF;
         let addr = self.get_rr(id);
-        self.af |= u16::from(self.read(addr)) << 8;
+        self.cpu.af |= u16::from(self.read(addr)) << 8;
     }
 
     fn ld_drr_a(&mut self, op: u8) {
         let id = (op >> 4) + 1;
         let addr = self.get_rr(id);
-        self.cpu_write(addr, (self.af >> 8) as u8);
+        self.cpu_write(addr, (self.cpu.af >> 8) as u8);
     }
 
     fn ld_da16_a(&mut self) {
         let addr = self.imm16();
-        self.cpu_write(addr, (self.af >> 8) as u8);
+        self.cpu_write(addr, (self.cpu.af >> 8) as u8);
     }
 
     fn ld_a_da16(&mut self) {
-        self.af &= 0xFF;
+        self.cpu.af &= 0xFF;
         let addr = self.imm16();
-        self.af |= u16::from(self.read(addr)) << 8;
+        self.cpu.af |= u16::from(self.read(addr)) << 8;
     }
 
     fn ld_dhli_a(&mut self) {
-        let addr = self.hl;
-        self.cpu_write(addr, (self.af >> 8) as u8);
-        self.hl = addr.wrapping_add(1);
+        let addr = self.cpu.hl;
+        self.cpu_write(addr, (self.cpu.af >> 8) as u8);
+        self.cpu.hl = addr.wrapping_add(1);
     }
 
     fn ld_dhld_a(&mut self) {
-        let addr = self.hl;
-        self.cpu_write(addr, (self.af >> 8) as u8);
-        self.hl = addr.wrapping_sub(1);
+        let addr = self.cpu.hl;
+        self.cpu_write(addr, (self.cpu.af >> 8) as u8);
+        self.cpu.hl = addr.wrapping_sub(1);
     }
 
     fn ld_a_dhli(&mut self) {
-        let addr = self.hl;
+        let addr = self.cpu.hl;
         let val = u16::from(self.read(addr));
-        self.af &= 0xFF;
-        self.af |= val << 8;
-        self.hl = addr.wrapping_add(1);
+        self.cpu.af &= 0xFF;
+        self.cpu.af |= val << 8;
+        self.cpu.hl = addr.wrapping_add(1);
     }
 
     fn ld_a_dhld(&mut self) {
-        let addr = self.hl;
+        let addr = self.cpu.hl;
         let val = u16::from(self.read(addr));
-        self.af &= 0xFF;
-        self.af |= val << 8;
-        self.hl = addr.wrapping_sub(1);
+        self.cpu.af &= 0xFF;
+        self.cpu.af |= val << 8;
+        self.cpu.hl = addr.wrapping_sub(1);
     }
 
     fn ldh_da8_a(&mut self) {
         let tmp = u16::from(self.imm8());
-        let a = (self.af >> 8) as u8;
+        let a = (self.cpu.af >> 8) as u8;
         self.cpu_write(0xFF00 | tmp, a);
     }
 
     fn ldh_a_da8(&mut self) {
         let tmp = u16::from(self.imm8());
-        self.af &= 0xFF;
-        self.af |= u16::from(self.read(0xFF00 | tmp)) << 8;
+        self.cpu.af &= 0xFF;
+        self.cpu.af |= u16::from(self.read(0xFF00 | tmp)) << 8;
     }
 
     fn ldh_dc_a(&mut self) {
-        self.cpu_write(0xFF00 | self.bc & 0xFF, (self.af >> 8) as u8);
+        self.cpu_write(0xFF00 | self.cpu.bc & 0xFF, (self.cpu.af >> 8) as u8);
     }
 
     fn ldh_a_dc(&mut self) {
-        self.af &= 0xFF;
-        self.af |= u16::from(self.read(0xFF00 | self.bc & 0xFF)) << 8;
+        self.cpu.af &= 0xFF;
+        self.cpu.af |= u16::from(self.read(0xFF00 | self.cpu.bc & 0xFF)) << 8;
     }
 
     fn ld_hr_d8(&mut self, op: u8) {
@@ -220,27 +264,27 @@ impl<A: AudioCallback> Gb<A> {
 
     fn ld_dhl_d8(&mut self) {
         let tmp = self.imm8();
-        self.cpu_write(self.hl, tmp);
+        self.cpu_write(self.cpu.hl, tmp);
     }
 
     fn ld16_sp_hl(&mut self) {
-        let val = self.hl;
-        self.sp = val;
+        let val = self.cpu.hl;
+        self.cpu.sp = val;
         self.tick_m_cycle();
     }
 
     const fn add(&mut self, val: u16) {
-        let a = self.af >> 8;
+        let a = self.cpu.af >> 8;
         let res = a + val;
-        self.af = res << 8;
+        self.cpu.af = res << 8;
         if res.trailing_zeros() >= 8 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
         if (a & 0xF) + (val & 0xF) > 0x0F {
-            self.af |= HF;
+            self.cpu.af |= HF;
         }
         if res > 0xFF {
-            self.af |= CF;
+            self.cpu.af |= CF;
         }
     }
 
@@ -255,16 +299,16 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     const fn sub(&mut self, val: u16) {
-        let a = self.af >> 8;
-        self.af = (a.wrapping_sub(val) << 8) | NF;
+        let a = self.cpu.af >> 8;
+        self.cpu.af = (a.wrapping_sub(val) << 8) | NF;
         if a == val {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
         if (a & 0xF) < (val & 0xF) {
-            self.af |= HF;
+            self.cpu.af |= HF;
         }
         if a < val {
-            self.af |= CF;
+            self.cpu.af |= CF;
         }
     }
 
@@ -279,19 +323,19 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     fn sbc(&mut self, val: u16) {
-        let a = self.af >> 8;
-        let carry = u16::from((self.af & CF) != 0);
+        let a = self.cpu.af >> 8;
+        let carry = u16::from((self.cpu.af & CF) != 0);
         let res = a.wrapping_sub(val).wrapping_sub(carry);
-        self.af = (res << 8) | NF;
+        self.cpu.af = (res << 8) | NF;
 
         if res.trailing_zeros() >= 8 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
         if (a & 0xF) < (val & 0xF) + carry {
-            self.af |= HF;
+            self.cpu.af |= HF;
         }
         if res > 0xFF {
-            self.af |= CF;
+            self.cpu.af |= CF;
         }
     }
 
@@ -306,18 +350,18 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     fn adc(&mut self, val: u16) {
-        let a = self.af >> 8;
-        let carry = u16::from((self.af & CF) != 0);
+        let a = self.cpu.af >> 8;
+        let carry = u16::from((self.cpu.af & CF) != 0);
         let res = a + val + carry;
-        self.af = res << 8;
+        self.cpu.af = res << 8;
         if res.trailing_zeros() >= 8 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
         if (a & 0xF) + (val & 0xF) + carry > 0x0F {
-            self.af |= HF;
+            self.cpu.af |= HF;
         }
         if res > 0xFF {
-            self.af |= CF;
+            self.cpu.af |= CF;
         }
     }
 
@@ -332,10 +376,10 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     const fn or(&mut self, val: u16) {
-        let a = self.af >> 8;
-        self.af = (a | val) << 8;
+        let a = self.cpu.af >> 8;
+        self.cpu.af = (a | val) << 8;
         if a | val == 0 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
     }
 
@@ -350,11 +394,11 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     const fn xor(&mut self, val: u16) {
-        let a = self.af >> 8;
+        let a = self.cpu.af >> 8;
         let a = a ^ val;
-        self.af = a << 8;
+        self.cpu.af = a << 8;
         if a == 0 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
     }
 
@@ -369,11 +413,11 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     const fn and(&mut self, val: u16) {
-        let a = self.af >> 8;
+        let a = self.cpu.af >> 8;
         let a = a & val;
-        self.af = (a << 8) | HF;
+        self.cpu.af = (a << 8) | HF;
         if a == 0 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
     }
 
@@ -388,17 +432,17 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     const fn cp(&mut self, val: u16) {
-        let a = self.af >> 8;
-        self.af &= 0xFF00;
-        self.af |= NF;
+        let a = self.cpu.af >> 8;
+        self.cpu.af &= 0xFF00;
+        self.cpu.af |= NF;
         if a == val {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
         if a & 0xF < val & 0xF {
-            self.af |= HF;
+            self.cpu.af |= HF;
         }
         if a < val {
-            self.af |= CF;
+            self.cpu.af |= CF;
         }
     }
 
@@ -418,14 +462,14 @@ impl<A: AudioCallback> Gb<A> {
         let rr = self.get_rr(id) & 0xFF00 | val;
         self.set_rr(id, rr);
 
-        self.af &= !(NF | ZF | HF);
+        self.cpu.af &= !(NF | ZF | HF);
 
         if rr.trailing_zeros() >= 4 {
-            self.af |= HF;
+            self.cpu.af |= HF;
         }
 
         if rr.trailing_zeros() >= 8 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
     }
 
@@ -435,15 +479,15 @@ impl<A: AudioCallback> Gb<A> {
         let rr = self.get_rr(id) & 0xFF00 | val;
         self.set_rr(id, rr);
 
-        self.af &= !(ZF | HF);
-        self.af |= NF;
+        self.cpu.af &= !(ZF | HF);
+        self.cpu.af |= NF;
 
         if rr & 0x0F == 0xF {
-            self.af |= HF;
+            self.cpu.af |= HF;
         }
 
         if rr.trailing_zeros() >= 8 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
     }
 
@@ -451,14 +495,14 @@ impl<A: AudioCallback> Gb<A> {
         let id = ((op >> 4) + 1) & 0x03;
         let rr = self.get_rr(id).wrapping_add(0x100);
         self.set_rr(id, rr);
-        self.af &= !(NF | ZF | HF);
+        self.cpu.af &= !(NF | ZF | HF);
 
         if rr & 0x0F00 == 0 {
-            self.af |= HF;
+            self.cpu.af |= HF;
         }
 
         if rr & 0xFF00 == 0 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
     }
 
@@ -466,44 +510,44 @@ impl<A: AudioCallback> Gb<A> {
         let id = ((op >> 4) + 1) & 0x03;
         let rr = self.get_rr(id).wrapping_sub(0x100);
         self.set_rr(id, rr);
-        self.af &= !(ZF | HF);
-        self.af |= NF;
+        self.cpu.af &= !(ZF | HF);
+        self.cpu.af |= NF;
 
         if rr & 0x0F00 == 0xF00 {
-            self.af |= HF;
+            self.cpu.af |= HF;
         }
 
         if rr & 0xFF00 == 0 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
     }
 
     fn inc_dhl(&mut self) {
-        let val = self.read(self.hl).wrapping_add(1);
-        self.cpu_write(self.hl, val);
+        let val = self.read(self.cpu.hl).wrapping_add(1);
+        self.cpu_write(self.cpu.hl, val);
 
-        self.af &= !(NF | ZF | HF);
+        self.cpu.af &= !(NF | ZF | HF);
         if val.trailing_zeros() >= 4 {
-            self.af |= HF;
+            self.cpu.af |= HF;
         }
 
         if val == 0 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
     }
 
     fn dec_dhl(&mut self) {
-        let val = self.read(self.hl).wrapping_sub(1);
-        self.cpu_write(self.hl, val);
+        let val = self.read(self.cpu.hl).wrapping_sub(1);
+        self.cpu_write(self.cpu.hl, val);
 
-        self.af &= !(ZF | HF);
-        self.af |= NF;
+        self.cpu.af &= !(ZF | HF);
+        self.cpu.af |= NF;
         if (val & 0x0F) == 0x0F {
-            self.af |= HF;
+            self.cpu.af |= HF;
         }
 
         if val == 0 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
     }
 
@@ -520,55 +564,55 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     fn ld_hl_sp_r8(&mut self) {
-        self.af &= 0xFF00;
+        self.cpu.af &= 0xFF00;
         #[expect(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
         let offset = self.imm8() as i8 as u16;
         self.tick_m_cycle();
-        self.hl = self.sp.wrapping_add(offset);
+        self.cpu.hl = self.cpu.sp.wrapping_add(offset);
 
-        if (self.sp & 0xF) + (offset & 0xF) > 0xF {
-            self.af |= HF;
+        if (self.cpu.sp & 0xF) + (offset & 0xF) > 0xF {
+            self.cpu.af |= HF;
         }
 
-        if (self.sp & 0xFF) + (offset & 0xFF) > 0xFF {
-            self.af |= CF;
+        if (self.cpu.sp & 0xFF) + (offset & 0xFF) > 0xFF {
+            self.cpu.af |= CF;
         }
     }
 
     const fn rlca(&mut self) {
-        let carry = (self.af & 0x8000) != 0;
+        let carry = (self.cpu.af & 0x8000) != 0;
 
-        self.af = (self.af & 0xFF00) << 1;
+        self.cpu.af = (self.cpu.af & 0xFF00) << 1;
         if carry {
-            self.af |= CF | 0x0100;
+            self.cpu.af |= CF | 0x0100;
         }
     }
 
     const fn rrca(&mut self) {
-        let carry = self.af & 0x100 != 0;
-        self.af = (self.af >> 1) & 0xFF00;
+        let carry = self.cpu.af & 0x100 != 0;
+        self.cpu.af = (self.cpu.af >> 1) & 0xFF00;
         if carry {
-            self.af |= CF | 0x8000;
+            self.cpu.af |= CF | 0x8000;
         }
     }
 
     fn rrc_r(&mut self, op: u8) {
         let val = self.get_r(op);
         let carry = (val & 0x01) != 0;
-        self.af &= 0xFF00;
+        self.cpu.af &= 0xFF00;
         let val = (val >> 1) | (u8::from(carry) << 7);
         self.set_r(op, val);
         if carry {
-            self.af |= CF;
+            self.cpu.af |= CF;
         }
         if val == 0 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
     }
 
     fn do_jump_to_immediate(&mut self) {
         let addr = self.imm16();
-        self.pc = addr;
+        self.cpu.pc = addr;
         self.tick_m_cycle();
     }
 
@@ -580,21 +624,21 @@ impl<A: AudioCallback> Gb<A> {
         if self.satisfies_branch_condition(op) {
             self.do_jump_to_immediate();
         } else {
-            let pc = self.pc.wrapping_add(2);
-            self.pc = pc;
+            let pc = self.cpu.pc.wrapping_add(2);
+            self.cpu.pc = pc;
             self.tick_m_cycle();
             self.tick_m_cycle();
         }
     }
 
     const fn jp_hl(&mut self) {
-        self.pc = self.hl;
+        self.cpu.pc = self.cpu.hl;
     }
 
     fn do_jump_relative(&mut self) {
         #[expect(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
         let offset = self.imm8() as i8 as u16;
-        self.pc = self.pc.wrapping_add(offset);
+        self.cpu.pc = self.cpu.pc.wrapping_add(offset);
         self.tick_m_cycle();
     }
 
@@ -606,15 +650,15 @@ impl<A: AudioCallback> Gb<A> {
         if self.satisfies_branch_condition(op) {
             self.do_jump_relative();
         } else {
-            self.pc = self.pc.wrapping_add(1);
+            self.cpu.pc = self.cpu.pc.wrapping_add(1);
             self.tick_m_cycle();
         }
     }
 
     fn do_call(&mut self) {
         let addr = self.imm16();
-        self.push(self.pc);
-        self.pc = addr;
+        self.push(self.cpu.pc);
+        self.cpu.pc = addr;
     }
 
     fn call_nn(&mut self) {
@@ -625,15 +669,15 @@ impl<A: AudioCallback> Gb<A> {
         if self.satisfies_branch_condition(op) {
             self.do_call();
         } else {
-            let pc = self.pc.wrapping_add(2);
-            self.pc = pc;
+            let pc = self.cpu.pc.wrapping_add(2);
+            self.cpu.pc = pc;
             self.tick_m_cycle();
             self.tick_m_cycle();
         }
     }
 
     fn ret(&mut self) {
-        self.pc = self.pop();
+        self.cpu.pc = self.pop();
         self.tick_m_cycle();
     }
 
@@ -653,28 +697,28 @@ impl<A: AudioCallback> Gb<A> {
     #[must_use]
     const fn satisfies_branch_condition(&self, op: u8) -> bool {
         match (op >> 3) & 3 {
-            0 => self.af & ZF == 0,
-            1 => self.af & ZF != 0,
-            2 => self.af & CF == 0,
-            3 => self.af & CF != 0,
+            0 => self.cpu.af & ZF == 0,
+            1 => self.cpu.af & ZF != 0,
+            2 => self.cpu.af & CF == 0,
+            3 => self.cpu.af & CF != 0,
             _ => unreachable!(),
         }
     }
 
     fn rst(&mut self, op: u8) {
-        self.push(self.pc);
-        self.pc = u16::from(op) ^ 0xC7;
+        self.push(self.cpu.pc);
+        self.cpu.pc = u16::from(op) ^ 0xC7;
     }
 
     const fn halt(&mut self) {
         if !self.ints.is_any_requested() {
-            self.cpu_halted = true;
+            self.cpu.is_halted = true;
         } else if self.ints.are_enabled() {
-            self.cpu_halted = false;
-            self.pc = self.pc.wrapping_sub(1);
+            self.cpu.is_halted = false;
+            self.cpu.pc = self.cpu.pc.wrapping_sub(1);
         } else {
-            self.cpu_halted = false;
-            self.halt_bug = true;
+            self.cpu.is_halted = false;
+            self.cpu.is_halt_bug_triggered = true;
         }
     }
 
@@ -690,7 +734,7 @@ impl<A: AudioCallback> Gb<A> {
                 self.tick_m_cycle();
             }
         } else {
-            self.cpu_halted = true;
+            self.cpu.is_halted = true;
         }
     }
 
@@ -699,17 +743,17 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     const fn ei(&mut self) {
-        self.ei_delay = true;
+        self.cpu.has_ei_delay = true;
     }
 
     const fn ccf(&mut self) {
-        self.af ^= CF;
-        self.af &= !(HF | NF);
+        self.cpu.af ^= CF;
+        self.cpu.af &= !(HF | NF);
     }
 
     const fn scf(&mut self) {
-        self.af |= CF;
-        self.af &= !(HF | NF);
+        self.cpu.af |= CF;
+        self.cpu.af &= !(HF | NF);
     }
 
     #[expect(clippy::unused_self)]
@@ -723,20 +767,20 @@ impl<A: AudioCallback> Gb<A> {
 
     const fn daa(&mut self) {
         let a = {
-            let mut a = self.af >> 8;
+            let mut a = self.cpu.af >> 8;
 
-            if self.af & NF == 0 {
-                if self.af & HF != 0 || a & 0x0F > 0x09 {
+            if self.cpu.af & NF == 0 {
+                if self.cpu.af & HF != 0 || a & 0x0F > 0x09 {
                     a += 0x06;
                 }
-                if self.af & CF != 0 || a > 0x9F {
+                if self.cpu.af & CF != 0 || a > 0x9F {
                     a += 0x60;
                 }
             } else {
-                if self.af & HF != 0 {
+                if self.cpu.af & HF != 0 {
                     a = a.wrapping_sub(0x06) & 0xFF;
                 }
-                if self.af & CF != 0 {
+                if self.cpu.af & CF != 0 {
                     a = a.wrapping_sub(0x60);
                 }
             }
@@ -744,29 +788,29 @@ impl<A: AudioCallback> Gb<A> {
             a
         };
 
-        self.af &= !(0xFF00 | ZF | HF);
+        self.cpu.af &= !(0xFF00 | ZF | HF);
 
         if a.trailing_zeros() >= 8 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
 
         if a & 0x100 == 0x100 {
-            self.af |= CF;
+            self.cpu.af |= CF;
         }
 
-        self.af |= a << 8;
+        self.cpu.af |= a << 8;
     }
 
     const fn cpl(&mut self) {
-        self.af ^= 0xFF00;
-        self.af |= HF | NF;
+        self.cpu.af ^= 0xFF00;
+        self.cpu.af |= HF | NF;
     }
 
     fn push(&mut self, val: u16) {
-        self.sp = self.sp.wrapping_sub(1);
-        self.cpu_write(self.sp, (val >> 8) as u8);
-        self.sp = self.sp.wrapping_sub(1);
-        self.cpu_write(self.sp, (val & 0xFF) as u8);
+        self.cpu.sp = self.cpu.sp.wrapping_sub(1);
+        self.cpu_write(self.cpu.sp, (val >> 8) as u8);
+        self.cpu.sp = self.cpu.sp.wrapping_sub(1);
+        self.cpu_write(self.cpu.sp, (val & 0xFF) as u8);
         self.tick_m_cycle();
     }
 
@@ -777,10 +821,10 @@ impl<A: AudioCallback> Gb<A> {
 
     #[must_use]
     fn pop(&mut self) -> u16 {
-        let val = u16::from(self.read(self.sp));
-        self.sp = self.sp.wrapping_add(1);
-        let val = val | (u16::from(self.read(self.sp)) << 8);
-        self.sp = self.sp.wrapping_add(1);
+        let val = u16::from(self.read(self.cpu.sp));
+        self.cpu.sp = self.cpu.sp.wrapping_add(1);
+        let val = val | (u16::from(self.read(self.cpu.sp)) << 8);
+        self.cpu.sp = self.cpu.sp.wrapping_add(1);
         val
     }
 
@@ -788,7 +832,7 @@ impl<A: AudioCallback> Gb<A> {
         let val = self.pop();
         let id = ((op >> 4) + 1) & 3;
         self.set_rr(id, val);
-        self.af &= 0xFFF0;
+        self.cpu.af &= 0xFFF0;
     }
 
     fn ld_rr_d16(&mut self, op: u8) {
@@ -798,44 +842,44 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     fn ld_da16_sp(&mut self) {
-        let val = self.sp;
+        let val = self.cpu.sp;
         let addr = self.imm16();
         self.cpu_write(addr, (val & 0xFF) as u8);
         self.cpu_write(addr.wrapping_add(1), (val >> 8) as u8);
     }
 
     fn add_sp_r8(&mut self) {
-        let sp = self.sp;
+        let sp = self.cpu.sp;
         #[expect(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
         let offset = self.imm8() as i8 as u16;
         self.tick_m_cycle();
         self.tick_m_cycle();
-        self.sp = self.sp.wrapping_add(offset);
-        self.af &= 0xFF00;
+        self.cpu.sp = self.cpu.sp.wrapping_add(offset);
+        self.cpu.af &= 0xFF00;
 
         if (sp & 0xF) + (offset & 0xF) > 0xF {
-            self.af |= HF;
+            self.cpu.af |= HF;
         }
 
         if (sp & 0xFF) + (offset & 0xFF) > 0xFF {
-            self.af |= CF;
+            self.cpu.af |= CF;
         }
     }
 
     fn add_hl_rr(&mut self, op: u8) {
         let id = (op >> 4) + 1;
-        let hl = self.hl;
+        let hl = self.cpu.hl;
         let rr = self.get_rr(id);
-        self.hl = hl.wrapping_add(rr);
+        self.cpu.hl = hl.wrapping_add(rr);
 
-        self.af &= !(NF | CF | HF);
+        self.cpu.af &= !(NF | CF | HF);
 
         if ((hl & 0xFFF) + (rr & 0xFFF)) & 0x1000 != 0 {
-            self.af |= HF;
+            self.cpu.af |= HF;
         }
 
         if (u32::from(hl) + u32::from(rr)) & 0x10000 != 0 {
-            self.af |= CF;
+            self.cpu.af |= CF;
         }
 
         self.tick_m_cycle();
@@ -844,39 +888,39 @@ impl<A: AudioCallback> Gb<A> {
     fn rlc_r(&mut self, op: u8) {
         let val = self.get_r(op);
         let carry = val & 0x80 != 0;
-        self.af &= 0xFF00;
+        self.cpu.af &= 0xFF00;
         self.set_r(op, (val << 1) | u8::from(carry));
         if carry {
-            self.af |= CF;
+            self.cpu.af |= CF;
         }
         if val == 0 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
     }
 
     fn rra(&mut self) {
-        let bit1 = self.af & 0x0100 != 0;
-        let carry = self.af & CF != 0;
+        let bit1 = self.cpu.af & 0x0100 != 0;
+        let carry = self.cpu.af & CF != 0;
 
-        self.af = (self.af >> 1) & 0xFF00 | (u16::from(carry) << 15);
+        self.cpu.af = (self.cpu.af >> 1) & 0xFF00 | (u16::from(carry) << 15);
         if bit1 {
-            self.af |= CF;
+            self.cpu.af |= CF;
         }
     }
 
     fn rr_r(&mut self, op: u8) {
         let val = self.get_r(op);
-        let carry = self.af & CF != 0;
+        let carry = self.cpu.af & CF != 0;
         let bit1 = val & 1 != 0;
         let val = (val >> 1) | (u8::from(carry) << 7);
         self.set_r(op, val);
 
-        self.af &= 0xFF00;
+        self.cpu.af &= 0xFF00;
         if bit1 {
-            self.af |= CF;
+            self.cpu.af |= CF;
         }
         if val == 0 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
     }
 
@@ -886,47 +930,47 @@ impl<A: AudioCallback> Gb<A> {
         let res = val << 1;
         self.set_r(op, res);
 
-        self.af &= 0xFF00;
+        self.cpu.af &= 0xFF00;
         if carry {
-            self.af |= CF;
+            self.cpu.af |= CF;
         }
         if res == 0 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
     }
 
     fn sra_r(&mut self, op: u8) {
         let val = self.get_r(op);
         let bit7 = val & 0x80;
-        self.af &= 0xFF00;
+        self.cpu.af &= 0xFF00;
         if val & 1 != 0 {
-            self.af |= CF;
+            self.cpu.af |= CF;
         }
         let val = (val >> 1) | bit7;
         self.set_r(op, val);
         if val == 0 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
     }
 
     fn srl_r(&mut self, op: u8) {
         let val = self.get_r(op);
-        self.af &= 0xFF00;
+        self.cpu.af &= 0xFF00;
         self.set_r(op, val >> 1);
         if val & 1 != 0 {
-            self.af |= CF;
+            self.cpu.af |= CF;
         }
         if val >> 1 == 0 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
     }
 
     fn swap_r(&mut self, op: u8) {
         let val = self.get_r(op);
-        self.af &= 0xFF00;
+        self.cpu.af &= 0xFF00;
         self.set_r(op, val.rotate_left(4));
         if val == 0 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
     }
 
@@ -936,10 +980,10 @@ impl<A: AudioCallback> Gb<A> {
         let bit = 1 << bit_no;
         if op & 0xC0 == 0x40 {
             // bit
-            self.af &= 0xFF00 | CF;
-            self.af |= HF;
+            self.cpu.af &= 0xFF00 | CF;
+            self.cpu.af |= HF;
             if bit & val == 0 {
-                self.af |= ZF;
+                self.cpu.af |= ZF;
             }
         } else if op & 0xC0 == 0x80 {
             // res
@@ -951,35 +995,35 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     fn rla(&mut self) {
-        let bit7 = self.af & 0x8000 != 0;
-        let carry = self.af & CF != 0;
+        let bit7 = self.cpu.af & 0x8000 != 0;
+        let carry = self.cpu.af & CF != 0;
 
-        self.af = ((self.af & 0xFF00) << 1) | (u16::from(carry) << 8);
+        self.cpu.af = ((self.cpu.af & 0xFF00) << 1) | (u16::from(carry) << 8);
 
         if bit7 {
-            self.af |= CF;
+            self.cpu.af |= CF;
         }
     }
 
     fn rl_r(&mut self, op: u8) {
         let val = self.get_r(op);
-        let carry = self.af & CF != 0;
+        let carry = self.cpu.af & CF != 0;
         let bit7 = val & 0x80 != 0;
 
-        self.af &= 0xFF00;
+        self.cpu.af &= 0xFF00;
         let val = (val << 1) | u8::from(carry);
         self.set_r(op, val);
         if bit7 {
-            self.af |= CF;
+            self.cpu.af |= CF;
         }
         if val == 0 {
-            self.af |= ZF;
+            self.cpu.af |= ZF;
         }
     }
 
     const fn illegal(&mut self, _op: u8) {
         self.ints.illegal();
-        self.cpu_halted = true;
+        self.cpu.is_halted = true;
     }
 
     fn exec(&mut self, op: u8) {

@@ -78,17 +78,17 @@ fn write_core_block<C: AudioCallback, W: Write>(
 
     // CPU Registers
     {
-        writer.write_all(&gb.pc.to_le_bytes())?; // PC
-        writer.write_all(&gb.af.to_le_bytes())?; // AF
-        writer.write_all(&gb.bc.to_le_bytes())?; // BC
-        writer.write_all(&gb.de.to_le_bytes())?; // DE
-        writer.write_all(&gb.hl.to_le_bytes())?; // HL
-        writer.write_all(&gb.sp.to_le_bytes())?; // SP
+        writer.write_all(&gb.cpu.pc().to_le_bytes())?; // PC
+        writer.write_all(&gb.cpu.af().to_le_bytes())?; // AF
+        writer.write_all(&gb.cpu.bc().to_le_bytes())?; // BC
+        writer.write_all(&gb.cpu.de().to_le_bytes())?; // DE
+        writer.write_all(&gb.cpu.hl().to_le_bytes())?; // HL
+        writer.write_all(&gb.cpu.sp().to_le_bytes())?; // SP
         writer.write_all(&[u8::from(gb.ints.are_enabled())])?; // IME
         writer.write_all(&[gb.ints.read_ie()])?; // IE
 
         // Execution state (TODO: stopped state)
-        writer.write_all(&[u8::from(gb.cpu_halted)])?;
+        writer.write_all(&[u8::from(gb.cpu.is_halted())])?;
         // Reserved byte, must be zero according to BESS specification
         writer.write_all(&[0])?;
         writer.write_all(&[0])?;

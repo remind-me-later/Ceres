@@ -22,7 +22,12 @@ use joypad::Joypad;
 use memory::{Key1, Svbk};
 use serial::Serial;
 use std::io;
-use {apu::Apu, memory::HdmaState, ppu::Ppu, timing::TIMAState};
+use {apu::Apu, ppu::Ppu};
+use {
+    cpu::Cpu,
+    memory::{Dma, Hdma},
+    timing::Clock,
+};
 
 pub use {
     error::Error,
@@ -50,57 +55,25 @@ pub trait AudioCallback {
     fn audio_sample(&self, l: Sample, r: Sample);
 }
 
-#[expect(clippy::struct_excessive_bools)]
 #[derive(Debug)]
 pub struct Gb<C: AudioCallback> {
     model: Model,
     cgb_mode: CgbMode,
     dot_accumulator: i32,
 
-    // cartridge
     cart: Cartridge,
     bootrom: Option<&'static [u8]>,
 
-    // cpu
-    af: u16,
-    bc: u16,
-    de: u16,
-    hl: u16,
-    sp: u16,
-    pc: u16,
+    cpu: Cpu,
+    clock: Clock,
 
-    ei_delay: bool,
-    cpu_halted: bool,
-    halt_bug: bool,
-
-    // memory
     wram: Box<[u8; WRAM_SIZE_CGB as usize]>,
     hram: [u8; HRAM_SIZE as usize],
     svbk: Svbk,
     key1: Key1,
+    dma: Dma,
+    hdma: Hdma,
 
-    // -- dma
-    dma: u8,
-    dma_on: bool,
-    dma_addr: u16,
-    dma_restarting: bool,
-    dma_cycles: i32,
-
-    // -- hdma
-    hdma5: u8,
-    hdma_src: u16,
-    hdma_dst: u16,
-    hdma_len: u16,
-    hdma_state: HdmaState,
-
-    // clock
-    tima: u8,
-    tma: u8,
-    tac: u8,
-    div: u16,
-    tima_state: TIMAState,
-
-    // peripherals
     ppu: Ppu,
     apu: Apu<C>,
     serial: Serial,
@@ -140,36 +113,16 @@ impl<C: AudioCallback> Gb<C> {
                     .unwrap()
             },
             hram: [0; HRAM_SIZE as usize],
-            af: Default::default(),
-            bc: Default::default(),
-            cpu_halted: Default::default(),
-            de: Default::default(),
-            dma_addr: Default::default(),
-            dma_cycles: Default::default(),
-            dma_on: Default::default(),
-            dma_restarting: Default::default(),
-            dma: Default::default(),
-            ei_delay: Default::default(),
-            halt_bug: Default::default(),
-            hdma_dst: Default::default(),
-            hdma_len: Default::default(),
-            hdma_src: Default::default(),
-            hdma_state: HdmaState::default(),
-            hdma5: Default::default(),
-            hl: Default::default(),
+            cpu: Cpu::default(),
+            dma: Dma::default(),
+            hdma: Hdma::default(),
             ints: Interrupts::default(),
             joy: Joypad::default(),
             key1: Key1::default(),
-            pc: Default::default(),
             ppu: Ppu::default(),
             serial: Serial::default(),
-            sp: Default::default(),
             svbk: Svbk::default(),
-            tac: Default::default(),
-            tima_state: TIMAState::default(),
-            tima: Default::default(),
-            tma: Default::default(),
-            div: Default::default(),
+            clock: Clock::default(),
             dot_accumulator: Default::default(),
         }
     }
@@ -181,51 +134,22 @@ impl<C: AudioCallback> Gb<C> {
             Model::Cgb => Some(CGB_BOOTROM),
         };
 
-        self.af = Default::default();
-        self.bc = Default::default();
-        self.cpu_halted = Default::default();
-        self.de = Default::default();
-        self.dma_addr = Default::default();
-        self.dma_cycles = Default::default();
-        self.dma_on = Default::default();
-        self.dma_restarting = Default::default();
-        self.dma = Default::default();
-        self.ei_delay = Default::default();
-        self.halt_bug = Default::default();
-        self.hdma_dst = Default::default();
-        self.hdma_len = Default::default();
-        self.hdma_src = Default::default();
-        self.hdma_state = HdmaState::default();
-        self.hdma5 = Default::default();
-        self.hl = Default::default();
+        self.cpu = Cpu::default();
+        self.dma = Dma::default();
+        self.hdma = Hdma::default();
         self.ints = Interrupts::default();
         self.joy = Joypad::default();
         self.key1 = Key1::default();
-        self.pc = Default::default();
         self.ppu = Ppu::default();
         self.serial = Serial::default();
-        self.sp = Default::default();
         self.svbk = Svbk::default();
-        self.tac = Default::default();
-        self.tima_state = TIMAState::default();
-        self.tima = Default::default();
-        self.tma = Default::default();
-        self.div = Default::default();
+        self.clock = Clock::default();
         self.dot_accumulator = Default::default();
         self.ppu = Ppu::default();
         self.apu.reset();
         self.serial = Serial::default();
         self.ints = Interrupts::default();
         self.joy = Joypad::default();
-        self.dma_on = false;
-        self.dma_restarting = false;
-        self.dma_cycles = 0;
-        self.dma_addr = 0;
-        self.hdma_state = HdmaState::default();
-        self.hdma5 = 0;
-        self.hdma_src = 0;
-        self.hdma_dst = 0;
-        self.hdma_len = 0;
         self.svbk = Svbk::default();
         self.key1 = Key1::default();
     }
@@ -288,6 +212,12 @@ impl<C: AudioCallback> Gb<C> {
 
     pub const fn has_battery(&self) -> bool {
         self.cart.has_battery()
+    }
+
+    pub const fn cgb_regs_available(&self) -> bool {
+        // The bootrom writes the color palettes for compatibility mode, so we must allow it to write to those registers,
+        // since it's not modifiable by the user there should be no issues.
+        matches!(self.cgb_mode, CgbMode::Cgb) || self.bootrom.is_some()
     }
 }
 

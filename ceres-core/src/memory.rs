@@ -1,15 +1,6 @@
 use crate::{AudioCallback, Model};
 use crate::{CgbMode, Gb, Model::Cgb, ppu::Mode};
 
-#[derive(Default, Debug)]
-pub enum HdmaState {
-    #[default]
-    Sleep,
-    WaitHBlank,
-    HBlankDone,
-    General,
-}
-
 // IO addresses
 // JoyP
 const P1: u8 = 0x00;
@@ -107,16 +98,6 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[must_use]
-    const fn is_dma_active(&self) -> bool {
-        self.dma_on && (self.dma_cycles > 0 || self.dma_restarting)
-    }
-
-    #[must_use]
-    const fn is_hdma_on(&self) -> bool {
-        !matches!(self.hdma_state, HdmaState::Sleep)
-    }
-
-    #[must_use]
     const fn read_boot_or_cart(&self, addr: u16) -> u8 {
         if let Some(bootrom) = self.bootrom {
             // TODO: as long as the bootrom is correct should be in bounds
@@ -146,7 +127,7 @@ impl<A: AudioCallback> Gb<A> {
             0xA000..=0xBFFF => self.cart.read_ram(addr),
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.read_wram_lo(addr),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.read_wram_hi(addr),
-            0xFE00..=0xFE9F => self.ppu.read_oam(addr, self.dma_on),
+            0xFE00..=0xFE9F => self.ppu.read_oam(addr, self.dma.is_enabled),
             0xFEA0..=0xFEFF => 0xFF,
             0xFF00..=0xFFFF => self.read_high((addr & 0xFF) as u8),
         }
@@ -160,7 +141,7 @@ impl<A: AudioCallback> Gb<A> {
             0xA000..=0xBFFF => self.cart.write_ram(addr, val),
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.write_wram_lo(addr, val),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.write_wram_hi(addr, val),
-            0xFE00..=0xFE9F => self.ppu.write_oam(addr, val, self.is_dma_active()),
+            0xFE00..=0xFE9F => self.ppu.write_oam(addr, val, self.dma.is_active()),
             0xFEA0..=0xFEFF => (),
             0xFF00..=0xFFFF => self.write_high((addr & 0xFF) as u8, val),
         }
@@ -173,8 +154,8 @@ impl<A: AudioCallback> Gb<A> {
             SB => self.serial.read_sb(),
             SC => self.serial.read_sc(),
             DIV => self.read_div(),
-            TIMA => self.tima,
-            TMA => self.tma,
+            TIMA => self.clock.tima(),
+            TMA => self.clock.tma(),
             TAC => self.read_tac(),
             IF => self.ints.read_if(),
             NR10 => self.apu.read_nr10(),
@@ -200,23 +181,23 @@ impl<A: AudioCallback> Gb<A> {
             SCX => self.ppu.read_scx(),
             LY => self.ppu.read_ly(),
             LYC => self.ppu.read_lyc(),
-            DMA => self.dma,
+            DMA => self.dma.read(),
             BGP => self.ppu.read_bgp(),
             OBP0 => self.ppu.read_obp0(),
             OBP1 => self.ppu.read_obp1(),
             WY => self.ppu.read_wy(),
             WX => self.ppu.read_wx(),
-            KEY1 if matches!(self.cgb_mode, CgbMode::Cgb) => self.key1.read(),
-            VBK if matches!(self.cgb_mode, CgbMode::Cgb) => self.ppu.read_vbk(),
-            HDMA5 if matches!(self.cgb_mode, CgbMode::Cgb) => self.read_hdma5(),
-            BCPS if matches!(self.cgb_mode, CgbMode::Cgb) => self.ppu.bcp().spec(),
-            BCPD if matches!(self.cgb_mode, CgbMode::Cgb) => self.ppu.bcp().data(),
-            OCPS if matches!(self.cgb_mode, CgbMode::Cgb) => self.ppu.ocp().spec(),
-            OCPD if matches!(self.cgb_mode, CgbMode::Cgb) => self.ppu.ocp().data(),
-            OPRI if matches!(self.cgb_mode, CgbMode::Cgb) => self.ppu.read_opri(),
-            SVBK if matches!(self.cgb_mode, CgbMode::Cgb) => self.svbk.read(),
-            PCM12 if matches!(self.cgb_mode, CgbMode::Cgb) => self.apu.pcm12(),
-            PCM34 if matches!(self.cgb_mode, CgbMode::Cgb) => self.apu.pcm34(),
+            KEY1 if self.cgb_regs_available() => self.key1.read(),
+            VBK if self.cgb_regs_available() => self.ppu.read_vbk(),
+            HDMA5 if self.cgb_regs_available() => self.hdma.read_hdma5(),
+            BCPS if self.cgb_regs_available() => self.ppu.bcp().spec(),
+            BCPD if self.cgb_regs_available() => self.ppu.bcp().data(),
+            OCPS if self.cgb_regs_available() => self.ppu.ocp().spec(),
+            OCPD if self.cgb_regs_available() => self.ppu.ocp().data(),
+            OPRI if self.cgb_regs_available() => self.ppu.read_opri(),
+            SVBK if self.cgb_regs_available() => self.svbk.read(),
+            PCM12 if self.cgb_regs_available() => self.apu.pcm12(),
+            PCM34 if self.cgb_regs_available() => self.apu.pcm34(),
             HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize],
             IE => self.ints.read_ie(),
             _ => 0xFF,
@@ -261,7 +242,7 @@ impl<A: AudioCallback> Gb<A> {
             SCY => self.ppu.write_scy(val),
             SCX => self.ppu.write_scx(val),
             LYC => self.ppu.write_lyc(val),
-            DMA => self.write_dma(val),
+            DMA => self.dma.write(val),
             BGP => self.ppu.write_bgp(val),
             OBP0 => self.ppu.write_obp0(val),
             OBP1 => self.ppu.write_obp1(val),
@@ -274,30 +255,29 @@ impl<A: AudioCallback> Gb<A> {
                     self.cgb_mode = CgbMode::Compat;
                 }
             }
-            KEY1 if matches!(self.cgb_mode, CgbMode::Cgb) => self.key1.write(val),
-            VBK if matches!(self.cgb_mode, CgbMode::Cgb) => self.ppu.write_vbk(val),
+            KEY1 if self.cgb_regs_available() => self.key1.write(val),
+            VBK if self.cgb_regs_available() => self.ppu.write_vbk(val),
             BANK => {
                 if val & 1 != 0 {
                     self.bootrom = None;
                 }
             }
-            HDMA1 if matches!(self.cgb_mode, CgbMode::Cgb) => self.write_hdma1(val),
-            HDMA2 if matches!(self.cgb_mode, CgbMode::Cgb) => self.write_hdma2(val),
-            HDMA3 if matches!(self.cgb_mode, CgbMode::Cgb) => self.write_hdma3(val),
-            HDMA4 if matches!(self.cgb_mode, CgbMode::Cgb) => self.write_hdma4(val),
-            HDMA5 if matches!(self.cgb_mode, CgbMode::Cgb) => self.write_hdma5(val),
-            // FIXME: should be only writable in CGB mode, maybe the bootrom writes to this?
-            BCPS => self.ppu.bcp_mut().set_spec(val),
-            BCPD => self.ppu.bcp_mut().set_data(val),
-            OCPS => self.ppu.ocp_mut().set_spec(val),
-            OCPD => self.ppu.ocp_mut().set_data(val),
-            OPRI if matches!(self.model, Model::Cgb) => {
+            HDMA1 if self.cgb_regs_available() => self.hdma.write_hdma1(val),
+            HDMA2 if self.cgb_regs_available() => self.hdma.write_hdma2(val),
+            HDMA3 if self.cgb_regs_available() => self.hdma.write_hdma3(val),
+            HDMA4 if self.cgb_regs_available() => self.hdma.write_hdma4(val),
+            HDMA5 if self.cgb_regs_available() => self.hdma.write_hdma5(val),
+            BCPS if self.cgb_regs_available() => self.ppu.bcp_mut().set_spec(val),
+            BCPD if self.cgb_regs_available() => self.ppu.bcp_mut().set_data(val),
+            OCPS if self.cgb_regs_available() => self.ppu.ocp_mut().set_spec(val),
+            OCPD if self.cgb_regs_available() => self.ppu.ocp_mut().set_data(val),
+            OPRI if self.cgb_regs_available() => {
                 // FIXME: understand behaviour outside of bootrom
                 if self.bootrom.is_some() {
                     self.ppu.write_opri(val);
                 }
             }
-            SVBK if matches!(self.cgb_mode, CgbMode::Cgb) => self.svbk.write(val),
+            SVBK if self.cgb_regs_available() => self.svbk.write(val),
             HRAM_BEG..=HRAM_END => self.hram[(addr & 0x7F) as usize] = val,
             IE => self.ints.write_ie(val),
             _ => (),
@@ -308,122 +288,66 @@ impl<A: AudioCallback> Gb<A> {
     // * DMA *
     // *******
 
-    fn write_dma(&mut self, val: u8) {
-        if self.dma_on {
-            self.dma_restarting = true;
-        }
-
-        self.dma_cycles = -8; // two m-cycles delay
-        self.dma = val;
-        self.dma_addr = u16::from(val) << 8;
-        self.dma_on = true;
-    }
-
     pub fn run_dma(&mut self) {
-        if !self.dma_on {
+        if !self.dma.is_enabled() {
             return;
         }
 
-        while self.dma_cycles >= 4 {
-            self.dma_cycles -= 4;
+        while self.dma.remaining_cycles() >= 4 {
+            self.dma.steal_t_cycles(4);
 
             // TODO: reading some ranges should cause problems, $DF is
             // the maximum value accesible to OAM DMA (probably reads
             // from echo RAM should work too, RESEARCH).
             // what happens if reading from IO range? (garbage? 0xff?)
-            let val = self.read_mem(self.dma_addr);
+            let val = self.read_mem(self.dma.addr);
 
             // TODO: writes from DMA can access OAM on modes 2 and 3
             // with some glitches (RESEARCH) and without trouble during
             // VBLANK (what happens in HBLANK?)
-            self.ppu.write_oam_by_dma(self.dma_addr, val);
+            self.ppu.write_oam_by_dma(self.dma.addr, val);
 
-            self.dma_addr = self.dma_addr.wrapping_add(1);
-            if self.dma_addr & 0xFF > 0x9F {
-                self.dma_on = false;
-                self.dma_restarting = false;
-            }
+            self.dma.advance_addr();
         }
-    }
-
-    fn write_hdma1(&mut self, val: u8) {
-        self.hdma_src = (u16::from(val) << 8) | (self.hdma_src & 0xF0);
-    }
-
-    fn write_hdma2(&mut self, val: u8) {
-        self.hdma_src = (self.hdma_src & 0xFF00) | u16::from(val & 0xF0);
-    }
-
-    fn write_hdma3(&mut self, val: u8) {
-        self.hdma_dst = (u16::from(val & 0x1F) << 8) | (self.hdma_dst & 0xF0);
-    }
-
-    fn write_hdma4(&mut self, val: u8) {
-        self.hdma_dst = (self.hdma_dst & 0x1F00) | u16::from(val & 0xF0);
-    }
-
-    #[must_use]
-    const fn read_hdma5(&self) -> u8 {
-        // active on low
-        ((!self.is_hdma_on() as u8) << 7) | self.hdma5
-    }
-
-    fn write_hdma5(&mut self, val: u8) {
-        use HdmaState::{General, Sleep, WaitHBlank};
-
-        debug_assert!(
-            !matches!(self.hdma_state, HdmaState::General),
-            "HDMA transfer in progress, cannot write HDMA5"
-        );
-
-        // stop current transfer
-        if self.is_hdma_on() && val & 0x80 == 0 {
-            self.hdma_state = Sleep;
-            return;
-        }
-
-        self.hdma5 = val & 0x7F;
-        self.hdma_len = (u16::from(self.hdma5) + 1) * 0x10;
-        self.hdma_state = if val & 0x80 == 0 { General } else { WaitHBlank };
     }
 
     pub fn run_hdma(&mut self) {
         use HdmaState::{General, HBlankDone, Sleep, WaitHBlank};
 
-        match self.hdma_state {
+        match self.hdma.state {
             General => (),
             WaitHBlank if matches!(self.ppu.mode(), Mode::HBlank) => (),
             HBlankDone if !matches!(self.ppu.mode(), Mode::HBlank) => {
-                self.hdma_state = WaitHBlank;
+                self.hdma.state = WaitHBlank;
                 return;
             }
             _ => return,
         }
 
-        let len = if matches!(self.hdma_state, WaitHBlank) {
-            self.hdma_len -= 0x10;
-            self.hdma_state = if self.hdma_len == 0 {
+        let len = if matches!(self.hdma.state, WaitHBlank) {
+            self.hdma.len -= 0x10;
+            self.hdma.state = if self.hdma.len == 0 {
                 Sleep
             } else {
                 HBlankDone
             };
-            self.hdma5 = ((self.hdma_len / 0x10).wrapping_sub(1) & 0xFF) as u8;
+            self.hdma.hdma5 = ((self.hdma.len / 0x10).wrapping_sub(1) & 0xFF) as u8;
             0x10
         } else {
-            self.hdma_state = Sleep;
-            self.hdma5 = 0xFF;
-            let len = self.hdma_len;
-            self.hdma_len = 0;
+            self.hdma.state = Sleep;
+            self.hdma.hdma5 = 0xFF;
+            let len = self.hdma.len;
+            self.hdma.len = 0;
             len
         };
 
         for _ in 0..len {
             // TODO: the same problems as normal DMA plus reading from
             // VRAM should copy garbage
-            let val = self.read_mem(self.hdma_src);
-            self.ppu.write_vram(self.hdma_dst, val);
-            self.hdma_dst += 1;
-            self.hdma_src += 1;
+            let val = self.read_mem(self.hdma.src);
+            self.ppu.write_vram(self.hdma.dst, val);
+            self.hdma.dst += 1;
+            self.hdma.src += 1;
         }
 
         // can be outside of loop because HDMA should not
@@ -436,6 +360,128 @@ impl<A: AudioCallback> Gb<A> {
         } else {
             self.advance_t_cycles(i32::from(len) * 2);
         }
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct Dma {
+    reg: u8,
+    is_enabled: bool,
+    addr: u16,
+    // FIXME: check usage of restarting and on
+    is_restarting: bool,
+    remaining_cycles: i32,
+}
+
+impl Dma {
+    pub const fn is_enabled(&self) -> bool {
+        self.is_enabled
+    }
+
+    pub const fn remaining_cycles(&self) -> i32 {
+        self.remaining_cycles
+    }
+
+    pub const fn advance_t_cycles(&mut self, cycles: i32) {
+        self.remaining_cycles += cycles;
+    }
+
+    const fn steal_t_cycles(&mut self, cycles: i32) {
+        self.remaining_cycles -= cycles;
+    }
+
+    const fn advance_addr(&mut self) {
+        self.addr = self.addr.wrapping_add(1);
+        if self.addr & 0xFF > 0x9F {
+            self.is_enabled = false;
+            self.is_restarting = false;
+        }
+    }
+
+    #[must_use]
+    const fn is_active(&self) -> bool {
+        self.is_enabled && (self.remaining_cycles > 0 || self.is_restarting)
+    }
+
+    const fn read(&self) -> u8 {
+        self.reg
+    }
+
+    fn write(&mut self, val: u8) {
+        if self.is_enabled {
+            self.is_restarting = true;
+        }
+
+        self.remaining_cycles = -8; // two m-cycles delay
+        self.reg = val;
+        self.addr = u16::from(val) << 8;
+        self.is_enabled = true;
+    }
+}
+
+#[derive(Default, Debug)]
+pub enum HdmaState {
+    #[default]
+    Sleep,
+    WaitHBlank,
+    HBlankDone,
+    General,
+}
+
+#[derive(Default, Debug)]
+pub struct Hdma {
+    hdma5: u8,
+    src: u16,
+    dst: u16,
+    len: u16,
+    state: HdmaState,
+}
+
+impl Hdma {
+    #[must_use]
+    const fn is_on(&self) -> bool {
+        !matches!(self.state, HdmaState::Sleep)
+    }
+
+    fn write_hdma1(&mut self, val: u8) {
+        self.src = (u16::from(val) << 8) | (self.src & 0xF0);
+    }
+
+    fn write_hdma2(&mut self, val: u8) {
+        self.src = (self.src & 0xFF00) | u16::from(val & 0xF0);
+    }
+
+    fn write_hdma3(&mut self, val: u8) {
+        self.dst = (u16::from(val & 0x1F) << 8) | (self.dst & 0xF0);
+    }
+
+    fn write_hdma4(&mut self, val: u8) {
+        self.dst = (self.dst & 0x1F00) | u16::from(val & 0xF0);
+    }
+
+    #[must_use]
+    const fn read_hdma5(&self) -> u8 {
+        // active on low
+        ((!self.is_on() as u8) << 7) | self.hdma5
+    }
+
+    fn write_hdma5(&mut self, val: u8) {
+        use HdmaState::{General, Sleep, WaitHBlank};
+
+        debug_assert!(
+            !matches!(self.state, HdmaState::General),
+            "HDMA transfer in progress, cannot write HDMA5"
+        );
+
+        // stop current transfer
+        if self.is_on() && val & 0x80 == 0 {
+            self.state = Sleep;
+            return;
+        }
+
+        self.hdma5 = val & 0x7F;
+        self.len = (u16::from(self.hdma5) + 1) * 0x10;
+        self.state = if val & 0x80 == 0 { General } else { WaitHBlank };
     }
 }
 

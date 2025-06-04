@@ -1,5 +1,24 @@
 use crate::{AudioCallback, Gb};
 
+#[derive(Default, Debug)]
+pub struct Clock {
+    tima: u8,
+    tma: u8,
+    tac: u8,
+    div: u16,
+    tima_state: TIMAState,
+}
+
+impl Clock {
+    pub const fn tima(&self) -> u8 {
+        self.tima
+    }
+
+    pub const fn tma(&self) -> u8 {
+        self.tma
+    }
+}
+
 #[derive(Clone, Copy, Default, Debug)]
 pub enum TIMAState {
     Reloading,
@@ -12,7 +31,7 @@ impl<A: AudioCallback> Gb<A> {
     pub fn advance_t_cycles(&mut self, mut cycles: i32) {
         // affected by speed boost
         self.run_timers(cycles);
-        self.dma_cycles += cycles;
+        self.dma.advance_t_cycles(cycles);
 
         // not affected by speed boost
         if self.key1.is_enabled() {
@@ -30,24 +49,24 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     const fn advance_tima_state(&mut self) {
-        match self.tima_state {
+        match self.clock.tima_state {
             TIMAState::Reloading => {
                 self.ints.request_timer();
-                self.tima_state = TIMAState::Reloaded;
+                self.clock.tima_state = TIMAState::Reloaded;
             }
             TIMAState::Reloaded => {
-                self.tima_state = TIMAState::Running;
+                self.clock.tima_state = TIMAState::Running;
             }
             TIMAState::Running => (),
         }
     }
 
     const fn inc_tima(&mut self) {
-        self.tima = self.tima.wrapping_add(1);
+        self.clock.tima = self.clock.tima.wrapping_add(1);
 
-        if self.tima == 0 {
-            self.tima = self.tma;
-            self.tima_state = TIMAState::Reloading;
+        if self.clock.tima == 0 {
+            self.clock.tima = self.clock.tma;
+            self.clock.tima_state = TIMAState::Reloading;
         }
     }
 
@@ -64,7 +83,7 @@ impl<A: AudioCallback> Gb<A> {
             }
         }
 
-        let triggers = self.div & !val;
+        let triggers = self.clock.div & !val;
         let apu_bit = if self.key1.is_enabled() {
             0x2000
         } else {
@@ -72,7 +91,7 @@ impl<A: AudioCallback> Gb<A> {
         };
 
         // increase TIMA on falling edge of TAC mux
-        if self.is_tac_enabled() && (triggers & sys_clk_tac_mux(self.tac) != 0) {
+        if self.is_tac_enabled() && (triggers & sys_clk_tac_mux(self.clock.tac) != 0) {
             self.inc_tima();
         }
 
@@ -86,19 +105,19 @@ impl<A: AudioCallback> Gb<A> {
             self.apu.step_div_apu();
         }
 
-        self.div = val;
+        self.clock.div = val;
     }
 
     pub fn run_timers(&mut self, cycles: i32) {
         for _ in 0..cycles / 4 {
             self.advance_tima_state();
-            self.set_system_clk(self.div.wrapping_add(4));
+            self.set_system_clk(self.clock.div.wrapping_add(4));
         }
     }
 
     #[must_use]
     pub const fn read_div(&self) -> u8 {
-        ((self.div >> 8) & 0xFF) as u8
+        ((self.clock.div >> 8) & 0xFF) as u8
     }
 
     pub fn write_div(&mut self) {
@@ -106,24 +125,24 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     pub const fn write_tima(&mut self, val: u8) {
-        self.tima = val;
+        self.clock.tima = val;
     }
 
     pub const fn write_tma(&mut self, val: u8) {
-        self.tma = val;
+        self.clock.tma = val;
     }
 
     #[must_use]
     pub const fn read_tac(&self) -> u8 {
-        0xF8 | self.tac
+        0xF8 | self.clock.tac
     }
 
     pub const fn write_tac(&mut self, val: u8) {
-        self.tac = val;
+        self.clock.tac = val;
     }
 
     #[must_use]
     const fn is_tac_enabled(&self) -> bool {
-        self.tac & 4 != 0
+        self.clock.tac & 4 != 0
     }
 }
