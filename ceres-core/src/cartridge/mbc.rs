@@ -1,6 +1,6 @@
 use std::num::NonZeroU8;
 
-use crate::Error;
+use crate::{Error, timing::TC_SEC};
 
 use super::rom_size::ROMSize;
 
@@ -116,8 +116,8 @@ impl Mbc3RTC {
 
         self.t_cycles += cycles;
         // TODO: this while is not at all necessary
-        while self.t_cycles > crate::TC_SEC {
-            self.t_cycles -= crate::TC_SEC + 1;
+        while self.t_cycles > TC_SEC {
+            self.t_cycles -= TC_SEC + 1;
             self.update_secs();
         }
     }

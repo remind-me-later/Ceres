@@ -1,4 +1,11 @@
 use crate::{AudioCallback, Gb};
+use core::time::Duration;
+
+pub const FRAME_DURATION: Duration = Duration::new(0, 16_742_706);
+pub const TC_PER_FRAME: i32 = 70224; // t-cycles per frame
+
+// t-cycles per second
+pub const TC_SEC: i32 = 0x40_0000; // 2^22
 
 #[derive(Default, Debug)]
 pub struct Clock {
@@ -45,7 +52,7 @@ impl<A: AudioCallback> Gb<A> {
         self.apu.run(cycles);
         self.cart.run_rtc(cycles);
 
-        self.dot_accumulator += cycles;
+        self.t_cycles_run += cycles;
     }
 
     const fn advance_tima_state(&mut self) {

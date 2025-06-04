@@ -156,8 +156,9 @@ impl GbThread {
                     .map_err(Error::Io)?
             };
 
-            let gb_builder =
-                GbBuilder::new(model, audio_stream.sample_rate(), Some(rom), ring_buffer)?;
+            let gb_builder = GbBuilder::new(audio_stream.sample_rate(), ring_buffer)
+                .with_model(model)
+                .with_rom(rom)?;
 
             if !gb_builder.can_load_save_data() {
                 return Ok(gb_builder.build());
@@ -166,7 +167,8 @@ impl GbThread {
             if let Some(sav_path) = sav_path {
                 match File::open(sav_path) {
                     Ok(mut save_data) => {
-                        let gb = gb_builder.load_save_data(&mut save_data)?.build();
+                        let mut gb = gb_builder.build();
+                        gb.load_data(&mut save_data)?;
                         Ok(gb)
                     }
                     Err(_) => Ok(gb_builder.build()),
@@ -175,7 +177,9 @@ impl GbThread {
                 Ok(gb_builder.build())
             }
         } else {
-            Ok(GbBuilder::new(model, audio_stream.sample_rate(), None, ring_buffer)?.build())
+            Ok(GbBuilder::new(audio_stream.sample_rate(), ring_buffer)
+                .with_model(model)
+                .build())
         }
     }
 
@@ -243,7 +247,7 @@ impl GbThread {
 
     #[must_use]
     pub fn has_save_data(&self) -> bool {
-        self.gb.lock().is_ok_and(|gb| gb.has_battery())
+        self.gb.lock().is_ok_and(|gb| gb.cart_has_battery())
     }
 
     pub fn save_data<W: std::io::Write + std::io::Seek>(
