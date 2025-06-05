@@ -10,12 +10,6 @@ pub struct Bootrom {
     is_enabled: bool,
 }
 
-impl From<Model> for Bootrom {
-    fn from(model: Model) -> Self {
-        Self::new(model)
-    }
-}
-
 impl Bootrom {
     pub const fn new(model: Model) -> Self {
         let data = match model {

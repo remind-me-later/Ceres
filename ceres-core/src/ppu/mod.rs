@@ -1,26 +1,22 @@
 use crate::interrupts::Interrupts;
-
+pub use oam::Oam;
+pub use vram::Vram;
+pub use vram_renderer::VRAM_PX_HEIGHT;
+pub use vram_renderer::VRAM_PX_WIDTH;
 use {
     self::color_palette::ColorPalette, self::vram_renderer::VramRenderer, crate::CgbMode,
     rgba_buf::RgbaBuf,
 };
 
-pub use vram_renderer::VRAM_PX_HEIGHT;
-pub use vram_renderer::VRAM_PX_WIDTH;
-
 mod color_palette;
 mod draw;
+mod oam;
 mod rgba_buf;
+mod vram;
 mod vram_renderer;
 
 pub const PX_WIDTH: u8 = 160;
 pub const PX_HEIGHT: u8 = 144;
-
-// Mode timings
-const OAM_SCAN_CYCLES: i32 = 80; // Constant
-const DRAWING_CYCLES: i32 = 172; // Variable, minimum ammount
-const HBLANK_CYCLES: i32 = 204; // Variable, maximum ammount
-const VBLANK_CYCLES: i32 = 456; // Constant
 
 // LCDC bits
 const LCDC_BG_B: u8 = 0x1;
@@ -40,11 +36,6 @@ const STAT_IF_VBLANK_B: u8 = 0x10;
 const STAT_IF_OAM_B: u8 = 0x20;
 const STAT_IF_LYC_B: u8 = 0x40;
 
-// Sizes
-pub const OAM_SIZE: u16 = 0xA0;
-pub const VRAM_SIZE_GB: u16 = 0x2000;
-pub const VRAM_SIZE_CGB: u16 = VRAM_SIZE_GB * 2;
-
 #[derive(Clone, Copy, Debug, Default)]
 pub enum Mode {
     #[default]
@@ -56,6 +47,12 @@ pub enum Mode {
 
 impl Mode {
     pub fn cycles(self, scroll_x: u8) -> i32 {
+        // Mode timings
+        const OAM_SCAN_CYCLES: i32 = 80; // Constant
+        const DRAWING_CYCLES: i32 = 172; // Variable, minimum ammount
+        const HBLANK_CYCLES: i32 = 204; // Variable, maximum ammount
+        const VBLANK_CYCLES: i32 = 456; // Constant
+
         let scroll_adjust = i32::from(scroll_x & 7) * 4;
         match self {
             Self::OamScan => OAM_SCAN_CYCLES,
@@ -66,8 +63,7 @@ impl Mode {
     }
 }
 
-#[expect(clippy::struct_excessive_bools)]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Ppu {
     lcdc: u8,
     stat: u8,
@@ -81,12 +77,11 @@ pub struct Ppu {
     wy: u8,
     wx: u8,
     opri: bool,
-    vbk: bool,
     bcp: ColorPalette,
     ocp: ColorPalette,
 
-    vram: [u8; VRAM_SIZE_CGB as usize],
-    oam: [u8; OAM_SIZE as usize],
+    vram: Vram,
+    oam: Oam,
     rgb_buf: RgbaBuf,
     rgba_buf_present: RgbaBuf,
     cycles: i32,
@@ -96,38 +91,6 @@ pub struct Ppu {
 
     // Debug utils
     vram_renderer: VramRenderer,
-}
-
-impl Default for Ppu {
-    fn default() -> Self {
-        Self {
-            vram: [0; VRAM_SIZE_CGB as usize],
-            oam: [0; OAM_SIZE as usize],
-            cycles: Mode::default().cycles(0),
-            // Default
-            lcdc: Default::default(),
-            stat: Mode::default() as u8,
-            scy: Default::default(),
-            scx: Default::default(),
-            ly: Default::default(),
-            lyc: Default::default(),
-            bgp: Default::default(),
-            obp0: Default::default(),
-            obp1: Default::default(),
-            wy: Default::default(),
-            wx: Default::default(),
-            opri: Default::default(),
-            vbk: Default::default(),
-            bcp: ColorPalette::default(),
-            ocp: ColorPalette::default(),
-            rgb_buf: RgbaBuf::default(),
-            rgba_buf_present: RgbaBuf::default(),
-            win_in_frame: Default::default(),
-            win_in_ly: Default::default(),
-            win_skipped: Default::default(),
-            vram_renderer: VramRenderer::default(),
-        }
-    }
 }
 
 // IO
@@ -169,15 +132,6 @@ impl Ppu {
     #[must_use]
     pub const fn read_opri(&self) -> u8 {
         self.opri as u8 | 0xFE
-    }
-
-    pub const fn write_vbk(&mut self, val: u8) {
-        self.vbk = val & 1 != 0;
-    }
-
-    #[must_use]
-    pub const fn read_vbk(&self) -> u8 {
-        (self.vbk as u8) | 0xFE
     }
 
     pub const fn write_scx(&mut self, val: u8) {
@@ -294,70 +248,6 @@ impl Ppu {
         self.stat |= ly_equals_lyc | mode;
     }
 
-    #[must_use]
-    pub const fn read_vram(&self, addr: u16) -> u8 {
-        if matches!(self.mode(), Mode::Drawing) {
-            0xFF
-        } else {
-            let bank = self.vbk as u16 * VRAM_SIZE_GB;
-            let i = (addr & 0x1FFF) + bank;
-            self.vram[i as usize]
-        }
-    }
-
-    pub fn write_vram(&mut self, addr: u16, val: u8) {
-        if !matches!(self.mode(), Mode::Drawing) {
-            let bank = u16::from(self.vbk) * VRAM_SIZE_GB;
-            let i = (addr & 0x1FFF) + bank;
-            self.vram[i as usize] = val;
-        }
-    }
-
-    #[must_use]
-    pub const fn read_oam(&self, addr: u16, dma_on: bool) -> u8 {
-        match self.mode() {
-            Mode::HBlank | Mode::VBlank if !dma_on => self.oam[(addr & 0xFF) as usize],
-            _ => 0xFF,
-        }
-    }
-
-    pub const fn write_oam(&mut self, addr: u16, val: u8, dma_active: bool) {
-        match self.mode() {
-            Mode::HBlank | Mode::VBlank if !dma_active => {
-                self.oam[(addr & 0xFF) as usize] = val;
-            }
-            _ => (),
-        }
-    }
-
-    pub const fn write_oam_by_dma(&mut self, addr: u16, val: u8) {
-        self.oam[(addr & 0xFF) as usize] = val;
-    }
-
-    // Getters and setters
-    #[must_use]
-    pub const fn vram(&self) -> &[u8] {
-        &self.vram
-    }
-
-    #[must_use]
-    pub const fn vram_mut(&mut self) -> &mut [u8] {
-        &mut self.vram
-    }
-
-    #[must_use]
-    pub const fn oam(&self) -> &[u8] {
-        &self.oam
-    }
-
-    #[must_use]
-    pub const fn oam_mut(&mut self) -> &mut [u8] {
-        &mut self.oam
-    }
-}
-
-// General
-impl Ppu {
     pub fn run(&mut self, cycles: i32, ints: &mut Interrupts, cgb_mode: CgbMode) {
         if self.lcdc & LCDC_ON_B == 0 {
             return;
@@ -454,7 +344,7 @@ impl Ppu {
                 self.win_skipped = 0;
                 self.win_in_frame = false;
 
-                self.vram_renderer.draw_vram(&self.vram);
+                self.vram_renderer.draw_vram(self.vram.bytes());
             }
             Mode::Drawing => (),
             Mode::HBlank => {

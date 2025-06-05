@@ -102,7 +102,7 @@ impl<C: AudioCallback> Gb<C> {
     pub fn change_model_and_soft_reset(&mut self, model: Model) {
         self.model = model;
         self.cgb_mode = model.into();
-        self.bootrom = model.into();
+        self.bootrom = Bootrom::new(model);
         self.soft_reset();
     }
 

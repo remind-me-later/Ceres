@@ -6,9 +6,9 @@ mod wram;
 use crate::{AudioCallback, Model};
 use crate::{CgbMode, Gb, Model::Cgb};
 pub use dma::{Dma, Hdma};
-pub use hram::{HRAM_SIZE, Hram};
+pub use hram::Hram;
 pub use key1::Key1;
-pub use wram::{WRAM_SIZE_CGB, WRAM_SIZE_GB, Wram};
+pub use wram::Wram;
 
 // IO addresses
 // JoyP
@@ -165,7 +165,7 @@ impl<A: AudioCallback> Gb<A> {
             WY => self.ppu.read_wy(),
             WX => self.ppu.read_wx(),
             KEY1 if self.cgb_regs_available() => self.key1.read(),
-            VBK if self.cgb_regs_available() => self.ppu.read_vbk(),
+            VBK if self.cgb_regs_available() => self.ppu.vram().read_vbk(),
             HDMA5 if self.cgb_regs_available() => self.hdma.read_hdma5(),
             BCPS if self.cgb_regs_available() => self.ppu.bcp().spec(),
             BCPD if self.cgb_regs_available() => self.ppu.bcp().data(),
@@ -233,7 +233,7 @@ impl<A: AudioCallback> Gb<A> {
                 }
             }
             KEY1 if self.cgb_regs_available() => self.key1.write(val),
-            VBK if self.cgb_regs_available() => self.ppu.write_vbk(val),
+            VBK if self.cgb_regs_available() => self.ppu.vram_mut().write_vbk(val),
             BANK => {
                 if val & 1 != 0 {
                     self.bootrom.disable();

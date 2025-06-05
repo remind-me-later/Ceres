@@ -3,8 +3,8 @@
 
 use crate::{
     AudioCallback, Cartridge, CgbMode, Gb,
-    memory::{HRAM_SIZE, WRAM_SIZE_CGB, WRAM_SIZE_GB},
-    ppu::{OAM_SIZE, VRAM_SIZE_CGB, VRAM_SIZE_GB},
+    memory::{Hram, Wram},
+    ppu::{Oam, Vram},
 };
 use std::{
     io::{self, Read, Seek, Write},
@@ -215,16 +215,16 @@ impl CreatedSizes {
 pub fn save_state<C: AudioCallback, W: Write + Seek>(gb: &Gb<C>, writer: &mut W) -> io::Result<()> {
     let sizes = CreatedSizes {
         ram_size: match gb.cgb_mode {
-            CgbMode::Dmg | CgbMode::Compat => u32::from(WRAM_SIZE_GB),
-            CgbMode::Cgb => u32::from(WRAM_SIZE_CGB),
+            CgbMode::Dmg | CgbMode::Compat => u32::from(Wram::SIZE_GB),
+            CgbMode::Cgb => u32::from(Wram::SIZE_CGB),
         },
         vram_size: match gb.cgb_mode {
-            CgbMode::Dmg | CgbMode::Compat => u32::from(VRAM_SIZE_GB),
-            CgbMode::Cgb => u32::from(VRAM_SIZE_CGB),
+            CgbMode::Dmg | CgbMode::Compat => u32::from(Vram::SIZE_GB),
+            CgbMode::Cgb => u32::from(Vram::SIZE_CGB),
         },
         mbc_ram_size: gb.cart.ram_size_bytes(),
-        oam_size: u32::from(OAM_SIZE),
-        hram_size: u32::from(HRAM_SIZE),
+        oam_size: u32::from(Oam::SIZE),
+        hram_size: u32::from(Hram::SIZE),
         bg_palette_size: match gb.cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => 0,
             CgbMode::Cgb => 0x40,
@@ -239,7 +239,7 @@ pub fn save_state<C: AudioCallback, W: Write + Seek>(gb: &Gb<C>, writer: &mut W)
     writer.write_all(&gb.wram.wram()[..sizes.ram_size as usize])?;
 
     // Write VRAM
-    writer.write_all(&gb.ppu.vram()[..sizes.vram_size as usize])?;
+    writer.write_all(&gb.ppu.vram().bytes()[..sizes.vram_size as usize])?;
 
     // Write MBC RAM
     if let Some(mbc_ram) = gb.cart.mbc_ram() {
@@ -247,7 +247,7 @@ pub fn save_state<C: AudioCallback, W: Write + Seek>(gb: &Gb<C>, writer: &mut W)
     }
 
     // Write OAM
-    writer.write_all(&gb.ppu.oam()[..sizes.oam_size as usize])?;
+    writer.write_all(&gb.ppu.oam().bytes()[..sizes.oam_size as usize])?;
 
     // Write HRAM
     writer.write_all(gb.hram.hram().as_slice())?;
@@ -544,7 +544,7 @@ pub fn load_state<C: AudioCallback, R: Read + Seek>(
     reader.read_exact(gb.wram.wram_mut())?;
 
     reader.seek(io::SeekFrom::Start(u64::from(sizes.vram_offset())))?;
-    reader.read_exact(gb.ppu.vram_mut())?;
+    reader.read_exact(gb.ppu.vram_mut().bytes_mut())?;
 
     if let Some(mbc_ram) = gb.cart.mbc_ram_mut() {
         reader.seek(io::SeekFrom::Start(u64::from(sizes.mbc_ram_offset())))?;
@@ -552,7 +552,7 @@ pub fn load_state<C: AudioCallback, R: Read + Seek>(
     }
 
     reader.seek(io::SeekFrom::Start(u64::from(sizes.oam_offset())))?;
-    reader.read_exact(gb.ppu.oam_mut())?;
+    reader.read_exact(gb.ppu.oam_mut().bytes_mut())?;
 
     reader.seek(io::SeekFrom::Start(u64::from(sizes.hram_offset())))?;
     reader.read_exact(gb.hram.hram_mut())?;

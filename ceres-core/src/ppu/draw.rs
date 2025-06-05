@@ -1,7 +1,7 @@
 use {
     super::{
         LCDC_BG_AREA, LCDC_BG_B, LCDC_BG_SIGNED, LCDC_OBJ_B, LCDC_OBJL_B, LCDC_WIN_AREA,
-        LCDC_WIN_B, OAM_SIZE, Ppu, VRAM_SIZE_GB,
+        LCDC_WIN_B, Ppu,
     },
     crate::{CgbMode, PX_WIDTH},
 };
@@ -101,23 +101,18 @@ impl Ppu {
     }
 
     #[must_use]
-    fn vram_at_bank(&self, addr: u16, bank: u8) -> u8 {
-        self.vram[((addr & 0x1FFF) + u16::from(bank) * VRAM_SIZE_GB) as usize]
-    }
-
-    #[must_use]
     fn bg_tile(&self, tile_addr: u16, attr: u8) -> (u8, u8) {
         let bank = u8::from(attr & BG_VBK_B != 0);
-        let lo = self.vram_at_bank(tile_addr, bank);
-        let hi = self.vram_at_bank(tile_addr + 1, bank);
+        let lo = self.vram.vram_at_bank(tile_addr, bank);
+        let hi = self.vram.vram_at_bank(tile_addr + 1, bank);
         (lo, hi)
     }
 
     #[must_use]
     fn obj_tile(&self, tile_addr: u16, obj: &Obj) -> (u8, u8) {
         let bank = u8::from(obj.attr & SPR_TILE_BANK != 0);
-        let lo = self.vram_at_bank(tile_addr, bank);
-        let hi = self.vram_at_bank(tile_addr + 1, bank);
+        let lo = self.vram.vram_at_bank(tile_addr, bank);
+        let hi = self.vram.vram_at_bank(tile_addr + 1, bank);
         (lo, hi)
     }
 
@@ -152,11 +147,11 @@ impl Ppu {
 
             let attr = match cgb_mode {
                 CgbMode::Dmg | CgbMode::Compat => 0,
-                CgbMode::Cgb => self.vram_at_bank(tile_map, 1),
+                CgbMode::Cgb => self.vram.vram_at_bank(tile_map, 1),
             };
 
             let color = {
-                let tile_num = self.vram_at_bank(tile_map, 0);
+                let tile_num = self.vram.vram_at_bank(tile_map, 0);
 
                 let tile_addr = self.tile_addr(tile_num)
                     + if attr & BG_Y_FLIP_B == 0 {
@@ -224,11 +219,11 @@ impl Ppu {
 
             let attr = match cgb_mode {
                 CgbMode::Dmg | CgbMode::Compat => 0,
-                CgbMode::Cgb => self.vram_at_bank(tile_map, 1),
+                CgbMode::Cgb => self.vram.vram_at_bank(tile_map, 1),
             };
 
             let color = {
-                let tile_num = self.vram_at_bank(tile_map, 0);
+                let tile_num = self.vram.vram_at_bank(tile_map, 0);
 
                 let tile_addr = self.tile_addr(tile_num)
                     + if attr & BG_Y_FLIP_B == 0 {
@@ -270,16 +265,17 @@ impl Ppu {
     fn objs_in_ly(&self, height: u8, cgb_mode: CgbMode) -> ([Obj; 10], u8) {
         let mut len: u8 = 0;
         let mut obj: [Obj; 10] = Default::default();
+        let oam_bytes = self.oam.bytes();
 
-        for i in (0..OAM_SIZE as usize).step_by(4) {
-            let y = self.oam[i].wrapping_sub(16);
+        for chunk in oam_bytes.chunks_exact(4) {
+            let y = chunk[0].wrapping_sub(16);
 
             if self.ly.wrapping_sub(y) < height {
                 let attr = Obj {
                     y,
-                    x: self.oam[i + 1].wrapping_sub(8),
-                    tile_index: self.oam[i + 2],
-                    attr: self.oam[i + 3],
+                    x: chunk[1].wrapping_sub(8),
+                    tile_index: chunk[2],
+                    attr: chunk[3],
                 };
 
                 obj[len as usize] = attr;
