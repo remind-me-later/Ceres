@@ -1,4 +1,3 @@
-use anyhow::Context;
 use ceres_std::GbThread;
 use ceres_std::{AppOption, ScalingOption, ShaderOption};
 use eframe::egui::{self, CornerRadius, Key, style::HandleShape};
@@ -116,7 +115,7 @@ pub struct App {
     project_dirs: directories::ProjectDirs,
     thread: GbThread,
     screen: screen::GBScreen<{ ceres_std::PX_WIDTH as u32 }, { ceres_std::PX_HEIGHT as u32 }>,
-    _rom_path: Option<PathBuf>,
+    rom_path: Option<PathBuf>,
     sav_path: Option<PathBuf>,
 }
 
@@ -131,18 +130,7 @@ impl App {
         // Apply our minimal black and white theme
         setup_theme(&cc.egui_ctx);
 
-        let sav_path = if let Some(rom_path) = rom_path {
-            let file_stem = rom_path.file_stem().context("couldn't get file stem")?;
-
-            Some(
-                project_dirs
-                    .data_dir()
-                    .join(file_stem)
-                    .with_extension("sav"),
-            )
-        } else {
-            None
-        };
+        let sav_path = rom_path.and_then(|path| Self::sav_path_from_rom_path(&project_dirs, path));
 
         let pixel_data_rgba = Arc::new(Mutex::new(
             vec![0; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice(),
@@ -163,9 +151,22 @@ impl App {
             project_dirs,
             thread,
             screen,
-            _rom_path: rom_path.map(std::path::Path::to_path_buf),
+            rom_path: rom_path.map(std::path::Path::to_path_buf),
             sav_path,
         })
+    }
+
+    fn sav_path_from_rom_path(
+        project_dirs: &directories::ProjectDirs,
+        rom_path: &std::path::Path,
+    ) -> Option<PathBuf> {
+        let file_stem = rom_path.file_stem()?;
+        Some(
+            project_dirs
+                .data_dir()
+                .join(file_stem)
+                .with_extension("sav"),
+        )
     }
 
     fn save_data(&self) -> anyhow::Result<()> {
@@ -195,9 +196,13 @@ impl eframe::App for App {
                             .pick_file();
 
                         if let Some(file) = file {
-                            if let Err(e) = self.thread.change_rom(self.sav_path.as_deref(), &file)
-                            {
+                            let sav_path = Self::sav_path_from_rom_path(&self.project_dirs, &file);
+
+                            if let Err(e) = self.thread.change_rom(sav_path.as_deref(), &file) {
                                 eprintln!("couldn't open ROM: {e}");
+                            } else {
+                                self.sav_path = sav_path;
+                                self.rom_path = Some(file);
                             }
                         }
                     }
