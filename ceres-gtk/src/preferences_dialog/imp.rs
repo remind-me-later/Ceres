@@ -21,14 +21,13 @@ impl Default for PreferencesDialog {
             .build();
 
         // Create GB model row with combo
-        // Is destructuve action so set css
         let gb_model_row = adw::ComboRow::builder()
             .title("Game Boy Model")
             .subtitle("This will immediately reset the emulator")
             .build();
 
         // Create string list for GB models
-        let gb_models = gtk::StringList::new(&["DMG", "MGB", "CGB"]);
+        let gb_models = gtk::StringList::new(&["GameBoy", "GameBoy Pocket", "GameBoy Color"]);
         gb_model_row.set_model(Some(&gb_models));
         gb_model_row.set_selected(2); // Default to GCB
 
@@ -43,12 +42,33 @@ impl Default for PreferencesDialog {
 
             let variant = glib::Variant::from(model_name);
 
-            if let Some(window) = row.root().and_downcast::<gtk::Window>() {
-                window
-                    .application()
-                    .expect("Application should be set")
-                    .activate_action("set_gb_model", Some(&variant));
-            }
+            // Show confirmation dialog
+            let dialog = adw::AlertDialog::builder()
+                .heading("Changing GameBoy model")
+                .body(format!(
+                    "Changing the Model to {} will reset the emulator. Are you sure?",
+                    model_name
+                ))
+                .default_response("cancel")
+                .close_response("cancel")
+                .build();
+
+            dialog.add_responses(&[("cancel", "_Cancel"), ("ok", "_Ok")]);
+
+            dialog.present(Some(row));
+
+            dialog.connect_response(None, move |dialog, response| {
+                if response == "ok" {
+                    // If confirmed, activate the action to change the GB model
+                    if let Some(window) = dialog.root().and_downcast::<gtk::Window>() {
+                        window
+                            .application()
+                            .expect("Application should be set")
+                            .activate_action("set_gb_model", Some(&variant));
+                    }
+                }
+                dialog.close();
+            });
         });
 
         let shader_row = adw::ComboRow::builder()

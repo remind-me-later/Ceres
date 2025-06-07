@@ -258,6 +258,11 @@ impl GbThread {
             gb.save_data(writer).map_err(Error::Io)
         })
     }
+
+    #[must_use]
+    pub const fn model(&self) -> ceres_core::Model {
+        self.model
+    }
 }
 
 impl Drop for GbThread {

@@ -185,11 +185,11 @@ impl ObjectSubclass for ApplicationWindow {
                             let info_dialog = adw::AlertDialog::builder()
                                 .heading("Unable to open ROM file")
                                 .body(format!("{err}"))
-                                .default_response("cancel")
-                                .close_response("cancel")
+                                .default_response("ok")
+                                .close_response("ok")
                                 .build();
 
-                            info_dialog.add_responses(&[("cancel", "_Ok")]);
+                            info_dialog.add_responses(&[("ok", "_Ok")]);
 
                             info_dialog.choose_future(&win).await;
                         }
