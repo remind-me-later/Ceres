@@ -20,7 +20,7 @@ features = ["v1_7"]
 [dependencies.gtk]
 version = "*"
 package = "gtk4"
-features = ["v4_18", "xml_validation"]
+features = ["v4_18"]
 
 [build-dependencies]
 glib-build-tools = "*"

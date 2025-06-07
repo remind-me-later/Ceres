@@ -25,9 +25,6 @@ fn main() -> glib::ExitCode {
         });
     }
 
-    adw::gio::resources_register_include!("ceres_gtk.gresource")
-        .expect("Failed to register resources.");
-
     app::Application::new().run()
 }
 

@@ -3,18 +3,115 @@ use std::{cell::RefCell, fs::File, path::PathBuf, rc::Rc};
 
 use crate::gl_area::GlArea;
 
-#[derive(Debug, gtk::CompositeTemplate)]
-#[template(resource = "/org/remind-me-later/ceres-gtk/window.ui")]
+#[derive(Debug)]
 pub struct ApplicationWindow {
-    #[template_child(id = "gb_area")]
-    pub gb_area: TemplateChild<GlArea>,
-    #[template_child(id = "pause_button")]
-    pub pause_button: TemplateChild<adw::SplitButton>,
-    #[template_child(id = "volume_button")]
-    pub volume_button: TemplateChild<gtk::ScaleButton>,
+    pub toolbar_view: adw::ToolbarView,
+    pub gb_area: GlArea,
+    pub pause_button: adw::SplitButton,
+    pub volume_button: gtk::ScaleButton,
     pub dialog: gtk::FileDialog,
     pub rom_path: RefCell<Option<PathBuf>>,
     pub is_paused: RefCell<bool>,
+}
+
+impl Default for ApplicationWindow {
+    fn default() -> Self {
+        let file_dialog = {
+            let gb_filter = gtk::FileFilter::new();
+            gb_filter.set_name(Some("GameBoy ROMs"));
+            gb_filter.add_suffix("gb");
+            gb_filter.add_suffix("gbc");
+
+            gtk::FileDialog::builder()
+                .modal(true)
+                .default_filter(&gb_filter)
+                .build()
+        };
+
+        let toolbar_view = adw::ToolbarView::new();
+        let header_bar = adw::HeaderBar::new();
+
+        let volume_button = gtk::ScaleButton::new(
+            0.0,
+            1.0,
+            0.01,
+            &[
+                "audio-volume-muted-symbolic",
+                "audio-volume-high-symbolic",
+                "audio-volume-low-symbolic",
+                "audio-volume-medium-symbolic",
+            ],
+        );
+        volume_button.set_value(1.0);
+
+        header_bar.pack_start(&volume_button);
+
+        let pause_button = adw::SplitButton::new();
+        pause_button.set_icon_name("media-playback-pause-symbolic");
+        pause_button.set_action_name(Some("win.pause"));
+
+        let speed_menu = gtk::gio::Menu::new();
+        {
+            let x1_speed_item = gtk::gio::MenuItem::new(Some("_1x"), Some("win.speed_multiplier"));
+            x1_speed_item
+                .set_action_and_target_value(Some("win.speed_multiplier"), Some(&"1".to_variant()));
+            speed_menu.append_item(&x1_speed_item);
+
+            let x2_speed_item = gtk::gio::MenuItem::new(Some("_2x"), Some("win.speed_multiplier"));
+            x2_speed_item
+                .set_action_and_target_value(Some("win.speed_multiplier"), Some(&"2".to_variant()));
+            speed_menu.append_item(&x2_speed_item);
+
+            let x4_speed_item = gtk::gio::MenuItem::new(Some("_4x"), Some("win.speed_multiplier"));
+            x4_speed_item
+                .set_action_and_target_value(Some("win.speed_multiplier"), Some(&"4".to_variant()));
+            speed_menu.append_item(&x4_speed_item);
+
+            let x8_speed_item = gtk::gio::MenuItem::new(Some("_8x"), Some("win.speed_multiplier"));
+            x8_speed_item
+                .set_action_and_target_value(Some("win.speed_multiplier"), Some(&"8".to_variant()));
+            speed_menu.append_item(&x8_speed_item);
+        }
+
+        pause_button.set_menu_model(Some(&speed_menu));
+
+        header_bar.pack_start(&pause_button);
+
+        let menu_button = gtk::MenuButton::new();
+        menu_button.set_icon_name("open-menu-symbolic");
+        menu_button.set_primary(true);
+
+        let app_menu = gtk::gio::Menu::new();
+        {
+            let open_item = gtk::gio::MenuItem::new(Some("_Open"), Some("win.open"));
+            app_menu.append_item(&open_item);
+
+            let preferences_item =
+                gtk::gio::MenuItem::new(Some("_Preferences"), Some("app.preferences"));
+            app_menu.append_item(&preferences_item);
+
+            let about_item = gtk::gio::MenuItem::new(Some("_About"), Some("app.about"));
+            app_menu.append_item(&about_item);
+        }
+
+        menu_button.set_menu_model(Some(&app_menu));
+        header_bar.pack_end(&menu_button);
+
+        toolbar_view.add_top_bar(&header_bar);
+
+        let gb_area = GlArea::new();
+        toolbar_view.set_content(Some(&gb_area));
+
+        Self {
+            dialog: file_dialog,
+            gb_area,
+            toolbar_view,
+            pause_button,
+            volume_button,
+            rom_path: RefCell::new(None),
+            is_paused: RefCell::new(false),
+        }
+    }
 }
 
 impl ApplicationWindow {
@@ -51,31 +148,7 @@ impl ObjectSubclass for ApplicationWindow {
     type Type = crate::application_window::ApplicationWindow;
     type ParentType = adw::ApplicationWindow;
 
-    fn new() -> Self {
-        let file_dialog = {
-            let gb_filter = gtk::FileFilter::new();
-            gb_filter.set_name(Some("GameBoy ROMs"));
-            gb_filter.add_suffix("gb");
-            gb_filter.add_suffix("gbc");
-
-            gtk::FileDialog::builder()
-                .modal(true)
-                .default_filter(&gb_filter)
-                .build()
-        };
-
-        Self {
-            dialog: file_dialog,
-            gb_area: TemplateChild::default(),
-            pause_button: TemplateChild::default(),
-            volume_button: Default::default(),
-            rom_path: RefCell::new(None),
-            is_paused: RefCell::new(false),
-        }
-    }
-
     fn class_init(klass: &mut Self::Class) {
-        klass.bind_template();
         klass.install_action_async(
             "win.open",
             None,
@@ -139,10 +212,6 @@ impl ObjectSubclass for ApplicationWindow {
                 *imp.is_paused.borrow_mut() = true;
             }
         });
-    }
-
-    fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
-        obj.init_template();
     }
 }
 
@@ -241,6 +310,9 @@ impl ObjectImpl for ApplicationWindow {
             .connect_value_changed(move |_, new_volume| {
                 thread_clone.borrow_mut().set_volume(new_volume as f32);
             });
+
+        self.obj().set_title(Some("Ceres"));
+        self.obj().set_content(Some(&self.toolbar_view));
     }
 
     fn dispose(&self) {

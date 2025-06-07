@@ -1,21 +1,14 @@
 use adw::{glib, prelude::*, subclass::prelude::*};
 
-#[derive(Debug, Default)]
-pub struct PreferencesDialog;
-
-#[glib::object_subclass]
-impl ObjectSubclass for PreferencesDialog {
-    const NAME: &'static str = "CeresPreferencesWindow";
-    type Type = crate::preferences_dialog::PreferencesDialog;
-    type ParentType = adw::PreferencesDialog;
+#[derive(Debug)]
+pub struct PreferencesDialog {
+    preferences_page: adw::PreferencesPage,
 }
 
-impl ObjectImpl for PreferencesDialog {
-    fn constructed(&self) {
-        self.parent_constructed();
-
+impl Default for PreferencesDialog {
+    fn default() -> Self {
         // Create preferences page
-        let page = adw::PreferencesPage::builder()
+        let preferences_page = adw::PreferencesPage::builder()
             .name("general")
             .title("General")
             .icon_name("preferences-system-symbolic")
@@ -88,8 +81,23 @@ impl ObjectImpl for PreferencesDialog {
 
         emulation_group.add(&gb_model_row);
         emulation_group.add(&shader_row);
-        page.add(&emulation_group);
-        self.obj().add(&page);
+        preferences_page.add(&emulation_group);
+
+        Self { preferences_page }
+    }
+}
+
+#[glib::object_subclass]
+impl ObjectSubclass for PreferencesDialog {
+    const NAME: &'static str = "CeresPreferencesWindow";
+    type Type = crate::preferences_dialog::PreferencesDialog;
+    type ParentType = adw::PreferencesDialog;
+}
+
+impl ObjectImpl for PreferencesDialog {
+    fn constructed(&self) {
+        self.parent_constructed();
+        self.obj().add(&self.preferences_page);
     }
 }
 
