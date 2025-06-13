@@ -50,8 +50,8 @@ fn write_info_block<W: Write>(writer: &mut W, cart: &Cartridge) -> io::Result<()
     Ok(())
 }
 
-fn write_core_block<C: AudioCallback, W: Write>(
-    gb: &Gb<C>,
+fn write_core_block<A: AudioCallback, W: Write>(
+    gb: &Gb<A>,
     sizes: &CreatedSizes,
     writer: &mut W,
 ) -> io::Result<()> {
@@ -212,7 +212,7 @@ impl CreatedSizes {
     }
 }
 
-pub fn save_state<C: AudioCallback, W: Write + Seek>(gb: &Gb<C>, writer: &mut W) -> io::Result<()> {
+pub fn save_state<A: AudioCallback, W: Write + Seek>(gb: &Gb<A>, writer: &mut W) -> io::Result<()> {
     let sizes = CreatedSizes {
         ram_size: match gb.cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => u32::from(Wram::SIZE_GB),
@@ -390,10 +390,10 @@ impl ReadSizes {
     // }
 }
 
-fn read_core_block<C: AudioCallback, R: Read + Seek>(
+fn read_core_block<A: AudioCallback, R: Read + Seek>(
     reader: &mut R,
     _size: u32,
-    _gb: &mut Gb<C>,
+    _gb: &mut Gb<A>,
 ) -> io::Result<ReadSizes> {
     // Ignore version for now
     reader.seek(io::SeekFrom::Current(4))?;
@@ -511,8 +511,8 @@ fn read_rtc_block<R: Read + Seek>(reader: &mut R, cart: &mut Cartridge) -> io::R
     Ok(())
 }
 
-pub fn load_state<C: AudioCallback, R: Read + Seek>(
-    gb: &mut Gb<C>,
+pub fn load_state<A: AudioCallback, R: Read + Seek>(
+    gb: &mut Gb<A>,
     reader: &mut R,
 ) -> io::Result<()> {
     let offset_to_first_block = read_footer(reader)?;

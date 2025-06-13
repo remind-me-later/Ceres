@@ -42,8 +42,8 @@ use {
 };
 
 #[derive(Debug)]
-pub struct Gb<C: AudioCallback> {
-    apu: Apu<C>,
+pub struct Gb<A: AudioCallback> {
+    apu: Apu<A>,
     bootrom: Bootrom,
     cart: Cartridge,
     cgb_mode: CgbMode,
@@ -62,9 +62,9 @@ pub struct Gb<C: AudioCallback> {
     wram: Wram,
 }
 
-impl<C: AudioCallback> Gb<C> {
+impl<A: AudioCallback> Gb<A> {
     #[must_use]
-    fn new(model: Model, sample_rate: i32, cart: Cartridge, audio_callback: C) -> Self {
+    fn new(model: Model, sample_rate: i32, cart: Cartridge, audio_callback: A) -> Self {
         Self {
             model,
             cgb_mode: model.into(),
@@ -186,15 +186,15 @@ impl From<Model> for CgbMode {
     }
 }
 
-pub struct GbBuilder<C: AudioCallback> {
+pub struct GbBuilder<A: AudioCallback> {
     model: Model,
     cart: Option<Cartridge>,
     sample_rate: i32,
-    audio_callback: C,
+    audio_callback: A,
 }
 
-impl<C: AudioCallback> GbBuilder<C> {
-    pub fn new(sample_rate: i32, audio_callback: C) -> Self {
+impl<A: AudioCallback> GbBuilder<A> {
+    pub fn new(sample_rate: i32, audio_callback: A) -> Self {
         Self {
             model: Model::default(),
             cart: None,
@@ -220,7 +220,7 @@ impl<C: AudioCallback> GbBuilder<C> {
             .is_some_and(cartridge::Cartridge::has_battery)
     }
 
-    pub fn build(self) -> Gb<C> {
+    pub fn build(self) -> Gb<A> {
         Gb::new(
             self.model,
             self.sample_rate,

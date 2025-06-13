@@ -68,7 +68,7 @@ impl HighPassFilter {
 }
 
 #[derive(Debug)]
-pub struct Apu<C: AudioCallback> {
+pub struct Apu<A: AudioCallback> {
     nr51: u8,
 
     enabled: bool,
@@ -87,13 +87,13 @@ pub struct Apu<C: AudioCallback> {
     render_timer: i32,
     ext_sample_period: i32,
 
-    audio_callback: C,
+    audio_callback: A,
 
     hpf: HighPassFilter,
 }
 
-impl<C: AudioCallback> Apu<C> {
-    pub fn new(sample_rate: i32, audio_callback: C) -> Self {
+impl<A: AudioCallback> Apu<A> {
+    pub fn new(sample_rate: i32, audio_callback: A) -> Self {
         Self {
             ext_sample_period: Self::sample_period_from_rate(sample_rate),
             audio_callback,
@@ -244,7 +244,7 @@ impl<C: AudioCallback> Apu<C> {
 }
 
 // IO
-impl<C: AudioCallback> Apu<C> {
+impl<A: AudioCallback> Apu<A> {
     #[must_use]
     pub fn read_nr50(&self) -> u8 {
         self.right_volume
