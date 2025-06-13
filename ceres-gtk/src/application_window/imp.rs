@@ -5,13 +5,13 @@ use crate::gl_area::GlArea;
 
 #[derive(Debug)]
 pub struct ApplicationWindow {
-    pub toolbar_view: adw::ToolbarView,
-    pub gb_area: GlArea,
-    pub pause_button: adw::SplitButton,
-    pub volume_button: gtk::ScaleButton,
-    pub dialog: gtk::FileDialog,
-    pub rom_path: RefCell<Option<PathBuf>>,
-    pub is_paused: RefCell<bool>,
+    toolbar_view: adw::ToolbarView,
+    gb_area: GlArea,
+    pause_button: adw::SplitButton,
+    volume_button: gtk::ScaleButton,
+    dialog: gtk::FileDialog,
+    rom_path: RefCell<Option<PathBuf>>,
+    is_paused: RefCell<bool>,
 }
 
 impl Default for ApplicationWindow {
@@ -34,7 +34,7 @@ impl Default for ApplicationWindow {
         let volume_button = gtk::ScaleButton::new(
             0.0,
             1.0,
-            0.01,
+            0.1,
             &[
                 "audio-volume-muted-symbolic",
                 "audio-volume-high-symbolic",
@@ -139,6 +139,22 @@ impl ApplicationWindow {
         path.push(ceres_std::CERES_BIN);
         std::fs::create_dir_all(&path).expect("Could not create directory.");
         path
+    }
+
+    pub fn set_model(&self, model: ceres_std::Model) {
+        self.gb_area.set_model(model);
+    }
+
+    pub fn model(&self) -> ceres_std::Model {
+        self.gb_area.model()
+    }
+
+    pub fn set_shader(&self, mode: crate::gl_area::ShaderMode) {
+        self.gb_area.set_shader(mode);
+    }
+
+    pub fn shader(&self) -> crate::gl_area::ShaderMode {
+        self.gb_area.shader()
     }
 }
 

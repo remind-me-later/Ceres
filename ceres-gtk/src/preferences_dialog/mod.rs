@@ -1,6 +1,6 @@
 mod imp;
 
-use adw::glib;
+use adw::{glib, subclass::prelude::ObjectSubclassIsExt};
 
 glib::wrapper! {
     pub struct PreferencesDialog(ObjectSubclass<imp::PreferencesDialog>)
@@ -11,6 +11,14 @@ glib::wrapper! {
 impl PreferencesDialog {
     pub fn new() -> Self {
         glib::Object::builder().build()
+    }
+
+    pub fn set_shader(&self, mode: crate::gl_area::ShaderMode) {
+        self.imp().set_shader(mode);
+    }
+
+    pub fn set_model(&self, model: ceres_std::Model) {
+        self.imp().set_gb_model(model);
     }
 }
 

@@ -1,8 +1,12 @@
 use adw::{glib, prelude::*, subclass::prelude::*};
 
+use crate::gl_area::ShaderMode;
+
 #[derive(Debug)]
 pub struct PreferencesDialog {
     preferences_page: adw::PreferencesPage,
+    shader_row: adw::ComboRow,
+    gb_model_row: adw::ComboRow,
 }
 
 impl Default for PreferencesDialog {
@@ -103,7 +107,33 @@ impl Default for PreferencesDialog {
         emulation_group.add(&shader_row);
         preferences_page.add(&emulation_group);
 
-        Self { preferences_page }
+        Self {
+            preferences_page,
+            shader_row,
+            gb_model_row,
+        }
+    }
+}
+
+impl PreferencesDialog {
+    pub fn set_shader(&self, mode: ShaderMode) {
+        let index = match mode {
+            ShaderMode::Nearest => 0,
+            ShaderMode::Scale2x => 1,
+            ShaderMode::Scale3x => 2,
+            ShaderMode::Lcd => 3,
+            ShaderMode::Crt => 4,
+        };
+        self.shader_row.set_selected(index);
+    }
+
+    pub fn set_gb_model(&self, model: ceres_std::Model) {
+        let index = match model {
+            ceres_std::Model::Dmg => 0,
+            ceres_std::Model::Mgb => 1,
+            ceres_std::Model::Cgb => 2,
+        };
+        self.gb_model_row.set_selected(index);
     }
 }
 

@@ -7,7 +7,7 @@ use gtk::{
     },
 };
 
-use crate::gl_area::PxScaleMode;
+use crate::gl_area::ShaderMode;
 
 #[derive(Default)]
 pub struct Application;
@@ -45,14 +45,21 @@ impl ApplicationImpl for Application {
         #[allow(clippy::shadow_unrelated)]
         let preferences_action = gio::ActionEntry::builder("preferences")
             .activate(move |app: &Self::Type, _, _| {
-                let window = app.active_window();
+                let window = app.active_window().expect("Active window should be set");
+                let window = window
+                    .downcast_ref::<crate::application_window::ApplicationWindow>()
+                    .expect("Active window should be an ApplicationWindow");
+
                 let preferences = crate::preferences_dialog::PreferencesDialog::new();
-                preferences.present(window.as_ref());
+                preferences.set_shader(window.shader());
+                preferences.set_model(window.model());
+
+                preferences.present(app.active_window().as_ref());
             })
             .build();
 
         #[allow(clippy::shadow_unrelated)]
-        let change_gb_model_action = gio::ActionEntry::builder("set_gb_model")
+        let set_gb_model_action = gio::ActionEntry::builder("set_gb_model")
             .parameter_type(Some(glib::VariantTy::STRING))
             .activate(move |app: &Self::Type, _, param: Option<&glib::Variant>| {
                 if let Some(parameter) = param {
@@ -65,16 +72,12 @@ impl ApplicationImpl for Application {
                         };
 
                         let win = app.active_window().expect("Active window should be set");
-                        // downcast
                         let win = win
                             .downcast_ref::<crate::application_window::ApplicationWindow>()
                             .expect("Active window should be an ApplicationWindow");
 
-                        win.imp().save_data();
-
-                        let thread = &mut win.imp().gb_area.gb_thread().borrow_mut();
-
-                        thread.change_model(model);
+                        win.save_data();
+                        win.set_model(model);
                     }
                 }
             })
@@ -92,18 +95,16 @@ impl ApplicationImpl for Application {
                             .downcast_ref::<crate::application_window::ApplicationWindow>()
                             .expect("Active window should be an ApplicationWindow");
 
-                        if let Some(rend) = win.imp().gb_area.imp().renderer.borrow_mut().as_mut() {
-                            let px_scale_mode = match shader_name.as_str() {
-                                "Nearest" => PxScaleMode::Nearest,
-                                "Scale2x" => PxScaleMode::Scale2x,
-                                "Scale3x" => PxScaleMode::Scale3x,
-                                "LCD" => PxScaleMode::Lcd,
-                                "CRT" => PxScaleMode::Crt,
-                                _ => unreachable!(),
-                            };
+                        let px_scale_mode = match shader_name.as_str() {
+                            "Nearest" => ShaderMode::Nearest,
+                            "Scale2x" => ShaderMode::Scale2x,
+                            "Scale3x" => ShaderMode::Scale3x,
+                            "LCD" => ShaderMode::Lcd,
+                            "CRT" => ShaderMode::Crt,
+                            _ => unreachable!(),
+                        };
 
-                            rend.choose_scale_mode(px_scale_mode);
-                        }
+                        win.set_shader(px_scale_mode);
                     }
                 }
             })
@@ -112,7 +113,7 @@ impl ApplicationImpl for Application {
         app.add_action_entries([
             about_action,
             preferences_action,
-            change_gb_model_action,
+            set_gb_model_action,
             set_shader_action,
         ]);
 

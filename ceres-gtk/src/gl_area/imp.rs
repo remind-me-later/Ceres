@@ -1,4 +1,4 @@
-use super::renderer::{PxScaleMode, Renderer};
+use super::renderer::{Renderer, ShaderMode};
 use gtk::{glib, prelude::*, subclass::prelude::*};
 use std::{
     cell::RefCell,
@@ -27,11 +27,13 @@ impl ceres_std::PainterCallback for PainterCallbackImpl {
 }
 
 pub struct GlArea {
-    pub gb_thread: Rc<RefCell<ceres_std::GbThread>>,
-    pub renderer: RefCell<Option<Renderer>>,
-    pub scale_mode_changed: RefCell<Option<PxScaleMode>>,
-    pub callbacks: RefCell<Option<gtk::TickCallbackId>>,
-    pub buffer: Arc<Mutex<Box<[u8]>>>,
+    gb_thread: Rc<RefCell<ceres_std::GbThread>>,
+    renderer: RefCell<Option<Renderer>>,
+    shader_changed: RefCell<Option<ShaderMode>>,
+    callbacks: RefCell<Option<gtk::TickCallbackId>>,
+    buffer: Arc<Mutex<Box<[u8]>>>,
+    shader: RefCell<ShaderMode>,
+    model: RefCell<ceres_std::Model>,
 }
 
 impl GlArea {
@@ -53,6 +55,29 @@ impl GlArea {
         if let Some(tick_id) = self.callbacks.borrow_mut().take() {
             tick_id.remove();
         }
+    }
+
+    pub fn set_model(&self, model: ceres_std::Model) {
+        let mut thread = self.gb_thread.borrow_mut();
+        thread.change_model(model);
+        *self.model.borrow_mut() = model;
+    }
+
+    pub fn model(&self) -> ceres_std::Model {
+        *self.model.borrow()
+    }
+
+    pub fn set_shader(&self, mode: ShaderMode) {
+        self.shader_changed.replace(Some(mode));
+        self.shader.replace(mode);
+    }
+
+    pub fn shader(&self) -> ShaderMode {
+        *self.shader.borrow()
+    }
+
+    pub const fn gb_thread(&self) -> &Rc<RefCell<ceres_std::GbThread>> {
+        &self.gb_thread
     }
 }
 
@@ -87,8 +112,10 @@ impl ObjectSubclass for GlArea {
             gb_thread,
             buffer,
             renderer: Default::default(),
-            scale_mode_changed: Default::default(),
+            shader_changed: Default::default(),
             callbacks: Default::default(),
+            shader: RefCell::new(ShaderMode::default()),
+            model: RefCell::new(ceres_std::Model::default()),
         }
     }
 }
@@ -156,7 +183,7 @@ impl GLAreaImpl for GlArea {
         let mut rf = self.renderer.borrow_mut();
         let rend = rf.as_mut().unwrap();
 
-        if let Some(scale_mode) = self.scale_mode_changed.take() {
+        if let Some(scale_mode) = self.shader_changed.take() {
             rend.choose_scale_mode(scale_mode);
         }
 

@@ -4,13 +4,39 @@ use glow::{
 };
 
 #[derive(Clone, Copy, Default)]
-pub enum PxScaleMode {
+pub enum ShaderMode {
     #[default]
     Nearest = 0,
     Scale2x = 1,
     Scale3x = 2,
     Lcd = 3,
     Crt = 4,
+}
+
+impl From<&str> for ShaderMode {
+    fn from(s: &str) -> Self {
+        match s {
+            "Nearest" => Self::Nearest,
+            "Scale2x" => Self::Scale2x,
+            "Scale3x" => Self::Scale3x,
+            "LCD" => Self::Lcd,
+            "CRT" => Self::Crt,
+            _ => Self::default(),
+        }
+    }
+}
+
+impl std::fmt::Display for ShaderMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            Self::Nearest => "Nearest",
+            Self::Scale2x => "Scale2x",
+            Self::Scale3x => "Scale3x",
+            Self::Lcd => "LCD",
+            Self::Crt => "CRT",
+        };
+        write!(f, "{}", name)
+    }
 }
 
 const PX_WIDTH: u32 = ceres_std::PX_WIDTH as u32;
@@ -28,7 +54,7 @@ pub struct Renderer {
     dims_unif: UniformLocation,
     scale_unif: UniformLocation,
     new_size: Option<(u32, u32)>,
-    new_scale_mode: Option<PxScaleMode>,
+    new_scale_mode: Option<ShaderMode>,
 }
 
 impl Renderer {
@@ -161,7 +187,7 @@ impl Renderer {
                 .get_uniform_location(program, "_group_1_binding_1_fs")
                 .expect("couldn't get location of scale uniform");
 
-            gl.uniform_1_u32_slice(Some(&scale_unif), &[PxScaleMode::Nearest as u32]);
+            gl.uniform_1_u32_slice(Some(&scale_unif), &[ShaderMode::Nearest as u32]);
 
             Self {
                 gl,
@@ -178,7 +204,7 @@ impl Renderer {
         }
     }
 
-    pub const fn choose_scale_mode(&mut self, scale_mode: PxScaleMode) {
+    pub const fn choose_scale_mode(&mut self, scale_mode: ShaderMode) {
         self.new_scale_mode = Some(scale_mode);
     }
 
