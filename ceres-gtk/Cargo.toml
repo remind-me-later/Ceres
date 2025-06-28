@@ -11,19 +11,17 @@ epoxy = { version = "*" }
 libloading = { version = "*" }
 glow = { version = "*" }
 
-# Gtk
 [dependencies.adw]
 package = "libadwaita"
 version = "*"
+default-features = false
 features = ["v1_7"]
 
 [dependencies.gtk]
 version = "*"
 package = "gtk4"
+default-features = false
 features = ["v4_18"]
-
-[build-dependencies]
-glib-build-tools = "*"
 
 [lints.clippy]
 nursery = "warn"

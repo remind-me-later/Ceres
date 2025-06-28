@@ -50,8 +50,7 @@ impl Default for PreferencesDialog {
             let dialog = adw::AlertDialog::builder()
                 .heading("Changing GameBoy model")
                 .body(format!(
-                    "Changing the Model to {} will reset the emulator. Are you sure?",
-                    model_name
+                    "Changing the Model to {model_name} will reset the emulator. Are you sure?",
                 ))
                 .default_response("cancel")
                 .close_response("cancel")

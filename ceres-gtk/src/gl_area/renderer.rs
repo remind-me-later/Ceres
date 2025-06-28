@@ -35,7 +35,7 @@ impl std::fmt::Display for ShaderMode {
             Self::Lcd => "LCD",
             Self::Crt => "CRT",
         };
-        write!(f, "{}", name)
+        write!(f, "{name}")
     }
 }
 
