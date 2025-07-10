@@ -188,7 +188,7 @@ impl eframe::App for App {
     #[expect(clippy::too_many_lines)]
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("top_panel").show(ctx, |top_panel_ui| {
-            egui::menu::bar(top_panel_ui, |menu_bar_ui| {
+            egui::MenuBar::new().ui(top_panel_ui, |menu_bar_ui| {
                 menu_bar_ui.menu_button("File", |menu_button_ui| {
                     if menu_button_ui.button("Open").clicked() {
                         let file = FileDialog::new()
@@ -288,7 +288,7 @@ impl eframe::App for App {
 
                     menu_button_ui.menu_button("Shader", |menu_button_ui| {
                         for shader_option in ShaderOption::iter() {
-                            let shader_button = egui::SelectableLabel::new(
+                            let shader_button = egui::Button::selectable(
                                 self.screen.shader_option() == shader_option,
                                 shader_option.str(),
                             );
@@ -301,7 +301,7 @@ impl eframe::App for App {
 
                     menu_button_ui.menu_button("Scaling", |menu_button_ui| {
                         for pixel_mode in ScalingOption::iter() {
-                            let pixel_button = egui::SelectableLabel::new(
+                            let pixel_button = egui::Button::selectable(
                                 self.screen.pixel_mode() == pixel_mode,
                                 pixel_mode.str(),
                             );
