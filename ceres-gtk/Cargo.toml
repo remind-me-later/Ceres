@@ -2,30 +2,28 @@
 name = "ceres-gtk"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
 repository.workspace = true
+license.workspace = true
 
 [dependencies]
 ceres-std = { path = "../ceres-std" }
 epoxy = { version = "*" }
-libloading = { version = "*" }
 glow = { version = "*" }
+libloading = { version = "*" }
 
 [dependencies.adw]
-package = "libadwaita"
 version = "*"
 default-features = false
 features = ["v1_7"]
+package = "libadwaita"
 
 [dependencies.gtk]
 version = "*"
-package = "gtk4"
 default-features = false
 features = ["v4_18"]
+package = "gtk4"
 
 [lints.clippy]
-nursery = "warn"
-# restriction
 as_underscore = "warn"
 assertions_on_result_states = "warn"
 clone_on_ref_ptr = "warn"
@@ -50,9 +48,13 @@ let_underscore_must_use = "warn"
 lossy_float_literal = "warn"
 map_err_ignore = "warn"
 mem_forget = "warn"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+missing_safety_doc = "allow"
 mixed_read_write_in_expression = "warn"
 modulo_arithmetic = "warn"
 mutex_atomic = "warn"
+nursery = "warn"
 # panic = "warn"
 partial_pub_fields = "warn"
 # print_stderr = "warn"
@@ -63,10 +65,12 @@ rest_pat_in_fully_bound_structs = "warn"
 # same_name_method = "warn"
 self_named_module_files = "warn"
 shadow_unrelated = "warn"
+similar_names = "allow"
 str_to_string = "warn"
 string_add = "warn"
 string_slice = "warn"
 string_to_string = "warn"
+struct_excessive_bools = "allow"
 todo = "warn"
 try_err = "warn"
 unimplemented = "warn"
@@ -74,11 +78,5 @@ unnecessary_self_imports = "warn"
 unneeded_field_pattern = "warn"
 unseparated_literal_suffix = "warn"
 use_debug = "warn"
-verbose_file_reads = "warn"
-# allow
-missing_errors_doc = "allow"
-missing_panics_doc = "allow"
-missing_safety_doc = "allow"
-similar_names = "allow"
-struct_excessive_bools = "allow"
 verbose_bit_mask = "allow"
+verbose_file_reads = "warn"

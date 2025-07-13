@@ -1,18 +1,21 @@
 [package]
 name = "ceres-std"
-edition.workspace = true
 version.workspace = true
-license.workspace = true
+edition.workspace = true
 repository.workspace = true
+license.workspace = true
 
-[features]
-wgpu_renderer = ["dep:wgpu"]
-
-[lints]
-workspace = true
+[dependencies.bytemuck]
+version = "*"
+default-features = false
 
 [dependencies.ceres-core]
 path = "../ceres-core"
+
+[dependencies.clap]
+version = "*"
+default-features = false
+features = ["derive", "help", "std"]
 
 [dependencies.cpal]
 version = "*"
@@ -27,25 +30,23 @@ features = ["std"]
 version = "*"
 default-features = false
 
-[dependencies.thread-priority]
-version = "*"
-default-features = false
-
 [dependencies.spin_sleep]
 version = "*"
 default-features = false
 
-[dependencies.clap]
+[dependencies.thread-priority]
 version = "*"
 default-features = false
-features = ["std", "derive", "help"]
 
 [dependencies.wgpu]
 version = "25"
+default-features = false
+features = ["dx12", "metal", "vulkan", "wgsl"]
 optional = true
-default-features = false
-features = ["dx12", "metal", "wgsl", "vulkan"]
 
-[dependencies.bytemuck]
-version = "*"
-default-features = false
+[features]
+wgpu_renderer = ["dep:wgpu"]
+
+[lints]
+workspace = true
+

@@ -1,10 +1,10 @@
 [package]
 name = "ceres"
-description = "An experimental GameBoy emulator"
-edition.workspace = true
 version.workspace = true
-license.workspace = true
+edition.workspace = true
+description = "An experimental GameBoy emulator"
 repository.workspace = true
+license.workspace = true
 
 [package.metadata.bundle]
 name = "Ceres"
@@ -14,17 +14,12 @@ category = "public.app-category.games"
 [dependencies.anyhow]
 version = "*"
 
+[dependencies.ceres-std]
+features = ["wgpu_renderer"]
+path = "../ceres-std"
+
 [dependencies.directories]
 version = "*"
-
-[dependencies.ceres-std]
-path = "../ceres-std"
-features = ["wgpu_renderer"]
-
-[dependencies.winit]
-version = "*"
-default-features = false
-features = ["rwh_06", "wayland", "wayland-csd-adwaita"]
 
 [dependencies.pollster]
 version = "*"
@@ -32,6 +27,11 @@ default-features = false
 
 [dependencies.rfd]
 version = "*"
+
+[dependencies.winit]
+version = "*"
+default-features = false
+features = ["rwh_06", "wayland", "wayland-csd-adwaita"]
 
 [target.'cfg(target_os = "macos")'.dependencies.objc2-app-kit]
 version = "*"
@@ -47,13 +47,12 @@ default-features = true
 features = ["std"]
 
 [lints.clippy]
-pedantic = "warn"
-nursery = "warn"
 # std_instead_of_alloc = "warn"
 alloc_instead_of_core = "warn"
 as_underscore = "warn"
 assertions_on_result_states = "warn"
 clone_on_ref_ptr = "warn"
+cognitive_complexity = "warn"
 create_dir = "warn"
 dbg_macro = "warn"
 decimal_literal_representation = "warn"
@@ -70,42 +69,44 @@ fn_to_numeric_cast_any = "warn"
 format_push_string = "warn"
 get_unwrap = "warn"
 if_then_some_else_none = "warn"
+large_stack_arrays = "warn"
+large_stack_frames = "warn"
 let_underscore_must_use = "warn"
 lossy_float_literal = "warn"
 map_err_ignore = "warn"
 mem_forget = "warn"
+missing_errors_doc = { level = "allow", priority = 1 }
+missing_panics_doc = { level = "allow", priority = 1 }
+missing_safety_doc = { level = "allow", priority = 1 }
 mixed_read_write_in_expression = "warn"
 modulo_arithmetic = "warn"
 mutex_atomic = "warn"
 mutex_integer = "warn"
 non_ascii_literal = "warn"
+nursery = "warn"
 panic = "warn"
 partial_pub_fields = "warn"
+pedantic = "warn"
 rc_buffer = "warn"
 rc_mutex = "warn"
 rest_pat_in_fully_bound_structs = "warn"
 same_name_method = "warn"
 self_named_module_files = "warn"
 shadow_unrelated = "warn"
+similar_names = { level = "allow", priority = 1 }
 str_to_string = "warn"
 string_add = "warn"
 string_slice = "warn"
 string_to_string = "warn"
+struct_excessive_bools = { level = "allow", priority = 1 }
 todo = "warn"
 try_err = "warn"
 unimplemented = "warn"
 unnecessary_self_imports = "warn"
 unneeded_field_pattern = "warn"
 unseparated_literal_suffix = "warn"
-use_debug = "warn"
-verbose_file_reads = "warn"
 unwrap_used = "warn"
-large_stack_frames = "warn"
-large_stack_arrays = "warn"
-cognitive_complexity = "warn"
-missing_errors_doc = { level = "allow", priority = 1 }
-missing_panics_doc = { level = "allow", priority = 1 }
-missing_safety_doc = { level = "allow", priority = 1 }
-similar_names = { level = "allow", priority = 1 }
-struct_excessive_bools = { level = "allow", priority = 1 }
+use_debug = "warn"
 verbose_bit_mask = { level = "allow", priority = 1 }
+verbose_file_reads = "warn"
+

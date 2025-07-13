@@ -2,18 +2,15 @@
 name = "ceres-egui"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
 repository.workspace = true
-
-[lints]
-workspace = true
-
-[dependencies.ceres-std]
-path = "../ceres-std"
-features = ["wgpu_renderer"]
+license.workspace = true
 
 [dependencies.anyhow]
 version = "*"
+
+[dependencies.ceres-std]
+features = ["wgpu_renderer"]
+path = "../ceres-std"
 
 [dependencies.directories]
 version = "*"
@@ -21,10 +18,14 @@ version = "*"
 [dependencies.eframe]
 version = "*"
 default-features = false
-features = ["default_fonts", "wgpu", "wayland", "accesskit"]
+features = ["accesskit", "default_fonts", "wayland", "wgpu"]
+
+[dependencies.rfd]
+version = "*"
 
 [dependencies.winit]
 version = "*"
 
-[dependencies.rfd]
-version = "*"
+[lints]
+workspace = true
+
