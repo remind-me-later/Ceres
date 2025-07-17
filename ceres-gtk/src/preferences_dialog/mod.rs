@@ -5,9 +5,7 @@ use adw::{glib, subclass::prelude::ObjectSubclassIsExt};
 glib::wrapper! {
     pub struct PreferencesDialog(ObjectSubclass<imp::PreferencesDialog>)
         @extends gtk::Widget, adw::Dialog, adw::PreferencesDialog,
-        @implements gtk::Native, gtk::Root,
-            gtk::Buildable, gtk::Accessible, gtk::ConstraintTarget,
-            gtk::ShortcutManager;
+        @implements gtk::Buildable, gtk::Accessible, gtk::ConstraintTarget;
 }
 
 impl PreferencesDialog {
