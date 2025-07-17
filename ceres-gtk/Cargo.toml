@@ -14,13 +14,13 @@ libloading = { version = "*" }
 [dependencies.adw]
 version = "*"
 default-features = false
-features = ["v1_7"]
+features = ["v1_5"]
 package = "libadwaita"
 
 [dependencies.gtk]
 version = "*"
 default-features = false
-features = ["v4_18"]
+features = ["v4_10"]
 package = "gtk4"
 
 [lints.clippy]

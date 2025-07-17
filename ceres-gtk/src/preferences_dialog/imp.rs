@@ -151,6 +151,5 @@ impl ObjectImpl for PreferencesDialog {
 }
 
 impl WidgetImpl for PreferencesDialog {}
-impl WindowImpl for PreferencesDialog {}
 impl AdwDialogImpl for PreferencesDialog {}
 impl PreferencesDialogImpl for PreferencesDialog {}

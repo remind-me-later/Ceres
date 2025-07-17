@@ -7,7 +7,10 @@ use crate::gl_area::ShaderMode;
 glib::wrapper! {
     pub struct ApplicationWindow(ObjectSubclass<imp::ApplicationWindow>)
         @extends gtk::Widget, gtk::Window, gtk::ApplicationWindow, adw::ApplicationWindow,
-        @implements gio::ActionMap, gio::ActionGroup, gtk::Native, gtk::Root;
+        @implements
+            gio::ActionMap, gio::ActionGroup,
+            gtk::Native, gtk::Root, gtk::Buildable, gtk::Accessible, gtk::ConstraintTarget,
+            gtk::ShortcutManager;
 }
 
 impl ApplicationWindow {

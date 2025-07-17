@@ -8,7 +8,8 @@ pub use renderer::ShaderMode;
 
 glib::wrapper! {
     pub struct GlArea(ObjectSubclass<imp::GlArea>)
-        @extends gtk::Widget, gtk::GLArea;
+        @extends gtk::Widget, gtk::GLArea,
+        @implements gtk::ConstraintTarget, gtk::Buildable, gtk::Accessible;
 }
 
 impl Default for GlArea {
