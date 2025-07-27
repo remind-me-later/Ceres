@@ -156,6 +156,107 @@ impl ApplicationWindow {
     pub fn shader(&self) -> crate::gl_area::ShaderMode {
         self.gb_area.shader()
     }
+
+    pub fn setup_cli_action_listeners(&self) {
+        let obj = self.obj();
+
+        if let Some(app) = obj
+            .application()
+            .and_then(|app| app.downcast::<crate::app::Application>().ok())
+        {
+            if let Some(action) = app.lookup_action("set-model") {
+                if let Some(stateful_action) = action.downcast_ref::<gtk::gio::SimpleAction>() {
+                    let window_weak = obj.downgrade();
+                    stateful_action.connect_state_notify(move |action| {
+                        let window = match window_weak.upgrade() {
+                            Some(window) => window,
+                            None => return,
+                        };
+
+                        if let Some(state) = action.state() {
+                            if let Some(model_str) = state.get::<String>() {
+                                let model = match model_str.as_str() {
+                                    "dmg" => ceres_std::Model::Dmg,
+                                    "mgb" => ceres_std::Model::Mgb,
+                                    "cgb" => ceres_std::Model::Cgb,
+                                    _ => return,
+                                };
+                                window.set_model(model);
+                            }
+                        }
+                    });
+                }
+            }
+
+            if let Some(action) = app.lookup_action("set-shader") {
+                if let Some(stateful_action) = action.downcast_ref::<gtk::gio::SimpleAction>() {
+                    let window_weak = obj.downgrade();
+                    stateful_action.connect_state_notify(move |action| {
+                        let window = match window_weak.upgrade() {
+                            Some(window) => window,
+                            None => return,
+                        };
+
+                        if let Some(state) = action.state() {
+                            if let Some(shader_str) = state.get::<String>() {
+                                let shader_mode = match shader_str.as_str() {
+                                    "nearest" => crate::gl_area::ShaderMode::Nearest,
+                                    "scale2x" => crate::gl_area::ShaderMode::Scale2x,
+                                    "scale3x" => crate::gl_area::ShaderMode::Scale3x,
+                                    "lcd" => crate::gl_area::ShaderMode::Lcd,
+                                    "crt" => crate::gl_area::ShaderMode::Crt,
+                                    _ => return,
+                                };
+                                window.set_shader(shader_mode);
+                            }
+                        }
+                    });
+                }
+            }
+
+            if let Some(action) = app.lookup_action("open-file") {
+                if let Some(simple_action) = action.downcast_ref::<gtk::gio::SimpleAction>() {
+                    let window_weak = obj.downgrade();
+                    simple_action.connect_activate(move |_action, _parameter| {
+                        let window = match window_weak.upgrade() {
+                            Some(window) => window,
+                            None => return,
+                        };
+
+                        if let Some(open_action) = window.lookup_action("open") {
+                            open_action.activate(None);
+                        }
+                    });
+                }
+            }
+        }
+    }
+
+    pub fn load_file(&self, file_path: &std::path::Path) {
+        let pathbuf = file_path.to_path_buf();
+
+        let sav_path = {
+            let file_stem = pathbuf.file_stem().unwrap();
+            Some(Self::data_path().join(file_stem).with_extension("sav"))
+        };
+
+        let change_rom_res = self
+            .gb_area
+            .gb_thread()
+            .borrow_mut()
+            .change_rom(sav_path.as_deref(), &pathbuf);
+
+        match change_rom_res {
+            Ok(()) => {
+                *self.rom_path.borrow_mut() = Some(pathbuf.clone());
+                self.obj()
+                    .set_title(pathbuf.file_name().map(|s| s.to_string_lossy()).as_deref());
+            }
+            Err(err) => {
+                eprintln!("Unable to load ROM file: {err}");
+            }
+        }
+    }
 }
 
 #[glib::object_subclass]
@@ -192,7 +293,6 @@ impl ObjectSubclass for ApplicationWindow {
                     match change_rom_res {
                         Ok(()) => {
                             *win.imp().rom_path.borrow_mut() = Some(pathbuf.clone());
-                            // set window title to path
                             win.set_title(
                                 pathbuf.file_name().map(|s| s.to_string_lossy()).as_deref(),
                             );
@@ -303,13 +403,11 @@ impl ObjectImpl for ApplicationWindow {
             #[weak]
             rend,
             move |action, parameter| {
-                // Get parameter
                 let parameter = parameter
                     .expect("Could not get parameter.")
                     .get::<String>()
                     .expect("The value needs to be of type `String`.");
 
-                // Set orientation and save state
                 rend.obj()
                     .gb_thread()
                     .borrow_mut()
@@ -329,6 +427,8 @@ impl ObjectImpl for ApplicationWindow {
 
         self.obj().set_title(Some("Ceres"));
         self.obj().set_content(Some(&self.toolbar_view));
+
+        self.setup_cli_action_listeners();
     }
 
     fn dispose(&self) {

@@ -1,78 +1,37 @@
 use adw::{glib, prelude::*, subclass::prelude::*};
-
-use crate::gl_area::ShaderMode;
+use gtk::gio;
+use std::{cell::RefCell, rc::Rc};
 
 #[derive(Debug)]
 pub struct PreferencesDialog {
     preferences_page: adw::PreferencesPage,
     shader_row: adw::ComboRow,
     gb_model_row: adw::ComboRow,
+    model_action_handler: RefCell<Option<glib::SignalHandlerId>>,
+    shader_action_handler: RefCell<Option<glib::SignalHandlerId>>,
+    initializing: Rc<RefCell<bool>>,
 }
 
 impl Default for PreferencesDialog {
     fn default() -> Self {
-        // Create preferences page
         let preferences_page = adw::PreferencesPage::builder()
             .name("general")
             .title("General")
             .icon_name("preferences-system-symbolic")
             .build();
 
-        // Create emulation group
         let emulation_group = adw::PreferencesGroup::builder()
             .title("Emulation")
             .description("Configure emulation settings")
             .build();
 
-        // Create GB model row with combo
         let gb_model_row = adw::ComboRow::builder()
             .title("Game Boy Model")
             .subtitle("This will immediately reset the emulator")
             .build();
 
-        // Create string list for GB models
         let gb_models = gtk::StringList::new(&["GameBoy", "GameBoy Pocket", "GameBoy Color"]);
         gb_model_row.set_model(Some(&gb_models));
-        gb_model_row.set_selected(2); // Default to GCB
-
-        // Connect the combo row to an action
-        gb_model_row.connect_selected_notify(|row| {
-            let model_name = match row.selected() {
-                0 => "DMG",
-                1 => "MGB",
-                2 => "CGB",
-                _ => "CGB",
-            };
-
-            let variant = glib::Variant::from(model_name);
-
-            // Show confirmation dialog
-            let dialog = adw::AlertDialog::builder()
-                .heading("Changing GameBoy model")
-                .body(format!(
-                    "Changing the Model to {model_name} will reset the emulator. Are you sure?",
-                ))
-                .default_response("cancel")
-                .close_response("cancel")
-                .build();
-
-            dialog.add_responses(&[("cancel", "_Cancel"), ("ok", "_Ok")]);
-
-            dialog.present(Some(row));
-
-            dialog.connect_response(None, move |dialog, response| {
-                if response == "ok" {
-                    // If confirmed, activate the action to change the GB model
-                    if let Some(window) = dialog.root().and_downcast::<gtk::Window>() {
-                        window
-                            .application()
-                            .expect("Application should be set")
-                            .activate_action("set_gb_model", Some(&variant));
-                    }
-                }
-                dialog.close();
-            });
-        });
 
         let shader_row = adw::ComboRow::builder()
             .title("Shader")
@@ -81,26 +40,6 @@ impl Default for PreferencesDialog {
 
         let shaders = gtk::StringList::new(&["Nearest", "Scale2x", "Scale3x", "LCD", "CRT"]);
         shader_row.set_model(Some(&shaders));
-        shader_row.set_selected(0); // Default to Nearest
-        shader_row.connect_selected_notify(|row| {
-            let shader_name = match row.selected() {
-                0 => "Nearest",
-                1 => "Scale2x",
-                2 => "Scale3x",
-                3 => "LCD",
-                4 => "CRT",
-                _ => "Nearest",
-            };
-
-            let variant = glib::Variant::from(shader_name);
-
-            if let Some(window) = row.root().and_downcast::<gtk::Window>() {
-                window
-                    .application()
-                    .expect("Application should be set")
-                    .activate_action("set_shader", Some(&variant));
-            }
-        });
 
         emulation_group.add(&gb_model_row);
         emulation_group.add(&shader_row);
@@ -110,29 +49,183 @@ impl Default for PreferencesDialog {
             preferences_page,
             shader_row,
             gb_model_row,
+            model_action_handler: RefCell::new(None),
+            shader_action_handler: RefCell::new(None),
+            initializing: Rc::new(RefCell::new(false)),
         }
     }
 }
 
 impl PreferencesDialog {
-    pub fn set_shader(&self, mode: ShaderMode) {
-        let index = match mode {
-            ShaderMode::Nearest => 0,
-            ShaderMode::Scale2x => 1,
-            ShaderMode::Scale3x => 2,
-            ShaderMode::Lcd => 3,
-            ShaderMode::Crt => 4,
-        };
-        self.shader_row.set_selected(index);
+    pub fn connect_to_actions(&self, app: &gtk::Application) {
+        let gb_model_row = &self.gb_model_row;
+        let app_weak = app.downgrade();
+        let initializing = Rc::clone(&self.initializing);
+        gb_model_row.connect_selected_notify(move |row| {
+            let app = match app_weak.upgrade() {
+                Some(app) => app,
+                None => return,
+            };
+
+            let model_name = match row.selected() {
+                0 => "dmg",
+                1 => "mgb",
+                2 => "cgb",
+                _ => "cgb",
+            };
+            let variant = glib::Variant::from(model_name);
+
+            if *initializing.borrow() {
+                app.activate_action("set-model", Some(&variant));
+                return;
+            }
+
+            // For model changes, show confirmation dialog
+            let dialog = adw::AlertDialog::builder()
+                .heading("Changing GameBoy model")
+                .body(format!(
+                    "Changing the Model to {} will reset the emulator. Are you sure?",
+                    model_name.to_uppercase()
+                ))
+                .default_response("cancel")
+                .close_response("cancel")
+                .build();
+
+            dialog.add_responses(&[("cancel", "_Cancel"), ("ok", "_Ok")]);
+            dialog.present(Some(row));
+
+            let app_weak = app.downgrade();
+            dialog.connect_response(None, move |dialog, response| {
+                let app = match app_weak.upgrade() {
+                    Some(app) => app,
+                    None => return,
+                };
+
+                if response == "ok" {
+                    app.activate_action("set-model", Some(&variant));
+                }
+                dialog.close();
+            });
+        });
+
+        // Connect shader selection changes to the CLI action
+        let shader_row = &self.shader_row;
+        let app_weak = app.downgrade();
+        shader_row.connect_selected_notify(move |row| {
+            let app = match app_weak.upgrade() {
+                Some(app) => app,
+                None => return,
+            };
+
+            let shader_name = match row.selected() {
+                0 => "nearest",
+                1 => "scale2x",
+                2 => "scale3x",
+                3 => "lcd",
+                4 => "crt",
+                _ => "nearest",
+            };
+
+            let variant = glib::Variant::from(shader_name);
+            app.activate_action("set-shader", Some(&variant));
+        });
+
+        // Listen to action state changes to update UI automatically
+        if let Some(model_action) = app.lookup_action("set-model") {
+            if let Some(stateful_action) = model_action.downcast_ref::<gio::SimpleAction>() {
+                let gb_model_row_weak = self.gb_model_row.downgrade();
+                let handler_id = stateful_action.connect_state_notify(move |action| {
+                    let row = match gb_model_row_weak.upgrade() {
+                        Some(row) => row,
+                        None => return,
+                    };
+
+                    if let Some(state) = action.state() {
+                        if let Some(model_str) = state.get::<String>() {
+                            let index = match model_str.as_str() {
+                                "dmg" => 0,
+                                "mgb" => 1,
+                                "cgb" => 2,
+                                _ => 2,
+                            };
+
+                            row.set_selected(index);
+                        }
+                    }
+                });
+                *self.model_action_handler.borrow_mut() = Some(handler_id);
+
+                // Set initial state
+                if let Some(state) = stateful_action.state() {
+                    if let Some(model_str) = state.get::<String>() {
+                        let index = match model_str.as_str() {
+                            "dmg" => 0,
+                            "mgb" => 1,
+                            "cgb" => 2,
+                            _ => 2,
+                        };
+                        *self.initializing.borrow_mut() = true;
+                        self.gb_model_row.set_selected(index);
+                        *self.initializing.borrow_mut() = false;
+                    }
+                }
+            }
+        }
+
+        if let Some(shader_action) = app.lookup_action("set-shader") {
+            if let Some(stateful_action) = shader_action.downcast_ref::<gio::SimpleAction>() {
+                let shader_row_weak = self.shader_row.downgrade();
+                let handler_id = stateful_action.connect_state_notify(move |action| {
+                    let row = match shader_row_weak.upgrade() {
+                        Some(row) => row,
+                        None => return,
+                    };
+
+                    if let Some(state) = action.state() {
+                        if let Some(shader_str) = state.get::<String>() {
+                            let index = match shader_str.as_str() {
+                                "nearest" => 0,
+                                "scale2x" => 1,
+                                "scale3x" => 2,
+                                "lcd" => 3,
+                                "crt" => 4,
+                                _ => 0,
+                            };
+                            row.set_selected(index);
+                        }
+                    }
+                });
+                *self.shader_action_handler.borrow_mut() = Some(handler_id);
+
+                if let Some(state) = stateful_action.state() {
+                    if let Some(shader_str) = state.get::<String>() {
+                        let index = match shader_str.as_str() {
+                            "nearest" => 0,
+                            "scale2x" => 1,
+                            "scale3x" => 2,
+                            "lcd" => 3,
+                            "crt" => 4,
+                            _ => 0,
+                        };
+                        self.shader_row.set_selected(index);
+                    }
+                }
+            }
+        }
     }
 
-    pub fn set_gb_model(&self, model: ceres_std::Model) {
-        let index = match model {
-            ceres_std::Model::Dmg => 0,
-            ceres_std::Model::Mgb => 1,
-            ceres_std::Model::Cgb => 2,
-        };
-        self.gb_model_row.set_selected(index);
+    pub fn disconnect_from_actions(&self, app: &gtk::Application) {
+        if let Some(handler_id) = self.model_action_handler.borrow_mut().take() {
+            if let Some(action) = app.lookup_action("set-model") {
+                action.disconnect(handler_id);
+            }
+        }
+
+        if let Some(handler_id) = self.shader_action_handler.borrow_mut().take() {
+            if let Some(action) = app.lookup_action("set-shader") {
+                action.disconnect(handler_id);
+            }
+        }
     }
 }
 
@@ -147,6 +240,17 @@ impl ObjectImpl for PreferencesDialog {
     fn constructed(&self) {
         self.parent_constructed();
         self.obj().add(&self.preferences_page);
+    }
+
+    fn dispose(&self) {
+        if let Some(app) = self
+            .obj()
+            .root()
+            .and_then(|root| root.downcast::<gtk::Window>().ok())
+            .and_then(|window| window.application())
+        {
+            self.disconnect_from_actions(&app);
+        }
     }
 }
 

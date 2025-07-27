@@ -25,7 +25,8 @@ fn main() -> glib::ExitCode {
         });
     }
 
-    app::Application::new().run()
+    let app = app::Application::new();
+    app.run()
 }
 
 #[cfg(not(target_os = "linux"))]

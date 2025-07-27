@@ -7,10 +7,13 @@ use gtk::{
     },
 };
 
-use crate::gl_area::ShaderMode;
+use super::cli_handler::CliOptions;
 
 #[derive(Default)]
-pub struct Application;
+pub struct Application {
+    pub cli_options: std::cell::RefCell<CliOptions>,
+    pub preferences_dialog: std::cell::OnceCell<crate::preferences_dialog::PreferencesDialog>,
+}
 
 #[glib::object_subclass]
 impl ObjectSubclass for Application {
@@ -22,9 +25,35 @@ impl ObjectSubclass for Application {
 impl ObjectImpl for Application {}
 
 impl ApplicationImpl for Application {
+    fn command_line(&self, command_line: &gio::ApplicationCommandLine) -> glib::ExitCode {
+        let app = self.obj();
+        let args: Vec<String> = command_line
+            .arguments()
+            .iter()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect();
+
+        let cli_options = CliOptions::parse_from_args(&args);
+        *self.cli_options.borrow_mut() = cli_options;
+
+        app.activate();
+
+        glib::ExitCode::SUCCESS
+    }
+
     fn startup(&self) {
         self.parent_startup();
         let app = self.obj();
+
+        super::cli_actions::setup_cli_actions(&app);
+
+        let preferences = crate::preferences_dialog::PreferencesDialog::new();
+        let gtk_app = app.upcast_ref::<gtk::Application>();
+        preferences.imp().connect_to_actions(gtk_app);
+
+        self.preferences_dialog
+            .set(preferences)
+            .expect("Preferences dialog should only be set once");
 
         #[allow(clippy::shadow_unrelated)]
         let about_action = gio::ActionEntry::builder("about")
@@ -45,77 +74,17 @@ impl ApplicationImpl for Application {
         #[allow(clippy::shadow_unrelated)]
         let preferences_action = gio::ActionEntry::builder("preferences")
             .activate(move |app: &Self::Type, _, _| {
-                let window = app.active_window().expect("Active window should be set");
-                let window = window
-                    .downcast_ref::<crate::application_window::ApplicationWindow>()
-                    .expect("Active window should be an ApplicationWindow");
-
-                let preferences = crate::preferences_dialog::PreferencesDialog::new();
-                preferences.set_shader(window.shader());
-                preferences.set_model(window.model());
+                let preferences = app
+                    .imp()
+                    .preferences_dialog
+                    .get()
+                    .expect("Preferences dialog should be initialized");
 
                 preferences.present(app.active_window().as_ref());
             })
             .build();
 
-        #[allow(clippy::shadow_unrelated)]
-        let set_gb_model_action = gio::ActionEntry::builder("set_gb_model")
-            .parameter_type(Some(glib::VariantTy::STRING))
-            .activate(move |app: &Self::Type, _, param: Option<&glib::Variant>| {
-                if let Some(parameter) = param {
-                    if let Some(model_name) = parameter.get::<String>() {
-                        let model = match model_name.as_str() {
-                            "DMG" => ceres_std::Model::Dmg,
-                            "MGB" => ceres_std::Model::Mgb,
-                            "CGB" => ceres_std::Model::Cgb,
-                            _ => ceres_std::Model::Cgb,
-                        };
-
-                        let win = app.active_window().expect("Active window should be set");
-                        let win = win
-                            .downcast_ref::<crate::application_window::ApplicationWindow>()
-                            .expect("Active window should be an ApplicationWindow");
-
-                        win.save_data();
-                        win.set_model(model);
-                    }
-                }
-            })
-            .build();
-
-        #[allow(clippy::shadow_unrelated)]
-        let set_shader_action = gio::ActionEntry::builder("set_shader")
-            .parameter_type(Some(glib::VariantTy::STRING))
-            .activate(move |app: &Self::Type, _, param: Option<&glib::Variant>| {
-                if let Some(parameter) = param {
-                    if let Some(shader_name) = parameter.get::<String>() {
-                        let win = app.active_window().expect("Active window should be set");
-                        // downcast
-                        let win = win
-                            .downcast_ref::<crate::application_window::ApplicationWindow>()
-                            .expect("Active window should be an ApplicationWindow");
-
-                        let px_scale_mode = match shader_name.as_str() {
-                            "Nearest" => ShaderMode::Nearest,
-                            "Scale2x" => ShaderMode::Scale2x,
-                            "Scale3x" => ShaderMode::Scale3x,
-                            "LCD" => ShaderMode::Lcd,
-                            "CRT" => ShaderMode::Crt,
-                            _ => unreachable!(),
-                        };
-
-                        win.set_shader(px_scale_mode);
-                    }
-                }
-            })
-            .build();
-
-        app.add_action_entries([
-            about_action,
-            preferences_action,
-            set_gb_model_action,
-            set_shader_action,
-        ]);
+        app.add_action_entries([about_action, preferences_action]);
 
         app.set_accels_for_action("win.open", &["<Primary>o"]);
         app.set_accels_for_action("win.pause", &["space"]);
@@ -124,7 +93,16 @@ impl ApplicationImpl for Application {
 
     fn activate(&self) {
         let app = self.obj();
+        let cli_options = self.cli_options.borrow().clone();
+
+        super::cli_actions::apply_cli_options(&app, &cli_options);
+
         let window = crate::application_window::ApplicationWindow::new(app.as_ref());
+
+        window.setup_cli_listeners();
+
+        window.apply_cli_options(&cli_options);
+
         window.present();
     }
 }
