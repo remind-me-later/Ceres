@@ -1,4 +1,6 @@
 #[cfg(target_os = "linux")]
+mod about_dialog;
+#[cfg(target_os = "linux")]
 mod app;
 #[cfg(target_os = "linux")]
 mod application_window;

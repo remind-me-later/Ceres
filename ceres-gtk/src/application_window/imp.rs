@@ -432,7 +432,6 @@ impl ObjectImpl for ApplicationWindow {
 
         self.obj().set_title(Some("Ceres"));
         self.obj().set_content(Some(&self.toolbar_view));
-
     }
 
     fn dispose(&self) {

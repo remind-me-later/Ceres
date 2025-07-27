@@ -68,7 +68,7 @@ str_to_string = "warn"
 string_add = "warn"
 string_slice = "warn"
 string_to_string = "warn"
-struct_excessive_bools = "allow"
+struct_excessive_bools = "warn"
 struct_field_names = { level = "allow", priority = 1 }
 todo = "warn"
 try_err = "warn"

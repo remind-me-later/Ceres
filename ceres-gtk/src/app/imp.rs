@@ -13,6 +13,7 @@ use super::cli_handler::CliOptions;
 pub struct Application {
     pub cli_options: std::cell::RefCell<CliOptions>,
     pub preferences_dialog: std::cell::OnceCell<crate::preferences_dialog::PreferencesDialog>,
+    pub about_dialog: std::cell::OnceCell<crate::about_dialog::AboutDialog>,
 }
 
 #[glib::object_subclass]
@@ -55,19 +56,21 @@ impl ApplicationImpl for Application {
             .set(preferences)
             .expect("Preferences dialog should only be set once");
 
+        let about = crate::about_dialog::AboutDialog::new();
+        self.about_dialog
+            .set(about)
+            .expect("About dialog should only be set once");
+
         #[allow(clippy::shadow_unrelated)]
         let about_action = gio::ActionEntry::builder("about")
             .activate(move |app: &Self::Type, _, _| {
-                let window = app.active_window();
-                let about_dialog = adw::AboutDialog::builder()
-                    .application_name("Ceres")
-                    .license_type(gtk::License::MitX11)
-                    .version("0.1.0")
-                    .comments("A GTK+ 4.0 frontend for the Ceres GameBoy emulator")
-                    .website("github.com/remind-me-later/ceres")
-                    .build();
+                let about = app
+                    .imp()
+                    .about_dialog
+                    .get()
+                    .expect("About dialog should be initialized");
 
-                about_dialog.present(window.as_ref());
+                about.present(app.active_window().as_ref());
             })
             .build();
 
