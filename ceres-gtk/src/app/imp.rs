@@ -95,13 +95,11 @@ impl ApplicationImpl for Application {
         let app = self.obj();
         let cli_options = self.cli_options.borrow().clone();
 
-        super::cli_actions::apply_cli_options(&app, &cli_options);
-
         let window = crate::application_window::ApplicationWindow::new(app.as_ref());
 
         window.setup_cli_listeners();
 
-        window.apply_cli_options(&cli_options);
+        super::cli_actions::apply_cli_options(&app, &cli_options);
 
         window.present();
     }

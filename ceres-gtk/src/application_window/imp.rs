@@ -141,16 +141,8 @@ impl ApplicationWindow {
         path
     }
 
-    pub fn set_model(&self, model: ceres_std::Model) {
-        self.gb_area.set_model(model);
-    }
-
     pub fn model(&self) -> ceres_std::Model {
         self.gb_area.model()
-    }
-
-    pub fn set_shader(&self, mode: crate::gl_area::ShaderMode) {
-        self.gb_area.set_shader(mode);
     }
 
     pub fn shader(&self) -> crate::gl_area::ShaderMode {
@@ -167,8 +159,8 @@ impl ApplicationWindow {
             if let Some(action) = app.lookup_action("set-model") {
                 if let Some(stateful_action) = action.downcast_ref::<gtk::gio::SimpleAction>() {
                     stateful_action.connect_state_notify(glib::clone!(
-                        #[weak]
-                        obj,
+                        #[weak(rename_to = gb_area)]
+                        self.gb_area,
                         move |action| {
                             if let Some(state) = action.state() {
                                 if let Some(model_str) = state.get::<String>() {
@@ -178,7 +170,7 @@ impl ApplicationWindow {
                                         "cgb" => ceres_std::Model::Cgb,
                                         _ => return,
                                     };
-                                    obj.set_model(model);
+                                    gb_area.set_model(model);
                                 }
                             }
                         }
@@ -189,8 +181,8 @@ impl ApplicationWindow {
             if let Some(action) = app.lookup_action("set-shader") {
                 if let Some(stateful_action) = action.downcast_ref::<gtk::gio::SimpleAction>() {
                     stateful_action.connect_state_notify(glib::clone!(
-                        #[weak]
-                        obj,
+                        #[weak(rename_to = gb_area)]
+                        self.gb_area,
                         move |action| {
                             if let Some(state) = action.state() {
                                 if let Some(shader_str) = state.get::<String>() {
@@ -202,7 +194,7 @@ impl ApplicationWindow {
                                         "crt" => crate::gl_area::ShaderMode::Crt,
                                         _ => return,
                                     };
-                                    obj.set_shader(shader_mode);
+                                    gb_area.set_shader(shader_mode);
                                 }
                             }
                         }
@@ -218,6 +210,21 @@ impl ApplicationWindow {
                         move |_action, _parameter| {
                             if let Some(open_action) = obj.lookup_action("open") {
                                 open_action.activate(None);
+                            }
+                        }
+                    ));
+                }
+            }
+
+            if let Some(action) = app.lookup_action("load-file") {
+                if let Some(simple_action) = action.downcast_ref::<gtk::gio::SimpleAction>() {
+                    simple_action.connect_activate(glib::clone!(
+                        #[weak(rename_to = window_imp)]
+                        self,
+                        move |_action, parameter| {
+                            if let Some(file_path_str) = parameter.and_then(|p| p.get::<String>()) {
+                                let file_path = std::path::Path::new(&file_path_str);
+                                window_imp.load_file(file_path);
                             }
                         }
                     ));
@@ -426,7 +433,6 @@ impl ObjectImpl for ApplicationWindow {
         self.obj().set_title(Some("Ceres"));
         self.obj().set_content(Some(&self.toolbar_view));
 
-        self.setup_cli_action_listeners();
     }
 
     fn dispose(&self) {

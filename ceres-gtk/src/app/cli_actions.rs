@@ -8,29 +8,11 @@ pub fn setup_cli_actions(app: &crate::app::Application) {
         &"cgb".to_variant(),
     );
 
-    set_model_action.connect_activate(glib::clone!(
-        #[weak]
-        app,
-        move |action, parameter| {
-            if let Some(model_str) = parameter.and_then(|p| p.get::<String>()) {
-                let model = match model_str.as_str() {
-                    "dmg" => ceres_std::Model::Dmg,
-                    "mgb" => ceres_std::Model::Mgb,
-                    "cgb" => ceres_std::Model::Cgb,
-                    _ => return,
-                };
-
-                if let Some(window) = app.active_window() {
-                    if let Some(app_window) =
-                        window.downcast_ref::<crate::application_window::ApplicationWindow>()
-                    {
-                        app_window.set_model(model);
-                        action.set_state(&model_str.to_variant());
-                    }
-                }
-            }
+    set_model_action.connect_activate(glib::clone!(move |action, parameter| {
+        if let Some(model_str) = parameter.and_then(|p| p.get::<String>()) {
+            action.set_state(&model_str.to_variant());
         }
-    ));
+    }));
 
     let set_shader_action = gio::SimpleAction::new_stateful(
         "set-shader",
@@ -38,31 +20,11 @@ pub fn setup_cli_actions(app: &crate::app::Application) {
         &"nearest".to_variant(),
     );
 
-    set_shader_action.connect_activate(glib::clone!(
-        #[weak]
-        app,
-        move |action, parameter| {
-            if let Some(shader_str) = parameter.and_then(|p| p.get::<String>()) {
-                let shader_mode = match shader_str.as_str() {
-                    "nearest" => crate::gl_area::ShaderMode::Nearest,
-                    "scale2x" => crate::gl_area::ShaderMode::Scale2x,
-                    "scale3x" => crate::gl_area::ShaderMode::Scale3x,
-                    "lcd" => crate::gl_area::ShaderMode::Lcd,
-                    "crt" => crate::gl_area::ShaderMode::Crt,
-                    _ => return,
-                };
-
-                if let Some(window) = app.active_window() {
-                    if let Some(app_window) =
-                        window.downcast_ref::<crate::application_window::ApplicationWindow>()
-                    {
-                        app_window.set_shader(shader_mode);
-                        action.set_state(&shader_str.to_variant());
-                    }
-                }
-            }
+    set_shader_action.connect_activate(glib::clone!(move |action, parameter| {
+        if let Some(shader_str) = parameter.and_then(|p| p.get::<String>()) {
+            action.set_state(&shader_str.to_variant());
         }
-    ));
+    }));
 
     let open_file_action = gio::SimpleAction::new("open-file", None);
     open_file_action.connect_activate(glib::clone!(
@@ -72,29 +34,34 @@ pub fn setup_cli_actions(app: &crate::app::Application) {
             if let Some(window) = app.active_window() {
                 let dialog = gtk::FileDialog::builder().title("Open ROM File").build();
 
-                dialog.open(Some(&window), gio::Cancellable::NONE, glib::clone!(
-                    #[weak]
-                    app,
-                    move |result| {
-                        if let Ok(file) = result {
-                            let path = file.path().unwrap();
-                            if let Some(window) = app.active_window() {
-                                if let Some(app_window) =
-                                    window.downcast_ref::<crate::application_window::ApplicationWindow>()
-                                {
-                                    app_window.load_file(&path);
+                dialog.open(
+                    Some(&window),
+                    gio::Cancellable::NONE,
+                    glib::clone!(
+                        #[weak]
+                        app,
+                        move |result| {
+                            if let Ok(file) = result {
+                                let path = file.path().unwrap();
+                                if let Some(load_action) = app.lookup_action("load-file") {
+                                    load_action.activate(Some(
+                                        &path.to_string_lossy().to_string().to_variant(),
+                                    ));
                                 }
                             }
                         }
-                    }
-                ));
+                    ),
+                );
             }
         }
     ));
 
+    let load_file_action = gio::SimpleAction::new("load-file", Some(glib::VariantTy::STRING));
+
     app.add_action(&set_model_action);
     app.add_action(&set_shader_action);
     app.add_action(&open_file_action);
+    app.add_action(&load_file_action);
 
     app.set_accels_for_action("app.open-file", &["<Control>o"]);
 }
@@ -107,7 +74,7 @@ pub fn apply_cli_options(app: &crate::app::Application, options: &CliOptions) {
                 ceres_std::Model::Mgb => "mgb",
                 ceres_std::Model::Cgb => "cgb",
             };
-            stateful_action.set_state(&model_str.to_variant());
+            stateful_action.activate(Some(&model_str.to_variant()));
         }
     }
 
@@ -120,7 +87,13 @@ pub fn apply_cli_options(app: &crate::app::Application, options: &CliOptions) {
                 ceres_std::ShaderOption::Lcd => "lcd",
                 ceres_std::ShaderOption::Crt => "crt",
             };
-            stateful_action.set_state(&shader_str.to_variant());
+            stateful_action.activate(Some(&shader_str.to_variant()));
+        }
+    }
+
+    if let Some(file_path) = &options.file {
+        if let Some(action) = app.lookup_action("load-file") {
+            action.activate(Some(&file_path.to_string_lossy().to_string().to_variant()));
         }
     }
 }
