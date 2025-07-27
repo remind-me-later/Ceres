@@ -202,20 +202,6 @@ impl ApplicationWindow {
                 }
             }
 
-            if let Some(action) = app.lookup_action("open-file") {
-                if let Some(simple_action) = action.downcast_ref::<gtk::gio::SimpleAction>() {
-                    simple_action.connect_activate(glib::clone!(
-                        #[weak]
-                        obj,
-                        move |_action, _parameter| {
-                            if let Some(open_action) = obj.lookup_action("open") {
-                                open_action.activate(None);
-                            }
-                        }
-                    ));
-                }
-            }
-
             if let Some(action) = app.lookup_action("load-file") {
                 if let Some(simple_action) = action.downcast_ref::<gtk::gio::SimpleAction>() {
                     simple_action.connect_activate(glib::clone!(

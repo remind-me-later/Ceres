@@ -26,44 +26,11 @@ pub fn setup_cli_actions(app: &crate::app::Application) {
         }
     }));
 
-    let open_file_action = gio::SimpleAction::new("open-file", None);
-    open_file_action.connect_activate(glib::clone!(
-        #[weak]
-        app,
-        move |_action, _parameter| {
-            if let Some(window) = app.active_window() {
-                let dialog = gtk::FileDialog::builder().title("Open ROM File").build();
-
-                dialog.open(
-                    Some(&window),
-                    gio::Cancellable::NONE,
-                    glib::clone!(
-                        #[weak]
-                        app,
-                        move |result| {
-                            if let Ok(file) = result {
-                                let path = file.path().unwrap();
-                                if let Some(load_action) = app.lookup_action("load-file") {
-                                    load_action.activate(Some(
-                                        &path.to_string_lossy().to_string().to_variant(),
-                                    ));
-                                }
-                            }
-                        }
-                    ),
-                );
-            }
-        }
-    ));
-
     let load_file_action = gio::SimpleAction::new("load-file", Some(glib::VariantTy::STRING));
 
     app.add_action(&set_model_action);
     app.add_action(&set_shader_action);
-    app.add_action(&open_file_action);
     app.add_action(&load_file_action);
-
-    app.set_accels_for_action("app.open-file", &["<Control>o"]);
 }
 
 pub fn apply_cli_options(app: &crate::app::Application, options: &CliOptions) {
