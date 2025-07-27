@@ -51,13 +51,13 @@ impl Default for PreferencesDialog {
             gb_model_row,
             model_action_handler: RefCell::new(None),
             shader_action_handler: RefCell::new(None),
-            initializing: Rc::new(RefCell::new(false)),
+            initializing: Rc::new(RefCell::new(true)),
         }
     }
 }
 
 impl PreferencesDialog {
-    pub fn connect_to_actions(&self, app: &gtk::Application) {
+    pub(super) fn connect_to_actions(&self, app: &gtk::Application) {
         let gb_model_row = &self.gb_model_row;
         let app_weak = app.downgrade();
         let initializing = Rc::clone(&self.initializing);
@@ -160,9 +160,7 @@ impl PreferencesDialog {
                             "cgb" => 2,
                             _ => 2,
                         };
-                        *self.initializing.borrow_mut() = true;
                         self.gb_model_row.set_selected(index);
-                        *self.initializing.borrow_mut() = false;
                     }
                 }
             }
@@ -208,7 +206,7 @@ impl PreferencesDialog {
         }
     }
 
-    pub fn disconnect_from_actions(&self, app: &gtk::Application) {
+    pub(super) fn disconnect_from_actions(&self, app: &gtk::Application) {
         if let Some(handler_id) = self.model_action_handler.borrow_mut().take() {
             if let Some(action) = app.lookup_action("set-model") {
                 action.disconnect(handler_id);
@@ -220,6 +218,10 @@ impl PreferencesDialog {
                 action.disconnect(handler_id);
             }
         }
+    }
+
+    pub(super) fn set_initialization_complete(&self) {
+        *self.initializing.borrow_mut() = false;
     }
 }
 

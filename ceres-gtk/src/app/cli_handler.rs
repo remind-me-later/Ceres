@@ -105,22 +105,5 @@ impl CliOptions {
             "    -p, --pixel-mode <MODE>          Pixel mode [default: stretch] [possible values: pixel-perfect, stretch]"
         );
         println!("    -h, --help                       Print help");
-        println!();
-        println!("GB bindings:");
-        println!();
-        println!("    | Gameboy | Emulator  |");
-        println!("    | ------- | --------- |");
-        println!("    | Dpad    | WASD      |");
-        println!("    | A       | K         |");
-        println!("    | B       | L         |");
-        println!("    | Start   | M         |");
-        println!("    | Select  | N         |");
-        println!();
-        println!("Other bindings:");
-        println!();
-        println!("    | System       | Emulator |");
-        println!("    | ------------ | -------- |");
-        println!("    | Fullscreen   | F        |");
-        println!("    | Scale filter | Z        |");
     }
 }

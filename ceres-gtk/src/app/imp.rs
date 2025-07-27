@@ -49,8 +49,6 @@ impl ApplicationImpl for Application {
         super::cli_actions::setup_cli_actions(&app);
 
         let preferences = crate::preferences_dialog::PreferencesDialog::new();
-        let gtk_app = app.upcast_ref::<gtk::Application>();
-        preferences.imp().connect_to_actions(gtk_app);
 
         self.preferences_dialog
             .set(preferences)
@@ -103,6 +101,14 @@ impl ApplicationImpl for Application {
         window.setup_cli_listeners();
 
         super::cli_actions::apply_cli_options(&app, &cli_options);
+
+        let preferences = self
+            .preferences_dialog
+            .get()
+            .expect("Preferences dialog should be initialized");
+        let gtk_app = app.upcast_ref::<gtk::Application>();
+        preferences.connect_to_actions(gtk_app);
+        preferences.set_initialization_complete();
 
         window.present();
     }
