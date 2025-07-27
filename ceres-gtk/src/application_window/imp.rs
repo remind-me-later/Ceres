@@ -9,9 +9,8 @@ pub struct ApplicationWindow {
     gb_area: GlArea,
     pause_button: adw::SplitButton,
     volume_button: gtk::ScaleButton,
-    dialog: gtk::FileDialog,
+    file_dialog: gtk::FileDialog,
     rom_path: RefCell<Option<PathBuf>>,
-    is_paused: RefCell<bool>,
 }
 
 impl Default for ApplicationWindow {
@@ -86,6 +85,9 @@ impl Default for ApplicationWindow {
             let open_item = gtk::gio::MenuItem::new(Some("_Open"), Some("win.open"));
             app_menu.append_item(&open_item);
 
+            let save_item = gtk::gio::MenuItem::new(Some("_Save Data"), Some("win.save-data"));
+            app_menu.append_item(&save_item);
+
             let preferences_item =
                 gtk::gio::MenuItem::new(Some("_Preferences"), Some("app.preferences"));
             app_menu.append_item(&preferences_item);
@@ -103,18 +105,23 @@ impl Default for ApplicationWindow {
         toolbar_view.set_content(Some(&gb_area));
 
         Self {
-            dialog: file_dialog,
+            file_dialog,
             gb_area,
             toolbar_view,
             pause_button,
             volume_button,
             rom_path: RefCell::new(None),
-            is_paused: RefCell::new(false),
         }
     }
 }
 
 impl ApplicationWindow {
+    pub const fn gl_area(&self) -> &GlArea {
+        &self.gb_area
+    }
+
+    /// Save game data to disk. This method is automatically called when the window is disposed,
+    /// but can also be triggered manually via the `save_data` action or Ctrl+S keyboard shortcut.
     pub fn save_data(&self) {
         if let Some(path) = self.rom_path.borrow().as_ref() {
             if !self.gb_area.gb_thread().borrow().has_save_data() {
@@ -141,85 +148,7 @@ impl ApplicationWindow {
         path
     }
 
-    pub fn model(&self) -> ceres_std::Model {
-        self.gb_area.model()
-    }
-
-    pub fn shader(&self) -> crate::gl_area::ShaderMode {
-        self.gb_area.shader()
-    }
-
-    pub fn setup_cli_action_listeners(&self) {
-        let obj = self.obj();
-
-        if let Some(app) = obj
-            .application()
-            .and_then(|app| app.downcast::<crate::app::Application>().ok())
-        {
-            if let Some(action) = app.lookup_action("set-model") {
-                if let Some(stateful_action) = action.downcast_ref::<gtk::gio::SimpleAction>() {
-                    stateful_action.connect_state_notify(glib::clone!(
-                        #[weak(rename_to = gb_area)]
-                        self.gb_area,
-                        move |action| {
-                            if let Some(state) = action.state() {
-                                if let Some(model_str) = state.get::<String>() {
-                                    let model = match model_str.as_str() {
-                                        "dmg" => ceres_std::Model::Dmg,
-                                        "mgb" => ceres_std::Model::Mgb,
-                                        "cgb" => ceres_std::Model::Cgb,
-                                        _ => return,
-                                    };
-                                    gb_area.set_model(model);
-                                }
-                            }
-                        }
-                    ));
-                }
-            }
-
-            if let Some(action) = app.lookup_action("set-shader") {
-                if let Some(stateful_action) = action.downcast_ref::<gtk::gio::SimpleAction>() {
-                    stateful_action.connect_state_notify(glib::clone!(
-                        #[weak(rename_to = gb_area)]
-                        self.gb_area,
-                        move |action| {
-                            if let Some(state) = action.state() {
-                                if let Some(shader_str) = state.get::<String>() {
-                                    let shader_mode = match shader_str.as_str() {
-                                        "nearest" => crate::gl_area::ShaderMode::Nearest,
-                                        "scale2x" => crate::gl_area::ShaderMode::Scale2x,
-                                        "scale3x" => crate::gl_area::ShaderMode::Scale3x,
-                                        "lcd" => crate::gl_area::ShaderMode::Lcd,
-                                        "crt" => crate::gl_area::ShaderMode::Crt,
-                                        _ => return,
-                                    };
-                                    gb_area.set_shader(shader_mode);
-                                }
-                            }
-                        }
-                    ));
-                }
-            }
-
-            if let Some(action) = app.lookup_action("load-file") {
-                if let Some(simple_action) = action.downcast_ref::<gtk::gio::SimpleAction>() {
-                    simple_action.connect_activate(glib::clone!(
-                        #[weak(rename_to = window_imp)]
-                        self,
-                        move |_action, parameter| {
-                            if let Some(file_path_str) = parameter.and_then(|p| p.get::<String>()) {
-                                let file_path = std::path::Path::new(&file_path_str);
-                                window_imp.load_file(file_path);
-                            }
-                        }
-                    ));
-                }
-            }
-        }
-    }
-
-    pub fn load_file(&self, file_path: &std::path::Path) {
+    fn load_file(&self, file_path: &std::path::Path) -> Result<(), ceres_std::Error> {
         let pathbuf = file_path.to_path_buf();
 
         let sav_path = {
@@ -238,10 +167,9 @@ impl ApplicationWindow {
                 *self.rom_path.borrow_mut() = Some(pathbuf.clone());
                 self.obj()
                     .set_title(pathbuf.file_name().map(|s| s.to_string_lossy()).as_deref());
+                Ok(())
             }
-            Err(err) => {
-                eprintln!("Unable to load ROM file: {err}");
-            }
+            Err(err) => Err(err),
         }
     }
 }
@@ -257,45 +185,23 @@ impl ObjectSubclass for ApplicationWindow {
             "win.open",
             None,
             |win, _action_name, _action_target| async move {
-                let file_dialog = &win.imp().dialog;
+                let file_dialog = &win.imp().file_dialog;
 
                 let res = file_dialog.open_future(Some(&win)).await;
 
                 if let Ok(file) = res {
                     let pathbuf = file.path().expect("Couldn't get file path");
+                    if let Err(err) = win.imp().load_file(&pathbuf) {
+                        let info_dialog = adw::AlertDialog::builder()
+                            .heading("Unable to open ROM file")
+                            .body(format!("{err}"))
+                            .default_response("ok")
+                            .close_response("ok")
+                            .build();
 
-                    let sav_path = {
-                        let file_stem = pathbuf.file_stem().unwrap();
-                        Some(Self::data_path().join(file_stem).with_extension("sav"))
-                    };
+                        info_dialog.add_responses(&[("ok", "_Ok")]);
 
-                    // TODO: gracefully handle invalid files
-                    let change_rom_res = win
-                        .imp()
-                        .gb_area
-                        .gb_thread()
-                        .borrow_mut()
-                        .change_rom(sav_path.as_deref(), &pathbuf);
-
-                    match change_rom_res {
-                        Ok(()) => {
-                            *win.imp().rom_path.borrow_mut() = Some(pathbuf.clone());
-                            win.set_title(
-                                pathbuf.file_name().map(|s| s.to_string_lossy()).as_deref(),
-                            );
-                        }
-                        Err(err) => {
-                            let info_dialog = adw::AlertDialog::builder()
-                                .heading("Unable to open ROM file")
-                                .body(format!("{err}"))
-                                .default_response("ok")
-                                .close_response("ok")
-                                .build();
-
-                            info_dialog.add_responses(&[("ok", "_Ok")]);
-
-                            info_dialog.choose_future(&win).await;
-                        }
+                        info_dialog.choose_future(&win).await;
                     }
                 }
             },
@@ -304,15 +210,14 @@ impl ObjectSubclass for ApplicationWindow {
         klass.install_action("win.pause", None, |win, _action_name, _action_target| {
             let imp = win.imp();
             let button = &imp.pause_button;
+            let is_running = imp.gb_area.property::<bool>("emulator-running");
 
-            if *imp.is_paused.borrow() {
-                imp.gb_area.play();
-                button.set_icon_name("media-playback-pause-symbolic");
-                *imp.is_paused.borrow_mut() = false;
-            } else {
-                imp.gb_area.pause();
+            if is_running {
+                imp.gb_area.set_property("emulator-running", false);
                 button.set_icon_name("media-playback-start-symbolic");
-                *imp.is_paused.borrow_mut() = true;
+            } else {
+                imp.gb_area.set_property("emulator-running", true);
+                button.set_icon_name("media-playback-pause-symbolic");
             }
         });
     }
@@ -404,6 +309,32 @@ impl ObjectImpl for ApplicationWindow {
         ));
 
         self.obj().add_action(&action_speed_multiplier);
+
+        // Save data action
+        let action_save_data = gtk::gio::SimpleAction::new("win.save-data", None);
+        action_save_data.connect_activate(glib::clone!(
+            #[weak(rename_to = window_imp)]
+            self,
+            move |_action, _parameter| {
+                window_imp.save_data();
+            }
+        ));
+        self.obj().add_action(&action_save_data);
+
+        // Load file action
+        let action_load_file =
+            gtk::gio::SimpleAction::new("win.load-file", Some(&String::static_variant_type()));
+        action_load_file.connect_activate(glib::clone!(
+            #[weak(rename_to = window_imp)]
+            self,
+            move |_action, parameter| {
+                if let Some(file_path_str) = parameter.and_then(|p| p.get::<String>()) {
+                    let file_path = std::path::Path::new(&file_path_str);
+                    drop(window_imp.load_file(file_path));
+                }
+            }
+        ));
+        self.obj().add_action(&action_load_file);
 
         self.volume_button.connect_value_changed(glib::clone!(
             #[weak(rename_to = gb_area)]

@@ -13,12 +13,12 @@ impl PreferencesDialog {
         glib::Object::builder().build()
     }
 
-    pub fn connect_to_actions(&self, app: &gtk::Application) {
-        self.imp().connect_to_actions(app);
+    pub fn connect_to_gl_area(&self, gl_area: &crate::gl_area::GlArea) {
+        self.imp().connect_to_gl_area(gl_area);
     }
 
-    pub fn disconnect_from_actions(&self, app: &gtk::Application) {
-        self.imp().disconnect_from_actions(app);
+    pub fn disconnect_from_gl_area(&self) {
+        self.imp().disconnect_from_gl_area();
     }
 
     pub fn set_initialization_complete(&self) {

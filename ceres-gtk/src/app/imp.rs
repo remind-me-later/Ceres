@@ -46,8 +46,6 @@ impl ApplicationImpl for Application {
         self.parent_startup();
         let app = self.obj();
 
-        super::cli_actions::setup_cli_actions(&app);
-
         let preferences = crate::preferences_dialog::PreferencesDialog::new();
 
         self.preferences_dialog
@@ -89,6 +87,7 @@ impl ApplicationImpl for Application {
 
         app.set_accels_for_action("win.open", &["<Primary>o"]);
         app.set_accels_for_action("win.pause", &["space"]);
+        app.set_accels_for_action("win.save-data", &["<Primary>s"]);
         app.set_accels_for_action("app.preferences", &["<Primary>comma"]);
     }
 
@@ -98,16 +97,16 @@ impl ApplicationImpl for Application {
 
         let window = crate::application_window::ApplicationWindow::new(app.as_ref());
 
-        window.setup_cli_listeners();
-
-        super::cli_actions::apply_cli_options(&app, &cli_options);
-
         let preferences = self
             .preferences_dialog
             .get()
             .expect("Preferences dialog should be initialized");
-        let gtk_app = app.upcast_ref::<gtk::Application>();
-        preferences.connect_to_actions(gtk_app);
+
+        // Connect preferences dialog to the GlArea using properties
+        preferences.connect_to_gl_area(window.imp().gl_area());
+
+        super::cli_actions::apply_cli_options(&app, &cli_options);
+
         preferences.set_initialization_complete();
 
         window.present();

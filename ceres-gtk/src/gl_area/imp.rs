@@ -34,10 +34,11 @@ pub struct GlArea {
     buffer: Arc<Mutex<Box<[u8]>>>,
     shader: RefCell<ShaderMode>,
     model: RefCell<ceres_std::Model>,
+    is_running: RefCell<bool>,
 }
 
 impl GlArea {
-    pub fn play(&self) {
+    fn play(&self) {
         let widget = self.obj();
 
         *self.callbacks.borrow_mut() = Some(widget.add_tick_callback(move |gl_area, _| {
@@ -47,33 +48,18 @@ impl GlArea {
         }));
 
         self.gb_thread.borrow_mut().resume().unwrap();
+
+        *self.is_running.borrow_mut() = true;
     }
 
-    pub fn pause(&self) {
+    fn pause(&self) {
         self.gb_thread.borrow_mut().pause().unwrap();
 
         if let Some(tick_id) = self.callbacks.borrow_mut().take() {
             tick_id.remove();
         }
-    }
 
-    pub fn set_model(&self, model: ceres_std::Model) {
-        let mut thread = self.gb_thread.borrow_mut();
-        thread.change_model(model);
-        *self.model.borrow_mut() = model;
-    }
-
-    pub fn model(&self) -> ceres_std::Model {
-        *self.model.borrow()
-    }
-
-    pub fn set_shader(&self, mode: ShaderMode) {
-        self.shader_changed.replace(Some(mode));
-        self.shader.replace(mode);
-    }
-
-    pub fn shader(&self) -> ShaderMode {
-        *self.shader.borrow()
+        *self.is_running.borrow_mut() = false;
     }
 
     pub const fn gb_thread(&self) -> &Rc<RefCell<ceres_std::GbThread>> {
@@ -116,11 +102,88 @@ impl ObjectSubclass for GlArea {
             callbacks: Default::default(),
             shader: RefCell::new(ShaderMode::default()),
             model: RefCell::new(ceres_std::Model::default()),
+            is_running: RefCell::new(false),
         }
     }
 }
 
-impl ObjectImpl for GlArea {}
+impl ObjectImpl for GlArea {
+    fn properties() -> &'static [glib::ParamSpec] {
+        use std::sync::OnceLock;
+        static PROPERTIES: OnceLock<Vec<glib::ParamSpec>> = OnceLock::new();
+
+        PROPERTIES.get_or_init(|| {
+            vec![
+                glib::ParamSpecString::builder("shader-mode")
+                    .nick("Shader Mode")
+                    .blurb("The shader mode to use for rendering")
+                    .default_value(Some("Nearest"))
+                    .build(),
+                glib::ParamSpecString::builder("gb-model")
+                    .nick("GameBoy Model")
+                    .blurb("The GameBoy model to emulate")
+                    .default_value(Some("cgb"))
+                    .build(),
+                glib::ParamSpecBoolean::builder("emulator-running")
+                    .nick("Emulator Running")
+                    .blurb("Whether the emulator is currently running")
+                    .default_value(false)
+                    .build(),
+            ]
+        })
+    }
+
+    fn set_property(&self, _id: usize, value: &glib::Value, pspec: &glib::ParamSpec) {
+        match pspec.name() {
+            "shader-mode" => {
+                let shader_str = value.get::<String>().unwrap();
+                let mode = ShaderMode::from(shader_str.as_str());
+                self.shader_changed.replace(Some(mode));
+                self.shader.replace(mode);
+            }
+            "gb-model" => {
+                let model_str = value.get::<String>().unwrap();
+                let model = match model_str.as_str() {
+                    "dmg" => ceres_std::Model::Dmg,
+                    "mgb" => ceres_std::Model::Mgb,
+                    "cgb" => ceres_std::Model::Cgb,
+                    _ => ceres_std::Model::Cgb,
+                };
+                let mut thread = self.gb_thread.borrow_mut();
+                thread.change_model(model);
+                *self.model.borrow_mut() = model;
+            }
+            "emulator-running" => {
+                let is_running = value.get::<bool>().unwrap();
+                if is_running {
+                    self.play();
+                } else {
+                    self.pause();
+                }
+            }
+            _ => {
+                eprintln!("Unknown property: {}", pspec.name());
+            }
+        }
+    }
+
+    fn property(&self, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
+        match pspec.name() {
+            "shader-mode" => self.shader.borrow().to_string().to_value(),
+            "gb-model" => match *self.model.borrow() {
+                ceres_std::Model::Dmg => "dmg",
+                ceres_std::Model::Mgb => "mgb",
+                ceres_std::Model::Cgb => "cgb",
+            }
+            .to_value(),
+            "emulator-running" => self.is_running.borrow().to_value(),
+            _ => {
+                eprintln!("Unknown property: {}", pspec.name());
+                glib::Value::from("")
+            }
+        }
+    }
+}
 
 impl WidgetImpl for GlArea {
     fn realize(&self) {

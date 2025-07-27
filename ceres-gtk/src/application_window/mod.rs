@@ -1,6 +1,6 @@
 mod imp;
 
-use adw::{gio, glib, prelude::*, subclass::prelude::ObjectSubclassIsExt};
+use adw::{gio, glib, prelude::*};
 
 glib::wrapper! {
     pub struct ApplicationWindow(ObjectSubclass<imp::ApplicationWindow>)
@@ -14,9 +14,5 @@ glib::wrapper! {
 impl ApplicationWindow {
     pub fn new<P: IsA<gtk::Application>>(app: &P) -> Self {
         glib::Object::builder().property("application", app).build()
-    }
-
-    pub fn setup_cli_listeners(&self) {
-        self.imp().setup_cli_action_listeners();
     }
 }
