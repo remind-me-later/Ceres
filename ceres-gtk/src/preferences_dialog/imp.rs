@@ -110,49 +110,45 @@ impl PreferencesDialog {
 
         // Connect shader selection changes to the CLI action
         let shader_row = &self.shader_row;
-        let app_weak = app.downgrade();
-        shader_row.connect_selected_notify(move |row| {
-            let app = match app_weak.upgrade() {
-                Some(app) => app,
-                None => return,
-            };
+        shader_row.connect_selected_notify(glib::clone!(
+            #[weak]
+            app,
+            move |row| {
+                let shader_name = match row.selected() {
+                    0 => "nearest",
+                    1 => "scale2x",
+                    2 => "scale3x",
+                    3 => "lcd",
+                    4 => "crt",
+                    _ => "nearest",
+                };
 
-            let shader_name = match row.selected() {
-                0 => "nearest",
-                1 => "scale2x",
-                2 => "scale3x",
-                3 => "lcd",
-                4 => "crt",
-                _ => "nearest",
-            };
-
-            let variant = glib::Variant::from(shader_name);
-            app.activate_action("set-shader", Some(&variant));
-        });
+                let variant = glib::Variant::from(shader_name);
+                app.activate_action("set-shader", Some(&variant));
+            }
+        ));
 
         // Listen to action state changes to update UI automatically
         if let Some(model_action) = app.lookup_action("set-model") {
             if let Some(stateful_action) = model_action.downcast_ref::<gio::SimpleAction>() {
-                let gb_model_row_weak = self.gb_model_row.downgrade();
-                let handler_id = stateful_action.connect_state_notify(move |action| {
-                    let row = match gb_model_row_weak.upgrade() {
-                        Some(row) => row,
-                        None => return,
-                    };
+                let handler_id = stateful_action.connect_state_notify(glib::clone!(
+                    #[weak(rename_to = row)]
+                    self.gb_model_row,
+                    move |action| {
+                        if let Some(state) = action.state() {
+                            if let Some(model_str) = state.get::<String>() {
+                                let index = match model_str.as_str() {
+                                    "dmg" => 0,
+                                    "mgb" => 1,
+                                    "cgb" => 2,
+                                    _ => 2,
+                                };
 
-                    if let Some(state) = action.state() {
-                        if let Some(model_str) = state.get::<String>() {
-                            let index = match model_str.as_str() {
-                                "dmg" => 0,
-                                "mgb" => 1,
-                                "cgb" => 2,
-                                _ => 2,
-                            };
-
-                            row.set_selected(index);
+                                row.set_selected(index);
+                            }
                         }
                     }
-                });
+                ));
                 *self.model_action_handler.borrow_mut() = Some(handler_id);
 
                 // Set initial state
@@ -174,27 +170,25 @@ impl PreferencesDialog {
 
         if let Some(shader_action) = app.lookup_action("set-shader") {
             if let Some(stateful_action) = shader_action.downcast_ref::<gio::SimpleAction>() {
-                let shader_row_weak = self.shader_row.downgrade();
-                let handler_id = stateful_action.connect_state_notify(move |action| {
-                    let row = match shader_row_weak.upgrade() {
-                        Some(row) => row,
-                        None => return,
-                    };
-
-                    if let Some(state) = action.state() {
-                        if let Some(shader_str) = state.get::<String>() {
-                            let index = match shader_str.as_str() {
-                                "nearest" => 0,
-                                "scale2x" => 1,
-                                "scale3x" => 2,
-                                "lcd" => 3,
-                                "crt" => 4,
-                                _ => 0,
-                            };
-                            row.set_selected(index);
+                let handler_id = stateful_action.connect_state_notify(glib::clone!(
+                    #[weak(rename_to = row)]
+                    self.shader_row,
+                    move |action| {
+                        if let Some(state) = action.state() {
+                            if let Some(shader_str) = state.get::<String>() {
+                                let index = match shader_str.as_str() {
+                                    "nearest" => 0,
+                                    "scale2x" => 1,
+                                    "scale3x" => 2,
+                                    "lcd" => 3,
+                                    "crt" => 4,
+                                    _ => 0,
+                                };
+                                row.set_selected(index);
+                            }
                         }
                     }
-                });
+                ));
                 *self.shader_action_handler.borrow_mut() = Some(handler_id);
 
                 if let Some(state) = stateful_action.state() {

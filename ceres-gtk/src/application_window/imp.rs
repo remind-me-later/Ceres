@@ -166,67 +166,61 @@ impl ApplicationWindow {
         {
             if let Some(action) = app.lookup_action("set-model") {
                 if let Some(stateful_action) = action.downcast_ref::<gtk::gio::SimpleAction>() {
-                    let window_weak = obj.downgrade();
-                    stateful_action.connect_state_notify(move |action| {
-                        let window = match window_weak.upgrade() {
-                            Some(window) => window,
-                            None => return,
-                        };
-
-                        if let Some(state) = action.state() {
-                            if let Some(model_str) = state.get::<String>() {
-                                let model = match model_str.as_str() {
-                                    "dmg" => ceres_std::Model::Dmg,
-                                    "mgb" => ceres_std::Model::Mgb,
-                                    "cgb" => ceres_std::Model::Cgb,
-                                    _ => return,
-                                };
-                                window.set_model(model);
+                    stateful_action.connect_state_notify(glib::clone!(
+                        #[weak]
+                        obj,
+                        move |action| {
+                            if let Some(state) = action.state() {
+                                if let Some(model_str) = state.get::<String>() {
+                                    let model = match model_str.as_str() {
+                                        "dmg" => ceres_std::Model::Dmg,
+                                        "mgb" => ceres_std::Model::Mgb,
+                                        "cgb" => ceres_std::Model::Cgb,
+                                        _ => return,
+                                    };
+                                    obj.set_model(model);
+                                }
                             }
                         }
-                    });
+                    ));
                 }
             }
 
             if let Some(action) = app.lookup_action("set-shader") {
                 if let Some(stateful_action) = action.downcast_ref::<gtk::gio::SimpleAction>() {
-                    let window_weak = obj.downgrade();
-                    stateful_action.connect_state_notify(move |action| {
-                        let window = match window_weak.upgrade() {
-                            Some(window) => window,
-                            None => return,
-                        };
-
-                        if let Some(state) = action.state() {
-                            if let Some(shader_str) = state.get::<String>() {
-                                let shader_mode = match shader_str.as_str() {
-                                    "nearest" => crate::gl_area::ShaderMode::Nearest,
-                                    "scale2x" => crate::gl_area::ShaderMode::Scale2x,
-                                    "scale3x" => crate::gl_area::ShaderMode::Scale3x,
-                                    "lcd" => crate::gl_area::ShaderMode::Lcd,
-                                    "crt" => crate::gl_area::ShaderMode::Crt,
-                                    _ => return,
-                                };
-                                window.set_shader(shader_mode);
+                    stateful_action.connect_state_notify(glib::clone!(
+                        #[weak]
+                        obj,
+                        move |action| {
+                            if let Some(state) = action.state() {
+                                if let Some(shader_str) = state.get::<String>() {
+                                    let shader_mode = match shader_str.as_str() {
+                                        "nearest" => crate::gl_area::ShaderMode::Nearest,
+                                        "scale2x" => crate::gl_area::ShaderMode::Scale2x,
+                                        "scale3x" => crate::gl_area::ShaderMode::Scale3x,
+                                        "lcd" => crate::gl_area::ShaderMode::Lcd,
+                                        "crt" => crate::gl_area::ShaderMode::Crt,
+                                        _ => return,
+                                    };
+                                    obj.set_shader(shader_mode);
+                                }
                             }
                         }
-                    });
+                    ));
                 }
             }
 
             if let Some(action) = app.lookup_action("open-file") {
                 if let Some(simple_action) = action.downcast_ref::<gtk::gio::SimpleAction>() {
-                    let window_weak = obj.downgrade();
-                    simple_action.connect_activate(move |_action, _parameter| {
-                        let window = match window_weak.upgrade() {
-                            Some(window) => window,
-                            None => return,
-                        };
-
-                        if let Some(open_action) = window.lookup_action("open") {
-                            open_action.activate(None);
+                    simple_action.connect_activate(glib::clone!(
+                        #[weak]
+                        obj,
+                        move |_action, _parameter| {
+                            if let Some(open_action) = obj.lookup_action("open") {
+                                open_action.activate(None);
+                            }
                         }
-                    });
+                    ));
                 }
             }
         }
@@ -418,12 +412,16 @@ impl ObjectImpl for ApplicationWindow {
 
         self.obj().add_action(&action_speed_multiplier);
 
-        let thread_clone = Rc::clone(self.gb_area.gb_thread());
-
-        self.volume_button
-            .connect_value_changed(move |_, new_volume| {
-                thread_clone.borrow_mut().set_volume(new_volume as f32);
-            });
+        self.volume_button.connect_value_changed(glib::clone!(
+            #[weak(rename_to = gb_area)]
+            self.gb_area,
+            move |_, new_volume| {
+                gb_area
+                    .gb_thread()
+                    .borrow_mut()
+                    .set_volume(new_volume as f32);
+            }
+        ));
 
         self.obj().set_title(Some("Ceres"));
         self.obj().set_content(Some(&self.toolbar_view));
