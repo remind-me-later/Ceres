@@ -73,11 +73,11 @@ impl Renderer {
             let shader_sources = [
                 (
                     glow::VERTEX_SHADER,
-                    include_str!("../../shader/shader.vert"),
+                    include_str!("../../shader/vshader.vert"),
                 ),
                 (
                     glow::FRAGMENT_SHADER,
-                    include_str!("../../shader/shader.frag"),
+                    include_str!("../../shader/fshader.frag"),
                 ),
             ];
 
