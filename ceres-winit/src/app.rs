@@ -186,8 +186,8 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
         let main_window_attributes = winit::window::Window::default_attributes()
             .with_title(CERES_STYLIZED)
             .with_inner_size(PhysicalSize {
-                width: u32::from(PX_WIDTH) * crate::WIN_MULTIPLIER,
-                height: u32::from(PX_HEIGHT) * crate::WIN_MULTIPLIER,
+                width: ceres_std::PX_WIDTH,
+                height: ceres_std::PX_HEIGHT,
             })
             .with_min_inner_size(PhysicalSize {
                 width: ceres_std::PX_WIDTH,

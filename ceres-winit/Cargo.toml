@@ -1,5 +1,5 @@
 [package]
-name = "ceres"
+name = "ceres-winit"
 version.workspace = true
 edition.workspace = true
 description = "An experimental GameBoy emulator"

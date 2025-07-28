@@ -7,8 +7,6 @@ mod macos;
 use ceres_std::{CERES_STYLIZED, ORGANIZATION, QUALIFIER, clap::Parser};
 use winit::event_loop::EventLoop;
 
-const WIN_MULTIPLIER: u32 = 2;
-
 #[cfg(not(target_os = "macos"))]
 #[derive(Clone)]
 enum CeresEvent {}
