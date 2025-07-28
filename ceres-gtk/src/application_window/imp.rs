@@ -220,6 +220,14 @@ impl ObjectSubclass for ApplicationWindow {
                 button.set_icon_name("media-playback-pause-symbolic");
             }
         });
+
+        klass.install_action(
+            "win.save-data",
+            None,
+            |win, _action_name, _action_target| {
+                win.imp().save_data();
+            },
+        );
     }
 }
 
