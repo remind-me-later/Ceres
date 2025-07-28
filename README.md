@@ -59,7 +59,7 @@ To build:
     In the future this module should work in no std environments.
 - `ceres-std` contains code for audio and threading, for use with different frontends.
 - `ceres-wgpu` containd the rendering code for the frontends using wgpu.
-- `ceres` contains the `winit` frontend.
+- `ceres-winit` contains the `winit` frontend.
 - `ceres-egui` contains the `egui` frontend.
 - `ceres-gtk` contains the `gtk` frontend.
 
