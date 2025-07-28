@@ -50,26 +50,17 @@ impl Default for ApplicationWindow {
         pause_button.set_action_name(Some("win.pause"));
 
         let speed_menu = gtk::gio::Menu::new();
-        {
-            let x1_speed_item = gtk::gio::MenuItem::new(Some("_1x"), Some("win.speed_multiplier"));
-            x1_speed_item
-                .set_action_and_target_value(Some("win.speed_multiplier"), Some(&"1".to_variant()));
-            speed_menu.append_item(&x1_speed_item);
 
-            let x2_speed_item = gtk::gio::MenuItem::new(Some("_2x"), Some("win.speed_multiplier"));
-            x2_speed_item
-                .set_action_and_target_value(Some("win.speed_multiplier"), Some(&"2".to_variant()));
-            speed_menu.append_item(&x2_speed_item);
-
-            let x4_speed_item = gtk::gio::MenuItem::new(Some("_4x"), Some("win.speed_multiplier"));
-            x4_speed_item
-                .set_action_and_target_value(Some("win.speed_multiplier"), Some(&"4".to_variant()));
-            speed_menu.append_item(&x4_speed_item);
-
-            let x8_speed_item = gtk::gio::MenuItem::new(Some("_8x"), Some("win.speed_multiplier"));
-            x8_speed_item
-                .set_action_and_target_value(Some("win.speed_multiplier"), Some(&"8".to_variant()));
-            speed_menu.append_item(&x8_speed_item);
+        for multiplier in [1, 2, 4, 8] {
+            let item = gtk::gio::MenuItem::new(
+                Some(&format!("_{multiplier}x")),
+                Some("win.speed-multiplier"),
+            );
+            item.set_action_and_target_value(
+                Some("win.speed-multiplier"),
+                Some(&multiplier.to_string().to_variant()),
+            );
+            speed_menu.append_item(&item);
         }
 
         pause_button.set_menu_model(Some(&speed_menu));
@@ -243,7 +234,12 @@ impl ObjectImpl for ApplicationWindow {
 
         {
             let thread_clone = Rc::clone(gl_area.gb_thread());
-            keys.connect_key_pressed(move |_, key, _keycode, _state| {
+            keys.connect_key_pressed(move |_, key, _keycode, state| {
+                // If any modifier keys are pressed, ignore the key event
+                if !state.is_empty() {
+                    return glib::signal::Propagation::Proceed;
+                }
+
                 if thread_clone.borrow_mut().press_release(|k| {
                     match key {
                         gdk::Key::l => k.press(ceres_std::Button::A),
@@ -269,7 +265,12 @@ impl ObjectImpl for ApplicationWindow {
 
         {
             let thread_clone = Rc::clone(gl_area.gb_thread());
-            keys.connect_key_released(move |_, key, _keycode, _state| {
+            keys.connect_key_released(move |_, key, _keycode, state| {
+                // If any modifier keys are pressed, ignore the key event
+                if !state.is_empty() {
+                    return;
+                }
+
                 thread_clone.borrow_mut().press_release(|k| {
                     match key {
                         gdk::Key::l => k.release(ceres_std::Button::A),
@@ -294,7 +295,7 @@ impl ObjectImpl for ApplicationWindow {
         let rend = self.gb_area.imp();
 
         let action_speed_multiplier = gtk::gio::SimpleAction::new_stateful(
-            "speed_multiplier",
+            "speed-multiplier",
             Some(&String::static_variant_type()),
             &"1".to_variant(),
         );
@@ -317,17 +318,6 @@ impl ObjectImpl for ApplicationWindow {
         ));
 
         self.obj().add_action(&action_speed_multiplier);
-
-        // Save data action
-        let action_save_data = gtk::gio::SimpleAction::new("win.save-data", None);
-        action_save_data.connect_activate(glib::clone!(
-            #[weak(rename_to = window_imp)]
-            self,
-            move |_action, _parameter| {
-                window_imp.save_data();
-            }
-        ));
-        self.obj().add_action(&action_save_data);
 
         // Load file action
         let action_load_file =
@@ -355,8 +345,12 @@ impl ObjectImpl for ApplicationWindow {
             }
         ));
 
-        self.obj().set_title(Some("Ceres"));
-        self.obj().set_content(Some(&self.toolbar_view));
+        let window = self.obj();
+        window.set_title(Some("Ceres"));
+        window.set_content(Some(&self.toolbar_view));
+
+        // Make window as compact as possible
+        window.set_default_size(1, 1); // Set minimal default size
     }
 
     fn dispose(&self) {
