@@ -14,13 +14,6 @@ const AFTER_HELP: &str = "GB bindings:
     | B       | L         |
     | Start   | M         |
     | Select  | N         |
-
-Other binsings:
-
-    | System       | Emulator |
-    | ------------ | -------- |
-    | Fullscreen   | F        |
-    | Scale filter | Z        |
 ";
 
 pub trait AppOption: Default + Clone + Copy + clap::ValueEnum {
