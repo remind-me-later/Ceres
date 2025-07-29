@@ -75,9 +75,6 @@ let_underscore_must_use = "warn"
 lossy_float_literal = "warn"
 map_err_ignore = "warn"
 mem_forget = "warn"
-missing_errors_doc = { level = "allow", priority = 1 }
-missing_panics_doc = { level = "allow", priority = 1 }
-missing_safety_doc = { level = "allow", priority = 1 }
 mixed_read_write_in_expression = "warn"
 modulo_arithmetic = "warn"
 mutex_atomic = "warn"
@@ -93,12 +90,10 @@ rest_pat_in_fully_bound_structs = "warn"
 same_name_method = "warn"
 self_named_module_files = "warn"
 shadow_unrelated = "warn"
-similar_names = { level = "allow", priority = 1 }
 str_to_string = "warn"
 string_add = "warn"
 string_slice = "warn"
 string_to_string = "warn"
-struct_excessive_bools = { level = "allow", priority = 1 }
 todo = "warn"
 try_err = "warn"
 unimplemented = "warn"
@@ -107,6 +102,5 @@ unneeded_field_pattern = "warn"
 unseparated_literal_suffix = "warn"
 unwrap_used = "warn"
 use_debug = "warn"
-verbose_bit_mask = { level = "allow", priority = 1 }
 verbose_file_reads = "warn"
 

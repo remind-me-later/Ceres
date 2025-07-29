@@ -52,18 +52,18 @@ impl HighPassFilter {
         let l_i32 = i32::from(l);
         let r_i32 = i32::from(r);
 
-        let outl_i32 = l_i32 - self.capacitor_l;
-        let outr_i32 = r_i32 - self.capacitor_r;
+        let out_left_i32 = l_i32 - self.capacitor_l;
+        let out_right_i32 = r_i32 - self.capacitor_r;
 
-        self.capacitor_l = l_i32 - ((outl_i32 * FILTER_COEFF) >> PRECISION_BITS);
-        self.capacitor_r = r_i32 - ((outr_i32 * FILTER_COEFF) >> PRECISION_BITS);
+        self.capacitor_l = l_i32 - ((out_left_i32 * FILTER_COEFF) >> PRECISION_BITS);
+        self.capacitor_r = r_i32 - ((out_right_i32 * FILTER_COEFF) >> PRECISION_BITS);
 
         #[expect(clippy::cast_possible_truncation)]
-        let outl = outl_i32.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
+        let out_left = out_left_i32.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
         #[expect(clippy::cast_possible_truncation)]
-        let outr = outr_i32.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
+        let out_right = out_right_i32.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
 
-        (outl, outr)
+        (out_left, out_right)
     }
 }
 

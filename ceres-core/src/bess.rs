@@ -102,19 +102,19 @@ fn write_core_block<A: AudioCallback, W: Write>(
 
     // Sizes
     {
-        writer.write_all(&sizes.ram_size.to_le_bytes())?;
+        writer.write_all(&sizes.ram.to_le_bytes())?;
         writer.write_all(&sizes.ram_offset().to_le_bytes())?;
-        writer.write_all(&sizes.vram_size.to_le_bytes())?;
+        writer.write_all(&sizes.vram.to_le_bytes())?;
         writer.write_all(&sizes.vram_offset().to_le_bytes())?;
-        writer.write_all(&sizes.mbc_ram_size.to_le_bytes())?;
+        writer.write_all(&sizes.mbc_ram.to_le_bytes())?;
         writer.write_all(&sizes.mbc_ram_offset().to_le_bytes())?;
-        writer.write_all(&sizes.oam_size.to_le_bytes())?;
+        writer.write_all(&sizes.oam.to_le_bytes())?;
         writer.write_all(&sizes.oam_offset().to_le_bytes())?;
-        writer.write_all(&sizes.hram_size.to_le_bytes())?;
+        writer.write_all(&sizes.hram.to_le_bytes())?;
         writer.write_all(&sizes.hram_offset().to_le_bytes())?;
-        writer.write_all(&sizes.bg_palette_size.to_le_bytes())?;
+        writer.write_all(&sizes.bg_palette.to_le_bytes())?;
         writer.write_all(&sizes.bg_palette_offset().to_le_bytes())?;
-        writer.write_all(&sizes.obj_palette_size.to_le_bytes())?;
+        writer.write_all(&sizes.obj_palette.to_le_bytes())?;
         writer.write_all(&sizes.obj_palette_offset().to_le_bytes())?;
     }
 
@@ -162,13 +162,13 @@ fn write_rtc_block<W: Write>(writer: &mut W, cart: &Cartridge) -> io::Result<()>
 
 #[derive(Default)]
 struct CreatedSizes {
-    ram_size: u32,
-    vram_size: u32,
-    mbc_ram_size: u32,
-    oam_size: u32,
-    hram_size: u32,
-    bg_palette_size: u32,
-    obj_palette_size: u32,
+    ram: u32,
+    vram: u32,
+    mbc_ram: u32,
+    oam: u32,
+    hram: u32,
+    bg_palette: u32,
+    obj_palette: u32,
 }
 
 impl CreatedSizes {
@@ -188,66 +188,66 @@ impl CreatedSizes {
     }
 
     const fn vram_offset(&self) -> u32 {
-        self.ram_size
+        self.ram
     }
 
     const fn mbc_ram_offset(&self) -> u32 {
-        self.vram_offset() + self.vram_size
+        self.vram_offset() + self.vram
     }
 
     const fn oam_offset(&self) -> u32 {
-        self.mbc_ram_offset() + self.mbc_ram_size
+        self.mbc_ram_offset() + self.mbc_ram
     }
 
     const fn hram_offset(&self) -> u32 {
-        self.oam_offset() + self.oam_size
+        self.oam_offset() + self.oam
     }
 
     const fn bg_palette_offset(&self) -> u32 {
-        self.hram_offset() + self.hram_size
+        self.hram_offset() + self.hram
     }
 
     const fn obj_palette_offset(&self) -> u32 {
-        self.bg_palette_offset() + self.bg_palette_size
+        self.bg_palette_offset() + self.bg_palette
     }
 }
 
 pub fn save_state<A: AudioCallback, W: Write + Seek>(gb: &Gb<A>, writer: &mut W) -> io::Result<()> {
     let sizes = CreatedSizes {
-        ram_size: match gb.cgb_mode {
+        ram: match gb.cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => u32::from(Wram::SIZE_GB),
             CgbMode::Cgb => u32::from(Wram::SIZE_CGB),
         },
-        vram_size: match gb.cgb_mode {
+        vram: match gb.cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => u32::from(Vram::SIZE_GB),
             CgbMode::Cgb => u32::from(Vram::SIZE_CGB),
         },
-        mbc_ram_size: gb.cart.ram_size_bytes(),
-        oam_size: u32::from(Oam::SIZE),
-        hram_size: u32::from(Hram::SIZE),
-        bg_palette_size: match gb.cgb_mode {
+        mbc_ram: gb.cart.ram_size_bytes(),
+        oam: u32::from(Oam::SIZE),
+        hram: u32::from(Hram::SIZE),
+        bg_palette: match gb.cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => 0,
             CgbMode::Cgb => 0x40,
         },
-        obj_palette_size: match gb.cgb_mode {
+        obj_palette: match gb.cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => 0,
             CgbMode::Cgb => 0x40,
         },
     };
 
     // Write RAM
-    writer.write_all(&gb.wram.wram()[..sizes.ram_size as usize])?;
+    writer.write_all(&gb.wram.wram()[..sizes.ram as usize])?;
 
     // Write VRAM
-    writer.write_all(&gb.ppu.vram().bytes()[..sizes.vram_size as usize])?;
+    writer.write_all(&gb.ppu.vram().bytes()[..sizes.vram as usize])?;
 
     // Write MBC RAM
     if let Some(mbc_ram) = gb.cart.mbc_ram() {
-        writer.write_all(&mbc_ram[..sizes.mbc_ram_size as usize])?;
+        writer.write_all(&mbc_ram[..sizes.mbc_ram as usize])?;
     }
 
     // Write OAM
-    writer.write_all(&gb.ppu.oam().bytes()[..sizes.oam_size as usize])?;
+    writer.write_all(&gb.ppu.oam().bytes()[..sizes.oam as usize])?;
 
     // Write HRAM
     writer.write_all(gb.hram.hram().as_slice())?;

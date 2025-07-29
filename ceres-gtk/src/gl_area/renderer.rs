@@ -58,7 +58,10 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Initialization logic is long but necessary"
+    )]
     pub fn new() -> Self {
         unsafe {
             let gl = glow::Context::from_loader_function(epoxy::get_proc_addr);
@@ -274,7 +277,6 @@ impl Renderer {
 
             self.gl.use_program(Some(self.program));
 
-            #[allow(clippy::cast_precision_loss)]
             if let Some((width, height)) = self.new_size.take() {
                 // resize image to fit the window
                 let mul = (width as f32 / PX_WIDTH as f32).min(height as f32 / PX_HEIGHT as f32);

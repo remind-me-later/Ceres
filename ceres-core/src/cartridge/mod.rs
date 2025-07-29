@@ -36,6 +36,10 @@ impl Default for Cartridge {
         clippy::unwrap_used,
         reason = "ROMSize::new and RAMSize::new are safe to unwrap"
     )]
+    #[expect(
+        clippy::similar_names,
+        reason = "ROM and RAM are common names in this context"
+    )]
     fn default() -> Self {
         let rom_size = ROMSize::new(0).unwrap();
         let ram_size = RAMSize::new(0).unwrap();
@@ -62,6 +66,10 @@ impl Default for Cartridge {
 }
 
 impl Cartridge {
+    #[expect(
+        clippy::similar_names,
+        reason = "ROM and RAM are common names in this context"
+    )]
     pub fn new(rom: Box<[u8]>) -> Result<Self, Error> {
         let rom_size = ROMSize::new(rom[0x148])?;
         let ram_size = RAMSize::new(rom[0x149])?;

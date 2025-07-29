@@ -57,7 +57,6 @@ impl ApplicationImpl for Application {
             .set(about)
             .expect("About dialog should only be set once");
 
-        #[allow(clippy::shadow_unrelated)]
         let about_action = gio::ActionEntry::builder("about")
             .activate(move |app: &Self::Type, _, _| {
                 let about = app
@@ -70,7 +69,6 @@ impl ApplicationImpl for Application {
             })
             .build();
 
-        #[allow(clippy::shadow_unrelated)]
         let preferences_action = gio::ActionEntry::builder("preferences")
             .activate(move |app: &Self::Type, _, _| {
                 let preferences = app

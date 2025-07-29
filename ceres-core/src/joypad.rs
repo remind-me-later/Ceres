@@ -14,36 +14,37 @@ pub enum Button {
 
 #[derive(Default, Debug)]
 pub struct Joypad {
-    p1_btn: u8,
-    p1_dirs: bool,
-    p1_acts: bool,
+    // P1
+    button_mask: u8,
+    directions_flag: bool,
+    actions_flag: bool,
 }
 
 impl Joypad {
     pub const fn press(&mut self, button: Button, ints: &mut Interrupts) {
         let b = button as u8;
 
-        self.p1_btn |= b;
+        self.button_mask |= b;
 
-        if b & 0x0F != 0 && self.p1_dirs || b & 0xF0 != 0 && self.p1_acts {
+        if b & 0x0F != 0 && self.directions_flag || b & 0xF0 != 0 && self.actions_flag {
             ints.request_p1();
         }
     }
 
     pub const fn release(&mut self, button: Button) {
-        self.p1_btn &= !(button as u8);
+        self.button_mask &= !(button as u8);
     }
 
     #[must_use]
     pub const fn read_p1(&self) -> u8 {
-        let act = if self.p1_acts {
-            (self.p1_btn >> 4) | (1 << 5)
+        let act = if self.actions_flag {
+            (self.button_mask >> 4) | (1 << 5)
         } else {
             0
         };
 
-        let dir = if self.p1_dirs {
-            self.p1_btn & 0xF | (1 << 4)
+        let dir = if self.directions_flag {
+            self.button_mask & 0xF | (1 << 4)
         } else {
             0
         };
@@ -53,7 +54,7 @@ impl Joypad {
     }
 
     pub const fn write_joy(&mut self, val: u8) {
-        self.p1_acts = val & 0x20 == 0;
-        self.p1_dirs = val & 0x10 == 0;
+        self.actions_flag = val & 0x20 == 0;
+        self.directions_flag = val & 0x10 == 0;
     }
 }

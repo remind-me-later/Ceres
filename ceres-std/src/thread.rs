@@ -4,7 +4,7 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
 use std::{
     fs::File,
-    sync::{Mutex, atomic::AtomicU32},
+    sync::{Condvar, Mutex, atomic::AtomicU32},
 };
 use thread_priority::ThreadBuilderExt;
 
@@ -19,7 +19,7 @@ pub struct GbThread {
     gb: Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
     model: ceres_core::Model,
     exiting: Arc<AtomicBool>,
-    pause_thread: Arc<AtomicBool>,
+    pause_condvar: Arc<(Mutex<bool>, Condvar)>,
     _audio_state: audio::AudioState,
     audio_stream: audio::Stream,
     thread_handle: Option<std::thread::JoinHandle<()>>,
@@ -27,6 +27,11 @@ pub struct GbThread {
 }
 
 impl GbThread {
+    /// Creates a new `GbThread` instance.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if audio initialization, audio stream creation, or Game Boy creation fails.
     pub fn new<P: PainterCallback + 'static>(
         model: ceres_core::Model,
         sav_path: Option<&Path>,
@@ -36,26 +41,37 @@ impl GbThread {
         fn gb_loop<P: PainterCallback>(
             gb: &Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
             exiting: &Arc<AtomicBool>,
-            pause_thread: &Arc<AtomicBool>,
+            pause_condvar: &Arc<(Mutex<bool>, Condvar)>,
             multiplier: &Arc<AtomicU32>,
             ctx: &P,
         ) {
-            let mut duration = ceres_core::FRAME_DURATION;
-
             let mut last_loop = std::time::Instant::now();
 
-            // TODO: use condition variable
-
-            while !exiting.load(Relaxed) {
-                if !pause_thread.load(Relaxed) {
-                    if let Ok(mut gb) = gb.lock() {
-                        gb.run_frame();
-                        ctx.paint(gb.pixel_data_rgba());
+            loop {
+                // Check if we need to pause using the condition variable
+                let (pause_lock, pause_cvar) = &**pause_condvar;
+                if let Ok(mut paused) = pause_lock.lock() {
+                    while *paused && !exiting.load(Relaxed) {
+                        if let Ok(new_paused) = pause_cvar.wait(paused) {
+                            paused = new_paused;
+                        } else {
+                            return; // Exit if the Condvar is poisoned
+                        }
                     }
-                    ctx.request_repaint();
-                    duration = ceres_core::FRAME_DURATION / multiplier.load(Relaxed);
                 }
 
+                // Exit if we were signaled to exit while paused
+                if exiting.load(Relaxed) {
+                    break;
+                }
+
+                if let Ok(mut gb) = gb.lock() {
+                    gb.run_frame();
+                    ctx.paint(gb.pixel_data_rgba());
+                }
+                ctx.request_repaint();
+
+                let duration = ceres_core::FRAME_DURATION / multiplier.load(Relaxed);
                 let elapsed = last_loop.elapsed();
 
                 if elapsed < duration {
@@ -74,7 +90,11 @@ impl GbThread {
         let gb = Self::create_new_gb(&audio_stream, ring_buffer, model, rom_path, sav_path)?;
         let gb = Arc::new(Mutex::new(gb));
 
-        let pause_thread = Arc::new(AtomicBool::new(false));
+        #[expect(
+            clippy::mutex_atomic,
+            reason = "Using a Mutex to protect the pause state and a Condvar to signal when to pause/resume the thread"
+        )]
+        let pause_condvar = Arc::new((Mutex::new(false), Condvar::new()));
 
         let exiting = Arc::new(AtomicBool::new(false));
 
@@ -84,19 +104,19 @@ impl GbThread {
         let thread_handle = {
             let gb = Arc::clone(&gb);
             let exit = Arc::clone(&exiting);
-            let pause_thread = Arc::clone(&pause_thread);
+            let pause_condvar = Arc::clone(&pause_condvar);
             let multiplier = Arc::clone(&multiplier);
 
             // std::thread::spawn(move || gb_loop(gb, exit, pause_thread))
             thread_builder.spawn_with_priority(thread_priority::ThreadPriority::Max, move |_| {
-                gb_loop(&gb, &exit, &pause_thread, &multiplier, &ctx);
+                gb_loop(&gb, &exit, &pause_condvar, &multiplier, &ctx);
             })?
         };
 
         Ok(Self {
             gb,
             exiting,
-            pause_thread,
+            pause_condvar,
             thread_handle: Some(thread_handle),
             _audio_state: audio_state,
             audio_stream,
@@ -116,6 +136,11 @@ impl GbThread {
         self.multiplier.load(Relaxed)
     }
 
+    /// Changes the ROM loaded by the Game Boy thread.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if creating a new Game Boy instance fails.
     pub fn change_rom(&mut self, sav_path: Option<&Path>, rom_path: &Path) -> Result<(), Error> {
         let ring_buffer = self.audio_stream.get_ring_buffer();
 
@@ -191,23 +216,59 @@ impl GbThread {
 
     #[must_use]
     pub fn is_paused(&self) -> bool {
-        self.pause_thread.load(Relaxed)
+        let (pause_lock, _) = &*self.pause_condvar;
+        pause_lock.lock().is_ok_and(|paused| *paused)
     }
 
+    /// Pauses the Game Boy thread and audio stream.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if pausing the audio stream fails.
     pub fn pause(&mut self) -> Result<(), audio::Error> {
         self.audio_stream.pause()?;
-        self.pause_thread.store(true, Relaxed);
+
+        // Signal the condition variable
+        let (pause_lock, _pause_cvar) = &*self.pause_condvar;
+        if let Ok(mut paused) = pause_lock.lock() {
+            *paused = true;
+        }
+
         Ok(())
     }
 
+    /// Resumes the Game Boy thread and audio stream.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if resuming the audio stream fails.
     pub fn resume(&mut self) -> Result<(), audio::Error> {
-        self.pause_thread.store(false, Relaxed);
+        // Signal the condition variable to wake up the thread
+        let (pause_lock, pause_cvar) = &*self.pause_condvar;
+        if let Ok(mut paused) = pause_lock.lock() {
+            *paused = false;
+            pause_cvar.notify_one();
+        }
+
         self.audio_stream.resume()?;
         Ok(())
     }
 
+    /// Exits the Game Boy thread and waits for it to finish.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no thread is running or if joining the thread fails.
     pub fn exit(&mut self) -> Result<(), Error> {
         self.exiting.store(true, Relaxed);
+
+        // Wake up the thread if it's paused so it can exit
+        let (pause_lock, pause_cvar) = &*self.pause_condvar;
+        if let Ok(mut paused) = pause_lock.lock() {
+            *paused = false;
+            pause_cvar.notify_one();
+        }
+
         self.thread_handle
             .take()
             .ok_or(Error::NoThreadRunning)?
@@ -250,6 +311,11 @@ impl GbThread {
         self.gb.lock().is_ok_and(|gb| gb.cart_has_battery())
     }
 
+    /// Saves the current save data to the provided writer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the Game Boy thread is not running or if writing the save data fails.
     pub fn save_data<W: std::io::Write + std::io::Seek>(
         &self,
         writer: &mut W,

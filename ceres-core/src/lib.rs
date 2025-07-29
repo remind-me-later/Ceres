@@ -132,10 +132,20 @@ impl<A: AudioCallback> Gb<A> {
         self.joy.release(button);
     }
 
+    /// Saves the current state to the provided writer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing or seeking to the writer fails.
     pub fn save_data<W: io::Write + io::Seek>(&self, writer: &mut W) -> Result<(), io::Error> {
         bess::save_state(self, writer)
     }
 
+    /// Loads the state from the provided reader.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if reading from or seeking within the reader fails.
     pub fn load_data<R: io::Read + io::Seek>(&mut self, reader: &mut R) -> Result<(), io::Error> {
         bess::load_state(self, reader)
     }
@@ -209,6 +219,11 @@ impl<A: AudioCallback> GbBuilder<A> {
         self
     }
 
+    /// Loads a ROM into the builder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the ROM data is invalid or cannot be parsed as a cartridge.
     pub fn with_rom(mut self, rom: Box<[u8]>) -> Result<Self, Error> {
         self.cart = Some(Cartridge::new(rom)?);
         Ok(self)

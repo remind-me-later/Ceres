@@ -229,30 +229,19 @@ impl eframe::App for App {
                             }
                         }
 
-                        let multiplier = self.thread.multiplier();
+                        let selected_multiplier = self.thread.multiplier();
 
-                        if horizontal_ui
-                            .selectable_label(multiplier == 1, "1x")
-                            .on_hover_text("Speed 1x")
-                            .clicked()
-                        {
-                            self.thread.set_speed_multiplier(1);
-                        }
-
-                        if horizontal_ui
-                            .selectable_label(multiplier == 2, "2x")
-                            .on_hover_text("Speed 2x")
-                            .clicked()
-                        {
-                            self.thread.set_speed_multiplier(2);
-                        }
-
-                        if horizontal_ui
-                            .selectable_label(multiplier == 4, "4x")
-                            .on_hover_text("Speed 4x")
-                            .clicked()
-                        {
-                            self.thread.set_speed_multiplier(4);
+                        for multiplier in [1, 2, 4] {
+                            if horizontal_ui
+                                .selectable_label(
+                                    selected_multiplier == multiplier,
+                                    format!("{multiplier}x"),
+                                )
+                                .on_hover_text(format!("Speed {multiplier}x"))
+                                .clicked()
+                            {
+                                self.thread.set_speed_multiplier(multiplier);
+                            }
                         }
                     });
 
@@ -330,68 +319,25 @@ impl eframe::App for App {
 
         self.thread.press_release(|p| {
             ctx.input(|i| {
-                if i.key_pressed(Key::W) {
-                    p.press(ceres_std::Button::Up);
-                }
+                const KEY_DICT: [(Key, ceres_std::Button); 8] = [
+                    (Key::W, ceres_std::Button::Up),
+                    (Key::S, ceres_std::Button::Down),
+                    (Key::A, ceres_std::Button::Left),
+                    (Key::D, ceres_std::Button::Right),
+                    (Key::L, ceres_std::Button::A),
+                    (Key::K, ceres_std::Button::B),
+                    (Key::N, ceres_std::Button::Select),
+                    (Key::M, ceres_std::Button::Start),
+                ];
 
-                if i.key_released(Key::W) {
-                    p.release(ceres_std::Button::Up);
-                }
+                for (key, button) in KEY_DICT {
+                    if i.key_pressed(key) {
+                        p.press(button);
+                    }
 
-                if i.key_pressed(Key::A) {
-                    p.press(ceres_std::Button::Left);
-                }
-
-                if i.key_released(Key::A) {
-                    p.release(ceres_std::Button::Left);
-                }
-
-                if i.key_pressed(Key::S) {
-                    p.press(ceres_std::Button::Down);
-                }
-
-                if i.key_released(Key::S) {
-                    p.release(ceres_std::Button::Down);
-                }
-
-                if i.key_pressed(Key::D) {
-                    p.press(ceres_std::Button::Right);
-                }
-
-                if i.key_released(Key::D) {
-                    p.release(ceres_std::Button::Right);
-                }
-
-                if i.key_pressed(Key::L) {
-                    p.press(ceres_std::Button::A);
-                }
-
-                if i.key_released(Key::L) {
-                    p.release(ceres_std::Button::A);
-                }
-
-                if i.key_pressed(Key::K) {
-                    p.press(ceres_std::Button::B);
-                }
-
-                if i.key_released(Key::K) {
-                    p.release(ceres_std::Button::B);
-                }
-
-                if i.key_pressed(Key::M) {
-                    p.press(ceres_std::Button::Start);
-                }
-
-                if i.key_released(Key::M) {
-                    p.release(ceres_std::Button::Start);
-                }
-
-                if i.key_pressed(Key::N) {
-                    p.press(ceres_std::Button::Select);
-                }
-
-                if i.key_released(Key::N) {
-                    p.release(ceres_std::Button::Select);
+                    if i.key_released(key) {
+                        p.release(button);
+                    }
                 }
             });
 

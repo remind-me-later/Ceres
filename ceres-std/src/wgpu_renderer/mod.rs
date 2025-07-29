@@ -60,7 +60,10 @@ pub struct PipelineWrapper<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
 }
 
 impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEIGHT> {
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Initialization logic is long but necessary"
+    )]
     #[must_use]
     pub fn new(
         device: &wgpu::Device,
@@ -279,18 +282,21 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
         height: u32,
     ) {
         let (x, y) = {
-            #[allow(clippy::cast_precision_loss)]
-            let mul = if matches!(scaling_option, ScalingOption::PixelPerfect) {
-                (width / PX_WIDTH).min(height / PX_HEIGHT) as f32
-            } else {
-                (width as f32 / PX_WIDTH as f32).min(height as f32 / PX_HEIGHT as f32)
-            };
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "PX_WIDTH and PX_HEIGHT are u8 constants, so this is safe"
+            )]
+            {
+                let mul = if matches!(scaling_option, ScalingOption::PixelPerfect) {
+                    (width / PX_WIDTH).min(height / PX_HEIGHT) as f32
+                } else {
+                    (width as f32 / PX_WIDTH as f32).min(height as f32 / PX_HEIGHT as f32)
+                };
 
-            #[allow(clippy::cast_precision_loss)]
-            let x = (PX_WIDTH as f32 * mul) / width as f32;
-            #[allow(clippy::cast_precision_loss)]
-            let y = (PX_HEIGHT as f32 * mul) / height as f32;
-            (x, y)
+                let x = (PX_WIDTH as f32 * mul) / width as f32;
+                let y = (PX_HEIGHT as f32 * mul) / height as f32;
+                (x, y)
+            }
         };
 
         #[expect(clippy::tuple_array_conversions)]
