@@ -113,7 +113,7 @@ impl AppOption for ScalingOption {
     }
 }
 
-#[derive(clap::Parser)]
+#[derive(clap::Parser, Default)]
 #[command(name = CERES_BIN, about = ABOUT, after_help = AFTER_HELP)]
 pub struct Cli {
     #[arg(

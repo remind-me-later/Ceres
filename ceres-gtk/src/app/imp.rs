@@ -1,4 +1,5 @@
 use adw::{prelude::*, subclass::prelude::*};
+use ceres_std::{Cli, clap::Parser};
 use gtk::{
     gio, glib,
     subclass::prelude::{
@@ -7,13 +8,52 @@ use gtk::{
     },
 };
 
-use super::cli_handler::CliOptions;
-
 #[derive(Default)]
 pub struct Application {
-    pub cli_options: std::cell::RefCell<CliOptions>,
+    pub cli_options: std::cell::RefCell<Cli>,
     pub preferences_dialog: std::cell::OnceCell<crate::preferences_dialog::PreferencesDialog>,
     pub about_dialog: std::cell::OnceCell<crate::about_dialog::AboutDialog>,
+}
+
+impl Application {
+    fn apply_cli_options(&self) {
+        let app = self.obj();
+        let options = self.cli_options.borrow();
+
+        // For model and shader, we need to access the GlArea from the active window
+        if let Some(window) = app.active_window() {
+            if let Some(app_window) =
+                window.downcast_ref::<crate::application_window::ApplicationWindow>()
+            {
+                let gl_area = app_window.imp().gl_area();
+
+                // Set model property
+                let model_str = match options.model() {
+                    ceres_std::Model::Dmg => "dmg",
+                    ceres_std::Model::Mgb => "mgb",
+                    ceres_std::Model::Cgb => "cgb",
+                };
+                gl_area.set_property("gb-model", model_str);
+
+                // Set shader property
+                let shader_str = match options.shader_option() {
+                    ceres_std::ShaderOption::Nearest => "Nearest",
+                    ceres_std::ShaderOption::Scale2x => "Scale2x",
+                    ceres_std::ShaderOption::Scale3x => "Scale3x",
+                    ceres_std::ShaderOption::Lcd => "LCD",
+                    ceres_std::ShaderOption::Crt => "CRT",
+                };
+                gl_area.set_property("shader-mode", shader_str);
+
+                if let Some(file_path) = &options.file() {
+                    if let Some(action) = app_window.lookup_action("win.load-file") {
+                        action
+                            .activate(Some(&file_path.to_string_lossy().to_string().to_variant()));
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[glib::object_subclass]
@@ -34,7 +74,7 @@ impl ApplicationImpl for Application {
             .map(|arg| arg.to_string_lossy().to_string())
             .collect();
 
-        let cli_options = CliOptions::parse_from_args(&args);
+        let cli_options = Cli::parse_from(&args);
         *self.cli_options.borrow_mut() = cli_options;
 
         app.activate();
@@ -91,7 +131,6 @@ impl ApplicationImpl for Application {
 
     fn activate(&self) {
         let app = self.obj();
-        let cli_options = self.cli_options.borrow().clone();
 
         let window = crate::application_window::ApplicationWindow::new(app.as_ref());
 
@@ -103,7 +142,7 @@ impl ApplicationImpl for Application {
         // Connect preferences dialog to the GlArea using properties
         preferences.connect_to_gl_area(window.imp().gl_area());
 
-        super::cli_actions::apply_cli_options(&app, &cli_options);
+        self.apply_cli_options();
 
         preferences.set_initialization_complete();
 

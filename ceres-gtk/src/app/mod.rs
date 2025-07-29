@@ -1,8 +1,5 @@
-mod cli_actions;
-mod cli_handler;
 mod imp;
 
-pub use cli_handler::CliOptions;
 use gtk::gio;
 use gtk::glib;
 
