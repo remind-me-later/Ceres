@@ -67,16 +67,10 @@ impl ObjectImpl for Application {}
 
 impl ApplicationImpl for Application {
     fn command_line(&self, command_line: &gio::ApplicationCommandLine) -> glib::ExitCode {
-        let app = self.obj();
-        let args: Vec<String> = command_line
-            .arguments()
-            .iter()
-            .map(|arg| arg.to_string_lossy().to_string())
-            .collect();
-
-        let cli_options = Cli::parse_from(&args);
+        let cli_options = Cli::parse_from(command_line.arguments());
         *self.cli_options.borrow_mut() = cli_options;
 
+        let app = self.obj();
         app.activate();
 
         glib::ExitCode::SUCCESS
