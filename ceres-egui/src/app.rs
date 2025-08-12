@@ -219,14 +219,13 @@ impl eframe::App for App {
                             .selectable_label(paused, if paused { "\u{25b6}" } else { "\u{23f8}" })
                             .on_hover_text("Pause")
                             .clicked()
-                        {
-                            if let Err(e) = if paused {
+                            && let Err(e) = if paused {
                                 self.thread.resume()
                             } else {
                                 self.thread.pause()
-                            } {
-                                eprintln!("couldn't pause/resume: {e}");
                             }
+                        {
+                            eprintln!("couldn't pause/resume: {e}");
                         }
 
                         let selected_multiplier = self.thread.multiplier();

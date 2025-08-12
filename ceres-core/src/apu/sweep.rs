@@ -81,10 +81,10 @@ impl SweepTrait for Sweep {
             self.enabled = false;
         }
 
-        if self.shadow_pace.get() == 8 {
-            if let Some(pace) = NonZeroU8::new(self.pace) {
-                self.shadow_pace = pace;
-            }
+        if self.shadow_pace.get() == 8
+            && let Some(pace) = NonZeroU8::new(self.pace)
+        {
+            self.shadow_pace = pace;
         }
 
         self.dir = SweepDirection::from(val);
