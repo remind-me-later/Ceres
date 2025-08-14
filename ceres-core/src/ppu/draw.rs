@@ -6,20 +6,18 @@ use {
     crate::{CgbMode, PX_WIDTH},
 };
 
-// Sprite attributes bites
-const SPR_CGB_PAL: u8 = 0x7;
+const BG_PAL_B: u8 = 0x7; // BG attribute bits
+const BG_VBK_B: u8 = 0x8;
+const BG_X_FLIP_B: u8 = 0x20;
+const BG_Y_FLIP_B: u8 = 0x40;
+const BG_PR_B: u8 = 0x80;
+
+const SPR_CGB_PAL: u8 = 0x7; // Sprite attribute bits
 const SPR_TILE_BANK: u8 = 0x8;
 const SPR_PAL: u8 = 0x10;
 const SPR_FLIP_X: u8 = 0x20;
 const SPR_FLIP_Y: u8 = 0x40;
 const SPR_BG_FIRST: u8 = 0x80;
-
-// BG attributes bits
-const BG_PAL_B: u8 = 0x7;
-const BG_VBK_B: u8 = 0x8;
-const BG_X_FLIP_B: u8 = 0x20;
-const BG_Y_FLIP_B: u8 = 0x40;
-const BG_PR_B: u8 = 0x80;
 
 #[derive(Clone, Copy)]
 enum PxPrio {

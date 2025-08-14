@@ -6,20 +6,15 @@ use ceres_std::{
 use std::sync::Arc;
 
 pub struct State<'a, const PX_WIDTH: u32, const PX_HEIGHT: u32> {
-    surface: wgpu::Surface<'a>,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
-    size: winit::dpi::PhysicalSize<u32>,
-    scaling_option: PixelPerfectOption,
-    new_size: Option<winit::dpi::PhysicalSize<u32>>,
-    new_shader_option: Option<ShaderOption>,
-
+    device: wgpu::Device,
     gb_screen: PipelineWrapper<PX_WIDTH, PX_HEIGHT>,
-
-    // Make sure that the winit window is last in the struct so that
-    // it is dropped after the wgpu surface is dropped, otherwise the
-    // program may crash when closed. This is probably a bug in wgpu.
+    new_shader_option: Option<ShaderOption>,
+    new_size: Option<winit::dpi::PhysicalSize<u32>>,
+    queue: wgpu::Queue,
+    scaling_option: PixelPerfectOption,
+    size: winit::dpi::PhysicalSize<u32>,
+    surface: wgpu::Surface<'a>,
     window: Arc<winit::window::Window>,
 }
 
@@ -91,21 +86,8 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
         })
     }
 
-    pub const fn window(&self) -> &Arc<winit::window::Window> {
-        &self.window
-    }
-
-    pub const fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        self.new_size = Some(new_size);
-    }
-
     pub const fn on_lost(&mut self) {
         self.resize(self.size);
-    }
-
-    pub fn update_texture(&mut self, rgba: &[u8]) {
-        self.gb_screen
-            .update_screen_texture(&self.device, &self.queue, rgba);
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -163,6 +145,10 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
         Ok(())
     }
 
+    pub const fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+        self.new_size = Some(new_size);
+    }
+
     #[cfg(target_os = "macos")]
     pub const fn set_shader(&mut self, shader_option: ShaderOption) {
         self.new_shader_option = Some(shader_option);
@@ -171,5 +157,14 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
     #[cfg(target_os = "macos")]
     pub const fn set_scaling(&mut self, scaling_option: PixelPerfectOption) {
         self.scaling_option = scaling_option;
+    }
+
+    pub fn update_texture(&mut self, rgba: &[u8]) {
+        self.gb_screen
+            .update_screen_texture(&self.device, &self.queue, rgba);
+    }
+
+    pub const fn window(&self) -> &Arc<winit::window::Window> {
+        &self.window
     }
 }
