@@ -17,29 +17,29 @@ const AFTER_HELP: &str = "GB bindings:
 ";
 
 pub trait AppOption: Default + Clone + Copy + clap::ValueEnum {
-    fn str(self) -> &'static str;
     fn iter() -> impl Iterator<Item = Self>;
+    fn str(self) -> &'static str;
 }
 
 #[derive(Default, Clone, Copy, clap::ValueEnum)]
 enum Model {
-    Dmg,
-    Mgb,
     #[default]
     Cgb,
+    Dmg,
+    Mgb,
 }
 
 impl AppOption for Model {
+    fn iter() -> impl Iterator<Item = Self> {
+        [Self::Dmg, Self::Mgb, Self::Cgb].into_iter()
+    }
+
     fn str(self) -> &'static str {
         match self {
             Self::Dmg => "dmg",
             Self::Mgb => "mgb",
             Self::Cgb => "cgb",
         }
-    }
-
-    fn iter() -> impl Iterator<Item = Self> {
-        [Self::Dmg, Self::Mgb, Self::Cgb].into_iter()
     }
 }
 
@@ -55,25 +55,15 @@ impl From<Model> for ceres_core::Model {
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum ShaderOption {
+    Crt,
+    Lcd,
     #[default]
     Nearest,
     Scale2x,
     Scale3x,
-    Lcd,
-    Crt,
 }
 
 impl AppOption for ShaderOption {
-    fn str(self) -> &'static str {
-        match self {
-            Self::Nearest => "nearest",
-            Self::Scale2x => "scale2x",
-            Self::Scale3x => "scale3x",
-            Self::Lcd => "lcd",
-            Self::Crt => "crt",
-        }
-    }
-
     fn iter() -> impl Iterator<Item = Self> {
         [
             Self::Nearest,
@@ -84,25 +74,35 @@ impl AppOption for ShaderOption {
         ]
         .into_iter()
     }
+
+    fn str(self) -> &'static str {
+        match self {
+            Self::Nearest => "nearest",
+            Self::Scale2x => "scale2x",
+            Self::Scale3x => "scale3x",
+            Self::Lcd => "lcd",
+            Self::Crt => "crt",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
-pub enum ScalingOption {
+pub enum PixelPerfectOption {
     PixelPerfect,
     #[default]
     Stretch,
 }
 
-impl AppOption for ScalingOption {
+impl AppOption for PixelPerfectOption {
+    fn iter() -> impl Iterator<Item = Self> {
+        [Self::PixelPerfect, Self::Stretch].into_iter()
+    }
+
     fn str(self) -> &'static str {
         match self {
             Self::PixelPerfect => "pixel-perfect",
             Self::Stretch => "stretch",
         }
-    }
-
-    fn iter() -> impl Iterator<Item = Self> {
-        [Self::PixelPerfect, Self::Stretch].into_iter()
     }
 }
 
@@ -129,46 +129,46 @@ pub struct Cli {
     #[arg(
         short,
         long,
+        help = "Pixel perfect mode",
+        default_value = PixelPerfectOption::default().str(),
+        value_enum,
+        required = false
+    )]
+    pixel_mode: PixelPerfectOption,
+    #[arg(
+        short,
+        long,
         help = "Shader used",
         default_value = ShaderOption::default().str(),
         value_enum,
         required = false
     )]
     shader_option: ShaderOption,
-    #[arg(
-        short,
-        long,
-        help = "Pixel mode",
-        default_value = ScalingOption::default().str(),
-        value_enum,
-        required = false
-    )]
-    pixel_mode: ScalingOption,
 }
 
 impl Cli {
-    #[must_use]
-    pub fn model(&self) -> ceres_core::Model {
-        self.model.into()
-    }
-
     #[must_use]
     pub fn file(&self) -> Option<&Path> {
         self.file.as_deref()
     }
 
     #[must_use]
+    pub fn model(&self) -> ceres_core::Model {
+        self.model.into()
+    }
+
+    #[must_use]
+    pub const fn pixel_mode(&self) -> PixelPerfectOption {
+        self.pixel_mode
+    }
+
+    #[must_use]
+    pub const fn scaling_option(&self) -> PixelPerfectOption {
+        self.pixel_mode
+    }
+
+    #[must_use]
     pub const fn shader_option(&self) -> ShaderOption {
         self.shader_option
-    }
-
-    #[must_use]
-    pub const fn scaling_option(&self) -> ScalingOption {
-        self.pixel_mode
-    }
-
-    #[must_use]
-    pub const fn pixel_mode(&self) -> ScalingOption {
-        self.pixel_mode
     }
 }

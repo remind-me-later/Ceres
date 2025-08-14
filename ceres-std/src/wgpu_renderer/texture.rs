@@ -27,10 +27,6 @@ impl Texture {
         Self { texture, view }
     }
 
-    pub const fn view(&self) -> &wgpu::TextureView {
-        &self.view
-    }
-
     pub fn update(&self, queue: &wgpu::Queue, rgba: &[u8]) {
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
@@ -47,5 +43,9 @@ impl Texture {
             },
             self.texture.size(),
         );
+    }
+
+    pub const fn view(&self) -> &wgpu::TextureView {
+        &self.view
     }
 }

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use ceres_std::ScalingOption;
+use ceres_std::PixelPerfectOption;
 use ceres_std::ShaderOption;
 use ceres_std::wgpu_renderer::PipelineWrapper;
 use eframe::egui;
@@ -9,12 +9,31 @@ use eframe::wgpu;
 
 pub struct GBScreen<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
     buffer: Arc<Mutex<Box<[u8]>>>,
+    pixel_mode: PixelPerfectOption,
     shader_option: ShaderOption,
-    pixel_mode: ScalingOption,
     size: (f32, f32),
 }
 
 impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
+    pub fn custom_painting(&self, ui: &mut egui::Ui) {
+        let (response, painter) =
+            ui.allocate_painter(ui.available_size_before_wrap(), egui::Sense::drag());
+
+        painter.add(eframe::egui_wgpu::Callback::new_paint_callback(
+            response.rect,
+            Self {
+                buffer: Arc::clone(&self.buffer),
+                shader_option: self.shader_option,
+                size: (response.rect.width(), response.rect.height()),
+                pixel_mode: self.pixel_mode,
+            },
+        ));
+    }
+
+    pub const fn mut_pixel_mode(&mut self) -> &mut PixelPerfectOption {
+        &mut self.pixel_mode
+    }
+
     pub fn new(
         cc: &eframe::CreationContext<'_>,
         gb: Arc<Mutex<Box<[u8]>>>,
@@ -42,23 +61,12 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
             buffer: gb,
             shader_option,
             size: (0.0, 0.0),
-            pixel_mode: ScalingOption::default(),
+            pixel_mode: PixelPerfectOption::default(),
         }
     }
 
-    pub fn custom_painting(&self, ui: &mut egui::Ui) {
-        let (response, painter) =
-            ui.allocate_painter(ui.available_size_before_wrap(), egui::Sense::drag());
-
-        painter.add(eframe::egui_wgpu::Callback::new_paint_callback(
-            response.rect,
-            Self {
-                buffer: Arc::clone(&self.buffer),
-                shader_option: self.shader_option,
-                size: (response.rect.width(), response.rect.height()),
-                pixel_mode: self.pixel_mode,
-            },
-        ));
+    pub const fn pixel_mode(&self) -> PixelPerfectOption {
+        self.pixel_mode
     }
 
     pub const fn shader_option(&self) -> ShaderOption {
@@ -67,14 +75,6 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
 
     pub const fn shader_option_mut(&mut self) -> &mut ShaderOption {
         &mut self.shader_option
-    }
-
-    pub const fn pixel_mode(&self) -> ScalingOption {
-        self.pixel_mode
-    }
-
-    pub const fn mut_pixel_mode(&mut self) -> &mut ScalingOption {
-        &mut self.pixel_mode
     }
 }
 

@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::Context;
 use ceres_std::wgpu_renderer;
-use ceres_std::{GbThread, ShaderOption, wgpu_renderer::ScalingOption};
+use ceres_std::{GbThread, ShaderOption, wgpu_renderer::PixelPerfectOption};
 use ceres_std::{PX_HEIGHT, PX_WIDTH};
 use std::{
     sync::{Arc, Mutex},
@@ -53,7 +53,7 @@ pub struct App<'a> {
     // Config parameters
     project_dirs: directories::ProjectDirs,
     shader_option: ShaderOption,
-    scaling_option: ScalingOption,
+    scaling_option: PixelPerfectOption,
     sav_path: Option<std::path::PathBuf>,
     pixel_data_rgba: Arc<Mutex<Box<[u8]>>>,
     #[cfg(target_os = "macos")]
@@ -72,7 +72,7 @@ impl App<'_> {
         model: ceres_std::Model,
         rom_path: Option<&Path>,
         shader_option: ShaderOption,
-        scaling_option: ScalingOption,
+        scaling_option: PixelPerfectOption,
     ) -> anyhow::Result<Self> {
         let sav_path = if let Some(rom_path) = rom_path {
             let file_stem = rom_path.file_stem().context("couldn't get file stem")?;

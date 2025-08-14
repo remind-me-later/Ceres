@@ -89,39 +89,17 @@ const IE: u8 = 0xFF;
 
 impl<A: AudioCallback> Gb<A> {
     #[must_use]
-    pub fn read_mem(&self, addr: u16) -> u8 {
-        match addr {
-            0x0000..=0x00FF => self.read_boot_or_cart(addr),
-            0x0200..=0x08FF => {
-                if matches!(self.model, Model::Cgb) {
-                    self.read_boot_or_cart(addr)
-                } else {
-                    self.cart.read_rom(addr)
-                }
-            }
-            0x0100..=0x01FF | 0x0900..=0x7FFF => self.cart.read_rom(addr),
-            0x8000..=0x9FFF => self.ppu.read_vram(addr),
-            0xA000..=0xBFFF => self.cart.read_ram(addr),
-            0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.read_wram_lo(addr),
-            0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.read_wram_hi(addr),
-            0xFE00..=0xFE9F => self.ppu.read_oam(addr, self.dma.is_enabled()),
-            0xFEA0..=0xFEFF => 0xFF,
-            0xFF00..=0xFFFF => self.read_high((addr & 0xFF) as u8),
-        }
+    const fn are_cgb_regs_available(&self) -> bool {
+        // The bootrom writes the color palettes for compatibility mode, so we must allow it to write to those registers,
+        // since it's not modifiable by the user there should be no issues.
+        matches!(self.cgb_mode, CgbMode::Cgb) || self.bootrom.is_enabled()
     }
 
-    pub fn write_mem(&mut self, addr: u16, val: u8) {
-        match addr {
-            // FIXME: we assume bootrom doesn't write to rom
-            0x0000..=0x7FFF => self.cart.write_rom(addr, val),
-            0x8000..=0x9FFF => self.ppu.write_vram(addr, val),
-            0xA000..=0xBFFF => self.cart.write_ram(addr, val),
-            0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.write_wram_lo(addr, val),
-            0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.write_wram_hi(addr, val),
-            0xFE00..=0xFE9F => self.ppu.write_oam(addr, val, self.dma.is_active()),
-            0xFEA0..=0xFEFF => (),
-            0xFF00..=0xFFFF => self.write_high((addr & 0xFF) as u8, val),
-        }
+    #[must_use]
+    fn read_boot_or_cart(&self, addr: u16) -> u8 {
+        self.bootrom
+            .read(addr)
+            .unwrap_or_else(|| self.cart.read_rom(addr))
     }
 
     #[must_use]
@@ -164,20 +142,42 @@ impl<A: AudioCallback> Gb<A> {
             OBP1 => self.ppu.read_obp1(),
             WY => self.ppu.read_wy(),
             WX => self.ppu.read_wx(),
-            KEY1 if self.cgb_regs_available() => self.key1.read(),
-            VBK if self.cgb_regs_available() => self.ppu.vram().read_vbk(),
-            HDMA5 if self.cgb_regs_available() => self.hdma.read_hdma5(),
-            BCPS if self.cgb_regs_available() => self.ppu.bcp().spec(),
-            BCPD if self.cgb_regs_available() => self.ppu.bcp().data(),
-            OCPS if self.cgb_regs_available() => self.ppu.ocp().spec(),
-            OCPD if self.cgb_regs_available() => self.ppu.ocp().data(),
-            OPRI if self.cgb_regs_available() => self.ppu.read_opri(),
-            SVBK if self.cgb_regs_available() => self.wram.svbk().read(),
-            PCM12 if self.cgb_regs_available() => self.apu.pcm12(),
-            PCM34 if self.cgb_regs_available() => self.apu.pcm34(),
+            KEY1 if self.are_cgb_regs_available() => self.key1.read(),
+            VBK if self.are_cgb_regs_available() => self.ppu.vram().read_vbk(),
+            HDMA5 if self.are_cgb_regs_available() => self.hdma.read_hdma5(),
+            BCPS if self.are_cgb_regs_available() => self.ppu.bcp().spec(),
+            BCPD if self.are_cgb_regs_available() => self.ppu.bcp().data(),
+            OCPS if self.are_cgb_regs_available() => self.ppu.ocp().spec(),
+            OCPD if self.are_cgb_regs_available() => self.ppu.ocp().data(),
+            OPRI if self.are_cgb_regs_available() => self.ppu.read_opri(),
+            SVBK if self.are_cgb_regs_available() => self.wram.svbk().read(),
+            PCM12 if self.are_cgb_regs_available() => self.apu.pcm12(),
+            PCM34 if self.are_cgb_regs_available() => self.apu.pcm34(),
             HRAM_BEG..=HRAM_END => self.hram.read(addr),
             IE => self.ints.read_ie(),
             _ => 0xFF,
+        }
+    }
+
+    #[must_use]
+    pub fn read_mem(&self, addr: u16) -> u8 {
+        match addr {
+            0x0000..=0x00FF => self.read_boot_or_cart(addr),
+            0x0200..=0x08FF => {
+                if matches!(self.model, Model::Cgb) {
+                    self.read_boot_or_cart(addr)
+                } else {
+                    self.cart.read_rom(addr)
+                }
+            }
+            0x0100..=0x01FF | 0x0900..=0x7FFF => self.cart.read_rom(addr),
+            0x8000..=0x9FFF => self.ppu.read_vram(addr),
+            0xA000..=0xBFFF => self.cart.read_ram(addr),
+            0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.read_wram_lo(addr),
+            0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.read_wram_hi(addr),
+            0xFE00..=0xFE9F => self.ppu.read_oam(addr, self.dma.is_enabled()),
+            0xFEA0..=0xFEFF => 0xFF,
+            0xFF00..=0xFFFF => self.read_high((addr & 0xFF) as u8),
         }
     }
 
@@ -232,46 +232,46 @@ impl<A: AudioCallback> Gb<A> {
                     self.cgb_mode = CgbMode::Compat;
                 }
             }
-            KEY1 if self.cgb_regs_available() => self.key1.write(val),
-            VBK if self.cgb_regs_available() => self.ppu.vram_mut().write_vbk(val),
+            KEY1 if self.are_cgb_regs_available() => self.key1.write(val),
+            VBK if self.are_cgb_regs_available() => self.ppu.vram_mut().write_vbk(val),
             BANK => {
                 if val & 1 != 0 {
                     self.bootrom.disable();
                 }
             }
-            HDMA1 if self.cgb_regs_available() => self.hdma.write_hdma1(val),
-            HDMA2 if self.cgb_regs_available() => self.hdma.write_hdma2(val),
-            HDMA3 if self.cgb_regs_available() => self.hdma.write_hdma3(val),
-            HDMA4 if self.cgb_regs_available() => self.hdma.write_hdma4(val),
-            HDMA5 if self.cgb_regs_available() => self.hdma.write_hdma5(val),
-            BCPS if self.cgb_regs_available() => self.ppu.bcp_mut().set_spec(val),
-            BCPD if self.cgb_regs_available() => self.ppu.bcp_mut().set_data(val),
-            OCPS if self.cgb_regs_available() => self.ppu.ocp_mut().set_spec(val),
-            OCPD if self.cgb_regs_available() => self.ppu.ocp_mut().set_data(val),
-            OPRI if self.cgb_regs_available() => {
+            HDMA1 if self.are_cgb_regs_available() => self.hdma.write_hdma1(val),
+            HDMA2 if self.are_cgb_regs_available() => self.hdma.write_hdma2(val),
+            HDMA3 if self.are_cgb_regs_available() => self.hdma.write_hdma3(val),
+            HDMA4 if self.are_cgb_regs_available() => self.hdma.write_hdma4(val),
+            HDMA5 if self.are_cgb_regs_available() => self.hdma.write_hdma5(val),
+            BCPS if self.are_cgb_regs_available() => self.ppu.bcp_mut().set_spec(val),
+            BCPD if self.are_cgb_regs_available() => self.ppu.bcp_mut().set_data(val),
+            OCPS if self.are_cgb_regs_available() => self.ppu.ocp_mut().set_spec(val),
+            OCPD if self.are_cgb_regs_available() => self.ppu.ocp_mut().set_data(val),
+            OPRI if self.are_cgb_regs_available() => {
                 // FIXME: understand behaviour outside of bootrom
                 if self.bootrom.is_enabled() {
                     self.ppu.write_opri(val);
                 }
             }
-            SVBK if self.cgb_regs_available() => self.wram.svbk_mut().write(val),
+            SVBK if self.are_cgb_regs_available() => self.wram.svbk_mut().write(val),
             HRAM_BEG..=HRAM_END => self.hram.write(addr, val),
             IE => self.ints.write_ie(val),
             _ => (),
         }
     }
 
-    #[must_use]
-    fn read_boot_or_cart(&self, addr: u16) -> u8 {
-        self.bootrom
-            .read(addr)
-            .unwrap_or_else(|| self.cart.read_rom(addr))
-    }
-
-    #[must_use]
-    const fn cgb_regs_available(&self) -> bool {
-        // The bootrom writes the color palettes for compatibility mode, so we must allow it to write to those registers,
-        // since it's not modifiable by the user there should be no issues.
-        matches!(self.cgb_mode, CgbMode::Cgb) || self.bootrom.is_enabled()
+    pub fn write_mem(&mut self, addr: u16, val: u8) {
+        match addr {
+            // FIXME: we assume bootrom doesn't write to rom
+            0x0000..=0x7FFF => self.cart.write_rom(addr, val),
+            0x8000..=0x9FFF => self.ppu.write_vram(addr, val),
+            0xA000..=0xBFFF => self.cart.write_ram(addr, val),
+            0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.write_wram_lo(addr, val),
+            0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.write_wram_hi(addr, val),
+            0xFE00..=0xFE9F => self.ppu.write_oam(addr, val, self.dma.is_active()),
+            0xFEA0..=0xFEFF => (),
+            0xFF00..=0xFFFF => self.write_high((addr & 0xFF) as u8, val),
+        }
     }
 }

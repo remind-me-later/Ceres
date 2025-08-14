@@ -9,11 +9,11 @@ pub const TC_SEC: i32 = 0x40_0000; // 2^22
 
 #[derive(Default, Debug)]
 pub struct Clock {
-    tima: u8,
-    tma: u8,
-    tac: u8,
     div: u16,
+    tac: u8,
+    tima: u8,
     tima_state: TIMAState,
+    tma: u8,
 }
 
 impl Clock {
@@ -26,6 +26,10 @@ impl Clock {
     }
 }
 
+#[expect(
+    clippy::arbitrary_source_item_ordering,
+    reason = "Order follows the state machine transitions"
+)]
 #[derive(Clone, Copy, Default, Debug)]
 pub enum TIMAState {
     Reloading,
@@ -77,6 +81,28 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
+    #[must_use]
+    const fn is_tac_enabled(&self) -> bool {
+        self.clock.tac & 4 != 0
+    }
+
+    #[must_use]
+    pub const fn read_div(&self) -> u8 {
+        ((self.clock.div >> 8) & 0xFF) as u8
+    }
+
+    #[must_use]
+    pub const fn read_tac(&self) -> u8 {
+        0xF8 | self.clock.tac
+    }
+
+    pub fn run_timers(&mut self, cycles: i32) {
+        for _ in 0..cycles / 4 {
+            self.advance_tima_state();
+            self.set_system_clk(self.clock.div.wrapping_add(4));
+        }
+    }
+
     // only modify div inside this function
     // TODO: this could be optimized
     fn set_system_clk(&mut self, val: u16) {
@@ -115,20 +141,12 @@ impl<A: AudioCallback> Gb<A> {
         self.clock.div = val;
     }
 
-    pub fn run_timers(&mut self, cycles: i32) {
-        for _ in 0..cycles / 4 {
-            self.advance_tima_state();
-            self.set_system_clk(self.clock.div.wrapping_add(4));
-        }
-    }
-
-    #[must_use]
-    pub const fn read_div(&self) -> u8 {
-        ((self.clock.div >> 8) & 0xFF) as u8
-    }
-
     pub fn write_div(&mut self) {
         self.set_system_clk(0);
+    }
+
+    pub const fn write_tac(&mut self, val: u8) {
+        self.clock.tac = val;
     }
 
     pub const fn write_tima(&mut self, val: u8) {
@@ -137,19 +155,5 @@ impl<A: AudioCallback> Gb<A> {
 
     pub const fn write_tma(&mut self, val: u8) {
         self.clock.tma = val;
-    }
-
-    #[must_use]
-    pub const fn read_tac(&self) -> u8 {
-        0xF8 | self.clock.tac
-    }
-
-    pub const fn write_tac(&mut self, val: u8) {
-        self.clock.tac = val;
-    }
-
-    #[must_use]
-    const fn is_tac_enabled(&self) -> bool {
-        self.clock.tac & 4 != 0
     }
 }

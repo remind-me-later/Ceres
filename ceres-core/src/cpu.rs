@@ -10,13 +10,12 @@ pub struct Cpu {
     af: u16,
     bc: u16,
     de: u16,
-    hl: u16,
-    sp: u16,
-    pc: u16,
-
     has_ei_delay: bool,
-    is_halted: bool,
+    hl: u16,
     is_halt_bug_triggered: bool,
+    is_halted: bool,
+    pc: u16,
+    sp: u16,
 }
 
 impl Cpu {
@@ -36,996 +35,20 @@ impl Cpu {
         self.hl
     }
 
-    pub const fn sp(&self) -> u16 {
-        self.sp
+    pub const fn is_halted(&self) -> bool {
+        self.is_halted
     }
 
     pub const fn pc(&self) -> u16 {
         self.pc
     }
 
-    pub const fn is_halted(&self) -> bool {
-        self.is_halted
+    pub const fn sp(&self) -> u16 {
+        self.sp
     }
 }
 
 impl<A: AudioCallback> Gb<A> {
-    pub fn run_cpu(&mut self) {
-        if self.cpu.has_ei_delay {
-            self.ints.enable();
-            self.cpu.has_ei_delay = false;
-        }
-
-        if self.cpu.is_halted {
-            self.tick_m_cycle();
-        } else {
-            // println!("pc {:0x}", self.cpu.pc);
-
-            let op = self.imm8();
-            self.run_hdma();
-
-            if self.cpu.is_halt_bug_triggered {
-                self.cpu.pc = self.cpu.pc.wrapping_sub(1);
-                self.cpu.is_halt_bug_triggered = false;
-            }
-
-            self.exec(op);
-        }
-
-        if self.ints.is_any_requested() {
-            self.cpu.is_halted = false;
-
-            if self.ints.are_enabled() {
-                self.tick_m_cycle();
-                self.tick_m_cycle();
-
-                self.push(self.cpu.pc);
-
-                self.ints.disable();
-                self.cpu.pc = self.ints.handle();
-            }
-        }
-    }
-
-    fn cpu_write(&mut self, addr: u16, val: u8) {
-        self.tick_m_cycle();
-        self.write_mem(addr, val);
-    }
-
-    #[must_use]
-    fn read(&mut self, addr: u16) -> u8 {
-        self.tick_m_cycle();
-        self.read_mem(addr)
-    }
-
-    fn tick_m_cycle(&mut self) {
-        self.advance_t_cycles(4);
-    }
-
-    #[must_use]
-    fn imm8(&mut self) -> u8 {
-        let val = self.read(self.cpu.pc);
-        self.cpu.pc = self.cpu.pc.wrapping_add(1);
-        val
-    }
-
-    #[must_use]
-    fn imm16(&mut self) -> u16 {
-        let lo = u16::from(self.imm8());
-        let hi = u16::from(self.imm8());
-        (hi << 8) | lo
-    }
-
-    fn set_rr(&mut self, id: u8, val: u16) {
-        match id {
-            0 => self.cpu.af = val,
-            1 => self.cpu.bc = val,
-            2 => self.cpu.de = val,
-            3 => self.cpu.hl = val,
-            4 => self.cpu.sp = val,
-            _ => unreachable!(),
-        }
-    }
-
-    #[must_use]
-    const fn get_rr(&self, id: u8) -> u16 {
-        match id {
-            0 => self.cpu.af,
-            1 => self.cpu.bc,
-            2 => self.cpu.de,
-            3 => self.cpu.hl,
-            4 => self.cpu.sp,
-            _ => unreachable!(),
-        }
-    }
-
-    #[must_use]
-    fn get_r(&mut self, op: u8) -> u8 {
-        let id = ((op >> 1) + 1) & 3;
-        let lo = op & 1 != 0;
-        if id == 0 {
-            if lo {
-                (self.cpu.af >> 8) as u8
-            } else {
-                self.read(self.cpu.hl)
-            }
-        } else if lo {
-            (self.get_rr(id) & 0xFF) as u8
-        } else {
-            (self.get_rr(id) >> 8) as u8
-        }
-    }
-
-    fn set_r(&mut self, op: u8, val: u8) {
-        let id = ((op >> 1) + 1) & 3;
-        let lo = op & 1 != 0;
-        if id == 0 {
-            if lo {
-                self.cpu.af = (u16::from(val) << 8) | self.cpu.af & 0xFF;
-            } else {
-                self.cpu_write(self.cpu.hl, val);
-            }
-        } else if lo {
-            self.set_rr(id, u16::from(val) | self.get_rr(id) & 0xFF00);
-        } else {
-            self.set_rr(id, (u16::from(val) << 8) | self.get_rr(id) & 0xFF);
-        }
-    }
-
-    fn ld(&mut self, op: u8) {
-        let val = self.get_r(op);
-        self.set_r(op >> 3, val);
-    }
-
-    fn ld_a_drr(&mut self, op: u8) {
-        let id = (op >> 4) + 1;
-        self.cpu.af &= 0xFF;
-        let addr = self.get_rr(id);
-        self.cpu.af |= u16::from(self.read(addr)) << 8;
-    }
-
-    fn ld_drr_a(&mut self, op: u8) {
-        let id = (op >> 4) + 1;
-        let addr = self.get_rr(id);
-        self.cpu_write(addr, (self.cpu.af >> 8) as u8);
-    }
-
-    fn ld_da16_a(&mut self) {
-        let addr = self.imm16();
-        self.cpu_write(addr, (self.cpu.af >> 8) as u8);
-    }
-
-    fn ld_a_da16(&mut self) {
-        self.cpu.af &= 0xFF;
-        let addr = self.imm16();
-        self.cpu.af |= u16::from(self.read(addr)) << 8;
-    }
-
-    fn ld_dhli_a(&mut self) {
-        let addr = self.cpu.hl;
-        self.cpu_write(addr, (self.cpu.af >> 8) as u8);
-        self.cpu.hl = addr.wrapping_add(1);
-    }
-
-    fn ld_dhld_a(&mut self) {
-        let addr = self.cpu.hl;
-        self.cpu_write(addr, (self.cpu.af >> 8) as u8);
-        self.cpu.hl = addr.wrapping_sub(1);
-    }
-
-    fn ld_a_dhli(&mut self) {
-        let addr = self.cpu.hl;
-        let val = u16::from(self.read(addr));
-        self.cpu.af &= 0xFF;
-        self.cpu.af |= val << 8;
-        self.cpu.hl = addr.wrapping_add(1);
-    }
-
-    fn ld_a_dhld(&mut self) {
-        let addr = self.cpu.hl;
-        let val = u16::from(self.read(addr));
-        self.cpu.af &= 0xFF;
-        self.cpu.af |= val << 8;
-        self.cpu.hl = addr.wrapping_sub(1);
-    }
-
-    fn ldh_da8_a(&mut self) {
-        let tmp = u16::from(self.imm8());
-        let a = (self.cpu.af >> 8) as u8;
-        self.cpu_write(0xFF00 | tmp, a);
-    }
-
-    fn ldh_a_da8(&mut self) {
-        let tmp = u16::from(self.imm8());
-        self.cpu.af &= 0xFF;
-        self.cpu.af |= u16::from(self.read(0xFF00 | tmp)) << 8;
-    }
-
-    fn ldh_dc_a(&mut self) {
-        self.cpu_write(0xFF00 | self.cpu.bc & 0xFF, (self.cpu.af >> 8) as u8);
-    }
-
-    fn ldh_a_dc(&mut self) {
-        self.cpu.af &= 0xFF;
-        self.cpu.af |= u16::from(self.read(0xFF00 | self.cpu.bc & 0xFF)) << 8;
-    }
-
-    fn ld_hr_d8(&mut self, op: u8) {
-        let id = ((op >> 4) + 1) & 0x03;
-        let hi = u16::from(self.imm8());
-        self.set_rr(id, (hi << 8) | self.get_rr(id) & 0xFF);
-    }
-
-    fn ld_lr_d8(&mut self, op: u8) {
-        let id = (op >> 4) + 1;
-        let lo = u16::from(self.imm8());
-        self.set_rr(id, self.get_rr(id) & 0xFF00 | lo);
-    }
-
-    fn ld_dhl_d8(&mut self) {
-        let tmp = self.imm8();
-        self.cpu_write(self.cpu.hl, tmp);
-    }
-
-    fn ld16_sp_hl(&mut self) {
-        let val = self.cpu.hl;
-        self.cpu.sp = val;
-        self.tick_m_cycle();
-    }
-
-    const fn add(&mut self, val: u16) {
-        let a = self.cpu.af >> 8;
-        let res = a + val;
-        self.cpu.af = res << 8;
-        if res.trailing_zeros() >= 8 {
-            self.cpu.af |= ZF;
-        }
-        if (a & 0xF) + (val & 0xF) > 0x0F {
-            self.cpu.af |= HF;
-        }
-        if res > 0xFF {
-            self.cpu.af |= CF;
-        }
-    }
-
-    fn add_a_r(&mut self, op: u8) {
-        let val = u16::from(self.get_r(op));
-        self.add(val);
-    }
-
-    fn add_a_d8(&mut self) {
-        let val = u16::from(self.imm8());
-        self.add(val);
-    }
-
-    const fn sub(&mut self, val: u16) {
-        let a = self.cpu.af >> 8;
-        self.cpu.af = (a.wrapping_sub(val) << 8) | NF;
-        if a == val {
-            self.cpu.af |= ZF;
-        }
-        if (a & 0xF) < (val & 0xF) {
-            self.cpu.af |= HF;
-        }
-        if a < val {
-            self.cpu.af |= CF;
-        }
-    }
-
-    fn sub_a_r(&mut self, op: u8) {
-        let val = u16::from(self.get_r(op));
-        self.sub(val);
-    }
-
-    fn sub_a_d8(&mut self) {
-        let val = u16::from(self.imm8());
-        self.sub(val);
-    }
-
-    fn sbc(&mut self, val: u16) {
-        let a = self.cpu.af >> 8;
-        let carry = u16::from((self.cpu.af & CF) != 0);
-        let res = a.wrapping_sub(val).wrapping_sub(carry);
-        self.cpu.af = (res << 8) | NF;
-
-        if res.trailing_zeros() >= 8 {
-            self.cpu.af |= ZF;
-        }
-        if (a & 0xF) < (val & 0xF) + carry {
-            self.cpu.af |= HF;
-        }
-        if res > 0xFF {
-            self.cpu.af |= CF;
-        }
-    }
-
-    fn sbc_a_r(&mut self, op: u8) {
-        let val = u16::from(self.get_r(op));
-        self.sbc(val);
-    }
-
-    fn sbc_a_d8(&mut self) {
-        let val = u16::from(self.imm8());
-        self.sbc(val);
-    }
-
-    fn adc(&mut self, val: u16) {
-        let a = self.cpu.af >> 8;
-        let carry = u16::from((self.cpu.af & CF) != 0);
-        let res = a + val + carry;
-        self.cpu.af = res << 8;
-        if res.trailing_zeros() >= 8 {
-            self.cpu.af |= ZF;
-        }
-        if (a & 0xF) + (val & 0xF) + carry > 0x0F {
-            self.cpu.af |= HF;
-        }
-        if res > 0xFF {
-            self.cpu.af |= CF;
-        }
-    }
-
-    fn adc_a_r(&mut self, op: u8) {
-        let val = u16::from(self.get_r(op));
-        self.adc(val);
-    }
-
-    fn adc_a_d8(&mut self) {
-        let val = u16::from(self.imm8());
-        self.adc(val);
-    }
-
-    const fn or(&mut self, val: u16) {
-        let a = self.cpu.af >> 8;
-        self.cpu.af = (a | val) << 8;
-        if a | val == 0 {
-            self.cpu.af |= ZF;
-        }
-    }
-
-    fn or_a_r(&mut self, op: u8) {
-        let val = u16::from(self.get_r(op));
-        self.or(val);
-    }
-
-    fn or_a_d8(&mut self) {
-        let val = u16::from(self.imm8());
-        self.or(val);
-    }
-
-    const fn xor(&mut self, val: u16) {
-        let a = self.cpu.af >> 8;
-        let a = a ^ val;
-        self.cpu.af = a << 8;
-        if a == 0 {
-            self.cpu.af |= ZF;
-        }
-    }
-
-    fn xor_a_r(&mut self, op: u8) {
-        let val = u16::from(self.get_r(op));
-        self.xor(val);
-    }
-
-    fn xor_a_d8(&mut self) {
-        let val = u16::from(self.imm8());
-        self.xor(val);
-    }
-
-    const fn and(&mut self, val: u16) {
-        let a = self.cpu.af >> 8;
-        let a = a & val;
-        self.cpu.af = (a << 8) | HF;
-        if a == 0 {
-            self.cpu.af |= ZF;
-        }
-    }
-
-    fn and_a_r(&mut self, op: u8) {
-        let val = u16::from(self.get_r(op));
-        self.and(val);
-    }
-
-    fn and_a_d8(&mut self) {
-        let val = u16::from(self.imm8());
-        self.and(val);
-    }
-
-    const fn cp(&mut self, val: u16) {
-        let a = self.cpu.af >> 8;
-        self.cpu.af &= 0xFF00;
-        self.cpu.af |= NF;
-        if a == val {
-            self.cpu.af |= ZF;
-        }
-        if a & 0xF < val & 0xF {
-            self.cpu.af |= HF;
-        }
-        if a < val {
-            self.cpu.af |= CF;
-        }
-    }
-
-    fn cp_a_r(&mut self, op: u8) {
-        let val = u16::from(self.get_r(op));
-        self.cp(val);
-    }
-
-    fn cp_a_d8(&mut self) {
-        let val = u16::from(self.imm8());
-        self.cp(val);
-    }
-
-    fn inc_lr(&mut self, op: u8) {
-        let id = (op >> 4) + 1;
-        let val = self.get_rr(id).wrapping_add(1) & 0xFF;
-        let rr = self.get_rr(id) & 0xFF00 | val;
-        self.set_rr(id, rr);
-
-        self.cpu.af &= !(NF | ZF | HF);
-
-        if rr.trailing_zeros() >= 4 {
-            self.cpu.af |= HF;
-        }
-
-        if rr.trailing_zeros() >= 8 {
-            self.cpu.af |= ZF;
-        }
-    }
-
-    fn dec_lr(&mut self, op: u8) {
-        let id = (op >> 4) + 1;
-        let val = self.get_rr(id).wrapping_sub(1) & 0xFF;
-        let rr = self.get_rr(id) & 0xFF00 | val;
-        self.set_rr(id, rr);
-
-        self.cpu.af &= !(ZF | HF);
-        self.cpu.af |= NF;
-
-        if rr & 0x0F == 0xF {
-            self.cpu.af |= HF;
-        }
-
-        if rr.trailing_zeros() >= 8 {
-            self.cpu.af |= ZF;
-        }
-    }
-
-    fn inc_hr(&mut self, op: u8) {
-        let id = ((op >> 4) + 1) & 0x03;
-        let rr = self.get_rr(id).wrapping_add(0x100);
-        self.set_rr(id, rr);
-        self.cpu.af &= !(NF | ZF | HF);
-
-        if rr & 0x0F00 == 0 {
-            self.cpu.af |= HF;
-        }
-
-        if rr & 0xFF00 == 0 {
-            self.cpu.af |= ZF;
-        }
-    }
-
-    fn dec_hr(&mut self, op: u8) {
-        let id = ((op >> 4) + 1) & 0x03;
-        let rr = self.get_rr(id).wrapping_sub(0x100);
-        self.set_rr(id, rr);
-        self.cpu.af &= !(ZF | HF);
-        self.cpu.af |= NF;
-
-        if rr & 0x0F00 == 0xF00 {
-            self.cpu.af |= HF;
-        }
-
-        if rr & 0xFF00 == 0 {
-            self.cpu.af |= ZF;
-        }
-    }
-
-    fn inc_dhl(&mut self) {
-        let val = self.read(self.cpu.hl).wrapping_add(1);
-        self.cpu_write(self.cpu.hl, val);
-
-        self.cpu.af &= !(NF | ZF | HF);
-        if val.trailing_zeros() >= 4 {
-            self.cpu.af |= HF;
-        }
-
-        if val == 0 {
-            self.cpu.af |= ZF;
-        }
-    }
-
-    fn dec_dhl(&mut self) {
-        let val = self.read(self.cpu.hl).wrapping_sub(1);
-        self.cpu_write(self.cpu.hl, val);
-
-        self.cpu.af &= !(ZF | HF);
-        self.cpu.af |= NF;
-        if (val & 0x0F) == 0x0F {
-            self.cpu.af |= HF;
-        }
-
-        if val == 0 {
-            self.cpu.af |= ZF;
-        }
-    }
-
-    fn inc_rr(&mut self, op: u8) {
-        let id = (op >> 4) + 1;
-        self.set_rr(id, self.get_rr(id).wrapping_add(1));
-        self.tick_m_cycle();
-    }
-
-    fn dec_rr(&mut self, op: u8) {
-        let id = (op >> 4) + 1;
-        self.set_rr(id, self.get_rr(id).wrapping_sub(1));
-        self.tick_m_cycle();
-    }
-
-    fn ld_hl_sp_r8(&mut self) {
-        self.cpu.af &= 0xFF00;
-        #[expect(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
-        let offset = self.imm8() as i8 as u16;
-        self.tick_m_cycle();
-        self.cpu.hl = self.cpu.sp.wrapping_add(offset);
-
-        if (self.cpu.sp & 0xF) + (offset & 0xF) > 0xF {
-            self.cpu.af |= HF;
-        }
-
-        if (self.cpu.sp & 0xFF) + (offset & 0xFF) > 0xFF {
-            self.cpu.af |= CF;
-        }
-    }
-
-    const fn rlca(&mut self) {
-        let carry = (self.cpu.af & 0x8000) != 0;
-
-        self.cpu.af = (self.cpu.af & 0xFF00) << 1;
-        if carry {
-            self.cpu.af |= CF | 0x0100;
-        }
-    }
-
-    const fn rrca(&mut self) {
-        let carry = self.cpu.af & 0x100 != 0;
-        self.cpu.af = (self.cpu.af >> 1) & 0xFF00;
-        if carry {
-            self.cpu.af |= CF | 0x8000;
-        }
-    }
-
-    fn rrc_r(&mut self, op: u8) {
-        let val = self.get_r(op);
-        let carry = (val & 0x01) != 0;
-        self.cpu.af &= 0xFF00;
-        let val = (val >> 1) | (u8::from(carry) << 7);
-        self.set_r(op, val);
-        if carry {
-            self.cpu.af |= CF;
-        }
-        if val == 0 {
-            self.cpu.af |= ZF;
-        }
-    }
-
-    fn do_jump_to_immediate(&mut self) {
-        let addr = self.imm16();
-        self.cpu.pc = addr;
-        self.tick_m_cycle();
-    }
-
-    fn jp_a16(&mut self) {
-        self.do_jump_to_immediate();
-    }
-
-    fn jp_cc(&mut self, op: u8) {
-        if self.satisfies_branch_condition(op) {
-            self.do_jump_to_immediate();
-        } else {
-            let pc = self.cpu.pc.wrapping_add(2);
-            self.cpu.pc = pc;
-            self.tick_m_cycle();
-            self.tick_m_cycle();
-        }
-    }
-
-    const fn jp_hl(&mut self) {
-        self.cpu.pc = self.cpu.hl;
-    }
-
-    fn do_jump_relative(&mut self) {
-        #[expect(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
-        let offset = self.imm8() as i8 as u16;
-        self.cpu.pc = self.cpu.pc.wrapping_add(offset);
-        self.tick_m_cycle();
-    }
-
-    fn jr_d(&mut self) {
-        self.do_jump_relative();
-    }
-
-    fn jr_cc(&mut self, op: u8) {
-        if self.satisfies_branch_condition(op) {
-            self.do_jump_relative();
-        } else {
-            self.cpu.pc = self.cpu.pc.wrapping_add(1);
-            self.tick_m_cycle();
-        }
-    }
-
-    fn do_call(&mut self) {
-        let addr = self.imm16();
-        self.push(self.cpu.pc);
-        self.cpu.pc = addr;
-    }
-
-    fn call_nn(&mut self) {
-        self.do_call();
-    }
-
-    fn call_cc_a16(&mut self, op: u8) {
-        if self.satisfies_branch_condition(op) {
-            self.do_call();
-        } else {
-            let pc = self.cpu.pc.wrapping_add(2);
-            self.cpu.pc = pc;
-            self.tick_m_cycle();
-            self.tick_m_cycle();
-        }
-    }
-
-    fn ret(&mut self) {
-        self.cpu.pc = self.pop();
-        self.tick_m_cycle();
-    }
-
-    fn reti(&mut self) {
-        self.ret();
-        self.ints.enable();
-    }
-
-    fn ret_cc(&mut self, op: u8) {
-        self.tick_m_cycle();
-
-        if self.satisfies_branch_condition(op) {
-            self.ret();
-        }
-    }
-
-    #[must_use]
-    const fn satisfies_branch_condition(&self, op: u8) -> bool {
-        match (op >> 3) & 3 {
-            0 => self.cpu.af & ZF == 0,
-            1 => self.cpu.af & ZF != 0,
-            2 => self.cpu.af & CF == 0,
-            3 => self.cpu.af & CF != 0,
-            _ => unreachable!(),
-        }
-    }
-
-    fn rst(&mut self, op: u8) {
-        self.push(self.cpu.pc);
-        self.cpu.pc = u16::from(op) ^ 0xC7;
-    }
-
-    const fn halt(&mut self) {
-        if !self.ints.is_any_requested() {
-            self.cpu.is_halted = true;
-        } else if self.ints.are_enabled() {
-            self.cpu.is_halted = false;
-            self.cpu.pc = self.cpu.pc.wrapping_sub(1);
-        } else {
-            self.cpu.is_halted = false;
-            self.cpu.is_halt_bug_triggered = true;
-        }
-    }
-
-    fn stop(&mut self) {
-        let _discard_byte = self.imm8();
-
-        if self.key1.is_requested() {
-            self.key1.change_speed();
-            self.write_div();
-
-            // TODO: div should not tick
-            for _ in 0..2050 {
-                self.tick_m_cycle();
-            }
-        } else {
-            self.cpu.is_halted = true;
-        }
-    }
-
-    const fn di(&mut self) {
-        self.ints.disable();
-    }
-
-    const fn ei(&mut self) {
-        self.cpu.has_ei_delay = true;
-    }
-
-    const fn ccf(&mut self) {
-        self.cpu.af ^= CF;
-        self.cpu.af &= !(HF | NF);
-    }
-
-    const fn scf(&mut self) {
-        self.cpu.af |= CF;
-        self.cpu.af &= !(HF | NF);
-    }
-
-    #[expect(clippy::unused_self)]
-    const fn nop(&self) {}
-
-    // TODO: debugger breakpoint
-    #[expect(clippy::needless_pass_by_ref_mut)]
-    const fn ld_b_b(&mut self) {
-        self.nop();
-    }
-
-    const fn daa(&mut self) {
-        let a = {
-            let mut a = self.cpu.af >> 8;
-
-            if self.cpu.af & NF == 0 {
-                if self.cpu.af & HF != 0 || a & 0x0F > 0x09 {
-                    a += 0x06;
-                }
-                if self.cpu.af & CF != 0 || a > 0x9F {
-                    a += 0x60;
-                }
-            } else {
-                if self.cpu.af & HF != 0 {
-                    a = a.wrapping_sub(0x06) & 0xFF;
-                }
-                if self.cpu.af & CF != 0 {
-                    a = a.wrapping_sub(0x60);
-                }
-            }
-
-            a
-        };
-
-        self.cpu.af &= !(0xFF00 | ZF | HF);
-
-        if a.trailing_zeros() >= 8 {
-            self.cpu.af |= ZF;
-        }
-
-        if a & 0x100 == 0x100 {
-            self.cpu.af |= CF;
-        }
-
-        self.cpu.af |= a << 8;
-    }
-
-    const fn cpl(&mut self) {
-        self.cpu.af ^= 0xFF00;
-        self.cpu.af |= HF | NF;
-    }
-
-    fn push(&mut self, val: u16) {
-        self.cpu.sp = self.cpu.sp.wrapping_sub(1);
-        self.cpu_write(self.cpu.sp, (val >> 8) as u8);
-        self.cpu.sp = self.cpu.sp.wrapping_sub(1);
-        self.cpu_write(self.cpu.sp, (val & 0xFF) as u8);
-        self.tick_m_cycle();
-    }
-
-    fn push_rr(&mut self, op: u8) {
-        let id = ((op >> 4) + 1) & 3;
-        self.push(self.get_rr(id));
-    }
-
-    #[must_use]
-    fn pop(&mut self) -> u16 {
-        let val = u16::from(self.read(self.cpu.sp));
-        self.cpu.sp = self.cpu.sp.wrapping_add(1);
-        let val = val | (u16::from(self.read(self.cpu.sp)) << 8);
-        self.cpu.sp = self.cpu.sp.wrapping_add(1);
-        val
-    }
-
-    fn pop_rr(&mut self, op: u8) {
-        let val = self.pop();
-        let id = ((op >> 4) + 1) & 3;
-        self.set_rr(id, val);
-        self.cpu.af &= 0xFFF0;
-    }
-
-    fn ld_rr_d16(&mut self, op: u8) {
-        let id = (op >> 4) + 1;
-        let imm = self.imm16();
-        self.set_rr(id, imm);
-    }
-
-    fn ld_da16_sp(&mut self) {
-        let val = self.cpu.sp;
-        let addr = self.imm16();
-        self.cpu_write(addr, (val & 0xFF) as u8);
-        self.cpu_write(addr.wrapping_add(1), (val >> 8) as u8);
-    }
-
-    fn add_sp_r8(&mut self) {
-        let sp = self.cpu.sp;
-        #[expect(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
-        let offset = self.imm8() as i8 as u16;
-        self.tick_m_cycle();
-        self.tick_m_cycle();
-        self.cpu.sp = self.cpu.sp.wrapping_add(offset);
-        self.cpu.af &= 0xFF00;
-
-        if (sp & 0xF) + (offset & 0xF) > 0xF {
-            self.cpu.af |= HF;
-        }
-
-        if (sp & 0xFF) + (offset & 0xFF) > 0xFF {
-            self.cpu.af |= CF;
-        }
-    }
-
-    fn add_hl_rr(&mut self, op: u8) {
-        let id = (op >> 4) + 1;
-        let hl = self.cpu.hl;
-        let rr = self.get_rr(id);
-        self.cpu.hl = hl.wrapping_add(rr);
-
-        self.cpu.af &= !(NF | CF | HF);
-
-        if ((hl & 0xFFF) + (rr & 0xFFF)) & 0x1000 != 0 {
-            self.cpu.af |= HF;
-        }
-
-        if (u32::from(hl) + u32::from(rr)) & 0x10000 != 0 {
-            self.cpu.af |= CF;
-        }
-
-        self.tick_m_cycle();
-    }
-
-    fn rlc_r(&mut self, op: u8) {
-        let val = self.get_r(op);
-        let carry = val & 0x80 != 0;
-        self.cpu.af &= 0xFF00;
-        self.set_r(op, (val << 1) | u8::from(carry));
-        if carry {
-            self.cpu.af |= CF;
-        }
-        if val == 0 {
-            self.cpu.af |= ZF;
-        }
-    }
-
-    fn rra(&mut self) {
-        let bit1 = self.cpu.af & 0x0100 != 0;
-        let carry = self.cpu.af & CF != 0;
-
-        self.cpu.af = (self.cpu.af >> 1) & 0xFF00 | (u16::from(carry) << 15);
-        if bit1 {
-            self.cpu.af |= CF;
-        }
-    }
-
-    fn rr_r(&mut self, op: u8) {
-        let val = self.get_r(op);
-        let carry = self.cpu.af & CF != 0;
-        let bit1 = val & 1 != 0;
-        let val = (val >> 1) | (u8::from(carry) << 7);
-        self.set_r(op, val);
-
-        self.cpu.af &= 0xFF00;
-        if bit1 {
-            self.cpu.af |= CF;
-        }
-        if val == 0 {
-            self.cpu.af |= ZF;
-        }
-    }
-
-    fn sla_r(&mut self, op: u8) {
-        let val = self.get_r(op);
-        let carry = val & 0x80 != 0;
-        let res = val << 1;
-        self.set_r(op, res);
-
-        self.cpu.af &= 0xFF00;
-        if carry {
-            self.cpu.af |= CF;
-        }
-        if res == 0 {
-            self.cpu.af |= ZF;
-        }
-    }
-
-    fn sra_r(&mut self, op: u8) {
-        let val = self.get_r(op);
-        let bit7 = val & 0x80;
-        self.cpu.af &= 0xFF00;
-        if val & 1 != 0 {
-            self.cpu.af |= CF;
-        }
-        let val = (val >> 1) | bit7;
-        self.set_r(op, val);
-        if val == 0 {
-            self.cpu.af |= ZF;
-        }
-    }
-
-    fn srl_r(&mut self, op: u8) {
-        let val = self.get_r(op);
-        self.cpu.af &= 0xFF00;
-        self.set_r(op, val >> 1);
-        if val & 1 != 0 {
-            self.cpu.af |= CF;
-        }
-        if val >> 1 == 0 {
-            self.cpu.af |= ZF;
-        }
-    }
-
-    fn swap_r(&mut self, op: u8) {
-        let val = self.get_r(op);
-        self.cpu.af &= 0xFF00;
-        self.set_r(op, val.rotate_left(4));
-        if val == 0 {
-            self.cpu.af |= ZF;
-        }
-    }
-
-    fn bit_r(&mut self, op: u8) {
-        let val = self.get_r(op);
-        let bit_no = (op >> 3) & 7;
-        let bit = 1 << bit_no;
-        if op & 0xC0 == 0x40 {
-            // bit
-            self.cpu.af &= 0xFF00 | CF;
-            self.cpu.af |= HF;
-            if bit & val == 0 {
-                self.cpu.af |= ZF;
-            }
-        } else if op & 0xC0 == 0x80 {
-            // res
-            self.set_r(op, val & !bit);
-        } else {
-            // set
-            self.set_r(op, val | bit);
-        }
-    }
-
-    fn rla(&mut self) {
-        let bit7 = self.cpu.af & 0x8000 != 0;
-        let carry = self.cpu.af & CF != 0;
-
-        self.cpu.af = ((self.cpu.af & 0xFF00) << 1) | (u16::from(carry) << 8);
-
-        if bit7 {
-            self.cpu.af |= CF;
-        }
-    }
-
-    fn rl_r(&mut self, op: u8) {
-        let val = self.get_r(op);
-        let carry = self.cpu.af & CF != 0;
-        let bit7 = val & 0x80 != 0;
-
-        self.cpu.af &= 0xFF00;
-        let val = (val << 1) | u8::from(carry);
-        self.set_r(op, val);
-        if bit7 {
-            self.cpu.af |= CF;
-        }
-        if val == 0 {
-            self.cpu.af |= ZF;
-        }
-    }
-
-    const fn illegal(&mut self, _op: u8) {
-        self.ints.illegal();
-        self.cpu.is_halted = true;
-    }
-
     fn exec(&mut self, op: u8) {
         match op {
             0x00 | 0x5B | 0x6D | 0x7F | 0x49 | 0x52 | 0x64 => self.nop(),
@@ -1123,5 +146,990 @@ impl<A: AudioCallback> Gb<A> {
             7 => self.srl_r(op),
             _ => self.bit_r(op),
         }
+    }
+
+    pub fn run_cpu(&mut self) {
+        if self.cpu.has_ei_delay {
+            self.ints.enable();
+            self.cpu.has_ei_delay = false;
+        }
+
+        if self.cpu.is_halted {
+            self.tick_m_cycle();
+        } else {
+            // println!("pc {:0x}", self.cpu.pc);
+
+            let op = self.imm8();
+            self.run_hdma();
+
+            if self.cpu.is_halt_bug_triggered {
+                self.cpu.pc = self.cpu.pc.wrapping_sub(1);
+                self.cpu.is_halt_bug_triggered = false;
+            }
+
+            self.exec(op);
+        }
+
+        if self.ints.is_any_requested() {
+            self.cpu.is_halted = false;
+
+            if self.ints.are_enabled() {
+                self.tick_m_cycle();
+                self.tick_m_cycle();
+
+                self.push(self.cpu.pc);
+
+                self.ints.disable();
+                self.cpu.pc = self.ints.handle();
+            }
+        }
+    }
+}
+
+// Internal
+impl<A: AudioCallback> Gb<A> {
+    fn do_call(&mut self) {
+        let addr = self.imm16();
+        self.push(self.cpu.pc);
+        self.cpu.pc = addr;
+    }
+
+    fn do_jump_relative(&mut self) {
+        #[expect(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
+        let offset = self.imm8() as i8 as u16;
+        self.cpu.pc = self.cpu.pc.wrapping_add(offset);
+        self.tick_m_cycle();
+    }
+
+    fn do_jump_to_immediate(&mut self) {
+        let addr = self.imm16();
+        self.cpu.pc = addr;
+        self.tick_m_cycle();
+    }
+
+    #[must_use]
+    fn get_r(&mut self, op: u8) -> u8 {
+        let id = ((op >> 1) + 1) & 3;
+        let lo = op & 1 != 0;
+        if id == 0 {
+            if lo {
+                (self.cpu.af >> 8) as u8
+            } else {
+                self.read_cpu(self.cpu.hl)
+            }
+        } else if lo {
+            (self.get_rr(id) & 0xFF) as u8
+        } else {
+            (self.get_rr(id) >> 8) as u8
+        }
+    }
+
+    #[must_use]
+    const fn get_rr(&self, id: u8) -> u16 {
+        match id {
+            0 => self.cpu.af,
+            1 => self.cpu.bc,
+            2 => self.cpu.de,
+            3 => self.cpu.hl,
+            4 => self.cpu.sp,
+            _ => unreachable!(),
+        }
+    }
+
+    #[must_use]
+    fn imm16(&mut self) -> u16 {
+        let lo = u16::from(self.imm8());
+        let hi = u16::from(self.imm8());
+        (hi << 8) | lo
+    }
+
+    #[must_use]
+    fn imm8(&mut self) -> u8 {
+        let val = self.read_cpu(self.cpu.pc);
+        self.cpu.pc = self.cpu.pc.wrapping_add(1);
+        val
+    }
+
+    #[must_use]
+    fn pop(&mut self) -> u16 {
+        let val = u16::from(self.read_cpu(self.cpu.sp));
+        self.cpu.sp = self.cpu.sp.wrapping_add(1);
+        let val = val | (u16::from(self.read_cpu(self.cpu.sp)) << 8);
+        self.cpu.sp = self.cpu.sp.wrapping_add(1);
+        val
+    }
+
+    fn push(&mut self, val: u16) {
+        self.cpu.sp = self.cpu.sp.wrapping_sub(1);
+        self.write_cpu(self.cpu.sp, (val >> 8) as u8);
+        self.cpu.sp = self.cpu.sp.wrapping_sub(1);
+        self.write_cpu(self.cpu.sp, (val & 0xFF) as u8);
+        self.tick_m_cycle();
+    }
+
+    #[must_use]
+    fn read_cpu(&mut self, addr: u16) -> u8 {
+        self.tick_m_cycle();
+        self.read_mem(addr)
+    }
+
+    #[must_use]
+    const fn satisfies_branch_condition(&self, op: u8) -> bool {
+        match (op >> 3) & 3 {
+            0 => self.cpu.af & ZF == 0,
+            1 => self.cpu.af & ZF != 0,
+            2 => self.cpu.af & CF == 0,
+            3 => self.cpu.af & CF != 0,
+            _ => unreachable!(),
+        }
+    }
+
+    fn set_r(&mut self, op: u8, val: u8) {
+        let id = ((op >> 1) + 1) & 3;
+        let lo = op & 1 != 0;
+        if id == 0 {
+            if lo {
+                self.cpu.af = (u16::from(val) << 8) | self.cpu.af & 0xFF;
+            } else {
+                self.write_cpu(self.cpu.hl, val);
+            }
+        } else if lo {
+            self.set_rr(id, u16::from(val) | self.get_rr(id) & 0xFF00);
+        } else {
+            self.set_rr(id, (u16::from(val) << 8) | self.get_rr(id) & 0xFF);
+        }
+    }
+
+    fn set_rr(&mut self, id: u8, val: u16) {
+        match id {
+            0 => self.cpu.af = val,
+            1 => self.cpu.bc = val,
+            2 => self.cpu.de = val,
+            3 => self.cpu.hl = val,
+            4 => self.cpu.sp = val,
+            _ => unreachable!(),
+        }
+    }
+
+    fn tick_m_cycle(&mut self) {
+        self.advance_t_cycles(4);
+    }
+
+    fn write_cpu(&mut self, addr: u16, val: u8) {
+        self.tick_m_cycle();
+        self.write_mem(addr, val);
+    }
+}
+
+// ALU
+impl<A: AudioCallback> Gb<A> {
+    fn adc(&mut self, val: u16) {
+        let a = self.cpu.af >> 8;
+        let carry = u16::from((self.cpu.af & CF) != 0);
+        let res = a + val + carry;
+        self.cpu.af = res << 8;
+        if res.trailing_zeros() >= 8 {
+            self.cpu.af |= ZF;
+        }
+        if (a & 0xF) + (val & 0xF) + carry > 0x0F {
+            self.cpu.af |= HF;
+        }
+        if res > 0xFF {
+            self.cpu.af |= CF;
+        }
+    }
+
+    const fn add(&mut self, val: u16) {
+        let a = self.cpu.af >> 8;
+        let res = a + val;
+        self.cpu.af = res << 8;
+        if res.trailing_zeros() >= 8 {
+            self.cpu.af |= ZF;
+        }
+        if (a & 0xF) + (val & 0xF) > 0x0F {
+            self.cpu.af |= HF;
+        }
+        if res > 0xFF {
+            self.cpu.af |= CF;
+        }
+    }
+
+    const fn and(&mut self, val: u16) {
+        let a = self.cpu.af >> 8;
+        let a = a & val;
+        self.cpu.af = (a << 8) | HF;
+        if a == 0 {
+            self.cpu.af |= ZF;
+        }
+    }
+
+    const fn cp(&mut self, val: u16) {
+        let a = self.cpu.af >> 8;
+        self.cpu.af &= 0xFF00;
+        self.cpu.af |= NF;
+        if a == val {
+            self.cpu.af |= ZF;
+        }
+        if a & 0xF < val & 0xF {
+            self.cpu.af |= HF;
+        }
+        if a < val {
+            self.cpu.af |= CF;
+        }
+    }
+
+    const fn or(&mut self, val: u16) {
+        let a = self.cpu.af >> 8;
+        self.cpu.af = (a | val) << 8;
+        if a | val == 0 {
+            self.cpu.af |= ZF;
+        }
+    }
+
+    const fn sub(&mut self, val: u16) {
+        let a = self.cpu.af >> 8;
+        self.cpu.af = (a.wrapping_sub(val) << 8) | NF;
+        if a == val {
+            self.cpu.af |= ZF;
+        }
+        if (a & 0xF) < (val & 0xF) {
+            self.cpu.af |= HF;
+        }
+        if a < val {
+            self.cpu.af |= CF;
+        }
+    }
+
+    const fn xor(&mut self, val: u16) {
+        let a = self.cpu.af >> 8;
+        let a = a ^ val;
+        self.cpu.af = a << 8;
+        if a == 0 {
+            self.cpu.af |= ZF;
+        }
+    }
+}
+
+// Instructions
+impl<A: AudioCallback> Gb<A> {
+    fn adc_a_d8(&mut self) {
+        let val = u16::from(self.imm8());
+        self.adc(val);
+    }
+
+    fn adc_a_r(&mut self, op: u8) {
+        let val = u16::from(self.get_r(op));
+        self.adc(val);
+    }
+
+    fn add_a_d8(&mut self) {
+        let val = u16::from(self.imm8());
+        self.add(val);
+    }
+
+    fn add_a_r(&mut self, op: u8) {
+        let val = u16::from(self.get_r(op));
+        self.add(val);
+    }
+
+    fn add_hl_rr(&mut self, op: u8) {
+        let id = (op >> 4) + 1;
+        let hl = self.cpu.hl;
+        let rr = self.get_rr(id);
+        self.cpu.hl = hl.wrapping_add(rr);
+
+        self.cpu.af &= !(NF | CF | HF);
+
+        if ((hl & 0xFFF) + (rr & 0xFFF)) & 0x1000 != 0 {
+            self.cpu.af |= HF;
+        }
+
+        if (u32::from(hl) + u32::from(rr)) & 0x10000 != 0 {
+            self.cpu.af |= CF;
+        }
+
+        self.tick_m_cycle();
+    }
+
+    fn add_sp_r8(&mut self) {
+        let sp = self.cpu.sp;
+        #[expect(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
+        let offset = self.imm8() as i8 as u16;
+        self.tick_m_cycle();
+        self.tick_m_cycle();
+        self.cpu.sp = self.cpu.sp.wrapping_add(offset);
+        self.cpu.af &= 0xFF00;
+
+        if (sp & 0xF) + (offset & 0xF) > 0xF {
+            self.cpu.af |= HF;
+        }
+
+        if (sp & 0xFF) + (offset & 0xFF) > 0xFF {
+            self.cpu.af |= CF;
+        }
+    }
+
+    fn and_a_d8(&mut self) {
+        let val = u16::from(self.imm8());
+        self.and(val);
+    }
+
+    fn and_a_r(&mut self, op: u8) {
+        let val = u16::from(self.get_r(op));
+        self.and(val);
+    }
+
+    fn bit_r(&mut self, op: u8) {
+        let val = self.get_r(op);
+        let bit_no = (op >> 3) & 7;
+        let bit = 1 << bit_no;
+        if op & 0xC0 == 0x40 {
+            // bit
+            self.cpu.af &= 0xFF00 | CF;
+            self.cpu.af |= HF;
+            if bit & val == 0 {
+                self.cpu.af |= ZF;
+            }
+        } else if op & 0xC0 == 0x80 {
+            // res
+            self.set_r(op, val & !bit);
+        } else {
+            // set
+            self.set_r(op, val | bit);
+        }
+    }
+
+    fn call_cc_a16(&mut self, op: u8) {
+        if self.satisfies_branch_condition(op) {
+            self.do_call();
+        } else {
+            let pc = self.cpu.pc.wrapping_add(2);
+            self.cpu.pc = pc;
+            self.tick_m_cycle();
+            self.tick_m_cycle();
+        }
+    }
+
+    fn call_nn(&mut self) {
+        self.do_call();
+    }
+
+    const fn ccf(&mut self) {
+        self.cpu.af ^= CF;
+        self.cpu.af &= !(HF | NF);
+    }
+
+    fn cp_a_d8(&mut self) {
+        let val = u16::from(self.imm8());
+        self.cp(val);
+    }
+
+    fn cp_a_r(&mut self, op: u8) {
+        let val = u16::from(self.get_r(op));
+        self.cp(val);
+    }
+
+    const fn cpl(&mut self) {
+        self.cpu.af ^= 0xFF00;
+        self.cpu.af |= HF | NF;
+    }
+
+    const fn daa(&mut self) {
+        let a = {
+            let mut a = self.cpu.af >> 8;
+
+            if self.cpu.af & NF == 0 {
+                if self.cpu.af & HF != 0 || a & 0x0F > 0x09 {
+                    a += 0x06;
+                }
+                if self.cpu.af & CF != 0 || a > 0x9F {
+                    a += 0x60;
+                }
+            } else {
+                if self.cpu.af & HF != 0 {
+                    a = a.wrapping_sub(0x06) & 0xFF;
+                }
+                if self.cpu.af & CF != 0 {
+                    a = a.wrapping_sub(0x60);
+                }
+            }
+
+            a
+        };
+
+        self.cpu.af &= !(0xFF00 | ZF | HF);
+
+        if a.trailing_zeros() >= 8 {
+            self.cpu.af |= ZF;
+        }
+
+        if a & 0x100 == 0x100 {
+            self.cpu.af |= CF;
+        }
+
+        self.cpu.af |= a << 8;
+    }
+
+    fn dec_dhl(&mut self) {
+        let val = self.read_cpu(self.cpu.hl).wrapping_sub(1);
+        self.write_cpu(self.cpu.hl, val);
+
+        self.cpu.af &= !(ZF | HF);
+        self.cpu.af |= NF;
+        if (val & 0x0F) == 0x0F {
+            self.cpu.af |= HF;
+        }
+
+        if val == 0 {
+            self.cpu.af |= ZF;
+        }
+    }
+
+    fn dec_hr(&mut self, op: u8) {
+        let id = ((op >> 4) + 1) & 0x03;
+        let rr = self.get_rr(id).wrapping_sub(0x100);
+        self.set_rr(id, rr);
+        self.cpu.af &= !(ZF | HF);
+        self.cpu.af |= NF;
+
+        if rr & 0x0F00 == 0xF00 {
+            self.cpu.af |= HF;
+        }
+
+        if rr & 0xFF00 == 0 {
+            self.cpu.af |= ZF;
+        }
+    }
+
+    fn dec_lr(&mut self, op: u8) {
+        let id = (op >> 4) + 1;
+        let val = self.get_rr(id).wrapping_sub(1) & 0xFF;
+        let rr = self.get_rr(id) & 0xFF00 | val;
+        self.set_rr(id, rr);
+
+        self.cpu.af &= !(ZF | HF);
+        self.cpu.af |= NF;
+
+        if rr & 0x0F == 0xF {
+            self.cpu.af |= HF;
+        }
+
+        if rr.trailing_zeros() >= 8 {
+            self.cpu.af |= ZF;
+        }
+    }
+
+    fn dec_rr(&mut self, op: u8) {
+        let id = (op >> 4) + 1;
+        self.set_rr(id, self.get_rr(id).wrapping_sub(1));
+        self.tick_m_cycle();
+    }
+
+    const fn di(&mut self) {
+        self.ints.disable();
+    }
+
+    const fn ei(&mut self) {
+        self.cpu.has_ei_delay = true;
+    }
+
+    const fn halt(&mut self) {
+        if !self.ints.is_any_requested() {
+            self.cpu.is_halted = true;
+        } else if self.ints.are_enabled() {
+            self.cpu.is_halted = false;
+            self.cpu.pc = self.cpu.pc.wrapping_sub(1);
+        } else {
+            self.cpu.is_halted = false;
+            self.cpu.is_halt_bug_triggered = true;
+        }
+    }
+
+    const fn illegal(&mut self, _op: u8) {
+        self.ints.illegal();
+        self.cpu.is_halted = true;
+    }
+
+    fn inc_dhl(&mut self) {
+        let val = self.read_cpu(self.cpu.hl).wrapping_add(1);
+        self.write_cpu(self.cpu.hl, val);
+
+        self.cpu.af &= !(NF | ZF | HF);
+        if val.trailing_zeros() >= 4 {
+            self.cpu.af |= HF;
+        }
+
+        if val == 0 {
+            self.cpu.af |= ZF;
+        }
+    }
+
+    fn inc_hr(&mut self, op: u8) {
+        let id = ((op >> 4) + 1) & 0x03;
+        let rr = self.get_rr(id).wrapping_add(0x100);
+        self.set_rr(id, rr);
+        self.cpu.af &= !(NF | ZF | HF);
+
+        if rr & 0x0F00 == 0 {
+            self.cpu.af |= HF;
+        }
+
+        if rr & 0xFF00 == 0 {
+            self.cpu.af |= ZF;
+        }
+    }
+
+    fn inc_lr(&mut self, op: u8) {
+        let id = (op >> 4) + 1;
+        let val = self.get_rr(id).wrapping_add(1) & 0xFF;
+        let rr = self.get_rr(id) & 0xFF00 | val;
+        self.set_rr(id, rr);
+
+        self.cpu.af &= !(NF | ZF | HF);
+
+        if rr.trailing_zeros() >= 4 {
+            self.cpu.af |= HF;
+        }
+
+        if rr.trailing_zeros() >= 8 {
+            self.cpu.af |= ZF;
+        }
+    }
+
+    fn inc_rr(&mut self, op: u8) {
+        let id = (op >> 4) + 1;
+        self.set_rr(id, self.get_rr(id).wrapping_add(1));
+        self.tick_m_cycle();
+    }
+
+    fn jp_a16(&mut self) {
+        self.do_jump_to_immediate();
+    }
+
+    fn jp_cc(&mut self, op: u8) {
+        if self.satisfies_branch_condition(op) {
+            self.do_jump_to_immediate();
+        } else {
+            let pc = self.cpu.pc.wrapping_add(2);
+            self.cpu.pc = pc;
+            self.tick_m_cycle();
+            self.tick_m_cycle();
+        }
+    }
+
+    const fn jp_hl(&mut self) {
+        self.cpu.pc = self.cpu.hl;
+    }
+
+    fn jr_cc(&mut self, op: u8) {
+        if self.satisfies_branch_condition(op) {
+            self.do_jump_relative();
+        } else {
+            self.cpu.pc = self.cpu.pc.wrapping_add(1);
+            self.tick_m_cycle();
+        }
+    }
+
+    fn jr_d(&mut self) {
+        self.do_jump_relative();
+    }
+
+    fn ld(&mut self, op: u8) {
+        let val = self.get_r(op);
+        self.set_r(op >> 3, val);
+    }
+
+    fn ld16_sp_hl(&mut self) {
+        let val = self.cpu.hl;
+        self.cpu.sp = val;
+        self.tick_m_cycle();
+    }
+
+    fn ld_a_da16(&mut self) {
+        self.cpu.af &= 0xFF;
+        let addr = self.imm16();
+        self.cpu.af |= u16::from(self.read_cpu(addr)) << 8;
+    }
+
+    fn ld_a_dhld(&mut self) {
+        let addr = self.cpu.hl;
+        let val = u16::from(self.read_cpu(addr));
+        self.cpu.af &= 0xFF;
+        self.cpu.af |= val << 8;
+        self.cpu.hl = addr.wrapping_sub(1);
+    }
+
+    fn ld_a_dhli(&mut self) {
+        let addr = self.cpu.hl;
+        let val = u16::from(self.read_cpu(addr));
+        self.cpu.af &= 0xFF;
+        self.cpu.af |= val << 8;
+        self.cpu.hl = addr.wrapping_add(1);
+    }
+
+    fn ld_a_drr(&mut self, op: u8) {
+        let id = (op >> 4) + 1;
+        self.cpu.af &= 0xFF;
+        let addr = self.get_rr(id);
+        self.cpu.af |= u16::from(self.read_cpu(addr)) << 8;
+    }
+
+    // TODO: debugger breakpoint
+    #[expect(clippy::needless_pass_by_ref_mut)]
+    const fn ld_b_b(&mut self) {
+        self.nop();
+    }
+
+    fn ld_da16_a(&mut self) {
+        let addr = self.imm16();
+        self.write_cpu(addr, (self.cpu.af >> 8) as u8);
+    }
+
+    fn ld_da16_sp(&mut self) {
+        let val = self.cpu.sp;
+        let addr = self.imm16();
+        self.write_cpu(addr, (val & 0xFF) as u8);
+        self.write_cpu(addr.wrapping_add(1), (val >> 8) as u8);
+    }
+
+    fn ld_dhl_d8(&mut self) {
+        let tmp = self.imm8();
+        self.write_cpu(self.cpu.hl, tmp);
+    }
+
+    fn ld_dhld_a(&mut self) {
+        let addr = self.cpu.hl;
+        self.write_cpu(addr, (self.cpu.af >> 8) as u8);
+        self.cpu.hl = addr.wrapping_sub(1);
+    }
+
+    fn ld_dhli_a(&mut self) {
+        let addr = self.cpu.hl;
+        self.write_cpu(addr, (self.cpu.af >> 8) as u8);
+        self.cpu.hl = addr.wrapping_add(1);
+    }
+
+    fn ld_drr_a(&mut self, op: u8) {
+        let id = (op >> 4) + 1;
+        let addr = self.get_rr(id);
+        self.write_cpu(addr, (self.cpu.af >> 8) as u8);
+    }
+
+    fn ld_hl_sp_r8(&mut self) {
+        self.cpu.af &= 0xFF00;
+        #[expect(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
+        let offset = self.imm8() as i8 as u16;
+        self.tick_m_cycle();
+        self.cpu.hl = self.cpu.sp.wrapping_add(offset);
+
+        if (self.cpu.sp & 0xF) + (offset & 0xF) > 0xF {
+            self.cpu.af |= HF;
+        }
+
+        if (self.cpu.sp & 0xFF) + (offset & 0xFF) > 0xFF {
+            self.cpu.af |= CF;
+        }
+    }
+
+    fn ld_hr_d8(&mut self, op: u8) {
+        let id = ((op >> 4) + 1) & 0x03;
+        let hi = u16::from(self.imm8());
+        self.set_rr(id, (hi << 8) | self.get_rr(id) & 0xFF);
+    }
+
+    fn ld_lr_d8(&mut self, op: u8) {
+        let id = (op >> 4) + 1;
+        let lo = u16::from(self.imm8());
+        self.set_rr(id, self.get_rr(id) & 0xFF00 | lo);
+    }
+
+    fn ld_rr_d16(&mut self, op: u8) {
+        let id = (op >> 4) + 1;
+        let imm = self.imm16();
+        self.set_rr(id, imm);
+    }
+
+    fn ldh_a_da8(&mut self) {
+        let tmp = u16::from(self.imm8());
+        self.cpu.af &= 0xFF;
+        self.cpu.af |= u16::from(self.read_cpu(0xFF00 | tmp)) << 8;
+    }
+
+    fn ldh_a_dc(&mut self) {
+        self.cpu.af &= 0xFF;
+        self.cpu.af |= u16::from(self.read_cpu(0xFF00 | self.cpu.bc & 0xFF)) << 8;
+    }
+
+    fn ldh_da8_a(&mut self) {
+        let tmp = u16::from(self.imm8());
+        let a = (self.cpu.af >> 8) as u8;
+        self.write_cpu(0xFF00 | tmp, a);
+    }
+
+    fn ldh_dc_a(&mut self) {
+        self.write_cpu(0xFF00 | self.cpu.bc & 0xFF, (self.cpu.af >> 8) as u8);
+    }
+
+    #[expect(clippy::unused_self)]
+    const fn nop(&self) {}
+
+    fn or_a_d8(&mut self) {
+        let val = u16::from(self.imm8());
+        self.or(val);
+    }
+
+    fn or_a_r(&mut self, op: u8) {
+        let val = u16::from(self.get_r(op));
+        self.or(val);
+    }
+
+    fn pop_rr(&mut self, op: u8) {
+        let val = self.pop();
+        let id = ((op >> 4) + 1) & 3;
+        self.set_rr(id, val);
+        self.cpu.af &= 0xFFF0;
+    }
+
+    fn push_rr(&mut self, op: u8) {
+        let id = ((op >> 4) + 1) & 3;
+        self.push(self.get_rr(id));
+    }
+
+    fn ret(&mut self) {
+        self.cpu.pc = self.pop();
+        self.tick_m_cycle();
+    }
+
+    fn ret_cc(&mut self, op: u8) {
+        self.tick_m_cycle();
+
+        if self.satisfies_branch_condition(op) {
+            self.ret();
+        }
+    }
+
+    fn reti(&mut self) {
+        self.ret();
+        self.ints.enable();
+    }
+
+    fn rl_r(&mut self, op: u8) {
+        let val = self.get_r(op);
+        let carry = self.cpu.af & CF != 0;
+        let bit7 = val & 0x80 != 0;
+
+        self.cpu.af &= 0xFF00;
+        let val = (val << 1) | u8::from(carry);
+        self.set_r(op, val);
+        if bit7 {
+            self.cpu.af |= CF;
+        }
+        if val == 0 {
+            self.cpu.af |= ZF;
+        }
+    }
+
+    fn rla(&mut self) {
+        let bit7 = self.cpu.af & 0x8000 != 0;
+        let carry = self.cpu.af & CF != 0;
+
+        self.cpu.af = ((self.cpu.af & 0xFF00) << 1) | (u16::from(carry) << 8);
+
+        if bit7 {
+            self.cpu.af |= CF;
+        }
+    }
+
+    fn rlc_r(&mut self, op: u8) {
+        let val = self.get_r(op);
+        let carry = val & 0x80 != 0;
+        self.cpu.af &= 0xFF00;
+        self.set_r(op, (val << 1) | u8::from(carry));
+        if carry {
+            self.cpu.af |= CF;
+        }
+        if val == 0 {
+            self.cpu.af |= ZF;
+        }
+    }
+
+    const fn rlca(&mut self) {
+        let carry = (self.cpu.af & 0x8000) != 0;
+
+        self.cpu.af = (self.cpu.af & 0xFF00) << 1;
+        if carry {
+            self.cpu.af |= CF | 0x0100;
+        }
+    }
+
+    fn rr_r(&mut self, op: u8) {
+        let val = self.get_r(op);
+        let carry = self.cpu.af & CF != 0;
+        let bit1 = val & 1 != 0;
+        let val = (val >> 1) | (u8::from(carry) << 7);
+        self.set_r(op, val);
+
+        self.cpu.af &= 0xFF00;
+        if bit1 {
+            self.cpu.af |= CF;
+        }
+        if val == 0 {
+            self.cpu.af |= ZF;
+        }
+    }
+
+    fn rra(&mut self) {
+        let bit1 = self.cpu.af & 0x0100 != 0;
+        let carry = self.cpu.af & CF != 0;
+
+        self.cpu.af = (self.cpu.af >> 1) & 0xFF00 | (u16::from(carry) << 15);
+        if bit1 {
+            self.cpu.af |= CF;
+        }
+    }
+
+    fn rrc_r(&mut self, op: u8) {
+        let val = self.get_r(op);
+        let carry = (val & 0x01) != 0;
+        self.cpu.af &= 0xFF00;
+        let val = (val >> 1) | (u8::from(carry) << 7);
+        self.set_r(op, val);
+        if carry {
+            self.cpu.af |= CF;
+        }
+        if val == 0 {
+            self.cpu.af |= ZF;
+        }
+    }
+
+    const fn rrca(&mut self) {
+        let carry = self.cpu.af & 0x100 != 0;
+        self.cpu.af = (self.cpu.af >> 1) & 0xFF00;
+        if carry {
+            self.cpu.af |= CF | 0x8000;
+        }
+    }
+
+    fn rst(&mut self, op: u8) {
+        self.push(self.cpu.pc);
+        self.cpu.pc = u16::from(op) ^ 0xC7;
+    }
+
+    fn sbc(&mut self, val: u16) {
+        let a = self.cpu.af >> 8;
+        let carry = u16::from((self.cpu.af & CF) != 0);
+        let res = a.wrapping_sub(val).wrapping_sub(carry);
+        self.cpu.af = (res << 8) | NF;
+
+        if res.trailing_zeros() >= 8 {
+            self.cpu.af |= ZF;
+        }
+        if (a & 0xF) < (val & 0xF) + carry {
+            self.cpu.af |= HF;
+        }
+        if res > 0xFF {
+            self.cpu.af |= CF;
+        }
+    }
+
+    fn sbc_a_d8(&mut self) {
+        let val = u16::from(self.imm8());
+        self.sbc(val);
+    }
+
+    fn sbc_a_r(&mut self, op: u8) {
+        let val = u16::from(self.get_r(op));
+        self.sbc(val);
+    }
+
+    const fn scf(&mut self) {
+        self.cpu.af |= CF;
+        self.cpu.af &= !(HF | NF);
+    }
+
+    fn sla_r(&mut self, op: u8) {
+        let val = self.get_r(op);
+        let carry = val & 0x80 != 0;
+        let res = val << 1;
+        self.set_r(op, res);
+
+        self.cpu.af &= 0xFF00;
+        if carry {
+            self.cpu.af |= CF;
+        }
+        if res == 0 {
+            self.cpu.af |= ZF;
+        }
+    }
+
+    fn sra_r(&mut self, op: u8) {
+        let val = self.get_r(op);
+        let bit7 = val & 0x80;
+        self.cpu.af &= 0xFF00;
+        if val & 1 != 0 {
+            self.cpu.af |= CF;
+        }
+        let val = (val >> 1) | bit7;
+        self.set_r(op, val);
+        if val == 0 {
+            self.cpu.af |= ZF;
+        }
+    }
+
+    fn srl_r(&mut self, op: u8) {
+        let val = self.get_r(op);
+        self.cpu.af &= 0xFF00;
+        self.set_r(op, val >> 1);
+        if val & 1 != 0 {
+            self.cpu.af |= CF;
+        }
+        if val >> 1 == 0 {
+            self.cpu.af |= ZF;
+        }
+    }
+
+    fn stop(&mut self) {
+        let _discard_byte = self.imm8();
+
+        if self.key1.is_requested() {
+            self.key1.change_speed();
+            self.write_div();
+
+            // TODO: div should not tick
+            for _ in 0..2050 {
+                self.tick_m_cycle();
+            }
+        } else {
+            self.cpu.is_halted = true;
+        }
+    }
+
+    fn sub_a_d8(&mut self) {
+        let val = u16::from(self.imm8());
+        self.sub(val);
+    }
+
+    fn sub_a_r(&mut self, op: u8) {
+        let val = u16::from(self.get_r(op));
+        self.sub(val);
+    }
+
+    fn swap_r(&mut self, op: u8) {
+        let val = self.get_r(op);
+        self.cpu.af &= 0xFF00;
+        self.set_r(op, val.rotate_left(4));
+        if val == 0 {
+            self.cpu.af |= ZF;
+        }
+    }
+
+    fn xor_a_d8(&mut self) {
+        let val = u16::from(self.imm8());
+        self.xor(val);
+    }
+
+    fn xor_a_r(&mut self, op: u8) {
+        let val = u16::from(self.get_r(op));
+        self.xor(val);
     }
 }

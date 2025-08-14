@@ -3,14 +3,19 @@ use glow::{
     UniformLocation,
 };
 
+const PBO_BUFFER_SIZE: i32 = (PX_WIDTH * PX_HEIGHT * 4) as i32;
+const PX_HEIGHT: u32 = ceres_std::PX_HEIGHT as u32;
+const PX_WIDTH: u32 = ceres_std::PX_WIDTH as u32;
+const INITIAL_TEXTURE_DATA_SIZE: usize = (PX_WIDTH * PX_HEIGHT * 4) as usize;
+
 #[derive(Clone, Copy, Default)]
 pub enum ShaderMode {
+    Crt = 4,
+    Lcd = 3,
     #[default]
     Nearest = 0,
     Scale2x = 1,
     Scale3x = 2,
-    Lcd = 3,
-    Crt = 4,
 }
 
 impl From<&str> for ShaderMode {
@@ -39,25 +44,112 @@ impl std::fmt::Display for ShaderMode {
     }
 }
 
-const PX_WIDTH: u32 = ceres_std::PX_WIDTH as u32;
-const PX_HEIGHT: u32 = ceres_std::PX_HEIGHT as u32;
-const PBO_BUFFER_SIZE: i32 = (PX_WIDTH * PX_HEIGHT * 4) as i32;
-const INITIAL_TEXTURE_DATA_SIZE: usize = (PX_WIDTH * PX_HEIGHT * 4) as usize;
-
 pub struct Renderer {
+    dims_unif: UniformLocation,
     gl: Context,
+    new_scale_mode: Option<ShaderMode>,
+    new_size: Option<(u32, u32)>,
+    pbo_upload_current: NativeBuffer,
     program: NativeProgram,
-    vao: NativeVertexArray,
+    scale_unif: UniformLocation,
     texture_current: NativeTexture,
     texture_previous: NativeTexture,
-    pbo_upload_current: NativeBuffer,
-    dims_unif: UniformLocation,
-    scale_unif: UniformLocation,
-    new_size: Option<(u32, u32)>,
-    new_scale_mode: Option<ShaderMode>,
+    vao: NativeVertexArray,
 }
 
 impl Renderer {
+    pub const fn choose_scale_mode(&mut self, scale_mode: ShaderMode) {
+        self.new_scale_mode = Some(scale_mode);
+    }
+
+    pub fn draw_frame(&mut self, rgba: &[u8]) {
+        unsafe {
+            // Copy current texture to previous texture
+            self.gl.copy_image_sub_data(
+                self.texture_current,
+                glow::TEXTURE_2D,
+                0,
+                0,
+                0,
+                0,
+                self.texture_previous,
+                glow::TEXTURE_2D,
+                0,
+                0,
+                0,
+                0,
+                PX_WIDTH as i32,
+                PX_HEIGHT as i32,
+                1,
+            );
+
+            // Upload new rgba data to current texture via PBO
+            self.gl
+                .bind_buffer(glow::PIXEL_UNPACK_BUFFER, Some(self.pbo_upload_current));
+            let ptr = self.gl.map_buffer_range(
+                glow::PIXEL_UNPACK_BUFFER,
+                0,
+                PBO_BUFFER_SIZE,
+                glow::MAP_WRITE_BIT | glow::MAP_INVALIDATE_BUFFER_BIT,
+            );
+            if !ptr.is_null() {
+                let dest_slice =
+                    core::slice::from_raw_parts_mut(ptr.cast::<u8>(), PBO_BUFFER_SIZE as usize);
+                dest_slice.copy_from_slice(rgba);
+                self.gl.unmap_buffer(glow::PIXEL_UNPACK_BUFFER);
+            } else {
+                eprintln!("Failed to map PBO for current texture");
+            }
+
+            self.gl.active_texture(glow::TEXTURE0);
+            self.gl
+                .bind_texture(glow::TEXTURE_2D, Some(self.texture_current)); // Ensure correct texture is bound
+            self.gl.tex_sub_image_2d(
+                glow::TEXTURE_2D,
+                0,
+                0,
+                0,
+                PX_WIDTH as i32,
+                PX_HEIGHT as i32,
+                glow::RGBA,
+                glow::UNSIGNED_BYTE,
+                glow::PixelUnpackData::BufferOffset(0),
+            );
+            self.gl.bind_buffer(glow::PIXEL_UNPACK_BUFFER, None);
+
+            // Ensure previous texture is active on its unit (though binding persists, good for clarity)
+            self.gl.active_texture(glow::TEXTURE2);
+            self.gl
+                .bind_texture(glow::TEXTURE_2D, Some(self.texture_previous));
+
+            self.gl.use_program(Some(self.program));
+
+            if let Some((width, height)) = self.new_size.take() {
+                // resize image to fit the window
+                let mul = (width as f32 / PX_WIDTH as f32).min(height as f32 / PX_HEIGHT as f32);
+                let img_w = PX_WIDTH as f32 * mul;
+                let img_h = PX_HEIGHT as f32 * mul;
+                let uniform_x = img_w / width as f32;
+                let uniform_y = img_h / height as f32;
+
+                self.gl.viewport(0, 0, width as i32, height as i32);
+                self.gl
+                    .uniform_2_f32(Some(&self.dims_unif), uniform_x, uniform_y);
+            }
+
+            if let Some(scale_mode) = self.new_scale_mode.take() {
+                self.gl
+                    .uniform_1_u32_slice(Some(&self.scale_unif), &[scale_mode as u32]);
+            }
+
+            self.gl.bind_vertex_array(Some(self.vao));
+
+            self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
+            self.gl.clear(glow::COLOR_BUFFER_BIT);
+            self.gl.draw_arrays(glow::TRIANGLE_STRIP, 0, 4);
+        }
+    }
+
     #[expect(
         clippy::too_many_lines,
         reason = "Initialization logic is long but necessary"
@@ -207,100 +299,8 @@ impl Renderer {
         }
     }
 
-    pub const fn choose_scale_mode(&mut self, scale_mode: ShaderMode) {
-        self.new_scale_mode = Some(scale_mode);
-    }
-
     pub const fn resize_viewport(&mut self, width: u32, height: u32) {
         self.new_size = Some((width, height));
-    }
-
-    pub fn draw_frame(&mut self, rgba: &[u8]) {
-        unsafe {
-            // Copy current texture to previous texture
-            self.gl.copy_image_sub_data(
-                self.texture_current,
-                glow::TEXTURE_2D,
-                0,
-                0,
-                0,
-                0,
-                self.texture_previous,
-                glow::TEXTURE_2D,
-                0,
-                0,
-                0,
-                0,
-                PX_WIDTH as i32,
-                PX_HEIGHT as i32,
-                1,
-            );
-
-            // Upload new rgba data to current texture via PBO
-            self.gl
-                .bind_buffer(glow::PIXEL_UNPACK_BUFFER, Some(self.pbo_upload_current));
-            let ptr = self.gl.map_buffer_range(
-                glow::PIXEL_UNPACK_BUFFER,
-                0,
-                PBO_BUFFER_SIZE,
-                glow::MAP_WRITE_BIT | glow::MAP_INVALIDATE_BUFFER_BIT,
-            );
-            if !ptr.is_null() {
-                let dest_slice =
-                    core::slice::from_raw_parts_mut(ptr.cast::<u8>(), PBO_BUFFER_SIZE as usize);
-                dest_slice.copy_from_slice(rgba);
-                self.gl.unmap_buffer(glow::PIXEL_UNPACK_BUFFER);
-            } else {
-                eprintln!("Failed to map PBO for current texture");
-            }
-
-            self.gl.active_texture(glow::TEXTURE0);
-            self.gl
-                .bind_texture(glow::TEXTURE_2D, Some(self.texture_current)); // Ensure correct texture is bound
-            self.gl.tex_sub_image_2d(
-                glow::TEXTURE_2D,
-                0,
-                0,
-                0,
-                PX_WIDTH as i32,
-                PX_HEIGHT as i32,
-                glow::RGBA,
-                glow::UNSIGNED_BYTE,
-                glow::PixelUnpackData::BufferOffset(0),
-            );
-            self.gl.bind_buffer(glow::PIXEL_UNPACK_BUFFER, None);
-
-            // Ensure previous texture is active on its unit (though binding persists, good for clarity)
-            self.gl.active_texture(glow::TEXTURE2);
-            self.gl
-                .bind_texture(glow::TEXTURE_2D, Some(self.texture_previous));
-
-            self.gl.use_program(Some(self.program));
-
-            if let Some((width, height)) = self.new_size.take() {
-                // resize image to fit the window
-                let mul = (width as f32 / PX_WIDTH as f32).min(height as f32 / PX_HEIGHT as f32);
-                let img_w = PX_WIDTH as f32 * mul;
-                let img_h = PX_HEIGHT as f32 * mul;
-                let uniform_x = img_w / width as f32;
-                let uniform_y = img_h / height as f32;
-
-                self.gl.viewport(0, 0, width as i32, height as i32);
-                self.gl
-                    .uniform_2_f32(Some(&self.dims_unif), uniform_x, uniform_y);
-            }
-
-            if let Some(scale_mode) = self.new_scale_mode.take() {
-                self.gl
-                    .uniform_1_u32_slice(Some(&self.scale_unif), &[scale_mode as u32]);
-            }
-
-            self.gl.bind_vertex_array(Some(self.vao));
-
-            self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
-            self.gl.clear(glow::COLOR_BUFFER_BIT);
-            self.gl.draw_arrays(glow::TRIANGLE_STRIP, 0, 4);
-        }
     }
 }
 

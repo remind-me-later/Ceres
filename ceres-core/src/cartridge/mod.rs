@@ -1,3 +1,7 @@
+mod mbc;
+mod ram_size;
+mod rom_size;
+
 use {
     crate::Error,
     alloc::boxed::Box,
@@ -6,28 +10,21 @@ use {
     rom_size::ROMSize,
 };
 
-mod mbc;
-mod ram_size;
-mod rom_size;
-
 #[derive(Debug)]
 pub struct Cartridge {
+    has_battery: bool,
     mbc: Mbc,
 
-    rom: Box<[u8]>,
     ram: Box<[u8]>,
-
-    rom_bank_lo: u8,
-    rom_bank_hi: u8,
-    rom_offsets: (u32, u32),
-
-    ram_enabled: bool,
     ram_bank: u8,
+    ram_enabled: bool,
     ram_offset: u32,
-
-    has_battery: bool,
-
     ram_size: RAMSize,
+
+    rom: Box<[u8]>,
+    rom_bank_hi: u8,
+    rom_bank_lo: u8,
+    rom_offsets: (u32, u32),
     rom_size: ROMSize,
 }
 
@@ -66,6 +63,53 @@ impl Default for Cartridge {
 }
 
 impl Cartridge {
+    #[must_use]
+    pub fn ascii_title(&self) -> &[u8] {
+        let range = if self.is_old_licensee_code() {
+            0x134..0x144
+        } else {
+            0x134..0x13F
+        };
+
+        let title = &self.rom[range];
+        let mut i = 0;
+        while i < title.len() && title[i] != 0 {
+            i += 1;
+        }
+        &title[..i]
+    }
+
+    #[must_use]
+    pub const fn global_checksum(&self) -> u16 {
+        u16::from_le_bytes([self.rom[0x14F], self.rom[0x14E]])
+    }
+
+    #[must_use]
+    pub const fn has_battery(&self) -> bool {
+        self.has_battery
+    }
+
+    #[must_use]
+    pub const fn header_checksum(&self) -> u8 {
+        self.rom[0x14D]
+    }
+
+    #[must_use]
+    pub const fn is_old_licensee_code(&self) -> bool {
+        let code = self.rom[0x14B];
+        code != 0x33
+    }
+
+    #[must_use]
+    pub fn mbc_ram(&self) -> Option<&[u8]> {
+        self.has_battery.then_some(&*self.ram)
+    }
+
+    #[must_use]
+    pub fn mbc_ram_mut(&mut self) -> Option<&mut [u8]> {
+        self.has_battery.then_some(&mut *self.ram)
+    }
+
     #[expect(
         clippy::similar_names,
         reason = "ROM and RAM are common names in this context"
@@ -101,97 +145,13 @@ impl Cartridge {
     }
 
     #[must_use]
-    pub const fn is_old_licensee_code(&self) -> bool {
-        let code = self.rom[0x14B];
-        code != 0x33
-    }
-
-    #[must_use]
-    pub fn ascii_title(&self) -> &[u8] {
-        let range = if self.is_old_licensee_code() {
-            0x134..0x144
-        } else {
-            0x134..0x13F
-        };
-
-        let title = &self.rom[range];
-        let mut i = 0;
-        while i < title.len() && title[i] != 0 {
-            i += 1;
-        }
-        &title[..i]
-    }
-
-    #[must_use]
-    pub const fn header_checksum(&self) -> u8 {
-        self.rom[0x14D]
-    }
-
-    #[must_use]
-    pub const fn global_checksum(&self) -> u16 {
-        u16::from_le_bytes([self.rom[0x14F], self.rom[0x14E]])
-    }
-
-    #[must_use]
-    pub const fn version(&self) -> u8 {
-        self.rom[0x14C]
-    }
-
-    #[must_use]
-    pub fn mbc_ram(&self) -> Option<&[u8]> {
-        self.has_battery.then_some(&*self.ram)
-    }
-
-    #[must_use]
-    pub fn mbc_ram_mut(&mut self) -> Option<&mut [u8]> {
-        self.has_battery.then_some(&mut *self.ram)
-    }
-
-    #[must_use]
-    pub const fn rtc(&self) -> Option<&Mbc3RTC> {
-        if let Mbc::Mbc3 { rtc: Some(rtc), .. } = &self.mbc {
-            Some(rtc)
-        } else {
-            None
-        }
-    }
-
-    #[must_use]
-    pub const fn rtc_mut(&mut self) -> Option<&mut Mbc3RTC> {
-        if let Mbc::Mbc3 { rtc, .. } = &mut self.mbc {
-            rtc.as_mut()
-        } else {
-            None
-        }
-    }
-
-    #[must_use]
-    pub const fn has_battery(&self) -> bool {
-        self.has_battery
+    const fn ram_addr(&self, addr: u16) -> u32 {
+        self.ram_offset | (addr & 0x1FFF) as u32
     }
 
     #[must_use]
     pub const fn ram_size_bytes(&self) -> u32 {
         self.ram_size.size_bytes()
-    }
-
-    pub const fn run_rtc(&mut self, cycles: i32) {
-        if let Mbc::Mbc3 { rtc: Some(rtc), .. } = &mut self.mbc {
-            rtc.run_cycles(cycles);
-        }
-    }
-
-    #[must_use]
-    pub const fn read_rom(&self, addr: u16) -> u8 {
-        let (lo, hi) = self.rom_offsets;
-
-        let bank_addr = match addr {
-            0x0000..=0x3FFF => lo | (addr & 0x3FFF) as u32,
-            0x4000..=0x7FFF => hi | (addr & 0x3FFF) as u32,
-            _ => unreachable!(),
-        };
-
-        self.rom[bank_addr as usize]
     }
 
     #[must_use]
@@ -213,6 +173,70 @@ impl Cartridge {
                 .as_ref()
                 .and_then(|r| r.read(self.ram_enabled))
                 .unwrap_or_else(|| mbc_read_ram(self, self.ram_enabled, addr)),
+        }
+    }
+
+    #[must_use]
+    pub const fn read_rom(&self, addr: u16) -> u8 {
+        let (lo, hi) = self.rom_offsets;
+
+        let bank_addr = match addr {
+            0x0000..=0x3FFF => lo | (addr & 0x3FFF) as u32,
+            0x4000..=0x7FFF => hi | (addr & 0x3FFF) as u32,
+            _ => unreachable!(),
+        };
+
+        self.rom[bank_addr as usize]
+    }
+
+    #[must_use]
+    pub const fn rtc(&self) -> Option<&Mbc3RTC> {
+        if let Mbc::Mbc3 { rtc: Some(rtc), .. } = &self.mbc {
+            Some(rtc)
+        } else {
+            None
+        }
+    }
+
+    #[must_use]
+    pub const fn rtc_mut(&mut self) -> Option<&mut Mbc3RTC> {
+        if let Mbc::Mbc3 { rtc, .. } = &mut self.mbc {
+            rtc.as_mut()
+        } else {
+            None
+        }
+    }
+
+    pub const fn run_rtc(&mut self, cycles: i32) {
+        if let Mbc::Mbc3 { rtc: Some(rtc), .. } = &mut self.mbc {
+            rtc.run_cycles(cycles);
+        }
+    }
+
+    #[must_use]
+    pub const fn version(&self) -> u8 {
+        self.rom[0x14C]
+    }
+
+    pub fn write_ram(&mut self, addr: u16, val: u8) {
+        fn mbc_write_ram(cart: &mut Cartridge, ram_enabled: bool, addr: u16, val: u8) {
+            if cart.ram_size.has_ram() && ram_enabled {
+                let addr = cart.ram_addr(addr);
+                cart.ram[addr as usize] = val;
+            }
+        }
+
+        match &mut self.mbc {
+            Mbc::Mbc0 => (),
+            Mbc::Mbc1 { .. } | Mbc::Mbc2 | Mbc::Mbc5 => {
+                mbc_write_ram(self, self.ram_enabled, addr, val);
+            }
+            Mbc::Mbc3 { rtc, .. } => rtc
+                .as_mut()
+                .and_then(|r| r.write(self.ram_enabled, val))
+                .unwrap_or_else(|| {
+                    mbc_write_ram(self, self.ram_enabled, addr, val);
+                }),
         }
     }
 
@@ -361,32 +385,5 @@ impl Cartridge {
                 }
             }
         }
-    }
-
-    pub fn write_ram(&mut self, addr: u16, val: u8) {
-        fn mbc_write_ram(cart: &mut Cartridge, ram_enabled: bool, addr: u16, val: u8) {
-            if cart.ram_size.has_ram() && ram_enabled {
-                let addr = cart.ram_addr(addr);
-                cart.ram[addr as usize] = val;
-            }
-        }
-
-        match &mut self.mbc {
-            Mbc::Mbc0 => (),
-            Mbc::Mbc1 { .. } | Mbc::Mbc2 | Mbc::Mbc5 => {
-                mbc_write_ram(self, self.ram_enabled, addr, val);
-            }
-            Mbc::Mbc3 { rtc, .. } => rtc
-                .as_mut()
-                .and_then(|r| r.write(self.ram_enabled, val))
-                .unwrap_or_else(|| {
-                    mbc_write_ram(self, self.ram_enabled, addr, val);
-                }),
-        }
-    }
-
-    #[must_use]
-    const fn ram_addr(&self, addr: u16) -> u32 {
-        self.ram_offset | (addr & 0x1FFF) as u32
     }
 }

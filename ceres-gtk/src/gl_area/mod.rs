@@ -17,15 +17,15 @@ impl Default for GlArea {
 }
 
 impl GlArea {
-    pub fn new() -> Self {
-        glib::Object::new()
-    }
-
     pub fn gb_thread(&self) -> &Rc<RefCell<ceres_std::GbThread>> {
         self.imp().gb_thread()
     }
 
     fn make_current(&self) {
         GLAreaExt::make_current(self);
+    }
+
+    pub fn new() -> Self {
+        glib::Object::new()
     }
 }

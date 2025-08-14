@@ -1,5 +1,9 @@
 use crate::interrupts::Interrupts;
 
+#[expect(
+    clippy::arbitrary_source_item_ordering,
+    reason = "Order follows the button bit representation"
+)]
 #[derive(Clone, Copy)]
 pub enum Button {
     Right = 0x01,
@@ -15,9 +19,9 @@ pub enum Button {
 #[derive(Default, Debug)]
 pub struct Joypad {
     // P1
+    actions_flag: bool,
     button_mask: u8,
     directions_flag: bool,
-    actions_flag: bool,
 }
 
 impl Joypad {
@@ -29,10 +33,6 @@ impl Joypad {
         if b & 0x0F != 0 && self.directions_flag || b & 0xF0 != 0 && self.actions_flag {
             ints.request_p1();
         }
-    }
-
-    pub const fn release(&mut self, button: Button) {
-        self.button_mask &= !(button as u8);
     }
 
     #[must_use]
@@ -51,6 +51,10 @@ impl Joypad {
 
         // pressed on low
         !(act | dir)
+    }
+
+    pub const fn release(&mut self, button: Button) {
+        self.button_mask &= !(button as u8);
     }
 
     pub const fn write_joy(&mut self, val: u8) {

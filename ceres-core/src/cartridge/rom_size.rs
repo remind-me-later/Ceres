@@ -1,5 +1,9 @@
 use crate::Error;
 
+#[expect(
+    clippy::arbitrary_source_item_ordering,
+    reason = "The order follows the ROM size"
+)]
 #[derive(Clone, Copy, Debug)]
 pub enum ROMSize {
     Kb32 = 0,
@@ -15,6 +19,12 @@ pub enum ROMSize {
 
 impl ROMSize {
     pub const BANK_SIZE: u16 = 0x4000;
+
+    #[must_use]
+    pub const fn mask(self) -> u16 {
+        // maximum is 2 << 8 - 1 = 1FF
+        (2_u16 << (self as u8)) - 1
+    }
 
     pub const fn new(byte: u8) -> Result<Self, Error> {
         use ROMSize::{Kb32, Kb64, Kb128, Kb256, Kb512, Mb1, Mb2, Mb4, Mb8};
@@ -38,11 +48,5 @@ impl ROMSize {
     pub const fn size_bytes(self) -> u32 {
         // maximum is 0x8000 << 8 = 0x80_0000
         (Self::BANK_SIZE as u32 * 2) << (self as u8)
-    }
-
-    #[must_use]
-    pub const fn mask(self) -> u16 {
-        // maximum is 2 << 8 - 1 = 1FF
-        (2_u16 << (self as u8)) - 1
     }
 }

@@ -3,12 +3,12 @@ use std::fmt::Display;
 
 #[derive(Debug)]
 pub enum Error {
-    InvalidRomSize,
     InvalidRamSize,
+    InvalidRomSize,
     NonAsciiTitleString,
-    UnsupportedMBC { mbc_hex_code: u8 },
-    RomSizeDifferentThanActual { expected: usize, actual: usize },
     RamSizeDifferentThanActual { expected: usize, actual: usize },
+    RomSizeDifferentThanActual { expected: usize, actual: usize },
+    UnsupportedMBC { mbc_hex_code: u8 },
 }
 
 impl Display for Error {

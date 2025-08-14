@@ -3,11 +3,11 @@ use std::{cell::RefCell, rc::Rc};
 
 #[derive(Debug)]
 pub struct PreferencesDialog {
-    preferences_page: adw::PreferencesPage,
-    shader_row: adw::ComboRow,
     gb_model_row: adw::ComboRow,
     gl_area_bindings: RefCell<Vec<glib::Binding>>,
     initializing: Rc<RefCell<bool>>,
+    preferences_page: adw::PreferencesPage,
+    shader_row: adw::ComboRow,
 }
 
 impl Default for PreferencesDialog {
@@ -202,8 +202,8 @@ impl PreferencesDialog {
 #[glib::object_subclass]
 impl ObjectSubclass for PreferencesDialog {
     const NAME: &'static str = "CeresPreferencesWindow";
-    type Type = crate::preferences_dialog::PreferencesDialog;
     type ParentType = adw::PreferencesDialog;
+    type Type = crate::preferences_dialog::PreferencesDialog;
 }
 
 impl ObjectImpl for PreferencesDialog {

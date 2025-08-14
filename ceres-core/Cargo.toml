@@ -10,6 +10,7 @@ license.workspace = true
 absolute_paths = "warn"
 alloc_instead_of_core = "warn"
 allow_attributes = "warn"
+arbitrary_source_item_ordering = "warn"
 as_pointer_underscore = "warn"
 as_underscore = "warn"
 assertions_on_result_states = "warn"

@@ -27,25 +27,6 @@ impl Default for ColorPalette {
 }
 
 impl ColorPalette {
-    pub const fn set_spec(&mut self, val: u8) {
-        self.spec = val;
-    }
-
-    #[must_use]
-    pub const fn spec(&self) -> u8 {
-        self.spec | 0x40
-    }
-
-    #[must_use]
-    const fn index(&self) -> u8 {
-        self.spec & 0x3F
-    }
-
-    #[must_use]
-    const fn is_increment_enabled(&self) -> bool {
-        self.spec & 0x80 != 0
-    }
-
     #[must_use]
     pub const fn data(&self) -> u8 {
         let i = (self.index() as usize / 2) * 3;
@@ -61,6 +42,30 @@ impl ColorPalette {
             let b = self.buffer[i + 2] << 2;
             g | b
         }
+    }
+
+    #[must_use]
+    const fn index(&self) -> u8 {
+        self.spec & 0x3F
+    }
+
+    #[must_use]
+    const fn is_increment_enabled(&self) -> bool {
+        self.spec & 0x80 != 0
+    }
+
+    #[must_use]
+    pub const fn rgb(&self, palette: u8, color: u8) -> (u8, u8, u8) {
+        const fn scale_channel(c: u8) -> u8 {
+            (c << 3) | (c >> 2)
+        }
+
+        let i = (palette as usize * 4 + color as usize) * 3;
+        let r = self.buffer[i];
+        let g = self.buffer[i + 1];
+        let b = self.buffer[i + 2];
+
+        (scale_channel(r), scale_channel(g), scale_channel(b))
     }
 
     pub const fn set_data(&mut self, val: u8) {
@@ -85,17 +90,12 @@ impl ColorPalette {
         }
     }
 
+    pub const fn set_spec(&mut self, val: u8) {
+        self.spec = val;
+    }
+
     #[must_use]
-    pub const fn rgb(&self, palette: u8, color: u8) -> (u8, u8, u8) {
-        const fn scale_channel(c: u8) -> u8 {
-            (c << 3) | (c >> 2)
-        }
-
-        let i = (palette as usize * 4 + color as usize) * 3;
-        let r = self.buffer[i];
-        let g = self.buffer[i + 1];
-        let b = self.buffer[i + 2];
-
-        (scale_channel(r), scale_channel(g), scale_channel(b))
+    pub const fn spec(&self) -> u8 {
+        self.spec | 0x40
     }
 }

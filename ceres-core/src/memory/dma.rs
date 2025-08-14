@@ -2,27 +2,14 @@ use crate::{AudioCallback, Gb, ppu};
 
 #[derive(Default, Debug)]
 pub struct Dma {
-    reg: u8,
-    is_enabled: bool,
     addr: u16,
-    // FIXME: check usage of restarting and on
-    is_restarting: bool,
+    is_enabled: bool,
+    is_restarting: bool, // FIXME: check usage of restarting and on
+    reg: u8,
     remaining_cycles: i32,
 }
 
 impl Dma {
-    pub const fn is_enabled(&self) -> bool {
-        self.is_enabled
-    }
-
-    pub const fn remaining_cycles(&self) -> i32 {
-        self.remaining_cycles
-    }
-
-    pub const fn advance_t_cycles(&mut self, cycles: i32) {
-        self.remaining_cycles += cycles;
-    }
-
     const fn advance_addr(&mut self) {
         self.addr = self.addr.wrapping_add(1);
         if self.addr & 0xFF > 0x9F {
@@ -31,13 +18,25 @@ impl Dma {
         }
     }
 
+    pub const fn advance_t_cycles(&mut self, cycles: i32) {
+        self.remaining_cycles += cycles;
+    }
+
     #[must_use]
     pub const fn is_active(&self) -> bool {
         self.is_enabled && (self.remaining_cycles > 0 || self.is_restarting)
     }
 
+    pub const fn is_enabled(&self) -> bool {
+        self.is_enabled
+    }
+
     pub const fn read(&self) -> u8 {
         self.reg
+    }
+
+    pub const fn remaining_cycles(&self) -> i32 {
+        self.remaining_cycles
     }
 
     pub fn write(&mut self, val: u8) {
@@ -52,6 +51,10 @@ impl Dma {
     }
 }
 
+#[expect(
+    clippy::arbitrary_source_item_ordering,
+    reason = "Order follows the state machine transitions"
+)]
 #[derive(Default, Debug)]
 pub enum HdmaState {
     #[default]
@@ -63,10 +66,10 @@ pub enum HdmaState {
 
 #[derive(Default, Debug)]
 pub struct Hdma {
-    hdma5: u8,
-    src: u16,
     dst: u16,
+    hdma5: u8,
     len: u16,
+    src: u16,
     state: HdmaState,
 }
 
@@ -74,6 +77,12 @@ impl Hdma {
     #[must_use]
     const fn is_on(&self) -> bool {
         !matches!(self.state, HdmaState::Sleep)
+    }
+
+    #[must_use]
+    pub const fn read_hdma5(&self) -> u8 {
+        // active on low
+        ((!self.is_on() as u8) << 7) | self.hdma5
     }
 
     pub fn write_hdma1(&mut self, val: u8) {
@@ -90,12 +99,6 @@ impl Hdma {
 
     pub fn write_hdma4(&mut self, val: u8) {
         self.dst = (self.dst & 0x1F00) | u16::from(val & 0xF0);
-    }
-
-    #[must_use]
-    pub const fn read_hdma5(&self) -> u8 {
-        // active on low
-        ((!self.is_on() as u8) << 7) | self.hdma5
     }
 
     pub fn write_hdma5(&mut self, val: u8) {

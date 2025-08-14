@@ -23,83 +23,12 @@ const BG_PR_B: u8 = 0x80;
 
 #[derive(Clone, Copy)]
 enum PxPrio {
-    Sprites,
     Bg,
     Normal,
-}
-
-const fn shade_index(palette: u8, color: u8) -> u8 {
-    (palette >> (color * 2)) & 0x3
-}
-
-#[derive(Default)]
-struct Obj {
-    x: u8,
-    y: u8,
-    tile_index: u8,
-    attr: u8,
+    Sprites,
 }
 
 impl Ppu {
-    #[must_use]
-    const fn mono_rgb(index: u8) -> (u8, u8, u8) {
-        super::color_palette::GRAYSCALE_PALETTE[index as usize]
-    }
-
-    #[must_use]
-    const fn is_window_enabled(&self, cgb_mode: CgbMode) -> bool {
-        match cgb_mode {
-            CgbMode::Dmg | CgbMode::Compat => {
-                self.lcdc & (LCDC_BG_B | LCDC_WIN_B) == (LCDC_BG_B | LCDC_WIN_B)
-            }
-            CgbMode::Cgb => self.lcdc & LCDC_WIN_B != 0,
-        }
-    }
-
-    #[must_use]
-    const fn is_bg_enabled(&self, cgb_mode: CgbMode) -> bool {
-        match cgb_mode {
-            CgbMode::Dmg | CgbMode::Compat => self.lcdc & LCDC_BG_B != 0,
-            CgbMode::Cgb => true,
-        }
-    }
-
-    #[must_use]
-    const fn is_cgb_master_priority(&self, cgb_mode: CgbMode) -> bool {
-        match cgb_mode {
-            CgbMode::Dmg | CgbMode::Compat => false,
-            CgbMode::Cgb => self.lcdc & LCDC_BG_B == 0,
-        }
-    }
-
-    #[must_use]
-    fn bg_tile_map(&self) -> u16 {
-        0x9800 | (u16::from(self.lcdc & LCDC_BG_AREA != 0) << 10)
-    }
-
-    #[must_use]
-    fn win_tile_map(&self) -> u16 {
-        0x9800 | (u16::from(self.lcdc & LCDC_WIN_AREA != 0) << 10)
-    }
-
-    #[must_use]
-    fn tile_addr(&self, tile_num: u8) -> u16 {
-        let signed = self.lcdc & LCDC_BG_SIGNED == 0;
-        let base = 0x8000 | (u16::from(signed) << 11);
-
-        let offset = if signed {
-            #[expect(clippy::cast_possible_wrap)]
-            let tile_num = tile_num as i8;
-            #[expect(clippy::cast_sign_loss)]
-            let tile_num = (i16::from(tile_num) + 0x80) as u16;
-            tile_num
-        } else {
-            u16::from(tile_num)
-        };
-
-        base + offset * 16
-    }
-
     #[must_use]
     fn bg_tile(&self, tile_addr: u16, attr: u8) -> (u8, u8) {
         let bank = u8::from(attr & BG_VBK_B != 0);
@@ -109,20 +38,8 @@ impl Ppu {
     }
 
     #[must_use]
-    fn obj_tile(&self, tile_addr: u16, obj: &Obj) -> (u8, u8) {
-        let bank = u8::from(obj.attr & SPR_TILE_BANK != 0);
-        let lo = self.vram.vram_at_bank(tile_addr, bank);
-        let hi = self.vram.vram_at_bank(tile_addr + 1, bank);
-        (lo, hi)
-    }
-
-    pub fn draw_scanline(&mut self, cgb_mode: CgbMode) {
-        let mut bg_priority = [PxPrio::Normal; PX_WIDTH as usize];
-        let base_idx = u32::from(PX_WIDTH) * u32::from(self.ly);
-
-        self.draw_bg(&mut bg_priority, base_idx, cgb_mode);
-        self.draw_win(&mut bg_priority, base_idx, cgb_mode);
-        self.draw_obj(&bg_priority, base_idx, cgb_mode);
+    fn bg_tile_map(&self) -> u16 {
+        0x9800 | (u16::from(self.lcdc & LCDC_BG_AREA != 0) << 10)
     }
 
     fn draw_bg(
@@ -187,113 +104,6 @@ impl Ppu {
                 PxPrio::Normal
             };
         }
-    }
-
-    fn draw_win(
-        &mut self,
-        bg_priority: &mut [PxPrio; PX_WIDTH as usize],
-        base_idx: u32,
-        cgb_mode: CgbMode,
-    ) {
-        // not so sure about last condition...
-        if !(self.is_window_enabled(cgb_mode) && self.wy <= self.ly && self.wx < PX_WIDTH) {
-            if self.win_in_frame {
-                self.win_skipped += 1;
-            }
-            return;
-        }
-
-        let wx = self.wx.saturating_sub(7);
-        let y = (self.ly - self.wy).wrapping_sub(self.win_skipped);
-        let row = u16::from(y / 8) * 32;
-        let line = u16::from((y & 7) * 2);
-
-        for i in wx..PX_WIDTH {
-            self.win_in_frame = true;
-            self.win_in_ly = true;
-
-            let x = i.wrapping_sub(wx);
-            let col = u16::from(x / 8);
-
-            let tile_map = self.win_tile_map() + row + col;
-
-            let attr = match cgb_mode {
-                CgbMode::Dmg | CgbMode::Compat => 0,
-                CgbMode::Cgb => self.vram.vram_at_bank(tile_map, 1),
-            };
-
-            let color = {
-                let tile_num = self.vram.vram_at_bank(tile_map, 0);
-
-                let tile_addr = self.tile_addr(tile_num)
-                    + if attr & BG_Y_FLIP_B == 0 {
-                        line
-                    } else {
-                        14 - line
-                    };
-
-                let (lo, hi) = self.bg_tile(tile_addr, attr);
-
-                let mut bit = x & 7;
-                if attr & BG_X_FLIP_B == 0 {
-                    bit = 7 - bit;
-                }
-                let bit = 1 << bit;
-
-                (u8::from(hi & bit != 0) << 1) | u8::from(lo & bit != 0)
-            };
-
-            let rgb = match cgb_mode {
-                CgbMode::Dmg => Self::mono_rgb(shade_index(self.bgp, color)),
-                CgbMode::Compat => self.bcp.rgb(attr & BG_PAL_B, shade_index(self.bgp, color)),
-                CgbMode::Cgb => self.bcp.rgb(attr & BG_PAL_B, color),
-            };
-
-            bg_priority[i as usize] = if color == 0 {
-                PxPrio::Sprites
-            } else if attr & BG_PR_B != 0 {
-                PxPrio::Bg
-            } else {
-                PxPrio::Normal
-            };
-
-            self.rgb_buf.set_px(base_idx + u32::from(i), rgb);
-        }
-    }
-
-    #[must_use]
-    fn objs_in_ly(&self, height: u8, cgb_mode: CgbMode) -> ([Obj; 10], u8) {
-        let mut len: u8 = 0;
-        let mut obj: [Obj; 10] = Default::default();
-        let oam_bytes = self.oam.bytes();
-
-        for chunk in oam_bytes.chunks_exact(4) {
-            let y = chunk[0].wrapping_sub(16);
-
-            if self.ly.wrapping_sub(y) < height {
-                let attr = Obj {
-                    y,
-                    x: chunk[1].wrapping_sub(8),
-                    tile_index: chunk[2],
-                    attr: chunk[3],
-                };
-
-                obj[len as usize] = attr;
-                len += 1;
-
-                if len == 10 {
-                    break;
-                }
-            }
-        }
-
-        obj[..(len as usize)].reverse();
-
-        if matches!(cgb_mode, CgbMode::Dmg) || self.opri {
-            obj[..(len as usize)].sort_by(|a, b| b.x.cmp(&a.x));
-        }
-
-        (obj, len)
     }
 
     fn draw_obj(
@@ -384,4 +194,194 @@ impl Ppu {
             }
         }
     }
+
+    pub fn draw_scanline(&mut self, cgb_mode: CgbMode) {
+        let mut bg_priority = [PxPrio::Normal; PX_WIDTH as usize];
+        let base_idx = u32::from(PX_WIDTH) * u32::from(self.ly);
+
+        self.draw_bg(&mut bg_priority, base_idx, cgb_mode);
+        self.draw_win(&mut bg_priority, base_idx, cgb_mode);
+        self.draw_obj(&bg_priority, base_idx, cgb_mode);
+    }
+
+    fn draw_win(
+        &mut self,
+        bg_priority: &mut [PxPrio; PX_WIDTH as usize],
+        base_idx: u32,
+        cgb_mode: CgbMode,
+    ) {
+        // not so sure about last condition...
+        if !(self.is_window_enabled(cgb_mode) && self.wy <= self.ly && self.wx < PX_WIDTH) {
+            if self.win_in_frame {
+                self.win_skipped += 1;
+            }
+            return;
+        }
+
+        let wx = self.wx.saturating_sub(7);
+        let y = (self.ly - self.wy).wrapping_sub(self.win_skipped);
+        let row = u16::from(y / 8) * 32;
+        let line = u16::from((y & 7) * 2);
+
+        for i in wx..PX_WIDTH {
+            self.win_in_frame = true;
+            self.win_in_ly = true;
+
+            let x = i.wrapping_sub(wx);
+            let col = u16::from(x / 8);
+
+            let tile_map = self.win_tile_map() + row + col;
+
+            let attr = match cgb_mode {
+                CgbMode::Dmg | CgbMode::Compat => 0,
+                CgbMode::Cgb => self.vram.vram_at_bank(tile_map, 1),
+            };
+
+            let color = {
+                let tile_num = self.vram.vram_at_bank(tile_map, 0);
+
+                let tile_addr = self.tile_addr(tile_num)
+                    + if attr & BG_Y_FLIP_B == 0 {
+                        line
+                    } else {
+                        14 - line
+                    };
+
+                let (lo, hi) = self.bg_tile(tile_addr, attr);
+
+                let mut bit = x & 7;
+                if attr & BG_X_FLIP_B == 0 {
+                    bit = 7 - bit;
+                }
+                let bit = 1 << bit;
+
+                (u8::from(hi & bit != 0) << 1) | u8::from(lo & bit != 0)
+            };
+
+            let rgb = match cgb_mode {
+                CgbMode::Dmg => Self::mono_rgb(shade_index(self.bgp, color)),
+                CgbMode::Compat => self.bcp.rgb(attr & BG_PAL_B, shade_index(self.bgp, color)),
+                CgbMode::Cgb => self.bcp.rgb(attr & BG_PAL_B, color),
+            };
+
+            bg_priority[i as usize] = if color == 0 {
+                PxPrio::Sprites
+            } else if attr & BG_PR_B != 0 {
+                PxPrio::Bg
+            } else {
+                PxPrio::Normal
+            };
+
+            self.rgb_buf.set_px(base_idx + u32::from(i), rgb);
+        }
+    }
+
+    #[must_use]
+    const fn is_bg_enabled(&self, cgb_mode: CgbMode) -> bool {
+        match cgb_mode {
+            CgbMode::Dmg | CgbMode::Compat => self.lcdc & LCDC_BG_B != 0,
+            CgbMode::Cgb => true,
+        }
+    }
+
+    #[must_use]
+    const fn is_cgb_master_priority(&self, cgb_mode: CgbMode) -> bool {
+        match cgb_mode {
+            CgbMode::Dmg | CgbMode::Compat => false,
+            CgbMode::Cgb => self.lcdc & LCDC_BG_B == 0,
+        }
+    }
+
+    #[must_use]
+    const fn is_window_enabled(&self, cgb_mode: CgbMode) -> bool {
+        match cgb_mode {
+            CgbMode::Dmg | CgbMode::Compat => {
+                self.lcdc & (LCDC_BG_B | LCDC_WIN_B) == (LCDC_BG_B | LCDC_WIN_B)
+            }
+            CgbMode::Cgb => self.lcdc & LCDC_WIN_B != 0,
+        }
+    }
+
+    #[must_use]
+    const fn mono_rgb(index: u8) -> (u8, u8, u8) {
+        super::color_palette::GRAYSCALE_PALETTE[index as usize]
+    }
+
+    #[must_use]
+    fn obj_tile(&self, tile_addr: u16, obj: &Obj) -> (u8, u8) {
+        let bank = u8::from(obj.attr & SPR_TILE_BANK != 0);
+        let lo = self.vram.vram_at_bank(tile_addr, bank);
+        let hi = self.vram.vram_at_bank(tile_addr + 1, bank);
+        (lo, hi)
+    }
+
+    #[must_use]
+    fn objs_in_ly(&self, height: u8, cgb_mode: CgbMode) -> ([Obj; 10], u8) {
+        let mut len: u8 = 0;
+        let mut obj: [Obj; 10] = Default::default();
+        let oam_bytes = self.oam.bytes();
+
+        for chunk in oam_bytes.chunks_exact(4) {
+            let y = chunk[0].wrapping_sub(16);
+
+            if self.ly.wrapping_sub(y) < height {
+                let attr = Obj {
+                    y,
+                    x: chunk[1].wrapping_sub(8),
+                    tile_index: chunk[2],
+                    attr: chunk[3],
+                };
+
+                obj[len as usize] = attr;
+                len += 1;
+
+                if len == 10 {
+                    break;
+                }
+            }
+        }
+
+        obj[..(len as usize)].reverse();
+
+        if matches!(cgb_mode, CgbMode::Dmg) || self.opri {
+            obj[..(len as usize)].sort_by(|a, b| b.x.cmp(&a.x));
+        }
+
+        (obj, len)
+    }
+
+    #[must_use]
+    fn tile_addr(&self, tile_num: u8) -> u16 {
+        let signed = self.lcdc & LCDC_BG_SIGNED == 0;
+        let base = 0x8000 | (u16::from(signed) << 11);
+
+        let offset = if signed {
+            #[expect(clippy::cast_possible_wrap)]
+            let tile_num = tile_num as i8;
+            #[expect(clippy::cast_sign_loss)]
+            let tile_num = (i16::from(tile_num) + 0x80) as u16;
+            tile_num
+        } else {
+            u16::from(tile_num)
+        };
+
+        base + offset * 16
+    }
+
+    #[must_use]
+    fn win_tile_map(&self) -> u16 {
+        0x9800 | (u16::from(self.lcdc & LCDC_WIN_AREA != 0) << 10)
+    }
+}
+
+#[derive(Default)]
+struct Obj {
+    attr: u8,
+    tile_index: u8,
+    x: u8,
+    y: u8,
+}
+
+const fn shade_index(palette: u8, color: u8) -> u8 {
+    (palette >> (color * 2)) & 0x3
 }

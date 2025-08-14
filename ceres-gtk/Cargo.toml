@@ -25,6 +25,7 @@ package = "gtk4"
 
 [lints.clippy]
 allow_attributes = "warn"
+arbitrary_source_item_ordering = "warn"
 as_underscore = "warn"
 assertions_on_result_states = "warn"
 clone_on_ref_ptr = "warn"
@@ -75,3 +76,4 @@ unneeded_field_pattern = "warn"
 unseparated_literal_suffix = "warn"
 use_debug = "warn"
 verbose_file_reads = "warn"
+

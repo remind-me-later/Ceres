@@ -2,8 +2,8 @@ use crate::ppu::{Mode, Ppu};
 
 #[derive(Debug)]
 pub struct Vram {
-    vbk: bool,
     bytes: [u8; Self::SIZE_CGB as usize],
+    vbk: bool,
 }
 
 impl Default for Vram {
@@ -16,11 +16,21 @@ impl Default for Vram {
 }
 
 impl Vram {
-    pub const SIZE_GB: u16 = 0x2000;
     pub const SIZE_CGB: u16 = Self::SIZE_GB * 2;
+    pub const SIZE_GB: u16 = 0x2000;
 
-    pub const fn write_vbk(&mut self, val: u8) {
-        self.vbk = val & 1 != 0;
+    #[must_use]
+    pub const fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    #[must_use]
+    pub const fn bytes_mut(&mut self) -> &mut [u8] {
+        &mut self.bytes
+    }
+
+    pub const fn read(&self, addr: u16) -> u8 {
+        self.vram_at_bank(addr, self.vbk as u8)
     }
 
     #[must_use]
@@ -35,24 +45,14 @@ impl Vram {
         self.bytes[i as usize]
     }
 
-    pub const fn read(&self, addr: u16) -> u8 {
-        self.vram_at_bank(addr, self.vbk as u8)
-    }
-
     pub fn write(&mut self, addr: u16, val: u8) {
         let bank = u16::from(self.vbk) * Self::SIZE_GB;
         let i = (addr & 0x1FFF) + bank;
         self.bytes[i as usize] = val;
     }
 
-    #[must_use]
-    pub const fn bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-
-    #[must_use]
-    pub const fn bytes_mut(&mut self) -> &mut [u8] {
-        &mut self.bytes
+    pub const fn write_vbk(&mut self, val: u8) {
+        self.vbk = val & 1 != 0;
     }
 }
 
@@ -66,17 +66,17 @@ impl Ppu {
         }
     }
 
-    pub fn write_vram(&mut self, addr: u16, val: u8) {
-        if !matches!(self.mode(), Mode::Drawing) {
-            self.vram.write(addr, val);
-        }
-    }
-
     pub const fn vram(&self) -> &Vram {
         &self.vram
     }
 
     pub const fn vram_mut(&mut self) -> &mut Vram {
         &mut self.vram
+    }
+
+    pub fn write_vram(&mut self, addr: u16, val: u8) {
+        if !matches!(self.mode(), Mode::Drawing) {
+            self.vram.write(addr, val);
+        }
     }
 }

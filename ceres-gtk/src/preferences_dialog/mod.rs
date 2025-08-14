@@ -9,16 +9,16 @@ glib::wrapper! {
 }
 
 impl PreferencesDialog {
-    pub fn new() -> Self {
-        glib::Object::builder().build()
-    }
-
     pub fn connect_to_gl_area(&self, gl_area: &crate::gl_area::GlArea) {
         self.imp().connect_to_gl_area(gl_area);
     }
 
     pub fn disconnect_from_gl_area(&self) {
         self.imp().disconnect_from_gl_area();
+    }
+
+    pub fn new() -> Self {
+        glib::Object::builder().build()
     }
 
     pub fn set_initialization_complete(&self) {

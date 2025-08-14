@@ -7,14 +7,29 @@ const SHIFT: u8 = 0x1;
 // TODO: always off
 #[derive(Default, Debug)]
 pub struct Serial {
-    sc: u8,
-    sb: u8,
     count: u8,
     div_mask: u8,
     master_clock: bool,
+    sb: u8,
+    sc: u8,
 }
 
 impl Serial {
+    #[must_use]
+    pub const fn div_mask(&self) -> u8 {
+        self.div_mask
+    }
+
+    #[must_use]
+    pub const fn read_sb(&self) -> u8 {
+        self.sb
+    }
+
+    #[must_use]
+    pub const fn read_sc(&self) -> u8 {
+        self.sc
+    }
+
     pub const fn run_master(&mut self, ints: &mut Interrupts) {
         self.master_clock ^= true;
 
@@ -31,21 +46,6 @@ impl Serial {
             // TODO: always off
             self.sb |= 1;
         }
-    }
-
-    #[must_use]
-    pub const fn div_mask(&self) -> u8 {
-        self.div_mask
-    }
-
-    #[must_use]
-    pub const fn read_sb(&self) -> u8 {
-        self.sb
-    }
-
-    #[must_use]
-    pub const fn read_sc(&self) -> u8 {
-        self.sc
     }
 
     pub const fn write_sb(&mut self, val: u8) {

@@ -1,3 +1,10 @@
+mod color_palette;
+mod draw;
+mod oam;
+mod rgba_buf;
+mod vram;
+mod vram_renderer;
+
 use crate::interrupts::Interrupts;
 pub use oam::Oam;
 pub use vram::Vram;
@@ -7,13 +14,6 @@ use {
     self::color_palette::ColorPalette, self::vram_renderer::VramRenderer, crate::CgbMode,
     rgba_buf::RgbaBuf,
 };
-
-mod color_palette;
-mod draw;
-mod oam;
-mod rgba_buf;
-mod vram;
-mod vram_renderer;
 
 pub const PX_WIDTH: u8 = 160;
 pub const PX_HEIGHT: u8 = 144;
@@ -36,6 +36,10 @@ const STAT_IF_VBLANK_B: u8 = 0x10;
 const STAT_IF_OAM_B: u8 = 0x20;
 const STAT_IF_LYC_B: u8 = 0x40;
 
+#[expect(
+    clippy::arbitrary_source_item_ordering,
+    reason = "Order follows the state machine transitions"
+)]
 #[derive(Clone, Copy, Debug, Default)]
 pub enum Mode {
     #[default]
@@ -65,44 +69,100 @@ impl Mode {
 
 #[derive(Debug, Default)]
 pub struct Ppu {
+    bcp: ColorPalette,
+    bgp: u8,
+    cycles: i32,
     lcdc: u8,
-    stat: u8,
-    scy: u8,
-    scx: u8,
     ly: u8,
     lyc: u8,
-    bgp: u8,
+    oam: Oam,
     obp0: u8,
     obp1: u8,
-    wy: u8,
-    wx: u8,
-    opri: bool,
-    bcp: ColorPalette,
     ocp: ColorPalette,
-
-    vram: Vram,
-    oam: Oam,
+    opri: bool,
     rgb_buf: RgbaBuf,
     rgba_buf_present: RgbaBuf,
-    cycles: i32,
+    scx: u8,
+    scy: u8,
+    stat: u8,
+    vram: Vram,
+    vram_renderer: VramRenderer, // Debug util
     win_in_frame: bool,
     win_in_ly: bool,
     win_skipped: u8,
-
-    // Debug utils
-    vram_renderer: VramRenderer,
+    wx: u8,
+    wy: u8,
 }
 
 // IO
 impl Ppu {
     #[must_use]
-    pub const fn ocp_mut(&mut self) -> &mut ColorPalette {
-        &mut self.ocp
+    pub const fn bcp(&self) -> &ColorPalette {
+        &self.bcp
     }
 
     #[must_use]
     pub const fn bcp_mut(&mut self) -> &mut ColorPalette {
         &mut self.bcp
+    }
+
+    const fn check_lyc(&mut self, ints: &mut Interrupts) {
+        self.stat &= !STAT_LYC_B;
+
+        if self.ly == self.lyc {
+            self.stat |= STAT_LYC_B;
+            if self.stat & STAT_IF_LYC_B != 0 {
+                ints.request_lcd();
+            }
+        }
+    }
+
+    fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
+        self.set_mode_stat(mode);
+        self.cycles += self.mode().cycles(self.scx);
+
+        match mode {
+            Mode::OamScan => {
+                if self.stat & STAT_IF_OAM_B != 0 {
+                    ints.request_lcd();
+                }
+
+                self.win_in_ly = false;
+            }
+            Mode::VBlank => {
+                ints.request_vblank();
+
+                if self.stat & STAT_IF_VBLANK_B != 0 {
+                    ints.request_lcd();
+                }
+
+                // TODO: why?
+                // if self.stat & STAT_IF_OAM_B != 0 {
+                //     ints.req_lcd();
+                // }
+
+                self.win_skipped = 0;
+                self.win_in_frame = false;
+
+                self.vram_renderer.draw_vram(self.vram.bytes());
+            }
+            Mode::Drawing => (),
+            Mode::HBlank => {
+                if self.stat & STAT_IF_HBLANK_B != 0 {
+                    ints.request_lcd();
+                }
+            }
+        }
+    }
+
+    #[must_use]
+    pub const fn mode(&self) -> Mode {
+        match self.stat & 3 {
+            0 => Mode::HBlank,
+            1 => Mode::VBlank,
+            2 => Mode::OamScan,
+            _ => Mode::Drawing,
+        }
     }
 
     #[must_use]
@@ -111,8 +171,58 @@ impl Ppu {
     }
 
     #[must_use]
-    pub const fn bcp(&self) -> &ColorPalette {
-        &self.bcp
+    pub const fn ocp_mut(&mut self) -> &mut ColorPalette {
+        &mut self.ocp
+    }
+
+    #[must_use]
+    pub const fn pixel_data_rgba(&self) -> &[u8] {
+        self.rgba_buf_present.pixel_data()
+    }
+
+    #[must_use]
+    pub const fn read_bgp(&self) -> u8 {
+        self.bgp
+    }
+
+    #[must_use]
+    pub const fn read_lcdc(&self) -> u8 {
+        self.lcdc
+    }
+
+    #[must_use]
+    pub const fn read_ly(&self) -> u8 {
+        self.ly
+    }
+
+    #[must_use]
+    pub const fn read_lyc(&self) -> u8 {
+        self.lyc
+    }
+
+    #[must_use]
+    pub const fn read_obp0(&self) -> u8 {
+        self.obp0
+    }
+
+    #[must_use]
+    pub const fn read_obp1(&self) -> u8 {
+        self.obp1
+    }
+
+    #[must_use]
+    pub const fn read_opri(&self) -> u8 {
+        self.opri as u8 | 0xFE
+    }
+
+    #[must_use]
+    pub const fn read_scx(&self) -> u8 {
+        self.scx
+    }
+
+    #[must_use]
+    pub const fn read_scy(&self) -> u8 {
+        self.scy
     }
 
     #[must_use]
@@ -121,131 +231,13 @@ impl Ppu {
     }
 
     #[must_use]
-    pub const fn read_ly(&self) -> u8 {
-        self.ly
-    }
-
-    pub const fn write_opri(&mut self, val: u8) {
-        self.opri = val & 1 != 0;
-    }
-
-    #[must_use]
-    pub const fn read_opri(&self) -> u8 {
-        self.opri as u8 | 0xFE
-    }
-
-    pub const fn write_scx(&mut self, val: u8) {
-        self.scx = val;
-    }
-
-    #[must_use]
-    pub const fn read_scx(&self) -> u8 {
-        self.scx
-    }
-
-    pub const fn write_scy(&mut self, val: u8) {
-        self.scy = val;
-    }
-
-    #[must_use]
-    pub const fn read_scy(&self) -> u8 {
-        self.scy
-    }
-
-    pub const fn write_lyc(&mut self, val: u8) {
-        self.lyc = val;
-    }
-
-    #[must_use]
-    pub const fn read_lyc(&self) -> u8 {
-        self.lyc
-    }
-
-    pub const fn write_bgp(&mut self, val: u8) {
-        self.bgp = val;
-    }
-
-    #[must_use]
-    pub const fn read_bgp(&self) -> u8 {
-        self.bgp
-    }
-
-    pub const fn write_obp0(&mut self, val: u8) {
-        self.obp0 = val;
-    }
-
-    #[must_use]
-    pub const fn read_obp0(&self) -> u8 {
-        self.obp0
-    }
-
-    pub const fn write_obp1(&mut self, val: u8) {
-        self.obp1 = val;
-    }
-
-    #[must_use]
-    pub const fn read_obp1(&self) -> u8 {
-        self.obp1
-    }
-
-    pub const fn write_wy(&mut self, val: u8) {
-        self.wy = val;
-    }
-
-    #[must_use]
-    pub const fn read_wy(&self) -> u8 {
-        self.wy
-    }
-
-    pub const fn write_wx(&mut self, val: u8) {
-        self.wx = val;
-    }
-
-    #[must_use]
     pub const fn read_wx(&self) -> u8 {
         self.wx
     }
 
     #[must_use]
-    pub const fn read_lcdc(&self) -> u8 {
-        self.lcdc
-    }
-
-    pub fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts) {
-        // turn off
-        if val & LCDC_ON_B == 0 && self.lcdc & LCDC_ON_B != 0 {
-            // FIXME: breaks 'alone in the dark' and the menu fade out in 'Links awakening' among others
-            // debug_assert!(
-            //     matches!(self.mode(), Mode::VBlank),
-            //     "current mode = {:?}, cycles = {}, ly = {}",
-            //     self.mode(),
-            //     self.cycles,
-            //     self.ly
-            // );
-
-            self.ly = 0;
-        }
-
-        // turn on
-        if val & LCDC_ON_B != 0 && self.lcdc & LCDC_ON_B == 0 {
-            let mode = Mode::HBlank;
-
-            self.set_mode_stat(mode);
-            self.cycles = mode.cycles(self.scx);
-            self.ly = 0;
-            self.check_lyc(ints);
-        }
-
-        self.lcdc = val;
-    }
-
-    pub const fn write_stat(&mut self, val: u8) {
-        let ly_equals_lyc = self.stat & STAT_LYC_B;
-        let mode: u8 = self.mode() as u8;
-
-        self.stat = val;
-        self.stat &= !(STAT_LYC_B | STAT_MODE_B);
-        self.stat |= ly_equals_lyc | mode;
+    pub const fn read_wy(&self) -> u8 {
+        self.wy
     }
 
     pub fn run(&mut self, cycles: i32, ints: &mut Interrupts, cgb_mode: CgbMode) {
@@ -292,76 +284,85 @@ impl Ppu {
         }
     }
 
-    const fn check_lyc(&mut self, ints: &mut Interrupts) {
-        self.stat &= !STAT_LYC_B;
-
-        if self.ly == self.lyc {
-            self.stat |= STAT_LYC_B;
-            if self.stat & STAT_IF_LYC_B != 0 {
-                ints.request_lcd();
-            }
-        }
-    }
-
-    #[must_use]
-    pub const fn mode(&self) -> Mode {
-        match self.stat & 3 {
-            0 => Mode::HBlank,
-            1 => Mode::VBlank,
-            2 => Mode::OamScan,
-            _ => Mode::Drawing,
-        }
-    }
-
     const fn set_mode_stat(&mut self, mode: Mode) {
         self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
-    }
-
-    fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
-        self.set_mode_stat(mode);
-        self.cycles += self.mode().cycles(self.scx);
-
-        match mode {
-            Mode::OamScan => {
-                if self.stat & STAT_IF_OAM_B != 0 {
-                    ints.request_lcd();
-                }
-
-                self.win_in_ly = false;
-            }
-            Mode::VBlank => {
-                ints.request_vblank();
-
-                if self.stat & STAT_IF_VBLANK_B != 0 {
-                    ints.request_lcd();
-                }
-
-                // TODO: why?
-                // if self.stat & STAT_IF_OAM_B != 0 {
-                //     ints.req_lcd();
-                // }
-
-                self.win_skipped = 0;
-                self.win_in_frame = false;
-
-                self.vram_renderer.draw_vram(self.vram.bytes());
-            }
-            Mode::Drawing => (),
-            Mode::HBlank => {
-                if self.stat & STAT_IF_HBLANK_B != 0 {
-                    ints.request_lcd();
-                }
-            }
-        }
-    }
-
-    #[must_use]
-    pub const fn pixel_data_rgba(&self) -> &[u8] {
-        self.rgba_buf_present.pixel_data()
     }
 
     #[must_use]
     pub const fn vram_data_rgba(&self) -> &[u8] {
         self.vram_renderer.vram_data_rgba()
+    }
+
+    pub const fn write_bgp(&mut self, val: u8) {
+        self.bgp = val;
+    }
+
+    pub fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts) {
+        // turn off
+        if val & LCDC_ON_B == 0 && self.lcdc & LCDC_ON_B != 0 {
+            // FIXME: breaks 'alone in the dark' and the menu fade out in 'Links awakening' among others
+            // debug_assert!(
+            //     matches!(self.mode(), Mode::VBlank),
+            //     "current mode = {:?}, cycles = {}, ly = {}",
+            //     self.mode(),
+            //     self.cycles,
+            //     self.ly
+            // );
+
+            self.ly = 0;
+        }
+
+        // turn on
+        if val & LCDC_ON_B != 0 && self.lcdc & LCDC_ON_B == 0 {
+            let mode = Mode::HBlank;
+
+            self.set_mode_stat(mode);
+            self.cycles = mode.cycles(self.scx);
+            self.ly = 0;
+            self.check_lyc(ints);
+        }
+
+        self.lcdc = val;
+    }
+
+    pub const fn write_lyc(&mut self, val: u8) {
+        self.lyc = val;
+    }
+
+    pub const fn write_obp0(&mut self, val: u8) {
+        self.obp0 = val;
+    }
+
+    pub const fn write_obp1(&mut self, val: u8) {
+        self.obp1 = val;
+    }
+
+    pub const fn write_opri(&mut self, val: u8) {
+        self.opri = val & 1 != 0;
+    }
+
+    pub const fn write_scx(&mut self, val: u8) {
+        self.scx = val;
+    }
+
+    pub const fn write_scy(&mut self, val: u8) {
+        self.scy = val;
+    }
+
+    pub const fn write_stat(&mut self, val: u8) {
+        let ly_equals_lyc = self.stat & STAT_LYC_B;
+        let mode: u8 = self.mode() as u8;
+
+        self.stat = val;
+        self.stat &= !(STAT_LYC_B | STAT_MODE_B);
+        self.stat |= ly_equals_lyc | mode;
+    }
+
+    pub const fn write_wx(&mut self, val: u8) {
+        self.wx = val;
+    }
+
+    pub const fn write_wy(&mut self, val: u8) {
+        self.wy = val;
     }
 }

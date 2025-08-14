@@ -50,6 +50,7 @@ features = ["std"]
 # std_instead_of_alloc = "warn"
 alloc_instead_of_core = "warn"
 as_underscore = "warn"
+arbitrary_source_item_ordering = "warn"
 assertions_on_result_states = "warn"
 clone_on_ref_ptr = "warn"
 cognitive_complexity = "warn"

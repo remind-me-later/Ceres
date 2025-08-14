@@ -5,12 +5,12 @@ use crate::gl_area::GlArea;
 
 #[derive(Debug)]
 pub struct ApplicationWindow {
-    toolbar_view: adw::ToolbarView,
+    file_dialog: gtk::FileDialog,
     gb_area: GlArea,
     pause_button: adw::SplitButton,
-    volume_button: gtk::ScaleButton,
-    file_dialog: gtk::FileDialog,
     rom_path: RefCell<Option<PathBuf>>,
+    toolbar_view: adw::ToolbarView,
+    volume_button: gtk::ScaleButton,
 }
 
 impl Default for ApplicationWindow {
@@ -107,36 +107,15 @@ impl Default for ApplicationWindow {
 }
 
 impl ApplicationWindow {
-    pub const fn gl_area(&self) -> &GlArea {
-        &self.gb_area
-    }
-
-    /// Save game data to disk. This method is automatically called when the window is disposed,
-    /// but can also be triggered manually via the `save_data` action or Ctrl+S keyboard shortcut.
-    pub fn save_data(&self) {
-        if let Some(path) = self.rom_path.borrow().as_ref() {
-            if !self.gb_area.gb_thread().borrow().has_save_data() {
-                return;
-            }
-
-            let file_stem = path.file_stem().unwrap();
-            let sav_path = Self::data_path().join(file_stem).with_extension("sav");
-
-            std::fs::create_dir_all(sav_path.parent().unwrap()).unwrap();
-            let sav_file = File::create(sav_path);
-            self.gb_area
-                .gb_thread()
-                .borrow_mut()
-                .save_data(&mut sav_file.unwrap())
-                .unwrap();
-        }
-    }
-
     pub fn data_path() -> PathBuf {
         let mut path = glib::user_data_dir();
         path.push(ceres_std::CERES_BIN);
         std::fs::create_dir_all(&path).expect("Could not create directory.");
         path
+    }
+
+    pub const fn gl_area(&self) -> &GlArea {
+        &self.gb_area
     }
 
     fn load_file(&self, file_path: &std::path::Path) -> Result<(), ceres_std::Error> {
@@ -163,13 +142,34 @@ impl ApplicationWindow {
             Err(err) => Err(err),
         }
     }
+
+    /// Save game data to disk. This method is automatically called when the window is disposed,
+    /// but can also be triggered manually via the `save_data` action or Ctrl+S keyboard shortcut.
+    pub fn save_data(&self) {
+        if let Some(path) = self.rom_path.borrow().as_ref() {
+            if !self.gb_area.gb_thread().borrow().has_save_data() {
+                return;
+            }
+
+            let file_stem = path.file_stem().unwrap();
+            let sav_path = Self::data_path().join(file_stem).with_extension("sav");
+
+            std::fs::create_dir_all(sav_path.parent().unwrap()).unwrap();
+            let sav_file = File::create(sav_path);
+            self.gb_area
+                .gb_thread()
+                .borrow_mut()
+                .save_data(&mut sav_file.unwrap())
+                .unwrap();
+        }
+    }
 }
 
 #[glib::object_subclass]
 impl ObjectSubclass for ApplicationWindow {
     const NAME: &'static str = "CeresWindow";
-    type Type = crate::application_window::ApplicationWindow;
     type ParentType = adw::ApplicationWindow;
+    type Type = crate::application_window::ApplicationWindow;
 
     fn class_init(klass: &mut Self::Class) {
         klass.install_action_async(

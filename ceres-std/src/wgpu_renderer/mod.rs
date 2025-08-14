@@ -6,27 +6,27 @@ use texture::Texture;
 use wgpu::util::DeviceExt;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum ScalingOption {
+pub enum PixelPerfectOption {
     PixelPerfect,
     Stretch,
 }
 
-impl From<crate::ScalingOption> for ScalingOption {
-    fn from(scaling_option: crate::ScalingOption) -> Self {
-        match scaling_option {
-            crate::ScalingOption::PixelPerfect => Self::PixelPerfect,
-            crate::ScalingOption::Stretch => Self::Stretch,
+impl From<crate::PixelPerfectOption> for PixelPerfectOption {
+    fn from(pixel_perfect_option: crate::PixelPerfectOption) -> Self {
+        match pixel_perfect_option {
+            crate::PixelPerfectOption::PixelPerfect => Self::PixelPerfect,
+            crate::PixelPerfectOption::Stretch => Self::Stretch,
         }
     }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ShaderOption {
+    Crt = 4,
+    Lcd = 3,
     Nearest = 0,
     Scale2x = 1,
     Scale3x = 2,
-    Lcd = 3,
-    Crt = 4,
 }
 
 impl From<crate::ShaderOption> for ShaderOption {
@@ -42,21 +42,15 @@ impl From<crate::ShaderOption> for ShaderOption {
 }
 
 pub struct PipelineWrapper<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
-    render_pipeline: wgpu::RenderPipeline,
-
-    // Shader config binds
-    dimensions_uniform: wgpu::Buffer,
-    scale_uniform: wgpu::Buffer,
-    uniform_bind_group: wgpu::BindGroup,
-
-    // Texture binds
-    frame_texture: Texture,
     diffuse_bind_group: wgpu::BindGroup,
+    dimensions_uniform: wgpu::Buffer,
+    frame_texture: Texture,
     prev_frame_texture: Texture,
+    render_pipeline: wgpu::RenderPipeline,
     sampler: wgpu::Sampler,
-
-    // Bind group layout
+    scale_uniform: wgpu::Buffer,
     texture_bind_group_layout: wgpu::BindGroupLayout,
+    uniform_bind_group: wgpu::BindGroup,
 }
 
 impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEIGHT> {
@@ -221,16 +215,60 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
         });
 
         Self {
-            render_pipeline,
-            dimensions_uniform,
-            scale_uniform,
-            uniform_bind_group,
-            frame_texture,
             diffuse_bind_group,
+            dimensions_uniform,
+            frame_texture,
             prev_frame_texture,
+            render_pipeline,
             sampler,
+            scale_uniform,
             texture_bind_group_layout,
+            uniform_bind_group,
         }
+    }
+
+    pub fn paint(&self, render_pass: &mut wgpu::RenderPass) {
+        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
+        render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
+        render_pass.draw(0..4, 0..1);
+    }
+
+    pub fn resize(
+        &mut self,
+        scaling_option: PixelPerfectOption,
+        queue: &wgpu::Queue,
+        width: u32,
+        height: u32,
+    ) {
+        let (x, y) = {
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "PX_WIDTH and PX_HEIGHT are u8 constants, so this is safe"
+            )]
+            {
+                let mul = if matches!(scaling_option, PixelPerfectOption::PixelPerfect) {
+                    (width / PX_WIDTH).min(height / PX_HEIGHT) as f32
+                } else {
+                    (width as f32 / PX_WIDTH as f32).min(height as f32 / PX_HEIGHT as f32)
+                };
+
+                let x = (PX_WIDTH as f32 * mul) / width as f32;
+                let y = (PX_HEIGHT as f32 * mul) / height as f32;
+                (x, y)
+            }
+        };
+
+        #[expect(clippy::tuple_array_conversions)]
+        queue.write_buffer(&self.dimensions_uniform, 0, bytemuck::cast_slice(&[x, y]));
+    }
+
+    pub fn shader_option(&mut self, queue: &wgpu::Queue, shader_option: ShaderOption) {
+        queue.write_buffer(
+            &self.scale_uniform,
+            0,
+            bytemuck::cast_slice(&[shader_option as u32]),
+        );
     }
 
     pub fn update_screen_texture(
@@ -264,49 +302,5 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
 
         // Update the current frame texture
         self.frame_texture.update(queue, rgba);
-    }
-
-    pub fn shader_option(&mut self, queue: &wgpu::Queue, shader_option: ShaderOption) {
-        queue.write_buffer(
-            &self.scale_uniform,
-            0,
-            bytemuck::cast_slice(&[shader_option as u32]),
-        );
-    }
-
-    pub fn resize(
-        &mut self,
-        scaling_option: ScalingOption,
-        queue: &wgpu::Queue,
-        width: u32,
-        height: u32,
-    ) {
-        let (x, y) = {
-            #[expect(
-                clippy::cast_precision_loss,
-                reason = "PX_WIDTH and PX_HEIGHT are u8 constants, so this is safe"
-            )]
-            {
-                let mul = if matches!(scaling_option, ScalingOption::PixelPerfect) {
-                    (width / PX_WIDTH).min(height / PX_HEIGHT) as f32
-                } else {
-                    (width as f32 / PX_WIDTH as f32).min(height as f32 / PX_HEIGHT as f32)
-                };
-
-                let x = (PX_WIDTH as f32 * mul) / width as f32;
-                let y = (PX_HEIGHT as f32 * mul) / height as f32;
-                (x, y)
-            }
-        };
-
-        #[expect(clippy::tuple_array_conversions)]
-        queue.write_buffer(&self.dimensions_uniform, 0, bytemuck::cast_slice(&[x, y]));
-    }
-
-    pub fn paint(&self, render_pass: &mut wgpu::RenderPass) {
-        render_pass.set_pipeline(&self.render_pipeline);
-        render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
-        render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
-        render_pass.draw(0..4, 0..1);
     }
 }

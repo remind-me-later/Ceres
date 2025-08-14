@@ -16,17 +16,138 @@ pub trait PainterCallback: Send {
 }
 
 pub struct GbThread {
-    gb: Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
-    model: ceres_core::Model,
-    exiting: Arc<AtomicBool>,
-    pause_condvar: Arc<(Mutex<bool>, Condvar)>,
     _audio_state: audio::AudioState,
     audio_stream: audio::Stream,
-    thread_handle: Option<std::thread::JoinHandle<()>>,
+    exiting: Arc<AtomicBool>,
+    gb: Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
+    model: ceres_core::Model,
     multiplier: Arc<AtomicU32>,
+    pause_condvar: Arc<(Mutex<bool>, Condvar)>,
+    thread_handle: Option<std::thread::JoinHandle<()>>,
 }
 
 impl GbThread {
+    // Resets the GB state and loads the same ROM
+    pub fn change_model(&mut self, model: ceres_core::Model) {
+        if let Ok(mut gb) = self.gb.lock() {
+            self.model = model;
+            gb.change_model_and_soft_reset(model);
+        }
+    }
+
+    /// Changes the ROM loaded by the Game Boy thread.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if creating a new Game Boy instance fails.
+    pub fn change_rom(&mut self, sav_path: Option<&Path>, rom_path: &Path) -> Result<(), Error> {
+        let ring_buffer = self.audio_stream.ring_buffer();
+
+        let gb_new = Self::create_new_gb(
+            &self.audio_stream,
+            ring_buffer,
+            self.model,
+            Some(rom_path),
+            sav_path,
+        )?;
+
+        if let Ok(mut gb) = self.gb.lock() {
+            *gb = gb_new;
+        }
+
+        Ok(())
+    }
+
+    fn create_new_gb(
+        audio_stream: &audio::Stream,
+        ring_buffer: audio::AudioCallbackImpl,
+        model: ceres_core::Model,
+        rom_path: Option<&Path>,
+        sav_path: Option<&Path>,
+    ) -> Result<Gb<audio::AudioCallbackImpl>, Error> {
+        if let Some(rom_path) = rom_path {
+            let rom = {
+                std::fs::read(rom_path)
+                    .map(Vec::into_boxed_slice)
+                    .map_err(Error::Io)?
+            };
+
+            let gb_builder = GbBuilder::new(audio_stream.sample_rate(), ring_buffer)
+                .with_model(model)
+                .with_rom(rom)?;
+
+            if !gb_builder.can_load_save_data() {
+                return Ok(gb_builder.build());
+            }
+
+            if let Some(sav_path) = sav_path {
+                match File::open(sav_path) {
+                    Ok(mut save_data) => {
+                        let mut gb = gb_builder.build();
+                        gb.load_data(&mut save_data)?;
+                        Ok(gb)
+                    }
+                    Err(_) => Ok(gb_builder.build()),
+                }
+            } else {
+                Ok(gb_builder.build())
+            }
+        } else {
+            Ok(GbBuilder::new(audio_stream.sample_rate(), ring_buffer)
+                .with_model(model)
+                .build())
+        }
+    }
+
+    /// Exits the Game Boy thread and waits for it to finish.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no thread is running or if joining the thread fails.
+    pub fn exit(&mut self) -> Result<(), Error> {
+        self.exiting.store(true, Relaxed);
+
+        // Wake up the thread if it's paused so it can exit
+        let (pause_lock, pause_cvar) = &*self.pause_condvar;
+        if let Ok(mut paused) = pause_lock.lock() {
+            *paused = false;
+            pause_cvar.notify_one();
+        }
+
+        self.thread_handle
+            .take()
+            .ok_or(Error::NoThreadRunning)?
+            .join()
+            .map_err(|_e| Error::ThreadJoin)?;
+        Ok(())
+    }
+
+    #[must_use]
+    pub fn has_save_data(&self) -> bool {
+        self.gb.lock().is_ok_and(|gb| gb.cart_has_battery())
+    }
+
+    #[must_use]
+    pub const fn is_muted(&self) -> bool {
+        self.audio_stream.is_muted()
+    }
+
+    #[must_use]
+    pub fn is_paused(&self) -> bool {
+        let (pause_lock, _) = &*self.pause_condvar;
+        pause_lock.lock().is_ok_and(|paused| *paused)
+    }
+
+    #[must_use]
+    pub const fn model(&self) -> ceres_core::Model {
+        self.model
+    }
+
+    #[must_use]
+    pub fn multiplier(&self) -> u32 {
+        self.multiplier.load(Relaxed)
+    }
+
     /// Creates a new `GbThread` instance.
     ///
     /// # Errors
@@ -85,7 +206,7 @@ impl GbThread {
         let audio_state = audio::AudioState::new().map_err(Error::Audio)?;
 
         let audio_stream = audio::Stream::new(&audio_state).map_err(Error::Audio)?;
-        let ring_buffer = audio_stream.get_ring_buffer();
+        let ring_buffer = audio_stream.ring_buffer();
 
         let gb = Self::create_new_gb(&audio_stream, ring_buffer, model, rom_path, sav_path)?;
         let gb = Arc::new(Mutex::new(gb));
@@ -125,101 +246,6 @@ impl GbThread {
         })
     }
 
-    pub fn set_speed_multiplier(&mut self, multiplier: u32) {
-        self.multiplier.store(multiplier, Relaxed);
-        #[expect(clippy::cast_possible_wrap)]
-        self.set_sample_rate(self.audio_stream.sample_rate() / multiplier as i32);
-    }
-
-    #[must_use]
-    pub fn multiplier(&self) -> u32 {
-        self.multiplier.load(Relaxed)
-    }
-
-    /// Changes the ROM loaded by the Game Boy thread.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if creating a new Game Boy instance fails.
-    pub fn change_rom(&mut self, sav_path: Option<&Path>, rom_path: &Path) -> Result<(), Error> {
-        let ring_buffer = self.audio_stream.get_ring_buffer();
-
-        let gb_new = Self::create_new_gb(
-            &self.audio_stream,
-            ring_buffer,
-            self.model,
-            Some(rom_path),
-            sav_path,
-        )?;
-
-        if let Ok(mut gb) = self.gb.lock() {
-            *gb = gb_new;
-        }
-
-        Ok(())
-    }
-
-    // Resets the GB state and loads the same ROM
-    pub fn change_model(&mut self, model: ceres_core::Model) {
-        if let Ok(mut gb) = self.gb.lock() {
-            self.model = model;
-            gb.change_model_and_soft_reset(model);
-        }
-    }
-
-    fn create_new_gb(
-        audio_stream: &audio::Stream,
-        ring_buffer: audio::AudioCallbackImpl,
-        model: ceres_core::Model,
-        rom_path: Option<&Path>,
-        sav_path: Option<&Path>,
-    ) -> Result<Gb<audio::AudioCallbackImpl>, Error> {
-        if let Some(rom_path) = rom_path {
-            let rom = {
-                std::fs::read(rom_path)
-                    .map(Vec::into_boxed_slice)
-                    .map_err(Error::Io)?
-            };
-
-            let gb_builder = GbBuilder::new(audio_stream.sample_rate(), ring_buffer)
-                .with_model(model)
-                .with_rom(rom)?;
-
-            if !gb_builder.can_load_save_data() {
-                return Ok(gb_builder.build());
-            }
-
-            if let Some(sav_path) = sav_path {
-                match File::open(sav_path) {
-                    Ok(mut save_data) => {
-                        let mut gb = gb_builder.build();
-                        gb.load_data(&mut save_data)?;
-                        Ok(gb)
-                    }
-                    Err(_) => Ok(gb_builder.build()),
-                }
-            } else {
-                Ok(gb_builder.build())
-            }
-        } else {
-            Ok(GbBuilder::new(audio_stream.sample_rate(), ring_buffer)
-                .with_model(model)
-                .build())
-        }
-    }
-
-    fn set_sample_rate(&self, sample_rate: i32) {
-        if let Ok(mut gb) = self.gb.lock() {
-            gb.set_sample_rate(sample_rate);
-        }
-    }
-
-    #[must_use]
-    pub fn is_paused(&self) -> bool {
-        let (pause_lock, _) = &*self.pause_condvar;
-        pause_lock.lock().is_ok_and(|paused| *paused)
-    }
-
     /// Pauses the Game Boy thread and audio stream.
     ///
     /// # Errors
@@ -235,6 +261,13 @@ impl GbThread {
         }
 
         Ok(())
+    }
+
+    pub fn press_release<F>(&mut self, f: F) -> bool
+    where
+        F: FnOnce(&mut dyn Pressable) -> bool,
+    {
+        self.gb.lock().is_ok_and(|mut gb| f(&mut *gb))
     }
 
     /// Resumes the Game Boy thread and audio stream.
@@ -254,63 +287,6 @@ impl GbThread {
         Ok(())
     }
 
-    /// Exits the Game Boy thread and waits for it to finish.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if no thread is running or if joining the thread fails.
-    pub fn exit(&mut self) -> Result<(), Error> {
-        self.exiting.store(true, Relaxed);
-
-        // Wake up the thread if it's paused so it can exit
-        let (pause_lock, pause_cvar) = &*self.pause_condvar;
-        if let Ok(mut paused) = pause_lock.lock() {
-            *paused = false;
-            pause_cvar.notify_one();
-        }
-
-        self.thread_handle
-            .take()
-            .ok_or(Error::NoThreadRunning)?
-            .join()
-            .map_err(|_e| Error::ThreadJoin)?;
-        Ok(())
-    }
-
-    #[must_use]
-    pub fn volume(&self) -> f32 {
-        self.audio_stream.volume()
-    }
-
-    pub fn set_volume(&mut self, volume: f32) {
-        self.audio_stream.set_volume(volume);
-    }
-
-    #[must_use]
-    pub const fn is_muted(&self) -> bool {
-        self.audio_stream.is_muted()
-    }
-
-    pub fn toggle_mute(&mut self) {
-        if self.audio_stream.is_muted() {
-            self.audio_stream.unmute();
-        } else {
-            self.audio_stream.mute();
-        }
-    }
-
-    pub fn press_release<F>(&mut self, f: F) -> bool
-    where
-        F: FnOnce(&mut dyn Pressable) -> bool,
-    {
-        self.gb.lock().is_ok_and(|mut gb| f(&mut *gb))
-    }
-
-    #[must_use]
-    pub fn has_save_data(&self) -> bool {
-        self.gb.lock().is_ok_and(|gb| gb.cart_has_battery())
-    }
-
     /// Saves the current save data to the provided writer.
     ///
     /// # Errors
@@ -325,9 +301,33 @@ impl GbThread {
         })
     }
 
+    fn set_sample_rate(&self, sample_rate: i32) {
+        if let Ok(mut gb) = self.gb.lock() {
+            gb.set_sample_rate(sample_rate);
+        }
+    }
+
+    pub fn set_speed_multiplier(&mut self, multiplier: u32) {
+        self.multiplier.store(multiplier, Relaxed);
+        #[expect(clippy::cast_possible_wrap)]
+        self.set_sample_rate(self.audio_stream.sample_rate() / multiplier as i32);
+    }
+
+    pub fn set_volume(&mut self, volume: f32) {
+        self.audio_stream.set_volume(volume);
+    }
+
+    pub fn toggle_mute(&mut self) {
+        if self.audio_stream.is_muted() {
+            self.audio_stream.unmute();
+        } else {
+            self.audio_stream.mute();
+        }
+    }
+
     #[must_use]
-    pub const fn model(&self) -> ceres_core::Model {
-        self.model
+    pub fn volume(&self) -> f32 {
+        self.audio_stream.volume()
     }
 }
 
@@ -345,11 +345,11 @@ impl Drop for GbThread {
 
 #[derive(Debug)]
 pub enum Error {
-    Io(std::io::Error),
-    Gb(ceres_core::Error),
     Audio(audio::Error),
-    ThreadJoin,
+    Gb(ceres_core::Error),
+    Io(std::io::Error),
     NoThreadRunning,
+    ThreadJoin,
 }
 
 impl std::error::Error for Error {}

@@ -63,6 +63,38 @@ pub struct Gb<A: AudioCallback> {
 }
 
 impl<A: AudioCallback> Gb<A> {
+    pub const fn cart_has_battery(&self) -> bool {
+        self.cart.has_battery()
+    }
+
+    pub const fn cart_header_checksum(&self) -> u8 {
+        self.cart.header_checksum()
+    }
+
+    pub fn cart_title(&self) -> &[u8] {
+        self.cart.ascii_title()
+    }
+
+    pub const fn cart_version(&self) -> u8 {
+        self.cart.version()
+    }
+
+    pub fn change_model_and_soft_reset(&mut self, model: Model) {
+        self.model = model;
+        self.cgb_mode = model.into();
+        self.bootrom = Bootrom::new(model);
+        self.soft_reset();
+    }
+
+    /// Loads the state from the provided reader.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if reading from or seeking within the reader fails.
+    pub fn load_data<R: io::Read + io::Seek>(&mut self, reader: &mut R) -> Result<(), io::Error> {
+        bess::load_state(self, reader)
+    }
+
     #[must_use]
     fn new(model: Model, sample_rate: i32, cart: Cartridge, audio_callback: A) -> Self {
         Self {
@@ -86,6 +118,40 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
+    #[must_use]
+    pub const fn pixel_data_rgba(&self) -> &[u8] {
+        self.ppu.pixel_data_rgba()
+    }
+
+    pub const fn press(&mut self, button: Button) {
+        self.joy.press(button, &mut self.ints);
+    }
+
+    pub const fn release(&mut self, button: Button) {
+        self.joy.release(button);
+    }
+
+    pub fn run_frame(&mut self) {
+        while self.t_cycles_run < TC_PER_FRAME {
+            self.run_cpu();
+        }
+
+        self.t_cycles_run -= TC_PER_FRAME;
+    }
+
+    /// Saves the current state to the provided writer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing or seeking to the writer fails.
+    pub fn save_data<W: io::Write + io::Seek>(&self, writer: &mut W) -> Result<(), io::Error> {
+        bess::save_state(self, writer)
+    }
+
+    pub const fn set_sample_rate(&mut self, sample_rate: i32) {
+        self.apu.set_sample_rate(sample_rate);
+    }
+
     pub fn soft_reset(&mut self) {
         self.apu.reset();
         self.clock = Clock::default();
@@ -99,92 +165,26 @@ impl<A: AudioCallback> Gb<A> {
         self.bootrom.enable();
     }
 
-    pub fn change_model_and_soft_reset(&mut self, model: Model) {
-        self.model = model;
-        self.cgb_mode = model.into();
-        self.bootrom = Bootrom::new(model);
-        self.soft_reset();
-    }
-
-    pub fn run_frame(&mut self) {
-        while self.t_cycles_run < TC_PER_FRAME {
-            self.run_cpu();
-        }
-
-        self.t_cycles_run -= TC_PER_FRAME;
-    }
-
-    #[must_use]
-    pub const fn pixel_data_rgba(&self) -> &[u8] {
-        self.ppu.pixel_data_rgba()
-    }
-
     #[must_use]
     pub const fn vram_data_rgba(&self) -> &[u8] {
         self.ppu.vram_data_rgba()
-    }
-
-    pub const fn press(&mut self, button: Button) {
-        self.joy.press(button, &mut self.ints);
-    }
-
-    pub const fn release(&mut self, button: Button) {
-        self.joy.release(button);
-    }
-
-    /// Saves the current state to the provided writer.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if writing or seeking to the writer fails.
-    pub fn save_data<W: io::Write + io::Seek>(&self, writer: &mut W) -> Result<(), io::Error> {
-        bess::save_state(self, writer)
-    }
-
-    /// Loads the state from the provided reader.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if reading from or seeking within the reader fails.
-    pub fn load_data<R: io::Read + io::Seek>(&mut self, reader: &mut R) -> Result<(), io::Error> {
-        bess::load_state(self, reader)
-    }
-
-    pub const fn set_sample_rate(&mut self, sample_rate: i32) {
-        self.apu.set_sample_rate(sample_rate);
-    }
-
-    pub fn cart_title(&self) -> &[u8] {
-        self.cart.ascii_title()
-    }
-
-    pub const fn cart_header_checksum(&self) -> u8 {
-        self.cart.header_checksum()
-    }
-
-    pub const fn cart_version(&self) -> u8 {
-        self.cart.version()
-    }
-
-    pub const fn cart_has_battery(&self) -> bool {
-        self.cart.has_battery()
     }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub enum Model {
-    Dmg,
-    Mgb,
     #[default]
     Cgb,
+    Dmg,
+    Mgb,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 enum CgbMode {
-    Dmg,
-    Compat,
     #[default]
     Cgb,
+    Compat,
+    Dmg,
 }
 
 impl From<Model> for CgbMode {
@@ -197,13 +197,28 @@ impl From<Model> for CgbMode {
 }
 
 pub struct GbBuilder<A: AudioCallback> {
-    model: Model,
-    cart: Option<Cartridge>,
-    sample_rate: i32,
     audio_callback: A,
+    cart: Option<Cartridge>,
+    model: Model,
+    sample_rate: i32,
 }
 
 impl<A: AudioCallback> GbBuilder<A> {
+    pub fn build(self) -> Gb<A> {
+        Gb::new(
+            self.model,
+            self.sample_rate,
+            self.cart.unwrap_or_default(),
+            self.audio_callback,
+        )
+    }
+
+    pub fn can_load_save_data(&self) -> bool {
+        self.cart
+            .as_ref()
+            .is_some_and(cartridge::Cartridge::has_battery)
+    }
+
     pub fn new(sample_rate: i32, audio_callback: A) -> Self {
         Self {
             model: Model::default(),
@@ -227,20 +242,5 @@ impl<A: AudioCallback> GbBuilder<A> {
     pub fn with_rom(mut self, rom: Box<[u8]>) -> Result<Self, Error> {
         self.cart = Some(Cartridge::new(rom)?);
         Ok(self)
-    }
-
-    pub fn can_load_save_data(&self) -> bool {
-        self.cart
-            .as_ref()
-            .is_some_and(cartridge::Cartridge::has_battery)
-    }
-
-    pub fn build(self) -> Gb<A> {
-        Gb::new(
-            self.model,
-            self.sample_rate,
-            self.cart.unwrap_or_default(),
-            self.audio_callback,
-        )
     }
 }

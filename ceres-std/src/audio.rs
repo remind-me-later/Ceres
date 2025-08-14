@@ -16,15 +16,35 @@ const MAX_RESAMPLE_RATIO_RELATIVE: f64 = 5.0;
 type ProcessSample = f32;
 
 struct Buffers {
-    left: StaticRb<ceres_core::Sample, RING_BUFFER_SIZE>,
-    right: StaticRb<ceres_core::Sample, RING_BUFFER_SIZE>,
-    resampler: rubato::SincFixedOut<ProcessSample>,
-    output_buf: Vec<Vec<ProcessSample>>,
     input_buf: Vec<Vec<ProcessSample>>,
+    left: StaticRb<ceres_core::Sample, RING_BUFFER_SIZE>,
+    output_buf: Vec<Vec<ProcessSample>>,
+    resampler: rubato::SincFixedOut<ProcessSample>,
+    right: StaticRb<ceres_core::Sample, RING_BUFFER_SIZE>,
     volume: Arc<Mutex<f32>>,
 }
 
 impl Buffers {
+    fn compute_resample_ratio(&self) -> f64 {
+        #[expect(clippy::cast_precision_loss)]
+        let occupied = self.num_samples() as f64;
+        #[expect(clippy::cast_precision_loss)]
+        let target = RING_BUFFER_SIZE as f64 / 2.0;
+        let error = (occupied - target) / target;
+
+        if error.abs() < 0.1 {
+            return ORIG_RATIO;
+        }
+
+        // Adjust ratio based on buffer occupancy
+        // If buffer is too full, speed up playback (increase ratio)
+        // If buffer is too empty, slow down playback (decrease ratio)
+        let adjustment = -error * 0.05;
+
+        (ORIG_RATIO * (1.0 + adjustment))
+            .clamp(ORIG_RATIO * 0.85, ORIG_RATIO * MAX_RESAMPLE_RATIO_RELATIVE)
+    }
+
     fn new(volume: Arc<Mutex<f32>>) -> Result<Self, Error> {
         // FIXME: Cpal doesn't support pipewire on Linux, this seems to match the returned buffer size by accident
         // we have to way for cpal to have a nice way to get the supported buffer sizes or support pipewire
@@ -62,15 +82,15 @@ impl Buffers {
         })
     }
 
+    fn num_samples(&self) -> usize {
+        self.left.occupied_len()
+    }
+
     fn push_samples(&mut self, l: ceres_core::Sample, r: ceres_core::Sample) {
         use ringbuf::traits::RingBuffer;
 
         self.left.push_overwrite(l);
         self.right.push_overwrite(r);
-    }
-
-    fn num_samples(&self) -> usize {
-        self.left.occupied_len()
     }
 
     fn write_samples_interleaved(&mut self, buffer: &mut [ProcessSample]) {
@@ -122,26 +142,6 @@ impl Buffers {
             }
         }
     }
-
-    fn compute_resample_ratio(&self) -> f64 {
-        #[expect(clippy::cast_precision_loss)]
-        let occupied = self.num_samples() as f64;
-        #[expect(clippy::cast_precision_loss)]
-        let target = RING_BUFFER_SIZE as f64 / 2.0;
-        let error = (occupied - target) / target;
-
-        if error.abs() < 0.1 {
-            return ORIG_RATIO;
-        }
-
-        // Adjust ratio based on buffer occupancy
-        // If buffer is too full, speed up playback (increase ratio)
-        // If buffer is too empty, slow down playback (decrease ratio)
-        let adjustment = -error * 0.05;
-
-        (ORIG_RATIO * (1.0 + adjustment))
-            .clamp(ORIG_RATIO * 0.85, ORIG_RATIO * MAX_RESAMPLE_RATIO_RELATIVE)
-    }
 }
 
 #[derive(Clone)]
@@ -165,11 +165,21 @@ impl ceres_core::AudioCallback for AudioCallbackImpl {
 
 pub struct AudioState {
     _host: cpal::Host,
-    device: cpal::Device,
     config: cpal::StreamConfig,
+    device: cpal::Device,
 }
 
 impl AudioState {
+    #[must_use]
+    pub const fn config(&self) -> &cpal::StreamConfig {
+        &self.config
+    }
+
+    #[must_use]
+    pub const fn device(&self) -> &cpal::Device {
+        &self.device
+    }
+
     pub fn new() -> Result<Self, Error> {
         let host = cpal::default_host();
         let device = host.default_output_device().ok_or(Error::GetOutputDevice)?;
@@ -186,28 +196,30 @@ impl AudioState {
             config,
         })
     }
-
-    #[must_use]
-    pub const fn device(&self) -> &cpal::Device {
-        &self.device
-    }
-
-    #[must_use]
-    pub const fn config(&self) -> &cpal::StreamConfig {
-        &self.config
-    }
 }
 
 // Stream is not Send, so we can't use it directly in the renderer struct
 pub struct Stream {
-    strm: cpal::Stream,
+    cpal_strm: cpal::Stream,
     ring_buffer: AudioCallbackImpl,
+    sample_rate: i32,
     volume: Arc<Mutex<f32>>,
     volume_before_mute: Option<f32>,
-    sample_rate: i32,
 }
 
 impl Stream {
+    #[must_use]
+    pub const fn is_muted(&self) -> bool {
+        self.volume_before_mute.is_some()
+    }
+
+    pub fn mute(&mut self) {
+        if let Ok(mut vol) = self.volume.lock() {
+            self.volume_before_mute = Some(*vol);
+            *vol = 0.0;
+        }
+    }
+
     pub fn new(state: &AudioState) -> Result<Self, Error> {
         const INITIAL_VOLUME: f32 = 1.0;
         let volume = Arc::new(Mutex::new(INITIAL_VOLUME));
@@ -229,7 +241,7 @@ impl Stream {
             .map_err(|_err| Error::BuildStream)?;
 
         let res = Self {
-            strm: stream,
+            cpal_strm: stream,
             ring_buffer: AudioCallbackImpl::new(ring_buffer),
             volume,
             volume_before_mute: None,
@@ -241,34 +253,27 @@ impl Stream {
         Ok(res)
     }
 
-    #[must_use]
-    pub fn get_ring_buffer(&self) -> AudioCallbackImpl {
-        self.ring_buffer.clone()
-    }
-
     pub fn pause(&self) -> Result<(), Error> {
-        self.strm.pause().map_err(|_err| Error::PauseStream)
+        self.cpal_strm.pause().map_err(|_err| Error::PauseStream)
     }
 
     pub fn resume(&self) -> Result<(), Error> {
-        self.strm.play().map_err(|_err| Error::PlayStream)
+        self.cpal_strm.play().map_err(|_err| Error::PlayStream)
     }
 
     #[must_use]
-    pub fn volume(&self) -> f32 {
-        self.volume.lock().map_or(0.0, |vol| *vol)
+    pub fn ring_buffer(&self) -> AudioCallbackImpl {
+        self.ring_buffer.clone()
+    }
+
+    #[must_use]
+    pub const fn sample_rate(&self) -> i32 {
+        self.sample_rate
     }
 
     pub fn set_volume(&self, volume: f32) {
         if let Ok(mut vol) = self.volume.lock() {
             *vol = volume;
-        }
-    }
-
-    pub fn mute(&mut self) {
-        if let Ok(mut vol) = self.volume.lock() {
-            self.volume_before_mute = Some(*vol);
-            *vol = 0.0;
         }
     }
 
@@ -281,24 +286,19 @@ impl Stream {
     }
 
     #[must_use]
-    pub const fn is_muted(&self) -> bool {
-        self.volume_before_mute.is_some()
+    pub fn volume(&self) -> f32 {
+        self.volume.lock().map_or(0.0, |vol| *vol)
     }
 
     // pub fn set_sample_rate(&mut self, sample_rate: i32) {
     //     self.sample_rate = sample_rate;
     // }
-
-    #[must_use]
-    pub const fn sample_rate(&self) -> i32 {
-        self.sample_rate
-    }
 }
 
 #[derive(Debug)]
 pub enum Error {
-    GetOutputDevice,
     BuildStream,
+    GetOutputDevice,
     PauseStream,
     PlayStream,
 }

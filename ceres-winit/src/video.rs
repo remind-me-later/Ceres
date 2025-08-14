@@ -1,7 +1,7 @@
 use ceres_std::wgpu_renderer::wgpu;
 use ceres_std::{
     ShaderOption,
-    wgpu_renderer::{PipelineWrapper, ScalingOption},
+    wgpu_renderer::{PipelineWrapper, PixelPerfectOption},
 };
 use std::sync::Arc;
 
@@ -11,7 +11,7 @@ pub struct State<'a, const PX_WIDTH: u32, const PX_HEIGHT: u32> {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
-    scaling_option: ScalingOption,
+    scaling_option: PixelPerfectOption,
     new_size: Option<winit::dpi::PhysicalSize<u32>>,
     new_shader_option: Option<ShaderOption>,
 
@@ -27,7 +27,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
     pub async fn new(
         window: winit::window::Window,
         shader_option: ShaderOption,
-        scaling_option: ScalingOption,
+        scaling_option: PixelPerfectOption,
     ) -> anyhow::Result<Self> {
         use anyhow::Context;
 
@@ -169,7 +169,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
     }
 
     #[cfg(target_os = "macos")]
-    pub const fn set_scaling(&mut self, scaling_option: ScalingOption) {
+    pub const fn set_scaling(&mut self, scaling_option: PixelPerfectOption) {
         self.scaling_option = scaling_option;
     }
 }

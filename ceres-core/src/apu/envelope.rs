@@ -21,30 +21,17 @@ impl EnvelopeDirection {
 
 #[derive(Default, Debug)]
 pub struct Envelope {
-    enabled: bool,
     direction: EnvelopeDirection,
-
-    // between 0 and F
-    volume: u8,
-    initial_volume: u8,
-
-    period: u8,
+    enabled: bool,
+    period: u8, // 3 bits
     timer: u8,
+    volume: u8,         // 4 bits
+    volume_written: u8, // 4 bits
 }
 
 impl Envelope {
     pub const fn read(&self) -> u8 {
-        (self.initial_volume << 4) | self.direction.to_u8() | self.period
-    }
-
-    pub const fn write(&mut self, val: u8) {
-        self.period = val & 7;
-        self.enabled = self.period != 0;
-
-        self.timer = 0;
-        self.direction = EnvelopeDirection::from_u8(val);
-        self.initial_volume = val >> 4;
-        self.volume = self.initial_volume;
+        (self.volume_written << 4) | self.direction.to_u8() | self.period
     }
 
     pub const fn step(&mut self) {
@@ -75,10 +62,20 @@ impl Envelope {
 
     pub const fn trigger(&mut self) {
         self.timer = 0;
-        self.volume = self.initial_volume;
+        self.volume = self.volume_written;
     }
 
     pub const fn volume(&self) -> u8 {
         self.volume
+    }
+
+    pub const fn write(&mut self, val: u8) {
+        self.period = val & 7;
+        self.enabled = self.period != 0;
+
+        self.timer = 0;
+        self.direction = EnvelopeDirection::from_u8(val);
+        self.volume_written = val >> 4;
+        self.volume = self.volume_written;
     }
 }

@@ -27,17 +27,31 @@ impl ceres_std::PainterCallback for PainterCallbackImpl {
 }
 
 pub struct GlArea {
-    gb_thread: Rc<RefCell<ceres_std::GbThread>>,
-    renderer: RefCell<Option<Renderer>>,
-    shader_changed: RefCell<Option<ShaderMode>>,
-    callbacks: RefCell<Option<gtk::TickCallbackId>>,
     buffer: Arc<Mutex<Box<[u8]>>>,
-    shader: RefCell<ShaderMode>,
-    model: RefCell<ceres_std::Model>,
+    callbacks: RefCell<Option<gtk::TickCallbackId>>,
+    gb_thread: Rc<RefCell<ceres_std::GbThread>>,
     is_running: RefCell<bool>,
+    model: RefCell<ceres_std::Model>,
+    renderer: RefCell<Option<Renderer>>,
+    shader: RefCell<ShaderMode>,
+    shader_changed: RefCell<Option<ShaderMode>>,
 }
 
 impl GlArea {
+    pub const fn gb_thread(&self) -> &Rc<RefCell<ceres_std::GbThread>> {
+        &self.gb_thread
+    }
+
+    fn pause(&self) {
+        self.gb_thread.borrow_mut().pause().unwrap();
+
+        if let Some(tick_id) = self.callbacks.borrow_mut().take() {
+            tick_id.remove();
+        }
+
+        *self.is_running.borrow_mut() = false;
+    }
+
     fn play(&self) {
         let widget = self.obj();
 
@@ -51,20 +65,6 @@ impl GlArea {
 
         *self.is_running.borrow_mut() = true;
     }
-
-    fn pause(&self) {
-        self.gb_thread.borrow_mut().pause().unwrap();
-
-        if let Some(tick_id) = self.callbacks.borrow_mut().take() {
-            tick_id.remove();
-        }
-
-        *self.is_running.borrow_mut() = false;
-    }
-
-    pub const fn gb_thread(&self) -> &Rc<RefCell<ceres_std::GbThread>> {
-        &self.gb_thread
-    }
 }
 
 impl Default for GlArea {
@@ -76,8 +76,8 @@ impl Default for GlArea {
 #[glib::object_subclass]
 impl ObjectSubclass for GlArea {
     const NAME: &'static str = "CeresGlArea";
-    type Type = super::GlArea;
     type ParentType = gtk::GLArea;
+    type Type = super::GlArea;
 
     fn new() -> Self {
         let buffer = Arc::new(Mutex::new(
@@ -133,6 +133,23 @@ impl ObjectImpl for GlArea {
         })
     }
 
+    fn property(&self, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
+        match pspec.name() {
+            "shader-mode" => self.shader.borrow().to_string().to_value(),
+            "gb-model" => match *self.model.borrow() {
+                ceres_std::Model::Dmg => "dmg",
+                ceres_std::Model::Mgb => "mgb",
+                ceres_std::Model::Cgb => "cgb",
+            }
+            .to_value(),
+            "emulator-running" => self.is_running.borrow().to_value(),
+            _ => {
+                eprintln!("Unknown property: {}", pspec.name());
+                glib::Value::from("")
+            }
+        }
+    }
+
     fn set_property(&self, _id: usize, value: &glib::Value, pspec: &glib::ParamSpec) {
         match pspec.name() {
             "shader-mode" => {
@@ -166,26 +183,29 @@ impl ObjectImpl for GlArea {
             }
         }
     }
-
-    fn property(&self, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
-        match pspec.name() {
-            "shader-mode" => self.shader.borrow().to_string().to_value(),
-            "gb-model" => match *self.model.borrow() {
-                ceres_std::Model::Dmg => "dmg",
-                ceres_std::Model::Mgb => "mgb",
-                ceres_std::Model::Cgb => "cgb",
-            }
-            .to_value(),
-            "emulator-running" => self.is_running.borrow().to_value(),
-            _ => {
-                eprintln!("Unknown property: {}", pspec.name());
-                glib::Value::from("")
-            }
-        }
-    }
 }
 
 impl WidgetImpl for GlArea {
+    fn measure(&self, orientation: gtk::Orientation, _for_size: i32) -> (i32, i32, i32, i32) {
+        const MULTIPLIER: i32 = 1;
+
+        match orientation {
+            gtk::Orientation::Horizontal => {
+                const MINIMUM_SIZE: i32 = ceres_std::PX_WIDTH as i32;
+                const NATURAL_SIZE: i32 = MINIMUM_SIZE * MULTIPLIER;
+
+                (MINIMUM_SIZE, NATURAL_SIZE, -1, -1)
+            }
+            gtk::Orientation::Vertical => {
+                const MINIMUM_SIZE: i32 = ceres_std::PX_HEIGHT as i32;
+                const NATURAL_SIZE: i32 = MINIMUM_SIZE * MULTIPLIER;
+
+                (MINIMUM_SIZE, NATURAL_SIZE, -1, -1)
+            }
+            _ => unreachable!(),
+        }
+    }
+
     fn realize(&self) {
         self.parent_realize();
 
@@ -210,34 +230,14 @@ impl WidgetImpl for GlArea {
         self.play();
     }
 
-    fn unrealize(&self) {
-        self.pause();
-        self.parent_unrealize();
-    }
-
     // TODO: is this right?
     fn request_mode(&self) -> gtk::SizeRequestMode {
         gtk::SizeRequestMode::ConstantSize
     }
 
-    fn measure(&self, orientation: gtk::Orientation, _for_size: i32) -> (i32, i32, i32, i32) {
-        const MULTIPLIER: i32 = 1;
-
-        match orientation {
-            gtk::Orientation::Horizontal => {
-                const MINIMUM_SIZE: i32 = ceres_std::PX_WIDTH as i32;
-                const NATURAL_SIZE: i32 = MINIMUM_SIZE * MULTIPLIER;
-
-                (MINIMUM_SIZE, NATURAL_SIZE, -1, -1)
-            }
-            gtk::Orientation::Vertical => {
-                const MINIMUM_SIZE: i32 = ceres_std::PX_HEIGHT as i32;
-                const NATURAL_SIZE: i32 = MINIMUM_SIZE * MULTIPLIER;
-
-                (MINIMUM_SIZE, NATURAL_SIZE, -1, -1)
-            }
-            _ => unreachable!(),
-        }
+    fn unrealize(&self) {
+        self.pause();
+        self.parent_unrealize();
     }
 }
 

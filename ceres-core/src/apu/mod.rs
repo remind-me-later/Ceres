@@ -1,5 +1,18 @@
+mod envelope;
+mod high_pass_filter;
+mod length_timer;
+mod master_volume;
+mod noise;
+mod period_counter;
+mod square;
+mod sweep;
+mod wave;
+
 use {
-    crate::timing::TC_SEC,
+    crate::{
+        apu::{high_pass_filter::HighPassFilter, master_volume::MasterVolume},
+        timing::TC_SEC,
+    },
     length_timer::LengthTimer,
     noise::Noise,
     period_counter::PeriodCounter,
@@ -7,14 +20,6 @@ use {
     sweep::{Sweep, SweepTrait},
     wave::Wave,
 };
-
-mod envelope;
-mod length_timer;
-mod noise;
-mod period_counter;
-mod square;
-mod sweep;
-mod wave;
 
 pub type Sample = i16;
 
@@ -30,66 +35,19 @@ enum PeriodHalf {
 }
 
 #[derive(Debug)]
-struct HighPassFilter {
-    capacitor_l: i32,
-    capacitor_r: i32,
-}
-
-impl HighPassFilter {
-    const fn new() -> Self {
-        Self {
-            capacitor_l: 0,
-            capacitor_r: 0,
-        }
-    }
-
-    fn high_pass(&mut self, l: Sample, r: Sample) -> (Sample, Sample) {
-        // Using 16-bit fixed-point arithmetic
-        const FILTER_COEFF: i32 = 0xFFFE; // Q16 format of 0.999958
-        const PRECISION_BITS: i32 = 16;
-
-        // Convert samples to larger type to avoid overflow
-        let l_i32 = i32::from(l);
-        let r_i32 = i32::from(r);
-
-        let out_left_i32 = l_i32 - self.capacitor_l;
-        let out_right_i32 = r_i32 - self.capacitor_r;
-
-        self.capacitor_l = l_i32 - ((out_left_i32 * FILTER_COEFF) >> PRECISION_BITS);
-        self.capacitor_r = r_i32 - ((out_right_i32 * FILTER_COEFF) >> PRECISION_BITS);
-
-        #[expect(clippy::cast_possible_truncation)]
-        let out_left = out_left_i32.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
-        #[expect(clippy::cast_possible_truncation)]
-        let out_right = out_right_i32.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
-
-        (out_left, out_right)
-    }
-}
-
-#[derive(Debug)]
 pub struct Apu<A: AudioCallback> {
-    nr51: u8,
-
-    enabled: bool,
-    right_volume: u8,
-    left_volume: u8,
-    right_vin: bool,
-    left_vin: bool,
-
+    audio_callback: A,
     ch1: Square<Sweep>,
     ch2: Square<()>,
     ch3: Wave,
     ch4: Noise,
-
     div_divider: u8,
-
-    render_timer: i32,
+    enabled: bool,
     ext_sample_period: i32,
-
-    audio_callback: A,
-
     hpf: HighPassFilter,
+    master_volume: MasterVolume,
+    nr51: u8,
+    render_timer: i32,
 }
 
 impl<A: AudioCallback> Apu<A> {
@@ -99,10 +57,7 @@ impl<A: AudioCallback> Apu<A> {
             audio_callback,
             nr51: 0,
             enabled: false,
-            right_volume: 0,
-            left_volume: 0,
-            right_vin: false,
-            left_vin: false,
+            master_volume: MasterVolume::default(),
             ch1: Square::default(),
             ch2: Square::default(),
             ch3: Wave::default(),
@@ -115,10 +70,7 @@ impl<A: AudioCallback> Apu<A> {
 
     pub fn reset(&mut self) {
         self.enabled = false;
-        self.right_volume = 0;
-        self.left_volume = 0;
-        self.right_vin = false;
-        self.left_vin = false;
+        self.master_volume = MasterVolume::default();
 
         // reset registers
         self.ch1 = Square::default();
@@ -132,14 +84,6 @@ impl<A: AudioCallback> Apu<A> {
 
         // reset render timer
         self.render_timer = 0;
-    }
-
-    pub const fn set_sample_rate(&mut self, sample_rate: i32) {
-        self.ext_sample_period = Self::sample_period_from_rate(sample_rate);
-    }
-
-    const fn sample_period_from_rate(sample_rate: i32) -> i32 {
-        TC_SEC / sample_rate
     }
 
     pub fn run(&mut self, cycles: i32) {
@@ -164,8 +108,8 @@ impl<A: AudioCallback> Apu<A> {
             }
 
             // transform to i16 sample
-            let l = (0xF - i16::from(l) * 2) * i16::from(apu.left_volume + 1);
-            let r = (0xF - i16::from(r) * 2) * i16::from(apu.right_volume + 1);
+            let l = (0xF - i16::from(l) * 2) * i16::from(apu.master_volume.left_volume() + 1);
+            let r = (0xF - i16::from(r) * 2) * i16::from(apu.master_volume.right_volume() + 1);
 
             // amplify
             let l = l * 32;
@@ -203,6 +147,14 @@ impl<A: AudioCallback> Apu<A> {
 
             self.audio_callback.audio_sample(l, r);
         }
+    }
+
+    const fn sample_period_from_rate(sample_rate: i32) -> i32 {
+        TC_SEC / sample_rate
+    }
+
+    pub const fn set_sample_rate(&mut self, sample_rate: i32) {
+        self.ext_sample_period = Self::sample_period_from_rate(sample_rate);
     }
 
     pub fn step_div_apu(&mut self) {
@@ -245,12 +197,73 @@ impl<A: AudioCallback> Apu<A> {
 
 // IO
 impl<A: AudioCallback> Apu<A> {
+    pub const fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    pub const fn pcm12(&self) -> u8 {
+        self.ch1.output() | (self.ch2.output() << 4)
+    }
+
+    pub const fn pcm34(&self) -> u8 {
+        self.ch3.output() | (self.ch4.output() << 4)
+    }
+
+    pub fn read_nr10(&self) -> u8 {
+        self.ch1.read_nrx0()
+    }
+
+    pub const fn read_nr11(&self) -> u8 {
+        self.ch1.read_nrx1()
+    }
+
+    pub const fn read_nr12(&self) -> u8 {
+        self.ch1.read_nrx2()
+    }
+
+    pub const fn read_nr14(&self) -> u8 {
+        self.ch1.read_nrx4()
+    }
+
+    pub const fn read_nr21(&self) -> u8 {
+        self.ch2.read_nrx1()
+    }
+
+    pub const fn read_nr22(&self) -> u8 {
+        self.ch2.read_nrx2()
+    }
+
+    pub const fn read_nr24(&self) -> u8 {
+        self.ch2.read_nrx4()
+    }
+
+    pub const fn read_nr30(&self) -> u8 {
+        self.ch3.read_nr30()
+    }
+
+    pub const fn read_nr32(&self) -> u8 {
+        self.ch3.read_nr32()
+    }
+
+    pub const fn read_nr34(&self) -> u8 {
+        self.ch3.read_nr34()
+    }
+
+    pub const fn read_nr42(&self) -> u8 {
+        self.ch4.read_nr42()
+    }
+
+    pub const fn read_nr43(&self) -> u8 {
+        self.ch4.read_nr43()
+    }
+
+    pub const fn read_nr44(&self) -> u8 {
+        self.ch4.read_nr44()
+    }
+
     #[must_use]
     pub fn read_nr50(&self) -> u8 {
-        self.right_volume
-            | (u8::from(self.right_vin) << 3)
-            | (self.left_volume << 4)
-            | (u8::from(self.left_vin) << 7)
+        self.master_volume.read_nr50()
     }
 
     #[must_use]
@@ -278,69 +291,8 @@ impl<A: AudioCallback> Apu<A> {
             | (self.ch1.is_enabled() as u8)
     }
 
-    pub const fn write_nr50(&mut self, val: u8) {
-        if self.enabled {
-            self.right_volume = val & 7;
-            self.right_vin = val & 8 != 0;
-            self.left_volume = (val >> 4) & 7;
-            self.left_vin = val & 0x80 != 0;
-        }
-    }
-
-    pub const fn write_nr51(&mut self, val: u8) {
-        if self.enabled {
-            self.nr51 = val;
-        }
-    }
-
-    pub fn write_nr52(&mut self, val: u8) {
-        self.enabled = val & 0x80 != 0;
-
-        if !self.enabled {
-            // reset
-            // self.render_timer = 0;
-            self.div_divider = 0;
-            self.left_volume = 0;
-            self.left_vin = false;
-            self.right_volume = 0;
-            self.right_vin = false;
-
-            // reset registers
-            self.ch1 = Square::default();
-            self.ch2 = Square::default();
-            self.ch3.reset();
-            self.ch4 = Noise::default();
-            self.nr51 = 0;
-        }
-    }
-
-    pub const fn enabled(&self) -> bool {
-        self.enabled
-    }
-
-    pub const fn pcm12(&self) -> u8 {
-        self.ch1.output() | (self.ch2.output() << 4)
-    }
-
-    pub const fn pcm34(&self) -> u8 {
-        self.ch3.output() | (self.ch4.output() << 4)
-    }
-
-    // Channel 1 IO
-    pub fn read_nr10(&self) -> u8 {
-        self.ch1.read_nrx0()
-    }
-
-    pub const fn read_nr11(&self) -> u8 {
-        self.ch1.read_nrx1()
-    }
-
-    pub const fn read_nr12(&self) -> u8 {
-        self.ch1.read_nrx2()
-    }
-
-    pub const fn read_nr14(&self) -> u8 {
-        self.ch1.read_nrx4()
+    pub const fn read_wave_ram(&self, addr: u8) -> u8 {
+        self.ch3.read_wave_ram(addr)
     }
 
     pub fn write_nr10(&mut self, val: u8) {
@@ -363,19 +315,6 @@ impl<A: AudioCallback> Apu<A> {
         self.ch1.write_nrx4(val);
     }
 
-    // Channel 2 IO
-    pub const fn read_nr21(&self) -> u8 {
-        self.ch2.read_nrx1()
-    }
-
-    pub const fn read_nr22(&self) -> u8 {
-        self.ch2.read_nrx2()
-    }
-
-    pub const fn read_nr24(&self) -> u8 {
-        self.ch2.read_nrx4()
-    }
-
     pub const fn write_nr21(&mut self, val: u8) {
         self.ch2.write_nrx1(val);
     }
@@ -390,23 +329,6 @@ impl<A: AudioCallback> Apu<A> {
 
     pub fn write_nr24(&mut self, val: u8) {
         self.ch2.write_nrx4(val);
-    }
-
-    // Channel 3 IO
-    pub const fn read_nr30(&self) -> u8 {
-        self.ch3.read_nr30()
-    }
-
-    pub const fn read_nr32(&self) -> u8 {
-        self.ch3.read_nr32()
-    }
-
-    pub const fn read_nr34(&self) -> u8 {
-        self.ch3.read_nr34()
-    }
-
-    pub const fn read_wave_ram(&self, addr: u8) -> u8 {
-        self.ch3.read_wave_ram(addr)
     }
 
     pub const fn write_nr30(&mut self, val: u8) {
@@ -429,23 +351,6 @@ impl<A: AudioCallback> Apu<A> {
         self.ch3.write_nr34(val);
     }
 
-    pub const fn write_wave_ram(&mut self, addr: u8, val: u8) {
-        self.ch3.write_wave_ram(addr, val);
-    }
-
-    // Channel 4 IO
-    pub const fn read_nr42(&self) -> u8 {
-        self.ch4.read_nr42()
-    }
-
-    pub const fn read_nr43(&self) -> u8 {
-        self.ch4.read_nr43()
-    }
-
-    pub const fn read_nr44(&self) -> u8 {
-        self.ch4.read_nr44()
-    }
-
     pub const fn write_nr41(&mut self, val: u8) {
         self.ch4.write_nr41(val);
     }
@@ -460,5 +365,39 @@ impl<A: AudioCallback> Apu<A> {
 
     pub const fn write_nr44(&mut self, val: u8) {
         self.ch4.write_nr44(val);
+    }
+
+    pub const fn write_nr50(&mut self, val: u8) {
+        if self.enabled {
+            self.master_volume.write_nr50(val);
+        }
+    }
+
+    pub const fn write_nr51(&mut self, val: u8) {
+        if self.enabled {
+            self.nr51 = val;
+        }
+    }
+
+    pub fn write_nr52(&mut self, val: u8) {
+        self.enabled = val & 0x80 != 0;
+
+        if !self.enabled {
+            // reset
+            // self.render_timer = 0;
+            self.div_divider = 0;
+            self.master_volume = MasterVolume::default();
+
+            // reset registers
+            self.ch1 = Square::default();
+            self.ch2 = Square::default();
+            self.ch3.reset();
+            self.ch4 = Noise::default();
+            self.nr51 = 0;
+        }
+    }
+
+    pub const fn write_wave_ram(&mut self, addr: u8, val: u8) {
+        self.ch3.write_wave_ram(addr, val);
     }
 }

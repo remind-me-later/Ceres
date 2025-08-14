@@ -87,11 +87,11 @@ impl Mbc {
 
 #[derive(Default, Debug)]
 pub struct Mbc3RTC {
-    t_cycles: i32,
-    regs: [u8; 5],
-    mapped: Option<NonZeroU8>,
-    halt: bool,
     carry: bool,
+    halt: bool,
+    mapped: Option<NonZeroU8>,
+    regs: [u8; 5],
+    t_cycles: i32,
 }
 
 impl Mbc3RTC {
@@ -105,8 +105,19 @@ impl Mbc3RTC {
         Ok(())
     }
 
-    pub const fn unmap_reg(&mut self) {
-        self.mapped = None;
+    pub fn read(&self, ram_enabled: bool) -> Option<u8> {
+        ram_enabled
+            .then(|| {
+                self.mapped.map(|m| match m.get() {
+                    0x8 => self.regs[0],
+                    0x9 => self.regs[1],
+                    0xA => self.regs[2],
+                    0xB => self.regs[3],
+                    0xC => self.regs[4] | (u8::from(self.halt) << 6) | (u8::from(self.carry) << 7),
+                    _ => unreachable!("Not a valid RTC register"),
+                })
+            })
+            .flatten()
     }
 
     pub const fn run_cycles(&mut self, cycles: i32) {
@@ -120,6 +131,10 @@ impl Mbc3RTC {
             self.t_cycles -= TC_SEC + 1;
             self.update_secs();
         }
+    }
+
+    pub const fn unmap_reg(&mut self) {
+        self.mapped = None;
     }
 
     const fn update_secs(&mut self) {
@@ -147,21 +162,6 @@ impl Mbc3RTC {
         }
     }
 
-    pub fn read(&self, ram_enabled: bool) -> Option<u8> {
-        ram_enabled
-            .then(|| {
-                self.mapped.map(|m| match m.get() {
-                    0x8 => self.regs[0],
-                    0x9 => self.regs[1],
-                    0xA => self.regs[2],
-                    0xB => self.regs[3],
-                    0xC => self.regs[4] | (u8::from(self.halt) << 6) | (u8::from(self.carry) << 7),
-                    _ => unreachable!("Not a valid RTC register"),
-                })
-            })
-            .flatten()
-    }
-
     #[must_use]
     pub fn write(&mut self, ram_enabled: bool, val: u8) -> Option<()> {
         ram_enabled
@@ -182,50 +182,10 @@ impl Mbc3RTC {
             })
             .flatten()
     }
+}
 
-    pub const fn seconds(&self) -> u8 {
-        self.regs[0]
-    }
-
-    pub const fn minutes(&self) -> u8 {
-        self.regs[1]
-    }
-
-    pub const fn hours(&self) -> u8 {
-        self.regs[2]
-    }
-
-    pub const fn days(&self) -> u8 {
-        self.regs[3]
-    }
-
-    pub fn control(&self) -> u8 {
-        self.regs[4] | (u8::from(self.halt) << 6) | (u8::from(self.carry) << 7)
-    }
-
-    pub const fn set_seconds(&mut self, val: u8) {
-        self.regs[0] = val;
-    }
-
-    pub const fn set_minutes(&mut self, val: u8) {
-        self.regs[1] = val;
-    }
-
-    pub const fn set_hours(&mut self, val: u8) {
-        self.regs[2] = val;
-    }
-
-    pub const fn set_days(&mut self, val: u8) {
-        self.regs[3] = val;
-    }
-
-    pub const fn set_control(&mut self, val: u8) {
-        let val = val & 0xC1;
-        self.regs[4] = val;
-        self.carry = val & 0x80 != 0;
-        self.halt = val & 0x40 != 0;
-    }
-
+// Getters and Setters
+impl Mbc3RTC {
     #[expect(clippy::cast_possible_truncation)]
     pub fn add_seconds(&mut self, val: u64) {
         let secs = u64::from(self.regs[0]) + val;
@@ -244,5 +204,48 @@ impl Mbc3RTC {
         self.regs[4] = (self.regs[4] + carry as u8) & 0x1;
 
         self.carry = carry != 0;
+    }
+
+    pub fn control(&self) -> u8 {
+        self.regs[4] | (u8::from(self.halt) << 6) | (u8::from(self.carry) << 7)
+    }
+
+    pub const fn days(&self) -> u8 {
+        self.regs[3]
+    }
+
+    pub const fn hours(&self) -> u8 {
+        self.regs[2]
+    }
+
+    pub const fn minutes(&self) -> u8 {
+        self.regs[1]
+    }
+
+    pub const fn seconds(&self) -> u8 {
+        self.regs[0]
+    }
+
+    pub const fn set_control(&mut self, val: u8) {
+        let val = val & 0xC1;
+        self.regs[4] = val;
+        self.carry = val & 0x80 != 0;
+        self.halt = val & 0x40 != 0;
+    }
+
+    pub const fn set_days(&mut self, val: u8) {
+        self.regs[3] = val;
+    }
+
+    pub const fn set_hours(&mut self, val: u8) {
+        self.regs[2] = val;
+    }
+
+    pub const fn set_minutes(&mut self, val: u8) {
+        self.regs[1] = val;
+    }
+
+    pub const fn set_seconds(&mut self, val: u8) {
+        self.regs[0] = val;
     }
 }

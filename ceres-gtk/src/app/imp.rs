@@ -10,9 +10,9 @@ use gtk::{
 
 #[derive(Default)]
 pub struct Application {
-    pub cli_options: std::cell::RefCell<Cli>,
-    pub preferences_dialog: std::cell::OnceCell<crate::preferences_dialog::PreferencesDialog>,
-    pub about_dialog: std::cell::OnceCell<crate::about_dialog::AboutDialog>,
+    about_dialog: std::cell::OnceCell<crate::about_dialog::AboutDialog>,
+    cli_options: std::cell::RefCell<Cli>,
+    preferences_dialog: std::cell::OnceCell<crate::preferences_dialog::PreferencesDialog>,
 }
 
 impl Application {
@@ -64,6 +64,26 @@ impl ObjectSubclass for Application {
 impl ObjectImpl for Application {}
 
 impl ApplicationImpl for Application {
+    fn activate(&self) {
+        let app = self.obj();
+
+        let window = crate::application_window::ApplicationWindow::new(app.as_ref());
+
+        let preferences = self
+            .preferences_dialog
+            .get()
+            .expect("Preferences dialog should be initialized");
+
+        // Connect preferences dialog to the GlArea using properties
+        preferences.connect_to_gl_area(window.imp().gl_area());
+
+        self.apply_cli_options();
+
+        preferences.set_initialization_complete();
+
+        window.present();
+    }
+
     fn command_line(&self, command_line: &gio::ApplicationCommandLine) -> glib::ExitCode {
         let cli_options = Cli::parse_from(command_line.arguments());
         *self.cli_options.borrow_mut() = cli_options;
@@ -119,26 +139,6 @@ impl ApplicationImpl for Application {
         app.set_accels_for_action("win.pause", &["space"]);
         app.set_accels_for_action("win.save-data", &["<Primary>s"]);
         app.set_accels_for_action("app.preferences", &["<Primary>comma"]);
-    }
-
-    fn activate(&self) {
-        let app = self.obj();
-
-        let window = crate::application_window::ApplicationWindow::new(app.as_ref());
-
-        let preferences = self
-            .preferences_dialog
-            .get()
-            .expect("Preferences dialog should be initialized");
-
-        // Connect preferences dialog to the GlArea using properties
-        preferences.connect_to_gl_area(window.imp().gl_area());
-
-        self.apply_cli_options();
-
-        preferences.set_initialization_complete();
-
-        window.present();
     }
 }
 

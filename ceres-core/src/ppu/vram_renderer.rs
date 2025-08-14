@@ -32,16 +32,16 @@ impl Default for RgbaBuf {
 }
 
 impl RgbaBuf {
+    #[must_use]
+    pub const fn pixel_data(&self) -> &[u8] {
+        self.data.as_slice()
+    }
+
     pub fn set_px(&mut self, index: u32, rgb: (u8, u8, u8)) {
         let base = index * BPP;
         self.data[base as usize] = rgb.0;
         self.data[base as usize + 1] = rgb.1;
         self.data[base as usize + 2] = rgb.2;
-    }
-
-    #[must_use]
-    pub const fn pixel_data(&self) -> &[u8] {
-        self.data.as_slice()
     }
 }
 

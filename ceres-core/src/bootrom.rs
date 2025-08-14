@@ -11,6 +11,18 @@ pub struct Bootrom {
 }
 
 impl Bootrom {
+    pub const fn disable(&mut self) {
+        self.is_enabled = false;
+    }
+
+    pub const fn enable(&mut self) {
+        self.is_enabled = true;
+    }
+
+    pub const fn is_enabled(&self) -> bool {
+        self.is_enabled
+    }
+
     pub const fn new(model: Model) -> Self {
         let data = match model {
             Model::Dmg => DMG_BOOTROM,
@@ -21,18 +33,6 @@ impl Bootrom {
             data,
             is_enabled: true,
         }
-    }
-
-    pub const fn is_enabled(&self) -> bool {
-        self.is_enabled
-    }
-
-    pub const fn disable(&mut self) {
-        self.is_enabled = false;
-    }
-
-    pub const fn enable(&mut self) {
-        self.is_enabled = true;
     }
 
     pub fn read(&self, addr: u16) -> Option<u8> {
