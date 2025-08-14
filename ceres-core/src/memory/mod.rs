@@ -1,11 +1,14 @@
 mod dma;
+mod hdma;
 mod hram;
 mod key1;
+mod svbk;
 mod wram;
 
 use crate::{AudioCallback, Model};
 use crate::{CgbMode, Gb, Model::Cgb};
-pub use dma::{Dma, Hdma};
+pub use dma::Dma;
+pub use hdma::Hdma;
 pub use hram::Hram;
 pub use key1::Key1;
 pub use wram::Wram;

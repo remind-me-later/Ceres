@@ -4,7 +4,8 @@ const START: u8 = 0x80;
 const SPEED: u8 = 0x2;
 const SHIFT: u8 = 0x1;
 
-// TODO: always off
+// TODO: this is a temporal implementation that is always off,
+// implement proper serial communication somehow (sockets?)
 #[derive(Default, Debug)]
 pub struct Serial {
     count: u8,

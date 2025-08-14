@@ -19,9 +19,9 @@ A (very experimental) GameBoy/Color emulator written in rust.
 The emulator has 3 frontends:
 
 - `winit` a minimal cli frontend, shows an image but doesn't have any GUI,
-    should work on Windows, Mac and Linux.
+  should work on Windows, Mac and Linux.
 - `egui` uses the closs-platform `egui` library, should work on Windows,
-    Mac and Linux.
+  Mac and Linux.
 - `gtk4` uses the `gtk4` toolkit, should work on Linux.
 
 ## Build
@@ -56,7 +56,7 @@ To build:
 ## Folder organization
 
 - `ceres-core` contains the core emulator logic, such as cpu, apu and ppu emulation.
-    In the future this module should work in no std environments.
+  In the future this module should work in no std environments.
 - `ceres-std` contains code for audio and threading, for use with different frontends.
 - `ceres-wgpu` containd the rendering code for the frontends using wgpu.
 - `ceres-winit` contains the `winit` frontend.

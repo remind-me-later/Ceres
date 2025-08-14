@@ -76,4 +76,3 @@ unneeded_field_pattern = "warn"
 unseparated_literal_suffix = "warn"
 use_debug = "warn"
 verbose_file_reads = "warn"
-
