@@ -6,21 +6,6 @@ use texture::Texture;
 use wgpu::util::DeviceExt;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum PixelPerfectOption {
-    PixelPerfect,
-    Stretch,
-}
-
-impl From<crate::PixelPerfectOption> for PixelPerfectOption {
-    fn from(pixel_perfect_option: crate::PixelPerfectOption) -> Self {
-        match pixel_perfect_option {
-            crate::PixelPerfectOption::PixelPerfect => Self::PixelPerfect,
-            crate::PixelPerfectOption::Stretch => Self::Stretch,
-        }
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ShaderOption {
     Crt = 4,
     Lcd = 3,
@@ -234,20 +219,14 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
         render_pass.draw(0..4, 0..1);
     }
 
-    pub fn resize(
-        &mut self,
-        scaling_option: PixelPerfectOption,
-        queue: &wgpu::Queue,
-        width: u32,
-        height: u32,
-    ) {
+    pub fn resize(&mut self, pixel_perfect: bool, queue: &wgpu::Queue, width: u32, height: u32) {
         let (x, y) = {
             #[expect(
                 clippy::cast_precision_loss,
                 reason = "PX_WIDTH and PX_HEIGHT are u8 constants, so this is safe"
             )]
             {
-                let mul = if matches!(scaling_option, PixelPerfectOption::PixelPerfect) {
+                let mul = if pixel_perfect {
                     (width / PX_WIDTH).min(height / PX_HEIGHT) as f32
                 } else {
                     (width as f32 / PX_WIDTH as f32).min(height as f32 / PX_HEIGHT as f32)

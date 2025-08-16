@@ -1,6 +1,6 @@
 use crate::screen;
 use ceres_std::GbThread;
-use ceres_std::{AppOption, PixelPerfectOption, ShaderOption};
+use ceres_std::{AppOption, ShaderOption};
 use eframe::egui::{self, CornerRadius, Key, style::HandleShape};
 use rfd::FileDialog;
 use std::{
@@ -24,6 +24,7 @@ impl App {
         project_dirs: directories::ProjectDirs,
         rom_path: Option<&std::path::Path>,
         shader_option: ShaderOption,
+        pixel_perfect: bool,
     ) -> anyhow::Result<Self> {
         // Apply our minimal black and white theme
         setup_theme(&cc.egui_ctx);
@@ -41,7 +42,9 @@ impl App {
             PainterCallbackImpl::new(&cc.egui_ctx, Arc::clone(&pixel_data_rgba)),
         )?;
 
-        let screen = screen::GBScreen::new(cc, pixel_data_rgba, shader_option);
+        let mut screen = screen::GBScreen::new(cc, pixel_data_rgba, shader_option);
+
+        *screen.mut_pixel_perfect() = pixel_perfect;
 
         thread.resume()?;
 
@@ -74,8 +77,8 @@ impl App {
 
         std::fs::create_dir_all(self.project_dirs.data_dir())?;
         if let Some(sav_path) = &self.sav_path {
-            let sav_file = File::create(sav_path);
-            self.thread.save_data(&mut sav_file?)?;
+            let mut sav_file = File::create(sav_path)?;
+            self.thread.save_data(&mut sav_file)?;
         }
 
         Ok(())
@@ -191,15 +194,15 @@ impl eframe::App for App {
                         }
                     });
 
-                    menu_button_ui.menu_button("Scaling", |menu_button_ui| {
-                        for pixel_mode in PixelPerfectOption::iter() {
+                    menu_button_ui.menu_button("Pixel-perfect", |menu_button_ui| {
+                        for pixel_perfect in [true, false] {
                             let pixel_button = egui::Button::selectable(
-                                self.screen.pixel_mode() == pixel_mode,
-                                pixel_mode.str(),
+                                self.screen.pixel_perfect() == pixel_perfect,
+                                pixel_perfect.to_string(),
                             );
 
                             if menu_button_ui.add(pixel_button).clicked() {
-                                *self.screen.mut_pixel_mode() = pixel_mode;
+                                *self.screen.mut_pixel_perfect() = pixel_perfect;
                             }
                         }
                     });

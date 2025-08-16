@@ -45,6 +45,9 @@ impl Application {
             };
             gl_area.set_property("shader-mode", shader_str);
 
+            let pixel_perfect = options.pixel_perfect();
+            gl_area.set_property("pixel-perfect", pixel_perfect);
+
             if let Some(file_path) = &options.file()
                 && let Some(action) = app_window.lookup_action("win.load-file")
             {

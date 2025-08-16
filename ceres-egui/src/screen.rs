@@ -1,15 +1,13 @@
-use std::sync::Arc;
-use std::sync::Mutex;
-
-use ceres_std::PixelPerfectOption;
 use ceres_std::ShaderOption;
 use ceres_std::wgpu_renderer::PipelineWrapper;
 use eframe::egui;
 use eframe::wgpu;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 pub struct GBScreen<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
     buffer: Arc<Mutex<Box<[u8]>>>,
-    pixel_mode: PixelPerfectOption,
+    pixel_perfect: bool,
     shader_option: ShaderOption,
     size: (f32, f32),
 }
@@ -25,13 +23,13 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
                 buffer: Arc::clone(&self.buffer),
                 shader_option: self.shader_option,
                 size: (response.rect.width(), response.rect.height()),
-                pixel_mode: self.pixel_mode,
+                pixel_perfect: self.pixel_perfect,
             },
         ));
     }
 
-    pub const fn mut_pixel_mode(&mut self) -> &mut PixelPerfectOption {
-        &mut self.pixel_mode
+    pub const fn mut_pixel_perfect(&mut self) -> &mut bool {
+        &mut self.pixel_perfect
     }
 
     pub fn new(
@@ -61,12 +59,12 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
             buffer: gb,
             shader_option,
             size: (0.0, 0.0),
-            pixel_mode: PixelPerfectOption::default(),
+            pixel_perfect: false,
         }
     }
 
-    pub const fn pixel_mode(&self) -> PixelPerfectOption {
-        self.pixel_mode
+    pub const fn pixel_perfect(&self) -> bool {
+        self.pixel_perfect
     }
 
     pub const fn shader_option(&self) -> ShaderOption {
@@ -110,7 +108,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
 
             #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             pipeline.resize(
-                self.pixel_mode.into(),
+                self.pixel_perfect,
                 queue,
                 self.size.0 as u32,
                 self.size.1 as u32,

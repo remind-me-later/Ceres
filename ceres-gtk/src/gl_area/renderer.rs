@@ -45,10 +45,11 @@ impl std::fmt::Display for ShaderMode {
 }
 
 pub struct Renderer {
+    current_size: (u32, u32),
     dims_unif: UniformLocation,
     gl: Context,
     new_scale_mode: Option<ShaderMode>,
-    new_size: Option<(u32, u32)>,
+    new_size: Option<(u32, u32, bool)>,
     pbo_upload_current: NativeBuffer,
     program: NativeProgram,
     scale_unif: UniformLocation,
@@ -60,6 +61,10 @@ pub struct Renderer {
 impl Renderer {
     pub const fn choose_scale_mode(&mut self, scale_mode: ShaderMode) {
         self.new_scale_mode = Some(scale_mode);
+    }
+
+    pub const fn current_size(&self) -> (u32, u32) {
+        self.current_size
     }
 
     pub fn draw_frame(&mut self, rgba: &[u8]) {
@@ -124,9 +129,14 @@ impl Renderer {
 
             self.gl.use_program(Some(self.program));
 
-            if let Some((width, height)) = self.new_size.take() {
+            if let Some((width, height, use_pixel_perfect)) = self.new_size.take() {
                 // resize image to fit the window
-                let mul = (width as f32 / PX_WIDTH as f32).min(height as f32 / PX_HEIGHT as f32);
+                let mul = if use_pixel_perfect {
+                    (width / PX_WIDTH).min(height / PX_HEIGHT) as f32
+                } else {
+                    (width as f32 / PX_WIDTH as f32).min(height as f32 / PX_HEIGHT as f32)
+                };
+
                 let img_w = PX_WIDTH as f32 * mul;
                 let img_h = PX_HEIGHT as f32 * mul;
                 let uniform_x = img_w / width as f32;
@@ -285,6 +295,7 @@ impl Renderer {
             gl.uniform_1_u32_slice(Some(&scale_unif), &[ShaderMode::Nearest as u32]);
 
             Self {
+                current_size: (PX_WIDTH, PX_HEIGHT),
                 gl,
                 program,
                 vao,
@@ -299,8 +310,9 @@ impl Renderer {
         }
     }
 
-    pub const fn resize_viewport(&mut self, width: u32, height: u32) {
-        self.new_size = Some((width, height));
+    pub const fn resize_viewport(&mut self, width: u32, height: u32, pixel_perfect: bool) {
+        self.new_size = Some((width, height, pixel_perfect));
+        self.current_size = (width, height);
     }
 }
 

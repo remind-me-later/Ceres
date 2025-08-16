@@ -1,8 +1,5 @@
 use ceres_std::wgpu_renderer::wgpu;
-use ceres_std::{
-    ShaderOption,
-    wgpu_renderer::{PipelineWrapper, PixelPerfectOption},
-};
+use ceres_std::{ShaderOption, wgpu_renderer::PipelineWrapper};
 use std::sync::Arc;
 
 pub struct State<'a, const PX_WIDTH: u32, const PX_HEIGHT: u32> {
@@ -11,8 +8,8 @@ pub struct State<'a, const PX_WIDTH: u32, const PX_HEIGHT: u32> {
     gb_screen: PipelineWrapper<PX_WIDTH, PX_HEIGHT>,
     new_shader_option: Option<ShaderOption>,
     new_size: Option<winit::dpi::PhysicalSize<u32>>,
+    pixel_perfect: bool,
     queue: wgpu::Queue,
-    scaling_option: PixelPerfectOption,
     size: winit::dpi::PhysicalSize<u32>,
     surface: wgpu::Surface<'a>,
     window: Arc<winit::window::Window>,
@@ -22,7 +19,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
     pub async fn new(
         window: winit::window::Window,
         shader_option: ShaderOption,
-        scaling_option: PixelPerfectOption,
+        pixel_perfect: bool,
     ) -> anyhow::Result<Self> {
         use anyhow::Context;
 
@@ -82,7 +79,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
             gb_screen: gb_screen_renderer,
             new_size: None,
             new_shader_option: None,
-            scaling_option,
+            pixel_perfect,
         })
     }
 
@@ -97,7 +94,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> State<'_, PX_WIDTH, PX_HEIGHT> {
 
         if let Some(new_size) = self.new_size.take() {
             self.gb_screen.resize(
-                self.scaling_option,
+                self.pixel_perfect,
                 &self.queue,
                 new_size.width,
                 new_size.height,

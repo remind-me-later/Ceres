@@ -32,6 +32,7 @@ pub struct GlArea {
     gb_thread: Rc<RefCell<ceres_std::GbThread>>,
     is_running: RefCell<bool>,
     model: RefCell<ceres_std::Model>,
+    pixel_perfect: RefCell<bool>,
     renderer: RefCell<Option<Renderer>>,
     shader: RefCell<ShaderMode>,
     shader_changed: RefCell<Option<ShaderMode>>,
@@ -103,6 +104,7 @@ impl ObjectSubclass for GlArea {
             shader: RefCell::new(ShaderMode::default()),
             model: RefCell::new(ceres_std::Model::default()),
             is_running: RefCell::new(false),
+            pixel_perfect: RefCell::new(false),
         }
     }
 }
@@ -129,6 +131,11 @@ impl ObjectImpl for GlArea {
                     .blurb("Whether the emulator is currently running")
                     .default_value(false)
                     .build(),
+                glib::ParamSpecBoolean::builder("pixel-perfect")
+                    .nick("Pixel Perfect")
+                    .blurb("Whether to use pixel-perfect scaling")
+                    .default_value(false)
+                    .build(),
             ]
         })
     }
@@ -143,6 +150,7 @@ impl ObjectImpl for GlArea {
             }
             .to_value(),
             "emulator-running" => self.is_running.borrow().to_value(),
+            "pixel-perfect" => self.pixel_perfect.borrow().to_value(),
             _ => {
                 eprintln!("Unknown property: {}", pspec.name());
                 glib::Value::from("")
@@ -176,6 +184,14 @@ impl ObjectImpl for GlArea {
                     self.play();
                 } else {
                     self.pause();
+                }
+            }
+            "pixel-perfect" => {
+                let use_pixel_perfect = value.get::<bool>().unwrap();
+                self.pixel_perfect.replace(use_pixel_perfect);
+                if let Some(renderer) = self.renderer.borrow_mut().as_mut() {
+                    let size = renderer.current_size();
+                    renderer.resize_viewport(size.0, size.1, use_pixel_perfect);
                 }
             }
             _ => {
@@ -262,6 +278,6 @@ impl GLAreaImpl for GlArea {
             .borrow_mut()
             .as_mut()
             .unwrap()
-            .resize_viewport(width as u32, height as u32);
+            .resize_viewport(width as u32, height as u32, *self.pixel_perfect.borrow());
     }
 }

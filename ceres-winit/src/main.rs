@@ -41,7 +41,7 @@ fn main() -> anyhow::Result<()> {
         args.model(),
         args.file(),
         args.shader_option(),
-        args.scaling_option().into(),
+        args.pixel_perfect(),
     )?;
 
     main_event_loop.run_app(&mut main_window)?;

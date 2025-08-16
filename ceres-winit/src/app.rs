@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::Context;
 use ceres_std::wgpu_renderer;
-use ceres_std::{GbThread, ShaderOption, wgpu_renderer::PixelPerfectOption};
+use ceres_std::{GbThread, ShaderOption};
 use ceres_std::{PX_HEIGHT, PX_WIDTH};
 use std::{
     sync::{Arc, Mutex},
@@ -52,11 +52,11 @@ struct Windows<'a> {
 pub struct App<'a> {
     // Config parameters
     pixel_data_rgba: Arc<Mutex<Box<[u8]>>>,
+    pixel_perfect: bool,
     project_dirs: directories::ProjectDirs,
     #[cfg(target_os = "macos")]
     rom_path: Option<PathBuf>,
     sav_path: Option<std::path::PathBuf>,
-    scaling_option: PixelPerfectOption,
     shader_option: ShaderOption,
     thread: GbThread,
     // NOTE: carries the `Window`, thus it should be dropped after everything else.
@@ -125,7 +125,7 @@ impl App<'_> {
         model: ceres_std::Model,
         rom_path: Option<&Path>,
         shader_option: ShaderOption,
-        scaling_option: PixelPerfectOption,
+        pixel_perfect: bool,
     ) -> anyhow::Result<Self> {
         let sav_path = if let Some(rom_path) = rom_path {
             let file_stem = rom_path.file_stem().context("couldn't get file stem")?;
@@ -160,7 +160,7 @@ impl App<'_> {
             windows: None,
             sav_path,
             pixel_data_rgba,
-            scaling_option,
+            pixel_perfect,
             #[cfg(target_os = "macos")]
             rom_path: rom_path.map(std::path::Path::to_path_buf),
         })
@@ -240,7 +240,7 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
         let main_window_state = pollster::block_on(State::new(
             main_window,
             self.shader_option,
-            self.scaling_option,
+            self.pixel_perfect,
         ))
         .expect("Could not create renderer");
 

@@ -6,6 +6,7 @@ pub struct PreferencesDialog {
     gb_model_row: adw::ComboRow,
     gl_area_bindings: RefCell<Vec<glib::Binding>>,
     initializing: Rc<RefCell<bool>>,
+    pixel_perfect_row: adw::SwitchRow,
     preferences_page: adw::PreferencesPage,
     shader_row: adw::ComboRow,
 }
@@ -39,8 +40,14 @@ impl Default for PreferencesDialog {
         let shaders = gtk::StringList::new(&["Nearest", "Scale2x", "Scale3x", "LCD", "CRT"]);
         shader_row.set_model(Some(&shaders));
 
+        let pixel_perfect_row = adw::SwitchRow::builder()
+            .title("Pixel Perfect")
+            .subtitle("Don't stretch the image")
+            .build();
+
         emulation_group.add(&gb_model_row);
         emulation_group.add(&shader_row);
+        emulation_group.add(&pixel_perfect_row);
         preferences_page.add(&emulation_group);
 
         Self {
@@ -49,6 +56,7 @@ impl Default for PreferencesDialog {
             gb_model_row,
             gl_area_bindings: RefCell::new(Vec::new()),
             initializing: Rc::new(RefCell::new(true)),
+            pixel_perfect_row,
         }
     }
 }
@@ -183,8 +191,16 @@ impl PreferencesDialog {
             .sync_create()
             .build();
 
+        // Bind pixel-perfect row
+        let pixel_perfect_binding = gl_area
+            .bind_property("pixel-perfect", &self.pixel_perfect_row, "active")
+            .bidirectional()
+            .sync_create()
+            .build();
+
         bindings.push(shader_binding);
         bindings.push(gb_model_binding);
+        bindings.push(pixel_perfect_binding);
     }
 
     pub(super) fn disconnect_from_gl_area(&self) {

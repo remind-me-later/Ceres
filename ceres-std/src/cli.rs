@@ -126,15 +126,8 @@ pub struct Cli {
         required = false
     )]
     model: Model,
-    #[arg(
-        short,
-        long,
-        help = "Pixel perfect mode",
-        default_value = PixelPerfectOption::default().str(),
-        value_enum,
-        required = false
-    )]
-    pixel_mode: PixelPerfectOption,
+    #[arg(short, long, help = "Pixel perfect mode")]
+    pixel_perfect: bool,
     #[arg(
         short,
         long,
@@ -158,13 +151,8 @@ impl Cli {
     }
 
     #[must_use]
-    pub const fn pixel_mode(&self) -> PixelPerfectOption {
-        self.pixel_mode
-    }
-
-    #[must_use]
-    pub const fn scaling_option(&self) -> PixelPerfectOption {
-        self.pixel_mode
+    pub const fn pixel_perfect(&self) -> bool {
+        self.pixel_perfect
     }
 
     #[must_use]
