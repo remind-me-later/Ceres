@@ -1,5 +1,8 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use ringbuf::{StaticRb, traits::Observer};
+use ringbuf::{
+    StaticRb,
+    traits::{Consumer, Observer},
+};
 use rubato::Resampler;
 use {std::sync::Arc, std::sync::Mutex};
 
@@ -25,6 +28,11 @@ struct Buffers {
 }
 
 impl Buffers {
+    fn clear(&mut self) {
+        self.left.clear();
+        self.right.clear();
+    }
+
     fn compute_resample_ratio(&self) -> f64 {
         #[expect(clippy::cast_precision_loss)]
         let occupied = self.num_samples() as f64;
@@ -150,6 +158,10 @@ pub struct AudioCallbackImpl {
 }
 
 impl AudioCallbackImpl {
+    fn clear(&self) {
+        self.buffer.lock().map(|mut b| b.clear()).ok();
+    }
+
     const fn new(buffer: Arc<Mutex<Buffers>>) -> Self {
         Self { buffer }
     }
@@ -254,7 +266,10 @@ impl Stream {
     }
 
     pub fn pause(&self) -> Result<(), Error> {
-        self.cpal_strm.pause().map_err(|_err| Error::PauseStream)
+        self.cpal_strm.pause().map_err(|_err| Error::PauseStream)?;
+        // Avoids audio stretching after unpausing
+        self.ring_buffer.clear();
+        Ok(())
     }
 
     pub fn resume(&self) -> Result<(), Error> {
