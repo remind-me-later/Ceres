@@ -11,7 +11,7 @@ mod wave;
 use {
     crate::{
         apu::{high_pass_filter::HighPassFilter, master_volume::MasterVolume},
-        timing::TC_SEC,
+        timing::DOTS_PER_SEC,
     },
     length_timer::LengthTimer,
     noise::Noise,
@@ -86,7 +86,7 @@ impl<A: AudioCallback> Apu<A> {
         self.render_timer = 0;
     }
 
-    pub fn run(&mut self, cycles: i32) {
+    pub fn run(&mut self, dots: i32) {
         fn mix_and_render<C1: AudioCallback>(apu: &Apu<C1>) -> (Sample, Sample) {
             let mut l = 0;
             let mut r = 0;
@@ -123,13 +123,13 @@ impl<A: AudioCallback> Apu<A> {
         }
 
         if self.enabled {
-            self.ch1.step_sample(cycles);
-            self.ch2.step_sample(cycles);
-            self.ch3.step_sample(cycles);
-            self.ch4.step_sample(cycles);
+            self.ch1.step_sample(dots);
+            self.ch2.step_sample(dots);
+            self.ch3.step_sample(dots);
+            self.ch4.step_sample(dots);
         }
 
-        self.render_timer += cycles;
+        self.render_timer += dots;
         while self.render_timer >= self.ext_sample_period {
             self.render_timer -= self.ext_sample_period;
 
@@ -150,7 +150,7 @@ impl<A: AudioCallback> Apu<A> {
     }
 
     const fn sample_period_from_rate(sample_rate: i32) -> i32 {
-        TC_SEC / sample_rate
+        DOTS_PER_SEC / sample_rate
     }
 
     pub const fn set_sample_rate(&mut self, sample_rate: i32) {

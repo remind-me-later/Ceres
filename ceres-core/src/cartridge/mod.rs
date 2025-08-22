@@ -207,9 +207,9 @@ impl Cartridge {
         }
     }
 
-    pub const fn run_rtc(&mut self, cycles: i32) {
+    pub const fn run_rtc(&mut self, dots: i32) {
         if let Mbc::Mbc3 { rtc: Some(rtc), .. } = &mut self.mbc {
-            rtc.run_cycles(cycles);
+            rtc.run(dots);
         }
     }
 

@@ -37,7 +37,7 @@ fn main() -> anyhow::Result<()> {
                 project_dirs,
                 args.file(),
                 args.shader_option(),
-                args.pixel_perfect()
+                args.pixel_perfect(),
             )?))
         }),
     )

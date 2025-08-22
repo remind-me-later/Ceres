@@ -76,13 +76,13 @@ impl Wave {
         }
     }
 
-    pub const fn step_sample(&mut self, cycles: i32) {
+    pub const fn step_sample(&mut self, dots: i32) {
         if !self.is_enabled() {
             return;
         }
 
         if matches!(
-            self.period_counter.step(cycles),
+            self.period_counter.step(dots),
             PeriodStepResult::AdvanceFrequency
         ) {
             self.sample_index = (self.sample_index + 1) & (SAMPLE_LEN - 1);

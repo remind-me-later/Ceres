@@ -80,12 +80,12 @@ impl Noise {
         }
     }
 
-    pub fn step_sample(&mut self, cycles: i32) {
+    pub fn step_sample(&mut self, dots: i32) {
         if !self.is_truly_enabled() {
             return;
         }
 
-        self.timer -= cycles;
+        self.timer -= dots;
 
         if self.timer < 0 {
             self.timer += i32::from(self.timer_period);

@@ -116,9 +116,9 @@ impl<A: AudioCallback> Gb<A> {
         // should be glitchy anyways
         // FIXME: timings
         if self.key1.is_enabled() {
-            self.advance_t_cycles(i32::from(len) * 2 * 2);
+            self.advance_dots(i32::from(len) * 2 * 2);
         } else {
-            self.advance_t_cycles(i32::from(len) * 2);
+            self.advance_dots(i32::from(len) * 2);
         }
     }
 }

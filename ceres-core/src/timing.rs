@@ -1,11 +1,9 @@
 use crate::{AudioCallback, Gb};
 use core::time::Duration;
 
-pub const FRAME_DURATION: Duration = Duration::new(0, 16_742_706);
-pub const TC_PER_FRAME: i32 = 70224; // t-cycles per frame
-
-// t-cycles per second
-pub const TC_SEC: i32 = 0x40_0000; // 2^22
+pub const DOTS_PER_FRAME: i32 = 70224;
+pub const DOTS_PER_SEC: i32 = 1 << 22;
+pub const FRAME_DURATION: Duration = Duration::new(0, 16_742_706); // DOTS_PER_FRAME / DOTS_PER_SEC
 
 #[derive(Default, Debug)]
 pub struct Clock {
@@ -39,24 +37,24 @@ pub enum TIMAState {
 }
 
 impl<A: AudioCallback> Gb<A> {
-    pub fn advance_t_cycles(&mut self, mut cycles: i32) {
+    pub fn advance_dots(&mut self, mut dots: i32) {
         // affected by speed boost
-        self.run_timers(cycles);
-        self.dma.advance_t_cycles(cycles);
+        self.run_timers(dots);
+        self.dma.advance_dots(dots);
 
         // not affected by speed boost
         if self.key1.is_enabled() {
-            cycles >>= 1;
+            dots >>= 1;
         }
 
         // TODO: is this order right?
-        self.ppu.run(cycles, &mut self.ints, self.cgb_mode);
+        self.ppu.run(dots, &mut self.ints, self.cgb_mode);
         self.run_dma();
 
-        self.apu.run(cycles);
-        self.cart.run_rtc(cycles);
+        self.apu.run(dots);
+        self.cart.run_rtc(dots);
 
-        self.t_cycles_run += cycles;
+        self.dots_ran += dots;
     }
 
     const fn advance_tima_state(&mut self) {
@@ -96,8 +94,8 @@ impl<A: AudioCallback> Gb<A> {
         0xF8 | self.clock.tac
     }
 
-    pub fn run_timers(&mut self, cycles: i32) {
-        for _ in 0..cycles / 4 {
+    pub fn run_timers(&mut self, dots: i32) {
+        for _ in 0..dots / 4 {
             self.advance_tima_state();
             self.set_system_clk(self.clock.div.wrapping_add(4));
         }

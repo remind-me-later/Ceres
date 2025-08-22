@@ -50,19 +50,19 @@ pub enum Mode {
 }
 
 impl Mode {
-    pub fn cycles(self, scroll_x: u8) -> i32 {
+    pub fn dots(self, scroll_x: u8) -> i32 {
         // Mode timings
-        const OAM_SCAN_CYCLES: i32 = 80; // Constant
-        const DRAWING_CYCLES: i32 = 172; // Variable, minimum ammount
-        const HBLANK_CYCLES: i32 = 204; // Variable, maximum ammount
-        const VBLANK_CYCLES: i32 = 456; // Constant
+        const OAM_SCAN_DOTS: i32 = 80; // Constant
+        const DRAWING_DOTS: i32 = 172; // Variable, minimum ammount
+        const HBLANK_DOTS: i32 = 204; // Variable, maximum ammount
+        const VBLANK_DOTS: i32 = 456; // Constant
 
         let scroll_adjust = i32::from(scroll_x & 7) * 4;
         match self {
-            Self::OamScan => OAM_SCAN_CYCLES,
-            Self::Drawing => DRAWING_CYCLES + scroll_adjust,
-            Self::HBlank => HBLANK_CYCLES - scroll_adjust,
-            Self::VBlank => VBLANK_CYCLES,
+            Self::OamScan => OAM_SCAN_DOTS,
+            Self::Drawing => DRAWING_DOTS + scroll_adjust,
+            Self::HBlank => HBLANK_DOTS - scroll_adjust,
+            Self::VBlank => VBLANK_DOTS,
         }
     }
 }
@@ -71,7 +71,7 @@ impl Mode {
 pub struct Ppu {
     bcp: ColorPalette,
     bgp: u8,
-    cycles: i32,
+    dots: i32,
     lcdc: u8,
     ly: u8,
     lyc: u8,
@@ -119,7 +119,7 @@ impl Ppu {
 
     fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
         self.set_mode_stat(mode);
-        self.cycles += self.mode().cycles(self.scx);
+        self.dots += self.mode().dots(self.scx);
 
         match mode {
             Mode::OamScan => {
@@ -135,11 +135,6 @@ impl Ppu {
                 if self.stat & STAT_IF_VBLANK_B != 0 {
                     ints.request_lcd();
                 }
-
-                // TODO: why?
-                // if self.stat & STAT_IF_OAM_B != 0 {
-                //     ints.req_lcd();
-                // }
 
                 self.win_skipped = 0;
                 self.win_in_frame = false;
@@ -240,14 +235,14 @@ impl Ppu {
         self.wy
     }
 
-    pub fn run(&mut self, cycles: i32, ints: &mut Interrupts, cgb_mode: CgbMode) {
+    pub fn run(&mut self, dots: i32, ints: &mut Interrupts, cgb_mode: CgbMode) {
         if self.lcdc & LCDC_ON_B == 0 {
             return;
         }
 
-        self.cycles -= cycles;
+        self.dots -= dots;
 
-        if self.cycles < 0 {
+        if self.dots < 0 {
             match self.mode() {
                 Mode::OamScan => {
                     debug_assert!(self.ly <= 143, "OAM scan, ly = {}", self.ly);
@@ -276,7 +271,7 @@ impl Ppu {
                         self.rgba_buf_present = self.rgb_buf.clone();
                         self.enter_mode(Mode::OamScan, ints);
                     } else {
-                        self.cycles += self.mode().cycles(self.scx);
+                        self.dots += self.mode().dots(self.scx);
                     }
                     self.check_lyc(ints);
                 }
@@ -317,7 +312,7 @@ impl Ppu {
             let mode = Mode::HBlank;
 
             self.set_mode_stat(mode);
-            self.cycles = mode.cycles(self.scx);
+            self.dots = mode.dots(self.scx);
             self.ly = 0;
             self.check_lyc(ints);
         }

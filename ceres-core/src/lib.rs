@@ -7,19 +7,19 @@ mod apu;
 mod bess;
 mod bootrom;
 mod cartridge;
-mod cpu;
 mod error;
 mod interrupts;
 mod joypad;
 mod memory;
 mod ppu;
 mod serial;
+mod sm83;
 mod timing;
 
 use crate::{
     bootrom::Bootrom,
     memory::{Hram, Wram},
-    timing::TC_PER_FRAME,
+    timing::DOTS_PER_FRAME,
 };
 use cartridge::Cartridge;
 use interrupts::Interrupts;
@@ -36,8 +36,8 @@ pub use {
     timing::FRAME_DURATION,
 };
 use {
-    cpu::Cpu,
     memory::{Dma, Hdma},
+    sm83::Sm83,
     timing::Clock,
 };
 
@@ -48,8 +48,9 @@ pub struct Gb<A: AudioCallback> {
     cart: Cartridge,
     cgb_mode: CgbMode,
     clock: Clock,
-    cpu: Cpu,
+    cpu: Sm83,
     dma: Dma,
+    dots_ran: i32,
     hdma: Hdma,
     hram: Hram,
     ints: Interrupts,
@@ -58,7 +59,6 @@ pub struct Gb<A: AudioCallback> {
     model: Model,
     ppu: Ppu,
     serial: Serial,
-    t_cycles_run: i32,
     wram: Wram,
 }
 
@@ -104,9 +104,9 @@ impl<A: AudioCallback> Gb<A> {
             bootrom: Bootrom::new(model),
             apu: Apu::new(sample_rate, audio_callback),
             clock: Clock::default(),
-            cpu: Cpu::default(),
+            cpu: Sm83::default(),
             dma: Dma::default(),
-            t_cycles_run: Default::default(),
+            dots_ran: Default::default(),
             hdma: Hdma::default(),
             hram: Hram::default(),
             ints: Interrupts::default(),
@@ -132,11 +132,11 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     pub fn run_frame(&mut self) {
-        while self.t_cycles_run < TC_PER_FRAME {
+        while self.dots_ran < DOTS_PER_FRAME {
             self.run_cpu();
         }
 
-        self.t_cycles_run -= TC_PER_FRAME;
+        self.dots_ran -= DOTS_PER_FRAME;
     }
 
     /// Saves the current state to the provided writer.
@@ -155,7 +155,7 @@ impl<A: AudioCallback> Gb<A> {
     pub fn soft_reset(&mut self) {
         self.apu.reset();
         self.clock = Clock::default();
-        self.cpu = Cpu::default();
+        self.cpu = Sm83::default();
         self.dma = Dma::default();
         self.hdma = Hdma::default();
         self.ints = Interrupts::default();

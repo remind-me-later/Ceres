@@ -1,13 +1,13 @@
-use crate::timing::TC_SEC;
+use crate::timing::DOTS_PER_SEC;
 use std::num::NonZeroU8;
 
 #[derive(Default, Debug)]
 pub struct Mbc3RTC {
     carry: bool,
+    dots: i32,
     halt: bool,
     mapped: Option<NonZeroU8>,
     regs: [u8; 5],
-    t_cycles: i32,
 }
 
 impl Mbc3RTC {
@@ -36,15 +36,15 @@ impl Mbc3RTC {
             .flatten()
     }
 
-    pub const fn run_cycles(&mut self, cycles: i32) {
+    pub const fn run(&mut self, dots: i32) {
         if self.halt {
             return;
         }
 
-        self.t_cycles += cycles;
+        self.dots += dots;
         // TODO: this while is not at all necessary
-        while self.t_cycles > TC_SEC {
-            self.t_cycles -= TC_SEC + 1;
+        while self.dots > DOTS_PER_SEC {
+            self.dots -= DOTS_PER_SEC + 1;
             self.update_secs();
         }
     }

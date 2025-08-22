@@ -6,7 +6,7 @@ pub struct Dma {
     is_enabled: bool,
     is_restarting: bool, // FIXME: check usage of restarting and on
     reg: u8,
-    remaining_cycles: i32,
+    remaining_dots: i32,
 }
 
 impl Dma {
@@ -18,13 +18,13 @@ impl Dma {
         }
     }
 
-    pub const fn advance_t_cycles(&mut self, cycles: i32) {
-        self.remaining_cycles += cycles;
+    pub const fn advance_dots(&mut self, dots: i32) {
+        self.remaining_dots += dots;
     }
 
     #[must_use]
     pub const fn is_active(&self) -> bool {
-        self.is_enabled && (self.remaining_cycles > 0 || self.is_restarting)
+        self.is_enabled && (self.remaining_dots > 0 || self.is_restarting)
     }
 
     pub const fn is_enabled(&self) -> bool {
@@ -35,8 +35,8 @@ impl Dma {
         self.reg
     }
 
-    pub const fn remaining_cycles(&self) -> i32 {
-        self.remaining_cycles
+    pub const fn remaining_dots(&self) -> i32 {
+        self.remaining_dots
     }
 
     pub fn write(&mut self, val: u8) {
@@ -44,7 +44,7 @@ impl Dma {
             self.is_restarting = true;
         }
 
-        self.remaining_cycles = -8; // two m-cycles delay
+        self.remaining_dots = -8; // two m-cycles delay
         self.reg = val;
         self.addr = u16::from(val) << 8;
         self.is_enabled = true;
@@ -57,8 +57,8 @@ impl<A: AudioCallback> Gb<A> {
             return;
         }
 
-        while self.dma.remaining_cycles() >= 4 {
-            self.dma.remaining_cycles -= 4;
+        while self.dma.remaining_dots() >= 4 {
+            self.dma.remaining_dots -= 4;
 
             // TODO: reading some ranges should cause problems, $DF is
             // the maximum value accesible to OAM DMA (probably reads
