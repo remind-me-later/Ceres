@@ -268,6 +268,7 @@ pub fn load_state<A: AudioCallback, R: Read + Seek>(
     reader.read_exact(gb.ppu.vram_mut().bytes_mut())?;
 
     if let Some(mbc_ram) = gb.cart.mbc_ram_mut() {
+        // FIXME: use crate::Error to indicate ram size is not what expected from header
         reader.seek(io::SeekFrom::Start(u64::from(sizes.mbc_ram_offset())))?;
         reader.read_exact(mbc_ram)?;
     }

@@ -3,7 +3,6 @@ use {
     crate::apu::{LengthTimer, PeriodHalf},
 };
 
-#[derive(Debug)]
 pub struct Noise {
     dac_enabled: bool,
     enabled: bool,
@@ -47,7 +46,7 @@ impl Noise {
         self.output * self.envelope.volume()
     }
 
-    pub const fn read_nr42(&self) -> u8 {
+    pub fn read_nr42(&self) -> u8 {
         self.envelope.read()
     }
 
@@ -105,7 +104,7 @@ impl Noise {
         self.length_timer.write_len(val);
     }
 
-    pub const fn write_nr42(&mut self, val: u8) {
+    pub fn write_nr42(&mut self, val: u8) {
         if val & 0xF8 == 0 {
             self.enabled = false;
             self.dac_enabled = false;

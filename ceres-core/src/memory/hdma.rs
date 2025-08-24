@@ -4,7 +4,7 @@ use crate::{AudioCallback, Gb, ppu};
     clippy::arbitrary_source_item_ordering,
     reason = "Order follows the state machine transitions"
 )]
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub enum HdmaState {
     #[default]
     Sleep,
@@ -13,7 +13,7 @@ pub enum HdmaState {
     General,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct Hdma {
     dst: u16,
     hdma5: u8,

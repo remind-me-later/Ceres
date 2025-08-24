@@ -1,6 +1,5 @@
 use crate::Error;
 
-#[derive(Debug)]
 pub struct GameGenie {
     codes: Vec<GameGenieCode>,
 }
@@ -33,7 +32,6 @@ impl GameGenie {
     }
 }
 
-#[derive(Debug)]
 struct GameGenieCode {
     new_data: u8,
     old_data: u8,

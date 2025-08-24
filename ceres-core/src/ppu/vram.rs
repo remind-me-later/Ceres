@@ -1,6 +1,5 @@
 use crate::ppu::{Mode, Ppu};
 
-#[derive(Debug)]
 pub struct Vram {
     bytes: [u8; Self::SIZE_CGB as usize],
     vbk: bool,

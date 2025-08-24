@@ -67,7 +67,7 @@ impl Mode {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Ppu {
     bcp: ColorPalette,
     bgp: u8,
@@ -268,7 +268,7 @@ impl Ppu {
                     self.ly += 1;
                     if self.ly > 153 {
                         self.ly = 0;
-                        self.rgba_buf_present = self.rgb_buf.clone();
+                        self.rgba_buf_present = core::mem::take(&mut self.rgb_buf);
                         self.enter_mode(Mode::OamScan, ints);
                     } else {
                         self.dots += self.mode().dots(self.scx);

@@ -1,6 +1,5 @@
 use crate::{PX_HEIGHT, PX_WIDTH};
 
-#[derive(Clone, Debug)]
 pub struct RgbaBuf {
     data: Box<[u8; Self::RGB_BUF_SIZE as usize]>,
 }

@@ -7,11 +7,11 @@ pub trait SweepTrait: Default {
     fn write(&mut self, val: u8);
 }
 
-#[derive(Clone, Copy, Default, Debug)]
+#[derive(Clone, Copy, Default)]
 enum SweepDirection {
     #[default]
-    Add = 0,
-    Sub = 1,
+    Add,
+    Sub,
 }
 
 impl From<u8> for SweepDirection {
@@ -22,18 +22,19 @@ impl From<u8> for SweepDirection {
 
 impl From<SweepDirection> for u8 {
     fn from(val: SweepDirection) -> Self {
-        (val as Self) << 3
+        match val {
+            SweepDirection::Add => 0,
+            SweepDirection::Sub => 8,
+        }
     }
 }
 
-#[derive(Debug)]
 pub enum SweepCalculationResult {
     DisableChannel,
     None,
     UpdatePeriod { period: u16 },
 }
 
-#[derive(Debug)]
 pub struct Sweep {
     dir: SweepDirection,
     enabled: bool,          // TODO: check on behaviour

@@ -11,7 +11,6 @@ const RGB_BUF_SIZE: u32 = PX_TOTAL as u32 * BPP;
 pub const VRAM_PX_WIDTH: u16 = TILE_WIDTH * 8;
 pub const VRAM_PX_HEIGHT: u16 = TILE_HEIGHT * 8;
 
-#[derive(Clone, Debug)]
 pub struct RgbaBuf {
     data: Box<[u8; RGB_BUF_SIZE as usize]>,
 }
@@ -45,7 +44,7 @@ impl RgbaBuf {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct VramRenderer {
     rgba_buf: RgbaBuf,
 }

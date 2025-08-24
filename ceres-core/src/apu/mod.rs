@@ -27,14 +27,13 @@ pub trait AudioCallback {
     fn audio_sample(&self, l: Sample, r: Sample);
 }
 
-#[derive(Clone, Copy, Default, Debug)]
+#[derive(Clone, Copy, Default)]
 enum PeriodHalf {
     #[default]
     First,
     Second,
 }
 
-#[derive(Debug)]
 pub struct Apu<A: AudioCallback> {
     audio_callback: A,
     ch1: Square<Sweep>,
@@ -217,7 +216,7 @@ impl<A: AudioCallback> Apu<A> {
         self.ch1.read_nrx1()
     }
 
-    pub const fn read_nr12(&self) -> u8 {
+    pub fn read_nr12(&self) -> u8 {
         self.ch1.read_nrx2()
     }
 
@@ -229,7 +228,7 @@ impl<A: AudioCallback> Apu<A> {
         self.ch2.read_nrx1()
     }
 
-    pub const fn read_nr22(&self) -> u8 {
+    pub fn read_nr22(&self) -> u8 {
         self.ch2.read_nrx2()
     }
 
@@ -249,7 +248,7 @@ impl<A: AudioCallback> Apu<A> {
         self.ch3.read_nr34()
     }
 
-    pub const fn read_nr42(&self) -> u8 {
+    pub fn read_nr42(&self) -> u8 {
         self.ch4.read_nr42()
     }
 
@@ -303,7 +302,7 @@ impl<A: AudioCallback> Apu<A> {
         self.ch1.write_nrx1(val);
     }
 
-    pub const fn write_nr12(&mut self, val: u8) {
+    pub fn write_nr12(&mut self, val: u8) {
         self.ch1.write_nrx2(val);
     }
 
@@ -319,7 +318,7 @@ impl<A: AudioCallback> Apu<A> {
         self.ch2.write_nrx1(val);
     }
 
-    pub const fn write_nr22(&mut self, val: u8) {
+    pub fn write_nr22(&mut self, val: u8) {
         self.ch2.write_nrx2(val);
     }
 
@@ -355,7 +354,7 @@ impl<A: AudioCallback> Apu<A> {
         self.ch4.write_nr41(val);
     }
 
-    pub const fn write_nr42(&mut self, val: u8) {
+    pub fn write_nr42(&mut self, val: u8) {
         self.ch4.write_nr42(val);
     }
 

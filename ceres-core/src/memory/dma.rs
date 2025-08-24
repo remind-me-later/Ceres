@@ -1,6 +1,6 @@
 use crate::{AudioCallback, Gb};
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct Dma {
     addr: u16,
     is_enabled: bool,

@@ -6,7 +6,7 @@ const SHIFT: u8 = 0x1;
 
 // TODO: this is a temporal implementation that is always off,
 // implement proper serial communication somehow (sockets?)
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct Serial {
     count: u8,
     div_mask: u8,

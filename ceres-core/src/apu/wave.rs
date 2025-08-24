@@ -10,7 +10,7 @@ use {
 const RAM_LEN: u8 = 0x10;
 const SAMPLE_LEN: u8 = RAM_LEN * 2;
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct Wave {
     dac_enabled: bool,
     enabled: bool,

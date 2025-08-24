@@ -5,7 +5,7 @@ const NF: u16 = 0x40;
 const HF: u16 = 0x20;
 const CF: u16 = 0x10;
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Sm83 {
     af: u16,
     bc: u16,

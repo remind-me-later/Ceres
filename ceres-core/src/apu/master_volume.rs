@@ -1,4 +1,4 @@
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct MasterVolume {
     left_vin: bool,
     left_volume: u8,

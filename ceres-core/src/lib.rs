@@ -41,7 +41,6 @@ use {
     timing::Clock,
 };
 
-#[derive(Debug)]
 pub struct Gb<A: AudioCallback> {
     apu: Apu<A>,
     bootrom: Bootrom,
@@ -171,7 +170,7 @@ impl<A: AudioCallback> Gb<A> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Default)]
 pub enum Model {
     #[default]
     Cgb,
@@ -179,7 +178,7 @@ pub enum Model {
     Mgb,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Default)]
 enum CgbMode {
     #[default]
     Cgb,

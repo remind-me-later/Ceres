@@ -1,6 +1,5 @@
 use crate::Sample;
 
-#[derive(Debug)]
 pub struct HighPassFilter {
     capacitor_l: i32,
     capacitor_r: i32,

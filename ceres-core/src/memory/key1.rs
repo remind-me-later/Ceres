@@ -1,4 +1,4 @@
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct Key1 {
     key1: u8,
 }

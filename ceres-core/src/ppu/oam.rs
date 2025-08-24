@@ -1,6 +1,5 @@
 use crate::ppu::{Mode, Ppu};
 
-#[derive(Debug)]
 pub struct Oam {
     bytes: [u8; Self::SIZE as usize],
 }

@@ -5,7 +5,7 @@ pub const DOTS_PER_FRAME: i32 = 70224;
 pub const DOTS_PER_SEC: i32 = 1 << 22;
 pub const FRAME_DURATION: Duration = Duration::new(0, 16_742_706); // DOTS_PER_FRAME / DOTS_PER_SEC
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct Clock {
     div: u16,
     tac: u8,
@@ -28,8 +28,8 @@ impl Clock {
     clippy::arbitrary_source_item_ordering,
     reason = "Order follows the state machine transitions"
 )]
-#[derive(Clone, Copy, Default, Debug)]
-pub enum TIMAState {
+#[derive(Default)]
+enum TIMAState {
     Reloading,
     Reloaded,
     #[default]

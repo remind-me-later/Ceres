@@ -46,7 +46,7 @@ impl ROMSize {
 
     #[must_use]
     pub const fn size_bytes(self) -> u32 {
-        // maximum is 0x8000 << 8 = 0x80_0000
+        // maximum is 0x8000 << 8
         (Self::BANK_SIZE as u32 * 2) << (self as u8)
     }
 }

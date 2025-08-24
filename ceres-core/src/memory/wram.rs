@@ -1,6 +1,5 @@
 use super::svbk::Svbk;
 
-#[derive(Debug)]
 pub struct Wram {
     svbk: Svbk,
     wram: Box<[u8; Self::SIZE_CGB as usize]>,

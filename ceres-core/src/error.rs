@@ -1,13 +1,13 @@
 use core::{error, fmt};
-use std::fmt::Display;
+use fmt::Display;
 
 #[derive(Debug)]
 pub enum Error {
     InvalidRamSize,
     InvalidRomSize,
     NonAsciiTitleString,
-    RamSizeDifferentThanActual { expected: usize, actual: usize },
-    RomSizeDifferentThanActual { expected: usize, actual: usize },
+    RamSizeDifferentThanActual { expected: u32, actual: u32 },
+    RomSizeDifferentThanActual { expected: u32, actual: u32 },
     UnsupportedMBC { mbc_hex_code: u8 },
 }
 
@@ -26,7 +26,7 @@ impl Display for Error {
          characters"
             ),
             Self::UnsupportedMBC { mbc_hex_code } => {
-                write!(f, "unsupported MBC: {mbc_hex_code:#0x}")
+                write!(f, "unsupported MBC: {mbc_hex_code:02X}")
             }
             Self::RomSizeDifferentThanActual { expected, actual } => write!(
                 f,

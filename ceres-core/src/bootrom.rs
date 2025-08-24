@@ -4,7 +4,6 @@ const DMG_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/dmg.bin");
 const MGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/mgb.bin");
 const CGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/cgb.bin");
 
-#[derive(Debug)]
 pub struct Bootrom {
     data: &'static [u8],
     is_enabled: bool,

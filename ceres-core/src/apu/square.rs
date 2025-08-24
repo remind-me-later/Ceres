@@ -6,7 +6,7 @@ use {
     crate::apu::{LengthTimer, PeriodCounter, PeriodHalf, period_counter::PeriodStepResult},
 };
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct Square<Sweep: SweepTrait> {
     dac_enabled: bool,
     duty: u8,
@@ -39,7 +39,7 @@ impl<S: SweepTrait> Square<S> {
         0x3F | (self.duty << 6)
     }
 
-    pub const fn read_nrx2(&self) -> u8 {
+    pub fn read_nrx2(&self) -> u8 {
         self.envelope.read()
     }
 
@@ -108,7 +108,7 @@ impl<S: SweepTrait> Square<S> {
         self.length_timer.write_len(val);
     }
 
-    pub const fn write_nrx2(&mut self, val: u8) {
+    pub fn write_nrx2(&mut self, val: u8) {
         if val & 0xF8 == 0 {
             self.enabled = false;
             self.dac_enabled = false;

@@ -16,7 +16,7 @@ pub enum Button {
     Start = 0x80,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct Joypad {
     // P1
     actions_flag: bool,

@@ -121,8 +121,8 @@ impl Cartridge {
 
         if rom_size.size_bytes() as usize != rom.len() {
             return Err(Error::RomSizeDifferentThanActual {
-                expected: rom_size.size_bytes() as usize,
-                actual: rom.len(),
+                expected: rom_size.size_bytes(),
+                actual: rom.len() as u32,
             });
         }
 
