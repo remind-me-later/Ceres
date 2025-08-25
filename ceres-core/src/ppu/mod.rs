@@ -4,6 +4,8 @@ mod oam;
 mod rgba_buf;
 mod vram;
 
+use core::mem;
+
 use crate::interrupts::Interrupts;
 pub use oam::Oam;
 pub use vram::Vram;
@@ -29,6 +31,8 @@ const STAT_IF_HBLANK_B: u8 = 0x8;
 const STAT_IF_VBLANK_B: u8 = 0x10;
 const STAT_IF_OAM_B: u8 = 0x20;
 const STAT_IF_LYC_B: u8 = 0x40;
+
+const DOTS_UNTIL_ENABLED: i32 = 80;
 
 #[expect(
     clippy::arbitrary_source_item_ordering,
@@ -61,11 +65,13 @@ impl Mode {
     }
 }
 
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Default)]
 pub struct Ppu {
     bcp: ColorPalette,
     bgp: u8,
-    dots: i32,
+    delay_one_frame: bool,
+    enable_timer: i32,
     lcdc: u8,
     ly: u8,
     lyc: u8,
@@ -74,6 +80,7 @@ pub struct Ppu {
     obp1: u8,
     ocp: ColorPalette,
     opri: bool,
+    remaining_dots_in_mode: i32,
     rgb_buf: RgbaBuf,
     rgba_buf_present: RgbaBuf,
     scx: u8,
@@ -112,7 +119,7 @@ impl Ppu {
 
     fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
         self.set_mode_stat(mode);
-        self.dots += self.mode().dots(self.scx);
+        self.remaining_dots_in_mode += self.mode().dots(self.scx);
 
         match mode {
             Mode::OamScan => {
@@ -231,9 +238,25 @@ impl Ppu {
             return;
         }
 
-        self.dots -= dots;
+        let mut dots = dots;
 
-        if self.dots < 0 {
+        if self.enable_timer > 0 {
+            // self.restart_timer = self.restart_timer - dots;
+            if self.enable_timer - dots <= 0 {
+                self.enable_timer = 0;
+                dots -= self.enable_timer;
+                let mode = Mode::Drawing;
+                self.set_mode_stat(mode);
+                self.remaining_dots_in_mode = mode.dots(self.scx);
+            } else {
+                self.enable_timer -= dots;
+                return;
+            }
+        }
+
+        self.remaining_dots_in_mode -= dots;
+
+        if self.remaining_dots_in_mode < 0 {
             match self.mode() {
                 Mode::OamScan => {
                     debug_assert!(self.ly <= 143, "OAM scan, ly = {}", self.ly);
@@ -259,10 +282,14 @@ impl Ppu {
                     self.ly += 1;
                     if self.ly > 153 {
                         self.ly = 0;
-                        self.rgba_buf_present = core::mem::take(&mut self.rgb_buf);
+                        if self.delay_one_frame {
+                            self.delay_one_frame = false;
+                        } else {
+                            self.rgba_buf_present = mem::take(&mut self.rgb_buf);
+                        }
                         self.enter_mode(Mode::OamScan, ints);
                     } else {
-                        self.dots += self.mode().dots(self.scx);
+                        self.remaining_dots_in_mode += self.mode().dots(self.scx);
                     }
                     self.check_lyc(ints);
                 }
@@ -284,23 +311,28 @@ impl Ppu {
             // FIXME: breaks 'alone in the dark' and the menu fade out in 'Links awakening' among others
             // debug_assert!(
             //     matches!(self.mode(), Mode::VBlank),
-            //     "current mode = {:?}, cycles = {}, ly = {}",
+            //     "current mode = {:?}, dots = {}, ly = {}",
             //     self.mode(),
-            //     self.cycles,
+            //     self.remaining_dots_in_mode,
             //     self.ly
             // );
 
             self.ly = 0;
+            let mode = Mode::HBlank;
+            self.set_mode_stat(mode);
+            self.remaining_dots_in_mode = mode.dots(self.scx);
+            self.rgba_buf_present.clear();
         }
 
         // turn on
         if val & LCDC_ON_B != 0 && self.lcdc & LCDC_ON_B == 0 {
-            let mode = Mode::HBlank;
-
-            self.set_mode_stat(mode);
-            self.dots = mode.dots(self.scx);
             self.ly = 0;
+            let mode = Mode::HBlank;
+            self.set_mode_stat(mode);
+            self.remaining_dots_in_mode = mode.dots(self.scx);
             self.check_lyc(ints);
+            self.enable_timer = DOTS_UNTIL_ENABLED;
+            self.delay_one_frame = true;
         }
 
         self.lcdc = val;

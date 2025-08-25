@@ -113,7 +113,7 @@ impl Buffers {
         let got = self.num_samples();
 
         if needed > got {
-            eprintln!("Buffer underrun, needed: {needed}, got: {got}");
+            // eprintln!("Buffer underrun, needed: {needed}, got: {got}");
             return;
         }
 

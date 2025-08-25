@@ -24,6 +24,12 @@ impl RgbaBuf {
     const PX_TOTAL: u16 = PX_WIDTH as u16 * PX_HEIGHT as u16;
     const RGB_BUF_SIZE: u32 = Self::PX_TOTAL as u32 * Self::BPP;
 
+    pub fn clear(&mut self) {
+        for byte in self.data.iter_mut() {
+            *byte = 0xff;
+        }
+    }
+
     #[must_use]
     pub const fn pixel_data(&self) -> &[u8] {
         self.data.as_slice()
