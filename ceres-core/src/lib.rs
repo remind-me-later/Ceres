@@ -32,7 +32,7 @@ pub use {
     apu::{AudioCallback, Sample},
     error::Error,
     joypad::Button,
-    ppu::{PX_HEIGHT, PX_WIDTH, VRAM_PX_HEIGHT, VRAM_PX_WIDTH},
+    ppu::{PX_HEIGHT, PX_WIDTH},
     timing::FRAME_DURATION,
 };
 use {
@@ -162,11 +162,6 @@ impl<A: AudioCallback> Gb<A> {
         self.ppu = Ppu::default();
         self.serial = Serial::default();
         self.bootrom.enable();
-    }
-
-    #[must_use]
-    pub const fn vram_data_rgba(&self) -> &[u8] {
-        self.ppu.vram_data_rgba()
     }
 }
 

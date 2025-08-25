@@ -3,17 +3,11 @@ mod draw;
 mod oam;
 mod rgba_buf;
 mod vram;
-mod vram_renderer;
 
 use crate::interrupts::Interrupts;
 pub use oam::Oam;
 pub use vram::Vram;
-pub use vram_renderer::VRAM_PX_HEIGHT;
-pub use vram_renderer::VRAM_PX_WIDTH;
-use {
-    self::color_palette::ColorPalette, self::vram_renderer::VramRenderer, crate::CgbMode,
-    rgba_buf::RgbaBuf,
-};
+use {self::color_palette::ColorPalette, crate::CgbMode, rgba_buf::RgbaBuf};
 
 pub const PX_WIDTH: u8 = 160;
 pub const PX_HEIGHT: u8 = 144;
@@ -86,7 +80,6 @@ pub struct Ppu {
     scy: u8,
     stat: u8,
     vram: Vram,
-    vram_renderer: VramRenderer, // Debug util
     win_in_frame: bool,
     win_in_ly: bool,
     win_skipped: u8,
@@ -138,8 +131,6 @@ impl Ppu {
 
                 self.win_skipped = 0;
                 self.win_in_frame = false;
-
-                self.vram_renderer.draw_vram(self.vram.bytes());
             }
             Mode::Drawing => (),
             Mode::HBlank => {
@@ -281,11 +272,6 @@ impl Ppu {
 
     const fn set_mode_stat(&mut self, mode: Mode) {
         self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
-    }
-
-    #[must_use]
-    pub const fn vram_data_rgba(&self) -> &[u8] {
-        self.vram_renderer.vram_data_rgba()
     }
 
     pub const fn write_bgp(&mut self, val: u8) {
