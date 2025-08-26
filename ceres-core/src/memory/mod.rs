@@ -112,7 +112,7 @@ impl<A: AudioCallback> Gb<A> {
 
                 #[cfg(not(feature = "game_genie"))]
                 {
-                    self.cart.read_ram(addr)
+                    self.cart.read_rom(addr)
                 }
             },
             |boot_data| boot_data,
@@ -194,11 +194,24 @@ impl<A: AudioCallback> Gb<A> {
 
                     #[cfg(not(feature = "game_genie"))]
                     {
-                        self.cart.read_ram(addr)
+                        self.cart.read_rom(addr)
                     }
                 }
             }
-            0x0100..=0x01FF | 0x0900..=0x7FFF => self.cart.read_rom(addr),
+            0x0100..=0x01FF | 0x0900..=0x7FFF => {
+                #[cfg(feature = "game_genie")]
+                {
+                    let data = self.cart.read_rom(addr);
+                    self.game_genie
+                        .query(addr, data)
+                        .map_or_else(|| data, |gg_data| gg_data)
+                }
+
+                #[cfg(not(feature = "game_genie"))]
+                {
+                    self.cart.read_rom(addr)
+                }
+            }
             0x8000..=0x9FFF => self.ppu.read_vram(addr),
             0xA000..=0xBFFF => self.cart.read_ram(addr),
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.read_wram_lo(addr),

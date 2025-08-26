@@ -3,6 +3,9 @@ use std::{cell::RefCell, rc::Rc};
 
 #[derive(Debug)]
 pub struct PreferencesDialog {
+    add_code_row: adw::EntryRow,
+    cheats_group: adw::PreferencesGroup,
+    code_rows: RefCell<Vec<adw::ActionRow>>,
     gb_model_row: adw::ComboRow,
     gl_area_bindings: RefCell<Vec<glib::Binding>>,
     initializing: Rc<RefCell<bool>>,
@@ -50,6 +53,20 @@ impl Default for PreferencesDialog {
         emulation_group.add(&pixel_perfect_row);
         preferences_page.add(&emulation_group);
 
+        // Cheats section
+        let cheats_group = adw::PreferencesGroup::builder()
+            .title("Cheats")
+            .description("Game Genie codes")
+            .build();
+
+        let add_code_row = adw::EntryRow::builder()
+            .title("Add Game Genie Code")
+            .show_apply_button(true)
+            .build();
+
+        cheats_group.add(&add_code_row);
+        preferences_page.add(&cheats_group);
+
         Self {
             preferences_page,
             shader_row,
@@ -57,6 +74,9 @@ impl Default for PreferencesDialog {
             gl_area_bindings: RefCell::new(Vec::new()),
             initializing: Rc::new(RefCell::new(true)),
             pixel_perfect_row,
+            cheats_group,
+            add_code_row,
+            code_rows: RefCell::new(Vec::new()),
         }
     }
 }
@@ -201,12 +221,112 @@ impl PreferencesDialog {
         bindings.push(shader_binding);
         bindings.push(gb_model_binding);
         bindings.push(pixel_perfect_binding);
+
+        // Cheats: wire add/remove logic and initial refresh
+        self.refresh_game_genie_rows(gl_area);
+
+        // Handle add via apply button
+        let add_row = self.add_code_row.clone();
+        let gl_area_weak = gl_area.downgrade();
+        let prefs_weak = self.obj().downgrade();
+        self.add_code_row.connect_apply(move |row| {
+            let Some(gl_area) = gl_area_weak.upgrade() else {
+                return;
+            };
+            let Some(prefs) = prefs_weak.upgrade() else {
+                return;
+            };
+
+            let text = add_row.text();
+            let code_str = text.trim().to_owned();
+            if code_str.is_empty() {
+                return;
+            }
+
+            match ceres_std::GameGenieCode::new(&code_str) {
+                Ok(code) => {
+                    // Ensure RefMut drops before we refresh UI
+                    let activate_res = {
+                        let mut thread = gl_area.gb_thread().borrow_mut();
+                        thread.activate_game_genie(code)
+                    };
+
+                    match activate_res {
+                        Ok(()) => {
+                            add_row.set_text("");
+                            prefs.imp().refresh_game_genie_rows(&gl_area);
+                        }
+                        Err(err) => {
+                            let dialog = adw::AlertDialog::builder()
+                                .heading("Couldn't add code")
+                                .body(format!("{err}"))
+                                .default_response("ok")
+                                .close_response("ok")
+                                .build();
+                            dialog.add_responses(&[("ok", "_Ok")]);
+                            dialog.present(Some(row));
+                        }
+                    }
+                }
+                Err(err) => {
+                    let dialog = adw::AlertDialog::builder()
+                        .heading("Invalid Game Genie code")
+                        .body(format!("{err}"))
+                        .default_response("ok")
+                        .close_response("ok")
+                        .build();
+                    dialog.add_responses(&[("ok", "_Ok")]);
+                    dialog.present(Some(row));
+                }
+            }
+        });
     }
 
     pub(super) fn disconnect_from_gl_area(&self) {
         let mut bindings = self.gl_area_bindings.borrow_mut();
         for binding in bindings.drain(..) {
             binding.unbind();
+        }
+    }
+
+    fn refresh_game_genie_rows(&self, gl_area: &crate::gl_area::GlArea) {
+        // Clear previous rows
+        for row in self.code_rows.borrow_mut().drain(..) {
+            self.cheats_group.remove(&row);
+        }
+
+        // Fetch active codes
+        let codes = gl_area
+            .gb_thread()
+            .borrow()
+            .active_game_genie_codes()
+            .unwrap_or_default();
+
+        for code in codes {
+            let row = adw::ActionRow::builder().title(code.to_string()).build();
+
+            let remove_btn = gtk::Button::from_icon_name("list-remove-symbolic");
+            remove_btn.add_css_class("destructive-action");
+
+            // Wire removal
+            let gl_area_weak = gl_area.downgrade();
+            let prefs_weak = self.obj().downgrade();
+            remove_btn.connect_clicked(move |_| {
+                if let Some(gl_area) = gl_area_weak.upgrade() {
+                    {
+                        // Drop mutable borrow before refreshing UI
+                        let mut thread = gl_area.gb_thread().borrow_mut();
+                        thread.deactivate_game_genie(code);
+                    }
+                    if let Some(prefs) = prefs_weak.upgrade() {
+                        prefs.imp().refresh_game_genie_rows(&gl_area);
+                    }
+                }
+            });
+
+            row.add_suffix(&remove_btn);
+            self.cheats_group.add(&row);
+            self.code_rows.borrow_mut().push(row);
         }
     }
 

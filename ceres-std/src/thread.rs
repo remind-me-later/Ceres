@@ -41,6 +41,13 @@ impl GbThread {
             .map_or(Ok(()), |mut gb| gb.activate_game_genie(code))
     }
 
+    #[must_use]
+    pub fn active_game_genie_codes(&self) -> Option<Vec<GameGenieCode>> {
+        self.gb
+            .lock()
+            .map_or(None, |gb| Some(gb.active_game_genie_codes().to_vec()))
+    }
+
     // Resets the GB state and loads the same ROM
     pub fn change_model(&mut self, model: ceres_core::Model) {
         if let Ok(mut gb) = self.gb.lock() {

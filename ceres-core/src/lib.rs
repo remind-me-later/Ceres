@@ -80,6 +80,10 @@ impl<A: AudioCallback> Gb<A> {
         self.game_genie.activate_code(code)
     }
 
+    pub fn active_game_genie_codes(&self) -> &[GameGenieCode] {
+        self.game_genie.active_codes()
+    }
+
     pub const fn cart_has_battery(&self) -> bool {
         self.cart.has_battery()
     }

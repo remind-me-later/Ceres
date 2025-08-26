@@ -1,3 +1,5 @@
+use core::fmt;
+
 use crate::Error;
 
 #[derive(Default)]
@@ -15,6 +17,10 @@ impl GameGenie {
         } else {
             Err(Error::TooManyGameGenieCodes)
         }
+    }
+
+    pub fn active_codes(&self) -> &[GameGenieCode] {
+        &self.codes[..self.number_of_active_codes as usize]
     }
 
     pub fn deactivate_code(&mut self, code: GameGenieCode) {
@@ -43,6 +49,7 @@ impl GameGenie {
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub struct GameGenieCode {
     address: u16,
+    maybe_checksum: u8,
     new_data: u8,
     old_data: u8,
 }
@@ -106,12 +113,28 @@ impl GameGenieCode {
 
         let new_data = ab;
         let address = fcde ^ 0xF000;
-        let old_data = (gi ^ 0xBA).rotate_left(2);
+        let old_data = gi.rotate_right(2) ^ 0xBA;
+        let maybe_checksum = gh & 0x0F;
 
         Ok(Self {
             address,
+            maybe_checksum,
             new_data,
             old_data,
         })
+    }
+}
+
+impl fmt::Display for GameGenieCode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let cdef = (self.address ^ 0xF000).rotate_left(4);
+        let abc = (u16::from(self.new_data) << 4) | (cdef >> 12);
+        let def = cdef & 0x0FFF;
+        let gi = (self.old_data ^ 0xBA).rotate_left(2);
+        let ghi = (u16::from(gi & 0xF0) << 4)
+            | (u16::from(self.maybe_checksum) << 4)
+            | u16::from(gi & 0x0F);
+
+        write!(f, "{abc:03X}-{def:03X}-{ghi:03X}")
     }
 }
