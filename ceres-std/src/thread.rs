@@ -1,4 +1,6 @@
 use crate::audio;
+#[cfg(feature = "game_genie")]
+use ceres_core::GameGenieCode;
 use ceres_core::GbBuilder;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
@@ -27,6 +29,18 @@ pub struct GbThread {
 }
 
 impl GbThread {
+    /// Activates a Game Genie code.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if too many codes are activated.
+    #[cfg(feature = "game_genie")]
+    pub fn activate_game_genie(&mut self, code: GameGenieCode) -> Result<(), ceres_core::Error> {
+        self.gb
+            .lock()
+            .map_or(Ok(()), |mut gb| gb.activate_game_genie(code))
+    }
+
     // Resets the GB state and loads the same ROM
     pub fn change_model(&mut self, model: ceres_core::Model) {
         if let Ok(mut gb) = self.gb.lock() {
@@ -96,6 +110,13 @@ impl GbThread {
             Ok(GbBuilder::new(audio_stream.sample_rate(), ring_buffer)
                 .with_model(model)
                 .build())
+        }
+    }
+
+    #[cfg(feature = "game_genie")]
+    pub fn deactivate_game_genie(&mut self, code: GameGenieCode) {
+        if let Ok(mut gb) = self.gb.lock() {
+            gb.deactivate_game_genie(code);
         }
     }
 

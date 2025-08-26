@@ -6,6 +6,9 @@ description = "A library to make Gameboy/Color emulators"
 repository.workspace = true
 license.workspace = true
 
+[features]
+game_genie = []
+
 [lints.clippy]
 absolute_paths = "warn"
 alloc_instead_of_core = "warn"

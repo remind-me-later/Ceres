@@ -45,6 +45,7 @@ features = ["dx12", "metal", "vulkan", "wgsl"]
 optional = true
 
 [features]
+game_genie = ["ceres-core/game_genie"]
 wgpu_renderer = ["dep:wgpu"]
 
 [lints]

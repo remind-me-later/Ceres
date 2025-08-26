@@ -119,6 +119,7 @@ impl Cartridge {
         let ram_size = RAMSize::new(rom[0x149])?;
         let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], rom_size)?;
 
+        #[expect(clippy::cast_possible_truncation)]
         if rom_size.size_bytes() as usize != rom.len() {
             return Err(Error::RomSizeDifferentThanActual {
                 expected: rom_size.size_bytes(),

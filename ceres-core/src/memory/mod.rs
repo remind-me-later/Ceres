@@ -100,9 +100,23 @@ impl<A: AudioCallback> Gb<A> {
 
     #[must_use]
     fn read_boot_or_cart(&self, addr: u16) -> u8 {
-        self.bootrom
-            .read(addr)
-            .unwrap_or_else(|| self.cart.read_rom(addr))
+        self.bootrom.read(addr).map_or_else(
+            || {
+                #[cfg(feature = "game_genie")]
+                {
+                    let data = self.cart.read_rom(addr);
+                    self.game_genie
+                        .query(addr, data)
+                        .map_or(data, |gg_data| gg_data)
+                }
+
+                #[cfg(not(feature = "game_genie"))]
+                {
+                    self.cart.read_ram(addr)
+                }
+            },
+            |boot_data| boot_data,
+        )
     }
 
     #[must_use]
@@ -170,7 +184,18 @@ impl<A: AudioCallback> Gb<A> {
                 if matches!(self.model, Model::Cgb) {
                     self.read_boot_or_cart(addr)
                 } else {
-                    self.cart.read_rom(addr)
+                    #[cfg(feature = "game_genie")]
+                    {
+                        let data = self.cart.read_rom(addr);
+                        self.game_genie
+                            .query(addr, data)
+                            .map_or_else(|| data, |gg_data| gg_data)
+                    }
+
+                    #[cfg(not(feature = "game_genie"))]
+                    {
+                        self.cart.read_ram(addr)
+                    }
                 }
             }
             0x0100..=0x01FF | 0x0900..=0x7FFF => self.cart.read_rom(addr),

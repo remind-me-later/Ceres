@@ -7,6 +7,8 @@ mod apu;
 mod bess;
 mod bootrom;
 mod cartridge;
+#[cfg(feature = "game_genie")]
+mod cheats;
 mod error;
 mod interrupts;
 mod joypad;
@@ -22,6 +24,10 @@ use crate::{
     timing::DOTS_PER_FRAME,
 };
 use cartridge::Cartridge;
+#[cfg(feature = "game_genie")]
+use cheats::GameGenie;
+#[cfg(feature = "game_genie")]
+pub use cheats::GameGenieCode;
 use interrupts::Interrupts;
 use joypad::Joypad;
 use memory::Key1;
@@ -50,6 +56,8 @@ pub struct Gb<A: AudioCallback> {
     cpu: Sm83,
     dma: Dma,
     dots_ran: i32,
+    #[cfg(feature = "game_genie")]
+    game_genie: GameGenie,
     hdma: Hdma,
     hram: Hram,
     ints: Interrupts,
@@ -62,6 +70,16 @@ pub struct Gb<A: AudioCallback> {
 }
 
 impl<A: AudioCallback> Gb<A> {
+    /// Activates a Game Genie code.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if too many codes are activated.
+    #[cfg(feature = "game_genie")]
+    pub const fn activate_game_genie(&mut self, code: GameGenieCode) -> Result<(), Error> {
+        self.game_genie.activate_code(code)
+    }
+
     pub const fn cart_has_battery(&self) -> bool {
         self.cart.has_battery()
     }
@@ -83,6 +101,11 @@ impl<A: AudioCallback> Gb<A> {
         self.cgb_mode = model.into();
         self.bootrom = Bootrom::new(model);
         self.soft_reset();
+    }
+
+    #[cfg(feature = "game_genie")]
+    pub fn deactivate_game_genie(&mut self, code: GameGenieCode) {
+        self.game_genie.deactivate_code(code);
     }
 
     /// Loads the state from the provided reader.
@@ -114,6 +137,8 @@ impl<A: AudioCallback> Gb<A> {
             ppu: Ppu::default(),
             serial: Serial::default(),
             wram: Wram::default(),
+            #[cfg(feature = "game_genie")]
+            game_genie: GameGenie::default(),
         }
     }
 
