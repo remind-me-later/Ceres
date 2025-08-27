@@ -307,6 +307,7 @@ impl PreferencesDialog {
 
             let remove_btn = gtk::Button::from_icon_name("list-remove-symbolic");
             remove_btn.add_css_class("destructive-action");
+            remove_btn.add_css_class("flat");
 
             // Wire removal
             let gl_area_weak = gl_area.downgrade();
