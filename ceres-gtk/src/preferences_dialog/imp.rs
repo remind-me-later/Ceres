@@ -24,7 +24,7 @@ impl Default for PreferencesDialog {
 
         let emulation_group = adw::PreferencesGroup::builder()
             .title("Emulation")
-            .description("Configure emulation settings")
+            .description("Settings")
             .build();
 
         let gb_model_row = adw::ComboRow::builder()
@@ -56,7 +56,7 @@ impl Default for PreferencesDialog {
         // Cheats section
         let cheats_group = adw::PreferencesGroup::builder()
             .title("Cheats")
-            .description("Game Genie codes")
+            .description("Game Genie")
             .build();
 
         let add_code_row = adw::EntryRow::builder()
