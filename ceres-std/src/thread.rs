@@ -5,11 +5,10 @@ use ceres_core::GbBuilder;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
 use std::{
-    fs::File,
+    fs::OpenOptions,
     sync::{Condvar, Mutex, atomic::AtomicU32},
 };
 use thread_priority::ThreadBuilderExt;
-
 use {ceres_core::Gb, std::path::Path, std::sync::Arc};
 
 pub trait PainterCallback: Send {
@@ -86,37 +85,35 @@ impl GbThread {
         rom_path: Option<&Path>,
         sav_path: Option<&Path>,
     ) -> Result<Gb<audio::AudioCallbackImpl>, Error> {
+        let gb_builder = GbBuilder::new(audio_stream.sample_rate(), ring_buffer).with_model(model);
+
         if let Some(rom_path) = rom_path {
-            let rom = {
-                std::fs::read(rom_path)
+            let gb_builder = {
+                let rom = std::fs::read(rom_path)
                     .map(Vec::into_boxed_slice)
-                    .map_err(Error::Io)?
+                    .map_err(Error::Io)?;
+
+                gb_builder.with_rom(rom)?
             };
 
-            let gb_builder = GbBuilder::new(audio_stream.sample_rate(), ring_buffer)
-                .with_model(model)
-                .with_rom(rom)?;
-
-            if !gb_builder.can_load_save_data() {
-                return Ok(gb_builder.build());
-            }
-
-            if let Some(sav_path) = sav_path {
-                match File::open(sav_path) {
-                    Ok(mut save_data) => {
-                        let mut gb = gb_builder.build();
-                        gb.load_data(&mut save_data)?;
-                        Ok(gb)
-                    }
-                    Err(_) => Ok(gb_builder.build()),
-                }
+            if gb_builder.can_load_save_data()
+                && let Some(sav_path) = sav_path
+            {
+                let mut save_data = OpenOptions::new()
+                    .read(true)
+                    .write(false)
+                    .create(false)
+                    .truncate(false)
+                    .open(sav_path)
+                    .map_err(Error::Io)?;
+                let mut gb = gb_builder.build();
+                gb.load_data(&mut save_data)?;
+                Ok(gb)
             } else {
                 Ok(gb_builder.build())
             }
         } else {
-            Ok(GbBuilder::new(audio_stream.sample_rate(), ring_buffer)
-                .with_model(model)
-                .build())
+            Ok(gb_builder.build())
         }
     }
 
