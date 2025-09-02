@@ -33,7 +33,7 @@ impl Default for ApplicationWindow {
         let volume_button = gtk::ScaleButton::new(
             0.0,
             1.0,
-            0.1,
+            0.01,
             &[
                 "audio-volume-muted-symbolic",
                 "audio-volume-high-symbolic",
@@ -119,10 +119,8 @@ impl ApplicationWindow {
     }
 
     fn load_file(&self, file_path: &std::path::Path) -> Result<(), ceres_std::Error> {
-        let pathbuf = file_path.to_path_buf();
-
         let sav_path = {
-            let file_stem = pathbuf.file_stem().unwrap();
+            let file_stem = file_path.file_stem().unwrap();
             Some(Self::data_path().join(file_stem).with_extension("sav"))
         };
 
@@ -130,13 +128,17 @@ impl ApplicationWindow {
             .gb_area
             .gb_thread()
             .borrow_mut()
-            .change_rom(sav_path.as_deref(), &pathbuf);
+            .change_rom(sav_path.as_deref(), file_path);
 
         match change_rom_res {
             Ok(()) => {
-                *self.rom_path.borrow_mut() = Some(pathbuf.clone());
-                self.obj()
-                    .set_title(pathbuf.file_name().map(|s| s.to_string_lossy()).as_deref());
+                *self.rom_path.borrow_mut() = Some(file_path.to_path_buf());
+                self.obj().set_title(
+                    file_path
+                        .file_name()
+                        .map(|s| s.to_string_lossy())
+                        .as_deref(),
+                );
                 Ok(())
             }
             Err(err) => Err(err),
@@ -328,7 +330,18 @@ impl ObjectImpl for ApplicationWindow {
             move |_action, parameter| {
                 if let Some(file_path_str) = parameter.and_then(|p| p.get::<String>()) {
                     let file_path = std::path::Path::new(&file_path_str);
-                    drop(window_imp.load_file(file_path));
+
+                    if let Err(err) = window_imp.load_file(file_path) {
+                        let info_dialog = adw::AlertDialog::builder()
+                            .heading("Unable to open ROM file")
+                            .body(format!("{err}"))
+                            .default_response("ok")
+                            .close_response("ok")
+                            .build();
+
+                        info_dialog.add_responses(&[("ok", "_Ok")]);
+                        info_dialog.present(Some(window_imp.obj().as_ref()));
+                    }
                 }
             }
         ));

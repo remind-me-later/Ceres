@@ -108,7 +108,7 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[cfg(feature = "game_genie")]
-    pub fn deactivate_game_genie(&mut self, code: GameGenieCode) {
+    pub fn deactivate_game_genie(&mut self, code: &GameGenieCode) {
         self.game_genie.deactivate_code(code);
     }
 

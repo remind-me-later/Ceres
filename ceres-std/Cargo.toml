@@ -50,4 +50,3 @@ wgpu_renderer = ["dep:wgpu"]
 
 [lints]
 workspace = true
-

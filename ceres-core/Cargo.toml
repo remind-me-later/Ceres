@@ -82,4 +82,3 @@ verbose_file_reads = "warn"
 
 [lints.rust]
 unsafe_code = "forbid"
-

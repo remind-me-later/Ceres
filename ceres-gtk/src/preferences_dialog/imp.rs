@@ -317,7 +317,7 @@ impl PreferencesDialog {
                     {
                         // Drop mutable borrow before refreshing UI
                         let mut thread = gl_area.gb_thread().borrow_mut();
-                        thread.deactivate_game_genie(code);
+                        thread.deactivate_game_genie(&code);
                     }
                     if let Some(prefs) = prefs_weak.upgrade() {
                         prefs.imp().refresh_game_genie_rows(&gl_area);

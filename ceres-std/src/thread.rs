@@ -118,7 +118,7 @@ impl GbThread {
     }
 
     #[cfg(feature = "game_genie")]
-    pub fn deactivate_game_genie(&mut self, code: GameGenieCode) {
+    pub fn deactivate_game_genie(&mut self, code: &GameGenieCode) {
         if let Ok(mut gb) = self.gb.lock() {
             gb.deactivate_game_genie(code);
         }

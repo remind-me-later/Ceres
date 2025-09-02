@@ -1,10 +1,14 @@
 use core::{error, fmt};
 use fmt::Display;
 
+const COMMON_GAME_GENIE_FORMAT_STRING: &str =
+    "expected a game genie code of the form ABC-DEF-GHI, where A..I are hex digits";
+
 #[derive(Debug)]
 pub enum Error {
-    InvalidGameGenieCodeFormat { code: String },
-    InvalidGameGenieCodeLength { code: String },
+    InvalidGameGenieCodeExpectedHyphen { pos: u8 },
+    InvalidGameGenieCodeLength { actual: usize },
+    InvalidGameGenieCodeNotHexDigit { pos: u8 },
     InvalidRamSize,
     InvalidRomSize,
     NonAsciiTitleString,
@@ -17,11 +21,23 @@ pub enum Error {
 impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidGameGenieCodeLength { code } => {
-                write!(f, "invalid Game Genie code length: {code}")
+            Self::InvalidGameGenieCodeLength { actual } => write!(
+                f,
+                "{COMMON_GAME_GENIE_FORMAT_STRING}: expected length 11, got {actual}",
+            ),
+            Self::InvalidGameGenieCodeExpectedHyphen { pos } => {
+                write!(
+                    f,
+                    "{COMMON_GAME_GENIE_FORMAT_STRING}: missing hyphen at character position {}",
+                    pos + 1
+                )
             }
-            Self::InvalidGameGenieCodeFormat { code } => {
-                write!(f, "invalid Game Genie code format: {code}")
+            Self::InvalidGameGenieCodeNotHexDigit { pos } => {
+                write!(
+                    f,
+                    "{COMMON_GAME_GENIE_FORMAT_STRING}: expected hex digit at character position {}",
+                    pos + 1
+                )
             }
             Self::InvalidRomSize => {
                 write!(f, "invalid ROM size in cartridge header")
@@ -32,7 +48,7 @@ impl Display for Error {
             Self::NonAsciiTitleString => write!(
                 f,
                 "invalid title string in cartridge header, contains non ASCII \
-         characters"
+             characters"
             ),
             Self::UnsupportedMBC { mbc_hex_code } => {
                 write!(f, "unsupported MBC: {mbc_hex_code:02X}")
