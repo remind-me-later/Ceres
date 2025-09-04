@@ -8,7 +8,7 @@ use {std::sync::Arc, std::sync::Mutex};
 
 // Buffer size is the number of samples per channel per callback
 const BUFFER_SIZE: cpal::FrameCount = 512;
-const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 8;
+const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
 const SAMPLE_RATE: i32 = 48000;
 
 // Originally both the emulator and host platform output samples at the same rate,
@@ -54,12 +54,6 @@ impl Buffers {
     }
 
     fn new(volume: Arc<Mutex<f32>>) -> Result<Self, Error> {
-        // FIXME: Cpal doesn't support pipewire on Linux, this seems to match the returned buffer size by accident
-        // we have to way for cpal to have a nice way to get the supported buffer sizes or support pipewire
-        #[cfg(target_os = "linux")]
-        let chunk_size = BUFFER_SIZE as usize / 4;
-
-        #[cfg(not(target_os = "linux"))]
         let chunk_size = BUFFER_SIZE as usize;
 
         let resampler = rubato::SincFixedOut::<ProcessSample>::new(

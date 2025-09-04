@@ -33,7 +33,7 @@ impl Default for ApplicationWindow {
         let volume_button = gtk::ScaleButton::new(
             0.0,
             1.0,
-            0.01,
+            0.1,
             &[
                 "audio-volume-muted-symbolic",
                 "audio-volume-high-symbolic",

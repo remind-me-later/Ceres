@@ -18,8 +18,9 @@ default-features = false
 features = ["derive", "help", "std"]
 
 [dependencies.cpal]
-version = "*"
 default-features = false
+# version = "*"
+git = "https://github.com/RustAudio/cpal.git"
 
 [dependencies.ringbuf]
 version = "*"
