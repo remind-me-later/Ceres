@@ -79,6 +79,10 @@ impl Default for ApplicationWindow {
             let save_item = gtk::gio::MenuItem::new(Some("_Save Data"), Some("win.save-data"));
             app_menu.append_item(&save_item);
 
+            let screenshot_item =
+                gtk::gio::MenuItem::new(Some("Take _Screenshot"), Some("win.screenshot"));
+            app_menu.append_item(&screenshot_item);
+
             let preferences_item =
                 gtk::gio::MenuItem::new(Some("_Preferences"), Some("app.preferences"));
             app_menu.append_item(&preferences_item);
@@ -165,6 +169,63 @@ impl ApplicationWindow {
                 .unwrap();
         }
     }
+
+    /// Take a screenshot and save it to the default screenshots location.
+    pub fn take_screenshot(&self) {
+        // Get the Pictures directory or fallback to home directory
+        let screenshots_dir = glib::user_special_dir(glib::UserDirectory::Pictures)
+            .unwrap_or_else(|| glib::home_dir());
+
+        // Create a subdirectory for Ceres screenshots
+        // FIXME: don't hardcode "Ceres Screenshots", use a setting instead
+        let ceres_screenshots_dir = screenshots_dir.join("Ceres Screenshots");
+        if let Err(e) = std::fs::create_dir_all(&ceres_screenshots_dir) {
+            eprintln!("Failed to create screenshots directory: {}", e);
+            return;
+        }
+
+        // Generate a filename based on the ROM name and current timestamp
+        let screenshot_path = {
+            let rom_borrow = self.rom_path.borrow();
+
+            let rom_name = rom_borrow.as_ref().map_or("screenshot", |p| {
+                p.file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("screenshot")
+            });
+
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+
+            let filename = format!("{}_{}.webp", rom_name, timestamp);
+
+            ceres_screenshots_dir.join(filename)
+        };
+
+        match self
+            .gb_area
+            .gb_thread()
+            .borrow()
+            .save_screenshot(&screenshot_path)
+        {
+            Ok(()) => {
+                println!("Screenshot saved to: {}", screenshot_path.display());
+            }
+            Err(e) => {
+                let error_dialog = adw::AlertDialog::builder()
+                    .heading("Screenshot Failed")
+                    .body(format!("Failed to save screenshot: {}", e))
+                    .default_response("ok")
+                    .close_response("ok")
+                    .build();
+
+                error_dialog.add_responses(&[("ok", "_Ok")]);
+                error_dialog.present(Some(self.obj().as_ref()));
+            }
+        }
+    }
 }
 
 #[glib::object_subclass]
@@ -219,6 +280,14 @@ impl ObjectSubclass for ApplicationWindow {
             None,
             |win, _action_name, _action_target| {
                 win.imp().save_data();
+            },
+        );
+
+        klass.install_action(
+            "win.screenshot",
+            None,
+            |win, _action_name, _action_target| {
+                win.imp().take_screenshot();
             },
         );
     }

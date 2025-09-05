@@ -141,6 +141,7 @@ impl ApplicationImpl for Application {
         app.set_accels_for_action("win.open", &["<Primary>o"]);
         app.set_accels_for_action("win.pause", &["space"]);
         app.set_accels_for_action("win.save-data", &["<Primary>s"]);
+        app.set_accels_for_action("win.screenshot", &["F12"]);
         app.set_accels_for_action("app.preferences", &["<Primary>comma"]);
     }
 }
