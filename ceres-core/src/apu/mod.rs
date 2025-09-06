@@ -63,7 +63,7 @@ impl<A: AudioCallback> Apu<A> {
             ch4: Noise::default(),
             div_divider: 0,
             render_timer: 0,
-            hpf: HighPassFilter::new(),
+            hpf: HighPassFilter::default(),
         }
     }
 
