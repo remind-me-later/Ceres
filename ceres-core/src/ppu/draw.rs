@@ -88,8 +88,12 @@ impl Ppu {
 
             let rgb = match cgb_mode {
                 CgbMode::Dmg => Self::mono_rgb(shade_index(self.bgp, color)),
-                CgbMode::Compat => self.bcp.rgb(attr & BG_PAL_B, shade_index(self.bgp, color)),
-                CgbMode::Cgb => self.bcp.rgb(attr & BG_PAL_B, color),
+                CgbMode::Compat => self.bcp.rgb(
+                    attr & BG_PAL_B,
+                    shade_index(self.bgp, color),
+                    self.color_correction,
+                ),
+                CgbMode::Cgb => self.bcp.rgb(attr & BG_PAL_B, color, self.color_correction),
             };
 
             self.rgb_buf.set_px(base_idx + u32::from(i), rgb);
@@ -180,11 +184,12 @@ impl Ppu {
                             self.obp1
                         };
 
-                        self.ocp.rgb(0, shade_index(palette, color))
+                        self.ocp
+                            .rgb(0, shade_index(palette, color), self.color_correction)
                     }
                     CgbMode::Cgb => {
                         let cgb_palette = obj.attr & SPR_CGB_PAL;
-                        self.ocp.rgb(cgb_palette, color)
+                        self.ocp.rgb(cgb_palette, color, self.color_correction)
                     }
                 };
 
@@ -258,8 +263,12 @@ impl Ppu {
 
             let rgb = match cgb_mode {
                 CgbMode::Dmg => Self::mono_rgb(shade_index(self.bgp, color)),
-                CgbMode::Compat => self.bcp.rgb(attr & BG_PAL_B, shade_index(self.bgp, color)),
-                CgbMode::Cgb => self.bcp.rgb(attr & BG_PAL_B, color),
+                CgbMode::Compat => self.bcp.rgb(
+                    attr & BG_PAL_B,
+                    shade_index(self.bgp, color),
+                    self.color_correction,
+                ),
+                CgbMode::Cgb => self.bcp.rgb(attr & BG_PAL_B, color, self.color_correction),
             };
 
             bg_priority[i as usize] = if color == 0 {

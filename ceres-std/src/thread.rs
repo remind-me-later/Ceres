@@ -147,32 +147,6 @@ impl GbThread {
         Ok(())
     }
 
-    /// Saves a WebP screenshot to the specified path.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the Game Boy thread is not running, if creating the image fails,
-    /// or if writing the file fails.
-    pub fn save_screenshot<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), Error> {
-        let pixel_data = {
-            let gb = self.gb.lock().map_err(|_| Error::NoThreadRunning)?;
-            // save into a vector so we can release the lock early
-            gb.pixel_data_rgba().to_vec()
-        };
-
-        let img = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_raw(
-            ceres_core::PX_WIDTH as u32,
-            ceres_core::PX_HEIGHT as u32,
-            pixel_data,
-        )
-        .ok_or(Error::ImageCreate)?;
-
-        img.save_with_format(path, image::ImageFormat::WebP)
-            .map_err(Error::Image)?;
-
-        Ok(())
-    }
-
     #[must_use]
     pub fn has_save_data(&self) -> bool {
         self.gb.lock().is_ok_and(|gb| gb.cart_has_battery())
@@ -350,6 +324,32 @@ impl GbThread {
         self.gb.lock().map_or(Err(Error::NoThreadRunning), |gb| {
             gb.save_data(writer).map_err(Error::Io)
         })
+    }
+
+    /// Saves a WebP screenshot to the specified path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the Game Boy thread is not running, if creating the image fails,
+    /// or if writing the file fails.
+    pub fn save_screenshot<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), Error> {
+        let pixel_data = {
+            let gb = self.gb.lock().map_err(|_err| Error::NoThreadRunning)?;
+            // save into a vector so we can release the lock early
+            gb.pixel_data_rgba().to_vec()
+        };
+
+        let img = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_raw(
+            u32::from(ceres_core::PX_WIDTH),
+            u32::from(ceres_core::PX_HEIGHT),
+            pixel_data,
+        )
+        .ok_or(Error::ImageCreate)?;
+
+        img.save_with_format(path, image::ImageFormat::WebP)
+            .map_err(Error::Image)?;
+
+        Ok(())
     }
 
     fn set_sample_rate(&self, sample_rate: i32) {

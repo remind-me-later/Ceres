@@ -34,6 +34,17 @@ const STAT_IF_LYC_B: u8 = 0x40;
 
 const DOTS_UNTIL_ENABLED: i32 = 80;
 
+#[derive(Clone, Copy, Default)]
+pub enum ColorCorrectionMode {
+    CorrectCurves,
+    Disabled,
+    LowContrast,
+    #[default]
+    ModernBalanced,
+    ModernBoostContrast,
+    ReduceContrast,
+}
+
 #[expect(
     clippy::arbitrary_source_item_ordering,
     reason = "Order follows the state machine transitions"
@@ -70,6 +81,7 @@ impl Mode {
 pub struct Ppu {
     bcp: ColorPalette,
     bgp: u8,
+    color_correction: ColorCorrectionMode,
     delay_one_frame: bool,
     enable_timer: i32,
     lcdc: u8,
@@ -295,6 +307,10 @@ impl Ppu {
                 }
             }
         }
+    }
+
+    pub const fn set_color_correction(&mut self, mode: ColorCorrectionMode) {
+        self.color_correction = mode;
     }
 
     const fn set_mode_stat(&mut self, mode: Mode) {

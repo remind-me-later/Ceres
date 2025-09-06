@@ -38,6 +38,7 @@ pub use {
     apu::{AudioCallback, Sample},
     error::Error,
     joypad::Button,
+    ppu::ColorCorrectionMode,
     ppu::{PX_HEIGHT, PX_WIDTH},
     timing::FRAME_DURATION,
 };
@@ -174,6 +175,10 @@ impl<A: AudioCallback> Gb<A> {
     /// Returns an error if writing or seeking to the writer fails.
     pub fn save_data<W: io::Write + io::Seek>(&self, writer: &mut W) -> Result<(), io::Error> {
         bess::save_state(self, writer)
+    }
+
+    pub const fn set_color_correction(&mut self, mode: ColorCorrectionMode) {
+        self.ppu.set_color_correction(mode);
     }
 
     pub const fn set_sample_rate(&mut self, sample_rate: i32) {

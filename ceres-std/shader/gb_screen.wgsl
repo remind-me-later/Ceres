@@ -61,11 +61,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 
 fn get_sample(tex_coords: vec2<f32>) -> vec4<f32> {
-    return desaturated(txt, tex_coords);
+    return textureSample(txt, smpl, tex_coords);
 }
 
 fn get_ghost_sample(tex_coords: vec2<f32>) -> vec4<f32> {
-    return desaturated(prev_frame, tex_coords);
+    return textureSample(prev_frame, smpl, tex_coords);
 }
 
 fn eq(a: vec3<f32>, b: vec3<f32>) -> bool {

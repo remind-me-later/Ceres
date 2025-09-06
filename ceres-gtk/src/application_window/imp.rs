@@ -173,8 +173,8 @@ impl ApplicationWindow {
     /// Take a screenshot and save it to the default screenshots location.
     pub fn take_screenshot(&self) {
         // Get the Pictures directory or fallback to home directory
-        let screenshots_dir = glib::user_special_dir(glib::UserDirectory::Pictures)
-            .unwrap_or_else(|| glib::home_dir());
+        let screenshots_dir =
+            glib::user_special_dir(glib::UserDirectory::Pictures).unwrap_or_else(glib::home_dir);
 
         // Create a subdirectory for Ceres screenshots
         // FIXME: don't hardcode "Ceres Screenshots", use a setting instead
