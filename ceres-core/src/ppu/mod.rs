@@ -81,7 +81,7 @@ impl Mode {
 pub struct Ppu {
     bcp: ColorPalette,
     bgp: u8,
-    color_correction: ColorCorrectionMode,
+    color_correction_mode: ColorCorrectionMode,
     delay_one_frame: bool,
     enable_timer: i32,
     lcdc: u8,
@@ -309,8 +309,8 @@ impl Ppu {
         }
     }
 
-    pub const fn set_color_correction(&mut self, mode: ColorCorrectionMode) {
-        self.color_correction = mode;
+    pub const fn set_color_correction_mode(&mut self, mode: ColorCorrectionMode) {
+        self.color_correction_mode = mode;
     }
 
     const fn set_mode_stat(&mut self, mode: Mode) {

@@ -177,8 +177,8 @@ impl<A: AudioCallback> Gb<A> {
         bess::save_state(self, writer)
     }
 
-    pub const fn set_color_correction(&mut self, mode: ColorCorrectionMode) {
-        self.ppu.set_color_correction(mode);
+    pub const fn set_color_correction_mode(&mut self, mode: ColorCorrectionMode) {
+        self.ppu.set_color_correction_mode(mode);
     }
 
     pub const fn set_sample_rate(&mut self, sample_rate: i32) {

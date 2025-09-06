@@ -6,6 +6,7 @@ pub struct PreferencesDialog {
     add_code_row: adw::EntryRow,
     cheats_group: adw::PreferencesGroup,
     code_rows: RefCell<Vec<adw::ActionRow>>,
+    color_correction_row: adw::ComboRow,
     gb_model_row: adw::ComboRow,
     gl_area_bindings: RefCell<Vec<glib::Binding>>,
     initializing: Rc<RefCell<bool>>,
@@ -48,9 +49,25 @@ impl Default for PreferencesDialog {
             .subtitle("Don't stretch the image")
             .build();
 
+        let color_correction_row = adw::ComboRow::builder()
+            .title("Color Correction")
+            .subtitle("Select color correction mode")
+            .build();
+
+        let color_corrections = gtk::StringList::new(&[
+            "Modern Balanced",
+            "Modern Boost Contrast",
+            "Reduce Contrast",
+            "Low Contrast",
+            "Correct Curves",
+            "Disabled",
+        ]);
+        color_correction_row.set_model(Some(&color_corrections));
+
         emulation_group.add(&gb_model_row);
         emulation_group.add(&shader_row);
         emulation_group.add(&pixel_perfect_row);
+        emulation_group.add(&color_correction_row);
         preferences_page.add(&emulation_group);
 
         // Cheats section
@@ -71,6 +88,7 @@ impl Default for PreferencesDialog {
             preferences_page,
             shader_row,
             gb_model_row,
+            color_correction_row,
             gl_area_bindings: RefCell::new(Vec::new()),
             initializing: Rc::new(RefCell::new(true)),
             pixel_perfect_row,
@@ -218,9 +236,45 @@ impl PreferencesDialog {
             .sync_create()
             .build();
 
+        // Bind color correction row to GlArea property
+        let color_correction_binding = gl_area
+            .bind_property("color-correction", &self.color_correction_row, "selected")
+            .transform_to(|_, correction_str: String| {
+                Some(
+                    match correction_str.as_str() {
+                        "ModernBalanced" => 0_u32,
+                        "ModernBoostContrast" => 1_u32,
+                        "ReduceContrast" => 2_u32,
+                        "LowContrast" => 3_u32,
+                        "CorrectCurves" => 4_u32,
+                        "Disabled" => 5_u32,
+                        _ => 0_u32,
+                    }
+                    .to_value(),
+                )
+            })
+            .transform_from(|_, selected: u32| {
+                Some(
+                    match selected {
+                        0 => "ModernBalanced",
+                        1 => "ModernBoostContrast",
+                        2 => "ReduceContrast",
+                        3 => "LowContrast",
+                        4 => "CorrectCurves",
+                        5 => "Disabled",
+                        _ => "ModernBalanced",
+                    }
+                    .to_value(),
+                )
+            })
+            .bidirectional()
+            .sync_create()
+            .build();
+
         bindings.push(shader_binding);
         bindings.push(gb_model_binding);
         bindings.push(pixel_perfect_binding);
+        bindings.push(color_correction_binding);
 
         // Cheats: wire add/remove logic and initial refresh
         self.refresh_game_genie_rows(gl_area);

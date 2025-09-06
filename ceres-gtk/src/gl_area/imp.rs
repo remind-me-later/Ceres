@@ -29,6 +29,7 @@ impl ceres_std::PainterCallback for PainterCallbackImpl {
 pub struct GlArea {
     buffer: Arc<Mutex<Box<[u8]>>>,
     callbacks: RefCell<Option<gtk::TickCallbackId>>,
+    color_correction: RefCell<ceres_std::ColorCorrectionMode>,
     gb_thread: Rc<RefCell<ceres_std::GbThread>>,
     is_running: RefCell<bool>,
     model: RefCell<ceres_std::Model>,
@@ -105,6 +106,7 @@ impl ObjectSubclass for GlArea {
             model: RefCell::new(ceres_std::Model::default()),
             is_running: RefCell::new(false),
             pixel_perfect: RefCell::new(false),
+            color_correction: RefCell::new(ceres_std::ColorCorrectionMode::default()),
         }
     }
 }
@@ -136,6 +138,11 @@ impl ObjectImpl for GlArea {
                     .blurb("Whether to use pixel-perfect scaling")
                     .default_value(false)
                     .build(),
+                glib::ParamSpecString::builder("color-correction")
+                    .nick("Color Correction")
+                    .blurb("The color correction mode to use")
+                    .default_value(Some("ModernBalanced"))
+                    .build(),
             ]
         })
     }
@@ -151,6 +158,15 @@ impl ObjectImpl for GlArea {
             .to_value(),
             "emulator-running" => self.is_running.borrow().to_value(),
             "pixel-perfect" => self.pixel_perfect.borrow().to_value(),
+            "color-correction" => match *self.color_correction.borrow() {
+                ceres_std::ColorCorrectionMode::CorrectCurves => "CorrectCurves",
+                ceres_std::ColorCorrectionMode::Disabled => "Disabled",
+                ceres_std::ColorCorrectionMode::LowContrast => "LowContrast",
+                ceres_std::ColorCorrectionMode::ModernBalanced => "ModernBalanced",
+                ceres_std::ColorCorrectionMode::ModernBoostContrast => "ModernBoostContrast",
+                ceres_std::ColorCorrectionMode::ReduceContrast => "ReduceContrast",
+            }
+            .to_value(),
             _ => {
                 eprintln!("Unknown property: {}", pspec.name());
                 glib::Value::from("")
@@ -193,6 +209,21 @@ impl ObjectImpl for GlArea {
                     let size = renderer.current_size();
                     renderer.resize_viewport(size.0, size.1, use_pixel_perfect);
                 }
+            }
+            "color-correction" => {
+                let correction_str = value.get::<String>().unwrap();
+                let mode = match correction_str.as_str() {
+                    "CorrectCurves" => ceres_std::ColorCorrectionMode::CorrectCurves,
+                    "Disabled" => ceres_std::ColorCorrectionMode::Disabled,
+                    "LowContrast" => ceres_std::ColorCorrectionMode::LowContrast,
+                    "ModernBalanced" => ceres_std::ColorCorrectionMode::ModernBalanced,
+                    "ModernBoostContrast" => ceres_std::ColorCorrectionMode::ModernBoostContrast,
+                    "ReduceContrast" => ceres_std::ColorCorrectionMode::ReduceContrast,
+                    _ => ceres_std::ColorCorrectionMode::ModernBalanced,
+                };
+                self.color_correction.replace(mode);
+                let thread = self.gb_thread.borrow();
+                thread.set_color_correction_mode(mode);
             }
             _ => {
                 eprintln!("Unknown property: {}", pspec.name());

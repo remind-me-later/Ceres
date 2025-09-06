@@ -352,6 +352,12 @@ impl GbThread {
         Ok(())
     }
 
+    pub fn set_color_correction_mode(&self, mode: ceres_core::ColorCorrectionMode) {
+        if let Ok(mut gb) = self.gb.lock() {
+            gb.set_color_correction_mode(mode);
+        }
+    }
+
     fn set_sample_rate(&self, sample_rate: i32) {
         if let Ok(mut gb) = self.gb.lock() {
             gb.set_sample_rate(sample_rate);
