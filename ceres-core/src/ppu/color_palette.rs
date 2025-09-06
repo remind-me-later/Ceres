@@ -56,13 +56,14 @@ impl ColorPalette {
     }
 
     // For color correction values see: https://github.com/LIJI32/SameBoy/blob/master/Core/display.c#L355
+    // TODO: should this be done on GPU?
     #[expect(clippy::too_many_lines)]
     #[must_use]
     pub fn rgb(
         &self,
         palette: u8,
         color: u8,
-        color_correction: ColorCorrectionMode,
+        color_correction_mode: ColorCorrectionMode,
     ) -> (u8, u8, u8) {
         const SCALE_CHANNEL_WITH_CURVE: [u8; 32] = [
             0, 6, 12, 20, 28, 36, 45, 56, 66, 76, 88, 100, 113, 125, 137, 149, 161, 172, 182, 192,
@@ -74,11 +75,11 @@ impl ColorPalette {
         }
 
         let i = (palette as usize * 4 + color as usize) * 3;
-        let mut r = self.buffer[i] & 0x1F;
-        let mut g = self.buffer[i + 1] & 0x1F;
-        let mut b = self.buffer[i + 2] & 0x1F;
+        let mut r = self.buffer[i];
+        let mut g = self.buffer[i + 1];
+        let mut b = self.buffer[i + 2];
 
-        if matches!(color_correction, ColorCorrectionMode::Disabled) {
+        if matches!(color_correction_mode, ColorCorrectionMode::Disabled) {
             return (scale_channel(r), scale_channel(g), scale_channel(b));
         }
 
@@ -88,7 +89,7 @@ impl ColorPalette {
             SCALE_CHANNEL_WITH_CURVE[b as usize],
         );
 
-        if matches!(color_correction, ColorCorrectionMode::CorrectCurves) {
+        if matches!(color_correction_mode, ColorCorrectionMode::CorrectCurves) {
             return (r, g, b);
         }
 
@@ -96,14 +97,14 @@ impl ColorPalette {
 
         if g != b {
             let gamma = if matches!(
-                color_correction,
+                color_correction_mode,
                 ColorCorrectionMode::ReduceContrast | ColorCorrectionMode::LowContrast
             ) {
                 2.2
             } else {
                 1.6
             };
-            // new_g = round(pow((pow(g / 255.0, gamma) * 3 + pow(b / 255.0, gamma)) / 4, 1 / gamma) * 255);
+
             #[expect(
                 clippy::float_arithmetic,
                 clippy::cast_possible_truncation,
@@ -120,7 +121,7 @@ impl ColorPalette {
             }
         }
 
-        match color_correction {
+        match color_correction_mode {
             ColorCorrectionMode::LowContrast => {
                 (r, g, b) = (new_r, new_g, new_b);
 

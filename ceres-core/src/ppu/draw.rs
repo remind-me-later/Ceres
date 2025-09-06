@@ -93,7 +93,9 @@ impl Ppu {
                     shade_index(self.bgp, color),
                     self.color_correction_mode,
                 ),
-                CgbMode::Cgb => self.bcp.rgb(attr & BG_PAL_B, color, self.color_correction_mode),
+                CgbMode::Cgb => self
+                    .bcp
+                    .rgb(attr & BG_PAL_B, color, self.color_correction_mode),
             };
 
             self.rgb_buf.set_px(base_idx + u32::from(i), rgb);
@@ -268,7 +270,9 @@ impl Ppu {
                     shade_index(self.bgp, color),
                     self.color_correction_mode,
                 ),
-                CgbMode::Cgb => self.bcp.rgb(attr & BG_PAL_B, color, self.color_correction_mode),
+                CgbMode::Cgb => self
+                    .bcp
+                    .rgb(attr & BG_PAL_B, color, self.color_correction_mode),
             };
 
             bg_priority[i as usize] = if color == 0 {

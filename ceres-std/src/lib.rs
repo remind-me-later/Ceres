@@ -8,8 +8,8 @@ pub mod wgpu_renderer;
 #[cfg(feature = "game_genie")]
 pub use ceres_core::GameGenieCode;
 
-pub use ceres_core::{Button, Model, PX_HEIGHT, PX_WIDTH};
 pub use ceres_core::ColorCorrectionMode;
+pub use ceres_core::{Button, Model, PX_HEIGHT, PX_WIDTH};
 pub use clap;
 pub use cli::{
     AppOption, CERES_BIN, CERES_STYLIZED, Cli, ORGANIZATION, PixelPerfectOption, QUALIFIER,

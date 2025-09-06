@@ -41,6 +41,7 @@ impl GbThread {
     }
 
     #[must_use]
+    #[cfg(feature = "game_genie")]
     pub fn active_game_genie_codes(&self) -> Option<Vec<GameGenieCode>> {
         self.gb
             .lock()
