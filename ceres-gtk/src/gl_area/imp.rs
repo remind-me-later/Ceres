@@ -1,33 +1,9 @@
 use super::renderer::{Renderer, ShaderMode};
 use gtk::{glib, prelude::*, subclass::prelude::*};
-use std::{
-    cell::RefCell,
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
-
-pub struct PainterCallbackImpl {
-    buffer: Arc<Mutex<Box<[u8]>>>,
-}
-
-impl PainterCallbackImpl {
-    pub const fn new(buffer: Arc<Mutex<Box<[u8]>>>) -> Self {
-        Self { buffer }
-    }
-}
-
-impl ceres_std::PainterCallback for PainterCallbackImpl {
-    fn paint(&self, pixel_data_rgba: &[u8]) {
-        if let Ok(mut buffer) = self.buffer.lock() {
-            buffer.copy_from_slice(pixel_data_rgba);
-        }
-    }
-
-    fn request_repaint(&self) {}
-}
+use std::{cell::RefCell, rc::Rc};
 
 pub struct GlArea {
-    buffer: Arc<Mutex<Box<[u8]>>>,
+    buffer: RefCell<Box<[u8]>>,
     callbacks: RefCell<Option<gtk::TickCallbackId>>,
     color_correction: RefCell<ceres_std::ColorCorrectionMode>,
     gb_thread: Rc<RefCell<ceres_std::GbThread>>,
@@ -82,18 +58,11 @@ impl ObjectSubclass for GlArea {
     type Type = super::GlArea;
 
     fn new() -> Self {
-        let buffer = Arc::new(Mutex::new(
-            vec![0_u8; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice(),
-        ));
+        let buffer = RefCell::new(vec![0_u8; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice());
 
         let gb_thread = Rc::new(RefCell::new(
-            ceres_std::GbThread::new(
-                ceres_std::Model::Cgb,
-                None,
-                None,
-                PainterCallbackImpl::new(Arc::clone(&buffer)),
-            )
-            .expect("Failed to create GbThread"),
+            ceres_std::GbThread::new(ceres_std::Model::Cgb, None, None)
+                .expect("Failed to create GbThread"),
         ));
 
         Self {
@@ -297,9 +266,12 @@ impl GLAreaImpl for GlArea {
             rend.choose_scale_mode(scale_mode);
         }
 
-        if let Ok(rgba) = self.buffer.lock() {
-            rend.draw_frame(&rgba);
+        {
+            let mut buffer = self.buffer.borrow_mut();
+            let thread = self.gb_thread.borrow();
+            let _ = thread.copy_pixel_data_rgba(&mut buffer);
         }
+        rend.draw_frame(self.buffer.borrow().as_ref());
 
         glib::Propagation::Proceed
     }

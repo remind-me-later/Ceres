@@ -15,6 +15,6 @@ pub use cli::{
     AppOption, CERES_BIN, CERES_STYLIZED, Cli, ORGANIZATION, PixelPerfectOption, QUALIFIER,
     ShaderOption,
 };
-pub use thread::{Error, GbThread, PainterCallback, Pressable};
+pub use thread::{Error, GbThread, Pressable};
 
 pub const PIXEL_BUFFER_SIZE: usize = 4 * PX_WIDTH as usize * PX_HEIGHT as usize;

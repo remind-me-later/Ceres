@@ -21,6 +21,7 @@ features = ["derive", "help", "std"]
 default-features = false
 # version = "*"
 git = "https://github.com/RustAudio/cpal.git"
+features = ["oboe-shared-stdcxx"]
 
 [dependencies.image]
 version = "*"

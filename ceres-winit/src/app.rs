@@ -6,10 +6,7 @@ use anyhow::Context;
 use ceres_std::wgpu_renderer;
 use ceres_std::{GbThread, ShaderOption};
 use ceres_std::{PX_HEIGHT, PX_WIDTH};
-use std::{
-    sync::{Arc, Mutex},
-    time::Instant,
-};
+use std::time::Instant;
 use winit::{
     dpi::PhysicalSize,
     event::{KeyEvent, WindowEvent},
@@ -25,33 +22,13 @@ use {
 #[cfg(target_os = "macos")]
 use std::path::PathBuf;
 
-pub struct PainterCallbackImpl {
-    buffer: Arc<Mutex<Box<[u8]>>>,
-}
-
-impl PainterCallbackImpl {
-    pub const fn new(buffer: Arc<Mutex<Box<[u8]>>>) -> Self {
-        Self { buffer }
-    }
-}
-
-impl ceres_std::PainterCallback for PainterCallbackImpl {
-    fn paint(&self, pixel_data_rgba: &[u8]) {
-        if let Ok(mut buffer) = self.buffer.lock() {
-            buffer.copy_from_slice(pixel_data_rgba);
-        }
-    }
-
-    fn request_repaint(&self) {}
-}
-
 struct Windows<'a> {
     main: video::State<'a, { PX_WIDTH as u32 }, { PX_HEIGHT as u32 }>,
 }
 
 pub struct App<'a> {
     // Config parameters
-    pixel_data_rgba: Arc<Mutex<Box<[u8]>>>,
+    pixel_data_rgba: Box<[u8]>,
     pixel_perfect: bool,
     project_dirs: directories::ProjectDirs,
     #[cfg(target_os = "macos")]
@@ -140,16 +117,9 @@ impl App<'_> {
             None
         };
 
-        let pixel_data_rgba = Arc::new(Mutex::new(
-            vec![0; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice(),
-        ));
+        let pixel_data_rgba = vec![0u8; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice();
 
-        let mut thread = GbThread::new(
-            model,
-            sav_path.as_deref(),
-            rom_path,
-            PainterCallbackImpl::new(Arc::clone(&pixel_data_rgba)),
-        )?;
+        let mut thread = GbThread::new(model, sav_path.as_deref(), rom_path)?;
 
         thread.resume()?;
 
@@ -196,10 +166,8 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
             )));
 
             if let Some(windows) = self.windows.as_mut() {
-                if let Ok(pixel_data_rgba) = self.pixel_data_rgba.lock() {
-                    windows.main.update_texture(&pixel_data_rgba);
-                }
-
+                let _ = self.thread.copy_pixel_data_rgba(&mut self.pixel_data_rgba);
+                windows.main.update_texture(&self.pixel_data_rgba);
                 windows.main.window().request_redraw();
             }
         }

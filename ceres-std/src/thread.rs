@@ -11,11 +11,6 @@ use std::{
 use thread_priority::ThreadBuilderExt;
 use {ceres_core::Gb, std::path::Path, std::sync::Arc};
 
-pub trait PainterCallback: Send {
-    fn paint(&self, pixel_data_rgba: &[u8]);
-    fn request_repaint(&self);
-}
-
 pub struct GbThread {
     _audio_state: audio::AudioState,
     audio_stream: audio::Stream,
@@ -179,18 +174,16 @@ impl GbThread {
     /// # Errors
     ///
     /// Returns an error if audio initialization, audio stream creation, or Game Boy creation fails.
-    pub fn new<P: PainterCallback + 'static>(
+    pub fn new(
         model: ceres_core::Model,
         sav_path: Option<&Path>,
         rom_path: Option<&Path>,
-        ctx: P,
     ) -> Result<Self, Error> {
-        fn gb_loop<P: PainterCallback>(
+        fn gb_loop(
             gb: &Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
             exiting: &Arc<AtomicBool>,
             pause_condvar: &Arc<(Mutex<bool>, Condvar)>,
             multiplier: &Arc<AtomicU32>,
-            ctx: &P,
         ) {
             let mut last_loop = std::time::Instant::now();
 
@@ -214,9 +207,9 @@ impl GbThread {
 
                 if let Ok(mut gb) = gb.lock() {
                     gb.run_frame();
-                    ctx.paint(gb.pixel_data_rgba());
+                    // ctx.paint(gb.pixel_data_rgba());
                 }
-                ctx.request_repaint();
+                // ctx.request_repaint();
 
                 let duration = ceres_core::FRAME_DURATION / multiplier.load(Relaxed);
                 let elapsed = last_loop.elapsed();
@@ -256,7 +249,7 @@ impl GbThread {
 
             // std::thread::spawn(move || gb_loop(gb, exit, pause_thread))
             thread_builder.spawn_with_priority(thread_priority::ThreadPriority::Max, move |_| {
-                gb_loop(&gb, &exit, &pause_condvar, &multiplier, &ctx);
+                gb_loop(&gb, &exit, &pause_condvar, &multiplier);
             })?
         };
 
@@ -287,6 +280,13 @@ impl GbThread {
         }
 
         Ok(())
+    }
+
+    pub fn copy_pixel_data_rgba(&self, buffer: &mut [u8]) -> Result<(), ()> {
+        self.gb.lock().map_or(Err(()), |gb| {
+            buffer.copy_from_slice(gb.pixel_data_rgba());
+            Ok(())
+        })
     }
 
     pub fn press_release<F>(&mut self, f: F) -> bool

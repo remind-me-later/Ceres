@@ -35,12 +35,7 @@ impl App {
             vec![0; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice(),
         ));
 
-        let mut thread = GbThread::new(
-            model,
-            sav_path.as_deref(),
-            rom_path,
-            PainterCallbackImpl::new(&cc.egui_ctx, Arc::clone(&pixel_data_rgba)),
-        )?;
+        let mut thread = GbThread::new(model, sav_path.as_deref(), rom_path)?;
 
         let mut screen = screen::GBScreen::new(cc, pixel_data_rgba, shader_option);
 
@@ -210,6 +205,10 @@ impl eframe::App for App {
             });
         });
 
+        if let Ok(mut buffer) = self.screen.mut_buffer().lock() {
+            let _ = self.thread.copy_pixel_data_rgba(&mut buffer);
+        }
+
         egui::CentralPanel::default()
             .frame(egui::Frame {
                 inner_margin: egui::Margin::default(),
@@ -249,32 +248,8 @@ impl eframe::App for App {
 
             true
         });
-    }
-}
 
-pub struct PainterCallbackImpl {
-    buffer: Arc<Mutex<Box<[u8]>>>,
-    ctx: egui::Context,
-}
-
-impl PainterCallbackImpl {
-    pub fn new(ctx: &egui::Context, buffer: Arc<Mutex<Box<[u8]>>>) -> Self {
-        Self {
-            ctx: ctx.clone(),
-            buffer,
-        }
-    }
-}
-
-impl ceres_std::PainterCallback for PainterCallbackImpl {
-    fn paint(&self, pixel_data_rgba: &[u8]) {
-        if let Ok(mut buffer) = self.buffer.lock() {
-            buffer.copy_from_slice(pixel_data_rgba);
-        }
-    }
-
-    fn request_repaint(&self) {
-        self.ctx.request_repaint();
+        ctx.request_repaint();
     }
 }
 

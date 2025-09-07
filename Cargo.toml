@@ -1,6 +1,13 @@
 [workspace]
 resolver = "3"
-members = ["ceres-core", "ceres-egui", "ceres-gtk", "ceres-std", "ceres-winit"]
+members = [
+  "ceres-core",
+  "ceres-egui",
+  "ceres-gtk",
+  # "ceres-jni",
+  "ceres-std",
+  "ceres-winit",
+]
 default-members = ["ceres-gtk"]
 
 [workspace.package]
