@@ -88,7 +88,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_loadRo
     sav_path: JString,
 ) -> jboolean {
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
-    
+
     let rom_path_str = match env.get_string(&rom_path) {
         Ok(path) => path,
         Err(e) => {
@@ -96,9 +96,9 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_loadRo
             return 0; // false
         }
     };
-    
+
     let rom_path_buf = PathBuf::from(rom_path_str.to_str().unwrap_or(""));
-    
+
     let sav_path_opt = if sav_path.is_null() {
         None
     } else {
@@ -117,7 +117,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_loadRo
             }
         }
     };
-    
+
     match emulator.load_rom(&rom_path_buf, sav_path_opt.as_deref()) {
         Ok(()) => {
             debug!("ROM loaded successfully: {:?}", rom_path_buf);
@@ -138,7 +138,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_pressB
     button_id: jint,
 ) {
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
-    
+
     let button = match button_id {
         0 => Button::Right,
         1 => Button::Left,
@@ -153,7 +153,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_pressB
             return;
         }
     };
-    
+
     emulator.press_button(button);
 }
 
@@ -165,7 +165,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_releas
     button_id: jint,
 ) {
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
-    
+
     let button = match button_id {
         0 => Button::Right,
         1 => Button::Left,
@@ -180,7 +180,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_releas
             return;
         }
     };
-    
+
     emulator.release_button(button);
 }
 
@@ -191,7 +191,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_pauseE
     emulator_ptr: jlong,
 ) -> jboolean {
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
-    
+
     match emulator.pause() {
         Ok(()) => 1, // true
         Err(e) => {
@@ -208,7 +208,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_resume
     emulator_ptr: jlong,
 ) -> jboolean {
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
-    
+
     match emulator.resume() {
         Ok(()) => 1, // true
         Err(e) => {

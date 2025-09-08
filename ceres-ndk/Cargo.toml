@@ -12,16 +12,14 @@ name = "ceres_jni"
 
 [dependencies]
 android_logger = "*"
+android-activity = { version = "*", features = ["native-activity"] }
 anyhow = "*"
 ceres-core = { path = "../ceres-core" }
 ceres-std = { features = ["game_genie", "wgpu_renderer"], path = "../ceres-std" }
 jni = "*"
 log = "*"
 ndk = { version = "*", features = ["rwh_06"] }
-ndk-glue = "*"
-once_cell = "*"
 raw-window-handle = "0.6"
-thiserror = "*"
 
 [dependencies.pollster]
 version = "*"
