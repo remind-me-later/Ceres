@@ -152,16 +152,6 @@ impl State<'_> {
         self.new_size = Some(new_size);
     }
 
-    #[cfg(target_os = "macos")]
-    pub const fn set_shader(&mut self, shader_option: ShaderOption) {
-        self.new_shader_option = Some(shader_option);
-    }
-
-    #[cfg(target_os = "macos")]
-    pub const fn set_scaling(&mut self, scaling_option: PixelPerfectOption) {
-        self.scaling_option = scaling_option;
-    }
-
     pub fn update_texture(&mut self, rgba: &[u8]) {
         self.gb_screen
             .update_screen_texture(&self.device, &self.queue, rgba);

@@ -33,19 +33,6 @@ version = "*"
 default-features = false
 features = ["rwh_06", "wayland", "wayland-csd-adwaita"]
 
-[target.'cfg(target_os = "macos")'.dependencies.objc2-app-kit]
-version = "*"
-
-[target.'cfg(target_os = "macos")'.dependencies.objc2-foundation]
-version = "*"
-default-features = true
-features = ["alloc"]
-
-[target.'cfg(target_os = "macos")'.dependencies.objc2]
-version = "*"
-default-features = true
-features = ["std"]
-
 [lints.clippy]
 # std_instead_of_alloc = "warn"
 alloc_instead_of_core = "warn"

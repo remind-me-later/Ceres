@@ -18,9 +18,6 @@ use {
     winit::window,
 };
 
-#[cfg(target_os = "macos")]
-use std::path::PathBuf;
-
 struct Windows<'a> {
     main: video::State<'a>,
 }
@@ -30,8 +27,6 @@ pub struct App<'a> {
     pixel_data_rgba: Box<[u8]>,
     pixel_perfect: bool,
     project_dirs: directories::ProjectDirs,
-    #[cfg(target_os = "macos")]
-    rom_path: Option<PathBuf>,
     sav_path: Option<std::path::PathBuf>,
     shader_option: ShaderOption,
     thread: GbThread,
@@ -130,8 +125,6 @@ impl App<'_> {
             sav_path,
             pixel_data_rgba,
             pixel_perfect,
-            #[cfg(target_os = "macos")]
-            rom_path: rom_path.map(std::path::Path::to_path_buf),
         })
     }
 
@@ -191,19 +184,6 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
             .create_window(main_window_attributes)
             .expect("Could not create window");
 
-        #[cfg(target_os = "macos")]
-        {
-            use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-
-            if let Ok(RawWindowHandle::AppKit(handle)) =
-                main_window.window_handle().map(|h| h.as_raw())
-            {
-                let ns_view = handle.ns_view.as_ptr().cast::<objc2::runtime::AnyObject>();
-
-                crate::macos::setup_ns_view(ns_view);
-            }
-        }
-
         let main_window_state = pollster::block_on(State::new(
             main_window,
             self.shader_option,
@@ -227,91 +207,6 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
 
         self.windows = None;
         event_loop.set_control_flow(ControlFlow::Wait);
-    }
-
-    #[cfg(target_os = "macos")]
-    fn user_event(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop, event: CeresEvent) {
-        match event {
-            CeresEvent::ChangeShader(shader_option) => {
-                self.shader_option = shader_option;
-                // Update shader on the window if needed
-                if let Some(windows) = &mut self.windows {
-                    windows.main.set_shader(shader_option);
-                    windows.main.window().request_redraw();
-                }
-            }
-            CeresEvent::ChangeScaling(scaling_option) => {
-                self.scaling_option = scaling_option;
-                // Update scaling on the window if needed
-                if let Some(windows) = &mut self.windows {
-                    windows.main.set_scaling(scaling_option);
-                    // Force a resize to apply the new scaling option
-                    if let Some(size) = windows.main.window().inner_size().into() {
-                        windows.main.resize(size);
-                    }
-                    windows.main.window().request_redraw();
-                }
-            }
-            CeresEvent::ChangeSpeed(speed_multiplier) => {
-                // Set the emulation speed
-                self.thread.set_speed_multiplier(speed_multiplier);
-            }
-            CeresEvent::OpenRomFile => {
-                if let Some(path) = rfd::FileDialog::new()
-                    .add_filter("GameBoy", &["gbc", "gb"])
-                    .pick_file()
-                {
-                    // First save the current game data if needed
-                    self.save_data().unwrap_or_else(|e| {
-                        eprintln!("Error saving data: {e}");
-                    });
-
-                    self.sav_path = path
-                        .file_stem()
-                        .map(|stem| stem.to_string_lossy().to_string())
-                        .map(|file_stem| {
-                            self.project_dirs
-                                .data_dir()
-                                .join(&file_stem)
-                                .with_extension("sav")
-                        });
-
-                    self.thread
-                        .change_rom(self.sav_path.as_deref(), &path)
-                        .unwrap_or_else(|e| {
-                            eprintln!("Error loading ROM: {e}");
-                        });
-
-                    self.rom_path = Some(path);
-                }
-            }
-            CeresEvent::TogglePause => {
-                if let Err(e) = if self.thread.is_paused() {
-                    self.thread.resume()
-                } else {
-                    self.thread.pause()
-                } {
-                    eprintln!("Error toggling pause: {e}");
-                }
-            }
-            CeresEvent::ChangeModel(model) => {
-                // First save the current game data if needed
-                self.save_data().unwrap_or_else(|e| {
-                    eprintln!("Error saving data: {e}");
-                });
-
-                // Load the new ROM
-                self.thread
-                    .change_model(
-                        model.into(),
-                        self.sav_path.as_deref(),
-                        self.rom_path.as_deref(),
-                    )
-                    .unwrap_or_else(|e| {
-                        eprintln!("Error loading ROM: {e}");
-                    });
-            }
-        }
     }
 
     fn window_event(
