@@ -5,7 +5,6 @@ use crate::{
 use anyhow::Context;
 use ceres_std::wgpu_renderer;
 use ceres_std::{GbThread, ShaderOption};
-use ceres_std::{PX_HEIGHT, PX_WIDTH};
 use std::time::Instant;
 use winit::{
     dpi::PhysicalSize,
@@ -23,7 +22,7 @@ use {
 use std::path::PathBuf;
 
 struct Windows<'a> {
-    main: video::State<'a, { PX_WIDTH as u32 }, { PX_HEIGHT as u32 }>,
+    main: video::State<'a>,
 }
 
 pub struct App<'a> {

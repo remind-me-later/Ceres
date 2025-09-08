@@ -5,10 +5,11 @@ pub use wgpu;
 use texture::Texture;
 use wgpu::util::DeviceExt;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum ShaderOption {
     Crt = 4,
     Lcd = 3,
+    #[default]
     Nearest = 0,
     Scale2x = 1,
     Scale3x = 2,

@@ -1,23 +1,37 @@
-[workspace]
-resolver = "3"
-members = [
-  "ceres-core",
-  "ceres-egui",
-  "ceres-gtk",
-  "ceres-ndk",
-  "ceres-std",
-  "ceres-winit",
-]
-default-members = ["ceres-winit"]
+[package]
+name = "ceres-ndk"
+version.workspace = true
+edition.workspace = true
+description = "NDK bindings for Ceres"
+repository.workspace = true
+license.workspace = true
 
-[workspace.package]
-version = "0.1.0"
-edition = "2024"
-repository = "https://github.com/remind-me-later/Ceres"
-license = "MIT"
+[lib]
+crate-type = ["cdylib"]
 
-[workspace.lints.clippy]
-# std_instead_of_alloc = "warn"
+[dependencies]
+android_logger = "*"
+anyhow = "*"
+ceres-core = { path = "../ceres-core" }
+ceres-std = { features = ["game_genie", "wgpu_renderer"], path = "../ceres-std" }
+jni = "*"
+jni_fn = "*"
+log = "*"
+ndk = { version = "*", features = ["rwh_06"] }
+ndk-glue = "*"
+once_cell = "*"
+raw-window-handle = "0.6"
+thiserror = "*"
+
+[dependencies.pollster]
+version = "*"
+default-features = false
+
+[features]
+default = ["game_genie"]
+game_genie = ["ceres-core/game_genie", "ceres-std/game_genie"]
+
+[lints.clippy]
 alloc_instead_of_core = "warn"
 allow_attributes = "warn"
 arbitrary_source_item_ordering = "warn"
@@ -76,22 +90,9 @@ unwrap_used = "warn"
 use_debug = "warn"
 verbose_file_reads = "warn"
 
-[workspace.lints.rust]
-unsafe_code = "forbid"
-
-[profile.dev]
-opt-level = 1
-incremental = true
-rpath = false
-
 [profile.release]
 opt-level = 3
-debug = "none"
-strip = "symbols"
-debug-assertions = false
-overflow-checks = false
-lto = "fat"
-panic = "abort"
-incremental = false
-codegen-units = 1
-rpath = false
+lto = true
+# panic = "abort"
+# codegen-units = 1
+

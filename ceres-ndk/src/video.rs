@@ -1,37 +1,78 @@
 use ceres_std::wgpu_renderer::wgpu;
 use ceres_std::{ShaderOption, wgpu_renderer::PipelineWrapper};
-use std::sync::Arc;
+use jni::sys::{JNIEnv, jobject};
+use ndk::native_window::NativeWindow;
+use raw_window_handle::{
+    AndroidDisplayHandle, AndroidNdkWindowHandle, DisplayHandle, HandleError, HasDisplayHandle,
+    HasWindowHandle, RawDisplayHandle, RawWindowHandle, WindowHandle,
+};
+use std::ffi::c_void;
+use std::sync::{Arc, Mutex};
 
-pub struct State<'a> {
+#[derive(Clone)]
+struct NativeWindowWrapper {
+    window: Arc<Mutex<NativeWindow>>,
+}
+
+impl HasWindowHandle for NativeWindowWrapper {
+    fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
+        unsafe {
+            let a_native_window = self.window.lock().unwrap();
+            let handle = AndroidNdkWindowHandle::new(
+                core::ptr::NonNull::new(a_native_window.ptr().as_ptr() as *mut c_void).unwrap(),
+            );
+            Ok(WindowHandle::borrow_raw(RawWindowHandle::AndroidNdk(
+                handle,
+            )))
+        }
+    }
+}
+
+impl HasDisplayHandle for NativeWindowWrapper {
+    fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
+        unsafe {
+            Ok(DisplayHandle::borrow_raw(RawDisplayHandle::Android(
+                AndroidDisplayHandle::new(),
+            )))
+        }
+    }
+}
+
+pub struct State {
     config: wgpu::SurfaceConfiguration,
     device: wgpu::Device,
     gb_screen: PipelineWrapper<{ ceres_std::PX_WIDTH as u32 }, { ceres_std::PX_HEIGHT as u32 }>,
     new_shader_option: Option<ShaderOption>,
-    new_size: Option<winit::dpi::PhysicalSize<u32>>,
+    new_size: Option<(u32, u32)>,
     pixel_perfect: bool,
     queue: wgpu::Queue,
-    size: winit::dpi::PhysicalSize<u32>,
-    surface: wgpu::Surface<'a>,
-    window: Arc<winit::window::Window>,
+    size: (u32, u32),
+    surface: wgpu::Surface<'static>,
+    native_window_wrapper: NativeWindowWrapper,
 }
 
-impl State<'_> {
+impl State {
     pub async fn new(
-        window: winit::window::Window,
+        env: *mut JNIEnv,
+        surface: jobject,
         shader_option: ShaderOption,
         pixel_perfect: bool,
     ) -> anyhow::Result<Self> {
         use anyhow::Context;
 
-        let size = window.inner_size();
+        let native_window = unsafe { NativeWindow::from_surface(env, surface).unwrap() };
+
+        let size = (native_window.width() as u32, native_window.height() as u32);
+        let native_window_wrapper = NativeWindowWrapper {
+            window: Arc::new(Mutex::new(native_window)),
+        };
         let instance = wgpu::Instance::default();
-        let window = Arc::new(window);
 
         // # Safety
         //
         // The surface needs to live as long as the window that created it.
         // State owns the window so this should be safe.
-        let surface = instance.create_surface(Arc::clone(&window))?;
+        let surface = instance.create_surface(native_window_wrapper.clone())?;
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -57,8 +98,8 @@ impl State<'_> {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: wgpu::TextureFormat::Bgra8Unorm,
-            width: size.width,
-            height: size.height,
+            width: size.0,
+            height: size.1,
             present_mode: wgpu::PresentMode::AutoVsync,
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
             view_formats: vec![],
@@ -73,7 +114,7 @@ impl State<'_> {
             surface,
             device,
             queue,
-            window,
+            native_window_wrapper,
             config,
             size,
             gb_screen: gb_screen_renderer,
@@ -93,15 +134,11 @@ impl State<'_> {
         }
 
         if let Some(new_size) = self.new_size.take() {
-            self.gb_screen.resize(
-                self.pixel_perfect,
-                &self.queue,
-                new_size.width,
-                new_size.height,
-            );
+            self.gb_screen
+                .resize(self.pixel_perfect, &self.queue, new_size.0, new_size.1);
             self.size = new_size;
-            self.config.width = new_size.width;
-            self.config.height = new_size.height;
+            self.config.width = new_size.0;
+            self.config.height = new_size.1;
             self.surface.configure(&self.device, &self.config);
         }
 
@@ -142,26 +179,12 @@ impl State<'_> {
         Ok(())
     }
 
-    pub const fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+    pub const fn resize(&mut self, new_size: (u32, u32)) {
         self.new_size = Some(new_size);
-    }
-
-    #[cfg(target_os = "macos")]
-    pub const fn set_shader(&mut self, shader_option: ShaderOption) {
-        self.new_shader_option = Some(shader_option);
-    }
-
-    #[cfg(target_os = "macos")]
-    pub const fn set_scaling(&mut self, scaling_option: PixelPerfectOption) {
-        self.scaling_option = scaling_option;
     }
 
     pub fn update_texture(&mut self, rgba: &[u8]) {
         self.gb_screen
             .update_screen_texture(&self.device, &self.queue, rgba);
-    }
-
-    pub const fn window(&self) -> &Arc<winit::window::Window> {
-        &self.window
     }
 }
