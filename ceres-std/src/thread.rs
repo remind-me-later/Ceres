@@ -284,6 +284,7 @@ impl GbThread {
 
     pub fn copy_pixel_data_rgba(&self, buffer: &mut [u8]) -> Result<(), ()> {
         self.gb.lock().map_or(Err(()), |gb| {
+            debug_assert_eq!(buffer.len(), gb.pixel_data_rgba().len());
             buffer.copy_from_slice(gb.pixel_data_rgba());
             Ok(())
         })

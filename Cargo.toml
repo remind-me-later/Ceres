@@ -8,7 +8,7 @@ members = [
   "ceres-std",
   "ceres-winit",
 ]
-default-members = ["ceres-winit"]
+default-members = ["ceres-gtk"]
 
 [workspace.package]
 version = "0.1.0"
@@ -81,6 +81,9 @@ unsafe_code = "forbid"
 
 [profile.dev]
 opt-level = 1
+debug = "full"
+strip = "none"
+debug-assertions = true
 incremental = true
 rpath = false
 

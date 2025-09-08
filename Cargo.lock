@@ -710,7 +710,6 @@ dependencies = [
  "ceres-core",
  "ceres-std",
  "jni",
- "jni_fn",
  "log",
  "ndk 0.9.0",
  "ndk-glue",
@@ -2170,17 +2169,6 @@ name = "jni-sys"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8eaf4bc02d17cbdd7ff4c7438cafcdf7fb9a4613313ad11b4f8fefe7d3fa0130"
-
-[[package]]
-name = "jni_fn"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9027f7e19a424f3d3b923ceac9a9ed5bbdd531d014c58ab37ee507793e8942f9"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.106",
-]
 
 [[package]]
 name = "jobserver"

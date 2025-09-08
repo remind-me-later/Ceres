@@ -54,4 +54,4 @@ assets/
 **/*.jar
 **/*.webp
 
-ceres-android/
+**/*.so

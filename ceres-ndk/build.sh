@@ -13,8 +13,10 @@ if ! command -v cargo-ndk &> /dev/null; then
     exit 1
 fi
 
-# Android API level
-API_LEVEL=26
+BUILD_TYPE="debug" # Change to "debug" for debug builds
+
+# Android API level (match with app's minSdk)
+API_LEVEL=29
 
 # Android project path (relative to ceres-jni directory)
 ANDROID_PROJECT_PATH="../ceres-android/app/src/main/jniLibs"
@@ -31,14 +33,14 @@ for android_arch in "${!TARGETS[@]}"; do
     echo "Building for $android_arch ($rust_target)..."
     
     # Build the library
-    cargo ndk --target $android_arch --platform $API_LEVEL build --release
+    cargo ndk --target $android_arch --platform $API_LEVEL build
     
     # Create the target directory in Android project if it doesn't exist
     mkdir -p "$ANDROID_PROJECT_PATH/$android_arch"
     
     # Copy the .so file to the Android project
-    if [ -f "../target/$rust_target/release/libceres_jni.so" ]; then
-        cp "../target/$rust_target/release/libceres_jni.so" "$ANDROID_PROJECT_PATH/$android_arch/"
+    if [ -f "../target/$rust_target/$BUILD_TYPE/libceres_jni.so" ]; then
+        cp "../target/$rust_target/$BUILD_TYPE/libceres_jni.so" "$ANDROID_PROJECT_PATH/$android_arch/"
         echo "✓ Copied libceres_jni.so to $ANDROID_PROJECT_PATH/$android_arch/"
     else
         echo "✗ Failed to find libceres_jni.so for $android_arch"

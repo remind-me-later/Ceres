@@ -52,11 +52,17 @@ impl State<'_> {
             })
             .await?;
 
-        // let surface_caps = surface.get_capabilities(&adapter);
+        let surface_caps = surface.get_capabilities(&adapter);
+
+        let surface_format = surface_caps
+            .formats
+            .get(0)
+            .copied()
+            .expect("No supported surface formats found");
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: wgpu::TextureFormat::Bgra8Unorm,
+            format: surface_format,
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::AutoVsync,

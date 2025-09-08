@@ -4,39 +4,10 @@ use jni::sys::{JNIEnv, jobject};
 use ndk::native_window::NativeWindow;
 use raw_window_handle::{
     AndroidDisplayHandle, AndroidNdkWindowHandle, DisplayHandle, HandleError, HasDisplayHandle,
-    HasWindowHandle, RawDisplayHandle, RawWindowHandle, WindowHandle,
+    HasRawWindowHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle, WindowHandle,
 };
 use std::ffi::c_void;
 use std::sync::{Arc, Mutex};
-
-#[derive(Clone)]
-struct NativeWindowWrapper {
-    window: Arc<Mutex<NativeWindow>>,
-}
-
-impl HasWindowHandle for NativeWindowWrapper {
-    fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
-        unsafe {
-            let a_native_window = self.window.lock().unwrap();
-            let handle = AndroidNdkWindowHandle::new(
-                core::ptr::NonNull::new(a_native_window.ptr().as_ptr() as *mut c_void).unwrap(),
-            );
-            Ok(WindowHandle::borrow_raw(RawWindowHandle::AndroidNdk(
-                handle,
-            )))
-        }
-    }
-}
-
-impl HasDisplayHandle for NativeWindowWrapper {
-    fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
-        unsafe {
-            Ok(DisplayHandle::borrow_raw(RawDisplayHandle::Android(
-                AndroidDisplayHandle::new(),
-            )))
-        }
-    }
-}
 
 pub struct State {
     config: wgpu::SurfaceConfiguration,
@@ -48,7 +19,7 @@ pub struct State {
     queue: wgpu::Queue,
     size: (u32, u32),
     surface: wgpu::Surface<'static>,
-    native_window_wrapper: NativeWindowWrapper,
+    _native_window: NativeWindow,
 }
 
 impl State {
@@ -60,19 +31,47 @@ impl State {
     ) -> anyhow::Result<Self> {
         use anyhow::Context;
 
-        let native_window = unsafe { NativeWindow::from_surface(env, surface).unwrap() };
+        // Validate inputs
+        if env.is_null() {
+            return Err(anyhow::anyhow!("JNI environment pointer is null"));
+        }
+        if surface.is_null() {
+            return Err(anyhow::anyhow!("Surface object is null"));
+        }
+
+        let native_window = unsafe {
+            NativeWindow::from_surface(env, surface)
+                .context("Failed to create NativeWindow from surface")?
+        };
 
         let size = (native_window.width() as u32, native_window.height() as u32);
-        let native_window_wrapper = NativeWindowWrapper {
-            window: Arc::new(Mutex::new(native_window)),
-        };
+
+        // Validate window size
+        if size.0 == 0 || size.1 == 0 {
+            return Err(anyhow::anyhow!(
+                "Invalid window size: {}x{}",
+                size.0,
+                size.1
+            ));
+        }
+
         let instance = wgpu::Instance::default();
 
         // # Safety
         //
         // The surface needs to live as long as the window that created it.
         // State owns the window so this should be safe.
-        let surface = instance.create_surface(native_window_wrapper.clone())?;
+        let surface = unsafe {
+            let window_handle = native_window
+                .window_handle()
+                .context("Failed to get window handle")?;
+            instance
+                .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+                    raw_display_handle: RawDisplayHandle::Android(AndroidDisplayHandle::new()),
+                    raw_window_handle: window_handle.as_raw(),
+                })
+                .context("Failed to create wgpu surface")?
+        };
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -93,15 +92,26 @@ impl State {
             })
             .await?;
 
-        // let surface_caps = surface.get_capabilities(&adapter);
+        let surface_caps = surface.get_capabilities(&adapter);
+
+        let surface_format = surface_caps
+            .formats
+            .get(0)
+            .copied()
+            .expect("No supported surface formats found");
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: wgpu::TextureFormat::Bgra8Unorm,
+            format: surface_format,
             width: size.0,
             height: size.1,
-            present_mode: wgpu::PresentMode::AutoVsync,
-            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+            present_mode: surface_caps
+                .present_modes
+                .iter()
+                .copied()
+                .find(|m| *m == wgpu::PresentMode::AutoVsync)
+                .unwrap_or(surface_caps.present_modes[0]),
+            alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 1,
         };
@@ -114,7 +124,7 @@ impl State {
             surface,
             device,
             queue,
-            native_window_wrapper,
+            _native_window: native_window,
             config,
             size,
             gb_screen: gb_screen_renderer,
@@ -125,7 +135,7 @@ impl State {
     }
 
     pub const fn on_lost(&mut self) {
-        self.resize(self.size);
+        self.resize(self.size.0, self.size.1);
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -179,8 +189,8 @@ impl State {
         Ok(())
     }
 
-    pub const fn resize(&mut self, new_size: (u32, u32)) {
-        self.new_size = Some(new_size);
+    pub const fn resize(&mut self, width: u32, height: u32) {
+        self.new_size = Some((width, height));
     }
 
     pub fn update_texture(&mut self, rgba: &[u8]) {

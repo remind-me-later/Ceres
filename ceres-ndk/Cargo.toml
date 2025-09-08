@@ -8,6 +8,7 @@ license.workspace = true
 
 [lib]
 crate-type = ["cdylib"]
+name = "ceres_jni"
 
 [dependencies]
 android_logger = "*"
@@ -15,7 +16,6 @@ anyhow = "*"
 ceres-core = { path = "../ceres-core" }
 ceres-std = { features = ["game_genie", "wgpu_renderer"], path = "../ceres-std" }
 jni = "*"
-jni_fn = "*"
 log = "*"
 ndk = { version = "*", features = ["rwh_06"] }
 ndk-glue = "*"
@@ -89,10 +89,3 @@ unseparated_literal_suffix = "warn"
 unwrap_used = "warn"
 use_debug = "warn"
 verbose_file_reads = "warn"
-
-[profile.release]
-opt-level = 3
-lto = true
-# panic = "abort"
-# codegen-units = 1
-
