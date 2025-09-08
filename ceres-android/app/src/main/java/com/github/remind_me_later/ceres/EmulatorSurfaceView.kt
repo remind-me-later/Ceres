@@ -10,7 +10,9 @@ import android.view.SurfaceView
 import com.github.remind_me_later.ceres.RustBridge
 
 class EmulatorSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
-    private var emulatorPtr: Long = 0
+    var emulatorPtr: Long = 0
+        private set
+
     private var isRenderingActive = false
 
     constructor(context: Context) : super(context) {
@@ -108,6 +110,19 @@ class EmulatorSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         isRenderingActive = false
+        cleanup()
         Log.d("EmulatorSurfaceView", "Detached from window")
+    }
+
+    fun cleanup() {
+        if (emulatorPtr != 0L) {
+            try {
+                RustBridge.destroyEmulator(emulatorPtr)
+                emulatorPtr = 0L
+                Log.d("EmulatorSurfaceView", "Emulator destroyed")
+            } catch (e: Exception) {
+                Log.e("EmulatorSurfaceView", "Failed to destroy emulator", e)
+            }
+        }
     }
 }

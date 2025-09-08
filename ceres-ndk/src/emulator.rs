@@ -1,7 +1,8 @@
 use crate::video::State;
-use ceres_std::{GbThread, Model, ShaderOption};
+use ceres_std::{GbThread, Model, ShaderOption, Button};
 use jni::sys::{JNIEnv, jobject};
 use log::debug;
+use std::path::Path;
 
 pub struct Emulator {
     pixel_data_rgba: Box<[u8]>,
@@ -61,5 +62,59 @@ impl Emulator {
         if let Some(state) = &mut self.state {
             state.on_lost();
         }
+    }
+
+    pub fn load_rom(&mut self, rom_path: &Path, sav_path: Option<&Path>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        debug!("Loading ROM: {:?}", rom_path);
+        self.thread.change_rom(sav_path, rom_path)?;
+        debug!("ROM loaded successfully");
+        Ok(())
+    }
+
+    pub fn press_button(&mut self, button: Button) {
+        self.thread.press_release(|p| {
+            p.press(button);
+            true
+        });
+        debug!("Button pressed");
+    }
+
+    pub fn release_button(&mut self, button: Button) {
+        self.thread.press_release(|p| {
+            p.release(button);
+            true
+        });
+        debug!("Button released");
+    }
+
+    pub fn pause(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.thread.pause()?;
+        debug!("Emulator paused");
+        Ok(())
+    }
+
+    pub fn resume(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.thread.resume()?;
+        debug!("Emulator resumed");
+        Ok(())
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.thread.is_paused()
+    }
+
+    pub fn set_speed_multiplier(&mut self, multiplier: u32) {
+        self.thread.set_speed_multiplier(multiplier);
+        debug!("Speed multiplier set to: {}x", multiplier);
+    }
+
+    pub fn set_volume(&mut self, volume: f32) {
+        self.thread.set_volume(volume);
+        debug!("Volume set to: {}", volume);
+    }
+
+    pub fn toggle_mute(&mut self) {
+        self.thread.toggle_mute();
+        debug!("Mute toggled");
     }
 }
