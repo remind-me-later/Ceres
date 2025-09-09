@@ -56,9 +56,9 @@ impl State<'_> {
 
         let surface_format = surface_caps
             .formats
-            .get(0)
+            .first()
             .copied()
-            .expect("No supported surface formats found");
+            .context("no supported surface formats")?;
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,

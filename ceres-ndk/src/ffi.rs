@@ -10,18 +10,18 @@ use std::path::PathBuf;
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_createEmulator(
-    env: JNIEnv,
+    _env: JNIEnv,
     _class: JClass,
 ) -> jlong {
     let emulator = Box::new(Emulator::new());
     let ptr = Box::into_raw(emulator);
-    debug!("Emulator created at {:p}", ptr);
+    debug!("Emulator created at {ptr:p}");
     ptr as jlong
 }
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_renderFrame(
-    env: JNIEnv,
+    _env: JNIEnv,
     _class: JClass,
     emulator_ptr: jlong,
 ) {
@@ -32,7 +32,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_render
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_dropWgpuState(
-    env: JNIEnv,
+    _env: JNIEnv,
     _class: JClass,
     emulator_ptr: jlong,
 ) {
@@ -51,26 +51,27 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_recrea
     debug!("Entering recreate_wgpu_state");
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
     debug!("Recreating wgpu state");
-    emulator.recreate_state(env.get_raw(), surface.as_raw());
+    emulator.recreate_state(env, surface);
     debug!("Recreated wgpu state");
 }
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_resizeWgpuState(
-    env: JNIEnv,
+    _env: JNIEnv,
     _class: JClass,
     emulator_ptr: jlong,
     width: jint,
     height: jint,
 ) {
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
+    #[expect(clippy::cast_sign_loss)]
     emulator.resize(width as u32, height as u32);
-    debug!("Resized wgpu state to {}x{}", width, height);
+    debug!("Resized wgpu state to {width}x{height}");
 }
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_onWgpuLost(
-    env: JNIEnv,
+    _env: JNIEnv,
     _class: JClass,
     emulator_ptr: jlong,
 ) {
@@ -92,7 +93,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_loadRo
     let rom_path_str = match env.get_string(&rom_path) {
         Ok(path) => path,
         Err(e) => {
-            log::error!("Failed to get ROM path string: {}", e);
+            log::error!("Failed to get ROM path string: {e}");
             return 0; // false
         }
     };
@@ -112,7 +113,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_loadRo
                 }
             }
             Err(e) => {
-                log::error!("Failed to get save path string: {}", e);
+                log::error!("Failed to get save path string: {e}");
                 return 0; // false
             }
         }
@@ -120,11 +121,11 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_loadRo
 
     match emulator.load_rom(&rom_path_buf, sav_path_opt.as_deref()) {
         Ok(()) => {
-            debug!("ROM loaded successfully: {:?}", rom_path_buf);
+            debug!("ROM loaded successfully: {}", rom_path_buf.display());
             1 // true
         }
         Err(e) => {
-            log::error!("Failed to load ROM: {}", e);
+            log::error!("Failed to load ROM: {e}");
             0 // false
         }
     }
@@ -149,7 +150,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_pressB
         6 => Button::Select,
         7 => Button::Start,
         _ => {
-            log::error!("Invalid button ID: {}", button_id);
+            log::error!("Invalid button ID: {button_id}");
             return;
         }
     };
@@ -176,7 +177,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_releas
         6 => Button::Select,
         7 => Button::Start,
         _ => {
-            log::error!("Invalid button ID: {}", button_id);
+            log::error!("Invalid button ID: {button_id}");
             return;
         }
     };
@@ -195,7 +196,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_pauseE
     match emulator.pause() {
         Ok(()) => 1, // true
         Err(e) => {
-            log::error!("Failed to pause emulator: {}", e);
+            log::error!("Failed to pause emulator: {e}");
             0 // false
         }
     }
@@ -212,7 +213,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_resume
     match emulator.resume() {
         Ok(()) => 1, // true
         Err(e) => {
-            log::error!("Failed to resume emulator: {}", e);
+            log::error!("Failed to resume emulator: {e}");
             0 // false
         }
     }
@@ -225,7 +226,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_isPaus
     emulator_ptr: jlong,
 ) -> jboolean {
     let emulator = unsafe { &*(emulator_ptr as *const Emulator) };
-    if emulator.is_paused() { 1 } else { 0 }
+    u8::from(emulator.is_paused())
 }
 
 #[unsafe(no_mangle)]
@@ -236,6 +237,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_setSpe
     multiplier: jint,
 ) {
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
+    #[expect(clippy::cast_sign_loss)]
     emulator.set_speed_multiplier(multiplier as u32);
 }
 

@@ -74,6 +74,19 @@ impl GbThread {
         Ok(())
     }
 
+    /// Copies the pixel data in RGBA format to the provided buffer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the Game Boy thread is not running.
+    pub fn copy_pixel_data_rgba(&self, buffer: &mut [u8]) -> Result<(), Error> {
+        self.gb.lock().map_or(Err(Error::NoThreadRunning), |gb| {
+            debug_assert_eq!(buffer.len(), gb.pixel_data_rgba().len());
+            buffer.copy_from_slice(gb.pixel_data_rgba());
+            Ok(())
+        })
+    }
+
     fn create_new_gb(
         audio_stream: &audio::Stream,
         ring_buffer: audio::AudioCallbackImpl,
@@ -280,14 +293,6 @@ impl GbThread {
         }
 
         Ok(())
-    }
-
-    pub fn copy_pixel_data_rgba(&self, buffer: &mut [u8]) -> Result<(), ()> {
-        self.gb.lock().map_or(Err(()), |gb| {
-            debug_assert_eq!(buffer.len(), gb.pixel_data_rgba().len());
-            buffer.copy_from_slice(gb.pixel_data_rgba());
-            Ok(())
-        })
     }
 
     pub fn press_release<F>(&mut self, f: F) -> bool

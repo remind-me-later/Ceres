@@ -1,15 +1,12 @@
 use ceres_std::wgpu_renderer::wgpu;
 use ceres_std::{ShaderOption, wgpu_renderer::PipelineWrapper};
-use jni::sys::{JNIEnv, jobject};
+use jni::JNIEnv;
+use jni::objects::JObject;
 use ndk::native_window::NativeWindow;
-use raw_window_handle::{
-    AndroidDisplayHandle, AndroidNdkWindowHandle, DisplayHandle, HandleError, HasDisplayHandle,
-    HasRawWindowHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle, WindowHandle,
-};
-use std::ffi::c_void;
-use std::sync::{Arc, Mutex};
+use raw_window_handle::{AndroidDisplayHandle, HasWindowHandle, RawDisplayHandle};
 
 pub struct State {
+    _native_window: NativeWindow,
     config: wgpu::SurfaceConfiguration,
     device: wgpu::Device,
     gb_screen: PipelineWrapper<{ ceres_std::PX_WIDTH as u32 }, { ceres_std::PX_HEIGHT as u32 }>,
@@ -19,31 +16,28 @@ pub struct State {
     queue: wgpu::Queue,
     size: (u32, u32),
     surface: wgpu::Surface<'static>,
-    _native_window: NativeWindow,
 }
 
 impl State {
     pub async fn new(
-        env: *mut JNIEnv,
-        surface: jobject,
+        env: JNIEnv<'_>,
+        surface: JObject<'_>,
         shader_option: ShaderOption,
         pixel_perfect: bool,
     ) -> anyhow::Result<Self> {
         use anyhow::Context;
 
         // Validate inputs
-        if env.is_null() {
-            return Err(anyhow::anyhow!("JNI environment pointer is null"));
-        }
         if surface.is_null() {
             return Err(anyhow::anyhow!("Surface object is null"));
         }
 
         let native_window = unsafe {
-            NativeWindow::from_surface(env, surface)
+            NativeWindow::from_surface(env.get_raw(), surface.as_raw())
                 .context("Failed to create NativeWindow from surface")?
         };
 
+        #[expect(clippy::cast_sign_loss)]
         let size = (native_window.width() as u32, native_window.height() as u32);
 
         // Validate window size
@@ -61,7 +55,7 @@ impl State {
         //
         // The surface needs to live as long as the window that created it.
         // State owns the window so this should be safe.
-        let surface = unsafe {
+        let wgpu_surface = unsafe {
             let window_handle = native_window
                 .window_handle()
                 .context("Failed to get window handle")?;
@@ -76,7 +70,7 @@ impl State {
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::LowPower,
-                compatible_surface: Some(&surface),
+                compatible_surface: Some(&wgpu_surface),
                 force_fallback_adapter: false,
             })
             .await
@@ -92,13 +86,13 @@ impl State {
             })
             .await?;
 
-        let surface_caps = surface.get_capabilities(&adapter);
+        let surface_caps = wgpu_surface.get_capabilities(&adapter);
 
         let surface_format = surface_caps
             .formats
-            .get(0)
+            .first()
             .copied()
-            .expect("No supported surface formats found");
+            .context("No supported surface formats found")?;
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -116,12 +110,12 @@ impl State {
             desired_maximum_frame_latency: 1,
         };
 
-        surface.configure(&device, &config);
+        wgpu_surface.configure(&device, &config);
 
         let gb_screen_renderer = PipelineWrapper::new(&device, config.format, shader_option.into());
 
         Ok(Self {
-            surface,
+            surface: wgpu_surface,
             device,
             queue,
             _native_window: native_window,

@@ -111,7 +111,7 @@ impl App<'_> {
             None
         };
 
-        let pixel_data_rgba = vec![0u8; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice();
+        let pixel_data_rgba = vec![0; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice();
 
         let mut thread = GbThread::new(model, sav_path.as_deref(), rom_path)?;
 
@@ -157,8 +157,13 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
                 1.0 / 60.0,
             )));
 
-            if let Some(windows) = self.windows.as_mut() {
-                let _ = self.thread.copy_pixel_data_rgba(&mut self.pixel_data_rgba);
+            // FIXME: handle bad copy
+            if let Some(windows) = self.windows.as_mut()
+                && matches!(
+                    self.thread.copy_pixel_data_rgba(&mut self.pixel_data_rgba),
+                    Ok(())
+                )
+            {
                 windows.main.update_texture(&self.pixel_data_rgba);
                 windows.main.window().request_redraw();
             }
