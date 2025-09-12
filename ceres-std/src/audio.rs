@@ -119,6 +119,7 @@ impl Buffers {
                 .zip(input_buf_right[0].iter_mut())
                 .take(needed)
             {
+                // FIXME: this unwrap inside a loop doesn't look very performant
                 *l =
                     f32::from(self.left.try_pop().unwrap_or_default()) / f32::from(i16::MAX) * *vol;
                 *r = f32::from(self.right.try_pop().unwrap_or_default()) / f32::from(i16::MAX)

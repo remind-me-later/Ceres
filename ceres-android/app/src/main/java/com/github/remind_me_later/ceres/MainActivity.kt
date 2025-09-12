@@ -1,37 +1,40 @@
 package com.github.remind_me_later.ceres
 
-import android.app.Activity
-import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
-import java.io.File
-import java.io.FileOutputStream
-import java.io.InputStream
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.*
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.*
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -40,14 +43,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
+            MaterialTheme(colorScheme = darkColorScheme()) {
                 Surface(
-                    modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background
-                ) {
-                    EmulatorScreen { surfaceView ->
-                        emulatorSurfaceView = surfaceView
-                    }
-                }
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                ) { EmulatorScreen { surfaceView -> emulatorSurfaceView = surfaceView } }
             }
         }
     }
@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
                 val tempFile = copyUriToTempFile(uri)
                 if (tempFile != null) {
                     val success =
-                        RustBridge.loadRom(surfaceView.emulatorPtr, tempFile.absolutePath, null)
+                            RustBridge.loadRom(surfaceView.emulatorPtr, tempFile.absolutePath, null)
                     if (success) {
                         Log.d("MainActivity", "ROM loaded successfully: ${tempFile.absolutePath}")
                     } else {
@@ -135,7 +135,7 @@ class MainActivity : ComponentActivity() {
             cursor?.use {
                 if (it.moveToFirst()) {
                     val displayNameIndex =
-                        it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                            it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
                     if (displayNameIndex >= 0) {
                         return it.getString(displayNameIndex)
                     }
@@ -186,211 +186,366 @@ fun EmulatorScreen(onSurfaceViewCreated: (EmulatorSurfaceView) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
 
     // File picker launcher
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
-        uri?.let { selectedUri ->
-            // Get the activity context to call loadRomFromUri
-            if (context is MainActivity) {
-                context.loadRomFromUri(selectedUri)
-                currentRomName = context.getFileNameFromUri(selectedUri)
+    val filePickerLauncher =
+            rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri
+                ->
+                uri?.let { selectedUri ->
+                    // Get the activity context to call loadRomFromUri
+                    if (context is MainActivity) {
+                        context.loadRomFromUri(selectedUri)
+                        currentRomName = context.getFileNameFromUri(selectedUri)
+                    }
+                }
             }
-        }
-    }
 
-    Column(
-        modifier = Modifier.fillMaxSize()
-    ) {
+    Column(modifier = Modifier.fillMaxSize()) {
         // Top App Bar with Menu
-        TopAppBar(title = {
-            Text(
-                text = currentRomName ?: "Ceres Game Boy Emulator",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }, actions = {
-            // Pause/Resume button
-            emulatorSurfaceView?.let { surfaceView ->
-                IconButton(
-                    onClick = {
-                        scope.launch {
-                            val success = if (isPaused) {
-                                RustBridge.resumeEmulator(surfaceView.emulatorPtr)
-                            } else {
-                                RustBridge.pauseEmulator(surfaceView.emulatorPtr)
-                            }
-                            if (success) {
-                                isPaused = !isPaused
-                            }
-                        }
-                    }) {
-                    Icon(
-                        imageVector = if (isPaused) Icons.Default.PlayArrow else Icons.Default.Done,
-                        contentDescription = if (isPaused) "Resume" else "Pause"
+        TopAppBar(
+                title = {
+                    Text(
+                            text = currentRomName ?: "Ceres Game Boy Emulator",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
                     )
+                },
+                actions = {
+                    // Pause/Resume button
+                    emulatorSurfaceView?.let { surfaceView ->
+                        IconButton(
+                                onClick = {
+                                    scope.launch {
+                                        val success =
+                                                if (isPaused) {
+                                                    RustBridge.resumeEmulator(
+                                                            surfaceView.emulatorPtr
+                                                    )
+                                                } else {
+                                                    RustBridge.pauseEmulator(
+                                                            surfaceView.emulatorPtr
+                                                    )
+                                                }
+                                        if (success) {
+                                            isPaused = !isPaused
+                                        }
+                                    }
+                                }
+                        ) {
+                            Icon(
+                                    imageVector =
+                                            if (isPaused) Icons.Default.PlayArrow
+                                            else Icons.Default.Done,
+                                    contentDescription = if (isPaused) "Resume" else "Pause"
+                            )
+                        }
+                    }
+
+                    // Menu button
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu")
+                    }
+
+                    // Dropdown menu
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                                text = { Text("Open ROM") },
+                                onClick = {
+                                    showMenu = false
+                                    // Launch file picker for any file type (Android doesn't support
+                                    // .gb/.gbc MIME types well)
+                                    filePickerLauncher.launch("*/*")
+                                }
+                        )
+
+                        emulatorSurfaceView?.let { surfaceView ->
+                            DropdownMenuItem(
+                                    text = { Text("Speed 1x") },
+                                    onClick = {
+                                        showMenu = false
+                                        RustBridge.setSpeedMultiplier(surfaceView.emulatorPtr, 1)
+                                    }
+                            )
+                            DropdownMenuItem(
+                                    text = { Text("Speed 2x") },
+                                    onClick = {
+                                        showMenu = false
+                                        RustBridge.setSpeedMultiplier(surfaceView.emulatorPtr, 2)
+                                    }
+                            )
+                            DropdownMenuItem(
+                                    text = { Text("Speed 4x") },
+                                    onClick = {
+                                        showMenu = false
+                                        RustBridge.setSpeedMultiplier(surfaceView.emulatorPtr, 4)
+                                    }
+                            )
+
+                            HorizontalDivider()
+
+                            DropdownMenuItem(
+                                    text = { Text("Toggle Mute") },
+                                    onClick = {
+                                        showMenu = false
+                                        RustBridge.toggleMute(surfaceView.emulatorPtr)
+                                    }
+                            )
+                        }
+                    }
                 }
-            }
-
-            // Menu button
-            IconButton(onClick = { showMenu = true }) {
-                Icon(Icons.Default.Menu, contentDescription = "Menu")
-            }
-
-            // Dropdown menu
-            DropdownMenu(
-                expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                DropdownMenuItem(text = { Text("Open ROM") }, onClick = {
-                    showMenu = false
-                    // Launch file picker for any file type (Android doesn't support .gb/.gbc MIME types well)
-                    filePickerLauncher.launch("*/*")
-                })
-
-                emulatorSurfaceView?.let { surfaceView ->
-                    DropdownMenuItem(text = { Text("Speed 1x") }, onClick = {
-                        showMenu = false
-                        RustBridge.setSpeedMultiplier(surfaceView.emulatorPtr, 1)
-                    })
-                    DropdownMenuItem(text = { Text("Speed 2x") }, onClick = {
-                        showMenu = false
-                        RustBridge.setSpeedMultiplier(surfaceView.emulatorPtr, 2)
-                    })
-                    DropdownMenuItem(text = { Text("Speed 4x") }, onClick = {
-                        showMenu = false
-                        RustBridge.setSpeedMultiplier(surfaceView.emulatorPtr, 4)
-                    })
-
-                    Divider()
-
-                    DropdownMenuItem(text = { Text("Toggle Mute") }, onClick = {
-                        showMenu = false
-                        RustBridge.toggleMute(surfaceView.emulatorPtr)
-                    })
-                }
-            }
-        })
+        )
 
         // Emulator Surface
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f), contentAlignment = Alignment.Center
+                modifier = Modifier.fillMaxWidth().weight(1f).background(Color.Black),
+                contentAlignment = Alignment.Center
         ) {
             AndroidView(
-                factory = { context ->
-                    EmulatorSurfaceView(context).also { surfaceView ->
-                        emulatorSurfaceView = surfaceView
-                        onSurfaceViewCreated(surfaceView)
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(160f / 144f) // Game Boy screen aspect ratio
+                    factory = { context ->
+                        EmulatorSurfaceView(context).also { surfaceView ->
+                            emulatorSurfaceView = surfaceView
+                            onSurfaceViewCreated(surfaceView)
+                        }
+                    },
+                    modifier =
+                            Modifier.fillMaxWidth()
+                                    .aspectRatio(160f / 144f) // Game Boy screen aspect ratio
             )
         }
 
         // Virtual Game Boy Controls
         GameBoyControls(
-            onButtonPress = { buttonId ->
-            emulatorSurfaceView?.let { surfaceView ->
-                RustBridge.pressButton(surfaceView.emulatorPtr, buttonId)
-            }
-        }, onButtonRelease = { buttonId ->
-            emulatorSurfaceView?.let { surfaceView ->
-                RustBridge.releaseButton(surfaceView.emulatorPtr, buttonId)
-            }
-        }, modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
+                onButtonPress = { buttonId ->
+                    emulatorSurfaceView?.let { surfaceView ->
+                        RustBridge.pressButton(surfaceView.emulatorPtr, buttonId)
+                    }
+                },
+                onButtonRelease = { buttonId ->
+                    emulatorSurfaceView?.let { surfaceView ->
+                        RustBridge.releaseButton(surfaceView.emulatorPtr, buttonId)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().padding(16.dp)
         )
     }
 }
 
 @Composable
 fun GameBoyControls(
-    onButtonPress: (Int) -> Unit, onButtonRelease: (Int) -> Unit, modifier: Modifier = Modifier
+        onButtonPress: (Int) -> Unit,
+        onButtonRelease: (Int) -> Unit,
+        modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // D-Pad
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
+    Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 36.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
         ) {
-            GameBoyButton(
-                text = "↑",
-                buttonId = RustBridge.BUTTON_UP,
-                onPress = onButtonPress,
-                onRelease = onButtonRelease
+            // D-Pad
+            GameBoyDPad(
+                    onButtonPress = onButtonPress,
+                    onButtonRelease = onButtonRelease,
+                    modifier = Modifier.padding(16.dp)
             )
-            Row {
-                GameBoyButton(
-                    text = "←",
-                    buttonId = RustBridge.BUTTON_LEFT,
-                    onPress = onButtonPress,
-                    onRelease = onButtonRelease
-                )
-                Spacer(modifier = Modifier.width(48.dp))
-                GameBoyButton(
-                    text = "→",
-                    buttonId = RustBridge.BUTTON_RIGHT,
-                    onPress = onButtonPress,
-                    onRelease = onButtonRelease
-                )
-            }
-            GameBoyButton(
-                text = "↓",
-                buttonId = RustBridge.BUTTON_DOWN,
-                onPress = onButtonPress,
-                onRelease = onButtonRelease
+
+            // Action Buttons
+            GameBoyActionButtons(
+                    onButtonPress = onButtonPress,
+                    onButtonRelease = onButtonRelease,
+                    modifier = Modifier.padding(16.dp)
             )
         }
 
-        // Action Buttons
-        Column {
-            Row {
-                GameBoyButton(
+        // Start/Select buttons positioned in center bottom
+        Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp)
+        ) {
+            GameBoyStartSelectButton(
                     text = "SELECT",
                     buttonId = RustBridge.BUTTON_SELECT,
                     onPress = onButtonPress,
                     onRelease = onButtonRelease
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                GameBoyButton(
+            )
+            GameBoyStartSelectButton(
                     text = "START",
                     buttonId = RustBridge.BUTTON_START,
                     onPress = onButtonPress,
                     onRelease = onButtonRelease
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Row {
-                GameBoyButton(
-                    text = "B",
-                    buttonId = RustBridge.BUTTON_B,
-                    onPress = onButtonPress,
-                    onRelease = onButtonRelease
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                GameBoyButton(
-                    text = "A",
-                    buttonId = RustBridge.BUTTON_A,
-                    onPress = onButtonPress,
-                    onRelease = onButtonRelease
-                )
-            }
+            )
         }
     }
 }
 
 @Composable
-fun GameBoyButton(
-    text: String,
-    buttonId: Int,
-    onPress: (Int) -> Unit,
-    onRelease: (Int) -> Unit,
-    modifier: Modifier = Modifier
+fun GameBoyDPad(
+        onButtonPress: (Int) -> Unit,
+        onButtonRelease: (Int) -> Unit,
+        modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier.size(120.dp), contentAlignment = Alignment.Center) {
+        // D-Pad background cross shape
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val centerX = size.width / 2
+            val centerY = size.height / 2
+            val thickness = 36.dp.toPx()
+            val length = 100.dp.toPx()
+            val cornerRadius = 6.dp.toPx()
+
+            // Main D-Pad color (dark gray)
+            val dpadColor = Color(0xFF4A4A4A)
+            val dpadShadow = Color(0xFF2A2A2A)
+
+            // Horizontal bar with shadow effect
+            drawRoundRect(
+                    color = dpadShadow,
+                    topLeft =
+                            Offset(
+                                    centerX - length / 2 + 2.dp.toPx(),
+                                    centerY - thickness / 2 + 2.dp.toPx()
+                            ),
+                    size = Size(length, thickness),
+                    cornerRadius = CornerRadius(cornerRadius)
+            )
+            drawRoundRect(
+                    color = dpadColor,
+                    topLeft = Offset(centerX - length / 2, centerY - thickness / 2),
+                    size = Size(length, thickness),
+                    cornerRadius = CornerRadius(cornerRadius)
+            )
+
+            // Vertical bar with shadow effect
+            drawRoundRect(
+                    color = dpadShadow,
+                    topLeft =
+                            Offset(
+                                    centerX - thickness / 2 + 2.dp.toPx(),
+                                    centerY - length / 2 + 2.dp.toPx()
+                            ),
+                    size = Size(thickness, length),
+                    cornerRadius = CornerRadius(cornerRadius)
+            )
+            drawRoundRect(
+                    color = dpadColor,
+                    topLeft = Offset(centerX - thickness / 2, centerY - length / 2),
+                    size = Size(thickness, length),
+                    cornerRadius = CornerRadius(cornerRadius)
+            )
+        }
+
+        // Invisible touch areas for each direction
+        Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxSize()
+        ) {
+            // UP
+            InvisibleGameBoyButton(
+                    buttonId = RustBridge.BUTTON_UP,
+                    onPress = onButtonPress,
+                    onRelease = onButtonRelease,
+                    modifier = Modifier.size(36.dp, 32.dp)
+            )
+
+            Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+            ) {
+                // LEFT
+                InvisibleGameBoyButton(
+                        buttonId = RustBridge.BUTTON_LEFT,
+                        onPress = onButtonPress,
+                        onRelease = onButtonRelease,
+                        modifier = Modifier.size(32.dp, 36.dp)
+                )
+
+                Spacer(modifier = Modifier.width(36.dp))
+
+                // RIGHT
+                InvisibleGameBoyButton(
+                        buttonId = RustBridge.BUTTON_RIGHT,
+                        onPress = onButtonPress,
+                        onRelease = onButtonRelease,
+                        modifier = Modifier.size(32.dp, 36.dp)
+                )
+            }
+
+            // DOWN
+            InvisibleGameBoyButton(
+                    buttonId = RustBridge.BUTTON_DOWN,
+                    onPress = onButtonPress,
+                    onRelease = onButtonRelease,
+                    modifier = Modifier.size(36.dp, 32.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun InvisibleGameBoyButton(
+        buttonId: Int,
+        onPress: (Int) -> Unit,
+        onRelease: (Int) -> Unit,
+        modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+
+    LaunchedEffect(interactionSource) {
+        interactionSource.interactions.collect { interaction ->
+            when (interaction) {
+                is PressInteraction.Press -> onPress(buttonId)
+                is PressInteraction.Release -> onRelease(buttonId)
+                is PressInteraction.Cancel -> onRelease(buttonId)
+            }
+        }
+    }
+
+    Box(modifier = modifier.clickable(interactionSource = interactionSource, indication = null) {})
+}
+
+@Composable
+fun GameBoyActionButtons(
+        onButtonPress: (Int) -> Unit,
+        onButtonRelease: (Int) -> Unit,
+        modifier: Modifier = Modifier
+) {
+    Column(
+            modifier = modifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Row(
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                verticalAlignment = Alignment.CenterVertically
+        ) {
+            // B Button (left)
+            GameBoyCircularButton(
+                    text = "B",
+                    buttonId = RustBridge.BUTTON_B,
+                    onPress = onButtonPress,
+                    onRelease = onButtonRelease,
+                    color = Color(0xFF6B2D6C)
+            )
+
+            // A Button (right)
+            GameBoyCircularButton(
+                    text = "A",
+                    buttonId = RustBridge.BUTTON_A,
+                    onPress = onButtonPress,
+                    onRelease = onButtonRelease,
+                    color = Color(0xFF8B4B8C)
+            )
+        }
+    }
+}
+
+@Composable
+fun GameBoyCircularButton(
+        text: String,
+        buttonId: Int,
+        onPress: (Int) -> Unit,
+        onRelease: (Int) -> Unit,
+        color: Color,
+        modifier: Modifier = Modifier
 ) {
     var isPressed by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
@@ -402,12 +557,10 @@ fun GameBoyButton(
                     isPressed = true
                     onPress(buttonId)
                 }
-
                 is PressInteraction.Release -> {
                     isPressed = false
                     onRelease(buttonId)
                 }
-
                 is PressInteraction.Cancel -> {
                     isPressed = false
                     onRelease(buttonId)
@@ -416,16 +569,124 @@ fun GameBoyButton(
         }
     }
 
-    Button(
-        onClick = { }, // Interaction handled by interactionSource
-        modifier = modifier.size(48.dp),
-        interactionSource = interactionSource,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (isPressed) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primary
-        )
+    Box(
+            modifier =
+                    modifier.size(56.dp).clickable(
+                                    interactionSource = interactionSource,
+                                    indication = null
+                            ) {},
+            contentAlignment = Alignment.Center
     ) {
+        // Draw circular button with shadow effect
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val radius = size.minDimension / 2
+            val shadowOffset = if (isPressed) 1.dp.toPx() else 3.dp.toPx()
+
+            // Shadow
+            drawCircle(
+                    color = Color(0xFF2A2A2A),
+                    radius = radius - 2.dp.toPx(),
+                    center = Offset(center.x + shadowOffset, center.y + shadowOffset)
+            )
+
+            // Main button
+            drawCircle(
+                    color = if (isPressed) color.copy(alpha = 0.8f) else color,
+                    radius = radius - 2.dp.toPx(),
+                    center = center
+            )
+
+            // Highlight
+            drawCircle(
+                    color = Color.White.copy(alpha = if (isPressed) 0.1f else 0.2f),
+                    radius = radius - 4.dp.toPx(),
+                    center = Offset(center.x - 2.dp.toPx(), center.y - 2.dp.toPx())
+            )
+        }
+
+        Text(text = text, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+fun GameBoyStartSelectButton(
+        text: String,
+        buttonId: Int,
+        onPress: (Int) -> Unit,
+        onRelease: (Int) -> Unit,
+        modifier: Modifier = Modifier
+) {
+    var isPressed by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+
+    LaunchedEffect(interactionSource) {
+        interactionSource.interactions.collect { interaction ->
+            when (interaction) {
+                is PressInteraction.Press -> {
+                    isPressed = true
+                    onPress(buttonId)
+                }
+                is PressInteraction.Release -> {
+                    isPressed = false
+                    onRelease(buttonId)
+                }
+                is PressInteraction.Cancel -> {
+                    isPressed = false
+                    onRelease(buttonId)
+                }
+            }
+        }
+    }
+
+    Box(
+            modifier =
+                    modifier.size(width = 48.dp, height = 20.dp).clickable(
+                                    interactionSource = interactionSource,
+                                    indication = null
+                            ) {},
+            contentAlignment = Alignment.Center
+    ) {
+        // Draw rounded rectangular button
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val cornerRadius = 8.dp.toPx()
+            val shadowOffset = if (isPressed) 1.dp.toPx() else 2.dp.toPx()
+            val buttonColor = Color(0xFF4A4A4A)
+
+            // Shadow
+            drawRoundRect(
+                    color = Color(0xFF2A2A2A),
+                    topLeft = Offset(shadowOffset, shadowOffset),
+                    size = Size(size.width - shadowOffset, size.height - shadowOffset),
+                    cornerRadius = CornerRadius(cornerRadius)
+            )
+
+            // Main button
+            drawRoundRect(
+                    color = if (isPressed) buttonColor.copy(alpha = 0.8f) else buttonColor,
+                    topLeft = Offset.Zero,
+                    size = Size(size.width - shadowOffset, size.height - shadowOffset),
+                    cornerRadius = CornerRadius(cornerRadius)
+            )
+
+            // Highlight
+            drawRoundRect(
+                    color = Color.White.copy(alpha = if (isPressed) 0.1f else 0.2f),
+                    topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
+                    size =
+                            Size(
+                                    size.width - shadowOffset - 2.dp.toPx(),
+                                    size.height - shadowOffset - 2.dp.toPx()
+                            ),
+                    cornerRadius = CornerRadius(cornerRadius - 1.dp.toPx())
+            )
+        }
+
         Text(
-            text = text, fontSize = 10.sp, fontWeight = FontWeight.Bold
+                text = text,
+                color = Color.White,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.offset(y = (-4).dp)
         )
     }
 }

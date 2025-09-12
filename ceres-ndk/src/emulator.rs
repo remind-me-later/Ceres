@@ -1,4 +1,5 @@
 use crate::video::State;
+use anyhow::Context;
 use ceres_std::{Button, GbThread, Model, ShaderOption};
 use jni::{JNIEnv, objects::JObject};
 use log::debug;
@@ -30,12 +31,12 @@ impl Emulator {
         Ok(())
     }
 
-    pub fn new() -> Self {
-        Self {
+    pub fn new() -> anyhow::Result<Self> {
+        Ok(Self {
             pixel_data_rgba: vec![0; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice(),
-            thread: GbThread::new(Model::default(), None, None).unwrap(),
+            thread: GbThread::new(Model::default(), None, None)?,
             state: None,
-        }
+        })
     }
 
     pub const fn on_lost(&mut self) {
@@ -83,19 +84,20 @@ impl Emulator {
         debug!("Button released");
     }
 
-    pub fn render(&mut self) {
-        if let Some(state) = &mut self.state
-            && matches!(
-                self.thread.copy_pixel_data_rgba(&mut self.pixel_data_rgba),
-                Ok(())
-            )
-        {
+    pub fn render(&mut self) -> anyhow::Result<()> {
+        if let Some(state) = &mut self.state {
+            self.thread
+                .copy_pixel_data_rgba(&mut self.pixel_data_rgba)
+                .context("Failed to copy pixel data")?;
+
             debug!("Pixel data copied");
 
             // let _ = state.window().lock(None); //FIXME: why is this unnecessary?
             state.update_texture(&self.pixel_data_rgba);
-            state.render().expect("Failed to render frame");
+            state.render().context("Failed to render frame")?;
         }
+
+        Ok(())
     }
 
     pub const fn resize(&mut self, width: u32, height: u32) {

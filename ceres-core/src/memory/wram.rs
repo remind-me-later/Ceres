@@ -9,7 +9,7 @@ impl Default for Wram {
     fn default() -> Self {
         #[expect(
             clippy::unwrap_used,
-            reason = "RGB_BUF_SIZE is a constant, so this will never panic."
+            reason = "SIZE_CGB is a constant, so this will never panic."
         )]
         Self {
             wram: vec![0; Self::SIZE_CGB as usize]

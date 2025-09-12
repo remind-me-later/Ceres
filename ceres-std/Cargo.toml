@@ -18,9 +18,9 @@ default-features = false
 features = ["derive", "help", "std"]
 
 [dependencies.cpal]
-default-features = false
 # version = "*"
 git = "https://github.com/RustAudio/cpal.git"
+default-features = false
 
 [dependencies.image]
 version = "*"

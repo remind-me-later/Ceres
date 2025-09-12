@@ -8,34 +8,80 @@ use jni::sys::{jboolean, jfloat, jint, jlong};
 use log::debug;
 use std::path::PathBuf;
 
+// Helper functions for throwing Java exceptions
+fn throw_runtime_exception(env: &mut JNIEnv, message: &str) {
+    if let Err(e) = env.throw_new("java/lang/RuntimeException", message) {
+        log::error!("Failed to throw RuntimeException: {e}");
+    }
+}
+
+fn throw_illegal_argument_exception(env: &mut JNIEnv, message: &str) {
+    if let Err(e) = env.throw_new("java/lang/IllegalArgumentException", message) {
+        log::error!("Failed to throw IllegalArgumentException: {e}");
+    }
+}
+
+fn throw_io_exception(env: &mut JNIEnv, message: &str) {
+    if let Err(e) = env.throw_new("java/io/IOException", message) {
+        log::error!("Failed to throw IOException: {e}");
+    }
+}
+
+fn throw_illegal_state_exception(env: &mut JNIEnv, message: &str) {
+    if let Err(e) = env.throw_new("java/lang/IllegalStateException", message) {
+        log::error!("Failed to throw IllegalStateException: {e}");
+    }
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_createEmulator(
-    _env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
 ) -> jlong {
-    let emulator = Box::new(Emulator::new());
-    let ptr = Box::into_raw(emulator);
-    debug!("Emulator created at {ptr:p}");
-    ptr as jlong
+    match Emulator::new() {
+        Ok(emulator) => {
+            let emulator = Box::new(emulator);
+            let ptr = Box::into_raw(emulator);
+            debug!("Emulator created at {ptr:p}");
+            ptr as jlong
+        }
+        Err(e) => {
+            throw_runtime_exception(&mut env, &format!("Failed to create emulator: {e}"));
+            0 // Return null pointer on error
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_renderFrame(
-    _env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     emulator_ptr: jlong,
 ) {
+    if emulator_ptr == 0 {
+        throw_illegal_argument_exception(&mut env, "Invalid emulator pointer");
+        return;
+    }
+
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
-    emulator.render();
+    if let Err(e) = emulator.render() {
+        throw_runtime_exception(&mut env, &format!("Failed to render frame: {e}"));
+        return;
+    }
     debug!("Rendered frame");
 }
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_dropWgpuState(
-    _env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     emulator_ptr: jlong,
 ) {
+    if emulator_ptr == 0 {
+        throw_illegal_argument_exception(&mut env, "Invalid emulator pointer");
+        return;
+    }
+
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
     emulator.drop_state();
     debug!("Dropped wgpu state");
@@ -43,11 +89,16 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_dropWg
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_recreateWgpuState(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     emulator_ptr: jlong,
     surface: JObject,
 ) {
+    if emulator_ptr == 0 {
+        throw_illegal_argument_exception(&mut env, "Invalid emulator pointer");
+        return;
+    }
+
     debug!("Entering recreate_wgpu_state");
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
     debug!("Recreating wgpu state");
@@ -57,12 +108,17 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_recrea
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_resizeWgpuState(
-    _env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     emulator_ptr: jlong,
     width: jint,
     height: jint,
 ) {
+    if emulator_ptr == 0 {
+        throw_illegal_argument_exception(&mut env, "Invalid emulator pointer");
+        return;
+    }
+
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
     #[expect(clippy::cast_sign_loss)]
     emulator.resize(width as u32, height as u32);
@@ -71,10 +127,15 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_resize
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_onWgpuLost(
-    _env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     emulator_ptr: jlong,
 ) {
+    if emulator_ptr == 0 {
+        throw_illegal_argument_exception(&mut env, "Invalid emulator pointer");
+        return;
+    }
+
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
     emulator.on_lost();
     debug!("Handled wgpu lost");
@@ -90,10 +151,18 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_loadRo
 ) -> jboolean {
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
 
+    if emulator_ptr == 0 {
+        throw_illegal_argument_exception(&mut env, "Invalid emulator pointer");
+        return 0;
+    }
+
     let rom_path_str = match env.get_string(&rom_path) {
         Ok(path) => path,
         Err(e) => {
-            log::error!("Failed to get ROM path string: {e}");
+            throw_illegal_argument_exception(
+                &mut env,
+                &format!("Failed to get ROM path string: {e}"),
+            );
             return 0; // false
         }
     };
@@ -113,7 +182,10 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_loadRo
                 }
             }
             Err(e) => {
-                log::error!("Failed to get save path string: {e}");
+                throw_illegal_argument_exception(
+                    &mut env,
+                    &format!("Failed to get save path string: {e}"),
+                );
                 return 0; // false
             }
         }
@@ -125,7 +197,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_loadRo
             1 // true
         }
         Err(e) => {
-            log::error!("Failed to load ROM: {e}");
+            throw_io_exception(&mut env, &format!("Failed to load ROM: {e}"));
             0 // false
         }
     }
@@ -133,11 +205,16 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_loadRo
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_pressButton(
-    _env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     emulator_ptr: jlong,
     button_id: jint,
 ) {
+    if emulator_ptr == 0 {
+        throw_illegal_argument_exception(&mut env, "Invalid emulator pointer");
+        return;
+    }
+
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
 
     let button = match button_id {
@@ -150,7 +227,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_pressB
         6 => Button::Select,
         7 => Button::Start,
         _ => {
-            log::error!("Invalid button ID: {button_id}");
+            throw_illegal_argument_exception(&mut env, &format!("Invalid button ID: {button_id}"));
             return;
         }
     };
@@ -160,11 +237,16 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_pressB
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_releaseButton(
-    _env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     emulator_ptr: jlong,
     button_id: jint,
 ) {
+    if emulator_ptr == 0 {
+        throw_illegal_argument_exception(&mut env, "Invalid emulator pointer");
+        return;
+    }
+
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
 
     let button = match button_id {
@@ -177,7 +259,7 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_releas
         6 => Button::Select,
         7 => Button::Start,
         _ => {
-            log::error!("Invalid button ID: {button_id}");
+            throw_illegal_argument_exception(&mut env, &format!("Invalid button ID: {button_id}"));
             return;
         }
     };
@@ -187,16 +269,21 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_releas
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_pauseEmulator(
-    _env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     emulator_ptr: jlong,
 ) -> jboolean {
+    if emulator_ptr == 0 {
+        throw_illegal_argument_exception(&mut env, "Invalid emulator pointer");
+        return 0;
+    }
+
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
 
     match emulator.pause() {
         Ok(()) => 1, // true
         Err(e) => {
-            log::error!("Failed to pause emulator: {e}");
+            throw_illegal_state_exception(&mut env, &format!("Failed to pause emulator: {e}"));
             0 // false
         }
     }
@@ -204,16 +291,21 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_pauseE
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_resumeEmulator(
-    _env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     emulator_ptr: jlong,
 ) -> jboolean {
+    if emulator_ptr == 0 {
+        throw_illegal_argument_exception(&mut env, "Invalid emulator pointer");
+        return 0;
+    }
+
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
 
     match emulator.resume() {
         Ok(()) => 1, // true
         Err(e) => {
-            log::error!("Failed to resume emulator: {e}");
+            throw_illegal_state_exception(&mut env, &format!("Failed to resume emulator: {e}"));
             0 // false
         }
     }
@@ -221,21 +313,31 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_resume
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_isPaused(
-    _env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     emulator_ptr: jlong,
 ) -> jboolean {
+    if emulator_ptr == 0 {
+        throw_illegal_argument_exception(&mut env, "Invalid emulator pointer");
+        return 0;
+    }
+
     let emulator = unsafe { &*(emulator_ptr as *const Emulator) };
     u8::from(emulator.is_paused())
 }
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_setSpeedMultiplier(
-    _env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     emulator_ptr: jlong,
     multiplier: jint,
 ) {
+    if emulator_ptr == 0 {
+        throw_illegal_argument_exception(&mut env, "Invalid emulator pointer");
+        return;
+    }
+
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
     #[expect(clippy::cast_sign_loss)]
     emulator.set_speed_multiplier(multiplier as u32);
@@ -243,21 +345,31 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_setSpe
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_setVolume(
-    _env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     emulator_ptr: jlong,
     volume: jfloat,
 ) {
+    if emulator_ptr == 0 {
+        throw_illegal_argument_exception(&mut env, "Invalid emulator pointer");
+        return;
+    }
+
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
     emulator.set_volume(volume);
 }
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_toggleMute(
-    _env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     emulator_ptr: jlong,
 ) {
+    if emulator_ptr == 0 {
+        throw_illegal_argument_exception(&mut env, "Invalid emulator pointer");
+        return;
+    }
+
     let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
     emulator.toggle_mute();
 }

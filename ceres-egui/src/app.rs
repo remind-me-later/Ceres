@@ -205,8 +205,10 @@ impl eframe::App for App {
             });
         });
 
-        if let Ok(mut buffer) = self.screen.mut_buffer().lock() {
-            let _ = self.thread.copy_pixel_data_rgba(&mut buffer);
+        if let Ok(mut buffer) = self.screen.mut_buffer().lock()
+            && self.thread.copy_pixel_data_rgba(&mut buffer).is_err()
+        {
+            eprintln!("couldn't copy pixel data");
         }
 
         egui::CentralPanel::default()

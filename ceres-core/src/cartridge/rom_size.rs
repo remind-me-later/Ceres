@@ -4,8 +4,9 @@ use crate::Error;
     clippy::arbitrary_source_item_ordering,
     reason = "The order follows the ROM size"
 )]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub enum ROMSize {
+    #[default]
     Kb32 = 0,
     Kb64 = 1,
     Kb128 = 2,

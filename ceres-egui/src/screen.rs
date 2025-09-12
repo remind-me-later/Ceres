@@ -28,6 +28,10 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
         ));
     }
 
+    pub const fn mut_buffer(&mut self) -> &mut Arc<Mutex<Box<[u8]>>> {
+        &mut self.buffer
+    }
+
     pub const fn mut_pixel_perfect(&mut self) -> &mut bool {
         &mut self.pixel_perfect
     }
@@ -73,10 +77,6 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
 
     pub const fn shader_option_mut(&mut self) -> &mut ShaderOption {
         &mut self.shader_option
-    }
-
-    pub fn mut_buffer(&mut self) -> &mut Arc<Mutex<Box<[u8]>>> {
-        &mut self.buffer
     }
 }
 

@@ -7,7 +7,6 @@ import android.util.AttributeSet
 import android.util.Log
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import com.github.remind_me_later.ceres.RustBridge
 
 class EmulatorSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
     var emulatorPtr: Long = 0
@@ -23,9 +22,11 @@ class EmulatorSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
         init()
     }
 
-    constructor(context: Context, attrs: AttributeSet, defStyle: Int) : super(
-        context, attrs, defStyle
-    ) {
+    constructor(
+            context: Context,
+            attrs: AttributeSet,
+            defStyle: Int
+    ) : super(context, attrs, defStyle) {
         init()
     }
 
@@ -110,7 +111,7 @@ class EmulatorSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         isRenderingActive = false
-        cleanup()
+        RustBridge.dropWgpuState(emulatorPtr)
         Log.d("EmulatorSurfaceView", "Detached from window")
     }
 

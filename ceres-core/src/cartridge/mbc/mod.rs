@@ -4,8 +4,9 @@ use super::rom_size::ROMSize;
 use crate::Error;
 pub use mbc3_rtc::Mbc3RTC;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub enum Mbc {
+    #[default]
     Mbc0,
     Mbc1 {
         // Alternative MBC1 wiring allows to address up to 2MB of ROM

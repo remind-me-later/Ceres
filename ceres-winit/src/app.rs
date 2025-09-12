@@ -35,7 +35,6 @@ pub struct App<'a> {
 }
 
 impl App<'_> {
-    #[allow(clippy::expect_used)]
     fn handle_key(&mut self, event: &KeyEvent) {
         use {winit::event::ElementState, winit::keyboard::Key};
 
@@ -170,7 +169,10 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
         }
     }
 
-    #[allow(clippy::expect_used)]
+    #[expect(
+        clippy::expect_used,
+        reason = "We are tied to winit's trait, so there's no better way to handle errors"
+    )]
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let main_window_attributes = winit::window::Window::default_attributes()
             .with_title(CERES_STYLIZED)
@@ -206,7 +208,10 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
         self.thread.resume().expect("Couldn't resume");
     }
 
-    #[allow(clippy::expect_used)]
+    #[expect(
+        clippy::expect_used,
+        reason = "We are tied to winit's trait, so there's no better way to handle errors"
+    )]
     fn suspended(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         self.thread.pause().expect("Couldn't pause");
 

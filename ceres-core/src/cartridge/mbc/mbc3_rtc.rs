@@ -11,13 +11,24 @@ pub struct Mbc3RTC {
 }
 
 impl Mbc3RTC {
-    // Mapped register must be in 0x8..=0xC
+    /// Maps the given RTC register for reading and writing.
+    /// Valid values are between 0x8 and 0xC inclusive.
+    /// Returns an error if the value is out of range.
+    ///
+    /// # Errors
+    /// Returns `Err(())` if `val` is not in the range 0x8..=0xC.  
     pub fn map_reg(&mut self, val: u8) -> Result<(), ()> {
-        debug_assert!(
-            (0x8..=0xC).contains(&val),
-            "Mapped RTC register must be in 0x8..=0xC, got {val:#X}",
-        );
-        self.mapped = Some(NonZeroU8::new(val).ok_or(())?);
+        if !(0x8..=0xC).contains(&val) {
+            return Err(());
+        }
+
+        #[expect(
+            clippy::unwrap_used,
+            reason = "val can only be 0x8..=0xC it will panic only when passed 0"
+        )]
+        {
+            self.mapped = Some(NonZeroU8::new(val).unwrap());
+        }
         Ok(())
     }
 

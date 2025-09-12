@@ -15,7 +15,7 @@ android_logger = "*"
 android-activity = { version = "*", features = ["native-activity"] }
 anyhow = "*"
 ceres-core = { path = "../ceres-core" }
-ceres-std = { features = ["game_genie", "wgpu_renderer"], path = "../ceres-std" }
+ceres-std = { path = "../ceres-std", features = ["game_genie", "wgpu_renderer"] }
 jni = "*"
 log = "*"
 ndk = { version = "*", features = ["rwh_06"] }

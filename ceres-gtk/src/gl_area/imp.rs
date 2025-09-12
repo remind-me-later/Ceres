@@ -269,7 +269,9 @@ impl GLAreaImpl for GlArea {
         {
             let mut buffer = self.buffer.borrow_mut();
             let thread = self.gb_thread.borrow();
-            let _ = thread.copy_pixel_data_rgba(&mut buffer);
+            if thread.copy_pixel_data_rgba(&mut buffer).is_err() {
+                eprintln!("Failed to copy pixel data, no GB thread running?");
+            }
         }
         rend.draw_frame(self.buffer.borrow().as_ref());
 

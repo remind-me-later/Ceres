@@ -4,8 +4,9 @@ use crate::Error;
     clippy::arbitrary_source_item_ordering,
     reason = "The order follows the RAM size"
 )]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub enum RAMSize {
+    #[default]
     NoRAM,
     Kb8,
     Kb32,

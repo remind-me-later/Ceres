@@ -30,17 +30,14 @@ pub struct Cartridge {
 
 impl Default for Cartridge {
     #[expect(
-        clippy::unwrap_used,
-        reason = "ROMSize::new and RAMSize::new are safe to unwrap"
-    )]
-    #[expect(
         clippy::similar_names,
         reason = "ROM and RAM are common names in this context"
     )]
     fn default() -> Self {
-        let rom_size = ROMSize::new(0).unwrap();
-        let ram_size = RAMSize::new(0).unwrap();
-        let (mbc, has_battery) = Mbc::mbc_and_battery(0, rom_size).unwrap();
+        let rom_size = ROMSize::default();
+        let ram_size = RAMSize::default();
+        let mbc = Mbc::default();
+        let has_battery = false;
 
         let rom = alloc::vec![0xFF; rom_size.size_bytes() as usize].into_boxed_slice();
         let ram = alloc::vec![0xFF; ram_size.size_bytes() as usize].into_boxed_slice();
@@ -335,12 +332,12 @@ impl Cartridge {
                 0x4000..=0x5FFF => {
                     if (0x8..=0xC).contains(&val) {
                         // Write to RTC registers
-                        if let Some(r) = rtc.as_mut() {
+                        if let Some(rtc) = rtc.as_mut() {
                             #[expect(
                                 clippy::unwrap_used,
                                 reason = "val can only be 0x8..=0xC it will panic only when passed 0"
                             )]
-                            r.map_reg(val).unwrap();
+                            rtc.map_reg(val).unwrap();
                         }
                     } else {
                         // Choose RAM bank
