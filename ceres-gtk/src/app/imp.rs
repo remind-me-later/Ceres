@@ -1,5 +1,5 @@
 use adw::{prelude::*, subclass::prelude::*};
-use ceres_std::{Cli, clap::Parser};
+use ceres_std::cli::{Cli, clap::Parser};
 use gtk::{
     gio, glib,
     subclass::prelude::{
@@ -37,11 +37,11 @@ impl Application {
 
             // Set shader property
             let shader_str = match options.shader_option() {
-                ceres_std::ShaderOption::Nearest => "Nearest",
-                ceres_std::ShaderOption::Scale2x => "Scale2x",
-                ceres_std::ShaderOption::Scale3x => "Scale3x",
-                ceres_std::ShaderOption::Lcd => "LCD",
-                ceres_std::ShaderOption::Crt => "CRT",
+                ceres_std::cli::ShaderOption::Nearest => "Nearest",
+                ceres_std::cli::ShaderOption::Scale2x => "Scale2x",
+                ceres_std::cli::ShaderOption::Scale3x => "Scale3x",
+                ceres_std::cli::ShaderOption::Lcd => "LCD",
+                ceres_std::cli::ShaderOption::Crt => "CRT",
             };
             gl_area.set_property("shader-mode", shader_str);
 

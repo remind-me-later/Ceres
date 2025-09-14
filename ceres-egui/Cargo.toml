@@ -9,8 +9,8 @@ license.workspace = true
 version = "*"
 
 [dependencies.ceres-std]
-features = ["wgpu_renderer"]
 path = "../ceres-std"
+features = ["cli", "wgpu_renderer"]
 
 [dependencies.directories]
 version = "*"
@@ -18,7 +18,7 @@ version = "*"
 [dependencies.eframe]
 version = "*"
 default-features = false
-features = ["accesskit", "default_fonts", "wayland", "wgpu"]
+features = ["default_fonts", "accesskit", "wayland", "wgpu"]
 
 [dependencies.rfd]
 version = "*"

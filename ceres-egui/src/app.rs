@@ -1,6 +1,6 @@
 use crate::screen;
 use ceres_std::GbThread;
-use ceres_std::{AppOption, ShaderOption};
+use ceres_std::cli::{AppOption, ShaderOption};
 use eframe::egui::{self, CornerRadius, Key, style::HandleShape};
 use rfd::FileDialog;
 use std::{

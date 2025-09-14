@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+pub use clap;
+
 pub const QUALIFIER: &str = "com.github";
 pub const ORGANIZATION: &str = "remind-me-later";
 pub const CERES_BIN: &str = "ceres";

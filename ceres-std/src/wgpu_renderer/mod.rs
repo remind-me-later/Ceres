@@ -15,14 +15,15 @@ pub enum ShaderOption {
     Scale3x = 2,
 }
 
-impl From<crate::ShaderOption> for ShaderOption {
-    fn from(shader_option: crate::ShaderOption) -> Self {
+#[cfg(feature = "cli")]
+impl From<crate::cli::ShaderOption> for ShaderOption {
+    fn from(shader_option: crate::cli::ShaderOption) -> Self {
         match shader_option {
-            crate::ShaderOption::Nearest => Self::Nearest,
-            crate::ShaderOption::Scale2x => Self::Scale2x,
-            crate::ShaderOption::Scale3x => Self::Scale3x,
-            crate::ShaderOption::Lcd => Self::Lcd,
-            crate::ShaderOption::Crt => Self::Crt,
+            crate::cli::ShaderOption::Nearest => Self::Nearest,
+            crate::cli::ShaderOption::Scale2x => Self::Scale2x,
+            crate::cli::ShaderOption::Scale3x => Self::Scale3x,
+            crate::cli::ShaderOption::Lcd => Self::Lcd,
+            crate::cli::ShaderOption::Crt => Self::Crt,
         }
     }
 }

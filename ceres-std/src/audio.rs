@@ -148,7 +148,7 @@ impl Buffers {
 
 struct BufferCallbackWrapper {
     inner: Arc<Mutex<Buffers>>,
-    output_buf: [f32; (BUFFER_SIZE * 4) as usize],
+    output_buf: [f32; RING_BUFFER_SIZE],
 }
 
 impl BufferCallbackWrapper {

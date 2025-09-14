@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::Context;
 use ceres_std::wgpu_renderer;
-use ceres_std::{GbThread, ShaderOption};
+use ceres_std::{GbThread, cli::ShaderOption};
 use std::time::Instant;
 use winit::{
     dpi::PhysicalSize,

@@ -6,7 +6,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-ceres-std = { features = ["game_genie"], path = "../ceres-std" }
+ceres-std = { path = "../ceres-std", features = ["cli", "game_genie"] }
 epoxy = { version = "*" }
 glow = { version = "*" }
 libloading = { version = "*" }

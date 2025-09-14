@@ -1,14 +1,14 @@
 mod app;
 mod video;
 
-use ceres_std::{CERES_STYLIZED, ORGANIZATION, QUALIFIER, clap::Parser};
+use ceres_std::cli::{CERES_STYLIZED, ORGANIZATION, QUALIFIER, clap::Parser};
 use winit::event_loop::EventLoop;
 
 #[derive(Clone)]
 enum CeresEvent {}
 
 fn main() -> anyhow::Result<()> {
-    let args = ceres_std::Cli::parse();
+    let args = ceres_std::cli::Cli::parse();
 
     let main_event_loop = { EventLoop::<CeresEvent>::with_user_event().build()? };
 

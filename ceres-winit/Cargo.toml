@@ -16,7 +16,7 @@ version = "*"
 
 [dependencies.ceres-std]
 path = "../ceres-std"
-features = ["wgpu_renderer"]
+features = ["cli", "wgpu_renderer"]
 
 [dependencies.directories]
 version = "*"

@@ -2,11 +2,11 @@ mod app;
 mod screen;
 
 use app::App;
-use ceres_std::{CERES_STYLIZED, ORGANIZATION, QUALIFIER, clap::Parser};
+use ceres_std::cli::{CERES_STYLIZED, ORGANIZATION, QUALIFIER, clap::Parser};
 use eframe::egui;
 
 fn main() -> anyhow::Result<()> {
-    let args = ceres_std::Cli::parse();
+    let args = ceres_std::cli::Cli::parse();
     let project_dirs = directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED)
         .ok_or_else(|| anyhow::anyhow!("couldn't get project directories"))?;
 

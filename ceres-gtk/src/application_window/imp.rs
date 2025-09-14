@@ -113,7 +113,7 @@ impl Default for ApplicationWindow {
 impl ApplicationWindow {
     pub fn data_path() -> PathBuf {
         let mut path = glib::user_data_dir();
-        path.push(ceres_std::CERES_BIN);
+        path.push(ceres_std::cli::CERES_BIN);
         std::fs::create_dir_all(&path).expect("Could not create directory.");
         path
     }
