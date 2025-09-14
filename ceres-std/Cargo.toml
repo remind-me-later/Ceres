@@ -17,11 +17,6 @@ version = "*"
 default-features = false
 features = ["derive", "help", "std"]
 
-[dependencies.cpal]
-# version = "*"
-git = "https://github.com/RustAudio/cpal.git"
-default-features = false
-
 [dependencies.image]
 version = "*"
 default-features = false
@@ -35,6 +30,10 @@ features = ["std"]
 [dependencies.rubato]
 version = "*"
 default-features = false
+
+[dependencies.sdl3]
+version = "*"
+# default-features = false
 
 [dependencies.spin_sleep]
 version = "*"

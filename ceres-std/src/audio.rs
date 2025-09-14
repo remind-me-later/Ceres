@@ -1,13 +1,14 @@
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{
     StaticRb,
     traits::{Consumer, Observer},
 };
 use rubato::Resampler;
+use sdl3::audio;
 use {std::sync::Arc, std::sync::Mutex};
 
 // Buffer size is the number of samples per channel per callback
-const BUFFER_SIZE: cpal::FrameCount = 512;
+// FIXME: SDL wont take 512, maybe performance issue?
+const BUFFER_SIZE: u32 = 512 * 2;
 const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
 const SAMPLE_RATE: i32 = 48000;
 
@@ -114,16 +115,14 @@ impl Buffers {
         let (input_buf_left, input_buf_right) = self.input_buf.split_at_mut(1);
 
         if let Ok(vol) = self.volume.lock() {
-            for (l, r) in input_buf_left[0]
+            for ((l, l1), (r, r1)) in input_buf_left[0]
                 .iter_mut()
-                .zip(input_buf_right[0].iter_mut())
+                .zip(self.left.pop_iter())
+                .zip(input_buf_right[0].iter_mut().zip(self.right.pop_iter()))
                 .take(needed)
             {
-                // FIXME: this unwrap inside a loop doesn't look very performant
-                *l =
-                    f32::from(self.left.try_pop().unwrap_or_default()) / f32::from(i16::MAX) * *vol;
-                *r = f32::from(self.right.try_pop().unwrap_or_default()) / f32::from(i16::MAX)
-                    * *vol;
+                *l = f32::from(l1) / f32::from(i16::MAX) * *vol;
+                *r = f32::from(r1) / f32::from(i16::MAX) * *vol;
             }
 
             match self
@@ -144,6 +143,42 @@ impl Buffers {
                 }
             }
         }
+    }
+}
+
+struct BufferCallbackWrapper {
+    inner: Arc<Mutex<Buffers>>,
+    output_buf: [f32; (BUFFER_SIZE * 4) as usize],
+}
+
+impl BufferCallbackWrapper {
+    const fn new(inner: Arc<Mutex<Buffers>>) -> Self {
+        Self {
+            inner,
+            output_buf: [0.0; RING_BUFFER_SIZE],
+        }
+    }
+}
+
+impl audio::AudioCallback<f32> for BufferCallbackWrapper {
+    fn callback(&mut self, stream: &mut audio::AudioStream, requested: i32) {
+        #[expect(clippy::cast_sign_loss)]
+        let requested_usize = requested as usize;
+
+        {
+            #[expect(clippy::expect_used)]
+            let mut buffers = self
+                .inner
+                .lock()
+                .expect("SDL3: Failed to lock audio buffer");
+
+            buffers.write_samples_interleaved(&mut self.output_buf[..requested_usize]);
+        }
+
+        #[expect(clippy::expect_used)]
+        stream
+            .put_data_f32(&self.output_buf[..requested_usize])
+            .expect("SDL3: Failed to put audio data");
     }
 }
 
@@ -170,44 +205,9 @@ impl ceres_core::AudioCallback for AudioCallbackImpl {
     }
 }
 
-pub struct AudioState {
-    _host: cpal::Host,
-    config: cpal::StreamConfig,
-    device: cpal::Device,
-}
-
-impl AudioState {
-    #[must_use]
-    pub const fn config(&self) -> &cpal::StreamConfig {
-        &self.config
-    }
-
-    #[must_use]
-    pub const fn device(&self) -> &cpal::Device {
-        &self.device
-    }
-
-    pub fn new() -> Result<Self, Error> {
-        let host = cpal::default_host();
-        let device = host.default_output_device().ok_or(Error::GetOutputDevice)?;
-
-        let config = cpal::StreamConfig {
-            channels: 2,
-            sample_rate: cpal::SampleRate(SAMPLE_RATE as u32),
-            buffer_size: cpal::BufferSize::Fixed(BUFFER_SIZE),
-        };
-
-        Ok(Self {
-            _host: host,
-            device,
-            config,
-        })
-    }
-}
-
-// Stream is not Send, so we can't use it directly in the renderer struct
 pub struct Stream {
-    cpal_strm: cpal::Stream,
+    _sdl_context: sdl3::Sdl,
+    device: audio::AudioStreamWithCallback<BufferCallbackWrapper>,
     ring_buffer: AudioCallbackImpl,
     sample_rate: i32,
     volume: Arc<Mutex<f32>>,
@@ -227,32 +227,35 @@ impl Stream {
         }
     }
 
-    pub fn new(state: &AudioState) -> Result<Self, Error> {
+    pub fn new() -> Result<Self, Error> {
         const INITIAL_VOLUME: f32 = 1.0;
+
+        let sdl_context = sdl3::init().map_err(|_err| Error::GetOutputDevice)?;
+        let audio_subsystem = sdl_context.audio().map_err(|_err| Error::GetOutputDevice)?;
+
         let volume = Arc::new(Mutex::new(INITIAL_VOLUME));
         let buffer_volume = Arc::clone(&volume);
 
         let ring_buffer = Arc::new(Mutex::new(Buffers::new(buffer_volume)?));
-        let ring_buffer_clone = Arc::clone(&ring_buffer);
+        let buffer_cb_wrapper = BufferCallbackWrapper::new(Arc::clone(&ring_buffer));
 
-        let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
-        let data_callback = move |buffer: &mut [ProcessSample], _: &_| {
-            if let Ok(mut ring) = ring_buffer_clone.lock() {
-                ring.write_samples_interleaved(buffer);
-            }
+        let source_spec = audio::AudioSpec {
+            freq: Some(SAMPLE_RATE),
+            channels: Some(2),
+            format: Some(audio::AudioFormat::f32_sys()),
         };
 
-        let stream = state
-            .device()
-            .build_output_stream(state.config(), data_callback, error_callback, None)
+        let device = audio_subsystem
+            .open_playback_stream(&source_spec, buffer_cb_wrapper)
             .map_err(|_err| Error::BuildStream)?;
 
         let res = Self {
-            cpal_strm: stream,
+            device,
             ring_buffer: AudioCallbackImpl::new(ring_buffer),
             volume,
             volume_before_mute: None,
             sample_rate: SAMPLE_RATE,
+            _sdl_context: sdl_context,
         };
 
         res.pause()?;
@@ -261,14 +264,15 @@ impl Stream {
     }
 
     pub fn pause(&self) -> Result<(), Error> {
-        self.cpal_strm.pause().map_err(|_err| Error::PauseStream)?;
+        self.device.pause().map_err(|_err| Error::PauseStream)?;
         // Avoids audio stretching after unpausing
         self.ring_buffer.clear();
         Ok(())
     }
 
     pub fn resume(&self) -> Result<(), Error> {
-        self.cpal_strm.play().map_err(|_err| Error::PlayStream)
+        self.device.resume().map_err(|_err| Error::PlayStream)?;
+        Ok(())
     }
 
     #[must_use]

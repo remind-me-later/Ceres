@@ -12,7 +12,6 @@ use thread_priority::ThreadBuilderExt;
 use {ceres_core::Gb, std::path::Path, std::sync::Arc};
 
 pub struct GbThread {
-    _audio_state: audio::AudioState,
     audio_stream: audio::Stream,
     exiting: Arc<AtomicBool>,
     gb: Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
@@ -235,9 +234,7 @@ impl GbThread {
             }
         }
 
-        let audio_state = audio::AudioState::new().map_err(Error::Audio)?;
-
-        let audio_stream = audio::Stream::new(&audio_state).map_err(Error::Audio)?;
+        let audio_stream = audio::Stream::new().map_err(Error::Audio)?;
         let ring_buffer = audio_stream.ring_buffer();
 
         let gb = Self::create_new_gb(&audio_stream, ring_buffer, model, rom_path, sav_path)?;
@@ -271,7 +268,6 @@ impl GbThread {
             exiting,
             pause_condvar,
             thread_handle: Some(thread_handle),
-            _audio_state: audio_state,
             audio_stream,
             model,
             multiplier,
