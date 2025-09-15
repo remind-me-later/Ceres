@@ -26,8 +26,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,9 +35,9 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import kotlinx.coroutines.launch
 
-private val DPadColor = Color(0xFF0E131A)
-private val ActionButtonColor = Color(0xFF84254C)
-private val StartSelectButtonColor = Color(0xFFC2B9AA)
+private val DPadColor = Color(0x4DFFFFFF)
+private val ActionButtonColor = Color(0x4DFFFFFF)
+private val StartSelectButtonColor = Color(0x4DFFFFFF)
 
 class MainActivity : ComponentActivity() {
     private var emulatorSurfaceView: EmulatorSurfaceView? = null
@@ -365,15 +363,6 @@ fun GameBoyControls(
 fun GameBoyDPad(
     onButtonPress: (Int) -> Unit, onButtonRelease: (Int) -> Unit, modifier: Modifier = Modifier
 ) {
-    val pressedStates = remember {
-        mutableStateMapOf(
-            RustBridge.BUTTON_UP to false,
-            RustBridge.BUTTON_DOWN to false,
-            RustBridge.BUTTON_LEFT to false,
-            RustBridge.BUTTON_RIGHT to false
-        )
-    }
-
     Box(modifier = modifier.size(120.dp), contentAlignment = Alignment.Center) {
         // D-Pad background cross shape
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -383,64 +372,21 @@ fun GameBoyDPad(
             val length = 100.dp.toPx()
             val cornerRadius = 6.dp.toPx()
 
-            val dpadPath = Path().apply {
-                // Horizontal bar
-                addRoundRect(
-                    androidx.compose.ui.geometry.RoundRect(
-                        left = centerX - length / 2,
-                        top = centerY - thickness / 2,
-                        right = centerX + length / 2,
-                        bottom = centerY + thickness / 2,
-                        cornerRadius = CornerRadius(cornerRadius)
-                    )
-                )
-                // Vertical bar
-                addRoundRect(
-                    androidx.compose.ui.geometry.RoundRect(
-                        left = centerX - thickness / 2,
-                        top = centerY - length / 2,
-                        right = centerX + thickness / 2,
-                        bottom = centerY + length / 2,
-                        cornerRadius = CornerRadius(cornerRadius)
-                    )
-                )
-            }
+            // Horizontal bar
+            drawRoundRect(
+                color = DPadColor,
+                topLeft = Offset(centerX - length / 2, centerY - thickness / 2),
+                size = Size(length, thickness),
+                cornerRadius = CornerRadius(cornerRadius)
+            )
 
-            // Draw main D-Pad
-            drawPath(path = dpadPath, color = DPadColor)
-
-            // Pressed state overlay
-            val buttonRadius = 16.dp.toPx()
-            val buttonOffset = 34.dp.toPx()
-
-            if (pressedStates[RustBridge.BUTTON_UP] == true) {
-                drawCircle(
-                    DPadColor.copy(alpha = 0.8f),
-                    buttonRadius,
-                    center = Offset(centerX, centerY - buttonOffset)
-                )
-            }
-            if (pressedStates[RustBridge.BUTTON_DOWN] == true) {
-                drawCircle(
-                    DPadColor.copy(alpha = 0.8f),
-                    buttonRadius,
-                    center = Offset(centerX, centerY + buttonOffset)
-                )
-            }
-            if (pressedStates[RustBridge.BUTTON_LEFT] == true) {
-                drawCircle(
-                    DPadColor.copy(alpha = 0.8f),
-                    buttonRadius,
-                    center = Offset(centerX - buttonOffset, centerY)
-                )
-            }
-            if (pressedStates[RustBridge.BUTTON_RIGHT] == true) {
-                drawCircle(
-                    DPadColor.copy(alpha = 0.8f),
-                    buttonRadius,
-                    center = Offset(centerX + buttonOffset, centerY)
-                )
-            }
+            // Vertical bar
+            drawRoundRect(
+                color = DPadColor,
+                topLeft = Offset(centerX - thickness / 2, centerY - length / 2),
+                size = Size(thickness, length),
+                cornerRadius = CornerRadius(cornerRadius)
+            )
         }
 
         // Invisible touch areas for each direction
@@ -448,11 +394,10 @@ fun GameBoyDPad(
             horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxSize()
         ) {
             // UP
-            DPadButton(
+            InvisibleGameBoyButton(
                 buttonId = RustBridge.BUTTON_UP,
-                pressedStates = pressedStates,
-                onButtonPress = onButtonPress,
-                onButtonRelease = onButtonRelease,
+                onPress = onButtonPress,
+                onRelease = onButtonRelease,
                 modifier = Modifier.size(36.dp, 32.dp)
             )
 
@@ -462,32 +407,29 @@ fun GameBoyDPad(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 // LEFT
-                DPadButton(
+                InvisibleGameBoyButton(
                     buttonId = RustBridge.BUTTON_LEFT,
-                    pressedStates = pressedStates,
-                    onButtonPress = onButtonPress,
-                    onButtonRelease = onButtonRelease,
+                    onPress = onButtonPress,
+                    onRelease = onButtonRelease,
                     modifier = Modifier.size(32.dp, 36.dp)
                 )
 
                 Spacer(modifier = Modifier.width(36.dp))
 
                 // RIGHT
-                DPadButton(
+                InvisibleGameBoyButton(
                     buttonId = RustBridge.BUTTON_RIGHT,
-                    pressedStates = pressedStates,
-                    onButtonPress = onButtonPress,
-                    onButtonRelease = onButtonRelease,
+                    onPress = onButtonPress,
+                    onRelease = onButtonRelease,
                     modifier = Modifier.size(32.dp, 36.dp)
                 )
             }
 
             // DOWN
-            DPadButton(
+            InvisibleGameBoyButton(
                 buttonId = RustBridge.BUTTON_DOWN,
-                pressedStates = pressedStates,
-                onButtonPress = onButtonPress,
-                onButtonRelease = onButtonRelease,
+                onPress = onButtonPress,
+                onRelease = onButtonRelease,
                 modifier = Modifier.size(36.dp, 32.dp)
             )
         }
@@ -495,32 +437,17 @@ fun GameBoyDPad(
 }
 
 @Composable
-private fun DPadButton(
-    buttonId: Int,
-    pressedStates: MutableMap<Int, Boolean>,
-    onButtonPress: (Int) -> Unit,
-    onButtonRelease: (Int) -> Unit,
-    modifier: Modifier = Modifier
+fun InvisibleGameBoyButton(
+    buttonId: Int, onPress: (Int) -> Unit, onRelease: (Int) -> Unit, modifier: Modifier = Modifier
 ) {
     val interactionSource = remember { MutableInteractionSource() }
 
     LaunchedEffect(interactionSource) {
         interactionSource.interactions.collect { interaction ->
             when (interaction) {
-                is PressInteraction.Press -> {
-                    pressedStates[buttonId] = true
-                    onButtonPress(buttonId)
-                }
-
-                is PressInteraction.Release -> {
-                    pressedStates[buttonId] = false
-                    onButtonRelease(buttonId)
-                }
-
-                is PressInteraction.Cancel -> {
-                    pressedStates[buttonId] = false
-                    onButtonRelease(buttonId)
-                }
+                is PressInteraction.Press -> onPress(buttonId)
+                is PressInteraction.Release -> onRelease(buttonId)
+                is PressInteraction.Cancel -> onRelease(buttonId)
             }
         }
     }
@@ -546,8 +473,7 @@ fun GameBoyActionButtons(
                 text = "B",
                 buttonId = RustBridge.BUTTON_B,
                 onPress = onButtonPress,
-                onRelease = onButtonRelease,
-                color = ActionButtonColor
+                onRelease = onButtonRelease
             )
 
             // A Button (right)
@@ -555,8 +481,7 @@ fun GameBoyActionButtons(
                 text = "A",
                 buttonId = RustBridge.BUTTON_A,
                 onPress = onButtonPress,
-                onRelease = onButtonRelease,
-                color = ActionButtonColor
+                onRelease = onButtonRelease
             )
         }
     }
@@ -568,7 +493,6 @@ fun GameBoyCircularButton(
     buttonId: Int,
     onPress: (Int) -> Unit,
     onRelease: (Int) -> Unit,
-    color: Color,
     modifier: Modifier = Modifier
 ) {
     var isPressed by remember { mutableStateOf(false) }
@@ -602,8 +526,15 @@ fun GameBoyCircularButton(
                 interactionSource = interactionSource, indication = null
             ) {}, contentAlignment = Alignment.Center
     ) {
+        // Draw circular button
         Canvas(modifier = Modifier.fillMaxSize()) {
-            drawCircle(isPressed = isPressed, color = color, radius = size.minDimension / 2)
+            val radius = size.minDimension / 2
+
+            // Main button
+            drawCircle(
+                color = if (isPressed) ActionButtonColor.copy(alpha = 0.8f)
+                else ActionButtonColor, radius = radius, center = center
+            )
         }
 
         Text(text = text, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -651,11 +582,12 @@ fun GameBoyStartSelectButton(
     ) {
         // Draw rounded rectangular button
         Canvas(modifier = Modifier.fillMaxSize()) {
+            val cornerRadius = 8.dp.toPx()
+
+            // Main button
             drawRoundRect(
-                isPressed = isPressed,
-                color = StartSelectButtonColor,
-                size = size,
-                cornerRadius = CornerRadius(8.dp.toPx())
+                color = if (isPressed) StartSelectButtonColor.copy(alpha = 0.8f)
+                else StartSelectButtonColor, size = size, cornerRadius = CornerRadius(cornerRadius)
             )
         }
 
@@ -667,24 +599,4 @@ fun GameBoyStartSelectButton(
             modifier = Modifier.offset(y = (-4).dp)
         )
     }
-}
-
-private fun DrawScope.drawCircle(isPressed: Boolean, color: Color, radius: Float) {
-    drawCircle(
-        color = if (isPressed) color.copy(alpha = 0.8f) else color, radius = radius, center = center
-    )
-}
-
-private fun DrawScope.drawRoundRect(
-    isPressed: Boolean,
-    color: Color,
-    size: Size,
-    cornerRadius: CornerRadius,
-) {
-    drawRoundRect(
-        color = if (isPressed) color.copy(alpha = 0.8f) else color,
-        topLeft = Offset.Zero,
-        size = size,
-        cornerRadius = cornerRadius
-    )
 }

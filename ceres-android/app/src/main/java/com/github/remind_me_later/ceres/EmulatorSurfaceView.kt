@@ -23,9 +23,7 @@ class EmulatorSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
     }
 
     constructor(
-            context: Context,
-            attrs: AttributeSet,
-            defStyle: Int
+        context: Context, attrs: AttributeSet, defStyle: Int
     ) : super(context, attrs, defStyle) {
         init()
     }
@@ -33,6 +31,7 @@ class EmulatorSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
     private fun init() {
         RustBridge.init()
         emulatorPtr = RustBridge.createEmulator()
+        RustBridge.resumeEmulator(emulatorPtr)
         holder.addCallback(this)
         // Set up the surface for transparent rendering
         this.setZOrderMediaOverlay(true)
