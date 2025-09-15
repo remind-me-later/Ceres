@@ -1,14 +1,15 @@
+use std::sync::atomic::AtomicBool;
+
 use ringbuf::{
     StaticRb,
     traits::{Consumer, Observer},
 };
 use rubato::Resampler;
-use sdl3::audio;
+use tinyaudio::{OutputDevice, OutputDeviceParameters};
 use {std::sync::Arc, std::sync::Mutex};
 
 // Buffer size is the number of samples per channel per callback
-// FIXME: SDL wont take 512, maybe performance issue?
-const BUFFER_SIZE: u32 = 512 * 2;
+const BUFFER_SIZE: u32 = 512;
 const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
 const SAMPLE_RATE: i32 = 48000;
 
@@ -146,41 +147,41 @@ impl Buffers {
     }
 }
 
-struct BufferCallbackWrapper {
-    inner: Arc<Mutex<Buffers>>,
-    output_buf: [f32; RING_BUFFER_SIZE],
-}
+// struct BufferCallbackWrapper {
+//     inner: Arc<Mutex<Buffers>>,
+//     output_buf: [f32; RING_BUFFER_SIZE],
+// }
 
-impl BufferCallbackWrapper {
-    const fn new(inner: Arc<Mutex<Buffers>>) -> Self {
-        Self {
-            inner,
-            output_buf: [0.0; RING_BUFFER_SIZE],
-        }
-    }
-}
+// impl BufferCallbackWrapper {
+//     const fn new(inner: Arc<Mutex<Buffers>>) -> Self {
+//         Self {
+//             inner,
+//             output_buf: [0.0; RING_BUFFER_SIZE],
+//         }
+//     }
+// }
 
-impl audio::AudioCallback<f32> for BufferCallbackWrapper {
-    fn callback(&mut self, stream: &mut audio::AudioStream, requested: i32) {
-        #[expect(clippy::cast_sign_loss)]
-        let requested_usize = requested as usize;
+// impl audio::AudioCallback<f32> for BufferCallbackWrapper {
+//     fn callback(&mut self, stream: &mut audio::AudioStream, requested: i32) {
+//         #[expect(clippy::cast_sign_loss)]
+//         let requested_usize = requested as usize;
 
-        {
-            #[expect(clippy::expect_used)]
-            let mut buffers = self
-                .inner
-                .lock()
-                .expect("SDL3: Failed to lock audio buffer");
+//         {
+//             #[expect(clippy::expect_used)]
+//             let mut buffers = self
+//                 .inner
+//                 .lock()
+//                 .expect("SDL3: Failed to lock audio buffer");
 
-            buffers.write_samples_interleaved(&mut self.output_buf[..requested_usize]);
-        }
+//             buffers.write_samples_interleaved(&mut self.output_buf[..requested_usize]);
+//         }
 
-        #[expect(clippy::expect_used)]
-        stream
-            .put_data_f32(&self.output_buf[..requested_usize])
-            .expect("SDL3: Failed to put audio data");
-    }
-}
+//         #[expect(clippy::expect_used)]
+//         stream
+//             .put_data_f32(&self.output_buf[..requested_usize])
+//             .expect("SDL3: Failed to put audio data");
+//     }
+// }
 
 #[derive(Clone)]
 pub struct AudioCallbackImpl {
@@ -206,10 +207,10 @@ impl ceres_core::AudioCallback for AudioCallbackImpl {
 }
 
 pub struct Stream {
-    _sdl_context: sdl3::Sdl,
-    device: audio::AudioStreamWithCallback<BufferCallbackWrapper>,
+    _device: OutputDevice,
     ring_buffer: AudioCallbackImpl,
     sample_rate: i32,
+    silence: Arc<AtomicBool>,
     volume: Arc<Mutex<f32>>,
     volume_before_mute: Option<f32>,
 }
@@ -230,32 +231,44 @@ impl Stream {
     pub fn new() -> Result<Self, Error> {
         const INITIAL_VOLUME: f32 = 1.0;
 
-        let sdl_context = sdl3::init().map_err(|_err| Error::GetOutputDevice)?;
-        let audio_subsystem = sdl_context.audio().map_err(|_err| Error::GetOutputDevice)?;
-
         let volume = Arc::new(Mutex::new(INITIAL_VOLUME));
         let buffer_volume = Arc::clone(&volume);
 
         let ring_buffer = Arc::new(Mutex::new(Buffers::new(buffer_volume)?));
-        let buffer_cb_wrapper = BufferCallbackWrapper::new(Arc::clone(&ring_buffer));
+        let ring_buffer_clone = Arc::clone(&ring_buffer);
 
-        let source_spec = audio::AudioSpec {
-            freq: Some(SAMPLE_RATE),
-            channels: Some(2),
-            format: Some(audio::AudioFormat::f32_sys()),
+        let silence = Arc::new(AtomicBool::new(false));
+        let silence_clone = Arc::clone(&silence);
+
+        let params = OutputDeviceParameters {
+            channels_count: 2,
+            sample_rate: SAMPLE_RATE as usize,
+            channel_sample_count: BUFFER_SIZE as usize,
         };
 
-        let device = audio_subsystem
-            .open_playback_stream(&source_spec, buffer_cb_wrapper)
-            .map_err(|_err| Error::BuildStream)?;
+        let device = tinyaudio::run_output_device(params, {
+            move |mut data| {
+                let silence = silence_clone.load(std::sync::atomic::Ordering::Relaxed);
+
+                if silence {
+                    data.fill(0.0);
+                    return;
+                }
+
+                if let Ok(mut buffers) = ring_buffer_clone.lock() {
+                    buffers.write_samples_interleaved(&mut data);
+                }
+            }
+        })
+        .map_err(|_err| Error::BuildStream)?;
 
         let res = Self {
-            device,
+            _device: device,
             ring_buffer: AudioCallbackImpl::new(ring_buffer),
             volume,
             volume_before_mute: None,
             sample_rate: SAMPLE_RATE,
-            _sdl_context: sdl_context,
+            silence,
         };
 
         res.pause()?;
@@ -264,14 +277,17 @@ impl Stream {
     }
 
     pub fn pause(&self) -> Result<(), Error> {
-        self.device.pause().map_err(|_err| Error::PauseStream)?;
-        // Avoids audio stretching after unpausing
-        self.ring_buffer.clear();
+        self.silence
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+
         Ok(())
     }
 
     pub fn resume(&self) -> Result<(), Error> {
-        self.device.resume().map_err(|_err| Error::PlayStream)?;
+        self.silence
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        // Avoids audio stretching after unpausing
+        self.ring_buffer.clear();
         Ok(())
     }
 
