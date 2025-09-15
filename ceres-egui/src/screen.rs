@@ -1,4 +1,4 @@
-use ceres_std::cli::ShaderOption;
+use ceres_std::ShaderOption;
 use ceres_std::wgpu_renderer::PipelineWrapper;
 use eframe::egui;
 use eframe::wgpu;

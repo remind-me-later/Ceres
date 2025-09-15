@@ -14,4 +14,15 @@ pub use ceres_core::ColorCorrectionMode;
 pub use ceres_core::{Button, Model, PX_HEIGHT, PX_WIDTH};
 pub use thread::{Error, GbThread, Pressable};
 
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
+pub enum ShaderOption {
+    Crt,
+    Lcd,
+    #[default]
+    Nearest,
+    Scale2x,
+    Scale3x,
+}
+
 pub const PIXEL_BUFFER_SIZE: usize = 4 * PX_WIDTH as usize * PX_HEIGHT as usize;

@@ -1,5 +1,5 @@
 use ceres_std::wgpu_renderer::wgpu;
-use ceres_std::{cli::ShaderOption, wgpu_renderer::PipelineWrapper};
+use ceres_std::{ShaderOption, wgpu_renderer::PipelineWrapper};
 use std::sync::Arc;
 
 pub struct State<'a> {

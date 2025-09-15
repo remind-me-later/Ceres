@@ -34,7 +34,6 @@ default-features = false
 
 [dependencies.sdl3]
 version = "*"
-# default-features = false
 
 [dependencies.spin_sleep]
 version = "*"
@@ -54,6 +53,7 @@ optional = true
 # [target.'cfg(target_os = "android")'.dependencies]
 # log = { version = "*" }
 # android_logger = { version = "*" }
+
 
 [features]
 cli = ["dep:clap"]

@@ -1,6 +1,6 @@
-use std::path::{Path, PathBuf};
-
+use crate::ShaderOption;
 pub use clap;
+use std::path::{Path, PathBuf};
 
 pub const QUALIFIER: &str = "com.github";
 pub const ORGANIZATION: &str = "remind-me-later";
@@ -53,16 +53,6 @@ impl From<Model> for ceres_core::Model {
             Model::Cgb => Self::Cgb,
         }
     }
-}
-
-#[derive(Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
-pub enum ShaderOption {
-    Crt,
-    Lcd,
-    #[default]
-    Nearest,
-    Scale2x,
-    Scale3x,
 }
 
 impl AppOption for ShaderOption {
