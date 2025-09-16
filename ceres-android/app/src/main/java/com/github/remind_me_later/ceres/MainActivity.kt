@@ -70,10 +70,19 @@ class MainActivity : ComponentActivity() {
                 // Copy the content URI to a temporary file
                 val tempFile = copyUriToTempFile(uri)
                 if (tempFile != null) {
+                    // Generate save path based on original ROM name, not temp file name
+                    val originalFileName = getFileNameFromUri(uri) ?: "unknown_rom.gb"
+                    val savPath = getSavPathForRom(originalFileName)
+                    surfaceView.setSavPath(savPath)
+
+                    // Only pass savPath if the save file actually exists
+                    val existingSavPath = if (File(savPath).exists()) savPath else null
+
                     val success =
-                        RustBridge.loadRom(surfaceView.emulatorPtr, tempFile.absolutePath, null)
+                        RustBridge.loadRom(surfaceView.emulatorPtr, tempFile.absolutePath, existingSavPath)
                     if (success) {
                         Log.d("MainActivity", "ROM loaded successfully: ${tempFile.absolutePath}")
+                        Log.d("MainActivity", "SAV path: $savPath")
                     } else {
                         Log.e("MainActivity", "Failed to load ROM: ${tempFile.absolutePath}")
                     }
@@ -160,6 +169,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun getSavPathForRom(romFileName: String): String {
+        val savFileName = romFileName.substringBeforeLast(".") + ".sav"
+        return File(filesDir, savFileName).absolutePath
+    }
+
     override fun onDestroy() {
         cleanupTempRomFiles()
         super.onDestroy()
@@ -179,6 +193,32 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.e("MainActivity", "Error cleaning up temp ROM files: ${e.message}")
         }
+    }
+
+    fun importSaveFile(uri: Uri) {
+        emulatorViewModel?.emulatorSurfaceView?.let { surfaceView ->
+            try {
+                val currentSavPath = surfaceView.getCurrentSavPath()
+                if (currentSavPath != null) {
+                    // Copy the selected save file to the current save path
+                    contentResolver.openInputStream(uri)?.use { inputStream ->
+                        File(currentSavPath).outputStream().use { outputStream ->
+                            inputStream.copyTo(outputStream)
+                        }
+                    }
+                    Log.d("MainActivity", "Save file imported successfully to: $currentSavPath")
+                } else {
+                    Log.w("MainActivity", "No ROM loaded, cannot import save file")
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error importing save file: ${e.message}", e)
+            }
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        emulatorViewModel?.saveRAM()
     }
 }
 
@@ -267,6 +307,17 @@ fun EmulatorScreen(onViewModelCreated: (EmulatorViewModel) -> Unit) {
         }
     )
 
+    val saveFilePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+        onResult = { uri ->
+            uri?.let {
+                if (context is MainActivity) {
+                    context.importSaveFile(it)
+                }
+            }
+        }
+    )
+
     if (showRomListDialog && romFolderUri != null) {
         RomListDialog(
             romFolderUri = romFolderUri!!,
@@ -334,6 +385,11 @@ fun EmulatorScreen(onViewModelCreated: (EmulatorViewModel) -> Unit) {
                 DropdownMenuItem(text = { Text("Select ROM Folder") }, onClick = {
                     showMenu = false
                     directoryPickerLauncher.launch(null)
+                })
+
+                DropdownMenuItem(text = { Text("Import Save File") }, onClick = {
+                    showMenu = false
+                    saveFilePickerLauncher.launch(arrayOf("*/*"))
                 })
 
                 HorizontalDivider()

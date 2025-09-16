@@ -112,6 +112,17 @@ impl Emulator {
         Ok(())
     }
 
+    pub fn save_data(&self, path: &str) -> anyhow::Result<()> {
+        if self.thread.has_save_data() {
+            let mut file = std::fs::File::create(path)?;
+            self.thread
+                .save_data(&mut file)
+                .context("Failed to save data")
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn set_speed_multiplier(&mut self, multiplier: u32) {
         self.thread.set_speed_multiplier(multiplier);
         debug!("Speed multiplier set to: {multiplier}x");

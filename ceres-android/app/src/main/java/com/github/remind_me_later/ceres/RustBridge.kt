@@ -157,6 +157,17 @@ object RustBridge {
      */
     @Throws(IllegalArgumentException::class) external fun onWgpuLost(rustObj: Long)
 
+    /**
+     * Saves the emulator's RAM to a file.
+     *
+     * @param rustObj Pointer to the emulator instance
+     * @param path Path to save the RAM file
+     * @throws IllegalArgumentException if rustObj is invalid
+     * @throws IOException if saving fails
+     */
+    @Throws(IllegalArgumentException::class, IOException::class)
+    external fun saveRam(rustObj: Long, path: String)
+
     // Button constants matching the FFI implementation
     const val BUTTON_RIGHT: Int = 0
     const val BUTTON_LEFT: Int = 1

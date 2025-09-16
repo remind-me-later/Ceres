@@ -386,3 +386,39 @@ pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_destro
         debug!("Emulator destroyed");
     }
 }
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_github_remind_1me_1later_ceres_RustBridge_saveRam(
+    mut env: JNIEnv,
+    _class: JClass,
+    emulator_ptr: jlong,
+    path: JString,
+) {
+    if emulator_ptr == 0 {
+        throw_illegal_argument_exception(&mut env, "Invalid emulator pointer");
+        return;
+    }
+
+    let emulator = unsafe { &mut *(emulator_ptr as *mut Emulator) };
+    let path = match env.get_string(&path) {
+        Ok(jstr) => {
+            let jstr_path: String = jstr.into();
+            if jstr_path.is_empty() {
+                throw_illegal_argument_exception(&mut env, "Path cannot be empty");
+                return;
+            }
+            if let Err(e) = emulator.save_data(&jstr_path) {
+                throw_io_exception(&mut env, &format!("Failed to save RAM: {e}"));
+            }
+            jstr_path
+        }
+        Err(e) => {
+            throw_illegal_argument_exception(&mut env, &format!("Couldn't get string: {e}"));
+            return;
+        }
+    };
+
+    if let Err(e) = emulator.save_data(&path) {
+        throw_io_exception(&mut env, &format!("Failed to save RAM: {e}"));
+    }
+}

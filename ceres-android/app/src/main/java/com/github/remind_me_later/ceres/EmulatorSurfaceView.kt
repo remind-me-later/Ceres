@@ -13,6 +13,7 @@ class EmulatorSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
         private set
 
     private var isRenderingActive = false
+    private var savPath: String? = null
 
     constructor(context: Context) : super(context) {
         init()
@@ -122,6 +123,27 @@ class EmulatorSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                 Log.d("EmulatorSurfaceView", "Emulator destroyed")
             } catch (e: Exception) {
                 Log.e("EmulatorSurfaceView", "Failed to destroy emulator", e)
+            }
+        }
+    }
+
+    fun setSavPath(path: String) {
+        savPath = path
+    }
+
+    fun getCurrentSavPath(): String? {
+        return savPath
+    }
+
+    fun saveRAM() {
+        if (emulatorPtr != 0L) {
+            savPath?.let {
+                try {
+                    RustBridge.saveRam(emulatorPtr, it)
+                    Log.d("EmulatorSurfaceView", "RAM saved to $it")
+                } catch (e: Exception) {
+                    Log.e("EmulatorSurfaceView", "Failed to save RAM", e)
+                }
             }
         }
     }

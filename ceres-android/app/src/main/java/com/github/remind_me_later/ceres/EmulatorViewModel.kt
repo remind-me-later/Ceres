@@ -10,4 +10,8 @@ class EmulatorViewModel(application: Application) : AndroidViewModel(application
         emulatorSurfaceView.cleanup()
         super.onCleared()
     }
+
+    fun saveRAM() {
+        emulatorSurfaceView.saveRAM()
+    }
 }
