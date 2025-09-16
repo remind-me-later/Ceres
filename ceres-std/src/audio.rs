@@ -247,16 +247,14 @@ impl Stream {
         };
 
         let device = tinyaudio::run_output_device(params, {
-            move |mut data| {
-                let silence = silence_clone.load(std::sync::atomic::Ordering::Relaxed);
-
-                if silence {
+            move |data| {
+                if silence_clone.load(std::sync::atomic::Ordering::Relaxed) {
                     data.fill(0.0);
                     return;
                 }
 
                 if let Ok(mut buffers) = ring_buffer_clone.lock() {
-                    buffers.write_samples_interleaved(&mut data);
+                    buffers.write_samples_interleaved(data);
                 }
             }
         })
@@ -271,24 +269,21 @@ impl Stream {
             silence,
         };
 
-        res.pause()?;
+        res.pause();
 
         Ok(res)
     }
 
-    pub fn pause(&self) -> Result<(), Error> {
+    pub fn pause(&self) {
         self.silence
             .store(true, std::sync::atomic::Ordering::Relaxed);
-
-        Ok(())
     }
 
-    pub fn resume(&self) -> Result<(), Error> {
+    pub fn resume(&self) {
         self.silence
             .store(false, std::sync::atomic::Ordering::Relaxed);
         // Avoids audio stretching after unpausing
         self.ring_buffer.clear();
-        Ok(())
     }
 
     #[must_use]

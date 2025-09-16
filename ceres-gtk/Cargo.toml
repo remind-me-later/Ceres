@@ -5,19 +5,19 @@ edition.workspace = true
 repository.workspace = true
 license.workspace = true
 
-[dependencies]
+[target.'cfg(not(target_os = "android"))'.dependencies]
 ceres-std = { path = "../ceres-std", features = ["cli", "game_genie"] }
 epoxy = { version = "*" }
 glow = { version = "*" }
 libloading = { version = "*" }
 
-[dependencies.adw]
+[target.'cfg(not(target_os = "android"))'.dependencies.adw]
 version = "*"
 default-features = false
 features = ["v1_5"]
 package = "libadwaita"
 
-[dependencies.gtk]
+[target.'cfg(not(target_os = "android"))'.dependencies.gtk]
 version = "*"
 default-features = false
 features = ["v4_10"]

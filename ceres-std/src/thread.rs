@@ -280,7 +280,7 @@ impl GbThread {
     ///
     /// Returns an error if pausing the audio stream fails.
     pub fn pause(&mut self) -> Result<(), audio::Error> {
-        self.audio_stream.pause()?;
+        self.audio_stream.pause();
 
         // Signal the condition variable
         let (pause_lock, _pause_cvar) = &*self.pause_condvar;
@@ -311,7 +311,7 @@ impl GbThread {
             pause_cvar.notify_one();
         }
 
-        self.audio_stream.resume()?;
+        self.audio_stream.resume();
         Ok(())
     }
 
@@ -393,10 +393,6 @@ impl GbThread {
 
 impl Drop for GbThread {
     fn drop(&mut self) {
-        if let Err(e) = self.audio_stream.pause() {
-            eprintln!("error pausing audio stream: {e}");
-        }
-
         if let Err(e) = self.exit() {
             eprintln!("error exiting gb_loop: {e}");
         }

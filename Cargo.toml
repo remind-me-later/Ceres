@@ -13,6 +13,7 @@ default-members = ["ceres-gtk"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+readme = "README.md"
 repository = "https://github.com/remind-me-later/Ceres"
 license = "MIT"
 
