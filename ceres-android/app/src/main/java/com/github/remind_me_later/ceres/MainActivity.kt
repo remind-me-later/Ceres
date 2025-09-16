@@ -40,6 +40,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.launch
 import androidx.core.content.edit
 import androidx.core.net.toUri
@@ -471,7 +473,7 @@ fun GameBoyControls(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // D-Pad
-            GameBoyDPad(
+            VirtualAnalogStick(
                 onButtonPress = onButtonPress,
                 onButtonRelease = onButtonRelease,
                 modifier = Modifier.padding(16.dp)
@@ -509,158 +511,72 @@ fun GameBoyControls(
 }
 
 @Composable
-fun GameBoyDPad(
-    onButtonPress: (Int) -> Unit, onButtonRelease: (Int) -> Unit, modifier: Modifier = Modifier
-) {
-    var isUpPressed by remember { mutableStateOf(false) }
-    var isDownPressed by remember { mutableStateOf(false) }
-    var isLeftPressed by remember { mutableStateOf(false) }
-    var isRightPressed by remember { mutableStateOf(false) }
-
-    Box(modifier = modifier.size(120.dp), contentAlignment = Alignment.Center) {
-        // D-Pad background cross shape
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val centerX = size.width / 2
-            val centerY = size.height / 2
-            val thickness = 36.dp.toPx()
-            val length = 100.dp.toPx()
-            val armLength = (length - thickness) / 2
-            val cornerRadius = 6.dp.toPx()
-
-            // Base D-pad shape
-            // Horizontal bar
-            drawRoundRect(
-                color = DPadColor,
-                topLeft = Offset(centerX - length / 2, centerY - thickness / 2),
-                size = Size(length, thickness),
-                cornerRadius = CornerRadius(cornerRadius)
-            )
-
-            // Vertical bar
-            drawRoundRect(
-                color = DPadColor,
-                topLeft = Offset(centerX - thickness / 2, centerY - length / 2),
-                size = Size(thickness, length),
-                cornerRadius = CornerRadius(cornerRadius)
-            )
-
-            // Overlays for pressed states
-            val pressOverlayColor = DPadColor.copy(alpha = 0.5f)
-
-            if (isUpPressed) {
-                drawRect(
-                    color = pressOverlayColor,
-                    topLeft = Offset(centerX - thickness / 2, centerY - length / 2),
-                    size = Size(thickness, armLength)
-                )
-            }
-            if (isDownPressed) {
-                drawRect(
-                    color = pressOverlayColor,
-                    topLeft = Offset(centerX - thickness / 2, centerY + thickness / 2),
-                    size = Size(thickness, armLength)
-                )
-            }
-            if (isLeftPressed) {
-                drawRect(
-                    color = pressOverlayColor,
-                    topLeft = Offset(centerX - length / 2, centerY - thickness / 2),
-                    size = Size(armLength, thickness)
-                )
-            }
-            if (isRightPressed) {
-                drawRect(
-                    color = pressOverlayColor,
-                    topLeft = Offset(centerX + thickness / 2, centerY - thickness / 2),
-                    size = Size(armLength, thickness)
-                )
-            }
-        }
-
-        // Invisible touch areas for each direction
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxSize()
-        ) {
-            // UP
-            InvisibleGameBoyButton(
-                buttonId = RustBridge.BUTTON_UP,
-                onPress = onButtonPress,
-                onRelease = onButtonRelease,
-                onStateChange = { isUpPressed = it },
-                modifier = Modifier.size(36.dp, 42.dp) // Increased height for better touch area
-            )
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                // LEFT
-                InvisibleGameBoyButton(
-                    buttonId = RustBridge.BUTTON_LEFT,
-                    onPress = onButtonPress,
-                    onRelease = onButtonRelease,
-                    onStateChange = { isLeftPressed = it },
-                    modifier = Modifier.size(42.dp, 36.dp) // Increased width
-                )
-
-                Spacer(modifier = Modifier.width(36.dp))
-
-                // RIGHT
-                InvisibleGameBoyButton(
-                    buttonId = RustBridge.BUTTON_RIGHT,
-                    onPress = onButtonPress,
-                    onRelease = onButtonRelease,
-                    onStateChange = { isRightPressed = it },
-                    modifier = Modifier.size(42.dp, 36.dp) // Increased width
-                )
-            }
-
-            // DOWN
-            InvisibleGameBoyButton(
-                buttonId = RustBridge.BUTTON_DOWN,
-                onPress = onButtonPress,
-                onRelease = onButtonRelease,
-                onStateChange = { isDownPressed = it },
-                modifier = Modifier.size(36.dp, 42.dp) // Increased height
-            )
-        }
-    }
-}
-
-@Composable
-fun InvisibleGameBoyButton(
-    buttonId: Int,
-    onPress: (Int) -> Unit,
-    onRelease: (Int) -> Unit,
-    onStateChange: (Boolean) -> Unit,
+fun VirtualAnalogStick(
+    onButtonPress: (Int) -> Unit,
+    onButtonRelease: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
+    var thumbPosition by remember { mutableStateOf(Offset.Zero) }
+    val radius = 50.dp
+    val thumbRadius = 20.dp
+    var pressedButtons by remember { mutableStateOf(emptySet<Int>()) }
 
-    LaunchedEffect(interactionSource) {
-        interactionSource.interactions.collect { interaction ->
-            when (interaction) {
-                is PressInteraction.Press -> {
-                    onPress(buttonId)
-                    onStateChange(true)
-                }
+    Box(
+        modifier = modifier
+            .size(radius * 2)
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragEnd = {
+                        thumbPosition = Offset.Zero
+                        pressedButtons.forEach { onButtonRelease(it) }
+                        pressedButtons = emptySet()
+                    }
+                ) { change, dragAmount ->
+                    change.consume()
+                    val newPosition = thumbPosition + dragAmount
+                    val distance = newPosition.getDistance()
+                    thumbPosition = if (distance > radius.toPx()) {
+                        newPosition.div(distance) * radius.toPx()
+                    } else {
+                        newPosition
+                    }
 
-                is PressInteraction.Release -> {
-                    onRelease(buttonId)
-                    onStateChange(false)
-                }
+                    val newPressedButtons = mutableSetOf<Int>()
+                    if (thumbPosition != Offset.Zero) {
+                        val angle = Math.toDegrees(kotlin.math.atan2(thumbPosition.y, thumbPosition.x).toDouble())
+                        when {
+                            angle > -45 && angle <= 45 -> newPressedButtons.add(RustBridge.BUTTON_RIGHT)
+                            angle > 45 && angle <= 135 -> newPressedButtons.add(RustBridge.BUTTON_DOWN)
+                            angle > 135 || angle <= -135 -> newPressedButtons.add(RustBridge.BUTTON_LEFT)
+                            angle > -135 && angle <= -45 -> newPressedButtons.add(RustBridge.BUTTON_UP)
+                        }
+                    }
 
-                is PressInteraction.Cancel -> {
-                    onRelease(buttonId)
-                    onStateChange(false)
+                    val released = pressedButtons - newPressedButtons
+                    val pressed = newPressedButtons - pressedButtons
+
+                    released.forEach { onButtonRelease(it) }
+                    pressed.forEach { onButtonPress(it) }
+
+                    pressedButtons = newPressedButtons
                 }
-            }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            drawCircle(
+                color = DPadColor,
+                radius = radius.toPx()
+            )
+            drawCircle(
+                color = Color.White,
+                radius = thumbRadius.toPx(),
+                center = center + thumbPosition
+            )
         }
     }
-
-    Box(modifier = modifier.clickable(interactionSource = interactionSource, indication = null) {})
 }
+
 
 @Composable
 fun GameBoyActionButtons(
