@@ -335,6 +335,7 @@ impl GbThread {
     ///
     /// Returns an error if the Game Boy thread is not running, if creating the image fails,
     /// or if writing the file fails.
+    #[cfg(feature = "screenshot")]
     pub fn save_screenshot<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), Error> {
         let pixel_data = {
             let gb = self.gb.lock().map_err(|_err| Error::NoThreadRunning)?;
@@ -403,6 +404,7 @@ impl Drop for GbThread {
 pub enum Error {
     Audio(audio::Error),
     Gb(ceres_core::Error),
+    #[cfg(feature = "screenshot")]
     Image(image::ImageError),
     ImageCreate,
     Io(std::io::Error),
@@ -419,6 +421,7 @@ impl std::fmt::Display for Error {
             Self::ThreadJoin => write!(f, "thread join error"),
             Self::NoThreadRunning => write!(f, "no thread running"),
             Self::Audio(err) => write!(f, "audio error: {err}"),
+            #[cfg(feature = "screenshot")]
             Self::Image(err) => write!(f, "image error: {err}"),
             Self::ImageCreate => write!(f, "failed to create image"),
         }

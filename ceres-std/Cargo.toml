@@ -22,6 +22,7 @@ optional = true
 version = "*"
 default-features = false
 features = ["webp"]
+optional = true
 
 [dependencies.ringbuf]
 version = "*"
@@ -57,6 +58,7 @@ optional = true
 [features]
 cli = ["dep:clap"]
 game_genie = ["ceres-core/game_genie"]
+screenshot = ["dep:image"]
 wgpu_renderer = ["dep:wgpu"]
 
 [lints]
