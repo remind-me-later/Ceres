@@ -187,6 +187,10 @@ impl State {
         self.new_size = Some((width, height));
     }
 
+    pub const fn set_shader_option(&mut self, shader_option: ShaderOption) {
+        self.new_shader_option = Some(shader_option);
+    }
+
     pub fn update_texture(&mut self, rgba: &[u8]) {
         self.gb_screen
             .update_screen_texture(&self.device, &self.queue, rgba);

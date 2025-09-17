@@ -1,6 +1,8 @@
 use crate::video::State;
 use anyhow::Context;
-use ceres_std::{Button, GbThread, Model, ShaderOption};
+#[cfg(feature = "game_genie")]
+use ceres_std::GameGenieCode;
+use ceres_std::{Button, ColorCorrectionMode, GbThread, Model, ShaderOption};
 use jni::{JNIEnv, objects::JObject};
 use log::debug;
 use std::path::Path;
@@ -12,8 +14,36 @@ pub struct Emulator {
 }
 
 impl Emulator {
+    #[cfg(feature = "game_genie")]
+    pub fn activate_game_genie(&mut self, code: GameGenieCode) -> Result<(), ceres_core::Error> {
+        self.thread.activate_game_genie(code)
+    }
+
+    #[cfg(feature = "game_genie")]
+    pub fn active_game_genie_codes(&self) -> Option<Vec<GameGenieCode>> {
+        self.thread.active_game_genie_codes()
+    }
+
+    pub fn change_model(&mut self, model: Model) {
+        self.thread.change_model(model);
+        debug!("Model changed");
+    }
+
+    #[cfg(feature = "game_genie")]
+    pub fn deactivate_game_genie(&mut self, code: &GameGenieCode) {
+        self.thread.deactivate_game_genie(code);
+    }
+
     pub fn drop_state(&mut self) {
         self.state = None;
+    }
+
+    pub fn has_save_data(&self) -> bool {
+        self.thread.has_save_data()
+    }
+
+    pub const fn is_muted(&self) -> bool {
+        self.thread.is_muted()
     }
 
     pub fn is_paused(&self) -> bool {
@@ -29,6 +59,14 @@ impl Emulator {
         self.thread.change_rom(sav_path, rom_path)?;
         debug!("ROM loaded successfully");
         Ok(())
+    }
+
+    pub const fn model(&self) -> Model {
+        self.thread.model()
+    }
+
+    pub fn multiplier(&self) -> u32 {
+        self.thread.multiplier()
     }
 
     pub fn new() -> anyhow::Result<Self> {
@@ -123,6 +161,26 @@ impl Emulator {
         }
     }
 
+    // #[cfg(feature = "screenshot")]
+    // pub fn save_screenshot<P: AsRef<std::path::Path>>(
+    //     &self,
+    //     path: P,
+    // ) -> Result<(), ceres_std::Error> {
+    //     self.thread.save_screenshot(path)
+    // }
+
+    pub fn set_color_correction_mode(&self, mode: ColorCorrectionMode) {
+        self.thread.set_color_correction_mode(mode);
+        debug!("Color correction mode set");
+    }
+
+    pub fn set_shader_option(&mut self, shader: ShaderOption) {
+        if let Some(state) = &mut self.state {
+            state.set_shader_option(shader);
+            debug!("Shader option set");
+        }
+    }
+
     pub fn set_speed_multiplier(&mut self, multiplier: u32) {
         self.thread.set_speed_multiplier(multiplier);
         debug!("Speed multiplier set to: {multiplier}x");
@@ -136,5 +194,9 @@ impl Emulator {
     pub fn toggle_mute(&mut self) {
         self.thread.toggle_mute();
         debug!("Mute toggled");
+    }
+
+    pub fn volume(&self) -> f32 {
+        self.thread.volume()
     }
 }

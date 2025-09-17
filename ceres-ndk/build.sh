@@ -13,7 +13,7 @@ if ! command -v cargo-ndk &> /dev/null; then
     exit 1
 fi
 
-BUILD_TYPE="release" # Change to "debug" for debug builds
+BUILD_TYPE="debug" # Change to "debug" for debug builds and "release" for release
 if [ "$BUILD_TYPE" == "release" ]; then
     PROFILE="release"
 else
