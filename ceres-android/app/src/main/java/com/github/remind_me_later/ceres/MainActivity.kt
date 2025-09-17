@@ -1,17 +1,22 @@
 package com.github.remind_me_later.ceres
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.*
@@ -30,21 +35,24 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
+import androidx.core.content.edit
+import androidx.core.net.toUri
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.viewmodel.compose.viewModel
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.ui.input.pointer.pointerInput
-import kotlinx.coroutines.launch
-import androidx.core.content.edit
-import androidx.core.net.toUri
+import com.github.remind_me_later.ceres.ui.theme.CeresTheme
 
 private val DPadColor = Color(0x4DFFFFFF)
 private val ActionButtonColor = Color(0x4DFFFFFF)
@@ -56,10 +64,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
+            CeresTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background
-                ) { EmulatorScreen { vm -> emulatorViewModel = vm } }
+                ) {
+                    CeresApp { vm -> emulatorViewModel = vm }
+                }
             }
         }
     }
@@ -238,61 +248,72 @@ private fun getRomFolderUri(context: Context): Uri? {
     return uriString?.toUri()
 }
 
+enum class Screen {
+    RomList,
+    Emulator
+}
+
 @Composable
-private fun RomListDialog(
-    romFolderUri: Uri,
-    onDismiss: () -> Unit,
-    onRomSelected: (DocumentFile) -> Unit
-) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val romFiles = remember(romFolderUri) {
-        val tree = DocumentFile.fromTreeUri(context, romFolderUri)
-        tree?.listFiles()
-            ?.filter { it.isFile && (it.name?.endsWith(".gb") == true || it.name?.endsWith(".gbc") == true) }
-            ?: emptyList()
+fun CeresApp(onViewModelCreated: (EmulatorViewModel) -> Unit) {
+    val emulatorViewModel: EmulatorViewModel = viewModel()
+    onViewModelCreated(emulatorViewModel)
+
+    var currentScreen by remember { mutableStateOf(Screen.RomList) }
+    var selectedRom by remember { mutableStateOf<Uri?>(null) }
+    var isNewSelection by remember { mutableStateOf(false) }
+
+    val isGameRunning = selectedRom != null
+
+    LaunchedEffect(currentScreen) {
+        if (currentScreen == Screen.Emulator) {
+            emulatorViewModel.resume()
+        } else {
+            emulatorViewModel.pause()
+        }
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(0.9f),
-            shape = MaterialTheme.shapes.medium
-        ) {
-            Column {
-                Text(
-                    text = "Select a ROM",
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(16.dp)
-                )
-                LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                    items(romFiles) { file ->
-                        Text(
-                            text = file.name ?: "",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onRomSelected(file) }
-                                .padding(16.dp)
-                        )
+    when (currentScreen) {
+        Screen.RomList -> {
+            RomListScreen(
+                emulatorViewModel = emulatorViewModel,
+                onRomSelected = { romUri ->
+                    if (selectedRom != romUri) {
+                        selectedRom = romUri
                     }
+                    isNewSelection = true
+                    currentScreen = Screen.Emulator
+                },
+                isGameRunning = isGameRunning,
+                onReturnToGame = {
+                    isNewSelection = false
+                    currentScreen = Screen.Emulator
                 }
-            }
+            )
+        }
+
+        Screen.Emulator -> {
+            EmulatorScreen(
+                emulatorViewModel = emulatorViewModel,
+                romUri = selectedRom!!,
+                onExit = { currentScreen = Screen.RomList },
+                isNewSelection = isNewSelection,
+                onRomLoaded = { isNewSelection = false }
+            )
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EmulatorScreen(onViewModelCreated: (EmulatorViewModel) -> Unit) {
-    val emulatorViewModel: EmulatorViewModel = viewModel()
-    onViewModelCreated(emulatorViewModel)
-
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var showMenu by remember { mutableStateOf(false) }
-    var isPaused by remember { mutableStateOf(false) }
-    var currentRomName by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-
+fun RomListScreen(
+    emulatorViewModel: EmulatorViewModel,
+    onRomSelected: (Uri) -> Unit,
+    isGameRunning: Boolean,
+    onReturnToGame: () -> Unit
+) {
+    val context = LocalContext.current
     var romFolderUri by remember { mutableStateOf(getRomFolderUri(context)) }
-    var showRomListDialog by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
 
     val directoryPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
@@ -304,7 +325,6 @@ fun EmulatorScreen(onViewModelCreated: (EmulatorViewModel) -> Unit) {
                 )
                 saveRomFolderUri(context, it)
                 romFolderUri = it
-                showRomListDialog = true
             }
         }
     )
@@ -320,115 +340,152 @@ fun EmulatorScreen(onViewModelCreated: (EmulatorViewModel) -> Unit) {
         }
     )
 
-    if (showRomListDialog && romFolderUri != null) {
-        RomListDialog(
-            romFolderUri = romFolderUri!!,
-            onDismiss = { showRomListDialog = false },
-            onRomSelected = {
-                showRomListDialog = false
-                if (context is MainActivity) {
-                    context.loadRomFromUri(it.uri)
-                    currentRomName = it.name
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Roms") },
+                actions = {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu")
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Select ROM Folder") },
+                            onClick = {
+                                showMenu = false
+                                directoryPickerLauncher.launch(null)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Import Save File") },
+                            onClick = {
+                                showMenu = false
+                                saveFilePickerLauncher.launch(arrayOf("*/*"))
+                            }
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Speed 1x") },
+                            onClick = {
+                                showMenu = false
+                                RustBridge.setSpeedMultiplier(emulatorViewModel.emulatorSurfaceView.emulatorPtr, 1)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Speed 2x") },
+                            onClick = {
+                                showMenu = false
+                                RustBridge.setSpeedMultiplier(emulatorViewModel.emulatorSurfaceView.emulatorPtr, 2)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Speed 4x") },
+                            onClick = {
+                                showMenu = false
+                                RustBridge.setSpeedMultiplier(emulatorViewModel.emulatorSurfaceView.emulatorPtr, 4)
+                            }
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Toggle Mute") },
+                            onClick = {
+                                showMenu = false
+                                RustBridge.toggleMute(emulatorViewModel.emulatorSurfaceView.emulatorPtr)
+                            }
+                        )
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        Column(modifier = Modifier.padding(paddingValues)) {
+            if (romFolderUri == null) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Button(onClick = { directoryPickerLauncher.launch(null) }) {
+                        Text("Select ROMs Folder")
+                    }
+                }
+            } else {
+                val romFiles = remember(romFolderUri) {
+                    val tree = DocumentFile.fromTreeUri(context, romFolderUri!!)
+                    tree?.listFiles()
+                        ?.filter { it.isFile && (it.name?.endsWith(".gb") == true || it.name?.endsWith(".gbc") == true) }
+                        ?: emptyList()
+                }
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    if (isGameRunning) {
+                        item {
+                            ListItem(
+                                headlineContent = { Text("Return to Game") },
+                                leadingContent = {
+                                    Icon(
+                                        Icons.Default.PlayArrow,
+                                        contentDescription = "Play"
+                                    )
+                                },
+                                modifier = Modifier.clickable { onReturnToGame() }
+                            )
+                            HorizontalDivider()
+                        }
+                    }
+                    items(romFiles) { file ->
+                        ListItem(
+                            headlineContent = { Text(file.name ?: "") },
+                            modifier = Modifier.clickable { onRomSelected(file.uri) }
+                        )
+                    }
                 }
             }
-        )
+        }
+    }
+}
+
+@Composable
+fun EmulatorScreen(
+    emulatorViewModel: EmulatorViewModel,
+    romUri: Uri,
+    onExit: () -> Unit,
+    isNewSelection: Boolean,
+    onRomLoaded: () -> Unit
+) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val window = (view.context as Activity).window
+
+    DisposableEffect(Unit) {
+        val insetsController = WindowCompat.getInsetsController(window, view)
+        insetsController.hide(WindowInsetsCompat.Type.statusBars())
+        insetsController.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+
+        onDispose {
+            insetsController.show(WindowInsetsCompat.Type.statusBars())
+        }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Top App Bar with Menu
-        TopAppBar(title = {
-            Text(
-                text = currentRomName ?: "Ceres Game Boy Emulator",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }, actions = {
-            // Pause/Resume button
-            IconButton(
-                onClick = {
-                    scope.launch {
-                        val success = if (isPaused) {
-                            RustBridge.resumeEmulator(
-                                emulatorViewModel.emulatorSurfaceView.emulatorPtr
-                            )
-                        } else {
-                            RustBridge.pauseEmulator(
-                                emulatorViewModel.emulatorSurfaceView.emulatorPtr
-                            )
-                        }
-                        if (success) {
-                            isPaused = !isPaused
-                        }
-                    }
-                }) {
-                Icon(
-                    imageVector = if (isPaused) Icons.Default.PlayArrow
-                    else Icons.Default.Done,
-                    contentDescription = if (isPaused) "Resume" else "Pause"
-                )
-            }
+    BackHandler {
+        onExit()
+    }
 
-            // Menu button
-            IconButton(onClick = { showMenu = true }) {
-                Icon(Icons.Default.Menu, contentDescription = "Menu")
-            }
+    LaunchedEffect(romUri, isNewSelection) {
+        if (context is MainActivity && isNewSelection) {
+            context.loadRomFromUri(romUri)
+            onRomLoaded()
+        }
+    }
 
-            // Dropdown menu
-            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                DropdownMenuItem(text = { Text("Open ROM") }, onClick = {
-                    showMenu = false
-                    if (romFolderUri != null) {
-                        showRomListDialog = true
-                    } else {
-                        directoryPickerLauncher.launch(null)
-                    }
-                })
-
-                DropdownMenuItem(text = { Text("Select ROM Folder") }, onClick = {
-                    showMenu = false
-                    directoryPickerLauncher.launch(null)
-                })
-
-                DropdownMenuItem(text = { Text("Import Save File") }, onClick = {
-                    showMenu = false
-                    saveFilePickerLauncher.launch(arrayOf("*/*"))
-                })
-
-                HorizontalDivider()
-
-                DropdownMenuItem(text = { Text("Speed 1x") }, onClick = {
-                    showMenu = false
-                    RustBridge.setSpeedMultiplier(emulatorViewModel.emulatorSurfaceView.emulatorPtr, 1)
-                })
-                DropdownMenuItem(text = { Text("Speed 2x") }, onClick = {
-                    showMenu = false
-                    RustBridge.setSpeedMultiplier(emulatorViewModel.emulatorSurfaceView.emulatorPtr, 2)
-                })
-                DropdownMenuItem(text = { Text("Speed 4x") }, onClick = {
-                    showMenu = false
-                    RustBridge.setSpeedMultiplier(emulatorViewModel.emulatorSurfaceView.emulatorPtr, 4)
-                })
-
-                HorizontalDivider()
-
-                DropdownMenuItem(text = { Text("Toggle Mute") }, onClick = {
-                    showMenu = false
-                    RustBridge.toggleMute(emulatorViewModel.emulatorSurfaceView.emulatorPtr)
-                })
-            }
-        })
-
-        // Emulator Surface
+    Box(modifier = Modifier.fillMaxSize()) {
         BoxWithConstraints(
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
+                .fillMaxSize()
                 .background(Color.Black),
             contentAlignment = Alignment.Center
         ) {
             val boxWidth = this.maxWidth
             val boxHeight = this.maxHeight
-
             val aspectRatio = 160f / 144f
 
             val modifier = if (boxWidth / boxHeight > aspectRatio) {
@@ -447,18 +504,21 @@ fun EmulatorScreen(onViewModelCreated: (EmulatorViewModel) -> Unit) {
             )
         }
 
-        // Virtual Game Boy Controls
         GameBoyControls(
             onButtonPress = { buttonId ->
                 RustBridge.pressButton(emulatorViewModel.emulatorSurfaceView.emulatorPtr, buttonId)
-            }, onButtonRelease = { buttonId ->
+            },
+            onButtonRelease = { buttonId ->
                 RustBridge.releaseButton(emulatorViewModel.emulatorSurfaceView.emulatorPtr, buttonId)
-            }, modifier = Modifier
+            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .padding(16.dp)
         )
     }
 }
+
 
 @Composable
 fun GameBoyControls(
@@ -518,7 +578,7 @@ fun VirtualAnalogStick(
 ) {
     var thumbPosition by remember { mutableStateOf(Offset.Zero) }
     val radius = 50.dp
-    val thumbRadius = 20.dp
+    val thumbRadius = 30.dp
     var pressedButtons by remember { mutableStateOf(emptySet<Int>()) }
 
     Box(
@@ -548,7 +608,7 @@ fun VirtualAnalogStick(
                             angle > -45 && angle <= 45 -> newPressedButtons.add(RustBridge.BUTTON_RIGHT)
                             angle > 45 && angle <= 135 -> newPressedButtons.add(RustBridge.BUTTON_DOWN)
                             angle > 135 || angle <= -135 -> newPressedButtons.add(RustBridge.BUTTON_LEFT)
-                            angle > -135 && angle <= -45 -> newPressedButtons.add(RustBridge.BUTTON_UP)
+                            angle > -135 -> newPressedButtons.add(RustBridge.BUTTON_UP)
                         }
                     }
 

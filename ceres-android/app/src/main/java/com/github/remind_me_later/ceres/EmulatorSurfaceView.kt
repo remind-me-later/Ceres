@@ -32,7 +32,6 @@ class EmulatorSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
     private fun init() {
         RustBridge.init()
         emulatorPtr = RustBridge.createEmulator()
-        RustBridge.resumeEmulator(emulatorPtr)
         holder.addCallback(this)
         // Set up the surface for transparent rendering
         this.setZOrderMediaOverlay(true)
@@ -145,6 +144,18 @@ class EmulatorSurfaceView : SurfaceView, SurfaceHolder.Callback2 {
                     Log.e("EmulatorSurfaceView", "Failed to save RAM", e)
                 }
             }
+        }
+    }
+
+    fun pause() {
+        if (emulatorPtr != 0L) {
+            RustBridge.pauseEmulator(emulatorPtr)
+        }
+    }
+
+    fun resume() {
+        if (emulatorPtr != 0L) {
+            RustBridge.resumeEmulator(emulatorPtr)
         }
     }
 }

@@ -13,7 +13,12 @@ if ! command -v cargo-ndk &> /dev/null; then
     exit 1
 fi
 
-BUILD_TYPE="debug" # Change to "debug" for debug builds
+BUILD_TYPE="release" # Change to "debug" for debug builds
+if [ "$BUILD_TYPE" == "release" ]; then
+    PROFILE="release"
+else
+    PROFILE="dev"
+fi
 
 # Android API level (match with app's minSdk)
 API_LEVEL=29
@@ -33,7 +38,7 @@ for android_arch in "${!TARGETS[@]}"; do
     echo "Building for $android_arch ($rust_target)..."
     
     # Build the library
-    cargo ndk --target $android_arch --platform $API_LEVEL build
+    cargo ndk --target $android_arch --platform $API_LEVEL build --profile $PROFILE
     
     # Create the target directory in Android project if it doesn't exist
     mkdir -p "$ANDROID_PROJECT_PATH/$android_arch"

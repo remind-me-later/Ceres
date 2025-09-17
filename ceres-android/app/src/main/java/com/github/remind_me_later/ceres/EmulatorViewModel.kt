@@ -14,4 +14,12 @@ class EmulatorViewModel(application: Application) : AndroidViewModel(application
     fun saveRAM() {
         emulatorSurfaceView.saveRAM()
     }
+
+    fun pause() {
+        emulatorSurfaceView.pause()
+    }
+
+    fun resume() {
+        emulatorSurfaceView.resume()
+    }
 }

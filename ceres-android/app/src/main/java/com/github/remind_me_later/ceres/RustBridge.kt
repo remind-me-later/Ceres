@@ -11,7 +11,8 @@ object RustBridge {
      * @return Pointer to the emulator instance, or 0 if creation failed
      * @throws RuntimeException if emulator creation fails
      */
-    @Throws(RuntimeException::class) external fun createEmulator(): Long
+    @Throws(RuntimeException::class)
+    external fun createEmulator(): Long
 
     /**
      * Renders a single frame.
@@ -29,7 +30,8 @@ object RustBridge {
      * @param rustObj Pointer to the emulator instance
      * @throws IllegalArgumentException if rustObj is invalid
      */
-    @Throws(IllegalArgumentException::class) external fun dropWgpuState(rustObj: Long)
+    @Throws(IllegalArgumentException::class)
+    external fun dropWgpuState(rustObj: Long)
 
     /**
      * Recreates the WGPU state with a new surface.
@@ -72,7 +74,8 @@ object RustBridge {
      * @param buttonId ID of the button to press
      * @throws IllegalArgumentException if rustObj is invalid or buttonId is out of range
      */
-    @Throws(IllegalArgumentException::class) external fun pressButton(rustObj: Long, buttonId: Int)
+    @Throws(IllegalArgumentException::class)
+    external fun pressButton(rustObj: Long, buttonId: Int)
 
     /**
      * Releases a button on the emulator.
@@ -113,7 +116,8 @@ object RustBridge {
      * @return true if paused, false otherwise
      * @throws IllegalArgumentException if rustObj is invalid
      */
-    @Throws(IllegalArgumentException::class) external fun isPaused(rustObj: Long): Boolean
+    @Throws(IllegalArgumentException::class)
+    external fun isPaused(rustObj: Long): Boolean
 
     /**
      * Sets the emulator speed multiplier.
@@ -132,7 +136,8 @@ object RustBridge {
      * @param volume Volume level (0.0 to 1.0)
      * @throws IllegalArgumentException if rustObj is invalid
      */
-    @Throws(IllegalArgumentException::class) external fun setVolume(rustObj: Long, volume: Float)
+    @Throws(IllegalArgumentException::class)
+    external fun setVolume(rustObj: Long, volume: Float)
 
     /**
      * Toggles mute on the emulator.
@@ -140,7 +145,8 @@ object RustBridge {
      * @param rustObj Pointer to the emulator instance
      * @throws IllegalArgumentException if rustObj is invalid
      */
-    @Throws(IllegalArgumentException::class) external fun toggleMute(rustObj: Long)
+    @Throws(IllegalArgumentException::class)
+    external fun toggleMute(rustObj: Long)
 
     /**
      * Destroys the emulator instance and frees memory.
@@ -155,7 +161,8 @@ object RustBridge {
      * @param rustObj Pointer to the emulator instance
      * @throws IllegalArgumentException if rustObj is invalid
      */
-    @Throws(IllegalArgumentException::class) external fun onWgpuLost(rustObj: Long)
+    @Throws(IllegalArgumentException::class)
+    external fun onWgpuLost(rustObj: Long)
 
     /**
      * Saves the emulator's RAM to a file.
