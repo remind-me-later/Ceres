@@ -58,7 +58,8 @@ impl State<'_> {
             .formats
             .first()
             .copied()
-            .context("no supported surface formats")?;
+            .context("no supported surface formats")?
+            .remove_srgb_suffix();
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
