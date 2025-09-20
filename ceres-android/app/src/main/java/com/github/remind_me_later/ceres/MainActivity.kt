@@ -8,32 +8,57 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.*
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -48,18 +73,25 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.documentfile.provider.DocumentFile
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.github.remind_me_later.ceres.ui.theme.CeresTheme
+import kotlinx.coroutines.flow.collectLatest
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
-import com.github.remind_me_later.ceres.ui.theme.CeresTheme
 
 private val DPadColor = Color(0x4DFFFFFF)
 private val ActionButtonColor = Color(0x4DFFFFFF)
 private val StartSelectButtonColor = Color(0x4DFFFFFF)
 
+// To allow MainActivity to access the current EmulatorSurfaceView
+// This is a bit of a workaround for the importSaveFile functionality.
+// Ideally, this interaction would also go through the ViewModel or a shared service.
+private var currentEmulatorSurfaceView: EmulatorSurfaceView? = null
+
 class MainActivity : ComponentActivity() {
-    private var emulatorViewModel: EmulatorViewModel? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,42 +100,39 @@ class MainActivity : ComponentActivity() {
                 Surface(
                     modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background
                 ) {
-                    CeresApp { vm -> emulatorViewModel = vm }
+                    CeresApp()
                 }
             }
         }
     }
 
-    fun loadRomFromUri(uri: Uri) {
-        emulatorViewModel?.emulatorSurfaceView?.let { surfaceView ->
-            try {
-                Log.d("MainActivity", "Loading ROM from URI: $uri")
+    fun loadRomFromUri(surfaceView: EmulatorSurfaceView?, uri: Uri) {
+        surfaceView ?: return
+        try {
+            Log.d("MainActivity", "Loading ROM from URI: $uri")
 
-                // Copy the content URI to a temporary file
-                val tempFile = copyUriToTempFile(uri)
-                if (tempFile != null) {
-                    // Generate save path based on original ROM name, not temp file name
-                    val originalFileName = getFileNameFromUri(uri) ?: "unknown_rom.gb"
-                    val savPath = getSavPathForRom(originalFileName)
-                    surfaceView.setSavPath(savPath)
+            val tempFile = copyUriToTempFile(uri)
+            if (tempFile != null) {
+                val originalFileName = getFileNameFromUri(uri) ?: "unknown_rom.gb"
+                val savPath = getSavPathForRom(originalFileName)
+                surfaceView.setSavPath(savPath)
 
-                    // Only pass savPath if the save file actually exists
-                    val existingSavPath = if (File(savPath).exists()) savPath else null
+                val existingSavPath = if (File(savPath).exists()) savPath else null
 
-                    val success =
-                        RustBridge.loadRom(surfaceView.emulatorPtr, tempFile.absolutePath, existingSavPath)
-                    if (success) {
-                        Log.d("MainActivity", "ROM loaded successfully: ${tempFile.absolutePath}")
-                        Log.d("MainActivity", "SAV path: $savPath")
-                    } else {
-                        Log.e("MainActivity", "Failed to load ROM: ${tempFile.absolutePath}")
-                    }
+                val success = RustBridge.loadRom(
+                    surfaceView.emulatorPtr, tempFile.absolutePath, existingSavPath
+                )
+                if (success) {
+                    Log.d("MainActivity", "ROM loaded successfully: ${tempFile.absolutePath}")
+                    Log.d("MainActivity", "SAV path: $savPath")
                 } else {
-                    Log.e("MainActivity", "Failed to copy ROM file")
+                    Log.e("MainActivity", "Failed to load ROM: ${tempFile.absolutePath}")
                 }
-            } catch (e: Exception) {
-                Log.e("MainActivity", "Error loading ROM: ${e.message}")
+            } else {
+                Log.e("MainActivity", "Failed to copy ROM file")
             }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error loading ROM: ${e.message}")
         }
     }
 
@@ -115,28 +144,20 @@ class MainActivity : ComponentActivity() {
                 return null
             }
 
-            // Get the file name from the URI
             val fileName = getFileNameFromUri(uri) ?: "temp_rom.gb"
-
-            // Sanitize filename to prevent path traversal issues
             val sanitizedFileName = fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
-
-            // Create a temporary file in the app's cache directory
             val tempFile = File(cacheDir, "roms/$sanitizedFileName")
-            tempFile.parentFile?.mkdirs() // Create directories if they don't exist
+            tempFile.parentFile?.mkdirs()
 
-            // Delete existing file if it exists
             if (tempFile.exists()) {
                 tempFile.delete()
             }
-
             Log.d("MainActivity", "Copying ROM to: ${tempFile.absolutePath}")
 
-            // Copy the input stream to the temporary file
             val outputStream = FileOutputStream(tempFile)
             inputStream.use { input ->
                 outputStream.use { output ->
-                    val buffer = ByteArray(8192) // 8KB buffer for efficiency
+                    val buffer = ByteArray(8192)
                     var bytesRead: Int
                     var totalBytes = 0L
                     while (input.read(buffer).also { bytesRead = it } != -1) {
@@ -146,12 +167,8 @@ class MainActivity : ComponentActivity() {
                     Log.d("MainActivity", "ROM copied successfully, size: $totalBytes bytes")
                 }
             }
-
-            // Verify the file was created and has content
-            if (tempFile.exists() && tempFile.length() > 0) {
-                tempFile
-            } else {
-                Log.e("MainActivity", "Copied file is empty or doesn't exist")
+            if (tempFile.exists() && tempFile.length() > 0) tempFile else {
+                Log.e("MainActivity", "Copied file is empty or does not exist")
                 null
             }
         } catch (e: Exception) {
@@ -172,8 +189,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-
-            // Fallback to the last path segment
             uri.lastPathSegment
         } catch (e: Exception) {
             Log.e("MainActivity", "Error getting file name: ${e.message}")
@@ -188,6 +203,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         cleanupTempRomFiles()
+        currentEmulatorSurfaceView = null // Clear the reference
         super.onDestroy()
     }
 
@@ -208,11 +224,10 @@ class MainActivity : ComponentActivity() {
     }
 
     fun importSaveFile(uri: Uri) {
-        emulatorViewModel?.emulatorSurfaceView?.let { surfaceView ->
+        currentEmulatorSurfaceView?.let { surfaceView ->
             try {
                 val currentSavPath = surfaceView.getCurrentSavPath()
                 if (currentSavPath != null) {
-                    // Copy the selected save file to the current save path
                     contentResolver.openInputStream(uri)?.use { inputStream ->
                         File(currentSavPath).outputStream().use { outputStream ->
                             inputStream.copyTo(outputStream)
@@ -230,7 +245,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
-        emulatorViewModel?.saveRAM()
+        // ViewModel is not directly commanding saveRAM on activity pause anymore.
+        // This logic will be handled by EmulatorScreen observing lifecycle or commands.
     }
 }
 
@@ -249,55 +265,54 @@ private fun getRomFolderUri(context: Context): Uri? {
 }
 
 enum class Screen {
-    RomList,
-    Emulator
+    RomList, Emulator
 }
 
 @Composable
-fun CeresApp(onViewModelCreated: (EmulatorViewModel) -> Unit) {
+fun CeresApp() {
     val emulatorViewModel: EmulatorViewModel = viewModel()
-    onViewModelCreated(emulatorViewModel)
-
     var currentScreen by remember { mutableStateOf(Screen.RomList) }
     var selectedRom by remember { mutableStateOf<Uri?>(null) }
     var isNewSelection by remember { mutableStateOf(false) }
 
     val isGameRunning = selectedRom != null
 
-    LaunchedEffect(currentScreen) {
-        if (currentScreen == Screen.Emulator) {
-            emulatorViewModel.resume()
-        } else {
-            emulatorViewModel.pause()
-        }
-    }
+    // This effect is not strictly necessary anymore as pause/resume are handled
+    // by commands or directly in EmulatorScreen's lifecycle.
+    // LaunchedEffect(currentScreen) {
+    // if (currentScreen == Screen.Emulator) {
+    // emulatorViewModel.resume() // Consider if this is needed or handled by surface creation
+    // } else {
+    // emulatorViewModel.pause()
+    // }
+    // }
 
     when (currentScreen) {
         Screen.RomList -> {
-            RomListScreen(
-                emulatorViewModel = emulatorViewModel,
-                onRomSelected = { romUri ->
-                    if (selectedRom != romUri) {
-                        selectedRom = romUri
-                    }
-                    isNewSelection = true
-                    currentScreen = Screen.Emulator
-                },
-                isGameRunning = isGameRunning,
-                onReturnToGame = {
-                    isNewSelection = false
-                    currentScreen = Screen.Emulator
+            RomListScreen(emulatorViewModel = emulatorViewModel, onRomSelected = { romUri ->
+                if (selectedRom != romUri) {
+                    selectedRom = romUri
                 }
-            )
+                isNewSelection = true // Flag that a new ROM is selected
+                currentScreen = Screen.Emulator
+            }, isGameRunning = isGameRunning, onReturnToGame = {
+                isNewSelection = false // Returning to existing game, not a new selection
+                currentScreen = Screen.Emulator
+            })
         }
 
         Screen.Emulator -> {
             EmulatorScreen(
                 emulatorViewModel = emulatorViewModel,
-                romUri = selectedRom!!,
-                onExit = { currentScreen = Screen.RomList },
+                romUri = selectedRom!!, // Non-null asserted as it's set before navigating here
+                onExit = {
+                    // When exiting emulator, always tell ViewModel to pause and save.
+                    emulatorViewModel.pause()
+                    emulatorViewModel.saveRAM()
+                    currentScreen = Screen.RomList
+                },
                 isNewSelection = isNewSelection,
-                onRomLoaded = { isNewSelection = false }
+                onRomLoaded = { isNewSelection = false } // Reset flag after new ROM is processed
             )
         }
     }
@@ -316,93 +331,69 @@ fun RomListScreen(
     var showMenu by remember { mutableStateOf(false) }
 
     val directoryPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree(),
-        onResult = { uri ->
+        contract = ActivityResultContracts.OpenDocumentTree(), onResult = { uri ->
             uri?.let {
                 context.contentResolver.takePersistableUriPermission(
-                    it,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    it, Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
                 saveRomFolderUri(context, it)
                 romFolderUri = it
             }
-        }
-    )
+        })
 
     val saveFilePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-        onResult = { uri ->
+        contract = ActivityResultContracts.OpenDocument(), onResult = { uri ->
             uri?.let {
                 if (context is MainActivity) {
                     context.importSaveFile(it)
                 }
             }
-        }
-    )
+        })
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Roms") },
-                actions = {
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu")
-                    }
-                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Select ROM Folder") },
-                            onClick = {
-                                showMenu = false
-                                directoryPickerLauncher.launch(null)
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Import Save File") },
-                            onClick = {
-                                showMenu = false
-                                saveFilePickerLauncher.launch(arrayOf("*/*"))
-                            }
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("Speed 1x") },
-                            onClick = {
-                                showMenu = false
-                                RustBridge.setSpeedMultiplier(emulatorViewModel.emulatorSurfaceView.emulatorPtr, 1)
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Speed 2x") },
-                            onClick = {
-                                showMenu = false
-                                RustBridge.setSpeedMultiplier(emulatorViewModel.emulatorSurfaceView.emulatorPtr, 2)
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Speed 4x") },
-                            onClick = {
-                                showMenu = false
-                                RustBridge.setSpeedMultiplier(emulatorViewModel.emulatorSurfaceView.emulatorPtr, 4)
-                            }
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("Toggle Mute") },
-                            onClick = {
-                                showMenu = false
-                                RustBridge.toggleMute(emulatorViewModel.emulatorSurfaceView.emulatorPtr)
-                            }
-                        )
-                    }
+            TopAppBar(title = { Text("Roms") }, actions = {
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(Icons.Default.Menu, contentDescription = "Menu")
                 }
-            )
-        }
-    ) { paddingValues ->
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenuItem(text = { Text("Select ROM Folder") }, onClick = {
+                        showMenu = false
+                        directoryPickerLauncher.launch(null)
+                    })
+                    DropdownMenuItem(text = { Text("Import Save File") }, onClick = {
+                        showMenu = false
+                        if (currentEmulatorSurfaceView?.getCurrentSavPath() != null) {
+                            saveFilePickerLauncher.launch(arrayOf("*/*"))
+                        } else {
+                            // Optionally show a toast or message that no game is loaded
+                            Log.w(
+                                "RomListScreen",
+                                "Cannot import save, no game loaded or sav path not set."
+                            )
+                        }
+                    })
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text("Speed 1x") },
+                        onClick = { emulatorViewModel.setSpeed(1); showMenu = false })
+                    DropdownMenuItem(
+                        text = { Text("Speed 2x") },
+                        onClick = { emulatorViewModel.setSpeed(2); showMenu = false })
+                    DropdownMenuItem(
+                        text = { Text("Speed 4x") },
+                        onClick = { emulatorViewModel.setSpeed(4); showMenu = false })
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text("Toggle Mute") },
+                        onClick = { emulatorViewModel.toggleMute(); showMenu = false })
+                }
+            })
+        }) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues)) {
             if (romFolderUri == null) {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+                    modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center
                 ) {
                     Button(onClick = { directoryPickerLauncher.launch(null) }) {
                         Text("Select ROMs Folder")
@@ -411,9 +402,11 @@ fun RomListScreen(
             } else {
                 val romFiles = remember(romFolderUri) {
                     val tree = DocumentFile.fromTreeUri(context, romFolderUri!!)
-                    tree?.listFiles()
-                        ?.filter { it.isFile && (it.name?.endsWith(".gb") == true || it.name?.endsWith(".gbc") == true) }
-                        ?: emptyList()
+                    tree?.listFiles()?.filter {
+                        it.isFile && (it.name?.endsWith(".gb") == true || it.name?.endsWith(
+                            ".gbc"
+                        ) == true)
+                    } ?: emptyList()
                 }
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     if (isGameRunning) {
@@ -422,20 +415,17 @@ fun RomListScreen(
                                 headlineContent = { Text("Return to Game") },
                                 leadingContent = {
                                     Icon(
-                                        Icons.Default.PlayArrow,
-                                        contentDescription = "Play"
+                                        Icons.Default.PlayArrow, contentDescription = "Play"
                                     )
                                 },
-                                modifier = Modifier.clickable { onReturnToGame() }
-                            )
+                                modifier = Modifier.clickable { onReturnToGame() })
                             HorizontalDivider()
                         }
                     }
                     items(romFiles) { file ->
                         ListItem(
                             headlineContent = { Text(file.name ?: "") },
-                            modifier = Modifier.clickable { onRomSelected(file.uri) }
-                        )
+                            modifier = Modifier.clickable { onRomSelected(file.uri) })
                     }
                 }
             }
@@ -451,9 +441,62 @@ fun EmulatorScreen(
     isNewSelection: Boolean,
     onRomLoaded: () -> Unit
 ) {
-    val context = LocalContext.current
+    val context = LocalActivity.current as MainActivity // Assuming MainActivity context
     val view = LocalView.current
     val window = (view.context as Activity).window
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+
+    // Create and manage EmulatorSurfaceView instance here
+    val emulatorSurfaceView = remember {
+        EmulatorSurfaceView(context).also {
+            currentEmulatorSurfaceView = it // Set the global reference
+        }
+    }
+
+    DisposableEffect(emulatorSurfaceView, lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> emulatorSurfaceView.resume() // Resume rendering when screen is visible
+                Lifecycle.Event.ON_PAUSE -> emulatorSurfaceView.pause()   // Pause rendering when screen is not visible
+                Lifecycle.Event.ON_DESTROY -> {
+                    emulatorSurfaceView.cleanup() // Clean up when the composable is destroyed
+                    if (currentEmulatorSurfaceView == emulatorSurfaceView) {
+                        currentEmulatorSurfaceView = null // Clear the global reference
+                    }
+                }
+
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            // Ensure cleanup if not already done by ON_DESTROY (e.g. quick exit)
+            // emulatorSurfaceView.cleanup() // This might be redundant if ON_DESTROY always fires
+            if (currentEmulatorSurfaceView == emulatorSurfaceView) {
+                currentEmulatorSurfaceView = null
+            }
+        }
+    }
+
+
+    LaunchedEffect(emulatorViewModel.emulatorCommands, emulatorSurfaceView) {
+        emulatorViewModel.emulatorCommands.collectLatest {
+            when (it) {
+                EmulatorCommand.SaveRAM -> emulatorSurfaceView.saveRAM()
+                EmulatorCommand.Pause -> emulatorSurfaceView.pause()
+                EmulatorCommand.Resume -> emulatorSurfaceView.resume()
+                is EmulatorCommand.SetSpeed -> RustBridge.setSpeedMultiplier(
+                    emulatorSurfaceView.emulatorPtr, it.multiplier
+                )
+
+                EmulatorCommand.ToggleMute -> RustBridge.toggleMute(emulatorSurfaceView.emulatorPtr)
+
+                EmulatorCommand.Cleanup -> emulatorSurfaceView.cleanup()
+            }
+        }
+    }
 
     DisposableEffect(Unit) {
         val insetsController = WindowCompat.getInsetsController(window, view)
@@ -461,19 +504,23 @@ fun EmulatorScreen(
         insetsController.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 
+        // Resume emulator when entering this screen
+        emulatorViewModel.resume() // Or directly emulatorSurfaceView.resume() if preferred
+
         onDispose {
             insetsController.show(WindowInsetsCompat.Type.statusBars())
+            // Pausing is now handled by lifecycle observer or onExit lambda
         }
     }
 
     BackHandler {
-        onExit()
+        onExit() // This will trigger pause and saveRAM via the onExit lambda in CeresApp
     }
 
-    LaunchedEffect(romUri, isNewSelection) {
-        if (context is MainActivity && isNewSelection) {
-            context.loadRomFromUri(romUri)
-            onRomLoaded()
+    LaunchedEffect(romUri, isNewSelection, emulatorSurfaceView) {
+        if (isNewSelection) {
+            context.loadRomFromUri(emulatorSurfaceView, romUri)
+            onRomLoaded() // Signal that the new ROM has been processed
         }
     }
 
@@ -499,19 +546,24 @@ fun EmulatorScreen(
             }
 
             AndroidView(
-                factory = { emulatorViewModel.emulatorSurfaceView },
-                modifier = modifier
-            )
+                factory = { emulatorSurfaceView }, // Use the local instance
+                modifier = modifier, update = { view ->
+                    // Optional: If you need to tell the view it's being reused / reattached
+                    // For instance, if surfaceCreated wasn't being called reliably on return to screen
+                    Log.d("EmulatorScreen", "AndroidView update for: ${view.hashCode()}")
+                })
         }
 
         GameBoyControls(
             onButtonPress = { buttonId ->
-                RustBridge.pressButton(emulatorViewModel.emulatorSurfaceView.emulatorPtr, buttonId)
-            },
-            onButtonRelease = { buttonId ->
-                RustBridge.releaseButton(emulatorViewModel.emulatorSurfaceView.emulatorPtr, buttonId)
-            },
-            modifier = Modifier
+            if (emulatorSurfaceView.emulatorPtr != 0L) {
+                RustBridge.pressButton(emulatorSurfaceView.emulatorPtr, buttonId)
+            }
+        }, onButtonRelease = { buttonId ->
+            if (emulatorSurfaceView.emulatorPtr != 0L) {
+                RustBridge.releaseButton(emulatorSurfaceView.emulatorPtr, buttonId)
+            }
+        }, modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .padding(16.dp)
@@ -532,22 +584,17 @@ fun GameBoyControls(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // D-Pad
             VirtualAnalogStick(
                 onButtonPress = onButtonPress,
                 onButtonRelease = onButtonRelease,
                 modifier = Modifier.padding(16.dp)
             )
-
-            // Action Buttons
             GameBoyActionButtons(
                 onButtonPress = onButtonPress,
                 onButtonRelease = onButtonRelease,
                 modifier = Modifier.padding(16.dp)
             )
         }
-
-        // Start/Select buttons positioned in center bottom
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
@@ -572,9 +619,7 @@ fun GameBoyControls(
 
 @Composable
 fun VirtualAnalogStick(
-    onButtonPress: (Int) -> Unit,
-    onButtonRelease: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    onButtonPress: (Int) -> Unit, onButtonRelease: (Int) -> Unit, modifier: Modifier = Modifier
 ) {
     var thumbPosition by remember { mutableStateOf(Offset.Zero) }
     val radius = 50.dp
@@ -590,8 +635,7 @@ fun VirtualAnalogStick(
                         thumbPosition = Offset.Zero
                         pressedButtons.forEach { onButtonRelease(it) }
                         pressedButtons = emptySet()
-                    }
-                ) { change, dragAmount ->
+                    }) { change, dragAmount ->
                     change.consume()
                     val newPosition = thumbPosition + dragAmount
                     val distance = newPosition.getDistance()
@@ -603,7 +647,9 @@ fun VirtualAnalogStick(
 
                     val newPressedButtons = mutableSetOf<Int>()
                     if (thumbPosition != Offset.Zero) {
-                        val angle = Math.toDegrees(kotlin.math.atan2(thumbPosition.y, thumbPosition.x).toDouble())
+                        val angle = Math.toDegrees(
+                            kotlin.math.atan2(thumbPosition.y, thumbPosition.x).toDouble()
+                        )
                         when {
                             angle > -45 && angle <= 45 -> newPressedButtons.add(RustBridge.BUTTON_RIGHT)
                             angle > 45 && angle <= 135 -> newPressedButtons.add(RustBridge.BUTTON_DOWN)
@@ -620,18 +666,14 @@ fun VirtualAnalogStick(
 
                     pressedButtons = newPressedButtons
                 }
-            },
-        contentAlignment = Alignment.Center
+            }, contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             drawCircle(
-                color = DPadColor,
-                radius = radius.toPx()
+                color = DPadColor, radius = radius.toPx()
             )
             drawCircle(
-                color = Color.White,
-                radius = thumbRadius.toPx(),
-                center = center + thumbPosition
+                color = Color.White, radius = thumbRadius.toPx(), center = center + thumbPosition
             )
         }
     }
@@ -651,15 +693,12 @@ fun GameBoyActionButtons(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // B Button (left)
             GameBoyCircularButton(
                 text = "B",
                 buttonId = RustBridge.BUTTON_B,
                 onPress = onButtonPress,
                 onRelease = onButtonRelease
             )
-
-            // A Button (right)
             GameBoyCircularButton(
                 text = "A",
                 buttonId = RustBridge.BUTTON_A,
@@ -709,17 +748,13 @@ fun GameBoyCircularButton(
                 interactionSource = interactionSource, indication = null
             ) {}, contentAlignment = Alignment.Center
     ) {
-        // Draw circular button
         Canvas(modifier = Modifier.fillMaxSize()) {
             val radius = size.minDimension / 2
-
-            // Main button
             drawCircle(
                 color = if (isPressed) ActionButtonColor.copy(alpha = 0.8f)
                 else ActionButtonColor, radius = radius, center = center
             )
         }
-
         Text(text = text, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
     }
 }
@@ -763,17 +798,13 @@ fun GameBoyStartSelectButton(
                 interactionSource = interactionSource, indication = null
             ) {}, contentAlignment = Alignment.Center
     ) {
-        // Draw rounded rectangular button
         Canvas(modifier = Modifier.fillMaxSize()) {
             val cornerRadius = 8.dp.toPx()
-
-            // Main button
             drawRoundRect(
                 color = if (isPressed) StartSelectButtonColor.copy(alpha = 0.8f)
                 else StartSelectButtonColor, size = size, cornerRadius = CornerRadius(cornerRadius)
             )
         }
-
         Text(
             text = text,
             color = Color.White,
