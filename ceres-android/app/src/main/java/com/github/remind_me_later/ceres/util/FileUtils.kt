@@ -28,6 +28,9 @@ fun loadRomFromUri(context: Context, surfaceView: EmulatorSurfaceView?, uri: Uri
             if (success) {
                 Log.d("FileUtils", "ROM loaded successfully: ${tempFile.absolutePath}")
                 Log.d("FileUtils", "SAV path: $savPath")
+                
+                // Apply saved preferences after ROM loads
+                applyUserPreferences(context, surfaceView.emulatorPtr)
             } else {
                 Log.e("FileUtils", "Failed to load ROM: ${tempFile.absolutePath}")
             }
@@ -137,5 +140,21 @@ fun importSaveFile(context: Context, uri: Uri, surfaceView: EmulatorSurfaceView?
         } catch (e: Exception) {
             Log.e("FileUtils", "Error importing save file: ${e.message}", e)
         }
+    }
+}
+
+fun applyUserPreferences(context: Context, emulatorPtr: Long) {
+    try {
+        // Apply saved color correction mode
+        val colorCorrectionMode = getColorCorrectionMode(context)
+        RustBridge.setColorCorrectionMode(emulatorPtr, colorCorrectionMode)
+        Log.d("FileUtils", "Applied color correction mode: $colorCorrectionMode")
+        
+        // Apply saved shader option
+        val shaderOption = getShaderOption(context)
+        RustBridge.setShaderOption(emulatorPtr, shaderOption)
+        Log.d("FileUtils", "Applied shader option: $shaderOption")
+    } catch (e: Exception) {
+        Log.e("FileUtils", "Error applying user preferences: ${e.message}", e)
     }
 }

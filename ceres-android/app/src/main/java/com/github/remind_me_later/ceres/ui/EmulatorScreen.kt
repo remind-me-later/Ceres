@@ -95,6 +95,14 @@ fun EmulatorScreen(
 
                 EmulatorCommand.ToggleMute -> RustBridge.toggleMute(emulatorSurfaceView.emulatorPtr)
 
+                is EmulatorCommand.SetColorCorrectionMode -> RustBridge.setColorCorrectionMode(
+                    emulatorSurfaceView.emulatorPtr, it.mode
+                )
+
+                is EmulatorCommand.SetShaderOption -> RustBridge.setShaderOption(
+                    emulatorSurfaceView.emulatorPtr, it.shader
+                )
+
                 EmulatorCommand.Cleanup -> emulatorSurfaceView.cleanup()
             }
         }
@@ -119,7 +127,7 @@ fun EmulatorScreen(
         onExit() // This will trigger pause and saveRAM via the onExit lambda in CeresApp
     }
 
-    LaunchedEffect(romUri, isNewSelection, emulatorSurfaceView) {
+    LaunchedEffect(isNewSelection) {
         if (isNewSelection) {
             context.loadRomFromUri(emulatorSurfaceView, romUri)
             onRomLoaded() // Signal that the new ROM has been processed

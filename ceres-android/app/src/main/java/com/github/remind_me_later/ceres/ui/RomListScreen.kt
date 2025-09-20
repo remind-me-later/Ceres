@@ -8,8 +8,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -17,6 +21,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -33,10 +39,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
 import com.github.remind_me_later.ceres.MainActivity
+import com.github.remind_me_later.ceres.RustBridge
 import com.github.remind_me_later.ceres.util.getRomFolderUri
 import com.github.remind_me_later.ceres.util.saveRomFolderUri
+import com.github.remind_me_later.ceres.util.getColorCorrectionMode
+import com.github.remind_me_later.ceres.util.saveColorCorrectionMode
+import com.github.remind_me_later.ceres.util.getShaderOption
+import com.github.remind_me_later.ceres.util.saveShaderOption
 import com.github.remind_me_later.ceres.viewmodel.EmulatorViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,7 +68,7 @@ fun HomeScreen(
     val tabTitles = listOf("Roms", "Settings")
 
     var romFolderUri by remember { mutableStateOf(getRomFolderUri(context)) }
-SportsEsports
+
     val directoryPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(), onResult = { uri ->
             uri?.let {
@@ -182,6 +194,29 @@ fun SettingsScreen(
     onImportSaveFile: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    var colorCorrectionMode by remember { mutableStateOf(getColorCorrectionMode(context)) }
+    var shaderOption by remember { mutableStateOf(getShaderOption(context)) }
+    var colorCorrectionExpanded by remember { mutableStateOf(false) }
+    var shaderExpanded by remember { mutableStateOf(false) }
+
+    val colorCorrectionOptions = mapOf(
+        RustBridge.COLOR_CORRECT_CURVES to "Correct Curves",
+        RustBridge.COLOR_DISABLED to "Disabled",
+        RustBridge.COLOR_LOW_CONTRAST to "Low Contrast",
+        RustBridge.COLOR_MODERN_BALANCED to "Modern Balanced",
+        RustBridge.COLOR_MODERN_BOOST_CONTRAST to "Modern Boost Contrast",
+        RustBridge.COLOR_REDUCE_CONTRAST to "Reduce Contrast"
+    )
+
+    val shaderOptions = mapOf(
+        RustBridge.SHADER_CRT to "CRT",
+        RustBridge.SHADER_LCD to "LCD",
+        RustBridge.SHADER_NEAREST to "Nearest",
+        RustBridge.SHADER_SCALE2X to "Scale2x",
+        RustBridge.SHADER_SCALE3X to "Scale3x"
+    )
+
     LazyColumn(modifier = modifier) {
         item {
             ListItem(
@@ -195,6 +230,84 @@ fun SettingsScreen(
                 modifier = Modifier.clickable { onImportSaveFile() }
             )
         }
+        item { HorizontalDivider() }
+        
+        // Color Correction Mode Setting
+        item {
+            ListItem(
+                headlineContent = { 
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Color Correction")
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Box {
+                            Button(
+                                onClick = { colorCorrectionExpanded = true }
+                            ) {
+                                Text(colorCorrectionOptions[colorCorrectionMode] ?: "Unknown")
+                            }
+                            DropdownMenu(
+                                expanded = colorCorrectionExpanded,
+                                onDismissRequest = { colorCorrectionExpanded = false }
+                            ) {
+                                colorCorrectionOptions.forEach { (mode, name) ->
+                                    DropdownMenuItem(
+                                        text = { Text(name) },
+                                        onClick = {
+                                            colorCorrectionMode = mode
+                                            saveColorCorrectionMode(context, mode)
+                                            emulatorViewModel.setColorCorrectionMode(mode)
+                                            colorCorrectionExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            )
+        }
+
+        // Shader Option Setting
+        item {
+            ListItem(
+                headlineContent = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Shader")
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Box {
+                            Button(
+                                onClick = { shaderExpanded = true }
+                            ) {
+                                Text(shaderOptions[shaderOption] ?: "Unknown")
+                            }
+                            DropdownMenu(
+                                expanded = shaderExpanded,
+                                onDismissRequest = { shaderExpanded = false }
+                            ) {
+                                shaderOptions.forEach { (shader, name) ->
+                                    DropdownMenuItem(
+                                        text = { Text(name) },
+                                        onClick = {
+                                            shaderOption = shader
+                                            saveShaderOption(context, shader)
+                                            emulatorViewModel.setShaderOption(shader)
+                                            shaderExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            )
+        }
+        
         item { HorizontalDivider() }
         item {
             ListItem(

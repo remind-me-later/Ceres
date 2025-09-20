@@ -37,4 +37,16 @@ class EmulatorViewModel : ViewModel() {
             emulatorCommands.emit(EmulatorCommand.Resume)
         }
     }
+
+    fun setColorCorrectionMode(mode: Int) {
+        viewModelScope.launch {
+            emulatorCommands.emit(EmulatorCommand.SetColorCorrectionMode(mode))
+        }
+    }
+
+    fun setShaderOption(shader: Int) {
+        viewModelScope.launch {
+            emulatorCommands.emit(EmulatorCommand.SetShaderOption(shader))
+        }
+    }
 }
