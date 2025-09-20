@@ -1,17 +1,17 @@
 # Ceres
 
-A (very experimental) GameBoy/Color emulator written in rust.
+Some kind of GameBoy/Color emulator written in rust.
 
-![logo](https://github.com/remind-me-later/ceres-images/blob/main/ceres.webp?raw=true)
+![logo](media/logo/ceres.webp)
 
 ## Screenshots
 
 <p align="center" width="100%">
-    <img width="25%" alt="Kirby's Dream Land" src="https://github.com/remind-me-later/ceres-images/blob/main/kirby_dream.webp?raw=true">
-    <img width="25%" alt="Pokémon Silver" src="https://github.com/remind-me-later/ceres-images/blob/main/pokemon_silver.webp?raw=true">
-    <img width="25%" alt="Pokémon Crystal" src="https://github.com/remind-me-later/ceres-images/blob/main/pokemon_crystal.webp?raw=true">
-    <img width="25%" alt="Zelda Link's Awakening Intro" src="https://github.com/remind-me-later/ceres-images/blob/main/zelda_yume_1.webp?raw=true">
-    <img width="25%" alt="Zelda Link's Awakening Title" src="https://github.com/remind-me-later/ceres-images/blob/main/zelda_yume_2.webp?raw=true">
+    <img width="25%" alt="Tetris" src="media/screenshots/tetris.webp">
+    <img width="25%" alt="Pokémon Silver" src="media/screenshots/poke_silver.webp">
+    <img width="25%" alt="Pokémon Crystal" src="media/screenshots/poke_crystal.webp">
+    <img width="25%" alt="Zelda Link's Awakening" src="media/screenshots/links_awakening.webp">
+    <img width="25%" alt="Zelda Oracle of Ages" src="media/screenshots/oracle_of_ages.webp">
 </p>
 
 ## Frontends
