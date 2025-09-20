@@ -14,7 +14,7 @@ fn main() -> anyhow::Result<()> {
 
     let project_dirs = directories::ProjectDirs::from(QUALIFIER, ORGANIZATION, CERES_STYLIZED)
         .ok_or_else(|| {
-            anyhow::anyhow!("Failed to get project directories for '{}'", CERES_STYLIZED)
+            anyhow::anyhow!("Failed to get project directories for '{CERES_STYLIZED}'")
         })?;
 
     let mut main_window = app::App::new(
