@@ -52,6 +52,4 @@ assets/
 **/*.hprof
 
 **/*.jar
-**/*.webp
-
 **/*.so
