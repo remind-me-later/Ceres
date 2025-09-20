@@ -24,7 +24,7 @@ fun CeresApp() {
 
     when (currentScreen) {
         Screen.RomList -> {
-            RomListScreen(emulatorViewModel = emulatorViewModel, onRomSelected = { romUri ->
+            HomeScreen(emulatorViewModel = emulatorViewModel, onRomSelected = { romUri ->
                 if (selectedRom != romUri) {
                     selectedRom = romUri
                 }

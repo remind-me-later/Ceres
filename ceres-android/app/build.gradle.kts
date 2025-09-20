@@ -7,6 +7,7 @@ plugins {
 android {
     namespace = "com.github.remind_me_later.ceres"
     compileSdk = 36
+    ndkVersion = "26.1.10909125"
 
     defaultConfig {
         applicationId = "com.github.remind_me_later.ceres"
