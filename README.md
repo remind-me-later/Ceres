@@ -43,6 +43,11 @@ To build:
 
 ## Build for Android
 
+> [!WARNING]
+> This is only a proof of concept, the android frontend is not complete and working
+> with Android studio is painful, so until there is a way to use Kotlin without
+> Android Studio I won't invest more time in this.
+
 Follow the steps above, then:
 
 - Open the `ceres-ndk` folder and run `./build.sh`, this will build the JNI library
