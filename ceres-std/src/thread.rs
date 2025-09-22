@@ -155,6 +155,88 @@ impl GbThread {
         Ok(())
     }
 
+    fn gb_loop(
+        gb: &Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
+        exiting: &Arc<AtomicBool>,
+        pause_condvar: &Arc<(Mutex<bool>, Condvar)>,
+        multiplier: &Arc<AtomicU32>,
+        mut gilrs: gilrs::Gilrs,
+    ) {
+        let mut last_loop = std::time::Instant::now();
+
+        loop {
+            let (pause_lock, pause_cvar) = &**pause_condvar;
+            if let Ok(mut paused) = pause_lock.lock() {
+                while *paused && !exiting.load(Relaxed) {
+                    if let Ok(new_paused) = pause_cvar.wait(paused) {
+                        paused = new_paused;
+                    } else {
+                        return; // Exit if the Condvar is poisoned
+                    }
+                }
+            }
+
+            if exiting.load(Relaxed) {
+                break;
+            }
+
+            if let Ok(mut gb) = gb.lock() {
+                {
+                    // Handle gamepad input
+                    // TODO: how can we randomize in which part of the frame we send the input?
+                    while let Some(gilrs::Event { event, .. }) = gilrs.next_event() {
+                        match event {
+                            gilrs::EventType::ButtonPressed(button, _) => {
+                                if let Some(ceres_button) = match button {
+                                    gilrs::Button::DPadUp => Some(ceres_core::Button::Up),
+                                    gilrs::Button::DPadDown => Some(ceres_core::Button::Down),
+                                    gilrs::Button::DPadLeft => Some(ceres_core::Button::Left),
+                                    gilrs::Button::DPadRight => Some(ceres_core::Button::Right),
+                                    gilrs::Button::South => Some(ceres_core::Button::A),
+                                    gilrs::Button::East => Some(ceres_core::Button::B),
+                                    gilrs::Button::Select => Some(ceres_core::Button::Select),
+                                    gilrs::Button::Start => Some(ceres_core::Button::Start),
+                                    _ => None,
+                                } {
+                                    gb.press(ceres_button);
+                                }
+                            }
+                            gilrs::EventType::ButtonReleased(button, _) => {
+                                if let Some(ceres_button) = match button {
+                                    gilrs::Button::DPadUp => Some(ceres_core::Button::Up),
+                                    gilrs::Button::DPadDown => Some(ceres_core::Button::Down),
+                                    gilrs::Button::DPadLeft => Some(ceres_core::Button::Left),
+                                    gilrs::Button::DPadRight => Some(ceres_core::Button::Right),
+                                    gilrs::Button::South => Some(ceres_core::Button::A),
+                                    gilrs::Button::East => Some(ceres_core::Button::B),
+                                    gilrs::Button::Select => Some(ceres_core::Button::Select),
+                                    gilrs::Button::Start => Some(ceres_core::Button::Start),
+                                    _ => None,
+                                } {
+                                    gb.release(ceres_button);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+
+                gb.run_frame();
+                // ctx.paint(gb.pixel_data_rgba());
+            }
+            // ctx.request_repaint();
+
+            let duration = ceres_core::FRAME_DURATION / multiplier.load(Relaxed);
+            let elapsed = last_loop.elapsed();
+
+            if elapsed < duration {
+                spin_sleep::sleep(duration - elapsed);
+            }
+
+            last_loop = std::time::Instant::now();
+        }
+    }
+
     #[must_use]
     pub fn has_save_data(&self) -> bool {
         self.gb.lock().is_ok_and(|gb| gb.cart_has_battery())
@@ -191,49 +273,6 @@ impl GbThread {
         sav_path: Option<&Path>,
         rom_path: Option<&Path>,
     ) -> Result<Self, Error> {
-        fn gb_loop(
-            gb: &Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
-            exiting: &Arc<AtomicBool>,
-            pause_condvar: &Arc<(Mutex<bool>, Condvar)>,
-            multiplier: &Arc<AtomicU32>,
-        ) {
-            let mut last_loop = std::time::Instant::now();
-
-            loop {
-                // Check if we need to pause using the condition variable
-                let (pause_lock, pause_cvar) = &**pause_condvar;
-                if let Ok(mut paused) = pause_lock.lock() {
-                    while *paused && !exiting.load(Relaxed) {
-                        if let Ok(new_paused) = pause_cvar.wait(paused) {
-                            paused = new_paused;
-                        } else {
-                            return; // Exit if the Condvar is poisoned
-                        }
-                    }
-                }
-
-                // Exit if we were signaled to exit while paused
-                if exiting.load(Relaxed) {
-                    break;
-                }
-
-                if let Ok(mut gb) = gb.lock() {
-                    gb.run_frame();
-                    // ctx.paint(gb.pixel_data_rgba());
-                }
-                // ctx.request_repaint();
-
-                let duration = ceres_core::FRAME_DURATION / multiplier.load(Relaxed);
-                let elapsed = last_loop.elapsed();
-
-                if elapsed < duration {
-                    spin_sleep::sleep(duration - elapsed);
-                }
-
-                last_loop = std::time::Instant::now();
-            }
-        }
-
         let audio_stream = audio::Stream::new().map_err(Error::Audio)?;
         let ring_buffer = audio_stream.ring_buffer();
 
@@ -250,6 +289,9 @@ impl GbThread {
 
         let multiplier = Arc::new(AtomicU32::new(1));
 
+        // FIXME: use proper user facing config options
+        let gilrs = gilrs::Gilrs::new().map_err(|e| Error::GamePadError(e.to_string()))?;
+
         let thread_builder = std::thread::Builder::new().name("gb_loop".to_owned());
         let thread_handle = {
             let gb = Arc::clone(&gb);
@@ -259,7 +301,7 @@ impl GbThread {
 
             // std::thread::spawn(move || gb_loop(gb, exit, pause_thread))
             thread_builder.spawn_with_priority(thread_priority::ThreadPriority::Max, move |_| {
-                gb_loop(&gb, &exit, &pause_condvar, &multiplier);
+                Self::gb_loop(&gb, &exit, &pause_condvar, &multiplier, gilrs);
             })?
         };
 
@@ -403,6 +445,7 @@ impl Drop for GbThread {
 #[derive(Debug)]
 pub enum Error {
     Audio(audio::Error),
+    GamePadError(String),
     Gb(ceres_core::Error),
     #[cfg(feature = "screenshot")]
     Image(image::ImageError),
@@ -417,6 +460,7 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Io(err) => write!(f, "os error: {err}"),
+            Self::GamePadError(err) => write!(f, "gamepad error: {err}"),
             Self::Gb(err) => write!(f, "gb error: {err}"),
             Self::ThreadJoin => write!(f, "thread join error"),
             Self::NoThreadRunning => write!(f, "no thread running"),
