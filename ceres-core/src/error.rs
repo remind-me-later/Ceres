@@ -11,6 +11,8 @@ pub enum Error {
     InvalidGameGenieCodeNotHexDigit { pos: u8 },
     InvalidRamSize,
     InvalidRomSize,
+    // FIXME: add variants for invalid save state details
+    InvalidSaveState,
     NonAsciiTitleString,
     RamSizeDifferentThanActual { expected: u32, actual: u32 },
     RomSizeDifferentThanActual { expected: u32, actual: u32 },
@@ -44,6 +46,9 @@ impl Display for Error {
             }
             Self::InvalidRamSize => {
                 write!(f, "invalid RAM size in cartridge header")
+            }
+            Self::InvalidSaveState => {
+                write!(f, "invalid save state")
             }
             Self::NonAsciiTitleString => write!(
                 f,

@@ -1,5 +1,5 @@
 // #![no_std]
-// TODO: Use borrowedBuf or something similar to avoid std io (currently nightly only)
+// FIXME: https://github.com/rust-lang/rust/issues/137578
 
 extern crate alloc;
 
@@ -23,6 +23,7 @@ use crate::{
     memory::{Hram, Wram},
     timing::DOTS_PER_FRAME,
 };
+use alloc::{boxed::Box, vec::Vec};
 use cartridge::Cartridge;
 #[cfg(feature = "game_genie")]
 use cheats::GameGenie;
@@ -32,7 +33,6 @@ use interrupts::Interrupts;
 use joypad::Joypad;
 use memory::Key1;
 use serial::Serial;
-use std::io;
 use {apu::Apu, ppu::Ppu};
 pub use {
     apu::{AudioCallback, Sample},
@@ -118,8 +118,8 @@ impl<A: AudioCallback> Gb<A> {
     /// # Errors
     ///
     /// Returns an error if reading from or seeking within the reader fails.
-    pub fn load_data<R: io::Read + io::Seek>(&mut self, reader: &mut R) -> Result<(), io::Error> {
-        bess::load_state(self, reader)
+    pub fn load_data(&mut self, buf: &[u8], secs_since_unix_epoch: u64) -> Result<(), Error> {
+        bess::Reader::new(buf).load_state(self, secs_since_unix_epoch)
     }
 
     #[must_use]
@@ -168,13 +168,8 @@ impl<A: AudioCallback> Gb<A> {
         self.dots_ran -= DOTS_PER_FRAME;
     }
 
-    /// Saves the current state to the provided writer.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if writing or seeking to the writer fails.
-    pub fn save_data<W: io::Write + io::Seek>(&self, writer: &mut W) -> Result<(), io::Error> {
-        bess::save_state(self, writer)
+    pub fn save_data(&self, buf: &mut Vec<u8>, secs_since_unix_epoch: u64) {
+        bess::Writer::new(buf).save_state(self, secs_since_unix_epoch);
     }
 
     pub const fn set_color_correction_mode(&mut self, mode: ColorCorrectionMode) {

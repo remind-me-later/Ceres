@@ -4,6 +4,7 @@ use ceres_core::GameGenieCode;
 use ceres_core::GbBuilder;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
+use std::io::Read;
 use std::{
     fs::OpenOptions,
     sync::{Condvar, Mutex, atomic::AtomicU32},
@@ -107,15 +108,26 @@ impl GbThread {
             if gb_builder.can_load_save_data()
                 && let Some(sav_path) = sav_path
             {
-                let mut save_data = OpenOptions::new()
+                let mut gb = gb_builder.build();
+
+                let mut save_data_buf = Vec::new();
+
+                OpenOptions::new()
                     .read(true)
                     .write(false)
                     .create(false)
                     .truncate(false)
                     .open(sav_path)
-                    .map_err(Error::Io)?;
-                let mut gb = gb_builder.build();
-                gb.load_data(&mut save_data)?;
+                    .map_err(Error::Io)?
+                    .read_to_end(&mut save_data_buf)?;
+
+                #[expect(clippy::unwrap_used)]
+                let secs_since_unix_epoch = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs();
+
+                gb.load_data(&save_data_buf, secs_since_unix_epoch)?;
                 Ok(gb)
             } else {
                 Ok(gb_builder.build())
@@ -362,12 +374,24 @@ impl GbThread {
     /// # Errors
     ///
     /// Returns an error if the Game Boy thread is not running or if writing the save data fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the system time is before the UNIX epoch.
     pub fn save_data<W: std::io::Write + std::io::Seek>(
         &self,
         writer: &mut W,
     ) -> Result<(), Error> {
+        #[expect(clippy::unwrap_used)]
+        let secs_since_unix_epoch = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
         self.gb.lock().map_or(Err(Error::NoThreadRunning), |gb| {
-            gb.save_data(writer).map_err(Error::Io)
+            let mut buf = Vec::new();
+            gb.save_data(&mut buf, secs_since_unix_epoch);
+            writer.write_all(&buf).map_err(Error::Io)
         })
     }
 

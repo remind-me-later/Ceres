@@ -1,5 +1,5 @@
 use crate::timing::DOTS_PER_SEC;
-use std::num::NonZeroU8;
+use core::num::NonZeroU8;
 
 #[derive(Default, Debug)]
 pub struct Mbc3RTC {

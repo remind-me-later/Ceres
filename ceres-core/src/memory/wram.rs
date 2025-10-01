@@ -1,4 +1,5 @@
 use super::svbk::Svbk;
+use alloc::{boxed::Box, vec};
 
 pub struct Wram {
     svbk: Svbk,

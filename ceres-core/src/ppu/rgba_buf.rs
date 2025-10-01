@@ -1,4 +1,5 @@
 use crate::{PX_HEIGHT, PX_WIDTH};
+use alloc::{boxed::Box, vec};
 
 pub struct RgbaBuf {
     data: Box<[u8; Self::RGB_BUF_SIZE as usize]>,
