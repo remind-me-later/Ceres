@@ -1121,9 +1121,9 @@ impl<A: AudioCallback> Gb<A> {
             self.key1.change_speed();
             self.write_div();
 
-            // TODO: div should not tick
             for _ in 0..2050 {
-                self.tick_m_cycle();
+                // TODO: div should not tick during speed change, check this
+                self.advance_dots_no_timers(4);
             }
         } else {
             self.cpu.is_halted = true;

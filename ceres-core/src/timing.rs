@@ -37,9 +37,14 @@ enum TIMAState {
 }
 
 impl<A: AudioCallback> Gb<A> {
-    pub fn advance_dots(&mut self, mut dots: i32) {
+    pub fn advance_dots(&mut self, dots: i32) {
         // affected by speed boost
         self.run_timers(dots);
+        self.advance_dots_no_timers(dots);
+    }
+
+    pub fn advance_dots_no_timers(&mut self, mut dots: i32) {
+        // affected by speed boost
         self.dma.advance_dots(dots);
 
         // not affected by speed boost
