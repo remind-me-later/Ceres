@@ -22,11 +22,11 @@ responsibility:
     wide range of platforms.
 
 - `ceres-std`: Provides standard library-dependent functionalities for desktop
-    and mobile frontends (Android), such as:
+  frontends, such as:
   - Audio playback (`audio.rs`)
   - Threading (`thread.rs`)
-  - A WebGPU-based renderer (`wgpu_renderer/`) used by the `winit`, `egui` and
-    Android frontends.
+  - A WebGPU-based renderer (`wgpu_renderer/`) used by the `winit` and `egui`
+    frontends.
 
 - `ceres-winit`: A minimal, cross-platform CLI frontend using `winit` for
   windowing. It renders the emulator screen but offers no GUI controls.
@@ -35,10 +35,6 @@ responsibility:
   GUI library.
 
 - `ceres-gtk`: A Linux-focused frontend using GTK4 for its user interface.
-
-- `ceres-android/`: The Android application project.
-- `ceres-ndk/`: JNI bindings to expose the `ceres-core` functionality to the
-  Android application.
 
 - `gb-bootroms/`: Contains the source code and build scripts for the Game Boy
   boot ROMs used by the emulator.

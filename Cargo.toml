@@ -4,7 +4,6 @@ members = [
   "ceres-core",
   "ceres-egui",
   "ceres-gtk",
-  # "ceres-ndk",
   "ceres-std",
   "ceres-winit",
 ]
