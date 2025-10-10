@@ -5,6 +5,8 @@ mod app;
 #[cfg(target_os = "linux")]
 mod application_window;
 #[cfg(target_os = "linux")]
+mod config;
+#[cfg(target_os = "linux")]
 mod gl_area;
 #[cfg(target_os = "linux")]
 mod preferences_dialog;

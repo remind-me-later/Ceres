@@ -5,6 +5,7 @@ use crate::gl_area::GlArea;
 
 #[derive(Debug)]
 pub struct ApplicationWindow {
+    config: RefCell<crate::config::Config>,
     file_dialog: gtk::FileDialog,
     gb_area: GlArea,
     pause_button: adw::SplitButton,
@@ -100,6 +101,7 @@ impl Default for ApplicationWindow {
         toolbar_view.set_content(Some(&gb_area));
 
         Self {
+            config: RefCell::new(crate::config::Config::default()),
             file_dialog,
             gb_area,
             toolbar_view,
@@ -120,6 +122,33 @@ impl ApplicationWindow {
 
     pub const fn gl_area(&self) -> &GlArea {
         &self.gb_area
+    }
+
+    /// Get the last ROM path from the loaded configuration
+    pub fn last_rom_path(&self) -> Option<PathBuf> {
+        self.config
+            .borrow()
+            .last_rom_path
+            .as_ref()
+            .map(PathBuf::from)
+    }
+
+    /// Load configuration from disk and apply it to the UI
+    pub fn load_config(&self) {
+        let config = crate::config::Config::load();
+
+        // Apply settings to the UI
+        self.gb_area.set_property("gb-model", &config.gb_model);
+        self.gb_area
+            .set_property("shader-mode", &config.shader_mode);
+        self.gb_area
+            .set_property("pixel-perfect", config.pixel_perfect);
+        self.gb_area
+            .set_property("color-correction", &config.color_correction);
+        self.volume_button.set_value(config.volume);
+
+        // Store the loaded config
+        *self.config.borrow_mut() = config;
     }
 
     fn load_file(&self, file_path: &std::path::Path) -> Result<(), ceres_std::Error> {
@@ -146,6 +175,28 @@ impl ApplicationWindow {
                 Ok(())
             }
             Err(err) => Err(err),
+        }
+    }
+
+    /// Save current configuration to disk
+    pub fn save_config(&self) {
+        // Update config with current values
+        let mut config = self.config.borrow_mut();
+
+        config.last_rom_path = self
+            .rom_path
+            .borrow()
+            .as_ref()
+            .map(|p| p.display().to_string());
+        config.gb_model = self.gb_area.property::<String>("gb-model");
+        config.shader_mode = self.gb_area.property::<String>("shader-mode");
+        config.pixel_perfect = self.gb_area.property::<bool>("pixel-perfect");
+        config.color_correction = self.gb_area.property::<String>("color-correction");
+        config.volume = self.volume_button.value();
+
+        // Save to disk
+        if let Err(e) = config.save() {
+            eprintln!("Failed to save configuration: {}", e);
         }
     }
 
@@ -433,10 +484,14 @@ impl ObjectImpl for ApplicationWindow {
 
         // Make window as compact as possible
         window.set_default_size(1, 1); // Set minimal default size
+
+        // Load saved configuration
+        self.load_config();
     }
 
     fn dispose(&self) {
         self.save_data();
+        self.save_config();
     }
 }
 impl WidgetImpl for ApplicationWindow {}

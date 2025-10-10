@@ -80,9 +80,24 @@ impl ApplicationImpl for Application {
         // Connect preferences dialog to the GlArea using properties
         preferences.connect_to_gl_area(window.imp().gl_area());
 
-        self.apply_cli_options();
+        // Apply CLI options only if they were explicitly provided
+        // CLI options should override saved configuration
+        let has_cli_args = std::env::args().len() > 1;
+
+        if has_cli_args {
+            self.apply_cli_options();
+        }
 
         preferences.set_initialization_complete();
+
+        // If no ROM was specified via CLI, try loading the last opened ROM
+        if self.cli_options.borrow().file().is_none()
+            && let Some(last_rom) = window.imp().last_rom_path()
+            && last_rom.exists()
+            && let Some(action) = window.lookup_action("win.load-file")
+        {
+            action.activate(Some(&last_rom.display().to_string().to_variant()));
+        }
 
         window.present();
     }
