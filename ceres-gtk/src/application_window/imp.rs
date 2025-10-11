@@ -154,7 +154,8 @@ impl ApplicationWindow {
     fn load_file(&self, file_path: &std::path::Path) -> Result<(), ceres_std::Error> {
         let sav_path = {
             let file_stem = file_path.file_stem().unwrap();
-            Some(Self::data_path().join(file_stem).with_extension("sav"))
+            let maybe_sav_path = Self::data_path().join(file_stem).with_extension("sav");
+            maybe_sav_path.exists().then_some(maybe_sav_path)
         };
 
         let change_rom_res = self
@@ -216,7 +217,7 @@ impl ApplicationWindow {
             self.gb_area
                 .gb_thread()
                 .borrow_mut()
-                .save_data(&mut sav_file.unwrap())
+                .write_save_data(&mut sav_file.unwrap())
                 .unwrap();
         }
     }

@@ -131,7 +131,7 @@ impl App<'_> {
         std::fs::create_dir_all(self.project_dirs.data_dir())?;
         if let Some(sav_path) = &self.sav_path {
             let sav_file = File::create(sav_path);
-            self.thread.save_data(&mut sav_file?)?;
+            self.thread.write_save_data(&mut sav_file?)?;
         }
 
         Ok(())

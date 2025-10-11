@@ -385,33 +385,6 @@ impl GbThread {
         Ok(())
     }
 
-    /// Saves the current save data to the provided writer.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the Game Boy thread is not running or if writing the save data fails.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the system time is before the UNIX epoch.
-    #[inline]
-    pub fn save_data<W: std::io::Write + std::io::Seek>(
-        &self,
-        writer: &mut W,
-    ) -> Result<(), Error> {
-        #[expect(clippy::unwrap_used)]
-        let secs_since_unix_epoch = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        self.gb.lock().map_or(Err(Error::NoThreadRunning), |gb| {
-            let mut buf = Vec::new();
-            gb.save_data(&mut buf, secs_since_unix_epoch);
-            writer.write_all(&buf).map_err(Error::Io)
-        })
-    }
-
     /// Saves a WebP screenshot to the specified path.
     ///
     /// # Errors
@@ -478,6 +451,33 @@ impl GbThread {
     #[inline]
     pub fn volume(&self) -> f32 {
         self.audio_stream.volume()
+    }
+
+    /// Saves the current save data to the provided writer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the Game Boy thread is not running or if writing the save data fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the system time is before the UNIX epoch.
+    #[inline]
+    pub fn write_save_data<W: std::io::Write + std::io::Seek>(
+        &self,
+        writer: &mut W,
+    ) -> Result<(), Error> {
+        #[expect(clippy::unwrap_used)]
+        let secs_since_unix_epoch = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        self.gb.lock().map_or(Err(Error::NoThreadRunning), |gb| {
+            let mut buf = Vec::new();
+            gb.save_data(&mut buf, secs_since_unix_epoch);
+            writer.write_all(&buf).map_err(Error::Io)
+        })
     }
 }
 
