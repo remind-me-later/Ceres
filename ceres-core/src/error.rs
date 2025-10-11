@@ -4,12 +4,14 @@ use fmt::Display;
 const COMMON_GAME_GENIE_FORMAT_STRING: &str =
     "expected a game genie code of the form ABC-DEF-GHI, where A..I are hex digits";
 
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum Error {
     InvalidGameGenieCodeExpectedHyphen { pos: u8 },
     InvalidGameGenieCodeLength { actual: usize },
     InvalidGameGenieCodeNotHexDigit { pos: u8 },
     InvalidRamSize,
+    InvalidRomHeaderSize,
     InvalidRomSize,
     // FIXME: add variants for invalid save state details
     InvalidSaveState,
@@ -21,8 +23,9 @@ pub enum Error {
 }
 
 impl Display for Error {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
+        match *self {
             Self::InvalidGameGenieCodeLength { actual } => write!(
                 f,
                 "{COMMON_GAME_GENIE_FORMAT_STRING}: expected length 11, got {actual}",
@@ -39,6 +42,12 @@ impl Display for Error {
                     f,
                     "{COMMON_GAME_GENIE_FORMAT_STRING}: expected hex digit at character position {}",
                     pos + 1
+                )
+            }
+            Self::InvalidRomHeaderSize => {
+                write!(
+                    f,
+                    "ROM is too small to be a valid cartridge, header must be at least 0x150 bytes"
                 )
             }
             Self::InvalidRomSize => {

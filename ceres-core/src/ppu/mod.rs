@@ -34,6 +34,7 @@ const STAT_IF_LYC_B: u8 = 0x40;
 
 const DOTS_UNTIL_ENABLED: i32 = 80;
 
+#[non_exhaustive]
 #[derive(Clone, Copy, Default)]
 pub enum ColorCorrectionMode {
     CorrectCurves,

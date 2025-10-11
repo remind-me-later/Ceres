@@ -112,6 +112,13 @@ impl Cartridge {
         reason = "ROM and RAM are common names in this context"
     )]
     pub fn new(rom: Box<[u8]>) -> Result<Self, Error> {
+        if rom.len() < 0x150 {
+            return Err(Error::InvalidRomHeaderSize);
+        }
+
+        // NOTE: Superfluous but silences clippy false positive
+        assert!(rom.len() >= 0x150, "ROM is too small to be valid");
+
         let rom_size = ROMSize::new(rom[0x148])?;
         let ram_size = RAMSize::new(rom[0x149])?;
         let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], rom_size)?;

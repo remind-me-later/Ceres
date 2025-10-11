@@ -16,6 +16,7 @@ impl From<u8> for EnvelopeDirection {
 }
 
 impl From<EnvelopeDirection> for u8 {
+    #[inline]
     fn from(val: EnvelopeDirection) -> Self {
         match val {
             EnvelopeDirection::Decrease => 0,

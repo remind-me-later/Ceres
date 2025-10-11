@@ -177,6 +177,7 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[must_use]
+    #[inline]
     pub fn read_mem(&self, addr: u16) -> u8 {
         match addr {
             0x0000..=0x00FF => self.read_boot_or_cart(addr),
@@ -302,6 +303,7 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
+    #[inline]
     pub fn write_mem(&mut self, addr: u16, val: u8) {
         match addr {
             // FIXME: we assume bootrom doesn't write to rom

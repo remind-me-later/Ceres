@@ -156,6 +156,7 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
+    #[inline]
     pub fn run_cpu(&mut self) {
         if self.cpu.has_ei_delay {
             self.ints.enable();

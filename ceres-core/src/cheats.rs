@@ -61,6 +61,7 @@ impl GameGenieCode {
     /// # Errors
     ///
     /// Returns `Error::InvalidGameGenieCode` if the input string is not a valid Game Genie code.
+    #[inline]
     #[expect(clippy::string_slice)]
     pub fn new(code: &str) -> Result<Self, Error> {
         // Code consist of nine-digit hex numbers: "ABC-DEF-GHI"
@@ -114,6 +115,7 @@ impl GameGenieCode {
 }
 
 impl fmt::Display for GameGenieCode {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let cdef = (self.address ^ 0xF000).rotate_left(4);
         let abc = (u16::from(self.new_data) << 4) | (cdef >> 12);

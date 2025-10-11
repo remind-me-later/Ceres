@@ -122,7 +122,7 @@ impl ObjectImpl for GlArea {
             "gb-model" => match *self.model.borrow() {
                 ceres_std::Model::Dmg => "dmg",
                 ceres_std::Model::Mgb => "mgb",
-                ceres_std::Model::Cgb => "cgb",
+                _ => "cgb",
             }
             .to_value(),
             "emulator-running" => self.is_running.borrow().to_value(),
@@ -131,9 +131,9 @@ impl ObjectImpl for GlArea {
                 ceres_std::ColorCorrectionMode::CorrectCurves => "CorrectCurves",
                 ceres_std::ColorCorrectionMode::Disabled => "Disabled",
                 ceres_std::ColorCorrectionMode::LowContrast => "LowContrast",
-                ceres_std::ColorCorrectionMode::ModernBalanced => "ModernBalanced",
                 ceres_std::ColorCorrectionMode::ModernBoostContrast => "ModernBoostContrast",
                 ceres_std::ColorCorrectionMode::ReduceContrast => "ReduceContrast",
+                _ => "ModernBalanced",
             }
             .to_value(),
             _ => {

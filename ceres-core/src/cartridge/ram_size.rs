@@ -24,7 +24,7 @@ impl RAMSize {
 
     #[must_use]
     pub const fn mask(&self) -> u8 {
-        match self {
+        match *self {
             Self::NoRAM | Self::Kb8 => 0x0,
             Self::Kb32 => 0x3,
             Self::Kb128 => 0xF,
@@ -48,7 +48,7 @@ impl RAMSize {
 
     #[must_use]
     const fn num_banks(&self) -> u8 {
-        match self {
+        match *self {
             Self::NoRAM => 0x0,
             Self::Kb8 => 0x1,
             Self::Kb32 => 0x4,

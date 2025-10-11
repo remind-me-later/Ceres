@@ -76,31 +76,38 @@ impl<A: AudioCallback> Gb<A> {
     /// # Errors
     ///
     /// Returns an error if too many codes are activated.
+    #[inline]
     #[cfg(feature = "game_genie")]
     pub const fn activate_game_genie(&mut self, code: GameGenieCode) -> Result<(), Error> {
         self.game_genie.activate_code(code)
     }
 
+    #[inline]
     pub fn active_game_genie_codes(&self) -> &[GameGenieCode] {
         self.game_genie.active_codes()
     }
 
+    #[inline]
     pub const fn cart_has_battery(&self) -> bool {
         self.cart.has_battery()
     }
 
+    #[inline]
     pub const fn cart_header_checksum(&self) -> u8 {
         self.cart.header_checksum()
     }
 
+    #[inline]
     pub fn cart_title(&self) -> &[u8] {
         self.cart.ascii_title()
     }
 
+    #[inline]
     pub const fn cart_version(&self) -> u8 {
         self.cart.version()
     }
 
+    #[inline]
     pub fn change_model_and_soft_reset(&mut self, model: Model) {
         self.model = model;
         self.cgb_mode = model.into();
@@ -108,6 +115,7 @@ impl<A: AudioCallback> Gb<A> {
         self.soft_reset();
     }
 
+    #[inline]
     #[cfg(feature = "game_genie")]
     pub fn deactivate_game_genie(&mut self, code: &GameGenieCode) {
         self.game_genie.deactivate_code(code);
@@ -118,6 +126,7 @@ impl<A: AudioCallback> Gb<A> {
     /// # Errors
     ///
     /// Returns an error if reading from or seeking within the reader fails.
+    #[inline]
     pub fn load_data(&mut self, buf: &[u8], secs_since_unix_epoch: u64) -> Result<(), Error> {
         bess::Reader::new(buf).load_state(self, secs_since_unix_epoch)
     }
@@ -148,18 +157,22 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[must_use]
+    #[inline]
     pub const fn pixel_data_rgba(&self) -> &[u8] {
         self.ppu.pixel_data_rgba()
     }
 
+    #[inline]
     pub const fn press(&mut self, button: Button) {
         self.joy.press(button, &mut self.ints);
     }
 
+    #[inline]
     pub const fn release(&mut self, button: Button) {
         self.joy.release(button);
     }
 
+    #[inline]
     pub fn run_frame(&mut self) {
         while self.dots_ran < DOTS_PER_FRAME {
             self.run_cpu();
@@ -168,18 +181,22 @@ impl<A: AudioCallback> Gb<A> {
         self.dots_ran -= DOTS_PER_FRAME;
     }
 
+    #[inline]
     pub fn save_data(&self, buf: &mut Vec<u8>, secs_since_unix_epoch: u64) {
         bess::Writer::new(buf).save_state(self, secs_since_unix_epoch);
     }
 
+    #[inline]
     pub const fn set_color_correction_mode(&mut self, mode: ColorCorrectionMode) {
         self.ppu.set_color_correction_mode(mode);
     }
 
+    #[inline]
     pub const fn set_sample_rate(&mut self, sample_rate: i32) {
         self.apu.set_sample_rate(sample_rate);
     }
 
+    #[inline]
     pub fn soft_reset(&mut self) {
         self.apu.reset();
         self.clock = Clock::default();
@@ -194,6 +211,8 @@ impl<A: AudioCallback> Gb<A> {
     }
 }
 
+// FIXME: use all existing models
+#[non_exhaustive]
 #[derive(Clone, Copy, Default)]
 pub enum Model {
     #[default]
@@ -227,6 +246,7 @@ pub struct GbBuilder<A: AudioCallback> {
 }
 
 impl<A: AudioCallback> GbBuilder<A> {
+    #[inline]
     pub fn build(self) -> Gb<A> {
         Gb::new(
             self.model,
@@ -236,12 +256,14 @@ impl<A: AudioCallback> GbBuilder<A> {
         )
     }
 
+    #[inline]
     pub fn can_load_save_data(&self) -> bool {
         self.cart
             .as_ref()
             .is_some_and(cartridge::Cartridge::has_battery)
     }
 
+    #[inline]
     pub fn new(sample_rate: i32, audio_callback: A) -> Self {
         Self {
             model: Model::default(),
@@ -252,6 +274,7 @@ impl<A: AudioCallback> GbBuilder<A> {
     }
 
     #[must_use]
+    #[inline]
     pub const fn with_model(mut self, model: Model) -> Self {
         self.model = model;
         self
@@ -262,6 +285,7 @@ impl<A: AudioCallback> GbBuilder<A> {
     /// # Errors
     ///
     /// Returns an error if the ROM data is invalid or cannot be parsed as a cartridge.
+    #[inline]
     pub fn with_rom(mut self, rom: Box<[u8]>) -> Result<Self, Error> {
         self.cart = Some(Cartridge::new(rom)?);
         Ok(self)

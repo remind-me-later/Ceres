@@ -37,12 +37,14 @@ enum TIMAState {
 }
 
 impl<A: AudioCallback> Gb<A> {
+    #[inline]
     pub fn advance_dots(&mut self, dots: i32) {
         // affected by speed boost
         self.run_timers(dots);
         self.advance_dots_no_timers(dots);
     }
 
+    #[inline]
     pub fn advance_dots_no_timers(&mut self, mut dots: i32) {
         // affected by speed boost
         self.dma.advance_dots(dots);
@@ -90,15 +92,18 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[must_use]
+    #[inline]
     pub const fn read_div(&self) -> u8 {
         ((self.clock.div >> 8) & 0xFF) as u8
     }
 
     #[must_use]
+    #[inline]
     pub const fn read_tac(&self) -> u8 {
         0xF8 | self.clock.tac
     }
 
+    #[inline]
     pub fn run_timers(&mut self, dots: i32) {
         for _ in 0..dots / 4 {
             self.advance_tima_state();
@@ -144,18 +149,22 @@ impl<A: AudioCallback> Gb<A> {
         self.clock.div = val;
     }
 
+    #[inline]
     pub fn write_div(&mut self) {
         self.set_system_clk(0);
     }
 
+    #[inline]
     pub const fn write_tac(&mut self, val: u8) {
         self.clock.tac = val;
     }
 
+    #[inline]
     pub const fn write_tima(&mut self, val: u8) {
         self.clock.tima = val;
     }
 
+    #[inline]
     pub const fn write_tma(&mut self, val: u8) {
         self.clock.tma = val;
     }

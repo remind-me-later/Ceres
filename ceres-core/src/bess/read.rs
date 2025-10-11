@@ -95,18 +95,9 @@ impl<'a> Reader<'a> {
         // Ignore version for now
         self.seek_from_current(4)?;
 
-        // Read model
+        // Read model and ignore for now
         let mut model = [0; 4];
         self.read_exact(&mut model)?;
-
-        // gb.cgb_mode = match &model {
-        //     b"GD  " => CgbMode::Dmg,
-        //     b"GM  " => CgbMode::Compat,
-        //     b"CC  " => CgbMode::Cgb,
-        //     _ => {
-        //         return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid model"));
-        //     }
-        // };
 
         // Ignore CPU registers for now
         self.seek_from_current(0x90)?;
@@ -236,6 +227,7 @@ impl<'a> Reader<'a> {
             self.read_exact(&mut byte_buf)?;
             rtc.set_control(byte_buf[0]);
 
+            // FIXME: we don't emulate latched values on MBC3 RTC
             // Skip latched values
             self.read_exact(&mut byte_buf)?;
             self.read_exact(&mut byte_buf)?;

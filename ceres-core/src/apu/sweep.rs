@@ -21,6 +21,7 @@ impl From<u8> for SweepDirection {
 }
 
 impl From<SweepDirection> for u8 {
+    #[inline]
     fn from(val: SweepDirection) -> Self {
         match val {
             SweepDirection::Add => 0,

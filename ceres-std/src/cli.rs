@@ -46,6 +46,7 @@ impl AppOption for Model {
 }
 
 impl From<Model> for ceres_core::Model {
+    #[inline]
     fn from(model: Model) -> Self {
         match model {
             Model::Dmg => Self::Dmg,
@@ -56,6 +57,7 @@ impl From<Model> for ceres_core::Model {
 }
 
 impl AppOption for ShaderOption {
+    #[inline]
     fn iter() -> impl Iterator<Item = Self> {
         [
             Self::Nearest,
@@ -67,6 +69,7 @@ impl AppOption for ShaderOption {
         .into_iter()
     }
 
+    #[inline]
     fn str(self) -> &'static str {
         match self {
             Self::Nearest => "nearest",
@@ -86,10 +89,12 @@ pub enum PixelPerfectOption {
 }
 
 impl AppOption for PixelPerfectOption {
+    #[inline]
     fn iter() -> impl Iterator<Item = Self> {
         [Self::PixelPerfect, Self::Stretch].into_iter()
     }
 
+    #[inline]
     fn str(self) -> &'static str {
         match self {
             Self::PixelPerfect => "pixel-perfect",
@@ -133,21 +138,25 @@ pub struct Cli {
 
 impl Cli {
     #[must_use]
+    #[inline]
     pub fn file(&self) -> Option<&Path> {
         self.file.as_deref()
     }
 
     #[must_use]
+    #[inline]
     pub fn model(&self) -> ceres_core::Model {
         self.model.into()
     }
 
     #[must_use]
+    #[inline]
     pub const fn pixel_perfect(&self) -> bool {
         self.pixel_perfect
     }
 
     #[must_use]
+    #[inline]
     pub const fn shader_option(&self) -> ShaderOption {
         self.shader_option
     }

@@ -16,6 +16,7 @@ pub enum ShaderOption {
 }
 
 impl From<crate::ShaderOption> for ShaderOption {
+    #[inline]
     fn from(shader_option: crate::ShaderOption) -> Self {
         match shader_option {
             crate::ShaderOption::Nearest => Self::Nearest,
@@ -45,6 +46,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
         reason = "Initialization logic is long but necessary"
     )]
     #[must_use]
+    #[inline]
     pub fn new(
         device: &wgpu::Device,
         target_format: wgpu::TextureFormat,
@@ -213,6 +215,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
         }
     }
 
+    #[inline]
     pub fn paint(&self, render_pass: &mut wgpu::RenderPass) {
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
@@ -220,6 +223,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
         render_pass.draw(0..4, 0..1);
     }
 
+    #[inline]
     pub fn resize(&mut self, pixel_perfect: bool, queue: &wgpu::Queue, width: u32, height: u32) {
         let (x, y) = {
             #[expect(
@@ -243,6 +247,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
         queue.write_buffer(&self.dimensions_uniform, 0, bytemuck::cast_slice(&[x, y]));
     }
 
+    #[inline]
     pub fn shader_option(&mut self, queue: &wgpu::Queue, shader_option: ShaderOption) {
         queue.write_buffer(
             &self.scale_uniform,
@@ -251,6 +256,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
         );
     }
 
+    #[inline]
     pub fn update_screen_texture(
         &mut self,
         device: &wgpu::Device,

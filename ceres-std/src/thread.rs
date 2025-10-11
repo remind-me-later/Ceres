@@ -29,6 +29,7 @@ impl GbThread {
     ///
     /// Returns an error if too many codes are activated.
     #[cfg(feature = "game_genie")]
+    #[inline]
     pub fn activate_game_genie(&mut self, code: GameGenieCode) -> Result<(), ceres_core::Error> {
         self.gb
             .lock()
@@ -37,6 +38,7 @@ impl GbThread {
 
     #[must_use]
     #[cfg(feature = "game_genie")]
+    #[inline]
     pub fn active_game_genie_codes(&self) -> Option<Vec<GameGenieCode>> {
         self.gb
             .lock()
@@ -44,6 +46,7 @@ impl GbThread {
     }
 
     // Resets the GB state and loads the same ROM
+    #[inline]
     pub fn change_model(&mut self, model: ceres_core::Model) {
         if let Ok(mut gb) = self.gb.lock() {
             self.model = model;
@@ -56,6 +59,7 @@ impl GbThread {
     /// # Errors
     ///
     /// Returns an error if creating a new Game Boy instance fails.
+    #[inline]
     pub fn change_rom(&mut self, sav_path: Option<&Path>, rom_path: &Path) -> Result<(), Error> {
         let ring_buffer = self.audio_stream.ring_buffer();
 
@@ -79,6 +83,7 @@ impl GbThread {
     /// # Errors
     ///
     /// Returns an error if the Game Boy thread is not running.
+    #[inline]
     pub fn copy_pixel_data_rgba(&self, buffer: &mut [u8]) -> Result<(), Error> {
         self.gb.lock().map_or(Err(Error::NoThreadRunning), |gb| {
             debug_assert_eq!(buffer.len(), gb.pixel_data_rgba().len());
@@ -138,6 +143,7 @@ impl GbThread {
     }
 
     #[cfg(feature = "game_genie")]
+    #[inline]
     pub fn deactivate_game_genie(&mut self, code: &GameGenieCode) {
         if let Ok(mut gb) = self.gb.lock() {
             gb.deactivate_game_genie(code);
@@ -149,6 +155,7 @@ impl GbThread {
     /// # Errors
     ///
     /// Returns an error if no thread is running or if joining the thread fails.
+    #[inline]
     pub fn exit(&mut self) -> Result<(), Error> {
         self.exiting.store(true, Relaxed);
 
@@ -250,27 +257,32 @@ impl GbThread {
     }
 
     #[must_use]
+    #[inline]
     pub fn has_save_data(&self) -> bool {
         self.gb.lock().is_ok_and(|gb| gb.cart_has_battery())
     }
 
     #[must_use]
+    #[inline]
     pub const fn is_muted(&self) -> bool {
         self.audio_stream.is_muted()
     }
 
     #[must_use]
+    #[inline]
     pub fn is_paused(&self) -> bool {
         let (pause_lock, _) = &*self.pause_condvar;
         pause_lock.lock().is_ok_and(|paused| *paused)
     }
 
     #[must_use]
+    #[inline]
     pub const fn model(&self) -> ceres_core::Model {
         self.model
     }
 
     #[must_use]
+    #[inline]
     pub fn multiplier(&self) -> u32 {
         self.multiplier.load(Relaxed)
     }
@@ -280,6 +292,7 @@ impl GbThread {
     /// # Errors
     ///
     /// Returns an error if audio initialization, audio stream creation, or Game Boy creation fails.
+    #[inline]
     pub fn new(
         model: ceres_core::Model,
         sav_path: Option<&Path>,
@@ -333,6 +346,7 @@ impl GbThread {
     /// # Errors
     ///
     /// Returns an error if pausing the audio stream fails.
+    #[inline]
     pub fn pause(&mut self) -> Result<(), audio::Error> {
         self.audio_stream.pause();
 
@@ -345,6 +359,7 @@ impl GbThread {
         Ok(())
     }
 
+    #[inline]
     pub fn press_release<F>(&mut self, f: F) -> bool
     where
         F: FnOnce(&mut dyn Pressable) -> bool,
@@ -357,6 +372,7 @@ impl GbThread {
     /// # Errors
     ///
     /// Returns an error if resuming the audio stream fails.
+    #[inline]
     pub fn resume(&mut self) -> Result<(), audio::Error> {
         // Signal the condition variable to wake up the thread
         let (pause_lock, pause_cvar) = &*self.pause_condvar;
@@ -378,6 +394,7 @@ impl GbThread {
     /// # Panics
     ///
     /// Panics if the system time is before the UNIX epoch.
+    #[inline]
     pub fn save_data<W: std::io::Write + std::io::Seek>(
         &self,
         writer: &mut W,
@@ -401,6 +418,7 @@ impl GbThread {
     ///
     /// Returns an error if the Game Boy thread is not running, if creating the image fails,
     /// or if writing the file fails.
+    #[inline]
     #[cfg(feature = "screenshot")]
     pub fn save_screenshot<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), Error> {
         let pixel_data = {
@@ -422,6 +440,7 @@ impl GbThread {
         Ok(())
     }
 
+    #[inline]
     pub fn set_color_correction_mode(&self, mode: ceres_core::ColorCorrectionMode) {
         if let Ok(mut gb) = self.gb.lock() {
             gb.set_color_correction_mode(mode);
@@ -434,16 +453,19 @@ impl GbThread {
         }
     }
 
+    #[inline]
     pub fn set_speed_multiplier(&mut self, multiplier: u32) {
         self.multiplier.store(multiplier, Relaxed);
         #[expect(clippy::cast_possible_wrap)]
         self.set_sample_rate(self.audio_stream.sample_rate() / multiplier as i32);
     }
 
+    #[inline]
     pub fn set_volume(&mut self, volume: f32) {
         self.audio_stream.set_volume(volume);
     }
 
+    #[inline]
     pub fn toggle_mute(&mut self) {
         if self.audio_stream.is_muted() {
             self.audio_stream.unmute();
@@ -453,12 +475,14 @@ impl GbThread {
     }
 
     #[must_use]
+    #[inline]
     pub fn volume(&self) -> f32 {
         self.audio_stream.volume()
     }
 }
 
 impl Drop for GbThread {
+    #[inline]
     fn drop(&mut self) {
         if let Err(e) = self.exit() {
             eprintln!("error exiting gb_loop: {e}");
@@ -481,6 +505,7 @@ pub enum Error {
 
 impl std::error::Error for Error {}
 impl std::fmt::Display for Error {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Io(err) => write!(f, "os error: {err}"),
@@ -497,12 +522,14 @@ impl std::fmt::Display for Error {
 }
 
 impl From<std::io::Error> for Error {
+    #[inline]
     fn from(err: std::io::Error) -> Self {
         Self::Io(err)
     }
 }
 
 impl From<ceres_core::Error> for Error {
+    #[inline]
     fn from(err: ceres_core::Error) -> Self {
         Self::Gb(err)
     }
@@ -514,10 +541,12 @@ pub trait Pressable {
 }
 
 impl Pressable for Gb<audio::AudioCallbackImpl> {
+    #[inline]
     fn press(&mut self, button: ceres_core::Button) {
         self.press(button);
     }
 
+    #[inline]
     fn release(&mut self, button: ceres_core::Button) {
         self.release(button);
     }

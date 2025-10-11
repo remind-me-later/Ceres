@@ -31,7 +31,7 @@ impl Application {
             let model_str = match options.model() {
                 ceres_std::Model::Dmg => "dmg",
                 ceres_std::Model::Mgb => "mgb",
-                ceres_std::Model::Cgb => "cgb",
+                _ => "cgb",
             };
             gl_area.set_property("gb-model", model_str);
 

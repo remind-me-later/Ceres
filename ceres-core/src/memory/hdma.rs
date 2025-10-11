@@ -71,6 +71,7 @@ impl Hdma {
 }
 
 impl<A: AudioCallback> Gb<A> {
+    #[inline]
     pub fn run_hdma(&mut self) {
         use HdmaState::{General, HBlankDone, Sleep, WaitHBlank};
 

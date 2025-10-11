@@ -333,6 +333,9 @@ impl Ppu {
         let oam_bytes = self.oam.bytes();
 
         for chunk in oam_bytes.chunks_exact(4) {
+            // FIXME: false positive, chunks exact is guaranteed to return chunks of exact size
+            assert!(chunk.len() == 4, "OAM chunk length is not 4");
+
             let y = chunk[0].wrapping_sub(16);
 
             if self.ly.wrapping_sub(y) < height {

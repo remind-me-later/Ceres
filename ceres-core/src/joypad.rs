@@ -4,6 +4,7 @@ use crate::interrupts::Interrupts;
     clippy::arbitrary_source_item_ordering,
     reason = "Order follows the button bit representation"
 )]
+#[expect(clippy::exhaustive_enums, reason = "Exhaustive by design")]
 #[derive(Clone, Copy)]
 pub enum Button {
     Right = 0x01,

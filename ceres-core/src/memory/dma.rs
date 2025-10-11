@@ -52,6 +52,7 @@ impl Dma {
 }
 
 impl<A: AudioCallback> Gb<A> {
+    #[inline]
     pub fn run_dma(&mut self) {
         if !self.dma.is_enabled() {
             return;
