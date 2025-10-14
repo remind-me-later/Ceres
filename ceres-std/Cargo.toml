@@ -18,6 +18,10 @@ default-features = false
 features = ["derive", "help", "std"]
 optional = true
 
+[dependencies.cpal]
+git = "https://github.com/RustAudio/cpal.git"
+rev = "5dd648ee8564d3d0ed77c60c95246425dbeebd10"
+
 [dependencies.gilrs]
 version = "*"
 
@@ -43,9 +47,6 @@ default-features = false
 [dependencies.thread-priority]
 version = "*"
 default-features = false
-
-[dependencies.tinyaudio]
-version = "*"
 
 [dependencies.wgpu]
 version = "27"

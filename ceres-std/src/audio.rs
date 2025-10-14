@@ -1,11 +1,9 @@
-use std::sync::atomic::AtomicBool;
-
+use cpal::traits::{DeviceTrait as _, HostTrait as _, StreamTrait as _};
 use ringbuf::{
     StaticRb,
-    traits::{Consumer, Observer},
+    traits::{Consumer as _, Observer as _},
 };
-use rubato::Resampler;
-use tinyaudio::{OutputDevice, OutputDeviceParameters};
+use rubato::Resampler as _;
 use {std::sync::Arc, std::sync::Mutex};
 
 // Buffer size is the number of samples per channel per callback
@@ -91,14 +89,14 @@ impl Buffers {
     }
 
     fn push_samples(&mut self, l: ceres_core::Sample, r: ceres_core::Sample) {
-        use ringbuf::traits::RingBuffer;
+        use ringbuf::traits::RingBuffer as _;
 
         self.left.push_overwrite(l);
         self.right.push_overwrite(r);
     }
 
     fn write_samples_interleaved(&mut self, buffer: &mut [ProcessSample]) {
-        use ringbuf::traits::Consumer;
+        use ringbuf::traits::Consumer as _;
 
         let new_ratio = self.compute_resample_ratio();
         self.resampler
@@ -206,11 +204,11 @@ impl ceres_core::AudioCallback for AudioCallbackImpl {
     }
 }
 
+#[expect(clippy::struct_field_names)]
 pub struct Stream {
-    _device: OutputDevice,
     ring_buffer: AudioCallbackImpl,
     sample_rate: i32,
-    silence: Arc<AtomicBool>,
+    stream: cpal::Stream,
     volume: Arc<Mutex<f32>>,
     volume_before_mute: Option<f32>,
 }
@@ -237,53 +235,48 @@ impl Stream {
         let ring_buffer = Arc::new(Mutex::new(Buffers::new(buffer_volume)?));
         let ring_buffer_clone = Arc::clone(&ring_buffer);
 
-        let silence = Arc::new(AtomicBool::new(false));
-        let silence_clone = Arc::clone(&silence);
+        let host = cpal::default_host();
+        let device = host.default_output_device().ok_or(Error::GetOutputDevice)?;
 
-        let params = OutputDeviceParameters {
-            channels_count: 2,
-            sample_rate: SAMPLE_RATE as usize,
-            channel_sample_count: BUFFER_SIZE as usize,
+        let config = cpal::StreamConfig {
+            channels: 2,
+            sample_rate: cpal::SampleRate(SAMPLE_RATE as u32),
+            buffer_size: cpal::BufferSize::Fixed(BUFFER_SIZE),
         };
 
-        let device = tinyaudio::run_output_device(params, {
-            move |data| {
-                if silence_clone.load(std::sync::atomic::Ordering::Relaxed) {
-                    data.fill(0.0);
-                    return;
-                }
-
-                if let Ok(mut buffers) = ring_buffer_clone.lock() {
-                    buffers.write_samples_interleaved(data);
-                }
+        let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
+        let data_callback = move |buffer: &mut [ProcessSample], _: &_| {
+            if let Ok(mut ring) = ring_buffer_clone.lock() {
+                ring.write_samples_interleaved(buffer);
             }
-        })
-        .map_err(|_err| Error::BuildStream)?;
+        };
+
+        let stream = device
+            .build_output_stream(&config, data_callback, error_callback, None)
+            .map_err(|_err| Error::BuildStream)?;
 
         let res = Self {
-            _device: device,
+            stream,
             ring_buffer: AudioCallbackImpl::new(ring_buffer),
             volume,
             volume_before_mute: None,
             sample_rate: SAMPLE_RATE,
-            silence,
         };
 
-        res.pause();
+        res.pause()?;
 
         Ok(res)
     }
 
-    pub fn pause(&self) {
-        self.silence
-            .store(true, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    pub fn resume(&self) {
-        self.silence
-            .store(false, std::sync::atomic::Ordering::Relaxed);
+    pub fn pause(&self) -> Result<(), Error> {
+        self.stream.pause().map_err(|_err| Error::PauseStream)?;
         // Avoids audio stretching after unpausing
         self.ring_buffer.clear();
+        Ok(())
+    }
+
+    pub fn resume(&self) -> Result<(), Error> {
+        self.stream.play().map_err(|_err| Error::PlayStream)
     }
 
     #[must_use]

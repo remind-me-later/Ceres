@@ -4,12 +4,12 @@ use ceres_core::GameGenieCode;
 use ceres_core::GbBuilder;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering::Relaxed;
-use std::io::Read;
+use std::io::Read as _;
 use std::{
     fs::OpenOptions,
     sync::{Condvar, Mutex, atomic::AtomicU32},
 };
-use thread_priority::ThreadBuilderExt;
+use thread_priority::ThreadBuilderExt as _;
 use {ceres_core::Gb, std::path::Path, std::sync::Arc};
 
 pub struct GbThread {
@@ -348,7 +348,7 @@ impl GbThread {
     /// Returns an error if pausing the audio stream fails.
     #[inline]
     pub fn pause(&mut self) -> Result<(), audio::Error> {
-        self.audio_stream.pause();
+        self.audio_stream.pause()?;
 
         // Signal the condition variable
         let (pause_lock, _pause_cvar) = &*self.pause_condvar;
@@ -381,7 +381,7 @@ impl GbThread {
             pause_cvar.notify_one();
         }
 
-        self.audio_stream.resume();
+        self.audio_stream.resume()?;
         Ok(())
     }
 

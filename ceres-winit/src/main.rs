@@ -1,7 +1,7 @@
 mod app;
 mod video;
 
-use ceres_std::cli::{CERES_STYLIZED, ORGANIZATION, QUALIFIER, clap::Parser};
+use ceres_std::cli::{CERES_STYLIZED, ORGANIZATION, QUALIFIER, clap::Parser as _};
 use winit::event_loop::EventLoop;
 
 #[derive(Clone)]

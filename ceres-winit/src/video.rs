@@ -1,3 +1,4 @@
+use anyhow::Context as _;
 use ceres_std::wgpu_renderer::wgpu;
 use ceres_std::{ShaderOption, wgpu_renderer::PipelineWrapper};
 use std::sync::Arc;
@@ -21,8 +22,6 @@ impl State<'_> {
         shader_option: ShaderOption,
         pixel_perfect: bool,
     ) -> anyhow::Result<Self> {
-        use anyhow::Context;
-
         let size = window.inner_size();
         let instance = wgpu::Instance::default();
         let window = Arc::new(window);

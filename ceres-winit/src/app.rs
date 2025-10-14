@@ -2,7 +2,7 @@ use crate::{
     CERES_STYLIZED, CeresEvent,
     video::{self, State},
 };
-use anyhow::Context;
+use anyhow::Context as _;
 use ceres_std::wgpu_renderer;
 use ceres_std::{GbThread, ShaderOption};
 use std::time::Instant;

@@ -2,7 +2,7 @@ mod app;
 mod screen;
 
 use app::App;
-use ceres_std::cli::{CERES_STYLIZED, ORGANIZATION, QUALIFIER, clap::Parser};
+use ceres_std::cli::{CERES_STYLIZED, ORGANIZATION, QUALIFIER, clap::Parser as _};
 use eframe::egui;
 
 fn main() -> anyhow::Result<()> {

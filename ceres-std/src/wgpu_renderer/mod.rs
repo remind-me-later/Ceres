@@ -3,7 +3,7 @@ mod texture;
 pub use wgpu;
 
 use texture::Texture;
-use wgpu::util::DeviceExt;
+use wgpu::util::DeviceExt as _;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum ShaderOption {
