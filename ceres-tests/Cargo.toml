@@ -1,0 +1,17 @@
+[package]
+name = "ceres-tests"
+version.workspace = true
+edition.workspace = true
+readme.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ceres-core = { path = "../ceres-core" }
+anyhow = "1.0"
+
+[dev-dependencies]
+# Add testing dependencies as needed

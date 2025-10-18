@@ -186,6 +186,13 @@ impl<A: AudioCallback> Gb<A> {
         bess::Writer::new(buf).save_state(self, secs_since_unix_epoch);
     }
 
+    /// Get the serial output buffer (used by test ROMs like Blargg's tests)
+    #[must_use]
+    #[inline]
+    pub fn serial_output(&self) -> &str {
+        self.serial.output()
+    }
+
     #[inline]
     pub const fn set_color_correction_mode(&mut self, mode: ColorCorrectionMode) {
         self.ppu.set_color_correction_mode(mode);

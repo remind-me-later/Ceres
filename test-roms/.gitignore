@@ -1,0 +1,7 @@
+# Ignore downloaded ROM files
+*
+
+# Keep the structure
+!.gitignore
+!README.md
+!download-test-roms.sh

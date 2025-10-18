@@ -5,6 +5,7 @@ members = [
   "ceres-egui",
   "ceres-gtk",
   "ceres-std",
+  "ceres-tests",
   "ceres-winit",
 ]
 default-members = ["ceres-gtk"]
