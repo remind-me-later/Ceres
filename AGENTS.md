@@ -1,8 +1,8 @@
-# Ceres Emulator AGENTS.md
+# Ceres
 
 ## Project Overview
 
-Ceres is an experimental Game Boy, Game Boy Color, and Game Boy Advance
+Ceres is an experimental Game Boy and Game Boy Color
 emulator written in Rust. It is designed with a modular architecture,
 separating the core emulation logic from the frontend implementations.
 
@@ -64,3 +64,6 @@ responsibility:
 - **Hardware Documentation**: The
   [Pan Docs](https://gbdev.io/pandocs/) wiki is the primary reference for Game
   Boy hardware specifications, memory maps, and programming details.
+- **Testing**: We use the
+  [Game Boy Test Roms](https://github.com/c-sp/gameboy-test-roms) repository
+  for validating the correctness of our emulation.
