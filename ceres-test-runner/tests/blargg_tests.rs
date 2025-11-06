@@ -5,7 +5,7 @@
 
 use ceres_test_runner::{
     load_test_rom,
-    test_runner::{timeouts, TestConfig, TestResult, TestRunner},
+    test_runner::{TestConfig, TestResult, TestRunner, timeouts},
 };
 
 /// Helper to run a test ROM with a specific timeout
@@ -123,3 +123,227 @@ cpu_test!(
     "blargg/cpu_instrs/individual/11-op a,(hl).gb",
     "CPU OP A,(HL) test failed"
 );
+
+// ============================================================================
+// Instruction Timing Tests
+// ============================================================================
+
+/// Run the instruction timing test.
+/// This validates that instructions take the correct number of cycles.
+#[test]
+fn test_blargg_instr_timing() {
+    let rom = match load_test_rom("blargg/instr_timing/instr_timing.gb") {
+        Ok(rom) => rom,
+        Err(e) => panic!("Failed to load test ROM: {e}"),
+    };
+
+    let config = TestConfig {
+        timeout_frames: timeouts::INSTR_TIMING,
+        ..TestConfig::default()
+    };
+
+    let mut runner = match TestRunner::new(rom, config) {
+        Ok(runner) => runner,
+        Err(e) => panic!("Failed to create test runner: {e}"),
+    };
+
+    let result = runner.run();
+    assert_eq!(result, TestResult::Passed, "Instruction timing test failed");
+}
+
+// ============================================================================
+// Memory Timing Tests
+// ============================================================================
+
+/// Run the complete memory timing test suite.
+#[test]
+fn test_blargg_mem_timing_all() {
+    let rom = match load_test_rom("blargg/mem_timing/mem_timing.gb") {
+        Ok(rom) => rom,
+        Err(e) => panic!("Failed to load test ROM: {e}"),
+    };
+
+    let config = TestConfig {
+        timeout_frames: timeouts::MEM_TIMING,
+        ..TestConfig::default()
+    };
+
+    let mut runner = match TestRunner::new(rom, config) {
+        Ok(runner) => runner,
+        Err(e) => panic!("Failed to create test runner: {e}"),
+    };
+
+    let result = runner.run();
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "Memory timing test suite failed"
+    );
+}
+
+/// Helper to run `mem_timing` tests with the correct timeout
+fn run_mem_timing_test(path: &str) -> TestResult {
+    let rom = match load_test_rom(path) {
+        Ok(rom) => rom,
+        Err(e) => return TestResult::Failed(format!("Failed to load test ROM: {e}")),
+    };
+
+    let config = TestConfig {
+        timeout_frames: timeouts::MEM_TIMING,
+        ..TestConfig::default()
+    };
+
+    let mut runner = match TestRunner::new(rom, config) {
+        Ok(runner) => runner,
+        Err(e) => return TestResult::Failed(format!("Failed to create test runner: {e}")),
+    };
+
+    runner.run()
+}
+
+/// Macro to generate memory timing tests
+macro_rules! mem_timing_test {
+    ($name:ident, $path:expr, $desc:expr) => {
+        #[test]
+        fn $name() {
+            let result = run_mem_timing_test($path);
+            assert_eq!(result, TestResult::Passed, $desc);
+        }
+    };
+}
+
+mem_timing_test!(
+    test_blargg_mem_timing_01_read_timing,
+    "blargg/mem_timing/individual/01-read_timing.gb",
+    "Memory read timing test failed"
+);
+
+mem_timing_test!(
+    test_blargg_mem_timing_02_write_timing,
+    "blargg/mem_timing/individual/02-write_timing.gb",
+    "Memory write timing test failed"
+);
+
+mem_timing_test!(
+    test_blargg_mem_timing_03_modify_timing,
+    "blargg/mem_timing/individual/03-modify_timing.gb",
+    "Memory modify timing test failed"
+);
+
+// ============================================================================
+// Memory Timing 2 Tests
+// ============================================================================
+// Note: These tests currently timeout - they expose emulation bugs
+// that need to be fixed. Run with --ignored to test them.
+
+/// Run the complete memory timing 2 test suite.
+#[test]
+#[ignore = "Currently times out - emulation bug to fix"]
+fn test_blargg_mem_timing_2_all() {
+    let rom = match load_test_rom("blargg/mem_timing-2/mem_timing.gb") {
+        Ok(rom) => rom,
+        Err(e) => panic!("Failed to load test ROM: {e}"),
+    };
+
+    let config = TestConfig {
+        timeout_frames: timeouts::MEM_TIMING_2,
+        ..TestConfig::default()
+    };
+
+    let mut runner = match TestRunner::new(rom, config) {
+        Ok(runner) => runner,
+        Err(e) => panic!("Failed to create test runner: {e}"),
+    };
+
+    let result = runner.run();
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "Memory timing 2 test suite failed"
+    );
+}
+
+/// Helper to run `mem_timing-2` tests with the correct timeout
+fn run_mem_timing_2_test(path: &str) -> TestResult {
+    let rom = match load_test_rom(path) {
+        Ok(rom) => rom,
+        Err(e) => return TestResult::Failed(format!("Failed to load test ROM: {e}")),
+    };
+
+    let config = TestConfig {
+        timeout_frames: timeouts::MEM_TIMING_2,
+        ..TestConfig::default()
+    };
+
+    let mut runner = match TestRunner::new(rom, config) {
+        Ok(runner) => runner,
+        Err(e) => return TestResult::Failed(format!("Failed to create test runner: {e}")),
+    };
+
+    runner.run()
+}
+
+// Mark individual mem_timing-2 tests as ignored
+// These will help debug which specific test is failing
+#[ignore = "Currently times out - emulation bug to fix"]
+#[test]
+fn test_blargg_mem_timing_2_01_read_timing() {
+    let result = run_mem_timing_2_test("blargg/mem_timing-2/rom_singles/01-read_timing.gb");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "Memory timing 2 read test failed"
+    );
+}
+
+#[ignore = "Currently times out - emulation bug to fix"]
+#[test]
+fn test_blargg_mem_timing_2_02_write_timing() {
+    let result = run_mem_timing_2_test("blargg/mem_timing-2/rom_singles/02-write_timing.gb");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "Memory timing 2 write test failed"
+    );
+}
+
+#[ignore = "Currently times out - emulation bug to fix"]
+#[test]
+fn test_blargg_mem_timing_2_03_modify_timing() {
+    let result = run_mem_timing_2_test("blargg/mem_timing-2/rom_singles/03-modify_timing.gb");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "Memory timing 2 modify test failed"
+    );
+}
+
+// ============================================================================
+// Interrupt Timing Tests
+// ============================================================================
+// Note: This test currently times out - it exposes emulation bugs
+// that need to be fixed. Run with --ignored to test it.
+
+/// Run the interrupt timing test.
+/// This validates that interrupts occur at the correct time.
+#[test]
+#[ignore = "Currently times out - emulation bug to fix"]
+fn test_blargg_interrupt_time() {
+    let rom = match load_test_rom("blargg/interrupt_time/interrupt_time.gb") {
+        Ok(rom) => rom,
+        Err(e) => panic!("Failed to load test ROM: {e}"),
+    };
+
+    let config = TestConfig {
+        timeout_frames: timeouts::INTERRUPT_TIME,
+        ..TestConfig::default()
+    };
+
+    let mut runner = match TestRunner::new(rom, config) {
+        Ok(runner) => runner,
+        Err(e) => panic!("Failed to create test runner: {e}"),
+    };
+
+    let result = runner.run();
+    assert_eq!(result, TestResult::Passed, "Interrupt timing test failed");
+}

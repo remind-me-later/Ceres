@@ -40,9 +40,9 @@ responsibility:
   boot ROMs used by the emulator.
 
 - `ceres-test-runner`: Integration test suite that validates emulator
-  correctness using test ROMs. Currently focuses on CPU instruction validation
-  using Blargg's CPU instruction tests. Test ROMs are automatically downloaded
-  during the build process (172MB cached download).
+  correctness using test ROMs. Currently includes Blargg's CPU instruction
+  tests, instruction timing, and memory timing tests. Test ROMs are
+  automatically downloaded during the build process (172MB cached download).
 
 ## Building and Running
 
@@ -112,11 +112,22 @@ cargo llvm-cov --package ceres-core --package ceres-test-runner
 **Current Coverage Status:**
 
 - **CPU (`sm83.rs`)**: ~98% - Blargg tests thoroughly validate CPU instructions
+  and timing
 - **Overall**: ~54% - Focus areas include CPU, memory, interrupts, and timing
 - **Untested areas**: Save states (BESS), RTC, joypad input, audio details
 
 The integration tests run in ~3-4 seconds and validate all SM83 CPU
-instructions against the reference implementation.
+instructions, instruction timing, and memory timing against the reference
+implementation.
+
+**Note**: Some tests are currently ignored due to emulation bugs that need
+fixing:
+
+- `mem_timing-2` suite (all 3 tests + combined test) - times out
+- `interrupt_time` - times out
+
+Run with `cargo test --package ceres-test-runner -- --ignored` to see these
+failing tests.
 
 ### CI/CD Pipeline
 

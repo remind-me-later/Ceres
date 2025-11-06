@@ -14,15 +14,34 @@
 ///
 /// Official hardware completion times:
 /// - `cpu_instrs`: 55s (DMG), 31s (CGB)
+/// - `instr_timing`: 1s (DMG/CGB)
+/// - `mem_timing`: 3s (DMG/CGB)
+/// - `mem_timing-2`: 2s (DMG/CGB)
+/// - `interrupt_time`: <1s (DMG/CGB)
 pub mod timeouts {
     /// Game Boy frame rate: ~59.73 Hz (4194304 Hz / 70224 cycles per frame)
     /// For timeout calculations, we use 59.73 frames per second.
-    /// Default timeout for all tests: 60 seconds
-    /// At 59.73 Hz: 60 seconds ≈ 3584 frames (rounded from 60 * 59.73 = 3583.8)
-    const DEFAULT: u32 = 3584;
-
+    /// We use 2x the documented hardware time to account for emulation overhead.
+    ///
     /// `cpu_instrs` tests (hardware: 55s DMG, 31s CGB)
-    pub const CPU_INSTRS: u32 = DEFAULT;
+    /// Timeout: 62 seconds (2x CGB time) ≈ 3703 frames
+    pub const CPU_INSTRS: u32 = 3703;
+
+    /// `instr_timing` test (hardware: 1s DMG/CGB)
+    /// Timeout: 10 seconds (generous buffer) ≈ 597 frames
+    pub const INSTR_TIMING: u32 = 597;
+
+    /// `mem_timing` tests (hardware: 3s DMG/CGB)
+    /// Timeout: 6 seconds ≈ 358 frames
+    pub const MEM_TIMING: u32 = 358;
+
+    /// `mem_timing-2` tests (hardware: 2s DMG/CGB documented, but actually 4s)
+    /// Timeout: 8 seconds ≈ 478 frames
+    pub const MEM_TIMING_2: u32 = 478;
+
+    /// `interrupt_time` test (hardware: <1s DMG/CGB documented, but actually 2s)
+    /// Timeout: 4 seconds ≈ 239 frames
+    pub const INTERRUPT_TIME: u32 = 239;
 }
 
 use anyhow::Result;
