@@ -4,11 +4,8 @@
 //! repository if they're not already present. This is particularly useful for
 //! CI/CD pipelines where the ROMs need to be downloaded automatically.
 
-#![allow(clippy::implicit_clone)]
-
-use std::fs::{self, File};
-use std::io::{self, Cursor};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use anyhow::{Context, Result};
 
@@ -58,7 +55,7 @@ fn roms_already_downloaded(test_roms_dir: &Path) -> bool {
     cpu_instrs.exists() && cpu_instrs.join("cpu_instrs.gb").exists()
 }
 
-/// Download and extract test ROMs
+/// Download and extract test ROMs using curl and unzip
 fn download_and_extract_roms(test_roms_dir: &Path) -> Result<()> {
     let url = format!(
         "https://github.com/{REPO}/releases/download/{VERSION}/game-boy-test-roms-{VERSION}.zip"
@@ -66,64 +63,44 @@ fn download_and_extract_roms(test_roms_dir: &Path) -> Result<()> {
 
     println!("cargo:warning=Downloading from: {url}");
 
-    // Download the ZIP file
-    let response =
-        reqwest::blocking::get(&url).with_context(|| format!("Failed to download from {url}"))?;
+    // Create test-roms directory if it doesn't exist
+    std::fs::create_dir_all(test_roms_dir).context("Failed to create test-roms directory")?;
 
-    if !response.status().is_success() {
-        anyhow::bail!("Download failed with status: {}", response.status());
+    // Create a temporary file for the download
+    let temp_zip = test_roms_dir.with_file_name("test-roms-temp.zip");
+
+    // Download using curl
+    let download_status = Command::new("curl")
+        .arg("-L") // Follow redirects
+        .arg("-f") // Fail on HTTP errors
+        .arg("-o")
+        .arg(&temp_zip)
+        .arg(&url)
+        .status()
+        .context("Failed to execute curl")?;
+
+    if !download_status.success() {
+        anyhow::bail!("Download failed with curl exit code: {download_status}");
     }
-
-    let bytes = response.bytes().context("Failed to read response bytes")?;
 
     println!("cargo:warning=Extracting test ROMs...");
 
-    // Extract the ZIP file
-    let cursor = Cursor::new(bytes);
-    let mut archive = zip::ZipArchive::new(cursor).context("Failed to open ZIP archive")?;
+    // Extract using unzip directly to test-roms directory
+    let extract_status = Command::new("unzip")
+        .arg("-q") // Quiet mode
+        .arg("-o") // Overwrite without prompting
+        .arg(&temp_zip)
+        .arg("-d")
+        .arg(test_roms_dir)
+        .status()
+        .context("Failed to execute unzip")?;
 
-    let extract_prefix = format!("game-boy-test-roms-{VERSION}/");
-
-    for i in 0..archive.len() {
-        let mut file = archive
-            .by_index(i)
-            .context("Failed to get file from archive")?;
-
-        let Some(outpath) = file.enclosed_name().map(|p| p.to_owned()) else {
-            continue;
-        };
-
-        // Strip the version prefix from the path
-        let relative_path = outpath
-            .strip_prefix(&extract_prefix)
-            .map_or_else(|_| outpath.clone(), std::path::Path::to_path_buf);
-
-        // Skip if it's just the root directory
-        if relative_path.as_os_str().is_empty() {
-            continue;
-        }
-
-        let dest_path = test_roms_dir.join(&relative_path);
-
-        if file.is_dir() {
-            fs::create_dir_all(&dest_path)
-                .with_context(|| format!("Failed to create directory: {}", dest_path.display()))?;
-        } else {
-            // Create parent directories if they don't exist
-            if let Some(parent) = dest_path.parent() {
-                fs::create_dir_all(parent).with_context(|| {
-                    format!("Failed to create parent directory: {}", parent.display())
-                })?;
-            }
-
-            // Extract the file
-            let mut outfile = File::create(&dest_path)
-                .with_context(|| format!("Failed to create file: {}", dest_path.display()))?;
-
-            io::copy(&mut file, &mut outfile)
-                .with_context(|| format!("Failed to extract file: {}", dest_path.display()))?;
-        }
+    if !extract_status.success() {
+        anyhow::bail!("Extraction failed with unzip exit code: {extract_status}");
     }
+
+    // Clean up the zip file
+    let _ = std::fs::remove_file(&temp_zip);
 
     Ok(())
 }
