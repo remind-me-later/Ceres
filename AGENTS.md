@@ -39,6 +39,11 @@ responsibility:
 - `gb-bootroms/`: Contains the source code and build scripts for the Game Boy
   boot ROMs used by the emulator.
 
+- `ceres-test-runner`: Integration test suite that validates emulator
+  correctness using test ROMs. Currently focuses on CPU instruction validation
+  using Blargg's CPU instruction tests. Test ROMs are automatically downloaded
+  during the build process (172MB cached download).
+
 ## Building and Running
 
 ### Prerequisites
@@ -67,3 +72,60 @@ responsibility:
 - **Testing**: We use the
   [Game Boy Test Roms](https://github.com/c-sp/gameboy-test-roms) repository
   for validating the correctness of our emulation.
+
+## Testing
+
+### Running Tests
+
+The test suite includes both unit tests and integration tests using Game Boy
+test ROMs:
+
+```bash
+# Run all tests (including integration tests)
+cargo test --package ceres-core --package ceres-test-runner
+
+# Run only the test runner
+cargo test --package ceres-test-runner
+```
+
+Test ROMs are automatically downloaded on the first build (172MB). The download
+is cached, so subsequent builds don't require re-downloading.
+
+### Code Coverage
+
+To analyze test coverage using `cargo-llvm-cov`:
+
+```bash
+# Install cargo-llvm-cov (one-time setup)
+cargo install cargo-llvm-cov
+
+# Generate HTML coverage report
+cargo llvm-cov --package ceres-core --package ceres-test-runner --html
+
+# Open the report
+xdg-open target/llvm-cov/html/index.html
+
+# Or get a terminal summary
+cargo llvm-cov --package ceres-core --package ceres-test-runner
+```
+
+**Current Coverage Status:**
+
+- **CPU (`sm83.rs`)**: ~98% - Blargg tests thoroughly validate CPU instructions
+- **Overall**: ~54% - Focus areas include CPU, memory, interrupts, and timing
+- **Untested areas**: Save states (BESS), RTC, joypad input, audio details
+
+The integration tests run in ~3-4 seconds and validate all SM83 CPU
+instructions against the reference implementation.
+
+### CI/CD Pipeline
+
+GitHub Actions automatically runs tests on every push:
+
+- Installs RGBDS toolchain for bootrom compilation
+- Caches dependencies and test ROMs
+- Runs tests for `ceres-core` and `ceres-test-runner` only (avoids frontend
+  dependencies like GTK)
+- Tests complete in under 2 minutes
+
+See `.github/workflows/test.yml` for the complete workflow configuration.
