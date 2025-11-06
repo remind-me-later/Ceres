@@ -24,17 +24,18 @@ jobs:
         id: cache-rgbds
         uses: actions/cache@v4
         with:
-          path: /usr/local/bin
-          key: rgbds-linux-x86_64-latest
+          path: ~/rgbds
+          key: rgbds-0.8.0
 
       - name: Install RGBDS
         if: steps.cache-rgbds.outputs.cache-hit != 'true'
         run: |
           wget https://github.com/gbdev/rgbds/releases/latest/download/rgbds-linux-x86_64.tar.xz
-          mkdir rgbds
-          tar xf rgbds-linux-x86_64.tar.xz -C rgbds
-          cd rgbds
-          sudo ./install.sh
+          mkdir -p ~/rgbds
+          tar xf rgbds-linux-x86_64.tar.xz -C ~/rgbds --strip-components=1
+
+      - name: Add RGBDS to PATH
+        run: echo "$HOME/rgbds/bin" >> $GITHUB_PATH
 
       - name: Verify RGBDS installation
         run: rgbasm -V
