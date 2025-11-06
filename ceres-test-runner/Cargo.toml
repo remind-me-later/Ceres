@@ -14,8 +14,6 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 
 [build-dependencies]
 anyhow = "1.0"
-reqwest = { version = "0.12", features = ["blocking"] }
-zip = "2.2"
 
 [dev-dependencies]
 
