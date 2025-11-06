@@ -1,0 +1,67 @@
+# GitHub Actions workflow for Ceres testing
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry/index
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo registry cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry/cache
+          key: ${{ runner.os }}-cargo-cache-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-cache-
+
+      - name: Cache cargo git
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git/db
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-git-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-
+      
+      - name: Cache test ROMs
+        uses: actions/cache@v4
+        with:
+          path: test-roms
+          key: test-roms-v7.0
+      
+      - name: Run unit tests
+        run: cargo test --workspace
+      
+      - name: Run integration tests
+        run: cargo test --package ceres-test-runner
+        # Note: Test ROMs are automatically downloaded by the build script

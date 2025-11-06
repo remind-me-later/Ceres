@@ -53,3 +53,5 @@ assets/
 
 **/*.jar
 **/*.so
+
+test-roms/

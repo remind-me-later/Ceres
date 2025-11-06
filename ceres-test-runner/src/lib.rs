@@ -1,15 +1,16 @@
-//! Integration tests for the Ceres Game Boy emulator
+//! Integration test runner for the Ceres Game Boy emulator
 //!
 //! This crate provides infrastructure for running Game Boy test ROMs
 //! and validating the emulator's accuracy.
 
 pub mod test_runner;
 
-use anyhow::{Context, Result};
+use anyhow::{Context as _, Result};
 use std::path::{Path, PathBuf};
 
 /// Get the path to the test-roms directory
 #[inline]
+#[must_use]
 pub fn test_roms_dir() -> PathBuf {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     PathBuf::from(manifest_dir)
@@ -20,6 +21,7 @@ pub fn test_roms_dir() -> PathBuf {
 
 /// Check if test ROMs are available
 #[inline]
+#[must_use]
 pub fn test_roms_available() -> bool {
     let test_roms = test_roms_dir();
     test_roms.exists() && test_roms.is_dir()
@@ -33,8 +35,8 @@ pub fn load_test_rom(relative_path: &str) -> Result<Vec<u8>> {
     if !rom_path.exists() {
         anyhow::bail!(
             "Test ROM not found: {}\n\n\
-             Please download test ROMs by running:\n\
-             cd test-roms && ./download-test-roms.sh",
+             This should not happen as ROMs are automatically downloaded.\n\
+             Try: cargo clean --package ceres-tests && cargo build --package ceres-tests",
             rom_path.display()
         );
     }
@@ -78,27 +80,4 @@ pub fn list_test_roms(dir: &str) -> Result<Vec<PathBuf>> {
     roms.sort();
 
     Ok(roms)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_roms_directory_exists() {
-        let dir = test_roms_dir();
-        assert!(
-            dir.exists(),
-            "test-roms directory not found at: {}\n\
-             Please run: cd test-roms && ./download-test-roms.sh",
-            dir.display()
-        );
-    }
-
-    #[test]
-    #[ignore = "Only run if test ROMs are downloaded"]
-    fn test_can_list_blargg_roms() {
-        let roms = list_test_roms("blargg").expect("Failed to list ROMs");
-        assert!(!roms.is_empty(), "No Blargg test ROMs found");
-    }
 }

@@ -1,6 +1,6 @@
 //! Test runner infrastructure for executing test ROMs
 
-/// Timeout constants for specific Blargg test suites (in frames).
+/// Timeout constants for Blargg CPU test suites (in frames).
 ///
 /// Based on the official documentation at:
 /// <https://github.com/c-sp/game-boy-test-roms/blob/master/src/howto/blargg.md>
@@ -14,10 +14,6 @@
 ///
 /// Official hardware completion times:
 /// - `cpu_instrs`: 55s (DMG), 31s (CGB)
-/// - `dmg_sound`: 36s, `cgb_sound`: 37s
-/// - `oam_bug`: 21s, `halt_bug`: 2s
-/// - `instr_timing`: 1s, `interrupt_time`: 2s
-/// - `mem_timing`: 3s, `mem_timing-2`: 4s
 pub mod timeouts {
     /// Game Boy frame rate: ~59.73 Hz (4194304 Hz / 70224 cycles per frame)
     /// For timeout calculations, we use 59.73 frames per second.
@@ -27,22 +23,6 @@ pub mod timeouts {
 
     /// `cpu_instrs` tests (hardware: 55s DMG, 31s CGB)
     pub const CPU_INSTRS: u32 = DEFAULT;
-    /// `cgb_sound` tests (hardware: 37s)
-    pub const CGB_SOUND: u32 = DEFAULT;
-    /// `dmg_sound` tests (hardware: 36s)
-    pub const DMG_SOUND: u32 = DEFAULT;
-    /// `halt_bug` test (hardware: 2s)
-    pub const HALT_BUG: u32 = DEFAULT;
-    /// `instr_timing` test (hardware: 1s)
-    pub const INSTR_TIMING: u32 = DEFAULT;
-    /// `interrupt_time` test (hardware: 2s)
-    pub const INTERRUPT_TIME: u32 = DEFAULT;
-    /// `mem_timing` tests (hardware: 3s)
-    pub const MEM_TIMING: u32 = DEFAULT;
-    /// `mem_timing-2` tests (hardware: 4s)
-    pub const MEM_TIMING_2: u32 = DEFAULT;
-    /// `oam_bug` tests (hardware: 21s)
-    pub const OAM_BUG: u32 = DEFAULT;
 }
 
 use anyhow::Result;
