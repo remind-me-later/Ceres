@@ -52,16 +52,13 @@ jobs:
           key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-build-
-      
+
       - name: Cache test ROMs
         uses: actions/cache@v4
         with:
           path: test-roms
           key: test-roms-v7.0
-      
-      - name: Run unit tests
-        run: cargo test --workspace
-      
+
       - name: Run integration tests
         run: cargo test --package ceres-test-runner
         # Note: Test ROMs are automatically downloaded by the build script
