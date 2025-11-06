@@ -25,7 +25,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/rgbds
-          key: rgbds-0.8.0
+          key: rgbds-linux-x86_64-latest
 
       - name: Install RGBDS
         if: steps.cache-rgbds.outputs.cache-hit != 'true'
