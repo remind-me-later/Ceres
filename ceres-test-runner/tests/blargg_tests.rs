@@ -112,3 +112,15 @@ fn test_blargg_interrupt_time() {
     );
     assert_eq!(result, TestResult::Passed, "Interrupt timing test failed");
 }
+
+// ============================================================================
+// Halt Bug Test
+// ============================================================================
+
+/// Run the halt bug test.
+/// This validates correct emulation of the HALT instruction bug.
+#[test]
+fn test_blargg_halt_bug() {
+    let result = run_test_rom("blargg/halt_bug.gb", timeouts::HALT_BUG);
+    assert_eq!(result, TestResult::Passed, "Halt bug test failed");
+}

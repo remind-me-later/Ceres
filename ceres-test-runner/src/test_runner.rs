@@ -7,6 +7,7 @@ pub mod timeouts {
     pub const MEM_TIMING: u32 = 300;
     pub const MEM_TIMING_2: u32 = 360;
     pub const INTERRUPT_TIME: u32 = 240;
+    pub const HALT_BUG: u32 = 330;
 }
 
 use anyhow::Result;
