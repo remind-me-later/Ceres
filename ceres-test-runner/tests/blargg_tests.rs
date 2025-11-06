@@ -33,12 +33,6 @@ fn run_test_rom(path: &str, timeout: u32) -> TestResult {
     runner.run()
 }
 
-// ============================================================================
-// CPU Instructions Tests
-// ============================================================================
-
-/// Run the complete CPU instructions test suite.
-/// This runs all 11 CPU tests in one ROM and validates against a screenshot.
 #[test]
 fn test_blargg_cpu_instrs() {
     let result = run_test_rom("blargg/cpu_instrs/cpu_instrs.gb", timeouts::CPU_INSTRS);
@@ -49,12 +43,6 @@ fn test_blargg_cpu_instrs() {
     );
 }
 
-// ============================================================================
-// Instruction Timing Tests
-// ============================================================================
-
-/// Run the instruction timing test.
-/// This validates that instructions take the correct number of cycles.
 #[test]
 fn test_blargg_instr_timing() {
     let result = run_test_rom(
@@ -64,11 +52,6 @@ fn test_blargg_instr_timing() {
     assert_eq!(result, TestResult::Passed, "Instruction timing test failed");
 }
 
-// ============================================================================
-// Memory Timing Tests
-// ============================================================================
-
-/// Run the complete memory timing test suite.
 #[test]
 fn test_blargg_mem_timing() {
     let result = run_test_rom("blargg/mem_timing/mem_timing.gb", timeouts::MEM_TIMING);
@@ -79,13 +62,6 @@ fn test_blargg_mem_timing() {
     );
 }
 
-// ============================================================================
-// Memory Timing 2 Tests
-// ============================================================================
-// Note: These tests currently timeout - they expose emulation bugs
-// that need to be fixed. Run with --ignored to test them.
-
-/// Run the complete memory timing 2 test suite.
 #[test]
 fn test_blargg_mem_timing_2() {
     let result = run_test_rom("blargg/mem_timing-2/mem_timing.gb", timeouts::MEM_TIMING_2);
@@ -96,14 +72,6 @@ fn test_blargg_mem_timing_2() {
     );
 }
 
-// ============================================================================
-// Interrupt Timing Tests
-// ============================================================================
-// Note: This test currently times out - it exposes emulation bugs
-// that need to be fixed. Run with --ignored to test it.
-
-/// Run the interrupt timing test.
-/// This validates that interrupts occur at the correct time.
 #[test]
 fn test_blargg_interrupt_time() {
     let result = run_test_rom(
@@ -113,12 +81,6 @@ fn test_blargg_interrupt_time() {
     assert_eq!(result, TestResult::Passed, "Interrupt timing test failed");
 }
 
-// ============================================================================
-// Halt Bug Test
-// ============================================================================
-
-/// Run the halt bug test.
-/// This validates correct emulation of the HALT instruction bug.
 #[test]
 fn test_blargg_halt_bug() {
     let result = run_test_rom("blargg/halt_bug.gb", timeouts::HALT_BUG);
