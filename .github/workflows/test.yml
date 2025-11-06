@@ -17,10 +17,21 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install RGBDS
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rgbds
+
+      - name: Build boot ROMs
+        run: |
+          cd gb-bootroms
+          make
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
