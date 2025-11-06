@@ -15,9 +15,8 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 [build-dependencies]
 anyhow = "1.0"
 
-[dev-dependencies]
-
 [lints.clippy]
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
+nursery = "warn"
 pedantic = "warn"
