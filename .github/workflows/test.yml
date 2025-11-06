@@ -32,10 +32,9 @@ jobs:
         run: |
           wget https://github.com/gbdev/rgbds/releases/latest/download/rgbds-linux-x86_64.tar.xz
           mkdir -p ~/rgbds
-          tar xf rgbds-linux-x86_64.tar.xz -C ~/rgbds --strip-components=1
-
-      - name: Add RGBDS to PATH
-        run: echo "$HOME/rgbds/bin" >> $GITHUB_PATH
+          tar xf rgbds-linux-x86_64.tar.xz -C ~/rgbds
+          cd ~/rgbds
+          sudo ./install.sh
 
       - name: Verify RGBDS installation
         run: rgbasm -V
