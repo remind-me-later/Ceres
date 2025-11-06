@@ -42,6 +42,7 @@ fn test_serial_output_capture() {
         capture_serial: true,
         model: ceres_core::Model::Dmg,
         timeout_frames: 100, // Short timeout for this test
+        expected_screenshot: None,
     };
 
     let Ok(mut runner) = TestRunner::new(rom, config) else {

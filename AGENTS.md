@@ -40,9 +40,10 @@ responsibility:
   boot ROMs used by the emulator.
 
 - `ceres-test-runner`: Integration test suite that validates emulator
-  correctness using test ROMs. Currently includes Blargg's CPU instruction
-  tests, instruction timing, and memory timing tests. Test ROMs are
-  automatically downloaded during the build process (172MB cached download).
+  correctness using test ROMs. Tests use screenshot comparison against
+  reference images from Blargg's test suite (CPU instructions, instruction
+  timing, and memory timing). Test ROMs are automatically downloaded during
+  the build process (172MB cached download).
 
 ## Building and Running
 
@@ -91,6 +92,21 @@ cargo test --package ceres-test-runner
 Test ROMs are automatically downloaded on the first build (172MB). The download
 is cached, so subsequent builds don't require re-downloading.
 
+**Integration Tests:**
+
+The integration tests use screenshot comparison to validate emulator accuracy:
+
+- `test_blargg_cpu_instrs` - All CPU instructions (11 tests in one ROM, ~33s)
+- `test_blargg_instr_timing` - Instruction cycle timing (~3.6s)
+- `test_blargg_mem_timing` - Memory access timing (~4.6s)
+- `test_blargg_mem_timing_2` - Advanced memory timing (~5.9s)
+- `test_blargg_interrupt_time` - Interrupt timing (~3.6s)
+
+Each test compares the emulator's screen output pixel-by-pixel against reference
+PNG screenshots from the test ROM repository, with color correction disabled for
+accuracy. Timeout values are based on actual completion times with minimal
+margin for reliability.
+
 ### Code Coverage
 
 To analyze test coverage using `cargo-llvm-cov`:
@@ -116,14 +132,17 @@ cargo llvm-cov --package ceres-core --package ceres-test-runner
 - **Overall**: ~54% - Focus areas include CPU, memory, interrupts, and timing
 - **Untested areas**: Save states (BESS), RTC, joypad input, audio details
 
+The integration tests complete in ~3.9 seconds with optimized timeouts based on
+actual test completion times.
+
 The integration tests run in ~3-4 seconds and validate all SM83 CPU
-instructions, instruction timing, and memory timing against the reference
-implementation.
+instructions, instruction timing, memory timing, and interrupt timing against
+reference screenshots.
 
 **Note**: Some tests are currently ignored due to emulation bugs that need
 fixing:
 
-- `mem_timing-2` suite (all 3 tests + combined test) - times out
+- `mem_timing-2` - times out
 - `interrupt_time` - times out
 
 Run with `cargo test --package ceres-test-runner -- --ignored` to see these

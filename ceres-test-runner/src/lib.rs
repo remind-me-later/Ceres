@@ -36,13 +36,42 @@ pub fn load_test_rom(relative_path: &str) -> Result<Vec<u8>> {
         anyhow::bail!(
             "Test ROM not found: {}\n\n\
              This should not happen as ROMs are automatically downloaded.\n\
-             Try: cargo clean --package ceres-tests && cargo build --package ceres-tests",
+             Try: cargo clean --package ceres-test-runner && cargo build --package ceres-test-runner",
             rom_path.display()
         );
     }
 
     std::fs::read(&rom_path)
         .with_context(|| format!("Failed to read test ROM: {}", rom_path.display()))
+}
+
+/// Get path to expected screenshot for a test ROM
+#[inline]
+#[must_use]
+pub fn expected_screenshot_path(relative_path: &str, model: ceres_core::Model) -> Option<PathBuf> {
+    let rom_path = test_roms_dir().join(relative_path);
+    let rom_dir = rom_path.parent()?;
+
+    // Try model-specific screenshot first (e.g., "instr_timing-cgb.png")
+    let rom_stem = rom_path.file_stem()?.to_str()?;
+    let model_suffix = match model {
+        ceres_core::Model::Cgb => "cgb",
+        _ => "dmg", // DMG, MGB, and unknown models use DMG screenshots
+    };
+
+    // Try: test-name-model.png
+    let model_specific = rom_dir.join(format!("{rom_stem}-{model_suffix}.png"));
+    if model_specific.exists() {
+        return Some(model_specific);
+    }
+
+    // Try: test-name-dmg-cgb.png (works for both)
+    let combined = rom_dir.join(format!("{rom_stem}-dmg-cgb.png"));
+    if combined.exists() {
+        return Some(combined);
+    }
+
+    None
 }
 
 /// List all available test ROMs in a directory
