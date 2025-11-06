@@ -20,10 +20,24 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Cache RGBDS
+        id: cache-rgbds
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin
+          key: rgbds-linux-x86_64-latest
+
       - name: Install RGBDS
+        if: steps.cache-rgbds.outputs.cache-hit != 'true'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y rgbds
+          wget https://github.com/gbdev/rgbds/releases/latest/download/rgbds-linux-x86_64.tar.xz
+          mkdir rgbds
+          tar xf rgbds-linux-x86_64.tar.xz -C rgbds
+          cd rgbds
+          sudo ./install.sh
+
+      - name: Verify RGBDS installation
+        run: rgbasm -V
 
       - name: Build boot ROMs
         run: |
