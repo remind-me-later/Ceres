@@ -69,7 +69,7 @@ impl TestRunner {
     fn check_completion(&self) -> Option<TestResult> {
         // If we have an expected screenshot, compare it
         if let Some(ref screenshot_path) = self.config.expected_screenshot
-            && let Ok(true) = self.compare_screenshot(screenshot_path)
+            && matches!(self.compare_screenshot(screenshot_path), Ok(true))
         {
             return Some(TestResult::Passed);
         }
