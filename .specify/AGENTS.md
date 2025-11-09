@@ -9,11 +9,27 @@ This document provides guidance for AI agents working on the Ceres Game Boy emul
 1. **Read the Constitution**: Always start by reading `.specify/memory/constitution.md` to understand project principles
 2. **Check Existing Specs**: Look in `.specify/specs/` to see what's already planned or implemented
 3. **Understand the Codebase**: Review `AGENTS.md` in the project root for high-level architecture
+4. **Install markdownlint-cli** (optional, for formatting):
+   ```bash
+   npm install -g markdownlint-cli
+   # Or using yarn
+   yarn global add markdownlint-cli
+   ```
 
 ### Standard Workflow
 
-```
+```text
 /speckit.constitution → /speckit.specify → /speckit.plan → /speckit.tasks → /speckit.implement
+```
+
+After each step, format generated markdown files:
+
+```bash
+# Format all specs in current feature
+markdownlint --fix "specs/001-feature-name/**/*.md"
+
+# Or format all spec files
+markdownlint --fix "specs/**/*.md"
 ```
 
 ## Available Commands
@@ -221,6 +237,74 @@ Ceres/
         ├── mem_timing-2/            # ❌ Timing out
         └── interrupt_time/          # ❌ Timing out
 ```
+
+## Markdown Formatting
+
+### Using markdownlint-cli
+
+All spec markdown files should be formatted with markdownlint-cli to maintain consistency and avoid linter warnings.
+
+**Installation:**
+
+```bash
+npm install -g markdownlint-cli
+```
+
+**Format after spec creation:**
+
+```bash
+# Format current feature's markdown files
+markdownlint --fix "specs/001-add-cgb-acid2-test/**/*.md"
+
+# Format all spec files
+markdownlint --fix "specs/**/*.md"
+
+# Format constitution and guides
+markdownlint --fix ".specify/**/*.md"
+
+# Format entire project (specs + root docs)
+markdownlint --fix "**/*.md"
+```
+
+**Integrated workflow:**
+
+```bash
+# After /speckit.specify
+/speckit.specify Add new feature
+markdownlint --fix "specs/001-new-feature/**/*.md"
+
+# After /speckit.plan
+/speckit.plan
+markdownlint --fix "specs/001-new-feature/**/*.md"
+
+# Before committing
+git add specs/001-new-feature/
+markdownlint --fix "specs/001-new-feature/**/*.md"
+git add specs/001-new-feature/  # Re-add formatted files
+git commit -m "feat: add new feature spec"
+```
+
+**Configuration:**
+
+The project uses a `.markdownlint.json` configuration with relaxed rules for technical documentation:
+
+```json
+{
+  "MD013": {
+    "line_length": 120,     // Allow longer lines (120 chars)
+    "code_blocks": false,   // Don't check code blocks
+    "tables": false         // Don't check tables
+  },
+  "MD033": false,  // Allow inline HTML
+  "MD034": false,  // Allow bare URLs
+  "MD041": false   // Don't require H1 as first line
+}
+```
+
+This allows for:
+- Longer lines (up to 120 characters) for URLs and code examples
+- Bare URLs in documentation
+- Flexible heading structure in templates
 
 ## Best Practices
 
