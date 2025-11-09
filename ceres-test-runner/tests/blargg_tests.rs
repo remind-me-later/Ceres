@@ -1,7 +1,7 @@
-//! Integration tests using Blargg test ROMs
+//! Integration tests using Blargg's test ROM suite
 //!
-//! These tests validate the CPU instruction implementation against
-//! Blargg's comprehensive test suite.
+//! These tests validate CPU instructions, timing behavior, and hardware bugs
+//! using Blargg's comprehensive test suite.
 //!
 //! We only run the combined test suites (e.g., `cpu_instrs.gb`, `mem_timing.gb`)
 //! which have reference screenshots for pixel-perfect comparison. Individual
@@ -12,8 +12,8 @@ use ceres_test_runner::{
     test_runner::{TestConfig, TestResult, TestRunner, timeouts},
 };
 
-/// Helper to run a test ROM with a specific timeout and optional screenshot comparison
-fn run_test_rom(path: &str, timeout: u32) -> TestResult {
+/// Helper to run a Blargg test ROM with a specific timeout and screenshot comparison
+fn run_blargg_test(path: &str, timeout: u32) -> TestResult {
     let rom = match load_test_rom(path) {
         Ok(rom) => rom,
         Err(e) => return TestResult::Failed(format!("Failed to load test ROM: {e}")),
@@ -35,7 +35,7 @@ fn run_test_rom(path: &str, timeout: u32) -> TestResult {
 
 #[test]
 fn test_blargg_cpu_instrs() {
-    let result = run_test_rom("blargg/cpu_instrs/cpu_instrs.gb", timeouts::CPU_INSTRS);
+    let result = run_blargg_test("blargg/cpu_instrs/cpu_instrs.gb", timeouts::CPU_INSTRS);
     assert_eq!(
         result,
         TestResult::Passed,
@@ -45,7 +45,7 @@ fn test_blargg_cpu_instrs() {
 
 #[test]
 fn test_blargg_instr_timing() {
-    let result = run_test_rom(
+    let result = run_blargg_test(
         "blargg/instr_timing/instr_timing.gb",
         timeouts::INSTR_TIMING,
     );
@@ -54,7 +54,7 @@ fn test_blargg_instr_timing() {
 
 #[test]
 fn test_blargg_mem_timing() {
-    let result = run_test_rom("blargg/mem_timing/mem_timing.gb", timeouts::MEM_TIMING);
+    let result = run_blargg_test("blargg/mem_timing/mem_timing.gb", timeouts::MEM_TIMING);
     assert_eq!(
         result,
         TestResult::Passed,
@@ -64,7 +64,7 @@ fn test_blargg_mem_timing() {
 
 #[test]
 fn test_blargg_mem_timing_2() {
-    let result = run_test_rom("blargg/mem_timing-2/mem_timing.gb", timeouts::MEM_TIMING_2);
+    let result = run_blargg_test("blargg/mem_timing-2/mem_timing.gb", timeouts::MEM_TIMING_2);
     assert_eq!(
         result,
         TestResult::Passed,
@@ -74,7 +74,7 @@ fn test_blargg_mem_timing_2() {
 
 #[test]
 fn test_blargg_interrupt_time() {
-    let result = run_test_rom(
+    let result = run_blargg_test(
         "blargg/interrupt_time/interrupt_time.gb",
         timeouts::INTERRUPT_TIME,
     );
@@ -83,30 +83,6 @@ fn test_blargg_interrupt_time() {
 
 #[test]
 fn test_blargg_halt_bug() {
-    let result = run_test_rom("blargg/halt_bug.gb", timeouts::HALT_BUG);
+    let result = run_blargg_test("blargg/halt_bug.gb", timeouts::HALT_BUG);
     assert_eq!(result, TestResult::Passed, "Halt bug test failed");
-}
-
-#[test]
-fn test_cgb_acid2() {
-    use ceres_test_runner::test_roms_dir;
-    
-    let rom = match ceres_test_runner::load_test_rom("cgb-acid2/cgb-acid2.gbc") {
-        Ok(rom) => rom,
-        Err(e) => panic!("Failed to load test ROM: {e}"),
-    };
-
-    let config = TestConfig {
-        timeout_frames: timeouts::CGB_ACID2,
-        expected_screenshot: Some(test_roms_dir().join("cgb-acid2/cgb-acid2.png")),
-        ..TestConfig::default()
-    };
-
-    let mut runner = match TestRunner::new(rom, config) {
-        Ok(runner) => runner,
-        Err(e) => panic!("Failed to create test runner: {e}"),
-    };
-
-    let result = runner.run();
-    assert_eq!(result, TestResult::Passed, "CGB Acid2 PPU test failed");
 }

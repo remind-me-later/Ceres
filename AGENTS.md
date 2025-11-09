@@ -130,6 +130,8 @@ The integration tests use screenshot comparison to validate emulator accuracy:
 - `test_blargg_mem_timing_2` - Advanced memory timing (~5.9s)
 - `test_blargg_interrupt_time` - Interrupt timing (~3.6s)
 - `test_cgb_acid2` - CGB PPU accuracy test (~0.4s)
+- `test_dmg_acid2_cgb` - DMG Acid2 PPU test in CGB mode (~0.2s)
+- `test_dmg_acid2_dmg` - DMG Acid2 PPU test in DMG mode (currently ignored - known PPU rendering issue)
 
 Each test compares the emulator's screen output pixel-by-pixel against reference PNG screenshots from the test ROM
 repository, with color correction disabled for accuracy. Timeout values are based on actual completion times with

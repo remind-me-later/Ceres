@@ -4,14 +4,17 @@ Integration test runner for the Ceres Game Boy emulator using actual Game Boy te
 
 ## Overview
 
-The test suite is currently focused on **CPU instruction validation** to ensure core emulation accuracy before expanding
-to other subsystems.
+The test suite validates emulator accuracy using pixel-perfect screenshot comparison against reference images. Tests cover:
+
+- **CPU Instructions**: Complete SM83 instruction set validation
+- **Timing**: Instruction timing, memory timing, and interrupt timing
+- **PPU Rendering**: CGB and DMG display accuracy tests
 
 ## Setup
 
 Test ROMs are **automatically downloaded** when you build or test this crate. No manual setup required!
 
-The build script downloads the test ROM collection from the
+The build script downloads the test ROM collection (172MB) from the
 [c-sp/gameboy-test-roms](https://github.com/c-sp/gameboy-test-roms) repository on first build and caches it in the
 `test-roms/` directory.
 
@@ -23,16 +26,25 @@ The build script downloads the test ROM collection from the
 cargo test --package ceres-test-runner
 ```
 
-This will:
+This will run all integration tests (~2-3 seconds total):
 
 1. Download test ROMs automatically (if not already present)
-2. Run all CPU instruction tests (~3-4 seconds)
-3. Run unit tests for the test infrastructure
+2. Run CPU instruction tests
+3. Run timing validation tests
+4. Run PPU accuracy tests
+5. Run unit tests for the test infrastructure
 
 ### Run Specific Test
 
 ```bash
-cargo test --package ceres-test-runner test_blargg_cpu_instrs_all
+# Run a specific test
+cargo test --package ceres-test-runner test_blargg_cpu_instrs
+
+# Run all dmg-acid2 tests
+cargo test --package ceres-test-runner test_dmg_acid2
+
+# Run ignored tests (known failures)
+cargo test --package ceres-test-runner -- --ignored
 ```
 
 ### CI/CD Usage
@@ -51,48 +63,38 @@ Test ROMs are automatically downloaded in CI environments. For optimal performan
   run: cargo test --package ceres-test-runner
 ```
 
-## Test Structure
+## Test Suite
 
-### Full CPU Test Suite
+The tests are organized into logical modules:
 
-The primary test runs all 11 CPU instruction categories in one ROM:
+### Blargg Test Suite (`tests/blargg_tests.rs`)
 
-```bash
-cargo test --package ceres-test-runner test_blargg_cpu_instrs_all
-```
+CPU instructions, timing, and hardware bug tests from Blargg's test suite:
 
-### Debug Individual CPU Instructions
+- **`test_blargg_cpu_instrs`** - All 11 CPU instruction categories in one comprehensive test
+- **`test_blargg_instr_timing`** - Validates instruction cycle timing
+- **`test_blargg_mem_timing`** - Tests memory access timing
+- **`test_blargg_mem_timing_2`** - Advanced memory timing scenarios
+- **`test_blargg_interrupt_time`** - Interrupt handling timing
+- **`test_blargg_halt_bug`** - HALT instruction edge cases
 
-If the full suite fails, run individual tests to pinpoint the problem:
+### PPU Accuracy Tests (`tests/ppu_tests.rs`)
 
-```bash
-cargo test --package ceres-test-runner test_blargg_cpu_instrs_01_special
-cargo test --package ceres-test-runner test_blargg_cpu_instrs_02_interrupts
-# ... and so on for tests 03-11
-```
+Visual accuracy tests for the Pixel Processing Unit:
 
-Individual test categories:
+- **`test_cgb_acid2`** - CGB PPU rendering accuracy
+- **`test_dmg_acid2_cgb`** - DMG Acid2 test running in CGB mode
+- **`test_dmg_acid2_dmg`** - DMG Acid2 test running in DMG mode *(currently ignored - known issue)*
 
-1. `01_special` - Special instructions
-2. `02_interrupts` - Interrupt handling
-3. `03_op_sp_hl` - SP and HL operations
-4. `04_op_r_imm` - Register-immediate operations
-5. `05_op_rp` - Register pair operations
-6. `06_ld_r_r` - Register-to-register loads
-7. `07_jr_jp_call_ret_rst` - Control flow instructions
-8. `08_misc_instrs` - Miscellaneous instructions
-9. `09_op_r_r` - Register-to-register operations
-10. `10_bit_ops` - Bit operations
-11. `11_op_a_hl` - Accumulator and (HL) operations
+### Serial Output Tests (`tests/serial_test.rs`)
 
-## Future Expansion
+Serial communication functionality tests
 
-Once CPU tests are stable, additional test suites will be added:
+## Known Issues
 
-- **PPU/Graphics**: Rendering accuracy tests
-- **APU/Sound**: Audio processing tests
-- **Timing**: Instruction and memory timing tests
-- **Hardware Bugs**: OAM bug, halt bug, etc.
+- **DMG PPU rendering**: The `test_dmg_acid2_dmg` test is currently failing due to differences in DMG mode PPU
+  rendering. The CGB mode version passes, indicating the issue is specific to DMG palette handling or rendering
+  behavior.
 
 ## Writing New Tests
 
@@ -106,9 +108,27 @@ To add a new test ROM:
 Example:
 
 ```rust
+use ceres_test_runner::{
+    load_test_rom,
+    test_runner::{TestConfig, TestResult, TestRunner, timeouts},
+};
+
 #[test]
 fn test_my_rom() {
-    let result = run_test_rom("path/to/rom.gb");
+    let rom = load_test_rom("path/to/rom.gb").expect("Failed to load ROM");
+    
+    let config = TestConfig {
+        timeout_frames: 300,
+        expected_screenshot: ceres_test_runner::expected_screenshot_path(
+            "path/to/rom.gb",
+            ceres_core::Model::Cgb,
+        ),
+        ..TestConfig::default()
+    };
+    
+    let mut runner = TestRunner::new(rom, config).expect("Failed to create runner");
+    let result = runner.run();
+    
     assert_eq!(result, TestResult::Passed, "Test failed");
 }
 ```
