@@ -1,5 +1,5 @@
 ---
-description: Generate a custom checklist for the current feature based on user requirements.
+description: | Generate a custom checklist for the current feature based on user requirements.
 ---
 
 ## Checklist Purpose: "Unit Tests for English"
@@ -38,18 +38,21 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 1. **Setup**: Run `.specify/scripts/bash/check-prerequisites.sh --json` from repo root and parse JSON for FEATURE_DIR
    and AVAILABLE_DOCS list.
+
    - All file paths must be absolute.
    - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible:
      "I'm Groot").
 
 2. **Clarify intent (dynamic)**: Derive up to THREE initial contextual clarifying questions (no pre-baked catalog). They
    MUST:
+
    - Be generated from the user's phrasing + extracted signals from spec/plan/tasks
    - Only ask about information that materially changes checklist content
    - Be skipped individually if already unambiguous in `$ARGUMENTS`
    - Prefer precision over breadth
 
    Generation algorithm:
+
    1. Extract signals: feature domain keywords (e.g., auth, latency, UX, API), risk indicators ("critical", "must",
       "compliance"), stakeholder hints ("QA", "review", "security team"), and explicit deliverables ("a11y", "rollback",
       "contracts").
@@ -67,6 +70,7 @@ You **MUST** consider the user input before proceeding (if not empty).
       - Scenario class gap (e.g., "No recovery flows detected—are rollback / partial failure paths in scope?")
 
    Question formatting rules:
+
    - If presenting options, generate a compact table with columns: Option | Candidate | Why It Matters
    - Limit to A–E options maximum; omit table if a free-form answer is clearer
    - Never ask the user to restate what they already said
@@ -74,6 +78,7 @@ You **MUST** consider the user input before proceeding (if not empty).
      scope."
 
    Defaults when interaction impossible:
+
    - Depth: Standard
    - Audience: Reviewer (PR) if code-related; Author otherwise
    - Focus: Top 2 relevance clusters
@@ -84,23 +89,27 @@ You **MUST** consider the user input before proceeding (if not empty).
    user explicitly declines more.
 
 3. **Understand user request**: Combine `$ARGUMENTS` + clarifying answers:
+
    - Derive checklist theme (e.g., security, review, deploy, ux)
    - Consolidate explicit must-have items mentioned by user
    - Map focus selections to category scaffolding
    - Infer any missing context from spec/plan/tasks (do NOT hallucinate)
 
 4. **Load feature context**: Read from FEATURE_DIR:
+
    - spec.md: Feature requirements and scope
    - plan.md (if exists): Technical details, dependencies
    - tasks.md (if exists): Implementation tasks
 
    **Context Loading Strategy**:
+
    - Load only necessary portions relevant to active focus areas (avoid full-file dumping)
    - Prefer summarizing long sections into concise scenario/requirement bullets
    - Use progressive disclosure: add follow-on retrieval only if gaps detected
    - If source docs are large, generate interim summary items instead of embedding raw text
 
 5. **Generate checklist** - Create "Unit Tests for Requirements":
+
    - Create `FEATURE_DIR/checklists/` directory if it doesn't exist
    - Generate unique checklist filename:
      - Use short, descriptive name based on domain (e.g., `ux.md`, `api.md`, `security.md`)
@@ -111,6 +120,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 
    **CORE PRINCIPLE - Test the Requirements, Not the Implementation**: Every checklist item MUST evaluate the
    REQUIREMENTS THEMSELVES for:
+
    - **Completeness**: Are all necessary requirements present?
    - **Clarity**: Are requirements unambiguous and specific?
    - **Consistency**: Do requirements align with each other?
@@ -118,6 +128,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **Coverage**: Are all scenarios/edge cases addressed?
 
    **Category Structure** - Group items by requirement quality dimensions:
+
    - **Requirement Completeness** (Are all necessary requirements documented?)
    - **Requirement Clarity** (Are requirements specific and unambiguous?)
    - **Requirement Consistency** (Do requirements align without conflicts?)
@@ -131,11 +142,13 @@ You **MUST** consider the user input before proceeding (if not empty).
    **HOW TO WRITE CHECKLIST ITEMS - "Unit Tests for English"**:
 
    ❌ **WRONG** (Testing implementation):
+
    - "Verify landing page displays 3 episode cards"
    - "Test hover states work on desktop"
    - "Confirm logo click navigates home"
 
    ✅ **CORRECT** (Testing requirements quality):
+
    - "Are the exact number and layout of featured episodes specified?" [Completeness]
    - "Is 'prominent display' quantified with specific sizing/positioning?" [Clarity]
    - "Are hover state requirements consistent across all interactive elements?" [Consistency]
@@ -145,6 +158,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - "Does the spec define visual hierarchy for competing UI elements?" [Clarity]
 
    **ITEM STRUCTURE**: Each item should follow this pattern:
+
    - Question format asking about requirement quality
    - Focus on what's WRITTEN (or not written) in the spec/plan
    - Include quality dimension in brackets [Completeness/Clarity/Consistency/etc.]
@@ -154,29 +168,35 @@ You **MUST** consider the user input before proceeding (if not empty).
    **EXAMPLES BY QUALITY DIMENSION**:
 
    Completeness:
+
    - "Are error handling requirements defined for all API failure modes? [Gap]"
    - "Are accessibility requirements specified for all interactive elements? [Completeness]"
    - "Are mobile breakpoint requirements defined for responsive layouts? [Gap]"
 
    Clarity:
+
    - "Is 'fast loading' quantified with specific timing thresholds? [Clarity, Spec §NFR-2]"
    - "Are 'related episodes' selection criteria explicitly defined? [Clarity, Spec §FR-5]"
    - "Is 'prominent' defined with measurable visual properties? [Ambiguity, Spec §FR-4]"
 
    Consistency:
+
    - "Do navigation requirements align across all pages? [Consistency, Spec §FR-10]"
    - "Are card component requirements consistent between landing and detail pages? [Consistency]"
 
    Coverage:
+
    - "Are requirements defined for zero-state scenarios (no episodes)? [Coverage, Edge Case]"
    - "Are concurrent user interaction scenarios addressed? [Coverage, Gap]"
    - "Are requirements specified for partial data loading failures? [Coverage, Exception Flow]"
 
    Measurability:
+
    - "Are visual hierarchy requirements measurable/testable? [Acceptance Criteria, Spec §FR-1]"
    - "Can 'balanced visual weight' be objectively verified? [Measurability, Spec §FR-2]"
 
    **Scenario Classification & Coverage** (Requirements Quality Focus):
+
    - Check if requirements exist for: Primary, Alternate, Exception/Error, Recovery, Non-Functional scenarios
    - For each scenario class, ask: "Are [scenario type] requirements complete, clear, and consistent?"
    - If scenario class missing: "Are [scenario type] requirements intentionally excluded or missing? [Gap]"
@@ -184,12 +204,14 @@ You **MUST** consider the user input before proceeding (if not empty).
      [Gap]"
 
    **Traceability Requirements**:
+
    - MINIMUM: ≥80% of items MUST include at least one traceability reference
    - Each item should reference: spec section `[Spec §X.Y]`, or use markers: `[Gap]`, `[Ambiguity]`, `[Conflict]`,
      `[Assumption]`
    - If no ID system exists: "Is a requirement & acceptance criteria ID scheme established? [Traceability]"
 
    **Surface & Resolve Issues** (Requirements Quality Problems): Ask questions about the requirements themselves:
+
    - Ambiguities: "Is the term 'fast' quantified with specific metrics? [Ambiguity, Spec §NFR-1]"
    - Conflicts: "Do navigation requirements conflict between §FR-10 and §FR-10a? [Conflict]"
    - Assumptions: "Is the assumption of 'always available podcast API' validated? [Assumption]"
@@ -197,11 +219,13 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Missing definitions: "Is 'visual hierarchy' defined with measurable criteria? [Gap]"
 
    **Content Consolidation**:
+
    - Soft cap: If raw candidate items > 40, prioritize by risk/impact
    - Merge near-duplicates checking the same requirement aspect
    - If >5 low-impact edge cases, create one item: "Are edge cases X, Y, Z addressed in requirements? [Coverage]"
 
    **🚫 ABSOLUTELY PROHIBITED** - These make it an implementation test, not a requirements test:
+
    - ❌ Any item starting with "Verify", "Test", "Confirm", "Check" + implementation behavior
    - ❌ References to code execution, user actions, system behavior
    - ❌ "Displays correctly", "works properly", "functions as expected"
@@ -210,6 +234,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - ❌ Implementation details (frameworks, APIs, algorithms)
 
    **✅ REQUIRED PATTERNS** - These test requirements quality:
+
    - ✅ "Are [requirement type] defined/specified/documented for [scenario]?"
    - ✅ "Is [vague term] quantified/clarified with specific criteria?"
    - ✅ "Are requirements consistent between [section A] and [section B]?"
