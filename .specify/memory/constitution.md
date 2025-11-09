@@ -103,7 +103,7 @@ pub fn read_lcdc(&self) -> u8 { ... }
 ## Technology Stack
 
 ### Languages & Frameworks
-- **Rust**: Primary implementation language (stable channel)
+- **Rust**: Primary implementation language (Rust 1.91+, Edition 2024)
 - **RGBDS**: Boot ROM assembly (gbz80/SM83 assembler)
 
 ### Dependencies
