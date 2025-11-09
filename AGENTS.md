@@ -143,6 +143,7 @@ The integration tests use screenshot comparison to validate emulator accuracy:
 - `test_blargg_mem_timing` - Memory access timing (~4.6s)
 - `test_blargg_mem_timing_2` - Advanced memory timing (~5.9s)
 - `test_blargg_interrupt_time` - Interrupt timing (~3.6s)
+- `test_cgb_acid2` - CGB PPU accuracy test (~0.4s)
 
 Each test compares the emulator's screen output pixel-by-pixel against reference
 PNG screenshots from the test ROM repository, with color correction disabled for
@@ -181,14 +182,7 @@ The integration tests run in ~3-4 seconds and validate all SM83 CPU
 instructions, instruction timing, memory timing, and interrupt timing against
 reference screenshots.
 
-**Note**: Some tests are currently ignored due to emulation bugs that need
-fixing:
-
-- `mem_timing-2` - times out
-- `interrupt_time` - times out
-
-Run with `cargo test --package ceres-test-runner -- --ignored` to see these
-failing tests.
+All integration tests currently pass!
 
 ### CI/CD Pipeline
 

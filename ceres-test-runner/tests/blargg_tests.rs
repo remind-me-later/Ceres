@@ -86,3 +86,27 @@ fn test_blargg_halt_bug() {
     let result = run_test_rom("blargg/halt_bug.gb", timeouts::HALT_BUG);
     assert_eq!(result, TestResult::Passed, "Halt bug test failed");
 }
+
+#[test]
+fn test_cgb_acid2() {
+    use ceres_test_runner::test_roms_dir;
+    
+    let rom = match ceres_test_runner::load_test_rom("cgb-acid2/cgb-acid2.gbc") {
+        Ok(rom) => rom,
+        Err(e) => panic!("Failed to load test ROM: {e}"),
+    };
+
+    let config = TestConfig {
+        timeout_frames: timeouts::CGB_ACID2,
+        expected_screenshot: Some(test_roms_dir().join("cgb-acid2/cgb-acid2.png")),
+        ..TestConfig::default()
+    };
+
+    let mut runner = match TestRunner::new(rom, config) {
+        Ok(runner) => runner,
+        Err(e) => panic!("Failed to create test runner: {e}"),
+    };
+
+    let result = runner.run();
+    assert_eq!(result, TestResult::Passed, "CGB Acid2 PPU test failed");
+}
