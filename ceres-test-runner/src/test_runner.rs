@@ -9,9 +9,6 @@ pub mod timeouts {
     pub const INTERRUPT_TIME: u32 = 240;
     pub const HALT_BUG: u32 = 330;
     pub const CGB_ACID2: u32 = 300;
-    pub const DMG_ACID2: u32 = 480;
-    pub const RTC3TEST_BASIC: u32 = 1050;
-    pub const RTC3TEST_RANGE: u32 = 750;
 }
 
 use anyhow::Result;

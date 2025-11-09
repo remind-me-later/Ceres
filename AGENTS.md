@@ -47,6 +47,48 @@ See `openspec/AGENTS.md` for complete OpenSpec workflow documentation.
 
 ---
 
+## For AI Agents: Use Spec-Kit for Development
+
+**This project uses [Spec-Kit](https://github.com/github/spec-kit) for structured, spec-driven development.**
+
+### Quick Start for Agents
+
+1. **Read the Constitution**: Start with `.specify/memory/constitution.md` for project principles and standards
+2. **Follow Spec-Kit Workflow**: See `.specify/AGENTS.md` for detailed workflow guidance
+3. **Use Spec-Kit Commands**: Available in GitHub Copilot and Gemini CLI
+
+### Available Commands
+
+```
+/speckit.constitution  - Review project principles
+/speckit.specify       - Create feature specification
+/speckit.plan          - Generate implementation plan
+/speckit.tasks         - Break down into tasks
+/speckit.implement     - Execute implementation
+```
+
+### When to Use Spec-Kit
+
+✅ Use Spec-Kit for:
+
+- Bug fixes affecting multiple modules (e.g., mem_timing-2, interrupt_time tests)
+- New hardware features (RTC, serial, link cable, etc.)
+- Performance optimizations that change behavior
+- New frontend implementations
+- API changes in ceres-core
+
+❌ Simple changes (typos, formatting) don't need specs.
+
+### Key Principles
+
+- **SameBoy is the gold standard** for behavior verification
+- **Test-driven development** - maintain 98%+ CPU coverage
+- **Pan Docs compliance** - all hardware behavior documented
+- **no_std core** - keep ceres-core platform-agnostic
+- See `.specify/memory/constitution.md` for complete principles
+
+---
+
 ## Project Overview
 
 Ceres is an experimental Game Boy and Game Boy Color emulator written in Rust. It is designed with a modular
@@ -137,8 +179,6 @@ The integration tests use screenshot comparison to validate emulator accuracy:
 - `test_blargg_mem_timing_2` - Advanced memory timing (~5.9s)
 - `test_blargg_interrupt_time` - Interrupt timing (~3.6s)
 - `test_cgb_acid2` - CGB PPU accuracy test (~0.4s)
-- `test_dmg_acid2_cgb` - DMG Acid2 PPU test in CGB mode (~0.2s)
-- `test_dmg_acid2_dmg` - DMG Acid2 PPU test in DMG mode (currently ignored - known PPU rendering issue)
 
 Each test compares the emulator's screen output pixel-by-pixel against reference PNG screenshots from the test ROM
 repository, with color correction disabled for accuracy. Timeout values are based on actual completion times with
@@ -168,8 +208,14 @@ cargo llvm-cov --package ceres-core --package ceres-test-runner
 - **Overall**: ~54% - Focus areas include CPU, memory, interrupts, and timing
 - **Untested areas**: Save states (BESS), RTC, joypad input, audio details
 
-Integration tests complete in ~3-4 seconds and validate all SM83 CPU instructions, instruction timing, memory timing,
-and interrupt timing against reference screenshots. All integration tests currently pass!
+The integration tests complete in ~3.9 seconds with optimized timeouts based on
+actual test completion times.
+
+The integration tests run in ~3-4 seconds and validate all SM83 CPU
+instructions, instruction timing, memory timing, and interrupt timing against
+reference screenshots.
+
+All integration tests currently pass!
 
 ### CI/CD Pipeline
 
