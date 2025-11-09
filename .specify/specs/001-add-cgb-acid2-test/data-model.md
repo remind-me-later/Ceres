@@ -2,11 +2,13 @@
 
 ## Overview
 
-This feature adds a single integration test with minimal data structures. The test uses existing infrastructure from the TestRunner and does not introduce new data models.
+This feature adds a single integration test with minimal data structures. The test uses existing infrastructure from the
+TestRunner and does not introduce new data models.
 
 ## Existing Structures Used
 
 ### TestConfig
+
 ```rust
 pub struct TestConfig {
     pub capture_serial: bool,
@@ -17,12 +19,14 @@ pub struct TestConfig {
 ```
 
 **Usage in this feature**:
+
 - `capture_serial`: false (cgb-acid2 doesn't use serial output)
 - `model`: Model::Cgb (Color Game Boy)
 - `timeout_frames`: 600 (timeouts::CGB_ACID2)
 - `expected_screenshot`: Some("test-roms/cgb-acid2/cgb-acid2.png")
 
 ### TestResult
+
 ```rust
 pub enum TestResult {
     Failed(String),
@@ -33,6 +37,7 @@ pub enum TestResult {
 ```
 
 **Expected values**:
+
 - `Passed`: Screenshot matches reference image
 - `Failed(msg)`: Screenshot differs or other error
 - `Timeout`: Test exceeded 600 frames
@@ -40,6 +45,7 @@ pub enum TestResult {
 ## Constants
 
 ### timeouts Module
+
 ```rust
 pub mod timeouts {
     pub const CPU_INSTRS: u32 = 2091;
@@ -55,11 +61,13 @@ pub mod timeouts {
 ## File References
 
 ### Test ROM
+
 - **Path**: `test-roms/cgb-acid2/cgb-acid2.gbc`
 - **Type**: Game Boy Color ROM (binary)
 - **Size**: Small (~32KB typical for test ROMs)
 
 ### Reference Screenshot
+
 - **Path**: `test-roms/cgb-acid2/cgb-acid2.png`
 - **Type**: PNG image (160x144 pixels, RGBA8)
 - **Purpose**: Pixel-perfect comparison target
@@ -68,12 +76,13 @@ pub mod timeouts {
 
 The test follows a simple linear flow:
 
-```
-[Start] 
+```text
+[Start]
   → Load ROM → Run emulation → Compare screenshot → [Pass/Fail/Timeout]
 ```
 
 **States**:
+
 1. **Initial**: Test function invoked by cargo test
 2. **Loading**: ROM loaded via load_test_rom()
 3. **Running**: Emulation executes frames (0..600)
@@ -101,10 +110,10 @@ No persistent state between test runs.
 
 ## Entity Summary
 
-| Entity | Type | Purpose | Source |
-|--------|------|---------|--------|
-| test_cgb_acid2 | Function | Test entry point | New (blargg_tests.rs) |
-| CGB_ACID2 | Constant (u32) | Timeout value | New (test_runner.rs) |
-| TestConfig | Struct | Test configuration | Existing |
-| TestResult | Enum | Test outcome | Existing |
-| TestRunner | Struct | Test executor | Existing |
+| Entity         | Type           | Purpose            | Source                |
+| -------------- | -------------- | ------------------ | --------------------- |
+| test_cgb_acid2 | Function       | Test entry point   | New (blargg_tests.rs) |
+| CGB_ACID2      | Constant (u32) | Timeout value      | New (test_runner.rs)  |
+| TestConfig     | Struct         | Test configuration | Existing              |
+| TestResult     | Enum           | Test outcome       | Existing              |
+| TestRunner     | Struct         | Test executor      | Existing              |

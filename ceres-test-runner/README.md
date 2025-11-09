@@ -4,17 +4,14 @@ Integration test runner for the Ceres Game Boy emulator using actual Game Boy te
 
 ## Overview
 
-The test suite validates emulator accuracy using pixel-perfect screenshot comparison against reference images. Tests cover:
-
-- **CPU Instructions**: Complete SM83 instruction set validation
-- **Timing**: Instruction timing, memory timing, and interrupt timing
-- **PPU Rendering**: CGB and DMG display accuracy tests
+The test suite is currently focused on **CPU instruction validation** to ensure core emulation accuracy before expanding
+to other subsystems.
 
 ## Setup
 
 Test ROMs are **automatically downloaded** when you build or test this crate. No manual setup required!
 
-The build script downloads the test ROM collection (172MB) from the
+The build script downloads the test ROM collection from the
 [c-sp/gameboy-test-roms](https://github.com/c-sp/gameboy-test-roms) repository on first build and caches it in the
 `test-roms/` directory.
 

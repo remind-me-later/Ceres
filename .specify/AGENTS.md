@@ -10,6 +10,7 @@ This document provides guidance for AI agents working on the Ceres Game Boy emul
 2. **Check Existing Specs**: Look in `.specify/specs/` to see what's already planned or implemented
 3. **Understand the Codebase**: Review `AGENTS.md` in the project root for high-level architecture
 4. **Install markdownlint-cli** (optional, for formatting):
+
    ```bash
    npm install -g markdownlint-cli
    # Or using yarn
@@ -26,10 +27,10 @@ After each step, format generated markdown files:
 
 ```bash
 # Format all specs in current feature
-markdownlint --fix "specs/001-feature-name/**/*.md"
+markdownlint --fix ".specify/specs/001-feature-name/**/*.md"
 
 # Or format all spec files
-markdownlint --fix "specs/**/*.md"
+markdownlint --fix ".specify/specs/**/*.md"
 ```
 
 ## Available Commands
@@ -39,22 +40,22 @@ markdownlint --fix "specs/**/*.md"
 1. **`/speckit.constitution`** - Establish or review project principles
    - Run once to understand project standards
    - Constitution already created at `.specify/memory/constitution.md`
-   
+
 2. **`/speckit.specify`** - Create feature specification
    - Define WHAT needs to be built and WHY
    - Focus on requirements, not implementation
    - Include success criteria and test expectations
-   
+
 3. **`/speckit.plan`** - Generate technical implementation plan
    - Define HOW to implement (tech stack, approach)
    - Reference SameBoy and Pan Docs
    - List specific files and modules to change
-   
+
 4. **`/speckit.tasks`** - Break down into actionable tasks
    - Generates phased task breakdown
    - Maps tasks to test requirements
    - Creates implementation checklist
-   
+
 5. **`/speckit.implement`** - Execute all tasks
    - Works through tasks sequentially
    - Runs tests after each phase
@@ -65,11 +66,9 @@ markdownlint --fix "specs/**/*.md"
 - **`/speckit.clarify`** - Ask structured questions before planning
   - Use when requirements are ambiguous
   - Run BEFORE `/speckit.plan`
-  
 - **`/speckit.analyze`** - Check cross-artifact consistency
   - Run AFTER `/speckit.tasks`, BEFORE `/speckit.implement`
   - Validates specs, plans, and tasks align
-  
 - **`/speckit.checklist`** - Generate quality validation checklist
   - Creates custom validation criteria
   - Run after `/speckit.plan` for quality assurance
@@ -79,6 +78,7 @@ markdownlint --fix "specs/**/*.md"
 ### When to Create a Spec
 
 ✅ **DO create specs for:**
+
 - Bug fixes in failing tests (mem_timing-2, interrupt_time)
 - New hardware features (RTC, rumble, link cable, serial)
 - Performance optimizations that change behavior
@@ -87,6 +87,7 @@ markdownlint --fix "specs/**/*.md"
 - Major refactors affecting multiple modules
 
 ❌ **DON'T create specs for:**
+
 - Typo fixes in comments/documentation
 - Code formatting (rustfmt, clippy suggestions)
 - Simple documentation updates
@@ -94,11 +95,11 @@ markdownlint --fix "specs/**/*.md"
 
 ### Spec Granularity
 
-| Size | Duration | Example |
-|------|----------|---------|
-| **Small** | 1-3 days | Fix single test, add missing register, documentation update |
-| **Medium** | 1-2 weeks | Implement new hardware module, add frontend feature |
-| **Large** | 1+ month | Complete APU rewrite, WASM frontend, save state system |
+| Size       | Duration  | Example                                                     |
+| ---------- | --------- | ----------------------------------------------------------- |
+| **Small**  | 1-3 days  | Fix single test, add missing register, documentation update |
+| **Medium** | 1-2 weeks | Implement new hardware module, add frontend feature         |
+| **Large**  | 1+ month  | Complete APU rewrite, WASM frontend, save state system      |
 
 ### Critical References
 
@@ -107,11 +108,11 @@ Always reference these when creating specs:
 1. **SameBoy** - Gold standard for behavior
    - Repository: https://github.com/LIJI32/SameBoy
    - Check SameBoy implementation for timing, edge cases, quirks
-   
+
 2. **Pan Docs** - Hardware documentation
    - URL: https://gbdev.io/pandocs/
    - Use for register addresses, bit layouts, timing specs
-   
+
 3. **Existing Tests** - Validation suite
    - Location: `ceres-test-runner/tests/`
    - Current status: CPU 98% coverage, overall 54%
@@ -121,11 +122,11 @@ Always reference these when creating specs:
 
 ### Step 1: Create Specification
 
-```
+```text
 /speckit.specify Fix mem_timing-2 test timeout issue
 
-The mem_timing-2 test from Blargg's test suite currently times out after 360 frames 
-when it should complete successfully. This test validates advanced memory timing 
+The mem_timing-2 test from Blargg's test suite currently times out after 360 frames
+when it should complete successfully. This test validates advanced memory timing
 behavior that real Game Boy hardware exhibits.
 
 Requirements:
@@ -148,7 +149,7 @@ Success Criteria:
 
 ### Step 2: Create Technical Plan
 
-```
+```text
 /speckit.plan Technical approach for mem_timing-2 fix
 
 Tech Stack:
@@ -178,19 +179,19 @@ Key Files to Modify:
 
 ### Step 3: Generate Tasks
 
-```
+```text
 /speckit.tasks
 ```
 
 ### Step 4: Execute Implementation
 
-```
+```text
 /speckit.implement
 ```
 
 ## Project Structure
 
-```
+```text
 Ceres/
 ├── .specify/
 │   ├── memory/
@@ -240,90 +241,129 @@ Ceres/
 
 ## Markdown Formatting
 
-### Using markdownlint-cli
+### Using markdownlint-cli + Prettier
 
-All spec markdown files should be formatted with markdownlint-cli to maintain consistency and avoid linter warnings.
+Spec markdown files use two tools for formatting:
+
+- **markdownlint-cli**: Validates markdown structure and fixes simple issues
+- **Prettier**: Auto-formats and hard-wraps lines at 80 characters
 
 **Installation:**
 
 ```bash
+# markdownlint for validation
 npm install -g markdownlint-cli
+
+# Prettier for auto-formatting and hard wrapping
+npm install -g prettier
 ```
 
 **Format after spec creation:**
 
 ```bash
-# Format current feature's markdown files
-markdownlint --fix "specs/001-add-cgb-acid2-test/**/*.md"
+# Format current feature's markdown files (with hard wrapping)
+prettier --write ".specify/specs/001-add-cgb-acid2-test/**/*.md"
+markdownlint --fix ".specify/specs/001-add-cgb-acid2-test/**/*.md"
 
 # Format all spec files
-markdownlint --fix "specs/**/*.md"
-
-# Format constitution and guides
+prettier --write ".specify/**/*.md"
 markdownlint --fix ".specify/**/*.md"
 
-# Format entire project (specs + root docs)
-markdownlint --fix "**/*.md"
+# Format single file
+prettier --write ".specify/specs/001-feature/spec.md"
 ```
 
 **Integrated workflow:**
 
 ```bash
-# After /speckit.specify
+# After /speckit.specify - auto-format with hard wrapping
 /speckit.specify Add new feature
-markdownlint --fix "specs/001-new-feature/**/*.md"
+prettier --write ".specify/specs/001-new-feature/**/*.md"
+markdownlint --fix ".specify/specs/001-new-feature/**/*.md"
 
 # After /speckit.plan
 /speckit.plan
-markdownlint --fix "specs/001-new-feature/**/*.md"
+prettier --write ".specify/specs/001-new-feature/**/*.md"
+markdownlint --fix ".specify/specs/001-new-feature/**/*.md"
 
-# Before committing
-git add specs/001-new-feature/
-markdownlint --fix "specs/001-new-feature/**/*.md"
-git add specs/001-new-feature/  # Re-add formatted files
+# Before committing (complete workflow)
+git add .specify/specs/001-new-feature/
+prettier --write ".specify/specs/001-new-feature/**/*.md"
+markdownlint --fix ".specify/specs/001-new-feature/**/*.md"
+git add .specify/specs/001-new-feature/  # Re-add formatted files
 git commit -m "feat: add new feature spec"
+```
+
+**Quick command for both tools:**
+
+```bash
+# Format and validate in one line
+prettier --write ".specify/specs/**/*.md" && markdownlint --fix ".specify/specs/**/*.md"
 ```
 
 **Configuration:**
 
-The project uses a `.markdownlint.json` configuration with relaxed rules for technical documentation:
+Both tools are configured to work together with synced settings:
+
+`.prettierrc.json`:
+
+```json
+{
+  "proseWrap": "always",
+  "printWidth": 120
+}
+```
+
+`.markdownlint.json`:
 
 ```json
 {
   "MD013": {
-    "line_length": 120,     // Allow longer lines (120 chars)
-    "code_blocks": false,   // Don't check code blocks
-    "tables": false         // Don't check tables
+    "line_length": 120,
+    "code_blocks": false,
+    "tables": false
   },
-  "MD033": false,  // Allow inline HTML
-  "MD034": false,  // Allow bare URLs
-  "MD041": false   // Don't require H1 as first line
+  "MD033": false,
+  "MD034": false,
+  "MD041": false
 }
 ```
 
-This allows for:
-- Longer lines (up to 120 characters) for URLs and code examples
-- Bare URLs in documentation
-- Flexible heading structure in templates
+**Ignore files** (`.prettierignore` and `.markdownlintignore`):
+
+- `test-roms/` - External test ROM documentation
+- `gb-bootroms/` - Submodule with own formatting
+- `node_modules/` - Dependencies
+- `target/` - Build artifacts
+
+**Key settings:**
+
+- Line length: 120 characters (synced between both tools)
+- Prose wrapping: Enabled in Prettier
+- Allows: Bare URLs, inline HTML, flexible headings
+- Ignores: Submodules and external dependencies
 
 ## Best Practices
 
 ### Specification Writing
 
 **Focus on WHAT and WHY, not HOW:**
-```
+
+```text
 ✅ GOOD: "Fix VRAM access timing to match hardware behavior during PPU mode 3"
 ❌ BAD: "Add a check in mmu.rs line 123 to return 0xFF when in mode 3"
 ```
 
 **Include testable success criteria:**
-```
+
+```text
 ✅ GOOD: "mem_timing-2 test completes with 'Passed' screenshot match"
 ❌ BAD: "Memory timing is better"
 ```
 
 **Reference existing systems:**
-```
+
+```text
 ✅ GOOD: "Use SameBoy's memory blocking logic as reference"
 ❌ BAD: "Make memory timing more accurate"
 ```
@@ -331,19 +371,22 @@ This allows for:
 ### Planning Technical Details
 
 **Be specific about modules:**
-```
+
+```text
 ✅ GOOD: "Modify ceres-core/src/memory/mmu.rs::read_vram() to check PPU mode"
 ❌ BAD: "Update memory code"
 ```
 
 **Reference documentation:**
-```
+
+```text
 ✅ GOOD: "Per Pan Docs section 4.3, VRAM is inaccessible during mode 3"
 ❌ BAD: "VRAM can't be read sometimes"
 ```
 
 **Compare with SameBoy:**
-```
+
+```text
 ✅ GOOD: "SameBoy blocks VRAM reads in GB_read_memory() during mode 3"
 ❌ BAD: "Other emulators do this differently"
 ```
@@ -351,19 +394,22 @@ This allows for:
 ### Task Breakdown
 
 **Phase tasks appropriately:**
+
 - **Phase 1**: Investigation and research
 - **Phase 2**: Core implementation
 - **Phase 3**: Testing and validation
 - **Phase 4**: Documentation and cleanup
 
 **Make tasks testable:**
-```
+
+```text
 ✅ GOOD: "1.1 Add VRAM blocking, verify with vram_timing test"
 ❌ BAD: "1.1 Fix VRAM stuff"
 ```
 
 **Include regression testing:**
-```
+
+```text
 ✅ GOOD: "3.2 Run full test suite, ensure no regressions"
 ❌ BAD: "3.2 Make sure it works"
 ```
@@ -372,13 +418,13 @@ This allows for:
 
 ### Test Suite Overview
 
-| Test | Status | Duration | Coverage |
-|------|--------|----------|----------|
-| cpu_instrs | ✅ Passing | ~33s | 98% CPU |
-| instr_timing | ✅ Passing | ~3.6s | Timing |
-| mem_timing | ✅ Passing | ~4.6s | Memory |
-| mem_timing-2 | ❌ Timeout | N/A | Advanced memory |
-| interrupt_time | ❌ Timeout | N/A | Interrupt timing |
+| Test           | Status     | Duration | Coverage         |
+| -------------- | ---------- | -------- | ---------------- |
+| cpu_instrs     | ✅ Passing | ~33s     | 98% CPU          |
+| instr_timing   | ✅ Passing | ~3.6s    | Timing           |
+| mem_timing     | ✅ Passing | ~4.6s    | Memory           |
+| mem_timing-2   | ❌ Timeout | N/A      | Advanced memory  |
+| interrupt_time | ❌ Timeout | N/A      | Interrupt timing |
 
 ### Running Tests
 
@@ -396,6 +442,7 @@ cargo llvm-cov --package ceres-core --package ceres-test-runner --html
 ### Test Expectations
 
 Every spec should:
+
 1. Reference which tests will validate the changes
 2. Ensure existing tests continue to pass
 3. Add regression tests for bug fixes
@@ -406,6 +453,7 @@ Every spec should:
 ### Branch Strategy
 
 Ceres uses a **three-tier branch strategy**:
+
 - `main` - Production/deployment branch (stable releases only)
 - `dev` - Development integration branch (all features merge here first)
 - `001-feature-name` - Feature branches (created by Spec-Kit)
@@ -473,26 +521,30 @@ git push origin v0.1.0
 **Standard workflow for features:**
 
 1. **Create feature branch** (automatic via `/speckit.specify`)
+
    ```bash
    # You'll be on: 001-feature-name
    ```
 
 2. **Implement and commit changes**
+
    ```bash
    git add ceres-core/src/memory/mmu.rs
    git commit -m "fix(memory): implement VRAM blocking during mode 3"
    ```
 
 3. **Push to remote**
+
    ```bash
    git push -u origin 001-feature-name
    ```
 
 4. **Create Pull Request to `dev`**
+
    ```bash
    # Via GitHub CLI (if installed)
    gh pr create --base dev --title "Add cgb-acid2 test" --body "Implements spec 001-add-cgb-acid2-test"
-   
+
    # Or via GitHub web UI:
    # - Navigate to repository
    # - Click "Pull requests" → "New pull request"
@@ -501,6 +553,7 @@ git push origin v0.1.0
    ```
 
 5. **Review and merge**
+
    ```bash
    # After PR approval, merge via GitHub UI (squash merge recommended)
    # Or via CLI:
@@ -508,6 +561,7 @@ git push origin v0.1.0
    ```
 
 6. **Update local dev branch**
+
    ```bash
    git checkout dev
    git pull origin dev
@@ -560,7 +614,7 @@ git push origin main --tags
 
 Use conventional commit format:
 
-```
+```text
 fix(memory): implement VRAM access blocking during PPU mode 3
 
 - Add mode check in mmu.rs::read_vram()
@@ -574,11 +628,13 @@ fix(memory): implement VRAM access blocking during PPU mode 3
 ### Investigating Test Failures
 
 1. **Run test with output:**
+
    ```bash
    cargo test test_name -- --nocapture
    ```
 
 2. **Add debug logging:**
+
    ```rust
    eprintln!("VRAM read at {:04X} during mode {}", addr, ppu_mode);
    ```
@@ -600,6 +656,7 @@ fix(memory): implement VRAM access blocking during PPU mode 3
 ### Performance Optimization
 
 1. **Profile first:**
+
    ```bash
    cargo build --release --package ceres-winit
    perf record ./target/release/ceres-winit rom.gb
@@ -616,11 +673,13 @@ fix(memory): implement VRAM access blocking during PPU mode 3
 ### Spec-Kit Issues
 
 **Slash commands not appearing:**
+
 1. Restart VS Code / IDE
 2. Check `.github/prompts/*.prompt.md` files exist
 3. Open new chat window
 
 **Scripts failing:**
+
 ```bash
 # Make scripts executable
 chmod +x .specify/scripts/*.sh
@@ -630,6 +689,7 @@ specify check
 ```
 
 **Git branch issues:**
+
 ```bash
 # Ensure you're in a git repo
 git status
@@ -644,6 +704,7 @@ git branch -a
 ### Build Issues
 
 **Test ROMs missing:**
+
 ```bash
 # ROMs are auto-downloaded on first test
 cargo test --package ceres-test-runner
@@ -651,6 +712,7 @@ cargo test --package ceres-test-runner
 ```
 
 **Coverage not working:**
+
 ```bash
 # Install llvm-cov
 cargo install cargo-llvm-cov
@@ -660,6 +722,7 @@ cargo llvm-cov --package ceres-core --package ceres-test-runner
 ```
 
 **Boot ROMs missing:**
+
 ```bash
 cd gb-bootroms
 make  # Requires RGBDS toolchain
@@ -685,11 +748,13 @@ make  # Requires RGBDS toolchain
 ### Code Coverage
 
 Current status:
+
 - **CPU (sm83.rs)**: ~98% - Excellent coverage
 - **Overall**: ~54% - Target: 70%+
 - **Untested areas**: Save states (BESS), RTC, joypad input, audio details
 
 Track with:
+
 ```bash
 cargo llvm-cov --package ceres-core --package ceres-test-runner --html
 xdg-open target/llvm-cov/html/index.html

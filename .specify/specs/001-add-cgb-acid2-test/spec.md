@@ -2,11 +2,13 @@
 
 ## Overview
 
-Add the cgb-acid2 PPU accuracy test to the Ceres integration test suite. This test validates Color Game Boy (CGB) PPU emulation accuracy using pixel-perfect screenshot comparison.
+Add the cgb-acid2 PPU accuracy test to the Ceres integration test suite. This test validates Color Game Boy (CGB) PPU
+emulation accuracy using pixel-perfect screenshot comparison.
 
 ## Background
 
 The cgb-acid2 test is a comprehensive validation of the Game Boy Color's Pixel Processing Unit (PPU). It tests:
+
 - Background/window tile flipping (horizontal/vertical)
 - VRAM banking
 - Object (sprite) rendering and priorities
@@ -15,7 +17,8 @@ The cgb-acid2 test is a comprehensive validation of the Game Boy Color's Pixel P
 - 10 object per line limit
 - 8x16 sprite handling
 
-Unlike timing-critical tests, cgb-acid2 uses a simple line-based renderer and writes registers during PPU mode 2 (OAM scan). It completes by executing the `LD B, B` (opcode 0x40) instruction.
+Unlike timing-critical tests, cgb-acid2 uses a simple line-based renderer and writes registers during PPU mode 2 (OAM
+scan). It completes by executing the `LD B, B` (opcode 0x40) instruction.
 
 ## Requirements
 
@@ -72,12 +75,14 @@ Unlike timing-critical tests, cgb-acid2 uses a simple line-based renderer and wr
 ## Risk Assessment
 
 **Low Risk:**
+
 - Test infrastructure already exists
 - Reference screenshot available
 - Exit condition documented (though not strictly needed for screenshot-based testing)
 - Test doesn't require T-cycle accuracy
 
 **Potential Issues:**
+
 - Test may reveal existing PPU bugs (this is desired behavior)
 - Timeout value may need adjustment based on actual completion time
 

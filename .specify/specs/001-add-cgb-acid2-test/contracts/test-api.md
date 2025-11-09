@@ -9,12 +9,14 @@
 **Location**: tests/blargg_tests.rs
 
 **Signature**:
+
 ```rust
 #[test]
 fn test_cgb_acid2()
 ```
 
 **Behavior**:
+
 1. Loads cgb-acid2.gbc ROM from test-roms directory
 2. Creates TestRunner with CGB model and 600 frame timeout
 3. Runs emulation until completion or timeout
@@ -22,16 +24,19 @@ fn test_cgb_acid2()
 5. Asserts result is TestResult::Passed
 
 **Preconditions**:
+
 - Test ROM exists at test-roms/cgb-acid2/cgb-acid2.gbc
 - Reference screenshot exists at test-roms/cgb-acid2/cgb-acid2.png
 - ceres-core emulator compiled and linked
 
 **Postconditions**:
+
 - Test passes if screenshot matches exactly
 - Test fails if screenshot differs or other error occurs
 - Test fails if timeout exceeded
 
 **Error Cases**:
+
 - ROM not found → TestResult::Failed("Failed to load test ROM")
 - Screenshot not found → TestResult::Failed("Failed to load expected screenshot")
 - Timeout → TestResult::Timeout
@@ -46,6 +51,7 @@ fn test_cgb_acid2()
 **Location**: src/test_runner.rs
 
 **Signature**:
+
 ```rust
 pub const CGB_ACID2: u32 = 600;
 ```
@@ -65,17 +71,20 @@ pub const CGB_ACID2: u32 = 600;
 **Location**: tests/blargg_tests.rs
 
 **Signature**:
+
 ```rust
 fn run_test_rom(path: &str, timeout: u32) -> TestResult
 ```
 
 **Parameters**:
+
 - `path`: Relative path from test-roms/ directory (e.g., "cgb-acid2/cgb-acid2.gbc")
 - `timeout`: Maximum frames to run before timing out
 
 **Returns**: TestResult enum (Passed, Failed, Timeout, Unknown)
 
 **Behavior**:
+
 1. Loads ROM via load_test_rom()
 2. Creates TestConfig with:
    - timeout_frames = timeout
@@ -88,16 +97,19 @@ fn run_test_rom(path: &str, timeout: u32) -> TestResult
 ## Integration Points
 
 ### File System
+
 - **Read**: test-roms/cgb-acid2/cgb-acid2.gbc (ROM data)
 - **Read**: test-roms/cgb-acid2/cgb-acid2.png (reference image)
 - **No writes**: Test is read-only
 
 ### Emulator Core
+
 - **Uses**: ceres_core::Gb (Game Boy emulator)
 - **Uses**: ceres_core::Model::Cgb (CGB mode)
 - **Uses**: ceres_core::ColorCorrectionMode::Disabled
 
 ### Test Framework
+
 - **Uses**: Rust #[test] attribute
 - **Uses**: assert_eq! macro
 - **Integrates with**: cargo test runner
@@ -109,6 +121,7 @@ fn run_test_rom(path: &str, timeout: u32) -> TestResult
 **Type**: TestRunner method (existing, no changes)
 
 **Behavior**:
+
 1. Get actual screen from Gb::pixel_data_rgba()
 2. Load expected image from path
 3. Convert expected to RGBA8
@@ -121,7 +134,7 @@ fn run_test_rom(path: &str, timeout: u32) -> TestResult
 
 ## Test Execution Flow
 
-```
+```text
 cargo test
   └─> test_cgb_acid2()
        ├─> run_test_rom("cgb-acid2/cgb-acid2.gbc", timeouts::CGB_ACID2)

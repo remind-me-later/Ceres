@@ -39,6 +39,7 @@ fn test_cgb_acid2() {
 ### 3. Verify Test Files Exist
 
 Check that these files are present:
+
 - `test-roms/cgb-acid2/cgb-acid2.gbc`
 - `test-roms/cgb-acid2/cgb-acid2.png`
 
@@ -59,18 +60,21 @@ cargo test --package ceres-test-runner
 **Expected outcomes**:
 
 ✅ **PASSED**: PPU implementation is correct
-```
+
+```text
 test test_cgb_acid2 ... ok
 ```
 
 ❌ **FAILED**: PPU has bugs (expected until PPU is fully accurate)
-```
+
+```text
 test test_cgb_acid2 ... FAILED
 assertion failed: CGB Acid2 PPU test failed
 ```
 
 ⏱️ **TIMEOUT**: Test didn't complete in 600 frames (emulation issue)
-```
+
+```text
 test test_cgb_acid2 ... FAILED
 TestResult::Timeout
 ```
@@ -89,6 +93,7 @@ TestResult::Timeout
 If the test fails, compare screenshots to identify PPU issues:
 
 1. Run test with verbose output:
+
    ```bash
    cargo test --package ceres-test-runner test_cgb_acid2 -- --nocapture
    ```
@@ -104,17 +109,13 @@ If the test fails, compare screenshots to identify PPU issues:
 
 ## Common Issues
 
-**Issue**: Test ROM not found
-**Solution**: Run `cargo build` to trigger test ROM download (172MB)
+**Issue**: Test ROM not found **Solution**: Run `cargo build` to trigger test ROM download (172MB)
 
-**Issue**: Screenshot mismatch
-**Solution**: This is expected if PPU has bugs. Use failure pattern to identify issue.
+**Issue**: Screenshot mismatch **Solution**: This is expected if PPU has bugs. Use failure pattern to identify issue.
 
-**Issue**: Timeout
-**Solution**: Check emulation loop for infinite loops or timing bugs
+**Issue**: Timeout **Solution**: Check emulation loop for infinite loops or timing bugs
 
-**Issue**: Color correction interference
-**Solution**: TestRunner already disables color correction, no action needed
+**Issue**: Color correction interference **Solution**: TestRunner already disables color correction, no action needed
 
 ## Integration with CI
 
@@ -130,6 +131,7 @@ No CI configuration changes needed.
 ## Next Steps
 
 After implementation:
+
 1. Commit changes to feature branch
 2. Run full test suite
 3. Push to trigger CI
@@ -137,9 +139,9 @@ After implementation:
 
 ## Files Modified
 
-| File | Change |
-|------|--------|
-| `ceres-test-runner/src/test_runner.rs` | Add CGB_ACID2 constant |
+| File                                      | Change                      |
+| ----------------------------------------- | --------------------------- |
+| `ceres-test-runner/src/test_runner.rs`    | Add CGB_ACID2 constant      |
 | `ceres-test-runner/tests/blargg_tests.rs` | Add test_cgb_acid2 function |
 
 ## Estimated Time

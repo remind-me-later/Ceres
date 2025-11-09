@@ -59,7 +59,7 @@ See `openspec/AGENTS.md` for complete OpenSpec workflow documentation.
 
 ### Available Commands
 
-```
+```text
 /speckit.constitution  - Review project principles
 /speckit.specify       - Create feature specification
 /speckit.plan          - Generate implementation plan
@@ -99,7 +99,6 @@ architecture, separating the core emulation logic from the frontend implementati
 The repository is organized into several Rust crates, each with a specific responsibility:
 
 - `ceres-core`: The heart of the emulator. It contains the hardware emulation logic, including:
-
   - SM83 CPU (`sm83.rs`)
   - Audio Processing Unit (APU) (`apu/`)
   - Pixel Processing Unit (PPU) (`ppu/`)
@@ -108,7 +107,6 @@ The repository is organized into several Rust crates, each with a specific respo
   - This crate is designed to be `no_std` compatible, allowing it to run on a wide range of platforms.
 
 - `ceres-std`: Provides standard library-dependent functionalities for desktop frontends, such as:
-
   - Audio playback (`audio.rs`)
   - Threading (`thread.rs`)
   - A WebGPU-based renderer (`wgpu_renderer/`) used by the `winit` and `egui` frontends.
@@ -208,12 +206,10 @@ cargo llvm-cov --package ceres-core --package ceres-test-runner
 - **Overall**: ~54% - Focus areas include CPU, memory, interrupts, and timing
 - **Untested areas**: Save states (BESS), RTC, joypad input, audio details
 
-The integration tests complete in ~3.9 seconds with optimized timeouts based on
-actual test completion times.
+The integration tests complete in ~3.9 seconds with optimized timeouts based on actual test completion times.
 
-The integration tests run in ~3-4 seconds and validate all SM83 CPU
-instructions, instruction timing, memory timing, and interrupt timing against
-reference screenshots.
+The integration tests run in ~3-4 seconds and validate all SM83 CPU instructions, instruction timing, memory timing, and
+interrupt timing against reference screenshots.
 
 All integration tests currently pass!
 
