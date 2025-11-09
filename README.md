@@ -16,13 +16,10 @@ Some kind of GameBoy/Color emulator written in rust.
 
 ## Frontends
 
-The emulator has several frontends, the most complete and recommended is the
-`gtk4` one. Other options are:
+The emulator has several frontends, the most complete and recommended is the `gtk4` one. Other options are:
 
-- `winit` a minimal cli frontend, shows an image but doesn't have any GUI,
-  should work on Windows, Mac and Linux.
-- `egui` uses the closs-platform `egui` library, should work on Windows,
-  Mac and Linux.
+- `winit` a minimal cli frontend, shows an image but doesn't have any GUI, should work on Windows, Mac and Linux.
+- `egui` uses the closs-platform `egui` library, should work on Windows, Mac and Linux.
 - `gtk4` uses the `gtk4` toolkit, should work on Linux.
 
 ## Build
@@ -35,9 +32,8 @@ To build:
 
 - After cloning the repo run `git submodule update --init --recursive`.
 - Enter the `gb-bootroms` directory and `make`.
-- In `Cargo.toml` select the frontend.
-  For example, in case you want the gtk4 frontend use `default-members = ["ceres-gtk"]`,
-  the other options are `ceres-egui` and `ceres`.
+- In `Cargo.toml` select the frontend. For example, in case you want the gtk4 frontend use
+  `default-members = ["ceres-gtk"]`, the other options are `ceres-egui` and `ceres`.
 - In the root directory `cargo build`
 
 ## Quick start
@@ -56,8 +52,8 @@ To build:
 
 ## Folder organization
 
-- `ceres-core` contains the core emulator logic, such as cpu, apu and ppu emulation.
-  In the future this module should work in no std environments.
+- `ceres-core` contains the core emulator logic, such as cpu, apu and ppu emulation. In the future this module should
+  work in no std environments.
 - `ceres-std` contains code for audio and threading, for use with different frontends.
 - `ceres-wgpu` contains the rendering code for the frontends using wgpu.
 - `ceres-winit` contains the `winit` frontend.

@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+target/
+*.d
+*.o
+*.so
+*.a
+
+# Test ROMs (external)
+test-roms/
+
+# Submodules
+gb-bootroms/
+
+# Generated files
+.github/copilot-instructions.md

@@ -45,6 +45,7 @@ The `ceres-core` crate MUST remain `no_std` compatible.
 Clear separation of concerns across emulator subsystems.
 
 **Module boundaries:**
+
 - **CPU (sm83)**: Instruction execution, registers, flags
 - **PPU**: Graphics rendering, sprites, backgrounds, window
 - **APU**: Sound generation, channels, envelope, sweep
@@ -52,6 +53,7 @@ Clear separation of concerns across emulator subsystems.
 - **Cartridge**: MBC controllers, RAM, ROM banking, RTC
 
 Each module must:
+
 - Have well-defined public APIs
 - Be independently testable
 - Minimize cross-module dependencies
@@ -83,6 +85,7 @@ New code requires comprehensive test coverage.
 All public APIs must be documented with hardware context.
 
 **Required documentation:**
+
 - Hardware register addresses and bit layouts
 - Timing information (cycles, frame counts)
 - References to Pan Docs sections
@@ -90,6 +93,7 @@ All public APIs must be documented with hardware context.
 - Edge cases and hardware quirks
 
 **Example:**
+
 ```rust
 /// Reads from the LCD Control register (LCDC) at address 0xFF40.
 ///
@@ -102,34 +106,57 @@ pub fn read_lcdc(&self) -> u8 { ... }
 
 **Markdown Formatting:**
 
-All specification documents must be formatted with markdownlint:
+All specification documents must be formatted with Prettier (for hard wrapping) and markdownlint-cli (for validation):
 
 ```bash
-# Format spec files after creation
-markdownlint --fix "specs/**/*.md"
+# Format and validate after creating/editing specs
+prettier --write ".specify/**/*.md"
+markdownlint --fix ".specify/**/*.md"
 
-# Configuration in .markdownlint.json
+# Or format everything in one command
+prettier --write "**/*.md" && markdownlint --fix "**/*.md"
 ```
 
+**Configuration:**
+
+- `.prettierrc.json` - Auto hard-wraps lines at 120 characters
+- `.markdownlint.json` - Validates markdown structure and style
+- `.prettierignore` / `.markdownlintignore` - Excludes submodules and test-roms
+
+**Settings synced between tools:**
+
+- Line length: 120 characters (matches code blocks and technical documentation)
+- Ignores: test-roms/, gb-bootroms/, node_modules/, target/
+
 This ensures:
+
 - Consistent formatting across all spec documents
+- Automatic line wrapping at 120 characters for readability
 - No linter warnings in documentation
 - Easy readability and maintenance
 - Standard markdown best practices
 
+**Tool roles:**
+
+- **Prettier**: Handles formatting and automatic prose wrapping
+- **markdownlint**: Validates structure, headings, lists, links, etc.
+
 ## Technology Stack
 
 ### Languages & Frameworks
+
 - **Rust**: Primary implementation language (Rust 1.91+, Edition 2024)
 - **RGBDS**: Boot ROM assembly (gbz80/SM83 assembler)
 
 ### Dependencies
+
 - Minimize external dependencies in ceres-core
 - Use well-maintained crates with active communities
 - Audit security vulnerabilities regularly
 - Document rationale for each major dependency
 
 ### Build System
+
 - Cargo for Rust builds
 - Make for boot ROM builds
 - GitHub Actions for CI/CD
@@ -140,6 +167,7 @@ This ensures:
 ### When to Create a Spec
 
 ✅ **DO create specs for:**
+
 - Bug fixes affecting multiple modules
 - New hardware features (RTC, rumble, link cable, serial port)
 - Performance optimizations that change behavior
@@ -148,6 +176,7 @@ This ensures:
 - Test suite additions or modifications
 
 ❌ **DON'T create specs for:**
+
 - Typo fixes in comments or docs
 - Code formatting/style changes
 - Simple documentation updates
@@ -163,19 +192,21 @@ This ensures:
 
 Ceres uses a **three-tier branch strategy**:
 
-```
+```text
 main         - Production/deployment branch (stable releases only)
 dev          - Development integration branch (all features merge here first)
 001-feature  - Feature branch (created by /speckit.specify)
 ```
 
 **Workflow:**
+
 1. Feature branches created automatically by Spec-Kit (`001-feature-name`)
 2. All feature branches merge to `dev` via Pull Request
 3. `dev` is tested and stabilized
 4. `dev` merges to `main` for releases
 
 **Rules:**
+
 - ❌ Never commit directly to `main`
 - ❌ Never merge feature branches directly to `main`
 - ✅ Always merge features to `dev` first
@@ -185,6 +216,7 @@ dev          - Development integration branch (all features merge here first)
 ### Code Review Requirements
 
 All code must:
+
 - Pass all Blargg tests (no regressions)
 - Maintain or improve code coverage
 - Follow Rust style guidelines (rustfmt, clippy)
@@ -194,6 +226,7 @@ All code must:
 ### Testing Gates
 
 **Before merge to dev:**
+
 - ✅ All unit tests pass
 - ✅ All integration tests pass
 - ✅ Code coverage meets standards
@@ -201,6 +234,7 @@ All code must:
 - ✅ Documentation complete
 
 **Before merge to main:**
+
 - ✅ All tests pass on CI
 - ✅ Performance benchmarks acceptable
 - ✅ Release notes updated
@@ -233,18 +267,21 @@ All code must:
 ## Hardware Accuracy Priorities
 
 ### Priority 1 (Critical)
+
 - CPU instruction execution
 - Memory timing and access patterns
 - PPU rendering and timing
 - Interrupt handling
 
 ### Priority 2 (Important)
+
 - APU audio generation
 - DMA transfers
 - Timer accuracy
 - Serial communication
 
 ### Priority 3 (Nice to have)
+
 - Boot ROM execution
 - Obscure hardware quirks
 - Undocumented behavior
@@ -264,6 +301,7 @@ This constitution supersedes all other development practices.
 ### Amendments
 
 Constitution changes require:
+
 1. Documented rationale for the change
 2. Review by project maintainers
 3. Migration plan for existing code
@@ -279,15 +317,18 @@ Constitution changes require:
 ## Resources
 
 ### Primary References
+
 - **SameBoy**: https://github.com/LIJI32/SameBoy
 - **Pan Docs**: https://gbdev.io/pandocs/
 - **Test ROMs**: https://github.com/c-sp/gameboy-test-roms
 
 ### Community
+
 - **GB Dev Community**: https://gbdev.io/
 - **Bootstrap ROM Info**: https://gbdev.gg8.se/wiki/articles/Gameboy_Bootstrap_ROM
 
 ### Existing Documentation
+
 - See `AGENTS.md` in project root for high-level project overview
 - See `.specify/AGENTS.md` for Spec-Kit workflow guidance
 - See individual spec documents in `.specify/specs/` for feature details

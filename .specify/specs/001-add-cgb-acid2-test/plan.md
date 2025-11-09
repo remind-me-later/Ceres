@@ -1,13 +1,16 @@
 # Implementation Plan: Add cgb-acid2 Integration Test
 
-**Branch**: `001-add-cgb-acid2-test` | **Date**: 2025-11-09 | **Spec**: [spec.md](./spec.md)
-**Input**: Feature specification from `/specs/001-add-cgb-acid2-test/spec.md`
+**Branch**: `001-add-cgb-acid2-test` | **Date**: 2025-11-09 | **Spec**: [spec.md](./spec.md) **Input**: Feature
+specification from `/specs/001-add-cgb-acid2-test/spec.md`
 
-**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
+**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the
+execution workflow.
 
 ## Summary
 
-Add cgb-acid2 test to the integration test suite to validate CGB PPU emulation accuracy. The test loads cgb-acid2.gbc, runs emulation until completion, and compares the final screen output against a reference PNG using pixel-perfect comparison. This follows the existing Blargg test pattern using TestRunner with screenshot comparison.
+Add cgb-acid2 test to the integration test suite to validate CGB PPU emulation accuracy. The test loads cgb-acid2.gbc,
+runs emulation until completion, and compares the final screen output against a reference PNG using pixel-perfect
+comparison. This follows the existing Blargg test pattern using TestRunner with screenshot comparison.
 
 ## Technical Context
 
@@ -23,13 +26,14 @@ Add cgb-acid2 test to the integration test suite to validate CGB PPU emulation a
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+_GATE: Must pass before Phase 0 research. Re-check after Phase 1 design._
 
 ### Gates Evaluation
 
 ✅ **SameBoy Reference Standard**: Not applicable (test infrastructure, not emulation logic)
 
-✅ **Test-Driven Development**: 
+✅ **Test-Driven Development**:
+
 - Adding a new integration test (cgb-acid2)
 - Test uses existing TestRunner infrastructure
 - Follows Blargg test pattern with screenshot comparison
@@ -96,7 +100,8 @@ test-roms/
     └── cgb-acid2.png       # Existing reference screenshot
 ```
 
-**Structure Decision**: Single project (multi-crate workspace). This feature only modifies the ceres-test-runner crate by adding a new integration test function and timeout constant. No changes to ceres-core or other crates.
+**Structure Decision**: Single project (multi-crate workspace). This feature only modifies the ceres-test-runner crate
+by adding a new integration test function and timeout constant. No changes to ceres-core or other crates.
 
 ## Complexity Tracking
 

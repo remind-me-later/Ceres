@@ -4,7 +4,8 @@
 
 **Chosen**: 600 frames (~10 seconds)
 
-**Rationale**: 
+**Rationale**:
+
 - cgb-acid2 is NOT a timing torture test - it uses simple line-based rendering
 - Test completes by executing opcode 0x40 (LD B, B), but we rely on screenshot comparison
 - No timing-critical operations or T-cycle accuracy required
@@ -14,6 +15,7 @@
 - Expected completion: <300 frames, 600 provides 2x safety margin
 
 **Alternatives Considered**:
+
 1. 300 frames (~5s) - May be too tight for slower CI runners
 2. 1000 frames (~16s) - Unnecessarily long for a non-timing test
 3. Match halt_bug (330 frames) - cgb-acid2 likely slightly longer due to complexity
@@ -23,6 +25,7 @@
 **Chosen**: Add test to existing `blargg_tests.rs`
 
 **Rationale**:
+
 - cgb-acid2 is a visual/PPU test, not strictly a Blargg test
 - However, it uses the same TestRunner infrastructure
 - Alternative would be creating `acid_tests.rs` for cgb-acid2 and future acid tests
@@ -30,6 +33,7 @@
 - Can refactor later if we add dmg-acid2 or cgb-acid-hell
 
 **Alternatives Considered**:
+
 1. Create new `acid_tests.rs` - Better organization but overkill for 1 test
 2. Create `ppu_tests.rs` - Too generic, would need to move other PPU tests
 3. Keep in `blargg_tests.rs` - Simple, works with existing infrastructure ✓
@@ -39,12 +43,14 @@
 **Chosen**: Use existing TestConfig::expected_screenshot
 
 **Rationale**:
+
 - TestRunner already supports screenshot comparison via `expected_screenshot` field
 - Color correction already disabled in TestRunner for accurate comparison
 - RGB conversion formula (X << 3) | (X >> 2) matches Ceres PPU implementation
 - Reference image cgb-acid2.png already exists in test-roms directory
 
 **Alternatives Considered**:
+
 1. Add exit condition detection for opcode 0x40 - Unnecessary, screenshot comparison sufficient
 2. Use serial output - cgb-acid2 doesn't output to serial
 3. Custom comparison logic - Redundant, existing infrastructure works
@@ -54,12 +60,14 @@
 **Chosen**: `test_cgb_acid2`
 
 **Rationale**:
+
 - Follows Rust naming convention (snake_case)
 - Clear and descriptive
 - Matches test ROM filename
-- Consistent with existing test names (test_blargg_*)
+- Consistent with existing test names (test*blargg*\*)
 
 **Alternatives Considered**:
+
 1. `test_acid2_cgb` - Less clear (acid2 could refer to dmg-acid2)
 2. `test_ppu_acid2` - Doesn't match ROM name
 3. `test_cgb_acid2` - Clear, follows convention ✓
@@ -77,6 +85,7 @@ fn test_cgb_acid2() {
 ```
 
 **Key elements**:
+
 1. Use `run_test_rom` helper (already handles TestRunner setup)
 2. Pass relative path from test-roms/ directory
 3. Use timeout constant from timeouts module
@@ -103,6 +112,7 @@ fn test_cgb_acid2() {
 ### Testing the Test
 
 After implementation:
+
 1. Run `cargo test --package ceres-test-runner test_cgb_acid2`
 2. Verify test passes (if PPU implementation is correct)
 3. If test fails, compare actual vs expected screenshot for debugging
@@ -110,11 +120,10 @@ After implementation:
 
 ## Risk Mitigation
 
-**Risk**: Test may fail due to existing PPU bugs
-**Mitigation**: This is expected and desired - the test helps identify PPU issues to fix
+**Risk**: Test may fail due to existing PPU bugs **Mitigation**: This is expected and desired - the test helps identify
+PPU issues to fix
 
-**Risk**: Timeout too short for slow CI
-**Mitigation**: 600 frames (10s) provides ample margin; can adjust if needed
+**Risk**: Timeout too short for slow CI **Mitigation**: 600 frames (10s) provides ample margin; can adjust if needed
 
-**Risk**: Screenshot comparison false positives
-**Mitigation**: Color correction disabled, formula matches; unlikely to be an issue
+**Risk**: Screenshot comparison false positives **Mitigation**: Color correction disabled, formula matches; unlikely to
+be an issue

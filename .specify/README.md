@@ -6,23 +6,23 @@ This directory contains Spec-Kit configuration and documentation for the Ceres e
 
 ### For AI Agents
 
-1. **Start here**: Read `memory/constitution.md` - Project principles and standards
-2. **Workflow guide**: Read `AGENTS.md` - Spec-Kit usage and best practices
-3. **Existing work**: Check `specs/*/` - See completed and in-progress features
+1. **Start here**: Read `.specify/memory/constitution.md` - Project principles and standards
+2. **Learn workflow**: See `.specify/AGENTS.md` - Detailed workflow guidance
+3. **Existing work**: Check `.specify/specs/*/` - See completed and in-progress features
 
 ### Key Files
 
-| File | Purpose |
-|------|---------|
-| `memory/constitution.md` | Project principles, standards, and governance |
-| `AGENTS.md` | Spec-Kit workflow guide for AI agents |
-| `scripts/*.sh` | Automation scripts for feature management |
-| `templates/*.md` | Templates for specs, plans, and tasks |
-| `specs/*/` | Generated feature specifications (created by commands) |
+| File                     | Purpose                                                |
+| ------------------------ | ------------------------------------------------------ |
+| `memory/constitution.md` | Project principles, standards, and governance          |
+| `AGENTS.md`              | Spec-Kit workflow guide for AI agents                  |
+| `scripts/*.sh`           | Automation scripts for feature management              |
+| `templates/*.md`         | Templates for specs, plans, and tasks                  |
+| `specs/*/`               | Generated feature specifications (created by commands) |
 
 ### Directory Structure
 
-```
+```text
 .specify/
 ├── memory/
 │   └── constitution.md          # READ THIS FIRST - Project principles
@@ -52,7 +52,8 @@ This directory contains Spec-Kit configuration and documentation for the Ceres e
 All commands are available in GitHub Copilot Chat:
 
 ### Core Workflow
-```
+
+```text
 /speckit.constitution  - Create/review project principles
 /speckit.specify       - Create feature specification
 /speckit.plan          - Generate implementation plan
@@ -61,7 +62,8 @@ All commands are available in GitHub Copilot Chat:
 ```
 
 ### Enhancement Commands
-```
+
+```text
 /speckit.clarify       - Ask clarification questions
 /speckit.analyze       - Check artifact consistency
 /speckit.checklist     - Generate quality checklist
@@ -81,6 +83,7 @@ All commands are available in GitHub Copilot Chat:
 ### For Bug Fixes
 
 Same workflow as above, but focus specification on:
+
 - What behavior is broken
 - Expected behavior (reference SameBoy/Pan Docs)
 - Which tests validate the fix
@@ -89,11 +92,13 @@ Same workflow as above, but focus specification on:
 ## Ceres-Specific Notes
 
 ### Reference Materials
+
 - **SameBoy**: Gold standard for behavior (https://github.com/LIJI32/SameBoy)
 - **Pan Docs**: Hardware documentation (https://gbdev.io/pandocs/)
 - **Test Suite**: Blargg tests in `ceres-test-runner/tests/`
 
 ### Test Status
+
 - ✅ cpu_instrs (98% coverage)
 - ✅ instr_timing
 - ✅ mem_timing
@@ -101,6 +106,7 @@ Same workflow as above, but focus specification on:
 - ❌ interrupt_time (needs fix)
 
 ### Code Coverage Target
+
 - CPU: Maintain 98%+
 - Overall: Target 70%+ (currently ~54%)
 - New code: 80%+ coverage required

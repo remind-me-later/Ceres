@@ -1,21 +1,19 @@
 # Ceres Test Runner
 
-Integration test runner for the Ceres Game Boy emulator using actual Game Boy
-test ROMs.
+Integration test runner for the Ceres Game Boy emulator using actual Game Boy test ROMs.
 
 ## Overview
 
-The test suite is currently focused on **CPU instruction validation** to ensure
-core emulation accuracy before expanding to other subsystems.
+The test suite is currently focused on **CPU instruction validation** to ensure core emulation accuracy before expanding
+to other subsystems.
 
 ## Setup
 
-Test ROMs are **automatically downloaded** when you build or test this crate.
-No manual setup required!
+Test ROMs are **automatically downloaded** when you build or test this crate. No manual setup required!
 
 The build script downloads the test ROM collection from the
-[c-sp/gameboy-test-roms](https://github.com/c-sp/gameboy-test-roms) repository
-on first build and caches it in the `test-roms/` directory.
+[c-sp/gameboy-test-roms](https://github.com/c-sp/gameboy-test-roms) repository on first build and caches it in the
+`test-roms/` directory.
 
 ## Running Tests
 
@@ -39,8 +37,7 @@ cargo test --package ceres-test-runner test_blargg_cpu_instrs_all
 
 ### CI/CD Usage
 
-Test ROMs are automatically downloaded in CI environments. For optimal
-performance, cache the `test-roms/` directory:
+Test ROMs are automatically downloaded in CI environments. For optimal performance, cache the `test-roms/` directory:
 
 ```yaml
 # Example GitHub Actions workflow
