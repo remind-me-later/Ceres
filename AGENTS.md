@@ -1,5 +1,47 @@
 # Ceres
 
+## For AI Agents: Use Spec-Kit for Development
+
+**This project uses [Spec-Kit](https://github.com/github/spec-kit) for structured, spec-driven development.**
+
+### Quick Start for Agents
+
+1. **Read the Constitution**: Start with `.specify/memory/constitution.md` for project principles and standards
+2. **Follow Spec-Kit Workflow**: See `.specify/AGENTS.md` for detailed workflow guidance
+3. **Use Spec-Kit Commands**: Available in GitHub Copilot and Gemini CLI
+
+### Available Commands
+
+```
+/speckit.constitution  - Review project principles
+/speckit.specify       - Create feature specification
+/speckit.plan          - Generate implementation plan
+/speckit.tasks         - Break down into tasks
+/speckit.implement     - Execute implementation
+```
+
+### When to Use Spec-Kit
+
+✅ Use Spec-Kit for:
+
+- Bug fixes affecting multiple modules (e.g., mem_timing-2, interrupt_time tests)
+- New hardware features (RTC, serial, link cable, etc.)
+- Performance optimizations that change behavior
+- New frontend implementations
+- API changes in ceres-core
+
+❌ Simple changes (typos, formatting) don't need specs.
+
+### Key Principles
+
+- **SameBoy is the gold standard** for behavior verification
+- **Test-driven development** - maintain 98%+ CPU coverage
+- **Pan Docs compliance** - all hardware behavior documented
+- **no_std core** - keep ceres-core platform-agnostic
+- See `.specify/memory/constitution.md` for complete principles
+
+---
+
 ## Project Overview
 
 Ceres is an experimental Game Boy and Game Boy Color
