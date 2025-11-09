@@ -1,6 +1,6 @@
 # Implementation Plan: Fix `dmg-acid2` Test RGB Mismatch
 
-**Feature Branch**: `001-fix-dmg-acid2-rgb`
+**Feature Branch**: `003-fix-dmg-acid2-rgb`
 **Feature Spec**: [spec.md](./spec.md)
 **Created**: 2025-11-09
 **Status**: In Progress
