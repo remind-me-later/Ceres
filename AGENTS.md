@@ -24,23 +24,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 **This project uses [OpenSpec](https://openspec.dev) for structured, spec-driven development.**
 
-### Quick Start for Agents
-
-1. **Read the Principles**: Start with `.openspec/principles.md` for project principles and standards
-2. **Check Existing Specs**: Browse `.openspec/specs/` to see what's been done
-3. **Use Templates**: Copy from `.openspec/templates/` when creating new specs
-
-### Creating a New Spec
-
-OpenSpec is tool-agnostic. To create a new spec:
-
-1. Determine the next spec number (look at existing specs in `.openspec/specs/`)
-2. Create directory: `.openspec/specs/NNN-feature-name/`
-3. Copy template: `cp .openspec/templates/spec.md .openspec/specs/NNN-feature-name/spec.md`
-4. Fill in the template with feature details
-5. (Optional) Create implementation plan: `cp .openspec/templates/plan.md .openspec/specs/NNN-feature-name/plan.md`
-
-Or just ask your AI agent: _"Create a new OpenSpec for [feature name]"_
+See `openspec/AGENTS.md` for complete OpenSpec workflow documentation.
 
 ### When to Create a Spec
 
@@ -57,10 +41,9 @@ Or just ask your AI agent: _"Create a new OpenSpec for [feature name]"_
 ### Key Principles
 
 - **SameBoy is the gold standard** for behavior verification
-- **Test-driven development** - maintain 98%+ CPU coverage
+- **Test-driven development** - maintain high CPU coverage
 - **Pan Docs compliance** - all hardware behavior documented
 - **no_std core** - keep ceres-core platform-agnostic
-- See `.openspec/principles.md` for complete principles
 
 ---
 
@@ -185,12 +168,8 @@ cargo llvm-cov --package ceres-core --package ceres-test-runner
 - **Overall**: ~54% - Focus areas include CPU, memory, interrupts, and timing
 - **Untested areas**: Save states (BESS), RTC, joypad input, audio details
 
-The integration tests complete in ~3.9 seconds with optimized timeouts based on actual test completion times.
-
-The integration tests run in ~3-4 seconds and validate all SM83 CPU instructions, instruction timing, memory timing, and
-interrupt timing against reference screenshots.
-
-All integration tests currently pass!
+Integration tests complete in ~3-4 seconds and validate all SM83 CPU instructions, instruction timing, memory timing,
+and interrupt timing against reference screenshots. All integration tests currently pass!
 
 ### CI/CD Pipeline
 
