@@ -100,6 +100,23 @@ All public APIs must be documented with hardware context.
 pub fn read_lcdc(&self) -> u8 { ... }
 ```
 
+**Markdown Formatting:**
+
+All specification documents must be formatted with markdownlint:
+
+```bash
+# Format spec files after creation
+markdownlint --fix "specs/**/*.md"
+
+# Configuration in .markdownlint.json
+```
+
+This ensures:
+- Consistent formatting across all spec documents
+- No linter warnings in documentation
+- Easy readability and maintenance
+- Standard markdown best practices
+
 ## Technology Stack
 
 ### Languages & Frameworks
