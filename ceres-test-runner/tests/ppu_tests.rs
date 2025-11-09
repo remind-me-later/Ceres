@@ -31,7 +31,6 @@ fn test_cgb_acid2() {
 }
 
 #[test]
-#[ignore = "DMG PPU rendering doesn't match reference - known issue"]
 fn test_dmg_acid2_dmg() {
     let rom = match load_test_rom("dmg-acid2/dmg-acid2.gb") {
         Ok(rom) => rom,
