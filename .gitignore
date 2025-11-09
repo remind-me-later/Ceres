@@ -59,6 +59,3 @@ test-roms/
 # Agent files
 .gemini/
 .github/prompts/
-
-# Prevent specs in wrong location (use .specify/specs/ instead)
-/specs/

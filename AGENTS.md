@@ -24,7 +24,23 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 **This project uses [OpenSpec](https://openspec.dev) for structured, spec-driven development.**
 
-See `openspec/AGENTS.md` for complete OpenSpec workflow documentation.
+### Quick Start for Agents
+
+1. **Read the Principles**: Start with `.openspec/principles.md` for project principles and standards
+2. **Check Existing Specs**: Browse `.openspec/specs/` to see what's been done
+3. **Use Templates**: Copy from `.openspec/templates/` when creating new specs
+
+### Creating a New Spec
+
+OpenSpec is tool-agnostic. To create a new spec:
+
+1. Determine the next spec number (look at existing specs in `.openspec/specs/`)
+2. Create directory: `.openspec/specs/NNN-feature-name/`
+3. Copy template: `cp .openspec/templates/spec.md .openspec/specs/NNN-feature-name/spec.md`
+4. Fill in the template with feature details
+5. (Optional) Create implementation plan: `cp .openspec/templates/plan.md .openspec/specs/NNN-feature-name/plan.md`
+
+Or just ask your AI agent: _"Create a new OpenSpec for [feature name]"_
 
 ### When to Create a Spec
 
@@ -41,51 +57,10 @@ See `openspec/AGENTS.md` for complete OpenSpec workflow documentation.
 ### Key Principles
 
 - **SameBoy is the gold standard** for behavior verification
-- **Test-driven development** - maintain high CPU coverage
-- **Pan Docs compliance** - all hardware behavior documented
-- **no_std core** - keep ceres-core platform-agnostic
-
----
-
-## For AI Agents: Use Spec-Kit for Development
-
-**This project uses [Spec-Kit](https://github.com/github/spec-kit) for structured, spec-driven development.**
-
-### Quick Start for Agents
-
-1. **Read the Constitution**: Start with `.specify/memory/constitution.md` for project principles and standards
-2. **Follow Spec-Kit Workflow**: See `.specify/AGENTS.md` for detailed workflow guidance
-3. **Use Spec-Kit Commands**: Available in GitHub Copilot and Gemini CLI
-
-### Available Commands
-
-```text
-/speckit.constitution  - Review project principles
-/speckit.specify       - Create feature specification
-/speckit.plan          - Generate implementation plan
-/speckit.tasks         - Break down into tasks
-/speckit.implement     - Execute implementation
-```
-
-### When to Use Spec-Kit
-
-✅ Use Spec-Kit for:
-
-- Bug fixes affecting multiple modules (e.g., mem_timing-2, interrupt_time tests)
-- New hardware features (RTC, serial, link cable, etc.)
-- Performance optimizations that change behavior
-- New frontend implementations
-- API changes in ceres-core
-
-❌ Simple changes (typos, formatting) don't need specs.
-
-### Key Principles
-
-- **SameBoy is the gold standard** for behavior verification
 - **Test-driven development** - maintain 98%+ CPU coverage
 - **Pan Docs compliance** - all hardware behavior documented
 - **no_std core** - keep ceres-core platform-agnostic
-- See `.specify/memory/constitution.md` for complete principles
+- See `.openspec/principles.md` for complete principles
 
 ---
 
@@ -99,6 +74,7 @@ architecture, separating the core emulation logic from the frontend implementati
 The repository is organized into several Rust crates, each with a specific responsibility:
 
 - `ceres-core`: The heart of the emulator. It contains the hardware emulation logic, including:
+
   - SM83 CPU (`sm83.rs`)
   - Audio Processing Unit (APU) (`apu/`)
   - Pixel Processing Unit (PPU) (`ppu/`)
@@ -107,6 +83,7 @@ The repository is organized into several Rust crates, each with a specific respo
   - This crate is designed to be `no_std` compatible, allowing it to run on a wide range of platforms.
 
 - `ceres-std`: Provides standard library-dependent functionalities for desktop frontends, such as:
+
   - Audio playback (`audio.rs`)
   - Threading (`thread.rs`)
   - A WebGPU-based renderer (`wgpu_renderer/`) used by the `winit` and `egui` frontends.
