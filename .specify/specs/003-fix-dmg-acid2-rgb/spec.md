@@ -1,6 +1,6 @@
 # Feature Specification: Fix `dmg-acid2` Test RGB Mismatch
 
-**Feature Branch**: `001-fix-dmg-acid2-rgb`
+**Feature Branch**: `003-fix-dmg-acid2-rgb`
 **Created**: 2025-11-09
 **Status**: Draft
 **Input**: User description: "There is a bug in one of the integration tests recently added dmg-acid2, I think the problem is that we are not using the exact same rgb values when comparing screenshots. I want to fix that by making the output mat the screenshot for now."
