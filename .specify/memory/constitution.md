@@ -144,12 +144,26 @@ pub fn read_lcdc(&self) -> u8 { ... }
 
 ### Branch Strategy
 
-Spec-Kit automatically creates feature branches:
+Ceres uses a **three-tier branch strategy**:
+
 ```
-main         - Stable release branch
-dev          - Integration branch (merge here first)
+main         - Production/deployment branch (stable releases only)
+dev          - Development integration branch (all features merge here first)
 001-feature  - Feature branch (created by /speckit.specify)
 ```
+
+**Workflow:**
+1. Feature branches created automatically by Spec-Kit (`001-feature-name`)
+2. All feature branches merge to `dev` via Pull Request
+3. `dev` is tested and stabilized
+4. `dev` merges to `main` for releases
+
+**Rules:**
+- ❌ Never commit directly to `main`
+- ❌ Never merge feature branches directly to `main`
+- ✅ Always merge features to `dev` first
+- ✅ Use Pull Requests for all merges to `dev`
+- ✅ Only merge `dev` to `main` for releases
 
 ### Code Review Requirements
 

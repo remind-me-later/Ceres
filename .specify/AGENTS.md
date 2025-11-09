@@ -321,7 +321,12 @@ Every spec should:
 
 ### Branch Strategy
 
-Spec-Kit automatically manages branches:
+Ceres uses a **three-tier branch strategy**:
+- `main` - Production/deployment branch (stable releases only)
+- `dev` - Development integration branch (all features merge here first)
+- `001-feature-name` - Feature branches (created by Spec-Kit)
+
+Spec-Kit automatically manages feature branches:
 
 ```bash
 # Spec-Kit creates feature branch automatically
@@ -332,14 +337,139 @@ git branch  # Shows: 001-fix-mem-timing-2
 
 # Work on the feature in this branch
 # Make commits as you implement tasks
+git add .
+git commit -m "feat: implement feature"
 
-# When done, merge to dev first
+# Push feature branch to remote
+git push -u origin 001-feature-name
+```
+
+### Merging to Dev (Integration)
+
+**Always merge to `dev` first**, never directly to `main`:
+
+```bash
+# Option 1: Create Pull Request (RECOMMENDED)
+# After pushing feature branch, create PR to dev
+# On GitHub: Create Pull Request → Base: dev, Compare: 001-feature-name
+# Review, approve, and merge via GitHub UI (use squash merge)
+
+# Option 2: Manual merge (local testing)
 git checkout dev
-git merge 001-fix-mem-timing-2
+git merge 001-feature-name
+git push origin dev
 
-# Test on dev, then merge to main
+# After PR is merged, update local dev
+git checkout dev
+git fetch origin
+git reset --hard origin/dev  # Sync with remote
+
+# Clean up feature branch (optional)
+git branch -d 001-feature-name
+git push origin --delete 001-feature-name
+```
+
+### Merging to Main (Deployment)
+
+Only merge `dev` to `main` for releases:
+
+```bash
+# After testing thoroughly on dev
 git checkout main
 git merge dev
+git push origin main
+
+# Tag the release
+git tag -a v0.1.0 -m "Release v0.1.0: Add cgb-acid2 test"
+git push origin v0.1.0
+```
+
+### Pull Request Workflow
+
+**Standard workflow for features:**
+
+1. **Create feature branch** (automatic via `/speckit.specify`)
+   ```bash
+   # You'll be on: 001-feature-name
+   ```
+
+2. **Implement and commit changes**
+   ```bash
+   git add ceres-core/src/memory/mmu.rs
+   git commit -m "fix(memory): implement VRAM blocking during mode 3"
+   ```
+
+3. **Push to remote**
+   ```bash
+   git push -u origin 001-feature-name
+   ```
+
+4. **Create Pull Request to `dev`**
+   ```bash
+   # Via GitHub CLI (if installed)
+   gh pr create --base dev --title "Add cgb-acid2 test" --body "Implements spec 001-add-cgb-acid2-test"
+   
+   # Or via GitHub web UI:
+   # - Navigate to repository
+   # - Click "Pull requests" → "New pull request"
+   # - Base: dev, Compare: 001-feature-name
+   # - Fill in description, link to spec
+   ```
+
+5. **Review and merge**
+   ```bash
+   # After PR approval, merge via GitHub UI (squash merge recommended)
+   # Or via CLI:
+   gh pr merge 29 --squash --delete-branch
+   ```
+
+6. **Update local dev branch**
+   ```bash
+   git checkout dev
+   git pull origin dev
+   # Or if you have local commits:
+   git fetch origin
+   git reset --hard origin/dev
+   ```
+
+### Example: Complete Feature Workflow
+
+```bash
+# 1. Start feature (automatically creates branch)
+/speckit.specify Add cgb-acid2 integration test
+
+# 2. You're now on: 001-add-cgb-acid2-test
+git branch
+# * 001-add-cgb-acid2-test
+
+# 3. Implement changes
+# ... make code changes ...
+
+# 4. Commit changes
+git add ceres-test-runner/src/test_runner.rs
+git add ceres-test-runner/tests/blargg_tests.rs
+git commit -m "feat(tests): add cgb-acid2 PPU accuracy test"
+
+# 5. Push feature branch
+git push -u origin 001-add-cgb-acid2-test
+
+# 6. Create PR to dev (via GitHub UI or CLI)
+gh pr create --base dev --title "Add cgb-acid2 test" \
+  --body "Implements spec 001-add-cgb-acid2-test. All tests passing."
+
+# 7. After PR is merged, switch to dev
+git checkout dev
+git fetch origin
+git reset --hard origin/dev
+
+# 8. Verify tests pass on dev
+cargo test --package ceres-test-runner
+
+# 9. When ready for release, merge dev to main
+git checkout main
+git merge dev
+git tag v0.2.0
+git push origin main --tags
 ```
 
 ### Commit Messages
