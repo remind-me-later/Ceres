@@ -59,7 +59,6 @@ to the `Gb` instance, not the `Sm83` instance. This makes accessing the flag tri
 ### Files to modify
 
 1. **`ceres-core/src/lib.rs`**:
-
    - Add `ld_b_b_breakpoint: bool` field to `Gb` struct
    - Initialize to `false` in `new` method (line ~155)
    - Reset to `false` in `soft_reset` method (line ~240)

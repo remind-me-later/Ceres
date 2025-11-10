@@ -16,3 +16,4 @@ gb-bootroms/
 
 # Generated files
 .github/copilot-instructions.md
+openspec/AGENTS.md

@@ -2,3 +2,4 @@ node_modules/
 target/
 test-roms/
 gb-bootroms/
+openspec/AGENTS.md
