@@ -181,3 +181,55 @@ GitHub Actions automatically runs tests on every push:
 - Tests complete in under 2 minutes
 
 See `.github/workflows/test.yml` for the complete workflow configuration.
+
+## Code Formatting
+
+This project uses automated formatting tools to maintain consistent code style across all files.
+
+### Rust Code
+
+Format Rust code using `cargo fmt`:
+
+```bash
+# Format all Rust code in the workspace
+cargo fmt --all
+
+# Check formatting without making changes
+cargo fmt --all -- --check
+```
+
+### JSON, Markdown, and YAML Files
+
+Format JSON, Markdown, and YAML files using [Prettier](https://prettier.io/):
+
+```bash
+# Install prettier (one-time setup)
+npm install -g prettier
+
+# Format all supported files
+prettier --write "**/*.{json,md,yaml,yml}"
+
+# Check formatting without making changes
+prettier --check "**/*.{json,md,yaml,yml}"
+```
+
+**Note**: Always format your code before committing changes to maintain consistency across the codebase.
+
+## Commit Message Convention
+
+This project uses [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+
+**Format**: `<type>[optional scope]: <description>`
+
+**Common types**: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`
+
+**Common scopes**: `core`, `ppu`, `cpu`, `apu`, `memory`, `cartridge`, `gtk`, `egui`, `winit`, `std`, `tests`, `bootrom`
+
+**Examples**:
+
+- `feat(ppu): add sprite rendering support`
+- `fix(cpu): correct timing for HALT instruction`
+- `test(cpu): add Blargg CPU instruction tests`
+- `refactor(memory)!: change memory access API` (breaking change)
+
+See `CONTRIBUTING.md` for complete commit message guidelines and examples.
