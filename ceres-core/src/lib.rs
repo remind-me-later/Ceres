@@ -69,6 +69,7 @@ pub struct Gb<A: AudioCallback> {
     model: Model,
     ppu: Ppu,
     serial: Serial,
+    trace_enabled: bool,
     wram: Wram,
 }
 
@@ -169,6 +170,7 @@ impl<A: AudioCallback> Gb<A> {
             ld_b_b_breakpoint: false,
             ppu: Ppu::default(),
             serial: Serial::default(),
+            trace_enabled: false,
             wram: Wram::default(),
             #[cfg(feature = "game_genie")]
             game_genie: GameGenie::default(),
@@ -220,6 +222,45 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     pub const fn set_sample_rate(&mut self, sample_rate: i32) {
         self.apu.set_sample_rate(sample_rate);
+    }
+
+    /// Enable or disable execution tracing.
+    ///
+    /// When enabled, the emulator will print disassembled instructions and register
+    /// state to stderr during execution.
+    #[inline]
+    pub const fn set_trace_enabled(&mut self, enabled: bool) {
+        self.trace_enabled = enabled;
+    }
+
+    /// Check if execution tracing is enabled.
+    #[must_use]
+    #[inline]
+    pub const fn trace_enabled(&self) -> bool {
+        self.trace_enabled
+    }
+
+    /// Disassemble the instruction at the specified address.
+    ///
+    /// Reads up to 3 bytes from memory at the given address and returns
+    /// the disassembled instruction as a `DisasmResult`.
+    ///
+    /// # Arguments
+    ///
+    /// * `addr` - The memory address to disassemble
+    ///
+    /// # Returns
+    ///
+    /// A `DisasmResult` containing the mnemonic string and instruction length
+    #[must_use]
+    #[inline]
+    pub fn disasm_at(&self, addr: u16) -> disasm::DisasmResult {
+        // Read up to 3 bytes for the instruction
+        let b0 = self.read_mem(addr);
+        let b1 = self.read_mem(addr.wrapping_add(1));
+        let b2 = self.read_mem(addr.wrapping_add(2));
+        
+        disasm::disasm(&[b0, b1, b2], addr)
     }
 
     #[inline]

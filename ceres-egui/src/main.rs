@@ -38,6 +38,7 @@ fn main() -> anyhow::Result<()> {
                 args.file(),
                 args.shader_option(),
                 args.pixel_perfect(),
+                args.trace(),
             )?))
         }),
     )

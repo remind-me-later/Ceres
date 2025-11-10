@@ -61,7 +61,7 @@ impl ObjectSubclass for GlArea {
         let buffer = RefCell::new(vec![0_u8; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice());
 
         let gb_thread = Rc::new(RefCell::new(
-            ceres_std::GbThread::new(ceres_std::Model::Cgb, None, None)
+            ceres_std::GbThread::new(ceres_std::Model::Cgb, None, None, false)
                 .expect("Failed to create GbThread"),
         ));
 

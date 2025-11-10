@@ -134,6 +134,12 @@ pub struct Cli {
         required = false
     )]
     shader_option: ShaderOption,
+    #[arg(
+        long,
+        help = "Enable execution tracing (prints disassembled instructions and registers to stderr)",
+        default_value_t = false
+    )]
+    trace: bool,
 }
 
 impl Cli {
@@ -159,5 +165,11 @@ impl Cli {
     #[inline]
     pub const fn shader_option(&self) -> ShaderOption {
         self.shader_option
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn trace(&self) -> bool {
+        self.trace
     }
 }

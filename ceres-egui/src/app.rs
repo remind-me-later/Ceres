@@ -25,6 +25,7 @@ impl App {
         rom_path: Option<&std::path::Path>,
         shader_option: ShaderOption,
         pixel_perfect: bool,
+        trace_enabled: bool,
     ) -> anyhow::Result<Self> {
         // Apply our minimal black and white theme
         setup_theme(&cc.egui_ctx);
@@ -35,7 +36,7 @@ impl App {
             vec![0; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice(),
         ));
 
-        let mut thread = GbThread::new(model, sav_path.as_deref(), rom_path)?;
+        let mut thread = GbThread::new(model, sav_path.as_deref(), rom_path, trace_enabled)?;
 
         let mut screen = screen::GBScreen::new(cc, pixel_data_rgba, shader_option);
 
