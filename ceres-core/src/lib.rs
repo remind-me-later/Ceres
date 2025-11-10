@@ -64,6 +64,7 @@ pub struct Gb<A: AudioCallback> {
     ints: Interrupts,
     joy: Joypad,
     key1: Key1,
+    ld_b_b_breakpoint: bool,
     model: Model,
     ppu: Ppu,
     serial: Serial,
@@ -115,6 +116,22 @@ impl<A: AudioCallback> Gb<A> {
         self.soft_reset();
     }
 
+    /// Check if the `ld b, b` debug breakpoint instruction was executed and reset the flag.
+    ///
+    /// Some test ROMs (like cgb-acid2 and dmg-acid2) use the `ld b, b` instruction (opcode 0x40)
+    /// as a debug breakpoint to signal test completion. This method returns `true` if the
+    /// instruction has been executed since the last check, then automatically resets the flag.
+    ///
+    /// # Returns
+    ///
+    /// `true` if `ld b, b` was executed since the last check, `false` otherwise.
+    #[inline]
+    pub const fn check_and_reset_ld_b_b_breakpoint(&mut self) -> bool {
+        let was_set = self.ld_b_b_breakpoint;
+        self.ld_b_b_breakpoint = false;
+        was_set
+    }
+
     #[inline]
     #[cfg(feature = "game_genie")]
     pub fn deactivate_game_genie(&mut self, code: &GameGenieCode) {
@@ -148,6 +165,7 @@ impl<A: AudioCallback> Gb<A> {
             ints: Interrupts::default(),
             joy: Joypad::default(),
             key1: Key1::default(),
+            ld_b_b_breakpoint: false,
             ppu: Ppu::default(),
             serial: Serial::default(),
             wram: Wram::default(),
@@ -212,6 +230,7 @@ impl<A: AudioCallback> Gb<A> {
         self.hdma = Hdma::default();
         self.ints = Interrupts::default();
         self.key1 = Key1::default();
+        self.ld_b_b_breakpoint = false;
         self.ppu = Ppu::default();
         self.serial = Serial::default();
         self.bootrom.enable();

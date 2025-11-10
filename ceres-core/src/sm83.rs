@@ -818,9 +818,10 @@ impl<A: AudioCallback> Gb<A> {
         self.cpu.af |= u16::from(self.read_cpu(addr)) << 8;
     }
 
-    // TODO: debugger breakpoint
-    #[expect(clippy::needless_pass_by_ref_mut)]
+    // Sets the debug breakpoint flag. Test ROMs like cgb-acid2 and dmg-acid2
+    // use this instruction as a breakpoint to signal test completion.
     const fn ld_b_b(&mut self) {
+        self.ld_b_b_breakpoint = true;
         self.nop();
     }
 
