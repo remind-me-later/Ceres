@@ -1,6 +1,6 @@
 //! Test runner infrastructure for executing test ROMs
 
-/// Timeout constants for Blargg test suites (in frames at ~59.73 Hz).
+/// Timeout constants for test suites (in frames at ~59.73 Hz).
 pub mod timeouts {
     pub const CPU_INSTRS: u32 = 2091;
     pub const INSTR_TIMING: u32 = 250;
@@ -8,12 +8,36 @@ pub mod timeouts {
     pub const MEM_TIMING_2: u32 = 360;
     pub const INTERRUPT_TIME: u32 = 240;
     pub const HALT_BUG: u32 = 330;
+    pub const CGB_ACID2: u32 = 300;
+    pub const DMG_ACID2: u32 = 480;
+    pub const RTC3TEST_BASIC: u32 = 1050;
+    pub const RTC3TEST_RANGE: u32 = 750;
 }
 
 use anyhow::Result;
-use ceres_core::{AudioCallback, Gb, GbBuilder, Model, Sample};
+use ceres_core::{AudioCallback, Button, Gb, GbBuilder, Model, Sample};
 
 const DEFAULT_TIMEOUT_FRAMES: u32 = 1792;
+
+/// Action to perform on a button
+#[derive(Clone, Copy)]
+pub enum ButtonAction {
+    /// Press the button
+    Press,
+    /// Release the button
+    Release,
+}
+
+/// A scheduled button event
+#[derive(Clone, Copy)]
+pub struct ButtonEvent {
+    /// Frame number when this event should occur
+    pub frame: u32,
+    /// Button to affect
+    pub button: Button,
+    /// Action to perform
+    pub action: ButtonAction,
+}
 
 /// A dummy audio callback for headless testing
 #[derive(Default)]
@@ -42,6 +66,7 @@ pub struct TestConfig {
     pub model: Model,
     pub timeout_frames: u32,
     pub expected_screenshot: Option<std::path::PathBuf>,
+    pub button_events: Vec<ButtonEvent>,
 }
 
 impl Default for TestConfig {
@@ -52,6 +77,7 @@ impl Default for TestConfig {
             model: Model::Cgb,
             timeout_frames: DEFAULT_TIMEOUT_FRAMES,
             expected_screenshot: None,
+            button_events: Vec::new(),
         }
     }
 }
@@ -69,7 +95,7 @@ impl TestRunner {
     fn check_completion(&self) -> Option<TestResult> {
         // If we have an expected screenshot, compare it
         if let Some(ref screenshot_path) = self.config.expected_screenshot
-            && let Ok(true) = self.compare_screenshot(screenshot_path)
+            && matches!(self.compare_screenshot(screenshot_path), Ok(true))
         {
             return Some(TestResult::Passed);
         }
@@ -151,6 +177,16 @@ impl TestRunner {
 
     /// Run a single frame of emulation
     fn run_frame(&mut self) {
+        // Process any scheduled button events for this frame
+        for event in &self.config.button_events {
+            if event.frame == self.frames_run {
+                match event.action {
+                    ButtonAction::Press => self.gb.press(event.button),
+                    ButtonAction::Release => self.gb.release(event.button),
+                }
+            }
+        }
+
         self.gb.run_frame();
 
         if self.config.capture_serial {

@@ -1,0 +1,4 @@
+node_modules/
+target/
+test-roms/
+gb-bootroms/

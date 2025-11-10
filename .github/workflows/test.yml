@@ -27,12 +27,15 @@ jobs:
           path: ~/rgbds
           key: rgbds-linux-x86_64-latest
 
-      - name: Install RGBDS
+      - name: Download RGBDS
         if: steps.cache-rgbds.outputs.cache-hit != 'true'
         run: |
           wget https://github.com/gbdev/rgbds/releases/latest/download/rgbds-linux-x86_64.tar.xz
           mkdir -p ~/rgbds
           tar xf rgbds-linux-x86_64.tar.xz -C ~/rgbds
+
+      - name: Install RGBDS
+        run: |
           cd ~/rgbds
           sudo ./install.sh
 
