@@ -23,6 +23,7 @@ fn main() -> anyhow::Result<()> {
         args.file(),
         args.shader_option(),
         args.pixel_perfect(),
+        args.trace(),
     )?;
 
     main_event_loop.run_app(&mut main_window)?;

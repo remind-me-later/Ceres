@@ -166,7 +166,10 @@ impl<A: AudioCallback> Gb<A> {
         if self.cpu.is_halted {
             self.tick_m_cycle();
         } else {
-            // println!("pc {:0x}", self.cpu.pc);
+            // Trace instruction before execution if tracing is enabled
+            if self.trace_enabled {
+                self.trace_instruction();
+            }
 
             let op = self.imm8();
             self.run_hdma();
@@ -192,6 +195,34 @@ impl<A: AudioCallback> Gb<A> {
                 self.cpu.pc = self.ints.handle();
             }
         }
+    }
+
+    fn trace_instruction(&self) {
+        let pc = self.cpu.pc;
+        let disasm_result = self.disasm_at(pc);
+        
+        // Format flags: Z N H C
+        let f = self.cpu.f();
+        let flags = alloc::format!(
+            "{}{}{}{}",
+            if f & 0x80 != 0 { 'Z' } else { '-' },
+            if f & 0x40 != 0 { 'N' } else { '-' },
+            if f & 0x20 != 0 { 'H' } else { '-' },
+            if f & 0x10 != 0 { 'C' } else { '-' }
+        );
+        
+        // Format: [PC:$XXXX] MNEMONIC ; A=XX F=ZNHC BC=XXXX DE=XXXX HL=XXXX SP=XXXX
+        eprintln!(
+            "[PC:${:04X}] {} ; A={:02X} F={} BC={:04X} DE={:04X} HL={:04X} SP={:04X}",
+            pc,
+            disasm_result.mnemonic,
+            self.cpu.a(),
+            flags,
+            self.cpu.bc(),
+            self.cpu.de(),
+            self.cpu.hl(),
+            self.cpu.sp()
+        );
     }
 }
 

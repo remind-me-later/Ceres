@@ -1,8 +1,11 @@
 # disassembler-core Specification
 
 ## Purpose
+
 TBD - created by archiving change add-disassembler-core. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: SM83 Instruction Decoding
 
 The system SHALL decode SM83 CPU instructions from binary opcodes into human-readable assembly mnemonics following RGBDS
@@ -140,4 +143,3 @@ The disassembler SHALL handle invalid or partial instruction bytes gracefully.
 - **THEN** the mnemonic is `"ILLEGAL $XX"` where XX is the opcode hex value
 - **AND** the length is 1 byte
 - **AND** the function does not panic
-

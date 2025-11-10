@@ -96,6 +96,7 @@ impl App<'_> {
         rom_path: Option<&Path>,
         shader_option: ShaderOption,
         pixel_perfect: bool,
+        trace_enabled: bool,
     ) -> anyhow::Result<Self> {
         let sav_path = if let Some(rom_path) = rom_path {
             let file_stem = rom_path.file_stem().context("couldn't get file stem")?;
@@ -112,7 +113,7 @@ impl App<'_> {
 
         let pixel_data_rgba = vec![0; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice();
 
-        let mut thread = GbThread::new(model, sav_path.as_deref(), rom_path)?;
+        let mut thread = GbThread::new(model, sav_path.as_deref(), rom_path, trace_enabled)?;
 
         thread.resume()?;
 
