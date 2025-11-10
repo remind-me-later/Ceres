@@ -9,6 +9,7 @@ mod bootrom;
 mod cartridge;
 #[cfg(feature = "game_genie")]
 mod cheats;
+pub mod disasm;
 mod error;
 mod interrupts;
 mod joypad;
