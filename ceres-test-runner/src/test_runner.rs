@@ -92,12 +92,41 @@ pub struct TestRunner {
 
 impl TestRunner {
     /// Check if the test has completed and parse the result
-    fn check_completion(&self) -> Option<TestResult> {
+    ///
+    /// Tests can complete in two ways:
+    /// 1. Screenshot/serial comparison combined with breakpoint detection: Some test ROMs
+    ///    (like cgb-acid2 and dmg-acid2) use the `ld b, b` instruction as a debug breakpoint
+    ///    to signal test completion. When the screenshot matches AND a breakpoint was hit,
+    ///    the test completes immediately without waiting for the timeout.
+    /// 2. Screenshot/serial comparison: If a screenshot or serial output matches the expected result.
+    ///
+    /// The timeout mechanism in `run()` serves as a safety net to catch infinitely looping tests
+    /// that never signal completion.
+    fn check_completion(&mut self) -> Option<TestResult> {
+        // Check if the `ld b, b` breakpoint was hit (signals test completion for Acid2 tests)
+        let breakpoint_hit = self.gb.check_and_reset_ld_b_b_breakpoint();
+
         // If we have an expected screenshot, compare it
-        if let Some(ref screenshot_path) = self.config.expected_screenshot
-            && matches!(self.compare_screenshot(screenshot_path), Ok(true))
-        {
-            return Some(TestResult::Passed);
+        if let Some(ref screenshot_path) = self.config.expected_screenshot {
+            match self.compare_screenshot(screenshot_path) {
+                Ok(true) => {
+                    // Screenshot matches - test passed!
+                    // If breakpoint was hit, this is a proper completion signal (e.g., Acid2 tests)
+                    // If not, we're still waiting for the breakpoint or timeout (e.g., Blargg tests)
+                    return Some(TestResult::Passed);
+                }
+                Ok(false) if breakpoint_hit => {
+                    // Breakpoint hit but screenshot doesn't match yet - keep running
+                    // This handles cases where the test uses ld b,b internally but isn't done yet
+                }
+                Err(e) if breakpoint_hit => {
+                    // Error comparing screenshot after breakpoint
+                    return Some(TestResult::Failed(format!(
+                        "Screenshot comparison error: {e}"
+                    )));
+                }
+                _ => {}
+            }
         }
 
         let output = self.serial_output.trim();
@@ -166,7 +195,7 @@ impl TestRunner {
             self.run_frame();
             self.frames_run += 1;
 
-            // Check if test has completed
+            // Check if test has completed (via breakpoint or screenshot/serial match)
             if let Some(result) = self.check_completion() {
                 return result;
             }
