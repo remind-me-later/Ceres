@@ -6,6 +6,9 @@ description = "A library to make Gameboy/Color emulators"
 repository.workspace = true
 license.workspace = true
 
+[dependencies]
+heapless = "0.8"
+
 [features]
 default = ["game_genie"]
 game_genie = []
