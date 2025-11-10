@@ -4,11 +4,23 @@ Integration test runner for the Ceres Game Boy emulator using actual Game Boy te
 
 ## Overview
 
-The test suite validates emulator accuracy using pixel-perfect screenshot comparison against reference images. Tests cover:
+The test suite validates emulator accuracy using pixel-perfect screenshot comparison against reference images. Tests
+cover:
 
 - **CPU Instructions**: Complete SM83 instruction set validation
 - **Timing**: Instruction timing, memory timing, and interrupt timing
 - **PPU Rendering**: CGB and DMG display accuracy tests
+
+### Test Completion Detection
+
+The test runner uses multiple mechanisms to detect when tests complete:
+
+- **Breakpoint detection**: Test ROMs like cgb-acid2 and dmg-acid2 use the `ld b, b` instruction (opcode 0x40) as a
+  debug breakpoint to signal completion. When detected, tests complete immediately after the screenshot matches.
+- **Screenshot comparison**: Tests pass when the emulator output matches reference images pixel-for-pixel.
+- **Timeout safety**: All tests have timeout values to prevent infinite loops in broken or incomplete test ROMs.
+
+This approach allows Acid2 tests to complete in ~0.4 seconds instead of waiting for the full timeout (~20+ seconds).
 
 ## Setup
 
@@ -80,11 +92,14 @@ CPU instructions, timing, and hardware bug tests from Blargg's test suite:
 
 ### PPU Accuracy Tests (`tests/ppu_tests.rs`)
 
-Visual accuracy tests for the Pixel Processing Unit:
+Visual accuracy tests for the Pixel Processing Unit. These tests use breakpoint detection for fast completion:
 
 - **`test_cgb_acid2`** - CGB PPU rendering accuracy
 - **`test_dmg_acid2_cgb`** - DMG Acid2 test running in CGB mode
-- **`test_dmg_acid2_dmg`** - DMG Acid2 test running in DMG mode *(currently ignored - known issue)*
+- **`test_dmg_acid2_dmg`** - DMG Acid2 test running in DMG mode
+
+The Acid2 tests complete in ~0.4 seconds total thanks to breakpoint detection, compared to ~20 seconds if relying on
+timeouts alone.
 
 ### Serial Output Tests (`tests/serial_test.rs`)
 
@@ -116,7 +131,7 @@ use ceres_test_runner::{
 #[test]
 fn test_my_rom() {
     let rom = load_test_rom("path/to/rom.gb").expect("Failed to load ROM");
-    
+
     let config = TestConfig {
         timeout_frames: 300,
         expected_screenshot: ceres_test_runner::expected_screenshot_path(
@@ -125,10 +140,21 @@ fn test_my_rom() {
         ),
         ..TestConfig::default()
     };
-    
+
     let mut runner = TestRunner::new(rom, config).expect("Failed to create runner");
     let result = runner.run();
-    
+
     assert_eq!(result, TestResult::Passed, "Test failed");
 }
 ```
+
+### Breakpoint Detection
+
+If your test ROM uses the `ld b, b` instruction (opcode 0x40) as a completion signal:
+
+1. Configure an `expected_screenshot` in the `TestConfig`
+2. The test runner will automatically detect the breakpoint and complete immediately when the screenshot matches
+3. Set an appropriate timeout as a safety net (the test will use whichever comes first: breakpoint match or timeout)
+
+The breakpoint detection allows tests to complete as soon as they signal completion, rather than waiting for arbitrary
+timeouts.

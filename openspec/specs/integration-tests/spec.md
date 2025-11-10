@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change add-rtc3test-integration. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Button Input Simulation
 
 The test runner SHALL support simulating button presses at specific frames during test execution.
@@ -193,4 +195,3 @@ timeout-based completion.
 - **THEN** the flag is automatically reset by the `check_and_reset_ld_b_b_breakpoint()` method
 - **AND** subsequent frames do not incorrectly detect stale breakpoint signals
 - **AND** this ensures clean state management across test frames
-
