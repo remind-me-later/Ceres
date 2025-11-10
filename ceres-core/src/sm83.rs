@@ -166,9 +166,16 @@ impl<A: AudioCallback> Gb<A> {
         if self.cpu.is_halted {
             self.tick_m_cycle();
         } else {
+            let pc = self.cpu.pc;
+
             // Trace instruction before execution if tracing is enabled
             if self.trace_enabled {
                 self.trace_instruction();
+            }
+
+            // Collect trace entry if trace buffer is enabled
+            if self.trace_buffer.is_enabled() {
+                self.collect_trace_entry(pc);
             }
 
             let op = self.imm8();
@@ -200,7 +207,7 @@ impl<A: AudioCallback> Gb<A> {
     fn trace_instruction(&self) {
         let pc = self.cpu.pc;
         let disasm_result = self.disasm_at(pc);
-        
+
         // Format flags: Z N H C
         let f = self.cpu.f();
         let flags = alloc::format!(
@@ -210,7 +217,7 @@ impl<A: AudioCallback> Gb<A> {
             if f & 0x20 != 0 { 'H' } else { '-' },
             if f & 0x10 != 0 { 'C' } else { '-' }
         );
-        
+
         // Format: [PC:$XXXX] MNEMONIC ; A=XX F=ZNHC BC=XXXX DE=XXXX HL=XXXX SP=XXXX
         eprintln!(
             "[PC:${:04X}] {} ; A={:02X} F={} BC={:04X} DE={:04X} HL={:04X} SP={:04X}",
@@ -223,6 +230,37 @@ impl<A: AudioCallback> Gb<A> {
             self.cpu.hl(),
             self.cpu.sp()
         );
+    }
+
+    fn collect_trace_entry(&mut self, pc: u16) {
+        use crate::trace::{RegisterSnapshot, TraceEntry};
+
+        let disasm_result = self.disasm_at(pc);
+        let b = (self.cpu.bc() >> 8) as u8;
+        let c = (self.cpu.bc() & 0xFF) as u8;
+        let d = (self.cpu.de() >> 8) as u8;
+        let e = (self.cpu.de() & 0xFF) as u8;
+        let h = (self.cpu.hl() >> 8) as u8;
+        let l = (self.cpu.hl() & 0xFF) as u8;
+
+        let entry = TraceEntry {
+            pc,
+            instruction: alloc::format!("{}", disasm_result.mnemonic),
+            cycles: disasm_result.length, // Approximate - instruction length as cycles placeholder
+            registers: RegisterSnapshot {
+                a: self.cpu.a(),
+                f: self.cpu.f(),
+                b,
+                c,
+                d,
+                e,
+                h,
+                l,
+                sp: self.cpu.sp(),
+            },
+        };
+
+        self.trace_buffer.push(entry);
     }
 }
 

@@ -111,6 +111,103 @@ Serial communication functionality tests
   rendering. The CGB mode version passes, indicating the issue is specific to DMG palette handling or rendering
   behavior.
 
+## Trace Collection for Debugging
+
+The test runner supports automatic trace export when tests fail, capturing the last N executed instructions for
+debugging:
+
+### Enabling Trace Export
+
+```rust
+use ceres_test_runner::{
+    load_test_rom,
+    test_runner::{TestConfig, TestResult, TestRunner},
+};
+
+#[test]
+fn test_with_trace() {
+    let rom = load_test_rom("path/to/rom.gb").expect("Failed to load ROM");
+
+    let config = TestConfig {
+        enable_trace: true,                   // Enable trace collection
+        export_trace_on_failure: true,        // Export on failure
+        trace_buffer_size: 2000,              // Keep last 2000 instructions
+        timeout_frames: 300,
+        ..TestConfig::default()
+    };
+
+    let mut runner = TestRunner::new(rom, config).expect("Failed to create runner");
+    let result = runner.run();
+
+    // If test fails, trace is automatically exported to target/traces/<timestamp>_trace.json
+    assert_eq!(result, TestResult::Passed);
+}
+```
+
+### Trace Output
+
+Traces are exported as JSON to `target/traces/<timestamp>_trace.json` containing:
+
+- **Metadata**: timestamp, entry count, buffer capacity
+- **Entries**: Array of executed instructions with:
+  - Program counter (PC)
+  - Disassembled instruction
+  - Register state (A, F, B, C, D, E, H, L, SP)
+  - Cycle count
+
+### Analyzing Traces
+
+Use the provided Python analysis script or jq for trace analysis:
+
+### Command-line Analysis with jq
+
+```bash
+# Show last 10 instructions
+jq '.entries[-10:]' target/traces/1234567890_trace.json
+
+# Find all JP instructions
+jq '.entries[] | select(.instruction | contains("JP"))' target/traces/1234567890_trace.json
+
+# Count instruction frequencies
+jq -r '.entries[].instruction' target/traces/1234567890_trace.json | sort | uniq -c | sort -rn
+```
+
+### Python Analysis Script
+
+A comprehensive Python analysis tool is provided in `analyze_trace.py`:
+
+```bash
+# Show last 20 instructions with register state
+python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --last 20
+
+# Generate instruction frequency histogram
+python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --histogram
+
+# Find all JP instructions
+python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --inst JP
+
+# Show instructions in a specific PC range
+python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --range 0x0150 0x0160
+
+# Detect potential infinite loops
+python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --loops
+
+# Combine multiple analyses
+python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json \
+  --last 10 --histogram --loops
+```
+
+The script provides:
+
+- **Metadata Display**: Timestamp, entry count, buffer capacity
+- **Last N Instructions**: Show recent execution history with registers
+- **Instruction Search**: Find specific mnemonics (JP, CALL, LD, etc.)
+- **PC Range Filter**: View instructions in a specific address range
+- **Frequency Histogram**: Most executed instructions
+- **Loop Detection**: Find repeated PC sequences indicating infinite loops
+
+See the Python examples in the repository for advanced trace analysis workflows.
+
 ## Writing New Tests
 
 To add a new test ROM:

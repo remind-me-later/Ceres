@@ -79,6 +79,55 @@ chore(deps): update winit to 0.29
 - Format JSON, Markdown, and YAML with `prettier --write "**/*.{json,md,yaml,yml}"`
 - Run tests with `cargo test --package ceres-core --package ceres-test-runner`
 
+## Debugging Failed Tests
+
+### Using Execution Traces
+
+When integration tests fail, you can enable trace collection to capture the last N instructions before failure:
+
+```rust
+use ceres_test_runner::{TestRunner, TestConfig};
+
+let config = TestConfig {
+    timeout_seconds: 10,
+    enable_trace: true,              // Enable trace collection
+    export_trace_on_failure: true,   // Auto-export on failure
+    trace_buffer_size: 1000,         // Circular buffer size
+};
+
+let runner = TestRunner::new(rom_path, reference_path, config);
+runner.run().expect("Test failed");
+```
+
+Traces are exported to `target/traces/<timestamp>_trace.json` automatically.
+
+### Analyzing Traces
+
+Use the provided Python script to analyze execution traces:
+
+```bash
+# Show last 20 instructions with register state
+python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --last 20
+
+# Find all JP instructions
+python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --inst JP
+
+# Generate instruction histogram
+python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --histogram
+
+# Detect infinite loops
+python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --loops
+```
+
+### Common Debugging Patterns
+
+1. **Test timeout/hang**: Use `--loops` to detect infinite loops
+2. **Wrong behavior**: Compare `--histogram` output against SameBoy execution
+3. **Instruction bugs**: Use `--inst MNEMONIC` to find specific instruction occurrences
+4. **I/O issues**: Use `--range 0xFF00 0xFFFF` to filter I/O-related instructions
+
+See `ceres-test-runner/README.md` for complete trace documentation.
+
 ## Development Workflow
 
 See `AGENTS.md` for detailed development guidelines and the OpenSpec workflow for larger changes.

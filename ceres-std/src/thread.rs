@@ -21,6 +21,8 @@ pub struct GbThread {
     pause_condvar: Arc<(Mutex<bool>, Condvar)>,
     thread_handle: Option<std::thread::JoinHandle<()>>,
     trace_enabled: bool,
+    trace_buffer_enabled: bool,
+    trace_buffer_size: usize,
 }
 
 impl GbThread {
@@ -71,6 +73,8 @@ impl GbThread {
             Some(rom_path),
             sav_path,
             self.trace_enabled,
+            self.trace_buffer_enabled,
+            self.trace_buffer_size,
         )?;
 
         if let Ok(mut gb) = self.gb.lock() {
@@ -101,6 +105,8 @@ impl GbThread {
         rom_path: Option<&Path>,
         sav_path: Option<&Path>,
         trace_enabled: bool,
+        trace_buffer_enabled: bool,
+        trace_buffer_size: usize,
     ) -> Result<Gb<audio::AudioCallbackImpl>, Error> {
         let gb_builder = GbBuilder::new(audio_stream.sample_rate(), ring_buffer).with_model(model);
 
@@ -118,6 +124,10 @@ impl GbThread {
             {
                 let mut gb = gb_builder.build();
                 gb.set_trace_enabled(trace_enabled);
+                gb.trace_resize(trace_buffer_size);
+                if trace_buffer_enabled {
+                    gb.trace_enable();
+                }
 
                 let mut save_data_buf = Vec::new();
 
@@ -141,11 +151,19 @@ impl GbThread {
             } else {
                 let mut gb = gb_builder.build();
                 gb.set_trace_enabled(trace_enabled);
+                gb.trace_resize(trace_buffer_size);
+                if trace_buffer_enabled {
+                    gb.trace_enable();
+                }
                 Ok(gb)
             }
         } else {
             let mut gb = gb_builder.build();
             gb.set_trace_enabled(trace_enabled);
+            gb.trace_resize(trace_buffer_size);
+            if trace_buffer_enabled {
+                gb.trace_enable();
+            }
             Ok(gb)
         }
     }
@@ -306,11 +324,22 @@ impl GbThread {
         sav_path: Option<&Path>,
         rom_path: Option<&Path>,
         trace_enabled: bool,
+        trace_buffer_enabled: bool,
+        trace_buffer_size: usize,
     ) -> Result<Self, Error> {
         let audio_stream = audio::Stream::new().map_err(Error::Audio)?;
         let ring_buffer = audio_stream.ring_buffer();
 
-        let gb = Self::create_new_gb(&audio_stream, ring_buffer, model, rom_path, sav_path, trace_enabled)?;
+        let gb = Self::create_new_gb(
+            &audio_stream,
+            ring_buffer,
+            model,
+            rom_path,
+            sav_path,
+            trace_enabled,
+            trace_buffer_enabled,
+            trace_buffer_size,
+        )?;
         let gb = Arc::new(Mutex::new(gb));
 
         #[expect(
@@ -348,6 +377,8 @@ impl GbThread {
             model,
             multiplier,
             trace_enabled,
+            trace_buffer_enabled,
+            trace_buffer_size,
         })
     }
 
@@ -461,6 +492,25 @@ impl GbThread {
     #[inline]
     pub fn volume(&self) -> f32 {
         self.audio_stream.volume()
+    }
+
+    /// Exports the trace buffer to a JSON file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the GB thread is not running, JSON serialization fails,
+    /// or file writing fails.
+    #[inline]
+    pub fn export_trace_json(&self, path: &Path) -> Result<(), Error> {
+        use crate::trace_export::export_trace_json;
+
+        let json = self.gb.lock().map_or(Err(Error::NoThreadRunning), |gb| {
+            export_trace_json(&*gb)
+                .map_err(|e| Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))
+        })?;
+
+        std::fs::write(path, json).map_err(Error::Io)?;
+        Ok(())
     }
 
     /// Saves the current save data to the provided writer.

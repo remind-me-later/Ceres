@@ -140,6 +140,17 @@ pub struct Cli {
         default_value_t = false
     )]
     trace: bool,
+    #[arg(long, help = "Enable trace buffer collection", default_value_t = false)]
+    trace_enable: bool,
+    #[arg(
+        long,
+        help = "Trace buffer size (number of instructions to keep)",
+        default_value_t = 1000,
+        value_parser = clap::value_parser!(u32).range(1..=100000)
+    )]
+    trace_buffer_size: u32,
+    #[arg(long, help = "Export trace to JSON file on exit", value_name = "FILE")]
+    trace_export: Option<PathBuf>,
 }
 
 impl Cli {
@@ -171,5 +182,23 @@ impl Cli {
     #[inline]
     pub const fn trace(&self) -> bool {
         self.trace
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn trace_enable(&self) -> bool {
+        self.trace_enable
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn trace_buffer_size(&self) -> u32 {
+        self.trace_buffer_size
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn trace_export(&self) -> Option<&Path> {
+        self.trace_export.as_deref()
     }
 }
