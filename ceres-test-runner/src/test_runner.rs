@@ -67,6 +67,12 @@ pub struct TestConfig {
     pub timeout_frames: u32,
     pub expected_screenshot: Option<std::path::PathBuf>,
     pub button_events: Vec<ButtonEvent>,
+    /// Enable trace collection during test execution
+    pub enable_trace: bool,
+    /// Export trace to JSON file on test failure
+    pub export_trace_on_failure: bool,
+    /// Trace buffer size (number of instructions to keep)
+    pub trace_buffer_size: usize,
 }
 
 impl Default for TestConfig {
@@ -78,6 +84,9 @@ impl Default for TestConfig {
             timeout_frames: DEFAULT_TIMEOUT_FRAMES,
             expected_screenshot: None,
             button_events: Vec::new(),
+            enable_trace: false,
+            export_trace_on_failure: false,
+            trace_buffer_size: 1000,
         }
     }
 }
@@ -180,6 +189,12 @@ impl TestRunner {
 
         gb.set_color_correction_mode(ceres_core::ColorCorrectionMode::Disabled);
 
+        // Configure trace collection if enabled
+        if config.enable_trace {
+            gb.trace_resize(config.trace_buffer_size);
+            gb.trace_enable();
+        }
+
         Ok(Self {
             config,
             frames_run: 0,
@@ -197,8 +212,17 @@ impl TestRunner {
 
             // Check if test has completed (via breakpoint or screenshot/serial match)
             if let Some(result) = self.check_completion() {
+                // Export trace on failure if configured
+                if result != TestResult::Passed && self.config.export_trace_on_failure {
+                    self.export_trace_if_enabled();
+                }
                 return result;
             }
+        }
+
+        // Export trace on timeout if configured
+        if self.config.export_trace_on_failure {
+            self.export_trace_if_enabled();
         }
 
         TestResult::Timeout
@@ -232,6 +256,80 @@ impl TestRunner {
     pub fn serial_output(&self) -> &str {
         &self.serial_output
     }
+
+    /// Export trace to JSON file if trace collection is enabled
+    ///
+    /// The trace file is saved to `target/traces/<timestamp>_trace.json`
+    fn export_trace_if_enabled(&self) {
+        if !self.config.enable_trace {
+            return;
+        }
+
+        // Create traces directory
+        let trace_dir = std::path::PathBuf::from("target/traces");
+        if let Err(e) = std::fs::create_dir_all(&trace_dir) {
+            eprintln!("Failed to create trace directory: {e}");
+            return;
+        }
+
+        // Generate trace filename with timestamp
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let trace_path = trace_dir.join(format!("{timestamp}_trace.json"));
+
+        // Export trace using the ceres_std trace_export module
+        match export_trace_json(&self.gb) {
+            Ok(json) => {
+                if let Err(e) = std::fs::write(&trace_path, json) {
+                    eprintln!("Failed to write trace file: {e}");
+                } else {
+                    println!("Trace exported to: {}", trace_path.display());
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to serialize trace: {e}");
+            }
+        }
+    }
+}
+
+/// Export trace buffer as formatted JSON string.
+///
+/// This is a helper function that wraps the trace export functionality
+/// for use in the test runner.
+fn export_trace_json<A: AudioCallback>(gb: &Gb<A>) -> Result<String, serde_json::Error> {
+    use serde::Serialize;
+
+    #[derive(Debug, Serialize)]
+    struct TraceMetadata {
+        entry_count: usize,
+        buffer_capacity: usize,
+        timestamp: u64,
+    }
+
+    #[derive(Debug, Serialize)]
+    struct TraceExport<'a> {
+        metadata: TraceMetadata,
+        entries: Vec<&'a ceres_core::trace::TraceEntry>,
+    }
+
+    let entries: Vec<_> = gb.trace_entries().collect();
+
+    let export = TraceExport {
+        metadata: TraceMetadata {
+            entry_count: gb.trace_count(),
+            buffer_capacity: gb.trace_capacity(),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        },
+        entries,
+    };
+
+    serde_json::to_string_pretty(&export)
 }
 
 #[cfg(test)]

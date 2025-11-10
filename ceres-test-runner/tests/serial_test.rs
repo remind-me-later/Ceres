@@ -44,6 +44,9 @@ fn test_serial_output_capture() {
         timeout_frames: 100, // Short timeout for this test
         expected_screenshot: None,
         button_events: Vec::new(),
+        enable_trace: false,
+        export_trace_on_failure: false,
+        trace_buffer_size: 1000,
     };
 
     let Ok(mut runner) = TestRunner::new(rom, config) else {

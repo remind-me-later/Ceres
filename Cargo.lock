@@ -680,6 +680,7 @@ name = "ceres-core"
 version = "0.1.0"
 dependencies = [
  "heapless",
+ "serde",
 ]
 
 [[package]]
@@ -720,6 +721,8 @@ dependencies = [
  "image",
  "ringbuf",
  "rubato",
+ "serde",
+ "serde_json",
  "spin_sleep",
  "thread-priority",
  "wgpu",
@@ -732,6 +735,8 @@ dependencies = [
  "anyhow",
  "ceres-core",
  "image",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -18,6 +18,7 @@ mod ppu;
 mod serial;
 mod sm83;
 mod timing;
+pub mod trace;
 
 use crate::{
     bootrom::Bootrom,
@@ -47,6 +48,7 @@ use {
     memory::{Dma, Hdma},
     sm83::Sm83,
     timing::Clock,
+    trace::TraceBuffer,
 };
 
 pub struct Gb<A: AudioCallback> {
@@ -69,6 +71,9 @@ pub struct Gb<A: AudioCallback> {
     model: Model,
     ppu: Ppu,
     serial: Serial,
+    /// Circular buffer for capturing execution traces.
+    /// Enabled/disabled via trace_enable()/trace_disable() methods.
+    trace_buffer: TraceBuffer,
     trace_enabled: bool,
     wram: Wram,
 }
@@ -170,6 +175,7 @@ impl<A: AudioCallback> Gb<A> {
             ld_b_b_breakpoint: false,
             ppu: Ppu::default(),
             serial: Serial::default(),
+            trace_buffer: TraceBuffer::default(),
             trace_enabled: false,
             wram: Wram::default(),
             #[cfg(feature = "game_genie")]
@@ -240,6 +246,100 @@ impl<A: AudioCallback> Gb<A> {
         self.trace_enabled
     }
 
+    /// Enable trace buffer collection.
+    ///
+    /// When enabled, the emulator captures execution history in a circular buffer
+    /// that can be queried programmatically.
+    #[inline]
+    pub fn trace_enable(&mut self) {
+        self.trace_buffer.enable();
+    }
+
+    /// Disable trace buffer collection.
+    ///
+    /// Stops capturing new trace entries but preserves existing entries.
+    #[inline]
+    pub fn trace_disable(&mut self) {
+        self.trace_buffer.disable();
+    }
+
+    /// Clear all entries from the trace buffer.
+    #[inline]
+    pub fn trace_clear(&mut self) {
+        self.trace_buffer.clear();
+    }
+
+    /// Resize the trace buffer to a new capacity.
+    ///
+    /// This clears all existing entries and creates a new buffer with the
+    /// specified capacity.
+    #[inline]
+    pub fn trace_resize(&mut self, capacity: usize) {
+        let enabled = self.trace_buffer.is_enabled();
+        self.trace_buffer = TraceBuffer::new(capacity);
+        if enabled {
+            self.trace_buffer.enable();
+        }
+    }
+
+    /// Check if trace buffer collection is enabled.
+    #[must_use]
+    #[inline]
+    pub fn trace_is_enabled(&self) -> bool {
+        self.trace_buffer.is_enabled()
+    }
+
+    /// Get all trace entries as an iterator, from oldest to newest.
+    #[inline]
+    pub fn trace_entries(&self) -> impl Iterator<Item = &trace::TraceEntry> {
+        self.trace_buffer.iter()
+    }
+
+    /// Get the last N trace entries, from oldest to newest.
+    ///
+    /// Returns fewer than N entries if the buffer contains fewer entries.
+    #[inline]
+    pub fn trace_last_n(&self, n: usize) -> Vec<&trace::TraceEntry> {
+        self.trace_buffer.last_n(n)
+    }
+
+    /// Get the current number of entries in the trace buffer.
+    #[must_use]
+    #[inline]
+    pub fn trace_count(&self) -> usize {
+        self.trace_buffer.len()
+    }
+
+    /// Get the maximum capacity of the trace buffer.
+    #[must_use]
+    #[inline]
+    pub fn trace_capacity(&self) -> usize {
+        self.trace_buffer.capacity()
+    }
+
+    /// Filter trace entries using a predicate function.
+    ///
+    /// Returns entries where the predicate returns true.
+    #[inline]
+    pub fn trace_filter<F>(&self, predicate: F) -> Vec<&trace::TraceEntry>
+    where
+        F: Fn(&trace::TraceEntry) -> bool,
+    {
+        self.trace_buffer.iter().filter(|e| predicate(e)).collect()
+    }
+
+    /// Get trace entries within a specific PC address range (inclusive).
+    #[inline]
+    pub fn trace_range(&self, start_pc: u16, end_pc: u16) -> Vec<&trace::TraceEntry> {
+        self.trace_filter(|e| e.pc >= start_pc && e.pc <= end_pc)
+    }
+
+    /// Find trace entries containing a specific instruction mnemonic.
+    #[inline]
+    pub fn trace_find_instruction(&self, mnemonic: &str) -> Vec<&trace::TraceEntry> {
+        self.trace_filter(|e| e.instruction.contains(mnemonic))
+    }
+
     /// Disassemble the instruction at the specified address.
     ///
     /// Reads up to 3 bytes from memory at the given address and returns
@@ -259,7 +359,7 @@ impl<A: AudioCallback> Gb<A> {
         let b0 = self.read_mem(addr);
         let b1 = self.read_mem(addr.wrapping_add(1));
         let b2 = self.read_mem(addr.wrapping_add(2));
-        
+
         disasm::disasm(&[b0, b1, b2], addr)
     }
 
@@ -275,6 +375,7 @@ impl<A: AudioCallback> Gb<A> {
         self.ld_b_b_breakpoint = false;
         self.ppu = Ppu::default();
         self.serial = Serial::default();
+        self.trace_buffer.clear();
         self.bootrom.enable();
     }
 }

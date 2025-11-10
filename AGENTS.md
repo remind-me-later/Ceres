@@ -127,6 +127,54 @@ cargo test --package ceres-test-runner
 Test ROMs are automatically downloaded on the first build (172MB). The download is cached, so subsequent builds don't
 require re-downloading.
 
+### Debugging with Execution Traces
+
+When tests fail, the emulator can export execution traces for analysis. Traces capture the last N instructions before
+failure, including PC, disassembled instruction, cycle count, and full register state.
+
+**Enabling trace collection in tests:**
+
+```rust
+use ceres_test_runner::{TestRunner, TestConfig};
+
+let config = TestConfig {
+    timeout_seconds: 10,
+    enable_trace: true,              // Enable trace collection
+    export_trace_on_failure: true,   // Auto-export on failure
+    trace_buffer_size: 1000,         // Circular buffer size
+};
+
+let runner = TestRunner::new(rom_path, reference_path, config);
+runner.run().expect("Test failed");
+```
+
+Traces are automatically exported to `target/traces/<timestamp>_trace.json` on test failure or timeout.
+
+**Analyzing traces:**
+
+```bash
+# Show last 20 instructions before failure
+python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --last 20
+
+# Generate instruction frequency histogram
+python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --histogram
+
+# Detect infinite loops (repeated PC sequences)
+python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --loops
+
+# Find specific instructions (e.g., all JP/CALL instructions)
+python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --inst JP
+```
+
+**Common debugging workflows:**
+
+1. **Test hangs/timeouts**: Use `--loops` to detect infinite loops, then `--last 50` to see the repeated sequence
+2. **Incorrect behavior**: Use `--histogram` to see execution profile, compare against SameBoy
+3. **Specific instruction issues**: Use `--inst` to find all occurrences of problematic instructions
+4. **Memory-mapped I/O bugs**: Use `--range` to filter instructions in specific address ranges (e.g., 0xFF00-0xFFFF)
+
+See `ceres-test-runner/README.md` for complete trace collection documentation and JSON format details.
+
 **Integration Tests:**
 
 The integration tests use screenshot comparison to validate emulator accuracy:
