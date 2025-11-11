@@ -3,6 +3,7 @@
 //! This crate provides infrastructure for running Game Boy test ROMs
 //! and validating the emulator's accuracy.
 
+mod test_tracer;
 pub mod test_runner;
 
 use anyhow::{Context as _, Result};

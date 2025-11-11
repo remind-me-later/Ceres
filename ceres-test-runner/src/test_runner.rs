@@ -16,6 +16,7 @@ pub mod timeouts {
 
 use anyhow::Result;
 use ceres_core::{AudioCallback, Button, Gb, GbBuilder, Model, Sample};
+use crate::test_tracer::TestTracer;
 
 const DEFAULT_TIMEOUT_FRAMES: u32 = 1792;
 
@@ -97,6 +98,7 @@ pub struct TestRunner {
     frames_run: u32,
     gb: Gb<DummyAudioCallback>,
     serial_output: String,
+    tracer: Option<TestTracer>,
 }
 
 impl TestRunner {
@@ -189,16 +191,19 @@ impl TestRunner {
 
         gb.set_color_correction_mode(ceres_core::ColorCorrectionMode::Disabled);
 
-        // Configure trace collection if enabled
-        if config.enable_trace {
-            gb.trace_enable(); // Enable legacy trace printing if needed
-        }
+        // Set up tracing infrastructure if enabled
+        let tracer = if config.enable_trace {
+            Some(TestTracer::new(config.trace_buffer_size))
+        } else {
+            None
+        };
 
         Ok(Self {
             config,
             frames_run: 0,
             gb,
             serial_output: String::new(),
+            tracer,
         })
     }
 
@@ -211,20 +216,30 @@ impl TestRunner {
 
             // Check if test has completed (via breakpoint or screenshot/serial match)
             if let Some(result) = self.check_completion() {
-                // Export trace on failure if configured
-                if result != TestResult::Passed && self.config.export_trace_on_failure {
-                    self.export_trace_if_enabled();
+                if result != TestResult::Passed {
+                    // Export trace on failure if configured
+                    if self.config.export_trace_on_failure {
+                        self.export_trace_if_enabled();
+                    }
+                } else {
+                    // For passed tests, clear traces if not saving all
+                    if let Some(ref tracer) = self.tracer {
+                        tracer.clear(); // Clear traces to maintain performance for successful tests
+                    }
                 }
                 return result;
             }
         }
 
-        // Export trace on timeout if configured
+        // Handle timeout case
+        let result = TestResult::Timeout;
         if self.config.export_trace_on_failure {
             self.export_trace_if_enabled();
+        } else if let Some(ref tracer) = self.tracer {
+            tracer.clear(); // Clear traces for timeout if not configured to export
         }
 
-        TestResult::Timeout
+        result
     }
 
     /// Run a single frame of emulation
@@ -259,17 +274,74 @@ impl TestRunner {
     /// Export trace to JSON file if trace collection is enabled
     ///
     /// The trace file is saved to `target/traces/<timestamp>_trace.json`
-    /// Note: Traditional trace buffer export has been replaced with Rust tracing.
-    /// Enable tracing with RUST_LOG=cpu_execution=trace or similar filters.
     fn export_trace_if_enabled(&self) {
         if !self.config.enable_trace {
             return;
         }
 
-        eprintln!("Trace collection enabled but traditional export is deprecated.");
-        eprintln!(
-            "Use Rust tracing with appropriate filters instead (e.g., RUST_LOG=cpu_execution=trace)"
-        );
+        // Get the tracer and export the collected traces
+        if let Some(ref tracer) = self.tracer {
+            if tracer.is_empty() {
+                eprintln!("No trace data collected for export.");
+                return;
+            }
+
+            // Create traces directory
+            let trace_dir = std::path::PathBuf::from("target/traces");
+            if let Err(e) = std::fs::create_dir_all(&trace_dir) {
+                eprintln!("Failed to create trace directory: {e}");
+                return;
+            }
+
+            // Generate trace filename with timestamp
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            let trace_path = trace_dir.join(format!("{timestamp}_trace.json"));
+
+            // Export the collected traces
+            use crate::test_tracer::TraceEntry;
+            let traces = tracer.get_traces();
+
+            #[derive(serde::Serialize)]
+            struct TraceExport {
+                metadata: TraceMetadata,
+                entries: Vec<TraceEntry>,
+            }
+
+            #[derive(serde::Serialize)]
+            struct TraceMetadata {
+                entry_count: usize,
+                timestamp: u64,
+            }
+
+            let export = TraceExport {
+                metadata: TraceMetadata {
+                    entry_count: traces.len(),
+                    timestamp: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
+                },
+                entries: traces,
+            };
+
+            match serde_json::to_string_pretty(&export) {
+                Ok(json) => {
+                    if let Err(e) = std::fs::write(&trace_path, json) {
+                        eprintln!("Failed to write trace file: {e}");
+                    } else {
+                        println!("Trace exported to: {}", trace_path.display());
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to serialize trace: {e}");
+                }
+            }
+        } else {
+            eprintln!("Tracing not configured for this test run");
+        }
     }
 }
 
