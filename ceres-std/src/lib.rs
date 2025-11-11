@@ -1,6 +1,5 @@
 mod audio;
 mod thread;
-pub mod trace_export;
 
 #[cfg(feature = "cli")]
 pub mod cli;

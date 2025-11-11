@@ -8,12 +8,16 @@ license.workspace = true
 
 [dependencies]
 heapless = "0.8"
+tracing = { version = "0.1", default-features = false, features = ["attributes"] }
 
 [dependencies.serde]
 version = "*"
 default-features = false
 features = ["derive", "alloc"]
 optional = true
+
+[dev-dependencies]
+tracing-test = "0.2"
 
 [features]
 default = ["game_genie", "serde"]

@@ -113,14 +113,7 @@ impl App<'_> {
 
         let pixel_data_rgba = vec![0; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice();
 
-        let mut thread = GbThread::new(
-            model,
-            sav_path.as_deref(),
-            rom_path,
-            trace_enabled,
-            false,
-            1000,
-        )?;
+        let mut thread = GbThread::new(model, sav_path.as_deref(), rom_path, trace_enabled)?;
 
         thread.resume()?;
 

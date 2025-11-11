@@ -1,3 +1,32 @@
+//! # Ceres Game Boy and Game Boy Color Emulator Core
+//!
+//! Ceres is an experimental Game Boy and Game Boy Color emulator written in Rust.
+//! This crate contains the core emulation logic including CPU, PPU, APU, memory management,
+//! and cartridge handling.
+//!
+//! ## Tracing and Debugging
+//!
+//! This crate uses the standard Rust `tracing` crate for execution tracing.
+//! To enable tracing, configure a tracing subscriber in your application:
+//!
+//! ```rust,ignore
+//! // Example of how to configure tracing in your application:
+//! use tracing_subscriber::{fmt, EnvFilter};
+//!
+//! tracing::subscriber::with_default(
+//!     fmt::Subscriber::builder()
+//!         .with_env_filter(EnvFilter::from_default_env())
+//!         .json() // For JSON output format
+//!         .finish(),
+//!     || {
+//!         // Your emulator code here
+//!     }
+//! );
+//! ```
+//!
+//! With tracing enabled and the `cpu_execution` target filtered, you will receive
+//! detailed logs of each executed instruction.
+
 // #![no_std]
 // FIXME: https://github.com/rust-lang/rust/issues/137578
 
@@ -48,7 +77,6 @@ use {
     memory::{Dma, Hdma},
     sm83::Sm83,
     timing::Clock,
-    trace::TraceBuffer,
 };
 
 pub struct Gb<A: AudioCallback> {
@@ -71,9 +99,6 @@ pub struct Gb<A: AudioCallback> {
     model: Model,
     ppu: Ppu,
     serial: Serial,
-    /// Circular buffer for capturing execution traces.
-    /// Enabled/disabled via trace_enable()/trace_disable() methods.
-    trace_buffer: TraceBuffer,
     trace_enabled: bool,
     wram: Wram,
 }
@@ -175,7 +200,6 @@ impl<A: AudioCallback> Gb<A> {
             ld_b_b_breakpoint: false,
             ppu: Ppu::default(),
             serial: Serial::default(),
-            trace_buffer: TraceBuffer::default(),
             trace_enabled: false,
             wram: Wram::default(),
             #[cfg(feature = "game_genie")]
@@ -246,104 +270,34 @@ impl<A: AudioCallback> Gb<A> {
         self.trace_enabled
     }
 
-    /// Enable trace buffer collection.
+    /// Enable trace collection.
     ///
-    /// When enabled, the emulator captures execution history in a circular buffer
-    /// that can be queried programmatically.
+    /// This method controls whether detailed execution traces are logged.
+    /// For structured logging, use the Rust `tracing` crate with a configured subscriber.
     #[inline]
     pub fn trace_enable(&mut self) {
-        self.trace_buffer.enable();
+        self.trace_enabled = true;
     }
 
-    /// Disable trace buffer collection.
+    /// Disable trace collection.
     ///
-    /// Stops capturing new trace entries but preserves existing entries.
+    /// For structured logging, use the Rust `tracing` crate with a configured subscriber.
     #[inline]
     pub fn trace_disable(&mut self) {
-        self.trace_buffer.disable();
+        self.trace_enabled = false;
     }
 
-    /// Clear all entries from the trace buffer.
-    #[inline]
-    pub fn trace_clear(&mut self) {
-        self.trace_buffer.clear();
-    }
-
-    /// Resize the trace buffer to a new capacity.
-    ///
-    /// This clears all existing entries and creates a new buffer with the
-    /// specified capacity.
-    #[inline]
-    pub fn trace_resize(&mut self, capacity: usize) {
-        let enabled = self.trace_buffer.is_enabled();
-        self.trace_buffer = TraceBuffer::new(capacity);
-        if enabled {
-            self.trace_buffer.enable();
-        }
-    }
-
-    /// Check if trace buffer collection is enabled.
+    /// Check if trace collection is enabled.
     #[must_use]
     #[inline]
     pub fn trace_is_enabled(&self) -> bool {
-        self.trace_buffer.is_enabled()
-    }
-
-    /// Get all trace entries as an iterator, from oldest to newest.
-    #[inline]
-    pub fn trace_entries(&self) -> impl Iterator<Item = &trace::TraceEntry> {
-        self.trace_buffer.iter()
-    }
-
-    /// Get the last N trace entries, from oldest to newest.
-    ///
-    /// Returns fewer than N entries if the buffer contains fewer entries.
-    #[inline]
-    pub fn trace_last_n(&self, n: usize) -> Vec<&trace::TraceEntry> {
-        self.trace_buffer.last_n(n)
-    }
-
-    /// Get the current number of entries in the trace buffer.
-    #[must_use]
-    #[inline]
-    pub fn trace_count(&self) -> usize {
-        self.trace_buffer.len()
-    }
-
-    /// Get the maximum capacity of the trace buffer.
-    #[must_use]
-    #[inline]
-    pub fn trace_capacity(&self) -> usize {
-        self.trace_buffer.capacity()
-    }
-
-    /// Filter trace entries using a predicate function.
-    ///
-    /// Returns entries where the predicate returns true.
-    #[inline]
-    pub fn trace_filter<F>(&self, predicate: F) -> Vec<&trace::TraceEntry>
-    where
-        F: Fn(&trace::TraceEntry) -> bool,
-    {
-        self.trace_buffer.iter().filter(|e| predicate(e)).collect()
-    }
-
-    /// Get trace entries within a specific PC address range (inclusive).
-    #[inline]
-    pub fn trace_range(&self, start_pc: u16, end_pc: u16) -> Vec<&trace::TraceEntry> {
-        self.trace_filter(|e| e.pc >= start_pc && e.pc <= end_pc)
-    }
-
-    /// Find trace entries containing a specific instruction mnemonic.
-    #[inline]
-    pub fn trace_find_instruction(&self, mnemonic: &str) -> Vec<&trace::TraceEntry> {
-        self.trace_filter(|e| e.instruction.contains(mnemonic))
+        self.trace_enabled
     }
 
     /// Disassemble the instruction at the specified address.
     ///
     /// Reads up to 3 bytes from memory at the given address and returns
-    /// the disassembled instruction as a `DisasmResult`.
+    /// the disassembled instruction as a structured `Instruction` and its length.
     ///
     /// # Arguments
     ///
@@ -351,16 +305,17 @@ impl<A: AudioCallback> Gb<A> {
     ///
     /// # Returns
     ///
-    /// A `DisasmResult` containing the mnemonic string and instruction length
+    /// An `Option` containing a tuple of the `Instruction` and instruction length,
+    /// or `None` if the input is empty
     #[must_use]
     #[inline]
-    pub fn disasm_at(&self, addr: u16) -> disasm::DisasmResult {
+    pub fn disasm_at(&self, addr: u16) -> Option<(crate::disasm::Instruction, u8)> {
         // Read up to 3 bytes for the instruction
         let b0 = self.read_mem(addr);
         let b1 = self.read_mem(addr.wrapping_add(1));
         let b2 = self.read_mem(addr.wrapping_add(2));
 
-        disasm::disasm(&[b0, b1, b2], addr)
+        crate::disasm::disassemble(&[b0, b1, b2])
     }
 
     #[inline]
@@ -375,7 +330,6 @@ impl<A: AudioCallback> Gb<A> {
         self.ld_b_b_breakpoint = false;
         self.ppu = Ppu::default();
         self.serial = Serial::default();
-        self.trace_buffer.clear();
         self.bootrom.enable();
     }
 }
