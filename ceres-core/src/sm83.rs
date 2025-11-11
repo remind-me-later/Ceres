@@ -168,15 +168,14 @@ impl<A: AudioCallback> Gb<A> {
         } else {
             let pc = self.cpu.pc;
 
-            // Trace instruction before execution if tracing is enabled
+            // Trace instruction before execution if legacy tracing is enabled
             if self.trace_enabled {
                 self.trace_instruction();
             }
 
-            // Collect trace entry if trace buffer is enabled
-            if self.trace_buffer.is_enabled() {
-                self.collect_trace_entry(pc);
-            }
+            // Collect trace entry for structured tracing
+            // The filtering is now handled by the tracing subscriber
+            self.collect_trace_entry(pc);
 
             let op = self.imm8();
             self.run_hdma();
@@ -206,61 +205,80 @@ impl<A: AudioCallback> Gb<A> {
 
     fn trace_instruction(&self) {
         let pc = self.cpu.pc;
-        let disasm_result = self.disasm_at(pc);
+        // Use the new structured disassembler
+        // Read up to 3 bytes from memory at PC without advancing PC
+        let b0 = self.read_mem(pc);
+        let b1 = self.read_mem(pc.wrapping_add(1));
+        let b2 = self.read_mem(pc.wrapping_add(2));
+        let memory = [b0, b1, b2];
 
-        // Format flags: Z N H C
-        let f = self.cpu.f();
-        let flags = alloc::format!(
-            "{}{}{}{}",
-            if f & 0x80 != 0 { 'Z' } else { '-' },
-            if f & 0x40 != 0 { 'N' } else { '-' },
-            if f & 0x20 != 0 { 'H' } else { '-' },
-            if f & 0x10 != 0 { 'C' } else { '-' }
-        );
+        if let Some((instruction, length)) = crate::disasm::disassemble(&memory) {
+            // Format flags: Z N H C
+            let f = self.cpu.f();
+            let flags = alloc::format!(
+                "{}{}{}{}",
+                if f & 0x80 != 0 { 'Z' } else { '-' },
+                if f & 0x40 != 0 { 'N' } else { '-' },
+                if f & 0x20 != 0 { 'H' } else { '-' },
+                if f & 0x10 != 0 { 'C' } else { '-' }
+            );
 
-        // Format: [PC:$XXXX] MNEMONIC ; A=XX F=ZNHC BC=XXXX DE=XXXX HL=XXXX SP=XXXX
-        eprintln!(
-            "[PC:${:04X}] {} ; A={:02X} F={} BC={:04X} DE={:04X} HL={:04X} SP={:04X}",
-            pc,
-            disasm_result.mnemonic,
-            self.cpu.a(),
-            flags,
-            self.cpu.bc(),
-            self.cpu.de(),
-            self.cpu.hl(),
-            self.cpu.sp()
-        );
+            // Use the Rust tracing crate to log execution details
+            tracing::event!(
+                target: "cpu_execution",
+                tracing::Level::INFO,
+                pc = pc,
+                instruction = alloc::format!("{}", instruction),
+                a = self.cpu.a(),
+                f = self.cpu.f(),
+                b = (self.cpu.bc() >> 8) as u8,
+                c = (self.cpu.bc() & 0xFF) as u8,
+                d = (self.cpu.de() >> 8) as u8,
+                e = (self.cpu.de() & 0xFF) as u8,
+                h = (self.cpu.hl() >> 8) as u8,
+                l = (self.cpu.hl() & 0xFF) as u8,
+                sp = self.cpu.sp(),
+                flags = flags,
+                length = length,
+                "EXECUTE_INSTRUCTION_DETAIL"
+            );
+        }
     }
 
     fn collect_trace_entry(&mut self, pc: u16) {
-        use crate::trace::{RegisterSnapshot, TraceEntry};
+        use crate::trace::trace_instruction;
 
-        let disasm_result = self.disasm_at(pc);
-        let b = (self.cpu.bc() >> 8) as u8;
-        let c = (self.cpu.bc() & 0xFF) as u8;
-        let d = (self.cpu.de() >> 8) as u8;
-        let e = (self.cpu.de() & 0xFF) as u8;
-        let h = (self.cpu.hl() >> 8) as u8;
-        let l = (self.cpu.hl() & 0xFF) as u8;
+        // Get the disassembled instruction using the new structured disassembler
+        // Read up to 3 bytes from memory at PC without advancing PC
+        let b0 = self.read_mem(pc);
+        let b1 = self.read_mem(pc.wrapping_add(1));
+        let b2 = self.read_mem(pc.wrapping_add(2));
+        let memory = [b0, b1, b2];
 
-        let entry = TraceEntry {
-            pc,
-            instruction: alloc::format!("{}", disasm_result.mnemonic),
-            cycles: disasm_result.length, // Approximate - instruction length as cycles placeholder
-            registers: RegisterSnapshot {
-                a: self.cpu.a(),
-                f: self.cpu.f(),
+        if let Some((instruction, length)) = crate::disasm::disassemble(&memory) {
+            let b = (self.cpu.bc() >> 8) as u8;
+            let c = (self.cpu.bc() & 0xFF) as u8;
+            let d = (self.cpu.de() >> 8) as u8;
+            let e = (self.cpu.de() & 0xFF) as u8;
+            let h = (self.cpu.hl() >> 8) as u8;
+            let l = (self.cpu.hl() & 0xFF) as u8;
+
+            // Emit the event for the new tracing system
+            trace_instruction(
+                pc,
+                &alloc::format!("{}", instruction),
+                self.cpu.a(),
+                self.cpu.f(),
                 b,
                 c,
                 d,
                 e,
                 h,
                 l,
-                sp: self.cpu.sp(),
-            },
-        };
-
-        self.trace_buffer.push(entry);
+                self.cpu.sp(),
+                length,
+            );
+        }
     }
 }
 

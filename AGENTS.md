@@ -126,51 +126,47 @@ require re-downloading.
 
 ### Debugging with Execution Traces
 
-When tests fail, the emulator can export execution traces for analysis. Traces capture the last N instructions before
-failure, including PC, disassembled instruction, cycle count, and full register state.
+The emulator now uses the standard Rust `tracing` crate for execution tracing. The structured logging approach allows for flexible output formats (JSON, plain text, etc.) and works with standard tracing tooling.
 
-**Enabling trace collection in tests:**
+**Enabling trace collection in tests/applications:**
 
 ```rust
-use ceres_test_runner::{TestRunner, TestConfig};
+use tracing_subscriber::{fmt, EnvFilter};
 
-let config = TestConfig {
-    timeout_seconds: 10,
-    enable_trace: true,              // Enable trace collection
-    export_trace_on_failure: true,   // Auto-export on failure
-    trace_buffer_size: 1000,         // Circular buffer size
-};
-
-let runner = TestRunner::new(rom_path, reference_path, config);
-runner.run().expect("Test failed");
+// Configure tracing subscriber
+tracing::subscriber::with_default(
+    fmt::Subscriber::builder()
+        .with_env_filter(EnvFilter::from_default_env())
+        .json() // For JSON output, or omit for plain text
+        .finish(),
+    || {
+        // Your emulator code here
+        gb.set_trace_enabled(true);
+        // Run the emulator...
+    }
+);
 ```
 
-Traces are automatically exported to `target/traces/<timestamp>_trace.json` on test failure or timeout.
+To filter CPU execution traces specifically, you can use the `cpu_execution` target:
+```bash
+RUST_LOG="cpu_execution=trace" cargo run --release
+```
 
 **Analyzing traces:**
 
-```bash
-# Show last 20 instructions before failure
-python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --last 20
+With the standard `tracing` crate, you can use various existing tools for analysis:
 
-# Generate instruction frequency histogram
-python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --histogram
+1. **Plain text output**: Use the default formatter for human-readable logs
+2. **JSON output**: Use `.json()` formatter for machine processing
+3. **Custom filtering**: Use `EnvFilter` to target specific trace events
+4. **Integration with other tools**: Use with tools like `tracing-chrome` for Chrome tracing format
 
-# Detect infinite loops (repeated PC sequences)
-python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --loops
-
-# Find specific instructions (e.g., all JP/CALL instructions)
-python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --inst JP
-```
-
-**Common debugging workflows:**
-
-1. **Test hangs/timeouts**: Use `--loops` to detect infinite loops, then `--last 50` to see the repeated sequence
-2. **Incorrect behavior**: Use `--histogram` to see execution profile, compare against SameBoy
-3. **Specific instruction issues**: Use `--inst` to find all occurrences of problematic instructions
-4. **Memory-mapped I/O bugs**: Use `--range` to filter instructions in specific address ranges (e.g., 0xFF00-0xFFFF)
-
-See `ceres-test-runner/README.md` for complete trace collection documentation and JSON format details.
+For programmatic analysis of execution traces, trace events are emitted with structured fields:
+- `pc`: Program counter
+- `instruction`: Disassembled instruction as string
+- `a`, `f`, `b`, `c`, `d`, `e`, `h`, `l`: Register values
+- `sp`: Stack pointer
+- `cycles`: Instruction cycle count
 
 **Integration Tests:**
 

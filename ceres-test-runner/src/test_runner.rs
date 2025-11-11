@@ -191,8 +191,7 @@ impl TestRunner {
 
         // Configure trace collection if enabled
         if config.enable_trace {
-            gb.trace_resize(config.trace_buffer_size);
-            gb.trace_enable();
+            gb.trace_enable(); // Enable legacy trace printing if needed
         }
 
         Ok(Self {
@@ -260,76 +259,18 @@ impl TestRunner {
     /// Export trace to JSON file if trace collection is enabled
     ///
     /// The trace file is saved to `target/traces/<timestamp>_trace.json`
+    /// Note: Traditional trace buffer export has been replaced with Rust tracing.
+    /// Enable tracing with RUST_LOG=cpu_execution=trace or similar filters.
     fn export_trace_if_enabled(&self) {
         if !self.config.enable_trace {
             return;
         }
 
-        // Create traces directory
-        let trace_dir = std::path::PathBuf::from("target/traces");
-        if let Err(e) = std::fs::create_dir_all(&trace_dir) {
-            eprintln!("Failed to create trace directory: {e}");
-            return;
-        }
-
-        // Generate trace filename with timestamp
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        let trace_path = trace_dir.join(format!("{timestamp}_trace.json"));
-
-        // Export trace using the ceres_std trace_export module
-        match export_trace_json(&self.gb) {
-            Ok(json) => {
-                if let Err(e) = std::fs::write(&trace_path, json) {
-                    eprintln!("Failed to write trace file: {e}");
-                } else {
-                    println!("Trace exported to: {}", trace_path.display());
-                }
-            }
-            Err(e) => {
-                eprintln!("Failed to serialize trace: {e}");
-            }
-        }
+        eprintln!("Trace collection enabled but traditional export is deprecated.");
+        eprintln!(
+            "Use Rust tracing with appropriate filters instead (e.g., RUST_LOG=cpu_execution=trace)"
+        );
     }
-}
-
-/// Export trace buffer as formatted JSON string.
-///
-/// This is a helper function that wraps the trace export functionality
-/// for use in the test runner.
-fn export_trace_json<A: AudioCallback>(gb: &Gb<A>) -> Result<String, serde_json::Error> {
-    use serde::Serialize;
-
-    #[derive(Debug, Serialize)]
-    struct TraceMetadata {
-        entry_count: usize,
-        buffer_capacity: usize,
-        timestamp: u64,
-    }
-
-    #[derive(Debug, Serialize)]
-    struct TraceExport<'a> {
-        metadata: TraceMetadata,
-        entries: Vec<&'a ceres_core::trace::TraceEntry>,
-    }
-
-    let entries: Vec<_> = gb.trace_entries().collect();
-
-    let export = TraceExport {
-        metadata: TraceMetadata {
-            entry_count: gb.trace_count(),
-            buffer_capacity: gb.trace_capacity(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-        },
-        entries,
-    };
-
-    serde_json::to_string_pretty(&export)
 }
 
 #[cfg(test)]
