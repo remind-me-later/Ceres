@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
-use tracing::{Event, Level};
+use tracing::Event;
 use tracing_subscriber::{
     layer::{Context, Layer},
     registry::LookupSpan,
@@ -25,6 +25,53 @@ pub struct TraceEntry {
     pub timestamp: u64,
     /// Key-value fields attached to the event
     pub fields: std::collections::HashMap<String, serde_json::Value>,
+}
+
+/// Metadata about a trace collection session
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraceMetadata {
+    /// Name of the test that generated this trace
+    pub test_name: String,
+    /// Total number of trace entries
+    pub entry_count: usize,
+    /// Unix timestamp when trace was collected
+    pub timestamp: u64,
+    /// Duration of test execution in milliseconds
+    pub duration_ms: u64,
+    /// Number of frames executed
+    pub frames_executed: u32,
+    /// Emulator model (CGB, DMG, etc.)
+    pub model: String,
+    /// Failure reason if test failed
+    pub failure_reason: Option<String>,
+    /// Buffer size used for collection
+    pub buffer_size: usize,
+    /// Whether the buffer was truncated (filled before test ended)
+    pub truncated: bool,
+    /// Schema version for trace format
+    pub schema_version: String,
+}
+
+impl TraceMetadata {
+    /// Create new trace metadata
+    #[must_use]
+    pub fn new(test_name: String, model: String, buffer_size: usize) -> Self {
+        Self {
+            test_name,
+            entry_count: 0,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            duration_ms: 0,
+            frames_executed: 0,
+            model,
+            failure_reason: None,
+            buffer_size,
+            truncated: false,
+            schema_version: "1.0".to_string(),
+        }
+    }
 }
 
 /// A custom tracing subscriber for test debugging
@@ -74,6 +121,64 @@ impl TestTracer {
     pub fn buffer(&self) -> Arc<Mutex<VecDeque<TraceEntry>>> {
         Arc::clone(&self.buffer)
     }
+
+    /// Export traces in JSON Lines format (one JSON object per line)
+    ///
+    /// This format is machine-friendly and can be processed with standard Unix tools.
+    /// Each line is a complete, flattened JSON object.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if file creation or writing fails.
+    pub fn export_jsonl(&self, path: &std::path::Path) -> std::io::Result<()> {
+        use std::io::Write;
+
+        let file = std::fs::File::create(path)?;
+        let mut writer = std::io::BufWriter::new(file);
+
+        let traces = self.get_traces();
+        for entry in traces {
+            // Flatten the entry structure for easier querying
+            // Extract common fields from the nested fields HashMap
+            let flat_entry = serde_json::json!({
+                "target": entry.target,
+                "level": entry.level,
+                "timestamp": entry.timestamp,
+                "pc": entry.fields.get("pc").and_then(|v| v.as_u64()),
+                "instruction": entry.fields.get("instruction").and_then(|v| v.as_str()),
+                "a": entry.fields.get("a").and_then(|v| v.as_u64()),
+                "f": entry.fields.get("f").and_then(|v| v.as_u64()),
+                "b": entry.fields.get("b").and_then(|v| v.as_u64()),
+                "c": entry.fields.get("c").and_then(|v| v.as_u64()),
+                "d": entry.fields.get("d").and_then(|v| v.as_u64()),
+                "e": entry.fields.get("e").and_then(|v| v.as_u64()),
+                "h": entry.fields.get("h").and_then(|v| v.as_u64()),
+                "l": entry.fields.get("l").and_then(|v| v.as_u64()),
+                "sp": entry.fields.get("sp").and_then(|v| v.as_u64()),
+                "cycles": entry.fields.get("cycles").and_then(|v| v.as_u64()),
+            });
+
+            serde_json::to_writer(&mut writer, &flat_entry)?;
+            writeln!(writer)?;
+        }
+
+        writer.flush()?;
+        Ok(())
+    }
+
+    /// Export metadata about the trace collection
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if file creation or writing fails.
+    pub fn export_metadata(
+        metadata: &TraceMetadata,
+        path: &std::path::Path,
+    ) -> std::io::Result<()> {
+        let json = serde_json::to_string_pretty(metadata)?;
+        std::fs::write(path, json)?;
+        Ok(())
+    }
 }
 
 impl<C> Layer<C> for TestTracer
@@ -82,7 +187,9 @@ where
 {
     fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, C>) {
         // Only capture events from ceres-core components
-        if event.metadata().target().starts_with("ceres") {
+        if event.metadata().target().starts_with("ceres")
+            || event.metadata().target() == "cpu_execution"
+        {
             let mut buffer = self.buffer.lock().unwrap();
 
             // Create a new trace entry from the event
