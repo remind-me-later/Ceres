@@ -1,0 +1,141 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/remind-me-later/Ceres/schemas/trace-entry.json",
+  "title": "Ceres Emulator Trace Entry",
+  "description": "A single trace entry from the Ceres Game Boy emulator execution",
+  "type": "object",
+  "required": ["target", "level", "timestamp"],
+  "properties": {
+    "target": {
+      "type": "string",
+      "description": "Trace event target indicating the emulator component",
+      "examples": ["cpu_execution", "ceres_core::ppu", "ceres_core::apu"],
+      "enum": ["cpu_execution", "ceres_core::ppu", "ceres_core::apu", "ceres_core::memory"]
+    },
+    "level": {
+      "type": "string",
+      "description": "Logging level of the trace event",
+      "enum": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+    },
+    "timestamp": {
+      "type": "integer",
+      "description": "Unix timestamp in milliseconds when the event was captured",
+      "minimum": 0
+    },
+    "pc": {
+      "type": ["integer", "null"],
+      "description": "Program counter - memory address of the instruction (0x0000-0xFFFF)",
+      "minimum": 0,
+      "maximum": 65535
+    },
+    "instruction": {
+      "type": ["string", "null"],
+      "description": "Disassembled SM83 instruction",
+      "examples": [
+        "NOP",
+        "LD A, B",
+        "LD [HL+], A",
+        "JP 0x0150",
+        "CALL 0x2000",
+        "RET",
+        "JR NZ, $FD"
+      ]
+    },
+    "a": {
+      "type": ["integer", "null"],
+      "description": "Accumulator register value (0x00-0xFF)",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "f": {
+      "type": ["integer", "null"],
+      "description": "Flags register value (0x00-0xFF). Bits: [7]=Z, [6]=N, [5]=H, [4]=C, [3-0]=unused",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "b": {
+      "type": ["integer", "null"],
+      "description": "B register value (0x00-0xFF)",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "c": {
+      "type": ["integer", "null"],
+      "description": "C register value (0x00-0xFF)",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "d": {
+      "type": ["integer", "null"],
+      "description": "D register value (0x00-0xFF)",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "e": {
+      "type": ["integer", "null"],
+      "description": "E register value (0x00-0xFF)",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "h": {
+      "type": ["integer", "null"],
+      "description": "H register value (0x00-0xFF)",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "l": {
+      "type": ["integer", "null"],
+      "description": "L register value (0x00-0xFF)",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "sp": {
+      "type": ["integer", "null"],
+      "description": "Stack pointer value (0x0000-0xFFFF)",
+      "minimum": 0,
+      "maximum": 65535
+    },
+    "cycles": {
+      "type": ["integer", "null"],
+      "description": "Number of machine cycles the instruction took to execute (1-24 for SM83)",
+      "minimum": 1,
+      "maximum": 24
+    }
+  },
+  "examples": [
+    {
+      "target": "cpu_execution",
+      "level": "TRACE",
+      "timestamp": 1762960835982,
+      "pc": 502,
+      "instruction": "DEC C",
+      "a": 2,
+      "f": 64,
+      "b": 203,
+      "c": 242,
+      "d": 152,
+      "e": 16,
+      "h": 50,
+      "l": 141,
+      "sp": 57343,
+      "cycles": 1
+    },
+    {
+      "target": "cpu_execution",
+      "level": "TRACE",
+      "timestamp": 1762960835983,
+      "pc": 503,
+      "instruction": "JR NZ, $FD",
+      "a": 2,
+      "f": 64,
+      "b": 203,
+      "c": 241,
+      "d": 152,
+      "e": 16,
+      "h": 50,
+      "l": 141,
+      "sp": 57343,
+      "cycles": 3
+    }
+  ]
+}

@@ -47,6 +47,7 @@ fn test_serial_output_capture() {
         enable_trace: false,
         export_trace_on_failure: false,
         trace_buffer_size: 1000,
+        ..TestConfig::default()
     };
 
     let Ok(mut runner) = TestRunner::new(rom, config) else {

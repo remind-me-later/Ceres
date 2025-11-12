@@ -3,8 +3,9 @@
 //! This crate provides infrastructure for running Game Boy test ROMs
 //! and validating the emulator's accuracy.
 
-mod test_tracer;
 pub mod test_runner;
+pub mod test_tracer;
+pub mod trace_index;
 
 use anyhow::{Context as _, Result};
 use std::path::{Path, PathBuf};

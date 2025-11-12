@@ -4,9 +4,11 @@ This guide explains how to analyze execution traces exported by the test runner 
 
 ## Understanding Trace Files
 
-When a test fails or times out, the test runner exports a trace file to `target/traces/<timestamp>_trace.json` containing detailed execution information.
+When a test fails or times out, the test runner exports a trace file to `target/traces/<timestamp>_trace.json`
+containing detailed execution information.
 
 The trace file has the following structure:
+
 ```json
 {
   "metadata": {
@@ -35,12 +37,14 @@ The trace file has the following structure:
 ## Analyzing Execution Traces
 
 The trace contains detailed information about each executed instruction, including:
+
 - Program counter (PC) at execution time
 - Disassembled instruction
 - Register state before execution
 - Timing information
 
 To analyze:
+
 1. Look for patterns in the instruction execution sequence
 2. Identify where the execution diverges from expected behavior
 3. Examine register states to understand emulator state
@@ -67,6 +71,7 @@ jq '.entries[] | select(.fields.pc == 43690)' trace.json
 ## Common Debugging Workflows
 
 ### Identifying Infinite Loops
+
 Look for repeating instruction sequences or program counters:
 
 ```bash
@@ -74,6 +79,7 @@ jq '.entries[].fields.pc' trace.json | uniq -c | sort -nr | head -20
 ```
 
 ### Memory Access Issues
+
 Filter for memory read/write operations (addresses in specific ranges like 0xFF00-0xFFFF):
 
 ```bash
@@ -81,6 +87,7 @@ jq '.entries[] | select(.fields.pc >= 65280 and .fields.pc <= 65535)' trace.json
 ```
 
 ### Register State Changes
+
 Monitor specific register changes over time:
 
 ```bash
