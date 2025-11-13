@@ -6,7 +6,7 @@
 use anyhow::{Context, Result};
 use ceres_test_runner::trace_index::{IndexStats, TraceIndex};
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(name = "trace-query")]
@@ -100,6 +100,7 @@ enum Commands {
     },
 }
 
+#[expect(clippy::too_many_lines)]
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -139,7 +140,7 @@ fn main() -> Result<()> {
 
             println!("Querying trace: {}", trace.display());
             println!("Using index: {}", index_path.display());
-            println!("Query: {}\n", query);
+            println!("Query: {query}\n");
 
             // Parse query (simple format: "field:value")
             if let Some((field, value)) = query.split_once(':') {
@@ -150,7 +151,7 @@ fn main() -> Result<()> {
                             println!("Found {} occurrences of PC={:#06X}", pc_index.count, pc);
                             print_line_ranges(&pc_index.line_ranges, max_results);
                         } else {
-                            println!("PC={:#06X} not found in trace", pc);
+                            println!("PC={pc:#06X} not found in trace");
                         }
                     }
                     "instruction" | "inst" => {
@@ -161,11 +162,11 @@ fn main() -> Result<()> {
                             );
                             print_line_ranges(&inst_index.line_ranges, max_results);
                         } else {
-                            println!("Instruction '{}' not found in trace", value);
+                            println!("Instruction '{value}' not found in trace");
                         }
                     }
                     _ => {
-                        anyhow::bail!("Unknown field: {}. Supported: pc, instruction", field);
+                        anyhow::bail!("Unknown field: {field}. Supported: pc, instruction");
                     }
                 }
             } else {
@@ -203,7 +204,7 @@ fn main() -> Result<()> {
                 println!("\nShowing first few entries:");
                 show_trace_lines(&trace, &pc_index.line_ranges, 3)?;
             } else {
-                println!("PC={:#06X} not found in trace", pc_val);
+                println!("PC={pc_val:#06X} not found in trace");
             }
         }
 
@@ -224,13 +225,10 @@ fn main() -> Result<()> {
                 print_line_ranges(&inst_index.line_ranges, 100);
 
                 // Show examples with context
-                println!(
-                    "\nShowing first few entries with {} lines of context:",
-                    context
-                );
+                println!("\nShowing first few entries with {context} lines of context:");
                 show_trace_lines_with_context(&trace, &inst_index.line_ranges, 3, context)?;
             } else {
-                println!("Instruction '{}' not found in trace", instruction);
+                println!("Instruction '{instruction}' not found in trace");
             }
         }
 
@@ -349,18 +347,24 @@ fn show_trace_lines_with_context(
 }
 
 fn format_trace_entry(entry: &serde_json::Value) -> String {
-    let pc = entry.get("pc").and_then(|v| v.as_u64()).unwrap_or(0);
+    let pc = entry
+        .get("pc")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
     let instruction = entry
         .get("instruction")
         .and_then(|v| v.as_str())
         .unwrap_or("???");
-    let a = entry.get("a").and_then(|v| v.as_u64()).unwrap_or(0);
-    let f = entry.get("f").and_then(|v| v.as_u64()).unwrap_or(0);
+    let a = entry
+        .get("a")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let f = entry
+        .get("f")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
 
-    format!(
-        "PC={:#06X} {:20} A={:#04X} F={:#04X}",
-        pc, instruction, a, f
-    )
+    format!("PC={pc:#06X} {instruction:20} A={a:#04X} F={f:#04X}")
 }
 
 fn extract_lines(trace_path: &PathBuf, line_numbers: &[usize]) -> Result<()> {
@@ -410,8 +414,8 @@ fn parse_hex_u16(s: &str) -> Result<u16> {
     u16::from_str_radix(s, 16).context("Invalid hex number")
 }
 
-fn auto_detect_index(trace_path: &PathBuf) -> PathBuf {
-    let mut index_path = trace_path.clone();
+fn auto_detect_index(trace_path: &Path) -> PathBuf {
+    let mut index_path = trace_path.to_path_buf();
     index_path.set_extension("index.json");
     index_path
 }

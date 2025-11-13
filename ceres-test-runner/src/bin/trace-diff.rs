@@ -39,7 +39,6 @@ struct Cli {
 
 #[derive(Debug, Clone)]
 struct TraceEntry {
-    line_num: usize,
     pc: u16,
     instruction: String,
     a: u8,
@@ -54,9 +53,9 @@ struct TraceEntry {
 }
 
 impl TraceEntry {
-    fn from_json(json: &serde_json::Value, line_num: usize) -> Option<Self> {
+    #[expect(clippy::cast_possible_truncation)]
+    fn from_json(json: &serde_json::Value) -> Option<Self> {
         Some(Self {
-            line_num,
             pc: json.get("pc")?.as_u64()? as u16,
             instruction: json.get("instruction")?.as_str()?.to_string(),
             a: json.get("a")?.as_u64()? as u8,
@@ -208,12 +207,12 @@ fn load_trace(path: &PathBuf) -> Result<Vec<TraceEntry>> {
         }
 
         let json: serde_json::Value = serde_json::from_str(&line)
-            .with_context(|| format!("Failed to parse line {}", line_num))?;
+            .with_context(|| format!("Failed to parse line {line_num}"))?;
 
-        if let Some(entry) = TraceEntry::from_json(&json, line_num) {
+        if let Some(entry) = TraceEntry::from_json(&json) {
             entries.push(entry);
         } else {
-            eprintln!("Warning: Skipping line {} (incomplete data)", line_num);
+            eprintln!("Warning: Skipping line {line_num} (incomplete data)");
         }
     }
 
@@ -235,10 +234,9 @@ fn parse_fields(spec: &str) -> Result<Vec<DiffField>> {
             "pc" => fields.push(DiffField::Pc),
             "instruction" | "inst" => fields.push(DiffField::Instruction),
             "registers" | "regs" => fields.push(DiffField::Registers),
-            other => anyhow::bail!(
-                "Unknown field: {}. Valid: pc, instruction, registers, all",
-                other
-            ),
+            other => {
+                anyhow::bail!("Unknown field: {other}. Valid: pc, instruction, registers, all")
+            }
         }
     }
 
@@ -346,6 +344,6 @@ fn print_diff_statistics(differences: &[Difference]) {
     }
 
     for (field, count) in &field_counts {
-        println!("  {:?}: {} difference(s)", field, count);
+        println!("  {field:?}: {count} difference(s)");
     }
 }

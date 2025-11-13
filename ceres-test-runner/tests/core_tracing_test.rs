@@ -10,6 +10,7 @@ impl AudioCallback for DummyAudio {
 }
 
 #[test]
+#[expect(clippy::similar_names)]
 fn test_core_emits_trace_events() {
     // Load a simple test ROM
     let rom = load_test_rom("blargg/cpu_instrs/individual/01-special.gb")
@@ -58,10 +59,10 @@ fn test_core_emits_trace_events() {
                 trace.level
             );
             if let Some(pc) = trace.fields.get("pc") {
-                eprintln!("     PC: {}", pc);
+                eprintln!("     PC: {pc}");
             }
             if let Some(inst) = trace.fields.get("instruction") {
-                eprintln!("     Instruction: {}", inst);
+                eprintln!("     Instruction: {inst}");
             }
         }
     }

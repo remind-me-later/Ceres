@@ -32,7 +32,7 @@ pub enum TraceFormat {
 impl Default for TraceFormat {
     #[inline]
     fn default() -> Self {
-        TraceFormat::JsonLines
+        Self::JsonLines
     }
 }
 
@@ -78,6 +78,7 @@ pub enum TestResult {
 }
 
 /// Configuration for running a test ROM
+#[expect(clippy::struct_excessive_bools, reason = "Config struct")]
 pub struct TestConfig {
     pub capture_serial: bool,
     pub model: Model,
@@ -233,14 +234,13 @@ impl TestRunner {
 
         // Set up tracing infrastructure if enabled
         let (tracer, guard) = if config.enable_trace {
+            use tracing_subscriber::{EnvFilter, layer::SubscriberExt};
+
             // Enable tracing on the GB instance
             gb.set_trace_enabled(true);
 
             // Create the tracer layer
             let tracer = TestTracer::new(config.trace_buffer_size);
-
-            // Set up the tracing subscriber with our tracer layer
-            use tracing_subscriber::{EnvFilter, layer::SubscriberExt};
 
             // Create a filter that allows TRACE level for ceres modules
             let filter = EnvFilter::new("ceres=trace,cpu_execution=trace");
@@ -277,15 +277,15 @@ impl TestRunner {
 
             // Check if test has completed (via breakpoint or screenshot/serial match)
             if let Some(result) = self.check_completion() {
-                if result != TestResult::Passed {
-                    // Export trace on failure if configured
-                    if self.config.export_trace_on_failure {
-                        self.export_trace_if_enabled(&result);
-                    }
-                } else {
+                if result == TestResult::Passed {
                     // For passed tests, clear traces if not saving all
                     if let Some(ref tracer) = self.tracer {
                         tracer.clear(); // Clear traces to maintain performance for successful tests
+                    }
+                } else {
+                    // Export trace on failure if configured
+                    if self.config.export_trace_on_failure {
+                        self.export_trace_if_enabled(&result);
                     }
                 }
                 return result;
@@ -337,6 +337,7 @@ impl TestRunner {
     /// The trace file is saved to `target/traces/<test_name>_<timestamp>_trace.<ext>`
     /// Metadata is saved to `target/traces/<test_name>_<timestamp>_trace.meta.json`
     /// Index is saved to `target/traces/<test_name>_<timestamp>_trace.index.json` (if enabled)
+    #[expect(clippy::too_many_lines)]
     fn export_trace_if_enabled(&self, result: &TestResult) {
         if !self.config.enable_trace {
             return;
@@ -344,6 +345,8 @@ impl TestRunner {
 
         // Get the tracer and export the collected traces
         if let Some(ref tracer) = self.tracer {
+            use crate::test_tracer::TraceMetadata;
+
             if tracer.is_empty() {
                 eprintln!("No trace data collected for export.");
                 return;
@@ -363,7 +366,7 @@ impl TestRunner {
                 .as_secs();
 
             let test_name = self.config.test_name.as_deref().unwrap_or("unknown_test");
-            let base_name = format!("{}_{}", test_name, timestamp);
+            let base_name = format!("{test_name}_{timestamp}");
 
             // Choose extension based on format
             let extension = match self.config.trace_format {
@@ -374,9 +377,6 @@ impl TestRunner {
             let trace_path = trace_dir.join(format!("{base_name}_trace.{extension}"));
             let meta_path = trace_dir.join(format!("{base_name}_trace.meta.json"));
             let index_path = trace_dir.join(format!("{base_name}_trace.index.json"));
-
-            // Build metadata
-            use crate::test_tracer::TraceMetadata;
 
             let model_str = match self.config.model {
                 Model::Dmg => "DMG",
@@ -392,7 +392,10 @@ impl TestRunner {
             );
 
             metadata.entry_count = tracer.len();
-            metadata.duration_ms = self.start_time.elapsed().as_millis() as u64;
+            #[expect(clippy::cast_possible_truncation)]
+            {
+                metadata.duration_ms = self.start_time.elapsed().as_millis() as u64;
+            }
             metadata.frames_executed = self.frames_run;
             metadata.truncated = tracer.len() >= self.config.trace_buffer_size;
             metadata.failure_reason = match result {
@@ -419,8 +422,9 @@ impl TestRunner {
 
                         // Generate index if enabled (only for JSONL format)
                         if self.config.generate_index {
-                            println!("Generating trace index...");
                             use crate::trace_index::TraceIndex;
+
+                            println!("Generating trace index...");
 
                             match TraceIndex::build_from_jsonl(
                                 &trace_path,
@@ -453,15 +457,15 @@ impl TestRunner {
                     }
                 }
                 TraceFormat::Json => {
-                    // Export structured JSON format
-                    use crate::test_tracer::TraceEntry;
-                    let traces = tracer.get_traces();
-
                     #[derive(serde::Serialize)]
                     struct TraceExport {
                         metadata: TraceMetadata,
                         entries: Vec<TraceEntry>,
                     }
+
+                    // Export structured JSON format
+                    use crate::test_tracer::TraceEntry;
+                    let traces = tracer.get_traces();
 
                     let export = TraceExport {
                         metadata,

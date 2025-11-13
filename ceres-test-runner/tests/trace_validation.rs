@@ -4,6 +4,7 @@ use ceres_test_runner::test_tracer::TestTracer;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt};
 
 #[test]
+#[expect(clippy::similar_names)]
 fn test_tracing_infrastructure() {
     // Create a test tracer
     let tracer = TestTracer::new(1000);
@@ -39,6 +40,7 @@ fn test_tracing_infrastructure() {
 
     // Check if traces were collected
     let traces = tracer.get_traces();
+
     eprintln!("Collected {} trace entries", traces.len());
     for trace in &traces {
         eprintln!(
