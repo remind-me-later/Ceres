@@ -34,7 +34,6 @@ struct Cli {
 struct LoopPattern {
     start_line: usize,
     end_line: usize,
-    pc: u16,
     instructions: Vec<String>,
     iteration_count: usize,
 }
@@ -60,7 +59,9 @@ fn main() -> Result<()> {
 
     // Detect tight loops (same instruction repeating)
     let tight_loops = detect_tight_loops(&trace_data, cli.tight_loop_threshold);
-    if !tight_loops.is_empty() {
+    if tight_loops.is_empty() {
+        println!("\n✓ No tight loops detected");
+    } else {
         println!("\n🔄 TIGHT LOOPS DETECTED ({} found):", tight_loops.len());
         println!("{}", "-".repeat(80));
         for (i, loop_info) in tight_loops.iter().enumerate() {
@@ -73,14 +74,17 @@ fn main() -> Result<()> {
                 loop_info.consecutive_count
             );
         }
-    } else {
-        println!("\n✓ No tight loops detected");
     }
 
     // Detect loop patterns (repeating sequences)
     println!("\n{}", "=".repeat(80));
     let loop_patterns = detect_loop_patterns(&trace_data, cli.min_loop_iterations);
-    if !loop_patterns.is_empty() {
+    if loop_patterns.is_empty() {
+        println!(
+            "\n✓ No repeating loop patterns detected (threshold: {} iterations)",
+            cli.min_loop_iterations
+        );
+    } else {
         println!(
             "\n🔁 LOOP PATTERNS DETECTED ({} found):",
             loop_patterns.len()
@@ -98,15 +102,10 @@ fn main() -> Result<()> {
             if cli.verbose && !pattern.instructions.is_empty() {
                 println!("   Instructions:");
                 for inst in &pattern.instructions {
-                    println!("     - {}", inst);
+                    println!("     - {inst}");
                 }
             }
         }
-    } else {
-        println!(
-            "\n✓ No repeating loop patterns detected (threshold: {} iterations)",
-            cli.min_loop_iterations
-        );
     }
 
     // PC distribution analysis
@@ -119,6 +118,7 @@ fn main() -> Result<()> {
 
     println!("Top 10 most executed PCs:");
     for (i, (pc, count)) in sorted_pcs.iter().take(10).enumerate() {
+        #[expect(clippy::cast_precision_loss)]
         let percentage = (**count as f64 / trace_data.len() as f64) * 100.0;
         println!(
             "  {}. PC={:#06X}: {} times ({:.1}%)",
@@ -139,6 +139,7 @@ fn main() -> Result<()> {
 
     println!("Top 10 most executed instructions:");
     for (i, (inst, count)) in sorted_insts.iter().take(10).enumerate() {
+        #[expect(clippy::cast_precision_loss)]
         let percentage = (**count as f64 / trace_data.len() as f64) * 100.0;
         println!(
             "  {}. {}: {} times ({:.1}%)",
@@ -167,7 +168,6 @@ fn main() -> Result<()> {
 
 #[derive(Debug, Clone)]
 struct TraceData {
-    line: usize,
     pc: u16,
     instruction: String,
 }
@@ -186,14 +186,14 @@ fn load_trace_data(path: &PathBuf) -> Result<Vec<TraceData>> {
         }
 
         let json: serde_json::Value = serde_json::from_str(&line)
-            .with_context(|| format!("Failed to parse line {}", line_num))?;
+            .with_context(|| format!("Failed to parse line {line_num}"))?;
 
         if let (Some(pc), Some(inst)) = (
-            json.get("pc").and_then(|v| v.as_u64()),
+            json.get("pc").and_then(serde_json::Value::as_u64),
             json.get("instruction").and_then(|v| v.as_str()),
         ) {
+            #[expect(clippy::cast_possible_truncation)]
             data.push(TraceData {
-                line: line_num,
                 pc: pc as u16,
                 instruction: inst.to_string(),
             });
@@ -284,8 +284,7 @@ fn detect_loop_patterns(trace_data: &[TraceData], min_iterations: usize) -> Vec<
                 patterns.push(LoopPattern {
                     start_line: i,
                     end_line: j,
-                    pc: trace_data[i].pc,
-                    instructions: pattern.iter().map(|(_, inst)| inst.to_string()).collect(),
+                    instructions: pattern.iter().map(|(_, inst)| (*inst).clone()).collect(),
                     iteration_count: iterations,
                 });
 

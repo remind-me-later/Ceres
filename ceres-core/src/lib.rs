@@ -100,8 +100,8 @@ pub struct Gb<A: AudioCallback> {
     ppu: Ppu,
     serial: Serial,
     trace_enabled: bool,
-    trace_start_pc: Option<u16>,
     trace_end_pc: Option<u16>,
+    trace_start_pc: Option<u16>,
     wram: Wram,
 }
 
@@ -170,6 +170,30 @@ impl<A: AudioCallback> Gb<A> {
     #[cfg(feature = "game_genie")]
     pub fn deactivate_game_genie(&mut self, code: &GameGenieCode) {
         self.game_genie.deactivate_code(code);
+    }
+
+    /// Disassemble the instruction at the specified address.
+    ///
+    /// Reads up to 3 bytes from memory at the given address and returns
+    /// the disassembled instruction as a structured `Instruction` and its length.
+    ///
+    /// # Arguments
+    ///
+    /// * `addr` - The memory address to disassemble
+    ///
+    /// # Returns
+    ///
+    /// An `Option` containing a tuple of the `Instruction` and instruction length,
+    /// or `None` if the input is empty
+    #[must_use]
+    #[inline]
+    pub fn disasm_at(&self, addr: u16) -> Option<(disasm::Instruction, u8)> {
+        // Read up to 3 bytes for the instruction
+        let b0 = self.read_mem(addr);
+        let b1 = self.read_mem(addr.wrapping_add(1));
+        let b2 = self.read_mem(addr.wrapping_add(2));
+
+        disasm::disassemble(&[b0, b1, b2])
     }
 
     /// Loads the state from the provided reader.
@@ -268,64 +292,9 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[inline]
-    pub fn set_trace_pc_range(&mut self, start: u16, end: u16) {
+    pub const fn set_trace_pc_range(&mut self, start: u16, end: u16) {
         self.trace_start_pc = Some(start);
         self.trace_end_pc = Some(end);
-    }
-
-    /// Check if execution tracing is enabled.
-    #[must_use]
-    #[inline]
-    pub const fn trace_enabled(&self) -> bool {
-        self.trace_enabled
-    }
-
-    /// Enable trace collection.
-    ///
-    /// This method controls whether detailed execution traces are logged.
-    /// For structured logging, use the Rust `tracing` crate with a configured subscriber.
-    #[inline]
-    pub fn trace_enable(&mut self) {
-        self.trace_enabled = true;
-    }
-
-    /// Disable trace collection.
-    ///
-    /// For structured logging, use the Rust `tracing` crate with a configured subscriber.
-    #[inline]
-    pub fn trace_disable(&mut self) {
-        self.trace_enabled = false;
-    }
-
-    /// Check if trace collection is enabled.
-    #[must_use]
-    #[inline]
-    pub fn trace_is_enabled(&self) -> bool {
-        self.trace_enabled
-    }
-
-    /// Disassemble the instruction at the specified address.
-    ///
-    /// Reads up to 3 bytes from memory at the given address and returns
-    /// the disassembled instruction as a structured `Instruction` and its length.
-    ///
-    /// # Arguments
-    ///
-    /// * `addr` - The memory address to disassemble
-    ///
-    /// # Returns
-    ///
-    /// An `Option` containing a tuple of the `Instruction` and instruction length,
-    /// or `None` if the input is empty
-    #[must_use]
-    #[inline]
-    pub fn disasm_at(&self, addr: u16) -> Option<(crate::disasm::Instruction, u8)> {
-        // Read up to 3 bytes for the instruction
-        let b0 = self.read_mem(addr);
-        let b1 = self.read_mem(addr.wrapping_add(1));
-        let b2 = self.read_mem(addr.wrapping_add(2));
-
-        crate::disasm::disassemble(&[b0, b1, b2])
     }
 
     #[inline]
@@ -341,6 +310,37 @@ impl<A: AudioCallback> Gb<A> {
         self.ppu = Ppu::default();
         self.serial = Serial::default();
         self.bootrom.enable();
+    }
+
+    /// Disable trace collection.
+    ///
+    /// For structured logging, use the Rust `tracing` crate with a configured subscriber.
+    #[inline]
+    pub const fn trace_disable(&mut self) {
+        self.trace_enabled = false;
+    }
+
+    /// Enable trace collection.
+    ///
+    /// This method controls whether detailed execution traces are logged.
+    /// For structured logging, use the Rust `tracing` crate with a configured subscriber.
+    #[inline]
+    pub const fn trace_enable(&mut self) {
+        self.trace_enabled = true;
+    }
+
+    /// Check if execution tracing is enabled.
+    #[must_use]
+    #[inline]
+    pub const fn trace_enabled(&self) -> bool {
+        self.trace_enabled
+    }
+
+    /// Check if trace collection is enabled.
+    #[must_use]
+    #[inline]
+    pub const fn trace_is_enabled(&self) -> bool {
+        self.trace_enabled
     }
 }
 

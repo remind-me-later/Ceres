@@ -470,17 +470,11 @@ impl GbThread {
         self.audio_stream.volume()
     }
 
-    /// Exports the trace buffer to a JSON file.
-    ///
-    /// # Errors
-    ///
-
     /// Saves the current save data to the provided writer.
     ///
     /// # Errors
     ///
     /// Returns an error if the Game Boy thread is not running or if writing the save data fails.
-    ///
     /// # Panics
     ///
     /// Panics if the system time is before the UNIX epoch.

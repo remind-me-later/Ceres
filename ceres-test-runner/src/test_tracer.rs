@@ -15,7 +15,7 @@ use tracing_subscriber::{
 /// A single trace entry from the emulator execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraceEntry {
-    /// Target of the trace event (e.g., "cpu_execution", "apu", "ppu")
+    /// Target of the trace event (e.g., "cpu", "apu", "ppu")
     pub target: String,
     /// The level of the tracing event
     pub level: String,
@@ -85,6 +85,7 @@ pub struct TestTracer {
 }
 
 impl TestTracer {
+    #[must_use]
     pub fn new(max_entries: usize) -> Self {
         Self {
             buffer: Arc::new(Mutex::new(VecDeque::with_capacity(max_entries.max(100)))),
@@ -92,11 +93,13 @@ impl TestTracer {
         }
     }
 
+    #[must_use]
     pub fn with_default_capacity() -> Self {
         Self::new(10_000) // Default to 10k entries
     }
 
     /// Get a clone of the current trace entries
+    #[must_use]
     pub fn get_traces(&self) -> Vec<TraceEntry> {
         self.buffer.lock().unwrap().clone().into()
     }
@@ -108,16 +111,19 @@ impl TestTracer {
     }
 
     /// Get the number of trace entries
+    #[must_use]
     pub fn len(&self) -> usize {
         self.buffer.lock().unwrap().len()
     }
 
     /// Check if the trace buffer is empty
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.buffer.lock().unwrap().is_empty()
     }
 
     /// Get the shared buffer reference for use in test runner
+    #[must_use]
     pub fn buffer(&self) -> Arc<Mutex<VecDeque<TraceEntry>>> {
         Arc::clone(&self.buffer)
     }
@@ -144,18 +150,18 @@ impl TestTracer {
                 "target": entry.target,
                 "level": entry.level,
                 "timestamp": entry.timestamp,
-                "pc": entry.fields.get("pc").and_then(|v| v.as_u64()),
+                "pc": entry.fields.get("pc").and_then(serde_json::Value::as_u64),
                 "instruction": entry.fields.get("instruction").and_then(|v| v.as_str()),
-                "a": entry.fields.get("a").and_then(|v| v.as_u64()),
-                "f": entry.fields.get("f").and_then(|v| v.as_u64()),
-                "b": entry.fields.get("b").and_then(|v| v.as_u64()),
-                "c": entry.fields.get("c").and_then(|v| v.as_u64()),
-                "d": entry.fields.get("d").and_then(|v| v.as_u64()),
-                "e": entry.fields.get("e").and_then(|v| v.as_u64()),
-                "h": entry.fields.get("h").and_then(|v| v.as_u64()),
-                "l": entry.fields.get("l").and_then(|v| v.as_u64()),
-                "sp": entry.fields.get("sp").and_then(|v| v.as_u64()),
-                "cycles": entry.fields.get("cycles").and_then(|v| v.as_u64()),
+                "a": entry.fields.get("a").and_then(serde_json::Value::as_u64),
+                "f": entry.fields.get("f").and_then(serde_json::Value::as_u64),
+                "b": entry.fields.get("b").and_then(serde_json::Value::as_u64),
+                "c": entry.fields.get("c").and_then(serde_json::Value::as_u64),
+                "d": entry.fields.get("d").and_then(serde_json::Value::as_u64),
+                "e": entry.fields.get("e").and_then(serde_json::Value::as_u64),
+                "h": entry.fields.get("h").and_then(serde_json::Value::as_u64),
+                "l": entry.fields.get("l").and_then(serde_json::Value::as_u64),
+                "sp": entry.fields.get("sp").and_then(serde_json::Value::as_u64),
+                "cycles": entry.fields.get("cycles").and_then(serde_json::Value::as_u64),
             });
 
             serde_json::to_writer(&mut writer, &flat_entry)?;
@@ -199,6 +205,7 @@ where
             let mut visitor = FieldVisitor::new(&mut fields);
             event.record(&mut visitor);
 
+            #[expect(clippy::cast_possible_truncation)]
             let trace_entry = TraceEntry {
                 target: event.metadata().target().to_string(),
                 level: format!("{}", event.metadata().level()),
@@ -225,16 +232,16 @@ struct FieldVisitor<'a> {
 }
 
 impl<'a> FieldVisitor<'a> {
-    fn new(fields: &'a mut std::collections::HashMap<String, serde_json::Value>) -> Self {
+    const fn new(fields: &'a mut std::collections::HashMap<String, serde_json::Value>) -> Self {
         Self { fields }
     }
 }
 
-impl<'a> tracing::field::Visit for FieldVisitor<'a> {
+impl tracing::field::Visit for FieldVisitor<'_> {
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
         self.fields.insert(
             field.name().to_string(),
-            serde_json::Value::String(format!("{:?}", value)),
+            serde_json::Value::String(format!("{value:?}")),
         );
     }
 

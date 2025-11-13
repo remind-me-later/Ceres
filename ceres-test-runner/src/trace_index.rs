@@ -118,6 +118,7 @@ impl TraceIndex {
     /// # Errors
     ///
     /// Returns an error if the file cannot be read or parsed.
+    #[expect(clippy::too_many_lines)]
     pub fn build_from_jsonl(
         trace_path: &Path,
         checkpoint_interval: usize,
@@ -147,7 +148,8 @@ impl TraceIndex {
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
             // Extract fields
-            if let Some(pc) = entry.get("pc").and_then(|v| v.as_u64()) {
+            if let Some(pc) = entry.get("pc").and_then(serde_json::Value::as_u64) {
+                #[expect(clippy::cast_possible_truncation)]
                 let pc = pc as u16;
 
                 // Update PC index
@@ -220,26 +222,55 @@ impl TraceIndex {
             }
 
             // Create checkpoints at regular intervals
-            if line_num % checkpoint_interval == 0 {
-                if let Some(pc) = entry.get("pc").and_then(|v| v.as_u64()) {
-                    let registers = RegisterState {
-                        a: entry.get("a").and_then(|v| v.as_u64()).unwrap_or(0) as u8,
-                        f: entry.get("f").and_then(|v| v.as_u64()).unwrap_or(0) as u8,
-                        b: entry.get("b").and_then(|v| v.as_u64()).unwrap_or(0) as u8,
-                        c: entry.get("c").and_then(|v| v.as_u64()).unwrap_or(0) as u8,
-                        d: entry.get("d").and_then(|v| v.as_u64()).unwrap_or(0) as u8,
-                        e: entry.get("e").and_then(|v| v.as_u64()).unwrap_or(0) as u8,
-                        h: entry.get("h").and_then(|v| v.as_u64()).unwrap_or(0) as u8,
-                        l: entry.get("l").and_then(|v| v.as_u64()).unwrap_or(0) as u8,
-                        sp: entry.get("sp").and_then(|v| v.as_u64()).unwrap_or(0) as u16,
-                    };
+            if line_num % checkpoint_interval == 0
+                && let Some(pc) = entry.get("pc").and_then(serde_json::Value::as_u64)
+            {
+                #[expect(clippy::cast_possible_truncation)]
+                let registers = RegisterState {
+                    a: entry
+                        .get("a")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or(0) as u8,
+                    f: entry
+                        .get("f")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or(0) as u8,
+                    b: entry
+                        .get("b")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or(0) as u8,
+                    c: entry
+                        .get("c")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or(0) as u8,
+                    d: entry
+                        .get("d")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or(0) as u8,
+                    e: entry
+                        .get("e")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or(0) as u8,
+                    h: entry
+                        .get("h")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or(0) as u8,
+                    l: entry
+                        .get("l")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or(0) as u8,
+                    sp: entry
+                        .get("sp")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or(0) as u16,
+                };
 
-                    index.checkpoints.push(RegisterCheckpoint {
-                        line: line_num,
-                        pc: pc as u16,
-                        registers,
-                    });
-                }
+                #[expect(clippy::cast_possible_truncation)]
+                index.checkpoints.push(RegisterCheckpoint {
+                    line: line_num,
+                    pc: pc as u16,
+                    registers,
+                });
             }
 
             line_num += 1;

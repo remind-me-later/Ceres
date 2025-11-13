@@ -61,8 +61,10 @@
 /// * `l` - Value of the L register
 /// * `sp` - Value of the stack pointer
 /// * `cycles` - Number of cycles the instruction took
+#[expect(clippy::many_single_char_names)]
+#[expect(clippy::too_many_arguments)]
 #[inline]
-pub fn trace_instruction(
+pub fn instruction(
     pc: u16,
     instruction: &str,
     a: u8,
@@ -97,17 +99,16 @@ pub fn trace_instruction(
 
 #[cfg(test)]
 mod tests {
+    // FIXME: Add more comprehensive tests that verify the tracing output
+
     use super::*;
 
     #[test]
-    fn test_trace_instruction() {
+    fn test_instruction() {
         // Just test that the function can be called without panicking
         // The actual tracing functionality would be tested in integration tests
-        trace_instruction(
+        instruction(
             0x100, "NOP", 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0000, 4,
         );
-
-        // The function should execute without panicking
-        assert!(true); // Basic test to ensure no panic
     }
 }

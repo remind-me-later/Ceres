@@ -1,4 +1,4 @@
-use crate::{AudioCallback, Gb};
+use crate::{AudioCallback, Gb, disasm, trace};
 
 const ZF: u16 = 0x80;
 const NF: u16 = 0x40;
@@ -57,6 +57,41 @@ impl Sm83 {
 }
 
 impl<A: AudioCallback> Gb<A> {
+    #[expect(clippy::many_single_char_names)]
+    fn collect_trace_entry(&self, pc: u16) {
+        // Get the disassembled instruction using the new structured disassembler
+        // Read up to 3 bytes from memory at PC without advancing PC
+        let b0 = self.read_mem(pc);
+        let b1 = self.read_mem(pc.wrapping_add(1));
+        let b2 = self.read_mem(pc.wrapping_add(2));
+        let memory = [b0, b1, b2];
+
+        if let Some((instruction, length)) = disasm::disassemble(&memory) {
+            let b = (self.cpu.bc() >> 8) as u8;
+            let c = (self.cpu.bc() & 0xFF) as u8;
+            let d = (self.cpu.de() >> 8) as u8;
+            let e = (self.cpu.de() & 0xFF) as u8;
+            let h = (self.cpu.hl() >> 8) as u8;
+            let l = (self.cpu.hl() & 0xFF) as u8;
+
+            // Emit the event for the new tracing system
+            trace::instruction(
+                pc,
+                &alloc::format!("{instruction}"),
+                self.cpu.a(),
+                self.cpu.f(),
+                b,
+                c,
+                d,
+                e,
+                h,
+                l,
+                self.cpu.sp(),
+                length,
+            );
+        }
+    }
+
     fn exec(&mut self, op: u8) {
         match op {
             0x00 | 0x5B | 0x6D | 0x7F | 0x49 | 0x52 | 0x64 => self.nop(),
@@ -174,8 +209,8 @@ impl<A: AudioCallback> Gb<A> {
             }
 
             // Collect trace entry for structured tracing
-            let within_range = self.trace_start_pc.map_or(true, |start| pc >= start)
-                && self.trace_end_pc.map_or(true, |end| pc <= end);
+            let within_range = self.trace_start_pc.is_none_or(|start| pc >= start)
+                && self.trace_end_pc.is_none_or(|end| pc <= end);
 
             if self.trace_enabled && within_range {
                 self.collect_trace_entry(pc);
@@ -216,7 +251,7 @@ impl<A: AudioCallback> Gb<A> {
         let b2 = self.read_mem(pc.wrapping_add(2));
         let memory = [b0, b1, b2];
 
-        if let Some((instruction, length)) = crate::disasm::disassemble(&memory) {
+        if let Some((instruction, length)) = disasm::disassemble(&memory) {
             // Format flags: Z N H C
             let f = self.cpu.f();
             let flags = alloc::format!(
@@ -232,7 +267,7 @@ impl<A: AudioCallback> Gb<A> {
                 target: "cpu_execution",
                 tracing::Level::INFO,
                 pc = pc,
-                instruction = alloc::format!("{}", instruction),
+                instruction = alloc::format!("{instruction}"),
                 a = self.cpu.a(),
                 f = self.cpu.f(),
                 b = (self.cpu.bc() >> 8) as u8,
@@ -245,42 +280,6 @@ impl<A: AudioCallback> Gb<A> {
                 flags = flags,
                 length = length,
                 "EXECUTE_INSTRUCTION_DETAIL"
-            );
-        }
-    }
-
-    fn collect_trace_entry(&mut self, pc: u16) {
-        use crate::trace::trace_instruction;
-
-        // Get the disassembled instruction using the new structured disassembler
-        // Read up to 3 bytes from memory at PC without advancing PC
-        let b0 = self.read_mem(pc);
-        let b1 = self.read_mem(pc.wrapping_add(1));
-        let b2 = self.read_mem(pc.wrapping_add(2));
-        let memory = [b0, b1, b2];
-
-        if let Some((instruction, length)) = crate::disasm::disassemble(&memory) {
-            let b = (self.cpu.bc() >> 8) as u8;
-            let c = (self.cpu.bc() & 0xFF) as u8;
-            let d = (self.cpu.de() >> 8) as u8;
-            let e = (self.cpu.de() & 0xFF) as u8;
-            let h = (self.cpu.hl() >> 8) as u8;
-            let l = (self.cpu.hl() & 0xFF) as u8;
-
-            // Emit the event for the new tracing system
-            trace_instruction(
-                pc,
-                &alloc::format!("{}", instruction),
-                self.cpu.a(),
-                self.cpu.f(),
-                b,
-                c,
-                d,
-                e,
-                h,
-                l,
-                self.cpu.sp(),
-                length,
             );
         }
     }
