@@ -100,6 +100,8 @@ pub struct Gb<A: AudioCallback> {
     ppu: Ppu,
     serial: Serial,
     trace_enabled: bool,
+    trace_start_pc: Option<u16>,
+    trace_end_pc: Option<u16>,
     wram: Wram,
 }
 
@@ -201,6 +203,8 @@ impl<A: AudioCallback> Gb<A> {
             ppu: Ppu::default(),
             serial: Serial::default(),
             trace_enabled: false,
+            trace_start_pc: None,
+            trace_end_pc: None,
             wram: Wram::default(),
             #[cfg(feature = "game_genie")]
             game_genie: GameGenie::default(),
@@ -261,6 +265,12 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     pub const fn set_trace_enabled(&mut self, enabled: bool) {
         self.trace_enabled = enabled;
+    }
+
+    #[inline]
+    pub fn set_trace_pc_range(&mut self, start: u16, end: u16) {
+        self.trace_start_pc = Some(start);
+        self.trace_end_pc = Some(end);
     }
 
     /// Check if execution tracing is enabled.

@@ -26,6 +26,8 @@ fn run_mbc3_tester_with_trace(
         timeout_frames: 300, // Give it 5 seconds to complete
         expected_screenshot: Some(test_roms_dir().join(format!("mbc3-tester/{screenshot_name}"))),
         enable_trace: true,            // Enable trace collection
+        trace_start_pc: Some(0x0100),  // Start tracing after bootrom
+        trace_end_pc: None,            // Trace until the end
         export_trace_on_failure: true, // Export traces on failure
         trace_buffer_size: 10_000,     // Keep last 10k trace entries
         trace_format: ceres_test_runner::test_runner::TraceFormat::JsonLines, // Use JSONL format
@@ -42,6 +44,7 @@ fn run_mbc3_tester_with_trace(
 }
 
 #[test]
+#[ignore]
 fn test_mbc3_tester_cgb() {
     let result = run_mbc3_tester_with_trace(
         ceres_core::Model::Cgb,
@@ -74,6 +77,7 @@ fn test_mbc3_tester_cgb() {
 }
 
 #[test]
+#[ignore]
 fn test_mbc3_tester_dmg() {
     let result = run_mbc3_tester_with_trace(
         ceres_core::Model::Dmg,

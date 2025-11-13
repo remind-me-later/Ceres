@@ -3,9 +3,7 @@
 ## Purpose
 
 TBD - created by archiving change add-trace-collection. Update Purpose after archive.
-
 ## Requirements
-
 ### Requirement: Circular Trace Buffer (REQ-1)
 
 **Priority**: MUST  
@@ -226,3 +224,20 @@ Run failing test, check console output, verify trace file path printed to stdout
 #### Scenario: Passing Tests No Export
 
 Run passing integration test, verify no trace file exported by default (only failures export traces).
+
+### Requirement: PC-Based Trace Triggering
+
+The system SHALL allow enabling and disabling trace collection based on a program counter (PC) range.
+
+#### Scenario: Trace within PC range
+
+- **GIVEN** trace collection is configured with a start PC of `0x0100` and an end PC of `0x0150`
+- **WHEN** the CPU executes an instruction at PC `0x0120`
+- **THEN** the instruction SHALL be recorded in the trace buffer.
+
+#### Scenario: Trace outside PC range
+
+- **GIVEN** trace collection is configured with a start PC of `0x0100` and an end PC of `0x0150`
+- **WHEN** the CPU executes an instruction at PC `0x0200`
+- **THEN** the instruction SHALL NOT be recorded in the trace buffer.
+

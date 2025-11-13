@@ -86,6 +86,10 @@ pub struct TestConfig {
     pub button_events: Vec<ButtonEvent>,
     /// Enable trace collection during test execution
     pub enable_trace: bool,
+    /// PC address to start tracing at
+    pub trace_start_pc: Option<u16>,
+    /// PC address to stop tracing at
+    pub trace_end_pc: Option<u16>,
     /// Export trace to JSON file on test failure
     pub export_trace_on_failure: bool,
     /// Trace buffer size (number of instructions to keep)
@@ -110,6 +114,8 @@ impl Default for TestConfig {
             expected_screenshot: None,
             button_events: Vec::new(),
             enable_trace: false,
+            trace_start_pc: None,
+            trace_end_pc: None,
             export_trace_on_failure: false,
             trace_buffer_size: 1000,
             trace_format: TraceFormat::default(),
@@ -220,6 +226,10 @@ impl TestRunner {
             .build();
 
         gb.set_color_correction_mode(ceres_core::ColorCorrectionMode::Disabled);
+
+        if let (Some(start), Some(end)) = (config.trace_start_pc, config.trace_end_pc) {
+            gb.set_trace_pc_range(start, end);
+        }
 
         // Set up tracing infrastructure if enabled
         let (tracer, guard) = if config.enable_trace {
