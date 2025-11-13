@@ -174,8 +174,12 @@ impl<A: AudioCallback> Gb<A> {
             }
 
             // Collect trace entry for structured tracing
-            // The filtering is now handled by the tracing subscriber
-            self.collect_trace_entry(pc);
+            let within_range = self.trace_start_pc.map_or(true, |start| pc >= start)
+                && self.trace_end_pc.map_or(true, |end| pc <= end);
+
+            if self.trace_enabled && within_range {
+                self.collect_trace_entry(pc);
+            }
 
             let op = self.imm8();
             self.run_hdma();
