@@ -12,6 +12,8 @@ pub mod timeouts {
     pub const DMG_ACID2: u32 = 480;
     pub const RTC3TEST_BASIC: u32 = 1050;
     pub const RTC3TEST_RANGE: u32 = 750;
+    /// Mooneye Test Suite acceptance tests (120 seconds maximum runtime)
+    pub const MOONEYE_ACCEPTANCE: u32 = 7160;
 }
 
 use crate::test_tracer::TestTracer;
@@ -103,6 +105,8 @@ pub struct TestConfig {
     pub generate_index: bool,
     /// Checkpoint interval for index generation (every N instructions)
     pub checkpoint_interval: usize,
+    /// Use Mooneye Test Suite validation (Fibonacci register check)
+    pub use_mooneye_validation: bool,
 }
 
 impl Default for TestConfig {
@@ -123,6 +127,7 @@ impl Default for TestConfig {
             test_name: None,
             generate_index: true, // Generate index by default for better analysis
             checkpoint_interval: 1000, // Checkpoint every 1000 instructions
+            use_mooneye_validation: false,
         }
     }
 }
@@ -147,12 +152,20 @@ impl TestRunner {
     ///    to signal test completion. When the screenshot matches AND a breakpoint was hit,
     ///    the test completes immediately without waiting for the timeout.
     /// 2. Screenshot/serial comparison: If a screenshot or serial output matches the expected result.
+    /// 3. Mooneye validation: If Mooneye mode is enabled, check CPU registers for pass/fail.
     ///
     /// The timeout mechanism in `run()` serves as a safety net to catch infinitely looping tests
     /// that never signal completion.
     fn check_completion(&mut self) -> Option<TestResult> {
-        // Check if the `ld b, b` breakpoint was hit (signals test completion for Acid2 tests)
+        // Check if the `ld b, b` breakpoint was hit (signals test completion for Acid2 and Mooneye tests)
         let breakpoint_hit = self.gb.check_and_reset_ld_b_b_breakpoint();
+
+        // If Mooneye validation is enabled and breakpoint was hit, check CPU registers
+        if self.config.use_mooneye_validation && breakpoint_hit
+            && let Some(result) = self.check_mooneye_result()
+        {
+            return Some(result);
+        }
 
         // If we have an expected screenshot, compare it
         if let Some(ref screenshot_path) = self.config.expected_screenshot {
@@ -203,6 +216,38 @@ impl TestRunner {
         }
 
         Ok(expected_rgba.as_raw() == actual_rgba)
+    }
+
+    /// Check if a Mooneye test has passed or failed based on CPU register values.
+    ///
+    /// Mooneye tests use a specific protocol:
+    /// - Pass: B=3, C=5, D=8, E=13, H=21, L=34 (Fibonacci sequence)
+    /// - Fail: B=C=D=E=H=L=0x42
+    ///
+    /// This should only be called after detecting the `ld b, b` breakpoint.
+    #[allow(clippy::many_single_char_names)]
+    fn check_mooneye_result(&self) -> Option<TestResult> {
+        let b = self.gb.cpu_b();
+        let c = self.gb.cpu_c();
+        let d = self.gb.cpu_d();
+        let e = self.gb.cpu_e();
+        let h = self.gb.cpu_h();
+        let l = self.gb.cpu_l();
+
+        // Check for pass condition (Fibonacci sequence)
+        if b == 3 && c == 5 && d == 8 && e == 13 && h == 21 && l == 34 {
+            return Some(TestResult::Passed);
+        }
+
+        // Check for fail condition (all 0x42)
+        if b == 0x42 && c == 0x42 && d == 0x42 && e == 0x42 && h == 0x42 && l == 0x42 {
+            return Some(TestResult::Failed(format!(
+                "Mooneye test failed (registers: B={b:#04X} C={c:#04X} D={d:#04X} E={e:#04X} H={h:#04X} L={l:#04X})"
+            )));
+        }
+
+        // If neither condition is met, the test hasn't completed yet
+        None
     }
 
     /// Get the number of frames run
