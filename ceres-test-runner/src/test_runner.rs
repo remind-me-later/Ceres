@@ -325,6 +325,16 @@ impl TestRunner {
         }
     }
 
+    /// Read a byte from Game Boy memory
+    ///
+    /// This is useful for reading test result registers in test ROMs
+    /// that don't use serial output or screenshots.
+    #[must_use]
+    #[inline]
+    pub fn read_memory(&self, address: u16) -> u8 {
+        self.gb.read_mem(address)
+    }
+
     /// Get the serial output captured so far
     #[must_use]
     #[inline]
