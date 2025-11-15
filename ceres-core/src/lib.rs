@@ -166,6 +166,66 @@ impl<A: AudioCallback> Gb<A> {
         was_set
     }
 
+    /// Read the current value of CPU register B.
+    ///
+    /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
+    /// which use specific register values to signal pass/fail status.
+    #[must_use]
+    #[inline]
+    pub const fn cpu_b(&self) -> u8 {
+        (self.cpu.bc() >> 8) as u8
+    }
+
+    /// Read the current value of CPU register C.
+    ///
+    /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
+    /// which use specific register values to signal pass/fail status.
+    #[must_use]
+    #[inline]
+    pub const fn cpu_c(&self) -> u8 {
+        (self.cpu.bc() & 0xFF) as u8
+    }
+
+    /// Read the current value of CPU register D.
+    ///
+    /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
+    /// which use specific register values to signal pass/fail status.
+    #[must_use]
+    #[inline]
+    pub const fn cpu_d(&self) -> u8 {
+        (self.cpu.de() >> 8) as u8
+    }
+
+    /// Read the current value of CPU register E.
+    ///
+    /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
+    /// which use specific register values to signal pass/fail status.
+    #[must_use]
+    #[inline]
+    pub const fn cpu_e(&self) -> u8 {
+        (self.cpu.de() & 0xFF) as u8
+    }
+
+    /// Read the current value of CPU register H.
+    ///
+    /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
+    /// which use specific register values to signal pass/fail status.
+    #[must_use]
+    #[inline]
+    pub const fn cpu_h(&self) -> u8 {
+        (self.cpu.hl() >> 8) as u8
+    }
+
+    /// Read the current value of CPU register L.
+    ///
+    /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
+    /// which use specific register values to signal pass/fail status.
+    #[must_use]
+    #[inline]
+    pub const fn cpu_l(&self) -> u8 {
+        (self.cpu.hl() & 0xFF) as u8
+    }
+
     #[inline]
     #[cfg(feature = "game_genie")]
     pub fn deactivate_game_genie(&mut self, code: &GameGenieCode) {

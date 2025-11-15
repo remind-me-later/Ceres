@@ -170,20 +170,32 @@ For programmatic analysis of execution traces, trace events are emitted with str
 
 **Integration Tests:**
 
-The integration tests use screenshot comparison to validate emulator accuracy:
+The integration tests validate emulator accuracy using multiple test ROM suites:
+
+**Blargg Test Suite** (screenshot comparison):
 
 - `test_blargg_cpu_instrs` - All CPU instructions (11 tests in one ROM, ~33s)
 - `test_blargg_instr_timing` - Instruction cycle timing (~3.6s)
 - `test_blargg_mem_timing` - Memory access timing (~4.6s)
 - `test_blargg_mem_timing_2` - Advanced memory timing (~5.9s)
 - `test_blargg_interrupt_time` - Interrupt timing (~3.6s)
+
+**PPU Accuracy Tests** (screenshot comparison):
+
 - `test_cgb_acid2` - CGB PPU accuracy test (~0.4s)
 - `test_dmg_acid2_cgb` - DMG Acid2 PPU test in CGB mode (~0.2s)
 - `test_dmg_acid2_dmg` - DMG Acid2 PPU test in DMG mode (currently ignored - known PPU rendering issue)
 
-Each test compares the emulator's screen output pixel-by-pixel against reference PNG screenshots from the test ROM
-repository, with color correction disabled for accuracy. Timeout values are based on actual completion times with
-minimal margin for reliability.
+**Mooneye Test Suite** (CPU register-based validation):
+
+- 75 acceptance tests covering CPU instructions, timing, interrupts, PPU, timer, OAM DMA, and serial communication
+- **42 tests pass** (56% pass rate)
+- **33 tests ignored** (need improvements in boot ROM behavior, PPU timing, timer/interrupt edge cases)
+- Tests use Fibonacci register values (B=3, C=5, D=8, E=13, H=21, L=34) to signal pass/fail
+- Validated against real hardware (DMG, MGB, SGB, SGB2, CGB)
+
+Screenshot-based tests compare pixel-by-pixel against reference images with color correction disabled. Timeout values are
+based on actual completion times with minimal margin for reliability.
 
 ### Code Coverage
 
