@@ -40,6 +40,37 @@ To build:
 
 - In the root directory `cargo run`.
 
+## Debugging and Tracing
+
+Ceres includes a comprehensive execution tracing system for debugging and performance analysis. Traces use the Chrome Trace Event Format and can be analyzed with Perfetto or Chrome's built-in tracing viewer.
+
+**Quick Start:**
+
+```bash
+# Run tests with tracing enabled
+RUST_LOG=trace cargo test test_chrome_trace_export --package ceres-test-runner --ignored
+
+# View traces in Perfetto
+# Visit https://ui.perfetto.dev and load ceres-test-runner/target/traces/*.json
+```
+
+**Documentation:**
+
+- **[Comprehensive Tracing Guide](docs/TRACING_GUIDE.md)** - Complete guide covering trace generation, viewing, SQL analysis, and debugging workflows
+- **[Test Runner Tracing](ceres-test-runner/README.md#execution-tracing)** - Quick start for test tracing
+- **[SQL Query Library](examples/sql/)** - Pre-built queries for common debugging tasks (tight loops, hotspots, PPU timing, etc.)
+
+**Features:**
+
+- CPU execution traces with full register state
+- PPU mode changes and timing
+- DMA transfers
+- Memory access patterns
+- SQL-based trace analysis using Perfetto's trace_processor
+- Zero overhead when disabled
+
+See the [Tracing Guide](docs/TRACING_GUIDE.md) for detailed usage instructions.
+
 ## Key bindings
 
 | Gameboy | Emulator |

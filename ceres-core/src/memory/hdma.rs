@@ -102,6 +102,9 @@ impl<A: AudioCallback> Gb<A> {
             len
         };
 
+        let start_src = self.hdma.src;
+        let start_dst = self.hdma.dst;
+
         for _ in 0..len {
             // TODO: the same problems as normal DMA plus reading from
             // VRAM should copy garbage
@@ -109,6 +112,23 @@ impl<A: AudioCallback> Gb<A> {
             self.ppu.write_vram(self.hdma.dst, val);
             self.hdma.dst += 1;
             self.hdma.src += 1;
+        }
+
+        if len > 0 {
+            let transfer_type = if matches!(self.hdma.state, HBlankDone | Sleep) && len == 0x10 {
+                "HBlank"
+            } else {
+                "General"
+            };
+            
+            tracing::trace!(
+                target: "dma",
+                src = format!("${:04X}", start_src),
+                dst = format!("${:04X}", start_dst | 0x8000),
+                bytes = len,
+                transfer_type = transfer_type,
+                "HDMA transfer"
+            );
         }
 
         // can be outside of loop because HDMA should not

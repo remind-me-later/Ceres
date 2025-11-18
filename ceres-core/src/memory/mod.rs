@@ -308,11 +308,29 @@ impl<A: AudioCallback> Gb<A> {
         match addr {
             // FIXME: we assume bootrom doesn't write to rom
             0x0000..=0x7FFF => self.cart.write_rom(addr, val),
-            0x8000..=0x9FFF => self.ppu.write_vram(addr, val),
+            0x8000..=0x9FFF => {
+                tracing::trace!(
+                    target: "memory",
+                    addr = format!("${:04X}", addr),
+                    value = format!("${:02X}", val),
+                    region = "VRAM",
+                    "Memory write"
+                );
+                self.ppu.write_vram(addr, val);
+            }
             0xA000..=0xBFFF => self.cart.write_ram(addr, val),
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.write_wram_lo(addr, val),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.write_wram_hi(addr, val),
-            0xFE00..=0xFE9F => self.ppu.write_oam(addr, val, self.dma.is_active()),
+            0xFE00..=0xFE9F => {
+                tracing::trace!(
+                    target: "memory",
+                    addr = format!("${:04X}", addr),
+                    value = format!("${:02X}", val),
+                    region = "OAM",
+                    "Memory write"
+                );
+                self.ppu.write_oam(addr, val, self.dma.is_active());
+            }
             0xFEA0..=0xFEFF => (),
             0xFF00..=0xFFFF => self.write_high((addr & 0xFF) as u8, val),
         }

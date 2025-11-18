@@ -134,6 +134,21 @@ impl Ppu {
         self.set_mode_stat(mode);
         self.remaining_dots_in_mode += self.mode().dots(self.scx);
 
+        let mode_name = match mode {
+            Mode::HBlank => "HBlank",
+            Mode::VBlank => "VBlank",
+            Mode::OamScan => "OAM Scan",
+            Mode::Drawing => "Drawing",
+        };
+
+        tracing::trace!(
+            target: "ppu",
+            mode = mode_name,
+            ly = self.ly,
+            dots = self.remaining_dots_in_mode,
+            "PPU mode change"
+        );
+
         match mode {
             Mode::OamScan => {
                 if self.stat & STAT_IF_OAM_B != 0 {

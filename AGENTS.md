@@ -168,6 +168,19 @@ For programmatic analysis of execution traces, trace events are emitted with str
 - `sp`: Stack pointer
 - `cycles`: Instruction cycle count
 
+### Advanced Debugging with Perfetto
+
+For complex timing issues, use the Chrome Trace Event Format integration:
+
+1. **Generate Trace**: Run tests with tracing enabled
+   ```bash
+   cargo test --package ceres-test-runner -- test_name --trace
+   ```
+2. **Visualize**: Open `target/traces/*.json` in [ui.perfetto.dev](https://ui.perfetto.dev)
+3. **Analyze**: Use SQL queries to find patterns (tight loops, hotspots)
+
+See `docs/TRACING_GUIDE.md` for the complete workflow and `examples/sql/` for analysis queries.
+
 **Integration Tests:**
 
 The integration tests validate emulator accuracy using multiple test ROM suites:

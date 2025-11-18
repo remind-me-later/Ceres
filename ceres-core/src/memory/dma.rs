@@ -58,6 +58,9 @@ impl<A: AudioCallback> Gb<A> {
             return;
         }
 
+        let start_addr = self.dma.addr;
+        let mut bytes_transferred = 0u16;
+
         while self.dma.remaining_dots() >= 4 {
             self.dma.remaining_dots -= 4;
 
@@ -73,6 +76,17 @@ impl<A: AudioCallback> Gb<A> {
             self.ppu.write_oam_by_dma(self.dma.addr, val);
 
             self.dma.advance_addr();
+            bytes_transferred += 1;
+        }
+
+        if bytes_transferred > 0 {
+            tracing::trace!(
+                target: "dma",
+                src = format!("${:04X}", start_addr),
+                dst = format!("${:04X}", start_addr & 0xFF),
+                bytes = bytes_transferred,
+                "OAM DMA transfer"
+            );
         }
     }
 }
