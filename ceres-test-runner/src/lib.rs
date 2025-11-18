@@ -4,8 +4,6 @@
 //! and validating the emulator's accuracy.
 
 pub mod test_runner;
-pub mod test_tracer;
-pub mod trace_index;
 
 use anyhow::{Context as _, Result};
 use std::path::{Path, PathBuf};

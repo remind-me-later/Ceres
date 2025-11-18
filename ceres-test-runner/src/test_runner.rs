@@ -16,27 +16,10 @@ pub mod timeouts {
     pub const MOONEYE_ACCEPTANCE: u32 = 7160;
 }
 
-use crate::test_tracer::TestTracer;
 use anyhow::Result;
 use ceres_core::{AudioCallback, Button, Gb, GbBuilder, Model, Sample};
 
 const DEFAULT_TIMEOUT_FRAMES: u32 = 1792;
-
-/// Format for trace export
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TraceFormat {
-    /// Structured JSON with metadata wrapper
-    Json,
-    /// JSON Lines format - one JSON object per line (default, machine-friendly)
-    JsonLines,
-}
-
-impl Default for TraceFormat {
-    #[inline]
-    fn default() -> Self {
-        Self::JsonLines
-    }
-}
 
 /// Action to perform on a button
 #[derive(Clone, Copy)]
@@ -87,24 +70,6 @@ pub struct TestConfig {
     pub timeout_frames: u32,
     pub expected_screenshot: Option<std::path::PathBuf>,
     pub button_events: Vec<ButtonEvent>,
-    /// Enable trace collection during test execution
-    pub enable_trace: bool,
-    /// PC address to start tracing at
-    pub trace_start_pc: Option<u16>,
-    /// PC address to stop tracing at
-    pub trace_end_pc: Option<u16>,
-    /// Export trace to JSON file on test failure
-    pub export_trace_on_failure: bool,
-    /// Trace buffer size (number of instructions to keep)
-    pub trace_buffer_size: usize,
-    /// Format for trace export
-    pub trace_format: TraceFormat,
-    /// Test name for metadata (auto-detected if not provided)
-    pub test_name: Option<String>,
-    /// Generate companion index file for fast lookups
-    pub generate_index: bool,
-    /// Checkpoint interval for index generation (every N instructions)
-    pub checkpoint_interval: usize,
     /// Use Mooneye Test Suite validation (Fibonacci register check)
     pub use_mooneye_validation: bool,
 }
@@ -118,15 +83,6 @@ impl Default for TestConfig {
             timeout_frames: DEFAULT_TIMEOUT_FRAMES,
             expected_screenshot: None,
             button_events: Vec::new(),
-            enable_trace: false,
-            trace_start_pc: None,
-            trace_end_pc: None,
-            export_trace_on_failure: false,
-            trace_buffer_size: 1000,
-            trace_format: TraceFormat::default(),
-            test_name: None,
-            generate_index: true, // Generate index by default for better analysis
-            checkpoint_interval: 1000, // Checkpoint every 1000 instructions
             use_mooneye_validation: false,
         }
     }
@@ -138,9 +94,6 @@ pub struct TestRunner {
     frames_run: u32,
     gb: Gb<DummyAudioCallback>,
     serial_output: String,
-    tracer: Option<TestTracer>,
-    _guard: Option<tracing::subscriber::DefaultGuard>,
-    start_time: std::time::Instant,
 }
 
 impl TestRunner {
@@ -273,44 +226,37 @@ impl TestRunner {
 
         gb.set_color_correction_mode(ceres_core::ColorCorrectionMode::Disabled);
 
-        if let (Some(start), Some(end)) = (config.trace_start_pc, config.trace_end_pc) {
-            gb.set_trace_pc_range(start, end);
-        }
-
-        // Set up tracing infrastructure if enabled
-        let (tracer, guard) = if config.enable_trace {
-            use tracing_subscriber::{EnvFilter, layer::SubscriberExt};
-
-            // Enable tracing on the GB instance
-            gb.set_trace_enabled(true);
-
-            // Create the tracer layer
-            let tracer = TestTracer::new(config.trace_buffer_size);
-
-            // Create a filter that allows TRACE level for ceres modules
-            let filter = EnvFilter::new("ceres=trace,cpu_execution=trace");
-
-            let subscriber = tracing_subscriber::registry()
-                .with(filter)
-                .with(tracer.clone());
-
-            // Install the subscriber for this test
-            let guard = tracing::subscriber::set_default(subscriber);
-
-            (Some(tracer), Some(guard))
-        } else {
-            (None, None)
-        };
-
         Ok(Self {
             config,
             frames_run: 0,
             gb,
             serial_output: String::new(),
-            tracer,
-            _guard: guard,
-            start_time: std::time::Instant::now(),
         })
+    }
+    
+    /// Enable tracing on the Game Boy instance
+    /// 
+    /// This should be called after setting up a tracing subscriber externally.
+    pub fn enable_tracing(&mut self) {
+        self.gb.set_trace_enabled(true);
+    }
+
+    /// Set the PC range for trace collection
+    ///
+    /// This allows filtering traces to only capture execution within a specific
+    /// program counter range. Useful for skipping boot ROM execution or focusing
+    /// on specific code sections.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use ceres_test_runner::test_runner::{TestRunner, TestConfig};
+    /// # let mut runner = TestRunner::new(vec![], TestConfig::default()).unwrap();
+    /// // Skip boot ROM and trace only game code
+    /// runner.set_trace_pc_range(0x0100, 0xFFFF);
+    /// ```
+    pub fn set_trace_pc_range(&mut self, start: u16, end: u16) {
+        self.gb.set_trace_pc_range(start, end);
     }
 
     /// Run the test ROM and return the result
@@ -322,30 +268,11 @@ impl TestRunner {
 
             // Check if test has completed (via breakpoint or screenshot/serial match)
             if let Some(result) = self.check_completion() {
-                if result == TestResult::Passed {
-                    // For passed tests, clear traces if not saving all
-                    if let Some(ref tracer) = self.tracer {
-                        tracer.clear(); // Clear traces to maintain performance for successful tests
-                    }
-                } else {
-                    // Export trace on failure if configured
-                    if self.config.export_trace_on_failure {
-                        self.export_trace_if_enabled(&result);
-                    }
-                }
                 return result;
             }
         }
 
-        // Handle timeout case
-        let result = TestResult::Timeout;
-        if self.config.export_trace_on_failure {
-            self.export_trace_if_enabled(&result);
-        } else if let Some(ref tracer) = self.tracer {
-            tracer.clear(); // Clear traces for timeout if not configured to export
-        }
-
-        result
+        TestResult::Timeout
     }
 
     /// Run a single frame of emulation
@@ -385,165 +312,6 @@ impl TestRunner {
     #[inline]
     pub fn serial_output(&self) -> &str {
         &self.serial_output
-    }
-
-    /// Export trace to JSON/JSONL file if trace collection is enabled
-    ///
-    /// The trace file is saved to `target/traces/<test_name>_<timestamp>_trace.<ext>`
-    /// Metadata is saved to `target/traces/<test_name>_<timestamp>_trace.meta.json`
-    /// Index is saved to `target/traces/<test_name>_<timestamp>_trace.index.json` (if enabled)
-    #[expect(clippy::too_many_lines)]
-    fn export_trace_if_enabled(&self, result: &TestResult) {
-        if !self.config.enable_trace {
-            return;
-        }
-
-        // Get the tracer and export the collected traces
-        if let Some(ref tracer) = self.tracer {
-            use crate::test_tracer::TraceMetadata;
-
-            if tracer.is_empty() {
-                eprintln!("No trace data collected for export.");
-                return;
-            }
-
-            // Create traces directory
-            let trace_dir = std::path::PathBuf::from("target/traces");
-            if let Err(e) = std::fs::create_dir_all(&trace_dir) {
-                eprintln!("Failed to create trace directory: {e}");
-                return;
-            }
-
-            // Generate trace filename with timestamp and optional test name
-            let timestamp = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
-
-            let test_name = self.config.test_name.as_deref().unwrap_or("unknown_test");
-            let base_name = format!("{test_name}_{timestamp}");
-
-            // Choose extension based on format
-            let extension = match self.config.trace_format {
-                TraceFormat::Json => "json",
-                TraceFormat::JsonLines => "jsonl",
-            };
-
-            let trace_path = trace_dir.join(format!("{base_name}_trace.{extension}"));
-            let meta_path = trace_dir.join(format!("{base_name}_trace.meta.json"));
-            let index_path = trace_dir.join(format!("{base_name}_trace.index.json"));
-
-            let model_str = match self.config.model {
-                Model::Dmg => "DMG",
-                Model::Mgb => "MGB",
-                Model::Cgb => "CGB",
-                _ => "UNKNOWN",
-            };
-
-            let mut metadata = TraceMetadata::new(
-                test_name.to_string(),
-                model_str.to_string(),
-                self.config.trace_buffer_size,
-            );
-
-            metadata.entry_count = tracer.len();
-            #[expect(clippy::cast_possible_truncation)]
-            {
-                metadata.duration_ms = self.start_time.elapsed().as_millis() as u64;
-            }
-            metadata.frames_executed = self.frames_run;
-            metadata.truncated = tracer.len() >= self.config.trace_buffer_size;
-            metadata.failure_reason = match result {
-                TestResult::Failed(msg) => Some(msg.clone()),
-                TestResult::Timeout => Some("Timeout".to_string()),
-                TestResult::Unknown => Some("Unknown".to_string()),
-                TestResult::Passed => None,
-            };
-
-            // Export metadata
-            if let Err(e) = TestTracer::export_metadata(&metadata, &meta_path) {
-                eprintln!("Failed to export trace metadata: {e}");
-            } else {
-                println!("Trace metadata exported to: {}", meta_path.display());
-            }
-
-            // Export traces based on format
-            match self.config.trace_format {
-                TraceFormat::JsonLines => {
-                    if let Err(e) = tracer.export_jsonl(&trace_path) {
-                        eprintln!("Failed to export trace: {e}");
-                    } else {
-                        println!("Trace exported to: {}", trace_path.display());
-
-                        // Generate index if enabled (only for JSONL format)
-                        if self.config.generate_index {
-                            use crate::trace_index::TraceIndex;
-
-                            println!("Generating trace index...");
-
-                            match TraceIndex::build_from_jsonl(
-                                &trace_path,
-                                self.config.checkpoint_interval,
-                            ) {
-                                Ok(index) => {
-                                    let stats = index.stats();
-                                    println!(
-                                        "Index stats: {} entries, {} unique PCs, {} unique instructions, {} checkpoints",
-                                        stats.total_entries,
-                                        stats.unique_pcs,
-                                        stats.unique_instructions,
-                                        stats.checkpoint_count
-                                    );
-
-                                    if let Err(e) = index.export(&index_path) {
-                                        eprintln!("Failed to export index: {e}");
-                                    } else {
-                                        println!(
-                                            "Trace index exported to: {}",
-                                            index_path.display()
-                                        );
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!("Failed to build trace index: {e}");
-                                }
-                            }
-                        }
-                    }
-                }
-                TraceFormat::Json => {
-                    #[derive(serde::Serialize)]
-                    struct TraceExport {
-                        metadata: TraceMetadata,
-                        entries: Vec<TraceEntry>,
-                    }
-
-                    // Export structured JSON format
-                    use crate::test_tracer::TraceEntry;
-                    let traces = tracer.get_traces();
-
-                    let export = TraceExport {
-                        metadata,
-                        entries: traces,
-                    };
-
-                    match serde_json::to_string_pretty(&export) {
-                        Ok(json) => {
-                            if let Err(e) = std::fs::write(&trace_path, json) {
-                                eprintln!("Failed to write trace file: {e}");
-                            } else {
-                                println!("Trace exported to: {}", trace_path.display());
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to serialize trace: {e}");
-                        }
-                    }
-                }
-            }
-        } else {
-            eprintln!("Tracing not configured for this test run");
-        }
     }
 }
 
