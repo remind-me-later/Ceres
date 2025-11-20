@@ -1,6 +1,7 @@
 # Chrome Tracing Guide for Ceres
 
-Complete guide to using Chrome Trace Event Format traces for debugging and performance analysis in the Ceres Game Boy emulator.
+Complete guide to using Chrome Trace Event Format traces for debugging and performance analysis in the Ceres Game Boy
+emulator.
 
 ## Table of Contents
 
@@ -55,30 +56,30 @@ fn my_debug_trace() {
     let trace_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("target/traces/my_debug.json");
     std::fs::create_dir_all(trace_path.parent().unwrap()).unwrap();
-    
+
     // Set up tracing
     let (chrome_layer, _guard) = tracing_chrome::ChromeLayerBuilder::new()
         .file(&trace_path)
         .include_args(true)
         .build();
-    
+
     let filter = EnvFilter::new("trace,cpu_execution=info");
     let subscriber = tracing_subscriber::registry()
         .with(filter)
         .with(chrome_layer);
     let _sub_guard = tracing::subscriber::set_default(subscriber);
-    
+
     // Run emulator with tracing
     let rom = load_test_rom("path/to/test.gb").unwrap();
     let config = TestConfig {
         timeout_frames: 100,
         ..Default::default()
     };
-    
+
     let mut runner = TestRunner::new(rom, config).unwrap();
     runner.enable_tracing();
     runner.run();
-    
+
     eprintln!("Trace: {}", trace_path.display());
 }
 ```
@@ -115,6 +116,7 @@ runner.set_trace_pc_range(0x0150, 0x0200);
 ```
 
 **Common ranges**:
+
 - `0x0100` to `0xFFFF` - Skip boot ROM, trace all game code
 - `0x0150` to `0x7FFF` - Skip header, trace ROM code only
 - Custom ranges - Focus on specific functions/routines
@@ -123,19 +125,18 @@ This dramatically reduces trace size and makes analysis easier!
 
 ### Trace Size Management
 
-| Filter Level | Trace Size (100 frames) | Use Case |
-|--------------|-------------------------|----------|
-| `trace` | ~150MB | Full debugging |
-| `trace,cpu_execution=info` | ~130MB | Hardware focus |
-| `ppu=trace,dma=trace,memory=trace` | ~20MB | PPU/memory only |
-| `cpu_execution=info` | ~110MB | CPU only |
+| Filter Level                       | Trace Size (100 frames) | Use Case        |
+| ---------------------------------- | ----------------------- | --------------- |
+| `trace`                            | ~150MB                  | Full debugging  |
+| `trace,cpu_execution=info`         | ~130MB                  | Hardware focus  |
+| `ppu=trace,dma=trace,memory=trace` | ~20MB                   | PPU/memory only |
+| `cpu_execution=info`               | ~110MB                  | CPU only        |
 
 ## Viewing Traces
 
 ### Perfetto UI (Recommended)
 
-**Pros**: Advanced SQL queries, better performance, more features
-**Cons**: Requires internet connection
+**Pros**: Advanced SQL queries, better performance, more features **Cons**: Requires internet connection
 
 1. Open [ui.perfetto.dev](https://ui.perfetto.dev)
 2. Drag and drop trace file
@@ -146,6 +147,7 @@ This dramatically reduces trace size and makes analysis easier!
    - **Click and drag**: Select time range
 
 **Key Features**:
+
 - SQL query editor (left sidebar)
 - Thread/process view
 - Event details on click
@@ -154,8 +156,7 @@ This dramatically reduces trace size and makes analysis easier!
 
 ### Chrome Tracing
 
-**Pros**: Works offline, integrated with Chrome DevTools
-**Cons**: Limited analysis capabilities
+**Pros**: Works offline, integrated with Chrome DevTools **Cons**: Limited analysis capabilities
 
 1. Open `chrome://tracing` in Chrome
 2. Click "Load"
@@ -168,16 +169,16 @@ This dramatically reduces trace size and makes analysis easier!
 
 Located in `examples/sql/`:
 
-| Query | Purpose | Speed |
-|-------|---------|-------|
-| `tight_loops.sql` | Find infinite loops, busy waits | Fast |
-| `instruction_hotspots.sql` | Most executed instructions | Fast |
-| `ppu_mode_timeline.sql` | PPU timing analysis | Medium |
-| `frame_timing.sql` | Frame rate/timing issues | Fast |
-| `dma_transfers.sql` | DMA upload tracking | Fast |
-| `memory_hotspots.sql` | Hot memory addresses | Medium |
-| `register_changes.sql` | Register value tracking | Slow |
-| `execution_fingerprint.sql` | Execution comparison | Fast |
+| Query                       | Purpose                         | Speed  |
+| --------------------------- | ------------------------------- | ------ |
+| `tight_loops.sql`           | Find infinite loops, busy waits | Fast   |
+| `instruction_hotspots.sql`  | Most executed instructions      | Fast   |
+| `ppu_mode_timeline.sql`     | PPU timing analysis             | Medium |
+| `frame_timing.sql`          | Frame rate/timing issues        | Fast   |
+| `dma_transfers.sql`         | DMA upload tracking             | Fast   |
+| `memory_hotspots.sql`       | Hot memory addresses            | Medium |
+| `register_changes.sql`      | Register value tracking         | Slow   |
+| `execution_fingerprint.sql` | Execution comparison            | Fast   |
 
 See `examples/sql/QUICK_REFERENCE.md` for quick reference.
 
@@ -232,7 +233,8 @@ trace_processor -q examples/sql/tight_loops.sql trace.json | head -20
 ```
 
 Expected output:
-```
+
+```text
 "537",""JR Z, $FC"",255812,1724,352,2077
 ```
 
@@ -248,9 +250,8 @@ This shows PC 537 executing 255,812 times = likely stuck in loop.
 trace_processor -q examples/sql/frame_timing.sql trace.json
 ```
 
-Normal: 16-17ms per frame (~60 FPS)
-Slow: >17ms (indicates performance issue or waiting)
-Fast: <16ms (emulator running too fast)
+Normal: 16-17ms per frame (~60 FPS) Slow: >17ms (indicates performance issue or waiting) Fast: <16ms (emulator running
+too fast)
 
 ### PPU Rendering Issues
 
@@ -305,6 +306,7 @@ trace_processor -q examples/sql/instruction_hotspots.sql trace.json
 ```
 
 Focus on:
+
 - Instructions with high `execution_count`
 - Instructions at specific PCs (likely in loops)
 - `percent_of_total` to find biggest contributors
@@ -314,10 +316,10 @@ Focus on:
 Tracing has measurable overhead:
 
 | Measurement | No Trace | With Trace | Overhead |
-|-------------|----------|------------|----------|
-| Frame time | 16.7ms | ~19ms | +13% |
-| File I/O | None | Continuous | Disk I/O |
-| Memory | Normal | +50-100MB | Buffer |
+| ----------- | -------- | ---------- | -------- |
+| Frame time  | 16.7ms   | ~19ms      | +13%     |
+| File I/O    | None     | Continuous | Disk I/O |
+| Memory      | Normal   | +50-100MB  | Buffer   |
 
 For accurate timing measurements, compare traces (relative timing) rather than absolute times.
 
@@ -335,10 +337,10 @@ When a test fails:
 fn debug_failing_test() {
     // Enable tracing
     // ... setup code ...
-    
+
     let mut runner = TestRunner::new(rom, config).unwrap();
     runner.enable_tracing();
-    
+
     match runner.run() {
         TestResult::Passed => {},
         other => {

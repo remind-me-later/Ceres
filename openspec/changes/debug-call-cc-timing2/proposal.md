@@ -62,6 +62,24 @@ The test verifies:
    - Interaction between DMA writes and CPU writes to same OAM addresses
    - The "warmup" phase behavior (dma_current_dest states in SameBoy)
 
+4. **Trace Analysis & Recent Findings (Nov 20, 2025)**:
+   - Generated execution traces for `call_cc_timing2` with detailed instrumentation in `dma.rs` and `oam.rs`.
+   - Identified failure point: Register B becomes `0x42` (failure code) shortly after the `CALL` instruction sequence.
+   - The test executes `CALL` with SP pointing to OAM ($FE20). The `CALL` pushes the return address to OAM while DMA is active.
+   - **Key Finding**: Trace analysis confirms that OAM writes *are* being blocked by DMA.
+     - Event at timestamp `6283723506`: `OAM Write` to address `65055` ($FE1F) with `blocked=true` and `dma_active=true`.
+     - This confirms the emulator is correctly blocking CPU access to OAM during DMA.
+   - **The Problem**: The test failure implies the blocking is happening at the *wrong time* or for the *wrong duration*
+     relative to the `CALL` instruction's memory accesses.
+   - **Performance Issue**: The detailed tracing required to debug this issue generates massive trace files (>300MB for a
+     few seconds), causing system instability.
+   - **Next Steps**:
+     - Pause debugging to address tracing performance.
+     - Need to optimize tracing (e.g., circular buffer, selective enabling) before continuing deep cycle-accurate
+       debugging.
+     - Re-evaluate the DMA startup delay and blocking logic against hardware documentation (Pan Docs) and reference
+       implementations (SameBoy).
+
 ## What Changes
 
 - ~~Add trace collection capability~~ (not needed - analysis complete)

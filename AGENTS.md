@@ -1,14 +1,17 @@
 <!-- OPENSPEC:START -->
+
 # OpenSpec Instructions
 
 These instructions are for AI assistants working in this project.
 
 Always open `@/openspec/AGENTS.md` when the request:
+
 - Mentions planning or proposals (words like proposal, spec, change, plan)
 - Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
 - Sounds ambiguous and you need the authoritative spec before coding
 
 Use `@/openspec/AGENTS.md` to learn:
+
 - How to create and apply change proposals
 - Spec format and conventions
 - Project structure and guidelines
@@ -126,7 +129,8 @@ require re-downloading.
 
 ### Debugging with Execution Traces
 
-The emulator now uses the standard Rust `tracing` crate for execution tracing. The structured logging approach allows for flexible output formats (JSON, plain text, etc.) and works with standard tracing tooling.
+The emulator now uses the standard Rust `tracing` crate for execution tracing. The structured logging approach allows
+for flexible output formats (JSON, plain text, etc.) and works with standard tracing tooling.
 
 **Enabling trace collection in tests/applications:**
 
@@ -148,6 +152,7 @@ tracing::subscriber::with_default(
 ```
 
 To filter CPU execution traces specifically, you can use the `cpu_execution` target:
+
 ```bash
 RUST_LOG="cpu_execution=trace" cargo run --release
 ```
@@ -162,6 +167,7 @@ With the standard `tracing` crate, you can use various existing tools for analys
 4. **Integration with other tools**: Use with tools like `tracing-chrome` for Chrome tracing format
 
 For programmatic analysis of execution traces, trace events are emitted with structured fields:
+
 - `pc`: Program counter
 - `instruction`: Disassembled instruction as string
 - `a`, `f`, `b`, `c`, `d`, `e`, `h`, `l`: Register values
@@ -173,9 +179,11 @@ For programmatic analysis of execution traces, trace events are emitted with str
 For complex timing issues, use the Chrome Trace Event Format integration:
 
 1. **Generate Trace**: Run tests with tracing enabled
+
    ```bash
    cargo test --package ceres-test-runner -- test_name --trace
    ```
+
 2. **Visualize**: Open `target/traces/*.json` in [ui.perfetto.dev](https://ui.perfetto.dev)
 3. **Analyze**: Use SQL queries to find patterns (tight loops, hotspots)
 
@@ -207,8 +215,8 @@ The integration tests validate emulator accuracy using multiple test ROM suites:
 - Tests use Fibonacci register values (B=3, C=5, D=8, E=13, H=21, L=34) to signal pass/fail
 - Validated against real hardware (DMG, MGB, SGB, SGB2, CGB)
 
-Screenshot-based tests compare pixel-by-pixel against reference images with color correction disabled. Timeout values are
-based on actual completion times with minimal margin for reliability.
+Screenshot-based tests compare pixel-by-pixel against reference images with color correction disabled. Timeout values
+are based on actual completion times with minimal margin for reliability.
 
 ### Code Coverage
 
