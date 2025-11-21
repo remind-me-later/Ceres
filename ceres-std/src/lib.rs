@@ -1,5 +1,6 @@
 mod audio;
 mod thread;
+pub mod tracing;
 
 #[cfg(feature = "cli")]
 pub mod cli;

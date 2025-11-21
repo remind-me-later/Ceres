@@ -780,6 +780,8 @@ dependencies = [
  "serde_json",
  "spin_sleep",
  "thread-priority",
+ "tracing",
+ "tracing-subscriber",
  "wgpu",
 ]
 
@@ -789,6 +791,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "ceres-core",
+ "ceres-std",
  "clap",
  "image",
  "serde",

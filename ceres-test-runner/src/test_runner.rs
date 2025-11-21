@@ -18,6 +18,8 @@ pub mod timeouts {
 
 use anyhow::Result;
 use ceres_core::{AudioCallback, Button, Gb, GbBuilder, Model, Sample};
+use ceres_std::tracing::{RingBufferLayer, Trigger, TriggerLayer};
+use tracing_subscriber::{layer::SubscriberExt, Registry};
 
 const DEFAULT_TIMEOUT_FRAMES: u32 = 1792;
 
@@ -72,6 +74,14 @@ pub struct TestConfig {
     pub button_events: Vec<ButtonEvent>,
     /// Use Mooneye Test Suite validation (Fibonacci register check)
     pub use_mooneye_validation: bool,
+    /// Size of the ring buffer for tracing (number of events). If None, tracing is disabled.
+    pub trace_buffer_size: Option<usize>,
+    /// Name of the test (used for trace filenames)
+    pub test_name: String,
+    /// Trigger to start tracing
+    pub trace_start_trigger: Option<Trigger>,
+    /// Trigger to stop tracing
+    pub trace_stop_trigger: Option<Trigger>,
 }
 
 impl Default for TestConfig {
@@ -84,6 +94,10 @@ impl Default for TestConfig {
             expected_screenshot: None,
             button_events: Vec::new(),
             use_mooneye_validation: false,
+            trace_buffer_size: None,
+            test_name: "unknown_test".to_string(),
+            trace_start_trigger: None,
+            trace_stop_trigger: None,
         }
     }
 }
@@ -94,6 +108,8 @@ pub struct TestRunner {
     frames_run: u32,
     gb: Gb<DummyAudioCallback>,
     serial_output: String,
+    trace_layer: Option<RingBufferLayer>,
+    _trace_guard: Option<tracing::subscriber::DefaultGuard>,
 }
 
 impl TestRunner {
@@ -226,11 +242,36 @@ impl TestRunner {
 
         gb.set_color_correction_mode(ceres_core::ColorCorrectionMode::Disabled);
 
+        let (trace_layer, _trace_guard) = if let Some(size) = config.trace_buffer_size {
+            let layer = RingBufferLayer::new(size);
+            
+            if config.trace_start_trigger.is_some() || config.trace_stop_trigger.is_some() {
+                let trigger_layer = TriggerLayer::new(
+                    layer.clone(),
+                    config.trace_start_trigger,
+                    config.trace_stop_trigger,
+                );
+                let subscriber = Registry::default().with(trigger_layer);
+                let guard = tracing::subscriber::set_default(subscriber);
+                gb.set_trace_enabled(true);
+                (Some(layer), Some(guard))
+            } else {
+                let subscriber = Registry::default().with(layer.clone());
+                let guard = tracing::subscriber::set_default(subscriber);
+                gb.set_trace_enabled(true);
+                (Some(layer), Some(guard))
+            }
+        } else {
+            (None, None)
+        };
+
         Ok(Self {
             config,
             frames_run: 0,
             gb,
             serial_output: String::new(),
+            trace_layer,
+            _trace_guard,
         })
     }
     
@@ -259,6 +300,29 @@ impl TestRunner {
         self.gb.set_trace_pc_range(start, end);
     }
 
+    /// Dump the trace buffer to a file
+    pub fn dump_trace(&self, suffix: &str) -> Result<()> {
+        if let Some(layer) = &self.trace_layer {
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let filename = format!(
+                "target/traces/{}_{}_{}.json",
+                self.config.test_name, suffix, timestamp
+            );
+            let path = std::path::Path::new(&filename);
+
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+
+            layer.flush_to_file(path)?;
+            eprintln!("Trace dumped to {}", filename);
+        }
+        Ok(())
+    }
+
     /// Run the test ROM and return the result
     #[inline]
     pub fn run(&mut self) -> TestResult {
@@ -268,10 +332,14 @@ impl TestRunner {
 
             // Check if test has completed (via breakpoint or screenshot/serial match)
             if let Some(result) = self.check_completion() {
+                if let TestResult::Failed(_) = result {
+                    let _ = self.dump_trace("failed");
+                }
                 return result;
             }
         }
 
+        let _ = self.dump_trace("timeout");
         TestResult::Timeout
     }
 
