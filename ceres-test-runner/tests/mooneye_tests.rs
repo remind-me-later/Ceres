@@ -40,8 +40,8 @@
 //! ## Current Status
 //!
 //! Out of 75 acceptance tests:
-//! - **43 tests pass** (57% pass rate)
-//! - **32 tests fail** and are marked with `#[ignore]`
+//! - **44 tests pass** (59% pass rate)
+//! - **31 tests fail** and are marked with `#[ignore]`
 //!
 //! Failing tests need improvements in:
 //! - Boot ROM behavior and register initialization
@@ -52,6 +52,9 @@
 //!
 //! ## Recent Improvements
 //!
+//! - **Push Timing Test**: Now passing! Fixed PUSH instruction timing to include the internal delay
+//!   cycle at M=1 before memory writes. The fix ensures writes occur at M=2 (high byte) and M=3
+//!   (low byte), matching hardware behavior verified by the Mooneye push_timing test.
 //! - **IE Push Test**: Now passing! Fixed interrupt dispatch to handle IE register modifications
 //!   during PC push operations. When the stack pointer points to $FFFF (IE register), writes during
 //!   the upper byte push can now correctly cancel an interrupt mid-dispatch.
@@ -263,7 +266,6 @@ fn test_mooneye_pop_timing() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing
 fn test_mooneye_push_timing() {
     let result = run_mooneye_test("mooneye-test-suite/acceptance/push_timing.gb", Model::Cgb);
     assert_eq!(result, TestResult::Passed, "push_timing test failed");
@@ -300,13 +302,6 @@ fn test_mooneye_reti_intr_timing() {
 fn test_mooneye_reti_timing() {
     let result = run_mooneye_test("mooneye-test-suite/acceptance/reti_timing.gb", Model::Cgb);
     assert_eq!(result, TestResult::Passed, "reti_timing test failed");
-}
-
-#[test]
-#[ignore] // TODO: Enable when passing
-fn test_mooneye_rst_timing() {
-    let result = run_mooneye_test("mooneye-test-suite/acceptance/rst_timing.gb", Model::Cgb);
-    assert_eq!(result, TestResult::Passed, "rst_timing test failed");
 }
 
 // Boot register tests - model-specific

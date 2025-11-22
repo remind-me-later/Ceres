@@ -397,14 +397,26 @@ impl<A: AudioCallback> Gb<A> {
         u16::from_le_bytes([lo, hi])
     }
 
-    // TODO: can the val be modified by the SP write during the push?
+    /// PUSH rr instruction timing (verified by Mooneye push_timing test):
+    /// M=0: Instruction decode (implicit)
+    /// M=1: Internal delay
+    /// M=2: Memory write for high byte
+    /// M=3: Memory write for low byte
     fn push(&mut self, val: u16) {
         let [lo, hi] = val.to_le_bytes();
-        self.cpu.sp = self.cpu.sp.wrapping_sub(1);
-        self.write_cpu(self.cpu.sp, hi);
-        self.cpu.sp = self.cpu.sp.wrapping_sub(1);
-        self.write_cpu(self.cpu.sp, lo);
+        
+        // M=1: Internal delay (where OAM bug handling would occur on DMG)
         self.tick_m_cycle();
+        
+        // M=2: Write high byte
+        self.cpu.sp = self.cpu.sp.wrapping_sub(1);
+        self.tick_m_cycle();
+        self.write_mem(self.cpu.sp, hi);
+        
+        // M=3: Write low byte
+        self.cpu.sp = self.cpu.sp.wrapping_sub(1);
+        self.tick_m_cycle();
+        self.write_mem(self.cpu.sp, lo);
     }
 
     #[must_use]
