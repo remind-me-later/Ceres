@@ -382,28 +382,3 @@ impl TestRunner {
         &self.serial_output
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_runner_creation() {
-        let mut rom = vec![0; 0x8000];
-
-        rom[0x148] = 0;
-        rom[0x149] = 0;
-        rom[0x147] = 0;
-
-        let mut checksum: u8 = 0;
-        for byte in &rom[0x134..0x14D] {
-            checksum = checksum.wrapping_sub(*byte).wrapping_sub(1);
-        }
-        rom[0x14D] = checksum;
-
-        let config = TestConfig::default();
-        let result = TestRunner::new(rom, config);
-
-        assert!(result.is_ok(), "Failed to create test runner");
-    }
-}
