@@ -59,10 +59,26 @@ The test verifies:
    - **Issue 3: State Tracking**: The current `Dma` struct lacks explicit state tracking (Startup, Transfer, End),
      making it hard to implement precise timing and blocking behavior.
 
-3. **SameBoy Comparison**:
-   - SameBoy uses a state machine based on `dma_current_dest` (0-159 for transfer, 160 for end delay).
-   - DMA blocks OAM access whenever `dma_current_dest != 0xA1` (Inactive).
-   - DMA transfers 1 byte per M-cycle (4 T-cycles).
+### 3. SameBoy Comparison (Updated)
+
+A detailed comparison with SameBoy's implementation confirmed that the new `DmaState` implementation in `ceres-core` is
+architecturally consistent with the reference:
+
+| Feature            | SameBoy Implementation                                   | Ceres Implementation (New)                                               | Status                            |
+| :----------------- | :------------------------------------------------------- | :----------------------------------------------------------------------- | :-------------------------------- |
+| **State Tracking** | Uses `dma_current_dest` (0-159) and `dma_cycles_modulo`. | Uses explicit `DmaState` enum (`Starting`, `Transferring`, `Finishing`). | **Matched** (Logic is equivalent) |
+| **Startup Delay**  | 2 M-cycles (8 dots). Sets `dma_cycles_modulo = 2`.       | 2 M-cycles (8 dots). Uses `DmaState::Starting(8)`.                       | **Matched**                       |
+| **Transfer Rate**  | 1 byte per M-cycle (4 dots).                             | 1 byte per M-cycle (4 dots). `step()` consumes 4 dots.                   | **Matched**                       |
+| **End Delay**      | 1 M-cycle delay after last byte (state 160/0xA0).        | 1 M-cycle delay. Uses `DmaState::Finishing`.                             | **Matched**                       |
+| **OAM Blocking**   | Blocked whenever DMA is active (`GB_is_dma_active`).     | Blocked whenever state is not `Inactive` (`is_enabled()`).               | **Matched**                       |
+
+Despite this alignment, `test_mooneye_call_cc_timing2` still fails. This suggests the issue may lie in:
+
+1. **Bus Contention**: How CPU and DMA compete for bus access during the same M-cycle.
+2. **PPU Interaction**: OAM blocking logic in `ppu/oam.rs` might need to account for specific PPU modes more accurately
+   in conjunction with DMA.
+3. **Instruction Timing**: While `CALL` timing is correct in isolation, its interaction with DMA-blocked memory might be
+   subtle (e.g., when exactly the write happens within the M-cycle).
 
 ## Proposed Changes
 
@@ -115,7 +131,7 @@ Ensure `run_dma` is called correctly in `advance_dots_no_timers` to advance the 
 
 ## Plan
 
-1. **Modify `ceres-core/src/memory/dma.rs`**:
+1. **Modify `ceres-core/src/memory/dma.rs` (Done)**:
 
    - Define `DmaState` enum.
    - Update `Dma` struct to use `DmaState`.
@@ -123,15 +139,22 @@ Ensure `run_dma` is called correctly in `advance_dots_no_timers` to advance the 
    - Rewrite `run_dma` (or `advance`) to handle state transitions and byte transfers.
    - Update `is_active` / `is_enabled`.
 
-2. **Verify OAM Blocking**:
+2. **Verify OAM Blocking (Done)**:
 
    - Ensure `ceres-core/src/ppu/oam.rs` uses the updated `is_active` method to block CPU writes.
 
-3. **Test**:
+3. **Test (Done)**:
+
    - Run `test_mooneye_call_cc_timing2` and `test_mooneye_call_timing2`.
    - Verify other DMA tests still pass.
    - **Regression Testing**: Ensure all currently passing integration tests (42 Mooneye tests, Blargg tests, etc.)
      continue to pass.
+
+4. **Investigation Phase 2 (New)**:
+   - Compare execution traces of `call_cc_timing2` between Ceres and SameBoy (if possible) or analyze the failure state
+     more deeply.
+   - Investigate PPU OAM blocking logic in `ceres-core/src/ppu/oam.rs` for mode-specific edge cases.
+   - Check if `CALL` instruction write timing needs adjustment relative to DMA cycles.
 
 ## Impact
 
