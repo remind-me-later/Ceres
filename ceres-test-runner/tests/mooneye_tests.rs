@@ -111,7 +111,6 @@ fn test_mooneye_call_cc_timing() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing
 fn test_mooneye_call_cc_timing2() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/call_cc_timing2.gb",
@@ -127,7 +126,6 @@ fn test_mooneye_call_timing() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing
 fn test_mooneye_call_timing2() {
     let result = run_mooneye_test("mooneye-test-suite/acceptance/call_timing2.gb", Model::Cgb);
     assert_eq!(result, TestResult::Passed, "call_timing2 test failed");
