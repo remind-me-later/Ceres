@@ -62,27 +62,23 @@ The test verifies:
 ### 3. SameBoy Comparison (Updated)
 
 A detailed comparison with SameBoy's implementation confirmed that the new `DmaState` implementation in `ceres-core` is
-architecturally consistent with the reference:
+architecturally consistent with the reference. However, significant differences were found in **PPU OAM Blocking**
+logic:
 
-| Feature            | SameBoy Implementation                                   | Ceres Implementation (New)                                               | Status                            |
-| :----------------- | :------------------------------------------------------- | :----------------------------------------------------------------------- | :-------------------------------- |
-| **State Tracking** | Uses `dma_current_dest` (0-159) and `dma_cycles_modulo`. | Uses explicit `DmaState` enum (`Starting`, `Transferring`, `Finishing`). | **Matched** (Logic is equivalent) |
-| **Startup Delay**  | 2 M-cycles (8 dots). Sets `dma_cycles_modulo = 2`.       | 2 M-cycles (8 dots). Uses `DmaState::Starting(8)`.                       | **Matched**                       |
-| **Transfer Rate**  | 1 byte per M-cycle (4 dots).                             | 1 byte per M-cycle (4 dots). `step()` consumes 4 dots.                   | **Matched**                       |
-| **End Delay**      | 1 M-cycle delay after last byte (state 160/0xA0).        | 1 M-cycle delay. Uses `DmaState::Finishing`.                             | **Matched**                       |
-| **OAM Blocking**   | Blocked whenever DMA is active (`GB_is_dma_active`).     | Blocked whenever state is not `Inactive` (`is_enabled()`).               | **Matched**                       |
+| Feature             | SameBoy Implementation                                                                        | Ceres Implementation                       | Status       |
+| :------------------ | :-------------------------------------------------------------------------------------------- | :----------------------------------------- | :----------- |
+| **DMA State**       | Cycle-accurate state machine.                                                                 | Cycle-accurate state machine (`DmaState`). | **Matched**  |
+| **Mode 2 Blocking** | **Cycle-specific**: Write blocked changes after 2 cycles. Read blocked changes after 1 cycle. | Blocks for the entire duration of Mode 2.  | **Mismatch** |
+| **CGB Blocking**    | **Complex**: Exceptions for CGB double speed and specific revisions (e.g., CGB-D).            | Generic blocking based on mode.            | **Mismatch** |
+| **Line 0 Setup**    | Specific startup sequence (Read Unblocked / Write Blocked initially).                         | No specific Line 0 handling observed.      | **Mismatch** |
 
-Despite this alignment, `test_mooneye_call_cc_timing2` still fails. This suggests the issue may lie in:
-
-1. **Bus Contention**: How CPU and DMA compete for bus access during the same M-cycle.
-2. **PPU Interaction**: OAM blocking logic in `ppu/oam.rs` might need to account for specific PPU modes more accurately
-   in conjunction with DMA.
-3. **Instruction Timing**: While `CALL` timing is correct in isolation, its interaction with DMA-blocked memory might be
-   subtle (e.g., when exactly the write happens within the M-cycle).
+**Hypothesis**: The `call_cc_timing2` failure is likely due to the lack of **cycle-accurate PPU OAM blocking**
+(specifically in Mode 2) or missing **CGB-specific exceptions**. The test might be sensitive to exactly _when_ OAM
+becomes blocked/unblocked relative to the mode switch.
 
 ## Proposed Changes
 
-### 1. Refactor `Dma` Struct
+### 1. Refactor `Dma` Struct (Completed)
 
 Introduce a state machine to track DMA progress explicitly, similar to SameBoy.
 
@@ -93,16 +89,9 @@ enum DmaState {
     Transferring(u16), // Current offset (0-159)
     Finishing, // Extra cycle after transfer
 }
-
-pub struct Dma {
-    state: DmaState,
-    src_base: u16,
-    reg: u8,
-    // ...
-}
 ```
 
-### 2. Implement Cycle-Accurate State Machine
+### 2. Implement Cycle-Accurate State Machine (Completed)
 
 Update `run_dma` (or `advance`) to step the state machine based on cycles/dots.
 
@@ -111,23 +100,24 @@ Update `run_dma` (or `advance`) to step the state machine based on cycles/dots.
 - **Finishing**: Wait for 1 extra M-cycle (4 dots) after offset 159.
 - **Inactive**: State becomes Inactive after Finishing.
 
-### 3. Fix Blocking Logic
+### 3. Fix Blocking Logic (Completed)
 
 Update `is_active` (or `is_enabled`) to return `true` for all states except `Inactive`. This ensures OAM is blocked
 during startup, transfer, and the end delay.
 
-```rust
-impl Dma {
-    pub fn is_active(&self) -> bool {
-        !matches!(self.state, DmaState::Inactive)
-    }
-}
-```
-
-### 4. Update `run_dma` Usage
+### 4. Update `run_dma` Usage (Completed)
 
 Ensure `run_dma` is called correctly in `advance_dots_no_timers` to advance the state machine. The logic should handle
 `dots` increments and transition states accordingly.
+
+### 5. Refine PPU OAM Blocking (New)
+
+Update `ceres-core/src/ppu/oam.rs` and `ceres-core/src/ppu/mod.rs` to implement:
+
+1. **Cycle-Accurate Mode 2 Blocking**: Delay blocking/unblocking within Mode 2 to match SameBoy (Write: 2 cycles, Read:
+   1 cycle).
+2. **CGB Exceptions**: Implement checks for CGB double speed and model revision if applicable.
+3. **Line 0 Timing**: Verify and implement specific Line 0 startup blocking behavior.
 
 ## Plan
 
@@ -150,15 +140,19 @@ Ensure `run_dma` is called correctly in `advance_dots_no_timers` to advance the 
    - **Regression Testing**: Ensure all currently passing integration tests (42 Mooneye tests, Blargg tests, etc.)
      continue to pass.
 
-4. **Investigation Phase 2 (New)**:
-   - Compare execution traces of `call_cc_timing2` between Ceres and SameBoy (if possible) or analyze the failure state
-     more deeply.
-   - Investigate PPU OAM blocking logic in `ceres-core/src/ppu/oam.rs` for mode-specific edge cases.
-   - Check if `CALL` instruction write timing needs adjustment relative to DMA cycles.
+4. **Investigation Phase 2 (In Progress)**:
+   - **Analyze PPU Blocking (Done)**: Implemented cycle-accurate blocking for Mode 2 (Write: >2 cycles, Read: >1 cycle).
+     `call_cc_timing2` still fails.
+   - **Verify Line 0**: Check Line 0 startup behavior.
+   - **CGB Exceptions**: Investigate CGB-specific blocking rules (test runs in CGB mode).
+   - **Bus Contention**: Investigate if CPU/DMA bus contention is modeled correctly. Currently DMA wins (`is_active`
+     blocks CPU).
+   - **Re-run Tests**: Verify if `call_cc_timing2` passes with refined PPU blocking.
 
 ## Impact
 
 - **Affected code**:
   - `ceres-core/src/memory/dma.rs`: Major refactor.
-  - `ceres-core/src/ppu/oam.rs`: Minor update to usage if needed.
-- **Risk**: Medium. Changing DMA timing can affect many games. Regression testing with other ROMs is recommended.
+  - `ceres-core/src/ppu/oam.rs`: Logic update for PPU blocking.
+  - `ceres-core/src/ppu/mod.rs`: Potential state tracking for blocking delays.
+- **Risk**: Medium. Changing PPU timing can affect many games. Regression testing is critical.
