@@ -3,15 +3,22 @@
 -- Useful for finding infinite loops or busy-wait loops
 
 -- Note: This simplified version groups by instruction to find repeated patterns
-WITH instruction_data AS (
+WITH cpu_args AS (
   SELECT
-    s.id,
     s.ts,
-    s.dur,
-    (SELECT string_value FROM args WHERE arg_set_id = s.arg_set_id AND key = 'args.pc') AS pc,
-    (SELECT string_value FROM args WHERE arg_set_id = s.arg_set_id AND key = 'args.instruction') AS instruction
+    a.key,
+    COALESCE(a.string_value, CAST(a.int_value AS TEXT)) AS value
   FROM slice s
+  JOIN args a ON s.arg_set_id = a.arg_set_id
   WHERE s.cat = 'cpu_execution'
+),
+instruction_data AS (
+  SELECT
+    ts,
+    MAX(CASE WHEN key = 'args.pc' THEN value END) AS pc,
+    MAX(CASE WHEN key = 'args.instruction' THEN value END) AS instruction
+  FROM cpu_args
+  GROUP BY ts
 ),
 instruction_counts AS (
   SELECT

@@ -22,11 +22,6 @@ impl Dma {
         self.remaining_dots += dots;
     }
 
-    #[must_use]
-    pub const fn is_active(&self) -> bool {
-        self.is_enabled && (self.remaining_dots > 0 || self.is_restarting)
-    }
-
     pub const fn is_enabled(&self) -> bool {
         self.is_enabled
     }
@@ -48,7 +43,7 @@ impl Dma {
         self.reg = val;
         self.addr = u16::from(val) << 8;
         self.is_enabled = true;
-        
+
         tracing::trace!(
             target: "dma",
             src_base = format!("${:04X}", self.addr),

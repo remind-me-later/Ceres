@@ -8,10 +8,10 @@ SELECT
     WHEN name LIKE '%HDMA%' THEN 'HDMA'
     ELSE 'Unknown'
   END AS dma_type,
-  JSON_EXTRACT(args, '$.src') AS source_addr,
-  JSON_EXTRACT(args, '$.dst') AS dest_addr,
-  CAST(JSON_EXTRACT(args, '$.bytes') AS INT) AS bytes_transferred,
-  JSON_EXTRACT(args, '$.transfer_type') AS transfer_type,
+  (SELECT string_value FROM args WHERE arg_set_id = slice.arg_set_id AND key = 'args.src') AS source_addr,
+  (SELECT string_value FROM args WHERE arg_set_id = slice.arg_set_id AND key = 'args.dst') AS dest_addr,
+  CAST((SELECT string_value FROM args WHERE arg_set_id = slice.arg_set_id AND key = 'args.bytes') AS INT) AS bytes_transferred,
+  (SELECT string_value FROM args WHERE arg_set_id = slice.arg_set_id AND key = 'args.transfer_type') AS transfer_type,
   ts / 1000000.0 AS timestamp_ms,
   LEAD(ts) OVER (ORDER BY ts) - ts AS time_until_next_us
 FROM slice

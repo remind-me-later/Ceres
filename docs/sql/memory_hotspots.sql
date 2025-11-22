@@ -2,14 +2,23 @@
 -- Shows which memory addresses are accessed most frequently
 -- Useful for identifying hot data structures and optimization opportunities
 
-WITH memory_accesses AS (
+WITH memory_args AS (
   SELECT
-    (SELECT string_value FROM args WHERE arg_set_id = s.arg_set_id AND key = 'args.addr') AS address,
-    (SELECT string_value FROM args WHERE arg_set_id = s.arg_set_id AND key = 'args.region') AS region,
-    (SELECT string_value FROM args WHERE arg_set_id = s.arg_set_id AND key = 'args.value') AS value,
-    s.ts
+    s.ts,
+    a.key,
+    COALESCE(a.string_value, CAST(a.int_value AS TEXT)) AS value
   FROM slice s
+  JOIN args a ON s.arg_set_id = a.arg_set_id
   WHERE s.cat = 'memory'
+),
+memory_accesses AS (
+  SELECT
+    ts,
+    MAX(CASE WHEN key = 'args.addr' THEN value END) AS address,
+    MAX(CASE WHEN key = 'args.region' THEN value END) AS region,
+    MAX(CASE WHEN key = 'args.value' THEN value END) AS value
+  FROM memory_args
+  GROUP BY ts
 ),
 access_stats AS (
   SELECT

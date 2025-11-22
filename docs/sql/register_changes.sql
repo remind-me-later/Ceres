@@ -4,23 +4,31 @@
 
 -- This query extracts register values from CPU execution events
 -- and shows when they change
-WITH register_values AS (
+WITH cpu_args AS (
+  SELECT
+    s.ts,
+    a.key,
+    COALESCE(a.string_value, CAST(a.int_value AS TEXT)) AS value
+  FROM slice s
+  JOIN args a ON s.arg_set_id = a.arg_set_id
+  WHERE s.cat = 'cpu_execution'
+),
+register_values AS (
   SELECT
     ts / 1000000.0 AS time_ms,
-    SUBSTR(name, 1, INSTR(name, ' ') - 1) AS pc,
-    SUBSTR(name, INSTR(name, ' ') + 1) AS instruction,
-    -- Extract register values from args JSON
-    CAST(JSON_EXTRACT(args, '$.a') AS INT) AS reg_a,
-    CAST(JSON_EXTRACT(args, '$.f') AS INT) AS reg_f,
-    CAST(JSON_EXTRACT(args, '$.b') AS INT) AS reg_b,
-    CAST(JSON_EXTRACT(args, '$.c') AS INT) AS reg_c,
-    CAST(JSON_EXTRACT(args, '$.d') AS INT) AS reg_d,
-    CAST(JSON_EXTRACT(args, '$.e') AS INT) AS reg_e,
-    CAST(JSON_EXTRACT(args, '$.h') AS INT) AS reg_h,
-    CAST(JSON_EXTRACT(args, '$.l') AS INT) AS reg_l,
-    CAST(JSON_EXTRACT(args, '$.sp') AS INT) AS reg_sp
-  FROM slice
-  WHERE cat = 'cpu_execution'
+    MAX(CASE WHEN key = 'args.pc' THEN value END) AS pc,
+    MAX(CASE WHEN key = 'args.instruction' THEN value END) AS instruction,
+    CAST(MAX(CASE WHEN key = 'args.a' THEN value END) AS INT) AS reg_a,
+    CAST(MAX(CASE WHEN key = 'args.f' THEN value END) AS INT) AS reg_f,
+    CAST(MAX(CASE WHEN key = 'args.b' THEN value END) AS INT) AS reg_b,
+    CAST(MAX(CASE WHEN key = 'args.c' THEN value END) AS INT) AS reg_c,
+    CAST(MAX(CASE WHEN key = 'args.d' THEN value END) AS INT) AS reg_d,
+    CAST(MAX(CASE WHEN key = 'args.e' THEN value END) AS INT) AS reg_e,
+    CAST(MAX(CASE WHEN key = 'args.h' THEN value END) AS INT) AS reg_h,
+    CAST(MAX(CASE WHEN key = 'args.l' THEN value END) AS INT) AS reg_l,
+    CAST(MAX(CASE WHEN key = 'args.sp' THEN value END) AS INT) AS reg_sp
+  FROM cpu_args
+  GROUP BY ts
 ),
 register_changes AS (
   SELECT
@@ -28,6 +36,14 @@ register_changes AS (
     pc,
     instruction,
     reg_a,
+    reg_f,
+    reg_b,
+    reg_c,
+    reg_d,
+    reg_e,
+    reg_h,
+    reg_l,
+    reg_sp,
     reg_a != LAG(reg_a) OVER (ORDER BY time_ms) AS a_changed,
     reg_f != LAG(reg_f) OVER (ORDER BY time_ms) AS f_changed,
     reg_b != LAG(reg_b) OVER (ORDER BY time_ms) AS b_changed,

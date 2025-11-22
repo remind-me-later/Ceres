@@ -33,7 +33,7 @@ To build:
 - After cloning the repo run `git submodule update --init --recursive`.
 - Enter the `gb-bootroms` directory and `make`.
 - In `Cargo.toml` select the frontend. For example, in case you want the gtk4 frontend use
-  `default-members = ["ceres-gtk"]`, the other options are `ceres-egui` and `ceres`.
+  `default-members = ["ceres-gtk"]`, the other options are `ceres-egui` and `ceres-winit`.
 - In the root directory `cargo build`
 
 ## Quick start
@@ -42,7 +42,8 @@ To build:
 
 ## Debugging and Tracing
 
-Ceres includes a comprehensive execution tracing system for debugging and performance analysis. Traces use the Chrome Trace Event Format and can be analyzed with Perfetto or Chrome's built-in tracing viewer.
+Ceres includes a comprehensive execution tracing system for debugging and performance analysis. Traces use the Chrome
+Trace Event Format and can be analyzed with Perfetto or Chrome's built-in tracing viewer.
 
 **Quick Start:**
 
@@ -56,9 +57,7 @@ RUST_LOG=trace cargo test test_chrome_trace_export --package ceres-test-runner -
 
 **Documentation:**
 
-- **[Comprehensive Tracing Guide](docs/TRACING_GUIDE.md)** - Complete guide covering trace generation, viewing, SQL analysis, and debugging workflows
-- **[Test Runner Tracing](ceres-test-runner/README.md#execution-tracing)** - Quick start for test tracing
-- **[SQL Query Library](examples/sql/)** - Pre-built queries for common debugging tasks (tight loops, hotspots, PPU timing, etc.)
+Documentation is available in the `docs/` directory.
 
 **Features:**
 
@@ -85,8 +84,7 @@ See the [Tracing Guide](docs/TRACING_GUIDE.md) for detailed usage instructions.
 
 - `ceres-core` contains the core emulator logic, such as cpu, apu and ppu emulation. In the future this module should
   work in no std environments.
-- `ceres-std` contains code for audio and threading, for use with different frontends.
-- `ceres-wgpu` contains the rendering code for the frontends using wgpu.
+- `ceres-std` contains code for audio, threading and rendering, for use with different frontends.
 - `ceres-winit` contains the `winit` frontend.
 - `ceres-egui` contains the `egui` frontend.
 - `ceres-gtk` contains the `gtk` frontend.

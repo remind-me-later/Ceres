@@ -75,6 +75,44 @@ Test ROMs are automatically downloaded in CI environments. For optimal performan
   run: cargo test --package ceres-test-runner
 ```
 
+### CI/CD Pipeline
+
+GitHub Actions automatically runs tests on every push:
+
+- Installs RGBDS toolchain for bootrom compilation
+- Caches dependencies and test ROMs
+- Runs tests for `ceres-core` and `ceres-test-runner` only (avoids frontend dependencies like GTK)
+- Tests complete in under 2 minutes
+
+See `.github/workflows/test.yml` for the complete workflow configuration.
+
+### Code Coverage
+
+To analyze test coverage using `cargo-llvm-cov`:
+
+```bash
+# Install cargo-llvm-cov (one-time setup)
+cargo install cargo-llvm-cov
+
+# Generate HTML coverage report
+cargo llvm-cov --package ceres-core --package ceres-test-runner --html
+
+# Open the report
+xdg-open target/llvm-cov/html/index.html
+
+# Or get a terminal summary
+cargo llvm-cov --package ceres-core --package ceres-test-runner
+```
+
+**Current Coverage Status:**
+
+- **CPU (`sm83.rs`)**: ~98% - Blargg tests thoroughly validate CPU instructions and timing
+- **Overall**: ~54% - Focus areas include CPU, memory, interrupts, and timing
+- **Untested areas**: Save states (BESS), RTC, joypad input, audio details
+
+Integration tests complete in ~3-4 seconds and validate all SM83 CPU instructions, instruction timing, memory timing,
+and interrupt timing against reference screenshots. All integration tests currently pass!
+
 ## Test Suite
 
 The tests are organized into logical modules:
@@ -158,155 +196,3 @@ If your test ROM uses the `ld b, b` instruction (opcode 0x40) as a completion si
 
 The breakpoint detection allows tests to complete as soon as they signal completion, rather than waiting for arbitrary
 timeouts.
-
-## Execution Tracing
-
-The test runner supports Chrome Trace Event Format export for detailed emulator debugging and performance analysis.
-
-### Quick Start
-
-Generate a trace file:
-
-```bash
-# Run the trace export test (creates ~130MB trace for 100 frames)
-cargo test --package ceres-test-runner test_chrome_trace_export -- --ignored --nocapture
-```
-
-This creates a trace file in `ceres-test-runner/target/traces/test_chrome_trace_export_<timestamp>.json`.
-
-### Viewing Traces
-
-**Option 1: Perfetto UI (Recommended)**
-
-1. Open [ui.perfetto.dev](https://ui.perfetto.dev) in your browser
-2. Drag and drop the trace file
-3. Explore the timeline and use SQL queries
-
-**Option 2: Chrome Tracing**
-
-1. Open Chrome and navigate to `chrome://tracing`
-2. Click "Load" and select the trace file
-3. Use WASD keys to navigate the timeline
-
-### Using SQL Queries
-
-The `examples/sql/` directory contains ready-to-use SQL queries for common debugging scenarios:
-
-```bash
-# Analyze tight loops
-trace_processor -q examples/sql/tight_loops.sql <trace_file.json>
-
-# View instruction hotspots
-trace_processor -q examples/sql/instruction_hotspots.sql <trace_file.json>
-
-# Check PPU timing
-trace_processor -q examples/sql/ppu_mode_timeline.sql <trace_file.json>
-
-# Analyze frame timing
-trace_processor -q examples/sql/frame_timing.sql <trace_file.json>
-```
-
-See `examples/sql/README.md` for complete documentation and `examples/sql/QUICK_REFERENCE.md` for a quick lookup guide.
-
-### Enabling Tracing in Your Tests
-
-To enable tracing in custom tests, set up the Chrome tracing layer before creating the test runner:
-
-```rust
-use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
-
-#[test]
-#[ignore]
-fn my_traced_test() {
-    // Set up Chrome tracing
-    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let trace_dir = manifest_dir.join("target/traces");
-    std::fs::create_dir_all(&trace_dir).unwrap();
-    let trace_path = trace_dir.join("my_test.json");
-    
-    let (chrome_layer, _guard) = tracing_chrome::ChromeLayerBuilder::new()
-        .file(&trace_path)
-        .include_args(true)
-        .build();
-    
-    // Enable trace level for hardware events, info for CPU
-    let filter = EnvFilter::new("trace,cpu_execution=info");
-    let subscriber = tracing_subscriber::registry()
-        .with(filter)
-        .with(chrome_layer);
-    
-    let _subscriber_guard = tracing::subscriber::set_default(subscriber);
-    
-    // Create and run test
-    let rom = load_test_rom("path/to/rom.gb").unwrap();
-    let config = TestConfig {
-        timeout_frames: 100,
-        ..TestConfig::default()
-    };
-    
-    let mut runner = TestRunner::new(rom, config).unwrap();
-    runner.enable_tracing();  // Enable emulator tracing
-    
-    // Optional: Skip boot ROM and trace only game code (0x0100 onwards)
-    runner.set_trace_pc_range(0x0100, 0xFFFF);
-    
-    let result = runner.run();
-    
-    // Cleanup to flush traces
-    drop(runner);
-    drop(_subscriber_guard);
-    drop(_guard);
-    
-    eprintln!("Trace written to: {}", trace_path.display());
-}
-```
-
-### PC Range Filtering
-
-To reduce trace size and focus on specific code sections, you can filter by program counter (PC) range:
-
-```rust
-// Skip boot ROM execution - only trace game code starting at 0x0100
-runner.set_trace_pc_range(0x0100, 0xFFFF);
-
-// Trace only a specific function (e.g., addresses 0x0150-0x0200)
-runner.set_trace_pc_range(0x0150, 0x0200);
-```
-
-**Common use cases**:
-
-- **Skip boot ROM**: `set_trace_pc_range(0x0100, 0xFFFF)` - Start tracing when the game code begins
-- **Skip header**: `set_trace_pc_range(0x0150, 0x7FFF)` - Skip ROM header and trace only code
-- **Specific routine**: `set_trace_pc_range(0x1234, 0x1256)` - Debug a specific function
-
-This can reduce trace size by 50-80% when you don't need boot ROM execution data!
-
-### Trace Event Types
-
-Traces include these event categories:
-
-- **CPU Execution** (`cpu_execution` target)
-  - Program counter, instruction, registers, flags, cycles
-  - Use for: Finding hot code paths, debugging algorithms
-
-- **PPU Mode Changes** (`ppu` target)
-  - Mode transitions (OAM Scan, Drawing, HBlank, VBlank)
-  - Scanline number, timing information
-  - Use for: Debugging rendering issues, timing problems
-
-- **DMA Transfers** (`dma` target)
-  - Source/destination addresses, byte count, transfer type
-  - Use for: Tracking sprite/tile uploads
-
-- **Memory Access** (`memory` target)
-  - VRAM and OAM write operations
-  - Address, value, region
-  - Use for: Finding memory hotspots, tracking data flow
-
-### Performance Impact
-
-Tracing is designed to have minimal performance impact when disabled:
-
-- **Tracing disabled**: Zero overhead (events are not generated)
-- **Tracing enabled**: ~10-15% slowdown depending on trace verbosity
-- Trace files: ~1-2 MB per frame of emulation

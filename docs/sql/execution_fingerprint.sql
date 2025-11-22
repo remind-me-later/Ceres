@@ -10,7 +10,7 @@
 WITH execution_summary AS (
   SELECT
     CAST(ts / 1000000 AS INT) AS time_bucket_ms,
-    SUBSTR(name, 1, INSTR(name, ' ') - 1) AS pc,
+    (SELECT string_value FROM args WHERE arg_set_id = slice.arg_set_id AND key = 'args.pc') AS pc,
     COUNT(*) AS executions
   FROM slice
   WHERE cat = 'cpu_execution'

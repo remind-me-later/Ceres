@@ -2,14 +2,29 @@
 -- Analyzes frame-to-frame timing using VBlank events
 -- Useful for identifying frame drops, stuttering, or timing issues
 
-WITH vblank_events AS (
+WITH ppu_args AS (
   SELECT
     s.ts,
-    ROW_NUMBER() OVER (ORDER BY s.ts) AS frame_number
+    a.key,
+    COALESCE(a.string_value, CAST(a.int_value AS TEXT)) AS value
   FROM slice s
+  JOIN args a ON s.arg_set_id = a.arg_set_id
   WHERE s.cat = 'ppu'
-    AND (SELECT string_value FROM args WHERE arg_set_id = s.arg_set_id AND key = 'args.mode') = '"VBlank"'
-    AND CAST((SELECT string_value FROM args WHERE arg_set_id = s.arg_set_id AND key = 'args.ly') AS INT) = 144
+),
+ppu_states AS (
+  SELECT
+    ts,
+    MAX(CASE WHEN key = 'args.mode' THEN value END) AS mode,
+    CAST(MAX(CASE WHEN key = 'args.ly' THEN value END) AS INT) AS ly
+  FROM ppu_args
+  GROUP BY ts
+),
+vblank_events AS (
+  SELECT
+    ts,
+    ROW_NUMBER() OVER (ORDER BY ts) AS frame_number
+  FROM ppu_states
+  WHERE mode = '"VBlank"' AND ly = 144
 ),
 frame_durations AS (
   SELECT
