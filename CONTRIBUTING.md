@@ -103,30 +103,22 @@ Traces are exported to `target/traces/<timestamp>_trace.json` automatically.
 
 ### Analyzing Traces
 
-Use the provided Python script to analyze execution traces:
+Traces are exported in the Chrome Trace Event Format and can be analyzed using Perfetto or Chrome's built-in tracing
+viewer.
 
-```bash
-# Show last 20 instructions with register state
-python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --last 20
+1. **Visualize**: Open `target/traces/*.json` in [ui.perfetto.dev](https://ui.perfetto.dev).
+2. **Analyze**: Use SQL queries to find patterns (tight loops, hotspots).
 
-# Find all JP instructions
-python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --inst JP
-
-# Generate instruction histogram
-python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --histogram
-
-# Detect infinite loops
-python ceres-test-runner/analyze_trace.py target/traces/1234567890_trace.json --loops
-```
+See `docs/TRACING_GUIDE.md` for the complete workflow and `docs/sql/` for analysis queries.
 
 ### Common Debugging Patterns
 
-1. **Test timeout/hang**: Use `--loops` to detect infinite loops
-2. **Wrong behavior**: Compare `--histogram` output against SameBoy execution
-3. **Instruction bugs**: Use `--inst MNEMONIC` to find specific instruction occurrences
-4. **I/O issues**: Use `--range 0xFF00 0xFFFF` to filter I/O-related instructions
+1. **Test timeout/hang**: Use `docs/sql/tight_loops.sql` to detect infinite loops.
+2. **Wrong behavior**: Compare execution fingerprints against SameBoy execution.
+3. **Instruction bugs**: Use `docs/sql/instruction_hotspots.sql` to find specific instruction occurrences.
+4. **I/O issues**: Filter for I/O-related instructions in the trace viewer.
 
-See `ceres-test-runner/README.md` for complete trace documentation.
+See `docs/TRACING_GUIDE.md` for complete trace documentation.
 
 ## Development Workflow
 

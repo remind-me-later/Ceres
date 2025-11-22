@@ -2,14 +2,23 @@
 -- Shows PPU mode transitions and timing per scanline
 -- Useful for debugging PPU timing issues and understanding rendering
 
-WITH ppu_events AS (
+WITH ppu_args AS (
   SELECT
     s.ts,
-    CAST((SELECT string_value FROM args WHERE arg_set_id = s.arg_set_id AND key = 'args.ly') AS INT) AS scanline,
-    (SELECT string_value FROM args WHERE arg_set_id = s.arg_set_id AND key = 'args.mode') AS mode,
-    CAST((SELECT string_value FROM args WHERE arg_set_id = s.arg_set_id AND key = 'args.dots') AS INT) AS dots
+    a.key,
+    COALESCE(a.string_value, CAST(a.int_value AS TEXT)) AS value
   FROM slice s
+  JOIN args a ON s.arg_set_id = a.arg_set_id
   WHERE s.cat = 'ppu'
+),
+ppu_events AS (
+  SELECT
+    ts,
+    CAST(MAX(CASE WHEN key = 'args.ly' THEN value END) AS INT) AS scanline,
+    MAX(CASE WHEN key = 'args.mode' THEN value END) AS mode,
+    CAST(MAX(CASE WHEN key = 'args.dots' THEN value END) AS INT) AS dots
+  FROM ppu_args
+  GROUP BY ts
 )
 SELECT
   scanline,

@@ -2,14 +2,32 @@
 -- Shows which instructions are executed most frequently
 -- Useful for performance optimization and understanding program behavior
 
-WITH instruction_stats AS (
+WITH cpu_args AS (
   SELECT
-    (SELECT string_value FROM args WHERE arg_set_id = s.arg_set_id AND key = 'args.pc') AS pc,
-    (SELECT string_value FROM args WHERE arg_set_id = s.arg_set_id AND key = 'args.instruction') AS instruction,
-    COUNT(*) AS execution_count,
-    SUM((SELECT int_value FROM args WHERE arg_set_id = s.arg_set_id AND key = 'args.cycles')) AS total_cycles
+    s.ts,
+    a.key,
+    COALESCE(a.string_value, CAST(a.int_value AS TEXT)) AS value,
+    a.int_value
   FROM slice s
+  JOIN args a ON s.arg_set_id = a.arg_set_id
   WHERE s.cat = 'cpu_execution'
+),
+instruction_data AS (
+  SELECT
+    ts,
+    MAX(CASE WHEN key = 'args.pc' THEN value END) AS pc,
+    MAX(CASE WHEN key = 'args.instruction' THEN value END) AS instruction,
+    MAX(CASE WHEN key = 'args.cycles' THEN int_value END) AS cycles
+  FROM cpu_args
+  GROUP BY ts
+),
+instruction_stats AS (
+  SELECT
+    pc,
+    instruction,
+    COUNT(*) AS execution_count,
+    SUM(cycles) AS total_cycles
+  FROM instruction_data
   GROUP BY pc, instruction
 ),
 total_count AS (
