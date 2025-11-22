@@ -8,9 +8,10 @@ use crate::{AudioCallback, Gb};
 enum DmaState {
     #[default]
     Inactive,
-    Starting(u8),     // Startup delay (dots)
-    Transferring(u8), // Current offset (0-159)
-    Finishing,        // Extra cycle after transfer
+    Starting(u8),        // Startup delay (dots), OAM accessible
+    StartingBlocked(u8), // Startup delay (dots), OAM blocked
+    Transferring(u8),    // Current offset (0-159)
+    Finishing,           // Extra cycle after transfer
 }
 
 #[derive(Default)]
@@ -31,8 +32,11 @@ impl Dma {
         }
     }
 
-    pub const fn is_enabled(&self) -> bool {
-        !matches!(self.state, DmaState::Inactive)
+    pub const fn blocks_oam(&self) -> bool {
+        match self.state {
+            DmaState::Inactive | DmaState::Starting(_) => false,
+            DmaState::StartingBlocked(_) | DmaState::Transferring(_) | DmaState::Finishing => true,
+        }
     }
 
     pub const fn read(&self) -> u8 {
@@ -53,6 +57,13 @@ impl Dma {
                         return Some((self.base_addr, 0));
                     }
                     self.state = DmaState::Starting(dots - 4);
+                }
+                DmaState::StartingBlocked(dots) => {
+                    if dots <= 4 {
+                        self.state = DmaState::Transferring(1);
+                        return Some((self.base_addr, 0));
+                    }
+                    self.state = DmaState::StartingBlocked(dots - 4);
                 }
                 DmaState::Transferring(offset) => {
                     let src = self.base_addr.wrapping_add(u16::from(offset));
@@ -81,7 +92,14 @@ impl Dma {
         // The write instruction itself takes 1 M-cycle (4 dots), which is "lost"
         // because tick_m_cycle() runs before write_mem().
         // So we only need to wait 1 more M-cycle to reach the total 2 M-cycle delay.
-        self.state = DmaState::Starting(8);
+        //
+        // If a DMA transfer is already active (restarting), OAM is already blocked,
+        // so we use StartingBlocked to keep it blocked during the delay.
+        if matches!(self.state, DmaState::Inactive) {
+            self.state = DmaState::Starting(8);
+        } else {
+            self.state = DmaState::StartingBlocked(8);
+        }
         self.accumulator = 0;
     }
 }

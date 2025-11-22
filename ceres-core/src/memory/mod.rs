@@ -217,7 +217,7 @@ impl<A: AudioCallback> Gb<A> {
             0xA000..=0xBFFF => self.cart.read_ram(addr),
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.read_wram_lo(addr),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.read_wram_hi(addr),
-            0xFE00..=0xFE9F => self.ppu.read_oam(addr, self.dma.is_enabled()),
+            0xFE00..=0xFE9F => self.ppu.read_oam(addr, self.dma.blocks_oam()),
             0xFEA0..=0xFEFF => 0xFF,
             0xFF00..=0xFFFF => self.read_high((addr & 0xFF) as u8),
         }
@@ -340,7 +340,7 @@ impl<A: AudioCallback> Gb<A> {
                     sim_dots = self.total_dots,
                     "Memory write"
                 );
-                self.ppu.write_oam(addr, val, self.dma.is_enabled());
+                self.ppu.write_oam(addr, val, self.dma.blocks_oam());
             }
             0xFEA0..=0xFEFF => (),
             0xFF00..=0xFFFF => self.write_high((addr & 0xFF) as u8, val),

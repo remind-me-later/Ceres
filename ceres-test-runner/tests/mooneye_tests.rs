@@ -242,7 +242,6 @@ fn test_mooneye_oam_dma_restart() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing
 fn test_mooneye_oam_dma_start() {
     let result = run_mooneye_test("mooneye-test-suite/acceptance/oam_dma_start.gb", Model::Cgb);
     assert_eq!(result, TestResult::Passed, "oam_dma_start test failed");
