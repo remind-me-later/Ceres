@@ -329,7 +329,7 @@ impl<A: AudioCallback> Gb<A> {
                     region = "OAM",
                     "Memory write"
                 );
-                self.ppu.write_oam(addr, val, self.dma.is_active());
+                self.ppu.write_oam(addr, val, self.dma.is_enabled());
             }
             0xFEA0..=0xFEFF => (),
             0xFF00..=0xFFFF => self.write_high((addr & 0xFF) as u8, val),

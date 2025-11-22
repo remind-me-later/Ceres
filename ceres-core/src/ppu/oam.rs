@@ -54,10 +54,25 @@ impl Ppu {
         }
     }
 
-    pub const fn write_oam(&mut self, addr: u16, val: u8, dma_active: bool) {
-        match self.mode() {
-            Mode::HBlank | Mode::VBlank if !dma_active => self.oam.write(addr, val),
-            _ => (),
+    pub fn write_oam(&mut self, addr: u16, val: u8, dma_active: bool) {
+        let mode = self.mode();
+        let blocked = match mode {
+            Mode::HBlank | Mode::VBlank if !dma_active => false,
+            _ => true,
+        };
+        
+        tracing::trace!(
+            target: "oam",
+            addr = addr,
+            value = val,
+            dma_active = dma_active,
+            ppu_mode = ?mode,
+            blocked = blocked,
+            "OAM Write"
+        );
+        
+        if !blocked {
+            self.oam.write(addr, val);
         }
     }
 

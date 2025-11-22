@@ -45,60 +45,97 @@ The test verifies:
 1. **CPU Timing Verified Correct**:
 
    - Implemented proper M-cycle timing for CALL: M=1,2 (read nn), M=3 (internal delay), M=4,5 (push PC)
-   - Refactored `push()` into `push_raw()` (no delay) and `push()` (with M=1 delay for PUSH instruction)
-   - Changed `do_call()` to use `push_raw()` since M=3 delay already consumed
    - Result: `call_timing` and `call_cc_timing` tests PASS
 
 2. **OAM DMA Implementation Issue**:
 
-   - DMA has 2 M-cycle startup delay (-8 dots in code, matches SameBoy's `dma_cycles_modulo = 2`)
-   - DMA transfers 1 byte per M-cycle (160 M-cycles total)
-   - Timing2 tests still FAIL with all registers 0x42
-   - **Conclusion**: OAM DMA timing/behavior doesn't match hardware behavior
+   - Current implementation uses `remaining_dots` to track DMA progress.
+   - `run_dma` consumes dots and transfers bytes.
+   - **Issue 1: Blocking Duration**: `is_active` depends on `remaining_dots > 0`. At the end of an M-cycle,
+     `remaining_dots` becomes 0, causing `is_active` to be false during the subsequent CPU memory access in the same
+     M-cycle. This allows CPU to access OAM when it should be blocked.
+   - **Issue 2: End Delay**: SameBoy implementation shows DMA remains active for 1 extra M-cycle after the last byte
+     transfer (state 0xA0). `ceres-core` disables DMA immediately after the last byte.
+   - **Issue 3: State Tracking**: The current `Dma` struct lacks explicit state tracking (Startup, Transfer, End),
+     making it hard to implement precise timing and blocking behavior.
 
-3. **Probable DMA Issues**:
-   - Exact cycle when DMA starts relative to $FF46 write
-   - How DMA blocks/unblocks OAM access during transfer
-   - Interaction between DMA writes and CPU writes to same OAM addresses
-   - The "warmup" phase behavior (dma_current_dest states in SameBoy)
+3. **SameBoy Comparison**:
+   - SameBoy uses a state machine based on `dma_current_dest` (0-159 for transfer, 160 for end delay).
+   - DMA blocks OAM access whenever `dma_current_dest != 0xA1` (Inactive).
+   - DMA transfers 1 byte per M-cycle (4 T-cycles).
 
-4. **Trace Analysis & Recent Findings (Nov 20, 2025)**:
-   - Generated execution traces for `call_cc_timing2` with detailed instrumentation in `dma.rs` and `oam.rs`.
-   - Identified failure point: Register B becomes `0x42` (failure code) shortly after the `CALL` instruction sequence.
-   - The test executes `CALL` with SP pointing to OAM ($FE20). The `CALL` pushes the return address to OAM while DMA is active.
-   - **Key Finding**: Trace analysis confirms that OAM writes *are* being blocked by DMA.
-     - Event at timestamp `6283723506`: `OAM Write` to address `65055` ($FE1F) with `blocked=true` and `dma_active=true`.
-     - This confirms the emulator is correctly blocking CPU access to OAM during DMA.
-   - **The Problem**: The test failure implies the blocking is happening at the *wrong time* or for the *wrong duration*
-     relative to the `CALL` instruction's memory accesses.
-   - **Performance Issue**: The detailed tracing required to debug this issue generates massive trace files (>300MB for a
-     few seconds), causing system instability.
-   - **Next Steps**:
-     - Pause debugging to address tracing performance.
-     - Need to optimize tracing (e.g., circular buffer, selective enabling) before continuing deep cycle-accurate
-       debugging.
-     - Re-evaluate the DMA startup delay and blocking logic against hardware documentation (Pan Docs) and reference
-       implementations (SameBoy).
+## Proposed Changes
 
-## What Changes
+### 1. Refactor `Dma` Struct
 
-- ~~Add trace collection capability~~ (not needed - analysis complete)
-- ~~Analyze execution trace~~ (completed - found CPU timing was correct)
-- ~~Fix CALL instruction timing~~ (completed - CALL timing verified correct)
-- **Investigate OAM DMA implementation** (next step)
-- **Compare DMA behavior with SameBoy** (cycle-by-cycle comparison needed)
-- **Fix OAM DMA timing/access blocking** (specific issue TBD)
-- Verify fix by confirming timing2 tests pass
-- Un-ignore passing tests in mooneye_tests.rs
-- Update AGENTS.md to reflect 44 passing tests (from 42)
+Introduce a state machine to track DMA progress explicitly, similar to SameBoy.
+
+```rust
+enum DmaState {
+    Inactive,
+    Starting(i32), // Startup delay (dots)
+    Transferring(u16), // Current offset (0-159)
+    Finishing, // Extra cycle after transfer
+}
+
+pub struct Dma {
+    state: DmaState,
+    src_base: u16,
+    reg: u8,
+    // ...
+}
+```
+
+### 2. Implement Cycle-Accurate State Machine
+
+Update `run_dma` (or `advance`) to step the state machine based on cycles/dots.
+
+- **Startup**: Wait for 2 M-cycles (8 dots).
+- **Transfer**: Transfer 1 byte every M-cycle (4 dots). Increment offset.
+- **Finishing**: Wait for 1 extra M-cycle (4 dots) after offset 159.
+- **Inactive**: State becomes Inactive after Finishing.
+
+### 3. Fix Blocking Logic
+
+Update `is_active` (or `is_enabled`) to return `true` for all states except `Inactive`. This ensures OAM is blocked
+during startup, transfer, and the end delay.
+
+```rust
+impl Dma {
+    pub fn is_active(&self) -> bool {
+        !matches!(self.state, DmaState::Inactive)
+    }
+}
+```
+
+### 4. Update `run_dma` Usage
+
+Ensure `run_dma` is called correctly in `advance_dots_no_timers` to advance the state machine. The logic should handle
+`dots` increments and transition states accordingly.
+
+## Plan
+
+1. **Modify `ceres-core/src/memory/dma.rs`**:
+
+   - Define `DmaState` enum.
+   - Update `Dma` struct to use `DmaState`.
+   - Rewrite `write` (start DMA) to initialize `Starting` state.
+   - Rewrite `run_dma` (or `advance`) to handle state transitions and byte transfers.
+   - Update `is_active` / `is_enabled`.
+
+2. **Verify OAM Blocking**:
+
+   - Ensure `ceres-core/src/ppu/oam.rs` uses the updated `is_active` method to block CPU writes.
+
+3. **Test**:
+   - Run `test_mooneye_call_cc_timing2` and `test_mooneye_call_timing2`.
+   - Verify other DMA tests still pass.
+   - **Regression Testing**: Ensure all currently passing integration tests (42 Mooneye tests, Blargg tests, etc.)
+     continue to pass.
 
 ## Impact
 
-- Affected specs: N/A (investigation/debugging complete for CPU, moving to DMA)
-- Affected code:
-  - `ceres-core/src/sm83.rs` - ✅ FIXED: Refactored push timing, do_call now uses push_raw
-  - `ceres-core/src/memory/dma.rs` - **NEEDS FIX**: OAM DMA timing/behavior mismatch
-  - `ceres-core/src/ppu/oam.rs` - May need updates to OAM access blocking logic
-  - `ceres-test-runner/tests/mooneye_tests.rs` - Remove #[ignore] from timing2 tests once fixed
-  - `AGENTS.md` - Update passing test count from 42 to 44
-- Risk: Low-Medium - DMA fix may affect other DMA-dependent tests, requires careful validation
+- **Affected code**:
+  - `ceres-core/src/memory/dma.rs`: Major refactor.
+  - `ceres-core/src/ppu/oam.rs`: Minor update to usage if needed.
+- **Risk**: Medium. Changing DMA timing can affect many games. Regression testing with other ROMs is recommended.
