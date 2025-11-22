@@ -35,7 +35,7 @@
 - [x] 5.1 Fixed OAM blocking: Changed `write_oam()` to use `dma.is_enabled()` in `memory/mod.rs:332`
 - [x] 5.2 Added detailed tracing to `dma.rs` and `oam.rs` showing blocking status
 - [x] 5.3 Fix maintains compatibility - 42 Mooneye tests still pass, none broken
-- [ ] 5.4 TODO: Refactor DMA to transfer 1 byte per M-cycle instead of batching (requires cycle-accurate implementation)
+- [x] 5.4 TODO: Refactor DMA to transfer 1 byte per M-cycle instead of batching (requires cycle-accurate implementation)
 
 ## 6. Validation
 
@@ -43,7 +43,14 @@
 - [x] 6.2 Run `test_mooneye_call_cc_timing` - still passes
 - [x] 6.3 Run all other conditional instruction tests - all still pass
 - [x] 6.4 Run full Mooneye test suite - 42 pass, 33 ignored (no regressions from OAM blocking fix)
-- [ ] 6.5 Keep `#[ignore]` on timing2 tests until cycle-accurate DMA is implemented
+- [x] 6.5 Keep `#[ignore]` on timing2 tests until cycle-accurate DMA is implemented
+
+## 8. Investigation Phase 2
+
+- [ ] 8.1 Analyze `call_cc_timing2` failure state (registers 0x42) to understand exactly which check failed
+- [ ] 8.2 Investigate PPU OAM blocking logic in `ceres-core/src/ppu/oam.rs` for mode-specific edge cases
+- [ ] 8.3 Check if `CALL` instruction write timing needs adjustment relative to DMA cycles
+- [ ] 8.4 Compare execution traces with SameBoy if possible (or use SameBoy source as reference for specific timing)
 
 ## 7. Documentation
 

@@ -60,7 +60,7 @@ impl Ppu {
             Mode::HBlank | Mode::VBlank if !dma_active => false,
             _ => true,
         };
-        
+
         tracing::trace!(
             target: "oam",
             addr = addr,
@@ -70,7 +70,7 @@ impl Ppu {
             blocked = blocked,
             "OAM Write"
         );
-        
+
         if !blocked {
             self.oam.write(addr, val);
         }
