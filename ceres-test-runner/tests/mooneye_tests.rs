@@ -40,8 +40,8 @@
 //! ## Current Status
 //!
 //! Out of 75 acceptance tests:
-//! - **42 tests pass** (56% pass rate)
-//! - **33 tests fail** and are marked with `#[ignore]`
+//! - **43 tests pass** (57% pass rate)
+//! - **32 tests fail** and are marked with `#[ignore]`
 //!
 //! Failing tests need improvements in:
 //! - Boot ROM behavior and register initialization
@@ -49,6 +49,12 @@
 //! - Timer/interrupt edge cases
 //! - OAM DMA sources and timing
 //! - Serial communication timing
+//!
+//! ## Recent Improvements
+//!
+//! - **IE Push Test**: Now passing! Fixed interrupt dispatch to handle IE register modifications
+//!   during PC push operations. When the stack pointer points to $FFFF (IE register), writes during
+//!   the upper byte push can now correctly cancel an interrupt mid-dispatch.
 
 use ceres_core::Model;
 use ceres_test_runner::{
@@ -453,7 +459,6 @@ fn test_mooneye_instr_daa() {
 // =============================================================================
 
 #[test]
-#[ignore] // TODO: Enable when passing
 fn test_mooneye_interrupts_ie_push() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/interrupts/ie_push.gb",

@@ -235,10 +235,37 @@ impl<A: AudioCallback> Gb<A> {
                 self.tick_m_cycle();
                 self.tick_m_cycle();
 
-                self.push(self.cpu.pc);
+                // Perform interrupt push with IE re-check during upper byte write
+                // to handle the edge case where IE is modified mid-dispatch.
+                //
+                // Hardware behavior (verified by Mooneye ie_push test):
+                // - If SP=$0000, upper byte push writes to $FFFF (IE register)
+                // - If the write clears the interrupt bit, dispatch is cancelled (PC=$0000)
+                // - If SP=$0001, lower byte push writes to IE, but it's too late to cancel
+                let pc = self.cpu.pc;
+                let [lo, hi] = pc.to_le_bytes();
+
+                // Push upper byte
+                self.cpu.sp = self.cpu.sp.wrapping_sub(1);
+                self.write_cpu(self.cpu.sp, hi);
+
+                // Re-check interrupt queue after upper byte push
+                // IE may have been modified by the write to $FFFF
+                let (new_int, new_vector) = self.ints.determine_interrupt();
+
+                // Push lower byte
+                self.cpu.sp = self.cpu.sp.wrapping_sub(1);
+                self.write_cpu(self.cpu.sp, lo);
+                self.tick_m_cycle();
+
+                // Acknowledge the interrupt only if it's still pending
+                // If IE was modified to clear the original interrupt, don't clear IF
+                if new_int != 0 {
+                    self.ints.acknowledge_interrupt(new_int);
+                }
 
                 self.ints.disable();
-                self.cpu.pc = self.ints.handle();
+                self.cpu.pc = new_vector;
             }
         }
     }
@@ -431,7 +458,8 @@ impl<A: AudioCallback> Gb<A> {
         // Capture timestamp before advancing time for DMA start logging
         if addr >= 0xFF00 {
             let io_addr = (addr & 0xFF) as u8;
-            if io_addr == 0x46 {  // DMA register
+            if io_addr == 0x46 {
+                // DMA register
                 self.dma_write_start_dots = self.total_dots;
             }
         }
