@@ -120,7 +120,7 @@ impl<A: AudioCallback> Gb<A> {
             } else {
                 "General"
             };
-            
+
             tracing::trace!(
                 target: "dma",
                 src = format!("${:04X}", start_src),

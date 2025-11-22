@@ -89,7 +89,6 @@ pub struct Gb<A: AudioCallback> {
     dma: Dma,
     dma_write_start_dots: u64,
     dots_ran: i32,
-    total_dots: u64,
     #[cfg(feature = "game_genie")]
     game_genie: GameGenie,
     hdma: Hdma,
@@ -101,6 +100,7 @@ pub struct Gb<A: AudioCallback> {
     model: Model,
     ppu: Ppu,
     serial: Serial,
+    total_dots: u64,
     trace_enabled: bool,
     trace_end_pc: Option<u16>,
     trace_start_pc: Option<u16>,

@@ -19,7 +19,7 @@ pub mod timeouts {
 use anyhow::Result;
 use ceres_core::{AudioCallback, Button, Gb, GbBuilder, Model, Sample};
 use ceres_std::tracing::{RingBufferLayer, Trigger, TriggerLayer};
-use tracing_subscriber::{layer::SubscriberExt, Registry};
+use tracing_subscriber::{Registry, layer::SubscriberExt};
 
 const DEFAULT_TIMEOUT_FRAMES: u32 = 1792;
 
@@ -65,7 +65,6 @@ pub enum TestResult {
 }
 
 /// Configuration for running a test ROM
-#[expect(clippy::struct_excessive_bools, reason = "Config struct")]
 pub struct TestConfig {
     pub capture_serial: bool,
     pub model: Model,
@@ -130,7 +129,8 @@ impl TestRunner {
         let breakpoint_hit = self.gb.check_and_reset_ld_b_b_breakpoint();
 
         // If Mooneye validation is enabled and breakpoint was hit, check CPU registers
-        if self.config.use_mooneye_validation && breakpoint_hit
+        if self.config.use_mooneye_validation
+            && breakpoint_hit
             && let Some(result) = self.check_mooneye_result()
         {
             return Some(result);
@@ -242,9 +242,9 @@ impl TestRunner {
 
         gb.set_color_correction_mode(ceres_core::ColorCorrectionMode::Disabled);
 
-        let (trace_layer, _trace_guard) = if let Some(size) = config.trace_buffer_size {
+        let (trace_layer, trace_guard) = if let Some(size) = config.trace_buffer_size {
             let layer = RingBufferLayer::new(size);
-            
+
             if config.trace_start_trigger.is_some() || config.trace_stop_trigger.is_some() {
                 let trigger_layer = TriggerLayer::new(
                     layer.clone(),
@@ -271,14 +271,14 @@ impl TestRunner {
             gb,
             serial_output: String::new(),
             trace_layer,
-            _trace_guard,
+            _trace_guard: trace_guard,
         })
     }
-    
+
     /// Enable tracing on the Game Boy instance
-    /// 
+    ///
     /// This should be called after setting up a tracing subscriber externally.
-    pub fn enable_tracing(&mut self) {
+    pub const fn enable_tracing(&mut self) {
         self.gb.set_trace_enabled(true);
     }
 
@@ -296,7 +296,7 @@ impl TestRunner {
     /// // Skip boot ROM and trace only game code
     /// runner.set_trace_pc_range(0x0100, 0xFFFF);
     /// ```
-    pub fn set_trace_pc_range(&mut self, start: u16, end: u16) {
+    pub const fn set_trace_pc_range(&mut self, start: u16, end: u16) {
         self.gb.set_trace_pc_range(start, end);
     }
 
@@ -318,7 +318,7 @@ impl TestRunner {
             }
 
             layer.flush_to_file(path)?;
-            eprintln!("Trace dumped to {}", filename);
+            eprintln!("Trace dumped to {filename}");
         }
         Ok(())
     }

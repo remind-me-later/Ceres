@@ -16,9 +16,9 @@ use ceres_test_runner::{
 ///
 /// # Arguments
 /// * `rom_name` - Name of the ROM file (without path)
-/// * `frames` - Number of frames to run (default: 2, special: 24 for is_if_set_during_ime0)
+/// * `frames` - Number of frames to run (default: 2, special: 24 for `is_if_set_during_ime0`)
 fn run_gbmicrotest(rom_name: &str, frames: u32) -> TestResult {
-    let path = format!("gbmicrotest/{}", rom_name);
+    let path = format!("gbmicrotest/{rom_name}");
     let rom = match load_test_rom(&path) {
         Ok(rom) => rom,
         Err(e) => return TestResult::Failed(format!("Failed to load test ROM: {e}")),
@@ -47,8 +47,7 @@ fn run_gbmicrotest(rom_name: &str, frames: u32) -> TestResult {
             let actual = runner.read_memory(0xFF80);
             let expected = runner.read_memory(0xFF81);
             TestResult::Failed(format!(
-                "Test failed: actual=0x{:02X}, expected=0x{:02X}",
-                actual, expected
+                "Test failed: actual=0x{actual:02X}, expected=0x{expected:02X}"
             ))
         }
         _ => TestResult::Unknown,
@@ -64,6 +63,7 @@ macro_rules! gbmicrotest {
     ($name:ident, $rom:literal) => {
         #[test]
         #[ignore = "gbmicrotest requires cycle-accurate timing - enable individually as accuracy improves"]
+        #[allow(non_snake_case)]
         fn $name() {
             let result = run_gbmicrotest($rom, 2);
             assert_eq!(result, TestResult::Passed);

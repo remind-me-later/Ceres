@@ -8,10 +8,7 @@ use ceres_test_runner::{
 };
 
 /// Run mbc3-tester test
-fn run_mbc3_tester(
-    model: ceres_core::Model,
-    screenshot_name: &str,
-) -> TestResult {
+fn run_mbc3_tester(model: ceres_core::Model, screenshot_name: &str) -> TestResult {
     let rom = match load_test_rom("mbc3-tester/mbc3-tester.gb") {
         Ok(rom) => rom,
         Err(e) => return TestResult::Failed(format!("Failed to load test ROM: {e}")),
@@ -35,10 +32,7 @@ fn run_mbc3_tester(
 #[test]
 #[ignore]
 fn test_mbc3_tester_cgb() {
-    let result = run_mbc3_tester(
-        ceres_core::Model::Cgb,
-        "mbc3-tester-cgb.png",
-    );
+    let result = run_mbc3_tester(ceres_core::Model::Cgb, "mbc3-tester-cgb.png");
 
     match &result {
         TestResult::Passed => println!("✓ MBC3 tester passed (CGB mode)"),
@@ -63,10 +57,7 @@ fn test_mbc3_tester_cgb() {
 #[test]
 #[ignore]
 fn test_mbc3_tester_dmg() {
-    let result = run_mbc3_tester(
-        ceres_core::Model::Dmg,
-        "mbc3-tester-dmg.png",
-    );
+    let result = run_mbc3_tester(ceres_core::Model::Dmg, "mbc3-tester-dmg.png");
 
     match &result {
         TestResult::Passed => println!("✓ MBC3 tester passed (DMG mode)"),

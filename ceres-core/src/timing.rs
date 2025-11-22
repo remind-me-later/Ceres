@@ -62,7 +62,11 @@ impl<A: AudioCallback> Gb<A> {
         self.cart.run_rtc(dots);
 
         self.dots_ran += dots;
-        self.total_dots += dots as u64;
+
+        #[expect(clippy::cast_sign_loss)]
+        {
+            self.total_dots += dots as u64;
+        }
     }
 
     const fn advance_tima_state(&mut self) {
