@@ -772,7 +772,6 @@ fn test_mooneye_timer_tim11_div_trigger() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing
 fn test_mooneye_timer_tima_reload() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/timer/tima_reload.gb",
@@ -782,7 +781,6 @@ fn test_mooneye_timer_tima_reload() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing
 fn test_mooneye_timer_tima_write_reloading() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/timer/tima_write_reloading.gb",
@@ -796,7 +794,6 @@ fn test_mooneye_timer_tima_write_reloading() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing
 fn test_mooneye_timer_tma_write_reloading() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/timer/tma_write_reloading.gb",

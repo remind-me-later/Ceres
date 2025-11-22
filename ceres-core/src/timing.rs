@@ -16,7 +16,10 @@ pub struct Clock {
 
 impl Clock {
     pub const fn tima(&self) -> u8 {
-        self.tima
+        match self.tima_state {
+            TIMAState::Reloading => 0,
+            _ => self.tima,
+        }
     }
 
     pub const fn tma(&self) -> u8 {
@@ -166,11 +169,22 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub const fn write_tima(&mut self, val: u8) {
-        self.clock.tima = val;
+        match self.clock.tima_state {
+            TIMAState::Reloaded => (),
+            TIMAState::Reloading => {
+                self.clock.tima = val;
+                self.clock.tima_state = TIMAState::Running;
+            }
+            TIMAState::Running => self.clock.tima = val,
+        }
     }
 
     #[inline]
     pub const fn write_tma(&mut self, val: u8) {
         self.clock.tma = val;
+        match self.clock.tima_state {
+            TIMAState::Reloading | TIMAState::Reloaded => self.clock.tima = val,
+            _ => (),
+        }
     }
 }
