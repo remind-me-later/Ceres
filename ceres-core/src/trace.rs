@@ -77,6 +77,7 @@ pub fn instruction(
     l: u8,
     sp: u16,
     cycles: u8,
+    sim_dots: u64,
 ) {
     tracing::event!(
         target: "cpu_execution",
@@ -93,6 +94,7 @@ pub fn instruction(
         l = l,
         sp = sp,
         cycles = cycles,
+        sim_dots = sim_dots,
         "EXECUTE_INSTRUCTION"
     );
 }
@@ -108,7 +110,7 @@ mod tests {
         // Just test that the function can be called without panicking
         // The actual tracing functionality would be tested in integration tests
         instruction(
-            0x100, "NOP", 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0000, 4,
+            0x100, "NOP", 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0000, 4, 0,
         );
     }
 }

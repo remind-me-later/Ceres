@@ -139,10 +139,14 @@ where
         let mut visitor = JsonVisitor { fields: &mut fields };
         event.record(&mut visitor);
 
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_micros() as u64;
+        let timestamp = if let Some(sim_dots) = fields.get("sim_dots").and_then(|v| v.as_u64()) {
+            sim_dots
+        } else {
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_micros() as u64
+        };
 
         let stored_event = StoredEvent {
             timestamp,

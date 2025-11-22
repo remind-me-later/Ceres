@@ -219,3 +219,37 @@ fn debug_call_timing2_comparison() {
         eprintln!("Compare this with call_cc_timing2 trace to find differences");
     }
 }
+
+#[test]
+#[ignore]
+fn debug_call_timing_failure() {
+    eprintln!("=== Debugging call_timing (FAILING) with RingBufferLayer ===");
+    
+    let rom = load_test_rom("mooneye-test-suite/acceptance/call_timing.gb")
+        .expect("Failed to load test ROM");
+
+    let config = TestConfig {
+        model: Model::Cgb,
+        timeout_frames: timeouts::MOONEYE_ACCEPTANCE,
+        use_mooneye_validation: true,
+        capture_serial: false,
+        test_name: "call_timing".to_string(),
+        trace_buffer_size: Some(2_000_000), // Large buffer for detailed trace
+        ..TestConfig::default()
+    };
+
+    let mut runner = TestRunner::new(rom, config).expect("Failed to create test runner");
+    runner.enable_tracing();
+    runner.set_trace_pc_range(0x0100, 0xFFFF);
+    
+    eprintln!("Running test...");
+    let result = runner.run();
+    
+    eprintln!("\nTest result: {:?}", result);
+    eprintln!("Frames run: {}", runner.frames_run());
+    
+    // Trace is dumped automatically on failure or timeout by TestRunner, 
+    // but we can force dump it here too if needed.
+    // TestRunner dumps to target/traces/{test_name}_{suffix}_{timestamp}.json
+    runner.dump_trace("manual").unwrap();
+}

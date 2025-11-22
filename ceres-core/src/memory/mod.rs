@@ -261,7 +261,16 @@ impl<A: AudioCallback> Gb<A> {
             SCY => self.ppu.write_scy(val),
             SCX => self.ppu.write_scx(val),
             LYC => self.ppu.write_lyc(val),
-            DMA => self.dma.write(val),
+            DMA => {
+                tracing::trace!(
+                    target: "dma",
+                    src_base = format!("${:04X}", u16::from(val) << 8),
+                    delay_dots = 4,
+                    sim_dots = self.dma_write_start_dots,
+                    "OAM DMA started"
+                );
+                self.dma.write(val);
+            }
             BGP => self.ppu.write_bgp(val),
             OBP0 => self.ppu.write_obp0(val),
             OBP1 => self.ppu.write_obp1(val),
@@ -314,6 +323,7 @@ impl<A: AudioCallback> Gb<A> {
                     addr = format!("${:04X}", addr),
                     value = format!("${:02X}", val),
                     region = "VRAM",
+                    sim_dots = self.total_dots,
                     "Memory write"
                 );
                 self.ppu.write_vram(addr, val);
@@ -327,6 +337,7 @@ impl<A: AudioCallback> Gb<A> {
                     addr = format!("${:04X}", addr),
                     value = format!("${:02X}", val),
                     region = "OAM",
+                    sim_dots = self.total_dots,
                     "Memory write"
                 );
                 self.ppu.write_oam(addr, val, self.dma.is_enabled());

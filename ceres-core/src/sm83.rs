@@ -88,6 +88,7 @@ impl<A: AudioCallback> Gb<A> {
                 l,
                 self.cpu.sp(),
                 length,
+                self.total_dots,
             );
         }
     }
@@ -279,6 +280,7 @@ impl<A: AudioCallback> Gb<A> {
                 sp = self.cpu.sp(),
                 flags = flags,
                 length = length,
+                sim_dots = self.total_dots,
                 "EXECUTE_INSTRUCTION_DETAIL"
             );
         }
@@ -426,6 +428,13 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     fn write_cpu(&mut self, addr: u16, val: u8) {
+        // Capture timestamp before advancing time for DMA start logging
+        if addr >= 0xFF00 {
+            let io_addr = (addr & 0xFF) as u8;
+            if io_addr == 0x46 {  // DMA register
+                self.dma_write_start_dots = self.total_dots;
+            }
+        }
         self.tick_m_cycle();
         self.write_mem(addr, val);
     }

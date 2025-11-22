@@ -77,16 +77,12 @@ impl Dma {
     pub fn write(&mut self, val: u8) {
         self.reg = val;
         self.base_addr = u16::from(val) << 8;
-        // Startup delay: 2 M-cycles = 8 dots
+        // Startup delay: 1 M-cycle = 4 dots
+        // The write instruction itself takes 1 M-cycle (4 dots), which is "lost"
+        // because tick_m_cycle() runs before write_mem().
+        // So we only need to wait 1 more M-cycle to reach the total 2 M-cycle delay.
         self.state = DmaState::Starting(8);
         self.accumulator = 0;
-
-        tracing::trace!(
-            target: "dma",
-            src_base = format!("${:04X}", self.base_addr),
-            delay_dots = 8,
-            "OAM DMA started"
-        );
     }
 }
 
@@ -111,6 +107,7 @@ impl<A: AudioCallback> Gb<A> {
                 src = format!("${:04X}", src),
                 oam_offset = format!("${:02X}", dst_offset),
                 val = format!("${:02X}", val),
+                sim_dots = self.total_dots,
                 "OAM DMA transfer byte"
             );
         }
