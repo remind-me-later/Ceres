@@ -48,6 +48,14 @@ impl Dma {
         self.reg = val;
         self.addr = u16::from(val) << 8;
         self.is_enabled = true;
+        
+        tracing::trace!(
+            target: "dma",
+            src_base = format!("${:04X}", self.addr),
+            delay_dots = -8,
+            restarting = self.is_restarting,
+            "OAM DMA started"
+        );
     }
 }
 
@@ -59,6 +67,7 @@ impl<A: AudioCallback> Gb<A> {
         }
 
         let start_addr = self.dma.addr;
+        let start_remaining = self.dma.remaining_dots();
         let mut bytes_transferred = 0u16;
 
         while self.dma.remaining_dots() >= 4 {
@@ -82,9 +91,12 @@ impl<A: AudioCallback> Gb<A> {
         if bytes_transferred > 0 {
             tracing::trace!(
                 target: "dma",
-                src = format!("${:04X}", start_addr),
-                dst = format!("${:04X}", start_addr & 0xFF),
+                src_start = format!("${:04X}", start_addr),
+                src_end = format!("${:04X}", self.dma.addr.wrapping_sub(1)),
+                oam_offset = format!("${:02X}", (start_addr & 0xFF)),
                 bytes = bytes_transferred,
+                remaining_dots_before = start_remaining,
+                remaining_dots_after = self.dma.remaining_dots(),
                 "OAM DMA transfer"
             );
         }
