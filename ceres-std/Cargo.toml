@@ -24,7 +24,6 @@ optional = true
 
 [dependencies.cpal]
 git = "https://github.com/RustAudio/cpal.git"
-branch = "fix/pipewire-alsa-latency"
 
 [dependencies.gilrs]
 version = "*"
