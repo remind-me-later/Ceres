@@ -804,3 +804,280 @@ fn test_mooneye_timer_tma_write_reloading() {
         "timer/tma_write_reloading test failed"
     );
 }
+
+// =============================================================================
+// Emulator-Only MBC1 Tests
+// =============================================================================
+
+#[test]
+fn test_mooneye_mbc1_bits_bank1() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc1/bits_bank1.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc1/bits_bank1 test failed");
+}
+
+#[test]
+fn test_mooneye_mbc1_bits_bank2() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc1/bits_bank2.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc1/bits_bank2 test failed");
+}
+
+#[test]
+fn test_mooneye_mbc1_bits_mode() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc1/bits_mode.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc1/bits_mode test failed");
+}
+
+#[test]
+fn test_mooneye_mbc1_bits_ramg() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc1/bits_ramg.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc1/bits_ramg test failed");
+}
+
+#[test]
+#[ignore] // TODO: Enable when multicart support is implemented
+fn test_mooneye_mbc1_multicart_rom_8mb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc1/multicart_rom_8Mb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "mbc1/multicart_rom_8Mb test failed"
+    );
+}
+
+#[test]
+#[ignore] // TODO: Enable when passing - index out of bounds error
+fn test_mooneye_mbc1_ram_64kb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc1/ram_64kb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc1/ram_64kb test failed");
+}
+
+#[test]
+fn test_mooneye_mbc1_ram_256kb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc1/ram_256kb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc1/ram_256kb test failed");
+}
+
+#[test]
+#[ignore] // TODO: Enable when passing - Mooneye validation fails
+fn test_mooneye_mbc1_rom_512kb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc1/rom_512kb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc1/rom_512kb test failed");
+}
+
+#[test]
+#[ignore] // TODO: Enable when passing - Mooneye validation fails
+fn test_mooneye_mbc1_rom_1mb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc1/rom_1Mb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc1/rom_1Mb test failed");
+}
+
+#[test]
+#[ignore] // TODO: Enable when passing - Mooneye validation fails
+fn test_mooneye_mbc1_rom_2mb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc1/rom_2Mb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc1/rom_2Mb test failed");
+}
+
+#[test]
+#[ignore] // TODO: Enable when passing - Mooneye validation fails
+fn test_mooneye_mbc1_rom_4mb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc1/rom_4Mb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc1/rom_4Mb test failed");
+}
+
+#[test]
+#[ignore] // TODO: Enable when passing - Timeout
+fn test_mooneye_mbc1_rom_8mb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc1/rom_8Mb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc1/rom_8Mb test failed");
+}
+
+#[test]
+#[ignore] // TODO: Enable when passing - Timeout
+fn test_mooneye_mbc1_rom_16mb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc1/rom_16Mb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc1/rom_16Mb test failed");
+}
+
+// =============================================================================
+// Emulator-Only MBC2 Tests
+// =============================================================================
+
+#[test]
+#[ignore] // TODO: Enable when passing - Mooneye validation fails
+fn test_mooneye_mbc2_bits_ramg() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc2/bits_ramg.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc2/bits_ramg test failed");
+}
+
+#[test]
+fn test_mooneye_mbc2_bits_romb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc2/bits_romb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc2/bits_romb test failed");
+}
+
+#[test]
+fn test_mooneye_mbc2_bits_unused() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc2/bits_unused.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc2/bits_unused test failed");
+}
+
+#[test]
+#[ignore] // TODO: Enable when passing - Mooneye validation fails
+fn test_mooneye_mbc2_ram() {
+    let result = run_mooneye_test("mooneye-test-suite/emulator-only/mbc2/ram.gb", Model::Cgb);
+    assert_eq!(result, TestResult::Passed, "mbc2/ram test failed");
+}
+
+#[test]
+#[ignore] // TODO: Enable when passing - index out of bounds error
+fn test_mooneye_mbc2_rom_512kb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc2/rom_512kb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc2/rom_512kb test failed");
+}
+
+#[test]
+#[ignore] // TODO: Enable when passing - index out of bounds error
+fn test_mooneye_mbc2_rom_1mb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc2/rom_1Mb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc2/rom_1Mb test failed");
+}
+
+#[test]
+fn test_mooneye_mbc2_rom_2mb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc2/rom_2Mb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc2/rom_2Mb test failed");
+}
+
+// =============================================================================
+// Emulator-Only MBC5 Tests
+// =============================================================================
+
+#[test]
+fn test_mooneye_mbc5_rom_512kb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc5/rom_512kb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc5/rom_512kb test failed");
+}
+
+#[test]
+fn test_mooneye_mbc5_rom_1mb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc5/rom_1Mb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc5/rom_1Mb test failed");
+}
+
+#[test]
+fn test_mooneye_mbc5_rom_2mb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc5/rom_2Mb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc5/rom_2Mb test failed");
+}
+
+#[test]
+fn test_mooneye_mbc5_rom_4mb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc5/rom_4Mb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc5/rom_4Mb test failed");
+}
+
+#[test]
+fn test_mooneye_mbc5_rom_8mb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc5/rom_8Mb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc5/rom_8Mb test failed");
+}
+
+#[test]
+fn test_mooneye_mbc5_rom_16mb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc5/rom_16Mb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc5/rom_16Mb test failed");
+}
+
+#[test]
+fn test_mooneye_mbc5_rom_32mb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc5/rom_32Mb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc5/rom_32Mb test failed");
+}
+
+#[test]
+fn test_mooneye_mbc5_rom_64mb() {
+    let result = run_mooneye_test(
+        "mooneye-test-suite/emulator-only/mbc5/rom_64Mb.gb",
+        Model::Cgb,
+    );
+    assert_eq!(result, TestResult::Passed, "mbc5/rom_64Mb test failed");
+}
