@@ -143,12 +143,6 @@ timeouts alone.
 
 Serial communication functionality tests
 
-## Known Issues
-
-- **DMG PPU rendering**: The `test_dmg_acid2_dmg` test is currently failing due to differences in DMG mode PPU
-  rendering. The CGB mode version passes, indicating the issue is specific to DMG palette handling or rendering
-  behavior.
-
 ## Writing New Tests
 
 To add a new test ROM:

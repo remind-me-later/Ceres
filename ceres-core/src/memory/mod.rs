@@ -124,7 +124,7 @@ impl<A: AudioCallback> Gb<A> {
         match addr {
             P1 => self.joy.read_p1(),
             SB => self.serial.read_sb(),
-            SC => self.serial.read_sc(),
+            SC => self.serial.read_sc(self.cgb_mode),
             DIV => self.read_div(),
             TIMA => self.clock.tima(),
             TMA => self.clock.tma(),

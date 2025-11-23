@@ -320,21 +320,21 @@ fn test_mooneye_boot_div_dmgabcmgb() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - SGB hint
+#[ignore = "SGB not yet supported"]
 fn test_mooneye_boot_div_s() {
     let result = run_mooneye_test("mooneye-test-suite/acceptance/boot_div-S.gb", Model::Dmg);
     assert_eq!(result, TestResult::Passed, "boot_div-S test failed");
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - SGB hint
+#[ignore = "SGB not yet supported"]
 fn test_mooneye_boot_div2_s() {
     let result = run_mooneye_test("mooneye-test-suite/acceptance/boot_div2-S.gb", Model::Dmg);
     assert_eq!(result, TestResult::Passed, "boot_div2-S test failed");
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - DMG CPU revision 0
+#[ignore = "DMG 0 not supported yet"]
 fn test_mooneye_boot_hwio_dmg0() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/boot_hwio-dmg0.gb",
@@ -344,7 +344,7 @@ fn test_mooneye_boot_hwio_dmg0() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - DMG CPU revisions A/B/C + MGB
+#[ignore = "Expect A and B to be pressed after boot?"]
 fn test_mooneye_boot_hwio_dmgabcmgb() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/boot_hwio-dmgABCmgb.gb",
@@ -358,7 +358,7 @@ fn test_mooneye_boot_hwio_dmgabcmgb() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - SGB hint
+#[ignore = "SGB not yet supported"]
 fn test_mooneye_boot_hwio_s() {
     let result = run_mooneye_test("mooneye-test-suite/acceptance/boot_hwio-S.gb", Model::Dmg);
     assert_eq!(result, TestResult::Passed, "boot_hwio-S test failed");
@@ -423,7 +423,6 @@ fn test_mooneye_bits_reg_f() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - GS hint
 fn test_mooneye_bits_unused_hwio_gs() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/bits/unused_hwio-GS.gb",
