@@ -55,6 +55,7 @@ assets/
 **/*.so
 
 test-roms/
+test-source/
 
 # Agent files
 .gemini/

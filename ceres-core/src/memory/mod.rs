@@ -257,10 +257,10 @@ impl<A: AudioCallback> Gb<A> {
             NR52 => self.apu.write_nr52(val),
             WAV_BEG..=WAV_END => self.apu.write_wave_ram(addr, val),
             LCDC => self.ppu.write_lcdc(val, &mut self.ints),
-            STAT => self.ppu.write_stat(val),
+            STAT => self.ppu.write_stat(val, &mut self.ints),
             SCY => self.ppu.write_scy(val),
             SCX => self.ppu.write_scx(val),
-            LYC => self.ppu.write_lyc(val),
+            LYC => self.ppu.write_lyc(val, &mut self.ints),
             DMA => {
                 tracing::trace!(
                     target: "dma",

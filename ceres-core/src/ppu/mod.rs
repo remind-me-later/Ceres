@@ -87,6 +87,8 @@ pub struct Ppu {
     enable_timer: i32,
     lcdc: u8,
     ly: u8,
+    /// LY value used for LYC comparison (may differ from displayed LY during transitions)
+    ly_for_comparison: u8,
     lyc: u8,
     oam: Oam,
     obp0: u8,
@@ -99,6 +101,9 @@ pub struct Ppu {
     scx: u8,
     scy: u8,
     stat: u8,
+    /// Internal STAT interrupt line - OR of all enabled STAT sources.
+    /// Used to implement edge-triggered interrupt behavior.
+    stat_interrupt_line: bool,
     vram: Vram,
     win_in_frame: bool,
     win_in_ly: bool,
@@ -119,14 +124,38 @@ impl Ppu {
         &mut self.bcp
     }
 
-    const fn check_lyc(&mut self, ints: &mut Interrupts) {
-        self.stat &= !STAT_LYC_B;
+    /// Update the STAT interrupt line and fire interrupt on rising edge.
+    /// This implements proper STAT IRQ blocking - only fires when line transitions low->high.
+    fn update_stat(&mut self, ints: &mut Interrupts) {
+        let previous_line = self.stat_interrupt_line;
 
-        if self.ly == self.lyc {
+        // Update LY=LYC coincidence flag based on comparison value
+        self.stat &= !STAT_LYC_B;
+        if self.ly_for_comparison == self.lyc {
             self.stat |= STAT_LYC_B;
-            if self.stat & STAT_IF_LYC_B != 0 {
-                ints.request_lcd();
-            }
+        }
+
+        // Compute new STAT interrupt line state from all enabled sources
+        let mut new_line = false;
+
+        // LY=LYC coincidence interrupt
+        if (self.stat & STAT_IF_LYC_B != 0) && (self.stat & STAT_LYC_B != 0) {
+            new_line = true;
+        }
+
+        // Mode-based interrupts
+        match self.mode() {
+            Mode::HBlank if self.stat & STAT_IF_HBLANK_B != 0 => new_line = true,
+            Mode::VBlank if self.stat & STAT_IF_VBLANK_B != 0 => new_line = true,
+            Mode::OamScan if self.stat & STAT_IF_OAM_B != 0 => new_line = true,
+            _ => {}
+        }
+
+        self.stat_interrupt_line = new_line;
+
+        // Only fire interrupt on rising edge (low -> high transition)
+        if new_line && !previous_line {
+            ints.request_lcd();
         }
     }
 
@@ -149,31 +178,28 @@ impl Ppu {
             "PPU mode change"
         );
 
-        match mode {
-            Mode::OamScan => {
-                if self.stat & STAT_IF_OAM_B != 0 {
-                    ints.request_lcd();
-                }
+        // VBlank always fires its own interrupt (separate from STAT)
+        if matches!(mode, Mode::VBlank) {
+            ints.request_vblank();
+            self.win_skipped = 0;
+            self.win_in_frame = false;
 
-                self.win_in_ly = false;
-            }
-            Mode::VBlank => {
-                ints.request_vblank();
-
-                if self.stat & STAT_IF_VBLANK_B != 0 {
-                    ints.request_lcd();
-                }
-
-                self.win_skipped = 0;
-                self.win_in_frame = false;
-            }
-            Mode::Drawing => (),
-            Mode::HBlank => {
-                if self.stat & STAT_IF_HBLANK_B != 0 {
-                    ints.request_lcd();
-                }
+            // DMG/MGB/SGB quirk: When entering VBlank at line 144, the OAM interrupt
+            // (STAT bit 5) also triggers a STAT interrupt if enabled.
+            // This is because the Mode 2 condition is briefly asserted at VBlank entry.
+            // See: vblank_stat_intr-GS test
+            if self.ly == PX_HEIGHT && !self.stat_interrupt_line && (self.stat & STAT_IF_OAM_B != 0)
+            {
+                ints.request_lcd();
             }
         }
+
+        if matches!(mode, Mode::OamScan) {
+            self.win_in_ly = false;
+        }
+
+        // Update STAT interrupt line (fires on rising edge)
+        self.update_stat(ints);
     }
 
     #[must_use]
@@ -298,18 +324,21 @@ impl Ppu {
                 Mode::HBlank => {
                     debug_assert!(self.ly <= 143, "HBlank, ly = {}", self.ly);
                     self.ly += 1;
+                    self.ly_for_comparison = self.ly;
                     if self.ly > 143 {
                         self.enter_mode(Mode::VBlank, ints);
                     } else {
                         self.enter_mode(Mode::OamScan, ints);
                     }
-                    self.check_lyc(ints);
+                    // LY change already triggers update_stat via enter_mode
                 }
                 Mode::VBlank => {
                     debug_assert!(self.ly >= 144 && self.ly <= 153, "VBlank, ly = {}", self.ly);
                     self.ly += 1;
+                    self.ly_for_comparison = self.ly;
                     if self.ly > 153 {
                         self.ly = 0;
+                        self.ly_for_comparison = 0;
                         if self.delay_one_frame {
                             self.delay_one_frame = false;
                         } else {
@@ -318,8 +347,9 @@ impl Ppu {
                         self.enter_mode(Mode::OamScan, ints);
                     } else {
                         self.remaining_dots_in_mode += self.mode().dots(self.scx);
+                        // Update STAT for LY change during VBlank
+                        self.update_stat(ints);
                     }
-                    self.check_lyc(ints);
                 }
             }
         }
@@ -350,19 +380,32 @@ impl Ppu {
             // );
 
             self.ly = 0;
+            self.ly_for_comparison = 0;
             let mode = Mode::HBlank;
             self.set_mode_stat(mode);
             self.remaining_dots_in_mode = mode.dots(self.scx);
             self.rgba_buf_present.clear();
+
+            // When LCD turns off:
+            // - LY=LYC coincidence flag is RETAINED (not cleared)
+            // - The comparison clock stops, so LYC changes won't update the flag
+            // - The STAT interrupt line state should reflect the frozen coincidence
+            //   to prevent spurious interrupts when LCD turns back on
+            // If LY=LYC coincidence is set and LYC interrupt is enabled,
+            // the interrupt line should stay high
+            self.stat_interrupt_line =
+                (self.stat & STAT_LYC_B != 0) && (self.stat & STAT_IF_LYC_B != 0);
         }
 
         // turn on
         if val & LCDC_ON_B != 0 && self.lcdc & LCDC_ON_B == 0 {
             self.ly = 0;
+            self.ly_for_comparison = 0;
             let mode = Mode::HBlank;
             self.set_mode_stat(mode);
             self.remaining_dots_in_mode = mode.dots(self.scx);
-            self.check_lyc(ints);
+            // Comparison clock restarts - update coincidence and check for interrupt
+            self.update_stat(ints);
             self.enable_timer = DOTS_UNTIL_ENABLED;
             self.delay_one_frame = true;
         }
@@ -370,8 +413,12 @@ impl Ppu {
         self.lcdc = val;
     }
 
-    pub const fn write_lyc(&mut self, val: u8) {
+    pub fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
         self.lyc = val;
+        // LYC change may affect coincidence - update STAT line if LCD is on
+        if self.lcdc & LCDC_ON_B != 0 {
+            self.update_stat(ints);
+        }
     }
 
     pub const fn write_obp0(&mut self, val: u8) {
@@ -394,13 +441,18 @@ impl Ppu {
         self.scy = val;
     }
 
-    pub const fn write_stat(&mut self, val: u8) {
+    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts) {
         let ly_equals_lyc = self.stat & STAT_LYC_B;
         let mode: u8 = self.mode() as u8;
 
         self.stat = val;
         self.stat &= !(STAT_LYC_B | STAT_MODE_B);
         self.stat |= ly_equals_lyc | mode;
+
+        // STAT write may change which interrupts are enabled - update line if LCD is on
+        if self.lcdc & LCDC_ON_B != 0 {
+            self.update_stat(ints);
+        }
     }
 
     pub const fn write_wx(&mut self, val: u8) {

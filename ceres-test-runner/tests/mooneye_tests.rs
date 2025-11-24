@@ -616,7 +616,6 @@ fn test_mooneye_ppu_lcdon_write_timing_gs() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing
 fn test_mooneye_ppu_stat_irq_blocking() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/stat_irq_blocking.gb",
@@ -630,7 +629,6 @@ fn test_mooneye_ppu_stat_irq_blocking() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing
 fn test_mooneye_ppu_stat_lyc_onoff() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/stat_lyc_onoff.gb",
@@ -640,7 +638,6 @@ fn test_mooneye_ppu_stat_lyc_onoff() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - GS hint
 fn test_mooneye_ppu_vblank_stat_intr_gs() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/vblank_stat_intr-GS.gb",
