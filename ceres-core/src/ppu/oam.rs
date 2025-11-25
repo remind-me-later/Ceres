@@ -47,11 +47,7 @@ impl Ppu {
 
     // TODO: why does read check for enabled DMA transfer and write for active DMA?
     #[must_use]
-    pub const fn read_oam(&self, addr: u16, dma_on: bool) -> u8 {
-        if dma_on {
-            return 0xFF;
-        }
-
+    pub const fn read_oam(&self, addr: u16) -> u8 {
         match self.mode() {
             Mode::HBlank | Mode::VBlank => self.oam.read(addr),
             Mode::OamScan => {
@@ -68,32 +64,18 @@ impl Ppu {
         }
     }
 
-    pub fn write_oam(&mut self, addr: u16, val: u8, dma_active: bool) {
+    pub fn write_oam(&mut self, addr: u16, val: u8) {
         let mode = self.mode();
-        let blocked = if dma_active {
-            true
-        } else {
-            match mode {
-                Mode::HBlank | Mode::VBlank => false,
-                Mode::OamScan => {
-                    // OAM write is blocked after the first 2 M-cycles (8 dots) of Mode 2
-                    // Mode 2 is 80 dots long.
-                    // If remaining <= 72, we are in the first 8 dots.
-                    self.remaining_dots_in_mode <= 72
-                }
-                Mode::Drawing => true,
+        let blocked = match mode {
+            Mode::HBlank | Mode::VBlank => false,
+            Mode::OamScan => {
+                // OAM write is blocked after the first 2 M-cycles (8 dots) of Mode 2
+                // Mode 2 is 80 dots long.
+                // If remaining <= 72, we are in the first 8 dots.
+                self.remaining_dots_in_mode <= 72
             }
+            Mode::Drawing => true,
         };
-
-        tracing::trace!(
-            target: "oam",
-            addr = addr,
-            value = val,
-            dma_active = dma_active,
-            ppu_mode = ?mode,
-            blocked = blocked,
-            "OAM Write"
-        );
 
         if !blocked {
             self.oam.write(addr, val);

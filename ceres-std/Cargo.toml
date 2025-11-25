@@ -43,6 +43,16 @@ features = ["std"]
 version = "*"
 default-features = false
 
+[dependencies.serde]
+version = "*"
+default-features = false
+features = ["derive"]
+
+[dependencies.serde_json]
+version = "*"
+default-features = false
+features = ["std"]
+
 [dependencies.spin_sleep]
 version = "*"
 default-features = false
@@ -56,16 +66,6 @@ version = "27"
 default-features = false
 features = ["dx12", "metal", "vulkan", "wgsl"]
 optional = true
-
-[dependencies.serde]
-version = "*"
-default-features = false
-features = ["derive"]
-
-[dependencies.serde_json]
-version = "*"
-default-features = false
-features = ["std"]
 
 [features]
 cli = ["dep:clap"]

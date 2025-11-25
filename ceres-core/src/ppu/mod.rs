@@ -1,7 +1,9 @@
 mod color_palette;
-mod draw;
+mod fetcher;
+mod fifo;
 mod oam;
 mod rgba_buf;
+mod sprite;
 mod vram;
 
 use core::mem;
@@ -9,7 +11,10 @@ use core::mem;
 use crate::interrupts::Interrupts;
 pub use oam::Oam;
 pub use vram::Vram;
-use {self::color_palette::ColorPalette, crate::CgbMode, rgba_buf::RgbaBuf};
+use {
+    self::color_palette::ColorPalette, crate::CgbMode, fetcher::FetcherState, fifo::PixelFifo,
+    rgba_buf::RgbaBuf, sprite::SpriteBuffer,
+};
 
 pub const PX_WIDTH: u8 = 160;
 pub const PX_HEIGHT: u8 = 144;
@@ -110,6 +115,41 @@ pub struct Ppu {
     win_skipped: u8,
     wx: u8,
     wy: u8,
+
+    /// Background/window pixel FIFO (8-pixel capacity).
+    bg_fifo: PixelFifo,
+    /// Sprite (OAM) pixel FIFO (8-pixel capacity).
+    oam_fifo: PixelFifo,
+    /// Background fetcher state machine state.
+    fetcher_state: FetcherState,
+    /// Current tile X coordinate being fetched.
+    fetcher_tile_x: u8,
+    /// Current tile index being fetched.
+    current_tile: u8,
+    /// Current tile attributes (CGB only).
+    current_tile_attrs: u8,
+    /// Tile data bytes (low and high).
+    current_tile_data: [u8; 2],
+    /// Sprites visible on current scanline.
+    sprite_buffer: SpriteBuffer,
+    /// Current dot within scanline (0-455).
+    dots_in_line: u16,
+    /// LCD X position being rendered (-8 to 167, negative = scroll discard phase).
+    position_in_line: i16,
+    /// Actual LCD X coordinate (0-159).
+    lcd_x: u8,
+    /// Window has been triggered on this scanline.
+    window_triggered: bool,
+    /// Window internal line counter.
+    window_line: u8,
+    /// OAM is blocked (during Mode 2 and Mode 3).
+    oam_blocked: bool,
+    /// VRAM is blocked (during Mode 3).
+    vram_blocked: bool,
+    /// Fetcher sub-cycle counter (0-1, each fetcher step takes 2 T-cycles).
+    fetcher_step: u8,
+    /// OAM scan index (0-39, which OAM entry is being checked).
+    oam_scan_index: u8,
 }
 
 // IO
@@ -288,70 +328,8 @@ impl Ppu {
     }
 
     pub fn run(&mut self, dots: i32, ints: &mut Interrupts, cgb_mode: CgbMode) {
-        if self.lcdc & LCDC_ON_B == 0 {
-            return;
-        }
-
-        let mut dots = dots;
-
-        if self.enable_timer > 0 {
-            // self.restart_timer = self.restart_timer - dots;
-            if self.enable_timer - dots <= 0 {
-                self.enable_timer = 0;
-                dots -= self.enable_timer;
-                let mode = Mode::Drawing;
-                self.set_mode_stat(mode);
-                self.remaining_dots_in_mode = mode.dots(self.scx);
-            } else {
-                self.enable_timer -= dots;
-                return;
-            }
-        }
-
-        self.remaining_dots_in_mode -= dots;
-
-        if self.remaining_dots_in_mode < 0 {
-            match self.mode() {
-                Mode::OamScan => {
-                    debug_assert!(self.ly <= 143, "OAM scan, ly = {}", self.ly);
-                    self.enter_mode(Mode::Drawing, ints);
-                }
-                Mode::Drawing => {
-                    debug_assert!(self.ly <= 143, "Drawing, ly = {}", self.ly);
-                    self.draw_scanline(cgb_mode);
-                    self.enter_mode(Mode::HBlank, ints);
-                }
-                Mode::HBlank => {
-                    debug_assert!(self.ly <= 143, "HBlank, ly = {}", self.ly);
-                    self.ly += 1;
-                    self.ly_for_comparison = self.ly;
-                    if self.ly > 143 {
-                        self.enter_mode(Mode::VBlank, ints);
-                    } else {
-                        self.enter_mode(Mode::OamScan, ints);
-                    }
-                    // LY change already triggers update_stat via enter_mode
-                }
-                Mode::VBlank => {
-                    debug_assert!(self.ly >= 144 && self.ly <= 153, "VBlank, ly = {}", self.ly);
-                    self.ly += 1;
-                    self.ly_for_comparison = self.ly;
-                    if self.ly > 153 {
-                        self.ly = 0;
-                        self.ly_for_comparison = 0;
-                        if self.delay_one_frame {
-                            self.delay_one_frame = false;
-                        } else {
-                            self.rgba_buf_present = mem::take(&mut self.rgb_buf);
-                        }
-                        self.enter_mode(Mode::OamScan, ints);
-                    } else {
-                        self.remaining_dots_in_mode += self.mode().dots(self.scx);
-                        // Update STAT for LY change during VBlank
-                        self.update_stat(ints);
-                    }
-                }
-            }
+        for _ in 0..dots {
+            self.tick(ints, cgb_mode);
         }
     }
 
@@ -361,6 +339,609 @@ impl Ppu {
 
     const fn set_mode_stat(&mut self, mode: Mode) {
         self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
+    }
+
+    /// Returns true if OAM is accessible by the CPU.
+    ///
+    /// OAM is blocked during Mode 2 (OAM scan) and Mode 3 (drawing).
+    #[inline]
+    #[must_use]
+    pub const fn is_oam_accessible(&self) -> bool {
+        // OAM is accessible when LCD is off or during Mode 0/1
+        self.lcdc & LCDC_ON_B == 0 || !self.oam_blocked
+    }
+
+    /// Returns true if VRAM is accessible by the CPU.
+    ///
+    /// VRAM is blocked during Mode 3 (drawing).
+    #[inline]
+    #[must_use]
+    pub const fn is_vram_accessible(&self) -> bool {
+        // VRAM is accessible when LCD is off or not in Mode 3
+        self.lcdc & LCDC_ON_B == 0 || !self.vram_blocked
+    }
+
+    /// Advance PPU by one T-cycle (dot).
+    #[inline]
+    pub fn tick(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
+        if self.lcdc & LCDC_ON_B == 0 {
+            return;
+        }
+
+        // Handle LCD enable delay
+        if self.enable_timer > 0 {
+            self.enable_timer -= 1;
+            if self.enable_timer == 0 {
+                self.start_mode3(ints);
+            }
+            return;
+        }
+
+        // Advance the current mode
+        self.dots_in_line += 1;
+        self.remaining_dots_in_mode -= 1;
+
+        match self.mode() {
+            Mode::OamScan => self.tick_oam_scan(ints),
+            Mode::Drawing => self.tick_drawing(ints, cgb_mode),
+            Mode::HBlank => self.tick_hblank(ints),
+            Mode::VBlank => self.tick_vblank(ints),
+        }
+    }
+
+    /// Start Mode 3 (drawing) - called after LCD enable delay.
+    fn start_mode3(&mut self, ints: &mut Interrupts) {
+        self.set_mode_stat(Mode::Drawing);
+        self.remaining_dots_in_mode = Mode::Drawing.dots(self.scx);
+        self.oam_blocked = true;
+        self.vram_blocked = true;
+
+        // Initialize drawing state
+        self.dots_in_line = 0;
+        self.fetcher_state = FetcherState::GetTile;
+        self.fetcher_step = 0;
+        self.fetcher_tile_x = 0;
+        self.position_in_line = -16;
+        self.lcd_x = 0;
+        self.bg_fifo.clear();
+        self.oam_fifo.clear();
+        // Push 8 "junk" pixels to prime the FIFO (will be discarded during scroll)
+        self.bg_fifo.push_bg_row(0, 0, 0, false, false);
+        self.window_triggered = false;
+        self.window_line = 0;
+        // Note: No OAM scan happened, so sprite_buffer stays empty for first line after LCD on
+
+        self.update_stat(ints);
+    }
+
+    /// Tick during Mode 2 (OAM Scan).
+    fn tick_oam_scan(&mut self, ints: &mut Interrupts) {
+        // OAM scan takes exactly 80 dots
+        // Every 2 dots, check one OAM entry (40 entries total)
+        if self.dots_in_line % 2 == 0 && self.oam_scan_index < 40 {
+            self.scan_oam_entry();
+            self.oam_scan_index += 1;
+        }
+
+        if self.remaining_dots_in_mode <= 0 {
+            self.enter_mode(Mode::Drawing, ints);
+            self.oam_blocked = true;
+            self.vram_blocked = true;
+            self.fetcher_state = FetcherState::GetTile;
+            self.fetcher_step = 0;
+            self.fetcher_tile_x = 0;
+            self.position_in_line = -16;
+            self.lcd_x = 0;
+            self.bg_fifo.clear();
+            self.oam_fifo.clear();
+            // Push 8 "junk" pixels to prime the FIFO (will be discarded during scroll)
+            self.bg_fifo.push_bg_row(0, 0, 0, false, false);
+        }
+    }
+
+    /// Scan a single OAM entry during Mode 2.
+    fn scan_oam_entry(&mut self) {
+        let idx = self.oam_scan_index as usize * 4;
+        let oam_bytes = self.oam.bytes();
+
+        let y = oam_bytes[idx];
+        let x = oam_bytes[idx + 1];
+        let tile = oam_bytes[idx + 2];
+        let flags = oam_bytes[idx + 3];
+
+        // Sprite height (8 or 16 pixels)
+        let height = if self.lcdc & LCDC_OBJL_B != 0 { 16 } else { 8 };
+
+        // Check if sprite is on this scanline
+        // Sprite Y is offset by 16, so visible range is Y-16 to Y-16+height-1
+        let sprite_top = y.wrapping_sub(16);
+        let sprite_bottom = sprite_top.wrapping_add(height);
+
+        if self.ly >= sprite_top && self.ly < sprite_bottom {
+            self.sprite_buffer.add(sprite::SpriteEntry {
+                y,
+                x,
+                tile,
+                flags,
+                oam_index: self.oam_scan_index,
+            });
+        }
+    }
+
+    /// Fetch sprites at the current position and overlay onto OAM FIFO.
+    fn fetch_sprites_at_position(&mut self, cgb_mode: CgbMode) {
+        if self.lcdc & LCDC_OBJ_B == 0 && !matches!(cgb_mode, CgbMode::Cgb) {
+            return;
+        }
+
+        let match_x = self.lcd_x.wrapping_add(8);
+
+        for sprite in self.sprite_buffer.sprites_at_x(match_x) {
+            // Calculate tile address using get_object_line_address logic
+            let height_16 = self.lcdc & LCDC_OBJL_B != 0;
+            let tile_y =
+                (self.ly.wrapping_sub(sprite.y.wrapping_sub(16))) & if height_16 { 0xF } else { 7 };
+
+            // Apply Y-flip
+            let tile_y = if sprite.y_flip() {
+                tile_y ^ if height_16 { 0xF } else { 7 }
+            } else {
+                tile_y
+            };
+
+            // Calculate tile number (mask for 8x16 mode)
+            let tile_num = if height_16 {
+                sprite.tile & 0xFE
+            } else {
+                sprite.tile
+            };
+
+            // Calculate VRAM address
+            let line_address = u16::from(tile_num) * 16 + u16::from(tile_y) * 2;
+
+            // Determine VRAM bank (CGB only)
+            let vram_bank = if matches!(cgb_mode, CgbMode::Cgb) {
+                sprite.cgb_vram_bank()
+            } else {
+                0
+            };
+
+            // Read tile data from VRAM
+            let data_low = self.vram.vram_at_bank(0x8000 + line_address, vram_bank);
+            let data_high = self.vram.vram_at_bank(0x8000 + line_address + 1, vram_bank);
+
+            // Determine palette
+            let palette = match cgb_mode {
+                CgbMode::Cgb => sprite.cgb_palette(),
+                _ => sprite.dmg_palette(),
+            };
+
+            // Overlay onto OAM FIFO
+            // Priority for FIFO overlay:
+            // - DMG: Lower X = higher priority, so use X coordinate (higher X = higher priority number = lower priority)
+            // - CGB: Lower OAM index = higher priority
+            let priority = match cgb_mode {
+                CgbMode::Cgb => sprite.oam_index,
+                _ => sprite.x, // For DMG, X coordinate determines priority
+            };
+            self.oam_fifo.overlay_sprite_row(
+                data_low,
+                data_high,
+                palette,
+                sprite.bg_priority(),
+                priority,
+                sprite.x_flip(),
+            );
+        }
+    }
+
+    /// Tick during Mode 3 (Drawing).
+    fn tick_drawing(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
+        // Check for window activation
+        self.check_window_trigger(cgb_mode);
+
+        // Check for sprites at current position and fetch them
+        // Sprites are triggered when lcd_x + 8 == sprite.x
+        self.fetch_sprites_at_position(cgb_mode);
+
+        // SameBoy order: render_pixel_if_possible THEN advance_fetcher_state_machine
+        // Try to output a pixel first (if FIFO has data)
+        if self.bg_fifo.size() > 0 {
+            self.output_pixel(cgb_mode);
+        }
+
+        // Advance fetcher every 2 T-cycles (each fetcher state takes 2 T-cycles)
+        if self.fetcher_step == 0 {
+            self.advance_fetcher(cgb_mode);
+        }
+        self.fetcher_step = (self.fetcher_step + 1) % 2;
+
+        // Check if we've rendered all 160 pixels
+        if self.lcd_x >= PX_WIDTH {
+            // Increment window line counter if window was active this scanline
+            if self.window_triggered {
+                self.window_line = self.window_line.wrapping_add(1);
+            }
+            // Transition to HBlank
+            // Calculate actual HBlank duration: 456 total - 80 (OAM) - actual Mode 3 duration
+            // dots_in_line tracks how many dots we've spent in this scanline
+            let hblank_dots = 456 - i32::from(self.dots_in_line);
+            self.oam_blocked = false;
+            self.vram_blocked = false;
+            self.set_mode_stat(Mode::HBlank);
+            self.remaining_dots_in_mode = hblank_dots;
+            self.update_stat(ints);
+        }
+    }
+
+    /// Check if window should be activated at the current position.
+    fn check_window_trigger(&mut self, cgb_mode: CgbMode) {
+        // Window already triggered for this scanline
+        if self.window_triggered {
+            return;
+        }
+
+        // Check if window is enabled
+        let window_enabled = match cgb_mode {
+            CgbMode::Dmg | CgbMode::Compat => {
+                self.lcdc & (LCDC_BG_B | LCDC_WIN_B) == (LCDC_BG_B | LCDC_WIN_B)
+            }
+            CgbMode::Cgb => self.lcdc & LCDC_WIN_B != 0,
+        };
+
+        if !window_enabled {
+            return;
+        }
+
+        // Check WY condition (window Y trigger)
+        if self.ly < self.wy {
+            return;
+        }
+
+        // Check WX condition (window X trigger)
+        // Window activates when position_in_line == WX - 7
+        let wx_trigger = i16::from(self.wx.saturating_sub(7));
+        if self.position_in_line >= 0 && self.position_in_line == wx_trigger {
+            self.activate_window();
+        }
+    }
+
+    /// Activate window rendering.
+    fn activate_window(&mut self) {
+        self.window_triggered = true;
+        self.win_in_frame = true;
+
+        // Clear BG FIFO and restart fetcher for window
+        self.bg_fifo.clear();
+        self.fetcher_state = FetcherState::GetTile;
+        self.fetcher_tile_x = 0;
+
+        // Window activation incurs a 6-dot penalty (handled by fetcher restart)
+    }
+
+    /// Advance the background/window fetcher state machine.
+    fn advance_fetcher(&mut self, cgb_mode: CgbMode) {
+        match self.fetcher_state {
+            FetcherState::GetTile => {
+                // Calculate tile map address
+                let tile_map = if self.window_triggered {
+                    self.win_tile_map_addr()
+                } else {
+                    self.bg_tile_map_addr()
+                };
+
+                let y = if self.window_triggered {
+                    self.window_line
+                } else {
+                    self.ly.wrapping_add(self.scy)
+                };
+
+                let x = if self.window_triggered {
+                    self.fetcher_tile_x
+                } else {
+                    self.fetcher_tile_x.wrapping_add(self.scx / 8) & 0x1F
+                };
+
+                let addr = tile_map + u16::from(y / 8) * 32 + u16::from(x);
+
+                self.current_tile = self.vram.vram_at_bank(addr, 0);
+                self.current_tile_attrs = match cgb_mode {
+                    CgbMode::Cgb => self.vram.vram_at_bank(addr, 1),
+                    _ => 0,
+                };
+
+                self.fetcher_state = FetcherState::GetDataLow;
+            }
+            FetcherState::GetDataLow => {
+                let tile_addr = self.calculate_tile_data_addr();
+                self.current_tile_data[0] = self.read_tile_byte(tile_addr);
+                self.fetcher_state = FetcherState::GetDataHigh;
+            }
+            FetcherState::GetDataHigh => {
+                let tile_addr = self.calculate_tile_data_addr();
+                self.current_tile_data[1] = self.read_tile_byte(tile_addr + 1);
+                self.fetcher_state = FetcherState::Push;
+            }
+            FetcherState::Push => {
+                // Only push if FIFO is empty
+                if self.bg_fifo.is_empty() {
+                    let palette = self.current_tile_attrs & 0x07;
+                    let bg_priority = self.current_tile_attrs & 0x80 != 0;
+                    let flip_x = self.current_tile_attrs & 0x20 != 0;
+
+                    self.bg_fifo.push_bg_row(
+                        self.current_tile_data[0],
+                        self.current_tile_data[1],
+                        palette,
+                        bg_priority,
+                        flip_x,
+                    );
+
+                    self.fetcher_tile_x = self.fetcher_tile_x.wrapping_add(1) & 0x1F;
+                    self.fetcher_state = FetcherState::GetTile;
+                }
+                // If FIFO not empty, stay in Push state
+            }
+        }
+    }
+
+    /// Calculate tile data address for current tile.
+    fn calculate_tile_data_addr(&self) -> u16 {
+        let y = if self.window_triggered {
+            self.window_line
+        } else {
+            self.ly.wrapping_add(self.scy)
+        };
+
+        let y_offset = if self.current_tile_attrs & 0x40 != 0 {
+            // Y flip
+            7 - (y & 7)
+        } else {
+            y & 7
+        };
+
+        let tile_num = self.current_tile;
+        let base = if self.lcdc & LCDC_BG_SIGNED == 0 {
+            // 0x8800-0x97FF, signed addressing
+            #[expect(clippy::cast_possible_wrap)]
+            let signed_tile = tile_num as i8;
+            #[expect(clippy::cast_sign_loss)]
+            let offset = (i16::from(signed_tile) + 128) as u16;
+            0x8800 + offset * 16
+        } else {
+            // 0x8000-0x8FFF, unsigned addressing
+            0x8000 + u16::from(tile_num) * 16
+        };
+
+        base + u16::from(y_offset) * 2
+    }
+
+    /// Read a tile data byte, respecting CGB VRAM bank.
+    fn read_tile_byte(&self, addr: u16) -> u8 {
+        let bank = (self.current_tile_attrs >> 3) & 1;
+        self.vram.vram_at_bank(addr, bank)
+    }
+
+    /// Output a pixel to the LCD buffer.
+    fn output_pixel(&mut self, cgb_mode: CgbMode) {
+        if self.position_in_line < -8 {
+            // Phase 1: Check for SCX alignment
+            if (self.position_in_line & 7) as u8 == self.scx & 7 {
+                // Alignment reached, skip to phase 2
+                self.position_in_line = -8;
+            } else {
+                // Continue incrementing until alignment
+                let _ = self.bg_fifo.pop();
+                let _ = self.oam_fifo.pop();
+                self.position_in_line += 1;
+            }
+            return;
+        }
+
+        if self.position_in_line < 0 {
+            // Phase 2: Discard junk pixels (position -8 to -1)
+            let _ = self.bg_fifo.pop();
+            let _ = self.oam_fifo.pop();
+            self.position_in_line += 1;
+            return;
+        }
+
+        if self.lcd_x >= PX_WIDTH {
+            return;
+        }
+
+        let Some(bg_pixel) = self.bg_fifo.pop() else {
+            return;
+        };
+
+        let sprite_pixel = self.oam_fifo.pop();
+
+        let (color, palette, is_sprite) = self.mix_pixels(bg_pixel, sprite_pixel, cgb_mode);
+
+        let rgb = if is_sprite {
+            self.sprite_color_to_rgb(color, palette, cgb_mode)
+        } else {
+            self.bg_color_to_rgb(color, palette, cgb_mode)
+        };
+
+        let idx = u32::from(self.ly) * u32::from(PX_WIDTH) + u32::from(self.lcd_x);
+        self.rgb_buf.set_px(idx, rgb);
+
+        self.lcd_x += 1;
+        self.position_in_line += 1;
+    }
+
+    /// Mix background and sprite pixels according to priority rules.
+    fn mix_pixels(
+        &self,
+        bg_pixel: fifo::FifoPixel,
+        sprite_pixel: Option<fifo::FifoPixel>,
+        cgb_mode: CgbMode,
+    ) -> (u8, u8, bool) {
+        // Check if BG is enabled (LCDC bit 0)
+        // On DMG: When disabled, BG renders as color 0 (white)
+        // On CGB: This bit acts as master priority, not enable/disable
+        let bg_enabled = self.lcdc & LCDC_BG_B != 0 || matches!(cgb_mode, CgbMode::Cgb);
+        let effective_bg_color = if bg_enabled { bg_pixel.color } else { 0 };
+
+        // Check if sprites are enabled (LCDC bit 1)
+        // On DMG: Sprites are disabled if bit is 0
+        // On CGB: Sprites are ALWAYS processed regardless of this bit (checked at pop time)
+        let sprites_enabled = self.lcdc & LCDC_OBJ_B != 0;
+
+        let Some(sprite) = sprite_pixel else {
+            return (effective_bg_color, bg_pixel.palette, false);
+        };
+
+        // If sprites are disabled, use background
+        // On CGB, this check still applies - sprites won't render if OBJ bit is 0
+        if !sprites_enabled {
+            return (effective_bg_color, bg_pixel.palette, false);
+        }
+
+        // Transparent sprite pixel - use background
+        if sprite.color == 0 {
+            return (effective_bg_color, bg_pixel.palette, false);
+        }
+
+        // Check sprite priority
+        let sprite_behind_bg = sprite.bg_priority;
+        let bg_priority = bg_pixel.bg_priority;
+        let bg_opaque = effective_bg_color != 0;
+
+        // Determine if sprite should be hidden behind BG
+        let hide_sprite = match cgb_mode {
+            CgbMode::Dmg | CgbMode::Compat => {
+                // DMG: BG/OBJ priority from sprite attribute
+                sprite_behind_bg && bg_opaque
+            }
+            CgbMode::Cgb => {
+                // CGB: LCDC bit 0 acts as master priority
+                if self.lcdc & LCDC_BG_B == 0 {
+                    // Master priority off - sprites always on top
+                    false
+                } else {
+                    // Master priority on - check both BG priority and sprite priority
+                    (bg_priority || sprite_behind_bg) && bg_opaque
+                }
+            }
+        };
+
+        if hide_sprite {
+            (effective_bg_color, bg_pixel.palette, false)
+        } else {
+            (sprite.color, sprite.palette, true)
+        }
+    }
+
+    /// Convert background color to RGB.
+    fn bg_color_to_rgb(&self, color: u8, palette: u8, cgb_mode: CgbMode) -> (u8, u8, u8) {
+        match cgb_mode {
+            CgbMode::Dmg => {
+                let shade = (self.bgp >> (color * 2)) & 3;
+                Self::mono_rgb(shade)
+            }
+            CgbMode::Compat => {
+                let shade = (self.bgp >> (color * 2)) & 3;
+                self.bcp.rgb(palette, shade, self.color_correction_mode)
+            }
+            CgbMode::Cgb => self.bcp.rgb(palette, color, self.color_correction_mode),
+        }
+    }
+
+    /// Convert sprite color to RGB.
+    fn sprite_color_to_rgb(&self, color: u8, palette: u8, cgb_mode: CgbMode) -> (u8, u8, u8) {
+        match cgb_mode {
+            CgbMode::Dmg => {
+                let pal = if palette == 0 { self.obp0 } else { self.obp1 };
+                let shade = (pal >> (color * 2)) & 3;
+                Self::mono_rgb(shade)
+            }
+            CgbMode::Compat => {
+                let pal = if palette == 0 { self.obp0 } else { self.obp1 };
+                let shade = (pal >> (color * 2)) & 3;
+                self.ocp.rgb(0, shade, self.color_correction_mode)
+            }
+            CgbMode::Cgb => self.ocp.rgb(palette, color, self.color_correction_mode),
+        }
+    }
+
+    /// Get background tile map address.
+    #[inline]
+    const fn bg_tile_map_addr(&self) -> u16 {
+        if self.lcdc & LCDC_BG_AREA != 0 {
+            0x9C00
+        } else {
+            0x9800
+        }
+    }
+
+    /// Get window tile map address.
+    #[inline]
+    const fn win_tile_map_addr(&self) -> u16 {
+        if self.lcdc & LCDC_WIN_AREA != 0 {
+            0x9C00
+        } else {
+            0x9800
+        }
+    }
+
+    /// Monochrome palette lookup.
+    #[must_use]
+    const fn mono_rgb(shade: u8) -> (u8, u8, u8) {
+        color_palette::GRAYSCALE_PALETTE[shade as usize]
+    }
+
+    /// Tick during Mode 0 (HBlank).
+    fn tick_hblank(&mut self, ints: &mut Interrupts) {
+        if self.remaining_dots_in_mode <= 0 {
+            self.ly += 1;
+            self.ly_for_comparison = self.ly;
+            self.dots_in_line = 0;
+
+            if self.ly > 143 {
+                self.enter_mode(Mode::VBlank, ints);
+            } else {
+                // Reset for next scanline
+                self.oam_scan_index = 0;
+                self.sprite_buffer.clear();
+                self.oam_blocked = true;
+                self.window_triggered = false;
+                self.enter_mode(Mode::OamScan, ints);
+            }
+        }
+    }
+
+    /// Tick during Mode 1 (VBlank).
+    fn tick_vblank(&mut self, ints: &mut Interrupts) {
+        if self.remaining_dots_in_mode <= 0 {
+            self.ly += 1;
+            self.ly_for_comparison = self.ly;
+
+            if self.ly > 153 {
+                self.ly = 0;
+                self.ly_for_comparison = 0;
+                self.dots_in_line = 0;
+
+                // Present frame
+                if self.delay_one_frame {
+                    self.delay_one_frame = false;
+                } else {
+                    self.rgba_buf_present = mem::take(&mut self.rgb_buf);
+                }
+
+                // Reset for new frame
+                self.oam_scan_index = 0;
+                self.sprite_buffer.clear();
+                self.oam_blocked = true;
+                self.window_line = 0;
+                self.window_triggered = false;
+                self.enter_mode(Mode::OamScan, ints);
+            } else {
+                self.remaining_dots_in_mode += Mode::VBlank.dots(self.scx);
+                self.update_stat(ints);
+            }
+        }
     }
 
     pub const fn write_bgp(&mut self, val: u8) {

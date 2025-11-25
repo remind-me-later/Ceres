@@ -19,7 +19,6 @@ These 7 Mooneye PPU tests currently fail and should pass after implementation:
 - [ ] 1.3 Create `ceres-core/src/ppu/sprite.rs` with `SpriteEntry` struct
 - [ ] 1.4 Add new fields to `Ppu` struct (FIFOs, fetcher state, timing counters)
 - [ ] 1.5 Add `tick()` method stub that calls existing `run()` logic
-- [ ] 1.6 Add feature flag `cycle_accurate_ppu` (disabled by default)
 - [ ] 1.7 Verify existing tests still pass
 
 ## Phase 2: Pixel FIFO Implementation
@@ -96,7 +95,6 @@ These 7 Mooneye PPU tests currently fail and should pass after implementation:
 
 ## Phase 10: Integration and Validation
 
-- [ ] 10.1 Enable `cycle_accurate_ppu` feature by default
 - [ ] 10.2 Run all Mooneye PPU tests, verify 10/10 pass
 - [ ] 10.3 Run full Mooneye test suite, check for regressions
 - [ ] 10.4 Run Blargg CPU tests, verify no regressions

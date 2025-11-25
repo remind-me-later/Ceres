@@ -1,5 +1,10 @@
 # Change: Implement Cycle-Accurate PPU with Pixel FIFO
 
+## Status: In Progress
+
+The implementation compiles and passes unit tests, but visual tests (acid2) and some timing tests need debugging before
+it can be considered complete.
+
 ## Why
 
 The current PPU implementation uses a scanline-based rendering approach with approximate mode timings. While this works

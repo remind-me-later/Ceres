@@ -89,3 +89,43 @@ fn test_dmg_acid2_cgb() {
         "DMG Acid2 PPU test failed (CGB mode)"
     );
 }
+
+/// Debug test to save the actual screenshot for comparison
+#[test]
+#[ignore]
+fn debug_save_dmg_acid2_screenshot() {
+    use image::{ImageBuffer, Rgba};
+    
+    let rom = match load_test_rom("dmg-acid2/dmg-acid2.gb") {
+        Ok(rom) => rom,
+        Err(e) => panic!("Failed to load test ROM: {e}"),
+    };
+
+    let config = TestConfig {
+        model: ceres_core::Model::Dmg,
+        timeout_frames: timeouts::DMG_ACID2,
+        expected_screenshot: None, // Don't compare, just run
+        ..TestConfig::default()
+    };
+
+    let mut runner = match TestRunner::new(rom, config) {
+        Ok(runner) => runner,
+        Err(e) => panic!("Failed to create test runner: {e}"),
+    };
+
+    // Run for full timeout
+    let _ = runner.run();
+    
+    // Get the pixel data
+    let pixel_data = runner.pixel_data();
+    
+    // Save as PNG
+    let img: ImageBuffer<Rgba<u8>, _> = ImageBuffer::from_raw(
+        ceres_core::PX_WIDTH.into(),
+        ceres_core::PX_HEIGHT.into(),
+        pixel_data.to_vec(),
+    ).expect("Failed to create image buffer");
+    
+    img.save("target/debug_dmg_acid2.png").expect("Failed to save image");
+    eprintln!("Screenshot saved to target/debug_dmg_acid2.png");
+}

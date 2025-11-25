@@ -375,6 +375,13 @@ impl TestRunner {
         self.gb.read_mem(address)
     }
 
+    /// Get the current pixel data (RGBA format)
+    #[must_use]
+    #[inline]
+    pub fn pixel_data(&self) -> &[u8] {
+        self.gb.pixel_data_rgba()
+    }
+
     /// Get the serial output captured so far
     #[must_use]
     #[inline]

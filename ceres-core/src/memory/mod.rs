@@ -213,11 +213,23 @@ impl<A: AudioCallback> Gb<A> {
                     self.cart.read_rom(addr)
                 }
             }
-            0x8000..=0x9FFF => self.ppu.read_vram(addr),
+            0x8000..=0x9FFF => {
+                if self.ppu.is_vram_accessible() {
+                    self.ppu.read_vram(addr)
+                } else {
+                    0xFF
+                }
+            }
             0xA000..=0xBFFF => self.cart.read_ram(addr),
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.read_wram_lo(addr),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.read_wram_hi(addr),
-            0xFE00..=0xFE9F => self.ppu.read_oam(addr, self.dma.blocks_oam()),
+            0xFE00..=0xFE9F => {
+                if self.dma.blocks_oam() || !self.ppu.is_oam_accessible() {
+                    0xFF
+                } else {
+                    self.ppu.read_oam(addr)
+                }
+            }
             0xFEA0..=0xFEFF => 0xFF,
             0xFF00..=0xFFFF => self.read_high((addr & 0xFF) as u8),
         }
@@ -326,6 +338,10 @@ impl<A: AudioCallback> Gb<A> {
                     sim_dots = self.total_dots,
                     "Memory write"
                 );
+                if !self.ppu.is_vram_accessible() {
+                    return;
+                }
+
                 self.ppu.write_vram(addr, val);
             }
             0xA000..=0xBFFF => self.cart.write_ram(addr, val),
@@ -340,7 +356,11 @@ impl<A: AudioCallback> Gb<A> {
                     sim_dots = self.total_dots,
                     "Memory write"
                 );
-                self.ppu.write_oam(addr, val, self.dma.blocks_oam());
+                if self.dma.blocks_oam() || !self.ppu.is_oam_accessible() {
+                    return;
+                }
+
+                self.ppu.write_oam(addr, val);
             }
             0xFEA0..=0xFEFF => (),
             0xFF00..=0xFFFF => self.write_high((addr & 0xFF) as u8, val),
