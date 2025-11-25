@@ -79,47 +79,6 @@ chore(deps): update winit to 0.29
 - Format JSON, Markdown, and YAML with `prettier --write "**/*.{json,md,yaml,yml}"`
 - Run tests with `cargo test --package ceres-core --package ceres-test-runner`
 
-## Debugging Failed Tests
-
-### Using Execution Traces
-
-When integration tests fail, you can enable trace collection to capture the last N instructions before failure:
-
-```rust
-use ceres_test_runner::{TestRunner, TestConfig};
-
-let config = TestConfig {
-    timeout_seconds: 10,
-    enable_trace: true,              // Enable trace collection
-    export_trace_on_failure: true,   // Auto-export on failure
-    trace_buffer_size: 1000,         // Circular buffer size
-};
-
-let runner = TestRunner::new(rom_path, reference_path, config);
-runner.run().expect("Test failed");
-```
-
-Traces are exported to `target/traces/<timestamp>_trace.json` automatically.
-
-### Analyzing Traces
-
-Traces are exported in the Chrome Trace Event Format and can be analyzed using Perfetto or Chrome's built-in tracing
-viewer.
-
-1. **Visualize**: Open `target/traces/*.json` in [ui.perfetto.dev](https://ui.perfetto.dev).
-2. **Analyze**: Use SQL queries to find patterns (tight loops, hotspots).
-
-See `docs/TRACING_GUIDE.md` for the complete workflow and `docs/sql/` for analysis queries.
-
-### Common Debugging Patterns
-
-1. **Test timeout/hang**: Use `docs/sql/tight_loops.sql` to detect infinite loops.
-2. **Wrong behavior**: Compare execution fingerprints against SameBoy execution.
-3. **Instruction bugs**: Use `docs/sql/instruction_hotspots.sql` to find specific instruction occurrences.
-4. **I/O issues**: Filter for I/O-related instructions in the trace viewer.
-
-See `docs/TRACING_GUIDE.md` for complete trace documentation.
-
 ## Development Workflow
 
 See `AGENTS.md` for detailed development guidelines and the OpenSpec workflow for larger changes.

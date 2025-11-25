@@ -1,4 +1,4 @@
-use crate::{AudioCallback, Gb, disasm, trace};
+use crate::{AudioCallback, Gb};
 
 const ZF: u16 = 0x80;
 const NF: u16 = 0x40;
@@ -57,42 +57,6 @@ impl Sm83 {
 }
 
 impl<A: AudioCallback> Gb<A> {
-    #[expect(clippy::many_single_char_names)]
-    fn collect_trace_entry(&self, pc: u16) {
-        // Get the disassembled instruction using the new structured disassembler
-        // Read up to 3 bytes from memory at PC without advancing PC
-        let b0 = self.read_mem(pc);
-        let b1 = self.read_mem(pc.wrapping_add(1));
-        let b2 = self.read_mem(pc.wrapping_add(2));
-        let memory = [b0, b1, b2];
-
-        if let Some((instruction, length)) = disasm::disassemble(&memory) {
-            let b = (self.cpu.bc() >> 8) as u8;
-            let c = (self.cpu.bc() & 0xFF) as u8;
-            let d = (self.cpu.de() >> 8) as u8;
-            let e = (self.cpu.de() & 0xFF) as u8;
-            let h = (self.cpu.hl() >> 8) as u8;
-            let l = (self.cpu.hl() & 0xFF) as u8;
-
-            // Emit the event for the new tracing system
-            trace::instruction(
-                pc,
-                &alloc::format!("{instruction}"),
-                self.cpu.a(),
-                self.cpu.f(),
-                b,
-                c,
-                d,
-                e,
-                h,
-                l,
-                self.cpu.sp(),
-                length,
-                self.total_dots,
-            );
-        }
-    }
-
     fn exec(&mut self, op: u8) {
         match op {
             0x00 | 0x5B | 0x6D | 0x7F | 0x49 | 0x52 | 0x64 => self.nop(),
@@ -202,21 +166,6 @@ impl<A: AudioCallback> Gb<A> {
         if self.cpu.is_halted {
             self.tick_m_cycle();
         } else {
-            let pc = self.cpu.pc;
-
-            // Trace instruction before execution if legacy tracing is enabled
-            if self.trace_enabled {
-                self.trace_instruction();
-            }
-
-            // Collect trace entry for structured tracing
-            let within_range = self.trace_start_pc.is_none_or(|start| pc >= start)
-                && self.trace_end_pc.is_none_or(|end| pc <= end);
-
-            if self.trace_enabled && within_range {
-                self.collect_trace_entry(pc);
-            }
-
             let op = self.imm8();
             self.run_hdma();
 
@@ -267,49 +216,6 @@ impl<A: AudioCallback> Gb<A> {
                 self.ints.disable();
                 self.cpu.pc = new_vector;
             }
-        }
-    }
-
-    fn trace_instruction(&self) {
-        let pc = self.cpu.pc;
-        // Use the new structured disassembler
-        // Read up to 3 bytes from memory at PC without advancing PC
-        let b0 = self.read_mem(pc);
-        let b1 = self.read_mem(pc.wrapping_add(1));
-        let b2 = self.read_mem(pc.wrapping_add(2));
-        let memory = [b0, b1, b2];
-
-        if let Some((instruction, length)) = disasm::disassemble(&memory) {
-            // Format flags: Z N H C
-            let f = self.cpu.f();
-            let flags = alloc::format!(
-                "{}{}{}{}",
-                if f & 0x80 != 0 { 'Z' } else { '-' },
-                if f & 0x40 != 0 { 'N' } else { '-' },
-                if f & 0x20 != 0 { 'H' } else { '-' },
-                if f & 0x10 != 0 { 'C' } else { '-' }
-            );
-
-            // Use the Rust tracing crate to log execution details
-            tracing::event!(
-                target: "cpu_execution",
-                tracing::Level::INFO,
-                pc = pc,
-                instruction = alloc::format!("{instruction}"),
-                a = self.cpu.a(),
-                f = self.cpu.f(),
-                b = (self.cpu.bc() >> 8) as u8,
-                c = (self.cpu.bc() & 0xFF) as u8,
-                d = (self.cpu.de() >> 8) as u8,
-                e = (self.cpu.de() & 0xFF) as u8,
-                h = (self.cpu.hl() >> 8) as u8,
-                l = (self.cpu.hl() & 0xFF) as u8,
-                sp = self.cpu.sp(),
-                flags = flags,
-                length = length,
-                sim_dots = self.total_dots,
-                "EXECUTE_INSTRUCTION_DETAIL"
-            );
         }
     }
 }
@@ -397,22 +303,22 @@ impl<A: AudioCallback> Gb<A> {
         u16::from_le_bytes([lo, hi])
     }
 
-    /// PUSH rr instruction timing (verified by Mooneye push_timing test):
+    /// PUSH rr instruction timing (verified by Mooneye `push_timing` test):
     /// M=0: Instruction decode (implicit)
     /// M=1: Internal delay
     /// M=2: Memory write for high byte
     /// M=3: Memory write for low byte
     fn push(&mut self, val: u16) {
         let [lo, hi] = val.to_le_bytes();
-        
+
         // M=1: Internal delay (where OAM bug handling would occur on DMG)
         self.tick_m_cycle();
-        
+
         // M=2: Write high byte
         self.cpu.sp = self.cpu.sp.wrapping_sub(1);
         self.tick_m_cycle();
         self.write_mem(self.cpu.sp, hi);
-        
+
         // M=3: Write low byte
         self.cpu.sp = self.cpu.sp.wrapping_sub(1);
         self.tick_m_cycle();

@@ -20,7 +20,6 @@ pub struct GbThread {
     multiplier: Arc<AtomicU32>,
     pause_condvar: Arc<(Mutex<bool>, Condvar)>,
     thread_handle: Option<std::thread::JoinHandle<()>>,
-    trace_enabled: bool,
 }
 
 impl GbThread {
@@ -70,7 +69,6 @@ impl GbThread {
             self.model,
             Some(rom_path),
             sav_path,
-            self.trace_enabled,
         )?;
 
         if let Ok(mut gb) = self.gb.lock() {
@@ -100,7 +98,6 @@ impl GbThread {
         model: ceres_core::Model,
         rom_path: Option<&Path>,
         sav_path: Option<&Path>,
-        trace_enabled: bool,
     ) -> Result<Gb<audio::AudioCallbackImpl>, Error> {
         let gb_builder = GbBuilder::new(audio_stream.sample_rate(), ring_buffer).with_model(model);
 
@@ -117,7 +114,6 @@ impl GbThread {
                 && let Some(sav_path) = sav_path
             {
                 let mut gb = gb_builder.build();
-                gb.set_trace_enabled(trace_enabled);
 
                 let mut save_data_buf = Vec::new();
 
@@ -139,13 +135,11 @@ impl GbThread {
                 gb.load_data(&save_data_buf, secs_since_unix_epoch)?;
                 Ok(gb)
             } else {
-                let mut gb = gb_builder.build();
-                gb.set_trace_enabled(trace_enabled);
+                let gb = gb_builder.build();
                 Ok(gb)
             }
         } else {
-            let mut gb = gb_builder.build();
-            gb.set_trace_enabled(trace_enabled);
+            let gb = gb_builder.build();
             Ok(gb)
         }
     }
@@ -305,19 +299,11 @@ impl GbThread {
         model: ceres_core::Model,
         sav_path: Option<&Path>,
         rom_path: Option<&Path>,
-        trace_enabled: bool,
     ) -> Result<Self, Error> {
         let audio_stream = audio::Stream::new().map_err(Error::Audio)?;
         let ring_buffer = audio_stream.ring_buffer();
 
-        let gb = Self::create_new_gb(
-            &audio_stream,
-            ring_buffer,
-            model,
-            rom_path,
-            sav_path,
-            trace_enabled,
-        )?;
+        let gb = Self::create_new_gb(&audio_stream, ring_buffer, model, rom_path, sav_path)?;
         let gb = Arc::new(Mutex::new(gb));
 
         #[expect(
@@ -354,7 +340,6 @@ impl GbThread {
             audio_stream,
             model,
             multiplier,
-            trace_enabled,
         })
     }
 

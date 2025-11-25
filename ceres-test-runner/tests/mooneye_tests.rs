@@ -562,10 +562,21 @@ fn test_mooneye_ppu_intr_2_mode0_timing_sprites() {
 #[test]
 #[ignore] // TODO: Enable when passing
 fn test_mooneye_ppu_intr_2_mode3_timing() {
-    let result = run_mooneye_test(
-        "mooneye-test-suite/acceptance/ppu/intr_2_mode3_timing.gb",
-        Model::Cgb,
-    );
+    let path = "mooneye-test-suite/acceptance/ppu/intr_2_mode3_timing.gb";
+    let rom = load_test_rom(path).expect("Failed to load test ROM");
+
+    let config = TestConfig {
+        model: Model::Cgb,
+        timeout_frames: timeouts::MOONEYE_ACCEPTANCE,
+        use_mooneye_validation: true,
+        capture_serial: false,
+        test_name: "intr_2_mode3_timing".to_string(),
+        ..TestConfig::default()
+    };
+
+    let mut runner = TestRunner::new(rom, config).expect("Failed to create runner");
+    let result = runner.run();
+
     assert_eq!(
         result,
         TestResult::Passed,

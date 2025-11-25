@@ -104,7 +104,5 @@ See `README.md` for build instructions and prerequisites.
 ## Development Documentation
 
 - **Testing & CI/CD**: See `docs/TESTING.md` for running tests, adding new tests, code coverage, and CI/CD details.
-- **Tracing & Debugging**: See `docs/TRACING_GUIDE.md` for execution tracing, Perfetto analysis, and debugging
-  workflows.
 - **Code Style**: See `CONTRIBUTING.md` for formatting rules and tools.
 - **Commit Messages**: See `CONTRIBUTING.md` for the Conventional Commits convention.

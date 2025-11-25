@@ -3,29 +3,6 @@
 //! Ceres is an experimental Game Boy and Game Boy Color emulator written in Rust.
 //! This crate contains the core emulation logic including CPU, PPU, APU, memory management,
 //! and cartridge handling.
-//!
-//! ## Tracing and Debugging
-//!
-//! This crate uses the standard Rust `tracing` crate for execution tracing.
-//! To enable tracing, configure a tracing subscriber in your application:
-//!
-//! ```rust,ignore
-//! // Example of how to configure tracing in your application:
-//! use tracing_subscriber::{fmt, EnvFilter};
-//!
-//! tracing::subscriber::with_default(
-//!     fmt::Subscriber::builder()
-//!         .with_env_filter(EnvFilter::from_default_env())
-//!         .json() // For JSON output format
-//!         .finish(),
-//!     || {
-//!         // Your emulator code here
-//!     }
-//! );
-//! ```
-//!
-//! With tracing enabled and the `cpu_execution` target filtered, you will receive
-//! detailed logs of each executed instruction.
 
 // #![no_std]
 // FIXME: https://github.com/rust-lang/rust/issues/137578
@@ -47,7 +24,6 @@ mod ppu;
 mod serial;
 mod sm83;
 mod timing;
-pub mod trace;
 
 use crate::{
     bootrom::Bootrom,
@@ -101,9 +77,6 @@ pub struct Gb<A: AudioCallback> {
     ppu: Ppu,
     serial: Serial,
     total_dots: u64,
-    trace_enabled: bool,
-    trace_end_pc: Option<u16>,
-    trace_start_pc: Option<u16>,
     wram: Wram,
 }
 
@@ -290,9 +263,6 @@ impl<A: AudioCallback> Gb<A> {
             ld_b_b_breakpoint: false,
             ppu: Ppu::default(),
             serial: Serial::default(),
-            trace_enabled: false,
-            trace_start_pc: None,
-            trace_end_pc: None,
             wram: Wram::default(),
             #[cfg(feature = "game_genie")]
             game_genie: GameGenie::default(),
@@ -346,21 +316,6 @@ impl<A: AudioCallback> Gb<A> {
         self.apu.set_sample_rate(sample_rate);
     }
 
-    /// Enable or disable execution tracing.
-    ///
-    /// When enabled, the emulator will print disassembled instructions and register
-    /// state to stderr during execution.
-    #[inline]
-    pub const fn set_trace_enabled(&mut self, enabled: bool) {
-        self.trace_enabled = enabled;
-    }
-
-    #[inline]
-    pub const fn set_trace_pc_range(&mut self, start: u16, end: u16) {
-        self.trace_start_pc = Some(start);
-        self.trace_end_pc = Some(end);
-    }
-
     #[inline]
     pub fn soft_reset(&mut self) {
         self.apu.reset();
@@ -374,37 +329,6 @@ impl<A: AudioCallback> Gb<A> {
         self.ppu = Ppu::default();
         self.serial = Serial::default();
         self.bootrom.enable();
-    }
-
-    /// Disable trace collection.
-    ///
-    /// For structured logging, use the Rust `tracing` crate with a configured subscriber.
-    #[inline]
-    pub const fn trace_disable(&mut self) {
-        self.trace_enabled = false;
-    }
-
-    /// Enable trace collection.
-    ///
-    /// This method controls whether detailed execution traces are logged.
-    /// For structured logging, use the Rust `tracing` crate with a configured subscriber.
-    #[inline]
-    pub const fn trace_enable(&mut self) {
-        self.trace_enabled = true;
-    }
-
-    /// Check if execution tracing is enabled.
-    #[must_use]
-    #[inline]
-    pub const fn trace_enabled(&self) -> bool {
-        self.trace_enabled
-    }
-
-    /// Check if trace collection is enabled.
-    #[must_use]
-    #[inline]
-    pub const fn trace_is_enabled(&self) -> bool {
-        self.trace_enabled
     }
 }
 

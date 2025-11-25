@@ -119,15 +119,6 @@ impl<A: AudioCallback> Gb<A> {
             // VBLANK (what happens in HBLANK?)
             self.ppu
                 .write_oam_by_dma(u16::from(dst_offset) | 0xFE00, val);
-
-            tracing::trace!(
-                target: "dma",
-                src = format!("${:04X}", src),
-                oam_offset = format!("${:02X}", dst_offset),
-                val = format!("${:02X}", val),
-                sim_dots = self.total_dots,
-                "OAM DMA transfer byte"
-            );
         }
     }
 }
