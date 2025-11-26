@@ -150,8 +150,10 @@ pub struct Ppu {
     fetcher_step: u8,
     /// OAM scan index (0-39, which OAM entry is being checked).
     oam_scan_index: u8,
-    /// Delay counter for sprite fetching (Mode 3).
-    sprite_fetch_delay: u8,
+    /// Mode 3 delay (pipeline startup and sprite fetch penalties).
+    mode3_delay: u8,
+    /// Last X coordinate where sprites were fetched (to prevent re-triggering).
+    last_fetched_x: i16,
 }
 
 // IO
@@ -204,6 +206,13 @@ impl Ppu {
     fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
         self.set_mode_stat(mode);
         self.remaining_dots_in_mode += self.mode().dots(self.scx);
+
+        if matches!(mode, Mode::Drawing) {
+            // Mode 3 startup delay (approx 6-8 T-cycles)
+            // Required for accurate timing in Mooneye intr_2_mode0_timing
+            self.mode3_delay = 6;
+            self.last_fetched_x = -1;
+        }
 
         // VBlank always fires its own interrupt (separate from STAT)
         if matches!(mode, Mode::VBlank) {
@@ -382,6 +391,9 @@ impl Ppu {
         self.remaining_dots_in_mode = Mode::Drawing.dots(self.scx);
         self.oam_blocked = true;
         self.vram_blocked = true;
+        // Mode 3 startup delay
+        self.mode3_delay = 6;
+        self.last_fetched_x = -1;
 
         // Initialize drawing state
         self.dots_in_line = 0;
@@ -405,7 +417,7 @@ impl Ppu {
     fn tick_oam_scan(&mut self, ints: &mut Interrupts) {
         // OAM scan takes exactly 80 dots
         // Every 2 dots, check one OAM entry (40 entries total)
-        if self.dots_in_line % 2 == 0 && self.oam_scan_index < 40 {
+        if self.dots_in_line.is_multiple_of(2) && self.oam_scan_index < 40 {
             self.scan_oam_entry();
             self.oam_scan_index += 1;
         }
@@ -456,31 +468,20 @@ impl Ppu {
     }
 
     /// Fetch sprites at the current position and overlay onto OAM FIFO.
-    ///
-    /// SameBoy triggers sprite fetch when `objects_x[i] == position_in_line + 8`.
-    /// We check lcd_x + 8 against each sprite's X coordinate.
-    ///
-    /// Returns the number of penalty cycles incurred if sprites were fetched.
-    fn fetch_sprites_at_position(&mut self, cgb_mode: CgbMode) -> u8 {
-        // Sprites are disabled
+    fn fetch_sprites_at_position(&mut self, cgb_mode: CgbMode, match_x: u8) {
         if self.lcdc & LCDC_OBJ_B == 0 && !matches!(cgb_mode, CgbMode::Cgb) {
-            return 0;
+            return;
         }
 
-        // Calculate the X position for object matching (SameBoy's x_for_object_match)
-        // This is position_in_line + 8, but we use lcd_x which is the screen X coordinate
-        let match_x = self.lcd_x.wrapping_add(8);
+        if i16::from(match_x) == self.last_fetched_x {
+            return;
+        }
+        self.last_fetched_x = i16::from(match_x);
 
-        let mut sprites_found = false;
+        let mut sprite_count = 0;
 
-        // Find sprites at this X position
-        for i in 0..self.sprite_buffer.count as usize {
-            let sprite = self.sprite_buffer.sprites[i];
-            if sprite.x != match_x {
-                continue;
-            }
-
-            sprites_found = true;
+        for sprite in self.sprite_buffer.sprites_at_x(match_x) {
+            sprite_count += 1;
 
             // Calculate tile address using get_object_line_address logic
             let height_16 = self.lcdc & LCDC_OBJL_B != 0;
@@ -539,21 +540,26 @@ impl Ppu {
             );
         }
 
-        if sprites_found {
-            // Calculate penalty: 11 - min((sprite_x + (SCX % 8)) % 8, 5)
-            // sprite.x is match_x
-            let align = (match_x.wrapping_add(self.scx & 7)) & 7;
-            let penalty = 11 - align.min(5);
-            penalty
-        } else {
-            0
+        if sprite_count > 0 {
+            // Calculate sprite fetch penalty (6 cycles per sprite + fetcher alignment)
+            // Fetcher runs in 8-cycle steps (4 states * 2 cycles)
+            // Target alignment: Cycle 7
+            let state_val = self.fetcher_state as u8;
+            let current_cycle = state_val * 2 + self.fetcher_step;
+            let align_penalty = if current_cycle <= 7 {
+                7 - current_cycle
+            } else {
+                (8 - current_cycle) + 7
+            };
+
+            self.mode3_delay += align_penalty + (sprite_count as u8 * 6);
         }
     }
 
     /// Tick during Mode 3 (Drawing).
     fn tick_drawing(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
-        if self.sprite_fetch_delay > 0 {
-            self.sprite_fetch_delay -= 1;
+        if self.mode3_delay > 0 {
+            self.mode3_delay -= 1;
             return;
         }
 
@@ -561,13 +567,10 @@ impl Ppu {
         self.check_window_trigger(cgb_mode);
 
         // Check for sprites at current position and fetch them
-        // Sprites are triggered when lcd_x + 8 == sprite.x
-        let penalty = self.fetch_sprites_at_position(cgb_mode);
-        if penalty > 0 {
-            self.remaining_dots_in_mode += i32::from(penalty);
-            self.sprite_fetch_delay = penalty - 1;
-            return;
-        }
+        // Sprites are triggered when lcd_x + 8 == sprite.x.
+        // SameBoy uses position_in_line + 8, which correctly captures sprites at X=0 during junk phase (-8).
+        let match_x = self.position_in_line.wrapping_add(8) as u8;
+        self.fetch_sprites_at_position(cgb_mode, match_x);
 
         // SameBoy order: render_pixel_if_possible THEN advance_fetcher_state_machine
         // Try to output a pixel first (if FIFO has data)
@@ -742,7 +745,7 @@ impl Ppu {
     }
 
     /// Read a tile data byte, respecting CGB VRAM bank.
-    fn read_tile_byte(&self, addr: u16) -> u8 {
+    const fn read_tile_byte(&self, addr: u16) -> u8 {
         let bank = (self.current_tile_attrs >> 3) & 1;
         self.vram.vram_at_bank(addr, bank)
     }

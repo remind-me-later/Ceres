@@ -2,15 +2,15 @@
 
 ## Status Summary
 
-**3 of 10 tests now passing:**
+**4 of 10 tests now passing:**
 
 - ✅ `stat_irq_blocking` - Edge-triggered STAT interrupts
 - ✅ `stat_lyc_onoff` - LY/LYC coincidence during LCD on/off
 - ✅ `vblank_stat_intr_gs` - VBlank OAM interrupt quirk at line 144
+- ✅ `intr_2_mode0_timing` - Mode timing precision
 
-**7 tests still failing (require cycle-accurate PPU):**
+**6 tests still failing (require cycle-accurate PPU):**
 
-- ❌ `intr_2_mode0_timing` - Mode timing precision
 - ❌ `intr_2_mode0_timing_sprites` - Mode timing with sprites
 - ❌ `intr_2_mode3_timing` - Mode 3 timing
 - ❌ `intr_2_oam_ok_timing` - OAM accessibility timing
@@ -48,12 +48,12 @@
 - [ ] 4.4 Verify `lcdon_timing-GS` test passes
 - [ ] 4.5 Verify `lcdon_write_timing-GS` test passes
 
-## 5. Mode Timing Precision (DEFERRED - Requires Cycle-Accurate PPU)
+## 5. Mode Timing Precision (IN PROGRESS)
 
 - [ ] 5.1 Implement variable Mode 3 duration based on sprite X coordinates
 - [ ] 5.2 Implement proper Mode 2 to Mode 3 timing (~3-4 cycles)
 - [ ] 5.3 Implement proper Mode 2 to Mode 0 timing (~46-47 cycles to OAM readable)
-- [ ] 5.4 Verify `intr_2_mode0_timing` test passes
+- [x] 5.4 Verify `intr_2_mode0_timing` test passes
 - [ ] 5.5 Verify `intr_2_mode0_timing_sprites` test passes
 - [ ] 5.6 Verify `intr_2_mode3_timing` test passes
 - [ ] 5.7 Verify `intr_2_oam_ok_timing` test passes
