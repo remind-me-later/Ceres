@@ -492,7 +492,6 @@ fn test_mooneye_oam_dma_sources_gs() {
 // =============================================================================
 
 #[test]
-#[ignore] // TODO: Enable when passing - GS hint
 fn test_mooneye_ppu_hblank_ly_scx_timing_gs() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/hblank_ly_scx_timing-GS.gb",
@@ -545,7 +544,6 @@ fn test_mooneye_ppu_intr_2_mode0_timing() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing
 fn test_mooneye_ppu_intr_2_mode0_timing_sprites() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing_sprites.gb",
@@ -559,7 +557,6 @@ fn test_mooneye_ppu_intr_2_mode0_timing_sprites() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing
 fn test_mooneye_ppu_intr_2_mode3_timing() {
     let path = "mooneye-test-suite/acceptance/ppu/intr_2_mode3_timing.gb";
     let rom = load_test_rom(path).expect("Failed to load test ROM");
@@ -584,7 +581,6 @@ fn test_mooneye_ppu_intr_2_mode3_timing() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing
 fn test_mooneye_ppu_intr_2_oam_ok_timing() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/intr_2_oam_ok_timing.gb",
@@ -598,7 +594,6 @@ fn test_mooneye_ppu_intr_2_oam_ok_timing() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - GS hint
 fn test_mooneye_ppu_lcdon_timing_gs() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/lcdon_timing-GS.gb",
@@ -612,7 +607,6 @@ fn test_mooneye_ppu_lcdon_timing_gs() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - GS hint
 fn test_mooneye_ppu_lcdon_write_timing_gs() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/lcdon_write_timing-GS.gb",

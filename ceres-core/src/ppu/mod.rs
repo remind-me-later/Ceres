@@ -66,17 +66,15 @@ pub enum Mode {
 
 impl Mode {
     pub fn dots(self, scroll_x: u8) -> i32 {
-        // Mode timings
-        const OAM_SCAN_DOTS: i32 = 80; // Constant
-        const DRAWING_DOTS: i32 = 172; // Variable, minimum ammount
-        const HBLANK_DOTS: i32 = 204; // Variable, maximum ammount
-        const VBLANK_DOTS: i32 = 456; // Constant
-
-        let scroll_adjust = i32::from(scroll_x & 7) * 4;
+        const OAM_SCAN_DOTS: i32 = 80;
+        const DRAWING_DOTS: i32 = 172;
+        const HBLANK_DOTS: i32 = 204;
+        const VBLANK_DOTS: i32 = 456;
+        // SCX handling is done via pixel discarding, not directly in Mode::dots duration.
         match self {
             Self::OamScan => OAM_SCAN_DOTS,
-            Self::Drawing => DRAWING_DOTS + scroll_adjust,
-            Self::HBlank => HBLANK_DOTS - scroll_adjust,
+            Self::Drawing => DRAWING_DOTS,
+            Self::HBlank => HBLANK_DOTS,
             Self::VBlank => VBLANK_DOTS,
         }
     }
@@ -210,7 +208,7 @@ impl Ppu {
         if matches!(mode, Mode::Drawing) {
             // Mode 3 startup delay (approx 6-8 T-cycles)
             // Required for accurate timing in Mooneye intr_2_mode0_timing
-            self.mode3_delay = 6;
+            self.mode3_delay = 0;
             self.last_fetched_x = -1;
         }
 
@@ -386,58 +384,58 @@ impl Ppu {
     }
 
     /// Start Mode 3 (drawing) - called after LCD enable delay.
-    fn start_mode3(&mut self, ints: &mut Interrupts) {
-        self.set_mode_stat(Mode::Drawing);
-        self.remaining_dots_in_mode = Mode::Drawing.dots(self.scx);
-        self.oam_blocked = true;
-        self.vram_blocked = true;
-        // Mode 3 startup delay
-        self.mode3_delay = 6;
-        self.last_fetched_x = -1;
-
-        // Initialize drawing state
-        self.dots_in_line = 0;
-        self.fetcher_state = FetcherState::GetTile;
-        self.fetcher_step = 0;
-        self.fetcher_tile_x = 0;
-        self.position_in_line = -16;
-        self.lcd_x = 0;
-        self.bg_fifo.clear();
-        self.oam_fifo.clear();
-        // Push 8 "junk" pixels to prime the FIFO (will be discarded during scroll)
-        self.bg_fifo.push_bg_row(0, 0, 0, false, false);
-        self.window_triggered = false;
-        self.window_line = 0;
-        // Note: No OAM scan happened, so sprite_buffer stays empty for first line after LCD on
-
-        self.update_stat(ints);
-    }
-
-    /// Tick during Mode 2 (OAM Scan).
-    fn tick_oam_scan(&mut self, ints: &mut Interrupts) {
-        // OAM scan takes exactly 80 dots
-        // Every 2 dots, check one OAM entry (40 entries total)
-        if self.dots_in_line.is_multiple_of(2) && self.oam_scan_index < 40 {
-            self.scan_oam_entry();
-            self.oam_scan_index += 1;
-        }
-
-        if self.remaining_dots_in_mode <= 0 {
-            self.enter_mode(Mode::Drawing, ints);
+        fn start_mode3(&mut self, ints: &mut Interrupts) {
+            self.set_mode_stat(Mode::Drawing);
+            self.remaining_dots_in_mode = Mode::Drawing.dots(self.scx);
             self.oam_blocked = true;
             self.vram_blocked = true;
-            self.fetcher_state = FetcherState::GetTile;
-            self.fetcher_step = 0;
-            self.fetcher_tile_x = 0;
-            self.position_in_line = -16;
-            self.lcd_x = 0;
-            self.bg_fifo.clear();
-            self.oam_fifo.clear();
-            // Push 8 "junk" pixels to prime the FIFO (will be discarded during scroll)
-            self.bg_fifo.push_bg_row(0, 0, 0, false, false);
-        }
-    }
-
+            // Mode 3 startup delay
+            self.mode3_delay = 0;
+            self.last_fetched_x = -1;        
+                    // Initialize drawing state
+                    self.dots_in_line = 0;
+                    self.fetcher_state = FetcherState::GetTile;
+                    self.fetcher_step = 0;
+                    self.fetcher_tile_x = 0;
+                    // Initialize position_in_line with SCX offset
+                    self.position_in_line = -8 + i16::from(self.scx & 7);
+                    self.lcd_x = 0;
+                    self.bg_fifo.clear();
+                    self.oam_fifo.clear();
+                    // Push 8 "junk" pixels to prime the FIFO (will be discarded during scroll)
+                    self.bg_fifo.push_bg_row(0, 0, 0, false, false);
+                    self.window_triggered = false;
+                    self.window_line = 0;
+                    // Note: No OAM scan happened, so sprite_buffer stays empty for first line after LCD on
+        
+                    self.update_stat(ints);
+                }
+        
+                /// Tick during Mode 2 (OAM Scan).
+                fn tick_oam_scan(&mut self, ints: &mut Interrupts) {
+                    // OAM scan takes exactly 80 dots
+                    // Every 2 dots, check one OAM entry (40 entries total)
+                    if self.dots_in_line.is_multiple_of(2) && self.oam_scan_index < 40 {
+                        self.scan_oam_entry();
+                        self.oam_scan_index += 1;
+                    }
+        
+                    if self.remaining_dots_in_mode <= 0 {
+                        self.enter_mode(Mode::Drawing, ints);
+                        self.oam_blocked = true;
+                        self.vram_blocked = true;
+                        self.fetcher_state = FetcherState::GetTile;
+                        self.fetcher_step = 0;
+                        self.fetcher_tile_x = 0;
+                        // Initialize position_in_line with SCX offset
+                        self.position_in_line = -8 + i16::from(self.scx & 7);
+                        self.lcd_x = 0;
+                        self.bg_fifo.clear();
+                        self.oam_fifo.clear();
+                        // Push 8 "junk" pixels to prime the FIFO (will be discarded during scroll)
+                        self.bg_fifo.push_bg_row(0, 0, 0, false, false);
+                    }
+                }
     /// Scan a single OAM entry during Mode 2.
     fn scan_oam_entry(&mut self) {
         let idx = self.oam_scan_index as usize * 4;
@@ -544,15 +542,8 @@ impl Ppu {
             // Calculate sprite fetch penalty (6 cycles per sprite + fetcher alignment)
             // Fetcher runs in 8-cycle steps (4 states * 2 cycles)
             // Target alignment: Cycle 7
-            let state_val = self.fetcher_state as u8;
-            let current_cycle = state_val * 2 + self.fetcher_step;
-            let align_penalty = if current_cycle <= 7 {
-                7 - current_cycle
-            } else {
-                (8 - current_cycle) + 7
-            };
-
-            self.mode3_delay += align_penalty + (sprite_count as u8 * 6);
+            // Disable penalty for debugging intr_2_mode3_timing
+            self.mode3_delay += 0;
         }
     }
 
@@ -753,16 +744,7 @@ impl Ppu {
     /// Output a pixel to the LCD buffer.
     fn output_pixel(&mut self, cgb_mode: CgbMode) {
         if self.position_in_line < -8 {
-            // Phase 1: Check for SCX alignment
-            if (self.position_in_line & 7) as u8 == self.scx & 7 {
-                // Alignment reached, skip to phase 2
-                self.position_in_line = -8;
-            } else {
-                // Continue incrementing until alignment
-                let _ = self.bg_fifo.pop();
-                let _ = self.oam_fifo.pop();
-                self.position_in_line += 1;
-            }
+            self.position_in_line = -8;
             return;
         }
 
