@@ -7,7 +7,8 @@ The Game Boy PPU operates in four modes during a scanline (456 T-cycles total):
 ### Mode 2: OAM Scan (80 cycles)
 
 - **Duration:** Fixed at **80 cycles** in SameBoy.
-- **Operation:** Scans OAM memory (0xFE00-0xFE9F) to find sprites visible on the current line.
+- **Operation:** Scans OAM memory (0xFE00-0xFE9F) to find sprites visible on the
+  current line.
 - **Implementation:**
   - Iterates 40 times (0-39).
   - Each iteration takes **2 T-cycles**.
@@ -76,7 +77,8 @@ The fetcher operates in 2-cycle steps (except PUSH).
    - Pixels are popped and discarded if `position_in_line < -8`.
    - Alignment check: `(position_in_line & 7) == (SCX & 7)`.
    - If aligned, jumps to `-8`. This effectively consumes `SCX % 8` cycles.
-4. **Output:** If `position_in_line >= 0`, pushes to LCD buffer and increments `lcd_x`.
+4. **Output:** If `position_in_line >= 0`, pushes to LCD buffer and increments
+   `lcd_x`.
 
 ---
 
@@ -90,8 +92,8 @@ The fetcher operates in 2-cycle steps (except PUSH).
 
 - **Mechanism:** Pixel discarding.
 - **Cost:** `SCX % 8` cycles.
-- **Implementation:** `position_in_line` starts at -16. Render loop runs but discards pixels until alignment matches
-  SCX.
+- **Implementation:** `position_in_line` starts at -16. Render loop runs but
+  discards pixels until alignment matches SCX.
 
 ### Window Penalty
 
@@ -106,7 +108,8 @@ The fetcher operates in 2-cycle steps (except PUSH).
 - **Mechanism:** Fetcher Interruption.
 - **Trigger:** When `objects_x[i] == x_for_object_match`.
 - **Sequence:**
-  1. **Stall:** Loops `advance_fetcher` until fetcher reaches specific state (`DATA_HIGH_T2`?) or FIFO empty.
+  1. **Stall:** Loops `advance_fetcher` until fetcher reaches specific state
+     (`DATA_HIGH_T2`?) or FIFO empty.
   2. **OAM Read:** 2 cycles. (`cycles += 2; sleep(2)`).
   3. **VRAM Read 0:** 2 cycles. (`cycles += 2; sleep(2)`).
   4. **VRAM Read 1:** 1 cycle. (`cycles += 1; sleep(1)`).
@@ -119,8 +122,8 @@ The fetcher operates in 2-cycle steps (except PUSH).
 
 ### SCX Handling (Revisited)
 
-SameBoy's `render_pixel_if_possible` function contains specific logic for handling SCX alignment, which it refers to as
-"fractional scrolling".
+SameBoy's `render_pixel_if_possible` function contains specific logic for
+handling SCX alignment, which it refers to as "fractional scrolling".
 
 - **Initial State:** `gb->position_in_line` starts at -16.
 - **Discard Loop:**
@@ -128,15 +131,18 @@ SameBoy's `render_pixel_if_possible` function contains specific logic for handli
     - Checks alignment: `(position_in_line & 7) == (SCX & 7)`.
     - If aligned: Jumps `position_in_line` to -8.
     - If not aligned: Pops from FIFOs and increments `position_in_line` by 1.
-  - This mechanism effectively discards `(SCX % 8)` pixels at the start of the line.
-  - The cycle cost is implicit: the rendering loop runs for more iterations (discarding pixels) before
-    `position_in_line` reaches 0 (start of LCD output).
+  - This mechanism effectively discards `(SCX % 8)` pixels at the start of the
+    line.
+  - The cycle cost is implicit: the rendering loop runs for more iterations
+    (discarding pixels) before `position_in_line` reaches 0 (start of LCD
+    output).
 
 ### "Fractional Pixels"
 
-- The term "fractional pixels" appears in iOS/layout code (scaling related) and in HexFiend (UI view), which are
-  unrelated to the PPU logic.
-- In `display.c`, `gb->line_has_fractional_scrolling` flag is set if `SCX % 8 != 0` during the discard phase.
+- The term "fractional pixels" appears in iOS/layout code (scaling related) and
+  in HexFiend (UI view), which are unrelated to the PPU logic.
+- In `display.c`, `gb->line_has_fractional_scrolling` flag is set if
+  `SCX % 8 != 0` during the discard phase.
 - This flag affects `WX` glitch logic:
   `gb->cgb_wx_glitch = ... || (gb->position_in_line == (uint8_t)-7 && gb->line_has_fractional_scrolling)`.
 
@@ -149,8 +155,8 @@ SameBoy's `render_pixel_if_possible` function contains specific logic for handli
 3. **Main Loop:** Implement `while(lcd_x < 160)`.
 4. **Fetcher:** Implement full state machine (T1/T2 states).
 5. **FIFO:** Implement blocking PUSH state.
-6. **Sprites:** Implement "interrupt" logic in main loop. When sprite matches X, pause rendering, run sprite fetch
-   sequence (OAM->VRAM->VRAM), then resume.
+6. **Sprites:** Implement "interrupt" logic in main loop. When sprite matches X,
+   pause rendering, run sprite fetch sequence (OAM->VRAM->VRAM), then resume.
 7. **SCX:** Implement pixel discarding logic in renderer:
    - Start `position_in_line` at -16.
    - Discard logic matching `(position_in_line & 7) == (SCX & 7)`.

@@ -4,7 +4,9 @@ Thank you for your interest in contributing to Ceres!
 
 ## Commit Message Convention
 
-This project uses [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit messages.
+This project uses
+[Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) for
+commit messages.
 
 ### Format
 
@@ -18,17 +20,19 @@ This project uses [Conventional Commits](https://www.conventionalcommits.org/en/
 
 ### Types and Scopes
 
-Refer to the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/#summary) for the full
-list of commit types (e.g., `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`,
-`revert`).
+Refer to the
+[Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/#summary)
+for the full list of commit types (e.g., `feat`, `fix`, `docs`, `style`,
+`refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`).
 
-Common scopes include: `core`, `ppu`, `cpu`, `apu`, `memory`, `cartridge`, `gtk`, `egui`, `winit`, `std`, `tests`,
-`bootrom`.
+Common scopes include: `core`, `ppu`, `cpu`, `apu`, `memory`, `cartridge`,
+`gtk`, `egui`, `winit`, `std`, `tests`, `bootrom`.
 
 ### Breaking Changes
 
-Indicate breaking changes by appending `!` after the type/scope (e.g., `feat(api)!: change memory access API`) or by
-adding a `BREAKING CHANGE:` footer in the commit body.
+Indicate breaking changes by appending `!` after the type/scope (e.g.,
+`feat(api)!: change memory access API`) or by adding a `BREAKING CHANGE:` footer
+in the commit body.
 
 ### Examples
 
@@ -46,26 +50,31 @@ chore(deps): update winit to 0.29
 
 - Format Rust code with `cargo fmt --all`
 - Format TOML with `tombi format`
-- Format JSON, Markdown and YAML with `prettier --write "**/*.{json,yaml,yml,md}"`
+- Format JSON, Markdown and YAML with
+  `prettier --write "**/*.{json,yaml,yml,md}"`
 - Ensure tests pass (see below)
 
 ## Testing
 
-Ceres includes a comprehensive integration test suite `ceres-test-runner` that validates emulator accuracy using actual
-Game Boy test ROMs and pixel-perfect screenshot comparisons. These tests serve as the primary specification for the
+Ceres includes a comprehensive integration test suite `ceres-test-runner` that
+validates emulator accuracy using actual Game Boy test ROMs and pixel-perfect
+screenshot comparisons. These tests serve as the primary specification for the
 emulator's behavior, validating its accuracy against actual Game Boy hardware.
 
-The test runner uses multiple mechanisms to detect completion, as required by each test suite:
+The test runner uses multiple mechanisms to detect completion, as required by
+each test suite:
 
-- **Breakpoint detection**: Uses `ld b, b` (opcode 0x40) as a debug breakpoint for immediate completion (e.g., in Acid2
-  tests).
+- **Breakpoint detection**: Uses `ld b, b` (opcode 0x40) as a debug breakpoint
+  for immediate completion (e.g., in Acid2 tests).
 - **Screenshot comparison**: Tests pass when output matches reference images.
 - **Timeout safety**: Prevents infinite loops.
 
 ### Setup
 
-Test ROMs are **automatically downloaded** when you build or test. The build script downloads the test ROM collection
-from [c-sp/gameboy-test-roms](https://github.com/c-sp/gameboy-test-roms) into the `test-roms/` directory.
+Test ROMs are **automatically downloaded** when you build or test. The build
+script downloads the test ROM collection from
+[c-sp/gameboy-test-roms](https://github.com/c-sp/gameboy-test-roms) into the
+`test-roms/` directory.
 
 ### Running Tests
 
@@ -90,8 +99,9 @@ cargo test --package ceres-test-runner -- --ignored
 
 ### CI/CD Pipeline
 
-GitHub Actions automatically runs tests on every push. It installs the RGBDS toolchain, caches dependencies and test
-ROMs, and runs tests for `ceres-core` and `ceres-test-runner`.
+GitHub Actions automatically runs tests on every push. It installs the RGBDS
+toolchain, caches dependencies and test ROMs, and runs tests for `ceres-core`
+and `ceres-test-runner`.
 
 ### Code Coverage
 
