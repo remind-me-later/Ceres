@@ -40,6 +40,12 @@ To build:
 
 - In the root directory `cargo run`.
 
+## Testing
+
+To run the integration tests:
+
+`cargo test --package ceres-test-runner`
+
 ## Key bindings
 
 | Gameboy | Emulator |
@@ -58,6 +64,10 @@ To build:
 - `ceres-winit` contains the `winit` frontend.
 - `ceres-egui` contains the `egui` frontend.
 - `ceres-gtk` contains the `gtk` frontend.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development guide, code style, and detailed testing instructions.
 
 ## Thanks
 

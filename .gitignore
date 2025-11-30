@@ -55,8 +55,3 @@ assets/
 **/*.so
 
 test-roms/
-
-# Agent files
-.gemini/
-.github/prompts/
-.qwen/

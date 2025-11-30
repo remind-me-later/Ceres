@@ -16,50 +16,19 @@ This project uses [Conventional Commits](https://www.conventionalcommits.org/en/
 [optional footer(s)]
 ```
 
-### Types
+### Types and Scopes
 
-- **feat**: A new feature
-- **fix**: A bug fix
-- **docs**: Documentation only changes
-- **style**: Changes that don't affect code meaning (whitespace, formatting, etc)
-- **refactor**: Code change that neither fixes a bug nor adds a feature
-- **perf**: Performance improvements
-- **test**: Adding or correcting tests
-- **build**: Changes to build system or dependencies
-- **ci**: Changes to CI configuration files and scripts
-- **chore**: Other changes that don't modify src or test files
-- **revert**: Reverts a previous commit
+Refer to the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/#summary) for the full
+list of commit types (e.g., `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`,
+`revert`).
 
-### Common Scopes
-
-- **core**: Changes to ceres-core
-- **ppu**: PPU-related changes
-- **cpu**: CPU (SM83) related changes
-- **apu**: Audio Processing Unit
-- **memory**: Memory management
-- **cartridge**: Cartridge/MBC handling
-- **gtk**: GTK frontend
-- **egui**: egui frontend
-- **winit**: winit frontend
-- **std**: ceres-std library
-- **tests**: Test runner or test infrastructure
-- **bootrom**: Boot ROM changes
+Common scopes include: `core`, `ppu`, `cpu`, `apu`, `memory`, `cartridge`, `gtk`, `egui`, `winit`, `std`, `tests`,
+`bootrom`.
 
 ### Breaking Changes
 
-For breaking changes, add `!` after the type/scope:
-
-```text
-feat(api)!: change memory access API signature
-```
-
-Or add a `BREAKING CHANGE:` footer:
-
-```text
-feat(api): change memory access API
-
-BREAKING CHANGE: Memory::read() now returns Result instead of u8
-```
+Indicate breaking changes by appending `!` after the type/scope (e.g., `feat(api)!: change memory access API`) or by
+adding a `BREAKING CHANGE:` footer in the commit body.
 
 ### Examples
 
@@ -76,9 +45,65 @@ chore(deps): update winit to 0.29
 ## Code Style
 
 - Format Rust code with `cargo fmt --all`
-- Format JSON, Markdown, and YAML with `prettier --write "**/*.{json,md,yaml,yml}"`
-- Run tests with `cargo test --package ceres-core --package ceres-test-runner`
+- Format TOML with `tombi format`
+- Format JSON, Markdown and YAML with `prettier --write "**/*.{json,yaml,yml,md}"`
+- Ensure tests pass (see below)
 
-## Development Workflow
+## Testing
 
-See `AGENTS.md` for detailed development guidelines and the OpenSpec workflow for larger changes.
+Ceres includes a comprehensive integration test suite `ceres-test-runner` that validates emulator accuracy using actual
+Game Boy test ROMs and pixel-perfect screenshot comparisons. These tests serve as the primary specification for the
+emulator's behavior, validating its accuracy against actual Game Boy hardware.
+
+The test runner uses multiple mechanisms to detect completion, as required by each test suite:
+
+- **Breakpoint detection**: Uses `ld b, b` (opcode 0x40) as a debug breakpoint for immediate completion (e.g., in Acid2
+  tests).
+- **Screenshot comparison**: Tests pass when output matches reference images.
+- **Timeout safety**: Prevents infinite loops.
+
+### Setup
+
+Test ROMs are **automatically downloaded** when you build or test. The build script downloads the test ROM collection
+from [c-sp/gameboy-test-roms](https://github.com/c-sp/gameboy-test-roms) into the `test-roms/` directory.
+
+### Running Tests
+
+#### Run All Tests
+
+```bash
+cargo test --package ceres-test-runner
+```
+
+#### Run Specific Tests
+
+```bash
+# Run a specific test case
+cargo test --package ceres-test-runner test_blargg_cpu_instrs
+
+# Run all dmg-acid2 tests
+cargo test --package ceres-test-runner test_dmg_acid2
+
+# Run ignored tests (known failures)
+cargo test --package ceres-test-runner -- --ignored
+```
+
+### CI/CD Pipeline
+
+GitHub Actions automatically runs tests on every push. It installs the RGBDS toolchain, caches dependencies and test
+ROMs, and runs tests for `ceres-core` and `ceres-test-runner`.
+
+### Code Coverage
+
+To analyze test coverage using `cargo-llvm-cov`:
+
+```bash
+# Install cargo-llvm-cov
+cargo install cargo-llvm-cov
+
+# Generate HTML report
+cargo llvm-cov --package ceres-core --package ceres-test-runner --html
+
+# Open report
+xdg-open target/llvm-cov/html/index.html
+```
