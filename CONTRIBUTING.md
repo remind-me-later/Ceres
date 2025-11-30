@@ -50,8 +50,8 @@ chore(deps): update winit to 0.29
 
 - Format Rust code with `cargo fmt --all`
 - Format TOML with `tombi format`
-- Format JSON, Markdown and YAML with
-  `prettier --write "**/*.{json,yaml,yml,md}"`
+- Format JSON, Markdown, YAML and JSON with
+  `prettier --write "**/*.{json,yaml,yml,md,json}"`
 - Ensure tests pass (see below)
 
 ## Testing
