@@ -16,6 +16,7 @@ pub fn test_roms_dir() -> PathBuf {
     PathBuf::from(manifest_dir)
         .parent()
         .unwrap()
+        .join("external")
         .join("test-roms")
 }
 

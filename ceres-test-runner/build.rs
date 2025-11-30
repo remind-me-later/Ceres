@@ -41,6 +41,7 @@ fn get_test_roms_dir() -> Result<PathBuf> {
     let test_roms_dir = PathBuf::from(manifest_dir)
         .parent()
         .context("Failed to get parent directory")?
+        .join("external")
         .join("test-roms");
 
     Ok(test_roms_dir)
