@@ -19,8 +19,12 @@ use ceres_test_runner::{
 /// * `frames` - Number of frames to run (default: 2, special: 24 for `is_if_set_during_ime0`)
 fn run_gbmicrotest(rom_name: &str, frames: u32) -> TestResult {
     let path = format!("gbmicrotest/{rom_name}");
+    eprintln!("DEBUG: Loading ROM from path: {path}");
     let rom = match load_test_rom(&path) {
-        Ok(rom) => rom,
+        Ok(rom) => {
+            eprintln!("DEBUG: ROM loaded, size = {} bytes", rom.len());
+            rom
+        }
         Err(e) => return TestResult::Failed(format!("Failed to load test ROM: {e}")),
     };
 
@@ -41,11 +45,24 @@ fn run_gbmicrotest(rom_name: &str, frames: u32) -> TestResult {
 
     // Check result at 0xFF82: 0x01 = pass, 0xFF = fail
     let result = runner.read_memory(0xFF82);
+    let actual = runner.read_memory(0xFF80);
+    let expected = runner.read_memory(0xFF81);
+    // Also read bank register to see if bootrom finished
+    let bank = runner.read_memory(0xFF50);
+    // Read LCDC to see if LCD is on
+    let lcdc = runner.read_memory(0xFF40);
+    let ly = runner.read_memory(0xFF44);
+    // Read some ROM locations to verify ROM is loaded
+    let rom_100 = runner.read_memory(0x0100);
+    let rom_104 = runner.read_memory(0x0104);
+    // Read VRAM to see if test wrote there
+    let vram_8000 = runner.read_memory(0x8000);
+    eprintln!("DEBUG: result=0x{result:02X}, actual=0x{actual:02X}, expected=0x{expected:02X}");
+    eprintln!("DEBUG: bank=0x{bank:02X}, lcdc=0x{lcdc:02X}, ly=0x{ly:02X}, frames={}", runner.frames_run());
+    eprintln!("DEBUG: rom[0x100]=0x{rom_100:02X}, rom[0x104]=0x{rom_104:02X}, vram[0x8000]=0x{vram_8000:02X}");
     match result {
         0x01 => TestResult::Passed,
         0xFF => {
-            let actual = runner.read_memory(0xFF80);
-            let expected = runner.read_memory(0xFF81);
             TestResult::Failed(format!(
                 "Test failed: actual=0x{actual:02X}, expected=0x{expected:02X}"
             ))
@@ -65,7 +82,8 @@ macro_rules! gbmicrotest {
         #[ignore = "gbmicrotest requires cycle-accurate timing - enable individually as accuracy improves"]
         #[allow(non_snake_case)]
         fn $name() {
-            let result = run_gbmicrotest($rom, 2);
+            // NOTE: 310 frames is enough for bootrom (~5 sec) + test
+            let result = run_gbmicrotest($rom, 320);
             assert_eq!(result, TestResult::Passed);
         }
     };

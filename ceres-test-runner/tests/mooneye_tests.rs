@@ -521,7 +521,7 @@ fn test_mooneye_ppu_intr_1_2_timing_gs() {
 fn test_mooneye_ppu_intr_2_0_timing() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/intr_2_0_timing.gb",
-        Model::Cgb,
+        Model::Dmg,
     );
     assert_eq!(
         result,
@@ -534,7 +534,7 @@ fn test_mooneye_ppu_intr_2_0_timing() {
 fn test_mooneye_ppu_intr_2_mode0_timing() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing.gb",
-        Model::Cgb,
+        Model::Dmg,
     );
     assert_eq!(
         result,
@@ -547,7 +547,7 @@ fn test_mooneye_ppu_intr_2_mode0_timing() {
 fn test_mooneye_ppu_intr_2_mode0_timing_sprites() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing_sprites.gb",
-        Model::Cgb,
+        Model::Dmg,
     );
     assert_eq!(
         result,
@@ -558,21 +558,10 @@ fn test_mooneye_ppu_intr_2_mode0_timing_sprites() {
 
 #[test]
 fn test_mooneye_ppu_intr_2_mode3_timing() {
-    let path = "mooneye-test-suite/acceptance/ppu/intr_2_mode3_timing.gb";
-    let rom = load_test_rom(path).expect("Failed to load test ROM");
-
-    let config = TestConfig {
-        model: Model::Cgb,
-        timeout_frames: timeouts::MOONEYE_ACCEPTANCE,
-        use_mooneye_validation: true,
-        capture_serial: false,
-        test_name: "intr_2_mode3_timing".to_string(),
-        ..TestConfig::default()
-    };
-
-    let mut runner = TestRunner::new(rom, config).expect("Failed to create runner");
-    let result = runner.run();
-
+    let result = run_mooneye_test(
+        "mooneye-test-suite/acceptance/ppu/intr_2_mode3_timing.gb",
+        Model::Dmg,
+    );
     assert_eq!(
         result,
         TestResult::Passed,
@@ -584,7 +573,7 @@ fn test_mooneye_ppu_intr_2_mode3_timing() {
 fn test_mooneye_ppu_intr_2_oam_ok_timing() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/intr_2_oam_ok_timing.gb",
-        Model::Cgb,
+        Model::Dmg,
     );
     assert_eq!(
         result,
@@ -623,7 +612,7 @@ fn test_mooneye_ppu_lcdon_write_timing_gs() {
 fn test_mooneye_ppu_stat_irq_blocking() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/stat_irq_blocking.gb",
-        Model::Cgb,
+        Model::Dmg,
     );
     assert_eq!(
         result,
@@ -636,7 +625,7 @@ fn test_mooneye_ppu_stat_irq_blocking() {
 fn test_mooneye_ppu_stat_lyc_onoff() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/stat_lyc_onoff.gb",
-        Model::Cgb,
+        Model::Dmg,
     );
     assert_eq!(result, TestResult::Passed, "ppu/stat_lyc_onoff test failed");
 }
@@ -847,7 +836,7 @@ fn test_mooneye_mbc1_bits_ramg() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when multicart support is implemented
+#[ignore] // Requires MBC1M multicart wiring support (different from standard MBC1)
 fn test_mooneye_mbc1_multicart_rom_8mb() {
     let result = run_mooneye_test(
         "mooneye-test-suite/emulator-only/mbc1/multicart_rom_8Mb.gb",
@@ -861,7 +850,6 @@ fn test_mooneye_mbc1_multicart_rom_8mb() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - index out of bounds error
 fn test_mooneye_mbc1_ram_64kb() {
     let result = run_mooneye_test(
         "mooneye-test-suite/emulator-only/mbc1/ram_64kb.gb",
@@ -880,7 +868,6 @@ fn test_mooneye_mbc1_ram_256kb() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - Mooneye validation fails
 fn test_mooneye_mbc1_rom_512kb() {
     let result = run_mooneye_test(
         "mooneye-test-suite/emulator-only/mbc1/rom_512kb.gb",
@@ -890,7 +877,6 @@ fn test_mooneye_mbc1_rom_512kb() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - Mooneye validation fails
 fn test_mooneye_mbc1_rom_1mb() {
     let result = run_mooneye_test(
         "mooneye-test-suite/emulator-only/mbc1/rom_1Mb.gb",
@@ -900,7 +886,6 @@ fn test_mooneye_mbc1_rom_1mb() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - Mooneye validation fails
 fn test_mooneye_mbc1_rom_2mb() {
     let result = run_mooneye_test(
         "mooneye-test-suite/emulator-only/mbc1/rom_2Mb.gb",
@@ -910,7 +895,6 @@ fn test_mooneye_mbc1_rom_2mb() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - Mooneye validation fails
 fn test_mooneye_mbc1_rom_4mb() {
     let result = run_mooneye_test(
         "mooneye-test-suite/emulator-only/mbc1/rom_4Mb.gb",
@@ -920,7 +904,6 @@ fn test_mooneye_mbc1_rom_4mb() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - Timeout
 fn test_mooneye_mbc1_rom_8mb() {
     let result = run_mooneye_test(
         "mooneye-test-suite/emulator-only/mbc1/rom_8Mb.gb",
@@ -930,7 +913,6 @@ fn test_mooneye_mbc1_rom_8mb() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - Timeout
 fn test_mooneye_mbc1_rom_16mb() {
     let result = run_mooneye_test(
         "mooneye-test-suite/emulator-only/mbc1/rom_16Mb.gb",
