@@ -67,6 +67,8 @@ pub enum Mode {
 impl Mode {
     pub fn dots(self, scroll_x: u8) -> i32 {
         const OAM_SCAN_DOTS: i32 = 80;
+        // Mode 3 base is 172 minimum, but with proper fetcher/FIFO timing
+        // it's closer to 167 + (SCX & 7) for no sprites/window
         const DRAWING_DOTS: i32 = 172;
         const HBLANK_DOTS: i32 = 204;
         const VBLANK_DOTS: i32 = 456;
@@ -107,6 +109,10 @@ pub struct Ppu {
     /// Internal STAT interrupt line - OR of all enabled STAT sources.
     /// Used to implement edge-triggered interrupt behavior.
     stat_interrupt_line: bool,
+    /// Mode used for interrupt purposes (can differ from STAT mode bits by 1-2 cycles).
+    /// SameBoy uses this to fire Mode 2 interrupt slightly before STAT shows Mode 2.
+    /// Value of -1 (represented as None) means no mode-based interrupt should fire.
+    mode_for_interrupt: Option<Mode>,
     vram: Vram,
     win_in_frame: bool,
     win_in_ly: bool,
@@ -185,8 +191,11 @@ impl Ppu {
             new_line = true;
         }
 
-        // Mode-based interrupts
-        match self.mode() {
+        // Mode-based interrupts use mode_for_interrupt (which can differ from STAT bits)
+        // SameBoy: mode_for_interrupt can be set to 2 at the end of HBlank, before STAT changes
+        // If mode_for_interrupt is None, fall back to the actual STAT mode bits
+        let interrupt_mode = self.mode_for_interrupt.unwrap_or_else(|| self.mode());
+        match interrupt_mode {
             Mode::HBlank if self.stat & STAT_IF_HBLANK_B != 0 => new_line = true,
             Mode::VBlank if self.stat & STAT_IF_VBLANK_B != 0 => new_line = true,
             Mode::OamScan if self.stat & STAT_IF_OAM_B != 0 => new_line = true,
@@ -203,6 +212,9 @@ impl Ppu {
 
     fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
         self.set_mode_stat(mode);
+        // mode_for_interrupt will fallback to actual mode via unwrap_or_else
+        // Only set explicitly when we need to differ from STAT mode bits
+        self.mode_for_interrupt = None;
         self.remaining_dots_in_mode += self.mode().dots(self.scx);
 
         if matches!(mode, Mode::Drawing) {
@@ -397,8 +409,9 @@ impl Ppu {
         self.fetcher_state = FetcherState::GetTile;
         self.fetcher_step = 0;
         self.fetcher_tile_x = 0;
-        // Initialize position_in_line with SCX offset
-        self.position_in_line = -8 + i16::from(self.scx & 7);
+        // SameBoy: position_in_line starts at -16. The SCX alignment algorithm
+        // in output_pixel will handle jumping to -8 when (position_in_line & 7) == (SCX & 7).
+        self.position_in_line = -16;
         self.lcd_x = 0;
         self.bg_fifo.clear();
         self.oam_fifo.clear();
@@ -427,8 +440,9 @@ impl Ppu {
             self.fetcher_state = FetcherState::GetTile;
             self.fetcher_step = 0;
             self.fetcher_tile_x = 0;
-            // Initialize position_in_line with SCX offset
-            self.position_in_line = -8 + i16::from(self.scx & 7);
+            // SameBoy: position_in_line starts at -16. The SCX alignment algorithm
+            // in output_pixel will handle jumping to -8 when (position_in_line & 7) == (SCX & 7).
+            self.position_in_line = -16;
             self.lcd_x = 0;
             self.bg_fifo.clear();
             self.oam_fifo.clear();
@@ -549,6 +563,24 @@ impl Ppu {
 
     /// Tick during Mode 3 (Drawing).
     fn tick_drawing(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
+        // SameBoy: Exit check happens BEFORE the cycle's work, not after.
+        // This means the cycle where position_in_line reaches 160 exits immediately.
+        if self.position_in_line >= 160 {
+            // Increment window line counter if window was active this scanline
+            if self.window_triggered {
+                self.window_line = self.window_line.wrapping_add(1);
+            }
+            // Transition to HBlank
+            // Calculate actual HBlank duration: 456 total - actual dots used
+            let hblank_dots = 456 - i32::from(self.dots_in_line);
+            self.oam_blocked = false;
+            self.vram_blocked = false;
+            self.set_mode_stat(Mode::HBlank);
+            self.remaining_dots_in_mode = hblank_dots;
+            self.update_stat(ints);
+            return;
+        }
+
         if self.mode3_delay > 0 {
             self.mode3_delay -= 1;
             return;
@@ -558,9 +590,12 @@ impl Ppu {
         self.check_window_trigger(cgb_mode);
 
         // Check for sprites at current position and fetch them
-        // Sprites are triggered when lcd_x + 8 == sprite.x.
-        // SameBoy uses position_in_line + 8, which correctly captures sprites at X=0 during junk phase (-8).
-        let match_x = self.position_in_line.wrapping_add(8) as u8;
+        // SameBoy's x_for_object_match: position_in_line + 8, clamped to 0 if overflow
+        let match_x = {
+            let raw = self.position_in_line.wrapping_add(8) as u8;
+            // If raw > 240 (i.e., position_in_line was < -8), use 0
+            if raw > 240 { 0 } else { raw }
+        };
         self.fetch_sprites_at_position(cgb_mode, match_x);
 
         // SameBoy order: render_pixel_if_possible THEN advance_fetcher_state_machine
@@ -574,23 +609,6 @@ impl Ppu {
             self.advance_fetcher(cgb_mode);
         }
         self.fetcher_step = (self.fetcher_step + 1) % 2;
-
-        // Check if we've rendered all 160 pixels
-        if self.lcd_x >= PX_WIDTH {
-            // Increment window line counter if window was active this scanline
-            if self.window_triggered {
-                self.window_line = self.window_line.wrapping_add(1);
-            }
-            // Transition to HBlank
-            // Calculate actual HBlank duration: 456 total - 80 (OAM) - actual Mode 3 duration
-            // dots_in_line tracks how many dots we've spent in this scanline
-            let hblank_dots = 456 - i32::from(self.dots_in_line);
-            self.oam_blocked = false;
-            self.vram_blocked = false;
-            self.set_mode_stat(Mode::HBlank);
-            self.remaining_dots_in_mode = hblank_dots;
-            self.update_stat(ints);
-        }
     }
 
     /// Check if window should be activated at the current position.
@@ -742,21 +760,38 @@ impl Ppu {
     }
 
     /// Output a pixel to the LCD buffer.
+    /// Implements SameBoy's render_pixel_if_possible logic.
     fn output_pixel(&mut self, cgb_mode: CgbMode) {
-        if self.position_in_line < -8 {
-            self.position_in_line = -8;
-            return;
+        // SameBoy: Handle position_in_line alignment for SCX.
+        // (position_in_line + 16 < 8) is equivalent to (position_in_line < -8) in unsigned logic.
+        // When position_in_line is in the range [-16, -9], we're in the "fractional scrolling" phase.
+        #[expect(clippy::cast_sign_loss)]
+        let unsigned_pos_plus_16 = (self.position_in_line + 16) as u8;
+        if unsigned_pos_plus_16 < 8 {
+            // SameBoy: Check if we should jump to -8 based on SCX alignment.
+            // When (position_in_line & 7) == (SCX & 7), jump to -8.
+            #[expect(clippy::cast_sign_loss)]
+            let pos_mod_8 = (self.position_in_line & 7) as u8;
+            let scx_mod_8 = self.scx & 7;
+
+            if pos_mod_8 == scx_mod_8 {
+                self.position_in_line = -8;
+            }
+            // SameBoy: If alignment doesn't match, the function continues
+            // and will pop a pixel from FIFO + increment position_in_line below.
         }
 
+        // SameBoy: Discard phase - position_in_line < 0 means we're discarding junk pixels
         if self.position_in_line < 0 {
-            // Phase 2: Discard junk pixels (position -8 to -1)
             let _ = self.bg_fifo.pop();
             let _ = self.oam_fifo.pop();
             self.position_in_line += 1;
             return;
         }
 
+        // SameBoy: Drop pixels if we've reached the end of the visible line
         if self.lcd_x >= PX_WIDTH {
+            self.position_in_line += 1;
             return;
         }
 
@@ -904,6 +939,19 @@ impl Ppu {
 
     /// Tick during Mode 0 (HBlank).
     fn tick_hblank(&mut self, ints: &mut Interrupts) {
+        // SameBoy quirk: Mode 2 interrupt fires near the end of HBlank,
+        // about 2 cycles before the line actually changes.
+        // Fire the interrupt early while STAT still shows Mode 0.
+        if self.remaining_dots_in_mode == 2 && self.ly < 143 {
+            let next_line = self.ly + 1;
+            if next_line != 0 {
+                self.mode_for_interrupt = Some(Mode::OamScan);
+                self.update_stat(ints);
+                // Clear mode_for_interrupt so it doesn't interfere with stat_irq_blocking
+                self.mode_for_interrupt = None;
+            }
+        }
+
         if self.remaining_dots_in_mode <= 0 {
             self.ly += 1;
             self.ly_for_comparison = self.ly;
@@ -917,6 +965,7 @@ impl Ppu {
                 self.sprite_buffer.clear();
                 self.oam_blocked = true;
                 self.window_triggered = false;
+                
                 self.enter_mode(Mode::OamScan, ints);
             }
         }
