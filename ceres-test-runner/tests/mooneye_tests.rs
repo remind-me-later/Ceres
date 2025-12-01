@@ -926,7 +926,6 @@ fn test_mooneye_mbc1_rom_16mb() {
 // =============================================================================
 
 #[test]
-#[ignore] // TODO: Enable when passing - Mooneye validation fails
 fn test_mooneye_mbc2_bits_ramg() {
     let result = run_mooneye_test(
         "mooneye-test-suite/emulator-only/mbc2/bits_ramg.gb",
@@ -954,14 +953,12 @@ fn test_mooneye_mbc2_bits_unused() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - Mooneye validation fails
 fn test_mooneye_mbc2_ram() {
     let result = run_mooneye_test("mooneye-test-suite/emulator-only/mbc2/ram.gb", Model::Cgb);
     assert_eq!(result, TestResult::Passed, "mbc2/ram test failed");
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - index out of bounds error
 fn test_mooneye_mbc2_rom_512kb() {
     let result = run_mooneye_test(
         "mooneye-test-suite/emulator-only/mbc2/rom_512kb.gb",
@@ -971,7 +968,6 @@ fn test_mooneye_mbc2_rom_512kb() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - index out of bounds error
 fn test_mooneye_mbc2_rom_1mb() {
     let result = run_mooneye_test(
         "mooneye-test-suite/emulator-only/mbc2/rom_1Mb.gb",

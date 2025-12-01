@@ -131,7 +131,13 @@ impl Cartridge {
             });
         }
 
-        let ram = alloc::vec![0xFF; ram_size.size_bytes() as usize].into_boxed_slice();
+        // MBC2 has built-in 512 bytes of 4-bit RAM regardless of header
+        let actual_ram_size = if matches!(mbc, Mbc::Mbc2) {
+            0x200 // 512 bytes
+        } else {
+            ram_size.size_bytes() as usize
+        };
+        let ram = alloc::vec![0xFF; actual_ram_size].into_boxed_slice();
 
         Ok(Self {
             mbc,
@@ -179,7 +185,16 @@ impl Cartridge {
         match &self.mbc {
             Mbc::Mbc0 => 0xFF,
             Mbc::Mbc1 { .. } | Mbc::Mbc5 => mbc_read_ram(self, self.ram_enabled, addr),
-            Mbc::Mbc2 => (mbc_read_ram(self, self.ram_enabled, addr) & 0xF) | 0xF0,
+            Mbc::Mbc2 => {
+                // MBC2 has built-in 512 bytes of 4-bit RAM
+                // Upper 4 bits always read as 0xF
+                if self.ram_enabled {
+                    let ram_addr = (addr & 0x1FF) as usize; // 512 bytes
+                    (self.ram[ram_addr] & 0xF) | 0xF0
+                } else {
+                    0xFF
+                }
+            }
             Mbc::Mbc3 { rtc, .. } => rtc
                 .as_ref()
                 .and_then(|r| r.read(self.ram_enabled))
@@ -239,8 +254,16 @@ impl Cartridge {
 
         match &mut self.mbc {
             Mbc::Mbc0 => (),
-            Mbc::Mbc1 { .. } | Mbc::Mbc2 | Mbc::Mbc5 => {
+            Mbc::Mbc1 { .. } | Mbc::Mbc5 => {
                 mbc_write_ram(self, self.ram_enabled, addr, val);
+            }
+            Mbc::Mbc2 => {
+                // MBC2 has built-in 512 bytes of 4-bit RAM
+                // Only lower 4 bits are stored
+                if self.ram_enabled {
+                    let ram_addr = (addr & 0x1FF) as usize; // 512 bytes
+                    self.ram[ram_addr] = val & 0xF;
+                }
             }
             Mbc::Mbc3 { rtc, .. } => rtc
                 .as_mut()
@@ -325,15 +348,19 @@ impl Cartridge {
             }
             Mbc::Mbc2 => {
                 if addr <= 0x3FFF {
+                    // MBC2 uses bit 8 to distinguish RAM enable from ROM bank
                     if (addr >> 8) & 1 == 0 {
                         self.ram_enabled = (val & 0xF) == 0xA;
                     } else {
-                        let val = val & 0xF;
-                        self.rom_bank_lo = if val == 0 { 1 } else { val };
-                        self.rom_offsets = (
-                            0,
-                            u32::from(ROMSize::BANK_SIZE) * u32::from(self.rom_bank_lo),
-                        );
+                        // MBC2 only uses lower 4 bits for bank number
+                        // Store raw value, apply 0→1 correction based on lower 4 bits
+                        let bank = val & 0xF;
+                        let bank = if bank == 0 { 1 } else { bank };
+                        // Apply ROM size mask and calculate offset
+                        let masked_bank = bank as u16 & self.rom_size.mask();
+                        self.rom_bank_lo = bank;
+                        self.rom_offsets =
+                            (0, u32::from(ROMSize::BANK_SIZE) * u32::from(masked_bank));
                     }
                 }
             }
