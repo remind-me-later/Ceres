@@ -79,19 +79,11 @@ fn run_gbmicrotest(rom_name: &str, frames: u32) -> TestResult {
 macro_rules! gbmicrotest {
     ($name:ident, $rom:literal) => {
         #[test]
-        #[ignore = "gbmicrotest requires cycle-accurate timing - enable individually as accuracy improves"]
+        // #[ignore = "gbmicrotest requires cycle-accurate timing - enable individually as accuracy improves"]
         #[allow(non_snake_case)]
         fn $name() {
             // NOTE: 310 frames is enough for bootrom (~5 sec) + test
-            let result = run_gbmicrotest($rom, 320);
-            assert_eq!(result, TestResult::Passed);
-        }
-    };
-    ($name:ident, $rom:literal, frames = $frames:literal) => {
-        #[test]
-        #[ignore = "gbmicrotest requires cycle-accurate timing - enable individually as accuracy improves"]
-        fn $name() {
-            let result = run_gbmicrotest($rom, $frames);
+            let result = run_gbmicrotest($rom, 500);
             assert_eq!(result, TestResult::Passed);
         }
     };
@@ -244,8 +236,7 @@ gbmicrotest!(test_int_vblank2_incs, "int_vblank2_incs.gb");
 gbmicrotest!(test_int_vblank2_nops, "int_vblank2_nops.gb");
 gbmicrotest!(
     test_is_if_set_during_ime0,
-    "is_if_set_during_ime0.gb",
-    frames = 24
+    "is_if_set_during_ime0.gb"
 );
 gbmicrotest!(
     test_lcdon_halt_to_vblank_int_a,
