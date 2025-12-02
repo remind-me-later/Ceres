@@ -13,13 +13,13 @@ pub struct FifoPixel {
     pub bg_priority: bool,
 }
 
-/// Fixed-size FIFO with 8-pixel capacity.
+/// Fixed-size FIFO with 16-pixel capacity.
 ///
 /// The Game Boy PPU uses two FIFOs: one for background/window pixels and one for
-/// sprite (OAM) pixels. Each FIFO can hold up to 8 pixels.
+/// sprite (OAM) pixels. Each FIFO can hold up to 16 pixels (2 tiles).
 #[derive(Clone, Copy, Default)]
 pub struct PixelFifo {
-    pixels: [FifoPixel; 8],
+    pixels: [FifoPixel; 16],
     read_pos: u8,
     size: u8,
 }
@@ -56,7 +56,7 @@ impl PixelFifo {
     /// * `flip_x` - Whether to flip pixels horizontally
     ///
     /// # Panics
-    /// Panics in debug mode if FIFO is not empty.
+    /// Panics in debug mode if FIFO has more than 8 pixels.
     pub fn push_bg_row(
         &mut self,
         data_low: u8,
@@ -65,14 +65,15 @@ impl PixelFifo {
         bg_priority: bool,
         flip_x: bool,
     ) {
-        debug_assert!(self.size == 0, "BG FIFO must be empty before push");
-        self.size = 8;
-        self.read_pos = 0;
+        debug_assert!(self.size <= 8, "BG FIFO must have <= 8 pixels before push");
+
+        let start_idx = self.read_pos.wrapping_add(self.size);
 
         if flip_x {
             for i in 0..8 {
                 let color = ((data_low >> i) & 1) | (((data_high >> i) & 1) << 1);
-                self.pixels[i] = FifoPixel {
+                let idx = (start_idx.wrapping_add(i)) & 15;
+                self.pixels[idx as usize] = FifoPixel {
                     color,
                     palette,
                     priority: 0,
@@ -82,7 +83,8 @@ impl PixelFifo {
         } else {
             for i in 0..8 {
                 let color = ((data_low >> (7 - i)) & 1) | (((data_high >> (7 - i)) & 1) << 1);
-                self.pixels[i] = FifoPixel {
+                let idx = (start_idx.wrapping_add(i)) & 15;
+                self.pixels[idx as usize] = FifoPixel {
                     color,
                     palette,
                     priority: 0,
@@ -90,6 +92,7 @@ impl PixelFifo {
                 };
             }
         }
+        self.size += 8;
     }
 
     /// Pops a single pixel from the FIFO.
@@ -101,7 +104,7 @@ impl PixelFifo {
             return None;
         }
         let pixel = self.pixels[self.read_pos as usize];
-        self.read_pos = (self.read_pos + 1) & 7;
+        self.read_pos = (self.read_pos + 1) & 15;
         self.size -= 1;
         Some(pixel)
     }
@@ -128,9 +131,9 @@ impl PixelFifo {
         priority: u8,
         flip_x: bool,
     ) {
-        // Ensure FIFO has 8 slots (pad with transparent pixels if needed)
-        while self.size < 8 {
-            let idx = ((self.read_pos + self.size) & 7) as usize;
+        // Ensure FIFO has 16 slots (pad with transparent pixels if needed)
+        while self.size < 16 {
+            let idx = ((self.read_pos + self.size) & 15) as usize;
             self.pixels[idx] = FifoPixel::default();
             self.size += 1;
         }
@@ -142,7 +145,7 @@ impl PixelFifo {
             let bit = if flip_x { i } else { 7 - i };
             let color = ((data_low >> bit) & 1) | (((data_high >> bit) & 1) << 1);
 
-            let target_idx = ((self.read_pos + i) & 7) as usize;
+            let target_idx = ((self.read_pos + i) & 15) as usize;
             let target = &mut self.pixels[target_idx];
 
             // Sprite pixels only replace if:

@@ -65,12 +65,12 @@ pub enum Mode {
 }
 
 impl Mode {
-    pub fn dots(self, scroll_x: u8) -> i32 {
-        const OAM_SCAN_DOTS: i32 = 80;
+    pub fn dots(self, _scroll_x: u8) -> i32 {
+        const OAM_SCAN_DOTS: i32 = 84;
         // Mode 3 base is 172 minimum, but with proper fetcher/FIFO timing
         // it's closer to 167 + (SCX & 7) for no sprites/window
         const DRAWING_DOTS: i32 = 172;
-        const HBLANK_DOTS: i32 = 204;
+        const HBLANK_DOTS: i32 = 200;
         const VBLANK_DOTS: i32 = 456;
         // SCX handling is done via pixel discarding, not directly in Mode::dots duration.
         match self {
@@ -95,6 +95,7 @@ pub struct Ppu {
     /// LY value used for LYC comparison (may differ from displayed LY during transitions)
     ly_for_comparison: u8,
     lyc: u8,
+    mode: Mode,
     oam: Oam,
     obp0: u8,
     obp1: u8,
@@ -158,6 +159,8 @@ pub struct Ppu {
     mode3_delay: u8,
     /// Last X coordinate where sprites were fetched (to prevent re-triggering).
     last_fetched_x: i16,
+    /// Pending sprite fetch X coordinate (waiting for fetcher alignment).
+    pending_sprite_fetch_x: Option<u8>,
 }
 
 // IO
@@ -211,7 +214,13 @@ impl Ppu {
     }
 
     fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
-        self.set_mode_stat(mode);
+        self.mode = mode;
+        
+        // For OamScan, delay STAT update (handled in tick_oam_scan)
+        if !matches!(mode, Mode::OamScan) {
+            self.set_mode_stat(mode);
+        }
+
         // mode_for_interrupt will fallback to actual mode via unwrap_or_else
         // Only set explicitly when we need to differ from STAT mode bits
         self.mode_for_interrupt = None;
@@ -250,12 +259,7 @@ impl Ppu {
 
     #[must_use]
     pub const fn mode(&self) -> Mode {
-        match self.stat & 3 {
-            0 => Mode::HBlank,
-            1 => Mode::VBlank,
-            2 => Mode::OamScan,
-            _ => Mode::Drawing,
-        }
+        self.mode
     }
 
     #[must_use]
@@ -397,6 +401,7 @@ impl Ppu {
 
     /// Start Mode 3 (drawing) - called after LCD enable delay.
     fn start_mode3(&mut self, ints: &mut Interrupts) {
+        self.mode = Mode::Drawing;
         self.set_mode_stat(Mode::Drawing);
         self.remaining_dots_in_mode = Mode::Drawing.dots(self.scx);
         self.oam_blocked = true;
@@ -404,8 +409,11 @@ impl Ppu {
         // Mode 3 startup delay
         self.mode3_delay = 0;
         self.last_fetched_x = -1;
+        self.pending_sprite_fetch_x = None;
         // Initialize drawing state
-        self.dots_in_line = 0;
+        // SameBoy quirk: First line after LCD on behaves as if Mode 2 (80 dots) + 8 dots have passed.
+        // Total 88 dots.
+        self.dots_in_line = 88;
         self.fetcher_state = FetcherState::GetTile;
         self.fetcher_step = 0;
         self.fetcher_tile_x = 0;
@@ -426,11 +434,34 @@ impl Ppu {
 
     /// Tick during Mode 2 (OAM Scan).
     fn tick_oam_scan(&mut self, ints: &mut Interrupts) {
-        // OAM scan takes exactly 80 dots
-        // Every 2 dots, check one OAM entry (40 entries total)
-        if self.dots_in_line.is_multiple_of(2) && self.oam_scan_index < 40 {
-            self.scan_oam_entry();
-            self.oam_scan_index += 1;
+        // SameBoy startup delay logic
+        // dots_in_line:
+        // 1, 2: Sleep (Mode 0)
+        // 3: Sleep (Mode 0), LY update at end
+        // 4: Sleep (Mode 0), STAT update at end
+        // 5+: OAM Scan
+        
+        if self.dots_in_line == 3 {
+             self.ly = self.ly.wrapping_add(1);
+             self.ly_for_comparison = self.ly;
+             self.update_stat(ints);
+        }
+        
+        if self.dots_in_line == 4 {
+            self.set_mode_stat(Mode::OamScan);
+            self.update_stat(ints);
+        }
+        
+        // Only scan if we are past the startup phase
+        if self.dots_in_line > 4 {
+            let effective_dots = self.dots_in_line - 4;
+            
+            // OAM scan takes exactly 80 dots
+            // Every 2 dots, check one OAM entry (40 entries total)
+            if effective_dots.is_multiple_of(2) && self.oam_scan_index < 40 {
+                self.scan_oam_entry();
+                self.oam_scan_index += 1;
+            }
         }
 
         if self.remaining_dots_in_mode <= 0 {
@@ -556,8 +587,7 @@ impl Ppu {
             // Calculate sprite fetch penalty (6 cycles per sprite + fetcher alignment)
             // Fetcher runs in 8-cycle steps (4 states * 2 cycles)
             // Target alignment: Cycle 7
-            // Disable penalty for debugging intr_2_mode3_timing
-            self.mode3_delay += 0;
+            self.mode3_delay += 6 * sprite_count as u8;
         }
     }
 
@@ -575,6 +605,7 @@ impl Ppu {
             let hblank_dots = 456 - i32::from(self.dots_in_line);
             self.oam_blocked = false;
             self.vram_blocked = false;
+            self.mode = Mode::HBlank;
             self.set_mode_stat(Mode::HBlank);
             self.remaining_dots_in_mode = hblank_dots;
             self.update_stat(ints);
@@ -589,20 +620,62 @@ impl Ppu {
         // Check for window activation
         self.check_window_trigger(cgb_mode);
 
-        // Check for sprites at current position and fetch them
+        // Check for sprites at current position
         // SameBoy's x_for_object_match: position_in_line + 8, clamped to 0 if overflow
         let match_x = {
             let raw = self.position_in_line.wrapping_add(8) as u8;
             // If raw > 240 (i.e., position_in_line was < -8), use 0
             if raw > 240 { 0 } else { raw }
         };
-        self.fetch_sprites_at_position(cgb_mode, match_x);
+
+        // Handle sprite fetch pipeline
+        if self.pending_sprite_fetch_x.is_none() {
+            // Check if we should start a fetch
+            // Only fetch if enabled and not already fetched
+            // Note: fetch_sprites_at_position checks enable bits, but we need to check here to avoid setting pending
+            let sprites_enabled = self.lcdc & LCDC_OBJ_B != 0 || matches!(cgb_mode, CgbMode::Cgb);
+
+            if sprites_enabled && i16::from(match_x) != self.last_fetched_x {
+                if self.sprite_buffer.sprites_at_x(match_x).count() > 0 {
+                    self.pending_sprite_fetch_x = Some(match_x);
+                } else {
+                    self.last_fetched_x = i16::from(match_x);
+                }
+            }
+        }
+
+        if let Some(x) = self.pending_sprite_fetch_x {
+            // Alignment check: Wait for fetcher to finish reading (Wait if state < DataHighT2 OR FIFO empty)
+            // ceres-core fetcher states: GetTile -> GetDataLow -> GetDataHigh -> Push
+            // GetDataHigh + step 1 corresponds to End of DataHigh (SameBoy T2), ready to Push.
+
+            let aligned = match self.fetcher_state {
+                FetcherState::Push => true,
+                FetcherState::GetDataHigh if self.fetcher_step == 1 => true,
+                _ => false,
+            };
+
+            // SameBoy also checks FIFO size > 0 (unless empty, then wait?)
+            // "while (state < ... || fifo_size == 0)" -> Wait if empty.
+            let fifo_not_empty = self.bg_fifo.size() > 0;
+
+            if aligned && fifo_not_empty {
+                self.fetch_sprites_at_position(cgb_mode, x);
+                self.pending_sprite_fetch_x = None;
+                return;
+            }
+
+            // Not aligned, advance fetcher and return (don't output pixel)
+            if self.fetcher_step == 0 {
+                self.advance_fetcher(cgb_mode);
+            }
+            self.fetcher_step = (self.fetcher_step + 1) % 2;
+            return;
+        }
 
         // SameBoy order: render_pixel_if_possible THEN advance_fetcher_state_machine
-        // Try to output a pixel first (if FIFO has data)
-        if self.bg_fifo.size() > 0 {
-            self.output_pixel(cgb_mode);
-        }
+        // Try to output a pixel first (output_pixel handles empty FIFO checks internally)
+        self.output_pixel(cgb_mode);
 
         // Advance fetcher every 2 T-cycles (each fetcher state takes 2 T-cycles)
         if self.fetcher_step == 0 {
@@ -637,8 +710,8 @@ impl Ppu {
 
         // Check WX condition (window X trigger)
         // Window activates when position_in_line == WX - 7
-        let wx_trigger = i16::from(self.wx.saturating_sub(7));
-        if self.position_in_line >= 0 && self.position_in_line == wx_trigger {
+        let wx_trigger = i16::from(self.wx) - 7;
+        if self.position_in_line == wx_trigger {
             self.activate_window();
         }
     }
@@ -700,8 +773,8 @@ impl Ppu {
                 self.fetcher_state = FetcherState::Push;
             }
             FetcherState::Push => {
-                // Only push if FIFO is empty
-                if self.bg_fifo.is_empty() {
+                // Push if FIFO has space (capacity 16, push 8, so need <= 8)
+                if self.bg_fifo.size() <= 8 {
                     let palette = self.current_tile_attrs & 0x07;
                     let bg_priority = self.current_tile_attrs & 0x80 != 0;
                     let flip_x = self.current_tile_attrs & 0x20 != 0;
@@ -717,7 +790,7 @@ impl Ppu {
                     self.fetcher_tile_x = self.fetcher_tile_x.wrapping_add(1) & 0x1F;
                     self.fetcher_state = FetcherState::GetTile;
                 }
-                // If FIFO not empty, stay in Push state
+                // If FIFO full (size > 8), stay in Push state
             }
         }
     }
@@ -783,6 +856,10 @@ impl Ppu {
 
         // SameBoy: Discard phase - position_in_line < 0 means we're discarding junk pixels
         if self.position_in_line < 0 {
+            // SameBoy: if (fifo_size(&gb->bg_fifo) == 0) return;
+            if self.bg_fifo.is_empty() {
+                return;
+            }
             let _ = self.bg_fifo.pop();
             let _ = self.oam_fifo.pop();
             self.position_in_line += 1;
@@ -940,9 +1017,9 @@ impl Ppu {
     /// Tick during Mode 0 (HBlank).
     fn tick_hblank(&mut self, ints: &mut Interrupts) {
         // SameBoy quirk: Mode 2 interrupt fires near the end of HBlank,
-        // about 2 cycles before the line actually changes.
+        // about 1 cycle before the line actually changes.
         // Fire the interrupt early while STAT still shows Mode 0.
-        if self.remaining_dots_in_mode == 2 && self.ly < 143 {
+        if self.remaining_dots_in_mode == 1 && self.ly < 143 {
             let next_line = self.ly + 1;
             if next_line != 0 {
                 self.mode_for_interrupt = Some(Mode::OamScan);
@@ -952,24 +1029,23 @@ impl Ppu {
             }
         }
 
-        if self.remaining_dots_in_mode <= 0 {
-            self.ly += 1;
-            self.ly_for_comparison = self.ly;
-            self.dots_in_line = 0;
-
-            if self.ly > 143 {
-                self.enter_mode(Mode::VBlank, ints);
-            } else {
-                // Reset for next scanline
-                self.oam_scan_index = 0;
-                self.sprite_buffer.clear();
-                self.oam_blocked = true;
-                self.window_triggered = false;
-                
-                self.enter_mode(Mode::OamScan, ints);
-            }
-        }
-    }
+                if self.remaining_dots_in_mode <= 0 {
+                    self.dots_in_line = 0;
+        
+                    if self.ly + 1 > 143 {
+                        self.ly += 1;
+                        self.ly_for_comparison = self.ly;
+                        self.enter_mode(Mode::VBlank, ints);
+                    } else {
+                        // Reset for next scanline
+                        self.oam_scan_index = 0;
+                        self.sprite_buffer.clear();
+                        self.oam_blocked = true;
+                        self.window_triggered = false;
+                        
+                        self.enter_mode(Mode::OamScan, ints);
+                    }
+                }    }
 
     /// Tick during Mode 1 (VBlank).
     fn tick_vblank(&mut self, ints: &mut Interrupts) {
@@ -978,8 +1054,8 @@ impl Ppu {
             self.ly_for_comparison = self.ly;
 
             if self.ly > 153 {
-                self.ly = 0;
-                self.ly_for_comparison = 0;
+                self.ly = 0xFF;
+                self.ly_for_comparison = 0xFF;
                 self.dots_in_line = 0;
 
                 // Present frame
@@ -1022,6 +1098,7 @@ impl Ppu {
             self.ly = 0;
             self.ly_for_comparison = 0;
             let mode = Mode::HBlank;
+            self.mode = mode;
             self.set_mode_stat(mode);
             self.remaining_dots_in_mode = mode.dots(self.scx);
             self.rgba_buf_present.clear();
@@ -1042,6 +1119,7 @@ impl Ppu {
             self.ly = 0;
             self.ly_for_comparison = 0;
             let mode = Mode::HBlank;
+            self.mode = mode;
             self.set_mode_stat(mode);
             self.remaining_dots_in_mode = mode.dots(self.scx);
             // Comparison clock restarts - update coincidence and check for interrupt
