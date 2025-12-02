@@ -215,7 +215,7 @@ impl Ppu {
 
     fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
         self.mode = mode;
-        
+
         // For OamScan, delay STAT update (handled in tick_oam_scan)
         if !matches!(mode, Mode::OamScan) {
             self.set_mode_stat(mode);
@@ -440,22 +440,22 @@ impl Ppu {
         // 3: Sleep (Mode 0), LY update at end
         // 4: Sleep (Mode 0), STAT update at end
         // 5+: OAM Scan
-        
+
         if self.dots_in_line == 3 {
-             self.ly = self.ly.wrapping_add(1);
-             self.ly_for_comparison = self.ly;
-             self.update_stat(ints);
+            self.ly = self.ly.wrapping_add(1);
+            self.ly_for_comparison = self.ly;
+            self.update_stat(ints);
         }
-        
+
         if self.dots_in_line == 4 {
             self.set_mode_stat(Mode::OamScan);
             self.update_stat(ints);
         }
-        
+
         // Only scan if we are past the startup phase
         if self.dots_in_line > 4 {
             let effective_dots = self.dots_in_line - 4;
-            
+
             // OAM scan takes exactly 80 dots
             // Every 2 dots, check one OAM entry (40 entries total)
             if effective_dots.is_multiple_of(2) && self.oam_scan_index < 40 {
@@ -1029,23 +1029,24 @@ impl Ppu {
             }
         }
 
-                if self.remaining_dots_in_mode <= 0 {
-                    self.dots_in_line = 0;
-        
-                    if self.ly + 1 > 143 {
-                        self.ly += 1;
-                        self.ly_for_comparison = self.ly;
-                        self.enter_mode(Mode::VBlank, ints);
-                    } else {
-                        // Reset for next scanline
-                        self.oam_scan_index = 0;
-                        self.sprite_buffer.clear();
-                        self.oam_blocked = true;
-                        self.window_triggered = false;
-                        
-                        self.enter_mode(Mode::OamScan, ints);
-                    }
-                }    }
+        if self.remaining_dots_in_mode <= 0 {
+            self.dots_in_line = 0;
+
+            if self.ly + 1 > 143 {
+                self.ly += 1;
+                self.ly_for_comparison = self.ly;
+                self.enter_mode(Mode::VBlank, ints);
+            } else {
+                // Reset for next scanline
+                self.oam_scan_index = 0;
+                self.sprite_buffer.clear();
+                self.oam_blocked = true;
+                self.window_triggered = false;
+
+                self.enter_mode(Mode::OamScan, ints);
+            }
+        }
+    }
 
     /// Tick during Mode 1 (VBlank).
     fn tick_vblank(&mut self, ints: &mut Interrupts) {
