@@ -37,7 +37,17 @@ const STAT_IF_VBLANK_B: u8 = 0x10;
 const STAT_IF_OAM_B: u8 = 0x20;
 const STAT_IF_LYC_B: u8 = 0x40;
 
-const DOTS_UNTIL_ENABLED: i32 = 80;
+/// LCD startup state machine states.
+/// When LCD is enabled (LCDC bit 7 set), the PPU goes through a specific
+/// startup sequence before normal rendering begins.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum StartupState {
+    /// LCD is off or startup complete.
+    #[default]
+    Inactive,
+    /// Startup in progress. Memory access remains unblocked until Mode 3 entry.
+    Active,
+}
 
 #[non_exhaustive]
 #[derive(Clone, Copy, Default)]
@@ -89,7 +99,10 @@ pub struct Ppu {
     bgp: u8,
     color_correction_mode: ColorCorrectionMode,
     delay_one_frame: bool,
-    enable_timer: i32,
+    /// LCD startup state machine state.
+    startup_state: StartupState,
+    /// Countdown timer for current startup phase.
+    startup_dots: i32,
     lcdc: u8,
     ly: u8,
     /// LY value used for LYC comparison (may differ from displayed LY during transitions)
@@ -412,12 +425,9 @@ impl Ppu {
             return;
         }
 
-        // Handle LCD enable delay
-        if self.enable_timer > 0 {
-            self.enable_timer -= 1;
-            if self.enable_timer == 0 {
-                self.start_mode3(ints);
-            }
+        // Handle LCD startup state machine
+        if self.startup_state != StartupState::Inactive {
+            self.tick_startup(ints, cgb_mode);
             return;
         }
 
@@ -433,21 +443,38 @@ impl Ppu {
         }
     }
 
-    /// Start Mode 3 (drawing) - called after LCD enable delay.
-    fn start_mode3(&mut self, ints: &mut Interrupts) {
+    /// Tick the LCD startup state machine.
+    /// This implements the startup sequence during LCD enable.
+    /// Total: 80 dots before entering Mode 3, matching original enable_timer.
+    /// Note: For simplicity, memory access remains unblocked until Mode 3 entry.
+    fn tick_startup(&mut self, ints: &mut Interrupts, _cgb_mode: CgbMode) {
+        self.startup_dots -= 1;
+
+        if self.startup_dots == 0 {
+            // Startup complete, enter Mode 3 rendering
+            self.startup_state = StartupState::Inactive;
+            self.enter_mode3_after_startup(ints);
+        }
+    }
+
+    /// Enter Mode 3 rendering after startup sequence completes.
+    fn enter_mode3_after_startup(&mut self, ints: &mut Interrupts) {
         self.mode = Mode::Drawing;
         self.set_mode_stat(Mode::Drawing);
         self.remaining_dots_in_mode = Mode::Drawing.dots(self.scx);
-        // SameBoy: All memory access is blocked during Mode 3
+
+        // Block all memory access during Mode 3
         self.oam_read_blocked = true;
         self.oam_write_blocked = true;
         self.vram_read_blocked = true;
         self.vram_write_blocked = true;
         self.cgb_palettes_blocked = true;
+
         // Mode 3 startup delay
         self.mode3_delay = 0;
         self.last_fetched_x = -1;
         self.pending_sprite_fetch_x = None;
+
         // Initialize drawing state
         // SameBoy quirk: First line after LCD on behaves as if Mode 2 (80 dots) + 8 dots have passed.
         // Total 88 dots.
@@ -469,6 +496,9 @@ impl Ppu {
         self.line_has_fractional_scrolling = false;
         self.window_is_being_fetched = false;
         // Note: No OAM scan happened, so sprite_buffer stays empty for first line after LCD on
+
+        // Clear sprite buffer and visible object count
+        self.sprite_buffer.clear();
 
         self.update_stat(ints);
     }
@@ -617,11 +647,14 @@ impl Ppu {
 
             // Overlay onto OAM FIFO
             // Priority for FIFO overlay:
-            // - DMG: Lower X = higher priority, so use X coordinate (higher X = higher priority number = lower priority)
-            // - CGB: Lower OAM index = higher priority
+            // - DMG: All sprites use priority 0. The order sprites are fetched (already
+            //   sorted by X position) determines which sprite "wins" when they overlap.
+            //   The first sprite overlaid stays because subsequent sprites can't
+            //   overwrite pixels with equal or lower priority.
+            // - CGB: Lower OAM index = higher priority (lower value = wins)
             let priority = match cgb_mode {
                 CgbMode::Cgb => sprite.oam_index,
-                _ => sprite.x, // For DMG, X coordinate determines priority
+                _ => 0, // DMG: all sprites have same priority, order determines winner
             };
             self.oam_fifo.overlay_sprite_row(
                 data_low,
@@ -1179,6 +1212,17 @@ impl Ppu {
             self.remaining_dots_in_mode = mode.dots(self.scx);
             self.rgba_buf_present.clear();
 
+            // Reset startup state
+            self.startup_state = StartupState::Inactive;
+            self.startup_dots = 0;
+
+            // Unblock all memory access when LCD is off
+            self.oam_read_blocked = false;
+            self.oam_write_blocked = false;
+            self.vram_read_blocked = false;
+            self.vram_write_blocked = false;
+            self.cgb_palettes_blocked = false;
+
             // When LCD turns off:
             // - LY=LYC coincidence flag is RETAINED (not cleared)
             // - The comparison clock stops, so LYC changes won't update the flag
@@ -1200,7 +1244,17 @@ impl Ppu {
             self.remaining_dots_in_mode = mode.dots(self.scx);
             // Comparison clock restarts - update coincidence and check for interrupt
             self.update_stat(ints);
-            self.enable_timer = DOTS_UNTIL_ENABLED;
+
+            // Start LCD startup state machine
+            // 80 dots with all access unblocked, then enter Mode 3
+            self.startup_state = StartupState::Active;
+            self.startup_dots = 80;
+            self.oam_read_blocked = false;
+            self.oam_write_blocked = false;
+            self.vram_read_blocked = false;
+            self.vram_write_blocked = false;
+            self.cgb_palettes_blocked = false;
+
             self.delay_one_frame = true;
         }
 
