@@ -600,11 +600,17 @@ impl Ppu {
                 }
             }
             3 => {
-                // State 6: LY update
+                // State 6: LY update, OAM read blocked
                 self.ly = self.ly.wrapping_add(1);
                 self.ly_for_comparison = self.ly;
-                // OAM read blocked
                 self.oam_read_blocked = true;
+
+                // SameBoy: "The OAM STAT interrupt occurs 1 T-cycle before STAT
+                // actually changes, except on line 0. PPU glitch?"
+                if self.ly != 0 {
+                    self.mode_for_interrupt = Some(Mode::OamScan);
+                    // STAT mode bits stay at 0 (HBlank) but interrupt uses mode 2
+                }
                 self.update_stat(ints);
             }
             4 => {
@@ -612,7 +618,13 @@ impl Ppu {
                 self.set_mode_stat(Mode::OamScan);
                 self.oam_read_blocked = true;
                 self.oam_write_blocked = true;
+                self.ly_for_comparison = self.ly;
+
+                // SameBoy: After STAT update, mode_for_interrupt is set to -1
+                // (meaning no mode-based interrupt) to prevent double-firing
+                self.mode_for_interrupt = Some(Mode::OamScan);
                 self.update_stat(ints);
+                self.mode_for_interrupt = None;
             }
             5..=84 => {
                 // OAM scan: check one entry every 2 dots
