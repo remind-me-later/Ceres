@@ -12,8 +12,12 @@ use crate::interrupts::Interrupts;
 pub use oam::Oam;
 pub use vram::Vram;
 use {
-    self::color_palette::ColorPalette, crate::CgbMode, fetcher::FetcherState, fifo::PixelFifo,
-    rgba_buf::RgbaBuf, sprite::SpriteBuffer,
+    self::color_palette::ColorPalette,
+    crate::CgbMode,
+    fetcher::{FetcherState, SpriteFetcherState},
+    fifo::PixelFifo,
+    rgba_buf::RgbaBuf,
+    sprite::SpriteBuffer,
 };
 
 pub const PX_WIDTH: u8 = 160;
@@ -178,12 +182,32 @@ pub struct Ppu {
     mode3_delay: u8,
     /// Last X coordinate where sprites were fetched (to prevent re-triggering).
     last_fetched_x: i16,
-    /// Pending sprite fetch X coordinate (waiting for fetcher alignment).
-    pending_sprite_fetch_x: Option<u8>,
     /// Window is currently being fetched (used for SCX edge case).
     window_is_being_fetched: bool,
     /// Line has fractional scrolling (SCX & 7 != 0).
     line_has_fractional_scrolling: bool,
+    /// Sprite fetcher state machine state.
+    sprite_fetcher_state: SpriteFetcherState,
+    /// Sprite fetcher sub-cycle counter.
+    sprite_fetcher_step: u8,
+    /// Current sprite being fetched (index into sprite_buffer).
+    current_sprite_index: usize,
+    /// Current sprite's tile data low byte.
+    sprite_tile_data_low: u8,
+    /// Current sprite's tile data high byte.
+    sprite_tile_data_high: u8,
+    /// Current sprite's calculated VRAM address.
+    sprite_tile_address: u16,
+    /// Current sprite's VRAM bank (CGB).
+    sprite_vram_bank: u8,
+    /// Current sprite's palette.
+    sprite_palette: u8,
+    /// Current sprite's priority value.
+    sprite_priority: u8,
+    /// Current sprite's BG priority flag.
+    sprite_bg_priority: bool,
+    /// Current sprite's X-flip flag.
+    sprite_x_flip: bool,
 }
 
 // IO
@@ -473,7 +497,7 @@ impl Ppu {
         // Mode 3 startup delay
         self.mode3_delay = 0;
         self.last_fetched_x = -1;
-        self.pending_sprite_fetch_x = None;
+        self.sprite_fetcher_state = SpriteFetcherState::Idle;
 
         // Initialize drawing state
         // SameBoy quirk: First line after LCD on behaves as if Mode 2 (80 dots) + 8 dots have passed.
@@ -590,90 +614,6 @@ impl Ppu {
         }
     }
 
-    /// Fetch sprites at the current position and overlay onto OAM FIFO.
-    fn fetch_sprites_at_position(&mut self, cgb_mode: CgbMode, match_x: u8) {
-        if self.lcdc & LCDC_OBJ_B == 0 && !matches!(cgb_mode, CgbMode::Cgb) {
-            return;
-        }
-
-        if i16::from(match_x) == self.last_fetched_x {
-            return;
-        }
-        self.last_fetched_x = i16::from(match_x);
-
-        let mut sprite_count = 0;
-
-        for sprite in self.sprite_buffer.sprites_at_x(match_x) {
-            sprite_count += 1;
-
-            // Calculate tile address using get_object_line_address logic
-            let height_16 = self.lcdc & LCDC_OBJL_B != 0;
-            let tile_y =
-                (self.ly.wrapping_sub(sprite.y.wrapping_sub(16))) & if height_16 { 0xF } else { 7 };
-
-            // Apply Y-flip
-            let tile_y = if sprite.y_flip() {
-                tile_y ^ if height_16 { 0xF } else { 7 }
-            } else {
-                tile_y
-            };
-
-            // Calculate tile number (mask for 8x16 mode)
-            let tile_num = if height_16 {
-                sprite.tile & 0xFE
-            } else {
-                sprite.tile
-            };
-
-            // Calculate VRAM address
-            let line_address = u16::from(tile_num) * 16 + u16::from(tile_y) * 2;
-
-            // Determine VRAM bank (CGB only)
-            let vram_bank = if matches!(cgb_mode, CgbMode::Cgb) {
-                sprite.cgb_vram_bank()
-            } else {
-                0
-            };
-
-            // Read tile data from VRAM
-            let data_low = self.vram.vram_at_bank(0x8000 + line_address, vram_bank);
-            let data_high = self.vram.vram_at_bank(0x8000 + line_address + 1, vram_bank);
-
-            // Determine palette
-            let palette = match cgb_mode {
-                CgbMode::Cgb => sprite.cgb_palette(),
-                _ => sprite.dmg_palette(),
-            };
-
-            // Overlay onto OAM FIFO
-            // Priority for FIFO overlay:
-            // - DMG: All sprites use priority 0. The order sprites are fetched (already
-            //   sorted by X position) determines which sprite "wins" when they overlap.
-            //   The first sprite overlaid stays because subsequent sprites can't
-            //   overwrite pixels with equal or lower priority.
-            // - CGB: Lower OAM index = higher priority (lower value = wins)
-            let priority = match cgb_mode {
-                CgbMode::Cgb => sprite.oam_index,
-                _ => 0, // DMG: all sprites have same priority, order determines winner
-            };
-            self.oam_fifo.overlay_sprite_row(
-                data_low,
-                data_high,
-                palette,
-                sprite.bg_priority(),
-                priority,
-                sprite.x_flip(),
-            );
-        }
-
-        if sprite_count > 0 {
-            // Calculate sprite fetch penalty (6 cycles per sprite + fetcher alignment)
-            // Fetcher runs in 8-cycle steps (4 states * 2 cycles)
-            // Target alignment: Cycle 7
-            self.mode3_delay += 6 * sprite_count as u8;
-        }
-    }
-
     /// Tick during Mode 3 (Drawing).
     fn tick_drawing(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
         // SameBoy: Exit check happens BEFORE the cycle's work, not after.
@@ -715,49 +655,24 @@ impl Ppu {
             if raw > 240 { 0 } else { raw }
         };
 
-        // Handle sprite fetch pipeline
-        if self.pending_sprite_fetch_x.is_none() {
-            // Check if we should start a fetch
-            // Only fetch if enabled and not already fetched
-            // Note: fetch_sprites_at_position checks enable bits, but we need to check here to avoid setting pending
-            let sprites_enabled = self.lcdc & LCDC_OBJ_B != 0 || matches!(cgb_mode, CgbMode::Cgb);
-
-            if sprites_enabled && i16::from(match_x) != self.last_fetched_x {
-                if self.sprite_buffer.sprites_at_x(match_x).count() > 0 {
-                    self.pending_sprite_fetch_x = Some(match_x);
-                } else {
-                    self.last_fetched_x = i16::from(match_x);
-                }
-            }
+        // Handle sprite fetch state machine
+        if self.sprite_fetcher_state != SpriteFetcherState::Idle {
+            self.tick_sprite_fetcher(cgb_mode);
+            return;
         }
 
-        if let Some(x) = self.pending_sprite_fetch_x {
-            // Alignment check: Wait for fetcher to finish reading (Wait if state < DataHighT2 OR FIFO empty)
-            // ceres-core fetcher states: GetTile -> GetDataLow -> GetDataHigh -> Push
-            // GetDataHigh + step 1 corresponds to End of DataHigh (SameBoy T2), ready to Push.
-
-            let aligned = match self.fetcher_state {
-                FetcherState::Push => true,
-                FetcherState::GetDataHigh if self.fetcher_step == 1 => true,
-                _ => false,
-            };
-
-            // SameBoy also checks FIFO size > 0 (unless empty, then wait?)
-            // "while (state < ... || fifo_size == 0)" -> Wait if empty.
-            let fifo_not_empty = self.bg_fifo.size() > 0;
-
-            if aligned && fifo_not_empty {
-                self.fetch_sprites_at_position(cgb_mode, x);
-                self.pending_sprite_fetch_x = None;
+        // Check if we should start fetching sprites
+        let sprites_enabled = self.lcdc & LCDC_OBJ_B != 0 || matches!(cgb_mode, CgbMode::Cgb);
+        if sprites_enabled && i16::from(match_x) != self.last_fetched_x {
+            // Find next sprite to fetch at this X position
+            if let Some(sprite_idx) = self.find_next_sprite_at_x(match_x) {
+                self.start_sprite_fetch(sprite_idx, cgb_mode);
+                self.last_fetched_x = i16::from(match_x);
+                // Continue with sprite fetcher on next tick
+                self.tick_sprite_fetcher(cgb_mode);
                 return;
             }
-
-            // Not aligned, advance fetcher and return (don't output pixel)
-            if self.fetcher_step == 0 {
-                self.advance_fetcher(cgb_mode);
-            }
-            self.fetcher_step = (self.fetcher_step + 1) % 2;
-            return;
+            self.last_fetched_x = i16::from(match_x);
         }
 
         // SameBoy order: render_pixel_if_possible THEN advance_fetcher_state_machine
@@ -769,6 +684,166 @@ impl Ppu {
             self.advance_fetcher(cgb_mode);
         }
         self.fetcher_step = (self.fetcher_step + 1) % 2;
+    }
+
+    /// Find the next sprite to fetch at the given X position.
+    /// Returns the index into sprite_buffer, or None if no more sprites at this X.
+    fn find_next_sprite_at_x(&self, x: u8) -> Option<usize> {
+        for i in 0..self.sprite_buffer.count as usize {
+            let sprite = &self.sprite_buffer.sprites[i];
+            if sprite.x == x {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    /// Start fetching a sprite at the given index.
+    fn start_sprite_fetch(&mut self, sprite_idx: usize, cgb_mode: CgbMode) {
+        let sprite = &self.sprite_buffer.sprites[sprite_idx];
+
+        // Calculate tile address
+        let height_16 = self.lcdc & LCDC_OBJL_B != 0;
+        let tile_y =
+            (self.ly.wrapping_sub(sprite.y.wrapping_sub(16))) & if height_16 { 0xF } else { 7 };
+
+        // Apply Y-flip
+        let tile_y = if sprite.y_flip() {
+            tile_y ^ if height_16 { 0xF } else { 7 }
+        } else {
+            tile_y
+        };
+
+        // Calculate tile number (mask for 8x16 mode)
+        let tile_num = if height_16 {
+            sprite.tile & 0xFE
+        } else {
+            sprite.tile
+        };
+
+        // Calculate VRAM address
+        let line_address = u16::from(tile_num) * 16 + u16::from(tile_y) * 2;
+
+        // Store sprite fetch info
+        self.current_sprite_index = sprite_idx;
+        self.sprite_tile_address = 0x8000 + line_address;
+        self.sprite_vram_bank = if matches!(cgb_mode, CgbMode::Cgb) {
+            sprite.cgb_vram_bank()
+        } else {
+            0
+        };
+        self.sprite_palette = match cgb_mode {
+            CgbMode::Cgb => sprite.cgb_palette(),
+            _ => sprite.dmg_palette(),
+        };
+        self.sprite_priority = match cgb_mode {
+            CgbMode::Cgb => sprite.oam_index,
+            _ => 0,
+        };
+        self.sprite_bg_priority = sprite.bg_priority();
+        self.sprite_x_flip = sprite.x_flip();
+
+        // Start the sprite fetch state machine
+        self.sprite_fetcher_state = SpriteFetcherState::WaitForBgFetcher;
+        self.sprite_fetcher_step = 0;
+    }
+
+    /// Tick the sprite fetcher state machine.
+    fn tick_sprite_fetcher(&mut self, cgb_mode: CgbMode) {
+        match self.sprite_fetcher_state {
+            SpriteFetcherState::Idle => {}
+
+            SpriteFetcherState::WaitForBgFetcher => {
+                // Wait for BG fetcher to be aligned (past GetDataHigh and FIFO not empty)
+                let aligned = match self.fetcher_state {
+                    FetcherState::Push => true,
+                    FetcherState::GetDataHigh if self.fetcher_step == 1 => true,
+                    _ => false,
+                };
+                let fifo_not_empty = self.bg_fifo.size() > 0;
+
+                if aligned && fifo_not_empty {
+                    // Advance BG fetcher one more cycle (SameBoy does this)
+                    if self.fetcher_step == 0 {
+                        self.advance_fetcher(cgb_mode);
+                    }
+                    self.fetcher_step = (self.fetcher_step + 1) % 2;
+
+                    self.sprite_fetcher_state = SpriteFetcherState::GetTileAndFlags;
+                    self.sprite_fetcher_step = 0;
+                } else {
+                    // Not aligned, advance BG fetcher
+                    if self.fetcher_step == 0 {
+                        self.advance_fetcher(cgb_mode);
+                    }
+                    self.fetcher_step = (self.fetcher_step + 1) % 2;
+                }
+            }
+
+            SpriteFetcherState::GetTileAndFlags => {
+                // 2 cycles to "read" tile index and flags (already have them from OAM scan)
+                self.sprite_fetcher_step += 1;
+                if self.sprite_fetcher_step >= 2 {
+                    self.sprite_fetcher_state = SpriteFetcherState::GetDataLow;
+                    self.sprite_fetcher_step = 0;
+                }
+            }
+
+            SpriteFetcherState::GetDataLow => {
+                // 2 cycles to read low byte of tile data
+                if self.sprite_fetcher_step == 0 {
+                    // Read on first cycle
+                    self.sprite_tile_data_low = self
+                        .vram
+                        .vram_at_bank(self.sprite_tile_address, self.sprite_vram_bank);
+                }
+                self.sprite_fetcher_step += 1;
+                if self.sprite_fetcher_step >= 2 {
+                    self.sprite_fetcher_state = SpriteFetcherState::GetDataHighAndPush;
+                    self.sprite_fetcher_step = 0;
+                }
+            }
+
+            SpriteFetcherState::GetDataHighAndPush => {
+                // 1 cycle to read high byte and push to FIFO
+                self.sprite_tile_data_high = self
+                    .vram
+                    .vram_at_bank(self.sprite_tile_address + 1, self.sprite_vram_bank);
+
+                // Overlay sprite onto OAM FIFO
+                self.oam_fifo.overlay_sprite_row(
+                    self.sprite_tile_data_low,
+                    self.sprite_tile_data_high,
+                    self.sprite_palette,
+                    self.sprite_bg_priority,
+                    self.sprite_priority,
+                    self.sprite_x_flip,
+                );
+
+                // Check for more sprites at the same X position
+                let current_x = self.sprite_buffer.sprites[self.current_sprite_index].x;
+                let next_sprite = self.find_next_sprite_after(self.current_sprite_index, current_x);
+
+                if let Some(next_idx) = next_sprite {
+                    // Restart fetch for next sprite
+                    self.start_sprite_fetch(next_idx, cgb_mode);
+                } else {
+                    // Done fetching sprites
+                    self.sprite_fetcher_state = SpriteFetcherState::Idle;
+                }
+            }
+        }
+    }
+
+    /// Find the next sprite after the given index at the same X position.
+    fn find_next_sprite_after(&self, after_idx: usize, x: u8) -> Option<usize> {
+        for i in (after_idx + 1)..self.sprite_buffer.count as usize {
+            let sprite = &self.sprite_buffer.sprites[i];
+            if sprite.x == x {
+                return Some(i);
+            }
+        }
+        None
     }
 
     /// Check if window should be activated at the current position.

@@ -19,29 +19,21 @@ pub enum FetcherState {
 ///
 /// When a sprite is encountered during rendering, the background fetcher pauses
 /// and the sprite fetcher retrieves sprite tile data.
-#[expect(
-    dead_code,
-    reason = "Prepared for future sprite fetcher implementation"
-)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SpriteFetcherState {
     /// Idle - not currently fetching a sprite.
     #[default]
     Idle,
-    /// Read sprite tile index (from OAM entry).
-    GetTile,
-    /// Read low byte of sprite tile data.
+    /// Wait for BG fetcher alignment (fetcher must be past GetDataHigh and FIFO not empty).
+    WaitForBgFetcher,
+    /// Read sprite tile index and flags from OAM (2 cycles).
+    GetTileAndFlags,
+    /// Read low byte of sprite tile data (2 cycles).
     GetDataLow,
-    /// Read high byte of sprite tile data.
-    GetDataHigh,
-    /// Push sprite pixels to OAM FIFO.
-    Push,
+    /// Read high byte of sprite tile data (1 cycle), then push to FIFO.
+    GetDataHighAndPush,
 }
 
-#[expect(
-    dead_code,
-    reason = "Prepared for future sprite fetcher implementation"
-)]
 impl SpriteFetcherState {
     /// Advances to the next sprite fetcher state.
     #[inline]
@@ -49,10 +41,10 @@ impl SpriteFetcherState {
     pub const fn next(self) -> Self {
         match self {
             Self::Idle => Self::Idle,
-            Self::GetTile => Self::GetDataLow,
-            Self::GetDataLow => Self::GetDataHigh,
-            Self::GetDataHigh => Self::Push,
-            Self::Push => Self::Idle,
+            Self::WaitForBgFetcher => Self::GetTileAndFlags,
+            Self::GetTileAndFlags => Self::GetDataLow,
+            Self::GetDataLow => Self::GetDataHighAndPush,
+            Self::GetDataHighAndPush => Self::Idle,
         }
     }
 }
