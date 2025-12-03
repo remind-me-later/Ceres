@@ -53,12 +53,13 @@ impl<A: AudioCallback> Gb<A> {
         self.dma.advance_dots(dots);
 
         // not affected by speed boost
-        if self.key1.is_enabled() {
+        let double_speed = self.key1.is_enabled();
+        if double_speed {
             dots >>= 1;
         }
 
         // TODO: is this order right?
-        self.ppu.run(dots, &mut self.ints, self.cgb_mode);
+        self.ppu.run(dots, &mut self.ints, self.cgb_mode, double_speed);
         self.run_dma();
 
         self.apu.run(dots);

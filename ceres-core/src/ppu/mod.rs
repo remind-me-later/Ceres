@@ -392,9 +392,9 @@ impl Ppu {
         self.wy
     }
 
-    pub fn run(&mut self, dots: i32, ints: &mut Interrupts, cgb_mode: CgbMode) {
+    pub fn run(&mut self, dots: i32, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
         for _ in 0..dots {
-            self.tick(ints, cgb_mode);
+            self.tick(ints, cgb_mode, double_speed);
         }
     }
 
@@ -452,14 +452,14 @@ impl Ppu {
 
     /// Advance PPU by one T-cycle (dot).
     #[inline]
-    pub fn tick(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
+    pub fn tick(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
         if self.lcdc & LCDC_ON_B == 0 {
             return;
         }
 
         // Handle LCD startup state machine
         if self.startup_state != StartupState::Inactive {
-            self.tick_startup(ints, cgb_mode);
+            self.tick_startup(ints, cgb_mode, double_speed);
             return;
         }
 
@@ -468,9 +468,9 @@ impl Ppu {
         self.remaining_dots_in_mode -= 1;
 
         match self.mode() {
-            Mode::OamScan => self.tick_oam_scan(ints, cgb_mode),
+            Mode::OamScan => self.tick_oam_scan(ints, cgb_mode, double_speed),
             Mode::Drawing => self.tick_drawing(ints, cgb_mode),
-            Mode::HBlank => self.tick_hblank(ints),
+            Mode::HBlank => self.tick_hblank(ints, double_speed),
             Mode::VBlank => self.tick_vblank(ints),
         }
     }
@@ -482,7 +482,7 @@ impl Ppu {
     /// - Phase 3 (1 cycle): STAT = Mode 3, OAM fully blocked, VRAM blocked (DMG), CGB palettes blocked
     /// - Phase 4 (1 cycle): VRAM fully blocked, enter Mode 3 rendering
     /// Total: 80 cycles
-    fn tick_startup(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
+    fn tick_startup(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, _double_speed: bool) {
         let is_cgb = matches!(cgb_mode, CgbMode::Cgb);
 
         match self.startup_state {
@@ -589,13 +589,14 @@ impl Ppu {
     /// - Dot 3 (state 6): LY update, OAM read blocked (model dependent)
     /// - Dot 4 (state 7): STAT = Mode 2, OAM fully blocked
     /// - Dot 5-84: OAM scan (40 entries × 2 dots each)
-    fn tick_oam_scan(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
+    fn tick_oam_scan(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
         let is_cgb = matches!(cgb_mode, CgbMode::Cgb);
 
         match self.dots_in_line {
             1 | 2 => {
-                // State 35: OAM write blocked on CGB (non-double-speed)
-                if is_cgb {
+                // State 35: OAM write blocked on CGB (non-double-speed only)
+                // SameBoy: gb->oam_write_blocked = GB_is_cgb(gb) && !gb->cgb_double_speed;
+                if is_cgb && !double_speed {
                     self.oam_write_blocked = true;
                 }
             }
@@ -603,7 +604,9 @@ impl Ppu {
                 // State 6: LY update, OAM read blocked
                 self.ly = self.ly.wrapping_add(1);
                 self.ly_for_comparison = self.ly;
-                self.oam_read_blocked = true;
+                // SameBoy: gb->oam_read_blocked = !gb->cgb_double_speed || gb->model >= GB_MODEL_CGB_D;
+                // For simplicity, block OAM read unless in double-speed mode
+                self.oam_read_blocked = !double_speed;
 
                 // SameBoy: "The OAM STAT interrupt occurs 1 T-cycle before STAT
                 // actually changes, except on line 0. PPU glitch?"
@@ -1300,7 +1303,7 @@ impl Ppu {
     }
 
     /// Tick during Mode 0 (HBlank).
-    fn tick_hblank(&mut self, ints: &mut Interrupts) {
+    fn tick_hblank(&mut self, ints: &mut Interrupts, _double_speed: bool) {
         // SameBoy quirk: Mode 2 interrupt fires near the end of HBlank,
         // about 1 cycle before the line actually changes.
         // Fire the interrupt early while STAT still shows Mode 0.
