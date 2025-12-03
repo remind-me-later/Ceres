@@ -147,10 +147,16 @@ pub struct Ppu {
     window_triggered: bool,
     /// Window internal line counter.
     window_line: u8,
-    /// OAM is blocked (during Mode 2 and Mode 3).
-    oam_blocked: bool,
-    /// VRAM is blocked (during Mode 3).
-    vram_blocked: bool,
+    /// OAM read access blocked.
+    oam_read_blocked: bool,
+    /// OAM write access blocked.
+    oam_write_blocked: bool,
+    /// VRAM read access blocked.
+    vram_read_blocked: bool,
+    /// VRAM write access blocked.
+    vram_write_blocked: bool,
+    /// CGB palette access blocked.
+    cgb_palettes_blocked: bool,
     /// Fetcher sub-cycle counter (0-1, each fetcher step takes 2 T-cycles).
     fetcher_step: u8,
     /// OAM scan index (0-39, which OAM entry is being checked).
@@ -161,6 +167,10 @@ pub struct Ppu {
     last_fetched_x: i16,
     /// Pending sprite fetch X coordinate (waiting for fetcher alignment).
     pending_sprite_fetch_x: Option<u8>,
+    /// Window is currently being fetched (used for SCX edge case).
+    window_is_being_fetched: bool,
+    /// Line has fractional scrolling (SCX & 7 != 0).
+    line_has_fractional_scrolling: bool,
 }
 
 // IO
@@ -356,19 +366,43 @@ impl Ppu {
     /// OAM is blocked during Mode 2 (OAM scan) and Mode 3 (drawing).
     #[inline]
     #[must_use]
-    pub const fn is_oam_accessible(&self) -> bool {
-        // OAM is accessible when LCD is off or during Mode 0/1
-        self.lcdc & LCDC_ON_B == 0 || !self.oam_blocked
+    pub const fn is_oam_read_accessible(&self) -> bool {
+        // OAM is accessible when LCD is off or read not blocked
+        self.lcdc & LCDC_ON_B == 0 || !self.oam_read_blocked
     }
 
-    /// Returns true if VRAM is accessible by the CPU.
+    /// Returns true if OAM is writable by the CPU.
+    #[inline]
+    #[must_use]
+    pub const fn is_oam_write_accessible(&self) -> bool {
+        // OAM is writable when LCD is off or write not blocked
+        self.lcdc & LCDC_ON_B == 0 || !self.oam_write_blocked
+    }
+
+    /// Returns true if VRAM is readable by the CPU.
     ///
     /// VRAM is blocked during Mode 3 (drawing).
     #[inline]
     #[must_use]
-    pub const fn is_vram_accessible(&self) -> bool {
-        // VRAM is accessible when LCD is off or not in Mode 3
-        self.lcdc & LCDC_ON_B == 0 || !self.vram_blocked
+    pub const fn is_vram_read_accessible(&self) -> bool {
+        // VRAM is accessible when LCD is off or read not blocked
+        self.lcdc & LCDC_ON_B == 0 || !self.vram_read_blocked
+    }
+
+    /// Returns true if VRAM is writable by the CPU.
+    #[inline]
+    #[must_use]
+    pub const fn is_vram_write_accessible(&self) -> bool {
+        // VRAM is writable when LCD is off or write not blocked
+        self.lcdc & LCDC_ON_B == 0 || !self.vram_write_blocked
+    }
+
+    /// Returns true if CGB palettes (BCP/OCP) are accessible by the CPU.
+    #[inline]
+    #[must_use]
+    pub const fn is_cgb_palettes_accessible(&self) -> bool {
+        // CGB palettes are accessible when LCD is off or not blocked
+        self.lcdc & LCDC_ON_B == 0 || !self.cgb_palettes_blocked
     }
 
     /// Advance PPU by one T-cycle (dot).
@@ -404,8 +438,12 @@ impl Ppu {
         self.mode = Mode::Drawing;
         self.set_mode_stat(Mode::Drawing);
         self.remaining_dots_in_mode = Mode::Drawing.dots(self.scx);
-        self.oam_blocked = true;
-        self.vram_blocked = true;
+        // SameBoy: All memory access is blocked during Mode 3
+        self.oam_read_blocked = true;
+        self.oam_write_blocked = true;
+        self.vram_read_blocked = true;
+        self.vram_write_blocked = true;
+        self.cgb_palettes_blocked = true;
         // Mode 3 startup delay
         self.mode3_delay = 0;
         self.last_fetched_x = -1;
@@ -427,6 +465,9 @@ impl Ppu {
         self.bg_fifo.push_bg_row(0, 0, 0, false, false);
         self.window_triggered = false;
         self.window_line = 0;
+        // Reset per-line flags
+        self.line_has_fractional_scrolling = false;
+        self.window_is_being_fetched = false;
         // Note: No OAM scan happened, so sprite_buffer stays empty for first line after LCD on
 
         self.update_stat(ints);
@@ -438,7 +479,7 @@ impl Ppu {
         // dots_in_line:
         // 1, 2: Sleep (Mode 0)
         // 3: Sleep (Mode 0), LY update at end
-        // 4: Sleep (Mode 0), STAT update at end
+        // 4: Sleep (Mode 0), STAT update at end, OAM write blocked
         // 5+: OAM Scan
 
         if self.dots_in_line == 3 {
@@ -449,6 +490,8 @@ impl Ppu {
 
         if self.dots_in_line == 4 {
             self.set_mode_stat(Mode::OamScan);
+            // SameBoy: OAM write blocked from dot 4 of Mode 2
+            self.oam_write_blocked = true;
             self.update_stat(ints);
         }
 
@@ -466,8 +509,12 @@ impl Ppu {
 
         if self.remaining_dots_in_mode <= 0 {
             self.enter_mode(Mode::Drawing, ints);
-            self.oam_blocked = true;
-            self.vram_blocked = true;
+            // SameBoy: All memory access is blocked during Mode 3
+            self.oam_read_blocked = true;
+            self.oam_write_blocked = true;
+            self.vram_read_blocked = true;
+            self.vram_write_blocked = true;
+            self.cgb_palettes_blocked = true;
             self.fetcher_state = FetcherState::GetTile;
             self.fetcher_step = 0;
             self.fetcher_tile_x = 0;
@@ -479,6 +526,9 @@ impl Ppu {
             self.oam_fifo.clear();
             // Push 8 "junk" pixels to prime the FIFO (will be discarded during scroll)
             self.bg_fifo.push_bg_row(0, 0, 0, false, false);
+            // Reset per-line flags
+            self.line_has_fractional_scrolling = false;
+            self.window_is_being_fetched = false;
         }
     }
     /// Scan a single OAM entry during Mode 2.
@@ -603,8 +653,12 @@ impl Ppu {
             // Transition to HBlank
             // Calculate actual HBlank duration: 456 total - actual dots used
             let hblank_dots = 456 - i32::from(self.dots_in_line);
-            self.oam_blocked = false;
-            self.vram_blocked = false;
+            // SameBoy: All memory access is unblocked during HBlank
+            self.oam_read_blocked = false;
+            self.oam_write_blocked = false;
+            self.vram_read_blocked = false;
+            self.vram_write_blocked = false;
+            self.cgb_palettes_blocked = false;
             self.mode = Mode::HBlank;
             self.set_mode_stat(Mode::HBlank);
             self.remaining_dots_in_mode = hblank_dots;
@@ -720,6 +774,7 @@ impl Ppu {
     fn activate_window(&mut self) {
         self.window_triggered = true;
         self.win_in_frame = true;
+        self.window_is_being_fetched = true;
 
         // Clear BG FIFO and restart fetcher for window
         self.bg_fifo.clear();
@@ -841,18 +896,28 @@ impl Ppu {
         #[expect(clippy::cast_sign_loss)]
         let unsigned_pos_plus_16 = (self.position_in_line + 16) as u8;
         if unsigned_pos_plus_16 < 8 {
-            // SameBoy: Check if we should jump to -8 based on SCX alignment.
-            // When (position_in_line & 7) == (SCX & 7), jump to -8.
-            #[expect(clippy::cast_sign_loss)]
-            let pos_mod_8 = (self.position_in_line & 7) as u8;
-            let scx_mod_8 = self.scx & 7;
-
-            if pos_mod_8 == scx_mod_8 {
+            // SameBoy edge case: position_in_line == -17 wraps to -16
+            if self.position_in_line == -17 {
+                self.position_in_line = -16;
+            } else if (self.position_in_line & 7) as u8 == (self.scx & 7) {
+                // When (position_in_line & 7) == (SCX & 7), jump to -8
                 self.position_in_line = -8;
+            } else if self.window_is_being_fetched
+                && (self.position_in_line & 7) as u8 == 6
+                && (self.scx & 7) == 7
+            {
+                // SameBoy edge case: window fetch with specific SCX alignment
+                self.position_in_line = -8;
+            } else if self.position_in_line == -9 {
+                // SameBoy edge case: -9 wraps back to -16
+                self.position_in_line = -16;
+                return;
+            } else {
+                self.line_has_fractional_scrolling = true;
             }
-            // SameBoy: If alignment doesn't match, the function continues
-            // and will pop a pixel from FIFO + increment position_in_line below.
         }
+
+        self.window_is_being_fetched = false;
 
         // SameBoy: Discard phase - position_in_line < 0 means we're discarding junk pixels
         if self.position_in_line < 0 {
@@ -1040,7 +1105,12 @@ impl Ppu {
                 // Reset for next scanline
                 self.oam_scan_index = 0;
                 self.sprite_buffer.clear();
-                self.oam_blocked = true;
+                // SameBoy: OAM read blocked during Mode 2, but writes allowed initially
+                self.oam_read_blocked = true;
+                self.oam_write_blocked = false;
+                self.vram_read_blocked = false;
+                self.vram_write_blocked = false;
+                self.cgb_palettes_blocked = false;
                 self.window_triggered = false;
 
                 self.enter_mode(Mode::OamScan, ints);
@@ -1069,7 +1139,12 @@ impl Ppu {
                 // Reset for new frame
                 self.oam_scan_index = 0;
                 self.sprite_buffer.clear();
-                self.oam_blocked = true;
+                // SameBoy: OAM read blocked during Mode 2, but writes allowed initially
+                self.oam_read_blocked = true;
+                self.oam_write_blocked = false;
+                self.vram_read_blocked = false;
+                self.vram_write_blocked = false;
+                self.cgb_palettes_blocked = false;
                 self.window_line = 0;
                 self.window_triggered = false;
                 self.enter_mode(Mode::OamScan, ints);

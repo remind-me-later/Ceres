@@ -1,4 +1,4 @@
-use crate::ppu::{Mode, Ppu};
+use crate::ppu::Ppu;
 
 pub struct Oam {
     bytes: [u8; Self::SIZE as usize],
@@ -45,45 +45,22 @@ impl Ppu {
         &mut self.oam
     }
 
-    // TODO: why does read check for enabled DMA transfer and write for active DMA?
     #[must_use]
     pub const fn read_oam(&self, addr: u16) -> u8 {
-        match self.mode() {
-            Mode::HBlank | Mode::VBlank => self.oam.read(addr),
-            Mode::OamScan => {
-                // OAM read is blocked after the first M-cycle (4 dots) of Mode 2
-                // Mode 2 is 80 dots long.
-                // If remaining > 76, we are in the first 4 dots.
-                if self.remaining_dots_in_mode > 76 {
-                    self.oam.read(addr)
-                } else {
-                    0xFF
-                }
-            }
-            Mode::Drawing => 0xFF,
+        if self.oam_read_blocked {
+            0xFF
+        } else {
+            self.oam.read(addr)
         }
     }
 
     pub fn write_oam(&mut self, addr: u16, val: u8) {
-        let mode = self.mode();
-        let blocked = match mode {
-            Mode::HBlank | Mode::VBlank => false,
-            Mode::OamScan => {
-                // OAM write is blocked after the first 2 M-cycles (8 dots) of Mode 2
-                // Mode 2 is 80 dots long.
-                // If remaining <= 72, we are in the first 8 dots.
-                self.remaining_dots_in_mode <= 72
-            }
-            Mode::Drawing => true,
-        };
-
-        if !blocked {
+        if !self.oam_write_blocked {
             self.oam.write(addr, val);
         }
     }
 
     pub const fn write_oam_by_dma(&mut self, addr: u16, val: u8) {
-        // self.oam[(addr & 0xFF) as usize] = val;
         self.oam.write(addr, val);
     }
 }

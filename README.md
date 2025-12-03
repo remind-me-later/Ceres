@@ -95,3 +95,5 @@ and detailed testing instructions.
 - [retrio/gb](https://github.com/retrio/gb)
 - [SameBoy](https://github.com/LIJI32/SameBoy)
 - [GiiBiiAdvance](https://github.com/AntonioND/giibiiadvance)
+- [MetroBoy/GateBoy](https://github.com/aappleby/metroboy/tree/master)
+- [Furrtek schematics](https://github.com/furrtek/DMG-CPU-Inside)

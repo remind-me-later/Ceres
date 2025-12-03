@@ -163,9 +163,21 @@ impl<A: AudioCallback> Gb<A> {
             VBK if self.are_cgb_regs_available() => self.ppu.vram().read_vbk(),
             HDMA5 if self.are_cgb_regs_available() => self.hdma.read_hdma5(),
             BCPS if self.are_cgb_regs_available() => self.ppu.bcp().spec(),
-            BCPD if self.are_cgb_regs_available() => self.ppu.bcp().data(),
+            BCPD if self.are_cgb_regs_available() => {
+                if self.ppu.is_cgb_palettes_accessible() {
+                    self.ppu.bcp().data()
+                } else {
+                    0xFF
+                }
+            }
             OCPS if self.are_cgb_regs_available() => self.ppu.ocp().spec(),
-            OCPD if self.are_cgb_regs_available() => self.ppu.ocp().data(),
+            OCPD if self.are_cgb_regs_available() => {
+                if self.ppu.is_cgb_palettes_accessible() {
+                    self.ppu.ocp().data()
+                } else {
+                    0xFF
+                }
+            }
             OPRI if self.are_cgb_regs_available() => self.ppu.read_opri(),
             SVBK if self.are_cgb_regs_available() => self.wram.svbk().read(),
             PCM12 if self.are_cgb_regs_available() => self.apu.pcm12(),
@@ -213,18 +225,12 @@ impl<A: AudioCallback> Gb<A> {
                     self.cart.read_rom(addr)
                 }
             }
-            0x8000..=0x9FFF => {
-                if self.ppu.is_vram_accessible() {
-                    self.ppu.read_vram(addr)
-                } else {
-                    0xFF
-                }
-            }
+            0x8000..=0x9FFF => self.ppu.read_vram(addr),
             0xA000..=0xBFFF => self.cart.read_ram(addr),
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.read_wram_lo(addr),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.read_wram_hi(addr),
             0xFE00..=0xFE9F => {
-                if self.dma.blocks_oam() || !self.ppu.is_oam_accessible() {
+                if self.dma.blocks_oam() {
                     0xFF
                 } else {
                     self.ppu.read_oam(addr)
@@ -299,9 +305,17 @@ impl<A: AudioCallback> Gb<A> {
             HDMA4 if self.are_cgb_regs_available() => self.hdma.write_hdma4(val),
             HDMA5 if self.are_cgb_regs_available() => self.hdma.write_hdma5(val),
             BCPS if self.are_cgb_regs_available() => self.ppu.bcp_mut().set_spec(val),
-            BCPD if self.are_cgb_regs_available() => self.ppu.bcp_mut().set_data(val),
+            BCPD if self.are_cgb_regs_available() => {
+                if self.ppu.is_cgb_palettes_accessible() {
+                    self.ppu.bcp_mut().set_data(val);
+                }
+            }
             OCPS if self.are_cgb_regs_available() => self.ppu.ocp_mut().set_spec(val),
-            OCPD if self.are_cgb_regs_available() => self.ppu.ocp_mut().set_data(val),
+            OCPD if self.are_cgb_regs_available() => {
+                if self.ppu.is_cgb_palettes_accessible() {
+                    self.ppu.ocp_mut().set_data(val);
+                }
+            }
             OPRI if self.are_cgb_regs_available() => {
                 // FIXME: understand behaviour outside of bootrom
                 if self.bootrom.is_enabled() {
@@ -320,18 +334,12 @@ impl<A: AudioCallback> Gb<A> {
         match addr {
             // FIXME: we assume bootrom doesn't write to rom
             0x0000..=0x7FFF => self.cart.write_rom(addr, val),
-            0x8000..=0x9FFF => {
-                if !self.ppu.is_vram_accessible() {
-                    return;
-                }
-
-                self.ppu.write_vram(addr, val);
-            }
+            0x8000..=0x9FFF => self.ppu.write_vram(addr, val),
             0xA000..=0xBFFF => self.cart.write_ram(addr, val),
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.write_wram_lo(addr, val),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.write_wram_hi(addr, val),
             0xFE00..=0xFE9F => {
-                if self.dma.blocks_oam() || !self.ppu.is_oam_accessible() {
+                if self.dma.blocks_oam() {
                     return;
                 }
 
