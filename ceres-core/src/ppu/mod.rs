@@ -44,13 +44,21 @@ const STAT_IF_LYC_B: u8 = 0x40;
 /// LCD startup state machine states.
 /// When LCD is enabled (LCDC bit 7 set), the PPU goes through a specific
 /// startup sequence before normal rendering begins.
+/// Each phase has a countdown timer for its duration.
+/// Total: 76 + 2 + 1 + 1 = 80 cycles.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum StartupState {
     /// LCD is off or startup complete.
     #[default]
     Inactive,
-    /// Startup in progress. Memory access remains unblocked until Mode 3 entry.
-    Active,
+    /// Phase 1: Initial wait (76 cycles). Mode 0 in STAT, memory access unblocked.
+    Phase1(u8),
+    /// Phase 2: Wait 2 cycles. OAM write access blocked (set on first cycle).
+    Phase2(u8),
+    /// Phase 3: Wait 1 cycle. STAT = Mode 3, OAM/VRAM blocked, CGB palettes blocked.
+    Phase3(u8),
+    /// Phase 4: Wait 1 cycle. All memory blocked, then enter Mode 3 rendering.
+    Phase4(u8),
 }
 
 #[non_exhaustive]
@@ -103,10 +111,8 @@ pub struct Ppu {
     bgp: u8,
     color_correction_mode: ColorCorrectionMode,
     delay_one_frame: bool,
-    /// LCD startup state machine state.
+    /// LCD startup state machine state (includes phase countdown).
     startup_state: StartupState,
-    /// Countdown timer for current startup phase.
-    startup_dots: i32,
     lcdc: u8,
     ly: u8,
     /// LY value used for LYC comparison (may differ from displayed LY during transitions)
@@ -471,51 +477,72 @@ impl Ppu {
 
     /// Tick the LCD startup state machine.
     /// SameBoy timing for first line after LCD on:
-    /// - Dots 1-76: Mode 0 in STAT, all unblocked
-    /// - Dots 77-78: OAM write blocked
-    /// - Dot 79: STAT = Mode 3, OAM fully blocked, VRAM blocked (DMG)
-    /// - Dot 80: Enter Mode 3 rendering
-    /// Total: 80 dots to match original timing
+    /// - Phase 1 (76 cycles): Mode 0 in STAT, all unblocked
+    /// - Phase 2 (2 cycles): OAM write blocked
+    /// - Phase 3 (1 cycle): STAT = Mode 3, OAM fully blocked, VRAM blocked (DMG), CGB palettes blocked
+    /// - Phase 4 (1 cycle): VRAM fully blocked, enter Mode 3 rendering
+    /// Total: 80 cycles
     fn tick_startup(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
-        // startup_dots counts down from 80 to 0
-        // dot = 81 - startup_dots gives us dot 1 through 80
-        let dot = 81 - self.startup_dots;
         let is_cgb = matches!(cgb_mode, CgbMode::Cgb);
 
-        match dot {
-            1..=76 => {
-                // Mode 0 in STAT, all unblocked
-                // Already set in write_lcdc
+        match self.startup_state {
+            StartupState::Inactive => {}
+
+            StartupState::Phase1(remaining) => {
+                // Phase 1: Mode 0 in STAT, all unblocked
+                if remaining <= 1 {
+                    // Transition to Phase 2
+                    self.startup_state = StartupState::Phase2(2);
+                } else {
+                    self.startup_state = StartupState::Phase1(remaining - 1);
+                }
             }
-            77 | 78 => {
-                // OAM write blocked
-                if dot == 77 {
+
+            StartupState::Phase2(remaining) => {
+                // Phase 2: OAM write blocked (set on first cycle of Phase2)
+                if remaining == 2 {
                     self.oam_write_blocked = true;
                 }
+                if remaining <= 1 {
+                    // Transition to Phase 3: STAT = Mode 3, OAM fully blocked, CGB palettes blocked
+                    self.set_mode_stat(Mode::Drawing);
+                    self.oam_read_blocked = true;
+                    // VRAM blocking depends on CGB/DMG
+                    if !is_cgb {
+                        self.vram_read_blocked = true;
+                        self.vram_write_blocked = true;
+                    }
+                    self.cgb_palettes_blocked = true;
+                    self.update_stat(ints);
+                    self.startup_state = StartupState::Phase3(1);
+                } else {
+                    self.startup_state = StartupState::Phase2(remaining - 1);
+                }
             }
-            79 => {
-                // STAT = Mode 3, OAM fully blocked
-                self.set_mode_stat(Mode::Drawing);
-                self.oam_read_blocked = true;
-                // VRAM blocking depends on CGB/DMG
-                if !is_cgb {
+
+            StartupState::Phase3(remaining) => {
+                // Phase 3: STAT = Mode 3, all blocked except VRAM (CGB)
+                if remaining <= 1 {
+                    // Transition to Phase 4: VRAM fully blocked
                     self.vram_read_blocked = true;
                     self.vram_write_blocked = true;
+                    self.startup_state = StartupState::Phase4(1);
+                } else {
+                    self.startup_state = StartupState::Phase3(remaining - 1);
                 }
-                self.cgb_palettes_blocked = true;
-                self.update_stat(ints);
             }
-            80 => {
-                // VRAM fully blocked, enter Mode 3 rendering
-                self.vram_read_blocked = true;
-                self.vram_write_blocked = true;
-                self.startup_state = StartupState::Inactive;
-                self.enter_mode3_after_startup(ints);
-            }
-            _ => {}
-        }
 
-        self.startup_dots -= 1;
+            StartupState::Phase4(remaining) => {
+                // Phase 4: All blocked, enter Mode 3 rendering
+                if remaining <= 1 {
+                    // Startup complete
+                    self.startup_state = StartupState::Inactive;
+                    self.enter_mode3_after_startup(ints);
+                } else {
+                    self.startup_state = StartupState::Phase4(remaining - 1);
+                }
+            }
+        }
     }
 
     /// Enter Mode 3 rendering after startup sequence completes.
@@ -1338,7 +1365,6 @@ impl Ppu {
 
             // Reset startup state
             self.startup_state = StartupState::Inactive;
-            self.startup_dots = 0;
 
             // Unblock all memory access when LCD is off
             self.oam_read_blocked = false;
@@ -1369,10 +1395,9 @@ impl Ppu {
             // Comparison clock restarts - update coincidence and check for interrupt
             self.update_stat(ints);
 
-            // Start LCD startup state machine
-            // 80 dots before entering Mode 3 rendering
-            self.startup_state = StartupState::Active;
-            self.startup_dots = 80;
+            // Start LCD startup state machine with Phase 1 (76 cycles)
+            // Total: 76 + 2 + 1 + 1 = 80 cycles
+            self.startup_state = StartupState::Phase1(76);
             self.oam_read_blocked = false;
             self.oam_write_blocked = false;
             self.vram_read_blocked = false;
