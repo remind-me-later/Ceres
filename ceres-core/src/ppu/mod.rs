@@ -174,8 +174,10 @@ pub struct Ppu {
     vram_write_blocked: bool,
     /// CGB palette access blocked.
     cgb_palettes_blocked: bool,
-    /// Fetcher sub-cycle counter (0-1, each fetcher step takes 2 T-cycles).
-    fetcher_step: u8,
+    /// Cached tile index address (calculated in T1, used in T2).
+    fetcher_tile_index_addr: u16,
+    /// Cached tile data address (calculated in T1, used in T2).
+    fetcher_tile_data_addr: u16,
     /// OAM scan index (0-39, which OAM entry is being checked).
     oam_scan_index: u8,
     /// Mode 3 delay (pipeline startup and sprite fetch penalties).
@@ -503,8 +505,7 @@ impl Ppu {
         // SameBoy quirk: First line after LCD on behaves as if Mode 2 (80 dots) + 8 dots have passed.
         // Total 88 dots.
         self.dots_in_line = 88;
-        self.fetcher_state = FetcherState::GetTile;
-        self.fetcher_step = 0;
+        self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_tile_x = 0;
         // SameBoy: position_in_line starts at -16. The SCX alignment algorithm
         // in output_pixel will handle jumping to -8 when (position_in_line & 7) == (SCX & 7).
@@ -569,8 +570,7 @@ impl Ppu {
             self.vram_read_blocked = true;
             self.vram_write_blocked = true;
             self.cgb_palettes_blocked = true;
-            self.fetcher_state = FetcherState::GetTile;
-            self.fetcher_step = 0;
+            self.fetcher_state = FetcherState::GetTileT1;
             self.fetcher_tile_x = 0;
             // SameBoy: position_in_line starts at -16. The SCX alignment algorithm
             // in output_pixel will handle jumping to -8 when (position_in_line & 7) == (SCX & 7).
@@ -679,11 +679,8 @@ impl Ppu {
         // Try to output a pixel first (output_pixel handles empty FIFO checks internally)
         self.output_pixel(cgb_mode);
 
-        // Advance fetcher every 2 T-cycles (each fetcher state takes 2 T-cycles)
-        if self.fetcher_step == 0 {
-            self.advance_fetcher(cgb_mode);
-        }
-        self.fetcher_step = (self.fetcher_step + 1) % 2;
+        // Advance fetcher every T-cycle with T1/T2 states
+        self.advance_fetcher(cgb_mode);
     }
 
     /// Find the next sprite to fetch at the given X position.
@@ -754,29 +751,23 @@ impl Ppu {
             SpriteFetcherState::Idle => {}
 
             SpriteFetcherState::WaitForBgFetcher => {
-                // Wait for BG fetcher to be aligned (past GetDataHigh and FIFO not empty)
+                // Wait for BG fetcher to be aligned (past GetDataHighT2 and FIFO not empty)
                 let aligned = match self.fetcher_state {
-                    FetcherState::Push => true,
-                    FetcherState::GetDataHigh if self.fetcher_step == 1 => true,
+                    FetcherState::PushT1 | FetcherState::PushT2 => true,
+                    FetcherState::GetDataHighT2 => true,
                     _ => false,
                 };
                 let fifo_not_empty = self.bg_fifo.size() > 0;
 
                 if aligned && fifo_not_empty {
                     // Advance BG fetcher one more cycle (SameBoy does this)
-                    if self.fetcher_step == 0 {
-                        self.advance_fetcher(cgb_mode);
-                    }
-                    self.fetcher_step = (self.fetcher_step + 1) % 2;
+                    self.advance_fetcher(cgb_mode);
 
                     self.sprite_fetcher_state = SpriteFetcherState::GetTileAndFlags;
                     self.sprite_fetcher_step = 0;
                 } else {
                     // Not aligned, advance BG fetcher
-                    if self.fetcher_step == 0 {
-                        self.advance_fetcher(cgb_mode);
-                    }
-                    self.fetcher_step = (self.fetcher_step + 1) % 2;
+                    self.advance_fetcher(cgb_mode);
                 }
             }
 
@@ -886,17 +877,20 @@ impl Ppu {
 
         // Clear BG FIFO and restart fetcher for window
         self.bg_fifo.clear();
-        self.fetcher_state = FetcherState::GetTile;
+        self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_tile_x = 0;
 
         // Window activation incurs a 6-dot penalty (handled by fetcher restart)
     }
 
     /// Advance the background/window fetcher state machine.
+    /// Uses T1/T2 states matching SameBoy:
+    /// - T1: Calculate addresses/setup
+    /// - T2: Perform VRAM read
     fn advance_fetcher(&mut self, cgb_mode: CgbMode) {
         match self.fetcher_state {
-            FetcherState::GetTile => {
-                // Calculate tile map address
+            FetcherState::GetTileT1 => {
+                // T1: Calculate tile map address
                 let tile_map = if self.window_triggered {
                     self.win_tile_map_addr()
                 } else {
@@ -915,28 +909,45 @@ impl Ppu {
                     self.fetcher_tile_x.wrapping_add(self.scx / 8) & 0x1F
                 };
 
-                let addr = tile_map + u16::from(y / 8) * 32 + u16::from(x);
-
-                self.current_tile = self.vram.vram_at_bank(addr, 0);
+                // Cache address for T2
+                self.fetcher_tile_index_addr = tile_map + u16::from(y / 8) * 32 + u16::from(x);
+                self.fetcher_state = FetcherState::GetTileT2;
+            }
+            FetcherState::GetTileT2 => {
+                // T2: Read tile index and attributes from VRAM
+                self.current_tile = self.vram.vram_at_bank(self.fetcher_tile_index_addr, 0);
                 self.current_tile_attrs = match cgb_mode {
-                    CgbMode::Cgb => self.vram.vram_at_bank(addr, 1),
+                    CgbMode::Cgb => self.vram.vram_at_bank(self.fetcher_tile_index_addr, 1),
                     _ => 0,
                 };
 
-                self.fetcher_state = FetcherState::GetDataLow;
+                self.fetcher_state = FetcherState::GetDataLowT1;
             }
-            FetcherState::GetDataLow => {
-                let tile_addr = self.calculate_tile_data_addr();
-                self.current_tile_data[0] = self.read_tile_byte(tile_addr);
-                self.fetcher_state = FetcherState::GetDataHigh;
+            FetcherState::GetDataLowT1 => {
+                // T1: Calculate tile data address
+                self.fetcher_tile_data_addr = self.calculate_tile_data_addr();
+                self.fetcher_state = FetcherState::GetDataLowT2;
             }
-            FetcherState::GetDataHigh => {
-                let tile_addr = self.calculate_tile_data_addr();
-                self.current_tile_data[1] = self.read_tile_byte(tile_addr + 1);
-                self.fetcher_state = FetcherState::Push;
+            FetcherState::GetDataLowT2 => {
+                // T2: Read low byte from VRAM
+                self.current_tile_data[0] = self.read_tile_byte(self.fetcher_tile_data_addr);
+                self.fetcher_state = FetcherState::GetDataHighT1;
             }
-            FetcherState::Push => {
-                // Push if FIFO has space (capacity 16, push 8, so need <= 8)
+            FetcherState::GetDataHighT1 => {
+                // T1: Address already calculated, just advance
+                self.fetcher_state = FetcherState::GetDataHighT2;
+            }
+            FetcherState::GetDataHighT2 => {
+                // T2: Read high byte from VRAM
+                self.current_tile_data[1] = self.read_tile_byte(self.fetcher_tile_data_addr + 1);
+                self.fetcher_state = FetcherState::PushT1;
+            }
+            FetcherState::PushT1 => {
+                // T1: Wait cycle (FIFO push happens in T2)
+                self.fetcher_state = FetcherState::PushT2;
+            }
+            FetcherState::PushT2 => {
+                // T2: Push if FIFO has space (capacity 16, push 8, so need <= 8)
                 if self.bg_fifo.size() <= 8 {
                     let palette = self.current_tile_attrs & 0x07;
                     let bg_priority = self.current_tile_attrs & 0x80 != 0;
@@ -951,9 +962,11 @@ impl Ppu {
                     );
 
                     self.fetcher_tile_x = self.fetcher_tile_x.wrapping_add(1) & 0x1F;
-                    self.fetcher_state = FetcherState::GetTile;
+                    self.fetcher_state = FetcherState::GetTileT1;
+                } else {
+                    // FIFO full, go back to PushT1 to wait another 2 cycles
+                    self.fetcher_state = FetcherState::PushT1;
                 }
-                // If FIFO full (size > 8), stay in Push state
             }
         }
     }

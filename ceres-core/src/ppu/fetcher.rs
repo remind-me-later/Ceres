@@ -1,18 +1,28 @@
 /// Fetcher state machine states.
 ///
 /// The background/window fetcher retrieves tile data from VRAM and pushes
-/// 8 pixels to the FIFO. Each step takes 2 T-cycles (1 M-cycle).
+/// 8 pixels to the FIFO. Uses T1/T2 sub-states matching SameBoy:
+/// - T1: Calculate addresses/setup
+/// - T2: Perform VRAM read
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum FetcherState {
-    /// Read tile index from tilemap (cycle 1 of 2).
+    /// Read tile index from tilemap - T1: calculate address.
     #[default]
-    GetTile,
-    /// Read low byte of tile data (cycle 1 of 2).
-    GetDataLow,
-    /// Read high byte of tile data (cycle 1 of 2).
-    GetDataHigh,
-    /// Attempt to push 8 pixels to FIFO (repeats until FIFO has space).
-    Push,
+    GetTileT1,
+    /// Read tile index from tilemap - T2: read VRAM.
+    GetTileT2,
+    /// Read low byte of tile data - T1: calculate address.
+    GetDataLowT1,
+    /// Read low byte of tile data - T2: read VRAM.
+    GetDataLowT2,
+    /// Read high byte of tile data - T1: calculate address.
+    GetDataHighT1,
+    /// Read high byte of tile data - T2: read VRAM.
+    GetDataHighT2,
+    /// Attempt to push 8 pixels to FIFO - T1 (wait for space).
+    PushT1,
+    /// Attempt to push 8 pixels to FIFO - T2 (push if space, else stay).
+    PushT2,
 }
 
 /// Sprite fetcher state machine states.
