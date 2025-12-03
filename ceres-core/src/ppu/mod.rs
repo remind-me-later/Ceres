@@ -919,16 +919,40 @@ impl Ppu {
             return;
         }
 
-        // Check WY condition (window Y trigger)
+        // Check WY condition (window Y trigger) - must have been triggered on or before current line
         if self.ly < self.wy {
             return;
         }
 
-        // Check WX condition (window X trigger)
-        // Window activates when position_in_line == WX - 7
-        let wx_trigger = i16::from(self.wx) - 7;
-        if self.position_in_line == wx_trigger {
-            self.activate_window();
+        let is_cgb = matches!(cgb_mode, CgbMode::Cgb);
+        let pos = self.position_in_line;
+
+        // SameBoy: WX=0 has special handling
+        if self.wx == 0 {
+            let should_activate = if pos == -7i16 as i16 {
+                true
+            } else if pos == -16i16 as i16 && (self.scx & 7) != 0 {
+                true
+            } else {
+                // position_in_line >= -15 && position_in_line <= -8
+                pos >= -15 && pos <= -8
+            };
+
+            if should_activate {
+                self.activate_window();
+            }
+        }
+        // SameBoy: WX < 166 (or 167 on CGB) - normal window trigger
+        else if self.wx < 166 + u8::from(is_cgb) {
+            // Window activates when position_in_line + 7 == WX
+            if pos + 7 == i16::from(self.wx) {
+                self.activate_window();
+            }
+        }
+        // SameBoy: WX=166 on DMG - special case, increment window_y but don't fully trigger
+        else if !is_cgb && self.wx == 166 && pos + 7 == i16::from(self.wx) {
+            // Just increment window line counter without full window activation
+            self.window_line = self.window_line.wrapping_add(1);
         }
     }
 
