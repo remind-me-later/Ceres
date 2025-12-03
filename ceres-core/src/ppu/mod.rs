@@ -462,7 +462,7 @@ impl Ppu {
         self.remaining_dots_in_mode -= 1;
 
         match self.mode() {
-            Mode::OamScan => self.tick_oam_scan(ints),
+            Mode::OamScan => self.tick_oam_scan(ints, cgb_mode),
             Mode::Drawing => self.tick_drawing(ints, cgb_mode),
             Mode::HBlank => self.tick_hblank(ints),
             Mode::VBlank => self.tick_vblank(ints),
@@ -529,37 +529,45 @@ impl Ppu {
     }
 
     /// Tick during Mode 2 (OAM Scan).
-    fn tick_oam_scan(&mut self, ints: &mut Interrupts) {
-        // SameBoy startup delay logic
-        // dots_in_line:
-        // 1, 2: Sleep (Mode 0)
-        // 3: Sleep (Mode 0), LY update at end
-        // 4: Sleep (Mode 0), STAT update at end, OAM write blocked
-        // 5+: OAM Scan
+    /// SameBoy timing:
+    /// - Dot 1-2 (state 35): OAM write blocked (CGB && !double_speed)
+    /// - Dot 3 (state 6): LY update, OAM read blocked (model dependent)
+    /// - Dot 4 (state 7): STAT = Mode 2, OAM fully blocked
+    /// - Dot 5-84: OAM scan (40 entries × 2 dots each)
+    fn tick_oam_scan(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
+        let is_cgb = matches!(cgb_mode, CgbMode::Cgb);
 
-        if self.dots_in_line == 3 {
-            self.ly = self.ly.wrapping_add(1);
-            self.ly_for_comparison = self.ly;
-            self.update_stat(ints);
-        }
-
-        if self.dots_in_line == 4 {
-            self.set_mode_stat(Mode::OamScan);
-            // SameBoy: OAM write blocked from dot 4 of Mode 2
-            self.oam_write_blocked = true;
-            self.update_stat(ints);
-        }
-
-        // Only scan if we are past the startup phase
-        if self.dots_in_line > 4 {
-            let effective_dots = self.dots_in_line - 4;
-
-            // OAM scan takes exactly 80 dots
-            // Every 2 dots, check one OAM entry (40 entries total)
-            if effective_dots.is_multiple_of(2) && self.oam_scan_index < 40 {
-                self.scan_oam_entry();
-                self.oam_scan_index += 1;
+        match self.dots_in_line {
+            1 | 2 => {
+                // State 35: OAM write blocked on CGB (non-double-speed)
+                if is_cgb {
+                    self.oam_write_blocked = true;
+                }
             }
+            3 => {
+                // State 6: LY update
+                self.ly = self.ly.wrapping_add(1);
+                self.ly_for_comparison = self.ly;
+                // OAM read blocked
+                self.oam_read_blocked = true;
+                self.update_stat(ints);
+            }
+            4 => {
+                // State 7: STAT = Mode 2, OAM fully blocked
+                self.set_mode_stat(Mode::OamScan);
+                self.oam_read_blocked = true;
+                self.oam_write_blocked = true;
+                self.update_stat(ints);
+            }
+            5..=84 => {
+                // OAM scan: check one entry every 2 dots
+                let scan_dot = self.dots_in_line - 4; // 1-80
+                if scan_dot % 2 == 0 && self.oam_scan_index < 40 {
+                    self.scan_oam_entry();
+                    self.oam_scan_index += 1;
+                }
+            }
+            _ => {}
         }
 
         if self.remaining_dots_in_mode <= 0 {
