@@ -470,31 +470,61 @@ impl Ppu {
     }
 
     /// Tick the LCD startup state machine.
-    /// This implements the startup sequence during LCD enable.
-    /// Total: 80 dots before entering Mode 3, matching original enable_timer.
-    /// Note: For simplicity, memory access remains unblocked until Mode 3 entry.
-    fn tick_startup(&mut self, ints: &mut Interrupts, _cgb_mode: CgbMode) {
-        self.startup_dots -= 1;
+    /// SameBoy timing for first line after LCD on:
+    /// - Dots 1-76: Mode 0 in STAT, all unblocked
+    /// - Dots 77-78: OAM write blocked
+    /// - Dot 79: STAT = Mode 3, OAM fully blocked, VRAM blocked (DMG)
+    /// - Dot 80: Enter Mode 3 rendering
+    /// Total: 80 dots to match original timing
+    fn tick_startup(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
+        // startup_dots counts down from 80 to 0
+        // dot = 81 - startup_dots gives us dot 1 through 80
+        let dot = 81 - self.startup_dots;
+        let is_cgb = matches!(cgb_mode, CgbMode::Cgb);
 
-        if self.startup_dots == 0 {
-            // Startup complete, enter Mode 3 rendering
-            self.startup_state = StartupState::Inactive;
-            self.enter_mode3_after_startup(ints);
+        match dot {
+            1..=76 => {
+                // Mode 0 in STAT, all unblocked
+                // Already set in write_lcdc
+            }
+            77 | 78 => {
+                // OAM write blocked
+                if dot == 77 {
+                    self.oam_write_blocked = true;
+                }
+            }
+            79 => {
+                // STAT = Mode 3, OAM fully blocked
+                self.set_mode_stat(Mode::Drawing);
+                self.oam_read_blocked = true;
+                // VRAM blocking depends on CGB/DMG
+                if !is_cgb {
+                    self.vram_read_blocked = true;
+                    self.vram_write_blocked = true;
+                }
+                self.cgb_palettes_blocked = true;
+                self.update_stat(ints);
+            }
+            80 => {
+                // VRAM fully blocked, enter Mode 3 rendering
+                self.vram_read_blocked = true;
+                self.vram_write_blocked = true;
+                self.startup_state = StartupState::Inactive;
+                self.enter_mode3_after_startup(ints);
+            }
+            _ => {}
         }
+
+        self.startup_dots -= 1;
     }
 
     /// Enter Mode 3 rendering after startup sequence completes.
     fn enter_mode3_after_startup(&mut self, ints: &mut Interrupts) {
         self.mode = Mode::Drawing;
-        self.set_mode_stat(Mode::Drawing);
+        // STAT already set to Mode 3 at dot 79
         self.remaining_dots_in_mode = Mode::Drawing.dots(self.scx);
 
-        // Block all memory access during Mode 3
-        self.oam_read_blocked = true;
-        self.oam_write_blocked = true;
-        self.vram_read_blocked = true;
-        self.vram_write_blocked = true;
-        self.cgb_palettes_blocked = true;
+        // Memory blocking already set during startup sequence
 
         // Mode 3 startup delay
         self.mode3_delay = 0;
@@ -502,13 +532,11 @@ impl Ppu {
         self.sprite_fetcher_state = SpriteFetcherState::Idle;
 
         // Initialize drawing state
-        // SameBoy quirk: First line after LCD on behaves as if Mode 2 (80 dots) + 8 dots have passed.
-        // Total 88 dots.
+        // SameBoy: cycles_for_line is augmented by 8 extra cycles for first line
         self.dots_in_line = 88;
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_tile_x = 0;
-        // SameBoy: position_in_line starts at -16. The SCX alignment algorithm
-        // in output_pixel will handle jumping to -8 when (position_in_line & 7) == (SCX & 7).
+        // SameBoy: position_in_line starts at -16
         self.position_in_line = -16;
         self.lcd_x = 0;
         self.bg_fifo.clear();
@@ -1342,7 +1370,7 @@ impl Ppu {
             self.update_stat(ints);
 
             // Start LCD startup state machine
-            // 80 dots with all access unblocked, then enter Mode 3
+            // 80 dots before entering Mode 3 rendering
             self.startup_state = StartupState::Active;
             self.startup_dots = 80;
             self.oam_read_blocked = false;
@@ -1350,6 +1378,9 @@ impl Ppu {
             self.vram_read_blocked = false;
             self.vram_write_blocked = false;
             self.cgb_palettes_blocked = false;
+
+            // First line after LCD on has no OAM scan
+            self.sprite_buffer.clear();
 
             self.delay_one_frame = true;
         }
