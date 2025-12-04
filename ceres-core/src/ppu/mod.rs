@@ -875,9 +875,9 @@ impl Ppu {
                 // Condition: while (fetcher_state < 5 || fifo_size == 0)
                 // Check alignment BEFORE advance
                 let fetcher_aligned = match self.fetcher_state {
-                    FetcherState::GetDataHighT2
-                    | FetcherState::PushT1
-                    | FetcherState::PushT2 => true,
+                    FetcherState::GetDataHighT2 | FetcherState::PushT1 | FetcherState::PushT2 => {
+                        true
+                    }
                     _ => false,
                 };
                 let fifo_not_empty = self.bg_fifo.size() > 0;
@@ -901,14 +901,13 @@ impl Ppu {
                 if self.sprite_fetcher_step == 0 {
                     self.advance_fetcher(cgb_mode);
                 }
-                
+
                 self.sprite_fetcher_step += 1;
                 if self.sprite_fetcher_step >= 2 {
                     self.sprite_fetcher_state = SpriteFetcherState::GetDataLow;
                     self.sprite_fetcher_step = 0;
                 }
             }
-
 
             SpriteFetcherState::GetDataLow => {
                 // SameBoy State 39: VRAM low read (2 cycles)

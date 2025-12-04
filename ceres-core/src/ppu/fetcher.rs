@@ -53,4 +53,3 @@ pub enum SpriteFetcherState {
     /// SameBoy State 40: VRAM high byte read (1 cycle), then overlay to OAM FIFO.
     GetDataHighAndPush,
 }
-

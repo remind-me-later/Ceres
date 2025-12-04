@@ -96,6 +96,4 @@ impl SpriteBuffer {
         self.count += 1;
         true
     }
-
 }
-

@@ -66,6 +66,26 @@ pub fn expected_screenshot_path(relative_path: &str, model: ceres_core::Model) -
         return Some(model_specific);
     }
 
+    // Mealybug Tearoom naming conventions
+    // CGB: _cgb_c.png (assuming CGB-C behavior)
+    // DMG: _dmg_blob.png
+    if match model {
+        ceres_core::Model::Cgb => {
+            let p = rom_dir.join(format!("{rom_stem}_cgb_c.png"));
+            if p.exists() {
+                return Some(p);
+            }
+            false
+        }
+        _ => {
+            let p = rom_dir.join(format!("{rom_stem}_dmg_blob.png"));
+            if p.exists() {
+                return Some(p);
+            }
+            false
+        }
+    } {}
+
     // Try: test-name-dmg-cgb.png (works for both)
     let combined = rom_dir.join(format!("{rom_stem}-dmg-cgb.png"));
     if combined.exists() {

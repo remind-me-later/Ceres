@@ -59,7 +59,8 @@ impl<A: AudioCallback> Gb<A> {
         }
 
         // TODO: is this order right?
-        self.ppu.run(dots, &mut self.ints, self.cgb_mode, double_speed);
+        self.ppu
+            .run(dots, &mut self.ints, self.cgb_mode, double_speed);
         self.run_dma();
 
         self.apu.run(dots);
