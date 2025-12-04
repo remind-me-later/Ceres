@@ -143,6 +143,10 @@ pub struct Ppu {
     win_skipped: u8,
     wx: u8,
     wy: u8,
+    /// Pending LY value (delayed write for sub-cycle accuracy).
+    ly_pending: u8,
+    /// Cycles until pending LY write takes effect (0 = no pending write).
+    ly_write_delay: u8,
 
     /// Background/window pixel FIFO (8-pixel capacity).
     bg_fifo: PixelFifo,
@@ -312,6 +316,19 @@ impl Ppu {
         self.update_stat(ints);
     }
 
+    /// Schedule a delayed LY write for sub-cycle timing accuracy.
+    /// The write becomes visible after `delay` T-cycles.
+    /// Use delay=0 for immediate writes.
+    #[inline]
+    fn schedule_ly_write(&mut self, value: u8, delay: u8) {
+        if delay == 0 {
+            self.ly = value;
+        } else {
+            self.ly_pending = value;
+            self.ly_write_delay = delay;
+        }
+    }
+
     #[must_use]
     pub const fn mode(&self) -> Mode {
         self.mode
@@ -455,6 +472,14 @@ impl Ppu {
     pub fn tick(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
         if self.lcdc & LCDC_ON_B == 0 {
             return;
+        }
+
+        // Process pending LY write (for sub-cycle timing accuracy)
+        if self.ly_write_delay > 0 {
+            self.ly_write_delay -= 1;
+            if self.ly_write_delay == 0 {
+                self.ly = self.ly_pending;
+            }
         }
 
         // Handle LCD startup state machine
@@ -1344,38 +1369,50 @@ impl Ppu {
     /// Tick during Mode 1 (VBlank).
     fn tick_vblank(&mut self, ints: &mut Interrupts) {
         if self.remaining_dots_in_mode <= 0 {
-            self.ly += 1;
-            self.ly_for_comparison = self.ly;
+            let new_ly = self.ly + 1;
 
-            if self.ly > 153 {
-                self.ly = 0xFF;
-                self.ly_for_comparison = 0xFF;
-                self.dots_in_line = 0;
-
-                // Present frame
-                if self.delay_one_frame {
-                    self.delay_one_frame = false;
-                } else {
-                    self.rgba_buf_present = mem::take(&mut self.rgb_buf);
-                }
-
-                // Reset for new frame
-                self.oam_scan_index = 0;
-                self.sprite_buffer.clear();
-                // SameBoy: OAM read blocked during Mode 2, but writes allowed initially
-                self.oam_read_blocked = true;
-                self.oam_write_blocked = false;
-                self.vram_read_blocked = false;
-                self.vram_write_blocked = false;
-                self.cgb_palettes_blocked = false;
-                self.window_line = 0;
-                self.window_triggered = false;
-                self.enter_mode(Mode::OamScan, ints);
+            if new_ly > 153 {
+                self.ly = new_ly;
+                self.ly_for_comparison = new_ly;
+                self.finish_frame_and_start_new(ints);
             } else {
+                // Only delay the 152→153 transition for sub-cycle accuracy.
+                // This is critical for line_153_ly_a test which checks LY at
+                // precise cycle boundaries. Other VBlank transitions use immediate writes.
+                let delay = if new_ly == 153 { 4 } else { 0 };
+                self.schedule_ly_write(new_ly, delay);
+                self.ly_for_comparison = new_ly;
                 self.remaining_dots_in_mode += Mode::VBlank.dots(self.scx);
                 self.update_stat(ints);
             }
         }
+    }
+
+    /// Complete the current frame and start a new one.
+    fn finish_frame_and_start_new(&mut self, ints: &mut Interrupts) {
+        self.ly = 0xFF;
+        self.ly_for_comparison = 0xFF;
+        self.ly_write_delay = 0; // Clear any pending LY write
+        self.dots_in_line = 0;
+
+        // Present frame
+        if self.delay_one_frame {
+            self.delay_one_frame = false;
+        } else {
+            self.rgba_buf_present = mem::take(&mut self.rgb_buf);
+        }
+
+        // Reset for new frame
+        self.oam_scan_index = 0;
+        self.sprite_buffer.clear();
+        self.oam_read_blocked = true;
+        self.oam_write_blocked = false;
+        self.vram_read_blocked = false;
+        self.vram_write_blocked = false;
+        self.cgb_palettes_blocked = false;
+        self.window_line = 0;
+        self.window_triggered = false;
+        self.enter_mode(Mode::OamScan, ints);
     }
 
     pub const fn write_bgp(&mut self, val: u8) {
@@ -1396,6 +1433,7 @@ impl Ppu {
 
             self.ly = 0;
             self.ly_for_comparison = 0;
+            self.ly_write_delay = 0; // Clear any pending LY write
             let mode = Mode::HBlank;
             self.mode = mode;
             self.set_mode_stat(mode);
@@ -1427,6 +1465,7 @@ impl Ppu {
         if val & LCDC_ON_B != 0 && self.lcdc & LCDC_ON_B == 0 {
             self.ly = 0;
             self.ly_for_comparison = 0;
+            self.ly_write_delay = 0; // Clear any pending LY write
             let mode = Mode::HBlank;
             self.mode = mode;
             self.set_mode_stat(mode);

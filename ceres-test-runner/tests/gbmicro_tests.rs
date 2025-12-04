@@ -307,7 +307,7 @@ gbmicrotest!(test_line_144_oam_int_a, "line_144_oam_int_a.gb");
 gbmicrotest_ignore!(test_line_144_oam_int_b, "line_144_oam_int_b.gb");
 gbmicrotest_ignore!(test_line_144_oam_int_c, "line_144_oam_int_c.gb");
 gbmicrotest!(test_line_144_oam_int_d, "line_144_oam_int_d.gb");
-gbmicrotest_ignore!(test_line_153_ly_a, "line_153_ly_a.gb");
+gbmicrotest!(test_line_153_ly_a, "line_153_ly_a.gb");
 gbmicrotest!(test_line_153_ly_b, "line_153_ly_b.gb");
 gbmicrotest_ignore!(
     test_line_153_lyc0_int_inc_sled,
