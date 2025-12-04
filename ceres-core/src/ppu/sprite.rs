@@ -97,14 +97,5 @@ impl SpriteBuffer {
         true
     }
 
-    /// Returns an iterator over sprites that start at the given X position.
-    ///
-    /// Used during Mode 3 to find sprites that need to be fetched at the current position.
-    #[inline]
-    #[must_use]
-    pub fn sprites_at_x(&self, x: u8) -> impl Iterator<Item = &SpriteEntry> {
-        self.sprites[..self.count as usize]
-            .iter()
-            .filter(move |s| s.x == x)
-    }
 }
+

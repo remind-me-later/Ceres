@@ -504,9 +504,9 @@ impl Ppu {
     /// SameBoy timing for first line after LCD on:
     /// - Phase 1 (76 cycles): Mode 0 in STAT, all unblocked
     /// - Phase 2 (2 cycles): OAM write blocked
-    /// - Phase 3 (1 cycle): STAT = Mode 3, OAM fully blocked, VRAM blocked (DMG), CGB palettes blocked
-    /// - Phase 4 (1 cycle): VRAM fully blocked, enter Mode 3 rendering
-    /// Total: 80 cycles
+    /// - Phase 3 (2 cycles): STAT = Mode 3, OAM fully blocked, VRAM blocked (DMG), CGB palettes blocked
+    /// - Phase 4 (3 cycles): VRAM fully blocked, enter Mode 3 rendering
+    /// Total: 83 cycles
     fn tick_startup(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, _double_speed: bool) {
         let is_cgb = matches!(cgb_mode, CgbMode::Cgb);
 
@@ -539,7 +539,7 @@ impl Ppu {
                     }
                     self.cgb_palettes_blocked = true;
                     self.update_stat(ints);
-                    self.startup_state = StartupState::Phase3(1);
+                    self.startup_state = StartupState::Phase3(2);
                 } else {
                     self.startup_state = StartupState::Phase2(remaining - 1);
                 }
@@ -551,7 +551,7 @@ impl Ppu {
                     // Transition to Phase 4: VRAM fully blocked
                     self.vram_read_blocked = true;
                     self.vram_write_blocked = true;
-                    self.startup_state = StartupState::Phase4(1);
+                    self.startup_state = StartupState::Phase4(3);
                 } else {
                     self.startup_state = StartupState::Phase3(remaining - 1);
                 }
@@ -579,13 +579,17 @@ impl Ppu {
         // Memory blocking already set during startup sequence
 
         // Mode 3 startup delay
-        self.mode3_delay = 0;
+        // Matches SameBoy States 37 (2 cycles) + 38 (3 cycles) = 5.
+        // However, Ceres pixel pipeline is ~170 cycles (vs SameBoy's 167+overhead).
+        // Adjusting to 1 to hit target ~171.
+        self.mode3_delay = 1;
         self.last_fetched_x = -1;
         self.sprite_fetcher_state = SpriteFetcherState::Idle;
 
         // Initialize drawing state
-        // SameBoy: cycles_for_line is augmented by 8 extra cycles for first line
-        self.dots_in_line = 88;
+        // SameBoy: cycles_for_line is augmented by 8 extra cycles for first line.
+        // Startup duration 83 + 8 = 91.
+        self.dots_in_line = 91;
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_tile_x = 0;
         // SameBoy: position_in_line starts at -16
@@ -686,6 +690,12 @@ impl Ppu {
             // Reset per-line flags
             self.line_has_fractional_scrolling = false;
             self.window_is_being_fetched = false;
+
+            // Mode 3 pre-render delay (1 cycle).
+            // Matches SameBoy States 10 (3 cycles) + 32 (2 cycles) = 5.
+            // Adjusted to 1 to compensate for Ceres pixel pipeline duration (~170).
+            // Target total Mode 3 duration: ~171 cycles.
+            self.mode3_delay = 1;
         }
     }
     /// Scan a single OAM entry during Mode 2.
@@ -718,30 +728,7 @@ impl Ppu {
     }
 
     /// Tick during Mode 3 (Drawing).
-    fn tick_drawing(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
-        // SameBoy: Exit check happens BEFORE the cycle's work, not after.
-        // This means the cycle where position_in_line reaches 160 exits immediately.
-        if self.position_in_line >= 160 {
-            // Increment window line counter if window was active this scanline
-            if self.window_triggered {
-                self.window_line = self.window_line.wrapping_add(1);
-            }
-            // Transition to HBlank
-            // Calculate actual HBlank duration: 456 total - actual dots used
-            let hblank_dots = 456 - i32::from(self.dots_in_line);
-            // SameBoy: All memory access is unblocked during HBlank
-            self.oam_read_blocked = false;
-            self.oam_write_blocked = false;
-            self.vram_read_blocked = false;
-            self.vram_write_blocked = false;
-            self.cgb_palettes_blocked = false;
-            self.mode = Mode::HBlank;
-            self.set_mode_stat(Mode::HBlank);
-            self.remaining_dots_in_mode = hblank_dots;
-            self.update_stat(ints);
-            return;
-        }
-
+    fn tick_drawing(&mut self, _ints: &mut Interrupts, cgb_mode: CgbMode) {
         if self.mode3_delay > 0 {
             self.mode3_delay -= 1;
             return;
@@ -784,6 +771,29 @@ impl Ppu {
 
         // Advance fetcher every T-cycle with T1/T2 states
         self.advance_fetcher(cgb_mode);
+
+        // Check if line rendering is complete
+        if self.position_in_line >= 160 {
+            // Increment window line counter if window was active this scanline
+            if self.window_triggered {
+                self.window_line = self.window_line.wrapping_add(1);
+            }
+            // Transition to HBlank
+            // Calculate actual HBlank duration: 456 total - actual dots used
+            let hblank_dots = 456 - i32::from(self.dots_in_line);
+            // SameBoy: All memory access is unblocked during HBlank
+            self.oam_read_blocked = false;
+            self.oam_write_blocked = false;
+            self.vram_read_blocked = false;
+            self.vram_write_blocked = false;
+            self.cgb_palettes_blocked = false;
+            self.mode = Mode::HBlank;
+            self.set_mode_stat(Mode::HBlank);
+            self.remaining_dots_in_mode = hblank_dots;
+            // Note: We do NOT call update_stat here.
+            // SameBoy fires the Mode 0 interrupt 1 cycle AFTER the mode change (State 22 sleep).
+            // We delay it to the first cycle of tick_hblank.
+        }
     }
 
     /// Find the next sprite to fetch at the given X position.
@@ -863,10 +873,7 @@ impl Ppu {
             SpriteFetcherState::WaitForBgFetcher => {
                 // SameBoy State 27: Wait loop
                 // Condition: while (fetcher_state < 5 || fifo_size == 0)
-                // Each iteration: advance fetcher, consume 1 cycle
-                //
-                // Important: When alignment is met, we DON'T consume a cycle here.
-                // We transition to ExtraAdvance which has its own cycle.
+                // Check alignment BEFORE advance
                 let fetcher_aligned = match self.fetcher_state {
                     FetcherState::GetDataHighT2
                     | FetcherState::PushT1
@@ -875,38 +882,33 @@ impl Ppu {
                 };
                 let fifo_not_empty = self.bg_fifo.size() > 0;
 
-                // Always advance the fetcher first (matches SameBoy's loop body)
-                self.advance_fetcher(cgb_mode);
-
                 if fetcher_aligned && fifo_not_empty {
-                    // Exit condition was met BEFORE the advance above.
-                    // The advance we just did is State 41's advance.
-                    // Now do the "free" advance and transition to GetTileAndFlags.
+                    // Matches SameBoy State 41 (Post-loop advance)
                     self.advance_fetcher(cgb_mode);
+                    // Transition directly to OAM Read (State 20)
                     self.sprite_fetcher_state = SpriteFetcherState::GetTileAndFlags;
                     self.sprite_fetcher_step = 0;
+                } else {
+                    // Matches SameBoy State 27 (Loop body advance)
+                    self.advance_fetcher(cgb_mode);
+                    // Stay in WaitForBgFetcher
                 }
-                // If not aligned, stay in WaitForBgFetcher (advance already done)
-            }
-
-            SpriteFetcherState::ExtraAdvance => {
-                // This state exists for completeness but is not normally reached
-                // in the current implementation (the transition happens inline above).
-                self.advance_fetcher(cgb_mode);
-                self.advance_fetcher(cgb_mode);
-                self.sprite_fetcher_state = SpriteFetcherState::GetTileAndFlags;
-                self.sprite_fetcher_step = 0;
             }
 
             SpriteFetcherState::GetTileAndFlags => {
                 // SameBoy State 20: OAM read (2 cycles)
-                // The "free" advance already happened when transitioning here
+                // First cycle does the "free" advance.
+                if self.sprite_fetcher_step == 0 {
+                    self.advance_fetcher(cgb_mode);
+                }
+                
                 self.sprite_fetcher_step += 1;
                 if self.sprite_fetcher_step >= 2 {
                     self.sprite_fetcher_state = SpriteFetcherState::GetDataLow;
                     self.sprite_fetcher_step = 0;
                 }
             }
+
 
             SpriteFetcherState::GetDataLow => {
                 // SameBoy State 39: VRAM low read (2 cycles)
@@ -1353,6 +1355,10 @@ impl Ppu {
 
     /// Tick during Mode 0 (HBlank).
     fn tick_hblank(&mut self, ints: &mut Interrupts, _double_speed: bool) {
+        // Fire delayed Mode 0 interrupt (from tick_drawing transition)
+        // SameBoy fires it 1 cycle after the mode change.
+        self.update_stat(ints);
+
         // SameBoy quirk: Mode 2 interrupt fires near the end of HBlank,
         // about 1 cycle before the line actually changes.
         // Fire the interrupt early while STAT still shows Mode 0.

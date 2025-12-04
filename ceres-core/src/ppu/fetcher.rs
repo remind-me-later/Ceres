@@ -45,9 +45,6 @@ pub enum SpriteFetcherState {
     /// SameBoy State 27: Wait for BG fetcher alignment.
     /// Loops while (fetcher_state < 5 || fifo_size == 0), advancing fetcher each cycle.
     WaitForBgFetcher,
-    /// SameBoy State 41: Extra advance cycle (1 cycle).
-    /// Advances BG fetcher once after wait loop exits.
-    ExtraAdvance,
     /// SameBoy State 20: OAM read (2 cycles).
     /// First cycle does the "free" advance from after State 41.
     GetTileAndFlags,
@@ -57,18 +54,3 @@ pub enum SpriteFetcherState {
     GetDataHighAndPush,
 }
 
-impl SpriteFetcherState {
-    /// Advances to the next sprite fetcher state.
-    #[inline]
-    #[must_use]
-    pub const fn next(self) -> Self {
-        match self {
-            Self::Idle => Self::Idle,
-            Self::WaitForBgFetcher => Self::ExtraAdvance,
-            Self::ExtraAdvance => Self::GetTileAndFlags,
-            Self::GetTileAndFlags => Self::GetDataLow,
-            Self::GetDataLow => Self::GetDataHighAndPush,
-            Self::GetDataHighAndPush => Self::Idle,
-        }
-    }
-}
