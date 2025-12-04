@@ -29,18 +29,31 @@ pub enum FetcherState {
 ///
 /// When a sprite is encountered during rendering, the background fetcher pauses
 /// and the sprite fetcher retrieves sprite tile data.
+///
+/// SameBoy sprite fetch sequence:
+/// - State 27 (WaitForBgFetcher): Wait until fetcher_state >= 5 AND fifo > 0
+/// - State 41 (ExtraAdvance): 1 cycle, advances BG fetcher
+/// - "Free" advance: Happens at start of State 20, no cycle cost
+/// - State 20 (GetTileAndFlags): 2 cycles, OAM read
+/// - State 39 (GetDataLow): 2 cycles, VRAM low byte
+/// - State 40 (GetDataHighAndPush): 1 cycle, VRAM high byte + overlay
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SpriteFetcherState {
     /// Idle - not currently fetching a sprite.
     #[default]
     Idle,
-    /// Wait for BG fetcher alignment (fetcher must be past GetDataHigh and FIFO not empty).
+    /// SameBoy State 27: Wait for BG fetcher alignment.
+    /// Loops while (fetcher_state < 5 || fifo_size == 0), advancing fetcher each cycle.
     WaitForBgFetcher,
-    /// Read sprite tile index and flags from OAM (2 cycles).
+    /// SameBoy State 41: Extra advance cycle (1 cycle).
+    /// Advances BG fetcher once after wait loop exits.
+    ExtraAdvance,
+    /// SameBoy State 20: OAM read (2 cycles).
+    /// First cycle does the "free" advance from after State 41.
     GetTileAndFlags,
-    /// Read low byte of sprite tile data (2 cycles).
+    /// SameBoy State 39: VRAM low byte read (2 cycles).
     GetDataLow,
-    /// Read high byte of sprite tile data (1 cycle), then push to FIFO.
+    /// SameBoy State 40: VRAM high byte read (1 cycle), then overlay to OAM FIFO.
     GetDataHighAndPush,
 }
 
@@ -51,7 +64,8 @@ impl SpriteFetcherState {
     pub const fn next(self) -> Self {
         match self {
             Self::Idle => Self::Idle,
-            Self::WaitForBgFetcher => Self::GetTileAndFlags,
+            Self::WaitForBgFetcher => Self::ExtraAdvance,
+            Self::ExtraAdvance => Self::GetTileAndFlags,
             Self::GetTileAndFlags => Self::GetDataLow,
             Self::GetDataLow => Self::GetDataHighAndPush,
             Self::GetDataHighAndPush => Self::Idle,

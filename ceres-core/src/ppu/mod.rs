@@ -849,33 +849,58 @@ impl Ppu {
     }
 
     /// Tick the sprite fetcher state machine.
+    /// Implements SameBoy's sprite fetch sequence:
+    /// - State 27: Wait loop until (fetcher_state >= 5 AND fifo > 0)
+    /// - State 41: Extra advance (1 cycle)
+    /// - "Free" advance (no cycle cost, before State 20)
+    /// - State 20: OAM read (2 cycles)
+    /// - State 39: VRAM low (2 cycles)
+    /// - State 40: VRAM high (1 cycle)
     fn tick_sprite_fetcher(&mut self, cgb_mode: CgbMode) {
         match self.sprite_fetcher_state {
             SpriteFetcherState::Idle => {}
 
             SpriteFetcherState::WaitForBgFetcher => {
-                // Wait for BG fetcher to be aligned (past GetDataHighT2 and FIFO not empty)
-                let aligned = match self.fetcher_state {
-                    FetcherState::PushT1 | FetcherState::PushT2 => true,
-                    FetcherState::GetDataHighT2 => true,
+                // SameBoy State 27: Wait loop
+                // Condition: while (fetcher_state < 5 || fifo_size == 0)
+                // Each iteration: advance fetcher, consume 1 cycle
+                //
+                // Important: When alignment is met, we DON'T consume a cycle here.
+                // We transition to ExtraAdvance which has its own cycle.
+                let fetcher_aligned = match self.fetcher_state {
+                    FetcherState::GetDataHighT2
+                    | FetcherState::PushT1
+                    | FetcherState::PushT2 => true,
                     _ => false,
                 };
                 let fifo_not_empty = self.bg_fifo.size() > 0;
 
-                if aligned && fifo_not_empty {
-                    // Advance BG fetcher one more cycle (SameBoy does this)
-                    self.advance_fetcher(cgb_mode);
+                // Always advance the fetcher first (matches SameBoy's loop body)
+                self.advance_fetcher(cgb_mode);
 
+                if fetcher_aligned && fifo_not_empty {
+                    // Exit condition was met BEFORE the advance above.
+                    // The advance we just did is State 41's advance.
+                    // Now do the "free" advance and transition to GetTileAndFlags.
+                    self.advance_fetcher(cgb_mode);
                     self.sprite_fetcher_state = SpriteFetcherState::GetTileAndFlags;
                     self.sprite_fetcher_step = 0;
-                } else {
-                    // Not aligned, advance BG fetcher
-                    self.advance_fetcher(cgb_mode);
                 }
+                // If not aligned, stay in WaitForBgFetcher (advance already done)
+            }
+
+            SpriteFetcherState::ExtraAdvance => {
+                // This state exists for completeness but is not normally reached
+                // in the current implementation (the transition happens inline above).
+                self.advance_fetcher(cgb_mode);
+                self.advance_fetcher(cgb_mode);
+                self.sprite_fetcher_state = SpriteFetcherState::GetTileAndFlags;
+                self.sprite_fetcher_step = 0;
             }
 
             SpriteFetcherState::GetTileAndFlags => {
-                // 2 cycles to "read" tile index and flags (already have them from OAM scan)
+                // SameBoy State 20: OAM read (2 cycles)
+                // The "free" advance already happened when transitioning here
                 self.sprite_fetcher_step += 1;
                 if self.sprite_fetcher_step >= 2 {
                     self.sprite_fetcher_state = SpriteFetcherState::GetDataLow;
@@ -884,9 +909,8 @@ impl Ppu {
             }
 
             SpriteFetcherState::GetDataLow => {
-                // 2 cycles to read low byte of tile data
+                // SameBoy State 39: VRAM low read (2 cycles)
                 if self.sprite_fetcher_step == 0 {
-                    // Read on first cycle
                     self.sprite_tile_data_low = self
                         .vram
                         .vram_at_bank(self.sprite_tile_address, self.sprite_vram_bank);
@@ -899,7 +923,7 @@ impl Ppu {
             }
 
             SpriteFetcherState::GetDataHighAndPush => {
-                // 1 cycle to read high byte and push to FIFO
+                // SameBoy State 40: VRAM high read (1 cycle), then overlay
                 self.sprite_tile_data_high = self
                     .vram
                     .vram_at_bank(self.sprite_tile_address + 1, self.sprite_vram_bank);
