@@ -560,11 +560,11 @@ gbmicrotest_ignore!(test_sprite4_3_a, "sprite4_3_a.gb");
 gbmicrotest!(test_sprite4_3_b, "sprite4_3_b.gb");
 gbmicrotest_ignore!(test_sprite4_4_a, "sprite4_4_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_sprite4_4_b, "sprite4_4_b.gb");
-gbmicrotest_ignore!(test_sprite4_5_a, "sprite4_5_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_sprite4_5_a, "sprite4_5_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_sprite4_5_b, "sprite4_5_b.gb");
 gbmicrotest!(test_sprite4_6_a, "sprite4_6_a.gb");
 gbmicrotest_ignore!(test_sprite4_6_b, "sprite4_6_b.gb");
-gbmicrotest_ignore!(test_sprite4_7_a, "sprite4_7_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_sprite4_7_a, "sprite4_7_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_sprite4_7_b, "sprite4_7_b.gb");
 gbmicrotest_ignore!(test_stat_write_glitch_l0_a, "stat_write_glitch_l0_a.gb");
 gbmicrotest_ignore!(test_stat_write_glitch_l0_b, "stat_write_glitch_l0_b.gb");
@@ -670,7 +670,7 @@ gbmicrotest!(test_win0_scx3_a, "win0_scx3_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win0_scx3_b, "win0_scx3_b.gb");
 gbmicrotest!(test_win10_a, "win10_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win10_b, "win10_b.gb");
-gbmicrotest_ignore!(test_win10_scx3_a, "win10_scx3_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_win10_scx3_a, "win10_scx3_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win10_scx3_b, "win10_scx3_b.gb");
 gbmicrotest!(test_win11_a, "win11_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win11_b, "win11_b.gb");

@@ -1025,10 +1025,13 @@ impl Ppu {
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_tile_x = 0;
 
-        // Window activation incurs a 1-cycle delay before fetcher starts
+        // Window activation incurs a delay before fetcher starts
         // SameBoy line 1917-1919: WX=0 with (SCX & 7) != 0 on DMG adds extra 1 cycle
         if self.wx == 0 && (self.scx & 7) != 0 && !is_cgb {
             self.window_activation_delay = 2; // 1 base + 1 extra for this case
+        } else if (self.scx & 7) != 0 && !is_cgb {
+            // Non-zero SCX also seems to add 1 extra cycle for window activation
+            self.window_activation_delay = 2;
         } else {
             self.window_activation_delay = 1;
         }
