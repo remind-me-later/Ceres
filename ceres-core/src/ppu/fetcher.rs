@@ -32,10 +32,10 @@ pub enum FetcherState {
 ///
 /// SameBoy sprite fetch sequence:
 /// - State 27 (WaitForBgFetcher): Wait until fetcher_state >= 5 AND fifo > 0
-/// - State 41 (ExtraAdvance): 1 cycle, advances BG fetcher
-/// - "Free" advance: Happens at start of State 20, no cycle cost
-/// - State 20 (GetTileAndFlags): 2 cycles, OAM read
+/// - State 41 (State41Advance): 1 cycle, advances BG fetcher once
+/// - State 20 (GetTileAndFlags): 2 cycles, OAM read (first cycle does "free" advance)
 /// - State 39 (GetDataLow): 2 cycles, VRAM low byte
+/// - 1 extra cycle (SameBoy line 2001)
 /// - State 40 (GetDataHighAndPush): 1 cycle, VRAM high byte + overlay
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SpriteFetcherState {
@@ -45,11 +45,13 @@ pub enum SpriteFetcherState {
     /// SameBoy State 27: Wait for BG fetcher alignment.
     /// Loops while (fetcher_state < 5 || fifo_size == 0), advancing fetcher each cycle.
     WaitForBgFetcher,
+    /// SameBoy State 41: Extra advance after alignment (1 cycle).
+    State41Advance,
     /// SameBoy State 20: OAM read (2 cycles).
     /// First cycle does the "free" advance from after State 41.
     GetTileAndFlags,
     /// SameBoy State 39: VRAM low byte read (2 cycles).
     GetDataLow,
-    /// SameBoy State 40: VRAM high byte read (1 cycle), then overlay to OAM FIFO.
+    /// SameBoy State 40: VRAM high byte read + extra cycle + overlay (2 cycles total).
     GetDataHighAndPush,
 }
