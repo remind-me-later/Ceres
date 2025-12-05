@@ -222,6 +222,8 @@ pub struct Ppu {
     sprite_bg_priority: bool,
     /// Current sprite's X-flip flag.
     sprite_x_flip: bool,
+    /// First frame after LCD was enabled (special timing for line 0).
+    first_frame_after_lcd_on: bool,
 }
 
 // IO
@@ -395,7 +397,38 @@ impl Ppu {
 
     #[must_use]
     pub const fn read_stat(&self) -> u8 {
-        self.stat | 0x80
+        // Compute mode from dots_in_line for accurate timing
+        // This matches Age's approach of calculating mode on read
+        let computed_mode = self.compute_stat_mode();
+        (self.stat & !STAT_MODE_B) | computed_mode | 0x80
+    }
+
+    /// Compute STAT mode based on current timing state.
+    /// This provides more accurate mode reporting than the maintained state
+    /// for the first line after LCD enable (which has special timing).
+    const fn compute_stat_mode(&self) -> u8 {
+        // LCD off: mode 0
+        if self.lcdc & LCDC_ON_B == 0 {
+            return 0;
+        }
+
+        // First line after LCD on has special timing (Age: is_line_zero)
+        // Mode 0 is shown for first 82 cycles instead of Mode 2
+        // Only apply this special case for the actual first frame after LCD enable
+        if self.first_frame_after_lcd_on && self.ly == 0 {
+            // During startup state machine, use the stored STAT mode bits
+            if !matches!(self.startup_state, StartupState::Inactive) {
+                return self.stat & STAT_MODE_B;
+            }
+            
+            // First 82 cycles show Mode 0
+            if self.dots_in_line < 82 {
+                return 0;
+            }
+        }
+
+        // For all other cases, use the stored STAT mode bits
+        self.stat & STAT_MODE_B
     }
 
     #[must_use]
@@ -508,6 +541,9 @@ impl Ppu {
     /// Total: 83 cycles
     fn tick_startup(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, _double_speed: bool) {
         let is_cgb = matches!(cgb_mode, CgbMode::Cgb);
+
+        // Track dots during startup for computed STAT mode
+        self.dots_in_line += 1;
 
         match self.startup_state {
             StartupState::Inactive => {}
@@ -1380,6 +1416,11 @@ impl Ppu {
         if self.remaining_dots_in_mode <= 0 {
             self.dots_in_line = 0;
 
+            // Clear first frame flag when leaving line 0
+            if self.ly == 0 && self.first_frame_after_lcd_on {
+                self.first_frame_after_lcd_on = false;
+            }
+
             if self.ly + 1 > 143 {
                 self.ly += 1;
                 self.ly_for_comparison = self.ly;
@@ -1477,6 +1518,7 @@ impl Ppu {
 
             // Reset startup state
             self.startup_state = StartupState::Inactive;
+            self.first_frame_after_lcd_on = false;
 
             // Unblock all memory access when LCD is off
             self.oam_read_blocked = false;
@@ -1519,6 +1561,10 @@ impl Ppu {
 
             // First line after LCD on has no OAM scan
             self.sprite_buffer.clear();
+
+            // Mark as first frame for special timing
+            self.first_frame_after_lcd_on = true;
+            self.dots_in_line = 0;
 
             self.delay_one_frame = true;
         }
