@@ -997,14 +997,14 @@ impl Ppu {
             };
 
             if should_activate {
-                self.activate_window();
+                self.activate_window(is_cgb);
             }
         }
         // SameBoy: WX < 166 (or 167 on CGB) - normal window trigger
         else if self.wx < 166 + u8::from(is_cgb) {
             // Window activates when position_in_line + 7 == WX
             if pos + 7 == i16::from(self.wx) {
-                self.activate_window();
+                self.activate_window(is_cgb);
             }
         }
         // SameBoy: WX=166 on DMG - special case, increment window_y but don't fully trigger
@@ -1015,7 +1015,7 @@ impl Ppu {
     }
 
     /// Activate window rendering.
-    fn activate_window(&mut self) {
+    fn activate_window(&mut self, is_cgb: bool) {
         self.window_triggered = true;
         self.win_in_frame = true;
         self.window_is_being_fetched = true;
@@ -1026,8 +1026,12 @@ impl Ppu {
         self.fetcher_tile_x = 0;
 
         // Window activation incurs a 1-cycle delay before fetcher starts
-        // This matches the timing observed in hardware tests
-        self.window_activation_delay = 1;
+        // SameBoy line 1917-1919: WX=0 with (SCX & 7) != 0 on DMG adds extra 1 cycle
+        if self.wx == 0 && (self.scx & 7) != 0 && !is_cgb {
+            self.window_activation_delay = 2; // 1 base + 1 extra for this case
+        } else {
+            self.window_activation_delay = 1;
+        }
     }
 
     /// Advance the background/window fetcher state machine.

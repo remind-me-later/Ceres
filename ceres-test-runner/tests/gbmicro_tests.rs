@@ -666,7 +666,7 @@ gbmicrotest!(test_vram_write_l1_d, "vram_write_l1_d.gb");
 gbmicrotest_ignore!(test_wave_write_to_0xC003, "wave_write_to_0xC003.gb");
 gbmicrotest!(test_win0_a, "win0_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win0_b, "win0_b.gb");
-gbmicrotest_ignore!(test_win0_scx3_a, "win0_scx3_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_win0_scx3_a, "win0_scx3_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win0_scx3_b, "win0_scx3_b.gb");
 gbmicrotest!(test_win10_a, "win10_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win10_b, "win10_b.gb");
