@@ -664,39 +664,39 @@ gbmicrotest!(test_vram_write_l1_b, "vram_write_l1_b.gb");
 gbmicrotest_ignore!(test_vram_write_l1_c, "vram_write_l1_c.gb");
 gbmicrotest!(test_vram_write_l1_d, "vram_write_l1_d.gb");
 gbmicrotest_ignore!(test_wave_write_to_0xC003, "wave_write_to_0xC003.gb");
-gbmicrotest_ignore!(test_win0_a, "win0_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_win0_a, "win0_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win0_b, "win0_b.gb");
 gbmicrotest_ignore!(test_win0_scx3_a, "win0_scx3_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win0_scx3_b, "win0_scx3_b.gb");
-gbmicrotest_ignore!(test_win10_a, "win10_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_win10_a, "win10_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win10_b, "win10_b.gb");
 gbmicrotest_ignore!(test_win10_scx3_a, "win10_scx3_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win10_scx3_b, "win10_scx3_b.gb");
-gbmicrotest_ignore!(test_win11_a, "win11_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_win11_a, "win11_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win11_b, "win11_b.gb");
-gbmicrotest_ignore!(test_win12_a, "win12_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_win12_a, "win12_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win12_b, "win12_b.gb");
-gbmicrotest_ignore!(test_win13_a, "win13_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_win13_a, "win13_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win13_b, "win13_b.gb");
-gbmicrotest_ignore!(test_win14_a, "win14_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_win14_a, "win14_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win14_b, "win14_b.gb");
-gbmicrotest_ignore!(test_win15_a, "win15_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_win15_a, "win15_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win15_b, "win15_b.gb");
-gbmicrotest_ignore!(test_win1_a, "win1_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_win1_a, "win1_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win1_b, "win1_b.gb");
-gbmicrotest_ignore!(test_win2_a, "win2_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_win2_a, "win2_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win2_b, "win2_b.gb");
-gbmicrotest_ignore!(test_win3_a, "win3_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_win3_a, "win3_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win3_b, "win3_b.gb");
-gbmicrotest_ignore!(test_win4_a, "win4_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_win4_a, "win4_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win4_b, "win4_b.gb");
-gbmicrotest_ignore!(test_win5_a, "win5_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_win5_a, "win5_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win5_b, "win5_b.gb");
-gbmicrotest_ignore!(test_win6_a, "win6_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_win6_a, "win6_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win6_b, "win6_b.gb");
-gbmicrotest_ignore!(test_win7_a, "win7_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_win7_a, "win7_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win7_b, "win7_b.gb");
-gbmicrotest_ignore!(test_win8_a, "win8_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_win8_a, "win8_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win8_b, "win8_b.gb");
-gbmicrotest_ignore!(test_win9_a, "win9_a.gb"); // Fails with mode3_delay=0
+gbmicrotest!(test_win9_a, "win9_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_win9_b, "win9_b.gb");

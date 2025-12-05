@@ -194,6 +194,8 @@ pub struct Ppu {
     last_fetched_x: i16,
     /// Window is currently being fetched (used for SCX edge case).
     window_is_being_fetched: bool,
+    /// Window activation delay counter (cycles to wait after window activates).
+    window_activation_delay: u8,
     /// Line has fractional scrolling (SCX & 7 != 0).
     line_has_fractional_scrolling: bool,
     /// HBlank interrupt has been fired for this HBlank period.
@@ -596,6 +598,7 @@ impl Ppu {
         // Reset per-line flags
         self.line_has_fractional_scrolling = false;
         self.window_is_being_fetched = false;
+        self.window_activation_delay = 0;
         // Note: No OAM scan happened, so sprite_buffer stays empty for first line after LCD on
 
         // Clear sprite buffer and visible object count
@@ -682,6 +685,7 @@ impl Ppu {
             // Reset per-line flags
             self.line_has_fractional_scrolling = false;
             self.window_is_being_fetched = false;
+            self.window_activation_delay = 0;
         }
     }
     /// Scan a single OAM entry during Mode 2.
@@ -717,6 +721,12 @@ impl Ppu {
     fn tick_drawing(&mut self, _ints: &mut Interrupts, cgb_mode: CgbMode) {
         // Check for window activation
         self.check_window_trigger(cgb_mode);
+
+        // Handle window activation delay (1 cycle stall after window triggers)
+        if self.window_activation_delay > 0 {
+            self.window_activation_delay -= 1;
+            return;
+        }
 
         // Check for sprites at current position
         // SameBoy's x_for_object_match: position_in_line + 8, clamped to 0 if overflow
@@ -856,7 +866,7 @@ impl Ppu {
             SpriteFetcherState::WaitForBgFetcher => {
                 // SameBoy State 27: Wait loop
                 // Condition: while (fetcher_state < 5 || fifo_size == 0)
-                // Check alignment BEFORE advance
+                // fetcher_state >= 5 means GetDataHighT2, PushT1, or PushT2
                 let fetcher_aligned = match self.fetcher_state {
                     FetcherState::GetDataHighT2 | FetcherState::PushT1 | FetcherState::PushT2 => {
                         true
@@ -1015,7 +1025,9 @@ impl Ppu {
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_tile_x = 0;
 
-        // Window activation incurs a 6-dot penalty (handled by fetcher restart)
+        // Window activation incurs a 1-cycle delay before fetcher starts
+        // This matches the timing observed in hardware tests
+        self.window_activation_delay = 1;
     }
 
     /// Advance the background/window fetcher state machine.
@@ -1146,7 +1158,16 @@ impl Ppu {
     /// Output a pixel to the LCD buffer.
     /// Implements SameBoy's render_pixel_if_possible logic.
     fn output_pixel(&mut self, cgb_mode: CgbMode) {
-        // SameBoy: Handle position_in_line alignment for SCX.
+        // SameBoy line 667: FIFO empty check FIRST, before anything else
+        if self.bg_fifo.is_empty() {
+            return;
+        }
+
+        // SameBoy line 674: Pop from BG FIFO
+        let bg_pixel = self.bg_fifo.pop().unwrap();
+        let sprite_pixel = self.oam_fifo.pop();
+
+        // SameBoy lines 686-704: Handle position_in_line alignment for SCX.
         // (position_in_line + 16 < 8) is equivalent to (position_in_line < -8) in unsigned logic.
         // When position_in_line is in the range [-16, -9], we're in the "fractional scrolling" phase.
         #[expect(clippy::cast_sign_loss)]
@@ -1173,16 +1194,13 @@ impl Ppu {
             }
         }
 
+        // SameBoy line 706
         self.window_is_being_fetched = false;
 
-        // SameBoy: Discard phase - position_in_line < 0 means we're discarding junk pixels
+        // SameBoy lines 709-711: Drop pixels for scrolling (position >= 160 in uint8 terms)
+        // In signed terms: position < 0 (discard phase) OR position >= 160 (line complete)
         if self.position_in_line < 0 {
-            // SameBoy: if (fifo_size(&gb->bg_fifo) == 0) return;
-            if self.bg_fifo.is_empty() {
-                return;
-            }
-            let _ = self.bg_fifo.pop();
-            let _ = self.oam_fifo.pop();
+            // Discard phase - just increment position, pixel already popped
             self.position_in_line += 1;
             return;
         }
@@ -1193,12 +1211,7 @@ impl Ppu {
             return;
         }
 
-        let Some(bg_pixel) = self.bg_fifo.pop() else {
-            return;
-        };
-
-        let sprite_pixel = self.oam_fifo.pop();
-
+        // Normal rendering
         let (color, palette, is_sprite) = self.mix_pixels(bg_pixel, sprite_pixel, cgb_mode);
 
         let rgb = if is_sprite {

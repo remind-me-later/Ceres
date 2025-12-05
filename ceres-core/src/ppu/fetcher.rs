@@ -1,9 +1,10 @@
 /// Fetcher state machine states.
 ///
 /// The background/window fetcher retrieves tile data from VRAM and pushes
-/// 8 pixels to the FIFO. Uses T1/T2 sub-states matching SameBoy:
+/// 8 pixels to the FIFO. Uses T1/T2 sub-states:
 /// - T1: Calculate addresses/setup
 /// - T2: Perform VRAM read
+/// - Push has T1 (wait) and T2 (push if space)
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum FetcherState {
     /// Read tile index from tilemap - T1: calculate address.
