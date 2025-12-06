@@ -15,7 +15,6 @@ mod bootrom;
 mod cartridge;
 #[cfg(feature = "game_genie")]
 mod cheats;
-pub mod disasm;
 mod error;
 mod interrupts;
 mod joypad;
@@ -205,30 +204,6 @@ impl<A: AudioCallback> Gb<A> {
     #[cfg(feature = "game_genie")]
     pub fn deactivate_game_genie(&mut self, code: &GameGenieCode) {
         self.game_genie.deactivate_code(code);
-    }
-
-    /// Disassemble the instruction at the specified address.
-    ///
-    /// Reads up to 3 bytes from memory at the given address and returns
-    /// the disassembled instruction as a structured `Instruction` and its length.
-    ///
-    /// # Arguments
-    ///
-    /// * `addr` - The memory address to disassemble
-    ///
-    /// # Returns
-    ///
-    /// An `Option` containing a tuple of the `Instruction` and instruction length,
-    /// or `None` if the input is empty
-    #[must_use]
-    #[inline]
-    pub fn disasm_at(&self, addr: u16) -> Option<(disasm::Instruction, u8)> {
-        // Read up to 3 bytes for the instruction
-        let b0 = self.read_mem(addr);
-        let b1 = self.read_mem(addr.wrapping_add(1));
-        let b2 = self.read_mem(addr.wrapping_add(2));
-
-        disasm::disassemble(&[b0, b1, b2])
     }
 
     /// Loads the state from the provided reader.
