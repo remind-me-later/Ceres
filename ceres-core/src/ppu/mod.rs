@@ -24,21 +24,33 @@ use {
 // PPU Timing Constants
 // Reference: SameBoy display.c (https://github.com/LIJI32/SameBoy)
 //
-// Each line is 456 cycles. Without scrolling, objects or a window:
+// SameBoy runs the PPU at 8MHz (2× T-cycle rate) for sub-T-cycle precision.
+// All timing constants here are in 8MHz cycles unless otherwise noted.
+//
+// At T-cycle (4MHz) rate, each line is 456 cycles:
 //   Mode 2 - 80  cycles / OAM Transfer
-//   Mode 3 - 172 cycles / Rendering
-//   Mode 0 - 204 cycles / HBlank
+//   Mode 3 - 172 cycles / Rendering (base)
+//   Mode 0 - 204 cycles / HBlank (base)
 //   Mode 1 is VBlank
+//
+// At 8MHz rate (PPU internal), these are doubled:
+//   Mode 2 - 160 cycles
+//   Mode 3 - 344 cycles (base)
+//   Mode 0 - 408 cycles (base)
 // =============================================================================
 
-/// Length of OAM scan (Mode 2) in T-cycles.
-/// SameBoy: #define MODE2_LENGTH (80)
-#[allow(dead_code)]
-const MODE2_LENGTH: i32 = 80;
+/// PPU clock divisor - PPU runs at 8MHz (2× T-cycles).
+/// SameBoy: GB_BATCHABLE_STATE_MACHINE(gb, display, cycles, 2, !force)
+const PPU_DIVISOR: i32 = 2;
 
-/// Total T-cycles per scanline.
-/// SameBoy: #define LINE_LENGTH (456)
-const LINE_LENGTH: i32 = 456;
+/// Length of OAM scan (Mode 2) in 8MHz cycles.
+/// SameBoy: #define MODE2_LENGTH (80) [T-cycles] = 160 [8MHz]
+#[allow(dead_code)]
+const MODE2_LENGTH: i32 = 80 * PPU_DIVISOR;
+
+/// Total 8MHz cycles per scanline.
+/// SameBoy: #define LINE_LENGTH (456) [T-cycles] = 912 [8MHz]
+const LINE_LENGTH: i32 = 456 * PPU_DIVISOR;
 
 /// Number of visible scanlines.
 /// SameBoy: #define LINES (144)
@@ -48,24 +60,24 @@ pub const LINES: u8 = 144;
 /// SameBoy: #define WIDTH (160)
 pub const WIDTH: u8 = 160;
 
-/// Total T-cycles per frame.
-/// SameBoy: #define LCDC_PERIOD 70224
-/// Calculated as: VIRTUAL_LINES (154) * LINE_LENGTH (456)
+/// Total 8MHz cycles per frame.
+/// SameBoy: #define LCDC_PERIOD 70224 [T-cycles] = 140448 [8MHz]
+/// Calculated as: VIRTUAL_LINES (154) * LINE_LENGTH (912)
 #[allow(dead_code)]
-const LCDC_PERIOD: u32 = 70224;
+const LCDC_PERIOD: u32 = 70224 * PPU_DIVISOR as u32;
 
 /// Total scanlines per frame (visible + vblank).
 /// SameBoy: #define VIRTUAL_LINES (LCDC_PERIOD / LINE_LENGTH) // = 154
 const VIRTUAL_LINES: u8 = 154;
 
-/// Base Mode 3 (Drawing) length without sprites/window/scrolling.
-/// SameBoy: Mode 3 - 172 cycles / Rendering (base case)
-const MODE3_BASE_LENGTH: i32 = 172;
+/// Base Mode 3 (Drawing) length without sprites/window/scrolling in 8MHz cycles.
+/// SameBoy: Mode 3 - 172 cycles / Rendering (base case) [T-cycles] = 344 [8MHz]
+const MODE3_BASE_LENGTH: i32 = 172 * PPU_DIVISOR;
 
-/// Base Mode 0 (HBlank) length.
-/// SameBoy: Mode 0 - 204 cycles / HBlank (base case)
+/// Base Mode 0 (HBlank) length in 8MHz cycles.
+/// SameBoy: Mode 0 - 204 cycles / HBlank (base case) [T-cycles] = 408 [8MHz]
 #[allow(dead_code)]
-const MODE0_BASE_LENGTH: i32 = 204;
+const MODE0_BASE_LENGTH: i32 = 204 * PPU_DIVISOR;
 
 // Legacy aliases for compatibility
 pub const PX_WIDTH: u8 = WIDTH;
@@ -188,24 +200,26 @@ pub enum Mode {
 }
 
 impl Mode {
-    /// Returns the base duration in T-cycles for this PPU mode.
+    /// Returns the base duration in 8MHz cycles for this PPU mode.
     ///
-    /// Reference: SameBoy display.c timing comments:
-    /// - Mode 2 (OAM scan): 80 cycles
-    /// - Mode 3 (Drawing): 172 cycles base (varies with sprites/scroll/window)
-    /// - Mode 0 (HBlank): 204 cycles base (varies as Mode 3 varies)
-    /// - Mode 1 (VBlank): 456 cycles per line (10 lines total)
+    /// Reference: SameBoy display.c timing comments (values in T-cycles, doubled for 8MHz):
+    /// - Mode 2 (OAM scan): 80 T-cycles = 160 8MHz cycles
+    /// - Mode 3 (Drawing): 172 T-cycles base = 344 8MHz cycles (varies with sprites/scroll/window)
+    /// - Mode 0 (HBlank): 204 T-cycles base = 408 8MHz cycles (varies as Mode 3 varies)
+    /// - Mode 1 (VBlank): 456 T-cycles per line = 912 8MHz cycles (10 lines total)
     pub fn dots(self, _scroll_x: u8) -> i32 {
-        // SameBoy: MODE2_LENGTH (80), but we use a slightly adjusted value
+        // SameBoy: MODE2_LENGTH (80 T-cycles), but we use a slightly adjusted value
         // due to differences in when state transitions occur
-        const OAM_SCAN_DOTS: i32 = 89;
-        // SameBoy: Mode 3 - 172 cycles base (varies with content)
+        // 89 T-cycles = 178 8MHz cycles
+        const OAM_SCAN_DOTS: i32 = 89 * PPU_DIVISOR;
+        // SameBoy: Mode 3 - 172 T-cycles base = 344 8MHz cycles (varies with content)
         const DRAWING_DOTS: i32 = MODE3_BASE_LENGTH;
         // HBlank fills remaining time: LINE_LENGTH - MODE2_LENGTH - MODE3
-        // SameBoy: Mode 0 - 204 cycles base
-        const HBLANK_DOTS: i32 = 200;
+        // SameBoy: Mode 0 - 204 T-cycles base = 408 8MHz cycles
+        // 200 T-cycles = 400 8MHz cycles
+        const HBLANK_DOTS: i32 = 200 * PPU_DIVISOR;
         // VBlank is LINE_LENGTH per line
-        // SameBoy: LINE_LENGTH (456)
+        // SameBoy: LINE_LENGTH (456 T-cycles) = 912 8MHz cycles
         const VBLANK_DOTS: i32 = LINE_LENGTH;
 
         // Note: SCX handling affects Mode 3 duration via pixel discarding,
@@ -551,8 +565,16 @@ impl Ppu {
         self.wy
     }
 
-    pub fn run(&mut self, dots: i32, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
-        for _ in 0..dots {
+    /// Run PPU for the given number of 8MHz cycles.
+    /// SameBoy runs the PPU at 8MHz for sub-T-cycle precision.
+    pub fn run(
+        &mut self,
+        cycles_8mhz: i32,
+        ints: &mut Interrupts,
+        cgb_mode: CgbMode,
+        double_speed: bool,
+    ) {
+        for _ in 0..cycles_8mhz {
             self.tick(ints, cgb_mode, double_speed);
         }
     }
@@ -613,7 +635,8 @@ impl Ppu {
         self.lcdc & LCDC_ENABLE == 0 || !self.cgb_palettes_blocked
     }
 
-    /// Advance PPU by one T-cycle (dot).
+    /// Advance PPU by one 8MHz cycle.
+    /// SameBoy runs the PPU at 8MHz (2× T-cycles) for sub-T-cycle precision.
     #[inline]
     pub fn tick(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
         if self.lcdc & LCDC_ENABLE == 0 {
@@ -657,12 +680,12 @@ impl Ppu {
     }
 
     /// Tick the LCD startup state machine.
-    /// SameBoy timing for first line after LCD on:
-    /// - Phase 1 (76 cycles): Mode 0 in STAT, all unblocked
-    /// - Phase 2 (2 cycles): OAM write blocked
-    /// - Phase 3 (2 cycles): STAT = Mode 3, OAM fully blocked, VRAM blocked (DMG), CGB palettes blocked
-    /// - Phase 4 (3 cycles): VRAM fully blocked, enter Mode 3 rendering
-    /// Total: 83 cycles
+    /// SameBoy timing for first line after LCD on (in 8MHz cycles):
+    /// - Phase 1 (152 cycles): Mode 0 in STAT, all unblocked
+    /// - Phase 2 (4 cycles): OAM write blocked
+    /// - Phase 3 (4 cycles): STAT = Mode 3, OAM fully blocked, VRAM blocked (DMG), CGB palettes blocked
+    /// - Phase 4 (6 cycles): VRAM fully blocked, enter Mode 3 rendering
+    /// Total: 166 8MHz cycles (83 T-cycles)
     fn tick_startup(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
         let is_cgb = matches!(cgb_mode, CgbMode::Cgb);
 
@@ -673,10 +696,10 @@ impl Ppu {
             StartupState::Inactive => {}
 
             StartupState::Phase1(remaining) => {
-                // Phase 1: Mode 0 in STAT, all unblocked
+                // Phase 1: Mode 0 in STAT, all unblocked (152 8MHz cycles = 76 T-cycles)
                 if remaining <= 1 {
-                    // Transition to Phase 2
-                    self.startup_state = StartupState::Phase2(2);
+                    // Transition to Phase 2 (4 8MHz cycles = 2 T-cycles)
+                    self.startup_state = StartupState::Phase2(4);
                 } else {
                     self.startup_state = StartupState::Phase1(remaining - 1);
                 }
@@ -684,13 +707,14 @@ impl Ppu {
 
             StartupState::Phase2(remaining) => {
                 // Phase 2: OAM write blocked (set on first cycle of Phase2)
-                if remaining == 2 {
+                if remaining == 4 {
                     self.oam_write_blocked = true;
-                    // SameBoy calls GB_STAT_update here (cycle 77)
+                    // SameBoy calls GB_STAT_update here (cycle 77 in T-cycles, 154 in 8MHz)
                     self.update_stat(ints);
                 }
                 if remaining <= 1 {
                     // Transition to Phase 3: STAT = Mode 3, OAM fully blocked, CGB palettes blocked
+                    // (4 8MHz cycles = 2 T-cycles)
                     self.set_mode_stat(Mode::Drawing);
                     self.oam_read_blocked = true;
                     // VRAM blocking depends on CGB/DMG
@@ -703,7 +727,7 @@ impl Ppu {
                     }
 
                     self.update_stat(ints);
-                    self.startup_state = StartupState::Phase3(2);
+                    self.startup_state = StartupState::Phase3(4);
                 } else {
                     self.startup_state = StartupState::Phase2(remaining - 1);
                 }
@@ -712,9 +736,9 @@ impl Ppu {
             StartupState::Phase3(remaining) => {
                 // Phase 3: STAT = Mode 3, all blocked except VRAM (CGB)
                 if remaining <= 1 {
-                    // Transition to Phase 4: CGB palettes blocked
+                    // Transition to Phase 4: CGB palettes blocked (6 8MHz cycles = 3 T-cycles)
                     self.cgb_palettes_blocked = true;
-                    self.startup_state = StartupState::Phase4(3);
+                    self.startup_state = StartupState::Phase4(6);
                 } else {
                     self.startup_state = StartupState::Phase3(remaining - 1);
                 }
@@ -747,7 +771,7 @@ impl Ppu {
     /// Enter Mode 3 rendering after startup sequence completes.
     fn enter_mode3_after_startup(&mut self, ints: &mut Interrupts) {
         self.mode = Mode::Drawing;
-        // STAT already set to Mode 3 at dot 79
+        // STAT already set to Mode 3 at dot 79 (T-cycles) = 158 (8MHz)
         self.remaining_dots_in_mode = Mode::Drawing.dots(self.scx);
 
         // Memory blocking already set during startup sequence
@@ -756,9 +780,9 @@ impl Ppu {
         self.sprite_fetcher_state = SpriteFetcherState::Idle;
 
         // Initialize drawing state
-        // SameBoy: cycles_for_line is augmented by 8 extra cycles for first line.
-        // Startup duration 83 + 8 = 91.
-        self.dots_in_line = 91;
+        // SameBoy: cycles_for_line is augmented by 8 extra T-cycles for first line.
+        // Startup duration 83 + 8 = 91 T-cycles = 182 8MHz cycles.
+        self.dots_in_line = 182;
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_tile_x = 0;
         // SameBoy: position_in_line starts at -16
@@ -1644,11 +1668,10 @@ impl Ppu {
                 self.finish_frame_and_start_new(ints);
             } else {
                 // SameBoy VBlank timing (lines 2152-2215):
-                // At start of each VBlank line: ly_for_comparison = -1, sleep 2
+                // At start of each VBlank line: ly_for_comparison = -1, sleep 2 T-cycles
                 // Then: LY = current_line
-                // Test line_153_ly_a expects LY=152 at certain cycle,
-                // increasing delay to 4 to shift LY update later
-                let delay = 4;
+                // At 8MHz, 2 T-cycles = 4 8MHz cycles, but we use 8 to match observed behavior
+                let delay = 8;
                 self.schedule_ly_write(new_ly, delay);
                 self.ly_for_comparison = new_ly;
                 self.remaining_dots_in_mode += Mode::VBlank.dots(self.scx);
@@ -1743,9 +1766,9 @@ impl Ppu {
             // Comparison clock restarts - update coincidence and check for interrupt
             self.update_stat(ints);
 
-            // Start LCD startup state machine with Phase 1 (76 cycles)
-            // Total: 76 + 2 + 1 + 1 = 80 cycles
-            self.startup_state = StartupState::Phase1(76);
+            // Start LCD startup state machine with Phase 1 (76 T-cycles = 152 8MHz cycles)
+            // Total: 76 + 2 + 2 + 3 = 83 T-cycles = 166 8MHz cycles
+            self.startup_state = StartupState::Phase1(152);
             self.oam_read_blocked = false;
             self.oam_write_blocked = false;
             self.vram_read_blocked = false;
