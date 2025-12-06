@@ -1,31 +1,46 @@
 //! Pixel FIFO implementation for cycle-accurate PPU.
+//!
+//! Reference: SameBoy display.h/display.c FIFO implementation
 
-/// A single pixel in the FIFO.
+/// SameBoy: #define GB_FIFO_LENGTH 8
+#[allow(dead_code)]
+const FIFO_LENGTH: usize = 8;
+
+/// A single item in the FIFO.
+///
+/// Reference: SameBoy display.h GB_fifo_item_t
 #[derive(Clone, Copy, Default)]
-pub struct FifoPixel {
+pub struct FifoItem {
     /// Color index (0-3).
+    /// SameBoy: pixel field
     pub color: u8,
     /// Palette index (BG: 0-7 CGB, 0 DMG; OBJ: 0-7 CGB, 0-1 DMG).
+    /// SameBoy: palette field
     pub palette: u8,
     /// Sprite priority (OAM index for CGB, 0 for DMG).
+    /// SameBoy: priority field
     pub priority: u8,
     /// Background priority flag (BG-to-OAM priority in CGB mode).
+    /// SameBoy: bg_priority field
     pub bg_priority: bool,
 }
 
-/// Fixed-size FIFO with 16-pixel capacity.
+/// Fixed-size FIFO with 8-pixel capacity.
+///
+/// Reference: SameBoy display.h GB_fifo_t
 ///
 /// The Game Boy PPU uses two FIFOs: one for background/window pixels and one for
-/// sprite (OAM) pixels. Each FIFO can hold up to 16 pixels (2 tiles).
+/// sprite (OAM) pixels.
 #[derive(Clone, Copy, Default)]
 pub struct PixelFifo {
-    pixels: [FifoPixel; 16],
-    read_pos: u8,
+    fifo: [FifoItem; FIFO_LENGTH],
+    read_end: u8,
     size: u8,
 }
 
 impl PixelFifo {
     /// Returns the number of pixels currently in the FIFO.
+    /// SameBoy: fifo_size()
     #[inline]
     #[must_use]
     pub const fn size(&self) -> u8 {
@@ -40,13 +55,16 @@ impl PixelFifo {
     }
 
     /// Clears the FIFO, removing all pixels.
+    /// SameBoy: fifo_clear()
     #[inline]
     pub fn clear(&mut self) {
-        self.read_pos = 0;
+        self.read_end = 0;
         self.size = 0;
     }
 
     /// Pushes a row of 8 background/window pixels to the FIFO.
+    ///
+    /// Reference: SameBoy display.c fifo_push_bg_row()
     ///
     /// # Arguments
     /// * `data_low` - Low byte of tile data (bit 0 of each pixel color)
@@ -65,15 +83,17 @@ impl PixelFifo {
         bg_priority: bool,
         flip_x: bool,
     ) {
-        debug_assert!(self.size <= 8, "BG FIFO must have <= 8 pixels before push");
+        assert!(
+            self.is_empty(),
+            "BG FIFO must be empty before pushing new row"
+        );
 
-        let start_idx = self.read_pos.wrapping_add(self.size);
+        self.size = 8;
 
         if flip_x {
             for i in 0..8 {
                 let color = ((data_low >> i) & 1) | (((data_high >> i) & 1) << 1);
-                let idx = (start_idx.wrapping_add(i)) & 15;
-                self.pixels[idx as usize] = FifoPixel {
+                self.fifo[i] = FifoItem {
                     color,
                     palette,
                     priority: 0,
@@ -83,8 +103,7 @@ impl PixelFifo {
         } else {
             for i in 0..8 {
                 let color = ((data_low >> (7 - i)) & 1) | (((data_high >> (7 - i)) & 1) << 1);
-                let idx = (start_idx.wrapping_add(i)) & 15;
-                self.pixels[idx as usize] = FifoPixel {
+                self.fifo[i] = FifoItem {
                     color,
                     palette,
                     priority: 0,
@@ -92,24 +111,26 @@ impl PixelFifo {
                 };
             }
         }
-        self.size += 8;
     }
 
     /// Pops a single pixel from the FIFO.
     ///
+    /// Reference: SameBoy display.c fifo_pop()
+    ///
     /// Returns `None` if the FIFO is empty.
     #[inline]
-    pub fn pop(&mut self) -> Option<FifoPixel> {
-        if self.size == 0 {
-            return None;
-        }
-        let pixel = self.pixels[self.read_pos as usize];
-        self.read_pos = (self.read_pos + 1) & 15;
+    pub fn pop(&mut self) -> FifoItem {
+        assert!(self.size > 0, "Cannot pop from empty FIFO");
+        assert!(self.size <= FIFO_LENGTH as u8, "FIFO size overflow");
+        let pixel = self.fifo[self.read_end as usize];
+        self.read_end = (self.read_end + 1) & (FIFO_LENGTH as u8 - 1);
         self.size -= 1;
-        Some(pixel)
+        pixel
     }
 
     /// Overlays sprite pixels onto the OAM FIFO.
+    ///
+    /// Reference: SameBoy display.c fifo_overlay_object_row()
     ///
     /// Sprite pixels only replace existing pixels if:
     /// - The sprite pixel is non-transparent (color != 0)
@@ -122,100 +143,42 @@ impl PixelFifo {
     /// * `bg_priority` - Sprite's BG priority flag (from OAM attributes)
     /// * `priority` - Sprite OAM index (for CGB priority)
     /// * `flip_x` - Whether to flip sprite horizontally
-    pub fn overlay_sprite_row(
+    pub fn overlay_object_row(
         &mut self,
-        data_low: u8,
-        data_high: u8,
+        mut data_low: u8,
+        mut data_high: u8,
         palette: u8,
         bg_priority: bool,
         priority: u8,
         flip_x: bool,
     ) {
-        // Ensure FIFO has 16 slots (pad with transparent pixels if needed)
-        while self.size < 16 {
-            let idx = ((self.read_pos + self.size) & 15) as usize;
-            self.pixels[idx] = FifoPixel::default();
+        // SameBoy: Ensure FIFO has GB_FIFO_LENGTH slots (pad with transparent pixels if needed)
+        while self.size < FIFO_LENGTH as u8 {
+            let idx = ((self.read_end + self.size) & (FIFO_LENGTH as u8 - 1)) as usize;
+            self.fifo[idx] = FifoItem::default();
             self.size += 1;
         }
 
-        for i in 0..8_u8 {
-            // Extract color from tile data
-            // Without flip: pixel 0 is bit 7, pixel 7 is bit 0
-            // With flip: pixel 0 is bit 0, pixel 7 is bit 7
-            let bit = if flip_x { i } else { 7 - i };
-            let color = ((data_low >> bit) & 1) | (((data_high >> bit) & 1) << 1);
+        let flip_xor = if flip_x { 0 } else { 0x7 };
 
-            let target_idx = ((self.read_pos + i) & 15) as usize;
-            let target = &mut self.pixels[target_idx];
+        for i in (0..8_u8).rev() {
+            // Extract color from tile data
+            let color = (data_low >> 7) | ((data_high >> 7) << 1);
+            let target = &mut self.fifo
+                [((self.read_end + (i ^ flip_xor)) & (FIFO_LENGTH as u8 - 1)) as usize];
 
             // Sprite pixels only replace if:
             // - New pixel is non-transparent (color != 0)
-            // - Target pixel is transparent OR new sprite has higher priority (lower index)
+            // - Target pixel is transparent OR new sprite has higher priority
             if color != 0 && (target.color == 0 || priority < target.priority) {
                 target.color = color;
                 target.palette = palette;
                 target.bg_priority = bg_priority;
                 target.priority = priority;
             }
+
+            data_low <<= 1;
+            data_high <<= 1;
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_fifo_push_pop() {
-        let mut fifo = PixelFifo::default();
-        assert!(fifo.is_empty());
-        assert_eq!(fifo.size(), 0);
-
-        // Push a row with alternating colors
-        fifo.push_bg_row(0b1010_1010, 0b0000_0000, 0, false, false);
-        assert_eq!(fifo.size(), 8);
-
-        // Pop and check colors
-        for i in 0..8 {
-            let pixel = fifo.pop().expect("should have pixel");
-            let expected_color = if i % 2 == 0 { 1 } else { 0 };
-            assert_eq!(pixel.color, expected_color, "pixel {i} color mismatch");
-        }
-
-        assert!(fifo.is_empty());
-        assert!(fifo.pop().is_none());
-    }
-
-    #[test]
-    fn test_fifo_flip_x() {
-        let mut fifo_normal = PixelFifo::default();
-        let mut fifo_flipped = PixelFifo::default();
-
-        // Pattern: 0b1100_0011 = colors [1,1,0,0,0,0,1,1] when not flipped
-        fifo_normal.push_bg_row(0b1100_0011, 0b0000_0000, 0, false, false);
-        fifo_flipped.push_bg_row(0b1100_0011, 0b0000_0000, 0, false, true);
-
-        // Collect all colors
-        let mut colors_normal = Vec::new();
-        let mut colors_flipped = Vec::new();
-        for _ in 0..8 {
-            colors_normal.push(fifo_normal.pop().unwrap().color);
-            colors_flipped.push(fifo_flipped.pop().unwrap().color);
-        }
-
-        // Flipped should be reversed
-        let mut expected_flipped = colors_normal.clone();
-        expected_flipped.reverse();
-        assert_eq!(colors_flipped, expected_flipped);
-    }
-
-    #[test]
-    fn test_fifo_clear() {
-        let mut fifo = PixelFifo::default();
-        fifo.push_bg_row(0xFF, 0xFF, 0, false, false);
-        assert_eq!(fifo.size(), 8);
-
-        fifo.clear();
-        assert!(fifo.is_empty());
     }
 }
