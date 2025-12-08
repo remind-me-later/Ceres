@@ -7,9 +7,11 @@ pub const DOTS_PER_FRAME: i32 = 70224;
 pub const DOTS_PER_SEC: i32 = 1 << 22;
 pub const FRAME_DURATION: Duration = Duration::new(0, 16_742_706); // DOTS_PER_FRAME / DOTS_PER_SEC
 
-/// PPU runs at 8MHz (2× T-cycle rate) for sub-T-cycle precision.
-/// SameBoy uses this internally with divisor=2 in the display state machine.
-pub const PPU_CYCLES_PER_T_CYCLE: i32 = 2;
+/// PPU cycles per T-cycle.
+/// Set to 1 for T-cycle mode (4MHz), or 2 for 8MHz sub-T-cycle precision.
+/// NOTE: Currently using T-cycle mode (1) as the PPU state machine works at T-cycle resolution.
+/// TODO: Upgrade PPU to 8MHz mode for SameBoy-accurate sub-T-cycle timing.
+pub const PPU_CYCLES_PER_T_CYCLE: i32 = 1;
 
 #[derive(Default)]
 pub struct Clock {
