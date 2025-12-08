@@ -9,9 +9,8 @@ pub const FRAME_DURATION: Duration = Duration::new(0, 16_742_706); // DOTS_PER_F
 
 /// PPU cycles per T-cycle.
 /// Set to 1 for T-cycle mode (4MHz), or 2 for 8MHz sub-T-cycle precision.
-/// NOTE: Currently using T-cycle mode (1) as the PPU state machine works at T-cycle resolution.
-/// TODO: Upgrade PPU to 8MHz mode for SameBoy-accurate sub-T-cycle timing.
-pub const PPU_CYCLES_PER_T_CYCLE: i32 = 1;
+/// NOTE: Currently using 8MHz mode (2) for SameBoy-accurate sub-T-cycle timing.
+pub const PPU_CYCLES_PER_T_CYCLE: i32 = 2;
 
 #[derive(Default)]
 pub struct Clock {
