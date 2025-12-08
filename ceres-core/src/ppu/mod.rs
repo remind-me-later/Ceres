@@ -4,6 +4,7 @@ mod fifo;
 mod oam;
 mod rgba_buf;
 mod sprite;
+pub mod state;
 mod vram;
 
 use core::mem;
@@ -18,6 +19,7 @@ use {
     fifo::PixelFifo,
     rgba_buf::RgbaBuf,
     sprite::SpriteBuffer,
+    state::{HBlankStage, Line0Stage, Line153Stage, OamScanStage, PpuPhase, VBlankStage},
 };
 
 // =============================================================================
@@ -142,38 +144,6 @@ const STAT_IF_OAM: u8 = 0x20;
 /// STAT bit 6: LY=LYC interrupt enable.
 const STAT_IF_LYC: u8 = 0x40;
 
-/// LCD startup state machine states.
-/// Reference: SameBoy display.c GB_display_run() states 2, 34, 37, 38
-///
-/// When LCD is enabled (LCDC bit 7 set), the PPU goes through a specific
-/// startup sequence before normal rendering begins.
-/// Each phase has a countdown timer for its duration.
-/// Total: 76 + 2 + 2 + 3 = 83 cycles before Mode 3 starts.
-///
-/// SameBoy timing:
-/// - State 2 (76 cycles): MODE2_LENGTH - 4, Mode 0 in STAT
-/// - State 34 (2 cycles): OAM write blocked
-/// - State 37 (2 cycles): STAT = Mode 3, OAM fully blocked
-/// - State 38 (3 cycles): CGB palettes blocked, then enter Mode 3
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-enum StartupState {
-    /// LCD is off or startup complete.
-    #[default]
-    Inactive,
-    /// Phase 1: Initial wait (76 cycles). Mode 0 in STAT, memory access unblocked.
-    /// SameBoy: State 2, duration = MODE2_LENGTH - 4 = 76
-    Phase1(u8),
-    /// Phase 2: Wait 2 cycles. OAM write access blocked.
-    /// SameBoy: State 34
-    Phase2(u8),
-    /// Phase 3: Wait 2 cycles. STAT = Mode 3, OAM/VRAM blocked.
-    /// SameBoy: State 37
-    Phase3(u8),
-    /// Phase 4: Wait 3 cycles. CGB palettes blocked, then enter Mode 3 rendering.
-    /// SameBoy: State 38 + mode_3_start
-    Phase4(u8),
-}
-
 #[non_exhaustive]
 #[derive(Clone, Copy, Default)]
 pub enum ColorCorrectionMode {
@@ -236,12 +206,12 @@ impl Mode {
 #[expect(clippy::struct_excessive_bools)]
 #[derive(Default)]
 pub struct Ppu {
+    /// Hierarchical state machine phase.
+    phase: PpuPhase,
     bcp: ColorPalette,
     bgp: u8,
     color_correction_mode: ColorCorrectionMode,
     delay_one_frame: bool,
-    /// LCD startup state machine state (includes phase countdown).
-    startup_state: StartupState,
     lcdc: u8,
     ly: u8,
     /// LY value used for LYC comparison (may differ from displayed LY during transitions)
@@ -408,6 +378,27 @@ impl Ppu {
     fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
         self.mode = mode;
 
+        // Synchronize the hierarchical phase with the mode
+        // (Line0Startup is handled separately in tick_line0_startup)
+        match mode {
+            Mode::OamScan => {
+                // Start OAM scan at Entry stage (state 35)
+                self.phase = PpuPhase::OamScan(OamScanStage::Entry { remaining: 2 });
+            }
+            Mode::Drawing => {
+                self.phase = PpuPhase::Drawing;
+            }
+            Mode::HBlank => {
+                // HBlank phase is set directly in tick_drawing
+            }
+            Mode::VBlank => {
+                // Start VBlank at Remainder stage (main VBlank loop)
+                self.phase = PpuPhase::VBlank(VBlankStage::Remainder {
+                    remaining: Mode::VBlank.dots(self.scx) as i16,
+                });
+            }
+        }
+
         // For OamScan, delay STAT update (handled in tick_oam_scan)
         if !matches!(mode, Mode::OamScan) {
             self.set_mode_stat(mode);
@@ -546,7 +537,7 @@ impl Ppu {
         // Only apply this special case for the actual first frame after LCD enable
         if self.first_frame_after_lcd_on && self.ly == 0 {
             // During startup state machine, use the stored STAT mode bits
-            if !matches!(self.startup_state, StartupState::Inactive) {
+            if matches!(self.phase, PpuPhase::Line0Startup(_)) {
                 return self.stat & STAT_MODE;
             }
         }
@@ -651,9 +642,9 @@ impl Ppu {
             }
         }
 
-        // Handle LCD startup state machine
-        if self.startup_state != StartupState::Inactive {
-            self.tick_startup(ints, cgb_mode, double_speed);
+        // Handle LCD startup state machine (Line 0 after LCD enable)
+        if let PpuPhase::Line0Startup(stage) = self.phase {
+            self.tick_line0_startup(stage, ints, cgb_mode, double_speed);
             return;
         }
 
@@ -679,33 +670,38 @@ impl Ppu {
         }
     }
 
-    /// Tick the LCD startup state machine.
+    /// Tick the LCD startup state machine (Line 0 after LCD enable).
     /// SameBoy timing for first line after LCD on (in 8MHz cycles):
     /// - Phase 1 (152 cycles): Mode 0 in STAT, all unblocked
     /// - Phase 2 (4 cycles): OAM write blocked
     /// - Phase 3 (4 cycles): STAT = Mode 3, OAM fully blocked, VRAM blocked (DMG), CGB palettes blocked
     /// - Phase 4 (6 cycles): VRAM fully blocked, enter Mode 3 rendering
     /// Total: 166 8MHz cycles (83 T-cycles)
-    fn tick_startup(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
+    fn tick_line0_startup(
+        &mut self,
+        stage: Line0Stage,
+        ints: &mut Interrupts,
+        cgb_mode: CgbMode,
+        double_speed: bool,
+    ) {
         let is_cgb = matches!(cgb_mode, CgbMode::Cgb);
 
         // Track dots during startup for computed STAT mode
         self.dots_in_line += 1;
 
-        match self.startup_state {
-            StartupState::Inactive => {}
-
-            StartupState::Phase1(remaining) => {
+        match stage {
+            Line0Stage::InitialMode0 { remaining } => {
                 // Phase 1: Mode 0 in STAT, all unblocked (152 8MHz cycles = 76 T-cycles)
                 if remaining <= 1 {
                     // Transition to Phase 2 (4 8MHz cycles = 2 T-cycles)
-                    self.startup_state = StartupState::Phase2(4);
+                    self.phase = PpuPhase::Line0Startup(Line0Stage::OamWriteBlock { remaining: 4 });
                 } else {
-                    self.startup_state = StartupState::Phase1(remaining - 1);
+                    self.phase =
+                        PpuPhase::Line0Startup(Line0Stage::InitialMode0 { remaining: remaining - 1 });
                 }
             }
 
-            StartupState::Phase2(remaining) => {
+            Line0Stage::OamWriteBlock { remaining } => {
                 // Phase 2: OAM write blocked (set on first cycle of Phase2)
                 if remaining == 4 {
                     self.oam_write_blocked = true;
@@ -727,24 +723,26 @@ impl Ppu {
                     }
 
                     self.update_stat(ints);
-                    self.startup_state = StartupState::Phase3(4);
+                    self.phase = PpuPhase::Line0Startup(Line0Stage::StatMode3 { remaining: 4 });
                 } else {
-                    self.startup_state = StartupState::Phase2(remaining - 1);
+                    self.phase =
+                        PpuPhase::Line0Startup(Line0Stage::OamWriteBlock { remaining: remaining - 1 });
                 }
             }
 
-            StartupState::Phase3(remaining) => {
+            Line0Stage::StatMode3 { remaining } => {
                 // Phase 3: STAT = Mode 3, all blocked except VRAM (CGB)
                 if remaining <= 1 {
                     // Transition to Phase 4: CGB palettes blocked (6 8MHz cycles = 3 T-cycles)
                     self.cgb_palettes_blocked = true;
-                    self.startup_state = StartupState::Phase4(6);
+                    self.phase = PpuPhase::Line0Startup(Line0Stage::PalettesBlock { remaining: 6 });
                 } else {
-                    self.startup_state = StartupState::Phase3(remaining - 1);
+                    self.phase =
+                        PpuPhase::Line0Startup(Line0Stage::StatMode3 { remaining: remaining - 1 });
                 }
             }
 
-            StartupState::Phase4(remaining) => {
+            Line0Stage::PalettesBlock { remaining } => {
                 // Phase 4: All blocked, enter Mode 3 rendering
                 if remaining <= 1 {
                     // Startup complete
@@ -752,7 +750,7 @@ impl Ppu {
                     self.vram_read_blocked = true;
                     self.vram_write_blocked = true;
 
-                    self.startup_state = StartupState::Inactive;
+                    self.phase = PpuPhase::Drawing;
                     self.enter_mode3_after_startup(ints);
 
                     // SameBoy: After entering mode_3_start, immediately do first iteration
@@ -762,7 +760,8 @@ impl Ppu {
                     self.advance_fetcher(cgb_mode);
                     self.dots_in_line += 1;
                 } else {
-                    self.startup_state = StartupState::Phase4(remaining - 1);
+                    self.phase =
+                        PpuPhase::Line0Startup(Line0Stage::PalettesBlock { remaining: remaining - 1 });
                 }
             }
         }
@@ -807,39 +806,61 @@ impl Ppu {
     }
 
     /// Tick during Mode 2 (OAM Scan).
-    /// SameBoy timing:
-    /// - Dot 1-2 (state 35): OAM write blocked (CGB && !double_speed)
-    /// - Dot 3 (state 6): LY update, OAM read blocked (model dependent)
-    /// - Dot 4 (state 7): STAT = Mode 2, OAM fully blocked
-    /// - Dot 5-84: OAM scan (40 entries × 2 dots each)
+    /// Uses hierarchical state machine with OamScanStage.
+    /// SameBoy timing (in 8MHz cycles, 2 per T-cycle):
+    /// - State 35 (2 cycles): OAM write blocked (CGB && !double_speed)
+    /// - State 6 (1 cycle): LY update, OAM read blocked
+    /// - State 7 (1 cycle): STAT = Mode 2, OAM fully blocked
+    /// - State 8 (80 cycles): OAM scan (40 entries × 2 cycles each)
+    /// - State 10 (3 cycles): Transition to Mode 3
+    /// - State 32 (2 cycles): CGB palettes blocked
     fn tick_oam_scan(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
         let is_cgb = matches!(cgb_mode, CgbMode::Cgb);
 
-        match self.dots_in_line {
-            1 | 2 => {
+        // Get current stage from phase
+        let stage = match self.phase {
+            PpuPhase::OamScan(s) => s,
+            _ => {
+                // Fallback: use dots_in_line based dispatch for backward compatibility
+                self.tick_oam_scan_legacy(ints, cgb_mode, double_speed);
+                return;
+            }
+        };
+
+        match stage {
+            OamScanStage::Entry { remaining } => {
                 // State 35: OAM write blocked on CGB (non-double-speed only)
-                // SameBoy: gb->oam_write_blocked = GB_is_cgb(gb) && !gb->cgb_double_speed;
+                // This happens on both cycles of Entry (dots 1 and 2)
                 if is_cgb && !double_speed {
                     self.oam_write_blocked = true;
                 }
+                if remaining <= 1 {
+                    self.phase = PpuPhase::OamScan(OamScanStage::LyUpdate);
+                } else {
+                    self.phase = PpuPhase::OamScan(OamScanStage::Entry {
+                        remaining: remaining - 1,
+                    });
+                }
             }
-            3 => {
+
+            OamScanStage::LyUpdate => {
                 // State 6: LY update, OAM read blocked
                 self.ly = self.ly.wrapping_add(1);
                 self.ly_for_comparison = self.ly;
                 // SameBoy: gb->oam_read_blocked = !gb->cgb_double_speed || gb->model >= GB_MODEL_CGB_D;
-                // For simplicity, block OAM read unless in double-speed mode
                 self.oam_read_blocked = !double_speed;
 
                 // SameBoy: "The OAM STAT interrupt occurs 1 T-cycle before STAT
                 // actually changes, except on line 0. PPU glitch?"
                 if self.ly != 0 {
                     self.mode_for_interrupt = Some(Mode::OamScan);
-                    // STAT mode bits stay at 0 (HBlank) but interrupt uses mode 2
                 }
                 self.update_stat(ints);
+
+                self.phase = PpuPhase::OamScan(OamScanStage::StatUpdate);
             }
-            4 => {
+
+            OamScanStage::StatUpdate => {
                 // State 7: STAT = Mode 2, OAM fully blocked
                 self.set_mode_stat(Mode::OamScan);
                 self.oam_read_blocked = true;
@@ -847,77 +868,185 @@ impl Ppu {
                 self.ly_for_comparison = self.ly;
 
                 // SameBoy: After STAT update, mode_for_interrupt is set to -1
-                // (meaning no mode-based interrupt) to prevent double-firing
+                self.mode_for_interrupt = Some(Mode::OamScan);
+                self.update_stat(ints);
+                self.mode_for_interrupt = None;
+
+                // Start OAM scan loop
+                self.phase = PpuPhase::OamScan(OamScanStage::Scan {
+                    entry: 0,
+                    sub_cycle: 0,
+                });
+            }
+
+            OamScanStage::Scan { entry, sub_cycle } => {
+                // OAM scan: check one entry every 2 cycles
+                if sub_cycle == 0 && entry < 40 {
+                    self.scan_oam_entry_at(entry);
+                }
+
+                if sub_cycle == 0 {
+                    self.phase = PpuPhase::OamScan(OamScanStage::Scan {
+                        entry,
+                        sub_cycle: 1,
+                    });
+                } else if entry < 39 {
+                    self.phase = PpuPhase::OamScan(OamScanStage::Scan {
+                        entry: entry + 1,
+                        sub_cycle: 0,
+                    });
+                } else {
+                    // Done scanning, transition to Mode 3
+                    self.phase = PpuPhase::OamScan(OamScanStage::Transition1 { remaining: 3 });
+                }
+            }
+
+            OamScanStage::Transition1 { remaining } => {
+                // State 10: Transition to Mode 3
+                if remaining == 3 {
+                    self.set_mode_stat(Mode::Drawing);
+                    self.mode_for_interrupt = Some(Mode::Drawing);
+                    self.oam_read_blocked = true;
+                    self.oam_write_blocked = true;
+                    self.vram_read_blocked = true;
+                    self.vram_write_blocked = true;
+                    self.cgb_palettes_blocked = false;
+                    self.update_stat(ints);
+                }
+
+                if remaining <= 1 {
+                    self.phase = PpuPhase::OamScan(OamScanStage::Transition2 { remaining: 2 });
+                } else {
+                    self.phase = PpuPhase::OamScan(OamScanStage::Transition1 {
+                        remaining: remaining - 1,
+                    });
+                }
+            }
+
+            OamScanStage::Transition2 { remaining } => {
+                // State 32: CGB palettes blocked
+                if remaining == 2 {
+                    self.cgb_palettes_blocked = true;
+                }
+
+                if remaining <= 1 {
+                    // Stay in Transition2 with 0 remaining - let remaining_dots_in_mode
+                    // trigger the actual mode transition
+                    self.phase = PpuPhase::OamScan(OamScanStage::Transition2 { remaining: 0 });
+                } else {
+                    self.phase = PpuPhase::OamScan(OamScanStage::Transition2 {
+                        remaining: remaining - 1,
+                    });
+                }
+            }
+        }
+
+        // Check if it's time to enter Drawing (based on remaining_dots_in_mode)
+        if self.remaining_dots_in_mode <= 0 {
+            self.enter_drawing_from_oam_scan(ints, cgb_mode);
+        }
+    }
+
+    /// Legacy OAM scan tick using dots_in_line (for backward compatibility during migration)
+    fn tick_oam_scan_legacy(
+        &mut self,
+        ints: &mut Interrupts,
+        cgb_mode: CgbMode,
+        double_speed: bool,
+    ) {
+        let is_cgb = matches!(cgb_mode, CgbMode::Cgb);
+
+        match self.dots_in_line {
+            1 | 2 => {
+                if is_cgb && !double_speed {
+                    self.oam_write_blocked = true;
+                }
+            }
+            3 => {
+                self.ly = self.ly.wrapping_add(1);
+                self.ly_for_comparison = self.ly;
+                self.oam_read_blocked = !double_speed;
+                if self.ly != 0 {
+                    self.mode_for_interrupt = Some(Mode::OamScan);
+                }
+                self.update_stat(ints);
+            }
+            4 => {
+                self.set_mode_stat(Mode::OamScan);
+                self.oam_read_blocked = true;
+                self.oam_write_blocked = true;
+                self.ly_for_comparison = self.ly;
                 self.mode_for_interrupt = Some(Mode::OamScan);
                 self.update_stat(ints);
                 self.mode_for_interrupt = None;
             }
             5..=84 => {
-                // OAM scan: check one entry every 2 dots
-                let scan_dot = self.dots_in_line - 4; // 1-80
+                let scan_dot = self.dots_in_line - 4;
                 if scan_dot % 2 == 0 && self.oam_scan_index < 40 {
                     self.scan_oam_entry();
                     self.oam_scan_index += 1;
                 }
             }
             85 => {
-                // State 10: Transition to Mode 3 (3 cycles)
-                // SameBoy: STAT = Mode 3, OAM/VRAM blocked, CGB palettes unblocked
                 self.set_mode_stat(Mode::Drawing);
                 self.mode_for_interrupt = Some(Mode::Drawing);
-
                 self.oam_read_blocked = true;
                 self.oam_write_blocked = true;
                 self.vram_read_blocked = true;
                 self.vram_write_blocked = true;
                 self.cgb_palettes_blocked = false;
-
                 self.update_stat(ints);
             }
-            86 | 87 => {
-                // Wait in State 10
-            }
+            86 | 87 => {}
             88 => {
-                // State 32: Transition to Mode 3 (2 cycles)
-                // SameBoy: CGB palettes blocked
                 self.cgb_palettes_blocked = true;
             }
             _ => {}
         }
 
         if self.remaining_dots_in_mode <= 0 {
-            self.enter_mode(Mode::Drawing, ints);
-            // SameBoy: All memory access is blocked during Mode 3
-            self.oam_read_blocked = true;
-            self.oam_write_blocked = true;
-            self.vram_read_blocked = true;
-            self.vram_write_blocked = true;
-            self.cgb_palettes_blocked = true;
-            self.fetcher_state = FetcherState::GetTileT1;
-            self.fetcher_tile_x = 0;
-            // SameBoy: position_in_line starts at -16. The SCX alignment algorithm
-            // in output_pixel will handle jumping to -8 when (position_in_line & 7) == (SCX & 7).
-            self.position_in_line = -16;
-            self.lcd_x = 0;
-            self.bg_fifo.clear();
-            self.oam_fifo.clear();
-            // Push 8 "junk" pixels to prime the FIFO (will be discarded during scroll)
-            self.bg_fifo.push_bg_row(0, 0, 0, false, false);
-            // Reset per-line flags
-            self.line_has_fractional_scrolling = false;
-            self.window_is_being_fetched = false;
-            self.window_activation_delay = 0;
-
-            // SameBoy: Immediately do first Mode 3 iteration after entering mode_3_start
-            // This is important for cycle-accurate timing.
-            self.output_pixel(cgb_mode);
-            self.advance_fetcher(cgb_mode);
-            self.dots_in_line += 1;
+            self.enter_drawing_from_oam_scan(ints, cgb_mode);
         }
     }
-    /// Scan a single OAM entry during Mode 2.
+
+    /// Enter Mode 3 (Drawing) from OAM scan completion.
+    fn enter_drawing_from_oam_scan(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
+        self.enter_mode(Mode::Drawing, ints);
+        // SameBoy: All memory access is blocked during Mode 3
+        self.oam_read_blocked = true;
+        self.oam_write_blocked = true;
+        self.vram_read_blocked = true;
+        self.vram_write_blocked = true;
+        self.cgb_palettes_blocked = true;
+        self.fetcher_state = FetcherState::GetTileT1;
+        self.fetcher_tile_x = 0;
+        // SameBoy: position_in_line starts at -16
+        self.position_in_line = -16;
+        self.lcd_x = 0;
+        self.bg_fifo.clear();
+        self.oam_fifo.clear();
+        // Push 8 "junk" pixels to prime the FIFO
+        self.bg_fifo.push_bg_row(0, 0, 0, false, false);
+        // Reset per-line flags
+        self.line_has_fractional_scrolling = false;
+        self.window_is_being_fetched = false;
+        self.window_activation_delay = 0;
+
+        // SameBoy: Immediately do first Mode 3 iteration
+        self.output_pixel(cgb_mode);
+        self.advance_fetcher(cgb_mode);
+        self.dots_in_line += 1;
+    }
+
+    /// Scan a single OAM entry during Mode 2 (using oam_scan_index).
     fn scan_oam_entry(&mut self) {
-        let idx = self.oam_scan_index as usize * 4;
+        self.scan_oam_entry_at(self.oam_scan_index);
+        self.oam_scan_index += 1;
+    }
+
+    /// Scan OAM entry at given index.
+    fn scan_oam_entry_at(&mut self, entry: u8) {
+        let idx = entry as usize * 4;
         let oam_bytes = self.oam.bytes();
 
         let y = oam_bytes[idx];
@@ -943,7 +1072,7 @@ impl Ppu {
                 x,
                 tile,
                 flags,
-                oam_index: self.oam_scan_index,
+                oam_index: entry,
             });
         }
     }
@@ -1022,6 +1151,10 @@ impl Ppu {
 
             // Transition to HBlank mode
             self.mode = Mode::HBlank;
+            // Set HBlank phase - start with interrupt pending flag set
+            self.phase = PpuPhase::HBlank(HBlankStage::Remainder {
+                remaining: hblank_dots as i16,
+            });
             self.cgb_palettes_blocked = false;
             self.remaining_dots_in_mode = hblank_dots;
 
@@ -1603,80 +1736,310 @@ impl Ppu {
     }
 
     /// Tick during Mode 0 (HBlank).
+    /// Uses hierarchical state machine with HBlankStage.
     fn tick_hblank(&mut self, ints: &mut Interrupts, _double_speed: bool) {
-        // SameBoy: GB_STAT_update fires AFTER state 22 (1 cycle after STAT changes to 0)
-        // Fire the pending HBlank interrupt on first tick of HBlank
+        // Get current stage from phase
+        let stage = match self.phase {
+            PpuPhase::HBlank(s) => s,
+            _ => {
+                // Fallback to legacy behavior
+                self.tick_hblank_legacy(ints);
+                return;
+            }
+        };
+
+        match stage {
+            HBlankStage::StatUpdate => {
+                // State 22: STAT = Mode 0 (already set when entering HBlank)
+                // Fire the pending HBlank interrupt
+                if self.hblank_interrupt_pending {
+                    self.hblank_interrupt_pending = false;
+                    self.update_stat(ints);
+                }
+                // Calculate remaining dots and transition to Remainder
+                let remaining = self.remaining_dots_in_mode as i16;
+                self.phase = PpuPhase::HBlank(HBlankStage::Remainder { remaining });
+            }
+
+            HBlankStage::PalettesTransition1 { remaining } => {
+                // State 33: CGB palettes transition (not commonly used)
+                if remaining <= 1 {
+                    self.phase =
+                        PpuPhase::HBlank(HBlankStage::PalettesTransition2 { remaining: 2 });
+                } else {
+                    self.phase =
+                        PpuPhase::HBlank(HBlankStage::PalettesTransition1 { remaining: remaining - 1 });
+                }
+            }
+
+            HBlankStage::PalettesTransition2 { remaining } => {
+                // State 36: Final palettes unblock
+                if remaining <= 1 {
+                    let rem = self.remaining_dots_in_mode as i16;
+                    self.phase = PpuPhase::HBlank(HBlankStage::Remainder { remaining: rem });
+                } else {
+                    self.phase =
+                        PpuPhase::HBlank(HBlankStage::PalettesTransition2 { remaining: remaining - 1 });
+                }
+            }
+
+            HBlankStage::Remainder { remaining: _ } => {
+                // SameBoy: GB_STAT_update fires AFTER state 22 (1 cycle after STAT changes to 0)
+                // Fire the pending HBlank interrupt on first tick of HBlank
+                if self.hblank_interrupt_pending {
+                    self.hblank_interrupt_pending = false;
+                    self.update_stat(ints);
+                }
+
+                // SameBoy quirk: Mode 2 interrupt fires near the end of HBlank,
+                // about 1 cycle before the line actually changes.
+                if self.remaining_dots_in_mode == 1 && self.ly < LINES - 1 {
+                    let next_line = self.ly + 1;
+                    if next_line != 0 {
+                        self.mode_for_interrupt = Some(Mode::OamScan);
+                        self.update_stat(ints);
+                        self.mode_for_interrupt = None;
+                    }
+                }
+
+                // Update remaining in phase (for consistency)
+                let new_remaining = self.remaining_dots_in_mode as i16 - 1;
+                if new_remaining > 0 {
+                    self.phase = PpuPhase::HBlank(HBlankStage::Remainder {
+                        remaining: new_remaining,
+                    });
+                } else {
+                    self.phase = PpuPhase::HBlank(HBlankStage::End { remaining: 1 });
+                }
+            }
+
+            HBlankStage::End { remaining: _ } => {
+                // Handled by remaining_dots_in_mode check below
+            }
+        }
+
+        // Check if it's time to transition out of HBlank
+        if self.remaining_dots_in_mode <= 0 {
+            self.exit_hblank(ints);
+        }
+    }
+
+    /// Legacy HBlank tick (fallback during migration)
+    fn tick_hblank_legacy(&mut self, ints: &mut Interrupts) {
         if self.hblank_interrupt_pending {
             self.hblank_interrupt_pending = false;
             self.update_stat(ints);
         }
 
-        // SameBoy quirk: Mode 2 interrupt fires near the end of HBlank,
-        // about 1 cycle before the line actually changes.
-        // Fire the interrupt early while STAT still shows Mode 0.
-        // SameBoy: LINES (144) - 1 = 143
         if self.remaining_dots_in_mode == 1 && self.ly < LINES - 1 {
             let next_line = self.ly + 1;
             if next_line != 0 {
                 self.mode_for_interrupt = Some(Mode::OamScan);
                 self.update_stat(ints);
-                // Clear mode_for_interrupt so it doesn't interfere with stat_irq_blocking
                 self.mode_for_interrupt = None;
             }
         }
 
         if self.remaining_dots_in_mode <= 0 {
-            self.dots_in_line = 0;
+            self.exit_hblank(ints);
+        }
+    }
 
-            // Clear first frame flag when leaving line 0
-            if self.ly == 0 && self.first_frame_after_lcd_on {
-                self.first_frame_after_lcd_on = false;
-            }
+    /// Exit HBlank and transition to next mode (OamScan or VBlank)
+    fn exit_hblank(&mut self, ints: &mut Interrupts) {
+        self.dots_in_line = 0;
 
-            // SameBoy: LINES (144) - 1 = 143
-            if self.ly + 1 > LINES - 1 {
-                self.ly += 1;
-                self.ly_for_comparison = self.ly;
-                self.enter_mode(Mode::VBlank, ints);
-            } else {
-                // Reset for next scanline
-                self.oam_scan_index = 0;
-                self.sprite_buffer.clear();
-                // SameBoy: OAM read blocked during Mode 2, but writes allowed initially
-                self.oam_read_blocked = true;
-                self.oam_write_blocked = false;
-                self.vram_read_blocked = false;
-                self.vram_write_blocked = false;
-                self.cgb_palettes_blocked = false;
-                self.window_triggered = false;
+        // Clear first frame flag when leaving line 0
+        if self.ly == 0 && self.first_frame_after_lcd_on {
+            self.first_frame_after_lcd_on = false;
+        }
 
-                self.enter_mode(Mode::OamScan, ints);
-            }
+        // SameBoy: LINES (144) - 1 = 143
+        if self.ly + 1 > LINES - 1 {
+            self.ly += 1;
+            self.ly_for_comparison = self.ly;
+            self.enter_mode(Mode::VBlank, ints);
+        } else {
+            // Reset for next scanline
+            self.oam_scan_index = 0;
+            self.sprite_buffer.clear();
+            // SameBoy: OAM read blocked during Mode 2, but writes allowed initially
+            self.oam_read_blocked = true;
+            self.oam_write_blocked = false;
+            self.vram_read_blocked = false;
+            self.vram_write_blocked = false;
+            self.cgb_palettes_blocked = false;
+            self.window_triggered = false;
+
+            self.enter_mode(Mode::OamScan, ints);
         }
     }
 
     /// Tick during Mode 1 (VBlank).
+    /// Uses hierarchical state machine with VBlankStage.
     /// SameBoy: Lines 144-153 (LINES to VIRTUAL_LINES - 1)
     fn tick_vblank(&mut self, ints: &mut Interrupts) {
-        if self.remaining_dots_in_mode <= 0 {
-            let new_ly = self.ly + 1;
+        // Check if we're on Line 153 (special handling)
+        if let PpuPhase::Line153(stage) = self.phase {
+            self.tick_line153(stage, ints);
+            return;
+        }
 
-            // SameBoy: VIRTUAL_LINES (154) - 1 = 153
-            if new_ly > VIRTUAL_LINES - 1 {
-                self.ly = new_ly;
-                self.ly_for_comparison = new_ly;
-                self.finish_frame_and_start_new(ints);
-            } else {
-                // SameBoy VBlank timing (lines 2152-2215):
-                // At start of each VBlank line: ly_for_comparison = -1, sleep 2 T-cycles
-                // Then: LY = current_line
-                // At 8MHz, 2 T-cycles = 4 8MHz cycles, but we use 8 to match observed behavior
-                let delay = 8;
-                self.schedule_ly_write(new_ly, delay);
-                self.ly_for_comparison = new_ly;
-                self.remaining_dots_in_mode += Mode::VBlank.dots(self.scx);
-                self.update_stat(ints);
+        // Get current stage from phase
+        let stage = match self.phase {
+            PpuPhase::VBlank(s) => s,
+            _ => {
+                // Fallback to legacy behavior
+                self.tick_vblank_legacy(ints);
+                return;
             }
+        };
+
+        match stage {
+            VBlankStage::LycReset { remaining } => {
+                // State 26: ly_for_comparison = -1 (2 cycles)
+                // This happens at the start of each VBlank line
+                if remaining <= 1 {
+                    self.phase = PpuPhase::VBlank(VBlankStage::LyUpdate { remaining: 2 });
+                } else {
+                    self.phase = PpuPhase::VBlank(VBlankStage::LycReset {
+                        remaining: remaining - 1,
+                    });
+                }
+            }
+
+            VBlankStage::LyUpdate { remaining } => {
+                // State 12: LY update (2 cycles)
+                if remaining <= 1 {
+                    self.phase = PpuPhase::VBlank(VBlankStage::LycUpdate);
+                } else {
+                    self.phase = PpuPhase::VBlank(VBlankStage::LyUpdate {
+                        remaining: remaining - 1,
+                    });
+                }
+            }
+
+            VBlankStage::LycUpdate => {
+                // State 24: ly_for_comparison update (1 cycle)
+                let rem = self.remaining_dots_in_mode as i16;
+                self.phase = PpuPhase::VBlank(VBlankStage::Remainder { remaining: rem });
+            }
+
+            VBlankStage::Remainder { remaining: _ } => {
+                // Main VBlank loop - just wait for remaining_dots_in_mode to deplete
+                // Update phase remaining for consistency
+                let new_remaining = self.remaining_dots_in_mode as i16 - 1;
+                if new_remaining > 0 {
+                    self.phase = PpuPhase::VBlank(VBlankStage::Remainder {
+                        remaining: new_remaining,
+                    });
+                }
+            }
+        }
+
+        // Check if it's time to transition to next VBlank line or new frame
+        if self.remaining_dots_in_mode <= 0 {
+            self.advance_vblank_line(ints);
+        }
+    }
+
+    /// Tick during Line 153 (special VBlank line).
+    /// Line 153 has unique LY behavior where LY briefly shows 153 then becomes 0.
+    /// Based on gbmicrotest:
+    /// - ly_c (6 nops/48 cycles): expects LY=153
+    /// - ly_d (7 nops/56 cycles): expects LY=0
+    /// So LY transitions from 153 to 0 between cycles 48-56 (around cycle 52)
+    fn tick_line153(&mut self, stage: Line153Stage, ints: &mut Interrupts) {
+        match stage {
+            Line153Stage::Ly153 { remaining } => {
+                // LY=153 period
+                // schedule_ly_write(153, 8) sets LY=153 at cycle 8
+                // We need LY=0 transition around cycle 52
+                // So Ly153 stage should last 52 - 8 = 44 cycles
+                // But we start at remaining=16, so need to adjust entry point
+                if remaining <= 1 {
+                    // Transition LY to 0
+                    self.ly = 0;
+                    self.ly_for_comparison = 0;
+                    self.update_stat(ints);
+                    let rem = self.remaining_dots_in_mode as i16;
+                    self.phase = PpuPhase::Line153(Line153Stage::Remainder { remaining: rem });
+                } else {
+                    self.phase = PpuPhase::Line153(Line153Stage::Ly153 {
+                        remaining: remaining - 1,
+                    });
+                }
+            }
+
+            Line153Stage::Remainder { remaining: _ } => {
+                // Wait for line to end
+                let new_remaining = self.remaining_dots_in_mode as i16 - 1;
+                if new_remaining > 0 {
+                    self.phase = PpuPhase::Line153(Line153Stage::Remainder {
+                        remaining: new_remaining,
+                    });
+                }
+            }
+
+            // Other stages not currently used
+            _ => {
+                let rem = self.remaining_dots_in_mode as i16;
+                self.phase = PpuPhase::Line153(Line153Stage::Remainder { remaining: rem });
+            }
+        }
+
+        // Check if Line 153 is complete - start new frame
+        if self.remaining_dots_in_mode <= 0 {
+            self.finish_frame_and_start_new(ints);
+        }
+    }
+
+    /// Legacy VBlank tick (fallback during migration)
+    fn tick_vblank_legacy(&mut self, ints: &mut Interrupts) {
+        if self.remaining_dots_in_mode <= 0 {
+            self.advance_vblank_line(ints);
+        }
+    }
+
+    /// Advance to next VBlank line or start new frame
+    fn advance_vblank_line(&mut self, ints: &mut Interrupts) {
+        let new_ly = self.ly + 1;
+
+        // SameBoy: VIRTUAL_LINES (154) - 1 = 153
+        if new_ly > VIRTUAL_LINES - 1 {
+            self.ly = new_ly;
+            self.ly_for_comparison = new_ly;
+            self.finish_frame_and_start_new(ints);
+        } else if new_ly == 153 {
+            // Line 153 has special LY behavior
+            // Based on tests:
+            // - ly_c (6 nops/48 cycles): expects LY=153
+            // - ly_d (7 nops/56 cycles): expects LY=0
+            // LY=153 set by schedule_ly_write at cycle 8
+            // LY=0 transition should happen around cycle 52
+            // Ly153 stage runs from entry until LY=0 transition
+            // Entry is at cycle 0, so remaining = 52 - 8 = 44 cycles
+            let delay = 8;
+            self.schedule_ly_write(new_ly, delay);
+            self.ly_for_comparison = new_ly;
+            self.remaining_dots_in_mode += Mode::VBlank.dots(self.scx);
+            // Start Ly153 stage with 44 cycles until LY=0 transition
+            self.phase = PpuPhase::Line153(Line153Stage::Ly153 { remaining: 44 });
+            self.update_stat(ints);
+        } else {
+            // Normal VBlank line (144-152)
+            // SameBoy VBlank timing (lines 2152-2215):
+            // At start of each VBlank line: ly_for_comparison = -1, sleep 2 T-cycles
+            // Then: LY = current_line
+            // At 8MHz, 2 T-cycles = 4 8MHz cycles, but we use 8 to match observed behavior
+            let delay = 8;
+            self.schedule_ly_write(new_ly, delay);
+            self.ly_for_comparison = new_ly;
+            self.remaining_dots_in_mode += Mode::VBlank.dots(self.scx);
+            self.phase = PpuPhase::VBlank(VBlankStage::Remainder {
+                remaining: self.remaining_dots_in_mode as i16,
+            });
+            self.update_stat(ints);
         }
     }
 
@@ -1732,8 +2095,8 @@ impl Ppu {
             self.remaining_dots_in_mode = mode.dots(self.scx);
             self.rgba_buf_present.clear();
 
-            // Reset startup state
-            self.startup_state = StartupState::Inactive;
+            // Reset phase to LCD off
+            self.phase = PpuPhase::LcdOff;
             self.first_frame_after_lcd_on = false;
 
             // Unblock all memory access when LCD is off
@@ -1768,7 +2131,7 @@ impl Ppu {
 
             // Start LCD startup state machine with Phase 1 (76 T-cycles = 152 8MHz cycles)
             // Total: 76 + 2 + 2 + 3 = 83 T-cycles = 166 8MHz cycles
-            self.startup_state = StartupState::Phase1(152);
+            self.phase = PpuPhase::Line0Startup(Line0Stage::InitialMode0 { remaining: 152 });
             self.oam_read_blocked = false;
             self.oam_write_blocked = false;
             self.vram_read_blocked = false;
