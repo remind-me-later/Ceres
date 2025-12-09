@@ -62,7 +62,7 @@ impl<A: AudioCallback> Gb<A> {
         self.dma.advance_dots(t_cycles);
 
         let double_speed = self.key1.is_enabled();
-        
+
         // PPU runs at 8MHz (2× T-cycles) for sub-T-cycle precision.
         // In double speed mode, the CPU runs at 8MHz but PPU stays at 4MHz,
         // so we don't double the cycles.
@@ -75,18 +75,14 @@ impl<A: AudioCallback> Gb<A> {
         } else {
             t_cycles * PPU_CYCLES_PER_T_CYCLE // Normal speed: double for 8MHz
         };
-        
+
         self.ppu
             .run(ppu_cycles, &mut self.ints, self.cgb_mode, double_speed);
         self.run_dma();
 
         // APU runs at T-cycle rate, not affected by speed boost for timing
         // but the actual T-cycle count changes in double speed
-        let apu_cycles = if double_speed {
-            t_cycles / 2
-        } else {
-            t_cycles
-        };
+        let apu_cycles = if double_speed { t_cycles / 2 } else { t_cycles };
         self.apu.run(apu_cycles);
         self.cart.run_rtc(apu_cycles);
 

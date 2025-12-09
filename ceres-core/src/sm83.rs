@@ -179,6 +179,7 @@ impl<A: AudioCallback> Gb<A> {
 
         if self.ints.is_any_requested() {
             self.cpu.is_halted = false;
+            self.ppu.leave_stop_mode();
 
             if self.ints.are_enabled() {
                 self.tick_m_cycle();
@@ -1174,6 +1175,7 @@ impl<A: AudioCallback> Gb<A> {
             }
         } else {
             self.cpu.is_halted = true;
+            self.ppu.enter_stop_mode();
         }
     }
 

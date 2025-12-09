@@ -85,15 +85,56 @@ impl SpriteBuffer {
         self.count = 0;
     }
 
-    /// Adds a sprite to the buffer if not full.
+    /// Adds a sprite to the buffer if not full, sorted descending by X coordinate.
+    ///
+    /// This ensures that sprites with smaller X coordinates are at the end of the array,
+    /// ready to be popped in order during rendering.
+    /// Stable sort: if X coordinates are equal, the new sprite (higher OAM index)
+    /// is inserted before the existing one (lower OAM index), so the existing one
+    /// is popped first (higher priority on DMG).
     ///
     /// Returns true if the sprite was added, false if buffer is full.
     pub fn add(&mut self, sprite: SpriteEntry) -> bool {
         if self.count >= 10 {
             return false;
         }
-        self.sprites[self.count as usize] = sprite;
+
+        let mut insert_idx = self.count as usize;
+        for i in 0..self.count as usize {
+            if self.sprites[i].x <= sprite.x {
+                insert_idx = i;
+                break;
+            }
+        }
+
+        // Shift elements to make room
+        if insert_idx < self.count as usize {
+            self.sprites
+                .copy_within(insert_idx..self.count as usize, insert_idx + 1);
+        }
+
+        self.sprites[insert_idx] = sprite;
         self.count += 1;
         true
+    }
+
+    /// Returns the next sprite to be rendered (smallest X), without removing it.
+    #[must_use]
+    pub const fn peek(&self) -> Option<&SpriteEntry> {
+        if self.count == 0 {
+            None
+        } else {
+            Some(&self.sprites[self.count as usize - 1])
+        }
+    }
+
+    /// Removes and returns the next sprite to be rendered (smallest X).
+    pub fn pop(&mut self) -> Option<SpriteEntry> {
+        if self.count == 0 {
+            None
+        } else {
+            self.count -= 1;
+            Some(self.sprites[self.count as usize])
+        }
     }
 }

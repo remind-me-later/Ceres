@@ -13,13 +13,14 @@ pub struct FifoPixel {
     pub bg_priority: bool,
 }
 
-/// Fixed-size FIFO with 16-pixel capacity.
+/// Fixed-size FIFO with 8-pixel capacity.
 ///
 /// The Game Boy PPU uses two FIFOs: one for background/window pixels and one for
-/// sprite (OAM) pixels. Each FIFO can hold up to 16 pixels (2 tiles).
+/// sprite (OAM) pixels. Each FIFO holds 8 pixels, but sprites can partially
+/// overlay onto the "next" 8 pixels by wrapping around the buffer.
 #[derive(Clone, Copy, Default)]
 pub struct PixelFifo {
-    pixels: [FifoPixel; 16],
+    pixels: [FifoPixel; 8],
     read_pos: u8,
     size: u8,
 }
@@ -56,43 +57,54 @@ impl PixelFifo {
     /// * `flip_x` - Whether to flip pixels horizontally
     ///
     /// # Panics
-    /// Panics in debug mode if FIFO has more than 8 pixels.
+    /// Panics in debug mode if FIFO is not empty (bg push only happens when empty).
     pub fn push_bg_row(
         &mut self,
-        data_low: u8,
-        data_high: u8,
+        mut data_low: u8,
+        mut data_high: u8,
         palette: u8,
         bg_priority: bool,
         flip_x: bool,
     ) {
-        debug_assert!(self.size <= 8, "BG FIFO must have <= 8 pixels before push");
+        debug_assert!(self.size == 0, "BG FIFO must be empty before push");
 
-        let start_idx = self.read_pos.wrapping_add(self.size);
+        self.size = 8;
+        // SameBoy resets read_pos on empty, but since we use circular buffer logic,
+        // we write relative to current read_pos (which should be aligned if empty?).
+        // Actually, SameBoy says `fifo->read_end = 0` in `fifo_clear` but `fifo_push_bg_row` assumes empty.
+        // In SameBoy: `fifo->read_end` is the READ pointer.
+        // It writes to `fifo->fifo[i]` directly (0..7).
+        // This implies it resets alignment?
+        // SameBoy's `fifo_clear` resets read_end. `push_bg_row` asserts size 0.
+        // If size is 0, read_pos doesn't matter unless we reset it.
+        // Let's reset it to 0 to match SameBoy's implicit behavior.
+        self.read_pos = 0;
 
-        if flip_x {
+        if !flip_x {
             for i in 0..8 {
-                let color = ((data_low >> i) & 1) | (((data_high >> i) & 1) << 1);
-                let idx = (start_idx.wrapping_add(i)) & 15;
-                self.pixels[idx as usize] = FifoPixel {
+                let color = ((data_low >> 7) & 1) | (((data_high >> 7) & 1) << 1);
+                self.pixels[i] = FifoPixel {
                     color,
                     palette,
                     priority: 0,
                     bg_priority,
                 };
+                data_low <<= 1;
+                data_high <<= 1;
             }
         } else {
             for i in 0..8 {
-                let color = ((data_low >> (7 - i)) & 1) | (((data_high >> (7 - i)) & 1) << 1);
-                let idx = (start_idx.wrapping_add(i)) & 15;
-                self.pixels[idx as usize] = FifoPixel {
+                let color = (data_low & 1) | ((data_high & 1) << 1);
+                self.pixels[i] = FifoPixel {
                     color,
                     palette,
                     priority: 0,
                     bg_priority,
                 };
+                data_low >>= 1;
+                data_high >>= 1;
             }
         }
-        self.size += 8;
     }
 
     /// Pops a single pixel from the FIFO.
@@ -104,7 +116,7 @@ impl PixelFifo {
             return None;
         }
         let pixel = self.pixels[self.read_pos as usize];
-        self.read_pos = (self.read_pos + 1) & 15;
+        self.read_pos = (self.read_pos + 1) & 7;
         self.size -= 1;
         Some(pixel)
     }
@@ -124,40 +136,49 @@ impl PixelFifo {
     /// * `flip_x` - Whether to flip sprite horizontally
     pub fn overlay_sprite_row(
         &mut self,
-        data_low: u8,
-        data_high: u8,
+        mut data_low: u8,
+        mut data_high: u8,
         palette: u8,
         bg_priority: bool,
         priority: u8,
         flip_x: bool,
     ) {
-        // Ensure FIFO has 16 slots (pad with transparent pixels if needed)
-        while self.size < 16 {
-            let idx = ((self.read_pos + self.size) & 15) as usize;
+        // Ensure FIFO has space for overlay (SameBoy logic: size < 8 means we pad with transparent)
+        while self.size < 8 {
+            let idx = ((self.read_pos + self.size) & 7) as usize;
             self.pixels[idx] = FifoPixel::default();
             self.size += 1;
         }
 
-        for i in 0..8_u8 {
-            // Extract color from tile data
-            // Without flip: pixel 0 is bit 7, pixel 7 is bit 0
-            // With flip: pixel 0 is bit 0, pixel 7 is bit 7
-            let bit = if flip_x { i } else { 7 - i };
-            let color = ((data_low >> bit) & 1) | (((data_high >> bit) & 1) << 1);
+        let flip_xor = if flip_x { 0 } else { 7 };
 
-            let target_idx = ((self.read_pos + i) & 15) as usize;
+        // Iterate 8 pixels of the sprite (high to low)
+        for i in (0..8).rev() {
+            let pixel_color = ((data_low >> 7) & 1) | (((data_high >> 7) & 1) << 1);
+
+            // Calculate target index in circular buffer
+            let target_idx = (self.read_pos as usize + (i ^ flip_xor)) & 7;
             let target = &mut self.pixels[target_idx];
 
-            // Sprite pixels only replace if:
-            // - New pixel is non-transparent (color != 0)
-            // - Target pixel is transparent OR new sprite has higher priority (lower index)
-            if color != 0 && (target.color == 0 || priority < target.priority) {
-                target.color = color;
+            if pixel_color != 0 && (target.color == 0 || priority < target.priority) {
+                target.color = pixel_color;
                 target.palette = palette;
                 target.bg_priority = bg_priority;
                 target.priority = priority;
             }
+
+            data_low <<= 1;
+            data_high <<= 1;
         }
+    }
+
+    /// Injects a single transparent pixel at the front of the FIFO (glitch behavior).
+    /// Used for the window pixel insertion glitch on DMG.
+    /// Sets size to 1.
+    pub fn inject_glitch_pixel(&mut self) {
+        self.read_pos = self.read_pos.wrapping_sub(1) & 7;
+        self.pixels[self.read_pos as usize] = FifoPixel::default();
+        self.size = 1;
     }
 }
 

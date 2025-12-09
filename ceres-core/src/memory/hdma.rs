@@ -20,6 +20,8 @@ pub struct Hdma {
     len: u16,
     src: u16,
     state: HdmaState,
+    /// When starting HBlank DMA, if already in HBlank, start immediately
+    start_immediately: bool,
 }
 
 impl Hdma {
@@ -34,8 +36,26 @@ impl Hdma {
         ((!self.is_on() as u8) << 7) | self.hdma5
     }
 
+    #[must_use]
+    pub const fn is_transferring(&self) -> bool {
+        matches!(self.state, HdmaState::General)
+    }
+
+    #[must_use]
+    pub const fn has_multiple_steps_left(&self) -> bool {
+        self.len > 0x10
+    }
+
+    #[must_use]
+    pub const fn is_at_block_end(&self) -> bool {
+        (self.dst & 0xF) == 0xF
+    }
+
     pub fn write_hdma1(&mut self, val: u8) {
         self.src = (u16::from(val) << 8) | (self.src & 0xF0);
+        if self.src >= 0xE000 {
+            self.src |= 0xF000;
+        }
     }
 
     pub fn write_hdma2(&mut self, val: u8) {
@@ -50,7 +70,7 @@ impl Hdma {
         self.dst = (self.dst & 0x1F00) | u16::from(val & 0xF0);
     }
 
-    pub fn write_hdma5(&mut self, val: u8) {
+    pub fn write_hdma5(&mut self, val: u8, in_hblank: bool) {
         use HdmaState::{General, Sleep, WaitHBlank};
 
         debug_assert!(
@@ -66,7 +86,15 @@ impl Hdma {
 
         self.hdma5 = val & 0x7F;
         self.len = (u16::from(self.hdma5) + 1) * 0x10;
-        self.state = if val & 0x80 == 0 { General } else { WaitHBlank };
+
+        if val & 0x80 == 0 {
+            self.state = General;
+            self.start_immediately = false;
+        } else {
+            self.state = WaitHBlank;
+            // If we're already in HBlank when starting HBlank DMA, start immediately
+            self.start_immediately = in_hblank;
+        }
     }
 }
 
@@ -75,10 +103,14 @@ impl<A: AudioCallback> Gb<A> {
     pub fn run_hdma(&mut self) {
         use HdmaState::{General, HBlankDone, Sleep, WaitHBlank};
 
+        let in_hblank = matches!(self.ppu.mode(), ppu::Mode::HBlank);
+
         match self.hdma.state {
             General => (),
-            WaitHBlank if matches!(self.ppu.mode(), ppu::Mode::HBlank) => (),
-            HBlankDone if !matches!(self.ppu.mode(), ppu::Mode::HBlank) => {
+            WaitHBlank if in_hblank || self.hdma.start_immediately => {
+                self.hdma.start_immediately = false;
+            }
+            HBlankDone if !in_hblank => {
                 self.hdma.state = WaitHBlank;
                 return;
             }
@@ -102,6 +134,8 @@ impl<A: AudioCallback> Gb<A> {
             len
         };
 
+        let cycles_per_byte = if self.key1.is_enabled() { 4 } else { 2 };
+
         for _ in 0..len {
             // TODO: the same problems as normal DMA plus reading from
             // VRAM should copy garbage
@@ -109,17 +143,7 @@ impl<A: AudioCallback> Gb<A> {
             self.ppu.write_vram(self.hdma.dst, val);
             self.hdma.dst += 1;
             self.hdma.src += 1;
-        }
-
-        // can be outside of loop because HDMA should not
-        // access IO range (clk registers, ifr,
-        // etc..). If the PPU reads VRAM during an HDMA transfer it
-        // should be glitchy anyways
-        // FIXME: timings
-        if self.key1.is_enabled() {
-            self.advance_dots(i32::from(len) * 2 * 2);
-        } else {
-            self.advance_dots(i32::from(len) * 2);
+            self.advance_dots(cycles_per_byte);
         }
     }
 }

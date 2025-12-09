@@ -303,7 +303,10 @@ impl<A: AudioCallback> Gb<A> {
             HDMA2 if self.are_cgb_regs_available() => self.hdma.write_hdma2(val),
             HDMA3 if self.are_cgb_regs_available() => self.hdma.write_hdma3(val),
             HDMA4 if self.are_cgb_regs_available() => self.hdma.write_hdma4(val),
-            HDMA5 if self.are_cgb_regs_available() => self.hdma.write_hdma5(val),
+            HDMA5 if self.are_cgb_regs_available() => {
+                let in_hblank = matches!(self.ppu.mode(), crate::ppu::Mode::HBlank);
+                self.hdma.write_hdma5(val, in_hblank);
+            }
             BCPS if self.are_cgb_regs_available() => self.ppu.bcp_mut().set_spec(val),
             BCPD if self.are_cgb_regs_available() => {
                 if self.ppu.is_cgb_palettes_accessible() {

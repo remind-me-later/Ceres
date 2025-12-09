@@ -1,4 +1,4 @@
-use crate::{AudioCallback, Gb};
+use crate::{AudioCallback, Gb, Model};
 
 #[expect(
     clippy::arbitrary_source_item_ordering,
@@ -20,6 +20,13 @@ pub struct Dma {
     base_addr: u16,
     reg: u8,
     state: DmaState,
+}
+
+impl Dma {
+    #[must_use]
+    pub const fn is_active(&self) -> bool {
+        !matches!(self.state, DmaState::Inactive)
+    }
 }
 
 impl Dma {
@@ -108,11 +115,32 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     pub fn run_dma(&mut self) {
         while let Some((src, dst_offset)) = self.dma.step() {
-            // TODO: reading some ranges should cause problems, $DF is
-            // the maximum value accesible to OAM DMA (probably reads
-            // from echo RAM should work too, RESEARCH).
-            // what happens if reading from IO range? (garbage? 0xff?)
-            let val = self.read_mem(src);
+            // HDMA/DMA conflict: Skip DMA transfer if HDMA is in progress
+            // (except for the last byte of an HDMA block)
+            // Aligned with SameBoy line 1870-1871
+            if self.hdma.is_transferring()
+                && (self.hdma.has_multiple_steps_left() || !self.hdma.is_at_block_end())
+            {
+                continue;
+            }
+
+            // Source address handling aligned with SameBoy lines 1873-1883
+            let val = if src < 0xE000 {
+                // Normal read from ROM, RAM, or external RAM
+                self.read_mem(src)
+            } else {
+                // Reading from 0xE000-0xFFFF during DMA
+                match self.model {
+                    Model::Cgb => {
+                        // CGB: Invalid source, reads 0xFF
+                        0xFF
+                    }
+                    Model::Dmg | Model::Mgb => {
+                        // DMG/MGB: Mirrors 0xC000-0xDFFF (mask with 0xDFFF = ~0x2000)
+                        self.read_mem(src & 0xDFFF)
+                    }
+                }
+            };
 
             // TODO: writes from DMA can access OAM on modes 2 and 3
             // with some glitches (RESEARCH) and without trouble during

@@ -6,7 +6,6 @@ use ceres_test_runner::{
     load_test_rom,
     test_runner::{TestConfig, TestResult, TestRunner},
 };
-use std::path::PathBuf;
 
 /// Helper to run an AGE test ROM
 fn run_age_test(rom_path: &str, model: ceres_core::Model, timeout: u32) -> TestResult {

@@ -92,19 +92,6 @@ macro_rules! gbmicrotest {
     };
 }
 
-macro_rules! gbmicrotest_ignored {
-    ($name:ident, $rom:literal) => {
-        #[test]
-        #[ignore]
-        #[allow(non_snake_case)]
-        fn $name() {
-            // NOTE: 310 frames is enough for bootrom (~5 sec) + test
-            let result = run_gbmicrotest($rom, 500);
-            assert_eq!(result, TestResult::Passed);
-        }
-    };
-}
-
 // Generated test declarations
 gbmicrotest!(test_n000_oam_lock, "000-oam_lock.gb");
 gbmicrotest!(test_n000_write_to_x8000, "000-write_to_x8000.gb");
