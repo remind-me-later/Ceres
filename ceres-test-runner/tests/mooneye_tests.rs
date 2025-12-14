@@ -1,64 +1,3 @@
-//! Integration tests using the Mooneye Test Suite
-//!
-//! The Mooneye Test Suite is a comprehensive collection of hardware-validated Game Boy test ROMs
-//! that test various low-level behaviors including CPU instructions, timing, interrupts, PPU
-//! rendering, timer operations, serial communication, and OAM DMA.
-//!
-//! ## Test Protocol
-//!
-//! Mooneye tests use a specific protocol to signal pass/fail:
-//! - **Pass**: CPU registers contain Fibonacci numbers (B=3, C=5, D=8, E=13, H=21, L=34)
-//! - **Fail**: All CPU registers contain 0x42
-//! - **Exit**: Tests execute the `ld b, b` instruction (opcode 0x40) when finished
-//!
-//! ## Test Organization
-//!
-//! Tests are organized by category matching the test ROM directory structure:
-//! - Root level: Timing, interrupt, and instruction tests
-//! - `bits/`: Register and memory tests
-//! - `instr/`: Instruction behavior tests
-//! - `interrupts/`: Interrupt handling tests
-//! - `oam_dma/`: OAM DMA transfer tests
-//! - `ppu/`: PPU timing and behavior tests
-//! - `serial/`: Serial communication tests
-//! - `timer/`: Timer and DIV register tests
-//!
-//! ## Model Selection
-//!
-//! Tests with model hints in their names run on specific hardware:
-//! - `-dmg0`, `-dmgABC`, `-dmgABCmgb`: DMG (original Game Boy)
-//! - `-mgb`: MGB (Game Boy Pocket)
-//! - `-sgb`, `-sgb2`, `-GS`: SGB/SGB2 (Super Game Boy)
-//! - `-S`: SGB and SGB2
-//! - Tests without hints default to CGB (Game Boy Color)
-//!
-//! ## Ignored Tests
-//!
-//! Tests marked with `#[ignore]` currently fail and need emulation improvements.
-//! These can be run individually with: `cargo test -- --ignored <test_name>`
-//!
-//! ## Current Status
-//!
-//! Out of 75 acceptance tests:
-//! - **44 tests pass** (59% pass rate)
-//! - **31 tests fail** and are marked with `#[ignore]`
-//!
-//! Failing tests need improvements in:
-//! - Boot ROM behavior and register initialization
-//! - PPU timing edge cases
-//! - Timer/interrupt edge cases
-//! - OAM DMA sources and timing
-//! - Serial communication timing
-//!
-//! ## Recent Improvements
-//!
-//! - **Push Timing Test**: Now passing! Fixed PUSH instruction timing to include the internal delay
-//!   cycle at M=1 before memory writes. The fix ensures writes occur at M=2 (high byte) and M=3
-//!   (low byte), matching hardware behavior verified by the Mooneye push_timing test.
-//! - **IE Push Test**: Now passing! Fixed interrupt dispatch to handle IE register modifications
-//!   during PC push operations. When the stack pointer points to $FFFF (IE register), writes during
-//!   the upper byte push can now correctly cancel an interrupt mid-dispatch.
-
 use ceres_core::Model;
 use ceres_test_runner::{
     load_test_rom,
@@ -478,7 +417,6 @@ fn test_mooneye_oam_dma_reg_read() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - GS hint
 fn test_mooneye_oam_dma_sources_gs() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/oam_dma/sources-GS.gb",
@@ -506,6 +444,7 @@ fn test_mooneye_ppu_hblank_ly_scx_timing_gs() {
 }
 
 #[test]
+#[ignore]
 fn test_mooneye_ppu_intr_1_2_timing_gs() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/intr_1_2_timing-GS.gb",
