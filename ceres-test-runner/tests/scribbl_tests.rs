@@ -86,7 +86,7 @@ fn test_scribbl_lycscx_dmg() {
     let result = run_scribbl_test(
         "scribbltests/lycscx/lycscx.gb",
         "scribbltests/lycscx/lycscx-cgb-dmg.png",
-        Model::Dmg,
+        Model::DmgB,
         SCRIBBL_TIMEOUT,
     );
     assert_eq!(result, TestResult::Passed, "lycscx test failed (DMG)");
@@ -97,7 +97,7 @@ fn test_scribbl_lycscx_cgb() {
     let result = run_scribbl_test(
         "scribbltests/lycscx/lycscx.gb",
         "scribbltests/lycscx/lycscx-cgb-dmg.png",
-        Model::Cgb,
+        Model::CgbE,
         SCRIBBL_TIMEOUT,
     );
     assert_eq!(result, TestResult::Passed, "lycscx test failed (CGB)");
@@ -112,7 +112,7 @@ fn test_scribbl_lycscy_dmg() {
     let result = run_scribbl_test(
         "scribbltests/lycscy/lycscy.gb",
         "scribbltests/lycscy/lycscy-cgb-dmg.png",
-        Model::Dmg,
+        Model::DmgB,
         SCRIBBL_TIMEOUT,
     );
     assert_eq!(result, TestResult::Passed, "lycscy test failed (DMG)");
@@ -123,7 +123,7 @@ fn test_scribbl_lycscy_cgb() {
     let result = run_scribbl_test(
         "scribbltests/lycscy/lycscy.gb",
         "scribbltests/lycscy/lycscy-cgb-dmg.png",
-        Model::Cgb,
+        Model::CgbE,
         SCRIBBL_TIMEOUT,
     );
     assert_eq!(result, TestResult::Passed, "lycscy test failed (CGB)");
@@ -138,7 +138,7 @@ fn test_scribbl_palettely_dmg() {
     let result = run_scribbl_test(
         "scribbltests/palettely/palettely.gb",
         "scribbltests/palettely/palettely-dmg.png",
-        Model::Dmg,
+        Model::DmgB,
         SCRIBBL_TIMEOUT,
     );
     assert_eq!(result, TestResult::Passed, "palettely test failed (DMG)");
@@ -149,7 +149,7 @@ fn test_scribbl_palettely_cgb() {
     let result = run_scribbl_test(
         "scribbltests/palettely/palettely.gb",
         "scribbltests/palettely/palettely-cgb.png",
-        Model::Cgb,
+        Model::CgbE,
         SCRIBBL_TIMEOUT,
     );
     assert_eq!(result, TestResult::Passed, "palettely test failed (CGB)");
@@ -164,7 +164,7 @@ fn test_scribbl_scxly_dmg() {
     let result = run_scribbl_test(
         "scribbltests/scxly/scxly.gb",
         "scribbltests/scxly/scxly-dmg.png",
-        Model::Dmg,
+        Model::DmgB,
         SCRIBBL_TIMEOUT,
     );
     assert_eq!(result, TestResult::Passed, "scxly test failed (DMG)");
@@ -176,7 +176,7 @@ fn test_scribbl_scxly_cgb() {
     let result = run_scribbl_test(
         "scribbltests/scxly/scxly.gb",
         "scribbltests/scxly/scxly-cgb.png",
-        Model::Cgb,
+        Model::CgbE,
         SCRIBBL_TIMEOUT,
     );
     assert_eq!(result, TestResult::Passed, "scxly test failed (CGB)");
@@ -192,7 +192,7 @@ fn test_scribbl_statcount_auto_dmg() {
     let result = run_scribbl_test(
         "scribbltests/statcount/statcount-auto.gb",
         "scribbltests/statcount/statcount_auto-cgb-dmg.png",
-        Model::Dmg,
+        Model::DmgB,
         STATCOUNT_AUTO_TIMEOUT,
     );
     assert_eq!(
@@ -208,7 +208,7 @@ fn test_scribbl_statcount_auto_cgb() {
     let result = run_scribbl_test(
         "scribbltests/statcount/statcount-auto.gb",
         "scribbltests/statcount/statcount_auto-cgb-dmg.png",
-        Model::Cgb,
+        Model::CgbE,
         STATCOUNT_AUTO_TIMEOUT,
     );
     assert_eq!(

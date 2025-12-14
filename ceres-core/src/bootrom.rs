@@ -24,9 +24,11 @@ impl Bootrom {
 
     pub const fn new(model: Model) -> Self {
         let data = match model {
-            Model::Dmg => DMG_BOOTROM,
+            Model::DmgB => DMG_BOOTROM,
             Model::Mgb => MGB_BOOTROM,
-            Model::Cgb => CGB_BOOTROM,
+            Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD | Model::CgbE => {
+                CGB_BOOTROM
+            }
         };
         Self {
             data,

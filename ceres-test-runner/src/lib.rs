@@ -56,7 +56,12 @@ pub fn expected_screenshot_path(relative_path: &str, model: ceres_core::Model) -
     // Try model-specific screenshot first (e.g., "instr_timing-cgb.png")
     let rom_stem = rom_path.file_stem()?.to_str()?;
     let model_suffix = match model {
-        ceres_core::Model::Cgb => "cgb",
+        ceres_core::Model::Cgb0
+        | ceres_core::Model::CgbA
+        | ceres_core::Model::CgbB
+        | ceres_core::Model::CgbC
+        | ceres_core::Model::CgbD
+        | ceres_core::Model::CgbE => "cgb",
         _ => "dmg", // DMG, MGB, and unknown models use DMG screenshots
     };
 
@@ -70,7 +75,12 @@ pub fn expected_screenshot_path(relative_path: &str, model: ceres_core::Model) -
     // CGB: _cgb_c.png (assuming CGB-C behavior)
     // DMG: _dmg_blob.png
     if match model {
-        ceres_core::Model::Cgb => {
+        ceres_core::Model::Cgb0
+        | ceres_core::Model::CgbA
+        | ceres_core::Model::CgbB
+        | ceres_core::Model::CgbC
+        | ceres_core::Model::CgbD
+        | ceres_core::Model::CgbE => {
             let p = rom_dir.join(format!("{rom_stem}_cgb_c.png"));
             if p.exists() {
                 return Some(p);

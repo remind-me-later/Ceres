@@ -240,7 +240,7 @@ impl Stream {
 
         let config = cpal::StreamConfig {
             channels: 2,
-            sample_rate: SAMPLE_RATE as u32,
+            sample_rate: cpal::SampleRate(SAMPLE_RATE as u32),
             buffer_size: cpal::BufferSize::Fixed(BUFFER_SIZE),
         };
 

@@ -23,13 +23,6 @@ pub struct Dma {
 }
 
 impl Dma {
-    #[must_use]
-    pub const fn is_active(&self) -> bool {
-        !matches!(self.state, DmaState::Inactive)
-    }
-}
-
-impl Dma {
     pub const fn advance_dots(&mut self, dots: i32) {
         if !matches!(self.state, DmaState::Inactive) {
             #[expect(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
@@ -131,11 +124,16 @@ impl<A: AudioCallback> Gb<A> {
             } else {
                 // Reading from 0xE000-0xFFFF during DMA
                 match self.model {
-                    Model::Cgb => {
+                    Model::Cgb0
+                    | Model::CgbA
+                    | Model::CgbB
+                    | Model::CgbC
+                    | Model::CgbD
+                    | Model::CgbE => {
                         // CGB: Invalid source, reads 0xFF
                         0xFF
                     }
-                    Model::Dmg | Model::Mgb => {
+                    Model::DmgB | Model::Mgb => {
                         // DMG/MGB: Mirrors 0xC000-0xDFFF (mask with 0xDFFF = ~0x2000)
                         self.read_mem(src & 0xDFFF)
                     }

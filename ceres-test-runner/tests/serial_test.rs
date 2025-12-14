@@ -40,7 +40,7 @@ fn test_serial_output_capture() {
 
     let config = TestConfig {
         capture_serial: true,
-        model: ceres_core::Model::Dmg,
+        model: ceres_core::Model::DmgB,
         timeout_frames: 100, // Short timeout for this test
         expected_screenshot: None,
         button_events: Vec::new(),

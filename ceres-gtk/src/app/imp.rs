@@ -29,7 +29,7 @@ impl Application {
 
             // Set model property
             let model_str = match options.model() {
-                ceres_std::Model::Dmg => "dmg",
+                ceres_std::Model::DmgB => "dmg",
                 ceres_std::Model::Mgb => "mgb",
                 _ => "cgb",
             };

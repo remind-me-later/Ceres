@@ -312,8 +312,13 @@ impl<A: AudioCallback> Gb<A> {
 #[derive(Clone, Copy, Default)]
 pub enum Model {
     #[default]
-    Cgb,
-    Dmg,
+    CgbE,
+    Cgb0,
+    CgbA,
+    CgbB,
+    CgbC,
+    CgbD,
+    DmgB,
     Mgb,
 }
 
@@ -328,8 +333,10 @@ enum CgbMode {
 impl From<Model> for CgbMode {
     fn from(model: Model) -> Self {
         match model {
-            Model::Dmg | Model::Mgb => Self::Dmg,
-            Model::Cgb => Self::Cgb,
+            Model::DmgB | Model::Mgb => Self::Dmg,
+            Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD | Model::CgbE => {
+                Self::Cgb
+            }
         }
     }
 }

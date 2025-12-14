@@ -38,11 +38,11 @@ fn test_dmg_acid2_dmg() {
     };
 
     let config = TestConfig {
-        model: ceres_core::Model::Dmg,
+        model: ceres_core::Model::DmgB,
         timeout_frames: timeouts::DMG_ACID2,
         expected_screenshot: expected_screenshot_path(
             "dmg-acid2/dmg-acid2.gb",
-            ceres_core::Model::Dmg,
+            ceres_core::Model::DmgB,
         ),
         ..TestConfig::default()
     };
@@ -68,11 +68,11 @@ fn test_dmg_acid2_cgb() {
     };
 
     let config = TestConfig {
-        model: ceres_core::Model::Cgb,
+        model: ceres_core::Model::CgbE,
         timeout_frames: timeouts::DMG_ACID2,
         expected_screenshot: expected_screenshot_path(
             "dmg-acid2/dmg-acid2.gb",
-            ceres_core::Model::Cgb,
+            ceres_core::Model::CgbE,
         ),
         ..TestConfig::default()
     };
@@ -102,7 +102,7 @@ fn debug_save_dmg_acid2_screenshot() {
     };
 
     let config = TestConfig {
-        model: ceres_core::Model::Dmg,
+        model: ceres_core::Model::DmgB,
         timeout_frames: timeouts::DMG_ACID2,
         expected_screenshot: None, // Don't compare, just run
         ..TestConfig::default()

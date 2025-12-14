@@ -71,27 +71,27 @@ fn run_samesuite_test(path: &str, model: Model) -> TestResult {
 
 #[test]
 fn test_samesuite_gbc_dma_cont() {
-    let result = run_samesuite_test("same-suite/dma/gbc_dma_cont.gb", Model::Cgb);
+    let result = run_samesuite_test("same-suite/dma/gbc_dma_cont.gb", Model::CgbE);
     assert_eq!(result, TestResult::Passed, "dma/gbc_dma_cont test failed");
 }
 
 #[test]
 fn test_samesuite_gdma_addr_mask() {
-    let result = run_samesuite_test("same-suite/dma/gdma_addr_mask.gb", Model::Cgb);
+    let result = run_samesuite_test("same-suite/dma/gdma_addr_mask.gb", Model::CgbE);
     assert_eq!(result, TestResult::Passed, "dma/gdma_addr_mask test failed");
 }
 
 #[test]
 #[ignore] // TODO: Enable when passing - HDMA with LCD off behavior needs fixing
 fn test_samesuite_hdma_lcd_off() {
-    let result = run_samesuite_test("same-suite/dma/hdma_lcd_off.gb", Model::Cgb);
+    let result = run_samesuite_test("same-suite/dma/hdma_lcd_off.gb", Model::CgbE);
     assert_eq!(result, TestResult::Passed, "dma/hdma_lcd_off test failed");
 }
 
 #[test]
 #[ignore] // TODO: Enable when passing - HDMA mode 0 (General Purpose DMA) needs fixing
 fn test_samesuite_hdma_mode0() {
-    let result = run_samesuite_test("same-suite/dma/hdma_mode0.gb", Model::Cgb);
+    let result = run_samesuite_test("same-suite/dma/hdma_mode0.gb", Model::CgbE);
     assert_eq!(result, TestResult::Passed, "dma/hdma_mode0 test failed");
 }
 
@@ -101,7 +101,7 @@ fn test_samesuite_hdma_mode0() {
 
 #[test]
 fn test_samesuite_ei_delay_halt() {
-    let result = run_samesuite_test("same-suite/interrupt/ei_delay_halt.gb", Model::Cgb);
+    let result = run_samesuite_test("same-suite/interrupt/ei_delay_halt.gb", Model::CgbE);
     assert_eq!(
         result,
         TestResult::Passed,

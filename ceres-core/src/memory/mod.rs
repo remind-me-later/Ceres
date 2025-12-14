@@ -6,7 +6,7 @@ mod svbk;
 mod wram;
 
 use crate::{AudioCallback, Model};
-use crate::{CgbMode, Gb, Model::Cgb};
+use crate::{CgbMode, Gb};
 pub use dma::Dma;
 pub use hdma::Hdma;
 pub use hram::Hram;
@@ -194,7 +194,15 @@ impl<A: AudioCallback> Gb<A> {
         match addr {
             0x0000..=0x00FF => self.read_boot_or_cart(addr),
             0x0200..=0x08FF => {
-                if matches!(self.model, Model::Cgb) {
+                if matches!(
+                    self.model,
+                    Model::Cgb0
+                        | Model::CgbA
+                        | Model::CgbB
+                        | Model::CgbC
+                        | Model::CgbD
+                        | Model::CgbE
+                ) {
                     self.read_boot_or_cart(addr)
                 } else {
                     #[cfg(feature = "game_genie")]
@@ -285,7 +293,11 @@ impl<A: AudioCallback> Gb<A> {
             OBP1 => self.ppu.write_obp1(val),
             WY => self.ppu.write_wy(val),
             WX => self.ppu.write_wx(val),
-            KEY0 if matches!(self.model, Cgb) => {
+            KEY0 if matches!(
+                self.model,
+                Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD | Model::CgbE
+            ) =>
+            {
                 // FIXME: causes broken palettes on GB games played on CGB
                 // should we allow all cgb functions to be observable from a GB rom?
                 if self.bootrom.is_enabled() && val == 4 {

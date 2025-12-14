@@ -100,9 +100,14 @@ impl<'a> Writer<'a> {
         // Model
         {
             let model = match gb.model {
-                crate::Model::Dmg => "GD  ",
+                crate::Model::DmgB => "GDB ",
                 crate::Model::Mgb => "GM  ",
-                crate::Model::Cgb => "CC  ",
+                crate::Model::Cgb0 => "CC0 ",
+                crate::Model::CgbA => "CCA ",
+                crate::Model::CgbB => "CCB ",
+                crate::Model::CgbC => "CCC ",
+                crate::Model::CgbD => "CCD ",
+                crate::Model::CgbE => "CCE ",
             };
 
             self.write_all(model.as_bytes());

@@ -30,8 +30,8 @@ fn run_gbmicrotest(rom_name: &str, frames: u32) -> TestResult {
 
     let config = TestConfig {
         timeout_frames: frames,
-        model: ceres_core::Model::Dmg, // gbmicrotest targets DMG
-        capture_serial: false,         // These tests don't use serial output
+        model: ceres_core::Model::DmgB, // gbmicrotest targets DMG
+        capture_serial: false,          // These tests don't use serial output
         ..TestConfig::default()
     };
 

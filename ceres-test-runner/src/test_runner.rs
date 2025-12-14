@@ -79,7 +79,7 @@ impl Default for TestConfig {
     fn default() -> Self {
         Self {
             capture_serial: true,
-            model: Model::Cgb,
+            model: Model::CgbE,
             timeout_frames: DEFAULT_TIMEOUT_FRAMES,
             expected_screenshot: None,
             button_events: Vec::new(),

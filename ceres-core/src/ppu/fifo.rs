@@ -171,15 +171,6 @@ impl PixelFifo {
             data_high <<= 1;
         }
     }
-
-    /// Injects a single transparent pixel at the front of the FIFO (glitch behavior).
-    /// Used for the window pixel insertion glitch on DMG.
-    /// Sets size to 1.
-    pub fn inject_glitch_pixel(&mut self) {
-        self.read_pos = self.read_pos.wrapping_sub(1) & 7;
-        self.pixels[self.read_pos as usize] = FifoPixel::default();
-        self.size = 1;
-    }
 }
 
 #[cfg(test)]

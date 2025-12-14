@@ -59,7 +59,7 @@ fn test_turtle_window_y_trigger_dmg() {
     let result = run_turtle_test(
         "turtle-tests/window_y_trigger/window_y_trigger.gb",
         "turtle-tests/window_y_trigger/window_y_trigger.png",
-        Model::Dmg,
+        Model::DmgB,
         TURTLE_TIMEOUT,
     );
     assert_eq!(
@@ -74,7 +74,7 @@ fn test_turtle_window_y_trigger_cgb() {
     let result = run_turtle_test(
         "turtle-tests/window_y_trigger/window_y_trigger.gb",
         "turtle-tests/window_y_trigger/window_y_trigger.png",
-        Model::Cgb,
+        Model::CgbE,
         TURTLE_TIMEOUT,
     );
     assert_eq!(
@@ -93,7 +93,7 @@ fn test_turtle_window_y_trigger_wx_offscreen_dmg() {
     let result = run_turtle_test(
         "turtle-tests/window_y_trigger_wx_offscreen/window_y_trigger_wx_offscreen.gb",
         "turtle-tests/window_y_trigger_wx_offscreen/window_y_trigger_wx_offscreen.png",
-        Model::Dmg,
+        Model::DmgB,
         TURTLE_TIMEOUT,
     );
     assert_eq!(
@@ -108,7 +108,7 @@ fn test_turtle_window_y_trigger_wx_offscreen_cgb() {
     let result = run_turtle_test(
         "turtle-tests/window_y_trigger_wx_offscreen/window_y_trigger_wx_offscreen.gb",
         "turtle-tests/window_y_trigger_wx_offscreen/window_y_trigger_wx_offscreen.png",
-        Model::Cgb,
+        Model::CgbE,
         TURTLE_TIMEOUT,
     );
     assert_eq!(

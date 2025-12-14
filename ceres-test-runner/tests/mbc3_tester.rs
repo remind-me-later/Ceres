@@ -32,7 +32,7 @@ fn run_mbc3_tester(model: ceres_core::Model, screenshot_name: &str) -> TestResul
 #[test]
 #[ignore]
 fn test_mbc3_tester_cgb() {
-    let result = run_mbc3_tester(ceres_core::Model::Cgb, "mbc3-tester-cgb.png");
+    let result = run_mbc3_tester(ceres_core::Model::CgbE, "mbc3-tester-cgb.png");
 
     match &result {
         TestResult::Passed => println!("✓ MBC3 tester passed (CGB mode)"),
@@ -57,7 +57,7 @@ fn test_mbc3_tester_cgb() {
 #[test]
 #[ignore]
 fn test_mbc3_tester_dmg() {
-    let result = run_mbc3_tester(ceres_core::Model::Dmg, "mbc3-tester-dmg.png");
+    let result = run_mbc3_tester(ceres_core::Model::DmgB, "mbc3-tester-dmg.png");
 
     match &result {
         TestResult::Passed => println!("✓ MBC3 tester passed (DMG mode)"),

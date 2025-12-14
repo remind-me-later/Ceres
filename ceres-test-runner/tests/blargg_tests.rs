@@ -21,7 +21,7 @@ fn run_blargg_test(path: &str, timeout: u32) -> TestResult {
 
     let config = TestConfig {
         timeout_frames: timeout,
-        expected_screenshot: expected_screenshot_path(path, ceres_core::Model::Cgb),
+        expected_screenshot: expected_screenshot_path(path, ceres_core::Model::CgbE),
         ..TestConfig::default()
     };
 

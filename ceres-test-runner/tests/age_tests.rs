@@ -65,25 +65,25 @@ macro_rules! age_test {
 age_test!(
     test_age_oam_read_dmgc_cgb_bc,
     "age-test-roms/oam/oam-read-dmgC-cgbBC.gb",
-    ceres_core::Model::Dmg
+    ceres_core::Model::DmgB
 );
 age_test!(
     test_age_oam_write_dmgc,
     "age-test-roms/oam/oam-write-dmgC.gb",
-    ceres_core::Model::Dmg
+    ceres_core::Model::DmgB
 );
 
 // CGB-compatible OAM tests
 age_test!(
     test_age_oam_read_cgb_e,
     "age-test-roms/oam/oam-read-cgbE.gb",
-    ceres_core::Model::Cgb
+    ceres_core::Model::CgbE
 );
 age_test!(
     test_age_oam_write_cgb_bce,
     "age-test-roms/oam/oam-write-cgbBCE.gb",
-    ceres_core::Model::Cgb
+    ceres_core::Model::CgbE
 );
 
 // Other AGE tests (example)
-// age_test!(test_age_m3_bg_bgp, "age-test-roms/m3-bg-bgp/m3-bg-bgp.gb", ceres_core::Model::Dmg);
+// age_test!(test_age_m3_bg_bgp, "age-test-roms/m3-bg-bgp/m3-bg-bgp.gb", ceres_core::Model::DmgB);
