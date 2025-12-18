@@ -1,7 +1,7 @@
 use cpal::traits::{DeviceTrait as _, HostTrait as _, StreamTrait as _};
 use ringbuf::{
-    StaticRb,
-    traits::{Consumer as _, Observer as _},
+    HeapRb,
+    traits::{Consumer as _, Observer as _, Producer as _, Split as _},
 };
 use rubato::Resampler as _;
 use {std::sync::Arc, std::sync::Mutex};
@@ -12,30 +12,35 @@ const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
 const SAMPLE_RATE: i32 = 48000;
 
 // Originally both the emulator and host platform output samples at the same rate,
+
 // as time passes one begins to shift away from the other, so we need to resample the emulator output
+
 const ORIG_RATIO: f64 = 1.0;
+
 const MAX_RESAMPLE_RATIO_RELATIVE: f64 = 5.0;
 
 type ProcessSample = f32;
 
-struct Buffers {
+type Rb = HeapRb<ceres_core::Sample>;
+type RbProducer = <Rb as ringbuf::traits::Split>::Prod;
+type RbConsumer = <Rb as ringbuf::traits::Split>::Cons;
+
+struct AudioProcessor {
+    buffer_input_left: Vec<ceres_core::Sample>,
+    buffer_input_right: Vec<ceres_core::Sample>,
     input_buf: Vec<Vec<ProcessSample>>,
-    left: StaticRb<ceres_core::Sample, RING_BUFFER_SIZE>,
+    left_consumer: Arc<Mutex<RbConsumer>>,
     output_buf: Vec<Vec<ProcessSample>>,
     resampler: rubato::SincFixedOut<ProcessSample>,
-    right: StaticRb<ceres_core::Sample, RING_BUFFER_SIZE>,
+    right_consumer: Arc<Mutex<RbConsumer>>,
     volume: Arc<Mutex<f32>>,
 }
 
-impl Buffers {
-    fn clear(&mut self) {
-        self.left.clear();
-        self.right.clear();
-    }
-
-    fn compute_resample_ratio(&self) -> f64 {
+impl AudioProcessor {
+    fn compute_resample_ratio(&self, occupied: usize) -> f64 {
         #[expect(clippy::cast_precision_loss)]
-        let occupied = self.num_samples() as f64;
+        let occupied = occupied as f64;
+
         #[expect(clippy::cast_precision_loss)]
         let target = RING_BUFFER_SIZE as f64 / 2.0;
         let error = (occupied - target) / target;
@@ -52,8 +57,11 @@ impl Buffers {
         (ORIG_RATIO * (1.0 + adjustment))
             .clamp(ORIG_RATIO * 0.85, ORIG_RATIO * MAX_RESAMPLE_RATIO_RELATIVE)
     }
-
-    fn new(volume: Arc<Mutex<f32>>) -> Result<Self, Error> {
+    fn new(
+        volume: Arc<Mutex<f32>>,
+        left_consumer: Arc<Mutex<RbConsumer>>,
+        right_consumer: Arc<Mutex<RbConsumer>>,
+    ) -> Result<Self, Error> {
         let chunk_size = BUFFER_SIZE as usize;
 
         let resampler = rubato::SincFixedOut::<ProcessSample>::new(
@@ -75,137 +83,149 @@ impl Buffers {
         let output_buf = resampler.output_buffer_allocate(true);
 
         Ok(Self {
-            left: StaticRb::default(),
-            right: StaticRb::default(),
             resampler,
             output_buf,
             input_buf,
             volume,
+            left_consumer,
+            right_consumer,
+            buffer_input_left: Vec::with_capacity(chunk_size * 2),
+            buffer_input_right: Vec::with_capacity(chunk_size * 2),
         })
     }
 
-    fn num_samples(&self) -> usize {
-        self.left.occupied_len()
-    }
-
-    fn push_samples(&mut self, l: ceres_core::Sample, r: ceres_core::Sample) {
-        use ringbuf::traits::RingBuffer as _;
-
-        self.left.push_overwrite(l);
-        self.right.push_overwrite(r);
-    }
-
     fn write_samples_interleaved(&mut self, buffer: &mut [ProcessSample]) {
-        use ringbuf::traits::Consumer as _;
+        // 1. Lock consumer to check status and set resample ratio
+        let needed;
+        let num_samples;
+        {
+            let left = match self.left_consumer.lock() {
+                Ok(l) => l,
+                Err(_) => {
+                    buffer.fill(0.0); // Silence on poisoned lock
+                    return;
+                }
+            };
+            num_samples = left.occupied_len();
+            let ratio = self.compute_resample_ratio(num_samples);
 
-        let new_ratio = self.compute_resample_ratio();
-        self.resampler
-            .set_resample_ratio(new_ratio, true)
-            .unwrap_or_else(|e| eprintln!("Failed to set resample ratio: {e}"));
+            // This is fine because the emulator thread does NOT need this lock.
+            self.resampler
+                .set_resample_ratio(ratio, true)
+                .unwrap_or_else(|e| eprintln!("Failed to set resample ratio: {e}"));
 
-        let needed = self.resampler.input_frames_next();
-        let got = self.num_samples();
-
-        if needed > got {
-            // eprintln!("Buffer underrun, needed: {needed}, got: {got}");
-            return;
+            needed = self.resampler.input_frames_next();
         }
 
+        // 2. Underrun Check
+        if needed > num_samples {
+            eprintln!("Underrun: needed {}, got {}", needed, num_samples);
+            buffer.fill(0.0);
+            return;
+        }
+        // 3. Pop Samples
+        {
+            let mut left = match self.left_consumer.lock() {
+                Ok(l) => l,
+                Err(_) => {
+                    buffer.fill(0.0);
+                    return;
+                }
+            };
+            let mut right = match self.right_consumer.lock() {
+                Ok(r) => r,
+                Err(_) => {
+                    buffer.fill(0.0);
+                    return;
+                }
+            };
+
+            self.buffer_input_left.clear();
+            self.buffer_input_right.clear();
+
+            self.buffer_input_left.extend(left.pop_iter().take(needed));
+            self.buffer_input_right
+                .extend(right.pop_iter().take(needed));
+        }
+
+        // 4. Prepare Resampler Input (No locks held)
         let (input_buf_left, input_buf_right) = self.input_buf.split_at_mut(1);
 
-        if let Ok(vol) = self.volume.lock() {
-            for ((l, l1), (r, r1)) in input_buf_left[0]
-                .iter_mut()
-                .zip(self.left.pop_iter())
-                .zip(input_buf_right[0].iter_mut().zip(self.right.pop_iter()))
-                .take(needed)
-            {
-                *l = f32::from(l1) / f32::from(i16::MAX) * *vol;
-                *r = f32::from(r1) / f32::from(i16::MAX) * *vol;
+        // Get volume and immediately unlock
+        let vol = match self.volume.lock() {
+            Ok(vol) => *vol,
+            Err(_) => {
+                buffer.fill(0.0);
+                return;
             }
+        };
 
-            match self
-                .resampler
-                .process_into_buffer(&self.input_buf, &mut self.output_buf, None)
-            {
-                Ok(_) => {
-                    buffer
-                        .chunks_exact_mut(2)
-                        .zip(self.output_buf[0].iter().zip(self.output_buf[1].iter()))
-                        .for_each(|(out, (&sample_l, &sample_r))| {
-                            out[0] = sample_l;
-                            out[1] = sample_r;
-                        });
-                }
-                Err(e) => {
-                    eprintln!("Resampler error: {e}");
-                }
+        for ((l, &l1), (r, &r1)) in input_buf_left[0]
+            .iter_mut()
+            .zip(self.buffer_input_left.iter())
+            .zip(
+                input_buf_right[0]
+                    .iter_mut()
+                    .zip(self.buffer_input_right.iter()),
+            )
+            .take(needed)
+        {
+            *l = f32::from(l1) / f32::from(i16::MAX) * vol;
+            *r = f32::from(r1) / f32::from(i16::MAX) * vol;
+        }
+
+        // 5. Resample (Heavy Work)
+        match self
+            .resampler
+            .process_into_buffer(&self.input_buf, &mut self.output_buf, None)
+        {
+            Ok(_) => {
+                buffer
+                    .chunks_exact_mut(2)
+                    .zip(self.output_buf[0].iter().zip(self.output_buf[1].iter()))
+                    .for_each(|(out, (&sample_l, &sample_r))| {
+                        out[0] = sample_l;
+                        out[1] = sample_r;
+                    });
+            }
+            Err(e) => {
+                eprintln!("Resampler error: {e}");
+                buffer.fill(0.0); // Silence on error
             }
         }
     }
 }
-
-// struct BufferCallbackWrapper {
-//     inner: Arc<Mutex<Buffers>>,
-//     output_buf: [f32; RING_BUFFER_SIZE],
-// }
-
-// impl BufferCallbackWrapper {
-//     const fn new(inner: Arc<Mutex<Buffers>>) -> Self {
-//         Self {
-//             inner,
-//             output_buf: [0.0; RING_BUFFER_SIZE],
-//         }
-//     }
-// }
-
-// impl audio::AudioCallback<f32> for BufferCallbackWrapper {
-//     fn callback(&mut self, stream: &mut audio::AudioStream, requested: i32) {
-//         #[expect(clippy::cast_sign_loss)]
-//         let requested_usize = requested as usize;
-
-//         {
-//             #[expect(clippy::expect_used)]
-//             let mut buffers = self
-//                 .inner
-//                 .lock()
-//                 .expect("SDL3: Failed to lock audio buffer");
-
-//             buffers.write_samples_interleaved(&mut self.output_buf[..requested_usize]);
-//         }
-
-//         #[expect(clippy::expect_used)]
-//         stream
-//             .put_data_f32(&self.output_buf[..requested_usize])
-//             .expect("SDL3: Failed to put audio data");
-//     }
-// }
 
 #[derive(Clone)]
 pub struct AudioCallbackImpl {
-    buffer: Arc<Mutex<Buffers>>,
+    left: Arc<Mutex<RbProducer>>,
+    right: Arc<Mutex<RbProducer>>,
 }
 
 impl AudioCallbackImpl {
-    fn clear(&self) {
-        self.buffer.lock().map(|mut b| b.clear()).ok();
-    }
-
-    const fn new(buffer: Arc<Mutex<Buffers>>) -> Self {
-        Self { buffer }
+    const fn new(left: Arc<Mutex<RbProducer>>, right: Arc<Mutex<RbProducer>>) -> Self {
+        Self { left, right }
     }
 }
 
 impl ceres_core::AudioCallback for AudioCallbackImpl {
     fn audio_sample(&self, l: ceres_core::Sample, r: ceres_core::Sample) {
-        if let Ok(mut buffer) = self.buffer.lock() {
-            buffer.push_samples(l, r);
+        // Emulator thread locks ONLY the Producer side.
+        // This never blocks on the Audio Thread.
+        if let Ok(mut left) = self.left.lock() {
+            left.try_push(l).ok();
+        }
+        if let Ok(mut right) = self.right.lock() {
+            right.try_push(r).ok();
         }
     }
 }
 
 #[expect(clippy::struct_field_names)]
 pub struct Stream {
+    // We hold references to consumers to clear them on pause
+    left_consumer: Arc<Mutex<RbConsumer>>,
+    right_consumer: Arc<Mutex<RbConsumer>>,
     ring_buffer: AudioCallbackImpl,
     sample_rate: i32,
     stream: cpal::Stream,
@@ -232,23 +252,36 @@ impl Stream {
         let volume = Arc::new(Mutex::new(INITIAL_VOLUME));
         let buffer_volume = Arc::clone(&volume);
 
-        let ring_buffer = Arc::new(Mutex::new(Buffers::new(buffer_volume)?));
-        let ring_buffer_clone = Arc::clone(&ring_buffer);
+        // Initialize Ring Buffers
+        let left_rb = Rb::new(RING_BUFFER_SIZE);
+        let right_rb = Rb::new(RING_BUFFER_SIZE);
+
+        let (left_prod, left_cons) = left_rb.split();
+        let (right_prod, right_cons) = right_rb.split();
+
+        let left_prod = Arc::new(Mutex::new(left_prod));
+        let right_prod = Arc::new(Mutex::new(right_prod));
+        let left_cons = Arc::new(Mutex::new(left_cons));
+        let right_cons = Arc::new(Mutex::new(right_cons));
+
+        let mut audio_processor = AudioProcessor::new(
+            buffer_volume,
+            Arc::clone(&left_cons),
+            Arc::clone(&right_cons),
+        )?;
 
         let host = cpal::default_host();
         let device = host.default_output_device().ok_or(Error::GetOutputDevice)?;
 
         let config = cpal::StreamConfig {
             channels: 2,
-            sample_rate: cpal::SampleRate(SAMPLE_RATE as u32),
+            sample_rate: SAMPLE_RATE as u32,
             buffer_size: cpal::BufferSize::Fixed(BUFFER_SIZE),
         };
 
         let error_callback = |err| eprintln!("an AudioError occurred on stream: {err}");
         let data_callback = move |buffer: &mut [ProcessSample], _: &_| {
-            if let Ok(mut ring) = ring_buffer_clone.lock() {
-                ring.write_samples_interleaved(buffer);
-            }
+            audio_processor.write_samples_interleaved(buffer);
         };
 
         let stream = device
@@ -257,7 +290,9 @@ impl Stream {
 
         let res = Self {
             stream,
-            ring_buffer: AudioCallbackImpl::new(ring_buffer),
+            ring_buffer: AudioCallbackImpl::new(left_prod, right_prod),
+            left_consumer: left_cons,
+            right_consumer: right_cons,
             volume,
             volume_before_mute: None,
             sample_rate: SAMPLE_RATE,
@@ -270,8 +305,15 @@ impl Stream {
 
     pub fn pause(&self) -> Result<(), Error> {
         self.stream.pause().map_err(|_err| Error::PauseStream)?;
-        // Avoids audio stretching after unpausing
-        self.ring_buffer.clear();
+
+        // Clear buffers on pause
+        if let Ok(mut l) = self.left_consumer.lock() {
+            l.clear();
+        }
+        if let Ok(mut r) = self.right_consumer.lock() {
+            r.clear();
+        }
+
         Ok(())
     }
 
@@ -296,10 +338,10 @@ impl Stream {
     }
 
     pub fn unmute(&mut self) {
-        if let Some(vol) = self.volume_before_mute.take()
-            && let Ok(mut v) = self.volume.lock()
-        {
-            *v = vol;
+        if let Some(vol) = self.volume_before_mute.take() {
+            if let Ok(mut v) = self.volume.lock() {
+                *v = vol;
+            }
         }
     }
 
@@ -307,10 +349,6 @@ impl Stream {
     pub fn volume(&self) -> f32 {
         self.volume.lock().map_or(0.0, |vol| *vol)
     }
-
-    // pub fn set_sample_rate(&mut self, sample_rate: i32) {
-    //     self.sample_rate = sample_rate;
-    // }
 }
 
 #[derive(Debug)]

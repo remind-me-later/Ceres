@@ -19,7 +19,7 @@ features = ["derive", "help", "std"]
 optional = true
 
 [dependencies.cpal]
-version = "*"
+git = "https://github.com/RustAudio/cpal.git"
 
 [dependencies.gilrs]
 version = "*"

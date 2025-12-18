@@ -183,7 +183,7 @@ impl GbThread {
         multiplier: &Arc<AtomicU32>,
         mut gilrs: gilrs::Gilrs,
     ) {
-        let mut last_loop = std::time::Instant::now();
+        let mut next_render_time = std::time::Instant::now();
 
         loop {
             let (pause_lock, pause_cvar) = &**pause_condvar;
@@ -194,6 +194,8 @@ impl GbThread {
                     } else {
                         return; // Exit if the Condvar is poisoned
                     }
+                    // Reset timing after pause to avoid burst catch-up
+                    next_render_time = std::time::Instant::now();
                 }
             }
 
@@ -248,13 +250,15 @@ impl GbThread {
             // ctx.request_repaint();
 
             let duration = ceres_core::FRAME_DURATION / multiplier.load(Relaxed);
-            let elapsed = last_loop.elapsed();
+            next_render_time += duration;
+            let now = std::time::Instant::now();
 
-            if elapsed < duration {
-                spin_sleep::sleep(duration - elapsed);
+            if now < next_render_time {
+                spin_sleep::sleep(next_render_time - now);
+            } else if now > next_render_time + duration * 5 {
+                // If we are significantly behind (e.g. debug pause), reset timing
+                next_render_time = now;
             }
-
-            last_loop = std::time::Instant::now();
         }
     }
 
