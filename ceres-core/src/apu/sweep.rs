@@ -34,6 +34,7 @@ pub enum SweepCalculationResult {
     DisableChannel,
     None,
     UpdatePeriod { period: u16 },
+    UpdatePeriodAndDisable { period: u16 },
 }
 
 pub struct Sweep {
@@ -47,20 +48,12 @@ pub struct Sweep {
 }
 
 impl Sweep {
-    const fn calculate_sweep(&mut self) -> SweepCalculationResult {
+    const fn calculate_sweep(&self) -> u16 {
         let t = self.shadow_register >> self.individual_step;
 
-        self.shadow_register = match self.dir {
+        match self.dir {
             SweepDirection::Sub => self.shadow_register - t,
             SweepDirection::Add => self.shadow_register + t,
-        };
-
-        if self.shadow_register > 0x7FF {
-            SweepCalculationResult::DisableChannel
-        } else {
-            SweepCalculationResult::UpdatePeriod {
-                period: self.shadow_register & 0x7FF,
-            }
         }
     }
 }
@@ -87,7 +80,24 @@ impl SweepTrait for Sweep {
             if self.pace == 0 {
                 SweepCalculationResult::None
             } else {
-                self.calculate_sweep()
+                let new_val = self.calculate_sweep();
+
+                if new_val > 0x7FF {
+                    SweepCalculationResult::DisableChannel
+                } else if self.individual_step != 0 {
+                    self.shadow_register = new_val;
+                    if self.calculate_sweep() > 0x7FF {
+                        SweepCalculationResult::UpdatePeriodAndDisable {
+                            period: self.shadow_register & 0x7FF,
+                        }
+                    } else {
+                        SweepCalculationResult::UpdatePeriod {
+                            period: self.shadow_register & 0x7FF,
+                        }
+                    }
+                } else {
+                    SweepCalculationResult::None
+                }
             }
         } else {
             SweepCalculationResult::None
@@ -106,7 +116,11 @@ impl SweepTrait for Sweep {
         }
 
         if self.individual_step != 0 {
-            self.calculate_sweep()
+            if self.calculate_sweep() > 0x7FF {
+                SweepCalculationResult::DisableChannel
+            } else {
+                SweepCalculationResult::None
+            }
         } else {
             SweepCalculationResult::None
         }

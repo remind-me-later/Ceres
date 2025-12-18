@@ -53,6 +53,10 @@ impl<const PERIOD_MUL: u16, S: SweepTrait> PeriodCounter<PERIOD_MUL, S> {
                 self.period = period;
                 PeriodTriggerResult::None
             }
+            SweepCalculationResult::UpdatePeriodAndDisable { period } => {
+                self.period = period;
+                PeriodTriggerResult::DisableChannel
+            }
             SweepCalculationResult::None => PeriodTriggerResult::None,
         }
     }
@@ -69,6 +73,10 @@ impl<const PERIOD_MUL: u16, S: SweepTrait> PeriodCounter<PERIOD_MUL, S> {
             SweepCalculationResult::UpdatePeriod { period } => {
                 self.period = period;
                 PeriodTriggerResult::None
+            }
+            SweepCalculationResult::UpdatePeriodAndDisable { period } => {
+                self.period = period;
+                PeriodTriggerResult::DisableChannel
             }
             SweepCalculationResult::None => PeriodTriggerResult::None,
         }
