@@ -9,8 +9,41 @@
 
 use ceres_test_runner::{
     load_test_rom,
-    test_runner::{TestConfig, TestResult, TestRunner},
+    test_runner::{CompletionCheck, DummyAudioCallback, TestConfig, TestResult, TestRunner},
 };
+
+/// Check for gbmicrotest completion via memory address 0xFF82
+pub struct GbMicroCheck;
+
+impl CompletionCheck for GbMicroCheck {
+    fn check(&self, gb: &mut ceres_core::Gb<DummyAudioCallback>) -> Option<TestResult> {
+        let result = gb.read_mem(0xFF82);
+        match result {
+            0x01 => Some(TestResult::Passed),
+            0xFF => {
+                let actual = gb.read_mem(0xFF80);
+                let expected = gb.read_mem(0xFF81);
+                Some(TestResult::Failed(format!(
+                    "actual=0x{actual:02X}, expected=0x{expected:02X}"
+                )))
+            }
+            _ => None,
+        }
+    }
+
+    fn on_timeout(&self, gb: &mut ceres_core::Gb<DummyAudioCallback>) -> TestResult {
+        let result = gb.read_mem(0xFF82);
+        match result {
+            0x01 => TestResult::Passed,
+            0xFF => {
+                let actual = gb.read_mem(0xFF80);
+                let expected = gb.read_mem(0xFF81);
+                TestResult::Failed(format!("actual=0x{actual:02X}, expected=0x{expected:02X}"))
+            }
+            _ => TestResult::Failed(format!("Unexpected result value: 0x{result:02X}")),
+        }
+    }
+}
 
 /// Helper to run a gbmicrotest ROM
 ///
@@ -25,53 +58,22 @@ fn run_gbmicrotest(rom_name: &str, frames: u32) -> TestResult {
             eprintln!("DEBUG: ROM loaded, size = {} bytes", rom.len());
             rom
         }
-        Err(e) => return TestResult::Failed(format!("Failed to load test ROM: {e}")),
+        Err(e) => return TestResult::Error(format!("Failed to load test ROM: {e}")),
     };
 
     let config = TestConfig {
         timeout_frames: frames,
         model: ceres_core::Model::DmgB, // gbmicrotest targets DMG
-        capture_serial: false,          // These tests don't use serial output
         ..TestConfig::default()
     };
 
-    let mut runner = match TestRunner::new(rom, config) {
+    let mut runner = match TestRunner::new(rom, config, Box::new(GbMicroCheck)) {
         Ok(runner) => runner,
-        Err(e) => return TestResult::Failed(format!("Failed to create test runner: {e}")),
+        Err(e) => return TestResult::Error(format!("Failed to create test runner: {e}")),
     };
 
-    // Run the test (ignore return value since completion is signaled via memory)
-    let _ = runner.run();
-
-    // Check result at 0xFF82: 0x01 = pass, 0xFF = fail
-    let result = runner.read_memory(0xFF82);
-    let actual = runner.read_memory(0xFF80);
-    let expected = runner.read_memory(0xFF81);
-    // Also read bank register to see if bootrom finished
-    let bank = runner.read_memory(0xFF50);
-    // Read LCDC to see if LCD is on
-    let lcdc = runner.read_memory(0xFF40);
-    let ly = runner.read_memory(0xFF44);
-    // Read some ROM locations to verify ROM is loaded
-    let rom_100 = runner.read_memory(0x0100);
-    let rom_104 = runner.read_memory(0x0104);
-    // Read VRAM to see if test wrote there
-    let vram_8000 = runner.read_memory(0x8000);
-    eprintln!("DEBUG: result=0x{result:02X}, actual=0x{actual:02X}, expected=0x{expected:02X}");
-    eprintln!(
-        "DEBUG: bank=0x{bank:02X}, lcdc=0x{lcdc:02X}, ly=0x{ly:02X}, frames={}",
-        runner.frames_run()
-    );
-    eprintln!(
-        "DEBUG: rom[0x100]=0x{rom_100:02X}, rom[0x104]=0x{rom_104:02X}, vram[0x8000]=0x{vram_8000:02X}"
-    );
-    match result {
-        0x01 => TestResult::Passed,
-        0xFF => TestResult::Failed(format!(
-            "Test failed: actual=0x{actual:02X}, expected=0x{expected:02X}"
-        )),
-        _ => TestResult::Unknown,
-    }
+    // Run the test
+    runner.run()
 }
 
 /// Macro to generate test cases for gbmicrotest ROMs
@@ -86,7 +88,7 @@ macro_rules! gbmicrotest {
         fn $name() {
             // NOTE: 310 frames is enough for bootrom (~5 sec) + test
             let result = run_gbmicrotest($rom, 500);
-            assert_eq!(result, TestResult::Passed);
+            assert!(result.is_passed(), "Test failed with result: {result:?}");
         }
     };
     ($name:ident, $rom:literal, ignore) => {
@@ -96,7 +98,7 @@ macro_rules! gbmicrotest {
         fn $name() {
             // NOTE: 310 frames is enough for bootrom (~5 sec) + test
             let result = run_gbmicrotest($rom, 500);
-            assert_eq!(result, TestResult::Passed);
+            assert!(result.is_passed(), "Test failed with result: {result:?}");
         }
     };
 }
@@ -107,7 +109,11 @@ gbmicrotest!(test_n000_write_to_x8000, "000-write_to_x8000.gb", ignore);
 gbmicrotest!(test_n001_vram_unlocked, "001-vram_unlocked.gb", ignore);
 gbmicrotest!(test_n002_vram_locked, "002-vram_locked.gb", ignore);
 gbmicrotest!(test_n004_tima_boot_phase, "004-tima_boot_phase.gb", ignore);
-gbmicrotest!(test_n004_tima_cycle_timer, "004-tima_cycle_timer.gb", ignore);
+gbmicrotest!(
+    test_n004_tima_cycle_timer,
+    "004-tima_cycle_timer.gb",
+    ignore
+);
 gbmicrotest!(test_n007_lcd_on_stat, "007-lcd_on_stat.gb", ignore);
 gbmicrotest!(test_n400_dma, "400-dma.gb", ignore);
 gbmicrotest!(test_n500_scx_timing, "500-scx-timing.gb", ignore);
@@ -118,7 +124,11 @@ gbmicrotest!(
     "802-ppu-latch-tileselect.gb",
     ignore
 );
-gbmicrotest!(test_n803_ppu_latch_bgdisplay, "803-ppu-latch-bgdisplay.gb", ignore);
+gbmicrotest!(
+    test_n803_ppu_latch_bgdisplay,
+    "803-ppu-latch-bgdisplay.gb",
+    ignore
+);
 gbmicrotest!(test_audio_testbench, "audio_testbench.gb", ignore);
 gbmicrotest!(test_cpu_bus_1, "cpu_bus_1.gb", ignore);
 gbmicrotest!(test_div_inc_timing_a, "div_inc_timing_a.gb");
@@ -134,7 +144,11 @@ gbmicrotest!(test_flood_vram, "flood_vram.gb", ignore);
 gbmicrotest!(test_halt_bug, "halt_bug.gb", ignore);
 gbmicrotest!(test_halt_op_dupe_delay, "halt_op_dupe_delay.gb", ignore);
 gbmicrotest!(test_halt_op_dupe, "halt_op_dupe.gb");
-gbmicrotest!(test_hblank_int_di_timing_a, "hblank_int_di_timing_a.gb", ignore);
+gbmicrotest!(
+    test_hblank_int_di_timing_a,
+    "hblank_int_di_timing_a.gb",
+    ignore
+);
 gbmicrotest!(test_hblank_int_di_timing_b, "hblank_int_di_timing_b.gb");
 gbmicrotest!(test_hblank_int_if_a, "hblank_int_if_a.gb");
 gbmicrotest!(test_hblank_int_if_b, "hblank_int_if_b.gb");
@@ -151,50 +165,106 @@ gbmicrotest!(test_hblank_int_scx1_if_a, "hblank_int_scx1_if_a.gb");
 gbmicrotest!(test_hblank_int_scx1_if_b, "hblank_int_scx1_if_b.gb", ignore);
 gbmicrotest!(test_hblank_int_scx1_if_c, "hblank_int_scx1_if_c.gb");
 gbmicrotest!(test_hblank_int_scx1_if_d, "hblank_int_scx1_if_d.gb", ignore);
-gbmicrotest!(test_hblank_int_scx1_nops_a, "hblank_int_scx1_nops_a.gb", ignore);
-gbmicrotest!(test_hblank_int_scx1_nops_b, "hblank_int_scx1_nops_b.gb", ignore);
+gbmicrotest!(
+    test_hblank_int_scx1_nops_a,
+    "hblank_int_scx1_nops_a.gb",
+    ignore
+);
+gbmicrotest!(
+    test_hblank_int_scx1_nops_b,
+    "hblank_int_scx1_nops_b.gb",
+    ignore
+);
 gbmicrotest!(test_hblank_int_scx2, "hblank_int_scx2.gb", ignore);
 gbmicrotest!(test_hblank_int_scx2_if_a, "hblank_int_scx2_if_a.gb");
 gbmicrotest!(test_hblank_int_scx2_if_b, "hblank_int_scx2_if_b.gb", ignore);
 gbmicrotest!(test_hblank_int_scx2_if_c, "hblank_int_scx2_if_c.gb");
 gbmicrotest!(test_hblank_int_scx2_if_d, "hblank_int_scx2_if_d.gb", ignore);
-gbmicrotest!(test_hblank_int_scx2_nops_a, "hblank_int_scx2_nops_a.gb", ignore);
-gbmicrotest!(test_hblank_int_scx2_nops_b, "hblank_int_scx2_nops_b.gb", ignore);
+gbmicrotest!(
+    test_hblank_int_scx2_nops_a,
+    "hblank_int_scx2_nops_a.gb",
+    ignore
+);
+gbmicrotest!(
+    test_hblank_int_scx2_nops_b,
+    "hblank_int_scx2_nops_b.gb",
+    ignore
+);
 gbmicrotest!(test_hblank_int_scx3, "hblank_int_scx3.gb");
 gbmicrotest!(test_hblank_int_scx3_if_a, "hblank_int_scx3_if_a.gb");
 gbmicrotest!(test_hblank_int_scx3_if_b, "hblank_int_scx3_if_b.gb", ignore);
 gbmicrotest!(test_hblank_int_scx3_if_c, "hblank_int_scx3_if_c.gb");
 gbmicrotest!(test_hblank_int_scx3_if_d, "hblank_int_scx3_if_d.gb", ignore);
-gbmicrotest!(test_hblank_int_scx3_nops_a, "hblank_int_scx3_nops_a.gb", ignore);
-gbmicrotest!(test_hblank_int_scx3_nops_b, "hblank_int_scx3_nops_b.gb", ignore);
+gbmicrotest!(
+    test_hblank_int_scx3_nops_a,
+    "hblank_int_scx3_nops_a.gb",
+    ignore
+);
+gbmicrotest!(
+    test_hblank_int_scx3_nops_b,
+    "hblank_int_scx3_nops_b.gb",
+    ignore
+);
 gbmicrotest!(test_hblank_int_scx4, "hblank_int_scx4.gb", ignore);
 gbmicrotest!(test_hblank_int_scx4_if_a, "hblank_int_scx4_if_a.gb");
 gbmicrotest!(test_hblank_int_scx4_if_b, "hblank_int_scx4_if_b.gb", ignore);
 gbmicrotest!(test_hblank_int_scx4_if_c, "hblank_int_scx4_if_c.gb");
 gbmicrotest!(test_hblank_int_scx4_if_d, "hblank_int_scx4_if_d.gb", ignore);
-gbmicrotest!(test_hblank_int_scx4_nops_a, "hblank_int_scx4_nops_a.gb", ignore);
-gbmicrotest!(test_hblank_int_scx4_nops_b, "hblank_int_scx4_nops_b.gb", ignore);
+gbmicrotest!(
+    test_hblank_int_scx4_nops_a,
+    "hblank_int_scx4_nops_a.gb",
+    ignore
+);
+gbmicrotest!(
+    test_hblank_int_scx4_nops_b,
+    "hblank_int_scx4_nops_b.gb",
+    ignore
+);
 gbmicrotest!(test_hblank_int_scx5, "hblank_int_scx5.gb", ignore);
 gbmicrotest!(test_hblank_int_scx5_if_a, "hblank_int_scx5_if_a.gb");
 gbmicrotest!(test_hblank_int_scx5_if_b, "hblank_int_scx5_if_b.gb", ignore);
 gbmicrotest!(test_hblank_int_scx5_if_c, "hblank_int_scx5_if_c.gb");
 gbmicrotest!(test_hblank_int_scx5_if_d, "hblank_int_scx5_if_d.gb", ignore);
-gbmicrotest!(test_hblank_int_scx5_nops_a, "hblank_int_scx5_nops_a.gb", ignore);
-gbmicrotest!(test_hblank_int_scx5_nops_b, "hblank_int_scx5_nops_b.gb", ignore);
+gbmicrotest!(
+    test_hblank_int_scx5_nops_a,
+    "hblank_int_scx5_nops_a.gb",
+    ignore
+);
+gbmicrotest!(
+    test_hblank_int_scx5_nops_b,
+    "hblank_int_scx5_nops_b.gb",
+    ignore
+);
 gbmicrotest!(test_hblank_int_scx6, "hblank_int_scx6.gb", ignore);
 gbmicrotest!(test_hblank_int_scx6_if_a, "hblank_int_scx6_if_a.gb");
 gbmicrotest!(test_hblank_int_scx6_if_b, "hblank_int_scx6_if_b.gb", ignore);
 gbmicrotest!(test_hblank_int_scx6_if_c, "hblank_int_scx6_if_c.gb");
 gbmicrotest!(test_hblank_int_scx6_if_d, "hblank_int_scx6_if_d.gb", ignore);
-gbmicrotest!(test_hblank_int_scx6_nops_a, "hblank_int_scx6_nops_a.gb", ignore);
-gbmicrotest!(test_hblank_int_scx6_nops_b, "hblank_int_scx6_nops_b.gb", ignore);
+gbmicrotest!(
+    test_hblank_int_scx6_nops_a,
+    "hblank_int_scx6_nops_a.gb",
+    ignore
+);
+gbmicrotest!(
+    test_hblank_int_scx6_nops_b,
+    "hblank_int_scx6_nops_b.gb",
+    ignore
+);
 gbmicrotest!(test_hblank_int_scx7, "hblank_int_scx7.gb", ignore); // Fails with mode3_delay=0
 gbmicrotest!(test_hblank_int_scx7_if_a, "hblank_int_scx7_if_a.gb");
 gbmicrotest!(test_hblank_int_scx7_if_b, "hblank_int_scx7_if_b.gb", ignore);
 gbmicrotest!(test_hblank_int_scx7_if_c, "hblank_int_scx7_if_c.gb");
 gbmicrotest!(test_hblank_int_scx7_if_d, "hblank_int_scx7_if_d.gb", ignore);
-gbmicrotest!(test_hblank_int_scx7_nops_a, "hblank_int_scx7_nops_a.gb", ignore);
-gbmicrotest!(test_hblank_int_scx7_nops_b, "hblank_int_scx7_nops_b.gb", ignore);
+gbmicrotest!(
+    test_hblank_int_scx7_nops_a,
+    "hblank_int_scx7_nops_a.gb",
+    ignore
+);
+gbmicrotest!(
+    test_hblank_int_scx7_nops_b,
+    "hblank_int_scx7_nops_b.gb",
+    ignore
+);
 gbmicrotest!(test_hblank_scx2_if_a, "hblank_scx2_if_a.gb");
 gbmicrotest!(test_hblank_scx3_if_a, "hblank_scx3_if_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_hblank_scx3_if_b, "hblank_scx3_if_b.gb", ignore);
@@ -574,20 +644,60 @@ gbmicrotest!(test_sprite4_6_a, "sprite4_6_a.gb");
 gbmicrotest!(test_sprite4_6_b, "sprite4_6_b.gb");
 gbmicrotest!(test_sprite4_7_a, "sprite4_7_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_sprite4_7_b, "sprite4_7_b.gb");
-gbmicrotest!(test_stat_write_glitch_l0_a, "stat_write_glitch_l0_a.gb", ignore);
-gbmicrotest!(test_stat_write_glitch_l0_b, "stat_write_glitch_l0_b.gb", ignore);
+gbmicrotest!(
+    test_stat_write_glitch_l0_a,
+    "stat_write_glitch_l0_a.gb",
+    ignore
+);
+gbmicrotest!(
+    test_stat_write_glitch_l0_b,
+    "stat_write_glitch_l0_b.gb",
+    ignore
+);
 gbmicrotest!(test_stat_write_glitch_l0_c, "stat_write_glitch_l0_c.gb");
 gbmicrotest!(test_stat_write_glitch_l143_a, "stat_write_glitch_l143_a.gb");
-gbmicrotest!(test_stat_write_glitch_l143_b, "stat_write_glitch_l143_b.gb", ignore);
-gbmicrotest!(test_stat_write_glitch_l143_c, "stat_write_glitch_l143_c.gb", ignore);
-gbmicrotest!(test_stat_write_glitch_l143_d, "stat_write_glitch_l143_d.gb", ignore);
-gbmicrotest!(test_stat_write_glitch_l154_a, "stat_write_glitch_l154_a.gb", ignore);
-gbmicrotest!(test_stat_write_glitch_l154_b, "stat_write_glitch_l154_b.gb", ignore);
+gbmicrotest!(
+    test_stat_write_glitch_l143_b,
+    "stat_write_glitch_l143_b.gb",
+    ignore
+);
+gbmicrotest!(
+    test_stat_write_glitch_l143_c,
+    "stat_write_glitch_l143_c.gb",
+    ignore
+);
+gbmicrotest!(
+    test_stat_write_glitch_l143_d,
+    "stat_write_glitch_l143_d.gb",
+    ignore
+);
+gbmicrotest!(
+    test_stat_write_glitch_l154_a,
+    "stat_write_glitch_l154_a.gb",
+    ignore
+);
+gbmicrotest!(
+    test_stat_write_glitch_l154_b,
+    "stat_write_glitch_l154_b.gb",
+    ignore
+);
 gbmicrotest!(test_stat_write_glitch_l154_c, "stat_write_glitch_l154_c.gb");
-gbmicrotest!(test_stat_write_glitch_l154_d, "stat_write_glitch_l154_d.gb", ignore);
+gbmicrotest!(
+    test_stat_write_glitch_l154_d,
+    "stat_write_glitch_l154_d.gb",
+    ignore
+);
 gbmicrotest!(test_stat_write_glitch_l1_a, "stat_write_glitch_l1_a.gb");
-gbmicrotest!(test_stat_write_glitch_l1_b, "stat_write_glitch_l1_b.gb", ignore);
-gbmicrotest!(test_stat_write_glitch_l1_c, "stat_write_glitch_l1_c.gb", ignore);
+gbmicrotest!(
+    test_stat_write_glitch_l1_b,
+    "stat_write_glitch_l1_b.gb",
+    ignore
+);
+gbmicrotest!(
+    test_stat_write_glitch_l1_c,
+    "stat_write_glitch_l1_c.gb",
+    ignore
+);
 gbmicrotest!(test_stat_write_glitch_l1_d, "stat_write_glitch_l1_d.gb");
 gbmicrotest!(test_temp, "temp.gb", ignore);
 gbmicrotest!(test_timer_div_phase_c, "timer_div_phase_c.gb");

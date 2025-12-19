@@ -1,27 +1,63 @@
 use ceres_core::Model;
 use ceres_test_runner::{
     load_test_rom,
-    test_runner::{TestConfig, TestResult, TestRunner, timeouts},
+    test_runner::{
+        CompletionCheck, DummyAudioCallback, TestConfig, TestResult, TestRunner, timeouts,
+    },
 };
+
+/// Check for Mooneye test completion (register values on ld b,b)
+pub struct MooneyeCheck;
+
+impl CompletionCheck for MooneyeCheck {
+    fn check(&self, gb: &mut ceres_core::Gb<DummyAudioCallback>) -> Option<TestResult> {
+        if !gb.check_and_reset_ld_b_b_breakpoint() {
+            return None;
+        }
+
+        let b = gb.cpu_b();
+        let c = gb.cpu_c();
+        let d = gb.cpu_d();
+        let e = gb.cpu_e();
+        let h = gb.cpu_h();
+        let l = gb.cpu_l();
+
+        // Check for pass condition (Fibonacci sequence)
+        if b == 3 && c == 5 && d == 8 && e == 13 && h == 21 && l == 34 {
+            return Some(TestResult::Passed);
+        }
+
+        // Check for fail condition (all 0x42)
+        if b == 0x42 && c == 0x42 && d == 0x42 && e == 0x42 && h == 0x42 && l == 0x42 {
+            return Some(TestResult::Failed(format!(
+                "Mooneye failure: B={b:#04X}, C={c:#04X}, D={d:#04X}, E={e:#04X}, H={h:#04X}, L={l:#04X}"
+            )));
+        }
+
+        None
+    }
+
+    fn on_timeout(&self, _gb: &mut ceres_core::Gb<DummyAudioCallback>) -> TestResult {
+        TestResult::Failed("Mooneye test timed out".to_string())
+    }
+}
 
 /// Helper function to run a SameSuite test
 fn run_samesuite_test(path: &str, model: Model) -> TestResult {
     let rom = match load_test_rom(path) {
         Ok(rom) => rom,
-        Err(e) => return TestResult::Failed(format!("Failed to load test ROM: {e}")),
+        Err(e) => return TestResult::Error(format!("Failed to load test ROM: {e}")),
     };
 
     let config = TestConfig {
         model,
         timeout_frames: timeouts::MOONEYE_ACCEPTANCE, // Use same timeout as Mooneye
-        use_mooneye_validation: true,                 // SameSuite uses same Fibonacci validation
-        capture_serial: false,
         ..TestConfig::default()
     };
 
-    let mut runner = match TestRunner::new(rom, config) {
+    let mut runner = match TestRunner::new(rom, config, Box::new(MooneyeCheck)) {
         Ok(runner) => runner,
-        Err(e) => return TestResult::Failed(format!("Failed to create test runner: {e}")),
+        Err(e) => return TestResult::Error(format!("Failed to create test runner: {e}")),
     };
 
     runner.run()
@@ -34,27 +70,27 @@ fn run_samesuite_test(path: &str, model: Model) -> TestResult {
 #[test]
 fn test_samesuite_gbc_dma_cont() {
     let result = run_samesuite_test("same-suite/dma/gbc_dma_cont.gb", Model::CgbE);
-    assert_eq!(result, TestResult::Passed, "dma/gbc_dma_cont test failed");
+    assert!(result.is_passed(), "dma/gbc_dma_cont test failed");
 }
 
 #[test]
 fn test_samesuite_gdma_addr_mask() {
     let result = run_samesuite_test("same-suite/dma/gdma_addr_mask.gb", Model::CgbE);
-    assert_eq!(result, TestResult::Passed, "dma/gdma_addr_mask test failed");
+    assert!(result.is_passed(), "dma/gdma_addr_mask test failed");
 }
 
 #[test]
 #[ignore] // TODO: Enable when passing - HDMA with LCD off behavior needs fixing
 fn test_samesuite_hdma_lcd_off() {
     let result = run_samesuite_test("same-suite/dma/hdma_lcd_off.gb", Model::CgbE);
-    assert_eq!(result, TestResult::Passed, "dma/hdma_lcd_off test failed");
+    assert!(result.is_passed(), "dma/hdma_lcd_off test failed");
 }
 
 #[test]
 #[ignore] // TODO: Enable when passing - HDMA mode 0 (General Purpose DMA) needs fixing
 fn test_samesuite_hdma_mode0() {
     let result = run_samesuite_test("same-suite/dma/hdma_mode0.gb", Model::CgbE);
-    assert_eq!(result, TestResult::Passed, "dma/hdma_mode0 test failed");
+    assert!(result.is_passed(), "dma/hdma_mode0 test failed");
 }
 
 // =============================================================================

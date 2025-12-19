@@ -5,7 +5,7 @@
 use ceres_core::Model;
 use ceres_test_runner::{
     expected_screenshot_path, load_test_rom,
-    test_runner::{TestConfig, TestResult, TestRunner},
+    test_runner::{ScreenshotCheck, TestConfig, TestResult, TestRunner},
 };
 
 const MEALYBUG_TIMEOUT_FRAMES: u32 = 500; // Typically 3 seconds for Mealybug tests
@@ -16,21 +16,25 @@ fn run_mealybug_ppu_test(rom_name: &str, model: Model) -> TestResult {
 
     let rom = match load_test_rom(&rom_path) {
         Ok(rom) => rom,
-        Err(e) => return TestResult::Failed(format!("Failed to load test ROM: {e}")),
+        Err(e) => return TestResult::Error(format!("Failed to load test ROM: {e}")),
     };
 
-    let expected_screenshot = expected_screenshot_path(&rom_path, model);
+    let screenshot_path = match expected_screenshot_path(&rom_path, model) {
+        Some(path) => path,
+        None => return TestResult::Error(format!("No expected screenshot found for {rom_path}")),
+    };
 
     let config = TestConfig {
         model,
         timeout_frames: MEALYBUG_TIMEOUT_FRAMES,
-        expected_screenshot,
         ..TestConfig::default()
     };
 
-    let mut runner = match TestRunner::new(rom, config) {
+    let check = Box::new(ScreenshotCheck::new(screenshot_path));
+
+    let mut runner = match TestRunner::new(rom, config, check) {
         Ok(runner) => runner,
-        Err(e) => return TestResult::Failed(format!("Failed to create test runner: {e}")),
+        Err(e) => return TestResult::Error(format!("Failed to create test runner: {e}")),
     };
 
     runner.run()
@@ -41,7 +45,7 @@ macro_rules! mealybug_ppu_test {
         #[test]
         fn $name() {
             let result = run_mealybug_ppu_test($rom, $model);
-            assert_eq!(result, TestResult::Passed);
+            assert!(result.is_passed(), "Test failed with result: {result:?}");
         }
     };
     ($name:ident, $rom:literal) => {

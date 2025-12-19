@@ -80,31 +80,32 @@ impl SweepTrait for Sweep {
                     NonZeroU8::new(if self.pace == 0 { 8 } else { self.pace }).unwrap();
             }
 
-                        if self.pace == 0 {
-                            SweepCalculationResult::None
-                        } else {
-                            let (new_val, delta) = self.calculate_sweep();
-                            self.last_delta = delta;
-            
-                            if new_val > 0x7FF {
-                                SweepCalculationResult::DisableChannel
-                            } else if self.individual_step != 0 {
-                                self.shadow_register = new_val;
-            
-                                let (next_val, _) = self.calculate_sweep();
-                                if next_val > 0x7FF {
-                                    SweepCalculationResult::UpdatePeriodAndDisable {
-                                        period: self.shadow_register & 0x7FF,
-                                    }
-                                } else {
-                                    SweepCalculationResult::UpdatePeriod {
-                                        period: self.shadow_register & 0x7FF,
-                                    }
-                                }
-                            } else {
-                                SweepCalculationResult::None
-                            }
-                        }        } else {
+            if self.pace == 0 {
+                SweepCalculationResult::None
+            } else {
+                let (new_val, delta) = self.calculate_sweep();
+                self.last_delta = delta;
+
+                if new_val > 0x7FF {
+                    SweepCalculationResult::DisableChannel
+                } else if self.individual_step != 0 {
+                    self.shadow_register = new_val;
+
+                    let (next_val, _) = self.calculate_sweep();
+                    if next_val > 0x7FF {
+                        SweepCalculationResult::UpdatePeriodAndDisable {
+                            period: self.shadow_register & 0x7FF,
+                        }
+                    } else {
+                        SweepCalculationResult::UpdatePeriod {
+                            period: self.shadow_register & 0x7FF,
+                        }
+                    }
+                } else {
+                    SweepCalculationResult::None
+                }
+            }
+        } else {
             SweepCalculationResult::None
         }
     }

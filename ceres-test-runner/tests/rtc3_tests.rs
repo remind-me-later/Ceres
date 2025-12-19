@@ -10,7 +10,9 @@
 
 use ceres_test_runner::{
     load_test_rom, test_roms_dir,
-    test_runner::{ButtonAction, ButtonEvent, TestConfig, TestResult, TestRunner, timeouts},
+    test_runner::{
+        ButtonAction, ButtonEvent, ScreenshotCheck, TestConfig, TestResult, TestRunner, timeouts,
+    },
 };
 
 /// Helper to run rtc3test with scheduled button presses and screenshot comparison
@@ -21,19 +23,21 @@ fn run_rtc3test(
 ) -> TestResult {
     let rom = match load_test_rom("rtc3test/rtc3test.gb") {
         Ok(rom) => rom,
-        Err(e) => return TestResult::Failed(format!("Failed to load test ROM: {e}")),
+        Err(e) => return TestResult::Error(format!("Failed to load test ROM: {e}")),
     };
 
+    let screenshot_path = test_roms_dir().join(format!("rtc3test/{screenshot_name}"));
     let config = TestConfig {
         timeout_frames: timeout,
-        expected_screenshot: Some(test_roms_dir().join(format!("rtc3test/{screenshot_name}"))),
         button_events,
         ..TestConfig::default()
     };
 
-    let mut runner = match TestRunner::new(rom, config) {
+    let check = Box::new(ScreenshotCheck::new(screenshot_path));
+
+    let mut runner = match TestRunner::new(rom, config, check) {
         Ok(runner) => runner,
-        Err(e) => return TestResult::Failed(format!("Failed to create test runner: {e}")),
+        Err(e) => return TestResult::Error(format!("Failed to create test runner: {e}")),
     };
 
     runner.run()

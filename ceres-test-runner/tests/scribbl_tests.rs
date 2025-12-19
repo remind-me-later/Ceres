@@ -38,7 +38,7 @@
 use ceres_core::Model;
 use ceres_test_runner::{
     load_test_rom, test_roms_dir,
-    test_runner::{TestConfig, TestResult, TestRunner},
+    test_runner::{ScreenshotCheck, TestConfig, TestResult, TestRunner},
 };
 
 /// Timeout for Scribbltests (most complete quickly, but statcount-auto needs more time)
@@ -56,22 +56,22 @@ fn run_scribbl_test(
 ) -> TestResult {
     let rom = match load_test_rom(rom_path) {
         Ok(rom) => rom,
-        Err(e) => return TestResult::Failed(format!("Failed to load test ROM: {e}")),
+        Err(e) => return TestResult::Error(format!("Failed to load test ROM: {e}")),
     };
 
-    let expected_screenshot = test_roms_dir().join(screenshot_path);
+    let screenshot_path = test_roms_dir().join(screenshot_path);
 
     let config = TestConfig {
         model,
         timeout_frames: timeout,
-        expected_screenshot: Some(expected_screenshot),
-        capture_serial: false,
         ..TestConfig::default()
     };
 
-    let mut runner = match TestRunner::new(rom, config) {
+    let check = Box::new(ScreenshotCheck::new(screenshot_path));
+
+    let mut runner = match TestRunner::new(rom, config, check) {
         Ok(runner) => runner,
-        Err(e) => return TestResult::Failed(format!("Failed to create test runner: {e}")),
+        Err(e) => return TestResult::Error(format!("Failed to create test runner: {e}")),
     };
 
     runner.run()
@@ -89,7 +89,7 @@ fn test_scribbl_lycscx_dmg() {
         Model::DmgB,
         SCRIBBL_TIMEOUT,
     );
-    assert_eq!(result, TestResult::Passed, "lycscx test failed (DMG)");
+    assert!(result.is_passed(), "lycscx test failed (DMG)");
 }
 
 #[test]
@@ -100,7 +100,7 @@ fn test_scribbl_lycscx_cgb() {
         Model::CgbE,
         SCRIBBL_TIMEOUT,
     );
-    assert_eq!(result, TestResult::Passed, "lycscx test failed (CGB)");
+    assert!(result.is_passed(), "lycscx test failed (CGB)");
 }
 
 // =============================================================================
@@ -115,7 +115,7 @@ fn test_scribbl_lycscy_dmg() {
         Model::DmgB,
         SCRIBBL_TIMEOUT,
     );
-    assert_eq!(result, TestResult::Passed, "lycscy test failed (DMG)");
+    assert!(result.is_passed(), "lycscy test failed (DMG)");
 }
 
 #[test]
@@ -126,7 +126,7 @@ fn test_scribbl_lycscy_cgb() {
         Model::CgbE,
         SCRIBBL_TIMEOUT,
     );
-    assert_eq!(result, TestResult::Passed, "lycscy test failed (CGB)");
+    assert!(result.is_passed(), "lycscy test failed (CGB)");
 }
 
 // =============================================================================
@@ -141,7 +141,7 @@ fn test_scribbl_palettely_dmg() {
         Model::DmgB,
         SCRIBBL_TIMEOUT,
     );
-    assert_eq!(result, TestResult::Passed, "palettely test failed (DMG)");
+    assert!(result.is_passed(), "palettely test failed (DMG)");
 }
 
 #[test]
@@ -152,7 +152,7 @@ fn test_scribbl_palettely_cgb() {
         Model::CgbE,
         SCRIBBL_TIMEOUT,
     );
-    assert_eq!(result, TestResult::Passed, "palettely test failed (CGB)");
+    assert!(result.is_passed(), "palettely test failed (CGB)");
 }
 
 // =============================================================================
@@ -167,7 +167,7 @@ fn test_scribbl_scxly_dmg() {
         Model::DmgB,
         SCRIBBL_TIMEOUT,
     );
-    assert_eq!(result, TestResult::Passed, "scxly test failed (DMG)");
+    assert!(result.is_passed(), "scxly test failed (DMG)");
 }
 
 #[test]
@@ -179,7 +179,7 @@ fn test_scribbl_scxly_cgb() {
         Model::CgbE,
         SCRIBBL_TIMEOUT,
     );
-    assert_eq!(result, TestResult::Passed, "scxly test failed (CGB)");
+    assert!(result.is_passed(), "scxly test failed (CGB)");
 }
 
 // =============================================================================

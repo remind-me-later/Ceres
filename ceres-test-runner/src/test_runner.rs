@@ -43,7 +43,7 @@ pub struct ButtonEvent {
 
 /// A dummy audio callback for headless testing
 #[derive(Default)]
-struct DummyAudioCallback;
+pub struct DummyAudioCallback;
 
 impl AudioCallback for DummyAudioCallback {
     fn audio_sample(&self, _l: Sample, _r: Sample) {}
@@ -52,25 +52,87 @@ impl AudioCallback for DummyAudioCallback {
 /// Result of running a test ROM
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TestResult {
-    /// Test failed with a message
-    Failed(String),
     /// Test passed successfully
     Passed,
-    /// Test timed out
-    Timeout,
-    /// Test result is unknown (couldn't parse output)
-    Unknown,
+    /// Test failed with a message
+    Failed(String),
+    /// Test failed with a generic error (e.g. IO error, setup failure)
+    Error(String),
+}
+
+impl TestResult {
+    /// Check if the test result is Passed
+    #[must_use]
+    pub fn is_passed(&self) -> bool {
+        matches!(self, Self::Passed)
+    }
+}
+
+/// Trait for defining test completion conditions
+pub trait CompletionCheck {
+    /// Check if the test has completed
+    fn check(&self, gb: &mut Gb<DummyAudioCallback>) -> Option<TestResult>;
+
+    /// Check result when timeout is reached
+    fn on_timeout(&self, _gb: &mut Gb<DummyAudioCallback>) -> TestResult {
+        TestResult::Failed("Timeout reached".to_string())
+    }
+}
+
+/// Check for screenshot match
+pub struct ScreenshotCheck {
+    expected_path: std::path::PathBuf,
+}
+
+impl ScreenshotCheck {
+    pub fn new(expected_path: std::path::PathBuf) -> Self {
+        Self { expected_path }
+    }
+
+    fn compare_screenshot(&self, gb: &Gb<DummyAudioCallback>) -> Result<bool> {
+        let expected_img = image::open(&self.expected_path)?;
+        let expected_rgba = expected_img.to_rgba8();
+        let actual_rgba = gb.pixel_data_rgba();
+
+        if expected_rgba.width() != u32::from(ceres_core::PX_WIDTH)
+            || expected_rgba.height() != u32::from(ceres_core::PX_HEIGHT)
+        {
+            return Ok(false);
+        }
+
+        Ok(expected_rgba.as_raw() == actual_rgba)
+    }
+}
+
+impl CompletionCheck for ScreenshotCheck {
+    fn check(&self, gb: &mut Gb<DummyAudioCallback>) -> Option<TestResult> {
+        if gb.check_and_reset_ld_b_b_breakpoint() {
+            match self.compare_screenshot(gb) {
+                Ok(true) => Some(TestResult::Passed),
+                Ok(false) => None,
+                Err(e) => Some(TestResult::Error(format!(
+                    "Screenshot comparison error: {e}"
+                ))),
+            }
+        } else {
+            None
+        }
+    }
+
+    fn on_timeout(&self, gb: &mut Gb<DummyAudioCallback>) -> TestResult {
+        match self.compare_screenshot(gb) {
+            Ok(true) => TestResult::Passed,
+            Ok(false) => TestResult::Failed("Screenshot mismatch".to_string()),
+            Err(e) => TestResult::Error(format!("Screenshot comparison error: {e}")),
+        }
+    }
 }
 
 /// Configuration for running a test ROM
 pub struct TestConfig {
-    pub capture_serial: bool,
     pub model: Model,
     pub timeout_frames: u32,
-    pub expected_screenshot: Option<std::path::PathBuf>,
     pub button_events: Vec<ButtonEvent>,
-    /// Use Mooneye Test Suite validation (Fibonacci register check)
-    pub use_mooneye_validation: bool,
     pub test_name: String,
 }
 
@@ -78,12 +140,9 @@ impl Default for TestConfig {
     #[inline]
     fn default() -> Self {
         Self {
-            capture_serial: true,
             model: Model::CgbE,
             timeout_frames: DEFAULT_TIMEOUT_FRAMES,
-            expected_screenshot: None,
             button_events: Vec::new(),
-            use_mooneye_validation: false,
             test_name: "unknown_test".to_string(),
         }
     }
@@ -94,122 +153,32 @@ pub struct TestRunner {
     config: TestConfig,
     frames_run: u32,
     gb: Gb<DummyAudioCallback>,
-    serial_output: String,
+    check: Box<dyn CompletionCheck>,
 }
 
 impl TestRunner {
-    /// Check if the test has completed and parse the result
-    ///
-    /// Tests can complete in two ways:
-    /// 1. Screenshot/serial comparison combined with breakpoint detection: Some test ROMs
-    ///    (like cgb-acid2 and dmg-acid2) use the `ld b, b` instruction as a debug breakpoint
-    ///    to signal test completion. When the screenshot matches AND a breakpoint was hit,
-    ///    the test completes immediately without waiting for the timeout.
-    /// 2. Screenshot/serial comparison: If a screenshot or serial output matches the expected result.
-    /// 3. Mooneye validation: If Mooneye mode is enabled, check CPU registers for pass/fail.
-    ///
-    /// The timeout mechanism in `run()` serves as a safety net to catch infinitely looping tests
-    /// that never signal completion.
-    fn check_completion(&mut self) -> Option<TestResult> {
-        // Check if the `ld b, b` breakpoint was hit (signals test completion for Acid2 and Mooneye tests)
-        let breakpoint_hit = self.gb.check_and_reset_ld_b_b_breakpoint();
-
-        // If Mooneye validation is enabled and breakpoint was hit, check CPU registers
-        if self.config.use_mooneye_validation
-            && breakpoint_hit
-            && let Some(result) = self.check_mooneye_result()
-        {
-            return Some(result);
-        }
-
-        // If we have an expected screenshot, compare it
-        if let Some(ref screenshot_path) = self.config.expected_screenshot {
-            match self.compare_screenshot(screenshot_path) {
-                Ok(true) => {
-                    // Screenshot matches - test passed!
-                    // If breakpoint was hit, this is a proper completion signal (e.g., Acid2 tests)
-                    // If not, we're still waiting for the breakpoint or timeout (e.g., Blargg tests)
-                    return Some(TestResult::Passed);
-                }
-                Ok(false) if breakpoint_hit => {
-                    // Breakpoint hit but screenshot doesn't match yet - keep running
-                    // This handles cases where the test uses ld b,b internally but isn't done yet
-                }
-                Err(e) if breakpoint_hit => {
-                    // Error comparing screenshot after breakpoint
-                    return Some(TestResult::Failed(format!(
-                        "Screenshot comparison error: {e}"
-                    )));
-                }
-                _ => {}
-            }
-        }
-
-        let output = self.serial_output.trim();
-
-        if output.contains("Passed") {
-            return Some(TestResult::Passed);
-        }
-
-        if output.contains("Failed") || output.contains("Error") {
-            return Some(TestResult::Failed(output.into()));
-        }
-
-        None
-    }
-
-    /// Compare the current screen against an expected screenshot
-    fn compare_screenshot(&self, expected_path: &std::path::Path) -> Result<bool> {
-        let expected_img = image::open(expected_path)?;
-        let expected_rgba = expected_img.to_rgba8();
-        let actual_rgba = self.gb.pixel_data_rgba();
-
-        if expected_rgba.width() != u32::from(ceres_core::PX_WIDTH)
-            || expected_rgba.height() != u32::from(ceres_core::PX_HEIGHT)
-        {
-            return Ok(false);
-        }
-
-        Ok(expected_rgba.as_raw() == actual_rgba)
-    }
-
-    /// Check if a Mooneye test has passed or failed based on CPU register values.
-    ///
-    /// Mooneye tests use a specific protocol:
-    /// - Pass: B=3, C=5, D=8, E=13, H=21, L=34 (Fibonacci sequence)
-    /// - Fail: B=C=D=E=H=L=0x42
-    ///
-    /// This should only be called after detecting the `ld b, b` breakpoint.
-    #[allow(clippy::many_single_char_names)]
-    fn check_mooneye_result(&self) -> Option<TestResult> {
-        let b = self.gb.cpu_b();
-        let c = self.gb.cpu_c();
-        let d = self.gb.cpu_d();
-        let e = self.gb.cpu_e();
-        let h = self.gb.cpu_h();
-        let l = self.gb.cpu_l();
-
-        // Check for pass condition (Fibonacci sequence)
-        if b == 3 && c == 5 && d == 8 && e == 13 && h == 21 && l == 34 {
-            return Some(TestResult::Passed);
-        }
-
-        // Check for fail condition (all 0x42)
-        if b == 0x42 && c == 0x42 && d == 0x42 && e == 0x42 && h == 0x42 && l == 0x42 {
-            return Some(TestResult::Failed(format!(
-                "Mooneye test failed (registers: B={b:#04X} C={c:#04X} D={d:#04X} E={e:#04X} H={h:#04X} L={l:#04X})"
-            )));
-        }
-
-        // If neither condition is met, the test hasn't completed yet
-        None
-    }
-
     /// Get the number of frames run
     #[must_use]
     #[inline]
     pub const fn frames_run(&self) -> u32 {
         self.frames_run
+    }
+
+    /// Read a byte from Game Boy memory
+    ///
+    /// This is useful for reading test result registers in test ROMs
+    /// that don't use screenshots.
+    #[must_use]
+    #[inline]
+    pub fn read_memory(&self, address: u16) -> u8 {
+        self.gb.read_mem(address)
+    }
+
+    /// Get the current pixel data (RGBA format)
+    #[must_use]
+    #[inline]
+    pub fn pixel_data(&self) -> &[u8] {
+        self.gb.pixel_data_rgba()
     }
 
     /// Create a new test runner with the given ROM
@@ -218,7 +187,7 @@ impl TestRunner {
     ///
     /// Returns an error if the ROM is invalid or cannot be loaded.
     #[inline]
-    pub fn new(rom: Vec<u8>, config: TestConfig) -> Result<Self> {
+    pub fn new(rom: Vec<u8>, config: TestConfig, check: Box<dyn CompletionCheck>) -> Result<Self> {
         let rom_boxed = rom.into_boxed_slice();
 
         let mut gb = GbBuilder::new(48000, DummyAudioCallback)
@@ -232,7 +201,7 @@ impl TestRunner {
             config,
             frames_run: 0,
             gb,
-            serial_output: String::new(),
+            check,
         })
     }
 
@@ -243,13 +212,12 @@ impl TestRunner {
             self.run_frame();
             self.frames_run += 1;
 
-            // Check if test has completed (via breakpoint or screenshot/serial match)
-            if let Some(result) = self.check_completion() {
+            if let Some(result) = self.check.check(&mut self.gb) {
                 return result;
             }
         }
 
-        TestResult::Timeout
+        self.check.on_timeout(&mut self.gb)
     }
 
     /// Run a single frame of emulation
@@ -265,36 +233,5 @@ impl TestRunner {
         }
 
         self.gb.run_frame();
-
-        if self.config.capture_serial {
-            let output = self.gb.serial_output();
-            if output.len() != self.serial_output.len() {
-                self.serial_output = String::from(output);
-            }
-        }
-    }
-
-    /// Read a byte from Game Boy memory
-    ///
-    /// This is useful for reading test result registers in test ROMs
-    /// that don't use serial output or screenshots.
-    #[must_use]
-    #[inline]
-    pub fn read_memory(&self, address: u16) -> u8 {
-        self.gb.read_mem(address)
-    }
-
-    /// Get the current pixel data (RGBA format)
-    #[must_use]
-    #[inline]
-    pub fn pixel_data(&self) -> &[u8] {
-        self.gb.pixel_data_rgba()
-    }
-
-    /// Get the serial output captured so far
-    #[must_use]
-    #[inline]
-    pub fn serial_output(&self) -> &str {
-        &self.serial_output
     }
 }
