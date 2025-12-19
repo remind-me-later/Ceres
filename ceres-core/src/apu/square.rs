@@ -100,7 +100,12 @@ impl<S: SweepTrait> Square<S> {
     }
 
     pub fn write_nrx0(&mut self, val: u8) {
-        self.period_counter.write_sweep(val);
+        if matches!(
+            self.period_counter.write_sweep(val),
+            PeriodTriggerResult::DisableChannel
+        ) {
+            self.enabled = false;
+        }
     }
 
     pub const fn write_nrx1(&mut self, val: u8) {

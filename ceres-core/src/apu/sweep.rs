@@ -4,10 +4,10 @@ pub trait SweepTrait: Default {
     fn read(&self) -> u8;
     fn step(&mut self) -> SweepCalculationResult;
     fn trigger(&mut self, period: u16) -> SweepCalculationResult;
-    fn write(&mut self, val: u8);
+    fn write(&mut self, val: u8) -> SweepCalculationResult;
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, PartialEq)]
 enum SweepDirection {
     #[default]
     Add,
@@ -45,16 +45,19 @@ pub struct Sweep {
     shadow_pace: NonZeroU8, // 0 is treated as 8
     shadow_register: u16,   // between 0 and 0x7FF
     timer: u8,
+    last_delta: u16,
 }
 
 impl Sweep {
-    const fn calculate_sweep(&self) -> u16 {
+    const fn calculate_sweep(&self) -> (u16, u16) {
         let t = self.shadow_register >> self.individual_step;
 
-        match self.dir {
-            SweepDirection::Sub => self.shadow_register - t,
-            SweepDirection::Add => self.shadow_register + t,
-        }
+        let (new_freq, delta) = match self.dir {
+            SweepDirection::Sub => (self.shadow_register - t, t ^ 0x7FF),
+            SweepDirection::Add => (self.shadow_register + t, t),
+        };
+
+        (new_freq, delta)
     }
 }
 
@@ -77,29 +80,31 @@ impl SweepTrait for Sweep {
                     NonZeroU8::new(if self.pace == 0 { 8 } else { self.pace }).unwrap();
             }
 
-            if self.pace == 0 {
-                SweepCalculationResult::None
-            } else {
-                let new_val = self.calculate_sweep();
-
-                if new_val > 0x7FF {
-                    SweepCalculationResult::DisableChannel
-                } else if self.individual_step != 0 {
-                    self.shadow_register = new_val;
-                    if self.calculate_sweep() > 0x7FF {
-                        SweepCalculationResult::UpdatePeriodAndDisable {
-                            period: self.shadow_register & 0x7FF,
-                        }
-                    } else {
-                        SweepCalculationResult::UpdatePeriod {
-                            period: self.shadow_register & 0x7FF,
-                        }
-                    }
-                } else {
-                    SweepCalculationResult::None
-                }
-            }
-        } else {
+                        if self.pace == 0 {
+                            SweepCalculationResult::None
+                        } else {
+                            let (new_val, delta) = self.calculate_sweep();
+                            self.last_delta = delta;
+            
+                            if new_val > 0x7FF {
+                                SweepCalculationResult::DisableChannel
+                            } else if self.individual_step != 0 {
+                                self.shadow_register = new_val;
+            
+                                let (next_val, _) = self.calculate_sweep();
+                                if next_val > 0x7FF {
+                                    SweepCalculationResult::UpdatePeriodAndDisable {
+                                        period: self.shadow_register & 0x7FF,
+                                    }
+                                } else {
+                                    SweepCalculationResult::UpdatePeriod {
+                                        period: self.shadow_register & 0x7FF,
+                                    }
+                                }
+                            } else {
+                                SweepCalculationResult::None
+                            }
+                        }        } else {
             SweepCalculationResult::None
         }
     }
@@ -116,7 +121,9 @@ impl SweepTrait for Sweep {
         }
 
         if self.individual_step != 0 {
-            if self.calculate_sweep() > 0x7FF {
+            let (val, delta) = self.calculate_sweep();
+            self.last_delta = delta;
+            if val > 0x7FF {
                 SweepCalculationResult::DisableChannel
             } else {
                 SweepCalculationResult::None
@@ -126,21 +133,25 @@ impl SweepTrait for Sweep {
         }
     }
 
-    fn write(&mut self, val: u8) {
+    fn write(&mut self, val: u8) -> SweepCalculationResult {
+        let old_dir = self.dir;
         self.pace = (val >> 4) & 7;
-
-        if self.pace == 0 {
-            self.enabled = false;
-        }
-
-        if self.shadow_pace.get() == 8
-            && let Some(pace) = NonZeroU8::new(self.pace)
-        {
-            self.shadow_pace = pace;
-        }
-
         self.dir = SweepDirection::from(val);
         self.individual_step = val & 7;
+
+        if old_dir == SweepDirection::Sub && self.dir == SweepDirection::Add {
+            // "Exiting negate mode after calculation disables channel"
+            // The check essentially sees if the *subtracted* value would have caused an overflow
+            // if it had been *added* (plus the negate bit interaction).
+            // shadow + last_delta + 1 (because old_negate was 1)
+            // Note: strict check for > 0x7FF
+            if self.shadow_register + self.last_delta + 1 > 0x7FF {
+                self.enabled = false;
+                return SweepCalculationResult::DisableChannel;
+            }
+        }
+
+        SweepCalculationResult::None
     }
 }
 
@@ -155,6 +166,7 @@ impl Default for Sweep {
             timer: 0,
             shadow_register: 0,
             enabled: false,
+            last_delta: 0,
         }
     }
 }
@@ -172,5 +184,7 @@ impl SweepTrait for () {
         SweepCalculationResult::None
     }
 
-    fn write(&mut self, _: u8) {}
+    fn write(&mut self, _: u8) -> SweepCalculationResult {
+        SweepCalculationResult::None
+    }
 }

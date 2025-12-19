@@ -90,7 +90,10 @@ impl<const PERIOD_MUL: u16, S: SweepTrait> PeriodCounter<PERIOD_MUL, S> {
         self.period = (self.period & 0x700) | u16::from(val);
     }
 
-    pub fn write_sweep(&mut self, val: u8) {
-        self.sweep.write(val);
+    pub fn write_sweep(&mut self, val: u8) -> PeriodTriggerResult {
+        match self.sweep.write(val) {
+            SweepCalculationResult::DisableChannel => PeriodTriggerResult::DisableChannel,
+            _ => PeriodTriggerResult::None,
+        }
     }
 }
