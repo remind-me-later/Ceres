@@ -164,32 +164,33 @@ impl<A: AudioCallback> Apu<A> {
             apu.ch4.set_period_half(p_half);
         }
 
-        // TODO: is this ok?
-        // if !self.on() {
-        //   return;
-        // }
+        self.div_divider = (self.div_divider + 1) & 7;
 
-        self.div_divider = self.div_divider.wrapping_add(1);
-
-        if self.div_divider & 7 == 7 {
-            self.ch1.step_envelope();
-            self.ch2.step_envelope();
-            self.ch4.step_envelope();
-        }
-
-        if self.div_divider & 1 == 1 {
-            self.ch1.step_length_timer();
-            self.ch2.step_length_timer();
-            self.ch3.step_length_timer();
-            self.ch4.step_length_timer();
-
-            set_period_half(self, PeriodHalf::First);
-        } else {
-            set_period_half(self, PeriodHalf::Second);
-        }
-
-        if self.div_divider & 3 == 3 {
-            self.ch1.step_sweep();
+        match self.div_divider {
+            0 | 4 => {
+                self.ch1.step_length_timer();
+                self.ch2.step_length_timer();
+                self.ch3.step_length_timer();
+                self.ch4.step_length_timer();
+                set_period_half(self, PeriodHalf::First);
+            }
+            2 | 6 => {
+                self.ch1.step_length_timer();
+                self.ch2.step_length_timer();
+                self.ch3.step_length_timer();
+                self.ch4.step_length_timer();
+                set_period_half(self, PeriodHalf::First);
+                self.ch1.step_sweep();
+            }
+            7 => {
+                self.ch1.step_envelope();
+                self.ch2.step_envelope();
+                self.ch4.step_envelope();
+                set_period_half(self, PeriodHalf::Second);
+            }
+            _ => {
+                set_period_half(self, PeriodHalf::Second);
+            }
         }
     }
 }
@@ -384,7 +385,7 @@ impl<A: AudioCallback> Apu<A> {
         if !self.enabled {
             // reset
             // self.render_timer = 0;
-            self.div_divider = 0;
+            self.div_divider = 7;
             self.master_volume = MasterVolume::default();
 
             // reset registers
