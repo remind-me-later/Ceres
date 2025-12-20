@@ -108,8 +108,8 @@ pub struct Ppu {
     /// Used to implement edge-triggered interrupt behavior.
     stat_interrupt_line: bool,
     /// Mode used for interrupt purposes (can differ from STAT mode bits by 1-2 cycles).
-    /// SameBoy uses this to fire Mode 2 interrupt slightly before STAT shows Mode 2.
-    /// Value of -1 (represented as None) means no mode-based interrupt should fire.
+    /// Required to fire Mode 2 interrupt slightly before STAT shows Mode 2.
+    /// None means no mode-based interrupt should fire.
     mode_for_interrupt: Option<Mode>,
     vram: Vram,
     wy_triggered: bool,
@@ -214,23 +214,8 @@ impl Ppu {
     fn update_stat(&mut self, ints: &mut Interrupts) {
         let previous_line = self.stat_interrupt_line;
 
-        // Update LY=LYC coincidence flag based on comparison value
-        // SameBoy: if (ly_for_comparison != -1 || (model <= CGB_C && !double_speed))
-        // Note: We don't track model exactly like SameBoy, assuming CGB behavior
+        // Update LY=LYC coincidence flag based on comparison value.
         // If ly_for_comparison is valid (not 0xFFFF), we compare.
-        // If it is 0xFFFF:
-        // - On DMG/CGB Double Speed: we do nothing (preserve flag)
-        // - On CGB Single Speed: we clear flag?
-        // Let's assume standard behavior for now: if 0xFFFF, don't update.
-        // But checking SameBoy: "if (ly_fc != -1 || ...)" -> if -1, we might still enter if CGB Single Speed.
-        // Inside: "if (ly_fc == lyc) ... else { if (ly_fc != -1) lyc_int=false; STAT &= ~4; }"
-        // So if ly_fc == -1 and CGB Single Speed: we go to else, skip lyc_int=false, but CLEAR STAT bit.
-        // So on CGB Single Speed, -1 clears the bit.
-        // On others, -1 preserves it.
-        // Let's implement the CGB Single Speed behavior (clear bit) if 0xFFFF, but check mode?
-        // Ppu doesn't know about CGB double speed here, passed in tick but not stored?
-        // Wait, update_stat doesn't take cgb_mode/double_speed.
-        // We should probably just compare if valid for now.
         if self.ly_for_comparison != 0xFFFF {
             self.stat &= !STAT_LYC_B;
             if self.ly_for_comparison == u16::from(self.lyc) {
@@ -239,24 +224,22 @@ impl Ppu {
         }
 
         // Compute new STAT interrupt line state from all enabled sources
-        let mut new_line = false;
-
-        // LY=LYC coincidence interrupt
-        if (self.stat & STAT_IF_LYC_B != 0) && (self.stat & STAT_LYC_B != 0) {
-            new_line = true;
-        }
-
-        // Mode-based interrupts use mode_for_interrupt (which can differ from STAT bits)
-        // SameBoy: mode_for_interrupt can be set to 2 at the end of HBlank, before STAT changes
-        // If mode_for_interrupt is None (SameBoy's -1), no mode interrupt is generated.
-        if let Some(interrupt_mode) = self.mode_for_interrupt {
+        let new_line = if (self.stat & STAT_IF_LYC_B != 0) && (self.stat & STAT_LYC_B != 0) {
+            // LY=LYC coincidence interrupt
+            true
+        } else if let Some(interrupt_mode) = self.mode_for_interrupt {
+            // Mode-based interrupts use mode_for_interrupt (which can differ from STAT bits)
+            // mode_for_interrupt can be set to OamScan at the end of HBlank, before STAT changes.
+            // If mode_for_interrupt is None, no mode interrupt is generated.
             match interrupt_mode {
-                Mode::HBlank if self.stat & STAT_IF_HBLANK_B != 0 => new_line = true,
-                Mode::VBlank if self.stat & STAT_IF_VBLANK_B != 0 => new_line = true,
-                Mode::OamScan if self.stat & STAT_IF_OAM_B != 0 => new_line = true,
-                _ => {}
+                Mode::HBlank if self.stat & STAT_IF_HBLANK_B != 0 => true,
+                Mode::VBlank if self.stat & STAT_IF_VBLANK_B != 0 => true,
+                Mode::OamScan if self.stat & STAT_IF_OAM_B != 0 => true,
+                _ => false,
             }
-        }
+        } else {
+            false
+        };
 
         self.stat_interrupt_line = new_line;
 
@@ -358,8 +341,7 @@ impl Ppu {
 
     #[must_use]
     pub const fn read_stat(&self) -> u8 {
-        // Compute mode from dots_in_line for accurate timing
-        // This matches Age's approach of calculating mode on read
+        // Compute mode from dots_in_line for accurate timing.
         let computed_mode = self.compute_stat_mode();
         (self.stat & !STAT_MODE_B) | computed_mode | 0x80
     }
@@ -574,11 +556,12 @@ impl Ppu {
     }
 
     /// Tick the LCD startup state machine (Line 0).
-    /// SameBoy timing for first line after LCD on (8MHz ticks):
+    /// Timing for first line after LCD on (8MHz ticks):
     /// - InitialMode0 (152 ticks): Mode 0 in STAT, all unblocked
     /// - OamWriteBlock (4 ticks): OAM write blocked
     /// - StatMode3 (4 ticks): STAT = Mode 3, OAM fully blocked, VRAM blocked (DMG), CGB palettes blocked
     /// - PalettesBlock (6 ticks): VRAM fully blocked, enter Mode 3 rendering
+    ///
     /// Total: 166 ticks
     fn tick_line0(&mut self, stage: Line0Stage, ints: &mut Interrupts, cgb_mode: CgbMode) {
         let is_cgb = matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat);
@@ -659,14 +642,13 @@ impl Ppu {
 
         self.sprite_fetcher_state = SpriteFetcherState::Idle;
 
-        // Initialize drawing state
-        // SameBoy: cycles_for_line is augmented by 8 extra cycles for first line (16 ticks).
+        // Initialize drawing state.
+        // cycles_for_line is augmented by 8 extra cycles for first line (16 ticks).
         // Startup duration 166 + 16 = 182.
         self.dots_in_line = 182;
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_step = 0;
         self.window_tile_x = 0;
-        // SameBoy: position_in_line starts at -16
         self.position_in_line = -16;
         self.lcd_x = 0;
         self.bg_fifo.clear();
@@ -674,7 +656,7 @@ impl Ppu {
         // Push 8 "junk" pixels to prime the FIFO (will be discarded during scroll)
         self.bg_fifo.push_bg_row(0, 0, 0, false, false);
         self.wx_triggered = false;
-        // SameBoy: window_y starts at -1 (0xFF), incremented when window activates
+        // window_y starts at -1 (0xFF), incremented when window activates.
         self.window_y = 0xFF;
         // Reset per-line flags
         self.line_has_fractional_scrolling = false;
@@ -689,7 +671,7 @@ impl Ppu {
     }
 
     /// Tick during Mode 2 (OAM Scan) using hierarchical state machine.
-    /// SameBoy timing (all in ticks = 8MHz half-cycles):
+    /// Timing (all in ticks = 8MHz half-cycles):
     /// - Entry (State 35): 4 ticks - OAM write blocked on CGB (non-double-speed)
     /// - LyUpdate (State 6): 2 ticks - LY update, OAM read blocked
     /// - StatUpdate (State 7): 2 ticks - STAT = Mode 2, OAM fully blocked
@@ -706,11 +688,10 @@ impl Ppu {
         match stage {
             OamScanStage::Entry { remaining } => {
                 // State 35: OAM write blocked on CGB (non-double-speed)
-                // SameBoy line 1767: gb->oam_write_blocked = GB_is_cgb(gb) && !gb->cgb_double_speed;
                 if remaining == 4 {
                     self.oam_write_blocked = is_cgb && !double_speed;
                 }
-                // SameBoy line 1771: After 2 cycles (4 ticks), upgrade to full CGB block
+                // After 2 cycles (4 ticks), upgrade to full CGB block
                 if remaining == 2 && is_cgb {
                     self.oam_write_blocked = true;
                 }
@@ -725,30 +706,31 @@ impl Ppu {
             }
 
             OamScanStage::LyUpdate { remaining } => {
-                // State 6: LY visible in register, OAM read blocked
-                // SameBoy lines 1773-1787
-                // Logic executes at START of state (remaining == 2)
+                // State 6: LY visible in register, OAM read blocked.
+                // Logic executes at START of state (remaining == 2).
                 //
-                // Note: LY was already incremented by HBlank transition (or is 0 for first frame)
-                // Here we just make it visible and set up ly_for_comparison
+                // Note: LY was already incremented by HBlank transition (or is 0 for first frame).
+                // Here we just make it visible and set up ly_for_comparison.
                 if remaining == 2 {
                     self.ly = self.current_line;
-                    // SameBoy line 1776: ly_for_comparison = current_line ? -1 : 0
-                    // This creates a window where LY=LYC comparison is undefined
+                    // ly_for_comparison = current_line ? -1 : 0.
+                    // This creates a window where LY=LYC comparison is undefined.
                     self.ly_for_comparison = if self.current_line != 0 { 0xFFFF } else { 0 };
-                    // SameBoy line 1775: oam_read_blocked depends on model
                     self.oam_read_blocked = !double_speed;
 
-                    // SameBoy lines 1778-1787: Mode 2 interrupt fires 1 T-cycle early (except line 0)
-                    // The OAM STAT interrupt occurs before STAT mode bits change to 2
+                    // Mode 2 interrupt fires 1 T-cycle early (except line 0).
+                    // The OAM STAT interrupt occurs before STAT mode bits change to 2.
                     if self.current_line != 0 {
                         self.mode_for_interrupt = Some(Mode::OamScan);
-                        // SameBoy line 1782: Clear STAT mode bits to 0 (keeping them as HBlank)
+                        // Clear STAT mode bits to 0 (keeping them as HBlank).
                         self.set_mode_stat(Mode::HBlank);
                     } else if !is_cgb {
                         // DMG line 0: clear mode bits but don't set mode_for_interrupt
                         self.set_mode_stat(Mode::HBlank);
+                    } else {
+                        // Do nothing on CGB line 0
                     }
+
                     self.update_stat(ints);
                 }
 
@@ -762,16 +744,15 @@ impl Ppu {
             }
 
             OamScanStage::StatUpdate { remaining } => {
-                // State 7: STAT = Mode 2, OAM fully blocked
-                // SameBoy lines 1789-1800
-                // Logic executes at START of state (remaining == 2)
+                // State 7: STAT = Mode 2, OAM fully blocked.
+                // Logic executes at START of state (remaining == 2).
                 if remaining == 2 {
                     self.oam_read_blocked = true;
                     self.set_mode_stat(Mode::OamScan);
                     self.oam_write_blocked = true;
                     self.ly_for_comparison = u16::from(self.ly);
 
-                    // SameBoy: mode_for_interrupt = 2 for STAT update, then -1
+                    // mode_for_interrupt = OamScan for STAT update, then None.
                     self.mode_for_interrupt = Some(Mode::OamScan);
                     self.update_stat(ints);
                     self.mode_for_interrupt = None;
@@ -796,11 +777,10 @@ impl Ppu {
             }
 
             OamScanStage::Scan { entry, sub_tick } => {
-                // State 8: OAM scan loop
-                // SameBoy lines 1807-1823
-                // Each entry takes 4 ticks (2 8MHz cycles)
-                // On CGB: scan happens at start of entry (sub_tick 0)
-                // On DMG: scan happens after 2 ticks (sub_tick 2)
+                // State 8: OAM scan loop.
+                // Each entry takes 4 ticks (2 8MHz cycles).
+                // On CGB: scan happens at start of entry (sub_tick 0).
+                // On DMG: scan happens after 2 ticks (sub_tick 2).
 
                 if sub_tick == 0 && is_cgb {
                     // CGB scans at start
@@ -812,7 +792,7 @@ impl Ppu {
                     self.scan_oam_entry_at(entry);
                 }
 
-                // SameBoy line 1817-1822: At entry 37 + 2 ticks, update memory blocking
+                // At entry 37 + 2 ticks, update memory blocking.
                 if entry == 37 && sub_tick == 2 {
                     self.vram_read_blocked = !is_cgb;
                     self.vram_write_blocked = false;
@@ -842,8 +822,7 @@ impl Ppu {
             }
 
             OamScanStage::Transition1 { remaining } => {
-                // State 10: Mode 3 transition
-                // SameBoy lines 1824-1840
+                // State 10: Mode 3 transition.
                 if remaining == 6 {
                     // Set up Mode 3
                     self.set_mode_stat(Mode::Drawing);
@@ -865,8 +844,7 @@ impl Ppu {
             }
 
             OamScanStage::Transition2 { remaining } => {
-                // State 32: CGB palettes blocked
-                // SameBoy lines 1842-1844
+                // State 32: CGB palettes blocked.
                 if remaining == 4 {
                     self.cgb_palettes_blocked = true;
                 }
@@ -953,8 +931,8 @@ impl Ppu {
             return;
         }
 
-        // Check for sprites at current position
-        // SameBoy's x_for_object_match: position_in_line + 8, clamped to 0 if overflow
+        // Check for sprites at current position.
+        // x_for_object_match: position_in_line + 8, clamped to 0 if overflow.
         let match_x = {
             let raw = self.position_in_line.wrapping_add(8) as u8;
             // If raw > 240 (i.e., position_in_line was < -8), use 0
@@ -969,24 +947,21 @@ impl Ppu {
 
         // Check if we should start fetching sprites
         let sprites_enabled = self.lcdc & LCDC_OBJ_B != 0 || matches!(cgb_mode, CgbMode::Cgb);
-        if sprites_enabled {
-            if let Some(sprite) = self.sprite_buffer.peek() {
-                if sprite.x == match_x {
-                    let sprite = self.sprite_buffer.pop().unwrap();
-                    self.start_sprite_fetch(sprite, cgb_mode);
-                    // Continue with sprite fetcher on next tick
-                    self.tick_sprite_fetcher(cgb_mode);
-                    return;
-                }
-            }
+        if sprites_enabled
+            && let Some(sprite) = self.sprite_buffer.peek()
+            && sprite.x == match_x
+        {
+            let sprite = self.sprite_buffer.pop().unwrap();
+            self.start_sprite_fetch(sprite, cgb_mode);
+            // Continue with sprite fetcher on next tick
+            self.tick_sprite_fetcher(cgb_mode);
+            return;
         }
 
-        // SameBoy order: render_pixel_if_possible THEN advance_fetcher_state_machine
-        // Try to output a pixel first (output_pixel handles empty FIFO checks internally)
-        // Run every 2 ticks (1 T-cycle)
-        // Start on even ticks relative to global counter, or local?
-        // dots_in_line runs continuously.
-        if self.dots_in_line % 2 == 0 {
+        // Render pixel if possible THEN advance fetcher state machine.
+        // Try to output a pixel first (output_pixel handles empty FIFO checks internally).
+        // Run every 2 ticks (1 T-cycle).
+        if self.dots_in_line.is_multiple_of(2) {
             self.output_pixel(cgb_mode);
         }
 
@@ -995,13 +970,13 @@ impl Ppu {
 
         // Check if line rendering is complete
         if self.position_in_line >= 160 {
-            // SameBoy lines 2077-2087: End of Mode 3 handling
-            // Reset window_y at line 143 (last visible line)
+            // End of Mode 3 handling.
+            // Reset window_y at line 143 (last visible line).
             if self.current_line == 143 {
                 self.window_y = 0xFF; // -1 in unsigned, will wrap to 0 on first increment
             }
 
-            // SameBoy: WX=166 DMG special case - triggers window for next line
+            // WX=166 DMG special case - triggers window for next line.
             let is_cgb = matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat);
             if !is_cgb && self.wy_triggered && self.is_window_enabled() && self.wx == 166 {
                 self.wx_triggered = true;
@@ -1011,11 +986,11 @@ impl Ppu {
                 self.wx_triggered = false;
             }
 
-            // Transition to HBlank
-            // Memory unblocking and STAT update happens in tick_hblank StatUpdate state
+            // Transition to HBlank.
+            // Memory unblocking and STAT update happens in tick_hblank StatUpdate state.
             self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate { remaining: 2 });
-            // Note: STAT mode bits are NOT updated here - that happens in tick_hblank
-            // This matches SameBoy where Mode 0 is set in State 22
+            // Note: STAT mode bits are NOT updated here - that happens in tick_hblank.
+            // Mode 0 is set in State 22.
         }
     }
 
@@ -1067,7 +1042,7 @@ impl Ppu {
     }
 
     /// Tick the sprite fetcher state machine.
-    /// Implements SameBoy's sprite fetch sequence:
+    /// Sprite fetch sequence:
     /// - State 27: Wait loop until (fetcher_state >= 5 AND fifo > 0)
     /// - State 41: Extra advance (1 cycle)
     /// - "Free" advance (no cycle cost, before State 20)
@@ -1079,46 +1054,29 @@ impl Ppu {
             SpriteFetcherState::Idle => {}
 
             SpriteFetcherState::WaitForBgFetcher => {
-                // SameBoy State 27: Wait loop
+                // State 27: Wait loop.
                 // Condition: while (fetcher_state < 5 || fifo_size == 0)
-                // fetcher_state >= 5 means GetDataHighT2, PushT1, or PushT2
-                let fetcher_aligned = match self.fetcher_state {
-                    FetcherState::GetDataHighT2 | FetcherState::Push => true,
-                    _ => false,
-                };
+                // fetcher_state >= 5 means GetDataHighT2, PushT1, or PushT2.
+                let fetcher_aligned = matches!(
+                    self.fetcher_state,
+                    FetcherState::GetDataHighT2 | FetcherState::Push
+                );
                 let fifo_not_empty = self.bg_fifo.size() > 0;
 
                 if fetcher_aligned && fifo_not_empty {
-                    // Exit wait loop, enter State 41 (1 cycle for advance)
-                    // But we advance BG fetcher THIS tick as well?
-                    // SameBoy loop body executes advance_fetcher_state_machine().
-                    // When breaking, it does NOT execute advance?
-                    // "if (...) goto state_41;"
+                    // Exit wait loop, enter State 41 (1 cycle for advance).
                     self.sprite_fetcher_state = SpriteFetcherState::State41Advance;
                     self.sprite_fetcher_step = 0;
-                    // Note: We don't call advance_fetcher here because we'll be in State 41
-                    // which advances it?
-                    // Actually, if we break, we stop iterating State 27 loop.
-                    // State 41 will run next.
-                    // BUT SameBoy runs multiple states in one loop if cycles allow.
-                    // We run one state per tick.
-                    // So we transition to State 41, which will run NEXT tick.
-                    // We should probably run advance_fetcher() for THIS tick if we were waiting?
-                    // If we were waiting, we advanced.
-                    // If we break immediately, did we wait?
-                    // Let's assume consistent with previous logic:
-                    // If we match the condition, we transition.
-                    // If not, we advance and stay.
-                    self.advance_fetcher(cgb_mode, true);
                 } else {
-                    // Matches SameBoy State 27 (Loop body advance)
-                    self.advance_fetcher(cgb_mode, true);
-                    // Stay in WaitForBgFetcher
+                    // Matches State 27 (Loop body advance).
+                    // Stay in WaitForBgFetcher.
                 }
+
+                self.advance_fetcher(cgb_mode, true);
             }
 
             SpriteFetcherState::State41Advance => {
-                // SameBoy State 41: 1 cycle (2 ticks), then do "free" advance and transition
+                // State 41: 1 cycle (2 ticks), then do "free" advance and transition.
                 self.advance_fetcher(cgb_mode, true);
                 self.sprite_fetcher_step += 1;
                 if self.sprite_fetcher_step >= 2 {
@@ -1128,8 +1086,8 @@ impl Ppu {
             }
 
             SpriteFetcherState::GetTileAndFlags => {
-                // SameBoy State 20: OAM read (2 cycles = 4 ticks)
-                // Advance BG fetcher 1 step (2 ticks) then wait
+                // State 20: OAM read (2 cycles = 4 ticks).
+                // Advance BG fetcher 1 step (2 ticks) then wait.
                 if self.sprite_fetcher_step < 2 {
                     self.advance_fetcher(cgb_mode, true);
                 }
@@ -1141,7 +1099,7 @@ impl Ppu {
             }
 
             SpriteFetcherState::GetDataLow => {
-                // SameBoy State 39: VRAM low read (2 cycles = 4 ticks)
+                // State 39: VRAM low read (2 cycles = 4 ticks).
                 if self.sprite_fetcher_step == 0 {
                     self.sprite_tile_data_low = self
                         .vram
@@ -1155,7 +1113,7 @@ impl Ppu {
             }
 
             SpriteFetcherState::GetDataHighAndPush => {
-                // SameBoy State 40: VRAM high read (1 cycle = 2 ticks), then overlay
+                // State 40: VRAM high read (1 cycle = 2 ticks), then overlay.
                 self.sprite_fetcher_step += 1;
 
                 if self.sprite_fetcher_step >= 2 {
@@ -1202,32 +1160,31 @@ impl Ppu {
         let is_cgb = matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat);
         let pos = self.position_in_line;
 
-        // SameBoy: WX=0 has special handling
+        // WX=0 has special handling.
         if self.wx == 0 {
-            let should_activate = if pos == -7i16 as i16 {
-                true
-            } else if pos == -16i16 as i16 && (self.scx & 7) != 0 {
+            let should_activate = if pos == -7 || pos == -16 && (self.scx & 7) != 0 {
                 true
             } else {
-                // position_in_line >= -15 && position_in_line <= -8
-                pos >= -15 && pos <= -8
+                (-15..=-8).contains(&pos)
             };
 
             if should_activate {
                 self.activate_window(is_cgb);
             }
         }
-        // SameBoy: WX < 166 (or 167 on CGB) - normal window trigger
+        // WX < 166 (or 167 on CGB) - normal window trigger.
         else if self.wx < 166 + u8::from(is_cgb) {
-            // Window activates when position_in_line + 7 == WX
+            // Window activates when position_in_line + 7 == WX.
             if pos + 7 == i16::from(self.wx) {
                 self.activate_window(is_cgb);
             }
         }
-        // SameBoy: WX=166 on DMG - special case, increment window_y but don't fully trigger
+        // WX=166 on DMG - special case, increment window_y but don't fully trigger.
         else if !is_cgb && self.wx == 166 && pos + 7 == i16::from(self.wx) {
-            // Just increment window line counter without full window activation
+            // Just increment window line counter without full window activation.
             self.window_y = self.window_y.wrapping_add(1);
+        } else {
+            // WX > 166 (or 167 on CGB) - window never activates.
         }
     }
 
@@ -1239,8 +1196,8 @@ impl Ppu {
         // Clear BG FIFO and restart fetcher for window
         self.bg_fifo.clear();
 
-        // SameBoy lines 1917-1919: Only WX=0 with (SCX & 7) != 0 on DMG adds 1 T-cycle (2 ticks) delay
-        // All other cases have no delay
+        // Only WX=0 with (SCX & 7) != 0 on DMG adds 1 T-cycle (2 ticks) delay.
+        // All other cases have no delay.
         if self.wx == 0 && (self.scx & 7) != 0 && !is_cgb {
             self.window_activation_delay = 2;
         } else {
@@ -1253,7 +1210,7 @@ impl Ppu {
     }
 
     /// Advance the background/window fetcher state machine.
-    /// Uses T1/T2 states matching SameBoy:
+    /// Uses T1/T2 states:
     /// - T1: Calculate addresses/setup (2 ticks)
     /// - T2: Perform VRAM read (2 ticks)
     fn advance_fetcher(&mut self, cgb_mode: CgbMode, during_sprite_fetch: bool) {
@@ -1267,8 +1224,8 @@ impl Ppu {
 
         match self.fetcher_state {
             FetcherState::GetTileT1 => {
-                // T1: Calculate tile map address
-                // SameBoy line 923-924: Clear wx_triggered if window is disabled
+                // T1: Calculate tile map address.
+                // Clear wx_triggered if window is disabled.
                 if !self.is_window_enabled() {
                     self.wx_triggered = false;
                 }
@@ -1288,7 +1245,7 @@ impl Ppu {
                 let x = if self.wx_triggered {
                     self.window_tile_x
                 } else {
-                    // SameBoy BG X calculation
+                    // BG X calculation
                     let scx = self.scx;
                     // (pos + 16 < 8) is equivalent to (pos < -8)
                     if self.position_in_line < -8 {
@@ -1334,22 +1291,22 @@ impl Ppu {
                 self.fetcher_state = FetcherState::GetDataHighT1;
             }
             FetcherState::GetDataHighT1 => {
-                // T1: Recalculate tile data address for high byte
-                // SameBoy re-reads LCDC here to handle mid-fetch changes
+                // T1: Recalculate tile data address for high byte.
+                // Re-read LCDC here to handle mid-fetch changes.
                 self.fetcher_tile_data_addr = self.calculate_tile_data_addr() + 1;
                 self.fetcher_state = FetcherState::GetDataHighT2;
             }
             FetcherState::GetDataHighT2 => {
-                // T2: Read high byte from VRAM
+                // T2: Read high byte from VRAM.
                 self.current_tile_data[1] = self.read_tile_byte(self.fetcher_tile_data_addr);
 
-                // SameBoy lines 1075-1078: Increment window_tile_x AFTER reading high byte
+                // Increment window_tile_x AFTER reading high byte.
                 if self.wx_triggered {
                     self.window_tile_x = self.window_tile_x.wrapping_add(1) & 0x1F;
                 }
 
-                // SameBoy: Fallthrough to PUSH logic immediately
-                // If FIFO is empty, push and go to GetTileT1 (0 cycles for push)
+                // Fallthrough to PUSH logic immediately.
+                // If FIFO is empty, push and go to GetTileT1 (0 cycles for push).
                 if self.bg_fifo.is_empty() {
                     self.push_to_fifo();
                     self.fetcher_state = FetcherState::GetTileT1;
@@ -1382,7 +1339,7 @@ impl Ppu {
             bg_priority,
             flip_x,
         );
-        // Note: window_tile_x increment moved to GetDataHighT2 to match SameBoy
+        // Note: window_tile_x increment moved to GetDataHighT2.
     }
 
     /// Calculate tile data address for current tile.
@@ -1426,24 +1383,24 @@ impl Ppu {
     }
 
     /// Output a pixel to the LCD buffer.
-    /// Implements SameBoy's render_pixel_if_possible logic.
+    /// Implements `render_pixel_if_possible` logic.
     fn output_pixel(&mut self, cgb_mode: CgbMode) {
-        // SameBoy line 667: FIFO empty check FIRST, before anything else
+        // FIFO empty check FIRST, before anything else.
         if self.bg_fifo.is_empty() {
             return;
         }
 
-        // SameBoy line 674: Pop from BG FIFO
+        // Pop from BG FIFO.
         let bg_pixel = self.bg_fifo.pop().unwrap();
         let sprite_pixel = self.oam_fifo.pop();
 
-        // SameBoy lines 686-704: Handle position_in_line alignment for SCX.
+        // Handle position_in_line alignment for SCX.
         // (position_in_line + 16 < 8) is equivalent to (position_in_line < -8) in unsigned logic.
         // When position_in_line is in the range [-16, -9], we're in the "fractional scrolling" phase.
         #[expect(clippy::cast_sign_loss)]
         let unsigned_pos_plus_16 = (self.position_in_line + 16) as u8;
         if unsigned_pos_plus_16 < 8 {
-            // SameBoy edge case: position_in_line == -17 wraps to -16
+            // Edge case: position_in_line == -17 wraps to -16
             if self.position_in_line == -17 {
                 self.position_in_line = -16;
             } else if (self.position_in_line & 7) as u8 == (self.scx & 7) {
@@ -1453,10 +1410,10 @@ impl Ppu {
                 && (self.position_in_line & 7) as u8 == 6
                 && (self.scx & 7) == 7
             {
-                // SameBoy edge case: window fetch with specific SCX alignment
+                // Edge case: window fetch with specific SCX alignment
                 self.position_in_line = -8;
             } else if self.position_in_line == -9 {
-                // SameBoy edge case: -9 wraps back to -16
+                // Edge case: -9 wraps back to -16
                 self.position_in_line = -16;
                 return;
             } else {
@@ -1464,18 +1421,17 @@ impl Ppu {
             }
         }
 
-        // SameBoy line 706
         self.window_is_being_fetched = false;
 
-        // SameBoy lines 709-711: Drop pixels for scrolling (position >= 160 in uint8 terms)
-        // In signed terms: position < 0 (discard phase) OR position >= 160 (line complete)
+        // Drop pixels for scrolling (position >= 160 in uint8 terms).
+        // In signed terms: position < 0 (discard phase) OR position >= 160 (line complete).
         if self.position_in_line < 0 {
-            // Discard phase - just increment position, pixel already popped
+            // Discard phase - just increment position, pixel already popped.
             self.position_in_line += 1;
             return;
         }
 
-        // SameBoy: Drop pixels if we've reached the end of the visible line
+        // Drop pixels if we've reached the end of the visible line.
         if self.lcd_x >= PX_WIDTH {
             self.position_in_line += 1;
             return;
@@ -1632,33 +1588,32 @@ impl Ppu {
     }
 
     /// Tick during Mode 0 (HBlank).
-    /// SameBoy timing:
+    /// Timing:
     /// - State 22 (2 ticks): STAT = Mode 0, memory unblocked, fire STAT interrupt
     /// - State 33 (4 ticks): CGB palettes blocked (non-double-speed only)
     /// - State 36 (4 ticks): CGB palettes unblocked
     /// - State 11 (variable): Wait until line ends (912 ticks total)
     /// - State 31 (4 ticks): Set mode_for_interrupt = 2 for next line
     fn tick_hblank(&mut self, ints: &mut Interrupts, double_speed: bool) {
-        let PpuPhase::HBlank(stage) = self.phase else {
-            return;
-        };
-
         // Line length is 456 T-cycles = 912 ticks
         const LINE_LENGTH_TICKS: u16 = 912;
         // PreEnd starts 4 ticks before line end
         const PRE_END_START: u16 = LINE_LENGTH_TICKS - 4;
 
+        let PpuPhase::HBlank(stage) = self.phase else {
+            return;
+        };
+
         match stage {
             HBlankStage::StatUpdate { remaining } => {
-                // State 22: STAT = Mode 0, memory unblocked
-                // SameBoy lines 2090-2108: Two-phase mode change
+                // State 22: STAT = Mode 0, memory unblocked.
+                // Two-phase mode change.
 
-                // Phase 1 (remaining == 2): Non-double-speed early unblock
-                // SameBoy lines 2090-2097
+                // Phase 1 (remaining == 2): Non-double-speed early unblock.
                 if remaining == 2 && !double_speed {
                     self.set_mode_stat(Mode::HBlank);
                     self.mode_for_interrupt = Some(Mode::HBlank);
-                    // Note: oam_read_blocked stays true on CGB-D+, but we don't track model
+                    // Note: oam_read_blocked stays true on CGB-D+, but we don't track model.
                     self.oam_read_blocked = false;
                     self.vram_read_blocked = false;
                     self.oam_write_blocked = false;
@@ -1666,8 +1621,7 @@ impl Ppu {
                     // No STAT update yet!
                 }
 
-                // Phase 2 (remaining == 1, right before transition): Full unblock + STAT update
-                // SameBoy lines 2102-2108
+                // Phase 2 (remaining == 1, right before transition): Full unblock + STAT update.
                 if remaining == 1 {
                     self.set_mode_stat(Mode::HBlank);
                     self.mode_for_interrupt = Some(Mode::HBlank);
@@ -1689,8 +1643,7 @@ impl Ppu {
             }
 
             HBlankStage::PalettesBlock { remaining } => {
-                // State 33: CGB palettes blocked (non-double-speed only)
-                // SameBoy lines 2111-2113
+                // State 33: CGB palettes blocked (non-double-speed only).
                 if remaining == 4 && !double_speed {
                     self.cgb_palettes_blocked = true;
                 }
@@ -1705,11 +1658,10 @@ impl Ppu {
             }
 
             HBlankStage::PalettesUnblock { remaining } => {
-                // State 36: CGB palettes unblocked
-                // SameBoy lines 2119-2121
+                // State 36: CGB palettes unblocked.
                 if remaining == 4 {
                     self.cgb_palettes_blocked = false;
-                    // TODO: HDMA trigger check (line 2115-2117)
+                    // TODO: HDMA trigger check
                 }
 
                 if remaining <= 1 {
@@ -1723,9 +1675,8 @@ impl Ppu {
             }
 
             HBlankStage::Remainder => {
-                // State 11: Wait for line to near-complete
-                // SameBoy lines 2129-2133
-                // We wait until 4 ticks before line end, then transition to PreEnd
+                // State 11: Wait for line to near-complete.
+                // We wait until 4 ticks before line end, then transition to PreEnd.
                 if self.dots_in_line >= PRE_END_START {
                     self.phase = PpuPhase::HBlank(HBlankStage::PreEnd { remaining: 4 });
                 }
@@ -1733,9 +1684,8 @@ impl Ppu {
             }
 
             HBlankStage::PreEnd { remaining } => {
-                // State 31: Pre-end, set mode_for_interrupt = 2 for next line
-                // SameBoy lines 2135-2139
-                // Use current_line, not ly, to match SameBoy line 2137
+                // State 31: Pre-end, set mode_for_interrupt = 2 for next line.
+                // Use current_line, not ly.
                 if remaining == 4 && self.current_line != 143 {
                     // Prepare Mode 2 interrupt for next line (LineStart)
                     self.mode_for_interrupt = Some(Mode::OamScan);
@@ -1785,10 +1735,10 @@ impl Ppu {
 
         match stage {
             VBlankStage::LycReset { ref mut remaining } => {
-                // State 26: 2 cycles (4 ticks)
+                // State 26: 2 cycles (4 ticks).
                 if *remaining == 4 {
-                    // Start of VBlank line logic
-                    // SameBoy: ly_for_comparison = -1;
+                    // Start of VBlank line logic.
+                    // ly_for_comparison = -1 (0xFFFF).
                     self.ly_for_comparison = 0xFFFF;
                     self.update_stat(ints);
                 }
@@ -1796,9 +1746,8 @@ impl Ppu {
                 if *remaining <= 1 {
                     self.phase = PpuPhase::VBlank(VBlankStage::LyUpdate { remaining: 4 });
                     return;
-                } else {
-                    *remaining -= 1;
                 }
+                *remaining -= 1;
             }
 
             VBlankStage::LyUpdate { ref mut remaining } => {
@@ -1810,26 +1759,24 @@ impl Ppu {
                 if *remaining <= 1 {
                     self.phase = PpuPhase::VBlank(VBlankStage::LycUpdate { remaining: 2 });
                     return;
-                } else {
-                    *remaining -= 1;
                 }
+                *remaining -= 1;
             }
 
             VBlankStage::LycUpdate { ref mut remaining } => {
-                // State 24: 1 cycle (2 ticks)
+                // State 24: 1 cycle (2 ticks).
                 if *remaining <= 1 {
                     self.ly_for_comparison = u16::from(self.ly);
                     self.update_stat(ints);
 
-                    // SameBoy Step 10: VBlank Entry Logic (Line 144 only)
+                    // Step 10: VBlank Entry Logic (Line 144 only).
                     if self.current_line == PX_HEIGHT {
-                        // Enter Mode 1 (VBlank) officially
+                        // Enter Mode 1 (VBlank) officially.
                         self.set_mode_stat(Mode::VBlank);
                         ints.request_vblank();
-                        self.wy_triggered = false; // Reset WY trigger (usually done in VBlank INT in SameBoy?)
+                        self.wy_triggered = false; // Reset WY trigger.
 
                         // Quirk #2: Check for OAM interrupt again?
-                        // SameBoy line 2197: if (!gb->stat_interrupt_line && (gb->io_registers[GB_IO_STAT] & 0x20))
                         if !self.stat_interrupt_line && (self.stat & STAT_IF_OAM_B != 0) {
                             ints.request_lcd();
                         }
@@ -1842,9 +1789,8 @@ impl Ppu {
                     // Remainder = 912 - 10 = 902.
                     self.phase = PpuPhase::VBlank(VBlankStage::Remainder { remaining: 902 });
                     return;
-                } else {
-                    *remaining -= 1;
                 }
+                *remaining -= 1;
             }
 
             VBlankStage::Remainder { ref mut remaining } => {
@@ -1865,9 +1811,8 @@ impl Ppu {
                         self.phase = PpuPhase::VBlank(VBlankStage::default());
                     }
                     return;
-                } else {
-                    *remaining -= 1;
                 }
+                *remaining -= 1;
             }
         }
 
@@ -1898,8 +1843,8 @@ impl Ppu {
         self.vram_read_blocked = false;
         self.vram_write_blocked = false;
         self.cgb_palettes_blocked = false;
-        // SameBoy: window_y starts at -1 (0xFF), incremented to 0 when window first activates
-        // The reset at line 143 handles this for subsequent frames
+        // window_y starts at -1 (0xFF), incremented to 0 when window first activates.
+        // The reset at line 143 handles this for subsequent frames.
         self.window_y = 0xFF;
         self.wx_triggered = false;
         self.enter_mode(Mode::OamScan, ints);

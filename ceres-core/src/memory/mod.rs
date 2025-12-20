@@ -5,7 +5,7 @@ mod key1;
 mod svbk;
 mod wram;
 
-use crate::{AudioCallback, Model};
+use crate::{AudioCallback, Model, ppu};
 use crate::{CgbMode, Gb};
 pub use dma::Dma;
 pub use hdma::Hdma;
@@ -100,23 +100,20 @@ impl<A: AudioCallback> Gb<A> {
 
     #[must_use]
     fn read_boot_or_cart(&self, addr: u16) -> u8 {
-        self.bootrom.read(addr).map_or_else(
-            || {
-                #[cfg(feature = "game_genie")]
-                {
-                    let data = self.cart.read_rom(addr);
-                    self.game_genie
-                        .query(addr, data)
-                        .map_or(data, |gg_data| gg_data)
-                }
+        self.bootrom.read(addr).unwrap_or_else(|| {
+            #[cfg(feature = "game_genie")]
+            {
+                let data = self.cart.read_rom(addr);
+                self.game_genie
+                    .query(addr, data)
+                    .map_or(data, |gg_data| gg_data)
+            }
 
-                #[cfg(not(feature = "game_genie"))]
-                {
-                    self.cart.read_rom(addr)
-                }
-            },
-            |boot_data| boot_data,
-        )
+            #[cfg(not(feature = "game_genie"))]
+            {
+                self.cart.read_rom(addr)
+            }
+        })
     }
 
     #[must_use]
@@ -208,9 +205,7 @@ impl<A: AudioCallback> Gb<A> {
                     #[cfg(feature = "game_genie")]
                     {
                         let data = self.cart.read_rom(addr);
-                        self.game_genie
-                            .query(addr, data)
-                            .map_or_else(|| data, |gg_data| gg_data)
+                        self.game_genie.query(addr, data).unwrap_or(data)
                     }
 
                     #[cfg(not(feature = "game_genie"))]
@@ -223,9 +218,7 @@ impl<A: AudioCallback> Gb<A> {
                 #[cfg(feature = "game_genie")]
                 {
                     let data = self.cart.read_rom(addr);
-                    self.game_genie
-                        .query(addr, data)
-                        .map_or_else(|| data, |gg_data| gg_data)
+                    self.game_genie.query(addr, data).unwrap_or(data)
                 }
 
                 #[cfg(not(feature = "game_genie"))]
@@ -266,6 +259,8 @@ impl<A: AudioCallback> Gb<A> {
                     self.apu.write_nr11(val);
                 } else if !self.is_cgb() {
                     self.apu.write_nr11(val & 0x3F);
+                } else {
+                    // Don't write anything on CGB when APU is disabled
                 }
             }
             NR12 if self.apu.enabled() => self.apu.write_nr12(val),
@@ -276,6 +271,8 @@ impl<A: AudioCallback> Gb<A> {
                     self.apu.write_nr21(val);
                 } else if !self.is_cgb() {
                     self.apu.write_nr21(val & 0x3F);
+                } else {
+                    // Don't write anything on CGB when APU is disabled
                 }
             }
             NR22 if self.apu.enabled() => self.apu.write_nr22(val),
@@ -344,7 +341,7 @@ impl<A: AudioCallback> Gb<A> {
             HDMA3 if self.are_cgb_regs_available() => self.hdma.write_hdma3(val),
             HDMA4 if self.are_cgb_regs_available() => self.hdma.write_hdma4(val),
             HDMA5 if self.are_cgb_regs_available() => {
-                let in_hblank = matches!(self.ppu.mode(), crate::ppu::Mode::HBlank);
+                let in_hblank = matches!(self.ppu.mode(), ppu::Mode::HBlank);
                 self.hdma.write_hdma5(val, in_hblank);
             }
             BCPS if self.are_cgb_regs_available() => self.ppu.bcp_mut().set_spec(val),

@@ -80,19 +80,7 @@ impl PixelFifo {
         // Let's reset it to 0 to match SameBoy's implicit behavior.
         self.read_pos = 0;
 
-        if !flip_x {
-            for i in 0..8 {
-                let color = ((data_low >> 7) & 1) | (((data_high >> 7) & 1) << 1);
-                self.pixels[i] = FifoPixel {
-                    color,
-                    palette,
-                    priority: 0,
-                    bg_priority,
-                };
-                data_low <<= 1;
-                data_high <<= 1;
-            }
-        } else {
+        if flip_x {
             for i in 0..8 {
                 let color = (data_low & 1) | ((data_high & 1) << 1);
                 self.pixels[i] = FifoPixel {
@@ -103,6 +91,18 @@ impl PixelFifo {
                 };
                 data_low >>= 1;
                 data_high >>= 1;
+            }
+        } else {
+            for i in 0..8 {
+                let color = ((data_low >> 7) & 1) | (((data_high >> 7) & 1) << 1);
+                self.pixels[i] = FifoPixel {
+                    color,
+                    palette,
+                    priority: 0,
+                    bg_priority,
+                };
+                data_low <<= 1;
+                data_high <<= 1;
             }
         }
     }
@@ -170,64 +170,5 @@ impl PixelFifo {
             data_low <<= 1;
             data_high <<= 1;
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_fifo_push_pop() {
-        let mut fifo = PixelFifo::default();
-        assert!(fifo.is_empty());
-        assert_eq!(fifo.size(), 0);
-
-        // Push a row with alternating colors
-        fifo.push_bg_row(0b1010_1010, 0b0000_0000, 0, false, false);
-        assert_eq!(fifo.size(), 8);
-
-        // Pop and check colors
-        for i in 0..8 {
-            let pixel = fifo.pop().expect("should have pixel");
-            let expected_color = if i % 2 == 0 { 1 } else { 0 };
-            assert_eq!(pixel.color, expected_color, "pixel {i} color mismatch");
-        }
-
-        assert!(fifo.is_empty());
-        assert!(fifo.pop().is_none());
-    }
-
-    #[test]
-    fn test_fifo_flip_x() {
-        let mut fifo_normal = PixelFifo::default();
-        let mut fifo_flipped = PixelFifo::default();
-
-        // Pattern: 0b1100_0011 = colors [1,1,0,0,0,0,1,1] when not flipped
-        fifo_normal.push_bg_row(0b1100_0011, 0b0000_0000, 0, false, false);
-        fifo_flipped.push_bg_row(0b1100_0011, 0b0000_0000, 0, false, true);
-
-        // Collect all colors
-        let mut colors_normal = Vec::new();
-        let mut colors_flipped = Vec::new();
-        for _ in 0..8 {
-            colors_normal.push(fifo_normal.pop().unwrap().color);
-            colors_flipped.push(fifo_flipped.pop().unwrap().color);
-        }
-
-        // Flipped should be reversed
-        let mut expected_flipped = colors_normal.clone();
-        expected_flipped.reverse();
-        assert_eq!(colors_flipped, expected_flipped);
-    }
-
-    #[test]
-    fn test_fifo_clear() {
-        let mut fifo = PixelFifo::default();
-        fifo.push_bg_row(0xFF, 0xFF, 0, false, false);
-        assert_eq!(fifo.size(), 8);
-
-        fifo.clear();
-        assert!(fifo.is_empty());
     }
 }

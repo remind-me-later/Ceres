@@ -29,42 +29,42 @@ impl SpriteEntry {
     /// Returns true if sprite has BG/Window priority (appears behind non-zero BG pixels).
     #[inline]
     #[must_use]
-    pub const fn bg_priority(&self) -> bool {
+    pub const fn bg_priority(self) -> bool {
         self.flags & 0x80 != 0
     }
 
     /// Returns true if sprite is Y-flipped.
     #[inline]
     #[must_use]
-    pub const fn y_flip(&self) -> bool {
+    pub const fn y_flip(self) -> bool {
         self.flags & 0x40 != 0
     }
 
     /// Returns true if sprite is X-flipped.
     #[inline]
     #[must_use]
-    pub const fn x_flip(&self) -> bool {
+    pub const fn x_flip(self) -> bool {
         self.flags & 0x20 != 0
     }
 
     /// Returns DMG palette (0=OBP0, 1=OBP1).
     #[inline]
     #[must_use]
-    pub const fn dmg_palette(&self) -> u8 {
+    pub const fn dmg_palette(self) -> u8 {
         (self.flags >> 4) & 1
     }
 
     /// Returns CGB VRAM bank (0 or 1).
     #[inline]
     #[must_use]
-    pub const fn cgb_vram_bank(&self) -> u8 {
+    pub const fn cgb_vram_bank(self) -> u8 {
         (self.flags >> 3) & 1
     }
 
     /// Returns CGB palette (0-7).
     #[inline]
     #[must_use]
-    pub const fn cgb_palette(&self) -> u8 {
+    pub const fn cgb_palette(self) -> u8 {
         self.flags & 7
     }
 }

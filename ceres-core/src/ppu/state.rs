@@ -32,6 +32,7 @@ impl Default for Line0Stage {
 /// - Scan (State 8): 160 ticks - 40 OAM entries × 4 ticks each
 /// - Transition1 (State 10): 6 ticks - Mode 3 transition, VRAM blocked
 /// - Transition2 (State 32): 4 ticks - CGB palettes blocked
+///
 /// Total: 4 + 2 + 2 + 160 + 6 + 4 = 178 ticks (but overlaps with Mode 3 setup)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OamScanStage {
