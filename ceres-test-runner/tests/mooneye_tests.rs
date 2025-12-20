@@ -1,8 +1,9 @@
 use ceres_core::Model;
 use ceres_test_runner::{
-    load_test_rom,
+    expected_screenshot_path, load_test_rom,
     test_runner::{
-        CompletionCheck, DummyAudioCallback, TestConfig, TestResult, TestRunner, timeouts,
+        CompletionCheck, DummyAudioCallback, ScreenshotCheck, TestConfig, TestResult, TestRunner,
+        timeouts,
     },
 };
 
@@ -59,6 +60,33 @@ fn run_mooneye_test(path: &str, model: Model) -> TestResult {
         Ok(runner) => runner,
         Err(e) => return TestResult::Error(format!("Failed to create test runner: {e}")),
     };
+
+    runner.run()
+}
+
+/// Helper function to run a Mooneye screenshot test
+fn run_mooneye_screenshot_test(path: &str, model: Model) -> TestResult {
+    let rom = match load_test_rom(path) {
+        Ok(rom) => rom,
+        Err(e) => return TestResult::Error(format!("Failed to load test ROM: {e}")),
+    };
+
+    let screenshot_path = match expected_screenshot_path(path, model) {
+        Some(path) => path,
+        None => return TestResult::Error("Expected screenshot not found".to_string()),
+    };
+
+    let config = TestConfig {
+        model,
+        timeout_frames: timeouts::MOONEYE_ACCEPTANCE,
+        ..TestConfig::default()
+    };
+
+    let mut runner =
+        match TestRunner::new(rom, config, Box::new(ScreenshotCheck::new(screenshot_path))) {
+            Ok(runner) => runner,
+            Err(e) => return TestResult::Error(format!("Failed to create test runner: {e}")),
+        };
 
     runner.run()
 }
@@ -1056,4 +1084,26 @@ fn test_mooneye_mbc5_rom_64mb() {
         Model::CgbE,
     );
     assert!(result.is_passed(), "mbc5/rom_64Mb test failed");
+}
+
+// =============================================================================
+// manual-only/ Tests
+// =============================================================================
+
+#[test]
+fn test_mooneye_manual_sprite_priority_dmg() {
+    let result = run_mooneye_screenshot_test(
+        "mooneye-test-suite/manual-only/sprite_priority.gb",
+        Model::DmgB,
+    );
+    assert!(result.is_passed(), "manual-only/sprite_priority DMG test failed");
+}
+
+#[test]
+fn test_mooneye_manual_sprite_priority_cgb() {
+    let result = run_mooneye_screenshot_test(
+        "mooneye-test-suite/manual-only/sprite_priority.gb",
+        Model::CgbE,
+    );
+    assert!(result.is_passed(), "manual-only/sprite_priority CGB test failed");
 }
