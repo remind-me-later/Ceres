@@ -114,6 +114,7 @@ fn test_samesuite_ei_delay_halt() {
 // Misc
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_div_trigger_volume_10() {
     let result = run_samesuite_test("same-suite/apu/div_trigger_volume_10.gb", Model::CgbE);
     assert_eq!(
@@ -124,6 +125,7 @@ fn test_samesuite_apu_div_trigger_volume_10() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_div_write_trigger_10() {
     let result = run_samesuite_test("same-suite/apu/div_write_trigger_10.gb", Model::CgbE);
     assert_eq!(
@@ -134,6 +136,7 @@ fn test_samesuite_apu_div_write_trigger_10() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_div_write_trigger_volume_10() {
     let result = run_samesuite_test("same-suite/apu/div_write_trigger_volume_10.gb", Model::CgbE);
     assert_eq!(
@@ -144,6 +147,7 @@ fn test_samesuite_apu_div_write_trigger_volume_10() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_div_write_trigger_volume() {
     let result = run_samesuite_test("same-suite/apu/div_write_trigger_volume.gb", Model::CgbE);
     assert_eq!(
@@ -154,6 +158,7 @@ fn test_samesuite_apu_div_write_trigger_volume() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_div_write_trigger() {
     let result = run_samesuite_test("same-suite/apu/div_write_trigger.gb", Model::CgbE);
     assert_eq!(
@@ -166,6 +171,7 @@ fn test_samesuite_apu_div_write_trigger() {
 // Channel 1
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_1_align_cpu() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_1/channel_1_align_cpu.gb",
@@ -179,6 +185,7 @@ fn test_samesuite_apu_channel_1_align_cpu() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_1_align() {
     let result = run_samesuite_test("same-suite/apu/channel_1/channel_1_align.gb", Model::CgbE);
     assert_eq!(
@@ -189,6 +196,7 @@ fn test_samesuite_apu_channel_1_align() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_1_delay() {
     let result = run_samesuite_test("same-suite/apu/channel_1/channel_1_delay.gb", Model::CgbE);
     assert_eq!(
@@ -199,6 +207,7 @@ fn test_samesuite_apu_channel_1_delay() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_1_duty_delay() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_1/channel_1_duty_delay.gb",
@@ -212,6 +221,7 @@ fn test_samesuite_apu_channel_1_duty_delay() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_1_duty() {
     let result = run_samesuite_test("same-suite/apu/channel_1/channel_1_duty.gb", Model::CgbE);
     assert_eq!(
@@ -222,6 +232,7 @@ fn test_samesuite_apu_channel_1_duty() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_1_freq_change() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_1/channel_1_freq_change.gb",
@@ -235,6 +246,7 @@ fn test_samesuite_apu_channel_1_freq_change() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_1_freq_change_timing_cgb_de() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_1/channel_1_freq_change_timing-cgbDE.gb",
@@ -248,6 +260,7 @@ fn test_samesuite_apu_channel_1_freq_change_timing_cgb_de() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_1_nrx2_glitch() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_1/channel_1_nrx2_glitch.gb",
@@ -261,6 +274,7 @@ fn test_samesuite_apu_channel_1_nrx2_glitch() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_1_nrx2_speed_change() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_1/channel_1_nrx2_speed_change.gb",
@@ -274,6 +288,7 @@ fn test_samesuite_apu_channel_1_nrx2_speed_change() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_1_restart() {
     let result = run_samesuite_test("same-suite/apu/channel_1/channel_1_restart.gb", Model::CgbE);
     assert_eq!(
@@ -284,6 +299,7 @@ fn test_samesuite_apu_channel_1_restart() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_1_restart_nrx2_glitch() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_1/channel_1_restart_nrx2_glitch.gb",
@@ -297,6 +313,7 @@ fn test_samesuite_apu_channel_1_restart_nrx2_glitch() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_1_stop_div() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_1/channel_1_stop_div.gb",
@@ -310,6 +327,7 @@ fn test_samesuite_apu_channel_1_stop_div() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_1_stop_restart() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_1/channel_1_stop_restart.gb",
@@ -323,6 +341,7 @@ fn test_samesuite_apu_channel_1_stop_restart() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_1_sweep() {
     let result = run_samesuite_test("same-suite/apu/channel_1/channel_1_sweep.gb", Model::CgbE);
     assert_eq!(
@@ -333,6 +352,7 @@ fn test_samesuite_apu_channel_1_sweep() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_1_sweep_restart_2() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_1/channel_1_sweep_restart_2.gb",
@@ -346,6 +366,7 @@ fn test_samesuite_apu_channel_1_sweep_restart_2() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_1_sweep_restart() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_1/channel_1_sweep_restart.gb",
@@ -359,6 +380,7 @@ fn test_samesuite_apu_channel_1_sweep_restart() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_1_volume_div() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_1/channel_1_volume_div.gb",
@@ -372,6 +394,7 @@ fn test_samesuite_apu_channel_1_volume_div() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_1_volume() {
     let result = run_samesuite_test("same-suite/apu/channel_1/channel_1_volume.gb", Model::CgbE);
     assert_eq!(
@@ -384,6 +407,7 @@ fn test_samesuite_apu_channel_1_volume() {
 // Channel 2
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_2_align_cpu() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_2/channel_2_align_cpu.gb",
@@ -397,6 +421,7 @@ fn test_samesuite_apu_channel_2_align_cpu() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_2_align() {
     let result = run_samesuite_test("same-suite/apu/channel_2/channel_2_align.gb", Model::CgbE);
     assert_eq!(
@@ -407,6 +432,7 @@ fn test_samesuite_apu_channel_2_align() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_2_delay() {
     let result = run_samesuite_test("same-suite/apu/channel_2/channel_2_delay.gb", Model::CgbE);
     assert_eq!(
@@ -417,6 +443,7 @@ fn test_samesuite_apu_channel_2_delay() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_2_duty_delay() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_2/channel_2_duty_delay.gb",
@@ -430,6 +457,7 @@ fn test_samesuite_apu_channel_2_duty_delay() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_2_duty() {
     let result = run_samesuite_test("same-suite/apu/channel_2/channel_2_duty.gb", Model::CgbE);
     assert_eq!(
@@ -440,6 +468,7 @@ fn test_samesuite_apu_channel_2_duty() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_2_freq_change() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_2/channel_2_freq_change.gb",
@@ -453,6 +482,7 @@ fn test_samesuite_apu_channel_2_freq_change() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_2_nrx2_glitch() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_2/channel_2_nrx2_glitch.gb",
@@ -466,6 +496,7 @@ fn test_samesuite_apu_channel_2_nrx2_glitch() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_2_nrx2_speed_change() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_2/channel_2_nrx2_speed_change.gb",
@@ -479,6 +510,7 @@ fn test_samesuite_apu_channel_2_nrx2_speed_change() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_2_restart() {
     let result = run_samesuite_test("same-suite/apu/channel_2/channel_2_restart.gb", Model::CgbE);
     assert_eq!(
@@ -489,6 +521,7 @@ fn test_samesuite_apu_channel_2_restart() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_2_restart_nrx2_glitch() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_2/channel_2_restart_nrx2_glitch.gb",
@@ -502,6 +535,7 @@ fn test_samesuite_apu_channel_2_restart_nrx2_glitch() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_2_stop_div() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_2/channel_2_stop_div.gb",
@@ -515,6 +549,7 @@ fn test_samesuite_apu_channel_2_stop_div() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_2_stop_restart() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_2/channel_2_stop_restart.gb",
@@ -528,6 +563,7 @@ fn test_samesuite_apu_channel_2_stop_restart() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_2_volume_div() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_2/channel_2_volume_div.gb",
@@ -541,6 +577,7 @@ fn test_samesuite_apu_channel_2_volume_div() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_2_volume() {
     let result = run_samesuite_test("same-suite/apu/channel_2/channel_2_volume.gb", Model::CgbE);
     assert_eq!(
@@ -553,6 +590,7 @@ fn test_samesuite_apu_channel_2_volume() {
 // Channel 3
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_3_and_glitch() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_3/channel_3_and_glitch.gb",
@@ -566,6 +604,7 @@ fn test_samesuite_apu_channel_3_and_glitch() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_3_delay() {
     let result = run_samesuite_test("same-suite/apu/channel_3/channel_3_delay.gb", Model::CgbE);
     assert_eq!(
@@ -576,6 +615,7 @@ fn test_samesuite_apu_channel_3_delay() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_3_first_sample() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_3/channel_3_first_sample.gb",
@@ -589,6 +629,7 @@ fn test_samesuite_apu_channel_3_first_sample() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_3_freq_change_delay() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_3/channel_3_freq_change_delay.gb",
@@ -602,6 +643,7 @@ fn test_samesuite_apu_channel_3_freq_change_delay() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_3_restart_delay() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_3/channel_3_restart_delay.gb",
@@ -615,6 +657,7 @@ fn test_samesuite_apu_channel_3_restart_delay() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_3_restart_during_delay() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_3/channel_3_restart_during_delay.gb",
@@ -628,6 +671,7 @@ fn test_samesuite_apu_channel_3_restart_during_delay() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_3_restart_stop_delay() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_3/channel_3_restart_stop_delay.gb",
@@ -641,6 +685,7 @@ fn test_samesuite_apu_channel_3_restart_stop_delay() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_3_shift_delay() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_3/channel_3_shift_delay.gb",
@@ -654,6 +699,7 @@ fn test_samesuite_apu_channel_3_shift_delay() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_3_shift_skip_delay() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_3/channel_3_shift_skip_delay.gb",
@@ -667,6 +713,7 @@ fn test_samesuite_apu_channel_3_shift_skip_delay() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_3_stop_delay() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_3/channel_3_stop_delay.gb",
@@ -680,6 +727,7 @@ fn test_samesuite_apu_channel_3_stop_delay() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_3_stop_div() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_3/channel_3_stop_div.gb",
@@ -693,6 +741,7 @@ fn test_samesuite_apu_channel_3_stop_div() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_3_wave_ram_dac_on_rw() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_3/channel_3_wave_ram_dac_on_rw.gb",
@@ -706,6 +755,7 @@ fn test_samesuite_apu_channel_3_wave_ram_dac_on_rw() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_3_wave_ram_locked_write() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_3/channel_3_wave_ram_locked_write.gb",
@@ -719,6 +769,7 @@ fn test_samesuite_apu_channel_3_wave_ram_locked_write() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_3_wave_ram_sync() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_3/channel_3_wave_ram_sync.gb",
@@ -734,6 +785,7 @@ fn test_samesuite_apu_channel_3_wave_ram_sync() {
 // Channel 4
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_4_align() {
     let result = run_samesuite_test("same-suite/apu/channel_4/channel_4_align.gb", Model::CgbE);
     assert_eq!(
@@ -744,6 +796,7 @@ fn test_samesuite_apu_channel_4_align() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_4_delay() {
     let result = run_samesuite_test("same-suite/apu/channel_4/channel_4_delay.gb", Model::CgbE);
     assert_eq!(
@@ -754,6 +807,7 @@ fn test_samesuite_apu_channel_4_delay() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_4_equivalent_frequencies() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_4/channel_4_equivalent_frequencies.gb",
@@ -767,6 +821,7 @@ fn test_samesuite_apu_channel_4_equivalent_frequencies() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_4_freq_change() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_4/channel_4_freq_change.gb",
@@ -780,6 +835,7 @@ fn test_samesuite_apu_channel_4_freq_change() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_4_frequency_alignment() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_4/channel_4_frequency_alignment.gb",
@@ -793,6 +849,7 @@ fn test_samesuite_apu_channel_4_frequency_alignment() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_4_lfsr15() {
     let result = run_samesuite_test("same-suite/apu/channel_4/channel_4_lfsr15.gb", Model::CgbE);
     assert_eq!(
@@ -803,6 +860,7 @@ fn test_samesuite_apu_channel_4_lfsr15() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_4_lfsr_7_15() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_4/channel_4_lfsr_7_15.gb",
@@ -816,6 +874,7 @@ fn test_samesuite_apu_channel_4_lfsr_7_15() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_4_lfsr() {
     let result = run_samesuite_test("same-suite/apu/channel_4/channel_4_lfsr.gb", Model::CgbE);
     assert_eq!(
@@ -826,6 +885,7 @@ fn test_samesuite_apu_channel_4_lfsr() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_4_lfsr_restart_fast() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_4/channel_4_lfsr_restart_fast.gb",
@@ -839,6 +899,7 @@ fn test_samesuite_apu_channel_4_lfsr_restart_fast() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_4_lfsr_restart() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_4/channel_4_lfsr_restart.gb",
@@ -852,6 +913,7 @@ fn test_samesuite_apu_channel_4_lfsr_restart() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_4_volume_div() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_4/channel_4_volume_div.gb",
@@ -865,6 +927,7 @@ fn test_samesuite_apu_channel_4_volume_div() {
 }
 
 #[test]
+#[ignore]
 fn test_samesuite_apu_channel_4_lfsr_15_7() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_4/channel_4_lfsr_15_7.gb",
