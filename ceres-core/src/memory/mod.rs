@@ -280,7 +280,15 @@ impl<A: AudioCallback> Gb<A> {
             NR44 if self.apu.enabled() => self.apu.write_nr44(val),
             NR50 => self.apu.write_nr50(val),
             NR51 => self.apu.write_nr51(val),
-            NR52 => self.apu.write_nr52(val),
+            NR52 => {
+                let div = self.read_div();
+                let div_bit = if self.key1.is_enabled() {
+                    div & 0x20 != 0
+                } else {
+                    div & 0x10 != 0
+                };
+                self.apu.write_nr52(val, div_bit);
+            }
             WAV_BEG..=WAV_END => self.apu.write_wave_ram(addr, val),
             LCDC => self.ppu.write_lcdc(val, &mut self.ints),
             STAT => self.ppu.write_stat(val, &mut self.ints),

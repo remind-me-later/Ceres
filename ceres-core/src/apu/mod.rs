@@ -27,11 +27,19 @@ pub trait AudioCallback {
     fn audio_sample(&self, l: Sample, r: Sample);
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
 enum PeriodHalf {
     #[default]
     First,
     Second,
+}
+
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum SkipDivEvent {
+    #[default]
+    Inactive,
+    Skip,
+    Skipped,
 }
 
 pub struct Apu<A: AudioCallback> {
@@ -47,6 +55,7 @@ pub struct Apu<A: AudioCallback> {
     master_volume: MasterVolume,
     nr51: u8,
     render_timer: i32,
+    skip_div_event: SkipDivEvent,
 }
 
 impl<A: AudioCallback> Apu<A> {
@@ -64,6 +73,7 @@ impl<A: AudioCallback> Apu<A> {
             div_divider: 0,
             render_timer: 0,
             hpf: HighPassFilter::default(),
+            skip_div_event: SkipDivEvent::default(),
         }
     }
 
@@ -83,6 +93,8 @@ impl<A: AudioCallback> Apu<A> {
 
         // reset render timer
         self.render_timer = 0;
+
+        self.skip_div_event = SkipDivEvent::default();
     }
 
     pub fn run(&mut self, dots: i32) {
@@ -162,6 +174,19 @@ impl<A: AudioCallback> Apu<A> {
             apu.ch2.set_period_half(p_half);
             apu.ch3.set_period_half(p_half);
             apu.ch4.set_period_half(p_half);
+        }
+
+        if !self.enabled {
+            return;
+        }
+
+        if self.skip_div_event == SkipDivEvent::Skip {
+            self.skip_div_event = SkipDivEvent::Skipped;
+            return;
+        }
+
+        if self.skip_div_event == SkipDivEvent::Skipped {
+            self.skip_div_event = SkipDivEvent::Inactive;
         }
 
         self.div_divider = (self.div_divider + 1) & 7;
@@ -379,8 +404,19 @@ impl<A: AudioCallback> Apu<A> {
         }
     }
 
-    pub fn write_nr52(&mut self, val: u8) {
+    pub fn write_nr52(&mut self, val: u8, div_bit: bool) {
+        let was_enabled = self.enabled;
         self.enabled = val & 0x80 != 0;
+
+        if !was_enabled && self.enabled {
+            if div_bit {
+                self.skip_div_event = SkipDivEvent::Skip;
+                self.div_divider = 0;
+            } else {
+                self.skip_div_event = SkipDivEvent::Inactive;
+                self.div_divider = 7;
+            }
+        }
 
         if !self.enabled {
             // reset
@@ -394,6 +430,8 @@ impl<A: AudioCallback> Apu<A> {
             self.ch3.reset();
             self.ch4 = Noise::default();
             self.nr51 = 0;
+
+            self.skip_div_event = SkipDivEvent::Inactive;
         }
     }
 
