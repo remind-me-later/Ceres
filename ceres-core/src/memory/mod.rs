@@ -146,7 +146,7 @@ impl<A: AudioCallback> Gb<A> {
             NR50 => self.apu.read_nr50(),
             NR51 => self.apu.read_nr51(),
             NR52 => self.apu.read_nr52(),
-            WAV_BEG..=WAV_END => self.apu.read_wave_ram(addr),
+            WAV_BEG..=WAV_END => self.apu.read_wave_ram(addr, self.is_cgb()),
             LCDC => self.ppu.read_lcdc(),
             STAT => self.ppu.read_stat(),
             SCY => self.ppu.read_scy(),
@@ -289,7 +289,7 @@ impl<A: AudioCallback> Gb<A> {
             }
             NR32 if self.apu.enabled() => self.apu.write_nr32(val),
             NR33 if self.apu.enabled() => self.apu.write_nr33(val),
-            NR34 if self.apu.enabled() => self.apu.write_nr34(val),
+            NR34 if self.apu.enabled() => self.apu.write_nr34(val, self.is_cgb()),
             NR41 => {
                 if self.apu.enabled() || !self.is_cgb() {
                     self.apu.write_nr41(val);
@@ -309,7 +309,7 @@ impl<A: AudioCallback> Gb<A> {
                 };
                 self.apu.write_nr52(val, div_bit, self.is_cgb());
             }
-            WAV_BEG..=WAV_END => self.apu.write_wave_ram(addr, val),
+            WAV_BEG..=WAV_END => self.apu.write_wave_ram(addr, val, self.is_cgb()),
             LCDC => self.ppu.write_lcdc(val, &mut self.ints),
             STAT => self.ppu.write_stat(val, &mut self.ints),
             SCY => self.ppu.write_scy(val),

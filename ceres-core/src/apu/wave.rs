@@ -22,6 +22,7 @@ pub struct Wave {
     sample_index: u8,
     samples: [u8; SAMPLE_LEN as usize],
     volume: u8,
+    wave_form_just_read: bool,
 }
 
 impl Wave {
@@ -59,8 +60,16 @@ impl Wave {
         self.length_timer.set_length(val);
     }
 
-    pub const fn read_wave_ram(&self, addr: u8) -> u8 {
-        let index = addr - 0x30;
+    pub const fn read_wave_ram(&self, addr: u8, is_cgb: bool) -> u8 {
+        let index = if self.enabled {
+            if !is_cgb && !self.wave_form_just_read {
+                return 0xFF;
+            }
+            self.sample_index / 2
+        } else {
+            addr - 0x30
+        };
+
         self.ram[index as usize]
     }
 
@@ -84,7 +93,7 @@ impl Wave {
         }
     }
 
-    pub const fn step_sample(&mut self, dots: i32) {
+    pub fn step_sample(&mut self, dots: i32) {
         if !self.is_enabled() {
             return;
         }
@@ -95,7 +104,17 @@ impl Wave {
         ) {
             self.sample_index = (self.sample_index + 1) & (SAMPLE_LEN - 1);
             self.sample_buffer = self.samples[self.sample_index as usize];
+            self.wave_form_just_read = true;
+        } else {
+            self.wave_form_just_read = false;
         }
+    }
+
+    const fn write_ram_direct(&mut self, index: u8, val: u8) {
+        self.ram[index as usize] = val;
+        // upper 4 bits first
+        self.samples[index as usize * 2] = val >> 4;
+        self.samples[index as usize * 2 + 1] = val & 0xF;
     }
 
     pub const fn write_nr30(&mut self, val: u8) {
@@ -120,7 +139,7 @@ impl Wave {
         self.period_counter.write_low(val);
     }
 
-    pub fn write_nr34(&mut self, val: u8) {
+    pub fn write_nr34(&mut self, val: u8, is_cgb: bool) {
         self.period_counter.write_high(val);
 
         if matches!(
@@ -132,6 +151,18 @@ impl Wave {
 
         // trigger
         if val & 0x80 != 0 {
+            if !is_cgb && self.enabled && self.period_counter.timer() <= 4 {
+                let offset = ((self.sample_index + 1) / 2) & 0xF;
+                if offset < 4 {
+                    self.write_ram_direct(0, self.ram[offset as usize]);
+                } else {
+                    let base = (offset & !3) as usize;
+                    for i in 0..4 {
+                        self.write_ram_direct(i as u8, self.ram[base + i]);
+                    }
+                }
+            }
+
             if self.dac_enabled {
                 self.enabled = true;
             }
@@ -154,8 +185,16 @@ impl Wave {
         }
     }
 
-    pub const fn write_wave_ram(&mut self, addr: u8, val: u8) {
-        let index = addr - 0x30;
+    pub const fn write_wave_ram(&mut self, addr: u8, val: u8, is_cgb: bool) {
+        let index = if self.enabled {
+            if !is_cgb && !self.wave_form_just_read {
+                return;
+            }
+            self.sample_index / 2
+        } else {
+            addr - 0x30
+        };
+
         self.ram[index as usize] = val;
         // upper 4 bits first
         self.samples[index as usize * 2] = val >> 4;

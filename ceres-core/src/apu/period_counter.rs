@@ -35,7 +35,11 @@ impl<const PERIOD_MUL: u16, S: SweepTrait> PeriodCounter<PERIOD_MUL, S> {
         self.sweep.read()
     }
 
-    pub const fn step(&mut self, dots: i32) -> PeriodStepResult {
+    pub const fn timer(&self) -> i32 {
+        self.timer
+    }
+
+    pub fn step(&mut self, dots: i32) -> PeriodStepResult {
         self.timer -= dots;
 
         if self.timer <= 0 {

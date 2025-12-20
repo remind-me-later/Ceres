@@ -316,8 +316,8 @@ impl<A: AudioCallback> Apu<A> {
             | (self.ch1.is_enabled() as u8)
     }
 
-    pub const fn read_wave_ram(&self, addr: u8) -> u8 {
-        self.ch3.read_wave_ram(addr)
+    pub const fn read_wave_ram(&self, addr: u8, is_cgb: bool) -> u8 {
+        self.ch3.read_wave_ram(addr, is_cgb)
     }
 
     pub fn write_nr10(&mut self, val: u8) {
@@ -372,8 +372,8 @@ impl<A: AudioCallback> Apu<A> {
         self.ch3.write_nr33(val);
     }
 
-    pub fn write_nr34(&mut self, val: u8) {
-        self.ch3.write_nr34(val);
+    pub fn write_nr34(&mut self, val: u8, is_cgb: bool) {
+        self.ch3.write_nr34(val, is_cgb);
     }
 
     pub const fn write_nr41(&mut self, val: u8) {
@@ -455,7 +455,7 @@ impl<A: AudioCallback> Apu<A> {
         }
     }
 
-    pub const fn write_wave_ram(&mut self, addr: u8, val: u8) {
-        self.ch3.write_wave_ram(addr, val);
+    pub const fn write_wave_ram(&mut self, addr: u8, val: u8, is_cgb: bool) {
+        self.ch3.write_wave_ram(addr, val, is_cgb);
     }
 }
