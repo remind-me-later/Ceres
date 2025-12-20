@@ -246,6 +246,15 @@ impl<A: AudioCallback> Gb<A> {
 
     #[must_use]
     #[inline]
+    pub const fn is_cgb(&self) -> bool {
+        matches!(
+            self.model,
+            Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD | Model::CgbE
+        )
+    }
+
+    #[must_use]
+    #[inline]
     pub const fn pixel_data_rgba(&self) -> &[u8] {
         self.ppu.pixel_data_rgba()
     }

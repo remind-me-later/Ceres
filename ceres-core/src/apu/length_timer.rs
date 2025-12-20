@@ -19,6 +19,14 @@ impl<const LENGTH_TIMER_MASK: u8> LengthTimer<LENGTH_TIMER_MASK> {
         (self.enabled as u8) << 6
     }
 
+    pub const fn length(&self) -> u8 {
+        self.length
+    }
+
+    pub const fn set_length(&mut self, val: u8) {
+        self.length = val;
+    }
+
     pub const fn set_phalf(&mut self, p_half: PeriodHalf) {
         self.period_half = p_half;
     }

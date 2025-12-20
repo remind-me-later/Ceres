@@ -1096,7 +1096,10 @@ fn test_mooneye_manual_sprite_priority_dmg() {
         "mooneye-test-suite/manual-only/sprite_priority.gb",
         Model::DmgB,
     );
-    assert!(result.is_passed(), "manual-only/sprite_priority DMG test failed");
+    assert!(
+        result.is_passed(),
+        "manual-only/sprite_priority DMG test failed"
+    );
 }
 
 #[test]
@@ -1105,5 +1108,8 @@ fn test_mooneye_manual_sprite_priority_cgb() {
         "mooneye-test-suite/manual-only/sprite_priority.gb",
         Model::CgbE,
     );
-    assert!(result.is_passed(), "manual-only/sprite_priority CGB test failed");
+    assert!(
+        result.is_passed(),
+        "manual-only/sprite_priority CGB test failed"
+    );
 }

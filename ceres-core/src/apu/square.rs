@@ -47,6 +47,14 @@ impl<S: SweepTrait> Square<S> {
         0xBF | self.length_timer.read_enabled()
     }
 
+    pub const fn length(&self) -> u8 {
+        self.length_timer.length()
+    }
+
+    pub const fn set_length(&mut self, val: u8) {
+        self.length_timer.set_length(val);
+    }
+
     pub const fn set_period_half(&mut self, p_half: PeriodHalf) {
         self.length_timer.set_phalf(p_half);
     }

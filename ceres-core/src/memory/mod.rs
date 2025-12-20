@@ -261,20 +261,40 @@ impl<A: AudioCallback> Gb<A> {
             TAC => self.write_tac(val),
             IF => self.ints.write_if(val),
             NR10 if self.apu.enabled() => self.apu.write_nr10(val),
-            NR11 if self.apu.enabled() => self.apu.write_nr11(val),
+            NR11 => {
+                if self.apu.enabled() {
+                    self.apu.write_nr11(val);
+                } else if !self.is_cgb() {
+                    self.apu.write_nr11(val & 0x3F);
+                }
+            }
             NR12 if self.apu.enabled() => self.apu.write_nr12(val),
             NR13 if self.apu.enabled() => self.apu.write_nr13(val),
             NR14 if self.apu.enabled() => self.apu.write_nr14(val),
-            NR21 if self.apu.enabled() => self.apu.write_nr21(val),
+            NR21 => {
+                if self.apu.enabled() {
+                    self.apu.write_nr21(val);
+                } else if !self.is_cgb() {
+                    self.apu.write_nr21(val & 0x3F);
+                }
+            }
             NR22 if self.apu.enabled() => self.apu.write_nr22(val),
             NR23 if self.apu.enabled() => self.apu.write_nr23(val),
             NR24 if self.apu.enabled() => self.apu.write_nr24(val),
             NR30 if self.apu.enabled() => self.apu.write_nr30(val),
-            NR31 if self.apu.enabled() => self.apu.write_nr31(val),
+            NR31 => {
+                if self.apu.enabled() || !self.is_cgb() {
+                    self.apu.write_nr31(val);
+                }
+            }
             NR32 if self.apu.enabled() => self.apu.write_nr32(val),
             NR33 if self.apu.enabled() => self.apu.write_nr33(val),
             NR34 if self.apu.enabled() => self.apu.write_nr34(val),
-            NR41 if self.apu.enabled() => self.apu.write_nr41(val),
+            NR41 => {
+                if self.apu.enabled() || !self.is_cgb() {
+                    self.apu.write_nr41(val);
+                }
+            }
             NR42 if self.apu.enabled() => self.apu.write_nr42(val),
             NR43 if self.apu.enabled() => self.apu.write_nr43(val),
             NR44 if self.apu.enabled() => self.apu.write_nr44(val),
@@ -287,7 +307,7 @@ impl<A: AudioCallback> Gb<A> {
                 } else {
                     div & 0x10 != 0
                 };
-                self.apu.write_nr52(val, div_bit);
+                self.apu.write_nr52(val, div_bit, self.is_cgb());
             }
             WAV_BEG..=WAV_END => self.apu.write_wave_ram(addr, val),
             LCDC => self.ppu.write_lcdc(val, &mut self.ints),

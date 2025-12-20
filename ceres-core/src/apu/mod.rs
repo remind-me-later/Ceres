@@ -404,34 +404,54 @@ impl<A: AudioCallback> Apu<A> {
         }
     }
 
-    pub fn write_nr52(&mut self, val: u8, div_bit: bool) {
+    pub fn write_nr52(&mut self, val: u8, div_bit: bool, is_cgb: bool) {
         let was_enabled = self.enabled;
-        self.enabled = val & 0x80 != 0;
 
-        if !was_enabled && self.enabled {
+        let enabling = val & 0x80 != 0;
+
+        let old_lengths = if !is_cgb && !was_enabled && enabling {
+            Some([
+                self.ch1.length(),
+                self.ch2.length(),
+                self.ch3.length(),
+                self.ch4.length(),
+            ])
+        } else {
+            None
+        };
+
+        if !was_enabled && enabling {
+            self.reset();
+
+            self.enabled = true;
+
             if div_bit {
                 self.skip_div_event = SkipDivEvent::Skip;
+
                 self.div_divider = 0;
             } else {
                 self.skip_div_event = SkipDivEvent::Inactive;
+
+                self.div_divider = 7;
+            }
+        } else {
+            self.enabled = enabling;
+
+            if !self.enabled {
+                self.reset();
+
                 self.div_divider = 7;
             }
         }
 
-        if !self.enabled {
-            // reset
-            // self.render_timer = 0;
-            self.div_divider = 7;
-            self.master_volume = MasterVolume::default();
+        if let Some([l1, l2, l3, l4]) = old_lengths {
+            self.ch1.set_length(l1);
 
-            // reset registers
-            self.ch1 = Square::default();
-            self.ch2 = Square::default();
-            self.ch3.reset();
-            self.ch4 = Noise::default();
-            self.nr51 = 0;
+            self.ch2.set_length(l2);
 
-            self.skip_div_event = SkipDivEvent::Inactive;
+            self.ch3.set_length(l3);
+
+            self.ch4.set_length(l4);
         }
     }
 
