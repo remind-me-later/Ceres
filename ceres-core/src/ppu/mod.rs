@@ -189,6 +189,12 @@ pub struct Ppu {
     sprite_bg_priority: bool,
     /// Current sprite's X-flip flag.
     sprite_x_flip: bool,
+
+    // Bus contention state
+    ext_dma_active: bool,
+    ext_dma_src: u16,
+    ext_dma_dst: u8,
+    ext_hdma_active: bool,
 }
 
 // IO
@@ -395,7 +401,22 @@ impl Ppu {
         self.wy
     }
 
-    pub fn run(&mut self, dots: i32, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
+    pub fn run(
+        &mut self,
+        dots: i32,
+        ints: &mut Interrupts,
+        cgb_mode: CgbMode,
+        double_speed: bool,
+        dma_active: bool,
+        dma_src: u16,
+        dma_dst: u8,
+        hdma_active: bool,
+    ) {
+        self.ext_dma_active = dma_active;
+        self.ext_dma_src = dma_src;
+        self.ext_dma_dst = dma_dst;
+        self.ext_hdma_active = hdma_active;
+
         for _ in 0..dots {
             self.tick(ints, cgb_mode, double_speed);
         }
@@ -1396,7 +1417,7 @@ impl Ppu {
 
     /// Read a tile data byte, respecting CGB VRAM bank.
     const fn read_tile_byte(&self, addr: u16) -> u8 {
-        if self.vram_ppu_blocked {
+        if self.vram_ppu_blocked || self.ext_hdma_active {
             return 0xFF;
         }
         let bank = (self.current_tile_attrs >> 3) & 1;

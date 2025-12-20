@@ -741,7 +741,6 @@ fn test_samesuite_apu_channel_3_stop_div() {
 }
 
 #[test]
-#[ignore]
 fn test_samesuite_apu_channel_3_wave_ram_dac_on_rw() {
     let result = run_samesuite_test(
         "same-suite/apu/channel_3/channel_3_wave_ram_dac_on_rw.gb",
@@ -849,7 +848,6 @@ fn test_samesuite_apu_channel_4_frequency_alignment() {
 }
 
 #[test]
-#[ignore]
 fn test_samesuite_apu_channel_4_lfsr15() {
     let result = run_samesuite_test("same-suite/apu/channel_4/channel_4_lfsr15.gb", Model::CgbE);
     assert_eq!(

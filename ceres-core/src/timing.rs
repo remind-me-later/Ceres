@@ -76,8 +76,21 @@ impl<A: AudioCallback> Gb<A> {
             t_cycles * PPU_CYCLES_PER_T_CYCLE // Normal speed: double for 8MHz
         };
 
-        self.ppu
-            .run(ppu_cycles, &mut self.ints, self.cgb_mode, double_speed);
+        let dma_active = self.dma.is_active();
+        let dma_src = self.dma.current_src();
+        let dma_dst = self.dma.current_dst();
+        let hdma_active = self.hdma.is_active();
+
+        self.ppu.run(
+            ppu_cycles,
+            &mut self.ints,
+            self.cgb_mode,
+            double_speed,
+            dma_active,
+            dma_src,
+            dma_dst,
+            hdma_active,
+        );
         self.run_dma();
 
         // APU runs at T-cycle rate, not affected by speed boost for timing

@@ -53,13 +53,6 @@ fn run_age_test(rom_path: &str, model: ceres_core::Model, timeout: u32) -> TestR
         Err(e) => return TestResult::Error(format!("Failed to load test ROM: {e}")),
     };
 
-    // AGE tests typically use screenshots for verification.
-    // Since we don't have reference images for all tests yet (specifically OAM),
-    // we might need to rely on manual verification or future addition of reference images.
-    // For now, we just check if it runs without crashing.
-
-    // TODO: Add automatic screenshot verification when reference images are available.
-
     let config = TestConfig {
         model,
         timeout_frames: timeout,
@@ -90,32 +83,258 @@ macro_rules! age_test {
 }
 
 // OAM Tests
-// Note: Reference images are missing in the repo for these, so visual verification is manual.
-// We run them to ensure no crashes/panics in the emulator core.
-
-// DMG-compatible OAM tests
 age_test!(
-    test_age_oam_read_dmgc_cgb_bc,
+    test_age_oam_read_dmg_c_cgb_bc,
     "age-test-roms/oam/oam-read-dmgC-cgbBC.gb",
     ceres_core::Model::DmgB
 );
 age_test!(
-    test_age_oam_write_dmgc,
-    "age-test-roms/oam/oam-write-dmgC.gb",
-    ceres_core::Model::DmgB
+    test_age_oam_read_ncm_bc,
+    "age-test-roms/oam/oam-read-ncmBC.gb",
+    ceres_core::Model::CgbC
 );
-
-// CGB-compatible OAM tests
+age_test!(
+    test_age_oam_read_ncm_e,
+    "age-test-roms/oam/oam-read-ncmE.gb",
+    ceres_core::Model::CgbE
+);
 age_test!(
     test_age_oam_read_cgb_e,
     "age-test-roms/oam/oam-read-cgbE.gb",
     ceres_core::Model::CgbE
 );
 age_test!(
+    test_age_oam_write_dmg_c,
+    "age-test-roms/oam/oam-write-dmgC.gb",
+    ceres_core::Model::DmgB
+);
+age_test!(
     test_age_oam_write_cgb_bce,
     "age-test-roms/oam/oam-write-cgbBCE.gb",
     ceres_core::Model::CgbE
 );
+age_test!(
+    test_age_oam_write_ncm_bce,
+    "age-test-roms/oam/oam-write-ncmBCE.gb",
+    ceres_core::Model::CgbE
+);
 
-// Other AGE tests (example)
-// age_test!(test_age_m3_bg_bgp, "age-test-roms/m3-bg-bgp/m3-bg-bgp.gb", ceres_core::Model::DmgB);
+// VRAM Tests
+age_test!(
+    test_age_vram_read_dmg_c,
+    "age-test-roms/vram/vram-read-dmgC.gb",
+    ceres_core::Model::DmgB
+);
+age_test!(
+    test_age_vram_read_cgb_bce,
+    "age-test-roms/vram/vram-read-cgbBCE.gb",
+    ceres_core::Model::CgbE
+);
+age_test!(
+    test_age_vram_read_ncm_bce,
+    "age-test-roms/vram/vram-read-ncmBCE.gb",
+    ceres_core::Model::CgbE
+);
+
+// LY Tests
+age_test!(
+    test_age_ly_cgb_e,
+    "age-test-roms/ly/ly-cgbE.gb",
+    ceres_core::Model::CgbE
+);
+age_test!(
+    test_age_ly_dmg_c_cgb_bc,
+    "age-test-roms/ly/ly-dmgC-cgbBC.gb",
+    ceres_core::Model::DmgB
+);
+age_test!(
+    test_age_ly_ncm_bc,
+    "age-test-roms/ly/ly-ncmBC.gb",
+    ceres_core::Model::CgbC
+);
+age_test!(
+    test_age_ly_ncm_e,
+    "age-test-roms/ly/ly-ncmE.gb",
+    ceres_core::Model::CgbE
+);
+
+// LCD Align LY Tests
+age_test!(
+    test_age_lcd_align_ly_cgb_e,
+    "age-test-roms/lcd-align-ly/lcd-align-ly-cgbE.gb",
+    ceres_core::Model::CgbE
+);
+age_test!(
+    test_age_lcd_align_ly_cgb_bc,
+    "age-test-roms/lcd-align-ly/lcd-align-ly-cgbBC.gb",
+    ceres_core::Model::CgbC
+);
+
+// STAT Interrupt Tests
+age_test!(
+    test_age_stat_int_dmg_c_cgb_bce,
+    "age-test-roms/stat-interrupt/stat-int-dmgC-cgbBCE.gb",
+    ceres_core::Model::DmgB
+);
+age_test!(
+    test_age_stat_int_ncm_bce,
+    "age-test-roms/stat-interrupt/stat-int-ncmBCE.gb",
+    ceres_core::Model::CgbE
+);
+
+// STAT Mode Tests
+age_test!(
+    test_age_stat_mode_dmg_c_cgb_bc,
+    "age-test-roms/stat-mode/stat-mode-dmgC-cgbBC.gb",
+    ceres_core::Model::DmgB
+);
+age_test!(
+    test_age_stat_mode_cgb_e,
+    "age-test-roms/stat-mode/stat-mode-cgbE.gb",
+    ceres_core::Model::CgbE
+);
+age_test!(
+    test_age_stat_mode_ncm_bc,
+    "age-test-roms/stat-mode/stat-mode-ncmBC.gb",
+    ceres_core::Model::CgbC
+);
+age_test!(
+    test_age_stat_mode_ncm_e,
+    "age-test-roms/stat-mode/stat-mode-ncmE.gb",
+    ceres_core::Model::CgbE
+);
+age_test!(
+    test_age_stat_mode_ds_cgb_bce,
+    "age-test-roms/stat-mode/stat-mode-ds-cgbBCE.gb",
+    ceres_core::Model::CgbE
+);
+
+// STAT Mode Sprites Tests
+age_test!(
+    test_age_stat_mode_sprites_dmg_c_cgb_bce,
+    "age-test-roms/stat-mode-sprites/stat-mode-sprites-dmgC-cgbBCE.gb",
+    ceres_core::Model::DmgB
+);
+age_test!(
+    test_age_stat_mode_sprites_ds_cgb_bce,
+    "age-test-roms/stat-mode-sprites/stat-mode-sprites-ds-cgbBCE.gb",
+    ceres_core::Model::CgbE
+);
+
+// STAT Mode Window Tests
+age_test!(
+    test_age_stat_mode_window_dmg_c,
+    "age-test-roms/stat-mode-window/stat-mode-window-dmgC.gb",
+    ceres_core::Model::DmgB
+);
+age_test!(
+    test_age_stat_mode_window_cgb_bce,
+    "age-test-roms/stat-mode-window/stat-mode-window-cgbBCE.gb",
+    ceres_core::Model::CgbE
+);
+age_test!(
+    test_age_stat_mode_window_ncm_bce,
+    "age-test-roms/stat-mode-window/stat-mode-window-ncmBCE.gb",
+    ceres_core::Model::CgbE
+);
+age_test!(
+    test_age_stat_mode_window_ds_cgb_bce,
+    "age-test-roms/stat-mode-window/stat-mode-window-ds-cgbBCE.gb",
+    ceres_core::Model::CgbE
+);
+
+// Mode 3 BG Tests
+age_test!(
+    test_age_m3_bg_scx,
+    "age-test-roms/m3-bg-scx/m3-bg-scx.gb",
+    ceres_core::Model::DmgB
+);
+age_test!(
+    test_age_m3_bg_scx_nocgb,
+    "age-test-roms/m3-bg-scx/m3-bg-scx-nocgb.gb",
+    ceres_core::Model::DmgB
+);
+age_test!(
+    test_age_m3_bg_scx_ds,
+    "age-test-roms/m3-bg-scx/m3-bg-scx-ds.gb",
+    ceres_core::Model::CgbE
+);
+age_test!(
+    test_age_m3_bg_bgp,
+    "age-test-roms/m3-bg-bgp/m3-bg-bgp.gb",
+    ceres_core::Model::DmgB
+);
+age_test!(
+    test_age_m3_bg_lcdc,
+    "age-test-roms/m3-bg-lcdc/m3-bg-lcdc.gb",
+    ceres_core::Model::DmgB
+);
+age_test!(
+    test_age_m3_bg_lcdc_nocgb,
+    "age-test-roms/m3-bg-lcdc/m3-bg-lcdc-nocgb.gb",
+    ceres_core::Model::DmgB
+);
+age_test!(
+    test_age_m3_bg_lcdc_ds,
+    "age-test-roms/m3-bg-lcdc/m3-bg-lcdc-ds.gb",
+    ceres_core::Model::CgbE
+);
+
+// Halt Tests
+age_test!(
+    test_age_halt_prefetch_dmg_c_cgb_bce,
+    "age-test-roms/halt/halt-prefetch-dmgC-cgbBCE.gb",
+    ceres_core::Model::DmgB
+);
+age_test!(
+    test_age_ei_halt_dmg_c_cgb_bce,
+    "age-test-roms/halt/ei-halt-dmgC-cgbBCE.gb",
+    ceres_core::Model::DmgB
+);
+age_test!(
+    test_age_halt_m0_interrupt_dmg_c_cgb_bce,
+    "age-test-roms/halt/halt-m0-interrupt-dmgC-cgbBCE.gb",
+    ceres_core::Model::DmgB
+);
+
+// Speed Switch Tests
+age_test!(
+    test_age_spsw_mode0_cgb_bce,
+    "age-test-roms/speed-switch/spsw-mode0-cgbBCE.gb",
+    ceres_core::Model::CgbE
+);
+age_test!(
+    test_age_spsw_stop_prefetch_cgb_bce,
+    "age-test-roms/speed-switch/spsw-stop-prefetch-cgbBCE.gb",
+    ceres_core::Model::CgbE
+);
+age_test!(
+    test_age_spsw_div_cgb_bce,
+    "age-test-roms/speed-switch/spsw-div-cgbBCE.gb",
+    ceres_core::Model::CgbE
+);
+age_test!(
+    test_age_spsw_ch2_lc_delay_cgb_bce,
+    "age-test-roms/speed-switch/spsw-ch2-lc-delay-cgbBCE.gb",
+    ceres_core::Model::CgbE
+);
+age_test!(
+    test_age_spsw_tima_cgb_bc,
+    "age-test-roms/speed-switch/spsw-tima-cgbBC.gb",
+    ceres_core::Model::CgbC
+);
+age_test!(
+    test_age_spsw_tima_cgb_e,
+    "age-test-roms/speed-switch/spsw-tima-cgbE.gb",
+    ceres_core::Model::CgbE
+);
+age_test!(
+    test_age_spsw_interrupts_cgb_bc,
+    "age-test-roms/speed-switch/caution/spsw-interrupts-cgbBC.gb",
+    ceres_core::Model::CgbC
+);
+age_test!(
+    test_age_spsw_interrupts_cgb_e,
+    "age-test-roms/speed-switch/caution/spsw-interrupts-cgbE.gb",
+    ceres_core::Model::CgbE
+);

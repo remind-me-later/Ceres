@@ -22,12 +22,18 @@ pub struct Hdma {
     state: HdmaState,
     /// When starting HBlank DMA, if already in HBlank, start immediately
     start_immediately: bool,
+    in_progress: bool,
 }
 
 impl Hdma {
     #[must_use]
     const fn is_on(&self) -> bool {
         !matches!(self.state, HdmaState::Sleep)
+    }
+
+    #[must_use]
+    pub const fn is_active(&self) -> bool {
+        self.in_progress
     }
 
     #[must_use]
@@ -136,6 +142,8 @@ impl<A: AudioCallback> Gb<A> {
 
         let cycles_per_byte = if self.key1.is_enabled() { 4 } else { 2 };
 
+        self.hdma.in_progress = true;
+
         for _ in 0..len {
             // TODO: the same problems as normal DMA plus reading from
             // VRAM should copy garbage
@@ -145,5 +153,7 @@ impl<A: AudioCallback> Gb<A> {
             self.hdma.src += 1;
             self.advance_dots(cycles_per_byte);
         }
+
+        self.hdma.in_progress = false;
     }
 }

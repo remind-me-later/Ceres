@@ -39,6 +39,24 @@ impl Dma {
         }
     }
 
+    pub const fn is_active(&self) -> bool {
+        matches!(self.state, DmaState::Transferring(_))
+    }
+
+    pub const fn current_src(&self) -> u16 {
+        match self.state {
+            DmaState::Transferring(offset) => self.base_addr.wrapping_add(offset as u16),
+            _ => 0,
+        }
+    }
+
+    pub const fn current_dst(&self) -> u8 {
+        match self.state {
+            DmaState::Transferring(offset) => offset,
+            _ => 0,
+        }
+    }
+
     pub const fn read(&self) -> u8 {
         self.reg
     }

@@ -48,10 +48,14 @@ impl Ppu {
     #[must_use]
     pub const fn read_oam(&self, addr: u16) -> u8 {
         if self.oam_read_blocked {
-            0xFF
-        } else {
-            self.oam.read(addr)
+            return 0xFF;
         }
+
+        if self.ext_dma_active && self.ext_dma_dst < 0xA0 {
+            return self.oam.read((self.ext_dma_dst as u16 & !1) | (addr & 1));
+        }
+
+        self.oam.read(addr)
     }
 
     pub fn write_oam(&mut self, addr: u16, val: u8) {
