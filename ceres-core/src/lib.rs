@@ -296,7 +296,7 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[inline]
-    pub const fn set_sample_rate(&mut self, sample_rate: i32) {
+    pub fn set_sample_rate(&mut self, sample_rate: i32) {
         self.apu.set_sample_rate(sample_rate);
     }
 

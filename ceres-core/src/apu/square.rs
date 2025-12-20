@@ -74,7 +74,7 @@ impl<S: SweepTrait> Square<S> {
         }
     }
 
-    pub fn step_sample(&mut self, dots: i32) {
+    pub fn step_sample(&mut self, dots: i32) -> Option<i32> {
         // Shape of the duty waveform for a certain duty
         const DUTY_WAV: [u8; 4] = [
             0b0000_0001, // _______- : 12.5%
@@ -84,15 +84,15 @@ impl<S: SweepTrait> Square<S> {
         ];
 
         if !self.is_enabled() {
-            return;
+            return None;
         }
 
-        if matches!(
-            self.period_counter.step(dots),
-            PeriodStepResult::AdvanceFrequency
-        ) {
+        if let PeriodStepResult::AdvanceFrequency(offset) = self.period_counter.step(dots) {
             self.duty_bit = (self.duty_bit + 1) & 7;
             self.output = u8::from((DUTY_WAV[self.duty as usize] & (1 << self.duty_bit)) != 0);
+            Some(offset)
+        } else {
+            None
         }
     }
 

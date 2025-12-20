@@ -6,7 +6,7 @@ pub enum PeriodTriggerResult {
 }
 
 pub enum PeriodStepResult {
-    AdvanceFrequency,
+    AdvanceFrequency(i32),
     None,
 }
 
@@ -43,8 +43,9 @@ impl<const PERIOD_MUL: u16, S: SweepTrait> PeriodCounter<PERIOD_MUL, S> {
         self.timer -= dots;
 
         if self.timer <= 0 {
+            let offset = self.timer;
             self.timer += Self::timer_from_period(self.period);
-            return PeriodStepResult::AdvanceFrequency;
+            return PeriodStepResult::AdvanceFrequency(offset);
         }
 
         PeriodStepResult::None

@@ -12,7 +12,6 @@ const RING_BUFFER_SIZE: usize = BUFFER_SIZE as usize * 4;
 const SAMPLE_RATE: i32 = 48000;
 
 // Originally both the emulator and host platform output samples at the same rate,
-
 // as time passes one begins to shift away from the other, so we need to resample the emulator output
 
 const ORIG_RATIO: f64 = 1.0;

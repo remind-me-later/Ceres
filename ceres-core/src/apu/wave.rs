@@ -93,20 +93,19 @@ impl Wave {
         }
     }
 
-    pub fn step_sample(&mut self, dots: i32) {
+    pub fn step_sample(&mut self, dots: i32) -> Option<i32> {
         if !self.is_enabled() {
-            return;
+            return None;
         }
 
-        if matches!(
-            self.period_counter.step(dots),
-            PeriodStepResult::AdvanceFrequency
-        ) {
+        if let PeriodStepResult::AdvanceFrequency(offset) = self.period_counter.step(dots) {
             self.sample_index = (self.sample_index + 1) & (SAMPLE_LEN - 1);
             self.sample_buffer = self.samples[self.sample_index as usize];
             self.wave_form_just_read = true;
+            Some(offset)
         } else {
             self.wave_form_just_read = false;
+            None
         }
     }
 

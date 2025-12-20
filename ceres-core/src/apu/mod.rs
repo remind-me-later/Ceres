@@ -1,3 +1,4 @@
+mod blip;
 mod envelope;
 mod high_pass_filter;
 mod length_timer;
@@ -10,7 +11,7 @@ mod wave;
 
 use {
     crate::{
-        apu::{high_pass_filter::HighPassFilter, master_volume::MasterVolume},
+        apu::{blip::Blip, high_pass_filter::HighPassFilter, master_volume::MasterVolume},
         timing::DOTS_PER_SEC,
     },
     length_timer::LengthTimer,
@@ -44,6 +45,7 @@ enum SkipDivEvent {
 
 pub struct Apu<A: AudioCallback> {
     audio_callback: A,
+    blips: [Blip; 4],
     ch1: Square<Sweep>,
     ch2: Square<()>,
     ch3: Wave,
@@ -63,6 +65,7 @@ impl<A: AudioCallback> Apu<A> {
         Self {
             ext_sample_period: Self::sample_period_from_rate(sample_rate),
             audio_callback,
+            blips: Default::default(),
             nr51: 0,
             enabled: false,
             master_volume: MasterVolume::default(),
@@ -72,7 +75,7 @@ impl<A: AudioCallback> Apu<A> {
             ch4: Noise::default(),
             div_divider: 0,
             render_timer: 0,
-            hpf: HighPassFilter::default(),
+            hpf: HighPassFilter::new(sample_rate),
             skip_div_event: SkipDivEvent::default(),
         }
     }
@@ -80,6 +83,7 @@ impl<A: AudioCallback> Apu<A> {
     pub fn reset(&mut self) {
         self.enabled = false;
         self.master_volume = MasterVolume::default();
+        self.blips = Default::default();
 
         // reset registers
         self.ch1 = Square::default();
@@ -97,54 +101,92 @@ impl<A: AudioCallback> Apu<A> {
         self.skip_div_event = SkipDivEvent::default();
     }
 
+    fn calculate_channel_output(&self, ch: usize) -> (i32, i32) {
+        let out = match ch {
+            0 => self.ch1.output() * u8::from(self.ch1.is_truly_enabled()),
+            1 => self.ch2.output() * u8::from(self.ch2.is_truly_enabled()),
+            2 => self.ch3.output() * u8::from(self.ch3.is_truly_enabled()),
+            3 => self.ch4.output() * u8::from(self.ch4.is_truly_enabled()),
+            _ => 0,
+        };
+
+        let right_on = i32::from(self.nr51 & (1 << ch) != 0);
+        let left_on = i32::from(self.nr51 & (0x10 << ch) != 0);
+
+        let out_i32 = i32::from(out);
+        (out_i32 * left_on, out_i32 * right_on)
+    }
+
     pub fn run(&mut self, dots: i32) {
-        fn mix_and_render<C1: AudioCallback>(apu: &Apu<C1>) -> (Sample, Sample) {
-            let mut l = 0;
-            let mut r = 0;
-
-            for i in 0..4 {
-                let out = match i {
-                    0 => apu.ch1.output() * u8::from(apu.ch1.is_truly_enabled()),
-                    1 => apu.ch2.output() * u8::from(apu.ch2.is_truly_enabled()),
-                    2 => apu.ch3.output() * u8::from(apu.ch3.is_truly_enabled()),
-                    3 => apu.ch4.output() * u8::from(apu.ch4.is_truly_enabled()),
-                    _ => break,
-                };
-
-                let right_on = u8::from(apu.nr51 & (1 << i) != 0);
-                let left_on = u8::from(apu.nr51 & (0x10 << i) != 0);
-
-                l += left_on * out;
-                r += right_on * out;
+        if self.enabled {
+            let old_1 = self.calculate_channel_output(0);
+            let res_1 = self.ch1.step_sample(dots);
+            let new_1 = self.calculate_channel_output(0);
+            if old_1 != new_1 {
+                let t = self.render_timer + dots + res_1.unwrap_or(0);
+                let phase =
+                    (i64::from(t) * (blip::PHASES as i64)) / i64::from(self.ext_sample_period);
+                self.blips[0].update(new_1.0, new_1.1, phase as usize);
             }
 
-            // transform to i16 sample
-            let l = (0xF - i16::from(l) * 2) * i16::from(apu.master_volume.left_volume() + 1);
-            let r = (0xF - i16::from(r) * 2) * i16::from(apu.master_volume.right_volume() + 1);
+            let old_2 = self.calculate_channel_output(1);
+            let res_2 = self.ch2.step_sample(dots);
+            let new_2 = self.calculate_channel_output(1);
+            if old_2 != new_2 {
+                let t = self.render_timer + dots + res_2.unwrap_or(0);
+                let phase =
+                    (i64::from(t) * (blip::PHASES as i64)) / i64::from(self.ext_sample_period);
+                self.blips[1].update(new_2.0, new_2.1, phase as usize);
+            }
 
-            // amplify
-            let l = l * 32;
-            let r = r * 32;
+            let old_3 = self.calculate_channel_output(2);
+            let res_3 = self.ch3.step_sample(dots);
+            let new_3 = self.calculate_channel_output(2);
+            if old_3 != new_3 {
+                let t = self.render_timer + dots + res_3.unwrap_or(0);
+                let phase =
+                    (i64::from(t) * (blip::PHASES as i64)) / i64::from(self.ext_sample_period);
+                self.blips[2].update(new_3.0, new_3.1, phase as usize);
+            }
 
-            // transform to f32 sample
-            // let l = l as f32 / i16::MAX as f32;
-            // let r = r as f32 / i16::MAX as f32;
-
-            (l, r)
-        }
-
-        if self.enabled {
-            self.ch1.step_sample(dots);
-            self.ch2.step_sample(dots);
-            self.ch3.step_sample(dots);
-            self.ch4.step_sample(dots);
+            let old_4 = self.calculate_channel_output(3);
+            let res_4 = self.ch4.step_sample(dots);
+            let new_4 = self.calculate_channel_output(3);
+            if old_4 != new_4 {
+                let t = self.render_timer + dots + res_4.unwrap_or(0);
+                let phase =
+                    (i64::from(t) * (blip::PHASES as i64)) / i64::from(self.ext_sample_period);
+                self.blips[3].update(new_4.0, new_4.1, phase as usize);
+            }
         }
 
         self.render_timer += dots;
         while self.render_timer >= self.ext_sample_period {
             self.render_timer -= self.ext_sample_period;
 
-            let (l, r) = mix_and_render(self);
+            // Read blips
+            let (l1, r1) = self.blips[0].read();
+            let (l2, r2) = self.blips[1].read();
+            let (l3, r3) = self.blips[2].read();
+            let (l4, r4) = self.blips[3].read();
+
+            // Sum and scale
+            // The accumulated values are roughly (Sample * ONE).
+            // We divide by ONE.
+            let l_sum = (l1 + l2 + l3 + l4) / blip::ONE;
+            let r_sum = (r1 + r2 + r3 + r4) / blip::ONE;
+
+            // transform to i16 sample
+            // The formula from original Ceres:
+            // let l = (0xF - i16::from(l) * 2) * i16::from(apu.master_volume.left_volume() + 1);
+            // Note: `l` in original was 0..60. `l_sum` here is also 0..60 range.
+
+            let l = (0xF - l_sum as i16 * 2) * i16::from(self.master_volume.left_volume() + 1);
+            let r = (0xF - r_sum as i16 * 2) * i16::from(self.master_volume.right_volume() + 1);
+
+            // amplify
+            let l = l * 32;
+            let r = r * 32;
 
             let (l, r) = if self.ch1.is_enabled()
                 || self.ch2.is_enabled()
@@ -164,8 +206,9 @@ impl<A: AudioCallback> Apu<A> {
         DOTS_PER_SEC / sample_rate
     }
 
-    pub const fn set_sample_rate(&mut self, sample_rate: i32) {
+    pub fn set_sample_rate(&mut self, sample_rate: i32) {
         self.ext_sample_period = Self::sample_period_from_rate(sample_rate);
+        self.hpf.set_sample_rate(sample_rate);
     }
 
     pub fn step_div_apu(&mut self) {
@@ -320,8 +363,68 @@ impl<A: AudioCallback> Apu<A> {
         self.ch3.read_wave_ram(addr, is_cgb)
     }
 
+    fn update_ch1<F>(&mut self, f: F)
+    where
+        F: FnOnce(&mut Square<Sweep>),
+    {
+        let old = self.calculate_channel_output(0);
+        f(&mut self.ch1);
+        let new = self.calculate_channel_output(0);
+
+        if old != new {
+            let phase = (i64::from(self.render_timer) * (blip::PHASES as i64))
+                / i64::from(self.ext_sample_period);
+            self.blips[0].update(new.0, new.1, phase as usize);
+        }
+    }
+
+    fn update_ch2<F>(&mut self, f: F)
+    where
+        F: FnOnce(&mut Square<()>),
+    {
+        let old = self.calculate_channel_output(1);
+        f(&mut self.ch2);
+        let new = self.calculate_channel_output(1);
+
+        if old != new {
+            let phase = (i64::from(self.render_timer) * (blip::PHASES as i64))
+                / i64::from(self.ext_sample_period);
+            self.blips[1].update(new.0, new.1, phase as usize);
+        }
+    }
+
+    fn update_ch3<F>(&mut self, f: F)
+    where
+        F: FnOnce(&mut Wave),
+    {
+        let old = self.calculate_channel_output(2);
+        f(&mut self.ch3);
+        let new = self.calculate_channel_output(2);
+
+        if old != new {
+            let phase = (i64::from(self.render_timer) * (blip::PHASES as i64))
+                / i64::from(self.ext_sample_period);
+            self.blips[2].update(new.0, new.1, phase as usize);
+        }
+    }
+
+    fn update_ch4<F>(&mut self, f: F)
+    where
+        F: FnOnce(&mut Noise),
+    {
+        let old = self.calculate_channel_output(3);
+        f(&mut self.ch4);
+        let new = self.calculate_channel_output(3);
+
+        if old != new {
+            let phase = (i64::from(self.render_timer) * (blip::PHASES as i64))
+                / i64::from(self.ext_sample_period);
+            self.blips[3].update(new.0, new.1, phase as usize);
+        }
+    }
+
     pub fn write_nr10(&mut self, val: u8) {
-        self.ch1.write_nrx0(val);
+        self.update_ch1(|ch| ch.write_nrx0(val));
     }
 
     pub const fn write_nr11(&mut self, val: u8) {
@@ -329,7 +432,7 @@ impl<A: AudioCallback> Apu<A> {
     }
 
     pub fn write_nr12(&mut self, val: u8) {
-        self.ch1.write_nrx2(val);
+        self.update_ch1(|ch| ch.write_nrx2(val));
     }
 
     pub fn write_nr13(&mut self, val: u8) {
@@ -337,7 +440,7 @@ impl<A: AudioCallback> Apu<A> {
     }
 
     pub fn write_nr14(&mut self, val: u8) {
-        self.ch1.write_nrx4(val);
+        self.update_ch1(|ch| ch.write_nrx4(val));
     }
 
     pub const fn write_nr21(&mut self, val: u8) {
@@ -345,7 +448,7 @@ impl<A: AudioCallback> Apu<A> {
     }
 
     pub fn write_nr22(&mut self, val: u8) {
-        self.ch2.write_nrx2(val);
+        self.update_ch2(|ch| ch.write_nrx2(val));
     }
 
     pub fn write_nr23(&mut self, val: u8) {
@@ -353,19 +456,19 @@ impl<A: AudioCallback> Apu<A> {
     }
 
     pub fn write_nr24(&mut self, val: u8) {
-        self.ch2.write_nrx4(val);
+        self.update_ch2(|ch| ch.write_nrx4(val));
     }
 
-    pub const fn write_nr30(&mut self, val: u8) {
-        self.ch3.write_nr30(val);
+    pub fn write_nr30(&mut self, val: u8) {
+        self.update_ch3(|ch| ch.write_nr30(val));
     }
 
     pub const fn write_nr31(&mut self, val: u8) {
         self.ch3.write_nr31(val);
     }
 
-    pub const fn write_nr32(&mut self, val: u8) {
-        self.ch3.write_nr32(val);
+    pub fn write_nr32(&mut self, val: u8) {
+        self.update_ch3(|ch| ch.write_nr32(val));
     }
 
     pub fn write_nr33(&mut self, val: u8) {
@@ -373,7 +476,7 @@ impl<A: AudioCallback> Apu<A> {
     }
 
     pub fn write_nr34(&mut self, val: u8, is_cgb: bool) {
-        self.ch3.write_nr34(val, is_cgb);
+        self.update_ch3(|ch| ch.write_nr34(val, is_cgb));
     }
 
     pub const fn write_nr41(&mut self, val: u8) {
@@ -381,15 +484,15 @@ impl<A: AudioCallback> Apu<A> {
     }
 
     pub fn write_nr42(&mut self, val: u8) {
-        self.ch4.write_nr42(val);
+        self.update_ch4(|ch| ch.write_nr42(val));
     }
 
     pub const fn write_nr43(&mut self, val: u8) {
         self.ch4.write_nr43(val);
     }
 
-    pub const fn write_nr44(&mut self, val: u8) {
-        self.ch4.write_nr44(val);
+    pub fn write_nr44(&mut self, val: u8) {
+        self.update_ch4(|ch| ch.write_nr44(val));
     }
 
     pub const fn write_nr50(&mut self, val: u8) {
@@ -398,9 +501,35 @@ impl<A: AudioCallback> Apu<A> {
         }
     }
 
-    pub const fn write_nr51(&mut self, val: u8) {
+    pub fn write_nr51(&mut self, val: u8) {
         if self.enabled {
+            let old1 = self.calculate_channel_output(0);
+            let old2 = self.calculate_channel_output(1);
+            let old3 = self.calculate_channel_output(2);
+            let old4 = self.calculate_channel_output(3);
+
             self.nr51 = val;
+
+            let new1 = self.calculate_channel_output(0);
+            let new2 = self.calculate_channel_output(1);
+            let new3 = self.calculate_channel_output(2);
+            let new4 = self.calculate_channel_output(3);
+
+            let phase = (i64::from(self.render_timer) * (blip::PHASES as i64))
+                / i64::from(self.ext_sample_period);
+
+            if old1 != new1 {
+                self.blips[0].update(new1.0, new1.1, phase as usize);
+            }
+            if old2 != new2 {
+                self.blips[1].update(new2.0, new2.1, phase as usize);
+            }
+            if old3 != new3 {
+                self.blips[2].update(new3.0, new3.1, phase as usize);
+            }
+            if old4 != new4 {
+                self.blips[3].update(new4.0, new4.1, phase as usize);
+            }
         }
     }
 
