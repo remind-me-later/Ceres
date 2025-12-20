@@ -923,14 +923,15 @@ impl Ppu {
         let flags = oam_bytes[idx + 3];
 
         // Sprite height (8 or 16 pixels)
-        let height = if self.lcdc & LCDC_OBJL_B != 0 { 16 } else { 8 };
+        let height: i16 = if self.lcdc & LCDC_OBJL_B != 0 { 16 } else { 8 };
 
         // Check if sprite is on this scanline
         // Sprite Y is offset by 16, so visible range is Y-16 to Y-16+height-1
-        let sprite_top = y.wrapping_sub(16);
-        let sprite_bottom = sprite_top.wrapping_add(height);
+        // Cast to i16 to handle partial top visibility (when y < 16)
+        let sprite_y = i16::from(y) - 16;
+        let ly = i16::from(self.ly);
 
-        if self.ly >= sprite_top && self.ly < sprite_bottom {
+        if sprite_y <= ly && sprite_y + height > ly {
             self.sprite_buffer.add(sprite::SpriteEntry {
                 y,
                 x,
