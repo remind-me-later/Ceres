@@ -296,7 +296,7 @@ impl Cartridge {
                     // The 0→1 correction happens on the UNMASKED lower 5 bits:
                     // if lower 5 bits of combined bank are 0, increment
                     // This check must happen BEFORE applying the ROM size mask
-                    if (combined & 0x1F) == 0 {
+                    if combined.trailing_zeros() >= 5 {
                         combined += 1;
                     }
 
@@ -357,7 +357,7 @@ impl Cartridge {
                         let bank = val & 0xF;
                         let bank = if bank == 0 { 1 } else { bank };
                         // Apply ROM size mask and calculate offset
-                        let masked_bank = bank as u16 & self.rom_size.mask();
+                        let masked_bank = u16::from(bank) & self.rom_size.mask();
                         self.rom_bank_lo = bank;
                         self.rom_offsets =
                             (0, u32::from(ROMSize::BANK_SIZE) * u32::from(masked_bank));

@@ -1,6 +1,6 @@
 //! Integration tests using the Mealybug Tearoom Tests ROM suite
 //! PPU related tests
-//! Source: https://github.com/mealybug/mealybug-tearoom-tests
+//! Source: <https://github.com/mealybug/mealybug-tearoom-tests>
 
 use ceres_core::Model;
 use ceres_test_runner::{
@@ -19,9 +19,8 @@ fn run_mealybug_ppu_test(rom_name: &str, model: Model) -> TestResult {
         Err(e) => return TestResult::Error(format!("Failed to load test ROM: {e}")),
     };
 
-    let screenshot_path = match expected_screenshot_path(&rom_path, model) {
-        Some(path) => path,
-        None => return TestResult::Error(format!("No expected screenshot found for {rom_path}")),
+    let Some(screenshot_path) = expected_screenshot_path(&rom_path, model) else {
+        return TestResult::Error(format!("No expected screenshot found for {rom_path}"));
     };
 
     let config = TestConfig {

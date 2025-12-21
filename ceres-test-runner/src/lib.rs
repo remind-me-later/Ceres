@@ -6,6 +6,7 @@
 pub mod test_runner;
 
 use anyhow::{Context as _, Result};
+use ceres_core::Model;
 use std::path::{Path, PathBuf};
 
 /// Get the path to the test-roms directory
@@ -49,19 +50,14 @@ pub fn load_test_rom(relative_path: &str) -> Result<Vec<u8>> {
 /// Get path to expected screenshot for a test ROM
 #[inline]
 #[must_use]
-pub fn expected_screenshot_path(relative_path: &str, model: ceres_core::Model) -> Option<PathBuf> {
+pub fn expected_screenshot_path(relative_path: &str, model: Model) -> Option<PathBuf> {
     let rom_path = test_roms_dir().join(relative_path);
     let rom_dir = rom_path.parent()?;
 
     // Try model-specific screenshot first (e.g., "instr_timing-cgb.png")
     let rom_stem = rom_path.file_stem()?.to_str()?;
     let model_suffix = match model {
-        ceres_core::Model::Cgb0
-        | ceres_core::Model::CgbA
-        | ceres_core::Model::CgbB
-        | ceres_core::Model::CgbC
-        | ceres_core::Model::CgbD
-        | ceres_core::Model::CgbE => "cgb",
+        Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD | Model::CgbE => "cgb",
         _ => "dmg", // DMG, MGB, and unknown models use DMG screenshots
     };
 
@@ -74,27 +70,16 @@ pub fn expected_screenshot_path(relative_path: &str, model: ceres_core::Model) -
     // Mealybug Tearoom naming conventions
     // CGB: _cgb_c.png (assuming CGB-C behavior)
     // DMG: _dmg_blob.png
-    if match model {
-        ceres_core::Model::Cgb0
-        | ceres_core::Model::CgbA
-        | ceres_core::Model::CgbB
-        | ceres_core::Model::CgbC
-        | ceres_core::Model::CgbD
-        | ceres_core::Model::CgbE => {
-            let p = rom_dir.join(format!("{rom_stem}_cgb_c.png"));
-            if p.exists() {
-                return Some(p);
-            }
-            false
+    let p = match model {
+        Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD | Model::CgbE => {
+            rom_dir.join(format!("{rom_stem}_cgb_c.png"))
         }
-        _ => {
-            let p = rom_dir.join(format!("{rom_stem}_dmg_blob.png"));
-            if p.exists() {
-                return Some(p);
-            }
-            false
-        }
-    } {}
+        _ => rom_dir.join(format!("{rom_stem}_dmg_blob.png")),
+    };
+
+    if p.exists() {
+        return Some(p);
+    }
 
     // Try: test-name-dmg-cgb.png (works for both)
     let combined = rom_dir.join(format!("{rom_stem}-dmg-cgb.png"));

@@ -63,7 +63,7 @@ pub enum TestResult {
 impl TestResult {
     /// Check if the test result is Passed
     #[must_use]
-    pub fn is_passed(&self) -> bool {
+    pub const fn is_passed(&self) -> bool {
         matches!(self, Self::Passed)
     }
 }
@@ -85,7 +85,8 @@ pub struct ScreenshotCheck {
 }
 
 impl ScreenshotCheck {
-    pub fn new(expected_path: std::path::PathBuf) -> Self {
+    #[must_use]
+    pub const fn new(expected_path: std::path::PathBuf) -> Self {
         Self { expected_path }
     }
 
@@ -177,7 +178,7 @@ impl TestRunner {
     /// Get the current pixel data (RGBA format)
     #[must_use]
     #[inline]
-    pub fn pixel_data(&self) -> &[u8] {
+    pub const fn pixel_data(&self) -> &[u8] {
         self.gb.pixel_data_rgba()
     }
 

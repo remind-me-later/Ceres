@@ -219,7 +219,7 @@ impl<A: AudioCallback> Gb<A> {
         self.clock.tma = val;
         match self.clock.tima_state {
             TIMAState::Reloading | TIMAState::Reloaded => self.clock.tima = val,
-            _ => (),
+            TIMAState::Running => (),
         }
     }
 }

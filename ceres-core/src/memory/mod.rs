@@ -242,7 +242,7 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[expect(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity, clippy::too_many_lines)]
     fn write_high(&mut self, addr: u8, val: u8) {
         match addr {
             P1 => self.joy.write_joy(val),

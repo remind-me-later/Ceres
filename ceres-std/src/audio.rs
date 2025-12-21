@@ -36,7 +36,7 @@ struct AudioProcessor {
 }
 
 impl AudioProcessor {
-    fn compute_resample_ratio(&self, occupied: usize) -> f64 {
+    fn compute_resample_ratio(occupied: usize) -> f64 {
         #[expect(clippy::cast_precision_loss)]
         let occupied = occupied as f64;
 
@@ -56,6 +56,7 @@ impl AudioProcessor {
         (ORIG_RATIO * (1.0 + adjustment))
             .clamp(ORIG_RATIO * 0.85, ORIG_RATIO * MAX_RESAMPLE_RATIO_RELATIVE)
     }
+
     fn new(
         volume: Arc<Mutex<f32>>,
         left_consumer: Arc<Mutex<RbConsumer>>,
@@ -97,16 +98,13 @@ impl AudioProcessor {
         // 1. Lock consumer to check status and set resample ratio
         let needed;
         let num_samples;
-        {
-            let left = match self.left_consumer.lock() {
-                Ok(l) => l,
-                Err(_) => {
-                    buffer.fill(0.0); // Silence on poisoned lock
-                    return;
-                }
-            };
+
+        if let Ok(left) = self.left_consumer.lock() {
             num_samples = left.occupied_len();
-            let ratio = self.compute_resample_ratio(num_samples);
+
+            std::mem::drop(left); // Release lock early
+
+            let ratio = Self::compute_resample_ratio(num_samples);
 
             // This is fine because the emulator thread does NOT need this lock.
             self.resampler
@@ -114,49 +112,42 @@ impl AudioProcessor {
                 .unwrap_or_else(|e| eprintln!("Failed to set resample ratio: {e}"));
 
             needed = self.resampler.input_frames_next();
+        } else {
+            buffer.fill(0.0); // Silence on poisoned lock
+            return;
         }
 
         // 2. Underrun Check
         if needed > num_samples {
-            eprintln!("Underrun: needed {}, got {}", needed, num_samples);
+            eprintln!("Underrun: needed {needed}, got {num_samples}");
             buffer.fill(0.0);
             return;
         }
-        // 3. Pop Samples
-        {
-            let mut left = match self.left_consumer.lock() {
-                Ok(l) => l,
-                Err(_) => {
-                    buffer.fill(0.0);
-                    return;
-                }
-            };
-            let mut right = match self.right_consumer.lock() {
-                Ok(r) => r,
-                Err(_) => {
-                    buffer.fill(0.0);
-                    return;
-                }
-            };
 
+        // 3. Pop Samples
+        if let Ok(mut left) = self.left_consumer.lock()
+            && let Ok(mut right) = self.right_consumer.lock()
+        {
             self.buffer_input_left.clear();
             self.buffer_input_right.clear();
 
             self.buffer_input_left.extend(left.pop_iter().take(needed));
             self.buffer_input_right
                 .extend(right.pop_iter().take(needed));
+        } else {
+            buffer.fill(0.0);
+            return;
         }
 
         // 4. Prepare Resampler Input (No locks held)
         let (input_buf_left, input_buf_right) = self.input_buf.split_at_mut(1);
 
         // Get volume and immediately unlock
-        let vol = match self.volume.lock() {
-            Ok(vol) => *vol,
-            Err(_) => {
-                buffer.fill(0.0);
-                return;
-            }
+        let vol = if let Ok(vol) = self.volume.lock() {
+            *vol
+        } else {
+            buffer.fill(0.0);
+            return;
         };
 
         for ((l, &l1), (r, &r1)) in input_buf_left[0]
@@ -337,10 +328,10 @@ impl Stream {
     }
 
     pub fn unmute(&mut self) {
-        if let Some(vol) = self.volume_before_mute.take() {
-            if let Ok(mut v) = self.volume.lock() {
-                *v = vol;
-            }
+        if let Some(vol) = self.volume_before_mute.take()
+            && let Ok(mut v) = self.volume.lock()
+        {
+            *v = vol;
         }
     }
 

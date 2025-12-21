@@ -151,7 +151,7 @@ impl Wave {
         // trigger
         if val & 0x80 != 0 {
             if !is_cgb && self.enabled && self.period_counter.timer() <= 4 {
-                let offset = ((self.sample_index + 1) / 2) & 0xF;
+                let offset = self.sample_index.div_ceil(2) & 0xF;
                 if offset < 4 {
                     self.write_ram_direct(0, self.ram[offset as usize]);
                 } else {

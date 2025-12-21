@@ -25,6 +25,7 @@ impl HighPassFilter {
 
     pub fn set_sample_rate(&mut self, sample_rate: i32) {
         // Value from SameBoy apu.c: pow(0.999958, 4194304 / sample_rate)
+        #[expect(clippy::cast_precision_loss)]
         let cycles_per_sample = DOTS_PER_SEC as f32 / sample_rate as f32;
         self.filter_coeff = 0.999_958_f32.powf(cycles_per_sample);
     }

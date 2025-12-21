@@ -538,16 +538,14 @@ impl<A: AudioCallback> Apu<A> {
 
         let enabling = val & 0x80 != 0;
 
-        let old_lengths = if !is_cgb && !was_enabled && enabling {
-            Some([
+        let old_lengths = (!is_cgb && !was_enabled && enabling).then(|| {
+            [
                 self.ch1.length(),
                 self.ch2.length(),
                 self.ch3.length(),
                 self.ch4.length(),
-            ])
-        } else {
-            None
-        };
+            ]
+        });
 
         if !was_enabled && enabling {
             self.reset();

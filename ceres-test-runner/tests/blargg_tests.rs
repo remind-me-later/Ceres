@@ -18,13 +18,10 @@ fn run_blargg_test(path: &str, timeout: u32) -> TestResult {
         Err(e) => return TestResult::Error(format!("Failed to load test ROM: {e}")),
     };
 
-    let screenshot_path = match expected_screenshot_path(path, ceres_core::Model::CgbE) {
-        Some(path) => path,
-        None => {
-            return TestResult::Error(format!(
-                "No expected screenshot found for {path} with model CgbE"
-            ));
-        }
+    let Some(screenshot_path) = expected_screenshot_path(path, ceres_core::Model::CgbE) else {
+        return TestResult::Error(format!(
+            "No expected screenshot found for {path} with model CgbE"
+        ));
     };
 
     let config = TestConfig {

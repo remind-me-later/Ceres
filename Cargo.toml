@@ -31,6 +31,7 @@ dbg_macro = "warn"
 decimal_literal_representation = "warn"
 default_union_representation = "warn"
 deref_by_slicing = "warn"
+doc-markdown = { level = "allow", priority = 1 }
 else_if_without_else = "warn"
 empty_drop = "warn"
 empty_structs_with_brackets = "warn"

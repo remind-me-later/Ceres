@@ -10,6 +10,7 @@ use ceres_test_runner::{
 pub struct MooneyeCheck;
 
 impl CompletionCheck for MooneyeCheck {
+    #[expect(clippy::many_single_char_names)]
     fn check(&self, gb: &mut ceres_core::Gb<DummyAudioCallback>) -> Option<TestResult> {
         if !gb.check_and_reset_ld_b_b_breakpoint() {
             return None;

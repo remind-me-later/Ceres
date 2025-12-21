@@ -11,6 +11,7 @@ use ceres_test_runner::{
 pub struct MooneyeCheck;
 
 impl CompletionCheck for MooneyeCheck {
+    #[expect(clippy::many_single_char_names)]
     fn check(&self, gb: &mut ceres_core::Gb<DummyAudioCallback>) -> Option<TestResult> {
         if !gb.check_and_reset_ld_b_b_breakpoint() {
             return None;
@@ -71,9 +72,8 @@ fn run_mooneye_screenshot_test(path: &str, model: Model) -> TestResult {
         Err(e) => return TestResult::Error(format!("Failed to load test ROM: {e}")),
     };
 
-    let screenshot_path = match expected_screenshot_path(path, model) {
-        Some(path) => path,
-        None => return TestResult::Error("Expected screenshot not found".to_string()),
+    let Some(screenshot_path) = expected_screenshot_path(path, model) else {
+        return TestResult::Error("Expected screenshot not found".to_string());
     };
 
     let config = TestConfig {

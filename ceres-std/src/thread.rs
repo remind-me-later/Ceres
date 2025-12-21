@@ -258,6 +258,8 @@ impl GbThread {
             } else if now > next_render_time + duration * 5 {
                 // If we are significantly behind (e.g. debug pause), reset timing
                 next_render_time = now;
+            } else {
+                // We're behind, but not too much; just continue without sleeping
             }
         }
     }
@@ -310,14 +312,8 @@ impl GbThread {
         let gb = Self::create_new_gb(&audio_stream, ring_buffer, model, rom_path, sav_path)?;
         let gb = Arc::new(Mutex::new(gb));
 
-        #[expect(
-            clippy::mutex_atomic,
-            reason = "Using a Mutex to protect the pause state and a Condvar to signal when to pause/resume the thread"
-        )]
         let pause_condvar = Arc::new((Mutex::new(false), Condvar::new()));
-
         let exiting = Arc::new(AtomicBool::new(false));
-
         let multiplier = Arc::new(AtomicU32::new(1));
 
         // FIXME: use proper user facing config options

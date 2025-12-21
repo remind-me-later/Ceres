@@ -1,6 +1,6 @@
 //! Integration tests using the AGE test ROM suite
 //!
-//! Source: https://github.com/c-sp/age-test-roms
+//! Source: <https://github.com/c-sp/age-test-roms>
 
 use ceres_test_runner::{
     load_test_rom,
@@ -14,6 +14,7 @@ impl CompletionCheck for AgeCheck {
     // Game Boy's CPU registers to the following Fibonacci numbers on success:
     // `B = 3, C = 5, D = 8, E = 13, H = 21, L = 34`.
     // Failure is indicated by any different values.
+    #[expect(clippy::many_single_char_names)]
     fn check(&self, gb: &mut ceres_core::Gb<DummyAudioCallback>) -> Option<TestResult> {
         if !gb.check_and_reset_ld_b_b_breakpoint() {
             return None;

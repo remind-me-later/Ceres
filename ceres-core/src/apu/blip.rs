@@ -1,3 +1,5 @@
+use std::f64;
+
 // From SameBoy apu.h
 pub const WIDTH: usize = 64; // GB_BAND_LIMITED_WIDTH
 pub const PHASES: usize = 256; // GB_BAND_LIMITED_PHASES
@@ -29,21 +31,29 @@ impl Blip {
 
         // From SameBoy apu.c
         let lowpass = 15.0 / 16.0;
-        let to_angle = std::f64::consts::PI / (PHASES as f64) * lowpass;
+        #[expect(clippy::cast_precision_loss)]
+        let to_angle = f64::consts::PI / (PHASES as f64) * lowpass;
 
         let mut sum = 0.0;
 
         for (i, m) in master.iter_mut().enumerate() {
-            let i_f = i as f64;
             // Exact Blackman window
             // From SameBoy apu.c
             const A0: f64 = 7938.0 / 18608.0;
             const A1: f64 = 9240.0 / 18608.0;
             const A2: f64 = 1430.0 / 18608.0;
 
-            let window_angle = (2.0 * std::f64::consts::PI * i_f) / ((WIDTH * PHASES) as f64);
-            let window = A0 - A1 * window_angle.cos() + A2 * (2.0 * window_angle).cos();
+            #[expect(clippy::cast_precision_loss)]
+            let i_f = i as f64;
 
+            #[expect(clippy::cast_precision_loss)]
+            let window_angle = (2.0 * f64::consts::PI * i_f) / ((WIDTH * PHASES) as f64);
+            let window = A2.mul_add(
+                (2.0 * window_angle).cos(),
+                A1.mul_add(-window_angle.cos(), A0),
+            );
+
+            #[expect(clippy::cast_precision_loss)]
             let angle = (i_f - (WIDTH * PHASES) as f64 / 2.0) * to_angle;
             let val = if angle == 0.0 {
                 1.0
@@ -69,7 +79,8 @@ impl Blip {
                         sum += master[index - phase];
                     }
                 }
-                let cur = (sum * (ONE as f64)) as i32;
+                #[expect(clippy::cast_possible_truncation)]
+                let cur = (sum * f64::from(ONE)) as i32;
                 error -= cur;
                 steps[phase][i] = cur;
             }
@@ -104,10 +115,10 @@ impl Blip {
 
         let steps = &self.steps[phase];
 
-        for i in 0..WIDTH {
+        for (i, &step) in steps.iter().enumerate().take(WIDTH) {
             let offset = (i + self.pos + delay) & MASK;
-            self.buffer_l[offset] += delta_l * steps[i];
-            self.buffer_r[offset] += delta_r * steps[i];
+            self.buffer_l[offset] += delta_l * step;
+            self.buffer_r[offset] += delta_r * step;
         }
     }
 
