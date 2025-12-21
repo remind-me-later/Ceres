@@ -10,8 +10,6 @@ build = "build.rs"
 [dependencies]
 anyhow = "1.0"
 ceres-core = { path = "../ceres-core" }
-ceres-std = { path = "../ceres-std" }
-clap = { version = "*", features = ["derive"] }
 image = { version = "*", default-features = false, features = ["png"] }
 
 [build-dependencies]
