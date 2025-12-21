@@ -166,8 +166,6 @@ impl<A: AudioCallback> Gb<A> {
         if self.cpu.is_halted {
             self.tick_m_cycle();
         } else {
-            // println!("pc {:0x}", self.cpu.pc);
-
             let op = self.imm8();
             self.run_hdma();
 
@@ -181,15 +179,43 @@ impl<A: AudioCallback> Gb<A> {
 
         if self.ints.is_any_requested() {
             self.cpu.is_halted = false;
+            self.ppu.leave_stop_mode();
 
             if self.ints.are_enabled() {
                 self.tick_m_cycle();
                 self.tick_m_cycle();
 
-                self.push(self.cpu.pc);
+                // Perform interrupt push with IE re-check during upper byte write
+                // to handle the edge case where IE is modified mid-dispatch.
+                //
+                // Hardware behavior (verified by Mooneye ie_push test):
+                // - If SP=$0000, upper byte push writes to $FFFF (IE register)
+                // - If the write clears the interrupt bit, dispatch is cancelled (PC=$0000)
+                // - If SP=$0001, lower byte push writes to IE, but it's too late to cancel
+                let pc = self.cpu.pc;
+                let [lo, hi] = pc.to_le_bytes();
+
+                // Push upper byte
+                self.cpu.sp = self.cpu.sp.wrapping_sub(1);
+                self.write_cpu(self.cpu.sp, hi);
+
+                // Re-check interrupt queue after upper byte push
+                // IE may have been modified by the write to $FFFF
+                let (new_int, new_vector) = self.ints.determine_interrupt();
+
+                // Push lower byte
+                self.cpu.sp = self.cpu.sp.wrapping_sub(1);
+                self.write_cpu(self.cpu.sp, lo);
+                self.tick_m_cycle();
+
+                // Acknowledge the interrupt only if it's still pending
+                // If IE was modified to clear the original interrupt, don't clear IF
+                if new_int != 0 {
+                    self.ints.acknowledge_interrupt(new_int);
+                }
 
                 self.ints.disable();
-                self.cpu.pc = self.ints.handle();
+                self.cpu.pc = new_vector;
             }
         }
     }
@@ -278,14 +304,26 @@ impl<A: AudioCallback> Gb<A> {
         u16::from_le_bytes([lo, hi])
     }
 
-    // TODO: can the val be modified by the SP write during the push?
+    /// PUSH rr instruction timing (verified by Mooneye `push_timing` test):
+    /// M=0: Instruction decode (implicit)
+    /// M=1: Internal delay
+    /// M=2: Memory write for high byte
+    /// M=3: Memory write for low byte
     fn push(&mut self, val: u16) {
         let [lo, hi] = val.to_le_bytes();
-        self.cpu.sp = self.cpu.sp.wrapping_sub(1);
-        self.write_cpu(self.cpu.sp, hi);
-        self.cpu.sp = self.cpu.sp.wrapping_sub(1);
-        self.write_cpu(self.cpu.sp, lo);
+
+        // M=1: Internal delay (where OAM bug handling would occur on DMG)
         self.tick_m_cycle();
+
+        // M=2: Write high byte
+        self.cpu.sp = self.cpu.sp.wrapping_sub(1);
+        self.tick_m_cycle();
+        self.write_mem(self.cpu.sp, hi);
+
+        // M=3: Write low byte
+        self.cpu.sp = self.cpu.sp.wrapping_sub(1);
+        self.tick_m_cycle();
+        self.write_mem(self.cpu.sp, lo);
     }
 
     #[must_use]
@@ -336,6 +374,14 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     fn write_cpu(&mut self, addr: u16, val: u8) {
+        // Capture timestamp before advancing time for DMA start logging
+        if addr >= 0xFF00 {
+            let io_addr = (addr & 0xFF) as u8;
+            if io_addr == 0x46 {
+                // DMA register
+                self.dma_write_start_dots = self.total_dots;
+            }
+        }
         self.tick_m_cycle();
         self.write_mem(addr, val);
     }
@@ -818,9 +864,10 @@ impl<A: AudioCallback> Gb<A> {
         self.cpu.af |= u16::from(self.read_cpu(addr)) << 8;
     }
 
-    // TODO: debugger breakpoint
-    #[expect(clippy::needless_pass_by_ref_mut)]
+    // Sets the debug breakpoint flag. Test ROMs like cgb-acid2 and dmg-acid2
+    // use this instruction as a breakpoint to signal test completion.
     const fn ld_b_b(&mut self) {
+        self.ld_b_b_breakpoint = true;
         self.nop();
     }
 
@@ -1128,6 +1175,7 @@ impl<A: AudioCallback> Gb<A> {
             }
         } else {
             self.cpu.is_halted = true;
+            self.ppu.enter_stop_mode();
         }
     }
 

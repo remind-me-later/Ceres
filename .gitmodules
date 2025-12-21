@@ -1,3 +1,3 @@
-[submodule "gb-bootroms"]
-	path = gb-bootroms
-	url = https://github.com/ISSOtm/gb-bootroms.git
+[submodule "external/gb-bootroms"]
+	path = external/gb-bootroms
+	url = https://codeberg.org/ISSOtm/gb-bootroms.git

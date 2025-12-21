@@ -12,6 +12,8 @@ pub mod timeouts {
     pub const DMG_ACID2: u32 = 480;
     pub const RTC3TEST_BASIC: u32 = 1050;
     pub const RTC3TEST_RANGE: u32 = 750;
+    /// Mooneye Test Suite acceptance tests (120 seconds maximum runtime)
+    pub const MOONEYE_ACCEPTANCE: u32 = 7160;
 }
 
 use anyhow::Result;
@@ -41,7 +43,7 @@ pub struct ButtonEvent {
 
 /// A dummy audio callback for headless testing
 #[derive(Default)]
-struct DummyAudioCallback;
+pub struct DummyAudioCallback;
 
 impl AudioCallback for DummyAudioCallback {
     fn audio_sample(&self, _l: Sample, _r: Sample) {}
@@ -50,74 +52,48 @@ impl AudioCallback for DummyAudioCallback {
 /// Result of running a test ROM
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TestResult {
-    /// Test failed with a message
-    Failed(String),
     /// Test passed successfully
     Passed,
-    /// Test timed out
-    Timeout,
-    /// Test result is unknown (couldn't parse output)
-    Unknown,
+    /// Test failed with a message
+    Failed(String),
+    /// Test failed with a generic error (e.g. IO error, setup failure)
+    Error(String),
 }
 
-/// Configuration for running a test ROM
-pub struct TestConfig {
-    pub capture_serial: bool,
-    pub model: Model,
-    pub timeout_frames: u32,
-    pub expected_screenshot: Option<std::path::PathBuf>,
-    pub button_events: Vec<ButtonEvent>,
-}
-
-impl Default for TestConfig {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            capture_serial: true,
-            model: Model::Cgb,
-            timeout_frames: DEFAULT_TIMEOUT_FRAMES,
-            expected_screenshot: None,
-            button_events: Vec::new(),
-        }
+impl TestResult {
+    /// Check if the test result is Passed
+    #[must_use]
+    pub const fn is_passed(&self) -> bool {
+        matches!(self, Self::Passed)
     }
 }
 
-/// A test runner for executing Game Boy test ROMs
-pub struct TestRunner {
-    config: TestConfig,
-    frames_run: u32,
-    gb: Gb<DummyAudioCallback>,
-    serial_output: String,
+/// Trait for defining test completion conditions
+pub trait CompletionCheck {
+    /// Check if the test has completed
+    fn check(&self, gb: &mut Gb<DummyAudioCallback>) -> Option<TestResult>;
+
+    /// Check result when timeout is reached
+    fn on_timeout(&self, _gb: &mut Gb<DummyAudioCallback>) -> TestResult {
+        TestResult::Failed("Timeout reached".to_string())
+    }
 }
 
-impl TestRunner {
-    /// Check if the test has completed and parse the result
-    fn check_completion(&self) -> Option<TestResult> {
-        // If we have an expected screenshot, compare it
-        if let Some(ref screenshot_path) = self.config.expected_screenshot
-            && matches!(self.compare_screenshot(screenshot_path), Ok(true))
-        {
-            return Some(TestResult::Passed);
-        }
+/// Check for screenshot match
+pub struct ScreenshotCheck {
+    expected_path: std::path::PathBuf,
+}
 
-        let output = self.serial_output.trim();
-
-        if output.contains("Passed") {
-            return Some(TestResult::Passed);
-        }
-
-        if output.contains("Failed") || output.contains("Error") {
-            return Some(TestResult::Failed(output.into()));
-        }
-
-        None
+impl ScreenshotCheck {
+    #[must_use]
+    pub const fn new(expected_path: std::path::PathBuf) -> Self {
+        Self { expected_path }
     }
 
-    /// Compare the current screen against an expected screenshot
-    fn compare_screenshot(&self, expected_path: &std::path::Path) -> Result<bool> {
-        let expected_img = image::open(expected_path)?;
+    fn compare_screenshot(&self, gb: &Gb<DummyAudioCallback>) -> Result<bool> {
+        let expected_img = image::open(&self.expected_path)?;
         let expected_rgba = expected_img.to_rgba8();
-        let actual_rgba = self.gb.pixel_data_rgba();
+        let actual_rgba = gb.pixel_data_rgba();
 
         if expected_rgba.width() != u32::from(ceres_core::PX_WIDTH)
             || expected_rgba.height() != u32::from(ceres_core::PX_HEIGHT)
@@ -127,12 +103,83 @@ impl TestRunner {
 
         Ok(expected_rgba.as_raw() == actual_rgba)
     }
+}
 
+impl CompletionCheck for ScreenshotCheck {
+    fn check(&self, gb: &mut Gb<DummyAudioCallback>) -> Option<TestResult> {
+        if gb.check_and_reset_ld_b_b_breakpoint() {
+            match self.compare_screenshot(gb) {
+                Ok(true) => Some(TestResult::Passed),
+                Ok(false) => None,
+                Err(e) => Some(TestResult::Error(format!(
+                    "Screenshot comparison error: {e}"
+                ))),
+            }
+        } else {
+            None
+        }
+    }
+
+    fn on_timeout(&self, gb: &mut Gb<DummyAudioCallback>) -> TestResult {
+        match self.compare_screenshot(gb) {
+            Ok(true) => TestResult::Passed,
+            Ok(false) => TestResult::Failed("Screenshot mismatch".to_string()),
+            Err(e) => TestResult::Error(format!("Screenshot comparison error: {e}")),
+        }
+    }
+}
+
+/// Configuration for running a test ROM
+pub struct TestConfig {
+    pub model: Model,
+    pub timeout_frames: u32,
+    pub button_events: Vec<ButtonEvent>,
+    pub test_name: String,
+}
+
+impl Default for TestConfig {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            model: Model::CgbE,
+            timeout_frames: DEFAULT_TIMEOUT_FRAMES,
+            button_events: Vec::new(),
+            test_name: "unknown_test".to_string(),
+        }
+    }
+}
+
+/// A test runner for executing Game Boy test ROMs
+pub struct TestRunner {
+    config: TestConfig,
+    frames_run: u32,
+    gb: Gb<DummyAudioCallback>,
+    check: Box<dyn CompletionCheck>,
+}
+
+impl TestRunner {
     /// Get the number of frames run
     #[must_use]
     #[inline]
     pub const fn frames_run(&self) -> u32 {
         self.frames_run
+    }
+
+    /// Read a byte from Game Boy memory
+    ///
+    /// This is useful for reading test result registers in test ROMs
+    /// that don't use screenshots.
+    #[must_use]
+    #[inline]
+    pub fn read_memory(&self, address: u16) -> u8 {
+        self.gb.read_mem(address)
+    }
+
+    /// Get the current pixel data (RGBA format)
+    #[must_use]
+    #[inline]
+    pub const fn pixel_data(&self) -> &[u8] {
+        self.gb.pixel_data_rgba()
     }
 
     /// Create a new test runner with the given ROM
@@ -141,7 +188,7 @@ impl TestRunner {
     ///
     /// Returns an error if the ROM is invalid or cannot be loaded.
     #[inline]
-    pub fn new(rom: Vec<u8>, config: TestConfig) -> Result<Self> {
+    pub fn new(rom: Vec<u8>, config: TestConfig, check: Box<dyn CompletionCheck>) -> Result<Self> {
         let rom_boxed = rom.into_boxed_slice();
 
         let mut gb = GbBuilder::new(48000, DummyAudioCallback)
@@ -155,7 +202,7 @@ impl TestRunner {
             config,
             frames_run: 0,
             gb,
-            serial_output: String::new(),
+            check,
         })
     }
 
@@ -166,13 +213,12 @@ impl TestRunner {
             self.run_frame();
             self.frames_run += 1;
 
-            // Check if test has completed
-            if let Some(result) = self.check_completion() {
+            if let Some(result) = self.check.check(&mut self.gb) {
                 return result;
             }
         }
 
-        TestResult::Timeout
+        self.check.on_timeout(&mut self.gb)
     }
 
     /// Run a single frame of emulation
@@ -188,44 +234,5 @@ impl TestRunner {
         }
 
         self.gb.run_frame();
-
-        if self.config.capture_serial {
-            let output = self.gb.serial_output();
-            if output.len() != self.serial_output.len() {
-                self.serial_output = String::from(output);
-            }
-        }
-    }
-
-    /// Get the serial output captured so far
-    #[must_use]
-    #[inline]
-    pub fn serial_output(&self) -> &str {
-        &self.serial_output
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_runner_creation() {
-        let mut rom = vec![0; 0x8000];
-
-        rom[0x148] = 0;
-        rom[0x149] = 0;
-        rom[0x147] = 0;
-
-        let mut checksum: u8 = 0;
-        for byte in &rom[0x134..0x14D] {
-            checksum = checksum.wrapping_sub(*byte).wrapping_sub(1);
-        }
-        rom[0x14D] = checksum;
-
-        let config = TestConfig::default();
-        let result = TestRunner::new(rom, config);
-
-        assert!(result.is_ok(), "Failed to create test runner");
     }
 }

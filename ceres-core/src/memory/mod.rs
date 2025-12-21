@@ -5,8 +5,8 @@ mod key1;
 mod svbk;
 mod wram;
 
-use crate::{AudioCallback, Model};
-use crate::{CgbMode, Gb, Model::Cgb};
+use crate::{AudioCallback, Model, ppu};
+use crate::{CgbMode, Gb};
 pub use dma::Dma;
 pub use hdma::Hdma;
 pub use hram::Hram;
@@ -100,23 +100,20 @@ impl<A: AudioCallback> Gb<A> {
 
     #[must_use]
     fn read_boot_or_cart(&self, addr: u16) -> u8 {
-        self.bootrom.read(addr).map_or_else(
-            || {
-                #[cfg(feature = "game_genie")]
-                {
-                    let data = self.cart.read_rom(addr);
-                    self.game_genie
-                        .query(addr, data)
-                        .map_or(data, |gg_data| gg_data)
-                }
+        self.bootrom.read(addr).unwrap_or_else(|| {
+            #[cfg(feature = "game_genie")]
+            {
+                let data = self.cart.read_rom(addr);
+                self.game_genie
+                    .query(addr, data)
+                    .map_or(data, |gg_data| gg_data)
+            }
 
-                #[cfg(not(feature = "game_genie"))]
-                {
-                    self.cart.read_rom(addr)
-                }
-            },
-            |boot_data| boot_data,
-        )
+            #[cfg(not(feature = "game_genie"))]
+            {
+                self.cart.read_rom(addr)
+            }
+        })
     }
 
     #[must_use]
@@ -124,7 +121,7 @@ impl<A: AudioCallback> Gb<A> {
         match addr {
             P1 => self.joy.read_p1(),
             SB => self.serial.read_sb(),
-            SC => self.serial.read_sc(),
+            SC => self.serial.read_sc(self.cgb_mode),
             DIV => self.read_div(),
             TIMA => self.clock.tima(),
             TMA => self.clock.tma(),
@@ -146,7 +143,7 @@ impl<A: AudioCallback> Gb<A> {
             NR50 => self.apu.read_nr50(),
             NR51 => self.apu.read_nr51(),
             NR52 => self.apu.read_nr52(),
-            WAV_BEG..=WAV_END => self.apu.read_wave_ram(addr),
+            WAV_BEG..=WAV_END => self.apu.read_wave_ram(addr, self.is_cgb()),
             LCDC => self.ppu.read_lcdc(),
             STAT => self.ppu.read_stat(),
             SCY => self.ppu.read_scy(),
@@ -163,9 +160,21 @@ impl<A: AudioCallback> Gb<A> {
             VBK if self.are_cgb_regs_available() => self.ppu.vram().read_vbk(),
             HDMA5 if self.are_cgb_regs_available() => self.hdma.read_hdma5(),
             BCPS if self.are_cgb_regs_available() => self.ppu.bcp().spec(),
-            BCPD if self.are_cgb_regs_available() => self.ppu.bcp().data(),
+            BCPD if self.are_cgb_regs_available() => {
+                if self.ppu.is_cgb_palettes_accessible() {
+                    self.ppu.bcp().data()
+                } else {
+                    0xFF
+                }
+            }
             OCPS if self.are_cgb_regs_available() => self.ppu.ocp().spec(),
-            OCPD if self.are_cgb_regs_available() => self.ppu.ocp().data(),
+            OCPD if self.are_cgb_regs_available() => {
+                if self.ppu.is_cgb_palettes_accessible() {
+                    self.ppu.ocp().data()
+                } else {
+                    0xFF
+                }
+            }
             OPRI if self.are_cgb_regs_available() => self.ppu.read_opri(),
             SVBK if self.are_cgb_regs_available() => self.wram.svbk().read(),
             PCM12 if self.are_cgb_regs_available() => self.apu.pcm12(),
@@ -182,15 +191,21 @@ impl<A: AudioCallback> Gb<A> {
         match addr {
             0x0000..=0x00FF => self.read_boot_or_cart(addr),
             0x0200..=0x08FF => {
-                if matches!(self.model, Model::Cgb) {
+                if matches!(
+                    self.model,
+                    Model::Cgb0
+                        | Model::CgbA
+                        | Model::CgbB
+                        | Model::CgbC
+                        | Model::CgbD
+                        | Model::CgbE
+                ) {
                     self.read_boot_or_cart(addr)
                 } else {
                     #[cfg(feature = "game_genie")]
                     {
                         let data = self.cart.read_rom(addr);
-                        self.game_genie
-                            .query(addr, data)
-                            .map_or_else(|| data, |gg_data| gg_data)
+                        self.game_genie.query(addr, data).unwrap_or(data)
                     }
 
                     #[cfg(not(feature = "game_genie"))]
@@ -203,9 +218,7 @@ impl<A: AudioCallback> Gb<A> {
                 #[cfg(feature = "game_genie")]
                 {
                     let data = self.cart.read_rom(addr);
-                    self.game_genie
-                        .query(addr, data)
-                        .map_or_else(|| data, |gg_data| gg_data)
+                    self.game_genie.query(addr, data).unwrap_or(data)
                 }
 
                 #[cfg(not(feature = "game_genie"))]
@@ -217,13 +230,19 @@ impl<A: AudioCallback> Gb<A> {
             0xA000..=0xBFFF => self.cart.read_ram(addr),
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.read_wram_lo(addr),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.read_wram_hi(addr),
-            0xFE00..=0xFE9F => self.ppu.read_oam(addr, self.dma.is_enabled()),
+            0xFE00..=0xFE9F => {
+                if self.dma.blocks_oam() {
+                    0xFF
+                } else {
+                    self.ppu.read_oam(addr)
+                }
+            }
             0xFEA0..=0xFEFF => 0xFF,
             0xFF00..=0xFFFF => self.read_high((addr & 0xFF) as u8),
         }
     }
 
-    #[expect(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity, clippy::too_many_lines)]
     fn write_high(&mut self, addr: u8, val: u8) {
         match addr {
             P1 => self.joy.write_joy(val),
@@ -235,39 +254,75 @@ impl<A: AudioCallback> Gb<A> {
             TAC => self.write_tac(val),
             IF => self.ints.write_if(val),
             NR10 if self.apu.enabled() => self.apu.write_nr10(val),
-            NR11 if self.apu.enabled() => self.apu.write_nr11(val),
+            NR11 => {
+                if self.apu.enabled() {
+                    self.apu.write_nr11(val);
+                } else if !self.is_cgb() {
+                    self.apu.write_nr11(val & 0x3F);
+                } else {
+                    // Don't write anything on CGB when APU is disabled
+                }
+            }
             NR12 if self.apu.enabled() => self.apu.write_nr12(val),
             NR13 if self.apu.enabled() => self.apu.write_nr13(val),
             NR14 if self.apu.enabled() => self.apu.write_nr14(val),
-            NR21 if self.apu.enabled() => self.apu.write_nr21(val),
+            NR21 => {
+                if self.apu.enabled() {
+                    self.apu.write_nr21(val);
+                } else if !self.is_cgb() {
+                    self.apu.write_nr21(val & 0x3F);
+                } else {
+                    // Don't write anything on CGB when APU is disabled
+                }
+            }
             NR22 if self.apu.enabled() => self.apu.write_nr22(val),
             NR23 if self.apu.enabled() => self.apu.write_nr23(val),
             NR24 if self.apu.enabled() => self.apu.write_nr24(val),
             NR30 if self.apu.enabled() => self.apu.write_nr30(val),
-            NR31 if self.apu.enabled() => self.apu.write_nr31(val),
+            NR31 => {
+                if self.apu.enabled() || !self.is_cgb() {
+                    self.apu.write_nr31(val);
+                }
+            }
             NR32 if self.apu.enabled() => self.apu.write_nr32(val),
             NR33 if self.apu.enabled() => self.apu.write_nr33(val),
-            NR34 if self.apu.enabled() => self.apu.write_nr34(val),
-            NR41 if self.apu.enabled() => self.apu.write_nr41(val),
+            NR34 if self.apu.enabled() => self.apu.write_nr34(val, self.is_cgb()),
+            NR41 => {
+                if self.apu.enabled() || !self.is_cgb() {
+                    self.apu.write_nr41(val);
+                }
+            }
             NR42 if self.apu.enabled() => self.apu.write_nr42(val),
             NR43 if self.apu.enabled() => self.apu.write_nr43(val),
             NR44 if self.apu.enabled() => self.apu.write_nr44(val),
             NR50 => self.apu.write_nr50(val),
             NR51 => self.apu.write_nr51(val),
-            NR52 => self.apu.write_nr52(val),
-            WAV_BEG..=WAV_END => self.apu.write_wave_ram(addr, val),
+            NR52 => {
+                let div = self.read_div();
+                let div_bit = if self.key1.is_enabled() {
+                    div & 0x20 != 0
+                } else {
+                    div & 0x10 != 0
+                };
+                self.apu.write_nr52(val, div_bit, self.is_cgb());
+            }
+            WAV_BEG..=WAV_END => self.apu.write_wave_ram(addr, val, self.is_cgb()),
             LCDC => self.ppu.write_lcdc(val, &mut self.ints),
-            STAT => self.ppu.write_stat(val),
+            STAT => self.ppu.write_stat(val, &mut self.ints),
             SCY => self.ppu.write_scy(val),
             SCX => self.ppu.write_scx(val),
-            LYC => self.ppu.write_lyc(val),
+            LYC => self.ppu.write_lyc(val, &mut self.ints),
             DMA => self.dma.write(val),
             BGP => self.ppu.write_bgp(val),
             OBP0 => self.ppu.write_obp0(val),
             OBP1 => self.ppu.write_obp1(val),
             WY => self.ppu.write_wy(val),
             WX => self.ppu.write_wx(val),
-            KEY0 if matches!(self.model, Cgb) => {
+            KEY0 if matches!(
+                self.model,
+                Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD | Model::CgbE
+            ) =>
+            {
                 // FIXME: causes broken palettes on GB games played on CGB
                 // should we allow all cgb functions to be observable from a GB rom?
                 if self.bootrom.is_enabled() && val == 4 {
@@ -285,11 +340,22 @@ impl<A: AudioCallback> Gb<A> {
             HDMA2 if self.are_cgb_regs_available() => self.hdma.write_hdma2(val),
             HDMA3 if self.are_cgb_regs_available() => self.hdma.write_hdma3(val),
             HDMA4 if self.are_cgb_regs_available() => self.hdma.write_hdma4(val),
-            HDMA5 if self.are_cgb_regs_available() => self.hdma.write_hdma5(val),
+            HDMA5 if self.are_cgb_regs_available() => {
+                let in_hblank = matches!(self.ppu.mode(), ppu::Mode::HBlank);
+                self.hdma.write_hdma5(val, in_hblank);
+            }
             BCPS if self.are_cgb_regs_available() => self.ppu.bcp_mut().set_spec(val),
-            BCPD if self.are_cgb_regs_available() => self.ppu.bcp_mut().set_data(val),
+            BCPD if self.are_cgb_regs_available() => {
+                if self.ppu.is_cgb_palettes_accessible() {
+                    self.ppu.bcp_mut().set_data(val);
+                }
+            }
             OCPS if self.are_cgb_regs_available() => self.ppu.ocp_mut().set_spec(val),
-            OCPD if self.are_cgb_regs_available() => self.ppu.ocp_mut().set_data(val),
+            OCPD if self.are_cgb_regs_available() => {
+                if self.ppu.is_cgb_palettes_accessible() {
+                    self.ppu.ocp_mut().set_data(val);
+                }
+            }
             OPRI if self.are_cgb_regs_available() => {
                 // FIXME: understand behaviour outside of bootrom
                 if self.bootrom.is_enabled() {
@@ -312,7 +378,13 @@ impl<A: AudioCallback> Gb<A> {
             0xA000..=0xBFFF => self.cart.write_ram(addr, val),
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.write_wram_lo(addr, val),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.write_wram_hi(addr, val),
-            0xFE00..=0xFE9F => self.ppu.write_oam(addr, val, self.dma.is_active()),
+            0xFE00..=0xFE9F => {
+                if self.dma.blocks_oam() {
+                    return;
+                }
+
+                self.ppu.write_oam(addr, val);
+            }
             0xFEA0..=0xFEFF => (),
             0xFF00..=0xFFFF => self.write_high((addr & 0xFF) as u8, val),
         }

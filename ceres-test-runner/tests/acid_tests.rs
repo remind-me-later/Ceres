@@ -5,7 +5,7 @@
 
 use ceres_test_runner::{
     expected_screenshot_path, load_test_rom, test_roms_dir,
-    test_runner::{TestConfig, TestResult, TestRunner, timeouts},
+    test_runner::{ScreenshotCheck, TestConfig, TestRunner, timeouts},
 };
 
 #[test]
@@ -15,19 +15,21 @@ fn test_cgb_acid2() {
         Err(e) => panic!("Failed to load test ROM: {e}"),
     };
 
+    let screenshot_path = test_roms_dir().join("cgb-acid2/cgb-acid2.png");
     let config = TestConfig {
         timeout_frames: timeouts::CGB_ACID2,
-        expected_screenshot: Some(test_roms_dir().join("cgb-acid2/cgb-acid2.png")),
         ..TestConfig::default()
     };
 
-    let mut runner = match TestRunner::new(rom, config) {
+    let check = Box::new(ScreenshotCheck::new(screenshot_path));
+
+    let mut runner = match TestRunner::new(rom, config, check) {
         Ok(runner) => runner,
         Err(e) => panic!("Failed to create test runner: {e}"),
     };
 
     let result = runner.run();
-    assert_eq!(result, TestResult::Passed, "CGB Acid2 PPU test failed");
+    assert!(result.is_passed(), "CGB Acid2 PPU test failed");
 }
 
 #[test]
@@ -37,27 +39,25 @@ fn test_dmg_acid2_dmg() {
         Err(e) => panic!("Failed to load test ROM: {e}"),
     };
 
+    let screenshot_path =
+        expected_screenshot_path("dmg-acid2/dmg-acid2.gb", ceres_core::Model::DmgB)
+            .expect("Expected screenshot not found");
+
     let config = TestConfig {
-        model: ceres_core::Model::Dmg,
+        model: ceres_core::Model::DmgB,
         timeout_frames: timeouts::DMG_ACID2,
-        expected_screenshot: expected_screenshot_path(
-            "dmg-acid2/dmg-acid2.gb",
-            ceres_core::Model::Dmg,
-        ),
         ..TestConfig::default()
     };
 
-    let mut runner = match TestRunner::new(rom, config) {
+    let check = Box::new(ScreenshotCheck::new(screenshot_path));
+
+    let mut runner = match TestRunner::new(rom, config, check) {
         Ok(runner) => runner,
         Err(e) => panic!("Failed to create test runner: {e}"),
     };
 
     let result = runner.run();
-    assert_eq!(
-        result,
-        TestResult::Passed,
-        "DMG Acid2 PPU test failed (DMG mode)"
-    );
+    assert!(result.is_passed(), "DMG Acid2 PPU test failed (DMG mode)");
 }
 
 #[test]
@@ -67,25 +67,24 @@ fn test_dmg_acid2_cgb() {
         Err(e) => panic!("Failed to load test ROM: {e}"),
     };
 
+    let screenshot_path =
+        expected_screenshot_path("dmg-acid2/dmg-acid2.gb", ceres_core::Model::CgbE)
+            .expect("Expected screenshot not found");
+
     let config = TestConfig {
-        model: ceres_core::Model::Cgb,
+        model: ceres_core::Model::CgbE,
         timeout_frames: timeouts::DMG_ACID2,
-        expected_screenshot: expected_screenshot_path(
-            "dmg-acid2/dmg-acid2.gb",
-            ceres_core::Model::Cgb,
-        ),
         ..TestConfig::default()
     };
 
-    let mut runner = match TestRunner::new(rom, config) {
+    let check = Box::new(ScreenshotCheck::new(screenshot_path));
+
+    let mut runner = match TestRunner::new(rom, config, check) {
         Ok(runner) => runner,
         Err(e) => panic!("Failed to create test runner: {e}"),
     };
 
     let result = runner.run();
-    assert_eq!(
-        result,
-        TestResult::Passed,
-        "DMG Acid2 PPU test failed (CGB mode)"
-    );
+
+    assert!(result.is_passed(), "DMG Acid2 PPU test failed (CGB mode)");
 }

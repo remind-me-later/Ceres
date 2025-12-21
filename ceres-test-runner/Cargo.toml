@@ -10,12 +10,14 @@ build = "build.rs"
 [dependencies]
 anyhow = "1.0"
 ceres-core = { path = "../ceres-core" }
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "*", default-features = false, features = ["png"] }
 
 [build-dependencies]
 anyhow = "1.0"
 
 [lints.clippy]
+doc-markdown = { level = "allow", priority = 1 }
+ignore_without_reason = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 nursery = "warn"

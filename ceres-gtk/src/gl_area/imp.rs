@@ -61,7 +61,7 @@ impl ObjectSubclass for GlArea {
         let buffer = RefCell::new(vec![0_u8; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice());
 
         let gb_thread = Rc::new(RefCell::new(
-            ceres_std::GbThread::new(ceres_std::Model::Cgb, None, None)
+            ceres_std::GbThread::new(ceres_std::Model::CgbC, None, None)
                 .expect("Failed to create GbThread"),
         ));
 
@@ -120,7 +120,7 @@ impl ObjectImpl for GlArea {
         match pspec.name() {
             "shader-mode" => self.shader.borrow().to_string().to_value(),
             "gb-model" => match *self.model.borrow() {
-                ceres_std::Model::Dmg => "dmg",
+                ceres_std::Model::DmgB => "dmg",
                 ceres_std::Model::Mgb => "mgb",
                 _ => "cgb",
             }
@@ -154,10 +154,10 @@ impl ObjectImpl for GlArea {
             "gb-model" => {
                 let model_str = value.get::<String>().unwrap();
                 let model = match model_str.as_str() {
-                    "dmg" => ceres_std::Model::Dmg,
+                    "dmg" => ceres_std::Model::DmgB,
                     "mgb" => ceres_std::Model::Mgb,
-                    "cgb" => ceres_std::Model::Cgb,
-                    _ => ceres_std::Model::Cgb,
+                    "cgb" => ceres_std::Model::CgbC,
+                    _ => ceres_std::Model::CgbC,
                 };
                 let mut thread = self.gb_thread.borrow_mut();
                 thread.change_model(model);

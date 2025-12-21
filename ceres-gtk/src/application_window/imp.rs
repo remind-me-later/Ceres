@@ -307,7 +307,7 @@ impl ObjectSubclass for ApplicationWindow {
 
                         info_dialog.add_responses(&[("ok", "_Ok")]);
 
-                        info_dialog.choose_future(&win).await;
+                        info_dialog.choose_future(Some(&win)).await;
                     }
                 }
             },

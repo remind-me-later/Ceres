@@ -12,9 +12,34 @@ pub struct Interrupts {
 }
 
 impl Interrupts {
+    /// Acknowledges a specific interrupt by clearing its flag in IF.
+    /// Should be called after the interrupt dispatch is complete.
+    pub const fn acknowledge_interrupt(&mut self, int_bit: u8) {
+        self.ifr &= !int_bit;
+    }
+
     #[must_use]
     pub const fn are_enabled(&self) -> bool {
         self.ime
+    }
+
+    /// Determines which interrupt should be dispatched based on current IE & IF state.
+    /// Returns the interrupt bit and vector address.
+    /// Used during interrupt dispatch to allow IE re-checking mid-push.
+    /// Returns (0, 0x0000) if no interrupt should be dispatched.
+    #[must_use]
+    pub fn determine_interrupt(&self) -> (u8, u16) {
+        let ints = self.ifr & self.ie;
+        if ints == 0 {
+            // No interrupt to dispatch - return 0x0000 as vector
+            return (0, 0x0000);
+        }
+        let tz = (ints.trailing_zeros() & 7) as u16;
+        // get rightmost interrupt bit
+        let int = u8::from(ints != 0) << tz;
+        // compute interrupt vector
+        let vector = 0x40 | (tz << 3);
+        (int, vector)
     }
 
     pub const fn disable(&mut self) {
@@ -23,18 +48,6 @@ impl Interrupts {
 
     pub const fn enable(&mut self) {
         self.ime = true;
-    }
-
-    #[must_use]
-    pub fn handle(&mut self) -> u16 {
-        let ints = self.ifr & self.ie;
-        let tz = (ints.trailing_zeros() & 7) as u16;
-        // get rightmost interrupt
-        let int = u8::from(ints != 0) << tz;
-        // acknowledge
-        self.ifr &= !int;
-        // compute direction of interrupt vector
-        0x40 | (tz << 3)
     }
 
     pub const fn illegal(&mut self) {

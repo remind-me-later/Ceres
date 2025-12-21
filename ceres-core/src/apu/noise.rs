@@ -58,6 +58,14 @@ impl Noise {
         0xBF | self.length_timer.read_enabled()
     }
 
+    pub const fn length(&self) -> u8 {
+        self.length_timer.length()
+    }
+
+    pub const fn set_length(&mut self, val: u8) {
+        self.length_timer.set_length(val);
+    }
+
     pub const fn set_period_half(&mut self, p_half: PeriodHalf) {
         self.length_timer.set_phalf(p_half);
     }
@@ -79,14 +87,15 @@ impl Noise {
         }
     }
 
-    pub fn step_sample(&mut self, dots: i32) {
+    pub fn step_sample(&mut self, dots: i32) -> Option<i32> {
         if !self.is_truly_enabled() {
-            return;
+            return None;
         }
 
         self.timer -= dots;
 
         if self.timer < 0 {
+            let offset = self.timer;
             self.timer += i32::from(self.timer_period);
 
             let xor_bit = (self.lfsr & 1) ^ ((self.lfsr & 2) >> 1);
@@ -97,7 +106,10 @@ impl Noise {
             }
 
             self.output = u8::from(self.lfsr & 1 == 0);
+            return Some(offset);
         }
+
+        None
     }
 
     pub const fn write_nr41(&mut self, val: u8) {

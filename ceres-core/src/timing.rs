@@ -1,9 +1,16 @@
 use crate::{AudioCallback, Gb};
 use core::time::Duration;
 
+/// T-cycles per frame (4MHz rate).
 pub const DOTS_PER_FRAME: i32 = 70224;
+/// T-cycles per second (4MHz).
 pub const DOTS_PER_SEC: i32 = 1 << 22;
 pub const FRAME_DURATION: Duration = Duration::new(0, 16_742_706); // DOTS_PER_FRAME / DOTS_PER_SEC
+
+/// PPU cycles per T-cycle.
+/// Set to 1 for T-cycle mode (4MHz), or 2 for 8MHz sub-T-cycle precision.
+/// NOTE: Currently using 8MHz mode (2) for SameBoy-accurate sub-T-cycle timing.
+pub const PPU_CYCLES_PER_T_CYCLE: i32 = 2;
 
 #[derive(Default)]
 pub struct Clock {
@@ -16,7 +23,10 @@ pub struct Clock {
 
 impl Clock {
     pub const fn tima(&self) -> u8 {
-        self.tima
+        match self.tima_state {
+            TIMAState::Reloading => 0,
+            _ => self.tima,
+        }
     }
 
     pub const fn tma(&self) -> u8 {
@@ -37,31 +47,64 @@ enum TIMAState {
 }
 
 impl<A: AudioCallback> Gb<A> {
+    /// Advance all components by the given number of T-cycles (4MHz).
+    /// This is the main timing entry point called by the CPU.
     #[inline]
-    pub fn advance_dots(&mut self, dots: i32) {
-        // affected by speed boost
-        self.run_timers(dots);
-        self.advance_dots_no_timers(dots);
+    pub fn advance_dots(&mut self, t_cycles: i32) {
+        // Timers run at T-cycle rate (4MHz), affected by speed boost
+        self.run_timers(t_cycles);
+        self.advance_dots_no_timers(t_cycles);
     }
 
     #[inline]
-    pub fn advance_dots_no_timers(&mut self, mut dots: i32) {
-        // affected by speed boost
-        self.dma.advance_dots(dots);
+    pub fn advance_dots_no_timers(&mut self, t_cycles: i32) {
+        // DMA is affected by speed boost, runs at T-cycle rate
+        self.dma.advance_dots(t_cycles);
 
-        // not affected by speed boost
-        if self.key1.is_enabled() {
-            dots >>= 1;
-        }
+        let double_speed = self.key1.is_enabled();
 
-        // TODO: is this order right?
-        self.ppu.run(dots, &mut self.ints, self.cgb_mode);
+        // PPU runs at 8MHz (2× T-cycles) for sub-T-cycle precision.
+        // In double speed mode, the CPU runs at 8MHz but PPU stays at 4MHz,
+        // so we don't double the cycles.
+        // SameBoy: timing.c line 481-483
+        //   if (unlikely(!gb->cgb_double_speed)) {
+        //       cycles <<= 1;
+        //   }
+        let ppu_cycles = if double_speed {
+            t_cycles // Double speed: PPU sees T-cycles as-is
+        } else {
+            t_cycles * PPU_CYCLES_PER_T_CYCLE // Normal speed: double for 8MHz
+        };
+
+        let dma_active = self.dma.is_active();
+        let dma_src = self.dma.current_src();
+        let dma_dst = self.dma.current_dst();
+        let hdma_active = self.hdma.is_active();
+
+        self.ppu.run(
+            ppu_cycles,
+            &mut self.ints,
+            self.cgb_mode,
+            double_speed,
+            dma_active,
+            dma_src,
+            dma_dst,
+            hdma_active,
+        );
         self.run_dma();
 
-        self.apu.run(dots);
-        self.cart.run_rtc(dots);
+        // APU runs at T-cycle rate, not affected by speed boost for timing
+        // but the actual T-cycle count changes in double speed
+        let apu_cycles = if double_speed { t_cycles / 2 } else { t_cycles };
+        self.apu.run(apu_cycles);
+        self.cart.run_rtc(apu_cycles);
 
-        self.dots_ran += dots;
+        self.dots_ran += apu_cycles;
+
+        #[expect(clippy::cast_sign_loss)]
+        {
+            self.total_dots += apu_cycles as u64;
+        }
     }
 
     const fn advance_tima_state(&mut self) {
@@ -161,11 +204,22 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub const fn write_tima(&mut self, val: u8) {
-        self.clock.tima = val;
+        match self.clock.tima_state {
+            TIMAState::Reloaded => (),
+            TIMAState::Reloading => {
+                self.clock.tima = val;
+                self.clock.tima_state = TIMAState::Running;
+            }
+            TIMAState::Running => self.clock.tima = val,
+        }
     }
 
     #[inline]
     pub const fn write_tma(&mut self, val: u8) {
         self.clock.tma = val;
+        match self.clock.tima_state {
+            TIMAState::Reloading | TIMAState::Reloaded => self.clock.tima = val,
+            TIMAState::Running => (),
+        }
     }
 }

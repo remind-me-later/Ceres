@@ -1,3 +1,9 @@
+//! # Ceres Game Boy and Game Boy Color Emulator Core
+//!
+//! Ceres is an experimental Game Boy and Game Boy Color emulator written in Rust.
+//! This crate contains the core emulation logic including CPU, PPU, APU, memory management,
+//! and cartridge handling.
+
 // #![no_std]
 // FIXME: https://github.com/rust-lang/rust/issues/137578
 
@@ -39,7 +45,7 @@ pub use {
     error::Error,
     joypad::Button,
     ppu::ColorCorrectionMode,
-    ppu::{PX_HEIGHT, PX_WIDTH},
+    ppu::{LINES, PX_HEIGHT, PX_WIDTH, WIDTH},
     timing::FRAME_DURATION,
 };
 use {
@@ -56,6 +62,7 @@ pub struct Gb<A: AudioCallback> {
     clock: Clock,
     cpu: Sm83,
     dma: Dma,
+    dma_write_start_dots: u64,
     dots_ran: i32,
     #[cfg(feature = "game_genie")]
     game_genie: GameGenie,
@@ -64,9 +71,11 @@ pub struct Gb<A: AudioCallback> {
     ints: Interrupts,
     joy: Joypad,
     key1: Key1,
+    ld_b_b_breakpoint: bool,
     model: Model,
     ppu: Ppu,
     serial: Serial,
+    total_dots: u64,
     wram: Wram,
 }
 
@@ -115,6 +124,82 @@ impl<A: AudioCallback> Gb<A> {
         self.soft_reset();
     }
 
+    /// Check if the `ld b, b` debug breakpoint instruction was executed and reset the flag.
+    ///
+    /// Some test ROMs (like cgb-acid2 and dmg-acid2) use the `ld b, b` instruction (opcode 0x40)
+    /// as a debug breakpoint to signal test completion. This method returns `true` if the
+    /// instruction has been executed since the last check, then automatically resets the flag.
+    ///
+    /// # Returns
+    ///
+    /// `true` if `ld b, b` was executed since the last check, `false` otherwise.
+    #[inline]
+    pub const fn check_and_reset_ld_b_b_breakpoint(&mut self) -> bool {
+        let was_set = self.ld_b_b_breakpoint;
+        self.ld_b_b_breakpoint = false;
+        was_set
+    }
+
+    /// Read the current value of CPU register B.
+    ///
+    /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
+    /// which use specific register values to signal pass/fail status.
+    #[must_use]
+    #[inline]
+    pub const fn cpu_b(&self) -> u8 {
+        (self.cpu.bc() >> 8) as u8
+    }
+
+    /// Read the current value of CPU register C.
+    ///
+    /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
+    /// which use specific register values to signal pass/fail status.
+    #[must_use]
+    #[inline]
+    pub const fn cpu_c(&self) -> u8 {
+        (self.cpu.bc() & 0xFF) as u8
+    }
+
+    /// Read the current value of CPU register D.
+    ///
+    /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
+    /// which use specific register values to signal pass/fail status.
+    #[must_use]
+    #[inline]
+    pub const fn cpu_d(&self) -> u8 {
+        (self.cpu.de() >> 8) as u8
+    }
+
+    /// Read the current value of CPU register E.
+    ///
+    /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
+    /// which use specific register values to signal pass/fail status.
+    #[must_use]
+    #[inline]
+    pub const fn cpu_e(&self) -> u8 {
+        (self.cpu.de() & 0xFF) as u8
+    }
+
+    /// Read the current value of CPU register H.
+    ///
+    /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
+    /// which use specific register values to signal pass/fail status.
+    #[must_use]
+    #[inline]
+    pub const fn cpu_h(&self) -> u8 {
+        (self.cpu.hl() >> 8) as u8
+    }
+
+    /// Read the current value of CPU register L.
+    ///
+    /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
+    /// which use specific register values to signal pass/fail status.
+    #[must_use]
+    #[inline]
+    pub const fn cpu_l(&self) -> u8 {
+        (self.cpu.hl() & 0xFF) as u8
+    }
+
     #[inline]
     #[cfg(feature = "game_genie")]
     pub fn deactivate_game_genie(&mut self, code: &GameGenieCode) {
@@ -142,18 +227,30 @@ impl<A: AudioCallback> Gb<A> {
             clock: Clock::default(),
             cpu: Sm83::default(),
             dma: Dma::default(),
+            dma_write_start_dots: 0,
             dots_ran: Default::default(),
+            total_dots: 0,
             hdma: Hdma::default(),
             hram: Hram::default(),
             ints: Interrupts::default(),
             joy: Joypad::default(),
             key1: Key1::default(),
+            ld_b_b_breakpoint: false,
             ppu: Ppu::default(),
             serial: Serial::default(),
             wram: Wram::default(),
             #[cfg(feature = "game_genie")]
             game_genie: GameGenie::default(),
         }
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn is_cgb(&self) -> bool {
+        matches!(
+            self.model,
+            Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD | Model::CgbE
+        )
     }
 
     #[must_use]
@@ -199,7 +296,7 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[inline]
-    pub const fn set_sample_rate(&mut self, sample_rate: i32) {
+    pub fn set_sample_rate(&mut self, sample_rate: i32) {
         self.apu.set_sample_rate(sample_rate);
     }
 
@@ -212,6 +309,7 @@ impl<A: AudioCallback> Gb<A> {
         self.hdma = Hdma::default();
         self.ints = Interrupts::default();
         self.key1 = Key1::default();
+        self.ld_b_b_breakpoint = false;
         self.ppu = Ppu::default();
         self.serial = Serial::default();
         self.bootrom.enable();
@@ -223,8 +321,13 @@ impl<A: AudioCallback> Gb<A> {
 #[derive(Clone, Copy, Default)]
 pub enum Model {
     #[default]
-    Cgb,
-    Dmg,
+    CgbE,
+    Cgb0,
+    CgbA,
+    CgbB,
+    CgbC,
+    CgbD,
+    DmgB,
     Mgb,
 }
 
@@ -239,8 +342,10 @@ enum CgbMode {
 impl From<Model> for CgbMode {
     fn from(model: Model) -> Self {
         match model {
-            Model::Dmg | Model::Mgb => Self::Dmg,
-            Model::Cgb => Self::Cgb,
+            Model::DmgB | Model::Mgb => Self::Dmg,
+            Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD | Model::CgbE => {
+                Self::Cgb
+            }
         }
     }
 }

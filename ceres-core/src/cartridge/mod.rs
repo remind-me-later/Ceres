@@ -121,7 +121,7 @@ impl Cartridge {
 
         let rom_size = ROMSize::new(rom[0x148])?;
         let ram_size = RAMSize::new(rom[0x149])?;
-        let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147], rom_size)?;
+        let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147])?;
 
         #[expect(clippy::cast_possible_truncation)]
         if rom_size.size_bytes() as usize != rom.len() {
@@ -131,7 +131,13 @@ impl Cartridge {
             });
         }
 
-        let ram = alloc::vec![0xFF; ram_size.size_bytes() as usize].into_boxed_slice();
+        // MBC2 has built-in 512 bytes of 4-bit RAM regardless of header
+        let actual_ram_size = if matches!(mbc, Mbc::Mbc2) {
+            0x200 // 512 bytes
+        } else {
+            ram_size.size_bytes() as usize
+        };
+        let ram = alloc::vec![0xFF; actual_ram_size].into_boxed_slice();
 
         Ok(Self {
             mbc,
@@ -151,7 +157,13 @@ impl Cartridge {
 
     #[must_use]
     const fn ram_addr(&self, addr: u16) -> u32 {
-        self.ram_offset | (addr & 0x1FFF) as u32
+        // Mask the final address with RAM size to handle wrapping
+        let raw_addr = self.ram_offset | (addr & 0x1FFF) as u32;
+        if self.ram_size.size_bytes() > 0 {
+            raw_addr & (self.ram_size.size_bytes() - 1)
+        } else {
+            raw_addr
+        }
     }
 
     #[must_use]
@@ -173,7 +185,16 @@ impl Cartridge {
         match &self.mbc {
             Mbc::Mbc0 => 0xFF,
             Mbc::Mbc1 { .. } | Mbc::Mbc5 => mbc_read_ram(self, self.ram_enabled, addr),
-            Mbc::Mbc2 => (mbc_read_ram(self, self.ram_enabled, addr) & 0xF) | 0xF0,
+            Mbc::Mbc2 => {
+                // MBC2 has built-in 512 bytes of 4-bit RAM
+                // Upper 4 bits always read as 0xF
+                if self.ram_enabled {
+                    let ram_addr = (addr & 0x1FF) as usize; // 512 bytes
+                    (self.ram[ram_addr] & 0xF) | 0xF0
+                } else {
+                    0xFF
+                }
+            }
             Mbc::Mbc3 { rtc, .. } => rtc
                 .as_ref()
                 .and_then(|r| r.read(self.ram_enabled))
@@ -233,8 +254,16 @@ impl Cartridge {
 
         match &mut self.mbc {
             Mbc::Mbc0 => (),
-            Mbc::Mbc1 { .. } | Mbc::Mbc2 | Mbc::Mbc5 => {
+            Mbc::Mbc1 { .. } | Mbc::Mbc5 => {
                 mbc_write_ram(self, self.ram_enabled, addr, val);
+            }
+            Mbc::Mbc2 => {
+                // MBC2 has built-in 512 bytes of 4-bit RAM
+                // Only lower 4 bits are stored
+                if self.ram_enabled {
+                    let ram_addr = (addr & 0x1FF) as usize; // 512 bytes
+                    self.ram[ram_addr] = val & 0xF;
+                }
             }
             Mbc::Mbc3 { rtc, .. } => rtc
                 .as_mut()
@@ -251,14 +280,28 @@ impl Cartridge {
             Mbc::Mbc0 => (),
             Mbc::Mbc1 { bank_mode } => {
                 const fn mbc1_rom_offsets(c: &Cartridge, bank_mode: bool) -> (u32, u32) {
-                    let (lo, hi) = (c.rom_bank_lo, c.rom_bank_hi << 5);
+                    // MBC1 bank_lo only uses lower 5 bits
+                    let lo = c.rom_bank_lo & 0x1F;
+                    let hi = c.rom_bank_hi << 5;
 
                     let lo_bank = if bank_mode {
                         hi as u16 & c.rom_size.mask()
                     } else {
                         0
                     };
-                    let hi_bank = (hi | lo) as u16 & c.rom_size.mask();
+
+                    // Calculate combined bank BEFORE ROM size mask
+                    let mut combined = (hi | lo) as u16;
+
+                    // The 0→1 correction happens on the UNMASKED lower 5 bits:
+                    // if lower 5 bits of combined bank are 0, increment
+                    // This check must happen BEFORE applying the ROM size mask
+                    if combined.trailing_zeros() >= 5 {
+                        combined += 1;
+                    }
+
+                    // Now apply ROM size mask to get the actual bank
+                    let hi_bank = combined & c.rom_size.mask();
 
                     (
                         ROMSize::BANK_SIZE as u32 * lo_bank as u32,
@@ -282,7 +325,8 @@ impl Cartridge {
                     0x2000..=0x3FFF => {
                         let bank_mode = *bank_mode;
 
-                        self.rom_bank_lo = if val == 0 { 1 } else { val };
+                        // Store raw value, masking and 0→1 correction happen in mbc1_rom_offsets
+                        self.rom_bank_lo = val;
                         self.rom_offsets = mbc1_rom_offsets(self, bank_mode);
                     }
                     0x4000..=0x5FFF => {
@@ -304,15 +348,19 @@ impl Cartridge {
             }
             Mbc::Mbc2 => {
                 if addr <= 0x3FFF {
+                    // MBC2 uses bit 8 to distinguish RAM enable from ROM bank
                     if (addr >> 8) & 1 == 0 {
                         self.ram_enabled = (val & 0xF) == 0xA;
                     } else {
-                        let val = val & 0xF;
-                        self.rom_bank_lo = if val == 0 { 1 } else { val };
-                        self.rom_offsets = (
-                            0,
-                            u32::from(ROMSize::BANK_SIZE) * u32::from(self.rom_bank_lo),
-                        );
+                        // MBC2 only uses lower 4 bits for bank number
+                        // Store raw value, apply 0→1 correction based on lower 4 bits
+                        let bank = val & 0xF;
+                        let bank = if bank == 0 { 1 } else { bank };
+                        // Apply ROM size mask and calculate offset
+                        let masked_bank = u16::from(bank) & self.rom_size.mask();
+                        self.rom_bank_lo = bank;
+                        self.rom_offsets =
+                            (0, u32::from(ROMSize::BANK_SIZE) * u32::from(masked_bank));
                     }
                 }
             }

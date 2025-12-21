@@ -1,8 +1,8 @@
 use crate::Model;
 
-const DMG_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/dmg.bin");
-const MGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/mgb.bin");
-const CGB_BOOTROM: &[u8] = include_bytes!("../../gb-bootroms/bin/cgb.bin");
+const DMG_BOOTROM: &[u8] = include_bytes!("../../external/gb-bootroms/bin/dmg.bin");
+const MGB_BOOTROM: &[u8] = include_bytes!("../../external/gb-bootroms/bin/mgb.bin");
+const CGB_BOOTROM: &[u8] = include_bytes!("../../external/gb-bootroms/bin/cgb.bin");
 
 pub struct Bootrom {
     data: &'static [u8],
@@ -24,9 +24,11 @@ impl Bootrom {
 
     pub const fn new(model: Model) -> Self {
         let data = match model {
-            Model::Dmg => DMG_BOOTROM,
+            Model::DmgB => DMG_BOOTROM,
             Model::Mgb => MGB_BOOTROM,
-            Model::Cgb => CGB_BOOTROM,
+            Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD | Model::CgbE => {
+                CGB_BOOTROM
+            }
         };
         Self {
             data,

@@ -2,11 +2,10 @@ use crate::{CgbMode, interrupts::Interrupts};
 use alloc::string::String;
 
 const START: u8 = 0x80;
-const SPEED: u8 = 0x2;
+const CGB_SPEED: u8 = 0x2;
 const SHIFT: u8 = 0x1;
 
-// Serial port implementation with output capture for test ROMs
-// Blargg test ROMs output results via the serial port
+// VERY PARTIAL Serial port implementation with output capture for test ROMs
 #[derive(Default)]
 pub struct Serial {
     count: u8,
@@ -36,8 +35,14 @@ impl Serial {
     }
 
     #[must_use]
-    pub const fn read_sc(&self) -> u8 {
-        self.sc
+    pub const fn read_sc(&self, cgb_mode: CgbMode) -> u8 {
+        const SC_MASK: u8 = !(START | SHIFT);
+
+        if matches!(cgb_mode, CgbMode::Cgb) {
+            self.sc | SC_MASK
+        } else {
+            self.sc | CGB_SPEED | SC_MASK
+        }
     }
 
     pub fn run_master(&mut self, ints: &mut Interrupts) {
@@ -89,8 +94,8 @@ impl Serial {
             val |= 2;
         }
 
-        self.sc = val | !(START | SPEED | SHIFT);
-        self.div_mask = if matches!(cgb_mode, CgbMode::Cgb) && val & SPEED != 0 {
+        self.sc = val | !(START | CGB_SPEED | SHIFT);
+        self.div_mask = if matches!(cgb_mode, CgbMode::Cgb) && val & CGB_SPEED != 0 {
             4
         } else {
             0x80

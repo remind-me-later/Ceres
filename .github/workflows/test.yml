@@ -44,7 +44,7 @@ jobs:
 
       - name: Build boot ROMs
         run: |
-          cd gb-bootroms
+          cd external/gb-bootroms
           make
 
       - name: Install Rust toolchain
@@ -84,7 +84,7 @@ jobs:
       - name: Cache test ROMs
         uses: actions/cache@v4
         with:
-          path: test-roms
+          path: external/test-roms
           key: test-roms-v7.0
 
       - name: Run integration tests

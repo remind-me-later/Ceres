@@ -27,13 +27,30 @@ pub trait AppOption: Default + Clone + Copy + clap::ValueEnum {
 enum Model {
     #[default]
     Cgb,
+    Cgb0,
+    CgbA,
+    CgbB,
+    CgbC,
+    CgbD,
+    CgbE,
     Dmg,
     Mgb,
 }
 
 impl AppOption for Model {
     fn iter() -> impl Iterator<Item = Self> {
-        [Self::Dmg, Self::Mgb, Self::Cgb].into_iter()
+        [
+            Self::Dmg,
+            Self::Mgb,
+            Self::Cgb,
+            Self::Cgb0,
+            Self::CgbA,
+            Self::CgbB,
+            Self::CgbC,
+            Self::CgbD,
+            Self::CgbE,
+        ]
+        .into_iter()
     }
 
     fn str(self) -> &'static str {
@@ -41,6 +58,12 @@ impl AppOption for Model {
             Self::Dmg => "dmg",
             Self::Mgb => "mgb",
             Self::Cgb => "cgb",
+            Self::Cgb0 => "cgb0",
+            Self::CgbA => "cgb-a",
+            Self::CgbB => "cgb-b",
+            Self::CgbC => "cgb-c",
+            Self::CgbD => "cgb-d",
+            Self::CgbE => "cgb-e",
         }
     }
 }
@@ -49,9 +72,14 @@ impl From<Model> for ceres_core::Model {
     #[inline]
     fn from(model: Model) -> Self {
         match model {
-            Model::Dmg => Self::Dmg,
+            Model::Dmg => Self::DmgB,
             Model::Mgb => Self::Mgb,
-            Model::Cgb => Self::Cgb,
+            Model::Cgb | Model::CgbE => Self::CgbE,
+            Model::Cgb0 => Self::Cgb0,
+            Model::CgbA => Self::CgbA,
+            Model::CgbB => Self::CgbB,
+            Model::CgbC => Self::CgbC,
+            Model::CgbD => Self::CgbD,
         }
     }
 }

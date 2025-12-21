@@ -6,7 +6,7 @@ pub enum PeriodTriggerResult {
 }
 
 pub enum PeriodStepResult {
-    AdvanceFrequency,
+    AdvanceFrequency(i32),
     None,
 }
 
@@ -35,12 +35,17 @@ impl<const PERIOD_MUL: u16, S: SweepTrait> PeriodCounter<PERIOD_MUL, S> {
         self.sweep.read()
     }
 
-    pub const fn step(&mut self, dots: i32) -> PeriodStepResult {
+    pub const fn timer(&self) -> i32 {
+        self.timer
+    }
+
+    pub fn step(&mut self, dots: i32) -> PeriodStepResult {
         self.timer -= dots;
 
         if self.timer <= 0 {
+            let offset = self.timer;
             self.timer += Self::timer_from_period(self.period);
-            return PeriodStepResult::AdvanceFrequency;
+            return PeriodStepResult::AdvanceFrequency(offset);
         }
 
         PeriodStepResult::None
@@ -52,6 +57,10 @@ impl<const PERIOD_MUL: u16, S: SweepTrait> PeriodCounter<PERIOD_MUL, S> {
             SweepCalculationResult::UpdatePeriod { period } => {
                 self.period = period;
                 PeriodTriggerResult::None
+            }
+            SweepCalculationResult::UpdatePeriodAndDisable { period } => {
+                self.period = period;
+                PeriodTriggerResult::DisableChannel
             }
             SweepCalculationResult::None => PeriodTriggerResult::None,
         }
@@ -70,6 +79,10 @@ impl<const PERIOD_MUL: u16, S: SweepTrait> PeriodCounter<PERIOD_MUL, S> {
                 self.period = period;
                 PeriodTriggerResult::None
             }
+            SweepCalculationResult::UpdatePeriodAndDisable { period } => {
+                self.period = period;
+                PeriodTriggerResult::DisableChannel
+            }
             SweepCalculationResult::None => PeriodTriggerResult::None,
         }
     }
@@ -82,7 +95,10 @@ impl<const PERIOD_MUL: u16, S: SweepTrait> PeriodCounter<PERIOD_MUL, S> {
         self.period = (self.period & 0x700) | u16::from(val);
     }
 
-    pub fn write_sweep(&mut self, val: u8) {
-        self.sweep.write(val);
+    pub fn write_sweep(&mut self, val: u8) -> PeriodTriggerResult {
+        match self.sweep.write(val) {
+            SweepCalculationResult::DisableChannel => PeriodTriggerResult::DisableChannel,
+            _ => PeriodTriggerResult::None,
+        }
     }
 }

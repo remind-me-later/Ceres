@@ -1,6 +1,5 @@
 mod mbc3_rtc;
 
-use super::rom_size::ROMSize;
 use crate::Error;
 pub use mbc3_rtc::Mbc3RTC;
 
@@ -23,16 +22,11 @@ pub enum Mbc {
 }
 
 impl Mbc {
-    pub fn mbc_and_battery(mbc_byte: u8, rom_size: ROMSize) -> Result<(Self, bool), Error> {
-        let bank_mode = matches!(
-            rom_size,
-            ROMSize::Mb1 | ROMSize::Mb2 | ROMSize::Mb4 | ROMSize::Mb8
-        );
-
+    pub fn mbc_and_battery(mbc_byte: u8) -> Result<(Self, bool), Error> {
         let res = match mbc_byte {
             0x00 => (Self::Mbc0, false),
-            0x01 | 0x02 => (Self::Mbc1 { bank_mode }, false),
-            0x03 => (Self::Mbc1 { bank_mode }, true),
+            0x01 | 0x02 => (Self::Mbc1 { bank_mode: false }, false),
+            0x03 => (Self::Mbc1 { bank_mode: false }, true),
             0x05 => (Self::Mbc2, false),
             0x06 => (Self::Mbc2, true),
             0x0F => (
