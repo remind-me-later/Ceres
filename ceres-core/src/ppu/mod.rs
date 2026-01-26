@@ -1995,4 +1995,63 @@ mod tests {
             "Mooneye timing mismatch: expected 80 dots between Intr and Mode 3"
         );
     }
+
+    #[test]
+    fn test_ppu_mode2_mode0_timing_detailed() {
+        let mut gb = setup_gb();
+        gb.write_mem(0xFF40, 0x80);
+
+        while gb.ppu.read_ly() != 64 {
+            gb.run_cpu();
+        }
+        while gb.ppu.mode() as u8 != 0 {
+            gb.run_cpu();
+        }
+
+        gb.write_mem(0xFF41, 0x20); // Enable Mode 2 STAT interrupt
+        gb.write_mem(0xFF0F, 0); // Clear IF
+
+        while (gb.ppu.read_stat() & 0x03) == 0 {
+            gb.advance_dots(1);
+        }
+
+        let mode2_start_dot = gb.total_dots;
+
+        let mut intr_dot = None;
+        let mut mode0_dot = None;
+
+        for _d in 0..456 {
+            let current_dot = gb.total_dots;
+            let if_reg = gb.ints.read_if();
+            let mode = gb.ppu.read_stat() & 0x03;
+
+            if intr_dot.is_none() && (if_reg & 0x02) != 0 {
+                intr_dot = Some(current_dot);
+            }
+            if mode0_dot.is_none() && mode == 0 && (current_dot - mode2_start_dot) > 10 {
+                mode0_dot = Some(current_dot);
+            }
+
+            gb.advance_dots(1);
+        }
+
+        let intr = intr_dot.expect("STAT Interrupt did not fire for Mode 2");
+        let m0 = mode0_dot.expect("PPU did not transition to Mode 0");
+
+        println!("Line 65 OAM Scan -> HBlank timing analysis:");
+        println!("  Interrupt fired at dot:       {}", intr);
+        println!("  Mode 0 started at dot:        {}", m0);
+        println!("  Diff (M0 - Intr):             {} dots", m0 - intr);
+
+        // Mooneye 'intr_2_mode0_timing' Requirement:
+        // On DMG, with no sprites/scroll/window:
+        // Mode 2 = 80 dots
+        // Mode 3 = 172 dots
+        // Total active = 252 dots.
+        assert_eq!(
+            m0 - intr,
+            252,
+            "Mooneye timing mismatch: expected 252 dots between Mode 2 Intr and Mode 0"
+        );
+    }
 }
