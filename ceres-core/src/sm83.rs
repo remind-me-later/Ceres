@@ -1212,18 +1212,7 @@ impl<A: AudioCallback> Gb<A> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AudioCallback, GbBuilder, Model, Sample};
-
-    struct DummyAudio;
-    impl AudioCallback for DummyAudio {
-        fn audio_sample(&self, _l: Sample, _r: Sample) {}
-    }
-
-    fn setup_gb() -> crate::Gb<DummyAudio> {
-        GbBuilder::new(44100, DummyAudio)
-            .with_model(Model::DmgB)
-            .build()
-    }
+    use crate::test_util::setup_gb;
 
     fn test_op_timing<A: AudioCallback>(
         gb: &mut crate::Gb<A>,

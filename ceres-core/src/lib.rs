@@ -403,3 +403,19 @@ impl<A: AudioCallback> GbBuilder<A> {
         Ok(self)
     }
 }
+
+#[cfg(test)]
+pub(crate) mod test_util {
+    use super::*;
+
+    pub struct DummyAudio;
+    impl AudioCallback for DummyAudio {
+        fn audio_sample(&self, _l: crate::Sample, _r: crate::Sample) {}
+    }
+
+    pub fn setup_gb() -> Gb<DummyAudio> {
+        GbBuilder::new(44100, DummyAudio)
+            .with_model(Model::DmgB)
+            .build()
+    }
+}

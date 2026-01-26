@@ -686,113 +686,54 @@ impl Ppu {
         };
 
         match stage {
-            OamScanStage::Entry { remaining } => {
-                // State 35: OAM write blocked on CGB (non-double-speed)
-                if remaining == 4 {
+            OamScanStage::Scan { entry, sub_tick } => {
+                let tick_in_line = u16::from(entry) * 4 + u16::from(sub_tick);
+
+                // Combined Setup and Scan loop (160 ticks total)
+
+                // SameBoy State 35 logic
+                if tick_in_line == 0 {
                     self.oam_write_blocked = is_cgb && !double_speed;
+                    // Fire Mode 2 interrupt at dot 0
+                    self.mode_for_interrupt = Some(Mode::OamScan);
+                    self.update_stat(ints);
+
+                    self.sprite_buffer.clear();
                 }
-                // After 2 cycles (4 ticks), upgrade to full CGB block
-                if remaining == 2 && is_cgb {
+                if tick_in_line == 2 && is_cgb {
                     self.oam_write_blocked = true;
                 }
 
-                if remaining <= 1 {
-                    self.phase = PpuPhase::OamScan(OamScanStage::LyUpdate { remaining: 2 });
-                } else {
-                    self.phase = PpuPhase::OamScan(OamScanStage::Entry {
-                        remaining: remaining - 1,
-                    });
-                }
-            }
-
-            OamScanStage::LyUpdate { remaining } => {
-                // State 6: LY visible in register, OAM read blocked.
-                // Logic executes at START of state (remaining == 2).
-                //
-                // Note: LY was already incremented by HBlank transition (or is 0 for first frame).
-                // Here we just make it visible and set up ly_for_comparison.
-                if remaining == 2 {
+                // SameBoy State 6 logic
+                if tick_in_line == 4 {
                     self.ly = self.current_line;
-                    // ly_for_comparison = current_line ? -1 : 0.
-                    // This creates a window where LY=LYC comparison is undefined.
                     self.ly_for_comparison = if self.current_line != 0 { 0xFFFF } else { 0 };
                     self.oam_read_blocked = !double_speed;
-
-                    // Mode 2 interrupt fires 1 T-cycle early (except line 0).
-                    // The OAM STAT interrupt occurs before STAT mode bits change to 2.
-                    if self.current_line != 0 {
-                        self.mode_for_interrupt = Some(Mode::OamScan);
-                        // Clear STAT mode bits to 0 (keeping them as HBlank).
-                        self.set_mode_stat(Mode::HBlank);
-                    } else if !is_cgb {
-                        // DMG line 0: clear mode bits but don't set mode_for_interrupt
-                        self.set_mode_stat(Mode::HBlank);
-                    } else {
-                        // Do nothing on CGB line 0
-                    }
-
                     self.update_stat(ints);
                 }
 
-                if remaining <= 1 {
-                    self.phase = PpuPhase::OamScan(OamScanStage::StatUpdate { remaining: 2 });
-                } else {
-                    self.phase = PpuPhase::OamScan(OamScanStage::LyUpdate {
-                        remaining: remaining - 1,
-                    });
-                }
-            }
-
-            OamScanStage::StatUpdate { remaining } => {
-                // State 7: STAT = Mode 2, OAM fully blocked.
-                // Logic executes at START of state (remaining == 2).
-                if remaining == 2 {
+                // SameBoy State 7 logic
+                if tick_in_line == 6 {
                     self.oam_read_blocked = true;
                     self.set_mode_stat(Mode::OamScan);
                     self.oam_write_blocked = true;
                     self.ly_for_comparison = u16::from(self.ly);
 
-                    // mode_for_interrupt = OamScan for STAT update, then None.
                     self.mode_for_interrupt = Some(Mode::OamScan);
                     self.update_stat(ints);
                     self.mode_for_interrupt = None;
                     self.update_stat(ints);
-
-                    // Initialize OAM scan
-                    self.sprite_buffer.clear();
-                    self.oam_scan_index = 0;
                 }
 
-                if remaining <= 1 {
-                    // Transition to Scan state
-                    self.phase = PpuPhase::OamScan(OamScanStage::Scan {
-                        entry: 0,
-                        sub_tick: 0,
-                    });
-                } else {
-                    self.phase = PpuPhase::OamScan(OamScanStage::StatUpdate {
-                        remaining: remaining - 1,
-                    });
-                }
-            }
-
-            OamScanStage::Scan { entry, sub_tick } => {
-                // State 8: OAM scan loop.
-                // Each entry takes 4 ticks (2 8MHz cycles).
-                // On CGB: scan happens at start of entry (sub_tick 0).
-                // On DMG: scan happens after 2 ticks (sub_tick 2).
-
+                // Normal scanning logic (every 4 ticks)
                 if sub_tick == 0 && is_cgb {
-                    // CGB scans at start
                     self.scan_oam_entry_at(entry);
                 }
-
                 if sub_tick == 2 && !is_cgb {
-                    // DMG scans after 2 ticks
                     self.scan_oam_entry_at(entry);
                 }
 
-                // At entry 37 + 2 ticks, update memory blocking.
+                // Tick 150 (Entry 37, sub_tick 2): Memory unblocking starts
                 if entry == 37 && sub_tick == 2 {
                     self.vram_read_blocked = !is_cgb;
                     self.vram_write_blocked = false;
@@ -802,11 +743,11 @@ impl Ppu {
 
                 let next_sub_tick = sub_tick + 1;
                 if next_sub_tick >= 4 {
-                    // Entry complete
                     let next_entry = entry + 1;
                     if next_entry >= 40 {
-                        // All entries scanned, transition to Mode 3 setup
                         self.phase = PpuPhase::OamScan(OamScanStage::Transition1 { remaining: 6 });
+                        // Transition to Mode 3 immediately in STAT
+                        self.set_mode_stat(Mode::Drawing);
                     } else {
                         self.phase = PpuPhase::OamScan(OamScanStage::Scan {
                             entry: next_entry,
@@ -1980,5 +1921,78 @@ impl Ppu {
         if self.current_line < 144 && self.current_line == val {
             self.wy_triggered = true;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::test_util::setup_gb;
+
+    #[test]
+    fn test_ppu_mode2_timing_detailed() {
+        let mut gb = setup_gb();
+        // Turn on LCD
+        gb.write_mem(0xFF40, 0x80);
+
+        // Move to end of HBlank on line 64
+        while gb.ppu.read_ly() != 64 {
+            gb.run_cpu();
+        }
+        while gb.ppu.mode() as u8 != 0 {
+            gb.run_cpu();
+        }
+
+        // Enable Mode 2 STAT interrupt BEFORE line 65 starts
+        gb.write_mem(0xFF41, 0x20); // Enable Mode 2 STAT interrupt
+        gb.write_mem(0xFF0F, 0); // Clear IF
+
+        // Step dot-by-dot until Mode 2 starts (Mode 2 is bits 0-1 == 2)
+        while (gb.ppu.read_stat() & 0x03) == 0 {
+            gb.advance_dots(1);
+        }
+
+        let mode2_start_dot = gb.total_dots;
+
+        let mut intr_dot = None;
+        let mut mode3_dot = None;
+
+        // Probing dots for the next 150 dots
+        for _d in 0..150 {
+            let current_dot = gb.total_dots;
+            let if_reg = gb.ints.read_if();
+            let stat = gb.ppu.read_stat();
+            let mode = stat & 0x03;
+
+            if intr_dot.is_none() && (if_reg & 0x02) != 0 {
+                intr_dot = Some(current_dot);
+            }
+            if mode3_dot.is_none() && mode == 3 {
+                mode3_dot = Some(current_dot);
+            }
+
+            gb.advance_dots(1);
+        }
+
+        let intr = intr_dot.expect("STAT Interrupt did not fire for Mode 2");
+        let m3 = mode3_dot.expect("PPU did not transition to Mode 3");
+
+        println!("Line 65 OAM Scan timing analysis:");
+        println!("  Mode 2 start dot (STAT bits): {}", mode2_start_dot);
+        println!("  Interrupt fired at dot:       {}", intr);
+        println!("  Mode 3 started at dot:        {}", m3);
+        println!("  Diff (M3 - Intr):             {} dots", m3 - intr);
+        println!(
+            "  Diff (Intr - M2 Start):       {} dots",
+            intr as i64 - mode2_start_dot as i64
+        );
+
+        // Mooneye 'intr_2_mode3_timing' Assumption:
+        // The difference between the STAT interrupt for Mode 2 and the
+        // appearance of Mode 3 in the STAT register must be exactly 80 dots.
+        assert_eq!(
+            m3 - intr,
+            80,
+            "Mooneye timing mismatch: expected 80 dots between Intr and Mode 3"
+        );
     }
 }
