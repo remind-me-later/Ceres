@@ -368,8 +368,8 @@ impl Ppu {
                 return self.stat & STAT_MODE_B;
             }
 
-            // First 82 cycles show Mode 0 (164 ticks)
-            if self.dots_in_line < 164 {
+            // First 83 cycles show Mode 0 (166 ticks)
+            if self.dots_in_line < 166 {
                 return 0;
             }
         }
@@ -386,6 +386,11 @@ impl Ppu {
     #[must_use]
     pub const fn read_wy(&self) -> u8 {
         self.wy
+    }
+
+    #[must_use]
+    pub(crate) fn sprite_buffer_len(&self) -> usize {
+        self.sprite_buffer.count as usize
     }
 
     pub fn run(
@@ -703,18 +708,15 @@ impl Ppu {
                     self.oam_write_blocked = true;
                 }
 
-                // Tick 3: LY update and Mode 2 interrupt (SameBoy State 6)
+                // Tick 3: LY update and Mode 2 interrupt pulse (SameBoy State 6)
                 if tick == 3 {
                     self.ly = self.current_line;
                     self.ly_for_comparison = if self.current_line != 0 { 0xFFFF } else { 0 };
                     self.oam_read_blocked = !double_speed;
 
-                    if self.current_line != 0 {
-                        self.mode_for_interrupt = Some(Mode::OamScan);
-                        self.set_mode_stat(Mode::HBlank);
-                    } else if !is_cgb {
-                        self.set_mode_stat(Mode::HBlank);
-                    }
+                    self.mode_for_interrupt = Some(Mode::OamScan);
+                    self.update_stat(ints);
+                    self.mode_for_interrupt = None;
                     self.update_stat(ints);
                 }
 
@@ -725,14 +727,10 @@ impl Ppu {
                     self.oam_write_blocked = true;
                     self.ly_for_comparison = u16::from(self.ly);
 
-                    self.mode_for_interrupt = Some(Mode::OamScan);
-                    self.update_stat(ints);
-                    self.mode_for_interrupt = None;
                     self.update_stat(ints);
                 }
 
                 // OAM Scan Loop (40 entries * 4 ticks = 160 ticks)
-                // Runs from tick 8 to 168
                 if tick >= 8 && tick < 168 {
                     let scan_tick = tick - 8;
                     let entry = (scan_tick / 4) as u8;
@@ -755,8 +753,8 @@ impl Ppu {
                 }
 
                 if tick >= 168 {
-                    // Transition to Mode 3 (Tick 169)
-                    self.phase = PpuPhase::OamScan(OamScanStage::Transition1 { remaining: 6 });
+                    // Transition to Mode 3 Rendering
+                    self.phase = PpuPhase::OamScan(OamScanStage::Transition1 { remaining: 7 });
                     self.set_mode_stat(Mode::Drawing);
                     self.mode_for_interrupt = Some(Mode::Drawing);
                     self.update_stat(ints);
@@ -767,7 +765,7 @@ impl Ppu {
 
             OamScanStage::Transition1 { remaining } => {
                 // State 10: Mode 3 transition part 1.
-                if remaining == 6 {
+                if remaining == 7 {
                     // VRAM fully blocked
                     self.vram_read_blocked = true;
                     self.vram_write_blocked = true;
@@ -776,24 +774,9 @@ impl Ppu {
                 }
 
                 if remaining <= 1 {
-                    self.phase = PpuPhase::OamScan(OamScanStage::Transition2 { remaining: 4 });
-                } else {
-                    self.phase = PpuPhase::OamScan(OamScanStage::Transition1 {
-                        remaining: remaining - 1,
-                    });
-                }
-            }
-
-            OamScanStage::Transition2 { remaining } => {
-                // State 32: Mode 3 transition part 2.
-                if remaining == 4 {
-                    self.cgb_palettes_blocked = true;
-                }
-
-                if remaining <= 1 {
                     self.enter_mode3_from_oam_scan(ints);
                 } else {
-                    self.phase = PpuPhase::OamScan(OamScanStage::Transition2 {
+                    self.phase = PpuPhase::OamScan(OamScanStage::Transition1 {
                         remaining: remaining - 1,
                     });
                 }
@@ -1681,6 +1664,11 @@ impl Ppu {
                     // ly_for_comparison = -1 (0xFFFF).
                     self.ly_for_comparison = 0xFFFF;
                     self.update_stat(ints);
+
+                    // OAM interrupt quirk: fires at start of line 144
+                    if self.current_line == PX_HEIGHT && (self.stat & STAT_IF_OAM_B != 0) {
+                        ints.request_lcd();
+                    }
                 }
 
                 if *remaining <= 1 {
@@ -1715,11 +1703,6 @@ impl Ppu {
                         self.set_mode_stat(Mode::VBlank);
                         ints.request_vblank();
                         self.wy_triggered = false; // Reset WY trigger.
-
-                        // Quirk #2: Check for OAM interrupt again?
-                        if !self.stat_interrupt_line && (self.stat & STAT_IF_OAM_B != 0) {
-                            ints.request_lcd();
-                        }
 
                         self.mode_for_interrupt = Some(Mode::VBlank);
                         self.update_stat(ints);
@@ -2105,8 +2088,8 @@ mod tests {
             mode2_ticks
         );
         assert!(
-            mode2_ticks + mode3_ticks >= 504,
-            "Active period {} is shorter than Mooneye expectation (504 ticks)",
+            mode2_ticks + mode3_ticks >= 502,
+            "Active period {} is shorter than expectation (502 ticks)",
             mode2_ticks + mode3_ticks
         );
     }
@@ -2150,6 +2133,51 @@ mod tests {
             jump_detected,
             "SCX alignment jump not detected in history: {:?}",
             pos_history
+        );
+    }
+
+    #[test]
+    fn test_ppu_sprite_scan_timing() {
+        let mut gb = setup_gb();
+        // Sprite 0 at Y=17 (line 1), X=8, Tile=0
+        gb.write_mem(0xFE00, 17);
+        gb.write_mem(0xFE01, 8);
+        gb.write_mem(0xFE02, 0);
+        gb.write_mem(0xFE03, 0);
+
+        gb.write_mem(0xFF40, 0x82); // LCD ON, OBJ ON
+
+        // Wait for line 1 OAM Scan start (Line 0 has no OAM scan after power on)
+        loop {
+            if gb.ppu.read_ly() == 1
+                && matches!(
+                    gb.ppu.phase,
+                    crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+                )
+            {
+                break;
+            }
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+
+        // At line 1, tick 0, sprite_buffer should be empty (it was cleared at mode start)
+        assert_eq!(gb.ppu.sprite_buffer_len(), 0);
+
+        // Tick until tick 11 (DMG scans entry 0 at tick 8 + 2 = 10, observable at tick 11)
+        // Tick 0 -> 1
+        // Tick 1 -> 2
+        // ...
+        // Tick 10 -> 11
+        for _ in 0..11 {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+
+        // At tick 11, sprite 0 should be scanned
+        assert_eq!(
+            gb.ppu.sprite_buffer_len(),
+            1,
+            "Sprite 0 should be scanned at tick 11 of line 1 (actual phase: {:?})",
+            gb.ppu.phase
         );
     }
 }

@@ -35,9 +35,6 @@ pub enum OamScanStage {
     /// State 10: Mode 3 transition part 1.
     /// Duration: 6 ticks (3 8MHz cycles).
     Transition1 { remaining: u8 },
-    /// State 32: Mode 3 transition part 2 (CGB palettes blocked).
-    /// Duration: 4 ticks (2 8MHz cycles).
-    Transition2 { remaining: u8 },
 }
 
 impl Default for OamScanStage {
