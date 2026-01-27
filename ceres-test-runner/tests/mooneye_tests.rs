@@ -312,17 +312,16 @@ fn test_mooneye_reti_timing() {
 
 // Boot register tests - model-specific
 #[test]
-#[ignore] // TODO: Enable when passing - DMG CPU revision 0
-fn test_mooneye_boot_div_dmg0() {
-    let result = run_mooneye_test(
-        "mooneye-test-suite/acceptance/boot_div-dmg0.gb",
-        Model::DmgB,
+fn test_mooneye_boot_div_cgbabcde() {
+    let result = run_mooneye_test("mooneye-test-suite/misc/boot_div-cgbABCDE.gb", Model::CgbE);
+    assert!(
+        result.is_passed(),
+        "boot_div-cgbABCDE test failed: {:?}",
+        result
     );
-    assert!(result.is_passed(), "boot_div-dmg0 test failed");
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - DMG CPU revisions A/B/C + MGB
 fn test_mooneye_boot_div_dmgabcmgb() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/boot_div-dmgABCmgb.gb",

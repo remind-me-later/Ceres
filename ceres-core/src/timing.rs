@@ -31,7 +31,7 @@ impl Default for Clock {
             tima: 0,
             tima_state: TIMAState::Running,
             tma: 0,
-            div_acc: 1,
+            div_acc: 0,
         }
     }
 }
@@ -170,11 +170,32 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     pub fn write_div(&mut self) {
         self.set_system_clk(0);
-        self.clock.div_acc = 1; // Reset phase to match SameBoy's 3-cycle sleep
+        self.clock.div_acc = 0; // Reset phase
+    }
+
+    #[must_use]
+    const fn sys_clk_tac_mux(tac: u8) -> u16 {
+        match tac & 3 {
+            0 => 1 << 9,
+            1 => 1 << 3,
+            2 => 1 << 5,
+            _ => 1 << 7,
+        }
     }
 
     #[inline]
-    pub const fn write_tac(&mut self, val: u8) {
+    pub fn write_tac(&mut self, val: u8) {
+        // Timer glitch: if timer is enabled and the muxed bit was 1,
+        // and now it's disabled or the new muxed bit is 0, TIMA increments.
+        if (self.clock.tac & 4) != 0 {
+            let old_bit = Self::sys_clk_tac_mux(self.clock.tac);
+            if (self.clock.div & old_bit) != 0 {
+                if (val & 4) == 0 || (self.clock.div & Self::sys_clk_tac_mux(val)) == 0 {
+                    self.inc_tima();
+                }
+            }
+        }
+
         self.clock.tac = val;
     }
 
@@ -202,16 +223,6 @@ impl<A: AudioCallback> Gb<A> {
     // only modify div inside this function
     // TODO: this could be optimized
     fn set_system_clk(&mut self, val: u16) {
-        #[must_use]
-        const fn sys_clk_tac_mux(tac: u8) -> u16 {
-            match tac & 3 {
-                0 => 1 << 9,
-                1 => 1 << 3,
-                2 => 1 << 5,
-                _ => 1 << 7,
-            }
-        }
-
         let triggers = self.clock.div & !val;
         let apu_bit = if self.key1.is_enabled() {
             0x2000
@@ -220,7 +231,7 @@ impl<A: AudioCallback> Gb<A> {
         };
 
         // increase TIMA on falling edge of TAC mux
-        if self.is_tac_enabled() && (triggers & sys_clk_tac_mux(self.clock.tac) != 0) {
+        if self.is_tac_enabled() && (triggers & Self::sys_clk_tac_mux(self.clock.tac) != 0) {
             self.inc_tima();
         }
 

@@ -1174,6 +1174,7 @@ impl<A: AudioCallback> Gb<A> {
                 self.advance_dots_no_timers(4);
             }
         } else {
+            self.write_div();
             self.cpu.is_halted = true;
             self.ppu.enter_stop_mode();
         }
