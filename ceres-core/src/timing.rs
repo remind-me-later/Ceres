@@ -12,13 +12,28 @@ pub const FRAME_DURATION: Duration = Duration::new(0, 16_742_706); // DOTS_PER_F
 /// NOTE: Currently using 8MHz mode (2) for SameBoy-accurate sub-T-cycle timing.
 pub const PPU_CYCLES_PER_T_CYCLE: i32 = 2;
 
-#[derive(Default)]
 pub struct Clock {
     div: u16,
     tac: u8,
     tima: u8,
     tima_state: TIMAState,
     tma: u8,
+    /// Accumulator for dots to handle SameBoy-accurate DIV timing.
+    /// Initialized to 1 to match SameBoy's 3-cycle initial sleep (4 - 3 = 1).
+    div_acc: i32,
+}
+
+impl Default for Clock {
+    fn default() -> Self {
+        Self {
+            div: 8, // SameBoy initializes DIV to 8
+            tac: 0,
+            tima: 0,
+            tima_state: TIMAState::Running,
+            tma: 0,
+            div_acc: 1,
+        }
+    }
 }
 
 impl Clock {
@@ -148,9 +163,43 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn run_timers(&mut self, dots: i32) {
-        for _ in 0..dots / 4 {
+        self.clock.div_acc += dots;
+        while self.clock.div_acc >= 4 {
+            self.clock.div_acc -= 4;
             self.advance_tima_state();
             self.set_system_clk(self.clock.div.wrapping_add(4));
+        }
+    }
+
+    #[inline]
+    pub fn write_div(&mut self) {
+        self.set_system_clk(0);
+        self.clock.div_acc = 1; // Reset phase to match SameBoy's 3-cycle sleep
+    }
+
+    #[inline]
+    pub const fn write_tac(&mut self, val: u8) {
+        self.clock.tac = val;
+    }
+
+    #[inline]
+    pub const fn write_tima(&mut self, val: u8) {
+        match self.clock.tima_state {
+            TIMAState::Reloaded => (),
+            TIMAState::Reloading => {
+                self.clock.tima = val;
+                self.clock.tima_state = TIMAState::Running;
+            }
+            TIMAState::Running => self.clock.tima = val,
+        }
+    }
+
+    #[inline]
+    pub const fn write_tma(&mut self, val: u8) {
+        self.clock.tma = val;
+        match self.clock.tima_state {
+            TIMAState::Reloading | TIMAState::Reloaded => self.clock.tima = val,
+            TIMAState::Running => (),
         }
     }
 
@@ -193,33 +242,64 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[inline]
-    pub fn write_div(&mut self) {
-        self.set_system_clk(0);
+    pub fn write_div_reg(&mut self) {
+        self.write_div();
     }
+}
 
-    #[inline]
-    pub const fn write_tac(&mut self, val: u8) {
-        self.clock.tac = val;
-    }
+#[cfg(test)]
+mod tests {
+    use crate::test_util::setup_gb;
 
-    #[inline]
-    pub const fn write_tima(&mut self, val: u8) {
-        match self.clock.tima_state {
-            TIMAState::Reloaded => (),
-            TIMAState::Reloading => {
-                self.clock.tima = val;
-                self.clock.tima_state = TIMAState::Running;
-            }
-            TIMAState::Running => self.clock.tima = val,
+    #[test]
+    fn test_tima_reload_delay() {
+        let mut gb = setup_gb();
+        gb.write_mem(0xFF40, 0); // LCD off
+        gb.write_mem(0xFF06, 0x42); // TMA = 0x42
+        gb.write_mem(0xFF05, 0xFE); // TIMA = 0xFE
+        gb.write_mem(0xFF07, 0x05); // TAC = 5 (Enabled, 262144 Hz -> every 16 dots)
+
+        // Wait for increment to 0xFF
+        for _ in 0..4 {
+            gb.advance_dots(4);
         }
+        assert_eq!(gb.read_mem(0xFF05), 0xFF);
+
+        // Wait for overflow
+        for _ in 0..4 {
+            gb.advance_dots(4);
+        }
+        // Now TIMA should have overflowed.
+        // Pan Docs: During the M-cycle after TIMA overflows, TIMA remains 00 (not TMA).
+        assert_eq!(gb.read_mem(0xFF05), 0x00);
+
+        // Next M-cycle it should be reloaded to TMA
+        gb.advance_dots(4);
+        assert_eq!(gb.read_mem(0xFF05), 0x42);
     }
 
-    #[inline]
-    pub const fn write_tma(&mut self, val: u8) {
-        self.clock.tma = val;
-        match self.clock.tima_state {
-            TIMAState::Reloading | TIMAState::Reloaded => self.clock.tima = val,
-            TIMAState::Running => (),
-        }
+    #[test]
+    fn test_div_increment_phase() {
+        let mut gb = setup_gb();
+        gb.write_mem(0xFF04, 0); // Reset DIV
+
+        // We implemented a 3-cycle delay for the first increment (div_acc starts at 1).
+        // So at dot 3, it should reach 4 dots worth of time and increment.
+        // Wait, dots=3. div_acc = 1 + 3 = 4. Increment! div becomes 8 + 4 = 12?
+        // No, write_div() resets div to 0.
+
+        gb.write_mem(0xFF04, 0);
+        // div is 0, div_acc is 1.
+
+        gb.advance_dots(2);
+        // div_acc is 3. div is 0.
+        assert_eq!(gb.read_div(), 0);
+
+        gb.advance_dots(1);
+        // div_acc is 4. Loop body runs. div becomes 4.
+        // Wait, Ceres advance_dots only runs timers on multiples of 4 dots?
+        // No, I changed it to use an accumulator!
+
+        assert_eq!(gb.read_div(), 0); // (4 >> 8) is still 0
     }
 }

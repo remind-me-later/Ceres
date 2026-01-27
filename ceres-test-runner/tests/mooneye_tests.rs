@@ -328,7 +328,11 @@ fn test_mooneye_boot_div_dmgabcmgb() {
         "mooneye-test-suite/acceptance/boot_div-dmgABCmgb.gb",
         Model::DmgB,
     );
-    assert!(result.is_passed(), "boot_div-dmgABCmgb test failed");
+    assert!(
+        result.is_passed(),
+        "boot_div-dmgABCmgb test failed: {:?}",
+        result
+    );
 }
 
 #[test]

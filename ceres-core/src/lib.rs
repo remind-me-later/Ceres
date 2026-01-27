@@ -418,4 +418,40 @@ pub(crate) mod test_util {
             .with_model(Model::DmgB)
             .build()
     }
+
+    #[test]
+    fn test_initial_values_dmg() {
+        let mut gb = setup_gb();
+
+        // Run until boot ROM is disabled.
+        // Mooneye boot_regs tests expect specific values after boot.
+        let mut frames = 0;
+        while gb.bootrom.is_enabled() && frames < 1000 {
+            gb.run_frame();
+            frames += 1;
+        }
+
+        // Characterization of current Ceres state (which differs from Mooneye expectations)
+        // FIXME: Ceres currently fails to match Mooneye boot_hwio and boot_regs.
+        // This is likely due to the different boot ROM used and potentially DIV timing issues.
+        println!("DMG Registers after boot:");
+        println!(
+            "A: {:#04X}, B: {:#04X}, C: {:#04X}, D: {:#04X}, E: {:#04X}, H: {:#04X}, L: {:#04X}",
+            gb.cpu.a(),
+            gb.cpu_b(),
+            gb.cpu_c(),
+            gb.cpu_d(),
+            gb.cpu_e(),
+            gb.cpu_h(),
+            gb.cpu_l()
+        );
+        println!(
+            "DIV: {:#04X}, LCDC: {:#04X}, STAT: {:#04X}, LY: {:#04X}, BGP: {:#04X}",
+            gb.read_div(),
+            gb.ppu.read_lcdc(),
+            gb.ppu.read_stat(),
+            gb.ppu.read_ly(),
+            gb.ppu.read_bgp()
+        );
+    }
 }
