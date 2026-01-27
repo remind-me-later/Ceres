@@ -368,8 +368,8 @@ impl Ppu {
                 return self.stat & STAT_MODE_B;
             }
 
-            // First 83 cycles show Mode 0 (166 ticks)
-            if self.dots_in_line < 166 {
+            // First 82 cycles show Mode 0 (164 ticks)
+            if self.dots_in_line < 164 {
                 return 0;
             }
         }
@@ -551,7 +551,12 @@ impl Ppu {
             }
 
             Line153Stage::Remainder { remaining } => {
-                // State 17
+                // State 17: Reports Mode 0 at the very end (DMG quirk)
+                if remaining == 4 {
+                    self.set_mode_stat(Mode::HBlank);
+                    self.update_stat(ints);
+                }
+
                 if remaining <= 1 {
                     // End of frame
                     self.finish_frame_and_start_new(ints);
@@ -765,6 +770,9 @@ impl Ppu {
 
             OamScanStage::Transition1 { remaining } => {
                 // State 10: Mode 3 transition part 1.
+                // NOTE: Duration of 7 ticks (Total Mode 2 = 175 ticks) is chosen to satisfy
+                // gbmicrotest sprite visibility tests. This slightly delays Mode 3/HBlank start,
+                // causing regressions in Mooneye STAT interrupt tests.
                 if remaining == 7 {
                     // VRAM fully blocked
                     self.vram_read_blocked = true;
@@ -2080,10 +2088,20 @@ mod tests {
             gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
         }
 
-        // Ceres Assumption: Mode 2 is ~160 ticks.
+        // Ceres Assumption: Mode 2 is 175 ticks (168 scan + 7 transition) internally.
+        // However, STAT Mode 2 flag is set at Tick 10 and cleared at start of Transition1.
+        // Visible Mode 2 = 168 - 10 = 158 ticks.
         // Mooneye Assumption: Mode 2 + Mode 3 = 504 ticks (252 dots).
+        //
+        // Note: Extending Mode 2 to 175 ticks (from ~174) satisfies gbmicrotest sprite visibility tests
+        // (sprites must be scanned by tick 11/12), but causes regressions in Mooneye STAT interrupt
+        // timing tests (hblank_ly_scx_timing_gs, intr_1_2_timing_gs, etc.) which expect a stricter
+        // Mode 2 duration (likely 174 ticks or Mode 3 starting 1 tick earlier).
+        //
+        // We prioritize sprite functionality (gbmicrotest) over cycle-perfect STAT IRQ timing (Mooneye)
+        // until a more precise sub-tick model is implemented.
         assert!(
-            (158..=162).contains(&mode2_ticks),
+            (157..=159).contains(&mode2_ticks),
             "Mode 2 duration assumption violated: {} ticks",
             mode2_ticks
         );
@@ -2179,5 +2197,72 @@ mod tests {
             "Sprite 0 should be scanned at tick 11 of line 1 (actual phase: {:?})",
             gb.ppu.phase
         );
+    }
+
+    #[test]
+    fn test_ppu_line153_mode0_quirk() {
+        let mut gb = setup_gb();
+        gb.write_mem(0xFF40, 0x80); // LCD ON
+
+        // Fast forward to start of line 153 (when LY becomes 153)
+        loop {
+            if gb.ppu.read_ly() == 153 {
+                break;
+            }
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+
+        let mut mode0_seen = false;
+        // Line 153 logic is complex: LY=153 -> LY=0 happens early.
+        // We want to check if Mode 0 is reported at the END of the 456-cycle (912 tick) period.
+        // We are at the start of Ly153 stage.
+        // Run for the duration of the line (912 ticks).
+        for _ in 0..912 {
+            // Check for Mode 0 (HBlank)
+            if (gb.ppu.read_stat() & 0x03) == 0 {
+                mode0_seen = true;
+            }
+
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+
+        assert!(
+            mode0_seen,
+            "PPU should report Mode 0 at the end of Line 153 (even if LY=0)"
+        );
+    }
+
+    #[test]
+    fn test_ppu_hblank_int_timing() {
+        let mut gb = setup_gb();
+        gb.write_mem(0xFF40, 0x80); // LCD ON
+        gb.write_mem(0xFF41, 0x08); // Enable HBlank interrupt (Bit 3)
+        gb.write_mem(0xFF0F, 0x00); // Clear IF
+
+        // Wait for Mode 3 of Line 0
+        loop {
+            if (gb.ppu.read_stat() & 0x03) == 3 {
+                break;
+            }
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+
+        // Tick until interrupt is requested
+        let mut int_requested = false;
+        for _ in 0..500 {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+            if gb.ints.read_if() & 0x02 != 0 {
+                int_requested = true;
+                // At the moment of interrupt, we should be in Mode 0
+                assert_eq!(
+                    gb.ppu.read_stat() & 0x03,
+                    0,
+                    "HBlank INT should fire in Mode 0"
+                );
+                break;
+            }
+        }
+
+        assert!(int_requested, "HBlank interrupt should fire after Mode 3");
     }
 }
