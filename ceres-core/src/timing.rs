@@ -291,23 +291,54 @@ mod tests {
         let mut gb = setup_gb();
         gb.write_mem(0xFF04, 0); // Reset DIV
 
-        // We implemented a 3-cycle delay for the first increment (div_acc starts at 1).
-        // So at dot 3, it should reach 4 dots worth of time and increment.
-        // Wait, dots=3. div_acc = 1 + 3 = 4. Increment! div becomes 8 + 4 = 12?
-        // No, write_div() resets div to 0.
+        // Ceres Assumption: div_acc = 0 after reset.
+        // T=0: div_acc=0
+        // T=1: div_acc=1
+        // T=2: div_acc=2
+        // T=3: div_acc=3
+        // T=4: div_acc=4 -> INCREMENT!
 
-        gb.write_mem(0xFF04, 0);
-        // div is 0, div_acc is 1.
-
-        gb.advance_dots(2);
-        // div_acc is 3. div is 0.
+        // Initial state after write_div:
         assert_eq!(gb.read_div(), 0);
 
-        gb.advance_dots(1);
-        // div_acc is 4. Loop body runs. div becomes 4.
-        // Wait, Ceres advance_dots only runs timers on multiples of 4 dots?
-        // No, I changed it to use an accumulator!
+        gb.advance_dots(3);
+        assert_eq!(gb.read_div(), 0, "DIV incremented too early (at T=3)");
 
-        assert_eq!(gb.read_div(), 0); // (4 >> 8) is still 0
+        gb.advance_dots(1);
+        // After 4 dots total, internal counter should be 4.
+        // DIV register reads internal counter >> 8.
+        // To see an increment in the upper byte, we need 256 dots.
+
+        // Let's test the internal counter if we can, or just loop.
+        for _ in 0..(256 - 4) / 4 {
+            gb.advance_dots(4);
+        }
+        // At T=256, internal DIV should be 256, so DIV register should be 1.
+        assert_eq!(gb.read_div(), 1, "DIV should be 1 after 256 dots");
+    }
+
+    #[test]
+    fn test_timer_glitch_tac_stop() {
+        let mut gb = setup_gb();
+        gb.write_mem(0xFF04, 0); // Reset DIV
+        // Advance DIV to a point where bit 9 is 1 (T=512)
+        for _ in 0..512 / 4 {
+            gb.advance_dots(4);
+        }
+
+        gb.write_mem(0xFF06, 0x00); // TMA = 0
+        gb.write_mem(0xFF05, 0x42); // TIMA = 0x42
+        gb.write_mem(0xFF07, 0x04); // TAC = 4 (Enabled, 4096Hz -> bit 9)
+
+        assert_eq!(gb.read_mem(0xFF05), 0x42);
+
+        // Falling edge glitch: Disable timer while muxed bit is 1
+        gb.write_mem(0xFF07, 0x00); // TAC = 0 (Disabled)
+
+        assert_eq!(
+            gb.read_mem(0xFF05),
+            0x43,
+            "Timer glitch did not trigger TIMA increment"
+        );
     }
 }

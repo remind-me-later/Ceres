@@ -512,7 +512,6 @@ fn test_mooneye_oam_dma_sources_gs() {
 // =============================================================================
 
 #[test]
-#[ignore]
 fn test_mooneye_ppu_hblank_ly_scx_timing_gs() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/hblank_ly_scx_timing-GS.gb",
