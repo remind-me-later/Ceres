@@ -40,3 +40,25 @@ detailed development guidelines, including:
   (`prettier`).
 - **Commit Messages**: Conventional Commits.
 - **Testing**: Running, writing, and coverage analysis.
+
+## Accuracy & Testing Workflow
+
+When troubleshooting failing integration tests (e.g., Mooneye, gbmicro), follow
+this systematic approach:
+
+1. **Isolation**: Identify the specific hardware behavior causing the failure.
+   Use SameBoy or Gambatte as a reference to compare internal state transitions
+   at a sub-M-cycle level.
+2. **Unit Testing**: Instead of relying solely on the integration test loop,
+   create minimal, high-speed unit tests in the relevant `ceres-core` module
+   (e.g., `timing.rs`, `ppu/mod.rs`).
+3. **Documenting Assumptions**: Every cycle-accurate assumption (e.g., "TIMA
+   increments at T=4 of the M-cycle" or "LCD ON has a 4-tick offset") must be
+   codified in a unit test. These tests serve as the primary documentation for
+   hardware quirks.
+4. **Sub-M-cycle Verification**: Ensure tests verify state at individual
+   T-cycles (respecting the 2+2 timing model) to prevent "coincidental" passes
+   that might break when instruction timing changes.
+5. **Regression Guard**: After a fix passes the localized unit test, always run
+   the full integration suite (`cargo test -p ceres-test-runner`) to verify that
+   the fix doesn't break unrelated edge cases.
