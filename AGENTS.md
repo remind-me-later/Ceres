@@ -11,7 +11,6 @@ frontend implementations.
 The repository is organized into several Rust crates:
 
 - `ceres-core`: Core emulation logic (CPU, APU, PPU, Memory, Cartridge).
-  `no_std` compatible.
 - `ceres-std`: Standard library-dependent functionalities for desktop frontends
   (audio, threading, WebGPU renderer).
 - `ceres-winit`: Minimal cross-platform CLI frontend (winit).

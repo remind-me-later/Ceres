@@ -1,12 +1,3 @@
-//! # Ceres Game Boy and Game Boy Color Emulator Core
-//!
-//! Ceres is an experimental Game Boy and Game Boy Color emulator written in Rust.
-//! This crate contains the core emulation logic including CPU, PPU, APU, memory management,
-//! and cartridge handling.
-
-// #![no_std]
-// FIXME: https://github.com/rust-lang/rust/issues/137578
-
 extern crate alloc;
 
 mod apu;
