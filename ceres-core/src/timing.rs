@@ -13,14 +13,14 @@ pub const FRAME_DURATION: Duration = Duration::new(0, 16_742_706); // DOTS_PER_F
 pub const PPU_CYCLES_PER_T_CYCLE: i32 = 2;
 
 pub struct Clock {
-    div: u16,
-    tac: u8,
-    tima: u8,
-    tima_state: TIMAState,
-    tma: u8,
+    pub(crate) div: u16,
+    pub(crate) tac: u8,
+    pub(crate) tima: u8,
+    pub(crate) tima_state: TIMAState,
+    pub(crate) tma: u8,
     /// Accumulator for dots to handle SameBoy-accurate DIV timing.
     /// Initialized to 1 to match SameBoy's 3-cycle initial sleep (4 - 3 = 1).
-    div_acc: i32,
+    pub(crate) div_acc: i32,
 }
 
 impl Default for Clock {
@@ -37,7 +37,7 @@ impl Default for Clock {
 }
 
 impl Clock {
-    pub const fn tima(&self) -> u8 {
+    pub fn tima(&self) -> u8 {
         match self.tima_state {
             TIMAState::Reloading => 0,
             _ => self.tima,
@@ -49,12 +49,8 @@ impl Clock {
     }
 }
 
-#[expect(
-    clippy::arbitrary_source_item_ordering,
-    reason = "Order follows the state machine transitions"
-)]
-#[derive(Default)]
-enum TIMAState {
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TIMAState {
     Reloading,
     Reloaded,
     #[default]
@@ -122,7 +118,7 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    const fn advance_tima_state(&mut self) {
+    fn advance_tima_state(&mut self) {
         match self.clock.tima_state {
             TIMAState::Reloading => {
                 self.ints.request_timer();
@@ -254,6 +250,7 @@ mod tests {
     #[test]
     fn test_tima_reload_delay() {
         let mut gb = setup_gb();
+        gb.write_mem(0xFF04, 0); // Reset DIV to synchronize phase
         gb.write_mem(0xFF40, 0); // LCD off
         gb.write_mem(0xFF06, 0x42); // TMA = 0x42
         gb.write_mem(0xFF05, 0xFE); // TIMA = 0xFE

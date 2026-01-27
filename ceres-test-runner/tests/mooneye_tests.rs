@@ -527,7 +527,6 @@ fn test_mooneye_ppu_hblank_ly_scx_timing_gs() {
 }
 
 #[test]
-#[ignore]
 fn test_mooneye_ppu_intr_1_2_timing_gs() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/intr_1_2_timing-GS.gb",
@@ -541,7 +540,6 @@ fn test_mooneye_ppu_intr_1_2_timing_gs() {
 }
 
 #[test]
-#[ignore]
 fn test_mooneye_ppu_intr_2_0_timing() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/intr_2_0_timing.gb",
@@ -676,7 +674,6 @@ fn test_mooneye_ppu_vblank_stat_intr_gs() {
 // =============================================================================
 
 #[test]
-#[ignore] // TODO: Enable when passing - dmgABCmgb hint
 fn test_mooneye_serial_boot_sclk_align_dmgabcmgb() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/serial/boot_sclk_align-dmgABCmgb.gb",
