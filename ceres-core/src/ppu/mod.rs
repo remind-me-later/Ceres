@@ -703,8 +703,8 @@ impl Ppu {
                     self.oam_write_blocked = true;
                 }
 
-                // Tick 8: LY update and Mode 2 interrupt (SameBoy State 6)
-                if tick == 8 {
+                // Tick 3: LY update and Mode 2 interrupt (SameBoy State 6)
+                if tick == 3 {
                     self.ly = self.current_line;
                     self.ly_for_comparison = if self.current_line != 0 { 0xFFFF } else { 0 };
                     self.oam_read_blocked = !double_speed;
@@ -1974,7 +1974,99 @@ mod tests {
         let intr = intr_tick.expect("STAT Interrupt did not fire for Mode 2");
         let m3 = mode3_tick.expect("PPU did not transition to Mode 3");
 
-        assert_eq!(m3 - intr, 160);
+        // Ceres: Mode 2 interrupt fires at tick 3, Mode 3 starts at tick 168.
+        // Duration = 165 ticks.
+        assert_eq!(m3 - intr, 165);
+    }
+
+    #[test]
+    fn test_ppu_oam_scan_ly_timing() {
+        let mut gb = setup_gb();
+        gb.write_mem(0xFF40, 0x80); // LCD ON
+
+        // Wait for line 10 HBlank
+        while gb.ppu.read_ly() != 10 {
+            gb.run_cpu();
+        }
+        while gb.ppu.mode() as u8 != 0 {
+            gb.run_cpu();
+        }
+
+        // Synchronize to EXACT transition from HBlank to OamScan of line 11
+        loop {
+            if matches!(
+                gb.ppu.phase,
+                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+            ) {
+                break;
+            }
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+
+        // Now we are at tick 0 of OamScan of line 11.
+        // LY should still be 10 until it updates.
+        assert_eq!(gb.ppu.read_ly(), 10);
+
+        let mut ly_update_tick = None;
+        for t in 1..20 {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+            if gb.ppu.read_ly() == 11 {
+                ly_update_tick = Some(t);
+                break;
+            }
+        }
+
+        assert_eq!(ly_update_tick, Some(4), "LY should update at tick 4");
+    }
+
+    #[test]
+    fn test_ppu_lcdon_ly_timing() {
+        let mut gb = setup_gb();
+        // LCD is OFF initially.
+        assert_eq!(gb.ppu.read_ly(), 0);
+
+        // Turn ON LCD.
+        gb.write_mem(0xFF40, 0x80);
+
+        // Startup takes 166 ticks.
+        for _ in 0..166 {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+
+        // After 166 ticks, we should be in Mode 3 of line 0.
+        assert_eq!(gb.ppu.read_ly(), 0);
+        assert_eq!(gb.ppu.mode() as u8, 3);
+
+        // Transition from Mode 3 to HBlank happens when position_in_line >= 160.
+        // HBlank ends with a transition to OamScan of line 1.
+        loop {
+            if matches!(
+                gb.ppu.phase,
+                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+            ) {
+                break;
+            }
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+
+        // Now we are at tick 0 of OamScan of line 1.
+        // LY should still be 0 until it updates.
+        assert_eq!(gb.ppu.read_ly(), 0);
+
+        let mut ly_update_tick = None;
+        for t in 1..20 {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+            if gb.ppu.read_ly() == 1 {
+                ly_update_tick = Some(t);
+                break;
+            }
+        }
+
+        assert_eq!(
+            ly_update_tick,
+            Some(4),
+            "LY should update to 1 at tick 4 of line 1 after LCD ON"
+        );
     }
 
     #[test]
