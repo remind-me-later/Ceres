@@ -551,7 +551,6 @@ fn test_mooneye_ppu_intr_2_0_timing() {
 }
 
 #[test]
-#[ignore]
 fn test_mooneye_ppu_intr_2_mode0_timing() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing.gb",

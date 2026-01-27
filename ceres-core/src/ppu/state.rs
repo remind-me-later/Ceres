@@ -25,30 +25,24 @@ impl Default for Line0Stage {
 }
 
 /// OAM Scan (Mode 2) state machine.
-/// SameBoy timing (all in 8MHz half-cycles, which equal ticks in Ceres):
-/// Total: 160 ticks (40 OAM entries × 4 ticks each)
-/// Plus Mode 3 transition overhead (overlaps with Drawing mode).
+/// Total duration: 174 ticks (87 dots).
+/// Transitions to Mode 3 STAT at tick 164.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OamScanStage {
-    /// State 8: OAM scan loop.
-    /// Each entry takes 4 ticks (2 8MHz cycles).
-    /// On CGB: scan happens on first 2 ticks.
-    /// On DMG: scan happens on last 2 ticks.
-    Scan { entry: u8, sub_tick: u8 },
-    /// State 10: Mode 3 transition.
+    /// OAM scan and setup.
+    /// Duration: 164 ticks.
+    Running { tick: u16 },
+    /// State 10: Mode 3 transition part 1.
     /// Duration: 6 ticks (3 8MHz cycles).
     Transition1 { remaining: u8 },
-    /// State 32: CGB palettes blocked.
+    /// State 32: Mode 3 transition part 2 (CGB palettes blocked).
     /// Duration: 4 ticks (2 8MHz cycles).
     Transition2 { remaining: u8 },
 }
 
 impl Default for OamScanStage {
     fn default() -> Self {
-        Self::Scan {
-            entry: 0,
-            sub_tick: 0,
-        }
+        Self::Running { tick: 0 }
     }
 }
 
