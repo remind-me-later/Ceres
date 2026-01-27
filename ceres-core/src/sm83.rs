@@ -327,12 +327,6 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[must_use]
-    fn read_cpu(&mut self, addr: u16) -> u8 {
-        self.tick_m_cycle();
-        self.read_mem(addr)
-    }
-
-    #[must_use]
     const fn satisfies_branch_condition(&self, op: u8) -> bool {
         match (op >> 3) & 3 {
             0 => self.cpu.af & ZF == 0,
@@ -373,6 +367,14 @@ impl<A: AudioCallback> Gb<A> {
         self.advance_dots(4);
     }
 
+    #[must_use]
+    fn read_cpu(&mut self, addr: u16) -> u8 {
+        self.advance_dots(2);
+        let val = self.read_mem(addr);
+        self.advance_dots(2);
+        val
+    }
+
     fn write_cpu(&mut self, addr: u16, val: u8) {
         // Capture timestamp before advancing time for DMA start logging
         if addr >= 0xFF00 {
@@ -382,8 +384,9 @@ impl<A: AudioCallback> Gb<A> {
                 self.dma_write_start_dots = self.total_dots;
             }
         }
-        self.tick_m_cycle();
+        self.advance_dots(2);
         self.write_mem(addr, val);
+        self.advance_dots(2);
     }
 }
 

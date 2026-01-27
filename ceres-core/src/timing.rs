@@ -318,6 +318,49 @@ mod tests {
     }
 
     #[test]
+    fn test_tima_increment_cpu_sync() {
+        let mut gb = setup_gb();
+        // Setup: TIMA increments every 64 dots (TAC = 4, 4096Hz)
+        // Mux bit for TAC=4 is bit 9 of DIV.
+        // Bit 9 falls every 1024 dots.
+        gb.write_mem(0xFF04, 0); // Reset DIV
+        gb.write_mem(0xFF06, 0); // TMA = 0
+        gb.write_mem(0xFF05, 0); // TIMA = 0
+        gb.write_mem(0xFF07, 0x04); // TAC = 4 (Enabled, 4096 Hz -> every 1024 dots)
+
+        // DIV increments every 4 dots.
+        // DIV reaches 512 (bit 9 becomes 1) at 512 * 4 = 2048 dots.
+        // DIV reaches 1024 (bit 9 becomes 0) at 1024 * 4 = 4096 dots.
+        // TIMA increments at T=4096.
+
+        // Advance to T=4092
+        for _ in 0..4092 / 4 {
+            gb.advance_dots(4);
+        }
+
+        // Reset TIMA to 0 after setup to simplify testing the next increment
+        gb.write_mem(0xFF05, 0);
+
+        // Now we are at T=4092. TIMA should be 0.
+        assert_eq!(gb.read_mem(0xFF05), 0);
+
+        // Next M-cycle is T=4092 to T=4096.
+        // In a real CPU read (2+2 timing):
+        // 1. advance_dots(2) -> T=4094. TIMA still 0.
+        // 2. read_mem() -> should see 0.
+        // 3. advance_dots(2) -> T=4096. TIMA becomes 1.
+        gb.advance_dots(2);
+        assert_eq!(gb.read_mem(0xFF05), 0, "TIMA incremented too early");
+        gb.advance_dots(2);
+
+        // Next M-cycle is T=4096 to T=4100.
+        // 1. advance_dots(2) -> T=4098. TIMA is already 1.
+        // 2. read_mem() -> should see 1.
+        gb.advance_dots(2);
+        assert_eq!(gb.read_mem(0xFF05), 1, "TIMA should have incremented");
+    }
+
+    #[test]
     fn test_timer_glitch_tac_stop() {
         let mut gb = setup_gb();
         gb.write_mem(0xFF04, 0); // Reset DIV
