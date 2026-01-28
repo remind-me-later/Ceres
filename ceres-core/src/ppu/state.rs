@@ -25,15 +25,15 @@ impl Default for Line0Stage {
 }
 
 /// OAM Scan (Mode 2) state machine.
-/// Total duration: 174 ticks (87 dots).
-/// Transitions to Mode 3 STAT at tick 164.
+/// Total duration: 175 ticks (87.5 dots).
+/// Transitions to Mode 3 STAT at tick 168.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OamScanStage {
     /// OAM scan and setup.
-    /// Duration: 164 ticks.
+    /// Duration: 168 ticks.
     Running { tick: u16 },
     /// State 10: Mode 3 transition part 1.
-    /// Duration: 6 ticks (3 8MHz cycles).
+    /// Duration: 7 ticks (3.5 8MHz cycles).
     Transition1 { remaining: u8 },
 }
 
