@@ -273,11 +273,6 @@ impl Ppu {
     }
 
     #[must_use]
-    pub const fn dots_in_line(&self) -> u16 {
-        self.dots_in_line
-    }
-
-    #[must_use]
     pub const fn mode(&self) -> Mode {
         match self.stat & STAT_MODE_B {
             0 => Mode::HBlank,
@@ -350,36 +345,7 @@ impl Ppu {
 
     #[must_use]
     pub const fn read_stat(&self) -> u8 {
-        // Compute mode from dots_in_line for accurate timing.
-        let computed_mode = self.compute_stat_mode();
-        (self.stat & !STAT_MODE_B) | computed_mode | 0x80
-    }
-
-    /// Compute STAT mode based on current timing state.
-    /// This provides more accurate mode reporting than the maintained state
-    /// for the first line after LCD enable (which has special timing).
-    const fn compute_stat_mode(&self) -> u8 {
-        // LCD off: mode 0
-        if self.lcdc & LCDC_ON_B == 0 {
-            return 0;
-        }
-
-        // First 82 cycles show Mode 0 (164 ticks)
-        // Only apply this special case for the actual first frame after LCD enable
-        if matches!(self.frame_skip_state, FrameSkipState::LcdTurnedOn) && self.ly == 0 {
-            // During startup state machine, use the stored STAT mode bits
-            if matches!(self.phase, PpuPhase::Line0Startup(_)) {
-                return self.stat & STAT_MODE_B;
-            }
-
-            // First 82 cycles show Mode 0 (164 ticks)
-            if self.dots_in_line < 164 {
-                return 0;
-            }
-        }
-
-        // For all other cases, use the stored STAT mode bits
-        self.stat & STAT_MODE_B
+        self.stat | 0x80
     }
 
     #[must_use]
@@ -390,11 +356,6 @@ impl Ppu {
     #[must_use]
     pub const fn read_wy(&self) -> u8 {
         self.wy
-    }
-
-    #[must_use]
-    pub(crate) fn sprite_buffer_len(&self) -> usize {
-        self.sprite_buffer.count as usize
     }
 
     pub fn run(

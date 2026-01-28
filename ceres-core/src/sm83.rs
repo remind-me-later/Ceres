@@ -369,24 +369,21 @@ impl<A: AudioCallback> Gb<A> {
 
     #[must_use]
     fn read_cpu(&mut self, addr: u16) -> u8 {
-        self.advance_dots(2);
+        self.advance_ticks(4);
         let val = self.read_mem(addr);
-        self.advance_dots(2);
+        self.advance_ticks(4);
         val
     }
 
     fn write_cpu(&mut self, addr: u16, val: u8) {
         // Capture timestamp before advancing time for DMA start logging
-        if addr >= 0xFF00 {
-            let io_addr = (addr & 0xFF) as u8;
-            if io_addr == 0x46 {
-                // DMA register
-                self.dma_write_start_dots = self.total_dots;
-            }
+        if addr == 0xFF46 {
+            self.dma_write_start_dots = self.total_dots;
         }
-        self.advance_dots(2);
+
+        self.advance_ticks(4);
         self.write_mem(addr, val);
-        self.advance_dots(2);
+        self.advance_ticks(4);
     }
 }
 

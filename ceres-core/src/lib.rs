@@ -68,6 +68,7 @@ pub struct Gb<A: AudioCallback> {
     serial: Serial,
     total_dots: u64,
     wram: Wram,
+    tick_acc: u8,
 }
 
 impl<A: AudioCallback> Gb<A> {
@@ -230,6 +231,7 @@ impl<A: AudioCallback> Gb<A> {
             ppu: Ppu::default(),
             serial: Serial::default(),
             wram: Wram::default(),
+            tick_acc: 0,
             #[cfg(feature = "game_genie")]
             game_genie: GameGenie::default(),
         }
@@ -303,6 +305,7 @@ impl<A: AudioCallback> Gb<A> {
         self.ld_b_b_breakpoint = false;
         self.ppu = Ppu::default();
         self.serial = Serial::default();
+        self.tick_acc = 0;
         self.bootrom.enable();
     }
 }

@@ -326,8 +326,7 @@ gbmicrotest!(
 );
 gbmicrotest!(
     test_line_153_lyc0_stat_timing_b,
-    "line_153_lyc0_stat_timing_b.gb",
-    ignore
+    "line_153_lyc0_stat_timing_b.gb"
 );
 gbmicrotest!(
     test_line_153_lyc0_stat_timing_c,
@@ -336,8 +335,7 @@ gbmicrotest!(
 );
 gbmicrotest!(
     test_line_153_lyc0_stat_timing_d,
-    "line_153_lyc0_stat_timing_d.gb",
-    ignore
+    "line_153_lyc0_stat_timing_d.gb"
 );
 gbmicrotest!(
     test_line_153_lyc0_stat_timing_e,
@@ -391,8 +389,7 @@ gbmicrotest!(
 );
 gbmicrotest!(
     test_line_153_lyc153_stat_timing_c,
-    "line_153_lyc153_stat_timing_c.gb",
-    ignore
+    "line_153_lyc153_stat_timing_c.gb"
 );
 gbmicrotest!(
     test_line_153_lyc153_stat_timing_d,
@@ -408,7 +405,7 @@ gbmicrotest!(
 );
 gbmicrotest!(test_line_153_lyc_a, "line_153_lyc_a.gb");
 gbmicrotest!(test_line_153_lyc_b, "line_153_lyc_b.gb", ignore);
-gbmicrotest!(test_line_153_lyc_c, "line_153_lyc_c.gb", ignore);
+gbmicrotest!(test_line_153_lyc_c, "line_153_lyc_c.gb");
 gbmicrotest!(test_line_153_ly_c, "line_153_ly_c.gb");
 gbmicrotest!(test_line_153_lyc_int_a, "line_153_lyc_int_a.gb");
 gbmicrotest!(test_line_153_lyc_int_b, "line_153_lyc_int_b.gb", ignore);
