@@ -632,7 +632,7 @@ gbmicrotest!(
     ignore
 );
 gbmicrotest!(test_stat_write_glitch_l1_d, "stat_write_glitch_l1_d.gb");
-gbmicrotest!(test_temp, "temp.gb", ignore);
+
 gbmicrotest!(test_timer_div_phase_c, "timer_div_phase_c.gb");
 gbmicrotest!(test_timer_div_phase_d, "timer_div_phase_d.gb");
 gbmicrotest!(test_timer_tima_inc_256k_a, "timer_tima_inc_256k_a.gb");
