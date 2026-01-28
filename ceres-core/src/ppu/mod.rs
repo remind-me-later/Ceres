@@ -251,7 +251,11 @@ impl Ppu {
 
     fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
         match mode {
-            Mode::OamScan => self.phase = PpuPhase::OamScan(OamScanStage::default()),
+            Mode::OamScan => {
+                self.phase = PpuPhase::OamScan(OamScanStage::default());
+                self.mode_for_interrupt = None;
+                self.update_stat(ints);
+            }
             Mode::VBlank => self.phase = PpuPhase::VBlank(VBlankStage::default()),
             Mode::Drawing => {
                 self.phase = PpuPhase::Drawing;
