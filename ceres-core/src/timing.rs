@@ -26,7 +26,7 @@ impl Default for Clock {
             tima: 0,
             tima_state: TIMAState::Running,
             tma: 0,
-            div_acc: 0,
+            div_acc: 1,
         }
     }
 }
@@ -76,33 +76,44 @@ impl<A: AudioCallback> Gb<A> {
     fn advance_tick(&mut self) {
         let double_speed = self.key1.is_enabled();
 
-        self.ppu.run(
-            1,
-            &mut self.ints,
-            self.cgb_mode,
-            double_speed,
-            self.dma.is_active(),
-            self.dma.current_src(),
-            self.dma.current_dst(),
-            self.hdma.is_active(),
-        );
-
         if double_speed {
             // CPU/Timer/DMA run at 8MHz
             self.run_timers(1);
             self.dma.advance_dots(1);
             self.run_dma();
 
-            // APU/PPU/RTC run at 4MHz
+            // APU/PPU/RTC run at 4MHz (dots)
             self.tick_acc ^= 1;
             if self.tick_acc == 0 {
+                self.ppu.run(
+                    1,
+                    &mut self.ints,
+                    self.cgb_mode,
+                    double_speed,
+                    self.dma.is_active(),
+                    self.dma.current_src(),
+                    self.dma.current_dst(),
+                    self.hdma.is_active(),
+                );
                 self.apu.run(1);
                 self.cart.run_rtc(1);
                 self.dots_ran += 1;
                 self.total_dots += 1;
             }
         } else {
-            // CPU/Timer/DMA/APU/PPU/RTC all effectively run at 4MHz
+            // CPU/Timer/DMA/APU/PPU/RTC all effectively run at 4MHz (dots)
+            // But we tick PPU at 8MHz granularity for sub-dot accuracy.
+            self.ppu.run(
+                1,
+                &mut self.ints,
+                self.cgb_mode,
+                double_speed,
+                self.dma.is_active(),
+                self.dma.current_src(),
+                self.dma.current_dst(),
+                self.hdma.is_active(),
+            );
+
             self.tick_acc ^= 1;
             if self.tick_acc == 0 {
                 self.run_timers(1);
@@ -137,17 +148,6 @@ impl<A: AudioCallback> Gb<A> {
     fn advance_tick_no_timers(&mut self) {
         let double_speed = self.key1.is_enabled();
 
-        self.ppu.run(
-            1,
-            &mut self.ints,
-            self.cgb_mode,
-            double_speed,
-            self.dma.is_active(),
-            self.dma.current_src(),
-            self.dma.current_dst(),
-            self.hdma.is_active(),
-        );
-
         if double_speed {
             // CPU/DMA run at 8MHz
             self.dma.advance_dots(1);
@@ -156,6 +156,16 @@ impl<A: AudioCallback> Gb<A> {
             // APU/PPU/RTC run at 4MHz
             self.tick_acc ^= 1;
             if self.tick_acc == 0 {
+                self.ppu.run(
+                    1,
+                    &mut self.ints,
+                    self.cgb_mode,
+                    double_speed,
+                    self.dma.is_active(),
+                    self.dma.current_src(),
+                    self.dma.current_dst(),
+                    self.hdma.is_active(),
+                );
                 self.apu.run(1);
                 self.cart.run_rtc(1);
                 self.dots_ran += 1;
@@ -163,6 +173,17 @@ impl<A: AudioCallback> Gb<A> {
             }
         } else {
             // CPU/DMA/APU/PPU/RTC all effectively run at 4MHz
+            self.ppu.run(
+                1,
+                &mut self.ints,
+                self.cgb_mode,
+                double_speed,
+                self.dma.is_active(),
+                self.dma.current_src(),
+                self.dma.current_dst(),
+                self.hdma.is_active(),
+            );
+
             self.tick_acc ^= 1;
             if self.tick_acc == 0 {
                 self.dma.advance_dots(1);

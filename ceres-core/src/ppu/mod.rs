@@ -674,33 +674,22 @@ impl Ppu {
                     self.oam_write_blocked = is_cgb && !double_speed;
                     self.sprite_buffer.clear();
                 }
+                if tick == 1 {
+                    self.oam_read_blocked = true;
+                }
                 if tick == 4 && is_cgb {
                     self.oam_write_blocked = true;
                 }
 
-                // Tick 3: LY update and Mode 2 interrupt pulse (SameBoy State 6)
-                if tick == 3 {
+                // Tick 2: LY update and Mode 2 interrupt pulse start (SameBoy State 6)
+                if tick == 2 {
                     self.ly = self.current_line;
                     self.ly_for_comparison = if self.current_line != 0 { 0xFFFF } else { 0 };
-                    self.oam_read_blocked = !double_speed;
 
                     // Pulse mode_for_interrupt from HBlank to OamScan.
                     // This allows continuous STAT line if both IRQs are enabled (blocking),
                     // but creates a rising edge if only Mode 2 is enabled.
                     self.mode_for_interrupt = Some(Mode::OamScan);
-                    self.update_stat(ints);
-                }
-
-                // Tick 10: STAT mode bits change to 2 (SameBoy State 7)
-                if tick == 10 {
-                    self.oam_read_blocked = true;
-                    self.set_mode_stat(Mode::OamScan);
-                    self.oam_write_blocked = true;
-                    self.ly_for_comparison = u16::from(self.ly);
-
-                    self.update_stat(ints);
-                    // End Mode 2 pulse, STAT bits now report Mode 2.
-                    self.mode_for_interrupt = None;
                     self.update_stat(ints);
                 }
 
@@ -1091,6 +1080,13 @@ impl Ppu {
             // Window activates when position_in_line + 7 == WX.
             if pos + 7 == i16::from(self.wx) {
                 self.activate_window(is_cgb);
+            }
+            // LCD-PPU horizontal desync quirk on DMG (verified by SameBoy)
+            else if !is_cgb && pos + 6 == i16::from(self.wx) {
+                self.activate_window(is_cgb);
+                if self.lcd_x > 0 {
+                    self.lcd_x -= 1;
+                }
             }
         }
         // WX=166 on DMG - special case, increment window_y but don't fully trigger.
@@ -1543,10 +1539,10 @@ impl Ppu {
                     self.vram_read_blocked = false;
                     self.oam_write_blocked = false;
                     self.vram_write_blocked = false;
-                    self.update_stat(ints);
                 }
 
                 if remaining <= 1 {
+                    self.update_stat(ints);
                     // Transition to PalettesBlock
                     self.phase = PpuPhase::HBlank(HBlankStage::PalettesBlock { remaining: 4 });
                 } else {
@@ -1622,7 +1618,7 @@ impl Ppu {
                         self.oam_scan_index = 0;
                         self.sprite_buffer.clear();
 
-                        self.oam_read_blocked = true;
+                        self.oam_read_blocked = false;
                         self.oam_write_blocked = false;
                         self.vram_read_blocked = false;
                         self.vram_write_blocked = false;
@@ -1871,7 +1867,16 @@ impl Ppu {
         self.scy = val;
     }
 
-    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts) {
+    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts, cgb_mode: CgbMode) {
+        if matches!(cgb_mode, CgbMode::Dmg) {
+            let old_stat = self.stat;
+            // DMG STAT write glitch: for one T-cycle, the STAT register is seen
+            // as having all interrupt sources active (bits 3-6 high).
+            self.stat |= 0x78;
+            self.update_stat(ints);
+            self.stat = old_stat;
+        }
+
         let ly_equals_lyc = self.stat & STAT_LYC_B;
         let mode: u8 = self.mode() as u8;
 
