@@ -253,8 +253,8 @@ impl Ppu {
         match mode {
             Mode::OamScan => {
                 self.phase = PpuPhase::OamScan(OamScanStage::default());
-                self.mode_for_interrupt = None;
-                self.update_stat(ints);
+                // Don't clear mode_for_interrupt here to allow continuous STAT line
+                // across HBlank -> OamScan transition for proper IRQ blocking.
             }
             Mode::VBlank => self.phase = PpuPhase::VBlank(VBlankStage::default()),
             Mode::Drawing => {
@@ -723,8 +723,22 @@ impl Ppu {
                     self.ly_for_comparison = if self.current_line != 0 { 0xFFFF } else { 0 };
                     self.oam_read_blocked = !double_speed;
 
+                    // Pulse mode_for_interrupt from HBlank to OamScan.
+                    // This allows continuous STAT line if both IRQs are enabled (blocking),
+                    // but creates a rising edge if only Mode 2 is enabled.
                     self.mode_for_interrupt = Some(Mode::OamScan);
                     self.update_stat(ints);
+                }
+
+                // Tick 10: STAT mode bits change to 2 (SameBoy State 7)
+                if tick == 10 {
+                    self.oam_read_blocked = true;
+                    self.set_mode_stat(Mode::OamScan);
+                    self.oam_write_blocked = true;
+                    self.ly_for_comparison = u16::from(self.ly);
+
+                    self.update_stat(ints);
+                    // End Mode 2 pulse, STAT bits now report Mode 2.
                     self.mode_for_interrupt = None;
                     self.update_stat(ints);
                 }
@@ -736,6 +750,9 @@ impl Ppu {
                     self.oam_write_blocked = true;
                     self.ly_for_comparison = u16::from(self.ly);
 
+                    self.update_stat(ints);
+                    // End Mode 2 pulse, STAT bits now report Mode 2.
+                    self.mode_for_interrupt = None;
                     self.update_stat(ints);
                 }
 
@@ -853,7 +870,7 @@ impl Ppu {
     }
 
     /// Tick during Mode 3 (Drawing).
-    fn tick_drawing(&mut self, _ints: &mut Interrupts, cgb_mode: CgbMode) {
+    fn tick_drawing(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
         // Check for window activation
         self.check_window_trigger(cgb_mode);
 
@@ -919,6 +936,10 @@ impl Ppu {
             }
 
             // Transition to HBlank.
+            // Set mode_for_interrupt and trigger STAT update immediately.
+            self.mode_for_interrupt = Some(Mode::HBlank);
+            self.update_stat(ints);
+
             // Memory unblocking and STAT update happens in tick_hblank StatUpdate state.
             self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate { remaining: 2 });
             // Note: STAT mode bits are NOT updated here - that happens in tick_hblank.
@@ -1346,7 +1367,7 @@ impl Ppu {
                 self.position_in_line = -8;
             } else if self.position_in_line == -9 {
                 // Edge case: -9 wraps back to -16
-                self.position_in_line = -16;
+                self.position_in_line = -8;
                 return;
             } else {
                 self.line_has_fractional_scrolling = true;

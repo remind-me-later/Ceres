@@ -156,36 +156,20 @@ gbmicrotest!(test_hblank_int_scx0_if_a, "hblank_int_scx0_if_a.gb");
 gbmicrotest!(test_hblank_int_scx0_if_b, "hblank_int_scx0_if_b.gb");
 gbmicrotest!(test_hblank_int_scx0_if_c, "hblank_int_scx0_if_c.gb");
 gbmicrotest!(test_hblank_int_scx0_if_d, "hblank_int_scx0_if_d.gb");
-gbmicrotest!(test_hblank_int_scx1, "hblank_int_scx1.gb", ignore);
+gbmicrotest!(test_hblank_int_scx1, "hblank_int_scx1.gb");
 gbmicrotest!(test_hblank_int_scx1_if_a, "hblank_int_scx1_if_a.gb");
-gbmicrotest!(test_hblank_int_scx1_if_b, "hblank_int_scx1_if_b.gb", ignore);
+gbmicrotest!(test_hblank_int_scx1_if_b, "hblank_int_scx1_if_b.gb");
 gbmicrotest!(test_hblank_int_scx1_if_c, "hblank_int_scx1_if_c.gb");
-gbmicrotest!(test_hblank_int_scx1_if_d, "hblank_int_scx1_if_d.gb", ignore);
-gbmicrotest!(
-    test_hblank_int_scx1_nops_a,
-    "hblank_int_scx1_nops_a.gb",
-    ignore
-);
-gbmicrotest!(
-    test_hblank_int_scx1_nops_b,
-    "hblank_int_scx1_nops_b.gb",
-    ignore
-);
-gbmicrotest!(test_hblank_int_scx2, "hblank_int_scx2.gb", ignore);
+gbmicrotest!(test_hblank_int_scx1_if_d, "hblank_int_scx1_if_d.gb");
+gbmicrotest!(test_hblank_int_scx1_nops_a, "hblank_int_scx1_nops_a.gb");
+gbmicrotest!(test_hblank_int_scx1_nops_b, "hblank_int_scx1_nops_b.gb");
+gbmicrotest!(test_hblank_int_scx2, "hblank_int_scx2.gb");
 gbmicrotest!(test_hblank_int_scx2_if_a, "hblank_int_scx2_if_a.gb");
-gbmicrotest!(test_hblank_int_scx2_if_b, "hblank_int_scx2_if_b.gb", ignore);
+gbmicrotest!(test_hblank_int_scx2_if_b, "hblank_int_scx2_if_b.gb");
 gbmicrotest!(test_hblank_int_scx2_if_c, "hblank_int_scx2_if_c.gb");
-gbmicrotest!(test_hblank_int_scx2_if_d, "hblank_int_scx2_if_d.gb", ignore);
-gbmicrotest!(
-    test_hblank_int_scx2_nops_a,
-    "hblank_int_scx2_nops_a.gb",
-    ignore
-);
-gbmicrotest!(
-    test_hblank_int_scx2_nops_b,
-    "hblank_int_scx2_nops_b.gb",
-    ignore
-);
+gbmicrotest!(test_hblank_int_scx2_if_d, "hblank_int_scx2_if_d.gb");
+gbmicrotest!(test_hblank_int_scx2_nops_a, "hblank_int_scx2_nops_a.gb");
+gbmicrotest!(test_hblank_int_scx2_nops_b, "hblank_int_scx2_nops_b.gb");
 gbmicrotest!(test_hblank_int_scx3, "hblank_int_scx3.gb");
 gbmicrotest!(test_hblank_int_scx3_if_a, "hblank_int_scx3_if_a.gb");
 gbmicrotest!(test_hblank_int_scx3_if_b, "hblank_int_scx3_if_b.gb");
@@ -200,36 +184,20 @@ gbmicrotest!(test_hblank_int_scx4_if_c, "hblank_int_scx4_if_c.gb");
 gbmicrotest!(test_hblank_int_scx4_if_d, "hblank_int_scx4_if_d.gb");
 gbmicrotest!(test_hblank_int_scx4_nops_a, "hblank_int_scx4_nops_a.gb");
 gbmicrotest!(test_hblank_int_scx4_nops_b, "hblank_int_scx4_nops_b.gb");
-gbmicrotest!(test_hblank_int_scx5, "hblank_int_scx5.gb", ignore);
+gbmicrotest!(test_hblank_int_scx5, "hblank_int_scx5.gb");
 gbmicrotest!(test_hblank_int_scx5_if_a, "hblank_int_scx5_if_a.gb");
-gbmicrotest!(test_hblank_int_scx5_if_b, "hblank_int_scx5_if_b.gb", ignore);
+gbmicrotest!(test_hblank_int_scx5_if_b, "hblank_int_scx5_if_b.gb");
 gbmicrotest!(test_hblank_int_scx5_if_c, "hblank_int_scx5_if_c.gb");
-gbmicrotest!(test_hblank_int_scx5_if_d, "hblank_int_scx5_if_d.gb", ignore);
-gbmicrotest!(
-    test_hblank_int_scx5_nops_a,
-    "hblank_int_scx5_nops_a.gb",
-    ignore
-);
-gbmicrotest!(
-    test_hblank_int_scx5_nops_b,
-    "hblank_int_scx5_nops_b.gb",
-    ignore
-);
-gbmicrotest!(test_hblank_int_scx6, "hblank_int_scx6.gb", ignore);
+gbmicrotest!(test_hblank_int_scx5_if_d, "hblank_int_scx5_if_d.gb");
+gbmicrotest!(test_hblank_int_scx5_nops_a, "hblank_int_scx5_nops_a.gb");
+gbmicrotest!(test_hblank_int_scx5_nops_b, "hblank_int_scx5_nops_b.gb");
+gbmicrotest!(test_hblank_int_scx6, "hblank_int_scx6.gb");
 gbmicrotest!(test_hblank_int_scx6_if_a, "hblank_int_scx6_if_a.gb");
-gbmicrotest!(test_hblank_int_scx6_if_b, "hblank_int_scx6_if_b.gb", ignore);
+gbmicrotest!(test_hblank_int_scx6_if_b, "hblank_int_scx6_if_b.gb");
 gbmicrotest!(test_hblank_int_scx6_if_c, "hblank_int_scx6_if_c.gb");
-gbmicrotest!(test_hblank_int_scx6_if_d, "hblank_int_scx6_if_d.gb", ignore);
-gbmicrotest!(
-    test_hblank_int_scx6_nops_a,
-    "hblank_int_scx6_nops_a.gb",
-    ignore
-);
-gbmicrotest!(
-    test_hblank_int_scx6_nops_b,
-    "hblank_int_scx6_nops_b.gb",
-    ignore
-);
+gbmicrotest!(test_hblank_int_scx6_if_d, "hblank_int_scx6_if_d.gb");
+gbmicrotest!(test_hblank_int_scx6_nops_a, "hblank_int_scx6_nops_a.gb");
+gbmicrotest!(test_hblank_int_scx6_nops_b, "hblank_int_scx6_nops_b.gb");
 gbmicrotest!(test_hblank_int_scx7, "hblank_int_scx7.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_hblank_int_scx7_if_a, "hblank_int_scx7_if_a.gb");
 gbmicrotest!(test_hblank_int_scx7_if_b, "hblank_int_scx7_if_b.gb");
@@ -257,19 +225,19 @@ gbmicrotest!(test_int_hblank_halt_scx7, "int_hblank_halt_scx7.gb");
 gbmicrotest!(test_int_hblank_incs_scx0, "int_hblank_incs_scx0.gb", ignore);
 gbmicrotest!(test_int_hblank_incs_scx1, "int_hblank_incs_scx1.gb");
 gbmicrotest!(test_int_hblank_incs_scx2, "int_hblank_incs_scx2.gb");
-gbmicrotest!(test_int_hblank_incs_scx3, "int_hblank_incs_scx3.gb", ignore);
+gbmicrotest!(test_int_hblank_incs_scx3, "int_hblank_incs_scx3.gb");
 gbmicrotest!(test_int_hblank_incs_scx4, "int_hblank_incs_scx4.gb", ignore);
 gbmicrotest!(test_int_hblank_incs_scx5, "int_hblank_incs_scx5.gb");
 gbmicrotest!(test_int_hblank_incs_scx6, "int_hblank_incs_scx6.gb");
-gbmicrotest!(test_int_hblank_incs_scx7, "int_hblank_incs_scx7.gb", ignore);
+gbmicrotest!(test_int_hblank_incs_scx7, "int_hblank_incs_scx7.gb");
 gbmicrotest!(test_int_hblank_nops_scx0, "int_hblank_nops_scx0.gb", ignore);
 gbmicrotest!(test_int_hblank_nops_scx1, "int_hblank_nops_scx1.gb");
 gbmicrotest!(test_int_hblank_nops_scx2, "int_hblank_nops_scx2.gb");
-gbmicrotest!(test_int_hblank_nops_scx3, "int_hblank_nops_scx3.gb", ignore);
+gbmicrotest!(test_int_hblank_nops_scx3, "int_hblank_nops_scx3.gb");
 gbmicrotest!(test_int_hblank_nops_scx4, "int_hblank_nops_scx4.gb", ignore);
 gbmicrotest!(test_int_hblank_nops_scx5, "int_hblank_nops_scx5.gb");
 gbmicrotest!(test_int_hblank_nops_scx6, "int_hblank_nops_scx6.gb");
-gbmicrotest!(test_int_hblank_nops_scx7, "int_hblank_nops_scx7.gb", ignore);
+gbmicrotest!(test_int_hblank_nops_scx7, "int_hblank_nops_scx7.gb");
 gbmicrotest!(test_int_lyc_halt, "int_lyc_halt.gb");
 gbmicrotest!(test_int_lyc_incs, "int_lyc_incs.gb");
 gbmicrotest!(test_int_lyc_nops, "int_lyc_nops.gb");
@@ -343,9 +311,9 @@ gbmicrotest!(test_lcdon_to_stat3_c, "lcdon_to_stat3_c.gb");
 gbmicrotest!(test_lcdon_to_stat3_d, "lcdon_to_stat3_d.gb");
 gbmicrotest!(test_lcdon_write_timing, "lcdon_write_timing.gb", ignore);
 gbmicrotest!(test_line_144_oam_int_a, "line_144_oam_int_a.gb");
-gbmicrotest!(test_line_144_oam_int_b, "line_144_oam_int_b.gb", ignore);
-gbmicrotest!(test_line_144_oam_int_c, "line_144_oam_int_c.gb", ignore);
-gbmicrotest!(test_line_144_oam_int_d, "line_144_oam_int_d.gb", ignore);
+gbmicrotest!(test_line_144_oam_int_b, "line_144_oam_int_b.gb");
+gbmicrotest!(test_line_144_oam_int_c, "line_144_oam_int_c.gb");
+gbmicrotest!(test_line_144_oam_int_d, "line_144_oam_int_d.gb");
 gbmicrotest!(test_line_153_ly_a, "line_153_ly_a.gb");
 gbmicrotest!(test_line_153_ly_b, "line_153_ly_b.gb");
 gbmicrotest!(
@@ -579,7 +547,7 @@ gbmicrotest!(test_ppu_sprite0_scx1_b, "ppu_sprite0_scx1_b.gb");
 gbmicrotest!(test_ppu_sprite0_scx2_a, "ppu_sprite0_scx2_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_ppu_sprite0_scx2_b, "ppu_sprite0_scx2_b.gb");
 gbmicrotest!(test_ppu_sprite0_scx3_a, "ppu_sprite0_scx3_a.gb"); // Fails with mode3_delay=0
-gbmicrotest!(test_ppu_sprite0_scx3_b, "ppu_sprite0_scx3_b.gb", ignore);
+gbmicrotest!(test_ppu_sprite0_scx3_b, "ppu_sprite0_scx3_b.gb");
 gbmicrotest!(test_ppu_sprite0_scx4_a, "ppu_sprite0_scx4_a.gb");
 gbmicrotest!(test_ppu_sprite0_scx4_b, "ppu_sprite0_scx4_b.gb");
 gbmicrotest!(test_ppu_sprite0_scx5_a, "ppu_sprite0_scx5_a.gb");
@@ -587,13 +555,13 @@ gbmicrotest!(test_ppu_sprite0_scx5_b, "ppu_sprite0_scx5_b.gb");
 gbmicrotest!(test_ppu_sprite0_scx6_a, "ppu_sprite0_scx6_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_ppu_sprite0_scx6_b, "ppu_sprite0_scx6_b.gb");
 gbmicrotest!(test_ppu_sprite0_scx7_a, "ppu_sprite0_scx7_a.gb"); // Fails with mode3_delay=0
-gbmicrotest!(test_ppu_sprite0_scx7_b, "ppu_sprite0_scx7_b.gb", ignore);
+gbmicrotest!(test_ppu_sprite0_scx7_b, "ppu_sprite0_scx7_b.gb");
 gbmicrotest!(test_ppu_sprite_testbench, "ppu_sprite_testbench.gb", ignore);
 gbmicrotest!(test_ppu_spritex_vs_scx, "ppu_spritex_vs_scx.gb", ignore);
 gbmicrotest!(test_ppu_win_vs_wx, "ppu_win_vs_wx.gb", ignore);
 gbmicrotest!(test_ppu_wx_early, "ppu_wx_early.gb", ignore);
 gbmicrotest!(test_sprite_0_a, "sprite_0_a.gb"); // Fails with mode3_delay=0
-gbmicrotest!(test_sprite_0_b, "sprite_0_b.gb", ignore);
+gbmicrotest!(test_sprite_0_b, "sprite_0_b.gb");
 gbmicrotest!(test_sprite_1_a, "sprite_1_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_sprite_1_b, "sprite_1_b.gb");
 gbmicrotest!(test_sprite4_0_a, "sprite4_0_a.gb");

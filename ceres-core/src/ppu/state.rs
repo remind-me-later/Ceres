@@ -53,7 +53,7 @@ impl Default for OamScanStage {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HBlankStage {
     /// State 22: STAT = Mode 0, memory unblocked.
-    /// Duration: 2 ticks (1 8MHz cycle).
+    /// Duration: 2 ticks (1 cycle).
     StatUpdate { remaining: u8 },
     /// State 33: CGB palettes blocked (non-double-speed only).
     /// Duration: 4 ticks (2 8MHz cycles).
