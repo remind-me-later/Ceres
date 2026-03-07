@@ -410,3 +410,11 @@ pub(crate) mod test_util {
             .build()
     }
 }
+
+#[cfg(test)]
+impl<A: AudioCallback> Gb<A> {
+    /// Set the CPU program counter.  Only available in test builds.
+    pub(crate) fn set_cpu_pc(&mut self, pc: u16) {
+        self.cpu.set_pc(pc);
+    }
+}

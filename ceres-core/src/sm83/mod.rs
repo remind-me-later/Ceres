@@ -56,6 +56,14 @@ impl Sm83 {
     }
 }
 
+#[cfg(test)]
+impl Sm83 {
+    /// Set the program counter.  Only available in test builds.
+    pub(crate) fn set_pc(&mut self, pc: u16) {
+        self.pc = pc;
+    }
+}
+
 impl<A: AudioCallback> Gb<A> {
     fn exec(&mut self, op: u8) {
         match op {

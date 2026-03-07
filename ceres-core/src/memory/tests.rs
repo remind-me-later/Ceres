@@ -965,3 +965,167 @@ fn oam_dma_src_high_cgb_reads_ff() {
         );
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Speed-switch (KEY1 / STOP) tests
+//
+// Unit tests derived from the Gambatte `speedchange/` test ROM suite.
+//
+// Hardware behaviour under test:
+//   • KEY1 (0xFF4D) readback: bit-masking and armed/disarmed state.
+//   • STOP with KEY1 armed: switches single ↔ double speed.
+//   • After a speed switch: DIV (0xFF04) resets to 0x00.
+//   • After a speed switch: KEY1 bit 7 reflects new speed, bit 0 is cleared.
+//
+// Test infrastructure: `setup_cgb()` is used for all tests (CGB-E, bootrom
+// disabled, LCD off).  To execute the STOP opcode the test writes the two
+// opcode bytes (`0x10 0x00`) into WRAM, sets `gb.cpu.pc` directly (the same
+// technique used by `sm83/tests.rs`), and calls `gb.run_cpu()`.
+//
+// References (ASM sources):
+//   external/reference-implementations/gambatte-core/test/hwtests/speedchange/
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Execute one speed switch: arm KEY1 then run the STOP opcode from WRAM.
+///
+/// This is the building block for all `speedchange_*` tests.  After this
+/// call the emulator is in double-speed mode (if it was in single-speed
+/// before) or single-speed mode (if it was already in double-speed).
+fn do_speed_switch(gb: &mut Gb) {
+    // Arm the speed switch (bit 0 of KEY1).
+    gb.write_mem(0xFF4D, 0x01);
+    // Write STOP opcode + mandatory padding byte into WRAM.
+    gb.write_mem(0xC000, 0x10); // opcode: STOP
+    gb.write_mem(0xC001, 0x00); // padding byte consumed by STOP
+                                // Point CPU at the STOP instruction and execute it.
+    gb.set_cpu_pc(0xC000);
+    gb.run_cpu();
+}
+
+// ─── KEY1 readback ───────────────────────────────────────────────────────────
+
+/// Writing 0x01 to KEY1 arms the speed switch.
+///
+/// After the write KEY1 should read back with bit 7 = 0 (still single speed),
+/// bit 0 = 1 (armed), and bits 6:1 forced to 1 → 0x7F.
+///
+/// Gambatte reference: `key1_set_dmg08_outFF_cgb04c_out7F`
+/// (CGB output = 0x7F)
+#[test]
+fn key1_armed_reads_7f() {
+    let mut gb = setup_cgb();
+    gb.write_mem(0xFF4D, 0x01);
+    assert_eq!(
+        gb.read_mem(0xFF4D),
+        0x7F,
+        "KEY1 after arming: should read 0x7F (bit7=0=single, bit0=1=armed, bits6:1=1)"
+    );
+}
+
+/// Writing 0xFF then 0x00 to KEY1 leaves the arm bit cleared.
+///
+/// The first write sets the arm bit (bit 0) regardless of the value written.
+/// The second write with 0x00 clears it.  Bit 7 (current speed) is read-only
+/// and remains 0 (single speed).  Bits 6:1 are always 1.  Result: 0x7E.
+///
+/// Gambatte reference: `key1_set_unset_dmg08_outFF_cgb04c_out7E`
+/// (CGB output = 0x7E)
+#[test]
+fn key1_armed_then_disarmed_reads_7e() {
+    let mut gb = setup_cgb();
+    gb.write_mem(0xFF4D, 0xFF); // arm (only bit 0 is writable)
+    gb.write_mem(0xFF4D, 0x00); // disarm
+    assert_eq!(
+        gb.read_mem(0xFF4D),
+        0x7E,
+        "KEY1 after arm+disarm: should read 0x7E (bit7=0, bit0=0, bits6:1=1)"
+    );
+}
+
+// ─── Single speed switch (STOP with KEY1 armed) ──────────────────────────────
+
+/// After one speed switch, KEY1 reads 0xFE (double speed, arm bit cleared).
+///
+/// After `STOP` with KEY1 armed:
+///   • Bit 7 = 1  (now in double-speed mode)
+///   • Bit 0 = 0  (arm bit cleared by the switch)
+///   • Bits 6:1 = 1 (always read as 1)
+/// → 0xFE
+///
+/// Gambatte reference: `speedchange_key1_cgb04c_outFE`
+#[test]
+fn speedchange_key1_reads_fe_after_single_switch() {
+    let mut gb = setup_cgb();
+    do_speed_switch(&mut gb);
+    assert_eq!(
+        gb.read_mem(0xFF4D),
+        0xFE,
+        "KEY1 after one speed switch: should read 0xFE (bit7=1=double, bit0=0=disarmed)"
+    );
+}
+
+/// After one speed switch, DIV resets to 0x00.
+///
+/// The STOP instruction with KEY1 armed calls `write_div()` which resets the
+/// internal DIV counter.  Reading DIV immediately after should give 0x00.
+///
+/// Gambatte reference: `speedchange_div_1_cgb04c_out00`
+#[test]
+fn speedchange_div_resets_to_zero_after_switch() {
+    let mut gb = setup_cgb();
+    // Advance DIV so we can confirm it truly reset (not just happened to be 0).
+    gb.advance_dots(1024);
+    assert_ne!(
+        gb.read_mem(0xFF04),
+        0x00,
+        "pre-condition: DIV should not be 0 before switch"
+    );
+    do_speed_switch(&mut gb);
+    assert_eq!(
+        gb.read_mem(0xFF04),
+        0x00,
+        "DIV must be 0x00 immediately after speed switch"
+    );
+}
+
+// ─── Double speed switch (two STOPs, back to single speed) ───────────────────
+
+/// After two speed switches (single→double→single), KEY1 reads 0x7E.
+///
+/// After the second STOP:
+///   • Bit 7 = 0  (back to single-speed)
+///   • Bit 0 = 0  (arm bit cleared)
+///   • Bits 6:1 = 1
+/// → 0x7E
+///
+/// Gambatte reference: `speedchange2_key1_cgb04c_out7E`
+#[test]
+fn speedchange2_key1_reads_7e_after_double_switch() {
+    let mut gb = setup_cgb();
+    do_speed_switch(&mut gb); // single → double
+    do_speed_switch(&mut gb); // double → single
+    assert_eq!(
+        gb.read_mem(0xFF4D),
+        0x7E,
+        "KEY1 after two switches: should read 0x7E (bit7=0=single, bit0=0=disarmed)"
+    );
+}
+
+/// After two speed switches, DIV resets to 0x00.
+///
+/// Each speed switch calls `write_div()`.  After the second switch DIV should
+/// again be 0x00.
+///
+/// Gambatte reference: `speedchange2_div_1_cgb04c_out00`
+#[test]
+fn speedchange2_div_resets_to_zero_after_double_switch() {
+    let mut gb = setup_cgb();
+    do_speed_switch(&mut gb); // first switch
+    gb.advance_dots(1024); // let DIV count up
+    do_speed_switch(&mut gb); // second switch resets DIV again
+    assert_eq!(
+        gb.read_mem(0xFF04),
+        0x00,
+        "DIV must be 0x00 immediately after second speed switch"
+    );
+}
