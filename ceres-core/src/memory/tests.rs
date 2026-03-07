@@ -428,6 +428,250 @@ fn hdma4_reads_ff() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Register readback (FF52 / FF53)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// `ff52_bits_cgb04c_outFF` — HDMA2 (FF52) read-back is always 0xFF.
+///
+/// Gambatte ROM: in the STAT interrupt handler it writes 0x00 to FF52
+/// (source low byte), performs a 1-block GDMA, then reads FF52.
+/// Expected output: 0xFF.  FF52 is write-only — reads always return 0xFF.
+#[test]
+fn hdma2_reads_ff() {
+    let mut gb = setup_cgb();
+
+    // Before any write
+    assert_eq!(
+        gb.read_mem(0xFF52),
+        0xFF,
+        "FF52 should read 0xFF before write"
+    );
+
+    // Write a value and trigger a GDMA
+    gb.write_mem(0xC000, 0xAB);
+    run_gdma(&mut gb, 0xC000, 0x0000, 1);
+
+    // After GDMA, FF52 must still read 0xFF (write-only)
+    assert_eq!(
+        gb.read_mem(0xFF52),
+        0xFF,
+        "FF52 should read 0xFF after GDMA (write-only)"
+    );
+}
+
+/// `ff53_bits_cgb04c_outFF` — HDMA3 (FF53) read-back is always 0xFF.
+///
+/// Gambatte ROM: in the STAT interrupt handler it writes 0x80 to FF53
+/// (destination high byte), performs a 1-block GDMA, then reads FF53 back.
+/// Expected output: 0xFF.  FF53 is write-only — reads always return 0xFF.
+#[test]
+fn hdma3_reads_ff() {
+    let mut gb = setup_cgb();
+
+    // Before any write
+    assert_eq!(
+        gb.read_mem(0xFF53),
+        0xFF,
+        "FF53 should read 0xFF before write"
+    );
+
+    // Write a value and trigger a GDMA
+    gb.write_mem(0xC000, 0xCD);
+    run_gdma(&mut gb, 0xC000, 0x0080, 1);
+
+    // After GDMA, FF53 must still read 0xFF (write-only)
+    assert_eq!(
+        gb.read_mem(0xFF53),
+        0xFF,
+        "FF53 should read 0xFF after GDMA (write-only)"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HDMA5 register readback
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// `hdma_m3halt_m1unhalt_hdma5_cgb04c_out00` — HDMA5 bit 7 = 1 when idle.
+///
+/// Gambatte ROM: starts a 1-block HBlank DMA (FF55 = 0x80), waits for it to
+/// complete (1 HBlank passes), then reads FF55.  After the transfer is done,
+/// the HDMA state machine returns to Sleep and `read_hdma5` returns
+/// `(1 << 7) | hdma5`.  With hdma5 = 0x00 (1 block done), result = 0x80.
+///
+/// Unit test: trigger a 1-block GDMA (which completes synchronously), then
+/// verify FF55 bit 7 is set (= no transfer in progress).
+#[test]
+fn hdma5_bit7_set_when_idle() {
+    let mut gb = setup_cgb();
+
+    gb.write_mem(0xC000, 0x42);
+    run_gdma(&mut gb, 0xC000, 0x0000, 1);
+
+    let hdma5 = gb.read_mem(0xFF55);
+    assert_eq!(
+        hdma5 & 0x80,
+        0x80,
+        "FF55 bit 7 should be 1 (no transfer active) after GDMA completes, got 0x{hdma5:02X}"
+    );
+}
+
+/// `hdma_m1halt_m0unhalt_hdma5_cgb04c_outFF` / `hdma_m2halt_m0unhalt_hdma5`
+/// — HDMA5 reads 0xFF when HBlank DMA is active and waiting for HBlank.
+///
+/// Gambatte ROMs: set up a multi-block HBlank DMA (FF55 = 0x80) and read FF55
+/// immediately from the HBlank interrupt — while the transfer is still in
+/// progress.  Expected: 0xFF (bit 7 = 0 = active, bits [6:0] = 0x7F = 127
+/// remaining blocks after the first 1-block step).
+///
+/// Unit test: verify FF55 bit 7 is 0 (= active) immediately after writing
+/// FF55 to start a 128-block HBlank DMA, before any HBlank occurs.
+#[test]
+fn hdma5_bit7_clear_when_hblank_dma_active() {
+    let mut gb = setup_cgb();
+
+    gb.write_mem(0xC000, 0x11);
+    // Program source/destination but do NOT call run_gdma — set up HBlank DMA instead
+    gb.write_mem(0xFF51, 0xC0);
+    gb.write_mem(0xFF52, 0x00);
+    gb.write_mem(0xFF53, 0x80);
+    gb.write_mem(0xFF54, 0x00);
+    // Start 128-block HBlank DMA (bit 7 = 1 → HBlank mode, len_blocks - 1 = 0x7F)
+    gb.write_mem(0xFF55, 0xFF);
+
+    let hdma5 = gb.read_mem(0xFF55);
+    assert_eq!(
+        hdma5 & 0x80,
+        0x00,
+        "FF55 bit 7 should be 0 (transfer active) immediately after starting HBlank DMA, got 0x{hdma5:02X}"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GDMA length encoding
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// GDMA length field: `(HDMA5_value + 1) * 16` bytes transferred.
+///
+/// Verifies that writing N to FF55 (bit 7 = 0) transfers `(N+1) * 16` bytes.
+/// Uses 2 blocks (N=1, 32 bytes) from WRAM to VRAM.
+///
+/// Derived from the baseline behaviour assumed by all `gdma_cycles_*` Gambatte
+/// tests (which measure timing for known-length transfers).
+#[test]
+fn gdma_len_encoding_two_blocks() {
+    let mut gb = setup_cgb();
+
+    // Fill 32 bytes of WRAM with distinct values
+    for i in 0u8..32 {
+        gb.write_mem(0xC000 + u16::from(i), i.wrapping_add(1));
+    }
+
+    // Trigger 2-block GDMA (N=1 → 32 bytes)
+    run_gdma(&mut gb, 0xC000, 0x0000, 2);
+
+    for i in 0u8..32 {
+        assert_eq!(
+            gb.read_mem(0x8000 + u16::from(i)),
+            i.wrapping_add(1),
+            "VRAM[0x{:04X}] should be 0x{:02X} (2-block GDMA)",
+            0x8000 + u16::from(i),
+            i.wrapping_add(1)
+        );
+    }
+    // Byte 32 (just outside the 2-block window) must be untouched
+    assert_eq!(
+        gb.read_mem(0x8020),
+        0x00,
+        "VRAM[0x8020] must not be written (outside 2-block transfer)"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GDMA from WRAM bank 2
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// `hdma_late_wrambank_1/2_cgb04c_out0/1` — GDMA reads from the WRAM bank
+/// that is **active at transfer time**, not at setup time.
+///
+/// Gambatte ROM pair:
+///   `_out0`: writes 0x01 to WRAM bank 2 at 0xD000, switches back to bank 1
+///            (SVBK=1), zero-fills 0xD000 in bank 1, then starts HBlank DMA
+///            with src=0xD000.  In the STAT handler, bank 2 is selected
+///            (SVBK=2) before the 1-block transfer.  VRAM[0x8000] gets the
+///            bank-2 value (0x01), so `(hl) & 0x07 = 0x01`… but the expected
+///            output is 0 — meaning the bank was *not* 2 at transfer time.
+///   `_out1`: same but bank switch happens one M-cycle *earlier* in the
+///            handler, making SVBK=2 active for the transfer → 0x01 is copied.
+///
+/// Unit test (simplified): write distinct values to 0xD000 in bank 1 and
+/// bank 2, perform GDMA with SVBK=2 active, verify VRAM receives bank-2 data.
+#[test]
+fn gdma_uses_wram_bank_active_at_transfer_time() {
+    let mut gb = setup_cgb();
+
+    // Write 0xAA to 0xD000 in WRAM bank 1 (SVBK=1)
+    gb.write_mem(0xFF70, 0x01);
+    gb.write_mem(0xD000, 0xAA);
+
+    // Write 0xBB to 0xD000 in WRAM bank 2 (SVBK=2)
+    gb.write_mem(0xFF70, 0x02);
+    gb.write_mem(0xD000, 0xBB);
+
+    // Bank 2 is active — GDMA from 0xD000 should copy bank-2 value (0xBB)
+    run_gdma(&mut gb, 0xD000, 0x0000, 1);
+
+    assert_eq!(
+        gb.read_mem(0x8000),
+        0xBB,
+        "VRAM[0x8000] should contain 0xBB (WRAM bank 2 active during GDMA)"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OAM DMA source address encoding
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// OAM DMA base address = value written to FF46 << 8.
+///
+/// Derived from `oamdma_src0000_*` Gambatte ROMs which all use src=0x0000
+/// (FF46 = 0x00).  Here we use src=0xC000 (FF46 = 0xC0) — WRAM — as a
+/// simple, side-effect-free test.
+///
+/// Setup: fill WRAM[0xC000..0xC0A0] with 0..159, start OAM DMA, run enough
+/// dots for the transfer to complete (160 bytes × 4 dots = 640 dots), then
+/// verify OAM[0xFE00..0xFEA0] received the WRAM values.
+#[test]
+fn oam_dma_copies_wram_to_oam() {
+    let mut gb = setup_cgb();
+
+    // Fill WRAM with recognisable pattern
+    for i in 0u8..160 {
+        gb.write_mem(0xC000 + u16::from(i), i);
+    }
+
+    // Start OAM DMA from 0xC000 (FF46 = 0xC0)
+    gb.write_mem(0xFF46, 0xC0);
+
+    // Advance enough dots for the full 160-byte transfer to complete.
+    // Each byte takes 1 M-cycle (4 dots); startup delay is 2 M-cycles (8 dots).
+    // Total: (160 + 2) * 4 = 648 dots → drive 650 to be safe.
+    for _ in 0..650 {
+        gb.advance_dots(1);
+        gb.run_dma();
+    }
+
+    // Verify OAM received the WRAM data
+    for i in 0u8..160 {
+        assert_eq!(
+            gb.read_mem(0xFE00 + u16::from(i)),
+            i,
+            "OAM[0x{:04X}] should be 0x{i:02X} after DMA from WRAM",
+            0xFE00 + u16::from(i)
+        );
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GDMA from normal (readable) WRAM source — sanity baseline
 // ─────────────────────────────────────────────────────────────────────────────
 
