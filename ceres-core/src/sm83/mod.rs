@@ -188,30 +188,33 @@ impl<A: AudioCallback> Gb<A> {
                 // Interrupt dispatch: the vector and interrupt bit are determined
                 // BEFORE the push sequence begins. The push may incidentally write
                 // to hardware registers (e.g. IF at $FF0F if SP=$FF10, or IE at
-                // $FFFF if SP=$0000), but only an IE modification can cancel
-                // dispatch mid-push.
+                // $FFFF if SP=$0000), and either modification can cancel dispatch
+                // if they clear the pending interrupt bit.
                 //
-                // Hardware behavior (verified by Mooneye ie_push test):
+                // Hardware behavior (verified by Gambatte irq_precedence tests):
                 // - Vector is committed at the start of dispatch.
-                // - If SP=$0000, upper byte push writes to $FFFF (IE register).
-                //   If that write clears the interrupt bit in IE, dispatch is
-                //   cancelled and PC=$0000.
-                // - If SP=$FF10, upper byte push writes to $FF0F (IF register),
-                //   but this does NOT cancel dispatch; the interrupt fires normally.
-                // - If SP=$0001, lower byte push writes to $0000, too late to cancel.
+                // - After pushing the upper byte of PC, re-check (IE & IF): if the
+                //   push wrote to $FFFF (IE) or $FF0F (IF) and cleared the relevant
+                //   interrupt bit, dispatch is cancelled and PC is set to $0000.
+                // - Example: SP=$0000 → upper push writes to $FFFF (IE). If that
+                //   clears the interrupt bit in IE, dispatch is cancelled.
+                // - Example: SP=$FF10 → upper push writes to $FF0F (IF). If that
+                //   clears the interrupt bit in IF, dispatch is cancelled.
+                // - If SP=$0001, lower byte push writes to $0000 (ROM), too late
+                //   to cancel.
                 let (orig_int, orig_vector) = self.ints.determine_interrupt();
 
                 let pc = self.cpu.pc;
                 let [lo, hi] = pc.to_le_bytes();
 
-                // Push upper byte — may modify IE (if SP-1=$FFFF)
+                // Push upper byte — may modify IE (if SP-1=$FFFF) or IF (if SP-1=$FF0F)
                 self.cpu.sp = self.cpu.sp.wrapping_sub(1);
                 self.write_cpu(self.cpu.sp, hi);
 
-                // Re-check IE only: if the write went to $FFFF and cleared the
-                // interrupt bit in IE, dispatch is cancelled (PC=$0000).
-                let ie_still_set = self.ints.read_ie() & orig_int != 0;
-                let (final_int, final_vector) = if ie_still_set {
+                // Re-check IE & IF: if the push cleared the interrupt bit in either
+                // register, dispatch is cancelled and PC is set to $0000.
+                let still_pending = self.ints.read_ie() & self.ints.read_if() & orig_int != 0;
+                let (final_int, final_vector) = if still_pending {
                     (orig_int, orig_vector)
                 } else {
                     (0, 0x0000)

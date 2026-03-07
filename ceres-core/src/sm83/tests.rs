@@ -718,13 +718,17 @@ fn gambatte_irq_precedence_if_and_ie_0_if_1() {
 
 /// gambatte irq_precedence: if_and_ie_0_vector_2_dmg08_cgb04c_out50
 ///
-/// Setup: SP=0xFF10, IF=IE=0x04 (Timer), EI. Normal dispatch to timer
-/// vector 0x0050. IF timer bit is cleared, PC = 0x0050.
+/// Setup: SP=0xD000 (WRAM, no collision with IF/IE), IF=IE=0x04 (Timer), EI.
+/// Normal dispatch to timer vector 0x0050. IF timer bit is cleared, PC = 0x0050.
+///
+/// Note: SP must NOT be 0xFF10 here. With base=0xC000 the return PC=0xC002,
+/// so SP-1=0xFF0F would write 0xC0 into IF (clearing it) and cancel dispatch.
+/// Using SP=0xD000 ensures the push lands in WRAM with no collision.
 #[test]
 fn gambatte_irq_precedence_if_and_ie_0_vector_normal_timer() {
     let mut gb = setup_gb();
 
-    // Place EI + NOP at 0xC000
+    // Place EI + NOP at 0xC000; return PC = 0xC002
     let base: u16 = 0xC000;
     write_code(
         &mut gb,
@@ -735,7 +739,8 @@ fn gambatte_irq_precedence_if_and_ie_0_vector_normal_timer() {
         ],
     );
     gb.cpu.pc = base;
-    gb.cpu.sp = 0xFF10;
+    // SP in WRAM: push of high byte 0xC0 goes to 0xCFFF (not IF/IE)
+    gb.cpu.sp = 0xD000;
 
     gb.ints.write_if(0x04);
     gb.ints.write_ie(0x04);
@@ -766,7 +771,7 @@ fn gambatte_irq_precedence_if_and_ie_0_vector_normal_timer() {
 
     // SP should have decremented by 2
     assert_eq!(
-        gb.cpu.sp, 0xFF0E,
+        gb.cpu.sp, 0xCFFE,
         "SP should have decremented by 2 after push"
     );
 }
