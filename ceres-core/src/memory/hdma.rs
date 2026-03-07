@@ -1,4 +1,4 @@
-use crate::{AudioCallback, Gb, ppu};
+use crate::{ppu, AudioCallback, Gb};
 
 #[expect(
     clippy::arbitrary_source_item_ordering,
@@ -145,12 +145,21 @@ impl<A: AudioCallback> Gb<A> {
         self.hdma.in_progress = true;
 
         for _ in 0..len {
-            // TODO: the same problems as normal DMA plus reading from
-            // VRAM should copy garbage
-            let val = self.read_mem(self.hdma.src);
+            // Valid GDMA/HDMA source ranges (aligned with SameBoy GB_hdma_run):
+            //   0x0000–0x7FFF  ROM
+            //   0xA000–0xBFFF  external (cart) RAM
+            //   0xC000–0xDFFF  WRAM (and 0xE000–0xFDFF echo)
+            // All other regions (VRAM 0x8000–0x9FFF, OAM 0xFE00–0xFEFF,
+            // HRAM/IO 0xFF00–0xFFFF) return 0xFF during the transfer.
+            let val = match self.hdma.src {
+                0x0000..=0x7FFF | 0xA000..=0xBFFF | 0xC000..=0xDFFF | 0xE000..=0xFDFF => {
+                    self.read_mem(self.hdma.src)
+                }
+                _ => 0xFF,
+            };
             self.ppu.write_vram(self.hdma.dst, val);
-            self.hdma.dst += 1;
-            self.hdma.src += 1;
+            self.hdma.dst = self.hdma.dst.wrapping_add(1);
+            self.hdma.src = self.hdma.src.wrapping_add(1);
             self.advance_dots(cycles_per_byte);
         }
 

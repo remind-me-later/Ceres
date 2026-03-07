@@ -3,9 +3,11 @@ mod hdma;
 mod hram;
 mod key1;
 mod svbk;
+#[cfg(test)]
+mod tests;
 mod wram;
 
-use crate::{AudioCallback, Model, ppu};
+use crate::{ppu, AudioCallback, Model};
 use crate::{CgbMode, Gb};
 pub use dma::Dma;
 pub use hdma::Hdma;
