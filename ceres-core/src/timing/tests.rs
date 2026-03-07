@@ -106,7 +106,7 @@ fn test_tima_increment_cpu_sync() {
 fn test_timer_glitch_tac_stop() {
     let mut gb = setup_gb();
     gb.write_mem(0xFF04, 0); // Reset DIV
-                             // Advance DIV to a point where bit 9 is 1 (T=512)
+    // Advance DIV to a point where bit 9 is 1 (T=512)
     for _ in 0..512 / 4 {
         gb.advance_dots(4);
     }

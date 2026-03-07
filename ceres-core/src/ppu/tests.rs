@@ -785,7 +785,8 @@ fn gambatte_lycint_lycirq_1_out1() {
     // Read IF — should be 0x00 (no pending STAT IRQ), i.e. IF & 0x02 == 0.
     let if_val = gb.ints.read_if() & 0x02;
     assert_eq!(
-        if_val, 0,
+        if_val,
+        0,
         "gambatte lycint_lycirq_1: no re-trigger expected when LYC set to non-matching value (IF={:#04X})",
         gb.ints.read_if()
     );
@@ -1028,7 +1029,8 @@ fn gambatte_m2int_m2irq_2_out2() {
 
     let if_val = gb.ints.read_if() & 0x02;
     assert_eq!(
-        if_val, 0x02,
+        if_val,
+        0x02,
         "gambatte m2int_m2irq_2: a new Mode 2 IRQ should fire within the next scanline (IF={:#04X})",
         gb.ints.read_if()
     );
@@ -1383,7 +1385,8 @@ fn gambatte_m0int_m0irq_1_out0() {
 
     let if_val = gb.ints.read_if() & 0x02;
     assert_eq!(
-        if_val, 0,
+        if_val,
+        0,
         "gambatte m0int_m0irq_1: IF&2 should be 0 immediately after HBlank IRQ dispatch (got {:#04X})",
         gb.ints.read_if()
     );

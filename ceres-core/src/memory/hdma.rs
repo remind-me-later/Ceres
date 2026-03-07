@@ -1,4 +1,4 @@
-use crate::{ppu, AudioCallback, Gb};
+use crate::{AudioCallback, Gb, ppu};
 
 #[expect(
     clippy::arbitrary_source_item_ordering,

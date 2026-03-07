@@ -7,7 +7,7 @@ mod svbk;
 mod tests;
 mod wram;
 
-use crate::{ppu, AudioCallback, Model};
+use crate::{AudioCallback, Model, ppu};
 use crate::{CgbMode, Gb};
 pub use dma::Dma;
 pub use hdma::Hdma;

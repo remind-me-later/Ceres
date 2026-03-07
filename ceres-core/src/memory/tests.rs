@@ -15,7 +15,7 @@
 /// # References
 ///
 /// ASM sources: `external/reference-implementations/gambatte-core/test/hwtests/dma/`
-use crate::{test_util::DummyAudio, GbBuilder, Model};
+use crate::{GbBuilder, Model, test_util::DummyAudio};
 
 type Gb = crate::Gb<DummyAudio>;
 
@@ -997,7 +997,7 @@ fn do_speed_switch(gb: &mut Gb) {
     // Write STOP opcode + mandatory padding byte into WRAM.
     gb.write_mem(0xC000, 0x10); // opcode: STOP
     gb.write_mem(0xC001, 0x00); // padding byte consumed by STOP
-                                // Point CPU at the STOP instruction and execute it.
+    // Point CPU at the STOP instruction and execute it.
     gb.set_cpu_pc(0xC000);
     gb.run_cpu();
 }
