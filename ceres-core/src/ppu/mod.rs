@@ -272,6 +272,7 @@ impl Ppu {
         }
     }
 
+    #[cfg(test)]
     #[must_use]
     pub const fn dots_in_line(&self) -> u16 {
         self.dots_in_line
@@ -392,6 +393,7 @@ impl Ppu {
         self.wy
     }
 
+    #[cfg(test)]
     #[must_use]
     pub(crate) fn sprite_buffer_len(&self) -> usize {
         self.sprite_buffer.count as usize
