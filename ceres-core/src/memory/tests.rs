@@ -699,3 +699,269 @@ fn gdma_from_wram_copies_correctly() {
         );
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GDMA from ROM — default cartridge returns 0xFF
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// `gdma_start_1_cgb04c_out1` (simplified) — GDMA from ROM bank 0.
+///
+/// Gambatte ROM: initialises VRAM[0x8000] = 0x00, WRAM[0xC000] = 0x01,
+/// then in a STAT handler runs GDMA from 0xC000 (HDMA1=0xC0) to VRAM 0x8000.
+/// The ROM also sets `.data@0: 01` (ROM[0x0000] = 0x01) to distinguish a
+/// transfer from ROM vs WRAM.
+///
+/// Unit test: with no cartridge loaded the default ROM is all 0xFF.
+/// GDMA from src=0x0000 must read the ROM bus (0xFF for each byte) and write
+/// those values to the destination VRAM region.  This verifies that the ROM
+/// address range is a valid GDMA source.
+#[test]
+fn gdma_from_rom_copies_ff() {
+    let mut gb = setup_cgb();
+
+    // Confirm VRAM[0x8000] starts as 0x00 (cleared at reset)
+    assert_eq!(
+        gb.read_mem(0x8000),
+        0x00,
+        "VRAM[0x8000] should be 0x00 before transfer"
+    );
+
+    // GDMA from ROM 0x0000 → VRAM 0x8000, 1 block (16 bytes)
+    run_gdma(&mut gb, 0x0000, 0x0000, 1);
+
+    // Default cartridge ROM is all 0xFF; GDMA must copy those values to VRAM
+    for i in 0u16..16 {
+        assert_eq!(
+            gb.read_mem(0x8000 + i),
+            0xFF,
+            "VRAM[0x{:04X}] should be 0xFF after GDMA from ROM (default cart)",
+            0x8000 + i
+        );
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OAM DMA from VRAM
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// OAM DMA from VRAM bank 0 copies VRAM data to OAM.
+///
+/// Gambatte: `oamdma_src8000_busypopFFFF` and related tests confirm that OAM
+/// DMA with src = 0x8000 (FF46 = 0x80) reads from VRAM.  On CGB the VRAM bus
+/// is accessible to OAM DMA when the LCD is off.
+///
+/// Unit test: write a recognisable pattern to VRAM[0x8000..0x80A0] with VBK=0
+/// active, start OAM DMA, run enough dots for the transfer, verify OAM
+/// received the VRAM values.
+#[test]
+fn oam_dma_from_vram_bank0() {
+    let mut gb = setup_cgb();
+
+    // Ensure VRAM bank 0 is selected
+    gb.write_mem(0xFF4F, 0x00);
+
+    // Write pattern to VRAM[0x8000..0x80A0]
+    for i in 0u8..160 {
+        gb.write_mem(0x8000 + u16::from(i), i.wrapping_add(1));
+    }
+
+    // Start OAM DMA from VRAM bank 0 (FF46 = 0x80)
+    gb.write_mem(0xFF46, 0x80);
+
+    // Run enough dots: 2 M-cycle startup + 160 bytes × 4 dots = 648 dots
+    for _ in 0..650 {
+        gb.advance_dots(1);
+        gb.run_dma();
+    }
+
+    // Verify OAM received the VRAM data
+    for i in 0u8..160 {
+        assert_eq!(
+            gb.read_mem(0xFE00 + u16::from(i)),
+            i.wrapping_add(1),
+            "OAM[0x{:04X}] should be 0x{:02X} after OAM DMA from VRAM",
+            0xFE00 + u16::from(i),
+            i.wrapping_add(1)
+        );
+    }
+}
+
+/// `oamdma_src8000_vrambankchange_2_cgb04c_out4` (simplified) — OAM DMA uses
+/// the VRAM bank active at the time of the transfer, not at setup time.
+///
+/// Gambatte ROM: writes distinct values to VRAM bank 0 and bank 1 at 0x8000,
+/// then starts OAM DMA with one bank active and (via STAT) switches banks
+/// mid-transfer.
+///
+/// Unit test (static bank): fill VRAM bank 0 and bank 1 each with a distinct
+/// constant byte at 0x8000, then start OAM DMA with each bank selected in
+/// turn and verify OAM[0] receives the correct bank's value.
+#[test]
+fn oam_dma_vram_bank_active_at_transfer_time() {
+    // --- Bank 0 ---
+    {
+        let mut gb = setup_cgb();
+
+        // Write 0xAA to VRAM bank 0 at 0x8000
+        gb.write_mem(0xFF4F, 0x00); // VBK = bank 0
+        gb.write_mem(0x8000, 0xAA);
+
+        // Write 0xBB to VRAM bank 1 at 0x8000
+        gb.write_mem(0xFF4F, 0x01); // VBK = bank 1
+        gb.write_mem(0x8000, 0xBB);
+
+        // Select bank 0 and start OAM DMA from 0x8000
+        gb.write_mem(0xFF4F, 0x00);
+        gb.write_mem(0xFF46, 0x80);
+
+        for _ in 0..650 {
+            gb.advance_dots(1);
+            gb.run_dma();
+        }
+
+        assert_eq!(
+            gb.read_mem(0xFE00),
+            0xAA,
+            "OAM[0] should be 0xAA (VRAM bank 0 active during OAM DMA)"
+        );
+    }
+
+    // --- Bank 1 ---
+    {
+        let mut gb = setup_cgb();
+
+        gb.write_mem(0xFF4F, 0x00);
+        gb.write_mem(0x8000, 0xAA);
+
+        gb.write_mem(0xFF4F, 0x01);
+        gb.write_mem(0x8000, 0xBB);
+
+        // Select bank 1 and start OAM DMA from 0x8000
+        gb.write_mem(0xFF4F, 0x01);
+        gb.write_mem(0xFF46, 0x80);
+
+        for _ in 0..650 {
+            gb.advance_dots(1);
+            gb.run_dma();
+        }
+
+        assert_eq!(
+            gb.read_mem(0xFE00),
+            0xBB,
+            "OAM[0] should be 0xBB (VRAM bank 1 active during OAM DMA)"
+        );
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OAM DMA from WRAM bank 1 and bank 2
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// `oamdma_srcD000_wrambankchange_*` (simplified) — OAM DMA uses the WRAM
+/// bank active at the time of transfer.
+///
+/// Gambatte ROMs verify that mid-DMA WRAM bank switches affect the bytes read
+/// by OAM DMA on a per-byte basis.  The simplified unit test here checks the
+/// static case: the correct bank's data is read when that bank is active for
+/// the entire transfer.
+///
+/// Unit test: write distinct values to 0xD000 in WRAM bank 1 and bank 2,
+/// start OAM DMA with each bank active in turn, verify OAM[0] matches.
+#[test]
+fn oam_dma_wram_bank_active_at_transfer_time() {
+    // --- SVBK = 1 ---
+    {
+        let mut gb = setup_cgb();
+
+        gb.write_mem(0xFF70, 0x01); // SVBK = bank 1
+        gb.write_mem(0xD000, 0xAA);
+
+        gb.write_mem(0xFF70, 0x02); // SVBK = bank 2
+        gb.write_mem(0xD000, 0xBB);
+
+        // Switch back to bank 1 and start OAM DMA from 0xD000
+        gb.write_mem(0xFF70, 0x01);
+        gb.write_mem(0xFF46, 0xD0);
+
+        for _ in 0..650 {
+            gb.advance_dots(1);
+            gb.run_dma();
+        }
+
+        assert_eq!(
+            gb.read_mem(0xFE00),
+            0xAA,
+            "OAM[0] should be 0xAA (WRAM bank 1 active during OAM DMA)"
+        );
+    }
+
+    // --- SVBK = 2 ---
+    {
+        let mut gb = setup_cgb();
+
+        gb.write_mem(0xFF70, 0x01);
+        gb.write_mem(0xD000, 0xAA);
+
+        gb.write_mem(0xFF70, 0x02);
+        gb.write_mem(0xD000, 0xBB);
+
+        // Stay on bank 2 and start OAM DMA from 0xD000
+        gb.write_mem(0xFF70, 0x02);
+        gb.write_mem(0xFF46, 0xD0);
+
+        for _ in 0..650 {
+            gb.advance_dots(1);
+            gb.run_dma();
+        }
+
+        assert_eq!(
+            gb.read_mem(0xFE00),
+            0xBB,
+            "OAM[0] should be 0xBB (WRAM bank 2 active during OAM DMA)"
+        );
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OAM DMA from high addresses (0xE000–0xFFFF): CGB returns 0xFF
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// OAM DMA from 0xE000–0xFFFF reads 0xFF on CGB.
+///
+/// On CGB hardware, initiating OAM DMA with a source address ≥ 0xE000 is
+/// invalid; the DMA engine reads 0xFF for each byte.  On DMG/MGB the range
+/// 0xE000–0xFDFF mirrors WRAM (echo RAM), but on CGB it returns 0xFF.
+///
+/// This is implicit in the CGB branch of `run_dma` (dma.rs): when
+/// `src >= 0xE000`, CGB returns 0xFF unconditionally.
+///
+/// Derived from `oamdma_srcFE00_busyreadA000_dmg08_cgb04c_out0` and related
+/// tests where the CGB output always differs from DMG when the source is in
+/// the high address region.
+#[test]
+fn oam_dma_src_high_cgb_reads_ff() {
+    let mut gb = setup_cgb();
+
+    // Pre-fill OAM with a known non-FF value so we can detect a real copy
+    for i in 0u8..160 {
+        gb.write_mem(0xFE00 + u16::from(i), 0x42);
+    }
+
+    // Start OAM DMA from 0xFE00 (source >= 0xE000)
+    gb.write_mem(0xFF46, 0xFE);
+
+    for _ in 0..650 {
+        gb.advance_dots(1);
+        gb.run_dma();
+    }
+
+    // CGB: source ≥ 0xE000 → all bytes read as 0xFF
+    for i in 0u8..160 {
+        assert_eq!(
+            gb.read_mem(0xFE00 + u16::from(i)),
+            0xFF,
+            "OAM[0x{:04X}] should be 0xFF (CGB OAM DMA from src>=0xE000)",
+            0xFE00 + u16::from(i)
+        );
+    }
+}
