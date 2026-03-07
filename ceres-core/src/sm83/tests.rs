@@ -413,6 +413,41 @@ fn write_code(gb: &mut Gb, addr: u16, bytes: &[u8]) {
     }
 }
 
+/// Build a minimal 32 KB DMG ROM image (all 0xFF by default) with custom
+/// bytes patched in at the given `(offset, byte)` pairs.
+///
+/// The header bytes required by `Cartridge::new` are pre-filled:
+///   - `0x0147` = 0x00 (ROM-only, no MBC)
+///   - `0x0148` = 0x00 (32 KB)
+///   - `0x0149` = 0x00 (no RAM)
+///
+/// All other bytes default to 0xFF.
+fn make_rom_32k(patches: &[(usize, u8)]) -> Box<[u8]> {
+    let mut rom = vec![0xFF_u8; 0x8000];
+    rom[0x0147] = 0x00; // ROM only
+    rom[0x0148] = 0x00; // 32 KB
+    rom[0x0149] = 0x00; // no RAM
+    for &(offset, byte) in patches {
+        rom[offset] = byte;
+    }
+    rom.into_boxed_slice()
+}
+
+/// Build a DMG `Gb` backed by a minimal 32 KB ROM with the given patches, and
+/// with the boot ROM disabled so that cart ROM is visible at `0x0000–0x00FF`.
+fn setup_dmg_with_rom(patches: &[(usize, u8)]) -> Gb {
+    use crate::GbBuilder;
+    let rom = make_rom_32k(patches);
+    let mut gb = GbBuilder::new(44100, crate::test_util::DummyAudio)
+        .with_model(crate::Model::DmgB)
+        .with_rom(rom)
+        .expect("minimal ROM should be valid")
+        .build();
+    // Disable boot ROM so cart ROM is mapped at 0x0000–0x00FF.
+    gb.write_mem(0xFF50, 0x01);
+    gb
+}
+
 // ----------------------------------------------------------------------------
 // Undefined opcode tests
 //
@@ -816,4 +851,152 @@ fn gambatte_irq_precedence_if_and_ie_0_if_2() {
         "Timer interrupt should be acknowledged when SP=0x0001 (IE not clobbered)"
     );
     assert_eq!(gb.cpu.pc, 0x0050, "PC should be at timer vector 0x0050");
+}
+
+// ----------------------------------------------------------------------------
+// EI-delay + HALT + double interrupt test
+//
+// Source: gambatte/test/hwtests/halt/ifandie_ei_halt_sra_dmg08_cgb04c_out0A.asm
+//
+// When `EI; HALT` is executed with IF=IE=0x11 (VBlank bit0 + Joypad bit4):
+//
+//   1. EI sets has_ei_delay.
+//   2. The next run_cpu (fetching HALT) fires the EI delay first → IME=1.
+//   3. halt() sees IME=1 and IF&IE≠0 → no halt bug; CPU is NOT halted; PC is
+//      decremented back to point at HALT.
+//   4. End-of-step interrupt check: IME=1, lowest pending bit = VBlank (bit 0)
+//      → dispatch to vector 0x0040.  SP is decremented by 2 (push return addr).
+//      VBlank bit cleared from IF.  IME cleared.
+//   5. VBlank handler at 0x0040: `SRA A; RET`.
+//      SRA on A=0x11: A = 0x08, carry = 1.
+//      RET pops return address → PC = address of HALT instruction.
+//   6. Next run_cpu executes HALT again: has_ei_delay=false → IME stays 0.
+//      halt() sees IME=0 and IF&IE = 0x10 & 0x11 = 0x10 ≠ 0 → HALT BUG.
+//      PC is not rewound; is_halt_bug_triggered = true.
+//   7. Next run_cpu: fetch opcode at INC_A address (0x3C), PC advances to
+//      INC_A+1; halt bug rewinds PC back to INC_A.
+//      Execute INC A → A = 0x09.
+//   8. Next run_cpu: PC is still at INC_A (halt bug rewound it). Fetch INC A
+//      again → A = 0x0A.
+//
+// Expected final A = 0x0A (= 10 = "0A" hex, which is the ROM's printed output).
+// ----------------------------------------------------------------------------
+
+/// gambatte halt: ifandie_ei_halt_sra_dmg08_cgb04c_out0A
+///
+/// Verifies that EI-delay + HALT with both VBlank and Joypad pending causes:
+///   - Normal HALT (not halt-bug) on the first execution (IME=1 via EI delay)
+///   - VBlank dispatch to handler at 0x0040 (`SRA A; RET`)
+///   - Halt-bug on the second execution of HALT (IME=0 after dispatch)
+///   - `INC A` executed twice due to halt-bug PC non-advance
+///   - Final A = 0x0A
+#[test]
+fn gambatte_ifandie_ei_halt_sra() {
+    // The VBlank handler lives at the fixed vector 0x0040 in cart ROM:
+    //   0x0040: CB 2F  (SRA A)
+    //   0x0042: C9     (RET)
+    let rom_patches: &[(usize, u8)] = &[
+        (0x0040, 0xCB), // SRA A — CB prefix
+        (0x0041, 0x2F), // SRA A — sub-opcode
+        (0x0042, 0xC9), // RET
+    ];
+    let mut gb = setup_dmg_with_rom(rom_patches);
+
+    // SP in WRAM so interrupt push doesn't clobber IF/IE.
+    gb.cpu.sp = 0xD000;
+    // A = 0x11 (same as the ROM: `ld a, 0x11`)
+    gb.cpu.af = 0x1100;
+    // IF = IE = 0x11 (VBlank bit0 + Joypad bit4)
+    gb.ints.write_if(0x11);
+    gb.ints.write_ie(0x11);
+
+    // Place: EI (0xFB), HALT (0x76), INC A (0x3C) in WRAM.
+    let base: u16 = 0xC000;
+    write_code(
+        &mut gb,
+        base,
+        &[
+            0xFB, // EI   → sets has_ei_delay
+            0x76, // HALT
+            0x3C, // INC A  (at base+2)
+        ],
+    );
+    gb.cpu.pc = base;
+
+    // Step 1: execute EI → has_ei_delay set, no dispatch yet.
+    gb.run_cpu();
+    assert!(gb.cpu.has_ei_delay, "EI should set has_ei_delay");
+
+    // Step 2: execute HALT — EI delay fires at top of run_cpu → IME=1.
+    // halt() with IME=1 and IF&IE≠0: no halt bug; PC rewound to HALT.
+    // End-of-step: VBlank (bit 0) dispatched to 0x0040.
+    //   IF bit 0 cleared; IME cleared; PC = 0x0040; SP -= 2.
+    let halt_addr = base + 1;
+    gb.run_cpu();
+    assert!(
+        !gb.cpu.has_ei_delay,
+        "EI delay should have fired before HALT"
+    );
+    assert_eq!(gb.cpu.pc, 0x0040, "VBlank dispatch should jump to 0x0040");
+    assert_eq!(
+        gb.ints.read_if() & 0x01,
+        0x00,
+        "VBlank bit should be cleared after dispatch"
+    );
+    assert_eq!(
+        gb.ints.read_if() & 0x10,
+        0x10,
+        "Joypad bit should still be pending"
+    );
+    assert!(
+        !gb.ints.are_enabled(),
+        "IME should be disabled after dispatch"
+    );
+
+    // Step 3: execute SRA A (CB 2F) at 0x0040.
+    // A = 0x11 → SRA → A = 0x08 (arithmetic right shift; carry = 1).
+    gb.run_cpu();
+    assert_eq!(gb.cpu.a(), 0x08, "SRA 0x11 should give 0x08");
+
+    // Step 4: execute RET at 0x0042. Returns to halt_addr (the HALT instruction).
+    gb.run_cpu();
+    assert_eq!(
+        gb.cpu.pc, halt_addr,
+        "RET should return to the HALT instruction address"
+    );
+
+    // Step 5: execute HALT again — IME=0, IF&IE = 0x10 & 0x11 = 0x10 ≠ 0.
+    // → halt bug fires; is_halt_bug_triggered = true; PC not rewound.
+    gb.run_cpu();
+    assert!(
+        gb.cpu.is_halt_bug_triggered,
+        "Second HALT with IME=0 and IF&IE≠0 should trigger halt bug"
+    );
+    assert_eq!(
+        gb.cpu.pc,
+        halt_addr + 1,
+        "PC should point at INC A (byte after HALT) after halt bug"
+    );
+
+    let inc_a_addr = halt_addr + 1; // base + 2
+
+    // Step 6: execute INC A with halt bug active.
+    // Opcode 0x3C (INC A) fetched from inc_a_addr; PC advances to inc_a_addr+1;
+    // halt bug rewinds PC back to inc_a_addr; execute INC A → A = 0x09.
+    gb.run_cpu();
+    assert!(!gb.cpu.is_halt_bug_triggered, "Halt bug flag should clear");
+    assert_eq!(gb.cpu.a(), 0x09, "First INC A should give 0x09");
+    assert_eq!(
+        gb.cpu.pc, inc_a_addr,
+        "PC should be rewound to INC A address after halt bug"
+    );
+
+    // Step 7: execute INC A again (PC still at inc_a_addr from halt-bug rewind).
+    // A = 0x09 + 1 = 0x0A.
+    gb.run_cpu();
+    assert_eq!(
+        gb.cpu.a(),
+        0x0A,
+        "Second INC A (halt-bug re-execution) should give 0x0A"
+    );
 }
