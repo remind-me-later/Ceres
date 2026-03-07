@@ -717,41 +717,33 @@ impl Ppu {
                     self.oam_write_blocked = true;
                 }
 
-                // Tick 3: LY update and Mode 2 interrupt pulse (SameBoy State 6)
+                // Tick 3: LY update and Mode 2 interrupt pulse (SameBoy State 6).
+                // Hardware: STAT mode bits flip to 2 simultaneously with the IRQ rising
+                // edge so that ISR code reading STAT immediately sees mode 2
+                // (gambatte m2int_m2stat_1).
                 if tick == 3 {
                     self.ly = self.current_line;
                     self.ly_for_comparison = if self.current_line != 0 { 0xFFFF } else { 0 };
                     self.oam_read_blocked = !double_speed;
 
-                    // Pulse mode_for_interrupt from HBlank to OamScan.
-                    // This allows continuous STAT line if both IRQs are enabled (blocking),
-                    // but creates a rising edge if only Mode 2 is enabled.
+                    // Set STAT mode bits to OAM scan so reads during the IRQ handler
+                    // return mode 2, then pulse mode_for_interrupt to generate the
+                    // rising edge on the STAT interrupt line.
+                    self.set_mode_stat(Mode::OamScan);
                     self.mode_for_interrupt = Some(Mode::OamScan);
                     self.update_stat(ints);
                 }
 
-                // Tick 10: STAT mode bits change to 2 (SameBoy State 7)
+                // Tick 10: complete OAM-scan memory blocking and enable LYC comparison
+                // (SameBoy State 7).  STAT mode bits are already 2 from tick 3.
                 if tick == 10 {
                     self.oam_read_blocked = true;
-                    self.set_mode_stat(Mode::OamScan);
                     self.oam_write_blocked = true;
                     self.ly_for_comparison = u16::from(self.ly);
 
+                    // LYC comparison now valid — fire LYC IRQ if LYC==LY.
                     self.update_stat(ints);
-                    // End Mode 2 pulse, STAT bits now report Mode 2.
-                    self.mode_for_interrupt = None;
-                    self.update_stat(ints);
-                }
-
-                // Tick 10: STAT mode bits change to 2 (SameBoy State 7)
-                if tick == 10 {
-                    self.oam_read_blocked = true;
-                    self.set_mode_stat(Mode::OamScan);
-                    self.oam_write_blocked = true;
-                    self.ly_for_comparison = u16::from(self.ly);
-
-                    self.update_stat(ints);
-                    // End Mode 2 pulse, STAT bits now report Mode 2.
+                    // End Mode 2 interrupt pulse.
                     self.mode_for_interrupt = None;
                     self.update_stat(ints);
                 }
@@ -1876,8 +1868,19 @@ impl Ppu {
 
     pub fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
         self.lyc = val;
-        // LYC change may affect coincidence - update STAT line if LCD is on
+        // LYC change may affect coincidence - update STAT line if LCD is on.
+        // A CPU write to LYC always recalculates the LYC=LY flag against the
+        // current LY register, even during the window where ly_for_comparison
+        // is 0xFFFF (which normally suppresses the internal comparison).
         if self.lcdc & LCDC_ON_B != 0 {
+            // First lower the STAT line so that a subsequent match generates a
+            // fresh rising edge even if the line was already high.  This models
+            // the hardware behaviour where writing LYC can re-trigger the IRQ.
+            self.stat_interrupt_line = false;
+            self.stat &= !STAT_LYC_B;
+            if u16::from(val) == u16::from(self.ly) {
+                self.stat |= STAT_LYC_B;
+            }
             self.update_stat(ints);
         }
     }
