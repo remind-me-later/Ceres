@@ -7,20 +7,20 @@
 //!
 //! # Completion detection
 //!
-//! Gambatte ROMs use `lprint_a`, a display routine that:
-//! 1. Turns the LCD **off** (`ldff(40), 0x00`).
-//! 2. Copies 256 bytes of font tile data from ROM (`0x7A00`) into VRAM (`0x8000`).
-//! 3. Writes the high nibble of A to tile-map address `0x9800`.
-//! 4. Writes the low nibble of A to tile-map address `0x9801`.
-//! 5. Turns the LCD **on** (`ldff(40), 0x91`), then loops forever.
+//! Gambatte ROMs use one of two `lprint_a` variants to write results to VRAM:
+//!
+//! - **NibbleSplit** (`undef_ops/`, `halt/`, `irq_precedence/`): writes
+//!   `swap(A) & 0x0F` to tile-map `0x9800` and `A & 0x0F` to `0x9801`.
+//!   Result = `(0x9800 << 4) | 0x9801`.
+//! - **OldStyle** (`oam_access/`, `sprites/`): writes the raw result byte A
+//!   directly to tile-map `0x9800`.  Result = `0x9800`.
 //!
 //! Completion is detected by checking that VRAM byte `0x8002` equals `0x7F`,
 //! which is the third byte of the first font tile (copied from ROM offset
 //! `0x7A02`). Before `lprint_a` runs this byte is `0x00`; after it is `0x7F`.
-//! This sentinel works for both zero and non-zero expected outputs.
-//!
-//! Reads are guarded by the PPU mode: `0x8002` and the tile-map are only read
-//! when the PPU is **not** in Mode 3 (VRAM inaccessible period).
+//! The sentinel and result bytes are read directly (bypassing PPU mode checks)
+//! via `Gb::read_vram_direct`, because the frame boundary often falls in Mode 3
+//! after `lprint_a` turns the LCD back on.
 //!
 //! # Models
 //!
@@ -40,14 +40,31 @@ use std::cell::Cell;
 // Completion check
 // ────────────────────────────────────────────────────────────────────────────
 
+/// Which `lprint_a` variant the test ROM uses.
+///
+/// Gambatte test ROMs use two different result-encoding routines:
+/// - `OldStyle`: writes the raw result byte to tile-map address `0x9800` only.
+///   Used by `oam_access/` and `sprites/` ROMs.
+/// - `NibbleSplit`: writes `swap(A) & 0F` to `0x9800` and `A & 0F` to `0x9801`,
+///   so the result is `(0x9800 << 4) | 0x9801`.
+///   Used by `irq_precedence/` ROMs.
+#[derive(Clone, Copy)]
+pub enum LprintVariant {
+    /// Raw result byte at `0x9800`.
+    OldStyle,
+    /// Hi nibble at `0x9800`, lo nibble at `0x9801`.
+    NibbleSplit,
+}
+
 /// Gambatte test completion check.
 ///
 /// Uses the tile-copy sentinel byte at VRAM `0x8002` to detect that
-/// `lprint_a` has finished writing results to VRAM.  The check is
-/// mode-guarded: if the PPU is in Mode 3 we skip the frame to avoid reading
-/// garbage (VRAM inaccessible).
+/// `lprint_a` has finished writing results to VRAM.  The sentinel byte is
+/// read directly (bypassing PPU mode checks) because the frame boundary often
+/// falls in Mode 3 after `lprint_a` turns the LCD back on.
 pub struct GambatteCheck {
     expected: u8,
+    variant: LprintVariant,
     frame: Cell<u32>,
 }
 
@@ -63,24 +80,27 @@ const MIN_FRAMES_AFTER_BOOT: u32 = 8;
 
 impl GambatteCheck {
     #[must_use]
-    pub fn new(expected: u8) -> Self {
+    pub fn new(expected: u8, variant: LprintVariant) -> Self {
         Self {
             expected,
+            variant,
             frame: Cell::new(0),
         }
     }
 
-    /// Read the two result nibbles from the tile map.
+    /// Read the result byte from VRAM.
     ///
-    /// Returns `None` if VRAM is currently inaccessible (PPU Mode 3).
-    fn try_read_output(gb: &mut ceres_core::Gb<DummyAudioCallback>) -> Option<u8> {
-        // Guard: skip during Mode 3 (VRAM locked by PPU rendering)
-        if gb.read_mem(0xFF41) & 0x03 == 3 {
-            return None;
+    /// Reads VRAM directly, bypassing PPU mode checks, since by the time this
+    /// is called the sentinel confirms `lprint_a` has already written the values.
+    fn read_output(&self, gb: &ceres_core::Gb<DummyAudioCallback>) -> u8 {
+        match self.variant {
+            LprintVariant::OldStyle => gb.read_vram_direct(0x9800),
+            LprintVariant::NibbleSplit => {
+                let hi = gb.read_vram_direct(0x9800) & 0x0F;
+                let lo = gb.read_vram_direct(0x9801) & 0x0F;
+                (hi << 4) | lo
+            }
         }
-        let hi = gb.read_mem(0x9800) & 0x0F;
-        let lo = gb.read_mem(0x9801) & 0x0F;
-        Some((hi << 4) | lo)
     }
 }
 
@@ -94,19 +114,18 @@ impl CompletionCheck for GambatteCheck {
             return None;
         }
 
-        // Guard against Mode 3 (VRAM inaccessible).
-        if gb.read_mem(0xFF41) & 0x03 == 3 {
-            return None;
-        }
-
         // Wait for the tile-copy sentinel: once lprint_a has copied font tiles
         // from ROM to VRAM, byte 0x8002 becomes 0x7F.  Until then the game ROM
         // has not yet produced its result.
-        if gb.read_mem(VRAM_SENTINEL_ADDR) != VRAM_SENTINEL_VAL {
+        //
+        // We read this directly (bypassing PPU mode checks) because the frame
+        // boundary often falls in Mode 3 after lprint_a turns the LCD back on,
+        // so `read_mem(0x8002)` would always return 0xFF through the normal path.
+        if gb.read_vram_direct(VRAM_SENTINEL_ADDR) != VRAM_SENTINEL_VAL {
             return None;
         }
 
-        let actual = Self::try_read_output(gb)?;
+        let actual = self.read_output(gb);
         if actual == self.expected {
             Some(TestResult::Passed)
         } else {
@@ -116,17 +135,19 @@ impl CompletionCheck for GambatteCheck {
 
     fn on_timeout(&self, gb: &mut ceres_core::Gb<DummyAudioCallback>) -> TestResult {
         let stat = gb.read_mem(0xFF41);
-        let sentinel = gb.read_mem(VRAM_SENTINEL_ADDR);
-        match Self::try_read_output(gb) {
-            Some(actual) if actual == self.expected => TestResult::Passed,
-            Some(actual) => TestResult::Failed(format!(
-                "timeout: expected 0x{:02X}, got 0x{:02X} (sentinel=0x{sentinel:02X}, STAT=0x{stat:02X})",
-                self.expected, actual
-            )),
-            None => TestResult::Failed(format!(
-                "timeout: VRAM inaccessible at timeout (expected 0x{:02X}, sentinel=0x{sentinel:02X}, STAT=0x{stat:02X})",
+        let sentinel = gb.read_vram_direct(VRAM_SENTINEL_ADDR);
+        let actual = self.read_output(gb);
+        if sentinel != VRAM_SENTINEL_VAL {
+            TestResult::Failed(format!(
+                "timeout: lprint_a never ran (sentinel=0x{sentinel:02X}, STAT=0x{stat:02X})",
+            ))
+        } else if actual == self.expected {
+            TestResult::Passed
+        } else {
+            TestResult::Failed(format!(
+                "timeout: expected 0x{:02X}, got 0x{actual:02X} (sentinel=0x{sentinel:02X}, STAT=0x{stat:02X})",
                 self.expected
-            )),
+            ))
         }
     }
 }
@@ -139,7 +160,12 @@ impl CompletionCheck for GambatteCheck {
 ///
 /// `relative_path` is relative to `external/test-roms/`.
 /// `expected_output` is the byte encoded in the ROM filename (`_outXX`).
-fn run_gambatte_test(relative_path: &str, expected_output: u8) -> TestResult {
+/// `variant` controls how the result byte is decoded from VRAM.
+fn run_gambatte_test_inner(
+    relative_path: &str,
+    expected_output: u8,
+    variant: LprintVariant,
+) -> TestResult {
     let rom = match load_test_rom(relative_path) {
         Ok(rom) => rom,
         Err(e) => return TestResult::Error(format!("Failed to load test ROM: {e}")),
@@ -152,13 +178,30 @@ fn run_gambatte_test(relative_path: &str, expected_output: u8) -> TestResult {
         ..TestConfig::default()
     };
 
-    let mut runner =
-        match TestRunner::new(rom, config, Box::new(GambatteCheck::new(expected_output))) {
-            Ok(runner) => runner,
-            Err(e) => return TestResult::Error(format!("Failed to create test runner: {e}")),
-        };
+    let mut runner = match TestRunner::new(
+        rom,
+        config,
+        Box::new(GambatteCheck::new(expected_output, variant)),
+    ) {
+        Ok(runner) => runner,
+        Err(e) => return TestResult::Error(format!("Failed to create test runner: {e}")),
+    };
 
     runner.run()
+}
+
+/// Run a Gambatte test ROM using the NibbleSplit lprint_a variant.
+///
+/// Used by `undef_ops/`, `halt/`, and `irq_precedence/` ROMs.
+fn run_gambatte_test(relative_path: &str, expected_output: u8) -> TestResult {
+    run_gambatte_test_inner(relative_path, expected_output, LprintVariant::NibbleSplit)
+}
+
+/// Run a Gambatte test ROM using the OldStyle lprint_a variant.
+///
+/// Used by `oam_access/` and `sprites/` ROMs.
+fn run_gambatte_test_old(relative_path: &str, expected_output: u8) -> TestResult {
+    run_gambatte_test_inner(relative_path, expected_output, LprintVariant::OldStyle)
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -392,6 +435,635 @@ fn gambatte_irq_precedence_if_and_ie_0_vector_4() {
     let result = run_gambatte_test(
         "gambatte/irq_precedence/if_and_ie_0_vector_4_dmg08_cgb04c_out50.gbc",
         0x50,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// OAM access timing tests
+//
+// These ROMs test OAM read/write accessibility at the cycle-accurate boundary
+// between Mode 2 (OAM scan, blocked) and other modes (accessible).  Result
+// byte is the raw value at VRAM `0x9800` (OldStyle lprint_a variant):
+//   0x03 = OAM byte read as 0xFF (blocked, corrupt read)
+//   0x00 = OAM byte read as 0x00 (accessible, correct)
+//   0x01 = OAM write took effect
+//
+// Source: gambatte/oam_access/*.gbc
+// ────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn gambatte_oam_access_10spritesprline_postread_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/10spritesprline_postread_1_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_10spritesprline_postread_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/10spritesprline_postread_2_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_midread_1() {
+    let result = run_gambatte_test_old("gambatte/oam_access/midread_1_dmg08_cgb04c_out3.gbc", 0x03);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_midread_2() {
+    let result = run_gambatte_test_old("gambatte/oam_access/midread_2_dmg08_cgb04c_out3.gbc", 0x03);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_midread_3() {
+    let result = run_gambatte_test_old("gambatte/oam_access/midread_3_dmg08_cgb04c_out3.gbc", 0x03);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_midwrite_1() {
+    let result =
+        run_gambatte_test_old("gambatte/oam_access/midwrite_1_dmg08_cgb04c_out0.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_midwrite_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/midwrite_2_dmg08_out1_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_midwrite_3() {
+    let result =
+        run_gambatte_test_old("gambatte/oam_access/midwrite_3_dmg08_cgb04c_out0.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postread_1() {
+    let result =
+        run_gambatte_test_old("gambatte/oam_access/postread_1_dmg08_cgb04c_out3.gbc", 0x03);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postread_2() {
+    let result =
+        run_gambatte_test_old("gambatte/oam_access/postread_2_dmg08_cgb04c_out0.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postread_ds_1() {
+    let result = run_gambatte_test_old("gambatte/oam_access/postread_ds_1_cgb04c_out3.gbc", 0x03);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postread_ds_2() {
+    let result = run_gambatte_test_old("gambatte/oam_access/postread_ds_2_cgb04c_out0.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postread_scx2_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/postread_scx2_1_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postread_scx2_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/postread_scx2_2_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postread_scx3_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/postread_scx3_1_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postread_scx3_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/postread_scx3_2_dmg08_xout1_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postread_scx3_3() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/postread_scx3_3_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postread_scx5_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/postread_scx5_1_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postread_scx5_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/postread_scx5_2_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postread_scx5_ds_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/postread_scx5_ds_1_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postread_scx5_ds_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/postread_scx5_ds_2_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postwrite_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/postwrite_1_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postwrite_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/postwrite_2_dmg08_cgb04c_out1.gbc",
+        0x01,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postwrite_2_scx3() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/postwrite_2_scx3_dmg08_cgb04c_out1.gbc",
+        0x01,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postwrite_ds_1() {
+    let result = run_gambatte_test_old("gambatte/oam_access/postwrite_ds_1_cgb04c_out0.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postwrite_ds_2() {
+    let result = run_gambatte_test_old("gambatte/oam_access/postwrite_ds_2_cgb04c_out1.gbc", 0x01);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postwrite_scx1_ds_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/postwrite_scx1_ds_1_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_postwrite_scx1_ds_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/postwrite_scx1_ds_2_cgb04c_out1.gbc",
+        0x01,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+/// OAM read one cycle before Mode 2 begins (should be accessible).
+///
+/// Ignored: OAM blocking boundary is off by one T-cycle — the emulator
+/// blocks OAM one tick too early, so reads that should be accessible return
+/// 0xFF instead of the expected value.
+#[test]
+#[ignore = "OAM mode-2 blocking starts one T-cycle too early"]
+fn gambatte_oam_access_preread_1() {
+    let result = run_gambatte_test_old("gambatte/oam_access/preread_1_dmg08_cgb04c_out0.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_preread_2() {
+    let result = run_gambatte_test_old("gambatte/oam_access/preread_2_dmg08_cgb04c_out3.gbc", 0x03);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_preread_ds_1() {
+    let result = run_gambatte_test_old("gambatte/oam_access/preread_ds_1_cgb04c_out0.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+/// Double-speed OAM preread variant 2 (should be accessible, one tick before Mode 2).
+///
+/// Ignored: same OAM blocking boundary bug as preread_1, manifesting in
+/// double-speed mode.
+#[test]
+#[ignore = "OAM mode-2 blocking starts one T-cycle too early (double-speed)"]
+fn gambatte_oam_access_preread_ds_2() {
+    let result = run_gambatte_test_old("gambatte/oam_access/preread_ds_2_cgb04c_out3.gbc", 0x03);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_preread_ds_lcdoffset1_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/preread_ds_lcdoffset1_1_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+/// Double-speed + lcdoffset1 OAM preread variant 2.
+///
+/// Ignored: OAM blocking boundary bug combined with the 4-tick LCD-on
+/// offset; one-cycle boundary check returns wrong result in double-speed.
+#[test]
+#[ignore = "OAM mode-2 blocking boundary off by one T-cycle (double-speed + lcdoffset1)"]
+fn gambatte_oam_access_preread_ds_lcdoffset1_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/preread_ds_lcdoffset1_2_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+/// lcdoffset1 OAM preread variant 1 (should return blocked / 0x00).
+///
+/// Ignored: OAM blocking boundary off by one T-cycle under lcdoffset1 timing.
+#[test]
+#[ignore = "OAM mode-2 blocking boundary off by one T-cycle (lcdoffset1)"]
+fn gambatte_oam_access_preread_lcdoffset1_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/preread_lcdoffset1_1_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_preread_lcdoffset1_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/preread_lcdoffset1_2_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_prewrite_1() {
+    let result =
+        run_gambatte_test_old("gambatte/oam_access/prewrite_1_dmg08_cgb04c_out1.gbc", 0x01);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_prewrite_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/prewrite_2_dmg08_out1_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_prewrite_3() {
+    let result =
+        run_gambatte_test_old("gambatte/oam_access/prewrite_3_dmg08_cgb04c_out0.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_prewrite_ds_1() {
+    let result = run_gambatte_test_old("gambatte/oam_access/prewrite_ds_1_cgb04c_out1.gbc", 0x01);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_prewrite_ds_2() {
+    let result = run_gambatte_test_old("gambatte/oam_access/prewrite_ds_2_cgb04c_out0.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+/// Double-speed + lcdoffset1 OAM prewrite variant 1 (write should take effect).
+///
+/// Ignored: OAM write-blocking boundary off by one T-cycle in double-speed
+/// + lcdoffset1 mode; write lands in the blocked window instead of just before.
+#[test]
+#[ignore = "OAM write-blocking boundary off by one T-cycle (double-speed + lcdoffset1)"]
+fn gambatte_oam_access_prewrite_ds_lcdoffset1_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/prewrite_ds_lcdoffset1_1_cgb04c_out1.gbc",
+        0x01,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_prewrite_ds_lcdoffset1_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/prewrite_ds_lcdoffset1_2_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+/// lcdoffset1 OAM prewrite variant 1 (write should take effect).
+///
+/// Ignored: OAM write-blocking boundary off by one T-cycle under lcdoffset1
+/// timing; write is incorrectly blocked.
+#[test]
+#[ignore = "OAM write-blocking boundary off by one T-cycle (lcdoffset1)"]
+fn gambatte_oam_access_prewrite_lcdoffset1_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/prewrite_lcdoffset1_1_cgb04c_out1.gbc",
+        0x01,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_oam_access_prewrite_lcdoffset1_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/oam_access/prewrite_lcdoffset1_2_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Sprite count / Mode 3 duration tests
+//
+// Each sprite on a scanline adds 11 T-cycles (6 in double-speed) to Mode 3.
+// These ROMs verify that the correct number of sprites extends Mode 3 enough
+// to flip the STAT mode bit at the right cycle.
+//
+// Source: gambatte/sprites/*PrLine_m3stat_*.gbc
+// ────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn gambatte_sprites_10spritesprline_m3stat_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/10spritesPrLine_m3stat_1_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_10spritesprline_m3stat_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/10spritesPrLine_m3stat_2_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_1spritesprline_m3stat_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/1spritesPrLine_m3stat_1_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_1spritesprline_m3stat_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/1spritesPrLine_m3stat_2_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_2spritesprline_m3stat_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/2spritesPrLine_m3stat_1_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_2spritesprline_m3stat_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/2spritesPrLine_m3stat_2_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_3spritesprline_m3stat_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/3spritesPrLine_m3stat_1_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_3spritesprline_m3stat_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/3spritesPrLine_m3stat_2_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_4spritesprline_m3stat_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/4spritesPrLine_m3stat_1_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_4spritesprline_m3stat_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/4spritesPrLine_m3stat_2_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_5spritesprline_m3stat_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/5spritesPrLine_m3stat_1_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_5spritesprline_m3stat_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/5spritesPrLine_m3stat_2_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_6spritesprline_m3stat_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/6spritesPrLine_m3stat_1_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_6spritesprline_m3stat_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/6spritesPrLine_m3stat_2_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_7spritesprline_m3stat_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/7spritesPrLine_m3stat_1_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_7spritesprline_m3stat_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/7spritesPrLine_m3stat_2_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_8spritesprline_m3stat_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/8spritesPrLine_m3stat_1_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_8spritesprline_m3stat_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/8spritesPrLine_m3stat_2_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_9spritesprline_m3stat_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/9spritesPrLine_m3stat_1_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_9spritesprline_m3stat_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/9spritesPrLine_m3stat_2_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_10spritesprline_10xposa7_m3stat_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/10spritesPrLine_10xposA7_m3stat_1_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+/// 10 sprites all at X=0xA7, Mode 3 boundary variant 2 (should exit Mode 3).
+///
+/// Ignored: with all 10 sprites at X=0xA7, the extra Mode 3 cycles do not
+/// push STAT past the boundary — the emulator reports Mode 3 when Mode 0
+/// is expected.  Sprite X-position penalty calculation is off.
+#[test]
+#[ignore = "sprite X-position penalty timing off: 10 sprites at X=0xA7 extends Mode 3 incorrectly"]
+fn gambatte_sprites_10spritesprline_10xposa7_m3stat_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/10spritesPrLine_10xposA7_m3stat_2_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_10spritesprline_1xpos0_m3stat_1() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/10spritesPrLine_1xpos0_m3stat_1_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_sprites_10spritesprline_1xpos0_m3stat_2() {
+    let result = run_gambatte_test_old(
+        "gambatte/sprites/10spritesPrLine_1xpos0_m3stat_2_dmg08_cgb04c_out0.gbc",
+        0x00,
     );
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }

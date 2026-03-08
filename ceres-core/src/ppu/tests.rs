@@ -1490,3 +1490,116 @@ fn gambatte_ff40_disable_1_out0() {
         gb.ints.read_if()
     );
 }
+
+/// Verify that Drawing (Mode 3) completes after LCD is turned off then back on (DMG).
+///
+/// `lprint_a` turns the LCD off (writes LCDC=0x00) then turns it back on
+/// (writes LCDC=0x91) to copy font tiles into VRAM. After LCD-on the PPU goes
+/// through the Line0Startup sequence and enters Drawing (Mode 3). That Mode 3
+/// **must** complete (position_in_line must reach 160) within one scanline's
+/// worth of ticks or the ROM will stall forever.
+#[test]
+fn test_ppu_drawing_completes_after_lcd_off_on() {
+    let mut gb = setup_gb();
+    gb.ppu.write_lcdc(0x91, &mut gb.ints);
+
+    for _ in 0..250_000 {
+        if gb.ppu.read_ly() == 144 {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert_eq!(
+        gb.ppu.read_ly(),
+        144,
+        "PPU should reach VBlank (LY=144) after warm-up"
+    );
+
+    gb.ppu.write_lcdc(0x00, &mut gb.ints);
+    assert_eq!(
+        gb.ppu.read_stat() & 0x03,
+        0,
+        "STAT mode should be 0 after LCD off"
+    );
+
+    gb.ppu.write_lcdc(0x91, &mut gb.ints);
+
+    let max_ticks = 912;
+    let mut drawing_started = false;
+    let mut drawing_ended = false;
+
+    for _t in 0..max_ticks {
+        let mode = gb.ppu.read_stat() & 0x03;
+        if mode == 3 {
+            drawing_started = true;
+        }
+        if drawing_started && mode != 3 {
+            drawing_ended = true;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    assert!(
+        drawing_started,
+        "PPU (DMG) should enter Drawing (Mode 3) after LCD-on startup"
+    );
+    assert!(
+        drawing_ended,
+        "PPU (DMG) should EXIT Drawing (Mode 3) within one scanline after LCD-off→on; \
+         position_in_line={}, bg_fifo_size={}, fetcher={:?}",
+        gb.ppu.position_in_line(),
+        gb.ppu.bg_fifo_size(),
+        gb.ppu.fetcher_state(),
+    );
+}
+
+/// Same as `test_ppu_drawing_completes_after_lcd_off_on` but using CGB mode.
+///
+/// The actual failing test ROMs run under `Model::CgbE`. Verify that CGB mode
+/// also exits Drawing correctly after LCD-off→on.
+#[test]
+fn test_ppu_drawing_completes_after_lcd_off_on_cgb() {
+    let mut gb = setup_gb();
+    gb.ppu.write_lcdc(0x91, &mut gb.ints);
+
+    for _ in 0..250_000 {
+        if gb.ppu.read_ly() == 144 {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Cgb, false);
+    }
+    assert_eq!(gb.ppu.read_ly(), 144, "PPU should reach VBlank (LY=144)");
+
+    gb.ppu.write_lcdc(0x00, &mut gb.ints);
+    gb.ppu.write_lcdc(0x91, &mut gb.ints);
+
+    let max_ticks = 912;
+    let mut drawing_started = false;
+    let mut drawing_ended = false;
+
+    for _t in 0..max_ticks {
+        let mode = gb.ppu.read_stat() & 0x03;
+        if mode == 3 {
+            drawing_started = true;
+        }
+        if drawing_started && mode != 3 {
+            drawing_ended = true;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Cgb, false);
+    }
+
+    assert!(
+        drawing_started,
+        "PPU (CGB) should enter Drawing (Mode 3) after LCD-on startup"
+    );
+    assert!(
+        drawing_ended,
+        "PPU (CGB) should EXIT Drawing (Mode 3) within one scanline after LCD-off→on; \
+         position_in_line={}, bg_fifo_size={}, fetcher={:?}",
+        gb.ppu.position_in_line(),
+        gb.ppu.bg_fifo_size(),
+        gb.ppu.fetcher_state(),
+    );
+}

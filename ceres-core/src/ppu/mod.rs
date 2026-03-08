@@ -399,6 +399,24 @@ impl Ppu {
         self.sprite_buffer.count as usize
     }
 
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) const fn position_in_line(&self) -> i16 {
+        self.position_in_line
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn bg_fifo_size(&self) -> usize {
+        self.bg_fifo.size() as usize
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn fetcher_state(&self) -> FetcherState {
+        self.fetcher_state
+    }
+
     pub fn run(
         &mut self,
         dots: i32,
@@ -424,7 +442,7 @@ impl Ppu {
         self.color_correction_mode = mode;
     }
 
-    const fn set_mode_stat(&mut self, mode: Mode) {
+    fn set_mode_stat(&mut self, mode: Mode) {
         self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
     }
 

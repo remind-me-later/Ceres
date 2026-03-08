@@ -250,6 +250,17 @@ impl<A: AudioCallback> Gb<A> {
         self.ppu.pixel_data_rgba()
     }
 
+    /// Read a VRAM byte directly, bypassing PPU mode-accessibility checks.
+    ///
+    /// This is intended for test ROM completion checkers that need to inspect
+    /// VRAM contents regardless of the current PPU rendering mode.  Normal
+    /// emulated code must use `read_mem` so that mode-3 blocking is enforced.
+    #[must_use]
+    #[inline]
+    pub const fn read_vram_direct(&self, addr: u16) -> u8 {
+        self.ppu.vram().read(addr)
+    }
+
     #[inline]
     pub const fn press(&mut self, button: Button) {
         self.joy.press(button, &mut self.ints);
