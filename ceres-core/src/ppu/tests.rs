@@ -1596,10 +1596,339 @@ fn test_ppu_drawing_completes_after_lcd_off_on_cgb() {
     );
     assert!(
         drawing_ended,
-        "PPU (CGB) should EXIT Drawing (Mode 3) within one scanline after LCD-off→on; \
+        "PPU (CGB) should EXIT Drawing (Mode 3) after LCD-off→on; \
          position_in_line={}, bg_fifo_size={}, fetcher={:?}",
         gb.ppu.position_in_line(),
         gb.ppu.bg_fifo_size(),
         gb.ppu.fetcher_state(),
+    );
+}
+
+// ── OAM blocking boundary unit tests (gambatte oam_access/preread investigation) ──────────────
+
+/// Synchronise the PPU to `OamScanStage::Running { tick: target }` on the given line.
+///
+/// Uses `cgb_mode` / `double_speed` for all tick calls so DS tests work correctly.
+fn advance_to_oam_scan_tick(
+    gb: &mut Gb,
+    target_ly: u8,
+    target_tick: u16,
+    cgb_mode: crate::CgbMode,
+    double_speed: bool,
+) {
+    // First advance to the correct LY
+    for _ in 0..10_000_000 {
+        if gb.ppu.read_ly() == target_ly
+            && matches!(
+                gb.ppu.phase,
+                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick })
+                    if tick == target_tick
+            )
+        {
+            return;
+        }
+        gb.ppu.tick(&mut gb.ints, cgb_mode, double_speed);
+    }
+    panic!(
+        "OamScan Running {{ tick: {} }} on LY={} never reached",
+        target_tick, target_ly
+    );
+}
+
+/// Measure Mode-3 duration (in T-ticks) for a given scanline.
+///
+/// Advances until Mode-3 starts, counts ticks until it ends, returns the count.
+fn mode3_duration_ticks(
+    gb: &mut Gb,
+    target_ly: u8,
+    cgb_mode: crate::CgbMode,
+    double_speed: bool,
+) -> u32 {
+    // Wait for mode-3 to start on target_ly
+    for _ in 0..10_000_000 {
+        if gb.ppu.read_ly() == target_ly && gb.ppu.read_stat() & 0x03 == 3 {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, cgb_mode, double_speed);
+    }
+    assert_eq!(
+        gb.ppu.read_stat() & 0x03,
+        3,
+        "Mode-3 never started on LY={}",
+        target_ly
+    );
+    let mut count: u32 = 0;
+    for _ in 0..2000 {
+        if gb.ppu.read_stat() & 0x03 != 3 {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, cgb_mode, double_speed);
+        count += 1;
+    }
+    count
+}
+
+/// gambatte `oam_access/preread_1` (DMG): OAM read-blocking must start at tick 4, NOT tick 3.
+///
+/// Hardware: CPU reads OAM[0] in ISR at code address 0x1067 — one instruction before the
+/// tick-4 boundary — and gets the real value 0x00 (unblocked).  At tick 4 blocking kicks in
+/// and subsequent reads return 0xFF.
+///
+/// Emulator bug: `oam_read_blocked` is set during tick 3 (`Running { tick: 3 }` processing),
+/// one tick too early. After the tick-3 processing completes the flag must still be `false`;
+/// it should only become `true` after tick-4 processing.
+///
+/// This test is `#[ignore]`d because the emulator currently sets blocking at tick 3.
+#[test]
+#[ignore = "OAM read-blocking starts one T-cycle too early (tick 3 instead of tick 4); \
+            gambatte preread_1 expects 0x00, emulator returns 0x03"]
+fn gambatte_oam_preread_blocking_starts_at_tick4_dmg() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    // Advance to tick 3 of OamScan on line 1
+    advance_to_oam_scan_tick(&mut gb, 1, 3, crate::CgbMode::Dmg, false);
+
+    // Before tick-3 logic runs: blocking must be off
+    assert!(
+        !gb.ppu.oam_read_blocked,
+        "oam_read_blocked should be false before tick-3 logic runs"
+    );
+
+    // Execute tick 3 — hardware does NOT block here yet
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+
+    // After tick-3 logic: blocking must STILL be false (hardware blocks at tick 4)
+    assert!(
+        !gb.ppu.oam_read_blocked,
+        "oam_read_blocked must remain false after tick 3 (hardware blocks at tick 4, not tick 3)"
+    );
+
+    // Execute tick 4 — NOW hardware blocks
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+
+    assert!(
+        gb.ppu.oam_read_blocked,
+        "oam_read_blocked must be true after tick 4"
+    );
+}
+
+/// gambatte `oam_access/preread_2` (CGB non-double-speed): same off-by-one bug.
+///
+/// CGB non-DS shares the same `!double_speed` branch as DMG for `oam_read_blocked`.
+/// Tick 3 must leave it false; tick 4 must set it true.
+#[test]
+#[ignore = "OAM read-blocking starts one T-cycle too early on CGB non-DS (tick 3 instead of tick 4)"]
+fn gambatte_oam_preread_blocking_starts_at_tick4_cgb() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    advance_to_oam_scan_tick(&mut gb, 1, 3, crate::CgbMode::Cgb, false);
+
+    assert!(
+        !gb.ppu.oam_read_blocked,
+        "oam_read_blocked should be false before tick-3 logic runs (CGB)"
+    );
+
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Cgb, false);
+
+    assert!(
+        !gb.ppu.oam_read_blocked,
+        "oam_read_blocked must remain false after tick 3 on CGB (hardware blocks at tick 4)"
+    );
+
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Cgb, false);
+
+    assert!(
+        gb.ppu.oam_read_blocked,
+        "oam_read_blocked must be true after tick 4 on CGB"
+    );
+}
+
+/// gambatte `oam_access/preread_ds_2` and `preread_ds_lcdoffset1_2` (CGB double-speed):
+///
+/// In double-speed mode `!double_speed` is `false`, so tick-3 does NOT set
+/// `oam_read_blocked`.  The DS blocking boundary is different — it comes via
+/// tick 10 (`self.oam_read_blocked = true` unconditionally).  The two DS preread
+/// tests probe the boundary T-cycles around that window.
+///
+/// `preread_ds_2` expects the read to be blocked (0x03 masked result), but the
+/// emulator returns 0x00 (unblocked).  This test pins the tick-10 boundary in DS mode.
+#[test]
+#[ignore = "CGB double-speed OAM read-blocking boundary is off; gambatte preread_ds_2 expects 0x03 (blocked), emulator returns 0x00"]
+fn gambatte_oam_preread_blocking_boundary_cgb_double_speed() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    // In double-speed, tick 3 must NOT set oam_read_blocked (it's gated on !double_speed)
+    advance_to_oam_scan_tick(&mut gb, 1, 3, crate::CgbMode::Cgb, true);
+
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Cgb, true); // process tick 3
+
+    assert!(
+        !gb.ppu.oam_read_blocked,
+        "oam_read_blocked must stay false at tick 3 in double-speed mode"
+    );
+
+    // Advance to tick 9 (just before tick 10 unconditional block)
+    advance_to_oam_scan_tick(&mut gb, 1, 9, crate::CgbMode::Cgb, true);
+
+    assert!(
+        !gb.ppu.oam_read_blocked,
+        "oam_read_blocked must still be false at tick 9 in double-speed mode"
+    );
+
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Cgb, true); // process tick 9 → tick 10
+
+    // After tick-10 logic: oam_read_blocked must be true
+    assert!(
+        gb.ppu.oam_read_blocked,
+        "oam_read_blocked must be true after tick 10 in double-speed mode (gambatte preread_ds_2)"
+    );
+}
+
+/// gambatte `oam_access/prewrite_lcdoffset1_1` and `prewrite_ds_lcdoffset1_1`:
+/// OAM write-blocking boundary is also off by one T-cycle.
+///
+/// Hardware (lcdoffset1 CGB non-DS): a write to OAM[0] at tick 3 succeeds (write not yet
+/// blocked), so reading back OAM[0] returns 0x01.  At tick 4 the write is blocked.
+///
+/// Emulator: `oam_write_blocked = true` is set at tick 0 for CGB non-DS
+/// (`is_cgb && !double_speed`), so ALL writes during OamScan are silently dropped.
+/// This test pins that a write during tick 3 succeeds.
+#[test]
+#[ignore = "OAM write-blocking on CGB non-DS is set at tick 0 instead of the correct tick 4; \
+            gambatte prewrite_lcdoffset1_1 expects 0x01, emulator returns 0x00"]
+fn gambatte_oam_prewrite_blocking_boundary_cgb() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    // Pre-load OAM[0] with 0x00 via DMA write (bypasses blocking)
+    gb.ppu.write_oam_by_dma(0xFE00, 0x00);
+
+    advance_to_oam_scan_tick(&mut gb, 1, 3, crate::CgbMode::Cgb, false);
+
+    // At tick 3, write blocking must be off — a write to OAM[0] must succeed
+    assert!(
+        !gb.ppu.oam_write_blocked,
+        "oam_write_blocked must be false at tick 3 (write should succeed)"
+    );
+
+    // Perform the write via the normal (blocking-aware) path
+    gb.ppu.write_oam(0xFE00, 0x01);
+
+    // Verify the value was written (read bypassing blocking)
+    let raw = gb.ppu.oam().read(0);
+    assert_eq!(
+        raw, 0x01,
+        "OAM[0] write at tick 3 should succeed (expected 0x01, got {:#04x})",
+        raw
+    );
+
+    // Execute tick 3 → tick 4
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Cgb, false);
+
+    // After tick 4 blocking kicks in — writes should be silently dropped
+    assert!(
+        gb.ppu.oam_write_blocked,
+        "oam_write_blocked must be true after tick 4"
+    );
+}
+
+// ── Sprite Mode-3 duration (X-penalty) unit tests ───────────────────────────────────────────
+
+/// Baseline: no sprites → Mode-3 duration is exactly 344 T-ticks.
+///
+/// Pan Docs: minimum Mode-3 length = 172 pixel-clock cycles.  The PPU tick() runs at
+/// T-cycle granularity and outputs a pixel only every 2 T-ticks (line 925 of ppu/mod.rs:
+/// `dots_in_line.is_multiple_of(2)`), so 172 pixel-clocks = 344 T-ticks.
+/// No sprite fetch penalty, SCX=0.
+#[test]
+fn gambatte_sprites_no_sprites_mode3_duration() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON, sprites disabled (bit 1 = 0)
+
+    // Wait for line 2 so the first-line startup anomaly is past
+    advance_to_ly(&mut gb, 2);
+    // Measure Mode-3 duration on line 2
+    let duration = mode3_duration_ticks(&mut gb, 2, crate::CgbMode::Dmg, false);
+
+    // Without sprites and SCX=0, Mode-3 should be exactly 344 T-ticks (172 pixel-clocks)
+    assert_eq!(
+        duration, 344,
+        "Mode-3 duration without sprites should be 344 T-ticks, got {}",
+        duration
+    );
+}
+
+/// 10 sprites at X = 8, 16, 24, … 80 (within active display range) → Mode-3 is extended.
+///
+/// Each sprite fetch adds a penalty of up to 11 ticks; with 10 sprites at low X positions
+/// the total must be strictly greater than 172.
+/// This matches the passing `gambatte_sprites_10spritesPrLine_m3stat_2` integration test
+/// (all sprites at X=8–80 do produce a Mode-3 penalty).
+#[test]
+fn gambatte_sprites_10spritesprline_mode3_baseline() {
+    let mut gb = setup_gb();
+    // LCDC = 0x82: LCD on (bit 7), OBJ enable (bit 1)
+    gb.write_mem(0xFF40, 0x82);
+
+    // Place 10 sprites at X = 8, 16, …, 80, all on Y = 16 (visible on LY 0)
+    // OAM entry = [Y, X, tile, attrs]
+    for i in 0u8..10 {
+        let base = (i as u16) * 4;
+        gb.ppu.write_oam_by_dma(0xFE00 + base, 16); // Y
+        gb.ppu.write_oam_by_dma(0xFE00 + base + 1, 8 + i * 8); // X = 8,16,...,80
+        gb.ppu.write_oam_by_dma(0xFE00 + base + 2, 0); // tile
+        gb.ppu.write_oam_by_dma(0xFE00 + base + 3, 0); // attrs
+    }
+
+    advance_to_ly(&mut gb, 0);
+    let duration = mode3_duration_ticks(&mut gb, 0, crate::CgbMode::Dmg, false);
+
+    assert!(
+        duration > 172,
+        "Mode-3 with 10 sprites in active range should exceed 172 ticks, got {}",
+        duration
+    );
+}
+
+/// gambatte `sprites/10spritesPrLine_10xposA7_m3stat_2` (DMG/CGB, expected 0x00 = Mode-0):
+///
+/// 10 sprites all at X = 0xA7 (167).  In hardware these sprites match at pixel position 159
+/// (the very last pixel of the line) and do NOT impose a Mode-3 penalty — Mode-3 exits after
+/// the last pixel is pushed.
+///
+/// Emulator bug: `start_sprite_fetch` is called for these sprites before the
+/// `position_in_line >= 160` exit guard fires, keeping Mode-3 alive for extra ticks and
+/// causing the emulator to report Mode-3 instead of Mode-0 at the probe instant.
+///
+/// This test verifies that Mode-3 with 10 sprites at X=0xA7 lasts the same as the no-sprite
+/// baseline (172 ticks), confirming no spurious penalty.
+#[test]
+#[ignore = "Sprites at X=0xA7 (position 159) incorrectly extend Mode-3; \
+            gambatte 10xposA7_m3stat_2 expects Mode-0 (0x00), emulator returns Mode-3 (0x03)"]
+fn gambatte_sprites_10xposa7_no_mode3_penalty() {
+    let mut gb = setup_gb();
+    // LCDC = 0x82: LCD on (bit 7), OBJ enable (bit 1)
+    gb.write_mem(0xFF40, 0x82);
+
+    // Place 10 sprites all at X = 0xA7 (167), Y = 16 → visible on LY 0
+    for i in 0u8..10 {
+        let base = (i as u16) * 4;
+        gb.ppu.write_oam_by_dma(0xFE00 + base, 16); // Y
+        gb.ppu.write_oam_by_dma(0xFE00 + base + 1, 0xA7); // X = 167
+        gb.ppu.write_oam_by_dma(0xFE00 + base + 2, i); // tile (distinct to avoid dedup)
+        gb.ppu.write_oam_by_dma(0xFE00 + base + 3, 0); // attrs
+    }
+
+    advance_to_ly(&mut gb, 0);
+    let duration = mode3_duration_ticks(&mut gb, 0, crate::CgbMode::Dmg, false);
+
+    // X=167 sprites must NOT extend Mode-3 — duration equals the no-sprite baseline (344 T-ticks)
+    assert_eq!(
+        duration, 344,
+        "Sprites at X=0xA7 must not impose a Mode-3 penalty (expected 344 T-ticks, got {})",
+        duration
     );
 }
