@@ -3033,3 +3033,195 @@ fn test_ppu_mode2_irq_fires_after_stat_write_during_mode3() {
         "PPU must generate a Mode 2 STAT interrupt after STAT=0x20 is written during Mode 3"
     );
 }
+
+// -----------------------------------------------------------------------
+// stat_irq_blocking - mooneye-test-suite/acceptance/ppu/stat_irq_blocking.s
+//
+// Description:
+//   Tests how the internal STAT IRQ signal can block subsequent STAT
+//   interrupts if the signal is never cleared.
+//   Wait for VBlank, enable mode 1 STAT int.
+//   On int: enable ALL stat ints (STAT=0x78), loop LY=0..143:
+//     set LYC=LY, wait for LYC=LY match (mode 2), wait for mode 0.
+//   If the internal STAT IRQ line stays high, the edge-triggered IF bit
+//   will never fire again.
+// -----------------------------------------------------------------------
+#[test]
+fn mooneye_stat_irq_blocking() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    // Wait for VBlank (LY=144) on the FIRST frame
+    advance_to_ly(&mut gb, 144);
+    // Wait for LY=0 to start the SECOND frame
+    advance_to_ly(&mut gb, 0);
+    // Wait for VBlank (LY=144) on the SECOND frame, where timing is normal
+    advance_to_ly(&mut gb, 144);
+
+    // Enable mode 1 interrupt
+    gb.write_mem(0xFF41, 0x10);
+    gb.write_mem(0xFF0F, 0); // clear IF
+
+    // Wait for the STAT interrupt (mode 1)
+    let mut fired = false;
+    for _ in 0..2000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            fired = true;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert!(fired, "Mode 1 interrupt should fire");
+
+    // Acknowledge interrupt
+    gb.ints.acknowledge_interrupt(0x02);
+
+    // Enable all STAT interrupts
+    gb.write_mem(0xFF41, 0x78);
+
+    // Simulate the test loop: for b in 0..144
+    for b in 0..144 {
+        gb.write_mem(0xFF45, b); // LYC = b
+
+        // Wait until LY == b and LYC coincidence is set (bit 2)
+        loop {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+            assert_eq!(
+                gb.ints.read_if() & 0x02,
+                0,
+                "STAT interrupt unexpectedly fired at LY={}, mode={}",
+                gb.ppu.read_ly(), gb.ppu.read_stat() & 3
+            );
+            let stat = gb.ppu.read_stat();
+            if gb.ppu.read_ly() == b && (stat & 0x04) != 0 && (stat & 3) == 2 {
+                break;
+            }
+        }
+
+        // Wait until mode = 0 (HBlank)
+        loop {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+            assert_eq!(
+                gb.ints.read_if() & 0x02,
+                0,
+                "STAT interrupt unexpectedly fired at LY={}, mode={}",
+                gb.ppu.read_ly(), gb.ppu.read_stat() & 3
+            );
+            if gb.ppu.read_stat() & 0x03 == 0 {
+                break;
+            }
+        }
+    }
+}
+
+// -----------------------------------------------------------------------
+// intr_1_2_timing - mooneye-test-suite/acceptance/ppu/intr_1_2_timing-GS.s
+//
+// Description:
+//   Tests the timing between STAT mode 1 interrupt and STAT mode 2 interrupt.
+//   Verifies the exact cycle duration between these events.
+// -----------------------------------------------------------------------
+#[test]
+fn mooneye_intr_1_2_timing() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+
+    // Wait until start of line 0
+    advance_to_ly(&mut gb, 0);
+
+    // Advance until we reach VBlank
+    advance_to_ly(&mut gb, 144);
+
+    // Enable mode 1 interrupt
+    gb.write_mem(0xFF41, 0x10);
+    gb.ints.write_if(0);
+
+    // Wait for Mode 1 interrupt to fire
+    let mut mode1_tick = 0;
+    for t in 0..10_000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            mode1_tick = t;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert!(mode1_tick > 0, "Mode 1 interrupt didn't fire");
+
+    // Clear IF and switch to Mode 2 interrupt
+    gb.ints.acknowledge_interrupt(0x02);
+    gb.write_mem(0xFF41, 0x20);
+
+    // Wait for Mode 2 interrupt (on line 0 of next frame)
+    let mut mode2_tick = 0;
+    for t in 0..200_000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            mode2_tick = t;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert!(mode2_tick > 0, "Mode 2 interrupt didn't fire");
+
+    // The mooneye test verifies the distance between the two interrupts.
+    // Line 144..153 = 10 lines of VBlank. 1 line = 912 ticks (456 T-cycles).
+    // 10 lines * 912 ticks = 9120 ticks.
+    assert!(
+        (9110..=9130).contains(&mode2_tick),
+        "Mode 1 to Mode 2 duration {} not within expected bounds (expected ~9120 ticks)",
+        mode2_tick
+    );
+}
+
+// -----------------------------------------------------------------------
+// intr_2_0_timing - mooneye-test-suite/acceptance/ppu/intr_2_0_timing.s
+//
+// Description:
+//   Tests the timing between STAT mode 2 interrupt and STAT mode 0 interrupt.
+// -----------------------------------------------------------------------
+#[test]
+fn mooneye_intr_2_0_timing() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+
+    // Wait until LY=66 (arbitrary active display line)
+    advance_to_ly(&mut gb, 66);
+    advance_to_mode(&mut gb, 3);
+
+    // Enable mode 2 interrupt for the next line (LY=67)
+    gb.write_mem(0xFF41, 0x20);
+    gb.ints.write_if(0);
+
+    // Wait for Mode 2 interrupt
+    let mut mode2_tick = 0;
+    for t in 0..10_000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            mode2_tick = t;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert!(mode2_tick > 0, "Mode 2 interrupt didn't fire");
+
+    // Clear IF and switch to Mode 0 interrupt
+    gb.ints.acknowledge_interrupt(0x02);
+    gb.write_mem(0xFF41, 0x08);
+
+    // Wait for Mode 0 interrupt on the same line
+    let mut mode0_tick = 0;
+    for t in 0..10_000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            mode0_tick = t;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert!(mode0_tick > 0, "Mode 0 interrupt didn't fire");
+
+    // Mode 2 is 160 ticks. Mode 3 is roughly 344 ticks.
+    // So Mode 2 to Mode 0 interrupt should take around 504 ticks.
+    assert!(
+        (500..=520).contains(&mode0_tick),
+        "Mode 2 to Mode 0 duration {} not within expected bounds (expected ~504 ticks)",
+        mode0_tick
+    );
+}
