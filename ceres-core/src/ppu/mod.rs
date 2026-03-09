@@ -915,7 +915,7 @@ impl Ppu {
     }
 
     /// Tick during Mode 3 (Drawing).
-    fn tick_drawing(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
+    fn tick_drawing(&mut self, _ints: &mut Interrupts, cgb_mode: CgbMode) {
         // Check for window activation
         self.check_window_trigger(cgb_mode);
 
@@ -982,14 +982,16 @@ impl Ppu {
             }
 
             // Transition to HBlank.
-            // Set mode_for_interrupt and trigger STAT update immediately.
+            // SameBoy: at Mode 3 exit (non-double-speed), STAT mode bits are cleared
+            // and mode_for_interrupt=0, but GB_STAT_update() is NOT called yet.
+            // After a 1 M-cycle (2 tick) sleep, full unblock + GB_STAT_update() fires
+            // the HBlank interrupt. So update_stat() happens in tick_hblank StatUpdate.
             self.mode_for_interrupt = Some(Mode::HBlank);
-            self.update_stat(ints);
+            // Do NOT call update_stat here — HBlank interrupt fires 2 ticks later.
 
-            // Memory unblocking and STAT update happens in tick_hblank StatUpdate state.
+            // Memory unblocking, STAT mode bits update, and interrupt firing all
+            // happen in tick_hblank StatUpdate state.
             self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate { remaining: 2 });
-            // Note: STAT mode bits are NOT updated here - that happens in tick_hblank.
-            // Mode 0 is set in State 22.
         }
     }
 
@@ -1754,11 +1756,6 @@ impl Ppu {
                     // ly_for_comparison = -1 (0xFFFF).
                     self.ly_for_comparison = 0xFFFF;
                     self.update_stat(ints);
-
-                    // OAM interrupt quirk: fires at start of line 144
-                    if self.current_line == PX_HEIGHT && (self.stat & STAT_IF_OAM_B != 0) {
-                        ints.request_lcd();
-                    }
                 }
 
                 if *remaining <= 1 {
@@ -1772,6 +1769,16 @@ impl Ppu {
                 // State 12: 2 cycles (4 ticks)
                 if *remaining == 4 {
                     self.ly = self.current_line;
+
+                    // OAM interrupt quirk: at line 144, if Mode 2 OAM STAT interrupt is
+                    // enabled and the STAT interrupt line was previously low, fire an
+                    // additional STAT interrupt. (SameBoy display.c ~line 2160)
+                    if self.current_line == PX_HEIGHT
+                        && !self.stat_interrupt_line
+                        && (self.stat & STAT_IF_OAM_B != 0)
+                    {
+                        ints.request_lcd();
+                    }
                 }
 
                 if *remaining <= 1 {

@@ -2999,3 +2999,37 @@ fn blargg_oam_bug_8_instr_effect_ld_a_hl_inc_dec_pattern_is_wrong() {
         "8-instr_effect: LD A,(HL-) should match read/write corruption"
     );
 }
+
+/// Regression test: mirrors the mooneye intr_2_0_timing scenario at the PPU level.
+///
+/// Syncs to Mode 3 of line 0x42, writes STAT=0x20 (OAM interrupt only), clears IF,
+/// then verifies that a Mode 2 (OAM) STAT interrupt is generated on the next line.
+/// This isolates PPU behavior from the CPU halt mechanism.
+#[test]
+fn test_ppu_mode2_irq_fires_after_stat_write_during_mode3() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    // Sync to Mode 3 of line 0x42 (mooneye intr_2 scenario)
+    advance_to_ly(&mut gb, 0x42);
+    advance_to_mode(&mut gb, 0);
+    advance_to_mode(&mut gb, 3);
+
+    // Write STAT=0x20 (OAM interrupt only), clear IF
+    gb.write_mem(0xFF41, 0x20);
+    gb.write_mem(0xFF0F, 0x00);
+
+    let mut mode2_irq_fired = false;
+    for _ in 0..2000u32 {
+        if (gb.ints.read_if() & 0x02) != 0 {
+            mode2_irq_fired = true;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    assert!(
+        mode2_irq_fired,
+        "PPU must generate a Mode 2 STAT interrupt after STAT=0x20 is written during Mode 3"
+    );
+}
