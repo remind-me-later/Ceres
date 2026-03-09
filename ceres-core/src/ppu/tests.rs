@@ -3439,3 +3439,147 @@ fn mooneye_intr_2_oam_ok_timing() {
     );
 }
 
+// -----------------------------------------------------------------------
+// vblank_stat_intr - mooneye-test-suite/acceptance/ppu/vblank_stat_intr-GS.s
+//
+// Description:
+//   If bit 5 (mode 2 OAM interrupt) is set, an interrupt is also triggered
+//   at line 144 when vblank starts.
+// -----------------------------------------------------------------------
+#[test]
+fn mooneye_vblank_stat_intr() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+
+    // Wait until LY=143
+    advance_to_ly(&mut gb, 143);
+
+    // Enable Mode 2 STAT interrupt (bit 5)
+    gb.write_mem(0xFF41, 0x20);
+    gb.ints.write_if(0);
+
+    // Run until VBlank begins
+    let mut fired = 0;
+    for _ in 0..10_000 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        let irq = gb.ints.read_if();
+        // Wait until at least VBlank interrupt fires
+        if irq & 0x01 != 0 {
+            fired = irq;
+            break;
+        }
+    }
+    
+    // Both VBlank (0x01) and STAT (0x02) should fire on the exact same tick!
+    assert_eq!(
+        fired & 0x03, 
+        0x03, 
+        "Both VBlank and STAT interrupts should trigger at LY=144 when Mode 2 STAT is enabled"
+    );
+}
+
+// -----------------------------------------------------------------------
+// intr_2_mode0_timing_sprites - mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing_sprites.s
+//
+// Description:
+//   Tests how long it takes to get from STAT=mode2 interrupt to mode0
+//   with sprites active, forcing Mode 3 to extend.
+// -----------------------------------------------------------------------
+#[test]
+fn mooneye_intr_2_0_timing_sprites() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0); // LCD OFF
+
+    // Setup 1 sprite at X=8 (visible left edge), Y=82 (on scanline 66)
+    gb.write_mem(0xFE00, 82);
+    gb.write_mem(0xFE01, 8); 
+    
+    gb.write_mem(0xFF40, 0x82); // LCD ON + OBJ ON
+
+    // Wait until LY=66
+    advance_to_ly(&mut gb, 66);
+    advance_to_mode(&mut gb, 3);
+
+    gb.write_mem(0xFF41, 0x20); // Mode 2 interrupt
+    gb.ints.write_if(0);
+
+    // Measure Mode 2
+    let mut _mode2_tick = 0;
+    for t in 0..10_000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            _mode2_tick = t;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    
+    gb.ints.acknowledge_interrupt(0x02);
+    gb.write_mem(0xFF41, 0x08); // Mode 0 interrupt
+
+    let mut mode0_tick = 0;
+    for t in 0..10_000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            mode0_tick = t;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Base duration for Mode 2 -> Mode 0 is ~504 ticks.
+    // 1 Sprite adds roughly ~12 ticks (depending on exact sprite fetch).
+    assert!(
+        mode0_tick > 510, 
+        "Mode 0 interrupt was not delayed by sprites (took {} ticks, expected > 510)", 
+        mode0_tick
+    );
+}
+
+// -----------------------------------------------------------------------
+// hblank_ly_scx_timing - mooneye-test-suite/acceptance/ppu/hblank_ly_scx_timing-GS.s
+//
+// Description:
+//   Tests how SCX affects the duration between STAT mode=0 interrupt and LY increment.
+// -----------------------------------------------------------------------
+#[test]
+fn mooneye_hblank_ly_scx_timing_intr() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+
+    // Set SCX = 0
+    gb.write_mem(0xFF43, 0);
+
+    advance_to_ly(&mut gb, 66);
+    advance_to_mode(&mut gb, 3);
+
+    gb.write_mem(0xFF41, 0x08); // Mode 0 interrupt
+    gb.ints.write_if(0);
+
+    // Wait for Mode 0 interrupt
+    for _ in 0..10_000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Now count ticks until LY increments to 67
+    let mut ticks_to_ly = 0;
+    loop {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        ticks_to_ly += 1;
+        if gb.ppu.read_ly() == 67 {
+            break;
+        }
+    }
+
+    // According to Mooneye hblank_ly_scx_timing-GS.s, 
+    // for SCX=0, the LY increment happens exactly 51 M-cycles (204 T-cycles / 408 ticks) 
+    // after the STAT interrupt condition is met.
+    assert!(
+        (390..=420).contains(&ticks_to_ly),
+        "LY increment timing after Mode 0 interrupt out of bounds: {} ticks (expected ~408)",
+        ticks_to_ly
+    );
+}
+
+
