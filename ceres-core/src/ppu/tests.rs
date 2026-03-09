@@ -1036,6 +1036,85 @@ fn gambatte_m2int_m2irq_2_out2() {
     );
 }
 
+/// m2int_m2irq_ifw_1: after dispatch, clearing IF inside the handler still leaves a pending
+/// Mode 2 IRQ visible on the immediate read.
+///
+/// Gambatte reference: m2int_m2irq_ifw_1_dmg08_cgb04c_out2.asm
+#[test]
+fn gambatte_m2int_m2irq_ifw_1_out2() {
+    let mut gb = setup_gb();
+
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_mode(&mut gb, 3);
+
+    gb.write_mem(0xFF41, 0x20);
+    gb.ints.write_if(0);
+
+    for _ in 0..100_000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert!(
+        gb.ints.read_if() & 0x02 != 0,
+        "Mode 2 STAT interrupt should have fired"
+    );
+
+    gb.ints.write_if(0);
+
+    for _ in 0..1200 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    assert_eq!(
+        gb.ints.read_if() & 0x02,
+        0x02,
+        "gambatte m2int_m2irq_ifw_1: clearing IF in the handler should still allow the next Mode 2 IRQ to become pending"
+    );
+}
+
+/// m2int_m2irq_ifw_2: after dispatch and IF clear, a slightly later read sees no pending Mode 2 IRQ.
+///
+/// Gambatte reference: m2int_m2irq_ifw_2_dmg08_cgb04c_out0.asm
+#[test]
+fn gambatte_m2int_m2irq_ifw_2_out0() {
+    let mut gb = setup_gb();
+
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_mode(&mut gb, 3);
+
+    gb.write_mem(0xFF41, 0x20);
+    gb.ints.write_if(0);
+
+    for _ in 0..100_000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert!(
+        gb.ints.read_if() & 0x02 != 0,
+        "Mode 2 STAT interrupt should have fired"
+    );
+
+    gb.ints.write_if(0);
+
+    // Read before the next line's Mode 2 boundary.
+    for _ in 0..400 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    assert_eq!(
+        gb.ints.read_if() & 0x02,
+        0x00,
+        "gambatte m2int_m2irq_ifw_2: IF should still be clear before the next Mode 2 IRQ boundary"
+    );
+}
+
 // -----------------------------------------------------------------------
 // m2int_m2stat — gambatte/test/hwtests/m2int_m2stat/
 //
@@ -1428,6 +1507,87 @@ fn gambatte_m0int_m0irq_2_out2() {
         if_val,
         0x02,
         "gambatte m0int_m0irq_2: next HBlank IRQ should fire within ~1 scanline (IF={:#04X})",
+        gb.ints.read_if()
+    );
+}
+
+/// late_m0irq_retrigger_1: a late HBlank IRQ retriggers after IF is cleared in the handler.
+///
+/// Gambatte reference: irq_precedence/late_m0irq_retrigger_1_dmg08_cgb04c_outE2.asm
+#[test]
+fn gambatte_late_m0irq_retrigger_1_oute2() {
+    let mut gb = setup_gb();
+
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_mode(&mut gb, 2);
+
+    gb.write_mem(0xFF41, 0x08);
+    gb.ints.write_if(0);
+
+    for _ in 0..100_000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert!(
+        gb.ints.read_if() & 0x02 != 0,
+        "HBlank STAT interrupt should fire"
+    );
+
+    gb.write_mem(0xFF41, 0x08);
+    gb.ints.write_if(0);
+
+    for _ in 0..1200 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    assert_eq!(
+        gb.ints.read_if(),
+        0xE2,
+        "gambatte late_m0irq_retrigger_1: IF should show a retriggered LCD interrupt (got {:#04X})",
+        gb.ints.read_if()
+    );
+}
+
+/// late_m0irq_retrigger_2: a slightly later handler point no longer sees the retriggered HBlank IRQ.
+///
+/// Gambatte reference: irq_precedence/late_m0irq_retrigger_2_dmg08_cgb04c_outE0.asm
+#[test]
+fn gambatte_late_m0irq_retrigger_2_oute0() {
+    let mut gb = setup_gb();
+
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_mode(&mut gb, 2);
+
+    gb.write_mem(0xFF41, 0x08);
+    gb.ints.write_if(0);
+
+    for _ in 0..100_000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert!(
+        gb.ints.read_if() & 0x02 != 0,
+        "HBlank STAT interrupt should fire"
+    );
+
+    gb.write_mem(0xFF41, 0x08);
+    gb.ints.write_if(0);
+
+    for _ in 0..400 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    assert_eq!(
+        gb.ints.read_if(),
+        0xE0,
+        "gambatte late_m0irq_retrigger_2: IF should remain clear at the later sampling point (got {:#04X})",
         gb.ints.read_if()
     );
 }

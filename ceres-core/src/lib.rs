@@ -444,4 +444,12 @@ impl<A: AudioCallback> Gb<A> {
     pub(crate) fn set_cpu_sp(&mut self, sp: u16) {
         self.cpu.set_sp(sp);
     }
+
+    pub(crate) const fn total_dots(&self) -> u64 {
+        self.total_dots
+    }
+
+    pub(crate) const fn is_double_speed(&self) -> bool {
+        self.key1.is_enabled()
+    }
 }

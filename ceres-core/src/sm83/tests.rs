@@ -377,6 +377,16 @@ fn test_timing_complex() {
 }
 
 #[test]
+fn test_interrupt_related_opcode_timings() {
+    let mut gb = setup_gb();
+
+    test_op_timing(&mut gb, 0xF3, &[], 1); // DI
+    test_op_timing(&mut gb, 0xFB, &[], 1); // EI
+    test_op_timing(&mut gb, 0xE0, &[0x0F], 3); // LDH (a8), A
+    test_op_timing(&mut gb, 0xF0, &[0x0F], 3); // LDH A, (a8)
+}
+
+#[test]
 fn test_timing_conditional() {
     let mut gb = setup_gb();
 
@@ -413,6 +423,56 @@ fn write_code(gb: &mut Gb, addr: u16, bytes: &[u8]) {
     }
 }
 
+fn do_speed_switch(gb: &mut Gb) {
+    gb.write_mem(0xFF4D, 0x01);
+    gb.write_mem(0xC000, 0x10);
+    gb.write_mem(0xC001, 0x00);
+    gb.set_cpu_pc(0xC000);
+    gb.run_cpu();
+}
+
+fn elapsed_cpu_m_cycles(gb: &Gb, start_dots: u64) -> u64 {
+    let dots = gb.total_dots() - start_dots;
+    let dots_per_m_cycle = if gb.is_double_speed() { 2 } else { 4 };
+    dots / dots_per_m_cycle
+}
+
+fn measure_blargg_interrupt_time_sequence(mut gb: Gb, request_bit: u8) -> u64 {
+    let base = 0xC000;
+    write_code(
+        &mut gb,
+        base,
+        &[
+            0xFB, // EI
+            0x3E,
+            request_bit, // LD A,d8
+            0xE0,
+            0x0F, // LDH (IF),A
+            0xF3, // DI
+            0x00, // NOP
+        ],
+    );
+    gb.set_cpu_pc(base);
+    gb.set_cpu_sp(0xD000);
+    gb.ints.write_ie(0x08);
+    gb.ints.write_if(0x00);
+
+    gb.run_cpu(); // EI
+
+    let start = gb.total_dots();
+    gb.run_cpu(); // LD A,d8
+    gb.run_cpu(); // LDH (IF),A (+ possible dispatch to 0x58)
+
+    if request_bit != 0 {
+        gb.run_cpu(); // JP handler target
+        gb.run_cpu(); // RET back to DI
+    }
+
+    gb.run_cpu(); // DI
+
+    elapsed_cpu_m_cycles(&gb, start)
+}
+
 /// Build a minimal 32 KB DMG ROM image (all 0xFF by default) with custom
 /// bytes patched in at the given `(offset, byte)` pairs.
 ///
@@ -433,18 +493,28 @@ fn make_rom_32k(patches: &[(usize, u8)]) -> Box<[u8]> {
     rom.into_boxed_slice()
 }
 
-/// Build a DMG `Gb` backed by a minimal 32 KB ROM with the given patches, and
-/// with the boot ROM disabled so that cart ROM is visible at `0x0000–0x00FF`.
-fn setup_dmg_with_rom(patches: &[(usize, u8)]) -> Gb {
+fn setup_model_with_rom(model: crate::Model, patches: &[(usize, u8)]) -> Gb {
     use crate::GbBuilder;
     let rom = make_rom_32k(patches);
     let mut gb = GbBuilder::new(44100, crate::test_util::DummyAudio)
-        .with_model(crate::Model::DmgB)
+        .with_model(model)
         .with_rom(rom)
         .expect("minimal ROM should be valid")
         .build();
     // Disable boot ROM so cart ROM is mapped at 0x0000–0x00FF.
     gb.write_mem(0xFF50, 0x01);
+    gb
+}
+
+/// Build a DMG `Gb` backed by a minimal 32 KB ROM with the given patches, and
+/// with the boot ROM disabled so that cart ROM is visible at `0x0000–0x00FF`.
+fn setup_dmg_with_rom(patches: &[(usize, u8)]) -> Gb {
+    setup_model_with_rom(crate::Model::DmgB, patches)
+}
+
+fn setup_cgb_with_rom(patches: &[(usize, u8)]) -> Gb {
+    let mut gb = setup_model_with_rom(crate::Model::CgbE, patches);
+    gb.write_mem(0xFF40, 0x00);
     gb
 }
 
@@ -853,6 +923,54 @@ fn gambatte_irq_precedence_if_and_ie_0_if_2() {
     assert_eq!(gb.cpu.pc, 0x0050, "PC should be at timer vector 0x0050");
 }
 
+fn run_gambatte_irq_precedence_late_if_via_sp_if(ei_addr: u16) -> u8 {
+    let patches = [
+        (0x0048, 0xF0), // LDH A,(a8)
+        (0x0049, 0x0F), // IF
+        (0x004A, 0xC9), // RET
+        (ei_addr as usize, 0xFB),
+        (ei_addr.wrapping_add(1) as usize, 0x00),
+    ];
+
+    let mut gb = setup_dmg_with_rom(&patches);
+    gb.set_cpu_pc(ei_addr);
+    gb.set_cpu_sp(0xFF11);
+    gb.ints.write_if(0x0A);
+    gb.ints.write_ie(0x0A);
+
+    gb.run_cpu();
+    assert!(gb.cpu.has_ei_delay, "EI should arm delayed IME enable");
+
+    gb.run_cpu();
+    assert_eq!(
+        gb.cpu.pc, 0x0048,
+        "Interrupt should dispatch to LCD vector 0x0048"
+    );
+
+    gb.run_cpu();
+    gb.cpu.a()
+}
+
+/// gambatte irq_precedence: late_if_via_sp_if_1_dmg08_cgb04c_outFD
+#[test]
+fn gambatte_irq_precedence_late_if_via_sp_if_1() {
+    assert_eq!(
+        run_gambatte_irq_precedence_late_if_via_sp_if(0x017D),
+        0xFD,
+        "Interrupt push via SP=0xFF11 should rewrite IF to 0xFD for late_if_via_sp_if_1"
+    );
+}
+
+/// gambatte irq_precedence: late_if_via_sp_if_2_dmg08_cgb04c_outE0
+#[test]
+fn gambatte_irq_precedence_late_if_via_sp_if_2() {
+    assert_eq!(
+        run_gambatte_irq_precedence_late_if_via_sp_if(0x017E),
+        0xE0,
+        "Interrupt push via SP=0xFF11 should rewrite IF to 0xE0 for late_if_via_sp_if_2"
+    );
+}
+
 // ----------------------------------------------------------------------------
 // EI-delay + HALT + double interrupt test
 //
@@ -998,5 +1116,176 @@ fn gambatte_ifandie_ei_halt_sra() {
         gb.cpu.a(),
         0x0A,
         "Second INC A (halt-bug re-execution) should give 0x0A"
+    );
+}
+
+// ----------------------------------------------------------------------------
+// Blargg interrupt timing / handling tests
+//
+// Sources:
+// - external/test-sources/gb-test-roms/interrupt_time/interrupt_time.s
+// - external/test-sources/gb-test-roms/cpu_instrs/source/02-interrupts.s
+// ----------------------------------------------------------------------------
+
+#[test]
+#[ignore = "interrupt_time full sequence modeling is not aligned with blargg helper overhead yet"]
+fn blargg_interrupt_time_timer_dispatch_takes_13_cycles_dmg() {
+    let gb = setup_dmg_with_rom(&[(0x0058, 0xC9)]);
+    let elapsed = measure_blargg_interrupt_time_sequence(gb, 0x08);
+
+    assert_eq!(
+        elapsed, 13,
+        "Timer interrupt dispatch should take 13 cycles on DMG"
+    );
+}
+
+#[test]
+#[ignore = "interrupt_time full sequence modeling is not aligned with blargg helper overhead yet"]
+fn blargg_interrupt_time_timer_dispatch_takes_13_cycles_cgb_double_speed() {
+    let mut gb = setup_cgb_with_rom(&[(0x0058, 0xC9)]);
+    do_speed_switch(&mut gb);
+    let elapsed = measure_blargg_interrupt_time_sequence(gb, 0x08);
+
+    assert_eq!(
+        elapsed, 13,
+        "Timer interrupt dispatch should still take 13 cycles in CGB double speed"
+    );
+}
+
+#[test]
+fn blargg_cpu_instrs_02_interrupts_ei_dispatches_after_following_instruction() {
+    let mut gb = setup_dmg_with_rom(&[(0x0050, 0x3C), (0x0051, 0xC9)]);
+    let base: u16 = 0xC100;
+    write_code(
+        &mut gb,
+        base,
+        &[
+            0xFB, // EI
+            0x01, 0x00, 0x00, // LD BC,0
+            0xC5, // PUSH BC
+            0xC1, // POP BC
+            0x04, // INC B
+            0x00, // NOP (represents IF write already done externally)
+            0x05, // DEC B at interrupt_addr
+        ],
+    );
+    gb.set_cpu_pc(base);
+    gb.set_cpu_sp(0xD000);
+    gb.ints.write_ie(0x04);
+
+    gb.run_cpu();
+    assert!(gb.cpu.has_ei_delay, "EI should arm delayed IME enable");
+
+    gb.run_cpu();
+    assert!(
+        gb.cpu.pc == base + 4,
+        "Instruction after EI should run before dispatch"
+    );
+
+    gb.run_cpu();
+    gb.run_cpu();
+    gb.run_cpu();
+    gb.ints.write_if(0x04);
+    gb.run_cpu();
+
+    assert_eq!(
+        gb.cpu.pc, 0x0050,
+        "Interrupt should dispatch only after the following instruction completes"
+    );
+    assert_eq!(
+        gb.cpu.bc() >> 8,
+        1,
+        "INC B should complete before interrupt handler runs"
+    );
+}
+
+#[test]
+fn blargg_cpu_instrs_02_interrupts_di_prevents_dispatch() {
+    let mut gb = setup_dmg_with_rom(&[]);
+    let base: u16 = 0xC000;
+    write_code(
+        &mut gb,
+        base,
+        &[
+            0xF3, // DI
+            0x01, 0x00, 0x00, // LD BC,0
+            0xC5, // PUSH BC
+            0xC1, // POP BC
+        ],
+    );
+    gb.set_cpu_pc(base);
+    gb.set_cpu_sp(0xD000);
+    gb.ints.write_ie(0x04);
+    gb.ints.write_if(0x04);
+
+    for _ in 0..4 {
+        gb.run_cpu();
+    }
+
+    assert_eq!(
+        gb.cpu.pc,
+        base + 6,
+        "Execution should continue normally with DI active"
+    );
+    assert_eq!(
+        gb.ints.read_if() & 0x04,
+        0x04,
+        "Pending timer interrupt should remain pending under DI"
+    );
+    assert!(
+        !gb.ints.are_enabled(),
+        "IME should remain disabled after DI"
+    );
+}
+
+#[test]
+fn blargg_cpu_instrs_02_interrupts_halt_exits_on_timer_interrupt() {
+    let mut gb = setup_dmg_with_rom(&[(0x0050, 0xC9)]);
+    let base: u16 = 0xC000;
+    write_code(
+        &mut gb,
+        base,
+        &[
+            0x76, // HALT
+            0x00, // NOP
+        ],
+    );
+    gb.set_cpu_pc(base);
+    gb.set_cpu_sp(0xD000);
+    gb.ints.enable();
+    gb.ints.write_ie(0x04);
+    gb.write_tma(0x00);
+    gb.write_tima(0xFE);
+    gb.write_tac(0x05);
+    gb.ints.write_if(0x00);
+
+    gb.run_cpu();
+    assert!(
+        gb.cpu.is_halted(),
+        "CPU should enter HALT with no pending interrupt yet"
+    );
+
+    for _ in 0..8 {
+        gb.advance_dots(4);
+        if gb.ints.read_if() & 0x04 != 0 {
+            break;
+        }
+    }
+
+    assert_eq!(
+        gb.ints.read_if() & 0x04,
+        0x04,
+        "Timer interrupt should become pending and wake HALT"
+    );
+
+    gb.run_cpu();
+
+    assert!(
+        !gb.cpu.is_halted(),
+        "Interrupt dispatch should wake the CPU out of HALT"
+    );
+    assert_eq!(
+        gb.cpu.pc, 0x0050,
+        "Woken HALT should dispatch to timer vector"
     );
 }
