@@ -728,23 +728,22 @@ impl Ppu {
             OamScanStage::Running { tick } => {
                 // SameBoy-accurate timing (in 8MHz ticks)
 
-                // Tick 0: CGB OAM write block start (SameBoy State 35)
+                // Tick 0: sprite buffer clear
                 if tick == 0 {
-                    self.oam_write_blocked = is_cgb && !double_speed;
                     self.sprite_buffer.clear();
-                }
-                if tick == 4 && is_cgb {
-                    self.oam_write_blocked = true;
                 }
 
                 // Tick 3: LY update and Mode 2 interrupt pulse (SameBoy State 6).
                 // Hardware: STAT mode bits flip to 2 simultaneously with the IRQ rising
                 // edge so that ISR code reading STAT immediately sees mode 2
                 // (gambatte m2int_m2stat_1).
+                //
+                // CGB OAM write blocking also starts at end of tick 3 (SameBoy State 7
+                // entry), so a write at Running{tick:3} succeeds but Running{tick:4} is
+                // blocked.  gambatte prewrite_lcdoffset1_1 confirms this boundary.
                 if tick == 3 {
                     self.ly = self.current_line;
                     self.ly_for_comparison = if self.current_line != 0 { 0xFFFF } else { 0 };
-                    self.oam_read_blocked = !double_speed;
 
                     // Set STAT mode bits to OAM scan so reads during the IRQ handler
                     // return mode 2, then pulse mode_for_interrupt to generate the
@@ -752,6 +751,28 @@ impl Ppu {
                     self.set_mode_stat(Mode::OamScan);
                     self.mode_for_interrupt = Some(Mode::OamScan);
                     self.update_stat(ints);
+
+                    // CGB write blocking takes effect when entering tick 4.
+                    if is_cgb {
+                        self.oam_write_blocked = true;
+                    }
+                }
+
+                // Tick 4: OAM read-blocking starts for non-double-speed (SameBoy State 7).
+                // gambatte preread_1 / preread_2 boundary:
+                //   read AT Running{tick:4} → blocked (0xFF / 0x03 masked)
+                //   read AT Running{tick:3} → unblocked (real value)
+                if tick == 4 {
+                    self.oam_read_blocked = !double_speed;
+                }
+
+                // Tick 9 → tick 10: full OAM blocking for double-speed (SameBoy State 7
+                // unconditional path).  In double-speed mode the tick-4 path only sets
+                // `oam_read_blocked = false`; the unconditional block for all models
+                // takes effect as we enter tick 10.
+                // gambatte preread_ds_2: read AT Running{tick:10} → blocked (0x03 masked).
+                if tick == 9 && double_speed {
+                    self.oam_read_blocked = true;
                 }
 
                 // Tick 10: complete OAM-scan memory blocking and enable LYC comparison
@@ -1673,7 +1694,7 @@ impl Ppu {
                         self.oam_scan_index = 0;
                         self.sprite_buffer.clear();
 
-                        self.oam_read_blocked = true;
+                        self.oam_read_blocked = false;
                         self.oam_write_blocked = false;
                         self.vram_read_blocked = false;
                         self.vram_write_blocked = false;

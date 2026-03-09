@@ -1838,10 +1838,8 @@ fn mode3_duration_ticks(
 /// one tick too early. After the tick-3 processing completes the flag must still be `false`;
 /// it should only become `true` after tick-4 processing.
 ///
-/// This test is `#[ignore]`d because the emulator currently sets blocking at tick 3.
+/// This test verifies that OAM read-blocking starts at tick 4, not tick 3.
 #[test]
-#[ignore = "OAM read-blocking starts one T-cycle too early (tick 3 instead of tick 4); \
-            gambatte preread_1 expects 0x00, emulator returns 0x03"]
 fn gambatte_oam_preread_blocking_starts_at_tick4_dmg() {
     let mut gb = setup_gb();
     gb.write_mem(0xFF40, 0x80); // LCD ON
@@ -1878,7 +1876,7 @@ fn gambatte_oam_preread_blocking_starts_at_tick4_dmg() {
 /// CGB non-DS shares the same `!double_speed` branch as DMG for `oam_read_blocked`.
 /// Tick 3 must leave it false; tick 4 must set it true.
 #[test]
-#[ignore = "OAM read-blocking starts one T-cycle too early on CGB non-DS (tick 3 instead of tick 4)"]
+#[test]
 fn gambatte_oam_preread_blocking_starts_at_tick4_cgb() {
     let mut gb = setup_gb();
     gb.write_mem(0xFF40, 0x80); // LCD ON
@@ -1915,7 +1913,6 @@ fn gambatte_oam_preread_blocking_starts_at_tick4_cgb() {
 /// `preread_ds_2` expects the read to be blocked (0x03 masked result), but the
 /// emulator returns 0x00 (unblocked).  This test pins the tick-10 boundary in DS mode.
 #[test]
-#[ignore = "CGB double-speed OAM read-blocking boundary is off; gambatte preread_ds_2 expects 0x03 (blocked), emulator returns 0x00"]
 fn gambatte_oam_preread_blocking_boundary_cgb_double_speed() {
     let mut gb = setup_gb();
     gb.write_mem(0xFF40, 0x80); // LCD ON
@@ -1957,8 +1954,6 @@ fn gambatte_oam_preread_blocking_boundary_cgb_double_speed() {
 /// (`is_cgb && !double_speed`), so ALL writes during OamScan are silently dropped.
 /// This test pins that a write during tick 3 succeeds.
 #[test]
-#[ignore = "OAM write-blocking on CGB non-DS is set at tick 0 instead of the correct tick 4; \
-            gambatte prewrite_lcdoffset1_1 expects 0x01, emulator returns 0x00"]
 fn gambatte_oam_prewrite_blocking_boundary_cgb() {
     let mut gb = setup_gb();
     gb.write_mem(0xFF40, 0x80); // LCD ON

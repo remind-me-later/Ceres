@@ -677,11 +677,7 @@ fn gambatte_oam_access_postwrite_scx1_ds_2() {
 
 /// OAM read one cycle before Mode 2 begins (should be accessible).
 ///
-/// Ignored: OAM blocking boundary is off by one T-cycle — the emulator
-/// blocks OAM one tick too early, so reads that should be accessible return
-/// 0xFF instead of the expected value.
 #[test]
-#[ignore = "OAM mode-2 blocking starts one T-cycle too early"]
 fn gambatte_oam_access_preread_1() {
     let result = run_gambatte_test_old("gambatte/oam_access/preread_1_dmg08_cgb04c_out0.gbc", 0x00);
     assert_eq!(result, TestResult::Passed, "{result:?}");
@@ -700,11 +696,7 @@ fn gambatte_oam_access_preread_ds_1() {
 }
 
 /// Double-speed OAM preread variant 2 (should be accessible, one tick before Mode 2).
-///
-/// Ignored: same OAM blocking boundary bug as preread_1, manifesting in
-/// double-speed mode.
 #[test]
-#[ignore = "OAM mode-2 blocking starts one T-cycle too early (double-speed)"]
 fn gambatte_oam_access_preread_ds_2() {
     let result = run_gambatte_test_old("gambatte/oam_access/preread_ds_2_cgb04c_out3.gbc", 0x03);
     assert_eq!(result, TestResult::Passed, "{result:?}");
@@ -720,11 +712,7 @@ fn gambatte_oam_access_preread_ds_lcdoffset1_1() {
 }
 
 /// Double-speed + lcdoffset1 OAM preread variant 2.
-///
-/// Ignored: OAM blocking boundary bug combined with the 4-tick LCD-on
-/// offset; one-cycle boundary check returns wrong result in double-speed.
 #[test]
-#[ignore = "OAM mode-2 blocking boundary off by one T-cycle (double-speed + lcdoffset1)"]
 fn gambatte_oam_access_preread_ds_lcdoffset1_2() {
     let result = run_gambatte_test_old(
         "gambatte/oam_access/preread_ds_lcdoffset1_2_cgb04c_out3.gbc",
@@ -735,9 +723,11 @@ fn gambatte_oam_access_preread_ds_lcdoffset1_2() {
 
 /// lcdoffset1 OAM preread variant 1 (should return blocked / 0x00).
 ///
-/// Ignored: OAM blocking boundary off by one T-cycle under lcdoffset1 timing.
+/// Ignored: OAM blocking boundary is wrong under lcdoffset1 timing — the
+/// 4-tick LCD-on offset shifts the Mode 2 start, so the blocking window
+/// starts one T-cycle later than the emulator currently models.
 #[test]
-#[ignore = "OAM mode-2 blocking boundary off by one T-cycle (lcdoffset1)"]
+#[ignore = "OAM mode-2 blocking boundary wrong under lcdoffset1 (4-tick LCD-on offset not modelled)"]
 fn gambatte_oam_access_preread_lcdoffset1_1() {
     let result = run_gambatte_test_old(
         "gambatte/oam_access/preread_lcdoffset1_1_cgb04c_out0.gbc",
@@ -792,10 +782,11 @@ fn gambatte_oam_access_prewrite_ds_2() {
 
 /// Double-speed + lcdoffset1 OAM prewrite variant 1 (write should take effect).
 ///
-/// Ignored: OAM write-blocking boundary off by one T-cycle in double-speed
-/// + lcdoffset1 mode; write lands in the blocked window instead of just before.
+/// Ignored: OAM write-blocking boundary is wrong under double-speed + lcdoffset1
+/// timing — the 4-tick LCD-on offset shifts the Mode 2 start, so the write
+/// lands in the incorrectly-early blocked window.
 #[test]
-#[ignore = "OAM write-blocking boundary off by one T-cycle (double-speed + lcdoffset1)"]
+#[ignore = "OAM write-blocking boundary wrong under double-speed + lcdoffset1 (4-tick LCD-on offset not modelled)"]
 fn gambatte_oam_access_prewrite_ds_lcdoffset1_1() {
     let result = run_gambatte_test_old(
         "gambatte/oam_access/prewrite_ds_lcdoffset1_1_cgb04c_out1.gbc",
@@ -815,10 +806,11 @@ fn gambatte_oam_access_prewrite_ds_lcdoffset1_2() {
 
 /// lcdoffset1 OAM prewrite variant 1 (write should take effect).
 ///
-/// Ignored: OAM write-blocking boundary off by one T-cycle under lcdoffset1
-/// timing; write is incorrectly blocked.
+/// Ignored: OAM write-blocking boundary is wrong under lcdoffset1 timing —
+/// the 4-tick LCD-on offset shifts the Mode 2 start, so the write is
+/// incorrectly blocked by the emulator's early blocking window.
 #[test]
-#[ignore = "OAM write-blocking boundary off by one T-cycle (lcdoffset1)"]
+#[ignore = "OAM write-blocking boundary wrong under lcdoffset1 (4-tick LCD-on offset not modelled)"]
 fn gambatte_oam_access_prewrite_lcdoffset1_1() {
     let result = run_gambatte_test_old(
         "gambatte/oam_access/prewrite_lcdoffset1_1_cgb04c_out1.gbc",
