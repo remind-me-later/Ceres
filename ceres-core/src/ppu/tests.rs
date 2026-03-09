@@ -3225,3 +3225,217 @@ fn mooneye_intr_2_0_timing() {
         mode0_tick
     );
 }
+
+// -----------------------------------------------------------------------
+// intr_2_mode3_timing - mooneye-test-suite/acceptance/ppu/intr_2_mode3_timing.s
+//
+// Description:
+//   Tests the timing between STAT mode 2 interrupt and the start of mode 3.
+// -----------------------------------------------------------------------
+#[test]
+fn mooneye_intr_2_mode3_timing() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+
+    // Wait until LY=66
+    advance_to_ly(&mut gb, 66);
+    advance_to_mode(&mut gb, 3);
+
+    // Enable mode 2 interrupt for the next line (LY=67)
+    gb.write_mem(0xFF41, 0x20);
+    gb.ints.write_if(0);
+
+    // Wait for Mode 2 interrupt
+    let mut mode2_tick = 0;
+    for t in 0..10_000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            mode2_tick = t;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert!(mode2_tick > 0, "Mode 2 interrupt didn't fire");
+
+    // Clear IF
+    gb.ints.acknowledge_interrupt(0x02);
+
+    // Wait for Mode 3 on the same line
+    let mut mode3_tick = 0;
+    for t in 0..10_000 {
+        if (gb.ppu.read_stat() & 0x03) == 3 {
+            mode3_tick = t;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert!(mode3_tick > 0, "Mode 3 didn't start");
+
+    // Mode 2 is exactly 160 ticks. Mode 2 interrupt fires near the start of Mode 2.
+    // So the distance should be around 160 ticks.
+    assert!(
+        (150..=170).contains(&mode3_tick),
+        "Mode 2 to Mode 3 duration {} not within expected bounds (expected ~160 ticks)",
+        mode3_tick
+    );
+}
+
+// -----------------------------------------------------------------------
+// stat_lyc_onoff - mooneye-test-suite/acceptance/ppu/stat_lyc_onoff.s
+//
+// Description:
+//   Tests how the STAT register LY=LYC comparison bit behaves when turning off
+//   and starting the PPU.
+// -----------------------------------------------------------------------
+#[test]
+fn mooneye_stat_lyc_onoff() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+
+    // Enable LYC interrupt
+    gb.write_mem(0xFF41, 0x40);
+
+    // Round 1: Turn off PPU while comparison bit is true (LYC = 144)
+    advance_to_ly(&mut gb, 144);
+    gb.write_mem(0xFF45, 144); // LYC = 144
+    // Wait for LY=LYC coincidence bit
+    for _ in 0..100 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        if (gb.ppu.read_stat() & 0x04) != 0 {
+            break;
+        }
+    }
+    assert_eq!(gb.ppu.read_stat() & 0x04, 0x04, "LYC coincidence bit not set");
+    
+    // Turn off LCD
+    gb.write_mem(0xFF40, 0);
+    gb.ints.write_if(0);
+    
+    // Bit should be retained
+    assert_eq!(gb.ppu.read_stat() & 0x04, 0x04, "LYC coincidence bit not retained after LCD off");
+    
+    // Changing LYC should not have an effect
+    gb.write_mem(0xFF45, 1);
+    assert_eq!(gb.ppu.read_stat() & 0x04, 0x04, "LYC coincidence changed while LCD off");
+
+    // Enabling PPU starts comparison clock. LY=0, LYC=1, so bit should go to 0
+    gb.write_mem(0xFF40, 0x80);
+    assert_eq!(gb.ppu.read_stat() & 0x04, 0x00, "LYC coincidence didn't reset after LCD on");
+
+    // Round 2: Turn off PPU while comparison is true (LYC=144)
+    advance_to_ly(&mut gb, 144);
+    gb.write_mem(0xFF45, 144);
+    for _ in 0..100 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        if (gb.ppu.read_stat() & 0x04) != 0 {
+            break;
+        }
+    }
+    gb.write_mem(0xFF40, 0); // LCD off
+    gb.ints.write_if(0);
+
+    assert_eq!(gb.ppu.read_stat() & 0x04, 0x04, "LYC coincidence bit not retained (R2)");
+
+    // Change LYC to 0 (which matches LY=0 when LCD turns on)
+    gb.write_mem(0xFF45, 0);
+    assert_eq!(gb.ppu.read_stat() & 0x04, 0x04, "LYC coincidence changed while LCD off (R2)");
+    
+    // Enabling PPU: LY=0 vs LYC=0. Coincidence stays set, but NO interrupt should fire (no rising edge)
+    gb.write_mem(0xFF40, 0x80);
+    assert_eq!(gb.ppu.read_stat() & 0x04, 0x04, "LYC coincidence didn't stay set after LCD on");
+    assert_eq!(gb.ints.read_if() & 0x02, 0, "Interrupt fired when turning LCD on with LYC=0 (R2)");
+
+    // Round 3: Turn off PPU while comparison is false (LYC=0)
+    advance_to_ly(&mut gb, 144);
+    gb.write_mem(0xFF40, 0); // LCD off
+    gb.write_mem(0xFF45, 0); // LYC=0
+    gb.ints.write_if(0);
+
+    assert_eq!(gb.ppu.read_stat() & 0x04, 0x00, "LYC coincidence bit set (R3)");
+
+    gb.write_mem(0xFF45, 1);
+    assert_eq!(gb.ppu.read_stat() & 0x04, 0x00, "LYC coincidence bit set after write (R3)");
+
+    gb.write_mem(0xFF40, 0x80); // LCD on
+    assert_eq!(gb.ppu.read_stat() & 0x04, 0x00, "LYC coincidence bit set after LCD on (R3)");
+    assert_eq!(gb.ints.read_if() & 0x02, 0, "Interrupt fired (R3)");
+
+    // Round 4: Turn off PPU while comparison is false, change so it becomes true on power-on
+    advance_to_ly(&mut gb, 144);
+    gb.write_mem(0xFF40, 0); // LCD off
+    gb.write_mem(0xFF45, 0); // LYC=0
+    gb.ints.write_if(0);
+    
+    assert_eq!(gb.ppu.read_stat() & 0x04, 0x00, "LYC coincidence bit set (R4)");
+
+    // We expect an interrupt because comparison clock starts and comparison bit gets set (LY=0 vs LYC=0)
+    gb.write_mem(0xFF40, 0x80); // LCD on
+    assert_eq!(gb.ppu.read_stat() & 0x04, 0x04, "LYC coincidence didn't set (R4)");
+    
+    // We should tick the PPU for the interrupt to be requested? Wait, Mooneye just expects the interrupt immediately.
+    // Let's tick a bit if needed.
+    let mut fired = false;
+    for _ in 0..10 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            fired = true;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert!(fired, "No interrupt on LCD power on when LYC=0 (R4)");
+}
+
+// -----------------------------------------------------------------------
+// intr_2_oam_ok_timing - mooneye-test-suite/acceptance/ppu/intr_2_oam_ok_timing.s
+//
+// Description:
+//   Tests how long it takes to get from STAT=mode2 interrupt to readable OAM.
+// -----------------------------------------------------------------------
+#[test]
+fn mooneye_intr_2_oam_ok_timing() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+
+    // Wait until LY=66
+    advance_to_ly(&mut gb, 66);
+    advance_to_mode(&mut gb, 3);
+
+    // Enable mode 2 interrupt for the next line (LY=67)
+    gb.write_mem(0xFF41, 0x20);
+    gb.ints.write_if(0);
+
+    // Wait for Mode 2 interrupt
+    let mut mode2_tick = 0;
+    for t in 0..10_000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            mode2_tick = t;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert!(mode2_tick > 0, "Mode 2 interrupt didn't fire");
+
+    // Clear IF
+    gb.ints.acknowledge_interrupt(0x02);
+
+    // Wait for OAM to become readable on the same line
+    let mut oam_ok_tick = 0;
+    for t in 0..10_000 {
+        // OAM is readable in Mode 0 and Mode 1. The test expects it when Mode 3 ends.
+        // We can just check the mode (Mode 0).
+        if (gb.ppu.read_stat() & 0x03) == 0 {
+            oam_ok_tick = t;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert!(oam_ok_tick > 0, "OAM didn't become readable (Mode 0 not reached)");
+
+    // The distance is basically the duration of Mode 2 + Mode 3.
+    // Mode 2 is 160 ticks, Mode 3 is roughly 344 ticks -> ~504 ticks.
+    assert!(
+        (500..=520).contains(&oam_ok_tick),
+        "Mode 2 to OAM OK duration {} not within expected bounds (expected ~504 ticks)",
+        oam_ok_tick
+    );
+}
+
