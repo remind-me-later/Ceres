@@ -14,6 +14,13 @@ pub struct Sm83 {
     hl: u16,
     is_halt_bug_triggered: bool,
     is_halted: bool,
+    /// Set by HALT when IME=1 and an interrupt is already pending.
+    /// SameBoy zeroes pending_cycles in this case, meaning both the
+    /// run-mode opcode fetch and the internal halt read cost 0 effective
+    /// T-cycles. We model this by skipping the two internal NOP ticks
+    /// that normally precede the ISR push sequence, so that the HALT
+    /// + dispatch takes exactly 4 M-cycles (16 T) instead of 6 (24 T).
+    skip_isr_nops: bool,
     pc: u16,
     sp: u16,
 }
@@ -206,27 +213,45 @@ impl<A: AudioCallback> Gb<A> {
             self.ppu.leave_stop_mode();
 
             if self.ints.are_enabled() {
-                self.tick_m_cycle();
-                self.tick_m_cycle();
+                // Skip the two internal NOP ticks when waking from HALT with
+                // IME=1 and interrupt already pending (SameBoy zeros
+                // pending_cycles in that case, so the opcode fetch + internal
+                // HALT read cost 0 effective T-cycles; only the push sequence
+                // and final tick remain).
+                if self.cpu.skip_isr_nops {
+                    self.cpu.skip_isr_nops = false;
+                } else {
+                    self.tick_m_cycle();
+                    self.tick_m_cycle();
+                }
 
-                // Interrupt dispatch: the vector and interrupt bit are determined
-                // BEFORE the push sequence begins. The push may incidentally write
-                // to hardware registers (e.g. IF at $FF0F if SP=$FF10, or IE at
-                // $FFFF if SP=$0000), and either modification can cancel dispatch
-                // if they clear the pending interrupt bit.
+                // Interrupt dispatch sequence (verified against SameBoy and Gambatte):
                 //
-                // Hardware behavior (verified by Gambatte irq_precedence tests):
-                // - Vector is committed at the start of dispatch.
-                // - After pushing the upper byte of PC, re-check (IE & IF): if the
-                //   push wrote to $FFFF (IE) or $FF0F (IF) and cleared the relevant
-                //   interrupt bit, dispatch is cancelled and PC is set to $0000.
-                // - Example: SP=$0000 → upper push writes to $FFFF (IE). If that
-                //   clears the interrupt bit in IE, dispatch is cancelled.
-                // - Example: SP=$FF10 → upper push writes to $FF0F (IF). If that
-                //   clears the interrupt bit in IF, dispatch is cancelled.
-                // - If SP=$0001, lower byte push writes to $0000 (ROM), too late
-                //   to cancel.
-                let (orig_int, orig_vector) = self.ints.determine_interrupt();
+                // The winning interrupt vector is NOT committed up front.  Instead the
+                // dispatch is a two-phase push whose mid-point re-evaluates IE & IF:
+                //
+                // Phase 1 – push high byte of PC.
+                //   SP is decremented first, then the high byte is written.  If that
+                //   address happens to be $FFFF (IE) or $FF0F (IF), the write can
+                //   modify the interrupt registers mid-dispatch.
+                //
+                // Phase 2 – re-evaluate IE & IF after the high-byte push.
+                //   Read the current IE & IF and re-select the winning interrupt.
+                //   * If the re-evaluation yields no pending interrupt, dispatch is
+                //     cancelled: the low byte is still pushed (to SP-1), IME is cleared,
+                //     and PC is set to $0000.
+                //   * If a (possibly different) interrupt survives, that new winner is
+                //     used as the final vector.  This handles the case where the push
+                //     clobbered IE so that the original winner is gone but another bit
+                //     remains (Mooneye ie_push round4).
+                //
+                // Phase 3 – push low byte of PC (always happens, cannot cancel).
+                //   If SP-1 == $FFFF (only possible when SP=0 and high byte was pushed
+                //   to $FFFF on a wrap, which would need SP to wrap twice – effectively
+                //   impossible in a single dispatch), the write would hit IE again, but
+                //   hardware evidence shows this path does not trigger another re-check.
+                //   The Gambatte irq_precedence SP=$0001 test confirms the lower push
+                //   to $FFFF does not cancel an already-committed dispatch.
 
                 let pc = self.cpu.pc;
                 let [lo, hi] = pc.to_le_bytes();
@@ -235,21 +260,17 @@ impl<A: AudioCallback> Gb<A> {
                 self.cpu.sp = self.cpu.sp.wrapping_sub(1);
                 self.write_cpu(self.cpu.sp, hi);
 
-                // Re-check IE & IF: if the push cleared the interrupt bit in either
-                // register, dispatch is cancelled and PC is set to $0000.
-                let still_pending = self.ints.read_ie() & self.ints.read_if() & orig_int != 0;
-                let (final_int, final_vector) = if still_pending {
-                    (orig_int, orig_vector)
-                } else {
-                    (0, 0x0000)
-                };
+                // Re-evaluate after upper push: re-read IE & IF to find the new winner.
+                // This handles both cancellation (new IE & IF = 0) and reselection (the
+                // push changed IE so a different interrupt wins).
+                let (final_int, final_vector) = self.ints.determine_interrupt();
 
-                // Push lower byte
+                // Push lower byte — always happens regardless of cancellation
                 self.cpu.sp = self.cpu.sp.wrapping_sub(1);
                 self.write_cpu(self.cpu.sp, lo);
                 self.tick_m_cycle();
 
-                // Acknowledge the interrupt only if dispatch was not cancelled
+                // Acknowledge and jump; if cancelled, final_int==0 and final_vector==0x0000
                 if final_int != 0 {
                     self.ints.acknowledge_interrupt(final_int);
                 }
@@ -770,7 +791,13 @@ impl<A: AudioCallback> Gb<A> {
         if !self.ints.is_any_requested() {
             self.cpu.is_halted = true;
         } else if self.ints.are_enabled() {
+            // IME=1 and interrupt pending: HALT immediately triggers the ISR.
+            // SameBoy zeroes pending_cycles here (negating both the run-mode
+            // opcode fetch and the internal HALT read), so the full HALT+dispatch
+            // takes only 4 M-cycles. We model this with a flag that suppresses
+            // the 2 internal NOP ticks in run_cpu's dispatch path.
             self.cpu.is_halted = false;
+            self.cpu.skip_isr_nops = true;
             self.cpu.pc = self.cpu.pc.wrapping_sub(1);
         } else {
             self.cpu.is_halted = false;

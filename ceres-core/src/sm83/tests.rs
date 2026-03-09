@@ -437,40 +437,89 @@ fn elapsed_cpu_m_cycles(gb: &Gb, start_dots: u64) -> u64 {
     dots / dots_per_m_cycle
 }
 
-fn measure_blargg_interrupt_time_sequence(mut gb: Gb, request_bit: u8) -> u64 {
-    let base = 0xC000;
+/// Measure the net ISR overhead (in M-cycles) caused by a single interrupt
+/// dispatch, modelling the exact sequence used by the blargg interrupt_time ROM:
+///
+/// ```asm
+///   ei
+///   ld  a, d          ; d=0 → no interrupt; d=0x08 → serial IF bit
+///   ld  ($FF0F), a    ; write IF; if d=0x08 the ISR fires after this
+///   di
+/// ```
+///
+/// The RST/IRQ vector at `0x0058` contains `JP $DEC3` and `0xDEC3` contains
+/// `RET`, matching the blargg source layout.  The measurement is the
+/// *difference* in elapsed M-cycles between the `d=0x08` run (interrupt fires)
+/// and the `d=0x00` run (no interrupt), which should be exactly
+/// `dispatch(5) + JP(4) + RET(4) = 13`.
+fn measure_blargg_interrupt_time_sequence(mut gb: Gb) -> u64 {
+    // Place `JP $DEC3` (C3 C3 DE) at the serial/timer IRQ vector 0x0058.
+    // 0x0058 is in ROM space so it must come from the ROM image patches;
+    // those patches are applied by the caller via `setup_*_with_rom`.
+
+    // Place `RET` at 0xDEC3 (WRAM, writable at runtime).
+    gb.write_mem(0xDEC3, 0xC9);
+
+    // Stack lives above the RET stub so pushes don't clobber it.
+    gb.set_cpu_sp(0xDFFF);
+
+    // IE = serial (bit 3), IF cleared.
+    gb.ints.write_ie(0x08);
+    gb.ints.write_if(0x00);
+
+    // -----------------------------------------------------------------------
+    // Run WITHOUT interrupt (d = 0x00) to get the baseline elapsed time.
+    // -----------------------------------------------------------------------
+    let base: u16 = 0xC100;
+    // ei / ld a, 0x00 / ld ($FF0F), a / di
     write_code(
         &mut gb,
         base,
         &[
             0xFB, // EI
-            0x3E,
-            request_bit, // LD A,d8
-            0xE0,
-            0x0F, // LDH (IF),A
+            0x3E, 0x00, // LD A, 0x00
+            0xEA, 0x0F, 0xFF, // LD ($FF0F), A   [4 M-cycles]
             0xF3, // DI
-            0x00, // NOP
         ],
     );
     gb.set_cpu_pc(base);
-    gb.set_cpu_sp(0xD000);
+    gb.run_cpu(); // EI
+    let start_no_int = gb.total_dots();
+    gb.run_cpu(); // LD A, 0x00
+    gb.run_cpu(); // LD ($FF0F), A
+    gb.run_cpu(); // DI
+    let elapsed_no_int = elapsed_cpu_m_cycles(&gb, start_no_int);
+
+    // -----------------------------------------------------------------------
+    // Run WITH interrupt (d = 0x08) and measure elapsed time.
+    // -----------------------------------------------------------------------
     gb.ints.write_ie(0x08);
     gb.ints.write_if(0x00);
 
+    let base2: u16 = 0xC200;
+    // ei / ld a, 0x08 / ld ($FF0F), a / di
+    write_code(
+        &mut gb,
+        base2,
+        &[
+            0xFB, // EI
+            0x3E, 0x08, // LD A, 0x08
+            0xEA, 0x0F, 0xFF, // LD ($FF0F), A   [4 M-cycles] → ISR fires after
+            0xF3, // DI
+        ],
+    );
+    gb.set_cpu_pc(base2);
     gb.run_cpu(); // EI
+    let start_int = gb.total_dots();
+    gb.run_cpu(); // LD A, 0x08
+    gb.run_cpu(); // LD ($FF0F), A  → interrupt taken; dispatch to 0x0058
+    gb.run_cpu(); // JP $DEC3        (at 0x0058)
+    gb.run_cpu(); // RET             (at 0xDEC3)
+    gb.run_cpu(); // DI              (resume after ISR)
+    let elapsed_int = elapsed_cpu_m_cycles(&gb, start_int);
 
-    let start = gb.total_dots();
-    gb.run_cpu(); // LD A,d8
-    gb.run_cpu(); // LDH (IF),A (+ possible dispatch to 0x58)
-
-    if request_bit != 0 {
-        gb.run_cpu(); // JP handler target
-        gb.run_cpu(); // RET back to DI
-    }
-
-    gb.run_cpu(); // DI
-
-    elapsed_cpu_m_cycles(&gb, start)
+    // The net ISR overhead is the difference.
+    elapsed_int - elapsed_no_int
 }
 
 /// Build a minimal 32 KB DMG ROM image (all 0xFF by default) with custom
@@ -1128,27 +1177,27 @@ fn gambatte_ifandie_ei_halt_sra() {
 // ----------------------------------------------------------------------------
 
 #[test]
-#[ignore = "interrupt_time full sequence modeling is not aligned with blargg helper overhead yet"]
 fn blargg_interrupt_time_timer_dispatch_takes_13_cycles_dmg() {
-    let gb = setup_dmg_with_rom(&[(0x0058, 0xC9)]);
-    let elapsed = measure_blargg_interrupt_time_sequence(gb, 0x08);
+    // 0x0058: JP $DEC3  →  C3 C3 DE
+    let gb = setup_dmg_with_rom(&[(0x0058, 0xC3), (0x0059, 0xC3), (0x005A, 0xDE)]);
+    let elapsed = measure_blargg_interrupt_time_sequence(gb);
 
     assert_eq!(
         elapsed, 13,
-        "Timer interrupt dispatch should take 13 cycles on DMG"
+        "Timer interrupt dispatch should take 13 M-cycles on DMG (dispatch 5 + JP 4 + RET 4)"
     );
 }
 
 #[test]
-#[ignore = "interrupt_time full sequence modeling is not aligned with blargg helper overhead yet"]
 fn blargg_interrupt_time_timer_dispatch_takes_13_cycles_cgb_double_speed() {
-    let mut gb = setup_cgb_with_rom(&[(0x0058, 0xC9)]);
+    // 0x0058: JP $DEC3  →  C3 C3 DE
+    let mut gb = setup_cgb_with_rom(&[(0x0058, 0xC3), (0x0059, 0xC3), (0x005A, 0xDE)]);
     do_speed_switch(&mut gb);
-    let elapsed = measure_blargg_interrupt_time_sequence(gb, 0x08);
+    let elapsed = measure_blargg_interrupt_time_sequence(gb);
 
     assert_eq!(
         elapsed, 13,
-        "Timer interrupt dispatch should still take 13 cycles in CGB double speed"
+        "Timer interrupt dispatch should still take 13 M-cycles in CGB double speed (dispatch 5 + JP 4 + RET 4)"
     );
 }
 
@@ -1287,5 +1336,316 @@ fn blargg_cpu_instrs_02_interrupts_halt_exits_on_timer_interrupt() {
     assert_eq!(
         gb.cpu.pc, 0x0050,
         "Woken HALT should dispatch to timer vector"
+    );
+}
+
+// ----------------------------------------------------------------------------
+// Mooneye interrupt / HALT tests
+//
+// Sources:
+// - external/test-sources/mooneye-test-suite/acceptance/interrupts/ie_push.s
+// - external/test-sources/mooneye-test-suite/acceptance/if_ie_registers.s
+// - external/test-sources/mooneye-test-suite/acceptance/halt_ime0_ei.s
+// - external/test-sources/mooneye-test-suite/acceptance/halt_ime0_nointr_timing.s
+// - external/test-sources/mooneye-test-suite/acceptance/halt_ime1_timing.s
+// - external/test-sources/mooneye-test-suite/acceptance/halt_ime1_timing2-GS.s
+// ----------------------------------------------------------------------------
+
+#[test]
+fn mooneye_acceptance_interrupts_ie_push_round1_upper_push_cancels_dispatch() {
+    // Code lives in WRAM so write_code() takes effect (MBC0 ROM writes are no-ops).
+    // base = 0xC200 → PC at dispatch = 0xC207 → hi-byte = 0xC2.
+    // SP = 0x0000 → first push lands at 0xFFFF (IE register).
+    // Writing 0xC2 to IE clears bit2 (timer); new IE & IF = 0 → dispatch cancelled.
+    let mut gb = setup_gb();
+    let base = 0xC200;
+    gb.set_cpu_pc(base);
+    gb.set_cpu_sp(0x0000);
+    gb.cpu.af = 0x0400;
+    gb.ints.write_ie(0x04);
+    gb.ints.write_if(0x00);
+    // EI, NOP, LD SP $0000, LDH (FF0F) A
+    write_code(&mut gb, base, &[0xFB, 0x00, 0x31, 0x00, 0x00, 0xE0, 0x0F]);
+
+    gb.run_cpu(); // EI
+    gb.run_cpu(); // NOP (IME now active)
+    gb.run_cpu(); // LD SP, $0000
+    gb.run_cpu(); // LDH (IF), A  → sets IF=0x04, triggers dispatch, upper push to IE→0xC2 cancels
+
+    assert_eq!(
+        gb.cpu.pc, 0x0000,
+        "Upper-byte IE write should cancel timer dispatch and leave PC at 0x0000"
+    );
+    assert_eq!(
+        gb.ints.read_if() & 0x1F,
+        0x04,
+        "IF should keep the timer bit after cancellation"
+    );
+    assert!(
+        !gb.ints.are_enabled(),
+        "IME should be cleared after cancelled dispatch"
+    );
+}
+
+#[test]
+fn mooneye_acceptance_interrupts_ie_push_round2_ime_stays_cleared_after_cancellation() {
+    let mut gb = setup_gb();
+    let base = 0xC000;
+    gb.set_cpu_pc(base);
+    gb.set_cpu_sp(0xD000);
+    gb.ints.disable();
+    gb.ints.write_ie(0x10);
+    gb.ints.write_if(0x10);
+    write_code(&mut gb, base, &[0x00, 0x00, 0x00]);
+
+    for _ in 0..3 {
+        gb.run_cpu();
+    }
+
+    assert_eq!(
+        gb.cpu.pc,
+        base + 3,
+        "IME should stay cleared after cancellation, so no later interrupt should dispatch"
+    );
+    assert!(!gb.ints.are_enabled(), "IME should remain cleared");
+    assert_eq!(
+        gb.ints.read_if() & 0x1F,
+        0x10,
+        "Pending joypad interrupt should remain pending"
+    );
+}
+
+#[test]
+fn mooneye_acceptance_interrupts_ie_push_round3_lower_push_too_late_to_cancel() {
+    // Code lives in WRAM so write_code() takes effect (MBC0 ROM writes are no-ops).
+    // base = 0xC22E → PC at dispatch = 0xC235 → hi-byte = 0xC2.
+    // SP = 0x0001 → upper push lands at 0x0000 (ROM, no-op); lower push at 0xFFFF (IE).
+    // After upper push IE is unchanged (0x08) and serial still wins → dispatch committed.
+    // Lower push writing lo-byte to IE happens too late: hardware does not re-check.
+    let mut gb = setup_gb();
+    let base = 0xC22E;
+    gb.set_cpu_pc(base);
+    gb.set_cpu_sp(0x0001);
+    gb.cpu.af = 0x0800;
+    gb.ints.write_if(0x00);
+    gb.ints.write_ie(0x08);
+    // EI, NOP, LD SP $0001, LDH (FF0F) A
+    write_code(&mut gb, base, &[0xFB, 0x00, 0x31, 0x01, 0x00, 0xE0, 0x0F]);
+
+    gb.run_cpu(); // EI
+    gb.run_cpu(); // NOP (IME now active)
+    gb.run_cpu(); // LD SP, $0001
+    gb.run_cpu(); // LDH (IF), A → sets IF=0x08, triggers serial dispatch → PC=0x0058
+
+    assert_eq!(
+        gb.cpu.pc, 0x0058,
+        "Lower-byte IE write should be too late to cancel serial dispatch"
+    );
+    assert_eq!(
+        gb.ints.read_if() & 0x1F,
+        0x00,
+        "IF should be cleared after successful serial dispatch"
+    );
+}
+
+#[test]
+fn mooneye_acceptance_interrupts_ie_push_round4_ie_clobber_changes_winning_vector() {
+    // Code lives in WRAM so write_code() takes effect (MBC0 ROM writes are no-ops).
+    // base = 0xC200 → PC at dispatch = 0xC207 → hi-byte = 0xC2.
+    // SP = 0x0000 → upper push lands at 0xFFFF (IE register), writing 0xC2.
+    // New IE = 0xC2: bit0 (VBlank) cleared, bit1 (STAT) survives.
+    // determine_interrupt() re-selects STAT → dispatch to 0x0048; VBlank stays in IF.
+    let mut gb = setup_gb();
+    let base = 0xC200;
+    gb.set_cpu_pc(base);
+    gb.set_cpu_sp(0x0000);
+    gb.cpu.af = 0x0300;
+    gb.ints.write_if(0x00);
+    gb.ints.write_ie(0x03);
+    // EI, NOP, LD SP $0000, LDH (FF0F) A
+    write_code(&mut gb, base, &[0xFB, 0x00, 0x31, 0x00, 0x00, 0xE0, 0x0F]);
+
+    gb.run_cpu(); // EI
+    gb.run_cpu(); // NOP (IME now active)
+    gb.run_cpu(); // LD SP, $0000
+    gb.run_cpu(); // LDH (IF), A → sets IF=0x03, triggers VBlank dispatch, upper push rewrites IE to 0xC2 → STAT reselected
+
+    assert_eq!(
+        gb.cpu.pc, 0x0048,
+        "IE clobber during upper push should switch dispatch from VBlank to STAT"
+    );
+    assert_eq!(
+        gb.ints.read_if() & 0x1F,
+        0x01,
+        "Only VBlank should remain pending after STAT dispatch"
+    );
+}
+
+#[test]
+fn mooneye_acceptance_if_ie_registers_if_without_ie_does_not_dispatch() {
+    let mut gb = setup_dmg_with_rom(&[(0x0058, 0x1C), (0x0059, 0xD9)]);
+    gb.cpu.af = 0;
+    gb.cpu.bc = 0;
+    gb.cpu.de = 0;
+    gb.ints.disable();
+    gb.ints.write_if(0x00);
+    gb.ints.write_ie(0x00);
+
+    gb.ints.enable();
+    gb.ints.write_if(0x08);
+    for _ in 0..64 {
+        gb.run_cpu();
+    }
+
+    assert_eq!(
+        gb.cpu.de & 0x00FF,
+        0x00,
+        "Serial handler must not run when IE is 0"
+    );
+    assert_eq!(
+        gb.ints.read_if(),
+        0xE8,
+        "IF should retain the serial bit when IE is 0"
+    );
+}
+
+#[test]
+fn mooneye_acceptance_if_ie_registers_enabling_ie_triggers_once() {
+    let mut gb = setup_dmg_with_rom(&[(0x0058, 0x1C), (0x0059, 0xD9)]);
+    let base = 0xC000;
+    gb.set_cpu_pc(base);
+    gb.set_cpu_sp(0xD000);
+    gb.cpu.de = 0;
+    gb.ints.write_if(0x08);
+    gb.ints.write_ie(0x00);
+    gb.ints.enable();
+    write_code(&mut gb, base, &[0x00, 0x00]);
+
+    gb.ints.write_ie(0x08);
+    gb.run_cpu();
+    assert_eq!(
+        gb.cpu.pc, 0x0058,
+        "Enabling IE with IF already set should dispatch serial on the next instruction boundary"
+    );
+    gb.run_cpu();
+    gb.run_cpu();
+
+    assert_eq!(
+        gb.cpu.de & 0x00FF,
+        0x01,
+        "Serial handler should increment E exactly once"
+    );
+    assert_eq!(
+        gb.ints.read_if(),
+        0xE0,
+        "IF should be cleared after RETI from serial handler"
+    );
+}
+
+#[test]
+fn mooneye_acceptance_halt_ime0_ei_ei_before_halt_behaves_like_ime1() {
+    let mut gb = setup_gb();
+    let base = 0xC000;
+    gb.set_cpu_pc(base);
+    gb.set_cpu_sp(0xD000);
+    gb.ints.disable();
+    gb.ints.write_if(0x01);
+    gb.ints.write_ie(0x01);
+    write_code(&mut gb, base, &[0xFB, 0x76, 0xF3]);
+
+    gb.run_cpu();
+    gb.run_cpu();
+
+    assert_eq!(
+        gb.cpu.pc, 0x0040,
+        "EI before HALT should cause the pending VBlank interrupt to dispatch at HALT time"
+    );
+}
+
+#[test]
+fn mooneye_acceptance_halt_ime1_timing_interrupt_serviced_before_post_halt_instruction() {
+    let mut gb = setup_dmg_with_rom(&[(0x0050, 0x00)]);
+    let base = 0xC000;
+    gb.set_cpu_pc(base);
+    gb.set_cpu_sp(0xD000);
+    gb.cpu.bc = 0;
+    gb.ints.enable();
+    gb.ints.write_ie(0x04);
+    gb.write_tma(0x00);
+    gb.write_tima(0xF0);
+    gb.write_tac(0x05);
+    write_code(&mut gb, base, &[0x76, 0x04]);
+
+    // HALT: CPU halts, TIMA=0xF0, TAC=0x05 (clock/16).
+    // From 0xF0 to overflow: 16 ticks × 16 T-cycles = 256 T-cycles.
+    // Loop up to 80 × 4 = 320 T-cycles to give enough margin.
+    gb.run_cpu();
+    for _ in 0..80 {
+        if gb.ints.read_if() & 0x04 != 0 {
+            break;
+        }
+        gb.advance_dots(4);
+    }
+    gb.run_cpu();
+
+    assert_eq!(
+        gb.cpu.pc, 0x0050,
+        "HALT with IME=1 should service the timer interrupt before executing the following instruction"
+    );
+    assert_eq!(
+        gb.cpu.bc() >> 8,
+        0x00,
+        "Instruction after HALT must not execute before the interrupt service entry"
+    );
+}
+
+#[test]
+fn mooneye_acceptance_halt_ime0_nointr_timing_halt_matches_nointr_reference_window() {
+    let mut gb = setup_dmg_with_rom(&[]);
+    gb.set_cpu_pc(0x0200);
+    gb.ints.disable();
+    gb.ints.write_ie(0x01);
+    gb.ints.write_if(0x00);
+
+    write_code(&mut gb, 0x0200, &[0x76, 0x00, 0x00, 0x00]);
+
+    let start = gb.total_dots();
+    gb.run_cpu();
+    let halt_elapsed = gb.total_dots() - start;
+
+    gb.set_cpu_pc(0x0300);
+    write_code(&mut gb, 0x0300, &[0x00]);
+    let start = gb.total_dots();
+    gb.run_cpu();
+    let nop_elapsed = gb.total_dots() - start;
+
+    assert_eq!(
+        halt_elapsed, nop_elapsed,
+        "IME=0 HALT without pending interrupt should behave like a normal 1-cycle wait in this simplified window"
+    );
+}
+
+#[test]
+fn mooneye_acceptance_halt_ime1_timing2_gs_roundtrip_window_matches_dmg_expectation() {
+    let mut gb = setup_gb();
+    let base = 0xC000;
+    gb.set_cpu_pc(base);
+    gb.set_cpu_sp(0xD000);
+    gb.ints.write_ie(0x01);
+    gb.ints.write_if(0x01);
+    write_code(&mut gb, base, &[0xFB, 0x76, 0x00]);
+
+    gb.run_cpu();
+    let start = gb.total_dots();
+    gb.run_cpu();
+    let elapsed = gb.total_dots() - start;
+
+    assert_eq!(
+        gb.cpu.pc, 0x0040,
+        "DMG EI;HALT timing2-GS scenario should dispatch through the VBlank vector"
+    );
+    assert_eq!(
+        elapsed, 16,
+        "DMG EI;HALT dispatch window should take 4 M-cycles in this simplified timing2-GS scenario"
     );
 }
