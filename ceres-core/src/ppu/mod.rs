@@ -508,6 +508,7 @@ impl Ppu {
                 // State 19: 2 cycles (4 ticks)
                 if remaining == 4 {
                     self.ly_for_comparison = 0xFFFF;
+                    self.stat &= !STAT_LYC_B; // Clear coincidence flag when comparison disabled
                     self.update_stat(ints);
                 }
 
@@ -755,7 +756,12 @@ impl Ppu {
                 // blocked.  gambatte prewrite_lcdoffset1_1 confirms this boundary.
                 if tick == 3 {
                     self.ly = self.current_line;
-                    self.ly_for_comparison = if self.current_line != 0 { 0xFFFF } else { 0 };
+                    if self.current_line != 0 {
+                        self.ly_for_comparison = 0xFFFF;
+                        self.stat &= !STAT_LYC_B; // Clear coincidence flag when LY increments
+                    } else {
+                        self.ly_for_comparison = 0;
+                    }
 
                     // Set STAT mode bits to OAM scan so reads during the IRQ handler
                     // return mode 2, then pulse mode_for_interrupt to generate the
@@ -1755,6 +1761,7 @@ impl Ppu {
                     // Start of VBlank line logic.
                     // ly_for_comparison = -1 (0xFFFF).
                     self.ly_for_comparison = 0xFFFF;
+                    self.stat &= !STAT_LYC_B; // Clear coincidence flag when comparison disabled
                     self.update_stat(ints);
                 }
 
@@ -1846,6 +1853,7 @@ impl Ppu {
             self.wy_triggered = true;
         }
         self.ly_for_comparison = 0xFFFF;
+        self.stat &= !STAT_LYC_B; // Clear coincidence flag when comparison disabled
         self.dots_in_line = 0;
 
         // Present frame
@@ -1948,10 +1956,6 @@ impl Ppu {
         // current LY register, even during the window where ly_for_comparison
         // is 0xFFFF (which normally suppresses the internal comparison).
         if self.lcdc & LCDC_ON_B != 0 {
-            // First lower the STAT line so that a subsequent match generates a
-            // fresh rising edge even if the line was already high.  This models
-            // the hardware behaviour where writing LYC can re-trigger the IRQ.
-            self.stat_interrupt_line = false;
             self.stat &= !STAT_LYC_B;
             if u16::from(val) == u16::from(self.ly) {
                 self.stat |= STAT_LYC_B;
