@@ -1238,4 +1238,47 @@ fn samesuite_hdma_mode0() {
     assert_eq!(gb.read_mem(0xFF55), 0xFF);
 }
 
+// -----------------------------------------------------------------------
+// hdma_lcd_off - SameSuite/dma/hdma_lcd_off.asm
+//
+// Description:
+//   Test what happens when starting HDMA while the LCD is off.
+//   Hardware behavior: HDMA behaves exactly like GDMA (copies 1 block and
+//   decrements the counter) but does not continue.
+// -----------------------------------------------------------------------
+#[test]
+fn samesuite_hdma_lcd_off() {
+    let mut gb = setup_cgb();
+    gb.write_mem(0xFF40, 0x00); // LCD OFF
+
+    // Init source buffer in WRAM
+    for i in 0u16..32 {
+        gb.write_mem(0xC000 + i, i as u8);
+    }
+
+    // Program HDMA
+    gb.write_mem(0xFF51, 0xC0);
+    gb.write_mem(0xFF52, 0x00);
+    gb.write_mem(0xFF53, 0x08); // dst = 0x8800
+    gb.write_mem(0xFF54, 0x00);
+    
+    // Start HBlank DMA (bit 7 = 1, len = 1 -> 2 blocks)
+    // While LCD is off, it should immediately copy ONE block and pause.
+    gb.write_mem(0xFF55, 0x81);
+    gb.run_hdma();
+
+    // Verify first block is copied
+    for i in 0u16..16 {
+        assert_eq!(gb.read_mem(0x8800 + i), i as u8);
+    }
+    // Second block should NOT be copied (LCD is off, no HBlanks)
+    assert_eq!(gb.read_mem(0x8810), 0);
+    
+    // HDMA5 should reflect 1 block remaining (bits 6:0 = 0) and bit 7=0 (active)
+    let hdma5 = gb.read_mem(0xFF55);
+    assert_eq!(hdma5 & 0x80, 0x00, "HDMA should still be active (bit 7 = 0)");
+    assert_eq!(hdma5 & 0x7F, 0x00, "HDMA should have 1 block remaining (bits 6:0 = 0)");
+}
+
+
 
