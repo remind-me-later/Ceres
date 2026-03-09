@@ -1129,3 +1129,113 @@ fn speedchange2_div_resets_to_zero_after_double_switch() {
         "DIV must be 0x00 immediately after second speed switch"
     );
 }
+
+// -----------------------------------------------------------------------
+// gbc_dma_cont - SameSuite/dma/gbc_dma_cont.asm
+//
+// Description:
+//   Test what happens when partially initializing a new GDMA after the
+//   previous one ends normally.
+// -----------------------------------------------------------------------
+#[test]
+fn samesuite_gbc_dma_cont() {
+    let mut gb = setup_cgb();
+
+    // Init source buffer in WRAM
+    for i in 0u16..32 {
+        gb.write_mem(0xC000 + i, i as u8);
+    }
+
+    // GDMA 1: copy 1 block (16 bytes) to VRAM 0x8000
+    gb.write_mem(0xFF51, 0xC0);
+    gb.write_mem(0xFF52, 0x00);
+    gb.write_mem(0xFF53, 0x00);
+    gb.write_mem(0xFF54, 0x00);
+    gb.write_mem(0xFF55, 0x00); // 1 block GDMA
+    gb.run_hdma();
+
+    // Verify first block
+    for i in 0u16..16 {
+        assert_eq!(gb.read_mem(0x8000 + i), i as u8);
+    }
+
+    // Trigger another 1-block GDMA immediately by writing to HDMA5 again
+    // It should continue from where the previous one left off (src=0xC010, dst=0x8010)
+    gb.write_mem(0xFF55, 0x00);
+    gb.run_hdma();
+
+    // Verify second block
+    for i in 0u16..16 {
+        assert_eq!(gb.read_mem(0x8010 + i), (i + 16) as u8);
+    }
+}
+
+// -----------------------------------------------------------------------
+// hdma_mode0 - SameSuite/dma/hdma_mode0.asm
+//
+// Description:
+//   Test what happens when performing a HDMA. A single block should get
+//   copied per HBlank, and the count should decrement.
+// -----------------------------------------------------------------------
+#[test]
+fn samesuite_hdma_mode0() {
+    let mut gb = setup_cgb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    // Init source buffer in WRAM
+    for i in 0u16..32 {
+        gb.write_mem(0xC000 + i, i as u8);
+    }
+
+    // Program HDMA
+    gb.write_mem(0xFF51, 0xC0);
+    gb.write_mem(0xFF52, 0x00);
+    gb.write_mem(0xFF53, 0x08); // dst = 0x8800
+    gb.write_mem(0xFF54, 0x00);
+    
+    // Start 2-block HBlank DMA (bit 7 = 1, len = 1)
+    gb.write_mem(0xFF55, 0x81);
+
+    // Should be active, but nothing copied yet (not in HBlank)
+    assert_eq!(gb.read_mem(0xFF55) & 0x80, 0);
+    assert_eq!(gb.read_mem(0x8800), 0);
+
+    // Advance to HBlank
+    loop {
+        gb.advance_dots(1);
+        gb.run_hdma();
+        if (gb.read_mem(0xFF41) & 0x03) == 0 { break; }
+    }
+    
+    // After one HBlank, first block should be copied
+    for i in 0u16..16 {
+        assert_eq!(gb.read_mem(0x8800 + i), i as u8);
+    }
+    // Second block not yet
+    assert_eq!(gb.read_mem(0x8810), 0);
+    
+    // HDMA5 should reflect 1 block remaining (bits 6:0 = 0)
+    assert_eq!(gb.read_mem(0xFF55) & 0x7F, 0);
+
+    // Advance to next HBlank
+    loop {
+        gb.advance_dots(1);
+        gb.run_hdma();
+        if (gb.read_mem(0xFF41) & 0x03) != 0 { break; } // Exit current HBlank
+    }
+    loop {
+        gb.advance_dots(1);
+        gb.run_hdma();
+        if (gb.read_mem(0xFF41) & 0x03) == 0 { break; } // Enter next HBlank
+    }
+
+    // Now second block should be copied
+    for i in 0u16..16 {
+        assert_eq!(gb.read_mem(0x8810 + i), (i + 16) as u8);
+    }
+    
+    // HDMA5 bit 7 should be set (finished)
+    assert_eq!(gb.read_mem(0xFF55), 0xFF);
+}
+
+

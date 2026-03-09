@@ -3732,6 +3732,37 @@ fn mooneye_hblank_ly_scx_timing_all() {
 }
 
 // -----------------------------------------------------------------------
+// blocking_bgpi_increase - SameSuite/ppu/blocking_bgpi_increase.asm
+//
+// Description:
+//   Test that writing to BCPD correctly triggers auto-increment of BCPS
+//   in all PPU modes (HBlank, VBlank, OAM Scan, Drawing).
+// -----------------------------------------------------------------------
+#[test]
+fn samesuite_blocking_bgpi_increase() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    // Test in each mode
+    let modes = [0, 1, 2, 3];
+    for mode in modes {
+        // Advance to desired mode
+        advance_to_mode(&mut gb, mode);
+        
+        // Write index 4, enable auto-increment
+        gb.write_mem(0xFF68, 0x84);
+        assert_eq!(gb.read_mem(0xFF68), 0xC4, "BCPS write failed in mode {}", mode);
+        
+        // Write data to BCPD
+        gb.write_mem(0xFF69, 0xAA);
+        
+        // Check if index incremented to 5
+        assert_eq!(gb.read_mem(0xFF68), 0xC5, "BCPS auto-increment failed in mode {}", mode);
+    }
+}
+
+
+// -----------------------------------------------------------------------
 // intr_2_mode0_timing - mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing.s
 //
 // Description:
