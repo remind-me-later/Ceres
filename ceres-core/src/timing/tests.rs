@@ -1,4 +1,12 @@
 use crate::test_util::setup_gb;
+use crate::{GbBuilder, Model};
+
+#[cfg(test)]
+fn setup_cgb() -> crate::Gb<crate::test_util::DummyAudio> {
+    GbBuilder::new(44100, crate::test_util::DummyAudio)
+        .with_model(Model::CgbE)
+        .build()
+}
 
 #[test]
 fn test_tima_reload_delay() {
@@ -106,7 +114,7 @@ fn test_tima_increment_cpu_sync() {
 fn test_timer_glitch_tac_stop() {
     let mut gb = setup_gb();
     gb.write_mem(0xFF04, 0); // Reset DIV
-    // Advance DIV to a point where bit 9 is 1 (T=512)
+                             // Advance DIV to a point where bit 9 is 1 (T=512)
     for _ in 0..512 / 4 {
         gb.advance_dots(4);
     }
@@ -376,5 +384,38 @@ fn test_div_write_glitch_tc01() {
         gb.read_mem(0xFF05),
         0x11,
         "DIV write glitch (tc01) must increment TIMA when mux bit3 is 1"
+    );
+}
+
+/// Simulate mooneye rapid_toggle loop on CGB.
+/// The loop: writes TAC=0x04 (start) then TAC=0x00 (stop) repeatedly.
+/// The disable-glitch fires on both DMG and CGB when the timer is enabled and
+/// the muxed DIV bit is 1 at the time of the stop-write (SameBoy behaviour,
+/// mooneye rapid_toggle test confirmed to pass on CGB hardware).
+/// This test verifies that TIMA increments via the glitch on CGB.
+#[test]
+fn test_timer_rapid_toggle_cgb_disable_glitch_fires() {
+    let mut gb = setup_cgb();
+    gb.write_mem(0xFF04, 0); // Reset DIV
+    gb.write_mem(0xFF40, 0); // LCD off
+    gb.write_mem(0xFF07, 0x00); // TAC disabled initially
+    gb.write_mem(0xFF06, 0x00); // TMA = 0
+    gb.write_mem(0xFF05, 0xF0); // TIMA = 0xF0 (needs 16 more increments to overflow)
+
+    // Advance DIV until bit 9 is set: bit9 = 1 at T=512 from div=0
+    for _ in 0..512 / 4 {
+        gb.advance_dots(4);
+    }
+
+    // Now div & 512 != 0. Enable then immediately disable:
+    gb.write_mem(0xFF07, 0x04); // TAC=0x04 (enable, mode 0, bit9): no glitch on enable
+    let tima_before = gb.read_mem(0xFF05);
+    gb.write_mem(0xFF07, 0x00); // TAC=0x00 (disable): glitch fires because bit9 was 1
+    let tima_after = gb.read_mem(0xFF05);
+
+    assert_eq!(
+        tima_after,
+        tima_before.wrapping_add(1),
+        "CGB disable-glitch must fire: TIMA must increment when bit9=1 and timer stopped"
     );
 }

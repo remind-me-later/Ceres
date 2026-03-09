@@ -2,8 +2,8 @@ use ceres_core::Model;
 use ceres_test_runner::{
     expected_screenshot_path, load_test_rom,
     test_runner::{
-        CompletionCheck, DummyAudioCallback, ScreenshotCheck, TestConfig, TestResult, TestRunner,
-        timeouts,
+        timeouts, CompletionCheck, DummyAudioCallback, ScreenshotCheck, TestConfig, TestResult,
+        TestRunner,
     },
 };
 
@@ -698,7 +698,7 @@ fn test_mooneye_timer_div_write() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing
+#[ignore = "timer/rapid_toggle: BC at interrupt time does not match expected $FFD9 — TAC glitch fires but loop timing is off"]
 fn test_mooneye_timer_rapid_toggle() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/timer/rapid_toggle.gb",

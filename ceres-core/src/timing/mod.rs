@@ -188,8 +188,17 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn write_tac(&mut self, val: u8) {
-        // Timer glitch: if timer is enabled and the muxed bit was 1,
-        // and now it's disabled or the new muxed bit is 0, TIMA increments.
+        // Timer glitch: the AND gate output falls when (old_enable AND old_div_bit) was 1
+        // and (new_enable AND new_div_bit) is 0, causing a spurious TIMA increment.
+        //
+        // This is based on the expected results of the mooneye rapid_toggle test and
+        // SameBoy's GB_emulate_timer_glitch implementation. Both DMG and CGB behave the
+        // same for this case (the Pan Docs note that disabling the timer glitch does not
+        // happen on CGB refers to a different scenario not tested by rapid_toggle).
+        //
+        // References:
+        //   - Pan Docs "Timer Obscure Behaviour"
+        //   - SameBoy Core/timing.c: GB_emulate_timer_glitch
         if (self.clock.tac & 4) != 0 {
             let old_bit = Self::sys_clk_tac_mux(self.clock.tac);
             if (self.clock.div & old_bit) != 0 {
