@@ -1649,3 +1649,34 @@ fn mooneye_acceptance_halt_ime1_timing2_gs_roundtrip_window_matches_dmg_expectat
         "DMG EI;HALT dispatch window should take 4 M-cycles in this simplified timing2-GS scenario"
     );
 }
+#[test]
+fn samesuite_ei_delay_halt() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x00);
+
+    gb.ints.write_ie(0x07);
+    gb.ints.write_if(0x03);
+    gb.ints.disable();
+
+    gb.write_mem(0xC000, 0xFB); // EI
+    gb.write_mem(0xC001, 0x76); // HALT
+    gb.write_mem(0xC002, 0x00); // NOP
+    gb.cpu.pc = 0xC000;
+    gb.cpu.sp = 0xD000; // Safe stack
+
+    gb.run_cpu(); // Run EI
+    assert!(gb.cpu.has_ei_delay);
+    assert!(!gb.ints.are_enabled());
+
+    gb.run_cpu(); // Run HALT
+    // Interrupt should have dispatched. IME becomes 0.
+    assert!(!gb.ints.are_enabled()); 
+    assert_eq!(gb.cpu.pc, 0x0040); // VBlank vector
+    
+    // Check if it pushed the return address 0xC001 (HALT)
+    let sp = gb.cpu.sp;
+    let lo = gb.read_mem(sp);
+    let hi = gb.read_mem(sp + 1);
+    let ret_addr = (hi as u16) << 8 | (lo as u16);
+    assert_eq!(ret_addr, 0xC001, "Should return to HALT instruction");
+}

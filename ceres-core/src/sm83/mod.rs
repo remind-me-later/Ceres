@@ -189,10 +189,8 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn run_cpu(&mut self) {
-        if self.cpu.has_ei_delay {
-            self.ints.enable();
-            self.cpu.has_ei_delay = false;
-        }
+        let has_ei_delay = self.cpu.has_ei_delay;
+        self.cpu.has_ei_delay = false;
 
         if self.cpu.is_halted {
             self.tick_m_cycle();
@@ -208,11 +206,24 @@ impl<A: AudioCallback> Gb<A> {
             self.exec(op);
         }
 
+        if has_ei_delay {
+            self.ints.enable();
+
+            if self.cpu.is_halt_bug_triggered {
+                self.cpu.skip_isr_nops = true;
+            }
+        }
+
         if self.ints.is_any_requested() {
             self.cpu.is_halted = false;
             self.ppu.leave_stop_mode();
 
             if self.ints.are_enabled() {
+                if self.cpu.is_halt_bug_triggered {
+                    self.cpu.pc = self.cpu.pc.wrapping_sub(1);
+                    self.cpu.is_halt_bug_triggered = false;
+                }
+
                 // Skip the two internal NOP ticks when waking from HALT with
                 // IME=1 and interrupt already pending (SameBoy zeros
                 // pending_cycles in that case, so the opcode fetch + internal
