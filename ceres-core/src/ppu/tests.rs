@@ -3731,5 +3731,59 @@ fn mooneye_hblank_ly_scx_timing_all() {
     }
 }
 
+// -----------------------------------------------------------------------
+// intr_2_mode0_timing - mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing.s
+//
+// Description:
+//   Tests how long it takes to get from STAT=mode2 interrupt to STAT mode 0 (register read).
+// -----------------------------------------------------------------------
+#[test]
+fn mooneye_intr_2_mode0_timing() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+
+    // Wait until LY=66
+    advance_to_ly(&mut gb, 66);
+    advance_to_mode(&mut gb, 3);
+
+    // Enable mode 2 interrupt for the next line (LY=67)
+    gb.write_mem(0xFF41, 0x20);
+    gb.ints.write_if(0);
+
+    // Wait for Mode 2 interrupt
+    let mut mode2_tick = 0;
+    for t in 0..10_000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            mode2_tick = t;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert!(mode2_tick > 0, "Mode 2 interrupt didn't fire");
+
+    // Clear IF
+    gb.ints.acknowledge_interrupt(0x02);
+
+    // Wait for Mode 0 on the same line (by checking STAT register)
+    let mut mode0_tick = 0;
+    for t in 0..10_000 {
+        if (gb.ppu.read_stat() & 0x03) == 0 {
+            mode0_tick = t;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert!(mode0_tick > 0, "Mode 0 didn't start");
+
+    // Mode 2 is 160 ticks. Mode 3 is roughly 344 ticks.
+    // Distance should be ~504 ticks.
+    assert!(
+        (500..=520).contains(&mode0_tick),
+        "Mode 2 to Mode 0 STAT duration {} not within expected bounds (expected ~504 ticks)",
+        mode0_tick
+    );
+}
+
+
 
 
