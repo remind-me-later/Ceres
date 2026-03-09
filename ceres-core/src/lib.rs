@@ -428,4 +428,20 @@ impl<A: AudioCallback> Gb<A> {
     pub(crate) fn set_cpu_pc(&mut self, pc: u16) {
         self.cpu.set_pc(pc);
     }
+
+    pub(crate) fn set_cpu_bc(&mut self, bc: u16) {
+        self.cpu.set_bc(bc);
+    }
+
+    pub(crate) fn set_cpu_de(&mut self, de: u16) {
+        self.cpu.set_de(de);
+    }
+
+    pub(crate) fn set_cpu_hl(&mut self, hl: u16) {
+        self.cpu.set_hl(hl);
+    }
+
+    pub(crate) fn set_cpu_sp(&mut self, sp: u16) {
+        self.cpu.set_sp(sp);
+    }
 }

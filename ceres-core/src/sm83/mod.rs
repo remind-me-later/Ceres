@@ -62,6 +62,22 @@ impl Sm83 {
     pub(crate) fn set_pc(&mut self, pc: u16) {
         self.pc = pc;
     }
+
+    pub(crate) fn set_bc(&mut self, bc: u16) {
+        self.bc = bc;
+    }
+
+    pub(crate) fn set_de(&mut self, de: u16) {
+        self.de = de;
+    }
+
+    pub(crate) fn set_hl(&mut self, hl: u16) {
+        self.hl = hl;
+    }
+
+    pub(crate) fn set_sp(&mut self, sp: u16) {
+        self.sp = sp;
+    }
 }
 
 impl<A: AudioCallback> Gb<A> {

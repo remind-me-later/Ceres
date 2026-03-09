@@ -1932,3 +1932,766 @@ fn gambatte_sprites_10xposa7_no_mode3_penalty() {
         duration
     );
 }
+
+// ── Blargg OAM bug-derived unit tests ─────────────────────────────────────────────────────────
+
+#[derive(Clone, Copy)]
+enum BlarggOamBugAccessKind {
+    Write,
+    ReadWrite,
+}
+
+fn advance_to_ly_dot(gb: &mut Gb, target_ly: u8, target_dot: u16) {
+    for _ in 0..10_000_000 {
+        if gb.ppu.read_ly() == target_ly && gb.ppu.dots_in_line() == target_dot {
+            return;
+        }
+        gb.advance_dots(1);
+    }
+
+    panic!(
+        "LY={} dot={} never reached (current LY={}, dot={})",
+        target_ly,
+        target_dot,
+        gb.ppu.read_ly(),
+        gb.ppu.dots_in_line()
+    );
+}
+
+fn fill_blargg_oam_bug_pattern(gb: &mut Gb) {
+    for i in 0u16..0x00A0 {
+        let val = (i as u8).wrapping_mul(3).wrapping_add(1);
+        gb.ppu.write_oam_by_dma(0xFE00 + i, val);
+    }
+}
+
+fn snapshot_oam(gb: &Gb) -> [u8; 0xA0] {
+    let mut bytes = [0; 0xA0];
+    bytes.copy_from_slice(gb.ppu.oam().bytes());
+    bytes
+}
+
+fn row_base(row: usize) -> usize {
+    row * 8
+}
+
+fn read_oam_word(bytes: &[u8; 0xA0], row: usize, word: usize) -> u16 {
+    let base = row_base(row) + word * 2;
+    u16::from_le_bytes([bytes[base], bytes[base + 1]])
+}
+
+fn write_oam_word(bytes: &mut [u8; 0xA0], row: usize, word: usize, val: u16) {
+    let base = row_base(row) + word * 2;
+    let [lo, hi] = val.to_le_bytes();
+    bytes[base] = lo;
+    bytes[base + 1] = hi;
+}
+
+fn apply_blargg_oam_bug_write_corruption(bytes: &mut [u8; 0xA0], row: usize) {
+    if row == 0 {
+        return;
+    }
+
+    let a = read_oam_word(bytes, row, 0);
+    let b = read_oam_word(bytes, row - 1, 0);
+    let c = read_oam_word(bytes, row - 1, 2);
+    write_oam_word(bytes, row, 0, ((a ^ c) & (b ^ c)) ^ c);
+
+    for word in 1..4 {
+        let prev = read_oam_word(bytes, row - 1, word);
+        write_oam_word(bytes, row, word, prev);
+    }
+}
+
+fn apply_blargg_oam_bug_read_corruption(bytes: &mut [u8; 0xA0], row: usize) {
+    if row == 0 {
+        return;
+    }
+
+    let a = read_oam_word(bytes, row, 0);
+    let b = read_oam_word(bytes, row - 1, 0);
+    let c = read_oam_word(bytes, row - 1, 2);
+    write_oam_word(bytes, row, 0, b | (a & c));
+
+    for word in 1..4 {
+        let prev = read_oam_word(bytes, row - 1, word);
+        write_oam_word(bytes, row, word, prev);
+    }
+}
+
+fn apply_blargg_oam_bug_read_write_corruption(bytes: &mut [u8; 0xA0], row: usize) {
+    if (4..19).contains(&row) {
+        let a = read_oam_word(bytes, row - 2, 0);
+        let b = read_oam_word(bytes, row - 1, 0);
+        let c = read_oam_word(bytes, row, 0);
+        let d = read_oam_word(bytes, row - 1, 2);
+        let corrupt_prev = (b & (a | c | d)) | (a & c & d);
+        write_oam_word(bytes, row - 1, 0, corrupt_prev);
+
+        let prev_row_words = [
+            read_oam_word(bytes, row - 1, 0),
+            read_oam_word(bytes, row - 1, 1),
+            read_oam_word(bytes, row - 1, 2),
+            read_oam_word(bytes, row - 1, 3),
+        ];
+
+        for (word, val) in prev_row_words.into_iter().enumerate() {
+            write_oam_word(bytes, row, word, val);
+            write_oam_word(bytes, row - 2, word, val);
+        }
+    }
+
+    apply_blargg_oam_bug_read_corruption(bytes, row);
+}
+
+fn expected_oam_after_blargg_oam_bug_access(
+    initial: [u8; 0xA0],
+    row: usize,
+    access: BlarggOamBugAccessKind,
+) -> [u8; 0xA0] {
+    let mut expected = initial;
+    match access {
+        BlarggOamBugAccessKind::Write => {
+            apply_blargg_oam_bug_write_corruption(&mut expected, row);
+        }
+        BlarggOamBugAccessKind::ReadWrite => {
+            apply_blargg_oam_bug_read_write_corruption(&mut expected, row);
+        }
+    }
+    expected
+}
+
+fn assert_oam_changed(before: &[u8; 0xA0], after: &[u8; 0xA0], context: &str) {
+    assert_ne!(before, after, "Expected OAM corruption: {context}");
+}
+
+fn assert_oam_unchanged(before: &[u8; 0xA0], after: &[u8; 0xA0], context: &str) {
+    assert_eq!(before, after, "Expected OAM to remain unchanged: {context}");
+}
+
+fn run_opcode(gb: &mut Gb, bytes: &[u8]) {
+    let pc = 0xC000;
+    gb.set_cpu_pc(pc);
+    for (i, &byte) in bytes.iter().enumerate() {
+        gb.write_mem(pc + i as u16, byte);
+    }
+    gb.run_cpu();
+}
+
+fn setup_blargg_oam_bug_mid_window() -> Gb {
+    let mut gb = setup_gb();
+    fill_blargg_oam_bug_pattern(&mut gb);
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_ly_dot(&mut gb, 2, 16);
+    gb
+}
+
+#[test]
+fn blargg_oam_bug_1_lcd_sync_turning_lcd_on_starts_too_late_in_scanline() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x00);
+    gb.write_mem(0xFF40, 0x81);
+
+    // Blargg measures in M-cycles and then performs `ldh a,(LY)` (3 M-cycles).
+    // To sample at the same instant, advance 112 M-cycles = 448 T-cycles.
+    for _ in 0..448 {
+        gb.advance_dots(1);
+    }
+
+    assert_eq!(gb.ppu.read_ly(), 0);
+}
+
+#[test]
+fn blargg_oam_bug_1_lcd_sync_turning_lcd_on_starts_too_early_in_scanline() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x00);
+    gb.write_mem(0xFF40, 0x81);
+
+    // `delay 110` followed by `ldh a,(LY)` samples 113 M-cycles after LCD-on.
+    // 113 M-cycles = 452 T-cycles.
+    for _ in 0..452 {
+        gb.advance_dots(1);
+    }
+
+    assert_eq!(gb.ppu.read_ly(), 1);
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_2_causes_ld_de_fe00_inc_de() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_de(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x13]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_changed(&before, &after, "2-causes: LD DE,$FE00 : INC DE");
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_2_causes_ld_de_fe00_dec_de() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_de(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x1B]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_changed(&before, &after, "2-causes: LD DE,$FE00 : DEC DE");
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_2_causes_ld_de_feff_inc_de() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_de(0xFEFF);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x13]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_changed(&before, &after, "2-causes: LD DE,$FEFF : INC DE");
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_2_causes_ld_bc_fe00_inc_bc() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_bc(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x03]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_changed(&before, &after, "2-causes: LD BC,$FE00 : INC BC");
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_2_causes_ld_hl_fe00_inc_hl() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_hl(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x23]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_changed(&before, &after, "2-causes: LD HL,$FE00 : INC HL");
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_2_causes_ld_sp_fe00_inc_sp() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_sp(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x33]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_changed(&before, &after, "2-causes: LD SP,$FE00 : INC SP");
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_2_causes_ld_sp_fdff_pop_bc() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_sp(0xFDFF);
+    gb.write_mem(0xFDFF, 0x34);
+    gb.write_mem(0xFE00, 0x12);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0xC1]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_changed(&before, &after, "2-causes: LD SP,$FDFF : POP BC");
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_2_causes_ld_sp_fe00_push_bc() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_sp(0xFE00);
+    gb.set_cpu_bc(0x1234);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0xC5]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_changed(&before, &after, "2-causes: LD SP,$FE00 : PUSH BC");
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_2_causes_ld_hl_fe00_ld_a_hli() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_hl(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x2A]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_changed(&before, &after, "2-causes: LD HL,$FE00 : LD A,(HL+)");
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_2_causes_ld_hl_fe00_ld_a_hld() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_hl(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x3A]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_changed(&before, &after, "2-causes: LD HL,$FE00 : LD A,(HL-)");
+}
+
+#[test]
+fn blargg_oam_bug_3_non_causes_when_lcd_is_off() {
+    let mut gb = setup_gb();
+    fill_blargg_oam_bug_pattern(&mut gb);
+    gb.set_cpu_de(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    for _ in 0..64 {
+        run_opcode(&mut gb, &[0x13]);
+        run_opcode(&mut gb, &[0x1B]);
+    }
+
+    let after = snapshot_oam(&gb);
+    assert_oam_unchanged(&before, &after, "3-non_causes: When LCD is off");
+}
+
+#[test]
+fn blargg_oam_bug_3_non_causes_ld_de_ff00_dec_de() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_de(0xFF00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x1B]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_unchanged(&before, &after, "3-non_causes: LD DE,$FF00 : DEC DE");
+}
+
+#[test]
+fn blargg_oam_bug_3_non_causes_ld_de_fdff_inc_de() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_de(0xFDFF);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x13]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_unchanged(&before, &after, "3-non_causes: LD DE,$FDFF : INC DE");
+}
+
+#[test]
+fn blargg_oam_bug_3_non_causes_ld_de_7e00_inc_de() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_de(0x7E00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x13]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_unchanged(&before, &after, "3-non_causes: LD DE,$7E00 : INC DE");
+}
+
+#[test]
+fn blargg_oam_bug_3_non_causes_ld_de_fe00_inc_e() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_de(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x1C]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_unchanged(&before, &after, "3-non_causes: LD DE,$FE00 : INC E");
+}
+
+#[test]
+fn blargg_oam_bug_3_non_causes_ld_sp_fdfe_pop_bc() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_sp(0xFDFE);
+    gb.write_mem(0xFDFE, 0x34);
+    gb.write_mem(0xFDFF, 0x12);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0xC1]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_unchanged(&before, &after, "3-non_causes: LD SP,$FDFE : POP BC");
+}
+
+#[test]
+fn blargg_oam_bug_3_non_causes_ld_sp_fe00_ld_hl_sp_plus_1() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_sp(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0xF8, 0x01]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_unchanged(&before, &after, "3-non_causes: LD SP,$FE00 : LD HL,SP+1");
+}
+
+#[test]
+fn blargg_oam_bug_3_non_causes_ld_hl_fe00_ld_bc_0001_add_hl_bc() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_hl(0xFE00);
+    gb.set_cpu_bc(0x0001);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x09]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_unchanged(
+        &before,
+        &after,
+        "3-non_causes: LD HL,$FE00 : LD BC,$0001 : ADD HL,BC",
+    );
+}
+
+#[test]
+fn blargg_oam_bug_3_non_causes_ld_sp_fe00_add_sp_1() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_sp(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0xE8, 0x01]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_unchanged(&before, &after, "3-non_causes: LD SP,$FE00 : ADD SP,1");
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_4_scanline_timing_inc_de_just_before_first_corruption() {
+    let mut gb = setup_gb();
+    fill_blargg_oam_bug_pattern(&mut gb);
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_ly_dot(&mut gb, 1, 448);
+    gb.set_cpu_de(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x13]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_unchanged(
+        &before,
+        &after,
+        "4-scanline_timing: INC DE just before first corruption",
+    );
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_4_scanline_timing_inc_de_at_first_corruption() {
+    let mut gb = setup_gb();
+    fill_blargg_oam_bug_pattern(&mut gb);
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_ly_dot(&mut gb, 1, 452);
+    gb.set_cpu_de(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x13]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_changed(
+        &before,
+        &after,
+        "4-scanline_timing: INC DE at first corruption",
+    );
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_4_scanline_timing_inc_de_at_last_corruption() {
+    let mut gb = setup_gb();
+    fill_blargg_oam_bug_pattern(&mut gb);
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_ly_dot(&mut gb, 1, 72);
+    gb.set_cpu_de(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x13]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_changed(
+        &before,
+        &after,
+        "4-scanline_timing: INC DE at last corruption",
+    );
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_4_scanline_timing_inc_de_just_after_last_corruption() {
+    let mut gb = setup_gb();
+    fill_blargg_oam_bug_pattern(&mut gb);
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_ly_dot(&mut gb, 1, 76);
+    gb.set_cpu_de(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x13]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_unchanged(
+        &before,
+        &after,
+        "4-scanline_timing: INC DE just after last corruption",
+    );
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_5_timing_bug_should_corrupt_at_beginning_of_first_scanline() {
+    let mut gb = setup_gb();
+    fill_blargg_oam_bug_pattern(&mut gb);
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_ly_dot(&mut gb, 1, 452);
+    gb.set_cpu_de(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x13]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_changed(&before, &after, "5-timing_bug: beginning of first scanline");
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_5_timing_bug_should_corrupt_at_plus_18_of_first_scanline() {
+    let mut gb = setup_gb();
+    fill_blargg_oam_bug_pattern(&mut gb);
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_ly_dot(&mut gb, 1, 72);
+    gb.set_cpu_de(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x13]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_changed(&before, &after, "5-timing_bug: +18 of first scanline");
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_5_timing_bug_should_corrupt_at_beginning_of_second_scanline() {
+    let mut gb = setup_gb();
+    fill_blargg_oam_bug_pattern(&mut gb);
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_ly_dot(&mut gb, 2, 452);
+    gb.set_cpu_de(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x13]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_changed(
+        &before,
+        &after,
+        "5-timing_bug: beginning of second scanline",
+    );
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_5_timing_bug_should_corrupt_at_plus_18_of_last_scanline() {
+    let mut gb = setup_gb();
+    fill_blargg_oam_bug_pattern(&mut gb);
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_ly_dot(&mut gb, 143, 72);
+    gb.set_cpu_de(0xFE00);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0x13]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_changed(&before, &after, "5-timing_bug: +18 of last scanline");
+}
+
+#[test]
+fn blargg_oam_bug_6_timing_no_bug_safe_times_do_not_corrupt() {
+    for &ly in &[1u8, 2, 37, 73, 143] {
+        let mut before_window = setup_gb();
+        fill_blargg_oam_bug_pattern(&mut before_window);
+        before_window.write_mem(0xFF40, 0x80);
+        advance_to_ly_dot(&mut before_window, ly, 448);
+        before_window.set_cpu_de(0xFE00);
+        let before = snapshot_oam(&before_window);
+        run_opcode(&mut before_window, &[0x13]);
+        let after = snapshot_oam(&before_window);
+        assert_oam_unchanged(
+            &before,
+            &after,
+            "6-timing_no_bug: just before visible-line window",
+        );
+
+        let mut after_window = setup_gb();
+        fill_blargg_oam_bug_pattern(&mut after_window);
+        after_window.write_mem(0xFF40, 0x80);
+        advance_to_ly_dot(&mut after_window, ly, 76);
+        after_window.set_cpu_de(0xFE00);
+        let before = snapshot_oam(&after_window);
+        run_opcode(&mut after_window, &[0x1B]);
+        let after = snapshot_oam(&after_window);
+        assert_oam_unchanged(
+            &before,
+            &after,
+            "6-timing_no_bug: just after visible-line window",
+        );
+    }
+
+    let mut vblank = setup_gb();
+    fill_blargg_oam_bug_pattern(&mut vblank);
+    vblank.write_mem(0xFF40, 0x80);
+    advance_to_ly_dot(&mut vblank, 144, 16);
+    vblank.set_cpu_de(0xFE00);
+    let before = snapshot_oam(&vblank);
+    for _ in 0..32 {
+        run_opcode(&mut vblank, &[0x13]);
+        run_opcode(&mut vblank, &[0x1B]);
+    }
+    let after = snapshot_oam(&vblank);
+    assert_oam_unchanged(&before, &after, "6-timing_no_bug: vblank is always safe");
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_7_timing_effect_mid_window_rows_have_distinct_corruption_patterns() {
+    for row in 1usize..20 {
+        let mut gb = setup_gb();
+        fill_blargg_oam_bug_pattern(&mut gb);
+        gb.write_mem(0xFF40, 0x80);
+        let line_dot = (row as u16).saturating_mul(4).saturating_sub(4);
+        advance_to_ly_dot(&mut gb, 2, line_dot);
+        gb.set_cpu_de(0xFE00);
+        let before = snapshot_oam(&gb);
+        let expected =
+            expected_oam_after_blargg_oam_bug_access(before, row, BlarggOamBugAccessKind::Write);
+
+        run_opcode(&mut gb, &[0x13]);
+
+        let after = snapshot_oam(&gb);
+        assert_eq!(
+            after, expected,
+            "7-timing_effect: row {} should match write-corruption pattern",
+            row
+        );
+    }
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_8_instr_effect_inc_dec_rp_pattern_is_wrong() {
+    let row = 5usize;
+
+    let mut gb_inc = setup_gb();
+    fill_blargg_oam_bug_pattern(&mut gb_inc);
+    gb_inc.write_mem(0xFF40, 0x80);
+    advance_to_ly_dot(&mut gb_inc, 2, 16);
+    gb_inc.set_cpu_de(0xFE00);
+    let before_inc = snapshot_oam(&gb_inc);
+    let expected_inc =
+        expected_oam_after_blargg_oam_bug_access(before_inc, row, BlarggOamBugAccessKind::Write);
+    run_opcode(&mut gb_inc, &[0x13]);
+    let after_inc = snapshot_oam(&gb_inc);
+    assert_eq!(
+        after_inc, expected_inc,
+        "8-instr_effect: INC rr pattern should match write corruption"
+    );
+
+    let mut gb_dec = setup_gb();
+    fill_blargg_oam_bug_pattern(&mut gb_dec);
+    gb_dec.write_mem(0xFF40, 0x80);
+    advance_to_ly_dot(&mut gb_dec, 2, 16);
+    gb_dec.set_cpu_de(0xFE00);
+    let before_dec = snapshot_oam(&gb_dec);
+    let expected_dec =
+        expected_oam_after_blargg_oam_bug_access(before_dec, row, BlarggOamBugAccessKind::Write);
+    run_opcode(&mut gb_dec, &[0x1B]);
+    let after_dec = snapshot_oam(&gb_dec);
+    assert_eq!(
+        after_dec, expected_dec,
+        "8-instr_effect: DEC rr pattern should match write corruption"
+    );
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_8_instr_effect_pop_rp_pattern_is_wrong() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_sp(0xFE10);
+    gb.write_mem(0xFE10, 0x34);
+    gb.write_mem(0xFE11, 0x12);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0xC1]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_changed(
+        &before,
+        &after,
+        "8-instr_effect: POP rp should produce its corruption pattern",
+    );
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_8_instr_effect_push_rp_pattern_is_wrong() {
+    let mut gb = setup_blargg_oam_bug_mid_window();
+    gb.set_cpu_sp(0xFE10);
+    gb.set_cpu_bc(0x1234);
+    let before = snapshot_oam(&gb);
+
+    run_opcode(&mut gb, &[0xC5]);
+
+    let after = snapshot_oam(&gb);
+    assert_oam_changed(
+        &before,
+        &after,
+        "8-instr_effect: PUSH rp should produce its corruption pattern",
+    );
+}
+
+#[test]
+#[ignore = "DMG OAM corruption bug is not implemented yet"]
+fn blargg_oam_bug_8_instr_effect_ld_a_hl_inc_dec_pattern_is_wrong() {
+    let row = 5usize;
+
+    let mut gb_hli = setup_blargg_oam_bug_mid_window();
+    gb_hli.set_cpu_hl(0xFE10);
+    let before_hli = snapshot_oam(&gb_hli);
+    let expected_hli = expected_oam_after_blargg_oam_bug_access(
+        before_hli,
+        row,
+        BlarggOamBugAccessKind::ReadWrite,
+    );
+    run_opcode(&mut gb_hli, &[0x2A]);
+    let after_hli = snapshot_oam(&gb_hli);
+    assert_eq!(
+        after_hli, expected_hli,
+        "8-instr_effect: LD A,(HL+) should match read/write corruption"
+    );
+
+    let mut gb_hld = setup_blargg_oam_bug_mid_window();
+    gb_hld.set_cpu_hl(0xFE10);
+    let before_hld = snapshot_oam(&gb_hld);
+    let expected_hld = expected_oam_after_blargg_oam_bug_access(
+        before_hld,
+        row,
+        BlarggOamBugAccessKind::ReadWrite,
+    );
+    run_opcode(&mut gb_hld, &[0x3A]);
+    let after_hld = snapshot_oam(&gb_hld);
+    assert_eq!(
+        after_hld, expected_hld,
+        "8-instr_effect: LD A,(HL-) should match read/write corruption"
+    );
+}
