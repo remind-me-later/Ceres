@@ -4014,6 +4014,108 @@ fn age_ppu_scx_latching() {
     // as a placeholder for the latching logic.
 }
 
+// -----------------------------------------------------------------------
+// age_ppu_mode3_duration_scx - age-test-roms/src/stat-mode/stat-mode.inc
+//
+// Description:
+//   Tests how SCX affects the duration of Mode 3 (Drawing).
+//   Each pixel of scrolling adds overhead to the background fetcher.
+// -----------------------------------------------------------------------
+#[test]
+fn age_ppu_mode3_duration_scx() {
+    let mut results = Vec::new();
+    for scx in 0..8 {
+        let mut gb = setup_gb();
+        gb.write_mem(0xFF40, 0x81);
+        gb.write_mem(0xFF43, scx);
+        
+        advance_to_ly(&mut gb, 1);
+        advance_to_mode(&mut gb, 3);
+        
+        let mut duration = 0;
+        loop {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+            duration += 1;
+            if (gb.ppu.read_stat() & 0x03) != 3 {
+                break;
+            }
+        }
+        results.push(duration);
+    }
+    
+    // In Ceres, base duration is 344 ticks. Each SCX increment adds 2 ticks.
+    let expected = [344, 346, 348, 350, 352, 354, 356, 358];
+    assert_eq!(results, expected, "Mode 3 duration vs SCX timing changed!");
+}
+
+// -----------------------------------------------------------------------
+// age_ppu_vram_blocking - age-test-roms/src/vram/vram-read.inc
+//
+// Description:
+//   Tests exactly when VRAM becomes unblocked at the end of Mode 3.
+// -----------------------------------------------------------------------
+#[test]
+fn age_ppu_vram_blocking() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x81); // LCD ON
+    
+    advance_to_ly(&mut gb, 1);
+    advance_to_mode(&mut gb, 3);
+    
+    assert!(gb.ppu.vram_read_blocked, "VRAM should be blocked in Mode 3");
+    
+    let mut ticks_in_m3 = 0;
+    loop {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        ticks_in_m3 += 1;
+        if !gb.ppu.vram_read_blocked {
+            break;
+        }
+    }
+    
+    assert_eq!(ticks_in_m3, 344, "VRAM unblocking timing changed!");
+    assert_eq!(gb.ppu.read_stat() & 0x03, 0, "VRAM should unblock exactly when Mode 0 starts");
+}
+
+// -----------------------------------------------------------------------
+// age_ppu_mode3_duration_sprites - age-test-roms/src/stat-mode-sprites/
+//
+// Description:
+//   Tests how sprites increase the duration of Mode 3 (Drawing).
+//   Each sprite requires additional T-cycles for fetching.
+// -----------------------------------------------------------------------
+#[test]
+fn age_ppu_mode3_duration_sprites() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0); // LCD OFF
+    
+    // Setup 10 sprites on line 66
+    for i in 0..10 {
+        let addr = 0xFE00 + (i * 4);
+        gb.write_mem(addr, 82); // Y = 82 (line 66)
+        gb.write_mem(addr + 1, 8 + (i as u8 * 8)); // X
+    }
+    
+    gb.write_mem(0xFF40, 0x82); // LCD ON + OBJ ON
+    
+    advance_to_ly(&mut gb, 66);
+    advance_to_mode(&mut gb, 3);
+    
+    let mut duration = 0;
+    loop {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        duration += 1;
+        if (gb.ppu.read_stat() & 0x03) != 3 {
+            break;
+        }
+    }
+    
+    // 10 non-overlapping sprites should add 110 dots (220 ticks).
+    // 344 + 220 = 564.
+    assert_eq!(duration, 564, "Sprite Mode 3 penalty timing changed!");
+}
+
+
 
 
 
