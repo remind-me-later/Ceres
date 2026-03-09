@@ -3582,4 +3582,154 @@ fn mooneye_hblank_ly_scx_timing_intr() {
     );
 }
 
+// -----------------------------------------------------------------------
+// lcdon_timing - mooneye-test-suite/acceptance/ppu/lcdon_timing-GS.s
+//
+// Description:
+//   Tests the values of LY and STAT after the PPU is enabled.
+//   Validates the special Line 0 startup phases.
+// -----------------------------------------------------------------------
+#[test]
+fn mooneye_lcdon_timing_gs() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0); // LCD OFF
+
+    // Set LYC=0 to test STAT coincidence
+    gb.write_mem(0xFF45, 0);
+
+    gb.write_mem(0xFF40, 0x81); // LCD ON
+
+    // Tick 0 -> InitialMode0 (Mode 0 in STAT, all unblocked)
+    assert_eq!(gb.ppu.read_stat() & 0x03, 0);
+    assert_eq!(gb.ppu.read_ly(), 0);
+
+    // InitialMode0 takes 152 ticks. Let's advance 150 ticks.
+    for _ in 0..150 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Still mode 0
+    assert_eq!(gb.ppu.read_stat() & 0x03, 0);
+
+    // Advance remaining 2 ticks of InitialMode0, then the 14 ticks of remaining startup.
+    // Total startup = 166 ticks. We are at 150.
+    for _ in 0..16 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    
+    // Now we should have entered Mode 3 (Drawing)
+    assert_eq!(gb.ppu.read_stat() & 0x03, 3);
+}
+
+// -----------------------------------------------------------------------
+// lcdon_write_timing - mooneye-test-suite/acceptance/ppu/lcdon_write_timing-GS.s
+//
+// Description:
+//   Tests whether writes to OAM and VRAM pass after the PPU is enabled.
+//   Validates Ceres's exact cycle blocking logic during LCD power-on.
+// -----------------------------------------------------------------------
+#[test]
+fn mooneye_lcdon_write_timing_gs() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0); // LCD OFF
+
+    // Initially everything is writable
+    assert!(!gb.ppu.oam_write_blocked);
+    assert!(!gb.ppu.vram_write_blocked);
+
+    gb.write_mem(0xFF40, 0x81); // LCD ON
+
+    // Phase 1: InitialMode0 (152 ticks) - all unblocked
+    for _ in 0..151 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        assert!(!gb.ppu.oam_write_blocked, "OAM should not be blocked in Phase 1");
+    }
+    // Tick 152 transitions to Phase 2
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    assert!(gb.ppu.oam_write_blocked, "OAM should be blocked entering Phase 2");
+    assert!(!gb.ppu.vram_write_blocked, "VRAM should not be blocked entering Phase 2 on DMG");
+
+    // Phase 2: OamWriteBlock (4 ticks) - OAM write blocked, VRAM unblocked on DMG
+    for _ in 0..3 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        assert!(gb.ppu.oam_write_blocked);
+        assert!(!gb.ppu.vram_write_blocked);
+    }
+    // Tick 156 transitions to Phase 3
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    assert!(gb.ppu.oam_write_blocked);
+    assert!(gb.ppu.vram_write_blocked, "VRAM should be blocked entering Phase 3 on DMG");
+
+    // Phase 3: StatMode3 (4 ticks) - OAM fully blocked, VRAM blocked on DMG
+    for _ in 0..3 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        assert!(gb.ppu.oam_write_blocked);
+        assert!(gb.ppu.vram_write_blocked);
+    }
+    // Tick 160 transitions to Phase 4
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+
+    // Phase 4: PalettesBlock (6 ticks) - VRAM fully blocked
+    for _ in 0..5 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        assert!(gb.ppu.oam_write_blocked);
+        assert!(gb.ppu.vram_write_blocked);
+    }
+    // Tick 166 transitions to Mode 3
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+
+    // Entering Mode 3 (Drawing)
+    assert_eq!(gb.ppu.mode() as u8, 3);
+    assert!(gb.ppu.oam_write_blocked);
+    assert!(gb.ppu.vram_write_blocked);
+}
+
+// -----------------------------------------------------------------------
+// hblank_ly_scx_timing_all - Expands mooneye-test-suite/acceptance/ppu/hblank_ly_scx_timing-GS.s
+//
+// Description:
+//   Tests how SCX affects the duration between STAT mode=0 interrupt and LY increment.
+//   Verifies Ceres's exact tick progression across all SCX alignment delays.
+// -----------------------------------------------------------------------
+#[test]
+fn mooneye_hblank_ly_scx_timing_all() {
+    let expected_ticks = [402, 400, 398, 396, 394, 392, 390, 388];
+
+    for scx in 0..8 {
+        let mut gb = setup_gb();
+        gb.write_mem(0xFF40, 0x80);
+        gb.write_mem(0xFF43, scx);
+
+        advance_to_ly(&mut gb, 66);
+        advance_to_mode(&mut gb, 3);
+
+        gb.write_mem(0xFF41, 0x08); // Mode 0 interrupt
+        gb.ints.write_if(0);
+
+        for _ in 0..10_000 {
+            if gb.ints.read_if() & 0x02 != 0 {
+                break;
+            }
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+
+        let mut ticks_to_ly = 0;
+        loop {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+            ticks_to_ly += 1;
+            if gb.ppu.read_ly() == 67 {
+                break;
+            }
+        }
+        
+        assert_eq!(
+            ticks_to_ly, 
+            expected_ticks[scx as usize], 
+            "SCX={} did not match expected ticks to LY increment", 
+            scx
+        );
+    }
+}
+
+
 
