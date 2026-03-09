@@ -2048,45 +2048,50 @@ fn gambatte_sprites_10spritesprline_mode3_baseline() {
     );
 }
 
-/// gambatte `sprites/10spritesPrLine_10xposA7_m3stat_2` (DMG/CGB, expected 0x00 = Mode-0):
+/// gambatte `sprites/10spritesPrLine_10xposA7_m3stat_{1,2}` (DMG, expected 0x03 then 0x00):
 ///
-/// 10 sprites all at X = 0xA7 (167).  In hardware these sprites match at pixel position 159
-/// (the very last pixel of the line) and do NOT impose a Mode-3 penalty — Mode-3 exits after
-/// the last pixel is pushed.
+/// 10 sprites all at X = 0xA7 (167).  These sprites all match at pixel position 159 (the last
+/// pixel of the line).  Hardware fetches **all 10 sprites** consecutively before rendering
+/// pixel 159, matching SameBoy's behaviour: the inner object-fetch loop runs while
+/// `x_for_object_match` equals the current position (159 here), draining all matches before
+/// `render_pixel_if_possible` is called.
 ///
-/// Emulator bug: `start_sprite_fetch` is called for these sprites before the
-/// `position_in_line >= 160` exit guard fires, keeping Mode-3 alive for extra ticks and
-/// causing the emulator to report Mode-3 instead of Mode-0 at the probe instant.
+/// Each sprite fetch costs exactly 12 T-ticks (SameBoy-accurate):
+///   State-27 exit free-advance + State-41 (2 T) + OAM-read (4 T) + VRAM-lo (4 T) + VRAM-hi (2 T)
 ///
-/// This test verifies that Mode-3 with 10 sprites at X=0xA7 lasts the same as the no-sprite
-/// baseline (172 ticks), confirming no spurious penalty.
+/// Mode-3 duration: 344 (baseline) + 10 × 12 = **464 T-ticks**.
+/// The `_1` probe fires while Mode-3 is still active (sees 0x03 = Mode 3).
+/// The `_2` probe fires after Mode-3 ends (sees 0x00 = Mode 0).
 #[test]
-#[ignore = "Sprites at X=0xA7 (position 159) incorrectly extend Mode-3; \
-            gambatte 10xposA7_m3stat_2 expects Mode-0 (0x00), emulator returns Mode-3 (0x03)"]
 fn gambatte_sprites_10xposa7_no_mode3_penalty() {
     let mut gb = setup_gb();
     // LCDC = 0x82: LCD on (bit 7), OBJ enable (bit 1)
     gb.write_mem(0xFF40, 0x82);
 
-    // Place 10 sprites all at X = 0xA7 (167), Y = 16 → visible on LY 0
+    // Place 10 sprites all at X = 0xA7 (167), Y = 16 → visible on LY 0–7
     for i in 0u8..10 {
         let base = (i as u16) * 4;
-        gb.ppu.write_oam_by_dma(0xFE00 + base, 16); // Y
+        gb.ppu.write_oam_by_dma(0xFE00 + base, 16); // Y (sprite Y=16 → visible on LY 0)
         gb.ppu.write_oam_by_dma(0xFE00 + base + 1, 0xA7); // X = 167
         gb.ppu.write_oam_by_dma(0xFE00 + base + 2, i); // tile (distinct to avoid dedup)
         gb.ppu.write_oam_by_dma(0xFE00 + base + 3, 0); // attrs
     }
 
-    advance_to_ly(&mut gb, 0);
-    let duration = mode3_duration_ticks(&mut gb, 0, crate::CgbMode::Dmg, false);
+    // Use LY=2 to skip the LY=0 startup-anomaly, which adds 3 extra ticks to mode3
+    // duration on the very first line after LCD-on and would mask the real comparison.
+    advance_to_ly(&mut gb, 2);
+    let duration = mode3_duration_ticks(&mut gb, 2, crate::CgbMode::Dmg, false);
 
-    // X=167 sprites must NOT extend Mode-3 — duration equals the no-sprite baseline (344 T-ticks)
+    // With 10 sprites all at X=0xA7, each sprite fetch costs exactly 12 T-ticks
+    // (SameBoy-accurate). All 10 are fetched: 344 (baseline) + 10 × 12 = 464 T-ticks.
     assert_eq!(
-        duration, 344,
-        "Sprites at X=0xA7 must not impose a Mode-3 penalty (expected 344 T-ticks, got {})",
+        duration,
+        464,
+        "10 sprites at X=0xA7 must impose exactly 10 × 12 T-tick penalty (expected 464, got {})",
         duration
     );
 }
+
 
 // ── Blargg OAM bug-derived unit tests ─────────────────────────────────────────────────────────
 

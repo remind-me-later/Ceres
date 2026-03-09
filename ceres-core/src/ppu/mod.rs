@@ -927,7 +927,8 @@ impl Ppu {
             return;
         }
 
-        // Check if we should start fetching sprites
+        // Check if we should start fetching sprites.
+        // Multiple sprites at the same X are fetched consecutively (matching SameBoy behavior).
         let sprites_enabled = self.lcdc & LCDC_OBJ_B != 0 || matches!(cgb_mode, CgbMode::Cgb);
         if sprites_enabled
             && let Some(sprite) = self.sprite_buffer.peek()
@@ -1050,9 +1051,13 @@ impl Ppu {
                 let fifo_not_empty = self.bg_fifo.size() > 0;
 
                 if fetcher_aligned && fifo_not_empty {
-                    // Exit wait loop, enter State 41 (1 cycle for advance).
+                    // Exit wait loop. The advance_fetcher call below is SameBoy's "free advance"
+                    // (no sleep cost in state 27 exit). State 41 is exactly 1 cycle = 2 T-ticks.
+                    // Since the current WaitForBgFetcher tick itself runs advance_fetcher (counting
+                    // as the first T-tick of State41), we set step=1 so State41Advance only needs
+                    // 1 more tick to complete (matching SameBoy's 12 T-tick total sprite fetch).
                     self.sprite_fetcher_state = SpriteFetcherState::State41Advance;
-                    self.sprite_fetcher_step = 0;
+                    self.sprite_fetcher_step = 1;
                 } else {
                     // Matches State 27 (Loop body advance).
                     // Stay in WaitForBgFetcher.
@@ -1117,7 +1122,7 @@ impl Ppu {
                         self.sprite_x_flip,
                     );
 
-                    // Done fetching this sprite
+                    // Done fetching this sprite; transition back to Idle.
                     self.sprite_fetcher_state = SpriteFetcherState::Idle;
                 }
             }

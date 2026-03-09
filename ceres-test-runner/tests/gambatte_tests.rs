@@ -386,12 +386,7 @@ fn gambatte_irq_precedence_if_and_ie_0_if_2() {
 /// SP=0x0000, timer interrupt: vector 1 (PC=0x0000 side-effect check).
 ///
 /// Expected output: 0x00.
-///
-/// Ignored: the dispatch cancellation logic is correct but the PPU gets stuck
-/// in Mode 3 after `lprint_a` re-enables the LCD via an LCD-off→on transition,
-/// preventing VRAM from being read. Tracked as a known PPU bug.
 #[test]
-#[ignore]
 fn gambatte_irq_precedence_if_and_ie_0_vector_1() {
     let result = run_gambatte_test(
         "gambatte/irq_precedence/if_and_ie_0_vector_1_dmg08_cgb04c_out00.gbc",
@@ -415,10 +410,7 @@ fn gambatte_irq_precedence_if_and_ie_0_vector_2() {
 /// SP=0x0000, cancelled dispatch, vector 3 variant.
 ///
 /// Expected output: 0x00.
-///
-/// Ignored: same PPU LCD-off→on Mode 3 stall bug as vector_1.
 #[test]
-#[ignore]
 fn gambatte_irq_precedence_if_and_ie_0_vector_3() {
     let result = run_gambatte_test(
         "gambatte/irq_precedence/if_and_ie_0_vector_3_dmg08_cgb04c_out00.gbc",
@@ -1027,13 +1019,7 @@ fn gambatte_sprites_10spritesprline_10xposa7_m3stat_1() {
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }
 
-/// 10 sprites all at X=0xA7, Mode 3 boundary variant 2 (should exit Mode 3).
-///
-/// Ignored: with all 10 sprites at X=0xA7, the extra Mode 3 cycles do not
-/// push STAT past the boundary — the emulator reports Mode 3 when Mode 0
-/// is expected.  Sprite X-position penalty calculation is off.
 #[test]
-#[ignore = "sprite X-position penalty timing off: 10 sprites at X=0xA7 extends Mode 3 incorrectly"]
 fn gambatte_sprites_10spritesprline_10xposa7_m3stat_2() {
     let result = run_gambatte_test_old(
         "gambatte/sprites/10spritesPrLine_10xposA7_m3stat_2_dmg08_cgb04c_out0.gbc",
