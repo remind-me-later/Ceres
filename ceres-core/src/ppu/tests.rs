@@ -1990,7 +1990,153 @@ fn gambatte_oam_prewrite_blocking_boundary_cgb() {
     );
 }
 
-// ── Sprite Mode-3 duration (X-penalty) unit tests ───────────────────────────────────────────
+// ── lcdoffset1: LCD-off → LCD-on startup timing unit tests ──────────────────────────────────
+
+/// gambatte `oam_access/preread_lcdoffset1_1` (CGB non-double-speed).
+///
+/// Hardware: after LCD-off → LCD-on, the startup line (line 0) ends 8 T-cycles
+/// (16 half-clocks) earlier than a normal line (SameBoy display.c: `cycles_for_line += 8`
+/// on the startup path).  This means line 1's OAM scan begins 16 half-clocks earlier in
+/// CPU time relative to the LCD-on event, so the blocking boundary on line 1 falls 16
+/// half-clocks earlier.
+///
+/// Probed from the CPU side: a read that lands at line 1 OamScan Running{tick:3} must
+/// see OAM **unblocked** after LCD-off → LCD-on (the ROM positions itself 16 ticks
+/// earlier than the normal boundary, i.e. the lcdoffset1_1 boundary is at the same
+/// relative OamScan tick as the normal preread_1 boundary).
+///
+/// Bug (before fix): Ceres does not shorten line 0's HBlank, so line 1 starts 16 ticks
+/// later than expected; the CPU probe lands at Running{tick:3+16/2=11} or similar, inside
+/// the blocked window.
+#[test]
+fn gambatte_lcdoffset1_oam_read_blocking_boundary_cgb() {
+    let mut gb = setup_gb();
+
+    // Warm up: get past the initial startup to steady-state normal lines.
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+    advance_to_ly(&mut gb, 3);
+
+    // Turn LCD OFF (simulates lprint_a VRAM-copy phase).
+    gb.write_mem(0xFF40, 0x00);
+    assert!(
+        !gb.ppu.oam_read_blocked,
+        "OAM must be unblocked when LCD is off"
+    );
+
+    // Turn LCD back ON — starts the startup sequence (lcdoffset1 condition).
+    gb.write_mem(0xFF40, 0x80);
+
+    // Advance to line 1, OamScan Running{tick:3}.
+    // In normal timing (no lcdoffset1 fix), tick:3 on line 1 is still unblocked.
+    // After the lcdoffset1 fix, the 16-tick shorter line 0 shifts line 1's
+    // OamScan start 16 half-clocks earlier; tick:3 remains unblocked (the boundary
+    // is still at tick:4).
+    advance_to_oam_scan_tick(&mut gb, 1, 3, crate::CgbMode::Cgb, false);
+
+    // At tick 3: OAM must NOT yet be read-blocked (preread_lcdoffset1_1 expects
+    // the read to return the real OAM value = accessible = 0x00 result).
+    assert!(
+        !gb.ppu.oam_read_blocked,
+        "oam_read_blocked must be false at OamScan tick 3 after LCD-off→on \
+         (lcdoffset1 preread boundary: read must be unblocked)"
+    );
+
+    // Execute one more tick → execute tick 3's body, advance phase to tick 4.
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Cgb, false);
+
+    // After tick 3 runs: still unblocked (blocking only set at tick 4).
+    assert!(
+        !gb.ppu.oam_read_blocked,
+        "oam_read_blocked must still be false after tick 3 body runs after LCD-off→on"
+    );
+
+    // Execute tick 4 → sets oam_read_blocked = true.
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Cgb, false);
+
+    // At tick 4: blocking must be engaged (same boundary as normal preread_2).
+    assert!(
+        gb.ppu.oam_read_blocked,
+        "oam_read_blocked must be true at OamScan tick 4 after LCD-off→on"
+    );
+}
+
+/// gambatte `oam_access/prewrite_lcdoffset1_1` (CGB non-double-speed).
+///
+/// After LCD-off → LCD-on, OAM write-blocking on line 1 must also observe the
+/// lcdoffset1 shift.  A write at OamScan Running{tick:3} must succeed (not yet blocked).
+#[test]
+fn gambatte_lcdoffset1_oam_write_blocking_boundary_cgb() {
+    let mut gb = setup_gb();
+
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_ly(&mut gb, 3);
+
+    // Simulate LCD-off → LCD-on (lcdoffset1 condition).
+    gb.write_mem(0xFF40, 0x00);
+    gb.write_mem(0xFF40, 0x80);
+
+    // Pre-load OAM[0] so we can detect whether the write took effect.
+    gb.ppu.write_oam_by_dma(0xFE00, 0x00);
+
+    advance_to_oam_scan_tick(&mut gb, 1, 3, crate::CgbMode::Cgb, false);
+
+    assert!(
+        !gb.ppu.oam_write_blocked,
+        "oam_write_blocked must be false at tick 3 after LCD-off→on (prewrite_lcdoffset1_1)"
+    );
+
+    // Write via normal (blocking-aware) path — must succeed at tick 3.
+    gb.ppu.write_oam(0xFE00, 0x01);
+
+    let raw = gb.ppu.oam().read(0);
+    assert_eq!(
+        raw, 0x01,
+        "OAM[0] write at tick 3 after LCD-off→on must succeed (expected 0x01, got {:#04x})",
+        raw
+    );
+
+    // Tick into tick 4 — write-blocking must now engage.
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Cgb, false);
+    assert!(
+        gb.ppu.oam_write_blocked,
+        "oam_write_blocked must be true at tick 4 after LCD-off→on"
+    );
+}
+
+/// gambatte `oam_access/prewrite_ds_lcdoffset1_1` (CGB double-speed).
+///
+/// In double-speed after LCD-off → LCD-on, OAM write-blocking on line 1 must
+/// also observe the lcdoffset1 shift (line 0 is 16 half-clocks shorter).
+/// A write at OamScan Running{tick:3} must succeed.
+#[test]
+fn gambatte_lcdoffset1_oam_write_blocking_boundary_cgb_double_speed() {
+    let mut gb = setup_gb();
+
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_ly(&mut gb, 3);
+
+    // Simulate LCD-off → LCD-on (lcdoffset1 condition).
+    gb.write_mem(0xFF40, 0x00);
+    gb.write_mem(0xFF40, 0x80);
+
+    gb.ppu.write_oam_by_dma(0xFE00, 0x00);
+
+    // Double-speed: advance to tick 3 on line 1.
+    advance_to_oam_scan_tick(&mut gb, 1, 3, crate::CgbMode::Cgb, true);
+
+    assert!(
+        !gb.ppu.oam_write_blocked,
+        "oam_write_blocked must be false at tick 3 after LCD-off→on (prewrite_ds_lcdoffset1_1)"
+    );
+
+    gb.ppu.write_oam(0xFE00, 0x01);
+    let raw = gb.ppu.oam().read(0);
+    assert_eq!(
+        raw, 0x01,
+        "OAM[0] write at DS tick 3 after LCD-off→on must succeed (expected 0x01, got {:#04x})",
+        raw
+    );
+}
 
 /// Baseline: no sprites → Mode-3 duration is exactly 344 T-ticks.
 ///
@@ -2085,13 +2231,11 @@ fn gambatte_sprites_10xposa7_no_mode3_penalty() {
     // With 10 sprites all at X=0xA7, each sprite fetch costs exactly 12 T-ticks
     // (SameBoy-accurate). All 10 are fetched: 344 (baseline) + 10 × 12 = 464 T-ticks.
     assert_eq!(
-        duration,
-        464,
+        duration, 464,
         "10 sprites at X=0xA7 must impose exactly 10 × 12 T-tick penalty (expected 464, got {})",
         duration
     );
 }
-
 
 // ── Blargg OAM bug-derived unit tests ─────────────────────────────────────────────────────────
 

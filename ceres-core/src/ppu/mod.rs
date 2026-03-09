@@ -190,6 +190,13 @@ pub struct Ppu {
     /// Current sprite's X-flip flag.
     sprite_x_flip: bool,
 
+    /// The line-0 startup sequence (after LCD-off → LCD-on) consumes 8 fewer T-cycles of HBlank
+    /// than a normal line (SameBoy display.c line ~1690: `cycles_for_line += 8`).
+    /// This flag causes the HBlank Remainder stage to trigger PreEnd 16 ticks (8 T-cycles) early
+    /// so that line 0 ends 16 half-clocks sooner, shifting line 1's OAM-scan blocking events
+    /// 16 half-clocks later in absolute CPU time (matching the `lcdoffset1` Gambatte test ROMs).
+    first_line_short: bool,
+
     // Bus contention state
     ext_dma_active: bool,
     ext_dma_src: u16,
@@ -705,6 +712,11 @@ impl Ppu {
 
         // Clear sprite buffer and visible object count
         self.sprite_buffer.clear();
+
+        // The startup line (line 0 after LCD-on) ends 8 T-cycles (16 half-clocks) earlier than a
+        // normal line (SameBoy: cycles_for_line += 8).  Set a flag so tick_hblank triggers PreEnd
+        // 16 ticks early, shortening line 0's HBlank by the correct amount.
+        self.first_line_short = true;
 
         self.update_stat(ints);
     }
@@ -1668,7 +1680,17 @@ impl Ppu {
             HBlankStage::Remainder => {
                 // State 11: Wait for line to near-complete.
                 // We wait until 4 ticks before line end, then transition to PreEnd.
-                if self.dots_in_line >= PRE_END_START {
+                //
+                // The LCD-on startup line (line 0) is 16 half-clocks (8 T-cycles) shorter than a
+                // normal line (SameBoy display.c: cycles_for_line += 8).  When first_line_short is
+                // set we trigger PreEnd 16 ticks early so line 0 ends at tick 896 instead of 912.
+                let threshold = if self.first_line_short {
+                    self.first_line_short = false; // consumed — clear for subsequent lines
+                    PRE_END_START - 16
+                } else {
+                    PRE_END_START
+                };
+                if self.dots_in_line >= threshold {
                     self.phase = PpuPhase::HBlank(HBlankStage::PreEnd { remaining: 4 });
                 }
                 // Otherwise stay in Remainder
