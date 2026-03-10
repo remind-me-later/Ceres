@@ -741,45 +741,37 @@ impl Ppu {
             OamScanStage::Running { tick } => {
                 // SameBoy-accurate timing (in 8MHz ticks)
 
-                // Tick 0: sprite buffer clear
+
+
+                // Tick 0: LY update and Mode 2 interrupt pulse.
                 if tick == 0 {
                     self.sprite_buffer.clear();
-                }
-
-                // Tick 3: LY update and Mode 2 interrupt pulse (SameBoy State 6).
-                // Hardware: STAT mode bits flip to 2 simultaneously with the IRQ rising
-                // edge so that ISR code reading STAT immediately sees mode 2
-                // (gambatte m2int_m2stat_1).
-                //
-                // CGB OAM write blocking also starts at end of tick 3 (SameBoy State 7
-                // entry), so a write at Running{tick:3} succeeds but Running{tick:4} is
-                // blocked.  gambatte prewrite_lcdoffset1_1 confirms this boundary.
-                if tick == 3 {
+                    
                     self.ly = self.current_line;
                     if self.current_line != 0 {
                         self.ly_for_comparison = 0xFFFF;
-                        self.stat &= !STAT_LYC_B; // Clear coincidence flag when LY increments
+                        self.stat &= !STAT_LYC_B;
                     } else {
                         self.ly_for_comparison = 0;
                     }
 
-                    // Set STAT mode bits to OAM scan so reads during the IRQ handler
-                    // return mode 2, then pulse mode_for_interrupt to generate the
-                    // rising edge on the STAT interrupt line.
                     self.set_mode_stat(Mode::OamScan);
                     self.mode_for_interrupt = Some(Mode::OamScan);
                     self.update_stat(ints);
 
-                    // CGB write blocking takes effect when entering tick 4.
-                    if is_cgb {
-                        self.oam_write_blocked = true;
-                    }
+
                 }
 
                 // Tick 4: OAM read-blocking starts for non-double-speed (SameBoy State 7).
                 // gambatte preread_1 / preread_2 boundary:
                 //   read AT Running{tick:4} → blocked (0xFF / 0x03 masked)
                 //   read AT Running{tick:3} → unblocked (real value)
+                // Tick 3: OAM write blocking for CGB.
+                if tick == 3 && is_cgb {
+                    self.oam_write_blocked = true;
+                }
+
+                // Tick 4: OAM read-blocking starts for non-double-speed (SameBoy State 7).
                 if tick == 4 {
                     self.oam_read_blocked = !double_speed;
                 }
@@ -808,7 +800,7 @@ impl Ppu {
                 }
 
                 // OAM Scan Loop (40 entries * 4 ticks = 160 ticks)
-                if tick >= 8 && tick < 168 {
+                if tick >= 8 && tick < 160 {
                     let scan_tick = tick - 8;
                     let entry = (scan_tick / 4) as u8;
                     let sub_tick = (scan_tick % 4) as u8;
@@ -829,7 +821,7 @@ impl Ppu {
                     }
                 }
 
-                if tick >= 168 {
+                if tick >= 160 {
                     // Transition to Mode 3 Rendering (Tick 169)
                     self.phase = PpuPhase::OamScan(OamScanStage::Transition1 { remaining: 7 });
                     self.set_mode_stat(Mode::Drawing);
@@ -921,7 +913,7 @@ impl Ppu {
     }
 
     /// Tick during Mode 3 (Drawing).
-    fn tick_drawing(&mut self, _ints: &mut Interrupts, cgb_mode: CgbMode) {
+    fn tick_drawing(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
         // Check for window activation
         self.check_window_trigger(cgb_mode);
 
@@ -988,16 +980,15 @@ impl Ppu {
             }
 
             // Transition to HBlank.
-            // SameBoy: at Mode 3 exit (non-double-speed), STAT mode bits are cleared
-            // and mode_for_interrupt=0, but GB_STAT_update() is NOT called yet.
-            // After a 1 M-cycle (2 tick) sleep, full unblock + GB_STAT_update() fires
-            // the HBlank interrupt. So update_stat() happens in tick_hblank StatUpdate.
+            self.set_mode_stat(Mode::HBlank);
             self.mode_for_interrupt = Some(Mode::HBlank);
-            // Do NOT call update_stat here — HBlank interrupt fires 2 ticks later.
+            self.oam_read_blocked = false;
+            self.vram_read_blocked = false;
+            self.oam_write_blocked = false;
+            self.vram_write_blocked = false;
+            self.update_stat(ints);
 
-            // Memory unblocking, STAT mode bits update, and interrupt firing all
-            // happen in tick_hblank StatUpdate state.
-            self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate { remaining: 2 });
+            self.phase = PpuPhase::HBlank(HBlankStage::PalettesBlock { remaining: 4 });
         }
     }
 
@@ -1616,42 +1607,7 @@ impl Ppu {
         };
 
         match stage {
-            HBlankStage::StatUpdate { remaining } => {
-                // State 22: STAT = Mode 0, memory unblocked.
-                // Two-phase mode change.
 
-                // Phase 1 (remaining == 2): Non-double-speed early unblock.
-                if remaining == 2 && !double_speed {
-                    self.set_mode_stat(Mode::HBlank);
-                    self.mode_for_interrupt = Some(Mode::HBlank);
-                    // Note: oam_read_blocked stays true on CGB-D+, but we don't track model.
-                    self.oam_read_blocked = false;
-                    self.vram_read_blocked = false;
-                    self.oam_write_blocked = false;
-                    self.vram_write_blocked = false;
-                    // No STAT update yet!
-                }
-
-                // Phase 2 (remaining == 1, right before transition): Full unblock + STAT update.
-                if remaining == 1 {
-                    self.set_mode_stat(Mode::HBlank);
-                    self.mode_for_interrupt = Some(Mode::HBlank);
-                    self.oam_read_blocked = false;
-                    self.vram_read_blocked = false;
-                    self.oam_write_blocked = false;
-                    self.vram_write_blocked = false;
-                    self.update_stat(ints);
-                }
-
-                if remaining <= 1 {
-                    // Transition to PalettesBlock
-                    self.phase = PpuPhase::HBlank(HBlankStage::PalettesBlock { remaining: 4 });
-                } else {
-                    self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate {
-                        remaining: remaining - 1,
-                    });
-                }
-            }
 
             HBlankStage::PalettesBlock { remaining } => {
                 // State 33: CGB palettes blocked (non-double-speed only).
