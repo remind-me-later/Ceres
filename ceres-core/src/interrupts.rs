@@ -61,7 +61,7 @@ impl Interrupts {
 
     #[must_use]
     pub const fn read_ie(&self) -> u8 {
-        self.ie | 0xE0
+        self.ie
     }
 
     #[must_use]
@@ -90,7 +90,7 @@ impl Interrupts {
     }
 
     pub const fn write_ie(&mut self, val: u8) {
-        self.ie = val & 0x1F;
+        self.ie = val;
     }
 
     pub const fn write_if(&mut self, val: u8) {
