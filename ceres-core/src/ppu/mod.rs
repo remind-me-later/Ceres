@@ -690,9 +690,8 @@ impl Ppu {
         self.sprite_fetcher_state = SpriteFetcherState::Idle;
 
         // Initialize drawing state.
-        // cycles_for_line is augmented by 8 extra cycles for first line (16 ticks).
-        // Startup duration 166 + 16 = 182.
-        self.dots_in_line = 182;
+        // Startup duration 166 ticks.
+        self.dots_in_line = 166;
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_step = 0;
         self.window_tile_x = 0;
