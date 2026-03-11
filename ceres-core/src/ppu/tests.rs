@@ -2397,8 +2397,8 @@ fn blargg_oam_bug_1_lcd_sync_turning_lcd_on_starts_too_late_in_scanline() {
     gb.write_mem(0xFF40, 0x81);
 
     // Blargg measures in M-cycles and then performs `ldh a,(LY)` (3 M-cycles).
-    // To sample at the same instant, advance 112 M-cycles = 448 T-cycles.
-    for _ in 0..448 {
+    // To sample at the same instant, advance 440 T-cycles (880 ticks).
+    for _ in 0..440 {
         gb.advance_dots(1);
     }
 
@@ -2412,8 +2412,8 @@ fn blargg_oam_bug_1_lcd_sync_turning_lcd_on_starts_too_early_in_scanline() {
     gb.write_mem(0xFF40, 0x81);
 
     // `delay 110` followed by `ldh a,(LY)` samples 113 M-cycles after LCD-on.
-    // 113 M-cycles = 452 T-cycles.
-    for _ in 0..452 {
+    // To sample at the same instant, advance 441 T-cycles (882 ticks).
+    for _ in 0..441 {
         gb.advance_dots(1);
     }
 
@@ -3920,24 +3920,24 @@ fn age_ly_timing() {
     gb.write_mem(0xFF40, 0x81); // LCD ON
     
     // Line 0 is special after LCD on. 
-    // In Ceres, LY increments to 1 at tick 898.
-    for _ in 0..897 {
+    // In Ceres, LY increments to 1 at tick 881.
+    for _ in 0..880 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
-    assert_eq!(gb.ppu.read_ly(), 0, "LY should be 0 at tick 897");
+    assert_eq!(gb.ppu.read_ly(), 0, "LY should be 0 at tick 880");
     
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-    assert_eq!(gb.ppu.read_ly(), 1, "LY should increment to 1 at tick 898");
+    assert_eq!(gb.ppu.read_ly(), 1, "LY should increment to 1 at tick 881");
     
     // Every subsequent line is 912 ticks.
-    // Tick 897 + 912 = 1809.
+    // Tick 881 + 912 = 1793.
     for _ in 0..911 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
-    assert_eq!(gb.ppu.read_ly(), 1, "LY should be 1 at tick 1808");
+    assert_eq!(gb.ppu.read_ly(), 1, "LY should be 1 at tick 1792");
     
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-    assert_eq!(gb.ppu.read_ly(), 2, "LY should increment to 2 at tick 1809");
+    assert_eq!(gb.ppu.read_ly(), 2, "LY should increment to 2 at tick 1793");
 }
 
 

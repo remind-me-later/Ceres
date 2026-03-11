@@ -477,20 +477,20 @@ impl Ppu {
             }
             PpuPhase::OamScan(_) => {
                 // OAM scan is driven by its own state machine
-                self.tick_oam_scan(ints, cgb_mode, double_speed);
                 self.dots_in_line += 1;
+                self.tick_oam_scan(ints, cgb_mode, double_speed);
             }
             PpuPhase::HBlank(_) => {
-                self.tick_hblank(ints, double_speed);
                 self.dots_in_line += 1;
+                self.tick_hblank(ints, double_speed);
             }
             PpuPhase::VBlank(_) => {
-                self.tick_vblank(ints);
                 self.dots_in_line += 1;
+                self.tick_vblank(ints);
             }
             PpuPhase::Drawing => {
-                self.tick_drawing(ints, cgb_mode);
                 self.dots_in_line += 1;
+                self.tick_drawing(ints, cgb_mode);
             }
             PpuPhase::LcdOff => {
                 // LCD is off, nothing to do
@@ -690,8 +690,9 @@ impl Ppu {
         self.sprite_fetcher_state = SpriteFetcherState::Idle;
 
         // Initialize drawing state.
-        // Startup duration 166 ticks.
-        self.dots_in_line = 166;
+        // cycles_for_line is augmented by 8 extra cycles for first line (16 ticks).
+        // Startup duration 166 + 16 = 182.
+        self.dots_in_line = 182;
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_step = 0;
         self.window_tile_x = 0;
