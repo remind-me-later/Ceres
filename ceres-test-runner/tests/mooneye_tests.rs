@@ -380,7 +380,7 @@ fn test_mooneye_boot_hwio_s() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - DMG CPU revision 0
+#[ignore = "DMG 0 not supported yet"]
 fn test_mooneye_boot_regs_dmg0() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/boot_regs-dmg0.gb",
@@ -405,7 +405,7 @@ fn test_mooneye_boot_regs_mgb() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - SGB hint
+#[ignore = "SGB not yet supported"]
 fn test_mooneye_boot_regs_sgb() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/boot_regs-sgb.gb",
@@ -415,7 +415,7 @@ fn test_mooneye_boot_regs_sgb() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - SGB2 hint
+#[ignore = "SGB not yet supported"]
 fn test_mooneye_boot_regs_sgb2() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/boot_regs-sgb2.gb",
@@ -512,7 +512,7 @@ fn test_mooneye_oam_dma_sources_gs() {
 // =============================================================================
 
 #[test]
-#[ignore]
+#[ignore = "Failing PPU or CPU instruction timing accuracy"]
 fn test_mooneye_ppu_hblank_ly_scx_timing_gs() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/hblank_ly_scx_timing-GS.gb",
@@ -526,7 +526,7 @@ fn test_mooneye_ppu_hblank_ly_scx_timing_gs() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "Failing PPU or CPU instruction timing accuracy"]
 fn test_mooneye_ppu_intr_1_2_timing_gs() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/intr_1_2_timing-GS.gb",
@@ -553,7 +553,7 @@ fn test_mooneye_ppu_intr_2_0_timing() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "Failing PPU or CPU instruction timing accuracy"]
 fn test_mooneye_ppu_intr_2_mode0_timing() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing.gb",
@@ -567,7 +567,7 @@ fn test_mooneye_ppu_intr_2_mode0_timing() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "Failing PPU or CPU instruction timing accuracy"]
 fn test_mooneye_ppu_intr_2_mode0_timing_sprites() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing_sprites.gb",
@@ -594,7 +594,7 @@ fn test_mooneye_ppu_intr_2_mode3_timing() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "Failing PPU or CPU instruction timing accuracy"]
 fn test_mooneye_ppu_intr_2_oam_ok_timing() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/intr_2_oam_ok_timing.gb",
@@ -608,7 +608,7 @@ fn test_mooneye_ppu_intr_2_oam_ok_timing() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "Failing PPU or CPU instruction timing accuracy"]
 fn test_mooneye_ppu_lcdon_timing_gs() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/lcdon_timing-GS.gb",
@@ -622,7 +622,7 @@ fn test_mooneye_ppu_lcdon_timing_gs() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "Failing PPU or CPU instruction timing accuracy"]
 fn test_mooneye_ppu_lcdon_write_timing_gs() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/lcdon_write_timing-GS.gb",
@@ -862,7 +862,7 @@ fn test_mooneye_mbc1_bits_ramg() {
 }
 
 #[test]
-#[ignore] // Requires MBC1M multicart wiring support (different from standard MBC1)
+#[ignore = "Requires MBC1M multicart wiring support"]
 fn test_mooneye_mbc1_multicart_rom_8mb() {
     let result = run_mooneye_test(
         "mooneye-test-suite/emulator-only/mbc1/multicart_rom_8Mb.gb",
