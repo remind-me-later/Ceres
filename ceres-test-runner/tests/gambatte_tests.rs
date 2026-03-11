@@ -1045,3 +1045,98 @@ fn gambatte_sprites_10spritesprline_1xpos0_m3stat_2() {
     );
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// PPU timing and interrupt tests (DMG focus)
+// ────────────────────────────────────────────────────────────────────────────
+
+/// Helper to run a Gambatte DMG test.
+///
+/// These use the OldStyle lprint_a variant (raw result byte at 0x9800).
+fn run_gambatte_dmg(relative_path: &str, expected_output: u8) -> TestResult {
+    let rom = match load_test_rom(relative_path) {
+        Ok(rom) => rom,
+        Err(e) => return TestResult::Error(format!("Failed to load test ROM: {e}")),
+    };
+
+    let config = TestConfig {
+        model: Model::CgbE, // Use CgbE for fast boot sequence
+        timeout_frames: 1000,
+        test_name: relative_path.to_string(),
+        ..TestConfig::default()
+    };
+
+    let mut runner = match TestRunner::new(
+        rom,
+        config,
+        Box::new(GambatteCheck::new(expected_output, LprintVariant::OldStyle)),
+    ) {
+        Ok(runner) => runner,
+        Err(e) => return TestResult::Error(format!("Failed to create test runner: {e}")),
+    };
+
+    runner.run()
+}
+
+#[test]
+fn gambatte_lycint_lycirq_1() {
+    let result = run_gambatte_dmg("gambatte/lycint_lycirq/lycint_lycirq_1_dmg08_cgb04c_out1.gbc", 0x01);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_m2int_m2irq_1() {
+    let result = run_gambatte_dmg("gambatte/m2int_m2irq/m2int_m2irq_1_dmg08_cgb04c_out0.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+#[ignore = "Failing PPU timing accuracy"]
+fn gambatte_m0int_m0irq_1() {
+    let result = run_gambatte_dmg("gambatte/m0int_m0irq/m0int_m0irq_1_dmg08_cgb04c_out0.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_lycint_m1stat_1() {
+    let result = run_gambatte_dmg("gambatte/m1/lycint_m1stat_1_dmg08_cgb04c_out0.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_lyc143_m1irq_1() {
+    let result = run_gambatte_dmg("gambatte/m1/lycint143_m1irq_1_dmg08_cgb04c_out0.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_m1irq_late_enable_1() {
+    let result = run_gambatte_dmg("gambatte/m1/m1irq_late_enable_1_dmg08_cgb04c_out2.gbc", 0x02);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_m1irq_m0disable_1() {
+    let result = run_gambatte_dmg("gambatte/m1/m1irq_m0disable_1_dmg08_cgb04c_out3.gbc", 0x03);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_lycint_ly_1() {
+    let result = run_gambatte_dmg("gambatte/lycint_ly/lycint_ly_1_dmg08_cgb04c_out5.gbc", 0x05);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+#[ignore = "Failing PPU timing accuracy"]
+fn gambatte_lycint_lycflag_1() {
+    let result = run_gambatte_dmg("gambatte/lycint_lycflag/lycint_lycflag_1_dmg08_cgb04c_out0.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+#[ignore = "Failing PPU timing accuracy"]
+fn gambatte_m2int_m0stat_1() {
+    let result = run_gambatte_dmg("gambatte/m2int_m0stat/m2int_m0stat_1_dmg08_cgb04c_out0.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
