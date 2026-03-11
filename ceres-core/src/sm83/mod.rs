@@ -189,8 +189,15 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn run_cpu(&mut self) {
-        let has_ei_delay = self.cpu.has_ei_delay;
+        let enable_ime = self.cpu.has_ei_delay;
         self.cpu.has_ei_delay = false;
+
+        if enable_ime {
+            self.ints.enable();
+            if self.cpu.is_halt_bug_triggered {
+                self.cpu.skip_isr_nops = true;
+            }
+        }
 
         if self.cpu.is_halted {
             self.tick_m_cycle();
@@ -204,14 +211,6 @@ impl<A: AudioCallback> Gb<A> {
             }
 
             self.exec(op);
-        }
-
-        if has_ei_delay {
-            self.ints.enable();
-
-            if self.cpu.is_halt_bug_triggered {
-                self.cpu.skip_isr_nops = true;
-            }
         }
 
         if self.ints.is_any_requested() {
@@ -792,6 +791,7 @@ impl<A: AudioCallback> Gb<A> {
 
     const fn di(&mut self) {
         self.ints.disable();
+        self.cpu.has_ei_delay = false;
     }
 
     const fn ei(&mut self) {

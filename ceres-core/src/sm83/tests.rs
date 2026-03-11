@@ -1680,3 +1680,109 @@ fn samesuite_ei_delay_halt() {
     let ret_addr = (hi as u16) << 8 | (lo as u16);
     assert_eq!(ret_addr, 0xC001, "Should return to HALT instruction");
 }
+
+// -----------------------------------------------------------------------
+// rapid_di_ei - mooneye-test-suite/acceptance/rapid_di_ei.s
+// -----------------------------------------------------------------------
+#[test]
+fn mooneye_acceptance_rapid_di_ei() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x00);
+    gb.write_mem(0xFF50, 0x01); // Disable bootrom
+    gb.cpu.sp = 0xD000;
+
+    // ISR increments E
+    gb.set_rom_byte(0x0058, 0x1C); // INC E
+    gb.set_rom_byte(0x0059, 0xD9); // RETI
+
+    let reset = |gb: &mut Gb| {
+        gb.ints.write_if(0x08);
+        gb.ints.write_ie(0x08);
+        gb.ints.disable();
+        gb.cpu.set_de(0x0000);
+    };
+
+    // Part 1: Rapid EI;DI
+    reset(&mut gb);
+    gb.write_mem(0xC000, 0xFB); // EI
+    gb.write_mem(0xC001, 0xF3); // DI
+    gb.set_cpu_pc(0xC000);
+    gb.run_cpu(); // EI
+    gb.run_cpu(); // DI -> IME becomes 1 at END of this call, but DI also sets delay
+    assert_eq!(gb.cpu.de() & 0xFF, 0, "EI;DI should not trigger interrupt");
+
+    // Part 2: NOP after EI -> should dispatch AFTER the NOP
+    reset(&mut gb);
+    gb.write_mem(0xC000, 0xFB); // EI
+    gb.write_mem(0xC001, 0x00); // NOP
+    gb.set_cpu_pc(0xC000);
+    gb.run_cpu(); // Run EI
+    gb.run_cpu(); // Run NOP -> dispatches AFTER NOP in the same call
+    assert_eq!(gb.cpu.pc, 0x0058, "Should dispatch after delay slot NOP");
+}
+
+// -----------------------------------------------------------------------
+// ei_timing - mooneye-test-suite/acceptance/ei_timing.s
+// -----------------------------------------------------------------------
+#[test]
+fn mooneye_acceptance_ei_timing() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x00);
+    gb.write_mem(0xFF50, 0x01); // Disable bootrom
+    gb.cpu.sp = 0xD000;
+
+    gb.ints.write_if(0x08);
+    gb.ints.write_ie(0x08);
+    gb.ints.disable();
+    gb.cpu.set_bc(0x0000);
+
+    gb.write_mem(0xC000, 0xFB); // EI
+    gb.write_mem(0xC001, 0x04); // INC B
+    gb.set_cpu_pc(0xC000);
+
+    gb.set_rom_byte(0x0058, 0x1C); // INC E
+    gb.set_rom_byte(0x0059, 0xD9); // RETI
+
+    gb.run_cpu(); // Run EI
+    gb.run_cpu(); // Run INC B (delay slot) -> IME becomes 1 at end, dispatches immediately
+    
+    assert_eq!(gb.cpu.pc, 0x0058, "Should have dispatched after delay slot");
+    assert_eq!(gb.cpu.bc() >> 8, 1, "B should be 1");
+}
+
+// -----------------------------------------------------------------------
+// reti_intr_timing - mooneye-test-suite/acceptance/reti_intr_timing.s
+// -----------------------------------------------------------------------
+#[test]
+fn mooneye_acceptance_reti_intr_timing() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x00);
+    gb.write_mem(0xFF50, 0x01); // Disable bootrom
+    gb.cpu.sp = 0xD000;
+
+    gb.ints.write_if(0x09);
+    gb.ints.write_ie(0x09);
+    gb.ints.disable();
+    gb.cpu.set_bc(0x0000);
+    gb.cpu.set_de(0x0000);
+
+    gb.write_mem(0xC000, 0xFB); // EI
+    gb.write_mem(0xC001, 0x04); // INC B
+    gb.set_cpu_pc(0xC000);
+
+    gb.set_rom_byte(0x0040, 0x14); // INC D
+    gb.set_rom_byte(0x0041, 0xD9); // RETI
+
+    gb.set_rom_byte(0x0058, 0x1C); // INC E
+    gb.set_rom_byte(0x0059, 0xD9); // RETI
+
+    gb.run_cpu(); // EI
+    gb.run_cpu(); // INC B -> delay slot finishes, dispatches VBLANK immediately
+    assert_eq!(gb.cpu.pc, 0x0040);
+    
+    gb.run_cpu(); // INC D
+    gb.run_cpu(); // RETI
+    
+    // In Ceres, RETI enables IME and dispatches immediately within the same call.
+    assert_eq!(gb.cpu.pc, 0x0058, "RETI should have immediately dispatched SERIAL interrupt");
+}

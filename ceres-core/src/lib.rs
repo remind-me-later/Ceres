@@ -131,6 +131,13 @@ impl<A: AudioCallback> Gb<A> {
         was_set
     }
 
+    /// Read the current value of CPU register A.
+    #[must_use]
+    #[inline]
+    pub const fn cpu_a(&self) -> u8 {
+        self.cpu.a()
+    }
+
     /// Read the current value of CPU register B.
     ///
     /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
@@ -424,6 +431,10 @@ pub(crate) mod test_util {
 
 #[cfg(test)]
 impl<A: AudioCallback> Gb<A> {
+    pub(crate) fn set_rom_byte(&mut self, addr: u16, val: u8) {
+        self.cart.write_rom_byte_for_test(addr, val);
+    }
+
     /// Set the CPU program counter.  Only available in test builds.
     pub(crate) fn set_cpu_pc(&mut self, pc: u16) {
         self.cpu.set_pc(pc);

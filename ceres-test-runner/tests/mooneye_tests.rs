@@ -31,8 +31,9 @@ impl CompletionCheck for MooneyeCheck {
 
         // Check for fail condition (all 0x42)
         if b == 0x42 && c == 0x42 && d == 0x42 && e == 0x42 && h == 0x42 && l == 0x42 {
+            let a = gb.cpu_a();
             return Some(TestResult::Failed(format!(
-                "Mooneye failure: B={b:#04X}, C={c:#04X}, D={d:#04X}, E={e:#04X}, H={h:#04X}, L={l:#04X}"
+                "Mooneye failure: A={a:#04X} B={b:#04X}, C={c:#04X}, D={d:#04X}, E={e:#04X}, H={h:#04X}, L={l:#04X}"
             )));
         }
 
@@ -277,7 +278,7 @@ fn test_mooneye_push_timing() {
 #[test]
 fn test_mooneye_rapid_di_ei() {
     let result = run_mooneye_test("mooneye-test-suite/acceptance/rapid_di_ei.gb", Model::CgbE);
-    assert!(result.is_passed(), "rapid_di_ei test failed");
+    assert!(result.is_passed(), "rapid_di_ei test failed: {:?}", result);
 }
 
 #[test]

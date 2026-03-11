@@ -439,4 +439,9 @@ impl Cartridge {
             }
         }
     }
+
+    #[cfg(test)]
+    pub(crate) fn write_rom_byte_for_test(&mut self, addr: u16, val: u8) {
+        self.rom[addr as usize] = val;
+    }
 }
