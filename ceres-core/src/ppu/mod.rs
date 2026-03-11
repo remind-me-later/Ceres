@@ -1648,12 +1648,12 @@ impl Ppu {
                 // normal line (SameBoy display.c: cycles_for_line += 8).  When first_line_short is
                 // set we trigger PreEnd 16 ticks early so line 0 ends at tick 896 instead of 912.
                 let threshold = if self.first_line_short {
-                    self.first_line_short = false; // consumed — clear for subsequent lines
                     PRE_END_START - 16
                 } else {
                     PRE_END_START
                 };
                 if self.dots_in_line >= threshold {
+                    self.first_line_short = false; // consumed — clear for subsequent lines
                     self.phase = PpuPhase::HBlank(HBlankStage::PreEnd { remaining: 4 });
                 }
                 // Otherwise stay in Remainder
