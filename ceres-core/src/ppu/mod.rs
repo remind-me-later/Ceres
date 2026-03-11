@@ -477,20 +477,20 @@ impl Ppu {
             }
             PpuPhase::OamScan(_) => {
                 // OAM scan is driven by its own state machine
-                self.dots_in_line += 1;
                 self.tick_oam_scan(ints, cgb_mode, double_speed);
+                self.dots_in_line += 1;
             }
             PpuPhase::HBlank(_) => {
-                self.dots_in_line += 1;
                 self.tick_hblank(ints, double_speed);
+                self.dots_in_line += 1;
             }
             PpuPhase::VBlank(_) => {
-                self.dots_in_line += 1;
                 self.tick_vblank(ints);
+                self.dots_in_line += 1;
             }
             PpuPhase::Drawing => {
-                self.dots_in_line += 1;
                 self.tick_drawing(ints, cgb_mode);
+                self.dots_in_line += 1;
             }
             PpuPhase::LcdOff => {
                 // LCD is off, nothing to do
@@ -792,9 +792,6 @@ impl Ppu {
                     self.ly_for_comparison = u16::from(self.ly);
 
                     // LYC comparison now valid — fire LYC IRQ if LYC==LY.
-                    self.update_stat(ints);
-                    // End Mode 2 interrupt pulse.
-                    self.mode_for_interrupt = None;
                     self.update_stat(ints);
                 }
 

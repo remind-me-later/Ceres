@@ -3920,14 +3920,14 @@ fn age_ly_timing() {
     gb.write_mem(0xFF40, 0x81); // LCD ON
     
     // Line 0 is special after LCD on. 
-    // In Ceres, LY increments to 1 at tick 897.
-    for _ in 0..896 {
+    // In Ceres, LY increments to 1 at tick 898.
+    for _ in 0..897 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
-    assert_eq!(gb.ppu.read_ly(), 0, "LY should be 0 at tick 896");
+    assert_eq!(gb.ppu.read_ly(), 0, "LY should be 0 at tick 897");
     
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-    assert_eq!(gb.ppu.read_ly(), 1, "LY should increment to 1 at tick 897");
+    assert_eq!(gb.ppu.read_ly(), 1, "LY should increment to 1 at tick 898");
     
     // Every subsequent line is 912 ticks.
     // Tick 897 + 912 = 1809.
