@@ -17,12 +17,21 @@ pub enum Button {
     Start = 0x80,
 }
 
-#[derive(Default)]
 pub struct Joypad {
     // P1
     actions_flag: bool,
     button_mask: u8,
     directions_flag: bool,
+}
+
+impl Default for Joypad {
+    fn default() -> Self {
+        Self {
+            actions_flag: true,
+            directions_flag: true,
+            button_mask: 0,
+        }
+    }
 }
 
 impl Joypad {
@@ -38,20 +47,21 @@ impl Joypad {
 
     #[must_use]
     pub const fn read_p1(&self) -> u8 {
-        let act = if self.actions_flag {
-            (self.button_mask >> 4) | (1 << 5)
-        } else {
-            0
-        };
+        let mut res = 0xCF;
 
-        let dir = if self.directions_flag {
-            self.button_mask & 0xF | (1 << 4)
+        if !self.actions_flag {
+            res |= 0x20;
         } else {
-            0
-        };
+            res &= !(self.button_mask >> 4);
+        }
 
-        // pressed on low
-        !(act | dir)
+        if !self.directions_flag {
+            res |= 0x10;
+        } else {
+            res &= !(self.button_mask & 0xF);
+        }
+
+        res
     }
 
     pub const fn release(&mut self, button: Button) {

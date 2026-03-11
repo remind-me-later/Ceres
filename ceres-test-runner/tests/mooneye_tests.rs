@@ -361,7 +361,6 @@ fn test_mooneye_boot_hwio_dmg0() {
 }
 
 #[test]
-#[ignore = "Requires A+B pressed during boot sequence"]
 fn test_mooneye_boot_hwio_dmgabcmgb() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/boot_hwio-dmgABCmgb.gb",
