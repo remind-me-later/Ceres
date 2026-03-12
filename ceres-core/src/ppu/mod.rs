@@ -221,23 +221,20 @@ impl Ppu {
     fn update_stat(&mut self, ints: &mut Interrupts) {
         let previous_line = self.stat_interrupt_line;
 
-        // Update LY=LYC coincidence flag based on comparison value.
-        // If ly_for_comparison is valid (not 0xFFFF), we compare.
-        if self.ly_for_comparison != 0xFFFF {
-            self.stat &= !STAT_LYC_B;
-            if self.ly_for_comparison == u16::from(self.lyc) {
-                self.stat |= STAT_LYC_B;
-            }
-        }
+        // Internal coincidence match used for interrupt logic
+        let coincidence_match = if self.ly_for_comparison != 0xFFFF {
+            self.ly_for_comparison == u16::from(self.lyc)
+        } else {
+            false
+        };
 
-        // Compute new STAT interrupt line state from all enabled sources
-        let new_line = if (self.stat & STAT_IF_LYC_B != 0) && (self.stat & STAT_LYC_B != 0) {
+        // Compute new STAT interrupt line state from all enabled sources.
+        // Note: coincidence interrupt is triggered by internal match.
+        let new_line = if (self.stat & STAT_IF_LYC_B != 0) && coincidence_match {
             // LY=LYC coincidence interrupt
             true
         } else if let Some(interrupt_mode) = self.mode_for_interrupt {
             // Mode-based interrupts use mode_for_interrupt (which can differ from STAT bits)
-            // mode_for_interrupt can be set to OamScan at the end of HBlank, before STAT changes.
-            // If mode_for_interrupt is None, no mode interrupt is generated.
             match interrupt_mode {
                 Mode::HBlank if self.stat & STAT_IF_HBLANK_B != 0 => true,
                 Mode::VBlank if self.stat & STAT_IF_VBLANK_B != 0 => true,
@@ -253,6 +250,16 @@ impl Ppu {
         // Only fire interrupt on rising edge (low -> high transition)
         if new_line && !previous_line {
             ints.request_lcd();
+        }
+
+        // FINALLY update the STAT register bits for CPU visibility.
+        // This ensures that if an interrupt fires, an IMMEDIATE CPU read of STAT
+        // might still see the OLD coincidence flag value (if requested right at the edge).
+        if self.ly_for_comparison != 0xFFFF {
+            self.stat &= !STAT_LYC_B;
+            if coincidence_match {
+                self.stat |= STAT_LYC_B;
+            }
         }
     }
 
@@ -748,18 +755,13 @@ impl Ppu {
                     self.sprite_buffer.clear();
                     
                     self.ly = self.current_line;
-                    if self.current_line != 0 {
-                        self.ly_for_comparison = 0xFFFF;
-                        self.stat &= !STAT_LYC_B;
-                    } else {
-                        self.ly_for_comparison = 0;
-                    }
+                    // LYC comparison now valid for the new line
+                    self.ly_for_comparison = u16::from(self.ly);
 
-                    self.set_mode_stat(Mode::OamScan);
+                    // Mode 2 interrupt fires at tick 0, but STAT still shows Mode 0.
+                    // LYC interrupt also fires here if LY==LYC.
                     self.mode_for_interrupt = Some(Mode::OamScan);
                     self.update_stat(ints);
-
-
                 }
 
                 // Tick 4: OAM read-blocking starts for non-double-speed (SameBoy State 7).
@@ -785,14 +787,16 @@ impl Ppu {
                     self.oam_read_blocked = true;
                 }
 
-                // Tick 10: complete OAM-scan memory blocking and enable LYC comparison
-                // (SameBoy State 7).  STAT mode bits are already 2 from tick 3.
+                // Tick 10: complete OAM-scan memory blocking (SameBoy State 7).
                 if tick == 10 {
                     self.oam_read_blocked = true;
                     self.oam_write_blocked = true;
-                    self.ly_for_comparison = u16::from(self.ly);
+                    self.update_stat(ints);
+                }
 
-                    // LYC comparison now valid — fire LYC IRQ if LYC==LY.
+                // STAT bits change to Mode 2 at tick 12 (SameBoy State 7 after delay)
+                if tick == 12 {
+                    self.set_mode_stat(Mode::OamScan);
                     self.update_stat(ints);
                 }
 

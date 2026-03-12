@@ -1127,14 +1127,12 @@ fn gambatte_lycint_ly_1() {
 }
 
 #[test]
-#[ignore = "Failing PPU timing accuracy"]
 fn gambatte_lycint_lycflag_1() {
     let result = run_gambatte_dmg("gambatte/lycint_lycflag/lycint_lycflag_1_dmg08_cgb04c_out0.gbc", 0x00);
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }
 
 #[test]
-#[ignore = "Failing PPU timing accuracy"]
 fn gambatte_m2int_m0stat_1() {
     let result = run_gambatte_dmg("gambatte/m2int_m0stat/m2int_m0stat_1_dmg08_cgb04c_out0.gbc", 0x00);
     assert_eq!(result, TestResult::Passed, "{result:?}");
