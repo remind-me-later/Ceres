@@ -1080,19 +1080,28 @@ fn run_gambatte_dmg(relative_path: &str, expected_output: u8) -> TestResult {
 
 #[test]
 fn gambatte_lycint_lycirq_1() {
-    let result = run_gambatte_dmg("gambatte/lycint_lycirq/lycint_lycirq_1_dmg08_cgb04c_out1.gbc", 0x01);
+    let result = run_gambatte_dmg(
+        "gambatte/lycint_lycirq/lycint_lycirq_1_dmg08_cgb04c_out1.gbc",
+        0x01,
+    );
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }
 
 #[test]
 fn gambatte_m2int_m2irq_1() {
-    let result = run_gambatte_dmg("gambatte/m2int_m2irq/m2int_m2irq_1_dmg08_cgb04c_out0.gbc", 0x00);
+    let result = run_gambatte_dmg(
+        "gambatte/m2int_m2irq/m2int_m2irq_1_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }
 
 #[test]
 fn gambatte_m0int_m0irq_1() {
-    let result = run_gambatte_dmg("gambatte/m0int_m0irq/m0int_m0irq_1_dmg08_cgb04c_out0.gbc", 0x00);
+    let result = run_gambatte_dmg(
+        "gambatte/m0int_m0irq/m0int_m0irq_1_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }
 
@@ -1110,7 +1119,10 @@ fn gambatte_lyc143_m1irq_1() {
 
 #[test]
 fn gambatte_m1irq_late_enable_1() {
-    let result = run_gambatte_dmg("gambatte/m1/m1irq_late_enable_1_dmg08_cgb04c_out2.gbc", 0x02);
+    let result = run_gambatte_dmg(
+        "gambatte/m1/m1irq_late_enable_1_dmg08_cgb04c_out2.gbc",
+        0x02,
+    );
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }
 
@@ -1128,12 +1140,18 @@ fn gambatte_lycint_ly_1() {
 
 #[test]
 fn gambatte_lycint_lycflag_1() {
-    let result = run_gambatte_dmg("gambatte/lycint_lycflag/lycint_lycflag_1_dmg08_cgb04c_out0.gbc", 0x00);
+    let result = run_gambatte_dmg(
+        "gambatte/lycint_lycflag/lycint_lycflag_1_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }
 
 #[test]
 fn gambatte_m2int_m0stat_1() {
-    let result = run_gambatte_dmg("gambatte/m2int_m0stat/m2int_m0stat_1_dmg08_cgb04c_out0.gbc", 0x00);
+    let result = run_gambatte_dmg(
+        "gambatte/m2int_m0stat/m2int_m0stat_1_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }

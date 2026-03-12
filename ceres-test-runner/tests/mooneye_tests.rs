@@ -2,8 +2,8 @@ use ceres_core::Model;
 use ceres_test_runner::{
     expected_screenshot_path, load_test_rom,
     test_runner::{
-        timeouts, CompletionCheck, DummyAudioCallback, ScreenshotCheck, TestConfig, TestResult,
-        TestRunner,
+        CompletionCheck, DummyAudioCallback, ScreenshotCheck, TestConfig, TestResult, TestRunner,
+        timeouts,
     },
 };
 
@@ -36,7 +36,8 @@ impl CompletionCheck for MooneyeCheck {
             )));
         }
 
-        None    }
+        None
+    }
 
     fn on_timeout(&self, _gb: &mut ceres_core::Gb<DummyAudioCallback>) -> TestResult {
         TestResult::Failed("Mooneye test timed out".to_string())

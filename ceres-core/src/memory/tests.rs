@@ -1192,7 +1192,7 @@ fn samesuite_hdma_mode0() {
     gb.write_mem(0xFF52, 0x00);
     gb.write_mem(0xFF53, 0x08); // dst = 0x8800
     gb.write_mem(0xFF54, 0x00);
-    
+
     // Start 2-block HBlank DMA (bit 7 = 1, len = 1)
     gb.write_mem(0xFF55, 0x81);
 
@@ -1204,16 +1204,18 @@ fn samesuite_hdma_mode0() {
     loop {
         gb.advance_dots(1);
         gb.run_hdma();
-        if (gb.read_mem(0xFF41) & 0x03) == 0 { break; }
+        if (gb.read_mem(0xFF41) & 0x03) == 0 {
+            break;
+        }
     }
-    
+
     // After one HBlank, first block should be copied
     for i in 0u16..16 {
         assert_eq!(gb.read_mem(0x8800 + i), i as u8);
     }
     // Second block not yet
     assert_eq!(gb.read_mem(0x8810), 0);
-    
+
     // HDMA5 should reflect 1 block remaining (bits 6:0 = 0)
     assert_eq!(gb.read_mem(0xFF55) & 0x7F, 0);
 
@@ -1221,19 +1223,23 @@ fn samesuite_hdma_mode0() {
     loop {
         gb.advance_dots(1);
         gb.run_hdma();
-        if (gb.read_mem(0xFF41) & 0x03) != 0 { break; } // Exit current HBlank
+        if (gb.read_mem(0xFF41) & 0x03) != 0 {
+            break;
+        } // Exit current HBlank
     }
     loop {
         gb.advance_dots(1);
         gb.run_hdma();
-        if (gb.read_mem(0xFF41) & 0x03) == 0 { break; } // Enter next HBlank
+        if (gb.read_mem(0xFF41) & 0x03) == 0 {
+            break;
+        } // Enter next HBlank
     }
 
     // Now second block should be copied
     for i in 0u16..16 {
         assert_eq!(gb.read_mem(0x8810 + i), (i + 16) as u8);
     }
-    
+
     // HDMA5 bit 7 should be set (finished)
     assert_eq!(gb.read_mem(0xFF55), 0xFF);
 }
@@ -1261,7 +1267,7 @@ fn samesuite_hdma_lcd_off() {
     gb.write_mem(0xFF52, 0x00);
     gb.write_mem(0xFF53, 0x08); // dst = 0x8800
     gb.write_mem(0xFF54, 0x00);
-    
+
     // Start HBlank DMA (bit 7 = 1, len = 1 -> 2 blocks)
     // While LCD is off, it should immediately copy ONE block and pause.
     gb.write_mem(0xFF55, 0x81);
@@ -1273,12 +1279,17 @@ fn samesuite_hdma_lcd_off() {
     }
     // Second block should NOT be copied (LCD is off, no HBlanks)
     assert_eq!(gb.read_mem(0x8810), 0);
-    
+
     // HDMA5 should reflect 1 block remaining (bits 6:0 = 0) and bit 7=0 (active)
     let hdma5 = gb.read_mem(0xFF55);
-    assert_eq!(hdma5 & 0x80, 0x00, "HDMA should still be active (bit 7 = 0)");
-    assert_eq!(hdma5 & 0x7F, 0x00, "HDMA should have 1 block remaining (bits 6:0 = 0)");
+    assert_eq!(
+        hdma5 & 0x80,
+        0x00,
+        "HDMA should still be active (bit 7 = 0)"
+    );
+    assert_eq!(
+        hdma5 & 0x7F,
+        0x00,
+        "HDMA should have 1 block remaining (bits 6:0 = 0)"
+    );
 }
-
-
-

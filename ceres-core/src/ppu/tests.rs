@@ -115,7 +115,11 @@ fn test_ppu_oam_scan_ly_timing() {
         }
     }
 
-    assert_eq!(ly_update_tick, Some(1), "LY should update at tick 1 (OAM Scan tick 0)");
+    assert_eq!(
+        ly_update_tick,
+        Some(1),
+        "LY should update at tick 1 (OAM Scan tick 0)"
+    );
 }
 
 #[test]
@@ -205,7 +209,10 @@ fn test_ppu_active_period_duration() {
         "Mode 2 duration assumption violated: {} ticks",
         mode2_ticks
     );
-    println!("DEBUG: mode2_ticks={}, mode3_ticks={}", mode2_ticks, mode3_ticks);
+    println!(
+        "DEBUG: mode2_ticks={}, mode3_ticks={}",
+        mode2_ticks, mode3_ticks
+    );
     assert!(
         mode2_ticks + mode3_ticks >= 502,
         "Active period {} is shorter than expectation (502 ticks)",
@@ -3090,7 +3097,8 @@ fn mooneye_stat_irq_blocking() {
                 gb.ints.read_if() & 0x02,
                 0,
                 "STAT interrupt unexpectedly fired at LY={}, mode={}",
-                gb.ppu.read_ly(), gb.ppu.read_stat() & 3
+                gb.ppu.read_ly(),
+                gb.ppu.read_stat() & 3
             );
             let stat = gb.ppu.read_stat();
             if gb.ppu.read_ly() == b && (stat & 0x04) != 0 && (stat & 3) == 2 {
@@ -3105,7 +3113,8 @@ fn mooneye_stat_irq_blocking() {
                 gb.ints.read_if() & 0x02,
                 0,
                 "STAT interrupt unexpectedly fired at LY={}, mode={}",
-                gb.ppu.read_ly(), gb.ppu.read_stat() & 3
+                gb.ppu.read_ly(),
+                gb.ppu.read_stat() & 3
             );
             if gb.ppu.read_stat() & 0x03 == 0 {
                 break;
@@ -3304,22 +3313,38 @@ fn mooneye_stat_lyc_onoff() {
             break;
         }
     }
-    assert_eq!(gb.ppu.read_stat() & 0x04, 0x04, "LYC coincidence bit not set");
-    
+    assert_eq!(
+        gb.ppu.read_stat() & 0x04,
+        0x04,
+        "LYC coincidence bit not set"
+    );
+
     // Turn off LCD
     gb.write_mem(0xFF40, 0);
     gb.ints.write_if(0);
-    
+
     // Bit should be retained
-    assert_eq!(gb.ppu.read_stat() & 0x04, 0x04, "LYC coincidence bit not retained after LCD off");
-    
+    assert_eq!(
+        gb.ppu.read_stat() & 0x04,
+        0x04,
+        "LYC coincidence bit not retained after LCD off"
+    );
+
     // Changing LYC should not have an effect
     gb.write_mem(0xFF45, 1);
-    assert_eq!(gb.ppu.read_stat() & 0x04, 0x04, "LYC coincidence changed while LCD off");
+    assert_eq!(
+        gb.ppu.read_stat() & 0x04,
+        0x04,
+        "LYC coincidence changed while LCD off"
+    );
 
     // Enabling PPU starts comparison clock. LY=0, LYC=1, so bit should go to 0
     gb.write_mem(0xFF40, 0x80);
-    assert_eq!(gb.ppu.read_stat() & 0x04, 0x00, "LYC coincidence didn't reset after LCD on");
+    assert_eq!(
+        gb.ppu.read_stat() & 0x04,
+        0x00,
+        "LYC coincidence didn't reset after LCD on"
+    );
 
     // Round 2: Turn off PPU while comparison is true (LYC=144)
     advance_to_ly(&mut gb, 144);
@@ -3333,16 +3358,32 @@ fn mooneye_stat_lyc_onoff() {
     gb.write_mem(0xFF40, 0); // LCD off
     gb.ints.write_if(0);
 
-    assert_eq!(gb.ppu.read_stat() & 0x04, 0x04, "LYC coincidence bit not retained (R2)");
+    assert_eq!(
+        gb.ppu.read_stat() & 0x04,
+        0x04,
+        "LYC coincidence bit not retained (R2)"
+    );
 
     // Change LYC to 0 (which matches LY=0 when LCD turns on)
     gb.write_mem(0xFF45, 0);
-    assert_eq!(gb.ppu.read_stat() & 0x04, 0x04, "LYC coincidence changed while LCD off (R2)");
-    
+    assert_eq!(
+        gb.ppu.read_stat() & 0x04,
+        0x04,
+        "LYC coincidence changed while LCD off (R2)"
+    );
+
     // Enabling PPU: LY=0 vs LYC=0. Coincidence stays set, but NO interrupt should fire (no rising edge)
     gb.write_mem(0xFF40, 0x80);
-    assert_eq!(gb.ppu.read_stat() & 0x04, 0x04, "LYC coincidence didn't stay set after LCD on");
-    assert_eq!(gb.ints.read_if() & 0x02, 0, "Interrupt fired when turning LCD on with LYC=0 (R2)");
+    assert_eq!(
+        gb.ppu.read_stat() & 0x04,
+        0x04,
+        "LYC coincidence didn't stay set after LCD on"
+    );
+    assert_eq!(
+        gb.ints.read_if() & 0x02,
+        0,
+        "Interrupt fired when turning LCD on with LYC=0 (R2)"
+    );
 
     // Round 3: Turn off PPU while comparison is false (LYC=0)
     advance_to_ly(&mut gb, 144);
@@ -3350,13 +3391,25 @@ fn mooneye_stat_lyc_onoff() {
     gb.write_mem(0xFF45, 0); // LYC=0
     gb.ints.write_if(0);
 
-    assert_eq!(gb.ppu.read_stat() & 0x04, 0x00, "LYC coincidence bit set (R3)");
+    assert_eq!(
+        gb.ppu.read_stat() & 0x04,
+        0x00,
+        "LYC coincidence bit set (R3)"
+    );
 
     gb.write_mem(0xFF45, 1);
-    assert_eq!(gb.ppu.read_stat() & 0x04, 0x00, "LYC coincidence bit set after write (R3)");
+    assert_eq!(
+        gb.ppu.read_stat() & 0x04,
+        0x00,
+        "LYC coincidence bit set after write (R3)"
+    );
 
     gb.write_mem(0xFF40, 0x80); // LCD on
-    assert_eq!(gb.ppu.read_stat() & 0x04, 0x00, "LYC coincidence bit set after LCD on (R3)");
+    assert_eq!(
+        gb.ppu.read_stat() & 0x04,
+        0x00,
+        "LYC coincidence bit set after LCD on (R3)"
+    );
     assert_eq!(gb.ints.read_if() & 0x02, 0, "Interrupt fired (R3)");
 
     // Round 4: Turn off PPU while comparison is false, change so it becomes true on power-on
@@ -3364,13 +3417,21 @@ fn mooneye_stat_lyc_onoff() {
     gb.write_mem(0xFF40, 0); // LCD off
     gb.write_mem(0xFF45, 0); // LYC=0
     gb.ints.write_if(0);
-    
-    assert_eq!(gb.ppu.read_stat() & 0x04, 0x00, "LYC coincidence bit set (R4)");
+
+    assert_eq!(
+        gb.ppu.read_stat() & 0x04,
+        0x00,
+        "LYC coincidence bit set (R4)"
+    );
 
     // We expect an interrupt because comparison clock starts and comparison bit gets set (LY=0 vs LYC=0)
     gb.write_mem(0xFF40, 0x80); // LCD on
-    assert_eq!(gb.ppu.read_stat() & 0x04, 0x04, "LYC coincidence didn't set (R4)");
-    
+    assert_eq!(
+        gb.ppu.read_stat() & 0x04,
+        0x04,
+        "LYC coincidence didn't set (R4)"
+    );
+
     // We should tick the PPU for the interrupt to be requested? Wait, Mooneye just expects the interrupt immediately.
     // Let's tick a bit if needed.
     let mut fired = false;
@@ -3428,7 +3489,10 @@ fn mooneye_intr_2_oam_ok_timing() {
         }
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
-    assert!(oam_ok_tick > 0, "OAM didn't become readable (Mode 0 not reached)");
+    assert!(
+        oam_ok_tick > 0,
+        "OAM didn't become readable (Mode 0 not reached)"
+    );
 
     // The distance is basically the duration of Mode 2 + Mode 3.
     // Mode 2 is 160 ticks, Mode 3 is roughly 344 ticks -> ~504 ticks.
@@ -3469,11 +3533,11 @@ fn mooneye_vblank_stat_intr() {
             break;
         }
     }
-    
+
     // Both VBlank (0x01) and STAT (0x02) should fire on the exact same tick!
     assert_eq!(
-        fired & 0x03, 
-        0x03, 
+        fired & 0x03,
+        0x03,
         "Both VBlank and STAT interrupts should trigger at LY=144 when Mode 2 STAT is enabled"
     );
 }
@@ -3492,8 +3556,8 @@ fn mooneye_intr_2_0_timing_sprites() {
 
     // Setup 1 sprite at X=8 (visible left edge), Y=82 (on scanline 66)
     gb.write_mem(0xFE00, 82);
-    gb.write_mem(0xFE01, 8); 
-    
+    gb.write_mem(0xFE01, 8);
+
     gb.write_mem(0xFF40, 0x82); // LCD ON + OBJ ON
 
     // Wait until LY=66
@@ -3512,7 +3576,7 @@ fn mooneye_intr_2_0_timing_sprites() {
         }
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
-    
+
     gb.ints.acknowledge_interrupt(0x02);
     gb.write_mem(0xFF41, 0x08); // Mode 0 interrupt
 
@@ -3528,8 +3592,8 @@ fn mooneye_intr_2_0_timing_sprites() {
     // Base duration for Mode 2 -> Mode 0 is ~504 ticks.
     // 1 Sprite adds roughly ~12 ticks (depending on exact sprite fetch).
     assert!(
-        mode0_tick > 510, 
-        "Mode 0 interrupt was not delayed by sprites (took {} ticks, expected > 510)", 
+        mode0_tick > 510,
+        "Mode 0 interrupt was not delayed by sprites (took {} ticks, expected > 510)",
         mode0_tick
     );
 }
@@ -3572,8 +3636,8 @@ fn mooneye_hblank_ly_scx_timing_intr() {
         }
     }
 
-    // According to Mooneye hblank_ly_scx_timing-GS.s, 
-    // for SCX=0, the LY increment happens exactly 51 M-cycles (204 T-cycles / 408 ticks) 
+    // According to Mooneye hblank_ly_scx_timing-GS.s,
+    // for SCX=0, the LY increment happens exactly 51 M-cycles (204 T-cycles / 408 ticks)
     // after the STAT interrupt condition is met.
     assert!(
         (390..=420).contains(&ticks_to_ly),
@@ -3616,7 +3680,7 @@ fn mooneye_lcdon_timing_gs() {
     for _ in 0..16 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
-    
+
     // Now we should have entered Mode 3 (Drawing)
     assert_eq!(gb.ppu.read_stat() & 0x03, 3);
 }
@@ -3642,12 +3706,21 @@ fn mooneye_lcdon_write_timing_gs() {
     // Phase 1: InitialMode0 (152 ticks) - all unblocked
     for _ in 0..151 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        assert!(!gb.ppu.oam_write_blocked, "OAM should not be blocked in Phase 1");
+        assert!(
+            !gb.ppu.oam_write_blocked,
+            "OAM should not be blocked in Phase 1"
+        );
     }
     // Tick 152 transitions to Phase 2
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-    assert!(gb.ppu.oam_write_blocked, "OAM should be blocked entering Phase 2");
-    assert!(!gb.ppu.vram_write_blocked, "VRAM should not be blocked entering Phase 2 on DMG");
+    assert!(
+        gb.ppu.oam_write_blocked,
+        "OAM should be blocked entering Phase 2"
+    );
+    assert!(
+        !gb.ppu.vram_write_blocked,
+        "VRAM should not be blocked entering Phase 2 on DMG"
+    );
 
     // Phase 2: OamWriteBlock (4 ticks) - OAM write blocked, VRAM unblocked on DMG
     for _ in 0..3 {
@@ -3658,7 +3731,10 @@ fn mooneye_lcdon_write_timing_gs() {
     // Tick 156 transitions to Phase 3
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     assert!(gb.ppu.oam_write_blocked);
-    assert!(gb.ppu.vram_write_blocked, "VRAM should be blocked entering Phase 3 on DMG");
+    assert!(
+        gb.ppu.vram_write_blocked,
+        "VRAM should be blocked entering Phase 3 on DMG"
+    );
 
     // Phase 3: StatMode3 (4 ticks) - OAM fully blocked, VRAM blocked on DMG
     for _ in 0..3 {
@@ -3721,11 +3797,10 @@ fn mooneye_hblank_ly_scx_timing_all() {
                 break;
             }
         }
-        
+
         assert_eq!(
-            ticks_to_ly, 
-            expected_ticks[scx as usize], 
-            "SCX={} did not match expected ticks to LY increment", 
+            ticks_to_ly, expected_ticks[scx as usize],
+            "SCX={} did not match expected ticks to LY increment",
             scx
         );
     }
@@ -3748,19 +3823,28 @@ fn samesuite_blocking_bgpi_increase() {
     for mode in modes {
         // Advance to desired mode
         advance_to_mode(&mut gb, mode);
-        
+
         // Write index 4, enable auto-increment
         gb.write_mem(0xFF68, 0x84);
-        assert_eq!(gb.read_mem(0xFF68), 0xC4, "BCPS write failed in mode {}", mode);
-        
+        assert_eq!(
+            gb.read_mem(0xFF68),
+            0xC4,
+            "BCPS write failed in mode {}",
+            mode
+        );
+
         // Write data to BCPD
         gb.write_mem(0xFF69, 0xAA);
-        
+
         // Check if index incremented to 5
-        assert_eq!(gb.read_mem(0xFF68), 0xC5, "BCPS auto-increment failed in mode {}", mode);
+        assert_eq!(
+            gb.read_mem(0xFF68),
+            0xC5,
+            "BCPS auto-increment failed in mode {}",
+            mode
+        );
     }
 }
-
 
 // -----------------------------------------------------------------------
 // intr_2_mode0_timing - mooneye-test-suite/acceptance/ppu/intr_2_mode0_timing.s
@@ -3841,27 +3925,27 @@ fn gbmicrotest_ppu_latch_scx() {
 
     // Write SCX = 4 immediately at the start of Mode 2
     gb.write_mem(0xFF43, 4);
-    
+
     // According to the test, if we wait ~8 NOPs (32 ticks) and write SCX=0,
     // the PPU should have already latched the value 4 for this scanline?
     // Actually, PPU latches SCX exactly when Mode 3 starts.
-    
+
     // Advance 32 ticks
     for _ in 0..32 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
-    
+
     // Write SCX = 0
     gb.write_mem(0xFF43, 0);
-    
+
     // Advance to Mode 3
     advance_to_mode(&mut gb, 3);
-    
+
     // In Ceres, SCX is currently read directly during Mode 3 drawing.
     // If it's correctly latched at the start of Mode 3, the value 0
     // written above (during Mode 2) should be the one used.
     // Wait, the test expects SCX=4 to be used if written early in Mode 2?
-    // Let's re-read: the gbmicrotest SCX latching says latching happens 
+    // Let's re-read: the gbmicrotest SCX latching says latching happens
     // at the transition from Mode 2 to Mode 3.
 }
 
@@ -3918,29 +4002,27 @@ fn age_ly_timing() {
     let mut gb = setup_gb();
     gb.write_mem(0xFF40, 0);
     gb.write_mem(0xFF40, 0x81); // LCD ON
-    
-    // Line 0 is special after LCD on. 
+
+    // Line 0 is special after LCD on.
     // In Ceres, LY increments to 1 at tick 881.
     for _ in 0..880 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
     assert_eq!(gb.ppu.read_ly(), 0, "LY should be 0 at tick 880");
-    
+
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     assert_eq!(gb.ppu.read_ly(), 1, "LY should increment to 1 at tick 881");
-    
+
     // Every subsequent line is 912 ticks.
     // Tick 881 + 912 = 1793.
     for _ in 0..911 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
     assert_eq!(gb.ppu.read_ly(), 1, "LY should be 1 at tick 1792");
-    
+
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     assert_eq!(gb.ppu.read_ly(), 2, "LY should increment to 2 at tick 1793");
 }
-
-
 
 // -----------------------------------------------------------------------
 // age_stat_int_timing - age-test-roms/src/stat-interrupt/stat-int.inc
@@ -3952,17 +4034,17 @@ fn age_ly_timing() {
 #[test]
 fn age_stat_int_timing() {
     let mut gb = setup_gb();
-    
+
     // Mode 0 (HBlank) interrupt timing with SCX=0
     gb.write_mem(0xFF40, 0); // LCD OFF
     gb.write_mem(0xFF43, 0); // SCX = 0
     gb.write_mem(0xFF41, 0x08); // Enable Mode 0 interrupt
     gb.ints.write_if(0);
     gb.write_mem(0xFF40, 0x81); // LCD ON
-    
+
     // Advance to line 3, start of Mode 2
     advance_to_ly(&mut gb, 3);
-    
+
     // Wait until Mode 0 interrupt fires
     let mut ticks_to_intr = 0;
     loop {
@@ -3972,9 +4054,11 @@ fn age_stat_int_timing() {
             break;
         }
         // Safety break
-        if ticks_to_intr > 1000 { panic!("Mode 0 interrupt never fired"); }
+        if ticks_to_intr > 1000 {
+            panic!("Mode 0 interrupt never fired");
+        }
     }
-    
+
     // For SCX=0 on line 3, the Mode 0 interrupt fires exactly at a certain tick.
     // Let's just verify it fires.
     assert!(ticks_to_intr > 0);
@@ -3998,16 +4082,16 @@ fn age_ppu_scx_latching() {
 
     // Write SCX = 7 during Mode 2
     gb.write_mem(0xFF43, 7);
-    
+
     // In Ceres, SCX is currently read directly.
     // If it's latched at the start of Mode 3, then writing SCX=0
     // AFTER Mode 3 has started should not affect the current line.
-    
+
     advance_to_mode(&mut gb, 3);
-    
+
     // Write SCX = 0 immediately after Mode 3 starts
     gb.write_mem(0xFF43, 0);
-    
+
     // If latching is correct, the PPU should be using SCX=7 for this line.
     // Note: To truly verify this without a renderer, we'd need to check
     // internal PPU state, but for now we'll just ensure this test exists
@@ -4028,10 +4112,10 @@ fn age_ppu_mode3_duration_scx() {
         let mut gb = setup_gb();
         gb.write_mem(0xFF40, 0x81);
         gb.write_mem(0xFF43, scx);
-        
+
         advance_to_ly(&mut gb, 1);
         advance_to_mode(&mut gb, 3);
-        
+
         let mut duration = 0;
         loop {
             gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
@@ -4042,7 +4126,7 @@ fn age_ppu_mode3_duration_scx() {
         }
         results.push(duration);
     }
-    
+
     // In Ceres, base duration is 344 ticks. Each SCX increment adds 2 ticks.
     let expected = [343, 345, 347, 349, 351, 353, 355, 357];
     assert_eq!(results, expected, "Mode 3 duration vs SCX timing changed!");
@@ -4058,12 +4142,12 @@ fn age_ppu_mode3_duration_scx() {
 fn age_ppu_vram_blocking() {
     let mut gb = setup_gb();
     gb.write_mem(0xFF40, 0x81); // LCD ON
-    
+
     advance_to_ly(&mut gb, 1);
     advance_to_mode(&mut gb, 3);
-    
+
     assert!(gb.ppu.vram_read_blocked, "VRAM should be blocked in Mode 3");
-    
+
     let mut ticks_in_m3 = 0;
     loop {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
@@ -4072,9 +4156,13 @@ fn age_ppu_vram_blocking() {
             break;
         }
     }
-    
+
     assert_eq!(ticks_in_m3, 343, "VRAM unblocking timing changed!");
-    assert_eq!(gb.ppu.read_stat() & 0x03, 0, "VRAM should unblock exactly when Mode 0 starts");
+    assert_eq!(
+        gb.ppu.read_stat() & 0x03,
+        0,
+        "VRAM should unblock exactly when Mode 0 starts"
+    );
 }
 
 // -----------------------------------------------------------------------
@@ -4088,19 +4176,19 @@ fn age_ppu_vram_blocking() {
 fn age_ppu_mode3_duration_sprites() {
     let mut gb = setup_gb();
     gb.write_mem(0xFF40, 0); // LCD OFF
-    
+
     // Setup 10 sprites on line 66
     for i in 0..10 {
         let addr = 0xFE00 + (i * 4);
         gb.write_mem(addr, 82); // Y = 82 (line 66)
         gb.write_mem(addr + 1, 8 + (i as u8 * 8)); // X
     }
-    
+
     gb.write_mem(0xFF40, 0x82); // LCD ON + OBJ ON
-    
+
     advance_to_ly(&mut gb, 66);
     advance_to_mode(&mut gb, 3);
-    
+
     let mut duration = 0;
     loop {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
@@ -4109,21 +4197,11 @@ fn age_ppu_mode3_duration_sprites() {
             break;
         }
     }
-    
+
     // 10 non-overlapping sprites should add 110 dots (220 ticks).
     // 344 + 220 = 564.
     assert_eq!(duration, 563, "Sprite Mode 3 penalty timing changed!");
 }
-
-
-
-
-
-
-
-
-
-
 
 #[test]
 fn test_mooneye_oam_blocking_steady_state() {
@@ -4137,26 +4215,35 @@ fn test_mooneye_oam_blocking_steady_state() {
     }
 
     // Start LCD (Model DMG)
-    gb.write_mem(0xFF40, 0x81); 
+    gb.write_mem(0xFF40, 0x81);
 
     // Synchronize to LY=43, and the moment tick 0 has JUST been processed.
-    while gb.ppu.read_ly() != 43 || !matches!(gb.ppu.phase, crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 1 })) {
+    while gb.ppu.read_ly() != 43
+        || !matches!(
+            gb.ppu.phase,
+            crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 1 })
+        )
+    {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
-    
+
     // At this point, tick 0 logic (which sets LY=43) has run.
     // The PPU is now in Running { tick: 1 }.
-    
+
     // Check OAM at start of ticks 1..3
     for t in 1..4 {
         assert_eq!(gb.ppu.read_oam(0xFE00), 0x00, "OAM unblocked at tick {}", t);
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
-    
+
     // Now internal tick counter is 4.
     // Tick 4 logic runs at the START of the next tick() and sets oam_read_blocked = true.
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-    assert_eq!(gb.ppu.read_oam(0xFE00), 0xFF, "OAM should be blocked at tick 4");
+    assert_eq!(
+        gb.ppu.read_oam(0xFE00),
+        0xFF,
+        "OAM should be blocked at tick 4"
+    );
 }
 
 #[test]
@@ -4168,12 +4255,16 @@ fn test_mooneye_lcdon_timing_gs_repro() {
 
     // Cycle 0: write to LCDC
     gb.write_mem(0xFF40, 0x81); // LCD ON
-    
+
     let check = |gb: &Gb, m_cycles: u32, expected_ly: u8, expected_stat: u8| {
         let actual_ly = gb.ppu.read_ly();
         let actual_stat = gb.ppu.read_stat();
         assert_eq!(actual_ly, expected_ly, "LY mismatch at cycle {}", m_cycles);
-        assert_eq!(actual_stat, expected_stat, "STAT mismatch at cycle {}", m_cycles);
+        assert_eq!(
+            actual_stat, expected_stat,
+            "STAT mismatch at cycle {}",
+            m_cycles
+        );
     };
 
     // Cycles are M-cycles (8 ticks per cycle at 8MHz)
@@ -4181,18 +4272,26 @@ fn test_mooneye_lcdon_timing_gs_repro() {
     check(&gb, 0, 0x00, 0x84); // Mode 0, Coinc set
 
     // Advance 17 cycles
-    for _ in 0..(17 * 8) { gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false); }
+    for _ in 0..(17 * 8) {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
     check(&gb, 17, 0x00, 0x84);
 
     // Advance to 60 cycles
-    for _ in 0..((60 - 17) * 8) { gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false); }
+    for _ in 0..((60 - 17) * 8) {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
     check(&gb, 60, 0x00, 0x87); // Should be Mode 3
 
     // Advance to 110 cycles
-    for _ in 0..((110 - 60) * 8) { gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false); }
+    for _ in 0..((110 - 60) * 8) {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
     check(&gb, 110, 0x00, 0x84); // Should be Mode 0 (HBlank)
 
     // Advance to 130 cycles
-    for _ in 0..((130 - 110) * 8) { gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false); }
+    for _ in 0..((130 - 110) * 8) {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
     check(&gb, 130, 0x01, 0x82); // Should be Mode 2 of line 1
 }

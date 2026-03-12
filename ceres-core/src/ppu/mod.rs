@@ -748,12 +748,10 @@ impl Ppu {
             OamScanStage::Running { tick } => {
                 // SameBoy-accurate timing (in 8MHz ticks)
 
-
-
                 // Tick 0: LY update and Mode 2 interrupt pulse.
                 if tick == 0 {
                     self.sprite_buffer.clear();
-                    
+
                     self.ly = self.current_line;
                     // LYC comparison now valid for the new line
                     self.ly_for_comparison = u16::from(self.ly);
@@ -838,7 +836,7 @@ impl Ppu {
                 if tick >= 168 {
                     // Transition to Mode 3 Rendering (Tick 168)
                     self.cgb_palettes_blocked = true;
-                    
+
                     self.enter_mode3_from_oam_scan(ints);
                 } else {
                     self.phase = PpuPhase::OamScan(OamScanStage::Running { tick: tick + 1 });

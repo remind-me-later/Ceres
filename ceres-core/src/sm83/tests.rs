@@ -1670,9 +1670,9 @@ fn samesuite_ei_delay_halt() {
 
     gb.run_cpu(); // Run HALT
     // Interrupt should have dispatched. IME becomes 0.
-    assert!(!gb.ints.are_enabled()); 
+    assert!(!gb.ints.are_enabled());
     assert_eq!(gb.cpu.pc, 0x0040); // VBlank vector
-    
+
     // Check if it pushed the return address 0xC001 (HALT)
     let sp = gb.cpu.sp;
     let lo = gb.read_mem(sp);
@@ -1745,7 +1745,7 @@ fn mooneye_acceptance_ei_timing() {
 
     gb.run_cpu(); // Run EI
     gb.run_cpu(); // Run INC B (delay slot) -> IME becomes 1 at end, dispatches immediately
-    
+
     assert_eq!(gb.cpu.pc, 0x0058, "Should have dispatched after delay slot");
     assert_eq!(gb.cpu.bc() >> 8, 1, "B should be 1");
 }
@@ -1779,10 +1779,13 @@ fn mooneye_acceptance_reti_intr_timing() {
     gb.run_cpu(); // EI
     gb.run_cpu(); // INC B -> delay slot finishes, dispatches VBLANK immediately
     assert_eq!(gb.cpu.pc, 0x0040);
-    
+
     gb.run_cpu(); // INC D
     gb.run_cpu(); // RETI
-    
+
     // In Ceres, RETI enables IME and dispatches immediately within the same call.
-    assert_eq!(gb.cpu.pc, 0x0058, "RETI should have immediately dispatched SERIAL interrupt");
+    assert_eq!(
+        gb.cpu.pc, 0x0058,
+        "RETI should have immediately dispatched SERIAL interrupt"
+    );
 }

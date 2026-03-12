@@ -28,9 +28,7 @@ impl Bootrom {
             Model::DmgB => DMG_BOOTROM,
             Model::Mgb => MGB_BOOTROM,
             Model::CgbE => CGB_E_BOOTROM,
-            Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD => {
-                CGB_BOOTROM
-            }
+            Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD => CGB_BOOTROM,
         };
         Self {
             data,
