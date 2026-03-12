@@ -25,18 +25,12 @@ impl Default for Line0Stage {
 }
 
 /// OAM Scan (Mode 2) state machine.
-/// Total duration: 176 ticks (88 cycles).
+/// Total duration: 168 ticks (84 cycles).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OamScanStage {
     /// OAM scan and setup.
-    /// Duration: 168 ticks (State 35 + 6 + 7 + 8).
+    /// Duration: 168 ticks.
     Running { tick: u16 },
-    /// State 10: Mode 3 transition part 1.
-    /// Duration: 4 ticks (2 cycles).
-    Transition1 { remaining: u8 },
-    /// State 32: Mode 3 transition part 2 (CGB palettes blocked).
-    /// Duration: 4 ticks (2 cycles).
-    Transition2 { remaining: u8 },
 }
 
 impl Default for OamScanStage {
