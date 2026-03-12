@@ -25,16 +25,18 @@ impl Default for Line0Stage {
 }
 
 /// OAM Scan (Mode 2) state machine.
-/// Total duration: 175 ticks (87.5 dots).
-/// Transitions to Mode 3 STAT at tick 168.
+/// Total duration: 176 ticks (88 cycles).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OamScanStage {
     /// OAM scan and setup.
-    /// Duration: 168 ticks.
+    /// Duration: 168 ticks (State 35 + 6 + 7 + 8).
     Running { tick: u16 },
     /// State 10: Mode 3 transition part 1.
-    /// Duration: 7 ticks (3.5 8MHz cycles).
+    /// Duration: 4 ticks (2 cycles).
     Transition1 { remaining: u8 },
+    /// State 32: Mode 3 transition part 2 (CGB palettes blocked).
+    /// Duration: 4 ticks (2 cycles).
+    Transition2 { remaining: u8 },
 }
 
 impl Default for OamScanStage {
@@ -54,24 +56,24 @@ impl Default for OamScanStage {
 pub enum HBlankStage {
     /// State 22: STAT = Mode 0, memory unblocked.
     /// Duration: 2 ticks (1 cycle).
-
+    StatUpdate { remaining: u8 },
     /// State 33: CGB palettes blocked (non-double-speed only).
-    /// Duration: 4 ticks (2 8MHz cycles).
+    /// Duration: 4 ticks (2 cycles).
     PalettesBlock { remaining: u8 },
     /// State 36: CGB palettes unblocked, HDMA trigger check.
-    /// Duration: 4 ticks (2 8MHz cycles).
+    /// Duration: 4 ticks (2 cycles).
     PalettesUnblock { remaining: u8 },
     /// State 11: Main HBlank wait period.
-    /// Duration: Variable (LINE_LENGTH - cycles_for_line - 4 ticks).
+    /// Duration: Variable.
     Remainder,
     /// State 31: Pre-end, set mode_for_interrupt = 2 for next line.
-    /// Duration: 4 ticks (2 8MHz cycles).
+    /// Duration: 4 ticks (2 cycles).
     PreEnd { remaining: u8 },
 }
 
 impl Default for HBlankStage {
     fn default() -> Self {
-        Self::PalettesBlock { remaining: 4 }
+        Self::StatUpdate { remaining: 2 }
     }
 }
 

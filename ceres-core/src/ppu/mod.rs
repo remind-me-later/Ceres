@@ -728,7 +728,7 @@ impl Ppu {
     /// - LyUpdate (State 6): 2 ticks - LY update, OAM read blocked
     /// - StatUpdate (State 7): 2 ticks - STAT = Mode 2, OAM fully blocked
     /// - Scan (State 8): 160 ticks - 40 OAM entries × 4 ticks each
-    /// - Transition1 (State 10): 6 ticks - Mode 3 transition, VRAM blocked
+    /// - Transition1 (State 10): 4 ticks - Mode 3 transition, VRAM blocked
     /// - Transition2 (State 32): 4 ticks - CGB palettes blocked
     fn tick_oam_scan(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
         let is_cgb = matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat);
@@ -797,7 +797,7 @@ impl Ppu {
                 }
 
                 // OAM Scan Loop (40 entries * 4 ticks = 160 ticks)
-                if tick >= 8 && tick < 160 {
+                if tick >= 8 && tick < 168 {
                     let scan_tick = tick - 8;
                     let entry = (scan_tick / 4) as u8;
                     let sub_tick = (scan_tick % 4) as u8;
@@ -818,12 +818,9 @@ impl Ppu {
                     }
                 }
 
-                if tick >= 160 {
-                    // Transition to Mode 3 Rendering (Tick 169)
-                    self.phase = PpuPhase::OamScan(OamScanStage::Transition1 { remaining: 7 });
-                    self.set_mode_stat(Mode::Drawing);
-                    self.mode_for_interrupt = Some(Mode::Drawing);
-                    self.update_stat(ints);
+                if tick >= 168 {
+                    // Transition to Mode 3 Rendering (Tick 168)
+                    self.phase = PpuPhase::OamScan(OamScanStage::Transition1 { remaining: 4 });
                 } else {
                     self.phase = PpuPhase::OamScan(OamScanStage::Running { tick: tick + 1 });
                 }
@@ -831,8 +828,34 @@ impl Ppu {
 
             OamScanStage::Transition1 { remaining } => {
                 // State 10: Mode 3 transition part 1.
-                if remaining == 7 {
-                    // VRAM fully blocked
+                if remaining == 4 {
+                    // STAT bits change to Mode 3 at the BEGINNING of State 10 (Tick 168).
+                    self.set_mode_stat(Mode::Drawing);
+                    self.mode_for_interrupt = Some(Mode::Drawing);
+                    self.update_stat(ints);
+
+                    // VRAM and OAM fully blocked
+                    self.vram_read_blocked = true;
+                    self.vram_write_blocked = true;
+                    self.oam_read_blocked = true;
+                    self.oam_write_blocked = true;
+                }
+
+                if remaining <= 1 {
+                    self.phase = PpuPhase::OamScan(OamScanStage::Transition2 { remaining: 4 });
+                } else {
+                    self.phase = PpuPhase::OamScan(OamScanStage::Transition1 {
+                        remaining: remaining - 1,
+                    });
+                }
+            }
+
+            OamScanStage::Transition2 { remaining } => {
+                // State 32: Mode 3 transition part 2.
+                if remaining == 4 {
+                    // CGB palettes blocked (Tick 172).
+                    self.cgb_palettes_blocked = true;
+                    // OAM and VRAM remain blocked
                     self.vram_read_blocked = true;
                     self.vram_write_blocked = true;
                     self.oam_read_blocked = true;
@@ -842,7 +865,7 @@ impl Ppu {
                 if remaining <= 1 {
                     self.enter_mode3_from_oam_scan(ints);
                 } else {
-                    self.phase = PpuPhase::OamScan(OamScanStage::Transition1 {
+                    self.phase = PpuPhase::OamScan(OamScanStage::Transition2 {
                         remaining: remaining - 1,
                     });
                 }
@@ -910,7 +933,7 @@ impl Ppu {
     }
 
     /// Tick during Mode 3 (Drawing).
-    fn tick_drawing(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
+    fn tick_drawing(&mut self, _ints: &mut Interrupts, cgb_mode: CgbMode) {
         // Check for window activation
         self.check_window_trigger(cgb_mode);
 
@@ -977,15 +1000,7 @@ impl Ppu {
             }
 
             // Transition to HBlank.
-            self.set_mode_stat(Mode::HBlank);
-            self.mode_for_interrupt = Some(Mode::HBlank);
-            self.oam_read_blocked = false;
-            self.vram_read_blocked = false;
-            self.oam_write_blocked = false;
-            self.vram_write_blocked = false;
-            self.update_stat(ints);
-
-            self.phase = PpuPhase::HBlank(HBlankStage::PalettesBlock { remaining: 4 });
+            self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate { remaining: 2 });
         }
     }
 
@@ -1604,7 +1619,26 @@ impl Ppu {
         };
 
         match stage {
+            HBlankStage::StatUpdate { remaining } => {
+                // State 22: STAT = Mode 0, memory unblocked.
+                if remaining == 2 {
+                    self.set_mode_stat(Mode::HBlank);
+                    self.mode_for_interrupt = Some(Mode::HBlank);
+                    self.oam_read_blocked = false;
+                    self.vram_read_blocked = false;
+                    self.oam_write_blocked = false;
+                    self.vram_write_blocked = false;
+                    self.update_stat(ints);
+                }
 
+                if remaining <= 1 {
+                    self.phase = PpuPhase::HBlank(HBlankStage::PalettesBlock { remaining: 4 });
+                } else {
+                    self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate {
+                        remaining: remaining - 1,
+                    });
+                }
+            }
 
             HBlankStage::PalettesBlock { remaining } => {
                 // State 33: CGB palettes blocked (non-double-speed only).

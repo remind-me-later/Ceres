@@ -1091,7 +1091,6 @@ fn gambatte_m2int_m2irq_1() {
 }
 
 #[test]
-#[ignore = "Failing PPU timing accuracy"]
 fn gambatte_m0int_m0irq_1() {
     let result = run_gambatte_dmg("gambatte/m0int_m0irq/m0int_m0irq_1_dmg08_cgb04c_out0.gbc", 0x00);
     assert_eq!(result, TestResult::Passed, "{result:?}");
