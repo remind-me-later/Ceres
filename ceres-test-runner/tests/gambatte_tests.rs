@@ -1155,3 +1155,208 @@ fn gambatte_m2int_m0stat_1() {
     );
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }
+
+#[test]
+fn gambatte_m0int_m0stat_scx2_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/m0int_m0stat/m0int_m0stat_scx2_1_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_m0int_m0stat_scx2_2() {
+    let result = run_gambatte_dmg(
+        "gambatte/m0int_m0stat/m0int_m0stat_scx2_2_dmg08_cgb04c_out2.gbc",
+        0x02,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_m0int_m0stat_scx3_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/m0int_m0stat/m0int_m0stat_scx3_1_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+#[ignore = "Failing PPU timing accuracy"]
+fn gambatte_m0int_m0stat_scx3_2() {
+    let result = run_gambatte_dmg(
+        "gambatte/m0int_m0stat/m0int_m0stat_scx3_2_dmg08_cgb04c_out2.gbc",
+        0x02,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+#[ignore = "Failing PPU timing accuracy"]
+fn gambatte_m2int_m2stat_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/m2int_m2stat/m2int_m2stat_1_dmg08_cgb04c_out2.gbc",
+        0x02,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_m2int_m2stat_2() {
+    let result = run_gambatte_dmg(
+        "gambatte/m2int_m2stat/m2int_m2stat_2_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_lycint_m0stat_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/lycint_m0stat/lycint_m0stat_1_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+#[ignore = "Failing PPU timing accuracy"]
+fn gambatte_lycint_m0stat_2() {
+    let result = run_gambatte_dmg(
+        "gambatte/lycint_m0stat/lycint_m0stat_2_dmg08_cgb04c_out2.gbc",
+        0x02,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+#[ignore = "Failing PPU timing accuracy"]
+fn gambatte_m2int_m3stat_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/m2int_m3stat/m2int_m3stat_1_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_m2int_m3stat_2() {
+    let result = run_gambatte_dmg(
+        "gambatte/m2int_m3stat/m2int_m3stat_2_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_m0int_m3stat_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/m0int_m3stat/m0int_m3stat_1_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_m0int_m3stat_2() {
+    let result = run_gambatte_dmg(
+        "gambatte/m0int_m3stat/m0int_m3stat_2_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+#[ignore = "Failing PPU timing accuracy"]
+fn gambatte_lyc0int_m0irq_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/lyc0int_m0irq/lyc0int_m0irq_1_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_lyc0int_m0irq_2() {
+    let result = run_gambatte_dmg(
+        "gambatte/lyc0int_m0irq/lyc0int_m0irq_2_dmg08_cgb04c_out2.gbc",
+        0x02,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_lyc153int_m2irq_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/lyc153int_m2irq/lyc153int_m2irq_1_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_lyc153int_m2irq_2() {
+    let result = run_gambatte_dmg(
+        "gambatte/lyc153int_m2irq/lyc153int_m2irq_2_dmg08_cgb04c_out2.gbc",
+        0x02,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_m0int_m0irq_2() {
+    let result = run_gambatte_dmg(
+        "gambatte/m0int_m0irq/m0int_m0irq_2_dmg08_cgb04c_out2.gbc",
+        0x02,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+#[ignore = "Failing PPU timing accuracy"]
+fn gambatte_m2int_m0irq_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/m2int_m0irq/m2int_m0irq_1_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_m2int_m0irq_2() {
+    let result = run_gambatte_dmg(
+        "gambatte/m2int_m0irq/m2int_m0irq_2_dmg08_cgb04c_out2.gbc",
+        0x02,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_lycint_lycirq_2() {
+    let result = run_gambatte_dmg(
+        "gambatte/lycint_lycirq/lycint_lycirq_2_dmg08_cgb04c_out3.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_lycint_m0stat_ds_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/lycint_m0stat/lycint_m0stat_ds_1_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+#[ignore = "Failing PPU timing accuracy"]
+fn gambatte_lycint_m0stat_ds_2() {
+    let result = run_gambatte_dmg(
+        "gambatte/lycint_m0stat/lycint_m0stat_ds_2_cgb04c_out2.gbc",
+        0x02,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
