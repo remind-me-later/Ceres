@@ -281,7 +281,6 @@ impl Ppu {
         }
     }
 
-    #[cfg(test)]
     #[must_use]
     pub const fn mode(&self) -> Mode {
         match self.stat & STAT_MODE_B {
