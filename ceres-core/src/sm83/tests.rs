@@ -1,5 +1,6 @@
 use super::*;
 use crate::test_util::setup_gb;
+use crate::CgbMode;
 
 // Helper type alias
 type Gb = crate::Gb<crate::test_util::DummyAudio>;
@@ -110,6 +111,52 @@ fn test_sub() {
     gb.sub(0x01);
     assert_eq!(gb.cpu.a(), 0x0F);
     assert_eq!(gb.cpu.f(), (NF | HF) as u8);
+}
+
+#[test]
+fn test_speed_change_basic() {
+    let mut gb = setup_gb();
+    // Use CGB mode for speed change
+    gb.cgb_mode = CgbMode::Cgb;
+    
+    // Preparation: STOP instruction
+    let addr = 0xC000;
+    gb.cpu.pc = addr;
+    gb.write_mem(addr, 0x10); // STOP
+    gb.write_mem(addr + 1, 0x00);
+    
+    // Request speed change (Normal -> Double)
+    gb.write_mem(0xFF4D, 0x01);
+    assert!(!gb.key1.is_enabled());
+    assert!(gb.key1.is_requested());
+    
+    let start_dots = gb.total_dots;
+    gb.run_cpu();
+    let end_dots = gb.total_dots;
+    
+    // Current implementation: 2050 * 4 = 8200 dots
+    let elapsed = end_dots - start_dots;
+    assert_eq!(elapsed, 8200, "Speed change should take 8200 dots in current implementation");
+    
+    // Verify speed change happened
+    assert!(gb.key1.is_enabled(), "Should be in double speed now");
+    assert!(!gb.key1.is_requested(), "Request should be cleared");
+    
+    // Verify KEY1 register (0xFF4D)
+    // Bit 7: current speed (1 for double)
+    // Bits 6-1: always 1
+    // Bit 0: request (0 after completion)
+    // 1111 1110 = 0xFE
+    assert_eq!(gb.key1.read(), 0xFE);
+    
+    // Now switch back to normal speed
+    gb.cpu.pc = addr;
+    gb.write_mem(0xFF4D, 0x01);
+    gb.run_cpu();
+    
+    assert!(!gb.key1.is_enabled(), "Should be in normal speed now");
+    // 0111 1110 = 0x7E
+    assert_eq!(gb.key1.read(), 0x7E);
 }
 
 #[test]

@@ -341,7 +341,7 @@ pub enum Model {
 }
 
 #[derive(Clone, Copy, Default)]
-enum CgbMode {
+pub(crate) enum CgbMode {
     #[default]
     Cgb,
     Compat,
