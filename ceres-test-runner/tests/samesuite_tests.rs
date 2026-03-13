@@ -81,17 +81,27 @@ fn test_samesuite_gdma_addr_mask() {
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - HDMA with LCD off behavior needs fixing
+#[ignore]
 fn test_samesuite_hdma_lcd_off() {
     let result = run_samesuite_test("same-suite/dma/hdma_lcd_off.gb", Model::CgbE);
     assert!(result.is_passed(), "dma/hdma_lcd_off test failed");
 }
 
 #[test]
-#[ignore] // TODO: Enable when passing - HDMA mode 0 (General Purpose DMA) needs fixing
+#[ignore]
 fn test_samesuite_hdma_mode0() {
     let result = run_samesuite_test("same-suite/dma/hdma_mode0.gb", Model::CgbE);
     assert!(result.is_passed(), "dma/hdma_mode0 test failed");
+}
+
+// =============================================================================
+// PPU Tests
+// =============================================================================
+
+#[test]
+fn test_samesuite_blocking_bgpi_increase() {
+    let result = run_samesuite_test("same-suite/ppu/blocking_bgpi_increase.gb", Model::CgbE);
+    assert!(result.is_passed(), "ppu/blocking_bgpi_increase test failed");
 }
 
 // =============================================================================

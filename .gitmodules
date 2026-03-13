@@ -1,3 +1,9 @@
 [submodule "external/gb-bootroms"]
 	path = external/gb-bootroms
 	url = https://codeberg.org/ISSOtm/gb-bootroms.git
+[submodule "external/test-sources/SameSuite"]
+	path = external/test-sources/SameSuite
+	url = git@github.com:LIJI32/SameSuite.git
+[submodule "external/test-sources/age-test-roms"]
+	path = external/test-sources/age-test-roms
+	url = git@github.com:c-sp/age-test-roms.git

@@ -190,6 +190,13 @@ pub struct Ppu {
     /// Current sprite's X-flip flag.
     sprite_x_flip: bool,
 
+    /// The line-0 startup sequence (after LCD-off → LCD-on) consumes 8 fewer T-cycles of HBlank
+    /// than a normal line (SameBoy display.c line ~1690: `cycles_for_line += 8`).
+    /// This flag causes the HBlank Remainder stage to trigger PreEnd 16 ticks (8 T-cycles) early
+    /// so that line 0 ends 16 half-clocks sooner, shifting line 1's OAM-scan blocking events
+    /// 16 half-clocks later in absolute CPU time (matching the `lcdoffset1` Gambatte test ROMs).
+    first_line_short: bool,
+
     // Bus contention state
     ext_dma_active: bool,
     ext_dma_src: u16,
@@ -214,38 +221,40 @@ impl Ppu {
     fn update_stat(&mut self, ints: &mut Interrupts) {
         let previous_line = self.stat_interrupt_line;
 
-        // Update LY=LYC coincidence flag based on comparison value.
-        // If ly_for_comparison is valid (not 0xFFFF), we compare.
-        if self.ly_for_comparison != 0xFFFF {
-            self.stat &= !STAT_LYC_B;
-            if self.ly_for_comparison == u16::from(self.lyc) {
-                self.stat |= STAT_LYC_B;
-            }
-        }
-
-        // Compute new STAT interrupt line state from all enabled sources
-        let new_line = if (self.stat & STAT_IF_LYC_B != 0) && (self.stat & STAT_LYC_B != 0) {
-            // LY=LYC coincidence interrupt
-            true
-        } else if let Some(interrupt_mode) = self.mode_for_interrupt {
-            // Mode-based interrupts use mode_for_interrupt (which can differ from STAT bits)
-            // mode_for_interrupt can be set to OamScan at the end of HBlank, before STAT changes.
-            // If mode_for_interrupt is None, no mode interrupt is generated.
-            match interrupt_mode {
-                Mode::HBlank if self.stat & STAT_IF_HBLANK_B != 0 => true,
-                Mode::VBlank if self.stat & STAT_IF_VBLANK_B != 0 => true,
-                Mode::OamScan if self.stat & STAT_IF_OAM_B != 0 => true,
-                _ => false,
-            }
+        // Internal coincidence match used for interrupt logic
+        let coincidence_match = if self.ly_for_comparison != 0xFFFF {
+            self.ly_for_comparison == u16::from(self.lyc)
         } else {
             false
         };
+
+        // Compute new STAT interrupt line state from all enabled sources.
+        // Note: coincidence interrupt is triggered by internal match.
+        let lyc_int = (self.stat & STAT_IF_LYC_B != 0) && coincidence_match;
+        let mode_int = match self.mode_for_interrupt {
+            Some(Mode::HBlank) => self.stat & STAT_IF_HBLANK_B != 0,
+            Some(Mode::VBlank) => self.stat & STAT_IF_VBLANK_B != 0,
+            Some(Mode::OamScan) => self.stat & STAT_IF_OAM_B != 0,
+            _ => false,
+        };
+
+        let new_line = lyc_int || mode_int;
 
         self.stat_interrupt_line = new_line;
 
         // Only fire interrupt on rising edge (low -> high transition)
         if new_line && !previous_line {
             ints.request_lcd();
+        }
+
+        // FINALLY update the STAT register bits for CPU visibility.
+        // This ensures that if an interrupt fires, an IMMEDIATE CPU read of STAT
+        // might still see the OLD coincidence flag value (if requested right at the edge).
+        if self.ly_for_comparison != 0xFFFF {
+            self.stat &= !STAT_LYC_B;
+            if coincidence_match {
+                self.stat |= STAT_LYC_B;
+            }
         }
     }
 
@@ -272,6 +281,7 @@ impl Ppu {
         }
     }
 
+    #[cfg(test)]
     #[must_use]
     pub const fn mode(&self) -> Mode {
         match self.stat & STAT_MODE_B {
@@ -358,6 +368,30 @@ impl Ppu {
         self.wy
     }
 
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn sprite_buffer_len(&self) -> usize {
+        self.sprite_buffer.count as usize
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) const fn position_in_line(&self) -> i16 {
+        self.position_in_line
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn bg_fifo_size(&self) -> usize {
+        self.bg_fifo.size() as usize
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn fetcher_state(&self) -> FetcherState {
+        self.fetcher_state
+    }
+
     pub fn run(
         &mut self,
         dots: i32,
@@ -383,7 +417,7 @@ impl Ppu {
         self.color_correction_mode = mode;
     }
 
-    const fn set_mode_stat(&mut self, mode: Mode) {
+    fn set_mode_stat(&mut self, mode: Mode) {
         self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
     }
 
@@ -442,6 +476,7 @@ impl Ppu {
                 // State 19: 2 cycles (4 ticks)
                 if remaining == 4 {
                     self.ly_for_comparison = 0xFFFF;
+                    self.stat &= !STAT_LYC_B; // Clear coincidence flag when comparison disabled
                     self.update_stat(ints);
                 }
 
@@ -647,6 +682,11 @@ impl Ppu {
         // Clear sprite buffer and visible object count
         self.sprite_buffer.clear();
 
+        // The startup line (line 0 after LCD-on) ends 8 T-cycles (16 half-clocks) earlier than a
+        // normal line (SameBoy: cycles_for_line += 8).  Set a flag so tick_hblank triggers PreEnd
+        // 16 ticks early, shortening line 0's HBlank by the correct amount.
+        self.first_line_short = true;
+
         self.update_stat(ints);
     }
 
@@ -669,40 +709,47 @@ impl Ppu {
             OamScanStage::Running { tick } => {
                 // SameBoy-accurate timing (in 8MHz ticks)
 
-                // Tick 0: CGB OAM write block start (SameBoy State 35)
+                // Tick 0: LY update and Mode 2 interrupt pulse.
                 if tick == 0 {
-                    self.oam_write_blocked = is_cgb && !double_speed;
                     self.sprite_buffer.clear();
-                }
-                if tick == 1 {
-                    self.oam_read_blocked = true;
-                }
-                if tick == 4 && is_cgb {
-                    self.oam_write_blocked = true;
-                }
 
-                // Tick 2: LY update and Mode 2 interrupt pulse start (SameBoy State 6)
-                if tick == 2 {
                     self.ly = self.current_line;
-                    self.ly_for_comparison = if self.current_line != 0 { 0xFFFF } else { 0 };
+                    // LYC comparison now valid for the new line
+                    self.ly_for_comparison = u16::from(self.ly);
 
-                    // Pulse mode_for_interrupt from HBlank to OamScan.
-                    // This allows continuous STAT line if both IRQs are enabled (blocking),
-                    // but creates a rising edge if only Mode 2 is enabled.
+                    // Mode 2 interrupt fires at tick 0.
+                    self.set_mode_stat(Mode::OamScan);
                     self.mode_for_interrupt = Some(Mode::OamScan);
                     self.update_stat(ints);
                 }
 
-                // Tick 10: STAT mode bits change to 2 (SameBoy State 7)
+                // Tick 4: OAM read-blocking starts for non-double-speed (SameBoy State 7).
+                // gambatte preread_1 / preread_2 boundary:
+                //   read AT Running{tick:4} → blocked (0xFF / 0x03 masked)
+                //   read AT Running{tick:3} → unblocked (real value)
+                // Tick 3: OAM write blocking for CGB.
+                if tick == 3 && is_cgb {
+                    self.oam_write_blocked = true;
+                }
+
+                // Tick 4: OAM read-blocking starts for non-double-speed (SameBoy State 7).
+                if tick == 4 {
+                    self.oam_read_blocked = !double_speed;
+                }
+
+                // Tick 9 → tick 10: full OAM blocking for double-speed (SameBoy State 7
+                // unconditional path).  In double-speed mode the tick-4 path only sets
+                // `oam_read_blocked = false`; the unconditional block for all models
+                // takes effect as we enter tick 10.
+                // gambatte preread_ds_2: read AT Running{tick:10} → blocked (0x03 masked).
+                if tick == 9 && double_speed {
+                    self.oam_read_blocked = true;
+                }
+
+                // Tick 10: complete OAM-scan memory blocking (SameBoy State 7).
                 if tick == 10 {
                     self.oam_read_blocked = true;
-                    self.set_mode_stat(Mode::OamScan);
                     self.oam_write_blocked = true;
-                    self.ly_for_comparison = u16::from(self.ly);
-
-                    self.update_stat(ints);
-                    // End Mode 2 pulse, STAT bits now report Mode 2.
-                    self.mode_for_interrupt = None;
                     self.update_stat(ints);
                 }
 
@@ -719,7 +766,7 @@ impl Ppu {
                         self.scan_oam_entry_at(entry);
                     }
 
-                    // Entry 37 memory unblocking
+                    // Entry 37 memory unblocking (ticks 158-159)
                     if entry == 37 && sub_tick == 2 {
                         self.vram_read_blocked = !is_cgb;
                         self.vram_write_blocked = false;
@@ -728,33 +775,23 @@ impl Ppu {
                     }
                 }
 
-                if tick >= 168 {
-                    // Transition to Mode 3 Rendering (Tick 169)
-                    self.phase = PpuPhase::OamScan(OamScanStage::Transition1 { remaining: 7 });
+                // STAT bits change to Mode 3 at tick 168
+                if tick == 168 {
                     self.set_mode_stat(Mode::Drawing);
                     self.mode_for_interrupt = Some(Mode::Drawing);
                     self.update_stat(ints);
-                } else {
-                    self.phase = PpuPhase::OamScan(OamScanStage::Running { tick: tick + 1 });
-                }
-            }
 
-            OamScanStage::Transition1 { remaining } => {
-                // State 10: Mode 3 transition part 1.
-                if remaining == 7 {
-                    // VRAM fully blocked
+                    // Memory fully blocked when transitioning to Mode 3 STAT
                     self.vram_read_blocked = true;
                     self.vram_write_blocked = true;
                     self.oam_read_blocked = true;
                     self.oam_write_blocked = true;
-                }
 
-                if remaining <= 1 {
+                    // Transition to Mode 3 Rendering (Tick 168)
+                    self.cgb_palettes_blocked = true;
                     self.enter_mode3_from_oam_scan(ints);
                 } else {
-                    self.phase = PpuPhase::OamScan(OamScanStage::Transition1 {
-                        remaining: remaining - 1,
-                    });
+                    self.phase = PpuPhase::OamScan(OamScanStage::Running { tick: tick + 1 });
                 }
             }
         }
@@ -844,7 +881,8 @@ impl Ppu {
             return;
         }
 
-        // Check if we should start fetching sprites
+        // Check if we should start fetching sprites.
+        // Multiple sprites at the same X are fetched consecutively (matching SameBoy behavior).
         let sprites_enabled = self.lcdc & LCDC_OBJ_B != 0 || matches!(cgb_mode, CgbMode::Cgb);
         if sprites_enabled
             && let Some(sprite) = self.sprite_buffer.peek()
@@ -886,14 +924,12 @@ impl Ppu {
             }
 
             // Transition to HBlank.
-            // Set mode_for_interrupt and trigger STAT update immediately.
+            self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate { remaining: 2 });
+
+            // Update STAT bits immediately (SameBoy accurate).
+            self.set_mode_stat(Mode::HBlank);
             self.mode_for_interrupt = Some(Mode::HBlank);
             self.update_stat(ints);
-
-            // Memory unblocking and STAT update happens in tick_hblank StatUpdate state.
-            self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate { remaining: 2 });
-            // Note: STAT mode bits are NOT updated here - that happens in tick_hblank.
-            // Mode 0 is set in State 22.
         }
     }
 
@@ -967,9 +1003,13 @@ impl Ppu {
                 let fifo_not_empty = self.bg_fifo.size() > 0;
 
                 if fetcher_aligned && fifo_not_empty {
-                    // Exit wait loop, enter State 41 (1 cycle for advance).
+                    // Exit wait loop. The advance_fetcher call below is SameBoy's "free advance"
+                    // (no sleep cost in state 27 exit). State 41 is exactly 1 cycle = 2 T-ticks.
+                    // Since the current WaitForBgFetcher tick itself runs advance_fetcher (counting
+                    // as the first T-tick of State41), we set step=1 so State41Advance only needs
+                    // 1 more tick to complete (matching SameBoy's 12 T-tick total sprite fetch).
                     self.sprite_fetcher_state = SpriteFetcherState::State41Advance;
-                    self.sprite_fetcher_step = 0;
+                    self.sprite_fetcher_step = 1;
                 } else {
                     // Matches State 27 (Loop body advance).
                     // Stay in WaitForBgFetcher.
@@ -1034,7 +1074,7 @@ impl Ppu {
                         self.sprite_x_flip,
                     );
 
-                    // Done fetching this sprite
+                    // Done fetching this sprite; transition back to Idle.
                     self.sprite_fetcher_state = SpriteFetcherState::Idle;
                 }
             }
@@ -1517,22 +1557,7 @@ impl Ppu {
         match stage {
             HBlankStage::StatUpdate { remaining } => {
                 // State 22: STAT = Mode 0, memory unblocked.
-                // Two-phase mode change.
-
-                // Phase 1 (remaining == 2): Non-double-speed early unblock.
-                if remaining == 2 && !double_speed {
-                    self.set_mode_stat(Mode::HBlank);
-                    self.mode_for_interrupt = Some(Mode::HBlank);
-                    // Note: oam_read_blocked stays true on CGB-D+, but we don't track model.
-                    self.oam_read_blocked = false;
-                    self.vram_read_blocked = false;
-                    self.oam_write_blocked = false;
-                    self.vram_write_blocked = false;
-                    // No STAT update yet!
-                }
-
-                // Phase 2 (remaining == 1, right before transition): Full unblock + STAT update.
-                if remaining == 1 {
+                if remaining == 2 {
                     self.set_mode_stat(Mode::HBlank);
                     self.mode_for_interrupt = Some(Mode::HBlank);
                     self.oam_read_blocked = false;
@@ -1542,8 +1567,6 @@ impl Ppu {
                 }
 
                 if remaining <= 1 {
-                    self.update_stat(ints);
-                    // Transition to PalettesBlock
                     self.phase = PpuPhase::HBlank(HBlankStage::PalettesBlock { remaining: 4 });
                 } else {
                     self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate {
@@ -1587,7 +1610,17 @@ impl Ppu {
             HBlankStage::Remainder => {
                 // State 11: Wait for line to near-complete.
                 // We wait until 4 ticks before line end, then transition to PreEnd.
-                if self.dots_in_line >= PRE_END_START {
+                //
+                // The LCD-on startup line (line 0) is 16 half-clocks (8 T-cycles) shorter than a
+                // normal line (SameBoy display.c: cycles_for_line += 8).  When first_line_short is
+                // set we trigger PreEnd 16 ticks early so line 0 ends at tick 896 instead of 912.
+                let threshold = if self.first_line_short {
+                    PRE_END_START - 16
+                } else {
+                    PRE_END_START
+                };
+                if self.dots_in_line >= threshold {
+                    self.first_line_short = false; // consumed — clear for subsequent lines
                     self.phase = PpuPhase::HBlank(HBlankStage::PreEnd { remaining: 4 });
                 }
                 // Otherwise stay in Remainder
@@ -1599,6 +1632,7 @@ impl Ppu {
                 if remaining == 4 && self.current_line != 143 {
                     // Prepare Mode 2 interrupt for next line (LineStart)
                     self.mode_for_interrupt = Some(Mode::OamScan);
+                    self.update_stat(ints);
                 }
 
                 if remaining <= 1 {
@@ -1650,12 +1684,8 @@ impl Ppu {
                     // Start of VBlank line logic.
                     // ly_for_comparison = -1 (0xFFFF).
                     self.ly_for_comparison = 0xFFFF;
+                    self.stat &= !STAT_LYC_B; // Clear coincidence flag when comparison disabled
                     self.update_stat(ints);
-
-                    // OAM interrupt quirk: fires at start of line 144
-                    if self.current_line == PX_HEIGHT && (self.stat & STAT_IF_OAM_B != 0) {
-                        ints.request_lcd();
-                    }
                 }
 
                 if *remaining <= 1 {
@@ -1669,6 +1699,16 @@ impl Ppu {
                 // State 12: 2 cycles (4 ticks)
                 if *remaining == 4 {
                     self.ly = self.current_line;
+
+                    // OAM interrupt quirk: at line 144, if Mode 2 OAM STAT interrupt is
+                    // enabled and the STAT interrupt line was previously low, fire an
+                    // additional STAT interrupt. (SameBoy display.c ~line 2160)
+                    if self.current_line == PX_HEIGHT
+                        && !self.stat_interrupt_line
+                        && (self.stat & STAT_IF_OAM_B != 0)
+                    {
+                        ints.request_lcd();
+                    }
                 }
 
                 if *remaining <= 1 {
@@ -1736,6 +1776,7 @@ impl Ppu {
             self.wy_triggered = true;
         }
         self.ly_for_comparison = 0xFFFF;
+        self.stat &= !STAT_LYC_B; // Clear coincidence flag when comparison disabled
         self.dots_in_line = 0;
 
         // Present frame
@@ -1833,8 +1874,15 @@ impl Ppu {
 
     pub fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
         self.lyc = val;
-        // LYC change may affect coincidence - update STAT line if LCD is on
+        // LYC change may affect coincidence - update STAT line if LCD is on.
+        // A CPU write to LYC always recalculates the LYC=LY flag against the
+        // current LY register, even during the window where ly_for_comparison
+        // is 0xFFFF (which normally suppresses the internal comparison).
         if self.lcdc & LCDC_ON_B != 0 {
+            self.stat &= !STAT_LYC_B;
+            if u16::from(val) == u16::from(self.ly) {
+                self.stat |= STAT_LYC_B;
+            }
             self.update_stat(ints);
         }
     }
@@ -1903,723 +1951,4 @@ impl Ppu {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::SpriteFetcherState;
-    use crate::test_util::setup_gb;
-
-    #[test]
-    fn test_ppu_mode2_timing_detailed() {
-        let mut gb = setup_gb();
-        gb.write_mem(0xFF40, 0x80);
-
-        while gb.ppu.read_ly() != 64 {
-            gb.run_cpu();
-        }
-        while gb.ppu.mode() as u8 != 0 {
-            gb.run_cpu();
-        }
-
-        // Enable Mode 2 STAT interrupt during HBlank of line 64
-        gb.write_mem(0xFF41, 0x20);
-        gb.write_mem(0xFF0F, 0); // Clear IF
-
-        // Synchronize to EXACT start of line 65 (dots_in_line == 0)
-        while gb.ppu.read_ly() == 64 {
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-        while gb.ppu.dots_in_line() != 0 {
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        gb.write_mem(0xFF0F, 0); // Clear any interrupts from previous line
-
-        let mut intr_tick = None;
-        let mut mode3_tick = None;
-
-        // Probing ticks for the next 300 ticks
-        for t in 0..300 {
-            let if_reg = gb.ints.read_if();
-            let mode = gb.ppu.read_stat() & 0x03;
-
-            if intr_tick.is_none() && (if_reg & 0x02) != 0 {
-                intr_tick = Some(t);
-            }
-            if mode3_tick.is_none() && mode == 3 {
-                mode3_tick = Some(t);
-            }
-
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        let intr = intr_tick.expect("STAT Interrupt did not fire for Mode 2");
-        let m3 = mode3_tick.expect("PPU did not transition to Mode 3");
-
-        // Ceres: Mode 2 interrupt fires at tick 3, Mode 3 starts at tick 168.
-        // Duration = 165 ticks.
-        assert_eq!(m3 - intr, 165);
-    }
-
-    #[test]
-    fn test_ppu_oam_scan_ly_timing() {
-        let mut gb = setup_gb();
-        gb.write_mem(0xFF40, 0x80); // LCD ON
-
-        // Wait for line 10 HBlank
-        while gb.ppu.read_ly() != 10 {
-            gb.run_cpu();
-        }
-        while gb.ppu.mode() as u8 != 0 {
-            gb.run_cpu();
-        }
-
-        // Synchronize to EXACT transition from HBlank to OamScan of line 11
-        loop {
-            if matches!(
-                gb.ppu.phase,
-                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
-            ) {
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        // Now we are at tick 0 of OamScan of line 11.
-        // LY should still be 10 until it updates.
-        assert_eq!(gb.ppu.read_ly(), 10);
-
-        let mut ly_update_tick = None;
-        for t in 1..20 {
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-            if gb.ppu.read_ly() == 11 {
-                ly_update_tick = Some(t);
-                break;
-            }
-        }
-
-        assert_eq!(ly_update_tick, Some(4), "LY should update at tick 4");
-    }
-
-    #[test]
-    fn test_ppu_lcdon_ly_timing() {
-        let mut gb = setup_gb();
-        // LCD is OFF initially.
-        assert_eq!(gb.ppu.read_ly(), 0);
-
-        // Turn ON LCD.
-        gb.write_mem(0xFF40, 0x80);
-
-        // Startup takes 166 ticks.
-        for _ in 0..166 {
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        // After 166 ticks, we should be in Mode 3 of line 0.
-        assert_eq!(gb.ppu.read_ly(), 0);
-        assert_eq!(gb.ppu.mode() as u8, 3);
-
-        // Transition from Mode 3 to HBlank happens when position_in_line >= 160.
-        // HBlank ends with a transition to OamScan of line 1.
-        loop {
-            if matches!(
-                gb.ppu.phase,
-                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
-            ) {
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        // Now we are at tick 0 of OamScan of line 1.
-        // LY should still be 0 until it updates.
-        assert_eq!(gb.ppu.read_ly(), 0);
-
-        let mut ly_update_tick = None;
-        for t in 1..20 {
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-            if gb.ppu.read_ly() == 1 {
-                ly_update_tick = Some(t);
-                break;
-            }
-        }
-
-        assert_eq!(
-            ly_update_tick,
-            Some(4),
-            "LY should update to 1 at tick 4 of line 1 after LCD ON"
-        );
-    }
-
-    #[test]
-    fn test_ppu_active_period_duration() {
-        let mut gb = setup_gb();
-        gb.write_mem(0xFF40, 0x80); // LCD ON
-
-        // Wait for Mode 2
-        for _ in 0..100000 {
-            if (gb.ppu.read_stat() & 0x03) == 2 {
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        let mut mode2_ticks = 0;
-        let mut mode3_ticks = 0;
-
-        // Measure Mode 2
-        while (gb.ppu.read_stat() & 0x03) == 2 {
-            mode2_ticks += 1;
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        // Measure Mode 3
-        while (gb.ppu.read_stat() & 0x03) == 3 {
-            mode3_ticks += 1;
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        // Ceres Assumption: Mode 2 is 175 ticks (168 scan + 7 transition) internally.
-        // However, STAT Mode 2 flag is set at Tick 10 and cleared at start of Transition1.
-        // Visible Mode 2 = 168 - 10 = 158 ticks.
-        // Mooneye Assumption: Mode 2 + Mode 3 = 504 ticks (252 dots).
-        //
-        // Note: Extending Mode 2 to 175 ticks (from ~174) satisfies gbmicrotest sprite visibility tests
-        // (sprites must be scanned by tick 11/12), but causes regressions in Mooneye STAT interrupt
-        // timing tests (hblank_ly_scx_timing_gs, intr_1_2_timing_gs, etc.) which expect a stricter
-        // Mode 2 duration (likely 174 ticks or Mode 3 starting 1 tick earlier).
-        //
-        // We prioritize sprite functionality (gbmicrotest) over cycle-perfect STAT IRQ timing (Mooneye)
-        // until a more precise sub-tick model is implemented.
-        assert!(
-            (157..=159).contains(&mode2_ticks),
-            "Mode 2 duration assumption violated: {} ticks",
-            mode2_ticks
-        );
-        assert!(
-            mode2_ticks + mode3_ticks >= 502,
-            "Active period {} is shorter than expectation (502 ticks)",
-            mode2_ticks + mode3_ticks
-        );
-    }
-
-    #[test]
-    fn test_ppu_scx_alignment_jump() {
-        let mut gb = setup_gb();
-        gb.write_mem(0xFF40, 0x81); // LCD ON, BG ON
-        gb.write_mem(0xFF43, 3); // SCX = 3
-
-        // Synchronize to Mode 3 but wait until position_in_line is reset to -16
-        for _ in 0..100000 {
-            if (gb.ppu.read_stat() & 0x03) == 3 && gb.ppu.position_in_line == -16 {
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        let mut pos_history = Vec::new();
-        for _ in 0..200 {
-            pos_history.push(gb.ppu.position_in_line);
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-            if gb.ppu.position_in_line >= 0 {
-                break;
-            }
-        }
-
-        // Validate that position_in_line initialization and jump logic is working.
-        assert!(
-            pos_history.contains(&-16),
-            "position_in_line must start at -16 (found history: {:?})",
-            pos_history
-        );
-
-        // With SCX=3, it should jump when (pos & 7) == 3.
-        // pos=-13 (243 in u8): 243 & 7 = 3. MATCH!
-        // It jumps to -8, then increments to -7 in output_pixel.
-        let jump_detected =
-            pos_history.contains(&-13) && pos_history.contains(&-7) && !pos_history.contains(&-12);
-        assert!(
-            jump_detected,
-            "SCX alignment jump not detected in history: {:?}",
-            pos_history
-        );
-    }
-
-    #[test]
-    fn test_ppu_sprite_scan_timing() {
-        let mut gb = setup_gb();
-        // Sprite 0 at Y=17 (line 1), X=8, Tile=0
-        gb.write_mem(0xFE00, 17);
-        gb.write_mem(0xFE01, 8);
-        gb.write_mem(0xFE02, 0);
-        gb.write_mem(0xFE03, 0);
-
-        gb.write_mem(0xFF40, 0x82); // LCD ON, OBJ ON
-
-        // Wait for line 1 OAM Scan start (Line 0 has no OAM scan after power on)
-        loop {
-            if gb.ppu.read_ly() == 1
-                && matches!(
-                    gb.ppu.phase,
-                    crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
-                )
-            {
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        // At line 1, tick 0, sprite_buffer should be empty (it was cleared at mode start)
-        assert_eq!(gb.ppu.sprite_buffer_len(), 0);
-
-        // Tick until tick 11 (DMG scans entry 0 at tick 8 + 2 = 10, observable at tick 11)
-        // Tick 0 -> 1
-        // Tick 1 -> 2
-        // ...
-        // Tick 10 -> 11
-        for _ in 0..11 {
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        // At tick 11, sprite 0 should be scanned
-        assert_eq!(
-            gb.ppu.sprite_buffer_len(),
-            1,
-            "Sprite 0 should be scanned at tick 11 of line 1 (actual phase: {:?})",
-            gb.ppu.phase
-        );
-    }
-
-    #[test]
-    fn test_ppu_line153_mode0_quirk() {
-        let mut gb = setup_gb();
-        gb.write_mem(0xFF40, 0x80); // LCD ON
-
-        // Fast forward to start of line 153 (when LY becomes 153)
-        loop {
-            if gb.ppu.read_ly() == 153 {
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        let mut mode0_seen = false;
-        // Line 153 logic is complex: LY=153 -> LY=0 happens early.
-        // We want to check if Mode 0 is reported at the END of the 456-cycle (912 tick) period.
-        // We are at the start of Ly153 stage.
-        // Run for the duration of the line (912 ticks).
-        for _ in 0..912 {
-            // Check for Mode 0 (HBlank)
-            if (gb.ppu.read_stat() & 0x03) == 0 {
-                mode0_seen = true;
-            }
-
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        assert!(
-            mode0_seen,
-            "PPU should report Mode 0 at the end of Line 153 (even if LY=0)"
-        );
-    }
-
-    #[test]
-    fn test_ppu_oam_scan_to_drawing_transition_gambatte() {
-        let mut gb = setup_gb();
-        gb.write_mem(0xFF40, 0x80); // LCD ON
-
-        // Wait for OAM Scan of line 1 (steady state)
-        loop {
-            if gb.ppu.read_ly() == 1
-                && matches!(
-                    gb.ppu.phase,
-                    crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
-                )
-            {
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        // Measure duration from OAM scan start (tick 0) to Mode 3 start in STAT
-        let mut ticks = 0;
-        loop {
-            if (gb.ppu.read_stat() & 0x03) == 3 {
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-            ticks += 1;
-        }
-
-        // Gambatte: Mode 3 starts at cycle 83 (166 ticks) for DMG.
-        // Ceres tick 0 is start of scanline.
-        // User requested target: 161 ticks (accounting for Ceres's internal tick offsets).
-        assert_eq!(
-            ticks, 161,
-            "Mode 3 should start at tick 161 in STAT (Gambatte target)"
-        );
-    }
-
-    #[test]
-    fn test_ppu_active_period_duration_gambatte() {
-        let mut gb = setup_gb();
-        gb.write_mem(0xFF40, 0x80); // LCD ON
-
-        // Wait for Line 1 OAM scan start
-        loop {
-            if gb.ppu.read_ly() == 1
-                && matches!(
-                    gb.ppu.phase,
-                    crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
-                )
-            {
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        let mut mode2_visible_ticks = 0;
-        for _ in 0..600 {
-            let mode = gb.ppu.read_stat() & 0x03;
-            if mode == 2 {
-                mode2_visible_ticks += 1;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        // Gambatte: Mode 2 starts at tick 10, ends at tick 166.
-        // Duration = 166 - 10 = 156 ticks.
-        assert_eq!(
-            mode2_visible_ticks, 156,
-            "Mode 2 should be visible in STAT for exactly 156 ticks"
-        );
-    }
-
-    #[test]
-    fn test_ppu_sprite_visibility_at_gambatte_timing() {
-        let mut gb = setup_gb();
-        // Clear OAM first
-        for i in 0..160 {
-            gb.write_mem(0xFE00 + i, 0);
-        }
-
-        // Sprite 0 at Y=17, X=8 (visible on Line 1)
-        gb.write_mem(0xFE00, 17);
-        gb.write_mem(0xFE01, 8);
-        gb.write_mem(0xFE02, 0);
-        gb.write_mem(0xFE03, 0);
-
-        gb.write_mem(0xFF40, 0x82); // LCD ON, OBJ ON
-
-        // Wait for Line 1 OAM scan start
-        loop {
-            if gb.ppu.read_ly() == 1
-                && matches!(
-                    gb.ppu.phase,
-                    crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
-                )
-            {
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        // Advance to Mode 3 start
-        while (gb.ppu.read_stat() & 0x03) != 3 {
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        // Sprite fetcher should start in Mode 3
-        let mut fetcher_started = false;
-        for _ in 0..1000 {
-            if gb.ppu.sprite_fetcher_state != SpriteFetcherState::Idle {
-                fetcher_started = true;
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        assert!(fetcher_started, "Sprite fetcher should start in Mode 3");
-    }
-
-    #[test]
-    fn test_ppu_mode2_interrupt_edge_behavior() {
-        let mut gb = setup_gb();
-        gb.write_mem(0xFF40, 0x80); // LCD ON
-        gb.write_mem(0xFF41, 0x20); // Enable Mode 2 STAT interrupt
-        gb.write_mem(0xFF0F, 0x00); // Clear IF
-
-        // Wait for start of line 1 OAM Scan
-        loop {
-            if gb.ppu.read_ly() == 1
-                && matches!(
-                    gb.ppu.phase,
-                    crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
-                )
-            {
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        gb.write_mem(0xFF0F, 0x00); // Clear IF again to be sure
-
-        let mut int_requested_at = None;
-        for t in 0..20 {
-            if gb.ints.read_if() & 0x02 != 0 {
-                int_requested_at = Some(t + 1); // t=0 is tick 1
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        // Mode 2 interrupt fires at tick 3, observable at tick 5 in our loop
-        // (tick 0 -> 1, tick 1 -> 2, tick 2 -> 3, tick 3 -> 4, tick 4 -> 5)
-        assert_eq!(
-            int_requested_at,
-            Some(5),
-            "Mode 2 interrupt should be observable at tick 5"
-        );
-
-        // Clear IF and ensure it doesn't fire again on this scanline
-        gb.write_mem(0xFF0F, 0x00);
-        for _ in 0..100 {
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-            assert_eq!(
-                gb.ints.read_if() & 0x02,
-                0,
-                "Mode 2 interrupt should only fire once per line"
-            );
-        }
-    }
-
-    #[test]
-    fn test_ppu_scx_hblank_timing_mooneye() {
-        let mut gb = setup_gb();
-        gb.write_mem(0xFF40, 0x81); // LCD ON, BG ON
-
-        for scx in 0..8 {
-            gb.write_mem(0xFF43, scx);
-
-            // Synchronize to Line 1 OAM Scan Start
-            loop {
-                if gb.ppu.read_ly() == 1
-                    && matches!(
-                        gb.ppu.phase,
-                        crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running {
-                            tick: 0
-                        })
-                    )
-                {
-                    break;
-                }
-                gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-            }
-
-            // Skip the initial reporting of Mode 0 (previous line's mode)
-            for _ in 0..20 {
-                gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-            }
-
-            let mut ticks = 20;
-            loop {
-                if (gb.ppu.read_stat() & 0x03) == 0 {
-                    break;
-                }
-                gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-                ticks += 1;
-                if ticks > 912 {
-                    panic!("HBlank never reached for SCX={}", scx);
-                }
-            }
-
-            // Target based on mooneye: HBlank starts later with SCX.
-            // For SCX=0, target is 504 ticks (252 dots).
-            assert!(
-                (ticks >= 504),
-                "HBlank started too early at tick {} for SCX={}",
-                ticks,
-                scx
-            );
-        }
-    }
-
-    #[test]
-    fn test_ppu_hblank_start_timing() {
-        let mut gb = setup_gb();
-        gb.write_mem(0xFF40, 0x81); // LCD ON, BG ON
-        gb.write_mem(0xFF43, 0x00); // SCX = 0
-
-        // Synchronize to Line 1 OAM Scan Start
-        loop {
-            if gb.ppu.read_ly() == 1
-                && matches!(
-                    gb.ppu.phase,
-                    crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
-                )
-            {
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        // Skip the initial reporting of Mode 0
-        for _ in 0..20 {
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        let mut ticks = 20;
-        loop {
-            if (gb.ppu.read_stat() & 0x03) == 0 {
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-            ticks += 1;
-        }
-
-        assert_eq!(
-            ticks, 504,
-            "HBlank should start at tick 504 for SCX=0 and no sprites (Gambatte target)"
-        );
-    }
-
-    #[test]
-    fn test_ppu_timing_diagnostic_log() {
-        let mut gb = setup_gb();
-        gb.write_mem(0xFF40, 0x80); // LCD ON
-
-        // Wait for steady state (Line 1 start)
-        loop {
-            if gb.ppu.read_ly() == 1
-                && matches!(
-                    gb.ppu.phase,
-                    crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
-                )
-            {
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        let mut mode_changes = Vec::new();
-        let mut last_mode = 0xFF;
-
-        // Trace one full scanline (912 ticks)
-        for t in 0..912 {
-            let mode = gb.ppu.read_stat() & 0x03;
-            if mode != last_mode {
-                mode_changes.push((t, mode));
-                last_mode = mode;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        println!("Mode changes for Line 1: {:?}", mode_changes);
-    }
-
-    #[test]
-    fn test_ppu_blocking_diagnostic_log() {
-        let mut gb = setup_gb();
-        gb.write_mem(0xFF40, 0x80); // LCD ON
-
-        // Wait for Line 1 start
-        loop {
-            if gb.ppu.read_ly() == 1
-                && matches!(
-                    gb.ppu.phase,
-                    crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
-                )
-            {
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        let mut last_blocking = (false, false, false, false);
-        let mut blocking_changes = Vec::new();
-
-        for t in 0..912 {
-            let current = (
-                gb.ppu.oam_read_blocked,
-                gb.ppu.oam_write_blocked,
-                gb.ppu.vram_read_blocked,
-                gb.ppu.vram_write_blocked,
-            );
-            if current != last_blocking {
-                blocking_changes.push((t, current));
-                last_blocking = current;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        println!(
-            "Blocking changes for Line 1 (OAM R/W, VRAM R/W): {:?}",
-            blocking_changes
-        );
-    }
-
-    #[test]
-    fn test_ppu_stat_irq_diagnostic_log() {
-        let mut gb = setup_gb();
-        gb.write_mem(0xFF40, 0x80);
-        gb.write_mem(0xFF41, 0x38); // Enable Mode 0, 1, 2 STAT interrupts
-        gb.write_mem(0xFF0F, 0x00);
-
-        // Wait for Line 1 start
-        loop {
-            if gb.ppu.read_ly() == 1
-                && matches!(
-                    gb.ppu.phase,
-                    crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
-                )
-            {
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        let mut irq_times = Vec::new();
-        for t in 0..912 {
-            if gb.ints.read_if() & 0x02 != 0 {
-                irq_times.push(t);
-                gb.write_mem(0xFF0F, 0x00); // Clear IF
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        println!("STAT IRQ firing times for Line 1: {:?}", irq_times);
-    }
-
-    #[test]
-    fn test_ppu_stat_line_diagnostic_log() {
-        let mut gb = setup_gb();
-        gb.write_mem(0xFF40, 0x80);
-        gb.write_mem(0xFF41, 0x38); // Enable Mode 0, 1, 2 STAT interrupts
-        gb.write_mem(0xFF0F, 0x00);
-
-        // Wait for Line 1 start
-        loop {
-            if gb.ppu.read_ly() == 1
-                && matches!(
-                    gb.ppu.phase,
-                    crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
-                )
-            {
-                break;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        let mut last_line = false;
-        let mut line_changes = Vec::new();
-
-        for t in 0..912 {
-            let current = gb.ppu.stat_interrupt_line;
-            if current != last_line {
-                line_changes.push((t, current));
-                last_line = current;
-            }
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        }
-
-        println!("STAT interrupt line changes for Line 1: {:?}", line_changes);
-    }
-}
+mod tests;

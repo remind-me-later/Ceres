@@ -39,6 +39,12 @@ features = ["std"]
 version = "*"
 default-features = false
 
+[dependencies.audioadapter]
+version = "2"
+
+[dependencies.audioadapter-buffers]
+version = "2"
+
 [dependencies.spin_sleep]
 version = "*"
 default-features = false

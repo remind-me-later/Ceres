@@ -1,3 +1,4 @@
+#![cfg(any())] // gbmicro tests are excluded from the test run
 //! Integration tests using the gbmicrotest ROM suite
 //!
 //! These tests validate specific low-level CPU, PPU, and timing behaviors

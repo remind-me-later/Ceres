@@ -14,6 +14,13 @@ pub struct Sm83 {
     hl: u16,
     is_halt_bug_triggered: bool,
     is_halted: bool,
+    /// Set by HALT when IME=1 and an interrupt is already pending.
+    /// SameBoy zeroes pending_cycles in this case, meaning both the
+    /// run-mode opcode fetch and the internal halt read cost 0 effective
+    /// T-cycles. We model this by skipping the two internal NOP ticks
+    /// that normally precede the ISR push sequence, so that the HALT
+    /// + dispatch takes exactly 4 M-cycles (16 T) instead of 6 (24 T).
+    skip_isr_nops: bool,
     pc: u16,
     sp: u16,
 }
@@ -53,6 +60,30 @@ impl Sm83 {
 
     pub const fn sp(&self) -> u16 {
         self.sp
+    }
+}
+
+#[cfg(test)]
+impl Sm83 {
+    /// Set the program counter.  Only available in test builds.
+    pub(crate) fn set_pc(&mut self, pc: u16) {
+        self.pc = pc;
+    }
+
+    pub(crate) fn set_bc(&mut self, bc: u16) {
+        self.bc = bc;
+    }
+
+    pub(crate) fn set_de(&mut self, de: u16) {
+        self.de = de;
+    }
+
+    pub(crate) fn set_hl(&mut self, hl: u16) {
+        self.hl = hl;
+    }
+
+    pub(crate) fn set_sp(&mut self, sp: u16) {
+        self.sp = sp;
     }
 }
 
@@ -158,10 +189,8 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn run_cpu(&mut self) {
-        if self.cpu.has_ei_delay {
-            self.ints.enable();
-            self.cpu.has_ei_delay = false;
-        }
+        let enable_ime = self.cpu.has_ei_delay;
+        self.cpu.has_ei_delay = false;
 
         if self.cpu.is_halted {
             self.tick_m_cycle();
@@ -177,45 +206,87 @@ impl<A: AudioCallback> Gb<A> {
             self.exec(op);
         }
 
+        if enable_ime {
+            self.ints.enable();
+            if self.cpu.is_halt_bug_triggered {
+                self.cpu.skip_isr_nops = true;
+            }
+        }
+
         if self.ints.is_any_requested() {
             self.cpu.is_halted = false;
             self.ppu.leave_stop_mode();
 
             if self.ints.are_enabled() {
-                self.tick_m_cycle();
-                self.tick_m_cycle();
+                if self.cpu.is_halt_bug_triggered {
+                    self.cpu.pc = self.cpu.pc.wrapping_sub(1);
+                    self.cpu.is_halt_bug_triggered = false;
+                }
 
-                // Perform interrupt push with IE re-check during upper byte write
-                // to handle the edge case where IE is modified mid-dispatch.
+                // Skip the two internal NOP ticks when waking from HALT with
+                // IME=1 and interrupt already pending (SameBoy zeros
+                // pending_cycles in that case, so the opcode fetch + internal
+                // HALT read cost 0 effective T-cycles; only the push sequence
+                // and final tick remain).
+                if self.cpu.skip_isr_nops {
+                    self.cpu.skip_isr_nops = false;
+                } else {
+                    self.tick_m_cycle();
+                    self.tick_m_cycle();
+                }
+
+                // Interrupt dispatch sequence (verified against SameBoy and Gambatte):
                 //
-                // Hardware behavior (verified by Mooneye ie_push test):
-                // - If SP=$0000, upper byte push writes to $FFFF (IE register)
-                // - If the write clears the interrupt bit, dispatch is cancelled (PC=$0000)
-                // - If SP=$0001, lower byte push writes to IE, but it's too late to cancel
+                // The winning interrupt vector is NOT committed up front.  Instead the
+                // dispatch is a two-phase push whose mid-point re-evaluates IE & IF:
+                //
+                // Phase 1 – push high byte of PC.
+                //   SP is decremented first, then the high byte is written.  If that
+                //   address happens to be $FFFF (IE) or $FF0F (IF), the write can
+                //   modify the interrupt registers mid-dispatch.
+                //
+                // Phase 2 – re-evaluate IE & IF after the high-byte push.
+                //   Read the current IE & IF and re-select the winning interrupt.
+                //   * If the re-evaluation yields no pending interrupt, dispatch is
+                //     cancelled: the low byte is still pushed (to SP-1), IME is cleared,
+                //     and PC is set to $0000.
+                //   * If a (possibly different) interrupt survives, that new winner is
+                //     used as the final vector.  This handles the case where the push
+                //     clobbered IE so that the original winner is gone but another bit
+                //     remains (Mooneye ie_push round4).
+                //
+                // Phase 3 – push low byte of PC (always happens, cannot cancel).
+                //   If SP-1 == $FFFF (only possible when SP=0 and high byte was pushed
+                //   to $FFFF on a wrap, which would need SP to wrap twice – effectively
+                //   impossible in a single dispatch), the write would hit IE again, but
+                //   hardware evidence shows this path does not trigger another re-check.
+                //   The Gambatte irq_precedence SP=$0001 test confirms the lower push
+                //   to $FFFF does not cancel an already-committed dispatch.
+
                 let pc = self.cpu.pc;
                 let [lo, hi] = pc.to_le_bytes();
 
-                // Push upper byte
+                // Push upper byte — may modify IE (if SP-1=$FFFF) or IF (if SP-1=$FF0F)
                 self.cpu.sp = self.cpu.sp.wrapping_sub(1);
                 self.write_cpu(self.cpu.sp, hi);
 
-                // Re-check interrupt queue after upper byte push
-                // IE may have been modified by the write to $FFFF
-                let (new_int, new_vector) = self.ints.determine_interrupt();
+                // Re-evaluate after upper push: re-read IE & IF to find the new winner.
+                // This handles both cancellation (new IE & IF = 0) and reselection (the
+                // push changed IE so a different interrupt wins).
+                let (final_int, final_vector) = self.ints.determine_interrupt();
 
-                // Push lower byte
+                // Push lower byte — always happens regardless of cancellation
                 self.cpu.sp = self.cpu.sp.wrapping_sub(1);
                 self.write_cpu(self.cpu.sp, lo);
                 self.tick_m_cycle();
 
-                // Acknowledge the interrupt only if it's still pending
-                // If IE was modified to clear the original interrupt, don't clear IF
-                if new_int != 0 {
-                    self.ints.acknowledge_interrupt(new_int);
+                // Acknowledge and jump; if cancelled, final_int==0 and final_vector==0x0000
+                if final_int != 0 {
+                    self.ints.acknowledge_interrupt(final_int);
                 }
 
                 self.ints.disable();
-                self.cpu.pc = new_vector;
+                self.cpu.pc = final_vector;
             }
         }
     }
@@ -717,6 +788,7 @@ impl<A: AudioCallback> Gb<A> {
 
     const fn di(&mut self) {
         self.ints.disable();
+        self.cpu.has_ei_delay = false;
     }
 
     const fn ei(&mut self) {
@@ -727,7 +799,13 @@ impl<A: AudioCallback> Gb<A> {
         if !self.ints.is_any_requested() {
             self.cpu.is_halted = true;
         } else if self.ints.are_enabled() {
+            // IME=1 and interrupt pending: HALT immediately triggers the ISR.
+            // SameBoy zeroes pending_cycles here (negating both the run-mode
+            // opcode fetch and the internal HALT read), so the full HALT+dispatch
+            // takes only 4 M-cycles. We model this with a flag that suppresses
+            // the 2 internal NOP ticks in run_cpu's dispatch path.
             self.cpu.is_halted = false;
+            self.cpu.skip_isr_nops = true;
             self.cpu.pc = self.cpu.pc.wrapping_sub(1);
         } else {
             self.cpu.is_halted = false;
@@ -1166,13 +1244,14 @@ impl<A: AudioCallback> Gb<A> {
         let _discard_byte = self.imm8();
 
         if self.key1.is_requested() {
+            self.advance_dots(4);
+
+            for _ in 0..32768 {
+                self.advance_dots(4);
+            }
+
             self.key1.change_speed();
             self.write_div();
-
-            for _ in 0..2050 {
-                // TODO: div should not tick during speed change, check this
-                self.advance_dots_no_timers(4);
-            }
         } else {
             self.write_div();
             self.cpu.is_halted = true;
@@ -1211,414 +1290,4 @@ impl<A: AudioCallback> Gb<A> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::test_util::setup_gb;
-
-    fn test_op_timing<A: AudioCallback>(
-        gb: &mut crate::Gb<A>,
-        opcode: u8,
-        operands: &[u8],
-        expected_m_cycles: u64,
-    ) {
-        let addr = 0xC000;
-        gb.cpu.pc = addr;
-        gb.write_mem(addr, opcode);
-        for (i, &op) in operands.iter().enumerate() {
-            gb.write_mem(addr + 1 + i as u16, op);
-        }
-
-        let start_dots = gb.total_dots;
-        gb.run_cpu();
-        let end_dots = gb.total_dots;
-        let elapsed_dots = end_dots - start_dots;
-        assert_eq!(
-            elapsed_dots,
-            expected_m_cycles * 4,
-            "Opcode 0x{:02X} took {} dots, expected {}",
-            opcode,
-            elapsed_dots,
-            expected_m_cycles * 4
-        );
-    }
-
-    fn test_cb_timing<A: AudioCallback>(
-        gb: &mut crate::Gb<A>,
-        cb_opcode: u8,
-        expected_m_cycles: u64,
-    ) {
-        let addr = 0xC000;
-        gb.cpu.pc = addr;
-        gb.write_mem(addr, 0xCB);
-        gb.write_mem(addr + 1, cb_opcode);
-
-        let start_dots = gb.total_dots;
-        gb.run_cpu();
-        let end_dots = gb.total_dots;
-        let elapsed_dots = end_dots - start_dots;
-        assert_eq!(
-            elapsed_dots,
-            expected_m_cycles * 4,
-            "CB Opcode 0x{:02X} took {} dots, expected {}",
-            cb_opcode,
-            elapsed_dots,
-            expected_m_cycles * 4
-        );
-    }
-
-    #[test]
-    fn test_add() {
-        let mut gb = setup_gb();
-        // 0x12 + 0x34 = 0x46
-        gb.cpu.af = 0x1200;
-        gb.add(0x34);
-        assert_eq!(gb.cpu.a(), 0x46);
-        assert_eq!(gb.cpu.f(), 0);
-
-        // 0xFF + 0x01 = 0x00 (Carry, Half-Carry, Zero)
-        gb.cpu.af = 0xFF00;
-        gb.add(0x01);
-        assert_eq!(gb.cpu.a(), 0x00);
-        assert_eq!(gb.cpu.f(), (ZF | HF | CF) as u8);
-
-        // 0x0F + 0x01 = 0x10 (Half-Carry)
-        gb.cpu.af = 0x0F00;
-        gb.add(0x01);
-        assert_eq!(gb.cpu.a(), 0x10);
-        assert_eq!(gb.cpu.f(), HF as u8);
-    }
-
-    #[test]
-    fn test_adc() {
-        let mut gb = setup_gb();
-        // 0x12 + 0x34 + carry(0) = 0x46
-        gb.cpu.af = 0x1200;
-        gb.adc(0x34);
-        assert_eq!(gb.cpu.a(), 0x46);
-        assert_eq!(gb.cpu.f(), 0);
-
-        // 0x12 + 0x34 + carry(1) = 0x47
-        gb.cpu.af = 0x1200 | CF;
-        gb.adc(0x34);
-        assert_eq!(gb.cpu.a(), 0x47);
-        assert_eq!(gb.cpu.f(), 0);
-
-        // 0x0F + 0x00 + carry(1) = 0x10 (Half-Carry)
-        gb.cpu.af = 0x0F00 | CF;
-        gb.adc(0x00);
-        assert_eq!(gb.cpu.a(), 0x10);
-        assert_eq!(gb.cpu.f(), HF as u8);
-    }
-
-    #[test]
-    fn test_sub() {
-        let mut gb = setup_gb();
-        // 0x34 - 0x12 = 0x22
-        gb.cpu.af = 0x3400;
-        gb.sub(0x12);
-        assert_eq!(gb.cpu.a(), 0x22);
-        assert_eq!(gb.cpu.f(), NF as u8);
-
-        // 0x00 - 0x01 = 0xFF (Carry, Half-Carry)
-        gb.cpu.af = 0x0000;
-        gb.sub(0x01);
-        assert_eq!(gb.cpu.a(), 0xFF);
-        assert_eq!(gb.cpu.f(), (NF | HF | CF) as u8);
-
-        // 0x10 - 0x01 = 0x0F (Half-Carry)
-        gb.cpu.af = 0x1000;
-        gb.sub(0x01);
-        assert_eq!(gb.cpu.a(), 0x0F);
-        assert_eq!(gb.cpu.f(), (NF | HF) as u8);
-    }
-
-    #[test]
-    fn test_sbc() {
-        let mut gb = setup_gb();
-        // 0x34 - 0x12 - carry(0) = 0x22
-        gb.cpu.af = 0x3400;
-        gb.sbc(0x12);
-        assert_eq!(gb.cpu.a(), 0x22);
-        assert_eq!(gb.cpu.f(), NF as u8);
-
-        // 0x34 - 0x12 - carry(1) = 0x21
-        gb.cpu.af = 0x3400 | CF;
-        gb.sbc(0x12);
-        assert_eq!(gb.cpu.a(), 0x21);
-        assert_eq!(gb.cpu.f(), NF as u8);
-
-        // 0x10 - 0x00 - carry(1) = 0x0F (Half-Carry)
-        gb.cpu.af = 0x1000 | CF;
-        gb.sbc(0x00);
-        assert_eq!(gb.cpu.a(), 0x0F);
-        assert_eq!(gb.cpu.f(), (NF | HF) as u8);
-    }
-
-    #[test]
-    fn test_logical() {
-        let mut gb = setup_gb();
-        // AND
-        gb.cpu.af = 0xFF00;
-        gb.and(0x0F);
-        assert_eq!(gb.cpu.a(), 0x0F);
-        assert_eq!(gb.cpu.f(), HF as u8);
-
-        // OR
-        gb.cpu.af = 0xF000;
-        gb.or(0x0F);
-        assert_eq!(gb.cpu.a(), 0xFF);
-        assert_eq!(gb.cpu.f(), 0);
-
-        // XOR
-        gb.cpu.af = 0xAA00;
-        gb.xor(0xFF);
-        assert_eq!(gb.cpu.a(), 0x55);
-        assert_eq!(gb.cpu.f(), 0);
-    }
-
-    #[test]
-    fn test_daa() {
-        let mut gb = setup_gb();
-        // 0x45 + 0x38 = 0x7D -> DAA -> 0x83
-        gb.cpu.af = 0x4500;
-        gb.add(0x38);
-        gb.daa();
-        assert_eq!(gb.cpu.a(), 0x83);
-
-        // 0x83 - 0x38 = 0x4B -> DAA -> 0x45
-        gb.cpu.af = 0x8300;
-        gb.sub(0x38);
-        gb.daa();
-        assert_eq!(gb.cpu.a(), 0x45);
-    }
-
-    #[test]
-    fn test_inc_dec() {
-        let mut gb = setup_gb();
-        // INC B (0x04)
-        gb.cpu.bc = 0x0000;
-        gb.inc_hr(0x04);
-        assert_eq!(gb.cpu.bc >> 8, 1);
-        assert_eq!(gb.cpu.f() & (NF as u8), 0);
-
-        // DEC B (0x05)
-        gb.dec_hr(0x05);
-        assert_eq!(gb.cpu.bc >> 8, 0);
-        assert_eq!(gb.cpu.f() & (ZF as u8), ZF as u8);
-        assert_eq!(gb.cpu.f() & (NF as u8), NF as u8);
-
-        // INC BC (0x03) - 16-bit, no flags
-        gb.cpu.af = 0;
-        gb.cpu.bc = 0xFFFF;
-        gb.inc_rr(0x03);
-        assert_eq!(gb.cpu.bc, 0x0000);
-        assert_eq!(gb.cpu.f(), 0);
-    }
-
-    #[test]
-    fn test_rotates() {
-        let mut gb = setup_gb();
-        // RLCA
-        gb.cpu.af = 0x8000;
-        gb.rlca();
-        assert_eq!(gb.cpu.a(), 0x01);
-        assert_eq!(gb.cpu.f(), CF as u8);
-
-        // RRCA
-        gb.cpu.af = 0x0100;
-        gb.rrca();
-        assert_eq!(gb.cpu.a(), 0x80);
-        assert_eq!(gb.cpu.f(), CF as u8);
-    }
-
-    #[test]
-    fn test_shifts() {
-        let mut gb = setup_gb();
-        // SLA A (0x27)
-        gb.cpu.af = 0x8000;
-        gb.sla_r(0x27);
-        assert_eq!(gb.cpu.a(), 0x00);
-        assert_eq!(gb.cpu.f(), (ZF | CF) as u8);
-
-        // SRA A (0x2F)
-        gb.cpu.af = 0x8100;
-        gb.sra_r(0x2F);
-        assert_eq!(gb.cpu.a(), 0xC0);
-        assert_eq!(gb.cpu.f(), CF as u8);
-
-        // SRL A (0x3F)
-        gb.cpu.af = 0x8100;
-        gb.srl_r(0x3F);
-        assert_eq!(gb.cpu.a(), 0x40);
-        assert_eq!(gb.cpu.f(), CF as u8);
-
-        // SWAP A (0x37)
-        gb.cpu.af = 0x1200;
-        gb.swap_r(0x37);
-        assert_eq!(gb.cpu.a(), 0x21);
-        assert_eq!(gb.cpu.f(), 0);
-    }
-
-    #[test]
-    fn test_daa_edge_cases() {
-        let mut gb = setup_gb();
-
-        // Addition: 0x99 + 0x01 = 0x9A -> DAA -> 0x00 (Carry)
-        gb.cpu.af = 0x9900;
-        gb.add(0x01);
-        gb.daa();
-        assert_eq!(gb.cpu.a(), 0x00);
-        assert_eq!(gb.cpu.f() & (CF as u8), CF as u8);
-        assert_eq!(gb.cpu.f() & (ZF as u8), ZF as u8);
-
-        // Subtraction: 0x00 - 0x01 = 0xFF (C, H, N) -> DAA -> 0x99 (Carry)
-        gb.cpu.af = 0x0000;
-        gb.sub(0x01);
-        gb.daa();
-        assert_eq!(gb.cpu.a(), 0x99);
-        assert_eq!(gb.cpu.f() & (CF as u8), CF as u8);
-    }
-
-    #[test]
-    fn test_add_hl() {
-        let mut gb = setup_gb();
-        // 0x1234 + 0x1111 = 0x2345
-        gb.cpu.af = NF | CF | HF; // These should be cleared
-        gb.cpu.hl = 0x1234;
-        gb.cpu.bc = 0x1111;
-        gb.add_hl_rr(0x09); // ADD HL, BC (opcode 0x09)
-        assert_eq!(gb.cpu.hl, 0x2345);
-        assert_eq!(gb.cpu.f() & (NF | CF | HF) as u8, 0);
-
-        // 0x0FFF + 0x0001 = 0x1000 (Half-Carry)
-        gb.cpu.hl = 0x0FFF;
-        gb.cpu.bc = 0x0001;
-        gb.add_hl_rr(0x09);
-        assert_eq!(gb.cpu.hl, 0x1000);
-        assert_eq!(gb.cpu.f() & (HF as u8), HF as u8);
-
-        // 0xFFFF + 0x0001 = 0x0000 (Carry, Half-Carry)
-        gb.cpu.hl = 0xFFFF;
-        gb.cpu.bc = 0x0001;
-        gb.add_hl_rr(0x09);
-        assert_eq!(gb.cpu.hl, 0x0000);
-        assert_eq!(gb.cpu.f() & (CF | HF) as u8, (CF | HF) as u8);
-    }
-
-    #[test]
-    fn test_bit_ops() {
-        let mut gb = setup_gb();
-        // SET 7, A (0xFF) - using bit_r internal logic
-        gb.cpu.af = 0x0000;
-        gb.bit_r(0xFF); // SET 7, A
-        assert_eq!(gb.cpu.a(), 0x80);
-
-        // BIT 7, A (0x7F)
-        gb.bit_r(0x7F);
-        assert_eq!(gb.cpu.f() & (ZF as u8), 0);
-        assert_eq!(gb.cpu.f() & (HF as u8), HF as u8);
-
-        // BIT 6, A (0x77)
-        gb.bit_r(0x40 | (6 << 3) | 7);
-        assert_eq!(gb.cpu.f() & (ZF as u8), ZF as u8);
-
-        // RES 7, A (0xBF)
-        gb.bit_r(0xBF);
-        assert_eq!(gb.cpu.a(), 0x00);
-    }
-
-    #[test]
-    fn test_timing() {
-        let mut gb = setup_gb();
-        gb.cpu.sp = 0xD000; // Point stack to WRAM
-
-        // Basic
-        test_op_timing(&mut gb, 0x00, &[], 1); // NOP
-        test_op_timing(&mut gb, 0x7F, &[], 1); // LD A, A
-        test_op_timing(&mut gb, 0x06, &[0x42], 2); // LD B, d8
-        test_op_timing(&mut gb, 0x46, &[], 2); // LD B, (HL)
-        test_op_timing(&mut gb, 0x70, &[], 2); // LD (HL), B
-        test_op_timing(&mut gb, 0x36, &[0x42], 3); // LD (HL), d8
-        test_op_timing(&mut gb, 0x01, &[0x34, 0x12], 3); // LD BC, d16
-        test_op_timing(&mut gb, 0x08, &[0x34, 0x12], 5); // LD (a16), SP
-
-        // Arithmetic
-        test_op_timing(&mut gb, 0x04, &[], 1); // INC B
-        test_op_timing(&mut gb, 0x03, &[], 2); // INC BC
-        test_op_timing(&mut gb, 0x34, &[], 3); // INC (HL)
-        test_op_timing(&mut gb, 0x09, &[], 2); // ADD HL, BC
-        test_op_timing(&mut gb, 0x80, &[], 1); // ADD A, B
-        test_op_timing(&mut gb, 0xC6, &[0x42], 2); // ADD A, d8
-        test_op_timing(&mut gb, 0x86, &[], 2); // ADD A, (HL)
-
-        // Control flow
-        test_op_timing(&mut gb, 0x18, &[0x02], 3); // JR e
-        test_op_timing(&mut gb, 0xC3, &[0x00, 0xC1], 4); // JP a16
-        test_op_timing(&mut gb, 0xE9, &[], 1); // JP (HL)
-
-        // Stack
-        test_op_timing(&mut gb, 0xC5, &[], 4); // PUSH BC
-        test_op_timing(&mut gb, 0xC1, &[], 3); // POP BC
-
-        // CB
-        test_cb_timing(&mut gb, 0x00, 2); // RLC B
-        test_cb_timing(&mut gb, 0x06, 4); // RLC (HL)
-        test_cb_timing(&mut gb, 0x40, 2); // BIT 0, B
-        test_cb_timing(&mut gb, 0x46, 3); // BIT 0, (HL)
-    }
-
-    #[test]
-    fn test_timing_complex() {
-        let mut gb = setup_gb();
-        gb.cpu.sp = 0xD000;
-
-        // PUSH BC (0xC5) -> 4
-        test_op_timing(&mut gb, 0xC5, &[], 4);
-        assert_eq!(gb.cpu.sp, 0xCFFE); // SP - 2
-
-        // POP BC (0xC1) -> 3
-        test_op_timing(&mut gb, 0xC1, &[], 3);
-        assert_eq!(gb.cpu.sp, 0xD000);
-
-        // CALL a16 (0xCD) -> 6
-        test_op_timing(&mut gb, 0xCD, &[0x00, 0xE0], 6);
-        assert_eq!(gb.cpu.pc, 0xE000);
-        assert_eq!(gb.cpu.sp, 0xCFFE);
-
-        // RET (0xC9) -> 4
-        // Note: CALL pushed 0xC003 (C000 + 3 bytes of instruction)
-        test_op_timing(&mut gb, 0xC9, &[], 4);
-        assert_eq!(gb.cpu.pc, 0xC003);
-        assert_eq!(gb.cpu.sp, 0xD000);
-
-        // RST 0x00 (0xC7) -> 4
-        test_op_timing(&mut gb, 0xC7, &[], 4);
-        assert_eq!(gb.cpu.pc, 0x0000);
-    }
-
-    #[test]
-    fn test_timing_conditional() {
-        let mut gb = setup_gb();
-
-        // JR NZ, r8 (0x20)
-        // Not taken (ZF=1)
-        gb.cpu.af = ZF;
-        gb.cpu.pc = 0xC000;
-        gb.write_mem(0xC000, 0x20);
-        gb.write_mem(0xC001, 0x05);
-        let start = gb.total_dots;
-        gb.run_cpu();
-        assert_eq!(gb.total_dots - start, 2 * 4);
-        assert_eq!(gb.cpu.pc, 0xC002);
-
-        // Taken (ZF=0)
-        gb.cpu.af = 0;
-        gb.cpu.pc = 0xC000;
-        gb.write_mem(0xC000, 0x20);
-        gb.write_mem(0xC001, 0x05);
-        let start = gb.total_dots;
-        gb.run_cpu();
-        assert_eq!(gb.total_dots - start, 3 * 4);
-        assert_eq!(gb.cpu.pc, 0xC007);
-    }
-}
+mod tests;

@@ -132,6 +132,13 @@ impl<A: AudioCallback> Gb<A> {
         was_set
     }
 
+    /// Read the current value of CPU register A.
+    #[must_use]
+    #[inline]
+    pub const fn cpu_a(&self) -> u8 {
+        self.cpu.a()
+    }
+
     /// Read the current value of CPU register B.
     ///
     /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
@@ -252,6 +259,17 @@ impl<A: AudioCallback> Gb<A> {
         self.ppu.pixel_data_rgba()
     }
 
+    /// Read a VRAM byte directly, bypassing PPU mode-accessibility checks.
+    ///
+    /// This is intended for test ROM completion checkers that need to inspect
+    /// VRAM contents regardless of the current PPU rendering mode.  Normal
+    /// emulated code must use `read_mem` so that mode-3 blocking is enforced.
+    #[must_use]
+    #[inline]
+    pub const fn read_vram_direct(&self, addr: u16) -> u8 {
+        self.ppu.vram().read(addr)
+    }
+
     #[inline]
     pub const fn press(&mut self, button: Button) {
         self.joy.press(button, &mut self.ints);
@@ -326,7 +344,7 @@ pub enum Model {
 }
 
 #[derive(Clone, Copy, Default)]
-enum CgbMode {
+pub(crate) enum CgbMode {
     #[default]
     Cgb,
     Compat,
@@ -411,5 +429,41 @@ pub(crate) mod test_util {
         GbBuilder::new(44100, DummyAudio)
             .with_model(Model::DmgB)
             .build()
+    }
+}
+
+#[cfg(test)]
+impl<A: AudioCallback> Gb<A> {
+    pub(crate) fn set_rom_byte(&mut self, addr: u16, val: u8) {
+        self.cart.write_rom_byte_for_test(addr, val);
+    }
+
+    /// Set the CPU program counter.  Only available in test builds.
+    pub(crate) fn set_cpu_pc(&mut self, pc: u16) {
+        self.cpu.set_pc(pc);
+    }
+
+    pub(crate) fn set_cpu_bc(&mut self, bc: u16) {
+        self.cpu.set_bc(bc);
+    }
+
+    pub(crate) fn set_cpu_de(&mut self, de: u16) {
+        self.cpu.set_de(de);
+    }
+
+    pub(crate) fn set_cpu_hl(&mut self, hl: u16) {
+        self.cpu.set_hl(hl);
+    }
+
+    pub(crate) fn set_cpu_sp(&mut self, sp: u16) {
+        self.cpu.set_sp(sp);
+    }
+
+    pub(crate) const fn total_dots(&self) -> u64 {
+        self.total_dots
+    }
+
+    pub(crate) const fn is_double_speed(&self) -> bool {
+        self.key1.is_enabled()
     }
 }
