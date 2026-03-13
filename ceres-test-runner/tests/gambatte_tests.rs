@@ -1358,3 +1358,43 @@ fn gambatte_lycint_m0stat_ds_2() {
     );
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Speed change tests
+// ────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn gambatte_speedchange_div_1() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_div_1_cgb04c_out00.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_div_2() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_div_2_cgb04c_out01.gbc",
+        0x01,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_key1() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_key1_cgb04c_outFE.gbc",
+        0xFE,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_tima00_1a() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_tima00_1a_cgb04c_out80.gbc",
+        0x80,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}

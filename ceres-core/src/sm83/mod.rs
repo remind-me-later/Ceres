@@ -1247,6 +1247,8 @@ impl<A: AudioCallback> Gb<A> {
         let _discard_byte = self.imm8();
 
         if self.key1.is_requested() {
+            self.advance_dots(4);
+
             for _ in 0..32768 {
                 self.advance_dots(4);
             }

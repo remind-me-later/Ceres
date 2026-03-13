@@ -141,10 +141,10 @@ fn test_speed_change_basic() {
     // STOP is 1 byte + 1 byte operand = 2 bytes.
     // fetch STOP: 4 dots
     // fetch operand: 4 dots
-    // execute speed switch: 131072 dots
-    // Total should be 131080 dots.
+    // execute speed switch: 131076 dots (1 + 32768 M-cycles)
+    // Total should be 131084 dots.
     let elapsed = end_dots - start_dots;
-    assert_eq!(elapsed, 131080, "Speed change should take 131080 dots (fetch + Switch)");
+    assert_eq!(elapsed, 131084, "Speed change should take 131084 dots (fetch + Switch)");
     
     // Verify speed change happened
     assert!(gb.key1.is_enabled(), "Should be in double speed now");
@@ -235,12 +235,11 @@ fn test_speed_change_double_to_normal() {
     
     // In double speed mode, each M-cycle is 4 T-cycles, but advance_dots_no_timers 
     // increments total_dots by t_cycles / 2.
-    // 131072 T-cycles / 2 = 65536 dots.
+    // (1 + 32768) M-cycles * 4 T-cycles / 2 = 65538 dots.
     // plus fetch: 2 cycles * 4 T-cycles / 2 = 4 dots.
-    // plus operand fetch: 2 cycles * 4 T-cycles / 2 = 4 dots.
-    // Total: 65536 + 4 = 65540 dots.
+    // Total: 65538 + 4 = 65542 dots.
     let elapsed = end_dots - start_dots;
-    assert_eq!(elapsed, 65540, "Speed change from double to normal should take 65540 normal dots");
+    assert_eq!(elapsed, 65542, "Speed change from double to normal should take 65542 normal dots");
     
     assert!(!gb.key1.is_enabled());
     assert_eq!(gb.read_mem(0xFF05), 128, "TIMA should increment 128 times during speed switch (Double -> Normal)");
