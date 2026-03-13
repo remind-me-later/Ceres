@@ -1398,3 +1398,48 @@ fn gambatte_speedchange_tima00_1a() {
     );
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }
+
+#[test]
+fn gambatte_speedchange_tima01_1() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_tima01_1_cgb04c_out07.gbc",
+        0x07,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange2_div_1() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_div_1_cgb04c_out00.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_cgbpal_m3start_ds_1() {
+    let result = run_gambatte_test(
+        "gambatte/cgbpal_m3/cgbpal_m3start_ds_1_cgb04c_out1.gbc",
+        0x01,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_cgbpal_m3start_ds_2() {
+    let result = run_gambatte_test(
+        "gambatte/cgbpal_m3/cgbpal_m3start_ds_2_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_cgbpal_m3end_ds_1() {
+    let result = run_gambatte_test(
+        "gambatte/cgbpal_m3/cgbpal_m3end_ds_1_cgb04c_out7.gbc",
+        0x07,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
