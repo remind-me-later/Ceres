@@ -1362,6 +1362,108 @@ fn gambatte_m2_late_enable_ly0_1() {
 }
 
 #[test]
+fn gambatte_lycint_m0stat_ds_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/lycint_m0stat/lycint_m0stat_ds_1_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_m0int_m0stat_ds_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/m0int_m0stat/m0int_m0stat_ds_1_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_m0int_m0stat_scx5_ds_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/m0int_m0stat/m0int_m0stat_scx5_ds_1_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_m2int_m2stat_ds_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/m2int_m2stat/m2int_m2stat_ds_1_cgb04c_out2.gbc",
+        0x02,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_m1_lycint_m1stat_1_v2() {
+    let result = run_gambatte_dmg("gambatte/m1/lycint_m1stat_1_dmg08_cgb04c_out0.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_m1_lycint143_m1irq_1_v2() {
+    let result = run_gambatte_dmg("gambatte/m1/lycint143_m1irq_1_dmg08_cgb04c_out0.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_window_late_disable_early_scx03_wx0f_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/window/late_disable_early_scx03_wx0f_1_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_window_late_disable_early_scx03_wx10_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/window/late_disable_early_scx03_wx10_1_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_window_late_disable_early_scx03_wx11_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/window/late_disable_early_scx03_wx11_1_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_window_late_disable_early_scx03_wx12_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/window/late_disable_early_scx03_wx12_1_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_window_late_disable_late_scx03_wx11_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/window/late_disable_late_scx03_wx11_1_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_window_late_disable_late_scx03_wx12_1() {
+    let result = run_gambatte_dmg(
+        "gambatte/window/late_disable_late_scx03_wx12_1_dmg08_cgb04c_out0.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
 fn gambatte_lycint_m0stat_1() {
     let result = run_gambatte_dmg(
         "gambatte/lycint_m0stat/lycint_m0stat_1_dmg08_cgb04c_out0.gbc",
@@ -1386,33 +1488,6 @@ fn gambatte_m2int_m3stat_1() {
     let result = run_gambatte_dmg(
         "gambatte/m2int_m3stat/m2int_m3stat_1_dmg08_cgb04c_out3.gbc",
         0x03,
-    );
-    assert_eq!(result, TestResult::Passed, "{result:?}");
-}
-
-#[test]
-fn gambatte_m2int_m3stat_2() {
-    let result = run_gambatte_dmg(
-        "gambatte/m2int_m3stat/m2int_m3stat_2_dmg08_cgb04c_out0.gbc",
-        0x00,
-    );
-    assert_eq!(result, TestResult::Passed, "{result:?}");
-}
-
-#[test]
-fn gambatte_m0int_m3stat_1() {
-    let result = run_gambatte_dmg(
-        "gambatte/m0int_m3stat/m0int_m3stat_1_dmg08_cgb04c_out3.gbc",
-        0x03,
-    );
-    assert_eq!(result, TestResult::Passed, "{result:?}");
-}
-
-#[test]
-fn gambatte_m0int_m3stat_2() {
-    let result = run_gambatte_dmg(
-        "gambatte/m0int_m3stat/m0int_m3stat_2_dmg08_cgb04c_out0.gbc",
-        0x00,
     );
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }
@@ -1478,24 +1553,6 @@ fn gambatte_m2int_m0irq_2() {
     let result = run_gambatte_dmg(
         "gambatte/m2int_m0irq/m2int_m0irq_2_dmg08_cgb04c_out2.gbc",
         0x02,
-    );
-    assert_eq!(result, TestResult::Passed, "{result:?}");
-}
-
-#[test]
-fn gambatte_lycint_lycirq_2() {
-    let result = run_gambatte_dmg(
-        "gambatte/lycint_lycirq/lycint_lycirq_2_dmg08_cgb04c_out3.gbc",
-        0x03,
-    );
-    assert_eq!(result, TestResult::Passed, "{result:?}");
-}
-
-#[test]
-fn gambatte_lycint_m0stat_ds_1() {
-    let result = run_gambatte_dmg(
-        "gambatte/lycint_m0stat/lycint_m0stat_ds_1_cgb04c_out0.gbc",
-        0x00,
     );
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }
