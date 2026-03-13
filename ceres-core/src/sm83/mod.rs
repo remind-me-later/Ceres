@@ -1247,13 +1247,12 @@ impl<A: AudioCallback> Gb<A> {
         let _discard_byte = self.imm8();
 
         if self.key1.is_requested() {
+            for _ in 0..32768 {
+                self.advance_dots(4);
+            }
+
             self.key1.change_speed();
             self.write_div();
-
-            for _ in 0..2050 {
-                // TODO: div should not tick during speed change, check this
-                self.advance_dots_no_timers(4);
-            }
         } else {
             self.write_div();
             self.cpu.is_halted = true;
