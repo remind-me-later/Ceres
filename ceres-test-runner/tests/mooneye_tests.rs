@@ -596,7 +596,6 @@ fn test_mooneye_ppu_intr_2_mode3_timing() {
 }
 
 #[test]
-#[ignore = "Failing PPU or CPU instruction timing accuracy"]
 fn test_mooneye_ppu_intr_2_oam_ok_timing() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/ppu/intr_2_oam_ok_timing.gb",

@@ -230,20 +230,15 @@ impl Ppu {
 
         // Compute new STAT interrupt line state from all enabled sources.
         // Note: coincidence interrupt is triggered by internal match.
-        let new_line = if (self.stat & STAT_IF_LYC_B != 0) && coincidence_match {
-            // LY=LYC coincidence interrupt
-            true
-        } else if let Some(interrupt_mode) = self.mode_for_interrupt {
-            // Mode-based interrupts use mode_for_interrupt (which can differ from STAT bits)
-            match interrupt_mode {
-                Mode::HBlank if self.stat & STAT_IF_HBLANK_B != 0 => true,
-                Mode::VBlank if self.stat & STAT_IF_VBLANK_B != 0 => true,
-                Mode::OamScan if self.stat & STAT_IF_OAM_B != 0 => true,
-                _ => false,
-            }
-        } else {
-            false
+        let lyc_int = (self.stat & STAT_IF_LYC_B != 0) && coincidence_match;
+        let mode_int = match self.mode_for_interrupt {
+            Some(Mode::HBlank) => self.stat & STAT_IF_HBLANK_B != 0,
+            Some(Mode::VBlank) => self.stat & STAT_IF_VBLANK_B != 0,
+            Some(Mode::OamScan) => self.stat & STAT_IF_OAM_B != 0,
+            _ => false,
         };
+
+        let new_line = lyc_int || mode_int;
 
         self.stat_interrupt_line = new_line;
 
@@ -756,8 +751,7 @@ impl Ppu {
                     // LYC comparison now valid for the new line
                     self.ly_for_comparison = u16::from(self.ly);
 
-                    // Mode 2 interrupt fires at tick 0, but STAT still shows Mode 0.
-                    // LYC interrupt also fires here if LY==LYC.
+                    // Mode 2 interrupt fires at tick 0.
                     self.mode_for_interrupt = Some(Mode::OamScan);
                     self.update_stat(ints);
                 }
@@ -773,6 +767,8 @@ impl Ppu {
 
                 // Tick 4: OAM read-blocking starts for non-double-speed (SameBoy State 7).
                 if tick == 4 {
+                    self.set_mode_stat(Mode::OamScan);
+                    self.update_stat(ints);
                     self.oam_read_blocked = !double_speed;
                 }
 
@@ -789,12 +785,6 @@ impl Ppu {
                 if tick == 10 {
                     self.oam_read_blocked = true;
                     self.oam_write_blocked = true;
-                    self.update_stat(ints);
-                }
-
-                // STAT bits change to Mode 2 at tick 12 (SameBoy State 7 after delay)
-                if tick == 12 {
-                    self.set_mode_stat(Mode::OamScan);
                     self.update_stat(ints);
                 }
 
@@ -973,6 +963,11 @@ impl Ppu {
 
             // Transition to HBlank.
             self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate { remaining: 2 });
+
+            // Update STAT bits immediately (SameBoy accurate).
+            self.set_mode_stat(Mode::HBlank);
+            self.mode_for_interrupt = Some(Mode::HBlank);
+            self.update_stat(ints);
         }
     }
 

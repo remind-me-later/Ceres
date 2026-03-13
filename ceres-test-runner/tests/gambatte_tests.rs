@@ -1184,7 +1184,6 @@ fn gambatte_m0int_m0stat_scx3_1() {
 }
 
 #[test]
-#[ignore = "Failing PPU timing accuracy"]
 fn gambatte_m0int_m0stat_scx3_2() {
     let result = run_gambatte_dmg(
         "gambatte/m0int_m0stat/m0int_m0stat_scx3_2_dmg08_cgb04c_out2.gbc",
