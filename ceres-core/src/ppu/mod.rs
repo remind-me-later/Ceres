@@ -752,6 +752,7 @@ impl Ppu {
                     self.ly_for_comparison = u16::from(self.ly);
 
                     // Mode 2 interrupt fires at tick 0.
+                    self.set_mode_stat(Mode::OamScan);
                     self.mode_for_interrupt = Some(Mode::OamScan);
                     self.update_stat(ints);
                 }
@@ -767,8 +768,6 @@ impl Ppu {
 
                 // Tick 4: OAM read-blocking starts for non-double-speed (SameBoy State 7).
                 if tick == 4 {
-                    self.set_mode_stat(Mode::OamScan);
-                    self.update_stat(ints);
                     self.oam_read_blocked = !double_speed;
                 }
 
@@ -786,19 +785,6 @@ impl Ppu {
                     self.oam_read_blocked = true;
                     self.oam_write_blocked = true;
                     self.update_stat(ints);
-                }
-
-                // STAT bits change to Mode 3 at tick 160
-                if tick == 160 {
-                    self.set_mode_stat(Mode::Drawing);
-                    self.mode_for_interrupt = Some(Mode::Drawing);
-                    self.update_stat(ints);
-
-                    // Memory fully blocked when transitioning to Mode 3 STAT
-                    self.vram_read_blocked = true;
-                    self.vram_write_blocked = true;
-                    self.oam_read_blocked = true;
-                    self.oam_write_blocked = true;
                 }
 
                 // OAM Scan Loop (40 entries * 4 ticks = 160 ticks)
@@ -823,10 +809,20 @@ impl Ppu {
                     }
                 }
 
-                if tick >= 168 {
+                // STAT bits change to Mode 3 at tick 168
+                if tick == 168 {
+                    self.set_mode_stat(Mode::Drawing);
+                    self.mode_for_interrupt = Some(Mode::Drawing);
+                    self.update_stat(ints);
+
+                    // Memory fully blocked when transitioning to Mode 3 STAT
+                    self.vram_read_blocked = true;
+                    self.vram_write_blocked = true;
+                    self.oam_read_blocked = true;
+                    self.oam_write_blocked = true;
+
                     // Transition to Mode 3 Rendering (Tick 168)
                     self.cgb_palettes_blocked = true;
-
                     self.enter_mode3_from_oam_scan(ints);
                 } else {
                     self.phase = PpuPhase::OamScan(OamScanStage::Running { tick: tick + 1 });
@@ -1664,6 +1660,7 @@ impl Ppu {
                 if remaining == 4 && self.current_line != 143 {
                     // Prepare Mode 2 interrupt for next line (LineStart)
                     self.mode_for_interrupt = Some(Mode::OamScan);
+                    self.update_stat(ints);
                 }
 
                 if remaining <= 1 {
