@@ -73,7 +73,7 @@ fn test_ppu_mode2_timing_detailed() {
     let intr = intr_tick.expect("STAT Interrupt did not fire for Mode 2");
     let m3 = mode3_tick.expect("PPU did not transition to Mode 3");
 
-    // Ceres: Mode 2 interrupt fires at dot -4 (tick 908 of prev line), 
+    // Ceres: Mode 2 interrupt fires at dot -4 (tick 908 of prev line),
     // Mode 3 starts at tick 168.
     // Duration = 4 + 168 = 172 ticks.
     assert_eq!(m3 - intr, 172);
@@ -414,7 +414,7 @@ fn test_ppu_mode2_interrupt_edge_behavior() {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
 
-    // Mode 2 interrupt fires at dot -4 (tick 908) of line 0, 
+    // Mode 2 interrupt fires at dot -4 (tick 908) of line 0,
     // we cleared at 900, so it fires at t=8, observable at t=9 (tick 10 of our loop)
     assert_eq!(
         int_requested_at,
@@ -1163,7 +1163,7 @@ fn gambatte_m2int_m2stat_1_out2() {
         "Mode 2 interrupt should have fired"
     );
 
-    // Simulate ISR dispatch (approx 20 T-cycles) so we are past the 
+    // Simulate ISR dispatch (approx 20 T-cycles) so we are past the
     // 4-tick early IRQ window and into Mode 2.
     for _ in 0..20 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
@@ -4316,9 +4316,9 @@ fn test_mooneye_lcdon_timing_gs_repro() {
 fn test_ppu_stat_interrupt_or_logic() {
     let mut gb = setup_gb();
     gb.write_mem(0xFF40, 0x80); // LCD ON
-    
+
     // Enable both LYC and Mode 2 interrupts
-    gb.write_mem(0xFF41, 0x40 | 0x20); 
+    gb.write_mem(0xFF41, 0x40 | 0x20);
     gb.write_mem(0xFF45, 1); // LYC = 1
     gb.write_mem(0xFF0F, 0x00); // Clear IF
 
@@ -4327,50 +4327,59 @@ fn test_ppu_stat_interrupt_or_logic() {
     while (gb.ppu.read_stat() & 0x03) != 0 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
-    
+
     gb.write_mem(0xFF0F, 0x00); // Clear IF
-    
+
     // Advance to line 1 start (tick 0 of OAM scan)
     // At tick 0 of line 1:
     // - LY becomes 1, so LY==LYC is true.
     // - Mode becomes 2, so Mode 2 interrupt condition is true.
     // Both are enabled. The interrupt should fire once.
-    
+
     while gb.ppu.read_ly() != 1 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
-    
+
     // Check if interrupt fired
-    assert!(gb.ints.read_if() & 0x02 != 0, "STAT interrupt should have fired at start of line 1");
-    
+    assert!(
+        gb.ints.read_if() & 0x02 != 0,
+        "STAT interrupt should have fired at start of line 1"
+    );
+
     // Clear IF
     gb.write_mem(0xFF0F, 0x00);
-    
+
     // Now change LYC to 2 while still in Mode 2 of line 1.
     // The LYC condition becomes false, but Mode 2 condition is still true.
     // The STAT interrupt line should stay high, so NO NEW interrupt should fire.
     gb.write_mem(0xFF45, 2);
-    
-    assert!(gb.ints.read_if() & 0x02 == 0, "STAT interrupt should NOT have fired when changing LYC if Mode 2 is still active");
-    
+
+    assert!(
+        gb.ints.read_if() & 0x02 == 0,
+        "STAT interrupt should NOT have fired when changing LYC if Mode 2 is still active"
+    );
+
     // Now disable Mode 2 interrupt source while LYC is still non-matching.
     // The STAT interrupt line should go low.
     gb.write_mem(0xFF41, 0x40); // Only LYC interrupt enabled
-    
+
     // Now change LYC back to 1.
     // The STAT interrupt line should go from low to high, firing a new interrupt.
     gb.write_mem(0xFF45, 1);
-    assert!(gb.ints.read_if() & 0x02 != 0, "STAT interrupt should have fired when LYC matches again");
+    assert!(
+        gb.ints.read_if() & 0x02 != 0,
+        "STAT interrupt should have fired when LYC matches again"
+    );
 }
 
 #[test]
 fn test_ppu_mode_bit_timing_regression() {
     let mut gb = setup_gb();
     gb.write_mem(0xFF40, 0x80); // LCD ON
-    
+
     // Advance to a steady state (line 1)
     advance_to_ly(&mut gb, 1);
-    
+
     // Wait for the exact start of OAM scan (tick 0)
     loop {
         if matches!(
@@ -4381,34 +4390,50 @@ fn test_ppu_mode_bit_timing_regression() {
         }
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
-    
+
     // At this point, phase is tick 0, but it hasn't been processed yet.
     // STAT should still show Mode 0 (HBlank).
     assert_eq!(gb.ppu.read_stat() & 0x03, 0);
 
     // Tick 0: STAT should show Mode 2 after processing (Fix from c9f6b06)
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-    assert_eq!(gb.ppu.read_stat() & 0x03, 2, "STAT should show Mode 2 after processing tick 0");
-    
+    assert_eq!(
+        gb.ppu.read_stat() & 0x03,
+        2,
+        "STAT should show Mode 2 after processing tick 0"
+    );
+
     // Advance to tick 167 (processed). Phase will be tick 168.
     for _ in 0..167 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
-    
+
     // At phase tick 168, still Mode 2 (tick 168 not processed yet)
-    assert_eq!(gb.ppu.read_stat() & 0x03, 2, "STAT should still show Mode 2 at tick 168 before processing");
-    
+    assert_eq!(
+        gb.ppu.read_stat() & 0x03,
+        2,
+        "STAT should still show Mode 2 at tick 168 before processing"
+    );
+
     // Tick 168: STAT should transition to Mode 3 after processing (Fix from c9f6b06)
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-    assert_eq!(gb.ppu.read_stat() & 0x03, 3, "STAT should show Mode 3 after processing tick 168");
-    
+    assert_eq!(
+        gb.ppu.read_stat() & 0x03,
+        3,
+        "STAT should show Mode 3 after processing tick 168"
+    );
+
     // Advance until Mode 3 ends. Mode 0 should be set immediately.
     while (gb.ppu.read_stat() & 0x03) == 3 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
-    
+
     // Just transitioned out of Mode 3
-    assert_eq!(gb.ppu.read_stat() & 0x03, 0, "STAT should show Mode 0 immediately after Mode 3");
+    assert_eq!(
+        gb.ppu.read_stat() & 0x03,
+        0,
+        "STAT should show Mode 0 immediately after Mode 3"
+    );
 }
 
 #[test]
@@ -4416,41 +4441,54 @@ fn test_ppu_early_mode2_interrupt_pre_end() {
     let mut gb = setup_gb();
     gb.write_mem(0xFF40, 0x80); // LCD ON
     gb.write_mem(0xFF41, 0x20); // Enable Mode 2 interrupt
-    
+
     // Advance to line 0 HBlank, near the end.
     // Specifically, until we are in HBlankStage::Remainder.
     advance_to_ly(&mut gb, 0);
-    while !matches!(gb.ppu.phase, crate::ppu::PpuPhase::HBlank(crate::ppu::HBlankStage::Remainder)) {
+    while !matches!(
+        gb.ppu.phase,
+        crate::ppu::PpuPhase::HBlank(crate::ppu::HBlankStage::Remainder)
+    ) {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
-    
+
     gb.write_mem(0xFF0F, 0x00); // Clear IF
-    
+
     // Run until HBlankStage::PreEnd { remaining: 4 }
     loop {
-        if matches!(gb.ppu.phase, crate::ppu::PpuPhase::HBlank(crate::ppu::HBlankStage::PreEnd { remaining: 4 })) {
+        if matches!(
+            gb.ppu.phase,
+            crate::ppu::PpuPhase::HBlank(crate::ppu::HBlankStage::PreEnd { remaining: 4 })
+        ) {
             break;
         }
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
-    
+
     // Now we are at PreEnd { remaining: 4 } BEFORE it is processed.
     // IF should be 0.
     assert_eq!(gb.ints.read_if() & 0x02, 0);
-    
+
     // Tick once. This should call update_stat and fire the interrupt.
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-    
-    assert!(gb.ints.read_if() & 0x02 != 0, "Mode 2 interrupt should fire at PreEnd {{ remaining: 4 }}");
-    
+
+    assert!(
+        gb.ints.read_if() & 0x02 != 0,
+        "Mode 2 interrupt should fire at PreEnd {{ remaining: 4 }}"
+    );
+
     // LY should still be 0.
-    assert_eq!(gb.ppu.read_ly(), 0, "LY should still be 0 when early Mode 2 interrupt fires");
-    
+    assert_eq!(
+        gb.ppu.read_ly(),
+        0,
+        "LY should still be 0 when early Mode 2 interrupt fires"
+    );
+
     // Tick 3 more times to finish PreEnd.
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false); // remaining 3
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false); // remaining 2
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false); // remaining 1
-    
+
     // Next tick should increment LY to 1.
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     assert_eq!(gb.ppu.read_ly(), 1, "LY should now be 1");

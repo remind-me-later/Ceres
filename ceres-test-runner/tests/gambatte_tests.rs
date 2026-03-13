@@ -1437,9 +1437,6 @@ fn gambatte_cgbpal_m3start_ds_2() {
 
 #[test]
 fn gambatte_cgbpal_m3end_ds_1() {
-    let result = run_gambatte_test(
-        "gambatte/cgbpal_m3/cgbpal_m3end_ds_1_cgb04c_out7.gbc",
-        0x07,
-    );
+    let result = run_gambatte_test("gambatte/cgbpal_m3/cgbpal_m3end_ds_1_cgb04c_out7.gbc", 0x07);
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }

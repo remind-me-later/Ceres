@@ -30,7 +30,7 @@ struct AudioProcessor {
     input_buf: Vec<Vec<ProcessSample>>,
     left_consumer: Arc<Mutex<RbConsumer>>,
     output_buf: Vec<Vec<ProcessSample>>,
-    resampler: rubato::SincFixedOut<ProcessSample>,
+    resampler: rubato::Async<ProcessSample>,
     right_consumer: Arc<Mutex<RbConsumer>>,
     volume: Arc<Mutex<f32>>,
 }
@@ -64,10 +64,10 @@ impl AudioProcessor {
     ) -> Result<Self, Error> {
         let chunk_size = BUFFER_SIZE as usize;
 
-        let resampler = rubato::SincFixedOut::<ProcessSample>::new(
+        let resampler = rubato::Async::<ProcessSample>::new_sinc(
             ORIG_RATIO,
             MAX_RESAMPLE_RATIO_RELATIVE,
-            rubato::SincInterpolationParameters {
+            &rubato::SincInterpolationParameters {
                 sinc_len: 256,
                 f_cutoff: 0.95,
                 oversampling_factor: 128,
@@ -76,11 +76,12 @@ impl AudioProcessor {
             },
             chunk_size,
             2,
+            rubato::FixedAsync::Output,
         )
         .map_err(|_err| Error::BuildStream)?;
 
-        let input_buf = resampler.input_buffer_allocate(true);
-        let output_buf = resampler.output_buffer_allocate(true);
+        let input_buf = vec![vec![0.0; resampler.input_frames_max()]; 2];
+        let output_buf = vec![vec![0.0; resampler.output_frames_max()]; 2];
 
         Ok(Self {
             resampler,
@@ -165,9 +166,19 @@ impl AudioProcessor {
         }
 
         // 5. Resample (Heavy Work)
+        let input_adapter =
+            audioadapter_buffers::direct::SequentialSliceOfVecs::new(&self.input_buf, 2, needed)
+                .unwrap();
+        let mut output_adapter = audioadapter_buffers::direct::SequentialSliceOfVecs::new_mut(
+            &mut self.output_buf,
+            2,
+            self.resampler.output_frames_max(),
+        )
+        .unwrap();
+
         match self
             .resampler
-            .process_into_buffer(&self.input_buf, &mut self.output_buf, None)
+            .process_into_buffer(&input_adapter, &mut output_adapter, None)
         {
             Ok(_) => {
                 buffer
