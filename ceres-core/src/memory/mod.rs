@@ -310,7 +310,7 @@ impl<A: AudioCallback> Gb<A> {
             }
             WAV_BEG..=WAV_END => self.apu.write_wave_ram(addr, val, self.is_cgb()),
             LCDC => self.ppu.write_lcdc(val, &mut self.ints),
-            STAT => self.ppu.write_stat(val, &mut self.ints, self.cgb_mode),
+            STAT => self.ppu.write_stat(val, &mut self.ints),
             SCY => self.ppu.write_scy(val),
             SCX => self.ppu.write_scx(val),
             LYC => self.ppu.write_lyc(val, &mut self.ints),

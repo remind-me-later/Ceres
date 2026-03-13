@@ -281,6 +281,12 @@ impl Ppu {
         }
     }
 
+    #[cfg(test)]
+    #[must_use]
+    pub const fn dots_in_line(&self) -> u16 {
+        self.dots_in_line
+    }
+
     #[must_use]
     pub const fn mode(&self) -> Mode {
         match self.stat & STAT_MODE_B {
@@ -354,7 +360,36 @@ impl Ppu {
 
     #[must_use]
     pub const fn read_stat(&self) -> u8 {
-        self.stat | 0x80
+        // Compute mode from dots_in_line for accurate timing.
+        let computed_mode = self.compute_stat_mode();
+        (self.stat & !STAT_MODE_B) | computed_mode | 0x80
+    }
+
+    /// Compute STAT mode based on current timing state.
+    /// This provides more accurate mode reporting than the maintained state
+    /// for the first line after LCD enable (which has special timing).
+    const fn compute_stat_mode(&self) -> u8 {
+        // LCD off: mode 0
+        if self.lcdc & LCDC_ON_B == 0 {
+            return 0;
+        }
+
+        // First 82 cycles show Mode 0 (164 ticks)
+        // Only apply this special case for the actual first frame after LCD enable
+        if matches!(self.frame_skip_state, FrameSkipState::LcdTurnedOn) && self.ly == 0 {
+            // During startup state machine, use the stored STAT mode bits
+            if matches!(self.phase, PpuPhase::Line0Startup(_)) {
+                return self.stat & STAT_MODE_B;
+            }
+
+            // First 82 cycles show Mode 0 (164 ticks)
+            if self.dots_in_line < 164 {
+                return 0;
+            }
+        }
+
+        // For all other cases, use the stored STAT mode bits
+        self.stat & STAT_MODE_B
     }
 
     #[must_use]
@@ -1120,13 +1155,6 @@ impl Ppu {
             if pos + 7 == i16::from(self.wx) {
                 self.activate_window(is_cgb);
             }
-            // LCD-PPU horizontal desync quirk on DMG (verified by SameBoy)
-            else if !is_cgb && pos + 6 == i16::from(self.wx) {
-                self.activate_window(is_cgb);
-                if self.lcd_x > 0 {
-                    self.lcd_x -= 1;
-                }
-            }
         }
         // WX=166 on DMG - special case, increment window_y but don't fully trigger.
         else if !is_cgb && self.wx == 166 && pos + 7 == i16::from(self.wx) {
@@ -1563,6 +1591,7 @@ impl Ppu {
                     self.vram_read_blocked = false;
                     self.oam_write_blocked = false;
                     self.vram_write_blocked = false;
+                    self.update_stat(ints);
                 }
 
                 if remaining <= 1 {
@@ -1914,16 +1943,7 @@ impl Ppu {
         self.scy = val;
     }
 
-    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts, cgb_mode: CgbMode) {
-        if matches!(cgb_mode, CgbMode::Dmg) {
-            let old_stat = self.stat;
-            // DMG STAT write glitch: for one T-cycle, the STAT register is seen
-            // as having all interrupt sources active (bits 3-6 high).
-            self.stat |= 0x78;
-            self.update_stat(ints);
-            self.stat = old_stat;
-        }
-
+    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts) {
         let ly_equals_lyc = self.stat & STAT_LYC_B;
         let mode: u8 = self.mode() as u8;
 

@@ -10,6 +10,11 @@ pub const DOTS_PER_FRAME: i32 = 70224;
 pub const DOTS_PER_SEC: i32 = 1 << 22;
 pub const FRAME_DURATION: Duration = Duration::new(0, 16_742_706); // DOTS_PER_FRAME / DOTS_PER_SEC
 
+/// PPU cycles per T-cycle.
+/// Set to 1 for T-cycle mode (4MHz), or 2 for 8MHz sub-T-cycle precision.
+/// NOTE: Currently using 8MHz mode (2) for SameBoy-accurate sub-T-cycle timing.
+pub const PPU_CYCLES_PER_T_CYCLE: i32 = 2;
+
 pub struct Clock {
     pub(crate) div: u16,
     pub(crate) tac: u8,
@@ -29,7 +34,7 @@ impl Default for Clock {
             tima: 0,
             tima_state: TIMAState::Running,
             tma: 0,
-            div_acc: 1,
+            div_acc: 0,
         }
     }
 }
@@ -60,142 +65,59 @@ impl<A: AudioCallback> Gb<A> {
     /// This is the main timing entry point called by the CPU.
     #[inline]
     pub fn advance_dots(&mut self, t_cycles: i32) {
-        let ticks = if self.key1.is_enabled() {
-            t_cycles
-        } else {
-            t_cycles * 2
-        };
-        self.advance_ticks(ticks);
-    }
-
-    #[inline]
-    pub fn advance_ticks(&mut self, ticks: i32) {
-        for _ in 0..ticks {
-            self.advance_tick();
-        }
-    }
-
-    #[inline]
-    fn advance_tick(&mut self) {
-        let double_speed = self.key1.is_enabled();
-
-        if double_speed {
-            // CPU/Timer/DMA run at 8MHz
-            self.run_timers(1);
-            self.dma.advance_dots(1);
-            self.run_dma();
-
-            // APU/PPU/RTC run at 4MHz (dots)
-            self.tick_acc ^= 1;
-            if self.tick_acc == 0 {
-                self.ppu.run(
-                    1,
-                    &mut self.ints,
-                    self.cgb_mode,
-                    double_speed,
-                    self.dma.is_active(),
-                    self.dma.current_src(),
-                    self.dma.current_dst(),
-                    self.hdma.is_active(),
-                );
-                self.apu.run(1);
-                self.cart.run_rtc(1);
-                self.dots_ran += 1;
-                self.total_dots += 1;
-            }
-        } else {
-            // CPU/Timer/DMA/APU/PPU/RTC all effectively run at 4MHz (dots)
-            // But we tick PPU at 8MHz granularity for sub-dot accuracy.
-            self.ppu.run(
-                1,
-                &mut self.ints,
-                self.cgb_mode,
-                double_speed,
-                self.dma.is_active(),
-                self.dma.current_src(),
-                self.dma.current_dst(),
-                self.hdma.is_active(),
-            );
-
-            self.tick_acc ^= 1;
-            if self.tick_acc == 0 {
-                self.run_timers(1);
-                self.dma.advance_dots(1);
-                self.run_dma();
-                self.apu.run(1);
-                self.cart.run_rtc(1);
-                self.dots_ran += 1;
-                self.total_dots += 1;
-            }
-        }
+        // Timers run at T-cycle rate (4MHz), affected by speed boost
+        self.run_timers(t_cycles);
+        self.advance_dots_no_timers(t_cycles);
     }
 
     #[inline]
     pub fn advance_dots_no_timers(&mut self, t_cycles: i32) {
-        let ticks = if self.key1.is_enabled() {
-            t_cycles
-        } else {
-            t_cycles * 2
-        };
-        self.advance_ticks_no_timers(ticks);
-    }
+        // DMA is affected by speed boost, runs at T-cycle rate
+        self.dma.advance_dots(t_cycles);
 
-    #[inline]
-    pub fn advance_ticks_no_timers(&mut self, ticks: i32) {
-        for _ in 0..ticks {
-            self.advance_tick_no_timers();
-        }
-    }
-
-    #[inline]
-    fn advance_tick_no_timers(&mut self) {
         let double_speed = self.key1.is_enabled();
 
-        if double_speed {
-            // CPU/DMA run at 8MHz
-            self.dma.advance_dots(1);
-            self.run_dma();
-
-            // APU/PPU/RTC run at 4MHz
-            self.tick_acc ^= 1;
-            if self.tick_acc == 0 {
-                self.ppu.run(
-                    1,
-                    &mut self.ints,
-                    self.cgb_mode,
-                    double_speed,
-                    self.dma.is_active(),
-                    self.dma.current_src(),
-                    self.dma.current_dst(),
-                    self.hdma.is_active(),
-                );
-                self.apu.run(1);
-                self.cart.run_rtc(1);
-                self.dots_ran += 1;
-                self.total_dots += 1;
-            }
+        // PPU runs at 8MHz (2× T-cycles) for sub-T-cycle precision.
+        // In double speed mode, the CPU runs at 8MHz but PPU stays at 4MHz,
+        // so we don't double the cycles.
+        // SameBoy: timing.c line 481-483
+        //   if (unlikely(!gb->cgb_double_speed)) {
+        //       cycles <<= 1;
+        //   }
+        let ppu_cycles = if double_speed {
+            t_cycles // Double speed: PPU sees T-cycles as-is
         } else {
-            // CPU/DMA/APU/PPU/RTC all effectively run at 4MHz
-            self.ppu.run(
-                1,
-                &mut self.ints,
-                self.cgb_mode,
-                double_speed,
-                self.dma.is_active(),
-                self.dma.current_src(),
-                self.dma.current_dst(),
-                self.hdma.is_active(),
-            );
+            t_cycles * PPU_CYCLES_PER_T_CYCLE // Normal speed: double for 8MHz
+        };
 
-            self.tick_acc ^= 1;
-            if self.tick_acc == 0 {
-                self.dma.advance_dots(1);
-                self.run_dma();
-                self.apu.run(1);
-                self.cart.run_rtc(1);
-                self.dots_ran += 1;
-                self.total_dots += 1;
-            }
+        let dma_active = self.dma.is_active();
+        let dma_src = self.dma.current_src();
+        let dma_dst = self.dma.current_dst();
+        let hdma_active = self.hdma.is_active();
+
+        self.ppu.run(
+            ppu_cycles,
+            &mut self.ints,
+            self.cgb_mode,
+            double_speed,
+            dma_active,
+            dma_src,
+            dma_dst,
+            hdma_active,
+        );
+        self.run_dma();
+
+        // APU runs at T-cycle rate, not affected by speed boost for timing
+        // but the actual T-cycle count changes in double speed
+        let apu_cycles = if double_speed { t_cycles / 2 } else { t_cycles };
+        self.apu.run(apu_cycles);
+        self.cart.run_rtc(apu_cycles);
+
+        self.dots_ran += apu_cycles;
+
+        #[expect(clippy::cast_sign_loss)]
+        {
+            self.total_dots += apu_cycles as u64;
         }
     }
 
