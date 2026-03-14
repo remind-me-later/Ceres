@@ -41,30 +41,46 @@ fn test_div_increment_phase() {
     let mut gb = setup_gb();
     gb.write_mem(0xFF04, 0); // Reset DIV
 
-    // Ceres Assumption: div_acc = 0 after reset.
-    // T=0: div_acc=0
-    // T=1: div_acc=1
-    // T=2: div_acc=2
-    // T=3: div_acc=3
-    // T=4: div_acc=4 -> INCREMENT!
+    // After write_div: div = 1, div_acc = 1
+    // T=1: div=2, div_acc=2
+    // T=2: div=3, div_acc=3
+    // T=3: div=4, div_acc=4 -> advance_tima_state called
 
     // Initial state after write_div:
     assert_eq!(gb.read_div(), 0);
 
-    gb.advance_dots(3);
-    assert_eq!(gb.read_div(), 0, "DIV incremented too early (at T=3)");
+    gb.advance_dots(2);
+    assert_eq!(gb.read_div(), 0, "DIV incremented too early");
 
     gb.advance_dots(1);
-    // After 4 dots total, internal counter should be 4.
-    // DIV register reads internal counter >> 8.
-    // To see an increment in the upper byte, we need 256 dots.
+    // After 3 dots total, internal counter should be 4.
+}
 
-    // Let's test the internal counter if we can, or just loop.
-    for _ in 0..(256 - 4) / 4 {
-        gb.advance_dots(4);
+#[test]
+fn test_div_reset_3_cycle_delay() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0); // Reset DIV
+
+    // DIV register (top 8 bits of 16-bit counter)
+    // Internal counter reaches 256 after some dots.
+    // Starting at 1:
+    // T=1: 2
+    // T=2: 3
+    // ...
+    // T=254: 255
+    // T=255: 256 (DIV register becomes 1)
+
+    for _ in 0..254 {
+        gb.advance_dots(1);
     }
-    // At T=256, internal DIV should be 256, so DIV register should be 1.
-    assert_eq!(gb.read_div(), 1, "DIV should be 1 after 256 dots");
+    assert_eq!(gb.read_div(), 0, "DIV incremented too early (at T=254)");
+
+    gb.advance_dots(1);
+    assert_eq!(
+        gb.read_div(),
+        1,
+        "DIV should be 1 after 255 dots (3-cycle delay)"
+    );
 }
 
 #[test]

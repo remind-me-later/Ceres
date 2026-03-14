@@ -29,12 +29,12 @@ pub struct Clock {
 impl Default for Clock {
     fn default() -> Self {
         Self {
-            div: 8, // SameBoy initializes DIV to 8
+            div: 1, // Match SameBoy's 3-cycle delay (4 - 3 = 1)
             tac: 0,
             tima: 0,
             tima_state: TIMAState::Running,
             tma: 0,
-            div_acc: 0,
+            div_acc: 1, // Match SameBoy's 3-cycle delay
         }
     }
 }
@@ -162,18 +162,22 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn run_timers(&mut self, dots: i32) {
-        self.clock.div_acc += dots;
-        while self.clock.div_acc >= 4 {
-            self.clock.div_acc -= 4;
-            self.advance_tima_state();
-            self.set_system_clk(self.clock.div.wrapping_add(4));
+        for _ in 0..dots {
+            self.clock.div_acc += 1;
+            if self.clock.div_acc == 4 {
+                self.clock.div_acc = 0;
+                self.advance_tima_state();
+            }
+
+            self.set_system_clk(self.clock.div.wrapping_add(1));
         }
     }
 
     #[inline]
     pub fn write_div(&mut self) {
         self.set_system_clk(0);
-        self.clock.div_acc = 0; // Reset phase
+        self.clock.div_acc = 1; // Reset to match SameBoy's 3-cycle delay
+        self.clock.div = 1;
     }
 
     #[must_use]
