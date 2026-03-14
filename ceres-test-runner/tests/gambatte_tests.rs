@@ -1685,3 +1685,91 @@ fn gambatte_cgbpal_m3end_ds_1() {
     let result = run_gambatte_test("gambatte/cgbpal_m3/cgbpal_m3end_ds_1_cgb04c_out7.gbc", 0x07);
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Timer accuracy tests
+// ────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn gambatte_div_start_inc_1() {
+    let result = run_gambatte_test("gambatte/div/start_inc_1_cgb04c_out1E.gbc", 0x1E);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_div_start_inc_2() {
+    let result = run_gambatte_test("gambatte/div/start_inc_2_cgb04c_out1F.gbc", 0x1F);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_div_start_stop1_inc_1() {
+    let result = run_gambatte_test("gambatte/div/start_stop1_inc_1_cgb04c_out00.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_div_start_stop1_inc_2() {
+    let result = run_gambatte_test("gambatte/div/start_stop1_inc_2_cgb04c_out01.gbc", 0x01);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_div_start_stop2_inc_1() {
+    let result = run_gambatte_test("gambatte/div/start_stop2_inc_1_cgb04c_out00.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_div_start_stop2_inc_2() {
+    let result = run_gambatte_test("gambatte/div/start_stop2_inc_2_cgb04c_out01.gbc", 0x01);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_div_write_start_1() {
+    let result = run_gambatte_test("gambatte/tima/tc00_div_write_start_1_dmg08_cgb04c_outF0.gbc", 0xF0);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_div_write_start_1() {
+    let result = run_gambatte_test("gambatte/tima/tc01_div_write_start_1_dmg08_cgb04c_outF1.gbc", 0xF1);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_div_write_1a() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_div_write_1a_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_div_write_1b() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_div_write_1b_dmg08_cgb04c_out00.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_div_write_1a() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_div_write_1a_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_div_write_1b() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_div_write_1b_dmg08_cgb04c_out00.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
