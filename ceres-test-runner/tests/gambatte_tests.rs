@@ -1728,13 +1728,19 @@ fn gambatte_div_start_stop2_inc_2() {
 
 #[test]
 fn gambatte_tima_tc00_div_write_start_1() {
-    let result = run_gambatte_test("gambatte/tima/tc00_div_write_start_1_dmg08_cgb04c_outF0.gbc", 0xF0);
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_div_write_start_1_dmg08_cgb04c_outF0.gbc",
+        0xF0,
+    );
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }
 
 #[test]
 fn gambatte_tima_tc01_div_write_start_1() {
-    let result = run_gambatte_test("gambatte/tima/tc01_div_write_start_1_dmg08_cgb04c_outF1.gbc", 0xF1);
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_div_write_start_1_dmg08_cgb04c_outF1.gbc",
+        0xF1,
+    );
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }
 
@@ -1770,6 +1776,2769 @@ fn gambatte_tima_tc01_late_div_write_1b() {
     let result = run_gambatte_test(
         "gambatte/tima/tc01_late_div_write_1b_dmg08_cgb04c_out00.gbc",
         0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_ff_tma_3_dmg08_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_ff_tma_3_dmg08_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_stop_inc_2_dmg08_cgb04c_outFE() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_stop_inc_2_dmg08_cgb04c_outFE.gbc",
+        0xFE,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_ff_tma_2_dmg08_cgb04c_out00() {
+    let result = run_gambatte_test("gambatte/tima/tc01_ff_tma_2_dmg08_cgb04c_out00.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_irq_ds_2_cgb04c_outE4() {
+    let result = run_gambatte_test("gambatte/tima/tc00_irq_ds_2_cgb04c_outE4.gbc", 0xE4);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_offset3_irq_1_dmg08_cgb04c_outE0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_offset3_irq_1_dmg08_cgb04c_outE0.gbc",
+        0xE0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_nop_div_write_start_2_dmg08_cgb04c_outF2() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_nop_div_write_start_2_dmg08_cgb04c_outF2.gbc",
+        0xF2,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_start_1_cgb04c_outF0() {
+    let result = run_gambatte_test("gambatte/tima/tc00_start_1_cgb04c_outF0.gbc", 0xF0);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_div_write_2a_dmg08_cgb04c_outFE() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_div_write_2a_dmg08_cgb04c_outFE.gbc",
+        0xFE,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_stop_inc_1_dmg08_cgb04c_outFE() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_stop_inc_1_dmg08_cgb04c_outFE.gbc",
+        0xFE,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_div_write_3a_dmg08_cgb04c_outFE() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_div_write_3a_dmg08_cgb04c_outFE.gbc",
+        0xFE,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_ff_tma_3_dmg08_cgb04c_outF0() {
+    let result = run_gambatte_test("gambatte/tima/tc01_ff_tma_3_dmg08_cgb04c_outF0.gbc", 0xF0);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_fe_ff_2_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test("gambatte/tima/tc01_fe_ff_2_dmg08_cgb04c_outFF.gbc", 0xFF);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_tima_tma_1_dmg08_cgb04c_out11() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_tima_tma_1_dmg08_cgb04c_out11.gbc",
+        0x11,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_div_write_start_2_dmg08_cgb04c_outF1() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_div_write_start_2_dmg08_cgb04c_outF1.gbc",
+        0xF1,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_irq_2_dmg08_cgb04c_outE4() {
+    let result = run_gambatte_test("gambatte/tima/tc01_irq_2_dmg08_cgb04c_outE4.gbc", 0xE4);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_nop_div_write_start_1_dmg08_cgb04c_outF1() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_nop_div_write_start_1_dmg08_cgb04c_outF1.gbc",
+        0xF1,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_1stopstart_offset2_ff_tma_1_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_1stopstart_offset2_ff_tma_1_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_offset1_ff_tma_2_dmg08_cgb04c_out00() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_offset1_ff_tma_2_dmg08_cgb04c_out00.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_offset2_irq_2_dmg08_cgb04c_outE4() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_offset2_irq_2_dmg08_cgb04c_outE4.gbc",
+        0xE4,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_stop_inc_1_dmg08_cgb04c_outFD() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_stop_inc_1_dmg08_cgb04c_outFD.gbc",
+        0xFD,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_div_write_4b_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_div_write_4b_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_ff_tma_2_dmg08_cgb04c_out00() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_ff_tma_2_dmg08_cgb04c_out00.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_irq_2_dmg08_cgb04c_outE4() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_irq_2_dmg08_cgb04c_outE4.gbc",
+        0xE4,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_irq_late_retrigger_3_dmg08_cgb04c_outE0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_irq_late_retrigger_3_dmg08_cgb04c_outE0.gbc",
+        0xE0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_1stopstart_ff_tma_1_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_1stopstart_ff_tma_1_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_div_write_if_2_dmg08_cgb04c_outE4() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_div_write_if_2_dmg08_cgb04c_outE4.gbc",
+        0xE4,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_div_write_4a_dmg08_cgb04c_outFE() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_div_write_4a_dmg08_cgb04c_outFE.gbc",
+        0xFE,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_stop_irq_2_dmg08_cgb04c_outE4() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_stop_irq_2_dmg08_cgb04c_outE4.gbc",
+        0xE4,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_tc01_5_dmg08_cgb04c_out00() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_tc01_5_dmg08_cgb04c_out00.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_irq_2_dmg08_cgb04c_outE4() {
+    let result = run_gambatte_test("gambatte/tima/tc00_irq_2_dmg08_cgb04c_outE4.gbc", 0xE4);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_div_write_3a_dmg08_cgb04c_outFE() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_div_write_3a_dmg08_cgb04c_outFE.gbc",
+        0xFE,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_tc01_3_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_tc01_3_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_fe_ff_2_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test("gambatte/tima/tc00_fe_ff_2_dmg08_cgb04c_outFF.gbc", 0xFF);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_stop_of_2_dmg08_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_stop_of_2_dmg08_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_offset1_ff_tma_1_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_offset1_ff_tma_1_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_offset1_irq_2_dmg08_cgb04c_outE4() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_offset1_irq_2_dmg08_cgb04c_outE4.gbc",
+        0xE4,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_div_write_2b_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_div_write_2b_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_irq_ifw_2_dmg08_cgb04c_outE0() {
+    let result = run_gambatte_test("gambatte/tima/tc00_irq_ifw_2_dmg08_cgb04c_outE0.gbc", 0xE0);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_tima_tma_3_dmg08_cgb04c_out11() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_tima_tma_3_dmg08_cgb04c_out11.gbc",
+        0x11,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_1stopstart_offset1_ff_tma_1_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_1stopstart_offset1_ff_tma_1_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_offset1_ff_tma_3_dmg08_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_offset1_ff_tma_3_dmg08_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_div_write_start_2_dmg08_cgb04c_outF2() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_div_write_start_2_dmg08_cgb04c_outF2.gbc",
+        0xF2,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_tima_tma_2_dmg08_cgb04c_outF1() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_tima_tma_2_dmg08_cgb04c_outF1.gbc",
+        0xF1,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_stop_irq_2_dmg08_cgb04c_outE4() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_stop_irq_2_dmg08_cgb04c_outE4.gbc",
+        0xE4,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_tma_next_2_dmg08_cgb04c_outF1() {
+    let result = run_gambatte_test("gambatte/tima/tc01_tma_next_2_dmg08_cgb04c_outF1.gbc", 0xF1);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_irq_ifw_ds_2_cgb04c_outE0() {
+    let result = run_gambatte_test("gambatte/tima/tc00_irq_ifw_ds_2_cgb04c_outE0.gbc", 0xE0);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_irq_1_dmg08_cgb04c_outE0() {
+    let result = run_gambatte_test("gambatte/tima/tc00_irq_1_dmg08_cgb04c_outE0.gbc", 0xE0);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_div_write_if_1b_dmg08_cgb04c_outE4() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_div_write_if_1b_dmg08_cgb04c_outE4.gbc",
+        0xE4,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_ff_tma_2_dmg08_cgb04c_out00() {
+    let result = run_gambatte_test("gambatte/tima/tc00_ff_tma_2_dmg08_cgb04c_out00.gbc", 0x00);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_tma_2_dmg08_cgb04c_outF1() {
+    let result = run_gambatte_test("gambatte/tima/tc01_late_tma_2_dmg08_cgb04c_outF1.gbc", 0xF1);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_fe_ff_1_dmg08_cgb04c_outFE() {
+    let result = run_gambatte_test("gambatte/tima/tc00_fe_ff_1_dmg08_cgb04c_outFE.gbc", 0xFE);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_1stopstart_offset2_ff_tma_2_dmg08_cgb04c_out00() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_1stopstart_offset2_ff_tma_2_dmg08_cgb04c_out00.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_ff_tma_1_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_ff_tma_1_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_1stopstart_offset2_ff_tma_3_dmg08_cgb04c_outFE() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_1stopstart_offset2_ff_tma_3_dmg08_cgb04c_outFE.gbc",
+        0xFE,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_irq_late_retrigger_ds_1_cgb04c_outE4() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_irq_late_retrigger_ds_1_cgb04c_outE4.gbc",
+        0xE4,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_tc01_1_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_tc01_1_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_offset2_ff_tma_1_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_offset2_ff_tma_1_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_tc01_late_tc00_of_2_dmg08_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_tc01_late_tc00_of_2_dmg08_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_irq_ds_1_cgb04c_outE0() {
+    let result = run_gambatte_test("gambatte/tima/tc00_irq_ds_1_cgb04c_outE0.gbc", 0xE0);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_start_3_dmg08_outF0() {
+    let result = run_gambatte_test("gambatte/tima/tc00_start_3_dmg08_outF0.gbc", 0xF0);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_div_write_4a_dmg08_cgb04c_outFE() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_div_write_4a_dmg08_cgb04c_outFE.gbc",
+        0xFE,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_start_4_dmg08_outF1() {
+    let result = run_gambatte_test("gambatte/tima/tc00_start_4_dmg08_outF1.gbc", 0xF1);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_tc01_2_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_tc01_2_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_stop_irq_1_dmg08_cgb04c_outE0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_stop_irq_1_dmg08_cgb04c_outE0.gbc",
+        0xE0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_offset1_irq_1_dmg08_cgb04c_outE0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_offset1_irq_1_dmg08_cgb04c_outE0.gbc",
+        0xE0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_irq_ifw_ds_1_cgb04c_outE4() {
+    let result = run_gambatte_test("gambatte/tima/tc00_irq_ifw_ds_1_cgb04c_outE4.gbc", 0xE4);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_nop_div_write_start_2_dmg08_cgb04c_outF1() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_nop_div_write_start_2_dmg08_cgb04c_outF1.gbc",
+        0xF1,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_div_write_if_1a_dmg08_cgb04c_outE0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_div_write_if_1a_dmg08_cgb04c_outE0.gbc",
+        0xE0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_irq_1_dmg08_cgb04c_outE0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_irq_1_dmg08_cgb04c_outE0.gbc",
+        0xE0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_start_2_cgb04c_outF1() {
+    let result = run_gambatte_test("gambatte/tima/tc00_start_2_cgb04c_outF1.gbc", 0xF1);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_irq_late_retrigger_ds_2_cgb04c_outE0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_irq_late_retrigger_ds_2_cgb04c_outE0.gbc",
+        0xE0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_irq_late_retrigger_1_dmg08_cgb04c_outE4() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_irq_late_retrigger_1_dmg08_cgb04c_outE4.gbc",
+        0xE4,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_stop_of_1_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_stop_of_1_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_stop_inc_2_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_stop_inc_2_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_1stopstart_offset1_ff_tma_2_dmg08_cgb04c_out00() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_1stopstart_offset1_ff_tma_2_dmg08_cgb04c_out00.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_ff_tma_1_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test("gambatte/tima/tc01_ff_tma_1_dmg08_cgb04c_outFF.gbc", 0xFF);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_offset3_ff_tma_3_dmg08_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_offset3_ff_tma_3_dmg08_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_tc01_ff_tma_2_dmg08_cgb04c_out00() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_tc01_ff_tma_2_dmg08_cgb04c_out00.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_offset3_ff_tma_1_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_offset3_ff_tma_1_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_irq_1_dmg08_cgb04c_outE0() {
+    let result = run_gambatte_test("gambatte/tima/tc01_irq_1_dmg08_cgb04c_outE0.gbc", 0xE0);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_tma_1_dmg08_cgb04c_out11() {
+    let result = run_gambatte_test("gambatte/tima/tc01_late_tma_1_dmg08_cgb04c_out11.gbc", 0x11);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_tc01_8_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_tc01_8_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_offset2_ff_tma_2_dmg08_cgb04c_out00() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_offset2_ff_tma_2_dmg08_cgb04c_out00.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_offset2_ff_tma_3_dmg08_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_offset2_ff_tma_3_dmg08_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_tc01_7_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_tc01_7_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_offset3_irq_2_dmg08_cgb04c_outE4() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_offset3_irq_2_dmg08_cgb04c_outE4.gbc",
+        0xE4,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_fe_ff_1_dmg08_cgb04c_outFE() {
+    let result = run_gambatte_test("gambatte/tima/tc01_fe_ff_1_dmg08_cgb04c_outFE.gbc", 0xFE);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_tc01_late_tc00_of_1_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_tc01_late_tc00_of_1_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_ff_tma_1_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test("gambatte/tima/tc00_ff_tma_1_dmg08_cgb04c_outFF.gbc", 0xFF);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_tima_irq_1_dmg08_cgb04c_outE0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_tima_irq_1_dmg08_cgb04c_outE0.gbc",
+        0xE0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_1stopstart_ff_tma_2_dmg08_cgb04c_out00() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_1stopstart_ff_tma_2_dmg08_cgb04c_out00.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_div_write_3b_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_div_write_3b_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_stop_of_1_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_stop_of_1_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_div_write_3b_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_div_write_3b_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_1stopstart_offset1_ff_tma_3_dmg08_cgb04c_outFE() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_1stopstart_offset1_ff_tma_3_dmg08_cgb04c_outFE.gbc",
+        0xFE,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_tc01_ff_tma_1_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_tc01_ff_tma_1_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_tima_inc_2_dmg08_cgb04c_out10() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_tima_inc_2_dmg08_cgb04c_out10.gbc",
+        0x10,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_nop_div_write_start_1_dmg08_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_nop_div_write_start_1_dmg08_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_ff_tma_3_dmg08_cgb04c_outFE() {
+    let result = run_gambatte_test("gambatte/tima/tc00_ff_tma_3_dmg08_cgb04c_outFE.gbc", 0xFE);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_irq_ifw_1_dmg08_cgb04c_outE4() {
+    let result = run_gambatte_test("gambatte/tima/tc00_irq_ifw_1_dmg08_cgb04c_outE4.gbc", 0xE4);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_offset2_irq_1_dmg08_cgb04c_outE0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_offset2_irq_1_dmg08_cgb04c_outE0.gbc",
+        0xE0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_irq_late_retrigger_2_dmg08_outE4_cgb04c_outE0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_irq_late_retrigger_2_dmg08_outE4_cgb04c_outE0.gbc",
+        0xE0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_tc01_4_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_tc01_4_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_tma_next_1_dmg08_cgb04c_outF0() {
+    let result = run_gambatte_test("gambatte/tima/tc01_tma_next_1_dmg08_cgb04c_outF0.gbc", 0xF0);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_1stopstart_offset3_ff_tma_2_dmg08_cgb04c_out00() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_1stopstart_offset3_ff_tma_2_dmg08_cgb04c_out00.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_tima_inc_1_dmg08_cgb04c_out11() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_tima_inc_1_dmg08_cgb04c_out11.gbc",
+        0x11,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_div_write_4b_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_div_write_4b_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_1stopstart_ff_tma_3_dmg08_cgb04c_outFE() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_1stopstart_ff_tma_3_dmg08_cgb04c_outFE.gbc",
+        0xFE,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_tc01_ff_tma_3_dmg08_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_tc01_ff_tma_3_dmg08_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_stop_of_2_dmg08_cgb04c_outFE() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_stop_of_2_dmg08_cgb04c_outFE.gbc",
+        0xFE,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_tc01_6_dmg08_cgb04c_outFE() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_tc01_6_dmg08_cgb04c_outFE.gbc",
+        0xFE,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_div_write_2a_dmg08_cgb04c_outFE() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_div_write_2a_dmg08_cgb04c_outFE.gbc",
+        0xFE,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc01_late_tima_irq_2_dmg08_cgb04c_outE4() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc01_late_tima_irq_2_dmg08_cgb04c_outE4.gbc",
+        0xE4,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_stop_irq_1_dmg08_cgb04c_outE0() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_stop_irq_1_dmg08_cgb04c_outE0.gbc",
+        0xE0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_tima_tc00_late_div_write_2b_dmg08_cgb04c_outFF() {
+    let result = run_gambatte_test(
+        "gambatte/tima/tc00_late_div_write_2b_dmg08_cgb04c_outFF.gbc",
+        0xFF,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_div_start_inc_1_dmg08_outAB() {
+    let result = run_gambatte_test("gambatte/div/start_inc_1_dmg08_outAB.gb", 0xAB);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_div_start_inc_2_dmg08_outAC() {
+    let result = run_gambatte_test("gambatte/div/start_inc_2_dmg08_outAC.gb", 0xAC);
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_tima02_1b_cgb04c_out03() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_tima02_1b_cgb04c_out03.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_lcdoff_nopx2_m2int_m3stat_scx3_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_lcdoff_nopx2_m2int_m3stat_scx3_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ly44_m3_nop_m3stat_scx1_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ly44_m3_nop_m3stat_scx1_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_tima01_2_cgb04c_out0A() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_tima01_2_cgb04c_out0A.gbc",
+        0x0A,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_frame1_m2int_m3stat_scx2_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_frame1_m2int_m3stat_scx2_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_tima02_2a_cgb04c_out03() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_tima02_2a_cgb04c_out03.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly97_ly_cgb04c_out8C() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly97_ly_cgb04c_out8C.gbc",
+        0x8C,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_lcdoff_nop_m2int_m3stat_scx1_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_lcdoff_nop_m2int_m3stat_scx1_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange4_ly44_m3_m3stat_scx1_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange4_ly44_m3_m3stat_scx1_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange3_nop_ly44_m3_m3stat_scx1_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange3_nop_ly44_m3_m3stat_scx1_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_tima01_nop_2_cgb04c_out08() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_tima01_nop_2_cgb04c_out08.gbc",
+        0x08,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_ly44_m3_nop_m3stat_scx4_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_ly44_m3_nop_m3stat_scx4_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ch2_nr52_2a_cgb04c_outF2() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ch2_nr52_2a_cgb04c_outF2.gbc",
+        0xF2,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_tima03_1a_cgb04c_out00() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_tima03_1a_cgb04c_out00.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange4_ch2_nr52_1a_cgb04c_outF2() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange4_ch2_nr52_1a_cgb04c_outF2.gbc",
+        0xF2,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange5_ly44_m3_nop_m3stat_scx2_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange5_ly44_m3_nop_m3stat_scx2_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_div_nop_1_cgb04c_out00() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_div_nop_1_cgb04c_out00.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_tima02_1a_cgb04c_out02() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_tima02_1a_cgb04c_out02.gbc",
+        0x02,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange5_ly44_m3_nop_m3stat_scx1_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange5_ly44_m3_nop_m3stat_scx1_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_nopx4_m3stat_scx1_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_nopx4_m3stat_scx1_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_lcdoff_tima01_1_cgb04c_out08() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_lcdoff_tima01_1_cgb04c_out08.gbc",
+        0x08,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_tima02_2a_cgb04c_out03() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_tima02_2a_cgb04c_out03.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_nop_m3stat_scx1_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_nop_m3stat_scx1_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ch2_nr52_1b_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ch2_nr52_1b_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_tima00_1b_cgb04c_out01() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_tima00_1b_cgb04c_out01.gbc",
+        0x01,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ly44_m3_m3stat_scx3_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ly44_m3_m3stat_scx3_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_key1_set_unset_dmg08_outFF_cgb04c_out7E() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/key1_set_unset_dmg08_outFF_cgb04c_out7E.gbc",
+        0x7E,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_lcdoff_nopx2_m2int_m3stat_scx2_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_lcdoff_nopx2_m2int_m3stat_scx2_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_tima01_nop_1_cgb04c_out07() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_tima01_nop_1_cgb04c_out07.gbc",
+        0x07,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_nopx2_m3stat_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_nopx2_m3stat_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange4_ly44_m3_m3stat_scx2_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange4_ly44_m3_m3stat_scx2_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_nopx3_m3stat_scx1_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_nopx3_m3stat_scx1_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange3_nop_ly44_m3_m3stat_scx1_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange3_nop_ly44_m3_m3stat_scx1_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ch2_nr52_2b_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ch2_nr52_2b_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange5_ly44_m3_nop_m3stat_scx1_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange5_ly44_m3_nop_m3stat_scx1_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange5_nop_ly44_m3_m3stat_scx2_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange5_nop_ly44_m3_m3stat_scx2_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_lcdoff_nopx2_m2int_m3stat_scx3_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_lcdoff_nopx2_m2int_m3stat_scx3_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_lcdoff_nopx2_m2int_m3stat_scx3_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_lcdoff_nopx2_m2int_m3stat_scx3_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange3_ly44_m3_m3stat_scx1_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange3_ly44_m3_m3stat_scx1_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ch2_nr52_ds_2b_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ch2_nr52_ds_2b_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_tima02_1a_cgb04c_out02() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_tima02_1a_cgb04c_out02.gbc",
+        0x02,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_tima03_1a_cgb04c_out00() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_tima03_1a_cgb04c_out00.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_lcdoff_m2int_m3stat_scx3_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_lcdoff_m2int_m3stat_scx3_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange4_ly44_m3_nop_m3stat_scx4_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange4_ly44_m3_nop_m3stat_scx4_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange3_ly44_m3_m3stat_scx2_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange3_ly44_m3_m3stat_scx2_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_lcdoff2_m2int_m3stat_scx3_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_lcdoff2_m2int_m3stat_scx3_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_lcdoff_m2int_m3stat_scx3_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_lcdoff_m2int_m3stat_scx3_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_ly44_m3_nop_m3stat_scx1_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_ly44_m3_nop_m3stat_scx1_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange3_ch2_nr52_2a_cgb04c_outF2() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange3_ch2_nr52_2a_cgb04c_outF2.gbc",
+        0xF2,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ch2_nr52_ds_2a_cgb04c_outF2() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ch2_nr52_ds_2a_cgb04c_outF2.gbc",
+        0xF2,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ch2_nr52_ds_2b_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ch2_nr52_ds_2b_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_lcdoff_nop_m2int_m3stat_scx1_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_lcdoff_nop_m2int_m3stat_scx1_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_stat_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_stat_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_m2int_m3stat_scx3_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_m2int_m3stat_scx3_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_m3stat_scx1_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_m3stat_scx1_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_lcdoff_m2int_m3stat_scx2_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_lcdoff_m2int_m3stat_scx2_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_tima00_2a_cgb04c_out81() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_tima00_2a_cgb04c_out81.gbc",
+        0x81,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ly44_m3_stat_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ly44_m3_stat_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_ly44_m3_m3stat_scx2_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_ly44_m3_m3stat_scx2_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ch2_nr52_ds_1b_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ch2_nr52_ds_1b_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ch2_nr52_ds_1a_cgb04c_outF2() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ch2_nr52_ds_1a_cgb04c_outF2.gbc",
+        0xF2,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_nopx4_m3stat_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_nopx4_m3stat_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ch2_nr52_1a_cgb04c_outF2() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ch2_nr52_1a_cgb04c_outF2.gbc",
+        0xF2,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange3_ly44_m3_m3stat_scx2_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange3_ly44_m3_m3stat_scx2_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ly44_m3_nopx2_m3stat_scx3_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ly44_m3_nopx2_m3stat_scx3_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_lcdoff_nop_m2int_m3stat_scx4_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_lcdoff_nop_m2int_m3stat_scx4_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ly44_m3_nop_m3stat_scx1_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ly44_m3_nop_m3stat_scx1_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange3_nop_ly44_m3_m3stat_scx2_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange3_nop_ly44_m3_m3stat_scx2_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_tima03_2b_cgb04c_out02() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_tima03_2b_cgb04c_out02.gbc",
+        0x02,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_tima02_2b_cgb04c_out04() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_tima02_2b_cgb04c_out04.gbc",
+        0x04,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_nopx2_m3stat_scx1_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_nopx2_m3stat_scx1_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_tima01_nop_1_cgb04c_out0A() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_tima01_nop_1_cgb04c_out0A.gbc",
+        0x0A,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_m2int_m3stat_scx1_lcdoffds_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/m2int_m3stat_scx1_lcdoffds_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange3_ly44_m3_nop_m3stat_scx2_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange3_ly44_m3_nop_m3stat_scx2_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_ly44_m3_m3stat_scx3_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_ly44_m3_m3stat_scx3_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange3_ly44_m3_nop_m3stat_scx1_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange3_ly44_m3_nop_m3stat_scx1_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ly44_m3_nopx2_m3stat_scx3_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ly44_m3_nopx2_m3stat_scx3_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_m2int_m3stat_scx4_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_m2int_m3stat_scx4_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ly44_m3_ly_1_cgb04c_out25() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ly44_m3_ly_1_cgb04c_out25.gbc",
+        0x25,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_stat_2_cgb04c_outC2() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_stat_2_cgb04c_outC2.gbc",
+        0xC2,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_m3stat_scx1_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_m3stat_scx1_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_tima03_2a_cgb04c_out01() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_tima03_2a_cgb04c_out01.gbc",
+        0x01,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange3_ch2_nr52_1b_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange3_ch2_nr52_1b_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_tima03_1b_cgb04c_out01() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_tima03_1b_cgb04c_out01.gbc",
+        0x01,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange5_ch2_nr52_1a_cgb04c_outF2() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange5_ch2_nr52_1a_cgb04c_outF2.gbc",
+        0xF2,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_tima02_2b_cgb04c_out04() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_tima02_2b_cgb04c_out04.gbc",
+        0x04,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ch2_nr52_2a_cgb04c_outF2() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ch2_nr52_2a_cgb04c_outF2.gbc",
+        0xF2,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_m2int_m3stat_scx1_lcdoffds_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/m2int_m3stat_scx1_lcdoffds_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ch2_nr52_1b_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ch2_nr52_1b_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_nopx3_m3stat_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_nopx3_m3stat_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_tima00_1b_cgb04c_out81() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_tima00_1b_cgb04c_out81.gbc",
+        0x81,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_m2int_m3stat_scx4_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_m2int_m3stat_scx4_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange4_ly44_m3_m3stat_scx2_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange4_ly44_m3_m3stat_scx2_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_tima00_1a_cgb04c_out00() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_tima00_1a_cgb04c_out00.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange4_nop_ly44_m3_m3stat_scx1_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange4_nop_ly44_m3_m3stat_scx1_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_tima00_2b_cgb04c_out02() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_tima00_2b_cgb04c_out02.gbc",
+        0x02,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange5_nop_ly44_m3_m3stat_scx1_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange5_nop_ly44_m3_m3stat_scx1_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ch2_nr52_1a_cgb04c_outF2() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ch2_nr52_1a_cgb04c_outF2.gbc",
+        0xF2,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange5_ch2_nr52_2b_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange5_ch2_nr52_2b_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_div_2_cgb04c_out01() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_div_2_cgb04c_out01.gbc",
+        0x01,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_tima01_nop_2_cgb04c_out0B() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_tima01_nop_2_cgb04c_out0B.gbc",
+        0x0B,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange5_ch2_nr52_2a_cgb04c_outF2() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange5_ch2_nr52_2a_cgb04c_outF2.gbc",
+        0xF2,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_m2int_m3stat_lcdoffds_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/m2int_m3stat_lcdoffds_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_nopx4_m3stat_scx1_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_nopx4_m3stat_scx1_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange5_ch2_nr52_1b_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange5_ch2_nr52_1b_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ch2_nr52_ds_1a_cgb04c_outF2() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ch2_nr52_ds_1a_cgb04c_outF2.gbc",
+        0xF2,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_ly44_m3_nop_m3stat_scx4_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_ly44_m3_nop_m3stat_scx4_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_lcdoff_m2int_m3stat_scx3_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_lcdoff_m2int_m3stat_scx3_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_tima00_2a_cgb04c_out01() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_tima00_2a_cgb04c_out01.gbc",
+        0x01,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange3_ly44_m3_m3stat_scx1_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange3_ly44_m3_m3stat_scx1_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_lcdoff_nop_m2int_m3stat_scx1_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_lcdoff_nop_m2int_m3stat_scx1_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_lcdoff_tima00_1_cgb04c_out80() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_lcdoff_tima00_1_cgb04c_out80.gbc",
+        0x80,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_nop_m3stat_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_nop_m3stat_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_nopx2_m3stat_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_nopx2_m3stat_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange3_nop_ly44_m3_m3stat_scx2_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange3_nop_ly44_m3_m3stat_scx2_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_lcdoff_m2int_m3stat_scx2_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_lcdoff_m2int_m3stat_scx2_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_tima01_1_cgb04c_out09() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_tima01_1_cgb04c_out09.gbc",
+        0x09,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_lcdoff2_m2int_m3stat_scx3_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_lcdoff2_m2int_m3stat_scx3_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_ly_cgb04c_out39() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_ly_cgb04c_out39.gbc",
+        0x39,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_nop_m3stat_scx1_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_nop_m3stat_scx1_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_ly44_m3_m3stat_scx3_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_ly44_m3_m3stat_scx3_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_lcdoff2_m2int_m3stat_scx4_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_lcdoff2_m2int_m3stat_scx4_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_key1_set_dmg08_outFF_cgb04c_out7F() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/key1_set_dmg08_outFF_cgb04c_out7F.gbc",
+        0x7F,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange5_ly44_m3_m3stat_scx1_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange5_ly44_m3_m3stat_scx1_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_lcdoff_nopx2_m2int_m3stat_scx2_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_lcdoff_nopx2_m2int_m3stat_scx2_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_lcdoff_nop_m2int_m3stat_scx4_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_lcdoff_nop_m2int_m3stat_scx4_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_stat_1_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_stat_1_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ch2_nr52_ds_1b_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ch2_nr52_ds_1b_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_tima00_2b_cgb04c_out82() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_tima00_2b_cgb04c_out82.gbc",
+        0x82,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_m2int_m3stat_scx2_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_m2int_m3stat_scx2_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange5_nop_ly44_m3_m3stat_scx2_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange5_nop_ly44_m3_m3stat_scx2_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange4_ch2_nr52_2b_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange4_ch2_nr52_2b_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange5_nop_ly44_m3_m3stat_scx1_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange5_nop_ly44_m3_m3stat_scx1_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ly44_m3_stat_4_cgb04c_outC2() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ly44_m3_stat_4_cgb04c_outC2.gbc",
+        0xC2,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange4_nop_ly44_m3_m3stat_scx2_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange4_nop_ly44_m3_m3stat_scx2_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange3_ch2_nr52_1a_cgb04c_outF2() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange3_ch2_nr52_1a_cgb04c_outF2.gbc",
+        0xF2,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_lcdoff_nop_m2int_m3stat_scx4_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_lcdoff_nop_m2int_m3stat_scx4_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ly44_m3_nopx2_m3stat_scx2_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ly44_m3_nopx2_m3stat_scx2_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_nopx4_m3stat_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_nopx4_m3stat_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ch2_nr52_ds_2a_cgb04c_outF2() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ch2_nr52_ds_2a_cgb04c_outF2.gbc",
+        0xF2,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ch2_nr52_2b_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ch2_nr52_2b_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_tima03_1b_cgb04c_out01() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_tima03_1b_cgb04c_out01.gbc",
+        0x01,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_tima02_1b_cgb04c_out03() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_tima02_1b_cgb04c_out03.gbc",
+        0x03,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_lcdoff_nopx2_m2int_m3stat_scx2_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_lcdoff_nopx2_m2int_m3stat_scx2_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_lcdoff_nop_m2int_m3stat_scx1_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_lcdoff_nop_m2int_m3stat_scx1_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_m2int_m3stat_lcdoffds_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/m2int_m3stat_lcdoffds_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange4_ly44_m3_m3stat_scx1_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange4_ly44_m3_m3stat_scx1_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ly44_m3_stat_3_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ly44_m3_stat_3_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ly44_m3_stat_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ly44_m3_stat_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange4_nop_ly44_m3_m3stat_scx1_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange4_nop_ly44_m3_m3stat_scx1_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange5_ly44_m3_m3stat_scx2_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange5_ly44_m3_m3stat_scx2_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_lcdoff_nopx2_m2int_m3stat_scx2_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_lcdoff_nopx2_m2int_m3stat_scx2_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_tima03_2a_cgb04c_out01() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_tima03_2a_cgb04c_out01.gbc",
+        0x01,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly97_stat_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly97_stat_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_div_nop_2_cgb04c_out01() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_div_nop_2_cgb04c_out01.gbc",
+        0x01,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ly44_m3_nop_m3stat_scx4_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ly44_m3_nop_m3stat_scx4_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange5_ly44_m3_m3stat_scx2_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange5_ly44_m3_m3stat_scx2_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_ly44_m3_m3stat_scx2_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_ly44_m3_m3stat_scx2_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_key1_cgb04c_out7E() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_key1_cgb04c_out7E.gbc",
+        0x7E,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_frame1_m2int_m3stat_scx2_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_frame1_m2int_m3stat_scx2_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_lcdoff_nop_m2int_m3stat_scx4_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_lcdoff_nop_m2int_m3stat_scx4_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_m2int_m3stat_scx3_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_m2int_m3stat_scx3_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange4_ly44_m3_nop_m3stat_scx4_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange4_ly44_m3_nop_m3stat_scx4_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ly44_m3_m3stat_scx3_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ly44_m3_m3stat_scx3_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange4_ly44_m3_nop_m3stat_scx3_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange4_ly44_m3_nop_m3stat_scx3_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_ly44_m3_nop_m3stat_scx1_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_ly44_m3_nop_m3stat_scx1_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_m2int_m3stat_scx2_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_m2int_m3stat_scx2_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_lcdoff_m2int_m3stat_scx2_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_lcdoff_m2int_m3stat_scx2_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange5_ly44_m3_m3stat_scx1_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange5_ly44_m3_m3stat_scx1_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_lcdoff2_m2int_m3stat_scx4_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_lcdoff2_m2int_m3stat_scx4_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange3_ly44_m3_nop_m3stat_scx2_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange3_ly44_m3_nop_m3stat_scx2_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ly44_m3_m3stat_scx2_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ly44_m3_m3stat_scx2_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_div_nop_1_cgb04c_out00() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_div_nop_1_cgb04c_out00.gbc",
+        0x00,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_m3stat_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_m3stat_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_tima03_2b_cgb04c_out02() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_tima03_2b_cgb04c_out02.gbc",
+        0x02,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange4_ch2_nr52_1b_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange4_ch2_nr52_1b_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_nopx3_m3stat_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_nopx3_m3stat_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_div_nop_2_cgb04c_out01() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_div_nop_2_cgb04c_out01.gbc",
+        0x01,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_tima01_2_cgb04c_out08() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_tima01_2_cgb04c_out08.gbc",
+        0x08,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_lcdoff_nopx2_m2int_m3stat_scx3_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_lcdoff_nopx2_m2int_m3stat_scx3_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange3_ly44_m3_nop_m3stat_scx1_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange3_ly44_m3_nop_m3stat_scx1_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange3_ch2_nr52_2b_cgb04c_outF0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange3_ch2_nr52_2b_cgb04c_outF0.gbc",
+        0xF0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_frame1_m2int_m3stat_scx3_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_frame1_m2int_m3stat_scx3_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_m3stat_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_m3stat_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_nopx3_m3stat_scx1_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_nopx3_m3stat_scx1_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_nopx2_m3stat_scx1_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_nopx2_m3stat_scx1_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_m2int_m3stat_scx1_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_m2int_m3stat_scx1_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange4_ly44_m3_nop_m3stat_scx3_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange4_ly44_m3_nop_m3stat_scx3_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ly44_m3_nop_m3stat_scx4_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ly44_m3_nop_m3stat_scx4_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange5_ly44_m3_nop_m3stat_scx2_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange5_ly44_m3_nop_m3stat_scx2_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ly44_m3_nopx2_m3stat_scx2_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ly44_m3_nopx2_m3stat_scx2_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_m2int_m3stat_scx1_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_m2int_m3stat_scx1_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_ly44_m3_m3stat_scx2_2_cgb04c_outC0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_ly44_m3_m3stat_scx2_2_cgb04c_outC0.gbc",
+        0xC0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_frame1_m2int_m3stat_scx3_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_frame1_m2int_m3stat_scx3_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_lcdoff_m2int_m3stat_scx3_1_cgb04c_out3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_lcdoff_m2int_m3stat_scx3_1_cgb04c_out3.gbc",
+        0x3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange2_nop_lcdoff_m2int_m3stat_scx2_2_cgb04c_out0() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange2_nop_lcdoff_m2int_m3stat_scx2_2_cgb04c_out0.gbc",
+        0x0,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_ly44_m3_nop_m3stat_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_ly44_m3_nop_m3stat_1_cgb04c_outC3.gbc",
+        0xC3,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange_lcdoff_tima01_2_cgb04c_out09() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange_lcdoff_tima01_2_cgb04c_out09.gbc",
+        0x09,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange4_ch2_nr52_2a_cgb04c_outF2() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange4_ch2_nr52_2a_cgb04c_outF2.gbc",
+        0xF2,
+    );
+    assert_eq!(result, TestResult::Passed, "{result:?}");
+}
+
+#[test]
+fn gambatte_speedchange_speedchange4_nop_ly44_m3_m3stat_scx2_1_cgb04c_outC3() {
+    let result = run_gambatte_test(
+        "gambatte/speedchange/speedchange4_nop_ly44_m3_m3stat_scx2_1_cgb04c_outC3.gbc",
+        0xC3,
     );
     assert_eq!(result, TestResult::Passed, "{result:?}");
 }
