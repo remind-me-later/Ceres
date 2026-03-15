@@ -435,18 +435,26 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     fn tick_m_cycle(&mut self) {
-        self.advance_dots(4);
+        let dots = if self.key1.is_enabled() { 2 } else { 4 };
+        self.advance_dots(dots);
     }
 
     #[must_use]
     fn read_cpu(&mut self, addr: u16) -> u8 {
-        self.advance_dots(2);
-        let val = self.read_mem(addr);
-        self.advance_dots(2);
-        val
+        let dots = if self.key1.is_enabled() { 2 } else { 4 };
+        self.advance_dots(dots);
+        self.read_mem(addr)
     }
 
     fn write_cpu(&mut self, addr: u16, val: u8) {
+        let dots = if self.key1.is_enabled() { 2 } else { 4 };
+        let if_addr = addr == 0xFF0F;
+        let ifr_before = if if_addr {
+            self.ints.read_if() & 0x1F
+        } else {
+            0
+        };
+
         // Capture timestamp before advancing time for DMA start logging
         if addr >= 0xFF00 {
             let io_addr = (addr & 0xFF) as u8;
@@ -455,9 +463,16 @@ impl<A: AudioCallback> Gb<A> {
                 self.dma_write_start_dots = self.total_dots;
             }
         }
-        self.advance_dots(2);
-        self.write_mem(addr, val);
-        self.advance_dots(2);
+
+        self.advance_dots(dots);
+
+        if if_addr {
+            let ifr_after = self.ints.read_if() & 0x1F;
+            let triggers = ifr_after & !ifr_before;
+            self.write_mem(addr, val | triggers);
+        } else {
+            self.write_mem(addr, val);
+        }
     }
 }
 
