@@ -646,3 +646,68 @@ fn test_repro_speedchange_double_to_normal_dots() {
         elapsed
     );
 }
+
+/// Isolate the behavior of `gambatte_tima_tc00_late_tc01_5_dmg08_cgb04c_out00`.
+/// Expected 0x00, Ceres gives 0xFE (the TMA value).
+/// This verifies TIMA write during the final reload dot for TC00 (4096Hz).
+#[test]
+fn test_repro_late_tc00_5_write() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, 0xFE); // TMA = 0xFE
+    gb.write_mem(0xFF05, 0xFF); // TIMA = 0xFF
+    gb.write_mem(0xFF07, 0x04); // Enabled, 4096Hz (period=1024 dots)
+
+    // Advance to overflow (1024 dots)
+    gb.advance_dots(1024);
+
+    // Advance 3 dots into the 4-dot reload window.
+    gb.advance_dots(3);
+    // Write 0x00 at the very last dot of the reload window.
+    gb.write_mem(0xFF05, 0x00);
+
+    // Advance 1 more dot to finish the reload window.
+    gb.advance_dots(1);
+
+    // The write should have taken effect (or cancelled the reload).
+    assert_eq!(
+        gb.read_mem(0xFF05),
+        0x00,
+        "TIMA write at end of reload window should result in 0x00"
+    );
+}
+
+/// Isolate the behavior of `gambatte_speedchange_div_2`.
+/// Expected 0x01, Ceres gives 0x00.
+/// This verifies DIV state after a speed change from Double to Normal.
+#[test]
+fn test_repro_speedchange_div_2() {
+    let mut gb = setup_gb();
+    gb.change_model_and_soft_reset(Model::CgbE);
+
+    // 1. Enter double speed
+    let addr = 0xC000;
+    gb.set_cpu_pc(addr);
+    gb.write_mem(addr, 0x10); // STOP
+    gb.write_mem(addr + 1, 0x00);
+    gb.write_mem(0xFF4D, 0x01);
+    gb.run_cpu();
+    assert!(gb.key1.is_enabled());
+
+    // 2. Clear DIV before speed change
+    gb.write_mem(0xFF04, 0);
+
+    // 3. Request speed change (Double -> Normal)
+    gb.set_cpu_pc(addr);
+    gb.write_mem(0xFF4D, 0x01);
+    gb.run_cpu();
+
+    // Verify DIV after speed switch.
+    // Integration test expects 0x01.
+    let div = gb.read_div();
+    assert_eq!(
+        div, 0x01,
+        "DIV should be 0x01 after Double -> Normal speed switch, got 0x{:02X}",
+        div
+    );
+}
