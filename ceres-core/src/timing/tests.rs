@@ -578,3 +578,71 @@ fn test_start_3_timing() {
     gb.advance_dots(1023);
     assert_eq!(gb.read_mem(0xFF05), 0xF0);
 }
+
+/// Isolate the behavior of `gambatte_tima_tc00_start_2_cgb04c_outF1`.
+/// Expected 0xF1, Ceres gives 0xF0.
+/// This verifies that TIMA increments exactly at the 1024-dot boundary for TC00.
+#[test]
+fn test_repro_timer_startup_tc00_1024_increment() {
+    let mut gb = setup_gb();
+    // Use CGB mode for consistency with the failing integration test
+    gb.change_model_and_soft_reset(Model::CgbE);
+
+    gb.write_mem(0xFF04, 0); // Reset DIV
+    gb.write_mem(0xFF06, 0x00); // TMA = 0
+    gb.write_mem(0xFF05, 0xF0); // TIMA = 0xF0
+
+    // Enable timer with clock select 00 (4096Hz = increment every 1024 dots)
+    gb.write_mem(0xFF07, 0x04);
+
+    // After 1023 dots, it should NOT have incremented yet.
+    gb.advance_dots(1023);
+    assert_eq!(
+        gb.read_mem(0xFF05),
+        0xF0,
+        "TIMA should not increment at 1023 dots"
+    );
+
+    // After 1 more dot (total 1024), it MUST increment to 0xF1.
+    gb.advance_dots(1);
+    assert_eq!(
+        gb.read_mem(0xFF05),
+        0xF1,
+        "TIMA must increment at exactly 1024 dots"
+    );
+}
+
+/// Isolate the behavior of `test_speed_change_double_to_normal` failing unit test.
+/// Expected 65542 normal dots, but got 131080.
+#[test]
+fn test_repro_speedchange_double_to_normal_dots() {
+    let mut gb = setup_gb();
+    gb.change_model_and_soft_reset(Model::CgbE);
+
+    // 1. Enter double speed
+    let addr = 0xC000;
+    gb.set_cpu_pc(addr);
+    gb.write_mem(addr, 0x10); // STOP
+    gb.write_mem(addr + 1, 0x00);
+    gb.write_mem(0xFF4D, 0x01);
+    gb.run_cpu();
+    assert!(gb.key1.is_enabled());
+
+    // 2. Request speed change (Double -> Normal)
+    gb.set_cpu_pc(addr);
+    gb.write_mem(0xFF4D, 0x01);
+
+    let start_dots = gb.total_dots();
+    gb.run_cpu();
+    let end_dots = gb.total_dots();
+
+    let elapsed = end_dots - start_dots;
+    // (1 + 32768) M-cycles * 4 T-cycles / 2 = 65538 dots.
+    // plus fetch: 2 cycles * 4 T-cycles / 2 = 4 dots.
+    // Total: 65538 + 4 = 65542 dots.
+    assert_eq!(
+        elapsed, 65542,
+        "Speed change from double to normal should take 65542 normal dots, got {}",
+        elapsed
+    );
+}

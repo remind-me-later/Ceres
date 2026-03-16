@@ -1244,6 +1244,84 @@ fn samesuite_hdma_mode0() {
     assert_eq!(gb.read_mem(0xFF55), 0xFF);
 }
 
+/// Isolate the behavior of `memory::tests::samesuite_hdma_mode0`.
+/// HDMA should only transfer ONE block per HBlank.
+#[test]
+fn test_repro_hdma_mode0_two_blocks_across_hblanks() {
+    let mut gb = setup_cgb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    // Init source buffer in WRAM
+    for i in 0u16..32 {
+        gb.write_mem(0xC000 + i, i as u8);
+    }
+
+    // Program HDMA (dst = 0x8800)
+    gb.write_mem(0xFF51, 0xC0);
+    gb.write_mem(0xFF52, 0x00);
+    gb.write_mem(0xFF53, 0x08);
+    gb.write_mem(0xFF54, 0x00);
+
+    // Start 2-block HBlank DMA (bit 7 = 1, len = 1 => 2 blocks)
+    gb.write_mem(0xFF55, 0x81);
+
+    // 1. Advance to FIRST HBlank
+    let mut hblank_reached = false;
+    for _ in 0..1000 {
+        gb.advance_dots(1);
+        gb.run_hdma();
+        if (gb.read_mem(0xFF41) & 0x03) == 0 {
+            hblank_reached = true;
+            break;
+        }
+    }
+    assert!(hblank_reached, "First HBlank never reached");
+
+    // After one HBlank, ONLY the first block should be copied.
+    for i in 0u16..16 {
+        assert_eq!(
+            gb.read_mem(0x8800 + i),
+            i as u8,
+            "HDMA failed to copy block 1 in first HBlank"
+        );
+    }
+    assert_eq!(
+        gb.read_mem(0x8810),
+        0,
+        "Second block should NOT be copied in the first HBlank"
+    );
+
+    // 2. Advance to SECOND HBlank
+    // First, exit current HBlank
+    for _ in 0..1000 {
+        gb.advance_dots(1);
+        gb.run_hdma();
+        if (gb.read_mem(0xFF41) & 0x03) != 0 {
+            break;
+        }
+    }
+    // Then, enter next HBlank
+    hblank_reached = false;
+    for _ in 0..1000 {
+        gb.advance_dots(1);
+        gb.run_hdma();
+        if (gb.read_mem(0xFF41) & 0x03) == 0 {
+            hblank_reached = true;
+            break;
+        }
+    }
+    assert!(hblank_reached, "Second HBlank never reached");
+
+    // After second HBlank, second block should be copied
+    for i in 0u16..16 {
+        assert_eq!(
+            gb.read_mem(0x8810 + i),
+            (i + 16) as u8,
+            "HDMA failed to copy block 2 in second HBlank"
+        );
+    }
+}
+
 // -----------------------------------------------------------------------
 // hdma_lcd_off - SameSuite/dma/hdma_lcd_off.asm
 //

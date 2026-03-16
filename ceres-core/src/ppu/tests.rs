@@ -1,5 +1,6 @@
 use super::SpriteFetcherState;
 use crate::test_util::setup_gb;
+use crate::{CgbMode, Model};
 
 // Helper type alias for tests
 type Gb = crate::Gb<crate::test_util::DummyAudio>;
@@ -4492,4 +4493,50 @@ fn test_ppu_early_mode2_interrupt_pre_end() {
     // Next tick should increment LY to 1.
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     assert_eq!(gb.ppu.read_ly(), 1, "LY should now be 1");
+}
+
+/// Isolate the behavior of `gambatte_sprites_1spritesprline_m3stat_1`.
+/// Expected 0x03 (Mode 3), Ceres gives 0x00 (Mode 0).
+/// Verifies that a single sprite correctly extends Mode 3 duration.
+#[test]
+fn test_repro_sprite_m3_penalty_1_sprite() {
+    let mut gb = setup_gb();
+    gb.change_model_and_soft_reset(Model::CgbE);
+
+    // Clear OAM
+    for i in 0..160 {
+        gb.ppu.write_oam_by_dma(0xFE00 + i, 0);
+    }
+
+    // Place 1 sprite at X=8, Y=16 (visible on Line 0)
+    gb.ppu.write_oam_by_dma(0xFE00, 16); // Y
+    gb.ppu.write_oam_by_dma(0xFE01, 8); // X
+    gb.ppu.write_oam_by_dma(0xFE02, 0); // tile
+    gb.ppu.write_oam_by_dma(0xFE03, 0); // attrs
+
+    // LCDC = 0x82: LCD on, OBJ enable
+    gb.write_mem(0xFF40, 0x82);
+
+    // Wait for Mode 3 to start
+    loop {
+        if (gb.read_mem(0xFF41) & 0x03) == 3 {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, CgbMode::Cgb, false);
+    }
+
+    // Baseline Mode 3 (no sprites, no scroll, no window) is exactly 172 dots (344 ticks).
+    // A single sprite at X=8 adds 11 ticks (DMG/CGB normal speed).
+    // So Mode 3 should last at least 344 + 11 = 355 ticks.
+    // If we advance 350 ticks, it SHOULD still be in Mode 3.
+    for _ in 0..350 {
+        gb.ppu.tick(&mut gb.ints, CgbMode::Cgb, false);
+    }
+
+    let mode = gb.read_mem(0xFF41) & 0x03;
+    assert_eq!(
+        mode, 3,
+        "PPU should still be in Mode 3 at tick 350 with 1 sprite penalty (Mode 3 baseline=344), got Mode {}",
+        mode
+    );
 }
