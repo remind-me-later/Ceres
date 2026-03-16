@@ -435,3 +435,146 @@ fn test_timer_rapid_toggle_cgb_disable_glitch_fires() {
         "CGB disable-glitch must fire: TIMA must increment when bit9=1 and timer stopped"
     );
 }
+
+#[test]
+fn test_irq_ds_1() {
+    let mut gb = setup_cgb();
+    gb.write_mem(0xFF4D, 1); // request double speed
+    gb.write_mem(0xFF04, 0); // Reset DIV
+    gb.write_mem(0xFF06, 0xFF); // TMA
+    gb.write_mem(0xFF05, 0xFF); // TIMA
+    gb.write_mem(0xFF07, 0x04); // TAC=4
+
+    // Advance 1024 dots
+    for _ in 0..1024 / 4 {
+        gb.advance_dots(4);
+    }
+
+    // Now TIMA should be 0 and reloading state 4
+    assert_eq!(gb.read_mem(0xFF05), 0);
+    let ifr = gb.read_mem(0xFF0F);
+    assert_eq!(ifr & 4, 0, "Interrupt should not be requested yet");
+
+    // Wait out the reload delay
+    gb.advance_dots(4);
+    let ifr = gb.read_mem(0xFF0F);
+    assert_eq!(ifr & 4, 4, "Interrupt should be requested now");
+}
+
+#[test]
+fn test_late_tc01_4() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0); // Reset DIV
+    gb.write_mem(0xFF06, 0xFF); // TMA = 0xFF
+    gb.write_mem(0xFF05, 0xFF); // TIMA = 0xFF
+    gb.write_mem(0xFF07, 0x05); // TAC = 5
+
+    // Advance 16 dots
+    gb.advance_dots(16);
+
+    // During reload, if we write to TIMA, the reload is cancelled.
+    // If the write happens "late" in the cycle, it might interact with the reload.
+    // The gambatte test late_tc01_4 writes at a specific cycle after overflow.
+    // For now, lets just ensure writing exactly 4 dots after overflow works as expected.
+    gb.write_mem(0xFF05, 0x42);
+
+    // Wait for reload to finish (if it wasnt cancelled)
+    gb.advance_dots(4);
+    assert_eq!(gb.read_mem(0xFF05), 0x42, "TIMA write should cancel reload");
+}
+
+#[test]
+fn test_irq_ds_timing_boundary() {
+    let mut gb = setup_cgb();
+    gb.write_mem(0xFF4D, 1);
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, 0xFF);
+    gb.write_mem(0xFF05, 0xFF);
+    gb.write_mem(0xFF07, 0x04);
+
+    // In DS, TIMA increments every 1024 dots.
+    gb.advance_dots(1024);
+
+    // Now TIMA has overflowed. Reload delay is 4 dots.
+    assert_eq!(gb.read_mem(0xFF05), 0);
+    assert_eq!(gb.ints.read_if() & 4, 0);
+
+    // Advance 3 dots. Still reloading.
+    gb.advance_dots(3);
+    assert_eq!(gb.read_mem(0xFF05), 0);
+    assert_eq!(gb.ints.read_if() & 4, 0);
+
+    // Advance 1 dot. Reload completes, IF set.
+    gb.advance_dots(1);
+    assert_eq!(gb.read_mem(0xFF05), 0xFF);
+    assert_eq!(gb.ints.read_if() & 4, 4);
+}
+
+#[test]
+fn test_late_tc01_5_write() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, 0xFE);
+    gb.write_mem(0xFF05, 0xFF);
+    gb.write_mem(0xFF07, 0x05); // increments every 16 dots
+
+    // Advance to exactly when overflow happens
+    gb.advance_dots(16);
+
+    // Advance to the end of the reload delay (4 dots total).
+    // If we write at dot 3 (1 dot before reload finishes), it should cancel the reload.
+    // The Gambatte test late_tc01_5 writes EXACTLY when reload finishes.
+    gb.advance_dots(3);
+    gb.write_mem(0xFF05, 0x00);
+
+    // Advance 1 dot to finish the original reload window.
+    gb.advance_dots(1);
+
+    // If we wrote during the final cycle, it should be ignored (or it cancelled).
+    // Assuming Gambatte expects 0x00.
+    assert_eq!(gb.read_mem(0xFF05), 0x00);
+}
+
+#[test]
+fn test_late_tc01_6_write() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, 0xFE);
+    gb.write_mem(0xFF05, 0xFF);
+    gb.write_mem(0xFF07, 0x05); // increments every 16 dots
+
+    gb.advance_dots(16);
+    // Write just after reload finishes
+    gb.advance_dots(4);
+    gb.write_mem(0xFF05, 0x00);
+    // Should be ignored, keeping TMA value
+    assert_eq!(gb.read_mem(0xFF05), 0xFE);
+}
+
+#[test]
+fn test_start_2_timing() {
+    let mut gb = setup_cgb(); // Fails on CGB
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, 0x00);
+    gb.write_mem(0xFF05, 0xF0);
+
+    // Enable timer, should increment after certain dots.
+    // Integration test expects 0xF1, meaning it missed an increment or we are 1 dot off.
+    gb.write_mem(0xFF07, 0x04);
+    gb.advance_dots(1024);
+    assert_eq!(gb.read_mem(0xFF05), 0xF1);
+}
+
+#[test]
+fn test_start_3_timing() {
+    let mut gb = setup_gb(); // Fails on DMG
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, 0x00);
+    gb.write_mem(0xFF05, 0xF0);
+
+    // Integration test expects 0xF0, we give 0xF1
+    gb.write_mem(0xFF07, 0x04);
+    // If we advance slightly less than full cycle, it should still be 0xF0
+    gb.advance_dots(1023);
+    assert_eq!(gb.read_mem(0xFF05), 0xF0);
+}
