@@ -4517,9 +4517,10 @@ fn test_repro_sprite_m3_penalty_1_sprite() {
     // LCDC = 0x82: LCD on, OBJ enable
     gb.write_mem(0xFF40, 0x82);
 
-    // Wait for Mode 3 to start
+    // Wait for Mode 3 of Line 1 to start.
+    // Line 0 skips OAM scan after LCD-on, so we must wait for Line 1 to see sprite penalty.
     loop {
-        if (gb.read_mem(0xFF41) & 0x03) == 3 {
+        if gb.read_mem(0xFF44) == 1 && (gb.read_mem(0xFF41) & 0x03) == 3 {
             break;
         }
         gb.ppu.tick(&mut gb.ints, CgbMode::Cgb, false);

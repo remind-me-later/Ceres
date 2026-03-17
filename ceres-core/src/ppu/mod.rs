@@ -1587,11 +1587,12 @@ impl Ppu {
                 if remaining == 2 {
                     self.set_mode_stat(Mode::HBlank);
                     self.mode_for_interrupt = Some(Mode::HBlank);
+                    self.update_stat(ints);
+
                     self.oam_read_blocked = false;
                     self.vram_read_blocked = false;
                     self.oam_write_blocked = false;
                     self.vram_write_blocked = false;
-                    self.update_stat(ints);
                 }
 
                 if remaining <= 1 {

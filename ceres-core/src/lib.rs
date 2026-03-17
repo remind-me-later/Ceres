@@ -216,13 +216,21 @@ impl<A: AudioCallback> Gb<A> {
 
     #[must_use]
     fn new(model: Model, sample_rate: i32, cart: Cartridge, audio_callback: A) -> Self {
+        let cgb_mode = CgbMode::from(model);
+        let mut clock = Clock::default();
+        clock.div = if matches!(cgb_mode, CgbMode::Dmg) {
+            1
+        } else {
+            0
+        };
+
         Self {
             model,
-            cgb_mode: model.into(),
+            cgb_mode,
             cart,
             bootrom: Bootrom::new(model),
             apu: Apu::new(sample_rate, audio_callback),
-            clock: Clock::default(),
+            clock,
             cpu: Sm83::default(),
             dma: Dma::default(),
             dma_write_start_dots: 0,
@@ -313,6 +321,11 @@ impl<A: AudioCallback> Gb<A> {
     pub fn soft_reset(&mut self) {
         self.apu.reset();
         self.clock = Clock::default();
+        self.clock.div = if matches!(self.cgb_mode, CgbMode::Dmg) {
+            1
+        } else {
+            0
+        };
         self.cpu = Sm83::default();
         self.dma = Dma::default();
         self.hdma = Hdma::default();

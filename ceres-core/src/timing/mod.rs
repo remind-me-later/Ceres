@@ -150,7 +150,13 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn run_timers(&mut self, dots: i32) {
-        for _ in 0..dots {
+        let iterations = if self.key1.is_enabled() {
+            dots * 2
+        } else {
+            dots
+        };
+
+        for _ in 0..iterations {
             self.clock.div_acc += 1;
             if self.clock.div_acc == 4 {
                 self.clock.div_acc = 0;
@@ -165,7 +171,11 @@ impl<A: AudioCallback> Gb<A> {
     pub fn write_div(&mut self) {
         self.set_system_clk(0);
         self.clock.div_acc = 1; // Reset to match SameBoy's 3-cycle delay
-        self.clock.div = 1;
+        self.clock.div = if matches!(self.cgb_mode, crate::CgbMode::Dmg) {
+            1
+        } else {
+            0
+        };
     }
 
     #[must_use]
