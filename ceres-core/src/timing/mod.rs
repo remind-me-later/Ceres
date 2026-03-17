@@ -61,24 +61,31 @@ pub(crate) enum TIMAState {
 }
 
 impl<A: AudioCallback> Gb<A> {
-    /// Advance all components by the given number of dots (4MHz).
+    /// Advance all components by the given number of CPU T-cycles.
     /// This is the main timing entry point called by the CPU.
     #[inline]
-    pub fn advance_dots(&mut self, dots: i32) {
-        // Timers run at T-cycle rate (4MHz)
-        self.run_timers(dots);
-        self.advance_dots_no_timers(dots);
+    pub fn advance_dots(&mut self, cpu_t_cycles: i32) {
+        self.run_timers(cpu_t_cycles);
+        self.advance_dots_no_timers(cpu_t_cycles);
     }
 
     #[inline]
-    pub fn advance_dots_no_timers(&mut self, dots: i32) {
-        // DMA is affected by speed boost, runs at T-cycle rate
-        self.dma.advance_dots(dots);
+    pub fn advance_dots_no_timers(&mut self, cpu_t_cycles: i32) {
+        // DMA runs at T-cycle rate
+        self.dma.advance_dots(cpu_t_cycles);
 
         let double_speed = self.key1.is_enabled();
 
-        // PPU runs at 8MHz (2× dots) for sub-T-cycle precision.
-        let ppu_cycles = dots * PPU_CYCLES_PER_T_CYCLE;
+        // Calculate real-time 4MHz dots elapsed.
+        // In double speed, 1 CPU T-cycle = 0.5 real dots.
+        let real_dots = if double_speed {
+            cpu_t_cycles / 2
+        } else {
+            cpu_t_cycles
+        };
+
+        // PPU runs at 8MHz (2× real-time dots)
+        let ppu_cycles = real_dots * PPU_CYCLES_PER_T_CYCLE;
 
         let dma_active = self.dma.is_active();
         let dma_src = self.dma.current_src();
@@ -97,15 +104,15 @@ impl<A: AudioCallback> Gb<A> {
         );
         self.run_dma();
 
-        // APU runs at T-cycle rate
-        self.apu.run(dots);
-        self.cart.run_rtc(dots);
+        // APU runs at 4MHz real-time rate
+        self.apu.run(real_dots);
+        self.cart.run_rtc(real_dots);
 
-        self.dots_ran += dots;
+        self.dots_ran += real_dots;
 
         #[expect(clippy::cast_sign_loss)]
         {
-            self.total_dots += dots as u64;
+            self.total_dots += real_dots as u64;
         }
     }
 
@@ -149,14 +156,8 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[inline]
-    pub fn run_timers(&mut self, dots: i32) {
-        let iterations = if self.key1.is_enabled() {
-            dots * 2
-        } else {
-            dots
-        };
-
-        for _ in 0..iterations {
+    pub fn run_timers(&mut self, cpu_t_cycles: i32) {
+        for _ in 0..cpu_t_cycles {
             self.clock.div_acc += 1;
             if self.clock.div_acc == 4 {
                 self.clock.div_acc = 0;
