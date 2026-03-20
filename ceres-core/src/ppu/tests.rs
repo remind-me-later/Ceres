@@ -2000,6 +2000,122 @@ fn gambatte_oam_prewrite_blocking_boundary_cgb() {
     );
 }
 
+/// Isolate the behavior of `gambatte_lycint_lycflag_1_dmg08_cgb04c_out0`.
+#[test]
+fn gambatte_lycint_lycflag_1_failure() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_ly(&mut gb, 3);
+    gb.write_mem(0xFF45, 5);
+    gb.write_mem(0xFF41, 0x40); // enable LYC int
+    gb.ints.write_if(0);
+
+    // Wait for the LYC interrupt
+    for _ in 0..100_000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // ROM sets LYC=6 immediately after IRQ
+    gb.write_mem(0xFF45, 6);
+
+    let stat = gb.read_mem(0xFF41) & 0x07;
+    // Expected 0x00 (Mode 0, LYC flag clear) or at least LYC flag clear.
+    // Integration test says Ceres fails this.
+    assert_eq!(
+        stat & 0x04,
+        0,
+        "LYC flag should be clear after setting LYC to non-matching value (got STAT&7={:#04X})",
+        stat
+    );
+}
+
+/// Isolate the behavior of `gambatte_m0int_m0irq_1_dmg08_cgb04c_out0`.
+#[test]
+fn gambatte_m0int_m0irq_1_failure() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_mode(&mut gb, 2);
+    gb.write_mem(0xFF41, 0x08); // Mode 0 STAT int
+    gb.ints.write_if(0);
+
+    // Wait for IRQ
+    for _ in 0..100_000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Dispatch ISR (clears IF bit 1)
+    gb.ints.acknowledge_interrupt(0x02);
+
+    let if_reg = gb.ints.read_if() & 0x02;
+    // Expected 0.
+    assert_eq!(
+        if_reg,
+        0,
+        "IF STAT bit should be clear immediately after dispatch (got {:#04X})",
+        gb.ints.read_if()
+    );
+}
+
+/// Isolate the behavior of `gambatte_m0int_m3stat_1_dmg08_cgb04c_out3`.
+#[test]
+fn gambatte_m0int_m3stat_1_failure() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_mode(&mut gb, 2);
+    gb.write_mem(0xFF41, 0x08); // Mode 0 STAT int
+    gb.ints.write_if(0);
+
+    // Wait for IRQ
+    for _ in 0..100_000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // ROM reads STAT shortly after IRQ. Expected 0x03 (Mode 3).
+    // This sounds weird for a Mode 0 interrupt, but maybe it's checking re-triggering?
+    // Let's check what STAT is.
+    let stat = gb.read_mem(0xFF41) & 0x03;
+    assert_eq!(
+        stat, 3,
+        "ROM expects Mode 3 shortly after Mode 0 IRQ (got Mode {})",
+        stat
+    );
+}
+
+/// Isolate the behavior of `gambatte_m2int_m0stat_1_dmg08_cgb04c_out0`.
+#[test]
+fn gambatte_m2int_m0stat_1_failure() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    advance_to_mode(&mut gb, 3);
+    gb.write_mem(0xFF41, 0x20); // Mode 2 STAT int
+    gb.ints.write_if(0);
+
+    // Wait for IRQ
+    for _ in 0..100_000 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // ROM reads STAT shortly after IRQ. Expected 0x00 (Mode 0).
+    let stat = gb.read_mem(0xFF41) & 0x03;
+    assert_eq!(
+        stat, 0,
+        "ROM expects Mode 0 shortly after Mode 2 IRQ (got Mode {})",
+        stat
+    );
+}
+
 // ── lcdoffset1: LCD-off → LCD-on startup timing unit tests ──────────────────────────────────
 
 /// gambatte `oam_access/preread_lcdoffset1_1` (CGB non-double-speed).

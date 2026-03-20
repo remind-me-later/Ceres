@@ -927,3 +927,37 @@ fn test_timer_startup_exhaustive_cgb() {
         gb.advance_dots(1);
     }
 }
+
+#[test]
+fn test_repro_div_inc_dmg() {
+    let mut gb = setup_gb(); // DMG
+    // DIV starts at 1 in Ceres for DMG.
+    // DIV register is internal_div >> 8.
+    // So DIV register = 1 means internal_div is in [256, 511].
+    // If it starts at 256 (because div=1), it should increment to 2 at 512.
+    // 512 - 256 = 256 dots.
+
+    assert_eq!(gb.read_div(), 1);
+    for i in 0..255 {
+        gb.advance_dots(1);
+        assert_eq!(gb.read_div(), 1, "DMG DIV incremented too early at T={}", i);
+    }
+    gb.advance_dots(1);
+    assert_eq!(gb.read_div(), 2, "DMG DIV should be 2 at T=256");
+}
+
+#[test]
+fn test_repro_div_inc_cgb() {
+    let mut gb = setup_cgb(); // CGB
+    // DIV starts at 0 in Ceres for CGB.
+    // DIV register = 0 means internal_div is in [0, 255].
+    // If it starts at 0, it should increment to 1 at 256.
+
+    assert_eq!(gb.read_div(), 0);
+    for i in 0..255 {
+        gb.advance_dots(1);
+        assert_eq!(gb.read_div(), 0, "CGB DIV incremented too early at T={}", i);
+    }
+    gb.advance_dots(1);
+    assert_eq!(gb.read_div(), 1, "CGB DIV should be 1 at T=256");
+}
