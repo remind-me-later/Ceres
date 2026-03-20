@@ -24,6 +24,8 @@ pub struct Clock {
     /// Accumulator for dots to handle SameBoy-accurate DIV timing.
     /// Initialized to 1 to match SameBoy's 3-cycle initial sleep (4 - 3 = 1).
     pub(crate) div_acc: i32,
+    /// T-cycles remaining in current Reloading/Reloaded state.
+    pub(crate) tima_state_dots: u8,
 }
 
 impl Default for Clock {
@@ -35,6 +37,7 @@ impl Default for Clock {
             tima_state: TIMAState::Running,
             tma: 0,
             div_acc: 1, // Match SameBoy's 3-cycle delay
+            tima_state_dots: 0,
         }
     }
 }
@@ -135,6 +138,7 @@ impl<A: AudioCallback> Gb<A> {
         if self.clock.tima == 0 {
             self.clock.tima = self.clock.tma;
             self.clock.tima_state = TIMAState::Reloading;
+            self.clock.tima_state_dots = 4;
         }
     }
 
@@ -161,7 +165,16 @@ impl<A: AudioCallback> Gb<A> {
             self.clock.div_acc += 1;
             if self.clock.div_acc == 4 {
                 self.clock.div_acc = 0;
-                self.advance_tima_state();
+            }
+
+            if self.clock.tima_state_dots > 0 {
+                self.clock.tima_state_dots -= 1;
+                if self.clock.tima_state_dots == 0 {
+                    self.advance_tima_state();
+                    if self.clock.tima_state != TIMAState::Running {
+                        self.clock.tima_state_dots = 4;
+                    }
+                }
             }
 
             self.set_system_clk(self.clock.div.wrapping_add(1));
@@ -221,6 +234,7 @@ impl<A: AudioCallback> Gb<A> {
             TIMAState::Reloading => {
                 self.clock.tima = val;
                 self.clock.tima_state = TIMAState::Running;
+                self.clock.tima_state_dots = 0;
             }
             TIMAState::Running => self.clock.tima = val,
         }
