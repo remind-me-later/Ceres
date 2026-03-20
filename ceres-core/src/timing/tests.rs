@@ -711,3 +711,219 @@ fn test_repro_speedchange_div_2() {
         div
     );
 }
+
+/// Isolate the behavior of `gambatte_tima_tc00_late_tc01_4_dmg08_cgb04c_outFF`.
+/// Expected 0xFF, got 0x00.
+#[test]
+fn test_repro_late_tc00_4_write() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, 0x00); // TMA = 0x00
+    gb.write_mem(0xFF05, 0xFF); // TIMA = 0xFF
+    gb.write_mem(0xFF07, 0x04); // Enabled, 4096Hz
+
+    // Advance to overflow
+    gb.advance_dots(1024);
+
+    // Advance 2 dots into the 4-dot reload window.
+    gb.advance_dots(2);
+    // Write 0xFF
+    gb.write_mem(0xFF05, 0xFF);
+
+    // Advance to finish reload window
+    gb.advance_dots(2);
+
+    assert_eq!(
+        gb.read_mem(0xFF05),
+        0xFF,
+        "TIMA write at dot 2 of reload window should result in 0xFF"
+    );
+}
+
+/// Isolate the behavior of `gambatte_tima_tc00_late_tc01_6_dmg08_cgb04c_outFE`.
+/// Expected 0xFE, got 0xFF.
+#[test]
+fn test_repro_late_tc00_6_write() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, 0xFE); // TMA = 0xFE
+    gb.write_mem(0xFF05, 0xFF); // TIMA = 0xFF
+    gb.write_mem(0xFF07, 0x04); // Enabled, 4096Hz
+
+    // Advance to overflow
+    gb.advance_dots(1024);
+
+    // Advance 4 dots to finish Reloading state
+    gb.advance_dots(4);
+    // Advance 1 dot into Reloaded state
+    gb.advance_dots(1);
+    // Write 0xFF (should be ignored in Reloaded)
+    gb.write_mem(0xFF05, 0xFF);
+
+    assert_eq!(
+        gb.read_mem(0xFF05),
+        0xFE,
+        "TIMA write in Reloaded state should be ignored, keeping TMA=0xFE"
+    );
+}
+
+/// Isolate the behavior of `gambatte_tima_tc00_late_tc01_4_dmg08_cgb04c_outFF`.
+/// Expected 0xFF, got 0x00.
+/// In Ceres, offset 3 is IGNORED, but Gambatte expects it to be WORKED (or we are at the wrong offset).
+#[test]
+fn test_repro_late_tc00_4_failure() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, 0x00);
+    gb.write_mem(0xFF05, 0xFF);
+    gb.write_mem(0xFF07, 0x04);
+
+    gb.advance_dots(1024 + 3); // Offset 3 is IGNORED in Ceres
+    gb.write_mem(0xFF05, 0xFF);
+    gb.advance_dots(8);
+
+    // Integration test expects 0xFF, but Ceres gives 0x00 at this offset.
+    assert_eq!(
+        gb.read_mem(0xFF05),
+        0xFF,
+        "Gambatte expects WORKED, Ceres gives IGNORED"
+    );
+}
+
+/// Isolate the behavior of `gambatte_tima_tc00_late_tc01_6_dmg08_cgb04c_outFE`.
+/// Expected 0xFE, got 0xFF.
+/// In Ceres, offset 2 is WORKED, but Gambatte expects it to be IGNORED (or we are at the wrong offset).
+#[test]
+fn test_repro_late_tc00_6_failure() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, 0xFE);
+    gb.write_mem(0xFF05, 0xFF);
+    gb.write_mem(0xFF07, 0x04);
+
+    gb.advance_dots(1024 + 2); // Offset 2 is WORKED in Ceres
+    gb.write_mem(0xFF05, 0xFF);
+    gb.advance_dots(8);
+
+    // Integration test expects 0xFE, but Ceres gives 0xFF at this offset.
+    assert_eq!(
+        gb.read_mem(0xFF05),
+        0xFE,
+        "Gambatte expects IGNORED, Ceres gives WORKED"
+    );
+}
+
+/// Isolate the behavior of `gambatte_tima_tc00_late_tc01_8_dmg08_cgb04c_outFF`.
+/// Expected 0xFF, got 0x00.
+#[test]
+fn test_repro_late_tc00_8_failure() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, 0x00);
+    gb.write_mem(0xFF05, 0xFF);
+    gb.write_mem(0xFF07, 0x04);
+
+    gb.advance_dots(1024 + 4); // Offset 4 is IGNORED in Ceres
+    gb.write_mem(0xFF05, 0xFF);
+    gb.advance_dots(8);
+
+    // Integration test expects 0xFF, but Ceres gives 0x00 at this offset.
+    assert_eq!(
+        gb.read_mem(0xFF05),
+        0xFF,
+        "Gambatte expects WORKED, Ceres gives IGNORED"
+    );
+}
+
+/// Isolate the behavior of `gambatte_tima_tc00_start_2_cgb04c_outF1`.
+/// Expected 0xF1, got 0xF0.
+#[test]
+fn test_repro_start_2_failure() {
+    let mut gb = setup_cgb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, 0x00);
+    gb.write_mem(0xFF05, 0xF0);
+
+    // Enable timer
+    gb.write_mem(0xFF07, 0x04);
+
+    // If the integration test reads at exactly T=1024 and expects 0xF1,
+    // but Ceres (due to internal timing) hasn't incremented yet or it's visible later.
+    // For now, let's just assert what we want.
+    gb.advance_dots(1024);
+    // If this fails with 0xF0, we've reproduced it.
+    assert_eq!(gb.read_mem(0xFF05), 0xF1);
+}
+
+/// Isolate the behavior of `gambatte_tima_tc00_late_tc01_8_dmg08_cgb04c_outFF`.
+/// Expected 0xFF, got 0x00.
+#[test]
+fn test_repro_late_tc00_8_write() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, 0x00); // TMA = 0x00
+    gb.write_mem(0xFF05, 0xFF); // TIMA = 0xFF
+    gb.write_mem(0xFF07, 0x04); // Enabled, 4096Hz
+
+    // Advance to overflow
+    gb.advance_dots(1024);
+
+    // Advance past reload window (8 dots total for Reloading+Reloaded)
+    gb.advance_dots(8);
+
+    // Write 0xFF
+    gb.write_mem(0xFF05, 0xFF);
+
+    assert_eq!(
+        gb.read_mem(0xFF05),
+        0xFF,
+        "TIMA write after reload window should result in 0xFF"
+    );
+}
+
+#[test]
+fn test_timer_startup_exhaustive_dmg() {
+    let mut gb = setup_gb(); // DMG
+    gb.write_mem(0xFF04, 0); // DIV = 1 (DMG)
+    gb.write_mem(0xFF05, 0xF0);
+    gb.write_mem(0xFF06, 0x00);
+
+    // Enable timer (TC00 = 4096Hz)
+    gb.write_mem(0xFF07, 0x04);
+
+    // Expect increment every 1024 dots.
+    // If DIV starts at 1, falling edge of bit 9 (1024) happens at T = 1023.
+    for i in 0..2000 {
+        let tima = gb.read_mem(0xFF05);
+        if i < 1023 {
+            assert_eq!(tima, 0xF0, "DMG TIMA incremented too early at T={}", i);
+        } else if i < 2047 {
+            // Note: 1023 + 1024 = 2047
+            assert_eq!(tima, 0xF1, "DMG TIMA should be 0xF1 at T={}", i);
+        }
+        gb.advance_dots(1);
+    }
+}
+
+#[test]
+fn test_timer_startup_exhaustive_cgb() {
+    let mut gb = setup_cgb(); // CGB
+    gb.write_mem(0xFF04, 0); // DIV = 0 (CGB)
+    gb.write_mem(0xFF05, 0xF0);
+    gb.write_mem(0xFF06, 0x00);
+
+    // Enable timer (TC00 = 4096Hz)
+    gb.write_mem(0xFF07, 0x04);
+
+    // Expect increment every 1024 dots.
+    // If DIV starts at 0, falling edge of bit 9 (1024) happens at T = 1024.
+    for i in 0..2000 {
+        let tima = gb.read_mem(0xFF05);
+        if i < 1024 {
+            assert_eq!(tima, 0xF0, "CGB TIMA incremented too early at T={}", i);
+        } else if i < 2048 {
+            assert_eq!(tima, 0xF1, "CGB TIMA should be 0xF1 at T={}", i);
+        }
+        gb.advance_dots(1);
+    }
+}
