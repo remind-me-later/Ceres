@@ -5040,3 +5040,108 @@ fn test_ppu_mode2_interrupt_timing() {
         dots_at_fire
     );
 }
+
+#[test]
+fn test_repro_lyc153_m2int() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    // 1. Wait for line 152
+    while gb.ppu.read_ly() != 152 {
+        gb.advance_dots(1);
+    }
+    while gb.ppu.read_ly() == 152 {
+        gb.advance_dots(1);
+    }
+
+    // Now on line 153
+    println!("Entered line 153 at dot {}", gb.ppu.dots_in_line());
+
+    // 2. Enable LYC and Mode 2 interrupts
+    gb.write_mem(0xFF41, 0x60); // Bits 5 and 6
+    gb.write_mem(0xFF45, 153);
+    gb.write_mem(0xFFFF, 0x02); // STAT interrupt
+    gb.write_mem(0xFF0F, 0); // Clear IF
+
+    // 3. Check if LYC=153 fires
+    let mut dots = 0;
+    while (gb.ints.read_if() & 0x02) == 0 && dots < 1000 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        dots += 1;
+    }
+
+    if (gb.ints.read_if() & 0x02) != 0 {
+        println!(
+            "LYC=153 interrupt fired at line {}, dot {}",
+            gb.ppu.read_ly(),
+            gb.ppu.dots_in_line()
+        );
+        gb.write_mem(0xFF0F, 0); // Clear it
+    } else {
+        println!("LYC=153 interrupt NEVER FIRED in 1000 ticks!");
+    }
+
+    // 4. Wait for next STAT interrupt (should be Mode 2 early firing)
+    dots = 0;
+    while (gb.ints.read_if() & 0x02) == 0 && dots < 1000 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        dots += 1;
+    }
+
+    if (gb.ints.read_if() & 0x02) != 0 {
+        println!(
+            "Next STAT interrupt fired at line {}, dot {}",
+            gb.ppu.read_ly(),
+            gb.ppu.dots_in_line()
+        );
+    } else {
+        println!("Mode 2 interrupt NEVER FIRED in 1000 ticks!");
+    }
+}
+
+#[test]
+fn test_repro_m2int_m3stat_sampling() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    // 1. Wait for line 10 Mode 3
+    while gb.ppu.read_ly() != 10 {
+        gb.advance_dots(1);
+    }
+    while (gb.ppu.read_stat() & 0x03) != 3 {
+        gb.advance_dots(1);
+    }
+
+    // 2. Enable Mode 2 interrupt
+    gb.write_mem(0xFF41, 0x20); // Bit 5
+    gb.write_mem(0xFFFF, 0x02); // STAT interrupt
+    gb.write_mem(0xFF0F, 0);
+
+    // 3. Wait for trigger
+    while (gb.ints.read_if() & 0x02) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let fire_line = gb.ppu.read_ly();
+    let fire_dot = gb.ppu.dots_in_line();
+    let fire_mode = gb.ppu.read_stat() & 0x03;
+
+    println!(
+        "M2 interrupt fired at line {}, dot {}, STAT mode {}",
+        fire_line, fire_dot, fire_mode
+    );
+
+    // 4. Simulate Gambatte's wait (20 dispatch + 216 NOPs = 236 dots)
+    for _ in 0..236 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let sample_line = gb.ppu.read_ly();
+    let sample_dot = gb.ppu.dots_in_line();
+    let sample_mode = gb.ppu.read_stat() & 0x03;
+
+    println!(
+        "M2 handler sampled at line {}, dot {}, STAT mode {}",
+        sample_line, sample_dot, sample_mode
+    );
+}

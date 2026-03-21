@@ -528,6 +528,7 @@ impl Ppu {
                 // State 14: 2 cycles (4 ticks)
                 if remaining == 4 {
                     self.ly = 153;
+                    self.ly_for_comparison = 153;
                     self.update_stat(ints);
                 }
 
@@ -945,6 +946,7 @@ impl Ppu {
 
         // HBlank interrupt fires 6 dots (12 ticks) before Mode 3 ends on hardware.
         if self.position_in_line >= 154 && self.mode_for_interrupt != Some(Mode::HBlank) {
+            self.set_mode_stat(Mode::HBlank);
             self.mode_for_interrupt = Some(Mode::HBlank);
             self.update_stat(ints);
         }
