@@ -115,6 +115,7 @@ pub struct Ppu {
     wy_triggered: bool,
     wx: u8,
     wy: u8,
+    is_frozen: bool,
 
     /// Background/window pixel FIFO (8-pixel capacity).
     bg_fifo: PixelFifo,
@@ -370,7 +371,7 @@ impl Ppu {
     /// for the first line after LCD enable (which has special timing).
     const fn compute_stat_mode(&self) -> u8 {
         // LCD off: mode 0
-        if self.lcdc & LCDC_ON_B == 0 {
+        if self.lcdc & LCDC_ON_B == 0 || self.is_frozen {
             return 0;
         }
 
@@ -466,7 +467,7 @@ impl Ppu {
     /// Advance PPU by one T-cycle (dot).
     #[inline]
     pub fn tick(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
-        if self.lcdc & LCDC_ON_B == 0 {
+        if self.lcdc & LCDC_ON_B == 0 || self.is_frozen {
             return;
         }
 
@@ -1896,11 +1897,11 @@ impl Ppu {
     }
 
     pub fn enter_stop_mode(&mut self) {
-        self.vram_ppu_blocked = !self.vram_read_blocked;
+        self.is_frozen = true;
     }
 
     pub fn leave_stop_mode(&mut self) {
-        self.vram_ppu_blocked = false;
+        self.is_frozen = false;
     }
 
     pub const fn write_obp0(&mut self, val: u8) {
