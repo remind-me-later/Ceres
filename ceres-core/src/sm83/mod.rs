@@ -235,50 +235,31 @@ impl<A: AudioCallback> Gb<A> {
                     self.tick_m_cycle();
                 }
 
-                // Interrupt dispatch sequence (verified against SameBoy and Gambatte):
-                //
-                // The winning interrupt vector is NOT committed up front.  Instead the
-                // dispatch is a two-phase push whose mid-point re-evaluates IE & IF:
-                //
-                // Phase 1 – push high byte of PC.
-                //   SP is decremented first, then the high byte is written.  If that
-                //   address happens to be $FFFF (IE) or $FF0F (IF), the write can
-                //   modify the interrupt registers mid-dispatch.
-                //
-                // Phase 2 – re-evaluate IE & IF after the high-byte push.
-                //   Read the current IE & IF and re-select the winning interrupt.
-                //   * If the re-evaluation yields no pending interrupt, dispatch is
-                //     cancelled: the low byte is still pushed (to SP-1), IME is cleared,
-                //     and PC is set to $0000.
-                //   * If a (possibly different) interrupt survives, that new winner is
-                //     used as the final vector.  This handles the case where the push
-                //     clobbered IE so that the original winner is gone but another bit
-                //     remains (Mooneye ie_push round4).
-                //
-                // Phase 3 – push low byte of PC (always happens, cannot cancel).
-                //   If SP-1 == $FFFF (only possible when SP=0 and high byte was pushed
-                //   to $FFFF on a wrap, which would need SP to wrap twice – effectively
-                //   impossible in a single dispatch), the write would hit IE again, but
-                //   hardware evidence shows this path does not trigger another re-check.
-                //   The Gambatte irq_precedence SP=$0001 test confirms the lower push
-                //   to $FFFF does not cancel an already-committed dispatch.
+                // Gambatte adds 12 T-cycles (3 M-cycles) before pushing the high byte,
+                // but the first 2 M-cycles are already covered above (if not skipped).
+                // So we need 1 more M-cycle here to reach 12 T-cycles.
+                self.tick_m_cycle();
 
                 let pc = self.cpu.pc;
                 let [lo, hi] = pc.to_le_bytes();
 
-                // Push upper byte — may modify IE (if SP-1=$FFFF) or IF (if SP-1=$FF0F)
+                // Push upper byte — write happens at T=12.
                 self.cpu.sp = self.cpu.sp.wrapping_sub(1);
-                self.write_cpu(self.cpu.sp, hi);
+                // We use raw write_mem because write_cpu would advance time,
+                // and Gambatte writes exactly at cc+12.
+                self.write_mem(self.cpu.sp, hi);
 
-                // Re-evaluate after upper push: re-read IE & IF to find the new winner.
+                // Advance 1 M-cycle to T=16.
+                self.tick_m_cycle();
+
+                // Re-evaluate after upper push: re-read IE & IF to find the new winner at T=16.
                 // This handles both cancellation (new IE & IF = 0) and reselection (the
                 // push changed IE so a different interrupt wins).
                 let (final_int, final_vector) = self.ints.determine_interrupt();
 
-                // Push lower byte — always happens regardless of cancellation
+                // Push lower byte — write happens at T=16.
                 self.cpu.sp = self.cpu.sp.wrapping_sub(1);
-                self.write_cpu(self.cpu.sp, lo);
-                self.tick_m_cycle();
+                self.write_mem(self.cpu.sp, lo);
 
                 // Acknowledge and jump; if cancelled, final_int==0 and final_vector==0x0000
                 if final_int != 0 {
@@ -287,6 +268,9 @@ impl<A: AudioCallback> Gb<A> {
 
                 self.ints.disable();
                 self.cpu.pc = final_vector;
+
+                // Advance final 1 M-cycle to T=20.
+                self.tick_m_cycle();
             }
         }
     }
