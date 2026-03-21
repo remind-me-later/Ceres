@@ -63,11 +63,14 @@ impl Sm83 {
     }
 }
 
-#[cfg(test)]
 impl Sm83 {
-    /// Set the program counter.  Only available in test builds.
+    /// Set the program counter.
     pub(crate) fn set_pc(&mut self, pc: u16) {
         self.pc = pc;
+    }
+
+    pub(crate) fn set_af(&mut self, af: u16) {
+        self.af = af;
     }
 
     pub(crate) fn set_bc(&mut self, bc: u16) {

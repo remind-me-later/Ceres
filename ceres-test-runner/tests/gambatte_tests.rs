@@ -175,6 +175,7 @@ fn run_gambatte_test_inner(
         model: Model::CgbE,
         timeout_frames: 200,
         test_name: relative_path.to_string(),
+        run_bootrom: false,
         ..TestConfig::default()
     };
 

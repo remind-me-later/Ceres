@@ -135,16 +135,17 @@ pub struct TestConfig {
     pub timeout_frames: u32,
     pub button_events: Vec<ButtonEvent>,
     pub test_name: String,
+    pub run_bootrom: bool,
 }
 
 impl Default for TestConfig {
-    #[inline]
     fn default() -> Self {
         Self {
-            model: Model::CgbE,
+            model: Model::DmgB,
             timeout_frames: DEFAULT_TIMEOUT_FRAMES,
             button_events: Vec::new(),
-            test_name: "unknown_test".to_string(),
+            test_name: "Unknown Test".to_string(),
+            run_bootrom: true,
         }
     }
 }
@@ -193,6 +194,7 @@ impl TestRunner {
 
         let mut gb = GbBuilder::new(48000, DummyAudioCallback)
             .with_model(config.model)
+            .with_run_bootrom(config.run_bootrom)
             .with_rom(rom_boxed)?
             .build();
 

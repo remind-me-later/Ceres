@@ -115,6 +115,42 @@ impl<A: AudioCallback> Gb<A> {
         self.soft_reset();
     }
 
+    /// Initializes the system state to match exactly the state immediately
+    /// after the bootrom finishes execution, skipping the boot sequence entirely.
+    /// This is required to perfectly align timers with some integration tests (e.g., Gambatte).
+    pub(crate) fn skip_bootrom(&mut self) {
+        self.bootrom.disable();
+
+        // CPU perfectly aligned post-bootrom
+        self.cpu.set_pc(0x0100);
+        self.cpu.set_sp(0xFFFE);
+
+        if self.is_cgb() {
+            // AGB F value might differ slightly, but we default to standard CGB
+            self.cpu.set_af(0x11B0);
+            self.cpu.set_bc(0x0013);
+            self.cpu.set_de(0x00D8);
+            self.cpu.set_hl(0x014D);
+        } else {
+            self.cpu.set_af(0x01B0);
+            self.cpu.set_bc(0x0013);
+            self.cpu.set_de(0x00D8);
+            self.cpu.set_hl(0x014D);
+        }
+
+        // Initialize IO to standard post-boot values
+        self.write_mem(0xFF11, 0xBF);
+        self.write_mem(0xFF12, 0xF3);
+        self.write_mem(0xFF24, 0x77);
+        self.write_mem(0xFF25, 0xF3);
+        self.write_mem(0xFF26, 0xF1);
+        self.write_mem(0xFF40, 0x91);
+
+        // Crucial for passing Gambatte timer tests (divLastUpdate = -0x1C00 equivalent)
+        // Which offsets DIV correctly relative to cc at 0x100
+        self.clock.div = 0xABCC;
+    }
+
     /// Check if the `ld b, b` debug breakpoint instruction was executed and reset the flag.
     ///
     /// Some test ROMs (like cgb-acid2 and dmg-acid2) use the `ld b, b` instruction (opcode 0x40)
@@ -367,17 +403,24 @@ pub struct GbBuilder<A: AudioCallback> {
     cart: Option<Cartridge>,
     model: Model,
     sample_rate: i32,
+    run_bootrom: bool,
 }
 
 impl<A: AudioCallback> GbBuilder<A> {
     #[inline]
     pub fn build(self) -> Gb<A> {
-        Gb::new(
+        let mut gb = Gb::new(
             self.model,
             self.sample_rate,
             self.cart.unwrap_or_default(),
             self.audio_callback,
-        )
+        );
+
+        if !self.run_bootrom {
+            gb.skip_bootrom();
+        }
+
+        gb
     }
 
     #[inline]
@@ -394,6 +437,7 @@ impl<A: AudioCallback> GbBuilder<A> {
             cart: None,
             sample_rate,
             audio_callback,
+            run_bootrom: true,
         }
     }
 
@@ -401,6 +445,13 @@ impl<A: AudioCallback> GbBuilder<A> {
     #[inline]
     pub const fn with_model(mut self, model: Model) -> Self {
         self.model = model;
+        self
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn with_run_bootrom(mut self, run_bootrom: bool) -> Self {
+        self.run_bootrom = run_bootrom;
         self
     }
 
