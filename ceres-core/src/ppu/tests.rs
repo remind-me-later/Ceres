@@ -4657,3 +4657,106 @@ fn test_repro_sprite_m3_penalty_1_sprite() {
         mode
     );
 }
+
+// ============================================================================
+// ISOLATED GAMBATTE FAILURE BEHAVIORS: PIXEL FIFO PENALTIES
+// ============================================================================
+
+/// Gambatte failure isolation: SCX=1 adds exactly 1 dot (2 T-cycles) of penalty to Mode 3.
+#[test]
+fn test_ppu_mode3_duration_scx1_penalty() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+    gb.write_mem(0xFF43, 1); // SCX = 1
+
+    advance_to_ly(&mut gb, 1);
+    let duration = mode3_duration_ticks(&mut gb, 1, crate::CgbMode::Dmg, false);
+
+    // Base duration without sprites/scx/win is 344 T-cycles.
+    // SCX = 1 should add exactly 2 T-cycles.
+    assert_eq!(
+        duration, 346,
+        "Mode-3 duration with SCX=1 should be 346 T-ticks, got {}",
+        duration
+    );
+}
+
+/// Gambatte failure isolation: SCX=2 adds exactly 2 dots (4 T-cycles) of penalty to Mode 3.
+#[test]
+fn test_ppu_mode3_duration_scx2_penalty() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+    gb.write_mem(0xFF43, 2); // SCX = 2
+
+    advance_to_ly(&mut gb, 1);
+    let duration = mode3_duration_ticks(&mut gb, 1, crate::CgbMode::Dmg, false);
+
+    assert_eq!(
+        duration, 348,
+        "Mode-3 duration with SCX=2 should be 348 T-ticks, got {}",
+        duration
+    );
+}
+
+/// Gambatte failure isolation: SCX=3 adds exactly 3 dots (6 T-cycles) of penalty to Mode 3.
+#[test]
+fn test_ppu_mode3_duration_scx3_penalty() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+    gb.write_mem(0xFF43, 3); // SCX = 3
+
+    advance_to_ly(&mut gb, 1);
+    let duration = mode3_duration_ticks(&mut gb, 1, crate::CgbMode::Dmg, false);
+
+    assert_eq!(
+        duration, 350,
+        "Mode-3 duration with SCX=3 should be 350 T-ticks, got {}",
+        duration
+    );
+}
+
+/// Gambatte failure isolation: 4 sprites on line add exactly 44 dots (88 T-cycles) of penalty to Mode 3.
+#[test]
+fn test_ppu_mode3_duration_4sprites_penalty() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x82); // LCD ON, OBJ enable
+
+    // Place 4 sprites all at X=8, 16, 24, 32 so they are fully fetched.
+    for i in 0..4 {
+        let base = i * 4;
+        gb.ppu.write_oam_by_dma(0xFE00 + base, 16); // Y = 16 (LY 0)
+        gb.ppu.write_oam_by_dma(0xFE00 + base + 1, 8 + i as u8 * 8); // X
+        gb.ppu.write_oam_by_dma(0xFE00 + base + 2, 0); // tile
+        gb.ppu.write_oam_by_dma(0xFE00 + base + 3, 0); // attrs
+    }
+
+    advance_to_ly(&mut gb, 0);
+    let duration = mode3_duration_ticks(&mut gb, 0, crate::CgbMode::Dmg, false);
+
+    // Base duration 344 + (4 * 11 dots) * 2 T-cycles/dot = 344 + 88 = 432
+    assert_eq!(
+        duration, 432,
+        "Mode-3 duration with 4 full sprites should be 432 T-ticks, got {}",
+        duration
+    );
+}
+
+/// Gambatte failure isolation: Enabling Window adds a single 6-dot (12 T-cycles) penalty.
+#[test]
+fn test_ppu_mode3_duration_window_penalty() {
+    let mut gb = setup_gb();
+    // LCD ON, Window Enable
+    gb.write_mem(0xFF40, 0xA0); 
+    gb.write_mem(0xFF4A, 0); // WY = 0
+    gb.write_mem(0xFF4B, 7); // WX = 7 (x=0)
+
+    advance_to_ly(&mut gb, 0);
+    let duration = mode3_duration_ticks(&mut gb, 0, crate::CgbMode::Dmg, false);
+
+    // Base duration 344 + 12 = 356 T-cycles
+    assert_eq!(
+        duration, 356,
+        "Mode-3 duration with Window enabled should be 356 T-ticks, got {}",
+        duration
+    );
+}
