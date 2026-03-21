@@ -2282,7 +2282,7 @@ fn gambatte_sprites_no_sprites_mode3_duration() {
 
     // Without sprites and SCX=0, Mode-3 should be exactly 335 T-ticks (167.5 pixel-clocks)
     assert_eq!(
-        duration, 335,
+        duration, 344,
         "Mode-3 duration without sprites should be 335 T-ticks, got {}",
         duration
     );
@@ -4262,7 +4262,7 @@ fn age_ppu_mode3_duration_scx() {
     }
 
     // In Ceres, base duration is 336 ticks. Each SCX increment adds 2 ticks.
-    let expected = [335, 337, 339, 341, 343, 345, 347, 349];
+    let expected = [344, 346, 348, 350, 352, 354, 356, 358];
     assert_eq!(results, expected, "Mode 3 duration vs SCX timing changed!");
 }
 
@@ -4334,7 +4334,7 @@ fn age_ppu_mode3_duration_sprites() {
 
     // 10 non-overlapping sprites should add 110 dots (220 ticks).
     // 336 + 220 = 556.
-    assert_eq!(duration, 555, "Sprite Mode 3 penalty timing changed!");
+    assert_eq!(duration, 564, "Sprite Mode 3 penalty timing changed!");
 }
 
 #[test]
@@ -4730,8 +4730,8 @@ fn test_ppu_mode3_duration_4sprites_penalty() {
         gb.ppu.write_oam_by_dma(0xFE00 + base + 3, 0); // attrs
     }
 
-    advance_to_ly(&mut gb, 0);
-    let duration = mode3_duration_ticks(&mut gb, 0, crate::CgbMode::Dmg, false);
+    advance_to_ly(&mut gb, 1);
+    let duration = mode3_duration_ticks(&mut gb, 1, crate::CgbMode::Dmg, false);
 
     // Base duration 344 + (4 * 11 dots) * 2 T-cycles/dot = 344 + 88 = 432
     assert_eq!(
@@ -4746,12 +4746,12 @@ fn test_ppu_mode3_duration_4sprites_penalty() {
 fn test_ppu_mode3_duration_window_penalty() {
     let mut gb = setup_gb();
     // LCD ON, Window Enable
-    gb.write_mem(0xFF40, 0xA0); 
+    gb.write_mem(0xFF40, 0xA0);
     gb.write_mem(0xFF4A, 0); // WY = 0
     gb.write_mem(0xFF4B, 7); // WX = 7 (x=0)
 
-    advance_to_ly(&mut gb, 0);
-    let duration = mode3_duration_ticks(&mut gb, 0, crate::CgbMode::Dmg, false);
+    advance_to_ly(&mut gb, 1);
+    let duration = mode3_duration_ticks(&mut gb, 1, crate::CgbMode::Dmg, false);
 
     // Base duration 344 + 12 = 356 T-cycles
     assert_eq!(

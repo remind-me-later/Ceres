@@ -698,7 +698,7 @@ impl Ppu {
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_step = 0;
         self.window_tile_x = 0;
-        self.position_in_line = -16;
+        self.position_in_line = -12 - (self.scx & 7) as i16;
         self.lcd_x = 0;
         self.bg_fifo.clear();
         self.oam_fifo.clear();
@@ -847,7 +847,7 @@ impl Ppu {
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_step = 0;
         self.window_tile_x = 0;
-        self.position_in_line = -16;
+        self.position_in_line = -12 - (self.scx & 7) as i16;
         self.lcd_x = 0;
         self.bg_fifo.clear();
         self.oam_fifo.clear();
@@ -932,7 +932,7 @@ impl Ppu {
         // Render pixel if possible THEN advance fetcher state machine.
         // Try to output a pixel first (output_pixel handles empty FIFO checks internally).
         // Run every 2 ticks (1 T-cycle).
-        if self.dots_in_line.is_multiple_of(2) {
+        if !self.dots_in_line.is_multiple_of(2) {
             self.output_pixel(cgb_mode);
         }
 
@@ -1056,44 +1056,42 @@ impl Ppu {
                 // State 41: 1 cycle (2 ticks), then do "free" advance and transition.
                 self.advance_fetcher(cgb_mode, true);
                 self.sprite_fetcher_step += 1;
-                if self.sprite_fetcher_step >= 2 {
+                if self.sprite_fetcher_step >= 4 {
                     self.sprite_fetcher_state = SpriteFetcherState::GetTileAndFlags;
                     self.sprite_fetcher_step = 0;
                 }
             }
 
             SpriteFetcherState::GetTileAndFlags => {
-                // State 20: OAM read (2 cycles = 4 ticks).
-                // Advance BG fetcher 1 step (2 ticks) then wait.
-                if self.sprite_fetcher_step < 2 {
+                // State 20
+                if self.sprite_fetcher_step < 4 {
                     self.advance_fetcher(cgb_mode, true);
                 }
                 self.sprite_fetcher_step += 1;
-                if self.sprite_fetcher_step >= 4 {
+                if self.sprite_fetcher_step >= 6 {
                     self.sprite_fetcher_state = SpriteFetcherState::GetDataLow;
                     self.sprite_fetcher_step = 0;
                 }
             }
 
             SpriteFetcherState::GetDataLow => {
-                // State 39: VRAM low read (2 cycles = 4 ticks).
+                // State 39
                 if self.sprite_fetcher_step == 0 {
                     self.sprite_tile_data_low = self
                         .vram
                         .vram_at_bank(self.sprite_tile_address, self.sprite_vram_bank);
                 }
                 self.sprite_fetcher_step += 1;
-                if self.sprite_fetcher_step >= 4 {
+                if self.sprite_fetcher_step >= 6 {
                     self.sprite_fetcher_state = SpriteFetcherState::GetDataHighAndPush;
                     self.sprite_fetcher_step = 0;
                 }
             }
 
             SpriteFetcherState::GetDataHighAndPush => {
-                // State 40: VRAM high read (1 cycle = 2 ticks), then overlay.
+                // State 40
                 self.sprite_fetcher_step += 1;
-
-                if self.sprite_fetcher_step >= 2 {
+                if self.sprite_fetcher_step >= 4 {
                     self.sprite_tile_data_high = self
                         .vram
                         .vram_at_bank(self.sprite_tile_address + 1, self.sprite_vram_bank);
@@ -1371,39 +1369,11 @@ impl Ppu {
         let bg_pixel = self.bg_fifo.pop().unwrap();
         let sprite_pixel = self.oam_fifo.pop();
 
-        // Handle position_in_line alignment for SCX.
-        // (position_in_line + 16 < 8) is equivalent to (position_in_line < -8) in unsigned logic.
-        // When position_in_line is in the range [-16, -9], we're in the "fractional scrolling" phase.
-        #[expect(clippy::cast_sign_loss)]
-        let unsigned_pos_plus_16 = (self.position_in_line + 16) as u8;
-        if unsigned_pos_plus_16 < 8 {
-            // Edge case: position_in_line == -17 wraps to -16
-            if self.position_in_line == -17 {
-                self.position_in_line = -16;
-            } else if (self.position_in_line & 7) as u8 == (self.scx & 7) {
-                // When (position_in_line & 7) == (SCX & 7), jump to -8
-                self.position_in_line = -8;
-            } else if self.window_is_being_fetched
-                && (self.position_in_line & 7) as u8 == 6
-                && (self.scx & 7) == 7
-            {
-                // Edge case: window fetch with specific SCX alignment
-                self.position_in_line = -8;
-            } else if self.position_in_line == -9 {
-                // Edge case: -9 wraps back to -16
-                self.position_in_line = -8;
-                return;
-            } else {
-                self.line_has_fractional_scrolling = true;
-            }
-        }
-
         self.window_is_being_fetched = false;
 
-        // Drop pixels for scrolling (position >= 160 in uint8 terms).
-        // In signed terms: position < 0 (discard phase) OR position >= 160 (line complete).
+        // Drop pixels for scrolling or priming.
+        // Screen starts at position_in_line = 0.
         if self.position_in_line < 0 {
-            // Discard phase - just increment position, pixel already popped.
             self.position_in_line += 1;
             return;
         }
