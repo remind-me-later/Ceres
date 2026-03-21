@@ -21,9 +21,6 @@ pub struct Clock {
     pub(crate) tima: u8,
     pub(crate) tima_state: TIMAState,
     pub(crate) tma: u8,
-    /// Accumulator for dots to handle SameBoy-accurate DIV timing.
-    /// Initialized to 1 to match SameBoy's 3-cycle initial sleep (4 - 3 = 1).
-    pub(crate) div_acc: i32,
     /// T-cycles remaining in current Reloading/Reloaded state.
     pub(crate) tima_state_dots: u8,
 }
@@ -31,12 +28,11 @@ pub struct Clock {
 impl Default for Clock {
     fn default() -> Self {
         Self {
-            div: 1, // Match SameBoy's 3-cycle delay (4 - 3 = 1)
+            div: 0,
             tac: 0,
             tima: 0,
             tima_state: TIMAState::Running,
             tma: 0,
-            div_acc: 1, // Match SameBoy's 3-cycle delay
             tima_state_dots: 0,
         }
     }
@@ -162,11 +158,6 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     pub fn run_timers(&mut self, cpu_t_cycles: i32) {
         for _ in 0..cpu_t_cycles {
-            self.clock.div_acc += 1;
-            if self.clock.div_acc == 4 {
-                self.clock.div_acc = 0;
-            }
-
             if self.clock.tima_state_dots > 0 {
                 self.clock.tima_state_dots -= 1;
                 if self.clock.tima_state_dots == 0 {
@@ -184,12 +175,6 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     pub fn write_div(&mut self) {
         self.set_system_clk(0);
-        self.clock.div_acc = 1; // Reset to match SameBoy's 3-cycle delay
-        self.clock.div = if matches!(self.cgb_mode, crate::CgbMode::Dmg) {
-            1
-        } else {
-            0
-        };
     }
 
     #[must_use]

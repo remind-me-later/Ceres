@@ -439,12 +439,13 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[must_use]
-    fn read_cpu(&mut self, addr: u16) -> u8 {
+    pub(crate) fn read_cpu(&mut self, addr: u16) -> u8 {
+        let val = self.read_mem(addr);
         self.advance_dots(4);
-        self.read_mem(addr)
+        val
     }
 
-    fn write_cpu(&mut self, addr: u16, val: u8) {
+    pub(crate) fn write_cpu(&mut self, addr: u16, val: u8) {
         let if_addr = addr == 0xFF0F;
         let ifr_before = if if_addr {
             self.ints.read_if() & 0x1F
@@ -461,8 +462,6 @@ impl<A: AudioCallback> Gb<A> {
             }
         }
 
-        self.advance_dots(4);
-
         if if_addr {
             let ifr_after = self.ints.read_if() & 0x1F;
             let triggers = ifr_after & !ifr_before;
@@ -470,6 +469,8 @@ impl<A: AudioCallback> Gb<A> {
         } else {
             self.write_mem(addr, val);
         }
+
+        self.advance_dots(4);
     }
 }
 
