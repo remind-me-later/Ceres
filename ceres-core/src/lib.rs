@@ -59,7 +59,7 @@ pub struct Gb<A: AudioCallback> {
     game_genie: GameGenie,
     hdma: Hdma,
     hram: Hram,
-    ints: Interrupts,
+    pub(crate) ints: Interrupts,
     joy: Joypad,
     key1: Key1,
     ld_b_b_breakpoint: bool,

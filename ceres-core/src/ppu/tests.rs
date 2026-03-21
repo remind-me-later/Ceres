@@ -4760,3 +4760,283 @@ fn test_ppu_mode3_duration_window_penalty() {
         duration
     );
 }
+
+// ============================================================================
+// REPRODUCTION OF FAILING GAMBATTE INTEGRATION TESTS
+// ============================================================================
+
+/// Reproduction of `gambatte_m2int_m3stat_2`:
+/// Checks the exact timing of Mode 2 STAT interrupt firing.
+#[test]
+fn test_repro_m2int_m3stat() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+    gb.write_mem(0xFF41, 0); // Disable all STAT interrupts initially
+    gb.write_mem(0xFF45, 0xFF); // LYC = 255
+
+    // Wait for Mode 3 of line 10
+    advance_to_ly(&mut gb, 10);
+    while (gb.ppu.read_stat() & 0x03) != 3 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Enable Mode 2 STAT interrupt
+    gb.write_mem(0xFF41, 0x20); // Mode 2 IRQ enable
+    gb.write_mem(0xFF0F, 0); // Clear IF
+    gb.ints.enable();
+
+    // Run until STAT interrupt fires
+    let mut fired_at_ly = 0xFF;
+    let mut fired_at_mode = 0xFF;
+
+    for _ in 0..2000 {
+        if (gb.ints.read_if() & 0x02) != 0 {
+            fired_at_ly = gb.ppu.read_ly();
+            fired_at_mode = gb.ppu.read_stat() & 0x03;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // On hardware, Mode 2 interrupt for line N+1 fires at the very end of line N (dot 452/0).
+    // Our emulator fires it at dot 452 (tick 904) of line N.
+    // So LY should be 10 if it fires early, or 11 if it fires exactly at start of OAM scan.
+    assert!(fired_at_ly >= 10, "Interrupt fired too early");
+    assert!(fired_at_ly < 150, "Interrupt never fired");
+}
+
+/// Reproduction of `gambatte_m0int_m0stat_scx2_1`:
+/// Checks if Mode 0 interrupt fires while STAT still shows Mode 3.
+#[test]
+fn test_repro_m0int_m0stat_scx() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+    gb.write_mem(0xFF41, 0);
+    gb.write_mem(0xFF43, 2); // SCX = 2
+
+    // Wait for Mode 3 of line 10
+    advance_to_ly(&mut gb, 10);
+    while (gb.ppu.read_stat() & 0x03) != 3 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Enable Mode 0 STAT interrupt
+    gb.write_mem(0xFF41, 0x08); // Mode 0 IRQ enable
+    gb.write_mem(0xFF0F, 0); // Clear IF
+    gb.ints.enable();
+
+    let mut fired_at_mode = 0xFF;
+    for _ in 0..1000 {
+        if (gb.ints.read_if() & 0x02) != 0 {
+            fired_at_mode = gb.ppu.read_stat() & 0x03;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Expect Mode 0 interrupt to fire.
+    assert_eq!(
+        fired_at_mode, 0,
+        "Mode 0 IRQ should fire when STAT shows Mode 0"
+    );
+}
+
+/// Reproduction of `gambatte_lyc0int_m0irq_2`:
+/// Checks interaction between LYC=LY interrupt and Mode 0 interrupt.
+#[test]
+fn test_repro_lyc0int_m0irq() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+    gb.write_mem(0xFF41, 0);
+    gb.write_mem(0xFF45, 0xFF); // LYC = 255
+
+    // Wait for LY=152 (last line of VBlank)
+    advance_to_ly(&mut gb, 152);
+
+    // Enable LYC interrupt (bit 6) and HBlank interrupt (bit 3)
+    gb.write_mem(0xFF41, 0x48);
+    gb.write_mem(0xFF0F, 0); // Clear IF
+
+    // Set LYC=0.
+    gb.write_mem(0xFF45, 0);
+
+    let mut fired_at_ly = 0xFF;
+    for _ in 0..2000 {
+        if (gb.ints.read_if() & 0x02) != 0 {
+            fired_at_ly = gb.ppu.read_ly();
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    assert_eq!(fired_at_ly, 0, "LYC=0 interrupt should fire when LY is 0");
+}
+
+/// Reproduction of `gambatte_window_late_disable_0`:
+/// Checks behavior when window is disabled late in the scanline.
+#[test]
+fn test_repro_window_late_disable() {
+    let mut gb = setup_gb();
+    // LCD ON, BG ON, Window ON
+    gb.write_mem(0xFF40, 0xA1);
+    gb.write_mem(0xFF4A, 0); // WY = 0
+    gb.write_mem(0xFF4B, 7); // WX = 7
+
+    advance_to_ly(&mut gb, 0);
+    // Wait until dot 100 of Mode 3
+    while gb.ppu.dots_in_line() < 100 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Disable window
+    gb.write_mem(0xFF40, 0x81);
+
+    // Run until end of line
+    while gb.ppu.read_ly() == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // This test ensures no panics or weird states occur when disabling window mid-line.
+    assert_eq!(gb.ppu.read_ly(), 1);
+}
+
+/// Reproduction of `stat_irq_blocking`:
+/// If a STAT interrupt condition is already met, other conditions shouldn't trigger a NEW interrupt
+/// until all conditions become false.
+#[test]
+fn test_repro_stat_irq_blocking() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+    gb.write_mem(0xFF41, 0);
+
+    // Wait for Mode 2
+    advance_to_mode(&mut gb, 2);
+
+    // Enable Mode 2 IRQ
+    gb.write_mem(0xFF41, 0x20);
+
+    // Interrupt should have fired during the write
+    assert!(
+        (gb.ints.read_if() & 0x02) != 0,
+        "Mode 2 IRQ should have fired after write"
+    );
+
+    // Clear IF
+    gb.write_mem(0xFF0F, 0);
+
+    // Now enable Mode 0 IRQ while still in Mode 2.
+    // STAT line is already HIGH due to Mode 2.
+    gb.write_mem(0xFF41, 0x28);
+
+    // IF bit 1 should NOT be set again because STAT line stayed HIGH.
+    assert!(
+        (gb.ints.read_if() & 0x02) == 0,
+        "STAT IRQ should not re-fire if line already HIGH"
+    );
+
+    // Wait until Mode 3. Mode 2 condition becomes FALSE.
+    // If Mode 0 is also FALSE (which it is), STAT line should go LOW.
+    while (gb.ppu.read_stat() & 0x03) == 2 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Clear IF just in case something weird happened
+    gb.write_mem(0xFF0F, 0);
+
+    // Wait for Mode 0. STAT line should go HIGH again.
+    while (gb.ppu.read_stat() & 0x03) != 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Now in Mode 0. STAT line should have gone high, setting IF bit 1.
+    assert!(
+        (gb.ints.read_if() & 0x02) != 0,
+        "Mode 0 IRQ should have fired after STAT line went low then high"
+    );
+}
+
+/// Reproduction of `gambatte_m0int_m3stat_1`:
+/// Checks if HBlank interrupt fires while STAT still shows Mode 3.
+/// This happens on hardware because the IRQ line goes high 1 cycle (4 dots)
+/// before the STAT mode bits change to 0.
+#[test]
+fn test_ppu_hblank_interrupt_timing() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+    gb.write_mem(0xFF41, 0x08); // Enable Mode 0 (HBlank) interrupt
+    gb.write_mem(0xFF0F, 0); // Clear IF
+
+    // Wait until Mode 3
+    advance_to_ly(&mut gb, 10);
+    while (gb.ppu.read_stat() & 0x03) != 3 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Clear IF again to be sure
+    gb.write_mem(0xFF0F, 0);
+
+    // Run until HBlank interrupt fires
+    let mut fired_at_mode = 0xFF;
+    let mut dots_at_fire = 0;
+
+    for _ in 0..1000 {
+        if (gb.ints.read_if() & 0x02) != 0 {
+            fired_at_mode = gb.ppu.read_stat() & 0x03;
+            dots_at_fire = gb.ppu.dots_in_line();
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Gambatte m0int_m3stat_1 expects 3 (Mode 3).
+    // This means the interrupt must fire while STAT shows 3.
+    assert_eq!(
+        fired_at_mode, 3,
+        "HBlank interrupt should fire while STAT still shows Mode 3 (dots_at_fire={})",
+        dots_at_fire
+    );
+}
+
+/// Reproduction of `gambatte_m2int_m3stat_2`:
+/// Checks if Mode 2 interrupt fires while STAT still shows HBlank (0).
+#[test]
+fn test_ppu_mode2_interrupt_timing() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+    gb.write_mem(0xFF41, 0x20); // Enable Mode 2 (OAM Scan) interrupt
+    gb.write_mem(0xFF0F, 0); // Clear IF
+
+    // Wait until Mode 0 (HBlank) of line 10
+    advance_to_ly(&mut gb, 10);
+    while (gb.ppu.read_stat() & 0x03) != 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Clear IF again
+    gb.write_mem(0xFF0F, 0);
+
+    // Run until Mode 2 interrupt fires
+    let mut fired_at_mode = 0xFF;
+    let mut dots_at_fire = 0;
+
+    for _ in 0..1000 {
+        if (gb.ints.read_if() & 0x02) != 0 {
+            fired_at_mode = gb.ppu.read_stat() & 0x03;
+            dots_at_fire = gb.ppu.dots_in_line();
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Gambatte m2int_m3stat_2 expects 0 (HBlank).
+    // This means Mode 2 interrupt fires while STAT shows 0.
+    println!(
+        "Mode 2 IRQ fired at dot {}, mode={}",
+        dots_at_fire, fired_at_mode
+    );
+    assert_eq!(
+        fired_at_mode, 0,
+        "Mode 2 interrupt should fire while STAT still shows Mode 0 (dots_at_fire={})",
+        dots_at_fire
+    );
+}

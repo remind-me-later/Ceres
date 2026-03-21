@@ -70,7 +70,7 @@ pub enum FrameSkipState {
     clippy::arbitrary_source_item_ordering,
     reason = "Order follows the state machine transitions"
 )]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum Mode {
     #[default]
     HBlank = 0,
@@ -543,6 +543,9 @@ impl Ppu {
                 // State 15: 2 cycles (4 ticks)
                 if remaining == 4 {
                     self.ly = 0;
+                    // LYC comparison for LY=0 happens now?
+                    // Actually, let's just set it.
+                    self.ly_for_comparison = 0;
                     self.update_stat(ints);
                 }
 
@@ -938,6 +941,12 @@ impl Ppu {
 
         // Advance fetcher every tick (it handles its own 2-tick wait states now)
         self.advance_fetcher(cgb_mode, false);
+
+        // HBlank interrupt fires 6 dots (12 ticks) before Mode 3 ends on hardware.
+        if self.position_in_line >= 154 && self.mode_for_interrupt != Some(Mode::HBlank) {
+            self.mode_for_interrupt = Some(Mode::HBlank);
+            self.update_stat(ints);
+        }
 
         // Check if line rendering is complete
         if self.position_in_line >= 160 {
@@ -1545,7 +1554,7 @@ impl Ppu {
         // Line length is 456 T-cycles = 912 ticks
         const LINE_LENGTH_TICKS: u16 = 912;
         // PreEnd starts 4 ticks before line end
-        const PRE_END_START: u16 = LINE_LENGTH_TICKS - 4;
+        const PRE_END_START: u16 = LINE_LENGTH_TICKS - 8;
 
         let PpuPhase::HBlank(stage) = self.phase else {
             return;
@@ -1620,7 +1629,7 @@ impl Ppu {
                 };
                 if self.dots_in_line >= threshold {
                     self.first_line_short = false; // consumed — clear for subsequent lines
-                    self.phase = PpuPhase::HBlank(HBlankStage::PreEnd { remaining: 4 });
+                    self.phase = PpuPhase::HBlank(HBlankStage::PreEnd { remaining: 8 });
                 }
                 // Otherwise stay in Remainder
             }
