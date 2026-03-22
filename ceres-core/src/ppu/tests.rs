@@ -5145,3 +5145,137 @@ fn test_repro_m2int_m3stat_sampling() {
         sample_line, sample_dot, sample_mode
     );
 }
+
+#[test]
+fn test_repro_m0_disable_scx() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+    gb.write_mem(0xFF43, 0x02); // SCX = 2
+
+    // 1. Wait for line 1 Mode 2
+    while gb.ppu.read_ly() != 1 {
+        gb.advance_dots(1);
+    }
+    advance_to_mode(&mut gb, 2);
+
+    // 2. Enable Mode 0 interrupt
+    gb.write_mem(0xFF41, 0x08); // Bit 3
+    gb.write_mem(0xFFFF, 0x02); // STAT interrupt
+    gb.write_mem(0xFF0F, 0);
+
+    // 3. Wait for Mode 0 trigger
+    while (gb.ints.read_if() & 0x02) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    println!(
+        "M0 interrupt fired at line {}, dot {}, STAT mode {}",
+        gb.ppu.read_ly(),
+        gb.ppu.dots_in_line(),
+        gb.ppu.read_stat() & 0x03
+    );
+
+    // 4. In handler: write 0 to STAT (disabling interrupts) AND then wait a bit
+    // handler starts at 1000. nop at 1000.
+    // 1066: xor a, a; ldff(41), a
+    // This is 1 dispatch + 1 NOP + some instructions.
+    // Let's just follow the asm:
+    // nop (4 T)
+    // xor a, a (4 T)
+    // ldff(41), a (12 T)
+    // Total 20 T-cycles since lstatint.
+    for _ in 0..20 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    gb.write_mem(0xFF41, 0x00); // Disable STAT interrupts
+    println!("STAT interrupt disabled at dot {}", gb.ppu.dots_in_line());
+
+    // 5. NOPs (7 NOPs = 28 T-cycles)
+    for _ in 0..28 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // 6. Sample IF
+    let if_reg = gb.ints.read_if();
+    println!(
+        "IF register sampled at dot {}: 0x{:02X}",
+        gb.ppu.dots_in_line(),
+        if_reg
+    );
+}
+
+#[test]
+fn test_repro_m0int_scx() {
+    for scx in 0..8 {
+        let mut gb = setup_gb();
+        gb.write_mem(0xFF40, 0x80); // LCD ON
+        gb.write_mem(0xFF43, scx);
+
+        while gb.ppu.read_ly() != 1 {
+            gb.advance_dots(1);
+        }
+        advance_to_mode(&mut gb, 3);
+
+        // Enable Mode 0 interrupt
+        gb.write_mem(0xFF41, 0x08);
+        gb.write_mem(0xFFFF, 0x02);
+        gb.write_mem(0xFF0F, 0);
+
+        while (gb.ints.read_if() & 0x02) == 0 {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+
+        let fire_dot = gb.ppu.dots_in_line();
+        let fire_mode = gb.ppu.read_stat() & 0x03;
+
+        println!(
+            "SCX {}: M0 interrupt fired at dot {}, STAT mode {}",
+            scx, fire_dot, fire_mode
+        );
+    }
+}
+
+#[test]
+fn test_repro_window_m2int_m0irq() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0xB1); // LCD ON, Win ON, BG ON
+    gb.write_mem(0xFF4B, 0xA6); // WX = 0xA6 (166)
+
+    // 1. Wait for line 91
+    advance_to_ly(&mut gb, 91);
+
+    // 2. Enable Mode 2 interrupt
+    gb.write_mem(0xFF41, 0x20); // Bit 5
+    gb.write_mem(0xFFFF, 0x02); // STAT interrupt
+    gb.write_mem(0xFF0F, 0);
+    gb.write_mem(0xFF43, 0x00); // SCX = 0
+
+    // 3. Wait for Mode 2 trigger
+    while (gb.ints.read_if() & 0x02) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    println!(
+        "M2 interrupt fired at line {}, dot {}",
+        gb.ppu.read_ly(),
+        gb.ppu.dots_in_line()
+    );
+
+    // 4. In handler: enable Mode 0 interrupt instead
+    gb.write_mem(0xFF41, 0x08); // Mode 0
+    gb.write_mem(0xFF0F, 0); // Clear IF
+
+    // 5. Wait for Mode 0 trigger
+    let mut dots = 0;
+    while (gb.ints.read_if() & 0x02) == 0 && dots < 1000 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        dots += 1;
+    }
+
+    if (gb.ints.read_if() & 0x02) != 0 {
+        println!("M0 interrupt fired at dot {}", gb.ppu.dots_in_line());
+    } else {
+        println!("M0 interrupt NEVER FIRED!");
+    }
+}
