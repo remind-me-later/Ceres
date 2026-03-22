@@ -5659,3 +5659,147 @@ fn test_repro_window_m2int_wxa6_m0irq_1_refined_gambatte() {
         println!("M0 IRQ NEVER FIRED after window M2 IRQ!");
     }
 }
+
+#[test]
+fn test_repro_m0int_m0stat_scx3_2_gambatte_assertion() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    gb.write_mem(0xFF43, 0x03); // SCX = 3
+
+    gb.write_mem(0xFF41, 0x08); // Mode 0 IRQ
+    gb.write_mem(0xFFFF, 0x02);
+    gb.write_mem(0xFF0F, 0);
+
+    advance_to_ly(&mut gb, 10);
+    advance_to_mode(&mut gb, 3);
+    gb.write_mem(0xFF0F, 0);
+
+    while (gb.ints.read_if() & 0x02) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Gambatte m0int_m0stat_scx3_2: 40 NOPs (160 T) + dispatch (20 T) = 180 T-cycles
+    // Plus ldff (8T, samples at T=4) -> 184 T-cycles = 368 PPU ticks.
+    gb.advance_dots(184);
+
+    let mode = gb.ppu.read_stat() & 0x03;
+    assert_eq!(
+        mode, 2,
+        "m0int_m0stat_scx3_2: Expected Mode 2 at T=184 after IRQ (SCX=3)"
+    );
+}
+
+#[test]
+fn test_repro_m2int_m2stat_2_gambatte_assertion() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    gb.write_mem(0xFF41, 0x20); // Mode 2 IRQ
+    gb.write_mem(0xFFFF, 0x02);
+    gb.write_mem(0xFF0F, 0);
+
+    advance_to_ly(&mut gb, 10);
+    advance_to_mode(&mut gb, 3); // Finish line 10
+    gb.write_mem(0xFF0F, 0);
+
+    while (gb.ints.read_if() & 0x02) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Gambatte m2int_m2stat_2: 11 NOPs (44 T) + dispatch (20 T) = 64 T-cycles
+    // Plus ldff (8T, samples at T=4) -> 68 T-cycles = 136 PPU ticks.
+    gb.advance_dots(68);
+
+    let mode = gb.ppu.read_stat() & 0x03;
+    assert_eq!(mode, 3, "m2int_m2stat_2: Expected Mode 3 at T=68 after IRQ");
+}
+
+#[test]
+fn test_repro_lycint_m0stat_2_gambatte_assertion() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    gb.write_mem(0xFF45, 0xFF); // LYC=255
+
+    advance_to_ly(&mut gb, 3);
+
+    gb.write_mem(0xFF41, 0x40); // LYC=LY IRQ
+    gb.write_mem(0xFFFF, 0x02);
+    gb.write_mem(0xFF0F, 0);
+
+    // Change LYC to 5 and wait for interrupt.
+    // In Gambatte this triggers an interrupt because the comparison is continuous.
+    gb.write_mem(0xFF45, 5);
+
+    let mut irq_fired = false;
+    for _ in 0..1000 {
+        if (gb.ints.read_if() & 0x02) != 0 {
+            irq_fired = true;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    assert!(
+        irq_fired,
+        "LYC=LY interrupt should fire when LYC is changed to match LY"
+    );
+
+    // Handler: nop (4T) + dispatch (20T) + ldff (8T, samples at 4T) = 28T = 56 ticks.
+    // Plus some offset if it fires at 0x48 then jumps to 0x1000?
+    // The asm said .text@1064 for ldff, so 100 nops = 400T.
+    // Total = 20 + 16 (jp) + 400 + 4 = 440 T-cycles.
+    gb.advance_dots(440);
+
+    let mode = gb.ppu.read_stat() & 0x03;
+    // lycint_m0stat_2_dmg08_cgb04c_out2 expects 2 (Mode 2)
+    assert_eq!(
+        mode, 2,
+        "lycint_m0stat_2: Expected Mode 2 at T=440 after IRQ"
+    );
+}
+
+#[test]
+fn test_repro_m2int_m0stat_2_gambatte_assertion() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    gb.write_mem(0xFF41, 0x20); // Mode 2 IRQ
+    gb.write_mem(0xFFFF, 0x02);
+    gb.write_mem(0xFF0F, 0);
+
+    advance_to_ly(&mut gb, 10);
+    advance_to_mode(&mut gb, 3);
+    gb.write_mem(0xFF0F, 0);
+
+    while (gb.ints.read_if() & 0x02) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // m2int_m0stat_2 expects 0 (Mode 0) at T=210 after IRQ.
+    // 210 T = 420 ticks.
+    gb.advance_dots(210);
+
+    let mode = gb.ppu.read_stat() & 0x03;
+    assert_eq!(
+        mode, 0,
+        "m2int_m0stat_2: Expected Mode 0 at T=210 after IRQ"
+    );
+}
+
+#[test]
+fn test_repro_oam_access_m2_detailed() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+
+    advance_to_ly(&mut gb, 20);
+    advance_to_mode(&mut gb, 2);
+
+    // OAM should be blocked during Mode 2
+    gb.write_mem(0xFE00, 0xAA);
+    let val = gb.read_mem(0xFE00);
+    assert_eq!(val, 0xFF, "OAM should be inaccessible (0xFF) during Mode 2");
+
+    // Wait for Mode 0
+    advance_to_mode(&mut gb, 0);
+    gb.write_mem(0xFE00, 0x55);
+    let val2 = gb.read_mem(0xFE00);
+    assert_eq!(val2, 0x55, "OAM should be accessible (0x55) during Mode 0");
+}
