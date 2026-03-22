@@ -5507,26 +5507,27 @@ fn test_repro_window_m2int_wxa6_m0irq_1_gambatte() {
 }
 
 #[test]
-fn test_repro_div_timing_dmg_skip_bootrom_fixed() {
-    // After skip_bootrom, PC=0x100, DIV=0xABD8
+fn test_repro_div_timing_dmg_skip_bootrom_gambatte() {
+    // After skip_bootrom, PC=0x100, DIV=0xABCC
 
-    // Gambatte div_start_inc_1: T=36 after 0x100 -> expects 0xAB
+    // start_inc_1: jp(16) + jp(16) + nop(4) + nop(4) + ldff(8) = 48 T-cycles
+    // Expects 0xAB
     let mut gb1 = setup_gb();
     gb1.skip_bootrom();
-    gb1.advance_dots(36);
+    gb1.advance_dots(48);
     let div1 = gb1.read_mem(0xFF04);
-    println!("DIV at T=36 (skip_bootrom): 0x{:02X}", div1);
+    println!("DIV at T=48 (skip_bootrom): 0x{:02X}", div1);
     assert_eq!(div1, 0xAB);
 
-    // Gambatte div_start_inc_2: T=40 after 0x100 -> expects 0xAC
+    // start_inc_2: jp(16) + jp(16) + nop(4) + nop(4) + nop(4) + ldff(8) = 52 T-cycles
+    // Expects 0xAC
     let mut gb2 = setup_gb();
     gb2.skip_bootrom();
-    gb2.advance_dots(40);
+    gb2.advance_dots(52);
     let div2 = gb2.read_mem(0xFF04);
-    println!("DIV at T=40 (skip_bootrom): 0x{:02X}", div2);
+    println!("DIV at T=52 (skip_bootrom): 0x{:02X}", div2);
     assert_eq!(div2, 0xAC);
 }
-
 #[test]
 fn test_repro_m0int_m0stat_scx3_2_refined_gambatte() {
     let mut gb = setup_gb();

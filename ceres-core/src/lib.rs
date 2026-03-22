@@ -148,7 +148,7 @@ impl<A: AudioCallback> Gb<A> {
 
         // Crucial for passing Gambatte timer tests (divLastUpdate = -0x1C00 equivalent)
         // Which offsets DIV correctly relative to cc at 0x100
-        self.clock.div = 0xABD8; // Matches Gambatte's expected DIV phase (high byte increments at T=40)
+        self.clock.div = 0xABCC; // Matches Gambatte's expected DIV phase (divLastUpdate = -0x1C00 equivalent)
     }
 
     /// Check if the `ld b, b` debug breakpoint instruction was executed and reset the flag.
