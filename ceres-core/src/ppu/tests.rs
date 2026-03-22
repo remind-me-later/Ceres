@@ -5279,3 +5279,382 @@ fn test_repro_window_m2int_m0irq() {
         println!("M0 interrupt NEVER FIRED!");
     }
 }
+
+#[test]
+fn test_repro_div_timing() {
+    let mut gb = setup_gb();
+    // After skip_bootrom, PC=0x100, DIV=0xABCC
+
+    // div_start_inc_1: 36 T-cycles after 0x100
+    let mut gb1 = setup_gb();
+    gb1.advance_dots(36);
+    let div1 = gb1.read_mem(0xFF04);
+    println!("DIV at T=36: 0x{:02X}", div1);
+
+    // div_start_inc_2: 40 T-cycles after 0x100
+    let mut gb2 = setup_gb();
+    gb2.advance_dots(40);
+    let div2 = gb2.read_mem(0xFF04);
+    println!("DIV at T=40: 0x{:02X}", div2);
+}
+
+#[test]
+fn test_repro_m2int_m2stat_refined() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+    gb.write_mem(0xFF41, 0x20); // Mode 2 interrupt
+    gb.write_mem(0xFFFF, 0x02);
+    gb.write_mem(0xFF0F, 0);
+
+    // Wait for Mode 3 of line 10 to clear any pending
+    advance_to_ly(&mut gb, 10);
+    advance_to_mode(&mut gb, 3);
+    gb.write_mem(0xFF0F, 0);
+
+    // Wait for next Mode 2 IRQ
+    while (gb.ints.read_if() & 0x02) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let fire_line = gb.ppu.read_ly();
+    let fire_dot = gb.ppu.dots_in_line();
+    println!("M2 IRQ fired at line {}, dot {}", fire_line, fire_dot);
+
+    // 11 NOPs (44 T) + dispatch (20 T) = 64 T-cycles
+    for _ in 0..64 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let sample_line = gb.ppu.read_ly();
+    let sample_dot = gb.ppu.dots_in_line();
+    let sample_mode = gb.ppu.read_stat() & 0x03;
+    println!(
+        "Sampled at line {}, dot {}, mode {}",
+        sample_line, sample_dot, sample_mode
+    );
+}
+
+#[test]
+fn test_repro_m0_disable_scx2_2_refined() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    gb.write_mem(0xFF43, 0x02); // SCX = 2
+
+    advance_to_ly(&mut gb, 1);
+    advance_to_mode(&mut gb, 2);
+
+    gb.write_mem(0xFF41, 0x08); // Mode 0 IRQ
+    gb.write_mem(0xFFFF, 0x02);
+    gb.write_mem(0xFF0F, 0);
+
+    while (gb.ints.read_if() & 0x02) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Dispatch (20 T) + NOP (4 T) + XOR (4 T) + LDFF (12 T) = 40 T
+    // Wait, the asm had:
+    // lstatint: nop
+    // 1066: xor a, a; ldff(41), a
+    // So sample at 1066 is 20 + 4 = 24 T?
+    // No, 1066 is where xor starts.
+    // The LDFF(41) is at some offset.
+    // Let's just wait 40 T and see.
+    for _ in 0..40 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    gb.write_mem(0xFF41, 0); // Disable IRQs
+
+    // 7 NOPs (28 T)
+    for _ in 0..28 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let mode = gb.ppu.read_stat() & 0x03;
+    println!("Sampled mode after disable: {}", mode);
+}
+
+#[test]
+fn test_repro_div_timing_dmg_skip_bootrom() {
+    let mut gb = setup_gb();
+    gb.skip_bootrom();
+    // After skip_bootrom, PC=0x100, DIV=0xABCC
+
+    // Gambatte div_start_inc_1: T=36 after 0x100 -> expects 0xAB
+    // Gambatte div_start_inc_2: T=40 after 0x100 -> expects 0xAC
+
+    let mut gb1 = setup_gb();
+    gb1.skip_bootrom();
+    gb1.advance_dots(36);
+    let div1 = gb1.read_mem(0xFF04);
+    println!("DIV at T=36 (skip_bootrom): 0x{:02X}", div1);
+
+    let mut gb2 = setup_gb();
+    gb2.skip_bootrom();
+    gb2.advance_dots(40);
+    let div2 = gb2.read_mem(0xFF04);
+    println!("DIV at T=40 (skip_bootrom): 0x{:02X}", div2);
+}
+
+#[test]
+fn test_repro_m0int_m0stat_scx3_2_gambatte() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+    gb.write_mem(0xFF43, 0x03); // SCX = 3
+
+    // Enable Mode 0 interrupt
+    gb.write_mem(0xFF41, 0x08);
+    gb.write_mem(0xFFFF, 0x02);
+    gb.write_mem(0xFF0F, 0);
+
+    advance_to_ly(&mut gb, 10);
+    advance_to_mode(&mut gb, 3);
+    gb.write_mem(0xFF0F, 0);
+
+    while (gb.ints.read_if() & 0x02) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let fire_line = gb.ppu.read_ly();
+    let fire_dot = gb.ppu.dots_in_line();
+    println!(
+        "m0int_m0stat_scx3_2 IRQ fired at line {}, dot {}",
+        fire_line, fire_dot
+    );
+
+    // Wait for sample: nop, nop, ldff a, (c)
+    // 2 NOPs (8 T) + LDFF (12 T) = 20 T. plus dispatch (20 T) = 40 T.
+    for _ in 0..40 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let sample_line = gb.ppu.read_ly();
+    let sample_dot = gb.ppu.dots_in_line();
+    let mode = gb.ppu.read_stat() & 0x03;
+    println!(
+        "m0int_m0stat_scx3_2 sampled at line {}, dot {}, mode: {}",
+        sample_line, sample_dot, mode
+    );
+}
+
+#[test]
+fn test_repro_m2int_m2stat_2_gambatte() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    gb.write_mem(0xFF41, 0x20); // Mode 2 IRQ
+    gb.write_mem(0xFFFF, 0x02);
+    gb.write_mem(0xFF0F, 0);
+
+    advance_to_ly(&mut gb, 10);
+    advance_to_mode(&mut gb, 3);
+    gb.write_mem(0xFF0F, 0);
+
+    while (gb.ints.read_if() & 0x02) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // 11 NOPs (44 T) + dispatch (20 T) = 64 T-cycles
+    for _ in 0..64 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let mode = gb.ppu.read_stat() & 0x03;
+    println!("m2int_m2stat_2 sampled mode: {}", mode);
+}
+
+#[test]
+fn test_repro_window_m2int_wxa6_m0irq_1_gambatte() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0xB1); // LCD ON, Win ON, BG ON
+    gb.write_mem(0xFF4B, 0xA6); // WX = 166 (0xA6)
+
+    gb.write_mem(0xFF41, 0x20); // Mode 2 IRQ
+    gb.write_mem(0xFFFF, 0x02);
+    gb.write_mem(0xFF0F, 0);
+
+    advance_to_ly(&mut gb, 91);
+    advance_to_mode(&mut gb, 3);
+    gb.write_mem(0xFF0F, 0);
+
+    while (gb.ints.read_if() & 0x02) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Handler: xor a, a; ldff(0f), a; ld a, 08; ldff(41), a
+    // Dispatch (20 T) + 4 T + 12 T + 8 T + 12 T = 56 T-cycles
+    for _ in 0..56 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    gb.write_mem(0xFF0F, 0);
+    gb.write_mem(0xFF41, 0x08); // Mode 0 IRQ
+
+    // Wait for trigger
+    let mut dots = 0;
+    while (gb.ints.read_if() & 0x02) == 0 && dots < 1000 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        dots += 1;
+    }
+
+    if (gb.ints.read_if() & 0x02) != 0 {
+        println!(
+            "M0 IRQ fired at dot {} after window M2 IRQ",
+            gb.ppu.dots_in_line()
+        );
+    } else {
+        println!("M0 IRQ NEVER FIRED after window M2 IRQ!");
+    }
+}
+
+#[test]
+fn test_repro_div_timing_dmg_skip_bootrom_fixed() {
+    // After skip_bootrom, PC=0x100, DIV=0xABD8
+
+    // Gambatte div_start_inc_1: T=36 after 0x100 -> expects 0xAB
+    let mut gb1 = setup_gb();
+    gb1.skip_bootrom();
+    gb1.advance_dots(36);
+    let div1 = gb1.read_mem(0xFF04);
+    println!("DIV at T=36 (skip_bootrom): 0x{:02X}", div1);
+    assert_eq!(div1, 0xAB);
+
+    // Gambatte div_start_inc_2: T=40 after 0x100 -> expects 0xAC
+    let mut gb2 = setup_gb();
+    gb2.skip_bootrom();
+    gb2.advance_dots(40);
+    let div2 = gb2.read_mem(0xFF04);
+    println!("DIV at T=40 (skip_bootrom): 0x{:02X}", div2);
+    assert_eq!(div2, 0xAC);
+}
+
+#[test]
+fn test_repro_m0int_m0stat_scx3_2_refined_gambatte() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    gb.write_mem(0xFF43, 0x03); // SCX = 3
+
+    gb.write_mem(0xFF41, 0x08); // Mode 0 IRQ
+    gb.write_mem(0xFFFF, 0x02);
+    gb.write_mem(0xFF0F, 0);
+
+    advance_to_ly(&mut gb, 10);
+    advance_to_mode(&mut gb, 3);
+    gb.write_mem(0xFF0F, 0);
+
+    while (gb.ints.read_if() & 0x02) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let fire_line = gb.ppu.read_ly();
+    let fire_dot = gb.ppu.dots_in_line();
+    println!(
+        "m0int_m0stat_scx3_2 IRQ fired at line {}, dot {}",
+        fire_line, fire_dot
+    );
+
+    // Handler wait: dispatch (20 T) + 40 NOPs (160 T) = 180 T-cycles
+    gb.advance_dots(180);
+
+    let sample_line = gb.ppu.read_ly();
+    let sample_dot = gb.ppu.dots_in_line();
+    let mode = gb.ppu.read_stat() & 0x03;
+    println!(
+        "m0int_m0stat_scx3_2 sampled at line {}, dot {}, mode: {}",
+        sample_line, sample_dot, mode
+    );
+    // Gambatte expects 2
+}
+
+#[test]
+fn test_repro_m2int_m2stat_2_refined_gambatte() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    gb.write_mem(0xFF41, 0x20); // Mode 2 IRQ
+    gb.write_mem(0xFFFF, 0x02);
+    gb.write_mem(0xFF0F, 0);
+
+    advance_to_ly(&mut gb, 10);
+    advance_to_mode(&mut gb, 3);
+    gb.write_mem(0xFF0F, 0);
+
+    while (gb.ints.read_if() & 0x02) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // 11 NOPs (44 T) + dispatch (20 T) = 64 T-cycles
+    gb.advance_dots(64);
+
+    let mode = gb.ppu.read_stat() & 0x03;
+    println!("m2int_m2stat_2 sampled mode: {}", mode);
+    // Gambatte expects 3
+}
+
+#[test]
+fn test_repro_m0_disable_scx2_2_refined_gambatte() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    gb.write_mem(0xFF43, 0x02); // SCX = 2
+
+    advance_to_ly(&mut gb, 1);
+    advance_to_mode(&mut gb, 2);
+
+    gb.write_mem(0xFF41, 0x08); // Mode 0 IRQ
+    gb.write_mem(0xFFFF, 0x02);
+    gb.write_mem(0xFF0F, 0);
+
+    while (gb.ints.read_if() & 0x02) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Wait for disable: dispatch (20 T) + NOP (4 T) + XOR (4 T) + LDFF(41) (12 T) = 40 T
+    gb.advance_dots(40);
+    gb.write_mem(0xFF41, 0);
+
+    // Wait 7 NOPs (28 T)
+    gb.advance_dots(28);
+
+    let if_reg = gb.ints.read_if();
+    println!("m0_disable_scx2_2 sampled IF: 0x{:02X}", if_reg);
+}
+
+#[test]
+fn test_repro_window_m2int_wxa6_m0irq_1_refined_gambatte() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0xB1); // LCD ON, Win ON, BG ON
+    gb.write_mem(0xFF4B, 0xA6); // WX = 166 (0xA6)
+
+    gb.write_mem(0xFF41, 0x20); // Mode 2 IRQ
+    gb.write_mem(0xFFFF, 0x02);
+    gb.write_mem(0xFF0F, 0);
+
+    advance_to_ly(&mut gb, 91);
+    advance_to_mode(&mut gb, 3);
+    gb.write_mem(0xFF0F, 0);
+
+    while (gb.ints.read_if() & 0x02) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Handler: xor a, a; ldff(0f), a; ld a, 08; ldff(41), a
+    // Dispatch (20 T) + 4 T + 12 T + 8 T + 12 T = 56 T-cycles
+    gb.advance_dots(56);
+    gb.write_mem(0xFF0F, 0);
+    gb.write_mem(0xFF41, 0x08); // Mode 0 IRQ
+
+    // Wait for trigger
+    let mut dots = 0;
+    while (gb.ints.read_if() & 0x02) == 0 && dots < 1000 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        dots += 1;
+    }
+
+    if (gb.ints.read_if() & 0x02) != 0 {
+        println!(
+            "M0 IRQ fired at line {}, dot {} after window M2 IRQ",
+            gb.ppu.read_ly(),
+            gb.ppu.dots_in_line()
+        );
+    } else {
+        println!("M0 IRQ NEVER FIRED after window M2 IRQ!");
+    }
+}
