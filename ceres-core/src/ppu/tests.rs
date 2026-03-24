@@ -5838,3 +5838,163 @@ fn test_repro_oam_access_m2_detailed() {
     let val2 = gb.read_mem(0xFE00);
     assert_eq!(val2, 0x55, "OAM should be accessible (0x55) during Mode 0");
 }
+
+#[test]
+fn test_repro_lycint_ly_2_gambatte_assertion() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    gb.write_mem(0xFF45, 0xFF); // LYC=255
+
+    advance_to_ly(&mut gb, 3);
+
+    gb.write_mem(0xFF41, 0x40); // LYC=LY IRQ
+    gb.write_mem(0xFFFF, 0x02);
+    gb.write_mem(0xFF0F, 0);
+
+    // Set LYC to 5
+    gb.write_mem(0xFF45, 5);
+
+    let mut irq_fired = false;
+    for _ in 0..10000 {
+        if (gb.ints.read_if() & 0x02) != 0 {
+            irq_fired = true;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    assert!(irq_fired, "LYC=LY interrupt should fire");
+
+    // lycint_ly_2 outputs 6
+    // 103 NOPs (412 T) + dispatch (20 T) + JP (16 T) + ldff (4 T) = 452 T-cycles
+    gb.advance_dots(452 * 2);
+
+    let ly = gb.ppu.read_ly();
+    // Gambatte updates LY early (T=453) and expects 6.
+    // Ceres updates LY at the very end of the line (T=456), so it outputs 5 here.
+    assert_eq!(ly, 5, "lycint_ly_2: Ceres outputs 5 (Hardware outputs 6)");
+}
+
+#[test]
+fn test_repro_m2int_m3stat_1_gambatte_assertion() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    gb.write_mem(0xFF41, 0x20); // Mode 2 IRQ
+    gb.write_mem(0xFFFF, 0x02);
+    gb.write_mem(0xFF0F, 0);
+
+    advance_to_ly(&mut gb, 10);
+    advance_to_mode(&mut gb, 3);
+    gb.write_mem(0xFF0F, 0);
+
+    while (gb.ints.read_if() & 0x02) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // m2int_m3stat_1 outputs 3 (Mode 3)
+    // 52 NOPs (208 T) + dispatch (20 T) + JP (16 T) + ldff (4 T) = 248 T-cycles
+    gb.advance_dots(248 * 2);
+
+    let mode = gb.ppu.read_stat() & 0x03;
+    assert_eq!(mode, 3, "m2int_m3stat_1: Expected Mode 3");
+}
+
+#[test]
+fn test_repro_m2int_m3stat_2_gambatte_assertion() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    gb.write_mem(0xFF41, 0x20); // Mode 2 IRQ
+    gb.write_mem(0xFFFF, 0x02);
+    gb.write_mem(0xFF0F, 0);
+
+    advance_to_ly(&mut gb, 10);
+    advance_to_mode(&mut gb, 3);
+    gb.write_mem(0xFF0F, 0);
+
+    while (gb.ints.read_if() & 0x02) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // m2int_m3stat_2 outputs 0 (Mode 0)
+    // 53 NOPs (212 T) + dispatch (20 T) + JP (16 T) + ldff (4 T) = 252 T-cycles
+    gb.advance_dots(252 * 2);
+
+    let mode = gb.ppu.read_stat() & 0x03;
+    // Ceres is late transitioning to Mode 0, so it outputs 3. Hardware outputs 0.
+    assert_eq!(
+        mode, 3,
+        "m2int_m3stat_2: Ceres outputs Mode 3 (Hardware outputs 0)"
+    );
+}
+
+#[test]
+fn test_repro_m0_disable_scx2_2_integration() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    gb.write_mem(0xFF43, 0x02); // SCX = 2
+    gb.write_mem(0xFF41, 0x08); // Mode 0 IRQ
+    gb.write_mem(0xFFFF, 0x02);
+    gb.write_mem(0xFF0F, 0);
+
+    advance_to_ly(&mut gb, 10);
+    advance_to_mode(&mut gb, 2);
+    gb.write_mem(0xFF0F, 0);
+
+    while (gb.ints.read_if() & 0x02) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // 102 NOPs (408 T) + dispatch (20 T) + JP (16 T) = 444 T-cycles
+    gb.advance_dots(444 * 2);
+
+    // Disable STAT IRQ (xor a, a; ldff (41), a) -> 4 + 12 = 16 T-cycles
+    gb.advance_dots(16 * 2);
+    gb.write_mem(0xFF41, 0);
+
+    // 7 NOPs (28 T) + ldff (4 T) = 32 T-cycles
+    gb.advance_dots(32 * 2);
+
+    let if_reg = gb.ints.read_if();
+    // Hardware expects IF & 3 == 2 (STAT IRQ fired again before disable).
+    // Ceres's late Mode 0 start causes it to miss the IRQ window, outputting 0.
+    assert_eq!(
+        if_reg & 3,
+        0,
+        "m0_disable_scx2_2: Ceres outputs 0 (Hardware outputs 2)"
+    );
+}
+
+#[test]
+fn test_repro_lycint_m0stat_1_gambatte_assertion() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    gb.write_mem(0xFF45, 0xFF); // LYC=255
+
+    advance_to_ly(&mut gb, 3);
+
+    gb.write_mem(0xFF41, 0x40); // LYC=LY IRQ
+    gb.write_mem(0xFFFF, 0x02);
+    gb.write_mem(0xFF0F, 0);
+
+    // Set LYC to 5
+    gb.write_mem(0xFF45, 5);
+
+    let mut irq_fired = false;
+    for _ in 0..10000 {
+        if (gb.ints.read_if() & 0x02) != 0 {
+            irq_fired = true;
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    assert!(irq_fired, "LYC=LY interrupt should fire");
+
+    // lycint_m0stat_1 outputs 0
+    // 99 NOPs (396 T) + dispatch (20 T) + inc (4 T) + ldff (12 T) + JP (16 T) + ldff (4 T) = 452 T-cycles
+    gb.advance_dots(452 * 2);
+
+    let mode = gb.ppu.read_stat() & 0x03;
+    // Both Ceres and Gambatte are in Mode 0 at T=452.
+    assert_eq!(mode, 0, "lycint_m0stat_1: Expected Mode 0");
+}
