@@ -245,8 +245,9 @@ impl GambatteCheck {
                 }
 
                 if !self.tile_matches(actual_rgba, expected_tile, x_offset) {
+                    let actual_char = self.find_actual_char(actual_rgba, x_offset);
                     return TestResult::Failed(format!(
-                        "Framebuffer mismatch at tile {i} (expected '{c}')",
+                        "Framebuffer mismatch at tile {i} (expected '{c}', got '{actual_char}')",
                     ));
                 }
             } else {
@@ -255,6 +256,19 @@ impl GambatteCheck {
         }
 
         TestResult::Passed
+    }
+
+    fn find_actual_char(&self, actual_rgba: &[u8], x_offset: usize) -> char {
+        for (idx, tile) in TILES.iter().enumerate() {
+            if self.tile_matches(actual_rgba, tile, x_offset) {
+                return match idx {
+                    0..=9 => (b'0' + idx as u8) as char,
+                    10..=15 => (b'A' + (idx - 10) as u8) as char,
+                    _ => '?',
+                };
+            }
+        }
+        '?'
     }
 
     fn tile_matches(&self, actual_rgba: &[u8], expected_tile: &[u8; 64], x_offset: usize) -> bool {
