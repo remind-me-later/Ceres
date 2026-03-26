@@ -692,9 +692,7 @@ fn repro_timer_multiple_periods() {
     }
 }
 
-// TODO: repro test for DIV not resetting on TAC write (affects 47 gambatte tests)
-// The timer doesn't reset its internal DIV counter when TAC is written,
-// which is the root cause of most stop/start test failures.
+// TODO: fix timer not resetting DIV counter on TAC write (affects 47 gambatte tests)
 
 #[test]
 fn repro_tima_tc00_start_1_cgb() {

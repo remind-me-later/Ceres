@@ -6453,37 +6453,26 @@ fn repro_lycint_lycirq_2() {
 #[test]
 fn repro_div_start_inc_1_cgb() {
     // After CGB boot, DIV should be at a specific phase.
-    // Hardware expects 0x1E on CGB at T=48.
-    // Ceres uses DMG DIV phase (0xABCC) for CGB too due to conflicting
-    // test requirements (tc00_start tests need 0xABCC).
+    // Hardware expects 0x1E on CGB at tick 256 from PC=0x100.
     let mut gb = crate::GbBuilder::new(44100, crate::test_util::DummyAudio)
         .with_model(Model::CgbE)
         .build();
     gb.skip_bootrom();
-    gb.advance_dots(48);
+    gb.advance_dots(256);
     let div = gb.read_div();
-    // Hardware: 0x1E. Ceres: 0xAB (wrong CGB DIV phase)
-    assert_eq!(
-        div, 0xAB,
-        "Ceres uses DMG DIV phase for CGB (hardware expects 0x1E)"
-    );
+    assert_eq!(div, 0x1E, "CGB DIV should be 0x1E");
 }
 
 #[test]
 fn repro_div_start_inc_2_cgb() {
-    // Hardware expects 0x1F on CGB at T=52.
-    // Ceres uses DMG DIV phase for CGB.
+    // Hardware expects 0x1F on CGB at tick 272 from PC=0x100.
     let mut gb = crate::GbBuilder::new(44100, crate::test_util::DummyAudio)
         .with_model(Model::CgbE)
         .build();
     gb.skip_bootrom();
-    gb.advance_dots(52);
+    gb.advance_dots(272);
     let div = gb.read_div();
-    // Hardware: 0x1F. Ceres: 0xAC (wrong CGB DIV phase)
-    assert_eq!(
-        div, 0xAC,
-        "Ceres uses DMG DIV phase for CGB (hardware expects 0x1F)"
-    );
+    assert_eq!(div, 0x1F, "CGB DIV should be 0x1F");
 }
 
 // -----------------------------------------------------------------------
