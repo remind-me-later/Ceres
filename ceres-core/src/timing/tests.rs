@@ -527,3 +527,171 @@ fn test_start_2_timing() {
     gb.advance_dots(1);
     assert_eq!(gb.read_mem(0xFF05), 0xF1);
 }
+
+// -----------------------------------------------------------------------
+// Repro tests for failing gambatte timer tests
+//
+// These tests document timer behaviors relevant to the 47 failing gambatte
+// timer integration tests. The core issue is that Ceres doesn't properly
+// complete the TIMA reload cycle in all cases.
+// -----------------------------------------------------------------------
+
+/// Helper: verify timer increments TIMA by 1 after exactly one period.
+fn check_timer_period(tac: u8, period: i32, init_tima: u8) {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, init_tima.wrapping_sub(1));
+    gb.write_mem(0xFF05, init_tima);
+    gb.write_mem(0xFF07, tac);
+    gb.advance_dots(period - 1);
+    assert_eq!(gb.read_mem(0xFF05), init_tima);
+    gb.advance_dots(1);
+    assert_eq!(gb.read_mem(0xFF05), init_tima.wrapping_add(1));
+}
+
+#[test]
+fn repro_timer_period_tc00() {
+    check_timer_period(0x04, 1024, 0x00);
+}
+#[test]
+fn repro_timer_period_tc01() {
+    check_timer_period(0x05, 16, 0x00);
+}
+#[test]
+fn repro_timer_period_tc02() {
+    check_timer_period(0x06, 64, 0x00);
+}
+#[test]
+fn repro_timer_period_tc03() {
+    check_timer_period(0x07, 256, 0x00);
+}
+
+#[test]
+fn repro_timer_stop_prevents_increment() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF05, 0x00);
+    gb.write_mem(0xFF07, 0x04); // TAC=0x04, 1024-dot period
+    gb.advance_dots(511); // Just before first increment (bit 9 rises at 512)
+    gb.write_mem(0xFF07, 0x00); // Disable timer
+    gb.advance_dots(100);
+    assert_eq!(
+        gb.read_mem(0xFF05),
+        0x00,
+        "Timer stopped should not increment TIMA"
+    );
+}
+
+// TODO: repro test for DIV not resetting on TAC write (affects 47 gambatte tests)
+// The timer doesn't reset its internal DIV counter when TAC is written,
+// which is the root cause of most stop/start test failures.
+
+#[test]
+fn repro_timer_div_write_glitch() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF05, 0x00);
+    gb.write_mem(0xFF07, 0x05);
+    gb.advance_dots(8);
+    gb.write_mem(0xFF04, 0);
+    assert_eq!(gb.read_mem(0xFF05), 0x01);
+}
+
+#[test]
+fn repro_timer_tac_disable_glitch() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF05, 0x00);
+    gb.write_mem(0xFF07, 0x05);
+    gb.advance_dots(8);
+    gb.write_mem(0xFF07, 0x01);
+    assert_eq!(gb.read_mem(0xFF05), 0x01);
+}
+
+#[test]
+fn repro_timer_reload_delay() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, 0x42);
+    gb.write_mem(0xFF05, 0xFF);
+    gb.write_mem(0xFF07, 0x05);
+    gb.advance_dots(16);
+    assert_eq!(gb.read_mem(0xFF05), 0x00);
+    gb.advance_dots(3);
+    assert_eq!(gb.read_mem(0xFF05), 0x00);
+    gb.advance_dots(1);
+    assert_eq!(gb.read_mem(0xFF05), 0x42);
+}
+
+#[test]
+fn repro_timer_write_during_reload_cancels() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, 0x42);
+    gb.write_mem(0xFF05, 0xFF);
+    gb.write_mem(0xFF07, 0x05);
+    gb.advance_dots(16);
+    gb.write_mem(0xFF05, 0x12);
+    assert_eq!(gb.read_mem(0xFF05), 0x12);
+    gb.advance_dots(8);
+    assert_eq!(gb.read_mem(0xFF05), 0x12);
+}
+
+#[test]
+fn repro_timer_tma_write_during_reload() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, 0x00);
+    gb.write_mem(0xFF05, 0xFF);
+    gb.write_mem(0xFF07, 0x05);
+    gb.advance_dots(16);
+    gb.write_mem(0xFF06, 0x42);
+    assert_eq!(gb.read_mem(0xFF05), 0x00);
+    gb.advance_dots(4);
+    assert_eq!(gb.read_mem(0xFF05), 0x42);
+}
+
+#[test]
+fn repro_timer_tma_write_during_reloaded() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, 0x00);
+    gb.write_mem(0xFF05, 0xFF);
+    gb.write_mem(0xFF07, 0x05);
+    gb.advance_dots(20);
+    gb.write_mem(0xFF06, 0x42);
+    assert_eq!(gb.read_mem(0xFF05), 0x42);
+}
+
+#[test]
+fn repro_timer_irq_fires_on_reload() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF06, 0x00);
+    gb.write_mem(0xFF05, 0xFF);
+    gb.write_mem(0xFF07, 0x04);
+    gb.advance_dots(1024);
+    assert_eq!(gb.ints.read_if() & 0x04, 0);
+    gb.advance_dots(4);
+    assert_eq!(gb.ints.read_if() & 0x04, 0x04);
+}
+
+#[test]
+fn repro_timer_multiple_periods() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0);
+    gb.write_mem(0xFF05, 0x00);
+    gb.write_mem(0xFF07, 0x05);
+    for expected in 1..=10u8 {
+        gb.advance_dots(16);
+        assert_eq!(
+            gb.read_mem(0xFF05),
+            expected,
+            "TIMA should be {expected} after {expected} periods"
+        );
+    }
+}
+
+// TODO: repro test for DIV not resetting on TAC write (affects 47 gambatte tests)
+// The timer doesn't reset its internal DIV counter when TAC is written,
+// which is the root cause of most stop/start test failures.
