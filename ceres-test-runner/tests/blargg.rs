@@ -26,6 +26,8 @@ fn run_blargg_test(path: &str, timeout: u32) -> TestResult {
 
     let config = TestConfig {
         timeout_frames: timeout,
+        run_bootrom: true,
+        model: ceres_core::Model::CgbE,
         ..TestConfig::default()
     };
 
