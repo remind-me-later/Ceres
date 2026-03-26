@@ -146,14 +146,13 @@ impl<A: AudioCallback> Gb<A> {
         self.write_mem(0xFF26, 0xF1);
         self.write_mem(0xFF40, 0x91);
 
-        // DIV phase differs between DMG and CGB boot ROMs.
-        // DMG: 0xABCC (Gambatte's divLastUpdate = -0x1C00 equivalent)
-        // CGB: 0x1ECC (CGB boot ROM leaves DIV at a different phase)
-        if self.is_cgb() {
-            self.clock.div = 0x1ECC;
-        } else {
-            self.clock.div = 0xABCC;
-        }
+        // DIV phase after boot ROM.  The CGB boot ROM leaves DIV at a
+        // different phase than the DMG boot ROM.  However, the gambatte
+        // test ROMs have conflicting requirements: div_start_inc_*/2
+        // expects 0x1ECC while tc00_start_*/1 expects 0xABCC.  Until we
+        // can run the actual CGB boot ROM to determine the true post-boot
+        // DIV, use the DMG value for both models.
+        self.clock.div = 0xABCC;
     }
 
     /// Check if the `ld b, b` debug breakpoint instruction was executed and reset the flag.

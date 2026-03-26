@@ -695,3 +695,29 @@ fn repro_timer_multiple_periods() {
 // TODO: repro test for DIV not resetting on TAC write (affects 47 gambatte tests)
 // The timer doesn't reset its internal DIV counter when TAC is written,
 // which is the root cause of most stop/start test failures.
+
+#[test]
+fn repro_tima_tc00_start_1_cgb() {
+    // gambatte tc00_start_1 expects F0 on CGB (no TIMA increment).
+    // This test writes TAC=0x04 and reads TIMA after a short delay.
+    // With CGB DIV phase 0xABCC, bit 9 hasn't fallen yet at the read point.
+    let mut gb = crate::GbBuilder::new(44100, crate::test_util::DummyAudio)
+        .with_model(crate::Model::CgbE)
+        .build();
+    gb.skip_bootrom();
+    // ROM: 14 NOPs + clear IF/IE + TIMA=0xF0, TMA=0xF0 + 4 NOPs + TAC=0x04 + JP + read
+    gb.advance_dots(14 * 4); // 14 NOPs from PC=0x100
+    gb.write_mem(0xFF0F, 0);
+    gb.write_mem(0xFFFF, 0);
+    gb.write_mem(0xFF06, 0xF0);
+    gb.write_mem(0xFF05, 0xF0);
+    gb.advance_dots(4 * 4); // 4 NOPs
+    gb.write_mem(0xFF07, 0x04); // TAC = enabled, 1024-dot period
+    // JP (16T) + NOP (4T) + read preparation
+    gb.advance_dots(5 * 4 + 3 * 4); // JP + NOP + approximate read timing
+    let tima = gb.read_mem(0xFF05);
+    assert_eq!(
+        tima, 0xF0,
+        "TIMA should not have incremented yet (tc00_start_1)"
+    );
+}
