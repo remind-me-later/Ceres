@@ -6454,33 +6454,25 @@ fn repro_lycint_lycirq_2() {
 fn repro_div_start_inc_1_cgb() {
     // After CGB boot, DIV should be at a specific phase.
     // Hardware expects 0x1E on CGB at T=48.
-    // Ceres's skip_bootrom doesn't set the CGB DIV phase correctly.
     let mut gb = crate::GbBuilder::new(44100, crate::test_util::DummyAudio)
         .with_model(Model::CgbE)
         .build();
     gb.skip_bootrom();
     gb.advance_dots(48);
     let div = gb.read_div();
-    // Hardware: 0x1E. Ceres: 0xAB (uses DMG boot DIV phase for CGB too)
-    assert_eq!(
-        div, 0xAB,
-        "Ceres uses DMG DIV phase even for CGB (hardware expects 0x1E)"
-    );
+    assert_eq!(div, 0x1E, "CGB DIV should be 0x1E at T=48");
 }
 
 #[test]
 fn repro_div_start_inc_2_cgb() {
+    // Hardware expects 0x1F on CGB at T=52.
     let mut gb = crate::GbBuilder::new(44100, crate::test_util::DummyAudio)
         .with_model(Model::CgbE)
         .build();
     gb.skip_bootrom();
     gb.advance_dots(52);
     let div = gb.read_div();
-    // Hardware: 0x1F. Ceres: 0xAC
-    assert_eq!(
-        div, 0xAC,
-        "Ceres uses DMG DIV phase even for CGB (hardware expects 0x1F)"
-    );
+    assert_eq!(div, 0x1F, "CGB DIV should be 0x1F at T=52");
 }
 
 // -----------------------------------------------------------------------
