@@ -148,13 +148,16 @@ impl<A: AudioCallback> Gb<A> {
 
         // DIV phase after boot ROM.  DMG and CGB boot ROMs leave DIV at
         // different phases due to different boot durations.
-        // DMG: 0xABCC (from Gambatte's setPostBiosState with cycleCounter=0x18FCC)
-        // CGB: 0x1DF0 (derived from Gambatte's cycleCounter=0x102A0 and
-        //      divLastUpdate=-0x1C00, adjusted so that both div_start_inc and
-        //      tc00_start gambatte test families pass)
+        // Derived from Gambatte's setPostBiosState:
+        //   divLastUpdate = -0x1C00 for both models
+        //   cycleCounter = 0x102A0 (CGB) or 0x18FCC (DMG)
+        //   internal_counter = cycleCounter - divLastUpdate
+        //   DIV = internal_counter & 0xFFFF
         if self.is_cgb() {
-            self.clock.div = 0x1DF0;
+            // CGB: 0x102A0 + 0x1C00 = 0x11EA0 → DIV = 0x1EA0
+            self.clock.div = 0x1EA0;
         } else {
+            // DMG: 0x18FCC + 0x1C00 = 0x1ABCC → DIV = 0xABCC
             self.clock.div = 0xABCC;
         }
     }
