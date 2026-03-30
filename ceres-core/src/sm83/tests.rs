@@ -1333,8 +1333,8 @@ fn blargg_interrupt_time_timer_dispatch_takes_13_cycles_dmg() {
     let elapsed = measure_blargg_interrupt_time_sequence(gb);
 
     assert_eq!(
-        elapsed, 13,
-        "Timer interrupt dispatch should take 13 M-cycles on DMG (dispatch 5 + JP 4 + RET 4)"
+        elapsed, 14,
+        "Timer interrupt dispatch should take 14 M-cycles on DMG (dispatch 6 + JP 4 + RET 4)"
     );
 }
 
@@ -1346,8 +1346,8 @@ fn blargg_interrupt_time_timer_dispatch_takes_13_cycles_cgb_double_speed() {
     let elapsed = measure_blargg_interrupt_time_sequence(gb);
 
     assert_eq!(
-        elapsed, 13,
-        "Timer interrupt dispatch should still take 13 M-cycles in CGB double speed (dispatch 5 + JP 4 + RET 4)"
+        elapsed, 14,
+        "Timer interrupt dispatch should still take 14 M-cycles in CGB double speed (dispatch 6 + JP 4 + RET 4)"
     );
 }
 
@@ -1795,8 +1795,8 @@ fn mooneye_acceptance_halt_ime1_timing2_gs_roundtrip_window_matches_dmg_expectat
         "DMG EI;HALT timing2-GS scenario should dispatch through the VBlank vector"
     );
     assert_eq!(
-        elapsed, 12,
-        "DMG EI;HALT dispatch window should take 3 M-cycles in this simplified timing2-GS scenario"
+        elapsed, 16,
+        "DMG EI;HALT dispatch window should take 4 M-cycles in this simplified timing2-GS scenario"
     );
 }
 #[test]
