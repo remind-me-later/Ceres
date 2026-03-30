@@ -256,9 +256,6 @@ impl<A: AudioCallback> Gb<A> {
                 let ie_pre = self.ints.read_ie() & 0x1F;
                 self.write_mem(self.cpu.sp, lo);
 
-                // T=24 (or T=16 if skipped): IF re-evaluation / Acknowledgment
-                self.advance_dots(4);
-
                 let queue = ie_pre & ifr_pre;
                 let (final_int, final_vector) = if queue != 0 {
                     let tz = (queue.trailing_zeros() & 7) as u8;

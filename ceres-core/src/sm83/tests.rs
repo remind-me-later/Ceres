@@ -1333,8 +1333,8 @@ fn blargg_interrupt_time_timer_dispatch_takes_13_cycles_dmg() {
     let elapsed = measure_blargg_interrupt_time_sequence(gb);
 
     assert_eq!(
-        elapsed, 14,
-        "Timer interrupt dispatch should take 14 M-cycles on DMG (dispatch 6 + JP 4 + RET 4)"
+        elapsed, 13,
+        "Timer interrupt dispatch should take 13 M-cycles on DMG (dispatch 5 + JP 4 + RET 4)"
     );
 }
 
@@ -1346,8 +1346,8 @@ fn blargg_interrupt_time_timer_dispatch_takes_13_cycles_cgb_double_speed() {
     let elapsed = measure_blargg_interrupt_time_sequence(gb);
 
     assert_eq!(
-        elapsed, 14,
-        "Timer interrupt dispatch should still take 14 M-cycles in CGB double speed (dispatch 6 + JP 4 + RET 4)"
+        elapsed, 13,
+        "Timer interrupt dispatch should still take 13 M-cycles in CGB double speed (dispatch 5 + JP 4 + RET 4)"
     );
 }
 
