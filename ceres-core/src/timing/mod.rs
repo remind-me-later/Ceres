@@ -69,6 +69,15 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[inline]
+    pub fn flush_pending_dots(&mut self) {
+        if self.pending_dots > 0 {
+            let dots = self.pending_dots;
+            self.pending_dots = 0;
+            self.advance_dots(dots);
+        }
+    }
+
+    #[inline]
     pub fn advance_dots_no_timers(&mut self, cpu_t_cycles: i32) {
         // DMA runs at T-cycle rate
         self.dma.advance_dots(cpu_t_cycles);

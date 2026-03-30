@@ -14,6 +14,7 @@ pub struct Sm83 {
     hl: u16,
     is_halt_bug_triggered: bool,
     is_halted: bool,
+    is_just_halted: bool,
     /// Set by HALT when IME=1 and an interrupt is already pending.
     /// SameBoy zeroes pending_cycles in this case, meaning both the
     /// run-mode opcode fetch and the internal halt read cost 0 effective
@@ -216,6 +217,8 @@ impl<A: AudioCallback> Gb<A> {
             }
         }
 
+        self.flush_pending_dots();
+
         if self.ints.is_any_requested() {
             self.cpu.is_halted = false;
             self.ppu.leave_stop_mode();
@@ -226,56 +229,69 @@ impl<A: AudioCallback> Gb<A> {
                     self.cpu.is_halt_bug_triggered = false;
                 }
 
-                // Skip the two internal NOP ticks when waking from HALT with
-                // IME=1 and interrupt already pending (SameBoy zeros
-                // pending_cycles in that case, so the opcode fetch + internal
-                // HALT read cost 0 effective T-cycles; only the push sequence
-                // and final tick remain).
-                if self.cpu.skip_isr_nops {
-                    self.cpu.skip_isr_nops = false;
-                } else {
-                    self.tick_m_cycle();
-                    self.tick_m_cycle();
+                // SameBoy-accurate ISR dispatch sequence:
+                self.flush_pending_dots();
+                if !self.cpu.skip_isr_nops {
+                    self.advance_dots(4); // fetch
+                    self.advance_dots(4); // oam bug
                 }
-
-                // Gambatte adds 12 T-cycles (3 M-cycles) before pushing the high byte,
-                // but the first 2 M-cycles are already covered above (if not skipped).
-                // So we need 1 more M-cycle here to reach 12 T-cycles.
-                self.tick_m_cycle();
+                self.cpu.skip_isr_nops = false;
+                self.advance_dots(4); // no access
 
                 let pc = self.cpu.pc;
                 let [lo, hi] = pc.to_le_bytes();
 
-                // Push upper byte — write happens at T=12.
+                // T=16 (or T=8 if skipped): Push Hi
                 self.cpu.sp = self.cpu.sp.wrapping_sub(1);
-                // We use raw write_mem because write_cpu would advance time,
-                // and Gambatte writes exactly at cc+12.
-                self.write_mem(self.cpu.sp, hi);
+                self.write_cpu(self.cpu.sp, hi);
 
-                // Advance 1 M-cycle to T=16.
-                self.tick_m_cycle();
-
-                // Re-evaluate after upper push: re-read IE & IF to find the new winner at T=16.
-                // This handles both cancellation (new IE & IF = 0) and reselection (the
-                // push changed IE so a different interrupt wins).
-                let (final_int, final_vector) = self.ints.determine_interrupt();
-
-                // Push lower byte — write happens at T=16.
+                // T=20 (or T=12 if skipped): Push Lo
                 self.cpu.sp = self.cpu.sp.wrapping_sub(1);
-                self.write_mem(self.cpu.sp, lo);
 
-                // Acknowledge and jump; if cancelled, final_int==0 and final_vector==0x0000
+                // SameBoy re-evaluates IF *after* the Lo push finishes,
+                // using the value from BEFORE the write if it's to IF.
+                let if_addr = self.cpu.sp == 0xFF0F;
+                let old_ifr = if if_addr {
+                    self.flush_pending_dots();
+                    self.ints.read_if() & 0x1F
+                } else {
+                    0
+                };
+
+                self.write_cpu(self.cpu.sp, lo);
+
+                let (final_int, final_vector) = if if_addr {
+                    let ie = self.ints.read_ie() & 0x1F;
+                    let queue = ie & old_ifr;
+                    if queue != 0 {
+                        let tz = (queue.trailing_zeros() & 7) as u8;
+                        (1 << tz, 0x40 | (u16::from(tz) << 3))
+                    } else {
+                        (0, 0x0000)
+                    }
+                } else {
+                    self.ints.determine_interrupt()
+                };
+
                 if final_int != 0 {
                     self.ints.acknowledge_interrupt(final_int);
+                    self.cpu.pc = final_vector;
+                } else {
+                    self.cpu.pc = 0x0000;
                 }
 
                 self.ints.disable();
-                self.cpu.pc = final_vector;
+                self.cpu.is_just_halted = false;
 
-                // Advance final 1 M-cycle to T=20.
-                self.tick_m_cycle();
+                // Advance final 2 M-cycles to T=24
+                self.flush_pending_dots();
+                self.advance_dots(4);
+                return;
             }
         }
+
+        self.cpu.is_just_halted = false;
+        self.flush_pending_dots();
     }
 }
 
@@ -422,13 +438,15 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     fn tick_m_cycle(&mut self) {
-        self.advance_dots(4);
+        self.flush_pending_dots();
+        self.pending_dots = 4;
     }
 
     #[must_use]
     pub(crate) fn read_cpu(&mut self, addr: u16) -> u8 {
+        self.flush_pending_dots();
         let val = self.read_mem(addr);
-        self.advance_dots(4);
+        self.pending_dots = 4;
         val
     }
 
@@ -441,13 +459,12 @@ impl<A: AudioCallback> Gb<A> {
         };
 
         // Capture timestamp before advancing time for DMA start logging
-        if addr >= 0xFF00 {
-            let io_addr = (addr & 0xFF) as u8;
-            if io_addr == 0x46 {
-                // DMA register
-                self.dma_write_start_dots = self.total_dots;
-            }
+        if addr == 0xFF46 {
+            // DMA register
+            self.dma_write_start_dots = self.total_dots + self.pending_dots as u64;
         }
+
+        self.flush_pending_dots();
 
         if if_addr {
             let ifr_after = self.ints.read_if() & 0x1F;
@@ -457,7 +474,7 @@ impl<A: AudioCallback> Gb<A> {
             self.write_mem(addr, val);
         }
 
-        self.advance_dots(4);
+        self.pending_dots = 4;
     }
 }
 
@@ -799,6 +816,8 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     const fn halt(&mut self) {
+        self.cpu.is_just_halted = true;
+
         if !self.ints.is_any_requested() {
             self.cpu.is_halted = true;
         } else if self.ints.are_enabled() {

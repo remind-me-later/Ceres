@@ -1902,6 +1902,11 @@ impl Ppu {
         self.is_frozen = true;
     }
 
+    #[must_use]
+    pub const fn is_frozen(&self) -> bool {
+        self.is_frozen
+    }
+
     pub fn leave_stop_mode(&mut self) {
         self.is_frozen = false;
     }

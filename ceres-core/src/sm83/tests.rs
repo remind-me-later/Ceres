@@ -669,6 +669,11 @@ fn measure_blargg_interrupt_time_sequence(mut gb: Gb) -> u64 {
     gb.run_cpu(); // DI              (resume after ISR)
     let elapsed_int = elapsed_cpu_m_cycles(&gb, start_int);
 
+    println!(
+        "DEBUG: elapsed_int={}, elapsed_no_int={}",
+        elapsed_int, elapsed_no_int
+    );
+
     // The net ISR overhead is the difference.
     elapsed_int - elapsed_no_int
 }
