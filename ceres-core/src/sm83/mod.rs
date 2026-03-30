@@ -205,6 +205,7 @@ impl<A: AudioCallback> Gb<A> {
             if self.cpu.is_halt_bug_triggered {
                 self.cpu.pc = self.cpu.pc.wrapping_sub(1);
                 self.cpu.is_halt_bug_triggered = false;
+                self.cpu.skip_isr_nops = true;
             }
 
             self.exec(op);
@@ -248,29 +249,19 @@ impl<A: AudioCallback> Gb<A> {
                 // T=20 (or T=12 if skipped): Push Lo
                 self.cpu.sp = self.cpu.sp.wrapping_sub(1);
 
-                // SameBoy re-evaluates IF *after* the Lo push finishes,
-                // using the value from BEFORE the write if it's to IF.
-                let if_addr = self.cpu.sp == 0xFF0F;
-                let old_ifr = if if_addr {
-                    self.flush_pending_dots();
-                    self.ints.read_if() & 0x1F
-                } else {
-                    0
-                };
+                // SameBoy re-evaluates IF/IE *after* the Lo push finishes,
+                // using the value from BEFORE the write if it's to IF or IE.
+                self.advance_dots(4);
+                let ifr_pre = self.ints.read_if() & 0x1F;
+                let ie_pre = self.ints.read_ie() & 0x1F;
+                self.write_mem(self.cpu.sp, lo);
 
-                self.write_cpu(self.cpu.sp, lo);
-
-                let (final_int, final_vector) = if if_addr {
-                    let ie = self.ints.read_ie() & 0x1F;
-                    let queue = ie & old_ifr;
-                    if queue != 0 {
-                        let tz = (queue.trailing_zeros() & 7) as u8;
-                        (1 << tz, 0x40 | (u16::from(tz) << 3))
-                    } else {
-                        (0, 0x0000)
-                    }
+                let queue = ie_pre & ifr_pre;
+                let (final_int, final_vector) = if queue != 0 {
+                    let tz = (queue.trailing_zeros() & 7) as u8;
+                    (1 << tz, 0x40 | (u16::from(tz) << 3))
                 } else {
-                    self.ints.determine_interrupt()
+                    (0, 0x0000)
                 };
 
                 if final_int != 0 {
@@ -283,9 +274,6 @@ impl<A: AudioCallback> Gb<A> {
                 self.ints.disable();
                 self.cpu.is_just_halted = false;
 
-                // Advance final 2 M-cycles to T=24
-                self.flush_pending_dots();
-                self.advance_dots(4);
                 return;
             }
         }
@@ -821,14 +809,8 @@ impl<A: AudioCallback> Gb<A> {
         if !self.ints.is_any_requested() {
             self.cpu.is_halted = true;
         } else if self.ints.are_enabled() {
-            // IME=1 and interrupt pending: HALT immediately triggers the ISR.
-            // SameBoy zeroes pending_cycles here (negating both the run-mode
-            // opcode fetch and the internal HALT read), so the full HALT+dispatch
-            // takes only 4 M-cycles. We model this with a flag that suppresses
-            // the 2 internal NOP ticks in run_cpu's dispatch path.
             self.cpu.is_halted = false;
             self.cpu.skip_isr_nops = true;
-            self.cpu.pc = self.cpu.pc.wrapping_sub(1);
         } else {
             self.cpu.is_halted = false;
             self.cpu.is_halt_bug_triggered = true;
@@ -1272,6 +1254,7 @@ impl<A: AudioCallback> Gb<A> {
                 self.tick_m_cycle();
             }
 
+            self.flush_pending_dots();
             self.key1.change_speed();
             self.write_div();
         } else {

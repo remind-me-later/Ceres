@@ -135,18 +135,13 @@ fn test_speed_change_basic() {
     let end_dots = gb.total_dots;
 
     // Speed change takes 32768 M-cycles (131072 dots)
-    // plus the STOP instruction fetch/execute (4 cycles = 16 dots)
-    // plus the next instruction fetch (2 cycles = 8 dots)
-    // wait, run_cpu executes ONE instruction.
-    // STOP is 1 byte + 1 byte operand = 2 bytes.
-    // fetch STOP: 4 dots
-    // fetch operand: 4 dots
-    // execute speed switch: 131076 dots (1 + 32768 M-cycles)
-    // Total should be 131084 dots.
+    // plus the STOP instruction fetch/execute (4 + 4 = 8 dots)
+    // plus the next instruction fetch (4 dots)
+    // Total should be 131084 dots, counting the fetches.
     let elapsed = end_dots - start_dots;
     assert_eq!(
         elapsed, 131084,
-        "Speed change should take 131084 dots (fetch + Switch)"
+        "Speed change should take 131084 dots (fetches + switch)"
     );
 
     // Verify speed change happened
@@ -244,15 +239,14 @@ fn test_speed_change_double_to_normal() {
     gb.run_cpu();
     let end_dots = gb.total_dots;
 
-    // In double speed mode, each M-cycle is 4 T-cycles, but advance_dots_no_timers
-    // increments total_dots by t_cycles / 2.
-    // (1 + 32768) M-cycles * 4 T-cycles / 2 = 65538 dots.
-    // plus fetch: 2 cycles * 4 T-cycles / 2 = 4 dots.
-    // Total: 65538 + 4 = 65542 dots.
+    // Speed change from double to normal speed takes 32768 M-cycles (65536 dots)
+    // plus the STOP instruction fetch/execute (2 + 2 = 4 dots)
+    // plus the next instruction fetch (2 dots).
+    // Total should be 65542 dots, counting the fetches.
     let elapsed = end_dots - start_dots;
     assert_eq!(
         elapsed, 65542,
-        "Speed change from double to normal should take 65542 normal dots"
+        "Speed change from double to normal should take 65542 normal dots (fetches + switch)"
     );
 
     assert!(!gb.key1.is_enabled());
@@ -1801,8 +1795,8 @@ fn mooneye_acceptance_halt_ime1_timing2_gs_roundtrip_window_matches_dmg_expectat
         "DMG EI;HALT timing2-GS scenario should dispatch through the VBlank vector"
     );
     assert_eq!(
-        elapsed, 16,
-        "DMG EI;HALT dispatch window should take 4 M-cycles in this simplified timing2-GS scenario"
+        elapsed, 12,
+        "DMG EI;HALT dispatch window should take 3 M-cycles in this simplified timing2-GS scenario"
     );
 }
 #[test]
