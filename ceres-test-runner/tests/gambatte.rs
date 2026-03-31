@@ -238,8 +238,8 @@ impl GambatteCheck {
 
         for (i, c) in self.expected.chars().enumerate() {
             if let Some(expected_tile) = tile_from_char(c) {
-                // The first character is shifted by 4 pixels due to the PPU fetcher delay.
-                let x_offset = i * 8 + 4;
+                // The characters are now aligned at 8-pixel boundaries.
+                let x_offset = i * 8;
                 if x_offset + 8 > 160 {
                     break;
                 }

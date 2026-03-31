@@ -703,7 +703,7 @@ impl Ppu {
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_step = 0;
         self.window_tile_x = 0;
-        self.position_in_line = -12 - (self.scx & 7) as i16;
+        self.position_in_line = -16 - (self.scx & 7) as i16;
         self.lcd_x = 0;
         self.bg_fifo.clear();
         self.oam_fifo.clear();
@@ -852,7 +852,7 @@ impl Ppu {
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_step = 0;
         self.window_tile_x = 0;
-        self.position_in_line = -12 - (self.scx & 7) as i16;
+        self.position_in_line = -16 - (self.scx & 7) as i16;
         self.lcd_x = 0;
         self.bg_fifo.clear();
         self.oam_fifo.clear();
@@ -1234,21 +1234,15 @@ impl Ppu {
                 } else {
                     // BG X calculation
                     let scx = self.scx;
-                    // (pos + 16 < 8) is equivalent to (pos < -8)
-                    if self.position_in_line < -8 {
-                        scx / 8
-                    } else {
-                        let offset = u8::from(
-                            matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat)
-                                && !during_sprite_fetch,
-                        );
-                        let pos = self
-                            .position_in_line
-                            .wrapping_add(8)
-                            .wrapping_sub(i16::from(offset));
-                        let scx_adj = scx.wrapping_add(pos as u8);
-                        scx_adj / 8
-                    }
+                    let offset = u8::from(
+                        matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat) && !during_sprite_fetch,
+                    );
+                    let pos = self
+                        .position_in_line
+                        .wrapping_add(8)
+                        .wrapping_sub(i16::from(offset));
+                    let scx_adj = scx.wrapping_add(pos as u8);
+                    scx_adj / 8
                 } & 0x1F;
 
                 // Cache address for T2
@@ -1375,6 +1369,18 @@ impl Ppu {
         // FIFO empty check FIRST, before anything else.
         if self.bg_fifo.is_empty() {
             return;
+        }
+
+        // SCX alignment jump logic
+        if self.position_in_line >= -16 && self.position_in_line < -8 {
+            if (self.position_in_line as u8 & 7) == (self.scx & 7) {
+                self.position_in_line = -8;
+            } else if self.window_is_being_fetched
+                && (self.position_in_line as u8 & 7) == 6
+                && (self.scx & 7) == 7
+            {
+                self.position_in_line = -8;
+            }
         }
 
         // Pop from BG FIFO.
