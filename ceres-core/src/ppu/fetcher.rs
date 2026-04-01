@@ -20,9 +20,10 @@ pub enum FetcherState {
     GetDataHighT1,
     /// Read high byte of tile data - T2: read VRAM.
     GetDataHighT2,
-    /// Attempt to push 8 pixels to FIFO.
-    /// Matches SameBoy's PUSH state: can happen immediately after HighT2 if FIFO is empty.
-    Push,
+    /// Attempt to push 8 pixels to FIFO - T1 (wait).
+    PushT1,
+    /// Attempt to push 8 pixels to FIFO - T2 (push if space).
+    PushT2,
 }
 
 /// Sprite fetcher state machine states.

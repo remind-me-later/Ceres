@@ -4,7 +4,7 @@ pub enum PpuPhase {
     LcdOff,
     Line0Startup(Line0Stage),
     OamScan(OamScanStage),
-    Drawing,
+    Drawing(DrawingStage),
     HBlank(HBlankStage),
     VBlank(VBlankStage),
     Line153(Line153Stage),
@@ -36,6 +36,22 @@ pub enum OamScanStage {
 impl Default for OamScanStage {
     fn default() -> Self {
         Self::Running { tick: 0 }
+    }
+}
+
+/// Drawing (Mode 3) state machine.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DrawingStage {
+    /// Delay before rendering starts (SameBoy Transition1/2).
+    /// Duration: 10 ticks (5 cycles).
+    Transition { remaining: u8 },
+    /// Main rendering loop.
+    Running,
+}
+
+impl Default for DrawingStage {
+    fn default() -> Self {
+        Self::Transition { remaining: 10 }
     }
 }
 

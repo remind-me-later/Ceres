@@ -19,7 +19,9 @@ use {
     fifo::PixelFifo,
     rgba_buf::RgbaBuf,
     sprite::SpriteBuffer,
-    state::{HBlankStage, Line0Stage, Line153Stage, OamScanStage, PpuPhase, VBlankStage},
+    state::{
+        DrawingStage, HBlankStage, Line0Stage, Line153Stage, OamScanStage, PpuPhase, VBlankStage,
+    },
 };
 
 pub const PX_WIDTH: u8 = 160;
@@ -268,7 +270,7 @@ impl Ppu {
             }
             Mode::VBlank => self.phase = PpuPhase::VBlank(VBlankStage::default()),
             Mode::Drawing => {
-                self.phase = PpuPhase::Drawing;
+                self.phase = PpuPhase::Drawing(DrawingStage::default());
                 self.set_mode_stat(mode);
                 self.mode_for_interrupt = Some(mode);
                 self.update_stat(ints);
@@ -491,7 +493,7 @@ impl Ppu {
                 self.dots_in_line += 1;
                 self.tick_vblank(ints);
             }
-            PpuPhase::Drawing => {
+            PpuPhase::Drawing(_) => {
                 self.dots_in_line += 1;
                 self.tick_drawing(ints, cgb_mode);
             }
@@ -676,7 +678,6 @@ impl Ppu {
                 if remaining <= 1 {
                     // Startup complete
                     self.enter_mode3_after_startup(ints);
-                    self.phase = PpuPhase::Drawing;
                 } else {
                     self.phase = PpuPhase::Line0Startup(Line0Stage::PalettesBlock {
                         remaining: remaining - 1,
@@ -688,7 +689,7 @@ impl Ppu {
 
     /// Enter Mode 3 rendering after startup sequence completes.
     fn enter_mode3_after_startup(&mut self, ints: &mut Interrupts) {
-        self.phase = PpuPhase::Drawing;
+        self.phase = PpuPhase::Drawing(DrawingStage::Running);
         self.mode_for_interrupt = Some(Mode::Drawing);
         // STAT already set to Mode 3 at dot 79
 
@@ -703,7 +704,7 @@ impl Ppu {
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_step = 0;
         self.window_tile_x = 0;
-        self.position_in_line = -16 - (self.scx & 7) as i16;
+        self.position_in_line = -16;
         self.lcd_x = 0;
         self.bg_fifo.clear();
         self.oam_fifo.clear();
@@ -760,33 +761,18 @@ impl Ppu {
                     self.set_mode_stat(Mode::OamScan);
                     self.mode_for_interrupt = Some(Mode::OamScan);
                     self.update_stat(ints);
+
+                    // OAM write-blocking starts for CGB (non-double-speed) (SameBoy State 35)
+                    self.oam_write_blocked = is_cgb && !double_speed;
                 }
 
-                // Tick 4: OAM read-blocking starts for non-double-speed (SameBoy State 7).
-                // gambatte preread_1 / preread_2 boundary:
-                //   read AT Running{tick:4} → blocked (0xFF / 0x03 masked)
-                //   read AT Running{tick:3} → unblocked (real value)
-                // Tick 3: OAM write blocking for CGB.
-                if tick == 3 && is_cgb {
-                    self.oam_write_blocked = true;
-                }
-
-                // Tick 4: OAM read-blocking starts for non-double-speed (SameBoy State 7).
+                // Tick 4: OAM write-blocking starts for all models (SameBoy State 35 exit).
                 if tick == 4 {
-                    self.oam_read_blocked = !double_speed;
+                    self.oam_write_blocked = is_cgb;
                 }
 
-                // Tick 9 → tick 10: full OAM blocking for double-speed (SameBoy State 7
-                // unconditional path).  In double-speed mode the tick-4 path only sets
-                // `oam_read_blocked = false`; the unconditional block for all models
-                // takes effect as we enter tick 10.
-                // gambatte preread_ds_2: read AT Running{tick:10} → blocked (0x03 masked).
-                if tick == 9 && double_speed {
-                    self.oam_read_blocked = true;
-                }
-
-                // Tick 10: complete OAM-scan memory blocking (SameBoy State 7).
-                if tick == 10 {
+                // Tick 8: complete OAM-scan memory blocking (SameBoy State 7).
+                if tick == 8 {
                     self.oam_read_blocked = true;
                     self.oam_write_blocked = true;
                     self.update_stat(ints);
@@ -844,15 +830,13 @@ impl Ppu {
 
     /// Enter Mode 3 (Drawing) after OAM scan completes.
     fn enter_mode3_from_oam_scan(&mut self, _ints: &mut Interrupts) {
-        self.phase = PpuPhase::Drawing;
-
-        // Memory blocking already set during Transition1/2
+        self.phase = PpuPhase::Drawing(DrawingStage::Transition { remaining: 10 });
 
         // Initialize drawing state
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_step = 0;
         self.window_tile_x = 0;
-        self.position_in_line = -16 - (self.scx & 7) as i16;
+        self.position_in_line = -16;
         self.lcd_x = 0;
         self.bg_fifo.clear();
         self.oam_fifo.clear();
@@ -897,6 +881,16 @@ impl Ppu {
 
     /// Tick during Mode 3 (Drawing).
     fn tick_drawing(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
+        if let PpuPhase::Drawing(DrawingStage::Transition { remaining }) = self.phase {
+            if remaining > 1 {
+                self.phase = PpuPhase::Drawing(DrawingStage::Transition {
+                    remaining: remaining - 1,
+                });
+                return;
+            }
+            self.phase = PpuPhase::Drawing(DrawingStage::Running);
+        }
+
         // Check for window activation
         self.check_window_trigger(cgb_mode);
 
@@ -1041,69 +1035,63 @@ impl Ppu {
             SpriteFetcherState::WaitForBgFetcher => {
                 // State 27: Wait loop.
                 // Condition: while (fetcher_state < 5 || fifo_size == 0)
-                // fetcher_state >= 5 means GetDataHighT2, PushT1, or PushT2.
                 let fetcher_aligned = matches!(
                     self.fetcher_state,
-                    FetcherState::GetDataHighT2 | FetcherState::Push
+                    FetcherState::GetDataHighT2 | FetcherState::PushT1 | FetcherState::PushT2
                 );
                 let fifo_not_empty = self.bg_fifo.size() > 0;
 
                 if fetcher_aligned && fifo_not_empty {
-                    // Exit wait loop. The advance_fetcher call below is SameBoy's "free advance"
-                    // (no sleep cost in state 27 exit). State 41 is exactly 1 cycle = 2 T-ticks.
-                    // Since the current WaitForBgFetcher tick itself runs advance_fetcher (counting
-                    // as the first T-tick of State41), we set step=1 so State41Advance only needs
-                    // 1 more tick to complete (matching SameBoy's 12 T-tick total sprite fetch).
+                    // Exit wait loop. SameBoy advances BG fetcher once more before State 41 sleep.
                     self.sprite_fetcher_state = SpriteFetcherState::State41Advance;
-                    self.sprite_fetcher_step = 1;
-                } else {
-                    // Matches State 27 (Loop body advance).
-                    // Stay in WaitForBgFetcher.
+                    self.sprite_fetcher_step = 0;
                 }
 
                 self.advance_fetcher(cgb_mode, true);
             }
 
             SpriteFetcherState::State41Advance => {
-                // State 41: 1 cycle (2 ticks), then do "free" advance and transition.
-                self.advance_fetcher(cgb_mode, true);
+                // State 41: 1 cycle (2 ticks). Advances BG fetcher once at start.
+                if self.sprite_fetcher_step == 0 {
+                    self.advance_fetcher(cgb_mode, true);
+                }
                 self.sprite_fetcher_step += 1;
-                if self.sprite_fetcher_step >= 4 {
+                if self.sprite_fetcher_step >= 2 {
                     self.sprite_fetcher_state = SpriteFetcherState::GetTileAndFlags;
                     self.sprite_fetcher_step = 0;
                 }
             }
 
             SpriteFetcherState::GetTileAndFlags => {
-                // State 20
-                if self.sprite_fetcher_step < 4 {
+                // State 20: 2 cycles (4 ticks). Advances BG fetcher once at start.
+                if self.sprite_fetcher_step == 0 {
                     self.advance_fetcher(cgb_mode, true);
                 }
                 self.sprite_fetcher_step += 1;
-                if self.sprite_fetcher_step >= 6 {
+                if self.sprite_fetcher_step >= 4 {
                     self.sprite_fetcher_state = SpriteFetcherState::GetDataLow;
                     self.sprite_fetcher_step = 0;
                 }
             }
 
             SpriteFetcherState::GetDataLow => {
-                // State 39
+                // State 39: 2 cycles (4 ticks). No BG fetcher advance.
                 if self.sprite_fetcher_step == 0 {
                     self.sprite_tile_data_low = self
                         .vram
                         .vram_at_bank(self.sprite_tile_address, self.sprite_vram_bank);
                 }
                 self.sprite_fetcher_step += 1;
-                if self.sprite_fetcher_step >= 6 {
+                if self.sprite_fetcher_step >= 4 {
                     self.sprite_fetcher_state = SpriteFetcherState::GetDataHighAndPush;
                     self.sprite_fetcher_step = 0;
                 }
             }
 
             SpriteFetcherState::GetDataHighAndPush => {
-                // State 40
+                // State 40: 1 cycle (2 ticks). No BG fetcher advance.
                 self.sprite_fetcher_step += 1;
-                if self.sprite_fetcher_step >= 4 {
+                if self.sprite_fetcher_step >= 2 {
                     self.sprite_tile_data_high = self
                         .vram
                         .vram_at_bank(self.sprite_tile_address + 1, self.sprite_vram_bank);
@@ -1237,12 +1225,19 @@ impl Ppu {
                     let offset = u8::from(
                         matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat) && !during_sprite_fetch,
                     );
-                    let pos = self
-                        .position_in_line
-                        .wrapping_add(8)
-                        .wrapping_sub(i16::from(offset));
-                    let scx_adj = scx.wrapping_add(pos as u8);
-                    scx_adj / 8
+
+                    // SameBoy: first fetch (pos < -8) uses SCX / 8.
+                    // Sub-tile scrolling only starts affecting fetcher address after first fetch.
+                    if self.position_in_line < -8 {
+                        scx / 8
+                    } else {
+                        let pos = self
+                            .position_in_line
+                            .wrapping_add(8)
+                            .wrapping_sub(i16::from(offset));
+                        let scx_adj = scx.wrapping_add(pos as u8);
+                        scx_adj / 8
+                    }
                 } & 0x1F;
 
                 // Cache address for T2
@@ -1286,23 +1281,19 @@ impl Ppu {
                     self.window_tile_x = self.window_tile_x.wrapping_add(1) & 0x1F;
                 }
 
-                // Fallthrough to PUSH logic immediately.
-                // If FIFO is empty, push and go to GetTileT1 (0 cycles for push).
-                if self.bg_fifo.is_empty() {
-                    self.push_to_fifo();
-                    self.fetcher_state = FetcherState::GetTileT1;
-                } else {
-                    // FIFO not empty, wait in Push state
-                    self.fetcher_state = FetcherState::Push;
-                }
+                self.fetcher_state = FetcherState::PushT1;
             }
-            FetcherState::Push => {
-                // Wait for FIFO to be empty
+            FetcherState::PushT1 => {
+                // Push T1: Wait 1 cycle (2 ticks)
+                self.fetcher_state = FetcherState::PushT2;
+            }
+            FetcherState::PushT2 => {
+                // Push T2: Wait for FIFO to be empty
                 if self.bg_fifo.is_empty() {
                     self.push_to_fifo();
                     self.fetcher_state = FetcherState::GetTileT1;
                 }
-                // Else stay in Push state
+                // Else stay in PushT2
             }
         }
     }
