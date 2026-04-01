@@ -3,7 +3,4 @@ ceres-gtk
 ceres-std
 ceres-winit
 media
-external/reference-implementations/metroboy
-external/reference-implementations/gambatte-core
-external/test-sources
-external/gb-bootroms
+external/
