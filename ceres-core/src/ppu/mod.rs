@@ -413,6 +413,12 @@ impl Ppu {
 
     #[cfg(test)]
     #[must_use]
+    pub(crate) const fn window_y(&self) -> u8 {
+        self.window_y
+    }
+
+    #[cfg(test)]
+    #[must_use]
     pub(crate) const fn position_in_line(&self) -> i16 {
         self.position_in_line
     }

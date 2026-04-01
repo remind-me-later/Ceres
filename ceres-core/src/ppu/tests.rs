@@ -485,6 +485,235 @@ fn test_ppu_scx_hblank_timing_mooneye() {
 }
 
 #[test]
+fn test_ppu_mode3_duration_scx_variation() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x81); // LCD ON, BG ON
+
+    let mut durations = Vec::new();
+
+    for scx in 0..8 {
+        gb.write_mem(0xFF43, scx);
+
+        // Synchronize to Line 1 OAM Scan Start
+        loop {
+            if gb.ppu.read_ly() == 1
+                && matches!(
+                    gb.ppu.phase,
+                    crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+                )
+            {
+                break;
+            }
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+
+        // Advance until Mode 3 starts
+        while (gb.ppu.read_stat() & 0x03) != 3 {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+
+        // Measure Mode 3 duration
+        let mut ticks = 0;
+        while (gb.ppu.read_stat() & 0x03) == 3 {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+            ticks += 1;
+        }
+        durations.push(ticks);
+    }
+
+    let base = durations[0];
+    for scx in 1..8 {
+        let delta = durations[scx] - durations[scx - 1];
+        // SCX increment adds exactly 1 dot (2 ticks) of discard.
+        assert_eq!(delta, 2, "SCX {}->{} delta was {}", scx - 1, scx, delta);
+    }
+}
+
+#[test]
+#[ignore = "Depends on future decoupled STAT update implementation"]
+fn test_ppu_vram_lock_boundary() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x81); // LCD ON, BG ON
+
+    // Synchronize to Line 1 OAM Scan Start (Dot 0)
+    loop {
+        if gb.ppu.read_ly() == 1
+            && matches!(
+                gb.ppu.phase,
+                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+            )
+        {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Mode 2 is 80 dots (160 ticks).
+    // VRAM should be unlocked during Mode 2.
+    // At tick 160, we transition to Mode 3.
+    // gbmicrotest 001-vram_unlocked.s implies dot 80 (tick 160) is still unlocked
+    // because the STAT bits only update at tick 168.
+
+    // Try write at tick 158 (Dot 79) - should succeed
+    for _ in 0..158 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    gb.ppu.write_vram(0x8000, 0x55);
+    assert_eq!(gb.ppu.vram().read(0x8000), 0x55, "VRAM write at tick 158 failed");
+
+    // Try write at tick 162 (Dot 81) - should still succeed (STAT bits haven't changed)
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    gb.ppu.write_vram(0x8001, 0xAA);
+    assert_eq!(gb.ppu.vram().read(0x8001), 0xAA, "VRAM write at tick 162 failed");
+
+    // Advance to tick 168 - STAT bits change, memory blocks
+    for _ in 0..6 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert_eq!(gb.ppu.read_stat() & 0x03, 3, "STAT should be Mode 3 at tick 168");
+    gb.ppu.write_vram(0x8002, 0xBB);
+    assert_ne!(gb.ppu.vram().read(0x8002), 0xBB, "VRAM write at tick 168 should have been blocked");
+}
+
+#[test]
+fn test_ppu_window_y_increment_timing() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0xA1); // LCD ON, BG ON, WIN ON
+    gb.write_mem(0xFF4A, 10);   // WY = 10
+    gb.write_mem(0xFF4B, 7);    // WX = 7 (triggers at pos=0)
+
+    // Synchronize to Start of Frame (LY=0, Dot 0)
+    while gb.ppu.read_ly() != 0 || gb.ppu.dots_in_line() != 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    gb.write_mem(0xFF40, 0xA1); // LCD ON, BG ON, WIN ON
+    gb.write_mem(0xFF4A, 10);   // WY = 10
+    gb.write_mem(0xFF4B, 7);    // WX = 7 (triggers at pos=0)
+
+    // Advance to Line 10
+    while gb.ppu.read_ly() != 10 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Capture window_y before the window triggers on this line
+    let initial_wy = gb.ppu.window_y();
+
+    // Advance through Mode 2
+    while (gb.ppu.read_stat() & 0x03) != 3 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Mode 3 starts at tick 160.
+    // WX=7 triggers when position_in_line + 7 == 7 => pos = 0.
+    // For SCX=0, pos starts at -8.
+    for _ in 0..100 {
+        let prev_wy = gb.ppu.window_y();
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        let curr_wy = gb.ppu.window_y();
+        if curr_wy != prev_wy {
+            break;
+        }
+    }
+
+    assert_eq!(gb.ppu.window_y(), initial_wy + 1, "window_y should have incremented");
+}
+
+#[test]
+fn test_ppu_oam_unlock_timing() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x81); // LCD ON, BG ON
+
+    // Synchronize to Line 1 Mode 3 Start
+    while gb.ppu.read_ly() != 1 && (gb.ppu.read_stat() & 0x03) != 3 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    while (gb.ppu.read_stat() & 0x03) != 3 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Advance until nearly the end of Mode 3
+    // Mode 3 for SCX=0 is ~324 ticks.
+    // HBlank interrupt fires at pos=154.
+    // 154 pixels take 154 * 2 = 308 ticks.
+    // Plus 16 ticks for first tile = 324 ticks.
+    // Plus 10 ticks transition? = 334 ticks.
+    // Let's just loop until pos=159.
+    while gb.ppu.position_in_line() < 159 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // At pos=159, OAM should still be locked
+    assert!(gb.ppu.read_stat() & 0x03 == 3, "Still should be Mode 3");
+    gb.ppu.write_oam(0xFE00, 0x55);
+    assert_ne!(gb.ppu.oam().read(0xFE00), 0x55, "OAM write at pos=159 should be blocked");
+
+    // Advance 2 ticks to finish last pixel
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+
+    // Now it should be Mode 0 and OAM unlocked
+    assert_eq!(gb.ppu.read_stat() & 0x03, 0, "Should be Mode 0 now");
+    gb.ppu.write_oam(0xFE00, 0xAA);
+    assert_eq!(gb.ppu.oam().read(0xFE00), 0xAA, "OAM write at Mode 0 should succeed");
+}
+
+#[test]
+#[ignore = "Depends on future SCX latching implementation"]
+fn test_ppu_scx_latching() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x81); // LCD ON, BG ON
+
+    // Synchronize to Line 1 Dot 0
+    while gb.ppu.read_ly() != 1 || gb.ppu.dots_in_line() != 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // gbmicrotest 800-ppu-latch-scx.s implies SCX is latched before Mode 3.
+    // Let's test if changing SCX at dot 40 (tick 80) affects the line.
+    for _ in 0..80 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    gb.write_mem(0xFF43, 4); // SCX = 4
+
+    // Advance to Mode 3
+    while (gb.ppu.read_stat() & 0x03) != 3 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Measure Mode 3 duration. SCX=4 should be 332 ticks. SCX=0 should be 324.
+    let mut ticks = 0;
+    while (gb.ppu.read_stat() & 0x03) == 3 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        ticks += 1;
+    }
+
+    // Reset and try again, changing it back at dot 70.
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x81);
+    while gb.ppu.read_ly() != 1 || gb.ppu.dots_in_line() != 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    gb.write_mem(0xFF43, 4); // SCX = 4
+    for _ in 0..140 { // Dot 70
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    gb.write_mem(0xFF43, 0); // SCX = 0
+
+    while (gb.ppu.read_stat() & 0x03) != 3 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    let mut ticks = 0;
+    while (gb.ppu.read_stat() & 0x03) == 3 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        ticks += 1;
+    }
+}
+
+#[test]
 fn test_ppu_timing_diagnostic_log() {
     let mut gb = setup_gb();
     gb.write_mem(0xFF40, 0x80); // LCD ON
