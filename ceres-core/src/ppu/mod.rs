@@ -881,16 +881,6 @@ impl Ppu {
 
     /// Tick during Mode 3 (Drawing).
     fn tick_drawing(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
-        if let PpuPhase::Drawing(DrawingStage::Transition { remaining }) = self.phase {
-            if remaining > 1 {
-                self.phase = PpuPhase::Drawing(DrawingStage::Transition {
-                    remaining: remaining - 1,
-                });
-                return;
-            }
-            self.phase = PpuPhase::Drawing(DrawingStage::Running);
-        }
-
         // Check for window activation
         self.check_window_trigger(cgb_mode);
 
@@ -911,6 +901,16 @@ impl Ppu {
         // Handle sprite fetch state machine
         if self.sprite_fetcher_state != SpriteFetcherState::Idle {
             self.tick_sprite_fetcher(cgb_mode);
+            // Move transition handling here so it can return if still in transition
+            if let PpuPhase::Drawing(DrawingStage::Transition { remaining }) = self.phase {
+                if remaining > 1 {
+                    self.phase = PpuPhase::Drawing(DrawingStage::Transition {
+                        remaining: remaining - 1,
+                    });
+                    return;
+                }
+                self.phase = PpuPhase::Drawing(DrawingStage::Running);
+            }
             return;
         }
 
@@ -925,6 +925,16 @@ impl Ppu {
             self.start_sprite_fetch(sprite, cgb_mode);
             // Continue with sprite fetcher on next tick
             self.tick_sprite_fetcher(cgb_mode);
+            // Move transition handling here too
+            if let PpuPhase::Drawing(DrawingStage::Transition { remaining }) = self.phase {
+                if remaining > 1 {
+                    self.phase = PpuPhase::Drawing(DrawingStage::Transition {
+                        remaining: remaining - 1,
+                    });
+                    return;
+                }
+                self.phase = PpuPhase::Drawing(DrawingStage::Running);
+            }
             return;
         }
 
@@ -938,9 +948,20 @@ impl Ppu {
         // Advance fetcher every tick (it handles its own 2-tick wait states now)
         self.advance_fetcher(cgb_mode, false);
 
+        // Handle Transition stage delay (10 ticks total).
+        // Fetcher and FIFO logic continues above during transition.
+        if let PpuPhase::Drawing(DrawingStage::Transition { remaining }) = self.phase {
+            if remaining > 1 {
+                self.phase = PpuPhase::Drawing(DrawingStage::Transition {
+                    remaining: remaining - 1,
+                });
+                return;
+            }
+            self.phase = PpuPhase::Drawing(DrawingStage::Running);
+        }
+
         // HBlank interrupt fires 6 dots (12 ticks) before Mode 3 ends on hardware.
         if self.position_in_line >= 154 && self.mode_for_interrupt != Some(Mode::HBlank) {
-            self.set_mode_stat(Mode::HBlank);
             self.mode_for_interrupt = Some(Mode::HBlank);
             self.update_stat(ints);
         }
@@ -1288,8 +1309,8 @@ impl Ppu {
                 self.fetcher_state = FetcherState::PushT2;
             }
             FetcherState::PushT2 => {
-                // Push T2: Wait for FIFO to be empty
-                if self.bg_fifo.is_empty() {
+                // Push T2: Wait for FIFO to have space (capacity is 16, each push is 8)
+                if self.bg_fifo.size() <= 8 {
                     self.push_to_fifo();
                     self.fetcher_state = FetcherState::GetTileT1;
                 }

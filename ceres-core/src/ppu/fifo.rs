@@ -13,14 +13,13 @@ pub struct FifoPixel {
     pub bg_priority: bool,
 }
 
-/// Fixed-size FIFO with 8-pixel capacity.
+/// Fixed-size FIFO with 16-pixel capacity.
 ///
 /// The Game Boy PPU uses two FIFOs: one for background/window pixels and one for
-/// sprite (OAM) pixels. Each FIFO holds 8 pixels, but sprites can partially
-/// overlay onto the "next" 8 pixels by wrapping around the buffer.
+/// sprite (OAM) pixels. Each FIFO holds up to 16 pixels ( SameBoy accurate).
 #[derive(Clone, Copy, Default)]
 pub struct PixelFifo {
-    pixels: [FifoPixel; 8],
+    pixels: [FifoPixel; 16],
     read_pos: u8,
     size: u8,
 }
@@ -55,9 +54,6 @@ impl PixelFifo {
     /// * `palette` - Palette index (0 for DMG, 0-7 for CGB)
     /// * `bg_priority` - CGB BG-to-OAM priority flag
     /// * `flip_x` - Whether to flip pixels horizontally
-    ///
-    /// # Panics
-    /// Panics in debug mode if FIFO is not empty (bg push only happens when empty).
     pub fn push_bg_row(
         &mut self,
         mut data_low: u8,
@@ -66,24 +62,14 @@ impl PixelFifo {
         bg_priority: bool,
         flip_x: bool,
     ) {
-        debug_assert!(self.size == 0, "BG FIFO must be empty before push");
-
-        self.size = 8;
-        // SameBoy resets read_pos on empty, but since we use circular buffer logic,
-        // we write relative to current read_pos (which should be aligned if empty?).
-        // Actually, SameBoy says `fifo->read_end = 0` in `fifo_clear` but `fifo_push_bg_row` assumes empty.
-        // In SameBoy: `fifo->read_end` is the READ pointer.
-        // It writes to `fifo->fifo[i]` directly (0..7).
-        // This implies it resets alignment?
-        // SameBoy's `fifo_clear` resets read_end. `push_bg_row` asserts size 0.
-        // If size is 0, read_pos doesn't matter unless we reset it.
-        // Let's reset it to 0 to match SameBoy's implicit behavior.
-        self.read_pos = 0;
+        // Write 8 pixels starting from (read_pos + size) % 16
+        let start = (self.read_pos + self.size) & 0x0F;
 
         if flip_x {
             for i in 0..8 {
                 let color = (data_low & 1) | ((data_high & 1) << 1);
-                self.pixels[i] = FifoPixel {
+                let idx = (start + i) & 0x0F;
+                self.pixels[idx as usize] = FifoPixel {
                     color,
                     palette,
                     priority: 0,
@@ -95,7 +81,8 @@ impl PixelFifo {
         } else {
             for i in 0..8 {
                 let color = ((data_low >> 7) & 1) | (((data_high >> 7) & 1) << 1);
-                self.pixels[i] = FifoPixel {
+                let idx = (start + i) & 0x0F;
+                self.pixels[idx as usize] = FifoPixel {
                     color,
                     palette,
                     priority: 0,
@@ -105,6 +92,8 @@ impl PixelFifo {
                 data_high <<= 1;
             }
         }
+
+        self.size += 8;
     }
 
     /// Pops a single pixel from the FIFO.
@@ -116,7 +105,7 @@ impl PixelFifo {
             return None;
         }
         let pixel = self.pixels[self.read_pos as usize];
-        self.read_pos = (self.read_pos + 1) & 7;
+        self.read_pos = (self.read_pos + 1) & 0x0F;
         self.size -= 1;
         Some(pixel)
     }
@@ -145,7 +134,7 @@ impl PixelFifo {
     ) {
         // Ensure FIFO has space for overlay (SameBoy logic: size < 8 means we pad with transparent)
         while self.size < 8 {
-            let idx = ((self.read_pos + self.size) & 7) as usize;
+            let idx = ((self.read_pos + self.size) & 0x0F) as usize;
             self.pixels[idx] = FifoPixel::default();
             self.size += 1;
         }
@@ -157,7 +146,7 @@ impl PixelFifo {
             let pixel_color = ((data_low >> 7) & 1) | (((data_high >> 7) & 1) << 1);
 
             // Calculate target index in circular buffer
-            let target_idx = (self.read_pos as usize + (i ^ flip_xor)) & 7;
+            let target_idx = (self.read_pos as usize + (i ^ flip_xor)) & 0x0F;
             let target = &mut self.pixels[target_idx];
 
             if pixel_color != 0 && (target.color == 0 || priority < target.priority) {
