@@ -966,12 +966,6 @@ impl Ppu {
             self.phase = PpuPhase::Drawing(DrawingStage::Running);
         }
 
-        // HBlank interrupt fires 6 dots (12 ticks) before Mode 3 ends on hardware.
-        if self.position_in_line >= 154 && self.mode_for_interrupt != Some(Mode::HBlank) {
-            self.mode_for_interrupt = Some(Mode::HBlank);
-            self.update_stat(ints);
-        }
-
         // Check if line rendering is complete
         if self.position_in_line >= 160 {
             // End of Mode 3 handling.
@@ -995,8 +989,6 @@ impl Ppu {
 
             // Update STAT bits immediately (SameBoy accurate).
             self.set_mode_stat(Mode::HBlank);
-            self.mode_for_interrupt = Some(Mode::HBlank);
-            self.update_stat(ints);
         }
     }
 

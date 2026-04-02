@@ -559,7 +559,11 @@ fn test_ppu_vram_lock_boundary() {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
     gb.ppu.write_vram(0x8000, 0x55);
-    assert_eq!(gb.ppu.vram().read(0x8000), 0x55, "VRAM write at tick 158 failed");
+    assert_eq!(
+        gb.ppu.vram().read(0x8000),
+        0x55,
+        "VRAM write at tick 158 failed"
+    );
 
     // Try write at tick 162 (Dot 81) - should still succeed (STAT bits haven't changed)
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
@@ -567,23 +571,35 @@ fn test_ppu_vram_lock_boundary() {
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     gb.ppu.write_vram(0x8001, 0xAA);
-    assert_eq!(gb.ppu.vram().read(0x8001), 0xAA, "VRAM write at tick 162 failed");
+    assert_eq!(
+        gb.ppu.vram().read(0x8001),
+        0xAA,
+        "VRAM write at tick 162 failed"
+    );
 
     // Advance to tick 168 - STAT bits change, memory blocks
     for _ in 0..6 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
-    assert_eq!(gb.ppu.read_stat() & 0x03, 3, "STAT should be Mode 3 at tick 168");
+    assert_eq!(
+        gb.ppu.read_stat() & 0x03,
+        3,
+        "STAT should be Mode 3 at tick 168"
+    );
     gb.ppu.write_vram(0x8002, 0xBB);
-    assert_ne!(gb.ppu.vram().read(0x8002), 0xBB, "VRAM write at tick 168 should have been blocked");
+    assert_ne!(
+        gb.ppu.vram().read(0x8002),
+        0xBB,
+        "VRAM write at tick 168 should have been blocked"
+    );
 }
 
 #[test]
 fn test_ppu_window_y_increment_timing() {
     let mut gb = setup_gb();
     gb.write_mem(0xFF40, 0xA1); // LCD ON, BG ON, WIN ON
-    gb.write_mem(0xFF4A, 10);   // WY = 10
-    gb.write_mem(0xFF4B, 7);    // WX = 7 (triggers at pos=0)
+    gb.write_mem(0xFF4A, 10); // WY = 10
+    gb.write_mem(0xFF4B, 7); // WX = 7 (triggers at pos=0)
 
     // Synchronize to Start of Frame (LY=0, Dot 0)
     while gb.ppu.read_ly() != 0 || gb.ppu.dots_in_line() != 0 {
@@ -591,8 +607,8 @@ fn test_ppu_window_y_increment_timing() {
     }
 
     gb.write_mem(0xFF40, 0xA1); // LCD ON, BG ON, WIN ON
-    gb.write_mem(0xFF4A, 10);   // WY = 10
-    gb.write_mem(0xFF4B, 7);    // WX = 7 (triggers at pos=0)
+    gb.write_mem(0xFF4A, 10); // WY = 10
+    gb.write_mem(0xFF4B, 7); // WX = 7 (triggers at pos=0)
 
     // Advance to Line 10
     while gb.ppu.read_ly() != 10 {
@@ -619,7 +635,11 @@ fn test_ppu_window_y_increment_timing() {
         }
     }
 
-    assert_eq!(gb.ppu.window_y(), initial_wy + 1, "window_y should have incremented");
+    assert_eq!(
+        gb.ppu.window_y(),
+        initial_wy + 1,
+        "window_y should have incremented"
+    );
 }
 
 #[test]
@@ -649,7 +669,11 @@ fn test_ppu_oam_unlock_timing() {
     // At pos=159, OAM should still be locked
     assert!(gb.ppu.read_stat() & 0x03 == 3, "Still should be Mode 3");
     gb.ppu.write_oam(0xFE00, 0x55);
-    assert_ne!(gb.ppu.oam().read(0xFE00), 0x55, "OAM write at pos=159 should be blocked");
+    assert_ne!(
+        gb.ppu.oam().read(0xFE00),
+        0x55,
+        "OAM write at pos=159 should be blocked"
+    );
 
     // Advance 2 ticks to finish last pixel
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
@@ -658,7 +682,11 @@ fn test_ppu_oam_unlock_timing() {
     // Now it should be Mode 0 and OAM unlocked
     assert_eq!(gb.ppu.read_stat() & 0x03, 0, "Should be Mode 0 now");
     gb.ppu.write_oam(0xFE00, 0xAA);
-    assert_eq!(gb.ppu.oam().read(0xFE00), 0xAA, "OAM write at Mode 0 should succeed");
+    assert_eq!(
+        gb.ppu.oam().read(0xFE00),
+        0xAA,
+        "OAM write at Mode 0 should succeed"
+    );
 }
 
 #[test]
@@ -698,7 +726,8 @@ fn test_ppu_scx_latching() {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
     gb.write_mem(0xFF43, 4); // SCX = 4
-    for _ in 0..140 { // Dot 70
+    for _ in 0..140 {
+        // Dot 70
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
     gb.write_mem(0xFF43, 0); // SCX = 0
@@ -5929,10 +5958,6 @@ fn test_repro_m0int_m0stat_scx3_2_gambatte_assertion() {
     gb.advance_dots(200);
 
     let mode = gb.ppu.read_stat() & 0x03;
-    println!(
-        "DEBUG READ STAT: dots_in_line = {}, mode = {}",
-        gb.ppu.dots_in_line, mode
-    );
     assert_eq!(
         mode, 0,
         "m0int_m0stat_scx3_2: Ceres outputs Mode 0 because it doesn't change STAT early like Gambatte (which outputs 2)"
@@ -6096,7 +6121,7 @@ fn test_repro_lycint_ly_2_gambatte_assertion() {
 
     // lycint_ly_2 outputs 6
     // 103 NOPs (412 T) + dispatch (20 T) + JP (16 T) + ldff (4 T) = 452 T-cycles
-    gb.advance_dots(452 * 2);
+    gb.advance_dots(452);
 
     let ly = gb.ppu.read_ly();
     // Gambatte updates LY early (T=453) and expects 6.
@@ -6122,7 +6147,7 @@ fn test_repro_m2int_m3stat_1_gambatte_assertion() {
 
     // m2int_m3stat_1 outputs 3 (Mode 3)
     // 52 NOPs (208 T) + dispatch (20 T) + JP (16 T) + ldff (4 T) = 248 T-cycles
-    gb.advance_dots(248 * 2);
+    gb.advance_dots(248);
 
     let mode = gb.ppu.read_stat() & 0x03;
     assert_eq!(mode, 3, "m2int_m3stat_1: Expected Mode 3");
@@ -6146,7 +6171,7 @@ fn test_repro_m2int_m3stat_2_gambatte_assertion() {
 
     // m2int_m3stat_2 outputs 0 (Mode 0)
     // 53 NOPs (212 T) + dispatch (20 T) + JP (16 T) + ldff (4 T) = 252 T-cycles
-    gb.advance_dots(252 * 2);
+    gb.advance_dots(252);
 
     let mode = gb.ppu.read_stat() & 0x03;
     // Ceres is late transitioning to Mode 0, so it outputs 3. Hardware outputs 0.
@@ -6221,7 +6246,7 @@ fn test_repro_lycint_m0stat_1_gambatte_assertion() {
 
     // lycint_m0stat_1 outputs 0
     // 99 NOPs (396 T) + dispatch (20 T) + inc (4 T) + ldff (12 T) + JP (16 T) + ldff (4 T) = 452 T-cycles
-    gb.advance_dots(452 * 2);
+    gb.advance_dots(452);
 
     let mode = gb.ppu.read_stat() & 0x03;
     // Both Ceres and Gambatte are in Mode 0 at T=452.
