@@ -431,7 +431,19 @@ impl Ppu {
 
     #[cfg(test)]
     #[must_use]
-    pub(crate) fn fetcher_state(&self) -> FetcherState {
+    pub(crate) const fn lcd_x(&self) -> u8 {
+        self.lcd_x
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) const fn rgba_buf(&self) -> &RgbaBuf {
+        &self.rgb_buf
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) const fn fetcher_state(&self) -> FetcherState {
         self.fetcher_state
     }
 
@@ -518,6 +530,10 @@ impl Ppu {
             Line153Stage::LycReset { remaining } => {
                 // State 19: 2 cycles (4 ticks)
                 if remaining == 4 {
+                    // LY stays 152 for some ticks? SameBoy says:
+                    // case 19: // Line 153 start
+                    // if (ppu->line == 153) ppu->ly = 153;
+                    // But maybe it happens AFTER some delay.
                     self.ly_for_comparison = 0xFFFF;
                     self.stat &= !STAT_LYC_B; // Clear coincidence flag when comparison disabled
                     self.update_stat(ints);
@@ -1709,6 +1725,10 @@ impl Ppu {
                 // State 26: 2 cycles (4 ticks).
                 if *remaining == 4 {
                     // Start of VBlank line logic.
+                    // For line 144, LY stays at 143 for 8 ticks (4 in LycReset, 4 in LyUpdate).
+                    // For other lines, it should probably stay at previous line too.
+                    self.ly = self.current_line.wrapping_sub(1);
+
                     // ly_for_comparison = -1 (0xFFFF).
                     self.ly_for_comparison = 0xFFFF;
                     self.stat &= !STAT_LYC_B; // Clear coincidence flag when comparison disabled
