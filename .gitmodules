@@ -7,3 +7,24 @@
 [submodule "external/test-sources/age-test-roms"]
 	path = external/test-sources/age-test-roms
 	url = git@github.com:c-sp/age-test-roms.git
+[submodule "external/reference-implementations/gambatte-core"]
+	path = external/reference-implementations/gambatte-core
+	url = git@github.com:pokemon-speedrunning/gambatte-core.git
+[submodule "external/reference-implementations/SameBoy"]
+	path = external/reference-implementations/SameBoy
+	url = git@github.com:LIJI32/SameBoy.git
+[submodule "external/reference-implementations/metroboy"]
+	path = external/reference-implementations/metroboy
+	url = git@github.com:aappleby/metroboy.git
+[submodule "external/reference-implementations/mooneye-gb"]
+	path = external/reference-implementations/mooneye-gb
+	url = git@github.com:Gekkio/mooneye-gb.git
+[submodule "external/test-sources/gb-test-roms"]
+	path = external/test-sources/gb-test-roms
+	url = git@github.com:retrio/gb-test-roms.git
+[submodule "external/test-sources/gbmicrotest"]
+	path = external/test-sources/gbmicrotest
+	url = git@github.com:aappleby/gbmicrotest.git
+[submodule "external/test-sources/mooneye-test-suite"]
+	path = external/test-sources/mooneye-test-suite
+	url = git@github.com:Gekkio/mooneye-test-suite.git
