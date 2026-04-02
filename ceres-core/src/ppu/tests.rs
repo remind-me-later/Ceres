@@ -6773,3 +6773,191 @@ fn repro_m2int_m0irq_1() {
         println!("WARN: m2int_m0irq_1: Mode 0 IRQ re-triggered (Ceres behavior)");
     }
 }
+
+// -----------------------------------------------------------------------
+// Additional PPU timing tests derived from gbmicrotest and gambatte
+// -----------------------------------------------------------------------
+
+/// lcdon_to_stat0_d - gbmicrotest/tests/lcdon_to_stat0_d.s
+/// Verifies that STAT Mode 0 is reached at 174 M-cycles (1392 ticks) after LCD-on.
+#[test]
+fn gbmicrotest_lcdon_to_stat0_d() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    // 174 M-cycles * 4 = 696 T-cycles (4MHz) = 1392 ticks (8MHz).
+    for _ in 0..1392 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let stat = gb.ppu.read_stat();
+    // Expected: Mode 0 (bits 0-1 = 00).
+    assert_eq!(
+        stat & 0x03,
+        0,
+        "STAT should be Mode 0 at 174 M-cycles (got {stat:#04X})"
+    );
+}
+
+/// lcdon_to_stat1_d - gbmicrotest/tests/lcdon_to_stat1_d.s
+/// Verifies that STAT Mode 1 is reached at 17552 M-cycles (140416 ticks) after LCD-on.
+#[test]
+fn gbmicrotest_lcdon_to_stat1_d() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    // 17552 M-cycles * 4 * 2 = 140416 ticks (8MHz).
+    for _ in 0..140416 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let stat = gb.ppu.read_stat();
+    // Expected: Mode 1 (bits 0-1 = 01).
+    assert_eq!(
+        stat & 0x03,
+        1,
+        "STAT should be Mode 1 (VBlank) at 17552 M-cycles (got {stat:#04X})"
+    );
+}
+
+/// oam_read_l0_a - gbmicrotest/tests/oam_read_l0_a.s
+/// OAM read at 17 M-cycles (136 ticks) after LCD-on should SUCCEED.
+#[test]
+fn gbmicrotest_oam_read_l0_a() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFE00, 0x55);
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    // 17 M-cycles * 8 = 136 ticks.
+    for _ in 0..136 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let val = gb.read_mem(0xFE00);
+    assert_eq!(
+        val, 0x55,
+        "OAM read at 17 M-cycles should succeed (InitialMode0 phase)"
+    );
+}
+
+/// oam_read_l0_b - gbmicrotest/tests/oam_read_l0_b.s
+/// OAM read at 18 M-cycles (144 ticks) after LCD-on should be BLOCKED (0xFF).
+#[test]
+fn gbmicrotest_oam_read_l0_b() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFE00, 0x55);
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    // 18 M-cycles * 8 + 24 (ldh overhead) = 168 ticks.
+    for _ in 0..168 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let val = gb.read_mem(0xFE00);
+    assert_eq!(
+        val, 0xFF,
+        "OAM read at 18 M-cycles (+ldh) should be blocked (Phase 3+)"
+    );
+}
+
+/// hblank_int_scx0 - gbmicrotest/tests/hblank_int_scx0.s
+/// Checks HBlank interrupt timing for SCX=0.
+#[test]
+fn gbmicrotest_hblank_int_scx0() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    // Skip first line (startup line is special)
+    while gb.ppu.read_ly() == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    // Synchronize to Start of Line 1 OAM Scan (tick 0)
+    loop {
+        if matches!(
+            gb.ppu.phase,
+            crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+        ) {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    gb.write_mem(0xFF43, 0); // SCX = 0
+    gb.write_mem(0xFF41, 0x08); // Enable HBlank IRQ
+    gb.write_mem(0xFF0F, 0); // Clear IF
+
+    let mut irq_tick = None;
+    for t in 0..912 {
+        if gb.ints.read_if() & 0x02 != 0 {
+            irq_tick = Some(t);
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let tick = irq_tick.expect("HBlank IRQ should fire");
+    // Expected HBlank start for SCX=0: ~252 dots = 504 ticks into line.
+    assert!(
+        tick >= 502 && tick <= 510,
+        "HBlank IRQ fired at unexpected tick {tick} (expected ~504)"
+    );
+}
+
+/// win0_b - gbmicrotest/tests/win0_b.s
+/// Verifies that WX=0 triggers the window correctly and affects HBlank timing.
+#[test]
+fn gbmicrotest_win0_b() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x00); // LCD OFF
+    gb.write_mem(0xFF4A, 0); // WY = 0
+    gb.write_mem(0xFF4B, 0); // WX = 0
+    gb.write_mem(0xFF40, 0xB1); // LCD ON, BG ON, WIN ON, BG/WIN priority ON
+
+    // Wait for line 0 HBlank
+    // 112 M-cycles (short line 0) + 63 M-cycles (delay) = 175 M-cycles.
+    // 175 * 8 = 1400 ticks.
+    for _ in 0..1400 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let stat = gb.ppu.read_stat();
+    // Expected: Mode 0 ($80).
+    assert_eq!(
+        stat & 0x03,
+        0,
+        "STAT should be Mode 0 at 175 M-cycles with WX=0 (got {stat:#04X})"
+    );
+}
+
+/// scx_m3_extend_1 - gambatte/test/hwtests/scx_during_m3/scx_m3_extend_1_dmg08_cgb04c_out3.asm
+/// Verifies that Mode 3 is extended if SCX is changed during the mode.
+#[test]
+fn gambatte_scx_m3_extend_1() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    advance_to_ly(&mut gb, 90);
+    advance_to_mode(&mut gb, 3);
+
+    // Wait until position_in_line is ~80
+    while gb.ppu.position_in_line() < 80 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Change SCX to 7 (should extend Mode 3 by 7 dots = 14 ticks)
+    gb.write_mem(0xFF43, 7);
+
+    // Wait until what would have been the end of Mode 3 if SCX was 0.
+    // Mode 3 for SCX=0 is ~172 dots = 344 ticks.
+    // Plus 168 ticks OAM scan = 512 ticks.
+    while gb.ppu.dots_in_line() < 512 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // With SCX=7, it should still be in Mode 3 at tick 512.
+    let mode = gb.ppu.read_stat() & 0x03;
+    assert_eq!(
+        mode, 3,
+        "Should still be in Mode 3 at tick 512 due to SCX=7 extension"
+    );
+}
