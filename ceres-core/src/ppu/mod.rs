@@ -968,7 +968,7 @@ impl Ppu {
         }
 
         // Advance fetcher every tick (it handles its own 2-tick wait states now)
-        self.advance_fetcher(cgb_mode, false);
+        self.advance_fetcher(cgb_mode);
 
         // Handle Transition stage delay (10 ticks total).
         // Fetcher and FIFO logic continues above during transition.
@@ -1082,13 +1082,13 @@ impl Ppu {
                     self.sprite_fetcher_step = 0;
                 }
 
-                self.advance_fetcher(cgb_mode, true);
+                self.advance_fetcher(cgb_mode);
             }
 
             SpriteFetcherState::State41Advance => {
                 // State 41: 1 cycle (2 ticks). Advances BG fetcher once at start.
                 if self.sprite_fetcher_step == 0 {
-                    self.advance_fetcher(cgb_mode, true);
+                    self.advance_fetcher(cgb_mode);
                 }
                 self.sprite_fetcher_step += 1;
                 if self.sprite_fetcher_step >= 2 {
@@ -1100,7 +1100,7 @@ impl Ppu {
             SpriteFetcherState::GetTileAndFlags => {
                 // State 20: 2 cycles (4 ticks). Advances BG fetcher once at start.
                 if self.sprite_fetcher_step == 0 {
-                    self.advance_fetcher(cgb_mode, true);
+                    self.advance_fetcher(cgb_mode);
                 }
                 self.sprite_fetcher_step += 1;
                 if self.sprite_fetcher_step >= 4 {
@@ -1223,7 +1223,7 @@ impl Ppu {
     /// Uses T1/T2 states:
     /// - T1: Calculate addresses/setup (2 ticks)
     /// - T2: Perform VRAM read (2 ticks)
-    fn advance_fetcher(&mut self, cgb_mode: CgbMode, during_sprite_fetch: bool) {
+    fn advance_fetcher(&mut self, cgb_mode: CgbMode) {
         // Implement 8MHz timing: each state takes 2 ticks (1 T-cycle)
         // Wait 1 tick before doing work and transitioning
         if self.fetcher_step == 0 {
@@ -1257,9 +1257,6 @@ impl Ppu {
                 } else {
                     // BG X calculation
                     let scx = self.scx;
-                    let offset = u8::from(
-                        matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat) && !during_sprite_fetch,
-                    );
 
                     // SameBoy: first fetch (pos < -8) uses SCX / 8.
                     // Sub-tile scrolling only starts affecting fetcher address after first fetch.
@@ -1268,8 +1265,7 @@ impl Ppu {
                     } else {
                         let pos = self
                             .position_in_line
-                            .wrapping_add(self.bg_fifo.size() as i16)
-                            .wrapping_sub(i16::from(offset));
+                            .wrapping_add(self.bg_fifo.size() as i16);
                         let scx_adj = scx.wrapping_add(pos as u8);
                         scx_adj / 8
                     }
