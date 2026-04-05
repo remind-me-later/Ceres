@@ -7419,3 +7419,111 @@ fn gbmicrotest_802_ppu_latch_tileselect() {
 
     // It should have latched the old Tile Select ($8000) if it latches early.
 }
+#[test]
+fn test_ppu_sprite_background_shift_repro() {
+    let mut gb = setup_gb();
+
+    // Clear OAM
+    for i in 0..160 {
+        gb.write_mem(0xFE00 + i, 0);
+    }
+
+    // Set up BG Tile 0 (all black) and Tile 1 (all white)
+    // Actually let's just make the BG a sequence of colors so we can see shifts.
+    for i in 0..16 {
+        gb.write_mem(0x8000 + i, 0x00); // Tile 0: Color 0
+        gb.write_mem(0x8010 + i, 0xFF); // Tile 1: Color 3
+    }
+
+    // Tile map: alternating 0 and 1
+    for i in 0..32 {
+        gb.write_mem(0x9800 + i, (i % 2) as u8);
+    }
+
+    // Set up a sprite at Y=17 (LY=1), X=24, Tile=2 (all Color 1)
+    for i in 0..16 {
+        gb.write_mem(0x8020 + i, 0x55); // Tile 2: Color 1 (if palette is setup)
+    }
+    gb.write_mem(0xFE00, 17);
+    gb.write_mem(0xFE01, 24);
+    gb.write_mem(0xFE02, 2);
+    gb.write_mem(0xFE03, 0);
+
+    // Setup palettes
+    gb.write_mem(0xFF47, 0xE4); // BGP: 11 10 01 00 (Color 3=Black, 0=White)
+    gb.write_mem(0xFF48, 0xE4); // OBP0
+
+    // SCX = 0
+    gb.write_mem(0xFF43, 0);
+
+    // Run without sprite (move sprite off-screen)
+    gb.write_mem(0xFE00, 0);
+    gb.write_mem(0xFF40, 0x83); // LCD ON, BG ON, OBJ ON
+
+    // Wait for end of Line 1
+    while gb.ppu.read_ly() != 2 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Capture background pixels
+    let mut expected_bg = Vec::new();
+    let row_start = 1 * 160;
+    for x in 0..160 {
+        let rgb = gb.ppu.rgba_buf().pixel_data()
+            [((row_start + x) as usize * 4)..((row_start + x) as usize * 4 + 3)]
+            .to_vec();
+        expected_bg.push(rgb);
+    }
+
+    // Reset and run WITH sprite
+    let mut gb = setup_gb();
+    for i in 0..160 {
+        gb.write_mem(0xFE00 + i, 0);
+    }
+    for i in 0..16 {
+        gb.write_mem(0x8000 + i, 0x00);
+        gb.write_mem(0x8010 + i, 0xFF);
+        gb.write_mem(0x8020 + i, 0x55);
+    }
+    for i in 0..32 {
+        gb.write_mem(0x9800 + i, (i % 2) as u8);
+    }
+    gb.write_mem(0xFF47, 0xE4);
+    gb.write_mem(0xFF48, 0xE4);
+    gb.write_mem(0xFF43, 0);
+
+    gb.write_mem(0xFE00, 17);
+    gb.write_mem(0xFE01, 24);
+    gb.write_mem(0xFE02, 2);
+    gb.write_mem(0xFE03, 0);
+    gb.write_mem(0xFF40, 0x83);
+
+    while gb.ppu.read_ly() != 2 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Verify background didn't shift
+    let mut actual_bg = Vec::new();
+    for x in 0..160 {
+        let rgb = gb.ppu.rgba_buf().pixel_data()
+            [((row_start + x) as usize * 4)..((row_start + x) as usize * 4 + 3)]
+            .to_vec();
+        actual_bg.push(rgb);
+    }
+
+    // Sprite should be at X=16 to 23 (since X=24 means lcd_x = 24 - 8 = 16)
+    // The background everywhere else should match exactly
+    let mut diffs = 0;
+    for x in 0..160 {
+        if x < 16 || x >= 24 {
+            if actual_bg[x as usize] != expected_bg[x as usize] {
+                println!(
+                    "Mismatch at X={}: Expected {:?}, got {:?}",
+                    x, expected_bg[x as usize], actual_bg[x as usize]
+                );
+                diffs += 1;
+            }
+        }
+    }
+    assert_eq!(diffs, 0, "Background shifted after sprite!");
+}

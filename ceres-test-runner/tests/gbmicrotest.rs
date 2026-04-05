@@ -556,8 +556,8 @@ gbmicrotest!(test_ppu_sprite0_scx6_a, "ppu_sprite0_scx6_a.gb"); // Fails with mo
 gbmicrotest!(test_ppu_sprite0_scx6_b, "ppu_sprite0_scx6_b.gb");
 gbmicrotest!(test_ppu_sprite0_scx7_a, "ppu_sprite0_scx7_a.gb"); // Fails with mode3_delay=0
 gbmicrotest!(test_ppu_sprite0_scx7_b, "ppu_sprite0_scx7_b.gb");
-gbmicrotest!(test_ppu_sprite_testbench, "ppu_sprite_testbench.gb", ignore);
-gbmicrotest!(test_ppu_spritex_vs_scx, "ppu_spritex_vs_scx.gb", ignore);
+gbmicrotest!(test_ppu_sprite_testbench, "ppu_sprite_testbench.gb");
+gbmicrotest!(test_ppu_spritex_vs_scx, "ppu_spritex_vs_scx.gb");
 gbmicrotest!(test_ppu_win_vs_wx, "ppu_win_vs_wx.gb", ignore);
 gbmicrotest!(test_ppu_wx_early, "ppu_wx_early.gb", ignore);
 gbmicrotest!(test_sprite_0_a, "sprite_0_a.gb"); // Fails with mode3_delay=0

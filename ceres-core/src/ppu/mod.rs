@@ -1268,7 +1268,7 @@ impl Ppu {
                     } else {
                         let pos = self
                             .position_in_line
-                            .wrapping_add(8)
+                            .wrapping_add(self.bg_fifo.size() as i16)
                             .wrapping_sub(i16::from(offset));
                         let scx_adj = scx.wrapping_add(pos as u8);
                         scx_adj / 8
