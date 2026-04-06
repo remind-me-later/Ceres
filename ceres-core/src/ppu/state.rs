@@ -42,8 +42,7 @@ impl Default for OamScanStage {
 /// Drawing (Mode 3) state machine.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DrawingStage {
-    /// Delay before rendering starts (SameBoy Transition1/2).
-    /// Duration: 10 ticks (5 cycles).
+    /// Pipeline priming / fetcher stalling delay.
     Transition { remaining: u8 },
     /// Main rendering loop.
     Running,
@@ -51,7 +50,7 @@ pub enum DrawingStage {
 
 impl Default for DrawingStage {
     fn default() -> Self {
-        Self::Transition { remaining: 10 }
+        Self::Transition { remaining: 12 }
     }
 }
 

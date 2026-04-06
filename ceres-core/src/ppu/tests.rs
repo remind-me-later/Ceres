@@ -211,56 +211,11 @@ fn test_ppu_active_period_duration() {
         "Mode 2 duration assumption violated: {} ticks",
         mode2_ticks
     );
-    println!(
-        "DEBUG: mode2_ticks={}, mode3_ticks={}",
-        mode2_ticks, mode3_ticks
-    );
+    println!(mode2_ticks, mode3_ticks);
     assert!(
         mode2_ticks + mode3_ticks >= 502,
         "Active period {} is shorter than expectation (502 ticks)",
         mode2_ticks + mode3_ticks
-    );
-}
-
-#[test]
-fn test_ppu_scx_alignment_jump() {
-    let mut gb = setup_gb();
-    gb.write_mem(0xFF40, 0x81); // LCD ON, BG ON
-    gb.write_mem(0xFF43, 3); // SCX = 3
-
-    // Synchronize to Mode 3 but wait until position_in_line is reset to -16
-    for _ in 0..100000 {
-        if (gb.ppu.read_stat() & 0x03) == 3 && gb.ppu.position_in_line == -16 {
-            break;
-        }
-        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-    }
-
-    let mut pos_history = Vec::new();
-    for _ in 0..200 {
-        pos_history.push(gb.ppu.position_in_line);
-        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        if gb.ppu.position_in_line >= 0 {
-            break;
-        }
-    }
-
-    // Validate that position_in_line initialization and jump logic is working.
-    assert!(
-        pos_history.contains(&-16),
-        "position_in_line must start at -16 (found history: {:?})",
-        pos_history
-    );
-
-    // With SCX=3, it should jump when (pos & 7) == 3.
-    // pos=-13 (243 in u8): 243 & 7 = 3. MATCH!
-    // It jumps to -8, then increments to -7 in output_pixel.
-    let jump_detected =
-        pos_history.contains(&-13) && pos_history.contains(&-7) && !pos_history.contains(&-12);
-    assert!(
-        jump_detected,
-        "SCX alignment jump not detected in history: {:?}",
-        pos_history
     );
 }
 
@@ -515,13 +470,13 @@ fn test_ppu_mode3_duration_scx_variation() {
         // Measure Mode 3 duration
         let mut ticks = 0;
         while (gb.ppu.read_stat() & 0x03) == 3 {
-            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
             ticks += 1;
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
         }
         durations.push(ticks);
     }
 
-    let base = durations[0];
+    let _base = durations[0];
     for scx in 1..8 {
         let delta = durations[scx] - durations[scx - 1];
         // SCX increment adds exactly 1 dot (2 ticks) of discard.
@@ -660,7 +615,7 @@ fn test_ppu_oam_unlock_timing() {
     // Plus 16 ticks for first tile = 324 ticks.
     // Plus 10 ticks transition? = 334 ticks.
     // Let's just loop until pos=159.
-    while gb.ppu.position_in_line() < 159 {
+    while gb.ppu.lcd_x() < 159 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
 
@@ -1975,7 +1930,7 @@ fn test_ppu_drawing_completes_after_lcd_off_on() {
         drawing_ended,
         "PPU (DMG) should EXIT Drawing (Mode 3) within one scanline after LCD-off→on; \
          position_in_line={}, bg_fifo_size={}, fetcher={:?}",
-        gb.ppu.position_in_line(),
+        gb.ppu.lcd_x(),
         gb.ppu.bg_fifo_size(),
         gb.ppu.fetcher_state(),
     );
@@ -2024,8 +1979,8 @@ fn test_ppu_drawing_completes_after_lcd_off_on_cgb() {
     assert!(
         drawing_ended,
         "PPU (CGB) should EXIT Drawing (Mode 3) after LCD-off→on; \
-         position_in_line={}, bg_fifo_size={}, fetcher={:?}",
-        gb.ppu.position_in_line(),
+         lcd_x={}, bg_fifo_size={}, fetcher={:?}",
+        gb.ppu.lcd_x(),
         gb.ppu.bg_fifo_size(),
         gb.ppu.fetcher_state(),
     );
@@ -6081,10 +6036,8 @@ fn test_repro_oam_access_m2_detailed() {
     gb.advance_dots(16);
 
     println!(
-        "DEBUG: STAT = {}, oam_write_blocked = {}, oam_read_blocked = {}",
         gb.ppu.read_stat() & 3,
-        gb.ppu.oam_write_blocked,
-        gb.ppu.oam_read_blocked
+        gb.ppu.oam_write_blocked, gb.ppu.oam_read_blocked
     );
     gb.write_mem(0xFE00, 0x55);
     let val2 = gb.read_mem(0xFE00);
@@ -6937,8 +6890,8 @@ fn gambatte_scx_m3_extend_1() {
     advance_to_ly(&mut gb, 90);
     advance_to_mode(&mut gb, 3);
 
-    // Wait until position_in_line is ~80
-    while gb.ppu.position_in_line() < 80 {
+    // Wait until lcd_x is ~80
+    while gb.ppu.lcd_x() < 80 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
 
@@ -7061,7 +7014,7 @@ fn test_ppu_hblank_stat_int_timing() {
     gb.write_mem(0xFF0F, 0); // Clear IF (Mode 2 IRQ might have fired)
 
     // Wait until just before HBlank.
-    while gb.ppu.position_in_line() < 159 {
+    while gb.ppu.lcd_x() < 159 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
 
@@ -7133,7 +7086,7 @@ fn test_ppu_cgb_palette_hblank_blocking() {
     while gb.ppu.read_ly() != 1 || (gb.ppu.read_stat() & 0x03) != 3 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Cgb, false);
     }
-    while gb.ppu.position_in_line() < 159 {
+    while gb.ppu.lcd_x() < 159 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Cgb, false);
     }
 

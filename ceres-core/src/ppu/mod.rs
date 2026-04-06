@@ -139,8 +139,12 @@ pub struct Ppu {
     sprite_buffer: SpriteBuffer,
     /// Current dot within scanline (0-455).
     dots_in_line: u16,
-    /// LCD X position being rendered (-8 to 167, negative = scroll discard phase).
-    position_in_line: i16,
+    /// Pixels to drop at the start of the line or when window activates.
+    pixel_discard_count: u8,
+    /// Is the background fetcher currently suspended by the sprite fetcher?
+    fetcher_suspended: bool,
+    /// The mode currently visible to the CPU in the STAT register.
+    stat_mode: Mode,
     /// Actual LCD X coordinate (0-159).
     lcd_x: u8,
     /// Window has been triggered on this scanline.
@@ -415,12 +419,6 @@ impl Ppu {
     #[must_use]
     pub(crate) const fn window_y(&self) -> u8 {
         self.window_y
-    }
-
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) const fn position_in_line(&self) -> i16 {
-        self.position_in_line
     }
 
     #[cfg(test)]
@@ -709,49 +707,6 @@ impl Ppu {
         }
     }
 
-    /// Enter Mode 3 rendering after startup sequence completes.
-    fn enter_mode3_after_startup(&mut self, ints: &mut Interrupts) {
-        self.phase = PpuPhase::Drawing(DrawingStage::Running);
-        self.mode_for_interrupt = Some(Mode::Drawing);
-        // STAT already set to Mode 3 at dot 79
-
-        // Memory blocking already set during startup sequence
-
-        self.sprite_fetcher_state = SpriteFetcherState::Idle;
-
-        // Initialize drawing state.
-        // cycles_for_line is augmented by 8 extra cycles for first line (16 ticks).
-        // Startup duration 166 + 16 = 182.
-        self.dots_in_line = 182;
-        self.fetcher_state = FetcherState::GetTileT1;
-        self.fetcher_step = 0;
-        self.window_tile_x = 0;
-        self.position_in_line = -16;
-        self.lcd_x = 0;
-        self.bg_fifo.clear();
-        self.oam_fifo.clear();
-        // Push 8 "junk" pixels to prime the FIFO (will be discarded during scroll)
-        self.bg_fifo.push_bg_row(0, 0, 0, false, false);
-        self.wx_triggered = false;
-        // window_y starts at -1 (0xFF), incremented when window activates.
-        self.window_y = 0xFF;
-        // Reset per-line flags
-        self.line_has_fractional_scrolling = false;
-        self.window_is_being_fetched = false;
-        self.window_activation_delay = 0;
-        // Note: No OAM scan happened, so sprite_buffer stays empty for first line after LCD on
-
-        // Clear sprite buffer and visible object count
-        self.sprite_buffer.clear();
-
-        // The startup line (line 0 after LCD-on) ends 8 T-cycles (16 half-clocks) earlier than a
-        // normal line (SameBoy: cycles_for_line += 8).  Set a flag so tick_hblank triggers PreEnd
-        // 16 ticks early, shortening line 0's HBlank by the correct amount.
-        self.first_line_short = true;
-
-        self.update_stat(ints);
-    }
-
     /// Tick during Mode 2 (OAM Scan) using hierarchical state machine.
     /// Timing (all in ticks = 8MHz half-cycles):
     /// - Entry (State 35): 4 ticks - OAM write blocked on CGB (non-double-speed)
@@ -771,7 +726,8 @@ impl Ppu {
             OamScanStage::Running { tick } => {
                 // SameBoy-accurate timing (in 8MHz ticks)
 
-                // Tick 0: LY update and Mode 2 interrupt pulse.
+                // Tick 0: LY update. Mode 2 interrupt pulse.
+                // NOTE: STAT bottom bits don't change to Mode 2 until tick 4.
                 if tick == 0 {
                     self.sprite_buffer.clear();
 
@@ -780,20 +736,21 @@ impl Ppu {
                     self.ly_for_comparison = u16::from(self.ly);
 
                     // Mode 2 interrupt fires at tick 0.
-                    self.set_mode_stat(Mode::OamScan);
                     self.mode_for_interrupt = Some(Mode::OamScan);
                     self.update_stat(ints);
 
-                    // OAM write-blocking starts for CGB (non-double-speed) (SameBoy State 35)
+                    // OAM write-blocking starts for CGB (non-double-speed)
                     self.oam_write_blocked = is_cgb && !double_speed;
                 }
 
-                // Tick 4: OAM write-blocking starts for all models (SameBoy State 35 exit).
+                // Tick 4: STAT mode bits change to Mode 2.
                 if tick == 4 {
+                    self.set_mode_stat(Mode::OamScan);
                     self.oam_write_blocked = is_cgb;
+                    self.update_stat(ints);
                 }
 
-                // Tick 8: complete OAM-scan memory blocking (SameBoy State 7).
+                // Tick 8: complete OAM-scan memory blocking.
                 if tick == 8 {
                     self.oam_read_blocked = true;
                     self.oam_write_blocked = true;
@@ -801,10 +758,9 @@ impl Ppu {
                 }
 
                 // OAM Scan Loop (40 entries * 4 ticks = 160 ticks)
-                if tick >= 8 && tick < 168 {
-                    let scan_tick = tick - 8;
-                    let entry = (scan_tick / 4) as u8;
-                    let sub_tick = (scan_tick % 4) as u8;
+                if tick < 160 {
+                    let entry = (tick / 4) as u8;
+                    let sub_tick = (tick % 4) as u8;
 
                     if sub_tick == 0 && is_cgb {
                         self.scan_oam_entry_at(entry);
@@ -813,7 +769,7 @@ impl Ppu {
                         self.scan_oam_entry_at(entry);
                     }
 
-                    // Entry 37 memory unblocking (ticks 158-159)
+                    // Entry 37 memory unblocking (ticks 150-151? No, 158-159)
                     if entry == 37 && sub_tick == 2 {
                         self.vram_read_blocked = !is_cgb;
                         self.vram_write_blocked = false;
@@ -822,8 +778,8 @@ impl Ppu {
                     }
                 }
 
-                // STAT bits change to Mode 3 at tick 168
-                if tick == 168 {
+                // STAT bits change to Mode 3 at tick 160
+                if tick == 160 {
                     self.set_mode_stat(Mode::Drawing);
                     self.mode_for_interrupt = Some(Mode::Drawing);
                     self.update_stat(ints);
@@ -834,7 +790,7 @@ impl Ppu {
                     self.oam_read_blocked = true;
                     self.oam_write_blocked = true;
 
-                    // Transition to Mode 3 Rendering (Tick 168)
+                    // Transition to Mode 3 Rendering (Tick 160)
                     self.cgb_palettes_blocked = true;
                     self.enter_mode3_from_oam_scan(ints);
                 } else {
@@ -852,19 +808,43 @@ impl Ppu {
 
     /// Enter Mode 3 (Drawing) after OAM scan completes.
     fn enter_mode3_from_oam_scan(&mut self, _ints: &mut Interrupts) {
-        self.phase = PpuPhase::Drawing(DrawingStage::Transition { remaining: 10 });
+        #[cfg(test)]
+        if self.current_line == 2 {}
+        // Mode 3 overhead: 7 ticks pipeline latency.
+        let remaining = if self.current_line == 0 { 0 } else { 7 };
+        self.phase = PpuPhase::Drawing(DrawingStage::Transition { remaining });
 
         // Initialize drawing state
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_step = 0;
         self.window_tile_x = 0;
-        self.position_in_line = -16;
+        self.pixel_discard_count = self.scx & 7;
         self.lcd_x = 0;
         self.bg_fifo.clear();
         self.oam_fifo.clear();
-        // Push 8 "junk" pixels to prime the FIFO (will be discarded during scroll)
-        self.bg_fifo.push_bg_row(0, 0, 0, false, false);
         self.sprite_fetcher_state = SpriteFetcherState::Idle;
+        self.fetcher_suspended = false;
+
+        // Reset per-line flags
+        self.line_has_fractional_scrolling = false;
+        self.window_is_being_fetched = false;
+        self.window_activation_delay = 0;
+    }
+
+    /// Enter Mode 3 after LCD startup (Line 0).
+    fn enter_mode3_after_startup(&mut self, _ints: &mut Interrupts) {
+        self.phase = PpuPhase::Drawing(DrawingStage::Running);
+
+        self.dots_in_line = 168;
+        self.fetcher_state = FetcherState::GetTileT1;
+        self.fetcher_step = 0;
+        self.window_tile_x = 0;
+        self.pixel_discard_count = self.scx & 7;
+        self.lcd_x = 0;
+        self.bg_fifo.clear();
+        self.oam_fifo.clear();
+        self.sprite_fetcher_state = SpriteFetcherState::Idle;
+        self.fetcher_suspended = false;
 
         // Reset per-line flags
         self.line_has_fractional_scrolling = false;
@@ -902,76 +882,9 @@ impl Ppu {
     }
 
     /// Tick during Mode 3 (Drawing).
-    fn tick_drawing(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
-        // Check for window activation
-        self.check_window_trigger(cgb_mode);
-
-        // Handle window activation delay (1 cycle stall after window triggers)
-        if self.window_activation_delay > 0 {
-            self.window_activation_delay -= 1;
-            return;
-        }
-
-        // Check for sprites at current position.
-        // x_for_object_match: position_in_line + 8, clamped to 0 if overflow.
-        let match_x = {
-            let raw = self.position_in_line.wrapping_add(8) as u8;
-            // If raw > 240 (i.e., position_in_line was < -8), use 0
-            if raw > 240 { 0 } else { raw }
-        };
-
-        // Handle sprite fetch state machine
-        if self.sprite_fetcher_state != SpriteFetcherState::Idle {
-            self.tick_sprite_fetcher(cgb_mode);
-            // Move transition handling here so it can return if still in transition
-            if let PpuPhase::Drawing(DrawingStage::Transition { remaining }) = self.phase {
-                if remaining > 1 {
-                    self.phase = PpuPhase::Drawing(DrawingStage::Transition {
-                        remaining: remaining - 1,
-                    });
-                    return;
-                }
-                self.phase = PpuPhase::Drawing(DrawingStage::Running);
-            }
-            return;
-        }
-
-        // Check if we should start fetching sprites.
-        // Multiple sprites at the same X are fetched consecutively (matching SameBoy behavior).
-        let sprites_enabled = self.lcdc & LCDC_OBJ_B != 0 || matches!(cgb_mode, CgbMode::Cgb);
-        if sprites_enabled
-            && let Some(sprite) = self.sprite_buffer.peek()
-            && sprite.x == match_x
-        {
-            let sprite = self.sprite_buffer.pop().unwrap();
-            self.start_sprite_fetch(sprite, cgb_mode);
-            // Continue with sprite fetcher on next tick
-            self.tick_sprite_fetcher(cgb_mode);
-            // Move transition handling here too
-            if let PpuPhase::Drawing(DrawingStage::Transition { remaining }) = self.phase {
-                if remaining > 1 {
-                    self.phase = PpuPhase::Drawing(DrawingStage::Transition {
-                        remaining: remaining - 1,
-                    });
-                    return;
-                }
-                self.phase = PpuPhase::Drawing(DrawingStage::Running);
-            }
-            return;
-        }
-
-        // Render pixel if possible THEN advance fetcher state machine.
-        // Try to output a pixel first (output_pixel handles empty FIFO checks internally).
-        // Run every 2 ticks (1 T-cycle).
-        if !self.dots_in_line.is_multiple_of(2) {
-            self.output_pixel(cgb_mode);
-        }
-
-        // Advance fetcher every tick (it handles its own 2-tick wait states now)
-        self.advance_fetcher(cgb_mode);
-
-        // Handle Transition stage delay (10 ticks total).
-        // Fetcher and FIFO logic continues above during transition.
+    fn tick_drawing(&mut self, _ints: &mut Interrupts, cgb_mode: CgbMode) {
+        // Handle Transition stage delay.
+        // Pipeline and fetcher are stalled during Mode 3 lead-in.
         if let PpuPhase::Drawing(DrawingStage::Transition { remaining }) = self.phase {
             if remaining > 1 {
                 self.phase = PpuPhase::Drawing(DrawingStage::Transition {
@@ -980,17 +893,40 @@ impl Ppu {
                 return;
             }
             self.phase = PpuPhase::Drawing(DrawingStage::Running);
+            return;
+        }
+
+        // Pixel output every 2 ticks (1 dot).
+        if !self.dots_in_line.is_multiple_of(2) {
+            // Check for window activation before attempting to output
+            self.check_window_trigger(cgb_mode);
+
+            if self.window_activation_delay > 0 {
+                self.window_activation_delay -= 1;
+            } else {
+                self.tick_pixel_sequencer(cgb_mode);
+            }
+        }
+
+        // BG fetcher runs every tick (internally handles its 2-tick states).
+        // Only runs if not suspended by the sprite fetcher.
+        if !self.fetcher_suspended {
+            self.advance_fetcher(cgb_mode);
+        }
+
+        // Sprite fetcher runs every tick if active.
+        if self.sprite_fetcher_state != SpriteFetcherState::Idle {
+            self.tick_sprite_fetcher(cgb_mode);
         }
 
         // Check if line rendering is complete
-        if self.position_in_line >= 160 {
-            // End of Mode 3 handling.
-            // Reset window_y at line 143 (last visible line).
+        if self.lcd_x >= 160 {
+            #[cfg(test)]
+            if self.current_line == 2 {}
             if self.current_line == 143 {
-                self.window_y = 0xFF; // -1 in unsigned, will wrap to 0 on first increment
+                self.window_y = 0xFF;
             }
 
-            // WX=166 DMG special case - triggers window for next line.
             let is_cgb = matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat);
             if !is_cgb && self.wy_triggered && self.is_window_enabled() && self.wx == 166 {
                 self.wx_triggered = true;
@@ -1000,12 +936,61 @@ impl Ppu {
                 self.wx_triggered = false;
             }
 
-            // Transition to HBlank.
             self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate { remaining: 2 });
-
-            // Update STAT bits immediately (SameBoy accurate).
-            self.set_mode_stat(Mode::HBlank);
+            #[cfg(test)]
+            if self.current_line == 2 {}
         }
+    }
+
+    /// The Pixel Sequencer attempts to pop from the FIFO and output a pixel to the screen.
+    fn tick_pixel_sequencer(&mut self, cgb_mode: CgbMode) {
+        // If BG FIFO is empty, the sequencer stalls.
+        if self.bg_fifo.is_empty() {
+            return;
+        }
+
+        // Check for sprites at current position (before popping pixel).
+        let sprites_enabled = self.lcdc & LCDC_OBJ_B != 0 || matches!(cgb_mode, CgbMode::Cgb);
+        if sprites_enabled
+            && let Some(sprite) = self.sprite_buffer.peek()
+            && sprite.x == self.lcd_x.wrapping_add(8)
+            && self.sprite_fetcher_state == SpriteFetcherState::Idle
+        {
+            let sprite = self.sprite_buffer.pop().unwrap();
+            self.start_sprite_fetch(sprite, cgb_mode);
+            // Stalls sequencer this dot since sprite fetcher hijacked it.
+            return;
+        }
+
+        // If we have pixels to discard (SCX offset or Window priming), do so.
+        if self.pixel_discard_count > 0 {
+            self.bg_fifo.pop();
+            self.oam_fifo.pop();
+            self.pixel_discard_count -= 1;
+            return;
+        }
+
+        self.window_is_being_fetched = false;
+
+        // Pop from FIFOs and mix.
+        let bg_pixel = self.bg_fifo.pop().unwrap();
+        let sprite_pixel = self.oam_fifo.pop();
+
+        let (color, palette, is_sprite) = self.mix_pixels(bg_pixel, sprite_pixel, cgb_mode);
+
+        let rgb = if is_sprite {
+            self.sprite_color_to_rgb(color, palette, cgb_mode)
+        } else {
+            self.bg_color_to_rgb(color, palette, cgb_mode)
+        };
+
+        let idx = u32::from(self.ly) * u32::from(PX_WIDTH) + u32::from(self.lcd_x);
+        // Safety check: only write to visible area
+        if self.ly < PX_HEIGHT {
+            self.rgb_buf.set_px(idx, rgb);
+        }
+
+        self.lcd_x += 1;
     }
 
     /// Start fetching a sprite.
@@ -1053,6 +1038,8 @@ impl Ppu {
         // Start the sprite fetch state machine
         self.sprite_fetcher_state = SpriteFetcherState::WaitForBgFetcher;
         self.sprite_fetcher_step = 0;
+        // Suspend normal BG fetcher updates (sprite fetcher will manually advance it when needed)
+        self.fetcher_suspended = true;
     }
 
     /// Tick the sprite fetcher state machine.
@@ -1062,22 +1049,26 @@ impl Ppu {
     /// - "Free" advance (no cycle cost, before State 20)
     /// - State 20: OAM read (2 cycles)
     /// - State 39: VRAM low (2 cycles)
+    /// - State 27: Wait loop.
+    /// - State 41: Post-wait delay (1 cycle)
+    /// - State 20: Sprite tile/flags (2 cycles)
+    /// - State 39: VRAM low (2 cycles)
     /// - State 40: VRAM high (1 cycle)
     fn tick_sprite_fetcher(&mut self, cgb_mode: CgbMode) {
         match self.sprite_fetcher_state {
             SpriteFetcherState::Idle => {}
 
             SpriteFetcherState::WaitForBgFetcher => {
-                // State 27: Wait loop.
-                // Condition: while (fetcher_state < 5 || fifo_size == 0)
-                let fetcher_aligned = matches!(
+                // Condition: while (fetcher_state < GetDataHighT2 || fifo_size == 0)
+                let fetcher_ready = matches!(
                     self.fetcher_state,
                     FetcherState::GetDataHighT2 | FetcherState::PushT1 | FetcherState::PushT2
                 );
-                let fifo_not_empty = self.bg_fifo.size() > 0;
+                let fifo_ready = self.bg_fifo.size() > 0;
 
-                if fetcher_aligned && fifo_not_empty {
-                    // Exit wait loop. SameBoy advances BG fetcher once more before State 41 sleep.
+                if fetcher_ready && fifo_ready {
+                    // Exit wait loop. SameBoy advances fetcher once more (full T-cycle).
+                    self.advance_fetcher(cgb_mode);
                     self.sprite_fetcher_state = SpriteFetcherState::State41Advance;
                     self.sprite_fetcher_step = 0;
                 }
@@ -1086,7 +1077,7 @@ impl Ppu {
             }
 
             SpriteFetcherState::State41Advance => {
-                // State 41: 1 cycle (2 ticks). Advances BG fetcher once at start.
+                // State 41: 1 cycle (2 ticks) delay.
                 if self.sprite_fetcher_step == 0 {
                     self.advance_fetcher(cgb_mode);
                 }
@@ -1098,7 +1089,7 @@ impl Ppu {
             }
 
             SpriteFetcherState::GetTileAndFlags => {
-                // State 20: 2 cycles (4 ticks). Advances BG fetcher once at start.
+                // State 20: 2 cycles (4 ticks).
                 if self.sprite_fetcher_step == 0 {
                     self.advance_fetcher(cgb_mode);
                 }
@@ -1110,7 +1101,7 @@ impl Ppu {
             }
 
             SpriteFetcherState::GetDataLow => {
-                // State 39: 2 cycles (4 ticks). No BG fetcher advance.
+                // State 39: 2 cycles (4 ticks).
                 if self.sprite_fetcher_step == 0 {
                     self.sprite_tile_data_low = self
                         .vram
@@ -1124,14 +1115,13 @@ impl Ppu {
             }
 
             SpriteFetcherState::GetDataHighAndPush => {
-                // State 40: 1 cycle (2 ticks). No BG fetcher advance.
+                // State 40: 1 cycle (2 ticks).
                 self.sprite_fetcher_step += 1;
                 if self.sprite_fetcher_step >= 2 {
                     self.sprite_tile_data_high = self
                         .vram
                         .vram_at_bank(self.sprite_tile_address + 1, self.sprite_vram_bank);
 
-                    // Overlay sprite onto OAM FIFO
                     self.oam_fifo.overlay_sprite_row(
                         self.sprite_tile_data_low,
                         self.sprite_tile_data_high,
@@ -1141,8 +1131,8 @@ impl Ppu {
                         self.sprite_x_flip,
                     );
 
-                    // Done fetching this sprite; transition back to Idle.
                     self.sprite_fetcher_state = SpriteFetcherState::Idle;
+                    self.fetcher_suspended = false;
                 }
             }
         }
@@ -1168,33 +1158,23 @@ impl Ppu {
         }
 
         let is_cgb = matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat);
-        let pos = self.position_in_line;
 
-        // WX=0 has special handling.
-        if self.wx == 0 {
-            let should_activate = if pos == -7 || pos == -16 && (self.scx & 7) != 0 {
-                true
-            } else {
-                (-15..=-8).contains(&pos)
-            };
-
-            if should_activate {
-                self.activate_window(is_cgb);
-            }
-        }
-        // WX < 166 (or 167 on CGB) - normal window trigger.
-        else if self.wx < 166 + u8::from(is_cgb) {
-            // Window activates when position_in_line + 7 == WX.
-            if pos + 7 == i16::from(self.wx) {
-                self.activate_window(is_cgb);
-            }
-        }
-        // WX=166 on DMG - special case, increment window_y but don't fully trigger.
-        else if !is_cgb && self.wx == 166 && pos + 7 == i16::from(self.wx) {
-            // Just increment window line counter without full window activation.
-            self.window_y = self.window_y.wrapping_add(1);
+        // Window activates when lcd_x + 7 == WX. If WX < 7, it activates at lcd_x = 0.
+        let should_activate = if self.wx < 7 {
+            self.lcd_x == 0
+        } else if self.wx < 166 + u8::from(is_cgb) {
+            self.lcd_x == self.wx.saturating_sub(7)
         } else {
-            // WX > 166 (or 167 on CGB) - window never activates.
+            false
+        };
+
+        if should_activate {
+            // WX=166 on DMG - special case, increment window_y but don't fully trigger.
+            if !is_cgb && self.wx == 166 {
+                self.window_y = self.window_y.wrapping_add(1);
+            } else {
+                self.activate_window(is_cgb);
+            }
         }
     }
 
@@ -1258,17 +1238,14 @@ impl Ppu {
                     // BG X calculation
                     let scx = self.scx;
 
-                    // SameBoy: first fetch (pos < -8) uses SCX / 8.
-                    // Sub-tile scrolling only starts affecting fetcher address after first fetch.
-                    if self.position_in_line < -8 {
-                        scx / 8
-                    } else {
-                        let pos = self
-                            .position_in_line
-                            .wrapping_add(self.bg_fifo.size() as i16);
-                        let scx_adj = scx.wrapping_add(pos as u8);
-                        scx_adj / 8
-                    }
+                    // fetch_x_pixels represents the absolute pixel column we are fetching.
+                    let fetch_x_pixels = self
+                        .lcd_x
+                        .wrapping_add(self.pixel_discard_count)
+                        .wrapping_add(self.bg_fifo.size() as u8);
+
+                    let scx_adj = scx.wrapping_add(fetch_x_pixels);
+                    scx_adj / 8
                 } & 0x1F;
 
                 // Cache address for T2
@@ -1388,41 +1365,11 @@ impl Ppu {
     /// Output a pixel to the LCD buffer.
     /// Implements `render_pixel_if_possible` logic.
     fn output_pixel(&mut self, cgb_mode: CgbMode) {
-        // FIFO empty check FIRST, before anything else.
-        if self.bg_fifo.is_empty() {
-            return;
-        }
-
-        // SCX alignment jump logic
-        if self.position_in_line >= -16 && self.position_in_line < -8 {
-            if (self.position_in_line as u8 & 7) == (self.scx & 7) {
-                self.position_in_line = -8;
-            } else if self.window_is_being_fetched
-                && (self.position_in_line as u8 & 7) == 6
-                && (self.scx & 7) == 7
-            {
-                self.position_in_line = -8;
-            }
-        }
-
         // Pop from BG FIFO.
         let bg_pixel = self.bg_fifo.pop().unwrap();
         let sprite_pixel = self.oam_fifo.pop();
 
         self.window_is_being_fetched = false;
-
-        // Drop pixels for scrolling or priming.
-        // Screen starts at position_in_line = 0.
-        if self.position_in_line < 0 {
-            self.position_in_line += 1;
-            return;
-        }
-
-        // Drop pixels if we've reached the end of the visible line.
-        if self.lcd_x >= PX_WIDTH {
-            self.position_in_line += 1;
-            return;
-        }
 
         // Normal rendering
         let (color, palette, is_sprite) = self.mix_pixels(bg_pixel, sprite_pixel, cgb_mode);
@@ -1438,9 +1385,6 @@ impl Ppu {
         if self.ly < PX_HEIGHT {
             self.rgb_buf.set_px(idx, rgb);
         }
-
-        self.lcd_x += 1;
-        self.position_in_line += 1;
     }
 
     /// Mix background and sprite pixels according to priority rules.
@@ -1594,10 +1538,19 @@ impl Ppu {
         match stage {
             HBlankStage::StatUpdate { remaining } => {
                 // State 22: STAT = Mode 0, memory unblocked.
+                // Tick 0: fire Mode 0 interrupt pulse.
                 if remaining == 2 {
-                    self.set_mode_stat(Mode::HBlank);
                     self.mode_for_interrupt = Some(Mode::HBlank);
                     self.update_stat(ints);
+                }
+
+                // Tick 2: update STAT bits and unblock memory.
+                if remaining == 1 {
+                    self.set_mode_stat(Mode::HBlank);
+                    self.update_stat(ints);
+
+                    #[cfg(test)]
+                    if self.current_line == 2 {}
 
                     self.oam_read_blocked = false;
                     self.vram_read_blocked = false;
