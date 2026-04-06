@@ -19,10 +19,10 @@ pub struct Clock {
     pub(crate) div: u16,
     pub(crate) tac: u8,
     pub(crate) tima: u8,
-    pub(crate) tima_state: TIMAState,
     pub(crate) tma: u8,
-    /// T-cycles remaining in current Reloading/Reloaded state.
-    pub(crate) tima_state_dots: u8,
+    /// T-cycles remaining until TIMA is reloaded from TMA.
+    /// 0 means no reload is pending.
+    pub(crate) tima_reload_pending: u8,
 }
 
 impl Default for Clock {
@@ -31,18 +31,18 @@ impl Default for Clock {
             div: 0,
             tac: 0,
             tima: 0,
-            tima_state: TIMAState::Running,
             tma: 0,
-            tima_state_dots: 0,
+            tima_reload_pending: 0,
         }
     }
 }
 
 impl Clock {
     pub fn tima(&self) -> u8 {
-        match self.tima_state {
-            TIMAState::Reloading => 0,
-            _ => self.tima,
+        if self.tima_reload_pending > 0 {
+            0
+        } else {
+            self.tima
         }
     }
 
@@ -51,13 +51,7 @@ impl Clock {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum TIMAState {
-    Reloading,
-    Reloaded,
-    #[default]
-    Running,
-}
+
 
 impl<A: AudioCallback> Gb<A> {
     /// Advance all components by the given number of CPU T-cycles.
@@ -124,26 +118,12 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    fn advance_tima_state(&mut self) {
-        match self.clock.tima_state {
-            TIMAState::Reloading => {
-                self.ints.request_timer();
-                self.clock.tima_state = TIMAState::Reloaded;
-            }
-            TIMAState::Reloaded => {
-                self.clock.tima_state = TIMAState::Running;
-            }
-            TIMAState::Running => (),
-        }
-    }
-
-    const fn inc_tima(&mut self) {
+    fn inc_tima(&mut self) {
         self.clock.tima = self.clock.tima.wrapping_add(1);
 
         if self.clock.tima == 0 {
-            self.clock.tima = self.clock.tma;
-            self.clock.tima_state = TIMAState::Reloading;
-            self.clock.tima_state_dots = 4;
+            // TIMA overflow: reload will happen after 1 M-cycle (4 T-cycles)
+            self.clock.tima_reload_pending = 1;
         }
     }
 
@@ -167,13 +147,14 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     pub fn run_timers(&mut self, cpu_t_cycles: i32) {
         for _ in 0..cpu_t_cycles {
-            if self.clock.tima_state_dots > 0 {
-                self.clock.tima_state_dots -= 1;
-                if self.clock.tima_state_dots == 0 {
-                    self.advance_tima_state();
-                    if self.clock.tima_state != TIMAState::Running {
-                        self.clock.tima_state_dots = 4;
-                    }
+            // TIMA reload logic happens at the end of the M-cycle (T3 of 4 T-cycles).
+            // SameBoy and other accurate emulators check this at a specific phase.
+            // Since we tick 1 T-cycle at a time, we can check (div & 3) == 3.
+            if (self.clock.div & 3) == 3 && self.clock.tima_reload_pending > 0 {
+                self.clock.tima_reload_pending -= 1;
+                if self.clock.tima_reload_pending == 0 {
+                    self.clock.tima = self.clock.tma;
+                    self.ints.request_timer();
                 }
             }
 
@@ -222,24 +203,18 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[inline]
-    pub const fn write_tima(&mut self, val: u8) {
-        match self.clock.tima_state {
-            TIMAState::Reloaded => (),
-            TIMAState::Reloading => {
-                self.clock.tima = val;
-                self.clock.tima_state = TIMAState::Running;
-                self.clock.tima_state_dots = 0;
-            }
-            TIMAState::Running => self.clock.tima = val,
-        }
+    pub fn write_tima(&mut self, val: u8) {
+        // Writing to TIMA during the 4-dot reload window cancels the reload.
+        self.clock.tima = val;
+        self.clock.tima_reload_pending = 0;
     }
 
     #[inline]
-    pub const fn write_tma(&mut self, val: u8) {
+    pub fn write_tma(&mut self, val: u8) {
         self.clock.tma = val;
-        match self.clock.tima_state {
-            TIMAState::Reloading | TIMAState::Reloaded => self.clock.tima = val,
-            TIMAState::Running => (),
+        // If TMA is written during the reload window, the new value is used for TIMA.
+        if self.clock.tima_reload_pending > 0 {
+            self.clock.tima = val;
         }
     }
 
