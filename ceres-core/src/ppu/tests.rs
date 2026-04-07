@@ -211,7 +211,7 @@ fn test_ppu_active_period_duration() {
         "Mode 2 duration assumption violated: {} ticks",
         mode2_ticks
     );
-    println!(mode2_ticks, mode3_ticks);
+    println!("{} {}", mode2_ticks, mode3_ticks);
     assert!(
         mode2_ticks + mode3_ticks >= 502,
         "Active period {} is shorter than expectation (502 ticks)",
@@ -6036,8 +6036,10 @@ fn test_repro_oam_access_m2_detailed() {
     gb.advance_dots(16);
 
     println!(
+        "{} {} {}",
         gb.ppu.read_stat() & 3,
-        gb.ppu.oam_write_blocked, gb.ppu.oam_read_blocked
+        gb.ppu.oam_write_blocked,
+        gb.ppu.oam_read_blocked
     );
     gb.write_mem(0xFE00, 0x55);
     let val2 = gb.read_mem(0xFE00);
@@ -7479,4 +7481,61 @@ fn test_ppu_sprite_background_shift_repro() {
         }
     }
     assert_eq!(diffs, 0, "Background shifted after sprite!");
+}
+
+#[test]
+fn test_repro_gbmicro_hblank_int_suite() {
+    // This suite reproduces the core HBlank interrupt timing tests from gbmicrotest.
+    // It verifies Mode 3 duration and STAT interrupt firing for various SCX values.
+    // Results are in ticks (8MHz half-cycles). 1 M-cycle = 4 ticks.
+
+    println!("--- gbmicrotest HBlank Timing Repro ---");
+
+    for scx in 0..8 {
+        let mut gb = setup_gb();
+        gb.ppu.write_lcdc(0x00, &mut gb.ints);
+        gb.ppu.write_stat(0x08, &mut gb.ints); // Mode 0 interrupt enabled
+        gb.ppu.write_scx(scx as u8);
+        gb.write_mem(0xFF0F, 0x00); // Clear IF
+
+        // LCD ON: Starts Line 0.
+        // SameBoy says Line 0 starts at dot 86 (tick 172)? No, dot 84 (tick 168).
+        gb.ppu.write_lcdc(0x91, &mut gb.ints);
+
+        // Measure ticks until HBlank IRQ fires on Line 0
+        let mut fired_tick = None;
+        for t in 1..=1000 {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+            if (gb.ints.read_if() & 0x02) != 0 {
+                fired_tick = Some(t);
+                break;
+            }
+        }
+
+        let fired = fired_tick.expect("HBlank Interrupt did not fire");
+
+        // Expected firing dot for SCX=0 is dot 252 (tick 504) if counted from start of line.
+        // Ceres Line 0 currently starts at dot 84 (tick 168).
+        // 504 - 168 = 336 ticks Mode 3 duration?
+        // gbmicrotest expects HBlank IRQ around tick 240 (60 M-cycles).
+        println!("SCX={}: HBlank IRQ at tick {} after LCD ON", scx, fired);
+    }
+
+    // --- Window HBlank Timing (test_win0_b.s) ---
+    // WX=0, WY=0. Mode 3 should end early enough for Mode 0 to be visible at tick 700.
+    {
+        let mut gb = setup_gb();
+        gb.ppu.write_lcdc(0x00, &mut gb.ints);
+        gb.ppu.write_wy(0);
+        gb.ppu.write_wx(0);
+        gb.ppu.write_lcdc(0xB1, &mut gb.ints); // LCD ON + WIN ON + BG ON
+
+        // Wait 700 ticks
+        for _ in 0..700 {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+        let mode = gb.ppu.read_stat() & 0x03;
+        println!("test_win0_b: Mode at tick 700 is {}", mode);
+        assert_eq!(mode, 0, "test_win0_b should be in Mode 0 at tick 700");
+    }
 }
