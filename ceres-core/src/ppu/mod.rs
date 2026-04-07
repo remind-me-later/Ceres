@@ -381,17 +381,11 @@ impl Ppu {
             return 0;
         }
 
-        // First 82 cycles show Mode 0 (164 ticks)
-        // Only apply this special case for the actual first frame after LCD enable
+        // During the first frame after LCD on, we use specialized timing.
         if matches!(self.frame_skip_state, FrameSkipState::LcdTurnedOn) && self.ly == 0 {
             // During startup state machine, use the stored STAT mode bits
             if matches!(self.phase, PpuPhase::Line0Startup(_)) {
                 return self.stat & STAT_MODE_B;
-            }
-
-            // First 82 cycles show Mode 0 (164 ticks)
-            if self.dots_in_line < 164 {
-                return 0;
             }
         }
 
@@ -835,12 +829,13 @@ impl Ppu {
     fn enter_mode3_after_startup(&mut self, _ints: &mut Interrupts) {
         self.phase = PpuPhase::Drawing(DrawingStage::Running);
 
-        self.dots_in_line = 168;
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_step = 0;
         self.window_tile_x = 0;
         self.pixel_discard_count = self.scx & 7;
-        self.lcd_x = 0;
+        // Hardware starts Line 0 with rendering already in progress (~dot 131).
+        // This makes Line 0 significantly shorter than subsequent lines.
+        self.lcd_x = 131;
         self.bg_fifo.clear();
         self.oam_fifo.clear();
         self.sprite_fetcher_state = SpriteFetcherState::Idle;
@@ -944,6 +939,11 @@ impl Ppu {
 
     /// The Pixel Sequencer attempts to pop from the FIFO and output a pixel to the screen.
     fn tick_pixel_sequencer(&mut self, cgb_mode: CgbMode) {
+        // Sequencer stalls during sprite fetches.
+        if self.sprite_fetcher_state != SpriteFetcherState::Idle {
+            return;
+        }
+
         // If BG FIFO is empty, the sequencer stalls.
         if self.bg_fifo.is_empty() {
             return;
@@ -1538,19 +1538,11 @@ impl Ppu {
         match stage {
             HBlankStage::StatUpdate { remaining } => {
                 // State 22: STAT = Mode 0, memory unblocked.
-                // Tick 0: fire Mode 0 interrupt pulse.
+                // Tick 0: fire Mode 0 interrupt pulse and update STAT bits.
                 if remaining == 2 {
+                    self.set_mode_stat(Mode::HBlank);
                     self.mode_for_interrupt = Some(Mode::HBlank);
                     self.update_stat(ints);
-                }
-
-                // Tick 2: update STAT bits and unblock memory.
-                if remaining == 1 {
-                    self.set_mode_stat(Mode::HBlank);
-                    self.update_stat(ints);
-
-                    #[cfg(test)]
-                    if self.current_line == 2 {}
 
                     self.oam_read_blocked = false;
                     self.vram_read_blocked = false;
@@ -1839,7 +1831,7 @@ impl Ppu {
             self.ly = 0;
             self.ly_for_comparison = 0;
             self.current_line = 0;
-            let mode = Mode::HBlank;
+            let mode = Mode::OamScan;
             self.set_mode_stat(mode);
             self.mode_for_interrupt = None;
             // Comparison clock restarts - update coincidence and check for interrupt
@@ -1859,6 +1851,7 @@ impl Ppu {
 
             // Mark as first frame for special timing
             self.frame_skip_state = FrameSkipState::LcdTurnedOn;
+            self.first_line_short = true;
             self.dots_in_line = 0;
             if self.wy == 0 {
                 self.wy_triggered = true;

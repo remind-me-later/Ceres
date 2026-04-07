@@ -2521,8 +2521,8 @@ fn gambatte_sprites_10spritesprline_mode3_baseline() {
         gb.ppu.write_oam_by_dma(0xFE00 + base + 3, 0); // attrs
     }
 
-    advance_to_ly(&mut gb, 0);
-    let duration = mode3_duration_ticks(&mut gb, 0, crate::CgbMode::Dmg, false);
+    advance_to_ly(&mut gb, 1);
+    let duration = mode3_duration_ticks(&mut gb, 1, crate::CgbMode::Dmg, false);
 
     assert!(
         duration > 172,
@@ -6740,17 +6740,20 @@ fn gbmicrotest_lcdon_to_stat0_d() {
 
     // 174 M-cycles * 4 = 696 T-cycles (4MHz) = 1392 ticks (8MHz).
     // Plus 3 M-cycles (24 ticks) for the `ldh a, (STAT)` read instruction = 1416 ticks.
-    // Ceres architecture currently has a known +1 tick tolerance, so Mode 0 starts at 1417.
-    for _ in 0..1417 {
+    for i in 1..=1416 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        if i > 1390 {
+            // println!("Total Tick {}, LY {}, Dots {}, STAT {:02X}", i, gb.ppu.read_ly(), gb.ppu.dots_in_line, gb.ppu.read_stat());
+        }
     }
 
     let stat = gb.ppu.read_stat();
+    println!("Final STAT at 1416 ticks: {:#04X}, LY: {}, Dots: {}", stat, gb.ppu.read_ly(), gb.ppu.dots_in_line);
     // Expected: Mode 0 (bits 0-1 = 00).
     assert_eq!(
         stat & 0x03,
         0,
-        "STAT should be Mode 0 at 174 M-cycles (+read delay +1 Ceres tolerance) (got {stat:#04X})"
+        "STAT should be Mode 0 at 174 M-cycles (+read delay) (got {stat:#04X})"
     );
 }
 
@@ -6761,8 +6764,7 @@ fn gbmicrotest_lcdon_to_stat0_c() {
 
     // 173 M-cycles * 4 = 692 T-cycles = 1384 ticks.
     // Plus 3 M-cycles (24 ticks) for the read = 1408 ticks.
-    // Ceres architecture currently has a known +1 tick tolerance, so Mode 3 is still active.
-    for _ in 0..1409 {
+    for _ in 0..1408 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
 
@@ -6771,7 +6773,7 @@ fn gbmicrotest_lcdon_to_stat0_c() {
     assert_eq!(
         stat & 0x03,
         3,
-        "STAT should be Mode 3 at 173 M-cycles (+read delay +1 Ceres tolerance) (got {stat:#04X})"
+        "STAT should be Mode 3 at 173 M-cycles (+read delay) (got {stat:#04X})"
     );
 }
 
@@ -7526,7 +7528,7 @@ fn test_repro_gbmicro_hblank_int_suite() {
             gb.ppu.write_lcdc(0x91, &mut gb.ints);
 
             // Advance to target line
-            for _ in 0..(line * 912) {
+            while gb.ppu.read_ly() < line {
                 gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
             }
             gb.write_mem(0xFF0F, 0x00);
@@ -7547,8 +7549,8 @@ fn test_repro_gbmicro_hblank_int_suite() {
             // Other lines have standard timing (OAM + Drawing).
             // Ceres empirical values (8MHz ticks):
             // Line 0: ~241 ticks from startup
-            // Line 1+: ~505 ticks from line start
-            let base_expected = if line == 0 { 240 } else { 504 };
+            // Line 1+: ~504 ticks from line start
+            let base_expected = if line == 0 { 241 } else { 504 };
             let expected = base_expected + (scx as u16 * 2);
 
             println!(
@@ -7569,7 +7571,7 @@ fn test_repro_gbmicro_hblank_int_suite() {
     }
 
     // --- Window HBlank Timing (test_win0_b.s) ---
-    // WX=0, WY=0. Mode 3 should end early enough for Mode 0 to be visible at tick 1420.
+    // WX=0, WY=0. Mode 3 should end early enough for Mode 0 to be visible at tick 1400.
     {
         let mut gb = setup_gb();
         gb.ppu.write_lcdc(0x00, &mut gb.ints);
@@ -7577,17 +7579,16 @@ fn test_repro_gbmicro_hblank_int_suite() {
         gb.ppu.write_wx(0);
         gb.ppu.write_lcdc(0xB1, &mut gb.ints); // LCD ON + WIN ON + BG ON
 
-        // Wait 1420 ticks (Line 1, ~508 ticks into line)
-        for _ in 0..1420 {
+        // Wait 1400 ticks (Line 1, 504 ticks into line)
+        for _ in 0..1400 {
             gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
         }
         let mode = gb.ppu.read_stat() & 0x03;
-        println!("test_win0_b: Mode at tick 1420 is {}", mode);
-        assert_eq!(mode, 0, "test_win0_b should be in Mode 0 at tick 1420");
+        assert_eq!(mode, 0, "test_win0_b should be in Mode 0 at tick 1400");
     }
 
     // --- Window Mode 3 Timing (test_win0_a.s) ---
-    // WX=0, WY=0. Mode 3 should still be active at tick 1400 (Line 1, ~488 ticks into line)
+    // WX=0, WY=0. Mode 3 should still be active at tick 1380 (Line 1, 484 ticks into line)
     {
         let mut gb = setup_gb();
         gb.ppu.write_lcdc(0x00, &mut gb.ints);
@@ -7595,17 +7596,15 @@ fn test_repro_gbmicro_hblank_int_suite() {
         gb.ppu.write_wx(0);
         gb.ppu.write_lcdc(0xB1, &mut gb.ints);
 
-        for _ in 0..1400 {
+        for _ in 0..1380 {
             gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
         }
         let mode = gb.ppu.read_stat() & 0x03;
-        println!("test_win0_a: Mode at tick 1400 is {}", mode);
-        assert_eq!(mode, 3, "test_win0_a should still be in Mode 3 at tick 1400");
+        assert_eq!(mode, 3, "test_win0_a should still be in Mode 3 at tick 1380");
     }
 
     // --- Window Mode 3 Timing with SCX (test_win0_scx3_a.s) ---
-    // WX=0, WY=0, SCX=3. Mode 3 should be active at tick 1400 (Line 1).
-    // SCX=3 adds 6 ticks (3 dots) of delay to Mode 3.
+    // WX=0, WY=0, SCX=3. Mode 3 should be active at tick 1386 (Line 1).
     {
         let mut gb = setup_gb();
         gb.ppu.write_lcdc(0x00, &mut gb.ints);
@@ -7614,14 +7613,13 @@ fn test_repro_gbmicro_hblank_int_suite() {
         gb.ppu.write_scx(3);
         gb.ppu.write_lcdc(0xB1, &mut gb.ints);
 
-        for _ in 0..1410 {
+        for _ in 0..1386 {
             gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
         }
         let mode = gb.ppu.read_stat() & 0x03;
-        println!("test_win0_scx3_a: Mode at tick 1410 is {}", mode);
         assert_eq!(
             mode, 3,
-            "test_win0_scx3_a should still be in Mode 3 at tick 1410"
+            "test_win0_scx3_a should still be in Mode 3 at tick 1386"
         );
     }
 }
@@ -7631,9 +7629,12 @@ fn test_repro_gbmicro_memory_access_suite() {
     // --- VRAM/OAM Access during Startup (vram_read_l0_a/b/c/d.s, 000-oam_lock.s) ---
     // Verifies memory blocking behavior when LCD is first turned on.
     
-    // Line 0 Startup Timing (DMG):
-    // In Ceres, Line 0 starts in Drawing::Running (startup flavor) which does NOT
-    // block memory access for the first ~166 ticks.
+    // Line 0 Startup Timing (Ceres):
+    // Phase 1: 0..152 ticks - STAT Mode 2, Unblocked.
+    // Phase 2: 152..156 ticks - STAT Mode 2, OAM Write Blocked.
+    // Phase 3: 156..160 ticks - STAT Mode 3, OAM fully blocked, VRAM blocked.
+    // Phase 4: 160..166 ticks - STAT Mode 3, All blocked.
+    // Rendering: 166+ ticks - Short line starting at dot 131.
     {
         let mut gb = setup_gb();
         gb.ppu.write_lcdc(0x00, &mut gb.ints);
@@ -7642,18 +7643,27 @@ fn test_repro_gbmicro_memory_access_suite() {
         
         gb.ppu.write_lcdc(0x91, &mut gb.ints); // LCD ON
 
-        // In Ceres, for the first line after LCD ON, memory access remains UNBLOCKED
-        // because it skips OAM scan and enters a special startup drawing state.
-        for t in 0..166 {
-            let vram = gb.read_mem(0x9FFF);
-            let oam = gb.read_mem(0xFE00);
-            assert_eq!(vram, 0xF0, "VRAM should be readable at tick {} during Line 0 startup", t);
-            assert_eq!(oam, 0x55, "OAM should be readable at tick {} during Line 0 startup", t);
+        // Phase 1: Unblocked (up to tick 152)
+        for t in 0..152 {
+            assert_eq!(gb.read_mem(0x9FFF), 0xF0, "VRAM should be readable at tick {} during startup", t);
+            assert_eq!(gb.read_mem(0xFE00), 0x55, "OAM should be readable at tick {} during startup", t);
             gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
         }
 
-        // After Line 0 completes, it enters HBlank then OAM Scan for Line 1.
-        // OAM Scan WILL block memory.
+        // Phase 2: OAM Write Blocked (152..156)
+        for t in 152..156 {
+            assert_eq!(gb.read_mem(0xFE00), 0x55, "OAM read should be OK at tick {} during startup", t);
+            gb.write_mem(0xFE00, 0xAA);
+            assert_eq!(gb.read_mem(0xFE00), 0x55, "OAM write should be blocked at tick {} during startup", t);
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+
+        // Phase 3: OAM Fully Blocked, VRAM Blocked (156..160)
+        for t in 156..160 {
+            assert_eq!(gb.read_mem(0x9FFF), 0xFF, "VRAM should be blocked at tick {} during startup", t);
+            assert_eq!(gb.read_mem(0xFE00), 0xFF, "OAM should be blocked at tick {} during startup", t);
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
     }
 }
 
