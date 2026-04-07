@@ -719,3 +719,62 @@ fn repro_tima_tc00_start_1_cgb() {
         "TIMA should not have incremented yet (tc00_start_1)"
     );
 }
+
+#[test]
+fn test_repro_gbmicro_tima_phase_a() {
+    // Tests timer phase exactly as `gbmicrotest/timer_tima_phase_a.s`
+    let expected = [0xFE, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x80, 0x80, 0x80, 0x81];
+    
+    for (delay, &exp) in expected.iter().enumerate() {
+        let mut gb = setup_gb();
+        // Setup TMA and TAC
+        gb.write_mem(0xFF06, 0x80);
+        gb.write_mem(0xFF07, 0x05); // 262144 Hz (16 dots)
+
+        // Set TIMA to 0xFD. As the timer runs during the following CPU instructions,
+        // TIMA increments by 1 before DIV is finally reset to 0. 
+        // Thus, we simulate this initial 0xFE value.
+        gb.write_mem(0xFF05, 0xFE);
+        
+        // Reset DIV to 0. This synchronizes the timer phase.
+        gb.write_mem(0xFF04, 0);
+        
+        // Wait `delay` NOPs (4 dots each) + Read overhead (12 dots).
+        // Total delay = delay * 4 + 12 dots.
+        gb.advance_dots((delay as i32) * 4 + 12);
+        
+        assert_eq!(gb.read_mem(0xFF05), exp, "TIMA Phase mismatch at DELAY={}", delay);
+    }
+}
+
+#[test]
+fn test_repro_gbmicro_tima_inc_256k_a() {
+    // Tests timer phase increments as exactly defined by `timer_tima_inc_256k_a.s`
+    let expected = [1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4];
+    
+    for (delay, &exp) in expected.iter().enumerate() {
+        let mut gb = setup_gb();
+        
+        gb.write_mem(0xFF04, 0); // DIV
+        
+        // In the assembly test, instructions take time between writes:
+        // ld a, $00 (8 ticks) + ldh (TIMA), a (12 ticks)
+        gb.advance_dots(20);
+        gb.write_mem(0xFF05, 0); // TIMA
+        
+        // ld a, $34 (8 ticks) + ldh (TMA), a (12 ticks)
+        gb.advance_dots(20);
+        gb.write_mem(0xFF06, 0x34); // TMA
+        
+        // ld a, %00000101 (8 ticks) + ldh (TAC), a (12 ticks)
+        gb.advance_dots(20);
+        gb.write_mem(0xFF07, 0x05); // TAC: 262144 Hz (16 dots)
+
+        // Wait `delay` NOPs (4 dots each) + Read overhead (12 dots)
+        // Note: The read actually happens at the end of the ldh instruction,
+        // so it observes the state after 12 dots.
+        gb.advance_dots((delay as i32) * 4 + 12);
+        
+        assert_eq!(gb.read_mem(0xFF05), exp, "TIMA INC mismatch at DELAY={}", delay);
+    }
+}
