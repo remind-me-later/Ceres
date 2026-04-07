@@ -35,22 +35,21 @@ impl Serial {
     }
 
     #[must_use]
-    pub const fn read_sc(&self, cgb_mode: CgbMode) -> u8 {
-        const SC_MASK: u8 = !(START | SHIFT);
-
-        if matches!(cgb_mode, CgbMode::Cgb) {
-            self.sc | SC_MASK
-        } else {
-            self.sc | CGB_SPEED | SC_MASK
-        }
+    pub const fn read_sc(&self, _cgb_mode: CgbMode) -> u8 {
+        self.sc
     }
 
     pub fn run_master(&mut self, ints: &mut Interrupts) {
         self.master_clock ^= true;
 
-        if !self.master_clock && (self.sc & (START | SHIFT) == (START | SHIFT)) {
+        if !self.master_clock && (self.sc & START != 0) && (self.sc & SHIFT != 0) {
             self.count += 1;
-            if self.count > 7 {
+
+            self.sb <<= 1;
+            // When no device is connected, the input bit reads as 1
+            self.sb |= 1;
+
+            if self.count == 8 {
                 // Transfer complete - capture the ORIGINAL byte that was sent
                 let transferred_byte = self.sb_sent;
 
@@ -67,18 +66,8 @@ impl Serial {
                     self.output.push('\n');
                 } else if transferred_byte == b'\r' {
                     self.output.push('\r');
-                } else if transferred_byte != 0 {
-                    // For debugging: capture non-zero non-printable bytes as hex
-                    // write!(&mut self.output, "[{transferred_byte:02X}]");
-                } else {
-                    // Zero byte - ignore
                 }
             }
-
-            self.sb <<= 1;
-
-            // When no device is connected, the input bit reads as 1
-            self.sb |= 1;
         }
     }
 
@@ -90,19 +79,29 @@ impl Serial {
     pub fn write_sc(&mut self, mut val: u8, ints: &mut Interrupts, cgb_mode: CgbMode) {
         self.count = 0;
 
-        if matches!(cgb_mode, CgbMode::Cgb) {
-            val |= 2;
+        let is_cgb = !matches!(cgb_mode, CgbMode::Dmg);
+
+        if !is_cgb {
+            val |= CGB_SPEED;
         }
 
-        self.sc = val | !(START | CGB_SPEED | SHIFT);
-        self.div_mask = if matches!(cgb_mode, CgbMode::Cgb) && val & CGB_SPEED != 0 {
+        // Writing to SC while master clock is high triggers a clock edge (zombie clocking)
+        // This edge uses the OLD value of SC.
+        if self.master_clock {
+            self.run_master(ints);
+        }
+
+        // Bits 6-2 are always 1. Bit 1 is also always 1 on DMG.
+        self.sc = if is_cgb {
+            val | 0x7C
+        } else {
+            val | 0x7E
+        };
+
+        self.div_mask = if is_cgb && (val & CGB_SPEED != 0) {
             4
         } else {
             0x80
         };
-
-        if self.master_clock {
-            self.run_master(ints);
-        }
     }
 }
