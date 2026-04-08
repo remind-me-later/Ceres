@@ -1839,7 +1839,7 @@ fn test_cpu_isr_dispatch_latency() {
     //    - PUSH LO: 4 ticks
     // Total = 20 ticks.
     assert_eq!(elapsed, 20, "Total ISR dispatch latency should be 20 ticks");
-    }
+}
 
 #[test]
 fn samesuite_ei_delay_halt() {
