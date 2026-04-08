@@ -1799,6 +1799,48 @@ fn mooneye_acceptance_halt_ime1_timing2_gs_roundtrip_window_matches_dmg_expectat
         "DMG EI;HALT dispatch window should take 4 M-cycles in this simplified timing2-GS scenario"
     );
 }
+
+#[test]
+fn test_cpu_isr_dispatch_latency() {
+    let mut gb = setup_gb();
+    let base = 0xC000;
+    gb.set_cpu_pc(base);
+    gb.set_cpu_sp(0xD000);
+    
+    // Enable VBlank interrupt
+    gb.ints.write_ie(0x01);
+    gb.ints.enable();
+    
+    // Code: NOP; NOP; NOP...
+    write_code(&mut gb, base, &[0x00, 0x00, 0x00, 0x00]);
+    
+    // Step 1: Execute first NOP
+    gb.run_cpu();
+    assert_eq!(gb.cpu.pc, base + 1);
+    
+    // Step 2: Request interrupt mid-instruction (effectively)
+    gb.ints.write_if(0x01);
+    
+    // Step 3: Run CPU. It should execute the NEXT instruction (NOP), 
+    // THEN check for interrupts and start dispatch.
+    let start = gb.total_dots();
+    gb.run_cpu();
+    let elapsed = gb.total_dots() - start;
+    
+    // PC should now be at the VBlank vector
+    assert_eq!(gb.cpu.pc, 0x0040);
+    
+    // Latency calculation:
+    // 1. Next Instruction (NOP): 4 ticks
+    // 2. ISR Dispatch:
+    //    - Internal NOP 1: 4 ticks
+    //    - Internal NOP 2: 4 ticks
+    //    - Internal NOP 3: 4 ticks
+    //    - PUSH HI: 4 ticks
+    //    - PUSH LO: 4 ticks
+    // Total = 4 + 20 = 24 ticks.
+    assert_eq!(elapsed, 24, "Total latency (NOP + Dispatch) should be 24 ticks");
+}
 #[test]
 fn samesuite_ei_delay_halt() {
     let mut gb = setup_gb();

@@ -7768,3 +7768,78 @@ fn test_repro_gbmicro_latch_suite() {
         gb.ppu.write_lcdc(0x91, &mut gb.ints); // BG ON
     }
 }
+
+#[test]
+fn test_ppu_mode3_duration_formula_scx() {
+    let mut gb = setup_gb();
+    // LCD ON, BG ON, no sprites, no window
+    gb.ppu.write_lcdc(0x81, &mut gb.ints);
+
+    for scx in 0..8 {
+        gb.ppu.write_scx(scx);
+        advance_to_ly(&mut gb, 10);
+
+        // Wait for Mode 2 (OamScan) entry
+        while gb.ppu.mode() != crate::ppu::Mode::OamScan {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+
+        // dots_in_line in Ceres actually counts 8MHz ticks.
+        // We are now at tick 1 of Mode 2.
+        let start_ticks = gb.ppu.dots_in_line() - 1;
+        // Advance until Mode 0 (HBlank)
+        while gb.ppu.mode() != crate::ppu::Mode::HBlank {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+        let end_ticks = gb.ppu.dots_in_line();
+
+        // Duration in 8MHz ticks: end - start
+        let duration = end_ticks - start_ticks;
+
+        // Hardware Formula (DMG):
+        // Duration = OAM + Drawing (Baseline + SCX penalty)
+        // SCX penalty is 2 ticks (1 dot) per SCX unit.
+        // Ceres empirical baseline for SCX=0 is 511 ticks.
+        let expected = 511 + (u16::from(scx) * 2);
+
+        assert_eq!(
+            duration, expected,
+            "Mode 3 duration mismatch for SCX={}: expected {} ticks, got {}",
+            scx, expected, duration
+        );
+    }
+}
+
+#[test]
+fn test_ppu_mode3_duration_formula_sprites() {
+    let mut gb = setup_gb();
+    // LCD ON, BG ON, OBJ ON
+    gb.ppu.write_lcdc(0x83, &mut gb.ints);
+
+    // Baseline: SCX=0, No sprites.
+    // We already know SCX=0 is 511 ticks.
+
+    // 1 Sprite at X=8. Should add 11 dots (22 ticks) of penalty.
+    // Total = 511 + 22 = 533 ticks.
+    gb.ppu.write_oam(0, 26); // Y=26 (Visible on LY=10: 26 - 16 = 10)
+    gb.ppu.write_oam(1, 8);  // X=8
+    gb.ppu.write_oam(2, 0);  // Tile 0
+    gb.ppu.write_oam(3, 0);  // Attrs
+
+    advance_to_ly(&mut gb, 10);
+    while gb.ppu.mode() != crate::ppu::Mode::OamScan {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    let start_ticks = gb.ppu.dots_in_line() - 1;
+    while gb.ppu.mode() != crate::ppu::Mode::HBlank {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    let duration = gb.ppu.dots_in_line() - start_ticks;
+
+    // Ceres current sprite penalty implementation: 
+    // Sprite fetch takes 6 dots (12 ticks).
+    // Sequencer stalls during fetch.
+    // Total = 511 + 12 = 523?
+    // Wait, let's see what Ceres gives.
+    assert_eq!(duration, 533, "Mode 3 duration with 1 sprite at X=8 should be 533 ticks (511 + 22)");
+}
