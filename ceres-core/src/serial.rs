@@ -129,7 +129,7 @@ mod tests {
         let mut div: u16 = 0;
         let mut cycles = 0;
 
-        let mut fire_edge =
+        let fire_edge =
             |serial: &mut Serial, ints: &mut Interrupts, div: &mut u16, cycles: &mut u32| {
                 let old_div = *div;
                 *div = div.wrapping_add(1);

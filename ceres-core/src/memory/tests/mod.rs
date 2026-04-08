@@ -14,7 +14,7 @@ fn setup_cgb() -> Gb {
     gb
 }
 
-fn run_gdma(gb: &mut Gb, src: u16, dst_vram_offset: u16, len_blocks: u8) {
+fn _run_gdma(gb: &mut Gb, src: u16, dst_vram_offset: u16, len_blocks: u8) {
     gb.write_mem(0xFF51, (src >> 8) as u8);
     gb.write_mem(0xFF52, src as u8);
     gb.write_mem(0xFF53, (dst_vram_offset >> 8) as u8);

@@ -28,6 +28,7 @@ impl Interrupts {
     /// Used during interrupt dispatch to allow IE re-checking mid-push.
     /// Returns (0, 0x0000) if no interrupt should be dispatched.
     #[must_use]
+    #[allow(dead_code)]
     pub fn determine_interrupt(&self) -> (u8, u16) {
         let ints = self.ifr & self.ie;
         if ints == 0 {

@@ -143,8 +143,6 @@ pub struct Ppu {
     pixel_discard_count: u8,
     /// Is the background fetcher currently suspended by the sprite fetcher?
     fetcher_suspended: bool,
-    /// The mode currently visible to the CPU in the STAT register.
-    stat_mode: Mode,
     /// Actual LCD X coordinate (0-159).
     lcd_x: u8,
     /// Window has been triggered on this scanline.
@@ -1360,31 +1358,6 @@ impl Ppu {
         self.vram.vram_at_bank(addr, bank)
     }
 
-    /// Output a pixel to the LCD buffer.
-    /// Implements `render_pixel_if_possible` logic.
-    fn output_pixel(&mut self, cgb_mode: CgbMode) {
-        // Pop from BG FIFO.
-        let bg_pixel = self.bg_fifo.pop().unwrap();
-        let sprite_pixel = self.oam_fifo.pop();
-
-        self.window_is_being_fetched = false;
-
-        // Normal rendering
-        let (color, palette, is_sprite) = self.mix_pixels(bg_pixel, sprite_pixel, cgb_mode);
-
-        let rgb = if is_sprite {
-            self.sprite_color_to_rgb(color, palette, cgb_mode)
-        } else {
-            self.bg_color_to_rgb(color, palette, cgb_mode)
-        };
-
-        let idx = u32::from(self.ly) * u32::from(PX_WIDTH) + u32::from(self.lcd_x);
-        // Safety check: only write to visible area
-        if self.ly < PX_HEIGHT {
-            self.rgb_buf.set_px(idx, rgb);
-        }
-    }
-
     /// Mix background and sprite pixels according to priority rules.
     fn mix_pixels(
         &self,
@@ -1876,11 +1849,6 @@ impl Ppu {
 
     pub fn enter_stop_mode(&mut self) {
         self.is_frozen = true;
-    }
-
-    #[must_use]
-    pub const fn is_frozen(&self) -> bool {
-        self.is_frozen
     }
 
     pub fn leave_stop_mode(&mut self) {

@@ -4,7 +4,7 @@ mod timer;
 
 use crate::{GbBuilder, Model, test_util::setup_gb};
 
-type Gb = crate::Gb<crate::test_util::DummyAudio>;
+type _Gb = crate::Gb<crate::test_util::DummyAudio>;
 
 fn setup_cgb() -> crate::Gb<crate::test_util::DummyAudio> {
     GbBuilder::new(44100, crate::test_util::DummyAudio)
@@ -12,7 +12,7 @@ fn setup_cgb() -> crate::Gb<crate::test_util::DummyAudio> {
         .build()
 }
 
-fn advance_to_ly(gb: &mut crate::Gb<crate::test_util::DummyAudio>, ly: u8) {
+fn _advance_to_ly(gb: &mut crate::Gb<crate::test_util::DummyAudio>, ly: u8) {
     for _ in 0..10_000_000 {
         if gb.ppu.read_ly() == ly {
             return;
@@ -22,7 +22,7 @@ fn advance_to_ly(gb: &mut crate::Gb<crate::test_util::DummyAudio>, ly: u8) {
     panic!("LY={} never reached", ly);
 }
 
-fn advance_to_mode(gb: &mut crate::Gb<crate::test_util::DummyAudio>, mode: u8) {
+fn _advance_to_mode(gb: &mut crate::Gb<crate::test_util::DummyAudio>, mode: u8) {
     for _ in 0..10_000_000 {
         if gb.ppu.read_stat() & 0x03 == mode {
             return;

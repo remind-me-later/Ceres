@@ -391,10 +391,10 @@ fn test_ppu_scx_latching() {
     }
 
     // Measure Mode 3 duration. SCX=4 should be 332 ticks. SCX=0 should be 324.
-    let mut ticks = 0;
+    let mut _ticks = 0;
     while (gb.ppu.read_stat() & 0x03) == 3 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        ticks += 1;
+        _ticks += 1;
     }
 
     // Reset and try again, changing it back at dot 70.
@@ -413,10 +413,10 @@ fn test_ppu_scx_latching() {
     while (gb.ppu.read_stat() & 0x03) != 3 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
-    let mut ticks = 0;
+    let mut _ticks = 0;
     while (gb.ppu.read_stat() & 0x03) == 3 {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        ticks += 1;
+        _ticks += 1;
     }
 }
 
@@ -1926,7 +1926,6 @@ fn test_repro_m0int_scx() {
 
 #[test]
 fn test_repro_div_timing() {
-    let mut gb = setup_gb();
     // After skip_bootrom, PC=0x100, DIV=0xABCC
 
     // div_start_inc_1: 36 T-cycles after 0x100

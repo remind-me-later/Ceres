@@ -608,12 +608,12 @@ fn test_repro_m2int_m3stat() {
 
     // Run until STAT interrupt fires
     let mut fired_at_ly = 0xFF;
-    let mut fired_at_mode = 0xFF;
+    let mut _fired_at_mode = 0xFF;
 
     for _ in 0..2000 {
         if (gb.ints.read_if() & 0x02) != 0 {
             fired_at_ly = gb.ppu.read_ly();
-            fired_at_mode = gb.ppu.read_stat() & 0x03;
+            _fired_at_mode = gb.ppu.read_stat() & 0x03;
             break;
         }
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
