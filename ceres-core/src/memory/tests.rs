@@ -1371,3 +1371,52 @@ fn samesuite_hdma_lcd_off() {
         "HDMA should have 1 block remaining (bits 6:0 = 0)"
     );
 }
+
+#[test]
+fn test_dma_oam_blocking_boundary() {
+    let mut gb = setup_cgb();
+
+    // 1. Initial state: OAM accessible
+    gb.write_mem(0xFE00, 0x55);
+    assert_eq!(gb.read_mem(0xFE00), 0x55);
+
+    // 2. Start DMA
+    gb.write_mem(0xFF46, 0xC0);
+
+    // In Ceres, Dma::write() sets state to Starting(8).
+    // Starting(8) means blocks_oam() is FALSE for 8 ticks (4 T-cycles).
+
+    // Tick 1-4: OAM should still be accessible
+    for t in 1..=4 {
+        assert_eq!(
+            gb.read_mem(0xFE00),
+            0x55,
+            "OAM should be accessible at tick {} after DMA trigger",
+            t
+        );
+        gb.advance_dots(1);
+        gb.run_dma();
+    }
+
+    // At tick 4, Starting(8) becomes Starting(4) after step().
+    // Starting(4) STILL returns blocks_oam() == false.
+
+    // Tick 5-8: OAM still accessible in Starting(4) stage
+    for t in 5..=8 {
+        assert_eq!(
+            gb.read_mem(0xFE00),
+            0x55,
+            "OAM should still be accessible at tick {} (Starting(4) stage)",
+            t
+        );
+        gb.advance_dots(1);
+        gb.run_dma();
+    }
+
+    // Tick 9: OAM should definitely be blocked now (Transferring state)
+    assert_eq!(
+        gb.read_mem(0xFE00),
+        0xFF,
+        "OAM should be blocked at tick 9 after DMA trigger"
+    );
+}

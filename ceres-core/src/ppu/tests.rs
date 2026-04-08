@@ -7893,3 +7893,39 @@ fn test_ppu_lyc_coincidence_timing() {
         "STAT LYC bit should be 1 after the LyUpdate delay (4 ticks)"
     );
 }
+
+#[test]
+fn test_ppu_stat_interrupt_or_gate() {
+    let mut gb = setup_gb();
+    // Enable Mode 2 AND LYC STAT interrupts
+    gb.ppu.write_lcdc(0x80, &mut gb.ints);
+    gb.ppu.write_stat(0x60, &mut gb.ints); // LYC=1, Mode 2=1
+    gb.ppu.write_lyc(10, &mut gb.ints);
+
+    // 1. Advance to Line 10.
+    advance_to_ly(&mut gb, 10);
+
+    // 2. Wait for Mode 2 start (Dot 0).
+    // This triggers the Mode 2 STAT interrupt.
+    while gb.ppu.mode() != crate::ppu::Mode::OamScan {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Clear IF to prepare for the "hidden" interrupt
+    gb.write_mem(0xFF0F, 0x00);
+
+    // 3. Mode 2 line is now HIGH.
+    // At tick 4, LYC comparison becomes valid.
+    // Since LY=10 and LYC=10, the LYC coincidence line also goes HIGH.
+    for _ in 0..4 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // 4. Verify no NEW interrupt was requested.
+    // The STAT line was already HIGH from Mode 2, so the LYC HIGH doesn't create a rising edge.
+    assert_eq!(
+        gb.ints.read_if() & 0x02,
+        0,
+        "STAT interrupt should not re-fire when line is already HIGH"
+    );
+}
