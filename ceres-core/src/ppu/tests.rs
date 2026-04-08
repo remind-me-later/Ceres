@@ -6748,7 +6748,12 @@ fn gbmicrotest_lcdon_to_stat0_d() {
     }
 
     let stat = gb.ppu.read_stat();
-    println!("Final STAT at 1416 ticks: {:#04X}, LY: {}, Dots: {}", stat, gb.ppu.read_ly(), gb.ppu.dots_in_line);
+    println!(
+        "Final STAT at 1416 ticks: {:#04X}, LY: {}, Dots: {}",
+        stat,
+        gb.ppu.read_ly(),
+        gb.ppu.dots_in_line
+    );
     // Expected: Mode 0 (bits 0-1 = 00).
     assert_eq!(
         stat & 0x03,
@@ -7600,7 +7605,10 @@ fn test_repro_gbmicro_hblank_int_suite() {
             gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
         }
         let mode = gb.ppu.read_stat() & 0x03;
-        assert_eq!(mode, 3, "test_win0_a should still be in Mode 3 at tick 1380");
+        assert_eq!(
+            mode, 3,
+            "test_win0_a should still be in Mode 3 at tick 1380"
+        );
     }
 
     // --- Window Mode 3 Timing with SCX (test_win0_scx3_a.s) ---
@@ -7628,7 +7636,7 @@ fn test_repro_gbmicro_hblank_int_suite() {
 fn test_repro_gbmicro_memory_access_suite() {
     // --- VRAM/OAM Access during Startup (vram_read_l0_a/b/c/d.s, 000-oam_lock.s) ---
     // Verifies memory blocking behavior when LCD is first turned on.
-    
+
     // Line 0 Startup Timing (Ceres):
     // Phase 1: 0..152 ticks - STAT Mode 2, Unblocked.
     // Phase 2: 152..156 ticks - STAT Mode 2, OAM Write Blocked.
@@ -7640,28 +7648,58 @@ fn test_repro_gbmicro_memory_access_suite() {
         gb.ppu.write_lcdc(0x00, &mut gb.ints);
         gb.write_mem(0x9FFF, 0xF0);
         gb.write_mem(0xFE00, 0x55);
-        
+
         gb.ppu.write_lcdc(0x91, &mut gb.ints); // LCD ON
 
         // Phase 1: Unblocked (up to tick 152)
         for t in 0..152 {
-            assert_eq!(gb.read_mem(0x9FFF), 0xF0, "VRAM should be readable at tick {} during startup", t);
-            assert_eq!(gb.read_mem(0xFE00), 0x55, "OAM should be readable at tick {} during startup", t);
+            assert_eq!(
+                gb.read_mem(0x9FFF),
+                0xF0,
+                "VRAM should be readable at tick {} during startup",
+                t
+            );
+            assert_eq!(
+                gb.read_mem(0xFE00),
+                0x55,
+                "OAM should be readable at tick {} during startup",
+                t
+            );
             gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
         }
 
         // Phase 2: OAM Write Blocked (152..156)
         for t in 152..156 {
-            assert_eq!(gb.read_mem(0xFE00), 0x55, "OAM read should be OK at tick {} during startup", t);
+            assert_eq!(
+                gb.read_mem(0xFE00),
+                0x55,
+                "OAM read should be OK at tick {} during startup",
+                t
+            );
             gb.write_mem(0xFE00, 0xAA);
-            assert_eq!(gb.read_mem(0xFE00), 0x55, "OAM write should be blocked at tick {} during startup", t);
+            assert_eq!(
+                gb.read_mem(0xFE00),
+                0x55,
+                "OAM write should be blocked at tick {} during startup",
+                t
+            );
             gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
         }
 
         // Phase 3: OAM Fully Blocked, VRAM Blocked (156..160)
         for t in 156..160 {
-            assert_eq!(gb.read_mem(0x9FFF), 0xFF, "VRAM should be blocked at tick {} during startup", t);
-            assert_eq!(gb.read_mem(0xFE00), 0xFF, "OAM should be blocked at tick {} during startup", t);
+            assert_eq!(
+                gb.read_mem(0x9FFF),
+                0xFF,
+                "VRAM should be blocked at tick {} during startup",
+                t
+            );
+            assert_eq!(
+                gb.read_mem(0xFE00),
+                0xFF,
+                "OAM should be blocked at tick {} during startup",
+                t
+            );
             gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
         }
     }
@@ -7695,7 +7733,7 @@ fn test_repro_gbmicro_latch_suite() {
         }
 
         // Start of Tile 0 fetch (T1).
-        gb.ppu.write_scx(8); 
+        gb.ppu.write_scx(8);
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false); // Latches SCX=8
 
         // Change SCX. Tile 0 fetch continues using cached address from T1.
@@ -7703,7 +7741,7 @@ fn test_repro_gbmicro_latch_suite() {
         for _ in 0..7 {
             gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
         }
-        
+
         // Tile 1 fetch starts (GetTileT1). It should latch SCX=0.
         gb.ppu.write_scx(16);
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false); // Latches SCX=16
@@ -7722,11 +7760,11 @@ fn test_repro_gbmicro_latch_suite() {
             gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
         }
 
-        // Toggle BG enable mid-line. 
+        // Toggle BG enable mid-line.
         gb.ppu.write_lcdc(0x90, &mut gb.ints); // BG OFF
         // Next tick (dot output) will use the new LCDC value immediately in mix_pixels.
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
-        
+
         gb.ppu.write_lcdc(0x91, &mut gb.ints); // BG ON
     }
 }

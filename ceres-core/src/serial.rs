@@ -92,11 +92,7 @@ impl Serial {
         }
 
         // Bits 6-2 are always 1. Bit 1 is also always 1 on DMG.
-        self.sc = if is_cgb {
-            val | 0x7C
-        } else {
-            val | 0x7E
-        };
+        self.sc = if is_cgb { val | 0x7C } else { val | 0x7E };
 
         self.div_mask = if is_cgb && (val & CGB_SPEED != 0) {
             4
@@ -115,37 +111,38 @@ mod tests {
     fn test_serial_transfer_timing() {
         let mut serial = Serial::default();
         let mut ints = Interrupts::default();
-        
+
         // Setup: SB = 0xAA, SC = 0x81 (Start, Master, Normal Speed)
         serial.write_sb(0xAA);
         serial.write_sc(0x81, &mut ints, CgbMode::Dmg);
-        
+
         // Serial edge triggers on bit 7 falling edge of 4MHz clock (fires every 256 cycles).
         // 1st edge: Master Clock False -> True (No shift)
         // 2nd edge: Master Clock True -> False (Shift 1)
         // ...
         // 16th edge: Master Clock True -> False (Shift 8, Transfer complete)
-        
+
         // Total cycles for 16 edges: 16 * 256 = 4096 cycles.
         // But if we just reset DIV, the first edge happens at cycle 128 (Rising) or 256 (Falling).
         // Bit 7 goes 0->1 at cycle 128, 1->0 at cycle 256.
-        
+
         let mut div: u16 = 0;
         let mut cycles = 0;
-        
-        let mut fire_edge = |serial: &mut Serial, ints: &mut Interrupts, div: &mut u16, cycles: &mut u32| {
-            let old_div = *div;
-            *div = div.wrapping_add(1);
-            *cycles += 1;
-            
-            let triggers = old_div & !*div;
-            if triggers & u16::from(serial.div_mask()) != 0 {
-                serial.run_master(ints);
-                true
-            } else {
-                false
-            }
-        };
+
+        let mut fire_edge =
+            |serial: &mut Serial, ints: &mut Interrupts, div: &mut u16, cycles: &mut u32| {
+                let old_div = *div;
+                *div = div.wrapping_add(1);
+                *cycles += 1;
+
+                let triggers = old_div & !*div;
+                if triggers & u16::from(serial.div_mask()) != 0 {
+                    serial.run_master(ints);
+                    true
+                } else {
+                    false
+                }
+            };
 
         // Run until transfer complete
         let mut edges = 0;
@@ -153,31 +150,40 @@ mod tests {
             if fire_edge(&mut serial, &mut ints, &mut div, &mut cycles) {
                 edges += 1;
             }
-            if cycles > 10000 { panic!("Transfer timed out"); }
+            if cycles > 10000 {
+                panic!("Transfer timed out");
+            }
         }
-        
+
         assert_eq!(edges, 16, "Transfer should take exactly 16 edges");
         assert_eq!(cycles, 16 * 256, "Transfer should take exactly 4096 cycles");
-        assert_eq!(serial.read_sb(), 0xFF, "SB should be all 1s after shifting in from no-device");
-        assert!(ints.read_if() & 0x08 != 0, "Serial interrupt should be requested");
+        assert_eq!(
+            serial.read_sb(),
+            0xFF,
+            "SB should be all 1s after shifting in from no-device"
+        );
+        assert!(
+            ints.read_if() & 0x08 != 0,
+            "Serial interrupt should be requested"
+        );
     }
 
     #[test]
     fn test_serial_zombie_clocking() {
         let mut serial = Serial::default();
         let mut ints = Interrupts::default();
-        
+
         // 1. Manually toggle master clock high by "fake" edges
         serial.run_master(&mut ints);
         assert!(serial.master_clock);
-        
+
         // 2. Write to SC while master clock is high.
         // This should trigger an edge using the OLD SC value.
         // If old SC didn't have START set, no shift happens but master_clock toggles.
         serial.write_sc(0x81, &mut ints, CgbMode::Dmg);
         assert!(!serial.master_clock);
         assert_eq!(serial.count, 0); // No shift because START was not set in old SC
-        
+
         // 3. Now master clock is low. Write SC again.
         // It shouldn't trigger an edge because master clock is low.
         serial.write_sc(0x81, &mut ints, CgbMode::Dmg);
