@@ -788,3 +788,30 @@ fn test_repro_gbmicro_tima_inc_256k_a() {
         );
     }
 }
+
+#[test]
+fn test_timer_glitch_tac_bit_flip() {
+    let mut gb = setup_gb();
+
+    // 1. Setup: Enable timer, 4096 Hz (bit 9 of DIV)
+    // TIMA starts at 0.
+    gb.write_mem(0xFF06, 0x00); // TMA
+    gb.write_mem(0xFF07, 0x04); // Enable, 4096 Hz
+    gb.write_mem(0xFF05, 0x00); // TIMA
+
+    // 2. Advance DIV until bit 9 is 1.
+    // DIV starts at 0. Bit 9 becomes 1 at 512 T-cycles.
+    gb.advance_dots(512);
+    assert!(gb.read_mem(0xFF05) == 0);
+
+    // 3. Disable the timer (bit 2: 1 -> 0).
+    // Because DIV bit 9 is high, this creates a falling edge at the AND gate.
+    gb.write_mem(0xFF07, 0x00);
+
+    // 4. TIMA should have incremented to 1 due to the glitch.
+    assert_eq!(
+        gb.read_mem(0xFF05),
+        1,
+        "TIMA should increment when timer is disabled while DIV bit is high"
+    );
+}

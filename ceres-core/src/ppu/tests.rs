@@ -7822,9 +7822,9 @@ fn test_ppu_mode3_duration_formula_sprites() {
     // 1 Sprite at X=8. Should add 11 dots (22 ticks) of penalty.
     // Total = 511 + 22 = 533 ticks.
     gb.ppu.write_oam(0, 26); // Y=26 (Visible on LY=10: 26 - 16 = 10)
-    gb.ppu.write_oam(1, 8);  // X=8
-    gb.ppu.write_oam(2, 0);  // Tile 0
-    gb.ppu.write_oam(3, 0);  // Attrs
+    gb.ppu.write_oam(1, 8); // X=8
+    gb.ppu.write_oam(2, 0); // Tile 0
+    gb.ppu.write_oam(3, 0); // Attrs
 
     advance_to_ly(&mut gb, 10);
     while gb.ppu.mode() != crate::ppu::Mode::OamScan {
@@ -7836,10 +7836,60 @@ fn test_ppu_mode3_duration_formula_sprites() {
     }
     let duration = gb.ppu.dots_in_line() - start_ticks;
 
-    // Ceres current sprite penalty implementation: 
+    // Ceres current sprite penalty implementation:
     // Sprite fetch takes 6 dots (12 ticks).
     // Sequencer stalls during fetch.
     // Total = 511 + 12 = 523?
     // Wait, let's see what Ceres gives.
-    assert_eq!(duration, 533, "Mode 3 duration with 1 sprite at X=8 should be 533 ticks (511 + 22)");
+    assert_eq!(
+        duration, 533,
+        "Mode 3 duration with 1 sprite at X=8 should be 533 ticks (511 + 22)"
+    );
+}
+
+#[test]
+fn test_ppu_lyc_coincidence_timing() {
+    let mut gb = setup_gb();
+    // Setup: LCD ON, LYC = 1
+    gb.ppu.write_lcdc(0x80, &mut gb.ints);
+    gb.ppu.write_lyc(1, &mut gb.ints);
+
+    // 1. Advance to Line 0 start
+    while gb.ppu.read_ly() != 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // 2. Advance through Line 0.
+    // Line 0 is 880 ticks in Ceres.
+    for _ in 0..880 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // 3. We should now be at Tick 0 of Line 1 OAM Scan.
+    // LY update happens during the NEXT tick call (tick 0 of Mode 2).
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    assert_eq!(gb.ppu.read_ly(), 1, "LY should be 1 at start of Line 1");
+
+    // In Ceres, we update LY at tick 0 of OamScan.
+    // Let's check when STAT coincidence bit becomes 1.
+    let stat_initial = gb.ppu.read_stat();
+    assert_eq!(
+        stat_initial & 0x04,
+        0,
+        "STAT LYC bit should still be 0 at the exact tick LY changes"
+    );
+
+    // Advance 4 more ticks (Total 5 ticks into OamScan)
+    for _ in 0..4 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let stat_later = gb.ppu.read_stat();
+    // In Ceres, STAT is updated at dot 0, dot 4 etc.
+    // Our tick_oam_scan updates STAT at tick 4 (LyUpdate stage).
+    assert_eq!(
+        stat_later & 0x04,
+        0x04,
+        "STAT LYC bit should be 1 after the LyUpdate delay (4 ticks)"
+    );
 }

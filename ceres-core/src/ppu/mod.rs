@@ -726,8 +726,6 @@ impl Ppu {
                     self.sprite_buffer.clear();
 
                     self.ly = self.current_line;
-                    // LYC comparison now valid for the new line
-                    self.ly_for_comparison = u16::from(self.ly);
 
                     // Ensure STAT interrupt state is updated at dot 0
                     // (OamScan IRQ may have already fired at dot -4 in PreEnd)
@@ -740,6 +738,9 @@ impl Ppu {
 
                 // Tick 4: STAT mode bits change to Mode 2.
                 if tick == 4 {
+                    // LYC comparison now valid for the new line (Coincidence delay)
+                    self.ly_for_comparison = u16::from(self.ly);
+
                     self.set_mode_stat(Mode::OamScan);
                     self.oam_write_blocked = is_cgb;
                     self.update_stat(ints);
@@ -805,8 +806,8 @@ impl Ppu {
 
     /// Enter Mode 3 (Drawing) after OAM scan completes.
     fn enter_mode3_from_oam_scan(&mut self, _ints: &mut Interrupts) {
-        // Mode 3 overhead: 8 ticks pipeline latency to reach 172 dots (344 ticks) total duration.
-        let remaining = if self.current_line == 0 { 0 } else { 8 };
+        // Mode 3 overhead: 18 ticks pipeline latency to reach 172 dots (344 ticks) total duration.
+        let remaining = if self.current_line == 0 { 0 } else { 18 };
         self.phase = PpuPhase::Drawing(DrawingStage::Transition { remaining });
 
         // Initialize drawing state
@@ -1205,13 +1206,9 @@ impl Ppu {
     /// - T1: Calculate addresses/setup (2 ticks)
     /// - T2: Perform VRAM read (2 ticks)
     fn advance_fetcher(&mut self, cgb_mode: CgbMode) {
-        // Implement 8MHz timing: each state takes 2 ticks (1 T-cycle)
-        // Wait 1 tick before doing work and transitioning
-        if self.fetcher_step == 0 {
-            self.fetcher_step = 1;
-            return;
-        }
-        self.fetcher_step = 0;
+        // Implement 8MHz timing: each state takes 2 ticks (1 dot)
+        // Since tick_pixel_sequencer is called every 2 ticks, we perform
+        // the state work immediately and transition.
 
         match self.fetcher_state {
             FetcherState::GetTileT1 => {
