@@ -39,7 +39,7 @@ impl Default for Clock {
 
 impl Clock {
     pub fn tima(&self) -> u8 {
-        if self.tima_reload_pending > 0 {
+        if self.tima_reload_pending == 1 {
             0
         } else {
             self.tima
@@ -50,8 +50,6 @@ impl Clock {
         self.tma
     }
 }
-
-
 
 impl<A: AudioCallback> Gb<A> {
     /// Advance all components by the given number of CPU T-cycles.
@@ -150,11 +148,15 @@ impl<A: AudioCallback> Gb<A> {
             // TIMA reload logic happens at the end of the M-cycle (T3 of 4 T-cycles).
             // SameBoy and other accurate emulators check this at a specific phase.
             // Since we tick 1 T-cycle at a time, we can check (div & 3) == 3.
-            if (self.clock.div & 3) == 3 && self.clock.tima_reload_pending > 0 {
-                self.clock.tima_reload_pending -= 1;
-                if self.clock.tima_reload_pending == 0 {
+            if (self.clock.div & 3) == 3 {
+                if self.clock.tima_reload_pending == 1 {
                     self.clock.tima = self.clock.tma;
                     self.ints.request_timer();
+                    // Mark as reloaded but still in the reload window for TMA writes.
+                    // This window lasts until the next M-cycle's T3.
+                    self.clock.tima_reload_pending = 2;
+                } else if self.clock.tima_reload_pending == 2 {
+                    self.clock.tima_reload_pending = 0;
                 }
             }
 

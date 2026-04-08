@@ -729,7 +729,8 @@ impl Ppu {
                     // LYC comparison now valid for the new line
                     self.ly_for_comparison = u16::from(self.ly);
 
-                    // Mode 2 interrupt fires at tick 0.
+                    // Ensure STAT interrupt state is updated at dot 0
+                    // (OamScan IRQ may have already fired at dot -4 in PreEnd)
                     self.mode_for_interrupt = Some(Mode::OamScan);
                     self.update_stat(ints);
 
@@ -752,9 +753,11 @@ impl Ppu {
                 }
 
                 // OAM Scan Loop (40 entries * 4 ticks = 160 ticks)
-                if tick < 160 {
-                    let entry = (tick / 4) as u8;
-                    let sub_tick = (tick % 4) as u8;
+                // In Ceres, this loop starts at tick 8 to account for initialization.
+                if (8..168).contains(&tick) {
+                    let loop_tick = tick - 8;
+                    let entry = (loop_tick / 4) as u8;
+                    let sub_tick = (loop_tick % 4) as u8;
 
                     if sub_tick == 0 && is_cgb {
                         self.scan_oam_entry_at(entry);
@@ -763,8 +766,8 @@ impl Ppu {
                         self.scan_oam_entry_at(entry);
                     }
 
-                    // Entry 37 memory unblocking (ticks 150-151? No, 158-159)
-                    if entry == 37 && sub_tick == 2 {
+                    // Entry 37 memory unblocking (ticks 158-159 of scan, i.e., tick 166-167 total)
+                    if loop_tick == 158 {
                         self.vram_read_blocked = !is_cgb;
                         self.vram_write_blocked = false;
                         self.cgb_palettes_blocked = false;
@@ -772,8 +775,8 @@ impl Ppu {
                     }
                 }
 
-                // STAT bits change to Mode 3 at tick 160
-                if tick == 160 {
+                // STAT bits change to Mode 3 at tick 168
+                if tick == 168 {
                     self.set_mode_stat(Mode::Drawing);
                     self.mode_for_interrupt = Some(Mode::Drawing);
                     self.update_stat(ints);
@@ -784,7 +787,7 @@ impl Ppu {
                     self.oam_read_blocked = true;
                     self.oam_write_blocked = true;
 
-                    // Transition to Mode 3 Rendering (Tick 160)
+                    // Transition to Mode 3 Rendering (Tick 168)
                     self.cgb_palettes_blocked = true;
                     self.enter_mode3_from_oam_scan(ints);
                 } else {
@@ -802,10 +805,8 @@ impl Ppu {
 
     /// Enter Mode 3 (Drawing) after OAM scan completes.
     fn enter_mode3_from_oam_scan(&mut self, _ints: &mut Interrupts) {
-        #[cfg(test)]
-        if self.current_line == 2 {}
-        // Mode 3 overhead: 7 ticks pipeline latency.
-        let remaining = if self.current_line == 0 { 0 } else { 7 };
+        // Mode 3 overhead: 8 ticks pipeline latency to reach 172 dots (344 ticks) total duration.
+        let remaining = if self.current_line == 0 { 0 } else { 8 };
         self.phase = PpuPhase::Drawing(DrawingStage::Transition { remaining });
 
         // Initialize drawing state
@@ -892,7 +893,7 @@ impl Ppu {
         }
 
         // Pixel output every 2 ticks (1 dot).
-        if !self.dots_in_line.is_multiple_of(2) {
+        if self.dots_in_line.is_multiple_of(2) {
             // Check for window activation before attempting to output
             self.check_window_trigger(cgb_mode);
 
@@ -1595,11 +1596,11 @@ impl Ppu {
                 // State 11: Wait for line to near-complete.
                 // We wait until 4 ticks before line end, then transition to PreEnd.
                 //
-                // The LCD-on startup line (line 0) is 16 half-clocks (8 T-cycles) shorter than a
+                // The LCD-on startup line (line 0) is 32 half-clocks (16 T-cycles) shorter than a
                 // normal line (SameBoy display.c: cycles_for_line += 8).  When first_line_short is
-                // set we trigger PreEnd 16 ticks early so line 0 ends at tick 896 instead of 912.
+                // set we trigger PreEnd 32 ticks early so line 0 ends at tick 880 instead of 912.
                 let threshold = if self.first_line_short {
-                    PRE_END_START - 16
+                    PRE_END_START - 32
                 } else {
                     PRE_END_START
                 };
