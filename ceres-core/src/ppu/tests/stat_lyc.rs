@@ -1949,3 +1949,58 @@ fn test_ppu_stat_interrupt_or_gate() {
         "STAT interrupt should not re-fire when line is already HIGH"
     );
 }
+
+#[test]
+fn test_diagnostic_stat_irq_internal_line_state() {
+    let mut gb = setup_gb();
+    // Enable Mode 0 (HBlank) STAT interrupt
+    gb.ppu.write_lcdc(0x80, &mut gb.ints);
+    gb.ppu.write_stat(0x08, &mut gb.ints);
+    gb.ppu.write_lyc(0xFF, &mut gb.ints); // No LYC match
+
+    advance_to_ly(&mut gb, 10);
+    advance_to_mode(&mut gb, 3);
+
+    println!("--- Diagnostic: STAT IRQ Internal Line State ---");
+
+    // 1. Enter HBlank. Mode 0 IRQ fires.
+    while gb.ppu.mode() != crate::ppu::Mode::HBlank {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    let if_reg = gb.ints.read_if();
+    println!("Entered HBlank. IF=0x{:02X}", if_reg);
+    assert!(if_reg & 0x02 != 0, "HBlank IRQ should have fired");
+
+    // 2. Clear IF while still in HBlank.
+    gb.ints.write_if(0x00);
+    println!("Cleared IF in HBlank. IF=0x{:02X}", gb.ints.read_if());
+
+    // 3. Enable Mode 2 (OAM) STAT interrupt while still in HBlank.
+    // The internal STAT line is already HIGH due to Mode 0.
+    // Transitioning to (Mode 0 | Mode 2) should NOT create a rising edge.
+    gb.ppu.write_stat(0x28, &mut gb.ints); // Mode 0 + Mode 2 enabled
+    let if_reg = gb.ints.read_if();
+    println!("Enabled Mode 2 IRQ while in HBlank. IF=0x{:02X}", if_reg);
+    assert_eq!(
+        if_reg & 0x02,
+        0,
+        "Enabling another STAT interrupt while line is HIGH should NOT trigger IRQ"
+    );
+
+    // 4. Set LYC match while still in HBlank.
+    // Still no rising edge.
+    gb.ppu.write_lyc(10, &mut gb.ints);
+    gb.ppu.write_stat(0x68, &mut gb.ints); // Mode 0 + Mode 2 + LYC enabled
+    let if_reg = gb.ints.read_if();
+    println!(
+        "Enabled LYC IRQ (match) while in HBlank. IF=0x{:02X}",
+        if_reg
+    );
+    assert_eq!(
+        if_reg & 0x02,
+        0,
+        "LYC match while line is HIGH should NOT trigger IRQ"
+    );
+
+    println!("-------------------------------------------------");
+}

@@ -226,15 +226,22 @@ impl Ppu {
     fn update_stat(&mut self, ints: &mut Interrupts) {
         let previous_line = self.stat_interrupt_line;
 
-        // Internal coincidence match used for interrupt logic
+        // 1. Update the STAT register bits for CPU visibility FIRST.
+        // This ensures the coincidence match used for interrupt logic is derived
+        // from the same state visible to the CPU.
         let coincidence_match = if self.ly_for_comparison != 0xFFFF {
-            self.ly_for_comparison == u16::from(self.lyc)
+            self.stat &= !STAT_LYC_B;
+            if self.ly_for_comparison == u16::from(self.lyc) {
+                self.stat |= STAT_LYC_B;
+                true
+            } else {
+                false
+            }
         } else {
-            false
+            (self.stat & STAT_LYC_B) != 0
         };
 
-        // Compute new STAT interrupt line state from all enabled sources.
-        // Note: coincidence interrupt is triggered by internal match.
+        // 2. Compute new STAT interrupt line state from all enabled sources.
         let lyc_int = (self.stat & STAT_IF_LYC_B != 0) && coincidence_match;
         let mode_int = match self.mode_for_interrupt {
             Some(Mode::HBlank) => self.stat & STAT_IF_HBLANK_B != 0,
@@ -244,22 +251,11 @@ impl Ppu {
         };
 
         let new_line = lyc_int || mode_int;
-
         self.stat_interrupt_line = new_line;
 
-        // Only fire interrupt on rising edge (low -> high transition)
+        // 3. Only fire interrupt on rising edge (low -> high transition)
         if new_line && !previous_line {
             ints.request_lcd();
-        }
-
-        // FINALLY update the STAT register bits for CPU visibility.
-        // This ensures that if an interrupt fires, an IMMEDIATE CPU read of STAT
-        // might still see the OLD coincidence flag value (if requested right at the edge).
-        if self.ly_for_comparison != 0xFFFF {
-            self.stat &= !STAT_LYC_B;
-            if coincidence_match {
-                self.stat |= STAT_LYC_B;
-            }
         }
     }
 
@@ -729,25 +725,19 @@ impl Ppu {
                     // (OamScan IRQ may have already fired at dot -4 in PreEnd)
                     self.mode_for_interrupt = Some(Mode::OamScan);
                     self.update_stat(ints);
-
-                    // OAM write-blocking starts for CGB (non-double-speed)
-                    self.oam_write_blocked = is_cgb && !double_speed;
                 }
 
-                // Tick 4: STAT mode bits change to Mode 2.
-                if tick == 4 {
-                    // LYC comparison now valid for the new line (Coincidence delay)
-                    self.ly_for_comparison = u16::from(self.ly);
-
+                // Tick 3: Processed. Next tick (4) will show Mode 2 and blocked memory.
+                if tick == 3 {
                     self.set_mode_stat(Mode::OamScan);
-                    self.oam_write_blocked = is_cgb;
+                    self.oam_read_blocked = true;
+                    self.oam_write_blocked = true;
                     self.update_stat(ints);
                 }
 
-                // Tick 8: complete OAM-scan memory blocking.
-                if tick == 8 {
-                    self.oam_read_blocked = true;
-                    self.oam_write_blocked = true;
+                // Tick 4: LYC comparison now valid for the new line (Coincidence delay)
+                if tick == 4 {
+                    self.ly_for_comparison = u16::from(self.ly);
                     self.update_stat(ints);
                 }
 
@@ -764,18 +754,10 @@ impl Ppu {
                     if sub_tick == 2 && !is_cgb {
                         self.scan_oam_entry_at(entry);
                     }
-
-                    // Entry 37 memory unblocking (ticks 158-159 of scan, i.e., tick 166-167 total)
-                    if loop_tick == 158 {
-                        self.vram_read_blocked = !is_cgb;
-                        self.vram_write_blocked = false;
-                        self.cgb_palettes_blocked = false;
-                        self.oam_write_blocked = is_cgb;
-                    }
                 }
 
                 // STAT bits change to Mode 3 at tick 168
-                if tick == 168 {
+                if tick >= 168 {
                     self.set_mode_stat(Mode::Drawing);
                     self.mode_for_interrupt = Some(Mode::Drawing);
                     self.update_stat(ints);

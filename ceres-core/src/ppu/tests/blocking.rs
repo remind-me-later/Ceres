@@ -703,3 +703,33 @@ fn test_ppu_cgb_palette_hblank_blocking() {
         "CGB palettes should be unblocked after HBlank entry period"
     );
 }
+
+#[test]
+fn test_diagnostic_oam_blocking_first_10_ticks() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    // Advance to a stable line, e.g., Line 10
+    advance_to_ly(&mut gb, 10);
+
+    // Wait until the exact start of Mode 2 (tick 0 of OamScan)
+    loop {
+        if let crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 }) =
+            gb.ppu.phase
+        {
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    println!("--- Diagnostic: OAM Blocking First 10 Ticks of Mode 2 ---");
+    for t in 0..15 {
+        let oam_val = gb.read_mem(0xFE00);
+        println!(
+            "Tick {}: OAM read={:02X}, oam_read_blocked={}, phase={:?}",
+            t, oam_val, gb.ppu.oam_read_blocked, gb.ppu.phase
+        );
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    println!("---------------------------------------------------------");
+}

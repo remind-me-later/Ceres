@@ -2813,3 +2813,32 @@ fn test_ppu_mode3_duration_baseline_investigation() {
         m3_ticks / 2
     );
 }
+
+#[test]
+fn test_diagnostic_lcd_turn_on_first_frame_log() {
+    let mut gb = setup_gb();
+    gb.ppu.write_lcdc(0x00, &mut gb.ints);
+    gb.ppu.write_lyc(0, &mut gb.ints);
+
+    println!("--- Diagnostic: LCD ON First Frame Log ---");
+    gb.ppu.write_lcdc(0x81, &mut gb.ints); // LCD ON
+
+    let mut last_stat = gb.ppu.read_stat();
+    let mut last_ly = gb.ppu.read_ly();
+
+    println!("Tick 0: LY={}, STAT=0x{:02X}", last_ly, last_stat);
+
+    // Run for one full frame (154 lines * 912 ticks)
+    for t in 1..=(154 * 912) {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        let stat = gb.ppu.read_stat();
+        let ly = gb.ppu.read_ly();
+
+        if stat != last_stat || ly != last_ly {
+            println!("Tick {}: LY={}, STAT=0x{:02X}", t, ly, stat);
+            last_stat = stat;
+            last_ly = ly;
+        }
+    }
+    println!("------------------------------------------");
+}

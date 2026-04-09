@@ -530,3 +530,35 @@ fn test_ppu_mode3_duration_formula_sprites() {
         "Mode 3 duration with 1 sprite at X=8 should be 533 ticks (511 + 22)"
     );
 }
+
+#[test]
+fn test_diagnostic_sprite_fetcher_stall_ticks() {
+    let mut gb = setup_gb();
+    // LCD ON, Sprites ON
+    gb.ppu.write_lcdc(0x82, &mut gb.ints);
+    // Sprite 0 at X=8 (first possible position), LY=10
+    gb.ppu.write_oam(0xFE00, 10 + 16); // Y=10
+    gb.ppu.write_oam(0xFE01, 8); // X=8
+    gb.ppu.write_oam(0xFE02, 0); // Tile 0
+    gb.ppu.write_oam(0xFE03, 0); // Flags
+
+    advance_to_ly(&mut gb, 10);
+    advance_to_mode(&mut gb, 3);
+
+    println!("--- Diagnostic: Sprite Fetcher Stall Ticks (1 sprite at X=8) ---");
+
+    let mut total_m3_ticks = 0;
+    let mut stall_ticks = 0;
+    while (gb.ppu.read_stat() & 0x03) == 3 {
+        if gb.ppu.fetcher_suspended {
+            stall_ticks += 1;
+        }
+        total_m3_ticks += 1;
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    println!("Total Mode 3 ticks: {}", total_m3_ticks);
+    println!("Total Stall ticks: {}", stall_ticks);
+    println!("Base (Total - Stall): {}", total_m3_ticks - stall_ticks);
+    println!("---------------------------------------------------------------");
+}
