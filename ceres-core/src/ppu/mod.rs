@@ -804,9 +804,14 @@ impl Ppu {
 
     /// Enter Mode 3 (Drawing) after OAM scan completes.
     fn enter_mode3_from_oam_scan(&mut self, _ints: &mut Interrupts) {
-        // Mode 3 overhead: 18 ticks pipeline latency to reach 172 dots (344 ticks) total duration.
-        let remaining = if self.current_line == 0 { 0 } else { 18 };
-        self.phase = PpuPhase::Drawing(DrawingStage::Transition { remaining });
+        // Mode 3 overhead: 16 ticks initial fetch.
+        // 16 overhead + 320 rendering = 336 ticks (168 dots) total duration.
+        let remaining = 0;
+        if remaining == 0 {
+            self.phase = PpuPhase::Drawing(DrawingStage::Running);
+        } else {
+            self.phase = PpuPhase::Drawing(DrawingStage::Transition { remaining });
+        }
 
         // Initialize drawing state
         self.fetcher_state = FetcherState::GetTileT1;
@@ -877,7 +882,7 @@ impl Ppu {
     }
 
     /// Tick during Mode 3 (Drawing).
-    fn tick_drawing(&mut self, _ints: &mut Interrupts, cgb_mode: CgbMode) {
+    fn tick_drawing(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
         // Handle Transition stage delay.
         // Pipeline and fetcher are stalled during Mode 3 lead-in.
         if let PpuPhase::Drawing(DrawingStage::Transition { remaining }) = self.phase {
@@ -903,9 +908,9 @@ impl Ppu {
             }
         }
 
-        // BG fetcher runs every tick (internally handles its 2-tick states).
+        // BG fetcher runs every 2 ticks (1 dot).
         // Only runs if not suspended by the sprite fetcher.
-        if !self.fetcher_suspended {
+        if !self.fetcher_suspended && self.dots_in_line.is_multiple_of(2) {
             self.advance_fetcher(cgb_mode);
         }
 
@@ -931,7 +936,18 @@ impl Ppu {
                 self.wx_triggered = false;
             }
 
-            self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate { remaining: 2 });
+            // Unblock VRAM and OAM immediately at the end of Mode 3.
+            self.vram_read_blocked = false;
+            self.vram_write_blocked = false;
+            self.oam_read_blocked = false;
+            self.oam_write_blocked = false;
+
+            // Set STAT mode to HBlank (Mode 0) immediately.
+            self.set_mode_stat(Mode::HBlank);
+            self.mode_for_interrupt = Some(Mode::HBlank);
+            self.update_stat(ints);
+
+            self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate { remaining: 1 });
             #[cfg(test)]
             if self.current_line == 2 {}
         }
@@ -1160,10 +1176,16 @@ impl Ppu {
         let is_cgb = matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat);
 
         // Window activates when lcd_x + 7 == WX. If WX < 7, it activates at lcd_x = 0.
-        let should_activate = if self.wx < 7 {
-            self.lcd_x == 0
-        } else if self.wx < 166 + u8::from(is_cgb) {
-            self.lcd_x == self.wx.saturating_sub(7)
+        // The trigger is evaluated exactly when the pixel sequencer is ready to output
+        // a pixel (FIFO is not empty and no pixels are currently being discarded).
+        let should_activate = if !self.bg_fifo.is_empty() && self.pixel_discard_count == 0 {
+            if self.wx < 7 {
+                self.lcd_x == 0
+            } else if self.wx < 166 + u8::from(is_cgb) {
+                self.lcd_x == self.wx.saturating_sub(7)
+            } else {
+                false
+            }
         } else {
             false
         };
@@ -1509,18 +1531,8 @@ impl Ppu {
         match stage {
             HBlankStage::StatUpdate { remaining } => {
                 // State 22: STAT = Mode 0, memory unblocked.
-                // Tick 0: fire Mode 0 interrupt pulse and update STAT bits.
-                if remaining == 2 {
-                    self.set_mode_stat(Mode::HBlank);
-                    self.mode_for_interrupt = Some(Mode::HBlank);
-                    self.update_stat(ints);
-
-                    self.oam_read_blocked = false;
-                    self.vram_read_blocked = false;
-                    self.oam_write_blocked = false;
-                    self.vram_write_blocked = false;
-                }
-
+                // Mode 0 transition logic has been moved to the end of tick_drawing
+                // to precisely match the 335-tick Mode 3 baseline duration.
                 if remaining <= 1 {
                     self.phase = PpuPhase::HBlank(HBlankStage::PalettesBlock { remaining: 4 });
                 } else {

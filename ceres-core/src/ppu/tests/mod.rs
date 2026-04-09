@@ -257,9 +257,8 @@ fn oam_access_setup() -> Gb {
 
     // Wait for Mode 2 IRQ to fire (next line)
     while (gb.ints.read_if() & 0x02) == 0 {
-        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        gb.advance_dots(1);
     }
-
     gb
 }
 

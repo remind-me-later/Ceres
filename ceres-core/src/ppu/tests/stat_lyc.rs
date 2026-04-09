@@ -822,6 +822,81 @@ fn test_ppu_mode2_interrupt_timing() {
 }
 
 #[test]
+fn test_ppu_hblank_irq_stat_mode_sync() {
+    // Diagnostic test to see exactly when HBlank IRQ fires relative to STAT bits.
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+    gb.write_mem(0xFF41, 0x08); // Enable Mode 0 interrupt
+    gb.write_mem(0xFF0F, 0);
+
+    advance_to_ly(&mut gb, 10);
+    // Wait until Mode 3
+    while (gb.ppu.read_stat() & 0x03) != 3 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let mut irq_fired_at_tick = None;
+    let mut mode_at_fire = None;
+
+    for t in 0..1000 {
+        if (gb.ints.read_if() & 0x02) != 0 {
+            irq_fired_at_tick = Some(t);
+            mode_at_fire = Some(gb.ppu.read_stat() & 0x03);
+            break;
+        }
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let tick = irq_fired_at_tick.expect("HBlank IRQ did not fire");
+    let mode = mode_at_fire.unwrap();
+    println!("HBlank IRQ fired at tick {}, STAT mode was {}", tick, mode);
+
+    // Gambatte expects Mode 3.
+    assert_eq!(
+        mode, 3,
+        "HBlank IRQ must fire while STAT still shows Mode 3"
+    );
+}
+
+#[test]
+fn test_ppu_lyc_write_retrigger_oam_scan_startup() {
+    // Diagnostic test for LYC IRQ re-triggering during the first 4 ticks of OamScan
+    // where Ceres normally suppresses automatic comparison (ly_for_comparison = 0xFFFF).
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+    gb.write_mem(0xFF41, 0x40); // Enable LYC interrupt
+    gb.write_mem(0xFF45, 0); // LYC=0 initially
+    gb.ints.write_if(0);
+
+    // Advance to tick 0 of OamScan for Line 1 (LY=1).
+    // Line 0 is 912 ticks.
+    for _ in 0..912 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    assert_eq!(gb.ppu.read_ly(), 1);
+    // At tick 0 of OamScan, ly_for_comparison should be 0xFFFF.
+    // Let's verify that automatic comparison doesn't fire yet.
+    assert_eq!(
+        gb.ints.read_if() & 0x02,
+        0,
+        "IRQ should not fire automatically yet"
+    );
+
+    // NOW manually write LYC=1.
+    // Hardware (Gambatte) suggests this should trigger an IRQ even in this window.
+    gb.write_mem(0xFF45, 1);
+
+    let if_reg = gb.ints.read_if();
+    println!("IF after writing LYC=1 during startup: 0x{:02X}", if_reg);
+    assert_eq!(
+        if_reg & 0x02,
+        0x02,
+        "Writing LYC=LY should trigger STAT IRQ even during comparison suppression window"
+    );
+}
+
+#[test]
 fn test_repro_lyc153_m2int() {
     let mut gb = setup_gb();
     gb.write_mem(0xFF40, 0x80); // LCD ON

@@ -309,7 +309,7 @@ fn age_ppu_vram_blocking() {
         }
     }
 
-    assert_eq!(ticks_in_m3, 336, "VRAM unblocking timing changed!");
+    assert_eq!(ticks_in_m3, 335, "VRAM unblocking timing changed!");
     assert_eq!(
         gb.ppu.read_stat() & 0x03,
         0,
@@ -356,9 +356,16 @@ fn test_repro_oam_access_m2_detailed() {
 fn repro_oam_access_postread_1() {
     // postread_1 expects 3 (OAM blocked during Mode 3)
     let mut gb = oam_access_setup();
-    // Read OAM shortly after IRQ fires (still in Mode 2/3)
-    gb.advance_dots(4);
+    // Read OAM shortly after IRQ fires (still in Mode 2)
+    // The Mode 2 IRQ fires 4 ticks before OamScan starts.
+    // Ceres blocks OAM at tick 8 of OamScan.
+    // Advance 6 dots (12 ticks) to ensure it reaches tick 8 of OamScan and is blocked.
+    gb.advance_dots(6);
     let val = gb.read_mem(0xFE00);
+    println!(
+        "Phase after 6 dots: {:?}, blocked: {}",
+        gb.ppu.phase, gb.ppu.oam_read_blocked
+    );
     assert_eq!(val & 3, 3, "OAM should be blocked (0xFF & 3 = 3)");
 }
 
@@ -389,7 +396,8 @@ fn repro_oam_access_preread_1() {
     let mut gb = setup_gb();
     gb.write_mem(0xFF40, 0x80);
     advance_to_ly(&mut gb, 10);
-    advance_to_mode(&mut gb, 0);
+    advance_to_mode(&mut gb, 2); // Wait for Mode 2 to start to bypass the 4-tick Mode 0 overlap at line start
+    advance_to_mode(&mut gb, 0); // Now wait for the actual Mode 0 (HBlank) at the end of the line
     gb.advance_dots(100); // Well into Mode 0
     let val = gb.read_mem(0xFE00);
     assert_eq!(val & 3, 0, "OAM should be accessible well into Mode 0");

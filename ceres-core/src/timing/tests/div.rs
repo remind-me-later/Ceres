@@ -265,3 +265,18 @@ fn repro_tima_tc00_start_1_cgb() {
         "TIMA should not have incremented yet (tc00_start_1)"
     );
 }
+
+#[test]
+fn test_cgb_div_phase_diagnostic() {
+    let mut gb = crate::GbBuilder::new(44100, crate::test_util::DummyAudio)
+        .with_model(crate::Model::CgbE)
+        .build();
+    gb.skip_bootrom();
+
+    // Read DIV at every tick from 0 to 512
+    for t in 0..=512 {
+        let div = gb.read_div();
+        println!("Tick {}: DIV=0x{:02X}", t, div);
+        gb.advance_dots(1);
+    }
+}

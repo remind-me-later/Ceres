@@ -1180,7 +1180,7 @@ fn gambatte_sprites_no_sprites_mode3_duration() {
 
     // Without sprites and SCX=0, Mode-3 should be exactly 335 T-ticks (167.5 pixel-clocks)
     assert_eq!(
-        duration, 344,
+        duration, 335,
         "Mode-3 duration without sprites should be 335 T-ticks, got {}",
         duration
     );
