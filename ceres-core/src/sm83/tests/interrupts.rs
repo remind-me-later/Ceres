@@ -670,3 +670,63 @@ fn mooneye_acceptance_reti_intr_timing() {
         "RETI should have immediately dispatched SERIAL interrupt"
     );
 }
+
+#[test]
+fn test_repro_gbmicro_halt_bug_suite() {
+    // --- HALT bug (halt_bug.s) ---
+    // Verifies that when IE & IF != 0 and IME=0, HALT does NOT halt the CPU
+    // and triggers the halt bug (skipping the next PC increment after fetch).
+
+    let mut gb = setup_gb();
+    let base = 0xC000;
+    gb.set_cpu_pc(base);
+    gb.ints.disable();
+    gb.ints.write_ie(0x01);
+    gb.ints.write_if(0x01);
+
+    // Code: HALT (0x76); INC A (0x3C)
+    write_code(&mut gb, base, &[0x76, 0x3C]);
+
+    gb.cpu.af = 0x0000;
+
+    // 1. Run HALT.
+    // Ceres fetches 0x76, increments PC to base+1.
+    // Exec(0x76) sets is_halt_bug_triggered = true.
+    gb.run_cpu();
+
+    assert!(
+        !gb.cpu.is_halted,
+        "CPU should not be halted due to HALT bug"
+    );
+    assert_eq!(
+        gb.cpu.pc,
+        base + 1,
+        "PC should be at base+1 after HALT fetch"
+    );
+
+    // 2. Next run_cpu().
+    // It fetches byte at PC (base+1), which is 0x3C (INC A).
+    // imm8() increments PC to base+2.
+    // is_halt_bug_triggered is true, so PC is wrapped back to base+1!
+    // Exec(0x3C) runs, increments A to 1.
+    gb.run_cpu();
+
+    assert_eq!(gb.cpu.a(), 1, "A should be 1 after first INC A");
+    assert_eq!(
+        gb.cpu.pc,
+        base + 1,
+        "PC should have been wrapped back to base+1 by the HALT bug"
+    );
+
+    // 3. Next run_cpu().
+    // Fetches byte at PC (base+1) AGAIN. PC increments to base+2.
+    // Exec(0x3C) runs AGAIN, increments A to 2.
+    gb.run_cpu();
+
+    assert_eq!(
+        gb.cpu.a(),
+        2,
+        "A should be 2 because the instruction was executed twice"
+    );
+    assert_eq!(gb.cpu.pc, base + 2, "PC should now finally be at base+2");
+}
