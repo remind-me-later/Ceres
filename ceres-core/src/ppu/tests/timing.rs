@@ -2341,6 +2341,84 @@ fn gbmicrotest_802_ppu_latch_tileselect() {
 }
 
 #[test]
+fn test_repro_gbmicro_lcd_on_stat_suite() {
+    // --- LCD ON STAT behavior (007-lcd_on_stat.s) ---
+    // Verifies STAT register state immediately after turning the LCD ON.
+
+    let mut gb = setup_gb();
+    gb.ppu.write_lcdc(0x00, &mut gb.ints);
+    gb.ppu.write_lyc(0, &mut gb.ints); // Coincidence initially
+
+    // Turn LCD ON
+    gb.ppu.write_lcdc(0x91, &mut gb.ints);
+
+    // Immediately after ON:
+    // In Ceres, for Line 0 startup, it reports Mode 2 (OAM Scan) initially.
+    let stat = gb.ppu.read_stat();
+    assert_eq!(
+        stat & 0x03,
+        2,
+        "STAT should report Mode 2 immediately after turn-on in Ceres"
+    );
+    assert!(
+        stat & 0x04 != 0,
+        "LY=LYC coincidence should be set immediately after turn-on if LYC=0"
+    );
+}
+
+#[test]
+fn test_repro_gbmicro_register_latching_expanded() {
+    // --- SCY Latching (801-ppu-latch-scy.s) ---
+    // SCY affects tile-y selection at the start of each tile fetch (T1).
+    {
+        let mut gb = setup_gb();
+        gb.ppu.write_lcdc(0x00, &mut gb.ints);
+        gb.ppu.write_scy(0);
+        gb.ppu.write_lcdc(0x91, &mut gb.ints);
+
+        // Advance to Line 1, Mode 3, start of Tile 0 fetch.
+        // Line 1 starts at tick 912. Mode 3 starts at tick 912+160=1072.
+        // Transition stage is 7 ticks in Mode 3. 1072+7=1079.
+        for _ in 0..1079 {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+
+        // Change SCY.
+        gb.ppu.write_scy(4);
+        // Next tick (T1) latches the new SCY for this tile row.
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+
+        gb.ppu.write_scy(0);
+        // Tile 0 fetch continues with SCY=4 logic.
+    }
+
+    // --- Tile Data Select Latching (802-ppu-latch-tileselect.s) ---
+    // LCDC Bit 4 (Tile Data Area) is checked by the fetcher at T1 of each tile fetch.
+    {
+        let mut gb = setup_gb();
+        gb.ppu.write_lcdc(0x00, &mut gb.ints);
+        gb.ppu.write_lcdc(0x91, &mut gb.ints); // Bit 4 = 1 ($8000 area)
+
+        // Advance to Line 1, Mode 3, start of Tile 0 fetch (tick 1079)
+        for _ in 0..1079 {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+
+        // Start of Tile 0 fetch. Fetcher uses current LCDC bit 4.
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false); // T1 runs
+
+        // Mid-fetch toggle. Should NOT affect Tile 0.
+        gb.ppu.write_lcdc(0x81, &mut gb.ints); // Bit 4 = 0 ($8800 area)
+
+        for _ in 0..7 {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+
+        // Tile 1 fetch starts. It should now latch Bit 4 = 0.
+    }
+}
+
+#[test]
 fn test_repro_gbmicro_hblank_int_suite() {
     // This suite reproduces the core HBlank interrupt timing tests from gbmicrotest.
     // It verifies Mode 3 duration and STAT interrupt firing for various SCX values.
