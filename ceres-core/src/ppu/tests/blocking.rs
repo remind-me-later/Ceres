@@ -733,3 +733,31 @@ fn test_diagnostic_oam_blocking_first_10_ticks() {
     }
     println!("---------------------------------------------------------");
 }
+
+#[test]
+fn test_diagnostic_hblank_palette_unblock_timing() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    // Advance to Mode 0 (HBlank)
+    advance_to_ly(&mut gb, 10);
+    while (gb.ppu.read_stat() & 0x03) != 3 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    // Now in Mode 3, wait until it transitions to Mode 0
+    while (gb.ppu.read_stat() & 0x03) == 3 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Now at start of Mode 0. Trace ticks to find when palettes unblock.
+    println!("--- Diagnostic: HBlank Palette Unblocking ---");
+    for t in 0..20 {
+        let blocked = gb.ppu.cgb_palettes_blocked;
+        println!(
+            "Tick {}: Palettes blocked = {}, Phase = {:?}",
+            t, blocked, gb.ppu.phase
+        );
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    println!("----------------------------------------------");
+}

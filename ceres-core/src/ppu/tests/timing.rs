@@ -1700,12 +1700,44 @@ fn test_ppu_mode_bit_timing_regression() {
     // STAT should still show Mode 0 (HBlank).
     assert_eq!(gb.ppu.read_stat() & 0x03, 0);
 
-    // Tick 0: STAT should show Mode 2 after processing (Fix from c9f6b06)
+    // Tick 0: STAT should still show Mode 0 after processing (delay until tick 4)
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    assert_eq!(
+        gb.ppu.read_stat() & 0x03,
+        0,
+        "STAT should still show Mode 0 after processing tick 0 (delay until tick 4)"
+    );
+
+    // Advance to tick 167 (processed). Phase will be tick 168.
+    for _ in 0..164 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    // Now at tick 167 (Running { tick: 167 })
+    // It hasn't been processed yet, so STAT should still show Mode 2.
+    assert_eq!(gb.ppu.read_stat() & 0x03, 2);
+
+    // Process tick 167. Phase becomes tick 168.
     gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     assert_eq!(
         gb.ppu.read_stat() & 0x03,
         2,
-        "STAT should show Mode 2 after processing tick 0"
+        "STAT should still show Mode 2 after processing tick 167 (delay until tick 168)"
+    );
+
+    // Now process tick 168.
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    assert_eq!(
+        gb.ppu.read_stat() & 0x03,
+        2,
+        "STAT should still show Mode 2 after processing tick 168 (delay until tick 169)"
+    );
+
+    // Now process tick 169.
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    assert_eq!(
+        gb.ppu.read_stat() & 0x03,
+        3,
+        "STAT should show Mode 3 after processing tick 169"
     );
 
     // Advance to tick 167 (processed). Phase will be tick 168.

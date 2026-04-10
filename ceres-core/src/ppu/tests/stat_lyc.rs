@@ -2004,3 +2004,43 @@ fn test_diagnostic_stat_irq_internal_line_state() {
 
     println!("-------------------------------------------------");
 }
+
+#[test]
+fn test_diagnostic_stat_irq_line_transitions() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+    gb.write_mem(0xFF41, 0x40); // Enable LYC interrupt
+    gb.write_mem(0xFF45, 10); // LYC = 10
+    gb.write_mem(0xFF0F, 0x00);
+
+    advance_to_ly(&mut gb, 10);
+    // Coincidence comparison is delayed until tick 4 of OAM scan.
+    for _ in 0..4 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    // Check if STAT line is high when LY=10 and LYC=10
+    assert!(
+        gb.ppu.stat_interrupt_line,
+        "STAT line should be high when LY=10 and LYC=10 (Tick 4)"
+    );
+
+    // Change LYC to 11 - STAT line should go low
+    gb.write_mem(0xFF45, 11);
+    assert!(
+        !gb.ppu.stat_interrupt_line,
+        "STAT line should go low when LYC is changed to non-matching value"
+    );
+
+    // Change LYC back to 10 - STAT line should go high and trigger IF
+    gb.ints.write_if(0);
+    gb.write_mem(0xFF45, 10);
+    assert!(
+        gb.ppu.stat_interrupt_line,
+        "STAT line should go high when LYC is changed back to matching value"
+    );
+    assert!(
+        gb.ints.read_if() & 0x02 != 0,
+        "STAT interrupt should have triggered on rising edge of STAT line"
+    );
+}

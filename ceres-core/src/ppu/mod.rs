@@ -238,6 +238,8 @@ impl Ppu {
                 false
             }
         } else {
+            // Internal comparison is disabled - use the current STAT bit.
+            // This bit is updated manually by write_lyc() and other state transitions.
             (self.stat & STAT_LYC_B) != 0
         };
 
@@ -703,7 +705,7 @@ impl Ppu {
     /// - Scan (State 8): 160 ticks - 40 OAM entries × 4 ticks each
     /// - Transition1 (State 10): 6 ticks - Mode 3 transition, VRAM blocked
     /// - Transition2 (State 32): 4 ticks - CGB palettes blocked
-    fn tick_oam_scan(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
+    fn tick_oam_scan(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, _double_speed: bool) {
         let is_cgb = matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat);
 
         let PpuPhase::OamScan(stage) = self.phase else {

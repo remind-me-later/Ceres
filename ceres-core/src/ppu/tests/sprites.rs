@@ -562,3 +562,43 @@ fn test_diagnostic_sprite_fetcher_stall_ticks() {
     println!("Base (Total - Stall): {}", total_m3_ticks - stall_ticks);
     println!("---------------------------------------------------------------");
 }
+
+#[test]
+fn test_diagnostic_mode3_sprite_penalty_scaling() {
+    println!("--- Diagnostic: Mode 3 Sprite Penalty Scaling ---");
+    for num_sprites in [0, 1, 5, 10] {
+        let mut gb = setup_gb();
+        gb.write_mem(0xFF40, 0x82); // LCD ON, OBJ ON
+
+        // Place sprites at X=8, 16, 24, ...
+        for i in 0..num_sprites {
+            let base = i as u16 * 4;
+            gb.ppu.write_oam_by_dma(0xFE00 + base, 16); // Y = 16 (LY 0)
+            gb.ppu.write_oam_by_dma(0xFE00 + base + 1, 8 + i * 8); // X
+        }
+
+        // Wait for LY=1 OAM Scan
+        while gb.ppu.read_ly() != 1 || (gb.ppu.read_stat() & 0x03) != 2 {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+
+        // Wait for Mode 3 start
+        while (gb.ppu.read_stat() & 0x03) == 2 {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+        let m3_start = gb.ppu.dots_in_line();
+
+        // Wait for Mode 0 start
+        while (gb.ppu.read_stat() & 0x03) == 3 {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+        let m3_end = gb.ppu.dots_in_line();
+
+        println!(
+            "Sprites: {:2}, Mode 3 Duration: {} ticks",
+            num_sprites,
+            m3_end - m3_start
+        );
+    }
+    println!("--------------------------------------------------");
+}

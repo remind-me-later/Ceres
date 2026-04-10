@@ -441,3 +441,37 @@ fn test_timer_glitch_tac_bit_flip() {
         "TIMA should increment when timer is disabled while DIV bit is high"
     );
 }
+
+#[test]
+fn test_diagnostic_tima_reload_window_probe() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF04, 0); // DIV = 0
+    gb.write_mem(0xFF06, 0x42); // TMA = 0x42
+    gb.write_mem(0xFF05, 0xFE); // TIMA = 0xFE
+    gb.write_mem(0xFF07, 0x05); // 262144 Hz (16 dots)
+
+    // Advance to 16 dots: TIMA should be 0xFF
+    gb.advance_dots(16);
+    assert_eq!(gb.read_mem(0xFF05), 0xFF);
+
+    // Advance to 32 dots: TIMA should be 0x00 (Reloading starts)
+    gb.advance_dots(16);
+    assert_eq!(
+        gb.read_mem(0xFF05),
+        0x00,
+        "TIMA should read 0 during Reloading"
+    );
+
+    // Check next 4 dots (Reloading window)
+    println!("--- Diagnostic: TIMA Reload Window Probe ---");
+    for t in 0..8 {
+        let tima = gb.read_mem(0xFF05);
+        let reload_pending = gb.clock.tima_reload_pending;
+        println!(
+            "Tick +{}: TIMA=0x{:02X}, Pending={}",
+            t, tima, reload_pending
+        );
+        gb.advance_dots(1);
+    }
+    println!("--------------------------------------------");
+}

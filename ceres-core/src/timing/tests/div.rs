@@ -280,3 +280,23 @@ fn test_cgb_div_phase_diagnostic() {
         gb.advance_dots(1);
     }
 }
+
+#[test]
+fn test_diagnostic_div_exhaustive_trace() {
+    let mut gb = crate::GbBuilder::new(44100, crate::test_util::DummyAudio)
+        .with_model(crate::Model::CgbE)
+        .build();
+    gb.skip_bootrom();
+
+    println!("--- Diagnostic: DIV Counter Exhaustive Trace ---");
+    for t in 0..=1024 {
+        let internal_div = gb.clock.div;
+        let div_reg = gb.read_div();
+        println!(
+            "Tick {:4}: Internal DIV=0x{:04X}, DIV Reg=0x{:02X}",
+            t, internal_div, div_reg
+        );
+        gb.advance_dots(1);
+    }
+    println!("------------------------------------------------");
+}

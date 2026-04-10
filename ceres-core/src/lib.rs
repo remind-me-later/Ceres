@@ -155,8 +155,9 @@ impl<A: AudioCallback> Gb<A> {
         //   internal_counter = cycleCounter - divLastUpdate
         //   DIV = internal_counter & 0xFFFF
         if self.is_cgb() {
-            // CGB: 0x102A0 + 0x1C00 = 0x11EA0 → DIV = 0x1EA0
-            self.clock.div = 0x1EA0;
+            // CGB boot timing adjustment:
+            // Hardware expects increment from 0x1E to 0x1F between tick 256 and 272.
+            self.clock.div = 0x1DF8;
         } else {
             // DMG: 0x18FCC + 0x1C00 = 0x1ABCC → DIV = 0xABCC
             self.clock.div = 0xABCC;
