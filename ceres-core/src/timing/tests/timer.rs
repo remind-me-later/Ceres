@@ -475,3 +475,31 @@ fn test_diagnostic_tima_reload_window_probe() {
     }
     println!("--------------------------------------------");
 }
+
+#[test]
+fn test_diagnostic_tima_write_during_reload_cycle() {
+    println!("--- Diagnostic: TIMA Reload Glitch Window ---");
+    for offset in 0..4 {
+        let mut gb = setup_gb();
+        gb.write_mem(0xFF04, 0); // DIV = 0
+        gb.write_mem(0xFF06, 0x42); // TMA = 0x42
+        gb.write_mem(0xFF05, 0xFF); // TIMA = 0xFF
+        gb.write_mem(0xFF07, 0x05); // 262144 Hz (16 dots)
+
+        // Advance 16 dots, TIMA reaches 0x00 (reload pending)
+        gb.advance_dots(16);
+
+        // Now advance `offset` dots into the 4-dot reload window
+        gb.advance_dots(offset);
+
+        // Attempt manual CPU write
+        gb.write_mem(0xFF05, 0x99);
+
+        // Advance out of the reload window
+        gb.advance_dots(8 - offset);
+
+        let tima = gb.read_mem(0xFF05);
+        println!("Write at offset +{}: Final TIMA = 0x{:02X}", offset, tima);
+    }
+    println!("---------------------------------------------");
+}

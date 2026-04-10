@@ -761,3 +761,28 @@ fn test_diagnostic_hblank_palette_unblock_timing() {
     }
     println!("----------------------------------------------");
 }
+
+#[test]
+fn test_diagnostic_oam_blocking_tick_by_tick() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+
+    advance_to_ly(&mut gb, 10);
+    // Wait for end of HBlank (Mode 0)
+    while (gb.ppu.read_stat() & 0x03) == 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    println!("--- Diagnostic: OAM Blocking Boundary Probe ---");
+    // Now at start of OAM Scan (Mode 2)
+    for t in 0..10 {
+        let read_blocked = gb.ppu.oam_read_blocked;
+        let write_blocked = gb.ppu.oam_write_blocked;
+        println!(
+            "Tick {}: OAM Read Blocked = {}, OAM Write Blocked = {}, Phase = {:?}",
+            t, read_blocked, write_blocked, gb.ppu.phase
+        );
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    println!("-----------------------------------------------");
+}

@@ -2044,3 +2044,37 @@ fn test_diagnostic_stat_irq_line_transitions() {
         "STAT interrupt should have triggered on rising edge of STAT line"
     );
 }
+
+#[test]
+fn test_diagnostic_stat_irq_or_gate_overlap() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+    gb.write_mem(0xFF41, 0x60); // Enable LYC and Mode 2 interrupts
+    gb.write_mem(0xFF45, 10); // LYC = 10
+    gb.write_mem(0xFF0F, 0x00);
+
+    advance_to_ly(&mut gb, 9);
+
+    // Wait until Mode 0 (HBlank) of line 9
+    while (gb.ppu.read_stat() & 0x03) != 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    println!("--- Diagnostic: STAT IRQ OR-Gate Overlap Trace ---");
+    // Transition from Line 9 HBlank -> Line 10 OAM Scan -> Line 10 Mode 3
+    let mut ticks = 0;
+    while gb.ppu.read_ly() != 10 || (gb.ppu.read_stat() & 0x03) != 3 {
+        let stat_line = gb.ppu.stat_interrupt_line;
+        println!(
+            "Tick {:3}: LY={}, STAT={:02X}, IF={:02X}, Line={}",
+            ticks,
+            gb.ppu.read_ly(),
+            gb.ppu.read_stat(),
+            gb.ints.read_if(),
+            stat_line
+        );
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        ticks += 1;
+    }
+    println!("--------------------------------------------------");
+}

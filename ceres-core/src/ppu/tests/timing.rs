@@ -2874,3 +2874,60 @@ fn test_diagnostic_lcd_turn_on_first_frame_log() {
     }
     println!("------------------------------------------");
 }
+
+#[test]
+fn test_diagnostic_lcd_on_delay_ticks() {
+    let mut gb = setup_gb();
+    gb.ppu.write_lcdc(0x00, &mut gb.ints);
+
+    println!("--- Diagnostic: LCD-ON Frame 0 Startup Delay ---");
+    gb.ppu.write_lcdc(0x81, &mut gb.ints); // LCD ON
+
+    let mut ticks = 0;
+    // Wait for Mode 2 (OAM Scan)
+    while (gb.ppu.read_stat() & 0x03) != 2 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        ticks += 1;
+    }
+    println!("Ticks to Mode 2: {}", ticks);
+
+    // Wait for Mode 3 (Drawing)
+    while (gb.ppu.read_stat() & 0x03) != 3 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        ticks += 1;
+    }
+    println!("Ticks to Mode 3: {}", ticks);
+
+    // Wait for Mode 0 (HBlank)
+    while (gb.ppu.read_stat() & 0x03) != 0 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        ticks += 1;
+    }
+    println!("Ticks to Mode 0 (HBlank): {}", ticks);
+    println!("------------------------------------------------");
+}
+
+#[test]
+fn test_diagnostic_scx_mode3_extension() {
+    println!("--- Diagnostic: SCX Mode 3 Extension Logger ---");
+    for scx in 0..=7 {
+        let mut gb = setup_gb();
+        gb.ppu.write_lcdc(0x81, &mut gb.ints); // LCD ON, BG ON
+        gb.ppu.write_scx(scx);
+
+        advance_to_ly(&mut gb, 10);
+
+        while (gb.ppu.read_stat() & 0x03) != 3 {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+        let m3_start = gb.ppu.dots_in_line();
+
+        while (gb.ppu.read_stat() & 0x03) == 3 {
+            gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        }
+        let m3_end = gb.ppu.dots_in_line();
+
+        println!("SCX: {}, Mode 3 Duration: {} ticks", scx, m3_end - m3_start);
+    }
+    println!("-----------------------------------------------");
+}

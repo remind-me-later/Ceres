@@ -602,3 +602,36 @@ fn test_diagnostic_mode3_sprite_penalty_scaling() {
     }
     println!("--------------------------------------------------");
 }
+
+#[test]
+fn test_diagnostic_sprite_fetcher_state_machine() {
+    println!("--- Diagnostic: Sprite Fetcher State Machine Trace ---");
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x82); // LCD ON, OBJ ON
+
+    // Place a single sprite at X=8
+    gb.ppu.write_oam_by_dma(0xFE00, 16); // Y = 16 (LY 0)
+    gb.ppu.write_oam_by_dma(0xFE01, 8); // X = 8
+
+    advance_to_ly(&mut gb, 1);
+
+    // Wait for Mode 3 start
+    while (gb.ppu.read_stat() & 0x03) != 3 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+
+    let mut ticks = 0;
+    while (gb.ppu.read_stat() & 0x03) == 3 {
+        let phase = &gb.ppu.phase;
+        let suspended = gb.ppu.fetcher_suspended;
+        let dots = gb.ppu.dots_in_line();
+        println!(
+            "Tick {:3}: suspended={}, dots={}, phase={:?}",
+            ticks, suspended, dots, phase
+        );
+
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+        ticks += 1;
+    }
+    println!("------------------------------------------------------");
+}
