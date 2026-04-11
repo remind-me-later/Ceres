@@ -1233,10 +1233,10 @@ fn gambatte_sprites_10xposa7_no_mode3_penalty() {
     let duration = mode3_duration_ticks(&mut gb, 2, crate::CgbMode::Dmg, false);
 
     // With 10 sprites all at X=0xA7, each sprite fetch costs exactly 12 T-ticks
-    // (SameBoy-accurate). All 10 are fetched: 335 (baseline) + 10 × 12 = 455 T-ticks.
+    // (SameBoy-accurate). All 10 are fetched: 344 (baseline) + 10 × 12 = 464 T-ticks.
     assert_eq!(
-        duration, 455,
-        "10 sprites at X=0xA7 must impose exactly 10 × 12 T-tick penalty (expected 455, got {})",
+        duration, 464,
+        "10 sprites at X=0xA7 must impose exactly 10 × 12 T-tick penalty (expected 464, got {})",
         duration
     );
 }

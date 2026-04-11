@@ -206,7 +206,11 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn write_tima(&mut self, val: u8) {
-        // Writing to TIMA during the 4-dot reload window cancels the reload.
+        // Writing to TIMA during the "Reloaded" state (1 M-cycle after reload) is ignored.
+        if self.clock.tima_reload_pending == 2 {
+            return;
+        }
+        // Writing to TIMA during the 4-dot reloading window cancels the reload.
         self.clock.tima = val;
         self.clock.tima_reload_pending = 0;
     }

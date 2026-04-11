@@ -104,6 +104,8 @@ pub struct Ppu {
     rgb_buf: RgbaBuf,
     rgba_buf_present: RgbaBuf,
     scx: u8,
+    /// Latched SCX value at the start of Mode 3 (or window activation).
+    scx_latched: u8,
     scy: u8,
     stat: u8,
     /// Internal STAT interrupt line - OR of all enabled STAT sources.
@@ -425,6 +427,24 @@ impl Ppu {
 
     #[cfg(test)]
     #[must_use]
+    pub(crate) const fn pixel_discard_count(&self) -> u8 {
+        self.pixel_discard_count
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) const fn window_is_being_fetched(&self) -> bool {
+        self.window_is_being_fetched
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) const fn fetcher_tile_index_addr(&self) -> u16 {
+        self.fetcher_tile_index_addr
+    }
+
+    #[cfg(test)]
+    #[must_use]
     pub(crate) const fn rgba_buf(&self) -> &RgbaBuf {
         &self.rgb_buf
     }
@@ -722,6 +742,7 @@ impl Ppu {
                     self.sprite_buffer.clear();
 
                     self.ly = self.current_line;
+                    self.ly_for_comparison = 0xFFFF;
 
                     // Ensure STAT interrupt state is updated at dot 0
                     // (OamScan IRQ may have already fired at dot -4 in PreEnd)
@@ -801,7 +822,8 @@ impl Ppu {
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_step = 0;
         self.window_tile_x = 0;
-        self.pixel_discard_count = self.scx & 7;
+        self.scx_latched = self.scx;
+        self.pixel_discard_count = self.scx_latched & 7;
         self.lcd_x = 0;
         self.bg_fifo.clear();
         self.oam_fifo.clear();
@@ -821,7 +843,8 @@ impl Ppu {
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_step = 0;
         self.window_tile_x = 0;
-        self.pixel_discard_count = self.scx & 7;
+        self.scx_latched = self.scx;
+        self.pixel_discard_count = self.scx_latched & 7;
         // Hardware starts Line 0 with rendering already in progress (~dot 131).
         // This makes Line 0 significantly shorter than subsequent lines.
         self.lcd_x = 131;
@@ -1160,16 +1183,10 @@ impl Ppu {
         let is_cgb = matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat);
 
         // Window activates when lcd_x + 7 == WX. If WX < 7, it activates at lcd_x = 0.
-        // The trigger is evaluated exactly when the pixel sequencer is ready to output
-        // a pixel (FIFO is not empty and no pixels are currently being discarded).
-        let should_activate = if !self.bg_fifo.is_empty() && self.pixel_discard_count == 0 {
-            if self.wx < 7 {
-                self.lcd_x == 0
-            } else if self.wx < 166 + u8::from(is_cgb) {
-                self.lcd_x == self.wx.saturating_sub(7)
-            } else {
-                false
-            }
+        let should_activate = if self.wx < 7 {
+            self.lcd_x == 0
+        } else if self.wx < 166 + u8::from(is_cgb) {
+            self.lcd_x == self.wx.saturating_sub(7)
         } else {
             false
         };
@@ -1191,6 +1208,10 @@ impl Ppu {
 
         // Clear BG FIFO and restart fetcher for window
         self.bg_fifo.clear();
+
+        // When the window activates, we must discard (7 - WX) pixels from the first window tile.
+        // If WX >= 7, no pixels are discarded.
+        self.pixel_discard_count = 7u8.saturating_sub(self.wx);
 
         // Only WX=0 with (SCX & 7) != 0 on DMG adds 1 T-cycle (2 ticks) delay.
         // All other cases have no delay.
@@ -1238,13 +1259,10 @@ impl Ppu {
                     self.window_tile_x
                 } else {
                     // BG X calculation
-                    let scx = self.scx;
+                    let scx = self.scx_latched;
 
                     // fetch_x_pixels represents the absolute pixel column we are fetching.
-                    let fetch_x_pixels = self
-                        .lcd_x
-                        .wrapping_add(self.pixel_discard_count)
-                        .wrapping_add(self.bg_fifo.size() as u8);
+                    let fetch_x_pixels = self.lcd_x.wrapping_add(self.bg_fifo.size() as u8);
 
                     let scx_adj = scx.wrapping_add(fetch_x_pixels);
                     scx_adj / 8
@@ -1485,7 +1503,8 @@ impl Ppu {
 
     /// Check if window is enabled in LCDC.
     #[inline]
-    const fn is_window_enabled(&self) -> bool {
+    #[must_use]
+    pub(crate) const fn is_window_enabled(&self) -> bool {
         self.lcdc & LCDC_WIN_B != 0
     }
 
@@ -1798,15 +1817,16 @@ impl Ppu {
             self.ly = 0;
             self.ly_for_comparison = 0;
             self.current_line = 0;
-            let mode = Mode::OamScan;
+            let mode = Mode::HBlank;
             self.set_mode_stat(mode);
             self.mode_for_interrupt = None;
-            // Comparison clock restarts - update coincidence and check for interrupt
-            self.update_stat(ints);
 
             // Start LCD startup state machine with Phase 1 (152 ticks)
             // Total: 152 + 4 + 4 + 6 = 166 ticks
             self.phase = PpuPhase::Line0Startup(Line0Stage::InitialMode0 { remaining: 152 });
+
+            // Comparison clock restarts - update coincidence and check for interrupt
+            self.update_stat(ints);
             self.oam_read_blocked = false;
             self.oam_write_blocked = false;
             self.vram_read_blocked = false;
