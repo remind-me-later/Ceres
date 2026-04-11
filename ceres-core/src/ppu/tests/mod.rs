@@ -1,4 +1,5 @@
 mod blocking;
+mod diagnostics;
 mod fetcher_limits;
 mod gambatte;
 mod sprites;

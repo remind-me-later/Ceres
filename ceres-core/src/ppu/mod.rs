@@ -673,6 +673,7 @@ impl Ppu {
                 if remaining <= 1 {
                     // Transition to Phase 3: STAT = Mode 3, OAM fully blocked, CGB palettes blocked
                     self.set_mode_stat(Mode::Drawing);
+                    self.mode_for_interrupt = Some(Mode::Drawing);
                     self.oam_read_blocked = true;
                     // VRAM blocking depends on CGB/DMG
                     if !is_cgb {
@@ -793,7 +794,7 @@ impl Ppu {
 
                     // Transition to Mode 3 Rendering (Tick 168)
                     self.cgb_palettes_blocked = true;
-                    self.enter_mode3_from_oam_scan(ints);
+                    self.enter_mode3_from_oam_scan(ints, cgb_mode);
                 } else {
                     self.phase = PpuPhase::OamScan(OamScanStage::Running { tick: tick + 1 });
                 }
@@ -808,7 +809,20 @@ impl Ppu {
     }
 
     /// Enter Mode 3 (Drawing) after OAM scan completes.
-    fn enter_mode3_from_oam_scan(&mut self, _ints: &mut Interrupts) {
+    fn enter_mode3_from_oam_scan(&mut self, _ints: &mut Interrupts, cgb_mode: CgbMode) {
+        let is_cgb = matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat);
+
+        // Transition to Phase 3: STAT = Mode 3, OAM fully blocked, CGB palettes blocked
+        self.set_mode_stat(Mode::Drawing);
+        self.mode_for_interrupt = Some(Mode::Drawing);
+        self.oam_read_blocked = true;
+        self.oam_write_blocked = true;
+        // VRAM blocking depends on CGB/DMG
+        if !is_cgb {
+            self.vram_read_blocked = true;
+            self.vram_write_blocked = true;
+        }
+
         // Mode 3 overhead: 16 ticks initial fetch.
         // 16 overhead + 320 rendering = 336 ticks (168 dots) total duration.
         let remaining = 0;
