@@ -39,7 +39,7 @@ impl Default for Clock {
 
 impl Clock {
     pub fn tima(&self) -> u8 {
-        if self.tima_reload_pending == 1 {
+        if (1..=5).contains(&self.tima_reload_pending) {
             0
         } else {
             self.tima
@@ -120,8 +120,8 @@ impl<A: AudioCallback> Gb<A> {
         self.clock.tima = self.clock.tima.wrapping_add(1);
 
         if self.clock.tima == 0 {
-            // TIMA overflow: reload will happen after 1 M-cycle (4 T-cycles)
-            self.clock.tima_reload_pending = 1;
+            // TIMA overflow: reload will happen after 5 T-cycles
+            self.clock.tima_reload_pending = 5;
         }
     }
 
@@ -145,18 +145,21 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     pub fn run_timers(&mut self, cpu_t_cycles: i32) {
         for _ in 0..cpu_t_cycles {
-            // TIMA reload logic happens at the end of the M-cycle (T3 of 4 T-cycles).
-            // SameBoy and other accurate emulators check this at a specific phase.
-            // Since we tick 1 T-cycle at a time, we can check (div & 3) == 3.
-            if (self.clock.div & 3) == 3 {
-                if self.clock.tima_reload_pending == 1 {
-                    self.clock.tima = self.clock.tma;
-                    self.ints.request_timer();
-                    // Mark as reloaded but still in the reload window for TMA writes.
-                    // This window lasts until the next M-cycle's T3.
-                    self.clock.tima_reload_pending = 2;
-                } else if self.clock.tima_reload_pending == 2 {
-                    self.clock.tima_reload_pending = 0;
+            if self.clock.tima_reload_pending > 0 {
+                if self.clock.tima_reload_pending <= 5 {
+                    self.clock.tima_reload_pending -= 1;
+                    if self.clock.tima_reload_pending == 0 {
+                        self.clock.tima = self.clock.tma;
+                        self.ints.request_timer();
+                        // State 6-9: Already reloaded, TIMA writes ignored for 4 T-cycles (1 M-cycle)
+                        self.clock.tima_reload_pending = 6;
+                    }
+                } else {
+                    // In "Reloaded" state (6, 7, 8, 9).
+                    self.clock.tima_reload_pending += 1;
+                    if self.clock.tima_reload_pending > 9 {
+                        self.clock.tima_reload_pending = 0;
+                    }
                 }
             }
 
@@ -183,15 +186,6 @@ impl<A: AudioCallback> Gb<A> {
     pub fn write_tac(&mut self, val: u8) {
         // Timer glitch: the AND gate output falls when (old_enable AND old_div_bit) was 1
         // and (new_enable AND new_div_bit) is 0, causing a spurious TIMA increment.
-        //
-        // This is based on the expected results of the mooneye rapid_toggle test and
-        // SameBoy's GB_emulate_timer_glitch implementation. Both DMG and CGB behave the
-        // same for this case (the Pan Docs note that disabling the timer glitch does not
-        // happen on CGB refers to a different scenario not tested by rapid_toggle).
-        //
-        // References:
-        //   - Pan Docs "Timer Obscure Behaviour"
-        //   - SameBoy Core/timing.c: GB_emulate_timer_glitch
         if (self.clock.tac & 4) != 0 {
             let old_bit = Self::sys_clk_tac_mux(self.clock.tac);
             if (self.clock.div & old_bit) != 0 {
@@ -207,10 +201,10 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     pub fn write_tima(&mut self, val: u8) {
         // Writing to TIMA during the "Reloaded" state (1 M-cycle after reload) is ignored.
-        if self.clock.tima_reload_pending == 2 {
+        if self.clock.tima_reload_pending >= 6 {
             return;
         }
-        // Writing to TIMA during the 4-dot reloading window cancels the reload.
+        // Writing to TIMA during the reloading window cancels the reload.
         self.clock.tima = val;
         self.clock.tima_reload_pending = 0;
     }
@@ -218,14 +212,14 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     pub fn write_tma(&mut self, val: u8) {
         self.clock.tma = val;
-        // If TMA is written during the reload window, the new value is used for TIMA.
-        if self.clock.tima_reload_pending > 0 {
+        // If TMA is written during the reload window or the reloaded cycle,
+        // the new value is used for TIMA.
+        if self.clock.tima_reload_pending != 0 {
             self.clock.tima = val;
         }
     }
 
     // only modify div inside this function
-    // TODO: this could be optimized
     fn set_system_clk(&mut self, val: u16) {
         let triggers = self.clock.div & !val;
         let apu_bit = if self.key1.is_enabled() {

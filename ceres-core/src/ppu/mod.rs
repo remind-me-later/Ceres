@@ -889,7 +889,7 @@ impl Ppu {
     }
 
     /// Tick during Mode 3 (Drawing).
-    fn tick_drawing(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
+    fn tick_drawing(&mut self, _ints: &mut Interrupts, cgb_mode: CgbMode) {
         // Handle Transition stage delay.
         // Pipeline and fetcher are stalled during Mode 3 lead-in.
         if let PpuPhase::Drawing(DrawingStage::Transition { remaining }) = self.phase {
@@ -949,12 +949,9 @@ impl Ppu {
             self.oam_read_blocked = false;
             self.oam_write_blocked = false;
 
-            // Set STAT mode to HBlank (Mode 0) immediately.
-            self.set_mode_stat(Mode::HBlank);
-            self.mode_for_interrupt = Some(Mode::HBlank);
-            self.update_stat(ints);
-
-            self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate { remaining: 1 });
+            // Mode 0 STAT interrupt and bits update are delayed by 1 M-cycle (4 T-cycles = 8 ticks).
+            // This is handled in the HBlankStage::StatUpdate stage.
+            self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate { remaining: 8 });
             #[cfg(test)]
             if self.current_line == 2 {}
         }
@@ -1534,8 +1531,12 @@ impl Ppu {
         match stage {
             HBlankStage::StatUpdate { remaining } => {
                 // State 22: STAT = Mode 0, memory unblocked.
-                // Mode 0 transition logic has been moved to the end of tick_drawing
-                // to precisely match the 335-tick Mode 3 baseline duration.
+                if remaining == 1 {
+                    self.set_mode_stat(Mode::HBlank);
+                    self.mode_for_interrupt = Some(Mode::HBlank);
+                    self.update_stat(ints);
+                }
+
                 if remaining <= 1 {
                     self.phase = PpuPhase::HBlank(HBlankStage::PalettesBlock { remaining: 4 });
                 } else {
@@ -1819,11 +1820,11 @@ impl Ppu {
             self.current_line = 0;
             let mode = Mode::HBlank;
             self.set_mode_stat(mode);
-            self.mode_for_interrupt = None;
+            self.mode_for_interrupt = Some(Mode::HBlank);
 
-            // Start LCD startup state machine with Phase 1 (152 ticks)
-            // Total: 152 + 4 + 4 + 6 = 166 ticks
-            self.phase = PpuPhase::Line0Startup(Line0Stage::InitialMode0 { remaining: 152 });
+            // Start LCD startup state machine with Phase 1 (160 ticks)
+            // Total: 160 + 4 + 4 + 6 = 174 ticks
+            self.phase = PpuPhase::Line0Startup(Line0Stage::InitialMode0 { remaining: 160 });
 
             // Comparison clock restarts - update coincidence and check for interrupt
             self.update_stat(ints);
