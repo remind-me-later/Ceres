@@ -1306,3 +1306,43 @@ fn gambatte_scx_m3_extend_1() {
         "Should still be in Mode 3 at tick 512 due to SCX=7 extension"
     );
 }
+
+#[test]
+fn test_oam_blocking_boundary_repro() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80); // LCD ON
+    // Advance to line 1, tick 3 of OAM Scan
+    advance_to_oam_scan_tick(&mut gb, 1, 3, crate::CgbMode::Dmg, false);
+
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false); // Run tick 3
+    assert!(
+        !gb.ppu.oam_read_blocked,
+        "OAM must be accessible after tick 3"
+    );
+
+    gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false); // Run tick 4
+    assert!(gb.ppu.oam_read_blocked, "OAM must be blocked after tick 4");
+}
+
+#[test]
+fn test_stat_lyc_retrigger_repro() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF40, 0x80);
+    gb.write_mem(0xFF45, 5); // LYC = 5
+    gb.write_mem(0xFF41, 0x40); // Enable LYC STAT IRQ
+    advance_to_ly(&mut gb, 5); // IRQ fires
+
+    gb.ints.write_if(0); // Clear IF
+    gb.write_mem(0xFF45, 6); // Change LYC to 6 while LY is still 5
+    // Line should drop. Now advance to LY=6.
+    advance_to_ly(&mut gb, 6);
+    // LY is updated at tick 0, but LYC comparison (and IRQ) happens at tick 4 (Coincidence delay)
+    for _ in 0..4 {
+        gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
+    }
+    assert_eq!(
+        gb.ints.read_if() & 0x02,
+        0x02,
+        "STAT IRQ must re-trigger on LY=6"
+    );
+}

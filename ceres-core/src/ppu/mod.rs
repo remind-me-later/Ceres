@@ -744,6 +744,7 @@ impl Ppu {
 
                     self.ly = self.current_line;
                     self.ly_for_comparison = 0xFFFF;
+                    self.stat &= !STAT_LYC_B;
 
                     // Ensure STAT interrupt state is updated at dot 0
                     // (OamScan IRQ may have already fired at dot -4 in PreEnd)
@@ -751,16 +752,16 @@ impl Ppu {
                     self.update_stat(ints);
                 }
 
-                // Tick 3: Processed. Next tick (4) will show Mode 2 and blocked memory.
+                // Tick 3: Processed. Next tick (4) will show Mode 2.
                 if tick == 3 {
                     self.set_mode_stat(Mode::OamScan);
-                    self.oam_read_blocked = true;
-                    self.oam_write_blocked = true;
                     self.update_stat(ints);
                 }
 
-                // Tick 4: LYC comparison now valid for the new line (Coincidence delay)
+                // Tick 4: OAM blocked and LYC comparison now valid (Coincidence delay)
                 if tick == 4 {
+                    self.oam_read_blocked = true;
+                    self.oam_write_blocked = true;
                     self.ly_for_comparison = u16::from(self.ly);
                     self.update_stat(ints);
                 }

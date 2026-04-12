@@ -505,3 +505,25 @@ fn test_diagnostic_tima_write_during_reload_cycle() {
     }
     println!("---------------------------------------------");
 }
+
+#[test]
+fn test_tima_reload_timing() {
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF06, 0x00); // TMA = 0
+    gb.write_mem(0xFF05, 0xFF); // TIMA = 0xFF
+    gb.write_mem(0xFF07, 0x04); // TAC = Enabled, 4096Hz
+    gb.advance_dots(1023); // Just before increment
+    gb.advance_dots(1); // T=1024: TIMA overflows to 0
+
+    // Hardware should wait 4 T-cycles before reloading TMA (Ceres currently does 5)
+    for _ in 0..4 {
+        gb.advance_dots(1);
+        assert_eq!(gb.ints.read_if() & 0x04, 0);
+    }
+    gb.advance_dots(1);
+    assert_eq!(
+        gb.ints.read_if() & 0x04,
+        0x04,
+        "IRQ must fire exactly at T+5"
+    );
+}
