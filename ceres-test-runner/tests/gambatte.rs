@@ -325,12 +325,18 @@ fn parse_expected_outputs(filename: &str) -> (Option<String>, Option<String>) {
         cgb_out = Some(val);
     } else {
         if let Some(pos) = s.find("dmg08_out") {
-            dmg_out = Some(s[pos + 9..].to_string());
+            let dmg_str = &s[pos + 9..];
+            // It might be followed by _cgb04c_out...
+            if let Some(end_pos) = dmg_str.find("_cgb04c_out") {
+                dmg_out = Some(dmg_str[..end_pos].to_string());
+            } else {
+                dmg_out = Some(dmg_str.to_string());
+            }
         }
         if let Some(pos) = s.find("cgb04c_out") {
             cgb_out = Some(s[pos + 10..].to_string());
         } else if let Some(pos) = s.find("_out") {
-            if cgb_out.is_none() {
+            if cgb_out.is_none() && dmg_out.is_none() {
                 cgb_out = Some(s[pos + 4..].to_string());
             }
         }
@@ -352,6 +358,10 @@ fn run_gambatte_test(relative_path: &str) -> TestResult {
     };
 
     if let Some(expected) = dmg_out {
+        println!(
+            "Running DMG test for {} expecting {}",
+            relative_path, expected
+        );
         let config = TestConfig {
             model: Model::DmgB,
             timeout_frames: 15,
@@ -371,11 +381,16 @@ fn run_gambatte_test(relative_path: &str) -> TestResult {
 
         let res = runner.run();
         if res != TestResult::Passed {
+            println!("DMG test failed with {:?}", res);
             return res;
         }
     }
 
     if let Some(expected) = cgb_out {
+        println!(
+            "Running CGB test for {} expecting {}",
+            relative_path, expected
+        );
         let config = TestConfig {
             model: Model::CgbE,
             timeout_frames: 15,
@@ -394,6 +409,7 @@ fn run_gambatte_test(relative_path: &str) -> TestResult {
 
         let res = runner.run();
         if res != TestResult::Passed {
+            println!("CGB test failed with {:?}", res);
             return res;
         }
     }

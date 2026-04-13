@@ -794,7 +794,7 @@ fn test_mooneye_timer_tima_reload() {
         "mooneye-test-suite/acceptance/timer/tima_reload.gb",
         Model::CgbE,
     );
-    assert!(result.is_passed(), "timer/tima_reload test failed");
+    assert_eq!(result, TestResult::Passed, "timer/tima_reload test failed");
 }
 
 #[test]

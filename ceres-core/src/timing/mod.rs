@@ -39,7 +39,7 @@ impl Default for Clock {
 
 impl Clock {
     pub fn tima(&self) -> u8 {
-        if (1..=5).contains(&self.tima_reload_pending) {
+        if (1..=4).contains(&self.tima_reload_pending) {
             0
         } else {
             self.tima
@@ -120,8 +120,9 @@ impl<A: AudioCallback> Gb<A> {
         self.clock.tima = self.clock.tima.wrapping_add(1);
 
         if self.clock.tima == 0 {
-            // TIMA overflow: reload will happen after 5 T-cycles
-            self.clock.tima_reload_pending = 5;
+            self.clock.tima = self.clock.tma;
+            // TIMA overflow: reload will happen after 4 T-cycles
+            self.clock.tima_reload_pending = 4;
         }
     }
 
@@ -146,18 +147,17 @@ impl<A: AudioCallback> Gb<A> {
     pub fn run_timers(&mut self, cpu_t_cycles: i32) {
         for _ in 0..cpu_t_cycles {
             if self.clock.tima_reload_pending > 0 {
-                if self.clock.tima_reload_pending <= 5 {
+                if self.clock.tima_reload_pending <= 4 {
                     self.clock.tima_reload_pending -= 1;
                     if self.clock.tima_reload_pending == 0 {
-                        self.clock.tima = self.clock.tma;
                         self.ints.request_timer();
-                        // State 6-9: Already reloaded, TIMA writes ignored for 4 T-cycles (1 M-cycle)
-                        self.clock.tima_reload_pending = 6;
+                        // State 5-8: Already reloaded, TIMA writes ignored for 4 T-cycles (1 M-cycle)
+                        self.clock.tima_reload_pending = 5;
                     }
                 } else {
-                    // In "Reloaded" state (6, 7, 8, 9).
+                    // In "Reloaded" state (5, 6, 7, 8).
                     self.clock.tima_reload_pending += 1;
-                    if self.clock.tima_reload_pending > 9 {
+                    if self.clock.tima_reload_pending > 8 {
                         self.clock.tima_reload_pending = 0;
                     }
                 }
@@ -197,14 +197,12 @@ impl<A: AudioCallback> Gb<A> {
 
         self.clock.tac = val;
     }
-
     #[inline]
     pub fn write_tima(&mut self, val: u8) {
         // Writing to TIMA during the "Reloaded" state (1 M-cycle after reload) is ignored.
-        if self.clock.tima_reload_pending >= 6 {
+        if self.clock.tima_reload_pending >= 5 {
             return;
         }
-        // Writing to TIMA during the reloading window cancels the reload.
         self.clock.tima = val;
         self.clock.tima_reload_pending = 0;
     }

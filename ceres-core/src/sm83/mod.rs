@@ -426,16 +426,15 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     fn tick_m_cycle(&mut self) {
+        self.pending_dots += 4;
         self.flush_pending_dots();
-        self.pending_dots = 4;
     }
 
     #[must_use]
     pub(crate) fn read_cpu(&mut self, addr: u16) -> u8 {
+        self.pending_dots += 4;
         self.flush_pending_dots();
-        let val = self.read_mem(addr);
-        self.pending_dots = 4;
-        val
+        self.read_mem(addr)
     }
 
     pub(crate) fn write_cpu(&mut self, addr: u16, val: u8) {
@@ -452,6 +451,7 @@ impl<A: AudioCallback> Gb<A> {
             self.dma_write_start_dots = self.total_dots + self.pending_dots as u64;
         }
 
+        self.pending_dots += 4;
         self.flush_pending_dots();
 
         if if_addr {
@@ -461,8 +461,6 @@ impl<A: AudioCallback> Gb<A> {
         } else {
             self.write_mem(addr, val);
         }
-
-        self.pending_dots = 4;
     }
 }
 
