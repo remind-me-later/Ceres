@@ -342,6 +342,17 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[inline]
+    pub fn step_cpu(&mut self) {
+        self.run_cpu();
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn cpu_pc(&self) -> u16 {
+        self.cpu.pc()
+    }
+
+    #[inline]
     pub fn save_data(&self, buf: &mut Vec<u8>, secs_since_unix_epoch: u64) {
         bess::Writer::new(buf).save_state(self, secs_since_unix_epoch);
     }

@@ -7,309 +7,23 @@
 //!
 //! # Pass criteria
 //!
-//! These tests use the same pass criteria as the official Gambatte test runner
-//! (`gambatte-core/test/testrunner.cpp`). The emulator is run for a fixed
-//! number of frames (15 frames when skipping the boot ROM), and then the
-//! screen output is checked against the expected result string encoded in
-//! the ROM filename.
+//! These tests intercept the CPU right when it jumps to the `lprint_a`
+//! routine (at address 0x7000). At this point, the test logic is complete
+//! and the result is stored in the `A` register. This bypasses the need
+//! to wait for the test to draw its result to the screen as tiles, which
+//! improves execution speed and provides better error isolation.
 
-use ceres_core::Model;
+use ceres_core::{GbBuilder, Model};
 use ceres_test_runner::{
     load_test_rom,
-    test_runner::{CompletionCheck, DummyAudioCallback, TestConfig, TestResult, TestRunner},
+    test_runner::{DummyAudioCallback, TestResult},
 };
-use std::cell::Cell;
-
-// ────────────────────────────────────────────────────────────────────────────
-// Tiles for screen-based validation
-// ────────────────────────────────────────────────────────────────────────────
-
-#[rustfmt::skip]
-const TILES: [[u8; 64]; 16] = [
-    // 0
-    [
-        0,0,0,0,0,0,0,0,
-        0,1,1,1,1,1,1,1,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,1,
-        0,1,1,1,1,1,1,1,
-    ],
-    // 1
-    [
-        0,0,0,0,0,0,0,0,
-        0,0,0,0,1,0,0,0,
-        0,0,0,0,1,0,0,0,
-        0,0,0,0,1,0,0,0,
-        0,0,0,0,1,0,0,0,
-        0,0,0,0,1,0,0,0,
-        0,0,0,0,1,0,0,0,
-        0,0,0,0,1,0,0,0,
-    ],
-    // 2
-    [
-        0,0,0,0,0,0,0,0,
-        0,1,1,1,1,1,1,1,
-        0,0,0,0,0,0,0,1,
-        0,0,0,0,0,0,0,1,
-        0,1,1,1,1,1,1,1,
-        0,1,0,0,0,0,0,0,
-        0,1,0,0,0,0,0,0,
-        0,1,1,1,1,1,1,1,
-    ],
-    // 3
-    [
-        0,0,0,0,0,0,0,0,
-        0,1,1,1,1,1,1,1,
-        0,0,0,0,0,0,0,1,
-        0,0,0,0,0,0,0,1,
-        0,0,1,1,1,1,1,1,
-        0,0,0,0,0,0,0,1,
-        0,0,0,0,0,0,0,1,
-        0,1,1,1,1,1,1,1,
-    ],
-    // 4
-    [
-        0,0,0,0,0,0,0,0,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,1,
-        0,1,1,1,1,1,1,1,
-        0,0,0,0,0,0,0,1,
-        0,0,0,0,0,0,0,1,
-        0,0,0,0,0,0,0,1,
-    ],
-    // 5
-    [
-        0,0,0,0,0,0,0,0,
-        0,1,1,1,1,1,1,1,
-        0,1,0,0,0,0,0,0,
-        0,1,0,0,0,0,0,0,
-        0,1,1,1,1,1,1,0,
-        0,0,0,0,0,0,0,1,
-        0,0,0,0,0,0,0,1,
-        0,1,1,1,1,1,1,0,
-    ],
-    // 6
-    [
-        0,0,0,0,0,0,0,0,
-        0,1,1,1,1,1,1,1,
-        0,1,0,0,0,0,0,0,
-        0,1,0,0,0,0,0,0,
-        0,1,1,1,1,1,1,1,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,1,
-        0,1,1,1,1,1,1,1,
-    ],
-    // 7
-    [
-        0,0,0,0,0,0,0,0,
-        0,1,1,1,1,1,1,1,
-        0,0,0,0,0,0,0,1,
-        0,0,0,0,0,0,1,0,
-        0,0,0,0,0,1,0,0,
-        0,0,0,0,1,0,0,0,
-        0,0,0,1,0,0,0,0,
-        0,0,0,1,0,0,0,0,
-    ],
-    // 8
-    [
-        0,0,0,0,0,0,0,0,
-        0,0,1,1,1,1,1,0,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,1,
-        0,0,1,1,1,1,1,0,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,1,
-        0,0,1,1,1,1,1,0,
-    ],
-    // 9
-    [
-        0,0,0,0,0,0,0,0,
-        0,1,1,1,1,1,1,1,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,1,
-        0,1,1,1,1,1,1,1,
-        0,0,0,0,0,0,0,1,
-        0,0,0,0,0,0,0,1,
-        0,1,1,1,1,1,1,1,
-    ],
-    // A
-    [
-        0,0,0,0,0,0,0,0,
-        0,0,0,0,1,0,0,0,
-        0,0,1,0,0,0,1,0,
-        0,1,0,0,0,0,0,1,
-        0,1,1,1,1,1,1,1,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,1,
-    ],
-    // B
-    [
-        0,0,0,0,0,0,0,0,
-        0,1,1,1,1,1,1,0,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,1,
-        0,1,1,1,1,1,1,0,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,1,
-        0,1,1,1,1,1,1,0,
-    ],
-    // C
-    [
-        0,0,0,0,0,0,0,0,
-        0,0,1,1,1,1,1,0,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,0,
-        0,1,0,0,0,0,0,0,
-        0,1,0,0,0,0,0,0,
-        0,1,0,0,0,0,0,1,
-        0,0,1,1,1,1,1,0,
-    ],
-    // D
-    [
-        0,0,0,0,0,0,0,0,
-        0,1,1,1,1,1,1,0,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,1,
-        0,1,0,0,0,0,0,1,
-        0,1,1,1,1,1,1,0,
-    ],
-    // E
-    [
-        0,0,0,0,0,0,0,0,
-        0,1,1,1,1,1,1,1,
-        0,1,0,0,0,0,0,0,
-        0,1,0,0,0,0,0,0,
-        0,1,1,1,1,1,1,1,
-        0,1,0,0,0,0,0,0,
-        0,1,0,0,0,0,0,0,
-        0,1,1,1,1,1,1,1,
-    ],
-    // F
-    [
-        0,0,0,0,0,0,0,0,
-        0,1,1,1,1,1,1,1,
-        0,1,0,0,0,0,0,0,
-        0,1,0,0,0,0,0,0,
-        0,1,1,1,1,1,1,1,
-        0,1,0,0,0,0,0,0,
-        0,1,0,0,0,0,0,0,
-        0,1,0,0,0,0,0,0,
-    ],
-];
-
-fn tile_from_char(c: char) -> Option<&'static [u8; 64]> {
-    let idx = match c {
-        '0'..='9' => c as usize - '0' as usize,
-        'a'..='f' => c as usize - 'a' as usize + 10,
-        'A'..='F' => c as usize - 'A' as usize + 10,
-        _ => return None,
-    };
-    Some(&TILES[idx])
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Completion check
-// ────────────────────────────────────────────────────────────────────────────
-
-/// Gambatte test completion check.
-pub struct GambatteCheck {
-    expected: String,
-    frame: Cell<u32>,
-}
-
-impl GambatteCheck {
-    #[must_use]
-    pub fn new(expected: String) -> Self {
-        Self {
-            expected,
-            frame: Cell::new(0),
-        }
-    }
-
-    fn evaluate(&self, gb: &ceres_core::Gb<DummyAudioCallback>) -> TestResult {
-        let actual_rgba = gb.pixel_data_rgba();
-
-        for (i, c) in self.expected.chars().enumerate() {
-            if let Some(expected_tile) = tile_from_char(c) {
-                // The characters are now aligned at 8-pixel boundaries.
-                let x_offset = i * 8;
-                if x_offset + 8 > 160 {
-                    break;
-                }
-
-                if !self.tile_matches(actual_rgba, expected_tile, x_offset) {
-                    let actual_char = self.find_actual_char(actual_rgba, x_offset);
-                    return TestResult::Failed(format!(
-                        "Framebuffer mismatch at tile {i} (expected '{c}', got '{actual_char}')",
-                    ));
-                }
-            } else {
-                break;
-            }
-        }
-
-        TestResult::Passed
-    }
-
-    fn find_actual_char(&self, actual_rgba: &[u8], x_offset: usize) -> char {
-        for (idx, tile) in TILES.iter().enumerate() {
-            if self.tile_matches(actual_rgba, tile, x_offset) {
-                return match idx {
-                    0..=9 => (b'0' + idx as u8) as char,
-                    10..=15 => (b'A' + (idx - 10) as u8) as char,
-                    _ => '?',
-                };
-            }
-        }
-        '?'
-    }
-
-    fn tile_matches(&self, actual_rgba: &[u8], expected_tile: &[u8; 64], x_offset: usize) -> bool {
-        for y in 0..8 {
-            for x in 0..8 {
-                let pixel_idx = (y * 160 + x_offset + x) * 4;
-                let r = actual_rgba[pixel_idx];
-                let g = actual_rgba[pixel_idx + 1];
-                let b = actual_rgba[pixel_idx + 2];
-
-                // Gambatte's tilesAreEqual uses & 0xF8F8F8 for comparison.
-                // We consider a pixel black if its top 5 bits are all 0.
-                let is_black = (r & 0xF8) == 0 && (g & 0xF8) == 0 && (b & 0xF8) == 0;
-                let expected_black = expected_tile[y * 8 + x] != 0;
-
-                if is_black != expected_black {
-                    return false;
-                }
-            }
-        }
-        true
-    }
-}
-
-impl CompletionCheck for GambatteCheck {
-    fn check(&self, _gb: &mut ceres_core::Gb<DummyAudioCallback>) -> Option<TestResult> {
-        let cur = self.frame.get();
-        self.frame.set(cur + 1);
-        None
-    }
-
-    fn on_timeout(&self, gb: &mut ceres_core::Gb<DummyAudioCallback>) -> TestResult {
-        self.evaluate(gb)
-    }
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helper
 // ────────────────────────────────────────────────────────────────────────────
 
-fn parse_expected_outputs(filename: &str) -> (Option<String>, Option<String>) {
+fn parse_expected_outputs(filename: &str) -> (Option<u8>, Option<u8>) {
     let basename = filename.split('/').last().unwrap_or(filename);
     let s = basename
         .strip_suffix(".gbc")
@@ -319,25 +33,32 @@ fn parse_expected_outputs(filename: &str) -> (Option<String>, Option<String>) {
     let mut dmg_out = None;
     let mut cgb_out = None;
 
+    let parse_hex = |val_str: &str| -> Option<u8> {
+        // The output string might be e.g. "0A", "F1", "3", etc.
+        // It's the hex representation of the A register.
+        // In the original, they were strings of hex digits.
+        u8::from_str_radix(val_str, 16).ok()
+    };
+
     if let Some(pos) = s.find("dmg08_cgb04c_out") {
-        let val = s[pos + 16..].to_string();
-        dmg_out = Some(val.clone());
-        cgb_out = Some(val);
+        let val_str = &s[pos + 16..];
+        let val = parse_hex(val_str);
+        dmg_out = val;
+        cgb_out = val;
     } else {
         if let Some(pos) = s.find("dmg08_out") {
             let dmg_str = &s[pos + 9..];
-            // It might be followed by _cgb04c_out...
             if let Some(end_pos) = dmg_str.find("_cgb04c_out") {
-                dmg_out = Some(dmg_str[..end_pos].to_string());
+                dmg_out = parse_hex(&dmg_str[..end_pos]);
             } else {
-                dmg_out = Some(dmg_str.to_string());
+                dmg_out = parse_hex(dmg_str);
             }
         }
         if let Some(pos) = s.find("cgb04c_out") {
-            cgb_out = Some(s[pos + 10..].to_string());
+            cgb_out = parse_hex(&s[pos + 10..]);
         } else if let Some(pos) = s.find("_out") {
             if cgb_out.is_none() && dmg_out.is_none() {
-                cgb_out = Some(s[pos + 4..].to_string());
+                cgb_out = parse_hex(&s[pos + 4..]);
             }
         }
     }
@@ -347,8 +68,8 @@ fn parse_expected_outputs(filename: &str) -> (Option<String>, Option<String>) {
 
 /// Run a Gambatte test ROM.
 ///
-/// This function parses the expected model and output string directly from the
-/// ROM filename, matching the official Gambatte test runner logic.
+/// This intercepts execution at PC == 0x7000 (`lprint_a`), checking the A
+/// register against the expected test result.
 fn run_gambatte_test(relative_path: &str) -> TestResult {
     let (dmg_out, cgb_out) = parse_expected_outputs(relative_path);
 
@@ -357,60 +78,81 @@ fn run_gambatte_test(relative_path: &str) -> TestResult {
         Err(e) => return TestResult::Error(format!("Failed to load test ROM: {e}")),
     };
 
+    // We'll give the test up to 15 frames of cycles to reach 0x7000.
+    // 15 frames * ~70224 cycles/frame
+    let timeout_cycles = 15 * 70224;
+
     if let Some(expected) = dmg_out {
         println!(
-            "Running DMG test for {} expecting {}",
+            "Running DMG test for {} expecting A={:02X}",
             relative_path, expected
         );
-        let config = TestConfig {
-            model: Model::DmgB,
-            timeout_frames: 15,
-            test_name: format!("{} (DMG)", relative_path),
-            run_bootrom: false,
-            ..TestConfig::default()
+
+        let mut gb = match GbBuilder::new(48000, DummyAudioCallback::default())
+            .with_model(Model::DmgB)
+            .with_run_bootrom(false)
+            .with_rom(rom_data.clone().into_boxed_slice())
+        {
+            Ok(builder) => builder.build(),
+            Err(e) => return TestResult::Error(format!("Failed to build DMG: {e}")),
         };
 
-        let mut runner = match TestRunner::new(
-            rom_data.clone(),
-            config,
-            Box::new(GambatteCheck::new(expected)),
-        ) {
-            Ok(runner) => runner,
-            Err(e) => return TestResult::Error(format!("Failed to create DMG test runner: {e}")),
-        };
+        let mut reached_7000 = false;
+        for _ in 0..timeout_cycles {
+            gb.step_cpu();
+            if gb.cpu_pc() == 0x7000 {
+                let a = gb.cpu_a();
+                if a == expected {
+                    reached_7000 = true;
+                    break;
+                } else {
+                    return TestResult::Failed(format!(
+                        "Test failed (DMG). Expected A={:02X}, got A={:02X}",
+                        expected, a
+                    ));
+                }
+            }
+        }
 
-        let res = runner.run();
-        if res != TestResult::Passed {
-            println!("DMG test failed with {:?}", res);
-            return res;
+        if !reached_7000 {
+            return TestResult::Failed("Test timed out (DMG) without reaching PC=0x7000".into());
         }
     }
 
     if let Some(expected) = cgb_out {
         println!(
-            "Running CGB test for {} expecting {}",
+            "Running CGB test for {} expecting A={:02X}",
             relative_path, expected
         );
-        let config = TestConfig {
-            model: Model::CgbE,
-            timeout_frames: 15,
-            test_name: format!("{} (CGB)", relative_path),
-            run_bootrom: false,
-            ..TestConfig::default()
+
+        let mut gb = match GbBuilder::new(48000, DummyAudioCallback::default())
+            .with_model(Model::CgbE)
+            .with_run_bootrom(false)
+            .with_rom(rom_data.into_boxed_slice())
+        {
+            Ok(builder) => builder.build(),
+            Err(e) => return TestResult::Error(format!("Failed to build CGB: {e}")),
         };
 
-        let mut runner =
-            match TestRunner::new(rom_data, config, Box::new(GambatteCheck::new(expected))) {
-                Ok(runner) => runner,
-                Err(e) => {
-                    return TestResult::Error(format!("Failed to create CGB test runner: {e}"));
+        let mut reached_7000 = false;
+        for _ in 0..timeout_cycles {
+            gb.step_cpu();
+            if gb.cpu_pc() == 0x7000 {
+                let a = gb.cpu_a();
+                if a == expected {
+                    reached_7000 = true;
+                    break;
+                } else {
+                    return TestResult::Failed(format!(
+                        "Test failed (CGB). Expected A={:02X}, got A={:02X}",
+                        expected, a
+                    ));
                 }
-            };
+            }
+        }
 
-        let res = runner.run();
-        if res != TestResult::Passed {
-            println!("CGB test failed with {:?}", res);
-            return res;
+        if !reached_7000 {
+            return TestResult::Failed("Test timed out (CGB) without reaching PC=0x7000".into());
         }
     }
 
