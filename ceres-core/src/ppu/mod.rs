@@ -824,9 +824,8 @@ impl Ppu {
             self.vram_write_blocked = true;
         }
 
-        // Mode 3 overhead: 16 ticks initial fetch.
-        // 16 overhead + 320 rendering = 336 ticks (168 dots) total duration.
-        let remaining = 0;
+        // Mode 3 overhead: 10 ticks initial fetch (5 dots).
+        let remaining = 10;
         if remaining == 0 {
             self.phase = PpuPhase::Drawing(DrawingStage::Running);
         } else {
@@ -1094,27 +1093,18 @@ impl Ppu {
 
             SpriteFetcherState::WaitForBgFetcher => {
                 // Condition: while (fetcher_state < GetDataHighT2 || fifo_size == 0)
-                let fetcher_ready = matches!(
-                    self.fetcher_state,
-                    FetcherState::GetDataHighT2 | FetcherState::PushT1 | FetcherState::PushT2
-                );
+                let fetcher_ready = matches!(self.fetcher_state, FetcherState::GetDataHighT2);
                 let fifo_ready = self.bg_fifo.size() > 0;
 
                 if fetcher_ready && fifo_ready {
-                    // Exit wait loop. SameBoy advances fetcher once more (full T-cycle).
-                    self.advance_fetcher(cgb_mode);
+                    // Exit wait loop.
                     self.sprite_fetcher_state = SpriteFetcherState::State41Advance;
                     self.sprite_fetcher_step = 0;
                 }
-
-                self.advance_fetcher(cgb_mode);
             }
 
             SpriteFetcherState::State41Advance => {
                 // State 41: 1 cycle (2 ticks) delay.
-                if self.sprite_fetcher_step == 0 {
-                    self.advance_fetcher(cgb_mode);
-                }
                 self.sprite_fetcher_step += 1;
                 if self.sprite_fetcher_step >= 2 {
                     self.sprite_fetcher_state = SpriteFetcherState::GetTileAndFlags;
@@ -1124,9 +1114,6 @@ impl Ppu {
 
             SpriteFetcherState::GetTileAndFlags => {
                 // State 20: 2 cycles (4 ticks).
-                if self.sprite_fetcher_step == 0 {
-                    self.advance_fetcher(cgb_mode);
-                }
                 self.sprite_fetcher_step += 1;
                 if self.sprite_fetcher_step >= 4 {
                     self.sprite_fetcher_state = SpriteFetcherState::GetDataLow;
@@ -1320,19 +1307,14 @@ impl Ppu {
                     self.window_tile_x = self.window_tile_x.wrapping_add(1) & 0x1F;
                 }
 
-                self.fetcher_state = FetcherState::PushT1;
-            }
-            FetcherState::PushT1 => {
-                // Push T1: Wait 1 cycle (2 ticks)
-                self.fetcher_state = FetcherState::PushT2;
-            }
-            FetcherState::PushT2 => {
-                // Push T2: Wait for FIFO to have space (capacity is 16, each push is 8)
+                // Push to FIFO immediately if there is space.
                 if self.bg_fifo.size() <= 8 {
                     self.push_to_fifo();
                     self.fetcher_state = FetcherState::GetTileT1;
+                } else {
+                    // Stalls here until space is available.
+                    // This counts as the remainder of Mode 3 extension.
                 }
-                // Else stay in PushT2
             }
         }
     }
