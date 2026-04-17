@@ -462,18 +462,31 @@ impl<A: AudioCallback> Gb<A> {
 
         // Capture timestamp before advancing time for DMA start logging
         if addr == 0xFF46 {
-            // DMA register
             self.dma_write_start_dots = self.total_dots + self.pending_dots as u64;
         }
 
-        self.pending_dots += 4;
-        self.flush_pending_dots();
+        // Apply SameBoy-style split M-cycle for specific sensitive registers on write
+        if matches!(addr, 0xFE00..=0xFE9F | 0xFF04..=0xFF07 | 0xFF0F | 0xFF41) {
+            self.flush_pending_dots();
 
-        if if_addr {
-            let ifr_after = self.ints.read_if() & 0x1F;
-            let triggers = ifr_after & !ifr_before;
-            self.write_mem(addr, val | triggers);
+            // Advance Timer by full 4 dots (M-cycle)
+            self.run_timers(4);
+            // Advance PPU and others by 2 dots (half M-cycle)
+            self.advance_dots_no_timers(2);
+
+            if if_addr {
+                let ifr_after = self.ints.read_if() & 0x1F;
+                let triggers = ifr_after & !ifr_before;
+                self.write_mem(addr, val | triggers);
+            } else {
+                self.write_mem(addr, val);
+            }
+
+            // Catch up PPU and others
+            self.advance_dots_no_timers(2);
         } else {
+            self.pending_dots += 4;
+            self.flush_pending_dots();
             self.write_mem(addr, val);
         }
     }
