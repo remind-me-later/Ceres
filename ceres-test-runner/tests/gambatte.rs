@@ -1518,3 +1518,35 @@ gambatte_test!(
     gambatte_halt_m0irq_m0stat_scx2_1,
     "gambatte/halt/m0irq_m0stat_scx2_1_dmg08_cgb04c_out0.gbc"
 );
+
+gambatte_test!(
+    gambatte_scx_during_m3_scx_0367c0_1,
+    "gambatte/scx_during_m3/scx_0367c0/scx_during_m3_1.gbc"
+);
+
+gambatte_test!(
+    gambatte_scx_during_m3_scx_0367c0_ds_1,
+    "gambatte/scx_during_m3/scx_0367c0/scx_during_m3_ds_1.gbc"
+);
+
+gambatte_test!(
+    gambatte_window_m2int_wx03_scx3_m3stat_1,
+    "gambatte/window/m2int_wx03_scx3_m3stat_1_dmg08_cgb04c_out3.gbc"
+);
+
+gambatte_test!(
+    gambatte_window_late_enable_afterVblank_ds_1,
+    "gambatte/window/late_enable_afterVblank_ds_1_cgb04c_out3.gbc"
+);
+
+gambatte_test!(gambatte_scy_during_m3_1, "gambatte/scy/scy_during_m3_1.gbc");
+
+gambatte_test!(
+    gambatte_scy_during_m3_ds_1,
+    "gambatte/scy/scy_during_m3_ds_1.gbc"
+);
+
+gambatte_test!(
+    gambatte_oam_access_preread_ds_2,
+    "gambatte/oam_access/preread_ds_2_cgb04c_out3.gbc"
+);
