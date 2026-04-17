@@ -1386,3 +1386,138 @@ gambatte_test!(
     gambatte_tima_tc01_1stopstart_offset3_ff_tma_2,
     "gambatte/tima/tc01_1stopstart_offset3_ff_tma_2_dmg08_cgb04c_out00.gbc"
 );
+
+gambatte_test!(
+    gambatte_lycint_m0stat_ds_1,
+    "gambatte/lycint_m0stat/lycint_m0stat_ds_1_cgb04c_out0.gbc"
+);
+
+gambatte_test!(
+    gambatte_lycint_m0stat_ds_2,
+    "gambatte/lycint_m0stat/lycint_m0stat_ds_2_cgb04c_out2.gbc"
+);
+
+gambatte_test!(
+    gambatte_m0int_m0stat_ds_1,
+    "gambatte/m0int_m0stat/m0int_m0stat_ds_1_cgb04c_out0.gbc"
+);
+
+gambatte_test!(
+    gambatte_m0int_m0stat_ds_2,
+    "gambatte/m0int_m0stat/m0int_m0stat_ds_2_cgb04c_out2.gbc"
+);
+
+gambatte_test!(
+    gambatte_m2int_m0irq_ds_1,
+    "gambatte/m2int_m0irq/m2int_m0irq_ds_1_cgb04c_out1.gbc"
+);
+
+gambatte_test!(
+    gambatte_m2int_m0irq_ds_2,
+    "gambatte/m2int_m0irq/m2int_m0irq_ds_2_cgb04c_out3.gbc"
+);
+
+gambatte_test!(
+    gambatte_oam_access_postread_ds_1,
+    "gambatte/oam_access/postread_ds_1_cgb04c_out3.gbc"
+);
+
+gambatte_test!(
+    gambatte_oam_access_postread_ds_2,
+    "gambatte/oam_access/postread_ds_2_cgb04c_out0.gbc"
+);
+
+gambatte_test!(
+    gambatte_scx_m3_extend_1,
+    "gambatte/scx_during_m3/scx_m3_extend_1_dmg08_cgb04c_out3.gbc"
+);
+
+gambatte_test!(
+    gambatte_scx_m3_extend_ds_1,
+    "gambatte/scx_during_m3/scx_m3_extend_ds_1_cgb04c_out3.gbc"
+);
+
+gambatte_test!(
+    gambatte_lyc_ff45_trigger_delay_1,
+    "gambatte/lycEnable/lyc_ff45_trigger_delay_1_dmg08_cgb04c_out0.gbc"
+);
+
+gambatte_test!(
+    gambatte_lyc_ff45_trigger_delay_2,
+    "gambatte/lycEnable/lyc_ff45_trigger_delay_2_dmg08_out0_cgb04c_out2.gbc"
+);
+
+gambatte_test!(
+    gambatte_lyc_ff45_trigger_delay_ds_1,
+    "gambatte/lycEnable/lyc_ff45_trigger_delay_ds_1_cgb04c_out0.gbc"
+);
+
+gambatte_test!(
+    gambatte_lyc_ff41_trigger_delay_1,
+    "gambatte/lycEnable/lyc_ff41_trigger_delay_1_dmg08_cgb04c_out0.gbc"
+);
+
+gambatte_test!(
+    gambatte_lyc_ff41_trigger_delay_2,
+    "gambatte/lycEnable/lyc_ff41_trigger_delay_2_dmg08_cgb04c_out2.gbc"
+);
+
+gambatte_test!(
+    gambatte_lywrite77_ly44_m3_ly,
+    "gambatte/lywrite/lywrite77_ly44_m3_ly_dmg08_cgb04c_out44.gbc"
+);
+
+gambatte_test!(
+    gambatte_lywrite77_ly44_m3_stat,
+    "gambatte/lywrite/lywrite77_ly44_m3_stat_dmg08_cgb04c_outC7.gbc"
+);
+
+gambatte_test!(
+    gambatte_lywrite77_ly97_ly,
+    "gambatte/lywrite/lywrite77_ly97_ly_dmg08_cgb04c_out97.gbc"
+);
+
+gambatte_test!(
+    gambatte_lywrite77_ly97_stat,
+    "gambatte/lywrite/lywrite77_ly97_stat_dmg08_cgb04c_outC5.gbc"
+);
+
+gambatte_test!(
+    gambatte_m0_trigger_delay_1,
+    "gambatte/m0enable/m0_trigger_delay_1_dmg08_cgb04c_out0.gbc"
+);
+
+gambatte_test!(
+    gambatte_m0_trigger_delay_2,
+    "gambatte/m0enable/m0_trigger_delay_2_dmg08_cgb04c_out2.gbc"
+);
+
+gambatte_test!(
+    gambatte_m2_late_enable_1_v2,
+    "gambatte/m2enable/late_enable_1_dmg08_cgb04c_out2.gbc"
+);
+
+gambatte_test!(
+    gambatte_m2_late_enable_2,
+    "gambatte/m2enable/late_enable_2_dmg08_cgb04c_out0.gbc"
+);
+
+gambatte_test!(
+    gambatte_jpadirq_1,
+    "gambatte/jpadirq_1.gbc"
+);
+
+gambatte_test!(
+    gambatte_halt_m1int_ly_1,
+    "gambatte/halt/m1int_ly_1_dmg08_cgb04c_out90.gbc"
+);
+
+gambatte_test!(
+    gambatte_halt_m1int_ly_2,
+    "gambatte/halt/m1int_ly_2_dmg08_out90_cgb04c_out91.gbc"
+);
+
+gambatte_test!(
+    gambatte_halt_m0irq_m0stat_scx2_1,
+    "gambatte/halt/m0irq_m0stat_scx2_1_dmg08_cgb04c_out0.gbc"
+);
