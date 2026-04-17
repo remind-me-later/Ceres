@@ -30,12 +30,12 @@ impl Default for Line0Stage {
 pub enum OamScanStage {
     /// OAM scan and setup.
     /// Duration: 168 ticks.
-    Running { tick: u16 },
+    Scanning { tick: u16 },
 }
 
 impl Default for OamScanStage {
     fn default() -> Self {
-        Self::Running { tick: 0 }
+        Self::Scanning { tick: 0 }
     }
 }
 
@@ -50,7 +50,7 @@ pub enum DrawingStage {
 
 impl Default for DrawingStage {
     fn default() -> Self {
-        Self::Transition { remaining: 12 }
+        Self::Transition { remaining: 14 }
     }
 }
 
@@ -82,7 +82,7 @@ pub enum HBlankStage {
 
 impl Default for HBlankStage {
     fn default() -> Self {
-        Self::StatUpdate { remaining: 2 }
+        Self::StatUpdate { remaining: 4 }
     }
 }
 

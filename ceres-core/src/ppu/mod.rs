@@ -266,12 +266,24 @@ impl Ppu {
     fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
         match mode {
             Mode::OamScan => {
-                self.phase = PpuPhase::OamScan(OamScanStage::default());
-                // Don't clear mode_for_interrupt here to allow continuous STAT line
-                // across HBlank -> OamScan transition for proper IRQ blocking.
+                self.phase = PpuPhase::OamScan(OamScanStage::Scanning { tick: 0 });
+
+                self.oam_read_blocked = true;
+                self.oam_write_blocked = true;
+
+                // STAT mode bits don't update to Mode 2 until tick 4 of OamScan
+                // (This is handled in tick_oam_scan)
+                self.mode_for_interrupt = Some(Mode::OamScan);
+                self.update_stat(ints);
             }
-            Mode::VBlank => self.phase = PpuPhase::VBlank(VBlankStage::default()),
+            Mode::VBlank => {
+                self.phase = PpuPhase::VBlank(VBlankStage::default());
+                self.set_mode_stat(mode);
+                self.mode_for_interrupt = Some(mode);
+                self.update_stat(ints);
+            }
             Mode::Drawing => {
+                // Drawing (Mode 3) is entered via enter_mode3_from_oam_scan
                 self.phase = PpuPhase::Drawing(DrawingStage::default());
                 self.set_mode_stat(mode);
                 self.mode_for_interrupt = Some(mode);
@@ -734,7 +746,7 @@ impl Ppu {
         };
 
         match stage {
-            OamScanStage::Running { tick } => {
+            OamScanStage::Scanning { tick } => {
                 // SameBoy-accurate timing (in 8MHz ticks)
 
                 // Tick 0: LY update. Mode 2 interrupt pulse.
@@ -745,6 +757,10 @@ impl Ppu {
                     self.ly = self.current_line;
                     self.ly_for_comparison = 0xFFFF;
                     self.stat &= !STAT_LYC_B;
+
+                    // Ensure OAM is blocked immediately at dot 0
+                    self.oam_read_blocked = true;
+                    self.oam_write_blocked = true;
 
                     // Ensure STAT interrupt state is updated at dot 0
                     // (OamScan IRQ may have already fired at dot -4 in PreEnd)
@@ -760,18 +776,14 @@ impl Ppu {
 
                 // Tick 4: OAM blocked and LYC comparison now valid (Coincidence delay)
                 if tick == 4 {
-                    self.oam_read_blocked = true;
-                    self.oam_write_blocked = true;
                     self.ly_for_comparison = u16::from(self.ly);
                     self.update_stat(ints);
                 }
 
                 // OAM Scan Loop (40 entries * 4 ticks = 160 ticks)
-                // In Ceres, this loop starts at tick 8 to account for initialization.
-                if (8..168).contains(&tick) {
-                    let loop_tick = tick - 8;
-                    let entry = (loop_tick / 4) as u8;
-                    let sub_tick = (loop_tick % 4) as u8;
+                if tick < 160 {
+                    let entry = (tick / 4) as u8;
+                    let sub_tick = (tick % 4) as u8;
 
                     if sub_tick == 0 && is_cgb {
                         self.scan_oam_entry_at(entry);
@@ -781,23 +793,11 @@ impl Ppu {
                     }
                 }
 
-                // STAT bits change to Mode 3 at tick 168
-                if tick >= 168 {
-                    self.set_mode_stat(Mode::Drawing);
-                    self.mode_for_interrupt = Some(Mode::Drawing);
-                    self.update_stat(ints);
-
-                    // Memory fully blocked when transitioning to Mode 3 STAT
-                    self.vram_read_blocked = true;
-                    self.vram_write_blocked = true;
-                    self.oam_read_blocked = true;
-                    self.oam_write_blocked = true;
-
-                    // Transition to Mode 3 Rendering (Tick 168)
-                    self.cgb_palettes_blocked = true;
+                // Transition to Mode 3 at tick 160
+                if tick >= 160 {
                     self.enter_mode3_from_oam_scan(ints, cgb_mode);
                 } else {
-                    self.phase = PpuPhase::OamScan(OamScanStage::Running { tick: tick + 1 });
+                    self.phase = PpuPhase::OamScan(OamScanStage::Scanning { tick: tick + 1 });
                 }
             }
         }
@@ -824,8 +824,8 @@ impl Ppu {
             self.vram_write_blocked = true;
         }
 
-        // Mode 3 overhead: 12 ticks initial fetch (6 dots).
-        let remaining = 12;
+        // Mode 3 overhead: 14 ticks initial fetch (7 dots).
+        let remaining = 14;
         if remaining == 0 {
             self.phase = PpuPhase::Drawing(DrawingStage::Running);
         } else {
@@ -941,7 +941,8 @@ impl Ppu {
         }
 
         // Check if line rendering is complete
-        if self.lcd_x >= 160 {
+        // Mode 3 only ends when all pixels are output AND the fetcher has finished its current cycle.
+        if self.lcd_x >= 160 && matches!(self.fetcher_state, FetcherState::GetTileT1) {
             #[cfg(test)]
             if self.current_line == 2 {}
             if self.current_line == 143 {
@@ -957,14 +958,8 @@ impl Ppu {
                 self.wx_triggered = false;
             }
 
-            // Unblock VRAM and OAM immediately at the end of Mode 3.
-            self.vram_read_blocked = false;
-            self.vram_write_blocked = false;
-            self.oam_read_blocked = false;
-            self.oam_write_blocked = false;
-
-            // Mode 0 STAT interrupt and bits update are delayed by 2 M-cycles (8 T-cycles = 16 ticks).
-            self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate { remaining: 16 });
+            // Mode 0 STAT interrupt and bits update are delayed by 1 M-cycle (4 ticks).
+            self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate { remaining: 4 });
             #[cfg(test)]
             if self.current_line == 2 {}
         }
@@ -1532,6 +1527,12 @@ impl Ppu {
                     self.set_mode_stat(Mode::HBlank);
                     self.mode_for_interrupt = Some(Mode::HBlank);
                     self.update_stat(ints);
+
+                    // Unblock memory now that STAT shows Mode 0
+                    self.vram_read_blocked = false;
+                    self.vram_write_blocked = false;
+                    self.oam_read_blocked = false;
+                    self.oam_write_blocked = false;
                 }
 
                 if remaining <= 1 {
