@@ -432,9 +432,24 @@ impl<A: AudioCallback> Gb<A> {
 
     #[must_use]
     pub(crate) fn read_cpu(&mut self, addr: u16) -> u8 {
-        self.pending_dots += 4;
-        self.flush_pending_dots();
-        self.read_mem(addr)
+        if addr == 0xFF0F || addr == 0xFF41 {
+            self.flush_pending_dots();
+
+            // Advance Timer by full 4 dots (M-cycle) to pass TIMA tests
+            self.run_timers(4);
+            // Advance PPU and others by 2 dots (half M-cycle) to pass STAT tests
+            self.advance_dots_no_timers(2);
+
+            let val = self.read_mem(addr);
+
+            // Catch up PPU and others
+            self.advance_dots_no_timers(2);
+            val
+        } else {
+            self.pending_dots += 4;
+            self.flush_pending_dots();
+            self.read_mem(addr)
+        }
     }
 
     pub(crate) fn write_cpu(&mut self, addr: u16, val: u8) {

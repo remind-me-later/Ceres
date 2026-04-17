@@ -964,9 +964,8 @@ impl Ppu {
             self.oam_read_blocked = false;
             self.oam_write_blocked = false;
 
-            // Mode 0 STAT interrupt and bits update are delayed by 1 M-cycle (4 T-cycles = 8 ticks).
-            // This is handled in the HBlankStage::StatUpdate stage.
-            self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate { remaining: 8 });
+            // Mode 0 STAT interrupt and bits update are delayed by 2 M-cycles (8 T-cycles = 16 ticks).
+            self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate { remaining: 16 });
             #[cfg(test)]
             if self.current_line == 2 {}
         }
