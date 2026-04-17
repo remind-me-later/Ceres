@@ -1071,8 +1071,8 @@ impl Ppu {
         // Start the sprite fetch state machine
         self.sprite_fetcher_state = SpriteFetcherState::WaitForBgFetcher;
         self.sprite_fetcher_step = 0;
-        // Suspend normal BG fetcher updates (sprite fetcher will manually advance it when needed)
-        self.fetcher_suspended = true;
+        // DO NOT suspend yet. Wait for BG fetcher to hit safe point in WaitForBgFetcher stage.
+        self.fetcher_suspended = false;
     }
 
     /// Tick the sprite fetcher state machine.
@@ -1097,7 +1097,8 @@ impl Ppu {
                 let fifo_ready = self.bg_fifo.size() > 0;
 
                 if fetcher_ready && fifo_ready {
-                    // Exit wait loop.
+                    // Exit wait loop. Suspend BG fetcher (hijack).
+                    self.fetcher_suspended = true;
                     self.sprite_fetcher_state = SpriteFetcherState::State41Advance;
                     self.sprite_fetcher_step = 0;
                 }
@@ -1302,13 +1303,13 @@ impl Ppu {
                 // T2: Read high byte from VRAM.
                 self.current_tile_data[1] = self.read_tile_byte(self.fetcher_tile_data_addr);
 
-                // Increment window_tile_x AFTER reading high byte.
-                if self.wx_triggered {
-                    self.window_tile_x = self.window_tile_x.wrapping_add(1) & 0x1F;
-                }
-
                 // Push to FIFO immediately if there is space.
                 if self.bg_fifo.size() <= 8 {
+                    // Increment window_tile_x AFTER reading high byte, but ONLY if we are finishing the fetch.
+                    if self.wx_triggered {
+                        self.window_tile_x = self.window_tile_x.wrapping_add(1) & 0x1F;
+                    }
+
                     self.push_to_fifo();
                     self.fetcher_state = FetcherState::GetTileT1;
                 } else {
