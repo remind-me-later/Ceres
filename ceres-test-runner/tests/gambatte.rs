@@ -1502,10 +1502,7 @@ gambatte_test!(
     "gambatte/m2enable/late_enable_2_dmg08_cgb04c_out0.gbc"
 );
 
-gambatte_test!(
-    gambatte_jpadirq_1,
-    "gambatte/jpadirq_1.gbc"
-);
+gambatte_test!(gambatte_jpadirq_1, "gambatte/jpadirq_1.gbc");
 
 gambatte_test!(
     gambatte_halt_m1int_ly_1,

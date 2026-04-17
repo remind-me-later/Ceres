@@ -432,7 +432,7 @@ impl<A: AudioCallback> Gb<A> {
 
     #[must_use]
     pub(crate) fn read_cpu(&mut self, addr: u16) -> u8 {
-        if addr == 0xFF00 || addr == 0xFF0F || addr == 0xFF41 || addr == 0xFF44 {
+        if addr == 0xFF00 || addr == 0xFF0F || addr == 0xFF41 || addr == 0xFF44 || addr == 0xFF45 {
             self.flush_pending_dots();
 
             // Advance Timer by full 4 dots (M-cycle) to pass TIMA tests
@@ -466,7 +466,10 @@ impl<A: AudioCallback> Gb<A> {
         }
 
         // Apply SameBoy-style split M-cycle for specific sensitive registers on write
-        if matches!(addr, 0xFE00..=0xFE9F | 0xFF04..=0xFF07 | 0xFF0F | 0xFF41) {
+        if matches!(
+            addr,
+            0xFE00..=0xFE9F | 0xFF04..=0xFF07 | 0xFF0F | 0xFF41 | 0xFF43 | 0xFF45
+        ) {
             self.flush_pending_dots();
 
             // Advance Timer by full 4 dots (M-cycle)

@@ -824,8 +824,8 @@ impl Ppu {
             self.vram_write_blocked = true;
         }
 
-        // Mode 3 overhead: 10 ticks initial fetch (5 dots).
-        let remaining = 10;
+        // Mode 3 overhead: 12 ticks initial fetch (6 dots).
+        let remaining = 12;
         if remaining == 0 {
             self.phase = PpuPhase::Drawing(DrawingStage::Running);
         } else {
