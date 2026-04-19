@@ -1012,9 +1012,9 @@ impl Ppu {
             self.bg_color_to_rgb(color, palette, cgb_mode)
         };
 
-        let idx = u32::from(self.ly) * u32::from(PX_WIDTH) + u32::from(self.lcd_x);
         // Safety check: only write to visible area
-        if self.ly < PX_HEIGHT {
+        if self.ly < PX_HEIGHT && self.lcd_x < PX_WIDTH {
+            let idx = u32::from(self.ly) * u32::from(PX_WIDTH) + u32::from(self.lcd_x);
             self.rgb_buf.set_px(idx, rgb);
         }
 
