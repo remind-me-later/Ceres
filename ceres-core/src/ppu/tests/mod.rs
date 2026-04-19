@@ -49,7 +49,7 @@ fn advance_to_oam_scan_tick(
         if gb.ppu.read_ly() == target_ly
             && matches!(
                 gb.ppu.phase,
-                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick })
+                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Scanning { tick })
                     if tick == target_tick
             )
         {

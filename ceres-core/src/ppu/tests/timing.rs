@@ -70,7 +70,7 @@ fn test_ppu_oam_scan_ly_timing() {
     loop {
         if matches!(
             gb.ppu.phase,
-            crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+            crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Scanning { tick: 0 })
         ) {
             break;
         }
@@ -120,7 +120,7 @@ fn test_ppu_lcdon_ly_timing() {
     loop {
         if matches!(
             gb.ppu.phase,
-            crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+            crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Scanning { tick: 0 })
         ) {
             break;
         }
@@ -240,7 +240,7 @@ fn test_ppu_scx_hblank_timing_mooneye() {
             if gb.ppu.read_ly() == 1
                 && matches!(
                     gb.ppu.phase,
-                    crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+                    crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Scanning { tick: 0 })
                 )
             {
                 break;
@@ -291,7 +291,7 @@ fn test_ppu_mode3_duration_scx_variation() {
             if gb.ppu.read_ly() == 1
                 && matches!(
                     gb.ppu.phase,
-                    crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+                    crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Scanning { tick: 0 })
                 )
             {
                 break;
@@ -432,7 +432,7 @@ fn test_ppu_timing_diagnostic_log() {
         if gb.ppu.read_ly() == 1
             && matches!(
                 gb.ppu.phase,
-                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Scanning { tick: 0 })
             )
         {
             break;
@@ -1689,7 +1689,7 @@ fn test_ppu_mode_bit_timing_regression() {
     loop {
         if matches!(
             gb.ppu.phase,
-            crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+            crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Scanning { tick: 0 })
         ) {
             break;
         }
@@ -2199,7 +2199,7 @@ fn gbmicrotest_hblank_int_scx0() {
     loop {
         if matches!(
             gb.ppu.phase,
-            crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+            crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Scanning { tick: 0 })
         ) {
             break;
         }

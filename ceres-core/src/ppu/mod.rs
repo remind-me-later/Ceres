@@ -768,15 +768,15 @@ impl Ppu {
                     self.update_stat(ints);
                 }
 
-                // Tick 3: Processed. Next tick (4) will show Mode 2.
-                if tick == 3 {
-                    self.set_mode_stat(Mode::OamScan);
-                    self.update_stat(ints);
-                }
-
                 // Tick 4: OAM blocked and LYC comparison now valid (Coincidence delay)
                 if tick == 4 {
                     self.ly_for_comparison = u16::from(self.ly);
+                    self.update_stat(ints);
+                }
+
+                // Tick 3: Processed. Next tick (4) will show Mode 2.
+                if tick == 3 {
+                    self.set_mode_stat(Mode::OamScan);
                     self.update_stat(ints);
                 }
 

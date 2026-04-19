@@ -58,7 +58,7 @@ fn test_ppu_stat_irq_diagnostic_log() {
         if gb.ppu.read_ly() == 1
             && matches!(
                 gb.ppu.phase,
-                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Scanning { tick: 0 })
             )
         {
             break;
@@ -90,7 +90,7 @@ fn test_ppu_stat_line_diagnostic_log() {
         if gb.ppu.read_ly() == 1
             && matches!(
                 gb.ppu.phase,
-                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Scanning { tick: 0 })
             )
         {
             break;
@@ -445,7 +445,7 @@ fn test_mooneye_oam_blocking_steady_state() {
     while gb.ppu.read_ly() != 43
         || !matches!(
             gb.ppu.phase,
-            crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 1 })
+            crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Scanning { tick: 1 })
         )
     {
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);

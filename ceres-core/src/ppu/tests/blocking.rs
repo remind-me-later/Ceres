@@ -10,7 +10,7 @@ fn test_ppu_vram_lock_boundary() {
         if gb.ppu.read_ly() == 1
             && matches!(
                 gb.ppu.phase,
-                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Scanning { tick: 0 })
             )
         {
             break;
@@ -120,7 +120,7 @@ fn test_ppu_blocking_diagnostic_log() {
         if gb.ppu.read_ly() == 1
             && matches!(
                 gb.ppu.phase,
-                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Scanning { tick: 0 })
             )
         {
             break;
@@ -606,7 +606,7 @@ fn gbmicrotest_001_vram_unlocked() {
         if gb.ppu.read_ly() == 1
             && matches!(
                 gb.ppu.phase,
-                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Scanning { tick: 0 })
             )
         {
             break;
@@ -714,7 +714,7 @@ fn test_diagnostic_oam_blocking_first_10_ticks() {
 
     // Wait until the exact start of Mode 2 (tick 0 of OamScan)
     loop {
-        if let crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 }) =
+        if let crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Scanning { tick: 0 }) =
             gb.ppu.phase
         {
             break;

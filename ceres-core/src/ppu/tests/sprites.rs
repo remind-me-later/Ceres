@@ -16,7 +16,7 @@ fn test_ppu_sprite_scan_timing() {
         if gb.ppu.read_ly() == 1
             && matches!(
                 gb.ppu.phase,
-                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Scanning { tick: 0 })
             )
         {
             break;
@@ -66,7 +66,7 @@ fn test_ppu_sprite_visibility_at_gambatte_timing() {
         if gb.ppu.read_ly() == 1
             && matches!(
                 gb.ppu.phase,
-                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Running { tick: 0 })
+                crate::ppu::PpuPhase::OamScan(crate::ppu::OamScanStage::Scanning { tick: 0 })
             )
         {
             break;

@@ -432,7 +432,7 @@ impl<A: AudioCallback> Gb<A> {
 
     #[must_use]
     pub(crate) fn read_cpu(&mut self, addr: u16) -> u8 {
-        if addr == 0xFF00 || addr == 0xFF0F || addr == 0xFF41 || addr == 0xFF44 || addr == 0xFF45 {
+        if addr == 0xFF00 || addr == 0xFF0F || addr == 0xFF41 || addr == 0xFF44 {
             self.flush_pending_dots();
 
             // Advance Timer by full 4 dots (M-cycle) to pass TIMA tests
@@ -468,7 +468,7 @@ impl<A: AudioCallback> Gb<A> {
         // Apply SameBoy-style split M-cycle for specific sensitive registers on write
         if matches!(
             addr,
-            0xFE00..=0xFE9F | 0xFF04..=0xFF07 | 0xFF0F | 0xFF41 | 0xFF43 | 0xFF45
+            0xFE00..=0xFE9F | 0xFF04..=0xFF07 | 0xFF41 | 0xFF43
         ) {
             self.flush_pending_dots();
 
@@ -476,6 +476,18 @@ impl<A: AudioCallback> Gb<A> {
             self.run_timers(4);
             // Advance PPU and others by 2 dots (half M-cycle)
             self.advance_dots_no_timers(2);
+
+            self.write_mem(addr, val);
+
+            // Catch up PPU and others
+            self.advance_dots_no_timers(2);
+        } else if addr == 0xFF0F || addr == 0xFF45 {
+            self.flush_pending_dots();
+
+            // Advance Timer by full 4 dots (M-cycle)
+            self.run_timers(4);
+            // Advance PPU and others by 3 dots
+            self.advance_dots_no_timers(3);
 
             if if_addr {
                 let ifr_after = self.ints.read_if() & 0x1F;
@@ -486,7 +498,7 @@ impl<A: AudioCallback> Gb<A> {
             }
 
             // Catch up PPU and others
-            self.advance_dots_no_timers(2);
+            self.advance_dots_no_timers(1);
         } else {
             self.pending_dots += 4;
             self.flush_pending_dots();
