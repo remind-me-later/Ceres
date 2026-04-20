@@ -68,6 +68,7 @@ pub struct Gb<A: AudioCallback> {
     pending_dots: i32,
     serial: Serial,
     total_dots: u64,
+    t_cycle_remainder: i32,
     wram: Wram,
 }
 
@@ -290,6 +291,7 @@ impl<A: AudioCallback> Gb<A> {
             ppu: Ppu::default(),
             pending_dots: 0,
             serial: Serial::default(),
+            t_cycle_remainder: 0,
             wram: Wram::default(),
             #[cfg(feature = "game_genie")]
             game_genie: GameGenie::default(),

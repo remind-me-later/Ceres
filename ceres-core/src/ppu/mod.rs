@@ -244,7 +244,7 @@ impl Ppu {
         // 2. Compute the state of the STAT interrupt wire.
         // It is the logical OR of all enabled STAT interrupt sources.
         let lyc_source = (self.stat & STAT_IF_LYC_B != 0) && coincidence_match;
-        
+
         let mode_source = match self.mode_for_interrupt {
             Some(Mode::HBlank) => (self.stat & STAT_IF_HBLANK_B) != 0,
             Some(Mode::VBlank) => (self.stat & STAT_IF_VBLANK_B) != 0,
@@ -252,7 +252,7 @@ impl Ppu {
             _ => false,
         };
 
-        // Note: The VBlank interrupt source in STAT is special and separate 
+        // Note: The VBlank interrupt source in STAT is special and separate
         // from the Mode 1 VBlank interrupt in IF (0xFF0F bit 0).
         let current_line = lyc_source || mode_source;
         self.stat_interrupt_line = current_line;
@@ -511,7 +511,7 @@ impl Ppu {
                 self.tick_line0(stage, ints, cgb_mode);
             }
             PpuPhase::Line153(stage) => {
-                self.tick_line153(stage, ints);
+                self.tick_line153(stage, ints, cgb_mode);
             }
             PpuPhase::OamScan(_) => {
                 // OAM scan is driven by its own state machine
@@ -537,25 +537,25 @@ impl Ppu {
     }
 
     /// Tick Line 153 state machine.
-    fn tick_line153(&mut self, stage: Line153Stage, ints: &mut Interrupts) {
+    fn tick_line153(&mut self, stage: Line153Stage, ints: &mut Interrupts, cgb_mode: CgbMode) {
         // Track dots (Line 153 is part of VBlank mode effectively, but distinct phase)
         self.dots_in_line += 1;
+        let is_cgb_e = matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat);
 
         match stage {
             Line153Stage::LycReset { remaining } => {
                 // State 19: 2 cycles (4 ticks)
                 if remaining == 4 {
-                    // LY stays 152 for some ticks? SameBoy says:
-                    // case 19: // Line 153 start
-                    // if (ppu->line == 153) ppu->ly = 153;
-                    // But maybe it happens AFTER some delay.
                     self.ly_for_comparison = 0xFFFF;
                     self.stat &= !STAT_LYC_B; // Clear coincidence flag when comparison disabled
                     self.update_stat(ints);
                 }
 
                 if remaining <= 1 {
-                    self.phase = PpuPhase::Line153(Line153Stage::Ly153 { remaining: 4 });
+                    let next_remaining = if is_cgb_e { 4 } else { 8 };
+                    self.phase = PpuPhase::Line153(Line153Stage::Ly153 {
+                        remaining: next_remaining,
+                    });
                 } else {
                     self.phase = PpuPhase::Line153(Line153Stage::LycReset {
                         remaining: remaining - 1,
@@ -564,15 +564,17 @@ impl Ppu {
             }
 
             Line153Stage::Ly153 { remaining } => {
-                // State 14: 2 cycles (4 ticks)
-                if remaining == 4 {
+                // State 14: CGB: 4 ticks, DMG: 8 ticks
+                let expected = if is_cgb_e { 4 } else { 8 };
+                if remaining == expected {
                     self.ly = 153;
-                    self.ly_for_comparison = 153;
-                    self.update_stat(ints);
                 }
 
                 if remaining <= 1 {
-                    self.phase = PpuPhase::Line153(Line153Stage::Ly0 { remaining: 4 });
+                    let next_remaining = if is_cgb_e { 8 } else { 4 };
+                    self.phase = PpuPhase::Line153(Line153Stage::Ly0 {
+                        remaining: next_remaining,
+                    });
                 } else {
                     self.phase = PpuPhase::Line153(Line153Stage::Ly153 {
                         remaining: remaining - 1,
@@ -581,12 +583,13 @@ impl Ppu {
             }
 
             Line153Stage::Ly0 { remaining } => {
-                // State 15: 2 cycles (4 ticks)
-                if remaining == 4 {
-                    self.ly = 0;
-                    // LYC comparison for LY=0 happens now?
-                    // Actually, let's just set it.
-                    self.ly_for_comparison = 0;
+                // State 15: CGB: 8 ticks, DMG: 4 ticks
+                let expected = if is_cgb_e { 8 } else { 4 };
+                if remaining == expected {
+                    if !is_cgb_e {
+                        self.ly = 0;
+                    }
+                    self.ly_for_comparison = 153;
                     self.update_stat(ints);
                 }
 
@@ -601,6 +604,15 @@ impl Ppu {
 
             Line153Stage::LycTransition { remaining } => {
                 // State 16: 4 cycles (8 ticks)
+                if remaining == 8 {
+                    self.ly = 0;
+                    self.ly_for_comparison = if is_cgb_e { 153 } else { 0xFFFF };
+                    if self.ly_for_comparison == 0xFFFF {
+                        self.stat &= !STAT_LYC_B;
+                    }
+                    self.update_stat(ints);
+                }
+
                 if remaining <= 1 {
                     self.phase = PpuPhase::Line153(Line153Stage::LycSideEffect { remaining: 24 });
                 } else {
@@ -618,9 +630,7 @@ impl Ppu {
                 }
 
                 if remaining <= 1 {
-                    // Total used: 4+4+4+8+24 = 44 ticks.
-                    // Remainder = 912 - 44 = 868.
-                    self.phase = PpuPhase::Line153(Line153Stage::Remainder { remaining: 868 });
+                    self.phase = PpuPhase::Line153(Line153Stage::Remainder { remaining: 864 });
                 } else {
                     self.phase = PpuPhase::Line153(Line153Stage::LycSideEffect {
                         remaining: remaining - 1,
@@ -629,16 +639,9 @@ impl Ppu {
             }
 
             Line153Stage::Remainder { remaining } => {
-                // State 17: Reports Mode 0 at the very end (DMG quirk)
-                if remaining == 4 {
-                    self.set_mode_stat(Mode::HBlank);
-                    self.update_stat(ints);
-                }
-
                 if remaining <= 1 {
                     // End of frame
                     self.finish_frame_and_start_new(ints);
-                    // finish_frame sets phase to OamScan
                 } else {
                     self.phase = PpuPhase::Line153(Line153Stage::Remainder {
                         remaining: remaining - 1,

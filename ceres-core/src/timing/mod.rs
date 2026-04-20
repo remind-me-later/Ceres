@@ -78,14 +78,13 @@ impl<A: AudioCallback> Gb<A> {
 
         // Calculate real-time 4MHz dots elapsed.
         // In double speed, 1 CPU T-cycle = 0.5 real dots.
-        let real_dots = if double_speed {
-            cpu_t_cycles / 2
+        let (real_dots, ppu_cycles) = if double_speed {
+            let total_t = cpu_t_cycles + self.t_cycle_remainder;
+            self.t_cycle_remainder = total_t % 2;
+            (total_t / 2, cpu_t_cycles)
         } else {
-            cpu_t_cycles
+            (cpu_t_cycles, cpu_t_cycles * PPU_CYCLES_PER_T_CYCLE)
         };
-
-        // PPU runs at 8MHz (2× real-time dots)
-        let ppu_cycles = real_dots * PPU_CYCLES_PER_T_CYCLE;
 
         let dma_active = self.dma.is_active();
         let dma_src = self.dma.current_src();
@@ -107,8 +106,6 @@ impl<A: AudioCallback> Gb<A> {
         // APU runs at 4MHz real-time rate
         self.apu.run(real_dots);
         self.cart.run_rtc(real_dots);
-
-        self.dots_ran += real_dots;
 
         #[expect(clippy::cast_sign_loss)]
         {
