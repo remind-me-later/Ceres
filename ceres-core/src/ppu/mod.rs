@@ -224,41 +224,40 @@ impl Ppu {
     }
 
     /// Update the STAT interrupt line and fire interrupt on rising edge.
-    /// This implements proper STAT IRQ blocking - only fires when line transitions low->high.
     fn update_stat(&mut self, ints: &mut Interrupts) {
         let previous_line = self.stat_interrupt_line;
 
-        // 1. Update the STAT register bits for CPU visibility FIRST.
-        // This ensures the coincidence match used for interrupt logic is derived
-        // from the same state visible to the CPU.
+        // 1. Update the coincidence flag in the STAT register.
         let coincidence_match = if self.ly_for_comparison != 0xFFFF {
-            self.stat &= !STAT_LYC_B;
             if self.ly_for_comparison == u16::from(self.lyc) {
                 self.stat |= STAT_LYC_B;
                 true
             } else {
+                self.stat &= !STAT_LYC_B;
                 false
             }
         } else {
-            // Internal comparison is disabled - use the current STAT bit.
-            // This bit is updated manually by write_lyc() and other state transitions.
             (self.stat & STAT_LYC_B) != 0
         };
 
-        // 2. Compute new STAT interrupt line state from all enabled sources.
-        let lyc_int = (self.stat & STAT_IF_LYC_B != 0) && coincidence_match;
-        let mode_int = match self.mode_for_interrupt {
-            Some(Mode::HBlank) => self.stat & STAT_IF_HBLANK_B != 0,
-            Some(Mode::VBlank) => self.stat & STAT_IF_VBLANK_B != 0,
-            Some(Mode::OamScan) => self.stat & STAT_IF_OAM_B != 0,
+        // 2. Compute the state of the STAT interrupt wire.
+        // It is the logical OR of all enabled STAT interrupt sources.
+        let lyc_source = (self.stat & STAT_IF_LYC_B != 0) && coincidence_match;
+        
+        let mode_source = match self.mode_for_interrupt {
+            Some(Mode::HBlank) => (self.stat & STAT_IF_HBLANK_B) != 0,
+            Some(Mode::VBlank) => (self.stat & STAT_IF_VBLANK_B) != 0,
+            Some(Mode::OamScan) => (self.stat & STAT_IF_OAM_B) != 0,
             _ => false,
         };
 
-        let new_line = lyc_int || mode_int;
-        self.stat_interrupt_line = new_line;
+        // Note: The VBlank interrupt source in STAT is special and separate 
+        // from the Mode 1 VBlank interrupt in IF (0xFF0F bit 0).
+        let current_line = lyc_source || mode_source;
+        self.stat_interrupt_line = current_line;
 
-        // 3. Only fire interrupt on rising edge (low -> high transition)
-        if new_line && !previous_line {
+        // 3. Trigger a STAT interrupt on the rising edge of the wire.
+        if current_line && !previous_line {
             ints.request_lcd();
         }
     }
@@ -268,14 +267,8 @@ impl Ppu {
             Mode::OamScan => {
                 self.phase = PpuPhase::OamScan(OamScanStage::Scanning { tick: 0 });
 
-                // OAM is not blocked until tick 2 of OamScan
-                self.oam_read_blocked = false;
-                self.oam_write_blocked = false;
-
-                // STAT mode bits don't update to Mode 2 until tick 4 of OamScan
-                // (This is handled in tick_oam_scan)
-                self.mode_for_interrupt = Some(Mode::OamScan);
-                self.update_stat(ints);
+                // OAM locking and STAT mode transitions are handled in tick_oam_scan
+                // to match hardware T-cycle precision.
             }
             Mode::VBlank => {
                 self.phase = PpuPhase::VBlank(VBlankStage::default());
@@ -750,8 +743,7 @@ impl Ppu {
             OamScanStage::Scanning { tick } => {
                 // SameBoy-accurate timing (in 8MHz ticks)
 
-                // Tick 0: LY update. Mode 2 interrupt pulse.
-                // NOTE: STAT bottom bits don't change to Mode 2 until tick 4.
+                // Tick 0: Start of scanline.
                 if tick == 0 {
                     self.sprite_buffer.clear();
 
@@ -759,26 +751,32 @@ impl Ppu {
                     self.ly_for_comparison = 0xFFFF;
                     self.stat &= !STAT_LYC_B;
 
-                    // (OamScan IRQ may have already fired at dot -4 in PreEnd)
+                    // OAM is NOT yet blocked.
+                    self.oam_read_blocked = false;
+                    self.oam_write_blocked = false;
+                }
+
+                // Tick 4 (T=2): OAM write blocked.
+                if tick == 4 {
+                    self.oam_write_blocked = true;
+                }
+
+                // Tick 6 (T=3): OAM STAT interrupt pulse occurs 1 T-cycle before STAT mode change.
+                if tick == 6 && self.current_line != 0 {
                     self.mode_for_interrupt = Some(Mode::OamScan);
                     self.update_stat(ints);
                 }
 
-                // Tick 1: OAM blocked 1 T-cycle before STAT shows Mode 2 (at tick 4)
-                if tick == 1 {
-                    self.oam_read_blocked = true;
-                    self.oam_write_blocked = true;
-                }
-
-                // Tick 4: OAM blocked and LYC comparison now valid (Coincidence delay)
-                if tick == 4 {
+                // Tick 7 (T=3.5): LY comparison now valid.
+                if tick == 7 {
                     self.ly_for_comparison = u16::from(self.ly);
                     self.update_stat(ints);
                 }
 
-                // Tick 3: Processed. Next tick (4) will show Mode 2.
-                if tick == 3 {
+                // Tick 8 (T=4): STAT mode becomes 2. OAM read blocked.
+                if tick == 8 {
                     self.set_mode_stat(Mode::OamScan);
+                    self.oam_read_blocked = true;
                     self.update_stat(ints);
                 }
 
@@ -1524,11 +1522,22 @@ impl Ppu {
 
         match stage {
             HBlankStage::StatUpdate { remaining } => {
-                // State 22: STAT = Mode 0
-                if remaining == 1 {
-                    self.set_mode_stat(Mode::HBlank);
+                // Tick 4 (T=0): Pulse HBlank STAT interrupt immediately.
+                if remaining == 4 {
                     self.mode_for_interrupt = Some(Mode::HBlank);
                     self.update_stat(ints);
+
+                    self.vram_read_blocked = false;
+                    self.vram_write_blocked = false;
+                }
+
+                // Tick 2 (T=1): STAT mode bits finally become 0.
+                if remaining == 2 {
+                    self.set_mode_stat(Mode::HBlank);
+                    self.update_stat(ints);
+
+                    self.oam_read_blocked = false;
+                    self.oam_write_blocked = false;
                 }
 
                 if remaining <= 1 {
@@ -1544,14 +1553,6 @@ impl Ppu {
                 // State 33: CGB palettes blocked (non-double-speed only).
                 if remaining == 4 && !double_speed {
                     self.cgb_palettes_blocked = true;
-                }
-
-                // Unblock memory 2 T-cycles AFTER STAT became 0
-                if remaining == 1 {
-                    self.vram_read_blocked = false;
-                    self.vram_write_blocked = false;
-                    self.oam_read_blocked = false;
-                    self.oam_write_blocked = false;
                 }
 
                 if remaining <= 1 {
@@ -1600,14 +1601,7 @@ impl Ppu {
             }
 
             HBlankStage::PreEnd { remaining } => {
-                // State 31: Pre-end, set mode_for_interrupt = 2 for next line.
-                // Use current_line, not ly.
-                if remaining == 4 && self.current_line != 143 {
-                    // Prepare Mode 2 interrupt for next line (LineStart)
-                    self.mode_for_interrupt = Some(Mode::OamScan);
-                    self.update_stat(ints);
-                }
-
+                // State 31: Pre-end stage.
                 if remaining <= 1 {
                     // Line complete - transition to next line
                     self.dots_in_line = 0;
