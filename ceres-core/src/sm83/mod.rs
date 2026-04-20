@@ -466,9 +466,20 @@ impl<A: AudioCallback> Gb<A> {
         }
 
         // Apply SameBoy-style split M-cycle for specific sensitive registers on write
-        if matches!(
+        if addr == 0xFF4B {
+            self.ppu.wx_just_changed = true;
+            self.write_mem(addr, val);
+            self.flush_pending_dots();
+
+            // Advance Timer by full 4 dots (M-cycle)
+            self.run_timers(4);
+            // Advance PPU and others by full 4 dots
+            self.advance_dots_no_timers(4);
+
+            self.ppu.wx_just_changed = false;
+        } else if matches!(
             addr,
-            0xFE00..=0xFE9F | 0xFF04..=0xFF07 | 0xFF41 | 0xFF43
+            0xFE00..=0xFE9F | 0xFF41 | 0xFF43 | 0xFF47..=0xFF49
         ) {
             self.flush_pending_dots();
 

@@ -117,6 +117,7 @@ pub struct Ppu {
     mode_for_interrupt: Option<Mode>,
     vram: Vram,
     wy_triggered: bool,
+    pub wx_just_changed: bool,
     wx: u8,
     wy: u8,
     is_frozen: bool,
@@ -285,9 +286,9 @@ impl Ppu {
             }
             Mode::HBlank => {
                 self.phase = PpuPhase::HBlank(HBlankStage::default());
-                self.set_mode_stat(mode);
-                self.mode_for_interrupt = Some(mode);
-                self.update_stat(ints);
+
+                // STAT IRQ pulse and VRAM unblock occur immediately (handled in tick_hblank),
+                // but STAT mode bits don't update to Mode 0 until T=1 (tick 2).
             }
         }
     }
@@ -743,6 +744,11 @@ impl Ppu {
             OamScanStage::Scanning { tick } => {
                 // SameBoy-accurate timing (in 8MHz ticks)
 
+                // Check for window activation during OAM scan (e.g. WX=0)
+                if tick.is_multiple_of(2) {
+                    self.check_window_trigger(cgb_mode);
+                }
+
                 // Tick 0: Start of scanline.
                 if tick == 0 {
                     self.sprite_buffer.clear();
@@ -903,7 +909,7 @@ impl Ppu {
     }
 
     /// Tick during Mode 3 (Drawing).
-    fn tick_drawing(&mut self, _ints: &mut Interrupts, cgb_mode: CgbMode) {
+    fn tick_drawing(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
         // Handle Transition stage delay.
         // Pipeline and fetcher are stalled during Mode 3 lead-in.
         if let PpuPhase::Drawing(DrawingStage::Transition { remaining }) = self.phase {
@@ -958,8 +964,8 @@ impl Ppu {
                 self.wx_triggered = false;
             }
 
-            // Mode 0 STAT interrupt and bits update are delayed by 1 M-cycle (4 ticks).
-            self.phase = PpuPhase::HBlank(HBlankStage::StatUpdate { remaining: 4 });
+            // SameBoy: Mode 0 entered immediately. STAT update and interrupt pulse handled in enter_mode.
+            self.enter_mode(Mode::HBlank, ints);
             #[cfg(test)]
             if self.current_line == 2 {}
         }
@@ -1162,33 +1168,50 @@ impl Ppu {
             return;
         }
 
-        // Check if window is enabled
-        let window_enabled = self.lcdc & LCDC_WIN_B != 0;
-
-        if !window_enabled {
-            return;
-        }
-
-        // Check WY condition (window Y trigger) - must have been triggered on or before current line
-        if !self.wy_triggered {
+        // Check if window is enabled and WY condition
+        if self.lcdc & LCDC_WIN_B == 0 || !self.wy_triggered {
             return;
         }
 
         let is_cgb = matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat);
 
-        // Window activates when lcd_x + 7 == WX. If WX < 7, it activates at lcd_x = 0.
-        let should_activate = if self.wx < 7 {
-            self.lcd_x == 0
+        // Logical position in line (0 is first pixel, negative is during OAM scan)
+        // Note: dots_in_line is in 8MHz ticks. 1 dot = 2 ticks.
+        let pos = (self.dots_in_line as i32 / 2) - 80;
+
+        let mut should_activate = false;
+
+        if self.wx == 0 {
+            if pos == -7 {
+                should_activate = true;
+            } else if !is_cgb {
+                if pos == -16 && (self.scx & 7 != 0) {
+                    should_activate = true;
+                } else if pos >= -15 && pos <= -8 {
+                    should_activate = true;
+                }
+            }
         } else if self.wx < 166 + u8::from(is_cgb) {
-            self.lcd_x == self.wx.saturating_sub(7)
-        } else {
-            false
-        };
+            if self.wx == (pos + 7) as u8 {
+                should_activate = true;
+            } else if !is_cgb
+                && self.wx == (pos + 6) as u8
+                && !self.wx_just_changed
+                && self.dots_in_line >= 160
+            {
+                should_activate = true;
+                // LCD-PPU horizontal desync on DMG
+                if self.lcd_x > 0 {
+                    self.lcd_x -= 1;
+                }
+            }
+        }
 
         if should_activate {
             // WX=166 on DMG - special case, increment window_y but don't fully trigger.
             if !is_cgb && self.wx == 166 {
                 self.window_y = self.window_y.wrapping_add(1);
+                self.wx_triggered = true;
             } else {
                 self.activate_window(is_cgb);
             }
