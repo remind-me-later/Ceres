@@ -268,8 +268,9 @@ impl Ppu {
             Mode::OamScan => {
                 self.phase = PpuPhase::OamScan(OamScanStage::Scanning { tick: 0 });
 
-                self.oam_read_blocked = true;
-                self.oam_write_blocked = true;
+                // OAM is not blocked until tick 2 of OamScan
+                self.oam_read_blocked = false;
+                self.oam_write_blocked = false;
 
                 // STAT mode bits don't update to Mode 2 until tick 4 of OamScan
                 // (This is handled in tick_oam_scan)
@@ -758,14 +759,15 @@ impl Ppu {
                     self.ly_for_comparison = 0xFFFF;
                     self.stat &= !STAT_LYC_B;
 
-                    // Ensure OAM is blocked immediately at dot 0
-                    self.oam_read_blocked = true;
-                    self.oam_write_blocked = true;
-
-                    // Ensure STAT interrupt state is updated at dot 0
                     // (OamScan IRQ may have already fired at dot -4 in PreEnd)
                     self.mode_for_interrupt = Some(Mode::OamScan);
                     self.update_stat(ints);
+                }
+
+                // Tick 1: OAM blocked 1 T-cycle before STAT shows Mode 2 (at tick 4)
+                if tick == 1 {
+                    self.oam_read_blocked = true;
+                    self.oam_write_blocked = true;
                 }
 
                 // Tick 4: OAM blocked and LYC comparison now valid (Coincidence delay)
@@ -1522,17 +1524,11 @@ impl Ppu {
 
         match stage {
             HBlankStage::StatUpdate { remaining } => {
-                // State 22: STAT = Mode 0, memory unblocked.
+                // State 22: STAT = Mode 0
                 if remaining == 1 {
                     self.set_mode_stat(Mode::HBlank);
                     self.mode_for_interrupt = Some(Mode::HBlank);
                     self.update_stat(ints);
-
-                    // Unblock memory now that STAT shows Mode 0
-                    self.vram_read_blocked = false;
-                    self.vram_write_blocked = false;
-                    self.oam_read_blocked = false;
-                    self.oam_write_blocked = false;
                 }
 
                 if remaining <= 1 {
@@ -1548,6 +1544,14 @@ impl Ppu {
                 // State 33: CGB palettes blocked (non-double-speed only).
                 if remaining == 4 && !double_speed {
                     self.cgb_palettes_blocked = true;
+                }
+
+                // Unblock memory 2 T-cycles AFTER STAT became 0
+                if remaining == 1 {
+                    self.vram_read_blocked = false;
+                    self.vram_write_blocked = false;
+                    self.oam_read_blocked = false;
+                    self.oam_write_blocked = false;
                 }
 
                 if remaining <= 1 {
