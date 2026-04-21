@@ -1550,3 +1550,46 @@ gambatte_test!(
     gambatte_oam_access_preread_ds_2,
     "gambatte/oam_access/preread_ds_2_cgb04c_out3.gbc"
 );
+
+// ────────────────────────────────────────────────────────────────────────────
+// MISC STAT IRQ
+// ────────────────────────────────────────────────────────────────────────────
+
+gambatte_test!(
+    gambatte_miscmstatirq_lcdoff_statirqen_if,
+    "gambatte/miscmstatirq/lcdoff_statirqen_if_dmg08_cgb04c_outE0.gbc"
+);
+
+gambatte_test!(
+    gambatte_miscmstatirq_lycflag_statwirq_1,
+    "gambatte/miscmstatirq/lycflag_statwirq_1_dmg08_out2.gb"
+);
+
+gambatte_test!(
+    gambatte_miscmstatirq_m0statwirq_1,
+    "gambatte/miscmstatirq/m0statwirq_1_dmg08_out2.gb"
+);
+
+gambatte_test!(
+    gambatte_miscmstatirq_m1statwirq_1,
+    "gambatte/miscmstatirq/m1statwirq_1_dmg08_out3.gb"
+);
+
+// ────────────────────────────────────────────────────────────────────────────
+// Missing TIMA
+// ────────────────────────────────────────────────────────────────────────────
+
+gambatte_test!(
+    gambatte_tima_tc00_start_3,
+    "gambatte/tima/tc00_start_3_dmg08_outF0.gbc"
+);
+
+gambatte_test!(
+    gambatte_tima_tc00_start_4,
+    "gambatte/tima/tc00_start_4_dmg08_outF1.gbc"
+);
+
+gambatte_test!(
+    gambatte_tima_tc01_late_tima_inc_1,
+    "gambatte/tima/tc01_late_tima_inc_1_dmg08_cgb04c_out11.gbc"
+);
