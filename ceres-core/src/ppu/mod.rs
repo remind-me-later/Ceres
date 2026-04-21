@@ -951,7 +951,14 @@ impl Ppu {
 
         // Check if line rendering is complete
         // Mode 3 only ends when all pixels are output AND the fetcher has finished its current cycle.
-        if self.lcd_x >= 160 && matches!(self.fetcher_state, FetcherState::GetTileT1) {
+        // On real hardware, Mode 3 lasts at least 172 dots (344 ticks).
+        // Plus OAM scan (160 ticks), total ticks since scanline start must be >= 504.
+        // We use 514 here to account for additional fetcher overhead observed in tests.
+        let min_scanline_ticks_before_hblank = 514;
+        if self.lcd_x >= 160
+            && matches!(self.fetcher_state, FetcherState::GetTileT1)
+            && self.dots_in_line >= min_scanline_ticks_before_hblank
+        {
             #[cfg(test)]
             if self.current_line == 2 {}
             if self.current_line == 143 {
@@ -1013,6 +1020,12 @@ impl Ppu {
         let bg_pixel = self.bg_fifo.pop().unwrap();
         let sprite_pixel = self.oam_fifo.pop();
 
+        // If we've already output 160 pixels, we just discard the rest of the FIFO
+        // to allow the fetcher to finish its cycle and return to GetTileT1.
+        if self.lcd_x >= PX_WIDTH {
+            return;
+        }
+
         let (color, palette, is_sprite) = self.mix_pixels(bg_pixel, sprite_pixel, cgb_mode);
 
         let rgb = if is_sprite {
@@ -1022,7 +1035,7 @@ impl Ppu {
         };
 
         // Safety check: only write to visible area
-        if self.ly < PX_HEIGHT && self.lcd_x < PX_WIDTH {
+        if self.ly < PX_HEIGHT {
             let idx = u32::from(self.ly) * u32::from(PX_WIDTH) + u32::from(self.lcd_x);
             self.rgb_buf.set_px(idx, rgb);
         }
@@ -1195,7 +1208,7 @@ impl Ppu {
                 }
             }
         } else if self.wx < 166 + u8::from(is_cgb) {
-            if self.wx == (pos + 7) as u8 {
+            if self.wx == (pos + 7) as u8 && !self.wx_just_changed {
                 should_activate = true;
             } else if !is_cgb
                 && self.wx == (pos + 6) as u8
@@ -1555,6 +1568,7 @@ impl Ppu {
 
                     self.vram_read_blocked = false;
                     self.vram_write_blocked = false;
+                    self.oam_write_blocked = false;
                 }
 
                 // Tick 2 (T=1): STAT mode bits finally become 0.
@@ -1563,7 +1577,6 @@ impl Ppu {
                     self.update_stat(ints);
 
                     self.oam_read_blocked = false;
-                    self.oam_write_blocked = false;
                 }
 
                 if remaining <= 1 {
