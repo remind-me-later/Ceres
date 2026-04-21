@@ -1927,9 +1927,11 @@ impl Ppu {
         self.scy = val;
     }
 
-    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts) {
+    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts, cgb_mode: CgbMode) {
         let ly_equals_lyc = self.stat & STAT_LYC_B;
         let mode: u8 = self.mode() as u8;
+
+        let old_stat = self.stat;
 
         self.stat = val;
         self.stat &= !(STAT_LYC_B | STAT_MODE_B);
@@ -1937,6 +1939,25 @@ impl Ppu {
 
         // STAT write may change which interrupts are enabled - update line if LCD is on
         if self.lcdc & LCDC_ON_B != 0 {
+            if matches!(cgb_mode, CgbMode::Dmg) {
+                // DMG STAT write bug
+                let stat_mode = self.compute_stat_mode();
+                let lyc_match = self.ly_for_comparison == u16::from(self.lyc);
+                let lyc_blocked = lyc_match && (old_stat & STAT_IF_LYC_B != 0);
+
+                let stat_bug_trigger = if stat_mode == 0 {
+                    (old_stat & STAT_IF_HBLANK_B == 0) && !lyc_blocked
+                } else if stat_mode == 1 {
+                    (old_stat & STAT_IF_VBLANK_B == 0) && !lyc_blocked
+                } else {
+                    lyc_match && !lyc_blocked
+                };
+
+                if stat_bug_trigger {
+                    ints.request_lcd();
+                }
+            }
+
             self.update_stat(ints);
         }
     }
