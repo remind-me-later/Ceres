@@ -107,6 +107,8 @@ impl<A: AudioCallback> Gb<A> {
         self.apu.run(real_dots);
         self.cart.run_rtc(real_dots);
 
+        self.dots_ran += real_dots;
+
         #[expect(clippy::cast_sign_loss)]
         {
             self.total_dots += real_dots as u64;
