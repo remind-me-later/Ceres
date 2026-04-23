@@ -141,11 +141,21 @@ fn gambatte_lycint_lycirq_2_out3() {
         }
         gb.ppu.tick(&mut gb.ints, crate::CgbMode::Dmg, false);
     }
+
     assert_eq!(gb.ppu.read_ly(), 6, "precondition: must reach LY=6");
 
     // Now set LYC=6 while LY=6 → should immediately re-trigger the LYC interrupt.
     gb.ints.write_if(0);
-    gb.write_mem(0xFF45, 6);
+    gb.ppu.write_lyc(6, &mut gb.ints);
+
+    // A new STAT interrupt should be pending immediately.
+    let if_val = gb.ints.read_if() & 0x02;
+    assert_eq!(
+        if_val,
+        0x02,
+        "gambatte lycint_lycirq_2: writing LYC=6 while LY=6 should trigger STAT IRQ (IF={:#04X})",
+        gb.ints.read_if()
+    );
 
     // A new STAT interrupt should be pending immediately.
     let if_val = gb.ints.read_if() & 0x02;

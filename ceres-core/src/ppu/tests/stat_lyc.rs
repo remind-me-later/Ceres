@@ -1919,8 +1919,7 @@ fn test_ppu_stat_interrupt_or_gate() {
     let mut gb = setup_gb();
     // Enable Mode 2 AND LYC STAT interrupts
     gb.ppu.write_lcdc(0x80, &mut gb.ints);
-    gb.ppu
-        .write_stat(0x60, &mut gb.ints, ceres_core::CgbMode::Dmg); // LYC=1, Mode 2=1
+    gb.ppu.write_stat(0x60, &mut gb.ints, CgbMode::Dmg); // LYC=1, Mode 2=1
     gb.ppu.write_lyc(10, &mut gb.ints);
 
     // 1. Advance to Line 10.
@@ -1956,8 +1955,7 @@ fn test_diagnostic_stat_irq_internal_line_state() {
     let mut gb = setup_gb();
     // Enable Mode 0 (HBlank) STAT interrupt
     gb.ppu.write_lcdc(0x80, &mut gb.ints);
-    gb.ppu
-        .write_stat(0x08, &mut gb.ints, ceres_core::CgbMode::Dmg);
+    gb.ppu.write_stat(0x08, &mut gb.ints, CgbMode::Dmg);
     gb.ppu.write_lyc(0xFF, &mut gb.ints); // No LYC match
 
     advance_to_ly(&mut gb, 10);
@@ -1980,8 +1978,7 @@ fn test_diagnostic_stat_irq_internal_line_state() {
     // 3. Enable Mode 2 (OAM) STAT interrupt while still in HBlank.
     // The internal STAT line is already HIGH due to Mode 0.
     // Transitioning to (Mode 0 | Mode 2) should NOT create a rising edge.
-    gb.ppu
-        .write_stat(0x28, &mut gb.ints, ceres_core::CgbMode::Dmg); // Mode 0 + Mode 2 enabled
+    gb.ppu.write_stat(0x28, &mut gb.ints, CgbMode::Dmg); // Mode 0 + Mode 2 enabled
     let if_reg = gb.ints.read_if();
     println!("Enabled Mode 2 IRQ while in HBlank. IF=0x{:02X}", if_reg);
     assert_eq!(
@@ -1993,8 +1990,7 @@ fn test_diagnostic_stat_irq_internal_line_state() {
     // 4. Set LYC match while still in HBlank.
     // Still no rising edge.
     gb.ppu.write_lyc(10, &mut gb.ints);
-    gb.ppu
-        .write_stat(0x68, &mut gb.ints, ceres_core::CgbMode::Dmg); // Mode 0 + Mode 2 + LYC enabled
+    gb.ppu.write_stat(0x68, &mut gb.ints, CgbMode::Dmg); // Mode 0 + Mode 2 + LYC enabled
     let if_reg = gb.ints.read_if();
     println!(
         "Enabled LYC IRQ (match) while in HBlank. IF=0x{:02X}",

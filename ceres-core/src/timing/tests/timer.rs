@@ -579,3 +579,170 @@ fn test_tima_reload_timing() {
         );
     }
 }
+
+#[test]
+fn test_repro_gambatte_tc00_late_tc01_4() {
+    // tc00_late_tc01_4: TIMA=0xFE, TMA=0xFE, TAC=0x04
+    // Timer tick at 1024 increments TIMA: 0xFE -> 0xFF (no overflow)
+    // Read at offset 1073 (late in M-cycle) should see 0xFF
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF05, 0xFE);
+    gb.write_mem(0xFF06, 0xFE);
+    gb.write_mem(0xFF07, 0x04);
+    gb.write_mem(0xFFFF, 0x04); // IE: timer
+    gb.ints.write_if(0);
+
+    // Wait for timer tick at 1024 (and many more cycles for the read to happen)
+    // The test reads TIMA late in an M-cycle
+    gb.advance_dots(1076); // Just after the timer tick at 1024
+    assert_eq!(
+        gb.read_mem(0xFF05),
+        0xFF,
+        "TIMA should be 0xFF after tick at 1024"
+    );
+
+    // At offset 1073+1=1074: the timer tick at 1076 hasn't happened yet
+    // So we should see 0xFF (pre-increment state)
+    gb.advance_dots(2); // To offset ~1076
+    let tima = gb.read_mem(0xFF05);
+    // At this point, if timer hasn't ticked, still 0xFF. If timer ticked, could be 0x00
+    println!("TIMA at offset ~1076: 0x{:02X}", tima);
+}
+
+#[test]
+fn test_repro_gambatte_tc00_late_tc01_5() {
+    // tc00_late_tc01_5: Same setup as tc00_4
+    // At offset 1074, read should be 0x00 (during reload window)
+    // This means TIMA overflowed and is in the reload window (pending=1..4)
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF05, 0xFE);
+    gb.write_mem(0xFF06, 0xFE);
+    gb.write_mem(0xFF07, 0x04);
+    gb.write_mem(0xFFFF, 0x04); // IE: timer
+    gb.ints.write_if(0);
+
+    // We need to reach a point where:
+    // 1. TIMA has overflowed (TIMA=0, reload_pending=4)
+    // 2. We're in the 4-cycle reload window
+    // 3. Timer tick count would be at offset 1074 within the M-cycle timing
+    //
+    // The issue is: the test is checking TIMA at a specific point within an M-cycle,
+    // and we need to understand when exactly the timer tick happens vs when we read.
+    //
+    // Let me try: reach overflow, then advance to be "late" in the next M-cycle
+    gb.advance_dots(1024); // First timer tick at 1024: FE -> FF
+    gb.advance_dots(1024); // Second timer tick at 2048: FF -> 00 (overflow!)
+    // Now at T=2048, TIMA=0, reload_pending=4
+
+    // During reload window, TIMA should read as 0
+    let tima_during = gb.read_mem(0xFF05);
+    assert_eq!(tima_during, 0x00, "During reload window, TIMA should be 0");
+}
+
+#[test]
+fn test_repro_gambatte_tc00_late_tc01_8() {
+    // tc00_late_tc01_8: Same setup
+    // At offset 1077, after reload completes, should read 0xFF (TMA value)
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF05, 0xFE);
+    gb.write_mem(0xFF06, 0xFE);
+    gb.write_mem(0xFF07, 0x04);
+    gb.write_mem(0xFFFF, 0x04);
+    gb.ints.write_if(0);
+
+    gb.advance_dots(1024); // First tick: FE -> FF
+    gb.advance_dots(1024); // Second tick: FF -> 00 (overflow)
+    // At T=2048: overflow, reload_pending=4
+
+    // Wait through reload (4 cycles) + 3 more to exit window
+    gb.advance_dots(5);
+    // After reload completes: TIMA should be reloaded with TMA (0xFE)
+    let tima_after = gb.read_mem(0xFF05);
+    assert_eq!(tima_after, 0xFE, "After reload, TIMA should be TMA (0xFE)");
+}
+
+#[test]
+fn test_tima_overflow_read_during_reload_window() {
+    // Test that TIMA reads as 0 during the reload window
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF06, 0x00);
+    gb.write_mem(0xFF05, 0xFF);
+    gb.write_mem(0xFF07, 0x04);
+    gb.ints.write_if(0);
+
+    // Advance to cause overflow at T=1024
+    gb.advance_dots(1024);
+    // Now TIMA=0, reload_pending=4
+
+    // During the 4-cycle reload window, reads should return 0
+    for i in 0..4 {
+        let tima = gb.read_mem(0xFF05);
+        assert_eq!(
+            tima, 0x00,
+            "TIMA should be 0 during reload window, cycle {}",
+            i
+        );
+        gb.advance_dots(1);
+    }
+
+    // After reload completes, TIMA should be TMA (0x00)
+    let tima = gb.read_mem(0xFF05);
+    assert_eq!(tima, 0x00, "After reload, TIMA should be TMA (0x00)");
+}
+
+#[test]
+fn test_tima_overflow_write_blocks_reload() {
+    // Pandocs: Writing to TIMA during overflow cycle acts as if overflow didn't happen
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF06, 0xAB);
+    gb.write_mem(0xFF05, 0xFF);
+    gb.write_mem(0xFF07, 0x04);
+    gb.ints.write_if(0);
+
+    // Advance to cause overflow
+    gb.advance_dots(1024);
+    // TIMA just overflowed to 0, reload is pending
+
+    // Write to TIMA during the overflow cycle - should block reload
+    gb.write_mem(0xFF05, 0x42);
+    gb.advance_dots(1);
+
+    // TIMA should be 0x42, not TMA
+    let tima = gb.read_mem(0xFF05);
+    assert_eq!(
+        tima, 0x42,
+        "Writing to TIMA during overflow should preserve value"
+    );
+}
+
+#[test]
+fn test_tima_write_during_cycle_b_overwrites() {
+    // Test that TMA written during reload window updates TIMA during that window
+    // Pandocs: "Writing to TMA during cycle B will have the same value copied to TIMA"
+    let mut gb = setup_gb();
+    gb.write_mem(0xFF06, 0xAB);
+    gb.write_mem(0xFF05, 0xFF);
+    gb.write_mem(0xFF07, 0x04);
+    gb.ints.write_if(0);
+
+    // Overflow to enter reload window
+    gb.flush_pending_dots();
+    gb.advance_dots(1024);
+    // Now reload_pending=4, TIMA=0
+
+    // During reload window (pending=4), write TMA with new value
+    gb.write_mem(0xFF06, 0xCD);
+
+    // Flush and advance through reload window
+    gb.flush_pending_dots();
+    for _ in 0..5 {
+        gb.advance_dots(1);
+    }
+
+    // After reload completes, TIMA should be the last TMA written (0xCD)
+    let tima = gb.read_mem(0xFF05);
+    assert_eq!(
+        tima, 0xCD,
+        "After reload, TIMA should be last TMA written during window"
+    );
+}

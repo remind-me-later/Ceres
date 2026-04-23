@@ -2462,8 +2462,7 @@ fn test_repro_gbmicro_lyc_int_edge_suite() {
     let mut gb = setup_gb();
     gb.ppu.write_lcdc(0x00, &mut gb.ints);
     gb.ppu.write_lyc(1, &mut gb.ints);
-    gb.ppu
-        .write_stat(0x40, &mut gb.ints, ceres_core::CgbMode::Dmg); // Enable LYC interrupt
+    gb.ppu.write_stat(0x40, &mut gb.ints, CgbMode::Dmg); // Enable LYC interrupt
     gb.ints.write_ie(0x02); // Enable STAT interrupt
 
     gb.ppu.write_lcdc(0x91, &mut gb.ints); // LCD ON
@@ -2503,8 +2502,7 @@ fn test_repro_gbmicro_hblank_int_di_suite() {
 
     let mut gb = setup_gb();
     gb.ppu.write_lcdc(0x00, &mut gb.ints);
-    gb.ppu
-        .write_stat(0x08, &mut gb.ints, ceres_core::CgbMode::Dmg); // Enable HBlank interrupt
+    gb.ppu.write_stat(0x08, &mut gb.ints, CgbMode::Dmg); // Enable HBlank interrupt
     gb.ints.write_ie(0x02);
 
     // In Ceres, for Line 0 startup, HBlank IRQ fires at ~241 ticks.
@@ -2537,8 +2535,7 @@ fn test_repro_gbmicro_hblank_int_suite() {
         for scx in 0..8 {
             let mut gb = setup_gb();
             gb.ppu.write_lcdc(0x00, &mut gb.ints);
-            gb.ppu
-                .write_stat(0x08, &mut gb.ints, ceres_core::CgbMode::Dmg);
+            gb.ppu.write_stat(0x08, &mut gb.ints, CgbMode::Dmg);
             gb.ppu.write_scx(scx as u8);
             gb.write_mem(0xFF0F, 0x00);
 
