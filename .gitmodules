@@ -28,3 +28,6 @@
 [submodule "external/test-sources/mooneye-test-suite"]
 	path = external/test-sources/mooneye-test-suite
 	url = git@github.com:Gekkio/mooneye-test-suite.git
+[submodule "external/pandocs"]
+	path = external/pandocs
+	url = git@github.com:gbdev/pandocs.git
