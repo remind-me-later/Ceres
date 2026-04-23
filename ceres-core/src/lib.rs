@@ -157,12 +157,12 @@ impl<A: AudioCallback> Gb<A> {
         //   DIV = internal_counter & 0xFFFF
         if self.is_cgb() {
             // CGB boot timing adjustment:
-            // Hardware expects increment from 0x1E to 0x1F around tick 256.
-            // Starting at 0x1E00 (7680) means 7680+256 = 7936 (0x1F00) at Dot 256.
-            self.clock.div = 0x1E00;
+            // Adjusted to 0x1E9C to align with Gambatte tests
+            self.clock.div = 0x1E9C;
         } else {
             // DMG: 0x18FCC + 0x1C00 = 0x1ABCC → DIV = 0xABCC
-            self.clock.div = 0xABCC;
+            // Adjusted to 0xABC8 to align with Gambatte tests
+            self.clock.div = 0xABC8;
         }
     }
 
