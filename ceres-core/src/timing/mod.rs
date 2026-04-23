@@ -119,8 +119,8 @@ impl<A: AudioCallback> Gb<A> {
         self.clock.tima = self.clock.tima.wrapping_add(1);
 
         if self.clock.tima == 0 {
-            self.clock.tima = self.clock.tma;
-            // TIMA overflow: reload will happen after 4 T-cycles
+            // TIMA overflow: reload will happen after 4 T-cycles.
+            // During these 4 cycles, TIMA remains 0 on hardware.
             self.clock.tima_reload_pending = 4;
         }
     }
@@ -149,8 +149,10 @@ impl<A: AudioCallback> Gb<A> {
                 if self.clock.tima_reload_pending <= 4 {
                     self.clock.tima_reload_pending -= 1;
                     if self.clock.tima_reload_pending == 0 {
+                        // Actual reload happens now
+                        self.clock.tima = self.clock.tma;
                         self.ints.request_timer();
-                        // State 5-8: Already reloaded, TIMA writes ignored for 4 T-cycles (1 M-cycle)
+                        // State 5-8: Already reloaded, TIMA writes ignored for 4 T-cycles
                         self.clock.tima_reload_pending = 5;
                     }
                 } else {
