@@ -418,19 +418,33 @@ impl<A: AudioCallback> Gb<A> {
         self.advance_dots(4);
     }
 
+    #[inline]
+    fn io_conflict_write(addr: u16) -> i32 {
+        if addr == 0xFF0F { 1 } else { 0 }
+    }
+
+    #[inline]
+    fn io_conflict_read(addr: u16) -> i32 {
+        match addr {
+            0xFF05 | 0xFF0F | 0xFF41 | 0xFF44 | 0xFF45 => 1,
+            _ => 0,
+        }
+    }
+
     #[must_use]
     pub(crate) fn read_cpu(&mut self, addr: u16) -> u8 {
-        let val = self.read_mem(addr);
-        self.advance_dots(4);
-        val
+        let extra = Self::io_conflict_read(addr);
+        self.advance_dots(4 + extra);
+        self.read_mem(addr)
     }
 
     pub(crate) fn write_cpu(&mut self, addr: u16, val: u8) {
         if addr == 0xFF46 {
             self.dma_write_start_dots = self.total_dots;
         }
+        let extra = Self::io_conflict_write(addr);
+        self.advance_dots(4 + extra);
         self.write_mem(addr, val);
-        self.advance_dots(4);
     }
 }
 
