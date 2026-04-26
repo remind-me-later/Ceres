@@ -210,6 +210,10 @@ pub struct Ppu {
     ext_dma_src: u16,
     ext_dma_dst: u8,
     ext_hdma_active: bool,
+
+    /// Total PPU cycles consumed (for debugging and synchronization).
+    /// This tracks the same time base as Gb::total_dots.
+    cycles: u64,
 }
 
 // IO
@@ -480,7 +484,14 @@ impl Ppu {
 
         for _ in 0..dots {
             self.tick(ints, cgb_mode, double_speed);
+            self.cycles += 1;
         }
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn cycles(&self) -> u64 {
+        self.cycles
     }
 
     pub const fn set_color_correction_mode(&mut self, mode: ColorCorrectionMode) {

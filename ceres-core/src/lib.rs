@@ -543,6 +543,12 @@ impl<A: AudioCallback> Gb<A> {
         self.total_dots
     }
 
+    #[inline]
+    #[must_use]
+    pub const fn ppu_cycles(&self) -> u64 {
+        self.ppu.cycles()
+    }
+
     pub(crate) const fn is_double_speed(&self) -> bool {
         self.key1.is_enabled()
     }
