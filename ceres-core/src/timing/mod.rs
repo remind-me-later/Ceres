@@ -112,11 +112,6 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[inline]
-    pub fn flush_pending_dots(&mut self) {
-        // No-op: pending_dots removed, all timing now unified via advance_dots
-    }
-
     fn inc_tima(&mut self) {
         self.clock.tima = self.clock.tima.wrapping_add(1);
 

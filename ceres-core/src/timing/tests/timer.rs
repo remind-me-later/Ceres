@@ -31,7 +31,7 @@ fn test_start_3_timing_with_read_cpu() {
         // That means timer ticks at total_dots = 1028.
 
         // Advance to Dot 1024.
-        gb.flush_pending_dots();
+        
         gb.advance_dots(1024 - 16);
         assert_eq!(gb.total_dots(), 1024);
 
@@ -726,7 +726,7 @@ fn test_tima_write_during_cycle_b_overwrites() {
     gb.ints.write_if(0);
 
     // Overflow to enter reload window
-    gb.flush_pending_dots();
+    
     gb.advance_dots(1024);
     // Now reload_pending=4, TIMA=0
 
@@ -734,7 +734,7 @@ fn test_tima_write_during_cycle_b_overwrites() {
     gb.write_mem(0xFF06, 0xCD);
 
     // Flush and advance through reload window
-    gb.flush_pending_dots();
+    
     for _ in 0..5 {
         gb.advance_dots(1);
     }
@@ -760,7 +760,7 @@ fn test_tima_overflow_and_reload_sequence() {
         gb.write_mem(0xFF05, 0xFE);
         gb.write_mem(0xFF06, 0xFE);
         gb.write_mem(0xFF07, 0x04);
-        gb.flush_pending_dots();
+        
 
         // First tick at dot 1024: FE -> FF
         gb.advance_dots(1024);
@@ -790,7 +790,7 @@ fn test_tima_overflow_reload_period_is_1024_dots() {
         gb.write_mem(0xFF05, 0x00);
         gb.write_mem(0xFF06, 0x00);
         gb.write_mem(0xFF07, 0x04);
-        gb.flush_pending_dots();
+        
 
         let mut last_change_dot = 0;
         let mut last_tima = gb.read_mem(0xFF05);
@@ -824,7 +824,7 @@ fn test_tima_read_during_reload_window_reads_zero() {
         gb.write_mem(0xFF05, 0xFF);
         gb.write_mem(0xFF06, 0x42);
         gb.write_mem(0xFF07, 0x04);
-        gb.flush_pending_dots();
+        
 
         // Overflow at dot 1024
         gb.advance_dots(1024);
@@ -857,7 +857,7 @@ fn test_tima_write_during_overflow_cycle_blocks_reload() {
         gb.write_mem(0xFF05, 0xFF);
         gb.write_mem(0xFF06, 0x42);
         gb.write_mem(0xFF07, 0x04);
-        gb.flush_pending_dots();
+        
 
         // Trigger overflow
         gb.advance_dots(1024);
@@ -888,7 +888,7 @@ fn test_tima_write_during_reloaded_state_is_ignored() {
         gb.write_mem(0xFF05, 0xFF);
         gb.write_mem(0xFF06, 0x42);
         gb.write_mem(0xFF07, 0x04);
-        gb.flush_pending_dots();
+        
 
         // Trigger overflow and complete reload
         gb.advance_dots(1024); // overflow
@@ -916,7 +916,7 @@ fn test_tma_write_during_reload_window_updates_tima() {
         gb.write_mem(0xFF05, 0xFF);
         gb.write_mem(0xFF06, 0x00);
         gb.write_mem(0xFF07, 0x04);
-        gb.flush_pending_dots();
+        
 
         // Trigger overflow
         gb.advance_dots(1024);
@@ -944,7 +944,7 @@ fn test_timer_interrupt_requested_after_reload() {
         gb.write_mem(0xFF06, 0x42);
         gb.write_mem(0xFF07, 0x04);
         gb.ints.write_if(0);
-        gb.flush_pending_dots();
+        
 
         // Trigger overflow
         gb.advance_dots(1024);
@@ -978,7 +978,7 @@ fn test_tac_write_triggers_timer_glitch() {
         gb.write_mem(0xFF05, 0x00);
         gb.write_mem(0xFF06, 0x00);
         gb.write_mem(0xFF07, 0x05); // TAC bit 3 set
-        gb.flush_pending_dots();
+        
 
         // Advance to where bit 3 of DIV is set
         gb.advance_dots(8);
@@ -1002,7 +1002,7 @@ fn test_div_write_triggers_timer_glitch() {
         gb.write_mem(0xFF05, 0x00);
         gb.write_mem(0xFF06, 0x00);
         gb.write_mem(0xFF07, 0x05); // TAC bit 3
-        gb.flush_pending_dots();
+        
 
         // Advance until TAC mux bit is set
         gb.advance_dots(8);
@@ -1028,13 +1028,13 @@ fn test_read_cpu_during_reload_returns_correct_value() {
         gb.write_mem(0xFF05, 0xFF);
         gb.write_mem(0xFF06, 0x42);
         gb.write_mem(0xFF07, 0x04);
-        gb.flush_pending_dots();
+        
 
         // Trigger overflow
         gb.advance_dots(1024);
 
         // At this point, we're in reload window (pending=4)
-        gb.flush_pending_dots();
+        
 
         // Now read with read_cpu
         let val = gb.read_cpu(0xFF05);
@@ -1060,7 +1060,7 @@ fn test_tima_tma_combined_behavior() {
         gb.write_mem(0xFF05, 0xFF);
         gb.write_mem(0xFF06, 0x00);
         gb.write_mem(0xFF07, 0x04);
-        gb.flush_pending_dots();
+        
 
         // Overflow at dot 1024
         gb.advance_dots(1024);
