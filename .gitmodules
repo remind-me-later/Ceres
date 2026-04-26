@@ -31,3 +31,6 @@
 [submodule "external/pandocs"]
 	path = external/pandocs
 	url = git@github.com:gbdev/pandocs.git
+[submodule "external/reference-implementations/VerilogBoy"]
+	path = external/reference-implementations/VerilogBoy
+	url = git@github.com:zephray/VerilogBoy.git
