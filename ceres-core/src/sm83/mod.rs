@@ -438,12 +438,12 @@ impl<A: AudioCallback> Gb<A> {
             // Advance Timer by full 4 dots (M-cycle) to pass TIMA tests
             self.run_timers(4);
             // Advance PPU and others by 2 dots (half M-cycle) to pass STAT tests
-            self.advance_dots_no_timers(2);
+            self.advance_dots(2);
 
             let val = self.read_mem(addr);
 
             // Catch up PPU and others
-            self.advance_dots_no_timers(2);
+            self.advance_dots(2);
             val
         } else {
             self.pending_dots += 4;
@@ -473,12 +473,12 @@ impl<A: AudioCallback> Gb<A> {
             // Advance Timer and PPU by 1 dot with the suppression flag high
             self.ppu.wx_just_changed = true;
             self.run_timers(1);
-            self.advance_dots_no_timers(1);
+            self.advance_dots(1);
             self.ppu.wx_just_changed = false;
 
             // Advance the rest of the M-cycle (3 dots)
             self.run_timers(3);
-            self.advance_dots_no_timers(3);
+            self.advance_dots(3);
         } else if matches!(
             addr,
             0xFE00..=0xFE9F | 0xFF41 | 0xFF43 | 0xFF47..=0xFF49
@@ -488,19 +488,19 @@ impl<A: AudioCallback> Gb<A> {
             // Advance Timer by full 4 dots (M-cycle)
             self.run_timers(4);
             // Advance PPU and others by 2 dots (half M-cycle)
-            self.advance_dots_no_timers(2);
+            self.advance_dots(2);
 
             self.write_mem(addr, val);
 
             // Catch up PPU and others
-            self.advance_dots_no_timers(2);
+            self.advance_dots(2);
         } else if addr == 0xFF0F || addr == 0xFF45 {
             self.flush_pending_dots();
 
             // Advance Timer by full 4 dots (M-cycle)
             self.run_timers(4);
             // Advance PPU and others by 3 dots
-            self.advance_dots_no_timers(3);
+            self.advance_dots(3);
 
             if if_addr {
                 let ifr_after = self.ints.read_if() & 0x1F;
@@ -511,7 +511,7 @@ impl<A: AudioCallback> Gb<A> {
             }
 
             // Catch up PPU and others
-            self.advance_dots_no_timers(1);
+            self.advance_dots(1);
         } else {
             self.pending_dots += 4;
             self.flush_pending_dots();
