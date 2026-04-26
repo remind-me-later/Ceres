@@ -114,11 +114,7 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn flush_pending_dots(&mut self) {
-        if self.pending_dots > 0 {
-            let dots = self.pending_dots;
-            self.pending_dots = 0;
-            self.advance_dots(dots);
-        }
+        // No-op: pending_dots removed, all timing now unified via advance_dots
     }
 
     fn inc_tima(&mut self) {

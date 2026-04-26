@@ -65,7 +65,6 @@ pub struct Gb<A: AudioCallback> {
     ld_b_b_breakpoint: bool,
     model: Model,
     ppu: Ppu,
-    pending_dots: i32,
     serial: Serial,
     total_dots: u64,
     t_cycle_remainder: i32,
@@ -271,7 +270,6 @@ impl<A: AudioCallback> Gb<A> {
         let clock = Clock::default();
 
         Self {
-            model,
             cgb_mode,
             cart,
             bootrom: Bootrom::new(model),
@@ -288,8 +286,8 @@ impl<A: AudioCallback> Gb<A> {
             joy: Joypad::default(),
             key1: Key1::default(),
             ld_b_b_breakpoint: false,
+            model,
             ppu: Ppu::default(),
-            pending_dots: 0,
             serial: Serial::default(),
             t_cycle_remainder: 0,
             wram: Wram::default(),
@@ -387,7 +385,6 @@ impl<A: AudioCallback> Gb<A> {
         self.key1 = Key1::default();
         self.ld_b_b_breakpoint = false;
         self.ppu = Ppu::default();
-        self.pending_dots = 0;
         self.serial = Serial::default();
         self.bootrom.enable();
     }

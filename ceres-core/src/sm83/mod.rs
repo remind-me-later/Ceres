@@ -15,12 +15,6 @@ pub struct Sm83 {
     is_halt_bug_triggered: bool,
     is_halted: bool,
     is_just_halted: bool,
-    /// Set by HALT when IME=1 and an interrupt is already pending.
-    /// SameBoy zeroes pending_cycles in this case, meaning both the
-    /// run-mode opcode fetch and the internal halt read cost 0 effective
-    /// T-cycles. We model this by skipping the two internal NOP ticks
-    /// that normally precede the ISR push sequence, so that the HALT
-    /// + dispatch takes exactly 4 M-cycles (16 T) instead of 6 (24 T).
     skip_isr_nops: bool,
     pc: u16,
     sp: u16,
@@ -218,8 +212,6 @@ impl<A: AudioCallback> Gb<A> {
             }
         }
 
-        self.flush_pending_dots();
-
         if self.ints.is_any_requested() {
             self.cpu.is_halted = false;
             self.ppu.leave_stop_mode();
@@ -230,14 +222,12 @@ impl<A: AudioCallback> Gb<A> {
                     self.cpu.is_halt_bug_triggered = false;
                 }
 
-                // SameBoy-accurate ISR dispatch sequence:
-                self.flush_pending_dots();
                 if !self.cpu.skip_isr_nops {
-                    self.advance_dots(4); // fetch
-                    self.advance_dots(4); // oam bug
+                    self.advance_dots(4);
+                    self.advance_dots(4);
                 }
                 self.cpu.skip_isr_nops = false;
-                self.advance_dots(4); // no access
+                self.advance_dots(4);
 
                 let pc = self.cpu.pc;
                 let [lo, hi] = pc.to_le_bytes();
@@ -279,7 +269,6 @@ impl<A: AudioCallback> Gb<A> {
         }
 
         self.cpu.is_just_halted = false;
-        self.flush_pending_dots();
     }
 }
 
@@ -426,97 +415,22 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     fn tick_m_cycle(&mut self) {
-        self.pending_dots += 4;
-        self.flush_pending_dots();
+        self.advance_dots(4);
     }
 
     #[must_use]
     pub(crate) fn read_cpu(&mut self, addr: u16) -> u8 {
-        if addr == 0xFF00 || addr == 0xFF05 || addr == 0xFF0F || addr == 0xFF41 || addr == 0xFF44 {
-            self.flush_pending_dots();
-
-            // Advance Timer by full 4 dots (M-cycle) to pass TIMA tests
-            self.run_timers(4);
-            // Advance PPU and others by 2 dots (half M-cycle) to pass STAT tests
-            self.advance_dots(2);
-
-            let val = self.read_mem(addr);
-
-            // Catch up PPU and others
-            self.advance_dots(2);
-            val
-        } else {
-            self.pending_dots += 4;
-            self.flush_pending_dots();
-            self.read_mem(addr)
-        }
+        let val = self.read_mem(addr);
+        self.advance_dots(4);
+        val
     }
 
     pub(crate) fn write_cpu(&mut self, addr: u16, val: u8) {
-        let if_addr = addr == 0xFF0F;
-        let ifr_before = if if_addr {
-            self.ints.read_if() & 0x1F
-        } else {
-            0
-        };
-
-        // Capture timestamp before advancing time for DMA start logging
         if addr == 0xFF46 {
-            self.dma_write_start_dots = self.total_dots + self.pending_dots as u64;
+            self.dma_write_start_dots = self.total_dots;
         }
-
-        // Apply SameBoy-style split M-cycle for specific sensitive registers on write
-        if addr == 0xFF4B {
-            self.write_mem(addr, val);
-            self.flush_pending_dots();
-
-            // Advance Timer and PPU by 1 dot with the suppression flag high
-            self.ppu.wx_just_changed = true;
-            self.run_timers(1);
-            self.advance_dots(1);
-            self.ppu.wx_just_changed = false;
-
-            // Advance the rest of the M-cycle (3 dots)
-            self.run_timers(3);
-            self.advance_dots(3);
-        } else if matches!(
-            addr,
-            0xFE00..=0xFE9F | 0xFF41 | 0xFF43 | 0xFF47..=0xFF49
-        ) {
-            self.flush_pending_dots();
-
-            // Advance Timer by full 4 dots (M-cycle)
-            self.run_timers(4);
-            // Advance PPU and others by 2 dots (half M-cycle)
-            self.advance_dots(2);
-
-            self.write_mem(addr, val);
-
-            // Catch up PPU and others
-            self.advance_dots(2);
-        } else if addr == 0xFF0F || addr == 0xFF45 {
-            self.flush_pending_dots();
-
-            // Advance Timer by full 4 dots (M-cycle)
-            self.run_timers(4);
-            // Advance PPU and others by 3 dots
-            self.advance_dots(3);
-
-            if if_addr {
-                let ifr_after = self.ints.read_if() & 0x1F;
-                let triggers = ifr_after & !ifr_before;
-                self.write_mem(addr, val | triggers);
-            } else {
-                self.write_mem(addr, val);
-            }
-
-            // Catch up PPU and others
-            self.advance_dots(1);
-        } else {
-            self.pending_dots += 4;
-            self.flush_pending_dots();
-            self.write_mem(addr, val);
-        }
+        self.write_mem(addr, val);
+        self.advance_dots(4);
     }
 }
 
@@ -1308,7 +1222,6 @@ impl<A: AudioCallback> Gb<A> {
                 self.tick_m_cycle();
             }
 
-            self.flush_pending_dots();
             self.key1.change_speed();
             self.write_div();
         } else {
