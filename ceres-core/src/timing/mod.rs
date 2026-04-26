@@ -55,9 +55,12 @@ impl<A: AudioCallback> Gb<A> {
     /// Advance all components by the given number of CPU T-cycles.
     /// This is the main timing entry point called by the CPU.
     #[inline]
-    pub fn advance_dots(&mut self, cpu_t_cycles: i32) {
-        self.run_timers(cpu_t_cycles);
-        self.advance_dots_no_timers(cpu_t_cycles);
+    pub fn advance_dots(&mut self, mut cpu_t_cycles: i32) {
+        while cpu_t_cycles > 0 {
+            self.run_timers(1);
+            self.advance_dots_no_timers(1);
+            cpu_t_cycles -= 1;
+        }
     }
 
     #[inline]
@@ -71,14 +74,9 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn advance_dots_no_timers(&mut self, cpu_t_cycles: i32) {
-        // DMA runs at T-cycle rate
-        self.dma.advance_dots(cpu_t_cycles);
-
         let double_speed = self.key1.is_enabled();
 
-        // Calculate real-time 4MHz dots elapsed.
-        // In double speed, 1 CPU T-cycle = 0.5 real dots.
-        let (real_dots, ppu_cycles) = if double_speed {
+        let (_real_dots, mut ppu_cycles) = if double_speed {
             let total_t = cpu_t_cycles + self.t_cycle_remainder;
             self.t_cycle_remainder = total_t % 2;
             (total_t / 2, cpu_t_cycles)
@@ -86,13 +84,17 @@ impl<A: AudioCallback> Gb<A> {
             (cpu_t_cycles, cpu_t_cycles * PPU_CYCLES_PER_T_CYCLE)
         };
 
+        let initial_ppu_cycles = ppu_cycles;
+
         let dma_active = self.dma.is_active();
         let dma_src = self.dma.current_src();
         let dma_dst = self.dma.current_dst();
         let hdma_active = self.hdma.is_active();
 
+        self.dma.advance_dots(cpu_t_cycles);
+
         self.ppu.run(
-            ppu_cycles,
+            &mut ppu_cycles,
             &mut self.ints,
             self.cgb_mode,
             double_speed,
@@ -101,17 +103,24 @@ impl<A: AudioCallback> Gb<A> {
             dma_dst,
             hdma_active,
         );
+
         self.run_dma();
 
-        // APU runs at 4MHz real-time rate
-        self.apu.run(real_dots);
-        self.cart.run_rtc(real_dots);
+        let ppu_consumed = initial_ppu_cycles - ppu_cycles;
+        let real_dots_consumed = if double_speed {
+            ppu_consumed / 2
+        } else {
+            ppu_consumed / PPU_CYCLES_PER_T_CYCLE
+        };
 
-        self.dots_ran += real_dots;
+        self.apu.run(real_dots_consumed);
+        self.cart.run_rtc(real_dots_consumed);
+
+        self.dots_ran += real_dots_consumed;
 
         #[expect(clippy::cast_sign_loss)]
         {
-            self.total_dots += real_dots as u64;
+            self.total_dots += real_dots_consumed as u64;
         }
     }
 

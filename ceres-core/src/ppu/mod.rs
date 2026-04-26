@@ -468,7 +468,7 @@ impl Ppu {
 
     pub fn run(
         &mut self,
-        dots: i32,
+        dots: &mut i32,
         ints: &mut Interrupts,
         cgb_mode: CgbMode,
         double_speed: bool,
@@ -482,9 +482,10 @@ impl Ppu {
         self.ext_dma_dst = dma_dst;
         self.ext_hdma_active = hdma_active;
 
-        for _ in 0..dots {
+        while *dots > 0 {
             self.tick(ints, cgb_mode, double_speed);
             self.cycles += 1;
+            *dots -= 1;
         }
     }
 
