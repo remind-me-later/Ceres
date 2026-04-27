@@ -15,8 +15,9 @@ pub struct Sm83 {
     is_halt_bug_triggered: bool,
     is_halted: bool,
     is_just_halted: bool,
-    skip_isr_nops: bool,
+    pending_cycles: i32,
     pc: u16,
+    skip_isr_nops: bool,
     sp: u16,
 }
 
@@ -53,6 +54,10 @@ impl Sm83 {
         self.pc
     }
 
+    pub const fn pending_cycles(&self) -> i32 {
+        self.pending_cycles
+    }
+
     pub const fn sp(&self) -> u16 {
         self.sp
     }
@@ -62,6 +67,10 @@ impl Sm83 {
     /// Set the program counter.
     pub(crate) fn set_pc(&mut self, pc: u16) {
         self.pc = pc;
+    }
+
+    pub(crate) fn set_pending_cycles(&mut self, pending_cycles: i32) {
+        self.pending_cycles = pending_cycles;
     }
 
     pub(crate) fn set_af(&mut self, af: u16) {
@@ -223,11 +232,11 @@ impl<A: AudioCallback> Gb<A> {
                 }
 
                 if !self.cpu.skip_isr_nops {
-                    self.advance_dots(4);
-                    self.advance_dots(4);
+                    self.tick_m_cycle();
+                    self.tick_m_cycle();
                 }
                 self.cpu.skip_isr_nops = false;
-                self.advance_dots(4);
+                self.tick_m_cycle();
 
                 let pc = self.cpu.pc;
                 let [lo, hi] = pc.to_le_bytes();
@@ -241,10 +250,9 @@ impl<A: AudioCallback> Gb<A> {
 
                 // SameBoy re-evaluates IF/IE *after* the Lo push finishes,
                 // using the value from BEFORE the write if it's to IF or IE.
-                self.advance_dots(4);
                 let ifr_pre = self.ints.read_if() & 0x1F;
                 let ie_pre = self.ints.read_ie() & 0x1F;
-                self.write_mem(self.cpu.sp, lo);
+                self.write_cpu(self.cpu.sp, lo);
 
                 let queue = ie_pre & ifr_pre;
                 let (final_int, final_vector) = if queue != 0 {
@@ -253,6 +261,11 @@ impl<A: AudioCallback> Gb<A> {
                 } else {
                     (0, 0x0000)
                 };
+
+                assert!(self.cpu.pending_cycles() > 2);
+                self.cpu.set_pending_cycles(self.cpu.pending_cycles() - 2);
+                self.flush_pending_cycles();
+                self.cpu.set_pending_cycles(2);
 
                 if final_int != 0 {
                     self.ints.acknowledge_interrupt(final_int);
@@ -269,6 +282,7 @@ impl<A: AudioCallback> Gb<A> {
         }
 
         self.cpu.is_just_halted = false;
+        self.flush_pending_cycles();
     }
 }
 
@@ -369,12 +383,12 @@ impl<A: AudioCallback> Gb<A> {
         // M=2: Write high byte
         self.cpu.sp = self.cpu.sp.wrapping_sub(1);
         self.tick_m_cycle();
-        self.write_mem(self.cpu.sp, hi);
+        self.write_cpu(self.cpu.sp, hi);
 
         // M=3: Write low byte
         self.cpu.sp = self.cpu.sp.wrapping_sub(1);
         self.tick_m_cycle();
-        self.write_mem(self.cpu.sp, lo);
+        self.write_cpu(self.cpu.sp, lo);
     }
 
     #[must_use]
@@ -415,36 +429,59 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     fn tick_m_cycle(&mut self) {
-        self.advance_dots(4);
+        let pending_cycles = self.cpu.pending_cycles() + 4;
+        self.cpu.set_pending_cycles(pending_cycles);
     }
 
     #[inline]
-    fn io_conflict_write(addr: u16) -> i32 {
-        if addr == 0xFF0F { 1 } else { 0 }
-    }
-
-    #[inline]
-    fn io_conflict_read(addr: u16) -> i32 {
-        match addr {
-            0xFF05 | 0xFF0F | 0xFF41 | 0xFF44 | 0xFF45 => 1,
-            _ => 0,
+    fn flush_pending_cycles(&mut self) {
+        let pending = self.cpu.pending_cycles();
+        if pending != 0 {
+            self.advance_dots(pending as i32);
+            self.cpu.set_pending_cycles(0);
         }
     }
 
     #[must_use]
     pub(crate) fn read_cpu(&mut self, addr: u16) -> u8 {
-        let extra = Self::io_conflict_read(addr);
-        self.advance_dots(4 + extra);
+        self.flush_pending_cycles();
+        self.cpu.set_pending_cycles(4);
         self.read_mem(addr)
     }
 
     pub(crate) fn write_cpu(&mut self, addr: u16, val: u8) {
-        if addr == 0xFF46 {
-            self.dma_write_start_dots = self.total_dots;
+        #[derive(Clone, Copy, PartialEq)]
+        #[allow(dead_code)]
+        enum Conflict {
+            ReadOld,
+            ReadNew,
+            WriteCpu,
         }
-        let extra = Self::io_conflict_write(addr);
-        self.advance_dots(4 + extra);
-        self.write_mem(addr, val);
+
+        assert_ne!(self.cpu.pending_cycles(), 0);
+        let conflict = if (addr & 0xFF80) != 0xFF00 {
+            Conflict::ReadOld
+        } else {
+            match addr & 0xFF {
+                0x0F => Conflict::WriteCpu,
+                _ => Conflict::ReadOld,
+            }
+        };
+
+        match conflict {
+            Conflict::ReadOld => {
+                self.flush_pending_cycles();
+                self.write_mem(addr, val);
+                self.cpu.set_pending_cycles(4);
+            }
+            Conflict::WriteCpu => {
+                let pending = self.cpu.pending_cycles();
+                self.advance_dots(pending as i32 + 1);
+                self.write_mem(addr, val);
+                self.cpu.set_pending_cycles(3);
+            }
+            _ => panic!(),
+        }
     }
 }
 
