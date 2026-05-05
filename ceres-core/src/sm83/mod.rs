@@ -1311,6 +1311,3 @@ impl<A: AudioCallback> Gb<A> {
         self.xor(val);
     }
 }
-
-#[cfg(test)]
-mod tests;

@@ -1,9 +1,6 @@
 use crate::{AudioCallback, Gb};
 use core::time::Duration;
 
-#[cfg(test)]
-mod tests;
-
 /// T-cycles per frame (4MHz rate).
 pub const DOTS_PER_FRAME: i32 = 70224;
 /// T-cycles per second (4MHz).

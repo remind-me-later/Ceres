@@ -3,8 +3,6 @@ mod hdma;
 mod hram;
 mod key1;
 mod svbk;
-#[cfg(test)]
-mod tests;
 mod wram;
 
 use crate::{AudioCallback, Model, ppu};

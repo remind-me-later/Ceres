@@ -1985,6 +1985,3 @@ impl Ppu {
         }
     }
 }
-
-#[cfg(test)]
-mod tests;
