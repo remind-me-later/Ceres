@@ -53,7 +53,6 @@ pub struct Gb<A: AudioCallback> {
     clock: Clock,
     cpu: Sm83,
     dma: Dma,
-    dma_write_start_dots: u64,
     dots_ran: i32,
     #[cfg(feature = "game_genie")]
     game_genie: GameGenie,
@@ -277,7 +276,6 @@ impl<A: AudioCallback> Gb<A> {
             clock,
             cpu: Sm83::default(),
             dma: Dma::default(),
-            dma_write_start_dots: 0,
             dots_ran: Default::default(),
             total_dots: 0,
             hdma: Hdma::default(),
@@ -490,63 +488,5 @@ impl<A: AudioCallback> GbBuilder<A> {
     pub fn with_rom(mut self, rom: Box<[u8]>) -> Result<Self, Error> {
         self.cart = Some(Cartridge::new(rom)?);
         Ok(self)
-    }
-}
-
-#[cfg(test)]
-pub(crate) mod test_util {
-    use super::*;
-
-    pub struct DummyAudio;
-    impl AudioCallback for DummyAudio {
-        fn audio_sample(&self, _l: crate::Sample, _r: crate::Sample) {}
-    }
-
-    pub fn setup_gb() -> Gb<DummyAudio> {
-        GbBuilder::new(44100, DummyAudio)
-            .with_model(Model::DmgB)
-            .build()
-    }
-}
-
-#[cfg(test)]
-impl<A: AudioCallback> Gb<A> {
-    pub(crate) fn set_rom_byte(&mut self, addr: u16, val: u8) {
-        self.cart.write_rom_byte_for_test(addr, val);
-    }
-
-    /// Set the CPU program counter.  Only available in test builds.
-    pub(crate) fn set_cpu_pc(&mut self, pc: u16) {
-        self.cpu.set_pc(pc);
-    }
-
-    pub(crate) fn set_cpu_bc(&mut self, bc: u16) {
-        self.cpu.set_bc(bc);
-    }
-
-    pub(crate) fn set_cpu_de(&mut self, de: u16) {
-        self.cpu.set_de(de);
-    }
-
-    pub(crate) fn set_cpu_hl(&mut self, hl: u16) {
-        self.cpu.set_hl(hl);
-    }
-
-    pub(crate) fn set_cpu_sp(&mut self, sp: u16) {
-        self.cpu.set_sp(sp);
-    }
-
-    pub(crate) const fn total_dots(&self) -> u64 {
-        self.total_dots
-    }
-
-    #[inline]
-    #[must_use]
-    pub const fn ppu_cycles(&self) -> u64 {
-        self.ppu.cycles()
-    }
-
-    pub(crate) const fn is_double_speed(&self) -> bool {
-        self.key1.is_enabled()
     }
 }

@@ -1535,7 +1535,7 @@ gambatte_test!(
 );
 
 gambatte_test!(
-    gambatte_window_late_enable_afterVblank_ds_1,
+    gambatte_window_late_enable_after_vblank_ds_1,
     "gambatte/window/late_enable_afterVblank_ds_1_cgb04c_out3.gbc"
 );
 

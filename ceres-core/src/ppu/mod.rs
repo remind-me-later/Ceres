@@ -297,12 +297,6 @@ impl Ppu {
         }
     }
 
-    #[cfg(test)]
-    #[must_use]
-    pub const fn dots_in_line(&self) -> u16 {
-        self.dots_in_line
-    }
-
     #[must_use]
     pub const fn mode(&self) -> Mode {
         match self.stat & STAT_MODE_B {
@@ -412,60 +406,6 @@ impl Ppu {
         self.wy
     }
 
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) fn sprite_buffer_len(&self) -> usize {
-        self.sprite_buffer.count as usize
-    }
-
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) const fn window_y(&self) -> u8 {
-        self.window_y
-    }
-
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) fn bg_fifo_size(&self) -> usize {
-        self.bg_fifo.size() as usize
-    }
-
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) const fn lcd_x(&self) -> u8 {
-        self.lcd_x
-    }
-
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) const fn pixel_discard_count(&self) -> u8 {
-        self.pixel_discard_count
-    }
-
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) const fn window_is_being_fetched(&self) -> bool {
-        self.window_is_being_fetched
-    }
-
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) const fn fetcher_tile_index_addr(&self) -> u16 {
-        self.fetcher_tile_index_addr
-    }
-
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) const fn rgba_buf(&self) -> &RgbaBuf {
-        &self.rgb_buf
-    }
-
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) const fn fetcher_state(&self) -> FetcherState {
-        self.fetcher_state
-    }
-
     pub fn run(
         &mut self,
         dots: &mut i32,
@@ -487,12 +427,6 @@ impl Ppu {
             self.cycles += 1;
             *dots -= 1;
         }
-    }
-
-    #[inline]
-    #[must_use]
-    pub const fn cycles(&self) -> u64 {
-        self.cycles
     }
 
     pub const fn set_color_correction_mode(&mut self, mode: ColorCorrectionMode) {
@@ -1116,7 +1050,7 @@ impl Ppu {
     /// - State 20: Sprite tile/flags (2 cycles)
     /// - State 39: VRAM low (2 cycles)
     /// - State 40: VRAM high (1 cycle)
-    fn tick_sprite_fetcher(&mut self, cgb_mode: CgbMode) {
+    fn tick_sprite_fetcher(&mut self, _cgb_mode: CgbMode) {
         match self.sprite_fetcher_state {
             SpriteFetcherState::Idle => {}
 
