@@ -701,6 +701,7 @@ impl Ppu {
                 // Tick 0: Start of scanline.
                 if tick == 0 {
                     self.sprite_buffer.clear();
+                    self.wx_triggered = false;
 
                     self.ly = self.current_line;
                     self.ly_for_comparison = 0xFFFF;
@@ -788,13 +789,17 @@ impl Ppu {
         }
 
         // Initialize drawing state
-        self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_step = 0;
-        self.window_tile_x = 0;
         self.scx_latched = self.scx;
-        self.pixel_discard_count = self.scx_latched & 7;
         self.lcd_x = 0;
-        self.bg_fifo.clear();
+
+        if !self.wx_triggered {
+            self.fetcher_state = FetcherState::GetTileT1;
+            self.window_tile_x = 0;
+            self.pixel_discard_count = self.scx_latched & 7;
+            self.bg_fifo.clear();
+        }
+
         self.oam_fifo.clear();
         self.sprite_fetcher_state = SpriteFetcherState::Idle;
         self.fetcher_suspended = false;
@@ -812,6 +817,7 @@ impl Ppu {
         self.fetcher_state = FetcherState::GetTileT1;
         self.fetcher_step = 0;
         self.window_tile_x = 0;
+        self.wx_triggered = false;
         self.scx_latched = self.scx;
         self.pixel_discard_count = self.scx_latched & 7;
         // Hardware starts Line 0 with rendering already in progress (~dot 131).
@@ -859,33 +865,24 @@ impl Ppu {
 
     /// Tick during Mode 3 (Drawing).
     fn tick_drawing(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
-        // Handle Transition stage delay.
-        // Pipeline and fetcher are stalled during Mode 3 lead-in.
-        if let PpuPhase::Drawing(DrawingStage::Transition { remaining }) = self.phase {
-            if remaining > 1 {
-                self.phase = PpuPhase::Drawing(DrawingStage::Transition {
-                    remaining: remaining - 1,
-                });
-                return;
-            }
-            self.phase = PpuPhase::Drawing(DrawingStage::Running);
-            return;
-        }
-
         // Pixel output every 2 ticks (1 dot).
         if self.dots_in_line.is_multiple_of(2) {
             // Check for window activation before attempting to output
             self.check_window_trigger(cgb_mode);
 
-            if self.window_activation_delay > 0 {
-                self.window_activation_delay -= 1;
-            } else {
-                self.tick_pixel_sequencer(cgb_mode);
+            // Only output if not in transition stage
+            if matches!(self.phase, PpuPhase::Drawing(DrawingStage::Running)) {
+                if self.window_activation_delay > 0 {
+                    self.window_activation_delay -= 1;
+                } else {
+                    self.tick_pixel_sequencer(cgb_mode);
+                }
             }
         }
 
         // BG fetcher runs every 2 ticks (1 dot).
         // Only runs if not suspended by the sprite fetcher.
+        // It runs during BOTH Transition and Running stages.
         if !self.fetcher_suspended && self.dots_in_line.is_multiple_of(2) {
             self.advance_fetcher(cgb_mode);
         }
@@ -893,6 +890,17 @@ impl Ppu {
         // Sprite fetcher runs every tick if active.
         if self.sprite_fetcher_state != SpriteFetcherState::Idle {
             self.tick_sprite_fetcher(cgb_mode);
+        }
+
+        // Update stage
+        if let PpuPhase::Drawing(DrawingStage::Transition { remaining }) = self.phase {
+            if remaining > 1 {
+                self.phase = PpuPhase::Drawing(DrawingStage::Transition {
+                    remaining: remaining - 1,
+                });
+            } else {
+                self.phase = PpuPhase::Drawing(DrawingStage::Running);
+            }
         }
 
         // Check if line rendering is complete
@@ -1138,8 +1146,13 @@ impl Ppu {
         let is_cgb = matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat);
 
         // Logical position in line (0 is first pixel, negative is during OAM scan)
-        // Note: dots_in_line is in 8MHz ticks. 1 dot = 2 ticks.
-        let pos = (self.dots_in_line as i32 / 2) - 80;
+        // During Mode 3, we MUST use lcd_x to account for stalls (e.g. sprites).
+        // During OAM scan, lcd_x is 0, so we use the dot-based position.
+        let pos = if self.dots_in_line < 160 {
+            (self.dots_in_line as i32 / 2) - 80
+        } else {
+            i32::from(self.lcd_x)
+        };
 
         let mut should_activate = false;
 
