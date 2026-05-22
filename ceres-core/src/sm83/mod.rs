@@ -382,12 +382,10 @@ impl<A: AudioCallback> Gb<A> {
 
         // M=2: Write high byte
         self.cpu.sp = self.cpu.sp.wrapping_sub(1);
-        self.tick_m_cycle();
         self.write_cpu(self.cpu.sp, hi);
 
         // M=3: Write low byte
         self.cpu.sp = self.cpu.sp.wrapping_sub(1);
-        self.tick_m_cycle();
         self.write_cpu(self.cpu.sp, lo);
     }
 
