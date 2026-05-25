@@ -115,6 +115,9 @@ impl<A: AudioCallback> Gb<A> {
         if self.clock.tima == 0 {
             // TIMA overflow: reload will happen after 4 T-cycles.
             // During these 4 cycles, TIMA remains 0 on hardware.
+            // Under SameBoy, the reload value (TMA) is copied immediately
+            // to TIMA, but reads return 0.
+            self.clock.tima = self.clock.tma;
             self.clock.tima_reload_pending = 4;
         }
     }
@@ -143,8 +146,8 @@ impl<A: AudioCallback> Gb<A> {
                 if self.clock.tima_reload_pending <= 4 {
                     self.clock.tima_reload_pending -= 1;
                     if self.clock.tima_reload_pending == 0 {
-                        // Actual reload happens now
-                        self.clock.tima = self.clock.tma;
+                        // Actual interrupt is requested now
+                        // (TMA was already copied to TIMA on overflow).
                         self.ints.request_timer();
                         // State 5-8: Already reloaded, TIMA writes ignored for 4 T-cycles
                         self.clock.tima_reload_pending = 5;
@@ -192,6 +195,7 @@ impl<A: AudioCallback> Gb<A> {
 
         self.clock.tac = val;
     }
+
     #[inline]
     pub fn write_tima(&mut self, val: u8) {
         // Writing to TIMA during the "Reloaded" state (1 M-cycle after reload) is ignored.
@@ -199,7 +203,6 @@ impl<A: AudioCallback> Gb<A> {
             return;
         }
         self.clock.tima = val;
-        self.clock.tima_reload_pending = 0;
     }
 
     #[inline]

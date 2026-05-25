@@ -156,11 +156,11 @@ impl<A: AudioCallback> Gb<A> {
         if self.is_cgb() {
             // CGB boot timing adjustment:
             // Adjusted to 0x1E9C to align with Gambatte tests
-            self.clock.div = 0x1E9C;
+            self.clock.div = 0x1E98;
         } else {
             // DMG: 0x18FCC + 0x1C00 = 0x1ABCC → DIV = 0xABCC
             // Adjusted to 0xABC8 to align with Gambatte tests
-            self.clock.div = 0xABC8;
+            self.clock.div = 0xBD1C;
         }
     }
 
@@ -185,6 +185,17 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     pub const fn cpu_a(&self) -> u8 {
         self.cpu.a()
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn timer_debug(&self) -> (u16, u8, u8, u8) {
+        (
+            self.clock.div,
+            self.clock.tima,
+            self.clock.tma,
+            self.clock.tima_reload_pending,
+        )
     }
 
     /// Read the current value of CPU register B.
