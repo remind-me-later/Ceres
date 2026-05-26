@@ -110,6 +110,7 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     fn inc_tima(&mut self) {
+        // println!("inc_tima: DIV = 0x{:04X}, TIMA = 0x{:02X}", self.clock.div, self.clock.tima);
         self.clock.tima = self.clock.tima.wrapping_add(1);
 
         if self.clock.tima == 0 {

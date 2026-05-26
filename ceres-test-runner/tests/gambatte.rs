@@ -125,8 +125,14 @@ fn run_gambatte_test(relative_path: &str) -> TestResult {
             relative_path, expected
         );
 
+        let model = if relative_path.contains("cgb04c") {
+            Model::CgbC
+        } else {
+            Model::CgbE
+        };
+
         let mut gb = match GbBuilder::new(48000, DummyAudioCallback::default())
-            .with_model(Model::CgbE)
+            .with_model(model)
             .with_run_bootrom(false)
             .with_rom(rom_data.into_boxed_slice())
         {
