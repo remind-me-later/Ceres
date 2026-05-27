@@ -86,11 +86,7 @@ impl State<'_> {
         })
     }
 
-    pub const fn on_lost(&mut self) {
-        self.resize(self.size);
-    }
-
-    pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self) {
         if let Some(scaling) = self.new_shader_option.take() {
             self.gb_screen.shader_option(&self.queue, scaling.into());
         }
@@ -108,7 +104,12 @@ impl State<'_> {
             self.surface.configure(&self.device, &self.config);
         }
 
-        let output = self.surface.get_current_texture()?;
+        // TODO: graciously handle surface errors
+        let output = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
+            err => panic!("Surface error: {err:?}"),
+        };
+
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -139,8 +140,6 @@ impl State<'_> {
         }
 
         output.present();
-
-        Ok(())
     }
 
     pub const fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {

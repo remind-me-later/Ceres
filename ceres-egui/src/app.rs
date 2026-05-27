@@ -88,8 +88,8 @@ impl eframe::App for App {
     }
 
     #[expect(clippy::too_many_lines)]
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::TopBottomPanel::top("top_panel").show(ctx, |top_panel_ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        egui::Panel::top("top_panel").show_inside(ui, |top_panel_ui| {
             egui::MenuBar::new().ui(top_panel_ui, |menu_bar_ui| {
                 menu_bar_ui.menu_button("File", |menu_button_ui| {
                     if menu_button_ui.button("Open").clicked() {
@@ -220,12 +220,12 @@ impl eframe::App for App {
                 fill: egui::Color32::BLACK,
                 stroke: egui::Stroke::NONE,
             })
-            .show(ctx, |central_panel_ui| {
+            .show_inside(ui, |central_panel_ui| {
                 self.screen.custom_painting(central_panel_ui);
             });
 
         self.thread.press_release(|p| {
-            ctx.input(|i| {
+            ui.input(|i| {
                 const KEY_DICT: [(Key, ceres_std::Button); 8] = [
                     (Key::W, ceres_std::Button::Up),
                     (Key::S, ceres_std::Button::Down),
@@ -251,7 +251,7 @@ impl eframe::App for App {
             true
         });
 
-        ctx.request_repaint();
+        ui.request_repaint();
     }
 }
 
@@ -268,7 +268,7 @@ fn setup_theme(ctx: &egui::Context) {
     let blue = egui::Color32::from_rgb(69, 133, 136); // Blue accent
     // let aqua = egui::Color32::from_rgb(104, 157, 106); // Aqua accent
 
-    let mut style = (*ctx.style()).clone();
+    let mut style = (*ctx.global_style()).clone();
 
     style.visuals.window_fill = bg0;
     style.visuals.panel_fill = bg0;
@@ -327,5 +327,5 @@ fn setup_theme(ctx: &egui::Context) {
 
     style.visuals.override_text_color = Some(fg0);
 
-    ctx.set_style(style);
+    ctx.set_global_style(style);
 }

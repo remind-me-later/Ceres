@@ -5,6 +5,12 @@ edition.workspace = true
 repository.workspace = true
 license.workspace = true
 
+[dependencies.audioadapter]
+version = "*"
+
+[dependencies.audioadapter-buffers]
+version = "*"
+
 [dependencies.bytemuck]
 version = "*"
 default-features = false
@@ -39,12 +45,6 @@ features = ["std"]
 version = "*"
 default-features = false
 
-[dependencies.audioadapter]
-version = "2"
-
-[dependencies.audioadapter-buffers]
-version = "2"
-
 [dependencies.spin_sleep]
 version = "*"
 default-features = false
@@ -54,7 +54,7 @@ version = "*"
 default-features = false
 
 [dependencies.wgpu]
-version = "27"
+version = "*"
 default-features = false
 features = ["dx12", "metal", "vulkan", "wgsl"]
 optional = true

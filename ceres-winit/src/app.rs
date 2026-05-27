@@ -3,7 +3,6 @@ use crate::{
     video::{self, State},
 };
 use anyhow::Context as _;
-use ceres_std::wgpu_renderer;
 use ceres_std::{GbThread, ShaderOption};
 use std::time::Instant;
 use winit::{
@@ -247,20 +246,10 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
                 event: key_event, ..
             } => self.handle_key(&key_event),
             WindowEvent::RedrawRequested => {
-                use wgpu_renderer::wgpu::SurfaceError::{
-                    Lost, Other, OutOfMemory, Outdated, Timeout,
-                };
-
                 if let Some(windows) = self.windows.as_mut() {
                     match win_id {
-                        id if id == windows.main.window().id() => match windows.main.render() {
-                            Ok(()) => {}
-                            Err(Lost | Outdated) => windows.main.on_lost(),
-                            Err(OutOfMemory) => event_loop.exit(),
-                            Err(Timeout) => eprintln!("Surface timeout"),
-                            Err(Other) => eprintln!("Surface error: other"),
-                        },
-                        _ => (),
+                        id if id == windows.main.window().id() => windows.main.render(),
+                        _ => {}
                     }
                 }
             }
