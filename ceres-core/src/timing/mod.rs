@@ -141,7 +141,13 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn write_div(&mut self) {
+        // Writing DIV resets the system clock and the APU's internal phase
+        // counter (gambatte's `sound_unit::reset_cycle_counter` on div write).
+        // Without this, the APU length counter / serial transfer can step
+        // immediately after a DIV write, which breaks gambatte's
+        // serial/sound testsuite.
         self.set_system_clk(0);
+        self.apu.reset_div_phase();
     }
 
     #[must_use]

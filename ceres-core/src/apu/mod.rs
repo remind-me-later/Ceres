@@ -211,6 +211,15 @@ impl<A: AudioCallback> Apu<A> {
         self.hpf.set_sample_rate(sample_rate);
     }
 
+    /// Reset the APU's internal DIV phase counter. Called when the CPU
+    /// writes to the DIV register (FF04) — gambatte's sound_unit
+    /// resynchronises its cycle counter on every DIV write so the next
+    /// APU tick lands on a known phase.
+    pub fn reset_div_phase(&mut self) {
+        self.div_divider = 0;
+        self.skip_div_event = SkipDivEvent::default();
+    }
+
     pub fn step_div_apu(&mut self) {
         const fn set_period_half<C1: AudioCallback>(apu: &mut Apu<C1>, p_half: PeriodHalf) {
             apu.ch1.set_period_half(p_half);
