@@ -78,6 +78,11 @@ impl Serial {
 
     pub fn write_sc(&mut self, mut val: u8, ints: &mut Interrupts, cgb_mode: CgbMode) {
         self.count = 0;
+        // Reset the master clock phase so the transfer starts on a known
+        // half-cycle. Without this, a second transfer started shortly after
+        // the first can begin 256 T-cycles early, making the transfer
+        // complete before the gambatte test's read window.
+        self.master_clock = false;
 
         let is_cgb = !matches!(cgb_mode, CgbMode::Dmg);
 
