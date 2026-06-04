@@ -199,31 +199,10 @@ impl<A: AudioCallback> Gb<A> {
         let enable_ime = self.cpu.has_ei_delay;
         self.cpu.has_ei_delay = false;
 
-        if self.cpu.is_halted {
-            self.tick_m_cycle();
-        } else {
-            let op = self.imm8();
-            self.run_hdma();
-
-            if self.cpu.is_halt_bug_triggered {
-                self.cpu.pc = self.cpu.pc.wrapping_sub(1);
-                self.cpu.is_halt_bug_triggered = false;
-                self.cpu.skip_isr_nops = true;
-            }
-
-            self.exec(op);
-        }
-
-        if enable_ime {
-            self.ints.enable();
-            if self.cpu.is_halt_bug_triggered {
-                self.cpu.skip_isr_nops = true;
-            }
-        }
-
         if self.ints.is_any_requested() {
             self.cpu.is_halted = false;
             self.ppu.leave_stop_mode();
+            self.clock.stopped = false;
 
             if self.ints.are_enabled() {
                 if self.cpu.is_halt_bug_triggered {
@@ -250,11 +229,34 @@ impl<A: AudioCallback> Gb<A> {
 
                 // SameBoy re-evaluates IF/IE *after* the Lo push finishes,
                 // using the value from BEFORE the write if it's to IF or IE.
-                let ifr_pre = self.ints.read_if() & 0x1F;
-                let ie_pre = self.ints.read_ie() & 0x1F;
+                let is_if_write = self.cpu.sp == 0xFF0F;
+                let is_ie_write = self.cpu.sp == 0xFFFF;
+
+                let ifr_pre = if is_if_write {
+                    self.ints.read_if() & 0x1F
+                } else {
+                    0
+                };
+                let ie_pre = if is_ie_write {
+                    self.ints.read_ie() & 0x1F
+                } else {
+                    0
+                };
+
                 self.write_cpu(self.cpu.sp, lo);
 
-                let queue = ie_pre & ifr_pre;
+                let ifr = if is_if_write {
+                    ifr_pre
+                } else {
+                    self.ints.read_if() & 0x1F
+                };
+                let ie = if is_ie_write {
+                    ie_pre
+                } else {
+                    self.ints.read_ie() & 0x1F
+                };
+
+                let queue = ie & ifr;
                 let (final_int, final_vector) = if queue != 0 {
                     let tz = (queue.trailing_zeros() & 7) as u8;
                     (1 << tz, 0x40 | (u16::from(tz) << 3))
@@ -262,13 +264,16 @@ impl<A: AudioCallback> Gb<A> {
                     (0, 0x0000)
                 };
 
+                if final_int != 0 {
+                    self.ints.acknowledge_interrupt(final_int);
+                }
+
                 assert!(self.cpu.pending_cycles() > 2);
                 self.cpu.set_pending_cycles(self.cpu.pending_cycles() - 2);
                 self.flush_pending_cycles();
                 self.cpu.set_pending_cycles(2);
 
                 if final_int != 0 {
-                    self.ints.acknowledge_interrupt(final_int);
                     self.cpu.pc = final_vector;
                 } else {
                     self.cpu.pc = 0x0000;
@@ -282,6 +287,29 @@ impl<A: AudioCallback> Gb<A> {
         }
 
         self.cpu.is_just_halted = false;
+
+        if self.cpu.is_halted {
+            self.tick_m_cycle();
+        } else {
+            let op = self.imm8();
+            self.run_hdma();
+
+            if self.cpu.is_halt_bug_triggered {
+                self.cpu.pc = self.cpu.pc.wrapping_sub(1);
+                self.cpu.is_halt_bug_triggered = false;
+                self.cpu.skip_isr_nops = true;
+            }
+
+            self.exec(op);
+        }
+
+        if enable_ime {
+            self.ints.enable();
+            if self.cpu.is_halt_bug_triggered {
+                self.cpu.skip_isr_nops = true;
+            }
+        }
+
         self.flush_pending_cycles();
     }
 }
@@ -448,38 +476,14 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     pub(crate) fn write_cpu(&mut self, addr: u16, val: u8) {
-        #[derive(Clone, Copy, PartialEq)]
-        #[allow(dead_code)]
-        enum Conflict {
-            ReadOld,
-            ReadNew,
-            WriteCpu,
-        }
-
-        assert_ne!(self.cpu.pending_cycles(), 0);
-        let conflict = if (addr & 0xFF80) != 0xFF00 {
-            Conflict::ReadOld
-        } else {
-            match addr & 0xFF {
-                0x0F => Conflict::WriteCpu,
-                _ => Conflict::ReadOld,
-            }
-        };
-
-        match conflict {
-            Conflict::ReadOld => {
-                self.flush_pending_cycles();
-                self.write_mem(addr, val);
-                self.cpu.set_pending_cycles(4);
-            }
-            Conflict::WriteCpu => {
-                let pending = self.cpu.pending_cycles();
-                self.advance_dots(pending as i32 + 1);
-                self.write_mem(addr, val);
-                self.cpu.set_pending_cycles(3);
-            }
-            _ => panic!(),
-        }
+        // Conflict map removed during the scanline PPU revert — the
+        // cycle-accurate PPU fields (PpuPhase, OamScanStage,
+        // position_in_line, etc.) it referenced no longer exist.
+        // The simple path is correct enough for the scanline renderer;
+        // M-cycle splitting for STAT/LCDC/SCX is out of scope.
+        self.flush_pending_cycles();
+        self.write_mem(addr, val);
+        self.cpu.set_pending_cycles(4);
     }
 }
 
@@ -1275,8 +1279,12 @@ impl<A: AudioCallback> Gb<A> {
             self.write_div();
         } else {
             self.write_div();
+            if !self.ints.are_enabled() {
+                self.clock.div_cycles = -4;
+            }
             self.cpu.is_halted = true;
             self.ppu.enter_stop_mode();
+            self.clock.stopped = true;
         }
     }
 

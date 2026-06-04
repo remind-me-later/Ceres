@@ -174,6 +174,18 @@ impl<A: AudioCallback> Gb<A> {
                 0xABCC
             };
         }
+
+        self.clock.div_cycles = if let Ok(val) = std::env::var("CERES_DIV_CYCLES_OVERRIDE") {
+            val.parse::<i32>().unwrap_or(0)
+        } else {
+            0
+        };
+
+        self.clock.div_state = if let Ok(val) = std::env::var("CERES_DIV_STATE_OVERRIDE") {
+            val.parse::<u8>().unwrap_or(2) // Default state 2 as it's running
+        } else {
+            2
+        };
     }
 
     /// Check if the `ld b, b` debug breakpoint instruction was executed and reset the flag.
@@ -206,7 +218,7 @@ impl<A: AudioCallback> Gb<A> {
             self.clock.div,
             self.clock.tima,
             self.clock.tma,
-            self.clock.tima_reload_pending,
+            self.clock.tima_reload_state,
         )
     }
 
@@ -411,7 +423,7 @@ impl<A: AudioCallback> Gb<A> {
 
 // FIXME: use all existing models
 #[non_exhaustive]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub enum Model {
     #[default]
     CgbE,

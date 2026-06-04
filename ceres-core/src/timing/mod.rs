@@ -15,6 +15,10 @@ pub struct Clock {
     /// T-cycles remaining until TIMA is reloaded from TMA.
     /// 0 means no reload is pending.
     pub(crate) tima_reload_pending: u8,
+    pub(crate) div_cycles: i32,
+    pub(crate) div_state: u8,
+    pub(crate) tima_reload_state: u8,
+    pub(crate) stopped: bool,
 }
 
 impl Default for Clock {
@@ -25,6 +29,10 @@ impl Default for Clock {
             tima: 0,
             tma: 0,
             tima_reload_pending: 0,
+            div_cycles: 0,
+            div_state: 0,
+            tima_reload_state: 0,
+            stopped: false,
         }
     }
 }
