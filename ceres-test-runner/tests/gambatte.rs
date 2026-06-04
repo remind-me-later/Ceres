@@ -1692,3 +1692,173 @@ gambatte_test!(
     gambatte_halt_noime_noie_nolcdirq_readstat,
     "gambatte/halt/noime_noie_nolcdirq_readstat_dmg08_cgb_blank.gb"
 );
+
+// ────────────────────────────────────────────────────────────────────────────
+// Non-PPU smoke tests — second batch. Useful for triangulating regressions
+// in serial, DMA, APU, CGB speed switch, and IF/IE interaction without
+// the cycle-accurate PPU in the loop.
+// ────────────────────────────────────────────────────────────────────────────
+
+// Serial: basic start, read SB, read SC, clear IF, stop, trigger int, SC=0x80.
+gambatte_test!(
+    gambatte_serial_nopx1_start83_wait_read_if_1,
+    "gambatte/serial/nopx1_start83_wait_read_if_1_dmg08_cgb04c_outE0.gbc"
+);
+
+gambatte_test!(
+    gambatte_serial_start_wait_read_if_1,
+    "gambatte/serial/start_wait_read_if_1_dmg08_cgb04c_outE0.gbc"
+);
+
+gambatte_test!(
+    gambatte_serial_start_wait_read_sb_1,
+    "gambatte/serial/start_wait_read_sb_1_dmg08_cgb04c_out7F.gbc"
+);
+
+gambatte_test!(
+    gambatte_serial_start_wait_read_sc_1,
+    "gambatte/serial/start_wait_read_sc_1_dmg08_outFF_cgb04c_outFD.gbc"
+);
+
+gambatte_test!(
+    gambatte_serial_start_wait_clear_if_read_if_1,
+    "gambatte/serial/start_wait_clear_if_read_if_1_dmg08_cgb04c_outE8.gbc"
+);
+
+gambatte_test!(
+    gambatte_serial_start_wait_stop_read_if_1,
+    "gambatte/serial/start_wait_stop_read_if_1_dmg08_cgb04c_outE0.gbc"
+);
+
+gambatte_test!(
+    gambatte_serial_start_wait_trigger_int8_read_if_1,
+    "gambatte/serial/start_wait_trigger_int8_read_if_1_dmg08_cgb04c_outE8.gbc"
+);
+
+gambatte_test!(
+    gambatte_serial_start_wait_sc80_read_if_1,
+    "gambatte/serial/start_wait_sc80_read_if_1_dmg08_cgb04c_outE0.gbc"
+);
+
+// CGB DMA logic: read-side tests for each destination region (HRAM, OAM, VRAM)
+// plus the HRAM-source result. The test waits for LY=0x99 as a delay mechanism;
+// the assertion is on the DMA result, not on PPU timing.
+gambatte_test!(
+    gambatte_dma_hiram_read,
+    "gambatte/dma/dma_hiram_read_cgb04c_out7.gbc"
+);
+
+gambatte_test!(
+    gambatte_dma_hiram_read_result,
+    "gambatte/dma/dma_hiram_read_result_cgb04c_out1.gbc"
+);
+
+gambatte_test!(
+    gambatte_dma_oam_read,
+    "gambatte/dma/dma_oam_read_cgb04c_out7.gbc"
+);
+
+gambatte_test!(
+    gambatte_dma_vram_read,
+    "gambatte/dma/dma_vram_read_cgb04c_out7.gbc"
+);
+
+// APU ch1/ch2: late DIV write behaviour, length counter reset, init reset.
+// These are pure APU state machine tests with no PPU involvement.
+gambatte_test!(
+    gambatte_sound_ch1_late_div_write_nr52_1a,
+    "gambatte/sound/ch1_late_div_write_nr52_1a_dmg08_cgb04c_outF1.gbc"
+);
+
+gambatte_test!(
+    gambatte_sound_ch1_late_div_write_nr52_1b,
+    "gambatte/sound/ch1_late_div_write_nr52_1b_dmg08_cgb04c_outF0.gbc"
+);
+
+gambatte_test!(
+    gambatte_sound_ch2_div_write_reset_length_counter_timing_nr52_1,
+    "gambatte/sound/ch2_div_write_reset_length_counter_timing_nr52_1_dmg08_cgb04c_outF2.gbc"
+);
+
+gambatte_test!(
+    gambatte_sound_ch2_init_reset_length_counter_timing_nr52_1,
+    "gambatte/sound/ch2_init_reset_length_counter_timing_nr52_1_dmg08_out2_cgb04c_out0.gbc"
+);
+
+gambatte_test!(
+    gambatte_sound_ch2_late_div_write_nr52_1a,
+    "gambatte/sound/ch2_late_div_write_nr52_1a_dmg08_cgb04c_outF2.gbc"
+);
+
+gambatte_test!(
+    gambatte_sound_ch2_late_div_write_nr52_1b,
+    "gambatte/sound/ch2_late_div_write_nr52_1b_dmg08_cgb04c_outF0.gbc"
+);
+
+// CGB speed switch: DIV and TIMA behaviour across the speed change boundary.
+// KEY1 reads after the change verify the prepared/current-speed bits.
+gambatte_test!(
+    gambatte_speedchange2_div_1,
+    "gambatte/speedchange/speedchange2_div_1_cgb04c_out00.gbc"
+);
+
+gambatte_test!(
+    gambatte_speedchange2_div_nop_1,
+    "gambatte/speedchange/speedchange2_div_nop_1_cgb04c_out00.gbc"
+);
+
+gambatte_test!(
+    gambatte_speedchange2_key1,
+    "gambatte/speedchange/speedchange2_key1_cgb04c_out7E.gbc"
+);
+
+gambatte_test!(
+    gambatte_speedchange2_tima00_1a,
+    "gambatte/speedchange/speedchange2_tima00_1a_cgb04c_out00.gbc"
+);
+
+gambatte_test!(
+    gambatte_speedchange2_tima01_1,
+    "gambatte/speedchange/speedchange2_tima01_1_cgb04c_out09.gbc"
+);
+
+gambatte_test!(
+    gambatte_speedchange2_tima02_1a,
+    "gambatte/speedchange/speedchange2_tima02_1a_cgb04c_out02.gbc"
+);
+
+// IRQ precedence: the if_and_ie_0_* tests (which test pure IF/IE interaction
+// without PPU STAT) are already in the suite. These additional non-PPU
+// coverage comes from sound and speedchange variants below.
+
+// APU ch1/ch2: ch2 late DIV write variants and ch1 init reset sweep counter
+// variants. These complement the ch1/ch2 tests above.
+gambatte_test!(
+    gambatte_sound_ch2_late_div_write_nr52_2a,
+    "gambatte/sound/ch2_late_div_write_nr52_2a_dmg08_cgb04c_outF2.gbc"
+);
+
+gambatte_test!(
+    gambatte_sound_ch2_late_div_write_nr52_2b,
+    "gambatte/sound/ch2_late_div_write_nr52_2b_dmg08_cgb04c_outF0.gbc"
+);
+
+gambatte_test!(
+    gambatte_sound_ch1_init_reset_sweep_counter_timing_nr52_2,
+    "gambatte/sound/ch1_init_reset_sweep_counter_timing_nr52_2_dmg08_out0_cgb04c_out1.gbc"
+);
+
+gambatte_test!(
+    gambatte_sound_ch2_init_reset_length_counter_timing_nr52_2,
+    "gambatte/sound/ch2_init_reset_length_counter_timing_nr52_2_dmg08_cgb04c_out0.gbc"
+);
+
+gambatte_test!(
+    gambatte_speedchange2_tima01_nop_1,
+    "gambatte/speedchange/speedchange2_tima01_nop_1_cgb04c_out0A.gbc"
+);
+
+gambatte_test!(
+    gambatte_speedchange2_tima03_1a,
+    "gambatte/speedchange/speedchange2_tima03_1a_cgb04c_out00.gbc"
+);
