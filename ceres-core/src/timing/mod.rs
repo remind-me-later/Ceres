@@ -84,7 +84,6 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     fn inc_tima(&mut self) {
-        // println!("inc_tima: DIV = 0x{:04X}, TIMA = 0x{:02X}", self.clock.div, self.clock.tima);
         self.clock.tima = self.clock.tima.wrapping_add(1);
 
         if self.clock.tima == 0 {
@@ -173,10 +172,14 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn write_tima(&mut self, val: u8) {
-        // Writing to TIMA during the "Reloaded" state (1 M-cycle after reload) is ignored.
+        // Writing to TIMA during the "Reloaded" state (1 M-cycle after reload)
+        // is ignored. Writing during the "Reloading" window (the 4-T-cycle
+        // window after overflow) cancels the pending reload, matching the
+        // gambatte testsuite (see tc01_late_tima_irq_1).
         if self.clock.tima_reload_pending >= 5 {
             return;
         }
+        self.clock.tima_reload_pending = 0;
         self.clock.tima = val;
     }
 
