@@ -243,13 +243,24 @@ impl<A: AudioCallback> Apu<A> {
 
         self.div_divider = (self.div_divider + 1) & 7;
 
+        // SameBoy's frame sequencer pattern:
+        //   - length counter ticks at ODD div_divider values (1, 3, 5, 7)
+        //   - sweep ticks at EVEN values 2 and 6
+        //   - envelope ticks at value 7
+        // The previous pattern (length at 0,4 / sweep at 2,6) only stepped
+        // the length counter at 128 Hz instead of 256 Hz, which made the
+        // APU channels stay enabled roughly twice as long as hardware.
         match self.div_divider {
-            0 | 4 => {
+            1 | 3 | 5 | 7 => {
                 self.ch1.step_length_timer();
                 self.ch2.step_length_timer();
                 self.ch3.step_length_timer();
                 self.ch4.step_length_timer();
-                set_period_half(self, PeriodHalf::First);
+                if self.div_divider == 7 {
+                    set_period_half(self, PeriodHalf::Second);
+                } else {
+                    set_period_half(self, PeriodHalf::First);
+                }
             }
             2 | 6 => {
                 self.ch1.step_length_timer();
@@ -259,15 +270,16 @@ impl<A: AudioCallback> Apu<A> {
                 set_period_half(self, PeriodHalf::First);
                 self.ch1.step_sweep();
             }
-            7 => {
-                self.ch1.step_envelope();
-                self.ch2.step_envelope();
-                self.ch4.step_envelope();
-                set_period_half(self, PeriodHalf::Second);
-            }
             _ => {
                 set_period_half(self, PeriodHalf::Second);
             }
+        }
+
+        // Envelope ticks at div_divider == 7.
+        if self.div_divider == 7 {
+            self.ch1.step_envelope();
+            self.ch2.step_envelope();
+            self.ch4.step_envelope();
         }
     }
 }
