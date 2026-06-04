@@ -1599,3 +1599,96 @@ gambatte_test!(
     gambatte_tima_tc01_late_tima_inc_1,
     "gambatte/tima/tc01_late_tima_inc_1_dmg08_cgb04c_out11.gbc"
 );
+
+// ────────────────────────────────────────────────────────────────────────────
+// Non-PPU smoke tests — useful for triaging regressions in DMA, serial, APU,
+// CGB speed switch, and CPU HALT/IME behaviour without PPU timing in the loop.
+// ────────────────────────────────────────────────────────────────────────────
+
+// DIV register increment behaviour on DMG (the 6 CGB variant are already
+// in the suite; these are the DMG-only start_inc pairs).
+gambatte_test!(
+    gambatte_div_start_inc_1_dmg,
+    "gambatte/div/start_inc_1_dmg08_outAB.gb"
+);
+
+gambatte_test!(
+    gambatte_div_start_inc_2_dmg,
+    "gambatte/div/start_inc_2_dmg08_outAC.gb"
+);
+
+// Serial: SC=0x81 written after a DIV write / NOPs — checks that the
+// transfer-start timing and the IF flag are set correctly.
+gambatte_test!(
+    gambatte_serial_div_write_start_wait_read_if_1,
+    "gambatte/serial/div_write_start_wait_read_if_1_dmg08_cgb04c_outE0.gbc"
+);
+
+gambatte_test!(
+    gambatte_serial_div_write_start_wait_read_if_2,
+    "gambatte/serial/div_write_start_wait_read_if_2_dmg08_cgb04c_outE8.gbc"
+);
+
+gambatte_test!(
+    gambatte_serial_nopx1_div_write_start_wait_read_if_1,
+    "gambatte/serial/nopx1_div_write_start_wait_read_if_1_dmg08_cgb04c_outE0.gbc"
+);
+
+// CGB DMA logic (no PPU timing in the assertion — LY=0x99 is just a delay
+// mechanism, the actual assertion is on the destination/source wrap result).
+gambatte_test!(
+    gambatte_dma_dst_wrap_1,
+    "gambatte/dma/dma_dst_wrap_1_cgb04c_out1.gbc"
+);
+
+gambatte_test!(
+    gambatte_dma_src_wrap_1,
+    "gambatte/dma/dma_src_wrap_cgb04c_out1.gbc"
+);
+
+gambatte_test!(
+    gambatte_dma_ff51_bits,
+    "gambatte/dma/ff51_bits_cgb04c_outFF.gbc"
+);
+
+// APU: ch1 length-counter reset on DIV write, and ch1 init triggering the
+// sweep counter — pure APU logic, no PPU involved.
+gambatte_test!(
+    gambatte_sound_ch1_div_write_reset_length_counter_timing_nr52_1,
+    "gambatte/sound/ch1_div_write_reset_length_counter_timing_nr52_1_dmg08_cgb04c_outF1.gbc"
+);
+
+gambatte_test!(
+    gambatte_sound_ch1_init_reset_sweep_counter_timing_nr52_1,
+    "gambatte/sound/ch1_init_reset_sweep_counter_timing_nr52_1_dmg08_cgb04c_out1.gbc"
+);
+
+// CGB speed switch: KEY1 register read after setting/unsetting the
+// prepared bit. No PPU state is asserted.
+gambatte_test!(
+    gambatte_speedchange_key1_set,
+    "gambatte/speedchange/key1_set_dmg08_outFF_cgb04c_out7F.gbc"
+);
+
+gambatte_test!(
+    gambatte_speedchange_key1_set_unset,
+    "gambatte/speedchange/key1_set_unset_dmg08_outFF_cgb04c_out7E.gbc"
+);
+
+// HALT/IME/IF: the HALT bug (EI + HALT executes the next instruction twice),
+// IME off + HALT + SRA, and the IME-on-but-no-IRQ case. None of these read
+// PPU registers, so they're independent of the scanline renderer.
+gambatte_test!(
+    gambatte_halt_ifandie_ei_halt_sra,
+    "gambatte/halt/ifandie_ei_halt_sra_dmg08_cgb04c_out0A.gbc"
+);
+
+gambatte_test!(
+    gambatte_halt_ime_noie_nolcdirq_readstat,
+    "gambatte/halt/ime_noie_nolcdirq_readstat_dmg08_cgb_blank.gb"
+);
+
+gambatte_test!(
+    gambatte_halt_noime_noie_nolcdirq_readstat,
+    "gambatte/halt/noime_noie_nolcdirq_readstat_dmg08_cgb_blank.gb"
+);

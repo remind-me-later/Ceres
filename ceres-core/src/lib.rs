@@ -165,10 +165,13 @@ impl<A: AudioCallback> Gb<A> {
         } else {
             // DMG: 0x18FCC + 0x1C00 = 0x1ABCC → DIV = 0xABCC
             // Adjusted to 0xABC8 to align with Gambatte tests
+            // (0xBD1C was the SameBoy-aligned value but it broke the
+            // gambatte div testsuite — see the DMG start_inc_1 test which
+            // expects to read upper-DIV byte = 0xAB after the boot ROM.)
             self.clock.div = if let Ok(val) = std::env::var("CERES_DMG_DIV_OVERRIDE") {
-                u16::from_str_radix(&val, 16).unwrap_or(0xBD1C)
+                u16::from_str_radix(&val, 16).unwrap_or(0xABCC)
             } else {
-                0xBD1C
+                0xABCC
             };
         }
     }
