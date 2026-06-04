@@ -3,6 +3,7 @@
 //! These tests validate the Pixel Processing Unit implementation using
 //! visual accuracy test ROMs like cgb-acid2 and dmg-acid2.
 
+use ceres_core::Model;
 use ceres_test_runner::{
     expected_screenshot_path, load_test_rom, test_roms_dir,
     test_runner::{ScreenshotCheck, TestConfig, TestRunner, timeouts},
@@ -17,6 +18,7 @@ fn test_cgb_acid2() {
 
     let screenshot_path = test_roms_dir().join("cgb-acid2/cgb-acid2.png");
     let config = TestConfig {
+        model: Model::CgbE,
         timeout_frames: timeouts::CGB_ACID2,
         ..TestConfig::default()
     };
