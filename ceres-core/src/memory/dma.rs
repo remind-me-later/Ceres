@@ -39,10 +39,20 @@ impl Dma {
         }
     }
 
+    #[allow(
+        dead_code,
+        reason = "Used by cycle-accurate timing path (see TIMING_ISSUE.md); \
+                  currently dead after the scanline PPU revert"
+    )]
     pub const fn is_active(&self) -> bool {
         matches!(self.state, DmaState::Transferring(_))
     }
 
+    #[allow(
+        dead_code,
+        reason = "Used by cycle-accurate timing path (see TIMING_ISSUE.md); \
+                  currently dead after the scanline PPU revert"
+    )]
     pub const fn current_src(&self) -> u16 {
         match self.state {
             DmaState::Transferring(offset) => self.base_addr.wrapping_add(offset as u16),
@@ -50,6 +60,11 @@ impl Dma {
         }
     }
 
+    #[allow(
+        dead_code,
+        reason = "Used by cycle-accurate timing path (see TIMING_ISSUE.md); \
+                  currently dead after the scanline PPU revert"
+    )]
     pub const fn current_dst(&self) -> u8 {
         match self.state {
             DmaState::Transferring(offset) => offset,

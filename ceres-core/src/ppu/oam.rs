@@ -1,4 +1,4 @@
-use crate::ppu::Ppu;
+use crate::ppu::{Mode, Ppu};
 
 pub struct Oam {
     bytes: [u8; Self::SIZE as usize],
@@ -45,26 +45,26 @@ impl Ppu {
         &mut self.oam
     }
 
+    // Scanline renderer: OAM is blocked during Mode 2/3. DMA blocking is
+    // gated by the memory bus, so we no longer need a `dma_on`/`dma_active`
+    // parameter here.
     #[must_use]
     pub const fn read_oam(&self, addr: u16) -> u8 {
-        if self.oam_read_blocked {
-            return 0xFF;
+        match self.mode() {
+            Mode::HBlank | Mode::VBlank => self.oam.read(addr),
+            _ => 0xFF,
         }
-
-        if self.ext_dma_active && self.ext_dma_dst < 0xA0 {
-            return self.oam.read((self.ext_dma_dst as u16 & !1) | (addr & 1));
-        }
-
-        self.oam.read(addr)
     }
 
-    pub fn write_oam(&mut self, addr: u16, val: u8) {
-        if !self.oam_write_blocked {
-            self.oam.write(addr, val);
+    pub const fn write_oam(&mut self, addr: u16, val: u8) {
+        match self.mode() {
+            Mode::HBlank | Mode::VBlank => self.oam.write(addr, val),
+            _ => (),
         }
     }
 
     pub const fn write_oam_by_dma(&mut self, addr: u16, val: u8) {
+        // self.oam[(addr & 0xFF) as usize] = val;
         self.oam.write(addr, val);
     }
 }

@@ -7,11 +7,6 @@ pub const DOTS_PER_FRAME: i32 = 70224;
 pub const DOTS_PER_SEC: i32 = 1 << 22;
 pub const FRAME_DURATION: Duration = Duration::new(0, 16_742_706); // DOTS_PER_FRAME / DOTS_PER_SEC
 
-/// PPU cycles per T-cycle.
-/// Set to 1 for T-cycle mode (4MHz), or 2 for 8MHz sub-T-cycle precision.
-/// NOTE: Currently using 8MHz mode (2) for SameBoy-accurate sub-T-cycle timing.
-pub const PPU_CYCLES_PER_T_CYCLE: i32 = 2;
-
 pub struct Clock {
     pub(crate) div: u16,
     pub(crate) tac: u8,
@@ -51,62 +46,41 @@ impl Clock {
 impl<A: AudioCallback> Gb<A> {
     /// Advance all components by the given number of CPU T-cycles.
     /// This is the main timing entry point called by the CPU.
+    ///
+    /// Uses the scanline PPU: timers advance per T-cycle (for the cycle-accurate
+    /// TIMA reload state machine), but the PPU is fed the full dot budget at
+    /// once and handles its own mode transitions internally.
     #[inline]
-    pub fn advance_dots(&mut self, mut cpu_t_cycles: i32) {
-        while cpu_t_cycles > 0 {
-            self.run_timers(1);
-
-            let double_speed = self.key1.is_enabled();
-
-            let mut ppu_cycles = if double_speed {
-                let total_t = 1 + self.t_cycle_remainder;
-                self.t_cycle_remainder = total_t % 2;
-                1
-            } else {
-                PPU_CYCLES_PER_T_CYCLE
-            };
-
-            let initial_ppu_cycles = ppu_cycles;
-
-            let dma_active = self.dma.is_active();
-            let dma_src = self.dma.current_src();
-            let dma_dst = self.dma.current_dst();
-            let hdma_active = self.hdma.is_active();
-
-            self.dma.advance_dots(1);
-
-            self.ppu.run(
-                &mut ppu_cycles,
-                &mut self.ints,
-                self.cgb_mode,
-                double_speed,
-                dma_active,
-                dma_src,
-                dma_dst,
-                hdma_active,
-            );
-
-            self.run_dma();
-
-            let ppu_consumed = initial_ppu_cycles - ppu_cycles;
-            let real_dots_consumed = if double_speed {
-                ppu_consumed / 2
-            } else {
-                ppu_consumed / PPU_CYCLES_PER_T_CYCLE
-            };
-
-            self.apu.run(real_dots_consumed);
-            self.cart.run_rtc(real_dots_consumed);
-
-            self.dots_ran += real_dots_consumed;
-
-            #[expect(clippy::cast_sign_loss)]
-            {
-                self.total_dots += real_dots_consumed as u64;
-            }
-
-            cpu_t_cycles -= 1;
+    pub fn advance_dots(&mut self, cpu_t_cycles: i32) {
+        if cpu_t_cycles <= 0 {
+            return;
         }
+
+        // Cycle-accurate timer advancement (per T-cycle, for accurate TIMA
+        // reload timing).
+        self.run_timers(cpu_t_cycles);
+
+        // DMA advances per dot.
+        self.dma.advance_dots(cpu_t_cycles);
+
+        // Convert CPU T-cycles to PPU dots. The scanline renderer's
+        // Mode::dots() constants are in the same units as the dots we pass
+        // here. In double-speed mode the CPU runs at 2× but the PPU dot
+        // budget per real-time unit is fixed, so we halve the dot count
+        // passed to the PPU (mirrors 854dbf9 behaviour).
+        let double_speed = self.key1.is_enabled();
+        let mut ppu_dots = cpu_t_cycles;
+        if double_speed {
+            ppu_dots >>= 1;
+        }
+
+        self.ppu.run(ppu_dots, &mut self.ints, self.cgb_mode);
+        self.run_dma();
+
+        self.apu.run(ppu_dots);
+        self.cart.run_rtc(ppu_dots);
+
+        self.dots_ran += ppu_dots;
     }
 
     fn inc_tima(&mut self) {

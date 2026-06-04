@@ -32,6 +32,11 @@ impl Hdma {
     }
 
     #[must_use]
+    #[allow(
+        dead_code,
+        reason = "Used by cycle-accurate timing path (see TIMING_ISSUE.md); \
+                  currently dead after the scanline PPU revert"
+    )]
     pub const fn is_active(&self) -> bool {
         self.in_progress
     }

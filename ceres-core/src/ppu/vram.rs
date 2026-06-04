@@ -1,4 +1,4 @@
-use crate::ppu::Ppu;
+use crate::ppu::{Mode, Ppu};
 
 pub struct Vram {
     bytes: [u8; Self::SIZE_CGB as usize],
@@ -58,7 +58,7 @@ impl Vram {
 impl Ppu {
     #[must_use]
     pub const fn read_vram(&self, addr: u16) -> u8 {
-        if self.vram_read_blocked {
+        if matches!(self.mode(), Mode::Drawing) {
             0xFF
         } else {
             self.vram.read(addr)
@@ -74,7 +74,7 @@ impl Ppu {
     }
 
     pub fn write_vram(&mut self, addr: u16, val: u8) {
-        if !self.vram_write_blocked {
+        if !matches!(self.mode(), Mode::Drawing) {
             self.vram.write(addr, val);
         }
     }

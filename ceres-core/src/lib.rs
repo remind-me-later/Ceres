@@ -36,7 +36,7 @@ pub use {
     error::Error,
     joypad::Button,
     ppu::ColorCorrectionMode,
-    ppu::{LINES, PX_HEIGHT, PX_WIDTH, WIDTH},
+    ppu::{PX_HEIGHT, PX_WIDTH},
     timing::FRAME_DURATION,
 };
 use {
@@ -65,8 +65,6 @@ pub struct Gb<A: AudioCallback> {
     model: Model,
     ppu: Ppu,
     serial: Serial,
-    total_dots: u64,
-    t_cycle_remainder: i32,
     wram: Wram,
 }
 
@@ -299,7 +297,6 @@ impl<A: AudioCallback> Gb<A> {
             cpu: Sm83::default(),
             dma: Dma::default(),
             dots_ran: Default::default(),
-            total_dots: 0,
             hdma: Hdma::default(),
             hram: Hram::default(),
             ints: Interrupts::default(),
@@ -309,7 +306,6 @@ impl<A: AudioCallback> Gb<A> {
             model,
             ppu: Ppu::default(),
             serial: Serial::default(),
-            t_cycle_remainder: 0,
             wram: Wram::default(),
             #[cfg(feature = "game_genie")]
             game_genie: GameGenie::default(),
