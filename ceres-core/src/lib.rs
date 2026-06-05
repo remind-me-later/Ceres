@@ -701,4 +701,240 @@ mod tests {
         }
         panic!("Done tracing CGB DIV inc!");
     }
+
+    /// Direct unit test for the TIMA state machine on DMG.
+    ///
+    /// Locks in the three independent timings that the gambatte + mooneye
+    /// testsuites both rely on:
+    ///
+    /// 1. **IRQ fire time** = T_overflow + 3 (gambatte's
+    ///    `Tima::updateTima` sets `tmatime_ = lastUpdate_ + 3`).
+    /// 2. **Reads-0 window** = 4 T-cycles (mooneye `tima_reload.s`
+    ///    expects `TIMA = 00` for 4 cycles after overflow).
+    /// 3. **Writes-ignore window** = 4 T-cycles starting at
+    ///    T_overflow + 4 (writes to TIMA dropped while
+    ///    `tima_reload_pending >= 5`).
+    ///
+    /// Drives `run_timers` directly so it doesn't depend on any test ROM.
+    ///
+    /// Note on cycle accounting: the state machine
+    /// (`tima_reload_pending` / `tima_irq_countdown`) is updated at the
+    /// *start* of each T-cycle in `run_timers`, *before* `set_system_clk`
+    /// (which can trigger an overflow). So an overflow detected on cycle
+    /// N is reflected in the state machine from cycle N+1 onward. The
+    /// test accounts for this by counting one extra `run_timers` after
+    /// the cycle that triggers the overflow.
+    #[test]
+    fn test_tima_state_machine_three_timings() {
+        let mut gb = GbBuilder::new(48000, DummyAudio)
+            .with_model(Model::DmgB)
+            .with_run_bootrom(false)
+            .build();
+
+        // 1. Arrange: TIMA one tick from overflow, TMA = 0x42, timer
+        // enabled with the slowest period (TAC[1:0] = 00 → mux is bit 9
+        // → falling edge every 1024 T-cycles). Enable the timer IRQ in
+        // IE so `is_any_requested` reflects the IF fire.
+        gb.clock.tima = 0xFF;
+        gb.clock.tma = 0x42;
+        gb.clock.tac = 0x04; // bit 2 = timer enable, TAC[1:0] = 00
+        // Place DIV so the next tick falls the TAC mux bit (bit 9).
+        // 0x03FF → 0x0400: bit 9 transitions 1 → 0, triggering inc_tima.
+        gb.clock.div = 0x03FF;
+        gb.clock.tima_reload_pending = 0;
+        gb.clock.tima_irq_countdown = 0;
+        // IE bit 2 = timer interrupt enable. Without this `is_any_requested`
+        // returns false even when IF is set.
+        gb.ints.write_ie(0x04);
+
+        // 2. Cycle 1: overflow fires inside set_system_clk; TMA loaded
+        // into TIMA, reload_pending set to 4, irq_countdown set to 3 (DMG).
+        // The state machine itself runs on the next cycle.
+        gb.run_timers(1);
+        assert_eq!(gb.clock.tima, 0x42, "TMA must be loaded immediately");
+        assert_eq!(gb.clock.tima_reload_pending, 4);
+        assert_eq!(gb.clock.tima_irq_countdown, 3, "DMG must use 3-T-cycle countdown");
+        assert!(!gb.ints.is_any_requested(), "IRQ must not fire yet");
+        assert_eq!(gb.clock.tima(), 0, "TIMA reads return 0 immediately");
+
+        // 3. Cycle 2: state machine runs, decrementing both counters.
+        gb.run_timers(1);
+        assert_eq!(gb.clock.tima_reload_pending, 3);
+        assert_eq!(gb.clock.tima_irq_countdown, 2);
+        assert!(!gb.ints.is_any_requested());
+        assert_eq!(gb.clock.tima(), 0);
+
+        // 4. Cycle 3: irq_countdown goes 2→1, no fire yet.
+        gb.run_timers(1);
+        assert_eq!(gb.clock.tima_reload_pending, 2);
+        assert_eq!(gb.clock.tima_irq_countdown, 1);
+        assert!(!gb.ints.is_any_requested());
+        assert_eq!(gb.clock.tima(), 0);
+
+        // 5. Cycle 4: irq_countdown hits 0 → **IRQ fires**. This is the
+        // gambatte-compatible DMG timing: 3 T-cycles after the overflow.
+        // mooneye `tima_reload.s` is also happy because TIMA still reads 0
+        // (reload_pending 1..=4).
+        gb.run_timers(1);
+        assert_eq!(gb.clock.tima_reload_pending, 1);
+        assert_eq!(gb.clock.tima_irq_countdown, 0);
+        assert!(
+            gb.ints.is_any_requested(),
+            "IRQ must fire 3 T-cycles after overflow on DMG"
+        );
+        assert_eq!(gb.clock.tima(), 0);
+
+        // 6. Cycle 5: reload_pending transitions 1→0 then to 5, entering
+        // the writes-ignore window. The IRQ was already fired at cycle 4.
+        gb.run_timers(1);
+        assert_eq!(gb.clock.tima_reload_pending, 5);
+        // Reads-0 done — TIMA now returns the reloaded TMA value.
+        assert_eq!(gb.clock.tima(), 0x42);
+
+        // 7. Writes-ignore: writing to TIMA during pending >= 5 is
+        // dropped on the floor. The write must not change TIMA.
+        gb.write_tima(0x77);
+        assert_eq!(gb.clock.tima, 0x42);
+        assert_eq!(gb.clock.tima_reload_pending, 5);
+
+        // 8. Run 4 more T-cycles: writes-ignore rolls 5→6→7→8→0. After
+        // this the state machine is fully idle and a write to TIMA is
+        // accepted normally.
+        gb.run_timers(4);
+        assert_eq!(gb.clock.tima_reload_pending, 0);
+        gb.write_tima(0x11);
+        assert_eq!(gb.clock.tima, 0x11);
+        assert_eq!(gb.clock.tima_reload_pending, 0);
+        assert_eq!(gb.clock.tima_irq_countdown, 0);
+    }
+
+    /// The CGB fires the timer IRQ one T-cycle later than DMG. Matches
+    /// gambatte's `Memory::ackIrq` which does
+    /// `updateTimaIrq(cc + 2 + isCgb())`
+    /// (libgambatte/src/memory.cpp:439), and SameBoy's per-M-cycle
+    /// state machine which advances one M-cycle (= 4 T-cycles) per
+    /// overflow.
+    #[test]
+    fn test_tima_cgb_fires_irq_one_cycle_later() {
+        let mut gb = GbBuilder::new(48000, DummyAudio)
+            .with_model(Model::CgbE)
+            .with_run_bootrom(false)
+            .build();
+
+        // Same setup as the DMG test, but on a CGB.
+        gb.clock.tima = 0xFF;
+        gb.clock.tma = 0x42;
+        gb.clock.tac = 0x04;
+        gb.clock.div = 0x03FF;
+        gb.clock.tima_reload_pending = 0;
+        gb.clock.tima_irq_countdown = 0;
+        gb.ints.write_ie(0x04);
+
+        // Cycle 1: overflow fires; CGB initial countdown is 4 (not 3).
+        gb.run_timers(1);
+        assert_eq!(gb.clock.tima_reload_pending, 4);
+        assert_eq!(
+            gb.clock.tima_irq_countdown, 4,
+            "CGB must use 4-T-cycle countdown, not DMG's 3"
+        );
+        assert!(!gb.ints.is_any_requested());
+
+        // Cycles 2, 3: countdown 3, 2.
+        gb.run_timers(2);
+        assert_eq!(gb.clock.tima_irq_countdown, 2);
+        assert!(!gb.ints.is_any_requested());
+
+        // Cycle 4: countdown 1. Still no fire.
+        gb.run_timers(1);
+        assert_eq!(gb.clock.tima_irq_countdown, 1);
+        assert!(
+            !gb.ints.is_any_requested(),
+            "CGB IRQ must not fire at DMG's 3-cycle mark"
+        );
+
+        // Cycle 5: countdown 0 → IRQ fires on CGB, 1 cycle after DMG.
+        gb.run_timers(1);
+        assert_eq!(gb.clock.tima_irq_countdown, 0);
+        assert!(
+            gb.ints.is_any_requested(),
+            "CGB IRQ must fire 4 T-cycles after overflow"
+        );
+    }
+
+    /// `write_tac` must cancel a pending reload and IRQ countdown when
+    /// the timer is disabled. Matches gambatte's `Tima::setTac`
+    /// (libgambatte/src/tima.cpp:138-148).
+    #[test]
+    fn test_tima_tac_disable_cancels_reload_and_irq() {
+        let mut gb = GbBuilder::new(48000, DummyAudio)
+            .with_model(Model::DmgB)
+            .with_run_bootrom(false)
+            .build();
+
+        // Arrange: trigger an overflow so reload + IRQ are pending.
+        gb.clock.tima = 0xFF;
+        gb.clock.tma = 0x42;
+        gb.clock.tac = 0x04;
+        gb.clock.div = 0x03FF;
+        gb.ints.write_ie(0x04);
+
+        // Cycle 1 triggers the overflow, cycle 2 advances the state
+        // machine so we can assert the values that are about to be
+        // cancelled.
+        gb.run_timers(2);
+        assert_eq!(gb.clock.tima_reload_pending, 3);
+        assert_eq!(gb.clock.tima_irq_countdown, 2);
+        assert!(!gb.ints.is_any_requested());
+
+        // Disable the timer via TAC. Both counters must be cancelled.
+        gb.write_tac(0x00);
+        assert_eq!(
+            gb.clock.tima_reload_pending, 0,
+            "TAC disable must cancel pending reload"
+        );
+        assert_eq!(
+            gb.clock.tima_irq_countdown, 0,
+            "TAC disable must cancel pending IRQ countdown"
+        );
+
+        // Run more cycles — the IRQ must NOT fire later.
+        gb.run_timers(10);
+        assert!(!gb.ints.is_any_requested());
+    }
+
+    /// `write_tima` during the reads-0 window (reload_pending 1..=4)
+    /// must cancel both the reload state machine and the
+    /// `tima_irq_countdown`. Matches mooneye
+    /// `timer_tima_write_reloading` and gambatte
+    /// `tc01_late_tima_irq_1`.
+    #[test]
+    fn test_tima_write_in_reads_zero_cancels_irq() {
+        let mut gb = GbBuilder::new(48000, DummyAudio)
+            .with_model(Model::DmgB)
+            .with_run_bootrom(false)
+            .build();
+
+        gb.clock.tima = 0xFF;
+        gb.clock.tma = 0x42;
+        gb.clock.tac = 0x04;
+        gb.clock.div = 0x03FF;
+        gb.ints.write_ie(0x04);
+
+        // Trigger overflow (cycle 1) and let the state machine advance
+        // once (cycle 2) so both counters are mid-window.
+        gb.run_timers(2);
+        assert_eq!(gb.clock.tima_reload_pending, 3);
+        assert_eq!(gb.clock.tima_irq_countdown, 2);
+
+        // Write TIMA inside the reads-0 window — accepted, both state
+        // machines must be cancelled.
+        gb.write_tima(0x55);
+        assert_eq!(gb.clock.tima, 0x55);
+        assert_eq!(gb.clock.tima_reload_pending, 0);
+        assert_eq!(gb.clock.tima_irq_countdown, 0);
+
+        // Run enough cycles to verify the IRQ never fires.
+        gb.run_timers(10);
+        assert!(!gb.ints.is_any_requested());
+    }
 }

@@ -13,8 +13,27 @@ pub struct Clock {
     pub(crate) tima: u8,
     pub(crate) tma: u8,
     /// T-cycles remaining until TIMA is reloaded from TMA.
-    /// 0 means no reload is pending.
+    /// `0` means no reload is pending; `1..=4` are the reads-0 window;
+    /// `5..=8` are the writes-ignore window.
     pub(crate) tima_reload_pending: u8,
+    /// Independent countdown for the timer IRQ fire time. `0` means
+    /// no IRQ pending. On overflow we set this to `3` for DMG and `4`
+    /// for CGB, then the IRQ fires when it reaches 0.
+    ///
+    /// DMG: matches gambatte's `Tima::updateTima` which sets
+    /// `tmatime_ = lastUpdate_ + 3` (libgambatte/src/tima.cpp:99).
+    ///
+    /// CGB: matches gambatte's `Memory::ackIrq` which does
+    /// `updateTimaIrq(cc + 2 + isCgb())` for the *next* IRQ event
+    /// (libgambatte/src/memory.cpp:439), and SameBoy's per-M-cycle
+    /// state machine which advances one M-cycle (= 4 T-cycles) per
+    /// overflow. Both effectively fire the IRQ one T-cycle later on
+    /// CGB than on DMG.
+    ///
+    /// Kept separate from `tima_reload_pending` so the reads-0 window
+    /// (4 T-cycles, required by mooneye `tima_reload.s`) can coexist
+    /// with the model-specific IRQ fire time.
+    pub(crate) tima_irq_countdown: u8,
     pub(crate) div_cycles: i32,
     pub(crate) div_state: u8,
     pub(crate) tima_reload_state: u8,
@@ -29,6 +48,7 @@ impl Default for Clock {
             tima: 0,
             tma: 0,
             tima_reload_pending: 0,
+            tima_irq_countdown: 0,
             div_cycles: 0,
             div_state: 0,
             tima_reload_state: 0,
@@ -95,12 +115,23 @@ impl<A: AudioCallback> Gb<A> {
         self.clock.tima = self.clock.tima.wrapping_add(1);
 
         if self.clock.tima == 0 {
-            // TIMA overflow: reload will happen after 4 T-cycles.
-            // During these 4 cycles, TIMA remains 0 on hardware.
-            // Under SameBoy, the reload value (TMA) is copied immediately
-            // to TIMA, but reads return 0.
+            // TIMA overflow.
+            //
+            // The reads-0 / writes-ignore state machine (`tima_reload_pending`)
+            // holds for 4+4 T-cycles, as required by the mooneye
+            // `tima_reload.s` test (it samples at 4-T-cycle granularity
+            // and expects TIMA reads to be 0 for 4 cycles, then TMA).
+            //
+            // The IRQ fire time is decoupled via `tima_irq_countdown`,
+            // which is set to 3 on DMG and 4 on CGB so it matches
+            // gambatte's `Tima::updateTima` (DMG, libgambatte/src/tima.cpp:99)
+            // and gambatte's `Memory::ackIrq` plus SameBoy's per-M-cycle
+            // state machine (CGB, libgambatte/src/memory.cpp:439). See
+            // the field docs on `tima_irq_countdown`.
             self.clock.tima = self.clock.tma;
             self.clock.tima_reload_pending = 4;
+            self.clock.tima_irq_countdown =
+                if matches!(self.cgb_mode, crate::CgbMode::Cgb) { 4 } else { 3 };
         }
     }
 
@@ -128,10 +159,11 @@ impl<A: AudioCallback> Gb<A> {
                 if self.clock.tima_reload_pending <= 4 {
                     self.clock.tima_reload_pending -= 1;
                     if self.clock.tima_reload_pending == 0 {
-                        // Actual interrupt is requested now
-                        // (TMA was already copied to TIMA on overflow).
-                        self.ints.request_timer();
-                        // State 5-8: Already reloaded, TIMA writes ignored for 4 T-cycles
+                        // Transition into the writes-ignore window. The
+                        // IRQ is fired by `tima_irq_countdown` (separately
+                        // below), not here, so the IRQ fire time is no
+                        // longer tied to the reads-0 / writes-ignore
+                        // windows.
                         self.clock.tima_reload_pending = 5;
                     }
                 } else {
@@ -140,6 +172,16 @@ impl<A: AudioCallback> Gb<A> {
                     if self.clock.tima_reload_pending > 8 {
                         self.clock.tima_reload_pending = 0;
                     }
+                }
+            }
+
+            // Independent IRQ countdown — fires 3 T-cycles after overflow
+            // on DMG and 4 on CGB (see `tima_irq_countdown` field docs and
+            // `inc_tima` for the per-model initial value).
+            if self.clock.tima_irq_countdown > 0 {
+                self.clock.tima_irq_countdown -= 1;
+                if self.clock.tima_irq_countdown == 0 {
+                    self.ints.request_timer();
                 }
             }
 
@@ -181,19 +223,38 @@ impl<A: AudioCallback> Gb<A> {
             }
         }
 
+        // Cancel any pending reload / IRQ when the timer is disabled.
+        // gambatte's `Tima::setTac` does the same in the
+        // `if (tac_ & 0x04) { ... tmatime_ = disabled_time; ... }` branch
+        // (libgambatte/src/tima.cpp:138-148), which is the source of
+        // truth for tests like `tc00_1stopstart_ff_tma_2` that toggle
+        // TAC off and back on inside the post-overflow window.
+        if (val & 4) == 0 {
+            self.clock.tima_reload_pending = 0;
+            self.clock.tima_irq_countdown = 0;
+        }
+
         self.clock.tac = val;
     }
 
     #[inline]
     pub fn write_tima(&mut self, val: u8) {
-        // Writing to TIMA during the "Reloaded" state (1 M-cycle after reload)
-        // is ignored. Writing during the "Reloading" window (the 4-T-cycle
-        // window after overflow) cancels the pending reload, matching the
-        // gambatte testsuite (see tc01_late_tima_irq_1).
+        // Writing to TIMA during the "Reloaded" state (writes-ignore window,
+        // `tima_reload_pending >= 5`) is dropped on the floor. Writing
+        // during the "Reloading" window (the 4-T-cycle reads-0 window) or
+        // outside the state machine cancels both the pending reload and the
+        // pending IRQ — matching gambatte's `Tima::setTima`:
+        //
+        //   if (tmatime_ - cc < 4) tmatime_ = disabled_time;
+        //
+        // (libgambatte/src/tima.cpp:116-117). This is what the gambatte
+        // testsuite's `tc01_late_tima_irq_1` and the mooneye
+        // `timer_tima_write_reloading` test depend on.
         if self.clock.tima_reload_pending >= 5 {
             return;
         }
         self.clock.tima_reload_pending = 0;
+        self.clock.tima_irq_countdown = 0;
         self.clock.tima = val;
     }
 
