@@ -34,3 +34,6 @@
 [submodule "external/reference-implementations/VerilogBoy"]
 	path = external/reference-implementations/VerilogBoy
 	url = git@github.com:zephray/VerilogBoy.git
+[submodule "external/gb-ctr"]
+	path = external/gb-ctr
+	url = git@github.com:Gekkio/gb-ctr.git
