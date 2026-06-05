@@ -14,7 +14,6 @@ pub struct Sm83 {
     hl: u16,
     is_halt_bug_triggered: bool,
     is_halted: bool,
-    is_just_halted: bool,
     pending_cycles: i32,
     pc: u16,
     skip_isr_nops: bool,
@@ -280,13 +279,10 @@ impl<A: AudioCallback> Gb<A> {
                 }
 
                 self.ints.disable();
-                self.cpu.is_just_halted = false;
 
                 return;
             }
         }
-
-        self.cpu.is_just_halted = false;
 
         if self.cpu.is_halted {
             self.tick_m_cycle();
@@ -693,10 +689,7 @@ impl<A: AudioCallback> Gb<A> {
         if self.satisfies_branch_condition(op) {
             self.do_call();
         } else {
-            let pc = self.cpu.pc.wrapping_add(2);
-            self.cpu.pc = pc;
-            self.tick_m_cycle();
-            self.tick_m_cycle();
+            let _nn = self.imm16();
         }
     }
 
@@ -825,8 +818,6 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     const fn halt(&mut self) {
-        self.cpu.is_just_halted = true;
-
         if !self.ints.is_any_requested() {
             self.cpu.is_halted = true;
         } else if self.ints.are_enabled() {
@@ -903,10 +894,7 @@ impl<A: AudioCallback> Gb<A> {
         if self.satisfies_branch_condition(op) {
             self.do_jump_to_immediate();
         } else {
-            let pc = self.cpu.pc.wrapping_add(2);
-            self.cpu.pc = pc;
-            self.tick_m_cycle();
-            self.tick_m_cycle();
+            let _nn = self.imm16();
         }
     }
 
@@ -918,8 +906,7 @@ impl<A: AudioCallback> Gb<A> {
         if self.satisfies_branch_condition(op) {
             self.do_jump_relative();
         } else {
-            self.cpu.pc = self.cpu.pc.wrapping_add(1);
-            self.tick_m_cycle();
+            let _discard_byte = self.imm8();
         }
     }
 
