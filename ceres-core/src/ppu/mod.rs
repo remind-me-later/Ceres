@@ -257,6 +257,12 @@ impl Ppu {
             // self.restart_timer = self.restart_timer - dots;
             if self.enable_timer - dots <= 0 {
                 self.enable_timer = 0;
+                // Note: `dots -= self.enable_timer` deliberately subtracts 0.
+                // The PPU's enable_timer is a "free" wait period — the
+                // post-wait mode (Drawing) starts immediately and the full
+                // `dots` are applied to it. This effectively skips the
+                // OamScan phase for the first line, which the gbmicrotest
+                // `hblank_int_if_*` tests depend on.
                 dots -= self.enable_timer;
                 let mode = Mode::Drawing;
                 self.set_mode_stat(mode);
@@ -339,6 +345,10 @@ impl Ppu {
             self.set_mode_stat(mode);
             self.remaining_dots_in_mode = mode.dots(self.scx);
             self.rgba_buf_present.clear();
+            // Re-evaluate LYC coincidence after LY reset to 0. If LYC=0
+            // and the LYC STAT IRQ is enabled, fire it (SameBoy
+            // GB_lcd_off calls GB_STAT_update).
+            self.check_lyc(ints);
         }
 
         // turn on
@@ -355,8 +365,12 @@ impl Ppu {
         self.lcdc = val;
     }
 
-    pub const fn write_lyc(&mut self, val: u8, _ints: &mut Interrupts) {
+    pub fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
         self.lyc = val;
+        // Re-evaluate LY=LYC coincidence. On hardware, writing to LYC
+        // immediately updates the STAT LYC flag and fires the LYC STAT IRQ
+        // if enabled (SameBoy GB_STAT_update; gambatte memory.cpp::updateIrqs).
+        self.check_lyc(ints);
     }
 
     pub const fn write_obp0(&mut self, val: u8) {
@@ -379,13 +393,48 @@ impl Ppu {
         self.scy = val;
     }
 
-    pub fn write_stat(&mut self, val: u8, _ints: &mut Interrupts, _cgb_mode: CgbMode) {
+    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts, _cgb_mode: CgbMode) {
         let ly_equals_lyc = self.stat & STAT_LYC_B;
         let mode: u8 = self.mode() as u8;
+
+        // Capture which STAT IRQ sources were previously enabled, so we
+        // only fire IRQs for sources that *transition* from disabled to
+        // enabled by this write. An IRQ source that was already enabled
+        // would have already fired when its condition was first met
+        // (e.g., HBlank IRQ fires on HBlank entry, not on every STAT
+        // write during HBlank).
+        let prev_enables = self.stat
+            & (STAT_IF_HBLANK_B | STAT_IF_VBLANK_B | STAT_IF_OAM_B | STAT_IF_LYC_B);
 
         self.stat = val;
         self.stat &= !(STAT_LYC_B | STAT_MODE_B);
         self.stat |= ly_equals_lyc | mode;
+
+        // Re-evaluate STAT interrupt line after the write. On hardware,
+        // writing to STAT can cause a pending STAT IRQ to fire immediately
+        // if a newly-enabled condition is already met (SameBoy
+        // GB_STAT_update; gambatte memory.cpp::updateIrqs).
+        let new_enables = self.stat
+            & (STAT_IF_HBLANK_B | STAT_IF_VBLANK_B | STAT_IF_OAM_B | STAT_IF_LYC_B);
+        let newly_enabled = new_enables & !prev_enables;
+
+        // Mode-based STAT IRQ sources: only fire if the mode-specific
+        // enable was newly set by this write AND the mode condition is met.
+        let mode_irq_enable = match self.mode() {
+            Mode::HBlank => STAT_IF_HBLANK_B,
+            Mode::VBlank => STAT_IF_VBLANK_B,
+            Mode::OamScan => STAT_IF_OAM_B,
+            Mode::Drawing => 0,
+        };
+        if mode_irq_enable != 0 && (newly_enabled & mode_irq_enable) != 0 {
+            ints.request_lcd();
+        }
+
+        // LYC coincidence STAT IRQ source: only fire if the LYC enable was
+        // newly set by this write AND LY currently equals LYC.
+        if (newly_enabled & STAT_IF_LYC_B) != 0 && (self.stat & STAT_LYC_B) != 0 {
+            ints.request_lcd();
+        }
     }
 
     pub const fn write_wx(&mut self, val: u8) {
