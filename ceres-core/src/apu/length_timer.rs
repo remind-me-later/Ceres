@@ -33,11 +33,11 @@ impl<const LENGTH_TIMER_MASK: u8> LengthTimer<LENGTH_TIMER_MASK> {
 
     pub const fn step(&mut self) -> LengthTimerCalculationResult {
         if self.enabled {
-            if self.length == LENGTH_TIMER_MASK {
+            if self.length == 0 {
                 self.carry = true;
                 return LengthTimerCalculationResult::DisableChannel;
             }
-            self.length += 1;
+            self.length -= 1;
         }
 
         LengthTimerCalculationResult::None
@@ -67,7 +67,7 @@ impl<const LENGTH_TIMER_MASK: u8> LengthTimer<LENGTH_TIMER_MASK> {
     }
 
     pub const fn write_len(&mut self, val: u8) {
-        self.length = val & LENGTH_TIMER_MASK;
+        self.length = (LENGTH_TIMER_MASK + 1 - (val & LENGTH_TIMER_MASK)) & LENGTH_TIMER_MASK;
         self.carry = false;
     }
 }
