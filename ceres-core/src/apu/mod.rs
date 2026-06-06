@@ -243,13 +243,13 @@ impl<A: AudioCallback> Apu<A> {
 
         self.div_divider = (self.div_divider + 1) & 7;
 
-        // SameBoy's frame sequencer pattern:
+        // SameBoy's frame sequencer pattern (GB_apu_div_event, apu.c:667-757):
         //   - length counter ticks at ODD div_divider values (1, 3, 5, 7)
-        //   - sweep ticks at EVEN values 2 and 6
+        //   - sweep ticks at (div_divider & 3) == 3, i.e. values 3 and 7
         //   - envelope ticks at value 7
-        // The previous pattern (length at 0,4 / sweep at 2,6) only stepped
-        // the length counter at 128 Hz instead of 256 Hz, which made the
-        // APU channels stay enabled roughly twice as long as hardware.
+        // The previous code also ticked the length counter at values 2 and 6,
+        // which made the APU channels stay enabled ~50% longer than hardware
+        // (6 length ticks per 8-step cycle instead of 4).
         match self.div_divider {
             1 | 3 | 5 | 7 => {
                 self.ch1.step_length_timer();
@@ -263,10 +263,6 @@ impl<A: AudioCallback> Apu<A> {
                 }
             }
             2 | 6 => {
-                self.ch1.step_length_timer();
-                self.ch2.step_length_timer();
-                self.ch3.step_length_timer();
-                self.ch4.step_length_timer();
                 set_period_half(self, PeriodHalf::First);
                 self.ch1.step_sweep();
             }
