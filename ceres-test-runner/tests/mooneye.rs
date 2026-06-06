@@ -54,6 +54,7 @@ fn run_mooneye_test(path: &str, model: Model) -> TestResult {
     let config = TestConfig {
         model,
         timeout_frames: timeouts::MOONEYE_ACCEPTANCE,
+        run_bootrom: false,
         ..TestConfig::default()
     };
 
@@ -324,7 +325,6 @@ fn test_mooneye_boot_div_cgbabcde() {
 }
 
 #[test]
-#[ignore = "Ceres is 1 M-cycle off due to bootrom timing"]
 fn test_mooneye_boot_div_dmgabcmgb() {
     let result = run_mooneye_test(
         "mooneye-test-suite/acceptance/boot_div-dmgABCmgb.gb",
