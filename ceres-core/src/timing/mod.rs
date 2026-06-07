@@ -223,15 +223,8 @@ impl<A: AudioCallback> Gb<A> {
             }
         }
 
-        // Cancel any pending reload / IRQ when the timer is disabled.
-        // gambatte's `Tima::setTac` does the same in the
-        // `if (tac_ & 0x04) { ... tmatime_ = disabled_time; ... }` branch
-        // (libgambatte/src/tima.cpp:138-148), which is the source of
-        // truth for tests like `tc00_1stopstart_ff_tma_2` that toggle
-        // TAC off and back on inside the post-overflow window.
         if (val & 4) == 0 {
             self.clock.tima_reload_pending = 0;
-            self.clock.tima_irq_countdown = 0;
         }
 
         self.clock.tac = val;
