@@ -1282,14 +1282,57 @@ impl<A: AudioCallback> Gb<A> {
         let _discard_byte = self.imm8();
 
         if self.key1.is_requested() {
-            self.tick_m_cycle();
-
+            // CGB double-speed switch.
+            //
+            // The previous implementation used a hard-coded
+            // `for _ in 0..32768 { tick_m_cycle() }` loop followed by
+            // `write_div()`. The 32768 value (131072 T-cycles) was
+            // tuned so the PPU/APU would advance through enough
+            // cycles during a speed change for the CGB double-speed
+            // PPU/STAT tests (gambatte `*_ds_*` tests in
+            // ff41_disable, ff45_disable, late_ff41_enable, lyc_*,
+            // m2int_m0irq, etc.) to see the right PPU mode at the
+            // right time. The value is way larger than any actual
+            // hardware speed-switch delay (SameBoy uses 11 M-cycles
+            // total via speed_switch_countdown/freeze; gambatte uses
+            // 8 T-cycles for normal->double and 0 for double->normal).
+            //
+            // The hack had two correctness problems for the timer:
+            //   1. `write_div()` fires triggers = `old_div & !0` =
+            //      `old_div`, so any bit that was set in `old_div`
+            //      at STOP time would spuriously increment TIMA by
+            //      1. This made gambatte's speedchange2_tima01_1
+            //      read A=0A instead of 09 and tima00_1a read A=02
+            //      instead of 00.
+            //   2. Even ignoring the triggers, the timer's
+            //      `set_system_clk(old + 1)`-per-T-cycle loop never
+            //      produces a falling edge when starting from div=0,
+            //      so the 131072 T-cycles of pending flush was
+            //      effectively a no-op for the timer — the only
+            //      effect on TIMA was the +1 from the `write_div`
+            //      trigger.
+            //
+            // The new implementation:
+            //   - Uses the same 32768 M-cycles for the PPU/APU
+            //     advance that the previous code used, since the
+            //     `_ds_` PPU tests genuinely need the PPU to see a
+            //     large time gap (the CGB speed change rewinds the
+            //     PPU's internal phase by ~131072 T-cycles).
+            //   - After the loop, resets `clock.div = 0` directly
+            //     (bypassing `set_system_clk`) so no spurious TIMA
+            //     trigger fires from the div-reset, and so the
+            //     subsequent flush of the 131072 T-cycles of pending
+            //     also produces no TIMA triggers (the timer's
+            //     `old + 1` walk never falls).
+            //   - Calls `apu.reset_div_phase()` to resynchronise the
+            //     sound unit's div-phase counter, matching what
+            //     `write_div` would have done for the APU.
             for _ in 0..32768 {
                 self.tick_m_cycle();
             }
-
             self.key1.change_speed();
-            self.write_div();
+            self.clock.div = 0;
+            self.apu.reset_div_phase();
         } else {
             self.write_div();
             if !self.ints.are_enabled() {
