@@ -6,13 +6,13 @@ Last updated: 2026-06-07
 
 | Suite          | Pass  | Fail  | Ignored |
 |----------------|-------|-------|---------|
-| gambatte       | 474   | 258   | 0       |
+| gambatte       | 479   | 253   | 0       |
 | blargg         | 5     | 1     | 0       |
 | mooneye        | 75    | 11    | 18      |
 | gbmicrotest    | 257   | 182   | 74      |
 
-Branch: `dev` (24 commits ahead of `origin/dev`)
-Last commit: `4c1e51b4 fix(apu): also wrap subtraction in LengthTimer::write_len`
+Branch: `dev` (28 commits ahead of `origin/dev`)
+Last commit: `9713fa3c fix(sm83): bypass set_system_clk on CGB speed-change DIV reset`
 
 ## Categories of Failures
 
@@ -62,15 +62,34 @@ fundamentally cycle-accurate and would require a major rewrite.
 - 2 mooneye tests (`halt_ime1_timing2_gs`, `halt_ime0_nointr_timing`) — HALT exit delay trade-off
 - 2 mooneye tests (`di_timing_gs`, `boot_regs_mgb`, `boot_hwio_dmgabcmgb`) — boot/IO setup
 - 15 tc00 timer tests — fundamental conflict with IRQ precedence tests
-- 2 tc00_irq_ds tests (CGB double-speed timer)
+- 2 tc00_irq_ds tests (CGB double-speed timer) — now passing (were broken by the `write_div()` spurious-trigger bug in the CGB speed-change path; see `9713fa3c`)
+
+### CGB Double-Speed STOP Timer (3 remaining failures)
+- `gambatte_speedchange2_tima01_1` (CGB, mode 1): expected A=09, got A=08
+- `gambatte_speedchange2_tima01_nop_1` (CGB, mode 1): expected A=0A, got A=09
+- `gambatte_speedchange2_tima02_1a` (CGB, mode 2): expected A=02, got A=01
+
+These three tests are off by exactly 1 increment in modes 1 and 2 — the
+same direction across all three, which means a single cycle-count
+constant would fix them all (e.g., `for _ in 0..4` instead of `0..0`
+in the speed-change branch). But 4 M-cycles of timer advance
+introduces 4 increments in mode 0, breaking the four tests
+(`div_1`, `div_nop_1`, `tima00_1a`, `tima03_1a`) that the
+`set_system_clk`-bypass fix in `9713fa3c` just unblocked.
+
+The test ROMs appear to expect the timer to advance by 1 increment
+per STOP in modes 1 and 2, but by 0 increments per STOP in modes 0
+and 3 — which is impossible with a single "advance N T-cycles"
+constant since mode 0 has the finest-grained increment rate.
+
+`gambatte` (8 T-cycles per normal→double) and `SameBoy` (11 M-cycles
+via `speed_switch_countdown`/`speed_switch_freeze`) both disagree
+with the test expectations in some mode. Most likely the test ROMs
+were generated against specific hardware that has a quirk neither
+emulator captures (analogous to the metroboy-required sweep tests
+below).
 
 ### Sound Tests Requiring Gate-Level Accuracy
-The 5 failing sound tests are:
-- `ch1_init_reset_sweep_counter_timing_nr52_1` (CGB)
-- `ch1_init_reset_sweep_counter_timing_nr52_2` (DMG)
-- `ch2_init_reset_length_counter_timing_nr52_1` (CGB)
-- `ch2_init_reset_length_counter_timing_nr52_2` (both)
-- `ch2_late_div_write_nr52_2b` (DMG)
 
 **Root cause**: These tests were generated from real hardware and require a 128 KHz
 sweep clock (8 T-cycles per tick) plus a shift state machine. ceres-core's APU
@@ -107,7 +126,7 @@ a fundamentally different implementation structure (gate-by-gate modeling).
 ### TIMA
 - `2d6511c7`: Added `tima_irq_countdown` decoupled from `tima_reload_pending`
 - `8e19c5ef`: Added HALT exit delay (+4 T-cycles) for ISR dispatch
-- Fixes several gambatte timer tests
+- `88ee2b51`: Don't cancel `tima_irq_countdown` on TAC disable (matches gambatte `Tima::setTac`)
 
 ### APU
 - `a4b5f86d`: Removed duplicate length-counter ticks at div_divider 2,6
@@ -122,6 +141,17 @@ a fundamentally different implementation structure (gate-by-gate modeling).
 
 ### Memory
 - `972f4a1e`: HDMA fixes (destination, HALT processing)
+
+### SM83
+- `9713fa3c`: CGB speed-change DIV reset bypasses `set_system_clk` to avoid
+  spurious TIMA trigger. The previous `write_div()` call fired
+  `triggers = old_div & !0 = old_div` which incremented TIMA by 1
+  whenever the TAC-mux bit was set in `old_div`. Net: gambatte
+  476/256 → 479/253 (+3 passes, -3 failures). Unblocks
+  `speedchange2_tima00_1a`, `speedchange2_tima03_1a`,
+  `speedchange2_div_1`, `speedchange2_div_nop_1`, and the two
+  `tc00_irq_ds` tests that were also affected by the same spurious
+  trigger.
 
 ### Test infrastructure
 - `16be8e99`: mooneye tests now skip bootrom
