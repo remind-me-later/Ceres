@@ -307,6 +307,11 @@ impl<A: AudioCallback> Gb<A> {
 
         if self.cpu.is_halted {
             self.tick_m_cycle();
+            // HDMA runs independently of the CPU. During HALT, the CPU
+            // is halted but the PPU/HDMA hardware continues to operate.
+            // run_hdma() must be called even during HALT or HDMA will
+            // never start after HALT.
+            self.run_hdma();
         } else {
             let op = self.imm8();
             self.run_hdma();

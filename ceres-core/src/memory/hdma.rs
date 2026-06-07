@@ -162,7 +162,11 @@ impl<A: AudioCallback> Gb<A> {
                 }
                 _ => 0xFF,
             };
-            self.ppu.write_vram(self.hdma.dst, val);
+            // HDMA destination is always VRAM (0x8000-0x9FFF). The raw
+            // register values (0xFF53, 0xFF54) store only the offset
+            // within VRAM; the 0x8000 base is added at transfer time
+            // (matches gambatte memory.cpp:375: mm_vram_begin | dmaDest).
+            self.ppu.write_vram(0x8000 | self.hdma.dst, val);
             self.hdma.dst = self.hdma.dst.wrapping_add(1);
             self.hdma.src = self.hdma.src.wrapping_add(1);
             self.advance_dots(cycles_per_byte);

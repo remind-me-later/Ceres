@@ -119,7 +119,7 @@ impl Ppu {
         &mut self.bcp
     }
 
-    const fn check_lyc(&mut self, ints: &mut Interrupts) {
+    fn check_lyc(&mut self, ints: &mut Interrupts) {
         self.stat &= !STAT_LYC_B;
 
         if self.ly == self.lyc {
@@ -312,12 +312,13 @@ impl Ppu {
                             self.rgba_buf_present = mem::take(&mut self.rgb_buf);
                         }
                         self.enter_mode(Mode::OamScan, ints);
+                        self.check_lyc(ints);
                     } else {
                         self.remaining_dots_in_mode += self.mode().dots(self.scx);
+                        self.check_lyc(ints);
                         // No further transitions possible within this line.
                         break;
                     }
-                    self.check_lyc(ints);
                 }
             }
         }
@@ -375,7 +376,7 @@ impl Ppu {
     pub fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
         self.lyc = val;
         // Re-evaluate LY=LYC coincidence. On hardware, writing to LYC
-        // immediately updates the STAT LYC flag and fires the LYC STAT IRQ
+        // inmediatamente updates the STAT LYC flag and fires the LYC STAT IRQ
         // if enabled (SameBoy GB_STAT_update; gambatte memory.cpp::updateIrqs).
         self.check_lyc(ints);
     }
