@@ -275,7 +275,12 @@ impl Ppu {
 
         self.remaining_dots_in_mode -= dots;
 
-        if self.remaining_dots_in_mode < 0 {
+        // Process all mode transitions within the dots budget. If `dots`
+        // is large enough to cross multiple mode boundaries (e.g., during
+        // a `call` instruction or a large `run_cpu` flush), we need to
+        // loop and process each transition, otherwise the PPU mode gets
+        // out of sync with the actual T-cycle count.
+        while self.remaining_dots_in_mode < 0 {
             match self.mode() {
                 Mode::OamScan => {
                     debug_assert!(self.ly <= 143, "OAM scan, ly = {}", self.ly);
@@ -309,6 +314,8 @@ impl Ppu {
                         self.enter_mode(Mode::OamScan, ints);
                     } else {
                         self.remaining_dots_in_mode += self.mode().dots(self.scx);
+                        // No further transitions possible within this line.
+                        break;
                     }
                     self.check_lyc(ints);
                 }
