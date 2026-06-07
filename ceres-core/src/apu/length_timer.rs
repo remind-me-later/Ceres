@@ -67,10 +67,14 @@ impl<const LENGTH_TIMER_MASK: u8> LengthTimer<LENGTH_TIMER_MASK> {
     }
 
     pub const fn write_len(&mut self, val: u8) {
-        // Use wrapping_add to avoid overflow for the wave channel
-        // (LENGTH_TIMER_MASK=0xFF: 0xFF + 1 wraps to 0, yielding
-        // (-val) & 0xFF = (256 - val) & 0xFF, which is correct).
-        self.length = (LENGTH_TIMER_MASK.wrapping_add(1) - (val & LENGTH_TIMER_MASK))
+        // Compute (LENGTH_TIMER_MASK + 1 - val) & LENGTH_TIMER_MASK using
+        // wrapping arithmetic. For the wave channel (mask=0xFF):
+        //   0xFF.wrapping_add(1) = 0, then 0.wrapping_sub(val) = (-val) as u8
+        //   = (256 - val) & 0xFF, which is the correct length formula.
+        // For other channels (mask=0x3F): 64 - val (val ≤ 63, no underflow).
+        self.length = LENGTH_TIMER_MASK
+            .wrapping_add(1)
+            .wrapping_sub(val & LENGTH_TIMER_MASK)
             & LENGTH_TIMER_MASK;
         self.carry = false;
     }
