@@ -383,6 +383,17 @@ impl<A: AudioCallback> Gb<A> {
         self.cpu.pc()
     }
 
+    /// Returns whether the CPU is currently halted.
+    ///
+    /// This is used by test ROMs (such as Wilbertpol's Mooneye Test Suite
+    /// fork) that signal test completion by executing the undefined opcode
+    /// `0xED`, which the SM83 implements by entering the HALT state.
+    #[inline]
+    #[must_use]
+    pub const fn cpu_is_halted(&self) -> bool {
+        self.cpu.is_halted()
+    }
+
     #[inline]
     pub fn save_data(&self, buf: &mut Vec<u8>, secs_since_unix_epoch: u64) {
         bess::Writer::new(buf).save_state(self, secs_since_unix_epoch);

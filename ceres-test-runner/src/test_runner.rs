@@ -2,16 +2,6 @@
 
 /// Timeout constants for test suites (in frames at ~59.73 Hz).
 pub mod timeouts {
-    pub const CPU_INSTRS: u32 = 2091;
-    pub const INSTR_TIMING: u32 = 250;
-    pub const MEM_TIMING: u32 = 300;
-    pub const MEM_TIMING_2: u32 = 360;
-    pub const INTERRUPT_TIME: u32 = 240;
-    pub const HALT_BUG: u32 = 330;
-    pub const CGB_ACID2: u32 = 300;
-    pub const DMG_ACID2: u32 = 480;
-    pub const RTC3TEST_BASIC: u32 = 1050;
-    pub const RTC3TEST_RANGE: u32 = 750;
     /// Mooneye Test Suite acceptance tests (120 seconds maximum runtime)
     pub const MOONEYE_ACCEPTANCE: u32 = 7160;
 }
