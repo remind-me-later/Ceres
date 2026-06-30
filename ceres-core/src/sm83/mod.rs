@@ -195,8 +195,19 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn run_cpu(&mut self) {
-        let enable_ime = self.cpu.has_ei_delay;
-        self.cpu.has_ei_delay = false;
+        // EI semantics: hardware EI schedules IME to flip after the next
+        // instruction completes. SameBoy (sm83_cpu.c:1636-1640) toggles IME
+        // at the start of each instruction fetch using `ime_toggle`, and the
+        // pre-toggle IME is used for interrupt dispatch decisions. We mirror
+        // that: capture the IME value seen by this instruction (effective_ime),
+        // then if EI was pending, flip IME in place. If the instruction is DI
+        // it will clear IME again; if it's anything else, IME will stay true
+        // through subsequent run_cpu calls.
+        let effective_ime = self.ints.are_enabled();
+        if self.cpu.has_ei_delay {
+            self.cpu.has_ei_delay = false;
+            self.ints.enable();
+        }
 
         if self.ints.is_any_requested() {
             let was_halted = self.cpu.is_halted;
@@ -204,7 +215,7 @@ impl<A: AudioCallback> Gb<A> {
             self.ppu.leave_stop_mode();
             self.clock.stopped = false;
 
-            if self.ints.are_enabled() {
+            if effective_ime {
                 if self.cpu.is_halt_bug_triggered {
                     self.cpu.pc = self.cpu.pc.wrapping_sub(1);
                     self.cpu.is_halt_bug_triggered = false;
@@ -323,13 +334,6 @@ impl<A: AudioCallback> Gb<A> {
             }
 
             self.exec(op);
-        }
-
-        if enable_ime {
-            self.ints.enable();
-            if self.cpu.is_halt_bug_triggered {
-                self.cpu.skip_isr_nops = true;
-            }
         }
 
         self.flush_pending_cycles();

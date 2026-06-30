@@ -326,7 +326,7 @@ fn test_boot_div2_s() {
 
 #[test]
 fn test_boot_div_cgb0() {
-    let result = run_test(MOONEYE, "misc/boot_div-cgb0.gb", Model::CgbE);
+    let result = run_test(MOONEYE, "misc/boot_div-cgb0.gb", Model::Cgb0);
     assert!(
         result.is_passed(),
         "boot_div-cgb0 test failed: {result:?}"

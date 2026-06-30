@@ -120,6 +120,12 @@ impl<A: AudioCallback> Gb<A> {
     /// Initializes the system state to match exactly the state immediately
     /// after the bootrom finishes execution, skipping the boot sequence entirely.
     /// This is required to perfectly align timers with some integration tests (e.g., Gambatte).
+    ///
+    /// Per-model register values come from the mooneye-test-suite source
+    /// (`acceptance/boot_regs-*.s` and `misc/boot_regs-*.s`, committed in
+    /// `external/test-sources/`), which were measured on real hardware by Joonas
+    /// Javanainen. The values are also cross-checked against SameBoy's own
+    /// post-boot state in `gb.c::GB_reset_internal`.
     pub(crate) fn skip_bootrom(&mut self) {
         self.bootrom.disable();
 
@@ -127,18 +133,27 @@ impl<A: AudioCallback> Gb<A> {
         self.cpu.set_pc(0x0100);
         self.cpu.set_sp(0xFFFE);
 
-        if self.is_cgb() {
-            // AGB F value might differ slightly, but we default to standard CGB
-            self.cpu.set_af(0x11B0);
-            self.cpu.set_bc(0x0013);
-            self.cpu.set_de(0x00D8);
-            self.cpu.set_hl(0x014D);
-        } else {
-            self.cpu.set_af(0x01B0);
-            self.cpu.set_bc(0x0013);
-            self.cpu.set_de(0x00D8);
-            self.cpu.set_hl(0x014D);
-        }
+        // Per-model post-boot register values. Each line documents the source:
+        //   DMG-0     → acceptance/boot_regs-dmg0.s   (pass: DMG 0)
+        //   DMG-ABC   → acceptance/boot_regs-dmgABC.s (pass: DMG ABC)
+        //   MGB       → acceptance/boot_regs-mgb.s    (pass: MGB)
+        //   SGB/SGB2  → acceptance/boot_regs-sgb{,2}.s (pass: SGB{,2})
+        //   CGB-0     → misc/boot_regs-cgb.s          (F=$80 variant: CGB-0)
+        //   CGB-ABCDE → misc/boot_regs-cgb.s          (F=$B0 variant: CGB A-E)
+        //   AGB       → misc/boot_regs-A.s            (pass: AGB, AGS)
+        let (af, bc, de, hl) = match self.model {
+            Model::DmgB => (0x01B0, 0x0013, 0x00D8, 0x014D), // DMG-ABC
+            Model::Mgb => (0xFFB0, 0x0013, 0x00D8, 0x014D),  // MGB
+            Model::Cgb0 => (0x1180, 0x0000, 0x0008, 0x007C), // CGB-CPU 0
+            Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD => {
+                (0x11B0, 0x0013, 0x00D8, 0x014D) // CGB-ABCDE
+            }
+            Model::CgbE => (0x11B0, 0x0013, 0x00D8, 0x014D), // CGB-E
+        };
+        self.cpu.set_af(af);
+        self.cpu.set_bc(bc);
+        self.cpu.set_de(de);
+        self.cpu.set_hl(hl);
 
         // Initialize IO to standard post-boot values
         self.write_mem(0xFF11, 0xBF);
@@ -146,6 +161,10 @@ impl<A: AudioCallback> Gb<A> {
         self.write_mem(0xFF24, 0x77);
         self.write_mem(0xFF25, 0xF3);
         self.write_mem(0xFF26, 0xF1);
+        // LCDC: standard post-boot state. Keep the legacy $91 value here —
+        // boot_hwio-C.gb is handled by separate HW register writes below,
+        // and changing LCDC has ripple effects on PPU mode-state tests
+        // which currently pass at 0x91.
         self.write_mem(0xFF40, 0x91);
 
         // DIV phase after boot ROM.  DMG and CGB boot ROMs leave DIV at
@@ -158,7 +177,7 @@ impl<A: AudioCallback> Gb<A> {
         if self.is_cgb() {
             // CGB boot timing adjustment:
             self.clock.div = if let Ok(val) = std::env::var("CERES_DIV_OVERRIDE") {
-                u16::from_str_radix(&val, 16).unwrap_or(0x1D3B)
+                u16::from_str_radix(val.trim_start_matches("0x"), 16).unwrap_or(0x1D3B)
             } else {
                 match self.model {
                     Model::CgbE => 0x1EA0,
@@ -173,7 +192,7 @@ impl<A: AudioCallback> Gb<A> {
             // gambatte div testsuite — see the DMG start_inc_1 test which
             // expects to read upper-DIV byte = 0xAB after the boot ROM.)
             self.clock.div = if let Ok(val) = std::env::var("CERES_DMG_DIV_OVERRIDE") {
-                u16::from_str_radix(&val, 16).unwrap_or(0xABCC)
+                u16::from_str_radix(val.trim_start_matches("0x"), 16).unwrap_or(0xABCC)
             } else {
                 0xABCC
             };
