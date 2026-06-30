@@ -75,9 +75,10 @@ impl<A: AudioCallback> Gb<A> {
     /// Advance all components by the given number of CPU T-cycles.
     /// This is the main timing entry point called by the CPU.
     ///
-    /// Uses the scanline PPU: timers advance per T-cycle (for the cycle-accurate
-    /// TIMA reload state machine), but the PPU is fed the full dot budget at
-    /// once and handles its own mode transitions internally.
+    /// Cycle-accurate PPU: timers advance per T-cycle (for accurate TIMA
+    /// reload timing) and the PPU is advanced one M-cycle at a time so
+    /// mode-bound IRQs (OAM/VBlank/HBlank/LYC) fire at exact M-cycle
+    /// boundaries. This matches the mooneye-gb emulation model.
     #[inline]
     pub fn advance_dots(&mut self, cpu_t_cycles: i32) {
         if cpu_t_cycles <= 0 {
@@ -91,24 +92,42 @@ impl<A: AudioCallback> Gb<A> {
         // DMA advances per dot.
         self.dma.advance_dots(cpu_t_cycles);
 
-        // Convert CPU T-cycles to PPU dots. The scanline renderer's
-        // Mode::dots() constants are in the same units as the dots we pass
-        // here. In double-speed mode the CPU runs at 2× but the PPU dot
-        // budget per real-time unit is fixed, so we halve the dot count
-        // passed to the PPU (mirrors 854dbf9 behaviour).
+        // Advance the PPU one M-cycle at a time. `cpu_t_cycles` is always
+        // a multiple of 4 (every instruction / interrupt dispatch adds
+        // 4 T-cycles via `tick_m_cycle`), so integer division is exact.
         let double_speed = self.key1.is_enabled();
-        let mut ppu_dots = cpu_t_cycles;
+        let m_cycles = cpu_t_cycles / 4;
+        // SameBoy keeps the PPU cycle counter advancing at the same rate
+        // per real cycle in both single- and double-speed modes (just
+        // doubled in absolute terms for double-speed). For our M-cycle
+        // model this means 1 CPU M-cycle == 1 PPU M-cycle regardless of
+        // double-speed.
+        let ppu_m_cycles = if double_speed {
+            // In double-speed mode the CPU runs at 8MHz but the PPU's
+            // internal cycle counter advances at the same per-real-time
+            // rate, which means we should tick it half as often as the
+            // CPU's M-cycles. SameBoy does this via `cycles * 4` vs
+            // `cycles * 2` advance per CPU step. For our model we tick
+            // every other CPU M-cycle.
+            (m_cycles + self.ppu_dskip as i32) / 2
+        } else {
+            m_cycles
+        };
+
+        for _ in 0..ppu_m_cycles {
+            self.ppu.tick_m_cycle(&mut self.ints, self.cgb_mode);
+        }
         if double_speed {
-            ppu_dots >>= 1;
+            // Remember the parity so the next batch doesn't drift.
+            self.ppu_dskip = (m_cycles + self.ppu_dskip as i32) & 1 != 0;
         }
 
-        self.ppu.run(ppu_dots, &mut self.ints, self.cgb_mode);
         self.run_dma();
 
-        self.apu.run(ppu_dots);
-        self.cart.run_rtc(ppu_dots);
+        self.apu.run(cpu_t_cycles);
+        self.cart.run_rtc(cpu_t_cycles);
 
-        self.dots_ran += ppu_dots;
+        self.dots_ran += cpu_t_cycles;
     }
 
     fn inc_tima(&mut self) {

@@ -12,6 +12,11 @@ use {
 
 #[derive(Debug)]
 pub struct Cartridge {
+    /// True for the special MBC1 1 MiB (64-bank) "multicart" wiring.
+    /// Detected via the heuristic that every ROM bank carries the
+    /// Nintendo logo at $0104–$0133, which real multicarts tend to do
+    /// (and which standard MBC1 carts do not).
+    is_mbc1_multicart: bool,
     has_battery: bool,
     mbc: Mbc,
 
@@ -43,6 +48,7 @@ impl Default for Cartridge {
         let ram = alloc::vec![0xFF; ram_size.size_bytes() as usize].into_boxed_slice();
 
         Self {
+            is_mbc1_multicart: false,
             mbc,
             rom,
             ram,
@@ -57,6 +63,40 @@ impl Default for Cartridge {
             has_battery,
         }
     }
+}
+
+/// Nintendo logo bytes at $0104-$0133, used by the boot ROM to verify a
+/// legitimate cartridge. Real MBC1 multicarts typically repeat this logo
+/// in every ROM bank; standard MBC1 carts only have it in bank 0.
+const NINTENDO_LOGO: [u8; 48] = [
+    0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00, 0x0D,
+    0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9, 0x99,
+    0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E,
+];
+
+/// Heuristic detection: an MBC1 1 MiB (64-bank) ROM with the Nintendo
+/// logo present in *every* bank is treated as an MBC1 multicart. The
+/// canonical mooneye-gb multicart test relies on this.
+fn detect_mbc1_multicart(rom: &[u8], rom_size: ROMSize) -> bool {
+    if !matches!(rom_size, ROMSize::Mb1) {
+        return false;
+    }
+    let bank_size = ROMSize::BANK_SIZE as usize;
+    let num_banks = rom.len() / bank_size;
+    if num_banks < 4 {
+        return false;
+    }
+    for bank in 0..num_banks {
+        let start = bank * bank_size + 0x104;
+        let end = start + NINTENDO_LOGO.len();
+        if rom.len() < end {
+            return false;
+        }
+        if &rom[start..end] != NINTENDO_LOGO {
+            return false;
+        }
+    }
+    true
 }
 
 impl Cartridge {
@@ -140,6 +180,7 @@ impl Cartridge {
         let ram = alloc::vec![0xFF; actual_ram_size].into_boxed_slice();
 
         Ok(Self {
+            is_mbc1_multicart: detect_mbc1_multicart(&rom, rom_size),
             mbc,
             rom,
             ram,
@@ -280,6 +321,46 @@ impl Cartridge {
             Mbc::Mbc0 => (),
             Mbc::Mbc1 { bank_mode } => {
                 const fn mbc1_rom_offsets(c: &Cartridge, bank_mode: bool) -> (u32, u32) {
+                    // Multicart is a special MBC1 wiring found on some 8 Mbit
+                    // (1 MiB / 64-bank) cartridges. It uses a 4-quadrant
+                    // layout (4 × 16 banks) instead of the standard 8 × 8
+                    // layout MBC1 normally supports at this ROM size. The
+                    // header is identical to a normal 1 MiB MBC1 cart, so
+                    // we detect it via the Nintendo-logo-in-every-bank
+                    // heuristic (see `detect_mbc1_multicart`).
+                    let is_multicart = c.is_mbc1_multicart;
+
+                    if is_multicart {
+                        // bank_lo: low 4 bits index within the quadrant.
+                        // Bit 4 selects between two "sub-quadrants" that
+                        // both map to the same 16 physical banks; the 0→1
+                        // correction only applies when bit 4 is clear.
+                        let lo = c.rom_bank_lo & 0x1F;
+                        let low4 = lo & 0x0F;
+                        let mut lo_bank_idx = low4;
+                        if lo & 0x10 == 0 && lo_bank_idx == 0 {
+                            lo_bank_idx = 1;
+                        }
+                        // Quadrant = bank_hi (0..3), selects which 16-bank
+                        // group of the 64-bank ROM.
+                        let quadrant = (c.rom_bank_hi & 0x3) as u32;
+                        let lo_bank_idx_u32 = lo_bank_idx as u32;
+                        let hi_bank_idx = (quadrant * 16) + lo_bank_idx_u32;
+
+                        // In mode 1, $0000-$3FFF maps to the first bank
+                        // of the active quadrant (e.g. bank_hi=2 → bank 32).
+                        let lo_bank = if bank_mode {
+                            quadrant * 16
+                        } else {
+                            0
+                        };
+
+                        return (
+                            ROMSize::BANK_SIZE as u32 * lo_bank,
+                            ROMSize::BANK_SIZE as u32 * hi_bank_idx,
+                        );
+                    }
+
                     // MBC1 bank_lo only uses lower 5 bits
                     let lo = c.rom_bank_lo & 0x1F;
                     let hi = c.rom_bank_hi << 5;
@@ -310,6 +391,9 @@ impl Cartridge {
                 }
 
                 const fn mbc1_ram_offset(cart: &Cartridge, bank_mode: bool) -> u32 {
+                    // In multicart mode the upper 2 bits of `rom_bank_hi`
+                    // select the RAM bank (instead of the upper 2 ROM bank
+                    // bits, which now select a quadrant).
                     let bank = if bank_mode {
                         cart.rom_bank_hi as u32
                     } else {

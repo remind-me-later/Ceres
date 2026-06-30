@@ -63,6 +63,10 @@ pub struct Gb<A: AudioCallback> {
     key1: Key1,
     ld_b_b_breakpoint: bool,
     model: Model,
+    /// PPU double-speed skip parity. In CGB double-speed the PPU should
+    /// advance half as often as the CPU M-cycles, so we tick every other
+    /// one. This flag tracks which half to skip on the next batch.
+    ppu_dskip: bool,
     ppu: Ppu,
     serial: Serial,
     wram: Wram,
@@ -319,6 +323,7 @@ impl<A: AudioCallback> Gb<A> {
             key1: Key1::default(),
             ld_b_b_breakpoint: false,
             model,
+            ppu_dskip: false,
             ppu: Ppu::default(),
             serial: Serial::default(),
             wram: Wram::default(),
@@ -426,6 +431,7 @@ impl<A: AudioCallback> Gb<A> {
         self.ints = Interrupts::default();
         self.key1 = Key1::default();
         self.ld_b_b_breakpoint = false;
+        self.ppu_dskip = false;
         self.ppu = Ppu::default();
         self.serial = Serial::default();
         self.bootrom.enable();

@@ -32,8 +32,6 @@ const STAT_IF_VBLANK_B: u8 = 0x10;
 const STAT_IF_OAM_B: u8 = 0x20;
 const STAT_IF_LYC_B: u8 = 0x40;
 
-const DOTS_UNTIL_ENABLED: i32 = 80;
-
 #[non_exhaustive]
 #[derive(Clone, Copy, Default)]
 pub enum ColorCorrectionMode {
@@ -46,11 +44,13 @@ pub enum ColorCorrectionMode {
     ReduceContrast,
 }
 
+/// PPU mode (matches the STAT register mode bits 0-1 and the
+/// mooneye-gb state-machine mode names).
 #[expect(
     clippy::arbitrary_source_item_ordering,
     reason = "Order follows the state machine transitions"
 )]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Mode {
     #[default]
     HBlank = 0,
@@ -60,31 +60,41 @@ pub enum Mode {
 }
 
 impl Mode {
-    pub fn dots(self, scroll_x: u8) -> i32 {
-        // Mode timings
-        const OAM_SCAN_DOTS: i32 = 80; // Constant
-        const DRAWING_DOTS: i32 = 172; // Variable, minimum ammount
-        const HBLANK_DOTS: i32 = 204; // Variable, maximum ammount
-        const VBLANK_DOTS: i32 = 456; // Constant
-
-        let scroll_adjust = i32::from(scroll_x & 7) * 4;
+    /// M-cycles (1 M-cycle = 4 T-cycles) for each mode. Inspired by
+    /// mooneye-gb but with the original Ceres constants for the per-mode
+    /// lengths. `scroll_x` only affects Mode 3 / Mode 0 split, not VBlank.
+    const fn m_cycles(self, scroll_x: u8) -> i32 {
+        // mooneye-gb "scroll adjustment": how many extra M-cycles Mode 3
+        // gets and Mode 0 loses, based on the low 3 bits of SCX.
+        let scroll_adjust: i32 = match scroll_x & 0x7 {
+            1..=4 => 1,
+            5..=7 => 2,
+            _ => 0,
+        };
+        // Original Ceres scanline constants, kept to maintain compatibility
+        // with tests that were passing under the previous (batch-driven)
+        // PPU. Total per line still = 114 M-cycles = 456 T-cycles.
+        const OAM_M_CYCLES: i32 = 20;
+        const VRAM_M_CYCLES: i32 = 43;
+        const HBLANK_M_CYCLES: i32 = 51;
+        const VBLANK_M_CYCLES: i32 = 114;
         match self {
-            Self::OamScan => OAM_SCAN_DOTS,
-            Self::Drawing => DRAWING_DOTS + scroll_adjust,
-            Self::HBlank => HBLANK_DOTS - scroll_adjust,
-            Self::VBlank => VBLANK_DOTS,
+            Self::OamScan => OAM_M_CYCLES,
+            Self::Drawing => VRAM_M_CYCLES + scroll_adjust,
+            Self::HBlank => HBLANK_M_CYCLES - scroll_adjust,
+            Self::VBlank => VBLANK_M_CYCLES,
         }
     }
 }
 
 #[expect(clippy::struct_excessive_bools)]
-#[derive(Default)]
 pub struct Ppu {
     bcp: ColorPalette,
     bgp: u8,
     color_correction_mode: ColorCorrectionMode,
-    delay_one_frame: bool,
-    enable_timer: i32,
+    /// M-cycles remaining until the PPU transitions to the next mode
+    /// (or fires a mode-bound IRQ). Mirrors mooneye-gb's `cycles`.
+    cycles: i32,
     lcdc: u8,
     ly: u8,
     lyc: u8,
@@ -93,7 +103,6 @@ pub struct Ppu {
     obp1: u8,
     ocp: ColorPalette,
     opri: bool,
-    remaining_dots_in_mode: i32,
     rgb_buf: RgbaBuf,
     rgba_buf_present: RgbaBuf,
     scx: u8,
@@ -105,6 +114,41 @@ pub struct Ppu {
     win_skipped: u8,
     wx: u8,
     wy: u8,
+}
+
+impl Default for Ppu {
+    fn default() -> Self {
+        // The original Ceres scanline renderer started in HBlank mode
+        // with no pending cycle counter. We keep that initial state to
+        // remain compatible with the wider test suite. The LCDC bit
+        // is 0 so the PPU will not advance until the boot ROM or test
+        // runner enables the LCD.
+        Self {
+            bcp: ColorPalette::default(),
+            bgp: 0,
+            color_correction_mode: ColorCorrectionMode::default(),
+            cycles: Mode::HBlank.m_cycles(0),
+            lcdc: 0,
+            ly: 0,
+            lyc: 0,
+            oam: Oam::default(),
+            obp0: 0,
+            obp1: 0,
+            ocp: ColorPalette::default(),
+            opri: false,
+            rgb_buf: RgbaBuf::default(),
+            rgba_buf_present: RgbaBuf::default(),
+            scx: 0,
+            scy: 0,
+            stat: Mode::HBlank as u8,
+            vram: Vram::default(),
+            win_in_frame: false,
+            win_in_ly: false,
+            win_skipped: 0,
+            wx: 0,
+            wy: 0,
+        }
+    }
 }
 
 // IO
@@ -119,9 +163,9 @@ impl Ppu {
         &mut self.bcp
     }
 
+    /// Re-evaluate LY=LYC coincidence and fire LYC STAT IRQ on rising edge.
     fn check_lyc(&mut self, ints: &mut Interrupts) {
         self.stat &= !STAT_LYC_B;
-
         if self.ly == self.lyc {
             self.stat |= STAT_LYC_B;
             if self.stat & STAT_IF_LYC_B != 0 {
@@ -130,25 +174,30 @@ impl Ppu {
         }
     }
 
+    /// Transition the PPU to a new mode, reset the per-mode cycle counter,
+    /// and fire any mode-bound IRQs.
     fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
-        self.set_mode_stat(mode);
-        self.remaining_dots_in_mode += self.mode().dots(self.scx);
+        self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
+        self.cycles = mode.m_cycles(self.scx);
 
         match mode {
             Mode::OamScan => {
                 if self.stat & STAT_IF_OAM_B != 0 {
                     ints.request_lcd();
                 }
-
                 self.win_in_ly = false;
             }
             Mode::VBlank => {
                 ints.request_vblank();
-
                 if self.stat & STAT_IF_VBLANK_B != 0 {
                     ints.request_lcd();
                 }
-
+                // The mooneye-gb quirk: on entering VBlank, also fire the
+                // OAM STAT IRQ if enabled. This is what makes the
+                // `vblank_stat_intr-*` tests pass.
+                if self.stat & STAT_IF_OAM_B != 0 {
+                    ints.request_lcd();
+                }
                 self.win_skipped = 0;
                 self.win_in_frame = false;
             }
@@ -163,7 +212,7 @@ impl Ppu {
 
     #[must_use]
     pub const fn mode(&self) -> Mode {
-        match self.stat & 3 {
+        match self.stat & STAT_MODE_B {
             0 => Mode::HBlank,
             1 => Mode::VBlank,
             2 => Mode::OamScan,
@@ -246,80 +295,62 @@ impl Ppu {
         self.wy
     }
 
-    pub fn run(&mut self, dots: i32, ints: &mut Interrupts, cgb_mode: CgbMode) {
+    /// Advance the PPU by one M-cycle (4 T-cycles). This matches
+    /// mooneye-gb's `emulate()`: each call consumes one M-cycle of
+    /// the current mode, fires any pending IRQs, and switches modes
+    /// when the per-mode cycle budget runs out.
+    pub fn tick_m_cycle(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
         if self.lcdc & LCDC_ON_B == 0 {
             return;
         }
 
-        let mut dots = dots;
-
-        if self.enable_timer > 0 {
-            // self.restart_timer = self.restart_timer - dots;
-            if self.enable_timer - dots <= 0 {
-                self.enable_timer = 0;
-                // Note: `dots -= self.enable_timer` deliberately subtracts 0.
-                // The PPU's enable_timer is a "free" wait period — the
-                // post-wait mode (Drawing) starts immediately and the full
-                // `dots` are applied to it. This effectively skips the
-                // OamScan phase for the first line, which the gbmicrotest
-                // `hblank_int_if_*` tests depend on.
-                dots -= self.enable_timer;
-                let mode = Mode::Drawing;
-                self.set_mode_stat(mode);
-                self.remaining_dots_in_mode = mode.dots(self.scx);
-            } else {
-                self.enable_timer -= dots;
-                return;
+        // mooneye-gb's quirk: the HBlank STAT IRQ fires one M-cycle BEFORE
+        // the actual mode 0 entry, when we're 1 M-cycle from leaving Mode 3.
+        if self.cycles == 1 && self.mode() == Mode::Drawing {
+            if self.stat & STAT_IF_HBLANK_B != 0 {
+                ints.request_lcd();
             }
         }
 
-        self.remaining_dots_in_mode -= dots;
+        self.cycles -= 1;
 
-        // Process all mode transitions within the dots budget. If `dots`
-        // is large enough to cross multiple mode boundaries (e.g., during
-        // a `call` instruction or a large `run_cpu` flush), we need to
-        // loop and process each transition, otherwise the PPU mode gets
-        // out of sync with the actual T-cycle count.
-        while self.remaining_dots_in_mode < 0 {
-            match self.mode() {
-                Mode::OamScan => {
-                    debug_assert!(self.ly <= 143, "OAM scan, ly = {}", self.ly);
-                    self.enter_mode(Mode::Drawing, ints);
+        if self.cycles > 0 {
+            return;
+        }
+
+        match self.mode() {
+            Mode::OamScan => self.enter_mode(Mode::Drawing, ints),
+            Mode::Drawing => {
+                self.draw_scanline(cgb_mode);
+                self.enter_mode(Mode::HBlank, ints);
+            }
+            Mode::HBlank => {
+                self.ly += 1;
+                if self.ly > 143 {
+                    self.enter_mode(Mode::VBlank, ints);
+                } else {
+                    self.enter_mode(Mode::OamScan, ints);
                 }
-                Mode::Drawing => {
-                    debug_assert!(self.ly <= 143, "Drawing, ly = {}", self.ly);
-                    self.draw_scanline(cgb_mode);
-                    self.enter_mode(Mode::HBlank, ints);
+                self.check_lyc(ints);
+            }
+            Mode::VBlank => {
+                self.ly += 1;
+                if self.ly > 153 {
+                    // End of VBlank: wrap to line 0, enter Mode 2.
+                    self.ly = 0;
+                    // Hand the visible buffer to the host at this exact
+                    // boundary, so tests that sample frame N see frame N's
+                    // pixels.
+                    self.rgba_buf_present = mem::take(&mut self.rgb_buf);
+                    self.enter_mode(Mode::OamScan, ints);
+                } else {
+                    // Still inside the 10-line VBlank tail: stay in
+                    // VBlank mode and just refill the per-mode cycle
+                    // budget so the next iteration runs another 114
+                    // M-cycles before line incrementing again.
+                    self.cycles = Mode::VBlank.m_cycles(self.scx);
                 }
-                Mode::HBlank => {
-                    debug_assert!(self.ly <= 143, "HBlank, ly = {}", self.ly);
-                    self.ly += 1;
-                    if self.ly > 143 {
-                        self.enter_mode(Mode::VBlank, ints);
-                    } else {
-                        self.enter_mode(Mode::OamScan, ints);
-                    }
-                    self.check_lyc(ints);
-                }
-                Mode::VBlank => {
-                    debug_assert!(self.ly >= 144 && self.ly <= 153, "VBlank, ly = {}", self.ly);
-                    self.ly += 1;
-                    if self.ly > 153 {
-                        self.ly = 0;
-                        if self.delay_one_frame {
-                            self.delay_one_frame = false;
-                        } else {
-                            self.rgba_buf_present = mem::take(&mut self.rgb_buf);
-                        }
-                        self.enter_mode(Mode::OamScan, ints);
-                        self.check_lyc(ints);
-                    } else {
-                        self.remaining_dots_in_mode += self.mode().dots(self.scx);
-                        self.check_lyc(ints);
-                        // No further transitions possible within this line.
-                        break;
-                    }
-                }
+                self.check_lyc(ints);
             }
         }
     }
@@ -328,46 +359,25 @@ impl Ppu {
         self.color_correction_mode = mode;
     }
 
-    const fn set_mode_stat(&mut self, mode: Mode) {
-        self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
-    }
-
-    pub const fn write_bgp(&mut self, val: u8) {
-        self.bgp = val;
-    }
-
     pub fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts) {
-        // turn off
+        // turn off: reset to line 0 in HBlank mode, clear all blocking.
         if val & LCDC_ON_B == 0 && self.lcdc & LCDC_ON_B != 0 {
-            // FIXME: breaks 'alone in the dark' and the menu fade out in 'Links awakening' among others
-            // debug_assert!(
-            //     matches!(self.mode(), Mode::VBlank),
-            //     "current mode = {:?}, dots = {}, ly = {}",
-            //     self.mode(),
-            //     self.remaining_dots_in_mode,
-            //     self.ly
-            // );
-
             self.ly = 0;
-            let mode = Mode::HBlank;
-            self.set_mode_stat(mode);
-            self.remaining_dots_in_mode = mode.dots(self.scx);
+            self.stat &= !STAT_MODE_B;
+            self.cycles = Mode::HBlank.m_cycles(self.scx);
             self.rgba_buf_present.clear();
-            // Re-evaluate LYC coincidence after LY reset to 0. If LYC=0
-            // and the LYC STAT IRQ is enabled, fire it (SameBoy
-            // GB_lcd_off calls GB_STAT_update).
+            // LYC comparison: re-evaluate after LY reset to 0.
             self.check_lyc(ints);
         }
 
-        // turn on
+        // turn on: mooneye-gb starts in HBlank mode with the AccessOam
+        // cycle count, so the first line is drawn without an explicit
+        // OAM scan (matches hardware behavior on LCD enable).
         if val & LCDC_ON_B != 0 && self.lcdc & LCDC_ON_B == 0 {
             self.ly = 0;
-            let mode = Mode::HBlank;
-            self.set_mode_stat(mode);
-            self.remaining_dots_in_mode = mode.dots(self.scx);
+            self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
+            self.cycles = Mode::OamScan.m_cycles(self.scx);
             self.check_lyc(ints);
-            self.enable_timer = DOTS_UNTIL_ENABLED;
-            self.delay_one_frame = true;
         }
 
         self.lcdc = val;
@@ -375,10 +385,14 @@ impl Ppu {
 
     pub fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
         self.lyc = val;
-        // Re-evaluate LY=LYC coincidence. On hardware, writing to LYC
-        // inmediatamente updates the STAT LYC flag and fires the LYC STAT IRQ
-        // if enabled (SameBoy GB_STAT_update; gambatte memory.cpp::updateIrqs).
+        // On hardware, writing to LYC re-evaluates LY=LYC coincidence
+        // and fires the LYC STAT IRQ if newly satisfied (SameBoy
+        // GB_STAT_update; gambatte memory.cpp::updateIrqs).
         self.check_lyc(ints);
+    }
+
+    pub const fn write_bgp(&mut self, val: u8) {
+        self.bgp = val;
     }
 
     pub const fn write_obp0(&mut self, val: u8) {
@@ -408,9 +422,7 @@ impl Ppu {
         // Capture which STAT IRQ sources were previously enabled, so we
         // only fire IRQs for sources that *transition* from disabled to
         // enabled by this write. An IRQ source that was already enabled
-        // would have already fired when its condition was first met
-        // (e.g., HBlank IRQ fires on HBlank entry, not on every STAT
-        // write during HBlank).
+        // would have already fired when its condition was first met.
         let prev_enables = self.stat
             & (STAT_IF_HBLANK_B | STAT_IF_VBLANK_B | STAT_IF_OAM_B | STAT_IF_LYC_B);
 
