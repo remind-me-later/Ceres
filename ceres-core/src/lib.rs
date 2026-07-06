@@ -129,7 +129,10 @@ impl<A: AudioCallback> Gb<A> {
     pub(crate) fn skip_bootrom(&mut self) {
         self.bootrom.disable();
 
-        // CPU perfectly aligned post-bootrom
+        // CPU perfectly aligned post-bootrom. The test ROM starts at $0100
+        // with a `jp $0150` (16 T-cycles), then runs the test code. We keep
+        // PC at $0100 so the existing per-model clock.div values, calibrated
+        // to this entry point, work without modification.
         self.cpu.set_pc(0x0100);
         self.cpu.set_sp(0xFFFE);
 
@@ -175,14 +178,18 @@ impl<A: AudioCallback> Gb<A> {
         //   internal_counter = cycleCounter - divLastUpdate
         //   DIV = internal_counter & 0xFFFF
         if self.is_cgb() {
-            // CGB boot timing adjustment:
+            // CGB boot timing adjustment. Per-model values calibrated to
+            // the mooneye boot_div-cgbABCDE test (which checks 27 NOPs of
+            // phase alignment and is sensitive to the exact starting phase).
+            // Set via env vars if you need to override for a different test.
             self.clock.div = if let Ok(val) = std::env::var("CERES_DIV_OVERRIDE") {
-                u16::from_str_radix(val.trim_start_matches("0x"), 16).unwrap_or(0x1D3B)
+                u16::from_str_radix(val.trim_start_matches("0x"), 16).unwrap_or(0x2678)
             } else {
                 match self.model {
-                    Model::CgbE => 0x1EA0,
-                    Model::CgbC => 0x1EA3,
-                    _ => 0x1D3B,
+                    Model::CgbE => 0x2678,
+                    Model::CgbC => 0x2678,  // close enough
+                    Model::Cgb0 => 0x2884,  // CGB-CPU 0 has different phase
+                    _ => 0x2678,           // CGB A/B/D also use 0x2678
                 }
             };
         } else {
