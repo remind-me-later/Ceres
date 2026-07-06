@@ -164,11 +164,11 @@ impl<A: AudioCallback> Gb<A> {
         self.write_mem(0xFF24, 0x77);
         self.write_mem(0xFF25, 0xF3);
         self.write_mem(0xFF26, 0xF1);
-        // LCDC: standard post-boot state. Keep the legacy $91 value here —
-        // boot_hwio-C.gb is handled by separate HW register writes below,
-        // and changing LCDC has ripple effects on PPU mode-state tests
-        // which currently pass at 0x91.
-        self.write_mem(0xFF40, 0x91);
+        // LCDC: standard post-boot state. The CGB boot ROM leaves LCDC at
+        // $FF (BG+WIN+OBJ8x16+BG-tile-8000+LCD on). DMG/SGB leave it at $91
+        // (LCD on, BG+OBJ8x8, BG-tile-8800). Setting the right value here is
+        // important for tests that read LCDC post-boot (e.g. boot_hwio-C.gb).
+        self.write_mem(0xFF40, if self.is_cgb() { 0xFF } else { 0x91 });
 
         // DIV phase after boot ROM.  DMG and CGB boot ROMs leave DIV at
         // different phases due to different boot durations.
