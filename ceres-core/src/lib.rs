@@ -158,12 +158,28 @@ impl<A: AudioCallback> Gb<A> {
         self.cpu.set_de(de);
         self.cpu.set_hl(hl);
 
-        // Initialize IO to standard post-boot values
+        // Initialize IO to standard post-boot values. The CGB boot ROM leaves
+        // most sound registers in distinct states from DMG, so we set them
+        // separately per model.
+        self.write_mem(0xFF10, 0x80);
         self.write_mem(0xFF11, 0xBF);
         self.write_mem(0xFF12, 0xF3);
+        self.write_mem(0xFF14, 0xFF);
+        self.write_mem(0xFF16, 0xBF);
+        self.write_mem(0xFF19, 0xBF);
+        self.write_mem(0xFF1A, 0x7F);
+        self.write_mem(0xFF1C, 0x9F);
+        self.write_mem(0xFF1E, 0xBF);
+        self.write_mem(0xFF20, 0xFF);
+        self.write_mem(0xFF21, 0x00);
+        self.write_mem(0xFF22, 0x00);
+        self.write_mem(0xFF23, 0xBF);
         self.write_mem(0xFF24, 0x77);
         self.write_mem(0xFF25, 0xF3);
         self.write_mem(0xFF26, 0xF1);
+        // OBP0/OBP1: SameBoy initializes these to $00 on CGB and $FF on DMG.
+        self.write_mem(0xFF48, if self.is_cgb() { 0x00 } else { 0xFF });
+        self.write_mem(0xFF49, if self.is_cgb() { 0x00 } else { 0xFF });
         // LCDC: standard post-boot state. The CGB boot ROM leaves LCDC at
         // $FF (BG+WIN+OBJ8x16+BG-tile-8000+LCD on). DMG/SGB leave it at $91
         // (LCD on, BG+OBJ8x8, BG-tile-8800). Setting the right value here is
