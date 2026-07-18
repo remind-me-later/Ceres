@@ -144,14 +144,20 @@ impl<A: AudioCallback> Gb<A> {
         //   CGB-0     → misc/boot_regs-cgb.s          (F=$80 variant: CGB-0)
         //   CGB-ABCDE → misc/boot_regs-cgb.s          (F=$B0 variant: CGB A-E)
         //   AGB       → misc/boot_regs-A.s            (pass: AGB, AGS)
+        //   DMG-0     → acceptance/boot_regs-dmg0.s   (pass: DMG 0)
+        //   SGB/SGB2  → acceptance/boot_regs-sgb{,2}.s (A differs: SGB=$01, SGB2=$FF)
         let (af, bc, de, hl) = match self.model {
+            Model::Dmg0 => (0x0100, 0xFF13, 0x00C1, 0x8403), // DMG-0
             Model::DmgB => (0x01B0, 0x0013, 0x00D8, 0x014D), // DMG-ABC
             Model::Mgb => (0xFFB0, 0x0013, 0x00D8, 0x014D),  // MGB
-            Model::Cgb0 => (0x1180, 0x0000, 0x0008, 0x007C), // CGB-CPU 0
+            Model::Sgb => (0x0100, 0x0014, 0x0000, 0xC060),    // SGB (A=$01)
+            Model::Sgb2 => (0xFF00, 0x0014, 0x0000, 0xC060),   // SGB2 (A=$FF)
+            Model::Cgb0 => (0x1180, 0x0000, 0x0008, 0x007C),  // CGB-CPU 0
             Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD => {
                 (0x11B0, 0x0013, 0x00D8, 0x014D) // CGB-ABCDE
             }
             Model::CgbE => (0x11B0, 0x0013, 0x00D8, 0x014D), // CGB-E
+            Model::Agb => (0x1100, 0x0100, 0x0008, 0x007C),  // AGB
         };
         self.cpu.set_af(af);
         self.cpu.set_bc(bc);
@@ -214,10 +220,25 @@ impl<A: AudioCallback> Gb<A> {
             // (0xBD1C was the SameBoy-aligned value but it broke the
             // gambatte div testsuite — see the DMG start_inc_1 test which
             // expects to read upper-DIV byte = 0xAB after the boot ROM.)
+            //
+            // Per-model phase calibration for mooneye boot_div-* tests:
+            //   DMG-0 → 0x1830 (45-NOP initial reading expects DIV=$19)
+            //   DMG-ABC → 0xABCC (6-NOP initial reading expects DIV=$AC)
+            //   SGB / SGB2 → 0xD860 / 0xD850 (37-NOP initial expects DIV=$D9)
+            //   AGB → not CGB-mode, but our AGB defaults to CgbE=0x2678 for now.
+            // Set CERES_DMG_DIV_OVERRIDE to override per test.
             self.clock.div = if let Ok(val) = std::env::var("CERES_DMG_DIV_OVERRIDE") {
                 u16::from_str_radix(val.trim_start_matches("0x"), 16).unwrap_or(0xABCC)
             } else {
-                0xABCC
+                match self.model {
+                    Model::Dmg0 => 0x1830,
+                    Model::DmgB => 0xABCC,
+                    Model::Mgb => 0xABCC,
+                    Model::Sgb => 0xD860,
+                    Model::Sgb2 => 0xD850,
+                    Model::Agb => 0x267C,
+                    _ => 0xABCC,
+                }
             };
         }
 
@@ -491,8 +512,12 @@ pub enum Model {
     CgbB,
     CgbC,
     CgbD,
+    Dmg0,
     DmgB,
     Mgb,
+    Sgb,
+    Sgb2,
+    Agb,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -506,10 +531,14 @@ pub(crate) enum CgbMode {
 impl From<Model> for CgbMode {
     fn from(model: Model) -> Self {
         match model {
-            Model::DmgB | Model::Mgb => Self::Dmg,
-            Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD | Model::CgbE => {
-                Self::Cgb
-            }
+            Model::Dmg0 | Model::DmgB | Model::Mgb | Model::Sgb | Model::Sgb2 => Self::Dmg,
+            Model::Cgb0
+            | Model::CgbA
+            | Model::CgbB
+            | Model::CgbC
+            | Model::CgbD
+            | Model::CgbE
+            | Model::Agb => Self::Cgb,
         }
     }
 }

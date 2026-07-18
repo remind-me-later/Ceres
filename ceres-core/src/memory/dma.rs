@@ -162,11 +162,12 @@ impl<A: AudioCallback> Gb<A> {
                     | Model::CgbB
                     | Model::CgbC
                     | Model::CgbD
-                    | Model::CgbE => {
+                    | Model::CgbE
+                    | Model::Agb => {
                         // CGB: Invalid source, reads 0xFF
                         0xFF
                     }
-                    Model::DmgB | Model::Mgb => {
+                    Model::Dmg0 | Model::DmgB | Model::Mgb | Model::Sgb | Model::Sgb2 => {
                         // DMG/MGB: Mirrors 0xC000-0xDFFF (mask with 0xDFFF = ~0x2000)
                         self.read_mem(src & 0xDFFF)
                     }

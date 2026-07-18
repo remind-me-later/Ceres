@@ -320,7 +320,7 @@ fn test_rst_timing() {
 
 #[test]
 fn test_boot_div2_s() {
-    let result = run_test(MOONEYE, "acceptance/boot_div2-S.gb", Model::DmgB);
+    let result = run_test(MOONEYE, "acceptance/boot_div2-S.gb", Model::Sgb2);
     assert!(result.is_passed(), "boot_div2-S test failed");
 }
 
@@ -344,13 +344,13 @@ fn test_boot_div_cgbabcde() {
 
 #[test]
 fn test_boot_div_a() {
-    let result = run_test(MOONEYE, "misc/boot_div-A.gb", Model::CgbE);
+    let result = run_test(MOONEYE, "misc/boot_div-A.gb", Model::Agb);
     assert!(result.is_passed(), "boot_div-A test failed");
 }
 
 #[test]
 fn test_boot_div_dmg0() {
-    let result = run_test(MOONEYE, "acceptance/boot_div-dmg0.gb", Model::DmgB);
+    let result = run_test(MOONEYE, "acceptance/boot_div-dmg0.gb", Model::Dmg0);
     assert!(result.is_passed(), "boot_div-dmg0 test failed");
 }
 
@@ -365,7 +365,7 @@ fn test_boot_div_dmgabcmgb() {
 
 #[test]
 fn test_boot_div_s() {
-    let result = run_test(MOONEYE, "acceptance/boot_div-S.gb", Model::DmgB);
+    let result = run_test(MOONEYE, "acceptance/boot_div-S.gb", Model::Sgb);
     assert!(result.is_passed(), "boot_div-S test failed");
 }
 
@@ -377,7 +377,7 @@ fn test_boot_hwio_c() {
 
 #[test]
 fn test_boot_hwio_dmg0() {
-    let result = run_test(MOONEYE, "acceptance/boot_hwio-dmg0.gb", Model::DmgB);
+    let result = run_test(MOONEYE, "acceptance/boot_hwio-dmg0.gb", Model::Dmg0);
     assert!(result.is_passed(), "boot_hwio-dmg0 test failed");
 }
 
@@ -389,13 +389,13 @@ fn test_boot_hwio_g() {
 
 #[test]
 fn test_boot_hwio_s() {
-    let result = run_test(WILBERTPOL, "misc/boot_hwio-S.gb", Model::DmgB);
+    let result = run_test(WILBERTPOL, "misc/boot_hwio-S.gb", Model::Sgb);
     assert!(result.is_passed(), "boot_hwio-S test failed");
 }
 
 #[test]
 fn test_boot_regs_a() {
-    let result = run_test(WILBERTPOL, "misc/boot_regs-A.gb", Model::CgbE);
+    let result = run_test(WILBERTPOL, "misc/boot_regs-A.gb", Model::Agb);
     assert!(result.is_passed(), "boot_regs-A test failed");
 }
 
@@ -413,7 +413,7 @@ fn test_boot_regs_dmg() {
 
 #[test]
 fn test_boot_regs_dmg0() {
-    let result = run_test(MOONEYE, "acceptance/boot_regs-dmg0.gb", Model::DmgB);
+    let result = run_test(MOONEYE, "acceptance/boot_regs-dmg0.gb", Model::Dmg0);
     assert!(result.is_passed(), "boot_regs-dmg0 test failed");
 }
 
@@ -425,13 +425,13 @@ fn test_boot_regs_mgb() {
 
 #[test]
 fn test_boot_regs_sgb() {
-    let result = run_test(WILBERTPOL, "misc/boot_regs-sgb.gb", Model::DmgB);
+    let result = run_test(WILBERTPOL, "misc/boot_regs-sgb.gb", Model::Sgb);
     assert!(result.is_passed(), "boot_regs-sgb test failed");
 }
 
 #[test]
 fn test_boot_regs_sgb2() {
-    let result = run_test(WILBERTPOL, "misc/boot_regs-sgb2.gb", Model::DmgB);
+    let result = run_test(WILBERTPOL, "misc/boot_regs-sgb2.gb", Model::Sgb2);
     assert!(result.is_passed(), "boot_regs-sgb2 test failed");
 }
 
