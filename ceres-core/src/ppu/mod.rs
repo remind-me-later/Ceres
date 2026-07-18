@@ -97,6 +97,10 @@ pub struct Ppu {
     cycles: i32,
     lcdc: u8,
     ly: u8,
+    /// LY value used for LYC coincidence comparison. Separate from `ly`
+    /// because the real PPU updates the LYC comparator a few T-cycles
+    /// after LY increments (SameBoy's `ly_for_comparison`).
+    ly_for_comparison: u16,
     lyc: u8,
     oam: Oam,
     obp0: u8,
@@ -130,6 +134,7 @@ impl Default for Ppu {
             cycles: Mode::HBlank.m_cycles(0),
             lcdc: 0,
             ly: 0,
+            ly_for_comparison: 0,
             lyc: 0,
             oam: Oam::default(),
             obp0: 0,
@@ -164,13 +169,18 @@ impl Ppu {
     }
 
     /// Re-evaluate LY=LYC coincidence and fire LYC STAT IRQ on rising edge.
+    /// Uses `ly_for_comparison` (separate from `ly`) so the LYC comparator
+    /// can update a few T-cycles after `ly` increments, matching SameBoy.
     fn check_lyc(&mut self, ints: &mut Interrupts) {
         self.stat &= !STAT_LYC_B;
-        if self.ly == self.lyc {
+        let lyc_match = if self.ly_for_comparison == u16::from(self.lyc) {
             self.stat |= STAT_LYC_B;
-            if self.stat & STAT_IF_LYC_B != 0 {
-                ints.request_lcd();
-            }
+            true
+        } else {
+            false
+        };
+        if lyc_match && self.stat & STAT_IF_LYC_B != 0 {
+            ints.request_lcd();
         }
     }
 
@@ -326,6 +336,7 @@ impl Ppu {
             }
             Mode::HBlank => {
                 self.ly += 1;
+                self.ly_for_comparison = u16::from(self.ly);
                 if self.ly > 143 {
                     self.enter_mode(Mode::VBlank, ints);
                 } else {
@@ -335,9 +346,11 @@ impl Ppu {
             }
             Mode::VBlank => {
                 self.ly += 1;
+                self.ly_for_comparison = u16::from(self.ly);
                 if self.ly > 153 {
                     // End of VBlank: wrap to line 0, enter Mode 2.
                     self.ly = 0;
+                    self.ly_for_comparison = 0;
                     // Hand the visible buffer to the host at this exact
                     // boundary, so tests that sample frame N see frame N's
                     // pixels.
@@ -363,6 +376,7 @@ impl Ppu {
         // turn off: reset to line 0 in HBlank mode, clear all blocking.
         if val & LCDC_ON_B == 0 && self.lcdc & LCDC_ON_B != 0 {
             self.ly = 0;
+            self.ly_for_comparison = 0;
             self.stat &= !STAT_MODE_B;
             self.cycles = Mode::HBlank.m_cycles(self.scx);
             self.rgba_buf_present.clear();
@@ -375,6 +389,7 @@ impl Ppu {
         // OAM scan (matches hardware behavior on LCD enable).
         if val & LCDC_ON_B != 0 && self.lcdc & LCDC_ON_B == 0 {
             self.ly = 0;
+            self.ly_for_comparison = 0;
             self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
             self.cycles = Mode::OamScan.m_cycles(self.scx);
             self.check_lyc(ints);
