@@ -37,3 +37,6 @@
 [submodule "external/gb-ctr"]
 	path = external/gb-ctr
 	url = git@github.com:Gekkio/gb-ctr.git
+[submodule "external/test-sources/wilbertpol-mooneye-gb"]
+	path = external/test-sources/wilbertpol-mooneye-gb
+	url = git@github.com:wilbertpol/mooneye-gb.git
