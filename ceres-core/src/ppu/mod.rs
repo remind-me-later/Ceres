@@ -384,14 +384,17 @@ impl Ppu {
             self.check_lyc(ints);
         }
 
-        // turn on: mooneye-gb starts in HBlank mode with the AccessOam
-        // cycle count, so the first line is drawn without an explicit
-        // OAM scan (matches hardware behavior on LCD enable).
+        // turn on: per the lcdon_mode_timing test, the first line starts
+        // in mode 0 (HBlank) for ~16-17 M-cycles, then goes straight to
+        // mode 3 (skipping mode 2). This matches the "2 T-cycles late"
+        // hardware quirk for line 0.
         if val & LCDC_ON_B != 0 && self.lcdc & LCDC_ON_B == 0 {
             self.ly = 0;
             self.ly_for_comparison = 0;
             self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
-            self.cycles = Mode::OamScan.m_cycles(self.scx);
+            // Mode 0 length for line 0: ~16 M-cycles (shorter than usual 51)
+            // to account for the 2-T-cycle delay. Mode 2 is skipped.
+            self.cycles = 16;
             self.check_lyc(ints);
         }
 
