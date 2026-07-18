@@ -35,8 +35,15 @@ impl Serial {
     }
 
     #[must_use]
-    pub const fn read_sc(&self, _cgb_mode: CgbMode) -> u8 {
-        self.sc
+    pub const fn read_sc(&self, cgb_mode: CgbMode) -> u8 {
+        // Hardware behavior: bits 0-6 are unused and read as 1, except bit 6
+        // which reads as 0 on DMG/SGB. GBATEK "Read: bit 0-6 always 1 on CGB,
+        // bits 0-5 always 1 and bit 6=0 on DMG". We OR the appropriate mask
+        // here so test reads after writes return the expected forced bits.
+        self.sc | match cgb_mode {
+            CgbMode::Cgb => 0x7F,
+            _ => 0x7E,
+        }
     }
 
     pub fn run_master(&mut self, ints: &mut Interrupts) {
