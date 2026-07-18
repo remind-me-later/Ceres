@@ -84,6 +84,10 @@ const SVBK: u8 = 0x70;
 // APU digital out
 const PCM12: u8 = 0x76;
 const PCM34: u8 = 0x77;
+// Undocumented CGB registers
+const UNDOC_FF72: u8 = 0x72;
+const UNDOC_FF73: u8 = 0x73;
+const UNDOC_FF75: u8 = 0x75;
 // HRAM
 const HRAM_BEG: u8 = 0x80;
 const HRAM_END: u8 = 0xFE;
@@ -179,6 +183,14 @@ impl<A: AudioCallback> Gb<A> {
             SVBK if self.are_cgb_regs_available() => self.wram.svbk().read(),
             PCM12 if self.are_cgb_regs_available() => self.apu.pcm12(),
             PCM34 if self.are_cgb_regs_available() => self.apu.pcm34(),
+            // Undocumented CGB registers. Per Pan Docs "FF72-FF73 — Bits 0-7
+            // (CGB Mode only)": full R/W, init $00. "FF75 — Bits 4-6
+            // (CGB Mode only)": bits 0-3 and 7 read as 1, bits 4-6 are R/W.
+            UNDOC_FF72 if self.are_cgb_regs_available() => self.undoc_ff72,
+            UNDOC_FF73 if self.are_cgb_regs_available() => self.undoc_ff73,
+            UNDOC_FF75 if self.are_cgb_regs_available() => {
+                (self.undoc_ff75 & 0x70) | 0x8F
+            }
             HRAM_BEG..=HRAM_END => self.hram.read(addr),
             IE => self.ints.read_ie(),
             _ => 0xFF,
@@ -363,6 +375,12 @@ impl<A: AudioCallback> Gb<A> {
                 }
             }
             SVBK if self.are_cgb_regs_available() => self.wram.svbk_mut().write(val),
+            // Undocumented CGB registers. Per Pan Docs: FF72/FF73 are full
+            // R/W (any bit can be written), FF75 only bits 4-6 are writable
+            // (bits 0-3, 7 always read as 1).
+            UNDOC_FF72 if self.are_cgb_regs_available() => self.undoc_ff72 = val,
+            UNDOC_FF73 if self.are_cgb_regs_available() => self.undoc_ff73 = val,
+            UNDOC_FF75 if self.are_cgb_regs_available() => self.undoc_ff75 = val & 0x70,
             HRAM_BEG..=HRAM_END => self.hram.write(addr, val),
             IE => self.ints.write_ie(val),
             _ => (),

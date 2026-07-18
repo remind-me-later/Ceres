@@ -70,6 +70,14 @@ pub struct Gb<A: AudioCallback> {
     ppu: Ppu,
     serial: Serial,
     wram: Wram,
+    /// Undocumented CGB register at $FF72 (full R/W, init $00).
+    /// Pan Docs "FF72-FF73 — Bits 0-7 (CGB Mode only)".
+    undoc_ff72: u8,
+    /// Undocumented CGB register at $FF73 (full R/W, init $00).
+    undoc_ff73: u8,
+    /// Undocumented CGB register at $FF75 (bits 0-3, 7 read as 1; bits 4-6 R/W).
+    /// Pan Docs "FF75 — Bits 4-6 (CGB Mode only)".
+    undoc_ff75: u8,
 }
 
 impl<A: AudioCallback> Gb<A> {
@@ -166,7 +174,14 @@ impl<A: AudioCallback> Gb<A> {
 
         // Initialize IO to standard post-boot values. The CGB boot ROM leaves
         // most sound registers in distinct states from DMG, so we set them
-        // separately per model.
+        // separately per model. The values come from the mooneye-test-suite
+        // boot_hwio-{dmg0,dmgABCmgb,S,C}.s sources (and SameBoy defaults).
+        // NR52 must be set FIRST so subsequent writes to NR10/NR11/etc. are
+        // not masked by the "APU off" zombie behavior.
+        self.write_mem(
+            0xFF26,
+            if matches!(self.model, Model::Sgb | Model::Sgb2) { 0xF0 } else { 0xF1 },
+        );
         self.write_mem(0xFF10, 0x80);
         self.write_mem(0xFF11, 0xBF);
         self.write_mem(0xFF12, 0xF3);
@@ -182,15 +197,39 @@ impl<A: AudioCallback> Gb<A> {
         self.write_mem(0xFF23, 0xBF);
         self.write_mem(0xFF24, 0x77);
         self.write_mem(0xFF25, 0xF3);
-        self.write_mem(0xFF26, 0xF1);
-        // OBP0/OBP1: SameBoy initializes these to $00 on CGB and $FF on DMG.
+        // P1, OBP0/OBP1, LCDC, STAT, LY, LYC, BGP, IF, IE per-model.
+        // P1: $CF on DMG (bits 5,4 read low because P14/P15 not pressed),
+        //     $FF on CGB/SGB (in DMG-compat mode).
+        self.write_mem(0xFF00, if self.is_cgb() { 0xFF } else { 0xCF });
+        // OBP0/OBP1: $00 on CGB, $FF on DMG.
         self.write_mem(0xFF48, if self.is_cgb() { 0x00 } else { 0xFF });
         self.write_mem(0xFF49, if self.is_cgb() { 0x00 } else { 0xFF });
-        // LCDC: standard post-boot state. The CGB boot ROM leaves LCDC at
-        // $FF (BG+WIN+OBJ8x16+BG-tile-8000+LCD on). DMG/SGB leave it at $91
-        // (LCD on, BG+OBJ8x8, BG-tile-8800). Setting the right value here is
-        // important for tests that read LCDC post-boot (e.g. boot_hwio-C.gb).
+        // LCDC: $91 on DMG/SGB, $FF on CGB/AGB.
         self.write_mem(0xFF40, if self.is_cgb() { 0xFF } else { 0x91 });
+        // STAT: $83 on DMG-0/SGB/CGB (mode 3 + LYC set), $80 on DMG-ABC.
+        // On CGB-0/AGB same as DMG-0.
+        self.write_mem(
+            0xFF41,
+            match self.model {
+                Model::DmgB | Model::Mgb => 0x80,
+                _ => 0x83,
+            },
+        );
+        // LY, LYC: $00 on all models.
+        self.write_mem(0xFF44, 0x00);
+        self.write_mem(0xFF45, 0x00);
+        // BGP: $01 on DMG-0/SGB/CGB, $0A on DMG-ABC.
+        self.write_mem(
+            0xFF47,
+            match self.model {
+                Model::DmgB | Model::Mgb => 0x0A,
+                _ => 0x01,
+            },
+        );
+        // IF: $E1 (VBlank pending) on all models.
+        self.write_mem(0xFF0F, 0xE1);
+        // IE: $00 on all models.
+        self.write_mem(0xFFFF, 0x00);
 
         // DIV phase after boot ROM.  DMG and CGB boot ROMs leave DIV at
         // different phases due to different boot durations.
@@ -390,6 +429,9 @@ impl<A: AudioCallback> Gb<A> {
             ppu: Ppu::default(),
             serial: Serial::default(),
             wram: Wram::default(),
+            undoc_ff72: 0,
+            undoc_ff73: 0,
+            undoc_ff75: 0,
             #[cfg(feature = "game_genie")]
             game_genie: GameGenie::default(),
         }

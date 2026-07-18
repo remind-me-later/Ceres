@@ -347,6 +347,11 @@ impl<A: AudioCallback> Apu<A> {
     }
 
     #[must_use]
+    pub const fn read_nr41(&self) -> u8 {
+        self.ch4.read_nr41()
+    }
+
+    #[must_use]
     pub fn read_nr50(&self) -> u8 {
         self.master_volume.read_nr50()
     }
