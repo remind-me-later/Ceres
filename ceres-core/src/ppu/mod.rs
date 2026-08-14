@@ -347,12 +347,6 @@ impl Ppu {
             }
         }
 
-        // 1 M-cycle delay for LYC comparator update after line transition
-        if self.mode() == Mode::OamScan && self.cycles == 19 {
-            self.ly_for_comparison = u16::from(self.ly);
-            self.check_lyc(ints);
-        }
-
         // Line 153 early rollover to 0
         if self.mode() == Mode::VBlank && self.ly == 153 && self.cycles == 113 {
             self.ly = 0;
@@ -381,28 +375,42 @@ impl Ppu {
                 } else if self.line0_frame_wrap {
                     self.line0_frame_wrap = false;
                     self.enter_mode(Mode::OamScan, ints);
+                    self.ly_for_comparison = u16::from(self.ly);
+                    self.check_lyc(ints);
                 } else {
                     self.ly += 1;
+                    self.ly_for_comparison = u16::from(self.ly);
                     if self.ly > 143 {
-                        self.ly_for_comparison = u16::from(self.ly);
                         self.enter_mode(Mode::VBlank, ints);
-                        self.check_lyc(ints);
                     } else {
                         self.enter_mode(Mode::OamScan, ints);
                     }
+                    self.check_lyc(ints);
                 }
             }
             Mode::VBlank => {
                 if self.ly == 0 {
-                    // Line 153 finished: enter 1-M-cycle Mode 0 glitch on line 0
                     self.rgba_buf_present = mem::take(&mut self.rgb_buf);
-                    self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
-                    self.cycles = 1;
-                    self.line0_frame_wrap = true;
+                    if self.is_cgb {
+                        // On CGB: direct Mode 1 -> Mode 2 transition
+                        self.enter_mode(Mode::OamScan, ints);
+                        self.ly_for_comparison = 0;
+                        self.check_lyc(ints);
+                    } else {
+                        // On DMG/MGB: 1-M-cycle Mode 0 glitch on line 0
+                        self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
+                        self.cycles = 1;
+                        self.line0_frame_wrap = true;
+                    }
                 } else {
                     self.ly += 1;
                     self.ly_for_comparison = u16::from(self.ly);
-                    self.cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
+                    let base_cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
+                    self.cycles = if !self.is_cgb && self.ly == 152 {
+                        base_cycles - 1
+                    } else {
+                        base_cycles
+                    };
                     self.check_lyc(ints);
                 }
             }
