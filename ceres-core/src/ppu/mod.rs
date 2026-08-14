@@ -140,6 +140,7 @@ pub struct Ppu {
     wy: u8,
     lcdon_line0_mode0: bool,
     line0_frame_wrap: bool,
+    line144_transition: bool,
     stat_line: bool,
 }
 
@@ -157,6 +158,7 @@ impl Default for Ppu {
             lyc: 0,
             lcdon_line0_mode0: false,
             line0_frame_wrap: false,
+            line144_transition: false,
             stat_line: false,
             oam: Oam::default(),
             obp0: 0,
@@ -408,7 +410,13 @@ impl Ppu {
                 self.enter_mode(Mode::HBlank, ints);
             }
             Mode::HBlank => {
-                if self.lcdon_line0_mode0 {
+                if self.line144_transition {
+                    self.line144_transition = false;
+                    self.enter_mode(Mode::VBlank, ints);
+                    self.cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb) - 2;
+                    self.ly_for_comparison = 144;
+                    self.check_lyc(ints);
+                } else if self.lcdon_line0_mode0 {
                     self.lcdon_line0_mode0 = false;
                     self.enter_mode(Mode::Drawing, ints);
                 } else if self.line0_frame_wrap {
@@ -418,13 +426,15 @@ impl Ppu {
                     self.check_lyc(ints);
                 } else {
                     self.ly += 1;
-                    self.ly_for_comparison = u16::from(self.ly);
                     if self.ly > 143 {
-                        self.enter_mode(Mode::VBlank, ints);
+                        self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
+                        self.cycles = 1;
+                        self.line144_transition = true;
                     } else {
+                        self.ly_for_comparison = u16::from(self.ly);
                         self.enter_mode(Mode::OamScan, ints);
+                        self.check_lyc(ints);
                     }
-                    self.check_lyc(ints);
                 }
             }
             Mode::VBlank => {
