@@ -91,13 +91,13 @@ impl Mode {
         // with tests that were passing under the previous (batch-driven)
         // PPU. Total per line still = 114 M-cycles = 456 T-cycles.
         const OAM_M_CYCLES: i32 = 20;
-        const VRAM_M_CYCLES: i32 = 43;
-        const HBLANK_M_CYCLES: i32 = 51;
+        let vram_m_cycles: i32 = if cgb_mode { 43 } else { 43 };
+        let hblank_m_cycles: i32 = 114 - OAM_M_CYCLES - vram_m_cycles;
         const VBLANK_M_CYCLES: i32 = 114;
         match self {
             Self::OamScan => OAM_M_CYCLES,
-            Self::Drawing => VRAM_M_CYCLES + scroll_adjust,
-            Self::HBlank => HBLANK_M_CYCLES - scroll_adjust,
+            Self::Drawing => vram_m_cycles + scroll_adjust,
+            Self::HBlank => hblank_m_cycles - scroll_adjust,
             Self::VBlank => VBLANK_M_CYCLES,
         }
     }
@@ -139,6 +139,7 @@ pub struct Ppu {
     wx: u8,
     wy: u8,
     lcdon_line0_mode0: bool,
+    line0_frame_wrap: bool,
 }
 
 impl Default for Ppu {
@@ -154,6 +155,7 @@ impl Default for Ppu {
             ly_for_comparison: 0,
             lyc: 0,
             lcdon_line0_mode0: false,
+            line0_frame_wrap: false,
             oam: Oam::default(),
             obp0: 0,
             obp1: 0,
@@ -345,6 +347,21 @@ impl Ppu {
             }
         }
 
+        // 1 M-cycle delay for LYC comparator update after line transition
+        if self.mode() == Mode::OamScan && self.cycles == 19 {
+            self.ly_for_comparison = u16::from(self.ly);
+            self.check_lyc(ints);
+        }
+
+        // Line 153 early rollover to 0
+        if self.mode() == Mode::VBlank && self.ly == 153 && self.cycles == 113 {
+            self.ly = 0;
+        }
+        if self.mode() == Mode::VBlank && self.ly == 0 && self.cycles == 111 {
+            self.ly_for_comparison = 0;
+            self.check_lyc(ints);
+        }
+
         self.cycles -= 1;
 
         if self.cycles > 0 {
@@ -361,37 +378,33 @@ impl Ppu {
                 if self.lcdon_line0_mode0 {
                     self.lcdon_line0_mode0 = false;
                     self.enter_mode(Mode::Drawing, ints);
+                } else if self.line0_frame_wrap {
+                    self.line0_frame_wrap = false;
+                    self.enter_mode(Mode::OamScan, ints);
                 } else {
                     self.ly += 1;
-                    self.ly_for_comparison = u16::from(self.ly);
                     if self.ly > 143 {
+                        self.ly_for_comparison = u16::from(self.ly);
                         self.enter_mode(Mode::VBlank, ints);
+                        self.check_lyc(ints);
                     } else {
                         self.enter_mode(Mode::OamScan, ints);
                     }
-                    self.check_lyc(ints);
                 }
             }
             Mode::VBlank => {
-                self.ly += 1;
-                self.ly_for_comparison = u16::from(self.ly);
-                if self.ly > 153 {
-                    // End of VBlank: wrap to line 0, enter Mode 2.
-                    self.ly = 0;
-                    self.ly_for_comparison = 0;
-                    // Hand the visible buffer to the host at this exact
-                    // boundary, so tests that sample frame N see frame N's
-                    // pixels.
+                if self.ly == 0 {
+                    // Line 153 finished: enter 1-M-cycle Mode 0 glitch on line 0
                     self.rgba_buf_present = mem::take(&mut self.rgb_buf);
-                    self.enter_mode(Mode::OamScan, ints);
+                    self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
+                    self.cycles = 1;
+                    self.line0_frame_wrap = true;
                 } else {
-                    // Still inside the 10-line VBlank tail: stay in
-                    // VBlank mode and just refill the per-mode cycle
-                    // budget so the next iteration runs another 114
-                    // M-cycles before line incrementing again.
+                    self.ly += 1;
+                    self.ly_for_comparison = u16::from(self.ly);
                     self.cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
+                    self.check_lyc(ints);
                 }
-                self.check_lyc(ints);
             }
         }
     }
@@ -476,8 +489,8 @@ impl Ppu {
         // only fire IRQs for sources that *transition* from disabled to
         // enabled by this write. An IRQ source that was already enabled
         // would have already fired when its condition was first met.
-        let prev_enables = self.stat
-            & (STAT_IF_HBLANK_B | STAT_IF_VBLANK_B | STAT_IF_OAM_B | STAT_IF_LYC_B);
+        let prev_enables =
+            self.stat & (STAT_IF_HBLANK_B | STAT_IF_VBLANK_B | STAT_IF_OAM_B | STAT_IF_LYC_B);
 
         self.stat = val;
         self.stat &= !(STAT_LYC_B | STAT_MODE_B);
@@ -487,8 +500,8 @@ impl Ppu {
         // writing to STAT can cause a pending STAT IRQ to fire immediately
         // if a newly-enabled condition is already met (SameBoy
         // GB_STAT_update; gambatte memory.cpp::updateIrqs).
-        let new_enables = self.stat
-            & (STAT_IF_HBLANK_B | STAT_IF_VBLANK_B | STAT_IF_OAM_B | STAT_IF_LYC_B);
+        let new_enables =
+            self.stat & (STAT_IF_HBLANK_B | STAT_IF_VBLANK_B | STAT_IF_OAM_B | STAT_IF_LYC_B);
         let newly_enabled = new_enables & !prev_enables;
 
         // Mode-based STAT IRQ sources: only fire if the mode-specific

@@ -14,6 +14,7 @@ pub struct Sm83 {
     hl: u16,
     is_halt_bug_triggered: bool,
     is_halted: bool,
+    has_executed_illegal_opcode: bool,
     pending_cycles: i32,
     pc: u16,
     skip_isr_nops: bool,
@@ -21,6 +22,14 @@ pub struct Sm83 {
 }
 
 impl Sm83 {
+    pub const fn has_executed_illegal_opcode(&self) -> bool {
+        self.has_executed_illegal_opcode
+    }
+
+    pub(crate) const fn set_executed_illegal_opcode(&mut self, val: bool) {
+        self.has_executed_illegal_opcode = val;
+    }
+
     pub const fn a(&self) -> u8 {
         (self.af >> 8) as u8
     }
@@ -862,6 +871,7 @@ impl<A: AudioCallback> Gb<A> {
     const fn illegal(&mut self, _op: u8) {
         self.ints.illegal();
         self.cpu.is_halted = true;
+        self.cpu.has_executed_illegal_opcode = true;
     }
 
     fn inc_dhl(&mut self) {

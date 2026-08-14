@@ -167,9 +167,9 @@ impl<A: AudioCallback> Gb<A> {
             Model::Dmg0 => (0x0100, 0xFF13, 0x00C1, 0x8403), // DMG-0
             Model::DmgB => (0x01B0, 0x0013, 0x00D8, 0x014D), // DMG-ABC
             Model::Mgb => (0xFFB0, 0x0013, 0x00D8, 0x014D),  // MGB
-            Model::Sgb => (0x0100, 0x0014, 0x0000, 0xC060),    // SGB (A=$01)
-            Model::Sgb2 => (0xFF00, 0x0014, 0x0000, 0xC060),   // SGB2 (A=$FF)
-            Model::Cgb0 => (0x1180, 0x0000, 0x0008, 0x007C),  // CGB-CPU 0
+            Model::Sgb => (0x0100, 0x0014, 0x0000, 0xC060),  // SGB (A=$01)
+            Model::Sgb2 => (0xFF00, 0x0014, 0x0000, 0xC060), // SGB2 (A=$FF)
+            Model::Cgb0 => (0x1180, 0x0000, 0x0008, 0x007C), // CGB-CPU 0
             Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD => {
                 (0x11B0, 0x0013, 0x00D8, 0x014D) // CGB-ABCDE
             }
@@ -189,14 +189,22 @@ impl<A: AudioCallback> Gb<A> {
         // not masked by the "APU off" zombie behavior.
         self.write_mem(
             0xFF26,
-            if matches!(self.model, Model::Sgb | Model::Sgb2) { 0xF0 } else { 0xF1 },
+            if matches!(self.model, Model::Sgb | Model::Sgb2) {
+                0xF0
+            } else {
+                0xF1
+            },
         );
         self.write_mem(0xFF10, 0x80);
         self.write_mem(0xFF11, 0xBF);
         self.write_mem(0xFF12, 0xF3);
         self.write_mem(
             0xFF14,
-            if matches!(self.model, Model::Sgb | Model::Sgb2) { 0x3F } else { 0xBF },
+            if matches!(self.model, Model::Sgb | Model::Sgb2) {
+                0x3F
+            } else {
+                0xBF
+            },
         );
         self.write_mem(0xFF16, 0x3F);
         self.write_mem(0xFF17, 0x00);
@@ -271,8 +279,8 @@ impl<A: AudioCallback> Gb<A> {
             } else {
                 match self.model {
                     Model::CgbE => 0x2678,
-                    Model::CgbC => 0x2678,  // close enough
-                    Model::Cgb0 => 0x2884,  // CGB-CPU 0 has different phase
+                    Model::CgbC => 0x2678, // close enough
+                    Model::Cgb0 => 0x2884, // CGB-CPU 0 has different phase
                     _ => 0x2678,           // CGB A/B/D also use 0x2678
                 }
             };
@@ -525,6 +533,16 @@ impl<A: AudioCallback> Gb<A> {
     #[must_use]
     pub const fn cpu_is_halted(&self) -> bool {
         self.cpu.is_halted()
+    }
+
+    #[inline]
+    pub fn check_and_reset_illegal_opcode_breakpoint(&mut self) -> bool {
+        if self.cpu.has_executed_illegal_opcode() {
+            self.cpu.set_executed_illegal_opcode(false);
+            true
+        } else {
+            false
+        }
     }
 
     #[inline]
@@ -906,7 +924,10 @@ mod tests {
         gb.run_timers(1);
         assert_eq!(gb.clock.tima, 0x42, "TMA must be loaded immediately");
         assert_eq!(gb.clock.tima_reload_pending, 4);
-        assert_eq!(gb.clock.tima_irq_countdown, 3, "DMG must use 3-T-cycle countdown");
+        assert_eq!(
+            gb.clock.tima_irq_countdown, 3,
+            "DMG must use 3-T-cycle countdown"
+        );
         assert!(!gb.ints.is_any_requested(), "IRQ must not fire yet");
         assert_eq!(gb.clock.tima(), 0, "TIMA reads return 0 immediately");
 

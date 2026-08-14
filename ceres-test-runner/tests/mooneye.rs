@@ -37,9 +37,9 @@ pub struct MooneyeCheck;
 impl CompletionCheck for MooneyeCheck {
     #[expect(clippy::many_single_char_names)]
     fn check(&self, gb: &mut ceres_core::Gb<DummyAudioCallback>) -> Option<TestResult> {
-        // Wait for either completion signal: ld b,b breakpoint or permanent HALT (with IE=0).
+        // Wait for either completion signal: ld b,b breakpoint or illegal opcode (0xED).
         let triggered = gb.check_and_reset_ld_b_b_breakpoint()
-            || (gb.cpu_is_halted() && gb.read_mem(0xFFFF) == 0);
+            || gb.check_and_reset_illegal_opcode_breakpoint();
         if !triggered {
             return None;
         }
@@ -173,7 +173,7 @@ fn test_call_timing2() {
 #[test]
 fn test_di_timing_gs() {
     let result = run_test(WILBERTPOL, "acceptance/di_timing-GS.gb", Model::DmgB);
-    assert!(result.is_passed(), "di_timing-GS test failed");
+    assert_eq!(result, TestResult::Passed, "di_timing-GS test failed");
 }
 
 #[test]
@@ -222,7 +222,11 @@ fn test_halt_ime1_timing() {
 
 #[test]
 fn test_halt_ime1_timing2_gs() {
-    let result = run_test(WILBERTPOL, "acceptance/halt_ime1_timing2-GS.gb", Model::DmgB);
+    let result = run_test(
+        WILBERTPOL,
+        "acceptance/halt_ime1_timing2-GS.gb",
+        Model::DmgB,
+    );
     assert_eq!(
         result,
         TestResult::Passed,
@@ -339,10 +343,7 @@ fn test_boot_div2_s() {
 #[test]
 fn test_boot_div_cgb0() {
     let result = run_test(MOONEYE, "misc/boot_div-cgb0.gb", Model::Cgb0);
-    assert!(
-        result.is_passed(),
-        "boot_div-cgb0 test failed: {result:?}"
-    );
+    assert!(result.is_passed(), "boot_div-cgb0 test failed: {result:?}");
 }
 
 #[test]
@@ -527,11 +528,12 @@ fn test_oam_dma_sources_gs() {
 
 #[test]
 fn test_gpu_hblank_ly_scx_timing_c() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/hblank_ly_scx_timing-C.gb", Model::CgbE);
-    assert!(
-        result.is_passed(),
-        "gpu/hblank_ly_scx_timing-C test failed"
+    let result = run_test(
+        WILBERTPOL,
+        "acceptance/gpu/hblank_ly_scx_timing-C.gb",
+        Model::CgbE,
     );
+    assert!(result.is_passed(), "gpu/hblank_ly_scx_timing-C test failed");
 }
 
 #[test]
@@ -582,7 +584,11 @@ fn test_gpu_intr_0_timing() {
 
 #[test]
 fn test_gpu_intr_1_2_timing_gs() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/intr_1_2_timing-GS.gb", Model::DmgB);
+    let result = run_test(
+        WILBERTPOL,
+        "acceptance/gpu/intr_1_2_timing-GS.gb",
+        Model::DmgB,
+    );
     assert_eq!(
         result,
         TestResult::Passed,
@@ -599,7 +605,11 @@ fn test_gpu_intr_1_timing() {
 #[test]
 fn test_gpu_intr_2_0_timing() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/intr_2_0_timing.gb", Model::DmgB);
-    assert_eq!(result, TestResult::Passed, "gpu/intr_2_0_timing test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/intr_2_0_timing test failed"
+    );
 }
 
 #[test]
@@ -708,7 +718,11 @@ fn test_gpu_intr_2_mode0_scx8_timing_nops() {
 
 #[test]
 fn test_gpu_intr_2_mode0_timing() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/intr_2_mode0_timing.gb", Model::DmgB);
+    let result = run_test(
+        WILBERTPOL,
+        "acceptance/gpu/intr_2_mode0_timing.gb",
+        Model::DmgB,
+    );
     assert_eq!(
         result,
         TestResult::Passed,
@@ -797,7 +811,11 @@ fn test_gpu_intr_2_mode0_timing_sprites_scx4_nops() {
 
 #[test]
 fn test_gpu_intr_2_mode3_timing() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/intr_2_mode3_timing.gb", Model::DmgB);
+    let result = run_test(
+        WILBERTPOL,
+        "acceptance/gpu/intr_2_mode3_timing.gb",
+        Model::DmgB,
+    );
     assert_eq!(
         result,
         TestResult::Passed,
@@ -827,8 +845,16 @@ fn test_gpu_intr_2_timing() {
 
 #[test]
 fn test_gpu_lcdon_mode_timing() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/lcdon_mode_timing.gb", Model::DmgB);
-    assert_eq!(result, TestResult::Passed, "gpu/lcdon_mode_timing test failed");
+    let result = run_test(
+        WILBERTPOL,
+        "acceptance/gpu/lcdon_mode_timing.gb",
+        Model::DmgB,
+    );
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/lcdon_mode_timing test failed"
+    );
 }
 
 #[test]
@@ -843,7 +869,11 @@ fn test_gpu_lcdon_timing_gs() {
 
 #[test]
 fn test_gpu_lcdon_write_timing_gs() {
-    let result = run_test(MOONEYE, "acceptance/ppu/lcdon_write_timing-GS.gb", Model::DmgB);
+    let result = run_test(
+        MOONEYE,
+        "acceptance/ppu/lcdon_write_timing-GS.gb",
+        Model::DmgB,
+    );
     assert_eq!(
         result,
         TestResult::Passed,
@@ -890,24 +920,36 @@ fn test_gpu_ly00_mode3_0() {
 #[test]
 fn test_gpu_ly143_144_145() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/ly143_144_145.gb", Model::DmgB);
-    assert!(result.is_passed(), "gpu/ly143_144_145 test failed");
+    assert_eq!(result, TestResult::Passed, "gpu/ly143_144_145 test failed");
 }
 
 #[test]
 fn test_gpu_ly143_144_152_153() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly143_144_152_153.gb", Model::DmgB);
+    let result = run_test(
+        WILBERTPOL,
+        "acceptance/gpu/ly143_144_152_153.gb",
+        Model::DmgB,
+    );
     assert!(result.is_passed(), "gpu/ly143_144_152_153 test failed");
 }
 
 #[test]
 fn test_gpu_ly143_144_mode0_1() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly143_144_mode0_1.gb", Model::DmgB);
+    let result = run_test(
+        WILBERTPOL,
+        "acceptance/gpu/ly143_144_mode0_1.gb",
+        Model::DmgB,
+    );
     assert!(result.is_passed(), "gpu/ly143_144_mode0_1 test failed");
 }
 
 #[test]
 fn test_gpu_ly143_144_mode3_0() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly143_144_mode3_0.gb", Model::DmgB);
+    let result = run_test(
+        WILBERTPOL,
+        "acceptance/gpu/ly143_144_mode3_0.gb",
+        Model::DmgB,
+    );
     assert!(result.is_passed(), "gpu/ly143_144_mode3_0 test failed");
 }
 
@@ -925,13 +967,21 @@ fn test_gpu_ly_lyc_0_gs() {
 
 #[test]
 fn test_gpu_ly_lyc_0_write_c() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_lyc_0_write-C.gb", Model::CgbE);
+    let result = run_test(
+        WILBERTPOL,
+        "acceptance/gpu/ly_lyc_0_write-C.gb",
+        Model::CgbE,
+    );
     assert!(result.is_passed(), "gpu/ly_lyc_0_write-C test failed");
 }
 
 #[test]
 fn test_gpu_ly_lyc_0_write_gs() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_lyc_0_write-GS.gb", Model::DmgB);
+    let result = run_test(
+        WILBERTPOL,
+        "acceptance/gpu/ly_lyc_0_write-GS.gb",
+        Model::DmgB,
+    );
     assert!(result.is_passed(), "gpu/ly_lyc_0_write-GS test failed");
 }
 
@@ -1017,7 +1067,11 @@ fn test_gpu_ly_new_frame_gs() {
 
 #[test]
 fn test_gpu_stat_irq_blocking() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/stat_irq_blocking.gb", Model::DmgB);
+    let result = run_test(
+        WILBERTPOL,
+        "acceptance/gpu/stat_irq_blocking.gb",
+        Model::DmgB,
+    );
     assert_eq!(
         result,
         TestResult::Passed,
@@ -1033,13 +1087,21 @@ fn test_gpu_stat_write_if_c() {
 
 #[test]
 fn test_gpu_stat_write_if_gs() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/stat_write_if-GS.gb", Model::DmgB);
+    let result = run_test(
+        WILBERTPOL,
+        "acceptance/gpu/stat_write_if-GS.gb",
+        Model::DmgB,
+    );
     assert!(result.is_passed(), "gpu/stat_write_if-GS test failed");
 }
 
 #[test]
 fn test_gpu_vblank_if_timing() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/vblank_if_timing.gb", Model::DmgB);
+    let result = run_test(
+        WILBERTPOL,
+        "acceptance/gpu/vblank_if_timing.gb",
+        Model::DmgB,
+    );
     assert!(result.is_passed(), "gpu/vblank_if_timing test failed");
 }
 
@@ -1276,11 +1338,7 @@ fn test_mbc1_ram_256kb() {
 
 #[test]
 fn test_mbc1_rom_4banks() {
-    let result = run_test(
-        WILBERTPOL,
-        "emulator-only/mbc1_rom_4banks.gb",
-        Model::CgbE,
-    );
+    let result = run_test(WILBERTPOL, "emulator-only/mbc1_rom_4banks.gb", Model::CgbE);
     assert!(result.is_passed(), "mbc1_rom_4banks test failed");
 }
 
@@ -1416,11 +1474,7 @@ fn test_mbc5_rom_64mb() {
 
 #[test]
 fn test_manual_sprite_priority_dmg() {
-    let result = run_screenshot_test(
-        WILBERTPOL,
-        "manual-only/sprite_priority.gb",
-        Model::DmgB,
-    );
+    let result = run_screenshot_test(WILBERTPOL, "manual-only/sprite_priority.gb", Model::DmgB);
     assert!(
         result.is_passed(),
         "manual-only/sprite_priority DMG test failed"
@@ -1429,11 +1483,7 @@ fn test_manual_sprite_priority_dmg() {
 
 #[test]
 fn test_manual_sprite_priority_cgb() {
-    let result = run_screenshot_test(
-        WILBERTPOL,
-        "manual-only/sprite_priority.gb",
-        Model::CgbE,
-    );
+    let result = run_screenshot_test(WILBERTPOL, "manual-only/sprite_priority.gb", Model::CgbE);
     assert!(
         result.is_passed(),
         "manual-only/sprite_priority CGB test failed"
