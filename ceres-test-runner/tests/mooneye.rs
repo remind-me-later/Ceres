@@ -1110,7 +1110,7 @@ fn test_gpu_vblank_if_timing() {
         "acceptance/gpu/vblank_if_timing.gb",
         Model::DmgB,
     );
-    assert!(result.is_passed(), "gpu/vblank_if_timing test failed");
+    assert_eq!(result, TestResult::Passed, "gpu/vblank_if_timing test failed");
 }
 
 #[test]

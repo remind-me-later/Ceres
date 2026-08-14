@@ -347,6 +347,15 @@ impl Ppu {
             }
         }
 
+        // Scanline 143 VBlank assertion: per vblank_if_timing,
+        // bit 0 of IF is set on the last M-cycle of scanline 143 HBlank (cycles == 1).
+        if self.mode() == Mode::HBlank && self.ly == 143 && self.cycles == 1 {
+            ints.request_vblank();
+            if self.stat & STAT_IF_VBLANK_B != 0 || (!self.is_cgb && self.stat & STAT_IF_OAM_B != 0) {
+                ints.request_lcd();
+            }
+        }
+
         // Line 153 early rollover to 0
         if self.mode() == Mode::VBlank && self.ly == 153 && self.cycles == 113 {
             self.ly = 0;
