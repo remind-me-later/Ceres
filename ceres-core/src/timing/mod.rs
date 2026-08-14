@@ -149,8 +149,11 @@ impl<A: AudioCallback> Gb<A> {
             // the field docs on `tima_irq_countdown`.
             self.clock.tima = self.clock.tma;
             self.clock.tima_reload_pending = 4;
-            self.clock.tima_irq_countdown =
-                if matches!(self.cgb_mode, crate::CgbMode::Cgb) { 4 } else { 3 };
+            self.clock.tima_irq_countdown = if matches!(self.cgb_mode, crate::CgbMode::Cgb) {
+                4
+            } else {
+                3
+            };
         }
     }
 
@@ -244,6 +247,7 @@ impl<A: AudioCallback> Gb<A> {
 
         if (val & 4) == 0 {
             self.clock.tima_reload_pending = 0;
+            self.clock.tima_irq_countdown = 0;
         }
 
         self.clock.tac = val;
