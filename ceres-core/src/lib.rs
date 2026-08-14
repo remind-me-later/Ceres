@@ -189,7 +189,7 @@ impl<A: AudioCallback> Gb<A> {
         // not masked by the "APU off" zombie behavior.
         self.write_mem(
             0xFF26,
-            if matches!(self.model, Model::Sgb | Model::Sgb2) {
+            if matches!(self.model, Model::Sgb | Model::Sgb2) || self.is_cgb() {
                 0xF0
             } else {
                 0xF1
@@ -200,7 +200,7 @@ impl<A: AudioCallback> Gb<A> {
         self.write_mem(0xFF12, 0xF3);
         self.write_mem(
             0xFF14,
-            if matches!(self.model, Model::Sgb | Model::Sgb2) {
+            if matches!(self.model, Model::Sgb | Model::Sgb2) || self.is_cgb() {
                 0x3F
             } else {
                 0xBF
@@ -243,8 +243,7 @@ impl<A: AudioCallback> Gb<A> {
             Model::DmgB | Model::Mgb => 0x80,
             _ => 0x83,
         });
-        // LY: $01 on DMG0, $00 on other models.
-        self.ppu.set_ly(u8::from(matches!(self.model, Model::Dmg0)));
+        self.ppu.set_ly(0);
         self.write_mem(0xFF45, 0x00);
         self.dma.set_reg(if self.is_cgb() { 0x00 } else { 0xFF });
         // BGP: $FC on all models.
