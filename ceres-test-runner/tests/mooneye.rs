@@ -1048,7 +1048,7 @@ fn test_gpu_ly_lyc_gs() {
 #[test]
 fn test_gpu_ly_lyc_write_c() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/ly_lyc_write-C.gb", Model::CgbE);
-    assert!(result.is_passed(), "gpu/ly_lyc_write-C test failed");
+    assert_eq!(result, TestResult::Passed, "gpu/ly_lyc_write-C test failed");
 }
 
 #[test]

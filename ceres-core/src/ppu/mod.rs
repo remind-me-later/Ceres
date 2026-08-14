@@ -366,6 +366,16 @@ impl Ppu {
             }
         }
 
+        // Early LYC comparator advance in Mode 0 (per ly_lyc_write test)
+        if self.mode() == Mode::HBlank && self.cycles == 2 && self.ly < 143 {
+            self.ly_for_comparison = u16::from(self.ly + 1);
+            if self.ly_for_comparison == u16::from(self.lyc) {
+                self.stat |= STAT_LYC_B;
+            } else {
+                self.stat &= !STAT_LYC_B;
+            }
+        }
+
         // Line 153 early rollover to 0
         if self.mode() == Mode::VBlank && self.ly == 153 && self.cycles == 113 {
             self.ly = 0;
