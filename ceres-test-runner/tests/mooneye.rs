@@ -1090,7 +1090,11 @@ fn test_gpu_stat_irq_blocking() {
 #[test]
 fn test_gpu_stat_write_if_c() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/stat_write_if-C.gb", Model::CgbE);
-    assert!(result.is_passed(), "gpu/stat_write_if-C test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/stat_write_if-C test failed"
+    );
 }
 
 #[test]
@@ -1100,7 +1104,11 @@ fn test_gpu_stat_write_if_gs() {
         "acceptance/gpu/stat_write_if-GS.gb",
         Model::DmgB,
     );
-    assert!(result.is_passed(), "gpu/stat_write_if-GS test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/stat_write_if-GS test failed"
+    );
 }
 
 #[test]

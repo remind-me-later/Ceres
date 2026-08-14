@@ -140,6 +140,7 @@ pub struct Ppu {
     wy: u8,
     lcdon_line0_mode0: bool,
     line0_frame_wrap: bool,
+    stat_line: bool,
 }
 
 impl Default for Ppu {
@@ -156,6 +157,7 @@ impl Default for Ppu {
             lyc: 0,
             lcdon_line0_mode0: false,
             line0_frame_wrap: false,
+            stat_line: false,
             oam: Oam::default(),
             obp0: 0,
             obp1: 0,
@@ -191,17 +193,39 @@ impl Ppu {
     /// Re-evaluate LY=LYC coincidence and fire LYC STAT IRQ on rising edge.
     /// Uses `ly_for_comparison` (separate from `ly`) so the LYC comparator
     /// can update a few T-cycles after `ly` increments, matching SameBoy.
-    fn check_lyc(&mut self, ints: &mut Interrupts) {
-        self.stat &= !STAT_LYC_B;
-        let lyc_match = if self.ly_for_comparison == u16::from(self.lyc) {
-            self.stat |= STAT_LYC_B;
-            true
-        } else {
-            false
+    fn update_stat_line(&mut self, ints: &mut Interrupts) {
+        if self.lcdc & LCDC_ON_B == 0 {
+            self.stat_line = false;
+            return;
+        }
+
+        let lyc_signal = (self.stat & STAT_IF_LYC_B != 0) && (self.stat & STAT_LYC_B != 0);
+        let mode_signal = match self.mode() {
+            Mode::HBlank => self.stat & STAT_IF_HBLANK_B != 0,
+            Mode::VBlank => self.stat & STAT_IF_VBLANK_B != 0,
+            Mode::OamScan => self.stat & STAT_IF_OAM_B != 0,
+            Mode::Drawing => false,
         };
-        if lyc_match && self.stat & STAT_IF_LYC_B != 0 {
+
+        let new_line = lyc_signal || mode_signal;
+        if new_line && !self.stat_line {
             ints.request_lcd();
         }
+        self.stat_line = new_line;
+    }
+
+    fn check_lyc(&mut self, ints: &mut Interrupts) {
+        if self.lcdc & LCDC_ON_B == 0 {
+            return;
+        }
+
+        if self.ly_for_comparison == u16::from(self.lyc) {
+            self.stat |= STAT_LYC_B;
+        } else {
+            self.stat &= !STAT_LYC_B;
+        }
+
+        self.update_stat_line(ints);
     }
 
     /// Transition the PPU to a new mode, reset the per-mode cycle counter,
@@ -213,26 +237,18 @@ impl Ppu {
 
         match mode {
             Mode::OamScan => {
-                if self.stat & STAT_IF_OAM_B != 0 {
-                    ints.request_lcd();
-                }
                 self.win_in_ly = false;
             }
             Mode::VBlank => {
                 ints.request_vblank();
-                if self.stat & STAT_IF_VBLANK_B != 0 {
-                    ints.request_lcd();
-                }
                 self.win_skipped = 0;
                 self.win_in_frame = false;
             }
             Mode::Drawing => (),
-            Mode::HBlank => {
-                if self.stat & STAT_IF_HBLANK_B != 0 {
-                    ints.request_lcd();
-                }
-            }
+            Mode::HBlank => (),
         }
+
+        self.update_stat_line(ints);
     }
 
     #[must_use]
@@ -336,15 +352,17 @@ impl Ppu {
         // mooneye-gb's quirk: the HBlank STAT IRQ fires one M-cycle BEFORE
         // the actual mode 0 entry, when we're 1 M-cycle from leaving Mode 3.
         if self.cycles == 1 && self.mode() == Mode::Drawing {
-            if self.stat & STAT_IF_HBLANK_B != 0 {
+            if self.stat & STAT_IF_HBLANK_B != 0 && !self.stat_line {
                 ints.request_lcd();
+                self.stat_line = true;
             }
         }
 
         // Mode 2 STAT IRQ on line 144 fires 1 M-cycle BEFORE VBlank (vblank_stat_intr)
         if self.mode() == Mode::HBlank && self.ly == 143 && self.cycles == 1 {
-            if self.stat & STAT_IF_OAM_B != 0 {
+            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
                 ints.request_lcd();
+                self.stat_line = true;
             }
         }
 
@@ -429,6 +447,7 @@ impl Ppu {
             self.ly_for_comparison = 0;
             self.lcdon_line0_mode0 = false;
             self.stat &= !STAT_MODE_B;
+            self.stat_line = false;
             self.cycles = Mode::HBlank.m_cycles(self.scx, self.is_cgb);
             self.rgba_buf_present.clear();
             // LYC comparison: re-evaluate after LY reset to 0.
@@ -490,46 +509,23 @@ impl Ppu {
         self.scy = val;
     }
 
-    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts, _cgb_mode: CgbMode) {
+    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts, cgb_mode: CgbMode) {
         let ly_equals_lyc = self.stat & STAT_LYC_B;
         let mode: u8 = self.mode() as u8;
-
-        // Capture which STAT IRQ sources were previously enabled, so we
-        // only fire IRQs for sources that *transition* from disabled to
-        // enabled by this write. An IRQ source that was already enabled
-        // would have already fired when its condition was first met.
-        let prev_enables =
-            self.stat & (STAT_IF_HBLANK_B | STAT_IF_VBLANK_B | STAT_IF_OAM_B | STAT_IF_LYC_B);
 
         self.stat = val;
         self.stat &= !(STAT_LYC_B | STAT_MODE_B);
         self.stat |= ly_equals_lyc | mode;
 
-        // Re-evaluate STAT interrupt line after the write. On hardware,
-        // writing to STAT can cause a pending STAT IRQ to fire immediately
-        // if a newly-enabled condition is already met (SameBoy
-        // GB_STAT_update; gambatte memory.cpp::updateIrqs).
-        let new_enables =
-            self.stat & (STAT_IF_HBLANK_B | STAT_IF_VBLANK_B | STAT_IF_OAM_B | STAT_IF_LYC_B);
-        let newly_enabled = new_enables & !prev_enables;
-
-        // Mode-based STAT IRQ sources: only fire if the mode-specific
-        // enable was newly set by this write AND the mode condition is met.
-        let mode_irq_enable = match self.mode() {
-            Mode::HBlank => STAT_IF_HBLANK_B,
-            Mode::VBlank => STAT_IF_VBLANK_B,
-            Mode::OamScan => STAT_IF_OAM_B,
-            Mode::Drawing => 0,
-        };
-        if mode_irq_enable != 0 && (newly_enabled & mode_irq_enable) != 0 {
-            ints.request_lcd();
+        if !matches!(cgb_mode, CgbMode::Cgb) && (self.lcdc & LCDC_ON_B != 0) {
+            // On DMG/MGB, writing to STAT while in Mode 0 or Mode 1 glitches the STAT IRQ line high
+            if (self.mode() == Mode::HBlank || self.mode() == Mode::VBlank) && !self.stat_line {
+                ints.request_lcd();
+                self.stat_line = true;
+            }
         }
 
-        // LYC coincidence STAT IRQ source: only fire if the LYC enable was
-        // newly set by this write AND LY currently equals LYC.
-        if (newly_enabled & STAT_IF_LYC_B) != 0 && (self.stat & STAT_LYC_B) != 0 {
-            ints.request_lcd();
-        }
+        self.update_stat_line(ints);
     }
 
     pub const fn write_wx(&mut self, val: u8) {
