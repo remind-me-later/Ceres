@@ -1110,13 +1110,21 @@ fn test_gpu_vblank_if_timing() {
         "acceptance/gpu/vblank_if_timing.gb",
         Model::DmgB,
     );
-    assert_eq!(result, TestResult::Passed, "gpu/vblank_if_timing test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/vblank_if_timing test failed"
+    );
 }
 
 #[test]
 fn test_gpu_vblank_stat_intr_c() {
     let result = run_test(WILBERTPOL, "misc/gpu/vblank_stat_intr-C.gb", Model::CgbE);
-    assert!(result.is_passed(), "gpu/vblank_stat_intr-C test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/vblank_stat_intr-C test failed"
+    );
 }
 
 #[test]

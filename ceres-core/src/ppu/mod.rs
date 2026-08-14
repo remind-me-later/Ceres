@@ -223,12 +223,6 @@ impl Ppu {
                 if self.stat & STAT_IF_VBLANK_B != 0 {
                     ints.request_lcd();
                 }
-                // The mooneye-gb quirk: on entering VBlank, also fire the
-                // OAM STAT IRQ if enabled. This is what makes the
-                // `vblank_stat_intr-*` tests pass.
-                if self.stat & STAT_IF_OAM_B != 0 {
-                    ints.request_lcd();
-                }
                 self.win_skipped = 0;
                 self.win_in_frame = false;
             }
@@ -347,11 +341,9 @@ impl Ppu {
             }
         }
 
-        // Scanline 143 VBlank assertion: per vblank_if_timing,
-        // bit 0 of IF is set on the last M-cycle of scanline 143 HBlank (cycles == 1).
+        // Mode 2 STAT IRQ on line 144 fires 1 M-cycle BEFORE VBlank (vblank_stat_intr)
         if self.mode() == Mode::HBlank && self.ly == 143 && self.cycles == 1 {
-            ints.request_vblank();
-            if self.stat & STAT_IF_VBLANK_B != 0 || (!self.is_cgb && self.stat & STAT_IF_OAM_B != 0) {
+            if self.stat & STAT_IF_OAM_B != 0 {
                 ints.request_lcd();
             }
         }
