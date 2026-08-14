@@ -376,6 +376,12 @@ impl Ppu {
             }
         }
 
+        // Early LYC comparator advance at the end of line 144 (per ly_lyc_144 test)
+        if self.mode() == Mode::VBlank && self.ly == 144 && self.cycles == 2 {
+            self.ly_for_comparison = 145;
+            self.check_lyc(ints);
+        }
+
         // Line 153 early rollover to 0
         if self.mode() == Mode::VBlank && self.ly == 153 && self.cycles == 113 {
             self.ly = 0;
@@ -433,13 +439,13 @@ impl Ppu {
                     }
                 } else {
                     self.ly += 1;
-                    self.ly_for_comparison = u16::from(self.ly);
                     let base_cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
                     self.cycles = if !self.is_cgb && self.ly == 152 {
                         base_cycles - 1
                     } else {
                         base_cycles
                     };
+                    self.ly_for_comparison = u16::from(self.ly);
                     self.check_lyc(ints);
                 }
             }
