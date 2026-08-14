@@ -56,8 +56,24 @@ impl CompletionCheck for MooneyeCheck {
             return Some(TestResult::Passed);
         }
 
+        let save_c = gb.read_mem(0xC002);
+        let save_b = gb.read_mem(0xC003);
+        let save_e = gb.read_mem(0xC004);
+        let save_d = gb.read_mem(0xC005);
+
+        let mut text = String::new();
+        for addr in 0x9820..0x9900 {
+            let b = gb.read_mem(addr);
+            if (0x20..=0x7E).contains(&b) {
+                text.push(b as char);
+            } else if b == 0 {
+                text.push(' ');
+            }
+        }
+        let text = text.trim();
+
         Some(TestResult::Failed(format!(
-            "Mooneye failure: B={b:#04X}, C={c:#04X}, D={d:#04X}, E={e:#04X}, H={h:#04X}, L={l:#04X}"
+            "Mooneye failure: B={b:#04X}, C={c:#04X}, D={d:#04X}, E={e:#04X}, H={h:#04X}, L={l:#04X}, text: \"{text}\", saved(b={save_b:#04X}, c={save_c:#04X}, d={save_d:#04X}, e={save_e:#04X})"
         )))
     }
 
@@ -812,7 +828,7 @@ fn test_gpu_intr_2_timing() {
 #[test]
 fn test_gpu_lcdon_mode_timing() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/lcdon_mode_timing.gb", Model::DmgB);
-    assert!(result.is_passed(), "gpu/lcdon_mode_timing test failed");
+    assert_eq!(result, TestResult::Passed, "gpu/lcdon_mode_timing test failed");
 }
 
 #[test]
@@ -972,7 +988,7 @@ fn test_gpu_ly_lyc_c() {
 #[test]
 fn test_gpu_ly_lyc_gs() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/ly_lyc-GS.gb", Model::DmgB);
-    assert!(result.is_passed(), "gpu/ly_lyc-GS test failed");
+    assert_eq!(result, TestResult::Passed, "gpu/ly_lyc-GS test failed");
 }
 
 #[test]

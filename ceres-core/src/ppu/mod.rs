@@ -138,15 +138,11 @@ pub struct Ppu {
     win_skipped: u8,
     wx: u8,
     wy: u8,
+    lcdon_line0_mode0: bool,
 }
 
 impl Default for Ppu {
     fn default() -> Self {
-        // The original Ceres scanline renderer started in HBlank mode
-        // with no pending cycle counter. We keep that initial state to
-        // remain compatible with the wider test suite. The LCDC bit
-        // is 0 so the PPU will not advance until the boot ROM or test
-        // runner enables the LCD.
         Self {
             bcp: ColorPalette::default(),
             bgp: 0,
@@ -157,6 +153,7 @@ impl Default for Ppu {
             ly: 0,
             ly_for_comparison: 0,
             lyc: 0,
+            lcdon_line0_mode0: false,
             oam: Oam::default(),
             obp0: 0,
             obp1: 0,
@@ -361,14 +358,19 @@ impl Ppu {
                 self.enter_mode(Mode::HBlank, ints);
             }
             Mode::HBlank => {
-                self.ly += 1;
-                self.ly_for_comparison = u16::from(self.ly);
-                if self.ly > 143 {
-                    self.enter_mode(Mode::VBlank, ints);
+                if self.lcdon_line0_mode0 {
+                    self.lcdon_line0_mode0 = false;
+                    self.enter_mode(Mode::Drawing, ints);
                 } else {
-                    self.enter_mode(Mode::OamScan, ints);
+                    self.ly += 1;
+                    self.ly_for_comparison = u16::from(self.ly);
+                    if self.ly > 143 {
+                        self.enter_mode(Mode::VBlank, ints);
+                    } else {
+                        self.enter_mode(Mode::OamScan, ints);
+                    }
+                    self.check_lyc(ints);
                 }
-                self.check_lyc(ints);
             }
             Mode::VBlank => {
                 self.ly += 1;
@@ -403,6 +405,7 @@ impl Ppu {
         if val & LCDC_ON_B == 0 && self.lcdc & LCDC_ON_B != 0 {
             self.ly = 0;
             self.ly_for_comparison = 0;
+            self.lcdon_line0_mode0 = false;
             self.stat &= !STAT_MODE_B;
             self.cycles = Mode::HBlank.m_cycles(self.scx, self.is_cgb);
             self.rgba_buf_present.clear();
@@ -411,16 +414,14 @@ impl Ppu {
         }
 
         // turn on: per the lcdon_mode_timing test, the first line starts
-        // in mode 0 (HBlank) for ~16-17 M-cycles, then goes straight to
-        // mode 3 (skipping mode 2). This matches the "2 T-cycles late"
-        // hardware quirk for line 0.
+        // in mode 0 (HBlank) for 20 M-cycles, then goes straight to
+        // mode 3 (skipping mode 2).
         if val & LCDC_ON_B != 0 && self.lcdc & LCDC_ON_B == 0 {
             self.ly = 0;
             self.ly_for_comparison = 0;
             self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
-            // Mode 0 length for line 0: ~16 M-cycles (shorter than usual 51)
-            // to account for the 2-T-cycle delay. Mode 2 is skipped.
-            self.cycles = 16;
+            self.cycles = 20;
+            self.lcdon_line0_mode0 = true;
             self.check_lyc(ints);
         }
 
