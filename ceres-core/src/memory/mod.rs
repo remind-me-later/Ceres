@@ -188,9 +188,7 @@ impl<A: AudioCallback> Gb<A> {
             // (CGB Mode only)": bits 0-3 and 7 read as 1, bits 4-6 are R/W.
             UNDOC_FF72 if self.is_cgb() => self.undoc_ff72,
             UNDOC_FF73 if self.is_cgb() => self.undoc_ff73,
-            UNDOC_FF75 if self.is_cgb() => {
-                (self.undoc_ff75 & 0x70) | 0x8F
-            }
+            UNDOC_FF75 if self.is_cgb() => (self.undoc_ff75 & 0x70) | 0x8F,
             HRAM_BEG..=HRAM_END => self.hram.read(addr),
             IE => self.ints.read_ie(),
             _ => 0xFF,
@@ -320,7 +318,10 @@ impl<A: AudioCallback> Gb<A> {
             }
             WAV_BEG..=WAV_END => self.apu.write_wave_ram(addr, val, self.is_cgb()),
             LCDC => self.ppu.write_lcdc(val, &mut self.ints),
-            STAT => self.ppu.write_stat(val, &mut self.ints, self.cgb_mode),
+            STAT => {
+                let is_cgb = self.is_cgb();
+                self.ppu.write_stat(val, &mut self.ints, is_cgb);
+            }
             SCY => self.ppu.write_scy(val),
             SCX => self.ppu.write_scx(val),
             LYC => self.ppu.write_lyc(val, &mut self.ints),

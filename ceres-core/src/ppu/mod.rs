@@ -203,7 +203,7 @@ impl Ppu {
         let mode_signal = match self.mode() {
             Mode::HBlank => self.stat & STAT_IF_HBLANK_B != 0,
             Mode::VBlank => self.stat & STAT_IF_VBLANK_B != 0,
-            Mode::OamScan => self.stat & STAT_IF_OAM_B != 0,
+            Mode::OamScan => false,
             Mode::Drawing => false,
         };
 
@@ -238,6 +238,10 @@ impl Ppu {
         match mode {
             Mode::OamScan => {
                 self.win_in_ly = false;
+                if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                    ints.request_lcd();
+                    self.stat_line = true;
+                }
             }
             Mode::VBlank => {
                 ints.request_vblank();
@@ -525,7 +529,7 @@ impl Ppu {
         self.scy = val;
     }
 
-    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts, cgb_mode: CgbMode) {
+    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts, is_cgb: bool) {
         let ly_equals_lyc = self.stat & STAT_LYC_B;
         let mode: u8 = self.mode() as u8;
 
@@ -533,7 +537,7 @@ impl Ppu {
         self.stat &= !(STAT_LYC_B | STAT_MODE_B);
         self.stat |= ly_equals_lyc | mode;
 
-        if !matches!(cgb_mode, CgbMode::Cgb) && (self.lcdc & LCDC_ON_B != 0) {
+        if !is_cgb && (self.lcdc & LCDC_ON_B != 0) {
             // On DMG/MGB, writing to STAT while in Mode 0 or Mode 1 glitches the STAT IRQ line high
             if (self.mode() == Mode::HBlank || self.mode() == Mode::VBlank) && !self.stat_line {
                 ints.request_lcd();

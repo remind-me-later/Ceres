@@ -219,7 +219,7 @@ impl<A: AudioCallback> Gb<A> {
         }
 
         if self.ints.is_any_requested() {
-            let was_halted = self.cpu.is_halted;
+            let _was_halted = self.cpu.is_halted;
             self.cpu.is_halted = false;
             self.ppu.leave_stop_mode();
             self.clock.stopped = false;
@@ -237,7 +237,7 @@ impl<A: AudioCallback> Gb<A> {
                 self.cpu.skip_isr_nops = false;
                 self.tick_m_cycle();
 
-                if was_halted {
+                if _was_halted {
                     self.tick_m_cycle();
                 }
 
@@ -845,7 +845,6 @@ impl<A: AudioCallback> Gb<A> {
             self.cpu.is_halted = true;
         } else if self.ints.are_enabled() {
             self.cpu.is_halted = false;
-            self.cpu.skip_isr_nops = true;
         } else {
             self.cpu.is_halted = false;
             self.cpu.is_halt_bug_triggered = true;
