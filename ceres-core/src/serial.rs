@@ -40,10 +40,11 @@ impl Serial {
         // which reads as 0 on DMG/SGB. GBATEK "Read: bit 0-6 always 1 on CGB,
         // bits 0-5 always 1 and bit 6=0 on DMG". We OR the appropriate mask
         // here so test reads after writes return the expected forced bits.
-        self.sc | match cgb_mode {
-            CgbMode::Cgb => 0x7F,
-            _ => 0x7E,
-        }
+        self.sc
+            | match cgb_mode {
+                CgbMode::Cgb => 0x7F,
+                _ => 0x7E,
+            }
     }
 
     pub fn run_master(&mut self, ints: &mut Interrupts) {

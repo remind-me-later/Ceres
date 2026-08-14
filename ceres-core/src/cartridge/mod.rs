@@ -349,11 +349,7 @@ impl Cartridge {
 
                         // In mode 1, $0000-$3FFF maps to the first bank
                         // of the active quadrant (e.g. bank_hi=2 → bank 32).
-                        let lo_bank = if bank_mode {
-                            quadrant * 16
-                        } else {
-                            0
-                        };
+                        let lo_bank = if bank_mode { quadrant * 16 } else { 0 };
 
                         return (
                             ROMSize::BANK_SIZE as u32 * lo_bank,
