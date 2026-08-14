@@ -160,35 +160,35 @@ impl<A: AudioCallback> Gb<A> {
             OBP1 => self.ppu.read_obp1(),
             WY => self.ppu.read_wy(),
             WX => self.ppu.read_wx(),
-            KEY1 if self.are_cgb_regs_available() => self.key1.read(),
-            VBK if self.are_cgb_regs_available() => self.ppu.vram().read_vbk(),
-            HDMA5 if self.are_cgb_regs_available() => self.hdma.read_hdma5(),
-            BCPS if self.are_cgb_regs_available() => self.ppu.bcp().spec(),
-            BCPD if self.are_cgb_regs_available() => {
+            KEY1 if matches!(self.cgb_mode, CgbMode::Cgb) => self.key1.read(),
+            VBK if self.is_cgb() => self.ppu.vram().read_vbk(),
+            HDMA5 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.read_hdma5(),
+            BCPS if self.is_cgb() => self.ppu.bcp().spec(),
+            BCPD if matches!(self.cgb_mode, CgbMode::Cgb) => {
                 if self.ppu.is_cgb_palettes_accessible() {
                     self.ppu.bcp().data()
                 } else {
                     0xFF
                 }
             }
-            OCPS if self.are_cgb_regs_available() => self.ppu.ocp().spec(),
-            OCPD if self.are_cgb_regs_available() => {
+            OCPS if self.is_cgb() => self.ppu.ocp().spec(),
+            OCPD if matches!(self.cgb_mode, CgbMode::Cgb) => {
                 if self.ppu.is_cgb_palettes_accessible() {
                     self.ppu.ocp().data()
                 } else {
                     0xFF
                 }
             }
-            OPRI if self.are_cgb_regs_available() => self.ppu.read_opri(),
-            SVBK if self.are_cgb_regs_available() => self.wram.svbk().read(),
-            PCM12 if self.are_cgb_regs_available() => self.apu.pcm12(),
-            PCM34 if self.are_cgb_regs_available() => self.apu.pcm34(),
+            OPRI if self.bootrom.is_enabled() => self.ppu.read_opri(),
+            SVBK if matches!(self.cgb_mode, CgbMode::Cgb) => self.wram.svbk().read(),
+            PCM12 if self.is_cgb() => self.apu.pcm12(),
+            PCM34 if self.is_cgb() => self.apu.pcm34(),
             // Undocumented CGB registers. Per Pan Docs "FF72-FF73 — Bits 0-7
             // (CGB Mode only)": full R/W, init $00. "FF75 — Bits 4-6
             // (CGB Mode only)": bits 0-3 and 7 read as 1, bits 4-6 are R/W.
-            UNDOC_FF72 if self.are_cgb_regs_available() => self.undoc_ff72,
-            UNDOC_FF73 if self.are_cgb_regs_available() => self.undoc_ff73,
-            UNDOC_FF75 if self.are_cgb_regs_available() => {
+            UNDOC_FF72 if self.is_cgb() => self.undoc_ff72,
+            UNDOC_FF73 if self.is_cgb() => self.undoc_ff73,
+            UNDOC_FF75 if self.is_cgb() => {
                 (self.undoc_ff75 & 0x70) | 0x8F
             }
             HRAM_BEG..=HRAM_END => self.hram.read(addr),
@@ -341,46 +341,46 @@ impl<A: AudioCallback> Gb<A> {
                     self.cgb_mode = CgbMode::Compat;
                 }
             }
-            KEY1 if self.are_cgb_regs_available() => self.key1.write(val),
-            VBK if self.are_cgb_regs_available() => self.ppu.vram_mut().write_vbk(val),
             BANK => {
                 if val & 1 != 0 {
                     self.bootrom.disable();
                 }
             }
-            HDMA1 if self.are_cgb_regs_available() => self.hdma.write_hdma1(val),
-            HDMA2 if self.are_cgb_regs_available() => self.hdma.write_hdma2(val),
-            HDMA3 if self.are_cgb_regs_available() => self.hdma.write_hdma3(val),
-            HDMA4 if self.are_cgb_regs_available() => self.hdma.write_hdma4(val),
-            HDMA5 if self.are_cgb_regs_available() => {
+            VBK if self.is_cgb() => self.ppu.vram_mut().write_vbk(val),
+            KEY1 if matches!(self.cgb_mode, CgbMode::Cgb) => self.key1.write(val),
+            HDMA1 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.write_hdma1(val),
+            HDMA2 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.write_hdma2(val),
+            HDMA3 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.write_hdma3(val),
+            HDMA4 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.write_hdma4(val),
+            HDMA5 if matches!(self.cgb_mode, CgbMode::Cgb) => {
                 let in_hblank = matches!(self.ppu.mode(), ppu::Mode::HBlank);
                 self.hdma.write_hdma5(val, in_hblank);
             }
-            BCPS if self.are_cgb_regs_available() => self.ppu.bcp_mut().set_spec(val),
+            BCPS if self.is_cgb() => self.ppu.bcp_mut().set_spec(val),
             BCPD if self.are_cgb_regs_available() => {
                 if self.ppu.is_cgb_palettes_accessible() {
                     self.ppu.bcp_mut().set_data(val);
                 }
             }
-            OCPS if self.are_cgb_regs_available() => self.ppu.ocp_mut().set_spec(val),
+            OCPS if self.is_cgb() => self.ppu.ocp_mut().set_spec(val),
             OCPD if self.are_cgb_regs_available() => {
                 if self.ppu.is_cgb_palettes_accessible() {
                     self.ppu.ocp_mut().set_data(val);
                 }
             }
-            OPRI if self.are_cgb_regs_available() => {
+            OPRI if self.is_cgb() => {
                 // FIXME: understand behaviour outside of bootrom
                 if self.bootrom.is_enabled() {
                     self.ppu.write_opri(val);
                 }
             }
-            SVBK if self.are_cgb_regs_available() => self.wram.svbk_mut().write(val),
+            SVBK if matches!(self.cgb_mode, CgbMode::Cgb) => self.wram.svbk_mut().write(val),
             // Undocumented CGB registers. Per Pan Docs: FF72/FF73 are full
             // R/W (any bit can be written), FF75 only bits 4-6 are writable
             // (bits 0-3, 7 always read as 1).
-            UNDOC_FF72 if self.are_cgb_regs_available() => self.undoc_ff72 = val,
-            UNDOC_FF73 if self.are_cgb_regs_available() => self.undoc_ff73 = val,
-            UNDOC_FF75 if self.are_cgb_regs_available() => self.undoc_ff75 = val & 0x70,
+            UNDOC_FF72 if self.is_cgb() => self.undoc_ff72 = val,
+            UNDOC_FF73 if self.is_cgb() => self.undoc_ff73 = val,
+            UNDOC_FF75 if self.is_cgb() => self.undoc_ff75 = val & 0x70,
             HRAM_BEG..=HRAM_END => self.hram.write(addr, val),
             IE => self.ints.write_ie(val),
             _ => (),

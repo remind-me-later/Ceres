@@ -14,12 +14,22 @@ enum DmaState {
     Finishing,           // Extra cycle after transfer
 }
 
-#[derive(Default)]
 pub struct Dma {
     accumulator: u8,
     base_addr: u16,
     reg: u8,
     state: DmaState,
+}
+
+impl Default for Dma {
+    fn default() -> Self {
+        Self {
+            accumulator: 0,
+            base_addr: 0,
+            reg: 0xFF,
+            state: DmaState::Inactive,
+        }
+    }
 }
 
 impl Dma {
@@ -74,6 +84,10 @@ impl Dma {
 
     pub const fn read(&self) -> u8 {
         self.reg
+    }
+
+    pub(crate) const fn set_reg(&mut self, val: u8) {
+        self.reg = val;
     }
 
     // Returns Some((src_addr, dst_offset)) if a byte should be transferred.

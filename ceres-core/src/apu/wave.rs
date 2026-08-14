@@ -35,9 +35,13 @@ impl Wave {
     }
 
     pub const fn output(&self) -> u8 {
-        // wrapping_shr is necessary because (vol - 1) can be -1
-        self.sample_buffer
-            .wrapping_shr(self.volume.wrapping_sub(1) as u32)
+        if self.is_truly_enabled() {
+            // wrapping_shr is necessary because (vol - 1) can be -1
+            self.sample_buffer
+                .wrapping_shr(self.volume.wrapping_sub(1) as u32)
+        } else {
+            0
+        }
     }
 
     pub const fn read_nr30(&self) -> u8 {

@@ -37,8 +37,9 @@ pub struct MooneyeCheck;
 impl CompletionCheck for MooneyeCheck {
     #[expect(clippy::many_single_char_names)]
     fn check(&self, gb: &mut ceres_core::Gb<DummyAudioCallback>) -> Option<TestResult> {
-        // Wait for either completion signal: ld b,b breakpoint or HALT.
-        let triggered = gb.check_and_reset_ld_b_b_breakpoint() || gb.cpu_is_halted();
+        // Wait for either completion signal: ld b,b breakpoint or permanent HALT (with IE=0).
+        let triggered = gb.check_and_reset_ld_b_b_breakpoint()
+            || (gb.cpu_is_halted() && gb.read_mem(0xFFFF) == 0);
         if !triggered {
             return None;
         }
@@ -55,14 +56,9 @@ impl CompletionCheck for MooneyeCheck {
             return Some(TestResult::Passed);
         }
 
-        // Check for fail condition (all 0x42)
-        if b == 0x42 && c == 0x42 && d == 0x42 && e == 0x42 && h == 0x42 && l == 0x42 {
-            return Some(TestResult::Failed(format!(
-                "Mooneye failure: B={b:#04X}, C={c:#04X}, D={d:#04X}, E={e:#04X}, H={h:#04X}, L={l:#04X}"
-            )));
-        }
-
-        None
+        Some(TestResult::Failed(format!(
+            "Mooneye failure: B={b:#04X}, C={c:#04X}, D={d:#04X}, E={e:#04X}, H={h:#04X}, L={l:#04X}"
+        )))
     }
 
     fn on_timeout(&self, _gb: &mut ceres_core::Gb<DummyAudioCallback>) -> TestResult {
@@ -372,25 +368,25 @@ fn test_boot_div_s() {
 #[test]
 fn test_boot_hwio_c() {
     let result = run_test(WILBERTPOL, "misc/boot_hwio-C.gb", Model::CgbE);
-    assert!(result.is_passed(), "boot_hwio-C test failed");
+    assert_eq!(result, TestResult::Passed, "boot_hwio-C test failed");
 }
 
 #[test]
 fn test_boot_hwio_dmg0() {
     let result = run_test(MOONEYE, "acceptance/boot_hwio-dmg0.gb", Model::Dmg0);
-    assert!(result.is_passed(), "boot_hwio-dmg0 test failed");
+    assert_eq!(result, TestResult::Passed, "boot_hwio-dmg0 test failed");
 }
 
 #[test]
 fn test_boot_hwio_g() {
     let result = run_test(WILBERTPOL, "acceptance/boot_hwio-G.gb", Model::DmgB);
-    assert!(result.is_passed(), "boot_hwio-G test failed");
+    assert_eq!(result, TestResult::Passed, "boot_hwio-G test failed");
 }
 
 #[test]
 fn test_boot_hwio_s() {
     let result = run_test(WILBERTPOL, "misc/boot_hwio-S.gb", Model::Sgb);
-    assert!(result.is_passed(), "boot_hwio-S test failed");
+    assert_eq!(result, TestResult::Passed, "boot_hwio-S test failed");
 }
 
 #[test]
@@ -401,7 +397,7 @@ fn test_boot_regs_a() {
 
 #[test]
 fn test_boot_regs_cgb() {
-    let result = run_test(WILBERTPOL, "misc/boot_regs-cgb.gb", Model::CgbE);
+    let result = run_test(WILBERTPOL, "misc/boot_regs-cgb.gb", Model::Cgb0);
     assert!(result.is_passed(), "boot_regs-cgb test failed");
 }
 
@@ -454,7 +450,7 @@ fn test_bits_reg_f() {
 #[test]
 fn test_bits_unused_hwio_c() {
     let result = run_test(WILBERTPOL, "misc/bits/unused_hwio-C.gb", Model::CgbE);
-    assert!(result.is_passed(), "bits/unused_hwio-C test failed");
+    assert_eq!(result, TestResult::Passed, "bits/unused_hwio-C test failed");
 }
 
 #[test]

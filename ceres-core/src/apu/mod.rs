@@ -290,6 +290,10 @@ impl<A: AudioCallback> Apu<A> {
         self.ch1.output() | (self.ch2.output() << 4)
     }
 
+    pub(crate) const fn set_ch1_output(&mut self, val: u8) {
+        self.ch1.set_output(val);
+    }
+
     pub const fn pcm34(&self) -> u8 {
         self.ch3.output() | (self.ch4.output() << 4)
     }

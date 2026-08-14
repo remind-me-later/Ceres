@@ -63,13 +63,29 @@ impl Mode {
     /// M-cycles (1 M-cycle = 4 T-cycles) for each mode. Inspired by
     /// mooneye-gb but with the original Ceres constants for the per-mode
     /// lengths. `scroll_x` only affects Mode 3 / Mode 0 split, not VBlank.
-    const fn m_cycles(self, scroll_x: u8) -> i32 {
+    /// The scroll adjustment differs between DMG/MGB/SGB/SGB2 and
+    /// CGB/AGB/AGS (see SameBoy's display.c).
+    const fn m_cycles(self, scroll_x: u8, cgb_mode: bool) -> i32 {
         // mooneye-gb "scroll adjustment": how many extra M-cycles Mode 3
         // gets and Mode 0 loses, based on the low 3 bits of SCX.
-        let scroll_adjust: i32 = match scroll_x & 0x7 {
-            1..=4 => 1,
-            5..=7 => 2,
-            _ => 0,
+        let scroll_adjust: i32 = if cgb_mode {
+            // CGB / AGB / AGS (verified against the wilbertpol-mooneye-gb
+            // tests `hblank_ly_scx_timing-C`, `intr_2_mode0_scx1_timing`,
+            // and SameBoy's display.c):
+            //   0 0 0 1 1 1 1 2
+            match scroll_x & 0x7 {
+                3..=6 => 1,
+                7 => 2,
+                _ => 0,
+            }
+        } else {
+            // DMG / MGB / SGB / SGB2:
+            //   0 1 1 1 1 2 2 2
+            match scroll_x & 0x7 {
+                1..=4 => 1,
+                5..=7 => 2,
+                _ => 0,
+            }
         };
         // Original Ceres scanline constants, kept to maintain compatibility
         // with tests that were passing under the previous (batch-driven)
@@ -92,6 +108,10 @@ pub struct Ppu {
     bcp: ColorPalette,
     bgp: u8,
     color_correction_mode: ColorCorrectionMode,
+    /// Whether this PPU instance runs in CGB/AGB/AGS mode (as opposed to
+    /// DMG/MGB/SGB/SGB2 or CGB-in-compat-mode). Used to pick the per-model
+    /// scroll-adjustment table.
+    is_cgb: bool,
     /// M-cycles remaining until the PPU transitions to the next mode
     /// (or fires a mode-bound IRQ). Mirrors mooneye-gb's `cycles`.
     cycles: i32,
@@ -131,7 +151,8 @@ impl Default for Ppu {
             bcp: ColorPalette::default(),
             bgp: 0,
             color_correction_mode: ColorCorrectionMode::default(),
-            cycles: Mode::HBlank.m_cycles(0),
+            is_cgb: false,
+            cycles: Mode::HBlank.m_cycles(0, false),
             lcdc: 0,
             ly: 0,
             ly_for_comparison: 0,
@@ -187,8 +208,9 @@ impl Ppu {
     /// Transition the PPU to a new mode, reset the per-mode cycle counter,
     /// and fire any mode-bound IRQs.
     fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
+        self.cycles = mode.m_cycles(self.scx, self.is_cgb);
+        // Update mode bits AFTER setting cycles so cgb_mode is queried here.
         self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
-        self.cycles = mode.m_cycles(self.scx);
 
         match mode {
             Mode::OamScan => {
@@ -310,6 +332,10 @@ impl Ppu {
     /// the current mode, fires any pending IRQs, and switches modes
     /// when the per-mode cycle budget runs out.
     pub fn tick_m_cycle(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
+        // Cache whether we're running in CGB native mode so per-model
+        // timing decisions can be made without threading CgbMode
+        // through every internal call.
+        self.is_cgb = matches!(cgb_mode, CgbMode::Cgb);
         if self.lcdc & LCDC_ON_B == 0 {
             return;
         }
@@ -361,7 +387,7 @@ impl Ppu {
                     // VBlank mode and just refill the per-mode cycle
                     // budget so the next iteration runs another 114
                     // M-cycles before line incrementing again.
-                    self.cycles = Mode::VBlank.m_cycles(self.scx);
+                    self.cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
                 }
                 self.check_lyc(ints);
             }
@@ -378,7 +404,7 @@ impl Ppu {
             self.ly = 0;
             self.ly_for_comparison = 0;
             self.stat &= !STAT_MODE_B;
-            self.cycles = Mode::HBlank.m_cycles(self.scx);
+            self.cycles = Mode::HBlank.m_cycles(self.scx, self.is_cgb);
             self.rgba_buf_present.clear();
             // LYC comparison: re-evaluate after LY reset to 0.
             self.check_lyc(ints);
@@ -427,6 +453,14 @@ impl Ppu {
 
     pub const fn write_scx(&mut self, val: u8) {
         self.scx = val;
+    }
+
+    pub(crate) const fn set_stat(&mut self, val: u8) {
+        self.stat = val;
+    }
+
+    pub(crate) const fn set_ly(&mut self, val: u8) {
+        self.ly = val;
     }
 
     pub const fn write_scy(&mut self, val: u8) {

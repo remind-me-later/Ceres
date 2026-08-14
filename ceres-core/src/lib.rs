@@ -144,6 +144,15 @@ impl<A: AudioCallback> Gb<A> {
         self.cpu.set_pc(0x0100);
         self.cpu.set_sp(0xFFFE);
 
+        if self.is_cgb() {
+            let cgb_flag = self.cart.read_rom(0x0143);
+            if cgb_flag & 0x80 != 0 {
+                self.cgb_mode = CgbMode::Cgb;
+            } else {
+                self.cgb_mode = CgbMode::Compat;
+            }
+        }
+
         // Per-model post-boot register values. Each line documents the source:
         //   DMG-0     → acceptance/boot_regs-dmg0.s   (pass: DMG 0)
         //   DMG-ABC   → acceptance/boot_regs-dmgABC.s (pass: DMG ABC)
@@ -185,47 +194,61 @@ impl<A: AudioCallback> Gb<A> {
         self.write_mem(0xFF10, 0x80);
         self.write_mem(0xFF11, 0xBF);
         self.write_mem(0xFF12, 0xF3);
-        self.write_mem(0xFF14, 0xFF);
-        self.write_mem(0xFF16, 0xBF);
-        self.write_mem(0xFF19, 0xBF);
+        self.write_mem(
+            0xFF14,
+            if matches!(self.model, Model::Sgb | Model::Sgb2) { 0x3F } else { 0xBF },
+        );
+        self.write_mem(0xFF16, 0x3F);
+        self.write_mem(0xFF17, 0x00);
+        self.write_mem(0xFF19, 0x3F);
         self.write_mem(0xFF1A, 0x7F);
         self.write_mem(0xFF1C, 0x9F);
-        self.write_mem(0xFF1E, 0xBF);
+        self.write_mem(0xFF1E, 0x3F);
         self.write_mem(0xFF20, 0xFF);
         self.write_mem(0xFF21, 0x00);
         self.write_mem(0xFF22, 0x00);
-        self.write_mem(0xFF23, 0xBF);
+        self.write_mem(0xFF23, 0x3F);
         self.write_mem(0xFF24, 0x77);
         self.write_mem(0xFF25, 0xF3);
         // P1, OBP0/OBP1, LCDC, STAT, LY, LYC, BGP, IF, IE per-model.
-        // P1: $CF on DMG (bits 5,4 read low because P14/P15 not pressed),
-        //     $FF on CGB/SGB (in DMG-compat mode).
-        self.write_mem(0xFF00, if self.is_cgb() { 0xFF } else { 0xCF });
+        // P1: $CF on DMG/DMG0/MGB, $FF on CGB/SGB.
+        self.write_mem(
+            0xFF00,
+            if matches!(self.model, Model::Dmg0 | Model::DmgB | Model::Mgb) {
+                0xCF
+            } else {
+                0xFF
+            },
+        );
+        self.write_mem(0xFF42, 0x00);
+        self.write_mem(0xFF43, 0x00);
         // OBP0/OBP1: $00 on CGB, $FF on DMG.
         self.write_mem(0xFF48, if self.is_cgb() { 0x00 } else { 0xFF });
         self.write_mem(0xFF49, if self.is_cgb() { 0x00 } else { 0xFF });
+        self.write_mem(0xFF4A, 0x00);
+        self.write_mem(0xFF4B, 0x00);
         // LCDC: $91 on DMG/SGB, $FF on CGB/AGB.
         self.write_mem(0xFF40, if self.is_cgb() { 0xFF } else { 0x91 });
         // STAT: $83 on DMG-0/SGB/CGB (mode 3 + LYC set), $80 on DMG-ABC.
         // On CGB-0/AGB same as DMG-0.
-        self.write_mem(
-            0xFF41,
-            match self.model {
-                Model::DmgB | Model::Mgb => 0x80,
-                _ => 0x83,
-            },
-        );
-        // LY, LYC: $00 on all models.
-        self.write_mem(0xFF44, 0x00);
+        self.ppu.set_stat(match self.model {
+            Model::DmgB | Model::Mgb => 0x80,
+            _ => 0x83,
+        });
+        // LY: $01 on DMG0, $00 on other models.
+        self.ppu.set_ly(u8::from(matches!(self.model, Model::Dmg0)));
         self.write_mem(0xFF45, 0x00);
-        // BGP: $01 on DMG-0/SGB/CGB, $0A on DMG-ABC.
-        self.write_mem(
-            0xFF47,
-            match self.model {
-                Model::DmgB | Model::Mgb => 0x0A,
-                _ => 0x01,
-            },
-        );
+        self.dma.set_reg(if self.is_cgb() { 0x00 } else { 0xFF });
+        // BGP: $FC on all models.
+        self.write_mem(0xFF47, 0xFC);
+        if self.is_cgb() {
+            self.apu.set_ch1_output(0);
+            self.write_mem(0xFF68, 0xC8);
+            self.write_mem(0xFF6A, 0xD0);
+            self.undoc_ff72 = 0x00;
+            self.undoc_ff73 = 0x00;
+            self.undoc_ff75 = 0x00;
+        }
         // IF: $E1 (VBlank pending) on all models.
         self.write_mem(0xFF0F, 0xE1);
         // IE: $00 on all models.

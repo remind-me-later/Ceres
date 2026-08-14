@@ -43,7 +43,11 @@ impl Noise {
     }
 
     pub const fn output(&self) -> u8 {
-        self.output * self.envelope.volume()
+        if self.is_truly_enabled() {
+            self.output * self.envelope.volume()
+        } else {
+            0
+        }
     }
 
     pub fn read_nr42(&self) -> u8 {

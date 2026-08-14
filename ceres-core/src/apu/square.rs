@@ -28,7 +28,11 @@ impl<S: SweepTrait> Square<S> {
     }
 
     pub const fn output(&self) -> u8 {
-        self.output * self.envelope.volume()
+        if self.is_truly_enabled() {
+            self.output * self.envelope.volume()
+        } else {
+            0
+        }
     }
 
     pub fn read_nrx0(&self) -> u8 {
@@ -53,6 +57,10 @@ impl<S: SweepTrait> Square<S> {
 
     pub const fn set_length(&mut self, val: u8) {
         self.length_timer.set_length(val);
+    }
+
+    pub(crate) const fn set_output(&mut self, val: u8) {
+        self.output = val;
     }
 
     pub const fn set_period_half(&mut self, p_half: PeriodHalf) {
