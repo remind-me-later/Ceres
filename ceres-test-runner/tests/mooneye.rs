@@ -634,8 +634,9 @@ fn test_gpu_intr_2_mode0_scx1_timing_nops() {
         "acceptance/gpu/intr_2_mode0_scx1_timing_nops.gb",
         Model::DmgB,
     );
-    assert!(
-        result.is_passed(),
+    assert_eq!(
+        result,
+        TestResult::Passed,
         "gpu/intr_2_mode0_scx1_timing_nops test failed"
     );
 }
@@ -855,7 +856,7 @@ fn test_gpu_intr_2_oam_ok_timing() {
 #[test]
 fn test_gpu_intr_2_timing() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/intr_2_timing.gb", Model::DmgB);
-    assert!(result.is_passed(), "gpu/intr_2_timing test failed");
+    assert_eq!(result, TestResult::Passed, "gpu/intr_2_timing test failed");
 }
 
 #[test]
