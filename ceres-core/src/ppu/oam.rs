@@ -1,4 +1,4 @@
-use crate::ppu::{Mode, Ppu};
+use crate::ppu::{Mode, Ppu, LCDC_ON_B};
 
 pub struct Oam {
     bytes: [u8; Self::SIZE as usize],
@@ -50,6 +50,9 @@ impl Ppu {
     // parameter here.
     #[must_use]
     pub const fn read_oam(&self, addr: u16) -> u8 {
+        if self.lcdc & LCDC_ON_B == 0 {
+            return self.oam.read(addr);
+        }
         match self.mode() {
             Mode::HBlank | Mode::VBlank => self.oam.read(addr),
             _ => 0xFF,
@@ -57,6 +60,10 @@ impl Ppu {
     }
 
     pub const fn write_oam(&mut self, addr: u16, val: u8) {
+        if self.lcdc & LCDC_ON_B == 0 {
+            self.oam.write(addr, val);
+            return;
+        }
         match self.mode() {
             Mode::HBlank | Mode::VBlank => self.oam.write(addr, val),
             _ => (),

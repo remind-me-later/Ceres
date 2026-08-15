@@ -277,7 +277,7 @@ impl Ppu {
         match mode {
             Mode::OamScan => {
                 self.win_in_ly = false;
-                self.ly_for_comparison = u16::from(self.ly);
+                self.ly_for_comparison = if self.ly == 0 { 0 } else { u16::MAX };
             }
             Mode::VBlank => {
                 self.ly = 144;
@@ -429,10 +429,6 @@ impl Ppu {
                         self.ly = 0;
                         self.ly_for_comparison = u16::MAX;
                         self.check_lyc(ints);
-                    } else if self.cycles == 111 {
-                        self.ly = 0;
-                        self.ly_for_comparison = 0;
-                        self.check_lyc(ints);
                     }
                 } else if self.ly >= 144 {
                     let base_cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
@@ -546,13 +542,6 @@ impl Ppu {
 
     pub fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
         self.lyc = val;
-        if self.is_cgb
-            && ((self.mode() == Mode::HBlank && self.cycles <= 1)
-                || (self.mode() == Mode::OamScan && self.cycles >= 19)
-                || (self.mode() == Mode::VBlank && self.ly == 153 && self.cycles >= 108))
-        {
-            return;
-        }
         self.check_lyc(ints);
     }
 
