@@ -363,7 +363,12 @@ impl Ppu {
 
         // Mid-scanline comparator / glitch events:
         match self.mode() {
-            Mode::OamScan => (),
+            Mode::OamScan => {
+                if self.cycles == 19 {
+                    self.ly_for_comparison = u16::from(self.ly);
+                    self.check_lyc(ints);
+                }
+            }
             Mode::HBlank => {
                 if self.cycles == 1 && !self.lcdon_line0_mode0 {
                     // Mode 2 STAT IRQ fires 1 M-cycle BEFORE Mode 2 begins (SameBoy line 1780)
