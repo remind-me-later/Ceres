@@ -921,7 +921,7 @@ fn test_gpu_ly00_mode1_0_gs() {
 
 #[test]
 fn test_gpu_ly00_mode1_2_c() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly00_mode1_2-C.gb", Model::CgbE);
+    let result = run_test(WILBERTPOL, "acceptance/gpu/ly00_mode1_2-C.gb", Model::CgbC);
     assert_eq!(result, TestResult::Passed, "gpu/ly00_mode1_2-C test failed");
 }
 
@@ -960,7 +960,7 @@ fn test_gpu_ly143_144_mode0_1() {
         "acceptance/gpu/ly143_144_mode0_1.gb",
         Model::DmgB,
     );
-    assert!(result.is_passed(), "gpu/ly143_144_mode0_1 test failed");
+    assert_eq!(result, TestResult::Passed, "gpu/ly143_144_mode0_1 test failed");
 }
 
 #[test]

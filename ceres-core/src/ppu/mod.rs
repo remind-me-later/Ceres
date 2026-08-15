@@ -365,8 +365,8 @@ impl Ppu {
         match self.mode() {
             Mode::OamScan => (),
             Mode::HBlank => {
-                // Mode 2 STAT IRQ fires 1 M-cycle BEFORE Mode 2 begins (SameBoy line 1780)
                 if self.cycles == 1 && !self.lcdon_line0_mode0 {
+                    // Mode 2 STAT IRQ fires 1 M-cycle BEFORE Mode 2 begins (SameBoy line 1780)
                     if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
                         ints.request_lcd();
                         self.stat_line = true;
@@ -405,13 +405,7 @@ impl Ppu {
                         self.ly_for_comparison = 0;
                         self.check_lyc(ints);
                     }
-                } else if self.ly == 144 {
-                    let base_cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
-                    if self.cycles == base_cycles - 1 {
-                        self.ly_for_comparison = 144;
-                        self.check_lyc(ints);
-                    }
-                } else if self.ly >= 145 {
+                } else if self.ly >= 144 {
                     let base_cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
                     if self.cycles == base_cycles - 1 {
                         self.ly_for_comparison = u16::from(self.ly);
