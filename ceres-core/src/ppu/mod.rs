@@ -409,32 +409,20 @@ impl Ppu {
             }
             Mode::VBlank => {
                 if self.ly == 153 {
-                    // Line 153 timing phases:
-                    // Cycles 114..113: LY=153, comparator=-1
-                    // Cycles 112..111: LY=0 (DMG) / 153 (CGB), comparator=153
-                    // Cycles 110..107: LY=0, comparator=153 (CGB) / -1 (DMG)
-                    // Cycles 106..1:   LY=0, comparator=0
+                    // Line 153 timing phases (SameBoy display.c:2217):
+                    // self.cycles = 114: LY=153, ly_for_comparison = MAX
+                    // self.cycles = 113: LY=0,   ly_for_comparison = 153
+                    // self.cycles = 112: LY=0,   ly_for_comparison = MAX
+                    // self.cycles = 111: LY=0,   ly_for_comparison = 0
                     if self.cycles == 113 {
-                        self.ly = 153;
-                        self.ly_for_comparison = u16::MAX;
-                        self.check_lyc(ints);
-                    } else if self.cycles == 112 {
-                        if !self.is_cgb {
-                            self.ly = 0;
-                        }
+                        self.ly = 0;
                         self.ly_for_comparison = 153;
                         self.check_lyc(ints);
-                    } else if self.cycles == 111 {
-                        if !self.is_cgb {
-                            self.ly = 0;
-                            self.ly_for_comparison = u16::MAX;
-                            self.check_lyc(ints);
-                        }
-                    } else if self.cycles == 109 {
+                    } else if self.cycles == 112 {
                         self.ly = 0;
                         self.ly_for_comparison = u16::MAX;
                         self.check_lyc(ints);
-                    } else if self.cycles == 106 {
+                    } else if self.cycles == 111 {
                         self.ly = 0;
                         self.ly_for_comparison = 0;
                         self.check_lyc(ints);
