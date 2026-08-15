@@ -1206,7 +1206,7 @@ fn test_timer_if() {
 #[test]
 fn test_timer_rapid_toggle() {
     let result = run_test(WILBERTPOL, "acceptance/timer/rapid_toggle.gb", Model::CgbE);
-    assert!(result.is_passed(), "timer/rapid_toggle test failed");
+    assert_eq!(result, TestResult::Passed, "timer/rapid_toggle test failed");
 }
 
 #[test]
