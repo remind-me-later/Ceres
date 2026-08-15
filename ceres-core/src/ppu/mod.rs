@@ -280,6 +280,8 @@ impl Ppu {
                 self.ly_for_comparison = u16::from(self.ly);
             }
             Mode::VBlank => {
+                self.ly = 144;
+                self.ly_for_comparison = 144;
                 ints.request_vblank();
                 self.win_skipped = 0;
                 self.win_in_frame = false;
@@ -463,8 +465,6 @@ impl Ppu {
                     self.ly += 1;
                     if self.ly > 143 {
                         self.enter_mode(Mode::VBlank, ints, cgb_mode);
-                        self.ly_for_comparison = u16::MAX;
-                        self.check_lyc(ints);
                     } else {
                         self.enter_mode(Mode::OamScan, ints, cgb_mode);
                     }
