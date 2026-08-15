@@ -6,10 +6,9 @@ const CGB_SPEED: u8 = 0x2;
 const SHIFT: u8 = 0x1;
 
 // VERY PARTIAL Serial port implementation with output capture for test ROMs
-#[derive(Default)]
 pub struct Serial {
     count: u8,
-    div_mask: u8,
+    div_mask: u16,
     master_clock: bool,
     output: String,
     sb: u8,
@@ -17,9 +16,27 @@ pub struct Serial {
     sc: u8,
 }
 
+impl Default for Serial {
+    fn default() -> Self {
+        Self {
+            count: 0,
+            div_mask: 0x200,
+            master_clock: false,
+            output: String::new(),
+            sb: 0,
+            sb_sent: 0,
+            sc: 0,
+        }
+    }
+}
+
 impl Serial {
+    pub fn set_master_clock(&mut self, val: bool) {
+        self.master_clock = val;
+    }
+
     #[must_use]
-    pub const fn div_mask(&self) -> u8 {
+    pub const fn div_mask(&self) -> u16 {
         self.div_mask
     }
 
@@ -108,9 +125,9 @@ impl Serial {
         self.sc = if is_cgb { val | 0x7C } else { val | 0x7E };
 
         self.div_mask = if is_cgb && (val & CGB_SPEED != 0) {
-            4
+            0x10
         } else {
-            0x80
+            0x200
         };
     }
 }
@@ -129,16 +146,6 @@ mod tests {
         serial.write_sb(0xAA);
         serial.write_sc(0x81, &mut ints, CgbMode::Dmg);
 
-        // Serial edge triggers on bit 7 falling edge of 4MHz clock (fires every 256 cycles).
-        // 1st edge: Master Clock False -> True (No shift)
-        // 2nd edge: Master Clock True -> False (Shift 1)
-        // ...
-        // 16th edge: Master Clock True -> False (Shift 8, Transfer complete)
-
-        // Total cycles for 16 edges: 16 * 256 = 4096 cycles.
-        // But if we just reset DIV, the first edge happens at cycle 128 (Rising) or 256 (Falling).
-        // Bit 7 goes 0->1 at cycle 128, 1->0 at cycle 256.
-
         let mut div: u16 = 0;
         let mut cycles = 0;
 
@@ -149,7 +156,7 @@ mod tests {
                 *cycles += 1;
 
                 let triggers = old_div & !*div;
-                if triggers & u16::from(serial.div_mask()) != 0 {
+                if triggers & serial.div_mask() != 0 {
                     serial.run_master(ints);
                     true
                 } else {
@@ -163,13 +170,13 @@ mod tests {
             if fire_edge(&mut serial, &mut ints, &mut div, &mut cycles) {
                 edges += 1;
             }
-            if cycles > 10000 {
+            if cycles > 20000 {
                 panic!("Transfer timed out");
             }
         }
 
         assert_eq!(edges, 16, "Transfer should take exactly 16 edges");
-        assert_eq!(cycles, 16 * 256, "Transfer should take exactly 4096 cycles");
+        assert_eq!(cycles, 16 * 512, "Transfer should take exactly 8192 cycles");
         assert_eq!(
             serial.read_sb(),
             0xFF,

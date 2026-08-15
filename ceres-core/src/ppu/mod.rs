@@ -204,7 +204,7 @@ impl Ppu {
         let lyc_signal = (self.stat & STAT_IF_LYC_B != 0) && (self.stat & STAT_LYC_B != 0);
         let effective_mode = self.mode_for_interrupt.unwrap_or(self.mode());
         let mode_signal = match effective_mode {
-            Mode::HBlank => self.stat & STAT_IF_HBLANK_B != 0,
+            Mode::HBlank => !self.lcdon_line0_mode0 && (self.stat & STAT_IF_HBLANK_B != 0),
             Mode::VBlank => self.stat & STAT_IF_VBLANK_B != 0,
             Mode::OamScan => self.stat & STAT_IF_OAM_B != 0,
             Mode::Drawing => false,
@@ -389,14 +389,6 @@ impl Ppu {
             return;
         }
 
-        // mooneye-gb's quirk: the HBlank STAT IRQ fires one M-cycle BEFORE
-        // the actual mode 0 entry, when we're 1 M-cycle from leaving Mode 3.
-        if self.cycles == 1 && self.mode() == Mode::Drawing {
-            if self.stat & STAT_IF_HBLANK_B != 0 && !self.stat_line {
-                ints.request_lcd();
-                self.stat_line = true;
-            }
-        }
 
         // Mid-scanline comparator / glitch events:
         match self.mode() {
@@ -608,24 +600,11 @@ impl Ppu {
         self.scy = val;
     }
 
-    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts, is_cgb: bool) {
+    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts, _is_cgb: bool) {
         let ly_equals_lyc = self.stat & STAT_LYC_B;
         let mode = self.stat & STAT_MODE_B;
 
         self.stat = (val & !0x07) | ly_equals_lyc | mode;
-
-        if !is_cgb && self.lcdc & LCDC_ON_B != 0 && !self.stat_line {
-            // DMG STAT write glitch: writing to STAT while in Mode 0, Mode 1, or when LY=LYC is active
-            // pulses the STAT line high if it was previously low.
-            if self.mode() == Mode::HBlank
-                || self.mode() == Mode::VBlank
-                || (self.stat & STAT_LYC_B != 0)
-            {
-                ints.request_lcd();
-                self.stat_line = true;
-            }
-        }
-
         self.update_stat_line(ints);
     }
 

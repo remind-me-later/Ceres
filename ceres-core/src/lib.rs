@@ -350,6 +350,9 @@ impl<A: AudioCallback> Gb<A> {
         } else {
             2
         };
+
+        self.serial
+            .set_master_clock((self.clock.div & self.serial.div_mask()) != 0);
     }
 
     /// Check if the `ld b, b` debug breakpoint instruction was executed and reset the flag.

@@ -294,7 +294,7 @@ impl<A: AudioCallback> Gb<A> {
         }
 
         // advance serial master clock
-        if triggers & u16::from(self.serial.div_mask()) != 0 {
+        if triggers & self.serial.div_mask() != 0 {
             self.serial.run_master(&mut self.ints);
         }
 
