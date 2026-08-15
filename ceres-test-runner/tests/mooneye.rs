@@ -481,7 +481,7 @@ fn test_bits_reg_f() {
 
 #[test]
 fn test_bits_unused_hwio_c() {
-    let result = run_test(WILBERTPOL, "misc/bits/unused_hwio-C.gb", Model::CgbE);
+    let result = run_test(WILBERTPOL, "misc/bits/unused_hwio-C.gb", Model::CgbC);
     assert_eq!(result, TestResult::Passed, "bits/unused_hwio-C test failed");
 }
 

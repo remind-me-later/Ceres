@@ -181,8 +181,20 @@ impl<A: AudioCallback> Gb<A> {
             }
             OPRI if self.bootrom.is_enabled() => self.ppu.read_opri(),
             SVBK if matches!(self.cgb_mode, CgbMode::Cgb) => self.wram.svbk().read(),
-            PCM12 if self.is_cgb() => self.apu.pcm12(),
-            PCM34 if self.is_cgb() => self.apu.pcm34(),
+            PCM12 if self.is_cgb() => {
+                if matches!(self.model, Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC) || !self.apu.enabled() {
+                    0x00
+                } else {
+                    self.apu.pcm12()
+                }
+            }
+            PCM34 if self.is_cgb() => {
+                if matches!(self.model, Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC) || !self.apu.enabled() {
+                    0x00
+                } else {
+                    self.apu.pcm34()
+                }
+            }
             // Undocumented CGB registers. Per Pan Docs "FF72-FF73 — Bits 0-7
             // (CGB Mode only)": full R/W, init $00. "FF75 — Bits 4-6
             // (CGB Mode only)": bits 0-3 and 7 read as 1, bits 4-6 are R/W.
