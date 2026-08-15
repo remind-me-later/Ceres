@@ -140,7 +140,7 @@ pub struct Ppu {
     wy: u8,
     lcdon_line0_mode0: bool,
     line0_frame_wrap: bool,
-    line144_transition: bool,
+    mode_for_interrupt: Option<Mode>,
     stat_line: bool,
 }
 
@@ -158,7 +158,7 @@ impl Default for Ppu {
             lyc: 0,
             lcdon_line0_mode0: false,
             line0_frame_wrap: false,
-            line144_transition: false,
+            mode_for_interrupt: None,
             stat_line: false,
             oam: Oam::default(),
             obp0: 0,
@@ -202,10 +202,11 @@ impl Ppu {
         }
 
         let lyc_signal = (self.stat & STAT_IF_LYC_B != 0) && (self.stat & STAT_LYC_B != 0);
-        let mode_signal = match self.mode() {
+        let effective_mode = self.mode_for_interrupt.unwrap_or(self.mode());
+        let mode_signal = match effective_mode {
             Mode::HBlank => self.stat & STAT_IF_HBLANK_B != 0,
             Mode::VBlank => self.stat & STAT_IF_VBLANK_B != 0,
-            Mode::OamScan => false,
+            Mode::OamScan => self.stat & STAT_IF_OAM_B != 0,
             Mode::Drawing => false,
         };
 
@@ -234,27 +235,25 @@ impl Ppu {
     /// and fire any mode-bound IRQs.
     fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
         self.cycles = mode.m_cycles(self.scx, self.is_cgb);
+        self.mode_for_interrupt = None;
         // Update mode bits AFTER setting cycles so cgb_mode is queried here.
         self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
 
         match mode {
             Mode::OamScan => {
                 self.win_in_ly = false;
-                if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
-                    ints.request_lcd();
-                    self.stat_line = true;
-                }
+                self.ly_for_comparison = u16::from(self.ly);
             }
             Mode::VBlank => {
                 ints.request_vblank();
                 self.win_skipped = 0;
                 self.win_in_frame = false;
             }
-            Mode::Drawing => (),
-            Mode::HBlank => (),
+            Mode::Drawing | Mode::HBlank => (),
         }
 
         self.update_stat_line(ints);
+        self.check_lyc(ints);
     }
 
     #[must_use]
@@ -364,37 +363,59 @@ impl Ppu {
             }
         }
 
-        // Mode 2 STAT IRQ on line 144 fires 1 M-cycle BEFORE VBlank (vblank_stat_intr)
-        if self.mode() == Mode::HBlank && self.ly == 143 && self.cycles == 1 {
-            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
-                ints.request_lcd();
-                self.stat_line = true;
+        // Mid-scanline comparator / glitch events:
+        match self.mode() {
+            Mode::OamScan => (),
+            Mode::HBlank => {
+                // Mode 2 STAT IRQ glitch on line 144 fires 1 M-cycle BEFORE VBlank (vblank_stat_intr)
+                if self.ly == 143 && self.cycles == 1 {
+                    if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                        ints.request_lcd();
+                        self.stat_line = true;
+                    }
+                }
             }
-        }
-
-        // Early LYC comparator advance in Mode 0 (per ly_lyc_write test)
-        if self.mode() == Mode::HBlank && self.cycles == 2 && self.ly < 143 {
-            self.ly_for_comparison = u16::from(self.ly + 1);
-            if self.ly_for_comparison == u16::from(self.lyc) {
-                self.stat |= STAT_LYC_B;
-            } else {
-                self.stat &= !STAT_LYC_B;
+            Mode::VBlank => {
+                if self.ly == 153 {
+                    // Line 153 timing phases:
+                    // Cycles 114..113: LY=153, comparator=-1
+                    // Cycles 112..111: LY=0 (DMG) / 153 (CGB), comparator=153
+                    // Cycles 110..107: LY=0, comparator=153 (CGB) / -1 (DMG)
+                    // Cycles 106..1:   LY=0, comparator=0
+                    if self.cycles == 113 {
+                        self.ly = 153;
+                        self.ly_for_comparison = u16::MAX;
+                        self.check_lyc(ints);
+                    } else if self.cycles == 112 {
+                        if !self.is_cgb {
+                            self.ly = 0;
+                        }
+                        self.ly_for_comparison = 153;
+                        self.check_lyc(ints);
+                    } else if self.cycles == 111 {
+                        if !self.is_cgb {
+                            self.ly = 0;
+                            self.ly_for_comparison = u16::MAX;
+                            self.check_lyc(ints);
+                        }
+                    } else if self.cycles == 109 {
+                        self.ly = 0;
+                        self.ly_for_comparison = u16::MAX;
+                        self.check_lyc(ints);
+                    } else if self.cycles == 106 {
+                        self.ly = 0;
+                        self.ly_for_comparison = 0;
+                        self.check_lyc(ints);
+                    }
+                } else if self.ly >= 145 {
+                    let base_cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
+                    if self.cycles == base_cycles - 1 {
+                        self.ly_for_comparison = u16::from(self.ly);
+                        self.check_lyc(ints);
+                    }
+                }
             }
-        }
-
-        // Early LYC comparator advance at the end of line 144 (per ly_lyc_144 test)
-        if self.mode() == Mode::VBlank && self.ly == 144 && self.cycles == 2 {
-            self.ly_for_comparison = 145;
-            self.check_lyc(ints);
-        }
-
-        // Line 153 early rollover to 0
-        if self.mode() == Mode::VBlank && self.ly == 153 && self.cycles == 113 {
-            self.ly = 0;
-        }
-        if self.mode() == Mode::VBlank && self.ly == 0 && self.cycles == 111 {
-            self.ly_for_comparison = 0;
-            self.check_lyc(ints);
+            Mode::Drawing => (),
         }
 
         self.cycles -= 1;
@@ -410,30 +431,22 @@ impl Ppu {
                 self.enter_mode(Mode::HBlank, ints);
             }
             Mode::HBlank => {
-                if self.line144_transition {
-                    self.line144_transition = false;
-                    self.enter_mode(Mode::VBlank, ints);
-                    self.cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb) - 1;
-                    self.ly_for_comparison = 144;
-                    self.check_lyc(ints);
-                } else if self.lcdon_line0_mode0 {
+                if self.lcdon_line0_mode0 {
                     self.lcdon_line0_mode0 = false;
                     self.enter_mode(Mode::Drawing, ints);
                 } else if self.line0_frame_wrap {
                     self.line0_frame_wrap = false;
                     self.enter_mode(Mode::OamScan, ints);
-                    self.ly_for_comparison = u16::from(self.ly);
+                    self.ly_for_comparison = 0;
                     self.check_lyc(ints);
                 } else {
                     self.ly += 1;
                     if self.ly > 143 {
-                        self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
-                        self.cycles = 1;
-                        self.line144_transition = true;
-                    } else {
-                        self.ly_for_comparison = u16::from(self.ly);
-                        self.enter_mode(Mode::OamScan, ints);
+                        self.enter_mode(Mode::VBlank, ints);
+                        self.ly_for_comparison = 144;
                         self.check_lyc(ints);
+                    } else {
+                        self.enter_mode(Mode::OamScan, ints);
                     }
                 }
             }
@@ -460,7 +473,11 @@ impl Ppu {
                     } else {
                         base_cycles
                     };
-                    self.ly_for_comparison = u16::from(self.ly);
+                    self.ly_for_comparison = if self.ly == 153 {
+                        u16::MAX
+                    } else {
+                        u16::MAX
+                    };
                     self.check_lyc(ints);
                 }
             }
@@ -502,9 +519,13 @@ impl Ppu {
 
     pub fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
         self.lyc = val;
-        // On hardware, writing to LYC re-evaluates LY=LYC coincidence
-        // and fires the LYC STAT IRQ if newly satisfied (SameBoy
-        // GB_STAT_update; gambatte memory.cpp::updateIrqs).
+        if self.is_cgb
+            && ((self.mode() == Mode::HBlank && self.cycles <= 1)
+                || (self.mode() == Mode::OamScan && self.cycles >= 19)
+                || (self.mode() == Mode::VBlank && self.ly == 153 && self.cycles >= 108))
+        {
+            return;
+        }
         self.check_lyc(ints);
     }
 
@@ -545,22 +566,11 @@ impl Ppu {
         self.scy = val;
     }
 
-    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts, is_cgb: bool) {
+    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts, _is_cgb: bool) {
         let ly_equals_lyc = self.stat & STAT_LYC_B;
-        let mode: u8 = self.mode() as u8;
+        let mode = self.stat & STAT_MODE_B;
 
-        self.stat = val;
-        self.stat &= !(STAT_LYC_B | STAT_MODE_B);
-        self.stat |= ly_equals_lyc | mode;
-
-        if !is_cgb && (self.lcdc & LCDC_ON_B != 0) {
-            // On DMG/MGB, writing to STAT while in Mode 0 or Mode 1 glitches the STAT IRQ line high
-            if (self.mode() == Mode::HBlank || self.mode() == Mode::VBlank) && !self.stat_line {
-                ints.request_lcd();
-                self.stat_line = true;
-            }
-        }
-
+        self.stat = (val & !0x07) | ly_equals_lyc | mode;
         self.update_stat_line(ints);
     }
 

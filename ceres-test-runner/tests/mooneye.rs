@@ -56,16 +56,31 @@ impl CompletionCheck for MooneyeCheck {
             return Some(TestResult::Passed);
         }
 
-        let mut text = String::new();
-        for addr in 0x9820..0x9900 {
-            let b = gb.read_mem(addr);
-            if (0x20..=0x7E).contains(&b) {
-                text.push(b as char);
-            } else if b == 0 {
-                text.push(' ');
+        let mut lines = Vec::new();
+        for row in 0..18 {
+            let mut line = String::new();
+            for col in 0..20 {
+                let b = gb.read_mem(0x9800 + row * 32 + col);
+                if (0x20..=0x7E).contains(&b) {
+                    line.push(b as char);
+                } else if b == 0 {
+                    line.push(' ');
+                } else {
+                    line.push('.');
+                }
+            }
+            let trimmed = line.trim();
+            if !trimmed.is_empty() {
+                lines.push(trimmed.to_string());
             }
         }
-        let text = text.trim();
+        let text = lines.join(" | ");
+
+        let mut c000_buf = Vec::new();
+        for addr in 0xC000..0xC018 {
+            c000_buf.push(format!("{:02X}", gb.read_mem(addr)));
+        }
+        let c000_str = c000_buf.join(" ");
 
         let f80 = gb.read_mem(0xFF80);
         let f81 = gb.read_mem(0xFF81);
@@ -73,7 +88,7 @@ impl CompletionCheck for MooneyeCheck {
         let f83 = gb.read_mem(0xFF83);
 
         Some(TestResult::Failed(format!(
-            "Mooneye failure: B={b:#04X}, C={c:#04X}, D={d:#04X}, E={e:#04X}, H={h:#04X}, L={l:#04X}, text: \"{text}\", FF80=(${f80:#04X}, ${f81:#04X}, exp=${f82:#04X}, act=${f83:#04X})"
+            "Mooneye failure: B={b:#04X}, C={c:#04X}, D={d:#04X}, E={e:#04X}, H={h:#04X}, L={l:#04X}, C000=[{c000_str}], text: \"{text}\", FF80=(${f80:#04X}, ${f81:#04X}, exp=${f82:#04X}, act=${f83:#04X})"
         )))
     }
 
