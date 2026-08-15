@@ -438,7 +438,8 @@ impl Ppu {
                 }
             }
             Mode::VBlank => {
-                if self.ly == 0 {
+                if self.ly >= 153 || self.ly < 144 {
+                    self.ly = 0;
                     self.rgba_buf_present = mem::take(&mut self.rgb_buf);
                     if self.is_cgb {
                         // On CGB: direct Mode 1 -> Mode 2 transition
@@ -533,6 +534,11 @@ impl Ppu {
 
     pub(crate) const fn set_ly(&mut self, val: u8) {
         self.ly = val;
+        self.ly_for_comparison = val as u16;
+    }
+
+    pub(crate) const fn set_cycles(&mut self, val: i32) {
+        self.cycles = val;
     }
 
     pub const fn write_scy(&mut self, val: u8) {

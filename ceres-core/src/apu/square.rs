@@ -63,6 +63,10 @@ impl<S: SweepTrait> Square<S> {
         self.output = val;
     }
 
+    pub(crate) const fn set_duty_bit(&mut self, val: u8) {
+        self.duty_bit = val;
+    }
+
     pub const fn set_period_half(&mut self, p_half: PeriodHalf) {
         self.length_timer.set_phalf(p_half);
     }
@@ -83,12 +87,12 @@ impl<S: SweepTrait> Square<S> {
     }
 
     pub fn step_sample(&mut self, dots: i32) -> Option<i32> {
-        // Shape of the duty waveform for a certain duty
+        // Shape of the duty waveform for a certain duty (LSB = step 0, MSB = step 7)
         const DUTY_WAV: [u8; 4] = [
-            0b0000_0001, // _______- : 12.5%
-            0b1000_0001, // -______- : 25%
-            0b1000_0111, // -____--- : 50%
-            0b0111_1110, // _------_ : 75%
+            0b1000_0000, // 0,0,0,0,0,0,0,1 : 12.5%
+            0b1000_0001, // 1,0,0,0,0,0,0,1 : 25%
+            0b1110_0001, // 1,0,0,0,0,1,1,1 : 50%
+            0b0111_1110, // 0,1,1,1,1,1,1,0 : 75%
         ];
 
         if !self.is_enabled() {

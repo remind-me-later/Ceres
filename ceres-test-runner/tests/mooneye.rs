@@ -56,11 +56,6 @@ impl CompletionCheck for MooneyeCheck {
             return Some(TestResult::Passed);
         }
 
-        let save_c = gb.read_mem(0xC002);
-        let save_b = gb.read_mem(0xC003);
-        let save_e = gb.read_mem(0xC004);
-        let save_d = gb.read_mem(0xC005);
-
         let mut text = String::new();
         for addr in 0x9820..0x9900 {
             let b = gb.read_mem(addr);
@@ -72,8 +67,13 @@ impl CompletionCheck for MooneyeCheck {
         }
         let text = text.trim();
 
+        let f80 = gb.read_mem(0xFF80);
+        let f81 = gb.read_mem(0xFF81);
+        let f82 = gb.read_mem(0xFF82);
+        let f83 = gb.read_mem(0xFF83);
+
         Some(TestResult::Failed(format!(
-            "Mooneye failure: B={b:#04X}, C={c:#04X}, D={d:#04X}, E={e:#04X}, H={h:#04X}, L={l:#04X}, text: \"{text}\", saved(b={save_b:#04X}, c={save_c:#04X}, d={save_d:#04X}, e={save_e:#04X})"
+            "Mooneye failure: B={b:#04X}, C={c:#04X}, D={d:#04X}, E={e:#04X}, H={h:#04X}, L={l:#04X}, text: \"{text}\", FF80=(${f80:#04X}, ${f81:#04X}, exp=${f82:#04X}, act=${f83:#04X})"
         )))
     }
 

@@ -54,10 +54,6 @@ impl Noise {
         self.envelope.read()
     }
 
-    pub const fn read_nr41(&self) -> u8 {
-        0xFF
-    }
-
     pub const fn read_nr43(&self) -> u8 {
         self.nr43
     }

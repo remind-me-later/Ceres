@@ -294,6 +294,10 @@ impl<A: AudioCallback> Apu<A> {
         self.ch1.set_output(val);
     }
 
+    pub(crate) const fn set_ch1_duty_bit(&mut self, val: u8) {
+        self.ch1.set_duty_bit(val);
+    }
+
     pub const fn pcm34(&self) -> u8 {
         self.ch3.output() | (self.ch4.output() << 4)
     }
@@ -348,11 +352,6 @@ impl<A: AudioCallback> Apu<A> {
 
     pub const fn read_nr44(&self) -> u8 {
         self.ch4.read_nr44()
-    }
-
-    #[must_use]
-    pub const fn read_nr41(&self) -> u8 {
-        self.ch4.read_nr41()
     }
 
     #[must_use]

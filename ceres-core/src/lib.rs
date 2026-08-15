@@ -189,7 +189,7 @@ impl<A: AudioCallback> Gb<A> {
         // not masked by the "APU off" zombie behavior.
         self.write_mem(
             0xFF26,
-            if matches!(self.model, Model::Sgb | Model::Sgb2) || self.is_cgb() {
+            if matches!(self.model, Model::Sgb | Model::Sgb2) {
                 0xF0
             } else {
                 0xF1
@@ -200,7 +200,7 @@ impl<A: AudioCallback> Gb<A> {
         self.write_mem(0xFF12, 0xF3);
         self.write_mem(
             0xFF14,
-            if matches!(self.model, Model::Sgb | Model::Sgb2) || self.is_cgb() {
+            if matches!(self.model, Model::Sgb | Model::Sgb2) {
                 0x3F
             } else {
                 0xBF
@@ -208,14 +208,35 @@ impl<A: AudioCallback> Gb<A> {
         );
         self.write_mem(0xFF16, 0x3F);
         self.write_mem(0xFF17, 0x00);
-        self.write_mem(0xFF19, 0x3F);
+        self.write_mem(
+            0xFF19,
+            if matches!(self.model, Model::Sgb | Model::Sgb2) {
+                0x3F
+            } else {
+                0xBF
+            },
+        );
         self.write_mem(0xFF1A, 0x7F);
         self.write_mem(0xFF1C, 0x9F);
-        self.write_mem(0xFF1E, 0x3F);
+        self.write_mem(
+            0xFF1E,
+            if matches!(self.model, Model::Sgb | Model::Sgb2) {
+                0x3F
+            } else {
+                0xBF
+            },
+        );
         self.write_mem(0xFF20, 0xFF);
         self.write_mem(0xFF21, 0x00);
         self.write_mem(0xFF22, 0x00);
-        self.write_mem(0xFF23, 0x3F);
+        self.write_mem(
+            0xFF23,
+            if matches!(self.model, Model::Sgb | Model::Sgb2) {
+                0x3F
+            } else {
+                0xBF
+            },
+        );
         self.write_mem(0xFF24, 0x77);
         self.write_mem(0xFF25, 0xF3);
         // P1, OBP0/OBP1, LCDC, STAT, LY, LYC, BGP, IF, IE per-model.
@@ -235,21 +256,28 @@ impl<A: AudioCallback> Gb<A> {
         self.write_mem(0xFF49, if self.is_cgb() { 0x00 } else { 0xFF });
         self.write_mem(0xFF4A, 0x00);
         self.write_mem(0xFF4B, 0x00);
-        // LCDC: $91 on DMG/SGB, $FF on CGB/AGB.
-        self.write_mem(0xFF40, if self.is_cgb() { 0xFF } else { 0x91 });
-        // STAT: $83 on DMG-0/SGB/CGB (mode 3 + LYC set), $80 on DMG-ABC.
-        // On CGB-0/AGB same as DMG-0.
+        // LCDC: $91 on all models.
+        self.write_mem(0xFF40, 0x91);
+        // STAT: $83 on SGB/CGB (mode 3 + LYC set), $80 on DMG/MGB, $81 on DMG-0 (VBlank).
         self.ppu.set_stat(match self.model {
             Model::DmgB | Model::Mgb => 0x80,
+            Model::Dmg0 => 0x81,
             _ => 0x83,
         });
-        self.ppu.set_ly(0);
+        self.ppu.set_ly(match self.model {
+            Model::Dmg0 => 146,
+            _ => 0,
+        });
+        if matches!(self.model, Model::Dmg0) {
+            self.ppu.set_cycles(89);
+        }
         self.write_mem(0xFF45, 0x00);
         self.dma.set_reg(if self.is_cgb() { 0x00 } else { 0xFF });
         // BGP: $FC on all models.
         self.write_mem(0xFF47, 0xFC);
         if self.is_cgb() {
             self.apu.set_ch1_output(0);
+            self.apu.set_ch1_duty_bit(1);
             self.write_mem(0xFF68, 0xC8);
             self.write_mem(0xFF6A, 0xD0);
             self.undoc_ff72 = 0x00;

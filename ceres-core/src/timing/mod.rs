@@ -247,6 +247,7 @@ impl<A: AudioCallback> Gb<A> {
 
         if (val & 4) == 0 {
             self.clock.tima_reload_pending = 0;
+            self.clock.tima_irq_countdown = 0;
         }
 
         self.clock.tac = val;

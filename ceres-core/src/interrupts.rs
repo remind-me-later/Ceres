@@ -23,11 +23,6 @@ impl Interrupts {
         self.ime
     }
 
-    #[must_use]
-    pub const fn is_timer_requested(&self) -> bool {
-        self.ifr & self.ie & TIMER != 0
-    }
-
     /// Determines which interrupt should be dispatched based on current IE & IF state.
     /// Returns the interrupt bit and vector address.
     /// Used during interrupt dispatch to allow IE re-checking mid-push.
