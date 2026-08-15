@@ -243,12 +243,25 @@ impl Ppu {
         }
 
         let mut total_t_cycles = 0;
+        let mut last_tile_x = -1;
+
         for obj in &objs[..count as usize] {
-            let raw_x = obj.x.wrapping_add(8);
-            if raw_x > 0 && raw_x < 168 {
-                let scroll_offset = (raw_x.wrapping_add(self.scx)) & 7;
-                let penalty = 6 + if scroll_offset <= 5 { scroll_offset } else { 5 };
-                total_t_cycles += penalty as i32;
+            let x = obj.x;
+            if x == 0 || x >= 168 {
+                continue;
+            }
+
+            // Base sprite fetch penalty: 6 T-cycles (2 T OAM + 4 T VRAM)
+            total_t_cycles += 6;
+
+            // Fetcher alignment penalty (0..5 T-cycles)
+            let tile_x = (x.wrapping_add(self.scx) / 8) as i32;
+            if tile_x != last_tile_x {
+                let scroll_offset = (x.wrapping_add(self.scx) & 7) as i32;
+                if scroll_offset < 5 {
+                    total_t_cycles += 5 - scroll_offset;
+                }
+                last_tile_x = tile_x;
             }
         }
 
