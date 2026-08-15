@@ -574,7 +574,12 @@ impl Ppu {
         self.opri = val & 1 != 0;
     }
 
-    pub const fn write_scx(&mut self, val: u8) {
+    pub fn write_scx(&mut self, val: u8) {
+        if self.mode() == Mode::Drawing {
+            let old_mode3 = Mode::Drawing.m_cycles(self.scx, self.is_cgb);
+            let new_mode3 = Mode::Drawing.m_cycles(val, self.is_cgb);
+            self.cycles += new_mode3 - old_mode3;
+        }
         self.scx = val;
     }
 
