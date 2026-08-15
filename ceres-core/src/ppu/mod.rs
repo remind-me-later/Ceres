@@ -285,6 +285,11 @@ impl Ppu {
                 ints.request_vblank();
                 self.win_skipped = 0;
                 self.win_in_frame = false;
+
+                // DMG quirk: entering VBlank triggers the OAM STAT interrupt (SameBoy display.c:2173)
+                if !self.is_cgb && (self.stat & STAT_IF_OAM_B != 0) && !self.stat_line {
+                    ints.request_lcd();
+                }
             }
             Mode::Drawing | Mode::HBlank => (),
         }
