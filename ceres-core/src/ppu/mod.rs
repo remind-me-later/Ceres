@@ -413,7 +413,7 @@ impl Ppu {
                 if self.line144_transition {
                     self.line144_transition = false;
                     self.enter_mode(Mode::VBlank, ints);
-                    self.cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb) - 2;
+                    self.cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb) - 1;
                     self.ly_for_comparison = 144;
                     self.check_lyc(ints);
                 } else if self.lcdon_line0_mode0 {
