@@ -582,11 +582,24 @@ impl Ppu {
         self.scy = val;
     }
 
-    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts, _is_cgb: bool) {
+    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts, is_cgb: bool) {
         let ly_equals_lyc = self.stat & STAT_LYC_B;
         let mode = self.stat & STAT_MODE_B;
 
         self.stat = (val & !0x07) | ly_equals_lyc | mode;
+
+        if !is_cgb && self.lcdc & LCDC_ON_B != 0 && !self.stat_line {
+            // DMG STAT write glitch: writing to STAT while in Mode 0, Mode 1, or when LY=LYC is active
+            // pulses the STAT line high if it was previously low.
+            if self.mode() == Mode::HBlank
+                || self.mode() == Mode::VBlank
+                || (self.stat & STAT_LYC_B != 0)
+            {
+                ints.request_lcd();
+                self.stat_line = true;
+            }
+        }
+
         self.update_stat_line(ints);
     }
 
