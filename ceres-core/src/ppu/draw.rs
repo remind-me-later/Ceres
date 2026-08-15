@@ -331,7 +331,7 @@ impl Ppu {
     }
 
     #[must_use]
-    fn objs_in_ly(&self, height: u8, cgb_mode: CgbMode) -> ([Obj; 10], u8) {
+    pub(crate) fn objs_in_ly(&self, height: u8, cgb_mode: CgbMode) -> ([Obj; 10], u8) {
         let mut len: u8 = 0;
         let mut obj: [Obj; 10] = Default::default();
         let oam_bytes = self.oam.bytes();
@@ -393,11 +393,11 @@ impl Ppu {
 }
 
 #[derive(Default)]
-struct Obj {
-    attr: u8,
-    tile_index: u8,
-    x: u8,
-    y: u8,
+pub(crate) struct Obj {
+    pub(crate) attr: u8,
+    pub(crate) tile_index: u8,
+    pub(crate) x: u8,
+    pub(crate) y: u8,
 }
 
 const fn shade_index(palette: u8, color: u8) -> u8 {

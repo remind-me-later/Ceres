@@ -140,6 +140,7 @@ pub struct Ppu {
     line0_frame_wrap: bool,
     mode_for_interrupt: Option<Mode>,
     stat_line: bool,
+    sprite_penalty: i32,
 }
 
 impl Default for Ppu {
@@ -158,6 +159,7 @@ impl Default for Ppu {
             line0_frame_wrap: false,
             mode_for_interrupt: None,
             stat_line: false,
+            sprite_penalty: 0,
             oam: Oam::default(),
             obp0: 0,
             obp1: 0,
@@ -229,10 +231,45 @@ impl Ppu {
         self.update_stat_line(ints);
     }
 
+    fn sprite_penalty_m_cycles(&self, cgb_mode: CgbMode) -> i32 {
+        if self.lcdc & LCDC_OBJ_B == 0 {
+            return 0;
+        }
+
+        let height = if self.lcdc & LCDC_OBJL_B == 0 { 8 } else { 16 };
+        let (objs, count) = self.objs_in_ly(height, cgb_mode);
+        if count == 0 {
+            return 0;
+        }
+
+        let mut total_t_cycles = 0;
+        for obj in &objs[..count as usize] {
+            let raw_x = obj.x.wrapping_add(8);
+            if raw_x > 0 && raw_x < 168 {
+                let scroll_offset = (raw_x.wrapping_add(self.scx)) & 7;
+                let penalty = 6 + if scroll_offset <= 5 { scroll_offset } else { 5 };
+                total_t_cycles += penalty as i32;
+            }
+        }
+
+        (total_t_cycles + 2) / 4
+    }
+
     /// Transition the PPU to a new mode, reset the per-mode cycle counter,
     /// and fire any mode-bound IRQs.
-    fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts) {
-        self.cycles = mode.m_cycles(self.scx, self.is_cgb);
+    fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts, cgb_mode: CgbMode) {
+        if mode == Mode::Drawing {
+            self.sprite_penalty = self.sprite_penalty_m_cycles(cgb_mode);
+        } else if mode != Mode::HBlank {
+            self.sprite_penalty = 0;
+        }
+
+        let base_cycles = mode.m_cycles(self.scx, self.is_cgb);
+        self.cycles = match mode {
+            Mode::Drawing => base_cycles + self.sprite_penalty,
+            Mode::HBlank => (base_cycles - self.sprite_penalty).max(1),
+            _ => base_cycles,
+        };
         self.mode_for_interrupt = None;
         // Update mode bits AFTER setting cycles so cgb_mode is queried here.
         self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
@@ -428,28 +465,28 @@ impl Ppu {
         }
 
         match self.mode() {
-            Mode::OamScan => self.enter_mode(Mode::Drawing, ints),
+            Mode::OamScan => self.enter_mode(Mode::Drawing, ints, cgb_mode),
             Mode::Drawing => {
                 self.draw_scanline(cgb_mode);
-                self.enter_mode(Mode::HBlank, ints);
+                self.enter_mode(Mode::HBlank, ints, cgb_mode);
             }
             Mode::HBlank => {
                 if self.lcdon_line0_mode0 {
                     self.lcdon_line0_mode0 = false;
-                    self.enter_mode(Mode::Drawing, ints);
+                    self.enter_mode(Mode::Drawing, ints, cgb_mode);
                 } else if self.line0_frame_wrap {
                     self.line0_frame_wrap = false;
-                    self.enter_mode(Mode::OamScan, ints);
+                    self.enter_mode(Mode::OamScan, ints, cgb_mode);
                     self.ly_for_comparison = 0;
                     self.check_lyc(ints);
                 } else {
                     self.ly += 1;
                     if self.ly > 143 {
-                        self.enter_mode(Mode::VBlank, ints);
+                        self.enter_mode(Mode::VBlank, ints, cgb_mode);
                         self.ly_for_comparison = u16::MAX;
                         self.check_lyc(ints);
                     } else {
-                        self.enter_mode(Mode::OamScan, ints);
+                        self.enter_mode(Mode::OamScan, ints, cgb_mode);
                     }
                 }
             }
@@ -459,7 +496,7 @@ impl Ppu {
                     self.rgba_buf_present = mem::take(&mut self.rgb_buf);
                     if self.is_cgb {
                         // On CGB: direct Mode 1 -> Mode 2 transition
-                        self.enter_mode(Mode::OamScan, ints);
+                        self.enter_mode(Mode::OamScan, ints, cgb_mode);
                         self.ly_for_comparison = 0;
                         self.check_lyc(ints);
                     } else {

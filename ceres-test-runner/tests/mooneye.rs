@@ -767,10 +767,7 @@ fn test_gpu_intr_2_mode0_timing_sprites_nops() {
         "acceptance/gpu/intr_2_mode0_timing_sprites_nops.gb",
         Model::DmgB,
     );
-    assert!(
-        result.is_passed(),
-        "gpu/intr_2_mode0_timing_sprites_nops test failed"
-    );
+    assert_eq!(result, TestResult::Passed, "gpu/intr_2_mode0_timing_sprites_nops test failed");
 }
 
 #[test]
