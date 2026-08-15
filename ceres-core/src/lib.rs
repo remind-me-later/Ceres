@@ -277,7 +277,7 @@ impl<A: AudioCallback> Gb<A> {
         self.write_mem(0xFF47, 0xFC);
         if self.is_cgb() {
             self.apu.set_ch1_output(0);
-            self.apu.set_ch1_duty_bit(0);
+            self.apu.set_ch1_duty_bit(1);
             self.write_mem(0xFF68, 0xC8);
             self.write_mem(0xFF6A, 0xD0);
             self.undoc_ff72 = 0x00;
