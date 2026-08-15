@@ -594,7 +594,7 @@ fn test_gpu_hblank_ly_scx_timing_variant_nops() {
 #[test]
 fn test_gpu_intr_0_timing() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/intr_0_timing.gb", Model::DmgB);
-    assert!(result.is_passed(), "gpu/intr_0_timing test failed");
+    assert_eq!(result, TestResult::Passed, "gpu/intr_0_timing test failed");
 }
 
 #[test]
@@ -900,7 +900,7 @@ fn test_gpu_lcdon_write_timing_gs() {
 #[test]
 fn test_gpu_ly00_01_mode0_2() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/ly00_01_mode0_2.gb", Model::DmgB);
-    assert!(result.is_passed(), "gpu/ly00_01_mode0_2 test failed");
+    assert_eq!(result, TestResult::Passed, "gpu/ly00_01_mode0_2 test failed");
 }
 
 #[test]
@@ -916,7 +916,7 @@ fn test_gpu_ly00_mode0_2_gs() {
 #[test]
 fn test_gpu_ly00_mode1_0_gs() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/ly00_mode1_0-GS.gb", Model::DmgB);
-    assert!(result.is_passed(), "gpu/ly00_mode1_0-GS test failed");
+    assert_eq!(result, TestResult::Passed, "gpu/ly00_mode1_0-GS test failed");
 }
 
 #[test]

@@ -493,8 +493,12 @@ impl Ppu {
     }
 
     pub fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts) {
+        let was_on = self.lcdc & LCDC_ON_B != 0;
+        let is_on = val & LCDC_ON_B != 0;
+        self.lcdc = val;
+
         // turn off: reset to line 0 in HBlank mode, clear all blocking.
-        if val & LCDC_ON_B == 0 && self.lcdc & LCDC_ON_B != 0 {
+        if !is_on && was_on {
             self.ly = 0;
             self.ly_for_comparison = 0;
             self.lcdon_line0_mode0 = false;
@@ -509,7 +513,7 @@ impl Ppu {
         // turn on: per the lcdon_mode_timing test, the first line starts
         // in mode 0 (HBlank) for 20 M-cycles, then goes straight to
         // mode 3 (skipping mode 2).
-        if val & LCDC_ON_B != 0 && self.lcdc & LCDC_ON_B == 0 {
+        if is_on && !was_on {
             self.ly = 0;
             self.ly_for_comparison = 0;
             self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
@@ -517,8 +521,6 @@ impl Ppu {
             self.lcdon_line0_mode0 = true;
             self.check_lyc(ints);
         }
-
-        self.lcdc = val;
     }
 
     pub fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
@@ -570,11 +572,24 @@ impl Ppu {
         self.scy = val;
     }
 
-    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts, _is_cgb: bool) {
+    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts, is_cgb: bool) {
         let ly_equals_lyc = self.stat & STAT_LYC_B;
         let mode = self.stat & STAT_MODE_B;
 
         self.stat = (val & !0x07) | ly_equals_lyc | mode;
+
+        if !is_cgb && self.lcdc & LCDC_ON_B != 0 && !self.stat_line {
+            // DMG STAT write glitch: writing to STAT while in Mode 0, Mode 1, or when LY=LYC is active
+            // pulses the STAT line high if it was previously low.
+            if self.mode() == Mode::HBlank
+                || self.mode() == Mode::VBlank
+                || (self.stat & STAT_LYC_B != 0)
+            {
+                ints.request_lcd();
+                self.stat_line = true;
+            }
+        }
+
         self.update_stat_line(ints);
     }
 
