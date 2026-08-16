@@ -297,7 +297,7 @@ impl Ppu {
                     }
                 } else if x < 8 {
                     if x == 0 || (x as i32 & 7) >= 8 - scx_fine {
-                        total_t_cycles += 5;
+                        total_t_cycles += if num_tiles == 0 { 5 } else { 3 };
                     } else if (x as i32 & 7) == 1 {
                         total_t_cycles += 3;
                     } else if (x as i32 & 7) <= 3 {
