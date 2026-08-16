@@ -750,14 +750,13 @@ impl Ppu {
         self.stat = (val & !0x07) | ly_equals_lyc | mode;
 
         if !is_cgb && self.lcdc & LCDC_ON_B != 0 && !was_line_high {
-            let oam_suppressed = self.mode() == Mode::HBlank
-                && (val & STAT_IF_OAM_B != 0)
-                && (prev_stat & STAT_IF_OAM_B != 0);
+            let lyc_glitch = (prev_stat & STAT_IF_LYC_B == 0)
+                && (val & STAT_IF_LYC_B != 0)
+                && (self.stat & STAT_LYC_B != 0);
 
-            if !oam_suppressed
-                && (self.mode() == Mode::HBlank
-                    || self.mode() == Mode::VBlank
-                    || (self.stat & STAT_LYC_B != 0))
+            if self.mode() == Mode::HBlank
+                || self.mode() == Mode::VBlank
+                || lyc_glitch
             {
                 ints.request_lcd();
                 self.stat_line = true;
