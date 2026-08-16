@@ -486,7 +486,7 @@ impl Ppu {
         // Cache whether we're running in CGB native mode so per-model
         // timing decisions can be made without threading CgbMode
         // through every internal call.
-        self.is_cgb = matches!(cgb_mode, CgbMode::Cgb);
+        self.is_cgb = matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat);
         if self.lcdc & LCDC_ON_B == 0 {
             return;
         }
@@ -565,6 +565,10 @@ impl Ppu {
                     } else if self.cycles == 2 {
                         self.ly_for_comparison = u16::MAX;
                         self.check_lyc(ints);
+                    }
+
+                    if self.is_cgb && self.current_vblank_line == 152 && self.cycles <= 2 {
+                        self.ly = 153;
                     }
                 }
             }
@@ -675,6 +679,7 @@ impl Ppu {
     }
 
     pub fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts, is_cgb: bool) {
+        self.is_cgb = is_cgb;
         let was_on = self.lcdc & LCDC_ON_B != 0;
         let is_on = val & LCDC_ON_B != 0;
         self.lcdc = val;
