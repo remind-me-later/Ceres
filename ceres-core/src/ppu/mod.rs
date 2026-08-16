@@ -296,9 +296,9 @@ impl Ppu {
                         _ => {}
                     }
                 } else if x < 8 {
-                    if x == 0 || offset == 0 || (x as i32 & 7) >= 8 - scx_fine {
+                    if x == 0 || (x as i32 & 7) >= 8 - scx_fine {
                         total_t_cycles += 5;
-                    } else if (1..=3).contains(&offset) || (num_tiles == 0 && offset == 4) {
+                    } else if (x as i32 & 7) <= 3 {
                         total_t_cycles += 2;
                     }
                 } else {
