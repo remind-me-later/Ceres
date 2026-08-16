@@ -282,14 +282,16 @@ impl Ppu {
             let tile_x = (x.wrapping_add(self.scx) / 8) as i32;
             if tile_x != last_tile_x {
                 let offset = (x.wrapping_add(self.scx) & 7) as i32;
-                if (0..=3).contains(&offset) {
-                    total_t_cycles += 3;
+                match offset {
+                    0 | 1 => total_t_cycles += 3,
+                    2 | 3 => total_t_cycles += 2,
+                    _ => {}
                 }
                 last_tile_x = tile_x;
             }
         }
 
-        (total_t_cycles + 2) / 4
+        (total_t_cycles + 1) / 4
     }
 
     /// Transition the PPU to a new mode, reset the per-mode cycle counter,
