@@ -295,6 +295,15 @@ impl Ppu {
                 self.win_in_ly = false;
                 self.ly_for_comparison = u16::from(self.ly);
                 self.check_lyc(ints);
+                self.fifo.start_scanline(
+                    &self.oam,
+                    self.ly,
+                    self.scx,
+                    self.scy,
+                    self.lcdc,
+                    self.is_cgb,
+                    self.opri,
+                );
             }
             Mode::VBlank => {
                 self.ly = 144;
@@ -486,6 +495,22 @@ impl Ppu {
                 }
             }
             Mode::Drawing => {
+                for _ in 0..4 {
+                    if let Some((lx, bg_px, sprite_px)) = self.fifo.step_dot(
+                        &self.vram,
+                        self.ly,
+                        self.wx,
+                        self.wy,
+                        self.scx,
+                        self.lcdc,
+                        self.is_cgb,
+                    ) {
+                        let rgb = self.resolve_fifo_pixel(bg_px, sprite_px, cgb_mode);
+                        let idx = u32::from(self.ly) * 160 + u32::from(lx);
+                        self.rgb_buf.set_px(idx, rgb);
+                    }
+                }
+
                 if self.cycles == 1 {
                     // Mode 0 HBlank STAT IRQ fires 1 M-cycle BEFORE Mode 0 begins (mooneye-gb ppu.rs:326)
                     if self.stat & STAT_IF_HBLANK_B != 0 && !self.stat_line {
@@ -505,7 +530,9 @@ impl Ppu {
         match self.mode() {
             Mode::OamScan => self.enter_mode(Mode::Drawing, ints, cgb_mode),
             Mode::Drawing => {
-                self.draw_scanline(cgb_mode);
+                if self.fifo.lx < 160 {
+                    self.draw_scanline(cgb_mode);
+                }
                 self.enter_mode(Mode::HBlank, ints, cgb_mode);
             }
             Mode::HBlank => {

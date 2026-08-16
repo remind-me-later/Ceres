@@ -157,7 +157,7 @@ impl PixelFifo {
         ly: u8,
         wx: u8,
         wy: u8,
-        scx: u8,
+        _scx: u8,
         lcdc: u8,
         is_cgb: bool,
     ) -> Option<(u8, Pixel, Pixel)> {
