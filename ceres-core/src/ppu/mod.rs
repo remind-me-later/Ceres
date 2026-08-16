@@ -272,6 +272,7 @@ impl Ppu {
             visible_sprites[..count].sort_unstable();
         }
 
+        let scx_fine = (self.scx & 7) as i32;
         let mut total_t_cycles = 0;
         let mut last_tile_x = -1;
         let mut num_tiles = 0;
@@ -286,12 +287,18 @@ impl Ppu {
             let tile_x = (x.wrapping_add(self.scx) / 8) as i32;
             if tile_x != last_tile_x {
                 let offset = (x.wrapping_add(self.scx) & 7) as i32;
-                match offset {
-                    0 => total_t_cycles += 4,
-                    1 => total_t_cycles += 3,
-                    2 => total_t_cycles += 2,
-                    3 => total_t_cycles += 1,
-                    _ => {}
+                if scx_fine == 0 {
+                    match offset {
+                        0 => total_t_cycles += 4,
+                        1 => total_t_cycles += 3,
+                        2 => total_t_cycles += 2,
+                        3 => total_t_cycles += 1,
+                        _ => {}
+                    }
+                } else if x == 0 || offset == 0 || (x as i32 & 7) >= 8 - scx_fine {
+                    total_t_cycles += 5;
+                } else if (1..=3).contains(&offset) {
+                    total_t_cycles += 2;
                 }
                 if num_tiles > 0 && offset < 5 {
                     total_t_cycles += 1;
