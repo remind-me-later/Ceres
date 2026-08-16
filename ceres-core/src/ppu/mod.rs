@@ -452,7 +452,15 @@ impl Ppu {
                     }
                 }
             }
-            Mode::Drawing => (),
+            Mode::Drawing => {
+                if self.cycles == 1 {
+                    // Mode 0 HBlank STAT IRQ fires 1 M-cycle BEFORE Mode 0 begins (mooneye-gb ppu.rs:326)
+                    if self.stat & STAT_IF_HBLANK_B != 0 && !self.stat_line {
+                        ints.request_lcd();
+                        self.stat_line = true;
+                    }
+                }
+            }
         }
 
         self.cycles -= 1;
