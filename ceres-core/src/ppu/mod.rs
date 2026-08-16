@@ -205,12 +205,15 @@ impl Ppu {
         }
 
         let lyc_signal = (self.stat & STAT_IF_LYC_B != 0) && (self.stat & STAT_LYC_B != 0);
-        let effective_mode = self.mode_for_interrupt.unwrap_or(self.mode());
-        let mode_signal = match effective_mode {
-            Mode::HBlank => !self.lcdon_line0_mode0 && (self.stat & STAT_IF_HBLANK_B != 0),
-            Mode::VBlank => self.stat & STAT_IF_VBLANK_B != 0,
-            Mode::OamScan => self.stat & STAT_IF_OAM_B != 0,
-            Mode::Drawing => false,
+        let mode_signal = match self.mode_for_interrupt {
+            Some(Mode::HBlank) => !self.lcdon_line0_mode0 && (self.stat & STAT_IF_HBLANK_B != 0),
+            Some(Mode::VBlank) => self.stat & STAT_IF_VBLANK_B != 0,
+            Some(Mode::OamScan) => self.stat & STAT_IF_OAM_B != 0,
+            Some(Mode::Drawing) | None => match self.mode() {
+                Mode::HBlank => !self.lcdon_line0_mode0 && (self.stat & STAT_IF_HBLANK_B != 0),
+                Mode::VBlank => self.stat & STAT_IF_VBLANK_B != 0,
+                _ => false,
+            },
         };
 
         let new_line = lyc_signal || mode_signal;
