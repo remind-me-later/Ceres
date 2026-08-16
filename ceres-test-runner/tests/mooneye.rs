@@ -967,7 +967,7 @@ fn test_gpu_ly143_144_mode3_0() {
         "acceptance/gpu/ly143_144_mode3_0.gb",
         Model::DmgB,
     );
-    assert!(result.is_passed(), "gpu/ly143_144_mode3_0 test failed");
+    assert_eq!(result, TestResult::Passed, "gpu/ly143_144_mode3_0 test failed");
 }
 
 #[test]
