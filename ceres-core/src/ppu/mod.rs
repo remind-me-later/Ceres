@@ -1,3 +1,4 @@
+pub mod fifo;
 mod color_palette;
 mod draw;
 mod oam;

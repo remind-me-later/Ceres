@@ -1,0 +1,223 @@
+use super::pixel::Pixel;
+use super::sprite::Sprite;
+use crate::ppu::vram::Vram;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FetcherState {
+    #[default]
+    GetTile,
+    GetTileDataLow,
+    GetTileDataHigh,
+    Push,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TileFetcher {
+    pub state: FetcherState,
+    pub cycle: u8,
+    pub tile_id: u8,
+    pub tile_attr: u8,
+    pub tile_data_low: u8,
+    pub tile_data_high: u8,
+    pub map_x: u8,
+    pub map_y: u8,
+    pub is_window: bool,
+    pub sprite_fetch: Option<(Sprite, u8)>, // (Sprite, sub_cycle)
+}
+
+impl TileFetcher {
+    pub const fn new() -> Self {
+        Self {
+            state: FetcherState::GetTile,
+            cycle: 0,
+            tile_id: 0,
+            tile_attr: 0,
+            tile_data_low: 0,
+            tile_data_high: 0,
+            map_x: 0,
+            map_y: 0,
+            is_window: false,
+            sprite_fetch: None,
+        }
+    }
+
+    pub fn reset(&mut self, map_x: u8, map_y: u8, is_window: bool) {
+        self.state = FetcherState::GetTile;
+        self.cycle = 0;
+        self.tile_id = 0;
+        self.tile_attr = 0;
+        self.tile_data_low = 0;
+        self.tile_data_high = 0;
+        self.map_x = map_x;
+        self.map_y = map_y;
+        self.is_window = is_window;
+        self.sprite_fetch = None;
+    }
+
+    /// Advance fetcher by 1 T-cycle.
+    /// Returns true if 8 pixels are ready to push to FIFO.
+    pub fn step_t_cycle(
+        &mut self,
+        vram: &Vram,
+        lcdc: u8,
+        is_cgb: bool,
+    ) -> Option<[Pixel; 8]> {
+        // Handle sprite fetch stall if active
+        if let Some((sprite, cycle)) = &mut self.sprite_fetch {
+            *cycle += 1;
+            if *cycle >= 6 {
+                self.sprite_fetch = None;
+            }
+            return None;
+        }
+
+        self.cycle += 1;
+        if self.cycle < 2 {
+            return None;
+        }
+        self.cycle = 0;
+
+        match self.state {
+            FetcherState::GetTile => {
+                let map_base: u16 = if self.is_window {
+                    if lcdc & 0x40 != 0 { 0x1C00 } else { 0x1800 }
+                } else if lcdc & 0x08 != 0 {
+                    0x1C00
+                } else {
+                    0x1800
+                };
+
+                let tile_col = (self.map_x / 8) & 0x1F;
+                let tile_row = (self.map_y / 8) & 0x1F;
+                let map_addr = map_base + (u16::from(tile_row) * 32) + u16::from(tile_col);
+
+                self.tile_id = vram.vram_at_bank(map_addr, 0);
+                self.tile_attr = if is_cgb {
+                    vram.vram_at_bank(map_addr, 1)
+                } else {
+                    0
+                };
+
+                self.state = FetcherState::GetTileDataLow;
+                None
+            }
+            FetcherState::GetTileDataLow => {
+                let data_addr = self.calculate_tile_data_addr(lcdc);
+                let bank = if is_cgb && (self.tile_attr & 0x08 != 0) { 1 } else { 0 };
+                self.tile_data_low = vram.vram_at_bank(data_addr, bank);
+
+                self.state = FetcherState::GetTileDataHigh;
+                None
+            }
+            FetcherState::GetTileDataHigh => {
+                let data_addr = self.calculate_tile_data_addr(lcdc) + 1;
+                let bank = if is_cgb && (self.tile_attr & 0x08 != 0) { 1 } else { 0 };
+                self.tile_data_high = vram.vram_at_bank(data_addr, bank);
+
+                self.state = FetcherState::Push;
+                None
+            }
+            FetcherState::Push => {
+                // Decode 8 pixels
+                let pixels = self.decode_bg_pixels(is_cgb);
+                self.map_x = self.map_x.wrapping_add(8);
+                self.state = FetcherState::GetTile;
+                Some(pixels)
+            }
+        }
+    }
+
+    fn calculate_tile_data_addr(&self, lcdc: u8) -> u16 {
+        let is_signed = lcdc & 0x10 == 0;
+        let flip_y = self.tile_attr & 0x40 != 0;
+        let mut row_in_tile = (self.map_y % 8) as u16;
+        if flip_y {
+            row_in_tile = 7 - row_in_tile;
+        }
+
+        if is_signed {
+            let signed_id = self.tile_id as i8;
+            let offset = (i32::from(signed_id) + 128) as u16;
+            0x0800 + (offset * 16) + (row_in_tile * 2)
+        } else {
+            (u16::from(self.tile_id) * 16) + (row_in_tile * 2)
+        }
+    }
+
+    fn decode_bg_pixels(&self, is_cgb: bool) -> [Pixel; 8] {
+        let mut pixels = [Pixel::empty(); 8];
+        let flip_x = self.tile_attr & 0x20 != 0;
+        let palette = if is_cgb { self.tile_attr & 0x07 } else { 0 };
+        let bg_priority = is_cgb && (self.tile_attr & 0x80 != 0);
+
+        for i in 0..8 {
+            let bit_idx = if flip_x { i } else { 7 - i };
+            let low_bit = (self.tile_data_low >> bit_idx) & 1;
+            let high_bit = (self.tile_data_high >> bit_idx) & 1;
+            let color_id = (high_bit << 1) | low_bit;
+
+            pixels[i as usize] = Pixel {
+                color_id,
+                palette,
+                bg_priority,
+                sprite_priority: u8::MAX,
+            };
+        }
+
+        pixels
+    }
+
+    pub fn fetch_sprite_data(
+        &mut self,
+        sprite: Sprite,
+        vram: &Vram,
+        ly: u8,
+        sprite_height: u8,
+        is_cgb: bool,
+    ) -> [Pixel; 8] {
+        let flip_y = sprite.y_flip();
+        let flip_x = sprite.x_flip();
+        let mut row = (u16::from(ly) + 16).wrapping_sub(u16::from(sprite.y));
+        if flip_y {
+            row = u16::from(sprite_height) - 1 - row;
+        }
+
+        let tile_id = if sprite_height == 16 {
+            if row < 8 {
+                sprite.tile & 0xFE
+            } else {
+                sprite.tile | 0x01
+            }
+        } else {
+            sprite.tile
+        };
+
+        let row_in_tile = (row % 8) * 2;
+        let tile_addr = (u16::from(tile_id) * 16) + row_in_tile;
+        let bank = if is_cgb { sprite.cgb_vram_bank() } else { 0 };
+
+        let low = vram.vram_at_bank(tile_addr, bank);
+        let high = vram.vram_at_bank(tile_addr + 1, bank);
+
+        let palette = if is_cgb {
+            sprite.cgb_palette()
+        } else {
+            sprite.dmg_palette()
+        };
+
+        let mut pixels = [Pixel::empty(); 8];
+        for i in 0..8 {
+            let bit_idx = if flip_x { i } else { 7 - i };
+            let color_id = ((high >> bit_idx) & 1) << 1 | ((low >> bit_idx) & 1);
+            pixels[i as usize] = Pixel {
+                color_id,
+                palette,
+                bg_priority: sprite.bg_priority(),
+                sprite_priority: if is_cgb { sprite.oam_index } else { sprite.x },
+            };
+        }
+
+        self.sprite_fetch = Some((sprite, 0));
+        pixels
+    }
+}
