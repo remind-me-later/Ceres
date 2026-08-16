@@ -390,6 +390,50 @@ impl Ppu {
     fn win_tile_map(&self) -> u16 {
         0x9800 | (u16::from(self.lcdc & LCDC_WIN_AREA != 0) << 10)
     }
+
+    #[must_use]
+    pub fn resolve_fifo_pixel(
+        &self,
+        bg_px: super::fifo::pixel::Pixel,
+        sprite_px: super::fifo::pixel::Pixel,
+        cgb_mode: CgbMode,
+    ) -> (u8, u8, u8) {
+        let master_bg_enable = self.lcdc & LCDC_BG_B != 0;
+        let show_sprite = if sprite_px.color_id == 0 {
+            false
+        } else if !master_bg_enable {
+            cgb_mode != CgbMode::Dmg
+        } else if bg_px.color_id == 0 {
+            true
+        } else if bg_px.bg_priority || sprite_px.bg_priority {
+            false
+        } else {
+            true
+        };
+
+        if show_sprite {
+            match cgb_mode {
+                CgbMode::Dmg => {
+                    let pal = if sprite_px.palette == 0 { self.obp0 } else { self.obp1 };
+                    Self::mono_rgb(shade_index(pal, sprite_px.color_id))
+                }
+                CgbMode::Compat => {
+                    let pal = if sprite_px.palette == 0 { self.obp0 } else { self.obp1 };
+                    self.ocp.rgb(sprite_px.palette, shade_index(pal, sprite_px.color_id), self.color_correction_mode)
+                }
+                CgbMode::Cgb => {
+                    self.ocp.rgb(sprite_px.palette, sprite_px.color_id, self.color_correction_mode)
+                }
+            }
+        } else {
+            let bg_color = if !master_bg_enable && cgb_mode == CgbMode::Dmg { 0 } else { bg_px.color_id };
+            match cgb_mode {
+                CgbMode::Dmg => Self::mono_rgb(shade_index(self.bgp, bg_color)),
+                CgbMode::Compat => self.bcp.rgb(bg_px.palette, shade_index(self.bgp, bg_color), self.color_correction_mode),
+                CgbMode::Cgb => self.bcp.rgb(bg_px.palette, bg_color, self.color_correction_mode),
+            }
+        }
+    }
 }
 
 #[derive(Default)]

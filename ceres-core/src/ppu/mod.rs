@@ -142,6 +142,7 @@ pub struct Ppu {
     mode_for_interrupt: Option<Mode>,
     stat_line: bool,
     sprite_penalty: i32,
+    fifo: fifo::PixelFifo,
 }
 
 impl Default for Ppu {
@@ -161,6 +162,7 @@ impl Default for Ppu {
             mode_for_interrupt: None,
             stat_line: false,
             sprite_penalty: 0,
+            fifo: fifo::PixelFifo::new(),
             oam: Oam::default(),
             obp0: 0,
             obp1: 0,

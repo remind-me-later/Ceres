@@ -633,7 +633,7 @@ pub enum Model {
     Agb,
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum CgbMode {
     #[default]
     Cgb,

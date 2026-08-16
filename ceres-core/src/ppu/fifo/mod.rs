@@ -4,7 +4,7 @@ pub mod sprite;
 
 use self::fetcher::TileFetcher;
 use self::pixel::Pixel;
-use self::sprite::{Sprite, SpriteBuffer};
+use self::sprite::SpriteBuffer;
 use crate::ppu::oam::Oam;
 use crate::ppu::vram::Vram;
 

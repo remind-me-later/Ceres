@@ -63,7 +63,7 @@ impl TileFetcher {
         is_cgb: bool,
     ) -> Option<[Pixel; 8]> {
         // Handle sprite fetch stall if active
-        if let Some((sprite, cycle)) = &mut self.sprite_fetch {
+        if let Some((_sprite, cycle)) = &mut self.sprite_fetch {
             *cycle += 1;
             if *cycle >= 6 {
                 self.sprite_fetch = None;
