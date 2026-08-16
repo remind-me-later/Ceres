@@ -501,7 +501,7 @@ impl Ppu {
                 }
             }
             Mode::HBlank => {
-                if self.ly == 143 {
+                if self.ly == 143 && self.ly_for_comparison != u16::MAX {
                     if self.cycles == 2 {
                         self.ly = 144;
                         self.ly_for_comparison = 143;
@@ -510,8 +510,14 @@ impl Ppu {
                         self.ly_for_comparison = 144;
                         self.check_lyc(ints);
                     }
-                } else if self.cycles == 1 && !self.lcdon_line0_mode0 {
+                } else if self.cycles == 2 && !self.lcdon_line0_mode0 {
                     if self.ly < 143 {
+                        self.ly += 1;
+                        self.ly_for_comparison = u16::MAX;
+                        self.check_lyc(ints);
+                    }
+                } else if self.cycles == 1 && !self.lcdon_line0_mode0 {
+                    if self.ly <= 143 {
                         // Mode 2 STAT IRQ fires 1 M-cycle BEFORE Mode 2 begins (SameBoy line 1780)
                         if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
                             ints.request_lcd();
@@ -631,12 +637,7 @@ impl Ppu {
                 } else if self.ly >= 144 {
                     self.enter_mode(Mode::VBlank, ints, cgb_mode);
                 } else {
-                    self.ly += 1;
-                    if self.ly > 143 {
-                        self.enter_mode(Mode::VBlank, ints, cgb_mode);
-                    } else {
-                        self.enter_mode(Mode::OamScan, ints, cgb_mode);
-                    }
+                    self.enter_mode(Mode::OamScan, ints, cgb_mode);
                 }
             }
             Mode::VBlank => {
