@@ -1091,7 +1091,7 @@ fn test_gpu_ly_new_frame_c() {
 #[test]
 fn test_gpu_ly_new_frame_gs() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/ly_new_frame-GS.gb", Model::DmgB);
-    assert!(result.is_passed(), "gpu/ly_new_frame-GS test failed");
+    assert_eq!(result, TestResult::Passed, "gpu/ly_new_frame-GS test failed");
 }
 
 #[test]
