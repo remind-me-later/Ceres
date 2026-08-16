@@ -972,8 +972,8 @@ fn test_gpu_ly143_144_mode3_0() {
 
 #[test]
 fn test_gpu_ly_lyc_0_c() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_lyc_0-C.gb", Model::CgbE);
-    assert!(result.is_passed(), "gpu/ly_lyc_0-C test failed");
+    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_lyc_0-C.gb", Model::CgbC);
+    assert_eq!(result, TestResult::Passed, "gpu/ly_lyc_0-C test failed");
 }
 
 #[test]
