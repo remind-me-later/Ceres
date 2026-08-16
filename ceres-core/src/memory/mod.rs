@@ -329,7 +329,10 @@ impl<A: AudioCallback> Gb<A> {
                 self.apu.write_nr52(val, div_bit, self.is_cgb());
             }
             WAV_BEG..=WAV_END => self.apu.write_wave_ram(addr, val, self.is_cgb()),
-            LCDC => self.ppu.write_lcdc(val, &mut self.ints),
+            LCDC => {
+                let is_cgb = self.is_cgb();
+                self.ppu.write_lcdc(val, &mut self.ints, is_cgb);
+            }
             STAT => {
                 let is_cgb = self.is_cgb();
                 self.ppu.write_stat(val, &mut self.ints, is_cgb);

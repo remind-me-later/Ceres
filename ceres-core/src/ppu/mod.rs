@@ -235,34 +235,55 @@ impl Ppu {
     }
 
     fn sprite_penalty_m_cycles(&self, cgb_mode: CgbMode) -> i32 {
-        if self.lcdc & LCDC_OBJ_B == 0 {
+        if self.lcdc & LCDC_OBJ_B == 0 && cgb_mode == CgbMode::Dmg {
             return 0;
         }
 
-        let height = if self.lcdc & LCDC_OBJL_B == 0 { 8 } else { 16 };
-        let (objs, count) = self.objs_in_ly(height, cgb_mode);
+        let height: u8 = if self.lcdc & LCDC_OBJL_B == 0 { 8 } else { 16 };
+        let bytes = self.oam.bytes();
+        let mut visible_sprites: [u8; 10] = [0; 10];
+        let mut count = 0;
+
+        for i in 0..40 {
+            let offset = i * 4;
+            let y = bytes[offset];
+            let x = bytes[offset + 1];
+
+            let ly_plus_16 = u16::from(self.ly) + 16;
+            let y_u16 = u16::from(y);
+
+            if ly_plus_16 >= y_u16 && ly_plus_16 < y_u16 + u16::from(height) {
+                visible_sprites[count] = x;
+                count += 1;
+                if count == 10 {
+                    break;
+                }
+            }
+        }
+
         if count == 0 {
             return 0;
+        }
+
+        if matches!(cgb_mode, CgbMode::Dmg) || self.opri {
+            visible_sprites[..count].sort_unstable();
         }
 
         let mut total_t_cycles = 0;
         let mut last_tile_x = -1;
 
-        for obj in &objs[..count as usize] {
-            let x = obj.x;
-            if x == 0 || x >= 168 {
+        for &x in &visible_sprites[..count] {
+            if x >= 168 {
                 continue;
             }
 
-            // Base sprite fetch penalty: 6 T-cycles (2 T OAM + 4 T VRAM)
             total_t_cycles += 6;
 
-            // Fetcher alignment penalty (0..5 T-cycles for mid-tile sprites)
             let tile_x = (x.wrapping_add(self.scx) / 8) as i32;
             if tile_x != last_tile_x {
-                let scroll_offset = (x.wrapping_add(self.scx) & 7) as i32;
-                if scroll_offset > 0 && scroll_offset <= 5 {
-                    total_t_cycles += scroll_offset;
+                let offset = (x.wrapping_add(self.scx) & 7) as i32;
+                if (0..=3).contains(&offset) {
+                    total_t_cycles += 3;
                 }
                 last_tile_x = tile_x;
             }
@@ -593,7 +614,7 @@ impl Ppu {
         self.color_correction_mode = mode;
     }
 
-    pub fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts) {
+    pub fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts, is_cgb: bool) {
         let was_on = self.lcdc & LCDC_ON_B != 0;
         let is_on = val & LCDC_ON_B != 0;
         self.lcdc = val;
@@ -605,19 +626,23 @@ impl Ppu {
             self.lcdon_line0_mode0 = false;
             self.stat &= !STAT_MODE_B;
             self.stat_line = false;
-            self.cycles = Mode::HBlank.m_cycles(self.scx, self.is_cgb);
+            self.cycles = Mode::HBlank.m_cycles(self.scx, is_cgb);
             self.rgba_buf_present.clear();
             // LYC comparison: re-evaluate after LY reset to 0.
             self.check_lyc(ints);
         }
 
         // turn on: per the lcdon_mode_timing test, the first line starts
-        // in mode 0 (HBlank) for 20 M-cycles, then goes straight to
+        // in mode 0 (HBlank) for 20 M-cycles on DMG (Mode 1 on CGB), then goes straight to
         // mode 3 (skipping mode 2).
         if is_on && !was_on {
             self.ly = 0;
             self.ly_for_comparison = 0;
-            self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
+            if is_cgb {
+                self.stat = (self.stat & !STAT_MODE_B) | Mode::VBlank as u8;
+            } else {
+                self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
+            }
             self.cycles = 20;
             self.lcdon_line0_mode0 = true;
             self.check_lyc(ints);
