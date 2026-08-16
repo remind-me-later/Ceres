@@ -274,6 +274,7 @@ impl Ppu {
 
         let mut total_t_cycles = 0;
         let mut last_tile_x = -1;
+        let mut num_tiles = 0;
 
         for &x in &visible_sprites[..count] {
             if x >= 168 {
@@ -290,6 +291,10 @@ impl Ppu {
                     2 | 3 => total_t_cycles += 2,
                     _ => {}
                 }
+                if num_tiles > 0 {
+                    total_t_cycles += 1;
+                }
+                num_tiles += 1;
                 last_tile_x = tile_x;
             }
         }
