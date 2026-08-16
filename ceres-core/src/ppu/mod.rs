@@ -298,6 +298,8 @@ impl Ppu {
                 } else if x < 8 {
                     if x == 0 || (x as i32 & 7) >= 8 - scx_fine {
                         total_t_cycles += 5;
+                    } else if (x as i32 & 7) == 1 {
+                        total_t_cycles += 3;
                     } else if (x as i32 & 7) <= 3 {
                         total_t_cycles += 2;
                     }
@@ -306,8 +308,10 @@ impl Ppu {
                         0 => {
                             total_t_cycles += if num_tiles == 0 { 5 } else { 4 };
                         }
-                        1 => total_t_cycles += 3,
-                        2 => total_t_cycles += 2,
+                        1 => total_t_cycles += 4,
+                        2 => {
+                            total_t_cycles += if num_tiles == 0 { 3 } else { 2 };
+                        }
                         3 => total_t_cycles += 1,
                         4 => {
                             if num_tiles == 0 {
