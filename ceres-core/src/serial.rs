@@ -20,7 +20,7 @@ impl Default for Serial {
     fn default() -> Self {
         Self {
             count: 0,
-            div_mask: 0x200,
+            div_mask: 0x100,
             master_clock: false,
             output: String::new(),
             sb: 0,
@@ -65,9 +65,7 @@ impl Serial {
     }
 
     pub fn run_master(&mut self, ints: &mut Interrupts) {
-        self.master_clock ^= true;
-
-        if !self.master_clock && (self.sc & START != 0) && (self.sc & SHIFT != 0) {
+        if (self.sc & START != 0) && (self.sc & SHIFT != 0) {
             self.count += 1;
 
             self.sb <<= 1;
@@ -103,11 +101,6 @@ impl Serial {
 
     pub fn write_sc(&mut self, mut val: u8, ints: &mut Interrupts, cgb_mode: CgbMode) {
         self.count = 0;
-        // Reset the master clock phase so the transfer starts on a known
-        // half-cycle. Without this, a second transfer started shortly after
-        // the first can begin 256 T-cycles early, making the transfer
-        // complete before the gambatte test's read window.
-        self.master_clock = false;
 
         let is_cgb = !matches!(cgb_mode, CgbMode::Dmg);
 
@@ -125,9 +118,9 @@ impl Serial {
         self.sc = if is_cgb { val | 0x7C } else { val | 0x7E };
 
         self.div_mask = if is_cgb && (val & CGB_SPEED != 0) {
-            0x10
+            0x04
         } else {
-            0x200
+            0x100
         };
     }
 }
