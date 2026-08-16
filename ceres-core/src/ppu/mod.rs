@@ -303,6 +303,8 @@ impl Ppu {
                     } else if (x as i32 & 7) <= 3 {
                         total_t_cycles += 2;
                     }
+                } else if (x as i32 & 7) >= 8 - scx_fine {
+                    total_t_cycles += if num_tiles == 0 { 5 } else { 4 };
                 } else {
                     match offset {
                         0 => {
@@ -313,12 +315,11 @@ impl Ppu {
                             total_t_cycles += if num_tiles == 0 { 3 } else { 2 };
                         }
                         3 => total_t_cycles += 1,
-                        4 => {
+                        _ => {
                             if num_tiles == 0 {
                                 total_t_cycles += 1;
                             }
                         }
-                        _ => {}
                     }
                 }
                 if scx_fine == 0 {
