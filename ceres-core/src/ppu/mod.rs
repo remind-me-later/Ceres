@@ -437,20 +437,42 @@ impl Ppu {
                 }
             }
             Mode::VBlank => {
-                if self.ly == 153 {
+                if self.ly == 153 || self.ly == 0 {
                     // Line 153 timing phases (SameBoy display.c:2217):
-                    // self.cycles = 114: LY=153, ly_for_comparison = MAX
-                    // self.cycles = 113: LY=0,   ly_for_comparison = 153
-                    // self.cycles = 112: LY=0,   ly_for_comparison = MAX
-                    // self.cycles = 111: LY=0,   ly_for_comparison = 0
-                    if self.cycles == 113 {
-                        self.ly = 0;
-                        self.ly_for_comparison = 153;
-                        self.check_lyc(ints);
-                    } else if self.cycles == 112 {
-                        self.ly = 0;
-                        self.ly_for_comparison = u16::MAX;
-                        self.check_lyc(ints);
+                    if !self.is_cgb {
+                        // DMG: LY becomes 0 at cycle 114
+                        if self.cycles == 114 {
+                            self.ly = 0;
+                            self.ly_for_comparison = 153;
+                            self.check_lyc(ints);
+                        } else if self.cycles == 113 {
+                            self.ly = 0;
+                            self.ly_for_comparison = u16::MAX;
+                            self.check_lyc(ints);
+                        } else if self.cycles == 112 {
+                            self.ly = 0;
+                            self.ly_for_comparison = 0;
+                            self.check_lyc(ints);
+                        }
+                    } else {
+                        // CGB: LY becomes 0 at cycle 110
+                        if self.cycles == 113 {
+                            self.ly = 153;
+                            self.ly_for_comparison = 153;
+                            self.check_lyc(ints);
+                        } else if self.cycles == 112 {
+                            self.ly = 153;
+                            self.ly_for_comparison = u16::MAX;
+                            self.check_lyc(ints);
+                        } else if self.cycles == 111 {
+                            self.ly = 153;
+                            self.ly_for_comparison = u16::MAX;
+                            self.check_lyc(ints);
+                        } else if self.cycles == 110 {
+                            self.ly = 0;
+                            self.ly_for_comparison = 0;
+                            self.check_lyc(ints);
+                        }
                     }
                 } else if self.ly >= 144 {
                     let base_cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
