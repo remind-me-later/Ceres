@@ -502,12 +502,18 @@ impl Ppu {
             }
             Mode::HBlank => {
                 if self.ly == 143 && self.ly_for_comparison != u16::MAX {
-                    if self.cycles == 2 {
+                    if !self.is_cgb {
+                        if self.cycles == 2 {
+                            self.ly = 144;
+                            self.ly_for_comparison = 143;
+                            self.check_lyc(ints);
+                        } else if self.cycles == 1 {
+                            self.ly_for_comparison = 144;
+                            self.check_lyc(ints);
+                        }
+                    } else if self.cycles == 2 {
                         self.ly = 144;
                         self.ly_for_comparison = 143;
-                        self.check_lyc(ints);
-                    } else if self.cycles == 1 {
-                        self.ly_for_comparison = 144;
                         self.check_lyc(ints);
                     }
                 } else if self.cycles == 2 && !self.lcdon_line0_mode0 {
@@ -574,7 +580,7 @@ impl Ppu {
                     if self.cycles == base_cycles - 1 {
                         self.ly_for_comparison = u16::from(self.ly);
                         self.check_lyc(ints);
-                    } else if self.cycles == 2 {
+                    } else if self.cycles == (if self.is_cgb { 1 } else { 2 }) {
                         self.ly_for_comparison = u16::MAX;
                         self.check_lyc(ints);
                     }
