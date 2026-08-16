@@ -427,10 +427,12 @@ impl Ppu {
                         self.check_lyc(ints);
                     }
 
-                    // Mode 2 STAT IRQ fires 1 M-cycle BEFORE Mode 2 begins (SameBoy line 1780)
-                    if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
-                        ints.request_lcd();
-                        self.stat_line = true;
+                    if self.ly < 143 {
+                        // Mode 2 STAT IRQ fires 1 M-cycle BEFORE Mode 2 begins (SameBoy line 1780)
+                        if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                            ints.request_lcd();
+                            self.stat_line = true;
+                        }
                     }
                 }
             }
