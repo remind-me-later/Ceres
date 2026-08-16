@@ -287,11 +287,13 @@ impl Ppu {
             if tile_x != last_tile_x {
                 let offset = (x.wrapping_add(self.scx) & 7) as i32;
                 match offset {
-                    0 | 1 => total_t_cycles += 3,
-                    2 | 3 => total_t_cycles += 2,
+                    0 => total_t_cycles += 4,
+                    1 => total_t_cycles += 3,
+                    2 => total_t_cycles += 2,
+                    3 => total_t_cycles += 1,
                     _ => {}
                 }
-                if num_tiles > 0 {
+                if num_tiles > 0 && offset < 5 {
                     total_t_cycles += 1;
                 }
                 num_tiles += 1;
