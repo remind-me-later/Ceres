@@ -498,13 +498,16 @@ impl Ppu {
                 }
             }
             Mode::HBlank => {
-                if self.cycles == 1 && !self.lcdon_line0_mode0 {
-                    if self.ly == 143 {
+                if self.ly == 143 {
+                    if self.cycles == 2 {
                         self.ly = 144;
+                        self.ly_for_comparison = 143;
+                        self.check_lyc(ints);
+                    } else if self.cycles == 1 {
                         self.ly_for_comparison = 144;
                         self.check_lyc(ints);
                     }
-
+                } else if self.cycles == 1 && !self.lcdon_line0_mode0 {
                     if self.ly < 143 {
                         // Mode 2 STAT IRQ fires 1 M-cycle BEFORE Mode 2 begins (SameBoy line 1780)
                         if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
@@ -556,6 +559,9 @@ impl Ppu {
                     let base_cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
                     if self.cycles == base_cycles - 1 {
                         self.ly_for_comparison = u16::from(self.ly);
+                        self.check_lyc(ints);
+                    } else if self.cycles == 2 {
+                        self.ly_for_comparison = u16::MAX;
                         self.check_lyc(ints);
                     }
                 }
@@ -647,7 +653,7 @@ impl Ppu {
                     self.ly_for_comparison = if self.ly == 153 {
                         u16::MAX
                     } else {
-                        u16::MAX
+                        u16::from(self.ly)
                     };
                     self.check_lyc(ints);
                 }
