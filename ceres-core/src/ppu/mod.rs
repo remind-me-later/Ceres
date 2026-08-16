@@ -488,17 +488,17 @@ impl Ppu {
                             self.check_lyc(ints);
                         }
                     } else {
-                        // CGB: LY becomes 0 at cycle 110
-                        if self.cycles == 113 {
+                        // CGB: LY becomes 153 for 2 M-cycles (8 T-cycles) on cycles 114 and 113
+                        if self.cycles == 114 || self.cycles == 113 {
                             self.ly = 153;
                             self.ly_for_comparison = 153;
                             self.check_lyc(ints);
                         } else if self.cycles == 112 {
-                            self.ly = 153;
-                            self.ly_for_comparison = u16::MAX;
+                            self.ly = 0;
+                            self.ly_for_comparison = 153;
                             self.check_lyc(ints);
                         } else if self.cycles == 111 {
-                            self.ly = 153;
+                            self.ly = 0;
                             self.ly_for_comparison = u16::MAX;
                             self.check_lyc(ints);
                         } else if self.cycles == 110 {
