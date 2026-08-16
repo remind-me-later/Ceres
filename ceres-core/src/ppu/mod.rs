@@ -287,9 +287,9 @@ impl Ppu {
                 total_t_cycles += 2;
             }
 
-            let tile_x = (x.wrapping_add(self.scx) / 8) as i32;
+            let tile_x = (x / 8) as i32;
             if tile_x != last_tile_x {
-                let offset = (x.wrapping_add(self.scx) & 7) as i32;
+                let offset = (x & 7) as i32;
                 if scx_fine == 0 {
                     match offset {
                         0 => total_t_cycles += 4,
@@ -299,27 +299,23 @@ impl Ppu {
                         _ => {}
                     }
                 } else if x < 8 {
-                    if x == 0 || (x as i32 & 7) >= 8 - scx_fine {
+                    if x == 0 || offset >= 8 - scx_fine {
                         total_t_cycles += if num_tiles == 0 { 5 } else { 3 };
-                    } else if (x as i32 & 7) == 1 {
+                    } else if offset == 1 {
                         total_t_cycles += 3;
-                    } else if (x as i32 & 7) <= 3 {
+                    } else if offset <= 3 {
                         total_t_cycles += 2;
                     }
-                } else if (x as i32 & 7) >= 8 - scx_fine {
-                    total_t_cycles += if num_tiles == 0 { 5 } else { 4 };
                 } else {
                     match offset {
-                        0 => {
-                            total_t_cycles += if num_tiles == 0 { 5 } else { 4 };
-                        }
-                        1 => total_t_cycles += 4,
-                        2 => {
-                            total_t_cycles += if num_tiles == 0 { 3 } else { 2 };
-                        }
+                        0 => total_t_cycles += 4,
+                        1 => total_t_cycles += if num_tiles == 0 { 3 } else { 2 },
+                        2 => total_t_cycles += if num_tiles == 0 { 2 } else { 1 },
                         3 => total_t_cycles += 1,
                         _ => {
-                            if num_tiles == 0 {
+                            if offset >= 8 - scx_fine {
+                                total_t_cycles += if num_tiles == 0 { 5 } else { 4 };
+                            } else if num_tiles == 0 {
                                 total_t_cycles += 1;
                             }
                         }
