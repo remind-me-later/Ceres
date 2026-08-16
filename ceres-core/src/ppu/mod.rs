@@ -290,7 +290,8 @@ impl Ppu {
         match mode {
             Mode::OamScan => {
                 self.win_in_ly = false;
-                self.ly_for_comparison = if self.ly == 0 { 0 } else { u16::MAX };
+                self.ly_for_comparison = u16::from(self.ly);
+                self.check_lyc(ints);
             }
             Mode::VBlank => {
                 self.ly = 144;
