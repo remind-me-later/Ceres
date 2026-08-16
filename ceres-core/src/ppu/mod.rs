@@ -295,12 +295,33 @@ impl Ppu {
                         3 => total_t_cycles += 1,
                         _ => {}
                     }
-                } else if x == 0 || offset == 0 || (x as i32 & 7) >= 8 - scx_fine {
-                    total_t_cycles += 5;
-                } else if (1..=3).contains(&offset) {
-                    total_t_cycles += 2;
+                } else if x < 8 {
+                    if x == 0 || offset == 0 || (x as i32 & 7) >= 8 - scx_fine {
+                        total_t_cycles += 5;
+                    } else if (1..=3).contains(&offset) || (num_tiles == 0 && offset == 4) {
+                        total_t_cycles += 2;
+                    }
+                } else {
+                    match offset {
+                        0 => {
+                            total_t_cycles += if num_tiles == 0 { 5 } else { 4 };
+                        }
+                        1 => total_t_cycles += 3,
+                        2 => total_t_cycles += 2,
+                        3 => total_t_cycles += 1,
+                        4 => {
+                            if num_tiles == 0 {
+                                total_t_cycles += 1;
+                            }
+                        }
+                        _ => {}
+                    }
                 }
-                if num_tiles > 0 && offset < 5 {
+                if scx_fine == 0 {
+                    if num_tiles > 0 && offset < 5 {
+                        total_t_cycles += 1;
+                    }
+                } else if num_tiles > 0 && offset < 4 {
                     total_t_cycles += 1;
                 }
                 num_tiles += 1;
