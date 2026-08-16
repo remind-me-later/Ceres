@@ -142,6 +142,7 @@ pub struct Ppu {
     mode_for_interrupt: Option<Mode>,
     stat_line: bool,
     sprite_penalty: i32,
+    current_vblank_line: u8,
     fifo: fifo::PixelFifo,
 }
 
@@ -162,6 +163,7 @@ impl Default for Ppu {
             mode_for_interrupt: None,
             stat_line: false,
             sprite_penalty: 0,
+            current_vblank_line: 0,
             fifo: fifo::PixelFifo::new(),
             oam: Oam::default(),
             obp0: 0,
@@ -373,6 +375,7 @@ impl Ppu {
             }
             Mode::VBlank => {
                 self.ly = 144;
+                self.current_vblank_line = 144;
                 self.ly_for_comparison = 144;
                 ints.request_vblank();
                 self.win_skipped = 0;
@@ -518,10 +521,9 @@ impl Ppu {
                 }
             }
             Mode::VBlank => {
-                if self.ly == 153 || self.ly == 0 {
+                if self.current_vblank_line == 153 {
                     // Line 153 timing phases (SameBoy display.c:2217):
                     if !self.is_cgb {
-                        // DMG: LY becomes 0 at cycle 114
                         if self.cycles == 114 {
                             self.ly = 0;
                             self.ly_for_comparison = 153;
@@ -555,7 +557,7 @@ impl Ppu {
                             self.check_lyc(ints);
                         }
                     }
-                } else if self.ly >= 144 {
+                } else if self.current_vblank_line >= 144 {
                     let base_cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
                     if self.cycles == base_cycles - 1 {
                         self.ly_for_comparison = u16::from(self.ly);
@@ -578,8 +580,10 @@ impl Ppu {
                         self.is_cgb,
                     ) {
                         let rgb = self.resolve_fifo_pixel(bg_px, sprite_px, cgb_mode);
-                        let idx = u32::from(self.ly) * 160 + u32::from(lx);
-                        self.rgb_buf.set_px(idx, rgb);
+                        if self.ly < 144 {
+                            let idx = u32::from(self.ly) * 160 + u32::from(lx);
+                            self.rgb_buf.set_px(idx, rgb);
+                        }
                     }
                 }
 
@@ -628,7 +632,11 @@ impl Ppu {
                 }
             }
             Mode::VBlank => {
-                if self.ly >= 153 || self.ly < 144 {
+                if self.lcdon_line0_mode0 {
+                    self.lcdon_line0_mode0 = false;
+                    self.enter_mode(Mode::Drawing, ints, cgb_mode);
+                } else if self.current_vblank_line >= 153 {
+                    self.current_vblank_line = 0;
                     self.ly = 0;
                     self.rgba_buf_present = mem::take(&mut self.rgb_buf);
                     if self.is_cgb {
@@ -643,14 +651,15 @@ impl Ppu {
                         self.line0_frame_wrap = true;
                     }
                 } else {
-                    self.ly += 1;
+                    self.current_vblank_line += 1;
+                    self.ly = self.current_vblank_line;
                     let base_cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
-                    self.cycles = if !self.is_cgb && self.ly == 152 {
+                    self.cycles = if !self.is_cgb && self.current_vblank_line == 152 {
                         base_cycles - 1
                     } else {
                         base_cycles
                     };
-                    self.ly_for_comparison = if self.ly == 153 {
+                    self.ly_for_comparison = if self.current_vblank_line == 153 {
                         u16::MAX
                     } else {
                         u16::from(self.ly)
@@ -673,6 +682,7 @@ impl Ppu {
         // turn off: reset to line 0 in HBlank mode, clear all blocking.
         if !is_on && was_on {
             self.ly = 0;
+            self.current_vblank_line = 0;
             self.ly_for_comparison = 0;
             self.lcdon_line0_mode0 = false;
             self.stat &= !STAT_MODE_B;
@@ -688,6 +698,7 @@ impl Ppu {
         // mode 3 (skipping mode 2).
         if is_on && !was_on {
             self.ly = 0;
+            self.current_vblank_line = 0;
             self.ly_for_comparison = 0;
             if is_cgb {
                 self.stat = (self.stat & !STAT_MODE_B) | Mode::VBlank as u8;
