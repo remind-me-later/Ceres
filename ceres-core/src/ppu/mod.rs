@@ -513,11 +513,17 @@ impl Ppu {
                 } else if self.cycles == 2 && !self.lcdon_line0_mode0 {
                     if self.ly < 143 {
                         self.ly += 1;
-                        self.ly_for_comparison = u16::MAX;
-                        self.check_lyc(ints);
+                        if !self.is_cgb {
+                            self.ly_for_comparison = u16::MAX;
+                            self.check_lyc(ints);
+                        }
                     }
                 } else if self.cycles == 1 && !self.lcdon_line0_mode0 {
                     if self.ly <= 143 {
+                        if self.is_cgb {
+                            self.ly_for_comparison = u16::MAX;
+                            self.check_lyc(ints);
+                        }
                         // Mode 2 STAT IRQ fires 1 M-cycle BEFORE Mode 2 begins (SameBoy line 1780)
                         if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
                             ints.request_lcd();
