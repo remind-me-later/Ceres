@@ -283,6 +283,9 @@ impl Ppu {
             }
 
             total_t_cycles += 6;
+            if scx_fine > 0 && x == 0 && last_tile_x != -1 {
+                total_t_cycles += 2;
+            }
 
             let tile_x = (x.wrapping_add(self.scx) / 8) as i32;
             if tile_x != last_tile_x {
