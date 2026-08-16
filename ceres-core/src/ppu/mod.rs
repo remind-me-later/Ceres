@@ -570,6 +570,10 @@ impl Ppu {
                     if self.is_cgb && self.current_vblank_line == 152 && self.cycles <= 2 {
                         self.ly = 153;
                     }
+
+                    if !self.is_cgb && self.current_vblank_line == 144 && self.cycles <= 3 {
+                        self.ly = 145;
+                    }
                 }
             }
             Mode::Drawing => {
