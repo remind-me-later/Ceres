@@ -254,12 +254,12 @@ impl Ppu {
             // Base sprite fetch penalty: 6 T-cycles (2 T OAM + 4 T VRAM)
             total_t_cycles += 6;
 
-            // Fetcher alignment penalty (0..5 T-cycles)
+            // Fetcher alignment penalty (0..5 T-cycles for mid-tile sprites)
             let tile_x = (x.wrapping_add(self.scx) / 8) as i32;
             if tile_x != last_tile_x {
                 let scroll_offset = (x.wrapping_add(self.scx) & 7) as i32;
-                if scroll_offset < 5 {
-                    total_t_cycles += 5 - scroll_offset;
+                if scroll_offset > 0 && scroll_offset <= 5 {
+                    total_t_cycles += scroll_offset;
                 }
                 last_tile_x = tile_x;
             }
