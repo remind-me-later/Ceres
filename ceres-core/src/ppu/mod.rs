@@ -333,7 +333,8 @@ impl Ppu {
             }
         }
 
-        (total_t_cycles + 1) / 4
+        let base_scroll_adjust = if !self.is_cgb && (self.scx & 7) >= 4 { 1 } else { 0 };
+        (((total_t_cycles + 1) / 4) - base_scroll_adjust).max(0)
     }
 
     /// Transition the PPU to a new mode, reset the per-mode cycle counter,
