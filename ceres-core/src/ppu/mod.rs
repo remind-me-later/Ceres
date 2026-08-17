@@ -464,7 +464,7 @@ impl Ppu {
         match mode {
             Mode::OamScan => {
                 self.win_in_ly = false;
-                self.ly_for_comparison = u16::MAX;
+                self.ly_for_comparison = if self.is_cgb { u16::MAX } else { u16::from(self.ly) };
                 self.check_lyc(ints);
                 self.fifo.start_scanline(
                     &self.oam,

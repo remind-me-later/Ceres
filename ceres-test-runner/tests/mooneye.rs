@@ -57,38 +57,42 @@ impl CompletionCheck for MooneyeCheck {
         }
 
         let mut lines = Vec::new();
-        for row in 0..18 {
-            let mut line = String::new();
-            for col in 0..20 {
-                let b = gb.read_mem(0x9800 + row * 32 + col);
-                if (0x20..=0x7E).contains(&b) {
-                    line.push(b as char);
-                } else if b == 0 {
-                    line.push(' ');
-                } else {
-                    line.push('.');
+        for base in [0x9800, 0x9C00] {
+            for row in 0..18 {
+                let mut line = String::new();
+                for col in 0..20 {
+                    let b = gb.read_mem(base + row * 32 + col);
+                    if b == 0x19 || b == 0 {
+                        line.push(' ');
+                    } else if (0x1A..=0x7E).contains(&b) {
+                        line.push((b + 0x20 - 0x1A) as char);
+                    } else {
+                        line.push('.');
+                    }
+                }
+                let trimmed = line.trim();
+                if !trimmed.is_empty() {
+                    lines.push(trimmed.to_string());
                 }
             }
-            let trimmed = line.trim();
-            if !trimmed.is_empty() {
-                lines.push(trimmed.to_string());
-            }
+            if !lines.is_empty() { break; }
         }
         let text = lines.join(" | ");
 
         let mut c000_buf = Vec::new();
-        for addr in 0xC000..0xC018 {
+        for addr in 0xC000..0xC040 {
             c000_buf.push(format!("{:02X}", gb.read_mem(addr)));
         }
         let c000_str = c000_buf.join(" ");
 
-        let f80 = gb.read_mem(0xFF80);
-        let f81 = gb.read_mem(0xFF81);
-        let f82 = gb.read_mem(0xFF82);
-        let f83 = gb.read_mem(0xFF83);
+        let mut hram_buf = Vec::new();
+        for addr in 0xFF80..0xFFA0 {
+            hram_buf.push(format!("{:02X}", gb.read_mem(addr)));
+        }
+        let hram_str = hram_buf.join(" ");
 
         Some(TestResult::Failed(format!(
-            "Mooneye failure: B={b:#04X}, C={c:#04X}, D={d:#04X}, E={e:#04X}, H={h:#04X}, L={l:#04X}, C000=[{c000_str}], text: \"{text}\", FF80=(${f80:#04X}, ${f81:#04X}, exp=${f82:#04X}, act=${f83:#04X})"
+            "Mooneye failure: B={b:#04X}, C={c:#04X}, D={d:#04X}, E={e:#04X}, H={h:#04X}, L={l:#04X}, C000=[{c000_str}], HRAM=[{hram_str}], text: \"{text}\""
         )))
     }
 
