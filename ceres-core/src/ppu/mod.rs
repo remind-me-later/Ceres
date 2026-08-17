@@ -688,6 +688,9 @@ impl Ppu {
                     } else if self.cycles == 1 {
                         self.ly_for_comparison = u16::MAX;
                         self.check_lyc(ints);
+                        if self.current_vblank_line < 152 {
+                            self.ly = self.current_vblank_line + 1;
+                        }
                     }
 
                     if !self.is_cgb && self.current_vblank_line == 144 && self.cycles <= 2 {
@@ -700,7 +703,7 @@ impl Ppu {
                             self.ly = 0;
                         }
                     }
-                    if self.is_cgb && self.current_vblank_line == 152 && self.cycles == 1 {
+                    if self.is_cgb && self.current_vblank_line == 152 && self.cycles <= 2 {
                         self.ly = 153;
                     }
                 }
@@ -784,7 +787,7 @@ impl Ppu {
                     }
                 } else {
                     self.current_vblank_line += 1;
-                    self.ly = if self.current_vblank_line == 153 {
+                    self.ly = if !self.is_cgb && self.current_vblank_line == 153 {
                         0
                     } else {
                         self.current_vblank_line
