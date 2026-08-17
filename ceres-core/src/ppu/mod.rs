@@ -305,11 +305,13 @@ impl Ppu {
                     if x == 0 {
                         total_t_cycles += if num_tiles == 0 { 6 } else { 3 };
                     } else if offset >= 8 - scx_fine {
-                        total_t_cycles += if num_tiles == 0 { 6 } else { 3 };
+                        total_t_cycles += if num_tiles == 0 { 6 } else { 4 };
                         boundary_seen = true;
                     } else if offset == 1 {
                         total_t_cycles += 4;
-                    } else if offset <= 3 {
+                    } else if offset == 2 {
+                        total_t_cycles += if num_tiles == 0 { 3 } else { 2 };
+                    } else if offset == 3 {
                         total_t_cycles += 2;
                     }
                 } else {
@@ -319,12 +321,12 @@ impl Ppu {
                                 total_t_cycles += 4;
                             }
                         }
-                        1 => total_t_cycles += if num_tiles == 0 { 4 } else { 2 },
-                        2 => total_t_cycles += 2,
+                        1 => total_t_cycles += if num_tiles == 0 { 4 } else { 3 },
+                        2 => total_t_cycles += if num_tiles == 0 { 3 } else { 2 },
                         3 => total_t_cycles += if num_tiles == 0 { 2 } else { 1 },
                         _ => {
                             if offset >= 8 - scx_fine {
-                                total_t_cycles += if num_tiles == 0 { 6 } else { 4 };
+                                total_t_cycles += if num_tiles == 0 { 6 } else { 5 };
                                 boundary_seen = true;
                             }
                         }
@@ -336,7 +338,7 @@ impl Ppu {
                 num_tiles += 1;
                 last_tile_x = tile_x;
             } else if scx_fine > 0 && !boundary_seen && offset >= 8 - scx_fine {
-                total_t_cycles += 4;
+                total_t_cycles += 5;
                 boundary_seen = true;
             }
         }
