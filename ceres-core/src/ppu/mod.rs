@@ -697,7 +697,7 @@ impl Ppu {
                     if !self.is_cgb && self.current_vblank_line == 144 && self.cycles <= 2 {
                         self.ly = 145;
                     }
-                    if !self.is_cgb && self.current_vblank_line == 152 && self.cycles <= 2 {
+                    if self.current_vblank_line == 152 && self.cycles <= 2 {
                         self.ly = 153;
                     }
                 }
@@ -783,7 +783,11 @@ impl Ppu {
                     self.current_vblank_line += 1;
                     self.ly = self.current_vblank_line;
                     let base_cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
-                    self.cycles = base_cycles;
+                    self.cycles = if !self.is_cgb && self.current_vblank_line == 153 {
+                        base_cycles - 1
+                    } else {
+                        base_cycles
+                    };
                     self.ly_for_comparison = if self.current_vblank_line == 153 {
                         u16::MAX
                     } else {
