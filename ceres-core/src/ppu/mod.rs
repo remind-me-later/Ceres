@@ -667,18 +667,14 @@ impl Ppu {
                         }
                     } else {
                         if self.cycles == 113 {
-                            self.ly = 153;
+                            self.ly = 0;
                             self.ly_for_comparison = 153;
                             self.check_lyc(ints);
                         } else if self.cycles == 112 {
                             self.ly = 0;
-                            self.ly_for_comparison = 153;
-                            self.check_lyc(ints);
-                        } else if self.cycles == 111 {
-                            self.ly = 0;
                             self.ly_for_comparison = u16::MAX;
                             self.check_lyc(ints);
-                        } else if self.cycles == 110 {
+                        } else if self.cycles == 111 {
                             self.ly = 0;
                             self.ly_for_comparison = 0;
                             self.check_lyc(ints);
@@ -697,7 +693,14 @@ impl Ppu {
                     if !self.is_cgb && self.current_vblank_line == 144 && self.cycles <= 2 {
                         self.ly = 145;
                     }
-                    if self.current_vblank_line == 152 && self.cycles <= 2 {
+                    if !self.is_cgb && self.current_vblank_line == 152 {
+                        if self.cycles == 2 {
+                            self.ly = 153;
+                        } else if self.cycles == 1 {
+                            self.ly = 0;
+                        }
+                    }
+                    if self.is_cgb && self.current_vblank_line == 152 && self.cycles == 1 {
                         self.ly = 153;
                     }
                 }
@@ -781,7 +784,11 @@ impl Ppu {
                     }
                 } else {
                     self.current_vblank_line += 1;
-                    self.ly = self.current_vblank_line;
+                    self.ly = if self.current_vblank_line == 153 {
+                        0
+                    } else {
+                        self.current_vblank_line
+                    };
                     let base_cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
                     self.cycles = if !self.is_cgb && self.current_vblank_line == 153 {
                         base_cycles - 1
