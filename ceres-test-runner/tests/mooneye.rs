@@ -548,7 +548,11 @@ fn test_gpu_hblank_ly_scx_timing_c() {
         "acceptance/gpu/hblank_ly_scx_timing-C.gb",
         Model::CgbE,
     );
-    assert!(result.is_passed(), "gpu/hblank_ly_scx_timing-C test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/hblank_ly_scx_timing-C test failed"
+    );
 }
 
 #[test]

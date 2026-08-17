@@ -67,36 +67,42 @@ impl Mode {
     /// The scroll adjustment differs between DMG/MGB/SGB/SGB2 and
     /// CGB/AGB/AGS (see SameBoy's display.c).
     const fn m_cycles(self, scroll_x: u8, cgb_mode: bool) -> i32 {
-        // mooneye-gb "scroll adjustment": how many extra M-cycles Mode 3
-        // gets and Mode 0 loses, based on the low 3 bits of SCX.
-        let scroll_adjust: i32 = if cgb_mode {
-            // CGB / AGB / AGS (verified against the wilbertpol-mooneye-gb
-            // tests `hblank_ly_scx_timing-C`, `intr_2_mode0_scx1_timing`,
-            // and SameBoy's display.c):
-            //   0 0 0 1 1 1 1 2
-            match scroll_x & 0x7 {
-                3..=6 => 1,
-                7 => 2,
-                _ => 0,
-            }
-        } else {
-            // DMG / MGB / SGB / SGB2
-            match scroll_x & 0x7 {
-                4..=7 => 1,
-                _ => 0,
-            }
-        };
-        // Original Ceres scanline constants, kept to maintain compatibility
-        // with tests that were passing under the previous (batch-driven)
-        // PPU. Total per line still = 114 M-cycles = 456 T-cycles.
         const OAM_M_CYCLES: i32 = 20;
         let vram_m_cycles: i32 = if cgb_mode { 43 } else { 43 };
         let hblank_m_cycles: i32 = 114 - OAM_M_CYCLES - vram_m_cycles;
         const VBLANK_M_CYCLES: i32 = 114;
         match self {
             Self::OamScan => OAM_M_CYCLES,
-            Self::Drawing => vram_m_cycles + scroll_adjust,
-            Self::HBlank => hblank_m_cycles - scroll_adjust,
+            Self::Drawing => {
+                let scroll_adjust = if cgb_mode {
+                    match scroll_x & 0x7 {
+                        4..=7 => 1,
+                        _ => 0,
+                    }
+                } else {
+                    match scroll_x & 0x7 {
+                        4..=7 => 1,
+                        _ => 0,
+                    }
+                };
+                vram_m_cycles + scroll_adjust
+            }
+            Self::HBlank => {
+                let scroll_adjust = if cgb_mode {
+                    match scroll_x & 0x7 {
+                        3..=6 => 1,
+                        7 => 2,
+                        _ => 0,
+                    }
+                } else {
+                    match scroll_x & 0x7 {
+                        1..=4 => 1,
+                        5..=7 => 2,
+                        _ => 0,
+                    }
+                };
+                hblank_m_cycles - scroll_adjust
+            }
             Self::VBlank => VBLANK_M_CYCLES,
         }
     }
@@ -143,6 +149,7 @@ pub struct Ppu {
     stat_line: bool,
     sprite_penalty: i32,
     current_vblank_line: u8,
+    hblank_irq_delayed: bool,
     fifo: fifo::PixelFifo,
 }
 
@@ -164,6 +171,7 @@ impl Default for Ppu {
             stat_line: false,
             sprite_penalty: 0,
             current_vblank_line: 0,
+            hblank_irq_delayed: false,
             fifo: fifo::PixelFifo::new(),
             oam: Oam::default(),
             obp0: 0,
@@ -208,11 +216,11 @@ impl Ppu {
 
         let lyc_signal = (self.stat & STAT_IF_LYC_B != 0) && (self.stat & STAT_LYC_B != 0);
         let mode_signal = match self.mode_for_interrupt {
-            Some(Mode::HBlank) => !self.lcdon_line0_mode0 && (self.stat & STAT_IF_HBLANK_B != 0),
+            Some(Mode::HBlank) => !self.lcdon_line0_mode0 && !self.hblank_irq_delayed && (self.stat & STAT_IF_HBLANK_B != 0),
             Some(Mode::VBlank) => self.stat & STAT_IF_VBLANK_B != 0,
             Some(Mode::OamScan) => self.stat & STAT_IF_OAM_B != 0,
             Some(Mode::Drawing) | None => match self.mode() {
-                Mode::HBlank => !self.lcdon_line0_mode0 && (self.stat & STAT_IF_HBLANK_B != 0),
+                Mode::HBlank => !self.lcdon_line0_mode0 && !self.hblank_irq_delayed && (self.stat & STAT_IF_HBLANK_B != 0),
                 Mode::VBlank => self.stat & STAT_IF_VBLANK_B != 0,
                 _ => false,
             },
@@ -434,11 +442,14 @@ impl Ppu {
     /// Transition the PPU to a new mode, reset the per-mode cycle counter,
     /// and fire any mode-bound IRQs.
     fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts, cgb_mode: CgbMode) {
+        self.is_cgb = matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat);
         if mode == Mode::Drawing {
             self.sprite_penalty = self.sprite_penalty_m_cycles(cgb_mode);
         } else if mode != Mode::HBlank {
             self.sprite_penalty = 0;
         }
+
+        self.hblank_irq_delayed = mode == Mode::HBlank && self.is_cgb;
 
         let base_cycles = mode.m_cycles(self.scx, self.is_cgb);
         self.cycles = match mode {
@@ -466,7 +477,6 @@ impl Ppu {
                 );
             }
             Mode::VBlank => {
-                self.ly = 144;
                 self.current_vblank_line = 144;
                 self.ly_for_comparison = 144;
                 ints.request_vblank();
@@ -593,6 +603,11 @@ impl Ppu {
                 }
             }
             Mode::HBlank => {
+                if self.hblank_irq_delayed {
+                    self.hblank_irq_delayed = false;
+                    self.update_stat_line(ints);
+                }
+
                 if self.ly == 143 && self.ly_for_comparison != u16::MAX {
                     if !self.is_cgb {
                         if self.cycles == 2 {
@@ -710,8 +725,8 @@ impl Ppu {
                     }
                 }
 
-                if self.cycles == 1 {
-                    // Mode 0 HBlank STAT IRQ fires 1 M-cycle BEFORE Mode 0 begins (mooneye-gb ppu.rs:326)
+                if !self.is_cgb && self.cycles == 1 && (self.scx & 7) == 0 {
+                    // Mode 0 HBlank STAT IRQ fires 1 M-cycle BEFORE Mode 0 begins on DMG when SCX % 8 == 0
                     if self.stat & STAT_IF_HBLANK_B != 0 && !self.stat_line {
                         ints.request_lcd();
                         self.stat_line = true;
