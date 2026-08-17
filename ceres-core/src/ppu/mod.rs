@@ -278,6 +278,7 @@ impl Ppu {
         let mut total_t_cycles = 0;
         let mut last_tile_x = -1;
         let mut num_tiles = 0;
+        let mut boundary_seen = false;
 
         for &x in &visible_sprites[..count] {
             if x >= 168 {
@@ -285,13 +286,13 @@ impl Ppu {
             }
 
             total_t_cycles += 6;
-            if scx_fine > 0 && x == 0 && last_tile_x != -1 {
-                total_t_cycles += 2;
-            }
 
             let tile_x = (x / 8) as i32;
+            let offset = (x & 7) as i32;
+
             if tile_x != last_tile_x {
-                let offset = (x & 7) as i32;
+                let prev_boundary = boundary_seen;
+                boundary_seen = false;
                 if scx_fine == 0 {
                     match offset {
                         0 => total_t_cycles += 4,
@@ -301,42 +302,51 @@ impl Ppu {
                         _ => {}
                     }
                 } else if x < 8 {
-                    if x == 0 || offset >= 8 - scx_fine {
-                        total_t_cycles += if num_tiles == 0 { 5 } else { 3 };
+                    if x == 0 {
+                        total_t_cycles += if num_tiles == 0 { 6 } else { 3 };
+                    } else if offset >= 8 - scx_fine {
+                        total_t_cycles += if num_tiles == 0 { 6 } else { 3 };
+                        boundary_seen = true;
                     } else if offset == 1 {
-                        total_t_cycles += 3;
+                        total_t_cycles += 4;
                     } else if offset <= 3 {
                         total_t_cycles += 2;
                     }
                 } else {
                     match offset {
-                        0 => total_t_cycles += 4,
-                        1 => total_t_cycles += if num_tiles == 0 { 3 } else { 2 },
-                        2 => total_t_cycles += if num_tiles == 0 { 2 } else { 1 },
-                        3 => total_t_cycles += 1,
+                        0 => {
+                            if !prev_boundary {
+                                total_t_cycles += 4;
+                            }
+                        }
+                        1 => total_t_cycles += if num_tiles == 0 { 4 } else { 2 },
+                        2 => total_t_cycles += 2,
+                        3 => total_t_cycles += if num_tiles == 0 { 2 } else { 1 },
                         _ => {
                             if offset >= 8 - scx_fine {
-                                total_t_cycles += if num_tiles == 0 { 5 } else { 4 };
-                            } else if num_tiles == 0 {
-                                total_t_cycles += 1;
+                                total_t_cycles += if num_tiles == 0 { 6 } else { 4 };
+                                boundary_seen = true;
                             }
                         }
                     }
                 }
-                if scx_fine == 0 {
-                    if num_tiles > 0 && offset < 5 {
-                        total_t_cycles += 1;
-                    }
-                } else if num_tiles > 0 && offset < 4 {
+                if scx_fine == 0 && num_tiles > 0 && offset < 5 {
                     total_t_cycles += 1;
                 }
                 num_tiles += 1;
                 last_tile_x = tile_x;
+            } else if scx_fine > 0 && !boundary_seen && offset >= 8 - scx_fine {
+                total_t_cycles += 4;
+                boundary_seen = true;
             }
         }
 
         let base_scroll_adjust = if !self.is_cgb && (self.scx & 7) >= 4 { 1 } else { 0 };
-        (((total_t_cycles + 1) / 4) - base_scroll_adjust).max(0)
+        if scx_fine == 0 {
+            (((total_t_cycles + 1) / 4) - base_scroll_adjust).max(0)
+        } else {
+            ((total_t_cycles / 4) - base_scroll_adjust).max(0)
+        }
     }
 
     /// Transition the PPU to a new mode, reset the per-mode cycle counter,
@@ -507,6 +517,10 @@ impl Ppu {
                             self.ly = 144;
                             self.ly_for_comparison = 143;
                             self.check_lyc(ints);
+                            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                                ints.request_lcd();
+                                self.stat_line = true;
+                            }
                         } else if self.cycles == 1 {
                             self.ly_for_comparison = 144;
                             self.check_lyc(ints);
@@ -524,13 +538,18 @@ impl Ppu {
                             self.check_lyc(ints);
                         }
                     }
+                    if !self.is_cgb && self.ly == 1 {
+                        if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                            ints.request_lcd();
+                            self.stat_line = true;
+                        }
+                    }
                 } else if self.cycles == 1 && !self.lcdon_line0_mode0 {
                     if self.ly <= 143 {
                         if self.is_cgb {
                             self.ly_for_comparison = u16::MAX;
                             self.check_lyc(ints);
                         }
-                        // Mode 2 STAT IRQ fires 1 M-cycle BEFORE Mode 2 begins (SameBoy line 1780)
                         if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
                             ints.request_lcd();
                             self.stat_line = true;
