@@ -777,8 +777,9 @@ fn test_gpu_intr_2_mode0_timing_sprites_scx1_nops() {
         "acceptance/gpu/intr_2_mode0_timing_sprites_scx1_nops.gb",
         Model::DmgB,
     );
-    assert!(
-        result.is_passed(),
+    assert_eq!(
+        result,
+        TestResult::Passed,
         "gpu/intr_2_mode0_timing_sprites_scx1_nops test failed"
     );
 }
@@ -790,8 +791,9 @@ fn test_gpu_intr_2_mode0_timing_sprites_scx2_nops() {
         "acceptance/gpu/intr_2_mode0_timing_sprites_scx2_nops.gb",
         Model::DmgB,
     );
-    assert!(
-        result.is_passed(),
+    assert_eq!(
+        result,
+        TestResult::Passed,
         "gpu/intr_2_mode0_timing_sprites_scx2_nops test failed"
     );
 }
@@ -803,8 +805,9 @@ fn test_gpu_intr_2_mode0_timing_sprites_scx3_nops() {
         "acceptance/gpu/intr_2_mode0_timing_sprites_scx3_nops.gb",
         Model::DmgB,
     );
-    assert!(
-        result.is_passed(),
+    assert_eq!(
+        result,
+        TestResult::Passed,
         "gpu/intr_2_mode0_timing_sprites_scx3_nops test failed"
     );
 }
@@ -816,8 +819,9 @@ fn test_gpu_intr_2_mode0_timing_sprites_scx4_nops() {
         "acceptance/gpu/intr_2_mode0_timing_sprites_scx4_nops.gb",
         Model::DmgB,
     );
-    assert!(
-        result.is_passed(),
+    assert_eq!(
+        result,
+        TestResult::Passed,
         "gpu/intr_2_mode0_timing_sprites_scx4_nops test failed"
     );
 }

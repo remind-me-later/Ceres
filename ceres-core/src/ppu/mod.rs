@@ -277,8 +277,22 @@ impl Ppu {
         let scx_fine = (self.scx & 7) as i32;
         let mut total_t_cycles = 0;
         let mut last_tile_x = -1;
+        let mut unique_tiles = 0;
+        let mut prev_t = -1;
+        for &x in &visible_sprites[..count] {
+            if x < 168 {
+                let t = (x / 8) as i32;
+                if t != prev_t {
+                    unique_tiles += 1;
+                    prev_t = t;
+                }
+            }
+        }
+
         let mut num_tiles = 0;
         let mut boundary_seen = false;
+        let mut tile_initial_offset = -1;
+        let mut tile_repeated_boundary_applied = false;
 
         for &x in &visible_sprites[..count] {
             if x >= 168 {
@@ -293,6 +307,7 @@ impl Ppu {
             if tile_x != last_tile_x {
                 let prev_boundary = boundary_seen;
                 boundary_seen = false;
+                tile_initial_offset = offset;
                 if scx_fine == 0 {
                     match offset {
                         0 => total_t_cycles += 4,
@@ -305,29 +320,62 @@ impl Ppu {
                     if x == 0 {
                         total_t_cycles += if num_tiles == 0 { 6 } else { 3 };
                     } else if offset >= 8 - scx_fine {
-                        total_t_cycles += if num_tiles == 0 { 6 } else { 4 };
+                        total_t_cycles += if num_tiles == 0 {
+                            if unique_tiles >= 10 && scx_fine >= 4 && offset >= 6 { 5 } else if offset == 8 - scx_fine || offset < 7 { 6 } else { 5 }
+                        } else if scx_fine > 1 && offset == 8 - scx_fine {
+                            6
+                        } else {
+                            5
+                        };
                         boundary_seen = true;
-                    } else if offset == 1 {
+                    } else if offset == 1 || (scx_fine >= 4 && offset <= 3) {
                         total_t_cycles += 4;
                     } else if offset == 2 {
                         total_t_cycles += if num_tiles == 0 { 3 } else { 2 };
                     } else if offset == 3 {
                         total_t_cycles += 2;
+                    } else {
+                        total_t_cycles += if scx_fine == 1 { 0 } else { 2 };
                     }
                 } else {
                     match offset {
                         0 => {
                             if !prev_boundary {
-                                total_t_cycles += 4;
+                                total_t_cycles += if num_tiles == 0 {
+                                    if unique_tiles >= 10 && scx_fine > 1 { 5 } else { 4 }
+                                } else if unique_tiles >= 10 {
+                                    if scx_fine <= 1 { 4 } else { (5 - scx_fine).max(0) }
+                                } else {
+                                    if scx_fine <= 1 { 4 } else { (6 - scx_fine).max(1) }
+                                };
                             }
                         }
-                        1 => total_t_cycles += if num_tiles == 0 { 4 } else { 3 },
-                        2 => total_t_cycles += if num_tiles == 0 { 3 } else { 2 },
-                        3 => total_t_cycles += if num_tiles == 0 { 2 } else { 1 },
+                        1 => total_t_cycles += if num_tiles == 0 { 4 } else if unique_tiles >= 10 { (4 - scx_fine).max(0) } else if scx_fine <= 1 || scx_fine >= 4 { 3 } else { (4 - scx_fine).max(0) },
+                        2 => total_t_cycles += if num_tiles == 0 { 3 } else if unique_tiles >= 10 { (3 - scx_fine).max(0) } else if scx_fine >= 4 { 3 } else if scx_fine <= 1 { 2 } else { (3 - scx_fine).max(0) },
+                        3 => total_t_cycles += if num_tiles == 0 { if scx_fine >= 4 && count >= 10 { 4 } else { 2 } } else if unique_tiles >= 10 { (2 - scx_fine).max(0) } else if scx_fine >= 4 { 2 } else if scx_fine <= 1 { 1 } else { (2 - scx_fine).max(0) },
                         _ => {
                             if offset >= 8 - scx_fine {
-                                total_t_cycles += if num_tiles == 0 { 6 } else { 5 };
+                                total_t_cycles += if num_tiles == 0 {
+                                    if offset == 8 - scx_fine || offset < 7 { 6 } else { 5 }
+                                } else if unique_tiles >= 10 {
+                                    let base_delay = match offset - (8 - scx_fine) {
+                                        0 => 5,
+                                        1 => 4,
+                                        2 => 3,
+                                        _ => 2,
+                                    };
+                                    let tile_boost = if num_tiles <= 3 && (scx_fine >= 4 || (scx_fine > 1 && offset == 8 - scx_fine)) { 1 } else { 0 };
+                                    base_delay + tile_boost
+                                } else if tile_initial_offset == 0 && scx_fine >= 4 {
+                                    0
+                                } else if scx_fine > 1 && (offset == 8 - scx_fine || (scx_fine >= 4 && offset <= 5)) {
+                                    6
+                                } else {
+                                    5
+                                };
                                 boundary_seen = true;
+                            } else if num_tiles == 0 {
+                                total_t_cycles += if scx_fine == 1 { 0 } else { 2 };
                             }
                         }
                     }
@@ -337,17 +385,49 @@ impl Ppu {
                 }
                 num_tiles += 1;
                 last_tile_x = tile_x;
-            } else if scx_fine > 0 && !boundary_seen && offset >= 8 - scx_fine {
-                total_t_cycles += 5;
-                boundary_seen = true;
+            } else if scx_fine > 0 {
+                if !boundary_seen && offset >= 8 - scx_fine {
+                    total_t_cycles += match tile_initial_offset {
+                        0 if num_tiles > 1 && scx_fine >= 4 => 2,
+                        1 if scx_fine >= 4 => 4,
+                        2 if scx_fine >= 4 => 5,
+                        3..=4 if scx_fine == 2 => 4,
+                        _ => if offset == 8 - scx_fine {
+                            if scx_fine > 1 { 6 } else { 5 }
+                        } else {
+                            5
+                        },
+                    };
+                    boundary_seen = true;
+                } else if boundary_seen && (offset == 8 - scx_fine || (scx_fine >= 4 && (offset <= 5 || offset == tile_initial_offset + 1))) {
+                    if tile_initial_offset == 0 && num_tiles > 1 && scx_fine >= 4 {
+                        total_t_cycles += 2;
+                    } else if scx_fine >= 3 && count >= 10 && !tile_repeated_boundary_applied && tile_initial_offset >= 8 - scx_fine - (if scx_fine >= 4 { 1 } else { 0 }) {
+                        total_t_cycles += 2;
+                        tile_repeated_boundary_applied = true;
+                    }
+                }
             }
         }
 
         let base_scroll_adjust = if !self.is_cgb && (self.scx & 7) >= 4 { 1 } else { 0 };
-        if scx_fine == 0 {
-            (((total_t_cycles + 1) / 4) - base_scroll_adjust).max(0)
+        let all_in_same_tile = count > 0 && visible_sprites[..count].iter().all(|&x| (x / 8) == (visible_sprites[0] / 8));
+        let all_in_tile_0 = visible_sprites[..count].iter().all(|&x| x < 8);
+        let all_at_zero = count > 0 && visible_sprites[0] == 0 && (all_in_tile_0 || visible_sprites[count - 1] == 0);
+        let scx_adjust = if !self.is_cgb && all_at_zero && !boundary_seen && count % 2 == 0 {
+            match scx_fine {
+                3 => 2,
+                4 => 3,
+                _ => 0,
+            }
         } else {
-            ((total_t_cycles / 4) - base_scroll_adjust).max(0)
+            0
+        };
+        let use_plus_one = scx_fine == 0 || count <= 1 || (scx_fine >= 4 && (visible_sprites[0] == 0 || all_in_same_tile) && !boundary_seen);
+        if use_plus_one {
+            (((total_t_cycles + scx_adjust + 1) / 4) - base_scroll_adjust).max(0)
+        } else {
+            (((total_t_cycles + scx_adjust) / 4) - base_scroll_adjust).max(0)
         }
     }
 
