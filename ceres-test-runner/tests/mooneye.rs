@@ -1100,7 +1100,7 @@ fn test_gpu_ly_lyc_write_gs() {
 
 #[test]
 fn test_gpu_ly_new_frame_c() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_new_frame-C.gb", Model::CgbE);
+    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_new_frame-C.gb", Model::CgbC);
     assert_eq!(result, TestResult::Passed, "gpu/ly_new_frame-C test failed");
 }
 

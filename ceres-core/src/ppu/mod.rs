@@ -532,7 +532,11 @@ impl Ppu {
 
     #[must_use]
     pub const fn read_ly(&self) -> u8 {
-        self.ly
+        if self.is_cgb && self.current_vblank_line == 153 && self.cycles == 114 {
+            153
+        } else {
+            self.ly
+        }
     }
 
     #[must_use]
@@ -672,7 +676,7 @@ impl Ppu {
                             self.check_lyc(ints);
                         } else if self.cycles == 112 {
                             self.ly = 0;
-                            self.ly_for_comparison = u16::MAX;
+                            self.ly_for_comparison = 153;
                             self.check_lyc(ints);
                         } else if self.cycles == 111 {
                             self.ly = 0;
@@ -787,7 +791,7 @@ impl Ppu {
                     }
                 } else {
                     self.current_vblank_line += 1;
-                    self.ly = if !self.is_cgb && self.current_vblank_line == 153 {
+                    self.ly = if self.current_vblank_line == 153 {
                         0
                     } else {
                         self.current_vblank_line
@@ -840,11 +844,7 @@ impl Ppu {
             self.ly = 0;
             self.current_vblank_line = 0;
             self.ly_for_comparison = 0;
-            if is_cgb {
-                self.stat = (self.stat & !STAT_MODE_B) | Mode::VBlank as u8;
-            } else {
-                self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
-            }
+            self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
             self.cycles = 20;
             self.lcdon_line0_mode0 = true;
             self.check_lyc(ints);
