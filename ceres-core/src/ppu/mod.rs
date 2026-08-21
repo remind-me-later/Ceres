@@ -464,7 +464,7 @@ impl Ppu {
         match mode {
             Mode::OamScan => {
                 self.win_in_ly = false;
-                self.ly_for_comparison = if self.is_cgb { u16::MAX } else { u16::from(self.ly) };
+                self.ly_for_comparison = u16::from(self.ly);
                 self.check_lyc(ints);
                 self.fifo.start_scanline(
                     &self.oam,
@@ -482,11 +482,6 @@ impl Ppu {
                 ints.request_vblank();
                 self.win_skipped = 0;
                 self.win_in_frame = false;
-
-                // DMG quirk: entering VBlank triggers the OAM STAT interrupt (SameBoy display.c:2173)
-                if !self.is_cgb && (self.stat & STAT_IF_OAM_B != 0) && !self.stat_line {
-                    ints.request_lcd();
-                }
             }
             Mode::Drawing | Mode::HBlank => (),
         }
@@ -666,10 +661,6 @@ impl Ppu {
                             self.check_lyc(ints);
                         } else if self.cycles == 112 {
                             self.ly = 0;
-                            self.ly_for_comparison = u16::MAX;
-                            self.check_lyc(ints);
-                        } else if self.cycles == 111 {
-                            self.ly = 0;
                             self.ly_for_comparison = 0;
                             self.check_lyc(ints);
                         }
@@ -679,10 +670,6 @@ impl Ppu {
                             self.ly_for_comparison = 153;
                             self.check_lyc(ints);
                         } else if self.cycles == 112 {
-                            self.ly = 0;
-                            self.ly_for_comparison = 153;
-                            self.check_lyc(ints);
-                        } else if self.cycles == 111 {
                             self.ly = 0;
                             self.ly_for_comparison = 0;
                             self.check_lyc(ints);
@@ -694,7 +681,11 @@ impl Ppu {
                         self.ly_for_comparison = u16::from(self.ly);
                         self.check_lyc(ints);
                     } else if self.cycles == 1 {
-                        self.ly_for_comparison = u16::MAX;
+                        if self.current_vblank_line < 153 {
+                            self.ly_for_comparison = u16::from(self.current_vblank_line + 1);
+                        } else {
+                            self.ly_for_comparison = u16::MAX;
+                        }
                         self.check_lyc(ints);
                         if self.current_vblank_line < 152 {
                             self.ly = self.current_vblank_line + 1;
@@ -889,13 +880,12 @@ impl Ppu {
         self.stat = val;
     }
 
-    pub(crate) const fn set_ly(&mut self, val: u8) {
-        self.ly = val;
-        self.ly_for_comparison = val as u16;
-    }
-
-    pub(crate) const fn set_cycles(&mut self, val: i32) {
-        self.cycles = val;
+    pub(crate) const fn set_vblank_state(&mut self, line: u8, cycles: i32) {
+        self.ly = line;
+        self.current_vblank_line = line;
+        self.ly_for_comparison = line as u16;
+        self.stat = (self.stat & !STAT_MODE_B) | Mode::VBlank as u8;
+        self.cycles = cycles;
     }
 
     pub const fn write_scy(&mut self, val: u8) {

@@ -261,15 +261,10 @@ impl<A: AudioCallback> Gb<A> {
         // STAT: $83 on SGB/CGB (mode 3 + LYC set), $80 on DMG/MGB, $81 on DMG-0 (VBlank).
         self.ppu.set_stat(match self.model {
             Model::DmgB | Model::Mgb => 0x80,
-            Model::Dmg0 => 0x81,
             _ => 0x83,
         });
-        self.ppu.set_ly(match self.model {
-            Model::Dmg0 => 146,
-            _ => 0,
-        });
         if matches!(self.model, Model::Dmg0) {
-            self.ppu.set_cycles(89);
+            self.ppu.set_vblank_state(149, 100);
         }
         self.write_mem(0xFF45, 0x00);
         self.dma.set_reg(if self.is_cgb() { 0x00 } else { 0xFF });
