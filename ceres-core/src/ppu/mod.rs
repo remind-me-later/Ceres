@@ -675,6 +675,10 @@ impl Ppu {
                         }
                     } else if self.cycles == 113 {
                         self.ly = 0;
+                        self.ly_for_comparison = u16::MAX;
+                        self.check_lyc(ints);
+                    } else if self.cycles == 112 {
+                        self.ly = 0;
                         self.ly_for_comparison = 0;
                         self.check_lyc(ints);
                     }
