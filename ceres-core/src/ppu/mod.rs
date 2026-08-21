@@ -625,13 +625,15 @@ impl Ppu {
                         self.ly = 144;
                         self.ly_for_comparison = 143;
                         self.check_lyc(ints);
-                        if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                    } else if self.cycles == 1 {
+                        if !self.is_cgb {
+                            self.ly_for_comparison = 144;
+                            self.check_lyc(ints);
+                        }
+                        if self.is_cgb && self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
                             ints.request_lcd();
                             self.stat_line = true;
                         }
-                    } else if self.cycles == 1 {
-                        self.ly_for_comparison = 144;
-                        self.check_lyc(ints);
                     }
                 } else if self.cycles == 2 && !self.lcdon_line0_mode0 {
                     if self.ly < 143 {
@@ -649,10 +651,8 @@ impl Ppu {
                     }
                 } else if self.cycles == 1 && !self.lcdon_line0_mode0 {
                     if self.ly <= 143 {
-                        if !self.is_cgb {
-                            self.ly_for_comparison = u16::from(self.ly);
-                            self.check_lyc(ints);
-                        }
+                        self.ly_for_comparison = u16::from(self.ly);
+                        self.check_lyc(ints);
                         if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
                             ints.request_lcd();
                             self.stat_line = true;
@@ -663,56 +663,35 @@ impl Ppu {
             Mode::VBlank => {
                 if self.current_vblank_line == 153 {
                     // Line 153 timing phases (SameBoy display.c:2217):
-                    if !self.is_cgb {
-                        if self.cycles == 113 {
-                            self.ly = 0;
-                            self.ly_for_comparison = 153;
-                            self.check_lyc(ints);
-                        } else if self.cycles == 112 {
-                            self.ly = 0;
-                            self.ly_for_comparison = 0;
-                            self.check_lyc(ints);
-                        }
-                    } else {
-                        if self.cycles == 113 {
-                            self.ly = 0;
-                            self.ly_for_comparison = 153;
-                            self.check_lyc(ints);
-                        } else if self.cycles == 112 {
-                            self.ly = 0;
-                            self.ly_for_comparison = 0;
-                            self.check_lyc(ints);
-                        }
+                    if self.cycles == 113 {
+                        self.ly = 0;
+                        self.ly_for_comparison = 0;
+                        self.check_lyc(ints);
                     }
                 } else if self.current_vblank_line >= 144 {
                     let base_cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
                     if self.cycles == base_cycles - 1 {
                         self.ly_for_comparison = u16::from(self.ly);
                         self.check_lyc(ints);
-                    } else if self.cycles == 1 {
-                        if self.current_vblank_line < 153 {
-                            self.ly_for_comparison = u16::from(self.current_vblank_line + 1);
-                        } else {
-                            self.ly_for_comparison = u16::MAX;
-                        }
-                        self.check_lyc(ints);
+                    } else if !self.is_cgb && self.current_vblank_line == 144 && self.cycles == 3 {
+                        self.ly = 145;
+                    } else if self.cycles == 2 {
                         if self.current_vblank_line < 152 {
                             self.ly = self.current_vblank_line + 1;
-                        }
-                    }
-
-                    if !self.is_cgb && self.current_vblank_line == 144 && self.cycles <= 2 {
-                        self.ly = 145;
-                    }
-                    if !self.is_cgb && self.current_vblank_line == 152 {
-                        if self.cycles == 2 {
+                        } else {
                             self.ly = 153;
-                        } else if self.cycles == 1 {
-                            self.ly = 0;
+                            self.ly_for_comparison = u16::MAX;
+                            self.check_lyc(ints);
                         }
-                    }
-                    if self.is_cgb && self.current_vblank_line == 152 && self.cycles <= 2 {
-                        self.ly = 153;
+                        if !self.is_cgb && self.current_vblank_line == 144 {
+                            self.ly_for_comparison = 145;
+                            self.check_lyc(ints);
+                        }
+                    } else if self.cycles == 1 {
+                        if self.current_vblank_line < 152 {
+                            self.ly_for_comparison = u16::from(self.current_vblank_line + 1);
+                            self.check_lyc(ints);
+                        }
                     }
                 }
             }
@@ -790,25 +769,19 @@ impl Ppu {
                         self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
                         self.cycles = 1;
                         self.line0_frame_wrap = true;
+                        self.ly_for_comparison = 0;
+                        self.check_lyc(ints);
                     }
                 } else {
                     self.current_vblank_line += 1;
-                    self.ly = if self.current_vblank_line == 153 {
-                        0
-                    } else {
-                        self.current_vblank_line
-                    };
+                    self.ly = self.current_vblank_line;
                     let base_cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
                     self.cycles = if !self.is_cgb && self.current_vblank_line == 153 {
                         base_cycles - 1
                     } else {
                         base_cycles
                     };
-                    self.ly_for_comparison = if self.current_vblank_line == 153 {
-                        u16::MAX
-                    } else {
-                        u16::from(self.ly)
-                    };
+                    self.ly_for_comparison = u16::from(self.ly);
                     self.check_lyc(ints);
                 }
             }
