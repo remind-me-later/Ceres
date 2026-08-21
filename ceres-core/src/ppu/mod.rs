@@ -640,8 +640,10 @@ impl Ppu {
                         self.ly += 1;
                         if !self.is_cgb {
                             self.ly_for_comparison = u16::MAX;
-                            self.check_lyc(ints);
+                        } else {
+                            self.ly_for_comparison = u16::from(self.ly);
                         }
+                        self.check_lyc(ints);
                     }
                     if !self.is_cgb && self.ly == 1 {
                         if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
@@ -651,8 +653,10 @@ impl Ppu {
                     }
                 } else if self.cycles == 1 && !self.lcdon_line0_mode0 {
                     if self.ly <= 143 {
-                        self.ly_for_comparison = u16::from(self.ly);
-                        self.check_lyc(ints);
+                        if !self.is_cgb {
+                            self.ly_for_comparison = u16::from(self.ly);
+                            self.check_lyc(ints);
+                        }
                         if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
                             ints.request_lcd();
                             self.stat_line = true;
@@ -665,10 +669,6 @@ impl Ppu {
                     // Line 153 timing phases (SameBoy display.c:2217):
                     if self.is_cgb {
                         if self.cycles == 114 {
-                            self.ly = 0;
-                            self.ly_for_comparison = 153;
-                            self.check_lyc(ints);
-                        } else if self.cycles == 113 {
                             self.ly = 0;
                             self.ly_for_comparison = 0;
                             self.check_lyc(ints);
@@ -692,7 +692,7 @@ impl Ppu {
                             self.ly = self.current_vblank_line + 1;
                         } else {
                             self.ly = 153;
-                            self.ly_for_comparison = u16::MAX;
+                            self.ly_for_comparison = if self.is_cgb { 153 } else { u16::MAX };
                             self.check_lyc(ints);
                         }
                         if !self.is_cgb && self.current_vblank_line == 144 {
@@ -848,6 +848,17 @@ impl Ppu {
 
     pub fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
         self.lyc = val;
+        if self.is_cgb {
+            if self.mode() == Mode::HBlank && self.cycles == 2 {
+                return;
+            }
+            if self.mode() == Mode::VBlank
+                && ((self.current_vblank_line == 152 && self.cycles == 2)
+                    || (self.current_vblank_line == 153 && self.cycles == 114))
+            {
+                return;
+            }
+        }
         self.check_lyc(ints);
     }
 
