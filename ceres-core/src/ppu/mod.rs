@@ -479,7 +479,6 @@ impl Ppu {
             Mode::VBlank => {
                 self.current_vblank_line = 144;
                 self.ly_for_comparison = 144;
-                self.cycles = 113;
                 ints.request_vblank();
                 if !self.is_cgb && (self.stat & STAT_IF_OAM_B != 0) && !self.stat_line {
                     ints.request_lcd();
@@ -637,8 +636,10 @@ impl Ppu {
                 } else if self.cycles == 2 && !self.lcdon_line0_mode0 {
                     if self.ly < 143 {
                         self.ly += 1;
-                        self.ly_for_comparison = u16::MAX;
-                        self.check_lyc(ints);
+                        if !self.is_cgb {
+                            self.ly_for_comparison = u16::MAX;
+                            self.check_lyc(ints);
+                        }
                     }
                     if !self.is_cgb && self.ly == 1 {
                         if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
@@ -648,8 +649,8 @@ impl Ppu {
                     }
                 } else if self.cycles == 1 && !self.lcdon_line0_mode0 {
                     if self.ly <= 143 {
-                        if self.is_cgb {
-                            self.ly_for_comparison = u16::MAX;
+                        if !self.is_cgb {
+                            self.ly_for_comparison = u16::from(self.ly);
                             self.check_lyc(ints);
                         }
                         if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
@@ -886,12 +887,14 @@ impl Ppu {
         self.stat = val;
     }
 
-    pub(crate) const fn set_vblank_state(&mut self, line: u8, cycles: i32) {
+    pub(crate) const fn set_line_mode(&mut self, line: u8, mode: Mode, cycles: i32) {
         self.ly = line;
         self.current_vblank_line = line;
         self.ly_for_comparison = line as u16;
-        self.stat = (self.stat & !STAT_MODE_B) | Mode::VBlank as u8;
+        self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
         self.cycles = cycles;
+        self.lcdon_line0_mode0 = false;
+        self.line0_frame_wrap = false;
     }
 
     pub const fn write_scy(&mut self, val: u8) {

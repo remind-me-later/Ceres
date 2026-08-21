@@ -264,7 +264,7 @@ impl<A: AudioCallback> Gb<A> {
             _ => 0x83,
         });
         if matches!(self.model, Model::Dmg0) {
-            self.ppu.set_vblank_state(149, 100);
+            self.ppu.set_line_mode(145, ppu::Mode::VBlank, 65);
         }
         self.write_mem(0xFF45, 0x00);
         self.dma.set_reg(if self.is_cgb() { 0x00 } else { 0xFF });
