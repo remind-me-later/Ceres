@@ -479,7 +479,12 @@ impl Ppu {
             Mode::VBlank => {
                 self.current_vblank_line = 144;
                 self.ly_for_comparison = 144;
+                self.cycles = 113;
                 ints.request_vblank();
+                if !self.is_cgb && (self.stat & STAT_IF_OAM_B != 0) && !self.stat_line {
+                    ints.request_lcd();
+                    self.stat_line = true;
+                }
                 self.win_skipped = 0;
                 self.win_in_frame = false;
             }
@@ -613,10 +618,6 @@ impl Ppu {
                             self.ly = 144;
                             self.ly_for_comparison = 143;
                             self.check_lyc(ints);
-                            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
-                                ints.request_lcd();
-                                self.stat_line = true;
-                            }
                         } else if self.cycles == 1 {
                             self.ly_for_comparison = 144;
                             self.check_lyc(ints);
@@ -624,6 +625,13 @@ impl Ppu {
                     } else if self.cycles == 2 {
                         self.ly = 144;
                         self.ly_for_comparison = 143;
+                        self.check_lyc(ints);
+                        if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                            ints.request_lcd();
+                            self.stat_line = true;
+                        }
+                    } else if self.cycles == 1 {
+                        self.ly_for_comparison = 144;
                         self.check_lyc(ints);
                     }
                 } else if self.cycles == 2 && !self.lcdon_line0_mode0 {
@@ -774,12 +782,10 @@ impl Ppu {
                     self.ly = 0;
                     self.rgba_buf_present = mem::take(&mut self.rgb_buf);
                     if self.is_cgb {
-                        // On CGB: direct Mode 1 -> Mode 2 transition
                         self.enter_mode(Mode::OamScan, ints, cgb_mode);
                         self.ly_for_comparison = 0;
                         self.check_lyc(ints);
                     } else {
-                        // On DMG/MGB: 1-M-cycle Mode 0 glitch on line 0
                         self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
                         self.cycles = 1;
                         self.line0_frame_wrap = true;
