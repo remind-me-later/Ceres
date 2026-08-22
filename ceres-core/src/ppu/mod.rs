@@ -135,6 +135,7 @@ pub struct Ppu {
     current_vblank_line: u8,
     hblank_irq_delayed: bool,
     fifo: fifo::PixelFifo,
+    lyc_latched: u8,
 }
 
 impl Default for Ppu {
@@ -149,6 +150,7 @@ impl Default for Ppu {
             ly: 0,
             ly_for_comparison: 0,
             lyc: 0,
+            lyc_latched: 0,
             lcdon_line0_mode0: false,
             line0_frame_wrap: false,
             mode_for_interrupt: None,
@@ -627,12 +629,18 @@ impl Ppu {
                 } else if self.cycles == 2 && !self.lcdon_line0_mode0 {
                     if self.ly < 143 {
                         self.ly += 1;
-                        if !self.is_cgb {
-                            self.ly_for_comparison = u16::MAX;
-                        } else {
+                        if self.is_cgb {
+                            self.lyc_latched = self.lyc;
                             self.ly_for_comparison = u16::from(self.ly - 1);
+                            if self.ly_for_comparison == u16::from(self.lyc) {
+                                self.stat |= STAT_LYC_B;
+                            } else {
+                                self.stat &= !STAT_LYC_B;
+                            }
+                        } else {
+                            self.ly_for_comparison = u16::MAX;
+                            self.check_lyc(ints);
                         }
-                        self.check_lyc(ints);
                     }
                     if !self.is_cgb && (self.ly == 1 || self.ly == 143) {
                         if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
@@ -643,10 +651,24 @@ impl Ppu {
                 } else if self.cycles == 1 && !self.lcdon_line0_mode0 {
                     if self.ly <= 143 {
                         self.ly_for_comparison = u16::from(self.ly);
-                        self.check_lyc(ints);
-                        if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
-                            ints.request_lcd();
-                            self.stat_line = true;
+                        if self.is_cgb {
+                            if self.lyc_latched == self.ly {
+                                if (self.stat & STAT_IF_LYC_B) != 0 && !self.stat_line {
+                                    ints.request_lcd();
+                                    self.stat_line = true;
+                                }
+                            }
+                            if self.ly_for_comparison == u16::from(self.lyc) {
+                                self.stat |= STAT_LYC_B;
+                            } else {
+                                self.stat &= !STAT_LYC_B;
+                            }
+                        } else {
+                            self.check_lyc(ints);
+                            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                                ints.request_lcd();
+                                self.stat_line = true;
+                            }
                         }
                     }
                 }
@@ -657,12 +679,27 @@ impl Ppu {
                     if self.is_cgb {
                         if self.cycles == 114 {
                             self.ly = 0;
+                            self.lyc_latched = self.lyc;
                             self.ly_for_comparison = 153;
-                            self.check_lyc(ints);
+                            if self.ly_for_comparison == u16::from(self.lyc) {
+                                self.stat |= STAT_LYC_B;
+                            } else {
+                                self.stat &= !STAT_LYC_B;
+                            }
                         } else if self.cycles == 113 {
                             self.ly = 0;
                             self.ly_for_comparison = 0;
-                            self.check_lyc(ints);
+                            if self.lyc_latched == 0 {
+                                if (self.stat & STAT_IF_LYC_B) != 0 && !self.stat_line {
+                                    ints.request_lcd();
+                                    self.stat_line = true;
+                                }
+                            }
+                            if self.ly_for_comparison == u16::from(self.lyc) {
+                                self.stat |= STAT_LYC_B;
+                            } else {
+                                self.stat &= !STAT_LYC_B;
+                            }
                         }
                     } else if self.cycles == 113 {
                         self.ly = 0;
@@ -683,9 +720,19 @@ impl Ppu {
                             self.ly = self.current_vblank_line + 1;
                         } else {
                             self.ly = 153;
-                            self.ly_for_comparison = if self.is_cgb { 152 } else { u16::MAX };
+                            if self.is_cgb {
+                                self.lyc_latched = self.lyc;
+                                self.ly_for_comparison = 152;
+                                if self.ly_for_comparison == u16::from(self.lyc) {
+                                    self.stat |= STAT_LYC_B;
+                                } else {
+                                    self.stat &= !STAT_LYC_B;
+                                }
+                            } else {
+                                self.ly_for_comparison = u16::MAX;
+                                self.check_lyc(ints);
+                            }
                         }
-                        self.check_lyc(ints);
                         if !self.is_cgb && self.current_vblank_line == 144 {
                             self.ly_for_comparison = 145;
                             self.check_lyc(ints);
@@ -693,10 +740,24 @@ impl Ppu {
                     } else if self.cycles == 1 {
                         if self.current_vblank_line < 152 {
                             self.ly_for_comparison = u16::from(self.current_vblank_line + 1);
+                            self.check_lyc(ints);
+                        } else if self.is_cgb {
+                            self.ly_for_comparison = 153;
+                            if self.lyc_latched == 153 {
+                                if (self.stat & STAT_IF_LYC_B) != 0 && !self.stat_line {
+                                    ints.request_lcd();
+                                    self.stat_line = true;
+                                }
+                            }
+                            if self.ly_for_comparison == u16::from(self.lyc) {
+                                self.stat |= STAT_LYC_B;
+                            } else {
+                                self.stat &= !STAT_LYC_B;
+                            }
                         } else {
                             self.ly_for_comparison = 153;
+                            self.check_lyc(ints);
                         }
-                        self.check_lyc(ints);
                     }
                 }
             }
@@ -842,10 +903,13 @@ impl Ppu {
     pub fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
         self.lyc = val;
         if self.is_cgb {
-            if self.mode() == Mode::HBlank && self.cycles == 2 {
+            if self.mode() == Mode::HBlank && (self.cycles == 2 || self.cycles == 1) {
                 return;
             }
-            if self.current_vblank_line == 153 && self.cycles == 114 {
+            if self.current_vblank_line == 152 && (self.cycles == 2 || self.cycles == 1) {
+                return;
+            }
+            if self.current_vblank_line == 153 && (self.cycles == 114 || self.cycles == 113) {
                 return;
             }
         }
