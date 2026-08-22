@@ -54,14 +54,7 @@ impl Ppu {
             return self.oam.read(addr);
         }
         match self.mode() {
-            Mode::HBlank => {
-                if !self.is_cgb && !self.lcdon_line0_mode0 && self.cycles <= 2 && self.ly < 144 {
-                    0xFF
-                } else {
-                    self.oam.read(addr)
-                }
-            }
-            Mode::VBlank => self.oam.read(addr),
+            Mode::HBlank | Mode::VBlank => self.oam.read(addr),
             _ => 0xFF,
         }
     }
@@ -72,14 +65,7 @@ impl Ppu {
             return;
         }
         match self.mode() {
-            Mode::HBlank => {
-                if !self.is_cgb && !self.lcdon_line0_mode0 && self.cycles <= 2 && self.ly < 144 {
-                    ()
-                } else {
-                    self.oam.write(addr, val);
-                }
-            }
-            Mode::VBlank => self.oam.write(addr, val),
+            Mode::HBlank | Mode::VBlank => self.oam.write(addr, val),
             _ => (),
         }
     }
