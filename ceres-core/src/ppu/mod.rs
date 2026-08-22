@@ -74,32 +74,16 @@ impl Mode {
         match self {
             Self::OamScan => OAM_M_CYCLES,
             Self::Drawing => {
-                let scroll_adjust = if cgb_mode {
-                    match scroll_x & 0x7 {
-                        4..=7 => 1,
-                        _ => 0,
-                    }
-                } else {
-                    match scroll_x & 0x7 {
-                        1..=4 => 1,
-                        5..=7 => 2,
-                        _ => 0,
-                    }
+                let scroll_adjust = match scroll_x & 0x7 {
+                    4..=7 => 1,
+                    _ => 0,
                 };
                 vram_m_cycles + scroll_adjust
             }
             Self::HBlank => {
-                let scroll_adjust = if cgb_mode {
-                    match scroll_x & 0x7 {
-                        4..=7 => 1,
-                        _ => 0,
-                    }
-                } else {
-                    match scroll_x & 0x7 {
-                        1..=4 => 1,
-                        5..=7 => 2,
-                        _ => 0,
-                    }
+                let scroll_adjust = match scroll_x & 0x7 {
+                    4..=7 => 1,
+                    _ => 0,
                 };
                 hblank_m_cycles - scroll_adjust
             }
