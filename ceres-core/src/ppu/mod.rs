@@ -678,7 +678,7 @@ impl Ppu {
                     if self.cycles == base_cycles - 1 {
                         self.ly_for_comparison = u16::from(self.ly);
                         self.check_lyc(ints);
-                    } else if self.cycles == 2 {
+                    } else if self.cycles == if self.is_cgb { 2 } else { 3 } {
                         if self.current_vblank_line < 152 {
                             self.ly = self.current_vblank_line + 1;
                         } else {
