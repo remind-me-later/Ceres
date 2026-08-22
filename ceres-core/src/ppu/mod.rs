@@ -82,7 +82,17 @@ impl Mode {
                         _ => 0,
                     },
                 };
-                43 + adjust
+                let base = match model {
+                    Model::Cgb0
+                    | Model::CgbA
+                    | Model::CgbB
+                    | Model::CgbC
+                    | Model::CgbD
+                    | Model::CgbE
+                    | Model::Agb => 42,
+                    _ => 43,
+                };
+                base + adjust
             }
             Self::HBlank => {
                 let adjust = match model {
@@ -103,7 +113,17 @@ impl Mode {
                         _ => 0,
                     },
                 };
-                51 - adjust
+                let base = match model {
+                    Model::Cgb0
+                    | Model::CgbA
+                    | Model::CgbB
+                    | Model::CgbC
+                    | Model::CgbD
+                    | Model::CgbE
+                    | Model::Agb => 52,
+                    _ => 51,
+                };
+                base - adjust
             }
             Self::VBlank => VBLANK_M_CYCLES,
         }
@@ -232,7 +252,15 @@ impl Ppu {
             Some(Mode::VBlank) => self.stat & STAT_IF_VBLANK_B != 0,
             Some(Mode::OamScan) => self.stat & STAT_IF_OAM_B != 0,
             Some(Mode::Drawing) | None => match self.mode() {
-                Mode::HBlank => !self.lcdon_line0_mode0 && (self.stat & STAT_IF_HBLANK_B != 0),
+                Mode::HBlank => {
+                    let cgb_hblank_delayed = self.is_cgb
+                        && self.cycles
+                            >= (Mode::HBlank.m_cycles(self.scx, self.model)
+                                - self.sprite_penalty);
+                    !self.lcdon_line0_mode0
+                        && !cgb_hblank_delayed
+                        && (self.stat & STAT_IF_HBLANK_B != 0)
+                }
                 Mode::VBlank => self.stat & STAT_IF_VBLANK_B != 0,
                 _ => false,
             },
@@ -623,6 +651,10 @@ impl Ppu {
                 }
             }
             Mode::HBlank => {
+                let base_hblank = Mode::HBlank.m_cycles(self.scx, self.model) - self.sprite_penalty;
+                if self.is_cgb && self.cycles == base_hblank - 1 {
+                    self.update_stat_line(ints);
+                }
                 if (self.ly == 143 || (self.ly == 144 && self.mode() == Mode::HBlank)) && self.ly_for_comparison != u16::MAX {
                     if !self.is_cgb {
                         if self.cycles == 2 {
