@@ -66,22 +66,9 @@ impl Mode {
         match self {
             Self::OamScan => OAM_M_CYCLES,
             Self::Drawing => {
-                let adjust = match model {
-                    Model::Cgb0
-                    | Model::CgbA
-                    | Model::CgbB
-                    | Model::CgbC
-                    | Model::CgbD
-                    | Model::CgbE
-                    | Model::Agb => match scroll_x & 0x7 {
-                        3..=6 => 1,
-                        7 => 2,
-                        _ => 0,
-                    },
-                    _ => match scroll_x & 0x7 {
-                        4..=7 => 1,
-                        _ => 0,
-                    },
+                let adjust = match scroll_x & 0x7 {
+                    4..=7 => 1,
+                    _ => 0,
                 };
                 vram_m_cycles + adjust
             }
@@ -229,11 +216,11 @@ impl Ppu {
 
         let lyc_signal = (self.stat & STAT_IF_LYC_B != 0) && (self.stat & STAT_LYC_B != 0);
         let mode_signal = match self.mode_for_interrupt {
-            Some(Mode::HBlank) => !self.lcdon_line0_mode0 && (self.stat & STAT_IF_HBLANK_B != 0),
+            Some(Mode::HBlank) => !self.is_cgb && !self.lcdon_line0_mode0 && (self.stat & STAT_IF_HBLANK_B != 0),
             Some(Mode::VBlank) => self.stat & STAT_IF_VBLANK_B != 0,
             Some(Mode::OamScan) => self.stat & STAT_IF_OAM_B != 0,
             Some(Mode::Drawing) | None => match self.mode() {
-                Mode::HBlank => !self.lcdon_line0_mode0 && (self.stat & STAT_IF_HBLANK_B != 0),
+                Mode::HBlank => !self.is_cgb && !self.lcdon_line0_mode0 && (self.stat & STAT_IF_HBLANK_B != 0),
                 Mode::VBlank => self.stat & STAT_IF_VBLANK_B != 0,
                 _ => false,
             },
@@ -653,12 +640,6 @@ impl Ppu {
                             self.ly_for_comparison = u16::MAX;
                             self.check_lyc(ints);
                         }
-                        if self.ly == 1 || self.ly == 143 {
-                            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
-                                ints.request_lcd();
-                                self.stat_line = true;
-                            }
-                        }
                     } else if self.ly < 143 {
                         self.lyc_latched = self.lyc;
                         self.ly_for_comparison = u16::from(self.ly);
@@ -668,17 +649,22 @@ impl Ppu {
                             self.stat &= !STAT_LYC_B;
                         }
                     }
+                    if !self.is_cgb && (self.ly == 1 || self.ly == 143) {
+                        if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                            ints.request_lcd();
+                            self.stat_line = true;
+                        }
+                    }
                 } else if self.cycles == 1 && !self.lcdon_line0_mode0 {
-                    if self.is_cgb {
-                        if self.ly < 143 {
-                            self.ly += 1;
-                            self.ly_for_comparison = u16::from(self.ly);
-                            if self.lyc_latched == self.ly {
+                    if self.ly <= 143 {
+                        if self.is_cgb {
+                            if self.lyc_latched == self.ly + 1 {
                                 if (self.stat & STAT_IF_LYC_B) != 0 && !self.stat_line {
                                     ints.request_lcd();
                                     self.stat_line = true;
                                 }
                             }
+                            self.ly_for_comparison = u16::from(self.ly + 1);
                             if self.ly_for_comparison == u16::from(self.lyc) {
                                 self.stat |= STAT_LYC_B;
                             } else {
@@ -688,14 +674,20 @@ impl Ppu {
                                 ints.request_lcd();
                                 self.stat_line = true;
                             }
+                        } else {
+                            self.ly_for_comparison = u16::from(self.ly);
+                            self.check_lyc(ints);
+                            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                                ints.request_lcd();
+                                self.stat_line = true;
+                            }
                         }
-                    } else if self.ly <= 143 {
-                        self.ly_for_comparison = u16::from(self.ly);
-                        self.check_lyc(ints);
-                        if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
-                            ints.request_lcd();
-                            self.stat_line = true;
-                        }
+                    }
+                }
+                if self.is_cgb && self.cycles == self.mode().m_cycles(self.scx, self.model) - 1 {
+                    if self.stat & STAT_IF_HBLANK_B != 0 && !self.stat_line {
+                        ints.request_lcd();
+                        self.stat_line = true;
                     }
                 }
             }
@@ -846,6 +838,9 @@ impl Ppu {
                 } else if self.ly >= 144 {
                     self.enter_mode(Mode::VBlank, ints, cgb_mode);
                 } else {
+                    if self.is_cgb {
+                        self.ly += 1;
+                    }
                     self.enter_mode(Mode::OamScan, ints, cgb_mode);
                 }
             }
