@@ -10,7 +10,7 @@ use core::mem;
 use crate::interrupts::Interrupts;
 pub use oam::Oam;
 pub use vram::Vram;
-use {self::color_palette::ColorPalette, crate::CgbMode, rgba_buf::RgbaBuf};
+use {self::color_palette::ColorPalette, crate::CgbMode, crate::Model, rgba_buf::RgbaBuf};
 
 pub const PX_WIDTH: u8 = 160;
 pub const PX_HEIGHT: u8 = 144;
@@ -45,15 +45,8 @@ pub enum ColorCorrectionMode {
     ReduceContrast,
 }
 
-/// PPU mode (matches the STAT register mode bits 0-1 and the
-/// mooneye-gb state-machine mode names).
-#[expect(
-    clippy::arbitrary_source_item_ordering,
-    reason = "Order follows the state machine transitions"
-)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
-    #[default]
     HBlank = 0,
     VBlank = 1,
     OamScan = 2,
@@ -66,19 +59,53 @@ impl Mode {
     /// lengths. `scroll_x` only affects Mode 3 / Mode 0 split, not VBlank.
     /// The scroll adjustment differs between DMG/MGB/SGB/SGB2 and
     /// CGB/AGB/AGS (see SameBoy's display.c).
-    const fn m_cycles(self, scroll_x: u8, _cgb_mode: bool) -> i32 {
+    const fn m_cycles(self, scroll_x: u8, model: Model) -> i32 {
         const OAM_M_CYCLES: i32 = 20;
         let vram_m_cycles: i32 = 43;
-        let hblank_m_cycles: i32 = 114 - OAM_M_CYCLES - vram_m_cycles;
         const VBLANK_M_CYCLES: i32 = 114;
-        let scroll_adjust = match scroll_x & 0x7 {
-            4..=7 => 1,
-            _ => 0,
-        };
         match self {
             Self::OamScan => OAM_M_CYCLES,
-            Self::Drawing => vram_m_cycles + scroll_adjust,
-            Self::HBlank => hblank_m_cycles - scroll_adjust,
+            Self::Drawing => {
+                let adjust = match model {
+                    Model::Cgb0
+                    | Model::CgbA
+                    | Model::CgbB
+                    | Model::CgbC
+                    | Model::CgbD
+                    | Model::CgbE
+                    | Model::Agb => match scroll_x & 0x7 {
+                        3..=6 => 1,
+                        7 => 2,
+                        _ => 0,
+                    },
+                    _ => match scroll_x & 0x7 {
+                        4..=7 => 1,
+                        _ => 0,
+                    },
+                };
+                vram_m_cycles + adjust
+            }
+            Self::HBlank => {
+                let adjust = match model {
+                    Model::Cgb0
+                    | Model::CgbA
+                    | Model::CgbB
+                    | Model::CgbC
+                    | Model::CgbD
+                    | Model::CgbE
+                    | Model::Agb => match scroll_x & 0x7 {
+                        3..=6 => 1,
+                        7 => 2,
+                        _ => 0,
+                    },
+                    _ => match scroll_x & 0x7 {
+                        1..=4 => 1,
+                        5..=7 => 2,
+                        _ => 0,
+                    },
+                };
+                51 - adjust
+            }
             Self::VBlank => VBLANK_M_CYCLES,
         }
     }
@@ -86,6 +113,7 @@ impl Mode {
 
 #[expect(clippy::struct_excessive_bools)]
 pub struct Ppu {
+    pub(crate) model: Model,
     bcp: ColorPalette,
     bgp: u8,
     color_correction_mode: ColorCorrectionMode,
@@ -132,11 +160,12 @@ pub struct Ppu {
 impl Default for Ppu {
     fn default() -> Self {
         Self {
+            model: Model::default(),
             bcp: ColorPalette::default(),
             bgp: 0,
             color_correction_mode: ColorCorrectionMode::default(),
             is_cgb: false,
-            cycles: Mode::HBlank.m_cycles(0, false),
+            cycles: Mode::HBlank.m_cycles(0, Model::default()),
             lcdc: 0,
             ly: 0,
             ly_for_comparison: 0,
@@ -171,6 +200,14 @@ impl Default for Ppu {
 
 // IO
 impl Ppu {
+    #[must_use]
+    pub fn new(model: Model) -> Self {
+        Self {
+            model,
+            cycles: Mode::HBlank.m_cycles(0, model),
+            ..Self::default()
+        }
+    }
     #[must_use]
     pub const fn bcp(&self) -> &ColorPalette {
         &self.bcp
@@ -425,7 +462,7 @@ impl Ppu {
             self.sprite_penalty = 0;
         }
 
-        let base_cycles = mode.m_cycles(self.scx, self.is_cgb);
+        let base_cycles = mode.m_cycles(self.scx, self.model);
         self.cycles = match mode {
             Mode::Drawing => base_cycles + self.sprite_penalty,
             Mode::HBlank => (base_cycles - self.sprite_penalty).max(1),
@@ -610,31 +647,32 @@ impl Ppu {
                         }
                     }
                 } else if self.cycles == 2 && !self.lcdon_line0_mode0 {
-                    if self.ly < 143 {
-                        self.ly += 1;
-                        if self.is_cgb {
-                            self.lyc_latched = self.lyc;
-                            self.ly_for_comparison = u16::from(self.ly - 1);
-                            if self.ly_for_comparison == u16::from(self.lyc) {
-                                self.stat |= STAT_LYC_B;
-                            } else {
-                                self.stat &= !STAT_LYC_B;
-                            }
-                        } else {
+                    if !self.is_cgb {
+                        if self.ly < 143 {
+                            self.ly += 1;
                             self.ly_for_comparison = u16::MAX;
                             self.check_lyc(ints);
                         }
-                    }
-                    if !self.is_cgb && (self.ly == 1 || self.ly == 143) {
-                        if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
-                            ints.request_lcd();
-                            self.stat_line = true;
+                        if self.ly == 1 || self.ly == 143 {
+                            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                                ints.request_lcd();
+                                self.stat_line = true;
+                            }
+                        }
+                    } else if self.ly < 143 {
+                        self.lyc_latched = self.lyc;
+                        self.ly_for_comparison = u16::from(self.ly);
+                        if self.ly_for_comparison == u16::from(self.lyc) {
+                            self.stat |= STAT_LYC_B;
+                        } else {
+                            self.stat &= !STAT_LYC_B;
                         }
                     }
                 } else if self.cycles == 1 && !self.lcdon_line0_mode0 {
-                    if self.ly <= 143 {
-                        self.ly_for_comparison = u16::from(self.ly);
-                        if self.is_cgb {
+                    if self.is_cgb {
+                        if self.ly < 143 {
+                            self.ly += 1;
+                            self.ly_for_comparison = u16::from(self.ly);
                             if self.lyc_latched == self.ly {
                                 if (self.stat & STAT_IF_LYC_B) != 0 && !self.stat_line {
                                     ints.request_lcd();
@@ -650,12 +688,13 @@ impl Ppu {
                                 ints.request_lcd();
                                 self.stat_line = true;
                             }
-                        } else {
-                            self.check_lyc(ints);
-                            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
-                                ints.request_lcd();
-                                self.stat_line = true;
-                            }
+                        }
+                    } else if self.ly <= 143 {
+                        self.ly_for_comparison = u16::from(self.ly);
+                        self.check_lyc(ints);
+                        if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                            ints.request_lcd();
+                            self.stat_line = true;
                         }
                     }
                 }
@@ -698,7 +737,7 @@ impl Ppu {
                         self.check_lyc(ints);
                     }
                 } else if self.current_vblank_line >= 144 {
-                    let base_cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
+                    let base_cycles = Mode::VBlank.m_cycles(self.scx, self.model);
                     if self.cycles == base_cycles - 1 {
                         self.ly_for_comparison = u16::from(self.ly);
                         self.check_lyc(ints);
@@ -836,7 +875,7 @@ impl Ppu {
                     } else {
                         self.current_vblank_line
                     };
-                    let base_cycles = Mode::VBlank.m_cycles(self.scx, self.is_cgb);
+                    let base_cycles = Mode::VBlank.m_cycles(self.scx, self.model);
                     self.cycles = if !self.is_cgb && self.current_vblank_line == 153 {
                         base_cycles - 1
                     } else {
@@ -871,7 +910,7 @@ impl Ppu {
             self.lcdon_line0_mode0 = false;
             self.stat &= !STAT_MODE_B;
             self.stat_line = false;
-            self.cycles = Mode::HBlank.m_cycles(self.scx, is_cgb);
+            self.cycles = Mode::HBlank.m_cycles(self.scx, self.model);
             self.rgba_buf_present.clear();
             // LYC comparison: re-evaluate after LY reset to 0.
             self.check_lyc(ints);
@@ -925,8 +964,8 @@ impl Ppu {
 
     pub fn write_scx(&mut self, val: u8) {
         if self.mode() == Mode::Drawing {
-            let old_mode3 = Mode::Drawing.m_cycles(self.scx, self.is_cgb);
-            let new_mode3 = Mode::Drawing.m_cycles(val, self.is_cgb);
+            let old_mode3 = Mode::Drawing.m_cycles(self.scx, self.model);
+            let new_mode3 = Mode::Drawing.m_cycles(val, self.model);
             self.cycles += new_mode3 - old_mode3;
         }
         self.scx = val;

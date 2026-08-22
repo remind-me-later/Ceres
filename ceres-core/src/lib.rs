@@ -482,7 +482,7 @@ impl<A: AudioCallback> Gb<A> {
             ld_b_b_breakpoint: false,
             model,
             ppu_dskip: false,
-            ppu: Ppu::default(),
+            ppu: Ppu::new(model),
             serial: Serial::default(),
             wram: Wram::default(),
             undoc_ff72: 0,
