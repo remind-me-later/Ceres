@@ -587,6 +587,10 @@ impl Ppu {
                             self.ly = 144;
                             self.ly_for_comparison = 143;
                             self.check_lyc(ints);
+                            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                                ints.request_lcd();
+                                self.stat_line = true;
+                            }
                         } else if self.cycles == 1 {
                             self.ly_for_comparison = 144;
                             self.check_lyc(ints);
@@ -600,7 +604,7 @@ impl Ppu {
                             self.ly_for_comparison = 144;
                             self.check_lyc(ints);
                         }
-                        if self.is_cgb && self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                        if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
                             ints.request_lcd();
                             self.stat_line = true;
                         }

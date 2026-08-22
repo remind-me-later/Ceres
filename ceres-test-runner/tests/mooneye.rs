@@ -950,7 +950,7 @@ fn test_gpu_ly00_mode3_0() {
 
 #[test]
 fn test_gpu_ly143_144_145() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly143_144_145.gb", Model::Mgb);
+    let result = run_test(WILBERTPOL, "acceptance/gpu/ly143_144_145.gb", Model::DmgB);
     assert_eq!(result, TestResult::Passed, "gpu/ly143_144_145 test failed");
 }
 
