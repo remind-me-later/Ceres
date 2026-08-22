@@ -61,7 +61,6 @@ impl Mode {
     /// CGB/AGB/AGS (see SameBoy's display.c).
     const fn m_cycles(self, scroll_x: u8, model: Model) -> i32 {
         const OAM_M_CYCLES: i32 = 20;
-        let vram_m_cycles: i32 = 43;
         const VBLANK_M_CYCLES: i32 = 114;
         match self {
             Self::OamScan => OAM_M_CYCLES,
@@ -83,7 +82,7 @@ impl Mode {
                         _ => 0,
                     },
                 };
-                vram_m_cycles + adjust
+                43 + adjust
             }
             Self::HBlank => {
                 let adjust = match model {
@@ -746,10 +745,6 @@ impl Ppu {
                     if self.cycles == base_cycles - 1 {
                         self.ly_for_comparison = u16::from(self.ly);
                         self.check_lyc(ints);
-                    } else if self.cycles == 3 {
-                        if !self.is_cgb && self.current_vblank_line < 152 {
-                            self.ly = self.current_vblank_line + 1;
-                        }
                     } else if self.cycles == 2 {
                         if self.current_vblank_line < 152 {
                             self.ly = self.current_vblank_line + 1;
