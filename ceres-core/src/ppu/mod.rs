@@ -587,10 +587,6 @@ impl Ppu {
                             self.ly = 144;
                             self.ly_for_comparison = 143;
                             self.check_lyc(ints);
-                            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
-                                ints.request_lcd();
-                                self.stat_line = true;
-                            }
                         } else if self.cycles == 1 {
                             self.ly_for_comparison = 144;
                             self.check_lyc(ints);
@@ -702,8 +698,6 @@ impl Ppu {
                     if self.cycles == base_cycles - 1 {
                         self.ly_for_comparison = u16::from(self.ly);
                         self.check_lyc(ints);
-                    } else if self.cycles == 3 && !self.is_cgb && self.current_vblank_line == 144 {
-                        self.ly = 145;
                     } else if self.cycles == 2 {
                         if self.current_vblank_line < 152 {
                             self.ly = self.current_vblank_line + 1;
@@ -721,10 +715,6 @@ impl Ppu {
                                 self.ly_for_comparison = u16::MAX;
                                 self.check_lyc(ints);
                             }
-                        }
-                        if !self.is_cgb && self.current_vblank_line == 144 {
-                            self.ly_for_comparison = 145;
-                            self.check_lyc(ints);
                         }
                     } else if self.cycles == 1 {
                         if self.current_vblank_line < 152 {
