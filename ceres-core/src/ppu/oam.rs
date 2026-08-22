@@ -72,14 +72,12 @@ impl Ppu {
             return;
         }
         match self.mode() {
-            Mode::HBlank => {
-                if !self.is_cgb && self.cycles == 1 && !self.lcdon_line0_mode0 {
-                    // Blocked 1 M-cycle before Mode 2 starts on DMG
-                } else {
+            Mode::HBlank | Mode::VBlank => self.oam.write(addr, val),
+            Mode::OamScan => {
+                if !self.is_cgb && self.cycles == 1 {
                     self.oam.write(addr, val);
                 }
             }
-            Mode::VBlank => self.oam.write(addr, val),
             _ => (),
         }
     }

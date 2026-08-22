@@ -66,7 +66,7 @@ impl Mode {
     /// lengths. `scroll_x` only affects Mode 3 / Mode 0 split, not VBlank.
     /// The scroll adjustment differs between DMG/MGB/SGB/SGB2 and
     /// CGB/AGB/AGS (see SameBoy's display.c).
-    const fn m_cycles(self, scroll_x: u8, cgb_mode: bool) -> i32 {
+    const fn m_cycles(self, scroll_x: u8, _cgb_mode: bool) -> i32 {
         const OAM_M_CYCLES: i32 = 20;
         let vram_m_cycles: i32 = 43;
         let hblank_m_cycles: i32 = 114 - OAM_M_CYCLES - vram_m_cycles;
@@ -698,9 +698,17 @@ impl Ppu {
                     if self.cycles == base_cycles - 1 {
                         self.ly_for_comparison = u16::from(self.ly);
                         self.check_lyc(ints);
+                    } else if self.cycles == 3 {
+                        if !self.is_cgb && self.current_vblank_line < 152 {
+                            self.ly = self.current_vblank_line + 1;
+                        }
                     } else if self.cycles == 2 {
                         if self.current_vblank_line < 152 {
                             self.ly = self.current_vblank_line + 1;
+                            if !self.is_cgb {
+                                self.ly_for_comparison = u16::MAX;
+                                self.check_lyc(ints);
+                            }
                         } else {
                             self.ly = 153;
                             if self.is_cgb {

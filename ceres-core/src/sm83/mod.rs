@@ -1,4 +1,4 @@
-use crate::{AudioCallback, CgbMode, Gb};
+use crate::{AudioCallback, Gb};
 
 const ZF: u16 = 0x80;
 const NF: u16 = 0x40;
@@ -237,7 +237,7 @@ impl<A: AudioCallback> Gb<A> {
                 self.cpu.skip_isr_nops = false;
                 self.tick_m_cycle();
 
-                if _was_halted && self.cgb_mode != CgbMode::Dmg {
+                if _was_halted {
                     self.tick_m_cycle();
                 }
 
