@@ -68,25 +68,17 @@ impl Mode {
     /// CGB/AGB/AGS (see SameBoy's display.c).
     const fn m_cycles(self, scroll_x: u8, cgb_mode: bool) -> i32 {
         const OAM_M_CYCLES: i32 = 20;
-        let vram_m_cycles: i32 = if cgb_mode { 43 } else { 43 };
+        let vram_m_cycles: i32 = 43;
         let hblank_m_cycles: i32 = 114 - OAM_M_CYCLES - vram_m_cycles;
         const VBLANK_M_CYCLES: i32 = 114;
+        let scroll_adjust = match scroll_x & 0x7 {
+            4..=7 => 1,
+            _ => 0,
+        };
         match self {
             Self::OamScan => OAM_M_CYCLES,
-            Self::Drawing => {
-                let scroll_adjust = match scroll_x & 0x7 {
-                    4..=7 => 1,
-                    _ => 0,
-                };
-                vram_m_cycles + scroll_adjust
-            }
-            Self::HBlank => {
-                let scroll_adjust = match scroll_x & 0x7 {
-                    4..=7 => 1,
-                    _ => 0,
-                };
-                hblank_m_cycles - scroll_adjust
-            }
+            Self::Drawing => vram_m_cycles + scroll_adjust,
+            Self::HBlank => hblank_m_cycles - scroll_adjust,
             Self::VBlank => VBLANK_M_CYCLES,
         }
     }
@@ -133,7 +125,6 @@ pub struct Ppu {
     stat_line: bool,
     sprite_penalty: i32,
     current_vblank_line: u8,
-    hblank_irq_delayed: bool,
     fifo: fifo::PixelFifo,
     lyc_latched: u8,
 }
@@ -157,7 +148,6 @@ impl Default for Ppu {
             stat_line: false,
             sprite_penalty: 0,
             current_vblank_line: 0,
-            hblank_irq_delayed: false,
             fifo: fifo::PixelFifo::new(),
             oam: Oam::default(),
             obp0: 0,
@@ -202,11 +192,11 @@ impl Ppu {
 
         let lyc_signal = (self.stat & STAT_IF_LYC_B != 0) && (self.stat & STAT_LYC_B != 0);
         let mode_signal = match self.mode_for_interrupt {
-            Some(Mode::HBlank) => !self.lcdon_line0_mode0 && !self.hblank_irq_delayed && (self.stat & STAT_IF_HBLANK_B != 0),
+            Some(Mode::HBlank) => !self.lcdon_line0_mode0 && (self.stat & STAT_IF_HBLANK_B != 0),
             Some(Mode::VBlank) => self.stat & STAT_IF_VBLANK_B != 0,
             Some(Mode::OamScan) => self.stat & STAT_IF_OAM_B != 0,
             Some(Mode::Drawing) | None => match self.mode() {
-                Mode::HBlank => !self.lcdon_line0_mode0 && !self.hblank_irq_delayed && (self.stat & STAT_IF_HBLANK_B != 0),
+                Mode::HBlank => !self.lcdon_line0_mode0 && (self.stat & STAT_IF_HBLANK_B != 0),
                 Mode::VBlank => self.stat & STAT_IF_VBLANK_B != 0,
                 _ => false,
             },
@@ -435,8 +425,6 @@ impl Ppu {
             self.sprite_penalty = 0;
         }
 
-        self.hblank_irq_delayed = mode == Mode::HBlank && self.is_cgb && (self.scx & 7 == 3 || self.scx & 7 == 7);
-
         let base_cycles = mode.m_cycles(self.scx, self.is_cgb);
         self.cycles = match mode {
             Mode::Drawing => base_cycles + self.sprite_penalty,
@@ -593,11 +581,6 @@ impl Ppu {
                 }
             }
             Mode::HBlank => {
-                if self.hblank_irq_delayed {
-                    self.hblank_irq_delayed = false;
-                    self.update_stat_line(ints);
-                }
-
                 if (self.ly == 143 || (self.ly == 144 && self.mode() == Mode::HBlank)) && self.ly_for_comparison != u16::MAX {
                     if !self.is_cgb {
                         if self.cycles == 2 {
@@ -663,6 +646,10 @@ impl Ppu {
                             } else {
                                 self.stat &= !STAT_LYC_B;
                             }
+                            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                                ints.request_lcd();
+                                self.stat_line = true;
+                            }
                         } else {
                             self.check_lyc(ints);
                             if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
@@ -715,6 +702,8 @@ impl Ppu {
                     if self.cycles == base_cycles - 1 {
                         self.ly_for_comparison = u16::from(self.ly);
                         self.check_lyc(ints);
+                    } else if self.cycles == 3 && !self.is_cgb && self.current_vblank_line == 144 {
+                        self.ly = 145;
                     } else if self.cycles == 2 {
                         if self.current_vblank_line < 152 {
                             self.ly = self.current_vblank_line + 1;
