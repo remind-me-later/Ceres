@@ -66,9 +66,22 @@ impl Mode {
         match self {
             Self::OamScan => OAM_M_CYCLES,
             Self::Drawing => {
-                let adjust = match scroll_x & 0x7 {
-                    4..=7 => 1,
-                    _ => 0,
+                let adjust = match model {
+                    Model::Cgb0
+                    | Model::CgbA
+                    | Model::CgbB
+                    | Model::CgbC
+                    | Model::CgbD
+                    | Model::CgbE
+                    | Model::Agb => match scroll_x & 0x7 {
+                        3..=6 => 1,
+                        7 => 2,
+                        _ => 0,
+                    },
+                    _ => match scroll_x & 0x7 {
+                        4..=7 => 1,
+                        _ => 0,
+                    },
                 };
                 vram_m_cycles + adjust
             }
@@ -216,11 +229,11 @@ impl Ppu {
 
         let lyc_signal = (self.stat & STAT_IF_LYC_B != 0) && (self.stat & STAT_LYC_B != 0);
         let mode_signal = match self.mode_for_interrupt {
-            Some(Mode::HBlank) => !self.is_cgb && !self.lcdon_line0_mode0 && (self.stat & STAT_IF_HBLANK_B != 0),
+            Some(Mode::HBlank) => !self.lcdon_line0_mode0 && (self.stat & STAT_IF_HBLANK_B != 0),
             Some(Mode::VBlank) => self.stat & STAT_IF_VBLANK_B != 0,
             Some(Mode::OamScan) => self.stat & STAT_IF_OAM_B != 0,
             Some(Mode::Drawing) | None => match self.mode() {
-                Mode::HBlank => !self.is_cgb && !self.lcdon_line0_mode0 && (self.stat & STAT_IF_HBLANK_B != 0),
+                Mode::HBlank => !self.lcdon_line0_mode0 && (self.stat & STAT_IF_HBLANK_B != 0),
                 Mode::VBlank => self.stat & STAT_IF_VBLANK_B != 0,
                 _ => false,
             },
@@ -530,8 +543,14 @@ impl Ppu {
 
     #[must_use]
     pub const fn read_ly(&self) -> u8 {
-        if self.is_cgb && self.current_vblank_line == 153 && self.cycles == 114 {
-            153
+        if self.is_cgb {
+            if self.current_vblank_line == 153 && self.cycles == 114 {
+                153
+            } else if (self.stat & STAT_MODE_B) == 0 && self.cycles == 1 && self.ly < 143 {
+                self.ly + 1
+            } else {
+                self.ly
+            }
         } else {
             self.ly
         }
@@ -682,12 +701,6 @@ impl Ppu {
                                 self.stat_line = true;
                             }
                         }
-                    }
-                }
-                if self.is_cgb && self.cycles == self.mode().m_cycles(self.scx, self.model) - 1 {
-                    if self.stat & STAT_IF_HBLANK_B != 0 && !self.stat_line {
-                        ints.request_lcd();
-                        self.stat_line = true;
                     }
                 }
             }

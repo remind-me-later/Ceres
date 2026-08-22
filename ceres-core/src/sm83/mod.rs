@@ -1,4 +1,4 @@
-use crate::{AudioCallback, Gb};
+use crate::{AudioCallback, CgbMode, Gb};
 
 const ZF: u16 = 0x80;
 const NF: u16 = 0x40;
