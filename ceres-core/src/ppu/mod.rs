@@ -74,32 +74,16 @@ impl Mode {
         match self {
             Self::OamScan => OAM_M_CYCLES,
             Self::Drawing => {
-                let scroll_adjust = if cgb_mode {
-                    match scroll_x & 0x7 {
-                        4..=7 => 1,
-                        _ => 0,
-                    }
-                } else {
-                    match scroll_x & 0x7 {
-                        4..=7 => 1,
-                        _ => 0,
-                    }
+                let scroll_adjust = match scroll_x & 0x7 {
+                    4..=7 => 1,
+                    _ => 0,
                 };
                 vram_m_cycles + scroll_adjust
             }
             Self::HBlank => {
-                let scroll_adjust = if cgb_mode {
-                    match scroll_x & 0x7 {
-                        3..=6 => 1,
-                        7 => 2,
-                        _ => 0,
-                    }
-                } else {
-                    match scroll_x & 0x7 {
-                        1..=4 => 1,
-                        5..=7 => 2,
-                        _ => 0,
-                    }
+                let scroll_adjust = match scroll_x & 0x7 {
+                    4..=7 => 1,
+                    _ => 0,
                 };
                 hblank_m_cycles - scroll_adjust
             }
@@ -449,7 +433,7 @@ impl Ppu {
             self.sprite_penalty = 0;
         }
 
-        self.hblank_irq_delayed = mode == Mode::HBlank && self.is_cgb;
+        self.hblank_irq_delayed = mode == Mode::HBlank && self.is_cgb && (self.scx & 7 == 3 || self.scx & 7 == 7);
 
         let base_cycles = mode.m_cycles(self.scx, self.is_cgb);
         self.cycles = match mode {
@@ -618,6 +602,10 @@ impl Ppu {
                             self.ly = 144;
                             self.ly_for_comparison = 143;
                             self.check_lyc(ints);
+                            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                                ints.request_lcd();
+                                self.stat_line = true;
+                            }
                         } else if self.cycles == 1 {
                             self.ly_for_comparison = 144;
                             self.check_lyc(ints);
@@ -642,11 +630,11 @@ impl Ppu {
                         if !self.is_cgb {
                             self.ly_for_comparison = u16::MAX;
                         } else {
-                            self.ly_for_comparison = u16::from(self.ly);
+                            self.ly_for_comparison = u16::from(self.ly - 1);
                         }
                         self.check_lyc(ints);
                     }
-                    if !self.is_cgb && self.ly == 1 {
+                    if !self.is_cgb && (self.ly == 1 || self.ly == 143) {
                         if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
                             ints.request_lcd();
                             self.stat_line = true;
@@ -654,10 +642,8 @@ impl Ppu {
                     }
                 } else if self.cycles == 1 && !self.lcdon_line0_mode0 {
                     if self.ly <= 143 {
-                        if !self.is_cgb {
-                            self.ly_for_comparison = u16::from(self.ly);
-                            self.check_lyc(ints);
-                        }
+                        self.ly_for_comparison = u16::from(self.ly);
+                        self.check_lyc(ints);
                         if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
                             ints.request_lcd();
                             self.stat_line = true;
@@ -670,6 +656,10 @@ impl Ppu {
                     // Line 153 timing phases (SameBoy display.c:2217):
                     if self.is_cgb {
                         if self.cycles == 114 {
+                            self.ly = 0;
+                            self.ly_for_comparison = 153;
+                            self.check_lyc(ints);
+                        } else if self.cycles == 113 {
                             self.ly = 0;
                             self.ly_for_comparison = 0;
                             self.check_lyc(ints);
@@ -693,9 +683,9 @@ impl Ppu {
                             self.ly = self.current_vblank_line + 1;
                         } else {
                             self.ly = 153;
-                            self.ly_for_comparison = if self.is_cgb { 153 } else { u16::MAX };
-                            self.check_lyc(ints);
+                            self.ly_for_comparison = if self.is_cgb { 152 } else { u16::MAX };
                         }
+                        self.check_lyc(ints);
                         if !self.is_cgb && self.current_vblank_line == 144 {
                             self.ly_for_comparison = 145;
                             self.check_lyc(ints);
@@ -851,17 +841,6 @@ impl Ppu {
 
     pub fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
         self.lyc = val;
-        if self.is_cgb {
-            if self.mode() == Mode::HBlank && self.cycles == 2 {
-                return;
-            }
-            if self.mode() == Mode::VBlank
-                && ((self.current_vblank_line == 152 && self.cycles == 2)
-                    || (self.current_vblank_line == 153 && self.cycles == 114))
-            {
-                return;
-            }
-        }
         self.check_lyc(ints);
     }
 
