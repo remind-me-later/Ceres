@@ -236,7 +236,10 @@ impl<A: AudioCallback> Gb<A> {
                 }
                 self.cpu.skip_isr_nops = false;
                 self.tick_m_cycle();
-                self.tick_m_cycle();
+
+                if _was_halted {
+                    self.tick_m_cycle();
+                }
 
                 let pc = self.cpu.pc;
                 let [lo, hi] = pc.to_le_bytes();
@@ -492,6 +495,11 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     pub(crate) fn write_cpu(&mut self, addr: u16, val: u8) {
+        // Conflict map removed during the scanline PPU revert — the
+        // cycle-accurate PPU fields (PpuPhase, OamScanStage,
+        // position_in_line, etc.) it referenced no longer exist.
+        // The simple path is correct enough for the scanline renderer;
+        // M-cycle splitting for STAT/LCDC/SCX is out of scope.
         self.flush_pending_cycles();
         self.write_mem(addr, val);
         self.cpu.set_pending_cycles(4);
