@@ -11,6 +11,7 @@ pub struct Sm83 {
     bc: u16,
     de: u16,
     has_ei_delay: bool,
+    just_halted_from_ei: bool,
     hl: u16,
     is_halt_bug_triggered: bool,
     is_halted: bool,
@@ -103,7 +104,11 @@ impl Sm83 {
 }
 
 impl<A: AudioCallback> Gb<A> {
-    fn exec(&mut self, op: u8) {
+    fn exec(&mut self, op: u8, was_ei_delay: bool) {
+        if op != 0x76 {
+            self.cpu.just_halted_from_ei = false;
+        }
+
         match op {
             0x00 | 0x5B | 0x6D | 0x7F | 0x49 | 0x52 | 0x64 => self.nop(),
             0x01 | 0x11 | 0x21 | 0x31 => self.ld_rr_d16(op),
@@ -143,7 +148,7 @@ impl<A: AudioCallback> Gb<A> {
             | 0x5E | 0x5F | 0x58 | 0x59 | 0x60 | 0x61 | 0x62 | 0x63 | 0x65 | 0x66 | 0x67 | 0x6A
             | 0x6B | 0x6C | 0x6E | 0x6F | 0x68 | 0x69 | 0x7A | 0x7B | 0x7C | 0x7D | 0x7E | 0x78
             | 0x79 | 0x77 | 0x70 | 0x73 | 0x72 | 0x71 | 0x74 | 0x75 => self.ld(op),
-            0x76 => self.halt(),
+            0x76 => self.halt(was_ei_delay),
             0x80..=0x87 => self.add_a_r(op),
             0x88..=0x8F => self.adc_a_r(op),
             0x90..=0x97 => self.sub_a_r(op),
@@ -213,6 +218,7 @@ impl<A: AudioCallback> Gb<A> {
         // it will clear IME again; if it's anything else, IME will stay true
         // through subsequent run_cpu calls.
         let effective_ime = self.ints.are_enabled();
+        let was_ei_delay = self.cpu.has_ei_delay;
         if self.cpu.has_ei_delay {
             self.cpu.has_ei_delay = false;
             self.ints.enable();
@@ -237,9 +243,10 @@ impl<A: AudioCallback> Gb<A> {
                 self.cpu.skip_isr_nops = false;
                 self.tick_m_cycle();
 
-                if _was_halted {
+                if _was_halted && (self.cgb_mode != CgbMode::Dmg || self.cpu.just_halted_from_ei) {
                     self.tick_m_cycle();
                 }
+                self.cpu.just_halted_from_ei = false;
 
                 let pc = self.cpu.pc;
                 let [lo, hi] = pc.to_le_bytes();
@@ -326,7 +333,7 @@ impl<A: AudioCallback> Gb<A> {
                 self.cpu.skip_isr_nops = true;
             }
 
-            self.exec(op);
+            self.exec(op, was_ei_delay);
         }
 
         self.flush_pending_cycles();
@@ -840,9 +847,10 @@ impl<A: AudioCallback> Gb<A> {
         self.cpu.has_ei_delay = true;
     }
 
-    const fn halt(&mut self) {
+    const fn halt(&mut self, was_ei_delay: bool) {
         if !self.ints.is_any_requested() {
             self.cpu.is_halted = true;
+            self.cpu.just_halted_from_ei = was_ei_delay;
         } else if self.ints.are_enabled() {
             self.cpu.is_halted = false;
         } else {
