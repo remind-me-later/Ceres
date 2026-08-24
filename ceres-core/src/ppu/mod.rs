@@ -858,7 +858,7 @@ impl Ppu {
         match self.mode() {
             Mode::OamScan => self.enter_mode(Mode::Drawing, ints, cgb_mode),
             Mode::Drawing => {
-                if self.fifo.lx < 160 {
+                if self.fifo.lx() < 160 {
                     self.draw_scanline(cgb_mode);
                 }
                 self.enter_mode(Mode::HBlank, ints, cgb_mode);

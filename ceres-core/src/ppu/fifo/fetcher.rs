@@ -3,7 +3,7 @@ use super::sprite::Sprite;
 use crate::ppu::vram::Vram;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum FetcherState {
+enum FetcherState {
     #[default]
     GetTile,
     GetTileDataLow,
@@ -12,21 +12,21 @@ pub enum FetcherState {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct TileFetcher {
-    pub state: FetcherState,
-    pub cycle: u8,
-    pub tile_id: u8,
-    pub tile_attr: u8,
-    pub tile_data_low: u8,
-    pub tile_data_high: u8,
-    pub map_x: u8,
-    pub map_y: u8,
-    pub is_window: bool,
-    pub sprite_fetch: Option<(Sprite, u8)>, // (Sprite, sub_cycle)
+pub(super) struct TileFetcher {
+    state: FetcherState,
+    cycle: u8,
+    tile_id: u8,
+    tile_attr: u8,
+    tile_data_low: u8,
+    tile_data_high: u8,
+    map_x: u8,
+    map_y: u8,
+    is_window: bool,
+    sprite_fetch: Option<(Sprite, u8)>, // (Sprite, sub_cycle)
 }
 
 impl TileFetcher {
-    pub const fn new() -> Self {
+    pub(super) const fn new() -> Self {
         Self {
             state: FetcherState::GetTile,
             cycle: 0,
@@ -41,7 +41,12 @@ impl TileFetcher {
         }
     }
 
-    pub fn reset(&mut self, map_x: u8, map_y: u8, is_window: bool) {
+    #[must_use]
+    pub(super) const fn is_fetching_sprite(&self) -> bool {
+        self.sprite_fetch.is_some()
+    }
+
+    pub(super) fn reset(&mut self, map_x: u8, map_y: u8, is_window: bool) {
         self.state = FetcherState::GetTile;
         self.cycle = 0;
         self.tile_id = 0;
@@ -56,7 +61,7 @@ impl TileFetcher {
 
     /// Advance fetcher by 1 T-cycle.
     /// Returns true if 8 pixels are ready to push to FIFO.
-    pub fn step_t_cycle(
+    pub(super) fn step_t_cycle(
         &mut self,
         vram: &Vram,
         lcdc: u8,
@@ -156,18 +161,13 @@ impl TileFetcher {
             let high_bit = (self.tile_data_high >> bit_idx) & 1;
             let color_id = (high_bit << 1) | low_bit;
 
-            pixels[i as usize] = Pixel {
-                color_id,
-                palette,
-                bg_priority,
-                sprite_priority: u8::MAX,
-            };
+            pixels[i as usize] = Pixel::new(color_id, palette, bg_priority, u8::MAX);
         }
 
         pixels
     }
 
-    pub fn fetch_sprite_data(
+    pub(super) fn fetch_sprite_data(
         &mut self,
         sprite: Sprite,
         vram: &Vram,
@@ -177,19 +177,19 @@ impl TileFetcher {
     ) -> [Pixel; 8] {
         let flip_y = sprite.y_flip();
         let flip_x = sprite.x_flip();
-        let mut row = (u16::from(ly) + 16).wrapping_sub(u16::from(sprite.y));
+        let mut row = (u16::from(ly) + 16).wrapping_sub(u16::from(sprite.y()));
         if flip_y {
             row = u16::from(sprite_height) - 1 - row;
         }
 
         let tile_id = if sprite_height == 16 {
             if row < 8 {
-                sprite.tile & 0xFE
+                sprite.tile() & 0xFE
             } else {
-                sprite.tile | 0x01
+                sprite.tile() | 0x01
             }
         } else {
-            sprite.tile
+            sprite.tile()
         };
 
         let row_in_tile = (row % 8) * 2;
@@ -209,12 +209,12 @@ impl TileFetcher {
         for i in 0..8 {
             let bit_idx = if flip_x { i } else { 7 - i };
             let color_id = ((high >> bit_idx) & 1) << 1 | ((low >> bit_idx) & 1);
-            pixels[i as usize] = Pixel {
+            pixels[i as usize] = Pixel::new(
                 color_id,
                 palette,
-                bg_priority: sprite.bg_priority(),
-                sprite_priority: if is_cgb { sprite.oam_index } else { sprite.x },
-            };
+                sprite.bg_priority(),
+                if is_cgb { sprite.oam_index() } else { sprite.x() },
+            );
         }
 
         self.sprite_fetch = Some((sprite, 0));

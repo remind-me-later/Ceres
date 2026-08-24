@@ -1,6 +1,6 @@
-pub mod fetcher;
-pub mod pixel;
-pub mod sprite;
+pub(super) mod fetcher;
+pub(in crate::ppu) mod pixel;
+pub(super) mod sprite;
 
 use self::fetcher::TileFetcher;
 use self::pixel::Pixel;
@@ -8,7 +8,7 @@ use self::sprite::SpriteBuffer;
 use crate::ppu::oam::Oam;
 use crate::ppu::vram::Vram;
 
-pub struct PixelFifo {
+pub(in crate::ppu) struct PixelFifo {
     bg_fifo: [Pixel; 16],
     bg_head: usize,
     bg_tail: usize,
@@ -19,13 +19,13 @@ pub struct PixelFifo {
     sprite_tail: usize,
     sprite_len: usize,
 
-    pub fetcher: TileFetcher,
-    pub sprites: SpriteBuffer,
-    pub scx_discard: u8,
-    pub lx: u8,
-    pub line_dots: u16,
-    pub window_active: bool,
-    pub window_line_counter: u8,
+    fetcher: TileFetcher,
+    sprites: SpriteBuffer,
+    scx_discard: u8,
+    lx: u8,
+    line_dots: u16,
+    window_active: bool,
+    window_line_counter: u8,
 }
 
 impl Default for PixelFifo {
@@ -35,7 +35,7 @@ impl Default for PixelFifo {
 }
 
 impl PixelFifo {
-    pub const fn new() -> Self {
+    pub(in crate::ppu) const fn new() -> Self {
         Self {
             bg_fifo: [Pixel::empty(); 16],
             bg_head: 0,
@@ -57,7 +57,12 @@ impl PixelFifo {
         }
     }
 
-    pub fn start_scanline(
+    #[must_use]
+    pub(in crate::ppu) const fn lx(&self) -> u8 {
+        self.lx
+    }
+
+    pub(in crate::ppu) fn start_scanline(
         &mut self,
         oam: &Oam,
         ly: u8,
@@ -82,7 +87,7 @@ impl PixelFifo {
         self.fetcher.reset(map_x, map_y, false);
     }
 
-    pub fn clear(&mut self) {
+    fn clear(&mut self) {
         self.bg_head = 0;
         self.bg_tail = 0;
         self.bg_len = 0;
@@ -94,12 +99,7 @@ impl PixelFifo {
         self.sprites.clear();
     }
 
-    #[must_use]
-    pub const fn bg_len(&self) -> usize {
-        self.bg_len
-    }
-
-    pub fn push_bg_pixels(&mut self, pixels: [Pixel; 8]) {
+    fn push_bg_pixels(&mut self, pixels: [Pixel; 8]) {
         for px in pixels {
             self.bg_fifo[self.bg_tail] = px;
             self.bg_tail = (self.bg_tail + 1) % 16;
@@ -107,7 +107,7 @@ impl PixelFifo {
         }
     }
 
-    pub fn overlay_sprite_pixels(&mut self, sprite_pixels: [Pixel; 8], is_cgb: bool) {
+    fn overlay_sprite_pixels(&mut self, sprite_pixels: [Pixel; 8], is_cgb: bool) {
         // Pad sprite FIFO up to 8 if needed
         while self.sprite_len < 8 {
             self.sprite_fifo[self.sprite_tail] = Pixel::empty();
@@ -119,17 +119,17 @@ impl PixelFifo {
             let slot = (self.sprite_head + i) % 8;
             let current = &mut self.sprite_fifo[slot];
 
-            if new_px.color_id != 0 {
-                if current.color_id == 0 {
+            if new_px.color_id() != 0 {
+                if current.color_id() == 0 {
                     *current = new_px;
-                } else if !is_cgb && new_px.sprite_priority < current.sprite_priority {
+                } else if !is_cgb && new_px.sprite_priority() < current.sprite_priority() {
                     *current = new_px;
                 }
             }
         }
     }
 
-    pub fn pop_bg_pixel(&mut self) -> Option<Pixel> {
+    fn pop_bg_pixel(&mut self) -> Option<Pixel> {
         if self.bg_len == 0 {
             return None;
         }
@@ -139,7 +139,7 @@ impl PixelFifo {
         Some(px)
     }
 
-    pub fn pop_sprite_pixel(&mut self) -> Option<Pixel> {
+    fn pop_sprite_pixel(&mut self) -> Option<Pixel> {
         if self.sprite_len == 0 {
             return None;
         }
@@ -151,7 +151,7 @@ impl PixelFifo {
 
     /// Advance Mode 3 drawing by 1 T-cycle (dot).
     /// Returns Some((lx, bg_pixel, sprite_pixel)) when a pixel is rendered to the screen.
-    pub fn step_dot(
+    pub(in crate::ppu) fn step_dot(
         &mut self,
         vram: &Vram,
         ly: u8,
@@ -173,7 +173,7 @@ impl PixelFifo {
 
         // Check sprite trigger at current lx
         let obj_enabled = lcdc & 0x02 != 0;
-        if obj_enabled && self.fetcher.sprite_fetch.is_none() {
+        if obj_enabled && !self.fetcher.is_fetching_sprite() {
             if let Some(sprite) = self.sprites.find_sprite_at(self.lx) {
                 let sprite_height = if lcdc & 0x04 != 0 { 16 } else { 8 };
                 let sprite_pixels = self.fetcher.fetch_sprite_data(
