@@ -394,8 +394,8 @@ impl Ppu {
     #[must_use]
     pub(super) fn resolve_fifo_pixel(
         &self,
-        bg_px: super::fifo::pixel::Pixel,
-        sprite_px: super::fifo::pixel::Pixel,
+        bg_px: super::fifo::Pixel,
+        sprite_px: super::fifo::Pixel,
         cgb_mode: CgbMode,
     ) -> (u8, u8, u8) {
         let master_bg_enable = self.lcdc & LCDC_BG_B != 0;

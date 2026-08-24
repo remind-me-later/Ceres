@@ -1,6 +1,6 @@
-pub mod fifo;
 mod color_palette;
 mod draw;
+mod fifo;
 mod oam;
 mod rgba_buf;
 mod vram;

@@ -1,14 +1,15 @@
 pub(super) mod fetcher;
-pub(in crate::ppu) mod pixel;
+pub(super) mod pixel;
 pub(super) mod sprite;
 
+pub(super) use self::pixel::Pixel;
+
 use self::fetcher::TileFetcher;
-use self::pixel::Pixel;
 use self::sprite::SpriteBuffer;
 use crate::ppu::oam::Oam;
 use crate::ppu::vram::Vram;
 
-pub(in crate::ppu) struct PixelFifo {
+pub(super) struct PixelFifo {
     bg_fifo: [Pixel; 16],
     bg_head: usize,
     bg_tail: usize,
@@ -35,7 +36,7 @@ impl Default for PixelFifo {
 }
 
 impl PixelFifo {
-    pub(in crate::ppu) const fn new() -> Self {
+    pub(super) const fn new() -> Self {
         Self {
             bg_fifo: [Pixel::empty(); 16],
             bg_head: 0,
@@ -58,11 +59,11 @@ impl PixelFifo {
     }
 
     #[must_use]
-    pub(in crate::ppu) const fn lx(&self) -> u8 {
+    pub(super) const fn lx(&self) -> u8 {
         self.lx
     }
 
-    pub(in crate::ppu) fn start_scanline(
+    pub(super) fn start_scanline(
         &mut self,
         oam: &Oam,
         ly: u8,
@@ -151,7 +152,7 @@ impl PixelFifo {
 
     /// Advance Mode 3 drawing by 1 T-cycle (dot).
     /// Returns Some((lx, bg_pixel, sprite_pixel)) when a pixel is rendered to the screen.
-    pub(in crate::ppu) fn step_dot(
+    pub(super) fn step_dot(
         &mut self,
         vram: &Vram,
         ly: u8,
