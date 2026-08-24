@@ -950,7 +950,7 @@ fn test_gpu_ly00_mode3_0() {
 
 #[test]
 fn test_gpu_ly143_144_145() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly143_144_145.gb", Model::DmgB);
+    let result = run_test(WILBERTPOL, "acceptance/gpu/ly143_144_145.gb", Model::Mgb);
     assert_eq!(result, TestResult::Passed, "gpu/ly143_144_145 test failed");
 }
 
@@ -1159,7 +1159,7 @@ fn test_gpu_vblank_if_timing() {
     let result = run_test(
         WILBERTPOL,
         "acceptance/gpu/vblank_if_timing.gb",
-        Model::DmgB,
+        Model::CgbE,
     );
     assert_eq!(
         result,
