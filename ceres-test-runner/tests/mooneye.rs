@@ -1183,7 +1183,7 @@ fn test_gpu_vblank_stat_intr_gs() {
     let result = run_test(
         WILBERTPOL,
         "acceptance/gpu/vblank_stat_intr-GS.gb",
-        Model::DmgB,
+        Model::Mgb,
     );
     assert_eq!(
         result,

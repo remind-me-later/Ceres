@@ -518,11 +518,6 @@ impl Ppu {
                 self.current_vblank_line = 144;
                 self.ly = 144;
                 self.ly_for_comparison = 144;
-                ints.request_vblank();
-                if !self.is_cgb && (self.stat & STAT_IF_OAM_B != 0) && !self.stat_line {
-                    ints.request_lcd();
-                    self.stat_line = true;
-                }
                 self.win_skipped = 0;
                 self.win_in_frame = false;
             }
