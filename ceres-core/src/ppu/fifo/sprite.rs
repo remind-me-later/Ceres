@@ -1,7 +1,7 @@
 use crate::ppu::oam::Oam;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(super) struct Sprite {
+pub struct Sprite {
     y: u8,
     x: u8,
     tile: u8,
@@ -11,7 +11,7 @@ pub(super) struct Sprite {
 
 impl Sprite {
     #[must_use]
-    pub(super) const fn new(y: u8, x: u8, tile: u8, flags: u8, oam_index: u8) -> Self {
+    pub const fn new(y: u8, x: u8, tile: u8, flags: u8, oam_index: u8) -> Self {
         Self {
             y,
             x,
@@ -22,78 +22,78 @@ impl Sprite {
     }
 
     #[must_use]
-    pub(super) const fn y(&self) -> u8 {
+    pub const fn y(&self) -> u8 {
         self.y
     }
 
     #[must_use]
-    pub(super) const fn x(&self) -> u8 {
+    pub const fn x(&self) -> u8 {
         self.x
     }
 
     #[must_use]
-    pub(super) const fn tile(&self) -> u8 {
+    pub const fn tile(&self) -> u8 {
         self.tile
     }
 
     #[must_use]
-    pub(super) const fn oam_index(&self) -> u8 {
+    pub const fn oam_index(&self) -> u8 {
         self.oam_index
     }
 
     #[must_use]
-    pub(super) const fn bg_priority(self) -> bool {
+    pub const fn bg_priority(self) -> bool {
         self.flags & 0x80 != 0
     }
 
     #[must_use]
-    pub(super) const fn y_flip(self) -> bool {
+    pub const fn y_flip(self) -> bool {
         self.flags & 0x40 != 0
     }
 
     #[must_use]
-    pub(super) const fn x_flip(self) -> bool {
+    pub const fn x_flip(self) -> bool {
         self.flags & 0x20 != 0
     }
 
     #[must_use]
-    pub(super) const fn dmg_palette(self) -> u8 {
+    pub const fn dmg_palette(self) -> u8 {
         (self.flags >> 4) & 1
     }
 
     #[must_use]
-    pub(super) const fn cgb_vram_bank(self) -> u8 {
+    pub const fn cgb_vram_bank(self) -> u8 {
         (self.flags >> 3) & 1
     }
 
     #[must_use]
-    pub(super) const fn cgb_palette(self) -> u8 {
+    pub const fn cgb_palette(self) -> u8 {
         self.flags & 0x07
     }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub(super) struct SpriteBuffer {
+pub struct SpriteBuffer {
     sprites: [Option<Sprite>; 10],
     count: usize,
 }
 
 impl SpriteBuffer {
-    pub(super) const fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             sprites: [None; 10],
             count: 0,
         }
     }
 
-    pub(super) fn clear(&mut self) {
+    pub fn clear(&mut self) {
         self.sprites = [None; 10];
         self.count = 0;
     }
 
     /// Scan OAM for scanline `ly` with sprite height (8 or 16).
     /// Extracts up to 10 matching sprites.
-    pub(super) fn scan_line(&mut self, oam: &Oam, ly: u8, sprite_height: u8, is_cgb: bool, opri: bool) {
+    pub fn scan_line(&mut self, oam: &Oam, ly: u8, sprite_height: u8, is_cgb: bool, opri: bool) {
         self.clear();
         let bytes = oam.bytes();
 
@@ -128,7 +128,7 @@ impl SpriteBuffer {
 
     /// Check if any sprite in buffer starts at screen X coordinate `lx`
     #[must_use]
-    pub(super) fn find_sprite_at(&self, lx: u8) -> Option<Sprite> {
+    pub fn find_sprite_at(&self, lx: u8) -> Option<Sprite> {
         let target_x = lx.wrapping_add(8);
         for s in self.sprites[..self.count].iter().flatten() {
             if s.x() == target_x {

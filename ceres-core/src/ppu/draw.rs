@@ -392,7 +392,7 @@ impl Ppu {
     }
 
     #[must_use]
-    pub(super) fn resolve_fifo_pixel(
+    pub fn resolve_fifo_pixel(
         &self,
         bg_px: super::fifo::Pixel,
         sprite_px: super::fifo::Pixel,

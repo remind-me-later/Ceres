@@ -1,5 +1,5 @@
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct Pixel {
+pub struct Pixel {
     /// 2-bit color index (0..=3)
     color_id: u8,
     /// Palette index (0..=7 for CGB, or 0/1 for DMG OBP0/OBP1, 0 for BGP)
@@ -12,7 +12,7 @@ pub(crate) struct Pixel {
 
 impl Pixel {
     #[must_use]
-    pub(crate) const fn new(
+    pub const fn new(
         color_id: u8,
         palette: u8,
         bg_priority: bool,
@@ -27,7 +27,7 @@ impl Pixel {
     }
 
     #[must_use]
-    pub(crate) const fn empty() -> Self {
+    pub const fn empty() -> Self {
         Self {
             color_id: 0,
             palette: 0,
@@ -37,22 +37,22 @@ impl Pixel {
     }
 
     #[must_use]
-    pub(crate) const fn color_id(&self) -> u8 {
+    pub const fn color_id(&self) -> u8 {
         self.color_id
     }
 
     #[must_use]
-    pub(crate) const fn palette(&self) -> u8 {
+    pub const fn palette(&self) -> u8 {
         self.palette
     }
 
     #[must_use]
-    pub(crate) const fn bg_priority(&self) -> bool {
+    pub const fn bg_priority(&self) -> bool {
         self.bg_priority
     }
 
     #[must_use]
-    pub(crate) const fn sprite_priority(&self) -> u8 {
+    pub const fn sprite_priority(&self) -> u8 {
         self.sprite_priority
     }
 }

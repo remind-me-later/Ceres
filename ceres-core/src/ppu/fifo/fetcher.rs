@@ -12,7 +12,7 @@ enum FetcherState {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub(super) struct TileFetcher {
+pub struct TileFetcher {
     state: FetcherState,
     cycle: u8,
     tile_id: u8,
@@ -26,7 +26,7 @@ pub(super) struct TileFetcher {
 }
 
 impl TileFetcher {
-    pub(super) const fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             state: FetcherState::GetTile,
             cycle: 0,
@@ -42,11 +42,11 @@ impl TileFetcher {
     }
 
     #[must_use]
-    pub(super) const fn is_fetching_sprite(&self) -> bool {
+    pub const fn is_fetching_sprite(&self) -> bool {
         self.sprite_fetch.is_some()
     }
 
-    pub(super) fn reset(&mut self, map_x: u8, map_y: u8, is_window: bool) {
+    pub fn reset(&mut self, map_x: u8, map_y: u8, is_window: bool) {
         self.state = FetcherState::GetTile;
         self.cycle = 0;
         self.tile_id = 0;
@@ -61,7 +61,7 @@ impl TileFetcher {
 
     /// Advance fetcher by 1 T-cycle.
     /// Returns true if 8 pixels are ready to push to FIFO.
-    pub(super) fn step_t_cycle(
+    pub fn step_t_cycle(
         &mut self,
         vram: &Vram,
         lcdc: u8,
@@ -167,7 +167,7 @@ impl TileFetcher {
         pixels
     }
 
-    pub(super) fn fetch_sprite_data(
+    pub fn fetch_sprite_data(
         &mut self,
         sprite: Sprite,
         vram: &Vram,
