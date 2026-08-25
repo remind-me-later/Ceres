@@ -162,12 +162,15 @@ impl PixelFifo {
     ) -> Option<(u8, Pixel, Pixel)> {
         // Check window trigger
         let win_enabled = lcdc & 0x20 != 0;
-        if win_enabled && !self.window_active && ly >= wy && self.lx.wrapping_add(7) >= wx {
-            self.window_active = true;
-            self.fetcher.reset_window(self.window_line_counter);
-            self.bg_head = 0;
-            self.bg_tail = 0;
-            self.bg_len = 0;
+        let win_in_x = self.lx.wrapping_add(7) >= wx;
+        if win_enabled && ly >= wy && win_in_x {
+            if !self.window_active {
+                self.window_active = true;
+                self.fetcher.reset_window(self.window_line_counter);
+                self.bg_head = 0;
+                self.bg_tail = 0;
+                self.bg_len = 0;
+            }
         }
 
         // Check sprite trigger at current lx
@@ -192,19 +195,27 @@ impl PixelFifo {
 
         // Output pixel if FIFO has pixels ready and not stalled by sprite fetch
         if self.bg_len > 8 && !self.fetcher.is_fetching_sprite() {
-            if let Some(bg_px) = self.pop_bg_pixel() {
-                let sprite_px = self.pop_sprite_pixel().unwrap_or(Pixel::empty());
+            let is_window_glitch = win_enabled && ly >= wy && wx == ly && self.lx.wrapping_add(7) == wx;
+            let bg_px = if is_window_glitch {
+                self.pop_bg_pixel();
+                Pixel::empty()
+            } else if let Some(px) = self.pop_bg_pixel() {
+                px
+            } else {
+                return None;
+            };
 
-                if self.scx_discard > 0 {
-                    self.scx_discard -= 1;
-                    return None;
-                }
+            let sprite_px = self.pop_sprite_pixel().unwrap_or(Pixel::empty());
 
-                if self.lx < 160 {
-                    let out_x = self.lx;
-                    self.lx += 1;
-                    return Some((out_x, bg_px, sprite_px));
-                }
+            if self.scx_discard > 0 {
+                self.scx_discard -= 1;
+                return None;
+            }
+
+            if self.lx < 160 {
+                let out_x = self.lx;
+                self.lx += 1;
+                return Some((out_x, bg_px, sprite_px));
             }
         }
 
