@@ -63,25 +63,30 @@ impl PixelFifo {
         self.lx
     }
 
-    pub fn start_scanline(
+    pub fn set_scx(&mut self, scx: u8) {
+        if self.line_dots < 6 {
+            self.scx_discard = scx & 7;
+            self.fetcher.set_bg_tile_x(scx);
+        }
+    }
+
+    pub fn scan_sprites(
         &mut self,
         oam: &Oam,
         ly: u8,
-        scx: u8,
-        _scy: u8,
-        lcdc: u8,
+        sprite_height: u8,
         is_cgb: bool,
         opri: bool,
     ) {
         self.clear();
+        self.sprites.scan_line(oam, ly, sprite_height, is_cgb, opri);
+    }
+
+    pub fn start_drawing(&mut self, scx: u8) {
         self.lx = 0;
         self.line_dots = 0;
         self.scx_discard = scx & 7;
-
-        let sprite_height = if lcdc & 0x04 != 0 { 16 } else { 8 };
-        self.sprites.scan_line(oam, ly, sprite_height, is_cgb, opri);
-
-        self.fetcher.reset_bg();
+        self.fetcher.reset_bg(scx);
     }
 
     fn clear(&mut self) {
@@ -160,6 +165,8 @@ impl PixelFifo {
         lcdc: u8,
         is_cgb: bool,
     ) -> Option<(u8, Pixel, Pixel)> {
+        self.line_dots += 1;
+
         // Check window trigger
         let win_enabled = lcdc & 0x20 != 0;
         let win_in_x = self.lx.wrapping_add(7) >= wx;

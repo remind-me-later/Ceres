@@ -599,15 +599,17 @@ impl Ppu {
                 self.win_in_ly = false;
                 self.ly_for_comparison = u16::from(self.ly);
                 self.check_lyc(ints);
-                self.fifo.start_scanline(
+                let sprite_height = if self.lcdc & 0x04 != 0 { 16 } else { 8 };
+                self.fifo.scan_sprites(
                     &self.oam,
                     self.ly,
-                    self.scx,
-                    self.scy,
-                    self.lcdc,
+                    sprite_height,
                     cgb_mode == CgbMode::Cgb,
                     self.opri,
                 );
+            }
+            Mode::Drawing => {
+                self.fifo.start_drawing(self.scx);
             }
             Mode::VBlank => {
                 self.current_vblank_line = 144;
@@ -616,7 +618,7 @@ impl Ppu {
                 self.win_skipped = 0;
                 self.win_in_frame = false;
             }
-            Mode::Drawing | Mode::HBlank => (),
+            Mode::HBlank => (),
         }
 
         self.update_stat_line(ints);
@@ -1097,6 +1099,7 @@ impl Ppu {
             self.cycles += new_mode3 - old_mode3;
         }
         self.scx = val;
+        self.fifo.set_scx(val);
     }
 
     pub(crate) const fn set_stat(&mut self, val: u8) {

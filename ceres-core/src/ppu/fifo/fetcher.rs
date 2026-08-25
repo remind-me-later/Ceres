@@ -20,6 +20,7 @@ pub struct TileFetcher {
     tile_data_low: u8,
     tile_data_high: u8,
     row_in_tile: u16,
+    bg_tile_x: u8,
     window_tile_x: u8,
     window_line_counter: u8,
     is_window: bool,
@@ -36,6 +37,7 @@ impl TileFetcher {
             tile_data_low: 0,
             tile_data_high: 0,
             row_in_tile: 0,
+            bg_tile_x: 0,
             window_tile_x: 0,
             window_line_counter: 0,
             is_window: false,
@@ -53,7 +55,7 @@ impl TileFetcher {
         matches!(self.state, FetcherState::Push | FetcherState::GetTile) && self.cycle == 0
     }
 
-    pub fn reset_bg(&mut self) {
+    pub fn reset_bg(&mut self, scx: u8) {
         self.state = FetcherState::GetTile;
         self.cycle = 0;
         self.tile_id = 0;
@@ -61,10 +63,15 @@ impl TileFetcher {
         self.tile_data_low = 0;
         self.tile_data_high = 0;
         self.row_in_tile = 0;
+        self.bg_tile_x = (scx >> 3) & 0x1F;
         self.window_tile_x = 0;
         self.window_line_counter = 0;
         self.is_window = false;
         self.sprite_fetch = None;
+    }
+
+    pub fn set_bg_tile_x(&mut self, scx: u8) {
+        self.bg_tile_x = (scx >> 3) & 0x1F;
     }
 
     pub fn reset_window(&mut self, window_line_counter: u8) {
@@ -87,9 +94,9 @@ impl TileFetcher {
         &mut self,
         vram: &Vram,
         ly: u8,
-        scx: u8,
+        _scx: u8,
         scy: u8,
-        lx: u8,
+        _lx: u8,
         lcdc: u8,
         is_cgb: bool,
         bg_len: usize,
@@ -119,16 +126,7 @@ impl TileFetcher {
                     (map, col, row, r)
                 } else {
                     let map = if lcdc & 0x08 != 0 { 0x1C00 } else { 0x1800 };
-                    let col = if lx == 0 {
-                        if bg_len == 0 {
-                            (scx / 8) & 0x1F
-                        } else {
-                            ((scx / 8).wrapping_add(1)) & 0x1F
-                        }
-                    } else {
-                        let offset: u8 = if is_cgb { 7 } else { 8 };
-                        ((scx.wrapping_add(lx).wrapping_add(offset)) / 8) & 0x1F
-                    };
+                    let col = self.bg_tile_x & 0x1F;
                     let y = ly.wrapping_add(scy);
                     let row = (y / 8) & 0x1F;
                     let r = (y % 8) as u16;
@@ -177,7 +175,9 @@ impl TileFetcher {
                     // Decode 8 pixels
                     let pixels = self.decode_bg_pixels(is_cgb);
                     if self.is_window {
-                        self.window_tile_x = self.window_tile_x.wrapping_add(1);
+                        self.window_tile_x = (self.window_tile_x + 1) & 0x1F;
+                    } else {
+                        self.bg_tile_x = (self.bg_tile_x + 1) & 0x1F;
                     }
                     self.state = FetcherState::GetTile;
                     Some(pixels)
