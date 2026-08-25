@@ -502,11 +502,39 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     pub(crate) fn write_cpu(&mut self, addr: u16, val: u8) {
-        // Conflict map removed during the scanline PPU revert — the
-        // cycle-accurate PPU fields (PpuPhase, OamScanStage,
-        // position_in_line, etc.) it referenced no longer exist.
-        // The simple path is correct enough for the scanline renderer;
-        // M-cycle splitting for STAT/LCDC/SCX is out of scope.
+        if addr == 0xFF43 && self.cgb_mode == CgbMode::Dmg {
+            let pending = self.cpu.pending_cycles();
+            if pending >= 2 {
+                self.advance_dots((pending - 2) as i32);
+                self.write_mem(addr, val);
+                self.cpu.set_pending_cycles(6);
+                return;
+            }
+        }
+        if addr == 0xFF40 && self.cgb_mode != CgbMode::Dmg {
+            let old = self.read_mem(0xFF40);
+            if (old & 0x10 != 0) && (val & 0x10 == 0) {
+                self.flush_pending_cycles();
+                self.write_mem(addr, val);
+                self.ppu.set_tile_sel_glitch(true);
+                self.advance_dots(1);
+                self.ppu.set_tile_sel_glitch(false);
+                self.cpu.set_pending_cycles(3);
+                return;
+            }
+        }
+        if matches!(addr, 0xFF47..=0xFF49) && self.cgb_mode == CgbMode::Dmg {
+            let pending = self.cpu.pending_cycles();
+            if pending >= 2 {
+                self.advance_dots((pending - 2) as i32);
+                let old = self.read_mem(addr);
+                self.write_mem(addr, val | old);
+                self.advance_dots(1);
+                self.write_mem(addr, val);
+                self.cpu.set_pending_cycles(5);
+                return;
+            }
+        }
         self.flush_pending_cycles();
         self.write_mem(addr, val);
         self.cpu.set_pending_cycles(4);

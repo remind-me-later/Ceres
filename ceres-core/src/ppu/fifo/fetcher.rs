@@ -24,6 +24,7 @@ pub struct TileFetcher {
     window_line_counter: u8,
     is_window: bool,
     sprite_fetch: Option<(Sprite, u8)>, // (Sprite, sub_cycle)
+    pub tile_sel_glitch: bool,
 }
 
 impl TileFetcher {
@@ -40,6 +41,7 @@ impl TileFetcher {
             window_line_counter: 0,
             is_window: false,
             sprite_fetch: None,
+            tile_sel_glitch: false,
         }
     }
 
@@ -171,7 +173,11 @@ impl TileFetcher {
     }
 
     fn calculate_tile_data_addr(&self, lcdc: u8) -> u16 {
-        let is_signed = lcdc & 0x10 == 0;
+        let is_signed = if self.tile_sel_glitch {
+            self.tile_id & 0x80 != 0
+        } else {
+            lcdc & 0x10 == 0
+        };
         let flip_y = self.tile_attr & 0x40 != 0;
         let mut row_in_tile = self.row_in_tile;
         if flip_y {
