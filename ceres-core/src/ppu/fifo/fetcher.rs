@@ -48,6 +48,11 @@ impl TileFetcher {
         self.sprite_fetch.is_some()
     }
 
+    #[must_use]
+    pub const fn is_ready_for_sprite_fetch(&self) -> bool {
+        matches!(self.state, FetcherState::Push | FetcherState::GetTile) && self.cycle == 0
+    }
+
     pub fn reset_bg(&mut self) {
         self.state = FetcherState::GetTile;
         self.cycle = 0;
@@ -114,8 +119,16 @@ impl TileFetcher {
                     (map, col, row, r)
                 } else {
                     let map = if lcdc & 0x08 != 0 { 0x1C00 } else { 0x1800 };
-                    let offset: u8 = if is_cgb { 7 } else { 8 };
-                    let col = ((scx.wrapping_add(lx).wrapping_add(offset)) / 8) & 0x1F;
+                    let col = if lx == 0 {
+                        if bg_len == 0 {
+                            (scx / 8) & 0x1F
+                        } else {
+                            ((scx / 8).wrapping_add(1)) & 0x1F
+                        }
+                    } else {
+                        let offset: u8 = if is_cgb { 7 } else { 8 };
+                        ((scx.wrapping_add(lx).wrapping_add(offset)) / 8) & 0x1F
+                    };
                     let y = ly.wrapping_add(scy);
                     let row = (y / 8) & 0x1F;
                     let r = (y % 8) as u16;
