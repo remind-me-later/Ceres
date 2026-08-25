@@ -2,6 +2,8 @@
 
 /// Timeout constants for test suites (in frames at ~59.73 Hz).
 pub mod timeouts {
+    pub const CGB_ACID2: u32 = 300;
+    pub const DMG_ACID2: u32 = 480;
     /// Mooneye Test Suite acceptance tests (120 seconds maximum runtime)
     pub const MOONEYE_ACCEPTANCE: u32 = 7160;
 }

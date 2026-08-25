@@ -510,7 +510,7 @@ impl Ppu {
                     self.scx,
                     self.scy,
                     self.lcdc,
-                    self.is_cgb,
+                    cgb_mode == CgbMode::Cgb,
                     self.opri,
                 );
             }
@@ -829,7 +829,7 @@ impl Ppu {
                         self.wy,
                         self.scx,
                         self.lcdc,
-                        self.is_cgb,
+                        cgb_mode == CgbMode::Cgb,
                     ) {
                         let rgb = self.resolve_fifo_pixel(bg_px, sprite_px, cgb_mode);
                         if self.ly < 144 {
