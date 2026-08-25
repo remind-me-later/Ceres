@@ -248,10 +248,6 @@ impl Ppu {
         &mut self.bcp
     }
 
-    pub fn set_tile_sel_glitch(&mut self, val: bool) {
-        self.fifo.set_tile_sel_glitch(val);
-    }
-
     /// Re-evaluate LY=LYC coincidence and fire LYC STAT IRQ on rising edge.
     /// Uses `ly_for_comparison` (separate from `ly`) so the LYC comparator
     /// can update a few T-cycles after `ly` increments, matching SameBoy.

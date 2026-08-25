@@ -84,10 +84,6 @@ impl PixelFifo {
         self.fetcher.reset_bg();
     }
 
-    pub fn set_tile_sel_glitch(&mut self, val: bool) {
-        self.fetcher.tile_sel_glitch = val;
-    }
-
     fn clear(&mut self) {
         self.bg_head = 0;
         self.bg_tail = 0;
