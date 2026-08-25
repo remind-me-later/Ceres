@@ -78,8 +78,20 @@ impl PixelFifo {
         is_cgb: bool,
         opri: bool,
     ) {
+        if self.window_active {
+            self.window_line_counter = self.window_line_counter.wrapping_add(1);
+        }
+        self.window_active = false;
         self.clear();
         self.sprites.scan_line(oam, ly, sprite_height, is_cgb, opri);
+    }
+
+    pub fn reset_window_frame(&mut self) {
+        if self.window_active {
+            self.window_line_counter = self.window_line_counter.wrapping_add(1);
+        }
+        self.window_active = false;
+        self.window_line_counter = 0;
     }
 
     pub fn start_drawing(&mut self, scx: u8) {
@@ -125,7 +137,7 @@ impl PixelFifo {
             if new_px.color_id() != 0 {
                 if current.color_id() == 0 {
                     *current = new_px;
-                } else if !is_cgb && new_px.sprite_priority() < current.sprite_priority() {
+                } else if is_cgb && new_px.sprite_priority() < current.sprite_priority() {
                     *current = new_px;
                 }
             }

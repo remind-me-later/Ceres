@@ -70,7 +70,6 @@ impl TileFetcher {
         self.row_in_tile = 0;
         self.bg_tile_x = (scx >> 3) & 0x1F;
         self.window_tile_x = 0;
-        self.window_line_counter = 0;
         self.is_window = false;
         self.sprite_fetch = None;
     }

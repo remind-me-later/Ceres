@@ -617,6 +617,7 @@ impl Ppu {
                 self.ly_for_comparison = 144;
                 self.win_skipped = 0;
                 self.win_in_frame = false;
+                self.fifo.reset_window_frame();
             }
             Mode::HBlank => (),
         }
@@ -956,8 +957,23 @@ impl Ppu {
         match self.mode() {
             Mode::OamScan => self.enter_mode(Mode::Drawing, ints, cgb_mode),
             Mode::Drawing => {
-                if self.fifo.lx() < 160 {
-                    self.draw_scanline(cgb_mode);
+                while self.fifo.lx() < 160 {
+                    if let Some((lx, bg_px, sprite_px)) = self.fifo.step_dot(
+                        &self.vram,
+                        self.ly,
+                        self.wx,
+                        self.wy,
+                        self.scx,
+                        self.scy,
+                        self.lcdc,
+                        cgb_mode == CgbMode::Cgb,
+                    ) {
+                        let rgb = self.resolve_fifo_pixel(bg_px, sprite_px, cgb_mode);
+                        if self.ly < 144 {
+                            let idx = u32::from(self.ly) * 160 + u32::from(lx);
+                            self.rgb_buf.set_px(idx, rgb);
+                        }
+                    }
                 }
                 self.enter_mode(Mode::HBlank, ints, cgb_mode);
             }
