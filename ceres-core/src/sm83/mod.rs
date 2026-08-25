@@ -538,10 +538,8 @@ impl<A: AudioCallback> Gb<A> {
             }
             ConflictType::StatDmg => {
                 self.flush_pending_cycles();
-                self.write_mem(addr, 0xFF);
-                self.advance_dots(1);
                 self.write_mem(addr, val);
-                self.cpu.set_pending_cycles(3);
+                self.cpu.set_pending_cycles(4);
             }
             ConflictType::StatCgb => {
                 let old = self.read_mem(addr);
@@ -595,18 +593,9 @@ impl<A: AudioCallback> Gb<A> {
                 }
             }
             ConflictType::DmgLcdc | ConflictType::SgbLcdc => {
-                if pending >= 2 {
-                    self.advance_dots(pending - 2);
-                    let old = self.read_mem(addr);
-                    self.write_mem(addr, old | (val & 0x01));
-                    self.advance_dots(1);
-                    self.write_mem(addr, val);
-                    self.cpu.set_pending_cycles(5);
-                } else {
-                    self.flush_pending_cycles();
-                    self.write_mem(addr, val);
-                    self.cpu.set_pending_cycles(4);
-                }
+                self.flush_pending_cycles();
+                self.write_mem(addr, val);
+                self.cpu.set_pending_cycles(4);
             }
             ConflictType::WxDmg => {
                 self.flush_pending_cycles();

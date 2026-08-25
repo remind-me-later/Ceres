@@ -22,7 +22,6 @@ pub enum ConflictType {
 
 pub const DMG_CONFLICT_MAP: [ConflictType; 128] = {
     let mut map = [ConflictType::ReadOld; 128];
-    map[0x0F] = ConflictType::WriteCpu;
     map[0x40] = ConflictType::DmgLcdc;
     map[0x41] = ConflictType::StatDmg;
     map[0x42] = ConflictType::ReadNew;
