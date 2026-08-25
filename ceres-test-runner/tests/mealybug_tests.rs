@@ -77,8 +77,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m2_win_en_toggle_cgb_c,
     "m2_win_en_toggle.gb",
-    Model::CgbE,
-    ignore
+    Model::CgbE
 );
 
 // m3_bgp_change.gb
