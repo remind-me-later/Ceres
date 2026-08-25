@@ -113,7 +113,8 @@ impl TileFetcher {
                     (map, col, row, r)
                 } else {
                     let map = if lcdc & 0x08 != 0 { 0x1C00 } else { 0x1800 };
-                    let col = ((scx.wrapping_add(lx).wrapping_add(7)) / 8) & 0x1F;
+                    let offset: u8 = if is_cgb { 7 } else { 8 };
+                    let col = ((scx.wrapping_add(lx).wrapping_add(offset)) / 8) & 0x1F;
                     let y = ly.wrapping_add(scy);
                     let row = (y / 8) & 0x1F;
                     let r = (y % 8) as u16;

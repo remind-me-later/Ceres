@@ -221,11 +221,21 @@ impl Default for Ppu {
 impl Ppu {
     #[must_use]
     pub fn new(model: Model) -> Self {
-        Self {
+        let mut ppu = Self {
             model,
             cycles: Mode::HBlank.m_cycles(0, model),
             ..Self::default()
+        };
+
+        if matches!(
+            model,
+            Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD | Model::CgbE
+        ) {
+            ppu.bcp.init_compat_palette();
+            ppu.ocp.init_compat_palette();
         }
+
+        ppu
     }
 
     #[must_use]
@@ -672,10 +682,6 @@ impl Ppu {
                         self.ly = 144;
                         self.ly_for_comparison = 143;
                         self.check_lyc(ints);
-                        if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
-                            ints.request_lcd();
-                            self.stat_line = true;
-                        }
                     } else if self.cycles == 1 {
                         self.ly_for_comparison = 144;
                         self.check_lyc(ints);

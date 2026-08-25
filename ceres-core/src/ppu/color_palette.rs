@@ -28,6 +28,30 @@ impl Default for ColorPalette {
 }
 
 impl ColorPalette {
+    pub fn init_compat_palette(&mut self) {
+        for pal in 0..8 {
+            let base = pal * 4 * 3;
+            // Color 0: White (31, 31, 31)
+            self.buffer[base] = 31;
+            self.buffer[base + 1] = 31;
+            self.buffer[base + 2] = 31;
+
+            // Color 1: Light Gray (21, 21, 21)
+            self.buffer[base + 3] = 21;
+            self.buffer[base + 4] = 21;
+            self.buffer[base + 5] = 21;
+
+            // Color 2: Dark Gray (10, 10, 10)
+            self.buffer[base + 6] = 10;
+            self.buffer[base + 7] = 10;
+            self.buffer[base + 8] = 10;
+
+            // Color 3: Black (0, 0, 0)
+            self.buffer[base + 9] = 0;
+            self.buffer[base + 10] = 0;
+            self.buffer[base + 11] = 0;
+        }
+    }
     #[must_use]
     pub const fn data(&self) -> u8 {
         let i = (self.index() as usize / 2) * 3;

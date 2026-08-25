@@ -399,17 +399,9 @@ impl Ppu {
         cgb_mode: CgbMode,
     ) -> (u8, u8, u8) {
         let master_bg_enable = self.lcdc & LCDC_BG_B != 0;
-        let show_sprite = if sprite_px.color_id() == 0 {
-            false
-        } else if !master_bg_enable {
-            cgb_mode != CgbMode::Dmg
-        } else if bg_px.color_id() == 0 {
-            true
-        } else if bg_px.bg_priority() || sprite_px.bg_priority() {
-            false
-        } else {
-            true
-        };
+        let show_sprite = sprite_px.color_id() != 0
+            && (!bg_px.bg_priority() || bg_px.color_id() == 0 || !master_bg_enable)
+            && (!sprite_px.bg_priority() || bg_px.color_id() == 0);
 
         if show_sprite {
             match cgb_mode {
@@ -425,8 +417,14 @@ impl Ppu {
                     self.ocp.rgb(sprite_px.palette(), sprite_px.color_id(), self.color_correction_mode)
                 }
             }
+        } else if !master_bg_enable && cgb_mode != CgbMode::Cgb {
+            match cgb_mode {
+                CgbMode::Dmg => Self::mono_rgb(0),
+                CgbMode::Compat => self.bcp.rgb(0, 0, self.color_correction_mode),
+                CgbMode::Cgb => unreachable!(),
+            }
         } else {
-            let bg_color = if !master_bg_enable && cgb_mode != CgbMode::Cgb { 0 } else { bg_px.color_id() };
+            let bg_color = bg_px.color_id();
             match cgb_mode {
                 CgbMode::Dmg => Self::mono_rgb(shade_index(self.bgp, bg_color)),
                 CgbMode::Compat => self.bcp.rgb(0, shade_index(self.bgp, bg_color), self.color_correction_mode),

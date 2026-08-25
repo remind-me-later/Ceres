@@ -194,8 +194,8 @@ impl PixelFifo {
             }
         }
 
-        // Output pixel if FIFO has pixels ready
-        if self.bg_len > 8 {
+        // Output pixel if FIFO has pixels ready and not stalled by sprite fetch
+        if self.bg_len > 8 && !self.fetcher.is_fetching_sprite() {
             if let Some(bg_px) = self.pop_bg_pixel() {
                 let sprite_px = self.pop_sprite_pixel().unwrap_or(Pixel::empty());
 
