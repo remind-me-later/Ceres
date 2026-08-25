@@ -1,0 +1,106 @@
+use crate::{CgbMode, Model};
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ConflictType {
+    #[default]
+    ReadOld,
+    ReadNew,
+    WriteCpu,
+    StatCgb,
+    StatCgbDouble,
+    StatDmg,
+    PaletteDmg,
+    PaletteCgb,
+    DmgLcdc,
+    SgbLcdc,
+    WxDmg,
+    LcdcCgb,
+    LcdcCgbDouble,
+    Nr10CgbDouble,
+    ScxDmgAndCgbDouble,
+}
+
+pub const DMG_CONFLICT_MAP: [ConflictType; 128] = {
+    let mut map = [ConflictType::ReadOld; 128];
+    map[0x0F] = ConflictType::WriteCpu;
+    map[0x40] = ConflictType::DmgLcdc;
+    map[0x41] = ConflictType::StatDmg;
+    map[0x42] = ConflictType::ReadNew;
+    map[0x43] = ConflictType::ScxDmgAndCgbDouble;
+    map[0x45] = ConflictType::ReadOld;
+    map[0x47] = ConflictType::PaletteDmg;
+    map[0x48] = ConflictType::PaletteDmg;
+    map[0x49] = ConflictType::PaletteDmg;
+    map[0x4A] = ConflictType::ReadOld;
+    map[0x4B] = ConflictType::WxDmg;
+    map
+};
+
+pub const SGB_CONFLICT_MAP: [ConflictType; 128] = {
+    let mut map = [ConflictType::ReadOld; 128];
+    map[0x0F] = ConflictType::WriteCpu;
+    map[0x40] = ConflictType::SgbLcdc;
+    map[0x41] = ConflictType::StatDmg;
+    map[0x42] = ConflictType::ReadNew;
+    map[0x43] = ConflictType::ScxDmgAndCgbDouble;
+    map[0x45] = ConflictType::ReadOld;
+    map[0x47] = ConflictType::ReadNew;
+    map[0x48] = ConflictType::ReadNew;
+    map[0x49] = ConflictType::ReadNew;
+    map[0x4A] = ConflictType::ReadOld;
+    map[0x4B] = ConflictType::WxDmg;
+    map
+};
+
+pub const CGB_CONFLICT_MAP: [ConflictType; 128] = {
+    let mut map = [ConflictType::ReadOld; 128];
+    map[0x0F] = ConflictType::WriteCpu;
+    map[0x40] = ConflictType::LcdcCgb;
+    map[0x41] = ConflictType::StatCgb;
+    map[0x43] = ConflictType::ReadOld;
+    map[0x45] = ConflictType::WriteCpu;
+    map[0x47] = ConflictType::PaletteCgb;
+    map[0x48] = ConflictType::PaletteCgb;
+    map[0x49] = ConflictType::PaletteCgb;
+    map[0x4A] = ConflictType::ReadOld;
+    map[0x4B] = ConflictType::WriteCpu;
+    map
+};
+
+pub const CGB_DOUBLE_CONFLICT_MAP: [ConflictType; 128] = {
+    let mut map = [ConflictType::ReadOld; 128];
+    map[0x0F] = ConflictType::WriteCpu;
+    map[0x10] = ConflictType::Nr10CgbDouble;
+    map[0x40] = ConflictType::LcdcCgbDouble;
+    map[0x41] = ConflictType::StatCgbDouble;
+    map[0x43] = ConflictType::ScxDmgAndCgbDouble;
+    map[0x45] = ConflictType::ReadOld;
+    map[0x4A] = ConflictType::ReadOld;
+    map[0x4B] = ConflictType::ReadOld;
+    map
+};
+
+#[must_use]
+pub const fn get_conflict(
+    model: Model,
+    cgb_mode: CgbMode,
+    double_speed: bool,
+    addr: u16,
+) -> ConflictType {
+    if (addr & 0xFF80) != 0xFF00 {
+        return ConflictType::ReadOld;
+    }
+
+    let offset = (addr & 0x7F) as usize;
+    if matches!(cgb_mode, CgbMode::Cgb) {
+        if double_speed {
+            CGB_DOUBLE_CONFLICT_MAP[offset]
+        } else {
+            CGB_CONFLICT_MAP[offset]
+        }
+    } else if matches!(model, Model::Sgb | Model::Sgb2) {
+        SGB_CONFLICT_MAP[offset]
+    } else {
+        DMG_CONFLICT_MAP[offset]
+    }
+}

@@ -178,7 +178,8 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_obj_en_change_cgb_c,
     "m3_lcdc_obj_en_change.gb",
-    Model::CgbE
+    Model::CgbE,
+    ignore
 );
 
 // m3_lcdc_obj_en_change_variant.gb

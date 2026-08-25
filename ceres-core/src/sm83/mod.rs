@@ -1,4 +1,7 @@
-use crate::{AudioCallback, CgbMode, Gb};
+pub mod conflict;
+
+use crate::{AudioCallback, CgbMode, Gb, Model};
+use conflict::ConflictType;
 
 const ZF: u16 = 0x80;
 const NF: u16 = 0x40;
@@ -502,9 +505,158 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     pub(crate) fn write_cpu(&mut self, addr: u16, val: u8) {
-        self.flush_pending_cycles();
-        self.write_mem(addr, val);
-        self.cpu.set_pending_cycles(4);
+        let conflict = conflict::get_conflict(
+            self.model,
+            self.cgb_mode,
+            self.key1.is_enabled(),
+            addr,
+        );
+
+        let pending = self.cpu.pending_cycles();
+
+        match conflict {
+            ConflictType::ReadOld => {
+                self.flush_pending_cycles();
+                self.write_mem(addr, val);
+                self.cpu.set_pending_cycles(4);
+            }
+            ConflictType::ReadNew => {
+                if pending >= 1 {
+                    self.advance_dots(pending - 1);
+                    self.write_mem(addr, val);
+                    self.cpu.set_pending_cycles(5);
+                } else {
+                    self.flush_pending_cycles();
+                    self.write_mem(addr, val);
+                    self.cpu.set_pending_cycles(4);
+                }
+            }
+            ConflictType::WriteCpu => {
+                self.advance_dots(pending + 1);
+                self.write_mem(addr, val);
+                self.cpu.set_pending_cycles(3);
+            }
+            ConflictType::StatDmg => {
+                self.flush_pending_cycles();
+                self.write_mem(addr, 0xFF);
+                self.advance_dots(1);
+                self.write_mem(addr, val);
+                self.cpu.set_pending_cycles(3);
+            }
+            ConflictType::StatCgb => {
+                let old = self.read_mem(addr);
+                self.flush_pending_cycles();
+                self.write_mem(addr, (old & 0x40) | (val & !0x40));
+                self.advance_dots(1);
+                self.write_mem(addr, val);
+                self.cpu.set_pending_cycles(3);
+            }
+            ConflictType::StatCgbDouble => {
+                let old = self.read_mem(addr);
+                self.flush_pending_cycles();
+                self.write_mem(addr, (val & !8) | (old & 8));
+                self.advance_dots(1);
+                self.write_mem(addr, val);
+                self.cpu.set_pending_cycles(3);
+            }
+            ConflictType::PaletteDmg => {
+                if pending >= 2 {
+                    self.advance_dots(pending - 2);
+                    let old = self.read_mem(addr);
+                    self.write_mem(addr, val | old);
+                    self.advance_dots(1);
+                    self.write_mem(addr, val);
+                    self.cpu.set_pending_cycles(5);
+                } else {
+                    self.flush_pending_cycles();
+                    self.write_mem(addr, val);
+                    self.cpu.set_pending_cycles(4);
+                }
+            }
+            ConflictType::PaletteCgb => {
+                if matches!(self.model, Model::CgbD | Model::CgbE | Model::Agb) {
+                    if pending >= 2 {
+                        self.advance_dots(pending - 2);
+                        self.write_mem(addr, val);
+                        self.cpu.set_pending_cycles(6);
+                    } else {
+                        self.flush_pending_cycles();
+                        self.write_mem(addr, val);
+                        self.cpu.set_pending_cycles(4);
+                    }
+                } else if pending >= 1 {
+                    self.advance_dots(pending - 1);
+                    self.write_mem(addr, val);
+                    self.cpu.set_pending_cycles(5);
+                } else {
+                    self.flush_pending_cycles();
+                    self.write_mem(addr, val);
+                    self.cpu.set_pending_cycles(4);
+                }
+            }
+            ConflictType::DmgLcdc | ConflictType::SgbLcdc => {
+                if pending >= 2 {
+                    self.advance_dots(pending - 2);
+                    let old = self.read_mem(addr);
+                    self.write_mem(addr, old | (val & 0x01));
+                    self.advance_dots(1);
+                    self.write_mem(addr, val);
+                    self.cpu.set_pending_cycles(5);
+                } else {
+                    self.flush_pending_cycles();
+                    self.write_mem(addr, val);
+                    self.cpu.set_pending_cycles(4);
+                }
+            }
+            ConflictType::WxDmg => {
+                self.flush_pending_cycles();
+                self.write_mem(addr, val);
+                self.advance_dots(1);
+                self.cpu.set_pending_cycles(3);
+            }
+            ConflictType::LcdcCgb => {
+                self.flush_pending_cycles();
+                self.write_mem(addr, val);
+                self.cpu.set_pending_cycles(4);
+            }
+            ConflictType::LcdcCgbDouble => {
+                if pending >= 2 {
+                    self.advance_dots(pending - 2);
+                    let old = self.read_mem(addr);
+                    self.write_mem(addr, (val & !0x81) | (old & 0x81));
+                    self.advance_dots(2);
+                    self.write_mem(addr, val);
+                    self.cpu.set_pending_cycles(4);
+                } else {
+                    self.flush_pending_cycles();
+                    self.write_mem(addr, val);
+                    self.cpu.set_pending_cycles(4);
+                }
+            }
+            ConflictType::ScxDmgAndCgbDouble => {
+                if pending >= 2 {
+                    self.advance_dots(pending - 2);
+                    self.write_mem(addr, val);
+                    self.cpu.set_pending_cycles(6);
+                } else {
+                    self.flush_pending_cycles();
+                    self.write_mem(addr, val);
+                    self.cpu.set_pending_cycles(4);
+                }
+            }
+            ConflictType::Nr10CgbDouble => {
+                if pending >= 1 {
+                    self.advance_dots(pending - 1);
+                    self.advance_dots(1);
+                    self.write_mem(addr, val);
+                    self.cpu.set_pending_cycles(4);
+                } else {
+                    self.flush_pending_cycles();
+                    self.write_mem(addr, val);
+                    self.cpu.set_pending_cycles(4);
+                }
+            }
+        }
     }
 }
 
