@@ -186,8 +186,11 @@ impl Ppu {
                             (self.obp1, 1)
                         };
 
-                        self.ocp
-                            .rgb(pal_idx, shade_index(palette, color), self.color_correction_mode)
+                        self.ocp.rgb(
+                            pal_idx,
+                            shade_index(palette, color),
+                            self.color_correction_mode,
+                        )
                     }
                     CgbMode::Cgb => {
                         let cgb_palette = obj.attr & SPR_CGB_PAL;
@@ -406,16 +409,30 @@ impl Ppu {
         if show_sprite {
             match cgb_mode {
                 CgbMode::Dmg => {
-                    let pal = if sprite_px.palette() == 0 { self.obp0 } else { self.obp1 };
+                    let pal = if sprite_px.palette() == 0 {
+                        self.obp0
+                    } else {
+                        self.obp1
+                    };
                     Self::mono_rgb(shade_index(pal, sprite_px.color_id()))
                 }
                 CgbMode::Compat => {
-                    let pal = if sprite_px.palette() == 0 { self.obp0 } else { self.obp1 };
-                    self.ocp.rgb(sprite_px.palette(), shade_index(pal, sprite_px.color_id()), self.color_correction_mode)
+                    let pal = if sprite_px.palette() == 0 {
+                        self.obp0
+                    } else {
+                        self.obp1
+                    };
+                    self.ocp.rgb(
+                        sprite_px.palette(),
+                        shade_index(pal, sprite_px.color_id()),
+                        self.color_correction_mode,
+                    )
                 }
-                CgbMode::Cgb => {
-                    self.ocp.rgb(sprite_px.palette(), sprite_px.color_id(), self.color_correction_mode)
-                }
+                CgbMode::Cgb => self.ocp.rgb(
+                    sprite_px.palette(),
+                    sprite_px.color_id(),
+                    self.color_correction_mode,
+                ),
             }
         } else if !master_bg_enable && cgb_mode != CgbMode::Cgb {
             match cgb_mode {
@@ -427,8 +444,14 @@ impl Ppu {
             let bg_color = bg_px.color_id();
             match cgb_mode {
                 CgbMode::Dmg => Self::mono_rgb(shade_index(self.bgp, bg_color)),
-                CgbMode::Compat => self.bcp.rgb(0, shade_index(self.bgp, bg_color), self.color_correction_mode),
-                CgbMode::Cgb => self.bcp.rgb(bg_px.palette(), bg_color, self.color_correction_mode),
+                CgbMode::Compat => self.bcp.rgb(
+                    0,
+                    shade_index(self.bgp, bg_color),
+                    self.color_correction_mode,
+                ),
+                CgbMode::Cgb => self
+                    .bcp
+                    .rgb(bg_px.palette(), bg_color, self.color_correction_mode),
             }
         }
     }

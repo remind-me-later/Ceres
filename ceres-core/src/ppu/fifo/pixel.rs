@@ -12,12 +12,7 @@ pub struct Pixel {
 
 impl Pixel {
     #[must_use]
-    pub const fn new(
-        color_id: u8,
-        palette: u8,
-        bg_priority: bool,
-        sprite_priority: u8,
-    ) -> Self {
+    pub const fn new(color_id: u8, palette: u8, bg_priority: bool, sprite_priority: u8) -> Self {
         Self {
             color_id,
             palette,

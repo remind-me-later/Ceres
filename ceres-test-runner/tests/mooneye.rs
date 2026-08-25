@@ -75,7 +75,9 @@ impl CompletionCheck for MooneyeCheck {
                     lines.push(trimmed.to_string());
                 }
             }
-            if !lines.is_empty() { break; }
+            if !lines.is_empty() {
+                break;
+            }
         }
         let text = lines.join(" | ");
 
@@ -777,7 +779,11 @@ fn test_gpu_intr_2_mode0_timing_sprites_nops() {
         "acceptance/gpu/intr_2_mode0_timing_sprites_nops.gb",
         Model::DmgB,
     );
-    assert_eq!(result, TestResult::Passed, "gpu/intr_2_mode0_timing_sprites_nops test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/intr_2_mode0_timing_sprites_nops test failed"
+    );
 }
 
 #[test]
@@ -911,7 +917,11 @@ fn test_gpu_lcdon_write_timing_gs() {
 #[test]
 fn test_gpu_ly00_01_mode0_2() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/ly00_01_mode0_2.gb", Model::DmgB);
-    assert_eq!(result, TestResult::Passed, "gpu/ly00_01_mode0_2 test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/ly00_01_mode0_2 test failed"
+    );
 }
 
 #[test]
@@ -927,7 +937,11 @@ fn test_gpu_ly00_mode0_2_gs() {
 #[test]
 fn test_gpu_ly00_mode1_0_gs() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/ly00_mode1_0-GS.gb", Model::DmgB);
-    assert_eq!(result, TestResult::Passed, "gpu/ly00_mode1_0-GS test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/ly00_mode1_0-GS test failed"
+    );
 }
 
 #[test]
@@ -975,7 +989,11 @@ fn test_gpu_ly143_144_mode0_1() {
         "acceptance/gpu/ly143_144_mode0_1.gb",
         Model::DmgB,
     );
-    assert_eq!(result, TestResult::Passed, "gpu/ly143_144_mode0_1 test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/ly143_144_mode0_1 test failed"
+    );
 }
 
 #[test]
@@ -985,7 +1003,11 @@ fn test_gpu_ly143_144_mode3_0() {
         "acceptance/gpu/ly143_144_mode3_0.gb",
         Model::DmgB,
     );
-    assert_eq!(result, TestResult::Passed, "gpu/ly143_144_mode3_0 test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/ly143_144_mode3_0 test failed"
+    );
 }
 
 #[test]
@@ -1113,7 +1135,11 @@ fn test_gpu_ly_new_frame_c() {
 #[test]
 fn test_gpu_ly_new_frame_gs() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/ly_new_frame-GS.gb", Model::DmgB);
-    assert_eq!(result, TestResult::Passed, "gpu/ly_new_frame-GS test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/ly_new_frame-GS test failed"
+    );
 }
 
 #[test]

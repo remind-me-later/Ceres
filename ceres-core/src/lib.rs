@@ -729,10 +729,6 @@ mod tests {
         fn audio_sample(&self, _: Sample, _: Sample) {}
     }
 
-
-
-
-
     /// Direct unit test for the TIMA state machine on DMG.
     ///
     /// Locks in the three independent timings that the gambatte + mooneye

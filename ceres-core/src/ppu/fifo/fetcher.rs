@@ -136,7 +136,11 @@ impl TileFetcher {
             }
             FetcherState::GetTileDataLow => {
                 let data_addr = self.calculate_tile_data_addr(lcdc);
-                let bank = if is_cgb && (self.tile_attr & 0x08 != 0) { 1 } else { 0 };
+                let bank = if is_cgb && (self.tile_attr & 0x08 != 0) {
+                    1
+                } else {
+                    0
+                };
                 self.tile_data_low = vram.vram_at_bank(data_addr, bank);
 
                 self.state = FetcherState::GetTileDataHigh;
@@ -144,7 +148,11 @@ impl TileFetcher {
             }
             FetcherState::GetTileDataHigh => {
                 let data_addr = self.calculate_tile_data_addr(lcdc) + 1;
-                let bank = if is_cgb && (self.tile_attr & 0x08 != 0) { 1 } else { 0 };
+                let bank = if is_cgb && (self.tile_attr & 0x08 != 0) {
+                    1
+                } else {
+                    0
+                };
                 self.tile_data_high = vram.vram_at_bank(data_addr, bank);
 
                 self.state = FetcherState::Push;
@@ -243,7 +251,11 @@ impl TileFetcher {
                 color_id,
                 palette,
                 sprite.bg_priority(),
-                if is_cgb { sprite.oam_index() } else { sprite.x() },
+                if is_cgb {
+                    sprite.oam_index()
+                } else {
+                    sprite.x()
+                },
             );
         }
 

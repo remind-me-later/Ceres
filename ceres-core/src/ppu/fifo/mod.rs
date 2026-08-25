@@ -176,20 +176,19 @@ impl PixelFifo {
         if obj_enabled && !self.fetcher.is_fetching_sprite() {
             if let Some(sprite) = self.sprites.find_sprite_at(self.lx) {
                 let sprite_height = if lcdc & 0x04 != 0 { 16 } else { 8 };
-                let sprite_pixels = self.fetcher.fetch_sprite_data(
-                    sprite,
-                    vram,
-                    ly,
-                    sprite_height,
-                    is_cgb,
-                );
+                let sprite_pixels =
+                    self.fetcher
+                        .fetch_sprite_data(sprite, vram, ly, sprite_height, is_cgb);
                 self.overlay_sprite_pixels(sprite_pixels, is_cgb);
             }
         }
 
         // Step Background Fetcher
         if self.bg_len <= 8 {
-            if let Some(pixels) = self.fetcher.step_t_cycle(vram, ly, scx, scy, self.lx, lcdc, is_cgb) {
+            if let Some(pixels) = self
+                .fetcher
+                .step_t_cycle(vram, ly, scx, scy, self.lx, lcdc, is_cgb)
+            {
                 self.push_bg_pixels(pixels);
             }
         }

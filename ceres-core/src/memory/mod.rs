@@ -182,14 +182,22 @@ impl<A: AudioCallback> Gb<A> {
             OPRI if self.bootrom.is_enabled() => self.ppu.read_opri(),
             SVBK if matches!(self.cgb_mode, CgbMode::Cgb) => self.wram.svbk().read(),
             PCM12 if self.is_cgb() => {
-                if matches!(self.model, Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC) || !self.apu.enabled() {
+                if matches!(
+                    self.model,
+                    Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC
+                ) || !self.apu.enabled()
+                {
                     0x00
                 } else {
                     self.apu.pcm12()
                 }
             }
             PCM34 if self.is_cgb() => {
-                if matches!(self.model, Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC) || !self.apu.enabled() {
+                if matches!(
+                    self.model,
+                    Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC
+                ) || !self.apu.enabled()
+                {
                     0x00
                 } else {
                     self.apu.pcm34()

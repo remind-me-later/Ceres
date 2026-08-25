@@ -1,4 +1,4 @@
-use crate::ppu::{Mode, Ppu, LCDC_ON_B};
+use crate::ppu::{LCDC_ON_B, Mode, Ppu};
 
 pub struct Oam {
     bytes: [u8; Self::SIZE as usize],

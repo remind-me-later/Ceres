@@ -266,8 +266,7 @@ impl Ppu {
                 Mode::HBlank => {
                     let cgb_hblank_delayed = self.is_cgb
                         && self.cycles
-                            >= (Mode::HBlank.m_cycles(self.scx, self.model)
-                                - self.sprite_penalty);
+                            >= (Mode::HBlank.m_cycles(self.scx, self.model) - self.sprite_penalty);
                     !self.lcdon_line0_mode0
                         && !cgb_hblank_delayed
                         && (self.stat & STAT_IF_HBLANK_B != 0)
@@ -380,7 +379,13 @@ impl Ppu {
                         total_t_cycles += if num_tiles == 0 { 6 } else { 3 };
                     } else if offset >= 8 - scx_fine {
                         total_t_cycles += if num_tiles == 0 {
-                            if unique_tiles >= 10 && scx_fine >= 4 && offset >= 6 { 5 } else if offset == 8 - scx_fine || offset < 7 { 6 } else { 5 }
+                            if unique_tiles >= 10 && scx_fine >= 4 && offset >= 6 {
+                                5
+                            } else if offset == 8 - scx_fine || offset < 7 {
+                                6
+                            } else {
+                                5
+                            }
                         } else if scx_fine > 1 && offset == 8 - scx_fine {
                             6
                         } else {
@@ -401,21 +406,71 @@ impl Ppu {
                         0 => {
                             if !prev_boundary {
                                 total_t_cycles += if num_tiles == 0 {
-                                    if unique_tiles >= 10 && scx_fine > 1 { 5 } else { 4 }
+                                    if unique_tiles >= 10 && scx_fine > 1 {
+                                        5
+                                    } else {
+                                        4
+                                    }
                                 } else if unique_tiles >= 10 {
-                                    if scx_fine <= 1 { 4 } else { (5 - scx_fine).max(0) }
+                                    if scx_fine <= 1 {
+                                        4
+                                    } else {
+                                        (5 - scx_fine).max(0)
+                                    }
                                 } else {
-                                    if scx_fine <= 1 { 4 } else { (6 - scx_fine).max(1) }
+                                    if scx_fine <= 1 {
+                                        4
+                                    } else {
+                                        (6 - scx_fine).max(1)
+                                    }
                                 };
                             }
                         }
-                        1 => total_t_cycles += if num_tiles == 0 { 4 } else if unique_tiles >= 10 { (4 - scx_fine).max(0) } else if scx_fine <= 1 || scx_fine >= 4 { 3 } else { (4 - scx_fine).max(0) },
-                        2 => total_t_cycles += if num_tiles == 0 { 3 } else if unique_tiles >= 10 { (3 - scx_fine).max(0) } else if scx_fine >= 4 { 3 } else if scx_fine <= 1 { 2 } else { (3 - scx_fine).max(0) },
-                        3 => total_t_cycles += if num_tiles == 0 { if scx_fine >= 4 && count >= 10 { 4 } else { 2 } } else if unique_tiles >= 10 { (2 - scx_fine).max(0) } else if scx_fine >= 4 { 2 } else if scx_fine <= 1 { 1 } else { (2 - scx_fine).max(0) },
+                        1 => {
+                            total_t_cycles += if num_tiles == 0 {
+                                4
+                            } else if unique_tiles >= 10 {
+                                (4 - scx_fine).max(0)
+                            } else if scx_fine <= 1 || scx_fine >= 4 {
+                                3
+                            } else {
+                                (4 - scx_fine).max(0)
+                            }
+                        }
+                        2 => {
+                            total_t_cycles += if num_tiles == 0 {
+                                3
+                            } else if unique_tiles >= 10 {
+                                (3 - scx_fine).max(0)
+                            } else if scx_fine >= 4 {
+                                3
+                            } else if scx_fine <= 1 {
+                                2
+                            } else {
+                                (3 - scx_fine).max(0)
+                            }
+                        }
+                        3 => {
+                            total_t_cycles += if num_tiles == 0 {
+                                if scx_fine >= 4 && count >= 10 { 4 } else { 2 }
+                            } else if unique_tiles >= 10 {
+                                (2 - scx_fine).max(0)
+                            } else if scx_fine >= 4 {
+                                2
+                            } else if scx_fine <= 1 {
+                                1
+                            } else {
+                                (2 - scx_fine).max(0)
+                            }
+                        }
                         _ => {
                             if offset >= 8 - scx_fine {
                                 total_t_cycles += if num_tiles == 0 {
-                                    if offset == 8 - scx_fine || offset < 7 { 6 } else { 5 }
+                                    if offset == 8 - scx_fine || offset < 7 {
+                                        6
+                                    } else {
+                                        5
+                                    }
                                 } else if unique_tiles >= 10 {
                                     let base_delay = match offset - (8 - scx_fine) {
                                         0 => 5,
@@ -423,11 +478,20 @@ impl Ppu {
                                         2 => 3,
                                         _ => 2,
                                     };
-                                    let tile_boost = if num_tiles <= 3 && (scx_fine >= 4 || (scx_fine > 1 && offset == 8 - scx_fine)) { 1 } else { 0 };
+                                    let tile_boost = if num_tiles <= 3
+                                        && (scx_fine >= 4
+                                            || (scx_fine > 1 && offset == 8 - scx_fine))
+                                    {
+                                        1
+                                    } else {
+                                        0
+                                    };
                                     base_delay + tile_boost
                                 } else if tile_initial_offset == 0 && scx_fine >= 4 {
                                     0
-                                } else if scx_fine > 1 && (offset == 8 - scx_fine || (scx_fine >= 4 && offset <= 5)) {
+                                } else if scx_fine > 1
+                                    && (offset == 8 - scx_fine || (scx_fine >= 4 && offset <= 5))
+                                {
                                     6
                                 } else {
                                     5
@@ -451,17 +515,26 @@ impl Ppu {
                         1 if scx_fine >= 4 => 4,
                         2 if scx_fine >= 4 => 5,
                         3..=4 if scx_fine == 2 => 4,
-                        _ => if offset == 8 - scx_fine {
-                            if scx_fine > 1 { 6 } else { 5 }
-                        } else {
-                            5
-                        },
+                        _ => {
+                            if offset == 8 - scx_fine {
+                                if scx_fine > 1 { 6 } else { 5 }
+                            } else {
+                                5
+                            }
+                        }
                     };
                     boundary_seen = true;
-                } else if boundary_seen && (offset == 8 - scx_fine || (scx_fine >= 4 && (offset <= 5 || offset == tile_initial_offset + 1))) {
+                } else if boundary_seen
+                    && (offset == 8 - scx_fine
+                        || (scx_fine >= 4 && (offset <= 5 || offset == tile_initial_offset + 1)))
+                {
                     if tile_initial_offset == 0 && num_tiles > 1 && scx_fine >= 4 {
                         total_t_cycles += 2;
-                    } else if scx_fine >= 3 && count >= 10 && !tile_repeated_boundary_applied && tile_initial_offset >= 8 - scx_fine - (if scx_fine >= 4 { 1 } else { 0 }) {
+                    } else if scx_fine >= 3
+                        && count >= 10
+                        && !tile_repeated_boundary_applied
+                        && tile_initial_offset >= 8 - scx_fine - (if scx_fine >= 4 { 1 } else { 0 })
+                    {
                         total_t_cycles += 2;
                         tile_repeated_boundary_applied = true;
                     }
@@ -469,10 +542,19 @@ impl Ppu {
             }
         }
 
-        let base_scroll_adjust = if !self.is_cgb && (self.scx & 7) >= 4 { 1 } else { 0 };
-        let all_in_same_tile = count > 0 && visible_sprites[..count].iter().all(|&x| (x / 8) == (visible_sprites[0] / 8));
+        let base_scroll_adjust = if !self.is_cgb && (self.scx & 7) >= 4 {
+            1
+        } else {
+            0
+        };
+        let all_in_same_tile = count > 0
+            && visible_sprites[..count]
+                .iter()
+                .all(|&x| (x / 8) == (visible_sprites[0] / 8));
         let all_in_tile_0 = visible_sprites[..count].iter().all(|&x| x < 8);
-        let all_at_zero = count > 0 && visible_sprites[0] == 0 && (all_in_tile_0 || visible_sprites[count - 1] == 0);
+        let all_at_zero = count > 0
+            && visible_sprites[0] == 0
+            && (all_in_tile_0 || visible_sprites[count - 1] == 0);
         let scx_adjust = if !self.is_cgb && all_at_zero && !boundary_seen && count % 2 == 0 {
             match scx_fine {
                 3 => 2,
@@ -482,7 +564,9 @@ impl Ppu {
         } else {
             0
         };
-        let use_plus_one = scx_fine == 0 || count <= 1 || (scx_fine >= 4 && (visible_sprites[0] == 0 || all_in_same_tile) && !boundary_seen);
+        let use_plus_one = scx_fine == 0
+            || count <= 1
+            || (scx_fine >= 4 && (visible_sprites[0] == 0 || all_in_same_tile) && !boundary_seen);
         if use_plus_one {
             (((total_t_cycles + scx_adjust + 1) / 4) - base_scroll_adjust).max(0)
         } else {
@@ -579,7 +663,10 @@ impl Ppu {
         if self.is_cgb {
             if self.current_vblank_line == 153 && self.cycles == 114 {
                 153
-            } else if (self.stat & STAT_MODE_B) == 1 && self.current_vblank_line == 144 && self.cycles == 2 {
+            } else if (self.stat & STAT_MODE_B) == 1
+                && self.current_vblank_line == 144
+                && self.cycles == 2
+            {
                 145
             } else if (self.stat & STAT_MODE_B) == 0 && self.cycles == 1 && self.ly < 143 {
                 self.ly + 1
@@ -649,7 +736,6 @@ impl Ppu {
             return;
         }
 
-
         // Mid-scanline comparator / glitch events:
         match self.mode() {
             Mode::OamScan => {
@@ -663,7 +749,9 @@ impl Ppu {
                 if self.is_cgb && self.cycles == base_hblank - 1 {
                     self.update_stat_line(ints);
                 }
-                if (self.ly == 143 || (self.ly == 144 && self.mode() == Mode::HBlank)) && self.ly_for_comparison != u16::MAX {
+                if (self.ly == 143 || (self.ly == 144 && self.mode() == Mode::HBlank))
+                    && self.ly_for_comparison != u16::MAX
+                {
                     if !self.is_cgb {
                         if self.cycles == 2 {
                             self.ly = 144;
@@ -1042,10 +1130,7 @@ impl Ppu {
                 && (val & STAT_IF_LYC_B != 0)
                 && (self.stat & STAT_LYC_B != 0);
 
-            if self.mode() == Mode::HBlank
-                || self.mode() == Mode::VBlank
-                || lyc_glitch
-            {
+            if self.mode() == Mode::HBlank || self.mode() == Mode::VBlank || lyc_glitch {
                 ints.request_lcd();
                 self.stat_line = true;
             }
