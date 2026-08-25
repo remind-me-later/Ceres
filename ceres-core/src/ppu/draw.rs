@@ -402,7 +402,9 @@ impl Ppu {
         cgb_mode: CgbMode,
     ) -> (u8, u8, u8) {
         let master_bg_enable = self.lcdc & LCDC_BG_B != 0;
-        let show_sprite = sprite_px.color_id() != 0
+        let master_obj_enable = self.lcdc & LCDC_OBJ_B != 0;
+        let show_sprite = master_obj_enable
+            && sprite_px.color_id() != 0
             && (!bg_px.bg_priority() || bg_px.color_id() == 0 || !master_bg_enable)
             && (!sprite_px.bg_priority() || bg_px.color_id() == 0);
 

@@ -79,9 +79,7 @@ impl PixelFifo {
         self.scx_discard = scx & 7;
 
         let sprite_height = if lcdc & 0x04 != 0 { 16 } else { 8 };
-        if lcdc & 0x02 != 0 {
-            self.sprites.scan_line(oam, ly, sprite_height, is_cgb, opri);
-        }
+        self.sprites.scan_line(oam, ly, sprite_height, is_cgb, opri);
 
         self.fetcher.reset_bg();
     }
@@ -106,7 +104,8 @@ impl PixelFifo {
         }
     }
 
-    fn overlay_sprite_pixels(&mut self, sprite_pixels: [Pixel; 8], is_cgb: bool) {
+    fn overlay_sprite_pixels(&mut self, sprite_pixels: [Pixel; 8], sprite_x: u8, is_cgb: bool) {
+        let cut = if sprite_x < 8 { (8 - sprite_x) as usize } else { 0 };
         // Pad sprite FIFO up to 8 if needed
         while self.sprite_len < 8 {
             self.sprite_fifo[self.sprite_tail] = Pixel::empty();
@@ -114,7 +113,7 @@ impl PixelFifo {
             self.sprite_len += 1;
         }
 
-        for (i, new_px) in sprite_pixels.into_iter().enumerate() {
+        for (i, new_px) in sprite_pixels.into_iter().skip(cut).enumerate() {
             let slot = (self.sprite_head + i) % 8;
             let current = &mut self.sprite_fifo[slot];
 
@@ -174,12 +173,12 @@ impl PixelFifo {
         // Check sprite trigger at current lx
         let obj_enabled = lcdc & 0x02 != 0;
         if obj_enabled && !self.fetcher.is_fetching_sprite() {
-            if let Some(sprite) = self.sprites.find_sprite_at(self.lx) {
+            if let Some(sprite) = self.sprites.take_sprite_at(self.lx) {
                 let sprite_height = if lcdc & 0x04 != 0 { 16 } else { 8 };
                 let sprite_pixels =
                     self.fetcher
                         .fetch_sprite_data(sprite, vram, ly, sprite_height, is_cgb);
-                self.overlay_sprite_pixels(sprite_pixels, is_cgb);
+                self.overlay_sprite_pixels(sprite_pixels, sprite.x(), is_cgb);
             }
         }
 

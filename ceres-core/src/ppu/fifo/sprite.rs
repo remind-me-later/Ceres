@@ -126,13 +126,15 @@ impl SpriteBuffer {
         }
     }
 
-    /// Check if any sprite in buffer starts at screen X coordinate `lx`
-    #[must_use]
-    pub fn find_sprite_at(&self, lx: u8) -> Option<Sprite> {
-        let target_x = lx.wrapping_add(8);
-        for s in self.sprites[..self.count].iter().flatten() {
-            if s.x() == target_x {
-                return Some(*s);
+    /// Find and consume a sprite in buffer that starts at screen X coordinate `lx`.
+    pub fn take_sprite_at(&mut self, lx: u8) -> Option<Sprite> {
+        for s in self.sprites[..self.count].iter_mut() {
+            if let Some(spr) = *s {
+                let target_lx = if spr.x() <= 8 { 0 } else { spr.x() - 8 };
+                if target_lx == lx {
+                    *s = None;
+                    return Some(spr);
+                }
             }
         }
         None
