@@ -34,6 +34,31 @@ fn test_cgb_acid2() {
 }
 
 #[test]
+fn test_cgb_acid_hell() {
+    let rom = match load_test_rom("cgb-acid-hell/cgb-acid-hell.gbc") {
+        Ok(rom) => rom,
+        Err(e) => panic!("Failed to load test ROM: {e}"),
+    };
+
+    let screenshot_path = test_roms_dir().join("cgb-acid-hell/cgb-acid-hell.png");
+    let config = TestConfig {
+        model: ceres_core::Model::CgbE,
+        timeout_frames: timeouts::CGB_ACID2,
+        ..TestConfig::default()
+    };
+
+    let check = Box::new(ScreenshotCheck::new(screenshot_path));
+
+    let mut runner = match TestRunner::new(rom, config, check) {
+        Ok(runner) => runner,
+        Err(e) => panic!("Failed to create test runner: {e}"),
+    };
+
+    let result = runner.run();
+    assert!(result.is_passed(), "CGB Acid Hell PPU test failed");
+}
+
+#[test]
 fn test_dmg_acid2_dmg() {
     let rom = match load_test_rom("dmg-acid2/dmg-acid2.gb") {
         Ok(rom) => rom,
