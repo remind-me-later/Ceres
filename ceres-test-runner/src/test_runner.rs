@@ -93,7 +93,22 @@ impl ScreenshotCheck {
             return Ok(false);
         }
 
-        Ok(expected_rgba.as_raw() == actual_rgba)
+        let matches = expected_rgba.as_raw() == actual_rgba;
+        if !matches {
+            let mut mismatch_count = 0;
+            for (idx, (e, a)) in expected_rgba.chunks(4).zip(actual_rgba.chunks(4)).enumerate() {
+                if e != a {
+                    mismatch_count += 1;
+                    if mismatch_count <= 5 {
+                        let x = idx % 160;
+                        let y = idx / 160;
+                        eprintln!("Mismatch #{mismatch_count} at ({x}, {y}): expected {:?}, got {:?}", e, a);
+                    }
+                }
+            }
+            eprintln!("Total mismatching pixels: {mismatch_count} / {}", 160 * 144);
+        }
+        Ok(matches)
     }
 }
 

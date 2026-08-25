@@ -175,7 +175,7 @@ impl PixelFifo {
         }
 
         // Check sprite trigger at current lx
-        let obj_enabled = lcdc & 0x02 != 0;
+        let obj_enabled = lcdc & 0x02 != 0 || is_cgb;
         if obj_enabled && !self.fetcher.is_fetching_sprite() {
             if let Some(sprite) = self.sprites.take_sprite_at(self.lx) {
                 let sprite_height = if lcdc & 0x04 != 0 { 16 } else { 8 };
@@ -187,13 +187,11 @@ impl PixelFifo {
         }
 
         // Step Background Fetcher
-        if self.bg_len <= 8 {
-            if let Some(pixels) = self
-                .fetcher
-                .step_t_cycle(vram, ly, scx, scy, self.lx, lcdc, is_cgb)
-            {
-                self.push_bg_pixels(pixels);
-            }
+        if let Some(pixels) = self
+            .fetcher
+            .step_t_cycle(vram, ly, scx, scy, self.lx, lcdc, is_cgb, self.bg_len)
+        {
+            self.push_bg_pixels(pixels);
         }
 
         // Output pixel if FIFO has pixels ready and not stalled by sprite fetch

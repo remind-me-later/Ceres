@@ -89,6 +89,7 @@ impl TileFetcher {
         lx: u8,
         lcdc: u8,
         is_cgb: bool,
+        bg_len: usize,
     ) -> Option<[Pixel; 8]> {
         // Handle sprite fetch stall if active
         if let Some((_sprite, cycle)) = &mut self.sprite_fetch {
@@ -161,13 +162,17 @@ impl TileFetcher {
                 None
             }
             FetcherState::Push => {
-                // Decode 8 pixels
-                let pixels = self.decode_bg_pixels(is_cgb);
-                if self.is_window {
-                    self.window_tile_x = self.window_tile_x.wrapping_add(1);
+                if bg_len <= 8 {
+                    // Decode 8 pixels
+                    let pixels = self.decode_bg_pixels(is_cgb);
+                    if self.is_window {
+                        self.window_tile_x = self.window_tile_x.wrapping_add(1);
+                    }
+                    self.state = FetcherState::GetTile;
+                    Some(pixels)
+                } else {
+                    None
                 }
-                self.state = FetcherState::GetTile;
-                Some(pixels)
             }
         }
     }
@@ -221,25 +226,25 @@ impl TileFetcher {
     ) -> [Pixel; 8] {
         let flip_y = sprite.y_flip();
         let flip_x = sprite.x_flip();
-        let mut row = (u16::from(ly) + 16).wrapping_sub(u16::from(sprite.y()));
+        let height_16 = sprite_height == 16;
+        let mut tile_y = (u16::from(ly) + 16).wrapping_sub(u16::from(sprite.y()))
+            & if height_16 { 0x0F } else { 7 };
         if flip_y {
-            row = u16::from(sprite_height) - 1 - row;
+            tile_y ^= if height_16 { 0x0F } else { 7 };
         }
 
-        let tile_id = if sprite_height == 16 {
-            if row < 8 {
-                sprite.tile() & 0xFE
-            } else {
-                sprite.tile() | 0x01
-            }
+        let tile_id = if height_16 {
+            sprite.tile() & 0xFE
         } else {
             sprite.tile()
         };
 
-        let row_in_tile = (row % 8) * 2;
-        let tile_addr = (u16::from(tile_id) * 16) + row_in_tile;
-        let bank = if is_cgb { sprite.cgb_vram_bank() } else { 0 };
-
+        let tile_addr = (u16::from(tile_id) * 16) + tile_y * 2;
+        let bank = if is_cgb {
+            sprite.cgb_vram_bank()
+        } else {
+            0
+        };
         let low = vram.vram_at_bank(tile_addr, bank);
         let high = vram.vram_at_bank(tile_addr + 1, bank);
 
