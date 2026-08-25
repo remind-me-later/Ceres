@@ -68,7 +68,7 @@ impl PixelFifo {
         oam: &Oam,
         ly: u8,
         scx: u8,
-        scy: u8,
+        _scy: u8,
         lcdc: u8,
         is_cgb: bool,
         opri: bool,
@@ -83,9 +83,7 @@ impl PixelFifo {
             self.sprites.scan_line(oam, ly, sprite_height, is_cgb, opri);
         }
 
-        let map_x = scx & !7;
-        let map_y = ly.wrapping_add(scy);
-        self.fetcher.reset(map_x, map_y, false);
+        self.fetcher.reset_bg();
     }
 
     fn clear(&mut self) {
@@ -158,7 +156,8 @@ impl PixelFifo {
         ly: u8,
         wx: u8,
         wy: u8,
-        _scx: u8,
+        scx: u8,
+        scy: u8,
         lcdc: u8,
         is_cgb: bool,
     ) -> Option<(u8, Pixel, Pixel)> {
@@ -166,7 +165,7 @@ impl PixelFifo {
         let win_enabled = lcdc & 0x20 != 0;
         if win_enabled && !self.window_active && ly >= wy && self.lx.wrapping_add(7) >= wx {
             self.window_active = true;
-            self.fetcher.reset(0, self.window_line_counter, true);
+            self.fetcher.reset_window(self.window_line_counter);
             self.bg_head = 0;
             self.bg_tail = 0;
             self.bg_len = 0;
@@ -190,7 +189,7 @@ impl PixelFifo {
 
         // Step Background Fetcher
         if self.bg_len <= 8 {
-            if let Some(pixels) = self.fetcher.step_t_cycle(vram, lcdc, is_cgb) {
+            if let Some(pixels) = self.fetcher.step_t_cycle(vram, ly, scx, scy, self.lx, lcdc, is_cgb) {
                 self.push_bg_pixels(pixels);
             }
         }

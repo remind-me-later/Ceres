@@ -19,8 +19,9 @@ pub struct TileFetcher {
     tile_attr: u8,
     tile_data_low: u8,
     tile_data_high: u8,
-    map_x: u8,
-    map_y: u8,
+    row_in_tile: u16,
+    window_tile_x: u8,
+    window_line_counter: u8,
     is_window: bool,
     sprite_fetch: Option<(Sprite, u8)>, // (Sprite, sub_cycle)
 }
@@ -34,8 +35,9 @@ impl TileFetcher {
             tile_attr: 0,
             tile_data_low: 0,
             tile_data_high: 0,
-            map_x: 0,
-            map_y: 0,
+            row_in_tile: 0,
+            window_tile_x: 0,
+            window_line_counter: 0,
             is_window: false,
             sprite_fetch: None,
         }
@@ -46,16 +48,31 @@ impl TileFetcher {
         self.sprite_fetch.is_some()
     }
 
-    pub fn reset(&mut self, map_x: u8, map_y: u8, is_window: bool) {
+    pub fn reset_bg(&mut self) {
         self.state = FetcherState::GetTile;
         self.cycle = 0;
         self.tile_id = 0;
         self.tile_attr = 0;
         self.tile_data_low = 0;
         self.tile_data_high = 0;
-        self.map_x = map_x;
-        self.map_y = map_y;
-        self.is_window = is_window;
+        self.row_in_tile = 0;
+        self.window_tile_x = 0;
+        self.window_line_counter = 0;
+        self.is_window = false;
+        self.sprite_fetch = None;
+    }
+
+    pub fn reset_window(&mut self, window_line_counter: u8) {
+        self.state = FetcherState::GetTile;
+        self.cycle = 0;
+        self.tile_id = 0;
+        self.tile_attr = 0;
+        self.tile_data_low = 0;
+        self.tile_data_high = 0;
+        self.row_in_tile = 0;
+        self.window_tile_x = 0;
+        self.window_line_counter = window_line_counter;
+        self.is_window = true;
         self.sprite_fetch = None;
     }
 
@@ -64,6 +81,10 @@ impl TileFetcher {
     pub fn step_t_cycle(
         &mut self,
         vram: &Vram,
+        ly: u8,
+        scx: u8,
+        scy: u8,
+        lx: u8,
         lcdc: u8,
         is_cgb: bool,
     ) -> Option<[Pixel; 8]> {
@@ -84,17 +105,23 @@ impl TileFetcher {
 
         match self.state {
             FetcherState::GetTile => {
-                let map_base: u16 = if self.is_window {
-                    if lcdc & 0x40 != 0 { 0x1C00 } else { 0x1800 }
-                } else if lcdc & 0x08 != 0 {
-                    0x1C00
+                let (map_base, tile_col, tile_row, row_in_tile) = if self.is_window {
+                    let map = if lcdc & 0x40 != 0 { 0x1C00 } else { 0x1800 };
+                    let col = self.window_tile_x & 0x1F;
+                    let row = (self.window_line_counter / 8) & 0x1F;
+                    let r = (self.window_line_counter % 8) as u16;
+                    (map, col, row, r)
                 } else {
-                    0x1800
+                    let map = if lcdc & 0x08 != 0 { 0x1C00 } else { 0x1800 };
+                    let col = ((scx.wrapping_add(lx).wrapping_add(7)) / 8) & 0x1F;
+                    let y = ly.wrapping_add(scy);
+                    let row = (y / 8) & 0x1F;
+                    let r = (y % 8) as u16;
+                    (map, col, row, r)
                 };
 
-                let tile_col = (self.map_x / 8) & 0x1F;
-                let tile_row = (self.map_y / 8) & 0x1F;
                 let map_addr = map_base + (u16::from(tile_row) * 32) + u16::from(tile_col);
+                self.row_in_tile = row_in_tile;
 
                 self.tile_id = vram.vram_at_bank(map_addr, 0);
                 self.tile_attr = if is_cgb {
@@ -125,7 +152,9 @@ impl TileFetcher {
             FetcherState::Push => {
                 // Decode 8 pixels
                 let pixels = self.decode_bg_pixels(is_cgb);
-                self.map_x = self.map_x.wrapping_add(8);
+                if self.is_window {
+                    self.window_tile_x = self.window_tile_x.wrapping_add(1);
+                }
                 self.state = FetcherState::GetTile;
                 Some(pixels)
             }
@@ -135,7 +164,7 @@ impl TileFetcher {
     fn calculate_tile_data_addr(&self, lcdc: u8) -> u16 {
         let is_signed = lcdc & 0x10 == 0;
         let flip_y = self.tile_attr & 0x40 != 0;
-        let mut row_in_tile = (self.map_y % 8) as u16;
+        let mut row_in_tile = self.row_in_tile;
         if flip_y {
             row_in_tile = 7 - row_in_tile;
         }

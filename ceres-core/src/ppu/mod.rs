@@ -227,6 +227,7 @@ impl Ppu {
             ..Self::default()
         }
     }
+
     #[must_use]
     pub const fn bcp(&self) -> &ColorPalette {
         &self.bcp
@@ -828,6 +829,7 @@ impl Ppu {
                         self.wx,
                         self.wy,
                         self.scx,
+                        self.scy,
                         self.lcdc,
                         cgb_mode == CgbMode::Cgb,
                     ) {
