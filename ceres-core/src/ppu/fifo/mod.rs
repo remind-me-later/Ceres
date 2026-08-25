@@ -202,7 +202,11 @@ impl PixelFifo {
 
         // Output pixel if FIFO has pixels ready and not stalled by sprite fetch
         if self.bg_len > 8 && !self.fetcher.is_fetching_sprite() {
-            let is_window_glitch = win_enabled && ly >= wy && wx == ly && self.lx.wrapping_add(7) == wx;
+            let is_window_glitch = win_enabled
+                && ly >= wy
+                && wx == ly
+                && self.lx.wrapping_add(7) == wx
+                && self.fetcher.is_get_tile();
             let bg_px = if is_window_glitch {
                 self.pop_bg_pixel();
                 Pixel::empty()

@@ -46,6 +46,11 @@ impl TileFetcher {
     }
 
     #[must_use]
+    pub const fn is_get_tile(&self) -> bool {
+        matches!(self.state, FetcherState::GetTile)
+    }
+
+    #[must_use]
     pub const fn is_fetching_sprite(&self) -> bool {
         self.sprite_fetch.is_some()
     }
