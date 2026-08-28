@@ -73,22 +73,10 @@ impl Mode {
         match self {
             Self::OamScan => OAM_M_CYCLES,
             Self::Drawing => {
-                let adjust = match model {
-                    Model::Cgb0
-                    | Model::CgbA
-                    | Model::CgbB
-                    | Model::CgbC
-                    | Model::CgbD
-                    | Model::CgbE
-                    | Model::Agb => match scroll_x & 0x7 {
-                        3..=6 => 1,
-                        7 => 2,
-                        _ => 0,
-                    },
-                    _ => match scroll_x & 0x7 {
-                        4..=7 => 1,
-                        _ => 0,
-                    },
+                let adjust = match scroll_x & 0x7 {
+                    3..=6 => 1,
+                    7 => 2,
+                    _ => 0,
                 };
                 let base = match model {
                     Model::Cgb0
@@ -103,23 +91,10 @@ impl Mode {
                 base + adjust
             }
             Self::HBlank => {
-                let adjust = match model {
-                    Model::Cgb0
-                    | Model::CgbA
-                    | Model::CgbB
-                    | Model::CgbC
-                    | Model::CgbD
-                    | Model::CgbE
-                    | Model::Agb => match scroll_x & 0x7 {
-                        3..=6 => 1,
-                        7 => 2,
-                        _ => 0,
-                    },
-                    _ => match scroll_x & 0x7 {
-                        1..=4 => 1,
-                        5..=7 => 2,
-                        _ => 0,
-                    },
+                let adjust = match scroll_x & 0x7 {
+                    3..=6 => 1,
+                    7 => 2,
+                    _ => 0,
                 };
                 let base = match model {
                     Model::Cgb0
@@ -578,10 +553,6 @@ impl Ppu {
                         } else {
                             self.ly_for_comparison = u16::from(self.ly);
                             self.check_lyc(ints);
-                            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
-                                ints.request_lcd();
-                                self.stat_line = true;
-                            }
                         }
                     }
                 }
@@ -690,14 +661,6 @@ impl Ppu {
                     let base3 = Mode::Drawing.m_cycles(self.scx, self.model) * DOTS_PER_M;
                     self.sprite_penalty = mode3_dots - base3;
                     self.cycles = 1;
-                }
-
-                if !self.is_cgb && self.cycles == DOTS_PER_M && (self.scx & 7) == 0 {
-                    // Mode 0 HBlank STAT IRQ fires 1 M-cycle BEFORE Mode 0 begins on DMG when SCX % 8 == 0
-                    if self.stat & STAT_IF_HBLANK_B != 0 && !self.stat_line {
-                        ints.request_lcd();
-                        self.stat_line = true;
-                    }
                 }
             }
         }
