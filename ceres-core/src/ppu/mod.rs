@@ -257,6 +257,7 @@ impl Ppu {
                         && (self.stat & STAT_IF_HBLANK_B != 0)
                 }
                 Mode::VBlank => self.stat & STAT_IF_VBLANK_B != 0,
+                Mode::OamScan => !self.is_cgb && (self.stat & STAT_IF_OAM_B != 0),
                 _ => false,
             },
         };
