@@ -98,9 +98,7 @@ impl TileFetcher {
         &mut self,
         vram: &Vram,
         ly: u8,
-        _scx: u8,
         scy: u8,
-        _lx: u8,
         lcdc: u8,
         is_cgb: bool,
         bg_len: usize,
@@ -171,8 +169,19 @@ impl TileFetcher {
                 };
                 self.tile_data_high = vram.vram_at_bank(data_addr, bank);
 
-                self.state = FetcherState::Push;
-                None
+                if bg_len <= 8 {
+                    let pixels = self.decode_bg_pixels(is_cgb);
+                    if self.is_window {
+                        self.window_tile_x = (self.window_tile_x + 1) & 0x1F;
+                    } else {
+                        self.bg_tile_x = (self.bg_tile_x + 1) & 0x1F;
+                    }
+                    self.state = FetcherState::GetTile;
+                    Some(pixels)
+                } else {
+                    self.state = FetcherState::Push;
+                    None
+                }
             }
             FetcherState::Push => {
                 if bg_len <= 8 {

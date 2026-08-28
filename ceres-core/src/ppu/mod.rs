@@ -15,6 +15,14 @@ use {self::color_palette::ColorPalette, crate::CgbMode, crate::Model, rgba_buf::
 pub const PX_WIDTH: u8 = 160;
 pub const PX_HEIGHT: u8 = 144;
 
+/// T-cycles (dots) per M-cycle.
+const DOTS_PER_M: i32 = 4;
+/// Maximum Mode 3 length in dots: a full line is 456 dots and Mode 2 takes
+/// 80, so a scanline can never spend more than this drawing. Used as a
+/// watchdog only — the real transition fires when the FIFO completes the
+/// scanline.
+const MODE3_MAX_DOTS: i32 = 456 - 20 * DOTS_PER_M;
+
 // LCDC bits
 const LCDC_BG_B: u8 = 0x1;
 const LCDC_OBJ_B: u8 = 0x2;
@@ -140,8 +148,9 @@ pub struct Ppu {
     /// DMG/MGB/SGB/SGB2 or CGB-in-compat-mode). Used to pick the per-model
     /// scroll-adjustment table.
     is_cgb: bool,
-    /// M-cycles remaining until the PPU transitions to the next mode
-    /// (or fires a mode-bound IRQ). Mirrors mooneye-gb's `cycles`.
+    /// Dots (T-cycles) remaining until the PPU transitions to the next
+    /// mode (or fires a mode-bound IRQ). In Mode 3 this is only a
+    /// watchdog: the FIFO decides when the line ends.
     cycles: i32,
     lcdc: u8,
     ly: u8,
@@ -184,7 +193,7 @@ impl Default for Ppu {
             bgp: 0,
             color_correction_mode: ColorCorrectionMode::default(),
             is_cgb: false,
-            cycles: Mode::HBlank.m_cycles(0, Model::default()),
+            cycles: Mode::HBlank.m_cycles(0, Model::default()) * DOTS_PER_M,
             lcdc: 0,
             ly: 0,
             ly_for_comparison: 0,
@@ -223,7 +232,7 @@ impl Ppu {
     pub fn new(model: Model) -> Self {
         let mut ppu = Self {
             model,
-            cycles: Mode::HBlank.m_cycles(0, model),
+            cycles: Mode::HBlank.m_cycles(0, model) * DOTS_PER_M,
             ..Self::default()
         };
 
@@ -266,7 +275,8 @@ impl Ppu {
                 Mode::HBlank => {
                     let cgb_hblank_delayed = self.is_cgb
                         && self.cycles
-                            >= (Mode::HBlank.m_cycles(self.scx, self.model) - self.sprite_penalty);
+                            >= (Mode::HBlank.m_cycles(self.scx, self.model) * DOTS_PER_M
+                                - self.sprite_penalty);
                     !self.lcdon_line0_mode0
                         && !cgb_hblank_delayed
                         && (self.stat & STAT_IF_HBLANK_B != 0)
@@ -297,297 +307,22 @@ impl Ppu {
         self.update_stat_line(ints);
     }
 
-    fn sprite_penalty_m_cycles(&self, cgb_mode: CgbMode) -> i32 {
-        if self.lcdc & LCDC_OBJ_B == 0 && cgb_mode == CgbMode::Dmg {
-            return 0;
-        }
-
-        let height: u8 = if self.lcdc & LCDC_OBJL_B == 0 { 8 } else { 16 };
-        let bytes = self.oam.bytes();
-        let mut visible_sprites: [u8; 10] = [0; 10];
-        let mut count = 0;
-
-        for i in 0..40 {
-            let offset = i * 4;
-            let y = bytes[offset];
-            let x = bytes[offset + 1];
-
-            let ly_plus_16 = u16::from(self.ly) + 16;
-            let y_u16 = u16::from(y);
-
-            if ly_plus_16 >= y_u16 && ly_plus_16 < y_u16 + u16::from(height) {
-                visible_sprites[count] = x;
-                count += 1;
-                if count == 10 {
-                    break;
-                }
-            }
-        }
-
-        if count == 0 {
-            return 0;
-        }
-
-        if matches!(cgb_mode, CgbMode::Dmg) || self.opri {
-            visible_sprites[..count].sort_unstable();
-        }
-
-        let scx_fine = (self.scx & 7) as i32;
-        let mut total_t_cycles = 0;
-        let mut last_tile_x = -1;
-        let mut unique_tiles = 0;
-        let mut prev_t = -1;
-        for &x in &visible_sprites[..count] {
-            if x < 168 {
-                let t = (x / 8) as i32;
-                if t != prev_t {
-                    unique_tiles += 1;
-                    prev_t = t;
-                }
-            }
-        }
-
-        let mut num_tiles = 0;
-        let mut boundary_seen = false;
-        let mut tile_initial_offset = -1;
-        let mut tile_repeated_boundary_applied = false;
-
-        for &x in &visible_sprites[..count] {
-            if x >= 168 {
-                continue;
-            }
-
-            total_t_cycles += 6;
-
-            let tile_x = (x / 8) as i32;
-            let offset = (x & 7) as i32;
-
-            if tile_x != last_tile_x {
-                let prev_boundary = boundary_seen;
-                boundary_seen = false;
-                tile_initial_offset = offset;
-                if scx_fine == 0 {
-                    match offset {
-                        0 => total_t_cycles += 4,
-                        1 => total_t_cycles += 3,
-                        2 => total_t_cycles += 2,
-                        3 => total_t_cycles += 1,
-                        _ => {}
-                    }
-                } else if x < 8 {
-                    if x == 0 {
-                        total_t_cycles += if num_tiles == 0 { 6 } else { 3 };
-                    } else if offset >= 8 - scx_fine {
-                        total_t_cycles += if num_tiles == 0 {
-                            if unique_tiles >= 10 && scx_fine >= 4 && offset >= 6 {
-                                5
-                            } else if offset == 8 - scx_fine || offset < 7 {
-                                6
-                            } else {
-                                5
-                            }
-                        } else if scx_fine > 1 && offset == 8 - scx_fine {
-                            6
-                        } else {
-                            5
-                        };
-                        boundary_seen = true;
-                    } else if offset == 1 || (scx_fine >= 4 && offset <= 3) {
-                        total_t_cycles += 4;
-                    } else if offset == 2 {
-                        total_t_cycles += if num_tiles == 0 { 3 } else { 2 };
-                    } else if offset == 3 {
-                        total_t_cycles += 2;
-                    } else {
-                        total_t_cycles += if scx_fine == 1 { 0 } else { 2 };
-                    }
-                } else {
-                    match offset {
-                        0 => {
-                            if !prev_boundary {
-                                total_t_cycles += if num_tiles == 0 {
-                                    if unique_tiles >= 10 && scx_fine > 1 {
-                                        5
-                                    } else {
-                                        4
-                                    }
-                                } else if unique_tiles >= 10 {
-                                    if scx_fine <= 1 {
-                                        4
-                                    } else {
-                                        (5 - scx_fine).max(0)
-                                    }
-                                } else {
-                                    if scx_fine <= 1 {
-                                        4
-                                    } else {
-                                        (6 - scx_fine).max(1)
-                                    }
-                                };
-                            }
-                        }
-                        1 => {
-                            total_t_cycles += if num_tiles == 0 {
-                                4
-                            } else if unique_tiles >= 10 {
-                                (4 - scx_fine).max(0)
-                            } else if scx_fine <= 1 || scx_fine >= 4 {
-                                3
-                            } else {
-                                (4 - scx_fine).max(0)
-                            }
-                        }
-                        2 => {
-                            total_t_cycles += if num_tiles == 0 {
-                                3
-                            } else if unique_tiles >= 10 {
-                                (3 - scx_fine).max(0)
-                            } else if scx_fine >= 4 {
-                                3
-                            } else if scx_fine <= 1 {
-                                2
-                            } else {
-                                (3 - scx_fine).max(0)
-                            }
-                        }
-                        3 => {
-                            total_t_cycles += if num_tiles == 0 {
-                                if scx_fine >= 4 && count >= 10 { 4 } else { 2 }
-                            } else if unique_tiles >= 10 {
-                                (2 - scx_fine).max(0)
-                            } else if scx_fine >= 4 {
-                                2
-                            } else if scx_fine <= 1 {
-                                1
-                            } else {
-                                (2 - scx_fine).max(0)
-                            }
-                        }
-                        _ => {
-                            if offset >= 8 - scx_fine {
-                                total_t_cycles += if num_tiles == 0 {
-                                    if offset == 8 - scx_fine || offset < 7 {
-                                        6
-                                    } else {
-                                        5
-                                    }
-                                } else if unique_tiles >= 10 {
-                                    let base_delay = match offset - (8 - scx_fine) {
-                                        0 => 5,
-                                        1 => 4,
-                                        2 => 3,
-                                        _ => 2,
-                                    };
-                                    let tile_boost = if num_tiles <= 3
-                                        && (scx_fine >= 4
-                                            || (scx_fine > 1 && offset == 8 - scx_fine))
-                                    {
-                                        1
-                                    } else {
-                                        0
-                                    };
-                                    base_delay + tile_boost
-                                } else if tile_initial_offset == 0 && scx_fine >= 4 {
-                                    0
-                                } else if scx_fine > 1
-                                    && (offset == 8 - scx_fine || (scx_fine >= 4 && offset <= 5))
-                                {
-                                    6
-                                } else {
-                                    5
-                                };
-                                boundary_seen = true;
-                            } else if num_tiles == 0 {
-                                total_t_cycles += if scx_fine == 1 { 0 } else { 2 };
-                            }
-                        }
-                    }
-                }
-                if scx_fine == 0 && num_tiles > 0 && offset < 5 {
-                    total_t_cycles += 1;
-                }
-                num_tiles += 1;
-                last_tile_x = tile_x;
-            } else if scx_fine > 0 {
-                if !boundary_seen && offset >= 8 - scx_fine {
-                    total_t_cycles += match tile_initial_offset {
-                        0 if num_tiles > 1 && scx_fine >= 4 => 2,
-                        1 if scx_fine >= 4 => 4,
-                        2 if scx_fine >= 4 => 5,
-                        3..=4 if scx_fine == 2 => 4,
-                        _ => {
-                            if offset == 8 - scx_fine {
-                                if scx_fine > 1 { 6 } else { 5 }
-                            } else {
-                                5
-                            }
-                        }
-                    };
-                    boundary_seen = true;
-                } else if boundary_seen
-                    && (offset == 8 - scx_fine
-                        || (scx_fine >= 4 && (offset <= 5 || offset == tile_initial_offset + 1)))
-                {
-                    if tile_initial_offset == 0 && num_tiles > 1 && scx_fine >= 4 {
-                        total_t_cycles += 2;
-                    } else if scx_fine >= 3
-                        && count >= 10
-                        && !tile_repeated_boundary_applied
-                        && tile_initial_offset >= 8 - scx_fine - (if scx_fine >= 4 { 1 } else { 0 })
-                    {
-                        total_t_cycles += 2;
-                        tile_repeated_boundary_applied = true;
-                    }
-                }
-            }
-        }
-
-        let base_scroll_adjust = if !self.is_cgb && (self.scx & 7) >= 4 {
-            1
-        } else {
-            0
-        };
-        let all_in_same_tile = count > 0
-            && visible_sprites[..count]
-                .iter()
-                .all(|&x| (x / 8) == (visible_sprites[0] / 8));
-        let all_in_tile_0 = visible_sprites[..count].iter().all(|&x| x < 8);
-        let all_at_zero = count > 0
-            && visible_sprites[0] == 0
-            && (all_in_tile_0 || visible_sprites[count - 1] == 0);
-        let scx_adjust = if !self.is_cgb && all_at_zero && !boundary_seen && count % 2 == 0 {
-            match scx_fine {
-                3 => 2,
-                4 => 3,
-                _ => 0,
-            }
-        } else {
-            0
-        };
-        let use_plus_one = scx_fine == 0
-            || count <= 1
-            || (scx_fine >= 4 && (visible_sprites[0] == 0 || all_in_same_tile) && !boundary_seen);
-        if use_plus_one {
-            (((total_t_cycles + scx_adjust + 1) / 4) - base_scroll_adjust).max(0)
-        } else {
-            (((total_t_cycles + scx_adjust) / 4) - base_scroll_adjust).max(0)
-        }
-    }
-
     /// Transition the PPU to a new mode, reset the per-mode cycle counter,
     /// and fire any mode-bound IRQs.
     fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts, cgb_mode: CgbMode) {
         self.is_cgb = matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat);
-        if mode == Mode::Drawing {
-            self.sprite_penalty = self.sprite_penalty_m_cycles(cgb_mode);
-        } else if mode != Mode::HBlank {
+        if mode != Mode::HBlank {
+            // Entering HBlank keeps the penalty measured when the FIFO
+            // finished the previous scanline (it sizes this HBlank).
             self.sprite_penalty = 0;
         }
 
-        let base_cycles = mode.m_cycles(self.scx, self.model);
+        let base_cycles = mode.m_cycles(self.scx, self.model) * DOTS_PER_M;
         self.cycles = match mode {
-            Mode::Drawing => base_cycles + self.sprite_penalty,
-            Mode::HBlank => (base_cycles - self.sprite_penalty).max(1),
+            // Mode 3's length is owned by the pixel FIFO; `cycles` only
+            // arms the watchdog against a stalled FIFO.
+            Mode::Drawing => MODE3_MAX_DOTS,
+            Mode::HBlank => (base_cycles - self.sprite_penalty).max(DOTS_PER_M),
             _ => base_cycles,
         };
         self.mode_for_interrupt = None;
@@ -600,13 +335,7 @@ impl Ppu {
                 self.ly_for_comparison = u16::from(self.ly);
                 self.check_lyc(ints);
                 let sprite_height = if self.lcdc & 0x04 != 0 { 16 } else { 8 };
-                self.fifo.scan_sprites(
-                    &self.oam,
-                    self.ly,
-                    sprite_height,
-                    cgb_mode == CgbMode::Cgb,
-                    self.opri,
-                );
+                self.fifo.scan_sprites(&self.oam, self.ly, sprite_height);
             }
             Mode::Drawing => {
                 self.fifo.start_drawing(self.scx);
@@ -664,14 +393,17 @@ impl Ppu {
     #[must_use]
     pub const fn read_ly(&self) -> u8 {
         if self.is_cgb {
-            if self.current_vblank_line == 153 && self.cycles == 114 {
+            if self.current_vblank_line == 153 && self.cycles == 114 * DOTS_PER_M {
                 153
             } else if (self.stat & STAT_MODE_B) == 1
                 && self.current_vblank_line == 144
-                && self.cycles == 2
+                && self.cycles == 2 * DOTS_PER_M
             {
                 145
-            } else if (self.stat & STAT_MODE_B) == 0 && self.cycles == 1 && self.ly < 143 {
+            } else if (self.stat & STAT_MODE_B) == 0
+                && self.cycles == DOTS_PER_M
+                && self.ly < 143
+            {
                 self.ly + 1
             } else {
                 self.ly
@@ -726,11 +458,34 @@ impl Ppu {
         self.wy
     }
 
-    /// Advance the PPU by one M-cycle (4 T-cycles). This matches
-    /// mooneye-gb's `emulate()`: each call consumes one M-cycle of
-    /// the current mode, fires any pending IRQs, and switches modes
-    /// when the per-mode cycle budget runs out.
-    pub fn tick_m_cycle(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
+    /// Step the pixel FIFO one dot and write the produced pixel (if any)
+    /// into the framebuffer.
+    fn step_fifo_dot(&mut self, cgb_mode: CgbMode) {
+        if let Some((lx, bg_px, sprite_px)) = self.fifo.step_dot(
+            &self.vram,
+            self.ly,
+            self.wx,
+            self.wy,
+            self.scy,
+            self.lcdc,
+            cgb_mode == CgbMode::Cgb,
+        ) {
+            let rgb = self.resolve_fifo_pixel(bg_px, sprite_px, cgb_mode);
+            if self.ly < 144 {
+                let idx = u32::from(self.ly) * u32::from(PX_WIDTH) + u32::from(lx);
+                self.rgb_buf.set_px(idx, rgb);
+            }
+        }
+    }
+
+    /// Advance the PPU by one T-cycle (dot). Mode 3's length is owned by
+    /// the pixel FIFO: the Drawing arm steps the FIFO one dot per call and
+    /// leaves for HBlank as soon as the scanline is complete, so mid-line
+    /// register writes land at exact dots and sprite/window stalls extend
+    /// the line naturally. All other modes use `cycles` as a dot countdown
+    /// (4 dots per M-cycle, so events previously calibrated in M-cycles
+    /// keep firing at the same absolute dots).
+    pub fn tick_t_cycle(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode) {
         // Cache whether we're running in CGB native mode so per-model
         // timing decisions can be made without threading CgbMode
         // through every internal call.
@@ -742,21 +497,22 @@ impl Ppu {
         // Mid-scanline comparator / glitch events:
         match self.mode() {
             Mode::OamScan => {
-                if self.cycles == 19 {
+                if self.cycles == DOTS_PER_M * 19 {
                     self.ly_for_comparison = u16::from(self.ly);
                     self.check_lyc(ints);
                 }
             }
             Mode::HBlank => {
-                let base_hblank = Mode::HBlank.m_cycles(self.scx, self.model) - self.sprite_penalty;
-                if self.is_cgb && self.cycles == base_hblank - 1 {
+                let base_hblank = Mode::HBlank.m_cycles(self.scx, self.model) * DOTS_PER_M
+                    - self.sprite_penalty;
+                if self.is_cgb && self.cycles == base_hblank - DOTS_PER_M {
                     self.update_stat_line(ints);
                 }
                 if (self.ly == 143 || (self.ly == 144 && self.mode() == Mode::HBlank))
                     && self.ly_for_comparison != u16::MAX
                 {
                     if !self.is_cgb {
-                        if self.cycles == 2 {
+                        if self.cycles == 2 * DOTS_PER_M {
                             self.ly = 144;
                             self.ly_for_comparison = 143;
                             self.check_lyc(ints);
@@ -764,21 +520,21 @@ impl Ppu {
                                 ints.request_lcd();
                                 self.stat_line = true;
                             }
-                        } else if self.cycles == 1 {
+                        } else if self.cycles == DOTS_PER_M {
                             self.ly_for_comparison = 144;
                             self.check_lyc(ints);
                             ints.request_vblank();
                         }
-                    } else if self.cycles == 2 {
+                    } else if self.cycles == 2 * DOTS_PER_M {
                         self.ly = 144;
                         self.ly_for_comparison = 143;
                         self.check_lyc(ints);
-                    } else if self.cycles == 1 {
+                    } else if self.cycles == DOTS_PER_M {
                         self.ly_for_comparison = 144;
                         self.check_lyc(ints);
                         ints.request_vblank();
                     }
-                } else if self.cycles == 2 && !self.lcdon_line0_mode0 {
+                } else if self.cycles == 2 * DOTS_PER_M && !self.lcdon_line0_mode0 {
                     if !self.is_cgb {
                         if self.ly < 143 {
                             self.ly += 1;
@@ -800,7 +556,7 @@ impl Ppu {
                             self.stat_line = true;
                         }
                     }
-                } else if self.cycles == 1 && !self.lcdon_line0_mode0 {
+                } else if self.cycles == DOTS_PER_M && !self.lcdon_line0_mode0 {
                     if self.ly <= 143 {
                         if self.is_cgb {
                             if self.lyc_latched == self.ly + 1 {
@@ -834,7 +590,7 @@ impl Ppu {
                 if self.current_vblank_line == 153 {
                     // Line 153 timing phases (SameBoy display.c:2217):
                     if self.is_cgb {
-                        if self.cycles == 114 {
+                        if self.cycles == 114 * DOTS_PER_M {
                             self.ly = 0;
                             self.lyc_latched = self.lyc;
                             self.ly_for_comparison = 153;
@@ -843,7 +599,7 @@ impl Ppu {
                             } else {
                                 self.stat &= !STAT_LYC_B;
                             }
-                        } else if self.cycles == 113 {
+                        } else if self.cycles == 113 * DOTS_PER_M {
                             self.ly = 0;
                             self.ly_for_comparison = 0;
                             if self.lyc_latched == 0 {
@@ -858,21 +614,21 @@ impl Ppu {
                                 self.stat &= !STAT_LYC_B;
                             }
                         }
-                    } else if self.cycles == 113 {
+                    } else if self.cycles == 113 * DOTS_PER_M {
                         self.ly = 0;
                         self.ly_for_comparison = u16::MAX;
                         self.check_lyc(ints);
-                    } else if self.cycles == 112 {
+                    } else if self.cycles == 112 * DOTS_PER_M {
                         self.ly = 0;
                         self.ly_for_comparison = 0;
                         self.check_lyc(ints);
                     }
                 } else if self.current_vblank_line >= 144 {
-                    let base_cycles = Mode::VBlank.m_cycles(self.scx, self.model);
-                    if self.cycles == base_cycles - 1 {
+                    let base_cycles = Mode::VBlank.m_cycles(self.scx, self.model) * DOTS_PER_M;
+                    if self.cycles == base_cycles - DOTS_PER_M {
                         self.ly_for_comparison = u16::from(self.ly);
                         self.check_lyc(ints);
-                    } else if self.cycles == 2 {
+                    } else if self.cycles == 2 * DOTS_PER_M {
                         if self.current_vblank_line < 152 {
                             self.ly = self.current_vblank_line + 1;
                             if !self.is_cgb {
@@ -894,7 +650,7 @@ impl Ppu {
                                 self.check_lyc(ints);
                             }
                         }
-                    } else if self.cycles == 1 {
+                    } else if self.cycles == DOTS_PER_M {
                         if self.current_vblank_line < 152 {
                             self.ly_for_comparison = u16::from(self.current_vblank_line + 1);
                             self.check_lyc(ints);
@@ -919,26 +675,24 @@ impl Ppu {
                 }
             }
             Mode::Drawing => {
-                for _ in 0..4 {
-                    if let Some((lx, bg_px, sprite_px)) = self.fifo.step_dot(
-                        &self.vram,
-                        self.ly,
-                        self.wx,
-                        self.wy,
-                        self.scx,
-                        self.scy,
-                        self.lcdc,
-                        cgb_mode == CgbMode::Cgb,
-                    ) {
-                        let rgb = self.resolve_fifo_pixel(bg_px, sprite_px, cgb_mode);
-                        if self.ly < 144 {
-                            let idx = u32::from(self.ly) * 160 + u32::from(lx);
-                            self.rgb_buf.set_px(idx, rgb);
-                        }
-                    }
+                if self.fifo.lx() < PX_WIDTH {
+                    self.step_fifo_dot(cgb_mode);
                 }
 
-                if !self.is_cgb && self.cycles == 1 && (self.scx & 7) == 0 {
+                if self.fifo.lx() >= PX_WIDTH {
+                    // The FIFO completed the scanline: Mode 3 ends at this
+                    // dot. Record the measured length (dots since mode-3
+                    // entry) as the sprite/window penalty relative to the
+                    // SCX-adjusted base, then let the mode-expiry block
+                    // below enter HBlank; HBlank absorbs the remainder so
+                    // the line still totals 456 dots.
+                    let mode3_dots = MODE3_MAX_DOTS - self.cycles + 1;
+                    let base3 = Mode::Drawing.m_cycles(self.scx, self.model) * DOTS_PER_M;
+                    self.sprite_penalty = mode3_dots - base3;
+                    self.cycles = 1;
+                }
+
+                if !self.is_cgb && self.cycles == DOTS_PER_M && (self.scx & 7) == 0 {
                     // Mode 0 HBlank STAT IRQ fires 1 M-cycle BEFORE Mode 0 begins on DMG when SCX % 8 == 0
                     if self.stat & STAT_IF_HBLANK_B != 0 && !self.stat_line {
                         ints.request_lcd();
@@ -957,23 +711,12 @@ impl Ppu {
         match self.mode() {
             Mode::OamScan => self.enter_mode(Mode::Drawing, ints, cgb_mode),
             Mode::Drawing => {
-                while self.fifo.lx() < 160 {
-                    if let Some((lx, bg_px, sprite_px)) = self.fifo.step_dot(
-                        &self.vram,
-                        self.ly,
-                        self.wx,
-                        self.wy,
-                        self.scx,
-                        self.scy,
-                        self.lcdc,
-                        cgb_mode == CgbMode::Cgb,
-                    ) {
-                        let rgb = self.resolve_fifo_pixel(bg_px, sprite_px, cgb_mode);
-                        if self.ly < 144 {
-                            let idx = u32::from(self.ly) * 160 + u32::from(lx);
-                            self.rgb_buf.set_px(idx, rgb);
-                        }
-                    }
+                // Watchdog: the FIFO should have completed the line by now
+                // (it never legitimately needs all 376 dots). Finish it so
+                // every scanline still reaches HBlank even if a PPU bug
+                // stalls the FIFO.
+                while self.fifo.lx() < PX_WIDTH {
+                    self.step_fifo_dot(cgb_mode);
                 }
                 self.enter_mode(Mode::HBlank, ints, cgb_mode);
             }
@@ -986,7 +729,7 @@ impl Ppu {
                     self.enter_mode(Mode::OamScan, ints, cgb_mode);
                     self.ly_for_comparison = 0;
                     self.check_lyc(ints);
-                } else if self.ly >= 144 {
+                } else if (self.is_cgb && self.ly == 143) || self.ly >= 144 {
                     self.enter_mode(Mode::VBlank, ints, cgb_mode);
                 } else {
                     if self.is_cgb {
@@ -1009,7 +752,7 @@ impl Ppu {
                         self.check_lyc(ints);
                     } else {
                         self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
-                        self.cycles = 1;
+                        self.cycles = DOTS_PER_M;
                         self.line0_frame_wrap = true;
                         self.ly_for_comparison = 0;
                         self.check_lyc(ints);
@@ -1021,9 +764,9 @@ impl Ppu {
                     } else {
                         self.current_vblank_line
                     };
-                    let base_cycles = Mode::VBlank.m_cycles(self.scx, self.model);
+                    let base_cycles = Mode::VBlank.m_cycles(self.scx, self.model) * DOTS_PER_M;
                     self.cycles = if !self.is_cgb && self.current_vblank_line == 153 {
-                        base_cycles - 1
+                        base_cycles - DOTS_PER_M
                     } else {
                         base_cycles
                     };
@@ -1056,7 +799,7 @@ impl Ppu {
             self.lcdon_line0_mode0 = false;
             self.stat &= !STAT_MODE_B;
             self.stat_line = false;
-            self.cycles = Mode::HBlank.m_cycles(self.scx, self.model);
+            self.cycles = Mode::HBlank.m_cycles(self.scx, self.model) * DOTS_PER_M;
             self.rgba_buf_present.clear();
             // LYC comparison: re-evaluate after LY reset to 0.
             self.check_lyc(ints);
@@ -1070,7 +813,7 @@ impl Ppu {
             self.current_vblank_line = 0;
             self.ly_for_comparison = 0;
             self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
-            self.cycles = 20;
+            self.cycles = 20 * DOTS_PER_M;
             self.lcdon_line0_mode0 = true;
             self.check_lyc(ints);
         }
@@ -1079,13 +822,19 @@ impl Ppu {
     pub fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
         self.lyc = val;
         if self.is_cgb {
-            if self.mode() == Mode::HBlank && (self.cycles == 2 || self.cycles == 1) {
+            if self.mode() == Mode::HBlank
+                && (self.cycles == 2 * DOTS_PER_M || self.cycles == DOTS_PER_M)
+            {
                 return;
             }
-            if self.current_vblank_line == 152 && (self.cycles == 2 || self.cycles == 1) {
+            if self.current_vblank_line == 152
+                && (self.cycles == 2 * DOTS_PER_M || self.cycles == DOTS_PER_M)
+            {
                 return;
             }
-            if self.current_vblank_line == 153 && (self.cycles == 114 || self.cycles == 113) {
+            if self.current_vblank_line == 153
+                && (self.cycles == 114 * DOTS_PER_M || self.cycles == 113 * DOTS_PER_M)
+            {
                 return;
             }
         }
@@ -1109,11 +858,8 @@ impl Ppu {
     }
 
     pub fn write_scx(&mut self, val: u8) {
-        if self.mode() == Mode::Drawing {
-            let old_mode3 = Mode::Drawing.m_cycles(self.scx, self.model);
-            let new_mode3 = Mode::Drawing.m_cycles(val, self.model);
-            self.cycles += new_mode3 - old_mode3;
-        }
+        // Mode 3's length is FIFO-owned: an SCX write takes effect through
+        // the FIFO's fetch/discard state, never by re-timing the mode.
         self.scx = val;
         self.fifo.set_scx(val);
     }
@@ -1122,6 +868,8 @@ impl Ppu {
         self.stat = val;
     }
 
+    /// Force the PPU line/mode state (dots remaining in `mode`). Test
+    /// hook for post-boot state injection.
     pub(crate) const fn set_line_mode(&mut self, line: u8, mode: Mode, cycles: i32) {
         self.ly = line;
         self.current_vblank_line = line;

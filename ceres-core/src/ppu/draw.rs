@@ -447,8 +447,12 @@ impl Ppu {
                     self.color_correction_mode,
                 ),
             }
-        } else if !master_bg_enable && cgb_mode == CgbMode::Dmg {
-            Self::mono_rgb(0)
+        } else if !master_bg_enable && cgb_mode != CgbMode::Cgb {
+            match cgb_mode {
+                CgbMode::Dmg => Self::mono_rgb(0),
+                CgbMode::Compat => self.bcp.rgb(0, 0, self.color_correction_mode),
+                CgbMode::Cgb => unreachable!(),
+            }
         } else {
             let bg_color = bg_px.color_id();
             match cgb_mode {
