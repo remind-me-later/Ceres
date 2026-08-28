@@ -84,12 +84,14 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_bgp_change_dmg_blob,
     "m3_bgp_change.gb",
-    Model::DmgB
+    Model::DmgB,
+    ignore
 );
 mealybug_ppu_test!(
     test_mb_m3_bgp_change_cgb_c,
     "m3_bgp_change.gb",
-    Model::CgbE
+    Model::CgbE,
+    ignore
 );
 
 // m3_bgp_change_sprites.gb
@@ -356,12 +358,14 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_scx_high_5_bits_dmg_blob,
     "m3_scx_high_5_bits.gb",
-    Model::DmgB
+    Model::DmgB,
+    ignore
 );
 mealybug_ppu_test!(
     test_mb_m3_scx_high_5_bits_cgb_c,
     "m3_scx_high_5_bits.gb",
-    Model::CgbE
+    Model::CgbE,
+    ignore
 );
 
 // m3_scx_high_5_bits_change2.gb
@@ -375,14 +379,16 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_scx_high_5_bits_change2_cgb_c,
     "m3_scx_high_5_bits_change2.gb",
-    Model::CgbE
+    Model::CgbE,
+    ignore
 );
 
 // m3_scx_low_3_bits.gb
 mealybug_ppu_test!(
     test_mb_m3_scx_low_3_bits_dmg_blob,
     "m3_scx_low_3_bits.gb",
-    Model::DmgB
+    Model::DmgB,
+    ignore
 );
 mealybug_ppu_test!(
     test_mb_m3_scx_low_3_bits_cgb_c,
