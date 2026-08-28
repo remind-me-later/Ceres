@@ -24,13 +24,6 @@ const DOTS_PER_M: i32 = 4;
 const MODE3_MAX_DOTS: i32 = 456 - 20 * DOTS_PER_M;
 
 // LCDC bits
-const LCDC_BG_B: u8 = 0x1;
-const LCDC_OBJ_B: u8 = 0x2;
-const LCDC_OBJL_B: u8 = 0x4;
-const LCDC_BG_AREA: u8 = 0x8;
-const LCDC_BG_SIGNED: u8 = 0x10;
-const LCDC_WIN_B: u8 = 0x20;
-const LCDC_WIN_AREA: u8 = 0x40;
 const LCDC_ON_B: u8 = 0x80;
 
 // STAT bits
