@@ -63,10 +63,11 @@ pub struct Gb<A: AudioCallback> {
     key1: Key1,
     ld_b_b_breakpoint: bool,
     model: Model,
-    /// PPU double-speed skip parity. In CGB double-speed the PPU should
-    /// advance half as often as the CPU M-cycles, so we tick every other
-    /// one. This flag tracks which half to skip on the next batch.
-    ppu_dskip: bool,
+    /// PPU tick credit, in CPU T-cycles. Banked by `advance_dots` when a
+    /// batch is not a whole number of PPU dots (sub-M-cycle bus-conflict
+    /// offsets flush 1-3 dots at a time) so no dot is ever dropped, in
+    /// single or double speed.
+    ppu_t_credit: i32,
     ppu: Ppu,
     serial: Serial,
     wram: Wram,
@@ -264,7 +265,7 @@ impl<A: AudioCallback> Gb<A> {
             _ => 0x83,
         });
         if matches!(self.model, Model::Dmg0) {
-            self.ppu.set_line_mode(145, ppu::Mode::VBlank, 65);
+            self.ppu.set_line_mode(145, ppu::Mode::VBlank, 65 * 4);
         }
         self.write_mem(0xFF45, 0x00);
         self.dma.set_reg(if self.is_cgb() { 0x00 } else { 0xFF });
@@ -481,7 +482,7 @@ impl<A: AudioCallback> Gb<A> {
             key1: Key1::default(),
             ld_b_b_breakpoint: false,
             model,
-            ppu_dskip: false,
+            ppu_t_credit: 0,
             ppu: Ppu::new(model),
             serial: Serial::default(),
             wram: Wram::default(),
@@ -602,7 +603,7 @@ impl<A: AudioCallback> Gb<A> {
         self.ints = Interrupts::default();
         self.key1 = Key1::default();
         self.ld_b_b_breakpoint = false;
-        self.ppu_dskip = false;
+        self.ppu_t_credit = 0;
         self.ppu = Ppu::default();
         self.serial = Serial::default();
         self.bootrom.enable();

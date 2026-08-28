@@ -75,10 +75,12 @@ impl<A: AudioCallback> Gb<A> {
     /// Advance all components by the given number of CPU T-cycles.
     /// This is the main timing entry point called by the CPU.
     ///
-    /// Cycle-accurate PPU: timers advance per T-cycle (for accurate TIMA
-    /// reload timing) and the PPU is advanced one M-cycle at a time so
-    /// mode-bound IRQs (OAM/VBlank/HBlank/LYC) fire at exact M-cycle
-    /// boundaries. This matches the mooneye-gb emulation model.
+    /// Timers advance per T-cycle (for accurate TIMA reload timing) and
+    /// the PPU advances per dot (4 T-cycles single speed, 2 in double
+    /// speed). Fractional T-cycles are banked in `ppu_t_credit` so that
+    /// sub-M-cycle bus-conflict write offsets (which flush odd numbers of
+    /// dots) never drop PPU dots: every T-cycle the CPU spends eventually
+    /// reaches the PPU.
     #[inline]
     pub fn advance_dots(&mut self, cpu_t_cycles: i32) {
         if cpu_t_cycles <= 0 {
@@ -92,34 +94,15 @@ impl<A: AudioCallback> Gb<A> {
         // DMA advances per dot.
         self.dma.advance_dots(cpu_t_cycles);
 
-        // Advance the PPU one M-cycle at a time. `cpu_t_cycles` is always
-        // a multiple of 4 (every instruction / interrupt dispatch adds
-        // 4 T-cycles via `tick_m_cycle`), so integer division is exact.
-        let double_speed = self.key1.is_enabled();
-        let m_cycles = cpu_t_cycles / 4;
-        // SameBoy keeps the PPU cycle counter advancing at the same rate
-        // per real cycle in both single- and double-speed modes (just
-        // doubled in absolute terms for double-speed). For our M-cycle
-        // model this means 1 CPU M-cycle == 1 PPU M-cycle regardless of
-        // double-speed.
-        let ppu_m_cycles = if double_speed {
-            // In double-speed mode the CPU runs at 8MHz but the PPU's
-            // internal cycle counter advances at the same per-real-time
-            // rate, which means we should tick it half as often as the
-            // CPU's M-cycles. SameBoy does this via `cycles * 4` vs
-            // `cycles * 2` advance per CPU step. For our model we tick
-            // every other CPU M-cycle.
-            (m_cycles + self.ppu_dskip as i32) / 2
-        } else {
-            m_cycles
-        };
-
-        for _ in 0..ppu_m_cycles {
-            self.ppu.tick_m_cycle(&mut self.ints, self.cgb_mode);
-        }
-        if double_speed {
-            // Remember the parity so the next batch doesn't drift.
-            self.ppu_dskip = (m_cycles + self.ppu_dskip as i32) & 1 != 0;
+        // Advance the PPU dot by dot. One PPU dot is one CPU T-cycle in
+        // single speed and two in double speed (the PPU's real-time rate
+        // is unchanged; SameBoy advances it by `cycles * 2` vs `cycles *
+        // 4` per CPU step for the same reason).
+        let t_cycles_per_dot = if self.key1.is_enabled() { 2 } else { 1 };
+        self.ppu_t_credit += cpu_t_cycles;
+        while self.ppu_t_credit >= t_cycles_per_dot {
+            self.ppu_t_credit -= t_cycles_per_dot;
+            self.ppu.tick_t_cycle(&mut self.ints, self.cgb_mode);
         }
 
         self.run_dma();

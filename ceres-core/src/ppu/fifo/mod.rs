@@ -70,20 +70,13 @@ impl PixelFifo {
         }
     }
 
-    pub fn scan_sprites(
-        &mut self,
-        oam: &Oam,
-        ly: u8,
-        sprite_height: u8,
-        is_cgb: bool,
-        opri: bool,
-    ) {
+    pub fn scan_sprites(&mut self, oam: &Oam, ly: u8, sprite_height: u8) {
         if self.window_active {
             self.window_line_counter = self.window_line_counter.wrapping_add(1);
         }
         self.window_active = false;
         self.clear();
-        self.sprites.scan_line(oam, ly, sprite_height, is_cgb, opri);
+        self.sprites.scan_line(oam, ly, sprite_height);
     }
 
     pub fn reset_window_frame(&mut self) {
@@ -172,7 +165,6 @@ impl PixelFifo {
         ly: u8,
         wx: u8,
         wy: u8,
-        scx: u8,
         scy: u8,
         lcdc: u8,
         is_cgb: bool,
@@ -192,28 +184,52 @@ impl PixelFifo {
             }
         }
 
-        // Step Background Fetcher
-        if let Some(pixels) = self
-            .fetcher
-            .step_t_cycle(vram, ly, scx, scy, self.lx, lcdc, is_cgb, self.bg_len)
-        {
-            self.push_bg_pixels(pixels);
-        }
-
-        // Check sprite trigger at current lx
+        // Object (sprite) fetch, mirroring SameBoy's mode 3 loop
+        // (display.c:1942-2026). Sprites are matched against the PPU's X
+        // position + 8 (`x_for_object_match`); sprites behind that point can
+        // no longer be fetched this line and are dropped. When a sprite
+        // matches, the fetcher first finishes the BG tile row it is on
+        // (pixel output pauses meanwhile — never mid-row), then each
+        // matching sprite costs a 6-dot fetch that stalls the BG fetcher
+        // and pixel output. Unlike the previous exact-lx + ready-state
+        // coincidence trigger, this can never silently drop a sprite.
+        let match_x = self.lx + 8;
+        self.sprites.discard_behind(match_x);
         let obj_enabled = lcdc & 0x02 != 0 || is_cgb;
-        if obj_enabled && !self.fetcher.is_fetching_sprite() && self.fetcher.is_ready_for_sprite_fetch() {
-            if let Some(sprite) = self.sprites.take_sprite_at(self.lx) {
+        let mut output_paused = false;
+        if obj_enabled
+            && !self.fetcher.is_fetching_sprite()
+            && self.sprites.next_x() == Some(match_x)
+        {
+            if self.fetcher.is_ready_for_sprite_fetch() {
+                let sprite = self.sprites.pop_next().expect("sprite at next_x");
                 let sprite_height = if lcdc & 0x04 != 0 { 16 } else { 8 };
                 let sprite_pixels =
                     self.fetcher
                         .fetch_sprite_data(sprite, vram, ly, sprite_height, is_cgb);
                 self.overlay_sprite_pixels(sprite_pixels, sprite.x(), is_cgb);
+                // fetch_sprite_data started the 6-dot stall; if more
+                // sprites share this X they are fetched on later dots,
+                // once the stall expires and the fetcher is still at the
+                // tile-row boundary.
+            } else {
+                // Fetcher mid-row: let this dot finish the row. Pixel
+                // output waits so the sprite overlay stays aligned with
+                // the sprite's on-screen X.
+                output_paused = true;
             }
         }
 
+        // Step Background Fetcher
+        if let Some(pixels) = self
+            .fetcher
+            .step_t_cycle(vram, ly, scy, lcdc, is_cgb, self.bg_len)
+        {
+            self.push_bg_pixels(pixels);
+        }
+
         // Output pixel if FIFO has pixels ready and not stalled by sprite fetch
-        if self.bg_len > 8 && !self.fetcher.is_fetching_sprite() {
+        if !output_paused && self.bg_len > 8 && !self.fetcher.is_fetching_sprite() {
             let is_window_glitch = win_enabled
                 && ly >= wy
                 && wx == ly

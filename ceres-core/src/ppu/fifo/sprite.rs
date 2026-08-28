@@ -93,7 +93,7 @@ impl SpriteBuffer {
 
     /// Scan OAM for scanline `ly` with sprite height (8 or 16).
     /// Extracts up to 10 matching sprites.
-    pub fn scan_line(&mut self, oam: &Oam, ly: u8, sprite_height: u8, is_cgb: bool, opri: bool) {
+    pub fn scan_line(&mut self, oam: &Oam, ly: u8, sprite_height: u8) {
         self.clear();
         let bytes = oam.bytes();
 
@@ -117,26 +117,53 @@ impl SpriteBuffer {
             }
         }
 
-        // On DMG (or CGB with OPRI = false), sprites are sorted by X coordinate
-        // (smaller X takes priority; ties preserved by OAM index order).
-        // On CGB (OPRI = true or default CGB), priority is strictly OAM index.
-        if !is_cgb || opri {
-            // Stable sort by X coordinate
-            self.sprites[..self.count].sort_by_key(|s| s.map_or(u8::MAX, |spr| spr.x()));
+        // Fetch order is always ascending X (stable sort, so equal X keeps
+        // OAM order). Pixel priority between overlapping sprites is not
+        // decided here: the FIFO overlay resolves it — first opaque pixel
+        // in fetch order on DMG (== X priority, Pan Docs "Drawing
+        // priority"), lowest OAM index on CGB regardless of fetch order.
+        self.sprites[..self.count].sort_by_key(|s| s.map_or(u8::MAX, |spr| spr.x()));
+    }
+
+    /// Effective match X for a sprite's OAM X coordinate: sprites at or
+    /// left of the screen edge all match once pixel output begins, since
+    /// their fetch point lies in the line's bootstrap phase.
+    const fn effective_x(x: u8) -> u8 {
+        if x < 8 { 8 } else { x }
+    }
+
+    /// Drop sprites that can no longer be fetched this line: their match
+    /// point is behind the PPU's current X position. Mirrors SameBoy
+    /// popping objects with `objects_x < x_for_object_match()`.
+    pub fn discard_behind(&mut self, match_x: u8) {
+        while self.count > 0 {
+            let front = self.sprites[0];
+            let Some(spr) = front else { break };
+            if Self::effective_x(spr.x()) < match_x {
+                self.sprites.copy_within(1.., 0);
+                self.sprites[self.count - 1] = None;
+                self.count -= 1;
+            } else {
+                break;
+            }
         }
     }
 
-    /// Find and consume a sprite in buffer that starts at screen X coordinate `lx`.
-    pub fn take_sprite_at(&mut self, lx: u8) -> Option<Sprite> {
-        for s in self.sprites[..self.count].iter_mut() {
-            if let Some(spr) = *s {
-                let target_lx = if spr.x() <= 8 { 0 } else { spr.x() - 8 };
-                if target_lx == lx {
-                    *s = None;
-                    return Some(spr);
-                }
-            }
+    /// X coordinate the next sprite (highest fetch priority) matches at.
+    #[must_use]
+    pub fn next_x(&self) -> Option<u8> {
+        self.sprites[0].map(|spr| Self::effective_x(spr.x()))
+    }
+
+    /// Consume the next sprite (highest fetch priority).
+    pub fn pop_next(&mut self) -> Option<Sprite> {
+        if self.count == 0 {
+            return None;
         }
-        None
+        let spr = self.sprites[0];
+        self.sprites.copy_within(1.., 0);
+        self.sprites[self.count - 1] = None;
+        self.count -= 1;
+        spr
     }
 }
