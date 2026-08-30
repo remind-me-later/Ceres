@@ -232,11 +232,11 @@ impl PixelFifo {
         if !output_paused && self.bg_len > 8 && !self.fetcher.is_fetching_sprite() {
             let is_window_glitch = win_enabled
                 && ly >= wy
-                && wx == ly
+                && self.window_active
                 && self.lx.wrapping_add(7) == wx
-                && self.fetcher.is_get_tile();
+                && self.fetcher.is_get_tile()
+                && self.bg_len == 8;
             let bg_px = if is_window_glitch {
-                self.pop_bg_pixel();
                 Pixel::empty()
             } else if let Some(px) = self.pop_bg_pixel() {
                 px
