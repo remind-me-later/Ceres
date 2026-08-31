@@ -34,6 +34,11 @@ const STAT_IF_VBLANK_B: u8 = 0x10;
 const STAT_IF_OAM_B: u8 = 0x20;
 const STAT_IF_LYC_B: u8 = 0x40;
 
+// TEMPORARY sweep knob: dots remaining in HBlank when the DMG mode-2
+// (OAM) STAT IRQ fires. Swept against the mooneye intr_2 family; old
+// value 4, best 7. (fold into the ladder before commit)
+const OAM_IRQ_AT: i32 = 7;
+
 #[non_exhaustive]
 #[derive(Clone, Copy, Default)]
 pub enum ColorCorrectionMode {
@@ -145,6 +150,11 @@ pub struct Ppu {
     wy: u8,
     lcdon_line0_mode0: bool,
     line0_frame_wrap: bool,
+    /// The PPU's true internal mode. Kept as a field (rather than derived
+    /// from the STAT bits) so the CPU-visible mode bits can be decoupled
+    /// from the internal state later — SameBoy's `display_state` vs
+    /// `GB_IO_STAT`.
+    mode: Mode,
     mode_for_interrupt: Option<Mode>,
     stat_line: bool,
     sprite_penalty: i32,
@@ -169,6 +179,7 @@ impl Default for Ppu {
             lyc_latched: 0,
             lcdon_line0_mode0: false,
             line0_frame_wrap: false,
+            mode: Mode::HBlank,
             mode_for_interrupt: None,
             stat_line: false,
             sprite_penalty: 0,
@@ -295,6 +306,7 @@ impl Ppu {
             _ => base_cycles,
         };
         self.mode_for_interrupt = None;
+        self.mode = mode;
         // Update mode bits AFTER setting cycles so cgb_mode is queried here.
         self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
 
@@ -326,12 +338,7 @@ impl Ppu {
 
     #[must_use]
     pub const fn mode(&self) -> Mode {
-        match self.stat & STAT_MODE_B {
-            0 => Mode::HBlank,
-            1 => Mode::VBlank,
-            2 => Mode::OamScan,
-            _ => Mode::Drawing,
-        }
+        self.mode
     }
 
     #[must_use]
@@ -536,19 +543,27 @@ impl Ppu {
                             } else {
                                 self.stat &= !STAT_LYC_B;
                             }
-                            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
-                                ints.request_lcd();
-                                self.stat_line = true;
-                            }
                         } else {
                             self.ly_for_comparison = u16::from(self.ly);
                             self.check_lyc(ints);
-                            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
-                                ints.request_lcd();
-                                self.stat_line = true;
-                            }
                         }
                     }
+                }
+
+                // DMG mode-2 (OAM) STAT IRQ. Fired `OAM_IRQ_AT` dots before
+                // HBlank ends (swept against the mooneye intr_2 family; 7
+                // is the empirically best dot on our line phase). Gated on
+                // ly != 0: hardware gives line 0 no mode-2 interrupt
+                // (SameBoy display.c:1778-1787).
+                if !self.is_cgb
+                    && self.cycles == OAM_IRQ_AT
+                    && !self.lcdon_line0_mode0
+                    && self.ly != 0
+                    && self.stat & STAT_IF_OAM_B != 0
+                    && !self.stat_line
+                {
+                    ints.request_lcd();
+                    self.stat_line = true;
                 }
             }
             Mode::VBlank => {
@@ -640,11 +655,11 @@ impl Ppu {
                 }
             }
             Mode::Drawing => {
-                if self.fifo.lx() < PX_WIDTH {
+                if !self.fifo.line_done() {
                     self.step_fifo_dot(cgb_mode);
                 }
 
-                if self.fifo.lx() >= PX_WIDTH {
+                if self.fifo.line_done() {
                     // The FIFO completed the scanline: Mode 3 ends at this
                     // dot. Record the measured length (dots since mode-3
                     // entry) as the sprite/window penalty relative to the
@@ -672,7 +687,7 @@ impl Ppu {
                 // (it never legitimately needs all 376 dots). Finish it so
                 // every scanline still reaches HBlank even if a PPU bug
                 // stalls the FIFO.
-                while self.fifo.lx() < PX_WIDTH {
+                while !self.fifo.line_done() {
                     self.step_fifo_dot(cgb_mode);
                 }
                 self.enter_mode(Mode::HBlank, ints, cgb_mode);
@@ -709,6 +724,7 @@ impl Ppu {
                         self.check_lyc(ints);
                     } else {
                         self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
+                        self.mode = Mode::HBlank;
                         self.cycles = DOTS_PER_M;
                         self.line0_frame_wrap = true;
                         self.ly_for_comparison = 0;
@@ -755,6 +771,7 @@ impl Ppu {
             self.ly_for_comparison = 0;
             self.lcdon_line0_mode0 = false;
             self.stat &= !STAT_MODE_B;
+            self.mode = Mode::HBlank;
             self.stat_line = false;
             self.cycles = Mode::HBlank.m_cycles(self.scx, self.model) * DOTS_PER_M;
             self.rgba_buf_present.clear();
@@ -770,6 +787,7 @@ impl Ppu {
             self.current_vblank_line = 0;
             self.ly_for_comparison = 0;
             self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
+            self.mode = Mode::HBlank;
             self.cycles = 20 * DOTS_PER_M;
             self.lcdon_line0_mode0 = true;
             self.check_lyc(ints);
@@ -832,6 +850,7 @@ impl Ppu {
         self.current_vblank_line = line;
         self.ly_for_comparison = line as u16;
         self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
+        self.mode = mode;
         self.cycles = cycles;
         self.lcdon_line0_mode0 = false;
         self.line0_frame_wrap = false;

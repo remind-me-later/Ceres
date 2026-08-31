@@ -125,21 +125,15 @@ impl SpriteBuffer {
         self.sprites[..self.count].sort_by_key(|s| s.map_or(u8::MAX, |spr| spr.x()));
     }
 
-    /// Effective match X for a sprite's OAM X coordinate: sprites at or
-    /// left of the screen edge all match once pixel output begins, since
-    /// their fetch point lies in the line's bootstrap phase.
-    const fn effective_x(x: u8) -> u8 {
-        if x < 8 { 8 } else { x }
-    }
-
     /// Drop sprites that can no longer be fetched this line: their match
-    /// point is behind the PPU's current X position. Mirrors SameBoy
-    /// popping objects with `objects_x < x_for_object_match()`.
-    pub fn discard_behind(&mut self, match_x: u8) {
+    /// point (`x - 8`, in FIFO-position space) is behind the PPU's current
+    /// position. Mirrors SameBoy popping objects with
+    /// `objects_x < x_for_object_match()`.
+    pub fn discard_behind(&mut self, match_x: i16) {
         while self.count > 0 {
             let front = self.sprites[0];
             let Some(spr) = front else { break };
-            if Self::effective_x(spr.x()) < match_x {
+            if i16::from(spr.x()) < match_x {
                 self.sprites.copy_within(1.., 0);
                 self.sprites[self.count - 1] = None;
                 self.count -= 1;
@@ -151,8 +145,8 @@ impl SpriteBuffer {
 
     /// X coordinate the next sprite (highest fetch priority) matches at.
     #[must_use]
-    pub fn next_x(&self) -> Option<u8> {
-        self.sprites[0].map(|spr| Self::effective_x(spr.x()))
+    pub fn next_x(&self) -> Option<i16> {
+        self.sprites[0].map(|spr| i16::from(spr.x()))
     }
 
     /// Consume the next sprite (highest fetch priority).

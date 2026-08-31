@@ -94,13 +94,16 @@ impl TileFetcher {
 
     /// Advance fetcher by 1 T-cycle.
     /// Returns true if 8 pixels are ready to push to FIFO.
+    /// `position` is the FIFO's u8-wrapped PPU X position (SameBoy's
+    /// `position_in_line`), from which the BG map column is derived live.
+    #[allow(clippy::too_many_arguments)]
     pub fn step_t_cycle(
         &mut self,
         vram: &Vram,
         ly: u8,
         scy: u8,
         scx: u8,
-        lx: u8,
+        position: u8,
         lcdc: u8,
         is_cgb: bool,
         bg_len: usize,
@@ -130,8 +133,9 @@ impl TileFetcher {
                     (map, col, row, r)
                 } else {
                     let map = if lcdc & 0x08 != 0 { 0x1C00 } else { 0x1800 };
-                    let fetch_x = u16::from(lx) + (bg_len as u16) + u16::from(scx);
-                    let col = ((fetch_x / 8) as u8) & 0x1F;
+                    // SameBoy display.c:943: map_x = (SCX + position + 8) / 8
+                    let fetch_x = scx.wrapping_add(position).wrapping_add(8);
+                    let col = (fetch_x / 8) & 0x1F;
                     let y = ly.wrapping_add(scy);
                     let row = (y / 8) & 0x1F;
                     let r = (y % 8) as u16;
