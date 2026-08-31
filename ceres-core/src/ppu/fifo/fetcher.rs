@@ -99,6 +99,8 @@ impl TileFetcher {
         vram: &Vram,
         ly: u8,
         scy: u8,
+        scx: u8,
+        lx: u8,
         lcdc: u8,
         is_cgb: bool,
         bg_len: usize,
@@ -128,7 +130,8 @@ impl TileFetcher {
                     (map, col, row, r)
                 } else {
                     let map = if lcdc & 0x08 != 0 { 0x1C00 } else { 0x1800 };
-                    let col = self.bg_tile_x & 0x1F;
+                    let fetch_x = u16::from(lx) + (bg_len as u16) + u16::from(scx);
+                    let col = ((fetch_x / 8) as u8) & 0x1F;
                     let y = ly.wrapping_add(scy);
                     let row = (y / 8) & 0x1F;
                     let r = (y % 8) as u16;

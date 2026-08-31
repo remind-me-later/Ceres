@@ -435,6 +435,7 @@ impl Ppu {
             self.ly,
             self.wx,
             self.wy,
+            self.scx,
             self.scy,
             self.lcdc,
             cgb_mode == CgbMode::Cgb,

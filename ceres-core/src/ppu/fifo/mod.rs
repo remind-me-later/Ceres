@@ -165,6 +165,7 @@ impl PixelFifo {
         ly: u8,
         wx: u8,
         wy: u8,
+        scx: u8,
         scy: u8,
         lcdc: u8,
         is_cgb: bool,
@@ -224,10 +225,16 @@ impl PixelFifo {
         }
 
         // Step Background Fetcher
-        if let Some(pixels) = self
-            .fetcher
-            .step_t_cycle(vram, ly, scy, lcdc, is_cgb, self.bg_len)
-        {
+        if let Some(pixels) = self.fetcher.step_t_cycle(
+            vram,
+            ly,
+            scy,
+            scx,
+            self.lx,
+            lcdc,
+            is_cgb,
+            self.bg_len,
+        ) {
             self.push_bg_pixels(pixels);
         }
 
