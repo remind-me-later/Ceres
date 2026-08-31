@@ -146,7 +146,7 @@ impl PixelFifo {
             return None;
         }
         let px = self.sprite_fifo[self.sprite_head];
-        self.sprite_head = (self.sprite_head + 1) % 8;
+        self.sprite_head = (self.sprite_head + 1) % 16;
         self.sprite_len -= 1;
         Some(px)
     }
