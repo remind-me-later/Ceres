@@ -387,8 +387,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_scx_low_3_bits_dmg_blob,
     "m3_scx_low_3_bits.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 mealybug_ppu_test!(
     test_mb_m3_scx_low_3_bits_cgb_c,

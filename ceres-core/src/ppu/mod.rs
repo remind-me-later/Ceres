@@ -519,12 +519,7 @@ impl Ppu {
                             self.stat &= !STAT_LYC_B;
                         }
                     }
-                    if !self.is_cgb && (self.ly == 1 || self.ly == 143) {
-                        if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
-                            ints.request_lcd();
-                            self.stat_line = true;
-                        }
-                    }
+
                 } else if self.cycles == DOTS_PER_M && !self.lcdon_line0_mode0 {
                     if self.ly <= 143 {
                         if self.is_cgb {
