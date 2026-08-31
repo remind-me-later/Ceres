@@ -21,7 +21,7 @@ impl Ppu {
 
         let bg_has_priority = match cgb_mode {
             CgbMode::Dmg | CgbMode::Compat => {
-                sprite_px.bg_priority() && bg_px.color_id() != 0
+                master_bg_enable && sprite_px.bg_priority() && bg_px.color_id() != 0
             }
             CgbMode::Cgb => {
                 if !master_bg_enable {

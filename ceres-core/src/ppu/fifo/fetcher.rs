@@ -47,7 +47,7 @@ impl TileFetcher {
 
     #[must_use]
     pub const fn is_get_tile(&self) -> bool {
-        matches!(self.state, FetcherState::GetTile)
+        matches!(self.state, FetcherState::GetTile) && self.cycle == 0
     }
 
     #[must_use]

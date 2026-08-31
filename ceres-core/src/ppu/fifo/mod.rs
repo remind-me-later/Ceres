@@ -181,6 +181,9 @@ impl PixelFifo {
                 self.bg_head = 0;
                 self.bg_tail = 0;
                 self.bg_len = 0;
+                if wx < 7 {
+                    self.scx_discard = 7 - wx;
+                }
             }
         }
 
@@ -233,9 +236,10 @@ impl PixelFifo {
             let is_window_glitch = win_enabled
                 && ly >= wy
                 && self.window_active
+                && self.lx > 0
+                && wx < 100
                 && self.lx.wrapping_add(7) == wx
-                && self.fetcher.is_get_tile()
-                && self.bg_len == 8;
+                && self.fetcher.is_get_tile();
             let bg_px = if is_window_glitch {
                 Pixel::empty()
             } else if let Some(px) = self.pop_bg_pixel() {
@@ -244,12 +248,12 @@ impl PixelFifo {
                 return None;
             };
 
-            let sprite_px = self.pop_sprite_pixel().unwrap_or(Pixel::empty());
-
             if self.scx_discard > 0 {
                 self.scx_discard -= 1;
                 return None;
             }
+
+            let sprite_px = self.pop_sprite_pixel().unwrap_or(Pixel::empty());
 
             if self.lx < 160 {
                 let out_x = self.lx;
