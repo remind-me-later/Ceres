@@ -57,7 +57,7 @@ impl TileFetcher {
 
     #[must_use]
     pub const fn is_ready_for_sprite_fetch(&self) -> bool {
-        matches!(self.state, FetcherState::Push | FetcherState::GetTile) && self.cycle == 0
+        matches!(self.state, FetcherState::Push)
     }
 
     pub fn reset_bg(&mut self, scx: u8) {
