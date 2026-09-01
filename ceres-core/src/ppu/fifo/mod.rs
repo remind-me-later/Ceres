@@ -94,20 +94,25 @@ impl PixelFifo {
         self.window_line_counter = 0;
     }
 
-    pub fn start_drawing(&mut self, scx: u8) {
+    pub fn start_drawing(&mut self, scx: u8, is_lcdon: bool) {
         self.lx = 0;
         self.line_dots = 0;
-        self.position = -16;
-        // Phase of the lead-in junk push within the M-cycle grid. The SCX
-        // fraction consumes `k` real pixels during the lead-in (the snap
-        // fires on pop k+1), which would delay output start by `k` dots;
-        // hardware instead shifts the pipeline phase so output always
-        // starts on the same M-cycle alignment. Junk at
-        // `6 - ((k+1) & 3)` puts first-visible at dot `14 + k - ((k+1)&3)`
-        // = 13/13/13/17/17/17/17/21 for k = 0..7, reproducing the mooneye
-        // mode-3 lengths (172/176/180 dots on DMG) exactly.
-        let k = u16::from(scx & 7);
-        self.junk_at = 5 - (k & 3);
+        if is_lcdon {
+            self.position = 0;
+            self.junk_at = 0;
+        } else {
+            self.position = -16;
+            // Phase of the lead-in junk push within the M-cycle grid. The SCX
+            // fraction consumes `k` real pixels during the lead-in (the snap
+            // fires on pop k+1), which would delay output start by `k` dots;
+            // hardware instead shifts the pipeline phase so output always
+            // starts on the same M-cycle alignment. Junk at
+            // `6 - ((k+1) & 3)` puts first-visible at dot `14 + k - ((k+1)&3)`
+            // = 13/13/13/17/17/17/17/21 for k = 0..7, reproducing the mooneye
+            // mode-3 lengths (172/176/180 dots on DMG) exactly.
+            let k = u16::from(scx & 7);
+            self.junk_at = 5 - (k & 3);
+        }
         self.fetcher.reset_bg(scx);
     }
 
@@ -245,48 +250,55 @@ impl PixelFifo {
         // costs a 6-dot fetch that stalls the BG fetcher and pixel output.
         // Unlike the previous exact-lx + ready-state coincidence trigger,
         // this can never silently drop a sprite.
-        let (match_x, is_match) = if self.position < 0 {
-            (0, self.sprites.next_x().map_or(false, |x| x < 8))
+        let match_x = if self.position < 0 {
+            0
         } else {
-            let mx = self.position + 8;
-            (mx, self.sprites.next_x().map_or(false, |x| x <= mx))
+            self.position + 8
         };
         self.sprites.discard_behind(match_x);
+        let is_match = if self.position < 0 {
+            self.sprites.next_x().map_or(false, |x| x < 8)
+        } else {
+            self.sprites.next_x().map_or(false, |x| x <= match_x)
+        };
         let obj_enabled = lcdc & 0x02 != 0 || is_cgb;
         let mut sprite_pending = false;
         if obj_enabled && !self.fetcher.is_fetching_sprite() && is_match {
             if self.fetcher.is_ready_for_sprite_fetch() {
-                let sprite = self.sprites.pop_next().expect("sprite at next_x");
-                if std::env::var_os("CERES_TRACE").is_some() && (ly == 0 || ly == 16 || ly == 40) {
-                    eprintln!(
-                        "SPR ly={} x={} tile={} pos={} dot={} slen={}",
-                        ly,
-                        sprite.x(),
-                        sprite.tile(),
-                        self.position,
-                        self.line_dots,
-                        self.sprite_len
-                    );
+                if let Some(sprite) = self.sprites.pop_next() {
+                    if std::env::var_os("CERES_TRACE").is_some()
+                        && (ly == 0 || ly == 16 || ly == 40)
+                    {
+                        eprintln!(
+                            "SPR ly={} x={} tile={} pos={} dot={} slen={}",
+                            ly,
+                            sprite.x(),
+                            sprite.tile(),
+                            self.position,
+                            self.line_dots,
+                            self.sprite_len
+                        );
+                    }
+                    let sprite_height = if lcdc & 0x04 != 0 { 16 } else { 8 };
+                    let sprite_pixels =
+                        self.fetcher
+                            .fetch_sprite_data(sprite, vram, ly, sprite_height, is_cgb);
+                    if std::env::var_os("CERES_OVERLAY").is_some() {
+                        eprintln!(
+                            "ROW ly={} x={} pos={} base={} px={}",
+                            ly,
+                            sprite.x(),
+                            self.position,
+                            i16::from(sprite.x()) - 8 - self.position,
+                            sprite_pixels
+                                .iter()
+                                .map(|p| p.color_id().to_string())
+                                .collect::<Vec<_>>()
+                                .join("")
+                        );
+                    }
+                    self.overlay_sprite_pixels(sprite_pixels, sprite.x(), is_cgb);
                 }
-                let sprite_height = if lcdc & 0x04 != 0 { 16 } else { 8 };
-                let sprite_pixels =
-                    self.fetcher
-                        .fetch_sprite_data(sprite, vram, ly, sprite_height, is_cgb);
-                if std::env::var_os("CERES_OVERLAY").is_some() {
-                    eprintln!(
-                        "ROW ly={} x={} pos={} base={} px={}",
-                        ly,
-                        sprite.x(),
-                        self.position,
-                        i16::from(sprite.x()) - 8 - self.position,
-                        sprite_pixels
-                            .iter()
-                            .map(|p| p.color_id().to_string())
-                            .collect::<Vec<_>>()
-                            .join("")
-                    );
-                }
-                self.overlay_sprite_pixels(sprite_pixels, sprite.x(), is_cgb);
             } else if self.position >= 0 {
                 sprite_pending = true;
             }
