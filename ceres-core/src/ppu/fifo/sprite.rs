@@ -123,6 +123,12 @@ impl SpriteBuffer {
             eprintln!("OAM ly=16 ys={ys:?} xs={xs:?}");
         }
 
+        if std::env::var_os("CERES_TRACE").is_some() && (60..80).contains(&ly) {
+            let ys: Vec<u8> = (0..12).map(|i| bytes[i * 4]).collect();
+            let xs: Vec<u8> = (0..12).map(|i| bytes[i * 4 + 1]).collect();
+            eprintln!("OAM ly=43 ys={ys:?} xs={xs:?}");
+        }
+
         // Fetch order is always ascending X (stable sort, so equal X keeps
         // OAM order). Pixel priority between overlapping sprites is not
         // decided here: the FIFO overlay resolves it — first opaque pixel

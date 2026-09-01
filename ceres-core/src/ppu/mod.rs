@@ -315,10 +315,15 @@ impl Ppu {
                 self.win_in_ly = false;
                 self.ly_for_comparison = u16::from(self.ly);
                 self.check_lyc(ints);
-                let sprite_height = if self.lcdc & 0x04 != 0 { 16 } else { 8 };
-                self.fifo.scan_sprites(&self.oam, self.ly, sprite_height);
             }
             Mode::Drawing => {
+                // The sprite scan runs at mode-2 END, not entry: hardware
+                // reads OAM incrementally through mode 2 (dots 4-84), so a
+                // mode-2 ISR that writes OAM (e.g. the intr_2_mode0_timing_sprites
+                // setup) is still seen by the not-yet-scanned entries.
+                // Scanning at mode-3 entry sees every mode-2 write.
+                let sprite_height = if self.lcdc & 0x04 != 0 { 16 } else { 8 };
+                self.fifo.scan_sprites(&self.oam, self.ly, sprite_height);
                 self.fifo.start_drawing(self.scx);
             }
             Mode::VBlank => {
@@ -667,6 +672,9 @@ impl Ppu {
                     // below enter HBlank; HBlank absorbs the remainder so
                     // the line still totals 456 dots.
                     let mode3_dots = MODE3_MAX_DOTS - self.cycles + 1;
+                    if std::env::var_os("CERES_LEN_TRACE").is_some() && self.ly <= 45 {
+                        eprintln!("LEN ly={} scx={} len={}", self.ly, self.scx, mode3_dots);
+                    }
                     let base3 = Mode::Drawing.m_cycles(self.scx, self.model) * DOTS_PER_M;
                     self.sprite_penalty = mode3_dots - base3;
                     self.cycles = 1;
