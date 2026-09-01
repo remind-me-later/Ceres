@@ -1,5 +1,66 @@
 # PPU FIFO rework — handoff notes (2026-08-28)
 
+## UPDATE 2026-09-01 (final) — committed through fc905267; 139/34
+
+Commits this session: `0ee76e39` (position model + sprite FIFO v2 + STAT knob),
+`af02ae2f` (sprite FIFO pop wrap %8→%16), `fc905267` (8-dot fetch cycle + lead-in
+column selection). **Suite: 139 pass / 34 fail** (HEAD at session start: 138/35).
+
+### The three bugs behind the +8 px BG shift (fixed in fc905267 + af02ae2f)
+
+1. **Sprite FIFO pop wrapped at %8** after the ring grew to 16 slots — pops past
+   slot 7 read stale entries (broke every sprite whose pixels landed past slot 7).
+2. **6-dot fetch cycle**: GetTileDataHigh pushed and jumped straight to GetTile
+   when the FIFO had room, so the fetcher lapped the 1 px/dot pops and injected a
+   duplicate tile row → every BG line shifted +8 px wherever the BG had content.
+   High now ALWAYS hands to Push; Push pushes when bg_len <= 8. Cycle = 8 dots,
+   phase-locked to the pops.
+3. **Lead-in column selection** (SameBoy display.c:939-941): during the first
+   half of the lead-in (raw position −16..−9) the fetched column is `SCX >> 3`,
+   NOT the wrapped-position formula (which computes col 31 garbage there).
+   From raw −8 on: `col = (SCX + position + 8) / 8` (the +8 = FIFO lead).
+
+dmg-acid2 mismatched pixels: 10089 → 376 (residual: mouth-overlap 8x16 sprites
+rows 40-55, and 3 px/row in the footer rows 120-127).
+
+### Debug technique that worked (reusable)
+
+Knob-sweeping: make the uncertain dot/duration a `const`, loop
+`sed -i` + `cargo nextest run` over candidate values, count passes. Assert-failing
+mooneye tests exit in ~0.2 s so each sweep step is fast. Frame-exact PNG diffs:
+use the harness's own `timeout_frames` (acid2 = 480, mealybug = 500,
+sprite_priority = 7160) with `dump_frame`; arbitrary counts catch transients.
+`diff_png <expected> <actual>` prints per-row expected/got.
+
+### Environment-gated traces
+
+7 `CERES_TRACE`-gated eprintln sites remain committed (fetcher BG fetch trace +
+CERES_TRACE_LY, fifo scan/fetch/PX traces, ppu LEN trace via CERES_LEN_TRACE).
+They are needed for the remaining pixel work; strip in the final cleanup commit.
+
+### Remaining 34 fails, grouped
+
+- 4 pre-existing at baseline: cgb_acid_hell, vblank_stat_intr_c/gs,
+  hblank_ly_scx_timing_variant_nops.
+- acid2 trio: dmg-acid2 down to 376 px (mouth rows 40-55: overlapping 8x16
+  mouth sprites swap black/gray at x=64-72 — X-priority at overlap; footer
+  rows 120-127: 3 px/row). cgb-acid2 similar. Trace ly==40 fetches + PX stream
+  next; suspects: overlay merge order vs SameBoy's `fifo_overlay_object_row`,
+  and LCDC bit-3 (bg map) mid-frame toggle for the footer.
+- mealybug window family ×6 (m2_win_en_toggle, m3_scx_low_3_bits,
+  m3_wx_4_change_sprites, dmg+cgb): m3_scx_low_3_bits is CLOSE — 320 px, only
+  the last ~10 columns per line differ by 2 px (mid-line SCX write vs the
+  junk_at/snap phase latched at mode-3 entry from the OLD scx). The window
+  tests need the SameBoy window state machine port (follow-up plan).
+- intr_2_mode0_timing_sprites ×6: mode-3 extension per sprite (should be
+  exactly +6 dots each); sprite-stall duration sweep was flat — the stall
+  PHASE vs the fetch cycle is the suspect.
+- intr_2_mode0_scx3/scx7_timing_nops, hblank_ly_scx ×3, lcdon ×3,
+  vblank_if_timing, stat_write_if_gs, halt_ime0, halt_ime1_timing2_gs,
+  di_timing_gs, intr_0_timing, intr_1_2_timing_gs.
+
+### Old 2026-09-01 update (superseded details)
+
 ## UPDATE 2026-09-01 — mode-3 lengths EXACT + intr_2 core family green (UNCOMMITTED WIP)
 
 Suite: **137 pass / 36 fail** (HEAD `66354e25` was 138/35; this session started at 132/41).
