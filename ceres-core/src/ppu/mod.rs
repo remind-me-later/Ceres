@@ -555,6 +555,7 @@ impl Ppu {
                     }
                 }
 
+
                 // DMG mode-2 (OAM) STAT IRQ. Fired `OAM_IRQ_AT` dots before
                 // HBlank ends (swept against the mooneye intr_2 family; 7
                 // is the empirically best dot on our line phase). Gated on
@@ -672,9 +673,6 @@ impl Ppu {
                     // below enter HBlank; HBlank absorbs the remainder so
                     // the line still totals 456 dots.
                     let mode3_dots = MODE3_MAX_DOTS - self.cycles + 1;
-                    if std::env::var_os("CERES_LEN_TRACE").is_some() && self.ly <= 45 {
-                        eprintln!("LEN ly={} scx={} len={}", self.ly, self.scx, mode3_dots);
-                    }
                     let base3 = Mode::Drawing.m_cycles(self.scx, self.model) * DOTS_PER_M;
                     self.sprite_penalty = mode3_dots - base3;
                     self.cycles = 1;
