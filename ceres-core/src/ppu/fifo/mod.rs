@@ -107,7 +107,7 @@ impl PixelFifo {
         // = 13/13/13/17/17/17/17/21 for k = 0..7, reproducing the mooneye
         // mode-3 lengths (172/176/180 dots on DMG) exactly.
         let k = u16::from(scx & 7);
-        self.junk_at = 6 - ((k + 1) & 3);
+        self.junk_at = 5 - (k & 3);
         self.fetcher.reset_bg(scx);
     }
 
