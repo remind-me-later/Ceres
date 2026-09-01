@@ -558,18 +558,12 @@ impl<A: AudioCallback> Gb<A> {
                 self.cpu.set_pending_cycles(3);
             }
             ConflictType::PaletteDmg => {
-                if pending >= 2 {
-                    self.advance_dots(pending - 2);
-                    let old = self.read_mem(addr);
-                    self.write_mem(addr, val | old);
-                    self.advance_dots(1);
-                    self.write_mem(addr, val);
-                    self.cpu.set_pending_cycles(5);
-                } else {
-                    self.flush_pending_cycles();
-                    self.write_mem(addr, val);
-                    self.cpu.set_pending_cycles(4);
-                }
+                let old = self.read_mem(addr);
+                self.flush_pending_cycles();
+                self.write_mem(addr, val | old);
+                self.advance_dots(1);
+                self.write_mem(addr, val);
+                self.cpu.set_pending_cycles(3);
             }
             ConflictType::PaletteCgb => {
                 if matches!(self.model, Model::CgbD | Model::CgbE | Model::Agb) {

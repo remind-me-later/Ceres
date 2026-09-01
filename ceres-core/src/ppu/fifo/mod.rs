@@ -159,6 +159,19 @@ impl PixelFifo {
     /// pixel are merged by sprite priority (DMG: first fetch wins, i.e.
     /// smaller X; CGB: lower OAM index).
     fn overlay_sprite_pixels(&mut self, sprite_pixels: [Pixel; 8], sprite_x: u8, is_cgb: bool) {
+        if std::env::var_os("CERES_OVERLAY").is_some()
+            && self.position >= 40
+            && self.position <= 64
+        {
+            eprintln!(
+                "OVL x={} pos={} base={} slen={} px={}",
+                sprite_x,
+                self.position,
+                i16::from(sprite_x) - 8 - self.position,
+                self.sprite_len,
+                sprite_pixels.iter().map(|p| p.color_id().to_string()).collect::<Vec<_>>().join("")
+            );
+        }
         for (j, new_px) in sprite_pixels.iter().enumerate() {
             let idx = i16::from(sprite_x) - 8 + j as i16 - self.position;
             if idx < 0 || idx >= 16 {
@@ -230,7 +243,14 @@ impl PixelFifo {
         // costs a 6-dot fetch that stalls the BG fetcher and pixel output.
         // Unlike the previous exact-lx + ready-state coincidence trigger,
         // this can never silently drop a sprite.
-        let match_x = self.position + 8;
+        let match_x: i16 = {
+            let ret = (self.position as u8).wrapping_add(8);
+            if ret > (-16i8 as u8) {
+                0
+            } else {
+                ret as i16
+            }
+        };
         self.sprites.discard_behind(match_x);
         let obj_enabled = lcdc & 0x02 != 0 || is_cgb;
         let mut output_paused = false;
@@ -242,19 +262,34 @@ impl PixelFifo {
                 let sprite = self.sprites.pop_next().expect("sprite at next_x");
                 if std::env::var_os("CERES_TRACE").is_some() && (ly == 0 || ly == 16 || ly == 40) {
                     eprintln!(
-                        "SPR x={} tile={} pos={} dot={} slen={} pal={}",
+                        "SPR ly={} x={} tile={} pos={} dot={} slen={}",
+                        ly,
                         sprite.x(),
                         sprite.tile(),
-                        sprite.x(),
                         self.position,
                         self.line_dots,
                         self.sprite_len
+
                     );
                 }
                 let sprite_height = if lcdc & 0x04 != 0 { 16 } else { 8 };
                 let sprite_pixels =
                     self.fetcher
                         .fetch_sprite_data(sprite, vram, ly, sprite_height, is_cgb);
+                if std::env::var_os("CERES_OVERLAY").is_some() {
+                    eprintln!(
+                        "ROW ly={} x={} pos={} base={} px={}",
+                        ly,
+                        sprite.x(),
+                        self.position,
+                        i16::from(sprite.x()) - 8 - self.position,
+                        sprite_pixels
+                            .iter()
+                            .map(|p| p.color_id().to_string())
+                            .collect::<Vec<_>>()
+                            .join("")
+                    );
+                }
                 self.overlay_sprite_pixels(sprite_pixels, sprite.x(), is_cgb);
                 // fetch_sprite_data started the 6-dot stall; if more
                 // sprites share this X they are fetched on later dots,
