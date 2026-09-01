@@ -1,6 +1,6 @@
 pub mod conflict;
 
-use crate::{AudioCallback, CgbMode, Gb, Model};
+use crate::{AudioCallback, Gb, Model};
 use conflict::ConflictType;
 
 const ZF: u16 = 0x80;
@@ -228,7 +228,7 @@ impl<A: AudioCallback> Gb<A> {
         }
 
         if self.ints.is_any_requested() {
-            let _was_halted = self.cpu.is_halted;
+            let was_halted = self.cpu.is_halted;
             self.cpu.is_halted = false;
             self.ppu.leave_stop_mode();
             self.clock.stopped = false;
@@ -246,7 +246,7 @@ impl<A: AudioCallback> Gb<A> {
                 self.cpu.skip_isr_nops = false;
                 self.tick_m_cycle();
 
-                if _was_halted {
+                if was_halted {
                     self.tick_m_cycle();
                 }
                 self.cpu.just_halted_from_ei = false;
@@ -316,6 +316,8 @@ impl<A: AudioCallback> Gb<A> {
                 self.ints.disable();
 
                 return;
+            } else if was_halted {
+                self.tick_m_cycle();
             }
         }
 
