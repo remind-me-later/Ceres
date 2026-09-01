@@ -560,10 +560,11 @@ impl<A: AudioCallback> Gb<A> {
             ConflictType::PaletteDmg => {
                 let old = self.read_mem(addr);
                 self.flush_pending_cycles();
+                self.advance_dots(1);
                 self.write_mem(addr, val | old);
                 self.advance_dots(1);
                 self.write_mem(addr, val);
-                self.cpu.set_pending_cycles(3);
+                self.cpu.set_pending_cycles(2);
             }
             ConflictType::PaletteCgb => {
                 if matches!(self.model, Model::CgbD | Model::CgbE | Model::Agb) {
