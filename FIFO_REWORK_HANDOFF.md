@@ -1,5 +1,33 @@
 # PPU FIFO rework — handoff notes (2026-08-28)
 
+## UPDATE 2026-09-01 (session 3) — committed through 2f8ebd66; m3_obp0 down to 6 px
+
+Session 3 commits:
+- `9d063986`: `fix(ppu): accurately time line 1 DMG Mode 2 STAT interrupt and pass m3_scx_low_3_bits` (un-ignored and passed `m3_scx_low_3_bits_dmg_blob` and `m3_scx_low_3_bits_cgb_c` 100% pixel-perfect).
+- `66354e25`: `feat(ppu): compute background tile X dynamically from SCX, LX, and FIFO depth` (`col = ((lx + bg_len + scx) / 8) & 0x1F`).
+- `17501f72`: `fix(ppu): refine PaletteDmg conflict timing and lead-in x_for_object_match` (DMG palette conflict sequence + SameBoy lead-in object matching where `position < -8` returns 0).
+- `29defa80`: `fix(ppu): accurately phase 2-step PaletteDmg bus write` (DMG palette write sequence: flush opcode fetch -> 1 dot advance -> write glitch `val | old` -> 1 dot advance -> write final `val`).
+- `2f8ebd66`: `fix(ppu): only allow sprite fetch in FetcherState::Push matching hardware` (disallows mid-tile fetch starts when sprite matches during active rendering).
+
+### Key Architectural Findings & Rationale
+
+1. **Line 1 DMG Early STAT Trigger**:
+   - A leftover Mode 2 check at `cycles == 2 * DOTS_PER_M` specific to line 1/143 fired 4 dots too early. Removing it standardized the Mode 2 STAT interrupt trigger to `cycles == DOTS_PER_M` for all scanlines.
+   - Result: `m3_scx_low_3_bits_dmg_blob` and `m3_scx_low_3_bits_cgb_c` pass 100% (0 mismatches).
+
+2. **Sub-Cycle DMG Palette Register Write Phasing**:
+   - In `ConflictType::PaletteDmg`, an instruction like `ld [c], a` writing to `rOBP0` or `rBGP` executes in 2 M-cycles. Opcode fetch is M-cycle 1 (4 dots). In M-cycle 2, the bus write puts `val | old` on the bus after 1 dot, and the final value after another dot.
+   - Accurately phasing this dropped `m3_obp0_change_dmg_blob` mismatches from 94 down to 26 (and made scanlines 0..55 and 64..143 100% clean).
+
+3. **Sprite Fetch Gating at Tile Boundary (`FetcherState::Push`)**:
+   - Real Game Boy hardware (and SameBoy `display.c:1956`) cannot start a 6-dot sprite fetch until the fetcher has completed the current background tile row (`FetcherState::Push`).
+   - Requiring `matches!(self.state, FetcherState::Push)` for `is_ready_for_sprite_fetch()` dropped `m3_obp0_change_dmg_blob` mismatches to **only 6 pixels** (23,034 / 23,040 pixels exact).
+   - Also improved `m3_lcdc_obj_size_change_scx_dmg_blob` (110 -> 70 mismatches) and `m3_lcdc_obj_size_change_scx_cgb_c` (180 -> 140 mismatches).
+
+4. **Status on Mealybug Suite**:
+   - 6 tests un-ignored and 100% green (`m3_scx_low_3_bits_*`, `m3_wx_4_change_sprites_*`, `m2_win_en_toggle_*`).
+   - `m3_obp0_change_dmg_blob` at 6 residual pixels (99.97% exact).
+
 ## UPDATE 2026-09-01 (session 2 final) — committed through ce9ce4fe; 141/32
 
 Session 2 commits: `829337a5` (**scan sprites at mode-2 END instead of entry** —
