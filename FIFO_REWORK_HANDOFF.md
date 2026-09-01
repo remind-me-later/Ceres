@@ -1,6 +1,51 @@
 # PPU FIFO rework — handoff notes (2026-08-28)
 
-## UPDATE 2026-09-01 (final) — committed through fc905267; 139/34
+## UPDATE 2026-09-01 (session 2 final) — committed through ce9ce4fe; 141/32
+
+Session 2 commits: `829337a5` (**scan sprites at mode-2 END instead of entry** —
++2: intr_2_0_timing, lcdon_mode_timing) and `ce9ce4fe` (instrumentation strip).
+All debug traces are now removed from the tree; re-add as documented below when
+debugging.
+
+### New findings this session
+
+1. **Sprite scan timing matters**: hardware reads OAM incrementally through the
+   whole mode-2 scan (dots 4-84); the intr_2_mode0_timing_sprites ROM writes its
+   sprite OAM from the mode-2 STAT ISR, so an entry-time scan misses it.
+   scan_sprites now runs at mode-3 entry (`enter_mode` Drawing arm).
+2. **Mealybug m3_scx_low_3_bits mechanism fully decoded** (source in
+   `external/test-sources/mealybug-tearoom-tests/src/ppu/m3_scx_low_3_bits.asm`):
+   the CPU sits in a 1200-NOP slide; EVERY line's STAT mode-2 IRQ re-enters at
+   `jp hl` → lcdc_handler, which writes SCX=0, delays 2 nops on rows < 72
+   (LY < $48), then writes SCX=2. Our run shows the writes at
+   `mode=2 cyc=54 (SCX=0)` and `mode=3 cyc=374 (SCX=2, = dot 2)` for rows < 72,
+   and `mode=2 cyc=2` for rows ≥ 72 — the visible content is ALREADY 95%
+   correct. The residual 320 px: hardware samples SCX's low 3 bits PER FETCH at
+   the B01 read (a mid-line write cascades 2 px shifts through later fetches —
+   SameBoy's `line_has_fractional_scrolling` territory); we latch the fraction
+   once per line at mode-3 entry.
+3. **A "shifted-first-tile" SCX model was tried and reverted** (136/37, worse):
+   pushing the first tile with its first k pixels discarded + an align stall
+   broke scx1/2/5/6 nops that the junk-phase model passes. The empirical
+   junk-phase model (`junk_at = 6 - ((k+1) & 3)`) stands until something
+   beats 141.
+4. **TRAP for future debugging**: `dump_frame` example runs a DIFFERENT config
+   than the harness (env-dependent paths differ) — env-gated traces through
+   dump_frame gave completely wrong answers (zero hits where the harness showed
+   290 events). Always trace through `cargo test -- --nocapture`.
+
+### Remaining 32 fails (grouped; 4 pre-existing at baseline)
+
+- acid2 trio (dmg-acid2 residual 376 px: mouth rows 40-55 overlapping 8x16
+  sprites swap black/gray at x=64-72; footer rows 120-127 3 px/row).
+- mealybug window family ×6 (see item 2 above for scx_low_3_bits; window tests
+  need the SameBoy window state machine port).
+- intr_2 sprites variants ×6 + scx3/scx7 nops ×2 (per-fetch SCX low-bit
+  sampling cascade, item 2).
+- hblank_ly_scx ×3, lcdon_timing_gs ×2, vblank_if_timing, stat_write_if_gs,
+  halt_ime0, halt_ime1_timing2_gs, di_timing_gs, intr_1_2_timing_gs.
+
+## UPDATE 2026-09-01 — mode-3 lengths EXACT + intr_2 core family green (superseded)
 
 Commits this session: `0ee76e39` (position model + sprite FIFO v2 + STAT knob),
 `af02ae2f` (sprite FIFO pop wrap %8→%16), `fc905267` (8-dot fetch cycle + lead-in
