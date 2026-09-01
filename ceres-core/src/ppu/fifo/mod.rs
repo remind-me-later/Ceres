@@ -245,17 +245,16 @@ impl PixelFifo {
         // costs a 6-dot fetch that stalls the BG fetcher and pixel output.
         // Unlike the previous exact-lx + ready-state coincidence trigger,
         // this can never silently drop a sprite.
-        let match_x: i16 = {
-            let ret = (self.position as u8).wrapping_add(8);
-            if ret > (-16i8 as u8) { 0 } else { ret as i16 }
+        let (match_x, is_match) = if self.position < 0 {
+            (0, self.sprites.next_x().map_or(false, |x| x < 8))
+        } else {
+            let mx = self.position + 8;
+            (mx, self.sprites.next_x().map_or(false, |x| x <= mx))
         };
         self.sprites.discard_behind(match_x);
         let obj_enabled = lcdc & 0x02 != 0 || is_cgb;
-        let mut output_paused = false;
-        if obj_enabled
-            && !self.fetcher.is_fetching_sprite()
-            && self.sprites.next_x() == Some(match_x)
-        {
+        let mut sprite_pending = false;
+        if obj_enabled && !self.fetcher.is_fetching_sprite() && is_match {
             if self.fetcher.is_ready_for_sprite_fetch() {
                 let sprite = self.sprites.pop_next().expect("sprite at next_x");
                 if std::env::var_os("CERES_TRACE").is_some() && (ly == 0 || ly == 16 || ly == 40) {
@@ -288,15 +287,8 @@ impl PixelFifo {
                     );
                 }
                 self.overlay_sprite_pixels(sprite_pixels, sprite.x(), is_cgb);
-                // fetch_sprite_data started the 6-dot stall; if more
-                // sprites share this X they are fetched on later dots,
-                // once the stall expires and the fetcher is still at the
-                // tile-row boundary.
-            } else {
-                // Fetcher mid-row: let this dot finish the row. Pixel
-                // output waits so the sprite overlay stays aligned with
-                // the sprite's on-screen X.
-                output_paused = true;
+            } else if self.position >= 0 {
+                sprite_pending = true;
             }
         }
 
@@ -335,7 +327,7 @@ impl PixelFifo {
         // SameBoy's render_pixel_if_possible has no FIFO-depth gate. The
         // position lead-in plus the fetch cadence make the line self-clock
         // to the hardware mode-3 length.
-        if !output_paused
+        if !sprite_pending
             && self.position < 160
             && self.bg_len > 0
             && !self.fetcher.is_fetching_sprite()
