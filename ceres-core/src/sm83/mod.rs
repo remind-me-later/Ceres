@@ -587,7 +587,16 @@ impl<A: AudioCallback> Gb<A> {
                     self.cpu.set_pending_cycles(4);
                 }
             }
-            ConflictType::DmgLcdc | ConflictType::SgbLcdc => {
+            ConflictType::DmgLcdc => {
+                let old = self.read_mem(addr);
+                self.flush_pending_cycles();
+                self.advance_dots(1);
+                self.write_mem(addr, old | (val & 0x01));
+                self.advance_dots(1);
+                self.write_mem(addr, val);
+                self.cpu.set_pending_cycles(2);
+            }
+            ConflictType::SgbLcdc => {
                 self.flush_pending_cycles();
                 self.write_mem(addr, val);
                 self.cpu.set_pending_cycles(4);
