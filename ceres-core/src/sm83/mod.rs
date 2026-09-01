@@ -246,7 +246,7 @@ impl<A: AudioCallback> Gb<A> {
                 self.cpu.skip_isr_nops = false;
                 self.tick_m_cycle();
 
-                if was_halted {
+                if was_halted && (self.cgb_mode != crate::CgbMode::Dmg || self.cpu.just_halted_from_ei) {
                     self.tick_m_cycle();
                 }
                 self.cpu.just_halted_from_ei = false;
