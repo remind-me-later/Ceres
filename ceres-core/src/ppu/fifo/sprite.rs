@@ -117,12 +117,25 @@ impl SpriteBuffer {
             }
         }
 
+        if std::env::var_os("CERES_TRACE").is_some() && ly == 16 && self.count == 0 {
+            let ys: Vec<u8> = (0..40).map(|i| bytes[i * 4]).collect();
+            let xs: Vec<u8> = (0..40).map(|i| bytes[i * 4 + 1]).collect();
+            eprintln!("OAM ly=16 ys={ys:?} xs={xs:?}");
+        }
+
         // Fetch order is always ascending X (stable sort, so equal X keeps
         // OAM order). Pixel priority between overlapping sprites is not
         // decided here: the FIFO overlay resolves it — first opaque pixel
         // in fetch order on DMG (== X priority, Pan Docs "Drawing
         // priority"), lowest OAM index on CGB regardless of fetch order.
         self.sprites[..self.count].sort_by_key(|s| s.map_or(u8::MAX, |spr| spr.x()));
+        if std::env::var_os("CERES_TRACE").is_some() && ly <= 20 && self.count > 0 {
+            let list: Vec<String> = self.sprites[..self.count]
+                .iter()
+                .map(|s| format!("(x={},t={})", s.map_or(0, |sp| sp.x()), s.map_or(0, |sp| sp.tile())))
+                .collect();
+            eprintln!("SCAN ly={ly} count={} {:?}", self.count, list);
+        }
     }
 
     /// Drop sprites that can no longer be fetched this line: their match

@@ -240,6 +240,17 @@ impl PixelFifo {
         {
             if self.fetcher.is_ready_for_sprite_fetch() {
                 let sprite = self.sprites.pop_next().expect("sprite at next_x");
+                if std::env::var_os("CERES_TRACE").is_some() && (ly == 0 || ly == 16 || ly == 40) {
+                    eprintln!(
+                        "SPR x={} tile={} pos={} dot={} slen={} pal={}",
+                        sprite.x(),
+                        sprite.tile(),
+                        sprite.x(),
+                        self.position,
+                        self.line_dots,
+                        self.sprite_len
+                    );
+                }
                 let sprite_height = if lcdc & 0x04 != 0 { 16 } else { 8 };
                 let sprite_pixels =
                     self.fetcher
@@ -266,21 +277,26 @@ impl PixelFifo {
             self.push_bg_pixels([Pixel::empty(); 8]);
         }
 
-        // Step Background Fetcher. The BG tile column is derived live from
-        // SCX and the (u8-wrapped) position, SameBoy-style
-        // (display.c:943: map_x = (SCX + position_in_line + 8) / 8), so
+        // Step Background Fetcher, starting at the junk-push dot (SameBoy's
+        // fetcher starts at mode-3 start together with the junk row — a
+        // fetcher that starts earlier samples its first column before the
+        // lead-in snap and grabs a wrapped junk column, shifting the whole
+        // line +8 px). The BG tile column is derived live from SCX and the
+        // (u8-wrapped) position, SameBoy-style (display.c:939-944), so
         // mid-line SCX writes shift subsequent fetches immediately.
-        if let Some(pixels) = self.fetcher.step_t_cycle(
-            vram,
-            ly,
-            scy,
-            scx,
-            self.position as u8,
-            lcdc,
-            is_cgb,
-            self.bg_len,
-        ) {
-            self.push_bg_pixels(pixels);
+        if self.line_dots >= self.junk_at {
+            if let Some(pixels) = self.fetcher.step_t_cycle(
+                vram,
+                ly,
+                scy,
+                scx,
+                self.position as u8,
+                lcdc,
+                is_cgb,
+                self.bg_len,
+            ) {
+                self.push_bg_pixels(pixels);
+            }
         }
 
         // Output: one FIFO pop per dot whenever the FIFO is non-empty —
@@ -331,6 +347,18 @@ impl PixelFifo {
             };
 
             let out_x = self.position as u8;
+            if std::env::var_os("CERES_TRACE").is_some() && out_x == 0 && (ly == 0 || ly == 32) {
+                eprintln!("PX0 ly={ly} dot={} k={} junk_at={}", self.line_dots, scx & 7, self.junk_at);
+            }
+            if std::env::var_os("CERES_TRACE").is_some() && ly == 40 && (60..82).contains(&out_x) {
+                eprintln!(
+                    "PX x={out_x} dot={} bgcid={} spcid={} spal={}",
+                    self.line_dots,
+                    bg_px.color_id(),
+                    sprite_px.color_id(),
+                    sprite_px.palette()
+                );
+            }
             self.lx = out_x;
             self.position += 1;
             return Some((out_x, bg_px, sprite_px));

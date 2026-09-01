@@ -133,9 +133,16 @@ impl TileFetcher {
                     (map, col, row, r)
                 } else {
                     let map = if lcdc & 0x08 != 0 { 0x1C00 } else { 0x1800 };
-                    // SameBoy display.c:943: map_x = (SCX + position + 8) / 8
-                    let fetch_x = scx.wrapping_add(position).wrapping_add(8);
-                    let col = (fetch_x / 8) & 0x1F;
+                    // SameBoy display.c:939-944: during the first half of the
+                    // lead-in the fetched column is simply the first visible
+                    // column (SCX >> 3); from the second half on it follows
+                    // the live position with the 8-pixel FIFO lead.
+                    let col = if position.wrapping_add(16) < 8 {
+                        (scx >> 3) & 0x1F
+                    } else {
+                        let fetch_x = scx.wrapping_add(position).wrapping_add(8);
+                        (fetch_x / 8) & 0x1F
+                    };
                     let y = ly.wrapping_add(scy);
                     let row = (y / 8) & 0x1F;
                     let r = (y % 8) as u16;
@@ -144,6 +151,18 @@ impl TileFetcher {
 
                 let map_addr = map_base + (u16::from(tile_row) * 32) + u16::from(tile_col);
                 self.row_in_tile = row_in_tile;
+
+                if std::env::var_os("CERES_TRACE").is_some()
+                    && !self.is_window
+                    && std::env::var("CERES_TRACE_LY")
+                        .ok()
+                        .and_then(|v| v.parse::<u8>().ok())
+                        .is_some_and(|l| l == ly)
+                {
+                    eprintln!(
+                        "BG col={tile_col} row={tile_row} map={map_addr:#06x} pos={position} lcdc={lcdc:#04x}"
+                    );
+                }
 
                 self.tile_id = vram.vram_at_bank(map_addr, 0);
                 self.tile_attr = if is_cgb {
@@ -176,19 +195,12 @@ impl TileFetcher {
                 };
                 self.tile_data_high = vram.vram_at_bank(data_addr, bank);
 
-                if bg_len <= 8 {
-                    let pixels = self.decode_bg_pixels(is_cgb);
-                    if self.is_window {
-                        self.window_tile_x = (self.window_tile_x + 1) & 0x1F;
-                    } else {
-                        self.bg_tile_x = (self.bg_tile_x + 1) & 0x1F;
-                    }
-                    self.state = FetcherState::GetTile;
-                    Some(pixels)
-                } else {
-                    self.state = FetcherState::Push;
-                    None
-                }
+                // Always hand over to Push: the fetch cycle must stay a
+                // constant 8 dots so the fetcher never laps the pixel pops
+                // (a 6-dot cycle injects a duplicate tile row and shifts
+                // the line by 8 px).
+                self.state = FetcherState::Push;
+                None
             }
             FetcherState::Push => {
                 if bg_len <= 8 {
