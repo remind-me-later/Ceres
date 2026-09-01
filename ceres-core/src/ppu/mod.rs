@@ -503,6 +503,10 @@ impl Ppu {
                             self.ly_for_comparison = 144;
                             self.check_lyc(ints);
                             ints.request_vblank();
+                            if self.stat & STAT_IF_VBLANK_B != 0 && !self.stat_line {
+                                ints.request_lcd();
+                                self.stat_line = true;
+                            }
                         }
                     } else if self.cycles == 2 * DOTS_PER_M {
                         self.ly = 144;
@@ -512,6 +516,10 @@ impl Ppu {
                         self.ly_for_comparison = 144;
                         self.check_lyc(ints);
                         ints.request_vblank();
+                        if self.stat & STAT_IF_VBLANK_B != 0 && !self.stat_line {
+                            ints.request_lcd();
+                            self.stat_line = true;
+                        }
                     }
                 } else if self.cycles == 2 * DOTS_PER_M && !self.lcdon_line0_mode0 {
                     if !self.is_cgb {

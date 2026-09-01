@@ -626,7 +626,7 @@ fn test_gpu_intr_1_2_timing_gs() {
 #[test]
 fn test_gpu_intr_1_timing() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/intr_1_timing.gb", Model::DmgB);
-    assert!(result.is_passed(), "gpu/intr_1_timing test failed");
+    assert_eq!(result, TestResult::Passed, "gpu/intr_1_timing test failed");
 }
 
 #[test]
