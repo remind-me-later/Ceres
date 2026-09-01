@@ -72,8 +72,8 @@ impl Mode {
             Self::OamScan => OAM_M_CYCLES,
             Self::Drawing => {
                 let adjust = match scroll_x & 0x7 {
-                    3..=6 => 1,
-                    7 => 2,
+                    1..=4 => 1,
+                    5..=7 => 2,
                     _ => 0,
                 };
                 let base = match model {
@@ -90,8 +90,8 @@ impl Mode {
             }
             Self::HBlank => {
                 let adjust = match scroll_x & 0x7 {
-                    3..=6 => 1,
-                    7 => 2,
+                    1..=4 => 1,
+                    5..=7 => 2,
                     _ => 0,
                 };
                 let base = match model {
@@ -524,7 +524,6 @@ impl Ppu {
                 } else if self.cycles == 2 * DOTS_PER_M && !self.lcdon_line0_mode0 {
                     if !self.is_cgb {
                         if self.ly < 143 {
-                            self.ly += 1;
                             self.ly_for_comparison = u16::MAX;
                             self.check_lyc(ints);
                         }
@@ -553,6 +552,9 @@ impl Ppu {
                                 self.stat &= !STAT_LYC_B;
                             }
                         } else {
+                            if self.ly < 143 {
+                                self.ly += 1;
+                            }
                             self.ly_for_comparison = u16::from(self.ly);
                             self.check_lyc(ints);
                         }
