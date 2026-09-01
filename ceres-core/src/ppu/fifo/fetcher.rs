@@ -279,11 +279,7 @@ impl TileFetcher {
         };
 
         let tile_addr = (u16::from(tile_id) * 16) + tile_y * 2;
-        let bank = if is_cgb {
-            sprite.cgb_vram_bank()
-        } else {
-            0
-        };
+        let bank = if is_cgb { sprite.cgb_vram_bank() } else { 0 };
         let low = vram.vram_at_bank(tile_addr, bank);
         let high = vram.vram_at_bank(tile_addr + 1, bank);
 

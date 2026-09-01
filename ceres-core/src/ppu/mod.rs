@@ -381,10 +381,7 @@ impl Ppu {
                 && self.cycles == 2 * DOTS_PER_M
             {
                 145
-            } else if (self.stat & STAT_MODE_B) == 0
-                && self.cycles == DOTS_PER_M
-                && self.ly < 143
-            {
+            } else if (self.stat & STAT_MODE_B) == 0 && self.cycles == DOTS_PER_M && self.ly < 143 {
                 self.ly + 1
             } else {
                 self.ly
@@ -485,8 +482,8 @@ impl Ppu {
                 }
             }
             Mode::HBlank => {
-                let base_hblank = Mode::HBlank.m_cycles(self.scx, self.model) * DOTS_PER_M
-                    - self.sprite_penalty;
+                let base_hblank =
+                    Mode::HBlank.m_cycles(self.scx, self.model) * DOTS_PER_M - self.sprite_penalty;
                 if self.is_cgb && self.cycles == base_hblank - DOTS_PER_M {
                     self.update_stat_line(ints);
                 }
@@ -532,7 +529,6 @@ impl Ppu {
                             self.stat &= !STAT_LYC_B;
                         }
                     }
-
                 } else if self.cycles == DOTS_PER_M && !self.lcdon_line0_mode0 {
                     if self.ly <= 143 {
                         if self.is_cgb {
@@ -554,7 +550,6 @@ impl Ppu {
                         }
                     }
                 }
-
 
                 // DMG mode-2 (OAM) STAT IRQ. Fired `OAM_IRQ_AT` dots before
                 // HBlank ends (swept against the mooneye intr_2 family; 7

@@ -96,13 +96,20 @@ impl ScreenshotCheck {
         let matches = expected_rgba.as_raw() == actual_rgba;
         if !matches {
             let mut count = 0;
-            for (idx, (e, a)) in expected_rgba.chunks(4).zip(actual_rgba.chunks(4)).enumerate() {
+            for (idx, (e, a)) in expected_rgba
+                .chunks(4)
+                .zip(actual_rgba.chunks(4))
+                .enumerate()
+            {
                 if e != a {
                     count += 1;
                     if count <= 10 {
                         let x = idx % 160;
                         let y = idx / 160;
-                        eprintln!("Mismatch #{count} at ({x}, {y}): expected {:?}, got {:?}", e, a);
+                        eprintln!(
+                            "Mismatch #{count} at ({x}, {y}): expected {:?}, got {:?}",
+                            e, a
+                        );
                     }
                 }
             }

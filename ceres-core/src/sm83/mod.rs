@@ -246,7 +246,9 @@ impl<A: AudioCallback> Gb<A> {
                 self.cpu.skip_isr_nops = false;
                 self.tick_m_cycle();
 
-                if was_halted && (self.cgb_mode != crate::CgbMode::Dmg || self.cpu.just_halted_from_ei) {
+                if was_halted
+                    && (self.cgb_mode != crate::CgbMode::Dmg || self.cpu.just_halted_from_ei)
+                {
                     self.tick_m_cycle();
                 }
                 self.cpu.just_halted_from_ei = false;
@@ -507,12 +509,8 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     pub(crate) fn write_cpu(&mut self, addr: u16, val: u8) {
-        let conflict = conflict::get_conflict(
-            self.model,
-            self.cgb_mode,
-            self.key1.is_enabled(),
-            addr,
-        );
+        let conflict =
+            conflict::get_conflict(self.model, self.cgb_mode, self.key1.is_enabled(), addr);
 
         let pending = self.cpu.pending_cycles();
 

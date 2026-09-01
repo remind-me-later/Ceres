@@ -1,6 +1,6 @@
 use {
     super::Ppu,
-    crate::{ppu::fifo::Pixel, CgbMode},
+    crate::{CgbMode, ppu::fifo::Pixel},
 };
 
 impl Ppu {

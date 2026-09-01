@@ -159,9 +159,7 @@ impl PixelFifo {
     /// pixel are merged by sprite priority (DMG: first fetch wins, i.e.
     /// smaller X; CGB: lower OAM index).
     fn overlay_sprite_pixels(&mut self, sprite_pixels: [Pixel; 8], sprite_x: u8, is_cgb: bool) {
-        if std::env::var_os("CERES_OVERLAY").is_some()
-            && self.position >= 40
-            && self.position <= 64
+        if std::env::var_os("CERES_OVERLAY").is_some() && self.position >= 40 && self.position <= 64
         {
             eprintln!(
                 "OVL x={} pos={} base={} slen={} px={}",
@@ -169,7 +167,11 @@ impl PixelFifo {
                 self.position,
                 i16::from(sprite_x) - 8 - self.position,
                 self.sprite_len,
-                sprite_pixels.iter().map(|p| p.color_id().to_string()).collect::<Vec<_>>().join("")
+                sprite_pixels
+                    .iter()
+                    .map(|p| p.color_id().to_string())
+                    .collect::<Vec<_>>()
+                    .join("")
             );
         }
         for (j, new_px) in sprite_pixels.iter().enumerate() {
@@ -245,11 +247,7 @@ impl PixelFifo {
         // this can never silently drop a sprite.
         let match_x: i16 = {
             let ret = (self.position as u8).wrapping_add(8);
-            if ret > (-16i8 as u8) {
-                0
-            } else {
-                ret as i16
-            }
+            if ret > (-16i8 as u8) { 0 } else { ret as i16 }
         };
         self.sprites.discard_behind(match_x);
         let obj_enabled = lcdc & 0x02 != 0 || is_cgb;
@@ -269,7 +267,6 @@ impl PixelFifo {
                         self.position,
                         self.line_dots,
                         self.sprite_len
-
                     );
                 }
                 let sprite_height = if lcdc & 0x04 != 0 { 16 } else { 8 };
@@ -383,7 +380,12 @@ impl PixelFifo {
 
             let out_x = self.position as u8;
             if std::env::var_os("CERES_TRACE").is_some() && out_x == 0 && (ly == 0 || ly == 32) {
-                eprintln!("PX0 ly={ly} dot={} k={} junk_at={}", self.line_dots, scx & 7, self.junk_at);
+                eprintln!(
+                    "PX0 ly={ly} dot={} k={} junk_at={}",
+                    self.line_dots,
+                    scx & 7,
+                    self.junk_at
+                );
             }
             if std::env::var_os("CERES_TRACE").is_some() && ly == 40 && (60..82).contains(&out_x) {
                 eprintln!(
