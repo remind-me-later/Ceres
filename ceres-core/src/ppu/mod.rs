@@ -261,8 +261,7 @@ impl Ppu {
                         && (self.stat & STAT_IF_HBLANK_B != 0)
                 }
                 Mode::VBlank => self.stat & STAT_IF_VBLANK_B != 0,
-                Mode::OamScan => !self.is_cgb && (self.stat & STAT_IF_OAM_B != 0),
-                _ => false,
+                Mode::OamScan | Mode::Drawing => false,
             },
         };
 
@@ -880,6 +879,7 @@ impl Ppu {
 
         let was_line_high = self.stat_line;
         self.stat = (val & !0x07) | ly_equals_lyc | mode;
+
 
         if !is_cgb && self.lcdc & LCDC_ON_B != 0 && !was_line_high {
             let lyc_glitch = (prev_stat & STAT_IF_LYC_B == 0)
