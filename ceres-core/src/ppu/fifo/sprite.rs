@@ -129,11 +129,11 @@ impl SpriteBuffer {
     /// point (`x - 8`, in FIFO-position space) is behind the PPU's current
     /// position. Mirrors SameBoy popping objects with
     /// `objects_x < x_for_object_match()`.
-    pub fn discard_behind(&mut self, match_x: i16) {
+    pub fn discard_behind(&mut self, match_x: u8) {
         while self.count > 0 {
             let front = self.sprites[0];
             let Some(spr) = front else { break };
-            if i16::from(spr.x()) < match_x {
+            if spr.x() < match_x {
                 self.sprites.copy_within(1.., 0);
                 self.sprites[self.count - 1] = None;
                 self.count -= 1;
@@ -145,8 +145,8 @@ impl SpriteBuffer {
 
     /// X coordinate the next sprite (highest fetch priority) matches at.
     #[must_use]
-    pub fn next_x(&self) -> Option<i16> {
-        self.sprites[0].map(|spr| i16::from(spr.x()))
+    pub fn next_x(&self) -> Option<u8> {
+        self.sprites[0].map(|spr| spr.x())
     }
 
     /// Consume the next sprite (highest fetch priority).

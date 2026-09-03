@@ -94,12 +94,16 @@ impl PixelFifo {
         self.window_line_counter = 0;
     }
 
-    pub fn start_drawing(&mut self, scx: u8, is_lcdon: bool) {
+    pub fn start_drawing(&mut self, scx: u8, is_lcdon: bool, is_cgb: bool) {
         self.lx = 0;
         self.line_dots = 0;
         if is_lcdon {
             self.position = 0;
             self.junk_at = 0;
+        } else if is_cgb {
+            self.position = -16;
+            let k = u16::from(scx & 7);
+            self.junk_at = if k & 3 > 1 { 0 } else { 1 - (k & 3) };
         } else {
             self.position = -16;
             // Phase of the lead-in junk push within the M-cycle grid. The SCX
@@ -250,17 +254,16 @@ impl PixelFifo {
         // costs a 6-dot fetch that stalls the BG fetcher and pixel output.
         // Unlike the previous exact-lx + ready-state coincidence trigger,
         // this can never silently drop a sprite.
-        let match_x = if self.position < 0 {
-            0
+        let (match_x, is_match) = if self.position < 0 {
+            (0, self.sprites.next_x().map_or(false, |x| x < 8))
         } else {
-            self.position + 8
+            let mx = self.position + 8;
+            (
+                mx as u8,
+                self.sprites.next_x().map_or(false, |x| x <= mx as u8),
+            )
         };
         self.sprites.discard_behind(match_x);
-        let is_match = if self.position < 0 {
-            self.sprites.next_x().map_or(false, |x| x < 8)
-        } else {
-            self.sprites.next_x().map_or(false, |x| x <= match_x)
-        };
         let obj_enabled = lcdc & 0x02 != 0 || is_cgb;
         let mut sprite_pending = false;
         if obj_enabled && !self.fetcher.is_fetching_sprite() && is_match {
