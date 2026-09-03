@@ -483,6 +483,15 @@ impl Ppu {
                     self.ly_for_comparison = u16::from(self.ly);
                     self.check_lyc(ints);
                 }
+                if !self.is_cgb
+                    && self.ly == 0
+                    && self.cycles == 79
+                    && self.stat & STAT_IF_OAM_B != 0
+                    && !self.stat_line
+                {
+                    ints.request_lcd();
+                    self.stat_line = true;
+                }
             }
             Mode::HBlank => {
                 let base_hblank =
@@ -879,7 +888,6 @@ impl Ppu {
 
         let was_line_high = self.stat_line;
         self.stat = (val & !0x07) | ly_equals_lyc | mode;
-
 
         if !is_cgb && self.lcdc & LCDC_ON_B != 0 && !was_line_high {
             let lyc_glitch = (prev_stat & STAT_IF_LYC_B == 0)
