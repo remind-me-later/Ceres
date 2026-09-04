@@ -61,7 +61,6 @@ pub struct Gb<A: AudioCallback> {
     pub(crate) ints: Interrupts,
     joy: Joypad,
     key1: Key1,
-    ld_b_b_breakpoint: bool,
     model: Model,
     /// PPU double-speed skip parity. In CGB double-speed the PPU should
     /// advance half as often as the CPU M-cycles, so we tick every other
@@ -70,6 +69,10 @@ pub struct Gb<A: AudioCallback> {
     ppu: Ppu,
     serial: Serial,
     wram: Wram,
+    /// Bus time deferred by the CPU but not yet consumed by the machine
+    /// (see the `Bus` trait docs in `sm83`). Only nonzero mid-step and for
+    /// the interrupt dispatch's 2-T-cycle tail; never serialized.
+    time_deferred: i32,
     /// Undocumented CGB register at $FF72 (full R/W, init $00).
     /// Pan Docs "FF72-FF73 — Bits 0-7 (CGB Mode only)".
     undoc_ff72: u8,
@@ -365,10 +368,8 @@ impl<A: AudioCallback> Gb<A> {
     ///
     /// `true` if `ld b, b` was executed since the last check, `false` otherwise.
     #[inline]
-    pub const fn check_and_reset_ld_b_b_breakpoint(&mut self) -> bool {
-        let was_set = self.ld_b_b_breakpoint;
-        self.ld_b_b_breakpoint = false;
-        was_set
+    pub fn check_and_reset_ld_b_b_breakpoint(&mut self) -> bool {
+        self.cpu.take_ld_b_b_breakpoint()
     }
 
     /// Read the current value of CPU register A.
@@ -484,12 +485,12 @@ impl<A: AudioCallback> Gb<A> {
             ints: Interrupts::default(),
             joy: Joypad::default(),
             key1: Key1::default(),
-            ld_b_b_breakpoint: false,
             model,
             ppu_dskip: false,
             ppu: Ppu::default(),
             serial: Serial::default(),
             wram: Wram::default(),
+            time_deferred: 0,
             undoc_ff72: 0,
             undoc_ff73: 0,
             undoc_ff75: 0,
@@ -606,7 +607,6 @@ impl<A: AudioCallback> Gb<A> {
         self.hdma = Hdma::default();
         self.ints = Interrupts::default();
         self.key1 = Key1::default();
-        self.ld_b_b_breakpoint = false;
         self.ppu_dskip = false;
         self.ppu = Ppu::default();
         self.serial = Serial::default();
@@ -733,6 +733,7 @@ mod tests {
     impl crate::AudioCallback for DummyAudio {
         fn audio_sample(&self, _: Sample, _: Sample) {}
     }
+
 
 
 

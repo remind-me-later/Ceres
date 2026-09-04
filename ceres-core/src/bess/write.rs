@@ -125,7 +125,7 @@ impl<'a> Writer<'a> {
             self.write_all(&gb.cpu.de().to_le_bytes()); // DE
             self.write_all(&gb.cpu.hl().to_le_bytes()); // HL
             self.write_all(&gb.cpu.sp().to_le_bytes()); // SP
-            self.write_all(&[u8::from(gb.ints.are_enabled())]); // IME
+            self.write_all(&[u8::from(gb.cpu.ime())]); // IME
             self.write_all(&[gb.ints.read_ie()]); // IE
 
             // Execution state (TODO: stopped state)
