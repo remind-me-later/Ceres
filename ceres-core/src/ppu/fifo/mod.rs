@@ -100,16 +100,15 @@ impl PixelFifo {
         self.window_line_counter = 0;
     }
 
-fn simulate_mode3_cycles(sprites: &[u8], scx: u8) -> u16 {
-    let mut position_in_line = -16i16;
-    let mut fetcher_state = 0u8;
-    let mut bg_fifo_size = 8u8;
-    let mut cycles_for_line = 0u16;
-    let mut cur_obj = 0;
-    let n_sprites = sprites.len();
+    fn simulate_mode3_cycles(sprites: &[u8], scx: u8) -> u16 {
+        let mut position_in_line = -16i16;
+        let mut fetcher_state = 0u8;
+        let mut bg_fifo_size = 8u8;
+        let mut cycles_for_line = 0u16;
+        let mut cur_obj = 0;
+        let n_sprites = sprites.len();
 
-    let advance_fetcher = |state: &mut u8, fifo: &mut u8| {
-        match *state {
+        let advance_fetcher = |state: &mut u8, fifo: &mut u8| match *state {
             0..=4 => *state += 1,
             _ => {
                 *state = 6;
@@ -118,74 +117,67 @@ fn simulate_mode3_cycles(sprites: &[u8], scx: u8) -> u16 {
                     *state = 0;
                 }
             }
-        }
-    };
-
-    loop {
-        let match_x = if position_in_line < -8 {
-            0
-        } else {
-            (position_in_line + 8) as u8
         };
 
-        while cur_obj < n_sprites && sprites[cur_obj] < match_x {
-            cur_obj += 1;
-        }
+        loop {
+            let match_x = if position_in_line < -8 {
+                0
+            } else {
+                (position_in_line + 8) as u8
+            };
 
-        while cur_obj < n_sprites && sprites[cur_obj] == match_x {
-            while fetcher_state < 5 || bg_fifo_size == 0 {
+            while cur_obj < n_sprites && sprites[cur_obj] < match_x {
+                cur_obj += 1;
+            }
+
+            while cur_obj < n_sprites && sprites[cur_obj] == match_x {
+                while fetcher_state < 5 || bg_fifo_size == 0 {
+                    advance_fetcher(&mut fetcher_state, &mut bg_fifo_size);
+                    cycles_for_line += 1;
+                }
                 advance_fetcher(&mut fetcher_state, &mut bg_fifo_size);
                 cycles_for_line += 1;
+
+                advance_fetcher(&mut fetcher_state, &mut bg_fifo_size);
+                cycles_for_line += 2;
+
+                cycles_for_line += 2;
+                cycles_for_line += 1;
+
+                cur_obj += 1;
             }
-            advance_fetcher(&mut fetcher_state, &mut bg_fifo_size);
-            cycles_for_line += 1;
 
-            advance_fetcher(&mut fetcher_state, &mut bg_fifo_size);
-            cycles_for_line += 2;
-
-            cycles_for_line += 2;
-            cycles_for_line += 1;
-
-            cur_obj += 1;
-        }
-
-        let pending_x0 = cur_obj < n_sprites && sprites[cur_obj] == 0;
-        if !pending_x0 && bg_fifo_size > 0 {
-            bg_fifo_size -= 1;
-            let pu8 = position_in_line as u8;
-            let mut skip_inc = false;
-            if pu8.wrapping_add(16) < 8 {
-                if pu8 == 239 {
-                    position_in_line = -16;
-                } else if pu8 & 7 == scx & 7 {
-                    position_in_line = -8;
-                } else if pu8 == 247 {
-                    position_in_line = -16;
-                    skip_inc = true;
+            let pending_x0 = cur_obj < n_sprites && sprites[cur_obj] == 0;
+            if !pending_x0 && bg_fifo_size > 0 {
+                bg_fifo_size -= 1;
+                let pu8 = position_in_line as u8;
+                let mut skip_inc = false;
+                if pu8.wrapping_add(16) < 8 {
+                    if pu8 == 239 {
+                        position_in_line = -16;
+                    } else if pu8 & 7 == scx & 7 {
+                        position_in_line = -8;
+                    } else if pu8 == 247 {
+                        position_in_line = -16;
+                        skip_inc = true;
+                    }
+                }
+                if !skip_inc {
+                    position_in_line += 1;
                 }
             }
-            if !skip_inc {
-                position_in_line += 1;
+
+            advance_fetcher(&mut fetcher_state, &mut bg_fifo_size);
+            if position_in_line == 160 {
+                break;
             }
+            cycles_for_line += 1;
         }
 
-        advance_fetcher(&mut fetcher_state, &mut bg_fifo_size);
-        if position_in_line == 160 {
-            break;
-        }
-        cycles_for_line += 1;
+        cycles_for_line
     }
 
-    cycles_for_line
-}
-
-    pub fn start_drawing(
-        &mut self,
-        scx: u8,
-        is_lcdon: bool,
-        is_cgb: bool,
-        obj_enabled: bool,
-    ) {
+    pub fn start_drawing(&mut self, scx: u8, is_lcdon: bool, is_cgb: bool, obj_enabled: bool) {
         self.lx = 0;
         self.line_dots = 0;
         self.sprite_stall = 0;
@@ -210,7 +202,11 @@ fn simulate_mode3_cycles(sprites: &[u8], scx: u8) -> u16 {
             // = 13/13/13/17/17/17/17/21 for k = 0..7, reproducing the mooneye
             // mode-3 lengths (172/176/180 dots on DMG) exactly.
             let k = u16::from(scx & 7);
-            self.position = if obj_enabled && (k & 3 == 3) { -15 } else { -16 };
+            self.position = if obj_enabled && (k & 3 == 3) {
+                -15
+            } else {
+                -16
+            };
             if obj_enabled {
                 self.junk_at = if k & 3 > 1 { 0 } else { 1 - (k & 3) };
                 let (xs, count) = self.sprites.sprite_xs();

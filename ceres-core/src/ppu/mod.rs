@@ -158,6 +158,7 @@ pub struct Ppu {
     mode_for_interrupt: Option<Mode>,
     stat_line: bool,
     sprite_penalty: i32,
+    hblank_dots: i32,
     current_vblank_line: u8,
     fifo: fifo::PixelFifo,
     lyc_latched: u8,
@@ -183,6 +184,7 @@ impl Default for Ppu {
             mode_for_interrupt: None,
             stat_line: false,
             sprite_penalty: 0,
+            hblank_dots: 51 * DOTS_PER_M,
             current_vblank_line: 0,
             fifo: fifo::PixelFifo::new(),
             oam: Oam::default(),
@@ -252,10 +254,7 @@ impl Ppu {
             Some(Mode::OamScan) => self.stat & STAT_IF_OAM_B != 0,
             Some(Mode::Drawing) | None => match self.mode() {
                 Mode::HBlank => {
-                    let cgb_hblank_delayed = self.is_cgb
-                        && self.cycles
-                            >= (Mode::HBlank.m_cycles(self.scx, self.model) * DOTS_PER_M
-                                - self.sprite_penalty);
+                    let cgb_hblank_delayed = self.is_cgb && self.cycles >= self.hblank_dots;
                     !self.lcdon_line0_mode0
                         && !cgb_hblank_delayed
                         && (self.stat & STAT_IF_HBLANK_B != 0)
@@ -301,7 +300,7 @@ impl Ppu {
             // Mode 3's length is owned by the pixel FIFO; `cycles` only
             // arms the watchdog against a stalled FIFO.
             Mode::Drawing => MODE3_MAX_DOTS,
-            Mode::HBlank => (base_cycles - self.sprite_penalty).max(DOTS_PER_M),
+            Mode::HBlank => self.hblank_dots,
             _ => base_cycles,
         };
         self.mode_for_interrupt = None;
@@ -386,7 +385,7 @@ impl Ppu {
                 && self.cycles == 2 * DOTS_PER_M
             {
                 145
-            } else if (self.stat & STAT_MODE_B) == 0 && self.cycles == DOTS_PER_M && self.ly < 143 {
+            } else if (self.stat & STAT_MODE_B) == 0 && self.cycles <= DOTS_PER_M && self.ly < 143 {
                 self.ly + 1
             } else {
                 self.ly
@@ -496,9 +495,7 @@ impl Ppu {
                 }
             }
             Mode::HBlank => {
-                let base_hblank =
-                    Mode::HBlank.m_cycles(self.scx, self.model) * DOTS_PER_M - self.sprite_penalty;
-                if self.is_cgb && self.cycles == base_hblank - DOTS_PER_M {
+                if self.is_cgb && self.cycles == self.hblank_dots - 1 {
                     self.update_stat_line(ints);
                 }
                 if (self.ly == 143 || (self.ly == 144 && self.mode() == Mode::HBlank))
@@ -683,15 +680,8 @@ impl Ppu {
                 }
 
                 if self.fifo.line_done() {
-                    // The FIFO completed the scanline: Mode 3 ends at this
-                    // dot. Record the measured length (dots since mode-3
-                    // entry) as the sprite/window penalty relative to the
-                    // SCX-adjusted base, then let the mode-expiry block
-                    // below enter HBlank; HBlank absorbs the remainder so
-                    // the line still totals 456 dots.
                     let mode3_dots = MODE3_MAX_DOTS - self.cycles + 1;
-                    let base3 = Mode::Drawing.m_cycles(self.scx, self.model) * DOTS_PER_M;
-                    self.sprite_penalty = mode3_dots - base3;
+                    self.hblank_dots = (456 - 80 - mode3_dots).max(DOTS_PER_M);
                     self.cycles = 1;
                 }
             }
@@ -749,6 +739,7 @@ impl Ppu {
                         self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
                         self.mode = Mode::HBlank;
                         self.cycles = DOTS_PER_M;
+                        self.hblank_dots = DOTS_PER_M;
                         self.line0_frame_wrap = true;
                         self.ly_for_comparison = 0;
                         self.check_lyc(ints);
@@ -797,6 +788,7 @@ impl Ppu {
             self.mode = Mode::HBlank;
             self.stat_line = false;
             self.cycles = Mode::HBlank.m_cycles(self.scx, self.model) * DOTS_PER_M;
+            self.hblank_dots = self.cycles;
             self.rgba_buf_present.clear();
             // LYC comparison: re-evaluate after LY reset to 0.
             self.check_lyc(ints);
@@ -812,6 +804,7 @@ impl Ppu {
             self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
             self.mode = Mode::HBlank;
             self.cycles = 20 * DOTS_PER_M;
+            self.hblank_dots = 20 * DOTS_PER_M;
             self.lcdon_line0_mode0 = true;
             self.check_lyc(ints);
         }
