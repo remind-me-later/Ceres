@@ -160,4 +160,15 @@ impl SpriteBuffer {
         self.count -= 1;
         spr
     }
+
+    #[must_use]
+    pub fn sprite_xs(&self) -> ([u8; 10], usize) {
+        let mut xs = [0u8; 10];
+        for i in 0..self.count {
+            if let Some(s) = self.sprites[i] {
+                xs[i] = s.x();
+            }
+        }
+        (xs, self.count)
+    }
 }

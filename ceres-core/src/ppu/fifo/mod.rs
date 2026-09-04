@@ -33,6 +33,9 @@ pub struct PixelFifo {
     junk_at: u16,
     window_active: bool,
     window_line_counter: u8,
+    sprite_stall: u8,
+    line_sprite_stall: u8,
+    junk_pushed: bool,
 }
 
 impl Default for PixelFifo {
@@ -62,6 +65,9 @@ impl PixelFifo {
             junk_at: 5,
             window_active: false,
             window_line_counter: 0,
+            sprite_stall: 0,
+            line_sprite_stall: 0,
+            junk_pushed: false,
         }
     }
 
@@ -94,12 +100,101 @@ impl PixelFifo {
         self.window_line_counter = 0;
     }
 
-    pub fn start_drawing(&mut self, scx: u8, is_lcdon: bool, is_cgb: bool) {
+fn simulate_mode3_cycles(sprites: &[u8], scx: u8) -> u16 {
+    let mut position_in_line = -16i16;
+    let mut fetcher_state = 0u8;
+    let mut bg_fifo_size = 8u8;
+    let mut cycles_for_line = 0u16;
+    let mut cur_obj = 0;
+    let n_sprites = sprites.len();
+
+    let advance_fetcher = |state: &mut u8, fifo: &mut u8| {
+        match *state {
+            0..=4 => *state += 1,
+            _ => {
+                *state = 6;
+                if *fifo == 0 {
+                    *fifo += 8;
+                    *state = 0;
+                }
+            }
+        }
+    };
+
+    loop {
+        let match_x = if position_in_line < -8 {
+            0
+        } else {
+            (position_in_line + 8) as u8
+        };
+
+        while cur_obj < n_sprites && sprites[cur_obj] < match_x {
+            cur_obj += 1;
+        }
+
+        while cur_obj < n_sprites && sprites[cur_obj] == match_x {
+            while fetcher_state < 5 || bg_fifo_size == 0 {
+                advance_fetcher(&mut fetcher_state, &mut bg_fifo_size);
+                cycles_for_line += 1;
+            }
+            advance_fetcher(&mut fetcher_state, &mut bg_fifo_size);
+            cycles_for_line += 1;
+
+            advance_fetcher(&mut fetcher_state, &mut bg_fifo_size);
+            cycles_for_line += 2;
+
+            cycles_for_line += 2;
+            cycles_for_line += 1;
+
+            cur_obj += 1;
+        }
+
+        let pending_x0 = cur_obj < n_sprites && sprites[cur_obj] == 0;
+        if !pending_x0 && bg_fifo_size > 0 {
+            bg_fifo_size -= 1;
+            let pu8 = position_in_line as u8;
+            let mut skip_inc = false;
+            if pu8.wrapping_add(16) < 8 {
+                if pu8 == 239 {
+                    position_in_line = -16;
+                } else if pu8 & 7 == scx & 7 {
+                    position_in_line = -8;
+                } else if pu8 == 247 {
+                    position_in_line = -16;
+                    skip_inc = true;
+                }
+            }
+            if !skip_inc {
+                position_in_line += 1;
+            }
+        }
+
+        advance_fetcher(&mut fetcher_state, &mut bg_fifo_size);
+        if position_in_line == 160 {
+            break;
+        }
+        cycles_for_line += 1;
+    }
+
+    cycles_for_line
+}
+
+    pub fn start_drawing(
+        &mut self,
+        scx: u8,
+        is_lcdon: bool,
+        is_cgb: bool,
+        obj_enabled: bool,
+    ) {
         self.lx = 0;
         self.line_dots = 0;
+        self.sprite_stall = 0;
+        self.line_sprite_stall = 0;
+        self.junk_pushed = false;
         if is_lcdon {
             self.position = 0;
             self.junk_at = 0;
+            self.junk_pushed = true;
         } else if is_cgb {
             self.position = -16;
             let k = u16::from(scx & 7);
@@ -115,7 +210,22 @@ impl PixelFifo {
             // = 13/13/13/17/17/17/17/21 for k = 0..7, reproducing the mooneye
             // mode-3 lengths (172/176/180 dots on DMG) exactly.
             let k = u16::from(scx & 7);
-            self.junk_at = 5 - (k & 3);
+            self.position = if obj_enabled && (k & 3 == 3) { -15 } else { -16 };
+            if obj_enabled {
+                self.junk_at = if k & 3 > 1 { 0 } else { 1 - (k & 3) };
+                let (xs, count) = self.sprites.sprite_xs();
+                if count > 0 {
+                    let cycles = Self::simulate_mode3_cycles(&xs[..count], scx);
+                    let diff = cycles.saturating_sub(167);
+                    let extra = diff / 4;
+                    let target_dots = 168 + 4 * (extra as i32);
+                    let natural_dots = 168 + if k & 3 == 3 { 2 } else { i32::from(scx & 7) };
+                    let stall = (target_dots - natural_dots).max(0);
+                    self.line_sprite_stall = stall as u8;
+                }
+            } else {
+                self.junk_at = 5 - (k & 3);
+            }
         }
         self.fetcher.reset_bg(scx);
     }
@@ -128,6 +238,9 @@ impl PixelFifo {
         self.sprite_head = 0;
         self.sprite_tail = 0;
         self.sprite_len = 0;
+        self.sprite_stall = 0;
+        self.line_sprite_stall = 0;
+        self.junk_pushed = false;
 
         self.sprites.clear();
     }
@@ -254,65 +367,45 @@ impl PixelFifo {
         // costs a 6-dot fetch that stalls the BG fetcher and pixel output.
         // Unlike the previous exact-lx + ready-state coincidence trigger,
         // this can never silently drop a sprite.
-        let (match_x, is_match) = if self.position < 0 {
-            (0, self.sprites.next_x().map_or(false, |x| x < 8))
+        if self.sprite_stall > 0 {
+            self.sprite_stall -= 1;
+            return None;
+        }
+
+        let match_x = if self.position < -8 {
+            0
         } else {
-            let mx = self.position + 8;
-            (
-                mx as u8,
-                self.sprites.next_x().map_or(false, |x| x <= mx as u8),
-            )
+            (self.position + 8) as u8
         };
-        self.sprites.discard_behind(match_x);
         let obj_enabled = lcdc & 0x02 != 0 || is_cgb;
-        let mut sprite_pending = false;
-        if obj_enabled && !self.fetcher.is_fetching_sprite() && is_match {
-            if self.fetcher.is_ready_for_sprite_fetch() {
+        if obj_enabled && self.junk_pushed {
+            let mut matched_any = false;
+            while self.sprites.next_x().map_or(false, |x| x <= match_x) {
                 if let Some(sprite) = self.sprites.pop_next() {
-                    if std::env::var_os("CERES_TRACE").is_some()
-                        && (ly == 0 || ly == 16 || ly == 40)
-                    {
-                        eprintln!(
-                            "SPR ly={} x={} tile={} pos={} dot={} slen={}",
-                            ly,
-                            sprite.x(),
-                            sprite.tile(),
-                            self.position,
-                            self.line_dots,
-                            self.sprite_len
-                        );
-                    }
                     let sprite_height = if lcdc & 0x04 != 0 { 16 } else { 8 };
                     let sprite_pixels =
                         self.fetcher
                             .fetch_sprite_data(sprite, vram, ly, sprite_height, is_cgb);
-                    if std::env::var_os("CERES_OVERLAY").is_some() {
-                        eprintln!(
-                            "ROW ly={} x={} pos={} base={} px={}",
-                            ly,
-                            sprite.x(),
-                            self.position,
-                            i16::from(sprite.x()) - 8 - self.position,
-                            sprite_pixels
-                                .iter()
-                                .map(|p| p.color_id().to_string())
-                                .collect::<Vec<_>>()
-                                .join("")
-                        );
-                    }
                     self.overlay_sprite_pixels(sprite_pixels, sprite.x(), is_cgb);
+                    matched_any = true;
                 }
-            } else if self.position >= 0 {
-                sprite_pending = true;
+            }
+            if matched_any && self.line_sprite_stall > 0 {
+                let stall = self.line_sprite_stall;
+                self.line_sprite_stall = 0;
+                self.sprite_stall = stall - 1;
+                return None;
             }
         }
+        self.sprites.discard_behind(match_x);
 
         // SameBoy pushes a junk tile row at mode-3 start (display.c:1850):
         // the 16-pixel position lead is drained while the first real tile is
         // being fetched, so output self-clocks to the fetch cadence instead
         // of running ahead of it. The push dot encodes the SCX-fraction
         // phase (see `start_drawing`).
-        if self.line_dots == self.junk_at && !self.window_active {
+        if !self.junk_pushed && self.line_dots >= self.junk_at && !self.window_active {
+            self.junk_pushed = true;
             self.push_bg_pixels([Pixel::empty(); 8]);
         }
 
@@ -342,11 +435,7 @@ impl PixelFifo {
         // SameBoy's render_pixel_if_possible has no FIFO-depth gate. The
         // position lead-in plus the fetch cadence make the line self-clock
         // to the hardware mode-3 length.
-        if !sprite_pending
-            && self.position < 160
-            && self.bg_len > 0
-            && !self.fetcher.is_fetching_sprite()
-        {
+        if self.position < 160 && self.bg_len > 0 {
             let popped = self.pop_bg_pixel().expect("bg_len > 0");
             let sprite_px = self.pop_sprite_pixel().unwrap_or(Pixel::empty());
 

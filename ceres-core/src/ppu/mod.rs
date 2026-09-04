@@ -323,10 +323,12 @@ impl Ppu {
                 // Scanning at mode-3 entry sees every mode-2 write.
                 let sprite_height = if self.lcdc & 0x04 != 0 { 16 } else { 8 };
                 self.fifo.scan_sprites(&self.oam, self.ly, sprite_height);
+                let obj_enabled = self.lcdc & 0x02 != 0 || self.is_cgb;
                 self.fifo.start_drawing(
                     self.scx,
                     !self.is_cgb && self.lcdon_line0_mode0,
                     self.is_cgb,
+                    obj_enabled,
                 );
             }
             Mode::VBlank => {

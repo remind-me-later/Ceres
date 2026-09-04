@@ -50,16 +50,6 @@ impl TileFetcher {
         matches!(self.state, FetcherState::GetTile) && self.cycle == 0
     }
 
-    #[must_use]
-    pub const fn is_fetching_sprite(&self) -> bool {
-        self.sprite_fetch.is_some()
-    }
-
-    #[must_use]
-    pub const fn is_ready_for_sprite_fetch(&self) -> bool {
-        matches!(self.state, FetcherState::Push)
-    }
-
     pub fn reset_bg(&mut self, scx: u8) {
         self.state = FetcherState::GetTile;
         self.cycle = 0;
@@ -305,7 +295,6 @@ impl TileFetcher {
             );
         }
 
-        self.sprite_fetch = Some((sprite, 0));
         pixels
     }
 }
