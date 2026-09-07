@@ -149,6 +149,7 @@ pub struct Ppu {
     wx: u8,
     wy: u8,
     lcdon_line0_mode0: bool,
+    lcdon_line0: bool,
     line0_frame_wrap: bool,
     /// The PPU's true internal mode. Kept as a field (rather than derived
     /// from the STAT bits) so the CPU-visible mode bits can be decoupled
@@ -179,6 +180,7 @@ impl Default for Ppu {
             lyc: 0,
             lyc_latched: 0,
             lcdon_line0_mode0: false,
+            lcdon_line0: false,
             line0_frame_wrap: false,
             mode: Mode::HBlank,
             mode_for_interrupt: None,
@@ -378,14 +380,12 @@ impl Ppu {
     #[must_use]
     pub const fn read_ly(&self) -> u8 {
         if self.is_cgb {
-            if self.current_vblank_line == 153 && self.cycles == 114 * DOTS_PER_M {
-                153
-            } else if (self.stat & STAT_MODE_B) == 1
-                && self.current_vblank_line == 144
+            if matches!(self.mode(), Mode::VBlank)
+                && self.current_vblank_line == 153
                 && self.cycles == 2 * DOTS_PER_M
             {
                 145
-            } else if (self.stat & STAT_MODE_B) == 0 && self.cycles <= DOTS_PER_M && self.ly < 143 {
+            } else if (self.stat & STAT_MODE_B) == 0 && self.cycles <= 7 && self.ly < 143 {
                 self.ly + 1
             } else {
                 self.ly
@@ -427,7 +427,15 @@ impl Ppu {
 
     #[must_use]
     pub const fn read_stat(&self) -> u8 {
-        self.stat | 0x80
+        if self.is_cgb
+            && matches!(self.mode, Mode::Drawing)
+            && (self.scx & 3 == 3)
+            && self.fifo.position() >= 156
+        {
+            (self.stat & !STAT_MODE_B) | (Mode::HBlank as u8) | 0x80
+        } else {
+            self.stat | 0x80
+        }
     }
 
     #[must_use]
@@ -681,7 +689,13 @@ impl Ppu {
 
                 if self.fifo.line_done() {
                     let mode3_dots = MODE3_MAX_DOTS - self.cycles + 1;
-                    self.hblank_dots = (456 - 80 - mode3_dots).max(DOTS_PER_M);
+                    let init_dots = if self.lcdon_line0 {
+                        20 * DOTS_PER_M
+                    } else {
+                        80
+                    };
+                    let total_dots = 456;
+                    self.hblank_dots = (total_dots - init_dots - mode3_dots).max(DOTS_PER_M);
                     self.cycles = 1;
                 }
             }
@@ -709,18 +723,21 @@ impl Ppu {
                 if self.lcdon_line0_mode0 {
                     self.enter_mode(Mode::Drawing, ints, cgb_mode);
                     self.lcdon_line0_mode0 = false;
-                } else if self.line0_frame_wrap {
-                    self.line0_frame_wrap = false;
-                    self.enter_mode(Mode::OamScan, ints, cgb_mode);
-                    self.ly_for_comparison = 0;
-                    self.check_lyc(ints);
-                } else if (self.is_cgb && self.ly == 143) || self.ly >= 144 {
-                    self.enter_mode(Mode::VBlank, ints, cgb_mode);
                 } else {
-                    if self.is_cgb {
-                        self.ly += 1;
+                    self.lcdon_line0 = false;
+                    if self.line0_frame_wrap {
+                        self.line0_frame_wrap = false;
+                        self.enter_mode(Mode::OamScan, ints, cgb_mode);
+                        self.ly_for_comparison = 0;
+                        self.check_lyc(ints);
+                    } else if (self.is_cgb && self.ly == 143) || self.ly >= 144 {
+                        self.enter_mode(Mode::VBlank, ints, cgb_mode);
+                    } else {
+                        if self.is_cgb {
+                            self.ly += 1;
+                        }
+                        self.enter_mode(Mode::OamScan, ints, cgb_mode);
                     }
-                    self.enter_mode(Mode::OamScan, ints, cgb_mode);
                 }
             }
             Mode::VBlank => {
@@ -806,6 +823,7 @@ impl Ppu {
             self.cycles = 20 * DOTS_PER_M;
             self.hblank_dots = 20 * DOTS_PER_M;
             self.lcdon_line0_mode0 = true;
+            self.lcdon_line0 = true;
             self.check_lyc(ints);
         }
     }
@@ -869,6 +887,7 @@ impl Ppu {
         self.mode = mode;
         self.cycles = cycles;
         self.lcdon_line0_mode0 = false;
+        self.lcdon_line0 = false;
         self.line0_frame_wrap = false;
     }
 

@@ -77,6 +77,11 @@ impl PixelFifo {
         self.position >= 160
     }
 
+    #[must_use]
+    pub const fn position(&self) -> i16 {
+        self.position
+    }
+
     pub fn set_scx(&mut self, scx: u8) {
         // The SCX fraction is sampled live per pop during the lead-in (see
         // `step_dot`), so mid-line writes need no bookkeeping here.
@@ -188,9 +193,14 @@ impl PixelFifo {
             self.junk_at = 0;
             self.junk_pushed = true;
         } else if is_cgb {
-            self.position = -16;
-            let k = u16::from(scx & 7);
-            self.junk_at = if k & 3 > 1 { 0 } else { 1 - (k & 3) };
+            let k = scx & 7;
+            self.position = -16 + i16::from(k);
+            self.junk_at = match k {
+                0..=2 => 0,
+                3..=6 => 4,
+                7 => 8,
+                _ => unreachable!(),
+            };
         } else {
             self.position = -16;
             // Phase of the lead-in junk push within the M-cycle grid. The SCX
