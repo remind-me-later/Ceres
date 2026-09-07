@@ -532,6 +532,7 @@ impl Ppu {
                         self.ly_for_comparison = 143;
                         self.check_lyc(ints);
                     } else if self.cycles == DOTS_PER_M {
+                        self.stat = (self.stat & !STAT_MODE_B) | Mode::VBlank as u8;
                         self.ly_for_comparison = 144;
                         self.check_lyc(ints);
                         ints.request_vblank();
