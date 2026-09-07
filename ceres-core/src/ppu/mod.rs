@@ -385,7 +385,7 @@ impl Ppu {
                 && self.cycles == 2 * DOTS_PER_M
             {
                 145
-            } else if (self.stat & STAT_MODE_B) == 0 && self.cycles <= 7 && self.ly < 143 {
+            } else if matches!(self.mode(), Mode::HBlank) && self.cycles <= 7 && self.ly < 143 {
                 self.ly + 1
             } else {
                 self.ly
@@ -561,6 +561,13 @@ impl Ppu {
                 } else if self.cycles == DOTS_PER_M && !self.lcdon_line0_mode0 {
                     if self.ly < 143 {
                         if self.is_cgb {
+                            self.stat = (self.stat & !STAT_MODE_B) | Mode::OamScan as u8;
+                            self.ly_for_comparison = u16::from(self.ly + 1);
+                            if self.ly_for_comparison == u16::from(self.lyc) {
+                                self.stat |= STAT_LYC_B;
+                            } else {
+                                self.stat &= !STAT_LYC_B;
+                            }
                             if self.lyc_latched == self.ly + 1 {
                                 if (self.stat & STAT_IF_LYC_B) != 0 && !self.stat_line {
                                     ints.request_lcd();
