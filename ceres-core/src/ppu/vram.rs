@@ -59,7 +59,7 @@ impl Ppu {
     #[must_use]
     pub const fn read_vram(&self, addr: u16) -> u8 {
         if matches!(self.mode(), Mode::Drawing)
-            || (!self.is_cgb && matches!(self.mode(), Mode::OamScan) && self.cycles == 1)
+            || (!self.is_cgb && matches!(self.mode(), Mode::OamScan) && self.cycles <= 4)
         {
             0xFF
         } else {

@@ -182,17 +182,13 @@ impl PixelFifo {
         cycles_for_line
     }
 
-    pub fn start_drawing(&mut self, scx: u8, is_lcdon: bool, is_cgb: bool, obj_enabled: bool) {
+    pub fn start_drawing(&mut self, scx: u8, _is_lcdon: bool, is_cgb: bool, obj_enabled: bool) {
         self.lx = 0;
         self.line_dots = 0;
         self.sprite_stall = 0;
         self.line_sprite_stall = 0;
         self.junk_pushed = false;
-        if is_lcdon {
-            self.position = 0;
-            self.junk_at = 0;
-            self.junk_pushed = true;
-        } else if is_cgb {
+        if is_cgb {
             let k = scx & 7;
             self.position = -16 + i16::from(k);
             self.junk_at = match k {

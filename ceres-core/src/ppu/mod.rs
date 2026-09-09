@@ -34,9 +34,6 @@ const STAT_IF_VBLANK_B: u8 = 0x10;
 const STAT_IF_OAM_B: u8 = 0x20;
 const STAT_IF_LYC_B: u8 = 0x40;
 
-// TEMPORARY sweep knob: dots remaining in HBlank when the DMG mode-2
-// (OAM) STAT IRQ fires. Swept against the mooneye intr_2 family; old
-// value 4, best 7. (fold into the ladder before commit)
 const OAM_IRQ_AT: i32 = 7;
 
 #[non_exhaustive]
@@ -385,7 +382,11 @@ impl Ppu {
                 && self.cycles == 2 * DOTS_PER_M
             {
                 145
-            } else if matches!(self.mode(), Mode::HBlank) && self.cycles <= 7 && self.ly < 143 {
+            } else if matches!(self.mode(), Mode::HBlank)
+                && !self.lcdon_line0_mode0
+                && self.cycles <= 7
+                && self.ly < 143
+            {
                 self.ly + 1
             } else {
                 self.ly
@@ -510,7 +511,7 @@ impl Ppu {
                     && self.ly_for_comparison != u16::MAX
                 {
                     if !self.is_cgb {
-                        if self.cycles == 2 * DOTS_PER_M {
+                        if self.cycles == DOTS_PER_M {
                             self.ly = 144;
                             self.ly_for_comparison = 143;
                             self.check_lyc(ints);
@@ -518,7 +519,7 @@ impl Ppu {
                                 ints.request_lcd();
                                 self.stat_line = true;
                             }
-                        } else if self.cycles == DOTS_PER_M {
+                        } else if self.cycles == 1 {
                             self.stat = (self.stat & !STAT_MODE_B) | Mode::VBlank as u8;
                             self.ly_for_comparison = 144;
                             self.check_lyc(ints);
@@ -543,13 +544,7 @@ impl Ppu {
                         }
                     }
                 } else if self.cycles == 2 * DOTS_PER_M && !self.lcdon_line0_mode0 {
-                    if !self.is_cgb {
-                        if self.ly < 143 {
-                            self.ly += 1;
-                            self.ly_for_comparison = u16::MAX;
-                            self.check_lyc(ints);
-                        }
-                    } else if self.ly < 143 {
+                    if self.is_cgb && self.ly < 143 {
                         self.lyc_latched = self.lyc;
                         self.ly_for_comparison = u16::from(self.ly);
                         if self.ly_for_comparison == u16::from(self.lyc) {
@@ -557,6 +552,10 @@ impl Ppu {
                         } else {
                             self.stat &= !STAT_LYC_B;
                         }
+                    } else if !self.is_cgb && self.ly < 143 && (self.scx & 3) != 0 {
+                        self.ly += 1;
+                        self.ly_for_comparison = u16::MAX;
+                        self.check_lyc(ints);
                     }
                 } else if self.cycles == DOTS_PER_M && !self.lcdon_line0_mode0 {
                     if self.ly < 143 {
@@ -574,23 +573,19 @@ impl Ppu {
                                     self.stat_line = true;
                                 }
                             }
-                        } else {
-                            self.stat = (self.stat & !STAT_MODE_B) | Mode::OamScan as u8;
-                            self.ly_for_comparison = u16::from(self.ly);
+                        } else if (self.scx & 3) == 0 {
+                            self.ly += 1;
+                            self.ly_for_comparison = u16::MAX;
                             self.check_lyc(ints);
                         }
                     }
                 }
 
-                // DMG mode-2 (OAM) STAT IRQ. Fired `OAM_IRQ_AT` dots before
-                // HBlank ends (swept against the mooneye intr_2 family; 7
-                // is the empirically best dot on our line phase). Gated on
-                // ly != 0: hardware gives line 0 no mode-2 interrupt
-                // (SameBoy display.c:1778-1787).
+                let oam_irq_at = if self.lcdon_line0 { 3 } else { OAM_IRQ_AT };
                 if !self.is_cgb
-                    && self.cycles == OAM_IRQ_AT
+                    && self.cycles == oam_irq_at
                     && !self.lcdon_line0_mode0
-                    && self.ly != 0
+                    && self.ly < 143
                     && self.stat & STAT_IF_OAM_B != 0
                     && !self.stat_line
                 {
@@ -636,6 +631,12 @@ impl Ppu {
                         self.ly = 0;
                         self.ly_for_comparison = 0;
                         self.check_lyc(ints);
+                    } else if self.cycles == DOTS_PER_M {
+                        self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
+                        self.mode = Mode::HBlank;
+                        self.line0_frame_wrap = true;
+                        self.ly_for_comparison = 0;
+                        self.check_lyc(ints);
                     }
                 } else if self.current_vblank_line >= 144 {
                     let base_cycles = Mode::VBlank.m_cycles(self.scx, self.model) * DOTS_PER_M;
@@ -643,15 +644,11 @@ impl Ppu {
                         self.ly_for_comparison = u16::from(self.ly);
                         self.check_lyc(ints);
                     } else if self.cycles == 2 * DOTS_PER_M {
-                        if self.current_vblank_line < 152 {
-                            self.ly = self.current_vblank_line + 1;
-                            if !self.is_cgb {
-                                self.ly_for_comparison = u16::MAX;
-                                self.check_lyc(ints);
-                            }
-                        } else {
-                            self.ly = 153;
-                            if self.is_cgb {
+                        if self.is_cgb {
+                            if self.current_vblank_line < 152 {
+                                self.ly = self.current_vblank_line + 1;
+                            } else {
+                                self.ly = 153;
                                 self.lyc_latched = self.lyc;
                                 self.ly_for_comparison = 152;
                                 if self.ly_for_comparison == u16::from(self.lyc) {
@@ -659,18 +656,21 @@ impl Ppu {
                                 } else {
                                     self.stat &= !STAT_LYC_B;
                                 }
-                            } else {
-                                self.ly_for_comparison = u16::MAX;
-                                self.check_lyc(ints);
                             }
                         }
                     } else if self.cycles == DOTS_PER_M {
                         if self.current_vblank_line < 152 {
-                            self.ly_for_comparison = u16::from(self.current_vblank_line + 1);
-                            self.check_lyc(ints);
+                            if self.is_cgb {
+                                self.ly_for_comparison = u16::from(self.current_vblank_line + 1);
+                                self.check_lyc(ints);
+                            } else {
+                                self.ly = self.current_vblank_line + 1;
+                                self.ly_for_comparison = u16::MAX;
+                                self.check_lyc(ints);
+                            }
                         } else if self.is_cgb {
                             self.ly_for_comparison = 153;
-                            if self.lyc_latched == 153 {
+                            if self.lyc_latched == 153 || self.lyc == 153 {
                                 if (self.stat & STAT_IF_LYC_B) != 0 && !self.stat_line {
                                     ints.request_lcd();
                                     self.stat_line = true;
@@ -682,7 +682,8 @@ impl Ppu {
                                 self.stat &= !STAT_LYC_B;
                             }
                         } else {
-                            self.ly_for_comparison = 153;
+                            self.ly = 153;
+                            self.ly_for_comparison = u16::MAX;
                             self.check_lyc(ints);
                         }
                     }
@@ -696,11 +697,15 @@ impl Ppu {
                 if self.fifo.line_done() {
                     let mode3_dots = MODE3_MAX_DOTS - self.cycles + 1;
                     let init_dots = if self.lcdon_line0 {
-                        20 * DOTS_PER_M
+                        if !self.is_cgb { 76 } else { 80 }
                     } else {
                         80
                     };
-                    let total_dots = 456;
+                    let total_dots = if self.lcdon_line0 && !self.is_cgb {
+                        452
+                    } else {
+                        456
+                    };
                     self.hblank_dots = (total_dots - init_dots - mode3_dots).max(DOTS_PER_M);
                     self.cycles = 1;
                 }
@@ -733,6 +738,9 @@ impl Ppu {
                     self.lcdon_line0 = false;
                     if self.line0_frame_wrap {
                         self.line0_frame_wrap = false;
+                        self.current_vblank_line = 0;
+                        self.ly = 0;
+                        self.rgba_buf_present = mem::take(&mut self.rgb_buf);
                         self.enter_mode(Mode::OamScan, ints, cgb_mode);
                         self.ly_for_comparison = 0;
                         self.check_lyc(ints);
@@ -754,19 +762,9 @@ impl Ppu {
                     self.current_vblank_line = 0;
                     self.ly = 0;
                     self.rgba_buf_present = mem::take(&mut self.rgb_buf);
-                    if self.is_cgb {
-                        self.enter_mode(Mode::OamScan, ints, cgb_mode);
-                        self.ly_for_comparison = 0;
-                        self.check_lyc(ints);
-                    } else {
-                        self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
-                        self.mode = Mode::HBlank;
-                        self.cycles = DOTS_PER_M;
-                        self.hblank_dots = DOTS_PER_M;
-                        self.line0_frame_wrap = true;
-                        self.ly_for_comparison = 0;
-                        self.check_lyc(ints);
-                    }
+                    self.enter_mode(Mode::OamScan, ints, cgb_mode);
+                    self.ly_for_comparison = 0;
+                    self.check_lyc(ints);
                 } else {
                     self.current_vblank_line += 1;
                     self.ly = if !self.is_cgb && self.current_vblank_line == 153 {
@@ -775,17 +773,15 @@ impl Ppu {
                         self.current_vblank_line
                     };
                     let base_cycles = Mode::VBlank.m_cycles(self.scx, self.model) * DOTS_PER_M;
-                    self.cycles = if !self.is_cgb && self.current_vblank_line == 153 {
-                        base_cycles - DOTS_PER_M
-                    } else {
-                        base_cycles
-                    };
+                    self.cycles = base_cycles;
                     self.ly_for_comparison = if !self.is_cgb && self.current_vblank_line == 153 {
                         153
                     } else {
                         u16::from(self.ly)
                     };
-                    self.check_lyc(ints);
+                    if !(self.is_cgb && self.current_vblank_line == 153) {
+                        self.check_lyc(ints);
+                    }
                 }
             }
         }
@@ -807,6 +803,7 @@ impl Ppu {
             self.current_vblank_line = 0;
             self.ly_for_comparison = 0;
             self.lcdon_line0_mode0 = false;
+            self.lcdon_line0 = false;
             self.stat &= !STAT_MODE_B;
             self.mode = Mode::HBlank;
             self.stat_line = false;
@@ -818,7 +815,7 @@ impl Ppu {
         }
 
         // turn on: per the lcdon_mode_timing test, the first line starts
-        // in mode 0 (HBlank) for 20 M-cycles on DMG (Mode 1 on CGB), then goes straight to
+        // in mode 0 (HBlank) for 76 dots on DMG (Mode 1 on CGB), then goes straight to
         // mode 3 (skipping mode 2).
         if is_on && !was_on {
             self.ly = 0;
@@ -826,8 +823,9 @@ impl Ppu {
             self.ly_for_comparison = 0;
             self.stat = (self.stat & !STAT_MODE_B) | Mode::HBlank as u8;
             self.mode = Mode::HBlank;
-            self.cycles = 20 * DOTS_PER_M;
-            self.hblank_dots = 20 * DOTS_PER_M;
+            let init_dots = if !self.is_cgb { 76 } else { 80 };
+            self.cycles = init_dots;
+            self.hblank_dots = init_dots;
             self.lcdon_line0_mode0 = true;
             self.lcdon_line0 = true;
             self.check_lyc(ints);
@@ -837,19 +835,13 @@ impl Ppu {
     pub fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
         self.lyc = val;
         if self.is_cgb {
-            if self.mode() == Mode::HBlank
-                && (self.cycles == 2 * DOTS_PER_M || self.cycles == DOTS_PER_M)
-            {
+            if self.mode() == Mode::HBlank && self.cycles <= 3 * DOTS_PER_M {
                 return;
             }
-            if self.current_vblank_line == 152
-                && (self.cycles == 2 * DOTS_PER_M || self.cycles == DOTS_PER_M)
-            {
+            if self.current_vblank_line == 152 && self.cycles <= DOTS_PER_M {
                 return;
             }
-            if self.current_vblank_line == 153
-                && (self.cycles == 114 * DOTS_PER_M || self.cycles == 113 * DOTS_PER_M)
-            {
+            if self.current_vblank_line == 153 && self.cycles > 112 * DOTS_PER_M {
                 return;
             }
         }

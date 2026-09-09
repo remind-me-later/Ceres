@@ -55,7 +55,7 @@ impl Ppu {
         }
         match self.mode() {
             Mode::HBlank => {
-                if !self.is_cgb && self.cycles == 1 && !self.lcdon_line0_mode0 {
+                if !self.is_cgb && self.cycles <= 4 && !self.lcdon_line0_mode0 {
                     0xFF
                 } else {
                     self.oam.read(addr)
@@ -66,7 +66,7 @@ impl Ppu {
         }
     }
 
-    pub const fn write_oam(&mut self, addr: u16, val: u8) {
+    pub fn write_oam(&mut self, addr: u16, val: u8) {
         if self.lcdc & LCDC_ON_B == 0 {
             self.oam.write(addr, val);
             return;
@@ -74,11 +74,11 @@ impl Ppu {
         match self.mode() {
             Mode::HBlank | Mode::VBlank => self.oam.write(addr, val),
             Mode::OamScan => {
-                if !self.is_cgb && self.cycles == 1 {
+                if !self.is_cgb && self.cycles <= 4 {
                     self.oam.write(addr, val);
                 }
             }
-            _ => (),
+            Mode::Drawing => (),
         }
     }
 
