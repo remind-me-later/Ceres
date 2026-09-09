@@ -8,7 +8,6 @@ const P1: u8 = 16;
 pub struct Interrupts {
     ie: u8,
     ifr: u8,
-    ime: bool,
 }
 
 impl Interrupts {
@@ -16,11 +15,6 @@ impl Interrupts {
     /// Should be called after the interrupt dispatch is complete.
     pub const fn acknowledge_interrupt(&mut self, int_bit: u8) {
         self.ifr &= !int_bit;
-    }
-
-    #[must_use]
-    pub const fn are_enabled(&self) -> bool {
-        self.ime
     }
 
     /// Determines which interrupt should be dispatched based on current IE & IF state.
@@ -41,14 +35,6 @@ impl Interrupts {
         // compute interrupt vector
         let vector = 0x40 | (tz << 3);
         (int, vector)
-    }
-
-    pub const fn disable(&mut self) {
-        self.ime = false;
-    }
-
-    pub const fn enable(&mut self) {
-        self.ime = true;
     }
 
     pub const fn illegal(&mut self) {
