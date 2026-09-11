@@ -55,7 +55,12 @@ impl Ppu {
         }
         match self.mode() {
             Mode::HBlank => {
-                if !self.is_cgb && self.cycles <= 4 && !self.lcdon_line0_mode0 {
+                let oam_block_dot = if self.lcdon_line0 && !self.is_cgb {
+                    448
+                } else {
+                    452
+                };
+                if !self.is_cgb && self.line_dot >= oam_block_dot && !self.lcdon_line0_mode0 {
                     0xFF
                 } else {
                     self.oam.read(addr)
@@ -74,7 +79,7 @@ impl Ppu {
         match self.mode() {
             Mode::HBlank | Mode::VBlank => self.oam.write(addr, val),
             Mode::OamScan => {
-                if !self.is_cgb && self.cycles <= 4 {
+                if !self.is_cgb && self.line_dot >= 76 {
                     self.oam.write(addr, val);
                 }
             }
