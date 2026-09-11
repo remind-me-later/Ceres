@@ -533,6 +533,10 @@ impl Ppu {
                         self.ly = 144;
                         self.ly_for_comparison = 143;
                         self.check_lyc(ints);
+                        if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                            ints.request_lcd();
+                            self.stat_line = true;
+                        }
                     } else if self.cycles == DOTS_PER_M {
                         self.stat = (self.stat & !STAT_MODE_B) | Mode::VBlank as u8;
                         self.ly_for_comparison = 144;
@@ -572,6 +576,10 @@ impl Ppu {
                                     ints.request_lcd();
                                     self.stat_line = true;
                                 }
+                            }
+                            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                                ints.request_lcd();
+                                self.stat_line = true;
                             }
                         } else if (self.scx & 3) == 0 {
                             self.ly += 1;
@@ -622,6 +630,10 @@ impl Ppu {
                             }
                         } else if self.cycles == DOTS_PER_M {
                             self.stat = (self.stat & !STAT_MODE_B) | Mode::OamScan as u8;
+                            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
+                                ints.request_lcd();
+                                self.stat_line = true;
+                            }
                         }
                     } else if self.cycles == 113 * DOTS_PER_M {
                         self.ly = 0;
@@ -865,13 +877,11 @@ impl Ppu {
     }
 
     pub fn write_scx(&mut self, val: u8) {
-        // Mode 3's length is FIFO-owned: an SCX write takes effect through
-        // the FIFO's fetch/discard state, never by re-timing the mode.
         self.scx = val;
-        self.fifo.set_scx(val);
+        self.fifo.set_scx(val, self.is_cgb);
     }
 
-    pub(crate) const fn set_stat(&mut self, val: u8) {
+    pub const fn set_stat(&mut self, val: u8) {
         self.stat = val;
     }
 

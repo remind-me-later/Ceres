@@ -35,7 +35,10 @@ pub struct PixelFifo {
     window_line_counter: u8,
     sprite_stall: u8,
     line_sprite_stall: u8,
+    line_sprite_count: u8,
     junk_pushed: bool,
+    window_initial_fetch: bool,
+    scx_low3: u8,
 }
 
 impl Default for PixelFifo {
@@ -67,7 +70,10 @@ impl PixelFifo {
             window_line_counter: 0,
             sprite_stall: 0,
             line_sprite_stall: 0,
+            line_sprite_count: 0,
             junk_pushed: false,
+            window_initial_fetch: false,
+            scx_low3: 0,
         }
     }
 
@@ -82,10 +88,14 @@ impl PixelFifo {
         self.position
     }
 
-    pub fn set_scx(&mut self, scx: u8) {
-        // The SCX fraction is sampled live per pop during the lead-in (see
-        // `step_dot`), so mid-line writes need no bookkeeping here.
-        self.fetcher.set_bg_tile_x(scx);
+    pub fn set_scx(&mut self, scx: u8, is_cgb: bool) {
+        if is_cgb && self.line_dots == 0 {
+            let k = scx & 7;
+            self.scx_low3 = k;
+            self.fetcher.reset_bg(scx);
+        } else {
+            self.fetcher.set_bg_tile_x(scx);
+        }
     }
 
     pub fn scan_sprites(&mut self, oam: &Oam, ly: u8, sprite_height: u8) {
@@ -187,7 +197,9 @@ impl PixelFifo {
         self.line_dots = 0;
         self.sprite_stall = 0;
         self.line_sprite_stall = 0;
+        self.line_sprite_count = 0;
         self.junk_pushed = false;
+        self.scx_low3 = scx & 7;
         if is_cgb {
             let k = scx & 7;
             self.position = -16 + i16::from(k);
@@ -224,6 +236,7 @@ impl PixelFifo {
                     let natural_dots = 168 + if k & 3 == 3 { 2 } else { i32::from(scx & 7) };
                     let stall = (target_dots - natural_dots).max(0);
                     self.line_sprite_stall = stall as u8;
+                    self.line_sprite_count = count as u8;
                 }
             } else {
                 self.junk_at = 5 - (k & 3);
@@ -242,7 +255,9 @@ impl PixelFifo {
         self.sprite_len = 0;
         self.sprite_stall = 0;
         self.line_sprite_stall = 0;
+        self.line_sprite_count = 0;
         self.junk_pushed = false;
+        self.window_initial_fetch = false;
 
         self.sprites.clear();
     }
@@ -339,10 +354,22 @@ impl PixelFifo {
 
         // Check window trigger
         let win_enabled = lcdc & 0x20 != 0;
-        let win_in_x = self.lx.wrapping_add(7) >= wx;
-        if win_enabled && ly >= wy && win_in_x {
+        let pos_u8 = self.position as u8;
+        let win_in_x = if wx == 0 {
+            pos_u8 == 249 || (pos_u8 == 240 && (scx & 7 != 0)) || (241..=248).contains(&pos_u8)
+        } else if wx < 166 {
+            pos_u8.wrapping_add(7) == wx
+        } else {
+            false
+        };
+
+        let was_window_active = self.window_active;
+        if !win_enabled {
+            self.window_active = false;
+        } else if ly >= wy && win_in_x {
             if !self.window_active {
                 self.window_active = true;
+                self.window_initial_fetch = true;
                 self.fetcher.reset_window(self.window_line_counter);
                 self.bg_head = 0;
                 self.bg_tail = 0;
@@ -381,7 +408,7 @@ impl PixelFifo {
         };
         let obj_enabled = lcdc & 0x02 != 0 || is_cgb;
         if obj_enabled && self.junk_pushed {
-            let mut matched_any = false;
+            let mut matched_count: u8 = 0;
             while self.sprites.next_x().map_or(false, |x| x <= match_x) {
                 if let Some(sprite) = self.sprites.pop_next() {
                     let sprite_height = if lcdc & 0x04 != 0 { 16 } else { 8 };
@@ -389,14 +416,26 @@ impl PixelFifo {
                         self.fetcher
                             .fetch_sprite_data(sprite, vram, ly, sprite_height, is_cgb);
                     self.overlay_sprite_pixels(sprite_pixels, sprite.x(), is_cgb);
-                    matched_any = true;
+                    matched_count += 1;
                 }
             }
-            if matched_any && self.line_sprite_stall > 0 {
-                let stall = self.line_sprite_stall;
-                self.line_sprite_stall = 0;
-                self.sprite_stall = stall - 1;
-                return None;
+            if matched_count > 0 && self.line_sprite_stall > 0 {
+                let this_stall = if matched_count >= self.line_sprite_count {
+                    let s = self.line_sprite_stall;
+                    self.line_sprite_stall = 0;
+                    self.line_sprite_count = 0;
+                    s
+                } else {
+                    let s = (u16::from(self.line_sprite_stall) * u16::from(matched_count)
+                        / u16::from(self.line_sprite_count)) as u8;
+                    self.line_sprite_stall -= s;
+                    self.line_sprite_count -= matched_count;
+                    s
+                };
+                if this_stall > 0 {
+                    self.sprite_stall = this_stall - 1;
+                    return None;
+                }
             }
         }
         self.sprites.discard_behind(match_x);
@@ -448,7 +487,7 @@ impl PixelFifo {
             if pu8.wrapping_add(16) < 8 {
                 if pu8 == 239 {
                     self.position = -16;
-                } else if pu8 & 7 == scx & 7 {
+                } else if pu8 & 7 == self.scx_low3 {
                     self.position = -8;
                 } else if pu8 == 247 {
                     self.position = -16;
@@ -463,20 +502,20 @@ impl PixelFifo {
                 return None;
             }
 
-            let is_window_glitch = win_enabled
+            let out_x = self.position as u8;
+            let window_reactivation_zero = was_window_active
+                && !self.window_initial_fetch
+                && win_enabled
                 && ly >= wy
-                && self.window_active
-                && self.lx > 0
-                && wx < 100
-                && self.lx.wrapping_add(7) == wx
-                && self.fetcher.is_get_tile();
-            let bg_px = if is_window_glitch {
+                && out_x.wrapping_add(7) == wx
+                && self.fetcher.is_get_tile_t1();
+            self.window_initial_fetch = false;
+
+            let bg_px = if window_reactivation_zero {
                 Pixel::empty()
             } else {
                 popped
             };
-
-            let out_x = self.position as u8;
             if std::env::var_os("CERES_TRACE").is_some() && out_x == 0 && (ly == 0 || ly == 32) {
                 eprintln!(
                     "PX0 ly={ly} dot={} k={} junk_at={}",

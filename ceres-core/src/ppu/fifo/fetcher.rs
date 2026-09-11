@@ -45,11 +45,6 @@ impl TileFetcher {
         }
     }
 
-    #[must_use]
-    pub const fn is_get_tile(&self) -> bool {
-        matches!(self.state, FetcherState::GetTile) && self.cycle == 0
-    }
-
     pub fn reset_bg(&mut self, scx: u8) {
         self.state = FetcherState::GetTile;
         self.cycle = 0;
@@ -66,6 +61,10 @@ impl TileFetcher {
 
     pub fn set_bg_tile_x(&mut self, scx: u8) {
         self.bg_tile_x = (scx >> 3) & 0x1F;
+    }
+
+    pub fn is_get_tile_t1(&self) -> bool {
+        self.state == FetcherState::GetTile && self.cycle == 0
     }
 
     pub fn reset_window(&mut self, window_line_counter: u8) {
@@ -246,7 +245,7 @@ impl TileFetcher {
     }
 
     pub fn fetch_sprite_data(
-        &mut self,
+        &self,
         sprite: Sprite,
         vram: &Vram,
         ly: u8,

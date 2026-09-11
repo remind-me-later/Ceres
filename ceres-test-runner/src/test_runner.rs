@@ -124,7 +124,7 @@ impl CompletionCheck for ScreenshotCheck {
         if gb.check_and_reset_ld_b_b_breakpoint() {
             match self.compare_screenshot(gb) {
                 Ok(true) => Some(TestResult::Passed),
-                Ok(false) => None,
+                Ok(false) => Some(TestResult::Failed("Screenshot mismatch".to_string())),
                 Err(e) => Some(TestResult::Error(format!(
                     "Screenshot comparison error: {e}"
                 ))),
