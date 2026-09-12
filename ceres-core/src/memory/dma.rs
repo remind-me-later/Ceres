@@ -86,7 +86,7 @@ impl Dma {
         self.reg
     }
 
-    pub(crate) const fn set_reg(&mut self, val: u8) {
+    pub const fn set_reg(&mut self, val: u8) {
         self.reg = val;
     }
 

@@ -8,14 +8,14 @@ pub const DOTS_PER_SEC: i32 = 1 << 22;
 pub const FRAME_DURATION: Duration = Duration::new(0, 16_742_706); // DOTS_PER_FRAME / DOTS_PER_SEC
 
 pub struct Clock {
-    pub(crate) div: u16,
-    pub(crate) tac: u8,
-    pub(crate) tima: u8,
-    pub(crate) tma: u8,
+    pub div: u16,
+    pub tac: u8,
+    pub tima: u8,
+    pub tma: u8,
     /// T-cycles remaining until TIMA is reloaded from TMA.
     /// `0` means no reload is pending; `1..=4` are the reads-0 window;
     /// `5..=8` are the writes-ignore window.
-    pub(crate) tima_reload_pending: u8,
+    pub tima_reload_pending: u8,
     /// Independent countdown for the timer IRQ fire time. `0` means
     /// no IRQ pending. On overflow we set this to `3` for DMG and `4`
     /// for CGB, then the IRQ fires when it reaches 0.
@@ -33,11 +33,11 @@ pub struct Clock {
     /// Kept separate from `tima_reload_pending` so the reads-0 window
     /// (4 T-cycles, required by mooneye `tima_reload.s`) can coexist
     /// with the model-specific IRQ fire time.
-    pub(crate) tima_irq_countdown: u8,
-    pub(crate) div_cycles: i32,
-    pub(crate) div_state: u8,
-    pub(crate) tima_reload_state: u8,
-    pub(crate) stopped: bool,
+    pub tima_irq_countdown: u8,
+    pub div_cycles: i32,
+    pub div_state: u8,
+    pub tima_reload_state: u8,
+    pub stopped: bool,
 }
 
 impl Default for Clock {

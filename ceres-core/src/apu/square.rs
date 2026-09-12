@@ -59,11 +59,11 @@ impl<S: SweepTrait> Square<S> {
         self.length_timer.set_length(val);
     }
 
-    pub(crate) const fn set_output(&mut self, val: u8) {
+    pub const fn set_output(&mut self, val: u8) {
         self.output = val;
     }
 
-    pub(crate) const fn set_duty_bit(&mut self, val: u8) {
+    pub const fn set_duty_bit(&mut self, val: u8) {
         self.duty_bit = val;
     }
 

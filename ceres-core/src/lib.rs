@@ -58,7 +58,7 @@ pub struct Gb<A: AudioCallback> {
     game_genie: GameGenie,
     hdma: Hdma,
     hram: Hram,
-    pub(crate) ints: Interrupts,
+    pub ints: Interrupts,
     joy: Joypad,
     key1: Key1,
     model: Model,
@@ -138,7 +138,7 @@ impl<A: AudioCallback> Gb<A> {
     /// `external/test-sources/`), which were measured on real hardware by Joonas
     /// Javanainen. The values are also cross-checked against SameBoy's own
     /// post-boot state in `gb.c::GB_reset_internal`.
-    pub(crate) fn skip_bootrom(&mut self) {
+    pub fn skip_bootrom(&mut self) {
         self.bootrom.disable();
 
         // CPU perfectly aligned post-bootrom. The test ROM starts at $0100
@@ -631,7 +631,7 @@ pub enum Model {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum CgbMode {
+pub enum CgbMode {
     #[default]
     Cgb,
     Compat,

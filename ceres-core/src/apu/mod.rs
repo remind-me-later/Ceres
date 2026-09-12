@@ -290,11 +290,11 @@ impl<A: AudioCallback> Apu<A> {
         self.ch1.output() | (self.ch2.output() << 4)
     }
 
-    pub(crate) const fn set_ch1_output(&mut self, val: u8) {
+    pub const fn set_ch1_output(&mut self, val: u8) {
         self.ch1.set_output(val);
     }
 
-    pub(crate) const fn set_ch1_duty_bit(&mut self, val: u8) {
+    pub const fn set_ch1_duty_bit(&mut self, val: u8) {
         self.ch1.set_duty_bit(val);
     }
 

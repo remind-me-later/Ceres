@@ -141,18 +141,6 @@ impl TileFetcher {
                 let map_addr = map_base + (u16::from(tile_row) * 32) + u16::from(tile_col);
                 self.row_in_tile = row_in_tile;
 
-                if std::env::var_os("CERES_TRACE").is_some()
-                    && !self.is_window
-                    && std::env::var("CERES_TRACE_LY")
-                        .ok()
-                        .and_then(|v| v.parse::<u8>().ok())
-                        .is_some_and(|l| l == ly)
-                {
-                    eprintln!(
-                        "BG col={tile_col} row={tile_row} map={map_addr:#06x} pos={position} lcdc={lcdc:#04x}"
-                    );
-                }
-
                 self.tile_id = vram.vram_at_bank(map_addr, 0);
                 self.tile_attr = if is_cgb {
                     vram.vram_at_bank(map_addr, 1)

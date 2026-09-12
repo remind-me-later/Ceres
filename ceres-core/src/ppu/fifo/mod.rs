@@ -298,21 +298,6 @@ impl PixelFifo {
     /// pixel are merged by sprite priority (DMG: first fetch wins, i.e.
     /// smaller X; CGB: lower OAM index).
     fn overlay_sprite_pixels(&mut self, sprite_pixels: [Pixel; 8], sprite_x: u8, is_cgb: bool) {
-        if std::env::var_os("CERES_OVERLAY").is_some() && self.position >= 40 && self.position <= 64
-        {
-            eprintln!(
-                "OVL x={} pos={} base={} slen={} px={}",
-                sprite_x,
-                self.position,
-                i16::from(sprite_x) - 8 - self.position,
-                self.sprite_len,
-                sprite_pixels
-                    .iter()
-                    .map(|p| p.color_id().to_string())
-                    .collect::<Vec<_>>()
-                    .join("")
-            );
-        }
         for (j, new_px) in sprite_pixels.iter().enumerate() {
             let idx = i16::from(sprite_x) - 8 + j as i16 - self.position;
             if idx < 0 || idx >= 16 {
@@ -516,23 +501,6 @@ impl PixelFifo {
             } else {
                 popped
             };
-            if std::env::var_os("CERES_TRACE").is_some() && out_x == 0 && (ly == 0 || ly == 32) {
-                eprintln!(
-                    "PX0 ly={ly} dot={} k={} junk_at={}",
-                    self.line_dots,
-                    scx & 7,
-                    self.junk_at
-                );
-            }
-            if std::env::var_os("CERES_TRACE").is_some() && ly == 40 && (60..82).contains(&out_x) {
-                eprintln!(
-                    "PX x={out_x} dot={} bgcid={} spcid={} spal={}",
-                    self.line_dots,
-                    bg_px.color_id(),
-                    sprite_px.color_id(),
-                    sprite_px.palette()
-                );
-            }
             self.lx = out_x;
             self.position += 1;
             return Some((out_x, bg_px, sprite_px));
