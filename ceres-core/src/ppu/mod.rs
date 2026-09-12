@@ -48,7 +48,6 @@ pub enum Mode {
 
 #[expect(clippy::struct_excessive_bools)]
 pub struct Ppu {
-    #[expect(dead_code)]
     pub model: Model,
     bcp: ColorPalette,
     bgp: u8,
@@ -246,6 +245,7 @@ impl Ppu {
                     !self.is_cgb && self.lcdon_line0_mode0,
                     self.is_cgb,
                     obj_enabled,
+                    self.model,
                 );
             }
             Mode::VBlank => {
@@ -422,6 +422,15 @@ impl Ppu {
                     self.ly_for_comparison = u16::from(self.ly);
                     self.check_lyc(ints);
                 }
+                if self.is_cgb
+                    && self.ly == 0
+                    && dot == 0
+                    && self.stat & STAT_IF_OAM_B != 0
+                    && !self.stat_line
+                {
+                    ints.request_lcd();
+                    self.stat_line = true;
+                }
                 if !self.is_cgb
                     && self.ly == 0
                     && dot == 1
@@ -558,10 +567,6 @@ impl Ppu {
                             }
                         } else if dot == 452 {
                             self.stat = (self.stat & !STAT_MODE_B) | Mode::OamScan as u8;
-                            if self.stat & STAT_IF_OAM_B != 0 && !self.stat_line {
-                                ints.request_lcd();
-                                self.stat_line = true;
-                            }
                         }
                     } else if dot == 4 {
                         self.ly = 0;

@@ -69,7 +69,7 @@ impl TileFetcher {
 
     pub fn reset_window(&mut self, window_line_counter: u8) {
         self.state = FetcherState::GetTile;
-        self.cycle = 0;
+        self.cycle = 1;
         self.tile_id = 0;
         self.tile_attr = 0;
         self.tile_data_low = 0;

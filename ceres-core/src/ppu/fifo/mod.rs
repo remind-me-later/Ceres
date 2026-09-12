@@ -194,7 +194,14 @@ impl PixelFifo {
         cycles_for_line
     }
 
-    pub fn start_drawing(&mut self, scx: u8, _is_lcdon: bool, is_cgb: bool, obj_enabled: bool) {
+    pub fn start_drawing(
+        &mut self,
+        scx: u8,
+        _is_lcdon: bool,
+        is_cgb: bool,
+        obj_enabled: bool,
+        model: crate::Model,
+    ) {
         self.lx = 0;
         self.line_dots = 0;
         self.sprite_stall = 0;
@@ -206,8 +213,18 @@ impl PixelFifo {
         if is_cgb {
             let k = scx & 7;
             self.position = -16 + i16::from(k);
+            let is_early_cgb = matches!(
+                model,
+                crate::Model::Cgb0 | crate::Model::CgbA | crate::Model::CgbB | crate::Model::CgbC
+            );
             self.junk_at = match k {
-                0..=2 => 0,
+                0..=2 => {
+                    if is_early_cgb {
+                        2
+                    } else {
+                        0
+                    }
+                }
                 3..=6 => 4,
                 7 => 8,
                 _ => unreachable!(),
