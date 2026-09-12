@@ -1497,12 +1497,17 @@ impl<A: AudioCallback> Bus for Gb<A> {
             }
             ConflictType::PaletteDmg => {
                 let old = self.read_mem(addr);
-                self.flush_deferred_time();
-                self.advance_dots(1);
-                self.write_mem(addr, val | old);
-                self.advance_dots(1);
-                self.write_mem(addr, val);
-                self.time_deferred = 2;
+                if pending >= 3 {
+                    self.advance_dots(pending - 3);
+                    self.write_mem(addr, val | old);
+                    self.advance_dots(1);
+                    self.write_mem(addr, val);
+                    self.time_deferred = 6;
+                } else {
+                    self.flush_deferred_time();
+                    self.write_mem(addr, val);
+                    self.time_deferred = 4;
+                }
             }
             ConflictType::PaletteCgb => {
                 if matches!(self.model, Model::CgbD | Model::CgbE | Model::Agb) {

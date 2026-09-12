@@ -344,13 +344,12 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_obp0_change_dmg_blob,
     "m3_obp0_change.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 mealybug_ppu_test!(
     test_mb_m3_obp0_change_cgb_c,
     "m3_obp0_change.gb",
-    Model::CgbE,
+    Model::CgbC,
     ignore
 );
 
@@ -358,8 +357,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_scx_high_5_bits_dmg_blob,
     "m3_scx_high_5_bits.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 mealybug_ppu_test!(
     test_mb_m3_scx_high_5_bits_cgb_c,

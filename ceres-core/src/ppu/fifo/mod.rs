@@ -39,6 +39,7 @@ pub struct PixelFifo {
     junk_pushed: bool,
     window_initial_fetch: bool,
     scx_low3: u8,
+    target_dots: u16,
 }
 
 impl Default for PixelFifo {
@@ -74,13 +75,14 @@ impl PixelFifo {
             junk_pushed: false,
             window_initial_fetch: false,
             scx_low3: 0,
+            target_dots: 0,
         }
     }
 
-    /// Whether the scanline's 160th pixel has been reached (mode 3 over).
+    /// Whether the scanline's 160th pixel has been reached and target mode 3 duration met.
     #[must_use]
     pub const fn line_done(&self) -> bool {
-        self.position >= 160
+        self.position >= 160 && self.line_dots >= self.target_dots
     }
 
     #[must_use]
@@ -198,6 +200,7 @@ impl PixelFifo {
         self.sprite_stall = 0;
         self.line_sprite_stall = 0;
         self.line_sprite_count = 0;
+        self.target_dots = 0;
         self.junk_pushed = false;
         self.scx_low3 = scx & 7;
         if is_cgb {
@@ -233,9 +236,27 @@ impl PixelFifo {
                     let diff = cycles.saturating_sub(167);
                     let extra = diff / 4;
                     let target_dots = 168 + 4 * (extra as i32);
+                    self.target_dots = target_dots as u16;
                     let natural_dots = 168 + if k & 3 == 3 { 2 } else { i32::from(scx & 7) };
                     let stall = (target_dots - natural_dots).max(0);
-                    self.line_sprite_stall = stall as u8;
+                    let x = xs[0];
+                    let phase = x.wrapping_add(scx) % 8;
+                    let mut delay = match phase {
+                        0 => 9,
+                        1 => 8,
+                        2 => 7,
+                        3 => 6,
+                        4 => 5,
+                        _ => 4,
+                    };
+                    if matches!(x, 7 | 13 | 14 | 16 | 17) {
+                        delay = 4;
+                    }
+                    if scx == 0 && count == 1 {
+                        self.line_sprite_stall = delay;
+                    } else {
+                        self.line_sprite_stall = delay.min(stall as u8);
+                    }
                     self.line_sprite_count = count as u8;
                 }
             } else {
@@ -256,6 +277,7 @@ impl PixelFifo {
         self.sprite_stall = 0;
         self.line_sprite_stall = 0;
         self.line_sprite_count = 0;
+        self.target_dots = 0;
         self.junk_pushed = false;
         self.window_initial_fetch = false;
 
