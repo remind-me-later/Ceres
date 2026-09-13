@@ -55,6 +55,14 @@ macro_rules! mealybug_ppu_test {
             assert!(result.is_passed(), "Test failed with result: {result:?}");
         }
     };
+    ($name:ident, $rom:literal, $model:expr, ignore_no_screenshot) => {
+        #[test]
+        #[ignore = "Missing reference screenshot in upstream repository - do not take into account"]
+        fn $name() {
+            let result = run_mealybug_ppu_test($rom, $model);
+            assert!(result.is_passed(), "Test failed with result: {result:?}");
+        }
+    };
     ($name:ident, $rom:literal) => {
         // Default to DMG model if not specified
         mealybug_ppu_test!($name, $rom, Model::DmgB);
@@ -62,6 +70,10 @@ macro_rules! mealybug_ppu_test {
     ($name:ident, $rom:literal, ignore) => {
         // Default to DMG model if not specified
         mealybug_ppu_test!($name, $rom, Model::DmgB, ignore);
+    };
+    ($name:ident, $rom:literal, ignore_no_screenshot) => {
+        // Default to DMG model if not specified
+        mealybug_ppu_test!($name, $rom, Model::DmgB, ignore_no_screenshot);
     };
 }
 
@@ -130,7 +142,7 @@ mealybug_ppu_test!(
     test_mb_m3_lcdc_bg_en_change2_dmg_blob,
     "m3_lcdc_bg_en_change2.gb",
     Model::DmgB,
-    ignore
+    ignore_no_screenshot
 );
 mealybug_ppu_test!(
     test_mb_m3_lcdc_bg_en_change2_cgb_c,
@@ -159,7 +171,7 @@ mealybug_ppu_test!(
     test_mb_m3_lcdc_bg_map_change2_dmg_blob,
     "m3_lcdc_bg_map_change2.gb",
     Model::DmgB,
-    ignore
+    ignore_no_screenshot
 );
 mealybug_ppu_test!(
     test_mb_m3_lcdc_bg_map_change2_cgb_c,
@@ -248,7 +260,7 @@ mealybug_ppu_test!(
     test_mb_m3_lcdc_tile_sel_change2_dmg_blob,
     "m3_lcdc_tile_sel_change2.gb",
     Model::DmgB,
-    ignore
+    ignore_no_screenshot
 );
 mealybug_ppu_test!(
     test_mb_m3_lcdc_tile_sel_change2_cgb_c,
@@ -277,7 +289,7 @@ mealybug_ppu_test!(
     test_mb_m3_lcdc_tile_sel_win_change2_dmg_blob,
     "m3_lcdc_tile_sel_win_change2.gb",
     Model::DmgB,
-    ignore
+    ignore_no_screenshot
 );
 mealybug_ppu_test!(
     test_mb_m3_lcdc_tile_sel_win_change2_cgb_c,
@@ -301,18 +313,18 @@ mealybug_ppu_test!(
 );
 
 // m3_lcdc_win_en_change_multiple_wx.gb
-// Note: Missing reference screenshot in upstream mealybug repository for DMG blob (only dmg_b exists)
 mealybug_ppu_test!(
     test_mb_m3_lcdc_win_en_change_multiple_wx_dmg_blob,
     "m3_lcdc_win_en_change_multiple_wx.gb",
     Model::DmgB,
     ignore
 );
+// Note: Missing reference screenshot in upstream mealybug repository for CGB
 mealybug_ppu_test!(
     test_mb_m3_lcdc_win_en_change_multiple_wx_cgb_c,
     "m3_lcdc_win_en_change_multiple_wx.gb",
     Model::CgbE,
-    ignore
+    ignore_no_screenshot
 );
 
 // m3_lcdc_win_map_change.gb
@@ -335,13 +347,12 @@ mealybug_ppu_test!(
     test_mb_m3_lcdc_win_map_change2_dmg_blob,
     "m3_lcdc_win_map_change2.gb",
     Model::DmgB,
-    ignore
+    ignore_no_screenshot
 );
 mealybug_ppu_test!(
     test_mb_m3_lcdc_win_map_change2_cgb_c,
     "m3_lcdc_win_map_change2.gb",
-    Model::CgbE,
-    ignore
+    Model::CgbE
 );
 
 // m3_obp0_change.gb
@@ -375,7 +386,7 @@ mealybug_ppu_test!(
     test_mb_m3_scx_high_5_bits_change2_dmg_blob,
     "m3_scx_high_5_bits_change2.gb",
     Model::DmgB,
-    ignore
+    ignore_no_screenshot
 );
 mealybug_ppu_test!(
     test_mb_m3_scx_high_5_bits_change2_cgb_c,
@@ -416,7 +427,7 @@ mealybug_ppu_test!(
     test_mb_m3_scy_change2_dmg_blob,
     "m3_scy_change2.gb",
     Model::DmgB,
-    ignore
+    ignore_no_screenshot
 );
 mealybug_ppu_test!(
     test_mb_m3_scy_change2_cgb_c,
@@ -464,7 +475,7 @@ mealybug_ppu_test!(
     test_mb_m3_wx_4_change_cgb_c,
     "m3_wx_4_change.gb",
     Model::CgbE,
-    ignore
+    ignore_no_screenshot
 );
 
 // m3_wx_4_change_sprites.gb
@@ -491,7 +502,7 @@ mealybug_ppu_test!(
     test_mb_m3_wx_5_change_cgb_c,
     "m3_wx_5_change.gb",
     Model::CgbE,
-    ignore
+    ignore_no_screenshot
 );
 
 // m3_wx_6_change.gb
@@ -506,7 +517,7 @@ mealybug_ppu_test!(
     test_mb_m3_wx_6_change_cgb_c,
     "m3_wx_6_change.gb",
     Model::CgbE,
-    ignore
+    ignore_no_screenshot
 );
 
 // win_without_bg.gb
@@ -515,11 +526,11 @@ mealybug_ppu_test!(
     test_mb_win_without_bg_dmg_blob,
     "win_without_bg.gb",
     Model::DmgB,
-    ignore
+    ignore_no_screenshot
 );
 mealybug_ppu_test!(
     test_mb_win_without_bg_cgb_c,
     "win_without_bg.gb",
     Model::CgbE,
-    ignore
+    ignore_no_screenshot
 );
