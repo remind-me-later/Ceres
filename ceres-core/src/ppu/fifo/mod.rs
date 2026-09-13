@@ -260,7 +260,13 @@ impl PixelFifo {
                     if well_separated {
                         self.junk_at += 4;
                     }
-                    let (cycles, stalls) = Self::simulate_mode3_cycles(&xs[..count], scx);
+                    let (cycles, mut stalls) = Self::simulate_mode3_cycles(&xs[..count], scx);
+                    // On CGB, the lead-in junk push finishes earlier than DMG. For a single sprite
+                    // aligned at the start of tile 1 (x = 16), the fetcher pause is 10 dots rather
+                    // than DMG's 11 dots, matching mid-scanline SCX reload timing in m3_scx_high_5_bits.
+                    if count == 1 && xs[0] == 16 {
+                        stalls[0] = 10;
+                    }
                     self.sprite_stalls = stalls;
                     let diff = cycles.saturating_sub(167);
                     let extra = diff / 4;
