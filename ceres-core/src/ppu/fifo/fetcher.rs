@@ -25,6 +25,8 @@ pub struct TileFetcher {
     window_line_counter: u8,
     is_window: bool,
     sprite_fetch: Option<(Sprite, u8)>, // (Sprite, sub_cycle)
+    map_base: u16,
+    data_addr: u16,
 }
 
 impl TileFetcher {
@@ -42,6 +44,8 @@ impl TileFetcher {
             window_line_counter: 0,
             is_window: false,
             sprite_fetch: None,
+            map_base: 0x1800,
+            data_addr: 0,
         }
     }
 
@@ -57,6 +61,8 @@ impl TileFetcher {
         self.window_tile_x = 0;
         self.is_window = false;
         self.sprite_fetch = None;
+        self.map_base = 0x1800;
+        self.data_addr = 0;
     }
 
     pub fn set_bg_tile_x(&mut self, scx: u8) {
@@ -79,6 +85,8 @@ impl TileFetcher {
         self.window_line_counter = window_line_counter;
         self.is_window = true;
         self.sprite_fetch = None;
+        self.map_base = 0;
+        self.data_addr = 0;
     }
 
     /// Advance fetcher by 1 T-cycle.
@@ -106,10 +114,25 @@ impl TileFetcher {
             return None;
         }
 
-        self.cycle += 1;
-        if self.cycle < 2 {
+        if self.cycle == 0 {
+            self.cycle = 1;
+            match self.state {
+                FetcherState::GetTile => {
+                    if !self.is_window {
+                        self.map_base = if lcdc & 0x08 != 0 { 0x1C00 } else { 0x1800 };
+                    }
+                }
+                FetcherState::GetTileDataLow => {
+                    self.data_addr = self.calculate_tile_data_addr(lcdc);
+                }
+                FetcherState::GetTileDataHigh => {
+                    self.data_addr = self.calculate_tile_data_addr(lcdc) + 1;
+                }
+                FetcherState::Push => {}
+            }
             return None;
         }
+
         self.cycle = 0;
 
         match self.state {
@@ -121,7 +144,7 @@ impl TileFetcher {
                     let r = (self.window_line_counter % 8) as u16;
                     (map, col, row, r)
                 } else {
-                    let map = if lcdc & 0x08 != 0 { 0x1C00 } else { 0x1800 };
+                    let map = self.map_base;
                     // SameBoy display.c:939-944: during the first half of the
                     // lead-in the fetched column is simply the first visible
                     // column (SCX >> 3); from the second half on it follows
@@ -152,25 +175,23 @@ impl TileFetcher {
                 None
             }
             FetcherState::GetTileDataLow => {
-                let data_addr = self.calculate_tile_data_addr(lcdc);
                 let bank = if is_cgb && (self.tile_attr & 0x08 != 0) {
                     1
                 } else {
                     0
                 };
-                self.tile_data_low = vram.vram_at_bank(data_addr, bank);
+                self.tile_data_low = vram.vram_at_bank(self.data_addr, bank);
 
                 self.state = FetcherState::GetTileDataHigh;
                 None
             }
             FetcherState::GetTileDataHigh => {
-                let data_addr = self.calculate_tile_data_addr(lcdc) + 1;
                 let bank = if is_cgb && (self.tile_attr & 0x08 != 0) {
                     1
                 } else {
                     0
                 };
-                self.tile_data_high = vram.vram_at_bank(data_addr, bank);
+                self.tile_data_high = vram.vram_at_bank(self.data_addr, bank);
 
                 // Always hand over to Push: the fetch cycle must stay a
                 // constant 8 dots so the fetcher never laps the pixel pops

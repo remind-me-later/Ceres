@@ -254,9 +254,10 @@ impl PixelFifo {
                 let (xs, count) = self.sprites.sprite_xs();
                 if count > 0 {
                     let well_separated = count > 1
-                        && xs[..count]
-                            .windows(2)
-                            .all(|w| w[1].saturating_sub(w[0]) > 8);
+                        && (count < 10
+                            || xs[..count]
+                                .windows(2)
+                                .all(|w| w[1].saturating_sub(w[0]) > 8));
                     if well_separated {
                         self.junk_at += 4;
                     }

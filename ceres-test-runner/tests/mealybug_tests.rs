@@ -176,8 +176,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_bg_map_change2_cgb_c,
     "m3_lcdc_bg_map_change2.gb",
-    Model::CgbE,
-    ignore
+    Model::CgbC
 );
 
 // m3_lcdc_obj_en_change.gb
@@ -235,7 +234,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_obj_size_change_scx_cgb_c,
     "m3_lcdc_obj_size_change_scx.gb",
-    Model::CgbE,
+    Model::CgbC,
     ignore
 );
 
@@ -430,7 +429,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_scy_change2_cgb_c,
     "m3_scy_change2.gb",
-    Model::CgbE,
+    Model::CgbC,
     ignore
 );
 
