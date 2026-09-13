@@ -230,8 +230,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_obj_size_change_scx_dmg_blob,
     "m3_lcdc_obj_size_change_scx.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 mealybug_ppu_test!(
     test_mb_m3_lcdc_obj_size_change_scx_cgb_c,

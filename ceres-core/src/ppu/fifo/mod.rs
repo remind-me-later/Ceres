@@ -285,17 +285,17 @@ impl PixelFifo {
             // = 13/13/13/17/17/17/17/21 for k = 0..7, reproducing the mooneye
             // mode-3 lengths (172/176/180 dots on DMG) exactly.
             let k = u16::from(scx & 7);
-            self.position = if obj_enabled && (k & 3 == 3) {
-                -15
-            } else {
-                -16
-            };
             if obj_enabled {
                 let (xs, count) = self.sprites.sprite_xs();
                 let well_separated = count > 1
                     && xs[..count]
                         .windows(2)
                         .all(|w| w[1].saturating_sub(w[0]) > 8);
+                self.position = if !well_separated && (k & 3 == 3) {
+                    -15
+                } else {
+                    -16
+                };
                 self.junk_at = if well_separated {
                     if k & 3 > 1 { 3 } else { 4 - (k & 3) }
                 } else {
@@ -488,13 +488,10 @@ impl PixelFifo {
             if self.sprite_stall == 2 {
                 if let Some(sprite) = self.pending_sprite {
                     let sprite_height = if lcdc & 0x04 != 0 { 16 } else { 8 };
-                    self.pending_sprite_low = Some(self.fetcher.fetch_sprite_low(
-                        sprite,
-                        vram,
-                        ly,
-                        sprite_height,
-                        is_cgb,
-                    ));
+                    let low =
+                        self.fetcher
+                            .fetch_sprite_low(sprite, vram, ly, sprite_height, is_cgb);
+                    self.pending_sprite_low = Some(low);
                 }
             } else if self.sprite_stall == 0 {
                 if let Some(sprite) = self.pending_sprite.take() {
