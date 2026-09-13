@@ -36,7 +36,7 @@ pub use {
     error::Error,
     joypad::Button,
     ppu::ColorCorrectionMode,
-    ppu::{PX_HEIGHT, PX_WIDTH},
+    ppu::{PX_HEIGHT, PX_WIDTH, PixelFifo},
     timing::FRAME_DURATION,
 };
 use {

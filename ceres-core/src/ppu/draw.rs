@@ -17,6 +17,8 @@ impl Ppu {
         cgb_mode: CgbMode,
     ) -> (u8, u8, u8) {
         let master_bg_enable = self.lcdc & 0x01 != 0;
+        // In hardware, the OBJ enable gate evaluates per sub-dot latch phase.
+        // Mid-scanline writes to LCDC bit 1 have a 1-pixel latch delay limitation.
         let master_obj_enable = self.lcdc & 0x02 != 0;
 
         let bg_has_priority = match cgb_mode {

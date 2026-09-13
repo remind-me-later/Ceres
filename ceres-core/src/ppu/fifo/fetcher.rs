@@ -3,7 +3,7 @@ use super::sprite::Sprite;
 use crate::ppu::vram::Vram;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-enum FetcherState {
+pub enum FetcherState {
     #[default]
     GetTile,
     GetTileDataLow,
@@ -232,16 +232,16 @@ impl TileFetcher {
         pixels
     }
 
-    pub fn fetch_sprite_data(
+    #[must_use]
+    pub fn fetch_sprite_low(
         &self,
         sprite: Sprite,
         vram: &Vram,
         ly: u8,
         sprite_height: u8,
         is_cgb: bool,
-    ) -> [Pixel; 8] {
+    ) -> u8 {
         let flip_y = sprite.y_flip();
-        let flip_x = sprite.x_flip();
         let height_16 = sprite_height == 16;
         let mut tile_y = (u16::from(ly) + 16).wrapping_sub(u16::from(sprite.y()))
             & if height_16 { 0x0F } else { 7 };
@@ -257,9 +257,46 @@ impl TileFetcher {
 
         let tile_addr = (u16::from(tile_id) * 16) + tile_y * 2;
         let bank = if is_cgb { sprite.cgb_vram_bank() } else { 0 };
-        let low = vram.vram_at_bank(tile_addr, bank);
-        let high = vram.vram_at_bank(tile_addr + 1, bank);
+        vram.vram_at_bank(tile_addr, bank)
+    }
 
+    #[must_use]
+    pub fn fetch_sprite_high(
+        &self,
+        sprite: Sprite,
+        vram: &Vram,
+        ly: u8,
+        sprite_height: u8,
+        is_cgb: bool,
+    ) -> u8 {
+        let flip_y = sprite.y_flip();
+        let height_16 = sprite_height == 16;
+        let mut tile_y = (u16::from(ly) + 16).wrapping_sub(u16::from(sprite.y()))
+            & if height_16 { 0x0F } else { 7 };
+        if flip_y {
+            tile_y ^= if height_16 { 0x0F } else { 7 };
+        }
+
+        let tile_id = if height_16 {
+            sprite.tile() & 0xFE
+        } else {
+            sprite.tile()
+        };
+
+        let tile_addr = (u16::from(tile_id) * 16) + tile_y * 2;
+        let bank = if is_cgb { sprite.cgb_vram_bank() } else { 0 };
+        vram.vram_at_bank(tile_addr + 1, bank)
+    }
+
+    #[must_use]
+    pub fn decode_sprite_pixels(
+        &self,
+        sprite: Sprite,
+        low: u8,
+        high: u8,
+        is_cgb: bool,
+    ) -> [Pixel; 8] {
+        let flip_x = sprite.x_flip();
         let palette = if is_cgb {
             sprite.cgb_palette()
         } else {

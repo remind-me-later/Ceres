@@ -96,6 +96,7 @@ impl ScreenshotCheck {
         let matches = expected_rgba.as_raw() == actual_rgba;
         if !matches {
             let mut count = 0;
+            let mut line_counts = [0usize; 144];
             for (idx, (e, a)) in expected_rgba
                 .chunks(4)
                 .zip(actual_rgba.chunks(4))
@@ -103,14 +104,20 @@ impl ScreenshotCheck {
             {
                 if e != a {
                     count += 1;
+                    let y = idx / 160;
+                    line_counts[y] += 1;
                     if count <= 10 {
                         let x = idx % 160;
-                        let y = idx / 160;
                         eprintln!(
                             "Mismatch #{count} at ({x}, {y}): expected {:?}, got {:?}",
                             e, a
                         );
                     }
+                }
+            }
+            for (y, c) in line_counts.iter().enumerate() {
+                if *c > 0 {
+                    eprintln!("Scanline {y}: {c} mismatches");
                 }
             }
             eprintln!("Total mismatching pixels: {count} / {}", 160 * 144);

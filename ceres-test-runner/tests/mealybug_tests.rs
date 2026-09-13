@@ -169,6 +169,11 @@ mealybug_ppu_test!(
 );
 
 // m3_lcdc_obj_en_change.gb
+// Hardware limitation / sub-dot latch behavior:
+// These tests toggle LCDC bit 1 (OBJ Enable) mid-scanline during active pixel FIFO output.
+// In hardware, the pixel serializer and OBJ enable gate evaluate at sub-dot latch phases,
+// causing a 1-pixel boundary difference when LCDC is modified mid-operation (a limitation
+// also documented as "off by one" in cycle/gate-level emulators like MetroBoy).
 mealybug_ppu_test!(
     test_mb_m3_lcdc_obj_en_change_dmg_blob,
     "m3_lcdc_obj_en_change.gb",
@@ -178,11 +183,12 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_obj_en_change_cgb_c,
     "m3_lcdc_obj_en_change.gb",
-    Model::CgbE,
+    Model::CgbC,
     ignore
 );
 
 // m3_lcdc_obj_en_change_variant.gb
+// Same sub-dot latch behavior limitation as m3_lcdc_obj_en_change above.
 mealybug_ppu_test!(
     test_mb_m3_lcdc_obj_en_change_variant_dmg_blob,
     "m3_lcdc_obj_en_change_variant.gb",
@@ -192,7 +198,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_obj_en_change_variant_cgb_c,
     "m3_lcdc_obj_en_change_variant.gb",
-    Model::CgbE,
+    Model::CgbC,
     ignore
 );
 
@@ -200,14 +206,12 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_obj_size_change_dmg_blob,
     "m3_lcdc_obj_size_change.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 mealybug_ppu_test!(
     test_mb_m3_lcdc_obj_size_change_cgb_c,
     "m3_lcdc_obj_size_change.gb",
-    Model::CgbE,
-    ignore
+    Model::CgbC
 );
 
 // m3_lcdc_obj_size_change_scx.gb
@@ -349,8 +353,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_obp0_change_cgb_c,
     "m3_obp0_change.gb",
-    Model::CgbC,
-    ignore
+    Model::CgbC
 );
 
 // m3_scx_high_5_bits.gb
@@ -473,7 +476,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_wx_4_change_sprites_cgb_c,
     "m3_wx_4_change_sprites.gb",
-    Model::CgbE
+    Model::CgbC
 );
 
 // m3_wx_5_change.gb

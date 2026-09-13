@@ -8,6 +8,7 @@ mod vram;
 use core::mem;
 
 use crate::interrupts::Interrupts;
+pub use fifo::PixelFifo;
 pub use oam::Oam;
 pub use vram::Vram;
 use {self::color_palette::ColorPalette, crate::CgbMode, crate::Model, rgba_buf::RgbaBuf};
