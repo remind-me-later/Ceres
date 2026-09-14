@@ -495,6 +495,7 @@ impl PixelFifo {
         };
 
         let was_window_active = self.window_active;
+
         if !win_enabled {
             self.window_active = false;
         } else if ly >= wy && win_in_x {
@@ -616,7 +617,22 @@ impl PixelFifo {
         // position lead-in plus the fetch cadence make the line self-clock
         // to the hardware mode-3 length.
         if self.position < 160 && self.bg_len > 0 {
-            let popped = self.pop_bg_pixel().expect("bg_len > 0");
+            let out_x = self.position as u8;
+            let insert_bg_pixel = was_window_active
+                && !self.window_initial_fetch
+                && win_enabled
+                && ly >= wy
+                && (!is_cgb || wx == 0)
+                && out_x.wrapping_add(7) == wx
+                && self.fetcher.is_get_tile_t1()
+                && self.bg_len == 8;
+            self.window_initial_fetch = false;
+
+            let bg_px = if insert_bg_pixel {
+                Pixel::empty()
+            } else {
+                self.pop_bg_pixel().expect("bg_len > 0")
+            };
             let sprite_px = self.pop_sprite_pixel().unwrap_or(Pixel::empty());
 
             // Lead-in (position −16..−9, raw u8 240..247): snap forward to
@@ -641,20 +657,6 @@ impl PixelFifo {
                 return None;
             }
 
-            let out_x = self.position as u8;
-            let window_reactivation_zero = was_window_active
-                && !self.window_initial_fetch
-                && win_enabled
-                && ly >= wy
-                && out_x.wrapping_add(7) == wx
-                && self.fetcher.is_get_tile_t1();
-            self.window_initial_fetch = false;
-
-            let bg_px = if window_reactivation_zero {
-                Pixel::empty()
-            } else {
-                popped
-            };
             self.lx = out_x;
             self.position += 1;
             return Some((out_x, bg_px, sprite_px));

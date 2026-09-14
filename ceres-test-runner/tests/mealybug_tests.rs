@@ -453,7 +453,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_window_timing_wx_0_cgb_c,
     "m3_window_timing_wx_0.gb",
-    Model::CgbE,
+    Model::CgbC,
     ignore
 );
 
@@ -461,8 +461,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_wx_4_change_dmg_blob,
     "m3_wx_4_change.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 // Note: Missing reference screenshot in upstream mealybug repository for CGB
 mealybug_ppu_test!(
