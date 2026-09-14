@@ -41,6 +41,7 @@ pub struct PixelFifo {
     scx_low3: u8,
     target_dots: u16,
     is_cgb_model: bool,
+    model: crate::Model,
     sprite_stalls: [u8; 10],
     current_sprite_idx: usize,
     pending_sprite: Option<Sprite>,
@@ -82,6 +83,7 @@ impl PixelFifo {
             scx_low3: 0,
             target_dots: 0,
             is_cgb_model: false,
+            model: crate::Model::DmgB,
             sprite_stalls: [0; 10],
             current_sprite_idx: 0,
             pending_sprite: None,
@@ -105,6 +107,17 @@ impl PixelFifo {
             let k = scx & 7;
             self.scx_low3 = k;
             self.fetcher.reset_bg(scx);
+            if k == 0 {
+                self.position = -16;
+                let is_early_cgb = matches!(
+                    self.model,
+                    crate::Model::Cgb0
+                        | crate::Model::CgbA
+                        | crate::Model::CgbB
+                        | crate::Model::CgbC
+                );
+                self.junk_at = if is_early_cgb { 2 } else { 0 };
+            }
         } else {
             self.fetcher.set_bg_tile_x(scx);
         }
@@ -226,6 +239,7 @@ impl PixelFifo {
         self.junk_pushed = false;
         self.scx_low3 = scx & 7;
         self.is_cgb_model = is_cgb;
+        self.model = model;
         self.sprite_stalls = [0; 10];
         self.current_sprite_idx = 0;
         self.pending_sprite = None;
@@ -495,14 +509,13 @@ impl PixelFifo {
         };
 
         let was_window_active = self.window_active;
-
         if !win_enabled {
             self.window_active = false;
         } else if ly >= wy && win_in_x {
             if !self.window_active {
                 self.window_active = true;
-                if self.is_cgb_model {
-                    self.scx_low3 = 0;
+                if wx == 0 && self.position < -7 {
+                    self.position = -18;
                 }
                 self.fetcher.reset_window(self.window_line_counter);
                 self.window_initial_fetch = true;
@@ -597,7 +610,7 @@ impl PixelFifo {
         // line +8 px). The BG tile column is derived live from SCX and the
         // (u8-wrapped) position, SameBoy-style (display.c:939-944), so
         // mid-line SCX writes shift subsequent fetches immediately.
-        if self.line_dots >= self.junk_at {
+        if self.window_active || self.line_dots >= self.junk_at {
             if let Some(pixels) = self.fetcher.step_t_cycle(
                 vram,
                 ly,
