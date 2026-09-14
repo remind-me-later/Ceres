@@ -123,10 +123,10 @@ impl TileFetcher {
                     }
                 }
                 FetcherState::GetTileDataLow => {
-                    self.data_addr = self.calculate_tile_data_addr(lcdc);
+                    self.data_addr = self.calculate_tile_data_addr(lcdc, ly, scy);
                 }
                 FetcherState::GetTileDataHigh => {
-                    self.data_addr = self.calculate_tile_data_addr(lcdc) + 1;
+                    self.data_addr = self.calculate_tile_data_addr(lcdc, ly, scy) + 1;
                 }
                 FetcherState::Push => {}
             }
@@ -145,19 +145,14 @@ impl TileFetcher {
                     (map, col, row, r)
                 } else {
                     let map = self.map_base;
-                    // SameBoy display.c:939-944: during the first half of the
-                    // lead-in the fetched column is simply the first visible
-                    // column (SCX >> 3); from the second half on it follows
-                    // the live position with the 8-pixel FIFO lead.
                     let col = if position.wrapping_add(16) < 8 {
                         (scx >> 3) & 0x1F
                     } else {
                         let fetch_x = scx.wrapping_add(position).wrapping_add(8);
-                        (fetch_x / 8) & 0x1F
+                        (fetch_x >> 3) & 0x1F
                     };
-                    let y = ly.wrapping_add(scy);
-                    let row = (y / 8) & 0x1F;
-                    let r = (y % 8) as u16;
+                    let row = (ly.wrapping_add(scy) / 8) & 0x1F;
+                    let r = (ly.wrapping_add(scy) % 8) as u16;
                     (map, col, row, r)
                 };
 
@@ -218,10 +213,14 @@ impl TileFetcher {
         }
     }
 
-    fn calculate_tile_data_addr(&self, lcdc: u8) -> u16 {
+    fn calculate_tile_data_addr(&self, lcdc: u8, ly: u8, scy: u8) -> u16 {
         let is_signed = lcdc & 0x10 == 0;
         let flip_y = self.tile_attr & 0x40 != 0;
-        let mut row_in_tile = self.row_in_tile;
+        let mut row_in_tile = if self.is_window {
+            self.row_in_tile
+        } else {
+            (ly.wrapping_add(scy) % 8) as u16
+        };
         if flip_y {
             row_in_tile = 7 - row_in_tile;
         }

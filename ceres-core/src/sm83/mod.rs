@@ -1474,6 +1474,11 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 self.write_mem(addr, val);
                 self.time_deferred = 3;
             }
+            ConflictType::ScyDmg => {
+                self.advance_dots(pending + 2);
+                self.write_mem(addr, val);
+                self.time_deferred = 2;
+            }
             ConflictType::StatDmg => {
                 self.flush_deferred_time();
                 self.write_mem(addr, val);
@@ -1531,11 +1536,8 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 }
             }
             ConflictType::DmgLcdc => {
-                let old = self.read_mem(addr);
                 self.flush_deferred_time();
-                self.advance_dots(1);
-                self.write_mem(addr, old | (val & 0x01));
-                self.advance_dots(1);
+                self.advance_dots(2);
                 self.write_mem(addr, val);
                 self.time_deferred = 2;
             }

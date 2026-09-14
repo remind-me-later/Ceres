@@ -246,7 +246,28 @@ impl PixelFifo {
                         0
                     }
                 }
-                3..=6 => 4,
+                3 => 4,
+                4 => {
+                    if is_early_cgb {
+                        5
+                    } else {
+                        4
+                    }
+                }
+                5 => {
+                    if is_early_cgb {
+                        5
+                    } else {
+                        4
+                    }
+                }
+                6 => {
+                    if is_early_cgb {
+                        6
+                    } else {
+                        4
+                    }
+                }
                 7 => 8,
                 _ => unreachable!(),
             };
@@ -267,6 +288,12 @@ impl PixelFifo {
                     // than DMG's 11 dots, matching mid-scanline SCX reload timing in m3_scx_high_5_bits.
                     if count == 1 && xs[0] == 16 {
                         stalls[0] = 10;
+                    }
+                    // On CGB, the lead-in junk push does not delay an extra dot between k=4 and k=5
+                    // (both use junk_at=5), meaning the fetcher reaches the first sprite 1 dot earlier
+                    // than DMG simulation predicts. Thus for k in 5..=6, stalls[0] is 1 dot longer.
+                    if matches!(k, 5 | 6) {
+                        stalls[0] += 1;
                     }
                     self.sprite_stalls = stalls;
                     let diff = cycles.saturating_sub(167);
