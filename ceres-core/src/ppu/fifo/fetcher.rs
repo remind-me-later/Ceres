@@ -103,6 +103,7 @@ impl TileFetcher {
         position: u8,
         lcdc: u8,
         is_cgb: bool,
+        is_cgb_hardware: bool,
         bg_len: usize,
     ) -> Option<[Pixel; 8]> {
         // Handle sprite fetch stall if active
@@ -145,10 +146,11 @@ impl TileFetcher {
                     (map, col, row, r)
                 } else {
                     let map = self.map_base;
-                    let col = if position.wrapping_add(16) < 8 {
+                    let col = if position.wrapping_add(16) < 8 || position >= 240 {
                         (scx >> 3) & 0x1F
                     } else {
-                        let fetch_x = scx.wrapping_add(position).wrapping_add(8);
+                        let offset = if is_cgb_hardware { 7 } else { 8 };
+                        let fetch_x = scx.wrapping_add(position).wrapping_add(offset);
                         (fetch_x >> 3) & 0x1F
                     };
                     let row = (ly.wrapping_add(scy) / 8) & 0x1F;

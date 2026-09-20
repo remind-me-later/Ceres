@@ -18,6 +18,7 @@ pub enum ConflictType {
     LcdcCgbDouble,
     Nr10CgbDouble,
     ScxDmgAndCgbDouble,
+    ScxCgb,
     ScyDmg,
 }
 
@@ -57,7 +58,7 @@ pub const CGB_CONFLICT_MAP: [ConflictType; 128] = {
     map[0x0F] = ConflictType::WriteCpu;
     map[0x40] = ConflictType::LcdcCgb;
     map[0x41] = ConflictType::StatCgb;
-    map[0x43] = ConflictType::ReadOld;
+    map[0x43] = ConflictType::ScxCgb;
     map[0x45] = ConflictType::WriteCpu;
     map[0x47] = ConflictType::PaletteCgb;
     map[0x48] = ConflictType::PaletteCgb;
@@ -93,7 +94,13 @@ pub const fn get_conflict(
 
     let offset = (addr & 0x7F) as usize;
 
-    if matches!(cgb_mode, CgbMode::Cgb) {
+    if matches!(model, Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC) && offset == 0x43 {
+        if double_speed {
+            ConflictType::ScxDmgAndCgbDouble
+        } else {
+            ConflictType::ScxCgb
+        }
+    } else if matches!(cgb_mode, CgbMode::Cgb) {
         if double_speed {
             CGB_DOUBLE_CONFLICT_MAP[offset]
         } else {

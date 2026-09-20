@@ -1582,6 +1582,21 @@ impl<A: AudioCallback> Bus for Gb<A> {
                     self.time_deferred = 4;
                 }
             }
+            ConflictType::ScxCgb => {
+                if matches!(self.ppu.mode(), crate::ppu::Mode::Drawing) {
+                    self.advance_dots(pending + 3);
+                    self.write_mem(addr, val);
+                    self.time_deferred = 1;
+                } else if pending >= 2 {
+                    self.advance_dots(pending - 2);
+                    self.write_mem(addr, val);
+                    self.time_deferred = 6;
+                } else {
+                    self.flush_deferred_time();
+                    self.write_mem(addr, val);
+                    self.time_deferred = 4;
+                }
+            }
             ConflictType::Nr10CgbDouble => {
                 if pending >= 1 {
                     self.advance_dots(pending - 1);

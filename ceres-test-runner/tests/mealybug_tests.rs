@@ -386,8 +386,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_scx_high_5_bits_change2_cgb_c,
     "m3_scx_high_5_bits_change2.gb",
-    Model::CgbE,
-    ignore
+    Model::CgbC
 );
 
 // m3_scx_low_3_bits.gb

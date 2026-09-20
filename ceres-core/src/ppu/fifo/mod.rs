@@ -619,6 +619,7 @@ impl PixelFifo {
                 self.position as u8,
                 lcdc,
                 is_cgb,
+                self.is_cgb_model,
                 self.bg_len,
             ) {
                 self.push_bg_pixels(pixels);

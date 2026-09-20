@@ -630,6 +630,17 @@ pub enum Model {
     Agb,
 }
 
+impl Model {
+    #[must_use]
+    #[inline]
+    pub const fn is_cgb_hardware(self) -> bool {
+        matches!(
+            self,
+            Self::Cgb0 | Self::CgbA | Self::CgbB | Self::CgbC | Self::CgbD | Self::CgbE | Self::Agb
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum CgbMode {
     #[default]
