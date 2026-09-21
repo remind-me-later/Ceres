@@ -501,7 +501,10 @@ impl PixelFifo {
         let win_enabled = lcdc & 0x20 != 0;
         let pos_u8 = self.position as u8;
         let win_in_x = if wx == 0 {
-            pos_u8 == 249 || (pos_u8 == 240 && (scx & 7 != 0)) || (241..=248).contains(&pos_u8)
+            pos_u8 == 249
+                || (!self.is_cgb_model && pos_u8 == 240)
+                || (self.is_cgb_model && pos_u8 == 240 && (scx & 7 != 0))
+                || (241..=248).contains(&pos_u8)
         } else if wx < 166 {
             pos_u8.wrapping_add(7) == wx
         } else {
@@ -514,8 +517,16 @@ impl PixelFifo {
         } else if ly >= wy && win_in_x {
             if !self.window_active {
                 self.window_active = true;
-                if wx == 0 && self.position < -7 {
+                if self.is_cgb_model && wx == 0 && self.position < -7 {
                     self.position = -18;
+                } else if !self.is_cgb_model && wx == 0 && self.position < -7 {
+                    self.position = if scx & 7 != 0 {
+                        -15
+                    } else if ly == 0 {
+                        -10
+                    } else {
+                        -6
+                    };
                 }
                 self.fetcher.reset_window(self.window_line_counter);
                 self.window_initial_fetch = true;

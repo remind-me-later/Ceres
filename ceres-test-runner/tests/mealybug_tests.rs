@@ -446,8 +446,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_window_timing_wx_0_dmg_blob,
     "m3_window_timing_wx_0.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 mealybug_ppu_test!(
     test_mb_m3_window_timing_wx_0_cgb_c,

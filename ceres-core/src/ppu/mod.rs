@@ -531,7 +531,7 @@ impl Ppu {
                 if !self.is_cgb
                     && dot == 449
                     && !self.lcdon_line0_mode0
-                    && self.ly < 143
+                    && (self.ly < 143 || (self.ly == 143 && self.ly_for_comparison == u16::MAX))
                     && self.stat & STAT_IF_OAM_B != 0
                     && !self.stat_line
                 {
