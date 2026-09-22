@@ -247,6 +247,10 @@ impl Ppu {
                     self.is_cgb,
                     obj_enabled,
                     self.model,
+                    self.wx,
+                    self.lcdc,
+                    self.wy,
+                    self.ly,
                 );
             }
             Mode::VBlank => {
