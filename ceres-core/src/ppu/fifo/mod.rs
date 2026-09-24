@@ -345,7 +345,10 @@ impl PixelFifo {
                 } else {
                     -16
                 };
-                self.junk_at = if well_separated {
+                let win_enabled = lcdc & 0x20 != 0;
+                self.junk_at = if ly == 0 && !win_enabled {
+                    5 - (k & 3)
+                } else if well_separated {
                     if k & 3 > 1 { 3 } else { 4 - (k & 3) }
                 } else {
                     if k & 3 > 1 { 0 } else { 1 - (k & 3) }
@@ -540,24 +543,28 @@ impl PixelFifo {
                     self.position = if scx & 7 != 0 {
                         -15
                     } else if ly == 0 && self.initial_wx == 0 {
-                        -10
+                        -12
                     } else if ly == 0 {
-                        -8
+                        -10
                     } else {
-                        -6
+                        -8
                     };
                 } else if !self.is_cgb_model
                     && self.sprites.sprite_xs().1 == 0
                     && wx == 1
-                    && self.position < -6
+                    && self.position < -8
                 {
-                    self.position = -6;
+                    self.position = -8;
                 }
                 self.fetcher.reset_window(self.window_line_counter);
                 self.window_initial_fetch = true;
                 self.bg_head = 0;
                 self.bg_tail = 0;
                 self.bg_len = 0;
+                if !self.is_cgb_model && wx == 0 && (scx & 7 != 0) {
+                    self.sprite_stall = 1;
+                    return None;
+                }
             }
         }
 
@@ -693,17 +700,7 @@ impl PixelFifo {
                 if pu8 == 239 {
                     self.position = -16;
                 } else if pu8 & 7 == self.scx_low3 {
-                    self.position = if !self.is_cgb_model
-                        && self.sprites.sprite_xs().1 == 0
-                        && win_enabled
-                        && ly >= wy
-                        && wy == 0
-                        && (wx > 0 || (ly == 0 && self.initial_wx > 0))
-                    {
-                        -6
-                    } else {
-                        -8
-                    };
+                    self.position = -8;
                 } else if pu8 == 247 {
                     self.position = -16;
                     return None;
