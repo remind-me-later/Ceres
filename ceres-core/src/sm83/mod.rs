@@ -1502,11 +1502,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
             }
             ConflictType::PaletteDmg => {
                 let old = self.read_mem(addr);
-                let offset = if addr == 0xFF47 && !self.model.is_cgb_hardware() {
-                    1
-                } else {
-                    3
-                };
+                let offset = if !self.model.is_cgb_hardware() { 1 } else { 3 };
                 if pending >= offset {
                     self.advance_dots(pending - offset);
                     self.write_mem(addr, val | old);
@@ -1577,7 +1573,13 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 }
             }
             ConflictType::ScxDmgAndCgbDouble => {
-                if pending >= 2 {
+                if !self.model.is_cgb_hardware()
+                    && matches!(self.ppu.mode(), crate::ppu::Mode::Drawing)
+                {
+                    self.advance_dots(pending);
+                    self.write_mem(addr, val);
+                    self.time_deferred = 4;
+                } else if pending >= 2 {
                     self.advance_dots(pending - 2);
                     self.write_mem(addr, val);
                     self.time_deferred = 6;

@@ -96,7 +96,11 @@ impl PixelFifo {
     /// Whether the scanline's 160th pixel has been reached and target mode 3 duration met.
     #[must_use]
     pub const fn line_done(&self) -> bool {
-        self.position >= 160 && self.line_dots >= self.target_dots
+        if self.target_dots > 0 {
+            self.line_dots >= self.target_dots
+        } else {
+            self.position >= 160
+        }
     }
 
     #[must_use]
@@ -359,49 +363,6 @@ impl PixelFifo {
                     let extra = diff / 4;
                     let target_dots = 168 + 4 * (extra as i32);
                     self.target_dots = target_dots as u16;
-
-                    let natural_dots = 168 + if k & 3 == 3 { 2 } else { i32::from(scx & 7) };
-                    let stall = (target_dots - natural_dots).max(0);
-
-                    let well_separated = count > 1
-                        && xs[..count]
-                            .windows(2)
-                            .all(|w| w[1].saturating_sub(w[0]) > 8);
-
-                    let mut stalls = stalls;
-                    if !well_separated {
-                        let mut total = 0;
-                        for s in &mut stalls[..count] {
-                            if total + *s as i32 > stall {
-                                *s = (stall - total).max(0) as u8;
-                            }
-                            total += *s as i32;
-                        }
-                    }
-
-                    if count == 1 {
-                        let x = xs[0];
-                        let phase = x.wrapping_add(scx) % 8;
-                        let mut delay = match phase {
-                            0 => 9,
-                            1 => 8,
-                            2 => 7,
-                            3 => 6,
-                            4 => 5,
-                            _ => 4,
-                        };
-                        if x == 2 {
-                            delay = 8;
-                        } else if matches!(x, 7 | 13 | 14 | 16 | 17) {
-                            delay = 4;
-                        }
-                        if scx == 0 {
-                            stalls[0] = delay;
-                        } else {
-                            stalls[0] = delay.min(stall as u8);
-                        }
-                    }
-
                     self.sprite_stalls = stalls;
                 }
             } else {
@@ -612,6 +573,17 @@ impl PixelFifo {
                     self.current_sprite_idx += 1;
                     self.pending_sprite = Some(sprite);
                     self.pending_sprite_low = None;
+
+                    if !is_cgb && self.position >= 8 {
+                        self.fetcher.latch_tile_id_for_sprite(
+                            vram,
+                            ly,
+                            scy,
+                            scx,
+                            self.position as u8,
+                            lcdc,
+                        );
+                    }
 
                     if stall > 1 {
                         self.sprite_stall = stall - 1;

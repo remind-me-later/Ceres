@@ -27,6 +27,7 @@ pub struct TileFetcher {
     sprite_fetch: Option<(Sprite, u8)>, // (Sprite, sub_cycle)
     map_base: u16,
     data_addr: u16,
+    latched_tile_id: Option<u8>,
 }
 
 impl TileFetcher {
@@ -46,6 +47,7 @@ impl TileFetcher {
             sprite_fetch: None,
             map_base: 0x1800,
             data_addr: 0,
+            latched_tile_id: None,
         }
     }
 
@@ -63,10 +65,33 @@ impl TileFetcher {
         self.sprite_fetch = None;
         self.map_base = 0x1800;
         self.data_addr = 0;
+        self.latched_tile_id = None;
     }
 
     pub fn set_bg_tile_x(&mut self, scx: u8) {
         self.bg_tile_x = (scx >> 3) & 0x1F;
+    }
+
+    pub fn latch_tile_id_for_sprite(
+        &mut self,
+        vram: &Vram,
+        ly: u8,
+        scy: u8,
+        scx: u8,
+        position: u8,
+        lcdc: u8,
+    ) {
+        if self.state == FetcherState::GetTile && !self.is_window && self.latched_tile_id.is_none()
+        {
+            let map = if lcdc & 0x08 != 0 { 0x1C00 } else { 0x1800 };
+            let offset = 8;
+            let fetch_x = scx.wrapping_add(position).wrapping_add(offset);
+            let col = (fetch_x >> 3) & 0x1F;
+            let row = (ly.wrapping_add(scy) / 8) & 0x1F;
+            let map_addr = map + (u16::from(row) * 32) + u16::from(col);
+            self.row_in_tile = (ly.wrapping_add(scy) % 8) as u16;
+            self.latched_tile_id = Some(vram.vram_at_bank(map_addr, 0));
+        }
     }
 
     pub fn is_get_tile_t1(&self) -> bool {
@@ -87,6 +112,7 @@ impl TileFetcher {
         self.sprite_fetch = None;
         self.map_base = 0;
         self.data_addr = 0;
+        self.latched_tile_id = None;
     }
 
     /// Advance fetcher by 1 T-cycle.
@@ -161,7 +187,10 @@ impl TileFetcher {
                 let map_addr = map_base + (u16::from(tile_row) * 32) + u16::from(tile_col);
                 self.row_in_tile = row_in_tile;
 
-                self.tile_id = vram.vram_at_bank(map_addr, 0);
+                self.tile_id = self
+                    .latched_tile_id
+                    .take()
+                    .unwrap_or_else(|| vram.vram_at_bank(map_addr, 0));
                 self.tile_attr = if is_cgb {
                     vram.vram_at_bank(map_addr, 1)
                 } else {

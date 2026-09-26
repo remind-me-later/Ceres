@@ -644,7 +644,7 @@ impl Ppu {
                 }
 
                 if self.fifo.line_done() || dot >= 450 {
-                    while !self.fifo.line_done() {
+                    while self.fifo.position() < 160 {
                         self.step_fifo_dot(cgb_mode);
                     }
                     self.hblank_start_dot = dot + 1;

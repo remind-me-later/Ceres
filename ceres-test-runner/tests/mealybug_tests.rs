@@ -109,8 +109,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_bgp_change_sprites_dmg_blob,
     "m3_bgp_change_sprites.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 mealybug_ppu_test!(
     test_mb_m3_bgp_change_sprites_cgb_c,
