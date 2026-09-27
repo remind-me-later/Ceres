@@ -1501,18 +1501,29 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 self.time_deferred = 3;
             }
             ConflictType::PaletteDmg => {
-                let old = self.read_mem(addr);
-                let offset = if !self.model.is_cgb_hardware() { 1 } else { 3 };
-                if pending >= offset {
-                    self.advance_dots(pending - offset);
-                    self.write_mem(addr, val | old);
-                    self.advance_dots(1);
-                    self.write_mem(addr, val);
-                    self.time_deferred = 3 + offset;
+                if self.model.is_cgb_hardware() {
+                    if pending >= 3 {
+                        self.advance_dots(pending - 3);
+                        self.write_mem(addr, val);
+                        self.time_deferred = 7;
+                    } else {
+                        self.flush_deferred_time();
+                        self.write_mem(addr, val);
+                        self.time_deferred = 4;
+                    }
                 } else {
-                    self.flush_deferred_time();
-                    self.write_mem(addr, val);
-                    self.time_deferred = 4;
+                    let old = self.read_mem(addr);
+                    if pending >= 1 {
+                        self.advance_dots(pending - 1);
+                        self.write_mem(addr, val | old);
+                        self.advance_dots(1);
+                        self.write_mem(addr, val);
+                        self.time_deferred = 4;
+                    } else {
+                        self.flush_deferred_time();
+                        self.write_mem(addr, val);
+                        self.time_deferred = 4;
+                    }
                 }
             }
             ConflictType::PaletteCgb => {

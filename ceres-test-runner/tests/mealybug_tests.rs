@@ -98,12 +98,7 @@ mealybug_ppu_test!(
     "m3_bgp_change.gb",
     Model::DmgB
 );
-mealybug_ppu_test!(
-    test_mb_m3_bgp_change_cgb_c,
-    "m3_bgp_change.gb",
-    Model::CgbE,
-    ignore
-);
+mealybug_ppu_test!(test_mb_m3_bgp_change_cgb_c, "m3_bgp_change.gb", Model::CgbC);
 
 // m3_bgp_change_sprites.gb
 mealybug_ppu_test!(
@@ -114,8 +109,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_bgp_change_sprites_cgb_c,
     "m3_bgp_change_sprites.gb",
-    Model::CgbE,
-    ignore
+    Model::CgbC
 );
 
 // m3_lcdc_bg_en_change.gb
