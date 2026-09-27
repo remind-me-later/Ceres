@@ -93,6 +93,22 @@ impl PixelFifo {
         }
     }
 
+    #[inline]
+    pub fn abort_sprite_fetch(&mut self) {
+        if self.pending_sprite.is_some() || self.sprite_stall > 0 {
+            self.pending_sprite = None;
+            self.pending_sprite_low = None;
+            self.sprite_stall = 0;
+            self.target_dots = 0;
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn is_fetching_sprite(&self) -> bool {
+        self.pending_sprite.is_some() || self.sprite_stall > 0
+    }
+
     /// Whether the scanline's 160th pixel has been reached and target mode 3 duration met.
     #[must_use]
     pub const fn line_done(&self) -> bool {
@@ -311,7 +327,16 @@ impl PixelFifo {
                     // On CGB, the lead-in junk push finishes earlier than DMG. For a single sprite
                     // aligned at the start of tile 1 (x = 16), the fetcher pause is 10 dots rather
                     // than DMG's 11 dots, matching mid-scanline SCX reload timing in m3_scx_high_5_bits.
-                    if count == 1 && xs[0] == 16 {
+                    if count == 1
+                        && xs[0] == 16
+                        && !matches!(
+                            model,
+                            crate::Model::Cgb0
+                                | crate::Model::CgbA
+                                | crate::Model::CgbB
+                                | crate::Model::CgbC
+                        )
+                    {
                         stalls[0] = 10;
                     }
                     // On CGB, the lead-in junk push does not delay an extra dot between k=4 and k=5

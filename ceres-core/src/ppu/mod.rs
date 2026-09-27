@@ -321,6 +321,18 @@ impl Ppu {
     }
 
     #[must_use]
+    #[inline]
+    pub const fn fifo_position(&self) -> i16 {
+        self.fifo.position()
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn is_fetching_sprite(&self) -> bool {
+        self.fifo.is_fetching_sprite()
+    }
+
+    #[must_use]
     pub const fn read_lyc(&self) -> u8 {
         self.lyc
     }
@@ -724,6 +736,11 @@ impl Ppu {
         self.is_cgb = is_cgb;
         let was_on = self.lcdc & LCDC_ON_B != 0;
         let is_on = val & LCDC_ON_B != 0;
+        let was_obj_en = self.lcdc & 0x02 != 0;
+        let is_obj_en = val & 0x02 != 0;
+        if !is_cgb && was_obj_en && !is_obj_en {
+            self.fifo.abort_sprite_fetch();
+        }
         self.lcdc = val;
 
         // turn off: reset to line 0 in HBlank mode, clear all blocking.

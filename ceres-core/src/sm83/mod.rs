@@ -1537,10 +1537,47 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 }
             }
             ConflictType::DmgLcdc => {
-                self.flush_deferred_time();
-                self.advance_dots(2);
-                self.write_mem(addr, val);
-                self.time_deferred = 2;
+                let old = self.read_mem(addr);
+                let is_obj_disable = pending >= 1
+                    && matches!(self.ppu.mode(), crate::ppu::Mode::Drawing)
+                    && (old & 0x80 != 0)
+                    && (val & 0x80 != 0)
+                    && (val & 0x02 == 0)
+                    && (old & 0x02 != 0);
+
+                if is_obj_disable {
+                    if self.model.is_cgb_hardware() {
+                        if pending >= 2 {
+                            self.advance_dots(pending - 2);
+                            self.write_mem(addr, (old & !0x02) | (val & 0x02));
+                            self.advance_dots(4);
+                        } else {
+                            self.advance_dots(pending);
+                            self.advance_dots(2);
+                        }
+                        self.write_mem(addr, val);
+                        self.time_deferred = 2;
+                    } else {
+                        self.advance_dots(pending - 1);
+                        let pos = self.ppu.fifo_position();
+                        let is_fetching = self.ppu.is_fetching_sprite();
+                        if pos == 0 || is_fetching {
+                            self.write_mem(addr, (old & !0x02) | (val & 0x01));
+                        }
+                        self.advance_dots(1);
+                        if pos != 0 && !is_fetching {
+                            self.write_mem(addr, (old & !0x02) | (val & 0x01));
+                        }
+                        self.advance_dots(2);
+                        self.write_mem(addr, val);
+                        self.time_deferred = 2;
+                    }
+                } else {
+                    self.flush_deferred_time();
+                    self.advance_dots(2);
+                    self.write_mem(addr, val);
+                    self.time_deferred = 2;
+                }
             }
             ConflictType::SgbLcdc => {
                 self.flush_deferred_time();
