@@ -108,10 +108,7 @@ impl ScreenshotCheck {
                     line_counts[y] += 1;
                     if count <= 10 {
                         let x = idx % 160;
-                        eprintln!(
-                            "Mismatch #{count} at ({x}, {y}): expected {:?}, got {:?}",
-                            e, a
-                        );
+                        eprintln!("Mismatch #{count} at ({x}, {y}): expected {e:?}, got {a:?}");
                     }
                 }
             }

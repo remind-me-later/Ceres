@@ -1583,6 +1583,28 @@ impl<A: AudioCallback> Bus for Gb<A> {
                         self.write_mem(addr, val);
                         self.time_deferred = 2;
                     }
+                } else if !self.model.is_cgb_hardware()
+                    && matches!(self.ppu.mode(), crate::ppu::Mode::Drawing)
+                    && (old & 0x80 != 0)
+                    && (val & 0x80 != 0)
+                    && ((old ^ val) & 0x01 != 0)
+                {
+                    if pending >= 1 {
+                        self.advance_dots(pending - 1);
+                        let pos = self.ppu.fifo_position();
+                        if pos == 0 {
+                            self.write_mem(addr, val);
+                        }
+                        self.advance_dots(1);
+                        if pos != 0 {
+                            self.write_mem(addr, val);
+                        }
+                        self.time_deferred = 4;
+                    } else {
+                        self.flush_deferred_time();
+                        self.write_mem(addr, val);
+                        self.time_deferred = 4;
+                    }
                 } else {
                     self.flush_deferred_time();
                     self.advance_dots(2);
