@@ -1,6 +1,6 @@
 pub mod conflict;
 
-use crate::{AudioCallback, CgbMode, Gb, Model};
+use crate::{AudioCallback, CgbMode, Gb, Model, ppu::Mode};
 use conflict::ConflictType;
 use core::mem;
 
@@ -1605,6 +1605,21 @@ impl<A: AudioCallback> Bus for Gb<A> {
                         self.write_mem(addr, val);
                         self.time_deferred = 4;
                     }
+                } else if !self.model.is_cgb_hardware()
+                    && matches!(self.ppu.mode(), Mode::Drawing)
+                    && (old & 0x80 != 0)
+                    && (val & 0x80 != 0)
+                    && ((old ^ val) & 0x48 != 0)
+                {
+                    if pending >= 1 {
+                        self.advance_dots(pending - 1);
+                        self.write_mem(addr, val);
+                        self.advance_dots(1);
+                    } else {
+                        self.flush_deferred_time();
+                        self.write_mem(addr, val);
+                    }
+                    self.time_deferred = 4;
                 } else {
                     self.flush_deferred_time();
                     self.advance_dots(2);

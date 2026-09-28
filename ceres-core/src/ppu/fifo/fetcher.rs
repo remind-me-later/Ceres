@@ -79,11 +79,10 @@ impl TileFetcher {
         scy: u8,
         scx: u8,
         position: u8,
-        lcdc: u8,
     ) {
         if self.state == FetcherState::GetTile && !self.is_window && self.latched_tile_id.is_none()
         {
-            let map = if lcdc & 0x08 != 0 { 0x1C00 } else { 0x1800 };
+            let map = self.map_base;
             let offset = 8;
             let fetch_x = scx.wrapping_add(position).wrapping_add(offset);
             let col = (fetch_x >> 3) & 0x1F;
@@ -98,7 +97,7 @@ impl TileFetcher {
         self.state == FetcherState::GetTile && self.cycle == 0
     }
 
-    pub fn reset_window(&mut self, window_line_counter: u8) {
+    pub fn reset_window(&mut self, window_line_counter: u8, lcdc: u8) {
         self.state = FetcherState::GetTile;
         self.cycle = 1;
         self.tile_id = 0;
@@ -110,7 +109,7 @@ impl TileFetcher {
         self.window_line_counter = window_line_counter;
         self.is_window = true;
         self.sprite_fetch = None;
-        self.map_base = 0;
+        self.map_base = if lcdc & 0x40 != 0 { 0x1C00 } else { 0x1800 };
         self.data_addr = 0;
         self.latched_tile_id = None;
     }
@@ -147,6 +146,8 @@ impl TileFetcher {
                 FetcherState::GetTile => {
                     if !self.is_window {
                         self.map_base = if lcdc & 0x08 != 0 { 0x1C00 } else { 0x1800 };
+                    } else if !is_cgb_hardware {
+                        self.map_base = if lcdc & 0x40 != 0 { 0x1C00 } else { 0x1800 };
                     }
                 }
                 FetcherState::GetTileDataLow => {
@@ -165,7 +166,11 @@ impl TileFetcher {
         match self.state {
             FetcherState::GetTile => {
                 let (map_base, tile_col, tile_row, row_in_tile) = if self.is_window {
-                    let map = if lcdc & 0x40 != 0 { 0x1C00 } else { 0x1800 };
+                    let map = if is_cgb_hardware {
+                        if lcdc & 0x40 != 0 { 0x1C00 } else { 0x1800 }
+                    } else {
+                        self.map_base
+                    };
                     let col = self.window_tile_x & 0x1F;
                     let row = (self.window_line_counter / 8) & 0x1F;
                     let r = (self.window_line_counter % 8) as u16;

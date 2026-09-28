@@ -314,6 +314,7 @@ impl PixelFifo {
             };
             if obj_enabled {
                 let (xs, count) = self.sprites.sprite_xs();
+                self.line_sprite_count = count as u8;
                 if count > 0 {
                     let well_separated = count > 1
                         && (count < 10
@@ -365,6 +366,7 @@ impl PixelFifo {
             let k = u16::from(scx & 7);
             if obj_enabled {
                 let (xs, count) = self.sprites.sprite_xs();
+                self.line_sprite_count = count as u8;
                 let well_separated = count > 1
                     && xs[..count]
                         .windows(2)
@@ -375,7 +377,10 @@ impl PixelFifo {
                     -16
                 };
                 let win_enabled = lcdc & 0x20 != 0;
-                self.junk_at = if ly == 0 && !win_enabled {
+                // On line 0, when the window is either disabled or active from line 0 (wy == 0),
+                // the lead-in junk push uses 5 - (k & 3); if the window is enabled but not visible
+                // on line 0 (wy > 0), the normal background timing applies.
+                self.junk_at = if ly == 0 && (!win_enabled || wy == 0) {
                     5 - (k & 3)
                 } else if well_separated {
                     if k & 3 > 1 { 3 } else { 4 - (k & 3) }
@@ -388,6 +393,10 @@ impl PixelFifo {
                     let extra = diff / 4;
                     let target_dots = 168 + 4 * (extra as i32);
                     self.target_dots = target_dots as u16;
+                    let mut stalls = stalls;
+                    if count == 1 && xs[0] == 1 && (win_enabled && ly >= wy) {
+                        stalls[0] = 9;
+                    }
                     self.sprite_stalls = stalls;
                 }
             } else {
@@ -542,7 +551,7 @@ impl PixelFifo {
                 {
                     self.position = -8;
                 }
-                self.fetcher.reset_window(self.window_line_counter);
+                self.fetcher.reset_window(self.window_line_counter, lcdc);
                 self.window_initial_fetch = true;
                 self.bg_head = 0;
                 self.bg_tail = 0;
@@ -578,6 +587,7 @@ impl PixelFifo {
                     self.overlay_sprite_pixels(pixels, sprite.x(), is_cgb);
                 }
             }
+            self.step_window_fetcher_during_sprite_stall(vram, ly, scy, scx, lcdc, is_cgb);
             return None;
         }
 
@@ -599,19 +609,21 @@ impl PixelFifo {
                     self.pending_sprite = Some(sprite);
                     self.pending_sprite_low = None;
 
-                    if !is_cgb && self.position >= 8 {
+                    if !is_cgb && self.position >= 0 {
                         self.fetcher.latch_tile_id_for_sprite(
                             vram,
                             ly,
                             scy,
                             scx,
                             self.position as u8,
-                            lcdc,
                         );
                     }
 
                     if stall > 1 {
                         self.sprite_stall = stall - 1;
+                        self.step_window_fetcher_during_sprite_stall(
+                            vram, ly, scy, scx, lcdc, is_cgb,
+                        );
                         return None;
                     } else {
                         let sprite_height = if lcdc & 0x04 != 0 { 16 } else { 8 };
@@ -717,6 +729,38 @@ impl PixelFifo {
         }
 
         None
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn step_window_fetcher_during_sprite_stall(
+        &mut self,
+        vram: &Vram,
+        ly: u8,
+        scy: u8,
+        scx: u8,
+        lcdc: u8,
+        is_cgb: bool,
+    ) {
+        if !is_cgb
+            && self.window_active
+            && self.position >= 8
+            && self.sprite_stall >= 5
+            && self.line_sprite_count == 1
+        {
+            if let Some(pixels) = self.fetcher.step_t_cycle(
+                vram,
+                ly,
+                scy,
+                scx,
+                self.position as u8,
+                lcdc,
+                is_cgb,
+                self.is_cgb_model,
+                self.bg_len,
+            ) {
+                self.push_bg_pixels(pixels);
+            }
+        }
     }
 }
 
