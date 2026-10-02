@@ -49,7 +49,7 @@ pub enum Mode {
 
 #[expect(clippy::struct_excessive_bools)]
 pub struct Ppu {
-    pub model: Model,
+    model: Model,
     bcp: ColorPalette,
     bgp: u8,
     color_correction_mode: ColorCorrectionMode,
@@ -58,11 +58,11 @@ pub struct Ppu {
     /// scroll-adjustment table.
     is_cgb: bool,
     /// Forward master dot counter within the current scanline (0..456).
-    pub line_dot: u16,
+    line_dot: u16,
     /// The dot coordinate where HBlank was entered on this scanline.
-    pub hblank_start_dot: u16,
+    hblank_start_dot: u16,
     lcdc: u8,
-    pub ly: u8,
+    ly: u8,
     /// LY value used for LYC coincidence comparison. Separate from `ly`
     /// because the real PPU updates the LYC comparator a few T-cycles
     /// after LY increments (SameBoy's `ly_for_comparison`).

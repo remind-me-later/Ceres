@@ -13,8 +13,8 @@ pub enum FetcherState {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct TileFetcher {
-    pub state: FetcherState,
-    pub cycle: u8,
+    state: FetcherState,
+    cycle: u8,
     tile_id: u8,
     tile_attr: u8,
     tile_data_low: u8,
@@ -27,7 +27,7 @@ pub struct TileFetcher {
     data_addr: u16,
     latched_tile_id: Option<u8>,
     latched_tile_data: Option<(u8, u8)>,
-    pub tile_sel_glitched: bool,
+    tile_sel_glitched: bool,
 }
 
 impl TileFetcher {
@@ -65,6 +65,17 @@ impl TileFetcher {
         self.data_addr = 0;
         self.latched_tile_id = None;
         self.latched_tile_data = None;
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn tile_sel_glitched(&self) -> bool {
+        self.tile_sel_glitched
+    }
+
+    #[inline]
+    pub fn set_tile_sel_glitched(&mut self, val: bool) {
+        self.tile_sel_glitched = val;
     }
 
     pub fn latch_tile_for_sprite(
@@ -180,7 +191,7 @@ impl TileFetcher {
     /// Returns true if 8 pixels are ready to push to FIFO.
     /// `position` is the FIFO's u8-wrapped PPU X position (SameBoy's
     /// `position_in_line`), from which the BG map column is derived live.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub fn step_t_cycle(
         &mut self,
         vram: &Vram,

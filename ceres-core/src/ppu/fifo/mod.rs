@@ -43,7 +43,7 @@ pub struct PixelFifo {
     current_sprite_idx: usize,
     pending_sprite: Option<Sprite>,
     pending_sprite_low: Option<u8>,
-    pub initial_wx: u8,
+    initial_wx: u8,
 }
 
 impl Default for PixelFifo {
@@ -99,7 +99,7 @@ impl PixelFifo {
 
     #[inline]
     pub fn set_tile_sel_glitched(&mut self, val: bool) {
-        self.fetcher.tile_sel_glitched = val;
+        self.fetcher.set_tile_sel_glitched(val);
     }
 
     #[must_use]
@@ -563,7 +563,7 @@ impl PixelFifo {
                     if !is_cgb
                         && (self.position >= 0
                             || (self.window_active
-                                && self.fetcher.tile_sel_glitched
+                                && self.fetcher.tile_sel_glitched()
                                 && sprite.x() >= 5))
                     {
                         self.fetcher.latch_tile_for_sprite(
@@ -688,7 +688,7 @@ impl PixelFifo {
         None
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn step_window_fetcher_during_sprite_stall(
         &mut self,
         vram: &Vram,
