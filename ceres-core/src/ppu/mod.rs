@@ -741,6 +741,9 @@ impl Ppu {
         if !is_cgb && was_obj_en && !is_obj_en {
             self.fifo.abort_sprite_fetch();
         }
+        if !is_cgb && matches!(self.mode, Mode::Drawing) && ((self.lcdc ^ val) & 0x10 != 0) {
+            self.fifo.set_tile_sel_glitched(true);
+        }
         self.lcdc = val;
 
         // turn off: reset to line 0 in HBlank mode, clear all blocking.

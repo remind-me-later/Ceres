@@ -103,6 +103,11 @@ impl PixelFifo {
         }
     }
 
+    #[inline]
+    pub fn set_tile_sel_glitched(&mut self, val: bool) {
+        self.fetcher.tile_sel_glitched = val;
+    }
+
     #[must_use]
     #[inline]
     pub const fn is_fetching_sprite(&self) -> bool {
@@ -609,7 +614,12 @@ impl PixelFifo {
                     self.pending_sprite = Some(sprite);
                     self.pending_sprite_low = None;
 
-                    if !is_cgb && self.position >= 0 {
+                    if !is_cgb
+                        && (self.position >= 0
+                            || (self.window_active
+                                && self.fetcher.tile_sel_glitched
+                                && sprite.x() >= 5))
+                    {
                         self.fetcher.latch_tile_for_sprite(
                             vram,
                             ly,
@@ -617,6 +627,7 @@ impl PixelFifo {
                             scx,
                             self.position as u8,
                             lcdc,
+                            sprite.x(),
                         );
                     }
 

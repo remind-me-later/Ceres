@@ -249,8 +249,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_tile_sel_win_change_dmg_blob,
     "m3_lcdc_tile_sel_win_change.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 mealybug_ppu_test!(
     test_mb_m3_lcdc_tile_sel_win_change_cgb_c,
