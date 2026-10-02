@@ -642,6 +642,12 @@ impl Model {
 
     #[must_use]
     #[inline]
+    pub const fn is_cgb(self) -> bool {
+        self.is_cgb_hardware()
+    }
+
+    #[must_use]
+    #[inline]
     pub const fn is_early_cgb(self) -> bool {
         matches!(self, Self::Cgb0 | Self::CgbA | Self::CgbB | Self::CgbC)
     }

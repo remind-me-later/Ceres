@@ -28,19 +28,16 @@ pub struct PixelFifo {
     /// only for positions 0..=159. Mode 3's length is an output of this
     /// counter, never an input.
     position: i16,
-    lx: u8,
     line_dots: u16,
     junk_at: u16,
     window_active: bool,
     window_line_counter: u8,
     sprite_stall: u8,
-    line_sprite_stall: u8,
     line_sprite_count: u8,
     junk_pushed: bool,
     window_initial_fetch: bool,
     scx_low3: u8,
     target_dots: u16,
-    is_cgb_model: bool,
     model: crate::Model,
     sprite_stalls: [u8; 10],
     current_sprite_idx: usize,
@@ -71,19 +68,16 @@ impl PixelFifo {
             fetcher: TileFetcher::new(),
             sprites: SpriteBuffer::new(),
             position: -16,
-            lx: 0,
             line_dots: 0,
             junk_at: 5,
             window_active: false,
             window_line_counter: 0,
             sprite_stall: 0,
-            line_sprite_stall: 0,
             line_sprite_count: 0,
             junk_pushed: false,
             window_initial_fetch: false,
             scx_low3: 0,
             target_dots: 0,
-            is_cgb_model: false,
             model: crate::Model::DmgB,
             sprite_stalls: [0; 10],
             current_sprite_idx: 0,
@@ -138,8 +132,6 @@ impl PixelFifo {
                 self.position = -16;
                 self.junk_at = if self.model.is_early_cgb() { 2 } else { 0 };
             }
-        } else {
-            self.fetcher.set_bg_tile_x(scx);
         }
     }
 
@@ -254,15 +246,12 @@ impl PixelFifo {
         wy: u8,
         ly: u8,
     ) {
-        self.lx = 0;
         self.line_dots = 0;
         self.sprite_stall = 0;
-        self.line_sprite_stall = 0;
         self.line_sprite_count = 0;
         self.target_dots = 0;
         self.junk_pushed = false;
         self.scx_low3 = scx & 7;
-        self.is_cgb_model = is_cgb;
         self.model = model;
         self.sprite_stalls = [0; 10];
         self.current_sprite_idx = 0;
@@ -364,7 +353,7 @@ impl PixelFifo {
                 }
             } else {
                 let win_enabled = lcdc & 0x20 != 0;
-                self.junk_at = if !self.is_cgb_model && win_enabled && ly >= wy && wy == 0 {
+                self.junk_at = if !self.model.is_cgb() && win_enabled && ly >= wy && wy == 0 {
                     0
                 } else {
                     5 - (k & 3)
@@ -383,7 +372,6 @@ impl PixelFifo {
         self.sprite_tail = 0;
         self.sprite_len = 0;
         self.sprite_stall = 0;
-        self.line_sprite_stall = 0;
         self.line_sprite_count = 0;
         self.target_dots = 0;
         self.junk_pushed = false;
@@ -475,13 +463,13 @@ impl PixelFifo {
         let win_enabled = lcdc & 0x20 != 0;
         let pos_u8 = self.position as u8;
         let win_in_x = if wx == 0 {
-            !self.is_cgb_model
+            !self.model.is_cgb()
                 || pos_u8 == 249
                 || (pos_u8 == 240 && (scx & 7 != 0))
                 || (241..=248).contains(&pos_u8)
         } else if wx < 166 {
             pos_u8.wrapping_add(7) == wx
-                || (!self.is_cgb_model
+                || (!self.model.is_cgb()
                     && self.sprites.sprite_xs().1 == 0
                     && wx == 1
                     && pos_u8 == 240)
@@ -495,9 +483,9 @@ impl PixelFifo {
         } else if ly >= wy && win_in_x {
             if !self.window_active {
                 self.window_active = true;
-                if self.is_cgb_model && wx == 0 && self.position < -7 {
+                if self.model.is_cgb() && wx == 0 && self.position < -7 {
                     self.position = -18;
-                } else if !self.is_cgb_model && wx == 0 {
+                } else if !self.model.is_cgb() && wx == 0 {
                     self.position = if scx & 7 != 0 {
                         -15
                     } else if ly == 0 && self.initial_wx == 0 {
@@ -507,7 +495,7 @@ impl PixelFifo {
                     } else {
                         -8
                     };
-                } else if !self.is_cgb_model
+                } else if !self.model.is_cgb()
                     && self.sprites.sprite_xs().1 == 0
                     && wx == 1
                     && self.position < -8
@@ -519,7 +507,7 @@ impl PixelFifo {
                 self.bg_head = 0;
                 self.bg_tail = 0;
                 self.bg_len = 0;
-                if !self.is_cgb_model && wx == 0 && (scx & 7 != 0) {
+                if !self.model.is_cgb() && wx == 0 && (scx & 7 != 0) {
                     self.sprite_stall = 1;
                     return None;
                 }
@@ -641,7 +629,7 @@ impl PixelFifo {
                 self.position as u8,
                 lcdc,
                 is_cgb,
-                self.is_cgb_model,
+                self.model.is_cgb(),
                 self.bg_len,
             ) {
                 self.push_bg_pixels(pixels);
@@ -693,7 +681,6 @@ impl PixelFifo {
                 return None;
             }
 
-            self.lx = out_x;
             self.position += 1;
             return Some((out_x, bg_px, sprite_px));
         }
@@ -725,7 +712,7 @@ impl PixelFifo {
                 self.position as u8,
                 lcdc,
                 is_cgb,
-                self.is_cgb_model,
+                self.model.is_cgb(),
                 self.bg_len,
             ) {
                 self.push_bg_pixels(pixels);

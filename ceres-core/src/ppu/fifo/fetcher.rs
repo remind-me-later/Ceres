@@ -20,11 +20,9 @@ pub struct TileFetcher {
     tile_data_low: u8,
     tile_data_high: u8,
     row_in_tile: u16,
-    bg_tile_x: u8,
     window_tile_x: u8,
     window_line_counter: u8,
     is_window: bool,
-    sprite_fetch: Option<(Sprite, u8)>, // (Sprite, sub_cycle)
     map_base: u16,
     data_addr: u16,
     latched_tile_id: Option<u8>,
@@ -42,11 +40,9 @@ impl TileFetcher {
             tile_data_low: 0,
             tile_data_high: 0,
             row_in_tile: 0,
-            bg_tile_x: 0,
             window_tile_x: 0,
             window_line_counter: 0,
             is_window: false,
-            sprite_fetch: None,
             map_base: 0x1800,
             data_addr: 0,
             latched_tile_id: None,
@@ -55,7 +51,7 @@ impl TileFetcher {
         }
     }
 
-    pub fn reset_bg(&mut self, scx: u8) {
+    pub fn reset_bg(&mut self, _scx: u8) {
         self.state = FetcherState::GetTile;
         self.cycle = 0;
         self.tile_id = 0;
@@ -63,18 +59,12 @@ impl TileFetcher {
         self.tile_data_low = 0;
         self.tile_data_high = 0;
         self.row_in_tile = 0;
-        self.bg_tile_x = (scx >> 3) & 0x1F;
         self.window_tile_x = 0;
         self.is_window = false;
-        self.sprite_fetch = None;
         self.map_base = 0x1800;
         self.data_addr = 0;
         self.latched_tile_id = None;
         self.latched_tile_data = None;
-    }
-
-    pub fn set_bg_tile_x(&mut self, scx: u8) {
-        self.bg_tile_x = (scx >> 3) & 0x1F;
     }
 
     pub fn latch_tile_for_sprite(
@@ -180,7 +170,6 @@ impl TileFetcher {
         self.window_tile_x = 0;
         self.window_line_counter = window_line_counter;
         self.is_window = true;
-        self.sprite_fetch = None;
         self.map_base = if lcdc & 0x40 != 0 { 0x1C00 } else { 0x1800 };
         self.data_addr = 0;
         self.latched_tile_id = None;
@@ -204,15 +193,6 @@ impl TileFetcher {
         is_cgb_hardware: bool,
         bg_len: usize,
     ) -> Option<[Pixel; 8]> {
-        // Handle sprite fetch stall if active
-        if let Some((_sprite, cycle)) = &mut self.sprite_fetch {
-            *cycle += 1;
-            if *cycle >= 6 {
-                self.sprite_fetch = None;
-            }
-            return None;
-        }
-
         if self.cycle == 0 {
             self.cycle = 1;
             match self.state {
@@ -324,8 +304,6 @@ impl TileFetcher {
                     let pixels = self.decode_bg_pixels(is_cgb);
                     if self.is_window {
                         self.window_tile_x = (self.window_tile_x + 1) & 0x1F;
-                    } else {
-                        self.bg_tile_x = (self.bg_tile_x + 1) & 0x1F;
                     }
                     self.state = FetcherState::GetTile;
                     Some(pixels)

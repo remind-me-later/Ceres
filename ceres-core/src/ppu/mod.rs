@@ -79,9 +79,6 @@ pub struct Ppu {
     scy: u8,
     stat: u8,
     vram: Vram,
-    win_in_frame: bool,
-    win_in_ly: bool,
-    win_skipped: u8,
     wx: u8,
     wy: u8,
     lcdon_line0_mode0: bool,
@@ -92,7 +89,6 @@ pub struct Ppu {
     /// from the internal state later — SameBoy's `display_state` vs
     /// `GB_IO_STAT`.
     mode: Mode,
-    mode_for_interrupt: Option<Mode>,
     stat_line: bool,
     current_vblank_line: u8,
     fifo: fifo::PixelFifo,
@@ -118,7 +114,6 @@ impl Default for Ppu {
             lcdon_line0: false,
             line0_frame_wrap: false,
             mode: Mode::HBlank,
-            mode_for_interrupt: None,
             stat_line: false,
             current_vblank_line: 0,
             fifo: fifo::PixelFifo::new(),
@@ -133,9 +128,6 @@ impl Default for Ppu {
             scy: 0,
             stat: Mode::HBlank as u8,
             vram: Vram::default(),
-            win_in_frame: false,
-            win_in_ly: false,
-            win_skipped: 0,
             wx: 0,
             wy: 0,
         }
@@ -182,20 +174,15 @@ impl Ppu {
         }
 
         let lyc_signal = (self.stat & STAT_IF_LYC_B != 0) && (self.stat & STAT_LYC_B != 0);
-        let mode_signal = match self.mode_for_interrupt {
-            Some(Mode::HBlank) => !self.lcdon_line0_mode0 && (self.stat & STAT_IF_HBLANK_B != 0),
-            Some(Mode::VBlank) => self.stat & STAT_IF_VBLANK_B != 0,
-            Some(Mode::OamScan) => self.stat & STAT_IF_OAM_B != 0,
-            Some(Mode::Drawing) | None => match self.mode() {
-                Mode::HBlank => {
-                    let cgb_hblank_delayed = self.is_cgb && self.line_dot <= self.hblank_start_dot;
-                    !self.lcdon_line0_mode0
-                        && !cgb_hblank_delayed
-                        && (self.stat & STAT_IF_HBLANK_B != 0)
-                }
-                Mode::VBlank => self.stat & STAT_IF_VBLANK_B != 0,
-                Mode::OamScan | Mode::Drawing => false,
-            },
+        let mode_signal = match self.mode() {
+            Mode::HBlank => {
+                let cgb_hblank_delayed = self.is_cgb && self.line_dot <= self.hblank_start_dot;
+                !self.lcdon_line0_mode0
+                    && !cgb_hblank_delayed
+                    && (self.stat & STAT_IF_HBLANK_B != 0)
+            }
+            Mode::VBlank => self.stat & STAT_IF_VBLANK_B != 0,
+            Mode::OamScan | Mode::Drawing => false,
         };
 
         let new_line = lyc_signal || mode_signal;
@@ -222,13 +209,11 @@ impl Ppu {
     /// Transition the PPU to a new mode and fire any mode-bound IRQs.
     fn enter_mode(&mut self, mode: Mode, ints: &mut Interrupts, cgb_mode: CgbMode) {
         self.is_cgb = matches!(cgb_mode, CgbMode::Cgb | CgbMode::Compat);
-        self.mode_for_interrupt = None;
         self.mode = mode;
         self.stat = (self.stat & !STAT_MODE_B) | mode as u8;
 
         match mode {
             Mode::OamScan => {
-                self.win_in_ly = false;
                 self.ly_for_comparison = u16::from(self.ly);
                 self.check_lyc(ints);
             }
@@ -257,8 +242,6 @@ impl Ppu {
                 self.current_vblank_line = 144;
                 self.ly = 144;
                 self.ly_for_comparison = 144;
-                self.win_skipped = 0;
-                self.win_in_frame = false;
                 self.fifo.reset_window_frame();
             }
             Mode::HBlank => (),
