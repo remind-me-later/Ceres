@@ -1609,7 +1609,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
                     && matches!(self.ppu.mode(), Mode::Drawing)
                     && (old & 0x80 != 0)
                     && (val & 0x80 != 0)
-                    && ((old ^ val) & 0x48 != 0)
+                    && ((old ^ val) & 0x58 != 0)
                 {
                     if pending >= 1 {
                         self.advance_dots(pending - 1);

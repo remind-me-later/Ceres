@@ -610,12 +610,13 @@ impl PixelFifo {
                     self.pending_sprite_low = None;
 
                     if !is_cgb && self.position >= 0 {
-                        self.fetcher.latch_tile_id_for_sprite(
+                        self.fetcher.latch_tile_for_sprite(
                             vram,
                             ly,
                             scy,
                             scx,
                             self.position as u8,
+                            lcdc,
                         );
                     }
 

@@ -62,7 +62,7 @@ pub struct Ppu {
     /// The dot coordinate where HBlank was entered on this scanline.
     pub hblank_start_dot: u16,
     lcdc: u8,
-    ly: u8,
+    pub ly: u8,
     /// LY value used for LYC coincidence comparison. Separate from `ly`
     /// because the real PPU updates the LYC comparator a few T-cycles
     /// after LY increments (SameBoy's `ly_for_comparison`).

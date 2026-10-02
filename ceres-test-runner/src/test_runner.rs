@@ -97,6 +97,7 @@ impl ScreenshotCheck {
         if !matches {
             let mut count = 0;
             let mut line_counts = [0usize; 144];
+            let mut line_first = [(0u8, [0u8; 4], [0u8; 4]); 144];
             for (idx, (e, a)) in expected_rgba
                 .chunks(4)
                 .zip(actual_rgba.chunks(4))
@@ -105,6 +106,13 @@ impl ScreenshotCheck {
                 if e != a {
                     count += 1;
                     let y = idx / 160;
+                    if line_counts[y] == 0 {
+                        let mut ea = [0u8; 4];
+                        let mut aa = [0u8; 4];
+                        ea.copy_from_slice(e);
+                        aa.copy_from_slice(a);
+                        line_first[y] = ((idx % 160) as u8, ea, aa);
+                    }
                     line_counts[y] += 1;
                     if count <= 10 {
                         let x = idx % 160;
@@ -114,7 +122,8 @@ impl ScreenshotCheck {
             }
             for (y, c) in line_counts.iter().enumerate() {
                 if *c > 0 {
-                    eprintln!("Scanline {y}: {c} mismatches");
+                    let (x, e, a) = line_first[y];
+                    eprintln!("Scanline {y}: {c} mismatches (first at x={x}: exp={e:?} got={a:?})");
                 }
             }
             eprintln!("Total mismatching pixels: {count} / {}", 160 * 144);

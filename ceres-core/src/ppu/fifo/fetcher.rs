@@ -13,8 +13,8 @@ pub enum FetcherState {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct TileFetcher {
-    state: FetcherState,
-    cycle: u8,
+    pub state: FetcherState,
+    pub cycle: u8,
     tile_id: u8,
     tile_attr: u8,
     tile_data_low: u8,
@@ -28,6 +28,7 @@ pub struct TileFetcher {
     map_base: u16,
     data_addr: u16,
     latched_tile_id: Option<u8>,
+    latched_tile_data: Option<(u8, u8)>,
 }
 
 impl TileFetcher {
@@ -48,6 +49,7 @@ impl TileFetcher {
             map_base: 0x1800,
             data_addr: 0,
             latched_tile_id: None,
+            latched_tile_data: None,
         }
     }
 
@@ -66,30 +68,65 @@ impl TileFetcher {
         self.map_base = 0x1800;
         self.data_addr = 0;
         self.latched_tile_id = None;
+        self.latched_tile_data = None;
     }
 
     pub fn set_bg_tile_x(&mut self, scx: u8) {
         self.bg_tile_x = (scx >> 3) & 0x1F;
     }
 
-    pub fn latch_tile_id_for_sprite(
+    pub fn latch_tile_for_sprite(
         &mut self,
         vram: &Vram,
         ly: u8,
         scy: u8,
         scx: u8,
         position: u8,
+        lcdc: u8,
     ) {
-        if self.state == FetcherState::GetTile && !self.is_window && self.latched_tile_id.is_none()
-        {
-            let map = self.map_base;
-            let offset = 8;
-            let fetch_x = scx.wrapping_add(position).wrapping_add(offset);
-            let col = (fetch_x >> 3) & 0x1F;
-            let row = (ly.wrapping_add(scy) / 8) & 0x1F;
-            let map_addr = map + (u16::from(row) * 32) + u16::from(col);
-            self.row_in_tile = (ly.wrapping_add(scy) % 8) as u16;
-            self.latched_tile_id = Some(vram.vram_at_bank(map_addr, 0));
+        if !self.is_window {
+            let row_in_tile = (ly.wrapping_add(scy) % 8) as u16;
+            self.row_in_tile = row_in_tile;
+            let tile_id = match self.state {
+                FetcherState::GetTile => {
+                    let map = self.map_base;
+                    let offset = 8;
+                    let fetch_x = scx.wrapping_add(position).wrapping_add(offset);
+                    let col = (fetch_x >> 3) & 0x1F;
+                    let row = (ly.wrapping_add(scy) / 8) & 0x1F;
+                    let map_addr = map + (u16::from(row) * 32) + u16::from(col);
+                    let id = vram.vram_at_bank(map_addr, 0);
+                    self.latched_tile_id = Some(id);
+                    id
+                }
+                FetcherState::GetTileDataLow | FetcherState::GetTileDataHigh => {
+                    self.latched_tile_id.unwrap_or(self.tile_id)
+                }
+                FetcherState::Push => return,
+            };
+
+            if self.latched_tile_data.is_none() {
+                let is_signed = if position >= 8 {
+                    false
+                } else {
+                    lcdc & 0x10 == 0
+                };
+                let tile_offset = if is_signed {
+                    let signed_id = tile_id as i8 as i16;
+                    ((signed_id + 128) as u16) * 16
+                } else {
+                    (tile_id as u16) * 16
+                };
+                let base_addr = if is_signed { 0x0800 } else { 0x0000 };
+                let data_addr = base_addr + tile_offset + (row_in_tile * 2);
+
+                let low = match self.state {
+                    FetcherState::GetTileDataHigh => self.tile_data_low,
+                    _ => vram.vram_at_bank(data_addr, 0),
+                };
+                let high = vram.vram_at_bank(data_addr + 1, 0);
+                self.latched_tile_data = Some((low, high));
+            }
         }
     }
 
@@ -112,6 +149,7 @@ impl TileFetcher {
         self.map_base = if lcdc & 0x40 != 0 { 0x1C00 } else { 0x1800 };
         self.data_addr = 0;
         self.latched_tile_id = None;
+        self.latched_tile_data = None;
     }
 
     /// Advance fetcher by 1 T-cycle.
@@ -211,7 +249,11 @@ impl TileFetcher {
                 } else {
                     0
                 };
-                self.tile_data_low = vram.vram_at_bank(self.data_addr, bank);
+                self.tile_data_low = if let Some((low, _)) = self.latched_tile_data {
+                    low
+                } else {
+                    vram.vram_at_bank(self.data_addr, bank)
+                };
 
                 self.state = FetcherState::GetTileDataHigh;
                 None
@@ -222,7 +264,11 @@ impl TileFetcher {
                 } else {
                     0
                 };
-                self.tile_data_high = vram.vram_at_bank(self.data_addr, bank);
+                self.tile_data_high = if let Some((_, high)) = self.latched_tile_data.take() {
+                    high
+                } else {
+                    vram.vram_at_bank(self.data_addr, bank)
+                };
 
                 // Always hand over to Push: the fetch cycle must stay a
                 // constant 8 dots so the fetcher never laps the pixel pops

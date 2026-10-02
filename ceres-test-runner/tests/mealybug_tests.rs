@@ -123,7 +123,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_bg_en_change_cgb_c,
     "m3_lcdc_bg_en_change.gb",
-    Model::CgbE,
+    Model::CgbC,
     ignore
 );
 
@@ -150,7 +150,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_bg_map_change_cgb_c,
     "m3_lcdc_bg_map_change.gb",
-    Model::CgbE,
+    Model::CgbC,
     ignore
 );
 
@@ -221,13 +221,12 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_tile_sel_change_dmg_blob,
     "m3_lcdc_tile_sel_change.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 mealybug_ppu_test!(
     test_mb_m3_lcdc_tile_sel_change_cgb_c,
     "m3_lcdc_tile_sel_change.gb",
-    Model::CgbE,
+    Model::CgbC,
     ignore
 );
 
@@ -242,7 +241,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_tile_sel_change2_cgb_c,
     "m3_lcdc_tile_sel_change2.gb",
-    Model::CgbE,
+    Model::CgbC,
     ignore
 );
 
@@ -313,7 +312,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_win_map_change_cgb_c,
     "m3_lcdc_win_map_change.gb",
-    Model::CgbE,
+    Model::CgbC,
     ignore
 );
 
