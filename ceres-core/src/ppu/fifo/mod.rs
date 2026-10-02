@@ -136,14 +136,7 @@ impl PixelFifo {
             self.fetcher.reset_bg(scx);
             if k == 0 {
                 self.position = -16;
-                let is_early_cgb = matches!(
-                    self.model,
-                    crate::Model::Cgb0
-                        | crate::Model::CgbA
-                        | crate::Model::CgbB
-                        | crate::Model::CgbC
-                );
-                self.junk_at = if is_early_cgb { 2 } else { 0 };
+                self.junk_at = if self.model.is_early_cgb() { 2 } else { 0 };
             }
         } else {
             self.fetcher.set_bg_tile_x(scx);
@@ -280,41 +273,15 @@ impl PixelFifo {
         if is_cgb {
             let k = scx & 7;
             self.position = -16 + i16::from(k);
-            let is_early_cgb = matches!(
-                model,
-                crate::Model::Cgb0 | crate::Model::CgbA | crate::Model::CgbB | crate::Model::CgbC
-            );
-            self.junk_at = match k {
-                0..=2 => {
-                    if is_early_cgb {
-                        2
-                    } else {
-                        0
-                    }
-                }
-                3 => 4,
-                4 => {
-                    if is_early_cgb {
-                        5
-                    } else {
-                        4
-                    }
-                }
-                5 => {
-                    if is_early_cgb {
-                        5
-                    } else {
-                        4
-                    }
-                }
-                6 => {
-                    if is_early_cgb {
-                        6
-                    } else {
-                        4
-                    }
-                }
-                7 => 8,
+            let is_early_cgb = model.is_early_cgb();
+            self.junk_at = match (k, is_early_cgb) {
+                (0..=2, true) => 2,
+                (0..=2, false) => 0,
+                (3, _) => 4,
+                (4..=5, true) => 5,
+                (4..=6, false) => 4,
+                (6, true) => 6,
+                (7, _) => 8,
                 _ => unreachable!(),
             };
             if obj_enabled {
@@ -333,16 +300,7 @@ impl PixelFifo {
                     // On CGB, the lead-in junk push finishes earlier than DMG. For a single sprite
                     // aligned at the start of tile 1 (x = 16), the fetcher pause is 10 dots rather
                     // than DMG's 11 dots, matching mid-scanline SCX reload timing in m3_scx_high_5_bits.
-                    if count == 1
-                        && xs[0] == 16
-                        && !matches!(
-                            model,
-                            crate::Model::Cgb0
-                                | crate::Model::CgbA
-                                | crate::Model::CgbB
-                                | crate::Model::CgbC
-                        )
-                    {
+                    if count == 1 && xs[0] == 16 && !model.is_early_cgb() {
                         stalls[0] = 10;
                     }
                     // On CGB, the lead-in junk push does not delay an extra dot between k=4 and k=5

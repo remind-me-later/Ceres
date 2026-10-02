@@ -639,6 +639,12 @@ impl Model {
             Self::Cgb0 | Self::CgbA | Self::CgbB | Self::CgbC | Self::CgbD | Self::CgbE | Self::Agb
         )
     }
+
+    #[must_use]
+    #[inline]
+    pub const fn is_early_cgb(self) -> bool {
+        matches!(self, Self::Cgb0 | Self::CgbA | Self::CgbB | Self::CgbC)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

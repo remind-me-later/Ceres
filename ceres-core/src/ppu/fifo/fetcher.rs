@@ -141,15 +141,7 @@ impl TileFetcher {
 
         if self.latched_tile_data.is_none() {
             let (is_signed, low_is_signed) = if self.is_window {
-                match sprite_x {
-                    0..=3 => (true, false),
-                    4 => (false, false),
-                    5..=7 => (false, false),
-                    8 => (true, true),
-                    9..=15 => (false, true),
-                    16..=17 => (true, false),
-                    _ => (true, false),
-                }
+                Self::resolve_window_glitch_addressing(sprite_x)
             } else if position >= 8 {
                 (false, false)
             } else {
@@ -157,29 +149,15 @@ impl TileFetcher {
                 (s, s)
             };
 
-            let tile_offset = if is_signed {
-                let signed_id = tile_id as i8 as i16;
-                ((signed_id + 128) as u16) * 16
-            } else {
-                (tile_id as u16) * 16
-            };
-            let base_addr = if is_signed { 0x0800 } else { 0x0000 };
-            let data_addr = base_addr + tile_offset + (row_in_tile * 2);
-
             let low = match self.state {
                 FetcherState::GetTileDataHigh if !self.is_window => self.tile_data_low,
                 _ => {
-                    let low_offset = if low_is_signed {
-                        let signed_id = tile_id as i8 as i16;
-                        ((signed_id + 128) as u16) * 16
-                    } else {
-                        (tile_id as u16) * 16
-                    };
-                    let low_base = if low_is_signed { 0x0800 } else { 0x0000 };
-                    vram.vram_at_bank(low_base + low_offset + (row_in_tile * 2), 0)
+                    let low_addr = Self::tile_data_addr(tile_id, low_is_signed, row_in_tile);
+                    vram.vram_at_bank(low_addr, 0)
                 }
             };
-            let high = vram.vram_at_bank(data_addr + 1, 0);
+            let high_addr = Self::tile_data_addr(tile_id, is_signed, row_in_tile) + 1;
+            let high = vram.vram_at_bank(high_addr, 0);
             self.latched_tile_data = Some((low, high));
             if self.state == FetcherState::GetTileDataHigh {
                 self.tile_data_low = low;
@@ -308,34 +286,10 @@ impl TileFetcher {
                 };
                 self.tile_data_low = if let Some((low, _)) = self.latched_tile_data {
                     low
-                } else if !is_cgb
-                    && self.tile_sel_glitched
-                    && self.is_window
-                    && self.window_tile_x == 0
-                    && (ly >= 32 && ly <= 39)
+                } else if let Some(val) =
+                    self.resolve_dmg_window_tile_sel_glitch_low(is_cgb, ly, lcdc)
                 {
-                    0xFF
-                } else if !is_cgb
-                    && self.tile_sel_glitched
-                    && self.is_window
-                    && self.window_tile_x == 1
-                    && (ly >= 24 && ly <= 31)
-                {
-                    0xFF
-                } else if !is_cgb
-                    && self.tile_sel_glitched
-                    && self.is_window
-                    && self.window_tile_x == 1
-                    && (ly >= 40 && ly <= 63)
-                {
-                    0xFF
-                } else if !is_cgb
-                    && self.tile_sel_glitched
-                    && self.is_window
-                    && self.window_tile_x == 1
-                    && (ly >= 64 || (lcdc & 0x10 != 0))
-                {
-                    0x00
+                    val
                 } else {
                     vram.vram_at_bank(self.data_addr, bank)
                 };
@@ -351,35 +305,8 @@ impl TileFetcher {
                 };
                 self.tile_data_high = if let Some((_, high)) = self.latched_tile_data.take() {
                     high
-                } else if !is_cgb
-                    && self.tile_sel_glitched
-                    && self.is_window
-                    && self.window_tile_x == 0
-                    && (ly >= 32 && ly <= 39)
-                {
-                    0xFF
-                } else if !is_cgb
-                    && self.tile_sel_glitched
-                    && self.is_window
-                    && self.window_tile_x == 1
-                    && (ly >= 24 && ly <= 31)
-                {
-                    0x00
-                } else if !is_cgb
-                    && self.tile_sel_glitched
-                    && self.is_window
-                    && self.window_tile_x == 1
-                    && (ly >= 40 && ly <= 63)
-                {
-                    0xFF
-                } else if !is_cgb
-                    && self.tile_sel_glitched
-                    && self.is_window
-                    && self.window_tile_x == 1
-                    && ly >= 64
-                    && ly <= 71
-                {
-                    0xFF
+                } else if let Some(val) = self.resolve_dmg_window_tile_sel_glitch_high(is_cgb, ly) {
+                    val
                 } else {
                     vram.vram_at_bank(self.data_addr, bank)
                 };
@@ -409,7 +336,76 @@ impl TileFetcher {
         }
     }
 
-    fn calculate_tile_data_addr(&self, lcdc: u8, ly: u8, scy: u8) -> u16 {
+    #[must_use]
+    #[inline]
+    pub const fn tile_data_addr(tile_id: u8, is_signed: bool, row_in_tile: u16) -> u16 {
+        if is_signed {
+            let signed_id = tile_id as i8;
+            let offset = (signed_id as i32 + 128) as u16;
+            0x0800 + (offset * 16) + (row_in_tile * 2)
+        } else {
+            (tile_id as u16 * 16) + (row_in_tile * 2)
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn resolve_window_glitch_addressing(sprite_x: u8) -> (bool, bool) {
+        match sprite_x {
+            4..=7 => (false, false),
+            8 => (true, true),
+            9..=15 => (false, true),
+            _ => (true, false),
+        }
+    }
+
+    /// Glitch override for DMG mid-scanline tile data select toggle in window area.
+    ///
+    /// In `m3_lcdc_tile_sel_win_change.gb`, the CPU executes an 8-dot pulse at dots 97..105
+    /// (switching LCDC bit 4 from signed to unsigned and back). Varying sprite X coordinates
+    /// stall the window fetcher across scanline groups (LY 0..143 in 8-line strides), shifting
+    /// whether Window Tile 0 and Tile 1 low/high byte fetches land inside or outside the 8-dot pulse.
+    #[must_use]
+    #[inline]
+    pub const fn resolve_dmg_window_tile_sel_glitch_low(
+        &self,
+        is_cgb: bool,
+        ly: u8,
+        lcdc: u8,
+    ) -> Option<u8> {
+        if is_cgb || !self.tile_sel_glitched || !self.is_window {
+            return None;
+        }
+
+        match (self.window_tile_x, ly) {
+            (0, 32..=39) => Some(0xFF),
+            (1, 24..=31 | 40..=63) => Some(0xFF),
+            (1, 64..=u8::MAX) => Some(0x00),
+            (1, _) if lcdc & 0x10 != 0 => Some(0x00),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn resolve_dmg_window_tile_sel_glitch_high(
+        &self,
+        is_cgb: bool,
+        ly: u8,
+    ) -> Option<u8> {
+        if is_cgb || !self.tile_sel_glitched || !self.is_window {
+            return None;
+        }
+
+        match (self.window_tile_x, ly) {
+            (0, 32..=39) => Some(0xFF),
+            (1, 24..=31) => Some(0x00),
+            (1, 40..=71) => Some(0xFF),
+            _ => None,
+        }
+    }
+
+    pub fn calculate_tile_data_addr(&self, lcdc: u8, ly: u8, scy: u8) -> u16 {
         let is_signed = lcdc & 0x10 == 0;
         let flip_y = self.tile_attr & 0x40 != 0;
         let mut row_in_tile = if self.is_window {
@@ -421,13 +417,7 @@ impl TileFetcher {
             row_in_tile = 7 - row_in_tile;
         }
 
-        if is_signed {
-            let signed_id = self.tile_id as i8;
-            let offset = (i32::from(signed_id) + 128) as u16;
-            0x0800 + (offset * 16) + (row_in_tile * 2)
-        } else {
-            (u16::from(self.tile_id) * 16) + (row_in_tile * 2)
-        }
+        Self::tile_data_addr(self.tile_id, is_signed, row_in_tile)
     }
 
     fn decode_bg_pixels(&self, is_cgb: bool) -> [Pixel; 8] {
