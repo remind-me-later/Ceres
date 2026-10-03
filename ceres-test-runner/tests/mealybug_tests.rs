@@ -275,14 +275,12 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_win_en_change_multiple_dmg_blob,
     "m3_lcdc_win_en_change_multiple.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 mealybug_ppu_test!(
     test_mb_m3_lcdc_win_en_change_multiple_cgb_c,
     "m3_lcdc_win_en_change_multiple.gb",
-    Model::CgbE,
-    ignore
+    Model::CgbE
 );
 
 // m3_lcdc_win_en_change_multiple_wx.gb
@@ -459,8 +457,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_wx_5_change_dmg_blob,
     "m3_wx_5_change.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 // Note: Missing reference screenshot in upstream mealybug repository for CGB
 mealybug_ppu_test!(
@@ -474,8 +471,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_wx_6_change_dmg_blob,
     "m3_wx_6_change.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 // Note: Missing reference screenshot in upstream mealybug repository for CGB
 mealybug_ppu_test!(

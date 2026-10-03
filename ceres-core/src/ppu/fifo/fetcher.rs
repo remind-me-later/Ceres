@@ -178,6 +178,12 @@ impl TileFetcher {
         self.state == FetcherState::GetTile && self.cycle == 0
     }
 
+    /// Window disabled mid-line: the fetcher goes back to background tiles
+    /// at the next tile fetch (SameBoy clears `wx_triggered` at GET_TILE_T1).
+    pub const fn end_window(&mut self) {
+        self.is_window = false;
+    }
+
     pub fn reset_window(&mut self, window_line_counter: u8, lcdc: u8) {
         self.state = FetcherState::GetTile;
         self.cycle = 1;

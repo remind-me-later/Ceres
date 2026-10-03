@@ -141,18 +141,12 @@ impl PixelFifo {
     }
 
     pub fn scan_sprites(&mut self, oam: &Oam, ly: u8, sprite_height: u8) {
-        if self.window_active {
-            self.window_line_counter = self.window_line_counter.wrapping_add(1);
-        }
         self.window_active = false;
         self.clear();
         self.sprites.scan_line(oam, ly, sprite_height);
     }
 
     pub fn reset_window_frame(&mut self) {
-        if self.window_active {
-            self.window_line_counter = self.window_line_counter.wrapping_add(1);
-        }
         self.window_active = false;
         self.window_line_counter = 0;
     }
@@ -475,9 +469,11 @@ impl PixelFifo {
         };
 
         let was_window_active = self.window_active;
-        if !win_enabled {
+        if self.window_active && !win_enabled && self.fetcher.is_get_tile_t1() {
             self.window_active = false;
-        } else if ly >= wy && win_in_x {
+            self.fetcher.end_window();
+        }
+        if win_enabled && ly >= wy && win_in_x {
             if !self.window_active {
                 self.window_active = true;
                 if self.model.is_cgb() && wx == 0 && self.position < -7 {
@@ -499,7 +495,10 @@ impl PixelFifo {
                 {
                     self.position = -8;
                 }
+                // The window row advances on every activation (SameBoy's
+                // `window_y++`), so a re-trigger within a line draws the next row.
                 self.fetcher.reset_window(self.window_line_counter, lcdc);
+                self.window_line_counter = self.window_line_counter.wrapping_add(1);
                 self.window_initial_fetch = true;
                 self.bg_head = 0;
                 self.bg_tail = 0;

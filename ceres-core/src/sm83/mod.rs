@@ -1663,10 +1663,16 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 self.time_deferred = 4;
             }
             ConflictType::WxDmg => {
-                self.flush_deferred_time();
+                let o: i32 = if matches!(self.ppu.mode(), Mode::Drawing) {
+                    1
+                } else {
+                    0
+                };
+                let before = (pending + o).max(0);
+                self.advance_dots(before);
                 self.write_mem(addr, val);
                 self.advance_dots(1);
-                self.time_deferred = 3;
+                self.time_deferred = (3 + pending - before).max(0);
             }
             ConflictType::LcdcCgb => {
                 self.flush_deferred_time();
