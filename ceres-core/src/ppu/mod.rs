@@ -309,6 +309,11 @@ impl Ppu {
         self.fifo.position()
     }
 
+    #[inline]
+    pub const fn set_tile_sel_glitch(&mut self, active: bool) {
+        self.fifo.set_tile_sel_glitch(active);
+    }
+
     #[must_use]
     #[inline]
     pub const fn is_fetching_sprite(&self) -> bool {

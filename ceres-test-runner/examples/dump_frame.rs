@@ -16,6 +16,7 @@ fn main() {
     let model = match args[2].as_str() {
         "dmg" => Model::DmgB,
         "cgb" => Model::CgbE,
+        "cgbc" => Model::CgbC,
         other => panic!("unknown model {other}"),
     };
     let frames: u32 = args[3].parse().unwrap();
@@ -30,8 +31,12 @@ fn main() {
         .build();
     gb.set_color_correction_mode(ceres_core::ColorCorrectionMode::Disabled);
 
+    // Stop at the `ld b,b` breakpoint like the screenshot tests do.
     for _ in 0..frames {
         gb.run_frame();
+        if gb.check_and_reset_ld_b_b_breakpoint() {
+            break;
+        }
     }
 
     let rgba = gb.pixel_data_rgba();

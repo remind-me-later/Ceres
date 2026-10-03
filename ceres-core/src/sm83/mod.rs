@@ -1475,9 +1475,16 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 self.time_deferred = 3;
             }
             ConflictType::ScyDmg => {
-                self.advance_dots(pending + 2);
-                self.write_mem(addr, val);
-                self.time_deferred = 2;
+                if self.model.is_cgb_hardware() {
+                    let before = (pending - 2).max(0);
+                    self.advance_dots(before);
+                    self.write_mem(addr, val);
+                    self.time_deferred = 4 + pending - before;
+                } else {
+                    self.advance_dots(pending + 2);
+                    self.write_mem(addr, val);
+                    self.time_deferred = 2;
+                }
             }
             ConflictType::StatDmg => {
                 self.flush_deferred_time();
@@ -1620,6 +1627,29 @@ impl<A: AudioCallback> Bus for Gb<A> {
                         self.write_mem(addr, val);
                     }
                     self.time_deferred = 4;
+                } else if self.model.is_cgb_hardware()
+                    && matches!(self.ppu.mode(), Mode::Drawing)
+                    && (old & 0x80 != 0)
+                    && (val & 0x80 != 0)
+                    && old != val
+                {
+                    // CGB hardware running a DMG-compat ROM: the write lands a
+                    // couple of dots before the end of the M-cycle (the window
+                    // map bit one dot later than the rest).
+                    let lead = if (old ^ val) & 0x40 != 0 { 1 } else { 2 };
+                    let before = (pending - lead).max(0);
+                    self.advance_dots(before);
+                    self.write_mem(addr, val);
+                    if old & 0x10 != 0 && val & 0x10 == 0 {
+                        // Clearing TILE_SEL on the dot after the write can
+                        // corrupt a bitplane read in flight (see fetcher).
+                        self.ppu.set_tile_sel_glitch(true);
+                        self.advance_dots(1);
+                        self.ppu.set_tile_sel_glitch(false);
+                        self.time_deferred = 3 + pending - before;
+                    } else {
+                        self.time_deferred = 4 + pending - before;
+                    }
                 } else {
                     self.flush_deferred_time();
                     self.advance_dots(2);
@@ -1676,9 +1706,10 @@ impl<A: AudioCallback> Bus for Gb<A> {
             }
             ConflictType::ScxCgb => {
                 if matches!(self.ppu.mode(), crate::ppu::Mode::Drawing) {
-                    self.advance_dots(pending + 3);
+                    let before = (pending - 1).max(0);
+                    self.advance_dots(before);
                     self.write_mem(addr, val);
-                    self.time_deferred = 1;
+                    self.time_deferred = 4 + pending - before;
                 } else if pending >= 2 {
                     self.advance_dots(pending - 2);
                     self.write_mem(addr, val);

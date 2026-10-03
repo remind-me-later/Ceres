@@ -123,6 +123,11 @@ impl PixelFifo {
         self.position
     }
 
+    #[inline]
+    pub const fn set_tile_sel_glitch(&mut self, active: bool) {
+        self.fetcher.set_tile_sel_glitch(active);
+    }
+
     pub fn set_scx(&mut self, scx: u8, is_cgb: bool) {
         if is_cgb && self.line_dots == 0 {
             let k = scx & 7;
@@ -277,14 +282,6 @@ impl PixelFifo {
                 let (xs, count) = self.sprites.sprite_xs();
                 self.line_sprite_count = count as u8;
                 if count > 0 {
-                    let well_separated = count > 1
-                        && (count < 10
-                            || xs[..count]
-                                .windows(2)
-                                .all(|w| w[1].saturating_sub(w[0]) > 8));
-                    if well_separated {
-                        self.junk_at += 4;
-                    }
                     let (cycles, mut stalls) = Self::simulate_mode3_cycles(&xs[..count], scx);
                     // On CGB, the lead-in junk push finishes earlier than DMG. For a single sprite
                     // aligned at the start of tile 1 (x = 16), the fetcher pause is 10 dots rather

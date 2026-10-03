@@ -28,6 +28,12 @@ pub struct TileFetcher {
     latched_tile_id: Option<u8>,
     latched_tile_data: Option<(u8, u8)>,
     tile_sel_glitched: bool,
+    /// Tile index that ends up on the data bus if LCDC.4 is cleared during
+    /// the current bitplane read: only when LCDC.4 was set when the fetch
+    /// started and the index is below 0x80.
+    glitch_index_on_bus: Option<u8>,
+    /// Set for the dot right after a CGB write that cleared LCDC.4.
+    tile_sel_glitch: bool,
 }
 
 impl TileFetcher {
@@ -48,6 +54,8 @@ impl TileFetcher {
             latched_tile_id: None,
             latched_tile_data: None,
             tile_sel_glitched: false,
+            glitch_index_on_bus: None,
+            tile_sel_glitch: false,
         }
     }
 
@@ -215,9 +223,13 @@ impl TileFetcher {
                     }
                 }
                 FetcherState::GetTileDataLow => {
+                    self.glitch_index_on_bus =
+                        (lcdc & 0x10 != 0 && self.tile_id & 0x80 == 0).then_some(self.tile_id);
                     self.data_addr = self.calculate_tile_data_addr(lcdc, ly, scy);
                 }
                 FetcherState::GetTileDataHigh => {
+                    self.glitch_index_on_bus =
+                        (lcdc & 0x10 != 0 && self.tile_id & 0x80 == 0).then_some(self.tile_id);
                     self.data_addr = self.calculate_tile_data_addr(lcdc, ly, scy) + 1;
                 }
                 FetcherState::Push => {}
@@ -275,7 +287,9 @@ impl TileFetcher {
                 } else {
                     0
                 };
-                self.tile_data_low = if let Some((low, _)) = self.latched_tile_data {
+                self.tile_data_low = if let Some(val) = self.tile_sel_glitch_data() {
+                    val
+                } else if let Some((low, _)) = self.latched_tile_data {
                     low
                 } else if let Some(val) =
                     self.resolve_dmg_window_tile_sel_glitch_low(is_cgb, ly, lcdc)
@@ -294,7 +308,10 @@ impl TileFetcher {
                 } else {
                     0
                 };
-                self.tile_data_high = if let Some((_, high)) = self.latched_tile_data.take() {
+                let latched = self.latched_tile_data.take();
+                self.tile_data_high = if let Some(val) = self.tile_sel_glitch_data() {
+                    val
+                } else if let Some((_, high)) = latched {
                     high
                 } else if let Some(val) = self.resolve_dmg_window_tile_sel_glitch_high(is_cgb, ly) {
                     val
@@ -391,6 +408,20 @@ impl TileFetcher {
             (1, 24..=31) => Some(0x00),
             (1, 40..=71) => Some(0xFF),
             _ => None,
+        }
+    }
+
+    pub const fn set_tile_sel_glitch(&mut self, active: bool) {
+        self.tile_sel_glitch = active;
+    }
+
+    /// CGB: clearing LCDC.4 on the same dot as a bitplane read puts the tile
+    /// index on the data bus instead.
+    const fn tile_sel_glitch_data(&self) -> Option<u8> {
+        if self.tile_sel_glitch {
+            self.glitch_index_on_bus
+        } else {
+            None
         }
     }
 
