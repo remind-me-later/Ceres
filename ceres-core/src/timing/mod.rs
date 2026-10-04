@@ -333,7 +333,7 @@ impl<A: AudioCallback> Gb<A> {
 
         // advance serial master clock
         if triggers & self.serial.div_mask() != 0 {
-            self.serial.run_master(&mut self.ints);
+            self.serial.master_edge(&mut self.ints);
         }
 
         // advance APU on falling edge of APU_DIV bit

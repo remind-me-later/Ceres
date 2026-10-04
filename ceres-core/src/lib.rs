@@ -339,8 +339,7 @@ impl<A: AudioCallback> Gb<A> {
         // The DIV state machine is running.
         self.clock.div_state = 2;
 
-        self.serial
-            .set_master_clock((self.clock.div & self.serial.div_mask()) != 0);
+        self.serial.set_master_clock(self.clock.div & 0x100 != 0);
     }
 
     /// Check if the `ld b, b` debug breakpoint instruction was executed and reset the flag.
