@@ -33,7 +33,6 @@ const NOT_SELF_CHECKING: &[&str] = &[
     "flood_vram.gb",
     "lcdon_write_timing.gb",
     "ly_while_lcd_off.gb",
-    "mbc1_rom_banks.gb",
     "minimal.gb",
     "mode2_stat_int_to_oam_unlock.gb",
     "oam_sprite_trashing.gb",
