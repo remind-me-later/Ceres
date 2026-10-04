@@ -68,11 +68,6 @@ pub struct Gb<A: AudioCallback> {
     key1: Key1,
     speed_switch: SpeedSwitch,
     model: Model,
-    /// PPU tick credit, in CPU T-cycles. Banked by `advance_dots` when a
-    /// batch is not a whole number of PPU dots (sub-M-cycle bus-conflict
-    /// offsets flush 1-3 dots at a time) so no dot is ever dropped, in
-    /// single or double speed.
-    ppu_t_credit: i32,
     ppu: Ppu,
     serial: Serial,
     wram: Wram,
@@ -423,7 +418,6 @@ impl<A: AudioCallback> Gb<A> {
             key1: Key1::default(),
             speed_switch: SpeedSwitch::default(),
             model,
-            ppu_t_credit: 0,
             ppu: Ppu::new(model),
             serial: Serial::default(),
             wram: Wram::default(),
@@ -434,12 +428,6 @@ impl<A: AudioCallback> Gb<A> {
             #[cfg(feature = "game_genie")]
             game_genie: GameGenie::default(),
         }
-    }
-
-    #[doc(hidden)]
-    #[must_use]
-    pub fn apu_debug_state(&self) -> alloc::string::String {
-        self.apu.debug_state()
     }
 
     #[must_use]
@@ -548,7 +536,6 @@ impl<A: AudioCallback> Gb<A> {
         self.ints = Interrupts::default();
         self.key1 = Key1::default();
         self.speed_switch = SpeedSwitch::default();
-        self.ppu_t_credit = 0;
         self.time_deferred = 0;
         self.ppu = Ppu::new(self.model);
         self.serial = Serial::default();

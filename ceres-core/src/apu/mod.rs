@@ -329,10 +329,6 @@ impl<A: AudioCallback> Apu<A> {
         apu
     }
 
-    pub fn debug_state(&self) -> alloc::string::String {
-        alloc::format!("{:#?}\nregs {:02X?}", self.s, &self.regs[0x10..0x30])
-    }
-
     pub const fn set_model(&mut self, model: Model) {
         self.model = model;
     }

@@ -140,6 +140,9 @@ impl<A: AudioCallback> Gb<A> {
                 0x0000..=0x7FFF | 0xA000..=0xDFFF => self.read_mem(src),
                 _ => 0xFF,
             };
+            if self.dma.hdma_can_write_oam(self.key1.is_enabled()) {
+                self.hdma_write_oam(src as u8, byte);
+            }
             self.hdma.src = src.wrapping_add(1);
 
             self.advance_dots(cycles);

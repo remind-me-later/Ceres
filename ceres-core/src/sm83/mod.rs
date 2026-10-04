@@ -1613,7 +1613,15 @@ impl<A: AudioCallback> Bus for Gb<A> {
 
                 let old = self.ppu.read_lcdc();
                 self.advance_dots(pending);
-                self.write_mem(addr, (val & !OBJ_SIZE) | (old & OBJ_SIZE));
+                let delay_obj_size = self.ppu.read_scx() & 7 != 0;
+                self.write_mem(
+                    addr,
+                    if delay_obj_size {
+                        (val & !OBJ_SIZE) | (old & OBJ_SIZE)
+                    } else {
+                        val
+                    },
+                );
                 // Changing TILE_SEL on the dot after the write can corrupt a
                 // bitplane read in flight (see the PPU).
                 self.ppu.set_tile_sel_glitch((val ^ old) & 0x10 != 0);

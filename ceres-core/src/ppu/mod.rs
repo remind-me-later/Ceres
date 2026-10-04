@@ -259,14 +259,17 @@ impl Ppu {
     }
 
     /// Advance the PPU by one dot.
+    /// One CPU T-cycle: a PPU dot in single speed, half of one in double
+    /// speed.
     pub fn tick_t_cycle(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
         self.cgb_mode = cgb_mode;
         self.double_speed = double_speed;
-        self.d.tick_phase = (self.d.tick_phase + 1) & 3;
         if self.lcdc & LCDC_ON_B == 0 {
             return;
         }
-        self.run_display(ints);
+        for _ in 0..if double_speed { 1 } else { 2 } {
+            self.run_display(ints);
+        }
     }
 
     pub const fn set_color_correction_mode(&mut self, mode: ColorCorrectionMode) {
@@ -290,8 +293,7 @@ impl Ppu {
 
         self.lcdc = val;
         self.d.fetch_obj_size = val & 0x04 != 0;
-        self.d
-            .schedule_wy_check(self.model.is_cgb_hardware(), self.double_speed);
+        self.d.schedule_wy_check();
     }
 
     pub fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
@@ -335,6 +337,10 @@ impl Ppu {
             }
             self.run_display(&mut ints);
         }
+        // Finish the dot the loop stopped in.
+        if self.d.half_dot {
+            self.run_display(&mut ints);
+        }
     }
 
     pub const fn write_scy(&mut self, val: u8) {
@@ -351,8 +357,7 @@ impl Ppu {
 
     pub fn write_wy(&mut self, val: u8) {
         self.wy = val;
-        self.d
-            .schedule_wy_check(self.model.is_cgb_hardware(), self.double_speed);
+        self.d.schedule_wy_check();
     }
 
     /// CGB palette RAM is blocked from the CPU while the PPU reads it.

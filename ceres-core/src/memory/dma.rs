@@ -85,6 +85,13 @@ impl Dma {
         self.reg = val;
     }
 
+    /// The HDMA copies bytes into OAM while an OAM DMA is running, but only
+    /// on the M-cycle phase where the DMA has the bus free.
+    #[must_use]
+    pub const fn hdma_can_write_oam(&self, double_speed: bool) -> bool {
+        self.is_active() && (self.cycles_modulo == 2 || double_speed)
+    }
+
     pub const fn add_cycles(&mut self, cycles: i32) {
         self.cycles = cycles;
     }
@@ -203,6 +210,29 @@ impl<A: AudioCallback> Gb<A> {
             }
         }
         Some(addr)
+    }
+
+    /// SameBoy's `write_oam`: a byte the HDMA drops into OAM (only the low
+    /// byte of the source address is used). Past the 160 bytes it goes to the
+    /// memory behind the unusable area on some revisions.
+    pub(crate) fn hdma_write_oam(&mut self, addr: u8, value: u8) {
+        let oam = self.ppu.oam_mut();
+        if addr < 0xA0 {
+            oam.bytes_mut()[usize::from(addr)] = value;
+            return;
+        }
+        let addr = match self.model {
+            Model::CgbD => {
+                if addr >= 0xC0 {
+                    addr | 0xF0
+                } else {
+                    addr
+                }
+            }
+            Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC => addr & !0x18,
+            _ => return,
+        };
+        oam.extra_mut()[usize::from(addr - 0xA0)] = value;
     }
 
     /// DMA source read: unlike the CPU it is not blocked by the PPU.

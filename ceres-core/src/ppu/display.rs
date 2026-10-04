@@ -191,9 +191,12 @@ pub(super) struct Display {
     wy_triggered: bool,
     window_is_being_fetched: bool,
     wy_check_scheduled: bool,
-    wy_check_countdown: i32,
-    /// Dot counter modulo 4, anchored to the CPU's M-cycle phase.
-    pub tick_phase: u8,
+    /// SameBoy's `wy_check_modulo`: time since the LCD was turned on modulo 8,
+    /// in units of half a dot (a T-cycle in double speed, two per dot in
+    /// single speed).
+    wy_units: u8,
+    /// Double speed: the first T-cycle of the current dot already ran.
+    pub half_dot: bool,
     wy_just_checked: bool,
     cgb_wx_glitch: bool,
     disable_window_pixel_insertion_glitch: bool,
@@ -263,8 +266,8 @@ impl Default for Display {
             wy_triggered: false,
             window_is_being_fetched: false,
             wy_check_scheduled: false,
-            wy_check_countdown: 0,
-            tick_phase: 0,
+            wy_units: 0,
+            half_dot: false,
             wy_just_checked: false,
             cgb_wx_glitch: false,
             disable_window_pixel_insertion_glitch: false,
@@ -292,26 +295,13 @@ impl Display {
         self.state = 0;
         self.wait = 0;
         self.cfl = 0;
+        self.wy_units = 0;
+        self.half_dot = false;
     }
 
     /// Schedule the WY comparison that follows an LCDC/WY write.
-    pub(super) fn schedule_wy_check(&mut self, cgb: bool, double_speed: bool) {
-        if !self.wy_check_scheduled {
-            self.wy_check_scheduled = true;
-            // SameBoy aligns the check to a grid of 4 dots: it fires on the
-            // dot that makes the phase 2 (DMG, measured against Gambatte's
-            // late_wy tests) or 0 (CGB), 1 to 4 dots after
-            // the write. In double speed it is 1 dot.
-            let target = if cgb { 0 } else { 2 };
-            let wait = i32::from((target + 4 - self.tick_phase) & 3);
-            self.wy_check_countdown = if double_speed {
-                1
-            } else if wait == 0 {
-                4
-            } else {
-                wait
-            };
-        }
+    pub(super) const fn schedule_wy_check(&mut self) {
+        self.wy_check_scheduled = true;
     }
 }
 
@@ -1147,7 +1137,13 @@ impl Ppu {
         self.rgba_buf_present = core::mem::take(&mut self.rgb_buf);
     }
 
-    /// Advance the display by one dot.
+    /// Advance the display by one unit (half a dot, SameBoy's 8 MHz tick).
+    ///
+    /// SameBoy's state machine runs the code that follows a sleep as soon as
+    /// the time slept is exceeded, so a dot's work runs at the first of its
+    /// two units (`half_dot` says whether that already happened). It matters
+    /// for the accesses that land between units: after a speed switch or in
+    /// a split write in double speed.
     pub(super) fn run_display(&mut self, ints: &mut Interrupts) {
         // Pre-run bookkeeping (top of GB_display_run).
         if self.d.wy_triggered {
@@ -1155,7 +1151,10 @@ impl Ppu {
         }
 
         // A line that would outgrow 456 dots is cut off (mode 3 abort).
-        if i32::from(self.d.cfl) - self.d.wait + 2 > LINE_LENGTH && self.d.state != 0 {
+        // `balance` is SameBoy's `display_cycles`.
+        let balance = 2 - 2 * self.d.wait - i32::from(self.d.half_dot);
+        let cut = 2 * i32::from(self.d.cfl) + 1 + balance > 2 * LINE_LENGTH && self.d.state != 0;
+        if cut {
             if self.d.state == 22 {
                 self.stat &= !super::STAT_MODE_B;
                 self.d.mode_for_interrupt = 0;
@@ -1165,24 +1164,41 @@ impl Ppu {
             self.d.wait = 0;
         }
 
-        if self.d.delayed_glitch_hblank_interrupt && self.d.current_line < LINES {
-            self.d.delayed_glitch_hblank_interrupt = false;
-            self.d.mode_for_interrupt = 0;
-            self.stat_update(ints);
-            self.d.mode_for_interrupt = 3;
+        self.d.half_dot = !self.d.half_dot;
+        if self.d.half_dot || cut {
+            if self.d.delayed_glitch_hblank_interrupt && self.d.current_line < LINES {
+                self.d.delayed_glitch_hblank_interrupt = false;
+                self.d.mode_for_interrupt = 0;
+                self.stat_update(ints);
+                self.d.mode_for_interrupt = 3;
+            }
+
+            self.d.line_clock += 1;
+            self.step_state_machine(ints);
         }
+        self.advance_wy_units(1);
+    }
 
-        self.d.line_clock += 1;
-        self.step_state_machine(ints);
-
-        // The scheduled WY check lands after the dot it was due on.
-        if self.d.wy_check_scheduled && !self.d.wy_triggered {
-            self.d.wy_check_countdown -= 1;
-            if self.d.wy_check_countdown <= 0 {
-                self.d.wy_check_scheduled = false;
-                self.wy_check();
-                if self.d.state == 21 && self.hw_cgb() && !self.double_speed() {
-                    self.d.wy_just_checked = true;
+    /// Time passes by `units` half-dots. SameBoy runs the scheduled WY check
+    /// on a grid of 8 of them (counted from the moment the LCD was turned on),
+    /// which sits at a different offset in each speed and hardware.
+    pub(super) fn advance_wy_units(&mut self, units: u8) {
+        for _ in 0..units {
+            self.d.wy_units = (self.d.wy_units + 1) & 7;
+            if self.d.wy_check_scheduled && !self.d.wy_triggered {
+                let offset = if self.double_speed {
+                    6
+                } else if self.hw_cgb() {
+                    0
+                } else {
+                    2
+                };
+                if (self.d.wy_units + offset) & 7 == 0 {
+                    self.d.wy_check_scheduled = false;
+                    self.wy_check();
+                    if self.d.state == 21 && self.hw_cgb() && !self.double_speed() {
+                        self.d.wy_just_checked = true;
+                    }
                 }
             }
         }
@@ -1645,6 +1661,7 @@ impl Ppu {
             && self.d.state == 8
             && self.d.oam_search_index == 0
             && self.d.wait == 1
+            && !self.d.half_dot
             && val & 0x20 != 0
         {
             self.d.mode_for_interrupt = 2;

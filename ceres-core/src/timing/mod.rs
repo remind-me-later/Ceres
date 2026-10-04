@@ -77,13 +77,6 @@ impl Clock {
 impl<A: AudioCallback> Gb<A> {
     /// Advance all components by the given number of CPU T-cycles.
     /// This is the main timing entry point called by the CPU.
-    ///
-    /// Timers advance per T-cycle (for accurate TIMA reload timing) and
-    /// the PPU advances per dot (4 T-cycles single speed, 2 in double
-    /// speed). Fractional T-cycles are banked in `ppu_t_credit` so that
-    /// sub-M-cycle bus-conflict write offsets (which flush odd numbers of
-    /// dots) never drop PPU dots: every T-cycle the CPU spends eventually
-    /// reaches the PPU.
     #[inline]
     pub fn advance_dots(&mut self, cpu_t_cycles: i32) {
         if cpu_t_cycles <= 0 {
@@ -126,6 +119,11 @@ impl<A: AudioCallback> Gb<A> {
             if self.speed_switch.halt_countdown <= 0 {
                 self.speed_switch.halt_countdown = 0;
                 self.speed_switch.unhalt = true;
+                // The halt ends right here for the DMAs: they run in this very
+                // step (the CPU itself notices on its next one).
+                let hblank = matches!(self.ppu.mode(), crate::ppu::Mode::HBlank);
+                self.hdma.set_cpu_halted(false, hblank);
+                self.ppu.set_cpu_idle(self.clock.stopped);
             }
         }
 
@@ -139,18 +137,11 @@ impl<A: AudioCallback> Gb<A> {
             self.speed_switch.freeze = 0;
         }
 
-        // Advance the PPU dot by dot. One PPU dot is one CPU T-cycle in
-        // single speed and two in double speed (the PPU's real-time rate
-        // is unchanged; SameBoy advances it by `cycles * 2` vs `cycles *
-        // 4` per CPU step for the same reason). Fractional T-cycles are
-        // banked in `ppu_t_credit` so that sub-M-cycle bus-conflict write
-        // offsets never drop PPU dots.
-        let t_cycles_per_dot = if self.key1.is_enabled() { 2 } else { 1 };
-        self.ppu_t_credit += cycles;
-        while self.ppu_t_credit >= t_cycles_per_dot {
-            self.ppu_t_credit -= t_cycles_per_dot;
+        // Advance the PPU (see `Ppu::tick_t_cycle`).
+        let double_speed = self.key1.is_enabled();
+        for _ in 0..cycles {
             self.ppu
-                .tick_t_cycle(&mut self.ints, self.cgb_mode, self.key1.is_enabled());
+                .tick_t_cycle(&mut self.ints, self.cgb_mode, double_speed);
         }
 
         if self.ppu.take_hblank_hdma_edge() {
