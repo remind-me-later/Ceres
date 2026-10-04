@@ -25,6 +25,7 @@ pub enum ConflictType {
     LcdcCgbDouble,
     Nr10CgbDouble,
     ScxDmgAndCgbDouble,
+    ScyDmg,
 }
 
 pub const DMG_CONFLICT_MAP: [ConflictType; 128] = {
@@ -32,7 +33,7 @@ pub const DMG_CONFLICT_MAP: [ConflictType; 128] = {
     map[0x0F] = ConflictType::WriteCpu;
     map[0x40] = ConflictType::DmgLcdc;
     map[0x41] = ConflictType::StatDmg;
-    map[0x42] = ConflictType::ReadNew;
+    map[0x42] = ConflictType::ScyDmg;
     map[0x43] = ConflictType::ScxDmgAndCgbDouble;
     map[0x45] = ConflictType::ReadOld;
     map[0x47] = ConflictType::PaletteDmg;
@@ -48,7 +49,7 @@ pub const SGB_CONFLICT_MAP: [ConflictType; 128] = {
     map[0x0F] = ConflictType::WriteCpu;
     map[0x40] = ConflictType::SgbLcdc;
     map[0x41] = ConflictType::StatDmg;
-    map[0x42] = ConflictType::ReadNew;
+    map[0x42] = ConflictType::ScyDmg;
     map[0x43] = ConflictType::ScxDmgAndCgbDouble;
     map[0x45] = ConflictType::ReadOld;
     map[0x47] = ConflictType::ReadNew;

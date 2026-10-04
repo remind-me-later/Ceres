@@ -145,8 +145,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_bg_map_change_dmg_blob,
     "m3_lcdc_bg_map_change.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 mealybug_ppu_test!(
     test_mb_m3_lcdc_bg_map_change_cgb_c,
@@ -197,8 +196,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_obj_size_change_dmg_blob,
     "m3_lcdc_obj_size_change.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 mealybug_ppu_test!(
     test_mb_m3_lcdc_obj_size_change_cgb_c,
@@ -210,22 +208,19 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_obj_size_change_scx_dmg_blob,
     "m3_lcdc_obj_size_change_scx.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 mealybug_ppu_test!(
     test_mb_m3_lcdc_obj_size_change_scx_cgb_c,
     "m3_lcdc_obj_size_change_scx.gb",
-    Model::CgbC,
-    ignore
+    Model::CgbC
 );
 
 // m3_lcdc_tile_sel_change.gb
 mealybug_ppu_test!(
     test_mb_m3_lcdc_tile_sel_change_dmg_blob,
     "m3_lcdc_tile_sel_change.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 mealybug_ppu_test!(
     test_mb_m3_lcdc_tile_sel_change_cgb_c,
@@ -253,8 +248,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_tile_sel_win_change_dmg_blob,
     "m3_lcdc_tile_sel_win_change.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 mealybug_ppu_test!(
     test_mb_m3_lcdc_tile_sel_win_change_cgb_c,
@@ -309,8 +303,7 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_lcdc_win_map_change_dmg_blob,
     "m3_lcdc_win_map_change.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
 mealybug_ppu_test!(
     test_mb_m3_lcdc_win_map_change_cgb_c,
@@ -386,15 +379,9 @@ mealybug_ppu_test!(
 mealybug_ppu_test!(
     test_mb_m3_scy_change_dmg_blob,
     "m3_scy_change.gb",
-    Model::DmgB,
-    ignore
+    Model::DmgB
 );
-mealybug_ppu_test!(
-    test_mb_m3_scy_change_cgb_c,
-    "m3_scy_change.gb",
-    Model::CgbC,
-    ignore
-);
+mealybug_ppu_test!(test_mb_m3_scy_change_cgb_c, "m3_scy_change.gb", Model::CgbC);
 
 // m3_scy_change2.gb
 // Note: Missing reference screenshot in upstream mealybug repository for DMG
