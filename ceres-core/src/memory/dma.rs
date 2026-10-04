@@ -70,12 +70,6 @@ impl Dma {
         self.is_active()
     }
 
-    /// OAM index the DMA is writing (for the PPU's object search).
-    #[must_use]
-    pub const fn current_dest(&self) -> u8 {
-        self.current_dest
-    }
-
     #[must_use]
     pub const fn read(&self) -> u8 {
         self.reg

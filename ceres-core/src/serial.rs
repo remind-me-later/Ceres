@@ -37,11 +37,6 @@ impl Serial {
         self.master_clock = val;
     }
 
-    /// SC after the boot ROM: bit 1 (the CGB clock speed) reads 1 on a CGB.
-    pub const fn set_post_boot(&mut self, cgb: bool) {
-        self.sc = if cgb { 0x7F } else { 0x7E };
-    }
-
     /// The system counter bit whose falling edges clock the serial port.
     #[must_use]
     pub const fn div_mask(&self) -> u16 {
