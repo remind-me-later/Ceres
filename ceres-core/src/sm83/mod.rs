@@ -1477,6 +1477,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
     #[inline]
     fn read(&mut self, addr: u16) -> u8 {
         self.flush_deferred_time();
+        self.address_bus = addr;
         let val = self.cpu_read_mem(addr);
         self.time_deferred = 4;
         val
@@ -1645,6 +1646,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 self.time_deferred = 4;
             }
         }
+        self.address_bus = addr;
     }
 
     #[inline]
@@ -1684,6 +1686,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
 
     fn tick_oam_bug(&mut self, addr: u16) {
         self.flush_deferred_time();
+        self.address_bus = addr;
         self.ppu.trigger_oam_bug(addr);
         self.time_deferred = 4;
     }

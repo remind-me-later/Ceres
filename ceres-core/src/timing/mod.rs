@@ -1,4 +1,4 @@
-use crate::{AudioCallback, Gb};
+use crate::{AudioCallback, Gb, apu::ApuCtx};
 use core::time::Duration;
 
 /// T-cycles per frame (4MHz rate).
@@ -38,6 +38,8 @@ pub struct Clock {
     pub div_state: u8,
     pub tima_reload_state: u8,
     pub stopped: bool,
+    /// A DIV write is in progress (the APU's sweep glitches depend on it).
+    pub during_div_write: bool,
 }
 
 impl Default for Clock {
@@ -53,6 +55,7 @@ impl Default for Clock {
             div_state: 0,
             tima_reload_state: 0,
             stopped: false,
+            during_div_write: false,
         }
     }
 }
@@ -109,6 +112,8 @@ impl<A: AudioCallback> Gb<A> {
             }
         }
 
+        self.apu.reset_pcm_mask();
+
         // The OAM DMA is clocked by the CPU clock, whatever the speed.
         self.dma.add_cycles(cycles);
 
@@ -154,7 +159,6 @@ impl<A: AudioCallback> Gb<A> {
 
         self.run_dma();
 
-        self.apu.run(cycles);
         self.cart.run_rtc(cycles);
     }
 
@@ -202,10 +206,31 @@ impl<A: AudioCallback> Gb<A> {
         0xF8 | self.clock.tac
     }
 
+    /// What the APU needs to know about the machine.
+    pub(crate) const fn apu_ctx(&self) -> ApuCtx {
+        ApuCtx {
+            address_bus: self.address_bus,
+            div_counter: self.clock.div,
+            double_speed: self.key1.is_enabled(),
+            during_div_write: self.clock.during_div_write,
+            pc: self.cpu.pc(),
+            stopped: self.clock.stopped,
+        }
+    }
+
+    /// Runs the APU for the 2 MHz ticks of one DIV step (one M-cycle).
+    fn run_apu_step(&mut self) {
+        let ctx = self.apu_ctx();
+        self.apu.tick(&ctx, if ctx.double_speed { 1 } else { 2 });
+    }
+
     #[inline]
     pub fn run_timers(&mut self, cpu_t_cycles: i32) {
-        // The timers (and DIV) are frozen in STOP mode.
+        // The timers (and DIV) are frozen in STOP mode (the CGB's APU is not).
         if self.clock.stopped {
+            if self.is_cgb() {
+                self.run_apu_step();
+            }
             return;
         }
         for _ in 0..cpu_t_cycles {
@@ -245,7 +270,17 @@ impl<A: AudioCallback> Gb<A> {
                 }
             }
 
-            self.set_system_clk(self.clock.div.wrapping_add(1));
+            let div = self.clock.div.wrapping_add(1);
+            if div & 3 == 0 {
+                if self.apu.pending_envelope_tick() {
+                    let ctx = self.apu_ctx();
+                    self.apu.delayed_envelope_tick(&ctx);
+                }
+                self.set_system_clk(div);
+                self.run_apu_step();
+            } else {
+                self.set_system_clk(div);
+            }
         }
     }
 
@@ -256,8 +291,9 @@ impl<A: AudioCallback> Gb<A> {
         // Without this, the APU length counter / serial transfer can step
         // immediately after a DIV write, which breaks gambatte's
         // serial/sound testsuite.
+        self.clock.during_div_write = true;
         self.set_system_clk(0);
-        self.apu.reset_div_phase();
+        self.clock.during_div_write = false;
     }
 
     #[must_use]
@@ -336,9 +372,13 @@ impl<A: AudioCallback> Gb<A> {
             self.serial.master_edge(&mut self.ints);
         }
 
-        // advance APU on falling edge of APU_DIV bit
+        // The APU's frame sequencer follows the falling edge of an APU_DIV
+        // bit; a rising edge arms the envelopes.
         if triggers & apu_bit != 0 {
-            self.apu.step_div_apu();
+            let ctx = self.apu_ctx();
+            self.apu.div_event(&ctx);
+        } else if !self.clock.div & val & apu_bit != 0 {
+            self.apu.div_secondary_event();
         }
 
         self.clock.div = val;

@@ -30,7 +30,10 @@ use interrupts::Interrupts;
 use joypad::Joypad;
 use memory::{Key1, SpeedSwitch};
 use serial::Serial;
-use {apu::Apu, ppu::Ppu};
+use {
+    apu::{Apu, PostBoot},
+    ppu::Ppu,
+};
 pub use {
     apu::{AudioCallback, Sample},
     error::Error,
@@ -47,6 +50,8 @@ use {
 
 pub struct Gb<A: AudioCallback> {
     apu: Apu<A>,
+    /// Address the CPU last put on the bus (the APU's wave channel reads it).
+    address_bus: u16,
     bootrom: Bootrom,
     cart: Cartridge,
     cgb_mode: CgbMode,
@@ -186,64 +191,10 @@ impl<A: AudioCallback> Gb<A> {
         self.cpu.set_de(de);
         self.cpu.set_hl(hl);
 
-        // Initialize IO to standard post-boot values. The CGB boot ROM leaves
-        // most sound registers in distinct states from DMG, so we set them
-        // separately per model. The values come from the mooneye-test-suite
-        // boot_hwio-{dmg0,dmgABCmgb,S,C}.s sources (and SameBoy defaults).
-        // NR52 must be set FIRST so subsequent writes to NR10/NR11/etc. are
-        // not masked by the "APU off" zombie behavior.
-        self.write_mem(
-            0xFF26,
-            if matches!(self.model, Model::Sgb | Model::Sgb2) {
-                0xF0
-            } else {
-                0xF1
-            },
-        );
-        self.write_mem(0xFF10, 0x80);
-        self.write_mem(0xFF11, 0xBF);
-        self.write_mem(0xFF12, 0xF3);
-        self.write_mem(
-            0xFF14,
-            if matches!(self.model, Model::Sgb | Model::Sgb2) {
-                0x3F
-            } else {
-                0xBF
-            },
-        );
-        self.write_mem(0xFF16, 0x3F);
-        self.write_mem(0xFF17, 0x00);
-        self.write_mem(
-            0xFF19,
-            if matches!(self.model, Model::Sgb | Model::Sgb2) {
-                0x3F
-            } else {
-                0xBF
-            },
-        );
-        self.write_mem(0xFF1A, 0x7F);
-        self.write_mem(0xFF1C, 0x9F);
-        self.write_mem(
-            0xFF1E,
-            if matches!(self.model, Model::Sgb | Model::Sgb2) {
-                0x3F
-            } else {
-                0xBF
-            },
-        );
-        self.write_mem(0xFF20, 0xFF);
-        self.write_mem(0xFF21, 0x00);
-        self.write_mem(0xFF22, 0x00);
-        self.write_mem(
-            0xFF23,
-            if matches!(self.model, Model::Sgb | Model::Sgb2) {
-                0x3F
-            } else {
-                0xBF
-            },
-        );
-        self.write_mem(0xFF24, 0x77);
-        self.write_mem(0xFF25, 0xF3);
+        let cgb_cart = self.is_cgb() && self.cart.read_rom(0x0143) & 0x80 != 0;
+        // The boot ROM leaves the sound registers in a state that depends on
+        // the model and the boot time (see `PostBoot`).
+        self.apu.post_boot(PostBoot::new(self.model, cgb_cart));
         // P1, OBP0/OBP1, LCDC, STAT, LY, LYC, BGP, IF, IE per-model.
         // P1: $CF on DMG/DMG0/MGB, $FF on CGB/SGB.
         self.write_mem(
@@ -274,7 +225,6 @@ impl<A: AudioCallback> Gb<A> {
         // CGB hardware runs a longer boot sequence for DMG-only cartridges
         // (compatibility palettes), so they hand off in VBlank line 148; CGB
         // cartridges in line 144.
-        let cgb_cart = self.is_cgb() && self.cart.read_rom(0x0143) & 0x80 != 0;
         let (line, dot) = match self.model {
             Model::Dmg0 => (145, 101),
             Model::DmgB | Model::Mgb => (153, 405),
@@ -289,8 +239,6 @@ impl<A: AudioCallback> Gb<A> {
         };
         self.ppu.set_position(line, dot);
         if self.is_cgb() {
-            self.apu.set_ch1_output(0);
-            self.apu.set_ch1_duty_bit(1);
             self.write_mem(0xFF68, 0xC8);
             self.write_mem(0xFF6A, 0xD0);
             self.undoc_ff72 = 0x00;
@@ -455,11 +403,15 @@ impl<A: AudioCallback> Gb<A> {
         let cgb_mode = CgbMode::from(model);
         let clock = Clock::default();
 
+        let mut apu = Apu::new(sample_rate, audio_callback);
+        apu.set_model(model);
+
         Self {
             cgb_mode,
             cart,
             bootrom: Bootrom::new(model),
-            apu: Apu::new(sample_rate, audio_callback),
+            apu,
+            address_bus: 0,
             clock,
             cpu: Sm83::default(),
             dma: Dma::new(model),
@@ -482,6 +434,12 @@ impl<A: AudioCallback> Gb<A> {
             #[cfg(feature = "game_genie")]
             game_genie: GameGenie::default(),
         }
+    }
+
+    #[doc(hidden)]
+    #[must_use]
+    pub fn apu_debug_state(&self) -> alloc::string::String {
+        self.apu.debug_state()
     }
 
     #[must_use]

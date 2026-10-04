@@ -28,25 +28,14 @@ const TAC: u8 = 0x07;
 const IF: u8 = 0x0F;
 // APU
 const NR10: u8 = 0x10;
-const NR11: u8 = 0x11;
-const NR12: u8 = 0x12;
-const NR13: u8 = 0x13;
 const NR14: u8 = 0x14;
 const NR21: u8 = 0x16;
-const NR22: u8 = 0x17;
-const NR23: u8 = 0x18;
 const NR24: u8 = 0x19;
 const NR30: u8 = 0x1A;
-const NR31: u8 = 0x1B;
-const NR32: u8 = 0x1C;
-const NR33: u8 = 0x1D;
 const NR34: u8 = 0x1E;
 const NR41: u8 = 0x20;
-const NR42: u8 = 0x21;
-const NR43: u8 = 0x22;
 const NR44: u8 = 0x23;
 const NR50: u8 = 0x24;
-const NR51: u8 = 0x25;
 const NR52: u8 = 0x26;
 const WAV_BEG: u8 = 0x30;
 const WAV_END: u8 = 0x3F;
@@ -131,23 +120,9 @@ impl<A: AudioCallback> Gb<A> {
             TMA => self.clock.tma(),
             TAC => self.read_tac(),
             IF => self.ints.read_if(),
-            NR10 => self.apu.read_nr10(),
-            NR11 => self.apu.read_nr11(),
-            NR12 => self.apu.read_nr12(),
-            NR14 => self.apu.read_nr14(),
-            NR21 => self.apu.read_nr21(),
-            NR22 => self.apu.read_nr22(),
-            NR24 => self.apu.read_nr24(),
-            NR30 => self.apu.read_nr30(),
-            NR32 => self.apu.read_nr32(),
-            NR34 => self.apu.read_nr34(),
-            NR42 => self.apu.read_nr42(),
-            NR43 => self.apu.read_nr43(),
-            NR44 => self.apu.read_nr44(),
-            NR50 => self.apu.read_nr50(),
-            NR51 => self.apu.read_nr51(),
-            NR52 => self.apu.read_nr52(),
-            WAV_BEG..=WAV_END => self.apu.read_wave_ram(addr, self.is_cgb()),
+            NR10..=NR14 | NR21..=NR24 | NR30..=NR34 | NR41..=NR44 | NR50..=NR52 | WAV_BEG..=WAV_END => {
+                self.apu.read(usize::from(addr))
+            }
             LCDC => self.ppu.read_lcdc(),
             STAT => self.ppu.read_stat(),
             SCY => self.ppu.read_scy(),
@@ -181,28 +156,8 @@ impl<A: AudioCallback> Gb<A> {
             }
             OPRI if self.bootrom.is_enabled() => self.ppu.read_opri(),
             SVBK if matches!(self.cgb_mode, CgbMode::Cgb) => self.wram.svbk().read(),
-            PCM12 if self.is_cgb() => {
-                if matches!(
-                    self.model,
-                    Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC
-                ) || !self.apu.enabled()
-                {
-                    0x00
-                } else {
-                    self.apu.pcm12()
-                }
-            }
-            PCM34 if self.is_cgb() => {
-                if matches!(
-                    self.model,
-                    Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC
-                ) || !self.apu.enabled()
-                {
-                    0x00
-                } else {
-                    self.apu.pcm34()
-                }
-            }
+            PCM12 if self.is_cgb() => self.apu.pcm12(),
+            PCM34 if self.is_cgb() => self.apu.pcm34(),
             // Undocumented CGB registers. Per Pan Docs "FF72-FF73 — Bits 0-7
             // (CGB Mode only)": full R/W, init $00. "FF75 — Bits 4-6
             // (CGB Mode only)": bits 0-3 and 7 read as 1, bits 4-6 are R/W.
@@ -288,60 +243,10 @@ impl<A: AudioCallback> Gb<A> {
             TMA => self.write_tma(val),
             TAC => self.write_tac(val),
             IF => self.ints.write_if(val),
-            NR10 if self.apu.enabled() => self.apu.write_nr10(val),
-            NR11 => {
-                if self.apu.enabled() {
-                    self.apu.write_nr11(val);
-                } else if !self.is_cgb() {
-                    self.apu.write_nr11(val & 0x3F);
-                } else {
-                    // Don't write anything on CGB when APU is disabled
-                }
+            NR10..=NR14 | NR21..=NR24 | NR30..=NR34 | NR41..=NR44 | NR50..=NR52 | WAV_BEG..=WAV_END => {
+                let ctx = self.apu_ctx();
+                self.apu.write(&ctx, usize::from(addr), val);
             }
-            NR12 if self.apu.enabled() => self.apu.write_nr12(val),
-            NR13 if self.apu.enabled() => self.apu.write_nr13(val),
-            NR14 if self.apu.enabled() => self.apu.write_nr14(val),
-            NR21 => {
-                if self.apu.enabled() {
-                    self.apu.write_nr21(val);
-                } else if !self.is_cgb() {
-                    self.apu.write_nr21(val & 0x3F);
-                } else {
-                    // Don't write anything on CGB when APU is disabled
-                }
-            }
-            NR22 if self.apu.enabled() => self.apu.write_nr22(val),
-            NR23 if self.apu.enabled() => self.apu.write_nr23(val),
-            NR24 if self.apu.enabled() => self.apu.write_nr24(val),
-            NR30 if self.apu.enabled() => self.apu.write_nr30(val),
-            NR31 => {
-                if self.apu.enabled() || !self.is_cgb() {
-                    self.apu.write_nr31(val);
-                }
-            }
-            NR32 if self.apu.enabled() => self.apu.write_nr32(val),
-            NR33 if self.apu.enabled() => self.apu.write_nr33(val),
-            NR34 if self.apu.enabled() => self.apu.write_nr34(val, self.is_cgb()),
-            NR41 => {
-                if self.apu.enabled() || !self.is_cgb() {
-                    self.apu.write_nr41(val);
-                }
-            }
-            NR42 if self.apu.enabled() => self.apu.write_nr42(val),
-            NR43 if self.apu.enabled() => self.apu.write_nr43(val),
-            NR44 if self.apu.enabled() => self.apu.write_nr44(val),
-            NR50 => self.apu.write_nr50(val),
-            NR51 => self.apu.write_nr51(val),
-            NR52 => {
-                let div = self.read_div();
-                let div_bit = if self.key1.is_enabled() {
-                    div & 0x20 != 0
-                } else {
-                    div & 0x10 != 0
-                };
-                self.apu.write_nr52(val, div_bit, self.is_cgb());
-            }
-            WAV_BEG..=WAV_END => self.apu.write_wave_ram(addr, val, self.is_cgb()),
             LCDC => {
                 let is_cgb = self.is_cgb();
                 self.ppu.write_lcdc(val, &mut self.ints, is_cgb);
