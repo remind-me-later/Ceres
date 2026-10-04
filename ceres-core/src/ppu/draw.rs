@@ -35,7 +35,9 @@ impl Ppu {
         };
         match cgb_mode {
             CgbMode::Dmg => Self::mono_rgb(shade),
-            _ => self.bcp.rgb(out.bg_palette, shade, self.color_correction_mode),
+            _ => self
+                .bcp
+                .rgb(out.bg_palette, shade, self.color_correction_mode),
         }
     }
 

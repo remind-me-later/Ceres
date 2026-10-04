@@ -6,6 +6,7 @@ const MGB_BOOTROM: &[u8] = include_bytes!("../../external/gb-bootroms/bin/mgb.bi
 const SGB_BOOTROM: &[u8] = include_bytes!("../../external/gb-bootroms/bin/sgb.bin");
 const SGB2_BOOTROM: &[u8] = include_bytes!("../../external/gb-bootroms/bin/sgb2.bin");
 const CGB_BOOTROM: &[u8] = include_bytes!("../../external/gb-bootroms/bin/cgb.bin");
+const CGB0_BOOTROM: &[u8] = include_bytes!("../../external/gb-bootroms/bin/cgb0.bin");
 const CGB_E_BOOTROM: &[u8] = include_bytes!("../../external/gb-bootroms/bin/cgbE.bin");
 const AGB_BOOTROM: &[u8] = include_bytes!("../../external/gb-bootroms/bin/agb.bin");
 
@@ -35,7 +36,8 @@ impl Bootrom {
             Model::Sgb => SGB_BOOTROM,
             Model::Sgb2 => SGB2_BOOTROM,
             Model::CgbE => CGB_E_BOOTROM,
-            Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD => CGB_BOOTROM,
+            Model::Cgb0 => CGB0_BOOTROM,
+            Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD => CGB_BOOTROM,
             Model::Agb => AGB_BOOTROM,
         };
         Self {

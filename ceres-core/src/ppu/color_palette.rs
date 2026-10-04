@@ -226,6 +226,12 @@ impl ColorPalette {
             self.buffer[i + 2] = (val & 0x7C) >> 2;
         }
 
+        self.auto_increment();
+    }
+
+    /// A data write the PPU's palette access blocking dropped still advances
+    /// the index.
+    pub const fn auto_increment(&mut self) {
         if self.is_increment_enabled() {
             self.spec = (self.spec & 0x80) | (self.index() + 1) & 0x3F;
         }

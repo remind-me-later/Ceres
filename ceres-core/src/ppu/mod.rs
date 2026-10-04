@@ -1,6 +1,6 @@
 mod color_palette;
-mod draw;
 mod display;
+mod draw;
 mod oam;
 mod rgba_buf;
 mod vram;
@@ -17,7 +17,7 @@ pub const PX_HEIGHT: u8 = 144;
 const LCDC_ON_B: u8 = 0x80;
 
 // STAT bits
-pub(self) const STAT_MODE_B: u8 = 0x3;
+const STAT_MODE_B: u8 = 0x3;
 const STAT_LYC_B: u8 = 0x4;
 const STAT_IF_HBLANK_B: u8 = 0x8;
 const STAT_IF_VBLANK_B: u8 = 0x10;
@@ -44,7 +44,6 @@ pub enum Mode {
     Drawing = 3,
 }
 
-#[expect(clippy::struct_excessive_bools)]
 pub struct Ppu {
     model: Model,
     bcp: ColorPalette,
@@ -108,8 +107,13 @@ impl Default for Ppu {
 impl Ppu {
     #[must_use]
     pub fn new(model: Model) -> Self {
+        // Not deterministic on real hardware, but 00 (CGB) and FF (DMG) are
+        // by far the most common power-on values.
+        let obp = if model.is_cgb_hardware() { 0x00 } else { 0xFF };
         let mut ppu = Self {
             model,
+            obp0: obp,
+            obp1: obp,
             ..Self::default()
         };
         if model.is_cgb_hardware() {
@@ -173,11 +177,7 @@ impl Ppu {
     #[must_use]
     pub const fn fifo_position(&self) -> i16 {
         let p = self.d.position_in_line;
-        if p >= 240 {
-            p as i16 - 256
-        } else {
-            p as i16
-        }
+        if p >= 240 { p as i16 - 256 } else { p as i16 }
     }
 
     #[inline]
@@ -194,6 +194,16 @@ impl Ppu {
     #[must_use]
     pub const fn is_fetching_sprite(&self) -> bool {
         self.d.during_object_fetch
+    }
+
+    /// Whether `HBlank` was entered since the last call.
+    pub const fn take_hblank_hdma_edge(&mut self) -> bool {
+        core::mem::replace(&mut self.d.hblank_hdma_edge, false)
+    }
+
+    /// Whether the LCD was switched off in a non-zero mode since the last call.
+    pub const fn take_lcd_off_hdma_edge(&mut self) -> bool {
+        core::mem::replace(&mut self.d.lcd_off_hdma_edge, false)
     }
 
     /// SameBoy's `display_state`, for state-dependent register-write hacks.
@@ -277,7 +287,8 @@ impl Ppu {
         self.abort_object_fetch_on_obj_disable(val);
 
         self.lcdc = val;
-        self.d.schedule_wy_check(self.model.is_cgb_hardware(), self.double_speed);
+        self.d
+            .schedule_wy_check(self.model.is_cgb_hardware(), self.double_speed);
     }
 
     pub fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
@@ -304,22 +315,19 @@ impl Ppu {
         self.scx = val;
     }
 
-    pub const fn set_stat(&mut self, val: u8) {
-        self.stat = val;
-    }
-
-    /// Place the PPU on `line` in `mode`, `remaining_dots` before the end of
-    /// that line (test hook for post-boot state injection). The PPU is
-    /// restarted as if the LCD had just been turned on and run forward.
-    pub fn set_line_mode(&mut self, line: u8, mode: Mode, remaining_dots: i32) {
+    /// Place the PPU `dot` dots into `line` (post-boot state injection). The
+    /// PPU is restarted as if the LCD had just been turned on and run forward.
+    pub fn set_position(&mut self, line: u8, dot: i32) {
         if self.lcdc & LCDC_ON_B == 0 {
             return;
         }
         let mut ints = Interrupts::default();
         self.d.restart();
-        let target = LINE_LENGTH_DOTS - remaining_dots;
+        // `line_clock` restarts on every visible line and keeps running
+        // through VBlank, starting from line 144.
+        let base = i32::from(line.saturating_sub(144)) * LINE_LENGTH_DOTS;
         for _ in 0..(2 * 154 * 456) {
-            if self.d.current_line == line && self.mode() == mode && self.d.line_clock >= target {
+            if self.d.current_line == line && self.d.line_clock - base >= dot {
                 break;
             }
             self.run_display(&mut ints);
@@ -340,14 +348,15 @@ impl Ppu {
 
     pub fn write_wy(&mut self, val: u8) {
         self.wy = val;
-        self.d.schedule_wy_check(self.model.is_cgb_hardware(), self.double_speed);
+        self.d
+            .schedule_wy_check(self.model.is_cgb_hardware(), self.double_speed);
     }
 
     /// CGB palette RAM is blocked from the CPU while the PPU reads it.
     #[inline]
     #[must_use]
     pub const fn is_cgb_palettes_accessible(&self) -> bool {
-        true
+        !self.d.cgb_palettes_blocked
     }
 
     /// STOP-mode hooks (the PPU engine does not distinguish STOP yet).

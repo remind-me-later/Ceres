@@ -109,6 +109,25 @@ impl CompletionCheck for MooneyeCheck {
 /// `acceptance/add_sp_e_timing.gb`); `suite_root` selects which suite
 /// (`MOONEYE` or `WILBERTPOL`).
 fn run_test(suite_root: &str, relative_path: &str, model: Model) -> TestResult {
+    run_test_with_bootrom(suite_root, relative_path, model, false)
+}
+
+/// Runs a boot-state test twice: from the injected post-boot state and from
+/// the real boot ROM, which must leave the same machine behind.
+fn run_boot_test(suite_root: &str, relative_path: &str, model: Model) -> TestResult {
+    let skipped = run_test_with_bootrom(suite_root, relative_path, model, false);
+    if !skipped.is_passed() {
+        return skipped;
+    }
+    run_test_with_bootrom(suite_root, relative_path, model, true)
+}
+
+fn run_test_with_bootrom(
+    suite_root: &str,
+    relative_path: &str,
+    model: Model,
+    run_bootrom: bool,
+) -> TestResult {
     let path = format!("{suite_root}/{relative_path}");
     let rom = match load_test_rom(&path) {
         Ok(rom) => rom,
@@ -118,7 +137,7 @@ fn run_test(suite_root: &str, relative_path: &str, model: Model) -> TestResult {
     let config = TestConfig {
         model,
         timeout_frames: timeouts::MOONEYE_ACCEPTANCE,
-        run_bootrom: false,
+        run_bootrom,
         ..TestConfig::default()
     };
 
@@ -357,19 +376,19 @@ fn test_rst_timing() {
 
 #[test]
 fn test_boot_div2_s() {
-    let result = run_test(MOONEYE, "acceptance/boot_div2-S.gb", Model::Sgb2);
+    let result = run_boot_test(MOONEYE, "acceptance/boot_div2-S.gb", Model::Sgb2);
     assert!(result.is_passed(), "boot_div2-S test failed");
 }
 
 #[test]
 fn test_boot_div_cgb0() {
-    let result = run_test(MOONEYE, "misc/boot_div-cgb0.gb", Model::Cgb0);
+    let result = run_boot_test(MOONEYE, "misc/boot_div-cgb0.gb", Model::Cgb0);
     assert!(result.is_passed(), "boot_div-cgb0 test failed: {result:?}");
 }
 
 #[test]
 fn test_boot_div_cgbabcde() {
-    let result = run_test(MOONEYE, "misc/boot_div-cgbABCDE.gb", Model::CgbE);
+    let result = run_boot_test(MOONEYE, "misc/boot_div-cgbABCDE.gb", Model::CgbE);
     assert!(
         result.is_passed(),
         "boot_div-cgbABCDE test failed: {result:?}"
@@ -378,19 +397,19 @@ fn test_boot_div_cgbabcde() {
 
 #[test]
 fn test_boot_div_a() {
-    let result = run_test(MOONEYE, "misc/boot_div-A.gb", Model::Agb);
-    assert!(result.is_passed(), "boot_div-A test failed");
+    let result = run_boot_test(MOONEYE, "misc/boot_div-A.gb", Model::Agb);
+    assert!(result.is_passed(), "boot_div-A test failed: {result:?}");
 }
 
 #[test]
 fn test_boot_div_dmg0() {
-    let result = run_test(MOONEYE, "acceptance/boot_div-dmg0.gb", Model::Dmg0);
+    let result = run_boot_test(MOONEYE, "acceptance/boot_div-dmg0.gb", Model::Dmg0);
     assert!(result.is_passed(), "boot_div-dmg0 test failed");
 }
 
 #[test]
 fn test_boot_div_dmgabcmgb() {
-    let result = run_test(MOONEYE, "acceptance/boot_div-dmgABCmgb.gb", Model::DmgB);
+    let result = run_boot_test(MOONEYE, "acceptance/boot_div-dmgABCmgb.gb", Model::DmgB);
     assert!(
         result.is_passed(),
         "boot_div-dmgABCmgb test failed: {result:?}"
@@ -399,73 +418,73 @@ fn test_boot_div_dmgabcmgb() {
 
 #[test]
 fn test_boot_div_s() {
-    let result = run_test(MOONEYE, "acceptance/boot_div-S.gb", Model::Sgb);
+    let result = run_boot_test(MOONEYE, "acceptance/boot_div-S.gb", Model::Sgb);
     assert!(result.is_passed(), "boot_div-S test failed");
 }
 
 #[test]
 fn test_boot_hwio_c() {
-    let result = run_test(WILBERTPOL, "misc/boot_hwio-C.gb", Model::CgbE);
+    let result = run_boot_test(WILBERTPOL, "misc/boot_hwio-C.gb", Model::CgbE);
     assert_eq!(result, TestResult::Passed, "boot_hwio-C test failed");
 }
 
 #[test]
 fn test_boot_hwio_dmg0() {
-    let result = run_test(MOONEYE, "acceptance/boot_hwio-dmg0.gb", Model::Dmg0);
+    let result = run_boot_test(MOONEYE, "acceptance/boot_hwio-dmg0.gb", Model::Dmg0);
     assert_eq!(result, TestResult::Passed, "boot_hwio-dmg0 test failed");
 }
 
 #[test]
 fn test_boot_hwio_g() {
-    let result = run_test(WILBERTPOL, "acceptance/boot_hwio-G.gb", Model::DmgB);
+    let result = run_boot_test(WILBERTPOL, "acceptance/boot_hwio-G.gb", Model::DmgB);
     assert_eq!(result, TestResult::Passed, "boot_hwio-G test failed");
 }
 
 #[test]
 fn test_boot_hwio_s() {
-    let result = run_test(WILBERTPOL, "misc/boot_hwio-S.gb", Model::Sgb);
+    let result = run_boot_test(WILBERTPOL, "misc/boot_hwio-S.gb", Model::Sgb);
     assert_eq!(result, TestResult::Passed, "boot_hwio-S test failed");
 }
 
 #[test]
 fn test_boot_regs_a() {
-    let result = run_test(WILBERTPOL, "misc/boot_regs-A.gb", Model::Agb);
-    assert!(result.is_passed(), "boot_regs-A test failed");
+    let result = run_boot_test(WILBERTPOL, "misc/boot_regs-A.gb", Model::Agb);
+    assert!(result.is_passed(), "boot_regs-A test failed: {result:?}");
 }
 
 #[test]
 fn test_boot_regs_cgb() {
-    let result = run_test(WILBERTPOL, "misc/boot_regs-cgb.gb", Model::Cgb0);
+    let result = run_boot_test(WILBERTPOL, "misc/boot_regs-cgb.gb", Model::Cgb0);
     assert!(result.is_passed(), "boot_regs-cgb test failed");
 }
 
 #[test]
 fn test_boot_regs_dmg() {
-    let result = run_test(WILBERTPOL, "acceptance/boot_regs-dmg.gb", Model::DmgB);
+    let result = run_boot_test(WILBERTPOL, "acceptance/boot_regs-dmg.gb", Model::DmgB);
     assert!(result.is_passed(), "boot_regs-dmg test failed");
 }
 
 #[test]
 fn test_boot_regs_dmg0() {
-    let result = run_test(MOONEYE, "acceptance/boot_regs-dmg0.gb", Model::Dmg0);
+    let result = run_boot_test(MOONEYE, "acceptance/boot_regs-dmg0.gb", Model::Dmg0);
     assert!(result.is_passed(), "boot_regs-dmg0 test failed");
 }
 
 #[test]
 fn test_boot_regs_mgb() {
-    let result = run_test(WILBERTPOL, "misc/boot_regs-mgb.gb", Model::Mgb);
+    let result = run_boot_test(WILBERTPOL, "misc/boot_regs-mgb.gb", Model::Mgb);
     assert!(result.is_passed(), "boot_regs-mgb test failed");
 }
 
 #[test]
 fn test_boot_regs_sgb() {
-    let result = run_test(WILBERTPOL, "misc/boot_regs-sgb.gb", Model::Sgb);
+    let result = run_boot_test(WILBERTPOL, "misc/boot_regs-sgb.gb", Model::Sgb);
     assert!(result.is_passed(), "boot_regs-sgb test failed");
 }
 
 #[test]
 fn test_boot_regs_sgb2() {
-    let result = run_test(WILBERTPOL, "misc/boot_regs-sgb2.gb", Model::Sgb2);
+    let result = run_boot_test(WILBERTPOL, "misc/boot_regs-sgb2.gb", Model::Sgb2);
     assert!(result.is_passed(), "boot_regs-sgb2 test failed");
 }
 
@@ -1010,9 +1029,11 @@ fn test_gpu_ly143_144_mode3_0() {
     );
 }
 
+// The `-C` ly_* ROMs were measured on a CGB-D/E class unit: on CGB-C and
+// earlier LY reads 0 one M-cycle sooner on line 153.
 #[test]
 fn test_gpu_ly_lyc_0_c() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_lyc_0-C.gb", Model::CgbC);
+    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_lyc_0-C.gb", Model::CgbE);
     assert_eq!(result, TestResult::Passed, "gpu/ly_lyc_0-C test failed");
 }
 
@@ -1126,9 +1147,10 @@ fn test_gpu_ly_lyc_write_gs() {
     );
 }
 
+// See `test_gpu_ly_lyc_0_c` for the model choice.
 #[test]
 fn test_gpu_ly_new_frame_c() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_new_frame-C.gb", Model::CgbC);
+    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_new_frame-C.gb", Model::CgbE);
     assert_eq!(result, TestResult::Passed, "gpu/ly_new_frame-C test failed");
 }
 

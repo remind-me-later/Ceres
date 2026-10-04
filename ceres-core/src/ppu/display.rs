@@ -54,7 +54,14 @@ impl Fifo {
         item
     }
 
-    fn push_bg_row(&mut self, mut lower: u8, mut upper: u8, palette: u8, bg_priority: bool, flip_x: bool) {
+    fn push_bg_row(
+        &mut self,
+        mut lower: u8,
+        mut upper: u8,
+        palette: u8,
+        bg_priority: bool,
+        flip_x: bool,
+    ) {
         self.size = 8;
         for i in 0..8 {
             let pixel = if flip_x {
@@ -68,7 +75,12 @@ impl Fifo {
                 upper <<= 1;
                 p
             };
-            self.items[i] = Item { pixel, palette, priority: 0, bg_priority };
+            self.items[i] = Item {
+                pixel,
+                palette,
+                priority: 0,
+                bg_priority,
+            };
         }
     }
 
@@ -90,7 +102,12 @@ impl Fifo {
             let pixel = (lower >> 7) | ((upper >> 7) << 1);
             let target = &mut self.items[usize::from((self.read_end + (i ^ flip_xor)) & 7)];
             if pixel != 0 && (target.pixel == 0 || target.priority > priority) {
-                *target = Item { pixel, palette, priority, bg_priority };
+                *target = Item {
+                    pixel,
+                    palette,
+                    priority,
+                    bg_priority,
+                };
             }
             lower <<= 1;
             upper <<= 1;
@@ -115,6 +132,11 @@ pub(super) struct Display {
     pub state: u8,
     /// Dots left before the code following the current sleep runs.
     wait: i32,
+
+    /// The PPU entered `HBlank` (SameBoy state 33); consumed by the HDMA.
+    pub hblank_hdma_edge: bool,
+    /// The LCD was switched off with a non-zero STAT mode; consumed by the HDMA.
+    pub lcd_off_hdma_edge: bool,
 
     pub current_line: u8,
     /// `cycles_for_line`: SameBoy's line-length accounting.
@@ -237,6 +259,8 @@ impl Default for Display {
             lyc_interrupt_line: false,
             delayed_glitch_hblank_interrupt: false,
             line_clock: 0,
+            hblank_hdma_edge: false,
+            lcd_off_hdma_edge: false,
             oam_read_blocked: false,
             oam_write_blocked: false,
             vram_read_blocked: false,
@@ -353,6 +377,7 @@ impl Ppu {
     }
 
     pub(super) fn lcd_off(&mut self) {
+        self.d.lcd_off_hdma_edge = self.stat & super::STAT_MODE_B != 0;
         self.d.cfl = 0;
         self.d.state = 0;
         self.d.wait = 0;
@@ -545,7 +570,11 @@ impl Ppu {
                 };
                 self.d.last_tileset = self.lcdc & 0x10 != 0;
                 let tile_address = self.tile_address();
-                let y_flip = if self.d.current_tile_attributes & 0x40 != 0 { 7 } else { 0 };
+                let y_flip = if self.d.current_tile_attributes & 0x40 != 0 {
+                    7
+                } else {
+                    0
+                };
                 let low = self.d.fetcher_state == F_DATA_LOW_T1;
                 self.d.last_tile_data_address =
                     tile_address + u16::from((y & 7) ^ y_flip) * 2 + u16::from(!low);
@@ -643,7 +672,9 @@ impl Ppu {
 
         let attr = self.d.current_tile_attributes;
         let (low, high) = (self.d.current_tile_data[0], self.d.current_tile_data[1]);
-        self.d.bg_fifo.push_bg_row(low, high, attr & 7, attr & 0x80 != 0, attr & 0x20 != 0);
+        self.d
+            .bg_fifo
+            .push_bg_row(low, high, attr & 7, attr & 0x80 != 0, attr & 0x20 != 0);
         self.d.fetcher_state = F_GET_TILE_T1;
     }
 
@@ -653,9 +684,7 @@ impl Ppu {
 
     fn render_pixel_if_possible(&mut self) -> Option<PixelOut> {
         let obj_en = self.lcdc & 0x02 != 0 || self.hw_cgb();
-        if self.d.n_visible_objs != 0
-            && obj_en
-            && self.d.objects_x[self.d.n_visible_objs - 1] == 0
+        if self.d.n_visible_objs != 0 && obj_en && self.d.objects_x[self.d.n_visible_objs - 1] == 0
         {
             return None;
         }
@@ -783,10 +812,7 @@ impl Ppu {
             } else if u16::from(self.wx) < 166 + u16::from(hw) {
                 if self.wx == position.wrapping_add(7) {
                     should_activate = true;
-                } else if !hw
-                    && self.wx == position.wrapping_add(6)
-                    && !self.d.wx_just_changed
-                {
+                } else if !hw && self.wx == position.wrapping_add(6) && !self.d.wx_just_changed {
                     should_activate = true;
                     // LCD-PPU horizontal desync on DMG units.
                     if self.is_dmg_family() && self.d.lcd_x > 0 {
@@ -882,14 +908,26 @@ impl Ppu {
                     }
                     entry = 103;
                 }
-                27 => entry = if self.d.object_fetch_aborted { 130 } else { 102 },
+                27 => {
+                    entry = if self.d.object_fetch_aborted {
+                        130
+                    } else {
+                        102
+                    }
+                }
                 103 => {
                     self.advance_fetcher();
                     self.d.cfl += 1;
                     self.sleep(41, 1);
                     return Mode3Flow::Slept;
                 }
-                41 => entry = if self.d.object_fetch_aborted { 130 } else { 104 },
+                41 => {
+                    entry = if self.d.object_fetch_aborted {
+                        130
+                    } else {
+                        104
+                    }
+                }
                 104 => {
                     self.advance_fetcher();
                     let base = u16::from(self.d.visible_objs[self.d.n_visible_objs - 1]) * 4;
@@ -899,7 +937,13 @@ impl Ppu {
                     self.sleep(20, 2);
                     return Mode3Flow::Slept;
                 }
-                20 => entry = if self.d.object_fetch_aborted { 130 } else { 105 },
+                20 => {
+                    entry = if self.d.object_fetch_aborted {
+                        130
+                    } else {
+                        105
+                    }
+                }
                 105 => {
                     let n = self.d.n_visible_objs;
                     self.d.object_low_line_address = self.object_line_address(
@@ -912,7 +956,13 @@ impl Ppu {
                     self.sleep(39, 2);
                     return Mode3Flow::Slept;
                 }
-                39 => entry = if self.d.object_fetch_aborted { 130 } else { 106 },
+                39 => {
+                    entry = if self.d.object_fetch_aborted {
+                        130
+                    } else {
+                        106
+                    }
+                }
                 106 => {
                     self.d.during_object_fetch = false;
                     self.d.cfl += 1;
@@ -922,8 +972,7 @@ impl Ppu {
                         self.d.mode2_y_bus,
                         self.d.object_flags,
                     );
-                    self.d.object_tile_data[1] =
-                        self.vram_read(self.d.object_low_line_address + 1);
+                    self.d.object_tile_data[1] = self.vram_read(self.d.object_low_line_address + 1);
                     self.sleep(40, 1);
                     return Mode3Flow::Slept;
                 }
@@ -948,11 +997,7 @@ impl Ppu {
                         priority,
                         flags & 0x20 != 0,
                     );
-                    self.d.data_for_sel_glitch =
-                        self.vram_read(self.d.object_low_line_address + 1);
-                    if std::env::var("CERES_OBJ").is_ok() && (68..72).contains(&self.d.current_line) {
-                        eprintln!("OBJ ly={} pos={} idx={} x={} flags={:02x} data={:02x},{:02x} prio={} fifo_size={}", self.d.current_line, self.d.position_in_line, self.d.visible_objs[n-1], self.d.objects_x[n-1], flags, low, high, priority, self.d.oam_fifo.size);
-                    }
+                    self.d.data_for_sel_glitch = self.vram_read(self.d.object_low_line_address + 1);
                     self.d.n_visible_objs -= 1;
                     entry = 101;
                 }
@@ -1007,11 +1052,7 @@ impl Ppu {
         if self.d.current_line == 143 {
             self.d.window_y = 0xFF;
         }
-        if !self.hw_cgb()
-            && self.d.wy_triggered
-            && self.lcdc & 0x20 != 0
-            && self.wx == 166
-        {
+        if !self.hw_cgb() && self.d.wy_triggered && self.lcdc & 0x20 != 0 && self.wx == 166 {
             self.d.wx_triggered = true;
             self.d.window_tile_x = 1;
             self.d.window_y = self.d.window_y.wrapping_add(1);
@@ -1116,7 +1157,6 @@ impl Ppu {
 
         let mut state = self.d.state;
         loop {
-            if std::env::var("CERES_TRACE").is_ok() { eprintln!("S{state} line={} cfl={} ly={} stat={:02x}", self.d.current_line, self.d.cfl, self.ly, self.stat); }
             match state {
                 // ---- start of a frame after LCD on ----
                 0 => {
@@ -1299,6 +1339,7 @@ impl Ppu {
                 }
                 33 => {
                     self.d.cgb_palettes_blocked = !self.double_speed();
+                    self.d.hblank_hdma_edge = true;
                     self.d.cfl += 2;
                     self.sleep(36, 2);
                     return;
@@ -1440,8 +1481,12 @@ impl Ppu {
                 }
                 15 => {
                     self.ly = 0;
-                    self.d.ly_for_comparison =
-                        if model_ge_cgb_d(self.model) || self.double_speed() { 153 } else { -1 };
+                    self.d.ly_for_comparison = if model_ge_cgb_d(self.model) || self.double_speed()
+                    {
+                        153
+                    } else {
+                        -1
+                    };
                     self.stat_update(ints);
                     self.sleep(16, 4);
                     return;
@@ -1489,10 +1534,7 @@ impl Ppu {
 
     /// DMG: disabling objects while an object is being fetched aborts it.
     pub(super) fn abort_object_fetch_on_obj_disable(&mut self, val: u8) {
-        if !self.hw_cgb()
-            && self.lcdc & 0x02 != 0
-            && val & 0x02 == 0
-            && self.d.during_object_fetch
+        if !self.hw_cgb() && self.lcdc & 0x02 != 0 && val & 0x02 == 0 && self.d.during_object_fetch
         {
             self.d.cfl -= self.d.wait - 1;
             self.d.wait = 1;

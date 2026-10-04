@@ -33,6 +33,17 @@ impl Default for Dma {
 }
 
 impl Dma {
+    /// The DMA register powers on as 00 on CGB and FF on DMG hardware.
+    #[must_use]
+    pub const fn new(model: Model) -> Self {
+        Self {
+            accumulator: 0,
+            base_addr: 0,
+            reg: if model.is_cgb_hardware() { 0x00 } else { 0xFF },
+            state: DmaState::Inactive,
+        }
+    }
+
     pub const fn advance_dots(&mut self, dots: i32) {
         if !matches!(self.state, DmaState::Inactive) {
             #[expect(clippy::cast_sign_loss, clippy::cast_possible_truncation)]

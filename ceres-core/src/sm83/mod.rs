@@ -1,6 +1,6 @@
 pub mod conflict;
 
-use crate::{AudioCallback, CgbMode, Gb, Model};
+use crate::{AudioCallback, Gb, Model};
 use conflict::ConflictType;
 use core::mem;
 
@@ -39,9 +39,6 @@ pub trait Bus {
     /// stay deferred across the step boundary.
     fn defer(&mut self, t_cycles: i32);
 
-    /// Current CGB operating mode.
-    fn is_cgb_mode(&self) -> CgbMode;
-
     /// `(IF & IE) != 0` — some enabled interrupt line is asserted.
     fn interrupts_pending(&self) -> bool;
 
@@ -59,6 +56,16 @@ pub trait Bus {
 
     /// Run a pending HDMA transfer chunk, if any.
     fn tick_hdma(&mut self);
+
+    /// The CPU entered (or, with `false`, left) HALT.
+    fn set_halted(&mut self, halted: bool);
+
+    /// Advance the machine by `dots` T-cycles immediately (nothing is
+    /// deferred when this is called at the start of a step).
+    fn advance(&mut self, dots: i32);
+
+    /// Whether the machine is CGB hardware (regardless of ROM mode).
+    fn is_cgb_hardware(&self) -> bool;
 
     /// Cancel STOP mode (`ppu.leave_stop_mode` + unfreeze the clock).
     fn wake_from_stop(&mut self);
@@ -81,16 +88,15 @@ pub struct Sm83 {
     af: u16,
     bc: u16,
     de: u16,
-    has_ei_delay: bool,
-    just_halted_from_ei: bool,
+    ime_toggle: bool,
+    just_halted: bool,
     hl: u16,
     ime: bool,
-    is_halt_bug_triggered: bool,
+    halt_bug: bool,
     is_halted: bool,
     has_executed_illegal_opcode: bool,
     ld_b_b_breakpoint: bool,
     pc: u16,
-    skip_isr_nops: bool,
     sp: u16,
 }
 
@@ -189,117 +195,109 @@ impl Sm83 {
     /// it will clear IME again; if it's anything else, IME will stay true
     /// through subsequent step calls.
     pub fn step<B: Bus>(&mut self, bus: &mut B) {
-        let effective_ime = self.ime;
-        let was_ei_delay = self.has_ei_delay;
-        if self.has_ei_delay {
-            self.has_ei_delay = false;
-            self.ime = true;
+        // Port of SameBoy's `GB_cpu_run` control flow. All time of the
+        // previous instruction has been flushed, so interrupt lines are
+        // sampled with the hardware at instruction end.
+        let cgb = bus.is_cgb_hardware();
+
+        // While halted, DMG samples the interrupt lines two dots into each
+        // 4-dot step; CGB (and the first step after HALT) samples at the start.
+        if self.is_halted && !cgb && !self.just_halted {
+            bus.advance(2);
         }
 
-        if bus.interrupts_pending() {
-            let was_halted = self.is_halted;
-            self.is_halted = false;
-            bus.wake_from_stop();
-
-            if effective_ime {
-                if self.is_halt_bug_triggered {
-                    self.pc = self.pc.wrapping_sub(1);
-                    self.is_halt_bug_triggered = false;
-                }
-
-                if !self.skip_isr_nops {
-                    bus.tick();
-                    bus.tick();
-                }
-                self.skip_isr_nops = false;
-                bus.tick();
-
-                if was_halted && (bus.is_cgb_mode() != CgbMode::Dmg || self.just_halted_from_ei) {
-                    bus.tick();
-                }
-                self.just_halted_from_ei = false;
-
-                let pc = self.pc;
-                let [lo, hi] = pc.to_le_bytes();
-
-                // Push Hi. The write lands after all preceding M-cycles
-                // flush; IF/IE are sampled at that same instant, before the
-                // push's own M-cycle elapses.
-                self.sp = self.sp.wrapping_sub(1);
-                bus.write(self.sp, hi);
-
-                // Push Lo. SameBoy re-evaluates IF/IE *after* the Lo push
-                // finishes, using the value from BEFORE the write if it's to
-                // IF or IE. Both the re-evaluation and the acknowledgement
-                // happen at the write's access instant.
-                self.sp = self.sp.wrapping_sub(1);
-
-                let is_if_write = self.sp == 0xFF0F;
-                let is_ie_write = self.sp == 0xFFFF;
-
-                let ifr_pre = if is_if_write { bus.read_if() & 0x1F } else { 0 };
-                let ie_pre = if is_ie_write { bus.read_ie() & 0x1F } else { 0 };
-
-                bus.write(self.sp, lo);
-
-                let ifr = if is_if_write {
-                    ifr_pre
-                } else {
-                    bus.read_if() & 0x1F
-                };
-                let ie = if is_ie_write {
-                    ie_pre
-                } else {
-                    bus.read_ie() & 0x1F
-                };
-
-                let queue = ie & ifr;
-                let (final_int, final_vector) = if queue != 0 {
-                    let tz = (queue.trailing_zeros() & 7) as u8;
-                    (1 << tz, 0x40 | (u16::from(tz) << 3))
-                } else {
-                    (0, 0x0000)
-                };
-
-                if final_int != 0 {
-                    bus.ack_interrupt(final_int);
-                }
-
-                if final_int != 0 {
-                    self.pc = final_vector;
-                } else {
-                    self.pc = 0x0000;
-                }
-
-                self.ime = false;
-
-                bus.defer(2);
-
-                return;
-            } else if was_halted {
-                bus.tick();
-            }
-        }
-
-        // HDMA runs independently of the CPU and is evaluated at
-        // instruction-start time, before any M-cycle of this step elapses.
-        // It must run even during HALT or HDMA will never start after HALT.
-        bus.tick_hdma();
+        let interrupt_pending = bus.interrupts_pending();
 
         if self.is_halted {
-            bus.tick();
-        } else {
+            bus.advance(if cgb || self.just_halted { 4 } else { 2 });
+        }
+        self.just_halted = false;
+
+        let effective_ime = self.ime;
+        if self.ime_toggle {
+            self.ime = !self.ime;
+            self.ime_toggle = false;
+        }
+
+        if self.is_halted && !effective_ime && interrupt_pending {
+            // Wake up from HALT without calling the interrupt code.
+            self.is_halted = false;
+            bus.wake_from_stop();
+        } else if effective_ime && interrupt_pending {
+            self.is_halted = false;
+            bus.wake_from_stop();
+            self.dispatch_interrupt(bus);
+            return;
+        }
+
+        if !self.is_halted {
             let op = bus.read(self.pc);
             self.pc = self.pc.wrapping_add(1);
 
-            if self.is_halt_bug_triggered {
+            // A pending HDMA burst steals the bus right after the opcode
+            // fetch, while the fetch's M-cycle is still pending.
+            bus.tick_hdma();
+
+            if self.halt_bug {
                 self.pc = self.pc.wrapping_sub(1);
-                self.is_halt_bug_triggered = false;
-                self.skip_isr_nops = true;
+                self.halt_bug = false;
             }
 
-            self.exec(bus, op, was_ei_delay);
+            self.exec(bus, op);
         }
+    }
+
+    /// The five-M-cycle interrupt dispatch (SameBoy: fetch, OAM-bug cycle,
+    /// internal cycle, push high, push low).
+    fn dispatch_interrupt<B: Bus>(&mut self, bus: &mut B) {
+        bus.tick();
+        bus.tick();
+        bus.tick();
+
+        let [lo, hi] = self.pc.to_le_bytes();
+
+        // Push Hi. The write lands after all preceding M-cycles flush.
+        self.sp = self.sp.wrapping_sub(1);
+        bus.write(self.sp, hi);
+
+        // Push Lo. IF/IE are re-evaluated after the Lo push finishes, using
+        // the value from BEFORE the write if it targets IF or IE.
+        self.sp = self.sp.wrapping_sub(1);
+
+        let is_if_write = self.sp == 0xFF0F;
+        let is_ie_write = self.sp == 0xFFFF;
+
+        let ifr_pre = if is_if_write { bus.read_if() & 0x1F } else { 0 };
+        let ie_pre = if is_ie_write { bus.read_ie() & 0x1F } else { 0 };
+
+        bus.write(self.sp, lo);
+
+        let ifr = if is_if_write {
+            ifr_pre
+        } else {
+            bus.read_if() & 0x1F
+        };
+        let ie = if is_ie_write {
+            ie_pre
+        } else {
+            bus.read_ie() & 0x1F
+        };
+
+        let queue = ie & ifr;
+
+        // Two of the last M-cycle's four dots elapse before the interrupt is
+        // acknowledged and the vector is chosen.
+        bus.defer(2);
+
+        if queue != 0 {
+            let bit = (queue.trailing_zeros() & 7) as u8;
+            bus.ack_interrupt(1 << bit);
+            self.pc = 0x40 | (u16::from(bit) << 3);
+        } else {
+            self.pc = 0x0000;
+        }
+
+        self.ime = false;
     }
 }
 
@@ -555,11 +553,7 @@ impl Sm83 {
 
 // Instructions
 impl Sm83 {
-    fn exec(&mut self, bus: &mut impl Bus, op: u8, was_ei_delay: bool) {
-        if op != 0x76 {
-            self.just_halted_from_ei = false;
-        }
-
+    fn exec(&mut self, bus: &mut impl Bus, op: u8) {
         match op {
             0x00 | 0x5B | 0x6D | 0x7F | 0x49 | 0x52 | 0x64 => self.nop(),
             0x01 | 0x11 | 0x21 | 0x31 => self.ld_rr_d16(bus, op),
@@ -599,7 +593,7 @@ impl Sm83 {
             | 0x5E | 0x5F | 0x58 | 0x59 | 0x60 | 0x61 | 0x62 | 0x63 | 0x65 | 0x66 | 0x67 | 0x6A
             | 0x6B | 0x6C | 0x6E | 0x6F | 0x68 | 0x69 | 0x7A | 0x7B | 0x7C | 0x7D | 0x7E | 0x78
             | 0x79 | 0x77 | 0x70 | 0x73 | 0x72 | 0x71 | 0x74 | 0x75 => self.ld(bus, op),
-            0x76 => self.halt(bus, was_ei_delay),
+            0x76 => self.halt(bus),
             0x80..=0x87 => self.add_a_r(bus, op),
             0x88..=0x8F => self.adc_a_r(bus, op),
             0x90..=0x97 => self.sub_a_r(bus, op),
@@ -869,29 +863,38 @@ impl Sm83 {
     }
 
     const fn di(&mut self) {
+        // DI is NOT delayed, not even on a CGB.
         self.ime = false;
-        self.has_ei_delay = false;
     }
 
     const fn ei(&mut self) {
-        self.has_ei_delay = true;
+        // EI disables interrupts for one more instruction, then enables them.
+        if !self.ime && !self.ime_toggle {
+            self.ime_toggle = true;
+        }
     }
 
-    fn halt(&mut self, bus: &impl Bus, was_ei_delay: bool) {
-        if !bus.interrupts_pending() {
-            self.is_halted = true;
-            self.just_halted_from_ei = was_ei_delay;
-        } else if self.ime {
-            self.is_halted = false;
+    fn halt(&mut self, bus: &mut impl Bus) {
+        // The HALT bug also happens on a CGB, in both CGB and DMG modes.
+        if bus.interrupts_pending() {
+            if self.ime {
+                self.is_halted = false;
+                self.pc = self.pc.wrapping_sub(1);
+            } else {
+                self.is_halted = false;
+                self.halt_bug = true;
+            }
         } else {
-            self.is_halted = false;
-            self.is_halt_bug_triggered = true;
+            self.is_halted = true;
+            bus.set_halted(true);
         }
+        self.just_halted = true;
     }
 
     fn illegal(&mut self, bus: &mut impl Bus, _op: u8) {
         bus.clear_ie();
         self.is_halted = true;
+        bus.set_halted(true);
         self.has_executed_illegal_opcode = true;
     }
 
@@ -1609,10 +1612,6 @@ impl<A: AudioCallback> Bus for Gb<A> {
         self.time_deferred = t_cycles;
     }
 
-    fn is_cgb_mode(&self) -> CgbMode {
-        self.cgb_mode
-    }
-
     fn interrupts_pending(&self) -> bool {
         self.ints.is_any_requested()
     }
@@ -1634,12 +1633,30 @@ impl<A: AudioCallback> Bus for Gb<A> {
     }
 
     fn tick_hdma(&mut self) {
-        self.run_hdma();
+        if self.hdma.is_on() {
+            self.run_hdma();
+        }
+    }
+
+    fn set_halted(&mut self, halted: bool) {
+        let hblank = matches!(self.ppu.mode(), crate::ppu::Mode::HBlank);
+        self.hdma.set_cpu_halted(halted, hblank);
+    }
+
+    fn advance(&mut self, dots: i32) {
+        self.advance_dots(dots);
+    }
+
+    fn is_cgb_hardware(&self) -> bool {
+        self.model.is_cgb_hardware()
     }
 
     fn wake_from_stop(&mut self) {
         self.ppu.leave_stop_mode();
         self.clock.stopped = false;
+        let hblank = matches!(self.ppu.mode(), crate::ppu::Mode::HBlank);
+        self.hdma.set_cpu_halted(false, hblank);
+        self.hdma.wake(hblank);
     }
 
     fn enter_stop(&mut self, ime: bool) {
@@ -1649,6 +1666,8 @@ impl<A: AudioCallback> Bus for Gb<A> {
         }
         self.ppu.enter_stop_mode();
         self.clock.stopped = true;
+        self.hdma
+            .note_stop(matches!(self.ppu.mode(), crate::ppu::Mode::HBlank));
     }
 
     fn speed_switch_pending(&self) -> bool {

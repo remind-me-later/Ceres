@@ -43,7 +43,7 @@ pub struct Clock {
 impl Default for Clock {
     fn default() -> Self {
         Self {
-            div: 0,
+            div: 8,
             tac: 0,
             tima: 0,
             tma: 0,
@@ -102,7 +102,12 @@ impl<A: AudioCallback> Gb<A> {
         self.ppu_t_credit += cpu_t_cycles;
         while self.ppu_t_credit >= t_cycles_per_dot {
             self.ppu_t_credit -= t_cycles_per_dot;
-            self.ppu.tick_t_cycle(&mut self.ints, self.cgb_mode, self.key1.is_enabled());
+            self.ppu
+                .tick_t_cycle(&mut self.ints, self.cgb_mode, self.key1.is_enabled());
+        }
+
+        if self.ppu.take_hblank_hdma_edge() {
+            self.hdma.hblank_edge(self.clock.stopped);
         }
 
         self.run_dma();

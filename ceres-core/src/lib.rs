@@ -262,18 +262,25 @@ impl<A: AudioCallback> Gb<A> {
         self.write_mem(0xFF4B, 0x00);
         // LCDC: $91 on all models.
         self.write_mem(0xFF40, 0x91);
-        // STAT: $83 on SGB/CGB (mode 3 + LYC set), $80 on DMG/MGB, $81 on DMG-0 (VBlank).
-        self.ppu.set_stat(match self.model {
-            Model::DmgB | Model::Mgb => 0x80,
-            _ => 0x83,
-        });
-        if matches!(self.model, Model::Dmg0) {
-            self.ppu.set_line_mode(145, ppu::Mode::VBlank, 65 * 4);
-        }
         self.write_mem(0xFF45, 0x00);
         self.dma.set_reg(if self.is_cgb() { 0x00 } else { 0xFF });
         // BGP: $FC on all models.
         self.write_mem(0xFF47, 0xFC);
+        // Where the boot ROM leaves the PPU: measured by running the real boot
+        // ROMs (the hand-off write plus the M-cycle that follows it). DMG and
+        // SGB hand off in the tail of line 153 (LY already reads 0); the
+        // others in VBlank.
+        let (line, dot) = match self.model {
+            Model::Dmg0 => (145, 101),
+            Model::DmgB | Model::Mgb => (153, 405),
+            // The SGB boot ROM transmits the cartridge header, so its length
+            // varies a little with the cartridge (values for the mooneye ROMs).
+            Model::Sgb => (153, 173),
+            Model::Sgb2 => (153, 161),
+            Model::Agb => (148, 365),
+            _ => (148, 361),
+        };
+        self.ppu.set_position(line, dot);
         if self.is_cgb() {
             self.apu.set_ch1_output(0);
             self.apu.set_ch1_duty_bit(1);
@@ -304,10 +311,9 @@ impl<A: AudioCallback> Gb<A> {
                 u16::from_str_radix(val.trim_start_matches("0x"), 16).unwrap_or(0x2678)
             } else {
                 match self.model {
-                    Model::CgbE => 0x2678,
-                    Model::CgbC => 0x2678, // close enough
                     Model::Cgb0 => 0x2884, // CGB-CPU 0 has different phase
-                    _ => 0x2678,           // CGB A/B/D also use 0x2678
+                    Model::Agb => 0x267C,
+                    _ => 0x2678,
                 }
             };
         } else {
@@ -328,11 +334,8 @@ impl<A: AudioCallback> Gb<A> {
             } else {
                 match self.model {
                     Model::Dmg0 => 0x1830,
-                    Model::DmgB => 0xABCC,
-                    Model::Mgb => 0xABCC,
                     Model::Sgb => 0xD860,
                     Model::Sgb2 => 0xD850,
-                    Model::Agb => 0x267C,
                     _ => 0xABCC,
                 }
             };
@@ -474,7 +477,7 @@ impl<A: AudioCallback> Gb<A> {
             apu: Apu::new(sample_rate, audio_callback),
             clock,
             cpu: Sm83::default(),
-            dma: Dma::default(),
+            dma: Dma::new(model),
             dots_ran: Default::default(),
             hdma: Hdma::default(),
             hram: Hram::default(),
@@ -498,10 +501,7 @@ impl<A: AudioCallback> Gb<A> {
     #[must_use]
     #[inline]
     pub const fn is_cgb(&self) -> bool {
-        matches!(
-            self.model,
-            Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD | Model::CgbE
-        )
+        self.model.is_cgb_hardware()
     }
 
     #[must_use]
@@ -599,13 +599,13 @@ impl<A: AudioCallback> Gb<A> {
         self.apu.reset();
         self.clock = Clock::default();
         self.cpu = Sm83::default();
-        self.dma = Dma::default();
+        self.dma = Dma::new(self.model);
         self.hdma = Hdma::default();
         self.ints = Interrupts::default();
         self.key1 = Key1::default();
         self.ppu_t_credit = 0;
         self.time_deferred = 0;
-        self.ppu = Ppu::default();
+        self.ppu = Ppu::new(self.model);
         self.serial = Serial::default();
         self.bootrom.enable();
     }

@@ -50,6 +50,16 @@ impl Vram {
         self.bytes[i as usize] = val;
     }
 
+    /// HDMA write into the selected bank; `mirror` also writes the other bank.
+    pub fn write_hdma(&mut self, addr: u16, val: u8, mirror: bool) {
+        let bank = u16::from(self.vbk) * Self::SIZE_GB;
+        self.bytes[((addr & 0x1FFF) + bank) as usize] = val;
+        if mirror {
+            let other = (1 - u16::from(self.vbk)) * Self::SIZE_GB;
+            self.bytes[((addr & 0x1FFF) + other) as usize] = val;
+        }
+    }
+
     pub const fn write_vbk(&mut self, val: u8) {
         self.vbk = val & 1 != 0;
     }

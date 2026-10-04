@@ -152,7 +152,7 @@ impl<A: AudioCallback> Gb<A> {
             STAT => self.ppu.read_stat(),
             SCY => self.ppu.read_scy(),
             SCX => self.ppu.read_scx(),
-            LY => { let v = self.ppu.read_ly(); if std::env::var("CERES_LYR").is_ok() { eprintln!("LYR {v}"); } v }
+            LY => self.ppu.read_ly(),
             LYC => self.ppu.read_lyc(),
             DMA => self.dma.read(),
             BGP => self.ppu.read_bgp(),
@@ -221,15 +221,7 @@ impl<A: AudioCallback> Gb<A> {
         match addr {
             0x0000..=0x00FF => self.read_boot_or_cart(addr),
             0x0200..=0x08FF => {
-                if matches!(
-                    self.model,
-                    Model::Cgb0
-                        | Model::CgbA
-                        | Model::CgbB
-                        | Model::CgbC
-                        | Model::CgbD
-                        | Model::CgbE
-                ) {
+                if self.model.is_cgb_hardware() {
                     self.read_boot_or_cart(addr)
                 } else {
                     #[cfg(feature = "game_genie")]
@@ -340,6 +332,9 @@ impl<A: AudioCallback> Gb<A> {
             LCDC => {
                 let is_cgb = self.is_cgb();
                 self.ppu.write_lcdc(val, &mut self.ints, is_cgb);
+                if self.ppu.take_lcd_off_hdma_edge() {
+                    self.hdma.lcd_off_edge();
+                }
             }
             STAT => {
                 let is_cgb = self.is_cgb();
@@ -370,26 +365,31 @@ impl<A: AudioCallback> Gb<A> {
                     self.bootrom.disable();
                 }
             }
-            VBK if self.is_cgb() => self.ppu.vram_mut().write_vbk(val),
+            VBK if matches!(self.cgb_mode, CgbMode::Cgb) => self.ppu.vram_mut().write_vbk(val),
             KEY1 if matches!(self.cgb_mode, CgbMode::Cgb) => self.key1.write(val),
             HDMA1 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.write_hdma1(val),
             HDMA2 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.write_hdma2(val),
             HDMA3 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.write_hdma3(val),
             HDMA4 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.write_hdma4(val),
             HDMA5 if matches!(self.cgb_mode, CgbMode::Cgb) => {
-                let in_hblank = matches!(self.ppu.mode(), ppu::Mode::HBlank);
+                let in_hblank =
+                    matches!(self.ppu.mode(), ppu::Mode::HBlank) && self.ppu.display_state() != 7;
                 self.hdma.write_hdma5(val, in_hblank);
             }
             BCPS if self.is_cgb() => self.ppu.bcp_mut().set_spec(val),
             BCPD if self.are_cgb_regs_available() => {
                 if self.ppu.is_cgb_palettes_accessible() {
                     self.ppu.bcp_mut().set_data(val);
+                } else {
+                    self.ppu.bcp_mut().auto_increment();
                 }
             }
             OCPS if self.is_cgb() => self.ppu.ocp_mut().set_spec(val),
             OCPD if self.are_cgb_regs_available() => {
                 if self.ppu.is_cgb_palettes_accessible() {
                     self.ppu.ocp_mut().set_data(val);
+                } else {
+                    self.ppu.ocp_mut().auto_increment();
                 }
             }
             OPRI if self.is_cgb() => {

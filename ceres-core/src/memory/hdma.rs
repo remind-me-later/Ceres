@@ -1,60 +1,47 @@
-use crate::{AudioCallback, Gb, ppu};
+//! CGB general-purpose and `HBlank` DMA.
+//!
+//! Port of SameBoy's `GB_hdma_run`: a transfer is started by the CPU at an
+//! opcode fetch (so it steals time from the instruction being executed), the
+//! whole burst is one uninterrupted loop of 2 dots per byte (4 in double
+//! speed) framed by a 2-dot lead-in and, in single speed, a 2-dot tail.
 
-#[expect(
-    clippy::arbitrary_source_item_ordering,
-    reason = "Order follows the state machine transitions"
-)]
-#[derive(Default)]
-pub enum HdmaState {
-    #[default]
-    Sleep,
-    WaitHBlank,
-    HBlankDone,
-    General,
-}
+use crate::{AudioCallback, Gb};
 
 #[derive(Default)]
 pub struct Hdma {
+    /// STAT mode was non-zero when the CPU last halted/stopped; an `HBlank`
+    /// transfer only starts on wake-up if so.
+    allow_on_wake: bool,
+    cpu_halted: bool,
     dst: u16,
-    hdma5: u8,
-    len: u16,
-    src: u16,
-    state: HdmaState,
-    /// When starting HBlank DMA, if already in HBlank, start immediately
-    start_immediately: bool,
     in_progress: bool,
+    on: bool,
+    on_hblank: bool,
+    src: u16,
+    steps_left: u16,
 }
 
 impl Hdma {
     #[must_use]
-    const fn is_on(&self) -> bool {
-        !matches!(self.state, HdmaState::Sleep)
-    }
-
-    #[must_use]
-    #[allow(
-        dead_code,
-        reason = "Used by cycle-accurate timing path (see TIMING_ISSUE.md); \
-                  currently dead after the scanline PPU revert"
-    )]
-    pub const fn is_active(&self) -> bool {
-        self.in_progress
+    pub const fn is_on(&self) -> bool {
+        self.on
     }
 
     #[must_use]
     pub const fn read_hdma5(&self) -> u8 {
         // active on low
-        ((!self.is_on() as u8) << 7) | self.hdma5
+        (((!(self.on || self.on_hblank)) as u8) << 7)
+            | (self.steps_left.wrapping_sub(1) & 0x7F) as u8
     }
 
     #[must_use]
     pub const fn is_transferring(&self) -> bool {
-        matches!(self.state, HdmaState::General)
+        self.in_progress
     }
 
     #[must_use]
     pub const fn has_multiple_steps_left(&self) -> bool {
-        self.len > 0x10
+        self.steps_left > 1
     }
 
     #[must_use]
@@ -62,116 +49,118 @@ impl Hdma {
         (self.dst & 0xF) == 0xF
     }
 
+    pub const fn set_cpu_halted(&mut self, halted: bool, mode_is_hblank: bool) {
+        self.cpu_halted = halted;
+        if halted {
+            self.allow_on_wake = !mode_is_hblank;
+        }
+    }
+
+    pub const fn note_stop(&mut self, mode_is_hblank: bool) {
+        self.allow_on_wake = !mode_is_hblank;
+    }
+
+    /// Wake-up from HALT/STOP or interrupt dispatch.
+    pub const fn wake(&mut self, mode_is_hblank: bool) {
+        if self.on_hblank && mode_is_hblank && self.allow_on_wake {
+            self.on = true;
+        }
+    }
+
+    /// The PPU reached the start of `HBlank`.
+    pub const fn hblank_edge(&mut self, stopped: bool) {
+        if self.on_hblank && !self.cpu_halted && !stopped {
+            self.on = true;
+        }
+    }
+
+    /// The LCD was switched off while STAT reported a non-zero mode.
+    pub const fn lcd_off_edge(&mut self) {
+        if self.on_hblank {
+            self.on = true;
+        }
+    }
+
     pub fn write_hdma1(&mut self, val: u8) {
-        self.src = (u16::from(val) << 8) | (self.src & 0xF0);
+        self.src = (self.src & 0xF0) | (u16::from(val) << 8);
+        // Range 0xE*** acts like 0xF*** and can't overflow to anything
+        // meaningful.
         if self.src >= 0xE000 {
             self.src |= 0xF000;
         }
     }
 
-    pub fn write_hdma2(&mut self, val: u8) {
-        self.src = (self.src & 0xFF00) | u16::from(val & 0xF0);
+    pub const fn write_hdma2(&mut self, val: u8) {
+        self.src = (self.src & 0xFF00) | (val & 0xF0) as u16;
     }
 
     pub fn write_hdma3(&mut self, val: u8) {
-        self.dst = (u16::from(val & 0x1F) << 8) | (self.dst & 0xF0);
+        self.dst = (self.dst & 0xF0) | (u16::from(val) << 8);
     }
 
-    pub fn write_hdma4(&mut self, val: u8) {
-        self.dst = (self.dst & 0x1F00) | u16::from(val & 0xF0);
+    pub const fn write_hdma4(&mut self, val: u8) {
+        self.dst = (self.dst & 0xFF00) | (val & 0xF0) as u16;
     }
 
-    pub fn write_hdma5(&mut self, val: u8, in_hblank: bool) {
-        use HdmaState::{General, Sleep, WaitHBlank};
-
-        debug_assert!(
-            !matches!(self.state, HdmaState::General),
-            "HDMA transfer in progress, cannot write HDMA5"
-        );
-
-        // stop current transfer
-        if self.is_on() && val & 0x80 == 0 {
-            self.state = Sleep;
+    /// `in_hblank`: STAT mode is 0 and the PPU is not at the HBlank/OAM edge.
+    pub const fn write_hdma5(&mut self, val: u8, in_hblank: bool) {
+        self.steps_left = (val & 0x7F) as u16 + 1;
+        if val & 0x80 == 0 && self.on_hblank {
+            // Cancel the running HBlank transfer.
+            self.on_hblank = false;
             return;
         }
-
-        self.hdma5 = val & 0x7F;
-        self.len = (u16::from(self.hdma5) + 1) * 0x10;
-
-        if val & 0x80 == 0 {
-            self.state = General;
-            self.start_immediately = false;
-        } else {
-            self.state = WaitHBlank;
-            // If we're already in HBlank when starting HBlank DMA, start immediately
-            self.start_immediately = in_hblank;
+        self.on = val & 0x80 == 0;
+        self.on_hblank = val & 0x80 != 0;
+        if self.on_hblank && in_hblank {
+            self.on = true;
         }
     }
 }
 
 impl<A: AudioCallback> Gb<A> {
-    #[inline]
+    /// Runs a pending transfer burst. Called right after an opcode fetch,
+    /// while that fetch's M-cycle is still pending.
     pub fn run_hdma(&mut self) {
-        use HdmaState::{General, HBlankDone, Sleep, WaitHBlank};
-
-        let in_hblank = matches!(self.ppu.mode(), ppu::Mode::HBlank);
-
-        match self.hdma.state {
-            General => (),
-            WaitHBlank if in_hblank || self.hdma.start_immediately => {
-                self.hdma.start_immediately = false;
-            }
-            HBlankDone if !in_hblank => {
-                self.hdma.state = WaitHBlank;
-                return;
-            }
-            _ => return,
-        }
-
-        let len = if matches!(self.hdma.state, WaitHBlank) {
-            self.hdma.len -= 0x10;
-            self.hdma.state = if self.hdma.len == 0 {
-                Sleep
-            } else {
-                HBlankDone
-            };
-            self.hdma.hdma5 = ((self.hdma.len / 0x10).wrapping_sub(1) & 0xFF) as u8;
-            0x10
-        } else {
-            self.hdma.state = Sleep;
-            self.hdma.hdma5 = 0xFF;
-            let len = self.hdma.len;
-            self.hdma.len = 0;
-            len
-        };
-
-        let cycles_per_byte = if self.key1.is_enabled() { 4 } else { 2 };
+        let cycles = if self.key1.is_enabled() { 4 } else { 2 };
 
         self.hdma.in_progress = true;
+        self.advance_dots(cycles);
 
-        for _ in 0..len {
-            // Valid GDMA/HDMA source ranges (aligned with SameBoy GB_hdma_run):
-            //   0x0000–0x7FFF  ROM
-            //   0xA000–0xBFFF  external (cart) RAM
-            //   0xC000–0xDFFF  WRAM (and 0xE000–0xFDFF echo)
-            // All other regions (VRAM 0x8000–0x9FFF, OAM 0xFE00–0xFEFF,
-            // HRAM/IO 0xFF00–0xFFFF) return 0xFF during the transfer.
-            let val = match self.hdma.src {
-                0x0000..=0x7FFF | 0xA000..=0xBFFF | 0xC000..=0xDFFF | 0xE000..=0xFDFF => {
-                    self.read_mem(self.hdma.src)
-                }
+        while self.hdma.on {
+            let src = self.hdma.src;
+            // Valid sources: ROM, cart RAM and WRAM. Anything else
+            // (VRAM, echo RAM, OAM, I/O) yields the open bus.
+            let byte = match src {
+                0x0000..=0x7FFF | 0xA000..=0xDFFF => self.read_mem(src),
                 _ => 0xFF,
             };
-            // HDMA destination is always VRAM (0x8000-0x9FFF). The raw
-            // register values (0xFF53, 0xFF54) store only the offset
-            // within VRAM; the 0x8000 base is added at transfer time
-            // (matches gambatte memory.cpp:375: mm_vram_begin | dmaDest).
-            self.ppu.write_vram(0x8000 | self.hdma.dst, val);
+            self.hdma.src = src.wrapping_add(1);
+
+            self.advance_dots(cycles);
+
+            // The destination is always VRAM, written directly: the PPU's
+            // access blocking does not apply, but a write during a blocked
+            // phase lands in both banks.
+            let addr = self.hdma.dst & 0x1FFF;
             self.hdma.dst = self.hdma.dst.wrapping_add(1);
-            self.hdma.src = self.hdma.src.wrapping_add(1);
-            self.advance_dots(cycles_per_byte);
+            let mirror = self.ppu.vram_write_blocked();
+            self.ppu.vram_mut().write_hdma(addr, byte, mirror);
+
+            if self.hdma.dst & 0xF == 0 {
+                self.hdma.steps_left = self.hdma.steps_left.wrapping_sub(1);
+                if self.hdma.steps_left == 0 || self.hdma.dst == 0 {
+                    self.hdma.on = false;
+                    self.hdma.on_hblank = false;
+                } else if self.hdma.on_hblank {
+                    self.hdma.on = false;
+                }
+            }
         }
 
         self.hdma.in_progress = false;
+        if !self.key1.is_enabled() {
+            self.advance_dots(2);
+        }
     }
 }
