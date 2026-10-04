@@ -120,9 +120,12 @@ impl<A: AudioCallback> Gb<A> {
             TMA => self.clock.tma(),
             TAC => self.read_tac(),
             IF => self.ints.read_if(),
-            NR10..=NR14 | NR21..=NR24 | NR30..=NR34 | NR41..=NR44 | NR50..=NR52 | WAV_BEG..=WAV_END => {
-                self.apu.read(usize::from(addr))
-            }
+            NR10..=NR14
+            | NR21..=NR24
+            | NR30..=NR34
+            | NR41..=NR44
+            | NR50..=NR52
+            | WAV_BEG..=WAV_END => self.apu.read(usize::from(addr)),
             LCDC => self.ppu.read_lcdc(),
             STAT => self.ppu.read_stat(),
             SCY => self.ppu.read_scy(),
@@ -243,7 +246,12 @@ impl<A: AudioCallback> Gb<A> {
             TMA => self.write_tma(val),
             TAC => self.write_tac(val),
             IF => self.ints.write_if(val),
-            NR10..=NR14 | NR21..=NR24 | NR30..=NR34 | NR41..=NR44 | NR50..=NR52 | WAV_BEG..=WAV_END => {
+            NR10..=NR14
+            | NR21..=NR24
+            | NR30..=NR34
+            | NR41..=NR44
+            | NR50..=NR52
+            | WAV_BEG..=WAV_END => {
                 let ctx = self.apu_ctx();
                 self.apu.write(&ctx, usize::from(addr), val);
             }

@@ -140,6 +140,17 @@ impl<A: AudioCallback> Gb<A> {
     /// Javanainen. The values are also cross-checked against SameBoy's own
     /// post-boot state in `gb.c::GB_reset_internal`.
     pub fn skip_bootrom(&mut self) {
+        if matches!(self.model, Model::Sgb | Model::Sgb2) {
+            // The SGB boot ROM transmits the cartridge header to the SGB, so
+            // how long it takes (and with it DIV at the hand-off) depends on
+            // the header: run it (it takes a fraction of a second).
+            self.bootrom.enable();
+            while self.bootrom.is_enabled() {
+                self.step_cpu();
+            }
+            return;
+        }
+
         self.bootrom.disable();
 
         // CPU perfectly aligned post-bootrom. The test ROM starts at $0100
@@ -149,13 +160,13 @@ impl<A: AudioCallback> Gb<A> {
         self.cpu.set_pc(0x0100);
         self.cpu.set_sp(0xFFFE);
 
+        let cgb_cart = self.is_cgb() && self.cart.read_rom(0x0143) & 0x80 != 0;
         if self.is_cgb() {
-            let cgb_flag = self.cart.read_rom(0x0143);
-            if cgb_flag & 0x80 != 0 {
-                self.cgb_mode = CgbMode::Cgb;
+            self.cgb_mode = if cgb_cart {
+                CgbMode::Cgb
             } else {
-                self.cgb_mode = CgbMode::Compat;
-            }
+                CgbMode::Compat
+            };
         }
 
         // Per-model post-boot register values. Each line documents the source:
@@ -163,10 +174,8 @@ impl<A: AudioCallback> Gb<A> {
         //   DMG-ABC   → acceptance/boot_regs-dmgABC.s (pass: DMG ABC)
         //   MGB       → acceptance/boot_regs-mgb.s    (pass: MGB)
         //   SGB/SGB2  → acceptance/boot_regs-sgb{,2}.s (pass: SGB{,2})
-        //   CGB-0     → misc/boot_regs-cgb.s          (F=$80 variant: CGB-0)
-        //   CGB-ABCDE → misc/boot_regs-cgb.s          (F=$B0 variant: CGB A-E)
+        //   CGB       → misc/boot_regs-cgb.s          (pass: CGB, every revision)
         //   AGB       → misc/boot_regs-A.s            (pass: AGB, AGS)
-        //   DMG-0     → acceptance/boot_regs-dmg0.s   (pass: DMG 0)
         //   SGB/SGB2  → acceptance/boot_regs-sgb{,2}.s (A differs: SGB=$01, SGB2=$FF)
         let (af, bc, de, hl) = match self.model {
             Model::Dmg0 => (0x0100, 0xFF13, 0x00C1, 0x8403), // DMG-0
@@ -174,19 +183,28 @@ impl<A: AudioCallback> Gb<A> {
             Model::Mgb => (0xFFB0, 0x0013, 0x00D8, 0x014D),  // MGB
             Model::Sgb => (0x0100, 0x0014, 0x0000, 0xC060),  // SGB (A=$01)
             Model::Sgb2 => (0xFF00, 0x0014, 0x0000, 0xC060), // SGB2 (A=$FF)
-            Model::Cgb0 => (0x1180, 0x0000, 0x0008, 0x007C), // CGB-CPU 0
-            Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD => {
-                (0x11B0, 0x0013, 0x00D8, 0x014D) // CGB-ABCDE
+            // The CGB boot ROMs (measured): DMG-only cartridges get the
+            // compatibility values, CGB cartridges DE = $FF56 and HL = $000D.
+            Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD | Model::CgbE => {
+                if cgb_cart {
+                    (0x1180, 0x0000, 0xFF56, 0x000D)
+                } else {
+                    (0x1180, 0x0000, 0x0008, 0x007C)
+                }
             }
-            Model::CgbE => (0x11B0, 0x0013, 0x00D8, 0x014D), // CGB-E
-            Model::Agb => (0x1100, 0x0100, 0x0008, 0x007C),  // AGB
+            Model::Agb => {
+                if cgb_cart {
+                    (0x1100, 0x0100, 0xFF56, 0x000D)
+                } else {
+                    (0x1100, 0x0100, 0x0008, 0x007C)
+                }
+            }
         };
         self.cpu.set_af(af);
         self.cpu.set_bc(bc);
         self.cpu.set_de(de);
         self.cpu.set_hl(hl);
 
-        let cgb_cart = self.is_cgb() && self.cart.read_rom(0x0143) & 0x80 != 0;
         // The boot ROM leaves the sound registers in a state that depends on
         // the model and the boot time (see `PostBoot`).
         self.apu.post_boot(PostBoot::new(self.model, cgb_cart));
@@ -306,6 +324,13 @@ impl<A: AudioCallback> Gb<A> {
         self.cpu.a()
     }
 
+    /// Read the current value of the CPU flags register F.
+    #[must_use]
+    #[inline]
+    pub const fn cpu_f(&self) -> u8 {
+        (self.cpu.af() & 0xFF) as u8
+    }
+
     #[must_use]
     #[inline]
     pub const fn timer_debug(&self) -> (u16, u8, u8, u8) {
@@ -414,7 +439,7 @@ impl<A: AudioCallback> Gb<A> {
             hdma: Hdma::default(),
             hram: Hram::default(),
             ints: Interrupts::default(),
-            joy: Joypad::default(),
+            joy: Joypad::new(matches!(model, Model::Sgb | Model::Sgb2)),
             key1: Key1::default(),
             speed_switch: SpeedSwitch::default(),
             model,

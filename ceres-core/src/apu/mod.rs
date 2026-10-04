@@ -334,7 +334,9 @@ impl<A: AudioCallback> Apu<A> {
     }
 
     pub fn reset(&mut self) {
-        let wave: [u8; 0x10] = self.regs[WAV_START..=WAV_END].try_into().unwrap_or([0; 0x10]);
+        let wave: [u8; 0x10] = self.regs[WAV_START..=WAV_END]
+            .try_into()
+            .unwrap_or([0; 0x10]);
         self.s = State::default();
         self.s.pcm_mask = [0xFF; 2];
         self.regs = [0; 0x40];
@@ -429,7 +431,12 @@ impl<A: AudioCallback> Apu<A> {
         } else {
             0
         });
-        value & if self.rank() <= 13 { self.s.pcm_mask[0] } else { 0xFF }
+        value
+            & if self.rank() <= 13 {
+                self.s.pcm_mask[0]
+            } else {
+                0xFF
+            }
     }
 
     #[must_use]
@@ -443,7 +450,12 @@ impl<A: AudioCallback> Apu<A> {
         } else {
             0
         });
-        value & if self.rank() <= 13 { self.s.pcm_mask[1] } else { 0xFF }
+        value
+            & if self.rank() <= 13 {
+                self.s.pcm_mask[1]
+            } else {
+                0xFF
+            }
     }
 
     // -- DAC / mixing -----------------------------------------------------
@@ -531,8 +543,8 @@ impl<A: AudioCallback> Apu<A> {
         }
         let duty = self.regs[if index == SQUARE_1 { NR11 } else { NR21 }] >> 6;
         let volume = self.s.squares[index].current_volume;
-        let on = DUTIES[usize::from(self.s.squares[index].current_sample_index)
-            + usize::from(duty) * 8]
+        let on = DUTIES
+            [usize::from(self.s.squares[index].current_sample_index) + usize::from(duty) * 8]
             != 0;
         self.update_sample(index, if on { volume } else { 0 });
     }
@@ -915,7 +927,8 @@ impl<A: AudioCallback> Apu<A> {
             let nr42 = self.regs[NR42];
             self.s.noise.volume_countdown = nr42 & 7;
             let volume = self.s.noise.current_volume;
-            self.s.noise
+            self.s
+                .noise
                 .envelope_clock
                 .set(nr42 & 7 != 0, nr42 & 8 != 0, volume);
         }
@@ -938,7 +951,8 @@ impl<A: AudioCallback> Apu<A> {
             let mut cycles_left = cycles;
             while cycles_left != 0 {
                 cycles_left -= 1;
-                self.s.wave.bugged_read_countdown = self.s.wave.bugged_read_countdown.wrapping_sub(1);
+                self.s.wave.bugged_read_countdown =
+                    self.s.wave.bugged_read_countdown.wrapping_sub(1);
                 if self.s.wave.bugged_read_countdown == 0 {
                     self.s.wave.current_sample_byte =
                         self.regs[WAV_START + usize::from(ctx.address_bus & 0xF)];
@@ -1047,7 +1061,8 @@ impl<A: AudioCallback> Apu<A> {
                 while cycles_left > u32::from(self.s.wave.sample_countdown) {
                     cycles_left -= u32::from(self.s.wave.sample_countdown) + 1;
                     self.s.wave.sample_countdown = self.s.wave.sample_length ^ 0x7FF;
-                    self.s.wave.current_sample_index = (self.s.wave.current_sample_index + 1) & 0x1F;
+                    self.s.wave.current_sample_index =
+                        (self.s.wave.current_sample_index + 1) & 0x1F;
                     self.s.wave.current_sample_byte =
                         self.regs[WAV_START + usize::from(self.s.wave.current_sample_index >> 1)];
                     self.update_wave_sample();
@@ -1220,17 +1235,9 @@ impl<A: AudioCallback> Apu<A> {
 
         if divisor > 1 && self.s.noise.counter_countdown == 1 {
             self.s.noise.counter = (self.s.noise.counter + 1) & 0x3FFF;
-        } else if divisor > 1
-            && self.s.noise.counter_countdown == 2
-            && active
-            && rank <= 13
-            && ds
-        {
+        } else if divisor > 1 && self.s.noise.counter_countdown == 2 && active && rank <= 13 && ds {
             self.s.noise.counter = (self.s.noise.counter + 1) & 0x3FFF;
-        } else if self.s.noise.counter_countdown == 2
-            && self.s.noise.alignment & 3 == 0
-            && active
-        {
+        } else if self.s.noise.counter_countdown == 2 && self.s.noise.alignment & 3 == 0 && active {
             if divisor == 0 {
                 divisor = 8;
             } else if divisor == 1 {
@@ -1341,7 +1348,8 @@ impl<A: AudioCallback> Apu<A> {
         let new_bit = bit(effective_counter, new >> 4);
         let mut force_glitch = false;
 
-        if self.model == Model::CgbD && new_bit && glitch_bit && old_bit && (old ^ new) & 0x70 != 0 {
+        if self.model == Model::CgbD && new_bit && glitch_bit && old_bit && (old ^ new) & 0x70 != 0
+        {
             force_glitch = true;
         }
 
@@ -1496,7 +1504,11 @@ impl<A: AudioCallback> Apu<A> {
             m
         };
 
-        let map = if old & 0x80 != 0 { &GLITCH_MAP_H2L } else { &GLITCH_MAP_L2H };
+        let map = if old & 0x80 != 0 {
+            &GLITCH_MAP_H2L
+        } else {
+            &GLITCH_MAP_L2H
+        };
         let mut glitch = u32::from(map[usize::from(((old & 0x70) >> 1) | ((new & 0x70) >> 4))]);
         if force_glitch {
             if (new ^ old) & 0x80 == 0 {
@@ -1621,7 +1633,11 @@ impl<A: AudioCallback> Apu<A> {
             3 | 5 => {
                 if glitch == 5 {
                     if self.s.noise.lfsr & 0x3 == 2 {
-                        self.s.noise.lfsr &= if self.s.noise.narrow { !0x4040 } else { !0x4000 };
+                        self.s.noise.lfsr &= if self.s.noise.narrow {
+                            !0x4040
+                        } else {
+                            !0x4000
+                        };
                     }
                     if self.s.noise.lfsr & 0x19 == 8 {
                         self.s.noise.lfsr &= !8;
@@ -1638,7 +1654,11 @@ impl<A: AudioCallback> Apu<A> {
                 let prev = self.s.noise.lfsr;
                 self.step_lfsr();
                 self.s.noise.lfsr &= prev
-                    | if self.s.noise.narrow { !0x2022 } else { !0x2002 };
+                    | if self.s.noise.narrow {
+                        !0x2022
+                    } else {
+                        !0x2002
+                    };
             }
             _ => self.step_lfsr(),
         }
@@ -1865,7 +1885,11 @@ impl<A: AudioCallback> Apu<A> {
                         divisor = 2;
                     }
                     let align = usize::from(self.s.noise.alignment & 3);
-                    let table: [u8; 4] = if rank > 13 { [2, 1, 0, 3] } else { [2, 1, 4, 3] };
+                    let table: [u8; 4] = if rank > 13 {
+                        [2, 1, 0, 3]
+                    } else {
+                        [2, 1, 4, 3]
+                    };
                     self.s.noise.counter_countdown =
                         divisor + if divisor == 2 { 0 } else { table[align] };
                 }
@@ -2027,9 +2051,8 @@ impl<A: AudioCallback> Apu<A> {
                 } else {
                     self.s.sweep_length_addend = 0;
                 }
-                self.s.channel_1_restart_hold = 2
-                    - self.s.lf_div
-                    + u8::from(cgb && self.model != Model::CgbD) * 2;
+                self.s.channel_1_restart_hold =
+                    2 - self.s.lf_div + u8::from(cgb && self.model != Model::CgbD) * 2;
                 self.s.square_sweep_countdown = ((self.regs[NR10] >> 4) & 7) ^ 7;
             }
         }
