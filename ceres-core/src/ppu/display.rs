@@ -155,6 +155,10 @@ pub(super) struct Display {
     oam_search_index: u8,
     /// OAM row the PPU is reading (DMG OAM bug); `NO_ROW` when none.
     pub accessed_oam_row: u8,
+    /// OAM index the DMA is writing (`0xA1`: no transfer).
+    pub dma_dest: u8,
+    /// The CPU is halted or stopped.
+    pub cpu_idle: bool,
     mode2_y_bus: u8,
     mode2_x_bus: u8,
     object_flags: u8,
@@ -225,6 +229,8 @@ impl Default for Display {
             objects_y: [0; 10],
             oam_search_index: 0,
             accessed_oam_row: NO_ROW,
+            dma_dest: 0xA1,
+            cpu_idle: false,
             mode2_y_bus: 0,
             mode2_x_bus: 0,
             object_flags: 0,
@@ -402,12 +408,31 @@ impl Ppu {
     // Mode 2 object search
     // ---------------------------------------------------------------------
 
+    /// OAM as seen by the PPU's object search: while a DMA runs it sees the
+    /// byte pair the DMA is writing.
+    fn oam_read_for_search(&self, addr: u16) -> u8 {
+        let dest = self.d.dma_dest;
+        if dest <= 0xA0 && dest > 0 && dest != 0xA0 {
+            return self.oam.read(u16::from(dest & !1) | (addr & 1));
+        }
+        self.oam.read(addr)
+    }
+
     fn add_object_from_index(&mut self, index: u8) {
         let base = u16::from(index) * 4;
-        self.d.mode2_y_bus = self.oam.read(base);
-        self.d.mode2_x_bus = self.oam.read(base + 1);
+        let dma_active = self.d.dma_dest != 0xA1;
+        if !dma_active || self.d.cpu_idle {
+            self.d.mode2_y_bus = self.oam_read_for_search(base);
+            self.d.mode2_x_bus = self.oam_read_for_search(base + 1);
+        }
 
         if self.d.n_visible_objs == 10 {
+            return;
+        }
+
+        // A halted DMA blocks the object search on everything before CGB-E
+        // (pre-CGB units vary; like SameBoy this reads 0xFF there).
+        if dma_active && self.d.cpu_idle && !matches!(self.model, Model::CgbE | Model::Agb) {
             return;
         }
 
@@ -1532,6 +1557,29 @@ enum Mode3Flow {
 }
 
 impl Ppu {
+    /// The DMA copies `dest` (an OAM index, `0xA1` when idle) next.
+    pub const fn set_dma_dest(&mut self, dest: u8) {
+        self.d.dma_dest = dest;
+    }
+
+    pub const fn set_cpu_idle(&mut self, idle: bool) {
+        self.d.cpu_idle = idle;
+    }
+
+    /// The DMA's last cycle: during the OAM scan edge it raises the mode 2
+    /// bits (SameBoy `GB_dma_run`).
+    pub fn dma_finished(&mut self, ints: &mut Interrupts) {
+        if self.d.state == 8 {
+            self.stat |= 2;
+            self.stat_update(ints);
+        }
+    }
+
+    /// Re-evaluates the STAT interrupt line (after a DMA start).
+    pub fn refresh_stat(&mut self, ints: &mut Interrupts) {
+        self.stat_update(ints);
+    }
+
     /// Called by the CPU's LCDC write handler: disabling the window while a
     /// window tile is being fetched suppresses the pixel-insertion glitch.
     pub fn note_window_disable(&mut self, old: u8, new: u8) {

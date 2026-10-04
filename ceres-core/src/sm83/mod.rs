@@ -64,6 +64,10 @@ pub trait Bus {
     /// The DMG OAM bug for an address placed on the bus (no time passes).
     fn trigger_oam_bug(&mut self, addr: u16);
 
+    /// Runs the OAM DMA for the cycles it is owed (0 unless `wake` is set; on
+    /// a wake-up the DMA is given one M-cycle).
+    fn dma_run(&mut self, wake: bool);
+
     /// Discards the time deferred so far (it was already accounted for).
     fn drop_deferred(&mut self);
 
@@ -230,6 +234,7 @@ impl Sm83 {
             bus.advance(4);
             if bus.peek(0xFF00) & 0xF != 0xF {
                 bus.leave_stop();
+                bus.dma_run(true);
                 bus.advance(8);
             }
             return;
@@ -262,9 +267,11 @@ impl Sm83 {
             // Wake up from HALT without calling the interrupt code.
             self.is_halted = false;
             bus.wake_from_stop();
+            bus.dma_run(true);
         } else if effective_ime && interrupt_pending {
             self.is_halted = false;
             bus.wake_from_stop();
+            bus.dma_run(true);
             self.dispatch_interrupt(bus);
             return;
         }
@@ -1373,6 +1380,9 @@ impl Sm83 {
         let interrupt_pending = bus.interrupts_pending();
 
         if !exit_by_joyp {
+            if !immediate_exit {
+                bus.dma_run(false);
+            }
             bus.enter_stop(self.ime);
         }
 
@@ -1389,9 +1399,11 @@ impl Sm83 {
 
         if immediate_exit {
             bus.leave_stop();
+            bus.dma_run(true);
             if interrupt_pending {
                 bus.clear_speed_switch_halt();
             } else {
+                bus.dma_run(false);
                 self.is_halted = true;
                 self.just_halted = true;
                 bus.set_halted(true);
@@ -1677,6 +1689,13 @@ impl<A: AudioCallback> Bus for Gb<A> {
         self.ppu.trigger_oam_bug(addr);
     }
 
+    fn dma_run(&mut self, wake: bool) {
+        if wake {
+            self.dma.add_cycles(4);
+        }
+        self.run_dma();
+    }
+
     fn drop_deferred(&mut self) {
         self.time_deferred = 0;
     }
@@ -1684,6 +1703,8 @@ impl<A: AudioCallback> Bus for Gb<A> {
     fn set_halted(&mut self, halted: bool) {
         let hblank = matches!(self.ppu.mode(), crate::ppu::Mode::HBlank);
         self.hdma.set_cpu_halted(halted, hblank);
+        self.ppu
+            .set_cpu_idle(self.hdma.cpu_halted() || self.clock.stopped);
     }
 
     fn advance(&mut self, dots: i32) {
@@ -1705,6 +1726,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
         let hblank = matches!(self.ppu.mode(), crate::ppu::Mode::HBlank);
         self.hdma.set_cpu_halted(false, hblank);
         self.hdma.wake(hblank);
+        self.ppu.set_cpu_idle(false);
     }
 
     fn flush(&mut self) {
@@ -1734,6 +1756,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
         }
         self.ppu.enter_stop_mode();
         self.clock.stopped = true;
+        self.ppu.set_cpu_idle(true);
         self.hdma
             .note_stop(matches!(self.ppu.mode(), crate::ppu::Mode::HBlank));
     }

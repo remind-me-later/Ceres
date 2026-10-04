@@ -109,6 +109,9 @@ impl<A: AudioCallback> Gb<A> {
             }
         }
 
+        // The OAM DMA is clocked by the CPU clock, whatever the speed.
+        self.dma.add_cycles(cycles);
+
         // Cycle-accurate timer advancement (per T-cycle, for accurate TIMA
         // reload timing).
         self.run_timers(cycles);
@@ -130,9 +133,6 @@ impl<A: AudioCallback> Gb<A> {
             cycles -= freeze;
             self.speed_switch.freeze = 0;
         }
-
-        // DMA advances per dot.
-        self.dma.advance_dots(cycles);
 
         // Advance the PPU dot by dot. One PPU dot is one CPU T-cycle in
         // single speed and two in double speed (the PPU's real-time rate

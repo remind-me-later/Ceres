@@ -219,10 +219,13 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     pub fn cpu_read_mem(&mut self, addr: u16) -> u8 {
         if (0xFE00..=0xFEFF).contains(&addr) {
-            let dma_blocked = self.dma.blocks_oam();
+            let dma_blocked = self.dma.blocks_oam_read();
             return self.ppu.cpu_read_oam_area(addr, dma_blocked);
         }
-        self.read_mem(addr)
+        match self.dma_read_redirect(addr) {
+            Some(addr) => self.read_mem(addr),
+            None => 0xFF,
+        }
     }
 
     #[must_use]
@@ -263,7 +266,7 @@ impl<A: AudioCallback> Gb<A> {
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.read_wram_lo(addr),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.read_wram_hi(addr),
             0xFE00..=0xFE9F => {
-                if self.dma.blocks_oam() {
+                if self.dma.blocks_oam_read() {
                     0xFF
                 } else {
                     self.ppu.read_oam(addr)
@@ -353,7 +356,11 @@ impl<A: AudioCallback> Gb<A> {
             SCY => self.ppu.write_scy(val),
             SCX => self.ppu.write_scx(val),
             LYC => self.ppu.write_lyc(val, &mut self.ints),
-            DMA => self.dma.write(val),
+            DMA => {
+                self.dma.write(val);
+                self.ppu.set_dma_dest(0xFF);
+                self.ppu.refresh_stat(&mut self.ints);
+            }
             BGP => self.ppu.write_bgp(val),
             OBP0 => self.ppu.write_obp0(val),
             OBP1 => self.ppu.write_obp1(val),
@@ -423,6 +430,13 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn write_mem(&mut self, addr: u16, val: u8) {
+        let Some(addr) = (if addr < 0xFE00 {
+            self.dma_write_redirect(addr, val)
+        } else {
+            Some(addr)
+        }) else {
+            return;
+        };
         match addr {
             // FIXME: we assume bootrom doesn't write to rom
             0x0000..=0x7FFF => self.cart.write_rom(addr, val),
@@ -431,7 +445,7 @@ impl<A: AudioCallback> Gb<A> {
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.write_wram_lo(addr, val),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.write_wram_hi(addr, val),
             0xFE00..=0xFEFF => {
-                let dma_blocked = self.dma.blocks_oam();
+                let dma_blocked = self.dma.blocks_oam_write();
                 self.ppu.cpu_write_oam_area(addr, val, dma_blocked);
             }
             0xFF00..=0xFFFF => self.write_high((addr & 0xFF) as u8, val),

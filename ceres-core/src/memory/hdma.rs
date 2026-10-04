@@ -49,6 +49,11 @@ impl Hdma {
         (self.dst & 0xF) == 0xF
     }
 
+    #[must_use]
+    pub const fn cpu_halted(&self) -> bool {
+        self.cpu_halted
+    }
+
     pub const fn set_cpu_halted(&mut self, halted: bool, mode_is_hblank: bool) {
         self.cpu_halted = halted;
         if halted {
