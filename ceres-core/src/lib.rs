@@ -271,6 +271,10 @@ impl<A: AudioCallback> Gb<A> {
         // ROMs (the hand-off write plus the M-cycle that follows it). DMG and
         // SGB hand off in the tail of line 153 (LY already reads 0); the
         // others in VBlank.
+        // CGB hardware runs a longer boot sequence for DMG-only cartridges
+        // (compatibility palettes), so they hand off in VBlank line 148; CGB
+        // cartridges in line 144.
+        let cgb_cart = self.is_cgb() && self.cart.read_rom(0x0143) & 0x80 != 0;
         let (line, dot) = match self.model {
             Model::Dmg0 => (145, 101),
             Model::DmgB | Model::Mgb => (153, 405),
@@ -278,7 +282,9 @@ impl<A: AudioCallback> Gb<A> {
             // varies a little with the cartridge (values for the mooneye ROMs).
             Model::Sgb => (153, 173),
             Model::Sgb2 => (153, 161),
+            Model::Agb if cgb_cart => (144, 177),
             Model::Agb => (148, 365),
+            _ if cgb_cart => (144, 173),
             _ => (148, 361),
         };
         self.ppu.set_position(line, dot);
@@ -304,55 +310,34 @@ impl<A: AudioCallback> Gb<A> {
         //   internal_counter = cycleCounter - divLastUpdate
         //   DIV = internal_counter & 0xFFFF
         if self.is_cgb() {
-            // CGB boot timing adjustment. Per-model values calibrated to
-            // the mooneye boot_div-cgbABCDE test (which checks 27 NOPs of
-            // phase alignment and is sensitive to the exact starting phase).
-            // Set via env vars if you need to override for a different test.
-            self.clock.div = if let Ok(val) = std::env::var("CERES_DIV_OVERRIDE") {
-                u16::from_str_radix(val.trim_start_matches("0x"), 16).unwrap_or(0x2678)
-            } else {
-                match self.model {
-                    Model::Cgb0 => 0x2884, // CGB-CPU 0 has different phase
-                    Model::Agb => 0x267C,
-                    _ => 0x2678,
-                }
+            // DIV at the first cartridge instruction, measured by running the
+            // real boot ROMs. The boot time depends a little on the header
+            // (the compatibility palette lookup hashes the title): these
+            // match the mooneye boot_div ROMs for DMG-only cartridges and
+            // Gambatte's start_inc for CGB cartridges.
+            self.clock.div = match (self.model, cgb_cart) {
+                (Model::Cgb0, false) => 0x2884,
+                (Model::Cgb0, true) => 0x20AC,
+                (Model::Agb, false) => 0x267C,
+                (Model::Agb, true) => 0x1EA4,
+                (_, false) => 0x2678,
+                (_, true) => 0x1EA0,
             };
         } else {
-            // DMG: 0x18FCC + 0x1C00 = 0x1ABCC → DIV = 0xABCC
-            // Adjusted to 0xABC8 to align with Gambatte tests
-            // (0xBD1C was the SameBoy-aligned value but it broke the
-            // gambatte div testsuite — see the DMG start_inc_1 test which
-            // expects to read upper-DIV byte = 0xAB after the boot ROM.)
-            //
-            // Per-model phase calibration for mooneye boot_div-* tests:
-            //   DMG-0 → 0x1830 (45-NOP initial reading expects DIV=$19)
-            //   DMG-ABC → 0xABCC (6-NOP initial reading expects DIV=$AC)
-            //   SGB / SGB2 → 0xD860 / 0xD850 (37-NOP initial expects DIV=$D9)
-            //   AGB → not CGB-mode, but our AGB defaults to CgbE=0x2678 for now.
-            // Set CERES_DMG_DIV_OVERRIDE to override per test.
-            self.clock.div = if let Ok(val) = std::env::var("CERES_DMG_DIV_OVERRIDE") {
-                u16::from_str_radix(val.trim_start_matches("0x"), 16).unwrap_or(0xABCC)
-            } else {
-                match self.model {
-                    Model::Dmg0 => 0x1830,
-                    Model::Sgb => 0xD860,
-                    Model::Sgb2 => 0xD850,
-                    _ => 0xABCC,
-                }
+            // DIV at the first cartridge instruction, measured by running the
+            // real boot ROMs (mooneye boot_div-*). The SGB value depends on
+            // the cartridge header; these match the mooneye ROMs.
+            self.clock.div = match self.model {
+                Model::Dmg0 => 0x1830,
+                Model::Sgb => 0xD860,
+                Model::Sgb2 => 0xD850,
+                _ => 0xABCC,
             };
         }
 
-        self.clock.div_cycles = if let Ok(val) = std::env::var("CERES_DIV_CYCLES_OVERRIDE") {
-            val.parse::<i32>().unwrap_or(0)
-        } else {
-            0
-        };
-
-        self.clock.div_state = if let Ok(val) = std::env::var("CERES_DIV_STATE_OVERRIDE") {
-            val.parse::<u8>().unwrap_or(2) // Default state 2 as it's running
-        } else {
-            2
-        };
+        self.clock.div_cycles = 0;
+        // The DIV state machine is running.
+        self.clock.div_state = 2;
 
         self.serial
             .set_master_clock((self.clock.div & self.serial.div_mask()) != 0);
