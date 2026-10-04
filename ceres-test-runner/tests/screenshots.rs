@@ -115,9 +115,10 @@ fn collect(dir: &Path, out: &mut Vec<(PathBuf, PathBuf, String)>) {
         .iter()
         .find_map(|s| base.strip_suffix(s).map(|stem| (stem, (*s).to_string())))
         .unwrap_or((base, String::new()));
-        let rom = ["gb", "gbc"]
+        // `statcount_auto-cgb-dmg.png` belongs to `statcount-auto.gb`.
+        let rom = [stem.to_string(), stem.replace('_', "-")]
             .iter()
-            .map(|e| path.with_file_name(format!("{stem}.{e}")))
+            .flat_map(|stem| ["gb", "gbc"].map(|e| path.with_file_name(format!("{stem}.{e}"))))
             .find(|p| p.exists());
         if let Some(rom) = rom {
             out.push((path, rom, suffix));
