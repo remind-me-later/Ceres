@@ -192,6 +192,8 @@ pub(super) struct Display {
     window_is_being_fetched: bool,
     wy_check_scheduled: bool,
     wy_check_countdown: i32,
+    /// Dot counter modulo 4, anchored to the CPU's M-cycle phase.
+    pub tick_phase: u8,
     wy_just_checked: bool,
     cgb_wx_glitch: bool,
     disable_window_pixel_insertion_glitch: bool,
@@ -262,6 +264,7 @@ impl Default for Display {
             window_is_being_fetched: false,
             wy_check_scheduled: false,
             wy_check_countdown: 0,
+            tick_phase: 0,
             wy_just_checked: false,
             cgb_wx_glitch: false,
             disable_window_pixel_insertion_glitch: false,
@@ -295,14 +298,18 @@ impl Display {
     pub(super) fn schedule_wy_check(&mut self, cgb: bool, double_speed: bool) {
         if !self.wy_check_scheduled {
             self.wy_check_scheduled = true;
-            // SameBoy aligns the check to the 8 MHz grid; in dots that is
-            // 4 (CGB), 3 (DMG) or 1 (CGB double speed) dots after the write.
+            // SameBoy aligns the check to a grid of 4 dots: it fires on the
+            // dot that makes the phase 2 (DMG, measured against Gambatte's
+            // late_wy tests) or 0 (CGB), 1 to 4 dots after
+            // the write. In double speed it is 1 dot.
+            let target = if cgb { 0 } else { 2 };
+            let wait = i32::from((target + 4 - self.tick_phase) & 3);
             self.wy_check_countdown = if double_speed {
                 1
-            } else if cgb {
+            } else if wait == 0 {
                 4
             } else {
-                3
+                wait
             };
         }
     }
