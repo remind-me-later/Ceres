@@ -57,6 +57,13 @@ pub trait Bus {
     /// Run a pending HDMA transfer chunk, if any.
     fn tick_hdma(&mut self);
 
+    /// An internal M-cycle with `addr` on the address bus: flushes the
+    /// deferred time, triggers the DMG OAM bug for `addr`, defers 4 T-cycles.
+    fn tick_oam_bug(&mut self, addr: u16);
+
+    /// The DMG OAM bug for an address placed on the bus (no time passes).
+    fn trigger_oam_bug(&mut self, addr: u16);
+
     /// Discards the time deferred so far (it was already accounted for).
     fn drop_deferred(&mut self);
 
@@ -282,8 +289,10 @@ impl Sm83 {
     /// The five-M-cycle interrupt dispatch (SameBoy: fetch, OAM-bug cycle,
     /// internal cycle, push high, push low).
     fn dispatch_interrupt<B: Bus>(&mut self, bus: &mut B) {
-        bus.tick();
-        bus.tick();
+        // M1: dummy fetch. M2: PC (and SP) on the address bus.
+        bus.read(self.pc);
+        bus.tick_oam_bug(self.pc.wrapping_add(1));
+        bus.trigger_oam_bug(self.sp);
         bus.tick();
 
         let [lo, hi] = self.pc.to_le_bytes();
@@ -344,8 +353,8 @@ impl Sm83 {
     fn do_jump_relative(&mut self, bus: &mut impl Bus) {
         #[expect(clippy::cast_sign_loss)]
         let offset = self.imm8(bus).cast_signed() as u16;
+        bus.tick_oam_bug(self.pc);
         self.pc = self.pc.wrapping_add(offset);
-        bus.tick();
     }
 
     fn do_jump_to_immediate(&mut self, bus: &mut impl Bus) {
@@ -420,8 +429,8 @@ impl Sm83 {
     fn push(&mut self, bus: &mut impl Bus, val: u16) {
         let [lo, hi] = val.to_le_bytes();
 
-        // M=1: Internal delay (where OAM bug handling would occur on DMG)
-        bus.tick();
+        // M=1: Internal delay with SP on the address bus (DMG OAM bug).
+        bus.tick_oam_bug(self.sp);
 
         // M=2: Write high byte
         self.sp = self.sp.wrapping_sub(1);
@@ -890,8 +899,8 @@ impl Sm83 {
 
     fn dec_rr(&mut self, bus: &mut impl Bus, op: u8) {
         let id = Self::opcode_to_reg_id(op);
+        bus.tick_oam_bug(self.get_rr(id));
         self.set_rr(id, self.get_rr(id).wrapping_sub(1));
-        bus.tick();
     }
 
     const fn di(&mut self) {
@@ -983,8 +992,8 @@ impl Sm83 {
 
     fn inc_rr(&mut self, bus: &mut impl Bus, op: u8) {
         let id = Self::opcode_to_reg_id(op);
+        bus.tick_oam_bug(self.get_rr(id));
         self.set_rr(id, self.get_rr(id).wrapping_add(1));
-        bus.tick();
     }
 
     fn jp_a16(&mut self, bus: &mut impl Bus) {
@@ -1022,8 +1031,8 @@ impl Sm83 {
 
     fn ld16_sp_hl(&mut self, bus: &mut impl Bus) {
         let val = self.hl;
+        bus.tick_oam_bug(val);
         self.sp = val;
-        bus.tick();
     }
 
     fn ld_a_da16(&mut self, bus: &mut impl Bus) {
@@ -1456,7 +1465,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
     #[inline]
     fn read(&mut self, addr: u16) -> u8 {
         self.flush_deferred_time();
-        let val = self.read_mem(addr);
+        let val = self.cpu_read_mem(addr);
         self.time_deferred = 4;
         val
     }
@@ -1656,6 +1665,16 @@ impl<A: AudioCallback> Bus for Gb<A> {
         if self.hdma.is_on() {
             self.run_hdma();
         }
+    }
+
+    fn tick_oam_bug(&mut self, addr: u16) {
+        self.flush_deferred_time();
+        self.ppu.trigger_oam_bug(addr);
+        self.time_deferred = 4;
+    }
+
+    fn trigger_oam_bug(&mut self, addr: u16) {
+        self.ppu.trigger_oam_bug(addr);
     }
 
     fn drop_deferred(&mut self) {

@@ -10,6 +10,7 @@
 
 use crate::{CgbMode, Model, interrupts::Interrupts};
 
+use super::oam_bug::NO_ROW;
 use super::{Ppu, STAT_IF_HBLANK_B, STAT_IF_LYC_B, STAT_IF_OAM_B, STAT_IF_VBLANK_B, STAT_LYC_B};
 
 pub(super) const MODE2_LENGTH: i32 = 80;
@@ -152,6 +153,8 @@ pub(super) struct Display {
     objects_x: [u8; 10],
     objects_y: [u8; 10],
     oam_search_index: u8,
+    /// OAM row the PPU is reading (DMG OAM bug); `NO_ROW` when none.
+    pub accessed_oam_row: u8,
     mode2_y_bus: u8,
     mode2_x_bus: u8,
     object_flags: u8,
@@ -221,6 +224,7 @@ impl Default for Display {
             objects_x: [0; 10],
             objects_y: [0; 10],
             oam_search_index: 0,
+            accessed_oam_row: NO_ROW,
             mode2_y_bus: 0,
             mode2_x_bus: 0,
             object_flags: 0,
@@ -301,7 +305,7 @@ const fn model_ge_cgb_d(m: Model) -> bool {
 
 impl Ppu {
     #[inline]
-    const fn hw_cgb(&self) -> bool {
+    pub(super) const fn hw_cgb(&self) -> bool {
         self.model.is_cgb_hardware()
     }
 
@@ -378,6 +382,7 @@ impl Ppu {
 
     pub(super) fn lcd_off(&mut self) {
         self.d.lcd_off_hdma_edge = self.stat & super::STAT_MODE_B != 0;
+        self.d.accessed_oam_row = NO_ROW;
         self.d.cfl = 0;
         self.d.state = 0;
         self.d.wait = 0;
@@ -1098,6 +1103,7 @@ impl Ppu {
     fn line_start(&mut self) {
         self.wy_check();
         self.d.oam_write_blocked = self.hw_cgb() && !self.double_speed();
+        self.d.accessed_oam_row = 0;
         self.sleep(35, 2);
     }
 
@@ -1275,6 +1281,7 @@ impl Ppu {
                 8 => {
                     if !self.hw_cgb() {
                         self.add_object_from_index(self.d.oam_search_index);
+                        self.d.accessed_oam_row = ((self.d.oam_search_index & !1) * 4 + 8) as u8;
                     }
                     if self.d.oam_search_index == 37 {
                         self.d.vram_read_blocked = !self.hw_cgb();
@@ -1287,6 +1294,7 @@ impl Ppu {
                         state = 201;
                     } else {
                         self.d.cfl = MODE2_LENGTH + 4;
+                        self.d.accessed_oam_row = NO_ROW;
                         self.d.orig_n_visible_objs = self.d.n_visible_objs;
                         self.stat = (self.stat & !super::STAT_MODE_B) | 3;
                         self.d.mode_for_interrupt = 3;
@@ -1599,10 +1607,5 @@ impl Ppu {
     #[must_use]
     pub const fn oam_read_blocked(&self) -> bool {
         self.d.oam_read_blocked
-    }
-
-    #[must_use]
-    pub const fn oam_write_blocked(&self) -> bool {
-        self.d.oam_write_blocked
     }
 }

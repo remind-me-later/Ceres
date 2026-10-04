@@ -215,6 +215,16 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
+    /// CPU read: like `read_mem`, but OAM accesses can corrupt OAM (DMG).
+    #[inline]
+    pub fn cpu_read_mem(&mut self, addr: u16) -> u8 {
+        if (0xFE00..=0xFEFF).contains(&addr) {
+            let dma_blocked = self.dma.blocks_oam();
+            return self.ppu.cpu_read_oam_area(addr, dma_blocked);
+        }
+        self.read_mem(addr)
+    }
+
     #[must_use]
     #[inline]
     pub fn read_mem(&self, addr: u16) -> u8 {
@@ -259,7 +269,7 @@ impl<A: AudioCallback> Gb<A> {
                     self.ppu.read_oam(addr)
                 }
             }
-            0xFEA0..=0xFEFF => 0xFF,
+            0xFEA0..=0xFEFF => self.ppu.peek_unusable(addr),
             0xFF00..=0xFFFF => self.read_high((addr & 0xFF) as u8),
         }
     }
@@ -420,14 +430,10 @@ impl<A: AudioCallback> Gb<A> {
             0xA000..=0xBFFF => self.cart.write_ram(addr, val),
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.write_wram_lo(addr, val),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.write_wram_hi(addr, val),
-            0xFE00..=0xFE9F => {
-                if self.dma.blocks_oam() {
-                    return;
-                }
-
-                self.ppu.write_oam(addr, val);
+            0xFE00..=0xFEFF => {
+                let dma_blocked = self.dma.blocks_oam();
+                self.ppu.cpu_write_oam_area(addr, val, dma_blocked);
             }
-            0xFEA0..=0xFEFF => (),
             0xFF00..=0xFFFF => self.write_high((addr & 0xFF) as u8, val),
         }
     }

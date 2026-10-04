@@ -2,6 +2,7 @@ mod color_palette;
 mod display;
 mod draw;
 mod oam;
+mod oam_bug;
 mod rgba_buf;
 mod vram;
 
