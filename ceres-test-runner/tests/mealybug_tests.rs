@@ -490,3 +490,101 @@ mealybug_ppu_test!(
     Model::CgbC,
     ignore_no_screenshot
 );
+
+// CGB-D references (`*_cgb_d.png`). The tile_sel and wx_4 sprite tests fail
+// the same way in SameBoy.
+mealybug_ppu_test!(
+    test_mb_m2_win_en_toggle_cgb_d,
+    "m2_win_en_toggle.gb",
+    Model::CgbD
+);
+mealybug_ppu_test!(test_mb_m3_bgp_change_cgb_d, "m3_bgp_change.gb", Model::CgbD);
+mealybug_ppu_test!(
+    test_mb_m3_bgp_change_sprites_cgb_d,
+    "m3_bgp_change_sprites.gb",
+    Model::CgbD
+);
+mealybug_ppu_test!(
+    test_mb_m3_lcdc_bg_en_change_cgb_d,
+    "m3_lcdc_bg_en_change.gb",
+    Model::CgbD
+);
+mealybug_ppu_test!(
+    test_mb_m3_lcdc_bg_map_change_cgb_d,
+    "m3_lcdc_bg_map_change.gb",
+    Model::CgbD
+);
+mealybug_ppu_test!(
+    test_mb_m3_lcdc_obj_en_change_cgb_d,
+    "m3_lcdc_obj_en_change.gb",
+    Model::CgbD
+);
+mealybug_ppu_test!(
+    test_mb_m3_lcdc_obj_en_change_variant_cgb_d,
+    "m3_lcdc_obj_en_change_variant.gb",
+    Model::CgbD
+);
+mealybug_ppu_test!(
+    test_mb_m3_lcdc_obj_size_change_cgb_d,
+    "m3_lcdc_obj_size_change.gb",
+    Model::CgbD
+);
+mealybug_ppu_test!(
+    test_mb_m3_lcdc_obj_size_change_scx_cgb_d,
+    "m3_lcdc_obj_size_change_scx.gb",
+    Model::CgbD
+);
+mealybug_ppu_test!(
+    test_mb_m3_lcdc_tile_sel_change_cgb_d,
+    "m3_lcdc_tile_sel_change.gb",
+    Model::CgbD,
+    ignore
+);
+mealybug_ppu_test!(
+    test_mb_m3_lcdc_tile_sel_win_change_cgb_d,
+    "m3_lcdc_tile_sel_win_change.gb",
+    Model::CgbD,
+    ignore
+);
+mealybug_ppu_test!(
+    test_mb_m3_lcdc_win_en_change_multiple_cgb_d,
+    "m3_lcdc_win_en_change_multiple.gb",
+    Model::CgbD
+);
+mealybug_ppu_test!(
+    test_mb_m3_lcdc_win_map_change_cgb_d,
+    "m3_lcdc_win_map_change.gb",
+    Model::CgbD
+);
+mealybug_ppu_test!(
+    test_mb_m3_obp0_change_cgb_d,
+    "m3_obp0_change.gb",
+    Model::CgbD
+);
+mealybug_ppu_test!(
+    test_mb_m3_scx_high_5_bits_cgb_d,
+    "m3_scx_high_5_bits.gb",
+    Model::CgbD
+);
+mealybug_ppu_test!(
+    test_mb_m3_scx_low_3_bits_cgb_d,
+    "m3_scx_low_3_bits.gb",
+    Model::CgbD
+);
+mealybug_ppu_test!(test_mb_m3_scy_change_cgb_d, "m3_scy_change.gb", Model::CgbD);
+mealybug_ppu_test!(
+    test_mb_m3_window_timing_cgb_d,
+    "m3_window_timing.gb",
+    Model::CgbD
+);
+mealybug_ppu_test!(
+    test_mb_m3_window_timing_wx_0_cgb_d,
+    "m3_window_timing_wx_0.gb",
+    Model::CgbD
+);
+mealybug_ppu_test!(
+    test_mb_m3_wx_4_change_sprites_cgb_d,
+    "m3_wx_4_change_sprites.gb",
+    Model::CgbD,
+    ignore
+);

@@ -875,11 +875,11 @@ mod tests {
         );
     }
 
-    /// `write_tac` must cancel a pending reload and IRQ countdown when
-    /// the timer is disabled. Matches gambatte's `Tima::setTac`
-    /// (libgambatte/src/tima.cpp:138-148).
+    /// `write_tac` disabling the timer does not cancel a pending reload or
+    /// its IRQ: SameBoy (the reference) only emulates the falling-edge TIMA
+    /// increment of the TAC write glitch.
     #[test]
-    fn test_tima_tac_disable_cancels_reload_and_irq() {
+    fn test_tima_tac_disable_keeps_reload_and_irq() {
         let mut gb = GbBuilder::new(48000, DummyAudio)
             .with_model(Model::DmgB)
             .with_run_bootrom(false)
@@ -892,28 +892,21 @@ mod tests {
         gb.clock.div = 0x03FF;
         gb.ints.write_ie(0x04);
 
-        // Cycle 1 triggers the overflow, cycle 2 advances the state
-        // machine so we can assert the values that are about to be
-        // cancelled.
+        // Cycle 1 triggers the overflow, cycle 2 advances the state machine.
         gb.run_timers(2);
         assert_eq!(gb.clock.tima_reload_pending, 3);
         assert_eq!(gb.clock.tima_irq_countdown, 2);
         assert!(!gb.ints.is_any_requested());
 
-        // Disable the timer via TAC. Both counters must be cancelled.
+        // Disabling the timer leaves both pending...
         gb.write_tac(0x00);
-        assert_eq!(
-            gb.clock.tima_reload_pending, 0,
-            "TAC disable must cancel pending reload"
-        );
-        assert_eq!(
-            gb.clock.tima_irq_countdown, 0,
-            "TAC disable must cancel pending IRQ countdown"
-        );
+        assert_eq!(gb.clock.tima_reload_pending, 3);
+        assert_eq!(gb.clock.tima_irq_countdown, 2);
 
-        // Run more cycles — the IRQ must NOT fire later.
+        // ...and the IRQ still fires.
         gb.run_timers(10);
-        assert!(!gb.ints.is_any_requested());
+        assert!(gb.ints.is_any_requested());
+        assert_eq!(gb.clock.tima, 0x42);
     }
 
     /// `write_tima` during the reads-0 window (reload_pending 1..=4)

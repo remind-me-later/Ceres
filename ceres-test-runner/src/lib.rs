@@ -71,7 +71,16 @@ pub fn expected_screenshot_path(relative_path: &str, model: Model) -> Option<Pat
     // CGB: _cgb_c.png (assuming CGB-C behavior)
     // DMG: _dmg_blob.png
     let p = match model {
-        Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbD | Model::CgbE => {
+        Model::CgbD => {
+            // CGB-D has its own references; fall back to the CGB-C ones.
+            let d = rom_dir.join(format!("{rom_stem}_cgb_d.png"));
+            if d.exists() {
+                d
+            } else {
+                rom_dir.join(format!("{rom_stem}_cgb_c.png"))
+            }
+        }
+        Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC | Model::CgbE => {
             rom_dir.join(format!("{rom_stem}_cgb_c.png"))
         }
         _ => rom_dir.join(format!("{rom_stem}_dmg_blob.png")),
