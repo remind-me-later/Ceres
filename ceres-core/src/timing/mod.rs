@@ -150,7 +150,9 @@ impl<A: AudioCallback> Gb<A> {
 
         self.run_dma();
 
-        self.cart.run_rtc(cycles);
+        // The clock runs in 8 MHz units, whatever the CPU speed.
+        self.cart
+            .run_rtc(cycles as u32 * if double_speed { 1 } else { 2 });
     }
 
     fn inc_tima(&mut self) {

@@ -278,9 +278,9 @@ impl Cartridge {
         }
     }
 
-    pub const fn run_rtc(&mut self, dots: i32) {
+    pub const fn run_rtc(&mut self, units: u32) {
         if let Mbc::Mbc3 { rtc: Some(rtc), .. } = &mut self.mbc {
-            rtc.run(dots);
+            rtc.run(units);
         }
     }
 
@@ -490,7 +490,10 @@ impl Cartridge {
                     }
                 }
                 0x6000..=0x7FFF => {
-                    // TODO: no need to latch?
+                    // Any write latches the clock into the registers the CPU reads.
+                    if let Some(rtc) = rtc.as_mut() {
+                        rtc.latch();
+                    }
                 }
                 _ => (),
             },

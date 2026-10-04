@@ -13,7 +13,7 @@
 //! same screen on each of them. The test fails on any other failure, and on
 //! a known failure that now passes. Run with `BLESS=1` to rewrite the list.
 
-use ceres_core::{AudioCallback, ColorCorrectionMode, GbBuilder, Model, Sample};
+use ceres_core::{AudioCallback, Button, ColorCorrectionMode, GbBuilder, Model, Sample};
 use ceres_test_runner::test_roms_dir;
 use std::path::{Path, PathBuf};
 
@@ -194,4 +194,53 @@ fn screenshots() {
         fixed.is_empty(),
         "these known failures now pass (run with BLESS=1): {fixed:#?}"
     );
+}
+
+/// `rtc3test` has a menu: the buttons to press, with the frame to press each at.
+const RTC3TEST: &[(&str, &[(u32, Button)])] = &[
+    ("basic-tests", &[(300, Button::A)]),
+    ("range-tests", &[(300, Button::Down), (330, Button::A)]),
+    (
+        "sub-second-writes",
+        &[(300, Button::Down), (320, Button::Down), (350, Button::A)],
+    ),
+];
+
+#[test]
+#[ignore = "slow (minutes); run with --ignored"]
+fn rtc3test() {
+    let dir = test_roms_dir().join("rtc3test");
+    let rom = std::fs::read(dir.join("rtc3test.gb")).expect("read ROM");
+    let mut failures = Vec::new();
+    // The DMG screenshots are from a unit whose clock differs by a fraction of
+    // a millisecond; SameBoy fails them as well.
+    for (name, model) in [("cgbc", Model::CgbC), ("cgbe", Model::CgbE)] {
+        for (test, keys) in RTC3TEST {
+            let mut gb = GbBuilder::new(48000, NoAudio)
+                .with_model(model)
+                .with_run_bootrom(true)
+                .with_rom(rom.clone().into_boxed_slice())
+                .expect("valid ROM")
+                .build();
+            gb.set_color_correction_mode(ColorCorrectionMode::Disabled);
+            for frame in 0..4200 {
+                for (at, button) in *keys {
+                    if frame == *at {
+                        gb.press(*button);
+                    }
+                    if frame == at + 6 {
+                        gb.release(*button);
+                    }
+                }
+                gb.run_frame();
+            }
+            let reference = image::open(dir.join(format!("rtc3test-{test}-cgb.png")))
+                .expect("reference")
+                .to_rgba8();
+            if rank_image(reference.as_raw()) != rank_image(gb.pixel_data_rgba()) {
+                failures.push(format!("{name} {test}"));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "rtc3test failures: {failures:?}");
 }
