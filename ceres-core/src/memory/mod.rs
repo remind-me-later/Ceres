@@ -152,7 +152,7 @@ impl<A: AudioCallback> Gb<A> {
             STAT => self.ppu.read_stat(),
             SCY => self.ppu.read_scy(),
             SCX => self.ppu.read_scx(),
-            LY => self.ppu.read_ly(),
+            LY => { let v = self.ppu.read_ly(); if std::env::var("CERES_LYR").is_ok() { eprintln!("LYR {v}"); } v }
             LYC => self.ppu.read_lyc(),
             DMA => self.dma.read(),
             BGP => self.ppu.read_bgp(),

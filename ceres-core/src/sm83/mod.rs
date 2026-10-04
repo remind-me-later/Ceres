@@ -1,6 +1,6 @@
 pub mod conflict;
 
-use crate::{AudioCallback, CgbMode, Gb, Model, ppu::Mode};
+use crate::{AudioCallback, CgbMode, Gb, Model};
 use conflict::ConflictType;
 use core::mem;
 
@@ -1452,6 +1452,8 @@ impl<A: AudioCallback> Bus for Gb<A> {
 
         let pending = self.time_deferred;
 
+        // Port of SameBoy's `cycle_write`: each class says when, relative to
+        // the end of the pending M-cycles, the PPU sees the new value.
         match conflict {
             ConflictType::ReadOld => {
                 self.flush_deferred_time();
@@ -1459,40 +1461,33 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 self.time_deferred = 4;
             }
             ConflictType::ReadNew => {
-                if pending >= 1 {
-                    self.advance_dots(pending - 1);
-                    self.write_mem(addr, val);
-                    self.time_deferred = 5;
-                } else {
-                    self.flush_deferred_time();
-                    self.write_mem(addr, val);
-                    self.time_deferred = 4;
-                }
+                self.advance_dots(pending - 1);
+                self.write_mem(addr, val);
+                self.time_deferred = 5;
             }
             ConflictType::WriteCpu => {
                 self.advance_dots(pending + 1);
                 self.write_mem(addr, val);
                 self.time_deferred = 3;
             }
-            ConflictType::ScyDmg => {
-                if self.model.is_cgb_hardware() {
-                    let before = (pending - 2).max(0);
-                    self.advance_dots(before);
-                    self.write_mem(addr, val);
-                    self.time_deferred = 4 + pending - before;
-                } else {
-                    self.advance_dots(pending + 2);
-                    self.write_mem(addr, val);
-                    self.time_deferred = 2;
-                }
-            }
+            // The DMG STAT-write bug is basically the STAT register being
+            // read as FF for a single T-cycle.
             ConflictType::StatDmg => {
                 self.flush_deferred_time();
+                // State 7 is the edge between HBlank and OAM mode; the OAM
+                // interrupt seems to be blocked by HBlank interrupts there.
+                if self.ppu.display_state() == 7 && self.ppu.read_stat() & 0x28 == 0x08 {
+                    self.write_mem(addr, !0x20);
+                } else {
+                    self.write_mem(addr, 0xFF);
+                }
+                self.advance_dots(1);
                 self.write_mem(addr, val);
-                self.time_deferred = 4;
+                self.time_deferred = 3;
             }
             ConflictType::StatCgb => {
-                let old = self.read_mem(addr);
+                // The LYC bit behaves differently.
+                let old = self.ppu.read_stat();
                 self.flush_deferred_time();
                 self.write_mem(addr, (old & 0x40) | (val & !0x40));
                 self.advance_dots(1);
@@ -1500,7 +1495,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 self.time_deferred = 3;
             }
             ConflictType::StatCgbDouble => {
-                let old = self.read_mem(addr);
+                let old = self.ppu.read_stat();
                 self.flush_deferred_time();
                 self.write_mem(addr, (val & !8) | (old & 8));
                 self.advance_dots(1);
@@ -1508,235 +1503,99 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 self.time_deferred = 3;
             }
             ConflictType::PaletteDmg => {
-                if self.model.is_cgb_hardware() {
-                    if pending >= 3 {
-                        self.advance_dots(pending - 3);
-                        self.write_mem(addr, val);
-                        self.time_deferred = 7;
-                    } else {
-                        self.flush_deferred_time();
-                        self.write_mem(addr, val);
-                        self.time_deferred = 4;
-                    }
-                } else {
-                    let old = self.read_mem(addr);
-                    if pending >= 1 {
-                        self.advance_dots(pending - 1);
-                        self.write_mem(addr, val | old);
-                        self.advance_dots(1);
-                        self.write_mem(addr, val);
-                        self.time_deferred = 4;
-                    } else {
-                        self.flush_deferred_time();
-                        self.write_mem(addr, val);
-                        self.time_deferred = 4;
-                    }
-                }
+                self.advance_dots(pending - 2);
+                let old = self.read_mem(addr);
+                self.write_mem(addr, val | old);
+                self.advance_dots(1);
+                self.write_mem(addr, val);
+                self.time_deferred = 5;
             }
             ConflictType::PaletteCgb => {
                 if matches!(self.model, Model::CgbD | Model::CgbE | Model::Agb) {
-                    if pending >= 2 {
-                        self.advance_dots(pending - 2);
-                        self.write_mem(addr, val);
-                        self.time_deferred = 6;
-                    } else {
-                        self.flush_deferred_time();
-                        self.write_mem(addr, val);
-                        self.time_deferred = 4;
-                    }
-                } else if pending >= 1 {
+                    self.advance_dots(pending - 2);
+                    self.write_mem(addr, val);
+                    self.time_deferred = 6;
+                } else {
                     self.advance_dots(pending - 1);
                     self.write_mem(addr, val);
                     self.time_deferred = 5;
-                } else {
-                    self.flush_deferred_time();
-                    self.write_mem(addr, val);
-                    self.time_deferred = 4;
                 }
             }
+            // LCDC.1 is read both by the FIFO when popping pixels and by the
+            // object-fetching state machine, and the two behave differently
+            // when it comes to access conflicts.
             ConflictType::DmgLcdc => {
-                let old = self.read_mem(addr);
-                let is_obj_disable = pending >= 1
-                    && matches!(self.ppu.mode(), crate::ppu::Mode::Drawing)
-                    && (old & 0x80 != 0)
-                    && (val & 0x80 != 0)
-                    && (val & 0x02 == 0)
-                    && (old & 0x02 != 0);
-
-                if is_obj_disable {
-                    if self.model.is_cgb_hardware() {
-                        if pending >= 2 {
-                            self.advance_dots(pending - 2);
-                            self.write_mem(addr, (old & !0x02) | (val & 0x02));
-                            self.advance_dots(4);
-                        } else {
-                            self.advance_dots(pending);
-                            self.advance_dots(2);
-                        }
-                        self.write_mem(addr, val);
-                        self.time_deferred = 2;
-                    } else {
-                        self.advance_dots(pending - 1);
-                        let pos = self.ppu.fifo_position();
-                        let is_fetching = self.ppu.is_fetching_sprite();
-                        if pos == 0 || is_fetching {
-                            self.write_mem(addr, (old & !0x02) | (val & 0x01));
-                        }
-                        self.advance_dots(1);
-                        if pos != 0 && !is_fetching {
-                            self.write_mem(addr, (old & !0x02) | (val & 0x01));
-                        }
-                        self.advance_dots(2);
-                        self.write_mem(addr, val);
-                        self.time_deferred = 2;
-                    }
-                } else if !self.model.is_cgb_hardware()
-                    && matches!(self.ppu.mode(), crate::ppu::Mode::Drawing)
-                    && (old & 0x80 != 0)
-                    && (val & 0x80 != 0)
-                    && ((old ^ val) & 0x01 != 0)
-                {
-                    if pending >= 1 {
-                        self.advance_dots(pending - 1);
-                        let pos = self.ppu.fifo_position();
-                        if pos == 0 {
-                            self.write_mem(addr, val);
-                        }
-                        self.advance_dots(1);
-                        if pos != 0 {
-                            self.write_mem(addr, val);
-                        }
-                        self.time_deferred = 4;
-                    } else {
-                        self.flush_deferred_time();
-                        self.write_mem(addr, val);
-                        self.time_deferred = 4;
-                    }
-                } else if !self.model.is_cgb_hardware()
-                    && matches!(self.ppu.mode(), Mode::Drawing)
-                    && (old & 0x80 != 0)
-                    && (val & 0x80 != 0)
-                    && ((old ^ val) & 0x58 != 0)
-                {
-                    if pending >= 1 {
-                        self.advance_dots(pending - 1);
-                        self.write_mem(addr, val);
-                        self.advance_dots(1);
-                    } else {
-                        self.flush_deferred_time();
-                        self.write_mem(addr, val);
-                    }
-                    self.time_deferred = 4;
-                } else if self.model.is_cgb_hardware()
-                    && matches!(self.ppu.mode(), Mode::Drawing)
-                    && (old & 0x80 != 0)
-                    && (val & 0x80 != 0)
-                    && old != val
-                {
-                    // CGB hardware running a DMG-compat ROM: the write lands a
-                    // couple of dots before the end of the M-cycle (the window
-                    // map bit one dot later than the rest).
-                    let lead = if (old ^ val) & 0x40 != 0 { 1 } else { 2 };
-                    let before = (pending - lead).max(0);
-                    self.advance_dots(before);
-                    self.write_mem(addr, val);
-                    if old & 0x10 != 0 && val & 0x10 == 0 {
-                        // Clearing TILE_SEL on the dot after the write can
-                        // corrupt a bitplane read in flight (see fetcher).
-                        self.ppu.set_tile_sel_glitch(true);
-                        self.advance_dots(1);
-                        self.ppu.set_tile_sel_glitch(false);
-                        self.time_deferred = 3 + pending - before;
-                    } else {
-                        self.time_deferred = 4 + pending - before;
-                    }
-                } else {
-                    self.flush_deferred_time();
-                    self.advance_dots(2);
-                    self.write_mem(addr, val);
-                    self.time_deferred = 2;
+                let mut old = self.read_mem(addr);
+                self.advance_dots(pending - 2);
+                if self.model != Model::Mgb && self.ppu.fifo_position() == 0 && val & 0x02 == 0 {
+                    old &= !0x02;
+                } else if self.ppu.is_fetching_sprite() && val & 0x02 == 0 {
+                    old &= !0x02;
                 }
+
+                self.write_mem(addr, old | (val & 0x01));
+                self.advance_dots(1);
+                self.write_mem(addr, val);
+
+                self.ppu.note_window_disable(old, val);
+                self.time_deferred = 5;
             }
             ConflictType::SgbLcdc => {
-                self.flush_deferred_time();
+                // Simplified version of the above.
+                let old = self.read_mem(addr);
+                self.advance_dots(pending - 2);
+                // Hack to force aborting an object fetch.
                 self.write_mem(addr, val);
-                self.time_deferred = 4;
+                self.write_mem(addr, old);
+                self.advance_dots(1);
+                self.write_mem(addr, val);
+                self.time_deferred = 5;
             }
             ConflictType::WxDmg => {
-                let o: i32 = if matches!(self.ppu.mode(), Mode::Drawing) {
-                    1
-                } else {
-                    0
-                };
-                let before = (pending + o).max(0);
-                self.advance_dots(before);
+                self.advance_dots(pending);
                 self.write_mem(addr, val);
+                self.ppu.set_wx_just_changed(true);
                 self.advance_dots(1);
-                self.time_deferred = (3 + pending - before).max(0);
+                self.ppu.set_wx_just_changed(false);
+                self.time_deferred = 3;
             }
             ConflictType::LcdcCgb => {
-                self.flush_deferred_time();
-                self.write_mem(addr, val);
-                self.time_deferred = 4;
-            }
-            ConflictType::LcdcCgbDouble => {
-                if pending >= 2 {
-                    self.advance_dots(pending - 2);
-                    let old = self.read_mem(addr);
-                    self.write_mem(addr, (val & !0x81) | (old & 0x81));
-                    self.advance_dots(2);
+                let old = self.ppu.read_lcdc();
+                if (!val & old) & 0x10 != 0 {
+                    // Clearing TILE_SEL on the dot after the write can
+                    // corrupt a bitplane read in flight (see the PPU).
+                    self.advance_dots(pending);
                     self.write_mem(addr, val);
-                    self.time_deferred = 4;
+                    self.ppu.set_tile_sel_glitch(true);
+                    self.advance_dots(1);
+                    self.ppu.set_tile_sel_glitch(false);
+                    self.time_deferred = 3;
                 } else {
-                    self.flush_deferred_time();
-                    self.write_mem(addr, val);
-                    self.time_deferred = 4;
-                }
-            }
-            ConflictType::ScxDmgAndCgbDouble => {
-                if !self.model.is_cgb_hardware()
-                    && matches!(self.ppu.mode(), crate::ppu::Mode::Drawing)
-                {
                     self.advance_dots(pending);
                     self.write_mem(addr, val);
                     self.time_deferred = 4;
-                } else if pending >= 2 {
-                    self.advance_dots(pending - 2);
-                    self.write_mem(addr, val);
-                    self.time_deferred = 6;
-                } else {
-                    self.flush_deferred_time();
-                    self.write_mem(addr, val);
-                    self.time_deferred = 4;
                 }
             }
-            ConflictType::ScxCgb => {
-                if matches!(self.ppu.mode(), crate::ppu::Mode::Drawing) {
-                    let before = (pending - 1).max(0);
-                    self.advance_dots(before);
-                    self.write_mem(addr, val);
-                    self.time_deferred = 4 + pending - before;
-                } else if pending >= 2 {
-                    self.advance_dots(pending - 2);
-                    self.write_mem(addr, val);
-                    self.time_deferred = 6;
-                } else {
-                    self.flush_deferred_time();
-                    self.write_mem(addr, val);
-                    self.time_deferred = 4;
-                }
+            ConflictType::LcdcCgbDouble => {
+                let old = self.ppu.read_lcdc();
+                self.advance_dots(pending - 2);
+                self.write_mem(addr, (val & !0x81) | (old & 0x81));
+                self.ppu.set_tile_sel_glitch((val ^ old) & 0x10 != 0);
+                self.advance_dots(2);
+                self.ppu.set_tile_sel_glitch(false);
+                self.write_mem(addr, val);
+                self.time_deferred = 4;
+            }
+            ConflictType::ScxDmgAndCgbDouble => {
+                self.advance_dots(pending - 2);
+                self.write_mem(addr, val);
+                self.time_deferred = 6;
             }
             ConflictType::Nr10CgbDouble => {
-                if pending >= 1 {
-                    self.advance_dots(pending - 1);
-                    self.advance_dots(1);
-                    self.write_mem(addr, val);
-                    self.time_deferred = 4;
-                } else {
-                    self.flush_deferred_time();
-                    self.write_mem(addr, val);
-                    self.time_deferred = 4;
-                }
+                self.advance_dots(pending - 1);
+                self.advance_dots(1);
+                self.write_mem(addr, val);
+                self.time_deferred = 4;
             }
         }
     }

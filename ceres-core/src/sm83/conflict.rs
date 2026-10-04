@@ -1,3 +1,10 @@
+//! Access-conflict classes for writes to PPU/CPU-visible I/O registers.
+//!
+//! These mirror SameBoy's `GB_CONFLICT_*` handling: a register write does not
+//! always land at the end of its M-cycle, and some registers are written in
+//! two steps. The maps are selected by hardware (`GB_is_cgb`), not by the
+//! mode a ROM runs in, exactly like SameBoy.
+
 use crate::{CgbMode, Model};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -18,15 +25,14 @@ pub enum ConflictType {
     LcdcCgbDouble,
     Nr10CgbDouble,
     ScxDmgAndCgbDouble,
-    ScxCgb,
-    ScyDmg,
 }
 
 pub const DMG_CONFLICT_MAP: [ConflictType; 128] = {
     let mut map = [ConflictType::ReadOld; 128];
+    map[0x0F] = ConflictType::WriteCpu;
     map[0x40] = ConflictType::DmgLcdc;
     map[0x41] = ConflictType::StatDmg;
-    map[0x42] = ConflictType::ScyDmg;
+    map[0x42] = ConflictType::ReadNew;
     map[0x43] = ConflictType::ScxDmgAndCgbDouble;
     map[0x45] = ConflictType::ReadOld;
     map[0x47] = ConflictType::PaletteDmg;
@@ -58,7 +64,7 @@ pub const CGB_CONFLICT_MAP: [ConflictType; 128] = {
     map[0x0F] = ConflictType::WriteCpu;
     map[0x40] = ConflictType::LcdcCgb;
     map[0x41] = ConflictType::StatCgb;
-    map[0x43] = ConflictType::ScxCgb;
+    map[0x43] = ConflictType::ReadOld;
     map[0x45] = ConflictType::WriteCpu;
     map[0x47] = ConflictType::PaletteCgb;
     map[0x48] = ConflictType::PaletteCgb;
@@ -84,7 +90,7 @@ pub const CGB_DOUBLE_CONFLICT_MAP: [ConflictType; 128] = {
 #[must_use]
 pub const fn get_conflict(
     model: Model,
-    cgb_mode: CgbMode,
+    _cgb_mode: CgbMode,
     double_speed: bool,
     addr: u16,
 ) -> ConflictType {
@@ -94,13 +100,7 @@ pub const fn get_conflict(
 
     let offset = (addr & 0x7F) as usize;
 
-    if matches!(model, Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC) && offset == 0x43 {
-        if double_speed {
-            ConflictType::ScxDmgAndCgbDouble
-        } else {
-            ConflictType::ScxCgb
-        }
-    } else if matches!(cgb_mode, CgbMode::Cgb) {
+    if model.is_cgb_hardware() {
         if double_speed {
             CGB_DOUBLE_CONFLICT_MAP[offset]
         } else {

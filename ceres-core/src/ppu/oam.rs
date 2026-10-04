@@ -1,4 +1,4 @@
-use crate::ppu::{LCDC_ON_B, Mode, Ppu};
+use crate::ppu::{LCDC_ON_B, Ppu};
 
 pub struct Oam {
     bytes: [u8; Self::SIZE as usize],
@@ -45,45 +45,20 @@ impl Ppu {
         &mut self.oam
     }
 
-    // Scanline renderer: OAM is blocked during Mode 2/3. DMA blocking is
-    // gated by the memory bus, so we no longer need a `dma_on`/`dma_active`
-    // parameter here.
+    /// CPU read of OAM; blocked while the PPU owns it (see the flags set by
+    /// the display engine).
     #[must_use]
     pub const fn read_oam(&self, addr: u16) -> u8 {
-        if self.lcdc & LCDC_ON_B == 0 {
-            return self.oam.read(addr);
-        }
-        match self.mode() {
-            Mode::HBlank => {
-                let oam_block_dot = if self.lcdon_line0 && !self.is_cgb {
-                    448
-                } else {
-                    452
-                };
-                if !self.is_cgb && self.line_dot >= oam_block_dot && !self.lcdon_line0_mode0 {
-                    0xFF
-                } else {
-                    self.oam.read(addr)
-                }
-            }
-            Mode::VBlank => self.oam.read(addr),
-            _ => 0xFF,
+        if self.lcdc & LCDC_ON_B != 0 && self.oam_read_blocked() {
+            0xFF
+        } else {
+            self.oam.read(addr)
         }
     }
 
     pub fn write_oam(&mut self, addr: u16, val: u8) {
-        if self.lcdc & LCDC_ON_B == 0 {
+        if self.lcdc & LCDC_ON_B == 0 || !self.oam_write_blocked() {
             self.oam.write(addr, val);
-            return;
-        }
-        match self.mode() {
-            Mode::HBlank | Mode::VBlank => self.oam.write(addr, val),
-            Mode::OamScan => {
-                if !self.is_cgb && self.line_dot >= 76 {
-                    self.oam.write(addr, val);
-                }
-            }
-            Mode::Drawing => (),
         }
     }
 

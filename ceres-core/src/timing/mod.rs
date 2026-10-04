@@ -102,7 +102,7 @@ impl<A: AudioCallback> Gb<A> {
         self.ppu_t_credit += cpu_t_cycles;
         while self.ppu_t_credit >= t_cycles_per_dot {
             self.ppu_t_credit -= t_cycles_per_dot;
-            self.ppu.tick_t_cycle(&mut self.ints, self.cgb_mode);
+            self.ppu.tick_t_cycle(&mut self.ints, self.cgb_mode, self.key1.is_enabled());
         }
 
         self.run_dma();
