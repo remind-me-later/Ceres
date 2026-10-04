@@ -127,6 +127,8 @@ impl<A: AudioCallback> Gb<A> {
         self.model = model;
         self.cgb_mode = model.into();
         self.bootrom = Bootrom::new(model);
+        self.apu.set_model(model);
+        self.joy = Joypad::new(matches!(model, Model::Sgb | Model::Sgb2));
         self.soft_reset();
     }
 

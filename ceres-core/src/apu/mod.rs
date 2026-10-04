@@ -299,15 +299,20 @@ impl PostBoot {
 
 pub struct Apu<A: AudioCallback> {
     audio_callback: A,
-    acc_left: i64,
-    acc_right: i64,
-    ext_sample_period: i32,
+    /// Per-channel (left, right) level integrated over the current output
+    /// sample, in level x 1/65536 dot.
+    acc: [(i64, i64); N_CHANNELS],
+    /// How much each channel's DAC is charged (1.0 = fully).
+    dac_discharge: [f32; N_CHANNELS],
+    sample_rate: i32,
+    /// Dots per output sample, 16.16 fixed point.
+    sample_period: i64,
     hpf: HighPassFilter,
     /// Output level (left, right) of each channel.
     levels: [(i32, i32); N_CHANNELS],
     model: Model,
     regs: [u8; 0x40],
-    render_timer: i32,
+    render_timer: i64,
     s: State,
 }
 
@@ -315,9 +320,10 @@ impl<A: AudioCallback> Apu<A> {
     pub fn new(sample_rate: i32, audio_callback: A) -> Self {
         let mut apu = Self {
             audio_callback,
-            acc_left: 0,
-            acc_right: 0,
-            ext_sample_period: Self::sample_period_from_rate(sample_rate),
+            acc: [(0, 0); N_CHANNELS],
+            dac_discharge: [0.0; N_CHANNELS],
+            sample_rate,
+            sample_period: Self::sample_period_from_rate(sample_rate),
             hpf: HighPassFilter::new(sample_rate),
             levels: [(0, 0); N_CHANNELS],
             model: Model::default(),
@@ -393,12 +399,15 @@ impl<A: AudioCallback> Apu<A> {
         }
     }
 
-    const fn sample_period_from_rate(sample_rate: i32) -> i32 {
-        DOTS_PER_SEC / sample_rate
+    fn sample_period_from_rate(sample_rate: i32) -> i64 {
+        (i64::from(DOTS_PER_SEC) << 16) / i64::from(sample_rate.max(1))
     }
 
     pub fn set_sample_rate(&mut self, sample_rate: i32) {
-        self.ext_sample_period = Self::sample_period_from_rate(sample_rate);
+        self.sample_rate = sample_rate;
+        self.sample_period = Self::sample_period_from_rate(sample_rate);
+        self.render_timer = 0;
+        self.acc = [(0, 0); N_CHANNELS];
         self.hpf.set_sample_rate(sample_rate);
     }
 
@@ -588,32 +597,64 @@ impl<A: AudioCallback> Apu<A> {
 
     /// Cycle-averaged mixing of the channel levels over `ticks` APU ticks.
     fn mix(&mut self, ticks: u32) {
-        let mut remaining = (ticks * 2) as i32;
-        let (mut left, mut right) = (0i32, 0i32);
-        for (l, r) in self.levels {
-            left += l;
-            right += r;
-        }
-        left *= CH_STEP;
-        right *= CH_STEP;
-
+        let mut remaining = (i64::from(ticks) * 2) << 16;
         while remaining > 0 {
-            let step = remaining.min(self.ext_sample_period - self.render_timer);
-            self.acc_left += i64::from(left) * i64::from(step);
-            self.acc_right += i64::from(right) * i64::from(step);
+            let step = remaining.min(self.sample_period - self.render_timer);
+            for (acc, level) in self.acc.iter_mut().zip(&self.levels) {
+                acc.0 += i64::from(level.0) * step;
+                acc.1 += i64::from(level.1) * step;
+            }
             self.render_timer += step;
             remaining -= step;
-            if self.render_timer >= self.ext_sample_period {
-                let period = i64::from(self.ext_sample_period);
-                let l = (self.acc_left / period).clamp(-0x8000, 0x7FFF) as i16;
-                let r = (self.acc_right / period).clamp(-0x8000, 0x7FFF) as i16;
-                self.acc_left = 0;
-                self.acc_right = 0;
-                self.render_timer = 0;
-                let (l, r) = self.hpf.high_pass(l, r);
-                self.audio_callback.audio_sample(l, r);
+            if self.render_timer >= self.sample_period {
+                self.render();
             }
         }
+    }
+
+    /// Produces one output sample (SameBoy's `render`).
+    #[expect(clippy::float_arithmetic, clippy::cast_precision_loss)]
+    fn render(&mut self) {
+        const DAC_SPEED: f32 = 20_000.0;
+        let period = self.sample_period as f32;
+        let (mut left, mut right) = (0.0f32, 0.0f32);
+        for ch in 0..N_CHANNELS {
+            let mut multiplier = CH_STEP as f32;
+            if self.rank() <= 15 {
+                // The DAC charges and discharges instead of switching.
+                let speed = DAC_SPEED / self.sample_rate as f32;
+                let enabled = self.dac_enabled(ch);
+                let charge = &mut self.dac_discharge[ch];
+                if enabled {
+                    *charge += speed;
+                    if *charge > 1.0 {
+                        *charge = 1.0;
+                    } else {
+                        multiplier *= 3.0 * *charge * *charge - 2.0 * *charge * *charge * *charge;
+                    }
+                } else {
+                    *charge -= speed;
+                    if *charge < 0.0 {
+                        multiplier = 0.0;
+                        *charge = 0.0;
+                    } else {
+                        multiplier *= 3.0 * *charge * *charge - 2.0 * *charge * *charge * *charge;
+                    }
+                }
+            }
+            left += self.acc[ch].0 as f32 / period * multiplier;
+            right += self.acc[ch].1 as f32 / period * multiplier;
+        }
+        self.acc = [(0, 0); N_CHANNELS];
+        self.render_timer -= self.sample_period;
+
+        #[expect(clippy::cast_possible_truncation)]
+        let (l, r) = (
+            left.clamp(-32768.0, 32767.0) as i16,
+            right.clamp(-32768.0, 32767.0) as i16,
+        );
+        let (l, r) = self.hpf.high_pass(l, r);
+        self.audio_callback.audio_sample(l, r);
     }
 
     // -- envelopes ----------------------------------------------------------
