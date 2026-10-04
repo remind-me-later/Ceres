@@ -68,16 +68,27 @@ const fn glitch_quaternary_read_sgb2(
 }
 
 impl Ppu {
+    /// OAM byte; the corruption can touch the row right after OAM (row
+    /// 0xA0), which is memory outside OAM (unobservable on the DMG): reads
+    /// there yield 0 and writes are dropped.
+    fn oam_byte(&self, index: usize) -> u8 {
+        self.oam.bytes().get(index).copied().unwrap_or(0)
+    }
+
+    fn set_oam_byte(&mut self, index: usize, value: u8) {
+        if let Some(byte) = self.oam.bytes_mut().get_mut(index) {
+            *byte = value;
+        }
+    }
+
     fn oam_word(&self, index: usize) -> u16 {
-        let bytes = self.oam.bytes();
-        u16::from_le_bytes([bytes[index * 2], bytes[index * 2 + 1]])
+        u16::from_le_bytes([self.oam_byte(index * 2), self.oam_byte(index * 2 + 1)])
     }
 
     fn set_oam_word(&mut self, index: usize, value: u16) {
         let [lo, hi] = value.to_le_bytes();
-        let bytes = self.oam.bytes_mut();
-        bytes[index * 2] = lo;
-        bytes[index * 2 + 1] = hi;
+        self.set_oam_byte(index * 2, lo);
+        self.set_oam_byte(index * 2 + 1, hi);
     }
 
     /// The row the PPU is accessing, if the bug applies to it.
@@ -89,8 +100,8 @@ impl Ppu {
     /// Copies `len` bytes inside OAM.
     fn copy_oam_row(&mut self, dst: usize, src: usize) {
         for i in 0..8 {
-            let byte = self.oam.bytes()[src + i];
-            self.oam.bytes_mut()[dst + i] = byte;
+            let byte = self.oam_byte(src + i);
+            self.set_oam_byte(dst + i, byte);
         }
     }
 
@@ -111,8 +122,8 @@ impl Ppu {
         );
         self.set_oam_word(base, value);
         for i in 2..8 {
-            let byte = self.oam.bytes()[row - 8 + i];
-            self.oam.bytes_mut()[row + i] = byte;
+            let byte = self.oam_byte(row - 8 + i);
+            self.set_oam_byte(row + i, byte);
         }
     }
 
