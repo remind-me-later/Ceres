@@ -161,7 +161,10 @@ impl Cartridge {
 
         let rom_size = ROMSize::from_len(rom.len())?;
         let ram_size = RAMSize::new(rom[0x149])?;
-        let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147])?;
+        let (mut mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147])?;
+        if let Mbc::Mbc3 { is_mbc30, .. } = &mut mbc {
+            *is_mbc30 = rom_size.size_bytes() > 0x20_0000 || ram_size.size_bytes() > 0x8000;
+        }
 
         // Unused space reads as $FF.
         let rom = if rom.len() == rom_size.size_bytes() as usize {

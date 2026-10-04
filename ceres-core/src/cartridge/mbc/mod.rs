@@ -15,7 +15,9 @@ pub enum Mbc {
     Mbc3 {
         // Real time clock
         rtc: Option<Mbc3RTC>,
-        // Mbc30 is a variant of Mbc3 used in Pokémon Crystal that allows up to 4Mb of ROM and 64Kb of RAM
+        // Mbc30 is a variant of Mbc3 used in Pokémon Crystal that allows up to 4 MiB of ROM and 64 KiB
+        // of RAM. The header does not tell: a cartridge with more than 2 MiB of ROM or 32 KiB of
+        // RAM can only be one.
         is_mbc30: bool,
     },
     Mbc5,
@@ -39,7 +41,7 @@ impl Mbc {
             0x10 => (
                 Self::Mbc3 {
                     rtc: Some(Mbc3RTC::default()),
-                    is_mbc30: true,
+                    is_mbc30: false,
                 },
                 true,
             ),
@@ -53,14 +55,14 @@ impl Mbc {
             0x12 => (
                 Self::Mbc3 {
                     rtc: None,
-                    is_mbc30: true,
+                    is_mbc30: false,
                 },
                 false,
             ),
             0x13 => (
                 Self::Mbc3 {
                     rtc: None,
-                    is_mbc30: true,
+                    is_mbc30: false,
                 },
                 true,
             ),

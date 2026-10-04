@@ -285,7 +285,7 @@ impl Ppu {
     }
 
     /// The model-specific contents of the unusable area behind OAM.
-    fn read_unusable(&self, addr: u16) -> u8 {
+    pub(super) fn read_unusable(&self, addr: u16) -> u8 {
         let low = (addr & 0xFF) as u8;
         match self.model {
             Model::CgbE | Model::Agb => (low & 0xF0) | (low >> 4),

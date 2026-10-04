@@ -271,7 +271,7 @@ impl<A: AudioCallback> Gb<A> {
             LYC => self.ppu.write_lyc(val, &mut self.ints),
             DMA => {
                 self.dma.write(val);
-                self.ppu.set_dma_dest(0xFF);
+                self.ppu.set_dma_state(0xFF, u16::from(val) << 8, true);
                 self.ppu.refresh_stat(&mut self.ints);
             }
             BGP => self.ppu.write_bgp(val),

@@ -369,10 +369,14 @@ impl Ppu {
 
     /// STOP-mode hooks (the PPU engine does not distinguish STOP yet).
     #[inline]
-    pub const fn enter_stop_mode(&mut self) {}
+    pub const fn enter_stop_mode(&mut self) {
+        self.block_ppu_accesses(true);
+    }
 
     #[inline]
-    pub const fn leave_stop_mode(&mut self) {}
+    pub const fn leave_stop_mode(&mut self) {
+        self.block_ppu_accesses(false);
+    }
 }
 
 const LINE_LENGTH_DOTS: i32 = display::LINE_LENGTH;

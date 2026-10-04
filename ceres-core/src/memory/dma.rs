@@ -275,9 +275,14 @@ impl<A: AudioCallback> Gb<A> {
                 self.ppu.write_oam_by_dma(u16::from(dest) | 0xFE00, value);
             }
             self.dma.current_src = src.wrapping_add(1);
+            self.ppu.clear_dma_vram_conflict();
         }
         self.dma.cycles_modulo = cycles;
         self.dma.cycles = 0;
-        self.ppu.set_dma_dest(self.dma.current_dest);
+        self.ppu.set_dma_state(
+            self.dma.current_dest,
+            self.dma.current_src,
+            self.dma.cycles_modulo != 0,
+        );
     }
 }

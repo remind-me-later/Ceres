@@ -5,7 +5,7 @@
 //! whole burst is one uninterrupted loop of 2 dots per byte (4 in double
 //! speed) framed by a 2-dot lead-in and, in single speed, a 2-dot tail.
 
-use crate::{AudioCallback, Gb};
+use crate::{AudioCallback, Gb, Model};
 
 #[derive(Default)]
 pub struct Hdma {
@@ -130,10 +130,12 @@ impl<A: AudioCallback> Gb<A> {
         let cycles = if self.key1.is_enabled() { 4 } else { 2 };
 
         self.hdma.in_progress = true;
+        self.ppu.set_hdma_state(true, self.hdma.src);
         self.advance_dots(cycles);
 
         while self.hdma.on {
             let src = self.hdma.src;
+            self.ppu.set_hdma_state(true, src);
             // Valid sources: ROM, cart RAM and WRAM. Anything else
             // (VRAM, echo RAM, OAM, I/O) yields the open bus.
             let byte = match src {
@@ -149,11 +151,20 @@ impl<A: AudioCallback> Gb<A> {
 
             // The destination is always VRAM, written directly: the PPU's
             // access blocking does not apply, but a write during a blocked
-            // phase lands in both banks.
-            let addr = self.hdma.dst & 0x1FFF;
-            self.hdma.dst = self.hdma.dst.wrapping_add(1);
+            // phase lands in both banks. If the PPU read VRAM meanwhile the
+            // bus was busy and the byte may go astray.
             let mirror = self.ppu.vram_write_blocked();
-            self.ppu.vram_mut().write_hdma(addr, byte, mirror);
+            if let Some(conflict) = self.ppu.take_hdma_conflict_addr() {
+                if self.model == Model::CgbE || self.key1.is_enabled() {
+                    let addr = self.hdma.dst & conflict & 0x1FFF;
+                    self.ppu.vram_mut().write_hdma(addr, byte, mirror);
+                }
+                self.hdma.dst = self.hdma.dst.wrapping_add(1);
+            } else {
+                let addr = self.hdma.dst & 0x1FFF;
+                self.hdma.dst = self.hdma.dst.wrapping_add(1);
+                self.ppu.vram_mut().write_hdma(addr, byte, mirror);
+            }
 
             if self.hdma.dst & 0xF == 0 {
                 self.hdma.steps_left = self.hdma.steps_left.wrapping_sub(1);
@@ -167,6 +178,7 @@ impl<A: AudioCallback> Gb<A> {
         }
 
         self.hdma.in_progress = false;
+        self.ppu.set_hdma_state(false, self.hdma.src);
         if !self.key1.is_enabled() {
             self.advance_dots(2);
         }

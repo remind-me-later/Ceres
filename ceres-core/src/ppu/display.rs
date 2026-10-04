@@ -157,6 +157,22 @@ pub(super) struct Display {
     pub accessed_oam_row: u8,
     /// OAM index the DMA is writing (`0xA1`: no transfer).
     pub dma_dest: u8,
+    /// Address the OAM DMA reads next.
+    dma_src: u16,
+    /// The OAM DMA is part-way through a byte (`dma_cycles_modulo != 0`).
+    dma_modulo: bool,
+    /// An HDMA burst is running and the byte it reads next.
+    hdma_in_progress: bool,
+    hdma_src: u16,
+    /// VRAM address the PPU read while an HDMA burst ran (0xFFFF: none).
+    addr_for_hdma_conflict: u16,
+    /// The PPU and an OAM DMA from VRAM fought over the bus in this byte.
+    dma_ppu_vram_conflict: bool,
+    dma_ppu_vram_conflict_addr: u16,
+    /// In STOP mode the PPU's own accesses are blocked (SameBoy's `*_ppu_blocked`).
+    oam_ppu_blocked: bool,
+    vram_ppu_blocked: bool,
+    pub cgb_palettes_ppu_blocked: bool,
     /// OBJ_SIZE as the object fetch sees it (it can land a dot before the
     /// object search sees it).
     pub fetch_obj_size: bool,
@@ -238,6 +254,16 @@ impl Default for Display {
             oam_search_index: 0,
             accessed_oam_row: NO_ROW,
             dma_dest: 0xA1,
+            dma_src: 0,
+            dma_modulo: false,
+            hdma_in_progress: false,
+            hdma_src: 0,
+            addr_for_hdma_conflict: 0xFFFF,
+            dma_ppu_vram_conflict: false,
+            dma_ppu_vram_conflict_addr: 0,
+            oam_ppu_blocked: false,
+            vram_ppu_blocked: false,
+            cgb_palettes_ppu_blocked: false,
             fetch_obj_size: false,
             cpu_idle: false,
             mode2_y_bus: 0,
@@ -409,22 +435,39 @@ impl Ppu {
     // Mode 2 object search
     // ---------------------------------------------------------------------
 
-    /// OAM as seen by the PPU's object search: while a DMA runs it sees the
-    /// byte pair the DMA is writing.
-    fn oam_read_for_search(&self, addr: u16) -> u8 {
+    /// OAM as the PPU reads it (SameBoy's `oam_read`): blocked in STOP mode,
+    /// and while a DMA runs it sees the byte pair the DMA is writing.
+    fn oam_read(&self, addr: u16) -> u8 {
+        if self.d.oam_ppu_blocked {
+            return 0xFF;
+        }
         let dest = self.d.dma_dest;
-        if dest <= 0xA0 && dest > 0 && dest != 0xA0 {
-            return self.oam.read(u16::from(dest & !1) | (addr & 1));
+        if dest <= 0xA0 && dest > 0 {
+            if self.d.hdma_in_progress {
+                return self.oam_read_row(((self.d.hdma_src & !1) | (addr & 1)) as u8);
+            }
+            if dest != 0xA0 {
+                return self.oam.read(u16::from(dest & !1) | (addr & 1));
+            }
         }
         self.oam.read(addr)
+    }
+
+    /// SameBoy's `GB_read_oam`: the 160 bytes, then the unusable area.
+    fn oam_read_row(&self, addr: u8) -> u8 {
+        if addr < 0xA0 {
+            self.oam.read(u16::from(addr))
+        } else {
+            self.read_unusable(0xFE00 | u16::from(addr))
+        }
     }
 
     fn add_object_from_index(&mut self, index: u8) {
         let base = u16::from(index) * 4;
         let dma_active = self.d.dma_dest != 0xA1;
         if !dma_active || self.d.cpu_idle {
-            self.d.mode2_y_bus = self.oam_read_for_search(base);
-            self.d.mode2_x_bus = self.oam_read_for_search(base + 1);
+            self.d.mode2_y_bus = self.oam_read(base);
+            self.d.mode2_x_bus = self.oam_read(base + 1);
         }
 
         if self.d.n_visible_objs == 10 {
@@ -434,6 +477,10 @@ impl Ppu {
         // A halted DMA blocks the object search on everything before CGB-E
         // (pre-CGB units vary; like SameBoy this reads 0xFF there).
         if dma_active && self.d.cpu_idle && !matches!(self.model, Model::CgbE | Model::Agb) {
+            return;
+        }
+
+        if self.d.oam_ppu_blocked {
             return;
         }
 
@@ -483,12 +530,52 @@ impl Ppu {
         address
     }
 
-    fn vram_read(&self, address: u16) -> u8 {
+    /// VRAM at `address` (0x2000.. is bank 1), no bus conflicts.
+    fn vram_raw(&self, address: u16) -> u8 {
         if address >= 0x2000 {
             self.vram.vram_at_bank(address - 0x2000, 1)
         } else {
             self.vram.vram_at_bank(address, 0)
         }
+    }
+
+    /// The PPU's VRAM read (SameBoy's `vram_read`): blocked in STOP mode, and
+    /// it fights the HDMA and an OAM DMA that reads VRAM for the bus.
+    fn vram_read(&mut self, address: u16) -> u8 {
+        if self.d.vram_ppu_blocked {
+            return 0xFF;
+        }
+        let mut address = address;
+        if self.d.hdma_in_progress {
+            self.d.addr_for_hdma_conflict = address;
+            return 0;
+        }
+        let dest = self.d.dma_dest;
+        if dest <= 0xA0 && dest > 0 && self.d.dma_src & 0xE000 == 0x8000 {
+            // DMAing from VRAM!
+            let offset = 1 - u16::from(self.d.cpu_idle);
+            if self.hw_cgb() {
+                if self.d.dma_ppu_vram_conflict {
+                    address = (self.d.dma_ppu_vram_conflict_addr & 0x1FFF) | (address & 0x2000);
+                } else if self.d.dma_modulo && !self.d.cpu_idle {
+                    address &= 0x2000;
+                    address |= self.d.dma_src.wrapping_sub(offset) & 0x1FFF;
+                } else {
+                    address &= 0x2000 | (self.d.dma_src.wrapping_sub(offset) & 0x1FFF);
+                    self.d.dma_ppu_vram_conflict_addr = address;
+                    self.d.dma_ppu_vram_conflict = !self.d.cpu_idle;
+                }
+            } else {
+                address |= self.d.dma_src.wrapping_sub(offset) & 0x1FFF;
+            }
+            let bank = u16::from(self.vram.read_vbk() & 1) * 0x2000;
+            let value = self.vram_raw((address & 0x1FFF) | bank);
+            let index = usize::from(dest.wrapping_sub(offset as u8));
+            if let Some(byte) = self.oam.bytes_mut().get_mut(index) {
+                *byte = value;
+            }
+        }
+        self.vram_raw(address)
     }
 
     // ---------------------------------------------------------------------
@@ -586,9 +673,9 @@ impl Ppu {
                     return;
                 }
                 let address = self.d.last_tile_index_address;
-                self.d.current_tile = self.vram.vram_at_bank(address, 0);
+                self.d.current_tile = self.vram_read(address);
                 if self.hw_cgb() {
-                    self.d.current_tile_attributes = self.vram.vram_at_bank(address, 1);
+                    self.d.current_tile_attributes = self.vram_read(address + 0x2000);
                 }
                 self.d.fetcher_state += 1;
             }
@@ -962,8 +1049,8 @@ impl Ppu {
                 104 => {
                     self.advance_fetcher();
                     let base = u16::from(self.d.visible_objs[self.d.n_visible_objs - 1]) * 4;
-                    self.d.mode2_y_bus = self.oam.read(base + 2);
-                    self.d.object_flags = self.oam.read(base + 3);
+                    self.d.mode2_y_bus = self.oam_read(base + 2);
+                    self.d.object_flags = self.oam_read(base + 3);
                     self.d.cfl += 2;
                     self.sleep(20, 2);
                     return Mode3Flow::Slept;
@@ -1028,7 +1115,11 @@ impl Ppu {
                         priority,
                         flags & 0x20 != 0,
                     );
-                    self.d.data_for_sel_glitch = self.vram_read(self.d.object_low_line_address + 1);
+                    self.d.data_for_sel_glitch = if self.d.vram_ppu_blocked {
+                        0xFF
+                    } else {
+                        self.vram_raw(self.d.object_low_line_address + 1)
+                    };
                     self.d.n_visible_objs -= 1;
                     entry = 101;
                 }
@@ -1585,8 +1676,45 @@ enum Mode3Flow {
 
 impl Ppu {
     /// The DMA copies `dest` (an OAM index, `0xA1` when idle) next.
-    pub const fn set_dma_dest(&mut self, dest: u8) {
+    /// The OAM DMA's state, as the PPU sees it.
+    pub const fn set_dma_state(&mut self, dest: u8, src: u16, modulo: bool) {
         self.d.dma_dest = dest;
+        self.d.dma_src = src;
+        self.d.dma_modulo = modulo;
+    }
+
+    /// A new DMA byte starts: the bus fight of the last one is over.
+    pub const fn clear_dma_vram_conflict(&mut self) {
+        self.d.dma_ppu_vram_conflict = false;
+    }
+
+    /// An HDMA burst starts (`true`) or ends; `src` is the byte it reads next.
+    pub const fn set_hdma_state(&mut self, in_progress: bool, src: u16) {
+        self.d.hdma_in_progress = in_progress;
+        self.d.hdma_src = src;
+        if in_progress {
+            self.d.addr_for_hdma_conflict = 0xFFFF;
+        }
+    }
+
+    /// The VRAM address the PPU read during the last HDMA byte, if it did.
+    pub const fn take_hdma_conflict_addr(&mut self) -> Option<u16> {
+        let addr = self.d.addr_for_hdma_conflict;
+        self.d.addr_for_hdma_conflict = 0xFFFF;
+        if addr == 0xFFFF { None } else { Some(addr) }
+    }
+
+    /// STOP: the PPU's accesses are blocked (unless the CPU's already were).
+    pub const fn block_ppu_accesses(&mut self, blocked: bool) {
+        if blocked {
+            self.d.oam_ppu_blocked = !self.d.oam_read_blocked;
+            self.d.vram_ppu_blocked = !self.d.vram_read_blocked;
+            self.d.cgb_palettes_ppu_blocked = !self.d.cgb_palettes_blocked;
+        } else {
+            self.d.oam_ppu_blocked = false;
+            self.d.vram_ppu_blocked = false;
+            self.d.cgb_palettes_ppu_blocked = false;
+        }
     }
 
     pub const fn set_obj_size_fetch(&mut self, big: bool) {

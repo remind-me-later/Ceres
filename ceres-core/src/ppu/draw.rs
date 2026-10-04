@@ -15,6 +15,11 @@ impl Ppu {
     pub(super) fn pixel_rgb(&self, out: PixelOut) -> (u8, u8, u8) {
         let cgb_mode = self.cgb_mode;
 
+        // The PPU can't read the palettes in STOP mode: black.
+        if self.d.cgb_palettes_ppu_blocked {
+            return (0, 0, 0);
+        }
+
         if let Some((pixel, palette)) = out.obj {
             let shade = if cgb_mode == CgbMode::Cgb {
                 pixel
