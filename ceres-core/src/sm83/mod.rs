@@ -57,6 +57,9 @@ pub trait Bus {
     /// Run a pending HDMA transfer chunk, if any.
     fn tick_hdma(&mut self);
 
+    /// Discards the time deferred so far (it was already accounted for).
+    fn drop_deferred(&mut self);
+
     /// The CPU entered (or, with `false`, left) HALT.
     fn set_halted(&mut self, halted: bool);
 
@@ -74,13 +77,29 @@ pub trait Bus {
     /// PPU stop, clock stop. `ime` is the CPU's current IME state.
     fn enter_stop(&mut self, ime: bool);
 
-    /// KEY1 speed-switch requested (`key1.is_requested`).
-    fn speed_switch_pending(&self) -> bool;
+    /// Flush all deferred time.
+    fn flush(&mut self);
 
-    /// Perform the CGB double-speed switch: `key1.change_speed`, DIV reset,
-    /// APU div-phase resync, then advance the 32768 M-cycles the PPU/APU
-    /// must observe across the switch.
-    fn perform_speed_switch(&mut self);
+    /// Read without consuming time or triggering side effects.
+    fn peek(&self, addr: u16) -> u8;
+
+    /// The CPU is in STOP mode (waiting for a joypad press).
+    fn is_stopped(&self) -> bool;
+
+    /// KEY1 speed-switch requested (`key1.is_requested`).
+    fn speed_switch_requested(&self) -> bool;
+
+    /// Start the CGB speed switch (SameBoy's `stop` speed-switch block).
+    fn begin_speed_switch(&mut self, interrupt_pending: bool);
+
+    /// Leave STOP mode without touching the speed-switch halt countdown.
+    fn leave_stop(&mut self);
+
+    /// Cancel the post-speed-switch halt.
+    fn clear_speed_switch_halt(&mut self);
+
+    /// The post-speed-switch halt expired since the last call.
+    fn take_unhalt(&mut self) -> bool;
 }
 
 #[derive(Default)]
@@ -200,6 +219,15 @@ impl Sm83 {
         // sampled with the hardware at instruction end.
         let cgb = bus.is_cgb_hardware();
 
+        if bus.is_stopped() {
+            bus.advance(4);
+            if bus.peek(0xFF00) & 0xF != 0xF {
+                bus.leave_stop();
+                bus.advance(8);
+            }
+            return;
+        }
+
         // While halted, DMG samples the interrupt lines two dots into each
         // 4-dot step; CGB (and the first step after HALT) samples at the start.
         if self.is_halted && !cgb && !self.just_halted {
@@ -210,6 +238,10 @@ impl Sm83 {
 
         if self.is_halted {
             bus.advance(if cgb || self.just_halted { 4 } else { 2 });
+            if bus.take_unhalt() {
+                self.is_halted = false;
+                bus.set_halted(false);
+            }
         }
         self.just_halted = false;
 
@@ -875,6 +907,11 @@ impl Sm83 {
     }
 
     fn halt(&mut self, bus: &mut impl Bus) {
+        // A dummy read at PC flushes the fetch M-cycle before the interrupt
+        // lines are sampled; the read's own M-cycle is not charged.
+        bus.read(self.pc);
+        bus.drop_deferred();
+
         // The HALT bug also happens on a CGB, in both CGB and DMG modes.
         if bus.interrupts_pending() {
             if self.ime {
@@ -1317,63 +1354,39 @@ impl Sm83 {
     }
 
     fn stop(&mut self, bus: &mut impl Bus) {
-        // The discarded operand byte is read at the current instant, but
-        // its M-cycle only elapses after the STOP side effects — matching
-        // the previous batched ordering where `write_div`/the speed switch
-        // ran before the instruction's final flush.
-        let _discard_byte = bus.read(self.pc);
-        self.pc = self.pc.wrapping_add(1);
+        // Port of SameBoy's `stop`.
+        bus.flush();
+        bus.peek(self.pc);
 
-        if bus.speed_switch_pending() {
-            // CGB double-speed switch.
-            //
-            // The previous implementation used a hard-coded
-            // `for _ in 0..32768 { tick_m_cycle() }` loop followed by
-            // `write_div()`. The 32768 value (131072 T-cycles) was
-            // tuned so the PPU/APU would advance through enough
-            // cycles during a speed change for the CGB double-speed
-            // PPU/STAT tests (gambatte `*_ds_*` tests in
-            // ff41_disable, ff45_disable, late_ff41_enable, lyc_*,
-            // m2int_m0irq, etc.) to see the right PPU mode at the
-            // right time. The value is way larger than any actual
-            // hardware speed-switch delay (SameBoy uses 11 M-cycles
-            // total via speed_switch_countdown/freeze; gambatte uses
-            // 8 T-cycles for normal->double and 0 for double->normal).
-            //
-            // The hack had two correctness problems for the timer:
-            //   1. `write_div()` fires triggers = `old_div & !0` =
-            //      `old_div`, so any bit that was set in `old_div`
-            //      at STOP time would spuriously increment TIMA by
-            //      1. This made gambatte's speedchange2_tima01_1
-            //      read A=0A instead of 09 and tima00_1a read A=02
-            //      instead of 00.
-            //   2. Even ignoring the triggers, the timer's
-            //      `set_system_clk(old + 1)`-per-T-cycle loop never
-            //      produces a falling edge when starting from div=0,
-            //      so the 131072 T-cycles of pending flush was
-            //      effectively a no-op for the timer — the only
-            //      effect on TIMA was the +1 from the `write_div`
-            //      trigger.
-            //
-            // The new implementation:
-            //   - Uses the same 32768 M-cycles for the PPU/APU
-            //     advance that the previous code used, since the
-            //     `_ds_` PPU tests genuinely need the PPU to see a
-            //     large time gap (the CGB speed change rewinds the
-            //     PPU's internal phase by ~131072 T-cycles).
-            //   - After the loop, resets `clock.div = 0` directly
-            //     (bypassing `set_system_clk`) so no spurious TIMA
-            //     trigger fires from the div-reset, and so the
-            //     subsequent flush of the 131072 T-cycles of pending
-            //     also produces no TIMA triggers (the timer's
-            //     `old + 1` walk never falls).
-            //   - Calls `apu.reset_div_phase()` to resynchronise the
-            //     sound unit's div-phase counter, matching what
-            //     `write_div` would have done for the APU.
-            bus.perform_speed_switch();
-        } else {
-            bus.enter_stop(!self.ime);
-            self.is_halted = true;
+        let exit_by_joyp = bus.peek(0xFF00) & 0xF != 0xF;
+        let speed_switch = bus.speed_switch_requested() && !exit_by_joyp;
+        let immediate_exit = speed_switch || exit_by_joyp;
+        let interrupt_pending = bus.interrupts_pending();
+
+        if !exit_by_joyp {
+            bus.enter_stop(self.ime);
+        }
+
+        // When entering with IF&IE set, the second byte of STOP is actually
+        // executed.
+        if !interrupt_pending {
+            bus.read(self.pc);
+            self.pc = self.pc.wrapping_add(1);
+        }
+
+        if speed_switch {
+            bus.begin_speed_switch(interrupt_pending);
+        }
+
+        if immediate_exit {
+            bus.leave_stop();
+            if interrupt_pending {
+                bus.clear_speed_switch_halt();
+            } else {
+                self.is_halted = true;
+                self.just_halted = true;
+                bus.set_halted(true);
+            }
         }
     }
 
@@ -1645,6 +1658,10 @@ impl<A: AudioCallback> Bus for Gb<A> {
         }
     }
 
+    fn drop_deferred(&mut self) {
+        self.time_deferred = 0;
+    }
+
     fn set_halted(&mut self, halted: bool) {
         let hblank = matches!(self.ppu.mode(), crate::ppu::Mode::HBlank);
         self.hdma.set_cpu_halted(halted, hblank);
@@ -1659,11 +1676,36 @@ impl<A: AudioCallback> Bus for Gb<A> {
     }
 
     fn wake_from_stop(&mut self) {
+        self.leave_stop();
+        self.speed_switch.halt_countdown = 0;
+    }
+
+    fn leave_stop(&mut self) {
         self.ppu.leave_stop_mode();
         self.clock.stopped = false;
         let hblank = matches!(self.ppu.mode(), crate::ppu::Mode::HBlank);
         self.hdma.set_cpu_halted(false, hblank);
         self.hdma.wake(hblank);
+    }
+
+    fn flush(&mut self) {
+        self.flush_deferred_time();
+    }
+
+    fn peek(&self, addr: u16) -> u8 {
+        self.read_mem(addr)
+    }
+
+    fn is_stopped(&self) -> bool {
+        self.clock.stopped
+    }
+
+    fn clear_speed_switch_halt(&mut self) {
+        self.speed_switch.halt_countdown = 0;
+    }
+
+    fn take_unhalt(&mut self) -> bool {
+        core::mem::take(&mut self.speed_switch.unhalt)
     }
 
     fn enter_stop(&mut self, ime: bool) {
@@ -1677,14 +1719,22 @@ impl<A: AudioCallback> Bus for Gb<A> {
             .note_stop(matches!(self.ppu.mode(), crate::ppu::Mode::HBlank));
     }
 
-    fn speed_switch_pending(&self) -> bool {
+    fn speed_switch_requested(&self) -> bool {
         self.key1.is_requested()
     }
 
-    fn perform_speed_switch(&mut self) {
-        self.key1.change_speed();
-        self.clock.div = 0;
-        self.apu.reset_div_phase();
-        self.advance_dots(32768 * 4);
+    fn begin_speed_switch(&mut self, interrupt_pending: bool) {
+        self.flush_deferred_time();
+        if self.key1.is_enabled() {
+            self.key1.set_double_speed(false);
+        } else {
+            self.speed_switch.countdown = 6;
+            self.speed_switch.freeze = 1;
+        }
+        if !interrupt_pending {
+            self.speed_switch.halt_countdown = 0x20008;
+            self.speed_switch.freeze = 5;
+        }
+        self.key1.clear_request();
     }
 }

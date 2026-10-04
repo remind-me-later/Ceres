@@ -86,20 +86,62 @@ impl<A: AudioCallback> Gb<A> {
         if cpu_t_cycles <= 0 {
             return;
         }
+        self.dots_ran += cpu_t_cycles;
+        self.advance_cycles(cpu_t_cycles);
+    }
+
+    /// Port of SameBoy's `GB_advance_cycles`: the speed switch phases are
+    /// handled first, then the timers, and the rest of the machine only
+    /// runs once the post-switch freeze is over.
+    fn advance_cycles(&mut self, mut cycles: i32) {
+        if self.speed_switch.countdown != 0 {
+            let countdown = i32::from(self.speed_switch.countdown);
+            if countdown == cycles {
+                self.key1.toggle_double_speed();
+                self.speed_switch.countdown = 0;
+            } else if countdown > cycles {
+                self.speed_switch.countdown -= cycles as u8;
+            } else {
+                cycles -= countdown;
+                self.speed_switch.countdown = 0;
+                self.advance_cycles(countdown);
+                self.key1.toggle_double_speed();
+            }
+        }
 
         // Cycle-accurate timer advancement (per T-cycle, for accurate TIMA
         // reload timing).
-        self.run_timers(cpu_t_cycles);
+        self.run_timers(cycles);
+
+        if self.speed_switch.halt_countdown != 0 {
+            self.speed_switch.halt_countdown -= cycles;
+            if self.speed_switch.halt_countdown <= 0 {
+                self.speed_switch.halt_countdown = 0;
+                self.speed_switch.unhalt = true;
+            }
+        }
+
+        if self.speed_switch.freeze != 0 {
+            let freeze = i32::from(self.speed_switch.freeze);
+            if freeze >= cycles {
+                self.speed_switch.freeze -= cycles as u8;
+                return;
+            }
+            cycles -= freeze;
+            self.speed_switch.freeze = 0;
+        }
 
         // DMA advances per dot.
-        self.dma.advance_dots(cpu_t_cycles);
+        self.dma.advance_dots(cycles);
 
         // Advance the PPU dot by dot. One PPU dot is one CPU T-cycle in
         // single speed and two in double speed (the PPU's real-time rate
         // is unchanged; SameBoy advances it by `cycles * 2` vs `cycles *
-        // 4` per CPU step for the same reason).
+        // 4` per CPU step for the same reason). Fractional T-cycles are
+        // banked in `ppu_t_credit` so that sub-M-cycle bus-conflict write
+        // offsets never drop PPU dots.
         let t_cycles_per_dot = if self.key1.is_enabled() { 2 } else { 1 };
-        self.ppu_t_credit += cpu_t_cycles;
+        self.ppu_t_credit += cycles;
         while self.ppu_t_credit >= t_cycles_per_dot {
             self.ppu_t_credit -= t_cycles_per_dot;
             self.ppu
@@ -112,10 +154,8 @@ impl<A: AudioCallback> Gb<A> {
 
         self.run_dma();
 
-        self.apu.run(cpu_t_cycles);
-        self.cart.run_rtc(cpu_t_cycles);
-
-        self.dots_ran += cpu_t_cycles;
+        self.apu.run(cycles);
+        self.cart.run_rtc(cycles);
     }
 
     fn inc_tima(&mut self) {
@@ -164,7 +204,17 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn run_timers(&mut self, cpu_t_cycles: i32) {
+        // The timers (and DIV) are frozen in STOP mode.
+        if self.clock.stopped {
+            return;
+        }
         for _ in 0..cpu_t_cycles {
+            // The CPU-side DIV-reset signal being held delays the timers
+            // by a few T-cycles (set when entering STOP).
+            if self.clock.div_cycles < 0 {
+                self.clock.div_cycles += 1;
+                continue;
+            }
             if self.clock.tima_reload_pending > 0 {
                 if self.clock.tima_reload_pending <= 4 {
                     self.clock.tima_reload_pending -= 1;

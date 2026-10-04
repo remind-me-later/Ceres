@@ -28,7 +28,7 @@ use cheats::GameGenie;
 pub use cheats::GameGenieCode;
 use interrupts::Interrupts;
 use joypad::Joypad;
-use memory::Key1;
+use memory::{Key1, SpeedSwitch};
 use serial::Serial;
 use {apu::Apu, ppu::Ppu};
 pub use {
@@ -61,6 +61,7 @@ pub struct Gb<A: AudioCallback> {
     ints: Interrupts,
     joy: Joypad,
     key1: Key1,
+    speed_switch: SpeedSwitch,
     model: Model,
     /// PPU tick credit, in CPU T-cycles. Banked by `advance_dots` when a
     /// batch is not a whole number of PPU dots (sub-M-cycle bus-conflict
@@ -484,6 +485,7 @@ impl<A: AudioCallback> Gb<A> {
             ints: Interrupts::default(),
             joy: Joypad::default(),
             key1: Key1::default(),
+            speed_switch: SpeedSwitch::default(),
             model,
             ppu_t_credit: 0,
             ppu: Ppu::new(model),
@@ -603,6 +605,7 @@ impl<A: AudioCallback> Gb<A> {
         self.hdma = Hdma::default();
         self.ints = Interrupts::default();
         self.key1 = Key1::default();
+        self.speed_switch = SpeedSwitch::default();
         self.ppu_t_credit = 0;
         self.time_deferred = 0;
         self.ppu = Ppu::new(self.model);

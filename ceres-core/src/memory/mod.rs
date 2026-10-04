@@ -10,7 +10,7 @@ use crate::{CgbMode, Gb};
 pub use dma::Dma;
 pub use hdma::Hdma;
 pub use hram::Hram;
-pub use key1::Key1;
+pub use key1::{Key1, SpeedSwitch};
 pub use wram::Wram;
 
 // IO addresses
