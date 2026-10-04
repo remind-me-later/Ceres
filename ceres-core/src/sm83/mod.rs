@@ -1562,11 +1562,12 @@ impl<A: AudioCallback> Bus for Gb<A> {
             // object-fetching state machine, and the two behave differently
             // when it comes to access conflicts.
             ConflictType::DmgLcdc => {
-                // Bits the tile fetcher consumes (OBJ_SIZE, BG_MAP, TILE_SEL,
-                // WIN_MAP) are seen by the PPU one dot before the ones the
-                // pixel mixer consumes (BG_EN, WIN_EN, OBJ_EN): measured on
-                // DMG against the mealybug LCDC tests.
-                const FETCHER_BITS: u8 = 0x04 | 0x08 | 0x10 | 0x40;
+                // Bits the tile fetcher consumes (BG_MAP, TILE_SEL, WIN_MAP)
+                // are seen by the PPU one dot before the ones the pixel mixer
+                // consumes (BG_EN, WIN_EN, OBJ_EN): measured on DMG against
+                // the mealybug LCDC tests. OBJ_SIZE reaches the object fetch
+                // early too, but the object search only sees it with the rest.
+                const FETCHER_BITS: u8 = 0x08 | 0x10 | 0x40;
 
                 let mut old = self.read_mem(addr);
                 self.advance_dots(pending - 2);
@@ -1577,6 +1578,8 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 }
 
                 self.write_mem(addr, (old & !FETCHER_BITS) | (val & FETCHER_BITS));
+                // The object fetch (not the object search) sees OBJ_SIZE early.
+                self.ppu.set_obj_size_fetch(val & 0x04 != 0);
                 self.advance_dots(1);
                 self.write_mem(addr, val);
 

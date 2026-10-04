@@ -288,6 +288,7 @@ impl Ppu {
         self.abort_object_fetch_on_obj_disable(val);
 
         self.lcdc = val;
+        self.d.fetch_obj_size = val & 0x04 != 0;
         self.d
             .schedule_wy_check(self.model.is_cgb_hardware(), self.double_speed);
     }

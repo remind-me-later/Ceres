@@ -157,6 +157,9 @@ pub(super) struct Display {
     pub accessed_oam_row: u8,
     /// OAM index the DMA is writing (`0xA1`: no transfer).
     pub dma_dest: u8,
+    /// OBJ_SIZE as the object fetch sees it (it can land a dot before the
+    /// object search sees it).
+    pub fetch_obj_size: bool,
     /// The CPU is halted or stopped.
     pub cpu_idle: bool,
     mode2_y_bus: u8,
@@ -230,6 +233,7 @@ impl Default for Display {
             oam_search_index: 0,
             accessed_oam_row: NO_ROW,
             dma_dest: 0xA1,
+            fetch_obj_size: false,
             cpu_idle: false,
             mode2_y_bus: 0,
             mode2_x_bus: 0,
@@ -469,7 +473,7 @@ impl Ppu {
     }
 
     fn object_line_address(&self, y: u8, tile: u8, flags: u8) -> u16 {
-        let height_16 = self.lcdc & 0x04 != 0;
+        let height_16 = self.d.fetch_obj_size;
         let mut tile_y = self.d.current_line.wrapping_sub(y) & if height_16 { 0xF } else { 7 };
         if flags & 0x40 != 0 {
             tile_y ^= if height_16 { 0xF } else { 7 };
@@ -1560,6 +1564,10 @@ impl Ppu {
     /// The DMA copies `dest` (an OAM index, `0xA1` when idle) next.
     pub const fn set_dma_dest(&mut self, dest: u8) {
         self.d.dma_dest = dest;
+    }
+
+    pub const fn set_obj_size_fetch(&mut self, big: bool) {
+        self.d.fetch_obj_size = big;
     }
 
     pub const fn set_cpu_idle(&mut self, idle: bool) {
