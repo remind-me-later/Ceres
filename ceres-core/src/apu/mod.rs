@@ -7,10 +7,25 @@
 //! The APU is clocked in 2 MHz ticks: two per M-cycle in single speed, one in
 //! double speed.
 
+#![expect(
+    clippy::else_if_without_else,
+    reason = "A transliteration of SameBoy's apu.c: the chains deliberately have no fallthrough"
+)]
+#![expect(
+    clippy::verbose_bit_mask,
+    reason = "The register bit tests read like the C they come from"
+)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "The counters are bounded by the hardware: a tick count is a handful of cycles"
+)]
+
 mod high_pass_filter;
 
 use {
     crate::{Model, timing::DOTS_PER_SEC},
+    core::cmp::Ordering,
     high_pass_filter::HighPassFilter,
 };
 
@@ -119,6 +134,10 @@ impl EnvelopeClock {
     }
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Independent hardware flags of the channel state machine"
+)]
 #[derive(Clone, Copy, Debug, Default)]
 struct SquareChannel {
     pulse_length: u16,
@@ -135,6 +154,10 @@ struct SquareChannel {
     just_reloaded: bool,
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Independent hardware flags of the channel state machine"
+)]
 #[derive(Clone, Copy, Debug, Default)]
 struct WaveChannel {
     enable: bool,
@@ -150,6 +173,10 @@ struct WaveChannel {
     bugged_read_countdown: u8,
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Independent hardware flags of the channel state machine"
+)]
 #[derive(Clone, Copy, Debug, Default)]
 struct NoiseChannel {
     pulse_length: u16,
@@ -177,6 +204,10 @@ enum SkipDivEvent {
 }
 
 /// The state that powering the APU off clears (SameBoy's `GB_apu_t`).
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Independent hardware flags of the channel state machine"
+)]
 #[derive(Clone, Copy, Debug, Default)]
 struct State {
     global_enable: bool,
@@ -502,13 +533,12 @@ impl<A: AudioCallback> Apu<A> {
             self.s.samples[index] = value;
             let right_volume = i32::from(self.regs[NR50] & 7) + 1;
             let left_volume = i32::from((self.regs[NR50] >> 4) & 7) + 1;
-            let mut value = i32::from(value);
-            let mut silence = 0;
-            if index == WAVE {
-                // Channel 3 is inverted on the AGB and has another "silence".
-                value ^= 0xF;
-                silence = 7 * 2;
-            }
+            // Channel 3 is inverted on the AGB and has another "silence".
+            let (value, silence) = if index == WAVE {
+                (i32::from(value) ^ 0xF, 7 * 2)
+            } else {
+                (i32::from(value), 0)
+            };
             let bias = i32::from(self.agb_bias_for_channel(index));
             let left = self.regs[NR51] & (0x10 << index) != 0;
             let right = self.regs[NR51] & (1 << index) != 0;
@@ -617,7 +647,7 @@ impl<A: AudioCallback> Apu<A> {
     fn render(&mut self) {
         const DAC_SPEED: f32 = 20_000.0;
         let period = self.sample_period as f32;
-        let (mut left, mut right) = (0.0f32, 0.0f32);
+        let (mut left, mut right) = (0.0_f32, 0.0_f32);
         for ch in 0..N_CHANNELS {
             let mut multiplier = CH_STEP as f32;
             if self.rank() <= 15 {
@@ -630,7 +660,8 @@ impl<A: AudioCallback> Apu<A> {
                     if *charge > 1.0 {
                         *charge = 1.0;
                     } else {
-                        multiplier *= 3.0 * *charge * *charge - 2.0 * *charge * *charge * *charge;
+                        multiplier *=
+                            (3.0 * *charge).mul_add(*charge, -(2.0 * *charge * *charge * *charge));
                     }
                 } else {
                     *charge -= speed;
@@ -638,7 +669,8 @@ impl<A: AudioCallback> Apu<A> {
                         multiplier = 0.0;
                         *charge = 0.0;
                     } else {
-                        multiplier *= 3.0 * *charge * *charge - 2.0 * *charge * *charge * *charge;
+                        multiplier *=
+                            (3.0 * *charge).mul_add(*charge, -(2.0 * *charge * *charge * *charge));
                     }
                 }
             }
@@ -683,11 +715,11 @@ impl<A: AudioCallback> Apu<A> {
                 if (old_value & 7) == 0 && !lock.locked {
                     *volume ^= 0xF;
                 } else {
-                    *volume = 0xEu8.wrapping_sub(*volume) & 0xF;
+                    *volume = 0xE_u8.wrapping_sub(*volume) & 0xF;
                 }
                 should_tick = false; // Somehow prevents ticking?
             } else {
-                *volume = 0x10u8.wrapping_sub(*volume) & 0xF;
+                *volume = 0x10_u8.wrapping_sub(*volume) & 0xF;
             }
         }
         if should_tick {
@@ -983,6 +1015,10 @@ impl<A: AudioCallback> Apu<A> {
         self.mix(ticks);
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "SameBoy's `GB_apu_run`: every channel advances here"
+    )]
     fn run_ticks(&mut self, ctx: &ApuCtx, mut cycles: u32) {
         if cycles == 0 {
             return;
@@ -1009,15 +1045,17 @@ impl<A: AudioCallback> Apu<A> {
         if !ctx.stopped || self.cgb() {
             let delayed = u32::from(self.s.noise.dmg_delayed_start);
             if delayed != 0 {
-                if delayed == cycles {
-                    self.s.noise.dmg_delayed_start = 0;
-                    start_ch4 = true;
-                } else if delayed > cycles {
-                    self.s.noise.dmg_delayed_start -= cycles as u8;
-                } else {
-                    // Split it into two.
-                    cycles -= delayed;
-                    self.run_ticks(ctx, delayed);
+                match delayed.cmp(&cycles) {
+                    Ordering::Equal => {
+                        self.s.noise.dmg_delayed_start = 0;
+                        start_ch4 = true;
+                    }
+                    Ordering::Greater => self.s.noise.dmg_delayed_start -= cycles as u8,
+                    Ordering::Less => {
+                        // Split it into two.
+                        cycles -= delayed;
+                        self.run_ticks(ctx, delayed);
+                    }
                 }
             }
 
@@ -1274,9 +1312,10 @@ impl<A: AudioCallback> Apu<A> {
         let mut div_1_glitch = false;
         let active = self.s.is_active[NOISE];
 
-        if divisor > 1 && self.s.noise.counter_countdown == 1 {
-            self.s.noise.counter = (self.s.noise.counter + 1) & 0x3FFF;
-        } else if divisor > 1 && self.s.noise.counter_countdown == 2 && active && rank <= 13 && ds {
+        if divisor > 1
+            && (self.s.noise.counter_countdown == 1
+                || self.s.noise.counter_countdown == 2 && active && rank <= 13 && ds)
+        {
             self.s.noise.counter = (self.s.noise.counter + 1) & 0x3FFF;
         } else if self.s.noise.counter_countdown == 2 && self.s.noise.alignment & 3 == 0 && active {
             if divisor == 0 {
@@ -1366,6 +1405,10 @@ impl<A: AudioCallback> Apu<A> {
         }
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "The LFSR width glitches of SameBoy's `nr43_write`"
+    )]
     fn nr43_write(&mut self, new: u8) {
         let rank = self.rank();
         let old_narrow = self.s.noise.narrow;
@@ -1387,24 +1430,22 @@ impl<A: AudioCallback> Apu<A> {
         let mut glitch_value = (old & 0x7F) | (new & 0x80);
         let mut glitch_bit = bit(effective_counter, glitch_value >> 4);
         let new_bit = bit(effective_counter, new >> 4);
-        let mut force_glitch = false;
-
-        if self.model == Model::CgbD && new_bit && glitch_bit && old_bit && (old ^ new) & 0x70 != 0
-        {
-            force_glitch = true;
-        }
+        let mut force_glitch = self.model == Model::CgbD
+            && new_bit
+            && glitch_bit
+            && old_bit
+            && (old ^ new) & 0x70 != 0;
 
         if rank > 15 {
             // AGB behaviour is very glitchy and inconsistent; this is a very
             // rough approximation.
-            let glitch_value2;
-            if new >= 0x80 && old >= 0x80 {
+            let glitch_value2 = if new >= 0x80 && old >= 0x80 {
                 glitch_value = (old & 0xCF) | (new & 0x30);
-                glitch_value2 = (old & 0x8F) | (new & 0x70);
+                (old & 0x8F) | (new & 0x70)
             } else {
                 glitch_value = (old & 0xDF) | (new & 0x20);
-                glitch_value2 = (old & 0xCF) | (new & 0x30);
-            }
+                (old & 0xCF) | (new & 0x30)
+            };
             glitch_bit = bit(self.s.noise.counter, glitch_value >> 4);
             let glitch_bit2 = bit(self.s.noise.counter, glitch_value2 >> 4);
             if glitch_bit != glitch_bit2 {
@@ -1499,9 +1540,13 @@ impl<A: AudioCallback> Apu<A> {
         }
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Two lookup tables and a switch with fall-through, as in SameBoy"
+    )]
     fn glitch_category_1_cgb_d(&mut self, old: u8, new: u8, force_glitch: bool) {
         const GLITCH_MAP_L2H: [u8; 64] = {
-            let mut m = [0u8; 64];
+            let mut m = [0_u8; 64];
             let rows: [[u8; 6]; 8] = [
                 [0x00, 0x01, 0x01, 0x21, 0x02, 0x21],
                 [0x03, 0x00, 0x21, 0x01, 0x04, 0x04],
@@ -1524,7 +1569,7 @@ impl<A: AudioCallback> Apu<A> {
             m
         };
         const GLITCH_MAP_H2L: [u8; 64] = {
-            let mut m = [0u8; 64];
+            let mut m = [0_u8; 64];
             let rows: [[u8; 8]; 6] = [
                 [0x00, 0x27, 0x26, 0x37, 0x21, 0x38, 0x01, 0x01],
                 [0x01, 0x00, 0x38, 0x21, 0x21, 0x21, 0x01, 0x01],
@@ -1580,10 +1625,10 @@ impl<A: AudioCallback> Apu<A> {
         };
         if stage == 6 {
             let probe = if glitch == 4 { 0x60 } else { 0x40 };
-            if self.s.noise.lfsr & probe != 0x40 {
-                stage = 5;
-            } else {
+            if self.s.noise.lfsr & probe == 0x40 {
                 stage = 4;
+            } else {
+                stage = 5;
             }
         }
         if stage == 5 {
@@ -1616,7 +1661,7 @@ impl<A: AudioCallback> Apu<A> {
 
     fn glitch_category_2_cgb_e(&mut self, old: u8, new: u8) {
         const GLITCH_MAP: [u8; 64] = {
-            let mut m = [0u8; 64];
+            let mut m = [0_u8; 64];
             // Indexed by (old & 0x70) >> 1 | (new & 0x70) >> 4, octal in the C source.
             m[0o02] = 4;
             m[0o03] = 2;
@@ -1721,6 +1766,10 @@ impl<A: AudioCallback> Apu<A> {
     }
 
     /// Writes a register (`reg` is the low byte of the 0xFF10..=0xFF3F address).
+    #[expect(
+        clippy::too_many_lines,
+        reason = "SameBoy's `GB_apu_write`: one arm per register"
+    )]
     pub fn write(&mut self, ctx: &ApuCtx, reg: usize, value: u8) {
         let cgb = self.cgb();
         let rank = self.rank();
@@ -1945,10 +1994,10 @@ impl<A: AudioCallback> Apu<A> {
                         let new_bit = bit(counter, value >> 4);
                         if !old_bit && new_bit && glitch_bit {
                             let previous = counter.wrapping_sub(1) & 0x3FFF;
-                            let old_bit = bit(previous, self.regs[NR43] >> 4);
-                            let glitch_bit = bit(previous, 7);
-                            let new_bit = bit(previous, value >> 4);
-                            if old_bit && !new_bit && glitch_bit {
+                            let previous_old_bit = bit(previous, self.regs[NR43] >> 4);
+                            let previous_glitch_bit = bit(previous, 7);
+                            let previous_new_bit = bit(previous, value >> 4);
+                            if previous_old_bit && !previous_new_bit && previous_glitch_bit {
                                 self.step_lfsr();
                             }
                         }
@@ -1964,6 +2013,10 @@ impl<A: AudioCallback> Apu<A> {
         self.regs[reg] = value;
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "The trigger glitches of SameBoy's NRx4 write"
+    )]
     fn write_square_nrx4(&mut self, ctx: &ApuCtx, reg: usize, value: u8) {
         let rank = self.rank();
         let cgb = self.cgb();
@@ -2008,22 +2061,8 @@ impl<A: AudioCallback> Apu<A> {
             }
             let mut force_unsurpressed = false;
             let lf_div = i32::from(self.s.lf_div);
-            if !self.s.is_active[index] {
-                if matches!(self.model, Model::CgbE | Model::CgbD) {
-                    let sq = &mut self.s.squares[index];
-                    if value & 4 == 0
-                        && (sq.sample_countdown.wrapping_sub(u16::from(sq.delay)) / 2) & 0x400 == 0
-                    {
-                        sq.current_sample_index = (sq.current_sample_index + 1) & 7;
-                        force_unsurpressed = true;
-                    }
-                }
-                let delay = 6 + lf_div * if rank < 14 && ctx.double_speed { 1 } else { -1 };
-                let sq = &mut self.s.squares[index];
-                sq.delay = delay as u8;
-                sq.sample_countdown = (sq.sample_length ^ 0x7FF) * 2 + u16::from(sq.delay);
-            } else {
-                let mut extra_delay = 0u8;
+            if self.s.is_active[index] {
+                let mut extra_delay = 0_u8;
                 if matches!(self.model, Model::CgbE | Model::CgbD) {
                     let sq = &mut self.s.squares[index];
                     if !sq.just_reloaded
@@ -2048,7 +2087,21 @@ impl<A: AudioCallback> Apu<A> {
                 // Timing quirk: if already active, the sound starts 2 (2 MHz)
                 // ticks earlier.
                 let sq = &mut self.s.squares[index];
-                sq.delay = 4u8.wrapping_sub(self.s.lf_div).wrapping_add(extra_delay);
+                sq.delay = 4_u8.wrapping_sub(self.s.lf_div).wrapping_add(extra_delay);
+                sq.sample_countdown = (sq.sample_length ^ 0x7FF) * 2 + u16::from(sq.delay);
+            } else {
+                if matches!(self.model, Model::CgbE | Model::CgbD) {
+                    let sq = &mut self.s.squares[index];
+                    if value & 4 == 0
+                        && (sq.sample_countdown.wrapping_sub(u16::from(sq.delay)) / 2) & 0x400 == 0
+                    {
+                        sq.current_sample_index = (sq.current_sample_index + 1) & 7;
+                        force_unsurpressed = true;
+                    }
+                }
+                let delay = 6 + lf_div * if rank < 14 && ctx.double_speed { 1 } else { -1 };
+                let sq = &mut self.s.squares[index];
+                sq.delay = delay as u8;
                 sq.sample_countdown = (sq.sample_length ^ 0x7FF) * 2 + u16::from(sq.delay);
             }
             self.s.squares[index].current_volume = self.regs[nrx2] >> 4;
@@ -2145,8 +2198,8 @@ impl<A: AudioCallback> Apu<A> {
             }
             if self.s.wave.enable {
                 self.s.is_active[WAVE] = true;
-                let value = (self.s.wave.current_sample_byte >> 4) >> self.s.wave.shift;
-                self.update_sample(WAVE, value);
+                let sample = (self.s.wave.current_sample_byte >> 4) >> self.s.wave.shift;
+                self.update_sample(WAVE, sample);
             }
             self.s.wave.sample_countdown = (self.s.wave.sample_length ^ 0x7FF) + 3;
             if self.s.wave.pulse_length == 0 {

@@ -154,9 +154,7 @@ impl<A: AudioCallback> Gb<A> {
             // Cart specific.
             return None;
         }
-        if cgb && bus_for_addr(cgb, src) != Bus::Ram && addr >= 0xC000
-            || cgb && src >= 0xE000 && addr >= 0xC000
-        {
+        if cgb && addr >= 0xC000 && (bus_for_addr(cgb, src) != Bus::Ram || src >= 0xE000) {
             return Some((src.wrapping_sub(1) & 0x1000) | (addr & 0xFFF) | 0xC000);
         }
         Some(src.wrapping_sub(1))
@@ -177,7 +175,7 @@ impl<A: AudioCallback> Gb<A> {
             return None;
         }
 
-        if cgb && (src < 0xC000 || src >= 0xE000) && addr >= 0xC000 {
+        if cgb && !(0xC000..0xE000).contains(&src) && addr >= 0xC000 {
             return Some((src.wrapping_sub(1) & 0x1000) | (addr & 0xFFF) | 0xC000);
         } else if cgb && src >= 0xE000 && addr >= 0xC000 {
             addr = (src.wrapping_sub(1) & 0x1000) | (addr & 0xFFF) | 0xC000;
@@ -197,6 +195,8 @@ impl<A: AudioCallback> Gb<A> {
                     oam[oam_index] &= value;
                 } else if before_cgb_c || model == Model::Agb {
                     oam[oam_index] = value;
+                } else {
+                    // CGB-C, D and E: the OAM is left alone.
                 }
             }
             if before_cgb_e || addr >= 0xA000 {
@@ -239,7 +239,7 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     /// Port of `GB_dma_run`: transfers the bytes that became due.
-    pub fn run_dma(&mut self) {
+    pub(crate) fn run_dma(&mut self) {
         if !self.dma.is_active() || self.hdma.cpu_halted() || self.clock.stopped {
             return;
         }

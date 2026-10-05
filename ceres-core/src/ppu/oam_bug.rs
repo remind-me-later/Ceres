@@ -7,6 +7,11 @@
 //! `inc rr`, `push`, ...) to the OAM address range while that happens
 //! corrupts the row being read. The CGB is not affected.
 
+#![expect(
+    clippy::many_single_char_names,
+    reason = "The glitch functions name the bus values a, b, c, ... like SameBoy's"
+)]
+
 use super::Ppu;
 use crate::Model;
 
@@ -41,6 +46,10 @@ type Quaternary = fn(u16, u16, u16, u16, u16, u16, u16, u16) -> u16;
 
 /// On some DMGs some of these cases are non-deterministic; like SameBoy this
 /// models the ones that read back constant zeros.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "One argument per OAM word involved"
+)]
 const fn glitch_quaternary_read_dmg(
     _a: u16,
     b: u16,
@@ -54,6 +63,10 @@ const fn glitch_quaternary_read_dmg(
     (e & (h | g | (!d & f) | c | b)) | (c & g & h)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "One argument per OAM word involved"
+)]
 const fn glitch_quaternary_read_sgb2(
     a: u16,
     b: u16,
@@ -369,13 +382,13 @@ impl Ppu {
             if self.d.accessed_oam_row == 0xA0 {
                 for i in 0..8 {
                     let dst = (low & 0xF8) + i;
-                    let value = if (i & 6) != (low & 6) {
-                        self.oam.bytes()[0x98 + i]
-                    } else {
+                    let value = if (i & 6) == (low & 6) {
                         let a = u16::from(self.oam.bytes()[dst]);
                         let b = u16::from(self.oam.bytes()[0x9C]);
                         let c = u16::from(self.oam.bytes()[0x98 + i]);
-                        glitch(a, b, c) as u8
+                        glitch(a, b, c).to_le_bytes()[0]
+                    } else {
+                        self.oam.bytes()[0x98 + i]
                     };
                     self.oam.bytes_mut()[dst] = value;
                 }
@@ -388,7 +401,7 @@ impl Ppu {
                     let a = u16::from(self.oam.bytes()[i]);
                     let b = u16::from(self.oam.bytes()[(low & 0xF8) + i]);
                     let c = u16::from(self.oam.bytes()[(low & 0xFE) | i]);
-                    self.oam.bytes_mut()[i] = glitch(a, b, c) as u8;
+                    self.oam.bytes_mut()[i] = glitch(a, b, c).to_le_bytes()[0];
                 }
                 for i in 2..8 {
                     let byte = self.oam.bytes()[(low & 0xF8) + i];
@@ -397,6 +410,8 @@ impl Ppu {
             }
         } else if self.d.accessed_oam_row == 0 {
             self.oam.bytes_mut()[low & 7] = val;
+        } else {
+            // The unusable area: the write is dropped.
         }
     }
 }

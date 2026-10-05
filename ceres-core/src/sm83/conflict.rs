@@ -7,6 +7,10 @@
 
 use crate::{CgbMode, Model};
 
+#[expect(
+    clippy::module_name_repetitions,
+    reason = "Named after SameBoy's `conflict_t`; it is used outside this module"
+)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ConflictType {
     #[default]
@@ -89,6 +93,10 @@ pub const CGB_DOUBLE_CONFLICT_MAP: [ConflictType; 128] = {
 };
 
 #[must_use]
+#[expect(
+    clippy::module_name_repetitions,
+    reason = "Reads better at the call sites than a bare `get`"
+)]
 pub const fn get_conflict(
     model: Model,
     _cgb_mode: CgbMode,

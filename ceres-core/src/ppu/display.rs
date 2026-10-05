@@ -9,6 +9,7 @@
 //! traces line by line against SameBoy.
 
 use crate::{CgbMode, Model, interrupts::Interrupts};
+use core::mem;
 
 use super::oam_bug::NO_ROW;
 use super::{Ppu, STAT_IF_HBLANK_B, STAT_IF_LYC_B, STAT_IF_OAM_B, STAT_IF_VBLANK_B, STAT_LYC_B};
@@ -99,7 +100,7 @@ impl Fifo {
             self.size += 1;
         }
         let flip_xor: u8 = if flip_x { 0 } else { 7 };
-        for i in (0..8u8).rev() {
+        for i in (0..8_u8).rev() {
             let pixel = (lower >> 7) | ((upper >> 7) << 1);
             let target = &mut self.items[usize::from((self.read_end + (i ^ flip_xor)) & 7)];
             if pixel != 0 && (target.pixel == 0 || target.priority > priority) {
@@ -127,6 +128,11 @@ pub(super) struct PixelOut {
     pub obj: Option<(u8, u8)>,
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    clippy::partial_pub_fields,
+    reason = "SameBoy's display state: independent flags, some read by the rest of the PPU"
+)]
 #[derive(Clone)]
 pub(super) struct Display {
     /// SameBoy's `display_state`: id of the current sleep (0 = not started).
@@ -404,10 +410,12 @@ impl Ppu {
         if self.lcdc & 0x80 == 0 {
             return;
         }
-        let mut comparison = i32::from(self.d.current_line);
-        if (!self.hw_cgb() || self.double_speed()) && self.d.ly_for_comparison != -1 {
-            comparison = i32::from(self.d.ly_for_comparison as u8);
-        }
+        let comparison =
+            if (!self.hw_cgb() || self.double_speed()) && self.d.ly_for_comparison != -1 {
+                i32::from(self.d.ly_for_comparison.to_le_bytes()[0])
+            } else {
+                i32::from(self.d.current_line)
+            };
         if self.lcdc & 0x20 != 0 && i32::from(self.wy) == comparison {
             self.d.wy_triggered = true;
         }
@@ -444,7 +452,7 @@ impl Ppu {
         let dest = self.d.dma_dest;
         if dest <= 0xA0 && dest > 0 {
             if self.d.hdma_in_progress {
-                return self.oam_read_row(((self.d.hdma_src & !1) | (addr & 1)) as u8);
+                return self.oam_read_row(((self.d.hdma_src & !1) | (addr & 1)).to_le_bytes()[0]);
             }
             if dest != 0xA0 {
                 return self.oam.read(u16::from(dest & !1) | (addr & 1));
@@ -570,7 +578,7 @@ impl Ppu {
             }
             let bank = u16::from(self.vram.read_vbk() & 1) * 0x2000;
             let value = self.vram_raw((address & 0x1FFF) | bank);
-            let index = usize::from(dest.wrapping_sub(offset as u8));
+            let index = usize::from(dest.wrapping_sub(u8::from(!self.d.cpu_idle)));
             if let Some(byte) = self.oam.bytes_mut().get_mut(index) {
                 *byte = value;
             }
@@ -627,7 +635,7 @@ impl Ppu {
         let mut address = if self.d.last_tileset {
             u16::from(self.d.current_tile) * 0x10
         } else {
-            (i32::from(self.d.current_tile as i8) * 0x10 + 0x1000) as u16
+            0x1000_u16.wrapping_add_signed(i16::from(self.d.current_tile.cast_signed()) * 0x10)
         };
         if self.d.current_tile_attributes & 8 != 0 {
             address += 0x2000;
@@ -635,6 +643,7 @@ impl Ppu {
         address
     }
 
+    #[expect(clippy::too_many_lines, reason = "SameBoy's fetcher: one arm per step")]
     fn advance_fetcher(&mut self) {
         match self.d.fetcher_state {
             F_GET_TILE_T1 => {
@@ -643,9 +652,9 @@ impl Ppu {
                 if self.lcdc & 0x20 == 0 {
                     self.d.wx_triggered = false;
                 }
-                if self.lcdc & 0x08 != 0 && !self.d.wx_triggered {
-                    map = 0x1C00;
-                } else if self.lcdc & 0x40 != 0 && self.d.wx_triggered {
+                if self.lcdc & 0x08 != 0 && !self.d.wx_triggered
+                    || self.lcdc & 0x40 != 0 && self.d.wx_triggered
+                {
                     map = 0x1C00;
                 }
 
@@ -656,9 +665,8 @@ impl Ppu {
                 } else if position.wrapping_add(16) < 8 {
                     u16::from(self.scx >> 3)
                 } else {
-                    let sub = i32::from(self.hw_cgb() && !self.d.during_object_fetch);
-                    ((((i32::from(self.scx) + i32::from(position) + 8 - sub) / 8) & 0x1F) as u16)
-                        & 0x1F
+                    let sub = u16::from(self.hw_cgb() && !self.d.during_object_fetch);
+                    ((u16::from(self.scx) + u16::from(position) + 8 - sub) / 8) & 0x1F
                 };
                 if model_ge_cgb_d(self.model) {
                     // Cached on CGB-D and newer, so it cannot mix tiles.
@@ -704,14 +712,13 @@ impl Ppu {
                     self.d.fetcher_state += 1;
                     return;
                 }
-                let mut use_glitched = false;
-                let mut cgb_d_glitch = false;
-                if self.d.tile_sel_glitch {
+                let (use_glitched, cgb_d_glitch) = if self.d.tile_sel_glitch {
                     let (data, used, d) = self.data_for_tile_sel_glitch();
                     self.d.current_tile_data[0] = data;
-                    use_glitched = used;
-                    cgb_d_glitch = d;
-                }
+                    (used, d)
+                } else {
+                    (false, false)
+                };
                 if !use_glitched {
                     self.d.current_tile_data[0] = self.vram_read(self.d.last_tile_data_address);
                 }
@@ -720,6 +727,8 @@ impl Ppu {
                 } else if cgb_d_glitch {
                     self.d.data_for_sel_glitch =
                         self.vram_read(self.d.last_tile_data_address & !0x1000);
+                } else {
+                    // No glitch to propagate.
                 }
                 self.d.fetcher_state += 1;
             }
@@ -732,17 +741,16 @@ impl Ppu {
                     }
                     return;
                 }
-                let mut use_glitched = false;
-                let mut cgb_d_glitch = false;
-                if self.d.tile_sel_glitch {
+                let (use_glitched, cgb_d_glitch) = if self.d.tile_sel_glitch {
                     let (data, used, d) = self.data_for_tile_sel_glitch();
                     self.d.current_tile_data[1] = data;
-                    use_glitched = used;
-                    cgb_d_glitch = d;
-                    if cgb_d_glitch {
+                    if d {
                         self.d.last_tile_data_address -= 1;
                     }
-                }
+                    (used, d)
+                } else {
+                    (false, false)
+                };
                 if !use_glitched {
                     let value = self.vram_read(self.d.last_tile_data_address);
                     self.d.current_tile_data[1] = value;
@@ -753,6 +761,8 @@ impl Ppu {
                 } else if cgb_d_glitch {
                     self.d.data_for_sel_glitch =
                         self.vram_read((self.d.last_tile_data_address & !0x1000) + 1);
+                } else {
+                    // No glitch to propagate.
                 }
                 if self.d.wx_triggered {
                     self.d.window_tile_x = (self.d.window_tile_x + 1) & 0x1F;
@@ -833,9 +843,9 @@ impl Ppu {
         if position.wrapping_add(16) < 8 {
             if position == 239 {
                 self.d.position_in_line = 240;
-            } else if position & 7 == self.scx & 7 {
-                self.d.position_in_line = 248;
-            } else if self.d.window_is_being_fetched && position & 7 == 6 && self.scx & 7 == 7 {
+            } else if position & 7 == self.scx & 7
+                || self.d.window_is_being_fetched && position & 7 == 6 && self.scx & 7 == 7
+            {
                 self.d.position_in_line = 248;
             } else if position == 247 {
                 self.d.position_in_line = 240;
@@ -918,26 +928,25 @@ impl Ppu {
         } else if !self.d.wx_triggered && self.d.wy_triggered && self.lcdc & 0x20 != 0 {
             let position = self.d.position_in_line;
             let hw = self.hw_cgb();
-            let mut should_activate = false;
-            if self.wx == 0 {
-                if position == 249 {
-                    should_activate = true;
-                } else if position == 240 && self.scx & 7 != 0 {
-                    should_activate = true;
-                } else if (241..=248).contains(&position) {
-                    should_activate = true;
-                }
+            let should_activate = if self.wx == 0 {
+                position == 249
+                    || position == 240 && self.scx & 7 != 0
+                    || (241..=248).contains(&position)
             } else if u16::from(self.wx) < 166 + u16::from(hw) {
                 if self.wx == position.wrapping_add(7) {
-                    should_activate = true;
+                    true
                 } else if !hw && self.wx == position.wrapping_add(6) && !self.d.wx_just_changed {
-                    should_activate = true;
                     // LCD-PPU horizontal desync on DMG units.
                     if self.is_dmg_family() && self.d.lcd_x > 0 {
                         self.d.lcd_x -= 1;
                     }
+                    true
+                } else {
+                    false
                 }
-            }
+            } else {
+                false
+            };
 
             if should_activate {
                 self.d.window_y = self.d.window_y.wrapping_add(1);
@@ -949,11 +958,17 @@ impl Ppu {
                     return true;
                 } else if self.wx == 166 {
                     self.d.wx_166_interrupt_glitch = true;
+                } else {
+                    // Nothing special about this window start.
                 }
                 self.mode3_window_activated();
             } else if !hw && self.wx == 166 && self.wx == position.wrapping_add(7) {
                 self.d.window_y = self.d.window_y.wrapping_add(1);
+            } else {
+                // The window does not start here.
             }
+        } else {
+            // The window is already on, or is not being checked.
         }
         false
     }
@@ -971,6 +986,10 @@ impl Ppu {
     /// Runs the mode-3 loop from `entry` until it sleeps or finishes.
     /// Entries: 0 = top of an iteration, 42/27/41/20/39/40/21 = resume
     /// points after the corresponding SameBoy sleep.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "SameBoy's mode 3 loop: one arm per resume point"
+    )]
     fn mode3(&mut self, ints: &mut Interrupts, mut entry: u8) -> Mode3Flow {
         loop {
             match entry {
@@ -1097,10 +1116,11 @@ impl Ppu {
                 40 => {
                     let n = self.d.n_visible_objs;
                     let flags = self.d.object_flags;
-                    let mut palette = u8::from(flags & 0x10 != 0);
-                    if self.cgb_mode_on() {
-                        palette = flags & 0x7;
-                    }
+                    let palette = if self.cgb_mode_on() {
+                        flags & 0x7
+                    } else {
+                        u8::from(flags & 0x10 != 0)
+                    };
                     let priority = if self.opri_index_priority() {
                         self.d.visible_objs[n - 1]
                     } else {
@@ -1158,8 +1178,7 @@ impl Ppu {
     }
 
     /// Code after the mode-3 loop breaks (`skip_slow_mode_3`).
-    fn mode3_done(&mut self, ints: &mut Interrupts) {
-        let _ = ints;
+    fn mode3_done(&mut self) {
         self.d.position_in_line = 240;
         self.d.line_has_fractional_scrolling = false;
 
@@ -1225,7 +1244,7 @@ impl Ppu {
     }
 
     fn present_frame(&mut self) {
-        self.rgba_buf_present = core::mem::take(&mut self.rgb_buf);
+        self.rgba_buf_present = mem::take(&mut self.rgb_buf);
     }
 
     /// Advance the display by one unit (half a dot, SameBoy's 8 MHz tick).
@@ -1244,7 +1263,7 @@ impl Ppu {
         // A line that would outgrow 456 dots is cut off (mode 3 abort).
         // `balance` is SameBoy's `display_cycles`.
         let balance = 2 - 2 * self.d.wait - i32::from(self.d.half_dot);
-        let cut = 2 * i32::from(self.d.cfl) + 1 + balance > 2 * LINE_LENGTH && self.d.state != 0;
+        let cut = 2 * self.d.cfl + 1 + balance > 2 * LINE_LENGTH && self.d.state != 0;
         if cut {
             if self.d.state == 22 {
                 self.stat &= !super::STAT_MODE_B;
@@ -1284,7 +1303,7 @@ impl Ppu {
                 } else {
                     2
                 };
-                if (self.d.wy_units + offset) & 7 == 0 {
+                if (self.d.wy_units + offset).trailing_zeros() >= 3 {
                     self.d.wy_check_scheduled = false;
                     self.wy_check();
                     if self.d.state == 21 && self.hw_cgb() && !self.double_speed() {
@@ -1295,6 +1314,10 @@ impl Ppu {
         }
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "SameBoy's display coroutine: one arm per sleep"
+    )]
     fn step_state_machine(&mut self, ints: &mut Interrupts) {
         // Sleeping: `wait` dots remain, resume when it reaches zero.
         if self.d.wait > 0 {
@@ -1393,6 +1416,8 @@ impl Ppu {
                         self.stat &= !super::STAT_MODE_B;
                     } else if !self.hw_cgb() {
                         self.stat &= !super::STAT_MODE_B;
+                    } else {
+                        // CGB line 0: STAT keeps its mode bits.
                     }
                     self.stat_update(ints);
                     self.sleep(7, 1);
@@ -1424,7 +1449,7 @@ impl Ppu {
                 8 => {
                     if !self.hw_cgb() {
                         self.add_object_from_index(self.d.oam_search_index);
-                        self.d.accessed_oam_row = ((self.d.oam_search_index & !1) * 4 + 8) as u8;
+                        self.d.accessed_oam_row = (self.d.oam_search_index & !1) * 4 + 8;
                     }
                     if self.d.oam_search_index == 37 {
                         self.d.vram_read_blocked = !self.hw_cgb();
@@ -1469,7 +1494,7 @@ impl Ppu {
                     match self.mode3(ints, entry) {
                         Mode3Flow::Slept => return,
                         Mode3Flow::Done => {
-                            self.mode3_done(ints);
+                            self.mode3_done();
                             return;
                         }
                     }
@@ -1520,7 +1545,7 @@ impl Ppu {
                         return;
                     }
                     let p = self.d.position_in_line;
-                    if p >= 156 && p < 240 {
+                    if (156..240).contains(&p) {
                         self.d.delayed_glitch_hblank_interrupt = true;
                     }
                     self.d.position_in_line = 240;
@@ -1530,7 +1555,7 @@ impl Ppu {
                 28 => {
                     self.ly = self.d.current_line;
                     let p = self.d.position_in_line;
-                    if p >= 156 && p < 240 {
+                    if (156..240).contains(&p) {
                         self.d.delayed_glitch_hblank_interrupt = true;
                     }
                     self.stat_update(ints);

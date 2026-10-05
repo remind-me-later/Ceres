@@ -92,7 +92,7 @@ fn detect_mbc1_multicart(rom: &[u8], rom_size: ROMSize) -> bool {
         if rom.len() < end {
             return false;
         }
-        if &rom[start..end] != NINTENDO_LOGO {
+        if rom[start..end] != NINTENDO_LOGO {
             return false;
         }
     }

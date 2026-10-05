@@ -180,10 +180,8 @@ impl<A: AudioCallback> Gb<A> {
             let dma_blocked = self.dma.blocks_oam_read();
             return self.ppu.cpu_read_oam_area(addr, dma_blocked);
         }
-        match self.dma_read_redirect(addr) {
-            Some(addr) => self.read_mem(addr),
-            None => 0xFF,
-        }
+        self.dma_read_redirect(addr)
+            .map_or(0xFF, |addr| self.read_mem(addr))
     }
 
     #[must_use]
@@ -235,7 +233,7 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    #[expect(clippy::cognitive_complexity, clippy::too_many_lines)]
+    #[expect(clippy::cognitive_complexity)]
     fn write_high(&mut self, addr: u8, val: u8) {
         match addr {
             P1 => self.joy.write_joy(val),

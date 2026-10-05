@@ -81,6 +81,8 @@ impl Serial {
                     self.output.push('\n');
                 } else if transferred_byte == b'\r' {
                     self.output.push('\r');
+                } else {
+                    // Not printable: ignored.
                 }
             }
 
@@ -139,7 +141,7 @@ mod tests {
     fn serial_transfer_takes_eight_bits_at_8192_hz() {
         let mut serial = Serial::default();
         let mut ints = Interrupts::default();
-        let mut div = 0u16;
+        let mut div = 0_u16;
 
         serial.write_sb(0xAA);
         serial.write_sc(0x81, &mut ints, CgbMode::Dmg);

@@ -1,6 +1,6 @@
 pub mod conflict;
 
-use crate::{AudioCallback, Gb, Model};
+use crate::{AudioCallback, Gb, Model, ppu::Mode};
 use conflict::ConflictType;
 use core::mem;
 
@@ -113,6 +113,7 @@ pub trait Bus {
     fn take_unhalt(&mut self) -> bool;
 }
 
+#[expect(clippy::struct_excessive_bools, reason = "Independent CPU state flags")]
 #[derive(Default)]
 pub struct Sm83 {
     af: u16,
@@ -274,6 +275,8 @@ impl Sm83 {
             bus.dma_run(true);
             self.dispatch_interrupt(bus);
             return;
+        } else {
+            // Nothing to wake up for or to dispatch.
         }
 
         if !self.is_halted {
@@ -312,26 +315,34 @@ impl Sm83 {
         // the value from BEFORE the write if it targets IF or IE.
         self.sp = self.sp.wrapping_sub(1);
 
-        let is_if_write = self.sp == 0xFF0F;
-        let is_ie_write = self.sp == 0xFFFF;
+        let writes_flags = self.sp == 0xFF0F;
+        let writes_enable = self.sp == 0xFFFF;
 
-        let ifr_pre = if is_if_write { bus.read_if() & 0x1F } else { 0 };
-        let ie_pre = if is_ie_write { bus.read_ie() & 0x1F } else { 0 };
+        let old_flags = if writes_flags {
+            bus.read_if() & 0x1F
+        } else {
+            0
+        };
+        let old_enable = if writes_enable {
+            bus.read_ie() & 0x1F
+        } else {
+            0
+        };
 
         bus.write(self.sp, lo);
 
-        let ifr = if is_if_write {
-            ifr_pre
+        let flags = if writes_flags {
+            old_flags
         } else {
             bus.read_if() & 0x1F
         };
-        let ie = if is_ie_write {
-            ie_pre
+        let enable = if writes_enable {
+            old_enable
         } else {
             bus.read_ie() & 0x1F
         };
 
-        let queue = ie & ifr;
+        let queue = enable & flags;
 
         // Two of the last M-cycle's four dots elapse before the interrupt is
         // acknowledged and the vector is chosen.
@@ -1484,6 +1495,10 @@ impl<A: AudioCallback> Bus for Gb<A> {
     }
 
     #[inline]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "One arm per register class, like SameBoy's `cycle_write`"
+    )]
     fn write(&mut self, addr: u16, val: u8) {
         let conflict =
             conflict::get_conflict(self.model, self.cgb_mode, self.key1.is_enabled(), addr);
@@ -1572,9 +1587,10 @@ impl<A: AudioCallback> Bus for Gb<A> {
 
                 let mut old = self.read_mem(addr);
                 self.advance_dots(pending - 2);
-                if self.model != Model::Mgb && self.ppu.fifo_position() == 0 && val & 0x02 == 0 {
-                    old &= !0x02;
-                } else if self.ppu.is_fetching_sprite() && val & 0x02 == 0 {
+                if (self.model != Model::Mgb && self.ppu.fifo_position() == 0
+                    || self.ppu.is_fetching_sprite())
+                    && val & 0x02 == 0
+                {
                     old &= !0x02;
                 }
 
@@ -1715,7 +1731,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
     }
 
     fn set_halted(&mut self, halted: bool) {
-        let hblank = matches!(self.ppu.mode(), crate::ppu::Mode::HBlank);
+        let hblank = matches!(self.ppu.mode(), Mode::HBlank);
         self.hdma.set_cpu_halted(halted, hblank);
         self.ppu
             .set_cpu_idle(self.hdma.cpu_halted() || self.clock.stopped);
@@ -1737,7 +1753,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
     fn leave_stop(&mut self) {
         self.ppu.leave_stop_mode();
         self.clock.stopped = false;
-        let hblank = matches!(self.ppu.mode(), crate::ppu::Mode::HBlank);
+        let hblank = matches!(self.ppu.mode(), Mode::HBlank);
         self.hdma.set_cpu_halted(false, hblank);
         self.hdma.wake(hblank);
         self.ppu.set_cpu_idle(false);
@@ -1760,7 +1776,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
     }
 
     fn take_unhalt(&mut self) -> bool {
-        core::mem::take(&mut self.speed_switch.unhalt)
+        mem::take(&mut self.speed_switch.unhalt)
     }
 
     fn enter_stop(&mut self, ime: bool) {
@@ -1771,8 +1787,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
         self.ppu.enter_stop_mode();
         self.clock.stopped = true;
         self.ppu.set_cpu_idle(true);
-        self.hdma
-            .note_stop(matches!(self.ppu.mode(), crate::ppu::Mode::HBlank));
+        self.hdma.note_stop(matches!(self.ppu.mode(), Mode::HBlank));
     }
 
     fn speed_switch_requested(&self) -> bool {

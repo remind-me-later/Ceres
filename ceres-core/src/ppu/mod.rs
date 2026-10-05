@@ -7,6 +7,7 @@ mod rgba_buf;
 mod vram;
 
 use crate::interrupts::Interrupts;
+use core::mem;
 pub use oam::Oam;
 pub use vram::Vram;
 use {self::color_palette::ColorPalette, crate::CgbMode, crate::Model, rgba_buf::RgbaBuf};
@@ -199,12 +200,12 @@ impl Ppu {
 
     /// Whether `HBlank` was entered since the last call.
     pub const fn take_hblank_hdma_edge(&mut self) -> bool {
-        core::mem::replace(&mut self.d.hblank_hdma_edge, false)
+        mem::replace(&mut self.d.hblank_hdma_edge, false)
     }
 
     /// Whether the LCD was switched off in a non-zero mode since the last call.
     pub const fn take_lcd_off_hdma_edge(&mut self) -> bool {
-        core::mem::replace(&mut self.d.lcd_off_hdma_edge, false)
+        mem::replace(&mut self.d.lcd_off_hdma_edge, false)
     }
 
     /// SameBoy's `display_state`, for state-dependent register-write hacks.
@@ -285,6 +286,8 @@ impl Ppu {
         } else if !is_on && was_on {
             self.lcd_off();
             self.rgba_buf_present.clear();
+        } else {
+            // The LCD stays as it is.
         }
 
         // Disabling objects while an object is being fetched aborts the

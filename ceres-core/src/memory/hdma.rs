@@ -7,6 +7,10 @@
 
 use crate::{AudioCallback, Gb, Model};
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Independent flags of the transfer state machine"
+)]
 #[derive(Default)]
 pub struct Hdma {
     /// STAT mode was non-zero when the CPU last halted/stopped; an `HBlank`
@@ -126,7 +130,7 @@ impl Hdma {
 impl<A: AudioCallback> Gb<A> {
     /// Runs a pending transfer burst. Called right after an opcode fetch,
     /// while that fetch's M-cycle is still pending.
-    pub fn run_hdma(&mut self) {
+    pub(crate) fn run_hdma(&mut self) {
         let cycles = if self.key1.is_enabled() { 4 } else { 2 };
 
         self.hdma.in_progress = true;
@@ -143,7 +147,7 @@ impl<A: AudioCallback> Gb<A> {
                 _ => 0xFF,
             };
             if self.dma.hdma_can_write_oam(self.key1.is_enabled()) {
-                self.hdma_write_oam(src as u8, byte);
+                self.hdma_write_oam(src.to_le_bytes()[0], byte);
             }
             self.hdma.src = src.wrapping_add(1);
 
@@ -166,13 +170,15 @@ impl<A: AudioCallback> Gb<A> {
                 self.ppu.vram_mut().write_hdma(addr, byte, mirror);
             }
 
-            if self.hdma.dst & 0xF == 0 {
+            if self.hdma.dst.trailing_zeros() >= 4 {
                 self.hdma.steps_left = self.hdma.steps_left.wrapping_sub(1);
                 if self.hdma.steps_left == 0 || self.hdma.dst == 0 {
                     self.hdma.on = false;
                     self.hdma.on_hblank = false;
                 } else if self.hdma.on_hblank {
                     self.hdma.on = false;
+                } else {
+                    // A general purpose transfer goes on with the next block.
                 }
             }
         }

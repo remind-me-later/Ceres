@@ -7,9 +7,9 @@ pub struct Key1 {
 #[derive(Default)]
 pub struct SpeedSwitch {
     /// CPU cycles until the new speed takes effect.
-    pub countdown: u8,
+    pub countdown: i32,
     /// CPU cycles during which only the timers keep running.
-    pub freeze: u8,
+    pub freeze: i32,
     /// CPU cycles the CPU stays halted for.
     pub halt_countdown: i32,
     /// The halt countdown expired: wake the CPU.

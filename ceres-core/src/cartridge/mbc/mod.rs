@@ -31,28 +31,14 @@ impl Mbc {
             0x03 => (Self::Mbc1 { bank_mode: false }, true),
             0x05 => (Self::Mbc2, false),
             0x06 => (Self::Mbc2, true),
-            0x0F => (
+            0x0F | 0x10 => (
                 Self::Mbc3 {
                     rtc: Some(Mbc3RTC::default()),
                     is_mbc30: false,
                 },
                 true,
             ),
-            0x10 => (
-                Self::Mbc3 {
-                    rtc: Some(Mbc3RTC::default()),
-                    is_mbc30: false,
-                },
-                true,
-            ),
-            0x11 => (
-                Self::Mbc3 {
-                    rtc: None,
-                    is_mbc30: false,
-                },
-                false,
-            ),
-            0x12 => (
+            0x11 | 0x12 => (
                 Self::Mbc3 {
                     rtc: None,
                     is_mbc30: false,

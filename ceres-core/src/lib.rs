@@ -141,6 +141,11 @@ impl<A: AudioCallback> Gb<A> {
     /// `external/test-sources/`), which were measured on real hardware by Joonas
     /// Javanainen. The values are also cross-checked against SameBoy's own
     /// post-boot state in `gb.c::GB_reset_internal`.
+    #[expect(
+        clippy::missing_inline_in_public_items,
+        clippy::too_many_lines,
+        reason = "Called once; it lists the state the boot ROM leaves behind"
+    )]
     pub fn skip_bootrom(&mut self) {
         if matches!(self.model, Model::Sgb | Model::Sgb2) {
             // The SGB boot ROM transmits the cartridge header to the SGB, so
@@ -612,6 +617,7 @@ impl Model {
     }
 }
 
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum CgbMode {
     #[default]
@@ -621,6 +627,7 @@ pub enum CgbMode {
 }
 
 impl From<Model> for CgbMode {
+    #[inline]
     fn from(model: Model) -> Self {
         match model {
             Model::Dmg0 | Model::DmgB | Model::Mgb | Model::Sgb | Model::Sgb2 => Self::Dmg,

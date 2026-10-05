@@ -2,7 +2,7 @@ use core::num::NonZeroU8;
 
 /// 8 MHz units in a second: the RTC runs off its own crystal, so a second is
 /// 4 194 304 CPU cycles in single speed and twice as many in double speed.
-const SECOND_UNITS: u32 = 4_194_304 * 2;
+const SECOND_UNITS: u32 = 0x0080_0000;
 
 /// The MBC3's real-time clock (SameBoy's model): the clock ticks the real
 /// registers, the CPU reads the latched copy.

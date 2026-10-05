@@ -1,5 +1,5 @@
-use crate::{AudioCallback, Gb, apu::ApuCtx};
-use core::time::Duration;
+use crate::{AudioCallback, Gb, apu::ApuCtx, ppu::Mode};
+use core::{cmp::Ordering, time::Duration};
 
 /// T-cycles per frame (4MHz rate).
 pub const DOTS_PER_FRAME: i32 = 70224;
@@ -91,17 +91,19 @@ impl<A: AudioCallback> Gb<A> {
     /// runs once the post-switch freeze is over.
     fn advance_cycles(&mut self, mut cycles: i32) {
         if self.speed_switch.countdown != 0 {
-            let countdown = i32::from(self.speed_switch.countdown);
-            if countdown == cycles {
-                self.key1.toggle_double_speed();
-                self.speed_switch.countdown = 0;
-            } else if countdown > cycles {
-                self.speed_switch.countdown -= cycles as u8;
-            } else {
-                cycles -= countdown;
-                self.speed_switch.countdown = 0;
-                self.advance_cycles(countdown);
-                self.key1.toggle_double_speed();
+            let countdown = self.speed_switch.countdown;
+            match countdown.cmp(&cycles) {
+                Ordering::Equal => {
+                    self.key1.toggle_double_speed();
+                    self.speed_switch.countdown = 0;
+                }
+                Ordering::Greater => self.speed_switch.countdown -= cycles,
+                Ordering::Less => {
+                    cycles -= countdown;
+                    self.speed_switch.countdown = 0;
+                    self.advance_cycles(countdown);
+                    self.key1.toggle_double_speed();
+                }
             }
         }
 
@@ -121,16 +123,16 @@ impl<A: AudioCallback> Gb<A> {
                 self.speed_switch.unhalt = true;
                 // The halt ends right here for the DMAs: they run in this very
                 // step (the CPU itself notices on its next one).
-                let hblank = matches!(self.ppu.mode(), crate::ppu::Mode::HBlank);
+                let hblank = matches!(self.ppu.mode(), Mode::HBlank);
                 self.hdma.set_cpu_halted(false, hblank);
                 self.ppu.set_cpu_idle(self.clock.stopped);
             }
         }
 
         if self.speed_switch.freeze != 0 {
-            let freeze = i32::from(self.speed_switch.freeze);
+            let freeze = self.speed_switch.freeze;
             if freeze >= cycles {
-                self.speed_switch.freeze -= cycles as u8;
+                self.speed_switch.freeze -= cycles;
                 return;
             }
             cycles -= freeze;
@@ -152,7 +154,7 @@ impl<A: AudioCallback> Gb<A> {
 
         // The clock runs in 8 MHz units, whatever the CPU speed.
         self.cart
-            .run_rtc(cycles as u32 * if double_speed { 1 } else { 2 });
+            .run_rtc(cycles.cast_unsigned() * if double_speed { 1 } else { 2 });
     }
 
     fn inc_tima(&mut self) {
@@ -264,7 +266,7 @@ impl<A: AudioCallback> Gb<A> {
             }
 
             let div = self.clock.div.wrapping_add(1);
-            if div & 3 == 0 {
+            if div.trailing_zeros() >= 2 {
                 if self.apu.pending_envelope_tick() {
                     let ctx = self.apu_ctx();
                     self.apu.delayed_envelope_tick(&ctx);
@@ -305,10 +307,10 @@ impl<A: AudioCallback> Gb<A> {
         // and (new_enable AND new_div_bit) is 0, causing a spurious TIMA increment.
         if (self.clock.tac & 4) != 0 {
             let old_bit = Self::sys_clk_tac_mux(self.clock.tac);
-            if (self.clock.div & old_bit) != 0 {
-                if (val & 4) == 0 || (self.clock.div & Self::sys_clk_tac_mux(val)) == 0 {
-                    self.inc_tima();
-                }
+            if (self.clock.div & old_bit) != 0
+                && ((val & 4) == 0 || (self.clock.div & Self::sys_clk_tac_mux(val)) == 0)
+            {
+                self.inc_tima();
             }
         }
 
@@ -372,6 +374,8 @@ impl<A: AudioCallback> Gb<A> {
             self.apu.div_event(&ctx);
         } else if !self.clock.div & val & apu_bit != 0 {
             self.apu.div_secondary_event();
+        } else {
+            // No edge of the APU bit.
         }
 
         self.clock.div = val;

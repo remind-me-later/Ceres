@@ -69,10 +69,11 @@ impl Sgb {
     /// A write of `value` to P1 that changes the selected lines; `old` is the
     /// previous value of bits 4-5.
     fn write(&mut self, old: u8, value: u8) {
-        let mut command_size = usize::from(self.command[0] & 7).max(1) * SGB_PACKET_BITS;
-        if self.command[0] & 0xF1 == 0xF1 {
-            command_size = SGB_PACKET_BITS;
-        }
+        let command_size = if self.command[0] & 0xF1 == 0xF1 {
+            SGB_PACKET_BITS
+        } else {
+            usize::from(self.command[0] & 7).max(1) * SGB_PACKET_BITS
+        };
 
         if value & 0x20 != 0 && old & 0x20 == 0 && self.player_count & 1 == 0 {
             self.current_player = (self.current_player + 1) & (self.player_count - 1);
@@ -99,6 +100,8 @@ impl Sgb {
                     if self.command_write_index & (SGB_PACKET_BITS - 1) == 0 {
                         self.ready_for_stop = true;
                     }
+                } else {
+                    // The command buffer is full: the bit is dropped.
                 }
             }
             // One
@@ -119,6 +122,8 @@ impl Sgb {
                     if self.command_write_index & (SGB_PACKET_BITS - 1) == 0 {
                         self.ready_for_stop = true;
                     }
+                } else {
+                    // The command buffer is full: the bit is dropped.
                 }
             }
             // Reset pulse.
@@ -179,25 +184,25 @@ impl Joypad {
     pub const fn read_p1(&self) -> u8 {
         let mut res = 0xCF;
 
-        if !self.actions_flag {
-            res |= 0x20;
-        } else {
+        if self.actions_flag {
             res &= !(self.button_mask >> 4);
+        } else {
+            res |= 0x20;
         }
 
-        if !self.directions_flag {
-            res |= 0x10;
-        } else {
+        if self.directions_flag {
             res &= !(self.button_mask & 0xF);
+        } else {
+            res |= 0x10;
         }
 
         // With no line selected a multiplayer SGB reports the player ID.
-        if !self.actions_flag && !self.directions_flag {
-            if let Some(sgb) = &self.sgb {
-                if sgb.player_count > 1 {
-                    res = (res & 0xF0) | (0xF - sgb.current_player);
-                }
-            }
+        if !self.actions_flag
+            && !self.directions_flag
+            && let Some(sgb) = &self.sgb
+            && sgb.player_count > 1
+        {
+            res = (res & 0xF0) | (0xF - sgb.current_player);
         }
 
         res
