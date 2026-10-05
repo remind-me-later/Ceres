@@ -1,6 +1,5 @@
 mod color_palette;
 mod display;
-mod draw;
 mod oam;
 mod oam_bug;
 mod rgba_buf;
@@ -184,18 +183,18 @@ impl Ppu {
 
     #[inline]
     pub const fn set_tile_sel_glitch(&mut self, active: bool) {
-        self.d.tile_sel_glitch = active;
+        self.d.fetcher.tile_sel_glitch = active;
     }
 
     /// Set while a CPU write to WX is landing (SameBoy's `wx_just_changed`).
     #[inline]
     pub const fn set_wx_just_changed(&mut self, active: bool) {
-        self.d.wx_just_changed = active;
+        self.d.window.wx_just_changed = active;
     }
 
     #[must_use]
     pub const fn is_fetching_sprite(&self) -> bool {
-        self.d.during_object_fetch
+        self.d.obj_fetch.active
     }
 
     /// Whether `HBlank` was entered since the last call.
@@ -295,7 +294,7 @@ impl Ppu {
         self.abort_object_fetch_on_obj_disable(val);
 
         self.lcdc = val;
-        self.d.fetch_obj_size = val & 0x04 != 0;
+        self.d.obj_fetch.size_16 = val & 0x04 != 0;
         self.d.schedule_wy_check();
     }
 
@@ -367,7 +366,7 @@ impl Ppu {
     #[inline]
     #[must_use]
     pub const fn is_cgb_palettes_accessible(&self) -> bool {
-        !self.d.cgb_palettes_blocked
+        !self.d.cpu.cgb_palettes_blocked
     }
 
     /// STOP-mode hooks (the PPU engine does not distinguish STOP yet).
