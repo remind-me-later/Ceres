@@ -1,11 +1,1 @@
-cgbc age-test-roms/m3-bg-lcdc/m3-bg-lcdc-nocgb.gb
-cgbc age-test-roms/m3-bg-lcdc/m3-bg-lcdc.gb
-cgbc little-things-gb/tellinglys.gb
-cgbe age-test-roms/m3-bg-lcdc/m3-bg-lcdc-nocgb.gb
-cgbe age-test-roms/m3-bg-lcdc/m3-bg-lcdc.gb
-cgbe bully/bully.gb
-cgbe little-things-gb/tellinglys.gb
-dmg age-test-roms/m3-bg-bgp/m3-bg-bgp.gb
-dmg blargg/oam_bug/oam_bug.gb
-dmg bully/bully.gb
-dmg little-things-gb/tellinglys.gb
+

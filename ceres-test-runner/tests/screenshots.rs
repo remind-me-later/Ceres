@@ -1,6 +1,7 @@
 //! Integration tests that compare the final screen of a ROM with a
-//! reference screenshot: the blargg, scribbltests, turtle-tests, bully,
-//! little-things-gb, mbc3-tester and strikethrough ROMs and AGE's `m3-*`.
+//! reference screenshot: the scribbltests, turtle-tests, mbc3-tester and
+//! strikethrough ROMs (blargg, AGE, bully and little-things-gb have their own
+//! files, with a test per ROM).
 //!
 //! The screenshot's name says which hardware it was taken on (`-dmg`, `-cgb`,
 //! `-dmg-cgb`, AGE's `-dmgC`, `-cgbBCE`, `-ncmBC`, ...). Colours are compared
@@ -132,16 +133,10 @@ fn screenshots() {
     let root = test_roms_dir();
     let mut jobs = Vec::new();
     for dir in [
-        "blargg",
-        "bully",
-        "little-things-gb",
         "mbc3-tester",
         "scribbltests",
         "strikethrough",
         "turtle-tests",
-        "age-test-roms/m3-bg-bgp",
-        "age-test-roms/m3-bg-lcdc",
-        "age-test-roms/m3-bg-scx",
     ] {
         collect(&root.join(dir), &mut jobs);
     }
@@ -189,7 +184,7 @@ fn screenshots() {
         .filter(|k| !failures.iter().any(|f| f == **k))
         .collect();
     eprintln!("{ran} runs, {} known failures", failures.len());
-    assert!(ran > 50, "only {ran} screenshot runs");
+    assert!(ran > 20, "only {ran} screenshot runs");
     assert!(new_failures.is_empty(), "new failures: {new_failures:#?}");
     assert!(
         fixed.is_empty(),

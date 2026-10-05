@@ -88,13 +88,13 @@ fn run(path: &Path, cgb: bool, expected: &str) -> bool {
             break;
         };
         let glyph = &GLYPHS[digit as usize];
-        for y in 0..8 {
+        for (y, row) in glyph.iter().enumerate() {
             for x in 0..8 {
                 let p = (y * 160 + i * 8 + x) * 4;
                 let px = &fb[p..p + 3];
                 let black = px.iter().all(|c| c & 0xF8 == 0);
                 let white = px.iter().all(|c| c & 0xF8 == 0xF8);
-                let want_black = glyph[y] & (0x80 >> x) != 0;
+                let want_black = row & (0x80 >> x) != 0;
                 if (want_black && !black) || (!want_black && !white) {
                     return false;
                 }

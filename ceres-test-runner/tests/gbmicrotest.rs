@@ -88,7 +88,11 @@ fn gbmicrotest_suite() {
     let mut names: Vec<String> = std::fs::read_dir(&dir)
         .expect("gbmicrotest directory")
         .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
-        .filter(|name| name.ends_with(".gb"))
+        .filter(|name| {
+            std::path::Path::new(name)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("gb"))
+        })
         .collect();
     names.sort();
 
