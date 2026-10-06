@@ -25,6 +25,8 @@ pub struct StatIrq {
     /// the CGB does not see the enables written later in the entry hold
     /// (`MODE_VBLANK_ENTRY`).
     pub entry_stat: u8,
+    /// Dots until line 0's mode 2 interrupt condition pulses (0: none).
+    pub line0_pulse: u8,
 }
 
 impl Default for StatIrq {
@@ -36,6 +38,7 @@ impl Default for StatIrq {
             lyc_interrupt_line: false,
             delayed_glitch_hblank_interrupt: false,
             entry_stat: 0,
+            line0_pulse: 0,
         }
     }
 }

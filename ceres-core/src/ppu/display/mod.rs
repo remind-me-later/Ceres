@@ -270,6 +270,15 @@ impl Ppu {
             }
 
             self.d.line_clock += 1;
+            if self.d.irq.line0_pulse > 0 {
+                self.d.irq.line0_pulse -= 1;
+                if self.d.irq.line0_pulse == 0 {
+                    self.d.irq.mode_for_interrupt = 2;
+                    self.stat_update(ints);
+                    self.d.irq.mode_for_interrupt = -1;
+                    self.stat_update(ints);
+                }
+            }
             self.step_state_machine(ints);
         }
         self.advance_wy_units(1);

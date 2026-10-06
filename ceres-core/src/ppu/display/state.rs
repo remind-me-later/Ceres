@@ -254,12 +254,19 @@ impl Ppu {
                 self.d.cpu.oam_read_blocked = true;
                 self.d.cpu.oam_write_blocked = true;
                 self.stat = (self.stat & !STAT_MODE_B) | 2;
-                self.d.irq.mode_for_interrupt = 2;
                 self.d.irq.ly_for_comparison = i32::from(self.d.current_line);
                 self.wy_check();
-                self.stat_update(ints);
-                self.d.irq.mode_for_interrupt = -1;
-                self.stat_update(ints);
+                if self.d.current_line == 0 && !self.hw_cgb() {
+                    // The DMG's mode 2 condition of line 0 comes one dot after
+                    // the other lines'.
+                    self.stat_update(ints);
+                    self.d.irq.line0_pulse = 1;
+                } else {
+                    self.d.irq.mode_for_interrupt = 2;
+                    self.stat_update(ints);
+                    self.d.irq.mode_for_interrupt = -1;
+                    self.stat_update(ints);
+                }
                 self.d.objs.count = 0;
                 self.d.objs.found = 0;
                 self.d.objs.index = 0;
