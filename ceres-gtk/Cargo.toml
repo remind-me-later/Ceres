@@ -11,7 +11,6 @@ ceres-std = { path = "../ceres-std", features = [
   "game_genie",
   "screenshot",
 ] }
-epoxy = { version = "*" }
 glow = { version = "*" }
 libloading = { version = "*" }
 serde = { version = "*", features = ["derive"] }

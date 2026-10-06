@@ -166,7 +166,7 @@ impl Renderer {
     )]
     pub fn new() -> Self {
         unsafe {
-            let gl = glow::Context::from_loader_function(epoxy::get_proc_addr);
+            let gl = glow::Context::from_loader_function(crate::epoxy::get_proc_address);
 
             let vao = gl
                 .create_vertex_array()
