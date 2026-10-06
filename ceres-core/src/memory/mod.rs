@@ -180,8 +180,11 @@ impl<A: AudioCallback> Gb<A> {
             let dma_blocked = self.dma.blocks_oam_read();
             return self.ppu.cpu_read_oam_area(addr, dma_blocked);
         }
-        self.dma_read_redirect(addr)
-            .map_or(0xFF, |addr| self.read_mem(addr))
+        let value = self
+            .dma_read_redirect(addr)
+            .map_or(0xFF, |addr| self.read_mem(addr));
+        self.dma_after_read(addr);
+        value
     }
 
     #[must_use]

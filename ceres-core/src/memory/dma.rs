@@ -166,6 +166,21 @@ impl<A: AudioCallback> Gb<A> {
         })
     }
 
+    /// What a CPU read that conflicted with a VRAM-sourced transfer leaves
+    /// behind on the CPU-CGB-C: the OAM byte being copied is cleared.
+    pub(crate) fn dma_after_read(&mut self, addr: u16) {
+        let src = self.dma.current_src.wrapping_sub(1);
+        if self.model == Model::CgbC
+            && (0x8000..0xA000).contains(&src)
+            && self.is_addr_in_dma_use(addr)
+        {
+            let index = usize::from(self.dma.current_dest.wrapping_sub(1));
+            if let Some(byte) = self.ppu.oam_mut().bytes_mut().get_mut(index) {
+                *byte = 0;
+            }
+        }
+    }
+
     /// Handles a CPU write to `addr` during a transfer. Returns the address
     /// the write still has to be performed on, if any.
     pub(crate) fn dma_write_redirect(&mut self, addr: u16, value: u8) -> Option<u16> {
@@ -184,6 +199,20 @@ impl<A: AudioCallback> Gb<A> {
             if let Some(byte) = oam.get_mut(usize::from(self.dma.current_dest.wrapping_sub(1))) {
                 *byte = if current >= 0xC000 {
                     *byte & value
+                } else {
+                    value
+                };
+            }
+            return None;
+        }
+        if model == Model::CgbC && addr < 0xC000 {
+            // CPU-CGB-C (measured by Gambatte's tests): the write lands in the
+            // OAM byte being copied, or clears it when the DMA reads the VRAM.
+            let current = src.wrapping_sub(1);
+            let oam = self.ppu.oam_mut().bytes_mut();
+            if let Some(byte) = oam.get_mut(usize::from(self.dma.current_dest.wrapping_sub(1))) {
+                *byte = if (0x8000..0xA000).contains(&current) {
+                    0
                 } else {
                     value
                 };
