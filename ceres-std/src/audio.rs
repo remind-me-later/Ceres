@@ -6,7 +6,7 @@ use ringbuf::{
 use rubato::{Adjustable as _, Resampler as _};
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 // Buffer size is the number of samples per channel per callback
 const BUFFER_SIZE: u32 = 512;
@@ -169,6 +169,9 @@ impl ceres_core::AudioCallback for AudioCallbackImpl {
 #[expect(clippy::struct_field_names)]
 pub struct Stream {
     consumer: Arc<Mutex<RbConsumer>>,
+    /// cpal doesn't start streams on creation, and pausing one that never
+    /// played is an error in some backends (ALSA).
+    playing: AtomicBool,
     ring_buffer: AudioCallbackImpl,
     sample_rate: i32,
     stream: cpal::Stream,
@@ -221,22 +224,22 @@ impl Stream {
             .build_output_stream(config, data_callback, error_callback, None)
             .map_err(|_err| Error::BuildStream)?;
 
-        let res = Self {
+        Ok(Self {
             stream,
             ring_buffer: AudioCallbackImpl::new(prod),
             consumer: cons,
+            playing: AtomicBool::new(false),
             volume,
             volume_before_mute: None,
             sample_rate: SAMPLE_RATE,
-        };
-
-        res.pause()?;
-
-        Ok(res)
+        })
     }
 
     pub fn pause(&self) -> Result<(), Error> {
-        self.stream.pause().map_err(|_err| Error::PauseStream)?;
+        if self.playing.load(Ordering::Relaxed) {
+            self.stream.pause().map_err(|_err| Error::PauseStream)?;
+            self.playing.store(false, Ordering::Relaxed);
+        }
 
         // Clear buffers on pause
         if let Ok(mut cons) = self.consumer.lock() {
@@ -247,7 +250,10 @@ impl Stream {
     }
 
     pub fn resume(&self) -> Result<(), Error> {
-        self.stream.play().map_err(|_err| Error::PlayStream)
+        self.stream.play().map_err(|_err| Error::PlayStream)?;
+        self.playing.store(true, Ordering::Relaxed);
+
+        Ok(())
     }
 
     #[must_use]
