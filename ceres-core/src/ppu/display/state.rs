@@ -384,9 +384,6 @@ impl Ppu {
                 None
             }
             State::NextLine => {
-                if self.d.current_line != LINES - 1 {
-                    self.d.irq.mode_for_interrupt = 2;
-                }
                 self.d.current_line += 1;
                 if self.d.current_line < LINES {
                     self.line_start();
