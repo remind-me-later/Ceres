@@ -407,11 +407,12 @@ impl Ppu {
             }
             State::VBlankLy => {
                 self.ly = self.d.current_line;
-                if self.d.current_line == LINES
-                    && !self.d.irq.stat_interrupt_line
-                    && self.stat & STAT_IF_OAM_B != 0
-                {
-                    ints.request_lcd();
+                if self.d.current_line == LINES && self.stat & STAT_IF_OAM_B != 0 {
+                    if !self.d.irq.stat_interrupt_line {
+                        ints.request_lcd();
+                    }
+                    // The OAM condition holds the line until the VBlank one.
+                    self.d.irq.mode_for_interrupt = 2;
                 }
                 self.sleep(State::VBlankLyCompare, 2);
                 None
