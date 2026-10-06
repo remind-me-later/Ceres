@@ -492,12 +492,13 @@ impl Ppu {
                     -1
                 };
                 self.stat_update(ints);
-                self.sleep(State::Line153CompareZero, 4);
+                // The DMG compares with line 0 one dot later.
+                self.sleep(State::Line153CompareZero, if self.hw_cgb() { 4 } else { 5 });
             }
             State::Line153CompareZero => {
                 self.d.irq.ly_for_comparison = 0;
                 self.stat_update(ints);
-                self.sleep(State::Line153LycGlitch, 12);
+                self.sleep(State::Line153LycGlitch, if self.hw_cgb() { 12 } else { 11 });
             }
             State::Line153LycGlitch => self.sleep(State::FrameEnd, LINE_LENGTH - 24),
             State::FrameEnd => {
