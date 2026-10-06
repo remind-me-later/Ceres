@@ -1527,15 +1527,20 @@ impl<A: AudioCallback> Bus for Gb<A> {
             // read as FF for a single T-cycle.
             ConflictType::StatDmg => {
                 self.flush_deferred_time();
-                // At the edge between HBlank and OAM mode the OAM interrupt
-                // seems to be blocked by HBlank interrupts.
+                // The write glitches the register for a dot (all the enables are
+                // on) before the real value lands. The glitch is a pulse, the
+                // real value is in place for what the PPU does in the next dot,
+                // except at the edge between HBlank and OAM mode, where the OAM
+                // interrupt seems to be blocked by HBlank interrupts.
                 if self.ppu.at_oam_scan_edge() && self.ppu.read_stat() & 0x28 == 0x08 {
                     self.write_mem(addr, !0x20);
+                    self.advance_dots(1);
+                    self.write_mem(addr, val);
                 } else {
                     self.write_mem(addr, 0xFF);
+                    self.write_mem(addr, val);
+                    self.advance_dots(1);
                 }
-                self.advance_dots(1);
-                self.write_mem(addr, val);
                 self.time_deferred = 3;
             }
             ConflictType::StatCgb => {

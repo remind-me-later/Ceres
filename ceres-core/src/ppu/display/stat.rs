@@ -148,6 +148,15 @@ impl Ppu {
             self.d.irq.entry_stat = self.stat;
         }
 
+        // On the DMG the HBlank interrupt condition begins when HBlankStart runs,
+        // a dot after the mode bits change: a write in between does not see it.
+        let in_hblank_gap = !self.hw_cgb()
+            && self.d.state == State::HBlankStart
+            && self.d.irq.mode_for_interrupt == 0;
+        if in_hblank_gap {
+            self.d.irq.mode_for_interrupt = 3;
+        }
+
         // Annoying edge timing case.
         if self.double_speed()
             && self.d.state == State::OamScanObject
@@ -161,6 +170,10 @@ impl Ppu {
             self.d.irq.mode_for_interrupt = -1;
         } else {
             self.stat_update(ints);
+        }
+
+        if in_hblank_gap {
+            self.d.irq.mode_for_interrupt = 0;
         }
     }
 }
