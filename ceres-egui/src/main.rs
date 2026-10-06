@@ -21,7 +21,6 @@ fn main() -> anyhow::Result<()> {
                 f32::from(ceres_std::PX_HEIGHT) + 22.0,
             ]),
         renderer: eframe::Renderer::Wgpu,
-        vsync: true,
         depth_buffer: 0,
         stencil_buffer: 0,
         centered: true,

@@ -89,7 +89,7 @@ impl eframe::App for App {
 
     #[expect(clippy::too_many_lines)]
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        egui::Panel::top("top_panel").show_inside(ui, |top_panel_ui| {
+        egui::Panel::top("top_panel").show(ui, |top_panel_ui| {
             egui::MenuBar::new().ui(top_panel_ui, |menu_bar_ui| {
                 menu_bar_ui.menu_button("File", |menu_button_ui| {
                     if menu_button_ui.button("Open").clicked() {
@@ -220,7 +220,7 @@ impl eframe::App for App {
                 fill: egui::Color32::BLACK,
                 stroke: egui::Stroke::NONE,
             })
-            .show_inside(ui, |central_panel_ui| {
+            .show(ui, |central_panel_ui| {
                 self.screen.custom_painting(central_panel_ui);
             });
 

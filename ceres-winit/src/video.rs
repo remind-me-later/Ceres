@@ -37,6 +37,7 @@ impl State<'_> {
                 power_preference: wgpu::PowerPreference::LowPower,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
             })
             .await
             .context("unable to obtain wgpu adapter")?;
@@ -60,6 +61,7 @@ impl State<'_> {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
+            color_space: wgpu::SurfaceColorSpace::Auto,
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::AutoVsync,
@@ -139,7 +141,7 @@ impl State<'_> {
             self.queue.submit(core::iter::once(encoder.finish()));
         }
 
-        output.present();
+        self.queue.present(output);
     }
 
     pub const fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {

@@ -3,7 +3,7 @@ use ringbuf::{
     HeapRb,
     traits::{Consumer as _, Observer as _, Producer as _, Split as _},
 };
-use rubato::Resampler as _;
+use rubato::{Adjustable as _, Resampler as _};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -63,7 +63,7 @@ impl AudioProcessor {
             MAX_RESAMPLE_RATIO_RELATIVE,
             &rubato::SincInterpolationParameters {
                 sinc_len: 256,
-                f_cutoff: 0.95,
+                f_cutoff: Some(0.95),
                 oversampling_factor: 128,
                 interpolation: rubato::SincInterpolationType::Cubic,
                 window: rubato::WindowFunction::Blackman,
@@ -218,7 +218,7 @@ impl Stream {
         };
 
         let stream = device
-            .build_output_stream(&config, data_callback, error_callback, None)
+            .build_output_stream(config, data_callback, error_callback, None)
             .map_err(|_err| Error::BuildStream)?;
 
         let res = Self {
