@@ -7,7 +7,9 @@
 //! sleeps but loop heads the machine passes through.
 
 use {
-    super::{LINE_LENGTH, LINES, MODE2_LENGTH, mode3::Mode3Flow, model_ge_cgb_d},
+    super::{
+        LINE_LENGTH, LINES, MODE2_LENGTH, mode3::Mode3Flow, model_ge_cgb_d, stat::MODE_VBLANK_ENTRY,
+    },
     crate::{
         interrupts::Interrupts,
         ppu::{Ppu, STAT_IF_OAM_B, STAT_MODE_B, oam_bug::NO_ROW},
@@ -407,12 +409,14 @@ impl Ppu {
             }
             State::VBlankLy => {
                 self.ly = self.d.current_line;
-                if self.d.current_line == LINES && self.stat & STAT_IF_OAM_B != 0 {
-                    if !self.d.irq.stat_interrupt_line {
+                if self.d.current_line == LINES {
+                    if !self.d.irq.stat_interrupt_line && self.stat & STAT_IF_OAM_B != 0 {
                         ints.request_lcd();
                     }
-                    // The OAM condition holds the line until the VBlank one.
-                    self.d.irq.mode_for_interrupt = 2;
+                    // Until the VBlank condition takes over, the line is held
+                    // by the HBlank or the OAM one (see `stat_update`).
+                    self.d.irq.mode_for_interrupt = MODE_VBLANK_ENTRY;
+                    self.d.irq.entry_stat = self.stat;
                 }
                 self.sleep(State::VBlankLyCompare, 2);
                 None

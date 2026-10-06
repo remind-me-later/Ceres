@@ -8,6 +8,10 @@ use {
     },
 };
 
+/// `mode_for_interrupt` while the line is held by the HBlank or the OAM
+/// condition as VBlank starts.
+pub const MODE_VBLANK_ENTRY: i8 = 4;
+
 #[derive(Clone)]
 pub struct StatIrq {
     /// `ly_for_comparison`; `-1` is SameBoy's `(uint16_t)-1`.
@@ -17,6 +21,10 @@ pub struct StatIrq {
     pub stat_interrupt_line: bool,
     pub lyc_interrupt_line: bool,
     pub delayed_glitch_hblank_interrupt: bool,
+    /// The STAT register as it was when VBlank entry began; at normal speed
+    /// the CGB does not see the enables written later in the entry hold
+    /// (`MODE_VBLANK_ENTRY`).
+    pub entry_stat: u8,
 }
 
 impl Default for StatIrq {
@@ -27,6 +35,7 @@ impl Default for StatIrq {
             stat_interrupt_line: false,
             lyc_interrupt_line: false,
             delayed_glitch_hblank_interrupt: false,
+            entry_stat: 0,
         }
     }
 }
@@ -58,6 +67,14 @@ impl Ppu {
             0 => self.stat & STAT_IF_HBLANK_B != 0,
             1 => self.stat & STAT_IF_VBLANK_B != 0,
             2 => self.stat & STAT_IF_OAM_B != 0,
+            MODE_VBLANK_ENTRY => {
+                let stat = if self.hw_cgb() && !self.double_speed() {
+                    self.d.irq.entry_stat
+                } else {
+                    self.stat
+                };
+                stat & (STAT_IF_HBLANK_B | STAT_IF_OAM_B) != 0
+            }
             _ => false,
         };
 
@@ -118,6 +135,15 @@ impl Ppu {
         self.stat &= 7;
         self.stat |= val & !7;
         self.stat |= 0x80;
+
+        // The CGB's entry hold sees the enables written up to two dots before
+        // the VBlank condition is evaluated.
+        if self.d.irq.mode_for_interrupt == MODE_VBLANK_ENTRY
+            && self.d.state == State::VBlankLyCompare
+            && self.d.wait >= 2
+        {
+            self.d.irq.entry_stat = self.stat;
+        }
 
         // Annoying edge timing case.
         if self.double_speed()
