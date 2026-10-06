@@ -57,38 +57,44 @@ impl CompletionCheck for MooneyeCheck {
         }
 
         let mut lines = Vec::new();
-        for row in 0..18 {
-            let mut line = String::new();
-            for col in 0..20 {
-                let b = gb.read_mem(0x9800 + row * 32 + col);
-                if (0x20..=0x7E).contains(&b) {
-                    line.push(b as char);
-                } else if b == 0 {
-                    line.push(' ');
-                } else {
-                    line.push('.');
+        for base in [0x9800, 0x9C00] {
+            for row in 0..18 {
+                let mut line = String::new();
+                for col in 0..20 {
+                    let b = gb.read_mem(base + row * 32 + col);
+                    if b == 0x19 || b == 0 {
+                        line.push(' ');
+                    } else if (0x1A..=0x7E).contains(&b) {
+                        line.push((b + 0x20 - 0x1A) as char);
+                    } else {
+                        line.push('.');
+                    }
+                }
+                let trimmed = line.trim();
+                if !trimmed.is_empty() {
+                    lines.push(trimmed.to_string());
                 }
             }
-            let trimmed = line.trim();
-            if !trimmed.is_empty() {
-                lines.push(trimmed.to_string());
+            if !lines.is_empty() {
+                break;
             }
         }
         let text = lines.join(" | ");
 
         let mut c000_buf = Vec::new();
-        for addr in 0xC000..0xC018 {
+        for addr in 0xC000..0xC040 {
             c000_buf.push(format!("{:02X}", gb.read_mem(addr)));
         }
         let c000_str = c000_buf.join(" ");
 
-        let f80 = gb.read_mem(0xFF80);
-        let f81 = gb.read_mem(0xFF81);
-        let f82 = gb.read_mem(0xFF82);
-        let f83 = gb.read_mem(0xFF83);
+        let mut hram_buf = Vec::new();
+        for addr in 0xFF80..0xFFA0 {
+            hram_buf.push(format!("{:02X}", gb.read_mem(addr)));
+        }
+        let hram_str = hram_buf.join(" ");
 
         Some(TestResult::Failed(format!(
-            "Mooneye failure: B={b:#04X}, C={c:#04X}, D={d:#04X}, E={e:#04X}, H={h:#04X}, L={l:#04X}, C000=[{c000_str}], text: \"{text}\", FF80=(${f80:#04X}, ${f81:#04X}, exp=${f82:#04X}, act=${f83:#04X})"
+            "Mooneye failure: B={b:#04X}, C={c:#04X}, D={d:#04X}, E={e:#04X}, H={h:#04X}, L={l:#04X}, C000=[{c000_str}], HRAM=[{hram_str}], text: \"{text}\""
         )))
     }
 
@@ -103,6 +109,25 @@ impl CompletionCheck for MooneyeCheck {
 /// `acceptance/add_sp_e_timing.gb`); `suite_root` selects which suite
 /// (`MOONEYE` or `WILBERTPOL`).
 fn run_test(suite_root: &str, relative_path: &str, model: Model) -> TestResult {
+    run_test_with_bootrom(suite_root, relative_path, model, false)
+}
+
+/// Runs a boot-state test twice: from the injected post-boot state and from
+/// the real boot ROM, which must leave the same machine behind.
+fn run_boot_test(suite_root: &str, relative_path: &str, model: Model) -> TestResult {
+    let skipped = run_test_with_bootrom(suite_root, relative_path, model, false);
+    if !skipped.is_passed() {
+        return skipped;
+    }
+    run_test_with_bootrom(suite_root, relative_path, model, true)
+}
+
+fn run_test_with_bootrom(
+    suite_root: &str,
+    relative_path: &str,
+    model: Model,
+    run_bootrom: bool,
+) -> TestResult {
     let path = format!("{suite_root}/{relative_path}");
     let rom = match load_test_rom(&path) {
         Ok(rom) => rom,
@@ -112,7 +137,7 @@ fn run_test(suite_root: &str, relative_path: &str, model: Model) -> TestResult {
     let config = TestConfig {
         model,
         timeout_frames: timeouts::MOONEYE_ACCEPTANCE,
-        run_bootrom: false,
+        run_bootrom,
         ..TestConfig::default()
     };
 
@@ -351,19 +376,19 @@ fn test_rst_timing() {
 
 #[test]
 fn test_boot_div2_s() {
-    let result = run_test(MOONEYE, "acceptance/boot_div2-S.gb", Model::Sgb2);
+    let result = run_boot_test(MOONEYE, "acceptance/boot_div2-S.gb", Model::Sgb2);
     assert!(result.is_passed(), "boot_div2-S test failed");
 }
 
 #[test]
 fn test_boot_div_cgb0() {
-    let result = run_test(MOONEYE, "misc/boot_div-cgb0.gb", Model::Cgb0);
+    let result = run_boot_test(MOONEYE, "misc/boot_div-cgb0.gb", Model::Cgb0);
     assert!(result.is_passed(), "boot_div-cgb0 test failed: {result:?}");
 }
 
 #[test]
 fn test_boot_div_cgbabcde() {
-    let result = run_test(MOONEYE, "misc/boot_div-cgbABCDE.gb", Model::CgbE);
+    let result = run_boot_test(MOONEYE, "misc/boot_div-cgbABCDE.gb", Model::CgbE);
     assert!(
         result.is_passed(),
         "boot_div-cgbABCDE test failed: {result:?}"
@@ -372,19 +397,19 @@ fn test_boot_div_cgbabcde() {
 
 #[test]
 fn test_boot_div_a() {
-    let result = run_test(MOONEYE, "misc/boot_div-A.gb", Model::Agb);
-    assert!(result.is_passed(), "boot_div-A test failed");
+    let result = run_boot_test(MOONEYE, "misc/boot_div-A.gb", Model::Agb);
+    assert!(result.is_passed(), "boot_div-A test failed: {result:?}");
 }
 
 #[test]
 fn test_boot_div_dmg0() {
-    let result = run_test(MOONEYE, "acceptance/boot_div-dmg0.gb", Model::Dmg0);
+    let result = run_boot_test(MOONEYE, "acceptance/boot_div-dmg0.gb", Model::Dmg0);
     assert!(result.is_passed(), "boot_div-dmg0 test failed");
 }
 
 #[test]
 fn test_boot_div_dmgabcmgb() {
-    let result = run_test(MOONEYE, "acceptance/boot_div-dmgABCmgb.gb", Model::DmgB);
+    let result = run_boot_test(MOONEYE, "acceptance/boot_div-dmgABCmgb.gb", Model::DmgB);
     assert!(
         result.is_passed(),
         "boot_div-dmgABCmgb test failed: {result:?}"
@@ -393,73 +418,73 @@ fn test_boot_div_dmgabcmgb() {
 
 #[test]
 fn test_boot_div_s() {
-    let result = run_test(MOONEYE, "acceptance/boot_div-S.gb", Model::Sgb);
+    let result = run_boot_test(MOONEYE, "acceptance/boot_div-S.gb", Model::Sgb);
     assert!(result.is_passed(), "boot_div-S test failed");
 }
 
 #[test]
 fn test_boot_hwio_c() {
-    let result = run_test(WILBERTPOL, "misc/boot_hwio-C.gb", Model::CgbE);
+    let result = run_boot_test(WILBERTPOL, "misc/boot_hwio-C.gb", Model::CgbE);
     assert_eq!(result, TestResult::Passed, "boot_hwio-C test failed");
 }
 
 #[test]
 fn test_boot_hwio_dmg0() {
-    let result = run_test(MOONEYE, "acceptance/boot_hwio-dmg0.gb", Model::Dmg0);
+    let result = run_boot_test(MOONEYE, "acceptance/boot_hwio-dmg0.gb", Model::Dmg0);
     assert_eq!(result, TestResult::Passed, "boot_hwio-dmg0 test failed");
 }
 
 #[test]
 fn test_boot_hwio_g() {
-    let result = run_test(WILBERTPOL, "acceptance/boot_hwio-G.gb", Model::DmgB);
+    let result = run_boot_test(WILBERTPOL, "acceptance/boot_hwio-G.gb", Model::DmgB);
     assert_eq!(result, TestResult::Passed, "boot_hwio-G test failed");
 }
 
 #[test]
 fn test_boot_hwio_s() {
-    let result = run_test(WILBERTPOL, "misc/boot_hwio-S.gb", Model::Sgb);
+    let result = run_boot_test(WILBERTPOL, "misc/boot_hwio-S.gb", Model::Sgb);
     assert_eq!(result, TestResult::Passed, "boot_hwio-S test failed");
 }
 
 #[test]
 fn test_boot_regs_a() {
-    let result = run_test(WILBERTPOL, "misc/boot_regs-A.gb", Model::Agb);
-    assert!(result.is_passed(), "boot_regs-A test failed");
+    let result = run_boot_test(WILBERTPOL, "misc/boot_regs-A.gb", Model::Agb);
+    assert!(result.is_passed(), "boot_regs-A test failed: {result:?}");
 }
 
 #[test]
 fn test_boot_regs_cgb() {
-    let result = run_test(WILBERTPOL, "misc/boot_regs-cgb.gb", Model::Cgb0);
+    let result = run_boot_test(WILBERTPOL, "misc/boot_regs-cgb.gb", Model::Cgb0);
     assert!(result.is_passed(), "boot_regs-cgb test failed");
 }
 
 #[test]
 fn test_boot_regs_dmg() {
-    let result = run_test(WILBERTPOL, "acceptance/boot_regs-dmg.gb", Model::DmgB);
+    let result = run_boot_test(WILBERTPOL, "acceptance/boot_regs-dmg.gb", Model::DmgB);
     assert!(result.is_passed(), "boot_regs-dmg test failed");
 }
 
 #[test]
 fn test_boot_regs_dmg0() {
-    let result = run_test(MOONEYE, "acceptance/boot_regs-dmg0.gb", Model::Dmg0);
+    let result = run_boot_test(MOONEYE, "acceptance/boot_regs-dmg0.gb", Model::Dmg0);
     assert!(result.is_passed(), "boot_regs-dmg0 test failed");
 }
 
 #[test]
 fn test_boot_regs_mgb() {
-    let result = run_test(WILBERTPOL, "misc/boot_regs-mgb.gb", Model::Mgb);
+    let result = run_boot_test(WILBERTPOL, "misc/boot_regs-mgb.gb", Model::Mgb);
     assert!(result.is_passed(), "boot_regs-mgb test failed");
 }
 
 #[test]
 fn test_boot_regs_sgb() {
-    let result = run_test(WILBERTPOL, "misc/boot_regs-sgb.gb", Model::Sgb);
+    let result = run_boot_test(WILBERTPOL, "misc/boot_regs-sgb.gb", Model::Sgb);
     assert!(result.is_passed(), "boot_regs-sgb test failed");
 }
 
 #[test]
 fn test_boot_regs_sgb2() {
-    let result = run_test(WILBERTPOL, "misc/boot_regs-sgb2.gb", Model::Sgb2);
+    let result = run_boot_test(WILBERTPOL, "misc/boot_regs-sgb2.gb", Model::Sgb2);
     assert!(result.is_passed(), "boot_regs-sgb2 test failed");
 }
 
@@ -548,7 +573,11 @@ fn test_gpu_hblank_ly_scx_timing_c() {
         "acceptance/gpu/hblank_ly_scx_timing-C.gb",
         Model::CgbE,
     );
-    assert!(result.is_passed(), "gpu/hblank_ly_scx_timing-C test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/hblank_ly_scx_timing-C test failed"
+    );
 }
 
 #[test]
@@ -570,10 +599,11 @@ fn test_gpu_hblank_ly_scx_timing_nops() {
     let result = run_test(
         WILBERTPOL,
         "acceptance/gpu/hblank_ly_scx_timing_nops.gb",
-        Model::DmgB,
+        Model::CgbE,
     );
-    assert!(
-        result.is_passed(),
+    assert_eq!(
+        result,
+        TestResult::Passed,
         "gpu/hblank_ly_scx_timing_nops test failed"
     );
 }
@@ -583,10 +613,11 @@ fn test_gpu_hblank_ly_scx_timing_variant_nops() {
     let result = run_test(
         WILBERTPOL,
         "acceptance/gpu/hblank_ly_scx_timing_variant_nops.gb",
-        Model::DmgB,
+        Model::CgbE,
     );
-    assert!(
-        result.is_passed(),
+    assert_eq!(
+        result,
+        TestResult::Passed,
         "gpu/hblank_ly_scx_timing_variant_nops test failed"
     );
 }
@@ -614,7 +645,7 @@ fn test_gpu_intr_1_2_timing_gs() {
 #[test]
 fn test_gpu_intr_1_timing() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/intr_1_timing.gb", Model::DmgB);
-    assert!(result.is_passed(), "gpu/intr_1_timing test failed");
+    assert_eq!(result, TestResult::Passed, "gpu/intr_1_timing test failed");
 }
 
 #[test]
@@ -767,7 +798,11 @@ fn test_gpu_intr_2_mode0_timing_sprites_nops() {
         "acceptance/gpu/intr_2_mode0_timing_sprites_nops.gb",
         Model::DmgB,
     );
-    assert_eq!(result, TestResult::Passed, "gpu/intr_2_mode0_timing_sprites_nops test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/intr_2_mode0_timing_sprites_nops test failed"
+    );
 }
 
 #[test]
@@ -777,8 +812,9 @@ fn test_gpu_intr_2_mode0_timing_sprites_scx1_nops() {
         "acceptance/gpu/intr_2_mode0_timing_sprites_scx1_nops.gb",
         Model::DmgB,
     );
-    assert!(
-        result.is_passed(),
+    assert_eq!(
+        result,
+        TestResult::Passed,
         "gpu/intr_2_mode0_timing_sprites_scx1_nops test failed"
     );
 }
@@ -790,8 +826,9 @@ fn test_gpu_intr_2_mode0_timing_sprites_scx2_nops() {
         "acceptance/gpu/intr_2_mode0_timing_sprites_scx2_nops.gb",
         Model::DmgB,
     );
-    assert!(
-        result.is_passed(),
+    assert_eq!(
+        result,
+        TestResult::Passed,
         "gpu/intr_2_mode0_timing_sprites_scx2_nops test failed"
     );
 }
@@ -803,8 +840,9 @@ fn test_gpu_intr_2_mode0_timing_sprites_scx3_nops() {
         "acceptance/gpu/intr_2_mode0_timing_sprites_scx3_nops.gb",
         Model::DmgB,
     );
-    assert!(
-        result.is_passed(),
+    assert_eq!(
+        result,
+        TestResult::Passed,
         "gpu/intr_2_mode0_timing_sprites_scx3_nops test failed"
     );
 }
@@ -816,8 +854,9 @@ fn test_gpu_intr_2_mode0_timing_sprites_scx4_nops() {
         "acceptance/gpu/intr_2_mode0_timing_sprites_scx4_nops.gb",
         Model::DmgB,
     );
-    assert!(
-        result.is_passed(),
+    assert_eq!(
+        result,
+        TestResult::Passed,
         "gpu/intr_2_mode0_timing_sprites_scx4_nops test failed"
     );
 }
@@ -897,7 +936,11 @@ fn test_gpu_lcdon_write_timing_gs() {
 #[test]
 fn test_gpu_ly00_01_mode0_2() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/ly00_01_mode0_2.gb", Model::DmgB);
-    assert_eq!(result, TestResult::Passed, "gpu/ly00_01_mode0_2 test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/ly00_01_mode0_2 test failed"
+    );
 }
 
 #[test]
@@ -913,7 +956,11 @@ fn test_gpu_ly00_mode0_2_gs() {
 #[test]
 fn test_gpu_ly00_mode1_0_gs() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/ly00_mode1_0-GS.gb", Model::DmgB);
-    assert_eq!(result, TestResult::Passed, "gpu/ly00_mode1_0-GS test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/ly00_mode1_0-GS test failed"
+    );
 }
 
 #[test]
@@ -936,7 +983,7 @@ fn test_gpu_ly00_mode3_0() {
 
 #[test]
 fn test_gpu_ly143_144_145() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly143_144_145.gb", Model::DmgB);
+    let result = run_test(WILBERTPOL, "acceptance/gpu/ly143_144_145.gb", Model::Mgb);
     assert_eq!(result, TestResult::Passed, "gpu/ly143_144_145 test failed");
 }
 
@@ -947,7 +994,11 @@ fn test_gpu_ly143_144_152_153() {
         "acceptance/gpu/ly143_144_152_153.gb",
         Model::DmgB,
     );
-    assert!(result.is_passed(), "gpu/ly143_144_152_153 test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/ly143_144_152_153 test failed"
+    );
 }
 
 #[test]
@@ -957,7 +1008,11 @@ fn test_gpu_ly143_144_mode0_1() {
         "acceptance/gpu/ly143_144_mode0_1.gb",
         Model::DmgB,
     );
-    assert_eq!(result, TestResult::Passed, "gpu/ly143_144_mode0_1 test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/ly143_144_mode0_1 test failed"
+    );
 }
 
 #[test]
@@ -967,12 +1022,18 @@ fn test_gpu_ly143_144_mode3_0() {
         "acceptance/gpu/ly143_144_mode3_0.gb",
         Model::DmgB,
     );
-    assert_eq!(result, TestResult::Passed, "gpu/ly143_144_mode3_0 test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/ly143_144_mode3_0 test failed"
+    );
 }
 
+// The `-C` ly_* ROMs were measured on a CGB-D/E class unit: on CGB-C and
+// earlier LY reads 0 one M-cycle sooner on line 153.
 #[test]
 fn test_gpu_ly_lyc_0_c() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_lyc_0-C.gb", Model::CgbC);
+    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_lyc_0-C.gb", Model::CgbE);
     assert_eq!(result, TestResult::Passed, "gpu/ly_lyc_0-C test failed");
 }
 
@@ -987,7 +1048,7 @@ fn test_gpu_ly_lyc_0_write_c() {
     let result = run_test(
         WILBERTPOL,
         "acceptance/gpu/ly_lyc_0_write-C.gb",
-        Model::CgbC,
+        Model::CgbE,
     );
     assert_eq!(
         result,
@@ -1008,7 +1069,7 @@ fn test_gpu_ly_lyc_0_write_gs() {
 
 #[test]
 fn test_gpu_ly_lyc_144_c() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_lyc_144-C.gb", Model::CgbC);
+    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_lyc_144-C.gb", Model::CgbE);
     assert_eq!(result, TestResult::Passed, "gpu/ly_lyc_144-C test failed");
 }
 
@@ -1020,8 +1081,8 @@ fn test_gpu_ly_lyc_144_gs() {
 
 #[test]
 fn test_gpu_ly_lyc_153_c() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_lyc_153-C.gb", Model::CgbC);
-    assert!(result.is_passed(), "gpu/ly_lyc_153-C test failed");
+    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_lyc_153-C.gb", Model::CgbE);
+    assert_eq!(result, TestResult::Passed, "gpu/ly_lyc_153-C test failed");
 }
 
 #[test]
@@ -1035,9 +1096,13 @@ fn test_gpu_ly_lyc_153_write_c() {
     let result = run_test(
         WILBERTPOL,
         "acceptance/gpu/ly_lyc_153_write-C.gb",
-        Model::CgbC,
+        Model::CgbE,
     );
-    assert!(result.is_passed(), "gpu/ly_lyc_153_write-C test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/ly_lyc_153_write-C test failed"
+    );
 }
 
 #[test]
@@ -1056,7 +1121,7 @@ fn test_gpu_ly_lyc_153_write_gs() {
 
 #[test]
 fn test_gpu_ly_lyc_c() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_lyc-C.gb", Model::CgbC);
+    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_lyc-C.gb", Model::CgbE);
     assert_eq!(result, TestResult::Passed, "gpu/ly_lyc-C test failed");
 }
 
@@ -1068,7 +1133,7 @@ fn test_gpu_ly_lyc_gs() {
 
 #[test]
 fn test_gpu_ly_lyc_write_c() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_lyc_write-C.gb", Model::CgbC);
+    let result = run_test(WILBERTPOL, "acceptance/gpu/ly_lyc_write-C.gb", Model::CgbE);
     assert_eq!(result, TestResult::Passed, "gpu/ly_lyc_write-C test failed");
 }
 
@@ -1082,6 +1147,7 @@ fn test_gpu_ly_lyc_write_gs() {
     );
 }
 
+// See `test_gpu_ly_lyc_0_c` for the model choice.
 #[test]
 fn test_gpu_ly_new_frame_c() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/ly_new_frame-C.gb", Model::CgbE);
@@ -1091,7 +1157,11 @@ fn test_gpu_ly_new_frame_c() {
 #[test]
 fn test_gpu_ly_new_frame_gs() {
     let result = run_test(WILBERTPOL, "acceptance/gpu/ly_new_frame-GS.gb", Model::DmgB);
-    assert_eq!(result, TestResult::Passed, "gpu/ly_new_frame-GS test failed");
+    assert_eq!(
+        result,
+        TestResult::Passed,
+        "gpu/ly_new_frame-GS test failed"
+    );
 }
 
 #[test]
@@ -1137,7 +1207,7 @@ fn test_gpu_vblank_if_timing() {
     let result = run_test(
         WILBERTPOL,
         "acceptance/gpu/vblank_if_timing.gb",
-        Model::DmgB,
+        Model::CgbE,
     );
     assert_eq!(
         result,
@@ -1161,7 +1231,7 @@ fn test_gpu_vblank_stat_intr_gs() {
     let result = run_test(
         WILBERTPOL,
         "acceptance/gpu/vblank_stat_intr-GS.gb",
-        Model::DmgB,
+        Model::Mgb,
     );
     assert_eq!(
         result,

@@ -1,25 +1,42 @@
-mod blip;
+//! Audio processing unit.
+//!
+//! Modelled after SameBoy's `apu.c`: the channel state machines with their
+//! revision specific glitches, a frame sequencer driven by DIV and a
+//! cycle-averaged mixer for the audio output.
+//!
+//! The APU is clocked in 2 MHz ticks: two per M-cycle in single speed, one in
+//! double speed.
+
+#![expect(
+    clippy::else_if_without_else,
+    reason = "Most hardware quirks are chains of special cases without a general one"
+)]
+#![expect(
+    clippy::verbose_bit_mask,
+    reason = "The register bit tests read like the hardware documentation"
+)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "The counters are bounded by the hardware: a tick count is a handful of cycles"
+)]
+
 mod envelope;
 mod high_pass_filter;
-mod length_timer;
-mod master_volume;
+mod length;
+mod mixer;
 mod noise;
-mod period_counter;
+mod post_boot;
+mod revision;
 mod square;
 mod sweep;
 mod wave;
 
+pub use post_boot::PostBoot;
+
 use {
-    crate::{
-        apu::{blip::Blip, high_pass_filter::HighPassFilter, master_volume::MasterVolume},
-        timing::DOTS_PER_SEC,
-    },
-    length_timer::LengthTimer,
-    noise::Noise,
-    period_counter::PeriodCounter,
-    square::Square,
-    sweep::{Sweep, SweepTrait},
-    wave::Wave,
+    crate::Model, mixer::ChannelOutput, mixer::Mixer, noise::Noise, revision::Revision,
+    square::Square, sweep::Sweep, wave::Wave,
 };
 
 pub type Sample = i16;
@@ -28,586 +45,500 @@ pub trait AudioCallback {
     fn audio_sample(&self, l: Sample, r: Sample);
 }
 
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-enum PeriodHalf {
-    #[default]
-    First,
-    Second,
+// Register offsets inside 0xFF00.
+const NR10: usize = 0x10;
+const NR11: usize = 0x11;
+const NR12: usize = 0x12;
+const NR13: usize = 0x13;
+const NR14: usize = 0x14;
+const NR21: usize = 0x16;
+const NR22: usize = 0x17;
+const NR23: usize = 0x18;
+const NR24: usize = 0x19;
+const NR30: usize = 0x1A;
+const NR31: usize = 0x1B;
+const NR32: usize = 0x1C;
+const NR33: usize = 0x1D;
+const NR34: usize = 0x1E;
+const NR41: usize = 0x20;
+const NR42: usize = 0x21;
+const NR43: usize = 0x22;
+const NR44: usize = 0x23;
+const NR50: usize = 0x24;
+const NR51: usize = 0x25;
+const NR52: usize = 0x26;
+const WAV_START: usize = 0x30;
+const WAV_END: usize = 0x3F;
+
+const SQUARE_1: usize = 0;
+const SQUARE_2: usize = 1;
+const WAVE: usize = 2;
+const NOISE: usize = 3;
+const N_CHANNELS: usize = 4;
+
+/// Machine state the APU needs on each access.
+#[derive(Clone, Copy, Default)]
+pub struct ApuCtx {
+    pub address_bus: u16,
+    pub div_counter: u16,
+    pub double_speed: bool,
+    /// A DIV write is in progress (it can produce an APU event).
+    pub during_div_write: bool,
+    pub pc: u16,
+    pub stopped: bool,
 }
 
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
+/// What the channels see of the rest of the APU and the machine.
+#[derive(Clone, Copy)]
+struct Ctx {
+    rev: Revision,
+    double_speed: bool,
+    during_div_write: bool,
+    address_bus: u16,
+    pc: u16,
+    nr50: u8,
+    nr51: u8,
+    div_divider: u8,
+    lf_div: u8,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum SkipDivEvent {
-    #[default]
     Inactive,
-    Skip,
     Skipped,
+    Skip,
 }
 
 pub struct Apu<A: AudioCallback> {
     audio_callback: A,
-    blips: [Blip; 4],
-    ch1: Square<Sweep>,
-    ch2: Square<()>,
-    ch3: Wave,
-    ch4: Noise,
-    div_divider: u8,
+    mixer: Mixer,
+    rev: Revision,
+    /// NR52 bit 7: the APU is powered.
     enabled: bool,
-    ext_sample_period: i32,
-    hpf: HighPassFilter,
-    master_volume: MasterVolume,
+    nr50: u8,
     nr51: u8,
-    render_timer: i32,
+    /// The frame sequencer: counts the DIV events, which clock the
+    /// envelopes, the length timers and the sweep.
+    div_divider: u8,
     skip_div_event: SkipDivEvent,
+    /// The CGB-D and E tick the envelopes a little after the DIV event in
+    /// double speed.
+    pending_envelope_tick: bool,
+    /// The phase of the 1 MHz clock (the squares and the sweep run on it).
+    lf_div: u8,
+    squares: [Square; 2],
+    sweep: Sweep,
+    wave: Wave,
+    noise: Noise,
 }
 
 impl<A: AudioCallback> Apu<A> {
     pub fn new(sample_rate: i32, audio_callback: A) -> Self {
         Self {
-            ext_sample_period: Self::sample_period_from_rate(sample_rate),
             audio_callback,
-            blips: Default::default(),
-            nr51: 0,
+            mixer: Mixer::new(sample_rate),
+            rev: Revision::new(Model::default()),
             enabled: false,
-            master_volume: MasterVolume::default(),
-            ch1: Square::default(),
-            ch2: Square::default(),
-            ch3: Wave::default(),
-            ch4: Noise::default(),
+            nr50: 0,
+            nr51: 0,
             div_divider: 0,
-            render_timer: 0,
-            hpf: HighPassFilter::new(sample_rate),
-            skip_div_event: SkipDivEvent::default(),
+            skip_div_event: SkipDivEvent::Inactive,
+            pending_envelope_tick: false,
+            lf_div: 0,
+            squares: [Square::new(SQUARE_1), Square::new(SQUARE_2)],
+            sweep: Sweep::new(),
+            wave: Wave::new(),
+            noise: Noise::new(),
         }
     }
 
-    pub fn reset(&mut self) {
-        self.enabled = false;
-        self.master_volume = MasterVolume::default();
-        self.blips = Default::default();
-
-        // reset registers
-        self.ch1 = Square::default();
-        self.ch2 = Square::default();
-        self.ch3.reset();
-        self.ch4 = Noise::default();
-        self.nr51 = 0;
-
-        // reset div divider
-        self.div_divider = 0;
-
-        // reset render timer
-        self.render_timer = 0;
-
-        self.skip_div_event = SkipDivEvent::default();
-    }
-
-    fn calculate_channel_output(&self, ch: usize) -> (i32, i32) {
-        let out = match ch {
-            0 => self.ch1.output() * u8::from(self.ch1.is_truly_enabled()),
-            1 => self.ch2.output() * u8::from(self.ch2.is_truly_enabled()),
-            2 => self.ch3.output() * u8::from(self.ch3.is_truly_enabled()),
-            3 => self.ch4.output() * u8::from(self.ch4.is_truly_enabled()),
-            _ => 0,
-        };
-
-        let right_on = i32::from(self.nr51 & (1 << ch) != 0);
-        let left_on = i32::from(self.nr51 & (0x10 << ch) != 0);
-
-        let out_i32 = i32::from(out);
-        (out_i32 * left_on, out_i32 * right_on)
-    }
-
-    pub fn run(&mut self, dots: i32) {
-        if self.enabled {
-            let old_1 = self.calculate_channel_output(0);
-            let res_1 = self.ch1.step_sample(dots);
-            let new_1 = self.calculate_channel_output(0);
-            if old_1 != new_1 {
-                let t = self.render_timer + dots + res_1.unwrap_or(0);
-                let phase =
-                    (i64::from(t) * (blip::PHASES as i64)) / i64::from(self.ext_sample_period);
-                self.blips[0].update(new_1.0, new_1.1, phase as usize);
-            }
-
-            let old_2 = self.calculate_channel_output(1);
-            let res_2 = self.ch2.step_sample(dots);
-            let new_2 = self.calculate_channel_output(1);
-            if old_2 != new_2 {
-                let t = self.render_timer + dots + res_2.unwrap_or(0);
-                let phase =
-                    (i64::from(t) * (blip::PHASES as i64)) / i64::from(self.ext_sample_period);
-                self.blips[1].update(new_2.0, new_2.1, phase as usize);
-            }
-
-            let old_3 = self.calculate_channel_output(2);
-            let res_3 = self.ch3.step_sample(dots);
-            let new_3 = self.calculate_channel_output(2);
-            if old_3 != new_3 {
-                let t = self.render_timer + dots + res_3.unwrap_or(0);
-                let phase =
-                    (i64::from(t) * (blip::PHASES as i64)) / i64::from(self.ext_sample_period);
-                self.blips[2].update(new_3.0, new_3.1, phase as usize);
-            }
-
-            let old_4 = self.calculate_channel_output(3);
-            let res_4 = self.ch4.step_sample(dots);
-            let new_4 = self.calculate_channel_output(3);
-            if old_4 != new_4 {
-                let t = self.render_timer + dots + res_4.unwrap_or(0);
-                let phase =
-                    (i64::from(t) * (blip::PHASES as i64)) / i64::from(self.ext_sample_period);
-                self.blips[3].update(new_4.0, new_4.1, phase as usize);
-            }
-        }
-
-        self.render_timer += dots;
-        while self.render_timer >= self.ext_sample_period {
-            self.render_timer -= self.ext_sample_period;
-
-            // Read blips
-            let (l1, r1) = self.blips[0].read();
-            let (l2, r2) = self.blips[1].read();
-            let (l3, r3) = self.blips[2].read();
-            let (l4, r4) = self.blips[3].read();
-
-            // Sum and scale
-            // The accumulated values are roughly (Sample * ONE).
-            // We divide by ONE.
-            let l_sum = (l1 + l2 + l3 + l4) / blip::ONE;
-            let r_sum = (r1 + r2 + r3 + r4) / blip::ONE;
-
-            // transform to i16 sample
-            // The formula from original Ceres:
-            // let l = (0xF - i16::from(l) * 2) * i16::from(apu.master_volume.left_volume() + 1);
-            // Note: `l` in original was 0..60. `l_sum` here is also 0..60 range.
-
-            let l = (0xF - l_sum as i16 * 2) * i16::from(self.master_volume.left_volume() + 1);
-            let r = (0xF - r_sum as i16 * 2) * i16::from(self.master_volume.right_volume() + 1);
-
-            // amplify
-            let l = l * 32;
-            let r = r * 32;
-
-            let (l, r) = if self.ch1.is_enabled()
-                || self.ch2.is_enabled()
-                || self.ch3.is_enabled()
-                || self.ch4.is_enabled()
-            {
-                self.hpf.high_pass(l, r)
-            } else {
-                (l, r)
-            };
-
-            self.audio_callback.audio_sample(l, r);
-        }
-    }
-
-    const fn sample_period_from_rate(sample_rate: i32) -> i32 {
-        DOTS_PER_SEC / sample_rate
+    pub const fn set_model(&mut self, model: Model) {
+        self.rev = Revision::new(model);
     }
 
     pub fn set_sample_rate(&mut self, sample_rate: i32) {
-        self.ext_sample_period = Self::sample_period_from_rate(sample_rate);
-        self.hpf.set_sample_rate(sample_rate);
+        self.mixer.set_sample_rate(sample_rate);
     }
 
-    /// Reset the APU's internal DIV phase counter. Called when the CPU
-    /// writes to the DIV register (FF04) — gambatte's sound_unit
-    /// resynchronises its cycle counter on every DIV write so the next
-    /// APU tick lands on a known phase.
-    pub fn reset_div_phase(&mut self) {
+    /// Resets everything but the wave RAM.
+    pub fn reset(&mut self) {
+        self.enabled = false;
+        self.nr50 = 0;
+        self.nr51 = 0;
         self.div_divider = 0;
-        self.skip_div_event = SkipDivEvent::default();
+        self.skip_div_event = SkipDivEvent::Inactive;
+        self.pending_envelope_tick = false;
+        self.lf_div = 0;
+        self.squares = [Square::new(SQUARE_1), Square::new(SQUARE_2)];
+        self.sweep = Sweep::new();
+        self.wave.reset();
+        self.noise = Noise::new();
     }
 
-    pub fn step_div_apu(&mut self) {
-        const fn set_period_half<C1: AudioCallback>(apu: &mut Apu<C1>, p_half: PeriodHalf) {
-            apu.ch1.set_period_half(p_half);
-            apu.ch2.set_period_half(p_half);
-            apu.ch3.set_period_half(p_half);
-            apu.ch4.set_period_half(p_half);
+    const fn ctx(&self, ctx: &ApuCtx) -> Ctx {
+        Ctx {
+            rev: self.rev,
+            double_speed: ctx.double_speed,
+            during_div_write: ctx.during_div_write,
+            address_bus: ctx.address_bus,
+            pc: ctx.pc,
+            nr50: self.nr50,
+            nr51: self.nr51,
+            div_divider: self.div_divider,
+            lf_div: self.lf_div,
         }
+    }
 
+    // -- channels -------------------------------------------------------------
+
+    const fn output(&self, index: usize) -> &ChannelOutput {
+        match index {
+            SQUARE_1 | SQUARE_2 => self.squares[index].out(),
+            WAVE => self.wave.out(),
+            _ => self.noise.out(),
+        }
+    }
+
+    const fn output_mut(&mut self, index: usize) -> &mut ChannelOutput {
+        match index {
+            SQUARE_1 | SQUARE_2 => self.squares[index].out_mut(),
+            WAVE => self.wave.out_mut(),
+            _ => self.noise.out_mut(),
+        }
+    }
+
+    fn update_sample(&mut self, index: usize, value: u8, c: &Ctx) {
+        match index {
+            SQUARE_1 | SQUARE_2 => self.squares[index].update_sample(value, c),
+            WAVE => self.wave.update_sample(value, c),
+            _ => self.noise.update_sample(value, c),
+        }
+    }
+
+    // -- PCM registers ----------------------------------------------------------
+
+    /// Every machine step starts with an unmasked PCM (SameBoy's "sort of
+    /// hacky, but too many cross-component interactions to do it right").
+    pub const fn reset_pcm_mask(&mut self) {
+        self.squares[SQUARE_1].out_mut().pcm_mask = 0xF;
+        self.squares[SQUARE_2].out_mut().pcm_mask = 0xF;
+        self.wave.out_mut().pcm_mask = 0xF;
+        self.noise.out_mut().pcm_mask = 0xF;
+    }
+
+    #[must_use]
+    pub fn pcm12(&self) -> u8 {
+        let masked = self.rev <= Revision::CgbC;
+        (self.output(SQUARE_2).pcm(masked) << 4) | self.output(SQUARE_1).pcm(masked)
+    }
+
+    #[must_use]
+    pub fn pcm34(&self) -> u8 {
+        let masked = self.rev <= Revision::CgbC;
+        (self.output(NOISE).pcm(masked) << 4) | self.output(WAVE).pcm(masked)
+    }
+
+    // -- frame sequencer ------------------------------------------------------
+
+    fn tick_envelopes(&mut self, c: &Ctx) {
+        for sq in &mut self.squares {
+            sq.tick_envelope(c);
+        }
+        self.noise.tick_envelope(c);
+    }
+
+    pub fn delayed_envelope_tick(&mut self, ctx: &ApuCtx) {
+        self.pending_envelope_tick = false;
         if !self.enabled {
             return;
         }
+        self.reset_pcm_mask();
+        let c = self.ctx(ctx);
+        self.tick_envelopes(&c);
+    }
 
-        if self.skip_div_event == SkipDivEvent::Skip {
-            self.skip_div_event = SkipDivEvent::Skipped;
+    #[must_use]
+    pub const fn pending_envelope_tick(&self) -> bool {
+        self.pending_envelope_tick
+    }
+
+    /// A falling edge of DIV bit 4 (5 in double speed).
+    pub fn div_event(&mut self, ctx: &ApuCtx) {
+        self.reset_pcm_mask();
+        if !self.enabled {
+            return;
+        }
+        match self.skip_div_event {
+            SkipDivEvent::Skip => {
+                self.skip_div_event = SkipDivEvent::Skipped;
+                return;
+            }
+            SkipDivEvent::Skipped => self.skip_div_event = SkipDivEvent::Inactive,
+            SkipDivEvent::Inactive => self.div_divider = self.div_divider.wrapping_add(1),
+        }
+        let c = self.ctx(ctx);
+
+        if self.div_divider & 7 == 7 {
+            for sq in &mut self.squares {
+                sq.step_envelope_countdown();
+            }
+            self.noise.step_envelope_countdown();
+        }
+
+        if ctx.double_speed && self.rev.is_cgb_de() {
+            self.pending_envelope_tick = true;
+        } else {
+            self.tick_envelopes(&c);
+        }
+
+        if self.div_divider & 1 == 1 {
+            for sq in &mut self.squares {
+                sq.tick_length(&c);
+            }
+            self.wave.tick_length(&c);
+            self.noise.tick_length(&c);
+        }
+
+        if self.div_divider & 3 == 3 {
+            self.sweep.div_event(&mut self.squares[SQUARE_1], &c);
+        }
+    }
+
+    /// A rising edge of DIV bit 4 (5 in double speed): the envelopes whose
+    /// countdown expired raise their clock.
+    pub fn div_secondary_event(&mut self) {
+        self.reset_pcm_mask();
+        if !self.enabled {
+            return;
+        }
+        for sq in &mut self.squares {
+            sq.reload_envelope();
+        }
+        self.noise.reload_envelope();
+    }
+
+    // -- running --------------------------------------------------------------
+
+    /// Runs the APU for `ticks` ticks and feeds the mixer.
+    pub fn tick(&mut self, ctx: &ApuCtx, ticks: u32) {
+        self.run(ctx, ticks);
+        let levels = [
+            self.output(SQUARE_1).level,
+            self.output(SQUARE_2).level,
+            self.output(WAVE).level,
+            self.output(NOISE).level,
+        ];
+        let dacs = || {
+            (!self.rev.is_agb()).then(|| {
+                [
+                    self.squares[SQUARE_1].dac_enabled(),
+                    self.squares[SQUARE_2].dac_enabled(),
+                    self.wave.dac_enabled(),
+                    self.noise.dac_enabled(),
+                ]
+            })
+        };
+        self.mixer.mix(ticks, levels, dacs, &self.audio_callback);
+    }
+
+    fn run(&mut self, ctx: &ApuCtx, mut cycles: u32) {
+        if cycles == 0 {
+            return;
+        }
+        if self.wave.has_bugged_read() {
+            self.wave.run_bugged_read(cycles, &self.ctx(ctx));
+        }
+        if ctx.stopped && !self.rev.is_cgb() {
             return;
         }
 
-        if self.skip_div_event == SkipDivEvent::Skipped {
-            self.skip_div_event = SkipDivEvent::Inactive;
+        let mut start_noise = false;
+        if let Some(delay) = self.noise.delayed_start(cycles) {
+            if delay == cycles {
+                start_noise = true;
+            } else {
+                // Split it into two.
+                cycles -= delay;
+                self.run(ctx, delay);
+            }
         }
 
-        self.div_divider = (self.div_divider + 1) & 7;
+        // To align the square signal to 1 MHz.
+        self.lf_div ^= (cycles & 1) as u8;
+        self.noise.advance_alignment(cycles);
 
-        // SameBoy's frame sequencer pattern (GB_apu_div_event, apu.c:667-757):
-        //   - length counter ticks at ODD div_divider values (1, 3, 5, 7)
-        //   - sweep ticks at (div_divider & 3) == 3, i.e. values 3 and 7
-        //   - envelope ticks at value 7
-        // The previous code also ticked the length counter at values 2 and 6,
-        // which made the APU channels stay enabled ~50% longer than hardware
-        // (6 length ticks per 8-step cycle instead of 4).
-        match self.div_divider {
-            1 | 3 | 5 | 7 => {
-                self.ch1.step_length_timer();
-                self.ch2.step_length_timer();
-                self.ch3.step_length_timer();
-                self.ch4.step_length_timer();
-                if self.div_divider == 7 {
-                    set_period_half(self, PeriodHalf::Second);
-                } else {
-                    set_period_half(self, PeriodHalf::First);
+        let c = self.ctx(ctx);
+        self.sweep.run(cycles, &mut self.squares[SQUARE_1], &c);
+        for sq in &mut self.squares {
+            sq.run(cycles, &c);
+        }
+        self.wave.run(cycles, &c);
+        self.noise.run(cycles, &c);
+
+        if start_noise {
+            let value = if self.noise.length_enabled() {
+                0xC0
+            } else {
+                0x80
+            };
+            self.write(ctx, NR44, value);
+        }
+    }
+
+    // -- register access ----------------------------------------------------
+
+    /// Reads a register (`reg` is the low byte of the 0xFF10..=0xFF3F address).
+    #[must_use]
+    pub fn read(&self, reg: usize) -> u8 {
+        match reg {
+            NR10 => self.sweep.read_nr10(),
+            NR11 | NR21 => self.squares[usize::from(reg == NR21)].read_nrx1(),
+            NR12 | NR22 => self.squares[usize::from(reg == NR22)].read_nrx2(),
+            NR14 | NR24 => self.squares[usize::from(reg == NR24)].read_nrx4(),
+            NR30 => self.wave.read_nr30(),
+            NR32 => self.wave.read_nr32(),
+            NR34 => self.wave.read_nr34(),
+            NR42 => self.noise.read_nr42(),
+            NR43 => self.noise.read_nr43(),
+            NR44 => self.noise.read_nr44(),
+            NR50 => self.nr50,
+            NR51 => self.nr51,
+            NR52 => {
+                let mut value = if self.enabled { 0xF0 } else { 0x70 };
+                for i in 0..N_CHANNELS {
+                    if self.output(i).active {
+                        value |= 1 << i;
+                    }
+                }
+                value
+            }
+            WAV_START..=WAV_END => self.wave.read_ram(reg - WAV_START, self.rev),
+            _ => 0xFF,
+        }
+    }
+
+    /// Writes a register (`reg` is the low byte of the 0xFF10..=0xFF3F address).
+    pub fn write(&mut self, ctx: &ApuCtx, reg: usize, value: u8) {
+        // Only the wave RAM, and the length timers on the DMG, can be written
+        // with the APU off.
+        if !self.enabled
+            && reg != NR52
+            && reg < WAV_START
+            && (self.rev.is_cgb() || !matches!(reg, NR11 | NR21 | NR31 | NR41))
+        {
+            return;
+        }
+
+        let c = self.ctx(ctx);
+        let square = usize::from(matches!(reg, NR21..=NR24));
+        match reg {
+            NR50 | NR51 => self.write_nr50_nr51(ctx, reg, value),
+            NR52 => self.write_nr52(ctx, value),
+
+            NR10 => self
+                .sweep
+                .write_nr10(value, &mut self.squares[SQUARE_1], &c),
+            NR11 | NR21 => {
+                let value = if self.enabled { value } else { value & 0x3F };
+                self.squares[square].write_nrx1(value);
+            }
+            NR12 | NR22 => self.squares[square].write_nrx2(value, &c),
+            NR13 | NR23 => self.squares[square].write_nrx3(value),
+            NR14 | NR24 => {
+                let was_active = self.output(square).active;
+                self.squares[square].write_nrx4(value, &c);
+                if square == SQUARE_1 && value & 0x80 != 0 {
+                    self.sweep.trigger(&self.squares[SQUARE_1], was_active, &c);
                 }
             }
-            2 | 6 => {
-                set_period_half(self, PeriodHalf::First);
-                self.ch1.step_sweep();
-            }
-            _ => {
-                set_period_half(self, PeriodHalf::Second);
-            }
-        }
 
-        // Envelope ticks at div_divider == 7.
-        if self.div_divider == 7 {
-            self.ch1.step_envelope();
-            self.ch2.step_envelope();
-            self.ch4.step_envelope();
-        }
-    }
-}
+            NR30 => self.wave.write_nr30(value, &c),
+            NR31 => self.wave.write_nr31(value),
+            NR32 => self.wave.write_nr32(value, &c),
+            NR33 => self.wave.write_nr33(value),
+            NR34 => self.wave.write_nr34(value, &c),
 
-// IO
-impl<A: AudioCallback> Apu<A> {
-    pub const fn enabled(&self) -> bool {
-        self.enabled
-    }
+            NR41 => self.noise.write_nr41(value),
+            NR42 => self.noise.write_nr42(value, &c),
+            NR43 => self.noise.write_nr43(value, &c),
+            NR44 => self.noise.write_nr44(value, &c),
 
-    pub const fn pcm12(&self) -> u8 {
-        self.ch1.output() | (self.ch2.output() << 4)
-    }
-
-    pub(crate) const fn set_ch1_output(&mut self, val: u8) {
-        self.ch1.set_output(val);
-    }
-
-    pub(crate) const fn set_ch1_duty_bit(&mut self, val: u8) {
-        self.ch1.set_duty_bit(val);
-    }
-
-    pub const fn pcm34(&self) -> u8 {
-        self.ch3.output() | (self.ch4.output() << 4)
-    }
-
-    pub fn read_nr10(&self) -> u8 {
-        self.ch1.read_nrx0()
-    }
-
-    pub const fn read_nr11(&self) -> u8 {
-        self.ch1.read_nrx1()
-    }
-
-    pub fn read_nr12(&self) -> u8 {
-        self.ch1.read_nrx2()
-    }
-
-    pub const fn read_nr14(&self) -> u8 {
-        self.ch1.read_nrx4()
-    }
-
-    pub const fn read_nr21(&self) -> u8 {
-        self.ch2.read_nrx1()
-    }
-
-    pub fn read_nr22(&self) -> u8 {
-        self.ch2.read_nrx2()
-    }
-
-    pub const fn read_nr24(&self) -> u8 {
-        self.ch2.read_nrx4()
-    }
-
-    pub const fn read_nr30(&self) -> u8 {
-        self.ch3.read_nr30()
-    }
-
-    pub const fn read_nr32(&self) -> u8 {
-        self.ch3.read_nr32()
-    }
-
-    pub const fn read_nr34(&self) -> u8 {
-        self.ch3.read_nr34()
-    }
-
-    pub fn read_nr42(&self) -> u8 {
-        self.ch4.read_nr42()
-    }
-
-    pub const fn read_nr43(&self) -> u8 {
-        self.ch4.read_nr43()
-    }
-
-    pub const fn read_nr44(&self) -> u8 {
-        self.ch4.read_nr44()
-    }
-
-    #[must_use]
-    pub fn read_nr50(&self) -> u8 {
-        self.master_volume.read_nr50()
-    }
-
-    #[must_use]
-    pub const fn read_nr51(&self) -> u8 {
-        self.nr51
-    }
-
-    #[must_use]
-    pub const fn read_nr52(&self) -> u8 {
-        // println!("read nr52, ch2: {}", self.ch1.on());
-        // println!(
-        //     "Ch1 length timer: {}, Max: {}",
-        //     self.ch1.length_timer.length, 0x3f
-        // );
-        // println!(
-        //     "Ch1 sweep timer: {}, shadow pace: {}",
-        //     self.ch1.period_counter.sweep.timer, self.ch1.period_counter.sweep.shadow_pace
-        // );
-
-        ((self.enabled as u8) << 7)
-            | 0x70
-            | ((self.ch4.is_enabled() as u8) << 3)
-            | ((self.ch3.is_enabled() as u8) << 2)
-            | ((self.ch2.is_enabled() as u8) << 1)
-            | (self.ch1.is_enabled() as u8)
-    }
-
-    pub const fn read_wave_ram(&self, addr: u8, is_cgb: bool) -> u8 {
-        self.ch3.read_wave_ram(addr, is_cgb)
-    }
-
-    fn update_ch1<F>(&mut self, f: F)
-    where
-        F: FnOnce(&mut Square<Sweep>),
-    {
-        let old = self.calculate_channel_output(0);
-        f(&mut self.ch1);
-        let new = self.calculate_channel_output(0);
-
-        if old != new {
-            let phase = (i64::from(self.render_timer) * (blip::PHASES as i64))
-                / i64::from(self.ext_sample_period);
-            self.blips[0].update(new.0, new.1, phase as usize);
+            WAV_START..=WAV_END => self.wave.write_ram(reg - WAV_START, value, self.rev),
+            _ => {}
         }
     }
 
-    fn update_ch2<F>(&mut self, f: F)
-    where
-        F: FnOnce(&mut Square<()>),
-    {
-        let old = self.calculate_channel_output(1);
-        f(&mut self.ch2);
-        let new = self.calculate_channel_output(1);
-
-        if old != new {
-            let phase = (i64::from(self.render_timer) * (blip::PHASES as i64))
-                / i64::from(self.ext_sample_period);
-            self.blips[1].update(new.0, new.1, phase as usize);
-        }
-    }
-
-    fn update_ch3<F>(&mut self, f: F)
-    where
-        F: FnOnce(&mut Wave),
-    {
-        let old = self.calculate_channel_output(2);
-        f(&mut self.ch3);
-        let new = self.calculate_channel_output(2);
-
-        if old != new {
-            let phase = (i64::from(self.render_timer) * (blip::PHASES as i64))
-                / i64::from(self.ext_sample_period);
-            self.blips[2].update(new.0, new.1, phase as usize);
-        }
-    }
-
-    fn update_ch4<F>(&mut self, f: F)
-    where
-        F: FnOnce(&mut Noise),
-    {
-        let old = self.calculate_channel_output(3);
-        f(&mut self.ch4);
-        let new = self.calculate_channel_output(3);
-
-        if old != new {
-            let phase = (i64::from(self.render_timer) * (blip::PHASES as i64))
-                / i64::from(self.ext_sample_period);
-            self.blips[3].update(new.0, new.1, phase as usize);
-        }
-    }
-
-    pub fn write_nr10(&mut self, val: u8) {
-        self.update_ch1(|ch| ch.write_nrx0(val));
-    }
-
-    pub const fn write_nr11(&mut self, val: u8) {
-        self.ch1.write_nrx1(val);
-    }
-
-    pub fn write_nr12(&mut self, val: u8) {
-        self.update_ch1(|ch| ch.write_nrx2(val));
-    }
-
-    pub fn write_nr13(&mut self, val: u8) {
-        self.ch1.write_nrx3(val);
-    }
-
-    pub fn write_nr14(&mut self, val: u8) {
-        self.update_ch1(|ch| ch.write_nrx4(val));
-    }
-
-    pub const fn write_nr21(&mut self, val: u8) {
-        self.ch2.write_nrx1(val);
-    }
-
-    pub fn write_nr22(&mut self, val: u8) {
-        self.update_ch2(|ch| ch.write_nrx2(val));
-    }
-
-    pub fn write_nr23(&mut self, val: u8) {
-        self.ch2.write_nrx3(val);
-    }
-
-    pub fn write_nr24(&mut self, val: u8) {
-        self.update_ch2(|ch| ch.write_nrx4(val));
-    }
-
-    pub fn write_nr30(&mut self, val: u8) {
-        self.update_ch3(|ch| ch.write_nr30(val));
-    }
-
-    pub const fn write_nr31(&mut self, val: u8) {
-        self.ch3.write_nr31(val);
-    }
-
-    pub fn write_nr32(&mut self, val: u8) {
-        self.update_ch3(|ch| ch.write_nr32(val));
-    }
-
-    pub fn write_nr33(&mut self, val: u8) {
-        self.ch3.write_nr33(val);
-    }
-
-    pub fn write_nr34(&mut self, val: u8, is_cgb: bool) {
-        self.update_ch3(|ch| ch.write_nr34(val, is_cgb));
-    }
-
-    pub const fn write_nr41(&mut self, val: u8) {
-        self.ch4.write_nr41(val);
-    }
-
-    pub fn write_nr42(&mut self, val: u8) {
-        self.update_ch4(|ch| ch.write_nr42(val));
-    }
-
-    pub const fn write_nr43(&mut self, val: u8) {
-        self.ch4.write_nr43(val);
-    }
-
-    pub fn write_nr44(&mut self, val: u8) {
-        self.update_ch4(|ch| ch.write_nr44(val));
-    }
-
-    pub const fn write_nr50(&mut self, val: u8) {
-        if self.enabled {
-            self.master_volume.write_nr50(val);
-        }
-    }
-
-    pub fn write_nr51(&mut self, val: u8) {
-        if self.enabled {
-            let old1 = self.calculate_channel_output(0);
-            let old2 = self.calculate_channel_output(1);
-            let old3 = self.calculate_channel_output(2);
-            let old4 = self.calculate_channel_output(3);
-
-            self.nr51 = val;
-
-            let new1 = self.calculate_channel_output(0);
-            let new2 = self.calculate_channel_output(1);
-            let new3 = self.calculate_channel_output(2);
-            let new4 = self.calculate_channel_output(3);
-
-            let phase = (i64::from(self.render_timer) * (blip::PHASES as i64))
-                / i64::from(self.ext_sample_period);
-
-            if old1 != new1 {
-                self.blips[0].update(new1.0, new1.1, phase as usize);
-            }
-            if old2 != new2 {
-                self.blips[1].update(new2.0, new2.1, phase as usize);
-            }
-            if old3 != new3 {
-                self.blips[2].update(new3.0, new3.1, phase as usize);
-            }
-            if old4 != new4 {
-                self.blips[3].update(new4.0, new4.1, phase as usize);
-            }
-        }
-    }
-
-    pub fn write_nr52(&mut self, val: u8, div_bit: bool, is_cgb: bool) {
-        let was_enabled = self.enabled;
-
-        let enabling = val & 0x80 != 0;
-
-        let old_lengths = (!is_cgb && !was_enabled && enabling).then(|| {
-            [
-                self.ch1.length(),
-                self.ch2.length(),
-                self.ch3.length(),
-                self.ch4.length(),
-            ]
-        });
-
-        if !was_enabled && enabling {
-            self.reset();
-
-            self.enabled = true;
-
-            if div_bit {
-                self.skip_div_event = SkipDivEvent::Skip;
-
-                self.div_divider = 0;
-            } else {
-                self.skip_div_event = SkipDivEvent::Inactive;
-
-                self.div_divider = 7;
-            }
+    fn write_nr50_nr51(&mut self, ctx: &ApuCtx, reg: usize, value: u8) {
+        if reg == NR50 {
+            self.nr50 = value;
         } else {
-            self.enabled = enabling;
-
-            if !self.enabled {
-                self.reset();
-
-                self.div_divider = 7;
-            }
+            self.nr51 = value;
         }
-
-        if let Some([l1, l2, l3, l4]) = old_lengths {
-            self.ch1.set_length(l1);
-
-            self.ch2.set_length(l2);
-
-            self.ch3.set_length(l3);
-
-            self.ch4.set_length(l4);
+        // These registers affect the output of all 4 channels (but not the
+        // PCM registers): refresh the mixer inputs.
+        let c = self.ctx(ctx);
+        for i in (0..N_CHANNELS).rev() {
+            let sample = self.output(i).sample;
+            self.output_mut(i).sample = 0x10; // Invalidate to force the update.
+            self.update_sample(i, sample, &c);
         }
     }
 
-    pub const fn write_wave_ram(&mut self, addr: u8, val: u8, is_cgb: bool) {
-        self.ch3.write_wave_ram(addr, val, is_cgb);
+    fn write_nr52(&mut self, ctx: &ApuCtx, value: u8) {
+        let lengths = [
+            self.squares[SQUARE_1].length_counter(),
+            self.squares[SQUARE_2].length_counter(),
+            self.wave.length_counter(),
+            self.noise.length_counter(),
+        ];
+        if value & 0x80 != 0 && !self.enabled {
+            self.power_on(ctx);
+        } else if value & 0x80 == 0 && self.enabled {
+            let c = self.ctx(ctx);
+            for i in (0..N_CHANNELS).rev() {
+                self.update_sample(i, 0, &c);
+            }
+            self.clear();
+            self.nr50 = 0;
+            self.nr51 = 0;
+        }
+
+        // The DMG keeps the length timers.
+        if !self.rev.is_cgb() && value & 0x80 != 0 {
+            self.squares[SQUARE_1].set_length_counter(lengths[SQUARE_1]);
+            self.squares[SQUARE_2].set_length_counter(lengths[SQUARE_2]);
+            self.wave.set_length_counter(lengths[WAVE]);
+            self.noise.set_length_counter(lengths[NOISE]);
+        }
+    }
+
+    /// What powering the APU off clears.
+    fn clear(&mut self) {
+        self.enabled = false;
+        self.div_divider = 0;
+        self.skip_div_event = SkipDivEvent::Inactive;
+        self.pending_envelope_tick = false;
+        self.lf_div = 0;
+        for sq in &mut self.squares {
+            sq.power_off();
+        }
+        self.sweep = Sweep::new();
+        self.wave.power_off();
+        self.noise.power_off();
+    }
+
+    fn power_on(&mut self, ctx: &ApuCtx) {
+        self.clear();
+        self.enabled = true;
+        self.lf_div = 1;
+        // APU glitch: turning the APU on while DIV's bit 4 (5 in double speed)
+        // is set skips the first DIV/APU event.
+        if ctx.div_counter & if ctx.double_speed { 0x2000 } else { 0x1000 } != 0 {
+            self.skip_div_event = SkipDivEvent::Skip;
+            self.div_divider = 1;
+        }
+        for sq in &mut self.squares {
+            sq.power_on();
+        }
     }
 }

@@ -36,6 +36,12 @@ impl RgbaBuf {
         self.data.as_slice()
     }
 
+    #[must_use]
+    pub const fn px(&self, index: u32) -> (u8, u8, u8) {
+        let base = (index * Self::BPP) as usize;
+        (self.data[base], self.data[base + 1], self.data[base + 2])
+    }
+
     pub fn set_px(&mut self, index: u32, rgb: (u8, u8, u8)) {
         let base = index * Self::BPP;
         self.data[base as usize] = rgb.0;

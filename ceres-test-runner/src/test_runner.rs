@@ -2,6 +2,8 @@
 
 /// Timeout constants for test suites (in frames at ~59.73 Hz).
 pub mod timeouts {
+    pub const CGB_ACID2: u32 = 300;
+    pub const DMG_ACID2: u32 = 480;
     /// Mooneye Test Suite acceptance tests (120 seconds maximum runtime)
     pub const MOONEYE_ACCEPTANCE: u32 = 7160;
 }
@@ -91,7 +93,42 @@ impl ScreenshotCheck {
             return Ok(false);
         }
 
-        Ok(expected_rgba.as_raw() == actual_rgba)
+        let matches = expected_rgba.as_raw() == actual_rgba;
+        if !matches {
+            let mut count = 0;
+            let mut line_counts = [0usize; 144];
+            let mut line_first = [(0u8, [0u8; 4], [0u8; 4]); 144];
+            for (idx, (e, a)) in expected_rgba
+                .chunks(4)
+                .zip(actual_rgba.chunks(4))
+                .enumerate()
+            {
+                if e != a {
+                    count += 1;
+                    let y = idx / 160;
+                    if line_counts[y] == 0 {
+                        let mut ea = [0u8; 4];
+                        let mut aa = [0u8; 4];
+                        ea.copy_from_slice(e);
+                        aa.copy_from_slice(a);
+                        line_first[y] = (u8::try_from(idx % 160).unwrap_or(u8::MAX), ea, aa);
+                    }
+                    line_counts[y] += 1;
+                    if count <= 10 {
+                        let x = idx % 160;
+                        eprintln!("Mismatch #{count} at ({x}, {y}): expected {e:?}, got {a:?}");
+                    }
+                }
+            }
+            for (y, c) in line_counts.iter().enumerate() {
+                if *c > 0 {
+                    let (x, e, a) = line_first[y];
+                    eprintln!("Scanline {y}: {c} mismatches (first at x={x}: exp={e:?} got={a:?})");
+                }
+            }
+            eprintln!("Total mismatching pixels: {count} / {}", 160 * 144);
+        }
+        Ok(matches)
     }
 }
 
@@ -100,7 +137,7 @@ impl CompletionCheck for ScreenshotCheck {
         if gb.check_and_reset_ld_b_b_breakpoint() {
             match self.compare_screenshot(gb) {
                 Ok(true) => Some(TestResult::Passed),
-                Ok(false) => None,
+                Ok(false) => Some(TestResult::Failed("Screenshot mismatch".to_string())),
                 Err(e) => Some(TestResult::Error(format!(
                     "Screenshot comparison error: {e}"
                 ))),
@@ -115,6 +152,173 @@ impl CompletionCheck for ScreenshotCheck {
             Ok(true) => TestResult::Passed,
             Ok(false) => TestResult::Failed("Screenshot mismatch".to_string()),
             Err(e) => TestResult::Error(format!("Screenshot comparison error: {e}")),
+        }
+    }
+}
+
+/// Check for a result in the registers (Mooneye's protocol, which AGE and
+/// SameSuite follow).
+///
+/// On success they hold the Fibonacci numbers `3, 5, 8, 13, 21, 34` in `B, C,
+/// D, E, H, L`. The ROM signals completion with the `ld b, b` breakpoint or by
+/// executing an illegal opcode.
+pub struct FibonacciCheck;
+
+impl CompletionCheck for FibonacciCheck {
+    fn check(&self, gb: &mut Gb<DummyAudioCallback>) -> Option<TestResult> {
+        if !(gb.check_and_reset_ld_b_b_breakpoint()
+            || gb.check_and_reset_illegal_opcode_breakpoint())
+        {
+            return None;
+        }
+
+        let registers = [
+            gb.cpu_b(),
+            gb.cpu_c(),
+            gb.cpu_d(),
+            gb.cpu_e(),
+            gb.cpu_h(),
+            gb.cpu_l(),
+        ];
+        Some(if registers == [3, 5, 8, 13, 21, 34] {
+            TestResult::Passed
+        } else {
+            TestResult::Failed(format!("registers {registers:02X?}"))
+        })
+    }
+}
+
+/// Check for the result of one of blargg's ROMs.
+///
+/// The older ones print their result over the serial port ("Passed" or
+/// "Failed"); the newer ones leave it in the cartridge RAM instead: a
+/// signature (`DE B0 61`) at `$A001`, then the text, and at `$A000` the result
+/// code (`$80` while running, 0 on success).
+pub struct BlarggCheck;
+
+impl BlarggCheck {
+    fn memory_text(gb: &Gb<DummyAudioCallback>) -> String {
+        (0xA004..0xA400)
+            .map(|address| gb.read_mem(address))
+            .take_while(|&byte| byte != 0)
+            .map(char::from)
+            .collect()
+    }
+}
+
+impl CompletionCheck for BlarggCheck {
+    fn check(&self, gb: &mut Gb<DummyAudioCallback>) -> Option<TestResult> {
+        let output = gb.serial_output();
+        if output.contains("Passed") {
+            return Some(TestResult::Passed);
+        }
+        if output.contains("Failed") {
+            return Some(TestResult::Failed(format!("serial output: {output:?}")));
+        }
+
+        let signature = [
+            gb.read_mem(0xA001),
+            gb.read_mem(0xA002),
+            gb.read_mem(0xA003),
+        ];
+        if signature != [0xDE, 0xB0, 0x61] {
+            return None;
+        }
+        match gb.read_mem(0xA000) {
+            0x80 => None,
+            0 => Some(TestResult::Passed),
+            code => Some(TestResult::Failed(format!(
+                "result code {code:#04X}: {:?}",
+                Self::memory_text(gb)
+            ))),
+        }
+    }
+
+    fn on_timeout(&self, gb: &mut Gb<DummyAudioCallback>) -> TestResult {
+        TestResult::Failed(format!(
+            "Timeout reached, serial output: {:?}, cartridge RAM text: {:?}",
+            gb.serial_output(),
+            Self::memory_text(gb)
+        ))
+    }
+}
+
+/// Frames between two looks at the screen.
+const SCREEN_CHECK_INTERVAL: u32 = 30;
+
+/// Rank of the colours of an RGBA image, brightest first: two images that
+/// differ only in their palette have the same ranks.
+fn rank_image(rgba: &[u8]) -> Vec<u8> {
+    let mut colors: Vec<[u8; 3]> = rgba.chunks(4).map(|p| [p[0], p[1], p[2]]).collect();
+    colors.sort_by_key(|c| core::cmp::Reverse(u32::from(c[0]) + u32::from(c[1]) + u32::from(c[2])));
+    colors.dedup();
+    rgba.chunks(4)
+        .map(|p| {
+            colors
+                .iter()
+                .position(|c| *c == [p[0], p[1], p[2]])
+                .map_or(u8::MAX, |i| u8::try_from(i).unwrap_or(u8::MAX))
+        })
+        .collect()
+}
+
+/// Check that the screen ends up looking like a reference screenshot, whatever
+/// the palette.
+///
+/// The screen is looked at every half second; the check passes as soon as it
+/// matches twice in a row (the ROMs keep their final screen) or when the time
+/// is up.
+pub struct RankedScreenshotCheck {
+    expected: Vec<u8>,
+    frames: core::cell::Cell<u32>,
+    matched_last_time: core::cell::Cell<bool>,
+}
+
+impl RankedScreenshotCheck {
+    /// # Errors
+    ///
+    /// Returns an error if the screenshot cannot be read or is not 160x144.
+    #[inline]
+    pub fn new(screenshot: &std::path::Path) -> Result<Self> {
+        let image = image::open(screenshot)?.to_rgba8();
+        anyhow::ensure!(
+            image.width() == u32::from(ceres_core::PX_WIDTH)
+                && image.height() == u32::from(ceres_core::PX_HEIGHT),
+            "reference screenshot is not {}x{}",
+            ceres_core::PX_WIDTH,
+            ceres_core::PX_HEIGHT
+        );
+        Ok(Self {
+            expected: rank_image(image.as_raw()),
+            frames: core::cell::Cell::new(0),
+            matched_last_time: core::cell::Cell::new(false),
+        })
+    }
+
+    fn matches(&self, gb: &Gb<DummyAudioCallback>) -> bool {
+        rank_image(gb.pixel_data_rgba()) == self.expected
+    }
+}
+
+impl CompletionCheck for RankedScreenshotCheck {
+    fn check(&self, gb: &mut Gb<DummyAudioCallback>) -> Option<TestResult> {
+        self.frames.set(self.frames.get() + 1);
+        if !self.frames.get().is_multiple_of(SCREEN_CHECK_INTERVAL) {
+            return None;
+        }
+        let matches = self.matches(gb);
+        if matches && self.matched_last_time.get() {
+            return Some(TestResult::Passed);
+        }
+        self.matched_last_time.set(matches);
+        None
+    }
+
+    fn on_timeout(&self, gb: &mut Gb<DummyAudioCallback>) -> TestResult {
+        if self.matches(gb) {
+            TestResult::Passed
+        } else {
+            TestResult::Failed("Screenshot mismatch".to_string())
         }
     }
 }

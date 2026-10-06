@@ -1,183 +1,364 @@
-use {
-    super::{
-        SweepTrait, envelope::Envelope, length_timer::LengthTimerCalculationResult,
-        period_counter::PeriodTriggerResult,
-    },
-    crate::apu::{LengthTimer, PeriodCounter, PeriodHalf, period_counter::PeriodStepResult},
-};
+//! The square channels (1 and 2).
 
-#[derive(Default)]
-pub struct Square<Sweep: SweepTrait> {
-    dac_enabled: bool,
-    duty: u8,
-    duty_bit: u8,
-    enabled: bool,
+use super::{Ctx, envelope::Envelope, length::Length, mixer::ChannelOutput, revision::Revision};
+
+const DUTIES: [u8; 32] = [
+    0, 0, 0, 0, 0, 0, 0, 1, //
+    1, 0, 0, 0, 0, 0, 0, 1, //
+    1, 0, 0, 0, 0, 1, 1, 1, //
+    0, 1, 1, 1, 1, 1, 1, 0,
+];
+
+#[derive(Clone, Copy)]
+pub struct Square {
+    /// 0 for channel 1, 1 for channel 2.
+    index: usize,
+    out: ChannelOutput,
+    length: Length,
     envelope: Envelope,
-    length_timer: LengthTimer<0x3F>,
-    output: u8,
-    period_counter: PeriodCounter<4, Sweep>,
+    /// NRx1 bits 6-7.
+    duty: u8,
+    /// The last value written to NRx4.
+    nrx4: u8,
+    /// The 11-bit period from NRx3 and NRx4 (channel 1's sweep changes it).
+    period: u16,
+    /// 2 MHz ticks until the next duty step.
+    countdown: u16,
+    /// Position in the duty cycle (0-7).
+    duty_step: u8,
+    /// A just triggered channel outputs nothing until its first duty step.
+    suppressed: bool,
+    /// The start delay after a trigger.
+    delay: u8,
+    did_tick: bool,
+    /// The countdown reloaded on the last tick.
+    just_reloaded: bool,
 }
 
-impl<S: SweepTrait> Square<S> {
-    pub const fn is_enabled(&self) -> bool {
-        self.enabled
-    }
-
-    pub const fn is_truly_enabled(&self) -> bool {
-        self.enabled && self.dac_enabled
-    }
-
-    pub const fn output(&self) -> u8 {
-        if self.is_truly_enabled() {
-            self.output * self.envelope.volume()
-        } else {
-            0
+impl Square {
+    pub const fn new(index: usize) -> Self {
+        Self {
+            index,
+            out: ChannelOutput::new(),
+            length: Length::new(),
+            envelope: Envelope::new(),
+            duty: 0,
+            nrx4: 0,
+            period: 0,
+            countdown: 0,
+            duty_step: 0,
+            suppressed: false,
+            delay: 0,
+            did_tick: false,
+            just_reloaded: false,
         }
     }
 
-    pub fn read_nrx0(&self) -> u8 {
-        self.period_counter.read_sweep()
+    /// Clears the channel, but the DAC keeps its level until the next update.
+    pub const fn power_off(&mut self) {
+        let mut out = self.out;
+        out.power_off();
+        *self = Self::new(self.index);
+        self.out = out;
+    }
+
+    pub const fn out(&self) -> &ChannelOutput {
+        &self.out
+    }
+
+    pub const fn out_mut(&mut self) -> &mut ChannelOutput {
+        &mut self.out
+    }
+
+    pub const fn length_counter(&self) -> u16 {
+        self.length.counter
+    }
+
+    pub const fn set_length_counter(&mut self, counter: u16) {
+        self.length.counter = counter;
+    }
+
+    pub const fn dac_enabled(&self) -> bool {
+        self.envelope.dac_enabled()
+    }
+
+    pub const fn read_nrx2(&self) -> u8 {
+        self.envelope.nrx2
+    }
+
+    pub const fn set_envelope_countdown(&mut self, countdown: u8) {
+        self.envelope.countdown = countdown;
+    }
+
+    /// Every 8th DIV event.
+    pub const fn step_envelope_countdown(&mut self) {
+        self.envelope.step_countdown();
+    }
+
+    /// The secondary DIV event.
+    pub const fn reload_envelope(&mut self) {
+        if self.out.active {
+            self.envelope.reload();
+        }
+    }
+
+    /// Every other DIV event.
+    pub fn tick_length(&mut self, c: &Ctx) {
+        if self.length.tick() {
+            self.disable(c);
+        }
+    }
+
+    pub const fn period(&self) -> u16 {
+        self.period
+    }
+
+    pub const fn set_period(&mut self, period: u16) {
+        self.period = period;
+    }
+
+    /// Powering the APU on leaves the countdown at its maximum.
+    pub const fn power_on(&mut self) {
+        self.countdown = 0xFFFF;
+    }
+
+    /// The state the boot ROM leaves on channel 1: `played` when it played
+    /// the start-up sound (see `PostBoot`).
+    pub const fn post_boot(
+        &mut self,
+        played: bool,
+        countdown: u16,
+        length: u16,
+        volume_countdown: u8,
+        duty_step: u8,
+    ) {
+        self.write_nrx1(0x80);
+        self.envelope.nrx2 = 0xF3;
+        self.write_nrx3(0xC1);
+        self.nrx4 = if played { 0x87 } else { 0x07 };
+        self.period = 0x7C1;
+        self.countdown = countdown;
+        self.length.counter = length;
+        self.envelope.countdown = volume_countdown;
+        self.duty_step = duty_step;
+        if played {
+            self.out.active = true;
+            self.did_tick = true;
+            self.envelope.clock.locked = true;
+            self.envelope.clock.should_lock = true;
+        }
     }
 
     pub const fn read_nrx1(&self) -> u8 {
-        0x3F | (self.duty << 6)
-    }
-
-    pub fn read_nrx2(&self) -> u8 {
-        self.envelope.read()
+        (self.duty << 6) | 0x3F
     }
 
     pub const fn read_nrx4(&self) -> u8 {
-        0xBF | self.length_timer.read_enabled()
+        self.nrx4 | 0xBF
     }
 
-    pub const fn length(&self) -> u8 {
-        self.length_timer.length()
+    pub fn update_sample(&mut self, value: u8, c: &Ctx) {
+        self.out.update(
+            self.index,
+            value,
+            self.envelope.dac_enabled(),
+            self.envelope.volume,
+            c,
+        );
     }
 
-    pub const fn set_length(&mut self, val: u8) {
-        self.length_timer.set_length(val);
+    /// Outputs the current step of the duty cycle.
+    pub fn update_duty_sample(&mut self, c: &Ctx) {
+        if self.suppressed {
+            if c.rev.is_agb() {
+                self.update_sample(self.out.sample, c);
+            }
+            return;
+        }
+        let on = DUTIES[usize::from(self.duty_step) + usize::from(self.duty) * 8] != 0;
+        self.update_sample(if on { self.envelope.volume } else { 0 }, c);
     }
 
-    pub(crate) const fn set_output(&mut self, val: u8) {
-        self.output = val;
+    pub fn disable(&mut self, c: &Ctx) {
+        self.out.active = false;
+        self.update_sample(0, c);
     }
 
-    pub(crate) const fn set_duty_bit(&mut self, val: u8) {
-        self.duty_bit = val;
-    }
-
-    pub const fn set_period_half(&mut self, p_half: PeriodHalf) {
-        self.length_timer.set_phalf(p_half);
-    }
-
-    pub const fn step_envelope(&mut self) {
-        if self.enabled {
-            self.envelope.step();
+    pub fn run(&mut self, cycles: u32, c: &Ctx) {
+        if !self.out.active {
+            return;
+        }
+        let mut cycles_left = cycles;
+        if self.delay != 0 {
+            if u32::from(self.delay) < cycles_left {
+                self.delay = 0;
+            } else {
+                self.delay -= cycles_left as u8;
+            }
+        }
+        while cycles_left > u32::from(self.countdown) {
+            cycles_left -= u32::from(self.countdown) + 1;
+            self.countdown = (self.period ^ 0x7FF) * 2 + 1;
+            self.duty_step = (self.duty_step + 1) & 7;
+            self.suppressed = false;
+            if cycles_left == 0 && self.out.sample == 0 {
+                self.out.pcm_mask = 0;
+            }
+            self.did_tick = true;
+            self.update_duty_sample(c);
+        }
+        self.just_reloaded = cycles_left == 0;
+        if cycles_left != 0 {
+            self.countdown -= cycles_left as u16;
         }
     }
 
-    pub const fn step_length_timer(&mut self) {
-        if matches!(
-            self.length_timer.step(),
-            LengthTimerCalculationResult::DisableChannel
-        ) {
-            self.enabled = false;
+    /// Steps the volume if the envelope clock is high.
+    pub fn tick_envelope(&mut self, c: &Ctx) {
+        if !self.envelope.clock.clock {
+            return;
+        }
+        let Some(old_volume) = self.envelope.tick() else {
+            return;
+        };
+        if c.double_speed {
+            // The PCM register misses the bits the step changes.
+            let bits = if self.index == 0 {
+                1
+            } else if c.rev == Revision::Cgb0 && old_volume == 1 && self.envelope.nrx2 & 8 != 0 {
+                // CGB-0 behaviour is instance specific and non-deterministic.
+                1
+            } else {
+                3
+            };
+            self.out.pcm_mask &= (old_volume | bits) & 0xF;
+        }
+        if self.out.active {
+            self.update_duty_sample(c);
         }
     }
 
-    pub fn step_sample(&mut self, dots: i32) -> Option<i32> {
-        // Shape of the duty waveform for a certain duty (LSB = step 0, MSB = step 7)
-        const DUTY_WAV: [u8; 4] = [
-            0b1000_0000, // 0,0,0,0,0,0,0,1 : 12.5%
-            0b1000_0001, // 1,0,0,0,0,0,0,1 : 25%
-            0b1110_0001, // 1,0,0,0,0,1,1,1 : 50%
-            0b0111_1110, // 0,1,1,1,1,1,1,0 : 75%
-        ];
+    /// `value` has bits 0-5 masked off when written while the APU is off.
+    pub const fn write_nrx1(&mut self, value: u8) {
+        self.length.counter = 0x40 - (value & 0x3F) as u16;
+        self.duty = value >> 6;
+    }
 
-        if !self.is_enabled() {
-            return None;
-        }
-
-        if let PeriodStepResult::AdvanceFrequency(offset) = self.period_counter.step(dots) {
-            self.duty_bit = (self.duty_bit + 1) & 7;
-            self.output = u8::from((DUTY_WAV[self.duty as usize] & (1 << self.duty_bit)) != 0);
-            Some(offset)
+    pub fn write_nrx2(&mut self, value: u8, c: &Ctx) {
+        if value & 0xF8 == 0 {
+            // This disables the DAC.
+            self.envelope.nrx2 = value;
+            self.disable(c);
+        } else if self.out.active {
+            self.envelope.write_while_active(c.rev, value);
+            self.update_duty_sample(c);
         } else {
-            None
+            self.envelope.nrx2 = value;
         }
     }
 
-    pub fn step_sweep(&mut self) {
-        if self.enabled
-            && matches!(
-                self.period_counter.step_sweep(),
-                PeriodTriggerResult::DisableChannel
-            )
+    pub const fn write_nrx3(&mut self, value: u8) {
+        self.period = (self.period & !0xFF) | value as u16;
+        if self.just_reloaded {
+            self.countdown = (self.period ^ 0x7FF) * 2 + 1;
+        }
+    }
+
+    pub fn write_nrx4(&mut self, value: u8, c: &Ctx) {
+        // When the period changes right before being updated from >=$700 to
+        // <$700 the countdown should change to the old period but the current
+        // sample should not change; step the index backwards instead.
+        if value & 0x80 == 0
+            && self.out.active
+            && self.nrx4 & 0x7 == 7
+            && value & 7 != 7
+            && (c.rev.is_cgb_de() || self.countdown & 1 != 0)
+            && self.did_tick
+            && self.countdown >> 1 == (self.period ^ 0x7FF)
         {
-            self.enabled = false;
+            self.duty_step = self.duty_step.wrapping_sub(1) & 7;
+            self.suppressed = false;
         }
-    }
 
-    pub fn write_nrx0(&mut self, val: u8) {
-        if matches!(
-            self.period_counter.write_sweep(val),
-            PeriodTriggerResult::DisableChannel
+        let old_period = self.period;
+        self.period = (self.period & 0xFF) | (u16::from(value & 7) << 8);
+        if self.just_reloaded {
+            self.countdown = (self.period ^ 0x7FF) * 2 + 1;
+        }
+        if value & 0x80 != 0 {
+            self.trigger(value, old_period, c);
+        }
+
+        if self.length.write(
+            value,
+            c.rev.is_cgb() && c.rev <= Revision::CgbB,
+            c.div_divider,
+            0x40,
         ) {
-            self.enabled = false;
+            self.disable(c);
         }
+        self.nrx4 = value;
     }
 
-    pub const fn write_nrx1(&mut self, val: u8) {
-        self.duty = (val >> 6) & 3;
-        self.length_timer.write_len(val);
-    }
-
-    pub fn write_nrx2(&mut self, val: u8) {
-        if val & 0xF8 == 0 {
-            self.enabled = false;
-            self.dac_enabled = false;
+    fn trigger(&mut self, value: u8, old_period: u16, c: &Ctx) {
+        // The duty step is unchanged when restarting the channel; only turning
+        // the APU off resets it.
+        self.envelope.unlock();
+        self.did_tick = false;
+        let mut force_unsuppressed = false;
+        if self.out.active {
+            let mut extra_delay = 0_u8;
+            if c.rev.is_cgb_de() {
+                if !self.just_reloaded
+                    && value & 4 == 0
+                    && (self
+                        .countdown
+                        .wrapping_sub(1)
+                        .wrapping_sub(u16::from(self.delay))
+                        / 2)
+                        & 0x400
+                        == 0
+                {
+                    self.duty_step = (self.duty_step + 1) & 7;
+                    self.suppressed = false;
+                } else if self.period == 0x7FF && old_period != 0x7FF && self.suppressed {
+                    extra_delay += 2;
+                }
+            }
+            // Timing quirk: if already active, the sound starts 2 (2 MHz)
+            // ticks earlier.
+            self.delay = 4_u8.wrapping_sub(c.lf_div).wrapping_add(extra_delay);
         } else {
-            self.dac_enabled = true;
+            if c.rev.is_cgb_de()
+                && value & 4 == 0
+                && (self.countdown.wrapping_sub(u16::from(self.delay)) / 2) & 0x400 == 0
+            {
+                self.duty_step = (self.duty_step + 1) & 7;
+                force_unsuppressed = true;
+            }
+            let lf_div = i32::from(c.lf_div);
+            let delay = 6 + lf_div
+                * if c.rev <= Revision::CgbC && c.double_speed {
+                    1
+                } else {
+                    -1
+                };
+            self.delay = delay as u8;
+        }
+        self.countdown = (self.period ^ 0x7FF) * 2 + u16::from(self.delay);
+
+        self.envelope.restart();
+        // The volume change caused by sound start takes effect instantly
+        // (i.e. on the previously started sound).
+        if self.out.active {
+            self.update_duty_sample(c);
         }
 
-        self.envelope.write(val);
-    }
-
-    pub fn write_nrx3(&mut self, val: u8) {
-        self.period_counter.write_low(val);
-    }
-
-    pub fn write_nrx4(&mut self, val: u8) {
-        self.period_counter.write_high(val);
-        if matches!(
-            self.length_timer.write_enabled(val),
-            LengthTimerCalculationResult::DisableChannel
-        ) {
-            self.enabled = false;
+        if self.envelope.dac_enabled() && !self.out.active {
+            self.out.active = true;
+            self.update_sample(0, c);
+            self.suppressed = !force_unsuppressed;
         }
-
-        // trigger
-        if val & 0x80 != 0 {
-            if self.dac_enabled {
-                self.enabled = true;
-            }
-
-            self.envelope.trigger();
-
-            if matches!(
-                self.period_counter.trigger(),
-                PeriodTriggerResult::DisableChannel
-            ) {
-                self.enabled = false;
-            }
-
-            if matches!(
-                self.length_timer.trigger(),
-                LengthTimerCalculationResult::DisableChannel
-            ) {
-                self.enabled = false;
-            }
-        }
+        self.length.trigger(0x40);
     }
 }

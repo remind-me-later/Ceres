@@ -92,7 +92,7 @@ fn detect_mbc1_multicart(rom: &[u8], rom_size: ROMSize) -> bool {
         if rom.len() < end {
             return false;
         }
-        if &rom[start..end] != NINTENDO_LOGO {
+        if rom[start..end] != NINTENDO_LOGO {
             return false;
         }
     }
@@ -159,17 +159,21 @@ impl Cartridge {
         // NOTE: Superfluous but silences clippy false positive
         assert!(rom.len() >= 0x150, "ROM is too small to be valid");
 
-        let rom_size = ROMSize::new(rom[0x148])?;
+        let rom_size = ROMSize::from_len(rom.len())?;
         let ram_size = RAMSize::new(rom[0x149])?;
-        let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147])?;
-
-        #[expect(clippy::cast_possible_truncation)]
-        if rom_size.size_bytes() as usize != rom.len() {
-            return Err(Error::RomSizeDifferentThanActual {
-                expected: rom_size.size_bytes(),
-                actual: rom.len() as u32,
-            });
+        let (mut mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147])?;
+        if let Mbc::Mbc3 { is_mbc30, .. } = &mut mbc {
+            *is_mbc30 = rom_size.size_bytes() > 0x20_0000 || ram_size.size_bytes() > 0x8000;
         }
+
+        // Unused space reads as $FF.
+        let rom = if rom.len() == rom_size.size_bytes() as usize {
+            rom
+        } else {
+            let mut padded = alloc::vec![0xFF; rom_size.size_bytes() as usize];
+            padded[..rom.len()].copy_from_slice(&rom);
+            padded.into_boxed_slice()
+        };
 
         // MBC2 has built-in 512 bytes of 4-bit RAM regardless of header
         let actual_ram_size = if matches!(mbc, Mbc::Mbc2) {
@@ -274,9 +278,9 @@ impl Cartridge {
         }
     }
 
-    pub const fn run_rtc(&mut self, dots: i32) {
+    pub const fn run_rtc(&mut self, units: u32) {
         if let Mbc::Mbc3 { rtc: Some(rtc), .. } = &mut self.mbc {
-            rtc.run(dots);
+            rtc.run(units);
         }
     }
 
@@ -486,7 +490,10 @@ impl Cartridge {
                     }
                 }
                 0x6000..=0x7FFF => {
-                    // TODO: no need to latch?
+                    // Any write latches the clock into the registers the CPU reads.
+                    if let Some(rtc) = rtc.as_mut() {
+                        rtc.latch();
+                    }
                 }
                 _ => (),
             },

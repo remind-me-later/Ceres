@@ -1,4 +1,4 @@
-use crate::ppu::{Mode, Ppu};
+use crate::ppu::Ppu;
 
 pub struct Vram {
     bytes: [u8; Self::SIZE_CGB as usize],
@@ -50,6 +50,16 @@ impl Vram {
         self.bytes[i as usize] = val;
     }
 
+    /// HDMA write into the selected bank; `mirror` also writes the other bank.
+    pub fn write_hdma(&mut self, addr: u16, val: u8, mirror: bool) {
+        let bank = u16::from(self.vbk) * Self::SIZE_GB;
+        self.bytes[((addr & 0x1FFF) + bank) as usize] = val;
+        if mirror {
+            let other = (1 - u16::from(self.vbk)) * Self::SIZE_GB;
+            self.bytes[((addr & 0x1FFF) + other) as usize] = val;
+        }
+    }
+
     pub const fn write_vbk(&mut self, val: u8) {
         self.vbk = val & 1 != 0;
     }
@@ -58,7 +68,7 @@ impl Vram {
 impl Ppu {
     #[must_use]
     pub const fn read_vram(&self, addr: u16) -> u8 {
-        if matches!(self.mode(), Mode::Drawing) {
+        if self.vram_read_blocked() {
             0xFF
         } else {
             self.vram.read(addr)
@@ -74,7 +84,7 @@ impl Ppu {
     }
 
     pub fn write_vram(&mut self, addr: u16, val: u8) {
-        if !matches!(self.mode(), Mode::Drawing) {
+        if !self.vram_write_blocked() {
             self.vram.write(addr, val);
         }
     }

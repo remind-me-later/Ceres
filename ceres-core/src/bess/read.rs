@@ -227,13 +227,12 @@ impl<'a> Reader<'a> {
             self.read_exact(&mut byte_buf)?;
             rtc.set_control(byte_buf[0]);
 
-            // FIXME: we don't emulate latched values on MBC3 RTC
-            // Skip latched values
-            self.read_exact(&mut byte_buf)?;
-            self.read_exact(&mut byte_buf)?;
-            self.read_exact(&mut byte_buf)?;
-            self.read_exact(&mut byte_buf)?;
-            self.read_exact(&mut byte_buf)?;
+            let mut latched = [0; 5];
+            for value in &mut latched {
+                self.read_exact(&mut byte_buf)?;
+                *value = byte_buf[0];
+            }
+            rtc.set_latched(latched);
 
             // Seconds since saved timestamp
             {

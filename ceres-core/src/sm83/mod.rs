@@ -1,4 +1,7 @@
-use crate::{AudioCallback, Gb};
+pub mod conflict;
+
+use crate::{AudioCallback, Gb, Model, ppu::Mode};
+use conflict::ConflictType;
 use core::mem;
 
 const ZF: u16 = 0x80;
@@ -20,13 +23,6 @@ const CF: u16 = 0x10;
 ///   the machine after all preceding M-cycles of the instruction), perform
 ///   the access, then defer the access's own 4 T-cycles.
 /// - The host flushes whatever remains at the end of each `step`.
-///
-/// This is the mooneye-gb timing model, where the PPU advances per M-cycle
-/// relative to bus accesses. The deferral is load-bearing: the interrupt
-/// dispatch ends with `defer(2)`, splitting its last M-cycle into 2+2
-/// T-cycles, which reproduces the reference emulator's PPU-vs-CPU phase
-/// relationship across interrupt dispatches (verified by the mooneye
-/// `gpu/intr_2_*` and `halt_*_timing` tests).
 pub trait Bus {
     /// One internal (no bus access) M-cycle: defer 4 T-cycles.
     fn tick(&mut self);
@@ -40,8 +36,7 @@ pub trait Bus {
     fn write(&mut self, addr: u16, val: u8);
 
     /// Interrupt-dispatch tail: flush all but `t_cycles` T-cycles, which
-    /// stay deferred across the step boundary. The dispatch calls this with
-    /// 2 to model the 16-bit push whose M-cycle overlaps the next fetch.
+    /// stay deferred across the step boundary.
     fn defer(&mut self, t_cycles: i32);
 
     /// `(IF & IE) != 0` — some enabled interrupt line is asserted.
@@ -62,6 +57,30 @@ pub trait Bus {
     /// Run a pending HDMA transfer chunk, if any.
     fn tick_hdma(&mut self);
 
+    /// An internal M-cycle with `addr` on the address bus: flushes the
+    /// deferred time, triggers the DMG OAM bug for `addr`, defers 4 T-cycles.
+    fn tick_oam_bug(&mut self, addr: u16);
+
+    /// The DMG OAM bug for an address placed on the bus (no time passes).
+    fn trigger_oam_bug(&mut self, addr: u16);
+
+    /// Runs the OAM DMA for the cycles it is owed (0 unless `wake` is set; on
+    /// a wake-up the DMA is given one M-cycle).
+    fn dma_run(&mut self, wake: bool);
+
+    /// Discards the time deferred so far (it was already accounted for).
+    fn drop_deferred(&mut self);
+
+    /// The CPU entered (or, with `false`, left) HALT.
+    fn set_halted(&mut self, halted: bool);
+
+    /// Advance the machine by `dots` T-cycles immediately (nothing is
+    /// deferred when this is called at the start of a step).
+    fn advance(&mut self, dots: i32);
+
+    /// Whether the machine is CGB hardware (regardless of ROM mode).
+    fn is_cgb_hardware(&self) -> bool;
+
     /// Cancel STOP mode (`ppu.leave_stop_mode` + unfreeze the clock).
     fn wake_from_stop(&mut self);
 
@@ -69,29 +88,46 @@ pub trait Bus {
     /// PPU stop, clock stop. `ime` is the CPU's current IME state.
     fn enter_stop(&mut self, ime: bool);
 
-    /// KEY1 speed-switch requested (`key1.is_requested`).
-    fn speed_switch_pending(&self) -> bool;
+    /// Flush all deferred time.
+    fn flush(&mut self);
 
-    /// Perform the CGB double-speed switch: `key1.change_speed`, DIV reset,
-    /// APU div-phase resync, then advance the 32768 M-cycles the PPU/APU
-    /// must observe across the switch.
-    fn perform_speed_switch(&mut self);
+    /// Read without consuming time or triggering side effects.
+    fn peek(&self, addr: u16) -> u8;
+
+    /// The CPU is in STOP mode (waiting for a joypad press).
+    fn is_stopped(&self) -> bool;
+
+    /// KEY1 speed-switch requested (`key1.is_requested`).
+    fn speed_switch_requested(&self) -> bool;
+
+    /// Start the CGB speed switch (SameBoy's `stop` speed-switch block).
+    fn begin_speed_switch(&mut self, interrupt_pending: bool);
+
+    /// Leave STOP mode without touching the speed-switch halt countdown.
+    fn leave_stop(&mut self);
+
+    /// Cancel the post-speed-switch halt.
+    fn clear_speed_switch_halt(&mut self);
+
+    /// The post-speed-switch halt expired since the last call.
+    fn take_unhalt(&mut self) -> bool;
 }
 
+#[expect(clippy::struct_excessive_bools, reason = "Independent CPU state flags")]
 #[derive(Default)]
 pub struct Sm83 {
     af: u16,
     bc: u16,
     de: u16,
-    has_ei_delay: bool,
+    ime_toggle: bool,
+    just_halted: bool,
     hl: u16,
     ime: bool,
-    is_halt_bug_triggered: bool,
+    halt_bug: bool,
     is_halted: bool,
     has_executed_illegal_opcode: bool,
     ld_b_b_breakpoint: bool,
     pc: u16,
-    skip_isr_nops: bool,
     sp: u16,
 }
 
@@ -100,7 +136,7 @@ impl Sm83 {
         self.has_executed_illegal_opcode
     }
 
-    pub(crate) const fn set_executed_illegal_opcode(&mut self, val: bool) {
+    pub const fn set_executed_illegal_opcode(&mut self, val: bool) {
         self.has_executed_illegal_opcode = val;
     }
 
@@ -132,11 +168,11 @@ impl Sm83 {
         self.is_halted
     }
 
-    pub(crate) const fn ime(&self) -> bool {
+    pub const fn ime(&self) -> bool {
         self.ime
     }
 
-    pub(crate) fn take_ld_b_b_breakpoint(&mut self) -> bool {
+    pub fn take_ld_b_b_breakpoint(&mut self) -> bool {
         mem::take(&mut self.ld_b_b_breakpoint)
     }
 
@@ -151,27 +187,27 @@ impl Sm83 {
 
 impl Sm83 {
     /// Set the program counter.
-    pub(crate) fn set_pc(&mut self, pc: u16) {
+    pub fn set_pc(&mut self, pc: u16) {
         self.pc = pc;
     }
 
-    pub(crate) fn set_af(&mut self, af: u16) {
+    pub fn set_af(&mut self, af: u16) {
         self.af = af;
     }
 
-    pub(crate) fn set_bc(&mut self, bc: u16) {
+    pub fn set_bc(&mut self, bc: u16) {
         self.bc = bc;
     }
 
-    pub(crate) fn set_de(&mut self, de: u16) {
+    pub fn set_de(&mut self, de: u16) {
         self.de = de;
     }
 
-    pub(crate) fn set_hl(&mut self, hl: u16) {
+    pub fn set_hl(&mut self, hl: u16) {
         self.hl = hl;
     }
 
-    pub(crate) fn set_sp(&mut self, sp: u16) {
+    pub fn set_sp(&mut self, sp: u16) {
         self.sp = sp;
     }
 }
@@ -190,123 +226,137 @@ impl Sm83 {
     /// it will clear IME again; if it's anything else, IME will stay true
     /// through subsequent step calls.
     pub fn step<B: Bus>(&mut self, bus: &mut B) {
-        let effective_ime = self.ime;
-        if self.has_ei_delay {
-            self.has_ei_delay = false;
-            self.ime = true;
-        }
+        // Port of SameBoy's `GB_cpu_run` control flow. All time of the
+        // previous instruction has been flushed, so interrupt lines are
+        // sampled with the hardware at instruction end.
+        let cgb = bus.is_cgb_hardware();
 
-        if bus.interrupts_pending() {
-            let was_halted = self.is_halted;
-            self.is_halted = false;
-            bus.wake_from_stop();
-
-            if effective_ime {
-                if self.is_halt_bug_triggered {
-                    self.pc = self.pc.wrapping_sub(1);
-                    self.is_halt_bug_triggered = false;
-                }
-
-                if !self.skip_isr_nops {
-                    bus.tick();
-                    bus.tick();
-                }
-                self.skip_isr_nops = false;
-                bus.tick();
-
-                if was_halted {
-                    bus.tick();
-                }
-
-                let pc = self.pc;
-                let [lo, hi] = pc.to_le_bytes();
-
-                // Push Hi. The write lands after all preceding M-cycles
-                // flush; IF/IE are sampled at that same instant, before the
-                // push's own M-cycle elapses.
-                self.sp = self.sp.wrapping_sub(1);
-                bus.write(self.sp, hi);
-
-                // Push Lo. SameBoy re-evaluates IF/IE *after* the Lo push
-                // finishes, using the value from BEFORE the write if it's to
-                // IF or IE. Both the re-evaluation and the acknowledgement
-                // happen at the write's access instant.
-                self.sp = self.sp.wrapping_sub(1);
-
-                let is_if_write = self.sp == 0xFF0F;
-                let is_ie_write = self.sp == 0xFFFF;
-
-                let ifr_pre = if is_if_write {
-                    bus.read_if() & 0x1F
-                } else {
-                    0
-                };
-                let ie_pre = if is_ie_write {
-                    bus.read_ie() & 0x1F
-                } else {
-                    0
-                };
-
-                bus.write(self.sp, lo);
-
-                let ifr = if is_if_write {
-                    ifr_pre
-                } else {
-                    bus.read_if() & 0x1F
-                };
-                let ie = if is_ie_write {
-                    ie_pre
-                } else {
-                    bus.read_ie() & 0x1F
-                };
-
-                let queue = ie & ifr;
-                let (final_int, final_vector) = if queue != 0 {
-                    let tz = (queue.trailing_zeros() & 7) as u8;
-                    (1 << tz, 0x40 | (u16::from(tz) << 3))
-                } else {
-                    (0, 0x0000)
-                };
-
-                if final_int != 0 {
-                    bus.ack_interrupt(final_int);
-                }
-
-                if final_int != 0 {
-                    self.pc = final_vector;
-                } else {
-                    self.pc = 0x0000;
-                }
-
-                self.ime = false;
-
-                // The Lo push's M-cycle is split 2+2 around the step
-                // boundary (see the `Bus` timing model docs).
-                bus.defer(2);
-
-                return;
+        if bus.is_stopped() {
+            bus.advance(4);
+            if bus.peek(0xFF00) & 0xF != 0xF {
+                bus.leave_stop();
+                bus.dma_run(true);
+                bus.advance(8);
             }
+            return;
         }
 
-        // HDMA runs independently of the CPU and is evaluated at
-        // instruction-start time, before any M-cycle of this step elapses.
-        // It must run even during HALT or HDMA will never start after HALT.
-        bus.tick_hdma();
+        // While halted, DMG samples the interrupt lines two dots into each
+        // 4-dot step; CGB (and the first step after HALT) samples at the start.
+        if self.is_halted && !cgb && !self.just_halted {
+            bus.advance(2);
+        }
+
+        let interrupt_pending = bus.interrupts_pending();
 
         if self.is_halted {
-            bus.tick();
+            bus.advance(if cgb || self.just_halted { 4 } else { 2 });
+            if bus.take_unhalt() {
+                self.is_halted = false;
+                bus.set_halted(false);
+            }
+        }
+        self.just_halted = false;
+
+        let effective_ime = self.ime;
+        if self.ime_toggle {
+            self.ime = !self.ime;
+            self.ime_toggle = false;
+        }
+
+        if self.is_halted && !effective_ime && interrupt_pending {
+            // Wake up from HALT without calling the interrupt code.
+            self.is_halted = false;
+            bus.wake_from_stop();
+            bus.dma_run(true);
+        } else if effective_ime && interrupt_pending {
+            self.is_halted = false;
+            bus.wake_from_stop();
+            bus.dma_run(true);
+            self.dispatch_interrupt(bus);
+            return;
         } else {
+            // Nothing to wake up for or to dispatch.
+        }
+
+        if !self.is_halted {
             let op = bus.read(self.pc);
             self.pc = self.pc.wrapping_add(1);
 
-            if self.is_halt_bug_triggered {
+            // A pending HDMA burst steals the bus right after the opcode
+            // fetch, while the fetch's M-cycle is still pending.
+            bus.tick_hdma();
+
+            if self.halt_bug {
                 self.pc = self.pc.wrapping_sub(1);
-                self.is_halt_bug_triggered = false;
-                self.skip_isr_nops = true;
+                self.halt_bug = false;
             }
 
             self.exec(bus, op);
         }
+    }
+
+    /// The five-M-cycle interrupt dispatch (SameBoy: fetch, OAM-bug cycle,
+    /// internal cycle, push high, push low).
+    fn dispatch_interrupt<B: Bus>(&mut self, bus: &mut B) {
+        // M1: dummy fetch. M2: PC (and SP) on the address bus.
+        bus.read(self.pc);
+        bus.tick_oam_bug(self.pc.wrapping_add(1));
+        bus.trigger_oam_bug(self.sp);
+        bus.tick();
+
+        let [lo, hi] = self.pc.to_le_bytes();
+
+        // Push Hi. The write lands after all preceding M-cycles flush.
+        self.sp = self.sp.wrapping_sub(1);
+        bus.write(self.sp, hi);
+
+        // Push Lo. IF/IE are re-evaluated after the Lo push finishes, using
+        // the value from BEFORE the write if it targets IF or IE.
+        self.sp = self.sp.wrapping_sub(1);
+
+        let writes_flags = self.sp == 0xFF0F;
+        let writes_enable = self.sp == 0xFFFF;
+
+        let old_flags = if writes_flags {
+            bus.read_if() & 0x1F
+        } else {
+            0
+        };
+        let old_enable = if writes_enable {
+            bus.read_ie() & 0x1F
+        } else {
+            0
+        };
+
+        bus.write(self.sp, lo);
+
+        let flags = if writes_flags {
+            old_flags
+        } else {
+            bus.read_if() & 0x1F
+        };
+        let enable = if writes_enable {
+            old_enable
+        } else {
+            bus.read_ie() & 0x1F
+        };
+
+        let queue = enable & flags;
+
+        // Two of the last M-cycle's four dots elapse before the interrupt is
+        // acknowledged and the vector is chosen.
+        bus.defer(2);
+
+        if queue != 0 {
+            let bit = (queue.trailing_zeros() & 7) as u8;
+            bus.ack_interrupt(1 << bit);
+            self.pc = 0x40 | (u16::from(bit) << 3);
+        } else {
+            self.pc = 0x0000;
+        }
+
+        self.ime = false;
     }
 }
 
@@ -321,8 +371,8 @@ impl Sm83 {
     fn do_jump_relative(&mut self, bus: &mut impl Bus) {
         #[expect(clippy::cast_sign_loss)]
         let offset = self.imm8(bus).cast_signed() as u16;
+        bus.tick_oam_bug(self.pc);
         self.pc = self.pc.wrapping_add(offset);
-        bus.tick();
     }
 
     fn do_jump_to_immediate(&mut self, bus: &mut impl Bus) {
@@ -336,11 +386,7 @@ impl Sm83 {
         let id = ((op >> 1) + 1) & 3;
         let lo = op & 1 != 0;
         if id == 0 {
-            if lo {
-                self.a()
-            } else {
-                bus.read(self.hl)
-            }
+            if lo { self.a() } else { bus.read(self.hl) }
         } else if lo {
             (self.get_rr(id) & 0xFF) as u8
         } else {
@@ -401,8 +447,8 @@ impl Sm83 {
     fn push(&mut self, bus: &mut impl Bus, val: u16) {
         let [lo, hi] = val.to_le_bytes();
 
-        // M=1: Internal delay (where OAM bug handling would occur on DMG)
-        bus.tick();
+        // M=1: Internal delay with SP on the address bus (DMG OAM bug).
+        bus.tick_oam_bug(self.sp);
 
         // M=2: Write high byte
         self.sp = self.sp.wrapping_sub(1);
@@ -871,33 +917,48 @@ impl Sm83 {
 
     fn dec_rr(&mut self, bus: &mut impl Bus, op: u8) {
         let id = Self::opcode_to_reg_id(op);
+        bus.tick_oam_bug(self.get_rr(id));
         self.set_rr(id, self.get_rr(id).wrapping_sub(1));
-        bus.tick();
     }
 
     const fn di(&mut self) {
+        // DI is NOT delayed, not even on a CGB.
         self.ime = false;
-        self.has_ei_delay = false;
     }
 
     const fn ei(&mut self) {
-        self.has_ei_delay = true;
+        // EI disables interrupts for one more instruction, then enables them.
+        if !self.ime && !self.ime_toggle {
+            self.ime_toggle = true;
+        }
     }
 
-    fn halt(&mut self, bus: &impl Bus) {
-        if !bus.interrupts_pending() {
-            self.is_halted = true;
-        } else if self.ime {
-            self.is_halted = false;
+    fn halt(&mut self, bus: &mut impl Bus) {
+        // A dummy read at PC flushes the fetch M-cycle before the interrupt
+        // lines are sampled; the read's own M-cycle is not charged.
+        bus.read(self.pc);
+        bus.drop_deferred();
+
+        // The HALT bug also happens on a CGB, in both CGB and DMG modes.
+        if bus.interrupts_pending() {
+            if self.ime {
+                self.is_halted = false;
+                self.pc = self.pc.wrapping_sub(1);
+            } else {
+                self.is_halted = false;
+                self.halt_bug = true;
+            }
         } else {
-            self.is_halted = false;
-            self.is_halt_bug_triggered = true;
+            self.is_halted = true;
+            bus.set_halted(true);
         }
+        self.just_halted = true;
     }
 
     fn illegal(&mut self, bus: &mut impl Bus, _op: u8) {
         bus.clear_ie();
         self.is_halted = true;
+        bus.set_halted(true);
         self.has_executed_illegal_opcode = true;
     }
 
@@ -949,8 +1010,8 @@ impl Sm83 {
 
     fn inc_rr(&mut self, bus: &mut impl Bus, op: u8) {
         let id = Self::opcode_to_reg_id(op);
+        bus.tick_oam_bug(self.get_rr(id));
         self.set_rr(id, self.get_rr(id).wrapping_add(1));
-        bus.tick();
     }
 
     fn jp_a16(&mut self, bus: &mut impl Bus) {
@@ -988,8 +1049,8 @@ impl Sm83 {
 
     fn ld16_sp_hl(&mut self, bus: &mut impl Bus) {
         let val = self.hl;
+        bus.tick_oam_bug(val);
         self.sp = val;
-        bus.tick();
     }
 
     fn ld_a_da16(&mut self, bus: &mut impl Bus) {
@@ -1320,63 +1381,44 @@ impl Sm83 {
     }
 
     fn stop(&mut self, bus: &mut impl Bus) {
-        // The discarded operand byte is read at the current instant, but
-        // its M-cycle only elapses after the STOP side effects — matching
-        // the previous batched ordering where `write_div`/the speed switch
-        // ran before the instruction's final flush.
-        let _discard_byte = bus.read(self.pc);
-        self.pc = self.pc.wrapping_add(1);
+        // Port of SameBoy's `stop`.
+        bus.flush();
+        bus.peek(self.pc);
 
-        if bus.speed_switch_pending() {
-            // CGB double-speed switch.
-            //
-            // The previous implementation used a hard-coded
-            // `for _ in 0..32768 { tick_m_cycle() }` loop followed by
-            // `write_div()`. The 32768 value (131072 T-cycles) was
-            // tuned so the PPU/APU would advance through enough
-            // cycles during a speed change for the CGB double-speed
-            // PPU/STAT tests (gambatte `*_ds_*` tests in
-            // ff41_disable, ff45_disable, late_ff41_enable, lyc_*,
-            // m2int_m0irq, etc.) to see the right PPU mode at the
-            // right time. The value is way larger than any actual
-            // hardware speed-switch delay (SameBoy uses 11 M-cycles
-            // total via speed_switch_countdown/freeze; gambatte uses
-            // 8 T-cycles for normal->double and 0 for double->normal).
-            //
-            // The hack had two correctness problems for the timer:
-            //   1. `write_div()` fires triggers = `old_div & !0` =
-            //      `old_div`, so any bit that was set in `old_div`
-            //      at STOP time would spuriously increment TIMA by
-            //      1. This made gambatte's speedchange2_tima01_1
-            //      read A=0A instead of 09 and tima00_1a read A=02
-            //      instead of 00.
-            //   2. Even ignoring the triggers, the timer's
-            //      `set_system_clk(old + 1)`-per-T-cycle loop never
-            //      produces a falling edge when starting from div=0,
-            //      so the 131072 T-cycles of pending flush was
-            //      effectively a no-op for the timer — the only
-            //      effect on TIMA was the +1 from the `write_div`
-            //      trigger.
-            //
-            // The new implementation:
-            //   - Uses the same 32768 M-cycles for the PPU/APU
-            //     advance that the previous code used, since the
-            //     `_ds_` PPU tests genuinely need the PPU to see a
-            //     large time gap (the CGB speed change rewinds the
-            //     PPU's internal phase by ~131072 T-cycles).
-            //   - After the loop, resets `clock.div = 0` directly
-            //     (bypassing `set_system_clk`) so no spurious TIMA
-            //     trigger fires from the div-reset, and so the
-            //     subsequent flush of the 131072 T-cycles of pending
-            //     also produces no TIMA triggers (the timer's
-            //     `old + 1` walk never falls).
-            //   - Calls `apu.reset_div_phase()` to resynchronise the
-            //     sound unit's div-phase counter, matching what
-            //     `write_div` would have done for the APU.
-            bus.perform_speed_switch();
-        } else {
-            bus.enter_stop(!self.ime);
-            self.is_halted = true;
+        let exit_by_joyp = bus.peek(0xFF00) & 0xF != 0xF;
+        let speed_switch = bus.speed_switch_requested() && !exit_by_joyp;
+        let immediate_exit = speed_switch || exit_by_joyp;
+        let interrupt_pending = bus.interrupts_pending();
+
+        if !exit_by_joyp {
+            if !immediate_exit {
+                bus.dma_run(false);
+            }
+            bus.enter_stop(self.ime);
+        }
+
+        // When entering with IF&IE set, the second byte of STOP is actually
+        // executed.
+        if !interrupt_pending {
+            bus.read(self.pc);
+            self.pc = self.pc.wrapping_add(1);
+        }
+
+        if speed_switch {
+            bus.begin_speed_switch(interrupt_pending);
+        }
+
+        if immediate_exit {
+            bus.leave_stop();
+            bus.dma_run(true);
+            if interrupt_pending {
+                bus.clear_speed_switch_halt();
+            } else {
+                bus.dma_run(false);
+                self.is_halted = true;
+                self.just_halted = true;
+                bus.set_halted(true);
+            }
         }
     }
 
@@ -1446,21 +1488,189 @@ impl<A: AudioCallback> Bus for Gb<A> {
     #[inline]
     fn read(&mut self, addr: u16) -> u8 {
         self.flush_deferred_time();
-        let val = self.read_mem(addr);
+        self.address_bus = addr;
+        let val = self.cpu_read_mem(addr);
         self.time_deferred = 4;
         val
     }
 
     #[inline]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "One arm per register class, like SameBoy's `cycle_write`"
+    )]
     fn write(&mut self, addr: u16, val: u8) {
-        // Conflict map removed during the scanline PPU revert — the
-        // cycle-accurate PPU fields (PpuPhase, OamScanStage,
-        // position_in_line, etc.) it referenced no longer exist.
-        // The simple path is correct enough for the scanline renderer;
-        // M-cycle splitting for STAT/LCDC/SCX is out of scope.
-        self.flush_deferred_time();
-        self.write_mem(addr, val);
-        self.time_deferred = 4;
+        let conflict =
+            conflict::get_conflict(self.model, self.cgb_mode, self.key1.is_enabled(), addr);
+
+        let pending = self.time_deferred;
+
+        // Port of SameBoy's `cycle_write`: each class says when, relative to
+        // the end of the pending M-cycles, the PPU sees the new value.
+        match conflict {
+            ConflictType::ReadOld => {
+                self.flush_deferred_time();
+                self.write_mem(addr, val);
+                self.time_deferred = 4;
+            }
+            ConflictType::ReadNew => {
+                self.advance_dots(pending - 1);
+                self.write_mem(addr, val);
+                self.time_deferred = 5;
+            }
+            ConflictType::WriteCpu => {
+                self.advance_dots(pending + 1);
+                self.write_mem(addr, val);
+                self.time_deferred = 3;
+            }
+            // The DMG STAT-write bug is basically the STAT register being
+            // read as FF for a single T-cycle.
+            ConflictType::StatDmg => {
+                self.flush_deferred_time();
+                // At the edge between HBlank and OAM mode the OAM interrupt
+                // seems to be blocked by HBlank interrupts.
+                if self.ppu.at_oam_scan_edge() && self.ppu.read_stat() & 0x28 == 0x08 {
+                    self.write_mem(addr, !0x20);
+                } else {
+                    self.write_mem(addr, 0xFF);
+                }
+                self.advance_dots(1);
+                self.write_mem(addr, val);
+                self.time_deferred = 3;
+            }
+            ConflictType::StatCgb => {
+                // The LYC bit behaves differently.
+                let old = self.ppu.read_stat();
+                self.flush_deferred_time();
+                self.write_mem(addr, (old & 0x40) | (val & !0x40));
+                self.advance_dots(1);
+                self.write_mem(addr, val);
+                self.time_deferred = 3;
+            }
+            ConflictType::StatCgbDouble => {
+                let old = self.ppu.read_stat();
+                self.flush_deferred_time();
+                self.write_mem(addr, (val & !8) | (old & 8));
+                self.advance_dots(1);
+                self.write_mem(addr, val);
+                self.time_deferred = 3;
+            }
+            ConflictType::PaletteDmg => {
+                self.advance_dots(pending - 2);
+                let old = self.read_mem(addr);
+                self.write_mem(addr, val | old);
+                self.advance_dots(1);
+                self.write_mem(addr, val);
+                self.time_deferred = 5;
+            }
+            ConflictType::PaletteCgb => {
+                if matches!(self.model, Model::CgbD | Model::CgbE | Model::Agb) {
+                    self.advance_dots(pending - 2);
+                    self.write_mem(addr, val);
+                    self.time_deferred = 6;
+                } else {
+                    self.advance_dots(pending - 1);
+                    self.write_mem(addr, val);
+                    self.time_deferred = 5;
+                }
+            }
+            // LCDC.1 is read both by the FIFO when popping pixels and by the
+            // object-fetching state machine, and the two behave differently
+            // when it comes to access conflicts.
+            ConflictType::DmgLcdc => {
+                // Bits the tile fetcher consumes (BG_MAP, TILE_SEL, WIN_MAP)
+                // are seen by the PPU one dot before the ones the pixel mixer
+                // consumes (BG_EN, WIN_EN, OBJ_EN): measured on DMG against
+                // the mealybug LCDC tests. OBJ_SIZE reaches the object fetch
+                // early too, but the object search only sees it with the rest.
+                const FETCHER_BITS: u8 = 0x08 | 0x10 | 0x40;
+
+                let mut old = self.read_mem(addr);
+                self.advance_dots(pending - 2);
+                if (self.model != Model::Mgb && self.ppu.fifo_position() == 0
+                    || self.ppu.is_fetching_sprite())
+                    && val & 0x02 == 0
+                {
+                    old &= !0x02;
+                }
+
+                self.write_mem(addr, (old & !FETCHER_BITS) | (val & FETCHER_BITS));
+                // The object fetch (not the object search) sees OBJ_SIZE early.
+                self.ppu.set_obj_size_fetch(val & 0x04 != 0);
+                self.advance_dots(1);
+                self.write_mem(addr, val);
+
+                self.ppu.note_window_disable(old, val);
+                self.time_deferred = 5;
+            }
+            ConflictType::SgbLcdc => {
+                // Simplified version of the above.
+                let old = self.read_mem(addr);
+                self.advance_dots(pending - 2);
+                // Hack to force aborting an object fetch.
+                self.write_mem(addr, val);
+                self.write_mem(addr, old);
+                self.advance_dots(1);
+                self.write_mem(addr, val);
+                self.time_deferred = 5;
+            }
+            ConflictType::WxDmg => {
+                self.advance_dots(pending);
+                self.write_mem(addr, val);
+                self.ppu.set_wx_just_changed(true);
+                self.advance_dots(1);
+                self.ppu.set_wx_just_changed(false);
+                self.time_deferred = 3;
+            }
+            ConflictType::LcdcCgb => {
+                // OBJ_SIZE reaches the object fetcher one dot after the other
+                // bits reach the PPU (measured on CGB-C).
+                const OBJ_SIZE: u8 = 0x04;
+
+                let old = self.ppu.read_lcdc();
+                self.advance_dots(pending);
+                let delay_obj_size = self.ppu.read_scx() & 7 != 0;
+                self.write_mem(
+                    addr,
+                    if delay_obj_size {
+                        (val & !OBJ_SIZE) | (old & OBJ_SIZE)
+                    } else {
+                        val
+                    },
+                );
+                // Changing TILE_SEL on the dot after the write can corrupt a
+                // bitplane read in flight (see the PPU).
+                self.ppu.set_tile_sel_glitch((val ^ old) & 0x10 != 0);
+                self.advance_dots(1);
+                self.ppu.set_tile_sel_glitch(false);
+                self.write_mem(addr, val);
+                self.time_deferred = 3;
+            }
+            ConflictType::LcdcCgbDouble => {
+                let old = self.ppu.read_lcdc();
+                self.advance_dots(pending - 2);
+                self.write_mem(addr, (val & !0x81) | (old & 0x81));
+                self.ppu.set_tile_sel_glitch((val ^ old) & 0x10 != 0);
+                self.advance_dots(2);
+                self.ppu.set_tile_sel_glitch(false);
+                self.write_mem(addr, val);
+                self.time_deferred = 4;
+            }
+            // Registers the tile fetcher consumes land a dot before the ones the
+            // pixel mixer consumes (see `DmgLcdc`).
+            ConflictType::ScxDmgAndCgbDouble | ConflictType::ScyDmg => {
+                self.advance_dots(pending - 2);
+                self.write_mem(addr, val);
+                self.time_deferred = 6;
+            }
+            ConflictType::Nr10CgbDouble => {
+                self.advance_dots(pending - 1);
+                self.advance_dots(1);
+                self.write_mem(addr, val);
+                self.time_deferred = 4;
+            }
+        }
+        self.address_bus = addr;
     }
 
     #[inline]
@@ -1493,12 +1703,80 @@ impl<A: AudioCallback> Bus for Gb<A> {
     }
 
     fn tick_hdma(&mut self) {
-        self.run_hdma();
+        if self.hdma.is_on() {
+            self.run_hdma();
+        }
+    }
+
+    fn tick_oam_bug(&mut self, addr: u16) {
+        self.flush_deferred_time();
+        self.address_bus = addr;
+        self.ppu.trigger_oam_bug(addr);
+        self.time_deferred = 4;
+    }
+
+    fn trigger_oam_bug(&mut self, addr: u16) {
+        self.ppu.trigger_oam_bug(addr);
+    }
+
+    fn dma_run(&mut self, wake: bool) {
+        if wake {
+            self.dma.add_cycles(4);
+        }
+        self.run_dma();
+    }
+
+    fn drop_deferred(&mut self) {
+        self.time_deferred = 0;
+    }
+
+    fn set_halted(&mut self, halted: bool) {
+        let hblank = matches!(self.ppu.mode(), Mode::HBlank);
+        self.hdma.set_cpu_halted(halted, hblank);
+        self.ppu
+            .set_cpu_idle(self.hdma.cpu_halted() || self.clock.stopped);
+    }
+
+    fn advance(&mut self, dots: i32) {
+        self.advance_dots(dots);
+    }
+
+    fn is_cgb_hardware(&self) -> bool {
+        self.model.is_cgb_hardware()
     }
 
     fn wake_from_stop(&mut self) {
+        self.leave_stop();
+        self.speed_switch.halt_countdown = 0;
+    }
+
+    fn leave_stop(&mut self) {
         self.ppu.leave_stop_mode();
         self.clock.stopped = false;
+        let hblank = matches!(self.ppu.mode(), Mode::HBlank);
+        self.hdma.set_cpu_halted(false, hblank);
+        self.hdma.wake(hblank);
+        self.ppu.set_cpu_idle(false);
+    }
+
+    fn flush(&mut self) {
+        self.flush_deferred_time();
+    }
+
+    fn peek(&self, addr: u16) -> u8 {
+        self.read_mem(addr)
+    }
+
+    fn is_stopped(&self) -> bool {
+        self.clock.stopped
+    }
+
+    fn clear_speed_switch_halt(&mut self) {
+        self.speed_switch.halt_countdown = 0;
+    }
+
+    fn take_unhalt(&mut self) -> bool {
+        mem::take(&mut self.speed_switch.unhalt)
     }
 
     fn enter_stop(&mut self, ime: bool) {
@@ -1508,16 +1786,26 @@ impl<A: AudioCallback> Bus for Gb<A> {
         }
         self.ppu.enter_stop_mode();
         self.clock.stopped = true;
+        self.ppu.set_cpu_idle(true);
+        self.hdma.note_stop(matches!(self.ppu.mode(), Mode::HBlank));
     }
 
-    fn speed_switch_pending(&self) -> bool {
+    fn speed_switch_requested(&self) -> bool {
         self.key1.is_requested()
     }
 
-    fn perform_speed_switch(&mut self) {
-        self.key1.change_speed();
-        self.clock.div = 0;
-        self.apu.reset_div_phase();
-        self.advance_dots(32768 * 4);
+    fn begin_speed_switch(&mut self, interrupt_pending: bool) {
+        self.flush_deferred_time();
+        if self.key1.is_enabled() {
+            self.key1.set_double_speed(false);
+        } else {
+            self.speed_switch.countdown = 6;
+            self.speed_switch.freeze = 1;
+        }
+        if !interrupt_pending {
+            self.speed_switch.halt_countdown = 0x20008;
+            self.speed_switch.freeze = 5;
+        }
+        self.key1.clear_request();
     }
 }

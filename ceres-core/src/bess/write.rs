@@ -196,21 +196,17 @@ impl<'a> Writer<'a> {
         if let Some(rtc) = cart.rtc() {
             self.write_block_header(*b"RTC ", 0x28 + 0x8);
 
-            // FIXME: this are "latched" values, not the actual values
-            // Write seconds byte (0) and 3 bytes of padding
+            // Each register is a byte and 3 bytes of padding: the real
+            // registers, then the latched ones.
             self.write_all(&[rtc.seconds(), 0, 0, 0]);
-            // Same for the rest
             self.write_all(&[rtc.minutes(), 0, 0, 0]);
             self.write_all(&[rtc.hours(), 0, 0, 0]);
             self.write_all(&[rtc.days(), 0, 0, 0]);
             self.write_all(&[rtc.control(), 0, 0, 0]);
 
-            // FIXME: for now write the same values as the latched ones
-            self.write_all(&[rtc.seconds(), 0, 0, 0]);
-            self.write_all(&[rtc.minutes(), 0, 0, 0]);
-            self.write_all(&[rtc.hours(), 0, 0, 0]);
-            self.write_all(&[rtc.days(), 0, 0, 0]);
-            self.write_all(&[rtc.control(), 0, 0, 0]);
+            for value in rtc.latched() {
+                self.write_all(&[value, 0, 0, 0]);
+            }
 
             {
                 let timestamp = secs_since_unix_epoch;

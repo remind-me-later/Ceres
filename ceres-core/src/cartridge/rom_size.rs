@@ -27,18 +27,21 @@ impl ROMSize {
         (2_u16 << (self as u8)) - 1
     }
 
-    pub const fn new(byte: u8) -> Result<Self, Error> {
+    /// The size the ROM is mapped with: the file length rounded up to a power
+    /// of two, whatever the header says (as hardware does: the header is only
+    /// read by the boot ROM and the mapper never sees it).
+    pub const fn from_len(len: usize) -> Result<Self, Error> {
         use ROMSize::{Kb32, Kb64, Kb128, Kb256, Kb512, Mb1, Mb2, Mb4, Mb8};
-        let rom_size = match byte {
-            0 => Kb32,
-            1 => Kb64,
-            2 => Kb128,
-            3 => Kb256,
-            4 => Kb512,
-            5 => Mb1,
-            6 => Mb2,
-            7 => Mb4,
-            8 => Mb8,
+        let rom_size = match len {
+            0..=0x8000 => Kb32,
+            0x8001..=0x1_0000 => Kb64,
+            0x1_0001..=0x2_0000 => Kb128,
+            0x2_0001..=0x4_0000 => Kb256,
+            0x4_0001..=0x8_0000 => Kb512,
+            0x8_0001..=0x10_0000 => Mb1,
+            0x10_0001..=0x20_0000 => Mb2,
+            0x20_0001..=0x40_0000 => Mb4,
+            0x40_0001..=0x80_0000 => Mb8,
             _ => return Err(Error::InvalidRomSize),
         };
 
