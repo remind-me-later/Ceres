@@ -4,9 +4,9 @@ use super::{Ctx, revision::Revision, square::Square};
 
 #[derive(Clone, Copy)]
 pub struct Sweep {
-    pub nr10: u8,
+    nr10: u8,
     /// Advances every 4th DIV event; a sweep step happens when it reaches 7.
-    pub countdown: u8,
+    countdown: u8,
     /// The new period is calculated, and checked for overflow, after a delay.
     calculate_countdown: u8,
     calculate_countdown_reload_timer: u8,
@@ -36,6 +36,14 @@ impl Sweep {
         }
     }
 
+    pub const fn read_nr10(&self) -> u8 {
+        self.nr10 | 0x80
+    }
+
+    pub const fn set_countdown(&mut self, countdown: u8) {
+        self.countdown = countdown;
+    }
+
     const fn shift(&self) -> u8 {
         self.nr10 & 7
     }
@@ -51,7 +59,7 @@ impl Sweep {
     fn calculation_done(&mut self, ch1: &mut Square, c: &Ctx) {
         // APU bug: the sweep frequency is checked after adding the delta twice.
         if self.restart_hold == 0 {
-            self.shadow_period = ch1.period;
+            self.shadow_period = ch1.period();
         }
         if self.decreases() {
             self.addend ^= 0x7FF;
@@ -73,14 +81,15 @@ impl Sweep {
             return;
         }
         if self.shift() != 0 {
-            ch1.period = self
-                .addend
-                .wrapping_add(self.shadow_period)
-                .wrapping_add(u16::from(self.decreases()))
-                & 0x7FF;
+            ch1.set_period(
+                self.addend
+                    .wrapping_add(self.shadow_period)
+                    .wrapping_add(u16::from(self.decreases()))
+                    & 0x7FF,
+            );
         }
         if self.restart_hold == 0 {
-            self.addend = ch1.period >> self.shift();
+            self.addend = ch1.period() >> self.shift();
         }
 
         // Recalculation and the overflow check only occur after a delay.
@@ -154,7 +163,7 @@ impl Sweep {
             if !was_active {
                 self.calculate_countdown_reload_timer += 1;
             }
-            self.addend = ch1.period >> self.shift();
+            self.addend = ch1.period() >> self.shift();
         } else {
             self.addend = 0;
         }

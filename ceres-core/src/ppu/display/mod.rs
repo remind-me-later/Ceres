@@ -46,48 +46,44 @@ pub(super) const LINE_LENGTH: i32 = 456;
 pub(super) const LINES: u8 = 144;
 
 #[expect(
-    clippy::partial_pub_fields,
-    reason = "The rest of the PPU reads the line position and the HDMA edges"
-)]
-#[expect(
     clippy::struct_excessive_bools,
     reason = "Independent flags of the line state"
 )]
 #[derive(Clone)]
 pub(super) struct Display {
     /// The sleep the state machine is in.
-    pub state: State,
+    state: State,
     /// Dots left before the code following the current sleep runs.
     wait: i32,
     /// Double speed: the first T-cycle of the current dot already ran.
-    pub half_dot: bool,
+    half_dot: bool,
     /// `cycles_for_line`: SameBoy's line-length accounting.
     cfl: i32,
     /// Dots since the last `cycles_for_line` reset (diagnostics / injection).
-    pub line_clock: i32,
+    line_clock: i32,
 
-    pub current_line: u8,
+    current_line: u8,
     /// `position_in_line`: wraps like SameBoy's `uint8_t` (240..=255 is -16..=-1).
-    pub position_in_line: u8,
+    position_in_line: u8,
     lcd_x: u8,
     line_has_fractional_scrolling: bool,
 
     /// The PPU entered `HBlank` (SameBoy state 33); consumed by the HDMA.
-    pub hblank_hdma_edge: bool,
+    hblank_hdma_edge: bool,
     /// The LCD was switched off with a non-zero STAT mode; consumed by the HDMA.
-    pub lcd_off_hdma_edge: bool,
+    lcd_off_hdma_edge: bool,
 
     bg_fifo: Fifo,
     oam_fifo: Fifo,
     insert_bg_pixel: bool,
 
-    pub objs: ObjectSearch,
-    pub obj_fetch: ObjectFetch,
-    pub fetcher: Fetcher,
-    pub window: Window,
+    objs: ObjectSearch,
+    obj_fetch: ObjectFetch,
+    fetcher: Fetcher,
+    window: Window,
     irq: StatIrq,
     bus: PpuBus,
-    pub cpu: CpuAccess,
+    cpu: CpuAccess,
 }
 
 impl Default for Display {
@@ -125,6 +121,58 @@ impl Display {
         self.cfl = 0;
         self.window.wy_units = 0;
         self.half_dot = false;
+    }
+
+    pub(super) const fn state(&self) -> State {
+        self.state
+    }
+
+    pub(super) const fn half_dot(&self) -> bool {
+        self.half_dot
+    }
+
+    pub(super) const fn line_clock(&self) -> i32 {
+        self.line_clock
+    }
+
+    pub(super) const fn current_line(&self) -> u8 {
+        self.current_line
+    }
+
+    pub(super) const fn position_in_line(&self) -> u8 {
+        self.position_in_line
+    }
+
+    /// The OAM row the PPU is reading (for the OAM bug).
+    pub(super) const fn accessed_oam_row(&self) -> u8 {
+        self.objs.accessed_oam_row
+    }
+
+    pub(super) const fn fetching_object(&self) -> bool {
+        self.obj_fetch.active
+    }
+
+    /// The CPU's access to the memories the PPU uses.
+    pub(super) const fn cpu(&self) -> &CpuAccess {
+        &self.cpu
+    }
+
+    pub(super) const fn set_tile_sel_glitch(&mut self, active: bool) {
+        self.fetcher.tile_sel_glitch = active;
+    }
+
+    pub(super) const fn set_wx_just_changed(&mut self, active: bool) {
+        self.window.wx_just_changed = active;
+    }
+
+    /// Whether `HBlank` was entered since the last call.
+    pub(super) const fn take_hblank_hdma_edge(&mut self) -> bool {
+        mem::replace(&mut self.hblank_hdma_edge, false)
+    }
+
+    /// Whether the LCD was switched off in a non-zero mode since the last call.
+    pub(super) const fn take_lcd_off_hdma_edge(&mut self) -> bool {
+        mem::replace(&mut self.lcd_off_hdma_edge, false)
     }
 
     /// Schedule the WY comparison that follows an LCDC/WY write.

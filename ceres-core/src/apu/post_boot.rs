@@ -101,27 +101,20 @@ impl<A: AudioCallback> Apu<A> {
         self.nr51 = 0xF3;
         self.lf_div = 1;
         self.div_divider = pb.div_divider;
-        self.sweep.countdown = pb.sweep_countdown;
+        self.sweep.set_countdown(pb.sweep_countdown);
 
         let [ch1, ch2] = &mut self.squares;
-        ch1.write_nrx1(0x80);
-        ch1.envelope.nrx2 = 0xF3;
-        ch1.write_nrx3(0xC1);
-        ch1.restore_nrx4(if pb.ch1_active { 0x87 } else { 0x07 });
-        ch1.countdown = pb.ch1_countdown;
-        ch1.length.counter = pb.ch1_length;
-        ch1.envelope.countdown = pb.ch1_volume_countdown;
-        ch1.duty_step = pb.ch1_duty_step;
-        if pb.ch1_active {
-            ch1.out.active = true;
-            ch1.did_tick = true;
-            ch1.envelope.clock.locked = true;
-            ch1.envelope.clock.should_lock = true;
-        }
-        ch2.countdown = 0xFFFF;
-        ch2.envelope.countdown = pb.other_volume_countdown;
-        self.noise.envelope.countdown = pb.other_volume_countdown;
-        self.noise.alignment = pb.noise_alignment;
+        ch1.post_boot(
+            pb.ch1_active,
+            pb.ch1_countdown,
+            pb.ch1_length,
+            pb.ch1_volume_countdown,
+            pb.ch1_duty_step,
+        );
+        ch2.power_on();
+        ch2.set_envelope_countdown(pb.other_volume_countdown);
+        self.noise.set_envelope_countdown(pb.other_volume_countdown);
+        self.noise.set_alignment(pb.noise_alignment);
 
         let c = self.ctx(&super::ApuCtx::default());
         if c.rev.is_agb() {

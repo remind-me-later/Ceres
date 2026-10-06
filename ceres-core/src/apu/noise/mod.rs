@@ -12,9 +12,9 @@ use super::{
 )]
 #[derive(Clone, Copy)]
 pub struct Noise {
-    pub out: ChannelOutput,
-    pub length: Length,
-    pub envelope: Envelope,
+    out: ChannelOutput,
+    length: Length,
+    envelope: Envelope,
     /// NR43: clock shift (bits 4-7), LFSR width (bit 3) and divider (0-2).
     nr43: u8,
     lfsr: u16,
@@ -34,7 +34,7 @@ pub struct Noise {
     did_step_counter: bool,
     countdown_reloaded: bool,
     /// Counts 2 MHz ticks: the phase of the divider.
-    pub alignment: u8,
+    alignment: u8,
     /// A DMG trigger out of phase with the divider starts after a delay.
     dmg_delayed_start: u8,
     started_with_dac_disabled: bool,
@@ -72,6 +72,66 @@ impl Noise {
         out.power_off();
         *self = Self::new();
         self.out = out;
+    }
+
+    pub const fn out(&self) -> &ChannelOutput {
+        &self.out
+    }
+
+    pub const fn out_mut(&mut self) -> &mut ChannelOutput {
+        &mut self.out
+    }
+
+    pub const fn length_counter(&self) -> u16 {
+        self.length.counter
+    }
+
+    pub const fn set_length_counter(&mut self, counter: u16) {
+        self.length.counter = counter;
+    }
+
+    pub const fn dac_enabled(&self) -> bool {
+        self.envelope.dac_enabled()
+    }
+
+    pub const fn read_nr42(&self) -> u8 {
+        self.envelope.nrx2
+    }
+
+    pub const fn set_envelope_countdown(&mut self, countdown: u8) {
+        self.envelope.countdown = countdown;
+    }
+
+    /// Every 8th DIV event.
+    pub const fn step_envelope_countdown(&mut self) {
+        self.envelope.step_countdown();
+    }
+
+    /// The secondary DIV event.
+    pub const fn reload_envelope(&mut self) {
+        if self.out.active {
+            self.envelope.reload();
+        }
+    }
+
+    /// Every other DIV event.
+    pub fn tick_length(&mut self, c: &Ctx) {
+        if self.length.tick() {
+            self.disable(c);
+        }
+    }
+
+    pub const fn length_enabled(&self) -> bool {
+        self.length.enabled
+    }
+
+    /// The phase of the divider advances by `cycles` 2 MHz ticks.
+    pub const fn advance_alignment(&mut self, cycles: u32) {
+        self.alignment = self.alignment.wrapping_add(cycles as u8);
+    }
+
+    pub const fn set_alignment(&mut self, alignment: u8) {
+        self.alignment = alignment;
     }
 
     pub const fn read_nr43(&self) -> u8 {
@@ -145,7 +205,11 @@ impl Noise {
         (counter >> (nr43 >> 4)) & 1 != 0
     }
 
+    /// Steps the volume if the envelope clock is high.
     pub fn tick_envelope(&mut self, c: &Ctx) {
+        if !self.envelope.clock.clock {
+            return;
+        }
         let Some(old_volume) = self.envelope.tick() else {
             return;
         };

@@ -12,10 +12,6 @@
     reason = "Most hardware quirks are chains of special cases without a general one"
 )]
 #![expect(
-    clippy::partial_pub_fields,
-    reason = "The channels expose the parts that the frame sequencer and the mixer drive"
-)]
-#![expect(
     clippy::verbose_bit_mask,
     reason = "The register bit tests read like the hardware documentation"
 )]
@@ -166,7 +162,6 @@ impl<A: AudioCallback> Apu<A> {
 
     /// Resets everything but the wave RAM.
     pub fn reset(&mut self) {
-        let ram = self.wave.ram;
         self.enabled = false;
         self.nr50 = 0;
         self.nr51 = 0;
@@ -176,8 +171,7 @@ impl<A: AudioCallback> Apu<A> {
         self.lf_div = 0;
         self.squares = [Square::new(SQUARE_1), Square::new(SQUARE_2)];
         self.sweep = Sweep::new();
-        self.wave = Wave::new();
-        self.wave.ram = ram;
+        self.wave.reset();
         self.noise = Noise::new();
     }
 
@@ -199,17 +193,17 @@ impl<A: AudioCallback> Apu<A> {
 
     const fn output(&self, index: usize) -> &ChannelOutput {
         match index {
-            SQUARE_1 | SQUARE_2 => &self.squares[index].out,
-            WAVE => &self.wave.out,
-            _ => &self.noise.out,
+            SQUARE_1 | SQUARE_2 => self.squares[index].out(),
+            WAVE => self.wave.out(),
+            _ => self.noise.out(),
         }
     }
 
     const fn output_mut(&mut self, index: usize) -> &mut ChannelOutput {
         match index {
-            SQUARE_1 | SQUARE_2 => &mut self.squares[index].out,
-            WAVE => &mut self.wave.out,
-            _ => &mut self.noise.out,
+            SQUARE_1 | SQUARE_2 => self.squares[index].out_mut(),
+            WAVE => self.wave.out_mut(),
+            _ => self.noise.out_mut(),
         }
     }
 
@@ -226,35 +220,31 @@ impl<A: AudioCallback> Apu<A> {
     /// Every machine step starts with an unmasked PCM (SameBoy's "sort of
     /// hacky, but too many cross-component interactions to do it right").
     pub const fn reset_pcm_mask(&mut self) {
-        self.squares[SQUARE_1].out.pcm_mask = 0xF;
-        self.squares[SQUARE_2].out.pcm_mask = 0xF;
-        self.wave.out.pcm_mask = 0xF;
-        self.noise.out.pcm_mask = 0xF;
+        self.squares[SQUARE_1].out_mut().pcm_mask = 0xF;
+        self.squares[SQUARE_2].out_mut().pcm_mask = 0xF;
+        self.wave.out_mut().pcm_mask = 0xF;
+        self.noise.out_mut().pcm_mask = 0xF;
     }
 
     #[must_use]
     pub fn pcm12(&self) -> u8 {
         let masked = self.rev <= Revision::CgbC;
-        (self.squares[SQUARE_2].out.pcm(masked) << 4) | self.squares[SQUARE_1].out.pcm(masked)
+        (self.output(SQUARE_2).pcm(masked) << 4) | self.output(SQUARE_1).pcm(masked)
     }
 
     #[must_use]
     pub fn pcm34(&self) -> u8 {
         let masked = self.rev <= Revision::CgbC;
-        (self.noise.out.pcm(masked) << 4) | self.wave.out.pcm(masked)
+        (self.output(NOISE).pcm(masked) << 4) | self.output(WAVE).pcm(masked)
     }
 
     // -- frame sequencer ------------------------------------------------------
 
     fn tick_envelopes(&mut self, c: &Ctx) {
         for sq in &mut self.squares {
-            if sq.envelope.clock.clock {
-                sq.tick_envelope(c);
-            }
+            sq.tick_envelope(c);
         }
-        if self.noise.envelope.clock.clock {
-            self.noise.tick_envelope(c);
-        }
+        self.noise.tick_envelope(c);
     }
 
     pub fn delayed_envelope_tick(&mut self, ctx: &ApuCtx) {
@@ -290,9 +280,9 @@ impl<A: AudioCallback> Apu<A> {
 
         if self.div_divider & 7 == 7 {
             for sq in &mut self.squares {
-                sq.envelope.step_countdown();
+                sq.step_envelope_countdown();
             }
-            self.noise.envelope.step_countdown();
+            self.noise.step_envelope_countdown();
         }
 
         if ctx.double_speed && self.rev.is_cgb_de() {
@@ -303,16 +293,10 @@ impl<A: AudioCallback> Apu<A> {
 
         if self.div_divider & 1 == 1 {
             for sq in &mut self.squares {
-                if sq.length.tick() {
-                    sq.disable(&c);
-                }
+                sq.tick_length(&c);
             }
-            if self.wave.length.tick() {
-                self.wave.expire(&c);
-            }
-            if self.noise.length.tick() {
-                self.noise.disable(&c);
-            }
+            self.wave.tick_length(&c);
+            self.noise.tick_length(&c);
         }
 
         if self.div_divider & 3 == 3 {
@@ -328,13 +312,9 @@ impl<A: AudioCallback> Apu<A> {
             return;
         }
         for sq in &mut self.squares {
-            if sq.out.active {
-                sq.envelope.reload();
-            }
+            sq.reload_envelope();
         }
-        if self.noise.out.active {
-            self.noise.envelope.reload();
-        }
+        self.noise.reload_envelope();
     }
 
     // -- running --------------------------------------------------------------
@@ -343,18 +323,18 @@ impl<A: AudioCallback> Apu<A> {
     pub fn tick(&mut self, ctx: &ApuCtx, ticks: u32) {
         self.run(ctx, ticks);
         let levels = [
-            self.squares[SQUARE_1].out.level,
-            self.squares[SQUARE_2].out.level,
-            self.wave.out.level,
-            self.noise.out.level,
+            self.output(SQUARE_1).level,
+            self.output(SQUARE_2).level,
+            self.output(WAVE).level,
+            self.output(NOISE).level,
         ];
         let dacs = || {
             (!self.rev.is_agb()).then(|| {
                 [
-                    self.squares[SQUARE_1].envelope.dac_enabled(),
-                    self.squares[SQUARE_2].envelope.dac_enabled(),
-                    self.wave.dac_enabled,
-                    self.noise.envelope.dac_enabled(),
+                    self.squares[SQUARE_1].dac_enabled(),
+                    self.squares[SQUARE_2].dac_enabled(),
+                    self.wave.dac_enabled(),
+                    self.noise.dac_enabled(),
                 ]
             })
         };
@@ -385,7 +365,7 @@ impl<A: AudioCallback> Apu<A> {
 
         // To align the square signal to 1 MHz.
         self.lf_div ^= (cycles & 1) as u8;
-        self.noise.alignment = self.noise.alignment.wrapping_add(cycles as u8);
+        self.noise.advance_alignment(cycles);
 
         let c = self.ctx(ctx);
         self.sweep.run(cycles, &mut self.squares[SQUARE_1], &c);
@@ -396,7 +376,7 @@ impl<A: AudioCallback> Apu<A> {
         self.noise.run(cycles, &c);
 
         if start_noise {
-            let value = if self.noise.length.enabled {
+            let value = if self.noise.length_enabled() {
                 0xC0
             } else {
                 0x80
@@ -411,14 +391,14 @@ impl<A: AudioCallback> Apu<A> {
     #[must_use]
     pub fn read(&self, reg: usize) -> u8 {
         match reg {
-            NR10 => self.sweep.nr10 | 0x80,
+            NR10 => self.sweep.read_nr10(),
             NR11 | NR21 => self.squares[usize::from(reg == NR21)].read_nrx1(),
-            NR12 | NR22 => self.squares[usize::from(reg == NR22)].envelope.nrx2,
+            NR12 | NR22 => self.squares[usize::from(reg == NR22)].read_nrx2(),
             NR14 | NR24 => self.squares[usize::from(reg == NR24)].read_nrx4(),
             NR30 => self.wave.read_nr30(),
             NR32 => self.wave.read_nr32(),
             NR34 => self.wave.read_nr34(),
-            NR42 => self.noise.envelope.nrx2,
+            NR42 => self.noise.read_nr42(),
             NR43 => self.noise.read_nr43(),
             NR44 => self.noise.read_nr44(),
             NR50 => self.nr50,
@@ -465,7 +445,7 @@ impl<A: AudioCallback> Apu<A> {
             NR12 | NR22 => self.squares[square].write_nrx2(value, &c),
             NR13 | NR23 => self.squares[square].write_nrx3(value),
             NR14 | NR24 => {
-                let was_active = self.squares[square].out.active;
+                let was_active = self.output(square).active;
                 self.squares[square].write_nrx4(value, &c);
                 if square == SQUARE_1 && value & 0x80 != 0 {
                     self.sweep.trigger(&self.squares[SQUARE_1], was_active, &c);
@@ -506,10 +486,10 @@ impl<A: AudioCallback> Apu<A> {
 
     fn write_nr52(&mut self, ctx: &ApuCtx, value: u8) {
         let lengths = [
-            self.squares[SQUARE_1].length.counter,
-            self.squares[SQUARE_2].length.counter,
-            self.wave.length.counter,
-            self.noise.length.counter,
+            self.squares[SQUARE_1].length_counter(),
+            self.squares[SQUARE_2].length_counter(),
+            self.wave.length_counter(),
+            self.noise.length_counter(),
         ];
         if value & 0x80 != 0 && !self.enabled {
             self.power_on(ctx);
@@ -525,10 +505,10 @@ impl<A: AudioCallback> Apu<A> {
 
         // The DMG keeps the length timers.
         if !self.rev.is_cgb() && value & 0x80 != 0 {
-            self.squares[SQUARE_1].length.counter = lengths[SQUARE_1];
-            self.squares[SQUARE_2].length.counter = lengths[SQUARE_2];
-            self.wave.length.counter = lengths[WAVE];
-            self.noise.length.counter = lengths[NOISE];
+            self.squares[SQUARE_1].set_length_counter(lengths[SQUARE_1]);
+            self.squares[SQUARE_2].set_length_counter(lengths[SQUARE_2]);
+            self.wave.set_length_counter(lengths[WAVE]);
+            self.noise.set_length_counter(lengths[NOISE]);
         }
     }
 
@@ -558,7 +538,7 @@ impl<A: AudioCallback> Apu<A> {
             self.div_divider = 1;
         }
         for sq in &mut self.squares {
-            sq.countdown = 0xFFFF;
+            sq.power_on();
         }
     }
 }

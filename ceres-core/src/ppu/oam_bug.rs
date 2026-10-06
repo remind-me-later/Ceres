@@ -106,7 +106,7 @@ impl Ppu {
 
     /// The row the PPU is accessing, if the bug applies to it.
     fn bug_row(&self) -> Option<usize> {
-        let row = self.d.objs.accessed_oam_row;
+        let row = self.d.accessed_oam_row();
         (row != NO_ROW && row >= 8).then_some(usize::from(row))
     }
 
@@ -246,7 +246,7 @@ impl Ppu {
             return;
         }
         let low = usize::from(addr & 0xFF);
-        match self.d.objs.accessed_oam_row {
+        match self.d.accessed_oam_row() {
             0 => {
                 let value = glitch_read(
                     self.oam_word(0),
@@ -330,7 +330,7 @@ impl Ppu {
     /// Side-effect free view of the unusable area (for non-CPU readers).
     #[must_use]
     pub fn peek_unusable(&self, addr: u16) -> u8 {
-        if self.d.cpu.oam_read_blocked || self.d.cpu.oam_write_blocked && !self.hw_cgb() {
+        if self.d.cpu().oam_read_blocked || self.d.cpu().oam_write_blocked && !self.hw_cgb() {
             0xFF
         } else {
             self.read_unusable(addr)
@@ -339,14 +339,14 @@ impl Ppu {
 
     /// CPU read of `0xFE00..=0xFEFF`. `dma_blocked`: an OAM DMA owns the bus.
     pub fn cpu_read_oam_area(&mut self, addr: u16, dma_blocked: bool) -> u8 {
-        if self.d.cpu.oam_write_blocked && !self.hw_cgb() {
+        if self.d.cpu().oam_write_blocked && !self.hw_cgb() {
             self.trigger_oam_bug_read(addr);
             return 0xFF;
         }
         if dma_blocked {
             return 0xFF;
         }
-        if self.d.cpu.oam_read_blocked {
+        if self.d.cpu().oam_read_blocked {
             if !self.hw_cgb() {
                 self.oam_read_row_corruption(addr);
             }
@@ -361,7 +361,7 @@ impl Ppu {
 
     /// CPU write to `0xFE00..=0xFEFF`.
     pub fn cpu_write_oam_area(&mut self, addr: u16, val: u8, dma_blocked: bool) {
-        if self.d.cpu.oam_write_blocked {
+        if self.d.cpu().oam_write_blocked {
             self.trigger_oam_bug(addr);
             return;
         }
@@ -379,7 +379,7 @@ impl Ppu {
 
         let low = usize::from(addr & 0xFF);
         if addr < 0xFEA0 {
-            if self.d.objs.accessed_oam_row == 0xA0 {
+            if self.d.accessed_oam_row() == 0xA0 {
                 for i in 0..8 {
                     let dst = (low & 0xF8) + i;
                     let value = if (i & 6) == (low & 6) {
@@ -396,7 +396,7 @@ impl Ppu {
 
             self.oam.bytes_mut()[low] = val;
 
-            if self.d.objs.accessed_oam_row == 0 {
+            if self.d.accessed_oam_row() == 0 {
                 for i in 0..2 {
                     let a = u16::from(self.oam.bytes()[i]);
                     let b = u16::from(self.oam.bytes()[(low & 0xF8) + i]);
@@ -408,7 +408,7 @@ impl Ppu {
                     self.oam.bytes_mut()[i] = byte;
                 }
             }
-        } else if self.d.objs.accessed_oam_row == 0 {
+        } else if self.d.accessed_oam_row() == 0 {
             self.oam.bytes_mut()[low & 7] = val;
         } else {
             // The unusable area: the write is dropped.

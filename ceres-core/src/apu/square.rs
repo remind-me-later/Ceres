@@ -13,24 +13,24 @@ const DUTIES: [u8; 32] = [
 pub struct Square {
     /// 0 for channel 1, 1 for channel 2.
     index: usize,
-    pub out: ChannelOutput,
-    pub length: Length,
-    pub envelope: Envelope,
+    out: ChannelOutput,
+    length: Length,
+    envelope: Envelope,
     /// NRx1 bits 6-7.
     duty: u8,
     /// The last value written to NRx4.
     nrx4: u8,
     /// The 11-bit period from NRx3 and NRx4 (channel 1's sweep changes it).
-    pub period: u16,
+    period: u16,
     /// 2 MHz ticks until the next duty step.
-    pub countdown: u16,
+    countdown: u16,
     /// Position in the duty cycle (0-7).
-    pub duty_step: u8,
+    duty_step: u8,
     /// A just triggered channel outputs nothing until its first duty step.
     suppressed: bool,
     /// The start delay after a trigger.
     delay: u8,
-    pub did_tick: bool,
+    did_tick: bool,
     /// The countdown reloaded on the last tick.
     just_reloaded: bool,
 }
@@ -62,19 +62,99 @@ impl Square {
         self.out = out;
     }
 
+    pub const fn out(&self) -> &ChannelOutput {
+        &self.out
+    }
+
+    pub const fn out_mut(&mut self) -> &mut ChannelOutput {
+        &mut self.out
+    }
+
+    pub const fn length_counter(&self) -> u16 {
+        self.length.counter
+    }
+
+    pub const fn set_length_counter(&mut self, counter: u16) {
+        self.length.counter = counter;
+    }
+
+    pub const fn dac_enabled(&self) -> bool {
+        self.envelope.dac_enabled()
+    }
+
+    pub const fn read_nrx2(&self) -> u8 {
+        self.envelope.nrx2
+    }
+
+    pub const fn set_envelope_countdown(&mut self, countdown: u8) {
+        self.envelope.countdown = countdown;
+    }
+
+    /// Every 8th DIV event.
+    pub const fn step_envelope_countdown(&mut self) {
+        self.envelope.step_countdown();
+    }
+
+    /// The secondary DIV event.
+    pub const fn reload_envelope(&mut self) {
+        if self.out.active {
+            self.envelope.reload();
+        }
+    }
+
+    /// Every other DIV event.
+    pub fn tick_length(&mut self, c: &Ctx) {
+        if self.length.tick() {
+            self.disable(c);
+        }
+    }
+
+    pub const fn period(&self) -> u16 {
+        self.period
+    }
+
+    pub const fn set_period(&mut self, period: u16) {
+        self.period = period;
+    }
+
+    /// Powering the APU on leaves the countdown at its maximum.
+    pub const fn power_on(&mut self) {
+        self.countdown = 0xFFFF;
+    }
+
+    /// The state the boot ROM leaves on channel 1: `played` when it played
+    /// the start-up sound (see `PostBoot`).
+    pub const fn post_boot(
+        &mut self,
+        played: bool,
+        countdown: u16,
+        length: u16,
+        volume_countdown: u8,
+        duty_step: u8,
+    ) {
+        self.write_nrx1(0x80);
+        self.envelope.nrx2 = 0xF3;
+        self.write_nrx3(0xC1);
+        self.nrx4 = if played { 0x87 } else { 0x07 };
+        self.period = 0x7C1;
+        self.countdown = countdown;
+        self.length.counter = length;
+        self.envelope.countdown = volume_countdown;
+        self.duty_step = duty_step;
+        if played {
+            self.out.active = true;
+            self.did_tick = true;
+            self.envelope.clock.locked = true;
+            self.envelope.clock.should_lock = true;
+        }
+    }
+
     pub const fn read_nrx1(&self) -> u8 {
         (self.duty << 6) | 0x3F
     }
 
     pub const fn read_nrx4(&self) -> u8 {
         self.nrx4 | 0xBF
-    }
-
-    /// Sets NRx4 without the effects of a write (for the post-boot state).
-    pub const fn restore_nrx4(&mut self, value: u8) {
-        self.nrx4 = value;
-        self.period = (self.period & 0xFF) | (((value & 7) as u16) << 8);
-        self.length.enabled = value & 0x40 != 0;
     }
 
     pub fn update_sample(&mut self, value: u8, c: &Ctx) {
@@ -133,7 +213,11 @@ impl Square {
         }
     }
 
+    /// Steps the volume if the envelope clock is high.
     pub fn tick_envelope(&mut self, c: &Ctx) {
+        if !self.envelope.clock.clock {
+            return;
+        }
         let Some(old_volume) = self.envelope.tick() else {
             return;
         };

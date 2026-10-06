@@ -6,7 +6,6 @@ mod rgba_buf;
 mod vram;
 
 use crate::interrupts::Interrupts;
-use core::mem;
 pub use oam::Oam;
 pub use vram::Vram;
 use {self::color_palette::ColorPalette, crate::CgbMode, crate::Model, rgba_buf::RgbaBuf};
@@ -177,41 +176,41 @@ impl Ppu {
     /// `position_in_line` as a signed value (-16..=160).
     #[must_use]
     pub const fn fifo_position(&self) -> i16 {
-        let p = self.d.position_in_line;
+        let p = self.d.position_in_line();
         if p >= 240 { p as i16 - 256 } else { p as i16 }
     }
 
     #[inline]
     pub const fn set_tile_sel_glitch(&mut self, active: bool) {
-        self.d.fetcher.tile_sel_glitch = active;
+        self.d.set_tile_sel_glitch(active);
     }
 
     /// Set while a CPU write to WX is landing (SameBoy's `wx_just_changed`).
     #[inline]
     pub const fn set_wx_just_changed(&mut self, active: bool) {
-        self.d.window.wx_just_changed = active;
+        self.d.set_wx_just_changed(active);
     }
 
     #[must_use]
     pub const fn is_fetching_sprite(&self) -> bool {
-        self.d.obj_fetch.active
+        self.d.fetching_object()
     }
 
     /// Whether `HBlank` was entered since the last call.
     pub const fn take_hblank_hdma_edge(&mut self) -> bool {
-        mem::replace(&mut self.d.hblank_hdma_edge, false)
+        self.d.take_hblank_hdma_edge()
     }
 
     /// Whether the LCD was switched off in a non-zero mode since the last call.
     pub const fn take_lcd_off_hdma_edge(&mut self) -> bool {
-        mem::replace(&mut self.d.lcd_off_hdma_edge, false)
+        self.d.take_lcd_off_hdma_edge()
     }
 
     /// The PPU is at the edge between HBlank and the OAM scan (SameBoy's
     /// display state 7), where some register writes behave differently.
     #[must_use]
     pub fn at_oam_scan_edge(&self) -> bool {
-        self.d.state == display::State::OamScanStart
+        self.d.state() == display::State::OamScanStart
     }
 
     #[must_use]
@@ -295,7 +294,7 @@ impl Ppu {
         self.abort_object_fetch_on_obj_disable(val);
 
         self.lcdc = val;
-        self.d.obj_fetch.size_16 = val & 0x04 != 0;
+        self.set_obj_size_fetch(val & 0x04 != 0);
         self.d.schedule_wy_check();
     }
 
@@ -335,13 +334,13 @@ impl Ppu {
         // through VBlank, starting from line 144.
         let base = i32::from(line.saturating_sub(144)) * LINE_LENGTH_DOTS;
         for _ in 0..(2 * 154 * 456) {
-            if self.d.current_line == line && self.d.line_clock - base >= dot {
+            if self.d.current_line() == line && self.d.line_clock() - base >= dot {
                 break;
             }
             self.run_display(&mut ints);
         }
         // Finish the dot the loop stopped in.
-        if self.d.half_dot {
+        if self.d.half_dot() {
             self.run_display(&mut ints);
         }
     }
@@ -367,7 +366,7 @@ impl Ppu {
     #[inline]
     #[must_use]
     pub const fn is_cgb_palettes_accessible(&self) -> bool {
-        !self.d.cpu.cgb_palettes_blocked
+        !self.d.cpu().cgb_palettes_blocked
     }
 
     /// STOP-mode hooks (the PPU engine does not distinguish STOP yet).

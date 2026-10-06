@@ -4,10 +4,10 @@ use super::{Ctx, WAVE, length::Length, mixer::ChannelOutput, revision::Revision}
 
 #[derive(Clone, Copy)]
 pub struct Wave {
-    pub out: ChannelOutput,
-    pub length: Length,
+    out: ChannelOutput,
+    length: Length,
     /// NR30 bit 7: the DAC is on.
-    pub dac_enabled: bool,
+    dac_enabled: bool,
     /// NR32: the output level (bits 5-6).
     nr32: u8,
     /// The 11-bit period from NR33 and NR34.
@@ -26,7 +26,7 @@ pub struct Wave {
     /// The DMG keeps reading the wave RAM with the channel stopped: it reads
     /// the byte on the address bus when this expires.
     bugged_read_countdown: u8,
-    pub ram: [u8; 0x10],
+    ram: [u8; 0x10],
 }
 
 impl Wave {
@@ -57,6 +57,41 @@ impl Wave {
             ram: self.ram,
             ..Self::new()
         };
+    }
+
+    pub const fn out(&self) -> &ChannelOutput {
+        &self.out
+    }
+
+    pub const fn out_mut(&mut self) -> &mut ChannelOutput {
+        &mut self.out
+    }
+
+    pub const fn length_counter(&self) -> u16 {
+        self.length.counter
+    }
+
+    pub const fn set_length_counter(&mut self, counter: u16) {
+        self.length.counter = counter;
+    }
+
+    pub const fn dac_enabled(&self) -> bool {
+        self.dac_enabled
+    }
+
+    /// Resets the channel but the wave RAM.
+    pub const fn reset(&mut self) {
+        *self = Self {
+            ram: self.ram,
+            ..Self::new()
+        };
+    }
+
+    /// Every other DIV event.
+    pub fn tick_length(&mut self, c: &Ctx) {
+        if self.length.tick() {
+            self.expire(c);
+        }
     }
 
     pub const fn read_nr30(&self) -> u8 {
@@ -172,7 +207,7 @@ impl Wave {
     }
 
     /// The length timer expired.
-    pub fn expire(&mut self, c: &Ctx) {
+    fn expire(&mut self, c: &Ctx) {
         if self.out.active && c.rev.is_agb() {
             if self.countdown == 0 {
                 self.sample_byte = self.ram[usize::from(((self.position + 1) & 0xF) >> 1)];
