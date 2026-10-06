@@ -26,6 +26,19 @@ impl Wram {
     pub const SIZE_CGB: u16 = Self::SIZE_GB * 4;
     pub const SIZE_GB: u16 = 0x2000;
 
+    /// The work RAM as the hardware powers on. It is random on every unit;
+    /// the DMG's tends to come up as alternating blocks of 0xFF and 0x00.
+    #[must_use]
+    pub fn power_on(cgb_hardware: bool) -> Self {
+        let mut wram = Self::default();
+        if !cgb_hardware {
+            for (i, byte) in wram.wram.iter_mut().take(Self::SIZE_GB.into()).enumerate() {
+                *byte = if i & 0x100 == 0 { 0xFF } else { 0x00 };
+            }
+        }
+        wram
+    }
+
     #[must_use]
     pub const fn read_wram_hi(&self, addr: u16) -> u8 {
         self.wram[(addr & 0xFFF | self.svbk.bank_offset()) as usize]

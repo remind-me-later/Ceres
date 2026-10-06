@@ -157,7 +157,13 @@ impl<A: AudioCallback> Gb<A> {
         if cgb && addr >= 0xC000 && (bus_for_addr(cgb, src) != Bus::Ram || src >= 0xE000) {
             return Some((src.wrapping_sub(1) & 0x1000) | (addr & 0xFFF) | 0xC000);
         }
-        Some(src.wrapping_sub(1))
+        let current = src.wrapping_sub(1);
+        // The DMG's DMA reads the work RAM through its echo.
+        Some(if !cgb && current >= 0xE000 {
+            current & !0x2000
+        } else {
+            current
+        })
     }
 
     /// Handles a CPU write to `addr` during a transfer. Returns the address

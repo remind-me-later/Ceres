@@ -452,7 +452,7 @@ impl<A: AudioCallback> Gb<A> {
             model,
             ppu: Ppu::new(model),
             serial: Serial::default(),
-            wram: Wram::default(),
+            wram: Wram::power_on(model.is_cgb_hardware()),
             time_deferred: 0,
             undoc_ff72: 0,
             undoc_ff73: 0,
