@@ -170,6 +170,20 @@ impl<A: AudioCallback> Gb<A> {
         let model = self.model;
         let src = self.dma.current_src;
         let mut addr = addr;
+        if !cgb {
+            // The write only reaches the OAM byte the DMA is writing (ANDed
+            // with it when the DMA reads the work RAM).
+            let current = src.wrapping_sub(1);
+            let oam = self.ppu.oam_mut().bytes_mut();
+            if let Some(byte) = oam.get_mut(usize::from(self.dma.current_dest.wrapping_sub(1))) {
+                *byte = if current >= 0xC000 {
+                    *byte & value
+                } else {
+                    value
+                };
+            }
+            return None;
+        }
         if cgb && bus_for_addr(cgb, addr) == Bus::Main && src >= 0xE000 {
             // Cart specific.
             return None;
