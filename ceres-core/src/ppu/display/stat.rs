@@ -135,9 +135,23 @@ impl Ppu {
     }
 
     pub(in crate::ppu) fn write_stat_reg(&mut self, val: u8, ints: &mut Interrupts) {
+        let old = self.stat;
         self.stat &= 7;
         self.stat |= val & !7;
         self.stat |= 0x80;
+
+        if self.lcdc & 0x80 == 0 {
+            // With the LCD off the LY=LYC flag stays as it was: enabling the
+            // LYC interrupt while it is set raises it (on the DMG any write
+            // does, with the glitch that sets all the enables).
+            if old & STAT_LYC_B != 0
+                && old & STAT_IF_LYC_B == 0
+                && (!self.hw_cgb() || val & STAT_IF_LYC_B != 0)
+            {
+                ints.request_lcd();
+            }
+            return;
+        }
 
         // The CGB's entry hold sees the enables written up to two dots before
         // the VBlank condition is evaluated.
