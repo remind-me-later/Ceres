@@ -497,11 +497,12 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn run_frame(&mut self) {
-        while self.dots_ran < DOTS_PER_FRAME {
+        // `dots_ran` counts 8 MHz units (half dots), so a frame is twice `DOTS_PER_FRAME`.
+        while self.dots_ran < 2 * DOTS_PER_FRAME {
             self.run_cpu();
         }
 
-        self.dots_ran -= DOTS_PER_FRAME;
+        self.dots_ran -= 2 * DOTS_PER_FRAME;
     }
 
     #[inline]

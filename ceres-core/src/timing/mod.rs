@@ -82,7 +82,6 @@ impl<A: AudioCallback> Gb<A> {
         if cpu_t_cycles <= 0 {
             return;
         }
-        self.dots_ran += cpu_t_cycles;
         self.advance_cycles(cpu_t_cycles);
     }
 
@@ -141,6 +140,8 @@ impl<A: AudioCallback> Gb<A> {
 
         // Advance the PPU (see `Ppu::tick_t_cycle`).
         let double_speed = self.key1.is_enabled();
+        // A frame lasts the same time whatever the CPU speed.
+        self.dots_ran += cycles * if double_speed { 1 } else { 2 };
         for _ in 0..cycles {
             self.ppu
                 .tick_t_cycle(&mut self.ints, self.cgb_mode, double_speed);
