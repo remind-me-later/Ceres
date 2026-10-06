@@ -1,7 +1,7 @@
 //! Mode 3: the loop that fetches objects and pushes pixels to the LCD.
 
 use {
-    super::{LINES, fetcher::FetcherStep, model_ge_cgb_d},
+    super::{LINES, fetcher::FetcherStep, model_ge_cgb_d, state::State},
     crate::{
         interrupts::Interrupts,
         ppu::{PX_WIDTH, Ppu, STAT_MODE_B},
@@ -11,6 +11,24 @@ use {
 pub(super) enum Mode3Flow {
     Slept,
     Done,
+}
+
+/// The steps of the mode 3 loop. Each object takes 6 dots or more to fetch.
+#[derive(Clone, Copy)]
+enum Step {
+    /// The top of the loop: the window may start here.
+    WindowCheck,
+    /// Drops the objects that were passed and starts the object fetch.
+    Objects,
+    NextObject,
+    WaitForTile,
+    ReadObjectAttributes,
+    ReadObjectLow,
+    ReadObjectHigh,
+    PushObject,
+    /// Pushes a pixel to the LCD (and the end of an aborted object fetch).
+    OutputPixel,
+    AfterPixel,
 }
 
 impl Ppu {
@@ -24,27 +42,44 @@ impl Ppu {
         self.d.fetcher.step = FetcherStep::GetTileT1;
     }
 
-    /// Runs the mode-3 loop from `entry` until it sleeps or finishes.
-    /// Entries: 0 = top of an iteration, 42/27/41/20/39/40/21 = resume
-    /// points after the corresponding SameBoy sleep.
+    /// Runs the mode 3 loop from `resume` (the sleep that ended) until it
+    /// sleeps again or the line is drawn.
     #[expect(
         clippy::too_many_lines,
-        reason = "SameBoy's mode 3 loop: one arm per resume point"
+        reason = "SameBoy's mode 3 loop: one arm per step"
     )]
-    pub(super) fn mode3(&mut self, ints: &mut Interrupts, mut entry: u8) -> Mode3Flow {
+    pub(super) fn mode3(&mut self, ints: &mut Interrupts, resume: State) -> Mode3Flow {
+        // On the DMG, disabling objects aborts an object fetch (see
+        // `abort_object_fetch_on_obj_disable`).
+        let unless_aborted = |ppu: &Self, step| {
+            if ppu.d.obj_fetch.aborted {
+                Step::OutputPixel
+            } else {
+                step
+            }
+        };
+        let mut step = match resume {
+            State::Mode3WindowDelay => {
+                self.mode3_window_activated();
+                Step::Objects
+            }
+            State::Mode3ObjectWait => unless_aborted(self, Step::WaitForTile),
+            State::Mode3ObjectFetch => unless_aborted(self, Step::ReadObjectAttributes),
+            State::Mode3ObjectAttributes => unless_aborted(self, Step::ReadObjectLow),
+            State::Mode3ObjectLow => unless_aborted(self, Step::ReadObjectHigh),
+            State::Mode3ObjectHigh => Step::PushObject,
+            State::Mode3Pixel => Step::AfterPixel,
+            _ => Step::WindowCheck,
+        };
         loop {
-            match entry {
-                0 => {
+            step = match step {
+                Step::WindowCheck => {
                     if self.mode3_window() {
                         return Mode3Flow::Slept;
                     }
-                    entry = 100;
+                    Step::Objects
                 }
-                42 => {
-                    self.mode3_window_activated();
-                    entry = 100;
-                }
-                100 => {
+                Step::Objects => {
                     // Insert a pixel right at the FIFO's end.
                     let hw = self.hw_cgb();
                     if self.wx == self.d.position_in_line.wrapping_add(7)
@@ -57,111 +92,68 @@ impl Ppu {
                         self.d.insert_bg_pixel = true;
                     }
 
-                    // Handle objects.
+                    // Drop the objects left of the current position.
                     while self.d.objs.count != 0
                         && self.d.objs.x[self.d.objs.count - 1] < self.x_for_object_match()
                     {
                         self.d.objs.count -= 1;
                     }
                     self.d.obj_fetch.active = true;
-                    entry = 101;
+                    Step::NextObject
                 }
-                101 => {
+                Step::NextObject => {
                     let n = self.d.objs.count;
-                    entry = if n != 0
+                    if n != 0
                         && (self.lcdc & 0x02 != 0 || self.hw_cgb())
                         && self.d.objs.x[n - 1] == self.x_for_object_match()
                     {
-                        102
+                        Step::WaitForTile
                     } else {
-                        130
-                    };
+                        Step::OutputPixel
+                    }
                 }
-                102 => {
+                Step::WaitForTile => {
+                    // The background fetcher finishes its tile first.
                     if self.d.fetcher.step < FetcherStep::DataHighT2 || self.d.bg_fifo.size == 0 {
                         self.advance_fetcher();
                         self.d.cfl += 1;
-                        self.sleep(27, 1);
+                        self.sleep(State::Mode3ObjectWait, 1);
                         return Mode3Flow::Slept;
                     }
-                    entry = 103;
-                }
-                27 => entry = if self.d.obj_fetch.aborted { 130 } else { 102 },
-                103 => {
                     self.advance_fetcher();
                     self.d.cfl += 1;
-                    self.sleep(41, 1);
+                    self.sleep(State::Mode3ObjectFetch, 1);
                     return Mode3Flow::Slept;
                 }
-                41 => entry = if self.d.obj_fetch.aborted { 130 } else { 104 },
-                104 => {
+                Step::ReadObjectAttributes => {
                     self.advance_fetcher();
                     let base = u16::from(self.d.objs.indices[self.d.objs.count - 1]) * 4;
                     self.d.objs.y_bus = self.oam_read(base + 2);
                     self.d.obj_fetch.flags = self.oam_read(base + 3);
                     self.d.cfl += 2;
-                    self.sleep(20, 2);
+                    self.sleep(State::Mode3ObjectAttributes, 2);
                     return Mode3Flow::Slept;
                 }
-                20 => entry = if self.d.obj_fetch.aborted { 130 } else { 105 },
-                105 => {
-                    let n = self.d.objs.count;
-                    self.d.obj_fetch.line_address = self.object_line_address(
-                        self.d.objs.y[n - 1],
-                        self.d.objs.y_bus,
-                        self.d.obj_fetch.flags,
-                    );
+                Step::ReadObjectLow => {
+                    self.d.obj_fetch.line_address = self.current_object_line_address();
                     self.d.obj_fetch.data[0] = self.vram_read(self.d.obj_fetch.line_address);
                     self.d.cfl += 2;
-                    self.sleep(39, 2);
+                    self.sleep(State::Mode3ObjectLow, 2);
                     return Mode3Flow::Slept;
                 }
-                39 => entry = if self.d.obj_fetch.aborted { 130 } else { 106 },
-                106 => {
+                Step::ReadObjectHigh => {
                     self.d.obj_fetch.active = false;
                     self.d.cfl += 1;
-                    let n = self.d.objs.count;
-                    self.d.obj_fetch.line_address = self.object_line_address(
-                        self.d.objs.y[n - 1],
-                        self.d.objs.y_bus,
-                        self.d.obj_fetch.flags,
-                    );
+                    self.d.obj_fetch.line_address = self.current_object_line_address();
                     self.d.obj_fetch.data[1] = self.vram_read(self.d.obj_fetch.line_address + 1);
-                    self.sleep(40, 1);
+                    self.sleep(State::Mode3ObjectHigh, 1);
                     return Mode3Flow::Slept;
                 }
-                40 => {
-                    let n = self.d.objs.count;
-                    let flags = self.d.obj_fetch.flags;
-                    let palette = if self.cgb_mode_on() {
-                        flags & 0x7
-                    } else {
-                        u8::from(flags & 0x10 != 0)
-                    };
-                    let priority = if self.opri_index_priority() {
-                        self.d.objs.indices[n - 1]
-                    } else {
-                        0
-                    };
-                    let (low, high) = (self.d.obj_fetch.data[0], self.d.obj_fetch.data[1]);
-                    self.d.oam_fifo.overlay_object_row(
-                        low,
-                        high,
-                        palette,
-                        flags & 0x80 != 0,
-                        priority,
-                        flags & 0x20 != 0,
-                    );
-                    self.d.fetcher.sel_glitch_data = if self.d.bus.vram_ppu_blocked {
-                        0xFF
-                    } else {
-                        self.vram_raw(self.d.obj_fetch.line_address + 1)
-                    };
-                    self.d.objs.count -= 1;
-                    entry = 101;
+                Step::PushObject => {
+                    self.push_object();
+                    Step::NextObject
                 }
-                130 => {
-                    // abort_fetching_object:
+                Step::OutputPixel => {
                     self.d.obj_fetch.aborted = false;
                     self.d.obj_fetch.active = false;
                     if let Some(out) = self.render_pixel_if_possible() {
@@ -172,19 +164,58 @@ impl Ppu {
                         return Mode3Flow::Done;
                     }
                     self.d.cfl += 1;
-                    self.sleep(21, 1);
+                    self.sleep(State::Mode3Pixel, 1);
                     return Mode3Flow::Slept;
                 }
-                21 => {
+                Step::AfterPixel => {
                     if self.d.window.wx_166_interrupt_glitch {
                         self.d.irq.mode_for_interrupt = 0;
                         self.stat_update(ints);
                     }
-                    entry = 0;
+                    Step::WindowCheck
                 }
-                _ => unreachable!(),
-            }
+            };
         }
+    }
+
+    fn current_object_line_address(&self) -> u16 {
+        let n = self.d.objs.count;
+        self.object_line_address(
+            self.d.objs.y[n - 1],
+            self.d.objs.y_bus,
+            self.d.obj_fetch.flags,
+        )
+    }
+
+    /// Overlays the fetched object row on the object FIFO.
+    fn push_object(&mut self) {
+        let n = self.d.objs.count;
+        let flags = self.d.obj_fetch.flags;
+        let palette = if self.cgb_mode_on() {
+            flags & 0x7
+        } else {
+            u8::from(flags & 0x10 != 0)
+        };
+        let priority = if self.opri_index_priority() {
+            self.d.objs.indices[n - 1]
+        } else {
+            0
+        };
+        let [low, high] = self.d.obj_fetch.data;
+        self.d.oam_fifo.overlay_object_row(
+            low,
+            high,
+            palette,
+            flags & 0x80 != 0,
+            priority,
+            flags & 0x20 != 0,
+        );
+        self.d.fetcher.sel_glitch_data = if self.d.bus.vram_ppu_blocked {
+            0xFF
+        } else {
+            self.vram_raw(self.d.obj_fetch.line_address + 1)
+        };
+        self.d.objs.count -= 1;
     }
 
     /// Code after the mode-3 loop breaks (`skip_slow_mode_3`).
@@ -223,7 +254,7 @@ impl Ppu {
         }
 
         self.d.cfl += 1;
-        self.sleep(22, 1);
+        self.sleep(State::HBlankStart, 1);
     }
 
     pub(super) fn fill_desynced_line(&mut self) {

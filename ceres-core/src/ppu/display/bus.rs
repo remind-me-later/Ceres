@@ -62,6 +62,22 @@ pub struct CpuAccess {
     pub cgb_palettes_blocked: bool,
 }
 
+impl CpuAccess {
+    /// The CPU can access the OAM and the VRAM.
+    pub const fn unlock_oam_vram(&mut self) {
+        self.oam_read_blocked = false;
+        self.oam_write_blocked = false;
+        self.vram_read_blocked = false;
+        self.vram_write_blocked = false;
+    }
+
+    /// The CPU can access the OAM, the VRAM and the CGB palettes.
+    pub const fn unlock_all(&mut self) {
+        self.unlock_oam_vram();
+        self.cgb_palettes_blocked = false;
+    }
+}
+
 impl Ppu {
     /// VRAM at `address` (0x2000.. is bank 1), no bus conflicts.
     pub(super) fn vram_raw(&self, address: u16) -> u8 {

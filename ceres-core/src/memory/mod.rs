@@ -301,7 +301,7 @@ impl<A: AudioCallback> Gb<A> {
             HDMA4 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.write_hdma4(val),
             HDMA5 if matches!(self.cgb_mode, CgbMode::Cgb) => {
                 let in_hblank =
-                    matches!(self.ppu.mode(), ppu::Mode::HBlank) && self.ppu.display_state() != 7;
+                    matches!(self.ppu.mode(), ppu::Mode::HBlank) && !self.ppu.at_oam_scan_edge();
                 self.hdma.write_hdma5(val, in_hblank);
             }
             BCPS if self.is_cgb() => self.ppu.bcp_mut().set_spec(val),

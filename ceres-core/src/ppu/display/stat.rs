@@ -1,7 +1,7 @@
 //! The STAT interrupt line and the LY=LYC comparison.
 
 use {
-    super::model_ge_cgb_d,
+    super::{model_ge_cgb_d, state::State},
     crate::{
         interrupts::Interrupts,
         ppu::{Ppu, STAT_IF_HBLANK_B, STAT_IF_LYC_B, STAT_IF_OAM_B, STAT_IF_VBLANK_B, STAT_LYC_B},
@@ -73,7 +73,7 @@ impl Ppu {
     /// The DMA's last cycle: during the OAM scan edge it raises the mode 2
     /// bits (SameBoy `GB_dma_run`).
     pub fn dma_finished(&mut self, ints: &mut Interrupts) {
-        if self.d.state == 8 {
+        if self.d.state == State::OamScanObject {
             self.stat |= 2;
             self.stat_update(ints);
         }
@@ -89,14 +89,22 @@ impl Ppu {
         let cgb = self.hw_cgb();
         // These are the states around LY changes; the display routine calls
         // `stat_update` itself so LYC writes conflict on the right dot.
-        if state == 29 && cgb {
+        if state == State::Line153LycGlitch && cgb {
             self.d.irq.ly_for_comparison = 153;
             self.stat_update(ints);
             self.d.irq.ly_for_comparison = 0;
         }
         self.lyc = val;
-        if !cgb || (state != 35 && state != 26 && state != 15 && state != 16) {
-            if state == 14 && cgb {
+        if !cgb
+            || !matches!(
+                state,
+                State::LineOamWriteLock
+                    | State::VBlankLy
+                    | State::Line153Compare
+                    | State::Line153CompareZero
+            )
+        {
+            if state == State::Line153LyZero && cgb {
                 self.d.irq.ly_for_comparison = 153;
                 self.stat_update(ints);
                 self.d.irq.ly_for_comparison = -1;
@@ -113,7 +121,7 @@ impl Ppu {
 
         // Annoying edge timing case.
         if self.double_speed()
-            && self.d.state == 8
+            && self.d.state == State::OamScanObject
             && self.d.objs.index == 0
             && self.d.wait == 1
             && !self.d.half_dot

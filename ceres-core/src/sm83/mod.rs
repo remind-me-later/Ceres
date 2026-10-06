@@ -1527,9 +1527,9 @@ impl<A: AudioCallback> Bus for Gb<A> {
             // read as FF for a single T-cycle.
             ConflictType::StatDmg => {
                 self.flush_deferred_time();
-                // State 7 is the edge between HBlank and OAM mode; the OAM
-                // interrupt seems to be blocked by HBlank interrupts there.
-                if self.ppu.display_state() == 7 && self.ppu.read_stat() & 0x28 == 0x08 {
+                // At the edge between HBlank and OAM mode the OAM interrupt
+                // seems to be blocked by HBlank interrupts.
+                if self.ppu.at_oam_scan_edge() && self.ppu.read_stat() & 0x28 == 0x08 {
                     self.write_mem(addr, !0x20);
                 } else {
                     self.write_mem(addr, 0xFF);

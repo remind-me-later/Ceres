@@ -2,9 +2,9 @@
 //!
 //! SameBoy models the PPU as a coroutine that sleeps for a fixed number of
 //! dots between observable events. This module keeps the same shape: `state`
-//! is the id of the sleep the engine is currently in (the same numbers as
-//! SameBoy's `display_state`), `wait` is the number of dots left in it, and
-//! the state machine in `state.rs` holds the code that follows each sleep.
+//! is the sleep the engine is currently in, `wait` is the number of dots
+//! left in it, and the state machine in `state.rs` holds the code that
+//! follows each sleep.
 //!
 //! - `state.rs`: the line and frame state machine
 //! - `objects.rs`: the mode 2 object search and the object fetch
@@ -39,6 +39,8 @@ use {
 
 use super::{Ppu, STAT_MODE_B, oam_bug::NO_ROW};
 
+pub(super) use state::State;
+
 pub(super) const MODE2_LENGTH: i32 = 80;
 pub(super) const LINE_LENGTH: i32 = 456;
 pub(super) const LINES: u8 = 144;
@@ -53,8 +55,8 @@ pub(super) const LINES: u8 = 144;
 )]
 #[derive(Clone)]
 pub(super) struct Display {
-    /// SameBoy's `display_state`: id of the current sleep (0 = not started).
-    pub state: u8,
+    /// The sleep the state machine is in.
+    pub state: State,
     /// Dots left before the code following the current sleep runs.
     wait: i32,
     /// Double speed: the first T-cycle of the current dot already ran.
@@ -91,7 +93,7 @@ pub(super) struct Display {
 impl Default for Display {
     fn default() -> Self {
         Self {
-            state: 0,
+            state: State::LcdOn,
             wait: 0,
             half_dot: false,
             cfl: 0,
@@ -118,7 +120,7 @@ impl Default for Display {
 
 impl Display {
     pub(super) const fn restart(&mut self) {
-        self.state = 0;
+        self.state = State::LcdOn;
         self.wait = 0;
         self.cfl = 0;
         self.window.wy_units = 0;
@@ -160,7 +162,7 @@ impl Ppu {
 
     /// Sleep for `n` dots; the code of state `id` runs afterwards.
     #[inline]
-    pub(super) const fn sleep(&mut self, id: u8, n: i32) {
+    pub(super) const fn sleep(&mut self, id: State, n: i32) {
         self.d.state = id;
         self.d.wait = n;
     }
@@ -169,26 +171,14 @@ impl Ppu {
         self.d.lcd_off_hdma_edge = self.stat & STAT_MODE_B != 0;
         self.d.objs.accessed_oam_row = NO_ROW;
         self.d.cfl = 0;
-        self.d.state = 0;
+        self.d.state = State::LcdOn;
         self.d.wait = 0;
         self.ly = 0;
         self.stat &= !STAT_MODE_B;
         self.d.current_line = 0;
         self.d.irq.ly_for_comparison = 0;
         self.d.window.wy_triggered = false;
-        self.d.cpu.oam_read_blocked = false;
-        self.d.cpu.vram_read_blocked = false;
-        self.d.cpu.oam_write_blocked = false;
-        self.d.cpu.vram_write_blocked = false;
-        self.d.cpu.cgb_palettes_blocked = false;
-    }
-
-    /// Start of a line for lines 0..=143 (SameBoy's `for` body head).
-    pub(super) fn line_start(&mut self) {
-        self.wy_check();
-        self.d.cpu.oam_write_blocked = self.hw_cgb() && !self.double_speed();
-        self.d.objs.accessed_oam_row = 0;
-        self.sleep(35, 2);
+        self.d.cpu.unlock_all();
     }
 
     pub(super) fn present_frame(&mut self) {
@@ -211,14 +201,14 @@ impl Ppu {
         // A line that would outgrow 456 dots is cut off (mode 3 abort).
         // `balance` is SameBoy's `display_cycles`.
         let balance = 2 - 2 * self.d.wait - i32::from(self.d.half_dot);
-        let cut = 2 * self.d.cfl + 1 + balance > 2 * LINE_LENGTH && self.d.state != 0;
+        let cut = 2 * self.d.cfl + 1 + balance > 2 * LINE_LENGTH && self.d.state != State::LcdOn;
         if cut {
-            if self.d.state == 22 {
+            if self.d.state == State::HBlankStart {
                 self.stat &= !STAT_MODE_B;
                 self.d.irq.mode_for_interrupt = 0;
                 self.stat_update(ints);
             }
-            self.d.state = 9;
+            self.d.state = State::Mode3Abort;
             self.d.wait = 0;
         }
 

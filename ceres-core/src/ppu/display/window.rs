@@ -1,6 +1,9 @@
 //! The window: the WY trigger, the WX start and their glitches.
 
-use {super::fetcher::FetcherStep, crate::ppu::Ppu};
+use {
+    super::{fetcher::FetcherStep, state::State},
+    crate::ppu::Ppu,
+};
 
 #[expect(
     clippy::struct_excessive_bools,
@@ -81,7 +84,7 @@ impl Ppu {
                 if (self.d.window.wy_units + offset).trailing_zeros() >= 3 {
                     self.d.window.wy_check_scheduled = false;
                     self.wy_check();
-                    if self.d.state == 21 && self.hw_cgb() && !self.double_speed() {
+                    if self.d.state == State::Mode3Pixel && self.hw_cgb() && !self.double_speed() {
                         self.d.window.wy_just_checked = true;
                     }
                 }
@@ -149,7 +152,7 @@ impl Ppu {
                 self.d.bg_fifo.clear();
                 if self.wx == 0 && self.scx & 7 != 0 && !hw {
                     self.d.cfl += 1;
-                    self.sleep(42, 1);
+                    self.sleep(State::Mode3WindowDelay, 1);
                     return true;
                 } else if self.wx == 166 {
                     self.d.window.wx_166_interrupt_glitch = true;

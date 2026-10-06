@@ -207,10 +207,11 @@ impl Ppu {
         mem::replace(&mut self.d.lcd_off_hdma_edge, false)
     }
 
-    /// SameBoy's `display_state`, for state-dependent register-write hacks.
+    /// The PPU is at the edge between HBlank and the OAM scan (SameBoy's
+    /// display state 7), where some register writes behave differently.
     #[must_use]
-    pub const fn display_state(&self) -> u8 {
-        self.d.state
+    pub fn at_oam_scan_edge(&self) -> bool {
+        self.d.state == display::State::OamScanStart
     }
 
     #[must_use]
