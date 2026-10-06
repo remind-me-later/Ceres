@@ -1547,7 +1547,13 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 // The LYC bit behaves differently.
                 let old = self.ppu.read_stat();
                 self.flush_deferred_time();
-                self.write_mem(addr, (old & 0x40) | (val & !0x40));
+                let mut early = (old & 0x40) | (val & !0x40);
+                if val & !old & 0x40 != 0 {
+                    // Enabling the LYC source: the enables this write clears go
+                    // with it, so that no source drops out for a dot in between.
+                    early |= old & 0x38;
+                }
+                self.write_mem(addr, early);
                 self.advance_dots(1);
                 self.write_mem(addr, val);
                 self.time_deferred = 3;
