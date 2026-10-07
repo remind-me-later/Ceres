@@ -287,6 +287,24 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
+    /// The OAM index `run_dma` will have reached after the next `cycles`.
+    pub(crate) fn dma_dest_after(&self, cycles: i32) -> u8 {
+        let mut dest = self.dma.current_dest;
+        if !self.dma.is_active() || self.hdma.cpu_halted() || self.clock.stopped {
+            return dest;
+        }
+        let mut due = (self.dma.cycles_modulo + cycles) / 4;
+        while due > 0 {
+            due -= 1;
+            let last = dest >= 0xA0;
+            dest = dest.wrapping_add(1);
+            if last {
+                break;
+            }
+        }
+        dest
+    }
+
     /// Port of `GB_dma_run`: transfers the bytes that became due.
     pub(crate) fn run_dma(&mut self) {
         if !self.dma.is_active() || self.hdma.cpu_halted() || self.clock.stopped {

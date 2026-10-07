@@ -271,6 +271,7 @@ impl Ppu {
     pub fn tick_t_cycle(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
         self.cgb_mode = cgb_mode;
         self.double_speed = double_speed;
+        self.count_chunk_cycle();
         if self.lcdc & LCDC_ON_B == 0 {
             return;
         }

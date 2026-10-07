@@ -140,6 +140,8 @@ impl<A: AudioCallback> Gb<A> {
 
         // Advance the PPU (see `Ppu::tick_t_cycle`).
         let double_speed = self.key1.is_enabled();
+        self.ppu
+            .set_dma_lookahead(self.dma_dest_after(cycles), cycles);
         // A frame lasts the same time whatever the CPU speed.
         self.dots_ran += cycles * if double_speed { 1 } else { 2 };
         for _ in 0..cycles {

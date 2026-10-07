@@ -83,8 +83,21 @@ impl Ppu {
 
     pub(super) fn add_object_from_index(&mut self, index: u8) {
         let base = u16::from(index) * 4;
-        let dma_active = self.d.bus.dma_dest != 0xA1;
-        if !dma_active || self.d.bus.cpu_idle {
+        // On CGB the object search runs ahead of the DMA's state: by two
+        // T-cycles in single speed, by a whole M-cycle in double speed.
+        let lead = if self.double_speed { 3 } else { 2 };
+        let dest = if self.hw_cgb() && self.d.bus.chunk_left <= lead {
+            self.d.bus.dma_dest_next
+        } else {
+            self.d.bus.dma_dest
+        };
+        let dma_active = dest != 0xA1;
+        if dma_active && !self.d.bus.cpu_idle && !matches!(dest, 0xFF | 0) {
+            // Once a DMA has written its first byte the object search reads
+            // 0xFF until the transfer ends.
+            self.d.objs.y_bus = 0xFF;
+            self.d.objs.x_bus = 0xFF;
+        } else {
             self.d.objs.y_bus = self.oam_read(base);
             self.d.objs.x_bus = self.oam_read(base + 1);
         }

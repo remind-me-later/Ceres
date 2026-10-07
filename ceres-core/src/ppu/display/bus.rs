@@ -9,6 +9,11 @@ use crate::ppu::Ppu;
 pub struct PpuBus {
     /// OAM index the DMA is writing (`0xA1`: no transfer).
     pub dma_dest: u8,
+    /// Where `dma_dest` will be once the T-cycles the PPU is running are
+    /// accounted for (the DMA catches up after the PPU).
+    pub dma_dest_next: u8,
+    /// T-cycles of that chunk still to run after the current one.
+    pub chunk_left: i32,
     /// Address the OAM DMA reads next.
     pub dma_src: u16,
     /// The OAM DMA is part-way through a byte (`dma_cycles_modulo != 0`).
@@ -33,6 +38,8 @@ impl Default for PpuBus {
     fn default() -> Self {
         Self {
             dma_dest: 0xA1,
+            dma_dest_next: 0xA1,
+            chunk_left: 0,
             dma_src: 0,
             dma_modulo: false,
             hdma_in_progress: false,
@@ -133,6 +140,18 @@ impl Ppu {
         self.d.bus.dma_dest = dest;
         self.d.bus.dma_src = src;
         self.d.bus.dma_modulo = modulo;
+    }
+
+    /// The PPU is about to run `cycles` T-cycles, after which the OAM DMA
+    /// will have reached `dest_next`.
+    pub const fn set_dma_lookahead(&mut self, dest_next: u8, cycles: i32) {
+        self.d.bus.dma_dest_next = dest_next;
+        self.d.bus.chunk_left = cycles;
+    }
+
+    /// One T-cycle of the chunk set by `set_dma_lookahead` is about to run.
+    pub(in crate::ppu) const fn count_chunk_cycle(&mut self) {
+        self.d.bus.chunk_left -= 1;
     }
 
     /// A new DMA byte starts: the bus fight of the last one is over.
