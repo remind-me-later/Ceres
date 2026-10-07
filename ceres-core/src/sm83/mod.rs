@@ -1706,6 +1706,15 @@ impl<A: AudioCallback> Bus for Gb<A> {
     }
 
     fn ack_interrupt(&mut self, bit: u8) {
+        // On the CGB a timer interrupt due within the next cycles counts as
+        // already requested: acknowledging the timer bit swallows it.
+        if self.model.is_cgb_hardware() {
+            let headroom = 3 + self.time_deferred;
+            if (1..=headroom).contains(&i32::from(self.clock.tima_irq_countdown)) {
+                self.clock.tima_irq_countdown = 0;
+                self.ints.request_timer();
+            }
+        }
         self.ints.acknowledge_interrupt(bit);
     }
 

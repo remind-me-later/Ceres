@@ -205,8 +205,6 @@ sprites/late_sizechange_ds_1_cgb04c_out0.gbc
 sprites/late_sizechange_sp00_ds_1_cgb04c_out0.gbc
 sprites/late_sizechange_sp01_ds_1_cgb04c_out0.gbc
 sprites/late_sizechange_sp39_ds_1_cgb04c_out0.gbc
-tima/tc00_irq_late_retrigger_2_dmg08_outE4_cgb04c_outE0.gbc
-tima/tc00_irq_late_retrigger_ds_2_cgb04c_outE0.gbc
 vram_m3/preread_lcdoffset2_1_cgb04c_out0.gbc
 vram_m3/prewrite_lcdoffset2_1_cgb04c_out1.gbc
 window/arg/late_wy_1_dmg08_cgb04c_out0.gbc
