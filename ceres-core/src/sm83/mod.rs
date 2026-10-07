@@ -1670,9 +1670,20 @@ impl<A: AudioCallback> Bus for Gb<A> {
             // Registers the tile fetcher consumes land a dot before the ones the
             // pixel mixer consumes (see `DmgLcdc`).
             ConflictType::ScxDmgAndCgbDouble | ConflictType::ScyDmg => {
+                // The tile fetcher sees these two dots before the pixel mixer.
+                // On the DMG the mixer, which discards SCX's low bits, sees them
+                // a dot before the end of the write.
+                let old = self.ppu.read_scx();
                 self.advance_dots(pending - 2);
-                self.write_mem(addr, val);
-                self.time_deferred = 6;
+                if self.model.is_cgb_hardware() || addr != 0xFF43 {
+                    self.write_mem(addr, val);
+                    self.time_deferred = 6;
+                } else {
+                    self.write_mem(addr, (old & 7) | (val & !7));
+                    self.advance_dots(1);
+                    self.write_mem(addr, val);
+                    self.time_deferred = 5;
+                }
             }
             ConflictType::Nr10CgbDouble => {
                 self.advance_dots(pending - 1);
