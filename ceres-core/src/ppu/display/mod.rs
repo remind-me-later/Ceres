@@ -169,6 +169,10 @@ impl Display {
     }
 
     /// Whether `HBlank` was entered since the last call.
+    pub(super) const fn hblank_hdma_pending(&self) -> u8 {
+        self.hblank_hdma_delay
+    }
+
     pub(super) const fn take_hblank_hdma_edge(&mut self) -> bool {
         mem::replace(&mut self.hblank_hdma_edge, false)
     }

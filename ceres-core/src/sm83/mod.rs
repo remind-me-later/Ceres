@@ -301,6 +301,8 @@ impl Sm83 {
     fn dispatch_interrupt<B: Bus>(&mut self, bus: &mut B) {
         // M1: dummy fetch. M2: PC (and SP) on the address bus.
         bus.read(self.pc);
+        // A pending HDMA burst goes first, like after any opcode fetch.
+        bus.tick_hdma();
         bus.tick_oam_bug(self.pc.wrapping_add(1));
         bus.trigger_oam_bug(self.sp);
         bus.tick();
@@ -1773,7 +1775,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
     }
 
     fn set_halted(&mut self, halted: bool) {
-        let hblank = matches!(self.ppu.mode(), Mode::HBlank);
+        let hblank = self.ppu.hdma_period();
         self.hdma.set_cpu_halted(halted, hblank);
         self.ppu
             .set_cpu_idle(self.hdma.cpu_halted() || self.clock.stopped);
@@ -1795,7 +1797,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
     fn leave_stop(&mut self) {
         self.ppu.leave_stop_mode();
         self.clock.stopped = false;
-        let hblank = matches!(self.ppu.mode(), Mode::HBlank);
+        let hblank = self.ppu.hdma_period();
         self.hdma.set_cpu_halted(false, hblank);
         self.hdma.wake(hblank);
         self.ppu.set_cpu_idle(false);
