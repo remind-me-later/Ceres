@@ -1714,6 +1714,12 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 self.clock.tima_irq_countdown = 0;
                 self.ints.request_timer();
             }
+            // The serial port is looked ahead too.
+            self.serial.complete_if_due(
+                self.clock.div,
+                u16::try_from(3 + self.time_deferred).unwrap_or(0),
+                &mut self.ints,
+            );
         }
         self.ints.acknowledge_interrupt(bit);
     }
