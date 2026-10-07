@@ -66,29 +66,49 @@ impl Serial {
         self.master_clock = !self.master_clock;
 
         if !self.master_clock && self.sc & (START | SHIFT) == START | SHIFT {
-            self.count += 1;
-            if self.count == 8 {
-                self.count = 0;
-                self.sc &= !START;
-                ints.request_serial();
+            self.shift_in(ints);
+        }
+    }
 
-                // Capture the byte that was just transferred
-                // (test ROMs like Blargg's print through serial).
-                let transferred_byte = self.sb_sent;
-                if (0x20..0x7F).contains(&transferred_byte) {
-                    self.output.push(transferred_byte as char);
-                } else if transferred_byte == b'\n' {
-                    self.output.push('\n');
-                } else if transferred_byte == b'\r' {
-                    self.output.push('\r');
-                } else {
-                    // Not printable: ignored.
-                }
+    /// Shifts one bit in (and out); the eighth one completes the transfer.
+    fn shift_in(&mut self, ints: &mut Interrupts) {
+        self.count += 1;
+        if self.count == 8 {
+            self.count = 0;
+            self.sc &= !START;
+            ints.request_serial();
+
+            // Capture the byte that was just transferred
+            // (test ROMs like Blargg's print through serial).
+            let transferred_byte = self.sb_sent;
+            if (0x20..0x7F).contains(&transferred_byte) {
+                self.output.push(transferred_byte as char);
+            } else if transferred_byte == b'\n' {
+                self.output.push('\n');
+            } else if transferred_byte == b'\r' {
+                self.output.push('\r');
+            } else {
+                // Not printable: ignored.
             }
+        }
 
-            self.sb <<= 1;
-            // When no device is connected, the input bit reads as 1.
-            self.sb |= 1;
+        self.sb <<= 1;
+        // When no device is connected, the input bit reads as 1.
+        self.sb |= 1;
+    }
+
+    /// Completes the transfer now if its last bit is shifted within `cycles`
+    /// system clock cycles (the interrupt acknowledge looks ahead that far).
+    pub fn complete_if_due(&mut self, div: u16, cycles: u16, ints: &mut Interrupts) {
+        if !self.master_clock || self.sc & (START | SHIFT) != START | SHIFT || self.count != 7 {
+            return;
+        }
+        // The edge is the system counter's selected bit falling: the
+        // increment that wraps the bits below it.
+        let period = self.div_mask << 1;
+        let cycles_to_edge = period - (div & (period - 1));
+        if cycles_to_edge <= cycles {
+            self.shift_in(ints);
         }
     }
 

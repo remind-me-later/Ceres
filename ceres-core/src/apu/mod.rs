@@ -532,8 +532,10 @@ impl<A: AudioCallback> Apu<A> {
         self.enabled = true;
         self.lf_div = 1;
         // APU glitch: turning the APU on while DIV's bit 4 (5 in double speed)
-        // is set skips the first DIV/APU event.
-        if ctx.div_counter & if ctx.double_speed { 0x2000 } else { 0x1000 } != 0 {
+        // is set skips the first DIV/APU event. The write takes effect an
+        // M-cycle after the one it started in (measured with Gambatte's tests).
+        let div_counter = ctx.div_counter.wrapping_add(4);
+        if div_counter & if ctx.double_speed { 0x2000 } else { 0x1000 } != 0 {
             self.skip_div_event = SkipDivEvent::Skip;
             self.div_divider = 1;
         }

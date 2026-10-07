@@ -301,6 +301,8 @@ impl Sm83 {
     fn dispatch_interrupt<B: Bus>(&mut self, bus: &mut B) {
         // M1: dummy fetch. M2: PC (and SP) on the address bus.
         bus.read(self.pc);
+        // A pending HDMA burst goes first, like after any opcode fetch.
+        bus.tick_hdma();
         bus.tick_oam_bug(self.pc.wrapping_add(1));
         bus.trigger_oam_bug(self.sp);
         bus.tick();
@@ -1418,6 +1420,11 @@ impl Sm83 {
                 self.is_halted = true;
                 self.just_halted = true;
                 bus.set_halted(true);
+                if speed_switch {
+                    // A transfer requested before the CPU stopped goes on
+                    // during the wait of the speed switch.
+                    bus.tick_hdma();
+                }
             }
         }
     }
@@ -1527,22 +1534,33 @@ impl<A: AudioCallback> Bus for Gb<A> {
             // read as FF for a single T-cycle.
             ConflictType::StatDmg => {
                 self.flush_deferred_time();
-                // At the edge between HBlank and OAM mode the OAM interrupt
-                // seems to be blocked by HBlank interrupts.
+                // The write glitches the register for a dot (all the enables are
+                // on) before the real value lands. The glitch is a pulse, the
+                // real value is in place for what the PPU does in the next dot,
+                // except at the edge between HBlank and OAM mode, where the OAM
+                // interrupt seems to be blocked by HBlank interrupts.
                 if self.ppu.at_oam_scan_edge() && self.ppu.read_stat() & 0x28 == 0x08 {
                     self.write_mem(addr, !0x20);
+                    self.advance_dots(1);
+                    self.write_mem(addr, val);
                 } else {
                     self.write_mem(addr, 0xFF);
+                    self.write_mem(addr, val);
+                    self.advance_dots(1);
                 }
-                self.advance_dots(1);
-                self.write_mem(addr, val);
                 self.time_deferred = 3;
             }
             ConflictType::StatCgb => {
                 // The LYC bit behaves differently.
                 let old = self.ppu.read_stat();
                 self.flush_deferred_time();
-                self.write_mem(addr, (old & 0x40) | (val & !0x40));
+                let mut early = (old & 0x40) | (val & !0x40);
+                if val & !old & 0x40 != 0 {
+                    // Enabling the LYC source: the enables this write clears go
+                    // with it, so that no source drops out for a dot in between.
+                    early |= old & 0x38;
+                }
+                self.write_mem(addr, early);
                 self.advance_dots(1);
                 self.write_mem(addr, val);
                 self.time_deferred = 3;
@@ -1659,9 +1677,20 @@ impl<A: AudioCallback> Bus for Gb<A> {
             // Registers the tile fetcher consumes land a dot before the ones the
             // pixel mixer consumes (see `DmgLcdc`).
             ConflictType::ScxDmgAndCgbDouble | ConflictType::ScyDmg => {
+                // The tile fetcher sees these two dots before the pixel mixer.
+                // On the DMG the mixer, which discards SCX's low bits, sees them
+                // a dot before the end of the write.
+                let old = self.ppu.read_scx();
                 self.advance_dots(pending - 2);
-                self.write_mem(addr, val);
-                self.time_deferred = 6;
+                if self.model.is_cgb_hardware() || addr != 0xFF43 {
+                    self.write_mem(addr, val);
+                    self.time_deferred = 6;
+                } else {
+                    self.write_mem(addr, (old & 7) | (val & !7));
+                    self.advance_dots(1);
+                    self.write_mem(addr, val);
+                    self.time_deferred = 5;
+                }
             }
             ConflictType::Nr10CgbDouble => {
                 self.advance_dots(pending - 1);
@@ -1695,6 +1724,21 @@ impl<A: AudioCallback> Bus for Gb<A> {
     }
 
     fn ack_interrupt(&mut self, bit: u8) {
+        // On the CGB a timer interrupt due within the next cycles counts as
+        // already requested: acknowledging the timer bit swallows it.
+        if self.model.is_cgb_hardware() {
+            let headroom = 3 + self.time_deferred;
+            if (1..=headroom).contains(&i32::from(self.clock.tima_irq_countdown)) {
+                self.clock.tima_irq_countdown = 0;
+                self.ints.request_timer();
+            }
+            // The serial port is looked ahead too.
+            self.serial.complete_if_due(
+                self.clock.div,
+                u16::try_from(3 + self.time_deferred).unwrap_or(0),
+                &mut self.ints,
+            );
+        }
         self.ints.acknowledge_interrupt(bit);
     }
 
@@ -1731,7 +1775,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
     }
 
     fn set_halted(&mut self, halted: bool) {
-        let hblank = matches!(self.ppu.mode(), Mode::HBlank);
+        let hblank = self.ppu.hdma_period();
         self.hdma.set_cpu_halted(halted, hblank);
         self.ppu
             .set_cpu_idle(self.hdma.cpu_halted() || self.clock.stopped);
@@ -1753,7 +1797,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
     fn leave_stop(&mut self) {
         self.ppu.leave_stop_mode();
         self.clock.stopped = false;
-        let hblank = matches!(self.ppu.mode(), Mode::HBlank);
+        let hblank = self.ppu.hdma_period();
         self.hdma.set_cpu_halted(false, hblank);
         self.hdma.wake(hblank);
         self.ppu.set_cpu_idle(false);

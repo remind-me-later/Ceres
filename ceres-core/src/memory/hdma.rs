@@ -170,7 +170,15 @@ impl<A: AudioCallback> Gb<A> {
                 self.ppu.vram_mut().write_hdma(addr, byte, mirror);
             }
 
-            if self.hdma.dst.trailing_zeros() >= 4 {
+            if self.hdma.dst.trailing_zeros() >= 4
+                && self.hdma.cpu_halted()
+                && self.key1.is_enabled()
+            {
+                // A block that ends with the CPU halted by a switch to double
+                // speed leaves the length as it was and ends the transfer.
+                self.hdma.on = false;
+                self.hdma.on_hblank = false;
+            } else if self.hdma.dst.trailing_zeros() >= 4 {
                 self.hdma.steps_left = self.hdma.steps_left.wrapping_sub(1);
                 if self.hdma.steps_left == 0 || self.hdma.dst == 0 {
                     self.hdma.on = false;

@@ -7,12 +7,17 @@
 //! sleeps but loop heads the machine passes through.
 
 use {
-    super::{LINE_LENGTH, LINES, MODE2_LENGTH, mode3::Mode3Flow, model_ge_cgb_d},
+    super::{
+        LINE_LENGTH, LINES, MODE2_LENGTH, mode3::Mode3Flow, model_ge_cgb_d, stat::MODE_VBLANK_ENTRY,
+    },
     crate::{
         interrupts::Interrupts,
         ppu::{Ppu, STAT_IF_OAM_B, STAT_MODE_B, oam_bug::NO_ROW},
     },
 };
+
+/// Dots from HBlankStart to the HBlank HDMA request.
+const HBLANK_HDMA_DELAY: u8 = 1;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -252,12 +257,19 @@ impl Ppu {
                 self.d.cpu.oam_read_blocked = true;
                 self.d.cpu.oam_write_blocked = true;
                 self.stat = (self.stat & !STAT_MODE_B) | 2;
-                self.d.irq.mode_for_interrupt = 2;
                 self.d.irq.ly_for_comparison = i32::from(self.d.current_line);
                 self.wy_check();
-                self.stat_update(ints);
-                self.d.irq.mode_for_interrupt = -1;
-                self.stat_update(ints);
+                if self.d.current_line == 0 && !self.hw_cgb() {
+                    // The DMG's mode 2 condition of line 0 comes one dot after
+                    // the other lines'.
+                    self.stat_update(ints);
+                    self.d.irq.line0_pulse = 1;
+                } else {
+                    self.d.irq.mode_for_interrupt = 2;
+                    self.stat_update(ints);
+                    self.d.irq.mode_for_interrupt = -1;
+                    self.stat_update(ints);
+                }
                 self.d.objs.count = 0;
                 self.d.objs.found = 0;
                 self.d.objs.index = 0;
@@ -323,6 +335,7 @@ impl Ppu {
                 self.stat &= !STAT_MODE_B;
                 self.d.irq.mode_for_interrupt = 0;
                 self.d.cpu.unlock_oam_vram();
+                self.d.hblank_hdma_delay = HBLANK_HDMA_DELAY;
                 self.stat_update(ints);
                 self.d.cfl += 2;
                 self.sleep(State::HBlankHdma, 2);
@@ -330,7 +343,6 @@ impl Ppu {
             }
             State::HBlankHdma => {
                 self.d.cpu.cgb_palettes_blocked = !self.double_speed();
-                self.d.hblank_hdma_edge = true;
                 self.d.cfl += 2;
                 self.sleep(State::HBlankPalettesUnlock, 2);
                 None
@@ -382,9 +394,6 @@ impl Ppu {
                 None
             }
             State::NextLine => {
-                if self.d.current_line != LINES - 1 {
-                    self.d.irq.mode_for_interrupt = 2;
-                }
                 self.d.current_line += 1;
                 if self.d.current_line < LINES {
                     self.line_start();
@@ -407,11 +416,14 @@ impl Ppu {
             }
             State::VBlankLy => {
                 self.ly = self.d.current_line;
-                if self.d.current_line == LINES
-                    && !self.d.irq.stat_interrupt_line
-                    && self.stat & STAT_IF_OAM_B != 0
-                {
-                    ints.request_lcd();
+                if self.d.current_line == LINES {
+                    if !self.d.irq.stat_interrupt_line && self.stat & STAT_IF_OAM_B != 0 {
+                        ints.request_lcd();
+                    }
+                    // Until the VBlank condition takes over, the line is held
+                    // by the HBlank or the OAM one (see `stat_update`).
+                    self.d.irq.mode_for_interrupt = MODE_VBLANK_ENTRY;
+                    self.d.irq.entry_stat = self.stat;
                 }
                 self.sleep(State::VBlankLyCompare, 2);
                 None
@@ -483,12 +495,13 @@ impl Ppu {
                     -1
                 };
                 self.stat_update(ints);
-                self.sleep(State::Line153CompareZero, 4);
+                // The DMG compares with line 0 one dot later.
+                self.sleep(State::Line153CompareZero, if self.hw_cgb() { 4 } else { 5 });
             }
             State::Line153CompareZero => {
                 self.d.irq.ly_for_comparison = 0;
                 self.stat_update(ints);
-                self.sleep(State::Line153LycGlitch, 12);
+                self.sleep(State::Line153LycGlitch, if self.hw_cgb() { 12 } else { 11 });
             }
             State::Line153LycGlitch => self.sleep(State::FrameEnd, LINE_LENGTH - 24),
             State::FrameEnd => {

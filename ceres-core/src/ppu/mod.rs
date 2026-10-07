@@ -133,6 +133,13 @@ impl Ppu {
         &mut self.bcp
     }
 
+    /// The HBlank HDMA request has been raised (the STAT mode bits turn to 0
+    /// a couple of dots before).
+    #[must_use]
+    pub const fn hdma_period(&self) -> bool {
+        matches!(self.mode(), Mode::HBlank) && self.d.hblank_hdma_pending() == 0
+    }
+
     #[must_use]
     pub const fn mode(&self) -> Mode {
         match self.stat & STAT_MODE_B {
