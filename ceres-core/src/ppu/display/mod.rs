@@ -70,6 +70,8 @@ pub(super) struct Display {
 
     /// The PPU entered `HBlank` (SameBoy state 33); consumed by the HDMA.
     hblank_hdma_edge: bool,
+    /// Dots until the HBlank HDMA request is raised (0: none pending).
+    hblank_hdma_delay: u8,
     /// The LCD was switched off with a non-zero STAT mode; consumed by the HDMA.
     lcd_off_hdma_edge: bool,
 
@@ -99,6 +101,7 @@ impl Default for Display {
             lcd_x: 0,
             line_has_fractional_scrolling: false,
             hblank_hdma_edge: false,
+            hblank_hdma_delay: 0,
             lcd_off_hdma_edge: false,
             bg_fifo: Fifo::default(),
             oam_fifo: Fifo::default(),
@@ -270,6 +273,12 @@ impl Ppu {
             }
 
             self.d.line_clock += 1;
+            if self.d.hblank_hdma_delay > 0 {
+                self.d.hblank_hdma_delay -= 1;
+                if self.d.hblank_hdma_delay == 0 {
+                    self.d.hblank_hdma_edge = true;
+                }
+            }
             if self.d.irq.line0_pulse > 0 {
                 self.d.irq.line0_pulse -= 1;
                 if self.d.irq.line0_pulse == 0 {

@@ -16,6 +16,9 @@ use {
     },
 };
 
+/// Dots from HBlankStart to the HBlank HDMA request.
+const HBLANK_HDMA_DELAY: u8 = 1;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum State {
@@ -332,6 +335,7 @@ impl Ppu {
                 self.stat &= !STAT_MODE_B;
                 self.d.irq.mode_for_interrupt = 0;
                 self.d.cpu.unlock_oam_vram();
+                self.d.hblank_hdma_delay = HBLANK_HDMA_DELAY;
                 self.stat_update(ints);
                 self.d.cfl += 2;
                 self.sleep(State::HBlankHdma, 2);
@@ -339,7 +343,6 @@ impl Ppu {
             }
             State::HBlankHdma => {
                 self.d.cpu.cgb_palettes_blocked = !self.double_speed();
-                self.d.hblank_hdma_edge = true;
                 self.d.cfl += 2;
                 self.sleep(State::HBlankPalettesUnlock, 2);
                 None

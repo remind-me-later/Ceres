@@ -1418,6 +1418,11 @@ impl Sm83 {
                 self.is_halted = true;
                 self.just_halted = true;
                 bus.set_halted(true);
+                if speed_switch {
+                    // A transfer requested before the CPU stopped goes on
+                    // during the wait of the speed switch.
+                    bus.tick_hdma();
+                }
             }
         }
     }
