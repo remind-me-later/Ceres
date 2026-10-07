@@ -58,6 +58,12 @@ impl Dma {
         self.current_dest != INACTIVE
     }
 
+    /// The next step of the transfer is its last one, which hands OAM back.
+    #[must_use]
+    pub const fn is_in_last_step(&self) -> bool {
+        self.current_dest == 0xA0
+    }
+
     /// CPU reads of OAM return 0xFF while the DMA owns it.
     #[must_use]
     pub const fn blocks_oam_read(&self) -> bool {

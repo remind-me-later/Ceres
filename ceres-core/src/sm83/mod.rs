@@ -68,6 +68,10 @@ pub trait Bus {
     /// a wake-up the DMA is given one M-cycle).
     fn dma_run(&mut self, wake: bool);
 
+    /// The CPU is about to halt: an OAM DMA whose last step is due takes it
+    /// first (a halted DMA does not move, and that step frees OAM).
+    fn dma_finish_before_halt(&mut self);
+
     /// Discards the time deferred so far (it was already accounted for).
     fn drop_deferred(&mut self);
 
@@ -951,6 +955,7 @@ impl Sm83 {
                 self.halt_bug = true;
             }
         } else {
+            bus.dma_finish_before_halt();
             self.is_halted = true;
             bus.set_halted(true);
         }
@@ -1768,6 +1773,12 @@ impl<A: AudioCallback> Bus for Gb<A> {
             self.dma.add_cycles(4);
         }
         self.run_dma();
+    }
+
+    fn dma_finish_before_halt(&mut self) {
+        if self.dma.is_in_last_step() {
+            self.dma_run(true);
+        }
     }
 
     fn drop_deferred(&mut self) {
