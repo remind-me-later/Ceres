@@ -13,118 +13,11 @@
 //! failure, and on a known failure that now passes. Run with `BLESS=1` to
 //! rewrite the lists.
 
-use ceres_core::{AudioCallback, ColorCorrectionMode, GbBuilder, Model, Sample};
-use ceres_test_runner::test_roms_dir;
-use std::path::{Path, PathBuf};
-
-/// Gambatte runs 15 frames from the post-boot state (the 16th is displayed).
-const FRAMES: u32 = 16;
-
-/// Gambatte's 8x8 hex digit glyphs (bit 7 = leftmost pixel, set = black).
-pub const GLYPHS: [[u8; 8]; 16] = [
-    [0x00, 0x7F, 0x41, 0x41, 0x41, 0x41, 0x41, 0x7F],
-    [0x00, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08],
-    [0x00, 0x7F, 0x01, 0x01, 0x7F, 0x40, 0x40, 0x7F],
-    [0x00, 0x7F, 0x01, 0x01, 0x3F, 0x01, 0x01, 0x7F],
-    [0x00, 0x41, 0x41, 0x41, 0x7F, 0x01, 0x01, 0x01],
-    [0x00, 0x7F, 0x40, 0x40, 0x7E, 0x01, 0x01, 0x7E],
-    [0x00, 0x7F, 0x40, 0x40, 0x7F, 0x41, 0x41, 0x7F],
-    [0x00, 0x7F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x10],
-    [0x00, 0x3E, 0x41, 0x41, 0x3E, 0x41, 0x41, 0x3E],
-    [0x00, 0x7F, 0x41, 0x41, 0x7F, 0x01, 0x01, 0x7F],
-    [0x00, 0x08, 0x22, 0x41, 0x7F, 0x41, 0x41, 0x41],
-    [0x00, 0x7E, 0x41, 0x41, 0x7E, 0x41, 0x41, 0x7E],
-    [0x00, 0x3E, 0x41, 0x40, 0x40, 0x40, 0x41, 0x3E],
-    [0x00, 0x7E, 0x41, 0x41, 0x41, 0x41, 0x41, 0x7E],
-    [0x00, 0x7F, 0x40, 0x40, 0x7F, 0x40, 0x40, 0x7F],
-    [0x00, 0x7F, 0x40, 0x40, 0x7F, 0x40, 0x40, 0x40],
-];
-
-struct NoAudio;
-
-impl AudioCallback for NoAudio {
-    fn audio_sample(&self, _l: Sample, _r: Sample) {}
-}
-
-/// The expected result string for `stem` on the given hardware, if any.
-fn expected(stem: &str, cgb: bool) -> Option<String> {
-    let (dmg_key, cgb_key) = if stem.contains("dmg08_cgb04c_out") {
-        (Some("dmg08_cgb04c_out"), Some("dmg08_cgb04c_out"))
-    } else if stem.contains("dmg08_out") {
-        (
-            Some("dmg08_out"),
-            stem.contains("cgb04c_out").then_some("cgb04c_out"),
-        )
-    } else if stem.contains("_out") {
-        (None, Some("_out"))
-    } else {
-        return None;
-    };
-    let key = if cgb { cgb_key } else { dmg_key }?;
-    let pos = stem.find(key)?;
-    let out = &stem[pos + key.len()..];
-    // Audio tests compare sound output, not the screen.
-    (!out.starts_with("audio")).then(|| out.to_string())
-}
-
-fn run(path: &Path, cgb: bool, expected: &str) -> bool {
-    let rom = std::fs::read(path).expect("read ROM");
-    let Ok(builder) = GbBuilder::new(48000, NoAudio)
-        .with_model(if cgb { Model::CgbC } else { Model::DmgB })
-        .with_run_bootrom(false)
-        .with_rom(rom.into_boxed_slice())
-    else {
-        return false;
-    };
-    let mut gb = builder.build();
-    gb.set_color_correction_mode(ColorCorrectionMode::Disabled);
-    for _ in 0..FRAMES {
-        gb.run_frame();
-    }
-
-    let fb = gb.pixel_data_rgba();
-    for (i, ch) in expected.chars().enumerate() {
-        let Some(digit) = ch.to_digit(16) else {
-            break;
-        };
-        let glyph = &GLYPHS[digit as usize];
-        for (y, row) in glyph.iter().enumerate() {
-            for x in 0..8 {
-                let p = (y * 160 + i * 8 + x) * 4;
-                let px = &fb[p..p + 3];
-                let black = px.iter().all(|c| c & 0xF8 == 0);
-                let white = px.iter().all(|c| c & 0xF8 == 0xF8);
-                let want_black = row & (0x80 >> x) != 0;
-                if (want_black && !black) || (!want_black && !white) {
-                    return false;
-                }
-            }
-        }
-    }
-    true
-}
-
-fn collect_roms(dir: &Path, out: &mut Vec<PathBuf>) {
-    let mut entries: Vec<_> = std::fs::read_dir(dir)
-        .expect("gambatte directory")
-        .filter_map(Result::ok)
-        .map(|e| e.path())
-        .collect();
-    entries.sort();
-    for path in entries {
-        if path.is_dir() {
-            collect_roms(&path, out);
-        } else if matches!(
-            path.extension().and_then(|e| e.to_str()),
-            Some("gb" | "gbc")
-        ) {
-            out.push(path);
-        }
-    }
-}
+use ceres_test_runner::gambatte::{collect_roms, expected, roms_dir, run_rom};
+use std::path::Path;
 
 fn check(cgb: bool, known: &str, known_path: &str) {
-    let root = test_roms_dir().join("gambatte");
+    let root = roms_dir();
     let mut roms = Vec::new();
     collect_roms(&root, &mut roms);
 
@@ -136,7 +29,7 @@ fn check(cgb: bool, known: &str, known_path: &str) {
             continue;
         };
         ran += 1;
-        if !run(path, cgb, &expected) {
+        if run_rom(path, cgb, expected.len()).as_deref() != Some(expected.as_str()) {
             let rel = path.strip_prefix(&root).expect("under root");
             failures.push(rel.to_string_lossy().replace('\\', "/"));
         }

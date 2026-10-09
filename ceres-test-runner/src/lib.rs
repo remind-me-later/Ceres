@@ -3,6 +3,7 @@
 //! This crate provides infrastructure for running Game Boy test ROMs
 //! and validating the emulator's accuracy.
 
+pub mod gambatte;
 pub mod test_runner;
 
 use test_runner::{
