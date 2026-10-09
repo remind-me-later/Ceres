@@ -115,6 +115,17 @@ pub trait Bus {
 
     /// The post-speed-switch halt expired since the last call.
     fn take_unhalt(&mut self) -> bool;
+
+    /// An HBlank transfer is requested and has not run yet, on a CGB-C
+    /// (gambatte's HALT then prefetches the next opcode).
+    fn hdma_request_pending(&self) -> bool;
+
+    /// HALT prefetched the next opcode for a pending transfer: the transfer
+    /// runs at the wake in the time of that fetch.
+    fn note_halt_prefetch(&mut self);
+
+    /// An interrupt dispatch undid the opcode HALT prefetched.
+    fn clear_halt_prefetch(&mut self);
 }
 
 #[expect(clippy::struct_excessive_bools, reason = "Independent CPU state flags")]
@@ -274,6 +285,11 @@ impl Sm83 {
             bus.wake_from_stop();
             bus.dma_run(true);
         } else if effective_ime && interrupt_pending {
+            if self.is_halted {
+                // The dispatch undoes the opcode HALT prefetched.
+                self.halt_bug = false;
+                bus.clear_halt_prefetch();
+            }
             self.is_halted = false;
             bus.wake_from_stop();
             bus.dma_run(true);
@@ -955,6 +971,12 @@ impl Sm83 {
                 self.halt_bug = true;
             }
         } else {
+            // A transfer requested during the HALT's fetch has the next
+            // opcode prefetched: it runs twice, as with the HALT bug.
+            if bus.hdma_request_pending() {
+                self.halt_bug = true;
+                bus.note_halt_prefetch();
+            }
             bus.dma_finish_before_halt();
             self.is_halted = true;
             bus.set_halted(true);
@@ -1787,6 +1809,9 @@ impl<A: AudioCallback> Bus for Gb<A> {
 
     fn tick_hdma(&mut self) {
         if self.hdma.is_on() {
+            if mem::take(&mut self.hdma_halt_prefetch) {
+                self.time_deferred -= 4;
+            }
             self.run_hdma();
         }
     }
@@ -1866,6 +1891,18 @@ impl<A: AudioCallback> Bus for Gb<A> {
 
     fn clear_speed_switch_halt(&mut self) {
         self.speed_switch.halt_countdown = 0;
+    }
+
+    fn note_halt_prefetch(&mut self) {
+        self.hdma_halt_prefetch = true;
+    }
+
+    fn clear_halt_prefetch(&mut self) {
+        self.hdma_halt_prefetch = false;
+    }
+
+    fn hdma_request_pending(&self) -> bool {
+        self.ppu.gambatte_stat() && self.hdma.hblank_requested()
     }
 
     fn take_unhalt(&mut self) -> bool {

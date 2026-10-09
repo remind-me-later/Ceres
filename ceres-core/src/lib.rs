@@ -75,6 +75,8 @@ pub struct Gb<A: AudioCallback> {
     /// (see the `Bus` trait docs in `sm83`). Only nonzero mid-step and for
     /// the interrupt dispatch's 2-T-cycle tail; never serialized.
     time_deferred: i32,
+    /// HALT prefetched the next opcode for a pending HBlank transfer.
+    hdma_halt_prefetch: bool,
     /// Undocumented CGB register at $FF72 (full R/W, init $00).
     /// Pan Docs "FF72-FF73 — Bits 0-7 (CGB Mode only)".
     undoc_ff72: u8,
@@ -454,6 +456,7 @@ impl<A: AudioCallback> Gb<A> {
             serial: Serial::default(),
             wram: Wram::power_on(model.is_cgb_hardware()),
             time_deferred: 0,
+            hdma_halt_prefetch: false,
             undoc_ff72: 0,
             undoc_ff73: 0,
             undoc_ff75: 0,
