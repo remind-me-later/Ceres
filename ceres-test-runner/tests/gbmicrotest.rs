@@ -49,10 +49,7 @@ const NOT_SELF_CHECKING: &[&str] = &[
 
 /// Hardware-verified failures: SameBoy (the model for the PPU/CPU timing)
 /// fails these in exactly the same way.
-const KNOWN_FAILURES: &[&str] = &[
-    "halt_op_dupe_delay.gb",
-    "stat_write_glitch_l154_d.gb",
-];
+const KNOWN_FAILURES: &[&str] = &["halt_op_dupe_delay.gb", "stat_write_glitch_l154_d.gb"];
 
 struct NoAudio;
 

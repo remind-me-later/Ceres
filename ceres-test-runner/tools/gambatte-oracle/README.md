@@ -26,8 +26,8 @@ grep window /tmp/oracle.txt | LC_ALL=C sort -k1,1 -k2,2 | diff - /tmp/ceres.txt
 
 `gambatte_runner` takes an optional path filter, so a family can be iterated on
 in seconds; the `gambatte` test (`cargo nextest run -p ceres-test-runner
---test gambatte --run-ignored only`) is still the one that guards the
-`gambatte_known_failures_{dmg,cgb}.txt` lists.
+--test gambatte --run-ignored only`) is still the one that guards the whole
+set: every ROM has to pass.
 
 ## Tracing
 
