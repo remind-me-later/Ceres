@@ -175,7 +175,7 @@ impl<A: AudioCallback> Gb<A> {
             .run_rtc(cycles.cast_unsigned() * if double_speed { 1 } else { 2 });
     }
 
-    fn inc_tima(&mut self) {
+    const fn inc_tima(&mut self) {
         self.clock.tima = self.clock.tima.wrapping_add(1);
 
         if self.clock.tima == 0 {
@@ -310,7 +310,7 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     /// The CPU just switched back to single speed.
-    pub(crate) fn left_double_speed(&mut self) {
+    pub(crate) const fn left_double_speed(&mut self) {
         self.clock.apu_delay = 0;
         self.clock.apu_odd = !self.clock.apu_odd;
     }
@@ -318,7 +318,7 @@ impl<A: AudioCallback> Gb<A> {
     /// A speed switch makes the timer see the STOP's DIV reset four cycles
     /// early when it is clocked at 16 cycles or slower: the reset counts as
     /// a falling edge of the tapped bit a bit sooner.
-    pub(crate) fn tima_speed_change_catch_up(&mut self) {
+    pub(crate) const fn tima_speed_change_catch_up(&mut self) {
         if self.key1.is_requested() && self.is_tac_enabled() && self.clock.tac & 3 != 0 {
             let mux = Self::sys_clk_tac_mux(self.clock.tac);
             let div = self.clock.div;
@@ -352,7 +352,7 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[inline]
-    pub fn write_tac(&mut self, val: u8) {
+    pub const fn write_tac(&mut self, val: u8) {
         // Timer glitch: the AND gate output falls when (old_enable AND old_div_bit) was 1
         // and (new_enable AND new_div_bit) is 0, causing a spurious TIMA increment.
         if (self.clock.tac & 4) != 0 {
@@ -368,7 +368,7 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[inline]
-    pub fn write_tima(&mut self, val: u8) {
+    pub const fn write_tima(&mut self, val: u8) {
         // Writing to TIMA during the "Reloaded" state (writes-ignore window,
         // `tima_reload_pending >= 5`) is dropped on the floor. Writing
         // during the "Reloading" window (the 4-T-cycle reads-0 window) or
@@ -389,7 +389,7 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[inline]
-    pub fn write_tma(&mut self, val: u8) {
+    pub const fn write_tma(&mut self, val: u8) {
         self.clock.tma = val;
         // If TMA is written during the reload window or the reloaded cycle,
         // the new value is used for TIMA.

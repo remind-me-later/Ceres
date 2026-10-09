@@ -33,7 +33,7 @@ impl Default for Serial {
 impl Serial {
     /// Sets the master clock flip-flop from the system counter (it toggles on
     /// every falling edge of bit 7, so it follows bit 8 until DIV is written).
-    pub fn set_master_clock(&mut self, val: bool) {
+    pub const fn set_master_clock(&mut self, val: bool) {
         self.master_clock = val;
     }
 

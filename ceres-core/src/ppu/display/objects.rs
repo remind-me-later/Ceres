@@ -228,7 +228,7 @@ impl Ppu {
         }
     }
 
-    pub(super) fn x_for_object_match(&self) -> u8 {
+    pub(super) const fn x_for_object_match(&self) -> u8 {
         let ret = self.d.position_in_line.wrapping_add(8);
         if ret > 240 { 0 } else { ret }
     }
@@ -259,7 +259,7 @@ impl Ppu {
     }
 
     /// DMG: disabling objects while an object is being fetched aborts it.
-    pub(in crate::ppu) fn abort_object_fetch_on_obj_disable(&mut self, val: u8) {
+    pub(in crate::ppu) const fn abort_object_fetch_on_obj_disable(&mut self, val: u8) {
         if !self.hw_cgb() && self.lcdc & 0x02 != 0 && val & 0x02 == 0 && self.d.obj_fetch.active {
             self.d.cfl -= self.d.wait - 1;
             self.d.wait = 1;

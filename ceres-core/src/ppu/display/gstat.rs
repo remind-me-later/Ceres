@@ -80,7 +80,7 @@ impl LateReg {
         seen
     }
 
-    fn set(&mut self, val: u8) {
+    const fn set(&mut self, val: u8) {
         self.val = val;
         self.pending = [None; 4];
     }
@@ -341,7 +341,7 @@ impl GStat {
     /// gambatte's `statChangeTriggersStatIrqDmg`: on the DMG any STAT write
     /// raises the interrupt in HBlank, VBlank or with LY=LYC, unless the line
     /// was already held.
-    fn stat_change_triggers_dmg(&self, old: u8, ds: bool) -> bool {
+    const fn stat_change_triggers_dmg(&self, old: u8, ds: bool) -> bool {
         let lyc = self.lyc_cmp(ds).0 == self.lyc_reg;
         if self.ly < LINES {
             if !self.m0_done {
@@ -397,7 +397,7 @@ impl GStat {
 impl Ppu {
     /// The CGB follows gambatte's model (up to revision C).
     #[must_use]
-    pub fn gambatte_stat(&self) -> bool {
+    pub const fn gambatte_stat(&self) -> bool {
         self.hw_cgb() && !model_ge_cgb_d(self.model)
     }
 
@@ -631,7 +631,7 @@ impl Ppu {
         self.d.gstat.lcdc_tracked = false;
     }
 
-    pub(in crate::ppu) fn gstat_set_lcdc(&mut self, val: u8) {
+    pub(in crate::ppu) const fn gstat_set_lcdc(&mut self, val: u8) {
         self.d.gstat.lcdc.set(val);
     }
 
@@ -666,7 +666,7 @@ impl Ppu {
 
     /// The CGB-C's palettes become accessible 2 cycles after mode 0 begins
     /// on gambatte's clock (`m0Time + 2`); `None` outside HBlank.
-    pub(in crate::ppu) fn gstat_palettes_unlocked(&self) -> Option<bool> {
+    pub(in crate::ppu) const fn gstat_palettes_unlocked(&self) -> Option<bool> {
         let g = &self.d.gstat;
         if !self.gambatte_stat() || !g.lcd_on || !g.hblank || g.ly >= LINES {
             return None;
@@ -711,7 +711,7 @@ impl Ppu {
     }
 
     /// Checks the clock against the start of a line on `line_clock`.
-    pub(super) fn gstat_line_end(&mut self, line: u8) {
+    pub(super) const fn gstat_line_end(&mut self, line: u8) {
         let g = &mut self.d.gstat;
         g.ly = line;
         g.h = LINE_H - 19;

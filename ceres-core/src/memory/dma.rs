@@ -308,7 +308,7 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     /// The OAM index `run_dma` will have reached after the next `cycles`.
-    pub(crate) fn dma_dest_after(&self, cycles: i32) -> u8 {
+    pub(crate) const fn dma_dest_after(&self, cycles: i32) -> u8 {
         let mut dest = self.dma.current_dest;
         if !self.dma.is_active() || self.hdma.cpu_halted() || self.clock.stopped {
             return dest;

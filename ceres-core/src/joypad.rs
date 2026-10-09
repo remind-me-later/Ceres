@@ -39,7 +39,7 @@ struct Sgb {
 }
 
 impl Sgb {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             command: [0; SGB_COMMAND_BYTES],
             command_write_index: 0,
@@ -51,12 +51,12 @@ impl Sgb {
         }
     }
 
-    fn clear_command(&mut self) {
+    const fn clear_command(&mut self) {
         self.command_write_index = 0;
         self.command = [0; SGB_COMMAND_BYTES];
     }
 
-    fn command_ready(&mut self) {
+    const fn command_ready(&mut self) {
         if self.command[0] >> 3 == SGB_MLT_REQ {
             self.player_count = (self.command[1] & 3) + 1;
             if self.player_count == 3 {
@@ -199,7 +199,7 @@ impl Joypad {
         // With no line selected a multiplayer SGB reports the player ID.
         if !self.actions_flag
             && !self.directions_flag
-            && let Some(sgb) = &self.sgb
+            && let Some(ref sgb) = self.sgb
             && sgb.player_count > 1
         {
             res = (res & 0xF0) | (0xF - sgb.current_player);
@@ -214,7 +214,7 @@ impl Joypad {
 
     pub fn write_joy(&mut self, val: u8) {
         let old = (u8::from(!self.actions_flag) << 5) | (u8::from(!self.directions_flag) << 4);
-        if let Some(sgb) = &mut self.sgb {
+        if let Some(ref mut sgb) = self.sgb {
             // The packet receiver only sees changes of the selected lines.
             if old != val & 0x30 {
                 sgb.write(old, val);

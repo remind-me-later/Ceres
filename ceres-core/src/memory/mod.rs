@@ -97,9 +97,7 @@ impl<A: AudioCallback> Gb<A> {
             #[cfg(feature = "game_genie")]
             {
                 let data = self.cart.read_rom(addr);
-                self.game_genie
-                    .query(addr, data)
-                    .map_or(data, |gg_data| gg_data)
+                self.game_genie.query(addr, data).unwrap_or(data)
             }
 
             #[cfg(not(feature = "game_genie"))]

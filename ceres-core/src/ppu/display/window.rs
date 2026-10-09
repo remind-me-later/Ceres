@@ -199,7 +199,7 @@ impl Ppu {
     /// On CGB, disabling the window while its start is still in progress (its
     /// first tile not pushed yet) calls it off: the pixels go on from the
     /// background where they were instead of waiting for the window's tile.
-    pub(in crate::ppu) fn cancel_window_start(&mut self) {
+    pub(in crate::ppu) const fn cancel_window_start(&mut self) {
         let window = &mut self.d.window;
         if window.being_fetched
             && window.wx_triggered
@@ -215,7 +215,7 @@ impl Ppu {
 
     /// Called by the CPU's LCDC write handler: disabling the window while a
     /// window tile is being fetched suppresses the pixel-insertion glitch.
-    pub fn note_window_disable(&mut self, old: u8, new: u8) {
+    pub const fn note_window_disable(&mut self, old: u8, new: u8) {
         if old & 0x20 != 0 && new & 0x20 == 0 && self.d.window.being_fetched {
             self.d.window.no_pixel_insertion_glitch = true;
         }

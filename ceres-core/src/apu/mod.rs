@@ -161,7 +161,7 @@ impl<A: AudioCallback> Apu<A> {
     }
 
     /// Resets everything but the wave RAM.
-    pub fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.enabled = false;
         self.nr50 = 0;
         self.nr51 = 0;

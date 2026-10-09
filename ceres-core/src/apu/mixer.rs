@@ -193,8 +193,8 @@ impl Mixer {
                     }
                 }
             }
-            left += self.acc[ch].0 as f32 / period * multiplier;
-            right += self.acc[ch].1 as f32 / period * multiplier;
+            left = (self.acc[ch].0 as f32 / period).mul_add(multiplier, left);
+            right = (self.acc[ch].1 as f32 / period).mul_add(multiplier, right);
         }
         self.acc = [(0, 0); N_CHANNELS];
         self.render_timer -= self.sample_period;

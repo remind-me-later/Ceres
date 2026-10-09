@@ -162,7 +162,10 @@ impl Cartridge {
         let rom_size = ROMSize::from_len(rom.len())?;
         let ram_size = RAMSize::new(rom[0x149])?;
         let (mut mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147])?;
-        if let Mbc::Mbc3 { is_mbc30, .. } = &mut mbc {
+        if let Mbc::Mbc3 {
+            ref mut is_mbc30, ..
+        } = mbc
+        {
             *is_mbc30 = rom_size.size_bytes() > 0x20_0000 || ram_size.size_bytes() > 0x8000;
         }
 
@@ -227,7 +230,7 @@ impl Cartridge {
             }
         }
 
-        match &self.mbc {
+        match self.mbc {
             Mbc::Mbc0 => 0xFF,
             Mbc::Mbc1 { .. } | Mbc::Mbc5 => mbc_read_ram(self, self.ram_enabled, addr),
             Mbc::Mbc2 => {
@@ -240,7 +243,7 @@ impl Cartridge {
                     0xFF
                 }
             }
-            Mbc::Mbc3 { rtc, .. } => rtc
+            Mbc::Mbc3 { ref rtc, .. } => rtc
                 .as_ref()
                 .and_then(|r| r.read(self.ram_enabled))
                 .unwrap_or_else(|| mbc_read_ram(self, self.ram_enabled, addr)),
@@ -262,7 +265,10 @@ impl Cartridge {
 
     #[must_use]
     pub const fn rtc(&self) -> Option<&Mbc3RTC> {
-        if let Mbc::Mbc3 { rtc: Some(rtc), .. } = &self.mbc {
+        if let Mbc::Mbc3 {
+            rtc: Some(ref rtc), ..
+        } = self.mbc
+        {
             Some(rtc)
         } else {
             None
@@ -271,7 +277,7 @@ impl Cartridge {
 
     #[must_use]
     pub const fn rtc_mut(&mut self) -> Option<&mut Mbc3RTC> {
-        if let Mbc::Mbc3 { rtc, .. } = &mut self.mbc {
+        if let Mbc::Mbc3 { ref mut rtc, .. } = self.mbc {
             rtc.as_mut()
         } else {
             None
@@ -279,7 +285,11 @@ impl Cartridge {
     }
 
     pub const fn run_rtc(&mut self, units: u32) {
-        if let Mbc::Mbc3 { rtc: Some(rtc), .. } = &mut self.mbc {
+        if let Mbc::Mbc3 {
+            rtc: Some(ref mut rtc),
+            ..
+        } = self.mbc
+        {
             rtc.run(units);
         }
     }
@@ -297,7 +307,7 @@ impl Cartridge {
             }
         }
 
-        match &mut self.mbc {
+        match self.mbc {
             Mbc::Mbc0 => (),
             Mbc::Mbc1 { .. } | Mbc::Mbc5 => {
                 mbc_write_ram(self, self.ram_enabled, addr, val);
@@ -310,7 +320,7 @@ impl Cartridge {
                     self.ram[ram_addr] = val & 0xF;
                 }
             }
-            Mbc::Mbc3 { rtc, .. } => rtc
+            Mbc::Mbc3 { ref mut rtc, .. } => rtc
                 .as_mut()
                 .and_then(|r| r.write(self.ram_enabled, val))
                 .unwrap_or_else(|| {
@@ -321,9 +331,9 @@ impl Cartridge {
 
     #[expect(clippy::too_many_lines)]
     pub fn write_rom(&mut self, addr: u16, val: u8) {
-        match &mut self.mbc {
+        match self.mbc {
             Mbc::Mbc0 => (),
-            Mbc::Mbc1 { bank_mode } => {
+            Mbc::Mbc1 { ref mut bank_mode } => {
                 const fn mbc1_rom_offsets(c: &Cartridge, bank_mode: bool) -> (u32, u32) {
                     // Multicart is a special MBC1 wiring found on some 8 Mbit
                     // (1 MiB / 64-bank) cartridges. It uses a 4-quadrant
@@ -448,7 +458,10 @@ impl Cartridge {
                     }
                 }
             }
-            Mbc::Mbc3 { rtc, is_mbc30 } => match addr {
+            Mbc::Mbc3 {
+                ref mut rtc,
+                ref mut is_mbc30,
+            } => match addr {
                 0x0000..=0x1FFF => {
                     self.ram_enabled = (val & 0x0F) == 0x0A;
                 }

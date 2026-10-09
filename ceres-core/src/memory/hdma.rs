@@ -235,6 +235,8 @@ impl<A: AudioCallback> Gb<A> {
                 } else {
                     // A general purpose transfer goes on with the next block.
                 }
+            } else {
+                // The block goes on.
             }
         }
 

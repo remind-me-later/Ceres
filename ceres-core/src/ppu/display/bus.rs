@@ -87,7 +87,7 @@ impl CpuAccess {
 
 impl Ppu {
     /// VRAM at `address` (0x2000.. is bank 1), no bus conflicts.
-    pub(super) fn vram_raw(&self, address: u16) -> u8 {
+    pub(super) const fn vram_raw(&self, address: u16) -> u8 {
         if address >= 0x2000 {
             self.vram.vram_at_bank(address - 0x2000, 1)
         } else {

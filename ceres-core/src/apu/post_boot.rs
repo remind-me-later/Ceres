@@ -103,7 +103,7 @@ impl<A: AudioCallback> Apu<A> {
         self.div_divider = pb.div_divider;
         self.sweep.set_countdown(pb.sweep_countdown);
 
-        let [ch1, ch2] = &mut self.squares;
+        let [ref mut ch1, ref mut ch2] = self.squares;
         ch1.post_boot(
             pb.ch1_active,
             pb.ch1_countdown,

@@ -44,7 +44,7 @@ impl Revision {
     }
 
     /// The CGB-D and E share a set of glitches.
-    pub fn is_cgb_de(self) -> bool {
+    pub const fn is_cgb_de(self) -> bool {
         matches!(self, Self::CgbD | Self::CgbE)
     }
 }

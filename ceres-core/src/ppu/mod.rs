@@ -517,7 +517,7 @@ impl Ppu {
         self.write_stat_reg(val, ints);
     }
 
-    pub fn write_wx(&mut self, val: u8) {
+    pub const fn write_wx(&mut self, val: u8) {
         self.wx = val;
     }
 

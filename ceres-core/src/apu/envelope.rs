@@ -121,7 +121,7 @@ impl Envelope {
         self.nrx2 = value;
     }
 
-    fn zombie_step(&mut self, value: u8, old_value: u8) {
+    const fn zombie_step(&mut self, value: u8, old_value: u8) {
         if self.clock.clock {
             self.countdown = value & 7;
         }

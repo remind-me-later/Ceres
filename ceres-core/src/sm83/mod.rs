@@ -202,27 +202,27 @@ impl Sm83 {
 
 impl Sm83 {
     /// Set the program counter.
-    pub fn set_pc(&mut self, pc: u16) {
+    pub const fn set_pc(&mut self, pc: u16) {
         self.pc = pc;
     }
 
-    pub fn set_af(&mut self, af: u16) {
+    pub const fn set_af(&mut self, af: u16) {
         self.af = af;
     }
 
-    pub fn set_bc(&mut self, bc: u16) {
+    pub const fn set_bc(&mut self, bc: u16) {
         self.bc = bc;
     }
 
-    pub fn set_de(&mut self, de: u16) {
+    pub const fn set_de(&mut self, de: u16) {
         self.de = de;
     }
 
-    pub fn set_hl(&mut self, hl: u16) {
+    pub const fn set_hl(&mut self, hl: u16) {
         self.hl = hl;
     }
 
-    pub fn set_sp(&mut self, sp: u16) {
+    pub const fn set_sp(&mut self, sp: u16) {
         self.sp = sp;
     }
 }
@@ -1118,7 +1118,7 @@ impl Sm83 {
 
     // Sets the debug breakpoint flag. Test ROMs like cgb-acid2 and dmg-acid2
     // use this instruction as a breakpoint to signal test completion.
-    fn ld_b_b(&mut self) {
+    const fn ld_b_b(&mut self) {
         self.ld_b_b_breakpoint = true;
         self.nop();
     }

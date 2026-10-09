@@ -50,7 +50,7 @@ pub struct Fetcher {
 }
 
 impl Ppu {
-    pub(super) fn fetcher_y_value(&self) -> u8 {
+    pub(super) const fn fetcher_y_value(&self) -> u8 {
         if self.d.window.wx_triggered {
             self.d.window.line
         } else {
@@ -238,7 +238,7 @@ impl Ppu {
         }
 
         let attr = self.d.fetcher.attributes;
-        let (low, high) = (self.d.fetcher.data[0], self.d.fetcher.data[1]);
+        let [low, high] = self.d.fetcher.data;
         self.d
             .bg_fifo
             .push_bg_row(low, high, attr & 7, attr & 0x80 != 0, attr & 0x20 != 0);

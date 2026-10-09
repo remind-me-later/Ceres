@@ -238,7 +238,7 @@ impl Ppu {
         self.d.wait = n;
     }
 
-    pub(in crate::ppu) fn lcd_off(&mut self) {
+    pub(in crate::ppu) const fn lcd_off(&mut self) {
         self.d.lcd_off_hdma_edge = self.stat & STAT_MODE_B != 0;
         self.d.objs.accessed_oam_row = NO_ROW;
         self.d.cfl = 0;

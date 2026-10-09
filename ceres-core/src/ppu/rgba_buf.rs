@@ -26,7 +26,7 @@ impl RgbaBuf {
     const RGB_BUF_SIZE: u32 = Self::PX_TOTAL as u32 * Self::BPP;
 
     pub fn clear(&mut self) {
-        for byte in self.data.iter_mut() {
+        for byte in &mut self.data {
             *byte = 0xff;
         }
     }
