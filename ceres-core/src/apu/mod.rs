@@ -257,6 +257,12 @@ impl<A: AudioCallback> Apu<A> {
         self.tick_envelopes(&c);
     }
 
+    /// NR52 bit 7: the APU is powered.
+    #[must_use]
+    pub const fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
     #[must_use]
     pub const fn pending_envelope_tick(&self) -> bool {
         self.pending_envelope_tick

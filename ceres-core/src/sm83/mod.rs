@@ -1858,6 +1858,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
         self.flush_deferred_time();
         if self.key1.is_enabled() {
             self.key1.set_double_speed(false);
+            self.left_double_speed();
         } else {
             self.speed_switch.countdown = 6;
             self.speed_switch.freeze = 1;

@@ -40,6 +40,13 @@ pub struct Clock {
     pub stopped: bool,
     /// A DIV write is in progress (the APU's sweep glitches depend on it).
     pub during_div_write: bool,
+    /// Cycles the frame sequencer of an APU that was already running lags
+    /// the DIV counter by: a speed switch to double speed leaves it a cycle
+    /// behind unless the number of switches back to single speed so far is
+    /// odd.
+    pub apu_delay: u16,
+    /// How many times the CPU left double speed (only its parity matters).
+    pub ds_exits: u8,
 }
 
 impl Default for Clock {
@@ -56,6 +63,8 @@ impl Default for Clock {
             tima_reload_state: 0,
             stopped: false,
             during_div_write: false,
+            apu_delay: 0,
+            ds_exits: 0,
         }
     }
 }
@@ -94,6 +103,7 @@ impl<A: AudioCallback> Gb<A> {
             match countdown.cmp(&cycles) {
                 Ordering::Equal => {
                     self.key1.toggle_double_speed();
+                    self.entered_double_speed();
                     self.speed_switch.countdown = 0;
                 }
                 Ordering::Greater => self.speed_switch.countdown -= cycles,
@@ -102,6 +112,7 @@ impl<A: AudioCallback> Gb<A> {
                     self.speed_switch.countdown = 0;
                     self.advance_cycles(countdown);
                     self.key1.toggle_double_speed();
+                    self.entered_double_speed();
                 }
             }
         }
@@ -282,6 +293,17 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
+    /// The CPU just switched to double speed.
+    fn entered_double_speed(&mut self) {
+        self.clock.apu_delay = u16::from(self.apu.is_enabled() && self.clock.ds_exits & 1 == 0);
+    }
+
+    /// The CPU just switched back to single speed.
+    pub(crate) fn left_double_speed(&mut self) {
+        self.clock.apu_delay = 0;
+        self.clock.ds_exits ^= 1;
+    }
+
     /// A speed switch makes the timer see the STOP's DIV reset four cycles
     /// early when it is clocked at 16 cycles or slower: the reset counts as
     /// a falling edge of the tapped bit a bit sooner.
@@ -302,6 +324,7 @@ impl<A: AudioCallback> Gb<A> {
         // Without this, the APU length counter / serial transfer can step
         // immediately after a DIV write, which breaks gambatte's
         // serial/sound testsuite.
+        self.clock.apu_delay = 0;
         self.clock.during_div_write = true;
         self.set_system_clk(0);
         self.clock.during_div_write = false;
@@ -385,10 +408,14 @@ impl<A: AudioCallback> Gb<A> {
 
         // The APU's frame sequencer follows the falling edge of an APU_DIV
         // bit; a rising edge arms the envelopes.
-        if triggers & apu_bit != 0 {
+        let (a_old, a_new) = (
+            self.clock.div.wrapping_sub(self.clock.apu_delay),
+            val.wrapping_sub(self.clock.apu_delay),
+        );
+        if a_old & !a_new & apu_bit != 0 {
             let ctx = self.apu_ctx();
             self.apu.div_event(&ctx);
-        } else if !self.clock.div & val & apu_bit != 0 {
+        } else if !a_old & a_new & apu_bit != 0 {
             self.apu.div_secondary_event();
         } else {
             // No edge of the APU bit.

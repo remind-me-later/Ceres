@@ -253,6 +253,10 @@ impl<A: AudioCallback> Gb<A> {
             | NR41..=NR44
             | NR50..=NR52
             | WAV_BEG..=WAV_END => {
+                if addr == NR52 && val & 0x80 != 0 && !self.apu.is_enabled() {
+                    // A sequencer started now has no phase to correct.
+                    self.clock.apu_delay = 0;
+                }
                 let ctx = self.apu_ctx();
                 self.apu.write(&ctx, usize::from(addr), val);
             }
