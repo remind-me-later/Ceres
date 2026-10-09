@@ -306,6 +306,12 @@ impl Ppu {
                 }
             }
             self.step_state_machine(ints);
+        } else if self.d.irq.line153_compare_pending {
+            self.d.irq.line153_compare_pending = false;
+            self.d.irq.ly_for_comparison = 153;
+            self.stat_update(ints);
+        } else {
+            // Nothing runs in the second half of a dot.
         }
         self.advance_wy_units(1);
     }

@@ -469,6 +469,7 @@ impl Ppu {
     /// Line 153: LY reads 0 for most of it, at a revision specific time.
     fn line_153(&mut self, ints: &mut Interrupts, state: State) -> Option<State> {
         let cgb_d = model_ge_cgb_d(self.model);
+        let early_lyzero = self.hw_cgb() && !cgb_d && self.double_speed();
         match state {
             State::Line153 => {
                 self.d.irq.ly_for_comparison = -1;
@@ -477,9 +478,24 @@ impl Ppu {
             }
             State::Line153Ly => {
                 self.ly = 153;
-                self.sleep(State::Line153LyZero, if cgb_d { 2 } else { 4 });
+                self.sleep(
+                    State::Line153LyZero,
+                    if cgb_d {
+                        2
+                    } else if early_lyzero {
+                        3
+                    } else {
+                        4
+                    },
+                );
             }
             State::Line153LyZero => {
+                if early_lyzero {
+                    // The compare comes in the half dot before this dot's work.
+                    self.d.irq.line153_compare_pending = true;
+                    self.sleep(State::Line153Compare, 3);
+                    return None;
+                }
                 if !cgb_d && !self.double_speed() {
                     self.ly = 0;
                 }
@@ -495,19 +511,36 @@ impl Ppu {
                     -1
                 };
                 self.stat_update(ints);
-                // The DMG compares with line 0 one dot later.
-                self.sleep(State::Line153CompareZero, if self.hw_cgb() { 4 } else { 5 });
+                // The DMG compares with line 0 one dot later, and so does the
+                // CGB in double speed.
+                let compare_zero = if self.hw_cgb() && !self.double_speed() {
+                    4
+                } else {
+                    5
+                };
+                self.sleep(State::Line153CompareZero, compare_zero);
             }
             State::Line153CompareZero => {
                 self.d.irq.ly_for_comparison = 0;
                 self.stat_update(ints);
-                self.sleep(State::Line153LycGlitch, if self.hw_cgb() { 12 } else { 11 });
+                let rest = if self.hw_cgb() && !self.double_speed() {
+                    12
+                } else {
+                    11
+                };
+                self.sleep(State::Line153LycGlitch, rest);
             }
             State::Line153LycGlitch => self.sleep(State::FrameEnd, LINE_LENGTH - 24),
             State::FrameEnd => {
                 self.d.current_line = 0;
                 self.d.window.wy_triggered = false;
-                self.d.window.line0_wy_countdown = if self.hw_cgb() { 7 } else { 6 };
+                self.d.window.line0_wy_countdown = if self.double_speed() {
+                    8
+                } else if self.hw_cgb() {
+                    7
+                } else {
+                    6
+                };
                 self.line_start();
             }
             _ => unreachable!(),

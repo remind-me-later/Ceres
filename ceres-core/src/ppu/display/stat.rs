@@ -12,6 +12,10 @@ use {
 /// condition as VBlank starts.
 pub const MODE_VBLANK_ENTRY: i8 = 4;
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Independent interrupt line and glitch flags"
+)]
 #[derive(Clone)]
 pub struct StatIrq {
     /// `ly_for_comparison`; `-1` is SameBoy's `(uint16_t)-1`.
@@ -27,6 +31,9 @@ pub struct StatIrq {
     pub entry_stat: u8,
     /// Dots until line 0's mode 2 interrupt condition pulses (0: none).
     pub line0_pulse: u8,
+    /// The LYC compare of line 153 runs in the second half of the current dot
+    /// (CGB-C in double speed).
+    pub line153_compare_pending: bool,
 }
 
 impl Default for StatIrq {
@@ -39,6 +46,7 @@ impl Default for StatIrq {
             delayed_glitch_hblank_interrupt: false,
             entry_stat: 0,
             line0_pulse: 0,
+            line153_compare_pending: false,
         }
     }
 }
