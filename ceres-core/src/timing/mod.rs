@@ -42,11 +42,12 @@ pub struct Clock {
     pub during_div_write: bool,
     /// Cycles the frame sequencer of an APU that was already running lags
     /// the DIV counter by: a speed switch to double speed leaves it a cycle
-    /// behind unless the number of switches back to single speed so far is
-    /// odd.
+    /// behind when `apu_odd` is set.
     pub apu_delay: u16,
-    /// How many times the CPU left double speed (only its parity matters).
-    pub ds_exits: u8,
+    /// gambatte's `lastUpdate_ % 2`: odd for an APU powered on in single
+    /// speed, even in double speed, flipped by each switch back to single
+    /// speed.
+    pub apu_odd: bool,
 }
 
 impl Default for Clock {
@@ -64,7 +65,7 @@ impl Default for Clock {
             stopped: false,
             during_div_write: false,
             apu_delay: 0,
-            ds_exits: 0,
+            apu_odd: true,
         }
     }
 }
@@ -298,13 +299,20 @@ impl<A: AudioCallback> Gb<A> {
 
     /// The CPU just switched to double speed.
     fn entered_double_speed(&mut self) {
-        self.clock.apu_delay = u16::from(self.apu.is_enabled() && self.clock.ds_exits & 1 == 0);
+        self.clock.apu_delay = u16::from(self.apu.is_enabled() && self.clock.apu_odd);
+    }
+
+    /// The APU is powered on: a sequencer started now has no phase to
+    /// correct, and its parity follows the current speed.
+    pub(crate) const fn apu_powered_on(&mut self) {
+        self.clock.apu_delay = 0;
+        self.clock.apu_odd = !self.key1.is_enabled();
     }
 
     /// The CPU just switched back to single speed.
     pub(crate) fn left_double_speed(&mut self) {
         self.clock.apu_delay = 0;
-        self.clock.ds_exits ^= 1;
+        self.clock.apu_odd = !self.clock.apu_odd;
     }
 
     /// A speed switch makes the timer see the STOP's DIV reset four cycles
