@@ -8,6 +8,10 @@ use {
     },
 };
 
+/// Half-dots a CGB write to LYC that drops the LYC condition leaves it
+/// blocking the mode 0 and mode 2 conditions (gambatte's `MStatIrqEvent`).
+const LYC_DROP_HOLD: u8 = 8;
+
 /// `mode_for_interrupt` while the line is held by the HBlank or the OAM
 /// condition as VBlank starts.
 pub const MODE_VBLANK_ENTRY: i8 = 4;
@@ -34,6 +38,9 @@ pub struct StatIrq {
     /// The LYC compare of line 153 runs in the second half of the current dot
     /// (CGB-C in double speed).
     pub line153_compare_pending: bool,
+    /// Half-dots the LYC condition keeps blocking the mode 0 and mode 2
+    /// conditions after a CGB write to LYC dropped it.
+    pub lyc_line_hold: u8,
 }
 
 impl Default for StatIrq {
@@ -47,6 +54,7 @@ impl Default for StatIrq {
             entry_stat: 0,
             line0_pulse: 0,
             line153_compare_pending: false,
+            lyc_line_hold: 0,
         }
     }
 }
@@ -89,7 +97,9 @@ impl Ppu {
             _ => false,
         };
 
-        if self.stat & STAT_IF_LYC_B != 0 && self.d.irq.lyc_interrupt_line {
+        if self.stat & STAT_IF_LYC_B != 0
+            && (self.d.irq.lyc_interrupt_line || self.d.irq.lyc_line_hold > 0)
+        {
             self.d.irq.stat_interrupt_line = true;
         }
 
@@ -121,6 +131,9 @@ impl Ppu {
             self.d.irq.ly_for_comparison = 153;
             self.stat_update(ints);
             self.d.irq.ly_for_comparison = 0;
+        }
+        if cgb && !self.double_speed() && val != self.lyc && self.d.irq.lyc_interrupt_line {
+            self.d.irq.lyc_line_hold = LYC_DROP_HOLD;
         }
         self.lyc = val;
         if !cgb

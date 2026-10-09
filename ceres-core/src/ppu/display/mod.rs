@@ -313,6 +313,12 @@ impl Ppu {
         } else {
             // Nothing runs in the second half of a dot.
         }
+        if self.d.irq.lyc_line_hold > 0 {
+            self.d.irq.lyc_line_hold -= 1;
+            if self.d.irq.lyc_line_hold == 0 {
+                self.stat_update(ints);
+            }
+        }
         self.advance_wy_units(1);
     }
 }
