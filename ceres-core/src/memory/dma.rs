@@ -316,6 +316,10 @@ impl<A: AudioCallback> Gb<A> {
         if !self.dma.is_active() || self.hdma.cpu_halted() || self.clock.stopped {
             return;
         }
+        // The halt of a speed switch holds the OAM DMA until the CPU resumes.
+        if self.speed_switch.unhalt {
+            return;
+        }
         let cgb = self.model.is_cgb_hardware();
         let mut cycles = self.dma.cycles + self.dma.cycles_modulo;
         while cycles >= 4 {

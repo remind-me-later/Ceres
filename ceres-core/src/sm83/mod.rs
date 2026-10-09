@@ -1425,12 +1425,17 @@ impl Sm83 {
             }
             bus.enter_stop(self.ime);
         }
+        // A speed switch with an HBlank transfer requested prefetches the
+        // second byte of STOP, which then runs as an opcode (gambatte).
+        let prefetch = speed_switch && bus.hdma_request_pending();
 
         // When entering with IF&IE set, the second byte of STOP is actually
         // executed.
         if !interrupt_pending {
             bus.read(self.pc);
-            self.pc = self.pc.wrapping_add(1);
+            if !prefetch {
+                self.pc = self.pc.wrapping_add(1);
+            }
         }
 
         if speed_switch {
@@ -1916,6 +1921,11 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 || self.hdma.switch_state() == SwitchHdma::Requested
             {
                 self.hdma.request_hblank();
+            }
+            if self.hdma.switch_state() == SwitchHdma::Requested {
+                // The transfer dropped at the switch runs in the time of the
+                // opcode prefetched then.
+                self.hdma_halt_prefetch = true;
             }
         }
         unhalt
