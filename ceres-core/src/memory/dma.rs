@@ -21,6 +21,10 @@ pub struct Dma {
     reg: u8,
     /// A new transfer was started while another one was running.
     restarting: bool,
+    /// The OAM index the interrupted transfer was about to write when it
+    /// was restarted: it still writes it, from the new source, during the
+    /// new transfer's start-up delay (gambatte's `oamDmaStartPos_`).
+    restart_at: Option<u8>,
 }
 
 impl Default for Dma {
@@ -32,6 +36,7 @@ impl Default for Dma {
             current_src: 0,
             reg: 0xFF,
             restarting: false,
+            restart_at: None,
         }
     }
 }
@@ -98,6 +103,9 @@ impl Dma {
 
     pub fn write(&mut self, val: u8) {
         self.restarting = self.current_dest != INACTIVE && self.current_dest != 0xA0;
+        self.restart_at = (1..0xA0)
+            .contains(&self.current_dest)
+            .then_some(self.current_dest);
         self.cycles = 0;
         self.cycles_modulo = 2;
         self.current_dest = 0xFF;
@@ -125,8 +133,8 @@ impl<A: AudioCallback> Gb<A> {
         if !dma.is_active() || addr >= 0xFE00 || self.hdma.is_transferring() {
             return false;
         }
-        // Warm-up.
-        if dma.current_dest == 0xFF || dma.current_dest == 0 {
+        // Warm-up, unless a restarted transfer is still writing.
+        if dma.current_dest == 0xFF || (dma.current_dest == 0 && dma.restart_at.is_none()) {
             return false;
         }
         // Shortcut for the DMA's own access flow.
@@ -156,6 +164,12 @@ impl<A: AudioCallback> Gb<A> {
         }
         let cgb = self.model.is_cgb_hardware();
         let src = self.dma.current_src;
+        if let Some(at) = self.dma.restart_at
+            && self.dma.current_dest == 0
+        {
+            // The byte the interrupted transfer just wrote.
+            return Some(src.wrapping_add(u16::from(at)));
+        }
         if cgb && bus_for_addr(cgb, addr) == Bus::Main && src >= 0xE000 {
             // Cart specific.
             return None;
@@ -325,11 +339,18 @@ impl<A: AudioCallback> Gb<A> {
         while cycles >= 4 {
             cycles -= 4;
             if self.dma.current_dest >= 0xA0 {
+                if self.dma.current_dest == 0xFF
+                    && let Some(at) = self.dma.restart_at
+                {
+                    let value = self.dma_read(self.dma.current_src.wrapping_add(u16::from(at)));
+                    self.ppu.write_oam_by_dma(u16::from(at) | 0xFE00, value);
+                }
                 self.dma.current_dest = self.dma.current_dest.wrapping_add(1);
                 self.ppu.dma_finished(&mut self.ints);
                 break;
             }
             let dest = self.dma.current_dest;
+            self.dma.restart_at = None;
             self.dma.current_dest = self.dma.current_dest.wrapping_add(1);
             let src = self.dma.current_src;
             if self.hdma.is_transferring()
