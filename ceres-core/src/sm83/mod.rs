@@ -1556,11 +1556,13 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 self.time_deferred = 3;
             }
             ConflictType::StatCgb => {
-                // The LYC bit behaves differently.
+                // The LYC and the VBlank enables reach the PPU a dot after the
+                // others (the HBlank one too when it is turned off).
+                const LATE: u8 = 0x40 | 0x10;
+
                 let old = self.ppu.read_stat();
                 self.flush_deferred_time();
-                let mut early = (old & 0x40) | (val & !0x40);
-                // Turning the HBlank source off takes a dot longer.
+                let mut early = (old & LATE) | (val & !LATE);
                 early |= old & !val & 0x08;
                 if val & !old & 0x40 != 0 {
                     // Enabling the LYC source: the enables this write clears go
