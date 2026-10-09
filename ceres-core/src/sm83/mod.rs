@@ -123,9 +123,6 @@ pub trait Bus {
     /// HALT prefetched the next opcode for a pending transfer: the transfer
     /// runs at the wake in the time of that fetch.
     fn note_halt_prefetch(&mut self);
-
-    /// An interrupt dispatch undid the opcode HALT prefetched.
-    fn clear_halt_prefetch(&mut self);
 }
 
 #[expect(clippy::struct_excessive_bools, reason = "Independent CPU state flags")]
@@ -284,12 +281,13 @@ impl Sm83 {
             self.is_halted = false;
             bus.wake_from_stop();
             bus.dma_run(true);
+        } else if self.is_halted && self.halt_bug && effective_ime && interrupt_pending {
+            // The opcode HALT prefetched for a transfer runs before the
+            // interrupt is dispatched (gambatte's `setMinIntTime`).
+            self.is_halted = false;
+            bus.wake_from_stop();
+            bus.dma_run(true);
         } else if effective_ime && interrupt_pending {
-            if self.is_halted {
-                // The dispatch undoes the opcode HALT prefetched.
-                self.halt_bug = false;
-                bus.clear_halt_prefetch();
-            }
             self.is_halted = false;
             bus.wake_from_stop();
             bus.dma_run(true);
@@ -1900,10 +1898,6 @@ impl<A: AudioCallback> Bus for Gb<A> {
 
     fn note_halt_prefetch(&mut self) {
         self.hdma_halt_prefetch = true;
-    }
-
-    fn clear_halt_prefetch(&mut self) {
-        self.hdma_halt_prefetch = false;
     }
 
     fn hdma_request_pending(&self) -> bool {
