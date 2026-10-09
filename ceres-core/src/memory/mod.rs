@@ -8,7 +8,7 @@ mod wram;
 use crate::{AudioCallback, Model, ppu};
 use crate::{CgbMode, Gb};
 pub use dma::Dma;
-pub use hdma::Hdma;
+pub use hdma::{Hdma, SwitchHdma};
 pub use hram::Hram;
 pub use key1::{Key1, SpeedSwitch};
 pub use wram::Wram;
@@ -307,8 +307,9 @@ impl<A: AudioCallback> Gb<A> {
             HDMA3 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.write_hdma3(val),
             HDMA4 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.write_hdma4(val),
             HDMA5 if matches!(self.cgb_mode, CgbMode::Cgb) => {
-                let in_hblank =
-                    matches!(self.ppu.mode(), ppu::Mode::HBlank) && !self.ppu.at_oam_scan_edge();
+                let in_hblank = self.ppu.gstat_hdma_enable_in_hblank().unwrap_or_else(|| {
+                    matches!(self.ppu.mode(), ppu::Mode::HBlank) && !self.ppu.at_oam_scan_edge()
+                });
                 self.hdma.write_hdma5(val, in_hblank);
             }
             BCPS if self.is_cgb() => self.ppu.bcp_mut().set_spec(val),

@@ -13,6 +13,8 @@ use crate::{AudioCallback, Gb, Model};
 )]
 #[derive(Default)]
 pub struct Hdma {
+    /// gambatte's `haltHdmaState_` for a speed switch on the CGB-C.
+    switch_state: SwitchHdma,
     /// STAT mode was non-zero when the CPU last halted/stopped; an `HBlank`
     /// transfer only starts on wake-up if so.
     allow_on_wake: bool,
@@ -25,7 +27,52 @@ pub struct Hdma {
     steps_left: u16,
 }
 
+/// What a speed switch's halt does with the `HBlank` transfer: request it
+/// at the wake if the wake is in an `HBlank` that did not request it yet
+/// (`Low`), not (`High`), or in any case (`Requested`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SwitchHdma {
+    #[default]
+    Low,
+    High,
+    Requested,
+}
+
 impl Hdma {
+    #[must_use]
+    pub const fn switch_state(&self) -> SwitchHdma {
+        self.switch_state
+    }
+
+    pub const fn set_switch_state(&mut self, state: SwitchHdma) {
+        self.switch_state = state;
+    }
+
+    /// An `HBlank` transfer is requested and has not run yet.
+    #[must_use]
+    pub const fn hblank_requested(&self) -> bool {
+        self.on && self.on_hblank
+    }
+
+    #[must_use]
+    pub const fn hblank_enabled(&self) -> bool {
+        self.on_hblank
+    }
+
+    /// The request of an `HBlank` transfer is dropped.
+    pub const fn ack_hblank_request(&mut self) {
+        if self.on_hblank {
+            self.on = false;
+        }
+    }
+
+    /// An `HBlank` transfer is requested.
+    pub const fn request_hblank(&mut self) {
+        if self.on_hblank {
+            self.on = true;
+        }
+    }
+
     #[must_use]
     pub const fn is_on(&self) -> bool {
         self.on

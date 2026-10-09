@@ -597,6 +597,29 @@ impl Ppu {
         self.d.gstat.lcdc.set(val);
     }
 
+    /// An HBlank HDMA enabled now starts with the current HBlank (gambatte's
+    /// `isHdmaPeriod(cc + 4)`); `None` before mode 0 began.
+    pub fn gstat_hdma_enable_in_hblank(&self) -> Option<bool> {
+        self.gstat_hdma_period(4)
+    }
+
+    /// gambatte's `isHdmaPeriod(cc + offset)`; `None` before mode 0 began.
+    pub fn gstat_hdma_period(&self, offset: i64) -> Option<bool> {
+        let g = &self.d.gstat;
+        if !self.gambatte_stat() || !g.lcd_on {
+            return None;
+        }
+        if g.ly >= LINES {
+            return Some(false);
+        }
+        if !g.hblank {
+            return None;
+        }
+        let ds = self.double_speed();
+        let at = g.h + GStat::cc(ds, offset);
+        Some(at + GStat::cc(ds, 3 + 3 * i64::from(ds)) < LINE_H && at >= g.hblank_h + 3)
+    }
+
     /// HBlank began.
     pub(super) const fn gstat_hblank(&mut self) {
         self.d.gstat.hblank = true;
