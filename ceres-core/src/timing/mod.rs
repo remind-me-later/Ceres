@@ -282,6 +282,19 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
+    /// A speed switch makes the timer see the STOP's DIV reset four cycles
+    /// early when it is clocked at 16 cycles or slower: the reset counts as
+    /// a falling edge of the tapped bit a bit sooner.
+    pub(crate) fn tima_speed_change_catch_up(&mut self) {
+        if self.key1.is_requested() && self.is_tac_enabled() && self.clock.tac & 3 != 0 {
+            let mux = Self::sys_clk_tac_mux(self.clock.tac);
+            let div = self.clock.div;
+            if div & mux == 0 && div.wrapping_add(4) & mux != 0 {
+                self.inc_tima();
+            }
+        }
+    }
+
     #[inline]
     pub fn write_div(&mut self) {
         // Writing DIV resets the system clock and the APU's internal phase

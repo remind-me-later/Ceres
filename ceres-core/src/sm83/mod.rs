@@ -1839,6 +1839,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
     }
 
     fn enter_stop(&mut self, ime: bool) {
+        self.tima_speed_change_catch_up();
         self.write_div();
         if !ime {
             self.clock.div_cycles = -4;
