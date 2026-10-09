@@ -148,7 +148,6 @@ sprites/late_sizechange_sp01_ds_1_cgb04c_out0.gbc
 sprites/late_sizechange_sp39_ds_1_cgb04c_out0.gbc
 vram_m3/preread_lcdoffset2_1_cgb04c_out0.gbc
 vram_m3/prewrite_lcdoffset2_1_cgb04c_out1.gbc
-window/arg/late_wy_1_dmg08_cgb04c_out0.gbc
 window/arg/late_wy_1toFF_ds_2_cgb04c_out3.gbc
 window/arg/late_wy_1toFF_lcdoffset1_1_cgb04c_out0.gbc
 window/arg/late_wy_FFto0_ly2_ds_1_cgb04c_out3.gbc
@@ -172,8 +171,5 @@ window/late_enable_afterVblank_ds_lcdoffset1_2_cgb04c_out0.gbc
 window/late_reenable_ds_2_cgb04c_out0.gbc
 window/late_reenable_scx3_2_dmg08_out3_cgb04c_out0.gbc
 window/late_scx_late_disable_1_dmg08_out3_cgb04c_out0.gbc
-window/late_wy_1_dmg08_cgb04c_out0.gbc
 window/late_wy_ds_2_cgb04c_out3.gbc
-window/late_wy_ds_lcdoffset1_1_cgb04c_out0.gbc
-window/late_wy_lcdoffset1_1_cgb04c_out0.gbc
 window/m2int_wxA6_spxA7_m0irq_2_dmg08_cgb04c_out2.gbc

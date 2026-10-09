@@ -20,6 +20,8 @@ pub struct Window {
     pub wy_triggered: bool,
     pub being_fetched: bool,
     pub wy_check_scheduled: bool,
+    /// Dots until the WY trigger of line 0 is decided (0: not pending).
+    pub line0_wy_countdown: u8,
     /// SameBoy's `wy_check_modulo`: time since the LCD was turned on modulo 8,
     /// in units of half a dot (a T-cycle in double speed, two per dot in
     /// single speed).
@@ -41,6 +43,7 @@ impl Default for Window {
             wy_triggered: false,
             being_fetched: false,
             wy_check_scheduled: false,
+            line0_wy_countdown: 0,
             wy_units: 0,
             wy_just_checked: false,
             cgb_wx_glitch: false,

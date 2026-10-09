@@ -233,6 +233,7 @@ impl Ppu {
         self.d.current_line = 0;
         self.d.irq.ly_for_comparison = 0;
         self.d.window.wy_triggered = false;
+        self.d.window.line0_wy_countdown = 0;
         self.d.cpu.unlock_all();
     }
 
@@ -281,6 +282,14 @@ impl Ppu {
                 self.d.hblank_hdma_delay -= 1;
                 if self.d.hblank_hdma_delay == 0 {
                     self.d.hblank_hdma_edge = true;
+                }
+            }
+            if self.d.window.line0_wy_countdown > 0 {
+                self.d.window.line0_wy_countdown -= 1;
+                if self.d.window.line0_wy_countdown == 0 {
+                    // The trigger of line 0 is decided afresh: a WY that
+                    // changed since the line began can also take it away.
+                    self.d.window.wy_triggered = self.lcdc & 0x20 != 0 && self.wy == 0;
                 }
             }
             if self.d.irq.line0_pulse > 0 {

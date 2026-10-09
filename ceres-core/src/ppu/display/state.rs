@@ -507,6 +507,7 @@ impl Ppu {
             State::FrameEnd => {
                 self.d.current_line = 0;
                 self.d.window.wy_triggered = false;
+                self.d.window.line0_wy_countdown = if self.hw_cgb() { 7 } else { 6 };
                 self.line_start();
             }
             _ => unreachable!(),
