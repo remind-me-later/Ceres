@@ -71,6 +71,9 @@ pub struct Ppu {
     wx: u8,
     wy: u8,
     d: display::Display,
+    /// Half-dots the display already ran ahead of the CPU (see
+    /// `Gb::ack_interrupt`) and must not run again.
+    skip_units: u8,
 }
 
 impl Default for Ppu {
@@ -99,6 +102,7 @@ impl Default for Ppu {
             wx: 0,
             wy: 0,
             d: display::Display::default(),
+            skip_units: 0,
         }
     }
 }
@@ -282,8 +286,35 @@ impl Ppu {
             return;
         }
         for _ in 0..if double_speed { 1 } else { 2 } {
+            if self.skip_units > 0 {
+                self.skip_units -= 1;
+                continue;
+            }
             self.run_display(ints);
         }
+    }
+
+    /// Runs the display `cycles` T-cycles ahead of the CPU, which will not
+    /// run those cycles again. Only done around the end of the frame, where
+    /// the LYC compare of line 153 falls close to the acknowledge of an
+    /// interrupt; the other interrupt sources do not look ahead.
+    pub fn run_ahead(
+        &mut self,
+        ints: &mut Interrupts,
+        cgb_mode: CgbMode,
+        double_speed: bool,
+        cycles: i32,
+    ) {
+        if self.lcdc & LCDC_ON_B == 0 || self.d.current_line() < 152 {
+            return;
+        }
+        for _ in 0..cycles {
+            self.tick_t_cycle(ints, cgb_mode, double_speed);
+        }
+        let units = cycles * if double_speed { 1 } else { 2 };
+        self.skip_units = self
+            .skip_units
+            .saturating_add(u8::try_from(units).unwrap_or(u8::MAX));
     }
 
     pub const fn set_color_correction_mode(&mut self, mode: ColorCorrectionMode) {

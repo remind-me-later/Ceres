@@ -1733,6 +1733,12 @@ impl<A: AudioCallback> Bus for Gb<A> {
     }
 
     fn ack_interrupt(&mut self, bit: u8) {
+        // Gambatte runs the LCD two cycles ahead of an acknowledge: the LYC
+        // interrupt that the compare around line 153 raises that soon counts
+        // as already requested and is swallowed by the acknowledge.
+        let double_speed = self.key1.is_enabled();
+        self.ppu
+            .run_ahead(&mut self.ints, self.cgb_mode, double_speed, 2);
         // On the CGB a timer interrupt due within the next cycles counts as
         // already requested: acknowledging the timer bit swallows it.
         if self.model.is_cgb_hardware() {
