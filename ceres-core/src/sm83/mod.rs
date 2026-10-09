@@ -1576,6 +1576,12 @@ impl<A: AudioCallback> Bus for Gb<A> {
             }
             // The DMG STAT-write bug is basically the STAT register being
             // read as FF for a single T-cycle.
+            ConflictType::StatDmg if self.ppu.gambatte_irq() => {
+                // The STAT write bug is in the PPU's STAT interrupt events.
+                self.flush_deferred_time();
+                self.write_mem(addr, val);
+                self.time_deferred = 4;
+            }
             ConflictType::StatDmg => {
                 self.flush_deferred_time();
                 // The write glitches the register for a dot (all the enables are

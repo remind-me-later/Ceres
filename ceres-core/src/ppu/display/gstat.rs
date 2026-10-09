@@ -100,6 +100,7 @@ pub struct GStat {
 
     /// STAT as the LCD sees it (`statReg_`).
     stat: u8,
+    cgb: bool,
 
     // `LycIrq`.
     lyc_time: u64,
@@ -139,6 +140,7 @@ impl Default for GStat {
             ly: 0,
             h: 0,
             stat: 0,
+            cgb: true,
             lyc_time: DISABLED,
             lyc_src: 0,
             lyc_stat_src: 0,
@@ -228,6 +230,13 @@ impl GStat {
         self.lyc_src = lyc;
         self.lyc_time = self.lyc_time.min(src_time);
         let left = self.until(self.lyc_time, ds);
+        if !self.cgb {
+            if left > 4 || src_time != self.lyc_time {
+                self.lyc_reg = lyc;
+            }
+            self.lyc_stat = stat;
+            return;
+        }
         if left > 6 + 4 * i64::from(ds) || (src_time != self.lyc_time && left > 2) {
             self.lyc_reg = lyc;
         }
@@ -329,7 +338,24 @@ impl GStat {
         }
     }
 
+    /// gambatte's `statChangeTriggersStatIrqDmg`: on the DMG any STAT write
+    /// raises the interrupt in HBlank, VBlank or with LY=LYC, unless the line
+    /// was already held.
+    fn stat_change_triggers_dmg(&self, old: u8, ds: bool) -> bool {
+        let lyc = self.lyc_cmp(ds).0 == self.lyc_reg;
+        if self.ly < LINES {
+            if !self.m0_done {
+                return lyc && old & LYC_EN == 0;
+            }
+            return old & M0_EN == 0 && !(lyc && old & LYC_EN != 0);
+        }
+        old & M1_EN == 0 && !(lyc && old & LYC_EN != 0)
+    }
+
     fn stat_change_triggers(&self, old: u8, data: u8, ds: bool) -> bool {
+        if !self.cgb {
+            return self.stat_change_triggers_dmg(old, ds);
+        }
         if data & !old & (LYC_EN | M2_EN | M1_EN | M0_EN) == 0 {
             return false;
         }
@@ -347,7 +373,8 @@ impl GStat {
             return self.stat & M0_EN != 0 && !self.m0_ahead() && data == self.ly;
         }
         self.stat & M1_EN != 0
-            && !(self.ly == 153 && self.time_to_next_ly(ds) <= 2 + 2 * i64::from(ds) + 2)
+            && !(self.ly == 153
+                && self.time_to_next_ly(ds) <= 2 + 2 * i64::from(ds) + 2 * i64::from(self.cgb))
     }
 
     fn lyc_change_triggers(&self, old: u8, data: u8, ds: bool) -> bool {
@@ -355,8 +382,9 @@ impl GStat {
             return false;
         }
         let (mut cmp_ly, cmp_left) = self.lyc_cmp(ds);
-        if cmp_left <= 4 + 4 * i64::from(ds) + 2 {
-            if old == cmp_ly && cmp_left > 2 {
+        let cgb2 = 2 * i64::from(self.cgb);
+        if cmp_left <= 4 + 4 * i64::from(ds) + cgb2 {
+            if old == cmp_ly && cmp_left > cgb2 {
                 // LY and LYC change together: the flag never goes low.
                 return false;
             }
@@ -367,17 +395,25 @@ impl GStat {
 }
 
 impl Ppu {
-    /// The STAT interrupt follows gambatte's model (CGB up to revision C).
+    /// The CGB follows gambatte's model (up to revision C).
     #[must_use]
     pub fn gambatte_stat(&self) -> bool {
         self.hw_cgb() && !model_ge_cgb_d(self.model)
     }
 
+    /// The STAT interrupt and LY follow gambatte's model (its CGB, and its
+    /// DMG, a DMG-B).
+    #[must_use]
+    pub fn gambatte_irq(&self) -> bool {
+        self.gambatte_stat() || self.model == crate::Model::DmgB
+    }
+
     /// Advances gambatte's clock by a unit and runs the events that are due.
     pub(super) fn gstat_unit(&mut self, ints: &mut Interrupts) {
-        if !self.gambatte_stat() {
+        if !self.gambatte_irq() {
             return;
         }
+        self.d.gstat.cgb = self.hw_cgb();
         let ds = self.double_speed();
         let g = &mut self.d.gstat;
         g.g += 1;
@@ -391,7 +427,9 @@ impl Ppu {
         if !g.lcd_on {
             return;
         }
-        self.gstat_window_checks();
+        if self.hw_cgb() {
+            self.gstat_window_checks();
+        }
         self.gstat_events(ints, ds);
     }
 
@@ -696,8 +734,8 @@ impl Ppu {
             }
         }
         if g.lcd_on {
-            g.m_stat
-                .write(g.g, g.g + GStat::cc(ds, 2).cast_unsigned(), data);
+            let late = GStat::cc(ds, 2 * i64::from(g.cgb));
+            g.m_stat.write(g.g, g.g + late.cast_unsigned(), data);
         } else {
             g.m_stat.set(data);
         }
@@ -718,11 +756,11 @@ impl Ppu {
         }
         g.m_lyc.write(
             g.g,
-            g.g + GStat::cc(ds, 6 - i64::from(ds)).cast_unsigned(),
+            g.g + GStat::cc(ds, 5 * i64::from(g.cgb) + 1 - i64::from(ds)).cast_unsigned(),
             data,
         );
         if g.lyc_change_triggers(old, data, ds) {
-            if ds {
+            if ds || !g.cgb {
                 ints.request_lcd();
             } else {
                 g.oneshot_time = g.g + GStat::cc(ds, 5).cast_unsigned();

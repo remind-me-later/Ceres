@@ -103,7 +103,7 @@ impl Ppu {
             self.d.irq.stat_interrupt_line = true;
         }
 
-        if self.d.irq.stat_interrupt_line && !previous && !self.gambatte_stat() {
+        if self.d.irq.stat_interrupt_line && !previous && !self.gambatte_irq() {
             ints.request_lcd();
         }
     }
@@ -123,7 +123,7 @@ impl Ppu {
     }
 
     pub(in crate::ppu) fn write_lyc_reg(&mut self, val: u8, ints: &mut Interrupts) {
-        if self.gambatte_stat() {
+        if self.gambatte_irq() {
             self.gstat_write_lyc(val, ints);
         }
         let state = self.d.state;
@@ -159,7 +159,7 @@ impl Ppu {
     }
 
     pub(in crate::ppu) fn write_stat_reg(&mut self, val: u8, ints: &mut Interrupts) {
-        if self.gambatte_stat() {
+        if self.gambatte_irq() {
             self.gstat_write_stat(val, ints);
         }
         // On the CGB the HBlank condition is already held a dot before the

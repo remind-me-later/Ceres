@@ -51,7 +51,6 @@ const NOT_SELF_CHECKING: &[&str] = &[
 /// fails these in exactly the same way.
 const KNOWN_FAILURES: &[&str] = &[
     "halt_op_dupe_delay.gb",
-    "lyc1_int_if_edge_c.gb",
     "stat_write_glitch_l154_d.gb",
 ];
 

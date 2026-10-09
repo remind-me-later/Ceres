@@ -258,7 +258,7 @@ impl Ppu {
     /// CGB in single speed counts dots, in double speed half dots); `None`
     /// where the line timing is not the regular one.
     fn line_position(&self) -> Option<(u8, i32)> {
-        if !self.gambatte_stat() || self.lcdc & LCDC_ON_B == 0 || !self.d.line_clock_valid() {
+        if !self.gambatte_irq() || self.lcdc & LCDC_ON_B == 0 || !self.d.line_clock_valid() {
             return None;
         }
         // Half dots since this line began, counted at the read; LY changes
@@ -433,7 +433,7 @@ impl Ppu {
         if is_on && !was_on {
             // With LYC 0 the LY=LYC condition starts with the LCD, unless the
             // flag stayed set while it was off.
-            if self.gambatte_stat()
+            if self.gambatte_irq()
                 && self.stat & (STAT_IF_LYC_B | STAT_LYC_B) == STAT_IF_LYC_B
                 && self.lyc == 0
             {
