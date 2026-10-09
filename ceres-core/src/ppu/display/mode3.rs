@@ -107,6 +107,12 @@ impl Ppu {
                         && (self.lcdc & 0x02 != 0 || self.hw_cgb())
                         && self.d.objs.x[n - 1] == self.x_for_object_match()
                     {
+                        if self.d.objs.x[n - 1] == 167 {
+                            // The HBlank interrupt does not wait for the fetch of an
+                            // object at the right edge, unlike the STAT mode.
+                            self.d.irq.mode_for_interrupt = 0;
+                            self.stat_update(ints);
+                        }
                         Step::WaitForTile
                     } else {
                         Step::OutputPixel
