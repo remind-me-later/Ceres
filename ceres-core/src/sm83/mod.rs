@@ -1662,10 +1662,14 @@ impl<A: AudioCallback> Bus for Gb<A> {
                     },
                 );
                 // Changing TILE_SEL on the dot after the write can corrupt a
-                // bitplane read in flight (see the PPU).
+                // bitplane read in flight (see the PPU). The window start sees
+                // the window being turned on a dot late.
                 self.ppu.set_tile_sel_glitch((val ^ old) & 0x10 != 0);
+                self.ppu
+                    .set_window_enable_pending(old & 0x20 == 0 && val & 0x20 != 0);
                 self.advance_dots(1);
                 self.ppu.set_tile_sel_glitch(false);
+                self.ppu.set_window_enable_pending(false);
                 self.write_mem(addr, val);
                 self.time_deferred = 3;
             }

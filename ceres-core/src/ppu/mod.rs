@@ -198,6 +198,12 @@ impl Ppu {
         self.d.set_wx_just_changed(active);
     }
 
+    /// Set while a CPU write that turns the window on is landing.
+    #[inline]
+    pub const fn set_window_enable_pending(&mut self, active: bool) {
+        self.d.set_window_enable_pending(active);
+    }
+
     #[must_use]
     pub const fn is_fetching_sprite(&self) -> bool {
         self.d.fetching_object()

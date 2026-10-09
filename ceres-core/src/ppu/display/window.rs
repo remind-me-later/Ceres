@@ -36,6 +36,9 @@ pub struct Window {
     pub wx_166_interrupt_glitch: bool,
     /// A CPU write to WX is landing (SameBoy's `wx_just_changed`).
     pub wx_just_changed: bool,
+    /// A CPU write that turns the window on is landing: the pixel pipeline
+    /// sees the new enable a dot after the WY trigger does.
+    pub enable_pending: bool,
     /// The background FIFO and fetcher as the window start found them, for a
     /// CGB window start that is called off.
     pub saved: Option<(Fifo, Fetcher)>,
@@ -57,6 +60,7 @@ impl Default for Window {
             no_pixel_insertion_glitch: false,
             wx_166_interrupt_glitch: false,
             wx_just_changed: false,
+            enable_pending: false,
             saved: None,
         }
     }
@@ -130,7 +134,10 @@ impl Ppu {
         self.d.window.wx_166_interrupt_glitch = false;
         if self.d.window.wy_just_checked {
             self.d.window.wy_just_checked = false;
-        } else if !self.d.window.wx_triggered && self.d.window.wy_triggered && self.lcdc & 0x20 != 0
+        } else if !self.d.window.wx_triggered
+            && self.d.window.wy_triggered
+            && self.lcdc & 0x20 != 0
+            && !self.d.window.enable_pending
         {
             let position = self.d.position_in_line;
             let hw = self.hw_cgb();

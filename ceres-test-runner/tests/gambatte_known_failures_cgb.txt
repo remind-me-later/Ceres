@@ -148,5 +148,4 @@ window/arg/late_wy_FFto2_ly2_ds_1_cgb04c_out3.gbc
 window/arg/late_wy_FFto2_ly2_scx5_ds_1_cgb04c_out3.gbc
 window/late_enable_afterVblank_ds_lcdoffset1_2_cgb04c_out0.gbc
 window/late_reenable_ds_2_cgb04c_out0.gbc
-window/late_reenable_scx3_2_dmg08_out3_cgb04c_out0.gbc
 window/late_wy_ds_2_cgb04c_out3.gbc

@@ -168,6 +168,10 @@ impl Display {
         self.window.wx_just_changed = active;
     }
 
+    pub(super) const fn set_window_enable_pending(&mut self, active: bool) {
+        self.window.enable_pending = active;
+    }
+
     /// Whether `HBlank` was entered since the last call.
     pub(super) const fn hblank_hdma_pending(&self) -> u8 {
         self.hblank_hdma_delay
