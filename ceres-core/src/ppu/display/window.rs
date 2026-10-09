@@ -1,7 +1,11 @@
 //! The window: the WY trigger, the WX start and their glitches.
 
 use {
-    super::{fetcher::FetcherStep, state::State},
+    super::{
+        fetcher::{Fetcher, FetcherStep},
+        fifo::Fifo,
+        state::State,
+    },
     crate::ppu::Ppu,
 };
 
@@ -32,6 +36,9 @@ pub struct Window {
     pub wx_166_interrupt_glitch: bool,
     /// A CPU write to WX is landing (SameBoy's `wx_just_changed`).
     pub wx_just_changed: bool,
+    /// The background FIFO and fetcher as the window start found them, for a
+    /// CGB window start that is called off.
+    pub saved: Option<(Fifo, Fetcher)>,
 }
 
 impl Default for Window {
@@ -50,6 +57,7 @@ impl Default for Window {
             no_pixel_insertion_glitch: false,
             wx_166_interrupt_glitch: false,
             wx_just_changed: false,
+            saved: None,
         }
     }
 }
@@ -152,6 +160,7 @@ impl Ppu {
             if should_activate {
                 self.d.window.line = self.d.window.line.wrapping_add(1);
                 self.d.window.tile_x = 0;
+                self.d.window.saved = hw.then(|| (self.d.bg_fifo, self.d.fetcher.clone()));
                 self.d.bg_fifo.clear();
                 if self.wx == 0 && self.scx & 7 != 0 && !hw {
                     self.d.cfl += 1;
@@ -178,6 +187,23 @@ impl Ppu {
         self.d.window.wx_triggered = true;
         self.d.fetcher.step = FetcherStep::GetTileT1;
         self.d.window.being_fetched = true;
+    }
+
+    /// On CGB, disabling the window while its start is still in progress (its
+    /// first tile not pushed yet) calls it off: the pixels go on from the
+    /// background where they were instead of waiting for the window's tile.
+    pub(in crate::ppu) fn cancel_window_start(&mut self) {
+        let window = &mut self.d.window;
+        if window.being_fetched
+            && window.wx_triggered
+            && self.d.bg_fifo.size == 0
+            && let Some((fifo, fetcher)) = window.saved.take()
+        {
+            window.wx_triggered = false;
+            window.being_fetched = false;
+            self.d.bg_fifo = fifo;
+            self.d.fetcher = fetcher;
+        }
     }
 
     /// Called by the CPU's LCDC write handler: disabling the window while a
