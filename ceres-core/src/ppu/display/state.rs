@@ -332,6 +332,8 @@ impl Ppu {
     fn hblank(&mut self, ints: &mut Interrupts, state: State) -> Option<State> {
         match state {
             State::HBlankStart => {
+                self.gstat_mode3_end();
+                self.gstat_hblank();
                 self.stat &= !STAT_MODE_B;
                 self.d.irq.mode_for_interrupt = 0;
                 self.d.cpu.unlock_oam_vram();
@@ -360,6 +362,7 @@ impl Ppu {
                 None
             }
             State::LongLineEnd | State::Mode3Abort => {
+                self.d.line_clock_valid = false;
                 self.fill_desynced_line();
                 self.d.objs.count = self.d.objs.found;
                 self.d.current_line += 1;
@@ -388,8 +391,10 @@ impl Ppu {
                 Some(State::Mode3)
             }
             State::LineEnd => {
+                self.gstat_line_end(self.d.current_line);
                 self.d.cfl = 0;
                 self.d.line_clock = 0;
+                self.d.line_clock_valid = true;
                 self.sleep(State::NextLine, 2);
                 None
             }
@@ -417,7 +422,10 @@ impl Ppu {
             State::VBlankLy => {
                 self.ly = self.d.current_line;
                 if self.d.current_line == LINES {
-                    if !self.d.irq.stat_interrupt_line && self.stat & STAT_IF_OAM_B != 0 {
+                    if !self.gambatte_stat()
+                        && !self.d.irq.stat_interrupt_line
+                        && self.stat & STAT_IF_OAM_B != 0
+                    {
                         ints.request_lcd();
                     }
                     // Until the VBlank condition takes over, the line is held
@@ -444,7 +452,10 @@ impl Ppu {
                     self.stat &= !STAT_MODE_B;
                     self.stat |= 1;
                     ints.request_vblank();
-                    if !self.d.irq.stat_interrupt_line && self.stat & STAT_IF_OAM_B != 0 {
+                    if !self.gambatte_stat()
+                        && !self.d.irq.stat_interrupt_line
+                        && self.stat & STAT_IF_OAM_B != 0
+                    {
                         ints.request_lcd();
                     }
                     self.d.irq.mode_for_interrupt = 1;

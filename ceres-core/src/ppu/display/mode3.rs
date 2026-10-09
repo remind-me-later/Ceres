@@ -112,6 +112,7 @@ impl Ppu {
                             // object at the right edge, unlike the STAT mode.
                             self.d.irq.mode_for_interrupt = 0;
                             self.stat_update(ints);
+                            self.gstat_mode3_end();
                         }
                         Step::WaitForTile
                     } else {
@@ -177,6 +178,7 @@ impl Ppu {
                     if self.d.window.wx_166_interrupt_glitch {
                         self.d.irq.mode_for_interrupt = 0;
                         self.stat_update(ints);
+                        self.gstat_mode3_end();
                     }
                     Step::WindowCheck
                 }

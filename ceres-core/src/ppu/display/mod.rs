@@ -19,6 +19,7 @@
 mod bus;
 mod fetcher;
 mod fifo;
+mod gstat;
 mod mode3;
 mod objects;
 mod pixels;
@@ -32,6 +33,7 @@ use {
     core::mem,
     fetcher::Fetcher,
     fifo::Fifo,
+    gstat::GStat,
     objects::{ObjectFetch, ObjectSearch},
     stat::StatIrq,
     window::Window,
@@ -72,6 +74,9 @@ pub(super) struct Display {
     hblank_hdma_edge: bool,
     /// Dots until the HBlank HDMA request is raised (0: none pending).
     hblank_hdma_delay: u8,
+    /// `line_clock` counts from the start of the current line (false on the
+    /// first line after the LCD is turned on and after a cut off line).
+    line_clock_valid: bool,
     /// The LCD was switched off with a non-zero STAT mode; consumed by the HDMA.
     lcd_off_hdma_edge: bool,
 
@@ -84,6 +89,7 @@ pub(super) struct Display {
     fetcher: Fetcher,
     window: Window,
     irq: StatIrq,
+    gstat: GStat,
     bus: PpuBus,
     cpu: CpuAccess,
 }
@@ -102,6 +108,7 @@ impl Default for Display {
             line_has_fractional_scrolling: false,
             hblank_hdma_edge: false,
             hblank_hdma_delay: 0,
+            line_clock_valid: false,
             lcd_off_hdma_edge: false,
             bg_fifo: Fifo::default(),
             oam_fifo: Fifo::default(),
@@ -111,6 +118,7 @@ impl Default for Display {
             fetcher: Fetcher::default(),
             window: Window::default(),
             irq: StatIrq::default(),
+            gstat: GStat::default(),
             bus: PpuBus::default(),
             cpu: CpuAccess::default(),
         }
@@ -132,6 +140,10 @@ impl Display {
 
     pub(super) const fn half_dot(&self) -> bool {
         self.half_dot
+    }
+
+    pub(super) const fn line_clock_valid(&self) -> bool {
+        self.line_clock_valid
     }
 
     pub(super) const fn line_clock(&self) -> i32 {
@@ -238,6 +250,7 @@ impl Ppu {
         self.d.irq.ly_for_comparison = 0;
         self.d.window.wy_triggered = false;
         self.d.window.line0_wy_countdown = 0;
+        self.d.line_clock_valid = false;
         self.d.cpu.unlock_all();
     }
 
@@ -253,6 +266,7 @@ impl Ppu {
     /// for the accesses that land between units: after a speed switch or in
     /// a split write in double speed.
     pub(in crate::ppu) fn run_display(&mut self, ints: &mut Interrupts) {
+        self.gstat_unit(ints);
         // Pre-run bookkeeping (top of GB_display_run).
         if self.d.window.wy_triggered {
             self.d.window.wy_check_scheduled = false;

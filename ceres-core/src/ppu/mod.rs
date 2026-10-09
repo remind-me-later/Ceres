@@ -17,6 +17,8 @@ pub const PX_HEIGHT: u8 = 144;
 const LCDC_ON_B: u8 = 0x80;
 
 // STAT bits
+/// Dots per line.
+const LINE_CYCLES: i32 = 456;
 const STAT_MODE_B: u8 = 0x3;
 const STAT_LYC_B: u8 = 0x4;
 const STAT_IF_HBLANK_B: u8 = 0x8;
@@ -179,9 +181,94 @@ impl Ppu {
         self.lcdc
     }
 
+    /// LY as the CPU reads it.
     #[must_use]
-    pub const fn read_ly(&self) -> u8 {
-        self.ly
+    pub fn cpu_read_ly(&self) -> u8 {
+        let Some((ly, t)) = self.line_position() else {
+            return self.ly;
+        };
+        let ds = self.double_speed();
+        if ly == 153 {
+            if !ds || t <= 2 * LINE_CYCLES - 2 {
+                0
+            } else {
+                153
+            }
+        } else if t <= 6 + 4 * i32::from(ds) {
+            let next = ly + 1;
+            if t == 6 + 4 * i32::from(ds) {
+                ly & next
+            } else {
+                next
+            }
+        } else {
+            ly
+        }
+    }
+
+    /// STAT as the CPU reads it.
+    #[must_use]
+    pub fn cpu_read_stat(&self) -> u8 {
+        let stat = self.read_stat();
+        let Some((ly, t)) = self.line_position() else {
+            return stat;
+        };
+        // The line the LY=LYC flag compares with, and the time left until
+        // that comparison changes again.
+        let ds = i32::from(self.double_speed());
+        let line_time = LINE_CYCLES << ds;
+        let (cmp_ly, left) = if ly == 153 {
+            let left = t - (line_time - 6 - 6 * ds);
+            if left <= 0 {
+                (0, left + line_time)
+            } else {
+                (153, left)
+            }
+        } else {
+            let left = t - (2 + 2 * ds);
+            if left <= 0 {
+                (ly + 1, left + line_time)
+            } else {
+                (ly, left)
+            }
+        };
+        if cmp_ly == self.lyc && left > 2 {
+            stat | STAT_LYC_B
+        } else {
+            stat & !STAT_LYC_B
+        }
+    }
+
+    /// The line and the cycles left until it ends, on gambatte's clock (a
+    /// CGB in single speed counts dots, in double speed half dots); `None`
+    /// where the line timing is not the regular one.
+    fn line_position(&self) -> Option<(u8, i32)> {
+        if !self.gambatte_stat() || self.lcdc & LCDC_ON_B == 0 || !self.d.line_clock_valid() {
+            return None;
+        }
+        // Half dots since this line began, counted at the read; LY changes
+        // 19 half dots into the line on gambatte's clock.
+        let lc = self.d.line_clock().rem_euclid(LINE_CYCLES);
+        let tau = 2 * lc + i32::from(!self.d.half_dot());
+        let line = self.d.current_line();
+        let line = if tau >= 4 { line } else { (line + 1) % 154 };
+        let (ly, h) = if tau < 19 {
+            (
+                if line == 0 { 153 } else { line - 1 },
+                tau - 19 + 2 * LINE_CYCLES,
+            )
+        } else {
+            (line, tau - 19)
+        };
+        let left = 2 * LINE_CYCLES - h;
+        Some((
+            ly,
+            if self.double_speed() {
+                left
+            } else {
+                (left + 1) / 2
+            },
+        ))
     }
 
     /// `position_in_line` as a signed value (-16..=160).
@@ -295,17 +382,17 @@ impl Ppu {
     }
 
     /// Runs the display `cycles` T-cycles ahead of the CPU, which will not
-    /// run those cycles again. Only done around the end of the frame, where
-    /// the LYC compare of line 153 falls close to the acknowledge of an
-    /// interrupt; the other interrupt sources do not look ahead.
+    /// run those cycles again. Unless `any_line`, only done around the end
+    /// of the frame.
     pub fn run_ahead(
         &mut self,
         ints: &mut Interrupts,
         cgb_mode: CgbMode,
         double_speed: bool,
         cycles: i32,
+        any_line: bool,
     ) {
-        if self.lcdc & LCDC_ON_B == 0 || self.d.current_line() < 152 {
+        if self.lcdc & LCDC_ON_B == 0 || (self.d.current_line() < 152 && !any_line) {
             return;
         }
         for _ in 0..cycles {
@@ -321,14 +408,24 @@ impl Ppu {
         self.color_correction_mode = mode;
     }
 
-    pub fn write_lcdc(&mut self, val: u8, _ints: &mut Interrupts, _is_cgb: bool) {
+    pub fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts, _is_cgb: bool) {
         let was_on = self.lcdc & LCDC_ON_B != 0;
         let is_on = val & LCDC_ON_B != 0;
 
         if is_on && !was_on {
+            // With LYC 0 the LY=LYC condition starts with the LCD, unless the
+            // flag stayed set while it was off.
+            if self.gambatte_stat()
+                && self.stat & (STAT_IF_LYC_B | STAT_LYC_B) == STAT_IF_LYC_B
+                && self.lyc == 0
+            {
+                ints.request_lcd();
+            }
             self.d.restart();
+            self.gstat_lcd_on();
         } else if !is_on && was_on {
             self.lcd_off();
+            self.gstat_lcd_off();
             self.rgba_buf_present.clear();
         } else {
             // The LCD stays as it is.
@@ -378,6 +475,7 @@ impl Ppu {
         }
         let mut ints = Interrupts::default();
         self.d.restart();
+        self.gstat_lcd_on();
         // `line_clock` restarts on every visible line and keeps running
         // through VBlank, starting from line 144.
         let base = i32::from(line.saturating_sub(144)) * LINE_LENGTH_DOTS;
@@ -413,8 +511,10 @@ impl Ppu {
     /// CGB palette RAM is blocked from the CPU while the PPU reads it.
     #[inline]
     #[must_use]
-    pub const fn is_cgb_palettes_accessible(&self) -> bool {
-        !self.d.cpu().cgb_palettes_blocked
+    pub fn is_cgb_palettes_accessible(&self) -> bool {
+        !self
+            .gstat_mode3_lock(80)
+            .unwrap_or_else(|| self.d.cpu().cgb_palettes_blocked)
     }
 
     /// STOP-mode hooks (the PPU engine does not distinguish STOP yet).

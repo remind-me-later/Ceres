@@ -109,6 +109,14 @@ pub const fn get_conflict(
 
     let offset = (addr & 0x7F) as usize;
 
+    // Up to the CGB-C the STAT and LYC writes land at once: their timing is
+    // in the PPU's STAT interrupt events.
+    if matches!(model, Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC)
+        && matches!(offset, 0x41 | 0x45)
+    {
+        return ConflictType::ReadOld;
+    }
+
     if model.is_cgb_hardware() {
         if double_speed {
             CGB_DOUBLE_CONFLICT_MAP[offset]

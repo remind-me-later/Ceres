@@ -195,13 +195,15 @@ impl Ppu {
     // CPU-visible memory access, gated by the flags above.
 
     #[must_use]
-    pub const fn vram_read_blocked(&self) -> bool {
-        self.d.cpu.vram_read_blocked
+    pub fn vram_read_blocked(&self) -> bool {
+        self.gstat_mode3_lock(79)
+            .unwrap_or(self.d.cpu.vram_read_blocked)
     }
 
     #[must_use]
-    pub const fn vram_write_blocked(&self) -> bool {
-        self.d.cpu.vram_write_blocked
+    pub fn vram_write_blocked(&self) -> bool {
+        self.gstat_mode3_lock(79)
+            .unwrap_or(self.d.cpu.vram_write_blocked)
     }
 
     #[must_use]

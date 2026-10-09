@@ -127,10 +127,10 @@ impl<A: AudioCallback> Gb<A> {
             | NR50..=NR52
             | WAV_BEG..=WAV_END => self.apu.read(usize::from(addr)),
             LCDC => self.ppu.read_lcdc(),
-            STAT => self.ppu.read_stat(),
+            STAT => self.ppu.cpu_read_stat(),
             SCY => self.ppu.read_scy(),
             SCX => self.ppu.read_scx(),
-            LY => self.ppu.read_ly(),
+            LY => self.ppu.cpu_read_ly(),
             LYC => self.ppu.read_lyc(),
             DMA => self.dma.read(),
             BGP => self.ppu.read_bgp(),

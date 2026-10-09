@@ -1532,6 +1532,12 @@ impl<A: AudioCallback> Bus for Gb<A> {
             }
             ConflictType::WriteCpu => {
                 self.advance_dots(pending + 1);
+                // In double speed a write to IF lands after the LCD
+                // interrupts of the next cycle (gambatte `updateIrqs(cc + 2)`).
+                if addr == 0xFF0F && self.key1.is_enabled() && self.ppu.gambatte_stat() {
+                    self.ppu
+                        .run_ahead(&mut self.ints, self.cgb_mode, true, 1, true);
+                }
                 self.write_mem(addr, val);
                 self.time_deferred = 3;
             }
@@ -1742,7 +1748,8 @@ impl<A: AudioCallback> Bus for Gb<A> {
         // as already requested and is swallowed by the acknowledge. (In double
         // speed the compare itself comes early enough.)
         if !self.key1.is_enabled() {
-            self.ppu.run_ahead(&mut self.ints, self.cgb_mode, false, 2);
+            self.ppu
+                .run_ahead(&mut self.ints, self.cgb_mode, false, 2, false);
         }
         // On the CGB a timer interrupt due within the next cycles counts as
         // already requested: acknowledging the timer bit swallows it.

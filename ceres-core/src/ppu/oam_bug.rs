@@ -346,7 +346,10 @@ impl Ppu {
         if dma_blocked {
             return 0xFF;
         }
-        if self.d.cpu().oam_read_blocked {
+        if self
+            .gstat_oam_lock(false)
+            .unwrap_or_else(|| self.d.cpu().oam_read_blocked)
+        {
             if !self.hw_cgb() {
                 self.oam_read_row_corruption(addr);
             }
@@ -361,7 +364,10 @@ impl Ppu {
 
     /// CPU write to `0xFE00..=0xFEFF`.
     pub fn cpu_write_oam_area(&mut self, addr: u16, val: u8, dma_blocked: bool) {
-        if self.d.cpu().oam_write_blocked {
+        if self
+            .gstat_oam_lock(true)
+            .unwrap_or_else(|| self.d.cpu().oam_write_blocked)
+        {
             self.trigger_oam_bug(addr);
             return;
         }
