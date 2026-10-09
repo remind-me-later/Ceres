@@ -207,7 +207,7 @@ impl Ppu {
             && let Some((fifo, fetcher)) = window.saved.take()
         {
             window.wx_triggered = false;
-            window.being_fetched = false;
+
             self.d.bg_fifo = fifo;
             self.d.fetcher = fetcher;
         }

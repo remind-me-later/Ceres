@@ -122,6 +122,13 @@ pub struct GStat {
     m0_done: bool,
     /// Mode 3 of the current line is over.
     hblank: bool,
+    /// `h` when HBlank began.
+    hblank_h: i64,
+    /// WY and LCDC as gambatte's window checks see them.
+    wy: LateReg,
+    lcdc: LateReg,
+    /// The LCDC write in progress went through `gstat_write_lcdc`.
+    lcdc_tracked: bool,
     lcd_on: bool,
 }
 
@@ -145,6 +152,10 @@ impl Default for GStat {
             m0_pending: false,
             m0_done: false,
             hblank: false,
+            hblank_h: 0,
+            wy: LateReg::default(),
+            lcdc: LateReg::default(),
+            lcdc_tracked: false,
             lcd_on: false,
         }
     }
@@ -380,7 +391,30 @@ impl Ppu {
         if !g.lcd_on {
             return;
         }
+        self.gstat_window_checks();
+        self.gstat_events(ints, ds);
+    }
 
+    /// The window checks at the end of a line (gambatte's `weMaster`): at
+    /// line cycle 450 against the line, at 454 against the next one.
+    fn gstat_window_checks(&mut self) {
+        let g = &mut self.d.gstat;
+        let ly = match g.h {
+            900 => g.ly,
+            908 if g.ly == 153 => 0,
+            908 => g.ly + 1,
+            _ => return,
+        };
+        g.wy.settle(g.g);
+        g.lcdc.settle(g.g);
+        if ly != 0 && g.lcdc.val & 0x20 != 0 && g.wy.val == ly {
+            self.d.window.wy_triggered = true;
+        }
+    }
+
+    /// The STAT interrupt events due in this unit.
+    fn gstat_events(&mut self, ints: &mut Interrupts, ds: bool) {
+        let g = &mut self.d.gstat;
         if g.g == g.oneshot_time {
             g.oneshot_time = DISABLED;
             ints.request_lcd();
@@ -476,7 +510,10 @@ impl Ppu {
         }
         matches!(
             self.d.state(),
-            State::OamScanStart | State::OamScanNext | State::OamScanObject
+            State::OamScanStart
+                | State::OamScanNext
+                | State::OamScanObject
+                | State::Mode3PalettesLock
         )
         .then_some(true)
     }
@@ -525,9 +562,56 @@ impl Ppu {
         Some(456 - (t >> u32::from(ds)))
     }
 
+    /// A WY write: gambatte's window checks see it 2 cycles later.
+    pub(in crate::ppu) fn gstat_write_wy(&mut self, val: u8) {
+        let ds = self.double_speed();
+        let g = &mut self.d.gstat;
+        if g.lcd_on {
+            g.wy.write(g.g, g.g + GStat::cc(ds, 2).cast_unsigned(), val);
+        } else {
+            g.wy.set(val);
+        }
+    }
+
+    /// An LCDC write `units_early` before a read's point: gambatte's window
+    /// checks see it 2 cycles after that point.
+    pub fn gstat_write_lcdc(&mut self, val: u8, units_early: i64) {
+        let ds = self.double_speed();
+        let g = &mut self.d.gstat;
+        let after = g.g.cast_signed() + units_early + GStat::cc(ds, 2);
+        g.lcdc.write(g.g, after.cast_unsigned(), val);
+        g.lcdc_tracked = true;
+    }
+
+    /// LCDC writes that do not go through `gstat_write_lcdc` land at once.
+    pub(in crate::ppu) const fn d_lcdc_tracked(&self) -> bool {
+        self.d.gstat.lcdc_tracked
+    }
+
+    /// The LCDC write is complete.
+    pub const fn gstat_lcdc_write_done(&mut self) {
+        self.d.gstat.lcdc_tracked = false;
+    }
+
+    pub(in crate::ppu) fn gstat_set_lcdc(&mut self, val: u8) {
+        self.d.gstat.lcdc.set(val);
+    }
+
     /// HBlank began.
     pub(super) const fn gstat_hblank(&mut self) {
         self.d.gstat.hblank = true;
+        self.d.gstat.hblank_h = self.d.gstat.h;
+    }
+
+    /// The CGB-C's palettes become accessible 2 cycles after mode 0 begins
+    /// on gambatte's clock (`m0Time + 2`); `None` outside HBlank.
+    pub(in crate::ppu) fn gstat_palettes_unlocked(&self) -> Option<bool> {
+        let g = &self.d.gstat;
+        if !self.gambatte_stat() || !g.lcd_on || !g.hblank || g.ly >= LINES {
+            return None;
+        }
+        // Mode 0 begins (`m0Time`) 3 units after HBlankStart.
+        Some(g.h >= g.hblank_h + 3 + GStat::cc(self.double_speed(), 2))
     }
 
     /// Mode 3 ended: the mode 0 event follows in the next unit.

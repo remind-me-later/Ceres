@@ -154,7 +154,9 @@ impl Ppu {
 
     /// Starts a visible line (lines 0..=143).
     pub(super) fn line_start(&mut self) {
-        self.wy_check();
+        if !self.gambatte_stat() {
+            self.wy_check();
+        }
         self.d.cpu.oam_write_blocked = self.hw_cgb() && !self.double_speed();
         self.d.objs.accessed_oam_row = 0;
         self.d.objs.size_change = None;
@@ -259,7 +261,9 @@ impl Ppu {
                 self.d.cpu.oam_write_blocked = true;
                 self.stat = (self.stat & !STAT_MODE_B) | 2;
                 self.d.irq.ly_for_comparison = i32::from(self.d.current_line);
-                self.wy_check();
+                if !self.gambatte_stat() {
+                    self.wy_check();
+                }
                 if self.d.current_line == 0 && !self.hw_cgb() {
                     // The DMG's mode 2 condition of line 0 comes one dot after
                     // the other lines'.

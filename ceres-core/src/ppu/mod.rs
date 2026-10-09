@@ -427,6 +427,9 @@ impl Ppu {
         let was_on = self.lcdc & LCDC_ON_B != 0;
         let is_on = val & LCDC_ON_B != 0;
 
+        if !self.d_lcdc_tracked() {
+            self.gstat_set_lcdc(val);
+        }
         if is_on && !was_on {
             // With LYC 0 the LY=LYC condition starts with the LCD, unless the
             // flag stayed set while it was off.
@@ -519,6 +522,7 @@ impl Ppu {
     }
 
     pub fn write_wy(&mut self, val: u8) {
+        self.gstat_write_wy(val);
         self.wy = val;
         self.d.schedule_wy_check();
     }
@@ -527,6 +531,9 @@ impl Ppu {
     #[inline]
     #[must_use]
     pub fn is_cgb_palettes_accessible(&self) -> bool {
+        if let Some(unlocked) = self.gstat_palettes_unlocked() {
+            return unlocked;
+        }
         !self
             .gstat_mode3_lock(80)
             .unwrap_or_else(|| self.d.cpu().cgb_palettes_blocked)

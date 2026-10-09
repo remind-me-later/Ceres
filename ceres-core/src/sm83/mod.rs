@@ -1663,6 +1663,9 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 let old = self.ppu.read_lcdc();
                 self.advance_dots(pending);
                 self.ppu.cgb_obj_size_write(val, 0);
+                if self.ppu.gambatte_stat() {
+                    self.ppu.gstat_write_lcdc(val, 0);
+                }
                 let delay_obj_size = self.ppu.read_scx() & 7 != 0;
                 self.write_mem(
                     addr,
@@ -1682,17 +1685,24 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 self.ppu.set_tile_sel_glitch(false);
                 self.ppu.set_window_enable_pending(false);
                 self.write_mem(addr, val);
+                self.ppu.gstat_lcdc_write_done();
                 self.time_deferred = 3;
             }
             ConflictType::LcdcCgbDouble => {
                 let old = self.ppu.read_lcdc();
                 self.advance_dots(pending - 2);
                 self.ppu.cgb_obj_size_write(val, 2);
-                self.write_mem(addr, (val & !0x81) | (old & 0x81));
+                if self.ppu.gambatte_stat() {
+                    self.ppu.gstat_write_lcdc(val, 2);
+                }
+                // Turning the window on waits for the end of the write too.
+                let late = 0x81 | (!old & 0x20);
+                self.write_mem(addr, (val & !late) | (old & late));
                 self.ppu.set_tile_sel_glitch((val ^ old) & 0x10 != 0);
                 self.advance_dots(2);
                 self.ppu.set_tile_sel_glitch(false);
                 self.write_mem(addr, val);
+                self.ppu.gstat_lcdc_write_done();
                 self.time_deferred = 4;
             }
             // Registers the tile fetcher consumes land a dot before the ones the
