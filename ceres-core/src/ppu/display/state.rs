@@ -157,6 +157,7 @@ impl Ppu {
         self.wy_check();
         self.d.cpu.oam_write_blocked = self.hw_cgb() && !self.double_speed();
         self.d.objs.accessed_oam_row = 0;
+        self.d.objs.size_change = None;
         self.sleep(State::LineOamWriteLock, 2);
     }
 

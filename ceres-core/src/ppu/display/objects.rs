@@ -1,9 +1,12 @@
 //! Objects: the mode 2 search for the objects on the line and the state of
 //! the object fetch in mode 3.
 
-use crate::{
-    Model,
-    ppu::{Ppu, oam_bug::NO_ROW},
+use {
+    super::State,
+    crate::{
+        Model,
+        ppu::{Ppu, oam_bug::NO_ROW},
+    },
 };
 
 /// The mode 2 object search.
@@ -21,6 +24,27 @@ pub struct ObjectSearch {
     /// The last Y and X the search read from the OAM.
     pub y_bus: u8,
     pub x_bus: u8,
+    /// A CGB-C OBJ_SIZE write during this line's search (see
+    /// `cgb_obj_size_write`).
+    pub size_change: Option<SizeChange>,
+}
+
+/// OBJ_SIZE changed while the CGB-C was searching `line`: an entry samples
+/// the size at line cycles `2 * index` and `2 * index + 1` on gambatte's
+/// clock and is large if either sample is; the samples after `lc` see `new`.
+#[derive(Clone, Copy)]
+pub struct SizeChange {
+    pub line: u8,
+    pub lc: i64,
+    pub new: bool,
+}
+
+impl SizeChange {
+    fn large(self, index: u8) -> bool {
+        let first = 2 * i64::from(index);
+        let sample = |p: i64| if p > self.lc { self.new } else { !self.new };
+        sample(first) || sample(first + 1)
+    }
 }
 
 impl Default for ObjectSearch {
@@ -35,6 +59,7 @@ impl Default for ObjectSearch {
             accessed_oam_row: NO_ROW,
             y_bus: 0,
             x_bus: 0,
+            size_change: None,
         }
     }
 }
@@ -116,30 +141,90 @@ impl Ppu {
             return;
         }
 
-        let height_16 = self.lcdc & 0x04 != 0;
-        let y = i32::from(self.d.objs.y_bus) - 16;
+        let height_16 = match self.d.objs.size_change {
+            Some(c) if c.line == self.d.current_line => c.large(index),
+            _ => self.lcdc & 0x04 != 0,
+        };
+        if self.object_on_line(self.d.objs.y_bus, height_16) {
+            self.insert_object(index, self.d.objs.x_bus, self.d.objs.y_bus);
+        }
+    }
+
+    fn object_on_line(&self, y: u8, height_16: bool) -> bool {
+        let y = i32::from(y) - 16;
         let line = i32::from(self.d.current_line);
-        if y <= line && y + if height_16 { 16 } else { 8 } > line {
-            // Reverse-sorted insertion by X (stable for equal X).
-            let n = self.d.objs.count;
-            let mut j = 0;
-            while j < n {
-                if self.d.objs.x[j] <= self.d.objs.x_bus {
-                    break;
-                }
-                j += 1;
+        y <= line && y + if height_16 { 16 } else { 8 } > line
+    }
+
+    /// Inserts an object in the list, sorted by X (descending), then by OAM
+    /// index (descending).
+    fn insert_object(&mut self, index: u8, obj_x: u8, obj_y: u8) {
+        let objs = &mut self.d.objs;
+        let count = objs.count;
+        let at = (0..count)
+            .find(|&i| objs.x[i] < obj_x || (objs.x[i] == obj_x && objs.indices[i] < index))
+            .unwrap_or(count);
+        objs.indices.copy_within(at..count, at + 1);
+        objs.x.copy_within(at..count, at + 1);
+        objs.y.copy_within(at..count, at + 1);
+        objs.indices[at] = index;
+        objs.x[at] = obj_x;
+        objs.y[at] = obj_y;
+        objs.count += 1;
+    }
+
+    fn remove_object(&mut self, index: u8) {
+        let n = self.d.objs.count;
+        let Some(j) = self.d.objs.indices[..n].iter().position(|&i| i == index) else {
+            return;
+        };
+        for k in j..n - 1 {
+            self.d.objs.indices[k] = self.d.objs.indices[k + 1];
+            self.d.objs.x[k] = self.d.objs.x[k + 1];
+            self.d.objs.y[k] = self.d.objs.y[k + 1];
+        }
+        self.d.objs.count -= 1;
+    }
+
+    /// A CGB-C write that changes OBJ_SIZE, `units_early` before the point a
+    /// read in the same cycle would see. The search samples the size later
+    /// than this PPU looks at each entry (gambatte's `OamReader`), so the
+    /// entries already searched are looked at again.
+    pub fn cgb_obj_size_write(&mut self, val: u8, units_early: i64) {
+        let new = val & 0x04 != 0;
+        if !self.gambatte_stat() || self.lcdc & 0x80 == 0 || (self.lcdc & 0x04 != 0) == new {
+            return;
+        }
+        let searched = match self.d.state() {
+            State::OamScanNext => self.d.objs.index,
+            State::OamScanObject => self.d.objs.index + 1,
+            State::Mode3PalettesLock | State::Mode3Start => 40,
+            State::LineOamWriteLock | State::LineLy | State::OamScanStart => 0,
+            _ => return,
+        };
+        let line = self.d.current_line;
+        let Some(lc) = self.gstat_size_change_cycle(line, units_early) else {
+            return;
+        };
+        let change = SizeChange { line, lc, new };
+        self.d.objs.size_change = Some(change);
+        let old = !new;
+        for index in 0..searched {
+            let large = change.large(index);
+            if large == old {
+                continue;
             }
-            let mut k = n;
-            while k > j {
-                self.d.objs.indices[k] = self.d.objs.indices[k - 1];
-                self.d.objs.x[k] = self.d.objs.x[k - 1];
-                self.d.objs.y[k] = self.d.objs.y[k - 1];
-                k -= 1;
+            let base = u16::from(index) * 4;
+            let y = self.oam_read(base);
+            let x = self.oam_read(base + 1);
+            match (self.object_on_line(y, old), self.object_on_line(y, large)) {
+                (false, true) if self.d.objs.count < 10 => self.insert_object(index, x, y),
+                (true, false) => self.remove_object(index),
+                _ => {}
             }
-            self.d.objs.indices[j] = index;
-            self.d.objs.x[j] = self.d.objs.x_bus;
-            self.d.objs.y[j] = self.d.objs.y_bus;
-            self.d.objs.count += 1;
+        }
+        if searched == 40 {
+            self.d.objs.found = self.d.objs.count;
         }
     }
 

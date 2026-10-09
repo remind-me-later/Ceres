@@ -1662,6 +1662,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
 
                 let old = self.ppu.read_lcdc();
                 self.advance_dots(pending);
+                self.ppu.cgb_obj_size_write(val, 0);
                 let delay_obj_size = self.ppu.read_scx() & 7 != 0;
                 self.write_mem(
                     addr,
@@ -1686,6 +1687,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
             ConflictType::LcdcCgbDouble => {
                 let old = self.ppu.read_lcdc();
                 self.advance_dots(pending - 2);
+                self.ppu.cgb_obj_size_write(val, 2);
                 self.write_mem(addr, (val & !0x81) | (old & 0x81));
                 self.ppu.set_tile_sel_glitch((val ^ old) & 0x10 != 0);
                 self.advance_dots(2);

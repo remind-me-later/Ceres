@@ -500,6 +500,31 @@ impl Ppu {
         }
     }
 
+    /// The line cycle (gambatte's clock, relative to `line`) after which the
+    /// object search sees an OBJ_SIZE write landing now, `units_early` before
+    /// a read's point; `-1` if it lands before the line.
+    pub(in crate::ppu) fn gstat_size_change_cycle(
+        &self,
+        line: u8,
+        units_early: i64,
+    ) -> Option<i64> {
+        let g = &self.d.gstat;
+        let ds = self.double_speed();
+        let mut h = g.h + units_early + GStat::cc(ds, 2);
+        if g.ly == line {
+        } else if g.ly == if line == 0 { 153 } else { line - 1 } {
+            h -= LINE_H;
+        } else {
+            return None;
+        }
+        if h < 0 {
+            return Some(-1);
+        }
+        let left = LINE_H - h;
+        let t = if ds { left } else { left / 2 };
+        Some(456 - (t >> u32::from(ds)))
+    }
+
     /// HBlank began.
     pub(super) const fn gstat_hblank(&mut self) {
         self.d.gstat.hblank = true;

@@ -232,11 +232,26 @@ impl Ppu {
                 (ly, left)
             }
         };
-        if cmp_ly == self.lyc && left > 2 {
+        let stat = if cmp_ly == self.lyc && left > 2 {
             stat | STAT_LYC_B
         } else {
             stat & !STAT_LYC_B
-        }
+        };
+        // The mode at the line edges and around VBlank.
+        let line_cycles = LINE_CYCLES - (t >> ds);
+        let frame_cycles = i32::from(ly) * LINE_CYCLES + line_cycles;
+        let vblank = 144 * LINE_CYCLES;
+        let frame = 154 * LINE_CYCLES;
+        let mode = if (vblank - 3..frame - 3).contains(&frame_cycles) {
+            u8::from((vblank - 2..frame - 4 + ds).contains(&frame_cycles))
+        } else if !(77..453).contains(&line_cycles) {
+            2
+        } else if stat & STAT_MODE_B == 0 {
+            0
+        } else {
+            3
+        };
+        (stat & !STAT_MODE_B) | mode
     }
 
     /// The line and the cycles left until it ends, on gambatte's clock (a

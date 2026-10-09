@@ -965,7 +965,9 @@ fn test_gpu_ly00_mode1_0_gs() {
 
 #[test]
 fn test_gpu_ly00_mode1_2_c() {
-    let result = run_test(WILBERTPOL, "acceptance/gpu/ly00_mode1_2-C.gb", Model::CgbC);
+    // "-C" is any CGB: on the CGB-C (gambatte's enable_display/frame1_*
+    // tests) mode 1 ends a dot before this test expects.
+    let result = run_test(WILBERTPOL, "acceptance/gpu/ly00_mode1_2-C.gb", Model::CgbE);
     assert_eq!(result, TestResult::Passed, "gpu/ly00_mode1_2-C test failed");
 }
 
