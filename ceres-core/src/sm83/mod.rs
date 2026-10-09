@@ -291,9 +291,11 @@ impl Sm83 {
             bus.wake_from_stop();
             bus.dma_run(true);
         } else if effective_ime && interrupt_pending {
+            // Only a wake-up from HALT gives the OAM DMA its extra step.
+            let woke = self.is_halted;
             self.is_halted = false;
             bus.wake_from_stop();
-            bus.dma_run(true);
+            bus.dma_run(woke);
             self.dispatch_interrupt(bus);
             return;
         } else {

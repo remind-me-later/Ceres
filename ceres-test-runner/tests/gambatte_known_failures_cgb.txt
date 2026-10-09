@@ -1,3 +1,2 @@
-oamdma/oamdma_src0000_busyint0002_dmg08_cgb04c_outFF941234.gbc
 speedchange/speedchange2_ch2_nr52_ds_1a_cgb04c_outF2.gbc
 speedchange/speedchange2_ch2_nr52_ds_2a_cgb04c_outF2.gbc
