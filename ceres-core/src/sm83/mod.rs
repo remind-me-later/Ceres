@@ -136,6 +136,9 @@ pub struct Sm83 {
     hl: u16,
     ime: bool,
     halt_bug: bool,
+    /// An opcode HALT or STOP read ahead for a pending transfer: it runs
+    /// as read then, whatever the memory holds by the time it runs.
+    prefetched: Option<u8>,
     is_halted: bool,
     has_executed_illegal_opcode: bool,
     ld_b_b_breakpoint: bool,
@@ -298,7 +301,8 @@ impl Sm83 {
         }
 
         if !self.is_halted {
-            let op = bus.read(self.pc);
+            let fetched = bus.read(self.pc);
+            let op = self.prefetched.take().unwrap_or(fetched);
             self.pc = self.pc.wrapping_add(1);
 
             // A pending HDMA burst steals the bus right after the opcode
@@ -956,7 +960,7 @@ impl Sm83 {
     fn halt(&mut self, bus: &mut impl Bus) {
         // A dummy read at PC flushes the fetch M-cycle before the interrupt
         // lines are sampled; the read's own M-cycle is not charged.
-        bus.read(self.pc);
+        let next = bus.read(self.pc);
         bus.drop_deferred();
 
         // The HALT bug also happens on a CGB, in both CGB and DMG modes.
@@ -973,6 +977,7 @@ impl Sm83 {
             // opcode prefetched: it runs twice, as with the HALT bug.
             if bus.hdma_request_pending() {
                 self.halt_bug = true;
+                self.prefetched = Some(next);
                 bus.note_halt_prefetch();
             }
             bus.dma_finish_before_halt();
@@ -1430,7 +1435,10 @@ impl Sm83 {
         // When entering with IF&IE set, the second byte of STOP is actually
         // executed.
         if !interrupt_pending {
-            bus.read(self.pc);
+            let operand = bus.read(self.pc);
+            if prefetch {
+                self.prefetched = Some(operand);
+            }
             if !prefetch {
                 self.pc = self.pc.wrapping_add(1);
             }
