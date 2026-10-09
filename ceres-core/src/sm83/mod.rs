@@ -1560,6 +1560,8 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 let old = self.ppu.read_stat();
                 self.flush_deferred_time();
                 let mut early = (old & 0x40) | (val & !0x40);
+                // Turning the HBlank source off takes a dot longer.
+                early |= old & !val & 0x08;
                 if val & !old & 0x40 != 0 {
                     // Enabling the LYC source: the enables this write clears go
                     // with it, so that no source drops out for a dot in between.

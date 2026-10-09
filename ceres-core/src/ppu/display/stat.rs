@@ -143,6 +143,16 @@ impl Ppu {
     }
 
     pub(in crate::ppu) fn write_stat_reg(&mut self, val: u8, ints: &mut Interrupts) {
+        // On the CGB the HBlank condition is already held a dot before the
+        // mode bits change are evaluated: a write in that gap comes too late
+        // to prevent the interrupt.
+        if self.hw_cgb()
+            && self.d.state == State::HBlankStart
+            && self.d.irq.mode_for_interrupt == 0
+            && self.lcdc & 0x80 != 0
+        {
+            self.stat_update(ints);
+        }
         let old = self.stat;
         self.stat &= 7;
         self.stat |= val & !7;
