@@ -166,9 +166,7 @@ pub struct FibonacciCheck;
 
 impl CompletionCheck for FibonacciCheck {
     fn check(&self, gb: &mut Gb<DummyAudioCallback>) -> Option<TestResult> {
-        if !(gb.take_ld_b_b_breakpoint()
-            || gb.take_illegal_opcode())
-        {
+        if !(gb.take_ld_b_b_breakpoint() || gb.take_illegal_opcode()) {
             return None;
         }
 
