@@ -68,7 +68,11 @@ mod tests {
             ("MBC2+BATTERY", 0x06, 0x00),
             ("MBC2+BATTERY with a RAM size", 0x06, 0x02),
         ];
-        for (model, cgb) in [(Model::DmgB, false), (Model::CgbE, false), (Model::CgbE, true)] {
+        for (model, cgb) in [
+            (Model::DmgB, false),
+            (Model::CgbE, false),
+            (Model::CgbE, true),
+        ] {
             for (name, cart_type, ram_size) in carts {
                 let mut gb = build(rom(cart_type, ram_size, cgb), model);
                 gb.run_frame();

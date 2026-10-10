@@ -9,18 +9,26 @@ const COMMON_GAME_GENIE_FORMAT_STRING: &str =
 #[derive(Debug)]
 pub enum Error {
     #[cfg(feature = "game_genie")]
-    InvalidGameGenieCodeExpectedHyphen { pos: u8 },
+    InvalidGameGenieCodeExpectedHyphen {
+        pos: u8,
+    },
     #[cfg(feature = "game_genie")]
-    InvalidGameGenieCodeLength { actual: usize },
+    InvalidGameGenieCodeLength {
+        actual: usize,
+    },
     #[cfg(feature = "game_genie")]
-    InvalidGameGenieCodeNotHexDigit { pos: u8 },
+    InvalidGameGenieCodeNotHexDigit {
+        pos: u8,
+    },
     InvalidRamSize,
     InvalidRomHeaderSize,
     InvalidRomSize,
     InvalidSaveState,
     #[cfg(feature = "game_genie")]
     TooManyGameGenieCodes,
-    UnsupportedMBC { mbc_hex_code: u8 },
+    UnsupportedMBC {
+        mbc_hex_code: u8,
+    },
 }
 
 impl Display for Error {

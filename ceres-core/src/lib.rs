@@ -174,7 +174,8 @@ impl<A: AudioCallback> Gb<A> {
         self.cpu.set_pc(0x0100);
         self.cpu.set_sp(0xFFFE);
 
-        let cgb_cart = self.model.is_cgb_hardware() && self.cart.read_rom(HEADER_CGB_FLAG) & HEADER_CGB_B != 0;
+        let cgb_cart =
+            self.model.is_cgb_hardware() && self.cart.read_rom(HEADER_CGB_FLAG) & HEADER_CGB_B != 0;
         if self.model.is_cgb_hardware() {
             self.cgb_mode = if cgb_cart {
                 CgbMode::Cgb
@@ -235,15 +236,33 @@ impl<A: AudioCallback> Gb<A> {
         self.write_mem(io_addr(SCY), 0x00);
         self.write_mem(io_addr(SCX), 0x00);
         // OBP0/OBP1: $00 on CGB, $FF on DMG.
-        self.write_mem(io_addr(OBP0), if self.model.is_cgb_hardware() { 0x00 } else { 0xFF });
-        self.write_mem(io_addr(OBP1), if self.model.is_cgb_hardware() { 0x00 } else { 0xFF });
+        self.write_mem(
+            io_addr(OBP0),
+            if self.model.is_cgb_hardware() {
+                0x00
+            } else {
+                0xFF
+            },
+        );
+        self.write_mem(
+            io_addr(OBP1),
+            if self.model.is_cgb_hardware() {
+                0x00
+            } else {
+                0xFF
+            },
+        );
         self.write_mem(io_addr(WY), 0x00);
         self.write_mem(io_addr(WX), 0x00);
         // LCDC: $91 on all models.
         self.write_mem(io_addr(LCDC), 0x91);
         self.write_mem(io_addr(LYC), 0x00);
         // DMA: $00 on CGB, $FF on DMG.
-        self.dma.set_reg(if self.model.is_cgb_hardware() { 0x00 } else { 0xFF });
+        self.dma.set_reg(if self.model.is_cgb_hardware() {
+            0x00
+        } else {
+            0xFF
+        });
         // BGP: $FC on all models.
         self.write_mem(io_addr(BGP), 0xFC);
         // Where the boot ROM leaves the PPU: measured by running the real boot

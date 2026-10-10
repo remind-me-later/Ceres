@@ -313,7 +313,9 @@ impl Ppu {
     /// Side-effect free view of the unusable area (for non-CPU readers).
     #[must_use]
     pub(crate) fn peek_unusable(&self, addr: u16) -> u8 {
-        if self.d.cpu().oam_read_blocked || self.d.cpu().oam_write_blocked && !self.is_cgb_hardware() {
+        if self.d.cpu().oam_read_blocked
+            || self.d.cpu().oam_write_blocked && !self.is_cgb_hardware()
+        {
             0xFF
         } else {
             self.read_unusable(addr)

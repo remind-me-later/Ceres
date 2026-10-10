@@ -200,9 +200,15 @@ fn alu_a_r() {
 
     let mut expected = before;
     alu_model(&mut expected, (op >> 3) & 7, before.r[index]);
-    assert!(regs_after(&cpu, &bus, hl(&before), before.r[HL_BYTE]) == expected, "result");
+    assert!(
+        regs_after(&cpu, &bus, hl(&before), before.r[HL_BYTE]) == expected,
+        "result"
+    );
     if index == HL_BYTE {
-        assert!(bus.read_count == 1 && bus.read_addrs[0] == hl(&before), "reads (HL)");
+        assert!(
+            bus.read_count == 1 && bus.read_addrs[0] == hl(&before),
+            "reads (HL)"
+        );
     } else {
         assert!(bus.read_count == 0, "no read");
     }
@@ -224,7 +230,10 @@ fn alu_a_d8() {
     alu_model(&mut expected, kind, bus.reads[0]);
     expected.pc = before.pc.wrapping_add(1);
     assert!(regs_after(&cpu, &bus, hl(&before), 0) == expected, "result");
-    assert!(bus.read_count == 1 && bus.read_addrs[0] == before.pc, "reads the immediate");
+    assert!(
+        bus.read_count == 1 && bus.read_addrs[0] == before.pc,
+        "reads the immediate"
+    );
 }
 
 /// The CB-prefixed rotates, shifts, SWAP, BIT, RES and SET.
@@ -269,10 +278,16 @@ fn cb() {
         2 => expected.r[index] = v & !(1 << bit),
         _ => expected.r[index] = v | 1 << bit,
     }
-    assert!(regs_after(&cpu, &bus, hl(&before), before.r[HL_BYTE]) == expected, "result");
+    assert!(
+        regs_after(&cpu, &bus, hl(&before), before.r[HL_BYTE]) == expected,
+        "result"
+    );
     assert!(bus.read_addrs[0] == before.pc, "reads the opcode");
     if index == HL_BYTE {
-        assert!(bus.read_count == 2 && bus.read_addrs[1] == hl(&before), "reads (HL)");
+        assert!(
+            bus.read_count == 2 && bus.read_addrs[1] == hl(&before),
+            "reads (HL)"
+        );
     }
 }
 
@@ -300,7 +315,10 @@ fn inc_dec_r() {
         expected.h = v % 16 == 0;
     }
     expected.z = expected.r[index] == 0;
-    assert!(regs_after(&cpu, &bus, hl(&before), before.r[HL_BYTE]) == expected, "result");
+    assert!(
+        regs_after(&cpu, &bus, hl(&before), before.r[HL_BYTE]) == expected,
+        "result"
+    );
 }
 
 /// LD r,r' (0x40-0x7F but HALT).
@@ -316,7 +334,10 @@ fn ld_r_r() {
 
     let mut expected = before;
     expected.r[usize::from((op >> 3) & 7)] = before.r[usize::from(op & 7)];
-    assert!(regs_after(&cpu, &bus, hl(&before), before.r[HL_BYTE]) == expected, "result");
+    assert!(
+        regs_after(&cpu, &bus, hl(&before), before.r[HL_BYTE]) == expected,
+        "result"
+    );
 }
 
 /// ADD HL,rr (0x09, 0x19, 0x29, 0x39).

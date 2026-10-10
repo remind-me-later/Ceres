@@ -58,7 +58,14 @@ impl ChannelOutput {
     /// Sets the sample of channel `index` to `value` (SameBoy's
     /// `update_sample`). `volume` is the envelope volume, which biases the
     /// output on the AGB.
-    pub(super) fn update(&mut self, index: usize, value: u8, dac_enabled: bool, volume: u8, c: &Ctx) {
+    pub(super) fn update(
+        &mut self,
+        index: usize,
+        value: u8,
+        dac_enabled: bool,
+        volume: u8,
+        c: &Ctx,
+    ) {
         let left = c.nr51 & (0x10 << index) != 0;
         let right = c.nr51 & (1 << index) != 0;
         let left_volume = i32::from((c.nr50 >> 4) & 7) + 1;

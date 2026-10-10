@@ -187,7 +187,8 @@ impl<A: AudioCallback> Gb<A> {
             // Cart specific.
             return None;
         }
-        if cgb && addr >= WRAM_START && (bus_for_addr(cgb, src) != DmaBus::Ram || src >= ECHO_START) {
+        if cgb && addr >= WRAM_START && (bus_for_addr(cgb, src) != DmaBus::Ram || src >= ECHO_START)
+        {
             return Some(
                 (src.wrapping_sub(1) & Wram::BANK_SIZE)
                     | (addr & (Wram::BANK_SIZE - 1))
