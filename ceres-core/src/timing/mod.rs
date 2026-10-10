@@ -1,10 +1,19 @@
 use crate::{AudioCallback, Gb, apu::ApuCtx, ppu::Mode};
 use core::{cmp::Ordering, time::Duration};
 
-/// T-cycles per frame (4MHz rate).
+// Time is counted in three units:
+// - a dot is a 4 MHz cycle, the PPU's pixel clock;
+// - a T-cycle is a CPU cycle: a dot in single speed, half a dot in double
+//   speed;
+// - an 8 MHz unit is half a dot, SameBoy's tick, which the frame and the
+//   RTC count in.
+
+/// Dots per frame.
 pub const DOTS_PER_FRAME: i32 = 70224;
-/// T-cycles per second (4MHz).
+/// Dots per second.
 pub const DOTS_PER_SEC: i32 = 1 << 22;
+/// 8 MHz units per frame.
+pub const UNITS_PER_FRAME: i32 = 2 * DOTS_PER_FRAME;
 
 // TAC bits
 const TAC_ENABLE_B: u8 = 0x04;
@@ -95,14 +104,14 @@ impl Clock {
 }
 
 impl<A: AudioCallback> Gb<A> {
-    /// Advance all components by the given number of CPU T-cycles.
-    /// This is the main timing entry point called by the CPU.
+    /// Advances the machine by `t_cycles` CPU T-cycles (half a dot each in
+    /// double speed). This is the main timing entry point.
     #[inline]
-    pub fn advance_dots(&mut self, cpu_t_cycles: i32) {
-        if cpu_t_cycles <= 0 {
+    pub fn advance_t_cycles(&mut self, t_cycles: i32) {
+        if t_cycles <= 0 {
             return;
         }
-        self.advance_cycles(cpu_t_cycles);
+        self.advance_cycles(t_cycles);
     }
 
     /// Port of SameBoy's `GB_advance_cycles`: the speed switch phases are
@@ -167,8 +176,8 @@ impl<A: AudioCallback> Gb<A> {
         let double_speed = self.key1.is_enabled();
         self.ppu
             .set_dma_lookahead(self.dma_dest_after(cycles), cycles);
-        // A frame lasts the same time whatever the CPU speed.
-        self.dots_ran += cycles * if double_speed { 1 } else { 2 };
+        // A frame lasts the same time whatever the CPU speed: count 8 MHz units.
+        self.units_ran += cycles * if double_speed { 1 } else { 2 };
         for _ in 0..cycles {
             self.ppu
                 .tick_t_cycle(&mut self.ints, self.cgb_mode, double_speed);

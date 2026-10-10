@@ -18,7 +18,7 @@ mod timing;
 use crate::{
     bootrom::Bootrom,
     memory::{Hram, Wram},
-    timing::DOTS_PER_FRAME,
+    timing::UNITS_PER_FRAME,
 };
 use alloc::{boxed::Box, vec::Vec};
 use cartridge::{Cartridge, HEADER_CGB_B, HEADER_CGB_FLAG};
@@ -61,7 +61,8 @@ pub struct Gb<A: AudioCallback> {
     clock: Clock,
     cpu: Sm83,
     dma: Dma,
-    dots_ran: i32,
+    /// 8 MHz units run in the current frame.
+    units_ran: i32,
     #[cfg(feature = "game_genie")]
     game_genie: GameGenie,
     hdma: Hdma,
@@ -439,7 +440,7 @@ impl<A: AudioCallback> Gb<A> {
             clock,
             cpu: Sm83::default(),
             dma: Dma::new(model),
-            dots_ran: Default::default(),
+            units_ran: Default::default(),
             hdma: Hdma::default(),
             hram: Hram::default(),
             ints: Interrupts::default(),
@@ -495,12 +496,11 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn run_frame(&mut self) {
-        // `dots_ran` counts 8 MHz units (half dots), so a frame is twice `DOTS_PER_FRAME`.
-        while self.dots_ran < 2 * DOTS_PER_FRAME {
+        while self.units_ran < UNITS_PER_FRAME {
             self.run_cpu();
         }
 
-        self.dots_ran -= 2 * DOTS_PER_FRAME;
+        self.units_ran -= UNITS_PER_FRAME;
     }
 
     #[inline]

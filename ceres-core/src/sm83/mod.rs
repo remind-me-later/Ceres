@@ -89,9 +89,9 @@ pub trait Bus {
     /// The CPU entered (or, with `false`, left) HALT.
     fn set_halted(&mut self, halted: bool);
 
-    /// Advance the machine by `dots` T-cycles immediately (nothing is
+    /// Advance the machine by `t_cycles` T-cycles immediately (nothing is
     /// deferred when this is called at the start of a step).
-    fn advance(&mut self, dots: i32);
+    fn advance(&mut self, t_cycles: i32);
 
     /// Whether the machine is CGB hardware (regardless of ROM mode).
     fn is_cgb_hardware(&self) -> bool;
@@ -1308,7 +1308,7 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     fn flush_deferred_time(&mut self) {
         if self.time_deferred != 0 {
-            self.advance_dots(self.time_deferred);
+            self.advance_t_cycles(self.time_deferred);
             self.time_deferred = 0;
         }
     }
@@ -1351,12 +1351,12 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 self.time_deferred = 4;
             }
             ConflictType::ReadNew => {
-                self.advance_dots(pending - 1);
+                self.advance_t_cycles(pending - 1);
                 self.write_mem(addr, val);
                 self.time_deferred = 5;
             }
             ConflictType::WriteCpu => {
-                self.advance_dots(pending + 1);
+                self.advance_t_cycles(pending + 1);
                 // In double speed a write to IF lands after the LCD
                 // interrupts of the next cycle (gambatte `updateIrqs(cc + 2)`).
                 if addr == io_addr(IF) && self.key1.is_enabled() && self.ppu.gambatte_stat() {
@@ -1386,12 +1386,12 @@ impl<A: AudioCallback> Bus for Gb<A> {
                     && stat & (STAT_IF_OAM_B | STAT_IF_HBLANK_B) == STAT_IF_HBLANK_B
                 {
                     self.write_mem(addr, !STAT_IF_OAM_B);
-                    self.advance_dots(1);
+                    self.advance_t_cycles(1);
                     self.write_mem(addr, val);
                 } else {
                     self.write_mem(addr, 0xFF);
                     self.write_mem(addr, val);
-                    self.advance_dots(1);
+                    self.advance_t_cycles(1);
                 }
                 self.time_deferred = 3;
             }
@@ -1410,7 +1410,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
                     early |= old & (STAT_IF_HBLANK_B | STAT_IF_VBLANK_B | STAT_IF_OAM_B);
                 }
                 self.write_mem(addr, early);
-                self.advance_dots(1);
+                self.advance_t_cycles(1);
                 self.write_mem(addr, val);
                 self.time_deferred = 3;
             }
@@ -1418,25 +1418,25 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 let old = self.ppu.read_stat();
                 self.flush_deferred_time();
                 self.write_mem(addr, (val & !STAT_IF_HBLANK_B) | (old & STAT_IF_HBLANK_B));
-                self.advance_dots(1);
+                self.advance_t_cycles(1);
                 self.write_mem(addr, val);
                 self.time_deferred = 3;
             }
             ConflictType::PaletteDmg => {
-                self.advance_dots(pending - 2);
+                self.advance_t_cycles(pending - 2);
                 let old = self.read_mem(addr);
                 self.write_mem(addr, val | old);
-                self.advance_dots(1);
+                self.advance_t_cycles(1);
                 self.write_mem(addr, val);
                 self.time_deferred = 5;
             }
             ConflictType::PaletteCgb => {
                 if matches!(self.model, Model::CgbD | Model::CgbE | Model::Agb) {
-                    self.advance_dots(pending - 2);
+                    self.advance_t_cycles(pending - 2);
                     self.write_mem(addr, val);
                     self.time_deferred = 6;
                 } else {
-                    self.advance_dots(pending - 1);
+                    self.advance_t_cycles(pending - 1);
                     self.write_mem(addr, val);
                     self.time_deferred = 5;
                 }
@@ -1453,7 +1453,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 const FETCHER_BITS: u8 = LCDC_BG_MAP_B | LCDC_TILE_SEL_B | LCDC_WIN_MAP_B;
 
                 let mut old = self.read_mem(addr);
-                self.advance_dots(pending - 2);
+                self.advance_t_cycles(pending - 2);
                 if (self.model != Model::Mgb && self.ppu.fifo_position() == 0
                     || self.ppu.is_fetching_sprite())
                     && val & LCDC_OBJ_EN_B == 0
@@ -1464,7 +1464,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 self.write_mem(addr, (old & !FETCHER_BITS) | (val & FETCHER_BITS));
                 // The object fetch (not the object search) sees OBJ_SIZE early.
                 self.ppu.set_obj_size_fetch(val & LCDC_OBJ_SIZE_B != 0);
-                self.advance_dots(1);
+                self.advance_t_cycles(1);
                 self.write_mem(addr, val);
 
                 self.ppu.note_window_disable(old, val);
@@ -1473,19 +1473,19 @@ impl<A: AudioCallback> Bus for Gb<A> {
             ConflictType::SgbLcdc => {
                 // Simplified version of the above.
                 let old = self.read_mem(addr);
-                self.advance_dots(pending - 2);
+                self.advance_t_cycles(pending - 2);
                 // Hack to force aborting an object fetch.
                 self.write_mem(addr, val);
                 self.write_mem(addr, old);
-                self.advance_dots(1);
+                self.advance_t_cycles(1);
                 self.write_mem(addr, val);
                 self.time_deferred = 5;
             }
             ConflictType::WxDmg => {
-                self.advance_dots(pending);
+                self.advance_t_cycles(pending);
                 self.write_mem(addr, val);
                 self.ppu.set_wx_just_changed(true);
-                self.advance_dots(1);
+                self.advance_t_cycles(1);
                 self.ppu.set_wx_just_changed(false);
                 self.time_deferred = 3;
             }
@@ -1493,7 +1493,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 // OBJ_SIZE reaches the object fetcher one dot after the other
                 // bits reach the PPU (measured on CGB-C).
                 let old = self.ppu.read_lcdc();
-                self.advance_dots(pending);
+                self.advance_t_cycles(pending);
                 self.ppu.cgb_obj_size_write(val, 0);
                 if self.ppu.gambatte_stat() {
                     self.ppu.gstat_write_lcdc(val, 0);
@@ -1515,7 +1515,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 self.ppu.set_window_enable_pending(
                     old & LCDC_WIN_EN_B == 0 && val & LCDC_WIN_EN_B != 0,
                 );
-                self.advance_dots(1);
+                self.advance_t_cycles(1);
                 self.ppu.set_tile_sel_glitch(false);
                 self.ppu.set_window_enable_pending(false);
                 self.write_mem(addr, val);
@@ -1524,7 +1524,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
             }
             ConflictType::LcdcCgbDouble => {
                 let old = self.ppu.read_lcdc();
-                self.advance_dots(pending - 2);
+                self.advance_t_cycles(pending - 2);
                 self.ppu.cgb_obj_size_write(val, 2);
                 if self.ppu.gambatte_stat() {
                     self.ppu.gstat_write_lcdc(val, 2);
@@ -1534,7 +1534,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 self.write_mem(addr, (val & !late) | (old & late));
                 self.ppu
                     .set_tile_sel_glitch((val ^ old) & LCDC_TILE_SEL_B != 0);
-                self.advance_dots(2);
+                self.advance_t_cycles(2);
                 self.ppu.set_tile_sel_glitch(false);
                 self.write_mem(addr, val);
                 self.ppu.gstat_lcdc_write_done();
@@ -1547,20 +1547,20 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 // On the DMG the mixer, which discards SCX's low bits, sees them
                 // a dot before the end of the write.
                 let old = self.ppu.read_scx();
-                self.advance_dots(pending - 2);
+                self.advance_t_cycles(pending - 2);
                 if self.model.is_cgb_hardware() || addr != io_addr(SCX) {
                     self.write_mem(addr, val);
                     self.time_deferred = 6;
                 } else {
                     self.write_mem(addr, (old & 7) | (val & !7));
-                    self.advance_dots(1);
+                    self.advance_t_cycles(1);
                     self.write_mem(addr, val);
                     self.time_deferred = 5;
                 }
             }
             ConflictType::Nr10CgbDouble => {
-                self.advance_dots(pending - 1);
-                self.advance_dots(1);
+                self.advance_t_cycles(pending - 1);
+                self.advance_t_cycles(1);
                 self.write_mem(addr, val);
                 self.time_deferred = 4;
             }
@@ -1572,7 +1572,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
     fn defer(&mut self, t_cycles: i32) {
         let flush = self.time_deferred - t_cycles;
         if flush > 0 {
-            self.advance_dots(flush);
+            self.advance_t_cycles(flush);
         }
         self.time_deferred = t_cycles;
     }
@@ -1664,8 +1664,8 @@ impl<A: AudioCallback> Bus for Gb<A> {
             .set_cpu_idle(self.hdma.cpu_halted() || self.clock.stopped);
     }
 
-    fn advance(&mut self, dots: i32) {
-        self.advance_dots(dots);
+    fn advance(&mut self, t_cycles: i32) {
+        self.advance_t_cycles(t_cycles);
     }
 
     fn is_cgb_hardware(&self) -> bool {

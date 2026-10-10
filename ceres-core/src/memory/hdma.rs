@@ -194,7 +194,7 @@ impl<A: AudioCallback> Gb<A> {
 
         self.hdma.in_progress = true;
         self.ppu.set_hdma_state(true, self.hdma.src);
-        self.advance_dots(cycles);
+        self.advance_t_cycles(cycles);
 
         while self.hdma.on {
             let src = self.hdma.src;
@@ -210,7 +210,7 @@ impl<A: AudioCallback> Gb<A> {
             }
             self.hdma.src = src.wrapping_add(1);
 
-            self.advance_dots(cycles);
+            self.advance_t_cycles(cycles);
 
             // The destination is always VRAM, written directly: the PPU's
             // access blocking does not apply, but a write during a blocked
@@ -255,7 +255,7 @@ impl<A: AudioCallback> Gb<A> {
         self.hdma.in_progress = false;
         self.ppu.set_hdma_state(false, self.hdma.src);
         if !self.key1.is_enabled() {
-            self.advance_dots(2);
+            self.advance_t_cycles(2);
         }
     }
 }
