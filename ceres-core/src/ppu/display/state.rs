@@ -339,6 +339,8 @@ impl Ppu {
         match state {
             State::HBlankStart => {
                 self.gstat_mode3_end();
+                #[cfg(feature = "debug")]
+                self.timing_mode3_end();
                 self.gstat_hblank();
                 self.stat &= !STAT_MODE_B;
                 self.d.irq.mode_for_interrupt = 0;
@@ -396,6 +398,8 @@ impl Ppu {
             }
             State::LineEnd => {
                 self.gstat_line_end(self.d.current_line);
+                #[cfg(feature = "debug")]
+                self.timing_line_end(self.d.current_line);
                 self.d.cfl = 0;
                 self.d.line_clock = 0;
                 self.d.line_clock_valid = true;
@@ -427,6 +431,7 @@ impl Ppu {
                 self.ly = self.d.current_line;
                 if self.d.current_line == LINES {
                     if !self.gambatte_stat_irq()
+                        && !self.timing_live()
                         && !self.d.irq.stat_interrupt_line
                         && self.stat & STAT_IF_OAM_B != 0
                     {
@@ -457,6 +462,7 @@ impl Ppu {
                     self.stat |= 1;
                     ints.request_vblank();
                     if !self.gambatte_stat_irq()
+                        && !self.timing_live()
                         && !self.d.irq.stat_interrupt_line
                         && self.stat & STAT_IF_OAM_B != 0
                     {

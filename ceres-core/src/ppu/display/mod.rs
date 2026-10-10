@@ -25,6 +25,8 @@ mod objects;
 mod pixels;
 mod stat;
 mod state;
+#[cfg(feature = "debug")]
+mod timing;
 mod window;
 
 use {
@@ -100,6 +102,9 @@ pub(super) struct Display {
     window: Window,
     irq: StatIrq,
     gstat: GStat,
+    /// The hardware-structured timing unit, run as a shadow of `gstat`.
+    #[cfg(feature = "debug")]
+    timing: timing::LcdTiming,
     bus: PpuBus,
     cpu: CpuAccess,
 }
@@ -135,6 +140,8 @@ impl Default for Display {
             window: Window::default(),
             irq: StatIrq::default(),
             gstat: GStat::default(),
+            #[cfg(feature = "debug")]
+            timing: timing::LcdTiming::default(),
             bus: PpuBus::default(),
             cpu: CpuAccess::default(),
         }
@@ -290,6 +297,13 @@ impl Ppu {
         self.rgba_buf_present = mem::take(&mut self.rgb_buf);
     }
 
+    /// Without the `debug` feature there is no shadow timing unit.
+    #[cfg(not(feature = "debug"))]
+    #[expect(clippy::unused_self, reason = "Only the debug build has the unit")]
+    pub(in crate::ppu) const fn timing_live(&self) -> bool {
+        false
+    }
+
     /// Advance the display by one unit (half a dot, SameBoy's 8 MHz tick).
     ///
     /// SameBoy's state machine runs the code that follows a sleep as soon as
@@ -298,7 +312,10 @@ impl Ppu {
     /// for the accesses that land between units: after a speed switch or in
     /// a split write in double speed.
     pub(in crate::ppu) fn run_display(&mut self, ints: &mut Interrupts) {
-        self.gstat_unit(ints);
+        let mut muted = Interrupts::default();
+        self.gstat_unit(if self.timing_live() { &mut muted } else { ints });
+        #[cfg(feature = "debug")]
+        self.timing_unit(ints);
         // Pre-run bookkeeping (top of GB_display_run).
         if self.d.window.wy_triggered {
             self.d.window.wy_check_scheduled = false;

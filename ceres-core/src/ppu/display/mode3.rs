@@ -118,6 +118,8 @@ impl Ppu {
                             self.d.irq.mode_for_interrupt = 0;
                             self.stat_update(ints);
                             self.gstat_mode3_end();
+                            #[cfg(feature = "debug")]
+                            self.timing_mode3_end();
                         }
                         Step::WaitForTile
                     } else {
@@ -183,6 +185,8 @@ impl Ppu {
                         self.d.irq.mode_for_interrupt = 0;
                         self.stat_update(ints);
                         self.gstat_mode3_end();
+                        #[cfg(feature = "debug")]
+                        self.timing_mode3_end();
                     }
                     Step::WindowCheck
                 }

@@ -452,6 +452,7 @@ impl Ppu {
             // With LYC 0 the LY=LYC condition starts with the LCD, unless the
             // flag stayed set while it was off.
             if self.gambatte_stat_irq()
+                && !self.timing_live()
                 && self.stat & (STAT_IF_LYC_B | STAT_LYC_B) == STAT_IF_LYC_B
                 && self.lyc == 0
             {
@@ -459,9 +460,13 @@ impl Ppu {
             }
             self.d.restart();
             self.gstat_lcd_on();
+            #[cfg(feature = "debug")]
+            self.timing_lcd_on(ints);
         } else if !is_on && was_on {
             self.lcd_off();
             self.gstat_lcd_off();
+            #[cfg(feature = "debug")]
+            self.timing_lcd_off();
             self.rgba_buf_present.clear();
         } else {
             // The LCD stays as it is.
@@ -516,6 +521,8 @@ impl Ppu {
         let mut ints = Interrupts::default();
         self.d.restart();
         self.gstat_lcd_on();
+        #[cfg(feature = "debug")]
+        self.timing_lcd_on(&mut ints);
         // `line_clock` restarts on every visible line and keeps running
         // through VBlank, starting from its first line.
         let base = i32::from(line.saturating_sub(LINES)) * LINE_LENGTH;

@@ -110,6 +110,13 @@ impl<A: AudioCallback> Gb<A> {
         self.ppu.set_trace(enabled, &self.ints);
     }
 
+    /// Lets the hardware-structured LCD timing unit request the STAT
+    /// interrupts instead of the current model (an experiment).
+    #[inline]
+    pub const fn set_timing_live(&mut self, live: bool) {
+        self.ppu.set_timing_live(live);
+    }
+
     /// The PPU events recorded since the last call.
     #[inline]
     pub fn take_ppu_trace(&mut self) -> Vec<PpuEvent> {

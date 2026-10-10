@@ -106,7 +106,11 @@ impl Ppu {
             self.d.irq.stat_interrupt_line = true;
         }
 
-        if self.d.irq.stat_interrupt_line && !previous && !self.gambatte_stat_irq() {
+        if self.d.irq.stat_interrupt_line
+            && !previous
+            && !self.gambatte_stat_irq()
+            && !self.timing_live()
+        {
             ints.request_lcd();
         }
     }
@@ -131,8 +135,11 @@ impl Ppu {
 
     pub(in crate::ppu) fn write_lyc_reg(&mut self, val: u8, ints: &mut Interrupts) {
         if self.gambatte_stat_irq() {
-            self.gstat_write_lyc(val, ints);
+            let mut muted = Interrupts::default();
+            self.gstat_write_lyc(val, if self.timing_live() { &mut muted } else { ints });
         }
+        #[cfg(feature = "debug")]
+        self.timing_write_lyc(val);
         let state = self.d.state;
         let cgb = self.is_cgb_hardware();
         // These are the states around LY changes; the display routine calls
@@ -167,8 +174,11 @@ impl Ppu {
 
     pub(in crate::ppu) fn write_stat_reg(&mut self, val: u8, ints: &mut Interrupts) {
         if self.gambatte_stat_irq() {
-            self.gstat_write_stat(val, ints);
+            let mut muted = Interrupts::default();
+            self.gstat_write_stat(val, if self.timing_live() { &mut muted } else { ints });
         }
+        #[cfg(feature = "debug")]
+        self.timing_write_stat(val, ints);
         // On the CGB the HBlank condition is already held a dot before the
         // mode bits change are evaluated: a write in that gap comes too late
         // to prevent the interrupt.
@@ -191,6 +201,7 @@ impl Ppu {
             if old & STAT_LYC_B != 0
                 && old & STAT_IF_LYC_B == 0
                 && (!self.is_cgb_hardware() || val & STAT_IF_LYC_B != 0)
+                && !self.timing_live()
             {
                 ints.request_lcd();
             }

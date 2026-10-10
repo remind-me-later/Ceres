@@ -218,6 +218,11 @@ impl Run {
             .with_context(|| format!("Failed to load {}", self.rom.display()))?
             .build();
         gb.set_color_correction_mode(ceres_core::ColorCorrectionMode::Disabled);
+        // Experiment: the hardware-structured LCD timing unit drives the STAT
+        // interrupt on the DMG family.
+        if std::env::var_os("CERES_TIMING_LIVE").is_some() && !self.model.is_cgb_hardware() {
+            gb.set_timing_live(true);
+        }
         Ok(gb)
     }
 

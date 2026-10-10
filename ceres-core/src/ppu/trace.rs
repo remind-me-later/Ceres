@@ -14,6 +14,8 @@ pub enum PpuEventKind {
     StatRead(u8),
     /// The CPU read LY and got this value.
     LyRead(u8),
+    /// The shadow timing unit would have requested the LCD interrupt.
+    ShadowLcdInterrupt,
 }
 
 /// An event and where the display was.
@@ -70,6 +72,9 @@ impl Ppu {
     pub(super) fn trace_unit(&mut self, ints: &Interrupts) {
         self.trace.unit += 1;
         self.trace_requests(ints);
+        if self.take_timing_edge() {
+            self.trace_shadow_lcd_interrupt();
+        }
     }
 
     /// Records the LCD interrupt requests made since the last look.
@@ -79,6 +84,11 @@ impl Ppu {
             self.record(PpuEventKind::LcdInterrupt);
         }
         self.trace.lcd_requests = requests;
+    }
+
+    /// The shadow timing unit's interrupt line rose.
+    pub(in crate::ppu) fn trace_shadow_lcd_interrupt(&mut self) {
+        self.record(PpuEventKind::ShadowLcdInterrupt);
     }
 
     /// The CPU read `value` from STAT or LY.
