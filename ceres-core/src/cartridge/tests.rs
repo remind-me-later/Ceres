@@ -85,7 +85,7 @@ fn sizes() {
         (6, None),
     ] {
         assert_eq!(
-            RAMSize::new(byte).ok().map(|s| s.size_bytes()),
+            RAMSize::new(byte).ok().map(RAMSize::size_bytes),
             size,
             "RAM size {byte}"
         );
