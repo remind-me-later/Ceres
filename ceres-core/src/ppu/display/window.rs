@@ -82,26 +82,24 @@ impl Ppu {
         }
     }
 
-    /// Time passes by `units` half-dots. SameBoy runs the scheduled WY check
-    /// on a grid of 8 of them (counted from the moment the LCD was turned on),
-    /// which sits at a different offset in each speed and hardware.
-    pub(in crate::ppu) fn advance_wy_units(&mut self, units: u8) {
-        for _ in 0..units {
-            self.d.window.wy_units = (self.d.window.wy_units + 1) & 7;
-            if self.d.window.wy_check_scheduled && !self.d.window.wy_triggered {
-                let offset = if self.double_speed {
-                    6
-                } else if self.hw_cgb() {
-                    0
-                } else {
-                    2
-                };
-                if (self.d.window.wy_units + offset).trailing_zeros() >= 3 {
-                    self.d.window.wy_check_scheduled = false;
-                    self.wy_check();
-                    if self.d.state == State::Mode3Pixel && self.hw_cgb() && !self.double_speed() {
-                        self.d.window.wy_just_checked = true;
-                    }
+    /// Half a dot passes. SameBoy runs the scheduled WY check on a grid of
+    /// 8 of them (counted from the moment the LCD was turned on), which sits
+    /// at a different offset in each speed and hardware.
+    pub(in crate::ppu) fn advance_wy_unit(&mut self) {
+        self.d.window.wy_units = (self.d.window.wy_units + 1) & 7;
+        if self.d.window.wy_check_scheduled && !self.d.window.wy_triggered {
+            let offset = if self.double_speed {
+                6
+            } else if self.hw_cgb() {
+                0
+            } else {
+                2
+            };
+            if (self.d.window.wy_units + offset).trailing_zeros() >= 3 {
+                self.d.window.wy_check_scheduled = false;
+                self.wy_check();
+                if self.d.state == State::Mode3Pixel && self.hw_cgb() && !self.double_speed() {
+                    self.d.window.wy_just_checked = true;
                 }
             }
         }
@@ -170,8 +168,7 @@ impl Ppu {
                 self.d.window.saved = hw.then(|| (self.d.bg_fifo, self.d.fetcher.clone()));
                 self.d.bg_fifo.clear();
                 if self.wx == 0 && self.scx & 7 != 0 && !hw {
-                    self.d.cfl += 1;
-                    self.sleep(State::Mode3WindowDelay, 1);
+                    self.sleep_in_line(State::Mode3WindowDelay, 1);
                     return true;
                 } else if self.wx == 166 {
                     self.d.window.wx_166_interrupt_glitch = true;

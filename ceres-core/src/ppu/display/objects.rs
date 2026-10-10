@@ -85,7 +85,7 @@ impl Ppu {
             return 0xFF;
         }
         let dest = self.d.bus.dma_dest;
-        if dest <= 0xA0 && dest > 0 {
+        if (1..=0xA0).contains(&dest) {
             if self.d.bus.hdma_in_progress {
                 return self
                     .oam_read_row(((self.d.bus.hdma_src & !1) | (addr & 1)).to_le_bytes()[0]);
@@ -178,12 +178,11 @@ impl Ppu {
         let Some(j) = self.d.objs.indices[..n].iter().position(|&i| i == index) else {
             return;
         };
-        for k in j..n - 1 {
-            self.d.objs.indices[k] = self.d.objs.indices[k + 1];
-            self.d.objs.x[k] = self.d.objs.x[k + 1];
-            self.d.objs.y[k] = self.d.objs.y[k + 1];
-        }
-        self.d.objs.count -= 1;
+        let objs = &mut self.d.objs;
+        objs.indices.copy_within(j + 1..n, j);
+        objs.x.copy_within(j + 1..n, j);
+        objs.y.copy_within(j + 1..n, j);
+        objs.count -= 1;
     }
 
     /// A CGB-C write that changes OBJ_SIZE, `units_early` before the point a

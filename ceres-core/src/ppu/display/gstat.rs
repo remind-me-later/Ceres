@@ -30,6 +30,11 @@ const M0_EN: u8 = 0x08;
 const M2_LINE_CYCLE: i64 = 452;
 const M2_LINE_CYCLE_LY0: i64 = 454;
 const LAST_M2_FC: i64 = 143 * 456 + M2_LINE_CYCLE;
+
+/// The line after `ly` (153 wraps to 0).
+const fn next_ly(ly: u8) -> u8 {
+    if ly == 153 { 0 } else { ly + 1 }
+}
 const LY0_M2_FC: i64 = 153 * 456 + M2_LINE_CYCLE_LY0;
 /// The VBlank event: 2 dots before line 144.
 const M1_FC: i64 = 144 * 456 - 2;
@@ -388,7 +393,7 @@ impl GStat {
                 // LY and LYC change together: the flag never goes low.
                 return false;
             }
-            cmp_ly = if cmp_ly == 153 { 0 } else { cmp_ly + 1 };
+            cmp_ly = next_ly(cmp_ly);
         }
         data == cmp_ly
     }
@@ -420,7 +425,7 @@ impl Ppu {
         g.h += 1;
         if g.h == LINE_H {
             g.h = 0;
-            g.ly = if g.ly == 153 { 0 } else { g.ly + 1 };
+            g.ly = next_ly(g.ly);
             g.m0_done = false;
             g.hblank = false;
         }
@@ -469,7 +474,7 @@ impl Ppu {
         }
 
         if g.g == g.lyc_time {
-            let cmp_ly = if g.ly == 153 { 0 } else { g.ly + 1 };
+            let cmp_ly = next_ly(g.ly);
             let blocked = if g.lyc_reg <= LINES && g.lyc_reg > 0 {
                 g.lyc_stat & M2_EN != 0
             } else {
@@ -489,26 +494,24 @@ impl Ppu {
             let m_stat = g.m_stat.event(g.g);
             let m_lyc = g.m_lyc.event(g.g);
             let ly = if g.time_to_next_ly(ds) < 16 {
-                if g.ly == 153 { 0 } else { g.ly + 1 }
+                next_ly(g.ly)
             } else {
                 g.ly
             };
             let blocked_by_m1 = ly == 0 && m_stat & M1_EN != 0;
             let blocked_by_lyc =
-                m_stat & LYC_EN != 0 && (if ly == 0 { 0 } else { ly - 1 }) == m_lyc;
+                m_stat & LYC_EN != 0 && ly.saturating_sub(1) == m_lyc;
             g.m_lyc.set(g.lyc_reg);
             g.m_stat.set(g.stat);
-            let mut next = 70224;
-            if g.stat & M0_EN == 0 {
-                next = 456;
-                if ly == 0 {
-                    next -= M2_LINE_CYCLE_LY0 - M2_LINE_CYCLE;
-                } else if ly == LINES {
-                    next += 456 * (154 - i64::from(LINES) - 1) + M2_LINE_CYCLE_LY0 - M2_LINE_CYCLE;
-                } else {
-                    // An ordinary line.
-                }
-            }
+            let next = if g.stat & M0_EN != 0 {
+                70224
+            } else if ly == 0 {
+                456 - (M2_LINE_CYCLE_LY0 - M2_LINE_CYCLE)
+            } else if ly == LINES {
+                456 + 456 * (154 - i64::from(LINES) - 1) + M2_LINE_CYCLE_LY0 - M2_LINE_CYCLE
+            } else {
+                456
+            };
             g.m2_time += (2 * next).cast_unsigned();
             if !blocked_by_m1 && !blocked_by_lyc {
                 ints.request_lcd();
@@ -586,11 +589,12 @@ impl Ppu {
         let g = &self.d.gstat;
         let ds = self.double_speed();
         let mut h = g.h + units_early + GStat::cc(ds, 2);
-        if g.ly == line {
-        } else if g.ly == if line == 0 { 153 } else { line - 1 } {
+        if g.ly != line {
+            // Only a write in the last dots of the line before counts.
+            if next_ly(g.ly) != line {
+                return None;
+            }
             h -= LINE_H;
-        } else {
-            return None;
         }
         if h < 0 {
             return Some(-1);
@@ -725,15 +729,13 @@ impl Ppu {
         g.stat = data;
         g.lyc_reg_change(data, g.lyc_src, ds);
         if g.lcd_on {
-            if data & M0_EN != 0 && !g.m0_scheduled {
+            if data & M0_EN != 0 {
                 g.m0_scheduled = true;
             }
             g.m2_time = g.schedule_m2(data, ds);
             if g.stat_change_triggers(old, data, ds) {
                 ints.request_lcd();
             }
-        }
-        if g.lcd_on {
             let late = GStat::cc(ds, 2 * i64::from(g.cgb));
             g.m_stat.write(g.g, g.g + late.cast_unsigned(), data);
         } else {

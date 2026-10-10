@@ -107,7 +107,7 @@ impl Ppu {
             return 0;
         }
         let dest = self.d.bus.dma_dest;
-        if dest <= 0xA0 && dest > 0 && self.d.bus.dma_src & 0xE000 == 0x8000 {
+        if (1..=0xA0).contains(&dest) && self.d.bus.dma_src & 0xE000 == 0x8000 {
             // DMAing from VRAM!
             let offset = 1 - u16::from(self.d.bus.cpu_idle);
             if self.hw_cgb() {
@@ -177,15 +177,9 @@ impl Ppu {
 
     /// STOP: the PPU's accesses are blocked (unless the CPU's already were).
     pub const fn block_ppu_accesses(&mut self, blocked: bool) {
-        if blocked {
-            self.d.bus.oam_ppu_blocked = !self.d.cpu.oam_read_blocked;
-            self.d.bus.vram_ppu_blocked = !self.d.cpu.vram_read_blocked;
-            self.d.bus.cgb_palettes_ppu_blocked = !self.d.cpu.cgb_palettes_blocked;
-        } else {
-            self.d.bus.oam_ppu_blocked = false;
-            self.d.bus.vram_ppu_blocked = false;
-            self.d.bus.cgb_palettes_ppu_blocked = false;
-        }
+        self.d.bus.oam_ppu_blocked = blocked && !self.d.cpu.oam_read_blocked;
+        self.d.bus.vram_ppu_blocked = blocked && !self.d.cpu.vram_read_blocked;
+        self.d.bus.cgb_palettes_ppu_blocked = blocked && !self.d.cpu.cgb_palettes_blocked;
     }
 
     pub const fn set_cpu_idle(&mut self, idle: bool) {

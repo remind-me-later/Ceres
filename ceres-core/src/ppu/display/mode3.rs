@@ -121,15 +121,15 @@ impl Ppu {
                 }
                 Step::WaitForTile => {
                     // The background fetcher finishes its tile first.
-                    if self.d.fetcher.step < FetcherStep::DataHighT2 || self.d.bg_fifo.size == 0 {
-                        self.advance_fetcher();
-                        self.d.cfl += 1;
-                        self.sleep(State::Mode3ObjectWait, 1);
-                        return Mode3Flow::Slept;
-                    }
+                    let next = if self.d.fetcher.step < FetcherStep::DataHighT2
+                        || self.d.bg_fifo.size == 0
+                    {
+                        State::Mode3ObjectWait
+                    } else {
+                        State::Mode3ObjectFetch
+                    };
                     self.advance_fetcher();
-                    self.d.cfl += 1;
-                    self.sleep(State::Mode3ObjectFetch, 1);
+                    self.sleep_in_line(next, 1);
                     return Mode3Flow::Slept;
                 }
                 Step::ReadObjectAttributes => {
@@ -137,23 +137,20 @@ impl Ppu {
                     let base = u16::from(self.d.objs.indices[self.d.objs.count - 1]) * 4;
                     self.d.objs.y_bus = self.oam_read(base + 2);
                     self.d.obj_fetch.flags = self.oam_read(base + 3);
-                    self.d.cfl += 2;
-                    self.sleep(State::Mode3ObjectAttributes, 2);
+                    self.sleep_in_line(State::Mode3ObjectAttributes, 2);
                     return Mode3Flow::Slept;
                 }
                 Step::ReadObjectLow => {
                     self.d.obj_fetch.line_address = self.current_object_line_address();
                     self.d.obj_fetch.data[0] = self.vram_read(self.d.obj_fetch.line_address);
-                    self.d.cfl += 2;
-                    self.sleep(State::Mode3ObjectLow, 2);
+                    self.sleep_in_line(State::Mode3ObjectLow, 2);
                     return Mode3Flow::Slept;
                 }
                 Step::ReadObjectHigh => {
                     self.d.obj_fetch.active = false;
-                    self.d.cfl += 1;
                     self.d.obj_fetch.line_address = self.current_object_line_address();
                     self.d.obj_fetch.data[1] = self.vram_read(self.d.obj_fetch.line_address + 1);
-                    self.sleep(State::Mode3ObjectHigh, 1);
+                    self.sleep_in_line(State::Mode3ObjectHigh, 1);
                     return Mode3Flow::Slept;
                 }
                 Step::PushObject => {
@@ -170,8 +167,7 @@ impl Ppu {
                     if self.d.position_in_line == 160 {
                         return Mode3Flow::Done;
                     }
-                    self.d.cfl += 1;
-                    self.sleep(State::Mode3Pixel, 1);
+                    self.sleep_in_line(State::Mode3Pixel, 1);
                     return Mode3Flow::Slept;
                 }
                 Step::AfterPixel => {
@@ -231,9 +227,10 @@ impl Ppu {
         self.d.position_in_line = 240;
         self.d.line_has_fractional_scrolling = false;
 
-        if self.d.fetcher.step == FetcherStep::DataHighT1
-            || self.d.fetcher.step == FetcherStep::DataHighT2
-        {
+        if matches!(
+            self.d.fetcher.step,
+            FetcherStep::DataHighT1 | FetcherStep::DataHighT2
+        ) {
             // Make sure current_tile_data[1] holds the last tile data byte read.
             self.d.fetcher.data[1] = self.d.fetcher.data[0];
         }
@@ -261,8 +258,7 @@ impl Ppu {
             self.d.cpu.vram_write_blocked = false;
         }
 
-        self.d.cfl += 1;
-        self.sleep(State::HBlankStart, 1);
+        self.sleep_in_line(State::HBlankStart, 1);
     }
 
     pub(super) fn fill_desynced_line(&mut self) {

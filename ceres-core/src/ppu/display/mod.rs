@@ -204,6 +204,15 @@ impl Display {
     }
 }
 
+/// Steps a countdown that is idle at 0; true when it just ran out.
+const fn count_down(counter: &mut u8) -> bool {
+    if *counter == 0 {
+        return false;
+    }
+    *counter -= 1;
+    *counter == 0
+}
+
 /// Model helpers matching SameBoy's `gb->model` comparisons.
 const fn model_ge_cgb_d(m: Model) -> bool {
     matches!(m, Model::CgbD | Model::CgbE | Model::Agb)
@@ -236,6 +245,13 @@ impl Ppu {
     pub(super) const fn sleep(&mut self, id: State, n: i32) {
         self.d.state = id;
         self.d.wait = n;
+    }
+
+    /// Sleep for `n` dots that count towards the length of the line.
+    #[inline]
+    pub(super) const fn sleep_in_line(&mut self, id: State, n: i32) {
+        self.d.cfl += n;
+        self.sleep(id, n);
     }
 
     pub(in crate::ppu) const fn lcd_off(&mut self) {
@@ -296,28 +312,19 @@ impl Ppu {
             }
 
             self.d.line_clock += 1;
-            if self.d.hblank_hdma_delay > 0 {
-                self.d.hblank_hdma_delay -= 1;
-                if self.d.hblank_hdma_delay == 0 {
-                    self.d.hblank_hdma_edge = true;
-                }
+            if count_down(&mut self.d.hblank_hdma_delay) {
+                self.d.hblank_hdma_edge = true;
             }
-            if self.d.window.line0_wy_countdown > 0 {
-                self.d.window.line0_wy_countdown -= 1;
-                if self.d.window.line0_wy_countdown == 0 {
-                    // The trigger of line 0 is decided afresh: a WY that
-                    // changed since the line began can also take it away.
-                    self.d.window.wy_triggered = self.lcdc & 0x20 != 0 && self.wy == 0;
-                }
+            if count_down(&mut self.d.window.line0_wy_countdown) {
+                // The trigger of line 0 is decided afresh: a WY that
+                // changed since the line began can also take it away.
+                self.d.window.wy_triggered = self.lcdc & 0x20 != 0 && self.wy == 0;
             }
-            if self.d.irq.line0_pulse > 0 {
-                self.d.irq.line0_pulse -= 1;
-                if self.d.irq.line0_pulse == 0 {
-                    self.d.irq.mode_for_interrupt = 2;
-                    self.stat_update(ints);
-                    self.d.irq.mode_for_interrupt = -1;
-                    self.stat_update(ints);
-                }
+            if count_down(&mut self.d.irq.line0_pulse) {
+                self.d.irq.mode_for_interrupt = 2;
+                self.stat_update(ints);
+                self.d.irq.mode_for_interrupt = -1;
+                self.stat_update(ints);
             }
             self.step_state_machine(ints);
         } else if self.d.irq.line153_compare_pending {
@@ -327,12 +334,9 @@ impl Ppu {
         } else {
             // Nothing runs in the second half of a dot.
         }
-        if self.d.irq.lyc_line_hold > 0 {
-            self.d.irq.lyc_line_hold -= 1;
-            if self.d.irq.lyc_line_hold == 0 {
-                self.stat_update(ints);
-            }
+        if count_down(&mut self.d.irq.lyc_line_hold) {
+            self.stat_update(ints);
         }
-        self.advance_wy_units(1);
+        self.advance_wy_unit();
     }
 }

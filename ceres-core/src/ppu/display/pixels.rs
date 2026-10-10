@@ -65,13 +65,11 @@ impl Ppu {
         }
 
         // Mixing
-        let mut bg_enabled = true;
-        if self.lcdc & 0x01 == 0 {
-            if self.cgb_mode_on() {
-                bg_priority = false;
-            } else {
-                bg_enabled = false;
-            }
+        // LCDC bit 0 off: in CGB mode the objects lose their priority, in
+        // DMG mode the background is blank.
+        let bg_enabled = self.lcdc & 0x01 != 0 || self.cgb_mode_on();
+        if self.lcdc & 0x01 == 0 && self.cgb_mode_on() {
+            bg_priority = false;
         }
         let bg_pixel = if bg_enabled { fifo_item.pixel } else { 0 };
         if bg_pixel != 0 && bg_priority {

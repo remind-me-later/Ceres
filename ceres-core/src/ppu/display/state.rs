@@ -209,14 +209,12 @@ impl Ppu {
                 let vram_blocked = self.double_speed() || !self.hw_cgb();
                 self.d.cpu.vram_read_blocked = vram_blocked;
                 self.d.cpu.vram_write_blocked = vram_blocked;
-                self.d.cfl += 2;
-                self.sleep(State::FirstLinePalettesLock, 2);
+                self.sleep_in_line(State::FirstLinePalettesLock, 2);
                 None
             }
             State::FirstLinePalettesLock => {
                 self.d.cpu.cgb_palettes_blocked = true;
-                self.d.cfl += 3;
-                self.sleep(State::FirstLineVramLock, 3);
+                self.sleep_in_line(State::FirstLineVramLock, 3);
                 None
             }
             State::FirstLineVramLock => {
@@ -314,14 +312,12 @@ impl Ppu {
                 self.d.cpu.oam_write_blocked = true;
                 self.d.cpu.oam_read_blocked = true;
                 self.stat_update(ints);
-                self.d.cfl += 3;
-                self.sleep(State::Mode3PalettesLock, 3);
+                self.sleep_in_line(State::Mode3PalettesLock, 3);
                 None
             }
             State::Mode3PalettesLock => {
                 self.d.cpu.cgb_palettes_blocked = true;
-                self.d.cfl += 2;
-                self.sleep(State::Mode3Start, 2);
+                self.sleep_in_line(State::Mode3Start, 2);
                 None
             }
             State::Mode3Start => {
@@ -344,14 +340,12 @@ impl Ppu {
                 self.d.cpu.unlock_oam_vram();
                 self.d.hblank_hdma_delay = HBLANK_HDMA_DELAY;
                 self.stat_update(ints);
-                self.d.cfl += 2;
-                self.sleep(State::HBlankHdma, 2);
+                self.sleep_in_line(State::HBlankHdma, 2);
                 None
             }
             State::HBlankHdma => {
                 self.d.cpu.cgb_palettes_blocked = !self.double_speed();
-                self.d.cfl += 2;
-                self.sleep(State::HBlankPalettesUnlock, 2);
+                self.sleep_in_line(State::HBlankPalettesUnlock, 2);
                 None
             }
             State::HBlankPalettesUnlock => {
