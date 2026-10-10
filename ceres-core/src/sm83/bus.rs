@@ -15,6 +15,8 @@
 ///   the access, then defer the access's own 4 T-cycles.
 /// - The host flushes whatever remains at the end of each `step`.
 pub(crate) trait Bus {
+    // -- Time and memory ------------------------------------------------------
+
     /// One internal (no bus access) M-cycle: defer 4 T-cycles.
     fn tick(&mut self);
 
@@ -26,9 +28,27 @@ pub(crate) trait Bus {
     /// defer the write M-cycle's 4 T-cycles.
     fn write(&mut self, addr: u16, val: u8);
 
+    /// Read without consuming time or triggering side effects.
+    fn peek(&self, addr: u16) -> u8;
+
+    /// Flush all deferred time.
+    fn flush(&mut self);
+
     /// Interrupt-dispatch tail: flush all but `t_cycles` T-cycles, which
     /// stay deferred across the step boundary.
     fn defer(&mut self, t_cycles: i32);
+
+    /// Discards the time deferred so far (it was already accounted for).
+    fn drop_deferred(&mut self);
+
+    /// Advance the machine by `t_cycles` T-cycles immediately (nothing is
+    /// deferred when this is called at the start of a step).
+    fn advance(&mut self, t_cycles: i32);
+
+    /// Whether the machine is CGB hardware (regardless of ROM mode).
+    fn is_cgb_hardware(&self) -> bool;
+
+    // -- Interrupts -----------------------------------------------------------
 
     /// `(IF & IE) != 0` — some enabled interrupt line is asserted.
     fn interrupts_pending(&self) -> bool;
@@ -45,8 +65,7 @@ pub(crate) trait Bus {
     /// SM83 illegal-opcode behavior: IE is cleared.
     fn clear_ie(&mut self);
 
-    /// Run a pending HDMA transfer chunk, if any.
-    fn tick_hdma(&mut self);
+    // -- OAM bug and DMA ------------------------------------------------------
 
     /// An internal M-cycle with `addr` on the address bus: flushes the
     /// deferred time, triggers the DMG OAM bug for `addr`, defers 4 T-cycles.
@@ -63,34 +82,37 @@ pub(crate) trait Bus {
     /// first (a halted DMA does not move, and that step frees OAM).
     fn dma_finish_before_halt(&mut self);
 
-    /// Discards the time deferred so far (it was already accounted for).
-    fn drop_deferred(&mut self);
+    /// Run a pending HDMA transfer chunk, if any.
+    fn tick_hdma(&mut self);
+
+    /// An HBlank transfer is requested and has not run yet, on a CGB-C
+    /// (gambatte's HALT then prefetches the next opcode).
+    fn hdma_request_pending(&self) -> bool;
+
+    /// HALT prefetched the next opcode for a pending transfer: the transfer
+    /// runs at the wake in the time of that fetch. The CPU keeps the opcode
+    /// (`Sm83::prefetched`), the machine the timing (`hdma_halt_prefetch`).
+    fn note_halt_prefetch(&mut self);
+
+    // -- HALT and STOP --------------------------------------------------------
 
     /// The CPU entered (or, with `false`, left) HALT.
     fn set_halted(&mut self, halted: bool);
 
-    /// Advance the machine by `t_cycles` T-cycles immediately (nothing is
-    /// deferred when this is called at the start of a step).
-    fn advance(&mut self, t_cycles: i32);
-
-    /// Whether the machine is CGB hardware (regardless of ROM mode).
-    fn is_cgb_hardware(&self) -> bool;
-
-    /// Cancel STOP mode (`ppu.leave_stop_mode` + unfreeze the clock).
-    fn wake_from_stop(&mut self);
+    /// The CPU is in STOP mode (waiting for a joypad press).
+    fn is_stopped(&self) -> bool;
 
     /// Enter STOP mode: DIV write, DIV freeze when interrupts are disabled,
     /// PPU stop, clock stop. `ime` is the CPU's current IME state.
     fn enter_stop(&mut self, ime: bool);
 
-    /// Flush all deferred time.
-    fn flush(&mut self);
+    /// Cancel STOP mode (`ppu.leave_stop_mode` + unfreeze the clock).
+    fn wake_from_stop(&mut self);
 
-    /// Read without consuming time or triggering side effects.
-    fn peek(&self, addr: u16) -> u8;
+    /// Leave STOP mode without touching the speed-switch halt countdown.
+    fn leave_stop(&mut self);
 
-    /// The CPU is in STOP mode (waiting for a joypad press).
-    fn is_stopped(&self) -> bool;
+    // -- CGB speed switch -----------------------------------------------------
 
     /// KEY1 speed-switch requested (`key1.is_requested`).
     fn speed_switch_requested(&self) -> bool;
@@ -98,20 +120,9 @@ pub(crate) trait Bus {
     /// Start the CGB speed switch (SameBoy's `stop` speed-switch block).
     fn begin_speed_switch(&mut self, interrupt_pending: bool);
 
-    /// Leave STOP mode without touching the speed-switch halt countdown.
-    fn leave_stop(&mut self);
-
     /// Cancel the post-speed-switch halt.
     fn clear_speed_switch_halt(&mut self);
 
     /// The post-speed-switch halt expired since the last call.
     fn take_unhalt(&mut self) -> bool;
-
-    /// An HBlank transfer is requested and has not run yet, on a CGB-C
-    /// (gambatte's HALT then prefetches the next opcode).
-    fn hdma_request_pending(&self) -> bool;
-
-    /// HALT prefetched the next opcode for a pending transfer: the transfer
-    /// runs at the wake in the time of that fetch.
-    fn note_halt_prefetch(&mut self);
 }

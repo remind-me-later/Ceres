@@ -107,6 +107,11 @@ impl Dma {
         self.is_active() && (self.cycles_modulo == 2 || double_speed)
     }
 
+    /// The OAM index of the byte being copied.
+    const fn oam_index(&self) -> usize {
+        self.current_dest.wrapping_sub(1) as usize
+    }
+
     /// The T-cycles the next `run_dma` runs (SameBoy's `dma_cycles`).
     pub(crate) const fn set_cycles(&mut self, cycles: i32) {
         self.cycles = cycles;
@@ -123,6 +128,12 @@ impl Dma {
         self.current_src = u16::from(val) << 8;
         self.reg = val;
     }
+}
+
+/// The work RAM address a CPU access that conflicts with the transfer
+/// reaches on the CGB: the bank half the DMA reads, at the CPU's offset.
+const fn wram_conflict_addr(src: u16, addr: u16) -> u16 {
+    (src.wrapping_sub(1) & Wram::BANK_SIZE) | (addr & (Wram::BANK_SIZE - 1)) | WRAM_START
 }
 
 const fn bus_for_addr(cgb: bool, addr: u16) -> DmaBus {
@@ -189,11 +200,7 @@ impl<A: AudioCallback> Gb<A> {
         }
         if cgb && addr >= WRAM_START && (bus_for_addr(cgb, src) != DmaBus::Ram || src >= ECHO_START)
         {
-            return Some(
-                (src.wrapping_sub(1) & Wram::BANK_SIZE)
-                    | (addr & (Wram::BANK_SIZE - 1))
-                    | WRAM_START,
-            );
+            return Some(wram_conflict_addr(src, addr));
         }
         let current = src.wrapping_sub(1);
         // The DMG's DMA reads the work RAM through its echo.
@@ -212,7 +219,7 @@ impl<A: AudioCallback> Gb<A> {
             && (VRAM_START..CART_RAM_START).contains(&src)
             && self.is_addr_in_dma_use(addr)
         {
-            let index = usize::from(self.dma.current_dest.wrapping_sub(1));
+            let index = self.dma.oam_index();
             if let Some(byte) = self.ppu.oam_mut().bytes_mut().get_mut(index) {
                 *byte = 0;
             }
@@ -233,7 +240,7 @@ impl<A: AudioCallback> Gb<A> {
             // with it when the DMA reads the work RAM).
             let current = src.wrapping_sub(1);
             let oam = self.ppu.oam_mut().bytes_mut();
-            if let Some(byte) = oam.get_mut(usize::from(self.dma.current_dest.wrapping_sub(1))) {
+            if let Some(byte) = oam.get_mut(self.dma.oam_index()) {
                 *byte = if current >= WRAM_START {
                     *byte & value
                 } else {
@@ -247,7 +254,7 @@ impl<A: AudioCallback> Gb<A> {
             // OAM byte being copied, or clears it when the DMA reads the VRAM.
             let current = src.wrapping_sub(1);
             let oam = self.ppu.oam_mut().bytes_mut();
-            if let Some(byte) = oam.get_mut(usize::from(self.dma.current_dest.wrapping_sub(1))) {
+            if let Some(byte) = oam.get_mut(self.dma.oam_index()) {
                 *byte = if (VRAM_START..CART_RAM_START).contains(&current) {
                     0
                 } else {
@@ -261,15 +268,11 @@ impl<A: AudioCallback> Gb<A> {
             return None;
         }
         if !(WRAM_START..ECHO_START).contains(&src) && addr >= WRAM_START {
-            return Some(
-                (src.wrapping_sub(1) & Wram::BANK_SIZE)
-                    | (addr & (Wram::BANK_SIZE - 1))
-                    | WRAM_START,
-            );
+            return Some(wram_conflict_addr(src, addr));
         }
 
         let current = src.wrapping_sub(1);
-        let oam_index = usize::from(self.dma.current_dest.wrapping_sub(1));
+        let oam_index = self.dma.oam_index();
         let before_cgb_c = matches!(model, Model::Cgb0 | Model::CgbA | Model::CgbB);
         let before_cgb_e = before_cgb_c || matches!(model, Model::CgbC | Model::CgbD);
         let oam = self.ppu.oam_mut().bytes_mut();
