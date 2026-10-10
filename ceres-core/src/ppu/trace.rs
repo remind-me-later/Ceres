@@ -2,7 +2,12 @@
 //! requests and the values STAT and LY reads returned, each with where the
 //! display was. Two timing models of the PPU agree when these agree.
 
-use {super::Ppu, crate::interrupts::Interrupts, alloc::vec::Vec, core::mem};
+use {
+    super::{LCDC_ON_B, Ppu},
+    crate::interrupts::Interrupts,
+    alloc::vec::Vec,
+    core::mem,
+};
 
 /// What happened.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -16,6 +21,8 @@ pub enum PpuEventKind {
     LyRead(u8),
     /// The shadow timing unit would have requested the LCD interrupt.
     ShadowLcdInterrupt,
+    /// The shadow timing unit reads another value at `addr`.
+    ShadowReadMismatch { addr: u16, live: u8, shadow: u8 },
 }
 
 /// An event and where the display was.
@@ -30,6 +37,9 @@ pub struct PpuEvent {
     pub line_clock: i32,
     /// The event came in the second half of the dot.
     pub second_half: bool,
+    /// The line and half dot on the timing unit's clock (`timing.rs`).
+    pub timing_line: u8,
+    pub timing_h: i32,
     pub kind: PpuEventKind,
 }
 
@@ -64,6 +74,8 @@ impl Ppu {
             line: self.d.current_line(),
             line_clock: self.d.line_clock(),
             second_half: !self.d.half_dot(),
+            timing_line: self.timing_position().0,
+            timing_h: self.timing_position().1,
             kind,
         });
     }
@@ -93,10 +105,26 @@ impl Ppu {
 
     /// The CPU read `value` from STAT or LY.
     pub(crate) fn trace_read(&mut self, addr: u16, value: u8) {
-        match addr {
-            0xFF41 => self.record(PpuEventKind::StatRead(value)),
-            0xFF44 => self.record(PpuEventKind::LyRead(value)),
-            _ => {}
+        let shadow = match addr {
+            0xFF41 => {
+                self.record(PpuEventKind::StatRead(value));
+                self.timing_read_stat(self.read_stat())
+            }
+            0xFF44 => {
+                self.record(PpuEventKind::LyRead(value));
+                self.timing_read_ly()
+            }
+            _ => return,
+        };
+        let Some(shadow) = shadow else {
+            return;
+        };
+        if shadow != value && self.lcdc & LCDC_ON_B != 0 {
+            self.record(PpuEventKind::ShadowReadMismatch {
+                addr,
+                live: value,
+                shadow,
+            });
         }
     }
 }

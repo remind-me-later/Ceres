@@ -186,6 +186,10 @@ impl Ppu {
     /// LY as the CPU reads it.
     #[must_use]
     pub(crate) fn cpu_read_ly(&self) -> u8 {
+        #[cfg(feature = "debug")]
+        if self.timing_live() {
+            return self.timing_read_ly().unwrap_or(self.ly);
+        }
         let Some((ly, t)) = self.line_position() else {
             return self.ly;
         };
@@ -212,6 +216,10 @@ impl Ppu {
     #[must_use]
     pub(crate) fn cpu_read_stat(&self) -> u8 {
         let stat = self.read_stat();
+        #[cfg(feature = "debug")]
+        if self.timing_live() {
+            return self.timing_read_stat(stat).unwrap_or(stat);
+        }
         let Some((ly, t)) = self.line_position() else {
             return stat;
         };

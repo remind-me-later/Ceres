@@ -25,7 +25,10 @@ use {
     super::{LAST_LINE, LINE_LENGTH, LINES},
     crate::{
         interrupts::Interrupts,
-        ppu::{Ppu, STAT_IF_HBLANK_B, STAT_IF_LYC_B, STAT_IF_OAM_B, STAT_IF_VBLANK_B},
+        ppu::{
+            Ppu, STAT_IF_HBLANK_B, STAT_IF_LYC_B, STAT_IF_OAM_B, STAT_IF_VBLANK_B, STAT_LYC_B,
+            STAT_MODE_B,
+        },
     },
 };
 
@@ -40,8 +43,9 @@ const LINE_RESET_H: i32 = LINE_END_H + 2;
 const VBLANK_H: i32 = LINE_END_H + 4;
 /// LY=LYC is sampled once per M-cycle, at this phase.
 const LY_MATCH_PHASE: i32 = 4;
-/// On line 153 LY resets to 0 early, before this point of the line.
-const LINE153_LY_RESET_H: i32 = 8;
+/// On line 153 LY resets to 0 early, at this point of the line (after the
+/// LY=LYC sample there).
+const LINE153_LY_RESET_H: i32 = 4;
 /// A written LYC reaches the comparison this many half dots after the
 /// write, which then follows it at once (LY changes only at its samples).
 const LYC_WRITE_LATENCY: u8 = 3;
@@ -137,7 +141,6 @@ impl LcdTiming {
             }
             // No line reset as LY becomes 144: HBlank holds into VBlank.
             LINE_RESET_H if self.line != LAST_VISIBLE_LINE => self.hblank = false,
-            LINE153_LY_RESET_H if self.line == LAST_LINE => self.ly = 0,
             _ => {}
         }
         let mut rose = false;
@@ -154,6 +157,9 @@ impl LcdTiming {
         if self.h.rem_euclid(8) == LY_MATCH_PHASE {
             self.ly_match = self.ly == self.lyc;
         }
+        if self.h == LINE153_LY_RESET_H && self.line == LAST_LINE {
+            self.ly = 0;
+        }
         rose |= self.update_line();
         // VBlank is latched on the same clock edge as LY=LYC, a gate later:
         // LY=LYC dropping as VBlank starts leaves the line low in between.
@@ -169,7 +175,70 @@ impl LcdTiming {
     }
 }
 
+/// A CPU read sees the signals this many half dots after the unit's clock.
+const READ_LATENCY: u8 = 4;
+
+/// The OAM scan (mode 2) as reads see it: from a little after the line
+/// reset, for 77 dots.
+const SCAN_START_H: i32 = LINE_RESET_H + 4;
+const SCAN_END_H: i32 = 2 * 77 + READ_LATENCY as i32;
+
+impl LcdTiming {
+    /// The unit `n` half dots ahead.
+    fn ahead(&self, n: u8) -> Self {
+        let mut t = self.clone();
+        for _ in 0..n {
+            t.unit();
+        }
+        t
+    }
+
+    /// STAT's mode as a read sees it; `pipeline` is the mode the drawing
+    /// pipeline is in, which tells mode 3 from mode 0.
+    const fn read_mode(&self, pipeline: u8) -> u8 {
+        let next_visible = self.line < LAST_VISIBLE_LINE || self.line == LAST_LINE;
+        let scanning =
+            (self.h >= SCAN_START_H && next_visible) || (self.h < SCAN_END_H && self.line < LINES);
+        let visible =
+            self.line < LINES && !(self.line == LAST_VISIBLE_LINE && self.h >= SCAN_START_H);
+        // VBlank shows once the clock has turned over to line 144.
+        if self.vblank && self.line >= LINES {
+            1
+        } else if scanning {
+            2
+        } else if visible && pipeline != 0 {
+            3
+        } else {
+            0
+        }
+    }
+}
+
 impl Ppu {
+    /// LY as a CPU read sees it; `None` where the line clock does not hold
+    /// (the first line after the LCD is turned on, a cut off line).
+    pub(in crate::ppu) fn timing_read_ly(&self) -> Option<u8> {
+        if !self.d.line_clock_valid() {
+            return None;
+        }
+        Some(self.d.timing.ahead(READ_LATENCY).ly)
+    }
+
+    /// STAT's mode and LY=LYC flag as a CPU read sees them, over `stat`
+    /// (the enables and the pipeline's mode). The flag comes from a latch
+    /// (`RUPO`) that follows the synced comparison a half dot late, and
+    /// drops as soon as LY changes.
+    pub(in crate::ppu) fn timing_read_stat(&self, stat: u8) -> Option<u8> {
+        if !self.d.line_clock_valid() {
+            return None;
+        }
+        let flag_view = self.d.timing.ahead(READ_LATENCY - 1);
+        let lyc_flag = flag_view.ly_match && flag_view.ly == flag_view.lyc;
+        let t = flag_view.ahead(1);
+        let mode = t.read_mode(stat & STAT_MODE_B);
+        Some((stat & !(STAT_MODE_B | STAT_LYC_B)) | mode | if lyc_flag { STAT_LYC_B } else { 0 })
+    }
+
     /// Advances the shadow timing unit by a half dot; its interrupt is
     /// recorded with the unit's (`take_timing_edge`).
     pub(super) const fn timing_unit(&mut self, ints: &mut Interrupts) {
@@ -234,6 +303,11 @@ impl Ppu {
     pub(super) const fn timing_line_end(&mut self, line: u8) {
         self.d.timing.line = line;
         self.d.timing.h = LINE_H - 19;
+    }
+
+    /// The line and half dot on the unit's clock.
+    pub(in crate::ppu) const fn timing_position(&self) -> (u8, i32) {
+        (self.d.timing.line, self.d.timing.h)
     }
 
     /// The unit requests the STAT interrupts (`Gb::set_timing_live`).
