@@ -28,28 +28,17 @@ impl Mbc3RTC {
         if !(0x8..=0xC).contains(&val) {
             return Err(());
         }
-
-        #[expect(
-            clippy::unwrap_used,
-            reason = "val can only be 0x8..=0xC it will panic only when passed 0"
-        )]
-        {
-            self.mapped = Some(NonZeroU8::new(val).unwrap());
-        }
+        self.mapped = NonZeroU8::new(val);
         Ok(())
     }
 
     /// The latched register that is mapped, if any.
     pub fn read(&self, ram_enabled: bool) -> Option<u8> {
         const MASKS: [u8; 5] = [0x3F, 0x3F, 0x1F, 0xFF, 0xC1];
-        ram_enabled
-            .then(|| {
-                self.mapped.map(|m| {
-                    let index = usize::from(m.get() - 0x8);
-                    self.latched[index] & MASKS[index]
-                })
-            })
-            .flatten()
+        self.mapped.filter(|_| ram_enabled).map(|m| {
+            let index = usize::from(m.get() - 0x8);
+            self.latched[index] & MASKS[index]
+        })
     }
 
     /// Copies the real registers to the latched ones (any write to $6000-$7FFF).
@@ -105,18 +94,14 @@ impl Mbc3RTC {
 
     #[must_use]
     pub fn write(&mut self, ram_enabled: bool, val: u8) -> Option<()> {
-        ram_enabled
-            .then(|| {
-                self.mapped.map(|m| {
-                    let index = usize::from(m.get() - 0x8);
-                    if index == 0 {
-                        // Writing the seconds restarts the sub-second count.
-                        self.cycles = 0;
-                    }
-                    self.real[index] = val;
-                })
-            })
-            .flatten()
+        self.mapped.filter(|_| ram_enabled).map(|m| {
+            let index = usize::from(m.get() - 0x8);
+            if index == 0 {
+                // Writing the seconds restarts the sub-second count.
+                self.cycles = 0;
+            }
+            self.real[index] = val;
+        })
     }
 }
 
@@ -144,24 +129,14 @@ impl Mbc3RTC {
         self.latch();
     }
 
-    pub const fn control(&self) -> u8 {
-        self.real[4]
+    /// The clock registers: seconds, minutes, hours, days and control.
+    pub const fn real(&self) -> [u8; 5] {
+        self.real
     }
 
-    pub const fn days(&self) -> u8 {
-        self.real[3]
-    }
-
-    pub const fn hours(&self) -> u8 {
-        self.real[2]
-    }
-
-    pub const fn minutes(&self) -> u8 {
-        self.real[1]
-    }
-
-    pub const fn seconds(&self) -> u8 {
-        self.real[0]
+    pub const fn set_real(&mut self, real: [u8; 5]) {
+        self.real = real;
+        self.real[4] &= 0xC1;
     }
 
     pub const fn latched(&self) -> [u8; 5] {
@@ -170,25 +145,5 @@ impl Mbc3RTC {
 
     pub const fn set_latched(&mut self, latched: [u8; 5]) {
         self.latched = latched;
-    }
-
-    pub const fn set_control(&mut self, val: u8) {
-        self.real[4] = val & 0xC1;
-    }
-
-    pub const fn set_days(&mut self, val: u8) {
-        self.real[3] = val;
-    }
-
-    pub const fn set_hours(&mut self, val: u8) {
-        self.real[2] = val;
-    }
-
-    pub const fn set_minutes(&mut self, val: u8) {
-        self.real[1] = val;
-    }
-
-    pub const fn set_seconds(&mut self, val: u8) {
-        self.real[0] = val;
     }
 }

@@ -1,6 +1,5 @@
 use crate::Error;
 use core::fmt;
-use core::mem;
 
 #[derive(Default)]
 pub struct GameGenie {
@@ -24,26 +23,19 @@ impl GameGenie {
     }
 
     pub fn deactivate_code(&mut self, code: &GameGenieCode) {
-        if let Some(pos) = self.codes[..self.number_of_active_codes as usize]
-            .iter()
-            .position(|c| c == code)
-        {
-            for i in pos..(self.number_of_active_codes as usize - 1) {
-                self.codes[i] = mem::take(&mut self.codes[i + 1]);
-            }
-
+        let active = self.number_of_active_codes as usize;
+        if let Some(pos) = self.codes[..active].iter().position(|c| c == code) {
+            // The code goes past the active ones.
+            self.codes[pos..active].rotate_left(1);
             self.number_of_active_codes -= 1;
         }
     }
 
     pub fn query(&self, address: u16, old_data: u8) -> Option<u8> {
-        for code in &self.codes[..self.number_of_active_codes as usize] {
-            if code.address == address && code.old_data == old_data {
-                return Some(code.new_data);
-            }
-        }
-
-        None
+        self.active_codes()
+            .iter()
+            .find(|c| c.address == address && c.old_data == old_data)
+            .map(|c| c.new_data)
     }
 }
 
@@ -136,9 +128,26 @@ impl fmt::Display for GameGenieCode {
 
 #[cfg(test)]
 mod tests {
-    use super::GameGenieCode;
+    use super::{GameGenie, GameGenieCode};
     use crate::Error;
-    use alloc::string::ToString as _;
+    use alloc::{string::ToString as _, vec::Vec};
+
+    #[test]
+    fn deactivate_keeps_the_others() {
+        let codes: Vec<_> = ["00A-17B-C49", "01A-17B-C49", "02A-27B-C49"]
+            .into_iter()
+            .filter_map(|code| GameGenieCode::new(code).ok())
+            .collect();
+        assert_eq!(codes.len(), 3, "valid codes");
+        let mut gg = GameGenie::default();
+        for code in &codes {
+            assert!(gg.activate_code(code.clone()).is_ok(), "room for three codes");
+        }
+        gg.deactivate_code(&codes[1]);
+        assert!(gg.active_codes() == [codes[0].clone(), codes[2].clone()], "order kept");
+        assert_eq!(gg.query(codes[0].address, codes[0].old_data), Some(0x00), "first");
+        assert_eq!(gg.query(codes[2].address, codes[2].old_data), Some(0x02), "third");
+    }
 
     #[test]
     fn round_trip() {

@@ -86,17 +86,10 @@ fn detect_mbc1_multicart(rom: &[u8], rom_size: ROMSize) -> bool {
     if num_banks < 4 {
         return false;
     }
-    for bank in 0..num_banks {
+    (0..num_banks).all(|bank| {
         let start = bank * bank_size + 0x104;
-        let end = start + NINTENDO_LOGO.len();
-        if rom.len() < end {
-            return false;
-        }
-        if rom[start..end] != NINTENDO_LOGO {
-            return false;
-        }
-    }
-    true
+        rom.get(start..start + NINTENDO_LOGO.len()) == Some(&NINTENDO_LOGO[..])
+    })
 }
 
 impl Cartridge {
@@ -109,11 +102,8 @@ impl Cartridge {
         };
 
         let title = &self.rom[range];
-        let mut i = 0;
-        while i < title.len() && title[i] != 0 {
-            i += 1;
-        }
-        &title[..i]
+        let len = title.iter().position(|&b| b == 0).unwrap_or(title.len());
+        &title[..len]
     }
 
     #[must_use]
@@ -423,15 +413,12 @@ impl Cartridge {
                         self.rom_bank_lo = val;
                         self.rom_offsets = mbc1_rom_offsets(self, bank_mode);
                     }
-                    0x4000..=0x5FFF => {
-                        let bank_mode = *bank_mode;
-
-                        self.rom_bank_hi = val & 3;
-                        self.rom_offsets = mbc1_rom_offsets(self, bank_mode);
-                        self.ram_offset = mbc1_ram_offset(self, bank_mode);
-                    }
-                    0x6000..=0x7FFF => {
-                        *bank_mode = val & 1 != 0;
+                    0x4000..=0x7FFF => {
+                        if addr < 0x6000 {
+                            self.rom_bank_hi = val & 3;
+                        } else {
+                            *bank_mode = val & 1 != 0;
+                        }
                         let bank_mode = *bank_mode;
 
                         self.rom_offsets = mbc1_rom_offsets(self, bank_mode);

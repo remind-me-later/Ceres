@@ -147,12 +147,8 @@ pub struct Sm83 {
 }
 
 impl Sm83 {
-    pub const fn has_executed_illegal_opcode(&self) -> bool {
-        self.has_executed_illegal_opcode
-    }
-
-    pub const fn set_executed_illegal_opcode(&mut self, val: bool) {
-        self.has_executed_illegal_opcode = val;
+    pub const fn take_illegal_opcode(&mut self) -> bool {
+        mem::replace(&mut self.has_executed_illegal_opcode, false)
     }
 
     pub const fn a(&self) -> u8 {

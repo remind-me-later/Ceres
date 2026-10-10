@@ -56,12 +56,22 @@ impl Sgb {
         self.command = [0; SGB_COMMAND_BYTES];
     }
 
+    /// A command bit was received (zero unless it was set first).
+    const fn next_command_bit(&mut self) {
+        self.command_write_index += 1;
+        self.ready_for_pulse = false;
+        if self.command_write_index & (SGB_PACKET_BITS - 1) == 0 {
+            self.ready_for_stop = true;
+        }
+    }
+
     const fn command_ready(&mut self) {
         if self.command[0] >> 3 == SGB_MLT_REQ {
-            self.player_count = (self.command[1] & 3) + 1;
-            if self.player_count == 3 {
-                self.player_count += 1;
-            }
+            self.player_count = match self.command[1] & 3 {
+                0 => 1,
+                1 => 2,
+                _ => 4,
+            };
             self.current_player &= self.player_count - 1;
         }
     }
@@ -95,11 +105,7 @@ impl Sgb {
                     self.ready_for_write = false;
                     self.ready_for_stop = false;
                 } else if self.command_write_index < SGB_COMMAND_BYTES * 8 {
-                    self.command_write_index += 1;
-                    self.ready_for_pulse = false;
-                    if self.command_write_index & (SGB_PACKET_BITS - 1) == 0 {
-                        self.ready_for_stop = true;
-                    }
+                    self.next_command_bit();
                 } else {
                     // The command buffer is full: the bit is dropped.
                 }
@@ -117,11 +123,7 @@ impl Sgb {
                 } else if self.command_write_index < SGB_COMMAND_BYTES * 8 {
                     self.command[self.command_write_index / 8] |=
                         1 << (self.command_write_index & 7);
-                    self.command_write_index += 1;
-                    self.ready_for_pulse = false;
-                    if self.command_write_index & (SGB_PACKET_BITS - 1) == 0 {
-                        self.ready_for_stop = true;
-                    }
+                    self.next_command_bit();
                 } else {
                     // The command buffer is full: the bit is dropped.
                 }

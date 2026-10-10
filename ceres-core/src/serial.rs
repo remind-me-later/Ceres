@@ -80,15 +80,9 @@ impl Serial {
 
             // Capture the byte that was just transferred
             // (test ROMs like Blargg's print through serial).
-            let transferred_byte = self.sb_sent;
-            if (0x20..0x7F).contains(&transferred_byte) {
-                self.output.push(transferred_byte as char);
-            } else if transferred_byte == b'\n' {
-                self.output.push('\n');
-            } else if transferred_byte == b'\r' {
-                self.output.push('\r');
-            } else {
-                // Not printable: ignored.
+            let byte = self.sb_sent;
+            if (0x20..0x7F).contains(&byte) || matches!(byte, b'\n' | b'\r') {
+                self.output.push(char::from(byte));
             }
         }
 

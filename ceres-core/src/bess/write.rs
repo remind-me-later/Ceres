@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 
 use crate::{
-    AudioCallback, Cartridge, CgbMode, Gb,
+    AudioCallback, Cartridge, CgbMode, Gb, Model,
     memory::{Hram, Wram},
     ppu::{Oam, Vram},
 };
@@ -17,26 +17,16 @@ impl<'a> Writer<'a> {
     }
 
     pub fn save_state<A: AudioCallback>(&mut self, gb: &Gb<A>, secs_since_unix_epoch: u64) {
+        let cgb = matches!(gb.cgb_mode, CgbMode::Cgb);
+        let palette = if cgb { 0x40 } else { 0 };
         let sizes = WrittenSizes {
-            ram: match gb.cgb_mode {
-                CgbMode::Dmg | CgbMode::Compat => u32::from(Wram::SIZE_GB),
-                CgbMode::Cgb => u32::from(Wram::SIZE_CGB),
-            },
-            vram: match gb.cgb_mode {
-                CgbMode::Dmg | CgbMode::Compat => u32::from(Vram::SIZE_GB),
-                CgbMode::Cgb => u32::from(Vram::SIZE_CGB),
-            },
+            ram: u32::from(if cgb { Wram::SIZE_CGB } else { Wram::SIZE_GB }),
+            vram: u32::from(if cgb { Vram::SIZE_CGB } else { Vram::SIZE_GB }),
             mbc_ram: gb.cart.ram_size_bytes(),
             oam: u32::from(Oam::SIZE),
             hram: u32::from(Hram::SIZE),
-            bg_palette: match gb.cgb_mode {
-                CgbMode::Dmg | CgbMode::Compat => 0,
-                CgbMode::Cgb => 0x40,
-            },
-            obj_palette: match gb.cgb_mode {
-                CgbMode::Dmg | CgbMode::Compat => 0,
-                CgbMode::Cgb => 0x40,
-            },
+            bg_palette: palette,
+            obj_palette: palette,
         };
 
         // Write RAM
@@ -56,16 +46,12 @@ impl<'a> Writer<'a> {
         // Write HRAM
         self.write_all(gb.hram.hram().as_slice());
 
-        // Write Background Palette
-        if matches!(gb.cgb_mode, CgbMode::Cgb) {
-            let dummy_palette = [0; 0x80];
-            self.write_all(&dummy_palette);
+        // Write the background and object palettes
+        if cgb {
+            self.write_all(&[0; 0x80]);
         }
         #[expect(clippy::cast_possible_truncation)]
         let offset_to_first_block = { self.position as u32 };
-
-        // println!("Offset to first block: {}", offset_to_first_block);
-        // println!("Total size: {}", sizes.total());
 
         self.write_name_block();
         self.write_info_block(&gb.cart);
@@ -100,18 +86,18 @@ impl<'a> Writer<'a> {
         // Model
         {
             let model = match gb.model {
-                crate::Model::Dmg0 => "GD0 ",
-                crate::Model::DmgB => "GDB ",
-                crate::Model::Mgb => "GM  ",
-                crate::Model::Sgb => "GSB ",
-                crate::Model::Sgb2 => "GS2 ",
-                crate::Model::Cgb0 => "CC0 ",
-                crate::Model::CgbA => "CCA ",
-                crate::Model::CgbB => "CCB ",
-                crate::Model::CgbC => "CCC ",
-                crate::Model::CgbD => "CCD ",
-                crate::Model::CgbE => "CCE ",
-                crate::Model::Agb => "AGB ",
+                Model::Dmg0 => "GD0 ",
+                Model::DmgB => "GDB ",
+                Model::Mgb => "GM  ",
+                Model::Sgb => "GSB ",
+                Model::Sgb2 => "GS2 ",
+                Model::Cgb0 => "CC0 ",
+                Model::CgbA => "CCA ",
+                Model::CgbB => "CCB ",
+                Model::CgbC => "CCC ",
+                Model::CgbD => "CCD ",
+                Model::CgbE => "CCE ",
+                Model::Agb => "AGB ",
             };
 
             self.write_all(model.as_bytes());
@@ -198,20 +184,10 @@ impl<'a> Writer<'a> {
 
             // Each register is a byte and 3 bytes of padding: the real
             // registers, then the latched ones.
-            self.write_all(&[rtc.seconds(), 0, 0, 0]);
-            self.write_all(&[rtc.minutes(), 0, 0, 0]);
-            self.write_all(&[rtc.hours(), 0, 0, 0]);
-            self.write_all(&[rtc.days(), 0, 0, 0]);
-            self.write_all(&[rtc.control(), 0, 0, 0]);
-
-            for value in rtc.latched() {
+            for value in rtc.real().into_iter().chain(rtc.latched()) {
                 self.write_all(&[value, 0, 0, 0]);
             }
-
-            {
-                let timestamp = secs_since_unix_epoch;
-                self.write_all(&timestamp.to_le_bytes());
-            }
+            self.write_all(&secs_since_unix_epoch.to_le_bytes());
         }
     }
 }
@@ -228,16 +204,6 @@ struct WrittenSizes {
 }
 
 impl WrittenSizes {
-    // fn total(&self) -> u32 {
-    //     self.ram_size
-    //         + self.vram_size
-    //         + self.mbc_ram_size
-    //         + self.oam_size
-    //         + self.hram_size
-    //         + self.bg_palette_size
-    //         + self.obj_palette_size
-    // }
-
     const fn bg_palette_offset(&self) -> u32 {
         self.hram_offset() + self.hram
     }

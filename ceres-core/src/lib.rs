@@ -522,12 +522,7 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub const fn check_and_reset_illegal_opcode_breakpoint(&mut self) -> bool {
-        if self.cpu.has_executed_illegal_opcode() {
-            self.cpu.set_executed_illegal_opcode(false);
-            true
-        } else {
-            false
-        }
+        self.cpu.take_illegal_opcode()
     }
 
     #[inline]
