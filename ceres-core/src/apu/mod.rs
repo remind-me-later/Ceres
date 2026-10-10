@@ -102,7 +102,7 @@ struct Ctx {
     lf_div: u8,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 enum SkipDivEvent {
     Inactive,
     Skipped,
@@ -228,14 +228,17 @@ impl<A: AudioCallback> Apu<A> {
 
     #[must_use]
     pub fn pcm12(&self) -> u8 {
-        let masked = self.rev <= Revision::CgbC;
-        (self.output(SQUARE_2).pcm(masked) << 4) | self.output(SQUARE_1).pcm(masked)
+        self.pcm_pair(SQUARE_2, SQUARE_1)
     }
 
     #[must_use]
     pub fn pcm34(&self) -> u8 {
+        self.pcm_pair(NOISE, WAVE)
+    }
+
+    fn pcm_pair(&self, high: usize, low: usize) -> u8 {
         let masked = self.rev <= Revision::CgbC;
-        (self.output(NOISE).pcm(masked) << 4) | self.output(WAVE).pcm(masked)
+        (self.output(high).pcm(masked) << 4) | self.output(low).pcm(masked)
     }
 
     // -- frame sequencer ------------------------------------------------------
@@ -412,9 +415,7 @@ impl<A: AudioCallback> Apu<A> {
             NR52 => {
                 let mut value = if self.enabled { 0xF0 } else { 0x70 };
                 for i in 0..N_CHANNELS {
-                    if self.output(i).active {
-                        value |= 1 << i;
-                    }
+                    value |= u8::from(self.output(i).active) << i;
                 }
                 value
             }

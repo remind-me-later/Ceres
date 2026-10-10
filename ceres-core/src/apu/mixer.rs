@@ -81,15 +81,15 @@ impl ChannelOutput {
             return;
         }
 
-        let mut value = value;
         if value == 0 && self.sample == 0 {
             return;
         }
-        if dac_enabled {
+        let value = if dac_enabled {
             self.sample = value;
+            value
         } else {
-            value = self.sample;
-        }
+            self.sample
+        };
         let v = 0xF - i32::from(value) * 2;
         self.level = (
             if left { v * left_volume } else { 0 },
@@ -174,24 +174,14 @@ impl Mixer {
                 // The DAC charges and discharges instead of switching.
                 let speed = DAC_SPEED / self.sample_rate as f32;
                 let charge = &mut self.dac_charge[ch];
-                if dacs[ch] {
-                    *charge += speed;
-                    if *charge > 1.0 {
-                        *charge = 1.0;
-                    } else {
-                        multiplier *=
-                            (3.0 * *charge).mul_add(*charge, -(2.0 * *charge * *charge * *charge));
-                    }
+                *charge = if dacs[ch] {
+                    (*charge + speed).min(1.0)
                 } else {
-                    *charge -= speed;
-                    if *charge < 0.0 {
-                        multiplier = 0.0;
-                        *charge = 0.0;
-                    } else {
-                        multiplier *=
-                            (3.0 * *charge).mul_add(*charge, -(2.0 * *charge * *charge * *charge));
-                    }
-                }
+                    (*charge - speed).max(0.0)
+                };
+                // Smoothstep: exactly 1 when charged and 0 when discharged.
+                let c = *charge;
+                multiplier *= (3.0 * c).mul_add(c, -(2.0 * c * c * c));
             }
             left = (self.acc[ch].0 as f32 / period).mul_add(multiplier, left);
             right = (self.acc[ch].1 as f32 / period).mul_add(multiplier, right);

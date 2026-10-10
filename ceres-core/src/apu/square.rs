@@ -2,11 +2,11 @@
 
 use super::{Ctx, envelope::Envelope, length::Length, mixer::ChannelOutput, revision::Revision};
 
-const DUTIES: [u8; 32] = [
-    0, 0, 0, 0, 0, 0, 0, 1, //
-    1, 0, 0, 0, 0, 0, 0, 1, //
-    1, 0, 0, 0, 0, 1, 1, 1, //
-    0, 1, 1, 1, 1, 1, 1, 0,
+const DUTIES: [[u8; 8]; 4] = [
+    [0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 1, 1, 1],
+    [0, 1, 1, 1, 1, 1, 1, 0],
 ];
 
 #[derive(Clone, Copy)]
@@ -58,8 +58,10 @@ impl Square {
     pub const fn power_off(&mut self) {
         let mut out = self.out;
         out.power_off();
-        *self = Self::new(self.index);
-        self.out = out;
+        *self = Self {
+            out,
+            ..Self::new(self.index)
+        };
     }
 
     pub const fn out(&self) -> &ChannelOutput {
@@ -175,7 +177,7 @@ impl Square {
             }
             return;
         }
-        let on = DUTIES[usize::from(self.duty_step) + usize::from(self.duty) * 8] != 0;
+        let on = DUTIES[usize::from(self.duty)][usize::from(self.duty_step)] != 0;
         self.update_sample(if on { self.envelope.volume } else { 0 }, c);
     }
 
@@ -189,13 +191,7 @@ impl Square {
             return;
         }
         let mut cycles_left = cycles;
-        if self.delay != 0 {
-            if u32::from(self.delay) < cycles_left {
-                self.delay = 0;
-            } else {
-                self.delay -= cycles_left as u8;
-            }
-        }
+        self.delay = u32::from(self.delay).saturating_sub(cycles_left) as u8;
         while cycles_left > u32::from(self.countdown) {
             cycles_left -= u32::from(self.countdown) + 1;
             self.countdown = (self.period ^ 0x7FF) * 2 + 1;
@@ -223,14 +219,10 @@ impl Square {
         };
         if c.double_speed {
             // The PCM register misses the bits the step changes.
-            let bits = if self.index == 0 {
-                1
-            } else if c.rev == Revision::Cgb0 && old_volume == 1 && self.envelope.nrx2 & 8 != 0 {
-                // CGB-0 behaviour is instance specific and non-deterministic.
-                1
-            } else {
-                3
-            };
+            // CGB-0 behaviour is instance specific and non-deterministic.
+            let cgb0_glitch =
+                c.rev == Revision::Cgb0 && old_volume == 1 && self.envelope.nrx2 & 8 != 0;
+            let bits = if self.index == 0 || cgb0_glitch { 1 } else { 3 };
             self.out.pcm_mask &= (old_volume | bits) & 0xF;
         }
         if self.out.active {

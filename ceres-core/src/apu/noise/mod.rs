@@ -70,8 +70,7 @@ impl Noise {
     pub const fn power_off(&mut self) {
         let mut out = self.out;
         out.power_off();
-        *self = Self::new();
-        self.out = out;
+        *self = Self { out, ..Self::new() };
     }
 
     pub const fn out(&self) -> &ChannelOutput {
@@ -268,11 +267,9 @@ impl Noise {
                 self.step_lfsr(c);
             }
         }
+        self.countdown_reloaded = cycles_left == 0;
         if cycles_left != 0 {
             self.counter_countdown -= cycles_left as u8;
-            self.countdown_reloaded = false;
-        } else {
-            self.countdown_reloaded = true;
         }
     }
 

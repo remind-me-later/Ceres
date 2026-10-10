@@ -135,13 +135,7 @@ impl Sweep {
             }
         }
 
-        if self.restart_hold != 0 {
-            if u32::from(self.restart_hold) > cycles {
-                self.restart_hold -= cycles as u8;
-            } else {
-                self.restart_hold = 0;
-            }
-        }
+        self.restart_hold = u32::from(self.restart_hold).saturating_sub(cycles) as u8;
     }
 
     /// Channel 1 was triggered (`was_active`: it was already playing).
