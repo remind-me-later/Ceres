@@ -13,75 +13,96 @@ pub use hram::Hram;
 pub use key1::{Key1, SpeedSwitch};
 pub use wram::Wram;
 
+// The memory map
+pub const VRAM_START: u16 = 0x8000;
+pub const CART_RAM_START: u16 = 0xA000;
+pub const WRAM_START: u16 = 0xC000;
+/// Echo RAM: the work RAM again, up to the OAM.
+pub const ECHO_START: u16 = 0xE000;
+/// Echo RAM addresses are work RAM ones with this bit set.
+pub const ECHO_B: u16 = 0x2000;
+pub const OAM_START: u16 = 0xFE00;
+/// The unusable area after the OAM.
+pub const UNUSABLE_START: u16 = 0xFEA0;
+/// The I/O registers, then the high RAM and IE.
+pub const IO_START: u16 = 0xFF00;
+pub const HRAM_START: u16 = 0xFF80;
+
+/// The address of the I/O register at `reg` (one of the offsets below).
+#[must_use]
+pub const fn io_addr(reg: u8) -> u16 {
+    IO_START | reg as u16
+}
+
 // IO addresses
 // JoyP
-const P1: u8 = 0x00;
+pub const P1: u8 = 0x00;
 // Serial
-const SB: u8 = 0x01;
-const SC: u8 = 0x02;
+pub const SB: u8 = 0x01;
+pub const SC: u8 = 0x02;
 // Timer
-const DIV: u8 = 0x04;
-const TIMA: u8 = 0x05;
-const TMA: u8 = 0x06;
-const TAC: u8 = 0x07;
+pub const DIV: u8 = 0x04;
+pub const TIMA: u8 = 0x05;
+pub const TMA: u8 = 0x06;
+pub const TAC: u8 = 0x07;
 // IF
-const IF: u8 = 0x0F;
+pub const IF: u8 = 0x0F;
 // APU
-const NR10: u8 = 0x10;
-const NR14: u8 = 0x14;
-const NR21: u8 = 0x16;
-const NR24: u8 = 0x19;
-const NR30: u8 = 0x1A;
-const NR34: u8 = 0x1E;
-const NR41: u8 = 0x20;
-const NR44: u8 = 0x23;
-const NR50: u8 = 0x24;
-const NR52: u8 = 0x26;
-const WAV_BEG: u8 = 0x30;
-const WAV_END: u8 = 0x3F;
+pub const NR10: u8 = 0x10;
+pub const NR14: u8 = 0x14;
+pub const NR21: u8 = 0x16;
+pub const NR24: u8 = 0x19;
+pub const NR30: u8 = 0x1A;
+pub const NR34: u8 = 0x1E;
+pub const NR41: u8 = 0x20;
+pub const NR44: u8 = 0x23;
+pub const NR50: u8 = 0x24;
+pub const NR52: u8 = 0x26;
+pub const WAV_BEG: u8 = 0x30;
+pub const WAV_END: u8 = 0x3F;
 // PPU
-const LCDC: u8 = 0x40;
-const STAT: u8 = 0x41;
-const SCY: u8 = 0x42;
-const SCX: u8 = 0x43;
-const LY: u8 = 0x44;
-const LYC: u8 = 0x45;
-const DMA: u8 = 0x46;
-const BGP: u8 = 0x47;
-const OBP0: u8 = 0x48;
-const OBP1: u8 = 0x49;
-const BANK: u8 = 0x50;
-const WY: u8 = 0x4A;
-const WX: u8 = 0x4B;
-const KEY0: u8 = 0x4C;
-const KEY1: u8 = 0x4D;
-const VBK: u8 = 0x4F;
+pub const LCDC: u8 = 0x40;
+pub const STAT: u8 = 0x41;
+pub const SCY: u8 = 0x42;
+pub const SCX: u8 = 0x43;
+pub const LY: u8 = 0x44;
+pub const LYC: u8 = 0x45;
+pub const DMA: u8 = 0x46;
+pub const BGP: u8 = 0x47;
+pub const OBP0: u8 = 0x48;
+pub const OBP1: u8 = 0x49;
+pub const BANK: u8 = 0x50;
+pub const WY: u8 = 0x4A;
+pub const WX: u8 = 0x4B;
+pub const KEY0: u8 = 0x4C;
+pub const KEY1: u8 = 0x4D;
+pub const VBK: u8 = 0x4F;
 // HDMA
-const HDMA1: u8 = 0x51;
-const HDMA2: u8 = 0x52;
-const HDMA3: u8 = 0x53;
-const HDMA4: u8 = 0x54;
-const HDMA5: u8 = 0x55;
+pub const HDMA1: u8 = 0x51;
+pub const HDMA2: u8 = 0x52;
+pub const HDMA3: u8 = 0x53;
+pub const HDMA4: u8 = 0x54;
+pub const HDMA5: u8 = 0x55;
 // Palettes
-const BCPS: u8 = 0x68;
-const BCPD: u8 = 0x69;
-const OCPS: u8 = 0x6A;
-const OCPD: u8 = 0x6B;
-const OPRI: u8 = 0x6C;
+pub const BCPS: u8 = 0x68;
+pub const BCPD: u8 = 0x69;
+pub const OCPS: u8 = 0x6A;
+pub const OCPD: u8 = 0x6B;
+pub const OPRI: u8 = 0x6C;
 // WRAM select
-const SVBK: u8 = 0x70;
+pub const SVBK: u8 = 0x70;
 // APU digital out
-const PCM12: u8 = 0x76;
-const PCM34: u8 = 0x77;
+pub const PCM12: u8 = 0x76;
+pub const PCM34: u8 = 0x77;
 // Undocumented CGB registers
-const UNDOC_FF72: u8 = 0x72;
-const UNDOC_FF73: u8 = 0x73;
-const UNDOC_FF75: u8 = 0x75;
+pub const UNDOC_FF72: u8 = 0x72;
+pub const UNDOC_FF73: u8 = 0x73;
+pub const UNDOC_FF75: u8 = 0x75;
 // HRAM
-const HRAM_BEG: u8 = 0x80;
-const HRAM_END: u8 = 0xFE;
+pub const HRAM_BEG: u8 = 0x80;
+pub const HRAM_END: u8 = 0xFE;
 // IE
-const IE: u8 = 0xFF;
+pub const IE: u8 = 0xFF;
 
 impl<A: AudioCallback> Gb<A> {
     #[must_use]
@@ -174,7 +195,7 @@ impl<A: AudioCallback> Gb<A> {
     /// CPU read: like `read_mem`, but OAM accesses can corrupt OAM (DMG).
     #[inline]
     pub fn cpu_read_mem(&mut self, addr: u16) -> u8 {
-        if (0xFE00..=0xFEFF).contains(&addr) {
+        if (OAM_START..IO_START).contains(&addr) {
             let dma_blocked = self.dma.blocks_oam_read();
             return self.ppu.cpu_read_oam_area(addr, dma_blocked);
         }
@@ -316,7 +337,7 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn write_mem(&mut self, addr: u16, val: u8) {
-        let Some(addr) = (if addr < 0xFE00 {
+        let Some(addr) = (if addr < OAM_START {
             self.dma_write_redirect(addr, val)
         } else {
             Some(addr)

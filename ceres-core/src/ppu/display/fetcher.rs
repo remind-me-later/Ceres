@@ -1,12 +1,22 @@
 //! The background and window tile fetcher.
 
 use {
-    super::{fifo::Item, model_ge_cgb_d},
+    super::{TILE_BYTES, VRAM_BANK1, fifo::Item, model_ge_cgb_d},
     crate::{
         Model,
-        ppu::{LCDC_BG_MAP_B, LCDC_TILE_SEL_B, LCDC_WIN_EN_B, LCDC_WIN_MAP_B, Ppu},
+        ppu::{
+            ATTR_BANK_B, ATTR_CGB_PALETTE, ATTR_PRIORITY_B, ATTR_X_FLIP_B, ATTR_Y_FLIP_B,
+            LCDC_BG_MAP_B, LCDC_TILE_SEL_B, LCDC_WIN_EN_B, LCDC_WIN_MAP_B, Ppu,
+        },
     },
 };
+
+/// The tile maps (0x9800 and 0x9C00 for the CPU), 32x32 tiles each.
+const TILE_MAP_0: u16 = 0x1800;
+const TILE_MAP_1: u16 = 0x1C00;
+const TILE_MAP_WIDTH: u16 = 32;
+/// Tile 0 of the area addressed with signed tile numbers (0x9000).
+const TILE_DATA_SIGNED: u16 = 0x1000;
 
 /// The steps of the fetcher, two dots each but the last (SameBoy's
 /// `fetcher_step_t`).
@@ -67,7 +77,7 @@ impl Ppu {
             if self.model != Model::CgbD {
                 return (self.d.fetcher.tile, self.d.fetcher.tile & 0x80 == 0, false);
             }
-            self.d.fetcher.data_address &= !0x1000;
+            self.d.fetcher.data_address &= !TILE_DATA_SIGNED;
             return (0, false, true);
         }
         (self.d.fetcher.sel_glitch_data, true, false)
@@ -75,12 +85,14 @@ impl Ppu {
 
     pub(super) fn tile_address(&self) -> u16 {
         let mut address = if self.d.fetcher.last_tileset {
-            u16::from(self.d.fetcher.tile) * 0x10
+            u16::from(self.d.fetcher.tile) * TILE_BYTES
         } else {
-            0x1000_u16.wrapping_add_signed(i16::from(self.d.fetcher.tile.cast_signed()) * 0x10)
+            TILE_DATA_SIGNED.wrapping_add_signed(
+                i16::from(self.d.fetcher.tile.cast_signed()) * TILE_BYTES.cast_signed(),
+            )
         };
-        if self.d.fetcher.attributes & 8 != 0 {
-            address += 0x2000;
+        if self.d.fetcher.attributes & ATTR_BANK_B != 0 {
+            address += VRAM_BANK1;
         }
         address
     }
@@ -90,14 +102,14 @@ impl Ppu {
         match self.d.fetcher.step {
             FetcherStep::GetTileT1 => {
                 self.update_wx_glitch();
-                let mut map: u16 = 0x1800;
+                let mut map = TILE_MAP_0;
                 if self.lcdc & LCDC_WIN_EN_B == 0 {
                     self.d.window.wx_triggered = false;
                 }
                 if self.lcdc & LCDC_BG_MAP_B != 0 && !self.d.window.wx_triggered
                     || self.lcdc & LCDC_WIN_MAP_B != 0 && self.d.window.wx_triggered
                 {
-                    map = 0x1C00;
+                    map = TILE_MAP_1;
                 }
 
                 let y = self.fetcher_y_value();
@@ -108,13 +120,14 @@ impl Ppu {
                     u16::from(self.scx >> 3)
                 } else {
                     let sub = u16::from(self.hw_cgb() && !self.d.obj_fetch.active);
-                    ((u16::from(self.scx) + u16::from(position) + 8 - sub) / 8) & 0x1F
+                    ((u16::from(self.scx) + u16::from(position) + 8 - sub) / 8)
+                        & (TILE_MAP_WIDTH - 1)
                 };
                 if model_ge_cgb_d(self.model) {
                     // Cached on CGB-D and newer, so it cannot mix tiles.
                     self.d.fetcher.y = y;
                 }
-                self.d.fetcher.tile_index_address = map + x + u16::from(y / 8) * 32;
+                self.d.fetcher.tile_index_address = map + x + u16::from(y / 8) * TILE_MAP_WIDTH;
                 self.d.fetcher.step = self.d.fetcher.step.next();
             }
             FetcherStep::GetTileT2 => {
@@ -125,7 +138,7 @@ impl Ppu {
                 let address = self.d.fetcher.tile_index_address;
                 self.d.fetcher.tile = self.vram_read(address);
                 if self.hw_cgb() {
-                    self.d.fetcher.attributes = self.vram_read(address + 0x2000);
+                    self.d.fetcher.attributes = self.vram_read(address + VRAM_BANK1);
                 }
                 self.d.fetcher.step = self.d.fetcher.step.next();
             }
@@ -138,7 +151,7 @@ impl Ppu {
                 };
                 self.d.fetcher.last_tileset = self.lcdc & LCDC_TILE_SEL_B != 0;
                 let tile_address = self.tile_address();
-                let y_flip = if self.d.fetcher.attributes & 0x40 != 0 {
+                let y_flip = if self.d.fetcher.attributes & ATTR_Y_FLIP_B != 0 {
                     7
                 } else {
                     0
@@ -242,9 +255,13 @@ impl Ppu {
 
         let attr = self.d.fetcher.attributes;
         let [low, high] = self.d.fetcher.data;
-        self.d
-            .bg_fifo
-            .push_bg_row(low, high, attr & 7, attr & 0x80 != 0, attr & 0x20 != 0);
+        self.d.bg_fifo.push_bg_row(
+            low,
+            high,
+            attr & ATTR_CGB_PALETTE,
+            attr & ATTR_PRIORITY_B != 0,
+            attr & ATTR_X_FLIP_B != 0,
+        );
         self.d.fetcher.step = FetcherStep::GetTileT1;
     }
 }

@@ -11,36 +11,38 @@
 //! on `line_clock`.
 
 use {
-    super::{LINES, State, model_ge_cgb_d},
+    super::{LAST_LINE, LINE_LENGTH, LINES, LINES_PER_FRAME, State, model_ge_cgb_d},
     crate::{
         interrupts::Interrupts,
-        ppu::{LCDC_WIN_EN_B, Ppu},
+        ppu::{
+            LCDC_WIN_EN_B, Ppu, STAT_IF_HBLANK_B, STAT_IF_LYC_B, STAT_IF_OAM_B, STAT_IF_VBLANK_B,
+        },
     },
 };
 
+/// Dots per line and per frame.
+const LINE: i64 = LINE_LENGTH as i64;
+const FRAME: i64 = LINES_PER_FRAME as i64 * LINE;
 /// Half dots per line and per frame.
-const LINE_H: i64 = 912;
-const FRAME_H: i64 = 154 * LINE_H;
+const LINE_H: i64 = 2 * LINE;
+const FRAME_H: i64 = 2 * FRAME;
 const DISABLED: u64 = u64::MAX;
 
-const LYC_EN: u8 = 0x40;
-const M2_EN: u8 = 0x20;
-const M1_EN: u8 = 0x10;
-const M0_EN: u8 = 0x08;
+const LAST_VISIBLE_LINE: u8 = LINES - 1;
 
 /// Line cycles (dots) of the mode 2 events: 4 dots before the line, 2
 /// before line 0.
 const M2_LINE_CYCLE: i64 = 452;
 const M2_LINE_CYCLE_LY0: i64 = 454;
-const LAST_M2_FC: i64 = 143 * 456 + M2_LINE_CYCLE;
+const LAST_M2_FC: i64 = LAST_VISIBLE_LINE as i64 * LINE + M2_LINE_CYCLE;
 
-/// The line after `ly` (153 wraps to 0).
+/// The line after `ly` (the last one wraps to 0).
 const fn next_ly(ly: u8) -> u8 {
-    if ly == 153 { 0 } else { ly + 1 }
+    if ly == LAST_LINE { 0 } else { ly + 1 }
 }
-const LY0_M2_FC: i64 = 153 * 456 + M2_LINE_CYCLE_LY0;
+const LY0_M2_FC: i64 = LAST_LINE as i64 * LINE + M2_LINE_CYCLE_LY0;
 /// The VBlank event: 2 dots before line 144.
-const M1_FC: i64 = 144 * 456 - 2;
+const M1_FC: i64 = LINES as i64 * LINE - 2;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct Pending {
@@ -185,7 +187,7 @@ impl GStat {
 
     /// The line cycle (dots) of the clock.
     const fn line_cycles(&self, ds: bool) -> i64 {
-        456 - (self.time_to_next_ly(ds) >> ds as u32)
+        LINE - (self.time_to_next_ly(ds) >> ds as u32)
     }
 
     const fn frame_pos(&self) -> i64 {
@@ -220,11 +222,11 @@ impl GStat {
     }
 
     fn schedule_lyc(&self, stat: u8, lyc: u8) -> u64 {
-        if stat & LYC_EN != 0 && lyc < 154 {
+        if stat & STAT_IF_LYC_B != 0 && lyc < LINES_PER_FRAME {
             self.next_frame_cycle(if lyc == 0 {
-                153 * 456 + 6
+                i64::from(LAST_LINE) * LINE + 6
             } else {
-                i64::from(lyc) * 456 - 2
+                i64::from(lyc) * LINE - 2
             })
         } else {
             DISABLED
@@ -261,11 +263,11 @@ impl GStat {
 
     /// gambatte's `mode2IrqSchedule`.
     fn schedule_m2(&self, stat: u8, ds: bool) -> u64 {
-        if stat & M2_EN == 0 {
+        if stat & STAT_IF_OAM_B == 0 {
             return DISABLED;
         }
-        let fc = i64::from(self.ly) * 456 + self.line_cycles(ds);
-        if (LAST_M2_FC..LY0_M2_FC).contains(&fc) || stat & M0_EN != 0 {
+        let fc = i64::from(self.ly) * LINE + self.line_cycles(ds);
+        if (LAST_M2_FC..LY0_M2_FC).contains(&fc) || stat & STAT_IF_HBLANK_B != 0 {
             self.next_frame_cycle(LY0_M2_FC)
         } else {
             self.next_line_cycle(M2_LINE_CYCLE)
@@ -276,14 +278,14 @@ impl GStat {
     /// (gambatte's `getLycCmpLy`).
     const fn lyc_cmp(&self, ds: bool) -> (u8, i64) {
         let ds_n = ds as i64;
-        let line_time = 456 << ds_n;
+        let line_time = LINE << ds_n;
         let left = self.time_to_next_ly(ds);
-        if self.ly == 153 {
+        if self.ly == LAST_LINE {
             let left = left - (line_time - 6 - 6 * ds_n);
             if left <= 0 {
                 (0, left + line_time)
             } else {
-                (153, left)
+                (LAST_LINE, left)
             }
         } else {
             let left = left - (2 + 2 * ds_n);
@@ -318,30 +320,30 @@ impl GStat {
                 4 + 2 * ds_n
             };
             if self.m0_ahead() || left <= close {
-                return lycperiod && data & LYC_EN != 0;
+                return lycperiod && data & STAT_IF_LYC_B != 0;
             }
-            if old & M0_EN != 0 {
+            if old & STAT_IF_HBLANK_B != 0 {
                 return false;
             }
-            return data & M0_EN != 0 || (lycperiod && data & LYC_EN != 0);
+            return data & STAT_IF_HBLANK_B != 0 || (lycperiod && data & STAT_IF_LYC_B != 0);
         }
-        if old & M1_EN != 0 && (ly < 153 || left > 3 + 3 * ds_n) {
+        if old & STAT_IF_VBLANK_B != 0 && (ly < LAST_LINE || left > 3 + 3 * ds_n) {
             return false;
         }
-        (data & M1_EN != 0 && (ly < 153 || left > 4 + 2 * ds_n))
-            || (lycperiod && data & LYC_EN != 0)
+        (data & STAT_IF_VBLANK_B != 0 && (ly < LAST_LINE || left > 4 + 2 * ds_n))
+            || (lycperiod && data & STAT_IF_LYC_B != 0)
     }
 
     fn stat_change_triggers_m2(&self, old: u8, data: u8, ds: bool) -> bool {
-        if old & M2_EN != 0 || data & (M2_EN | M0_EN) != M2_EN {
+        if old & STAT_IF_OAM_B != 0 || data & (STAT_IF_OAM_B | STAT_IF_HBLANK_B) != STAT_IF_OAM_B {
             return false;
         }
         let left = self.time_to_next_ly(ds);
         let ds_n = i64::from(ds);
         match self.ly {
-            0..143 => left <= (456 - M2_LINE_CYCLE) * (1 + ds_n) && left > 2,
-            143 => left <= (456 - M2_LINE_CYCLE) * (1 + ds_n) && left > 4 + 2 * ds_n,
-            153 => left <= (456 - M2_LINE_CYCLE_LY0) * (1 + ds_n) && left > 2,
+            0..LAST_VISIBLE_LINE => left <= (LINE - M2_LINE_CYCLE) * (1 + ds_n) && left > 2,
+            LAST_VISIBLE_LINE => left <= (LINE - M2_LINE_CYCLE) * (1 + ds_n) && left > 4 + 2 * ds_n,
+            LAST_LINE => left <= (LINE - M2_LINE_CYCLE_LY0) * (1 + ds_n) && left > 2,
             _ => false,
         }
     }
@@ -353,23 +355,24 @@ impl GStat {
         let lyc = self.lyc_cmp(ds).0 == self.lyc_reg;
         if self.ly < LINES {
             if !self.m0_done {
-                return lyc && old & LYC_EN == 0;
+                return lyc && old & STAT_IF_LYC_B == 0;
             }
-            return old & M0_EN == 0 && !(lyc && old & LYC_EN != 0);
+            return old & STAT_IF_HBLANK_B == 0 && !(lyc && old & STAT_IF_LYC_B != 0);
         }
-        old & M1_EN == 0 && !(lyc && old & LYC_EN != 0)
+        old & STAT_IF_VBLANK_B == 0 && !(lyc && old & STAT_IF_LYC_B != 0)
     }
 
     fn stat_change_triggers(&self, old: u8, data: u8, ds: bool) -> bool {
         if !self.cgb {
             return self.stat_change_triggers_dmg(old, ds);
         }
-        if data & !old & (LYC_EN | M2_EN | M1_EN | M0_EN) == 0 {
+        if data & !old & (STAT_IF_LYC_B | STAT_IF_OAM_B | STAT_IF_VBLANK_B | STAT_IF_HBLANK_B) == 0
+        {
             return false;
         }
         let (cmp_ly, cmp_left) = self.lyc_cmp(ds);
         let lycperiod = cmp_ly == self.lyc_reg && cmp_left > 2;
-        if lycperiod && old & LYC_EN != 0 {
+        if lycperiod && old & STAT_IF_LYC_B != 0 {
             return false;
         }
         self.stat_change_triggers_m0_lyc_or_m1(old, data, lycperiod, ds)
@@ -378,15 +381,18 @@ impl GStat {
 
     fn lyc_change_blocked_by_m0_or_m1(&self, data: u8, ds: bool) -> bool {
         if self.ly < LINES {
-            return self.stat & M0_EN != 0 && !self.m0_ahead() && data == self.ly;
+            return self.stat & STAT_IF_HBLANK_B != 0 && !self.m0_ahead() && data == self.ly;
         }
-        self.stat & M1_EN != 0
-            && !(self.ly == 153
+        self.stat & STAT_IF_VBLANK_B != 0
+            && !(self.ly == LAST_LINE
                 && self.time_to_next_ly(ds) <= 2 + 2 * i64::from(ds) + 2 * i64::from(self.cgb))
     }
 
     fn lyc_change_triggers(&self, old: u8, data: u8, ds: bool) -> bool {
-        if self.stat & LYC_EN == 0 || data >= 154 || self.lyc_change_blocked_by_m0_or_m1(data, ds) {
+        if self.stat & STAT_IF_LYC_B == 0
+            || data >= LINES_PER_FRAME
+            || self.lyc_change_blocked_by_m0_or_m1(data, ds)
+        {
             return false;
         }
         let (mut cmp_ly, cmp_left) = self.lyc_cmp(ds);
@@ -447,7 +453,7 @@ impl Ppu {
         let g = &mut self.d.gstat;
         let ly = match g.h {
             900 => g.ly,
-            908 if g.ly == 153 => 0,
+            908 if g.ly == LAST_LINE => 0,
             908 => g.ly + 1,
             _ => return,
         };
@@ -467,9 +473,10 @@ impl Ppu {
         }
 
         // VBlank (gambatte's mode 1 event).
-        if i64::from(g.ly) * 456 * 2 + g.h == 2 * M1_FC {
+        if i64::from(g.ly) * LINE_H + g.h == 2 * M1_FC {
             let m_stat = g.m_stat.event(g.g);
-            let flag = g.stat & M1_EN != 0 && m_stat & (M2_EN | M0_EN) == 0;
+            let flag =
+                g.stat & STAT_IF_VBLANK_B != 0 && m_stat & (STAT_IF_OAM_B | STAT_IF_HBLANK_B) == 0;
             g.m_stat.set(g.stat);
             if flag {
                 ints.request_lcd();
@@ -479,12 +486,13 @@ impl Ppu {
         if g.g == g.lyc_time {
             let cmp_ly = next_ly(g.ly);
             let blocked = if g.lyc_reg <= LINES && g.lyc_reg > 0 {
-                g.lyc_stat & M2_EN != 0
+                g.lyc_stat & STAT_IF_OAM_B != 0
             } else {
-                g.lyc_stat & M1_EN != 0
+                g.lyc_stat & STAT_IF_VBLANK_B != 0
             };
-            let flag =
-                (g.lyc_stat | g.lyc_stat_src) & LYC_EN != 0 && g.lyc_reg == cmp_ly && !blocked;
+            let flag = (g.lyc_stat | g.lyc_stat_src) & STAT_IF_LYC_B != 0
+                && g.lyc_reg == cmp_ly
+                && !blocked;
             g.lyc_reg = g.lyc_src;
             g.lyc_stat = g.lyc_stat_src;
             g.lyc_time = g.schedule_lyc(g.lyc_stat, g.lyc_reg);
@@ -501,18 +509,20 @@ impl Ppu {
             } else {
                 g.ly
             };
-            let blocked_by_m1 = ly == 0 && m_stat & M1_EN != 0;
-            let blocked_by_lyc = m_stat & LYC_EN != 0 && ly.saturating_sub(1) == m_lyc;
+            let blocked_by_m1 = ly == 0 && m_stat & STAT_IF_VBLANK_B != 0;
+            let blocked_by_lyc = m_stat & STAT_IF_LYC_B != 0 && ly.saturating_sub(1) == m_lyc;
             g.m_lyc.set(g.lyc_reg);
             g.m_stat.set(g.stat);
-            let next = if g.stat & M0_EN != 0 {
-                70224
+            let next = if g.stat & STAT_IF_HBLANK_B != 0 {
+                FRAME
             } else if ly == 0 {
-                456 - (M2_LINE_CYCLE_LY0 - M2_LINE_CYCLE)
+                LINE - (M2_LINE_CYCLE_LY0 - M2_LINE_CYCLE)
             } else if ly == LINES {
-                456 + 456 * (154 - i64::from(LINES) - 1) + M2_LINE_CYCLE_LY0 - M2_LINE_CYCLE
+                LINE + LINE * (i64::from(LINES_PER_FRAME) - i64::from(LINES) - 1)
+                    + M2_LINE_CYCLE_LY0
+                    - M2_LINE_CYCLE
             } else {
-                456
+                LINE
             };
             g.m2_time += (2 * next).cast_unsigned();
             if !blocked_by_m1 && !blocked_by_lyc {
@@ -526,11 +536,11 @@ impl Ppu {
             if g.m0_scheduled {
                 let m_stat = g.m_stat.event(g.g);
                 let m_lyc = g.m_lyc.event(g.g);
-                let flag =
-                    (g.stat | m_stat) & M0_EN != 0 && (m_stat & LYC_EN == 0 || g.ly != m_lyc);
+                let flag = (g.stat | m_stat) & STAT_IF_HBLANK_B != 0
+                    && (m_stat & STAT_IF_LYC_B == 0 || g.ly != m_lyc);
                 g.m_lyc.set(g.lyc_reg);
                 g.m_stat.set(g.stat);
-                g.m0_scheduled = g.stat & M0_EN != 0;
+                g.m0_scheduled = g.stat & STAT_IF_HBLANK_B != 0;
                 if flag {
                     ints.request_lcd();
                 }
@@ -571,8 +581,8 @@ impl Ppu {
         }
         let ds = self.double_speed();
         let left = if write { 4 } else { 4 - i64::from(ds) };
-        if g.line_cycles(ds) + left >= 456 {
-            Some(!(LINES - 1..153).contains(&g.ly))
+        if g.line_cycles(ds) + left >= LINE {
+            Some(!(LAST_VISIBLE_LINE..LAST_LINE).contains(&g.ly))
         } else if g.ly >= LINES || g.hblank {
             Some(false)
         } else {
@@ -603,7 +613,7 @@ impl Ppu {
         }
         let left = LINE_H - h;
         let t = if ds { left } else { left / 2 };
-        Some(456 - (t >> u32::from(ds)))
+        Some(LINE - (t >> u32::from(ds)))
     }
 
     /// A WY write: gambatte's window checks see it 2 cycles later.
@@ -703,7 +713,7 @@ impl Ppu {
         g.m_lyc.set(g.lyc_reg);
         g.lyc_reschedule();
         g.m2_time = g.schedule_m2(g.stat, ds);
-        g.m0_scheduled = g.stat & M0_EN != 0;
+        g.m0_scheduled = g.stat & STAT_IF_HBLANK_B != 0;
     }
 
     pub(in crate::ppu) const fn gstat_lcd_off(&mut self) {
@@ -731,7 +741,7 @@ impl Ppu {
         g.stat = data;
         g.lyc_reg_change(data, g.lyc_src, ds);
         if g.lcd_on {
-            if data & M0_EN != 0 {
+            if data & STAT_IF_HBLANK_B != 0 {
                 g.m0_scheduled = true;
             }
             g.m2_time = g.schedule_m2(data, ds);

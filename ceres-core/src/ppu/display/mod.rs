@@ -39,13 +39,23 @@ use {
     window::Window,
 };
 
-use super::{LCDC_WIN_EN_B, Ppu, STAT_MODE_B, oam_bug::NO_ROW};
+use super::{LCDC_WIN_EN_B, PX_HEIGHT, Ppu, STAT_MODE_B, oam_bug::NO_ROW};
 
 pub(super) use state::State;
 
 pub(super) const MODE2_LENGTH: i32 = 80;
+/// The PPU addresses VRAM from 0 (0x8000 for the CPU), bank 1 after bank 0.
+pub(super) const VRAM_BANK1: u16 = 0x2000;
+/// The offset in a VRAM bank.
+pub(super) const VRAM_OFFSET_MASK: u16 = VRAM_BANK1 - 1;
+/// Two bytes for each of the 8 rows of a tile.
+pub(super) const TILE_BYTES: u16 = 0x10;
 pub(super) const LINE_LENGTH: i32 = 456;
-pub(super) const LINES: u8 = 144;
+/// The visible lines: VBlank starts with the next one.
+pub(super) const LINES: u8 = PX_HEIGHT;
+/// The last line of a frame.
+pub(super) const LAST_LINE: u8 = 153;
+pub(super) const LINES_PER_FRAME: u8 = LAST_LINE + 1;
 
 #[expect(
     clippy::struct_excessive_bools,
@@ -329,7 +339,7 @@ impl Ppu {
             self.step_state_machine(ints);
         } else if self.d.irq.line153_compare_pending {
             self.d.irq.line153_compare_pending = false;
-            self.d.irq.ly_for_comparison = 153;
+            self.d.irq.ly_for_comparison = LAST_LINE.into();
             self.stat_update(ints);
         } else {
             // Nothing runs in the second half of a dot.

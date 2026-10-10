@@ -6,6 +6,7 @@ mod rgba_buf;
 mod vram;
 
 use crate::interrupts::Interrupts;
+use display::{LAST_LINE, LINE_LENGTH, LINES, LINES_PER_FRAME};
 pub use oam::Oam;
 pub use oam_bug::unusable_index;
 pub use vram::Vram;
@@ -29,9 +30,21 @@ pub const LCDC_WIN_EN_B: u8 = 0x20;
 pub const LCDC_WIN_MAP_B: u8 = 0x40;
 pub const LCDC_ON_B: u8 = 0x80;
 
+// Tile attribute bits: OAM byte 3, and the background map attributes in
+// VRAM bank 1 on the CGB.
+/// The object goes behind background colors 1-3 (the background tile goes
+/// over the objects on the CGB).
+pub const ATTR_PRIORITY_B: u8 = 0x80;
+pub const ATTR_Y_FLIP_B: u8 = 0x40;
+pub const ATTR_X_FLIP_B: u8 = 0x20;
+/// DMG mode: the object uses OBP1.
+pub const ATTR_DMG_PALETTE_B: u8 = 0x10;
+/// CGB: the tile is in VRAM bank 1.
+pub const ATTR_BANK_B: u8 = 0x08;
+/// CGB: the palette number.
+pub const ATTR_CGB_PALETTE: u8 = 0x07;
+
 // STAT bits
-/// Dots per line.
-const LINE_CYCLES: i32 = 456;
 pub const STAT_MODE_B: u8 = 0x3;
 pub const STAT_LYC_B: u8 = 0x4;
 pub const STAT_IF_HBLANK_B: u8 = 0x8;
@@ -171,11 +184,11 @@ impl Ppu {
             return self.ly;
         };
         let ds = self.double_speed();
-        if ly == 153 {
-            if !ds || t <= 2 * LINE_CYCLES - 2 {
+        if ly == LAST_LINE {
+            if !ds || t <= 2 * LINE_LENGTH - 2 {
                 0
             } else {
-                153
+                LAST_LINE
             }
         } else if t <= 6 + 4 * i32::from(ds) {
             let next = ly + 1;
@@ -199,13 +212,13 @@ impl Ppu {
         // The line the LY=LYC flag compares with, and the time left until
         // that comparison changes again.
         let ds = i32::from(self.double_speed());
-        let line_time = LINE_CYCLES << ds;
-        let (cmp_ly, left) = if ly == 153 {
+        let line_time = LINE_LENGTH << ds;
+        let (cmp_ly, left) = if ly == LAST_LINE {
             let left = t - (line_time - 6 - 6 * ds);
             if left <= 0 {
                 (0, left + line_time)
             } else {
-                (153, left)
+                (LAST_LINE, left)
             }
         } else {
             let left = t - (2 + 2 * ds);
@@ -221,10 +234,10 @@ impl Ppu {
             stat & !STAT_LYC_B
         };
         // The mode at the line edges and around VBlank.
-        let line_cycles = LINE_CYCLES - (t >> ds);
-        let frame_cycles = i32::from(ly) * LINE_CYCLES + line_cycles;
-        let vblank = 144 * LINE_CYCLES;
-        let frame = 154 * LINE_CYCLES;
+        let line_cycles = LINE_LENGTH - (t >> ds);
+        let frame_cycles = i32::from(ly) * LINE_LENGTH + line_cycles;
+        let vblank = i32::from(LINES) * LINE_LENGTH;
+        let frame = i32::from(LINES_PER_FRAME) * LINE_LENGTH;
         let mode = if (vblank - 3..frame - 3).contains(&frame_cycles) {
             u8::from((vblank - 2..frame - 4 + ds).contains(&frame_cycles))
         } else if !(77..453).contains(&line_cycles) {
@@ -246,19 +259,23 @@ impl Ppu {
         }
         // Half dots since this line began, counted at the read; LY changes
         // 19 half dots into the line on gambatte's clock.
-        let lc = self.d.line_clock().rem_euclid(LINE_CYCLES);
+        let lc = self.d.line_clock().rem_euclid(LINE_LENGTH);
         let tau = 2 * lc + i32::from(!self.d.half_dot());
         let line = self.d.current_line();
-        let line = if tau >= 4 { line } else { (line + 1) % 154 };
+        let line = if tau >= 4 {
+            line
+        } else {
+            (line + 1) % LINES_PER_FRAME
+        };
         let (ly, h) = if tau < 19 {
             (
-                if line == 0 { 153 } else { line - 1 },
-                tau - 19 + 2 * LINE_CYCLES,
+                if line == 0 { LAST_LINE } else { line - 1 },
+                tau - 19 + 2 * LINE_LENGTH,
             )
         } else {
             (line, tau - 19)
         };
-        let left = 2 * LINE_CYCLES - h;
+        let left = 2 * LINE_LENGTH - h;
         Some((
             ly,
             if self.double_speed() {
@@ -478,9 +495,10 @@ impl Ppu {
         self.d.restart();
         self.gstat_lcd_on();
         // `line_clock` restarts on every visible line and keeps running
-        // through VBlank, starting from line 144.
-        let base = i32::from(line.saturating_sub(144)) * display::LINE_LENGTH;
-        for _ in 0..(2 * 154 * 456) {
+        // through VBlank, starting from its first line.
+        let base = i32::from(line.saturating_sub(LINES)) * LINE_LENGTH;
+        // Two frames at most: a guard against a target never reached.
+        for _ in 0..(2 * i32::from(LINES_PER_FRAME) * LINE_LENGTH) {
             if self.d.current_line() == line && self.d.line_clock() - base >= dot {
                 break;
             }

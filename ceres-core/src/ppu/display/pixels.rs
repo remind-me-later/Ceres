@@ -59,7 +59,7 @@ impl Ppu {
         self.d.window.being_fetched = false;
 
         // Drop pixels for scrolling (negative positions compare >= 160 in u8).
-        if self.d.position_in_line >= 160 {
+        if self.d.position_in_line >= PX_WIDTH {
             self.d.position_in_line = self.d.position_in_line.wrapping_add(1);
             return None;
         }
@@ -89,7 +89,7 @@ impl Ppu {
     }
 
     pub(super) fn output_pixel(&mut self, out: PixelOut) {
-        if out.lx >= 160 || self.d.current_line >= LINES {
+        if out.lx >= PX_WIDTH || self.d.current_line >= LINES {
             return;
         }
         let rgb = self.pixel_rgb(out);

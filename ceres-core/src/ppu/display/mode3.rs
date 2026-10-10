@@ -4,7 +4,10 @@ use {
     super::{LINES, fetcher::FetcherStep, model_ge_cgb_d, state::State},
     crate::{
         interrupts::Interrupts,
-        ppu::{LCDC_OBJ_EN_B, LCDC_WIN_EN_B, PX_WIDTH, Ppu, STAT_MODE_B},
+        ppu::{
+            ATTR_CGB_PALETTE, ATTR_DMG_PALETTE_B, ATTR_PRIORITY_B, ATTR_X_FLIP_B, LCDC_OBJ_EN_B,
+            LCDC_WIN_EN_B, Oam, PX_WIDTH, Ppu, STAT_MODE_B,
+        },
     },
 };
 
@@ -134,9 +137,11 @@ impl Ppu {
                 }
                 Step::ReadObjectAttributes => {
                     self.advance_fetcher();
-                    let base = u16::from(self.d.objs.indices[self.d.objs.count - 1]) * 4;
-                    self.d.objs.y_bus = self.oam_read(base + 2);
-                    self.d.obj_fetch.flags = self.oam_read(base + 3);
+                    let index = self.d.objs.indices[self.d.objs.count - 1];
+                    let base = u16::from(index) * Oam::ENTRY_SIZE;
+                    // The tile number goes over the OAM bus too (as in SameBoy).
+                    self.d.objs.y_bus = self.oam_read(base + Oam::ENTRY_TILE);
+                    self.d.obj_fetch.flags = self.oam_read(base + Oam::ENTRY_ATTRIBUTES);
                     self.sleep_in_line(State::Mode3ObjectAttributes, 2);
                     return Mode3Flow::Slept;
                 }
@@ -164,7 +169,7 @@ impl Ppu {
                         self.output_pixel(out);
                     }
                     self.advance_fetcher();
-                    if self.d.position_in_line == 160 {
+                    if self.d.position_in_line == PX_WIDTH {
                         return Mode3Flow::Done;
                     }
                     self.sleep_in_line(State::Mode3Pixel, 1);
@@ -196,9 +201,9 @@ impl Ppu {
         let n = self.d.objs.count;
         let flags = self.d.obj_fetch.flags;
         let palette = if self.cgb_mode_on() {
-            flags & 0x7
+            flags & ATTR_CGB_PALETTE
         } else {
-            u8::from(flags & 0x10 != 0)
+            u8::from(flags & ATTR_DMG_PALETTE_B != 0)
         };
         let priority = if self.opri_index_priority() {
             self.d.objs.indices[n - 1]
@@ -210,9 +215,9 @@ impl Ppu {
             low,
             high,
             palette,
-            flags & 0x80 != 0,
+            flags & ATTR_PRIORITY_B != 0,
             priority,
-            flags & 0x20 != 0,
+            flags & ATTR_X_FLIP_B != 0,
         );
         self.d.fetcher.sel_glitch_data = if self.d.bus.vram_ppu_blocked {
             0xFF
@@ -238,7 +243,7 @@ impl Ppu {
         // The PPU and LCD desynced: fill the rest of the line with the last colour.
         self.fill_desynced_line();
 
-        if self.d.current_line == 143 {
+        if self.d.current_line == LINES - 1 {
             self.d.window.line = 0xFF;
         }
         if !self.hw_cgb()
@@ -266,7 +271,7 @@ impl Ppu {
     }
 
     pub(super) fn fill_desynced_line(&mut self) {
-        while self.d.lcd_x < 160 {
+        while self.d.lcd_x < PX_WIDTH {
             if self.d.current_line < LINES {
                 let x = u32::from(self.d.lcd_x);
                 let base = u32::from(self.d.current_line) * u32::from(PX_WIDTH);

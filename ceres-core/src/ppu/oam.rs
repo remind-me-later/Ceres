@@ -3,20 +3,29 @@ use crate::ppu::{LCDC_ON_B, Ppu};
 pub struct Oam {
     bytes: [u8; Self::SIZE as usize],
     /// The CGB's memory behind the unusable area (0xFEA0..=0xFEFF).
-    extra: [u8; 0x60],
+    extra: [u8; Self::EXTRA_SIZE as usize],
 }
 
 impl Default for Oam {
     fn default() -> Self {
         Self {
             bytes: [0; Self::SIZE as usize],
-            extra: [0; 0x60],
+            extra: [0; Self::EXTRA_SIZE as usize],
         }
     }
 }
 
 impl Oam {
     pub const SIZE: u8 = 0xA0;
+    /// The unusable area after the OAM, up to the I/O registers.
+    pub const EXTRA_SIZE: u8 = 0x60;
+    /// The objects, 4 bytes each: Y, X, tile number and attributes.
+    pub const OBJECTS: u8 = 40;
+    pub const ENTRY_SIZE: u16 = 4;
+    pub const ENTRY_Y: u16 = 0;
+    pub const ENTRY_X: u16 = 1;
+    pub const ENTRY_TILE: u16 = 2;
+    pub const ENTRY_ATTRIBUTES: u16 = 3;
 
     #[must_use]
     pub const fn bytes(&self) -> &[u8] {

@@ -1,3 +1,5 @@
+use super::Wram;
+
 #[derive(Default)]
 pub struct Svbk {
     svbk: u8,
@@ -6,8 +8,8 @@ pub struct Svbk {
 impl Svbk {
     #[must_use]
     pub const fn bank_offset(&self) -> u16 {
-        // Return value between 0x1000 and 0x7000
-        (if self.svbk == 0 { 1 } else { self.svbk } as u16) * 0x1000
+        // Banks 1 to 7: bank 0 selects bank 1.
+        (if self.svbk == 0 { 1 } else { self.svbk } as u16) * Wram::BANK_SIZE
     }
 
     #[must_use]

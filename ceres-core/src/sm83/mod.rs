@@ -2,7 +2,7 @@ pub mod conflict;
 
 use crate::{
     AudioCallback, Gb, Model,
-    memory::SwitchHdma,
+    memory::{IE, IF, IO_START, P1, SCX, SwitchHdma, io_addr},
     ppu::{
         LCDC_BG_EN_B, LCDC_BG_MAP_B, LCDC_OBJ_EN_B, LCDC_OBJ_SIZE_B, LCDC_ON_B, LCDC_TILE_SEL_B,
         LCDC_WIN_EN_B, LCDC_WIN_MAP_B, Mode, STAT_IF_HBLANK_B, STAT_IF_LYC_B, STAT_IF_OAM_B,
@@ -252,7 +252,7 @@ impl Sm83 {
 
         if bus.is_stopped() {
             bus.advance(4);
-            if bus.peek(0xFF00) & 0xF != 0xF {
+            if bus.peek(io_addr(P1)) & 0xF != 0xF {
                 bus.leave_stop();
                 bus.dma_run(true);
                 bus.advance(8);
@@ -341,8 +341,8 @@ impl Sm83 {
         // the value from BEFORE the write if it targets IF or IE.
         self.sp = self.sp.wrapping_sub(1);
 
-        let old_flags = (self.sp == 0xFF0F).then(|| bus.read_if() & 0x1F);
-        let old_enable = (self.sp == 0xFFFF).then(|| bus.read_ie() & 0x1F);
+        let old_flags = (self.sp == io_addr(IF)).then(|| bus.read_if() & 0x1F);
+        let old_enable = (self.sp == io_addr(IE)).then(|| bus.read_ie() & 0x1F);
 
         bus.write(self.sp, lo);
 
@@ -1124,24 +1124,24 @@ impl Sm83 {
     }
 
     fn ldh_a_da8(&mut self, bus: &mut impl Bus) {
-        let addr = 0xFF00 | u16::from(self.imm8(bus));
+        let addr = IO_START | u16::from(self.imm8(bus));
         let val = bus.read(addr);
         self.set_a(val);
     }
 
     fn ldh_a_dc(&mut self, bus: &mut impl Bus) {
-        let val = bus.read(0xFF00 | self.bc & 0xFF);
+        let val = bus.read(IO_START | self.bc & 0xFF);
         self.set_a(val);
     }
 
     fn ldh_da8_a(&mut self, bus: &mut impl Bus) {
         let tmp = u16::from(self.imm8(bus));
         let a = self.a();
-        bus.write(0xFF00 | tmp, a);
+        bus.write(IO_START | tmp, a);
     }
 
     fn ldh_dc_a(&self, bus: &mut impl Bus) {
-        bus.write(0xFF00 | self.bc & 0xFF, self.a());
+        bus.write(IO_START | self.bc & 0xFF, self.a());
     }
 
     #[expect(clippy::unused_self)]
@@ -1230,7 +1230,7 @@ impl Sm83 {
         bus.flush();
         bus.peek(self.pc);
 
-        let exit_by_joyp = bus.peek(0xFF00) & 0xF != 0xF;
+        let exit_by_joyp = bus.peek(io_addr(P1)) & 0xF != 0xF;
         let speed_switch = bus.speed_switch_requested() && !exit_by_joyp;
         let immediate_exit = speed_switch || exit_by_joyp;
         let interrupt_pending = bus.interrupts_pending();
@@ -1350,7 +1350,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 self.advance_dots(pending + 1);
                 // In double speed a write to IF lands after the LCD
                 // interrupts of the next cycle (gambatte `updateIrqs(cc + 2)`).
-                if addr == 0xFF0F && self.key1.is_enabled() && self.ppu.gambatte_stat() {
+                if addr == io_addr(IF) && self.key1.is_enabled() && self.ppu.gambatte_stat() {
                     self.ppu
                         .run_ahead(&mut self.ints, self.cgb_mode, true, 1, true);
                 }
@@ -1536,7 +1536,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 // a dot before the end of the write.
                 let old = self.ppu.read_scx();
                 self.advance_dots(pending - 2);
-                if self.model.is_cgb_hardware() || addr != 0xFF43 {
+                if self.model.is_cgb_hardware() || addr != io_addr(SCX) {
                     self.write_mem(addr, val);
                     self.time_deferred = 6;
                 } else {

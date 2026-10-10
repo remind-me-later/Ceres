@@ -28,7 +28,10 @@ use cheats::GameGenie;
 pub use cheats::GameGenieCode;
 use interrupts::Interrupts;
 use joypad::Joypad;
-use memory::{Key1, SpeedSwitch};
+use memory::{
+    BCPS, BGP, IE, IF, Key1, LCDC, LYC, OBP0, OBP1, OCPS, P1, SCX, SCY, SpeedSwitch, WX, WY,
+    io_addr,
+};
 use serial::Serial;
 use {
     apu::{Apu, PostBoot},
@@ -221,26 +224,27 @@ impl<A: AudioCallback> Gb<A> {
         // P1, OBP0/OBP1, LCDC, STAT, LY, LYC, BGP, IF, IE per-model.
         // P1: $CF on DMG/DMG0/MGB, $FF on CGB/SGB.
         self.write_mem(
-            0xFF00,
+            io_addr(P1),
             if matches!(self.model, Model::Dmg0 | Model::DmgB | Model::Mgb) {
                 0xCF
             } else {
                 0xFF
             },
         );
-        self.write_mem(0xFF42, 0x00);
-        self.write_mem(0xFF43, 0x00);
+        self.write_mem(io_addr(SCY), 0x00);
+        self.write_mem(io_addr(SCX), 0x00);
         // OBP0/OBP1: $00 on CGB, $FF on DMG.
-        self.write_mem(0xFF48, if self.is_cgb() { 0x00 } else { 0xFF });
-        self.write_mem(0xFF49, if self.is_cgb() { 0x00 } else { 0xFF });
-        self.write_mem(0xFF4A, 0x00);
-        self.write_mem(0xFF4B, 0x00);
+        self.write_mem(io_addr(OBP0), if self.is_cgb() { 0x00 } else { 0xFF });
+        self.write_mem(io_addr(OBP1), if self.is_cgb() { 0x00 } else { 0xFF });
+        self.write_mem(io_addr(WY), 0x00);
+        self.write_mem(io_addr(WX), 0x00);
         // LCDC: $91 on all models.
-        self.write_mem(0xFF40, 0x91);
-        self.write_mem(0xFF45, 0x00);
+        self.write_mem(io_addr(LCDC), 0x91);
+        self.write_mem(io_addr(LYC), 0x00);
+        // DMA: $00 on CGB, $FF on DMG.
         self.dma.set_reg(if self.is_cgb() { 0x00 } else { 0xFF });
         // BGP: $FC on all models.
-        self.write_mem(0xFF47, 0xFC);
+        self.write_mem(io_addr(BGP), 0xFC);
         // Where the boot ROM leaves the PPU: measured by running the real boot
         // ROMs (the hand-off write plus the M-cycle that follows it). DMG and
         // SGB hand off in the tail of line 153 (LY already reads 0); the
@@ -262,16 +266,17 @@ impl<A: AudioCallback> Gb<A> {
         };
         self.ppu.set_position(line, dot);
         if self.is_cgb() {
-            self.write_mem(0xFF68, 0xC8);
-            self.write_mem(0xFF6A, 0xD0);
+            // Auto-increment on, at the index the boot ROM stopped at.
+            self.write_mem(io_addr(BCPS), 0xC8);
+            self.write_mem(io_addr(OCPS), 0xD0);
             self.undoc_ff72 = 0x00;
             self.undoc_ff73 = 0x00;
             self.undoc_ff75 = 0x00;
         }
         // IF: $E1 (VBlank pending) on all models.
-        self.write_mem(0xFF0F, 0xE1);
+        self.write_mem(io_addr(IF), 0xE1);
         // IE: $00 on all models.
-        self.write_mem(0xFFFF, 0x00);
+        self.write_mem(io_addr(IE), 0x00);
 
         // DIV phase after boot ROM.  DMG and CGB boot ROMs leave DIV at
         // different phases due to different boot durations.

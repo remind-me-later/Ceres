@@ -2,12 +2,19 @@
 //! the object fetch in mode 3.
 
 use {
-    super::State,
+    super::{State, TILE_BYTES, VRAM_BANK1},
     crate::{
         Model,
-        ppu::{LCDC_OBJ_EN_B, LCDC_OBJ_SIZE_B, LCDC_ON_B, Ppu, oam_bug::NO_ROW},
+        memory::{Dma, OAM_START},
+        ppu::{
+            ATTR_BANK_B, ATTR_Y_FLIP_B, LCDC_OBJ_EN_B, LCDC_OBJ_SIZE_B, LCDC_ON_B, Oam, Ppu,
+            oam_bug::NO_ROW,
+        },
     },
 };
+
+/// The most objects drawn on a line.
+const MAX_OBJECTS_PER_LINE: usize = 10;
 
 /// The mode 2 object search.
 #[derive(Clone)]
@@ -15,9 +22,9 @@ pub struct ObjectSearch {
     pub count: usize,
     pub found: usize,
     /// OAM indices of the objects on the line, sorted by X (descending).
-    pub indices: [u8; 10],
-    pub x: [u8; 10],
-    pub y: [u8; 10],
+    pub indices: [u8; MAX_OBJECTS_PER_LINE],
+    pub x: [u8; MAX_OBJECTS_PER_LINE],
+    pub y: [u8; MAX_OBJECTS_PER_LINE],
     pub index: u8,
     /// OAM row the PPU is reading (DMG OAM bug); `NO_ROW` when none.
     pub accessed_oam_row: u8,
@@ -52,9 +59,9 @@ impl Default for ObjectSearch {
         Self {
             count: 0,
             found: 0,
-            indices: [0; 10],
-            x: [0; 10],
-            y: [0; 10],
+            indices: [0; MAX_OBJECTS_PER_LINE],
+            x: [0; MAX_OBJECTS_PER_LINE],
+            y: [0; MAX_OBJECTS_PER_LINE],
             index: 0,
             accessed_oam_row: NO_ROW,
             y_bus: 0,
@@ -85,12 +92,12 @@ impl Ppu {
             return 0xFF;
         }
         let dest = self.d.bus.dma_dest;
-        if (1..=0xA0).contains(&dest) {
+        if (1..=Oam::SIZE).contains(&dest) {
             if self.d.bus.hdma_in_progress {
                 return self
                     .oam_read_row(((self.d.bus.hdma_src & !1) | (addr & 1)).to_le_bytes()[0]);
             }
-            if dest != 0xA0 {
+            if dest != Oam::SIZE {
                 return self.oam.read(u16::from(dest & !1) | (addr & 1));
             }
         }
@@ -99,15 +106,15 @@ impl Ppu {
 
     /// SameBoy's `GB_read_oam`: the 160 bytes, then the unusable area.
     pub(super) fn oam_read_row(&self, addr: u8) -> u8 {
-        if addr < 0xA0 {
+        if addr < Oam::SIZE {
             self.oam.read(u16::from(addr))
         } else {
-            self.read_unusable(0xFE00 | u16::from(addr))
+            self.read_unusable(OAM_START | u16::from(addr))
         }
     }
 
     pub(super) fn add_object_from_index(&mut self, index: u8) {
-        let base = u16::from(index) * 4;
+        let base = u16::from(index) * Oam::ENTRY_SIZE;
         // On CGB the object search runs ahead of the DMA's state: by two
         // T-cycles in single speed, by a whole M-cycle in double speed.
         let lead = if self.double_speed { 3 } else { 2 };
@@ -116,18 +123,18 @@ impl Ppu {
         } else {
             self.d.bus.dma_dest
         };
-        let dma_active = dest != 0xA1;
-        if dma_active && !self.d.bus.cpu_idle && !matches!(dest, 0xFF | 0) {
+        let dma_active = dest != Dma::DEST_IDLE;
+        if dma_active && !self.d.bus.cpu_idle && !matches!(dest, Dma::DEST_START_UP | 0) {
             // Once a DMA has written its first byte the object search reads
             // 0xFF until the transfer ends.
             self.d.objs.y_bus = 0xFF;
             self.d.objs.x_bus = 0xFF;
         } else {
-            self.d.objs.y_bus = self.oam_read(base);
-            self.d.objs.x_bus = self.oam_read(base + 1);
+            self.d.objs.y_bus = self.oam_read(base + Oam::ENTRY_Y);
+            self.d.objs.x_bus = self.oam_read(base + Oam::ENTRY_X);
         }
 
-        if self.d.objs.count == 10 {
+        if self.d.objs.count == MAX_OBJECTS_PER_LINE {
             return;
         }
 
@@ -200,7 +207,7 @@ impl Ppu {
         let searched = match self.d.state() {
             State::OamScanNext => self.d.objs.index,
             State::OamScanObject => self.d.objs.index + 1,
-            State::Mode3PalettesLock | State::Mode3Start => 40,
+            State::Mode3PalettesLock | State::Mode3Start => Oam::OBJECTS,
             State::LineOamWriteLock | State::LineLy | State::OamScanStart => 0,
             _ => return,
         };
@@ -216,16 +223,18 @@ impl Ppu {
             if large == old {
                 continue;
             }
-            let base = u16::from(index) * 4;
-            let y = self.oam_read(base);
-            let x = self.oam_read(base + 1);
+            let base = u16::from(index) * Oam::ENTRY_SIZE;
+            let y = self.oam_read(base + Oam::ENTRY_Y);
+            let x = self.oam_read(base + Oam::ENTRY_X);
             match (self.object_on_line(y, old), self.object_on_line(y, large)) {
-                (false, true) if self.d.objs.count < 10 => self.insert_object(index, x, y),
+                (false, true) if self.d.objs.count < MAX_OBJECTS_PER_LINE => {
+                    self.insert_object(index, x, y);
+                }
                 (true, false) => self.remove_object(index),
                 _ => {}
             }
         }
-        if searched == 40 {
+        if searched == Oam::OBJECTS {
             self.d.objs.found = self.d.objs.count;
         }
     }
@@ -238,13 +247,14 @@ impl Ppu {
     pub(super) fn object_line_address(&self, y: u8, tile: u8, flags: u8) -> u16 {
         let height_16 = self.d.obj_fetch.size_16;
         let mut tile_y = self.d.current_line.wrapping_sub(y) & if height_16 { 0xF } else { 7 };
-        if flags & 0x40 != 0 {
+        if flags & ATTR_Y_FLIP_B != 0 {
             tile_y ^= if height_16 { 0xF } else { 7 };
         }
-        let mut address =
-            u16::from(if height_16 { tile & 0xFE } else { tile }) * 0x10 + u16::from(tile_y) * 2;
-        if self.cgb_mode_on() && flags & 0x8 != 0 {
-            address += 0x2000;
+        // 8x16 objects ignore bit 0 of the tile number.
+        let tile = if height_16 { tile & 0xFE } else { tile };
+        let mut address = u16::from(tile) * TILE_BYTES + u16::from(tile_y) * 2;
+        if self.cgb_mode_on() && flags & ATTR_BANK_B != 0 {
+            address += VRAM_BANK1;
         }
         address
     }

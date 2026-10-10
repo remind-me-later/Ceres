@@ -8,11 +8,12 @@
 
 use {
     super::{
-        LINE_LENGTH, LINES, MODE2_LENGTH, mode3::Mode3Flow, model_ge_cgb_d, stat::MODE_VBLANK_ENTRY,
+        LAST_LINE, LINE_LENGTH, LINES, MODE2_LENGTH, mode3::Mode3Flow, model_ge_cgb_d,
+        stat::MODE_VBLANK_ENTRY,
     },
     crate::{
         interrupts::Interrupts,
-        ppu::{Ppu, STAT_IF_OAM_B, STAT_MODE_B, oam_bug::NO_ROW},
+        ppu::{Oam, Ppu, STAT_IF_OAM_B, STAT_MODE_B, oam_bug::NO_ROW},
     },
 };
 
@@ -298,7 +299,7 @@ impl Ppu {
                     self.d.cpu.oam_write_blocked = self.hw_cgb();
                 }
                 self.d.objs.index += 1;
-                if self.d.objs.index < 40 {
+                if self.d.objs.index < Oam::OBJECTS {
                     return Some(State::OamScanNext);
                 }
                 self.d.cfl = MODE2_LENGTH + 4;
@@ -466,7 +467,7 @@ impl Ppu {
             }
             State::VBlankLineEnd => {
                 self.d.current_line += 1;
-                if self.d.current_line < 153 {
+                if self.d.current_line < LAST_LINE {
                     Some(State::VBlankLine)
                 } else {
                     Some(State::Line153)
@@ -487,7 +488,7 @@ impl Ppu {
                 self.sleep(State::Line153Ly, 2);
             }
             State::Line153Ly => {
-                self.ly = 153;
+                self.ly = LAST_LINE;
                 self.sleep(
                     State::Line153LyZero,
                     if cgb_d {
@@ -509,7 +510,7 @@ impl Ppu {
                 if !cgb_d && !self.double_speed() {
                     self.ly = 0;
                 }
-                self.d.irq.ly_for_comparison = 153;
+                self.d.irq.ly_for_comparison = LAST_LINE.into();
                 self.stat_update(ints);
                 self.sleep(State::Line153Compare, if cgb_d { 4 } else { 2 });
             }

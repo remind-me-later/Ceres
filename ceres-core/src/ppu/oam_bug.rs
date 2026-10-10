@@ -13,7 +13,10 @@
 )]
 
 use super::Ppu;
-use crate::Model;
+use crate::{
+    Model,
+    memory::{IO_START, OAM_START, UNUSABLE_START},
+};
 
 /// `accessed_oam_row` value used when the PPU is not walking OAM.
 pub(super) const NO_ROW: u8 = 0xFF;
@@ -121,7 +124,7 @@ impl Ppu {
     /// The "write" corruption: an address in OAM range was put on the bus
     /// (writes, `inc rr`, `push`, ...).
     pub fn trigger_oam_bug(&mut self, addr: u16) {
-        if self.hw_cgb() || !(0xFE00..0xFF00).contains(&addr) {
+        if self.hw_cgb() || !(OAM_START..IO_START).contains(&addr) {
             return;
         }
         let Some(row) = self.bug_row() else {
@@ -191,7 +194,7 @@ impl Ppu {
 
     /// The "read" corruption: a CPU read of OAM while the PPU owns it.
     pub fn trigger_oam_bug_read(&mut self, addr: u16) {
-        if self.hw_cgb() || !(0xFE00..0xFF00).contains(&addr) {
+        if self.hw_cgb() || !(OAM_START..IO_START).contains(&addr) {
             return;
         }
         let Some(row) = self.bug_row() else {
@@ -242,7 +245,7 @@ impl Ppu {
     /// Corruption caused by reading OAM during the dots where only reads are
     /// blocked (the PPU is on the first or the last row).
     fn oam_read_row_corruption(&mut self, addr: u16) {
-        if addr >= 0xFEA0 {
+        if addr >= UNUSABLE_START {
             return;
         }
         let low = usize::from(addr & 0xFF);
@@ -335,7 +338,7 @@ impl Ppu {
             }
             return 0xFF;
         }
-        if addr < 0xFEA0 {
+        if addr < UNUSABLE_START {
             self.oam.read(addr)
         } else {
             self.read_unusable(addr)
@@ -355,7 +358,7 @@ impl Ppu {
             return;
         }
         if self.hw_cgb() {
-            if addr < 0xFEA0 {
+            if addr < UNUSABLE_START {
                 self.oam.write(addr, val);
             } else {
                 self.write_unusable(addr, val);
@@ -364,7 +367,7 @@ impl Ppu {
         }
 
         let low = usize::from(addr & 0xFF);
-        if addr < 0xFEA0 {
+        if addr < UNUSABLE_START {
             if self.d.accessed_oam_row() == 0xA0 {
                 for i in 0..8 {
                     let dst = (low & 0xF8) + i;

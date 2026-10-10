@@ -1,13 +1,19 @@
 //! The PPU's own memory accesses, which fight the OAM DMA and the HDMA for
 //! the bus, and the locks that keep the CPU out of the memory the PPU uses.
 
-use crate::ppu::Ppu;
+use {
+    super::{VRAM_BANK1, VRAM_OFFSET_MASK},
+    crate::{
+        memory::{Dma, VRAM_START},
+        ppu::{Oam, Ppu},
+    },
+};
 
 /// What the PPU sees of the DMA and HDMA, and of STOP mode.
 #[expect(clippy::struct_excessive_bools, reason = "Independent bus states")]
 #[derive(Clone)]
 pub struct PpuBus {
-    /// OAM index the DMA is writing (`0xA1`: no transfer).
+    /// OAM index the DMA is writing (`Dma::DEST_IDLE`: no transfer).
     pub dma_dest: u8,
     /// Where `dma_dest` will be once the T-cycles the PPU is running are
     /// accounted for (the DMA catches up after the PPU).
@@ -37,8 +43,8 @@ pub struct PpuBus {
 impl Default for PpuBus {
     fn default() -> Self {
         Self {
-            dma_dest: 0xA1,
-            dma_dest_next: 0xA1,
+            dma_dest: Dma::DEST_IDLE,
+            dma_dest_next: Dma::DEST_IDLE,
             chunk_left: 0,
             dma_src: 0,
             dma_modulo: false,
@@ -88,8 +94,8 @@ impl CpuAccess {
 impl Ppu {
     /// VRAM at `address` (0x2000.. is bank 1), no bus conflicts.
     pub(super) const fn vram_raw(&self, address: u16) -> u8 {
-        if address >= 0x2000 {
-            self.vram.vram_at_bank(address - 0x2000, 1)
+        if address >= VRAM_BANK1 {
+            self.vram.vram_at_bank(address - VRAM_BANK1, 1)
         } else {
             self.vram.vram_at_bank(address, 0)
         }
@@ -107,25 +113,27 @@ impl Ppu {
             return 0;
         }
         let dest = self.d.bus.dma_dest;
-        if (1..=0xA0).contains(&dest) && self.d.bus.dma_src & 0xE000 == 0x8000 {
+        if (1..=Oam::SIZE).contains(&dest) && self.d.bus.dma_src & 0xE000 == VRAM_START {
             // DMAing from VRAM!
             let offset = 1 - u16::from(self.d.bus.cpu_idle);
             if self.hw_cgb() {
                 if self.d.bus.dma_ppu_vram_conflict {
-                    address = (self.d.bus.dma_ppu_vram_conflict_addr & 0x1FFF) | (address & 0x2000);
+                    address = (self.d.bus.dma_ppu_vram_conflict_addr & VRAM_OFFSET_MASK)
+                        | (address & VRAM_BANK1);
                 } else if self.d.bus.dma_modulo && !self.d.bus.cpu_idle {
-                    address &= 0x2000;
-                    address |= self.d.bus.dma_src.wrapping_sub(offset) & 0x1FFF;
+                    address &= VRAM_BANK1;
+                    address |= self.d.bus.dma_src.wrapping_sub(offset) & VRAM_OFFSET_MASK;
                 } else {
-                    address &= 0x2000 | (self.d.bus.dma_src.wrapping_sub(offset) & 0x1FFF);
+                    address &=
+                        VRAM_BANK1 | (self.d.bus.dma_src.wrapping_sub(offset) & VRAM_OFFSET_MASK);
                     self.d.bus.dma_ppu_vram_conflict_addr = address;
                     self.d.bus.dma_ppu_vram_conflict = !self.d.bus.cpu_idle;
                 }
             } else {
-                address |= self.d.bus.dma_src.wrapping_sub(offset) & 0x1FFF;
+                address |= self.d.bus.dma_src.wrapping_sub(offset) & VRAM_OFFSET_MASK;
             }
-            let bank = u16::from(self.vram.read_vbk() & 1) * 0x2000;
-            let value = self.vram_raw((address & 0x1FFF) | bank);
+            let bank = u16::from(self.vram.read_vbk() & 1) * VRAM_BANK1;
+            let value = self.vram_raw((address & VRAM_OFFSET_MASK) | bank);
             let index = usize::from(dest.wrapping_sub(u8::from(!self.d.bus.cpu_idle)));
             if let Some(byte) = self.oam.bytes_mut().get_mut(index) {
                 *byte = value;

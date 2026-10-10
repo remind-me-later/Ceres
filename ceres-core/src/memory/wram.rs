@@ -25,6 +25,8 @@ impl Default for Wram {
 impl Wram {
     pub const SIZE_CGB: u16 = Self::SIZE_GB * 4;
     pub const SIZE_GB: u16 = 0x2000;
+    /// Bank 0 at 0xC000, the switchable bank at 0xD000.
+    pub const BANK_SIZE: u16 = 0x1000;
 
     /// The work RAM as the hardware powers on. It is random on every unit;
     /// the DMG's tends to come up as alternating blocks of 0xFF and 0x00.
@@ -42,12 +44,12 @@ impl Wram {
 
     #[must_use]
     pub const fn read_wram_hi(&self, addr: u16) -> u8 {
-        self.wram[(addr & 0xFFF | self.svbk.bank_offset()) as usize]
+        self.wram[(addr & (Self::BANK_SIZE - 1) | self.svbk.bank_offset()) as usize]
     }
 
     #[must_use]
     pub const fn read_wram_lo(&self, addr: u16) -> u8 {
-        self.wram[(addr & 0xFFF) as usize]
+        self.wram[(addr & (Self::BANK_SIZE - 1)) as usize]
     }
 
     #[must_use]
@@ -69,10 +71,10 @@ impl Wram {
     }
 
     pub fn write_wram_hi(&mut self, addr: u16, val: u8) {
-        self.wram[(addr & 0xFFF | self.svbk.bank_offset()) as usize] = val;
+        self.wram[(addr & (Self::BANK_SIZE - 1) | self.svbk.bank_offset()) as usize] = val;
     }
 
     pub fn write_wram_lo(&mut self, addr: u16, val: u8) {
-        self.wram[(addr & 0xFFF) as usize] = val;
+        self.wram[(addr & (Self::BANK_SIZE - 1)) as usize] = val;
     }
 }
