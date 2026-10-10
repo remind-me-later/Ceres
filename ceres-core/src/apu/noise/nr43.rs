@@ -137,10 +137,6 @@ impl Noise {
         self.stepped_in_narrow = self.narrow;
     }
 
-    #[expect(
-        clippy::too_many_lines,
-        reason = "Two lookup tables and a switch with fall-through, as in SameBoy"
-    )]
     fn category_1_cgb_d(&mut self, old: u8, new: u8, force_glitch: bool, c: &Ctx) {
         const GLITCH_MAP_L2H: [u8; 64] = {
             let mut m = [0_u8; 64];
@@ -209,50 +205,44 @@ impl Noise {
         let old_lfsr = self.lfsr;
         let lfsr_mask = self.high_bit_mask();
 
-        // Emulates the C `switch` with its deliberate fall-through chain:
-        // 6/4 -> 2 -> 1/8 -> 5.
-        let mut stage = match glitch {
-            6 | 4 => 6,
-            2 => 5,
-            1 | 8 => 4,
-            5 => 3,
-            7 => 100,
-            3 => 101,
-            _ => 0,
-        };
-        if stage == 6 {
-            let probe = if glitch == 4 { 0x60 } else { 0x40 };
-            if self.lfsr & probe == 0x40 {
-                stage = 4;
-            } else {
-                stage = 5;
+        // SameBoy's `switch` falls through 6/4 -> 2 -> 1/8 -> 5.
+        match glitch {
+            1 | 2 | 4 | 5 | 6 | 8 => {
+                // Cases 6 and 4 continue at case 2 or at case 1.
+                let case_2 = match glitch {
+                    6 | 4 => {
+                        let probe = if glitch == 4 { 0x60 } else { 0x40 };
+                        self.lfsr & probe != 0x40
+                    }
+                    2 => true,
+                    _ => false,
+                };
+                if case_2 && self.lfsr & 1 == 0 {
+                    self.lfsr &= !2;
+                }
+                // Case 1 (and 8): a step.
+                if glitch != 5 {
+                    self.step_lfsr(c);
+                }
+                // Case 5.
+                if glitch != 8 || old_lfsr & 3 != 2 {
+                    self.lfsr |= lfsr_mask;
+                } else {
+                    self.lfsr |= old_lfsr & lfsr_mask;
+                }
             }
-        }
-        if stage == 5 {
-            if self.lfsr & 1 == 0 {
-                self.lfsr &= !2;
-            }
-            stage = 4;
-        }
-        if stage == 4 {
-            self.step_lfsr(c);
-            stage = 3;
-        }
-        if stage == 3 {
-            if glitch != 8 || old_lfsr & 3 != 2 {
-                self.lfsr |= lfsr_mask;
-            } else {
+            7 => {
+                self.step_lfsr(c);
                 self.lfsr |= old_lfsr & lfsr_mask;
             }
-        } else if stage == 100 {
-            self.step_lfsr(c);
-            self.lfsr |= old_lfsr & lfsr_mask;
-        } else if stage == 101 {
-            self.step_lfsr(c);
-            self.lfsr &= old_lfsr;
-            self.lfsr |= old_lfsr & 1;
-            self.lfsr |= lfsr_mask;
-            self.update_lfsr(c);
+            3 => {
+                self.step_lfsr(c);
+                self.lfsr &= old_lfsr;
+                self.lfsr |= old_lfsr & 1;
+                self.lfsr |= lfsr_mask;
+                self.update_lfsr(c);
+            }
+            _ => (),
         }
     }
 
