@@ -3,7 +3,8 @@
 mod nr43;
 
 use super::{
-    Ctx, NOISE, envelope::Envelope, length::Length, mixer::ChannelOutput, revision::Revision,
+    Ctx, NOISE, NRX1_LENGTH, NRX2_DAC, NRX4_TRIGGER_B, envelope::Envelope, length::Length,
+    mixer::ChannelOutput, revision::Revision,
 };
 
 #[expect(
@@ -274,11 +275,11 @@ impl Noise {
     }
 
     pub const fn write_nr41(&mut self, value: u8) {
-        self.length.counter = 0x40 - (value & 0x3F) as u16;
+        self.length.counter = 0x40 - (value & NRX1_LENGTH) as u16;
     }
 
     pub fn write_nr42(&mut self, value: u8, c: &Ctx) {
-        if value & 0xF8 == 0 {
+        if value & NRX2_DAC == 0 {
             // This disables the DAC.
             if self.out.active && self.nr43 & 7 != 0 {
                 if self.counter_countdown <= 2 {
@@ -332,7 +333,7 @@ impl Noise {
     }
 
     pub fn write_nr44(&mut self, value: u8, c: &Ctx) {
-        if value & 0x80 != 0 {
+        if value & NRX4_TRIGGER_B != 0 {
             self.envelope.unlock();
             if !c.rev.is_cgb() && self.alignment & 3 != 0 {
                 self.dmg_delayed_start = 6;

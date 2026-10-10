@@ -1,6 +1,6 @@
 //! The volume envelope of the square and noise channels (NRx2).
 
-use super::revision::Revision;
+use super::{NRX2_DAC, revision::Revision};
 
 /// The clock line of the envelope. Ticking it to the volume limit locks it
 /// until the channel is restarted.
@@ -51,7 +51,7 @@ impl Envelope {
 
     /// The upper 5 bits of NRx2 power the channel's DAC.
     pub const fn dac_enabled(self) -> bool {
-        self.nrx2 & 0xF8 != 0
+        self.nrx2 & NRX2_DAC != 0
     }
 
     const fn pace(self) -> u8 {

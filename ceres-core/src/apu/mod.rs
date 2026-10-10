@@ -76,6 +76,24 @@ const NR52: usize = 0x26;
 const WAV_START: usize = 0x30;
 const WAV_END: usize = 0x3F;
 
+// Register bits
+/// NRx1: the length, the timer starts at 64 minus it.
+const NRX1_LENGTH: u8 = 0x3F;
+/// NRx2: the volume and direction bits, which power the DAC.
+const NRX2_DAC: u8 = 0xF8;
+/// NRx4: restart the channel.
+const NRX4_TRIGGER_B: u8 = 0x80;
+/// NRx4: the length timer is enabled.
+const NRX4_LENGTH_B: u8 = 0x40;
+/// NRx4: bits 8-10 of the period.
+const NRX4_PERIOD_HIGH: u8 = 0x07;
+/// NR30: the wave channel's DAC is on.
+const NR30_DAC_B: u8 = 0x80;
+/// NR52: the APU is on.
+const NR52_POWER_B: u8 = 0x80;
+/// The 11-bit period: a channel's timer counts up from it to 0x7FF.
+const PERIOD_MASK: u16 = 0x7FF;
+
 const SQUARE_1: usize = 0;
 const SQUARE_2: usize = 1;
 const WAVE: usize = 2;
@@ -293,6 +311,8 @@ impl<A: AudioCallback> Apu<A> {
         }
         let c = self.ctx(ctx);
 
+        // From the 512 Hz events: the envelope countdowns step at 64 Hz, the length
+        // timers at 256 Hz and the sweep at 128 Hz.
         if self.div_divider & 7 == 7 {
             for sq in &mut self.squares {
                 sq.step_envelope_countdown();
@@ -452,7 +472,11 @@ impl<A: AudioCallback> Apu<A> {
                 .sweep
                 .write_nr10(value, &mut self.squares[SQUARE_1], &c),
             NR11 | NR21 => {
-                let value = if self.enabled { value } else { value & 0x3F };
+                let value = if self.enabled {
+                    value
+                } else {
+                    value & NRX1_LENGTH
+                };
                 self.squares[square].write_nrx1(value);
             }
             NR12 | NR22 => self.squares[square].write_nrx2(value, &c),
@@ -460,7 +484,7 @@ impl<A: AudioCallback> Apu<A> {
             NR14 | NR24 => {
                 let was_active = self.output(square).active;
                 self.squares[square].write_nrx4(value, &c);
-                if square == SQUARE_1 && value & 0x80 != 0 {
+                if square == SQUARE_1 && value & NRX4_TRIGGER_B != 0 {
                     self.sweep.trigger(&self.squares[SQUARE_1], was_active, &c);
                 }
             }
@@ -504,9 +528,9 @@ impl<A: AudioCallback> Apu<A> {
             self.wave.length_counter(),
             self.noise.length_counter(),
         ];
-        if value & 0x80 != 0 && !self.enabled {
+        if value & NR52_POWER_B != 0 && !self.enabled {
             self.power_on(ctx);
-        } else if value & 0x80 == 0 && self.enabled {
+        } else if value & NR52_POWER_B == 0 && self.enabled {
             let c = self.ctx(ctx);
             for i in (0..N_CHANNELS).rev() {
                 self.update_sample(i, 0, &c);
@@ -517,7 +541,7 @@ impl<A: AudioCallback> Apu<A> {
         }
 
         // The DMG keeps the length timers.
-        if !self.rev.is_cgb() && value & 0x80 != 0 {
+        if !self.rev.is_cgb() && value & NR52_POWER_B != 0 {
             self.squares[SQUARE_1].set_length_counter(lengths[SQUARE_1]);
             self.squares[SQUARE_2].set_length_counter(lengths[SQUARE_2]);
             self.wave.set_length_counter(lengths[WAVE]);

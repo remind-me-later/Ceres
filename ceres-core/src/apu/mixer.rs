@@ -3,7 +3,8 @@
 use super::{Ctx, N_CHANNELS, WAVE, high_pass_filter::HighPassFilter};
 use crate::{AudioCallback, timing::DOTS_PER_SEC};
 
-/// Output amplitude of one DAC step (SameBoy's `CH_STEP`).
+/// Output amplitude of one DAC step (SameBoy's `CH_STEP`): a channel's
+/// largest amplitude, 0xFF0, over its 15 steps and the 8 master volumes.
 const CH_STEP: i32 = 0xFF0 / 0xF / 8;
 
 /// A channel's connection to its DAC: whether it is playing, the digital

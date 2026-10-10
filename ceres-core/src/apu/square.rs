@@ -1,7 +1,12 @@
 //! The square channels (1 and 2).
 
-use super::{Ctx, envelope::Envelope, length::Length, mixer::ChannelOutput, revision::Revision};
+use super::{
+    Ctx, NRX1_LENGTH, NRX2_DAC, NRX4_PERIOD_HIGH, NRX4_TRIGGER_B, PERIOD_MASK, envelope::Envelope,
+    length::Length, mixer::ChannelOutput, revision::Revision,
+};
 
+/// The waveforms selected by NRx1 bits 6-7, high 12.5%, 25%, 50% and 75%
+/// of the time.
 const DUTIES: [[u8; 8]; 4] = [
     [0, 0, 0, 0, 0, 0, 0, 1],
     [1, 0, 0, 0, 0, 0, 0, 1],
@@ -152,7 +157,7 @@ impl Square {
     }
 
     pub const fn read_nrx1(&self) -> u8 {
-        (self.duty << 6) | 0x3F
+        (self.duty << 6) | NRX1_LENGTH
     }
 
     pub const fn read_nrx4(&self) -> u8 {
@@ -194,7 +199,7 @@ impl Square {
         self.delay = u32::from(self.delay).saturating_sub(cycles_left) as u8;
         while cycles_left > u32::from(self.countdown) {
             cycles_left -= u32::from(self.countdown) + 1;
-            self.countdown = (self.period ^ 0x7FF) * 2 + 1;
+            self.countdown = (self.period ^ PERIOD_MASK) * 2 + 1;
             self.duty_step = (self.duty_step + 1) & 7;
             self.suppressed = false;
             if cycles_left == 0 && self.out.sample == 0 {
@@ -232,12 +237,12 @@ impl Square {
 
     /// `value` has bits 0-5 masked off when written while the APU is off.
     pub const fn write_nrx1(&mut self, value: u8) {
-        self.length.counter = 0x40 - (value & 0x3F) as u16;
+        self.length.counter = 0x40 - (value & NRX1_LENGTH) as u16;
         self.duty = value >> 6;
     }
 
     pub fn write_nrx2(&mut self, value: u8, c: &Ctx) {
-        if value & 0xF8 == 0 {
+        if value & NRX2_DAC == 0 {
             // This disables the DAC.
             self.envelope.nrx2 = value;
             self.disable(c);
@@ -252,7 +257,7 @@ impl Square {
     pub const fn write_nrx3(&mut self, value: u8) {
         self.period = (self.period & !0xFF) | value as u16;
         if self.just_reloaded {
-            self.countdown = (self.period ^ 0x7FF) * 2 + 1;
+            self.countdown = (self.period ^ PERIOD_MASK) * 2 + 1;
         }
     }
 
@@ -260,24 +265,24 @@ impl Square {
         // When the period changes right before being updated from >=$700 to
         // <$700 the countdown should change to the old period but the current
         // sample should not change; step the index backwards instead.
-        if value & 0x80 == 0
+        if value & NRX4_TRIGGER_B == 0
             && self.out.active
-            && self.nrx4 & 0x7 == 7
-            && value & 7 != 7
+            && self.nrx4 & NRX4_PERIOD_HIGH == NRX4_PERIOD_HIGH
+            && value & NRX4_PERIOD_HIGH != NRX4_PERIOD_HIGH
             && (c.rev.is_cgb_de() || self.countdown & 1 != 0)
             && self.did_tick
-            && self.countdown >> 1 == (self.period ^ 0x7FF)
+            && self.countdown >> 1 == (self.period ^ PERIOD_MASK)
         {
             self.duty_step = self.duty_step.wrapping_sub(1) & 7;
             self.suppressed = false;
         }
 
         let old_period = self.period;
-        self.period = (self.period & 0xFF) | (u16::from(value & 7) << 8);
+        self.period = (self.period & 0xFF) | (u16::from(value & NRX4_PERIOD_HIGH) << 8);
         if self.just_reloaded {
-            self.countdown = (self.period ^ 0x7FF) * 2 + 1;
+            self.countdown = (self.period ^ PERIOD_MASK) * 2 + 1;
         }
-        if value & 0x80 != 0 {
+        if value & NRX4_TRIGGER_B != 0 {
             self.trigger(value, old_period, c);
         }
 
@@ -313,7 +318,8 @@ impl Square {
                 {
                     self.duty_step = (self.duty_step + 1) & 7;
                     self.suppressed = false;
-                } else if self.period == 0x7FF && old_period != 0x7FF && self.suppressed {
+                } else if self.period == PERIOD_MASK && old_period != PERIOD_MASK && self.suppressed
+                {
                     extra_delay += 2;
                 }
             }
@@ -337,7 +343,7 @@ impl Square {
                 };
             self.delay = delay as u8;
         }
-        self.countdown = (self.period ^ 0x7FF) * 2 + u16::from(self.delay);
+        self.countdown = (self.period ^ PERIOD_MASK) * 2 + u16::from(self.delay);
 
         self.envelope.restart();
         // The volume change caused by sound start takes effect instantly

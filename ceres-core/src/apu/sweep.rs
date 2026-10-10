@@ -1,6 +1,6 @@
 //! The frequency sweep of channel 1 (NR10).
 
-use super::{Ctx, revision::Revision, square::Square};
+use super::{Ctx, PERIOD_MASK, revision::Revision, square::Square};
 
 #[derive(Clone, Copy)]
 pub struct Sweep {
@@ -62,9 +62,11 @@ impl Sweep {
             self.shadow_period = ch1.period();
         }
         if self.decreases() {
-            self.addend ^= 0x7FF;
+            self.addend ^= PERIOD_MASK;
         }
-        if u32::from(self.shadow_period) + u32::from(self.addend) > 0x7FF && !self.decreases() {
+        if u32::from(self.shadow_period) + u32::from(self.addend) > u32::from(PERIOD_MASK)
+            && !self.decreases()
+        {
             ch1.disable(c);
         }
         self.completed_addend = self.addend;
@@ -85,7 +87,7 @@ impl Sweep {
                 self.addend
                     .wrapping_add(self.shadow_period)
                     .wrapping_add(u16::from(self.decreases()))
-                    & 0x7FF,
+                    & PERIOD_MASK,
             );
         }
         if self.restart_hold == 0 {
@@ -172,7 +174,7 @@ impl Sweep {
         let old_negate = self.decreases() || c.rev <= Revision::CgbC;
         self.nr10 = value;
         if u32::from(self.shadow_period) + u32::from(self.completed_addend) + u32::from(old_negate)
-            > 0x7FF
+            > u32::from(PERIOD_MASK)
             && !self.decreases()
         {
             ch1.disable(c);

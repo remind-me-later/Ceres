@@ -1,6 +1,9 @@
 //! The wave channel (3).
 
-use super::{Ctx, WAVE, length::Length, mixer::ChannelOutput, revision::Revision};
+use super::{
+    Ctx, NR30_DAC_B, NRX4_PERIOD_HIGH, NRX4_TRIGGER_B, PERIOD_MASK, WAVE, length::Length,
+    mixer::ChannelOutput, revision::Revision,
+};
 
 #[derive(Clone, Copy)]
 pub struct Wave {
@@ -106,7 +109,8 @@ impl Wave {
         if self.length.enabled { 0xFF } else { 0xBF }
     }
 
-    /// The right shift of the 4-bit samples (the output level).
+    /// The right shift of the 4-bit samples for the output level in NR32
+    /// bits 5-6: mute (a shift by 4 clears them), 100%, 50% and 25%.
     const fn shift(&self) -> u8 {
         [4, 0, 1, 2][((self.nr32 >> 5) & 3) as usize]
     }
@@ -176,7 +180,7 @@ impl Wave {
             let mut cycles_left = cycles;
             while cycles_left > u32::from(self.countdown) {
                 cycles_left -= u32::from(self.countdown) + 1;
-                self.countdown = self.period ^ 0x7FF;
+                self.countdown = self.period ^ PERIOD_MASK;
                 self.position = (self.position + 1) & 0x1F;
                 self.sample_byte = self.ram[usize::from(self.position >> 1)];
                 self.update_wave_sample(c);
@@ -190,7 +194,7 @@ impl Wave {
             let mut cycles_left = cycles;
             while cycles_left > u32::from(self.countdown) {
                 cycles_left -= u32::from(self.countdown) + 1;
-                self.countdown = self.period ^ 0x7FF;
+                self.countdown = self.period ^ PERIOD_MASK;
                 if cycles_left != 0 {
                     self.sample_byte = self.ram[usize::from(c.address_bus & 0xF)];
                 } else {
@@ -219,7 +223,7 @@ impl Wave {
     }
 
     pub fn write_nr30(&mut self, value: u8, c: &Ctx) {
-        self.dac_enabled = value & 0x80 != 0;
+        self.dac_enabled = value & NR30_DAC_B != 0;
         if !self.dac_enabled {
             self.pulsed = false;
             if self.out.active {
@@ -250,13 +254,13 @@ impl Wave {
         self.period = (self.period & !0xFF) | value as u16;
         if self.bugged_read_countdown == 1 {
             // Just reloaded the countdown.
-            self.countdown = self.period ^ 0x7FF;
+            self.countdown = self.period ^ PERIOD_MASK;
         }
     }
 
     pub fn write_nr34(&mut self, value: u8, c: &Ctx) {
-        self.period = (self.period & 0xFF) | (u16::from(value & 7) << 8);
-        if value & 0x80 != 0 {
+        self.period = (self.period & 0xFF) | (u16::from(value & NRX4_PERIOD_HIGH) << 8);
+        if value & NRX4_TRIGGER_B != 0 {
             self.trigger(c);
         }
         if self.length.write(
@@ -292,7 +296,7 @@ impl Wave {
             self.out.active = true;
             self.update_sample((self.sample_byte >> 4) >> self.shift(), c);
         }
-        self.countdown = (self.period ^ 0x7FF) + 3;
+        self.countdown = (self.period ^ PERIOD_MASK) + 3;
         self.length.trigger(0x100);
         // The sample is not changed just yet (verified on hardware).
     }

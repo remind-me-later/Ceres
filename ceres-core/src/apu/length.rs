@@ -1,5 +1,7 @@
 //! The length timer that stops a channel (NRx1 and bit 6 of NRx4).
 
+use super::{NRX4_LENGTH_B, NRX4_TRIGGER_B};
+
 #[derive(Clone, Copy)]
 pub struct Length {
     /// Ticks left before the channel stops (SameBoy's `pulse_length`).
@@ -45,14 +47,14 @@ impl Length {
         let mut expired = false;
         // APU glitch: enabling the length while the DIV divider's LSB is 1
         // ticks the length once.
-        if (value & 0x40 != 0 || always_glitch)
+        if (value & NRX4_LENGTH_B != 0 || always_glitch)
             && !self.enabled
             && div_divider & 1 != 0
             && self.counter != 0
         {
             self.counter -= 1;
             if self.counter == 0 {
-                if value & 0x80 != 0 {
+                if value & NRX4_TRIGGER_B != 0 {
                     // A trigger reloads it, minus the glitched tick.
                     self.counter = max - 1;
                 } else {
@@ -60,7 +62,7 @@ impl Length {
                 }
             }
         }
-        self.enabled = value & 0x40 != 0;
+        self.enabled = value & NRX4_LENGTH_B != 0;
         expired
     }
 }
