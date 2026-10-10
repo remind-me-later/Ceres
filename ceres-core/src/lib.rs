@@ -100,6 +100,7 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[inline]
+    #[cfg(feature = "game_genie")]
     pub fn active_game_genie_codes(&self) -> &[GameGenieCode] {
         self.game_genie.active_codes()
     }

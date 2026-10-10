@@ -254,10 +254,8 @@ impl Ppu {
                     self.oam_word(low >> 1),
                 );
                 self.oam_word_pair(0, (low & 0xF8) >> 1, value);
-                for i in 2..8 {
-                    let byte = self.oam.bytes()[(low & 0xF8) + i];
-                    self.oam.bytes_mut()[i] = byte;
-                }
+                let base = low & 0xF8;
+                self.oam.bytes_mut().copy_within(base + 2..base + 8, 2);
             }
             0xA0 => {
                 let target = (low & 7) | 0x98;
@@ -282,10 +280,7 @@ impl Ppu {
                     4 | 5 => {}
                     _ => self.set_oam_word(target >> 1, glitch_read(a, b, c)),
                 }
-                for i in 0..8 {
-                    let byte = self.oam.bytes()[0x98 + i];
-                    self.oam.bytes_mut()[(low & 0xF8) + i] = byte;
-                }
+                self.oam.bytes_mut().copy_within(0x98..0xA0, low & 0xF8);
             }
             _ => {}
         }
@@ -302,28 +297,13 @@ impl Ppu {
         let low = (addr & 0xFF) as u8;
         match self.model {
             Model::CgbE | Model::Agb => (low & 0xF0) | (low >> 4),
-            Model::CgbD => {
-                let low = if low >= 0xC0 { low | 0xF0 } else { low };
-                self.oam.extra()[usize::from(low) - 0xA0]
-            }
-            Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC => {
-                self.oam.extra()[usize::from(low & !0x18) - 0xA0]
-            }
-            _ => 0,
+            model => unusable_index(model, low).map_or(0, |i| self.oam.extra()[i]),
         }
     }
 
-    fn write_unusable(&mut self, addr: u16, val: u8) {
-        let low = (addr & 0xFF) as u8;
-        match self.model {
-            Model::CgbD => {
-                let low = if low >= 0xC0 { low | 0xF0 } else { low };
-                self.oam.extra_mut()[usize::from(low) - 0xA0] = val;
-            }
-            Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC => {
-                self.oam.extra_mut()[usize::from(low & !0x18) - 0xA0] = val;
-            }
-            _ => {}
+    const fn write_unusable(&mut self, addr: u16, val: u8) {
+        if let Some(i) = unusable_index(self.model, (addr & 0xFF) as u8) {
+            self.oam.extra_mut()[i] = val;
         }
     }
 
@@ -409,10 +389,8 @@ impl Ppu {
                     let c = u16::from(self.oam.bytes()[(low & 0xFE) | i]);
                     self.oam.bytes_mut()[i] = glitch(a, b, c).to_le_bytes()[0];
                 }
-                for i in 2..8 {
-                    let byte = self.oam.bytes()[(low & 0xF8) + i];
-                    self.oam.bytes_mut()[i] = byte;
-                }
+                let base = low & 0xF8;
+                self.oam.bytes_mut().copy_within(base + 2..base + 8, 2);
             }
         } else if self.d.accessed_oam_row() == 0 {
             self.oam.bytes_mut()[low & 7] = val;
@@ -420,4 +398,16 @@ impl Ppu {
             // The unusable area: the write is dropped.
         }
     }
+}
+
+/// Where a byte of the unusable area (`low` is 0xA0..=0xFF) is kept, on the
+/// revisions that keep it in memory.
+pub const fn unusable_index(model: Model, low: u8) -> Option<usize> {
+    let low = match model {
+        Model::CgbD if low >= 0xC0 => low | 0xF0,
+        Model::CgbD => low,
+        Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC => low & !0x18,
+        _ => return None,
+    };
+    Some(low as usize - 0xA0)
 }

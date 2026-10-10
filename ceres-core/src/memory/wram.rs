@@ -32,8 +32,9 @@ impl Wram {
     pub fn power_on(cgb_hardware: bool) -> Self {
         let mut wram = Self::default();
         if !cgb_hardware {
-            for (i, byte) in wram.wram.iter_mut().take(Self::SIZE_GB.into()).enumerate() {
-                *byte = if i & 0x100 == 0 { 0xFF } else { 0x00 };
+            let (blocks, _) = wram.wram[..Self::SIZE_GB.into()].as_chunks_mut::<0x100>();
+            for (i, block) in blocks.iter_mut().enumerate() {
+                block.fill(if i % 2 == 0 { 0xFF } else { 0x00 });
             }
         }
         wram

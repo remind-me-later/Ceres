@@ -37,26 +37,25 @@ impl Vram {
         (self.vbk as u8) | 0xFE
     }
 
-    #[must_use]
-    pub const fn vram_at_bank(&self, addr: u16, bank: u8) -> u8 {
-        let bank = bank as u16 * Self::SIZE_GB;
-        let i = (addr & 0x1FFF) + bank;
-        self.bytes[i as usize]
+    /// Where `addr` is kept in `bank`.
+    const fn index(addr: u16, bank: u16) -> usize {
+        ((addr & 0x1FFF) + bank * Self::SIZE_GB) as usize
     }
 
-    pub fn write(&mut self, addr: u16, val: u8) {
-        let bank = u16::from(self.vbk) * Self::SIZE_GB;
-        let i = (addr & 0x1FFF) + bank;
-        self.bytes[i as usize] = val;
+    #[must_use]
+    pub const fn vram_at_bank(&self, addr: u16, bank: u8) -> u8 {
+        self.bytes[Self::index(addr, bank as u16)]
+    }
+
+    pub const fn write(&mut self, addr: u16, val: u8) {
+        self.bytes[Self::index(addr, self.vbk as u16)] = val;
     }
 
     /// HDMA write into the selected bank; `mirror` also writes the other bank.
-    pub fn write_hdma(&mut self, addr: u16, val: u8, mirror: bool) {
-        let bank = u16::from(self.vbk) * Self::SIZE_GB;
-        self.bytes[((addr & 0x1FFF) + bank) as usize] = val;
+    pub const fn write_hdma(&mut self, addr: u16, val: u8, mirror: bool) {
+        self.bytes[Self::index(addr, self.vbk as u16)] = val;
         if mirror {
-            let other = (1 - u16::from(self.vbk)) * Self::SIZE_GB;
-            self.bytes[((addr & 0x1FFF) + other) as usize] = val;
+            self.bytes[Self::index(addr, !self.vbk as u16)] = val;
         }
     }
 

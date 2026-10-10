@@ -7,6 +7,7 @@ mod vram;
 
 use crate::interrupts::Interrupts;
 pub use oam::Oam;
+pub use oam_bug::unusable_index;
 pub use vram::Vram;
 use {self::color_palette::ColorPalette, crate::CgbMode, crate::Model, rgba_buf::RgbaBuf};
 
@@ -46,6 +47,7 @@ pub enum Mode {
     Drawing = 3,
 }
 
+#[derive(Default)]
 pub struct Ppu {
     model: Model,
     bcp: ColorPalette,
@@ -76,37 +78,6 @@ pub struct Ppu {
     /// Half-dots the display already ran ahead of the CPU (see
     /// `Gb::ack_interrupt`) and must not run again.
     skip_units: u8,
-}
-
-impl Default for Ppu {
-    fn default() -> Self {
-        Self {
-            model: Model::default(),
-            bcp: ColorPalette::default(),
-            bgp: 0,
-            color_correction_mode: ColorCorrectionMode::default(),
-            cgb_mode: CgbMode::default(),
-            double_speed: false,
-            lcdc: 0,
-            ly: 0,
-            lyc: 0,
-            oam: Oam::default(),
-            obp0: 0,
-            obp1: 0,
-            ocp: ColorPalette::default(),
-            opri: false,
-            rgb_buf: RgbaBuf::default(),
-            rgba_buf_present: RgbaBuf::default(),
-            scx: 0,
-            scy: 0,
-            stat: Mode::HBlank as u8,
-            vram: Vram::default(),
-            wx: 0,
-            wy: 0,
-            d: display::Display::default(),
-            skip_units: 0,
-        }
-    }
 }
 
 // IO

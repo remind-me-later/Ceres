@@ -93,18 +93,18 @@ impl<A: AudioCallback> Gb<A> {
 
     #[must_use]
     fn read_boot_or_cart(&self, addr: u16) -> u8 {
-        self.bootrom.read(addr).unwrap_or_else(|| {
-            #[cfg(feature = "game_genie")]
-            {
-                let data = self.cart.read_rom(addr);
-                self.game_genie.query(addr, data).unwrap_or(data)
-            }
+        self.bootrom
+            .read(addr)
+            .unwrap_or_else(|| self.read_cart_rom(addr))
+    }
 
-            #[cfg(not(feature = "game_genie"))]
-            {
-                self.cart.read_rom(addr)
-            }
-        })
+    /// A cartridge ROM byte, as patched by the active Game Genie codes.
+    #[must_use]
+    fn read_cart_rom(&self, addr: u16) -> u8 {
+        let data = self.cart.read_rom(addr);
+        #[cfg(feature = "game_genie")]
+        let data = self.game_genie.query(addr, data).unwrap_or(data);
+        data
     }
 
     #[must_use]
@@ -190,34 +190,8 @@ impl<A: AudioCallback> Gb<A> {
     pub fn read_mem(&self, addr: u16) -> u8 {
         match addr {
             0x0000..=0x00FF => self.read_boot_or_cart(addr),
-            0x0200..=0x08FF => {
-                if self.model.is_cgb_hardware() {
-                    self.read_boot_or_cart(addr)
-                } else {
-                    #[cfg(feature = "game_genie")]
-                    {
-                        let data = self.cart.read_rom(addr);
-                        self.game_genie.query(addr, data).unwrap_or(data)
-                    }
-
-                    #[cfg(not(feature = "game_genie"))]
-                    {
-                        self.cart.read_rom(addr)
-                    }
-                }
-            }
-            0x0100..=0x01FF | 0x0900..=0x7FFF => {
-                #[cfg(feature = "game_genie")]
-                {
-                    let data = self.cart.read_rom(addr);
-                    self.game_genie.query(addr, data).unwrap_or(data)
-                }
-
-                #[cfg(not(feature = "game_genie"))]
-                {
-                    self.cart.read_rom(addr)
-                }
-            }
+            0x0200..=0x08FF if self.model.is_cgb_hardware() => self.read_boot_or_cart(addr),
+            0x0100..=0x7FFF => self.read_cart_rom(addr),
             0x8000..=0x9FFF => self.ppu.read_vram(addr),
             0xA000..=0xBFFF => self.cart.read_ram(addr),
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.read_wram_lo(addr),

@@ -29,28 +29,10 @@ impl Default for ColorPalette {
 
 impl ColorPalette {
     pub fn init_compat_palette(&mut self) {
-        for pal in 0..8 {
-            let base = pal * 4 * 3;
-            // Color 0: White (31, 31, 31)
-            self.buffer[base] = 31;
-            self.buffer[base + 1] = 31;
-            self.buffer[base + 2] = 31;
-
-            // Color 1: Light Gray (21, 21, 21)
-            self.buffer[base + 3] = 21;
-            self.buffer[base + 4] = 21;
-            self.buffer[base + 5] = 21;
-
-            // Color 2: Dark Gray (10, 10, 10)
-            self.buffer[base + 6] = 10;
-            self.buffer[base + 7] = 10;
-            self.buffer[base + 8] = 10;
-
-            // Color 3: Black (0, 0, 0)
-            self.buffer[base + 9] = 0;
-            self.buffer[base + 10] = 0;
-            self.buffer[base + 11] = 0;
-        }
+        // White, light gray, dark gray and black in every palette.
+        const GRAYS: [u8; 12] = [31, 31, 31, 21, 21, 21, 10, 10, 10, 0, 0, 0];
+        let (palettes, _) = self.buffer.as_chunks_mut::<{ GRAYS.len() }>();
+        palettes.fill(GRAYS);
     }
     #[must_use]
     pub const fn data(&self) -> u8 {
@@ -81,7 +63,6 @@ impl ColorPalette {
 
     // For color correction values see: https://github.com/LIJI32/SameBoy/blob/master/Core/display.c#L355
     // TODO: should this be done on GPU?
-    #[expect(clippy::too_many_lines)]
     #[must_use]
     pub fn rgb(
         &self,
@@ -147,32 +128,12 @@ impl ColorPalette {
 
         match color_correction_mode {
             ColorCorrectionMode::LowContrast => {
-                (r, g, b) = (new_r, new_g, new_b);
-
-                #[expect(clippy::cast_possible_truncation)]
-                {
-                    new_r = (u16::from(new_r) * 15 / 16 + (u16::from(g) + u16::from(b)) / 32) as u8;
-                    new_g = (u16::from(new_g) * 15 / 16 + (u16::from(r) + u16::from(b)) / 32) as u8;
-                    new_b = (u16::from(new_b) * 15 / 16 + (u16::from(r) + u16::from(g)) / 32) as u8;
-
-                    new_r = (u16::from(new_r) * (162 - 45) / 255 + 45) as u8;
-                    new_g = (u16::from(new_g) * (167 - 41) / 255 + 41) as u8;
-                    new_b = (u16::from(new_b) * (157 - 38) / 255 + 38) as u8;
-                }
+                (new_r, new_g, new_b) =
+                    squeeze_contrast((new_r, new_g, new_b), [(45, 162), (41, 167), (38, 157)]);
             }
             ColorCorrectionMode::ReduceContrast => {
-                (r, g, b) = (new_r, new_g, new_b);
-
-                #[expect(clippy::cast_possible_truncation)]
-                {
-                    new_r = (u16::from(new_r) * 15 / 16 + (u16::from(g) + u16::from(b)) / 32) as u8;
-                    new_g = (u16::from(new_g) * 15 / 16 + (u16::from(r) + u16::from(b)) / 32) as u8;
-                    new_b = (u16::from(new_b) * 15 / 16 + (u16::from(r) + u16::from(g)) / 32) as u8;
-
-                    new_r = (u16::from(new_r) * (220 - 40) / 255 + 40) as u8;
-                    new_g = (u16::from(new_g) * (224 - 36) / 255 + 36) as u8;
-                    new_b = (u16::from(new_b) * (216 - 32) / 255 + 32) as u8;
-                }
+                (new_r, new_g, new_b) =
+                    squeeze_contrast((new_r, new_g, new_b), [(40, 220), (36, 224), (32, 216)]);
             }
             ColorCorrectionMode::ModernBoostContrast => {
                 let old_max = r.max(g.max(b));
@@ -245,4 +206,17 @@ impl ColorPalette {
     pub const fn spec(&self) -> u8 {
         self.spec | 0x40
     }
+}
+
+/// Mixes a little of the other two channels into each one, then squeezes it
+/// into its `(low, high)` range.
+#[expect(clippy::cast_possible_truncation)]
+fn squeeze_contrast((r, g, b): (u8, u8, u8), ranges: [(u16, u16); 3]) -> (u8, u8, u8) {
+    let (r, g, b) = (u16::from(r), u16::from(g), u16::from(b));
+    let squeeze = |c: u16, (low, high): (u16, u16)| (c * (high - low) / 255 + low) as u8;
+    (
+        squeeze(r * 15 / 16 + (g + b) / 32, ranges[0]),
+        squeeze(g * 15 / 16 + (r + b) / 32, ranges[1]),
+        squeeze(b * 15 / 16 + (r + g) / 32, ranges[2]),
+    )
 }

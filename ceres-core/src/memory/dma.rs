@@ -4,7 +4,7 @@
 //! `GB_write_memory`: while a transfer runs, CPU accesses that share a bus with
 //! the DMA source read (or write) whatever the DMA is currently accessing.
 
-use crate::{AudioCallback, Gb, Model};
+use crate::{AudioCallback, Gb, Model, ppu::unusable_index};
 
 /// `current_dest` value while no transfer is running.
 const INACTIVE: u8 = 0xA1;
@@ -277,18 +277,9 @@ impl<A: AudioCallback> Gb<A> {
             oam.bytes_mut()[usize::from(addr)] = value;
             return;
         }
-        let addr = match self.model {
-            Model::CgbD => {
-                if addr >= 0xC0 {
-                    addr | 0xF0
-                } else {
-                    addr
-                }
-            }
-            Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC => addr & !0x18,
-            _ => return,
-        };
-        oam.extra_mut()[usize::from(addr - 0xA0)] = value;
+        if let Some(i) = unusable_index(self.model, addr) {
+            oam.extra_mut()[i] = value;
+        }
     }
 
     /// DMA source read: unlike the CPU it is not blocked by the PPU.
