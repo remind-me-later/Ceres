@@ -27,7 +27,7 @@ impl<'a> Reader<'a> {
                     self.read_info_block(size)?;
                 }
                 b"CORE" => sizes = self.read_core_block(size, gb)?,
-                b"RTC " => self.read_rtc_block(secs_since_unix_epoch, &mut gb.cart)?,
+                b"RTC " => self.read_rtc_block(size, secs_since_unix_epoch, &mut gb.cart)?,
                 b"END " => break 'reading,
                 _ => {
                     return Err(Error::InvalidSaveState);
@@ -206,6 +206,7 @@ impl<'a> Reader<'a> {
 
     fn read_rtc_block(
         &mut self,
+        size: u32,
         secs_since_unix_epoch: u64,
         cart: &mut Cartridge,
     ) -> Result<(), Error> {
@@ -240,10 +241,14 @@ impl<'a> Reader<'a> {
                 self.read_exact(&mut timestamp_buf)?;
 
                 let timestamp = u64::from_le_bytes(timestamp_buf);
-                let elapsed = secs_since_unix_epoch - timestamp;
+                // A timestamp from the future (a clock that went back) counts as none.
+                let elapsed = secs_since_unix_epoch.saturating_sub(timestamp);
 
                 rtc.add_seconds(elapsed);
             }
+        } else {
+            // A cartridge without a clock: skip the block.
+            self.seek_from_current(size as usize)?;
         }
 
         Ok(())

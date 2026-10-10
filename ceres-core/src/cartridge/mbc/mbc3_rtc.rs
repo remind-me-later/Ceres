@@ -137,7 +137,7 @@ impl Mbc3RTC {
         self.real[3] = (days % 256) as u8;
 
         let carry = days / 256;
-        self.real[4] = (self.real[4] & !1) | ((self.real[4] + carry as u8) & 1);
+        self.real[4] = (self.real[4] & !1) | ((self.real[4] ^ carry as u8) & 1);
         if carry != 0 {
             self.real[4] |= 0x80;
         }
