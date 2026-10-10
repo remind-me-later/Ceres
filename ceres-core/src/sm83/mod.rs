@@ -1337,7 +1337,10 @@ impl<A: AudioCallback> Bus for Gb<A> {
         let pending = self.time_deferred;
 
         // Port of SameBoy's `cycle_write`: each class says when, relative to
-        // the end of the pending M-cycles, the PPU sees the new value.
+        // the end of the pending M-cycles, the PPU sees the new value. The
+        // write's own M-cycle is always 4 dots: what an arm advances past
+        // `pending` plus what it leaves in `time_deferred` (a write landing a
+        // dot early defers 5, one landing a dot late 3).
         match conflict {
             ConflictType::ReadOld => {
                 self.flush_deferred_time();

@@ -1,4 +1,7 @@
-use crate::{AudioCallback, Cartridge, CgbMode, Gb, error::Error};
+use {
+    super::{CORE_REGISTERS_SIZE, FOOTER_SIZE, INFO_BLOCK_SIZE},
+    crate::{AudioCallback, Cartridge, CgbMode, Gb, error::Error},
+};
 
 pub struct Reader<'a> {
     data: &'a [u8],
@@ -74,7 +77,7 @@ impl<'a> Reader<'a> {
 
     fn read_core_block(&mut self) -> Result<ReadSizes, Error> {
         // Ignore the version, the model and the CPU registers for now
-        self.seek_from_current(4 + 4 + 0x90)?;
+        self.seek_from_current(4 + 4 + CORE_REGISTERS_SIZE)?;
 
         let sizes = ReadSizes {
             ram: self.read_buffer()?,
@@ -85,7 +88,7 @@ impl<'a> Reader<'a> {
             bg_palette: self.read_buffer()?,
         };
         // Ignore the object palettes for now
-        self.seek_from_current(8)?;
+        self.read_buffer()?;
 
         Ok(sizes)
     }
@@ -115,7 +118,7 @@ impl<'a> Reader<'a> {
     }
 
     fn read_footer(&mut self) -> Result<u32, Error> {
-        self.seek_from_end(8)?;
+        self.seek_from_end(FOOTER_SIZE)?;
         let offset_to_first_block = self.read_u32()?;
         let mut magic = [0; 4];
         self.read_exact(&mut magic)?;
@@ -126,11 +129,11 @@ impl<'a> Reader<'a> {
     }
 
     const fn read_info_block(&mut self, size: u32) -> Result<(), Error> {
-        if size != 0x12 {
+        if size != INFO_BLOCK_SIZE {
             return Err(Error::InvalidSaveState);
         }
         // Ignore the title and the global checksum for now
-        self.seek_from_current(0x12)
+        self.seek_from_current(INFO_BLOCK_SIZE as usize)
     }
 
     fn read_rtc_block(

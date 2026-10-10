@@ -1,7 +1,7 @@
 mod mbc3_rtc;
 
 use crate::Error;
-pub use mbc3_rtc::Mbc3RTC;
+pub use mbc3_rtc::{Mbc3RTC, RTC_REG_FIRST, RTC_REG_LAST};
 
 #[derive(Debug, Default)]
 pub enum Mbc {

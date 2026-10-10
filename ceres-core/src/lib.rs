@@ -21,7 +21,7 @@ use crate::{
     timing::DOTS_PER_FRAME,
 };
 use alloc::{boxed::Box, vec::Vec};
-use cartridge::Cartridge;
+use cartridge::{Cartridge, HEADER_CGB_B, HEADER_CGB_FLAG};
 #[cfg(feature = "game_genie")]
 use cheats::GameGenie;
 #[cfg(feature = "game_genie")]
@@ -173,7 +173,7 @@ impl<A: AudioCallback> Gb<A> {
         self.cpu.set_pc(0x0100);
         self.cpu.set_sp(0xFFFE);
 
-        let cgb_cart = self.is_cgb() && self.cart.read_rom(0x0143) & 0x80 != 0;
+        let cgb_cart = self.is_cgb() && self.cart.read_rom(HEADER_CGB_FLAG) & HEADER_CGB_B != 0;
         if self.is_cgb() {
             self.cgb_mode = if cgb_cart {
                 CgbMode::Cgb

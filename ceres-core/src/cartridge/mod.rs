@@ -5,7 +5,7 @@ mod rom_size;
 use {
     crate::Error,
     alloc::boxed::Box,
-    mbc::{Mbc, Mbc3RTC},
+    mbc::{Mbc, Mbc3RTC, RTC_REG_FIRST, RTC_REG_LAST},
     ram_size::RAMSize,
     rom_size::ROMSize,
 };
@@ -65,6 +65,29 @@ impl Default for Cartridge {
     }
 }
 
+/// Writing it in the low nibble to 0x0000-0x1FFF enables the cartridge RAM.
+const RAM_ENABLE_KEY: u8 = 0x0A;
+
+// Cartridge header offsets
+const HEADER_LOGO: usize = 0x104;
+const HEADER_TITLE: usize = 0x134;
+/// The title is 16 bytes long with an old licensee code, 11 with a new one.
+const HEADER_TITLE_END_OLD: usize = 0x144;
+const HEADER_TITLE_END_NEW: usize = 0x13F;
+/// Bit 7 set: the game supports the CGB.
+pub const HEADER_CGB_FLAG: u16 = 0x143;
+pub const HEADER_CGB_B: u8 = 0x80;
+const HEADER_CART_TYPE: usize = 0x147;
+const HEADER_RAM_SIZE: usize = 0x149;
+/// 0x33 means the new licensee code (at 0x144) is used instead.
+const HEADER_OLD_LICENSEE: usize = 0x14B;
+const NEW_LICENSEE: u8 = 0x33;
+const HEADER_VERSION: usize = 0x14C;
+const HEADER_CHECKSUM: usize = 0x14D;
+/// Big endian, unlike everything else in the header.
+const HEADER_GLOBAL_CHECKSUM: usize = 0x14E;
+const HEADER_END: usize = 0x150;
+
 /// Nintendo logo bytes at $0104-$0133, used by the boot ROM to verify a
 /// legitimate cartridge. Real MBC1 multicarts typically repeat this logo
 /// in every ROM bank; standard MBC1 carts only have it in bank 0.
@@ -87,7 +110,7 @@ fn detect_mbc1_multicart(rom: &[u8], rom_size: ROMSize) -> bool {
         return false;
     }
     (0..num_banks).all(|bank| {
-        let start = bank * bank_size + 0x104;
+        let start = bank * bank_size + HEADER_LOGO;
         rom.get(start..start + NINTENDO_LOGO.len()) == Some(&NINTENDO_LOGO[..])
     })
 }
@@ -96,9 +119,9 @@ impl Cartridge {
     #[must_use]
     pub fn ascii_title(&self) -> &[u8] {
         let range = if self.is_old_licensee_code() {
-            0x134..0x144
+            HEADER_TITLE..HEADER_TITLE_END_OLD
         } else {
-            0x134..0x13F
+            HEADER_TITLE..HEADER_TITLE_END_NEW
         };
 
         let title = &self.rom[range];
@@ -108,7 +131,10 @@ impl Cartridge {
 
     #[must_use]
     pub const fn global_checksum(&self) -> u16 {
-        u16::from_le_bytes([self.rom[0x14F], self.rom[0x14E]])
+        u16::from_le_bytes([
+            self.rom[HEADER_GLOBAL_CHECKSUM + 1],
+            self.rom[HEADER_GLOBAL_CHECKSUM],
+        ])
     }
 
     #[must_use]
@@ -118,13 +144,12 @@ impl Cartridge {
 
     #[must_use]
     pub const fn header_checksum(&self) -> u8 {
-        self.rom[0x14D]
+        self.rom[HEADER_CHECKSUM]
     }
 
     #[must_use]
     pub const fn is_old_licensee_code(&self) -> bool {
-        let code = self.rom[0x14B];
-        code != 0x33
+        self.rom[HEADER_OLD_LICENSEE] != NEW_LICENSEE
     }
 
     #[must_use]
@@ -142,16 +167,16 @@ impl Cartridge {
         reason = "ROM and RAM are common names in this context"
     )]
     pub fn new(rom: Box<[u8]>) -> Result<Self, Error> {
-        if rom.len() < 0x150 {
+        if rom.len() < HEADER_END {
             return Err(Error::InvalidRomHeaderSize);
         }
 
         // NOTE: Superfluous but silences clippy false positive
-        assert!(rom.len() >= 0x150, "ROM is too small to be valid");
+        assert!(rom.len() >= HEADER_END, "ROM is too small to be valid");
 
         let rom_size = ROMSize::from_len(rom.len())?;
-        let ram_size = RAMSize::new(rom[0x149])?;
-        let (mut mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147])?;
+        let ram_size = RAMSize::new(rom[HEADER_RAM_SIZE])?;
+        let (mut mbc, has_battery) = Mbc::mbc_and_battery(rom[HEADER_CART_TYPE])?;
         if let Mbc::Mbc3 {
             ref mut is_mbc30, ..
         } = mbc
@@ -286,7 +311,7 @@ impl Cartridge {
 
     #[must_use]
     pub const fn version(&self) -> u8 {
-        self.rom[0x14C]
+        self.rom[HEADER_VERSION]
     }
 
     pub fn write_ram(&mut self, addr: u16, val: u8) {
@@ -404,7 +429,7 @@ impl Cartridge {
 
                 match addr {
                     0x0000..=0x1FFF => {
-                        self.ram_enabled = (val & 0xF) == 0xA;
+                        self.ram_enabled = val & 0xF == RAM_ENABLE_KEY;
                     }
                     0x2000..=0x3FFF => {
                         let bank_mode = *bank_mode;
@@ -431,7 +456,7 @@ impl Cartridge {
                 if addr <= 0x3FFF {
                     // MBC2 uses bit 8 to distinguish RAM enable from ROM bank
                     if (addr >> 8) & 1 == 0 {
-                        self.ram_enabled = (val & 0xF) == 0xA;
+                        self.ram_enabled = val & 0xF == RAM_ENABLE_KEY;
                     } else {
                         // MBC2 only uses lower 4 bits for bank number
                         // Store raw value, apply 0→1 correction based on lower 4 bits
@@ -450,7 +475,7 @@ impl Cartridge {
                 ref mut is_mbc30,
             } => match addr {
                 0x0000..=0x1FFF => {
-                    self.ram_enabled = (val & 0x0F) == 0x0A;
+                    self.ram_enabled = val & 0xF == RAM_ENABLE_KEY;
                 }
                 0x2000..=0x3FFF => {
                     let mask = if *is_mbc30 { 0xFF } else { 0x7F };
@@ -469,12 +494,12 @@ impl Cartridge {
                     );
                 }
                 0x4000..=0x5FFF => {
-                    if (0x8..=0xC).contains(&val) {
+                    if (RTC_REG_FIRST..=RTC_REG_LAST).contains(&val) {
                         // Write to RTC registers
                         if let Some(rtc) = rtc.as_mut() {
                             #[expect(
                                 clippy::unwrap_used,
-                                reason = "val can only be 0x8..=0xC it will panic only when passed 0"
+                                reason = "val is in RTC_REG_FIRST..=RTC_REG_LAST: it would only panic on 0"
                             )]
                             rtc.map_reg(val).unwrap();
                         }
@@ -507,7 +532,7 @@ impl Cartridge {
 
                 match addr {
                     0x0000..=0x1FFF => {
-                        self.ram_enabled = val & 0xF == 0xA;
+                        self.ram_enabled = val & 0xF == RAM_ENABLE_KEY;
                     }
                     0x2000..=0x2FFF => {
                         self.rom_bank_lo = val;

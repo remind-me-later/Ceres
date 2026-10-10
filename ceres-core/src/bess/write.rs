@@ -1,3 +1,4 @@
+use super::{CGB_PALETTES_SIZE, CORE_BLOCK_SIZE, INFO_BLOCK_SIZE, INFO_TITLE_SIZE, RTC_BLOCK_SIZE};
 use alloc::vec::Vec;
 
 use crate::{
@@ -18,7 +19,7 @@ impl<'a> Writer<'a> {
 
     pub fn save_state<A: AudioCallback>(&mut self, gb: &Gb<A>, secs_since_unix_epoch: u64) {
         let cgb = matches!(gb.cgb_mode, CgbMode::Cgb);
-        let palette = if cgb { 0x40 } else { 0 };
+        let palette = if cgb { CGB_PALETTES_SIZE } else { 0 };
         let sizes = WrittenSizes {
             ram: u32::from(if cgb { Wram::SIZE_CGB } else { Wram::SIZE_GB }),
             vram: u32::from(if cgb { Vram::SIZE_CGB } else { Vram::SIZE_GB }),
@@ -48,7 +49,7 @@ impl<'a> Writer<'a> {
 
         // Write the background and object palettes
         if cgb {
-            self.write_all(&[0; 0x80]);
+            self.write_all(&[0; 2 * CGB_PALETTES_SIZE as usize]);
         }
         #[expect(clippy::cast_possible_truncation)]
         let offset_to_first_block = { self.position as u32 };
@@ -72,7 +73,7 @@ impl<'a> Writer<'a> {
     }
 
     fn write_core_block<A: AudioCallback>(&mut self, gb: &Gb<A>, sizes: &WrittenSizes) {
-        self.write_block_header(*b"CORE", 0xD0);
+        self.write_block_header(*b"CORE", CORE_BLOCK_SIZE);
 
         // BESS Version
         {
@@ -156,12 +157,10 @@ impl<'a> Writer<'a> {
     }
 
     fn write_info_block(&mut self, cart: &Cartridge) {
-        const INFO_BLOCK_SIZE: u32 = 0x12;
-
         self.write_block_header(*b"INFO", INFO_BLOCK_SIZE);
 
         // pad title to 0x10 bytes
-        let mut title = [0; 0x10];
+        let mut title = [0; INFO_TITLE_SIZE];
         let title_bytes = cart.ascii_title();
         let title_len = title_bytes.len();
         title[0..title_len].copy_from_slice(title_bytes);
@@ -180,7 +179,7 @@ impl<'a> Writer<'a> {
 
     fn write_rtc_block(&mut self, secs_since_unix_epoch: u64, cart: &Cartridge) {
         if let Some(rtc) = cart.rtc() {
-            self.write_block_header(*b"RTC ", 0x28 + 0x8);
+            self.write_block_header(*b"RTC ", RTC_BLOCK_SIZE);
 
             // Each register is a byte and 3 bytes of padding: the real
             // registers, then the latched ones.

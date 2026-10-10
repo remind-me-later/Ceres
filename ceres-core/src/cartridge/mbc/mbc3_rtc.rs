@@ -4,6 +4,20 @@ use core::num::NonZeroU8;
 /// 4 194 304 CPU cycles in single speed and twice as many in double speed.
 const SECOND_UNITS: u32 = 0x0080_0000;
 
+/// The RAM bank numbers that map a clock register instead.
+pub const RTC_REG_FIRST: u8 = 0x08;
+pub const RTC_REG_LAST: u8 = 0x0C;
+
+/// The control register's index, and its bits.
+const CONTROL: usize = 4;
+/// Bit 8 of the day counter.
+const CONTROL_DAY_HIGH_B: u8 = 0x01;
+/// The clock is stopped.
+const CONTROL_HALT_B: u8 = 0x40;
+/// The day counter overflowed.
+const CONTROL_CARRY_B: u8 = 0x80;
+const CONTROL_MASK: u8 = CONTROL_CARRY_B | CONTROL_HALT_B | CONTROL_DAY_HIGH_B;
+
 /// The MBC3's real-time clock (SameBoy's model): the clock ticks the real
 /// registers, the CPU reads the latched copy.
 #[derive(Default, Debug)]
@@ -25,7 +39,7 @@ impl Mbc3RTC {
     /// # Errors
     /// Returns `Err(())` if `val` is not in the range 0x8..=0xC.  
     pub fn map_reg(&mut self, val: u8) -> Result<(), ()> {
-        if !(0x8..=0xC).contains(&val) {
+        if !(RTC_REG_FIRST..=RTC_REG_LAST).contains(&val) {
             return Err(());
         }
         self.mapped = NonZeroU8::new(val);
@@ -34,9 +48,9 @@ impl Mbc3RTC {
 
     /// The latched register that is mapped, if any.
     pub fn read(&self, ram_enabled: bool) -> Option<u8> {
-        const MASKS: [u8; 5] = [0x3F, 0x3F, 0x1F, 0xFF, 0xC1];
+        const MASKS: [u8; 5] = [0x3F, 0x3F, 0x1F, 0xFF, CONTROL_MASK];
         self.mapped.filter(|_| ram_enabled).map(|m| {
-            let index = usize::from(m.get() - 0x8);
+            let index = usize::from(m.get() - RTC_REG_FIRST);
             self.latched[index] & MASKS[index]
         })
     }
@@ -49,7 +63,7 @@ impl Mbc3RTC {
     /// Advances the clock by `units` 8 MHz units (a CPU cycle in double speed,
     /// two in single speed).
     pub const fn run(&mut self, units: u32) {
-        if self.real[4] & 0x40 != 0 {
+        if self.real[CONTROL] & CONTROL_HALT_B != 0 {
             return;
         }
 
@@ -86,16 +100,16 @@ impl Mbc3RTC {
         if r[3] != 0 {
             return;
         }
-        if r[4] & 1 != 0 {
-            r[4] |= 0x80;
+        if r[CONTROL] & CONTROL_DAY_HIGH_B != 0 {
+            r[CONTROL] |= CONTROL_CARRY_B;
         }
-        r[4] ^= 1;
+        r[CONTROL] ^= CONTROL_DAY_HIGH_B;
     }
 
     #[must_use]
     pub fn write(&mut self, ram_enabled: bool, val: u8) -> Option<()> {
         self.mapped.filter(|_| ram_enabled).map(|m| {
-            let index = usize::from(m.get() - 0x8);
+            let index = usize::from(m.get() - RTC_REG_FIRST);
             if index == 0 {
                 // Writing the seconds restarts the sub-second count.
                 self.cycles = 0;
@@ -122,9 +136,10 @@ impl Mbc3RTC {
         self.real[3] = (days % 256) as u8;
 
         let carry = days / 256;
-        self.real[4] = (self.real[4] & !1) | ((self.real[4] ^ carry as u8) & 1);
+        self.real[CONTROL] = (self.real[CONTROL] & !CONTROL_DAY_HIGH_B)
+            | ((self.real[CONTROL] ^ carry as u8) & CONTROL_DAY_HIGH_B);
         if carry != 0 {
-            self.real[4] |= 0x80;
+            self.real[CONTROL] |= CONTROL_CARRY_B;
         }
         self.latch();
     }
@@ -136,7 +151,7 @@ impl Mbc3RTC {
 
     pub const fn set_real(&mut self, real: [u8; 5]) {
         self.real = real;
-        self.real[4] &= 0xC1;
+        self.real[CONTROL] &= CONTROL_MASK;
     }
 
     pub const fn latched(&self) -> [u8; 5] {
