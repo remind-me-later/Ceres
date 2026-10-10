@@ -1,4 +1,6 @@
 pub mod conflict;
+#[cfg(kani)]
+mod proofs;
 
 use crate::{
     AudioCallback, Gb, Model,

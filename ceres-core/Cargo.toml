@@ -129,4 +129,5 @@ verbose_file_reads = "warn"
 wildcard_enum_match_arm = "allow"
 
 [lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
 unsafe_code = "forbid"
