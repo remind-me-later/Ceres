@@ -1,5 +1,5 @@
 use {
-    super::{CORE_REGISTERS_SIZE, FOOTER_SIZE, INFO_BLOCK_SIZE},
+    super::{Buffer, CORE_REGISTERS_SIZE, FOOTER_SIZE, INFO_BLOCK_SIZE, Layout, Memory},
     crate::{AudioCallback, Cartridge, CgbMode, Gb, error::Error},
 };
 
@@ -19,7 +19,7 @@ impl<'a> Reader<'a> {
         // Read blocks
         self.seek_from_start(offset_to_first_block as usize)?;
 
-        let mut sizes = ReadSizes::default();
+        let mut layout = Layout::default();
 
         'reading: loop {
             let (name, size) = self.read_block_header()?;
@@ -28,7 +28,7 @@ impl<'a> Reader<'a> {
                 // Ignore the emulator name for now
                 b"NAME" => self.seek_from_current(size as usize)?,
                 b"INFO" => self.read_info_block(size)?,
-                b"CORE" => sizes = self.read_core_block()?,
+                b"CORE" => layout = self.read_core_block()?,
                 b"RTC " => self.read_rtc_block(size, secs_since_unix_epoch, &mut gb.cart)?,
                 b"END " => break 'reading,
                 _ => return Err(Error::InvalidSaveState),
@@ -36,20 +36,21 @@ impl<'a> Reader<'a> {
         }
 
         // Read data
-        self.read_memory(&sizes.ram, gb.wram.wram_mut())?;
-        self.read_memory(&sizes.vram, gb.ppu.vram_mut().bytes_mut())?;
-        self.read_memory(&sizes.mbc_ram, gb.cart.ram_mut())?;
-        self.read_memory(&sizes.oam, gb.ppu.oam_mut().bytes_mut())?;
-        self.read_memory(&sizes.hram, gb.hram.hram_mut())?;
+        self.read_memory(layout.get(Memory::Ram), gb.wram.wram_mut())?;
+        self.read_memory(layout.get(Memory::Vram), gb.ppu.vram_mut().bytes_mut())?;
+        self.read_memory(layout.get(Memory::MbcRam), gb.cart.ram_mut())?;
+        self.read_memory(layout.get(Memory::Oam), gb.ppu.oam_mut().bytes_mut())?;
+        self.read_memory(layout.get(Memory::Hram), gb.hram.hram_mut())?;
 
+        // The palettes are not restored, but they must be in the state.
+        let bg_palette = layout.get(Memory::BgPalette);
         let skip_palette = if matches!(gb.cgb_mode, CgbMode::Cgb) {
-            sizes
-                .bg_palette
+            bg_palette
                 .offset
-                .checked_add(sizes.bg_palette.size)
+                .checked_add(bg_palette.size)
                 .ok_or(Error::InvalidSaveState)?
         } else {
-            sizes.bg_palette.offset
+            bg_palette.offset
         };
 
         self.seek_from_start(skip_palette as usize)?;
@@ -60,7 +61,7 @@ impl<'a> Reader<'a> {
     /// Reads a memory into the start of `dest`, which can be larger: a DMG
     /// state has 8 KiB of WRAM and VRAM, and a state can lack the cartridge
     /// RAM.
-    fn read_memory(&mut self, buffer: &Buffer, dest: &mut [u8]) -> Result<(), Error> {
+    fn read_memory(&mut self, buffer: Buffer, dest: &mut [u8]) -> Result<(), Error> {
         let dest = dest
             .get_mut(..buffer.size as usize)
             .ok_or(Error::InvalidSaveState)?;
@@ -78,22 +79,15 @@ impl<'a> Reader<'a> {
         Ok((name, self.read_u32()?))
     }
 
-    fn read_core_block(&mut self) -> Result<ReadSizes, Error> {
+    fn read_core_block(&mut self) -> Result<Layout, Error> {
         // Ignore the version, the model and the CPU registers for now
         self.seek_from_current(4 + 4 + CORE_REGISTERS_SIZE)?;
 
-        let sizes = ReadSizes {
-            ram: self.read_buffer()?,
-            vram: self.read_buffer()?,
-            mbc_ram: self.read_buffer()?,
-            oam: self.read_buffer()?,
-            hram: self.read_buffer()?,
-            bg_palette: self.read_buffer()?,
-        };
-        // Ignore the object palettes for now
-        self.read_buffer()?;
-
-        Ok(sizes)
+        let mut layout = Layout::default();
+        for buffer in &mut layout.0 {
+            *buffer = self.read_buffer()?;
+        }
+        Ok(layout)
     }
 
     fn read_buffer(&mut self) -> Result<Buffer, Error> {
@@ -196,22 +190,4 @@ impl<'a> Reader<'a> {
         self.position = n;
         Ok(())
     }
-}
-
-/// A memory in the save state.
-#[derive(Default)]
-struct Buffer {
-    size: u32,
-    offset: u32,
-}
-
-/// Where the CORE block says the memories are.
-#[derive(Default)]
-struct ReadSizes {
-    ram: Buffer,
-    vram: Buffer,
-    mbc_ram: Buffer,
-    oam: Buffer,
-    hram: Buffer,
-    bg_palette: Buffer,
 }

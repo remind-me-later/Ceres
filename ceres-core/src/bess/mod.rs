@@ -22,6 +22,54 @@ const FOOTER_SIZE: usize = 8;
 pub(crate) use read::Reader;
 pub(crate) use write::Writer;
 
+/// The memories of the CORE block, in the order of its sizes and offsets.
+/// The writer puts their data in the same order, from offset 0.
+#[derive(Clone, Copy)]
+enum Memory {
+    Ram,
+    Vram,
+    MbcRam,
+    Oam,
+    Hram,
+    BgPalette,
+    #[expect(
+        dead_code,
+        reason = "Only its place in the layout: the palettes are not restored yet"
+    )]
+    ObjPalette,
+}
+
+impl Memory {
+    const COUNT: usize = 7;
+}
+
+/// A memory's size and offset in the state.
+#[derive(Clone, Copy, Default)]
+struct Buffer {
+    size: u32,
+    offset: u32,
+}
+
+/// Where each memory is in the state.
+#[derive(Default)]
+struct Layout([Buffer; Memory::COUNT]);
+
+impl Layout {
+    /// The memories of `sizes` one after the other, from offset 0.
+    fn contiguous(sizes: [u32; Memory::COUNT]) -> Self {
+        let mut offset = 0;
+        Self(sizes.map(|size| {
+            let buffer = Buffer { size, offset };
+            offset += size;
+            buffer
+        }))
+    }
+
+    const fn get(&self, memory: Memory) -> Buffer {
+        self.0[memory as usize]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{AudioCallback, Gb, GbBuilder, Model, Sample};

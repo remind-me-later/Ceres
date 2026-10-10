@@ -1,11 +1,9 @@
-use super::{CGB_PALETTES_SIZE, CORE_BLOCK_SIZE, INFO_BLOCK_SIZE, INFO_TITLE_SIZE, RTC_BLOCK_SIZE};
+use super::{
+    CGB_PALETTES_SIZE, CORE_BLOCK_SIZE, INFO_BLOCK_SIZE, INFO_TITLE_SIZE, Layout, RTC_BLOCK_SIZE,
+};
 use alloc::vec::Vec;
 
-use crate::{
-    AudioCallback, Cartridge, CgbMode, Gb, Model,
-    memory::{Hram, Wram},
-    ppu::{Oam, Vram},
-};
+use crate::{AudioCallback, Cartridge, CgbMode, Gb, Model, memory::Wram, ppu::Vram};
 
 pub(crate) struct Writer<'a> {
     buf: &'a mut Vec<u8>,
@@ -19,43 +17,32 @@ impl<'a> Writer<'a> {
 
     pub(crate) fn save_state<A: AudioCallback>(&mut self, gb: &Gb<A>, secs_since_unix_epoch: u64) {
         let cgb = matches!(gb.cgb_mode, CgbMode::Cgb);
-        let palette = if cgb { CGB_PALETTES_SIZE } else { 0 };
-        let sizes = WrittenSizes {
-            ram: u32::from(if cgb { Wram::SIZE_CGB } else { Wram::SIZE_GB }),
-            vram: u32::from(if cgb { Vram::SIZE_CGB } else { Vram::SIZE_GB }),
-            #[expect(clippy::cast_possible_truncation, reason = "128 KiB at most")]
-            mbc_ram: gb.cart.ram().len() as u32,
-            oam: u32::from(Oam::SIZE),
-            hram: u32::from(Hram::SIZE),
-            bg_palette: palette,
-            obj_palette: palette,
-        };
-
-        // Write RAM
-        self.write_all(&gb.wram.wram()[..sizes.ram as usize]);
-
-        // Write VRAM
-        self.write_all(&gb.ppu.vram().bytes()[..sizes.vram as usize]);
-
-        // Write MBC RAM
-        self.write_all(gb.cart.ram());
-
-        // Write OAM
-        self.write_all(&gb.ppu.oam().bytes()[..sizes.oam as usize]);
-
-        // Write HRAM
-        self.write_all(gb.hram.hram().as_slice());
-
-        // Write the background and object palettes
-        if cgb {
-            self.write_all(&[0; 2 * CGB_PALETTES_SIZE as usize]);
+        let ram = if cgb { Wram::SIZE_CGB } else { Wram::SIZE_GB };
+        let vram = if cgb { Vram::SIZE_CGB } else { Vram::SIZE_GB };
+        // The palettes are not saved yet.
+        let palette = [0; CGB_PALETTES_SIZE as usize];
+        let palette: &[u8] = if cgb { &palette } else { &[] };
+        // In the order of `Memory`.
+        let memories = [
+            &gb.wram.wram()[..usize::from(ram)],
+            &gb.ppu.vram().bytes()[..usize::from(vram)],
+            gb.cart.ram(),
+            gb.ppu.oam().bytes(),
+            gb.hram.hram().as_slice(),
+            palette,
+            palette,
+        ];
+        #[expect(clippy::cast_possible_truncation, reason = "128 KiB at most")]
+        let layout = Layout::contiguous(memories.map(|m| m.len() as u32));
+        for memory in memories {
+            self.write_all(memory);
         }
         #[expect(clippy::cast_possible_truncation)]
         let offset_to_first_block = { self.position as u32 };
 
         self.write_name_block();
         self.write_info_block(&gb.cart);
-        self.write_core_block(gb, &sizes);
+        self.write_core_block(gb, &layout);
         self.write_rtc_block(secs_since_unix_epoch, &gb.cart);
         self.write_end_block();
         self.write_footer(offset_to_first_block);
@@ -71,7 +58,7 @@ impl<'a> Writer<'a> {
         self.write_all(&size.to_le_bytes());
     }
 
-    fn write_core_block<A: AudioCallback>(&mut self, gb: &Gb<A>, sizes: &WrittenSizes) {
+    fn write_core_block<A: AudioCallback>(&mut self, gb: &Gb<A>, layout: &Layout) {
         self.write_block_header(*b"CORE", CORE_BLOCK_SIZE);
 
         // BESS Version
@@ -125,22 +112,10 @@ impl<'a> Writer<'a> {
             }
         }
 
-        // Sizes
-        {
-            self.write_all(&sizes.ram.to_le_bytes());
-            self.write_all(&sizes.ram_offset().to_le_bytes());
-            self.write_all(&sizes.vram.to_le_bytes());
-            self.write_all(&sizes.vram_offset().to_le_bytes());
-            self.write_all(&sizes.mbc_ram.to_le_bytes());
-            self.write_all(&sizes.mbc_ram_offset().to_le_bytes());
-            self.write_all(&sizes.oam.to_le_bytes());
-            self.write_all(&sizes.oam_offset().to_le_bytes());
-            self.write_all(&sizes.hram.to_le_bytes());
-            self.write_all(&sizes.hram_offset().to_le_bytes());
-            self.write_all(&sizes.bg_palette.to_le_bytes());
-            self.write_all(&sizes.bg_palette_offset().to_le_bytes());
-            self.write_all(&sizes.obj_palette.to_le_bytes());
-            self.write_all(&sizes.obj_palette_offset().to_le_bytes());
+        // Sizes and offsets
+        for buffer in layout.0 {
+            self.write_all(&buffer.size.to_le_bytes());
+            self.write_all(&buffer.offset.to_le_bytes());
         }
     }
 
@@ -187,47 +162,5 @@ impl<'a> Writer<'a> {
             }
             self.write_all(&secs_since_unix_epoch.to_le_bytes());
         }
-    }
-}
-
-#[derive(Default)]
-struct WrittenSizes {
-    bg_palette: u32,
-    hram: u32,
-    mbc_ram: u32,
-    oam: u32,
-    obj_palette: u32,
-    ram: u32,
-    vram: u32,
-}
-
-impl WrittenSizes {
-    const fn bg_palette_offset(&self) -> u32 {
-        self.hram_offset() + self.hram
-    }
-
-    const fn hram_offset(&self) -> u32 {
-        self.oam_offset() + self.oam
-    }
-
-    const fn mbc_ram_offset(&self) -> u32 {
-        self.vram_offset() + self.vram
-    }
-
-    const fn oam_offset(&self) -> u32 {
-        self.mbc_ram_offset() + self.mbc_ram
-    }
-
-    const fn obj_palette_offset(&self) -> u32 {
-        self.bg_palette_offset() + self.bg_palette
-    }
-
-    #[expect(clippy::unused_self)]
-    const fn ram_offset(&self) -> u32 {
-        0
-    }
-
-    const fn vram_offset(&self) -> u32 {
-        self.ram
     }
 }
