@@ -4,12 +4,20 @@
 //! registers when it reaches its `ld b, b` breakpoint: the Fibonacci numbers
 //! 3, 5, 8, 13, 21, 34 in B, C, D, E, H, L on success.
 //!
-//! Most ROMs are written for one family of CGB revisions (the suffix of the
-//! name says which), so each ROM runs on every model and the ones that fail
-//! are listed in `same_suite_known_failures.txt` (`<model> <rom>`): SameBoy,
-//! the reference this emulator follows, shows the very same screen on each
-//! of them. The test fails on any other failure, and on a known failure that
-//! now passes. Run with `BLESS=1` to rewrite the list.
+//! Each ROM runs on every model, and the ones that fail are listed in
+//! `same_suite_known_failures.txt` (`<model> <rom>`). Every ROM passes on the
+//! revisions it is written for; the listed failures are the ones real
+//! hardware has too, according to the APU README:
+//!
+//! - a suffix names the revisions a ROM is for (`-cgb0B`, `-cgbDE`...);
+//! - the other APU ROMs are for the CGB-D and E: the CGB-C and older fail
+//!   most of them (their PCM registers glitch), and the CGB-D fails
+//!   `channel_1_sweep_restart_2`;
+//! - the AGB, which no ROM is verified on, fails five of the CGB-D and E
+//!   ones (as it does in SameBoy).
+//!
+//! The test fails on any other failure, and on a known failure that now
+//! passes. Run with `BLESS=1` to rewrite the list.
 
 use ceres_core::Model;
 use ceres_test_runner::{

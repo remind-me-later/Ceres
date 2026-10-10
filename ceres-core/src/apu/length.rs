@@ -1,6 +1,6 @@
 //! The length timer that stops a channel (NRx1 and bit 6 of NRx4).
 
-use super::{NRX4_LENGTH_B, NRX4_TRIGGER_B};
+use super::{NRX4_LENGTH_B, NRX4_TRIGGER_B, revision::Revision};
 
 #[derive(Clone, Copy)]
 pub(super) struct Length {
@@ -43,26 +43,36 @@ impl Length {
         }
     }
 
-    /// Writes NRx4 (`value`), after a trigger. `always_glitch` makes even a
-    /// write that leaves the timer disabled glitch (the CGB-B and older do it
-    /// for the squares and the wave). Returns `true` if the timer expired.
-    pub(super) const fn write(&mut self, value: u8, always_glitch: bool, div_divider: u8) -> bool {
+    /// The wave channel's timer, the longest.
+    const fn is_wave(self) -> bool {
+        self.max == 0x100
+    }
+
+    /// Writes NRx4 (`value`), after a trigger. Returns `true` if the timer
+    /// expired.
+    pub(super) fn write(&mut self, value: u8, rev: Revision, div_divider: u8) -> bool {
         let mut expired = false;
         // APU glitch: enabling the length while the DIV divider's LSB is 1
-        // ticks the length once.
-        if (value & NRX4_LENGTH_B != 0 || always_glitch)
-            && !self.enabled
-            && div_divider & 1 != 0
-            && self.counter != 0
-        {
-            self.counter -= 1;
-            if self.counter == 0 {
-                if value & NRX4_TRIGGER_B != 0 {
-                    // A trigger reloads it, minus the glitched tick.
-                    self.counter = self.max - 1;
-                } else {
-                    expired = true;
+        // ticks the length once. On the CGB-B and older, any write while it
+        // is disabled does.
+        let glitch = value & NRX4_LENGTH_B != 0 || (rev.is_cgb() && rev <= Revision::CgbB);
+        if glitch && !self.enabled && div_divider & 1 != 0 {
+            if self.counter != 0 {
+                self.counter -= 1;
+                // The CGB-B's wave channel keeps playing until the next
+                // glitched write: it takes one more write to stop it.
+                if self.counter == 0 && !(rev == Revision::CgbB && self.is_wave()) {
+                    if value & NRX4_TRIGGER_B != 0 {
+                        // A trigger reloads it, minus the glitched tick.
+                        self.counter = self.max - 1;
+                    } else {
+                        expired = true;
+                    }
                 }
+            } else if rev == Revision::CgbB && self.is_wave() {
+                expired = true;
+            } else {
+                // An expired timer stays expired.
             }
         }
         self.enabled = value & NRX4_LENGTH_B != 0;

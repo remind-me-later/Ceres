@@ -287,11 +287,7 @@ impl Square {
             self.trigger(value, old_period, c);
         }
 
-        if self.length.write(
-            value,
-            c.rev.is_cgb() && c.rev <= Revision::CgbB,
-            c.div_divider,
-        ) {
+        if self.length.write(value, c.rev, c.div_divider) {
             self.disable(c);
         }
         self.nrx4 = value;

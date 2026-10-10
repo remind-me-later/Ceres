@@ -345,7 +345,7 @@ impl Noise {
                 self.start(c);
             }
         }
-        if self.length.write(value, false, c.div_divider) {
+        if self.length.write(value, c.rev, c.div_divider) {
             self.disable(c);
         }
     }

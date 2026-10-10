@@ -15,9 +15,11 @@ const SGB_MLT_REQ: u8 = 0x11;
 pub(super) struct Sgb {
     command: [u8; SGB_COMMAND_BYTES],
     command_write_index: usize,
+    /// The player counter.
     current_player: u8,
-    /// 1, 2 or 4 players.
-    player_count: u8,
+    /// `MLT_REQ`'s mode: 0 for one player, 1 for two and 3 for four, also the
+    /// mask of the player counter. 2 is invalid (see [`Self::multiplayer_id`]).
+    multiplayer_mode: u8,
     ready_for_pulse: bool,
     ready_for_stop: bool,
     ready_for_write: bool,
@@ -29,7 +31,7 @@ impl Sgb {
             command: [0; SGB_COMMAND_BYTES],
             command_write_index: 0,
             current_player: 0,
-            player_count: 1,
+            multiplayer_mode: 0,
             ready_for_pulse: false,
             ready_for_stop: false,
             ready_for_write: false,
@@ -37,11 +39,14 @@ impl Sgb {
     }
 
     /// The player the joypad reads with no line selected, in multiplayer.
+    ///
+    /// In the invalid mode 2 the counter is stuck and reads as player 2 or
+    /// 0 (SameSuite's `command_mlt_req`).
     pub(super) const fn multiplayer_id(&self) -> Option<u8> {
-        if self.player_count > 1 {
-            Some(self.current_player)
-        } else {
-            None
+        match self.multiplayer_mode {
+            0 => None,
+            2 => Some((self.current_player + 1) & 2),
+            _ => Some(self.current_player),
         }
     }
 
@@ -61,12 +66,10 @@ impl Sgb {
 
     const fn command_ready(&mut self) {
         if self.command[0] >> 3 == SGB_MLT_REQ {
-            self.player_count = match self.command[1] & 3 {
-                0 => 1,
-                1 => 2,
-                _ => 4,
-            };
-            self.current_player &= self.player_count - 1;
+            self.multiplayer_mode = self.command[1] & 3;
+            if self.multiplayer_mode != 2 {
+                self.current_player &= self.multiplayer_mode;
+            }
         }
     }
 
@@ -79,8 +82,11 @@ impl Sgb {
             usize::from(self.command[0] & 7).max(1) * SGB_PACKET_BITS
         };
 
-        if value & P1_ACTIONS_B != 0 && old & P1_ACTIONS_B == 0 && self.player_count & 1 == 0 {
-            self.current_player = (self.current_player + 1) & (self.player_count - 1);
+        if value & P1_ACTIONS_B != 0
+            && old & P1_ACTIONS_B == 0
+            && matches!(self.multiplayer_mode, 1 | 3)
+        {
+            self.current_player = (self.current_player + 1) & self.multiplayer_mode;
         }
 
         match (value >> 4) & 3 {

@@ -267,11 +267,7 @@ impl Wave {
         if value & NRX4_TRIGGER_B != 0 {
             self.trigger(c);
         }
-        if self.length.write(
-            value,
-            c.rev.is_cgb() && c.rev <= Revision::CgbB,
-            c.div_divider,
-        ) {
+        if self.length.write(value, c.rev, c.div_divider) {
             self.disable(c);
         }
     }

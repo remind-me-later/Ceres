@@ -39,7 +39,6 @@ cgb0 apu/channel_3/channel_3_extra_length_clocking-cgbB.gb
 cgb0 apu/channel_4/channel_4_align.gb
 cgb0 apu/channel_4/channel_4_delay.gb
 cgb0 apu/channel_4/channel_4_equivalent_frequencies.gb
-cgb0 apu/channel_4/channel_4_extra_length_clocking-cgb0B.gb
 cgb0 apu/channel_4/channel_4_freq_change.gb
 cgb0 apu/channel_4/channel_4_frequency_alignment.gb
 cgb0 apu/channel_4/channel_4_lfsr.gb
@@ -76,7 +75,6 @@ cgba apu/channel_3/channel_3_extra_length_clocking-cgbB.gb
 cgba apu/channel_4/channel_4_align.gb
 cgba apu/channel_4/channel_4_delay.gb
 cgba apu/channel_4/channel_4_equivalent_frequencies.gb
-cgba apu/channel_4/channel_4_extra_length_clocking-cgb0B.gb
 cgba apu/channel_4/channel_4_freq_change.gb
 cgba apu/channel_4/channel_4_frequency_alignment.gb
 cgba apu/channel_4/channel_4_lfsr.gb
@@ -109,11 +107,10 @@ cgbb apu/channel_2/channel_2_restart.gb
 cgbb apu/channel_2/channel_2_stop_div.gb
 cgbb apu/channel_2/channel_2_stop_restart.gb
 cgbb apu/channel_2/channel_2_volume.gb
-cgbb apu/channel_3/channel_3_extra_length_clocking-cgbB.gb
+cgbb apu/channel_3/channel_3_extra_length_clocking-cgb0.gb
 cgbb apu/channel_4/channel_4_align.gb
 cgbb apu/channel_4/channel_4_delay.gb
 cgbb apu/channel_4/channel_4_equivalent_frequencies.gb
-cgbb apu/channel_4/channel_4_extra_length_clocking-cgb0B.gb
 cgbb apu/channel_4/channel_4_freq_change.gb
 cgbb apu/channel_4/channel_4_frequency_alignment.gb
 cgbb apu/channel_4/channel_4_lfsr.gb
@@ -175,5 +172,3 @@ cgbe apu/channel_2/channel_2_extra_length_clocking-cgb0B.gb
 cgbe apu/channel_3/channel_3_extra_length_clocking-cgb0.gb
 cgbe apu/channel_3/channel_3_extra_length_clocking-cgbB.gb
 cgbe apu/channel_4/channel_4_extra_length_clocking-cgb0B.gb
-sgb sgb/command_mlt_req.gb
-sgb2 sgb/command_mlt_req.gb
