@@ -7,7 +7,7 @@ mod wram;
 
 use crate::{AudioCallback, Model, ppu};
 use crate::{CgbMode, Gb};
-pub(crate) use dma::Dma;
+pub(crate) use dma::{Dma, DmaPhase};
 pub(crate) use hdma::{Hdma, SwitchHdma};
 pub(crate) use hram::Hram;
 pub(crate) use key1::{Key1, SpeedSwitch};
@@ -268,7 +268,8 @@ impl<A: AudioCallback> Gb<A> {
             LYC => self.ppu.write_lyc(val, &mut self.ints),
             DMA => {
                 self.dma.write(val);
-                self.ppu.set_dma_state(0xFF, u16::from(val) << 8, true);
+                self.ppu
+                    .set_dma_state(DmaPhase::StartUp, u16::from(val) << 8, true);
                 self.ppu.refresh_stat(&mut self.ints);
             }
             BGP => self.ppu.write_bgp(val),

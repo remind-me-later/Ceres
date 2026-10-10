@@ -5,7 +5,7 @@ use {
     super::{State, TILE_BYTES, VRAM_BANK1},
     crate::{
         Model,
-        memory::{Dma, OAM_START},
+        memory::{DmaPhase, OAM_START},
         ppu::{
             ATTR_BANK_B, ATTR_Y_FLIP_B, LCDC_OBJ_EN_B, LCDC_OBJ_SIZE_B, LCDC_ON_B, Oam, Ppu,
             oam_bug::NO_ROW,
@@ -113,14 +113,13 @@ impl Ppu {
         if self.d.bus.oam_ppu_blocked {
             return 0xFF;
         }
-        let dest = self.d.bus.dma_dest;
-        if (1..=Oam::SIZE).contains(&dest) {
+        if let Some(written) = self.d.bus.dma_phase.written() {
             if self.d.bus.hdma_in_progress {
                 return self
                     .oam_read_row(((self.d.bus.hdma_src & !1) | (addr & 1)).to_le_bytes()[0]);
             }
-            if dest != Oam::SIZE {
-                return self.oam.read(u16::from(dest & !1) | (addr & 1));
+            if written != Oam::SIZE {
+                return self.oam.read(u16::from(written & !1) | (addr & 1));
             }
         }
         self.oam.read(addr)
@@ -140,13 +139,13 @@ impl Ppu {
         // On CGB the object search runs ahead of the DMA's state: by two
         // T-cycles in single speed, by a whole M-cycle in double speed.
         let lead = if self.double_speed { 3 } else { 2 };
-        let dest = if self.is_cgb_hardware() && self.d.bus.chunk_left <= lead {
-            self.d.bus.dma_dest_next
+        let phase = if self.is_cgb_hardware() && self.d.bus.chunk_left <= lead {
+            self.d.bus.dma_phase_next
         } else {
-            self.d.bus.dma_dest
+            self.d.bus.dma_phase
         };
-        let dma_active = dest != Dma::DEST_IDLE;
-        if dma_active && !self.d.bus.cpu_idle && !matches!(dest, Dma::DEST_START_UP | 0) {
+        let dma_active = phase != DmaPhase::Idle;
+        if !self.d.bus.cpu_idle && phase.written().is_some() {
             // Once a DMA has written its first byte the object search reads
             // 0xFF until the transfer ends.
             self.d.objs.y_bus = 0xFF;

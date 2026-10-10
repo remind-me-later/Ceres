@@ -4,8 +4,8 @@
 use {
     super::{VRAM_BANK1, VRAM_OFFSET_MASK, gstat::VRAM_LOCK_CYCLE},
     crate::{
-        memory::{Dma, VRAM_START},
-        ppu::{Oam, Ppu},
+        memory::{DmaPhase, VRAM_START},
+        ppu::Ppu,
     },
 };
 
@@ -13,11 +13,11 @@ use {
 #[expect(clippy::struct_excessive_bools, reason = "Independent bus states")]
 #[derive(Clone)]
 pub(super) struct PpuBus {
-    /// OAM index the DMA is writing (`Dma::DEST_IDLE`: no transfer).
-    pub dma_dest: u8,
-    /// Where `dma_dest` will be once the T-cycles the PPU is running are
-    /// accounted for (the DMA catches up after the PPU).
-    pub dma_dest_next: u8,
+    /// Where the OAM DMA is.
+    pub dma_phase: DmaPhase,
+    /// Where it will be once the T-cycles the PPU is running are accounted
+    /// for (the DMA catches up after the PPU).
+    pub dma_phase_next: DmaPhase,
     /// T-cycles of that chunk still to run after the current one.
     pub chunk_left: i32,
     /// Address the OAM DMA reads next.
@@ -43,8 +43,8 @@ pub(super) struct PpuBus {
 impl Default for PpuBus {
     fn default() -> Self {
         Self {
-            dma_dest: Dma::DEST_IDLE,
-            dma_dest_next: Dma::DEST_IDLE,
+            dma_phase: DmaPhase::Idle,
+            dma_phase_next: DmaPhase::Idle,
             chunk_left: 0,
             dma_src: 0,
             dma_modulo: false,
@@ -112,8 +112,9 @@ impl Ppu {
             self.d.bus.addr_for_hdma_conflict = address;
             return 0;
         }
-        let dest = self.d.bus.dma_dest;
-        if (1..=Oam::SIZE).contains(&dest) && self.d.bus.dma_src & 0xE000 == VRAM_START {
+        if let Some(written) = self.d.bus.dma_phase.written()
+            && self.d.bus.dma_src & 0xE000 == VRAM_START
+        {
             // DMAing from VRAM!
             let offset = 1 - u16::from(self.d.bus.cpu_idle);
             if self.is_cgb_hardware() {
@@ -134,7 +135,7 @@ impl Ppu {
             }
             let bank = u16::from(self.vram.read_vbk() & 1) * VRAM_BANK1;
             let value = self.vram_raw((address & VRAM_OFFSET_MASK) | bank);
-            let index = usize::from(dest.wrapping_sub(u8::from(!self.d.bus.cpu_idle)));
+            let index = usize::from(written - u8::from(!self.d.bus.cpu_idle));
             if let Some(byte) = self.oam.bytes_mut().get_mut(index) {
                 *byte = value;
             }
@@ -142,18 +143,17 @@ impl Ppu {
         self.vram_raw(address)
     }
 
-    /// The OAM DMA's state, as the PPU sees it: it copies `dest` (an OAM
-    /// index, `Dma::DEST_IDLE` when idle) next.
-    pub(crate) const fn set_dma_state(&mut self, dest: u8, src: u16, modulo: bool) {
-        self.d.bus.dma_dest = dest;
+    /// The OAM DMA's state, as the PPU sees it.
+    pub(crate) const fn set_dma_state(&mut self, phase: DmaPhase, src: u16, modulo: bool) {
+        self.d.bus.dma_phase = phase;
         self.d.bus.dma_src = src;
         self.d.bus.dma_modulo = modulo;
     }
 
     /// The PPU is about to run `cycles` T-cycles, after which the OAM DMA
-    /// will have reached `dest_next`.
-    pub(crate) const fn set_dma_lookahead(&mut self, dest_next: u8, cycles: i32) {
-        self.d.bus.dma_dest_next = dest_next;
+    /// will have reached `phase_next`.
+    pub(crate) const fn set_dma_lookahead(&mut self, phase_next: DmaPhase, cycles: i32) {
+        self.d.bus.dma_phase_next = phase_next;
         self.d.bus.chunk_left = cycles;
     }
 
