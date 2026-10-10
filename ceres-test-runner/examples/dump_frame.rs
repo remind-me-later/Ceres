@@ -34,7 +34,7 @@ fn main() {
     // Stop at the `ld b,b` breakpoint like the screenshot tests do.
     for _ in 0..frames {
         gb.run_frame();
-        if gb.check_and_reset_ld_b_b_breakpoint() {
+        if gb.take_ld_b_b_breakpoint() {
             break;
         }
     }

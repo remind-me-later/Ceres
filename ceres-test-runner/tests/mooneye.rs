@@ -38,8 +38,8 @@ impl CompletionCheck for MooneyeCheck {
     #[expect(clippy::many_single_char_names)]
     fn check(&self, gb: &mut ceres_core::Gb<DummyAudioCallback>) -> Option<TestResult> {
         // Wait for either completion signal: ld b,b breakpoint or illegal opcode (0xED).
-        let triggered = gb.check_and_reset_ld_b_b_breakpoint()
-            || gb.check_and_reset_illegal_opcode_breakpoint();
+        let triggered = gb.take_ld_b_b_breakpoint()
+            || gb.take_illegal_opcode();
         if !triggered {
             return None;
         }

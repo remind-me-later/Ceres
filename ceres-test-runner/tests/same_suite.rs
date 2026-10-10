@@ -47,7 +47,7 @@ fn run(path: &Path, model: Model) -> bool {
 
     for _ in 0..MAX_FRAMES {
         gb.run_frame();
-        if gb.check_and_reset_ld_b_b_breakpoint() || gb.check_and_reset_illegal_opcode_breakpoint()
+        if gb.take_ld_b_b_breakpoint() || gb.take_illegal_opcode()
         {
             return (
                 gb.cpu_b(),

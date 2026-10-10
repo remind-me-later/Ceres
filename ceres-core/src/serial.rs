@@ -1,4 +1,5 @@
 use crate::{CgbMode, interrupts::Interrupts};
+#[cfg(feature = "debug")]
 use alloc::string::String;
 
 // SC bits
@@ -17,14 +18,19 @@ const CLOCK_BIT: u16 = 0x80;
 const FAST_CLOCK_BIT: u16 = 0x04;
 
 /// The serial port, without a link cable: a transfer on the internal clock
-/// shifts in ones. The bytes sent are captured for test ROMs.
+/// shifts in ones. With the `debug` feature the bytes sent are captured for
+/// test ROMs.
 pub(crate) struct Serial {
     count: u8,
     div_mask: u16,
     master_clock: bool,
+    /// The printable bytes sent.
+    #[cfg(feature = "debug")]
     output: String,
     sb: u8,
-    sb_sent: u8, // Store the original byte being sent
+    /// The byte being sent, as written.
+    #[cfg(feature = "debug")]
+    sb_sent: u8,
     sc: u8,
 }
 
@@ -34,8 +40,10 @@ impl Default for Serial {
             count: 0,
             div_mask: CLOCK_BIT,
             master_clock: false,
+            #[cfg(feature = "debug")]
             output: String::new(),
             sb: 0,
+            #[cfg(feature = "debug")]
             sb_sent: 0,
             sc: 0x7E,
         }
@@ -55,7 +63,8 @@ impl Serial {
         self.div_mask
     }
 
-    /// Get the serial output as a string (used by test ROMs)
+    /// The printable bytes sent (test ROMs print their results).
+    #[cfg(feature = "debug")]
     #[must_use]
     pub(crate) fn output(&self) -> &str {
         &self.output
@@ -83,6 +92,10 @@ impl Serial {
     }
 
     /// Shifts one bit in (and out); the eighth one completes the transfer.
+    #[cfg_attr(
+        not(feature = "debug"),
+        expect(clippy::missing_const_for_fn, reason = "not const with the capture")
+    )]
     fn shift_in(&mut self, ints: &mut Interrupts) {
         self.count += 1;
         if self.count == 8 {
@@ -90,11 +103,12 @@ impl Serial {
             self.sc &= !SC_START_B;
             ints.request_serial();
 
-            // Capture the byte that was just transferred
-            // (test ROMs like Blargg's print through serial).
-            let byte = self.sb_sent;
-            if (0x20..0x7F).contains(&byte) || matches!(byte, b'\n' | b'\r') {
-                self.output.push(char::from(byte));
+            #[cfg(feature = "debug")]
+            {
+                let byte = self.sb_sent;
+                if (0x20..0x7F).contains(&byte) || matches!(byte, b'\n' | b'\r') {
+                    self.output.push(char::from(byte));
+                }
             }
         }
 
@@ -123,7 +137,10 @@ impl Serial {
 
     pub(crate) const fn write_sb(&mut self, val: u8) {
         self.sb = val;
-        self.sb_sent = val; // Store original value for later capture
+        #[cfg(feature = "debug")]
+        {
+            self.sb_sent = val;
+        }
     }
 
     pub(crate) fn write_sc(&mut self, mut val: u8, ints: &mut Interrupts, cgb_mode: CgbMode) {

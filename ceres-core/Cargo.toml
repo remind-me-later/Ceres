@@ -8,6 +8,9 @@ license.workspace = true
 
 [features]
 default = ["game_genie"]
+# What test harnesses and debuggers look at: the CPU registers, the
+# breakpoint opcodes and the serial output.
+debug = []
 game_genie = []
 
 [lints.clippy]

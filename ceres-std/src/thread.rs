@@ -110,7 +110,7 @@ impl GbThread {
                 gb_builder.with_rom(rom)?
             };
 
-            if gb_builder.can_load_save_data()
+            if gb_builder.has_battery()
                 && let Some(sav_path) = sav_path
             {
                 let mut gb = gb_builder.build();
@@ -132,7 +132,7 @@ impl GbThread {
                     .unwrap()
                     .as_secs();
 
-                gb.load_data(&save_data_buf, secs_since_unix_epoch)?;
+                gb.load_state(&save_data_buf, secs_since_unix_epoch)?;
                 Ok(gb)
             } else {
                 let gb = gb_builder.build();
@@ -476,7 +476,7 @@ impl GbThread {
 
         self.gb.lock().map_or(Err(Error::NoThreadRunning), |gb| {
             let mut buf = Vec::new();
-            gb.save_data(&mut buf, secs_since_unix_epoch);
+            gb.save_state(&mut buf, secs_since_unix_epoch);
             writer.write_all(&buf).map_err(Error::Io)
         })
     }

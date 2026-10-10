@@ -127,10 +127,10 @@ mod tests {
                 assert_eq!(gb.cart.ram()[0x45] & 0xF, 2, "{name}, CGB {cgb}: ran");
 
                 let mut state = Vec::new();
-                gb.save_data(&mut state, 0);
+                gb.save_state(&mut state, 0);
                 let mut loaded = build(rom(cart_type, ram_size, cgb), model);
                 assert!(
-                    loaded.load_data(&state, 0).is_ok(),
+                    loaded.load_state(&state, 0).is_ok(),
                     "{name}, CGB {cgb}: loads"
                 );
                 assert_eq!(loaded.read_mem(0xC123), 0x42, "{name}, CGB {cgb}: WRAM");

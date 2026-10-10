@@ -322,7 +322,10 @@ impl Sm83 {
         bus.clear_ie();
         self.is_halted = true;
         bus.set_halted(true);
-        self.has_executed_illegal_opcode = true;
+        #[cfg(feature = "debug")]
+        {
+            self.has_executed_illegal_opcode = true;
+        }
     }
 
     fn inc_dhl(&mut self, bus: &mut impl Bus) {
@@ -442,8 +445,18 @@ impl Sm83 {
 
     // Sets the debug breakpoint flag. Test ROMs like cgb-acid2 and dmg-acid2
     // use this instruction as a breakpoint to signal test completion.
+    #[cfg_attr(
+        not(feature = "debug"),
+        expect(
+            clippy::needless_pass_by_ref_mut,
+            reason = "it sets the flag with `debug`"
+        )
+    )]
     const fn ld_b_b(&mut self) {
-        self.ld_b_b_breakpoint = true;
+        #[cfg(feature = "debug")]
+        {
+            self.ld_b_b_breakpoint = true;
+        }
         self.nop();
     }
 

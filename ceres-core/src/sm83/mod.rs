@@ -16,6 +16,7 @@ use crate::{
 };
 
 pub(crate) use bus::Bus;
+#[cfg(feature = "debug")]
 use core::mem;
 
 const ZF: u16 = 0x80;
@@ -38,13 +39,16 @@ pub(crate) struct Sm83 {
     /// as read then, whatever the memory holds by the time it runs.
     prefetched: Option<u8>,
     is_halted: bool,
+    #[cfg(feature = "debug")]
     has_executed_illegal_opcode: bool,
+    #[cfg(feature = "debug")]
     ld_b_b_breakpoint: bool,
     pc: u16,
     sp: u16,
 }
 
 impl Sm83 {
+    #[cfg(feature = "debug")]
     pub(crate) const fn take_illegal_opcode(&mut self) -> bool {
         mem::replace(&mut self.has_executed_illegal_opcode, false)
     }
@@ -77,6 +81,7 @@ impl Sm83 {
         self.ime
     }
 
+    #[cfg(feature = "debug")]
     pub(crate) fn take_ld_b_b_breakpoint(&mut self) -> bool {
         mem::take(&mut self.ld_b_b_breakpoint)
     }

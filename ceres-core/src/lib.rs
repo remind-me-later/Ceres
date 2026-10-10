@@ -7,6 +7,8 @@ mod cartridge;
 #[cfg(feature = "game_genie")]
 mod cheats;
 mod cpu_bus;
+#[cfg(feature = "debug")]
+mod debug;
 mod error;
 mod interrupts;
 mod joypad;
@@ -339,107 +341,22 @@ impl<A: AudioCallback> Gb<A> {
         self.serial.set_master_clock(self.clock.div & 0x100 != 0);
     }
 
-    /// Check if the `ld b, b` debug breakpoint instruction was executed and reset the flag.
-    ///
-    /// Some test ROMs (like cgb-acid2 and dmg-acid2) use the `ld b, b` instruction (opcode 0x40)
-    /// as a debug breakpoint to signal test completion. This method returns `true` if the
-    /// instruction has been executed since the last check, then automatically resets the flag.
-    ///
-    /// # Returns
-    ///
-    /// `true` if `ld b, b` was executed since the last check, `false` otherwise.
-    #[inline]
-    pub fn check_and_reset_ld_b_b_breakpoint(&mut self) -> bool {
-        self.cpu.take_ld_b_b_breakpoint()
-    }
-
-    /// Read the current value of CPU register A.
-    #[must_use]
-    #[inline]
-    pub const fn cpu_a(&self) -> u8 {
-        self.cpu.a()
-    }
-
-    /// Read the current value of the CPU flags register F.
-    #[must_use]
-    #[inline]
-    pub const fn cpu_f(&self) -> u8 {
-        (self.cpu.af() & 0xFF) as u8
-    }
-
-    /// Read the current value of CPU register B.
-    ///
-    /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
-    /// which use specific register values to signal pass/fail status.
-    #[must_use]
-    #[inline]
-    pub const fn cpu_b(&self) -> u8 {
-        (self.cpu.bc() >> 8) as u8
-    }
-
-    /// Read the current value of CPU register C.
-    ///
-    /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
-    /// which use specific register values to signal pass/fail status.
-    #[must_use]
-    #[inline]
-    pub const fn cpu_c(&self) -> u8 {
-        (self.cpu.bc() & 0xFF) as u8
-    }
-
-    /// Read the current value of CPU register D.
-    ///
-    /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
-    /// which use specific register values to signal pass/fail status.
-    #[must_use]
-    #[inline]
-    pub const fn cpu_d(&self) -> u8 {
-        (self.cpu.de() >> 8) as u8
-    }
-
-    /// Read the current value of CPU register E.
-    ///
-    /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
-    /// which use specific register values to signal pass/fail status.
-    #[must_use]
-    #[inline]
-    pub const fn cpu_e(&self) -> u8 {
-        (self.cpu.de() & 0xFF) as u8
-    }
-
-    /// Read the current value of CPU register H.
-    ///
-    /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
-    /// which use specific register values to signal pass/fail status.
-    #[must_use]
-    #[inline]
-    pub const fn cpu_h(&self) -> u8 {
-        (self.cpu.hl() >> 8) as u8
-    }
-
-    /// Read the current value of CPU register L.
-    ///
-    /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
-    /// which use specific register values to signal pass/fail status.
-    #[must_use]
-    #[inline]
-    pub const fn cpu_l(&self) -> u8 {
-        (self.cpu.hl() & 0xFF) as u8
-    }
-
     #[inline]
     #[cfg(feature = "game_genie")]
     pub fn deactivate_game_genie(&mut self, code: &GameGenieCode) {
         self.game_genie.deactivate_code(code);
     }
 
-    /// Loads the state from the provided reader.
+    /// Loads a BESS save state (which Ceres also uses as the battery save).
+    /// Only the memories and the clock of the cartridge are restored so far,
+    /// not the CPU, the I/O registers or the palettes. The clock moves on by
+    /// the time since `secs_since_unix_epoch` that the state was saved.
     ///
     /// # Errors
     ///
-    /// Returns an error if reading from or seeking within the reader fails.
+    /// Returns an error if `buf` is not a valid state.
     #[inline]
-    pub fn load_data(&mut self, buf: &[u8], secs_since_unix_epoch: u64) -> Result<(), Error> {
+    pub fn load_state(&mut self, buf: &[u8], secs_since_unix_epoch: u64) -> Result<(), Error> {
         bess::Reader::new(buf).load_state(self, secs_since_unix_epoch)
     }
 
@@ -487,17 +404,6 @@ impl<A: AudioCallback> Gb<A> {
         self.ppu.pixel_data_rgba()
     }
 
-    /// Read a VRAM byte directly, bypassing PPU mode-accessibility checks.
-    ///
-    /// This is intended for test ROM completion checkers that need to inspect
-    /// VRAM contents regardless of the current PPU rendering mode.  Normal
-    /// emulated code must use `read_mem` so that mode-3 blocking is enforced.
-    #[must_use]
-    #[inline]
-    pub const fn read_vram_direct(&self, addr: u16) -> u8 {
-        self.ppu.vram().read(addr)
-    }
-
     #[inline]
     pub const fn press(&mut self, button: Button) {
         self.joy.press(button, &mut self.ints);
@@ -517,38 +423,11 @@ impl<A: AudioCallback> Gb<A> {
         self.units_ran -= UNITS_PER_FRAME;
     }
 
+    /// Appends a BESS save state to `buf`; its offsets count from where it
+    /// starts. `secs_since_unix_epoch` dates the cartridge's clock.
     #[inline]
-    #[must_use]
-    pub const fn cpu_pc(&self) -> u16 {
-        self.cpu.pc()
-    }
-
-    /// Returns whether the CPU is currently halted.
-    ///
-    /// This is used by test ROMs (such as Wilbertpol's Mooneye Test Suite
-    /// fork) that signal test completion by executing the undefined opcode
-    /// `0xED`, which the SM83 implements by entering the HALT state.
-    #[inline]
-    #[must_use]
-    pub const fn cpu_is_halted(&self) -> bool {
-        self.cpu.is_halted()
-    }
-
-    #[inline]
-    pub const fn check_and_reset_illegal_opcode_breakpoint(&mut self) -> bool {
-        self.cpu.take_illegal_opcode()
-    }
-
-    #[inline]
-    pub fn save_data(&self, buf: &mut Vec<u8>, secs_since_unix_epoch: u64) {
+    pub fn save_state(&self, buf: &mut Vec<u8>, secs_since_unix_epoch: u64) {
         bess::Writer::new(buf).save_state(self, secs_since_unix_epoch);
-    }
-
-    /// Get the serial output buffer (used by test ROMs like Blargg's tests)
-    #[must_use]
-    #[inline]
-    pub fn serial_output(&self) -> &str {
-        self.serial.output()
     }
 
     #[inline]
@@ -657,8 +536,9 @@ impl<A: AudioCallback> GbBuilder<A> {
         gb
     }
 
+    /// Whether the cartridge has a battery, so its state is worth keeping.
     #[inline]
-    pub fn can_load_save_data(&self) -> bool {
+    pub fn has_battery(&self) -> bool {
         self.cart
             .as_ref()
             .is_some_and(cartridge::Cartridge::has_battery)

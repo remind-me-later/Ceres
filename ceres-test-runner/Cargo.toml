@@ -9,7 +9,7 @@ build = "build.rs"
 
 [dependencies]
 anyhow = "1.0"
-ceres-core = { path = "../ceres-core" }
+ceres-core = { path = "../ceres-core", features = ["debug"] }
 image = { version = "*", default-features = false, features = ["png"] }
 
 [build-dependencies]
