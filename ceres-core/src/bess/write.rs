@@ -23,7 +23,8 @@ impl<'a> Writer<'a> {
         let sizes = WrittenSizes {
             ram: u32::from(if cgb { Wram::SIZE_CGB } else { Wram::SIZE_GB }),
             vram: u32::from(if cgb { Vram::SIZE_CGB } else { Vram::SIZE_GB }),
-            mbc_ram: gb.cart.ram_size_bytes(),
+            #[expect(clippy::cast_possible_truncation, reason = "128 KiB at most")]
+            mbc_ram: gb.cart.ram().len() as u32,
             oam: u32::from(Oam::SIZE),
             hram: u32::from(Hram::SIZE),
             bg_palette: palette,
@@ -37,9 +38,7 @@ impl<'a> Writer<'a> {
         self.write_all(&gb.ppu.vram().bytes()[..sizes.vram as usize]);
 
         // Write MBC RAM
-        if let Some(mbc_ram) = gb.cart.mbc_ram() {
-            self.write_all(&mbc_ram[..sizes.mbc_ram as usize]);
-        }
+        self.write_all(gb.cart.ram());
 
         // Write OAM
         self.write_all(&gb.ppu.oam().bytes()[..sizes.oam as usize]);

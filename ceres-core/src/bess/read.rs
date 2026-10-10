@@ -36,26 +36,18 @@ impl<'a> Reader<'a> {
         }
 
         // Read data
-        self.seek_from_start(sizes.ram.offset as usize)?;
-        self.read_exact(gb.wram.wram_mut())?;
-
-        self.seek_from_start(sizes.vram.offset as usize)?;
-        self.read_exact(gb.ppu.vram_mut().bytes_mut())?;
-
-        if let Some(mbc_ram) = gb.cart.mbc_ram_mut() {
-            // FIXME: use crate::Error to indicate ram size is not what expected from header
-            self.seek_from_start(sizes.mbc_ram.offset as usize)?;
-            self.read_exact(mbc_ram)?;
-        }
-
-        self.seek_from_start(sizes.oam.offset as usize)?;
-        self.read_exact(gb.ppu.oam_mut().bytes_mut())?;
-
-        self.seek_from_start(sizes.hram.offset as usize)?;
-        self.read_exact(gb.hram.hram_mut())?;
+        self.read_memory(&sizes.ram, gb.wram.wram_mut())?;
+        self.read_memory(&sizes.vram, gb.ppu.vram_mut().bytes_mut())?;
+        self.read_memory(&sizes.mbc_ram, gb.cart.ram_mut())?;
+        self.read_memory(&sizes.oam, gb.ppu.oam_mut().bytes_mut())?;
+        self.read_memory(&sizes.hram, gb.hram.hram_mut())?;
 
         let skip_palette = if matches!(gb.cgb_mode, CgbMode::Cgb) {
-            sizes.bg_palette.offset + sizes.bg_palette.size
+            sizes
+                .bg_palette
+                .offset
+                .checked_add(sizes.bg_palette.size)
+                .ok_or(Error::InvalidSaveState)?
         } else {
             sizes.bg_palette.offset
         };
@@ -63,6 +55,17 @@ impl<'a> Reader<'a> {
         self.seek_from_start(skip_palette as usize)?;
 
         Ok(())
+    }
+
+    /// Reads a memory into the start of `dest`, which can be larger: a DMG
+    /// state has 8 KiB of WRAM and VRAM, and a state can lack the cartridge
+    /// RAM.
+    fn read_memory(&mut self, buffer: &Buffer, dest: &mut [u8]) -> Result<(), Error> {
+        let dest = dest
+            .get_mut(..buffer.size as usize)
+            .ok_or(Error::InvalidSaveState)?;
+        self.seek_from_start(buffer.offset as usize)?;
+        self.read_exact(dest)
     }
 
     pub const fn new(data: &'a [u8]) -> Self {
@@ -101,13 +104,13 @@ impl<'a> Reader<'a> {
     }
 
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Error> {
-        let end = self.position + buf.len();
         let src = self
             .data
-            .get(self.position..end)
+            .get(self.position..)
+            .and_then(|rest| rest.get(..buf.len()))
             .ok_or(Error::InvalidSaveState)?;
         buf.copy_from_slice(src);
-        self.position = end;
+        self.position += buf.len();
         Ok(())
     }
 
@@ -167,7 +170,8 @@ impl<'a> Reader<'a> {
     }
 
     const fn seek_from_current(&mut self, n: usize) -> Result<(), Error> {
-        if self.position + n > self.data.len() {
+        // The position is never past the end.
+        if n > self.data.len() - self.position {
             return Err(Error::InvalidSaveState);
         }
 

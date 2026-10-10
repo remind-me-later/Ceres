@@ -182,11 +182,11 @@ impl Joypad {
     }
 
     pub const fn press(&mut self, button: Button, ints: &mut Interrupts) {
-        let b = button as u8;
-
-        self.button_mask |= b;
-
-        if b & 0x0F != 0 && self.directions_flag || b & 0xF0 != 0 && self.actions_flag {
+        let old = self.read_p1();
+        self.button_mask |= button as u8;
+        // The interrupt fires when an input line goes low: not for a button
+        // that is already held or not selected.
+        if old & !self.read_p1() & P1_INPUTS != 0 {
             ints.request_p1();
         }
     }
@@ -234,5 +234,29 @@ impl Joypad {
         }
         self.actions_flag = val & P1_ACTIONS_B == 0;
         self.directions_flag = val & P1_DIRECTIONS_B == 0;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Button, Joypad, P1_ACTIONS_B};
+    use crate::interrupts::{INT_MASK, Interrupts};
+
+    #[test]
+    fn interrupt_only_when_a_line_goes_low() {
+        let mut joy = Joypad::new(false);
+        let mut ints = Interrupts::default();
+        // Only the directions are selected.
+        joy.write_joy(P1_ACTIONS_B);
+
+        joy.press(Button::A, &mut ints);
+        assert_eq!(ints.read_if() & INT_MASK, 0, "actions not selected");
+
+        joy.press(Button::Right, &mut ints);
+        assert_ne!(ints.read_if() & INT_MASK, 0, "right pressed");
+
+        ints.write_if(0);
+        joy.press(Button::Right, &mut ints);
+        assert_eq!(ints.read_if() & INT_MASK, 0, "right already held");
     }
 }

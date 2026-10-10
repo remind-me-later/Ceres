@@ -212,7 +212,8 @@ impl Sm83 {
     }
 
     pub const fn set_af(&mut self, af: u16) {
-        self.af = af;
+        // The low nibble of F is always zero.
+        self.af = af & 0xFFF0;
     }
 
     pub const fn set_bc(&mut self, bc: u16) {

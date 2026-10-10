@@ -152,14 +152,16 @@ impl Cartridge {
         self.rom[HEADER_OLD_LICENSEE] != NEW_LICENSEE
     }
 
+    /// The cartridge RAM, with or without a battery (MBC2's built-in 512
+    /// half-bytes included).
     #[must_use]
-    pub fn mbc_ram(&self) -> Option<&[u8]> {
-        self.has_battery.then_some(&*self.ram)
+    pub fn ram(&self) -> &[u8] {
+        &self.ram
     }
 
     #[must_use]
-    pub fn mbc_ram_mut(&mut self) -> Option<&mut [u8]> {
-        self.has_battery.then_some(&mut *self.ram)
+    pub fn ram_mut(&mut self) -> &mut [u8] {
+        &mut self.ram
     }
 
     #[expect(
@@ -227,11 +229,6 @@ impl Cartridge {
         } else {
             raw_addr
         }
-    }
-
-    #[must_use]
-    pub const fn ram_size_bytes(&self) -> u32 {
-        self.ram_size.size_bytes()
     }
 
     #[must_use]

@@ -3,6 +3,9 @@ use core::num::NonZeroU8;
 /// 8 MHz units in a second: the RTC runs off its own crystal, so a second is
 /// 4 194 304 CPU cycles in single speed and twice as many in double speed.
 const SECOND_UNITS: u32 = 0x0080_0000;
+const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
+/// The day counter has 9 bits: the carry is set when it overflows.
+const DAYS: u64 = 0x200;
 
 /// The RAM bank numbers that map a clock register instead.
 pub const RTC_REG_FIRST: u8 = 0x08;
@@ -121,27 +124,29 @@ impl Mbc3RTC {
 
 // Getters and Setters
 impl Mbc3RTC {
+    /// `secs` seconds pass at once (a save state loaded later). As in
+    /// SameBoy, the whole days are added first, then the rest a second at a
+    /// time. A halted clock does not move.
     #[expect(clippy::cast_possible_truncation)]
-    pub fn add_seconds(&mut self, val: u64) {
-        let secs = u64::from(self.real[0]) + val;
-        self.real[0] = (secs % 60) as u8;
+    pub const fn add_seconds(&mut self, secs: u64) {
+        if self.real[CONTROL] & CONTROL_HALT_B != 0 {
+            return;
+        }
 
-        let mins = u64::from(self.real[1]) + secs / 60;
-        self.real[1] = (mins % 60) as u8;
-
-        let hours = u64::from(self.real[2]) + mins / 60;
-        self.real[2] = (hours % 24) as u8;
-
-        let days = u64::from(self.real[3]) + hours / 24;
-        self.real[3] = (days % 256) as u8;
-
-        let carry = days / 256;
-        self.real[CONTROL] = (self.real[CONTROL] & !CONTROL_DAY_HIGH_B)
-            | ((self.real[CONTROL] ^ carry as u8) & CONTROL_DAY_HIGH_B);
-        if carry != 0 {
+        let day = self.real[3] as u64 | (((self.real[CONTROL] & CONTROL_DAY_HIGH_B) as u64) << 8);
+        let day = day + secs / SECONDS_PER_DAY;
+        if day >= DAYS {
             self.real[CONTROL] |= CONTROL_CARRY_B;
         }
-        self.latch();
+        let day = day % DAYS;
+        self.real[3] = day as u8;
+        self.real[CONTROL] = (self.real[CONTROL] & !CONTROL_DAY_HIGH_B) | (day >> 8) as u8;
+
+        let mut left = secs % SECONDS_PER_DAY;
+        while left != 0 {
+            self.tick();
+            left -= 1;
+        }
     }
 
     /// The clock registers: seconds, minutes, hours, days and control.
@@ -160,5 +165,67 @@ impl Mbc3RTC {
 
     pub const fn set_latched(&mut self, latched: [u8; 5]) {
         self.latched = latched;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CONTROL_CARRY_B, CONTROL_DAY_HIGH_B, CONTROL_HALT_B, Mbc3RTC, SECONDS_PER_DAY};
+
+    fn rtc(real: [u8; 5]) -> Mbc3RTC {
+        let mut rtc = Mbc3RTC::default();
+        rtc.set_real(real);
+        rtc
+    }
+
+    #[test]
+    fn add_seconds_matches_ticking() {
+        let starts = [
+            [0, 0, 0, 0, 0],
+            [59, 59, 23, 255, 0],
+            [12, 34, 5, 255, CONTROL_DAY_HIGH_B],
+            [30, 59, 23, 255, CONTROL_DAY_HIGH_B],
+        ];
+        let durations = [
+            0,
+            1,
+            59,
+            3600,
+            SECONDS_PER_DAY - 1,
+            SECONDS_PER_DAY,
+            3 * SECONDS_PER_DAY + 12_345,
+        ];
+        for start in starts {
+            for secs in durations {
+                let mut ticked = rtc(start);
+                for _ in 0..secs {
+                    ticked.tick();
+                }
+                let mut added = rtc(start);
+                added.add_seconds(secs);
+                assert_eq!(added.real(), ticked.real(), "{start:?} + {secs} s");
+            }
+        }
+    }
+
+    #[test]
+    fn day_carry_only_when_the_9_bit_counter_overflows() {
+        let mut day_255 = rtc([0, 0, 0, 255, 0]);
+        day_255.add_seconds(SECONDS_PER_DAY);
+        assert_eq!(day_255.real(), [0, 0, 0, 0, CONTROL_DAY_HIGH_B], "day 256");
+
+        let mut day_511 = rtc([0, 0, 0, 255, CONTROL_DAY_HIGH_B]);
+        day_511.add_seconds(SECONDS_PER_DAY);
+        assert_eq!(day_511.real(), [0, 0, 0, 0, CONTROL_CARRY_B], "day 512");
+    }
+
+    #[test]
+    fn add_seconds_keeps_a_halted_clock_and_the_latched_registers() {
+        let halted = [1, 2, 3, 4, CONTROL_HALT_B];
+        let mut rtc = rtc(halted);
+        rtc.set_latched([5, 6, 7, 8, 0]);
+        rtc.add_seconds(1000);
+        assert_eq!(rtc.real(), halted, "halted");
+        assert_eq!(rtc.latched(), [5, 6, 7, 8, 0], "latched");
     }
 }
