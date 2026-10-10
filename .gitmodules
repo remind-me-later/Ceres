@@ -29,13 +29,13 @@
 	path = external/test-sources/mooneye-test-suite
 	url = git@github.com:Gekkio/mooneye-test-suite.git
 [submodule "external/pandocs"]
-	path = external/pandocs
+	path = external/docs/pandocs
 	url = git@github.com:gbdev/pandocs.git
 [submodule "external/reference-implementations/VerilogBoy"]
 	path = external/reference-implementations/VerilogBoy
 	url = git@github.com:zephray/VerilogBoy.git
 [submodule "external/gb-ctr"]
-	path = external/gb-ctr
+	path = external/docs/gb-ctr
 	url = git@github.com:Gekkio/gb-ctr.git
 [submodule "external/test-sources/wilbertpol-mooneye-gb"]
 	path = external/test-sources/wilbertpol-mooneye-gb
@@ -43,3 +43,9 @@
 [submodule "external/test-sources/mealybug-tearoom-tests"]
 	path = external/test-sources/mealybug-tearoom-tests
 	url = git@github.com:mattcurrie/mealybug-tearoom-tests.git
+[submodule "external/disassemblies/pokecrystal"]
+	path = external/disassemblies/pokecrystal
+	url = git@github.com:pret/pokecrystal.git
+[submodule "external/disassemblies/hardware.inc"]
+	path = external/disassemblies/hardware.inc
+	url = git@github.com:gbdev/hardware.inc.git
