@@ -1,5 +1,16 @@
 //! The CGB's STAT interrupt, after gambatte's event model.
 //!
+//! SameBoy's state machine (`state.rs`) runs on every model: it draws the
+//! pixels and sets the modes. On the models that gambatte was measured on,
+//! this event model takes over parts of it:
+//!
+//! - `gambatte_stat_irq()` (the CGB up to revision C and the DMG-B): the STAT
+//!   interrupt, the LY=LYC flag, LY reads and the LYC and STAT writes.
+//!   SameBoy's interrupt line is still computed, but it requests nothing.
+//! - `gambatte_cgb_timing()` (the CGB up to revision C): also the WY checks,
+//!   the CPU's VRAM, palette and OAM locks, OBJ size writes and the HDMA
+//!   periods, which follow gambatte's line clock.
+//!
 //! Each source raises the interrupt as a separate event at a fixed point of
 //! the line (mode 0 at the end of mode 3), and an event is suppressed when
 //! the line is already held by another source. The registers the events see
@@ -416,20 +427,20 @@ pub(in crate::ppu) const PALETTE_LOCK_CYCLE: i64 = 80;
 impl Ppu {
     /// The CGB follows gambatte's model (up to revision C).
     #[must_use]
-    pub(crate) const fn gambatte_stat(&self) -> bool {
+    pub(crate) const fn gambatte_cgb_timing(&self) -> bool {
         self.is_cgb_hardware() && !model_ge_cgb_d(self.model)
     }
 
     /// The STAT interrupt and LY follow gambatte's model (its CGB, and its
     /// DMG, a DMG-B).
     #[must_use]
-    pub(crate) fn gambatte_irq(&self) -> bool {
-        self.gambatte_stat() || self.model == crate::Model::DmgB
+    pub(crate) fn gambatte_stat_irq(&self) -> bool {
+        self.gambatte_cgb_timing() || self.model == crate::Model::DmgB
     }
 
     /// Advances gambatte's clock by a unit and runs the events that are due.
     pub(super) fn gstat_unit(&mut self, ints: &mut Interrupts) {
-        if !self.gambatte_irq() {
+        if !self.gambatte_stat_irq() {
             return;
         }
         self.d.gstat.cgb = self.is_cgb_hardware();
@@ -559,7 +570,7 @@ impl Ppu {
     /// it to the PPU's own lock.
     pub(in crate::ppu) fn gstat_mode3_lock(&self, threshold: i64) -> Option<bool> {
         let g = &self.d.gstat;
-        if !self.gambatte_stat() || !g.lcd_on || !self.d.line_clock_valid() || g.ly >= LINES {
+        if !self.gambatte_cgb_timing() || !g.lcd_on || !self.d.line_clock_valid() || g.ly >= LINES {
             return None;
         }
         let ds = self.double_speed();
@@ -581,7 +592,7 @@ impl Ppu {
     /// once mode 3 is over, `None` elsewhere.
     pub(in crate::ppu) fn gstat_oam_lock(&self, write: bool) -> Option<bool> {
         let g = &self.d.gstat;
-        if !self.gambatte_stat() || !g.lcd_on || !self.d.line_clock_valid() {
+        if !self.gambatte_cgb_timing() || !g.lcd_on || !self.d.line_clock_valid() {
             return None;
         }
         let ds = self.double_speed();
@@ -665,7 +676,7 @@ impl Ppu {
     /// gambatte's `isHdmaPeriod(cc + offset)`; `None` before mode 0 began.
     pub(crate) fn gstat_hdma_period(&self, offset: i64) -> Option<bool> {
         let g = &self.d.gstat;
-        if !self.gambatte_stat() || !g.lcd_on {
+        if !self.gambatte_cgb_timing() || !g.lcd_on {
             return None;
         }
         if g.ly >= LINES {
@@ -689,7 +700,7 @@ impl Ppu {
     /// on gambatte's clock (`m0Time + 2`); `None` outside HBlank.
     pub(in crate::ppu) const fn gstat_palettes_unlocked(&self) -> Option<bool> {
         let g = &self.d.gstat;
-        if !self.gambatte_stat() || !g.lcd_on || !g.hblank || g.ly >= LINES {
+        if !self.gambatte_cgb_timing() || !g.lcd_on || !g.hblank || g.ly >= LINES {
             return None;
         }
         // Mode 0 begins (`m0Time`) 3 units after HBlankStart.

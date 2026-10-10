@@ -15,10 +15,10 @@ use {
 impl Ppu {
     pub(super) fn render_pixel_if_possible(&mut self) -> Option<PixelOut> {
         let obj_en = self.lcdc & LCDC_OBJ_EN_B != 0 || self.is_cgb_hardware();
-        if self.d.objs.count != 0 && obj_en && self.d.objs.x[self.d.objs.count - 1] == 0 {
+        if obj_en && self.d.objs.next().is_some_and(|e| e.x == 0) {
             return None;
         }
-        if self.d.bg_fifo.size == 0 {
+        if self.d.bg_fifo.is_empty() {
             return None;
         }
 
@@ -32,7 +32,7 @@ impl Ppu {
         let mut oam_item = Item::default();
         let mut draw_oam = false;
 
-        if self.d.oam_fifo.size != 0 {
+        if !self.d.oam_fifo.is_empty() {
             oam_item = self.d.oam_fifo.pop();
             if oam_item.pixel != 0 && self.lcdc & LCDC_OBJ_EN_B != 0 {
                 draw_oam = true;

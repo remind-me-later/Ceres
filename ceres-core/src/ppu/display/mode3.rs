@@ -90,14 +90,17 @@ impl Ppu {
                         && self.d.window.wx_triggered
                         && !self.d.window.being_fetched
                         && self.d.fetcher.step == FetcherStep::GetTileT1
-                        && self.d.bg_fifo.size == 8
+                        && self.d.bg_fifo.len() == 8
                     {
                         self.d.insert_bg_pixel = true;
                     }
 
                     // Drop the objects left of the current position.
-                    while self.d.objs.count != 0
-                        && self.d.objs.x[self.d.objs.count - 1] < self.x_for_object_match()
+                    while self
+                        .d
+                        .objs
+                        .next()
+                        .is_some_and(|e| e.x < self.x_for_object_match())
                     {
                         self.d.objs.count -= 1;
                     }
@@ -105,12 +108,11 @@ impl Ppu {
                     Step::NextObject
                 }
                 Step::NextObject => {
-                    let n = self.d.objs.count;
-                    if n != 0
+                    if let Some(obj) = self.d.objs.next()
                         && (self.lcdc & LCDC_OBJ_EN_B != 0 || self.is_cgb_hardware())
-                        && self.d.objs.x[n - 1] == self.x_for_object_match()
+                        && obj.x == self.x_for_object_match()
                     {
-                        if self.d.objs.x[n - 1] == 167 {
+                        if obj.x == 167 {
                             // The HBlank interrupt does not wait for the fetch of an
                             // object at the right edge, unlike the STAT mode.
                             self.d.irq.mode_for_interrupt = 0;
@@ -125,7 +127,7 @@ impl Ppu {
                 Step::WaitForTile => {
                     // The background fetcher finishes its tile first.
                     let next = if self.d.fetcher.step < FetcherStep::DataHighT2
-                        || self.d.bg_fifo.size == 0
+                        || self.d.bg_fifo.is_empty()
                     {
                         State::Mode3ObjectWait
                     } else {
@@ -137,10 +139,11 @@ impl Ppu {
                 }
                 Step::ReadObjectAttributes => {
                     self.advance_fetcher();
-                    let index = self.d.objs.indices[self.d.objs.count - 1];
-                    let base = u16::from(index) * Oam::ENTRY_SIZE;
-                    // The tile number goes over the OAM bus too (as in SameBoy).
-                    self.d.objs.y_bus = self.oam_read(base + Oam::ENTRY_TILE);
+                    let base = u16::from(self.d.objs.fetched().index) * Oam::ENTRY_SIZE;
+                    // SameBoy keeps the tile number in the OAM bus latch the
+                    // search reads Y into: it is only read again after the
+                    // next search wrote it.
+                    self.d.obj_fetch.tile = self.oam_read(base + Oam::ENTRY_TILE);
                     self.d.obj_fetch.flags = self.oam_read(base + Oam::ENTRY_ATTRIBUTES);
                     self.sleep_in_line(State::Mode3ObjectAttributes, 2);
                     return Mode3Flow::Slept;
@@ -188,17 +191,15 @@ impl Ppu {
     }
 
     fn current_object_line_address(&self) -> u16 {
-        let n = self.d.objs.count;
         self.object_line_address(
-            self.d.objs.y[n - 1],
-            self.d.objs.y_bus,
+            self.d.objs.fetched().y,
+            self.d.obj_fetch.tile,
             self.d.obj_fetch.flags,
         )
     }
 
     /// Overlays the fetched object row on the object FIFO.
     fn push_object(&mut self) {
-        let n = self.d.objs.count;
         let flags = self.d.obj_fetch.flags;
         let palette = if self.cgb_mode_on() {
             flags & ATTR_CGB_PALETTE
@@ -206,7 +207,7 @@ impl Ppu {
             u8::from(flags & ATTR_DMG_PALETTE_B != 0)
         };
         let priority = if self.opri_index_priority() {
-            self.d.objs.indices[n - 1]
+            self.d.objs.fetched().index
         } else {
             0
         };

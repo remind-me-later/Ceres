@@ -43,7 +43,7 @@ impl<A: AudioCallback> Gb<A> {
                 self.advance_t_cycles(pending + 1);
                 // In double speed a write to IF lands after the LCD
                 // interrupts of the next cycle (gambatte `updateIrqs(cc + 2)`).
-                if addr == io_addr(IF) && self.key1.is_enabled() && self.ppu.gambatte_stat() {
+                if addr == io_addr(IF) && self.key1.is_enabled() && self.ppu.gambatte_cgb_timing() {
                     self.ppu
                         .run_ahead(&mut self.ints, self.cgb_mode, true, 1, true);
                 }
@@ -52,7 +52,7 @@ impl<A: AudioCallback> Gb<A> {
             }
             // The DMG STAT-write bug is basically the STAT register being
             // read as FF for a single T-cycle.
-            ConflictType::StatDmg if self.ppu.gambatte_irq() => {
+            ConflictType::StatDmg if self.ppu.gambatte_stat_irq() => {
                 // The STAT write bug is in the PPU's STAT interrupt events.
                 self.flush_deferred_time();
                 self.write_mem(addr, val);
@@ -179,7 +179,7 @@ impl<A: AudioCallback> Gb<A> {
                 let old = self.ppu.read_lcdc();
                 self.advance_t_cycles(pending);
                 self.ppu.cgb_obj_size_write(val, 0);
-                if self.ppu.gambatte_stat() {
+                if self.ppu.gambatte_cgb_timing() {
                     self.ppu.gstat_write_lcdc(val, 0);
                 }
                 let delay_obj_size = self.ppu.read_scx() & 7 != 0;
@@ -210,7 +210,7 @@ impl<A: AudioCallback> Gb<A> {
                 let old = self.ppu.read_lcdc();
                 self.advance_t_cycles(pending - 2);
                 self.ppu.cgb_obj_size_write(val, 2);
-                if self.ppu.gambatte_stat() {
+                if self.ppu.gambatte_cgb_timing() {
                     self.ppu.gstat_write_lcdc(val, 2);
                 }
                 // Turning the window on waits for the end of the write too.

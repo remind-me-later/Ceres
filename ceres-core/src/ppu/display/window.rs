@@ -211,7 +211,7 @@ impl Ppu {
         let window = &mut self.d.window;
         if window.being_fetched
             && window.wx_triggered
-            && self.d.bg_fifo.size == 0
+            && self.d.bg_fifo.is_empty()
             && let Some((fifo, fetcher)) = window.saved.take()
         {
             window.wx_triggered = false;

@@ -159,7 +159,7 @@ impl Ppu {
 
     /// Starts a visible line (lines 0..=143).
     pub(super) fn line_start(&mut self) {
-        if !self.gambatte_stat() {
+        if !self.gambatte_cgb_timing() {
             self.wy_check();
         }
         self.d.cpu.oam_write_blocked = self.is_cgb_hardware() && !self.double_speed();
@@ -264,7 +264,7 @@ impl Ppu {
                 self.d.cpu.oam_write_blocked = true;
                 self.stat = (self.stat & !STAT_MODE_B) | 2;
                 self.d.irq.ly_for_comparison = i32::from(self.d.current_line);
-                if !self.gambatte_stat() {
+                if !self.gambatte_cgb_timing() {
                     self.wy_check();
                 }
                 if self.d.current_line == 0 && !self.is_cgb_hardware() {
@@ -426,7 +426,7 @@ impl Ppu {
             State::VBlankLy => {
                 self.ly = self.d.current_line;
                 if self.d.current_line == LINES {
-                    if !self.gambatte_irq()
+                    if !self.gambatte_stat_irq()
                         && !self.d.irq.stat_interrupt_line
                         && self.stat & STAT_IF_OAM_B != 0
                     {
@@ -456,7 +456,7 @@ impl Ppu {
                     self.stat &= !STAT_MODE_B;
                     self.stat |= 1;
                     ints.request_vblank();
-                    if !self.gambatte_irq()
+                    if !self.gambatte_stat_irq()
                         && !self.d.irq.stat_interrupt_line
                         && self.stat & STAT_IF_OAM_B != 0
                     {

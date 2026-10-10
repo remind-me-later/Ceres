@@ -16,15 +16,25 @@ use {
 /// The most objects drawn on a line.
 const MAX_OBJECTS_PER_LINE: usize = 10;
 
+/// An object on the line.
+#[derive(Clone, Copy, Default)]
+pub(super) struct Entry {
+    /// Its OAM index.
+    pub index: u8,
+    pub x: u8,
+    pub y: u8,
+}
+
 /// The mode 2 object search.
 #[derive(Clone)]
 pub(super) struct ObjectSearch {
+    /// The objects left to draw: mode 3 drops them from the end.
     pub count: usize,
+    /// The objects the search found (`count` when mode 3 starts).
     pub found: usize,
-    /// OAM indices of the objects on the line, sorted by X (descending).
-    pub indices: [u8; MAX_OBJECTS_PER_LINE],
-    pub x: [u8; MAX_OBJECTS_PER_LINE],
-    pub y: [u8; MAX_OBJECTS_PER_LINE],
+    /// The objects on the line, sorted by X then OAM index, descending: the
+    /// next one to draw is the last.
+    pub entries: [Entry; MAX_OBJECTS_PER_LINE],
     pub index: u8,
     /// OAM row the PPU is reading (DMG OAM bug); `NO_ROW` when none.
     pub accessed_oam_row: u8,
@@ -54,14 +64,24 @@ impl SizeChange {
     }
 }
 
+impl ObjectSearch {
+    /// The next object to draw, if any.
+    pub(super) fn next(&self) -> Option<Entry> {
+        self.count.checked_sub(1).map(|i| self.entries[i])
+    }
+
+    /// The object being fetched (mode 3 only fetches with one left).
+    pub(super) const fn fetched(&self) -> Entry {
+        self.entries[self.count - 1]
+    }
+}
+
 impl Default for ObjectSearch {
     fn default() -> Self {
         Self {
             count: 0,
             found: 0,
-            indices: [0; MAX_OBJECTS_PER_LINE],
-            x: [0; MAX_OBJECTS_PER_LINE],
-            y: [0; MAX_OBJECTS_PER_LINE],
+            entries: [Entry::default(); MAX_OBJECTS_PER_LINE],
             index: 0,
             accessed_oam_row: NO_ROW,
             y_bus: 0,
@@ -74,6 +94,8 @@ impl Default for ObjectSearch {
 /// The fetch of an object's tile in mode 3.
 #[derive(Clone, Default)]
 pub(super) struct ObjectFetch {
+    /// The tile number and the attributes read from the OAM.
+    pub tile: u8,
     pub flags: u8,
     pub line_address: u16,
     pub data: [u8; 2],
@@ -168,27 +190,26 @@ impl Ppu {
     fn insert_object(&mut self, index: u8, obj_x: u8, obj_y: u8) {
         let objs = &mut self.d.objs;
         let count = objs.count;
-        let at = (0..count)
-            .find(|&i| objs.x[i] < obj_x || (objs.x[i] == obj_x && objs.indices[i] < index))
+        let at = objs.entries[..count]
+            .iter()
+            .position(|e| e.x < obj_x || (e.x == obj_x && e.index < index))
             .unwrap_or(count);
-        objs.indices.copy_within(at..count, at + 1);
-        objs.x.copy_within(at..count, at + 1);
-        objs.y.copy_within(at..count, at + 1);
-        objs.indices[at] = index;
-        objs.x[at] = obj_x;
-        objs.y[at] = obj_y;
+        objs.entries.copy_within(at..count, at + 1);
+        objs.entries[at] = Entry {
+            index,
+            x: obj_x,
+            y: obj_y,
+        };
         objs.count += 1;
     }
 
     fn remove_object(&mut self, index: u8) {
-        let n = self.d.objs.count;
-        let Some(j) = self.d.objs.indices[..n].iter().position(|&i| i == index) else {
+        let objs = &mut self.d.objs;
+        let n = objs.count;
+        let Some(j) = objs.entries[..n].iter().position(|e| e.index == index) else {
             return;
         };
-        let objs = &mut self.d.objs;
-        objs.indices.copy_within(j + 1..n, j);
-        objs.x.copy_within(j + 1..n, j);
-        objs.y.copy_within(j + 1..n, j);
+        objs.entries.copy_within(j + 1..n, j);
         objs.count -= 1;
     }
 
@@ -198,7 +219,7 @@ impl Ppu {
     /// entries already searched are looked at again.
     pub(crate) fn cgb_obj_size_write(&mut self, val: u8, units_early: i64) {
         let new = val & LCDC_OBJ_SIZE_B != 0;
-        if !self.gambatte_stat()
+        if !self.gambatte_cgb_timing()
             || self.lcdc & LCDC_ON_B == 0
             || (self.lcdc & LCDC_OBJ_SIZE_B != 0) == new
         {

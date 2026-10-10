@@ -11,12 +11,28 @@ pub(super) struct Item {
 /// An 8-entry ring, like SameBoy's `GB_fifo_t`.
 #[derive(Clone, Copy, Default)]
 pub(super) struct Fifo {
-    pub items: [Item; 8],
-    pub read_end: u8,
-    pub size: u8,
+    items: [Item; 8],
+    read_end: u8,
+    size: u8,
 }
 
 impl Fifo {
+    pub(super) const fn len(&self) -> u8 {
+        self.size
+    }
+
+    pub(super) const fn is_empty(&self) -> bool {
+        self.size == 0
+    }
+
+    /// The window insertion glitch (SameBoy's issue 278): the pixel before
+    /// the front comes back blank and is all that is left.
+    pub(super) fn rewind_to_blank_pixel(&mut self) {
+        self.read_end = self.read_end.wrapping_sub(1) & 7;
+        self.items[usize::from(self.read_end)] = Item::default();
+        self.size = 1;
+    }
+
     pub(super) const fn clear(&mut self) {
         self.read_end = 0;
         self.size = 0;

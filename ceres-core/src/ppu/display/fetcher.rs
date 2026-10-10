@@ -1,7 +1,7 @@
 //! The background and window tile fetcher.
 
 use {
-    super::{TILE_BYTES, VRAM_BANK1, fifo::Item, model_ge_cgb_d},
+    super::{TILE_BYTES, VRAM_BANK1, model_ge_cgb_d},
     crate::{
         Model,
         ppu::{
@@ -230,7 +230,7 @@ impl Ppu {
 
     pub(super) fn fetcher_push(&mut self) {
         self.d.fetcher.step = FetcherStep::Push;
-        if self.d.bg_fifo.size > 0 {
+        if !self.d.bg_fifo.is_empty() {
             return;
         }
 
@@ -245,10 +245,7 @@ impl Ppu {
                 logical_position = 0;
             }
             if self.wx == logical_position {
-                let fifo = &mut self.d.bg_fifo;
-                fifo.read_end = fifo.read_end.wrapping_sub(1) & 7;
-                fifo.items[usize::from(fifo.read_end)] = Item::default();
-                fifo.size = 1;
+                self.d.bg_fifo.rewind_to_blank_pixel();
                 return;
             }
         }

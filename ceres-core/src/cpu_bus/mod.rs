@@ -169,7 +169,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
         let hblank = self.ppu.hdma_period();
         self.hdma.set_cpu_halted(false, hblank);
         // A speed switch does not request the HBlank transfer (gambatte).
-        let switching = self.ppu.gambatte_stat() && self.speed_switch.halt_countdown != 0;
+        let switching = self.ppu.gambatte_cgb_timing() && self.speed_switch.halt_countdown != 0;
         if !switching {
             self.hdma.wake(hblank);
         }
@@ -197,12 +197,12 @@ impl<A: AudioCallback> Bus for Gb<A> {
     }
 
     fn hdma_request_pending(&self) -> bool {
-        self.ppu.gambatte_stat() && self.hdma.hblank_requested()
+        self.ppu.gambatte_cgb_timing() && self.hdma.hblank_requested()
     }
 
     fn take_unhalt(&mut self) -> bool {
         let unhalt = mem::take(&mut self.speed_switch.unhalt);
-        if unhalt && self.ppu.gambatte_stat() {
+        if unhalt && self.ppu.gambatte_cgb_timing() {
             // The wake of a speed switch requests the HBlank transfer
             // (gambatte's `intevent_unhalt`).
             let period =
@@ -222,7 +222,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
     }
 
     fn enter_stop(&mut self, ime: bool) {
-        if self.ppu.gambatte_stat() && self.key1.is_requested() {
+        if self.ppu.gambatte_cgb_timing() && self.key1.is_requested() {
             let period =
                 self.hdma.hblank_enabled() && self.ppu.gstat_hdma_period(0).unwrap_or(false);
             self.hdma
@@ -251,7 +251,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
 
     fn begin_speed_switch(&mut self, interrupt_pending: bool) {
         self.flush_deferred_time();
-        if self.ppu.gambatte_stat() && self.key1.is_enabled() {
+        if self.ppu.gambatte_cgb_timing() && self.key1.is_enabled() {
             // gambatte's `Memory::stop`: a pending HBlank transfer survives a
             // switch to double speed (it runs during the halt); leaving double
             // speed drops it and requests it again at the wake.

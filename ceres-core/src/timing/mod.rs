@@ -154,7 +154,7 @@ impl<A: AudioCallback> Gb<A> {
                 // The halt ends right here for the DMAs: they run in this very
                 // step (the CPU itself notices on its next one). On the CGB-C
                 // it lasts until the CPU resumes (gambatte's unhalt).
-                if !self.ppu.gambatte_stat() {
+                if !self.ppu.gambatte_cgb_timing() {
                     let hblank = matches!(self.ppu.mode(), Mode::HBlank);
                     self.hdma.set_cpu_halted(false, hblank);
                     self.ppu.set_cpu_idle(self.clock.stopped);
