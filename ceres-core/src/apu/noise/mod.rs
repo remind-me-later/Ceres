@@ -126,6 +126,10 @@ impl Noise {
     }
 
     /// The phase of the divider advances by `cycles` 2 MHz ticks.
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "the alignment is the divider's phase, modulo 256"
+    )]
     pub(super) const fn advance_alignment(&mut self, cycles: u32) {
         self.alignment = self.alignment.wrapping_add(cycles as u8);
     }
@@ -229,6 +233,7 @@ impl Noise {
 
     /// Advances the delayed DMG start. Returns the ticks to run before the
     /// channel starts, if it starts within `cycles`.
+    #[expect(clippy::cast_possible_truncation, reason = "cycles is below the delay")]
     pub(super) const fn delayed_start(&mut self, cycles: u32) -> Option<u32> {
         let delayed = self.dmg_delayed_start as u32;
         if delayed == 0 {
@@ -244,6 +249,10 @@ impl Noise {
         Some(delayed)
     }
 
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "cycles_left is below the countdown"
+    )]
     pub(super) fn run(&mut self, cycles: u32, c: &Ctx) {
         if !self.counter_active && !self.background_counter_active {
             return;
@@ -363,6 +372,11 @@ impl Noise {
 
     /// Restarts the counter and the LFSR, with the many timing quirks of the
     /// divider phase.
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "the countdown is a few cycles more or less than the divisor"
+    )]
     fn prepare_start(&mut self, c: &Ctx) {
         let old_revision = c.rev <= Revision::CgbC;
         let ds = c.double_speed;

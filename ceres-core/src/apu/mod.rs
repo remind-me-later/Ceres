@@ -15,11 +15,6 @@
     clippy::verbose_bit_mask,
     reason = "The register bit tests read like the hardware documentation"
 )]
-#![expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "The counters are bounded by the hardware: a tick count is a handful of cycles"
-)]
 
 mod envelope;
 mod high_pass_filter;

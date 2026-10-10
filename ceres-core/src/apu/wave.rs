@@ -174,6 +174,10 @@ impl Wave {
         }
     }
 
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "cycles_left is below the countdown"
+    )]
     pub(super) fn run(&mut self, cycles: u32, c: &Ctx) {
         self.just_read = false;
         if self.out.active {

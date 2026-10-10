@@ -108,6 +108,10 @@ impl Sweep {
     }
 
     /// Advances the sweep by `cycles` 2 MHz ticks (it runs at 1 MHz).
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "sweep_cycles is below the timers; restart_hold only goes down"
+    )]
     pub(super) fn run(&mut self, cycles: u32, ch1: &mut Square, c: &Ctx) {
         let mut sweep_cycles = cycles / 2;
         if cycles & 1 != 0 && c.lf_div == 0 {

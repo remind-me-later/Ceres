@@ -191,6 +191,10 @@ impl Square {
         self.update_sample(0, c);
     }
 
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "the result is at most the delay; cycles_left is below the countdown"
+    )]
     pub(super) fn run(&mut self, cycles: u32, c: &Ctx) {
         if !self.out.active {
             return;
@@ -297,6 +301,11 @@ impl Square {
         self.nrx4 = value;
     }
 
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "the delay is 5, 6 or 7"
+    )]
     fn trigger(&mut self, value: u8, old_period: u16, c: &Ctx) {
         // The duty step is unchanged when restarting the channel; only turning
         // the APU off resets it.
