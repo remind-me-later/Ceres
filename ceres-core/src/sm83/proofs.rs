@@ -340,6 +340,27 @@ fn ld_r_r() {
     );
 }
 
+/// LD r,d8 (0x06, 0x0E ... 0x3E).
+#[kani::proof]
+fn ld_r_d8() {
+    let mut cpu = any_cpu();
+    let mut bus = AnyBus::new();
+    let r: u8 = kani::any();
+    kani::assume(r < 8);
+    let before = regs(&cpu, 0);
+
+    cpu.exec(&mut bus, 0x06 | r << 3);
+
+    let mut expected = before;
+    expected.r[usize::from(r)] = bus.reads[0];
+    expected.pc = before.pc.wrapping_add(1);
+    assert!(regs_after(&cpu, &bus, hl(&before), 0) == expected, "result");
+    assert!(
+        bus.read_count == 1 && bus.read_addrs[0] == before.pc,
+        "reads the immediate"
+    );
+}
+
 /// ADD HL,rr (0x09, 0x19, 0x29, 0x39).
 #[kani::proof]
 fn add_hl_rr() {

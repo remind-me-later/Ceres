@@ -4,9 +4,9 @@ use crate::memory::{IO_START, P1, io_addr};
 
 use super::{Bus, CF, HF, NF, Sm83, ZF};
 
-// Instructions. In the names, r is an 8-bit register and rr a pair, high
-// and low are the halves of a pair (B D H A and C E L), dhl is (HL), d8 and
-// d16 are immediates, a8 and a16 immediate addresses.
+// Instructions. In the names, r is an 8-bit register or (HL) (see
+// `operand`) and rr a pair, dhl is (HL), d8 and d16 are immediates, a8 and
+// a16 immediate addresses.
 impl Sm83 {
     pub(super) fn exec(&mut self, bus: &mut impl Bus, op: u8) {
         match op {
@@ -14,17 +14,14 @@ impl Sm83 {
             0x01 | 0x11 | 0x21 | 0x31 => self.ld_rr_d16(bus, op),
             0x02 | 0x12 => self.ld_drr_a(bus, op),
             0x03 | 0x13 | 0x23 | 0x33 => self.inc_rr(bus, op),
-            0x04 | 0x14 | 0x24 | 0x3C => self.inc_high(op),
-            0x05 | 0x15 | 0x25 | 0x3D => self.dec_high(op),
-            0x06 | 0x16 | 0x26 | 0x3E => self.ld_high_d8(bus, op),
+            0x04 | 0x0C | 0x14 | 0x1C | 0x24 | 0x2C | 0x34 | 0x3C => self.inc_r(bus, op),
+            0x05 | 0x0D | 0x15 | 0x1D | 0x25 | 0x2D | 0x35 | 0x3D => self.dec_r(bus, op),
+            0x06 | 0x0E | 0x16 | 0x1E | 0x26 | 0x2E | 0x36 | 0x3E => self.ld_r_d8(bus, op),
             0x07 => self.rlca(),
             0x08 => self.ld_da16_sp(bus),
             0x09 | 0x19 | 0x29 | 0x39 => self.add_hl_rr(bus, op),
             0x0A | 0x1A => self.ld_a_drr(bus, op),
             0x0B | 0x1B | 0x2B | 0x3B => self.dec_rr(bus, op),
-            0x0C | 0x1C | 0x2C => self.inc_low(op),
-            0x0D | 0x1D | 0x2D => self.dec_low(op),
-            0x0E | 0x1E | 0x2E => self.ld_low_d8(bus, op),
             0x0F => self.rrca(),
             0x10 => self.stop(bus),
             0x17 => self.rla(),
@@ -36,9 +33,6 @@ impl Sm83 {
             0x2A => self.ld_a_dhli(bus),
             0x2F => self.cpl(),
             0x32 => self.ld_dhld_a(bus),
-            0x34 => self.inc_dhl(bus),
-            0x35 => self.dec_dhl(bus),
-            0x36 => self.ld_dhl_d8(bus),
             0x37 => self.scf(),
             0x3A => self.ld_a_dhld(bus),
             0x3F => self.ccf(),
@@ -222,51 +216,17 @@ impl Sm83 {
         self.af |= a << 8;
     }
 
-    fn dec_dhl(&mut self, bus: &mut impl Bus) {
-        let val = bus.read(self.hl).wrapping_sub(1);
-        bus.write(self.hl, val);
-
+    /// DEC r, the register in bits 3-5 of `op` ((HL) included).
+    fn dec_r(&mut self, bus: &mut impl Bus, op: u8) {
+        let r = op >> 3;
+        let val = self.get_r(bus, r).wrapping_sub(1);
+        self.set_r(bus, r, val);
         self.af &= !(ZF | HF);
         self.af |= NF;
-        if (val & 0x0F) == 0x0F {
+        if val & 0xF == 0xF {
             self.af |= HF;
         }
-
         if val == 0 {
-            self.af |= ZF;
-        }
-    }
-
-    fn dec_high(&mut self, op: u8) {
-        let id = Self::pair_id_af(op);
-        let rr = self.get_rr(id).wrapping_sub(0x100);
-        self.set_rr(id, rr);
-        self.af &= !(ZF | HF);
-        self.af |= NF;
-
-        if rr & 0x0F00 == 0xF00 {
-            self.af |= HF;
-        }
-
-        if rr & 0xFF00 == 0 {
-            self.af |= ZF;
-        }
-    }
-
-    fn dec_low(&mut self, op: u8) {
-        let id = Self::pair_id(op);
-        let val = self.get_rr(id).wrapping_sub(1) & 0xFF;
-        let rr = self.get_rr(id) & 0xFF00 | val;
-        self.set_rr(id, rr);
-
-        self.af &= !(ZF | HF);
-        self.af |= NF;
-
-        if rr & 0x0F == 0xF {
-            self.af |= HF;
-        }
-
-        if rr.trailing_zeros() >= 8 {
             self.af |= ZF;
         }
     }
@@ -328,48 +288,16 @@ impl Sm83 {
         }
     }
 
-    fn inc_dhl(&mut self, bus: &mut impl Bus) {
-        let val = bus.read(self.hl).wrapping_add(1);
-        bus.write(self.hl, val);
-
+    /// INC r, the register in bits 3-5 of `op` ((HL) included).
+    fn inc_r(&mut self, bus: &mut impl Bus, op: u8) {
+        let r = op >> 3;
+        let val = self.get_r(bus, r).wrapping_add(1);
+        self.set_r(bus, r, val);
         self.af &= !(NF | ZF | HF);
         if val.trailing_zeros() >= 4 {
             self.af |= HF;
         }
-
         if val == 0 {
-            self.af |= ZF;
-        }
-    }
-
-    fn inc_high(&mut self, op: u8) {
-        let id = Self::pair_id_af(op);
-        let rr = self.get_rr(id).wrapping_add(0x100);
-        self.set_rr(id, rr);
-        self.af &= !(NF | ZF | HF);
-
-        if rr & 0x0F00 == 0 {
-            self.af |= HF;
-        }
-
-        if rr & 0xFF00 == 0 {
-            self.af |= ZF;
-        }
-    }
-
-    fn inc_low(&mut self, op: u8) {
-        let id = Self::pair_id(op);
-        let val = self.get_rr(id).wrapping_add(1) & 0xFF;
-        let rr = self.get_rr(id) & 0xFF00 | val;
-        self.set_rr(id, rr);
-
-        self.af &= !(NF | ZF | HF);
-
-        if rr.trailing_zeros() >= 4 {
-            self.af |= HF;
-        }
-
-        if rr.trailing_zeros() >= 8 {
             self.af |= ZF;
         }
     }
@@ -472,11 +400,6 @@ impl Sm83 {
         bus.write(addr.wrapping_add(1), (val >> 8) as u8);
     }
 
-    fn ld_dhl_d8(&mut self, bus: &mut impl Bus) {
-        let tmp = self.imm8(bus);
-        bus.write(self.hl, tmp);
-    }
-
     fn ld_dhld_a(&mut self, bus: &mut impl Bus) {
         let addr = self.hl;
         bus.write(addr, self.a());
@@ -501,16 +424,10 @@ impl Sm83 {
         self.hl = res;
     }
 
-    fn ld_high_d8(&mut self, bus: &mut impl Bus, op: u8) {
-        let id = Self::pair_id_af(op);
-        let hi = u16::from(self.imm8(bus));
-        self.set_rr(id, (hi << 8) | self.get_rr(id) & 0xFF);
-    }
-
-    fn ld_low_d8(&mut self, bus: &mut impl Bus, op: u8) {
-        let id = Self::pair_id(op);
-        let lo = u16::from(self.imm8(bus));
-        self.set_rr(id, self.get_rr(id) & 0xFF00 | lo);
+    /// LD r,d8, the register in bits 3-5 of `op` ((HL) included).
+    fn ld_r_d8(&mut self, bus: &mut impl Bus, op: u8) {
+        let val = self.imm8(bus);
+        self.set_r(bus, op >> 3, val);
     }
 
     fn ld_rr_d16(&mut self, bus: &mut impl Bus, op: u8) {

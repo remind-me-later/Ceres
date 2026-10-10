@@ -347,8 +347,8 @@ impl Sm83 {
         (op >> 4) + 1
     }
 
-    /// The pair in bits 4-5 of `op` with AF (id 0) in place of SP: PUSH, POP
-    /// and the registers B, D, H and A, the high halves of the pairs.
+    /// The pair in bits 4-5 of `op` with AF (id 0) in place of SP (PUSH and
+    /// POP).
     #[must_use]
     const fn pair_id_af(op: u8) -> u8 {
         Self::pair_id(op) & 0x03
