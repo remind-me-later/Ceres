@@ -258,16 +258,12 @@ impl<A: AudioCallback> Gb<A> {
                 self.apu.write(&ctx, usize::from(addr), val);
             }
             LCDC => {
-                let is_cgb = self.is_cgb();
-                self.ppu.write_lcdc(val, &mut self.ints, is_cgb);
+                self.ppu.write_lcdc(val, &mut self.ints);
                 if self.ppu.take_lcd_off_hdma_edge() {
                     self.hdma.lcd_off_edge();
                 }
             }
-            STAT => {
-                let is_cgb = self.is_cgb();
-                self.ppu.write_stat(val, &mut self.ints, is_cgb);
-            }
+            STAT => self.ppu.write_stat(val, &mut self.ints),
             SCY => self.ppu.write_scy(val),
             SCX => self.ppu.write_scx(val),
             LYC => self.ppu.write_lyc(val, &mut self.ints),

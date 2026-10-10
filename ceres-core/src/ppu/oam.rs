@@ -69,7 +69,6 @@ impl Ppu {
     }
 
     pub const fn write_oam_by_dma(&mut self, addr: u16, val: u8) {
-        // self.oam[(addr & 0xFF) as usize] = val;
         self.oam.write(addr, val);
     }
 }

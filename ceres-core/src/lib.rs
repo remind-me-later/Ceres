@@ -340,17 +340,6 @@ impl<A: AudioCallback> Gb<A> {
         (self.cpu.af() & 0xFF) as u8
     }
 
-    #[must_use]
-    #[inline]
-    pub const fn timer_debug(&self) -> (u16, u8, u8, u8) {
-        (
-            self.clock.div,
-            self.clock.tima,
-            self.clock.tma,
-            self.clock.tima_reload_state,
-        )
-    }
-
     /// Read the current value of CPU register B.
     ///
     /// This is primarily used for test validation in test ROMs like the Mooneye Test Suite,
@@ -608,17 +597,6 @@ impl Model {
         )
     }
 
-    #[must_use]
-    #[inline]
-    pub const fn is_cgb(self) -> bool {
-        self.is_cgb_hardware()
-    }
-
-    #[must_use]
-    #[inline]
-    pub const fn is_early_cgb(self) -> bool {
-        matches!(self, Self::Cgb0 | Self::CgbA | Self::CgbB | Self::CgbC)
-    }
 }
 
 #[non_exhaustive]

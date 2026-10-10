@@ -423,7 +423,7 @@ impl Ppu {
         self.color_correction_mode = mode;
     }
 
-    pub fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts, _is_cgb: bool) {
+    pub fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts) {
         let was_on = self.lcdc & LCDC_ON_B != 0;
         let is_on = val & LCDC_ON_B != 0;
 
@@ -496,7 +496,7 @@ impl Ppu {
         self.gstat_lcd_on();
         // `line_clock` restarts on every visible line and keeps running
         // through VBlank, starting from line 144.
-        let base = i32::from(line.saturating_sub(144)) * LINE_LENGTH_DOTS;
+        let base = i32::from(line.saturating_sub(144)) * display::LINE_LENGTH;
         for _ in 0..(2 * 154 * 456) {
             if self.d.current_line() == line && self.d.line_clock() - base >= dot {
                 break;
@@ -513,7 +513,7 @@ impl Ppu {
         self.scy = val;
     }
 
-    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts, _is_cgb: bool) {
+    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts) {
         self.write_stat_reg(val, ints);
     }
 
@@ -550,5 +550,3 @@ impl Ppu {
         self.block_ppu_accesses(false);
     }
 }
-
-const LINE_LENGTH_DOTS: i32 = display::LINE_LENGTH;

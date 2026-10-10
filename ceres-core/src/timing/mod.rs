@@ -36,7 +36,6 @@ pub struct Clock {
     pub tima_irq_countdown: u8,
     pub div_cycles: i32,
     pub div_state: u8,
-    pub tima_reload_state: u8,
     pub stopped: bool,
     /// A DIV write is in progress (the APU's sweep glitches depend on it).
     pub during_div_write: bool,
@@ -61,7 +60,6 @@ impl Default for Clock {
             tima_irq_countdown: 0,
             div_cycles: 0,
             div_state: 0,
-            tima_reload_state: 0,
             stopped: false,
             during_div_write: false,
             apu_delay: 0,
@@ -433,10 +431,5 @@ impl<A: AudioCallback> Gb<A> {
         }
 
         self.clock.div = val;
-    }
-
-    #[inline]
-    pub fn write_div_reg(&mut self) {
-        self.write_div();
     }
 }

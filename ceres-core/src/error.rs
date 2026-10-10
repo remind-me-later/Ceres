@@ -15,9 +15,6 @@ pub enum Error {
     InvalidRomSize,
     // FIXME: add variants for invalid save state details
     InvalidSaveState,
-    NonAsciiTitleString,
-    RamSizeDifferentThanActual { expected: u32, actual: u32 },
-    RomSizeDifferentThanActual { expected: u32, actual: u32 },
     TooManyGameGenieCodes,
     UnsupportedMBC { mbc_hex_code: u8 },
 }
@@ -59,22 +56,9 @@ impl Display for Error {
             Self::InvalidSaveState => {
                 write!(f, "invalid save state")
             }
-            Self::NonAsciiTitleString => write!(
-                f,
-                "invalid title string in cartridge header, contains non ASCII \
-             characters"
-            ),
             Self::UnsupportedMBC { mbc_hex_code } => {
                 write!(f, "unsupported MBC: {mbc_hex_code:02X}")
             }
-            Self::RomSizeDifferentThanActual { expected, actual } => write!(
-                f,
-                "header ROM size is different from the size of the supplied file: expected {expected} bytes, got {actual} bytes"
-            ),
-            Self::RamSizeDifferentThanActual { expected, actual } => write!(
-                f,
-                "header RAM size is different from the size of the supplied file: expected {expected} bytes, got {actual} bytes"
-            ),
             Self::TooManyGameGenieCodes => {
                 write!(f, "too many Game Genie codes activated (maximum is 3)")
             }

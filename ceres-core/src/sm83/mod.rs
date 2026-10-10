@@ -718,7 +718,7 @@ impl Sm83 {
             0xFA => self.ld_a_da16(bus),
             0xFB => self.ei(),
             0xFE => self.cp_a_d8(bus),
-            _ => self.illegal(bus, op),
+            _ => self.illegal(bus),
         }
     }
 
@@ -989,7 +989,7 @@ impl Sm83 {
         self.just_halted = true;
     }
 
-    fn illegal(&mut self, bus: &mut impl Bus, _op: u8) {
+    fn illegal(&mut self, bus: &mut impl Bus) {
         bus.clear_ie();
         self.is_halted = true;
         bus.set_halted(true);
@@ -1547,8 +1547,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
         reason = "One arm per register class, like SameBoy's `cycle_write`"
     )]
     fn write(&mut self, addr: u16, val: u8) {
-        let conflict =
-            conflict::get_conflict(self.model, self.cgb_mode, self.key1.is_enabled(), addr);
+        let conflict = conflict::get_conflict(self.model, self.key1.is_enabled(), addr);
 
         let pending = self.time_deferred;
 

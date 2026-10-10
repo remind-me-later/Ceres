@@ -5,7 +5,7 @@
 //! two steps. The maps are selected by hardware (`GB_is_cgb`), not by the
 //! mode a ROM runs in, exactly like SameBoy.
 
-use crate::{CgbMode, Model};
+use crate::Model;
 
 #[expect(
     clippy::module_name_repetitions,
@@ -97,12 +97,7 @@ pub const CGB_DOUBLE_CONFLICT_MAP: [ConflictType; 128] = {
     clippy::module_name_repetitions,
     reason = "Reads better at the call sites than a bare `get`"
 )]
-pub const fn get_conflict(
-    model: Model,
-    _cgb_mode: CgbMode,
-    double_speed: bool,
-    addr: u16,
-) -> ConflictType {
+pub const fn get_conflict(model: Model, double_speed: bool, addr: u16) -> ConflictType {
     if (addr & 0xFF80) != 0xFF00 {
         return ConflictType::ReadOld;
     }

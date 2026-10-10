@@ -210,7 +210,6 @@ impl<A: AudioCallback> Gb<A> {
         let cgb = self.model.is_cgb_hardware();
         let model = self.model;
         let src = self.dma.current_src;
-        let mut addr = addr;
         if !cgb {
             // The write only reaches the OAM byte the DMA is writing (ANDed
             // with it when the DMA reads the work RAM).
@@ -239,40 +238,34 @@ impl<A: AudioCallback> Gb<A> {
             }
             return None;
         }
-        if cgb && bus_for_addr(cgb, addr) == Bus::Main && src >= 0xE000 {
+        if bus_for_addr(cgb, addr) == Bus::Main && src >= 0xE000 {
             // Cart specific.
             return None;
         }
-
-        if cgb && !(0xC000..0xE000).contains(&src) && addr >= 0xC000 {
+        if !(0xC000..0xE000).contains(&src) && addr >= 0xC000 {
             return Some((src.wrapping_sub(1) & 0x1000) | (addr & 0xFFF) | 0xC000);
-        } else if cgb && src >= 0xE000 && addr >= 0xC000 {
-            addr = (src.wrapping_sub(1) & 0x1000) | (addr & 0xFFF) | 0xC000;
-        } else {
-            addr = src.wrapping_sub(1);
         }
 
-        if cgb || addr >= 0xA000 {
-            let oam_index = usize::from(self.dma.current_dest.wrapping_sub(1));
-            let before_cgb_c = !cgb || matches!(model, Model::Cgb0 | Model::CgbA | Model::CgbB);
-            let before_cgb_e = before_cgb_c || matches!(model, Model::CgbC | Model::CgbD);
-            let oam = self.ppu.oam_mut().bytes_mut();
-            if oam_index < oam.len() {
-                if addr < 0xA000 {
-                    oam[oam_index] = 0;
-                } else if !cgb || model == Model::CgbB {
-                    oam[oam_index] &= value;
-                } else if before_cgb_c || model == Model::Agb {
-                    oam[oam_index] = value;
-                } else {
-                    // CGB-C, D and E: the OAM is left alone.
-                }
-            }
-            if before_cgb_e || addr >= 0xA000 {
-                return None;
+        let current = src.wrapping_sub(1);
+        let oam_index = usize::from(self.dma.current_dest.wrapping_sub(1));
+        let before_cgb_c = matches!(model, Model::Cgb0 | Model::CgbA | Model::CgbB);
+        let before_cgb_e = before_cgb_c || matches!(model, Model::CgbC | Model::CgbD);
+        let oam = self.ppu.oam_mut().bytes_mut();
+        if oam_index < oam.len() {
+            if current < 0xA000 {
+                oam[oam_index] = 0;
+            } else if model == Model::CgbB {
+                oam[oam_index] &= value;
+            } else if before_cgb_c || model == Model::Agb {
+                oam[oam_index] = value;
+            } else {
+                // CGB-C, D and E: the OAM is left alone.
             }
         }
-        Some(addr)
+        if before_cgb_e || current >= 0xA000 {
+            return None;
+        }
+        Some(current)
     }
 
     /// SameBoy's `write_oam`: a byte the HDMA drops into OAM (only the low
