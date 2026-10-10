@@ -17,7 +17,6 @@ pub enum Button {
     Start = 0x80,
 }
 
-/// Bits in an SGB command packet (16 bytes).
 // P1 bits
 /// Low selects the action buttons (A, B, Select, Start).
 const P1_ACTIONS_B: u8 = 0x20;
@@ -27,6 +26,7 @@ const P1_SELECT: u8 = P1_ACTIONS_B | P1_DIRECTIONS_B;
 /// The input lines, low while a selected button is pressed.
 const P1_INPUTS: u8 = 0x0F;
 
+/// Bits in an SGB command packet (16 bytes).
 const SGB_PACKET_BITS: usize = 16 * 8;
 /// Longest SGB command: 7 packets.
 const SGB_COMMAND_BYTES: usize = 7 * 16;

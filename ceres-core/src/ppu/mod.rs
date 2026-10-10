@@ -379,9 +379,8 @@ impl Ppu {
         self.wy
     }
 
-    /// Advance the PPU by one dot.
-    /// One CPU T-cycle: a PPU dot in single speed, half of one in double
-    /// speed.
+    /// Advances the PPU by one CPU T-cycle: a dot in single speed, half of
+    /// one in double speed.
     pub fn tick_t_cycle(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
         self.cgb_mode = cgb_mode;
         self.double_speed = double_speed;

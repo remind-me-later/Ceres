@@ -121,6 +121,10 @@ impl<A: AudioCallback> Gb<A> {
 
     /// A cartridge ROM byte, as patched by the active Game Genie codes.
     #[must_use]
+    #[cfg_attr(
+        not(feature = "game_genie"),
+        expect(clippy::missing_const_for_fn, reason = "not const with the cheats")
+    )]
     fn read_cart_rom(&self, addr: u16) -> u8 {
         let data = self.cart.read_rom(addr);
         #[cfg(feature = "game_genie")]

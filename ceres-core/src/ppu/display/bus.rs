@@ -142,8 +142,8 @@ impl Ppu {
         self.vram_raw(address)
     }
 
-    /// The DMA copies `dest` (an OAM index, `0xA1` when idle) next.
-    /// The OAM DMA's state, as the PPU sees it.
+    /// The OAM DMA's state, as the PPU sees it: it copies `dest` (an OAM
+    /// index, `Dma::DEST_IDLE` when idle) next.
     pub const fn set_dma_state(&mut self, dest: u8, src: u16, modulo: bool) {
         self.d.bus.dma_dest = dest;
         self.d.bus.dma_src = src;

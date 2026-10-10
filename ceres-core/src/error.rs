@@ -1,20 +1,24 @@
 use core::{error, fmt};
 use fmt::Display;
 
+#[cfg(feature = "game_genie")]
 const COMMON_GAME_GENIE_FORMAT_STRING: &str =
     "expected a game genie code of the form ABC-DEF-GHI, where A..I are hex digits";
 
 #[non_exhaustive]
 #[derive(Debug)]
 pub enum Error {
+    #[cfg(feature = "game_genie")]
     InvalidGameGenieCodeExpectedHyphen { pos: u8 },
+    #[cfg(feature = "game_genie")]
     InvalidGameGenieCodeLength { actual: usize },
+    #[cfg(feature = "game_genie")]
     InvalidGameGenieCodeNotHexDigit { pos: u8 },
     InvalidRamSize,
     InvalidRomHeaderSize,
     InvalidRomSize,
-    // FIXME: add variants for invalid save state details
     InvalidSaveState,
+    #[cfg(feature = "game_genie")]
     TooManyGameGenieCodes,
     UnsupportedMBC { mbc_hex_code: u8 },
 }
@@ -23,10 +27,12 @@ impl Display for Error {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
+            #[cfg(feature = "game_genie")]
             Self::InvalidGameGenieCodeLength { actual } => write!(
                 f,
                 "{COMMON_GAME_GENIE_FORMAT_STRING}: expected length 11, got {actual}",
             ),
+            #[cfg(feature = "game_genie")]
             Self::InvalidGameGenieCodeExpectedHyphen { pos } => {
                 write!(
                     f,
@@ -34,6 +40,7 @@ impl Display for Error {
                     pos + 1
                 )
             }
+            #[cfg(feature = "game_genie")]
             Self::InvalidGameGenieCodeNotHexDigit { pos } => {
                 write!(
                     f,
@@ -59,6 +66,7 @@ impl Display for Error {
             Self::UnsupportedMBC { mbc_hex_code } => {
                 write!(f, "unsupported MBC: {mbc_hex_code:02X}")
             }
+            #[cfg(feature = "game_genie")]
             Self::TooManyGameGenieCodes => {
                 write!(f, "too many Game Genie codes activated (maximum is 3)")
             }

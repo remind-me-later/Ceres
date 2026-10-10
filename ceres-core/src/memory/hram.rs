@@ -1,14 +1,11 @@
 pub struct Hram {
     hram: [u8; Self::SIZE as usize],
-    // FIXME: costly, maybe hide behind feature
-    // hram_initialized: u128,
 }
 
 impl Default for Hram {
     fn default() -> Self {
         Self {
             hram: [0; Self::SIZE as usize],
-            // hram_initialized: 0,
         }
     }
 }
@@ -26,16 +23,10 @@ impl Hram {
     }
 
     pub const fn read(&self, addr: u8) -> u8 {
-        // assert!(
-        //     self.hram_initialized & (1 << (addr & Self::SIZE)) != 0,
-        //     "Uninitialized memory read"
-        // );
-
         self.hram[(addr & Self::SIZE) as usize]
     }
 
     pub const fn write(&mut self, addr: u8, val: u8) {
         self.hram[(addr & Self::SIZE) as usize] = val;
-        // self.hram_initialized |= 1 << (addr & Self::SIZE);
     }
 }

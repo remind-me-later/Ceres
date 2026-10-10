@@ -16,7 +16,8 @@ const SC_INTERNAL_TRANSFER: u8 = SC_START_B | SC_INTERNAL_CLOCK_B;
 const CLOCK_BIT: u16 = 0x80;
 const FAST_CLOCK_BIT: u16 = 0x04;
 
-// VERY PARTIAL Serial port implementation with output capture for test ROMs
+/// The serial port, without a link cable: a transfer on the internal clock
+/// shifts in ones. The bytes sent are captured for test ROMs.
 pub struct Serial {
     count: u8,
     div_mask: u16,

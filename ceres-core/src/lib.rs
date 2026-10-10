@@ -558,7 +558,6 @@ impl<A: AudioCallback> Gb<A> {
     }
 }
 
-// FIXME: use all existing models
 #[non_exhaustive]
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub enum Model {

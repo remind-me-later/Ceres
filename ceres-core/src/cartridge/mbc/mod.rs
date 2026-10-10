@@ -53,10 +53,9 @@ impl Mbc {
                 true,
             ),
             0x19 | 0x1A => (Self::Mbc5, false),
-            // rumble
-            // 0x1C | 0x1D => (Mbc5, false),
-            // 0x1E => (Mbc5, true),
             0x1B => (Self::Mbc5, true),
+            // MBC5 with rumble (0x1C-0x1E) and the other mappers are not
+            // supported.
             _ => {
                 return Err(Error::UnsupportedMBC {
                     mbc_hex_code: mbc_byte,

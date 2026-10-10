@@ -23,7 +23,7 @@ impl ROMSize {
 
     #[must_use]
     pub const fn mask(self) -> u16 {
-        // maximum is 2 << 8 - 1 = 1FF
+        // The bank count minus one: at most (2 << 8) - 1 = 0x1FF.
         (2_u16 << (self as u8)) - 1
     }
 

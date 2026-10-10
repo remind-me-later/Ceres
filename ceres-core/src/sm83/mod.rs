@@ -1243,7 +1243,6 @@ impl Sm83 {
     fn stop(&mut self, bus: &mut impl Bus) {
         // Port of SameBoy's `stop`.
         bus.flush();
-        bus.peek(self.pc);
 
         let exit_by_joyp = bus.peek(io_addr(P1)) & 0xF != 0xF;
         let speed_switch = bus.speed_switch_requested() && !exit_by_joyp;
