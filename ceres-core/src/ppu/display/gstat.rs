@@ -408,6 +408,11 @@ impl GStat {
     }
 }
 
+/// The line cycle from which gambatte's CGB locks VRAM in mode 3.
+pub(in crate::ppu) const VRAM_LOCK_CYCLE: i64 = 79;
+/// The line cycle from which it locks the palettes.
+pub(in crate::ppu) const PALETTE_LOCK_CYCLE: i64 = 80;
+
 impl Ppu {
     /// The CGB follows gambatte's model (up to revision C).
     #[must_use]

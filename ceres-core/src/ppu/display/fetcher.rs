@@ -181,7 +181,7 @@ impl Ppu {
                     self.d.fetcher.sel_glitch_data = self.vram_read(self.d.fetcher.data_address);
                 } else if cgb_d_glitch {
                     self.d.fetcher.sel_glitch_data =
-                        self.vram_read(self.d.fetcher.data_address & !0x1000);
+                        self.vram_read(self.d.fetcher.data_address & !TILE_DATA_SIGNED);
                 } else {
                     // No glitch to propagate.
                 }
@@ -215,7 +215,7 @@ impl Ppu {
                     self.d.fetcher.sel_glitch_data = self.vram_read(self.d.fetcher.data_address);
                 } else if cgb_d_glitch {
                     self.d.fetcher.sel_glitch_data =
-                        self.vram_read((self.d.fetcher.data_address & !0x1000) + 1);
+                        self.vram_read((self.d.fetcher.data_address & !TILE_DATA_SIGNED) + 1);
                 } else {
                     // No glitch to propagate.
                 }

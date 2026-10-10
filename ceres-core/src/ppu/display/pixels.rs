@@ -4,6 +4,7 @@ use {
     super::{
         LINES,
         fifo::{Item, PixelOut},
+        pos,
     },
     crate::{
         CgbMode,
@@ -42,14 +43,14 @@ impl Ppu {
         // (position + 16 < 8) in u8 arithmetic: the lead-in range.
         let position = self.d.position_in_line;
         if position.wrapping_add(16) < 8 {
-            if position == 239 {
-                self.d.position_in_line = 240;
+            if position == pos(-17) {
+                self.d.position_in_line = pos(-16);
             } else if position & 7 == self.scx & 7
                 || self.d.window.being_fetched && position & 7 == 6 && self.scx & 7 == 7
             {
-                self.d.position_in_line = 248;
-            } else if position == 247 {
-                self.d.position_in_line = 240;
+                self.d.position_in_line = pos(-8);
+            } else if position == pos(-9) {
+                self.d.position_in_line = pos(-16);
                 return None;
             } else {
                 self.d.line_has_fractional_scrolling = true;

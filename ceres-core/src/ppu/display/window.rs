@@ -4,6 +4,7 @@ use {
     super::{
         fetcher::{Fetcher, FetcherStep},
         fifo::Fifo,
+        pos,
         state::State,
     },
     crate::ppu::{LCDC_ON_B, LCDC_WIN_EN_B, Ppu},
@@ -15,7 +16,7 @@ use {
 )]
 #[derive(Clone)]
 pub(super) struct Window {
-    /// The window line being drawn (0xFF before the first one).
+    /// The window line being drawn (`Window::NO_LINE` before the first one).
     pub line: u8,
     pub tile_x: u8,
     /// The window started on this line.
@@ -44,10 +45,16 @@ pub(super) struct Window {
     pub saved: Option<(Fifo, Fetcher)>,
 }
 
+impl Window {
+    /// `line` before the first window line: it wraps to 0 when the window
+    /// starts.
+    pub(super) const NO_LINE: u8 = 0xFF;
+}
+
 impl Default for Window {
     fn default() -> Self {
         Self {
-            line: 0xFF,
+            line: Self::NO_LINE,
             tile_x: 0,
             wx_triggered: false,
             wy_triggered: false,
@@ -71,12 +78,13 @@ impl Ppu {
         if self.lcdc & LCDC_ON_B == 0 {
             return;
         }
-        let comparison =
-            if (!self.is_cgb_hardware() || self.double_speed()) && self.d.irq.ly_for_comparison != -1 {
-                i32::from(self.d.irq.ly_for_comparison.to_le_bytes()[0])
-            } else {
-                i32::from(self.d.current_line)
-            };
+        let comparison = if (!self.is_cgb_hardware() || self.double_speed())
+            && self.d.irq.ly_for_comparison != -1
+        {
+            i32::from(self.d.irq.ly_for_comparison.to_le_bytes()[0])
+        } else {
+            i32::from(self.d.current_line)
+        };
         if self.lcdc & LCDC_WIN_EN_B != 0 && i32::from(self.wy) == comparison {
             self.d.window.wy_triggered = true;
         }
@@ -98,7 +106,10 @@ impl Ppu {
             if (self.d.window.wy_units + offset).trailing_zeros() >= 3 {
                 self.d.window.wy_check_scheduled = false;
                 self.wy_check();
-                if self.d.state == State::Mode3Pixel && self.is_cgb_hardware() && !self.double_speed() {
+                if self.d.state == State::Mode3Pixel
+                    && self.is_cgb_hardware()
+                    && !self.double_speed()
+                {
                     self.d.window.wy_just_checked = true;
                 }
             }
@@ -117,7 +128,7 @@ impl Ppu {
         if self.wx == 0 {
             // (position + 16 <= 8) in u8 arithmetic
             self.d.window.cgb_wx_glitch = position.wrapping_add(16) <= 8
-                || (position == 249 && self.d.line_has_fractional_scrolling);
+                || (position == pos(-7) && self.d.line_has_fractional_scrolling);
             return;
         }
         self.d.window.cgb_wx_glitch = position
@@ -140,9 +151,9 @@ impl Ppu {
             let position = self.d.position_in_line;
             let hw = self.is_cgb_hardware();
             let should_activate = if self.wx == 0 {
-                position == 249
-                    || position == 240 && self.scx & 7 != 0
-                    || (241..=248).contains(&position)
+                position == pos(-7)
+                    || position == pos(-16) && self.scx & 7 != 0
+                    || (pos(-15)..=pos(-8)).contains(&position)
             } else if u16::from(self.wx) < 166 + u16::from(hw) {
                 if self.wx == position.wrapping_add(7) {
                     true

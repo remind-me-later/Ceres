@@ -1,7 +1,7 @@
 //! Mode 3: the loop that fetches objects and pushes pixels to the LCD.
 
 use {
-    super::{LINES, fetcher::FetcherStep, model_ge_cgb_d, state::State},
+    super::{LINES, fetcher::FetcherStep, model_ge_cgb_d, pos, state::State, window::Window},
     crate::{
         interrupts::Interrupts,
         ppu::{
@@ -229,7 +229,7 @@ impl Ppu {
 
     /// Code after the mode-3 loop breaks (`skip_slow_mode_3`).
     pub(super) fn mode3_done(&mut self) {
-        self.d.position_in_line = 240;
+        self.d.position_in_line = pos(-16);
         self.d.line_has_fractional_scrolling = false;
 
         if matches!(
@@ -244,7 +244,7 @@ impl Ppu {
         self.fill_desynced_line();
 
         if self.d.current_line == LINES - 1 {
-            self.d.window.line = 0xFF;
+            self.d.window.line = Window::NO_LINE;
         }
         if !self.is_cgb_hardware()
             && self.d.window.wy_triggered

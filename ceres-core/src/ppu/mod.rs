@@ -6,7 +6,7 @@ mod rgba_buf;
 mod vram;
 
 use crate::interrupts::Interrupts;
-use display::{LAST_LINE, LINE_LENGTH, LINES, LINES_PER_FRAME};
+use display::{LAST_LINE, LINE_LENGTH, LINES, LINES_PER_FRAME, PALETTE_LOCK_CYCLE};
 pub(crate) use oam::Oam;
 pub(crate) use oam_bug::unusable_index;
 pub(crate) use vram::Vram;
@@ -290,7 +290,11 @@ impl Ppu {
     #[must_use]
     pub(crate) const fn fifo_position(&self) -> i16 {
         let p = self.d.position_in_line();
-        if p >= 240 { p as i16 - 256 } else { p as i16 }
+        if p >= display::pos(-16) {
+            p as i16 - 256
+        } else {
+            p as i16
+        }
     }
 
     #[inline]
@@ -381,7 +385,12 @@ impl Ppu {
 
     /// Advances the PPU by one CPU T-cycle: a dot in single speed, half of
     /// one in double speed.
-    pub(crate) fn tick_t_cycle(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
+    pub(crate) fn tick_t_cycle(
+        &mut self,
+        ints: &mut Interrupts,
+        cgb_mode: CgbMode,
+        double_speed: bool,
+    ) {
         self.cgb_mode = cgb_mode;
         self.double_speed = double_speed;
         self.count_chunk_cycle();
@@ -537,7 +546,7 @@ impl Ppu {
             return unlocked;
         }
         !self
-            .gstat_mode3_lock(80)
+            .gstat_mode3_lock(PALETTE_LOCK_CYCLE)
             .unwrap_or_else(|| self.d.cpu().cgb_palettes_blocked)
     }
 

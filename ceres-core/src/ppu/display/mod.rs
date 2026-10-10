@@ -41,7 +41,7 @@ use {
 
 use super::{LCDC_WIN_EN_B, PX_HEIGHT, Ppu, STAT_MODE_B, oam_bug::NO_ROW};
 
-pub(super) use state::State;
+pub(super) use {gstat::PALETTE_LOCK_CYCLE, state::State};
 
 pub(super) const MODE2_LENGTH: i32 = 80;
 /// The PPU addresses VRAM from 0 (0x8000 for the CPU), bank 1 after bank 0.
@@ -104,6 +104,12 @@ pub(super) struct Display {
     cpu: CpuAccess,
 }
 
+/// The `position_in_line` of a signed position: like SameBoy's `uint8_t`,
+/// the lead-in positions -16..=-1 are 240..=255.
+pub(super) const fn pos(signed: i8) -> u8 {
+    signed.cast_unsigned()
+}
+
 impl Default for Display {
     fn default() -> Self {
         Self {
@@ -113,7 +119,7 @@ impl Default for Display {
             cfl: 0,
             line_clock: 0,
             current_line: 0,
-            position_in_line: 240,
+            position_in_line: pos(-16),
             lcd_x: 0,
             line_has_fractional_scrolling: false,
             hblank_hdma_edge: false,

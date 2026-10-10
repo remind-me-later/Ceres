@@ -38,11 +38,11 @@ impl Oam {
     }
 
     #[must_use]
-    pub(crate) const fn extra(&self) -> &[u8; 0x60] {
+    pub(crate) const fn extra(&self) -> &[u8; Self::EXTRA_SIZE as usize] {
         &self.extra
     }
 
-    pub(crate) const fn extra_mut(&mut self) -> &mut [u8; 0x60] {
+    pub(crate) const fn extra_mut(&mut self) -> &mut [u8; Self::EXTRA_SIZE as usize] {
         &mut self.extra
     }
 

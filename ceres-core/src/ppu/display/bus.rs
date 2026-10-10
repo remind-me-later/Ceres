@@ -2,7 +2,7 @@
 //! the bus, and the locks that keep the CPU out of the memory the PPU uses.
 
 use {
-    super::{VRAM_BANK1, VRAM_OFFSET_MASK},
+    super::{VRAM_BANK1, VRAM_OFFSET_MASK, gstat::VRAM_LOCK_CYCLE},
     crate::{
         memory::{Dma, VRAM_START},
         ppu::{Oam, Ppu},
@@ -198,13 +198,13 @@ impl Ppu {
 
     #[must_use]
     pub(crate) fn vram_read_blocked(&self) -> bool {
-        self.gstat_mode3_lock(79)
+        self.gstat_mode3_lock(VRAM_LOCK_CYCLE)
             .unwrap_or(self.d.cpu.vram_read_blocked)
     }
 
     #[must_use]
     pub(crate) fn vram_write_blocked(&self) -> bool {
-        self.gstat_mode3_lock(79)
+        self.gstat_mode3_lock(VRAM_LOCK_CYCLE)
             .unwrap_or(self.d.cpu.vram_write_blocked)
     }
 

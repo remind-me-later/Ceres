@@ -8,8 +8,8 @@
 
 use {
     super::{
-        LAST_LINE, LINE_LENGTH, LINES, MODE2_LENGTH, mode3::Mode3Flow, model_ge_cgb_d,
-        stat::MODE_VBLANK_ENTRY,
+        LAST_LINE, LINE_LENGTH, LINES, MODE2_LENGTH, mode3::Mode3Flow, model_ge_cgb_d, pos,
+        stat::MODE_VBLANK_ENTRY, window::Window,
     },
     crate::{
         interrupts::Interrupts,
@@ -19,6 +19,10 @@ use {
 
 /// Dots from HBlankStart to the HBlank HDMA request.
 const HBLANK_HDMA_DELAY: u8 = 1;
+
+/// The OAM scan index at which the CPU's VRAM and palette access changes
+/// (SameBoy's 37).
+const OAM_SCAN_UNLOCK_INDEX: u8 = 37;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -177,9 +181,9 @@ impl Ppu {
             }
             State::FirstLine => {
                 self.d.current_line = 0;
-                self.d.window.line = 0xFF;
+                self.d.window.line = Window::NO_LINE;
                 self.d.window.wy_triggered = false;
-                self.d.position_in_line = 240;
+                self.d.position_in_line = pos(-16);
                 self.d.line_has_fractional_scrolling = false;
                 self.d.irq.ly_for_comparison = 0;
                 self.stat &= !STAT_MODE_B;
@@ -292,7 +296,7 @@ impl Ppu {
                     self.add_object_from_index(self.d.objs.index);
                     self.d.objs.accessed_oam_row = (self.d.objs.index & !1) * 4 + 8;
                 }
-                if self.d.objs.index == 37 {
+                if self.d.objs.index == OAM_SCAN_UNLOCK_INDEX {
                     self.d.cpu.vram_read_blocked = !self.is_cgb_hardware();
                     self.d.cpu.vram_write_blocked = false;
                     self.d.cpu.cgb_palettes_blocked = false;
@@ -373,20 +377,20 @@ impl Ppu {
                     self.sleep(State::AbortedLineStart, 2);
                     return None;
                 }
-                if (156..240).contains(&self.d.position_in_line) {
+                if (156..pos(-16)).contains(&self.d.position_in_line) {
                     self.d.irq.delayed_glitch_hblank_interrupt = true;
                 }
-                self.d.position_in_line = 240;
+                self.d.position_in_line = pos(-16);
                 self.d.line_has_fractional_scrolling = false;
                 Some(State::VBlankLine)
             }
             State::AbortedLineStart => {
                 self.ly = self.d.current_line;
-                if (156..240).contains(&self.d.position_in_line) {
+                if (156..pos(-16)).contains(&self.d.position_in_line) {
                     self.d.irq.delayed_glitch_hblank_interrupt = true;
                 }
                 self.stat_update(ints);
-                self.d.position_in_line = 241;
+                self.d.position_in_line = pos(-15);
                 self.mode3_start();
                 Some(State::Mode3)
             }
