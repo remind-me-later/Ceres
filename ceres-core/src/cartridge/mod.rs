@@ -549,3 +549,6 @@ impl Cartridge {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
