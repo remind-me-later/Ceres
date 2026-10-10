@@ -17,7 +17,7 @@ use ceres_core::Model;
 use ceres_test_runner::{
     Run,
     checks::{RegisterCheck, TestResult},
-    rom_test, run_exact_screenshot, timeouts,
+    rom_test, run_exact_screenshot, run_ranked_screenshot, timeouts,
 };
 
 /// Root paths to the two test suites.
@@ -325,6 +325,9 @@ rom_test!(
     test_gpu_stat_irq_blocking: mooneye(WILBERTPOL, "acceptance/gpu/stat_irq_blocking.gb", Model::DmgB)
 );
 rom_test!(
+    test_gpu_stat_lyc_onoff: mooneye(MOONEYE, "acceptance/ppu/stat_lyc_onoff.gb", Model::DmgB)
+);
+rom_test!(
     test_gpu_stat_write_if_c: mooneye(WILBERTPOL, "acceptance/gpu/stat_write_if-C.gb", Model::CgbC)
 );
 rom_test!(
@@ -435,4 +438,19 @@ rom_test!(
 );
 rom_test!(
     test_manual_sprite_priority_cgb: screenshot(WILBERTPOL, "manual-only/sprite_priority.gb", Model::CgbE)
+);
+
+// =============================================================================
+// madness/ tests
+// =============================================================================
+
+// An OAM DMA during `halt` leaves a stray sprite on the MGB; Ceres shows none.
+rom_test!(
+    #[ignore = "the MGB's OAM DMA during halt sprite glitch is not emulated"]
+    test_madness_mgb_oam_dma_halt_sprites: run_ranked_screenshot(
+        &format!("{WILBERTPOL}/madness/mgb_oam_dma_halt_sprites.gb"),
+        &format!("{WILBERTPOL}/madness/mgb_oam_dma_halt_sprites_expected.png"),
+        Model::Mgb,
+        timeouts::MOONEYE
+    )
 );

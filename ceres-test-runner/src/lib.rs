@@ -22,6 +22,8 @@ pub mod timeouts {
     /// Mooneye's acceptance tests: 2 minutes at most.
     pub const MOONEYE: u32 = 7160;
     pub const MEALYBUG: u32 = 500;
+    /// Mealybug's `mbc3_rtc` waits for the RTC to tick: about 1160.
+    pub const MEALYBUG_MBC3_RTC: u32 = 1500;
     pub const BLARGG: u32 = 3000;
     /// blargg's combined ROMs, which run all the single ones.
     pub const BLARGG_COMBINED: u32 = 6000;

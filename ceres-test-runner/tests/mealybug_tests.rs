@@ -1,9 +1,13 @@
-//! Integration tests using the Mealybug Tearoom Tests ROM suite
-//! PPU related tests
+//! Integration tests using the Mealybug Tearoom Tests ROM suite: the PPU
+//! tests compare the screen, the DMA and MBC ones report in the registers.
 //! Source: <https://github.com/mealybug/mealybug-tearoom-tests>
 
 use ceres_core::Model;
-use ceres_test_runner::{checks::TestResult, rom_test, run_exact_screenshot, timeouts};
+use ceres_test_runner::{
+    Run,
+    checks::{RegisterCheck, TestResult},
+    rom_test, run_exact_screenshot, timeouts,
+};
 
 /// The screen must be the reference screenshot (`*_dmg_blob.png`,
 /// `*_cgb_c.png` or `*_cgb_d.png`) when the ROM reaches its `ld b, b`
@@ -296,3 +300,24 @@ rom_test!(
     #[ignore = "fails the same way in SameBoy"]
     test_mb_m3_wx_4_change_sprites_cgb_d: mealybug("m3_wx_4_change_sprites.gb", Model::CgbD)
 );
+
+/// The registers hold the result (Mooneye's protocol, see `RegisterCheck`).
+fn mealybug_registers(rom: &str, model: Model, frames: u32) -> TestResult {
+    Run::new(format!("mealybug-tearoom-tests/{rom}"), model)
+        .skip_boot_rom()
+        .timeout(frames)
+        .check(RegisterCheck)
+}
+
+// DMA tests from mealybug-tearoom-tests/dma (`-C`: any CGB)
+rom_test!(
+    test_mb_hdma_during_halt_cgb_c: mealybug_registers("dma/hdma_during_halt-C.gb", Model::CgbC, timeouts::MEALYBUG)
+);
+rom_test!(
+    test_mb_hdma_during_halt_cgb_e: mealybug_registers("dma/hdma_during_halt-C.gb", Model::CgbE, timeouts::MEALYBUG)
+);
+rom_test!(test_mb_hdma_timing_cgb_c: mealybug_registers("dma/hdma_timing-C.gb", Model::CgbC, timeouts::MEALYBUG));
+rom_test!(test_mb_hdma_timing_cgb_e: mealybug_registers("dma/hdma_timing-C.gb", Model::CgbE, timeouts::MEALYBUG));
+
+// MBC tests from mealybug-tearoom-tests/mbc
+rom_test!(test_mb_mbc3_rtc: mealybug_registers("mbc/mbc3_rtc.gb", Model::DmgB, timeouts::MEALYBUG_MBC3_RTC));
