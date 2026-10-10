@@ -1,8 +1,8 @@
 //! The square channels (1 and 2).
 
 use super::{
-    Ctx, NRX1_LENGTH, NRX2_DAC, NRX4_PERIOD_HIGH, NRX4_TRIGGER_B, PERIOD_MASK, envelope::Envelope,
-    length::Length, mixer::ChannelOutput, revision::Revision,
+    Ctx, NRX1_LENGTH, NRX2_DAC, NRX4_PERIOD_HIGH, NRX4_TRIGGER_B, PERIOD_MASK, SQUARE_1,
+    envelope::Envelope, length::Length, mixer::ChannelOutput, revision::Revision,
 };
 
 /// The waveforms selected by NRx1 bits 6-7, high 12.5%, 25%, 50% and 75%
@@ -16,8 +16,6 @@ const DUTIES: [[u8; 8]; 4] = [
 
 #[derive(Clone, Copy)]
 pub(super) struct Square {
-    /// 0 for channel 1, 1 for channel 2.
-    index: usize,
     out: ChannelOutput,
     length: Length,
     envelope: Envelope,
@@ -41,11 +39,11 @@ pub(super) struct Square {
 }
 
 impl Square {
+    /// Channel 1 or 2 (`SQUARE_1` or `SQUARE_2`).
     pub(super) const fn new(index: usize) -> Self {
         Self {
-            index,
-            out: ChannelOutput::new(),
-            length: Length::new(),
+            out: ChannelOutput::new(index),
+            length: Length::new(0x40),
             envelope: Envelope::new(),
             duty: 0,
             nrx4: 0,
@@ -65,7 +63,7 @@ impl Square {
         out.power_off();
         *self = Self {
             out,
-            ..Self::new(self.index)
+            ..Self::new(self.out.index)
         };
     }
 
@@ -165,13 +163,8 @@ impl Square {
     }
 
     pub(super) fn update_sample(&mut self, value: u8, c: &Ctx) {
-        self.out.update(
-            self.index,
-            value,
-            self.envelope.dac_enabled(),
-            self.envelope.volume,
-            c,
-        );
+        self.out
+            .update(value, self.envelope.dac_enabled(), self.envelope.volume, c);
     }
 
     /// Outputs the current step of the duty cycle.
@@ -231,7 +224,11 @@ impl Square {
             // CGB-0 behaviour is instance specific and non-deterministic.
             let cgb0_glitch =
                 c.rev == Revision::Cgb0 && old_volume == 1 && self.envelope.nrx2 & 8 != 0;
-            let bits = if self.index == 0 || cgb0_glitch { 1 } else { 3 };
+            let bits = if self.out.index == SQUARE_1 || cgb0_glitch {
+                1
+            } else {
+                3
+            };
             self.out.pcm_mask &= (old_volume | bits) & 0xF;
         }
         if self.out.active {
@@ -241,7 +238,7 @@ impl Square {
 
     /// `value` has bits 0-5 masked off when written while the APU is off.
     pub(super) const fn write_nrx1(&mut self, value: u8) {
-        self.length.counter = 0x40 - (value & NRX1_LENGTH) as u16;
+        self.length.load((value & NRX1_LENGTH) as u16);
         self.duty = value >> 6;
     }
 
@@ -294,7 +291,6 @@ impl Square {
             value,
             c.rev.is_cgb() && c.rev <= Revision::CgbB,
             c.div_divider,
-            0x40,
         ) {
             self.disable(c);
         }
@@ -366,6 +362,6 @@ impl Square {
             self.update_sample(0, c);
             self.suppressed = !force_unsuppressed;
         }
-        self.length.trigger(0x40);
+        self.length.trigger();
     }
 }

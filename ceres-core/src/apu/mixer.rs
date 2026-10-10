@@ -11,6 +11,8 @@ const CH_STEP: i32 = 0xFF0 / 0xF / 8;
 /// sample it outputs and the resulting level after NR50/NR51.
 #[derive(Clone, Copy)]
 pub(super) struct ChannelOutput {
+    /// The channel (`SQUARE_1` to `NOISE`): its NR51 bits.
+    pub index: usize,
     /// The channel is on (NR52 bits 0-3).
     pub active: bool,
     /// The 4-bit sample read back through PCM12/PCM34. Set to 0x10 when it
@@ -25,8 +27,9 @@ pub(super) struct ChannelOutput {
 }
 
 impl ChannelOutput {
-    pub(super) const fn new() -> Self {
+    pub(super) const fn new(index: usize) -> Self {
         Self {
+            index,
             active: false,
             sample: 0,
             level: (0, 0),
@@ -39,7 +42,7 @@ impl ChannelOutput {
     pub(super) const fn power_off(&mut self) {
         *self = Self {
             level: self.level,
-            ..Self::new()
+            ..Self::new(self.index)
         };
     }
 
@@ -55,17 +58,10 @@ impl ChannelOutput {
         }
     }
 
-    /// Sets the sample of channel `index` to `value` (SameBoy's
-    /// `update_sample`). `volume` is the envelope volume, which biases the
-    /// output on the AGB.
-    pub(super) fn update(
-        &mut self,
-        index: usize,
-        value: u8,
-        dac_enabled: bool,
-        volume: u8,
-        c: &Ctx,
-    ) {
+    /// Sets the sample to `value` (SameBoy's `update_sample`). `volume` is
+    /// the envelope volume, which biases the output on the AGB.
+    pub(super) fn update(&mut self, value: u8, dac_enabled: bool, volume: u8, c: &Ctx) {
+        let index = self.index;
         let left = c.nr51 & (0x10 << index) != 0;
         let right = c.nr51 & (1 << index) != 0;
         let left_volume = i32::from((c.nr50 >> 4) & 7) + 1;

@@ -46,8 +46,8 @@ pub(super) struct Noise {
 impl Noise {
     pub(super) const fn new() -> Self {
         Self {
-            out: ChannelOutput::new(),
-            length: Length::new(),
+            out: ChannelOutput::new(NOISE),
+            length: Length::new(0x40),
             envelope: Envelope::new(),
             nr43: 0,
             lfsr: 0,
@@ -147,13 +147,8 @@ impl Noise {
     }
 
     pub(super) fn update_sample(&mut self, value: u8, c: &Ctx) {
-        self.out.update(
-            NOISE,
-            value,
-            self.envelope.dac_enabled(),
-            self.envelope.volume,
-            c,
-        );
+        self.out
+            .update(value, self.envelope.dac_enabled(), self.envelope.volume, c);
     }
 
     pub(super) fn disable(&mut self, c: &Ctx) {
@@ -284,7 +279,7 @@ impl Noise {
     }
 
     pub(super) const fn write_nr41(&mut self, value: u8) {
-        self.length.counter = 0x40 - (value & NRX1_LENGTH) as u16;
+        self.length.load((value & NRX1_LENGTH) as u16);
     }
 
     pub(super) fn write_nr42(&mut self, value: u8, c: &Ctx) {
@@ -350,7 +345,7 @@ impl Noise {
                 self.start(c);
             }
         }
-        if self.length.write(value, false, c.div_divider, 0x40) {
+        if self.length.write(value, false, c.div_divider) {
             self.disable(c);
         }
     }
@@ -367,7 +362,7 @@ impl Noise {
             self.out.active = true;
             self.update_sample(0, c);
         }
-        self.length.trigger(0x40);
+        self.length.trigger();
     }
 
     /// Restarts the counter and the LFSR, with the many timing quirks of the

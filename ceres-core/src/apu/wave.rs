@@ -35,8 +35,8 @@ pub(super) struct Wave {
 impl Wave {
     pub(super) const fn new() -> Self {
         Self {
-            out: ChannelOutput::new(),
-            length: Length::new(),
+            out: ChannelOutput::new(WAVE),
+            length: Length::new(0x100),
             dac_enabled: false,
             nr32: 0,
             period: 0,
@@ -116,7 +116,7 @@ impl Wave {
     }
 
     pub(super) fn update_sample(&mut self, value: u8, c: &Ctx) {
-        self.out.update(WAVE, value, self.dac_enabled, 0, c);
+        self.out.update(value, self.dac_enabled, 0, c);
     }
 
     fn update_wave_sample(&mut self, c: &Ctx) {
@@ -244,7 +244,7 @@ impl Wave {
     }
 
     pub(super) const fn write_nr31(&mut self, value: u8) {
-        self.length.counter = 0x100 - value as u16;
+        self.length.load(value as u16);
     }
 
     pub(super) fn write_nr32(&mut self, value: u8, c: &Ctx) {
@@ -271,7 +271,6 @@ impl Wave {
             value,
             c.rev.is_cgb() && c.rev <= Revision::CgbB,
             c.div_divider,
-            0x100,
         ) {
             self.disable(c);
         }
@@ -301,7 +300,7 @@ impl Wave {
             self.update_sample((self.sample_byte >> 4) >> self.shift(), c);
         }
         self.countdown = (self.period ^ PERIOD_MASK) + 3;
-        self.length.trigger(0x100);
+        self.length.trigger();
         // The sample is not changed just yet (verified on hardware).
     }
 }

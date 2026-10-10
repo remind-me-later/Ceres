@@ -121,10 +121,14 @@ struct Ctx {
     lf_div: u8,
 }
 
+/// SameBoy's `skip_div_event`: turning the APU on while DIV's bit is high
+/// skips the next DIV event.
 #[derive(Clone, Copy)]
 enum SkipDivEvent {
     Inactive,
+    /// An event was skipped: the next one does not advance `div_divider`.
     Skipped,
+    /// The next event is skipped.
     Skip,
 }
 
