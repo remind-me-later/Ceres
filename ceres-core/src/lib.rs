@@ -592,7 +592,6 @@ impl Model {
             Self::Cgb0 | Self::CgbA | Self::CgbB | Self::CgbC | Self::CgbD | Self::CgbE | Self::Agb
         )
     }
-
 }
 
 #[non_exhaustive]

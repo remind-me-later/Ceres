@@ -12,7 +12,10 @@
 
 use {
     super::{LINES, State, model_ge_cgb_d},
-    crate::{interrupts::Interrupts, ppu::Ppu},
+    crate::{
+        interrupts::Interrupts,
+        ppu::{LCDC_WIN_EN_B, Ppu},
+    },
 };
 
 /// Half dots per line and per frame.
@@ -450,7 +453,7 @@ impl Ppu {
         };
         g.wy.settle(g.g);
         g.lcdc.settle(g.g);
-        if ly != 0 && g.lcdc.val & 0x20 != 0 && g.wy.val == ly {
+        if ly != 0 && g.lcdc.val & LCDC_WIN_EN_B != 0 && g.wy.val == ly {
             self.d.window.wy_triggered = true;
         }
     }
@@ -499,8 +502,7 @@ impl Ppu {
                 g.ly
             };
             let blocked_by_m1 = ly == 0 && m_stat & M1_EN != 0;
-            let blocked_by_lyc =
-                m_stat & LYC_EN != 0 && ly.saturating_sub(1) == m_lyc;
+            let blocked_by_lyc = m_stat & LYC_EN != 0 && ly.saturating_sub(1) == m_lyc;
             g.m_lyc.set(g.lyc_reg);
             g.m_stat.set(g.stat);
             let next = if g.stat & M0_EN != 0 {

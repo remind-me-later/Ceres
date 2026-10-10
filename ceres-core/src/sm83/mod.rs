@@ -1,6 +1,14 @@
 pub mod conflict;
 
-use crate::{AudioCallback, Gb, Model, memory::SwitchHdma, ppu::Mode};
+use crate::{
+    AudioCallback, Gb, Model,
+    memory::SwitchHdma,
+    ppu::{
+        LCDC_BG_EN_B, LCDC_BG_MAP_B, LCDC_OBJ_EN_B, LCDC_OBJ_SIZE_B, LCDC_ON_B, LCDC_TILE_SEL_B,
+        LCDC_WIN_EN_B, LCDC_WIN_MAP_B, Mode, STAT_IF_HBLANK_B, STAT_IF_LYC_B, STAT_IF_OAM_B,
+        STAT_IF_VBLANK_B,
+    },
+};
 use conflict::ConflictType;
 use core::mem;
 
@@ -1271,7 +1279,6 @@ impl Sm83 {
             }
         }
     }
-
 }
 
 impl<A: AudioCallback> Gb<A> {
@@ -1379,16 +1386,16 @@ impl<A: AudioCallback> Bus for Gb<A> {
             ConflictType::StatCgb => {
                 // The LYC and the VBlank enables reach the PPU a dot after the
                 // others (the HBlank one too when it is turned off).
-                const LATE: u8 = 0x40 | 0x10;
+                const LATE: u8 = STAT_IF_LYC_B | STAT_IF_VBLANK_B;
 
                 let old = self.ppu.read_stat();
                 self.flush_deferred_time();
                 let mut early = (old & LATE) | (val & !LATE);
-                early |= old & !val & 0x08;
-                if val & !old & 0x40 != 0 {
+                early |= old & !val & STAT_IF_HBLANK_B;
+                if val & !old & STAT_IF_LYC_B != 0 {
                     // Enabling the LYC source: the enables this write clears go
                     // with it, so that no source drops out for a dot in between.
-                    early |= old & 0x38;
+                    early |= old & (STAT_IF_HBLANK_B | STAT_IF_VBLANK_B | STAT_IF_OAM_B);
                 }
                 self.write_mem(addr, early);
                 self.advance_dots(1);
@@ -1398,7 +1405,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
             ConflictType::StatCgbDouble => {
                 let old = self.ppu.read_stat();
                 self.flush_deferred_time();
-                self.write_mem(addr, (val & !8) | (old & 8));
+                self.write_mem(addr, (val & !STAT_IF_HBLANK_B) | (old & STAT_IF_HBLANK_B));
                 self.advance_dots(1);
                 self.write_mem(addr, val);
                 self.time_deferred = 3;
@@ -1431,20 +1438,20 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 // consumes (BG_EN, WIN_EN, OBJ_EN): measured on DMG against
                 // the mealybug LCDC tests. OBJ_SIZE reaches the object fetch
                 // early too, but the object search only sees it with the rest.
-                const FETCHER_BITS: u8 = 0x08 | 0x10 | 0x40;
+                const FETCHER_BITS: u8 = LCDC_BG_MAP_B | LCDC_TILE_SEL_B | LCDC_WIN_MAP_B;
 
                 let mut old = self.read_mem(addr);
                 self.advance_dots(pending - 2);
                 if (self.model != Model::Mgb && self.ppu.fifo_position() == 0
                     || self.ppu.is_fetching_sprite())
-                    && val & 0x02 == 0
+                    && val & LCDC_OBJ_EN_B == 0
                 {
-                    old &= !0x02;
+                    old &= !LCDC_OBJ_EN_B;
                 }
 
                 self.write_mem(addr, (old & !FETCHER_BITS) | (val & FETCHER_BITS));
                 // The object fetch (not the object search) sees OBJ_SIZE early.
-                self.ppu.set_obj_size_fetch(val & 0x04 != 0);
+                self.ppu.set_obj_size_fetch(val & LCDC_OBJ_SIZE_B != 0);
                 self.advance_dots(1);
                 self.write_mem(addr, val);
 
@@ -1473,8 +1480,6 @@ impl<A: AudioCallback> Bus for Gb<A> {
             ConflictType::LcdcCgb => {
                 // OBJ_SIZE reaches the object fetcher one dot after the other
                 // bits reach the PPU (measured on CGB-C).
-                const OBJ_SIZE: u8 = 0x04;
-
                 let old = self.ppu.read_lcdc();
                 self.advance_dots(pending);
                 self.ppu.cgb_obj_size_write(val, 0);
@@ -1485,7 +1490,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 self.write_mem(
                     addr,
                     if delay_obj_size {
-                        (val & !OBJ_SIZE) | (old & OBJ_SIZE)
+                        (val & !LCDC_OBJ_SIZE_B) | (old & LCDC_OBJ_SIZE_B)
                     } else {
                         val
                     },
@@ -1493,9 +1498,11 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 // Changing TILE_SEL on the dot after the write can corrupt a
                 // bitplane read in flight (see the PPU). The window start sees
                 // the window being turned on a dot late.
-                self.ppu.set_tile_sel_glitch((val ^ old) & 0x10 != 0);
                 self.ppu
-                    .set_window_enable_pending(old & 0x20 == 0 && val & 0x20 != 0);
+                    .set_tile_sel_glitch((val ^ old) & LCDC_TILE_SEL_B != 0);
+                self.ppu.set_window_enable_pending(
+                    old & LCDC_WIN_EN_B == 0 && val & LCDC_WIN_EN_B != 0,
+                );
                 self.advance_dots(1);
                 self.ppu.set_tile_sel_glitch(false);
                 self.ppu.set_window_enable_pending(false);
@@ -1511,9 +1518,10 @@ impl<A: AudioCallback> Bus for Gb<A> {
                     self.ppu.gstat_write_lcdc(val, 2);
                 }
                 // Turning the window on waits for the end of the write too.
-                let late = 0x81 | (!old & 0x20);
+                let late = LCDC_ON_B | LCDC_BG_EN_B | (!old & LCDC_WIN_EN_B);
                 self.write_mem(addr, (val & !late) | (old & late));
-                self.ppu.set_tile_sel_glitch((val ^ old) & 0x10 != 0);
+                self.ppu
+                    .set_tile_sel_glitch((val ^ old) & LCDC_TILE_SEL_B != 0);
                 self.advance_dots(2);
                 self.ppu.set_tile_sel_glitch(false);
                 self.write_mem(addr, val);

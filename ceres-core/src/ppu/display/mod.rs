@@ -39,7 +39,7 @@ use {
     window::Window,
 };
 
-use super::{Ppu, STAT_MODE_B, oam_bug::NO_ROW};
+use super::{LCDC_WIN_EN_B, Ppu, STAT_MODE_B, oam_bug::NO_ROW};
 
 pub(super) use state::State;
 
@@ -318,7 +318,7 @@ impl Ppu {
             if count_down(&mut self.d.window.line0_wy_countdown) {
                 // The trigger of line 0 is decided afresh: a WY that
                 // changed since the line began can also take it away.
-                self.d.window.wy_triggered = self.lcdc & 0x20 != 0 && self.wy == 0;
+                self.d.window.wy_triggered = self.lcdc & LCDC_WIN_EN_B != 0 && self.wy == 0;
             }
             if count_down(&mut self.d.irq.line0_pulse) {
                 self.d.irq.mode_for_interrupt = 2;

@@ -6,7 +6,7 @@ use {
         fifo::Fifo,
         state::State,
     },
-    crate::ppu::Ppu,
+    crate::ppu::{LCDC_ON_B, LCDC_WIN_EN_B, Ppu},
 };
 
 #[expect(
@@ -68,7 +68,7 @@ impl Default for Window {
 
 impl Ppu {
     pub(super) fn wy_check(&mut self) {
-        if self.lcdc & 0x80 == 0 {
+        if self.lcdc & LCDC_ON_B == 0 {
             return;
         }
         let comparison =
@@ -77,7 +77,7 @@ impl Ppu {
             } else {
                 i32::from(self.d.current_line)
             };
-        if self.lcdc & 0x20 != 0 && i32::from(self.wy) == comparison {
+        if self.lcdc & LCDC_WIN_EN_B != 0 && i32::from(self.wy) == comparison {
             self.d.window.wy_triggered = true;
         }
     }
@@ -109,7 +109,7 @@ impl Ppu {
         if !self.hw_cgb() {
             return;
         }
-        if self.lcdc & 0x20 == 0 || !self.d.window.wy_triggered {
+        if self.lcdc & LCDC_WIN_EN_B == 0 || !self.d.window.wy_triggered {
             self.d.window.cgb_wx_glitch = false;
             return;
         }
@@ -134,7 +134,7 @@ impl Ppu {
             self.d.window.wy_just_checked = false;
         } else if !self.d.window.wx_triggered
             && self.d.window.wy_triggered
-            && self.lcdc & 0x20 != 0
+            && self.lcdc & LCDC_WIN_EN_B != 0
             && !self.d.window.enable_pending
         {
             let position = self.d.position_in_line;
@@ -213,7 +213,7 @@ impl Ppu {
     /// Called by the CPU's LCDC write handler: disabling the window while a
     /// window tile is being fetched suppresses the pixel-insertion glitch.
     pub const fn note_window_disable(&mut self, old: u8, new: u8) {
-        if old & 0x20 != 0 && new & 0x20 == 0 && self.d.window.being_fetched {
+        if old & LCDC_WIN_EN_B != 0 && new & LCDC_WIN_EN_B == 0 && self.d.window.being_fetched {
             self.d.window.no_pixel_insertion_glitch = true;
         }
     }

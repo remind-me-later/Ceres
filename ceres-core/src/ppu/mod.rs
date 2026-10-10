@@ -15,17 +15,29 @@ pub const PX_WIDTH: u8 = 160;
 pub const PX_HEIGHT: u8 = 144;
 
 // LCDC bits
-const LCDC_ON_B: u8 = 0x80;
+/// DMG: background and window enable. CGB: their priority over objects.
+pub const LCDC_BG_EN_B: u8 = 0x01;
+pub const LCDC_OBJ_EN_B: u8 = 0x02;
+/// Objects are 8x16.
+pub const LCDC_OBJ_SIZE_B: u8 = 0x04;
+/// The background uses the tile map at 0x9C00.
+pub const LCDC_BG_MAP_B: u8 = 0x08;
+/// The background and window use the tiles at 0x8000.
+pub const LCDC_TILE_SEL_B: u8 = 0x10;
+pub const LCDC_WIN_EN_B: u8 = 0x20;
+/// The window uses the tile map at 0x9C00.
+pub const LCDC_WIN_MAP_B: u8 = 0x40;
+pub const LCDC_ON_B: u8 = 0x80;
 
 // STAT bits
 /// Dots per line.
 const LINE_CYCLES: i32 = 456;
-const STAT_MODE_B: u8 = 0x3;
-const STAT_LYC_B: u8 = 0x4;
-const STAT_IF_HBLANK_B: u8 = 0x8;
-const STAT_IF_VBLANK_B: u8 = 0x10;
-const STAT_IF_OAM_B: u8 = 0x20;
-const STAT_IF_LYC_B: u8 = 0x40;
+pub const STAT_MODE_B: u8 = 0x3;
+pub const STAT_LYC_B: u8 = 0x4;
+pub const STAT_IF_HBLANK_B: u8 = 0x8;
+pub const STAT_IF_VBLANK_B: u8 = 0x10;
+pub const STAT_IF_OAM_B: u8 = 0x20;
+pub const STAT_IF_LYC_B: u8 = 0x40;
 
 #[non_exhaustive]
 #[derive(Clone, Copy, Default)]
@@ -423,12 +435,12 @@ impl Ppu {
         // Disabling objects while an object is being fetched aborts the
         // fetch on non-CGB hardware.
         self.abort_object_fetch_on_obj_disable(val);
-        if self.hw_cgb() && self.lcdc & 0x20 != 0 && val & 0x20 == 0 {
+        if self.hw_cgb() && self.lcdc & LCDC_WIN_EN_B != 0 && val & LCDC_WIN_EN_B == 0 {
             self.cancel_window_start();
         }
 
         self.lcdc = val;
-        self.set_obj_size_fetch(val & 0x04 != 0);
+        self.set_obj_size_fetch(val & LCDC_OBJ_SIZE_B != 0);
         self.d.schedule_wy_check();
     }
 

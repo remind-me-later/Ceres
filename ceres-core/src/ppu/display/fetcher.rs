@@ -2,7 +2,10 @@
 
 use {
     super::{fifo::Item, model_ge_cgb_d},
-    crate::{Model, ppu::Ppu},
+    crate::{
+        Model,
+        ppu::{LCDC_BG_MAP_B, LCDC_TILE_SEL_B, LCDC_WIN_EN_B, LCDC_WIN_MAP_B, Ppu},
+    },
 };
 
 /// The steps of the fetcher, two dots each but the last (SameBoy's
@@ -88,11 +91,11 @@ impl Ppu {
             FetcherStep::GetTileT1 => {
                 self.update_wx_glitch();
                 let mut map: u16 = 0x1800;
-                if self.lcdc & 0x20 == 0 {
+                if self.lcdc & LCDC_WIN_EN_B == 0 {
                     self.d.window.wx_triggered = false;
                 }
-                if self.lcdc & 0x08 != 0 && !self.d.window.wx_triggered
-                    || self.lcdc & 0x40 != 0 && self.d.window.wx_triggered
+                if self.lcdc & LCDC_BG_MAP_B != 0 && !self.d.window.wx_triggered
+                    || self.lcdc & LCDC_WIN_MAP_B != 0 && self.d.window.wx_triggered
                 {
                     map = 0x1C00;
                 }
@@ -133,7 +136,7 @@ impl Ppu {
                 } else {
                     self.fetcher_y_value()
                 };
-                self.d.fetcher.last_tileset = self.lcdc & 0x10 != 0;
+                self.d.fetcher.last_tileset = self.lcdc & LCDC_TILE_SEL_B != 0;
                 let tile_address = self.tile_address();
                 let y_flip = if self.d.fetcher.attributes & 0x40 != 0 {
                     7
@@ -219,7 +222,7 @@ impl Ppu {
         }
 
         if self.d.window.wy_triggered
-            && self.lcdc & 0x20 == 0
+            && self.lcdc & LCDC_WIN_EN_B == 0
             && !self.hw_cgb()
             && !self.d.window.no_pixel_insertion_glitch
         {

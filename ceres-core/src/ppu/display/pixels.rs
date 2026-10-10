@@ -7,13 +7,13 @@ use {
     },
     crate::{
         CgbMode,
-        ppu::{PX_WIDTH, Ppu, color_palette::GRAYSCALE_PALETTE},
+        ppu::{LCDC_BG_EN_B, LCDC_OBJ_EN_B, PX_WIDTH, Ppu, color_palette::GRAYSCALE_PALETTE},
     },
 };
 
 impl Ppu {
     pub(super) fn render_pixel_if_possible(&mut self) -> Option<PixelOut> {
-        let obj_en = self.lcdc & 0x02 != 0 || self.hw_cgb();
+        let obj_en = self.lcdc & LCDC_OBJ_EN_B != 0 || self.hw_cgb();
         if self.d.objs.count != 0 && obj_en && self.d.objs.x[self.d.objs.count - 1] == 0 {
             return None;
         }
@@ -33,7 +33,7 @@ impl Ppu {
 
         if self.d.oam_fifo.size != 0 {
             oam_item = self.d.oam_fifo.pop();
-            if oam_item.pixel != 0 && self.lcdc & 0x02 != 0 {
+            if oam_item.pixel != 0 && self.lcdc & LCDC_OBJ_EN_B != 0 {
                 draw_oam = true;
                 bg_priority |= oam_item.bg_priority;
             }
@@ -67,8 +67,8 @@ impl Ppu {
         // Mixing
         // LCDC bit 0 off: in CGB mode the objects lose their priority, in
         // DMG mode the background is blank.
-        let bg_enabled = self.lcdc & 0x01 != 0 || self.cgb_mode_on();
-        if self.lcdc & 0x01 == 0 && self.cgb_mode_on() {
+        let bg_enabled = self.lcdc & LCDC_BG_EN_B != 0 || self.cgb_mode_on();
+        if self.lcdc & LCDC_BG_EN_B == 0 && self.cgb_mode_on() {
             bg_priority = false;
         }
         let bg_pixel = if bg_enabled { fifo_item.pixel } else { 0 };

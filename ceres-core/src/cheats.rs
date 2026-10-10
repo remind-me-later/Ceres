@@ -79,9 +79,7 @@ impl GameGenieCode {
         }
 
         let ab = (d[0] << 4) | d[1];
-        let cdef = d[2..6]
-            .iter()
-            .fold(0, |acc, &x| (acc << 4) | u16::from(x));
+        let cdef = d[2..6].iter().fold(0, |acc, &x| (acc << 4) | u16::from(x));
         let gh = (d[6] << 4) | d[7];
         let i = d[8];
 
@@ -141,12 +139,26 @@ mod tests {
         assert_eq!(codes.len(), 3, "valid codes");
         let mut gg = GameGenie::default();
         for code in &codes {
-            assert!(gg.activate_code(code.clone()).is_ok(), "room for three codes");
+            assert!(
+                gg.activate_code(code.clone()).is_ok(),
+                "room for three codes"
+            );
         }
         gg.deactivate_code(&codes[1]);
-        assert!(gg.active_codes() == [codes[0].clone(), codes[2].clone()], "order kept");
-        assert_eq!(gg.query(codes[0].address, codes[0].old_data), Some(0x00), "first");
-        assert_eq!(gg.query(codes[2].address, codes[2].old_data), Some(0x02), "third");
+        assert!(
+            gg.active_codes() == [codes[0].clone(), codes[2].clone()],
+            "order kept"
+        );
+        assert_eq!(
+            gg.query(codes[0].address, codes[0].old_data),
+            Some(0x00),
+            "first"
+        );
+        assert_eq!(
+            gg.query(codes[2].address, codes[2].old_data),
+            Some(0x02),
+            "third"
+        );
     }
 
     #[test]

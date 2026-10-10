@@ -4,7 +4,10 @@ use {
     super::{model_ge_cgb_d, state::State},
     crate::{
         interrupts::Interrupts,
-        ppu::{Ppu, STAT_IF_HBLANK_B, STAT_IF_LYC_B, STAT_IF_OAM_B, STAT_IF_VBLANK_B, STAT_LYC_B},
+        ppu::{
+            LCDC_ON_B, Ppu, STAT_IF_HBLANK_B, STAT_IF_LYC_B, STAT_IF_OAM_B, STAT_IF_VBLANK_B,
+            STAT_LYC_B,
+        },
     },
 };
 
@@ -61,7 +64,7 @@ impl Default for StatIrq {
 
 impl Ppu {
     pub(in crate::ppu) fn stat_update(&mut self, ints: &mut Interrupts) {
-        if self.lcdc & 0x80 == 0 {
+        if self.lcdc & LCDC_ON_B == 0 {
             return;
         }
 
@@ -168,7 +171,7 @@ impl Ppu {
         if self.hw_cgb()
             && self.d.state == State::HBlankStart
             && self.d.irq.mode_for_interrupt == 0
-            && self.lcdc & 0x80 != 0
+            && self.lcdc & LCDC_ON_B != 0
         {
             self.stat_update(ints);
         }
@@ -177,7 +180,7 @@ impl Ppu {
         self.stat |= val & !7;
         self.stat |= 0x80;
 
-        if self.lcdc & 0x80 == 0 {
+        if self.lcdc & LCDC_ON_B == 0 {
             // With the LCD off the LY=LYC flag stays as it was: enabling the
             // LYC interrupt while it is set raises it (on the DMG any write
             // does, with the glitch that sets all the enables).
@@ -214,7 +217,7 @@ impl Ppu {
             && self.d.objs.index == 0
             && self.d.wait == 1
             && !self.d.half_dot
-            && val & 0x20 != 0
+            && val & STAT_IF_OAM_B != 0
         {
             self.d.irq.mode_for_interrupt = 2;
             self.stat_update(ints);

@@ -5,7 +5,7 @@ use {
     super::State,
     crate::{
         Model,
-        ppu::{Ppu, oam_bug::NO_ROW},
+        ppu::{LCDC_OBJ_EN_B, LCDC_OBJ_SIZE_B, LCDC_ON_B, Ppu, oam_bug::NO_ROW},
     },
 };
 
@@ -143,7 +143,7 @@ impl Ppu {
 
         let height_16 = match self.d.objs.size_change {
             Some(c) if c.line == self.d.current_line => c.large(index),
-            _ => self.lcdc & 0x04 != 0,
+            _ => self.lcdc & LCDC_OBJ_SIZE_B != 0,
         };
         if self.object_on_line(self.d.objs.y_bus, height_16) {
             self.insert_object(index, self.d.objs.x_bus, self.d.objs.y_bus);
@@ -190,8 +190,11 @@ impl Ppu {
     /// than this PPU looks at each entry (gambatte's `OamReader`), so the
     /// entries already searched are looked at again.
     pub fn cgb_obj_size_write(&mut self, val: u8, units_early: i64) {
-        let new = val & 0x04 != 0;
-        if !self.gambatte_stat() || self.lcdc & 0x80 == 0 || (self.lcdc & 0x04 != 0) == new {
+        let new = val & LCDC_OBJ_SIZE_B != 0;
+        if !self.gambatte_stat()
+            || self.lcdc & LCDC_ON_B == 0
+            || (self.lcdc & LCDC_OBJ_SIZE_B != 0) == new
+        {
             return;
         }
         let searched = match self.d.state() {
@@ -259,7 +262,11 @@ impl Ppu {
 
     /// DMG: disabling objects while an object is being fetched aborts it.
     pub(in crate::ppu) const fn abort_object_fetch_on_obj_disable(&mut self, val: u8) {
-        if !self.hw_cgb() && self.lcdc & 0x02 != 0 && val & 0x02 == 0 && self.d.obj_fetch.active {
+        if !self.hw_cgb()
+            && self.lcdc & LCDC_OBJ_EN_B != 0
+            && val & LCDC_OBJ_EN_B == 0
+            && self.d.obj_fetch.active
+        {
             self.d.cfl -= self.d.wait - 1;
             self.d.wait = 1;
             self.d.obj_fetch.aborted = true;

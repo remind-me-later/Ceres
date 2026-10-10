@@ -4,7 +4,7 @@ use {
     super::{LINES, fetcher::FetcherStep, model_ge_cgb_d, state::State},
     crate::{
         interrupts::Interrupts,
-        ppu::{PX_WIDTH, Ppu, STAT_MODE_B},
+        ppu::{LCDC_OBJ_EN_B, LCDC_WIN_EN_B, PX_WIDTH, Ppu, STAT_MODE_B},
     },
 };
 
@@ -104,7 +104,7 @@ impl Ppu {
                 Step::NextObject => {
                     let n = self.d.objs.count;
                     if n != 0
-                        && (self.lcdc & 0x02 != 0 || self.hw_cgb())
+                        && (self.lcdc & LCDC_OBJ_EN_B != 0 || self.hw_cgb())
                         && self.d.objs.x[n - 1] == self.x_for_object_match()
                     {
                         if self.d.objs.x[n - 1] == 167 {
@@ -241,7 +241,11 @@ impl Ppu {
         if self.d.current_line == 143 {
             self.d.window.line = 0xFF;
         }
-        if !self.hw_cgb() && self.d.window.wy_triggered && self.lcdc & 0x20 != 0 && self.wx == 166 {
+        if !self.hw_cgb()
+            && self.d.window.wy_triggered
+            && self.lcdc & LCDC_WIN_EN_B != 0
+            && self.wx == 166
+        {
             self.d.window.wx_triggered = true;
             self.d.window.tile_x = 1;
             self.d.window.line = self.d.window.line.wrapping_add(1);
