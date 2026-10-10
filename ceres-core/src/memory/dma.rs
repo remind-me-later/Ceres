@@ -52,7 +52,7 @@ impl Default for Dma {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Bus {
+enum DmaBus {
     Main,
     Ram,
     Vram,
@@ -107,7 +107,8 @@ impl Dma {
         self.is_active() && (self.cycles_modulo == 2 || double_speed)
     }
 
-    pub const fn add_cycles(&mut self, cycles: i32) {
+    /// The T-cycles the next `run_dma` runs (SameBoy's `dma_cycles`).
+    pub const fn set_cycles(&mut self, cycles: i32) {
         self.cycles = cycles;
     }
 
@@ -124,15 +125,15 @@ impl Dma {
     }
 }
 
-const fn bus_for_addr(cgb: bool, addr: u16) -> Bus {
+const fn bus_for_addr(cgb: bool, addr: u16) -> DmaBus {
     if addr < VRAM_START {
-        Bus::Main
+        DmaBus::Main
     } else if addr < CART_RAM_START {
-        Bus::Vram
+        DmaBus::Vram
     } else if addr < WRAM_START || !cgb {
-        Bus::Main
+        DmaBus::Main
     } else {
-        Bus::Ram
+        DmaBus::Ram
     }
 }
 
@@ -159,10 +160,10 @@ impl<A: AudioCallback> Gb<A> {
         let cgb = self.model.is_cgb_hardware();
         if cgb {
             if addr >= WRAM_START {
-                return bus_for_addr(cgb, dma.current_src) != Bus::Vram;
+                return bus_for_addr(cgb, dma.current_src) != DmaBus::Vram;
             }
             if dma.current_src >= ECHO_START {
-                return bus_for_addr(cgb, addr) != Bus::Vram;
+                return bus_for_addr(cgb, addr) != DmaBus::Vram;
             }
         }
         bus_for_addr(cgb, addr) == bus_for_addr(cgb, dma.current_src)
@@ -182,11 +183,11 @@ impl<A: AudioCallback> Gb<A> {
             // The byte the interrupted transfer just wrote.
             return Some(src.wrapping_add(u16::from(at)));
         }
-        if cgb && bus_for_addr(cgb, addr) == Bus::Main && src >= ECHO_START {
+        if cgb && bus_for_addr(cgb, addr) == DmaBus::Main && src >= ECHO_START {
             // Cart specific.
             return None;
         }
-        if cgb && addr >= WRAM_START && (bus_for_addr(cgb, src) != Bus::Ram || src >= ECHO_START) {
+        if cgb && addr >= WRAM_START && (bus_for_addr(cgb, src) != DmaBus::Ram || src >= ECHO_START) {
             return Some(
                 (src.wrapping_sub(1) & Wram::BANK_SIZE)
                     | (addr & (Wram::BANK_SIZE - 1))
@@ -254,7 +255,7 @@ impl<A: AudioCallback> Gb<A> {
             }
             return None;
         }
-        if bus_for_addr(cgb, addr) == Bus::Main && src >= ECHO_START {
+        if bus_for_addr(cgb, addr) == DmaBus::Main && src >= ECHO_START {
             // Cart specific.
             return None;
         }

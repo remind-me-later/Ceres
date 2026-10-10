@@ -118,7 +118,7 @@ impl Ppu {
         // On CGB the object search runs ahead of the DMA's state: by two
         // T-cycles in single speed, by a whole M-cycle in double speed.
         let lead = if self.double_speed { 3 } else { 2 };
-        let dest = if self.hw_cgb() && self.d.bus.chunk_left <= lead {
+        let dest = if self.is_cgb_hardware() && self.d.bus.chunk_left <= lead {
             self.d.bus.dma_dest_next
         } else {
             self.d.bus.dma_dest
@@ -263,7 +263,7 @@ impl Ppu {
     /// selects X-coordinate priority; DMG hardware always uses X.
     #[inline]
     pub(super) const fn opri_index_priority(&self) -> bool {
-        self.hw_cgb() && !self.opri
+        self.is_cgb_hardware() && !self.opri
     }
 
     pub const fn set_obj_size_fetch(&mut self, big: bool) {
@@ -272,7 +272,7 @@ impl Ppu {
 
     /// DMG: disabling objects while an object is being fetched aborts it.
     pub(in crate::ppu) const fn abort_object_fetch_on_obj_disable(&mut self, val: u8) {
-        if !self.hw_cgb()
+        if !self.is_cgb_hardware()
             && self.lcdc & LCDC_OBJ_EN_B != 0
             && val & LCDC_OBJ_EN_B == 0
             && self.d.obj_fetch.active

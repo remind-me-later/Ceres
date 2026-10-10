@@ -140,7 +140,7 @@ impl<A: AudioCallback> Gb<A> {
         self.apu.reset_pcm_mask();
 
         // The OAM DMA is clocked by the CPU clock, whatever the speed.
-        self.dma.add_cycles(cycles);
+        self.dma.set_cycles(cycles);
 
         // Cycle-accurate timer advancement (per T-cycle, for accurate TIMA
         // reload timing).
@@ -260,7 +260,7 @@ impl<A: AudioCallback> Gb<A> {
     pub fn run_timers(&mut self, cpu_t_cycles: i32) {
         // The timers (and DIV) are frozen in STOP mode (the CGB's APU is not).
         if self.clock.stopped {
-            if self.is_cgb() {
+            if self.model.is_cgb_hardware() {
                 self.run_apu_step();
             }
             return;

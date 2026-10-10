@@ -124,7 +124,7 @@ impl Ppu {
     /// The "write" corruption: an address in OAM range was put on the bus
     /// (writes, `inc rr`, `push`, ...).
     pub fn trigger_oam_bug(&mut self, addr: u16) {
-        if self.hw_cgb() || !(OAM_START..IO_START).contains(&addr) {
+        if self.is_cgb_hardware() || !(OAM_START..IO_START).contains(&addr) {
             return;
         }
         let Some(row) = self.bug_row() else {
@@ -194,7 +194,7 @@ impl Ppu {
 
     /// The "read" corruption: a CPU read of OAM while the PPU owns it.
     pub fn trigger_oam_bug_read(&mut self, addr: u16) {
-        if self.hw_cgb() || !(OAM_START..IO_START).contains(&addr) {
+        if self.is_cgb_hardware() || !(OAM_START..IO_START).contains(&addr) {
             return;
         }
         let Some(row) = self.bug_row() else {
@@ -313,7 +313,7 @@ impl Ppu {
     /// Side-effect free view of the unusable area (for non-CPU readers).
     #[must_use]
     pub fn peek_unusable(&self, addr: u16) -> u8 {
-        if self.d.cpu().oam_read_blocked || self.d.cpu().oam_write_blocked && !self.hw_cgb() {
+        if self.d.cpu().oam_read_blocked || self.d.cpu().oam_write_blocked && !self.is_cgb_hardware() {
             0xFF
         } else {
             self.read_unusable(addr)
@@ -322,7 +322,7 @@ impl Ppu {
 
     /// CPU read of `0xFE00..=0xFEFF`. `dma_blocked`: an OAM DMA owns the bus.
     pub fn cpu_read_oam_area(&mut self, addr: u16, dma_blocked: bool) -> u8 {
-        if self.d.cpu().oam_write_blocked && !self.hw_cgb() {
+        if self.d.cpu().oam_write_blocked && !self.is_cgb_hardware() {
             self.trigger_oam_bug_read(addr);
             return 0xFF;
         }
@@ -333,7 +333,7 @@ impl Ppu {
             .gstat_oam_lock(false)
             .unwrap_or_else(|| self.d.cpu().oam_read_blocked)
         {
-            if !self.hw_cgb() {
+            if !self.is_cgb_hardware() {
                 self.oam_read_row_corruption(addr);
             }
             return 0xFF;
@@ -357,7 +357,7 @@ impl Ppu {
         if dma_blocked {
             return;
         }
-        if self.hw_cgb() {
+        if self.is_cgb_hardware() {
             if addr < UNUSABLE_START {
                 self.oam.write(addr, val);
             } else {

@@ -84,7 +84,7 @@ impl Ppu {
                 }
                 Step::Objects => {
                     // Insert a pixel right at the FIFO's end.
-                    let hw = self.hw_cgb();
+                    let hw = self.is_cgb_hardware();
                     if self.wx == self.d.position_in_line.wrapping_add(7)
                         && (!hw || self.wx == 0)
                         && self.d.window.wx_triggered
@@ -107,7 +107,7 @@ impl Ppu {
                 Step::NextObject => {
                     let n = self.d.objs.count;
                     if n != 0
-                        && (self.lcdc & LCDC_OBJ_EN_B != 0 || self.hw_cgb())
+                        && (self.lcdc & LCDC_OBJ_EN_B != 0 || self.is_cgb_hardware())
                         && self.d.objs.x[n - 1] == self.x_for_object_match()
                     {
                         if self.d.objs.x[n - 1] == 167 {
@@ -246,7 +246,7 @@ impl Ppu {
         if self.d.current_line == LINES - 1 {
             self.d.window.line = 0xFF;
         }
-        if !self.hw_cgb()
+        if !self.is_cgb_hardware()
             && self.d.window.wy_triggered
             && self.lcdc & LCDC_WIN_EN_B != 0
             && self.wx == 166

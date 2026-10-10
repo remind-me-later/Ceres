@@ -72,7 +72,7 @@ impl Ppu {
             return;
         }
         let comparison =
-            if (!self.hw_cgb() || self.double_speed()) && self.d.irq.ly_for_comparison != -1 {
+            if (!self.is_cgb_hardware() || self.double_speed()) && self.d.irq.ly_for_comparison != -1 {
                 i32::from(self.d.irq.ly_for_comparison.to_le_bytes()[0])
             } else {
                 i32::from(self.d.current_line)
@@ -90,7 +90,7 @@ impl Ppu {
         if self.d.window.wy_check_scheduled && !self.d.window.wy_triggered {
             let offset = if self.double_speed {
                 6
-            } else if self.hw_cgb() {
+            } else if self.is_cgb_hardware() {
                 0
             } else {
                 2
@@ -98,7 +98,7 @@ impl Ppu {
             if (self.d.window.wy_units + offset).trailing_zeros() >= 3 {
                 self.d.window.wy_check_scheduled = false;
                 self.wy_check();
-                if self.d.state == State::Mode3Pixel && self.hw_cgb() && !self.double_speed() {
+                if self.d.state == State::Mode3Pixel && self.is_cgb_hardware() && !self.double_speed() {
                     self.d.window.wy_just_checked = true;
                 }
             }
@@ -106,7 +106,7 @@ impl Ppu {
     }
 
     pub(super) fn update_wx_glitch(&mut self) {
-        if !self.hw_cgb() {
+        if !self.is_cgb_hardware() {
             return;
         }
         if self.lcdc & LCDC_WIN_EN_B == 0 || !self.d.window.wy_triggered {
@@ -138,7 +138,7 @@ impl Ppu {
             && !self.d.window.enable_pending
         {
             let position = self.d.position_in_line;
-            let hw = self.hw_cgb();
+            let hw = self.is_cgb_hardware();
             let should_activate = if self.wx == 0 {
                 position == 249
                     || position == 240 && self.scx & 7 != 0

@@ -129,7 +129,7 @@ impl<A: AudioCallback> Gb<A> {
     }
 
     #[must_use]
-    fn read_high(&self, addr: u8) -> u8 {
+    fn read_io(&self, addr: u8) -> u8 {
         match addr {
             P1 => self.joy.read_p1(),
             SB => self.serial.read_sb(),
@@ -158,9 +158,9 @@ impl<A: AudioCallback> Gb<A> {
             WY => self.ppu.read_wy(),
             WX => self.ppu.read_wx(),
             KEY1 if matches!(self.cgb_mode, CgbMode::Cgb) => self.key1.read(),
-            VBK if self.is_cgb() => self.ppu.vram().read_vbk(),
+            VBK if self.model.is_cgb_hardware() => self.ppu.vram().read_vbk(),
             HDMA5 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.read_hdma5(),
-            BCPS if self.is_cgb() => self.ppu.bcp().spec(),
+            BCPS if self.model.is_cgb_hardware() => self.ppu.bcp().spec(),
             BCPD if matches!(self.cgb_mode, CgbMode::Cgb) => {
                 if self.ppu.is_cgb_palettes_accessible() {
                     self.ppu.bcp().data()
@@ -168,7 +168,7 @@ impl<A: AudioCallback> Gb<A> {
                     0xFF
                 }
             }
-            OCPS if self.is_cgb() => self.ppu.ocp().spec(),
+            OCPS if self.model.is_cgb_hardware() => self.ppu.ocp().spec(),
             OCPD if matches!(self.cgb_mode, CgbMode::Cgb) => {
                 if self.ppu.is_cgb_palettes_accessible() {
                     self.ppu.ocp().data()
@@ -178,14 +178,14 @@ impl<A: AudioCallback> Gb<A> {
             }
             OPRI if self.bootrom.is_enabled() => self.ppu.read_opri(),
             SVBK if matches!(self.cgb_mode, CgbMode::Cgb) => self.wram.svbk().read(),
-            PCM12 if self.is_cgb() => self.apu.pcm12(),
-            PCM34 if self.is_cgb() => self.apu.pcm34(),
+            PCM12 if self.model.is_cgb_hardware() => self.apu.pcm12(),
+            PCM34 if self.model.is_cgb_hardware() => self.apu.pcm34(),
             // Undocumented CGB registers. Per Pan Docs "FF72-FF73 — Bits 0-7
             // (CGB Mode only)": full R/W, init $00. "FF75 — Bits 4-6
             // (CGB Mode only)": bits 0-3 and 7 read as 1, bits 4-6 are R/W.
-            UNDOC_FF72 if self.is_cgb() => self.undoc_ff72,
-            UNDOC_FF73 if self.is_cgb() => self.undoc_ff73,
-            UNDOC_FF75 if self.is_cgb() => (self.undoc_ff75 & 0x70) | 0x8F,
+            UNDOC_FF72 if self.model.is_cgb_hardware() => self.undoc_ff72,
+            UNDOC_FF73 if self.model.is_cgb_hardware() => self.undoc_ff73,
+            UNDOC_FF75 if self.model.is_cgb_hardware() => (self.undoc_ff75 & 0x70) | 0x8F,
             HRAM_BEG..=HRAM_END => self.hram.read(addr),
             IE => self.ints.read_ie(),
             _ => 0xFF,
@@ -225,12 +225,12 @@ impl<A: AudioCallback> Gb<A> {
                 }
             }
             0xFEA0..=0xFEFF => self.ppu.peek_unusable(addr),
-            0xFF00..=0xFFFF => self.read_high((addr & 0xFF) as u8),
+            0xFF00..=0xFFFF => self.read_io((addr & 0xFF) as u8),
         }
     }
 
     #[expect(clippy::cognitive_complexity)]
-    fn write_high(&mut self, addr: u8, val: u8) {
+    fn write_io(&mut self, addr: u8, val: u8) {
         match addr {
             P1 => self.joy.write_joy(val),
             SB => self.serial.write_sb(val),
@@ -300,7 +300,7 @@ impl<A: AudioCallback> Gb<A> {
                 });
                 self.hdma.write_hdma5(val, in_hblank);
             }
-            BCPS if self.is_cgb() => self.ppu.bcp_mut().set_spec(val),
+            BCPS if self.model.is_cgb_hardware() => self.ppu.bcp_mut().set_spec(val),
             BCPD if self.are_cgb_regs_available() => {
                 if self.ppu.is_cgb_palettes_accessible() {
                     self.ppu.bcp_mut().set_data(val);
@@ -308,7 +308,7 @@ impl<A: AudioCallback> Gb<A> {
                     self.ppu.bcp_mut().auto_increment();
                 }
             }
-            OCPS if self.is_cgb() => self.ppu.ocp_mut().set_spec(val),
+            OCPS if self.model.is_cgb_hardware() => self.ppu.ocp_mut().set_spec(val),
             OCPD if self.are_cgb_regs_available() => {
                 if self.ppu.is_cgb_palettes_accessible() {
                     self.ppu.ocp_mut().set_data(val);
@@ -316,7 +316,7 @@ impl<A: AudioCallback> Gb<A> {
                     self.ppu.ocp_mut().auto_increment();
                 }
             }
-            OPRI if self.is_cgb() => {
+            OPRI if self.model.is_cgb_hardware() => {
                 // FIXME: understand behaviour outside of bootrom
                 if self.bootrom.is_enabled() {
                     self.ppu.write_opri(val);
@@ -326,9 +326,9 @@ impl<A: AudioCallback> Gb<A> {
             // Undocumented CGB registers. Per Pan Docs: FF72/FF73 are full
             // R/W (any bit can be written), FF75 only bits 4-6 are writable
             // (bits 0-3, 7 always read as 1).
-            UNDOC_FF72 if self.is_cgb() => self.undoc_ff72 = val,
-            UNDOC_FF73 if self.is_cgb() => self.undoc_ff73 = val,
-            UNDOC_FF75 if self.is_cgb() => self.undoc_ff75 = val & 0x70,
+            UNDOC_FF72 if self.model.is_cgb_hardware() => self.undoc_ff72 = val,
+            UNDOC_FF73 if self.model.is_cgb_hardware() => self.undoc_ff73 = val,
+            UNDOC_FF75 if self.model.is_cgb_hardware() => self.undoc_ff75 = val & 0x70,
             HRAM_BEG..=HRAM_END => self.hram.write(addr, val),
             IE => self.ints.write_ie(val),
             _ => (),
@@ -355,7 +355,7 @@ impl<A: AudioCallback> Gb<A> {
                 let dma_blocked = self.dma.blocks_oam_write();
                 self.ppu.cpu_write_oam_area(addr, val, dma_blocked);
             }
-            0xFF00..=0xFFFF => self.write_high((addr & 0xFF) as u8, val),
+            0xFF00..=0xFFFF => self.write_io((addr & 0xFF) as u8, val),
         }
     }
 }

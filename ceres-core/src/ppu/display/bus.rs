@@ -116,7 +116,7 @@ impl Ppu {
         if (1..=Oam::SIZE).contains(&dest) && self.d.bus.dma_src & 0xE000 == VRAM_START {
             // DMAing from VRAM!
             let offset = 1 - u16::from(self.d.bus.cpu_idle);
-            if self.hw_cgb() {
+            if self.is_cgb_hardware() {
                 if self.d.bus.dma_ppu_vram_conflict {
                     address = (self.d.bus.dma_ppu_vram_conflict_addr & VRAM_OFFSET_MASK)
                         | (address & VRAM_BANK1);

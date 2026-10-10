@@ -119,7 +119,7 @@ impl Ppu {
                 } else if position.wrapping_add(16) < 8 {
                     u16::from(self.scx >> 3)
                 } else {
-                    let sub = u16::from(self.hw_cgb() && !self.d.obj_fetch.active);
+                    let sub = u16::from(self.is_cgb_hardware() && !self.d.obj_fetch.active);
                     ((u16::from(self.scx) + u16::from(position) + 8 - sub) / 8)
                         & (TILE_MAP_WIDTH - 1)
                 };
@@ -137,7 +137,7 @@ impl Ppu {
                 }
                 let address = self.d.fetcher.tile_index_address;
                 self.d.fetcher.tile = self.vram_read(address);
-                if self.hw_cgb() {
+                if self.is_cgb_hardware() {
                     self.d.fetcher.attributes = self.vram_read(address + VRAM_BANK1);
                 }
                 self.d.fetcher.step = self.d.fetcher.step.next();
@@ -236,7 +236,7 @@ impl Ppu {
 
         if self.d.window.wy_triggered
             && self.lcdc & LCDC_WIN_EN_B == 0
-            && !self.hw_cgb()
+            && !self.is_cgb_hardware()
             && !self.d.window.no_pixel_insertion_glitch
         {
             // See https://github.com/LIJI32/SameBoy/issues/278

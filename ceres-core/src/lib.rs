@@ -160,7 +160,7 @@ impl<A: AudioCallback> Gb<A> {
             // the header: run it (it takes a fraction of a second).
             self.bootrom.enable();
             while self.bootrom.is_enabled() {
-                self.step_cpu();
+                self.run_cpu();
             }
             return;
         }
@@ -174,8 +174,8 @@ impl<A: AudioCallback> Gb<A> {
         self.cpu.set_pc(0x0100);
         self.cpu.set_sp(0xFFFE);
 
-        let cgb_cart = self.is_cgb() && self.cart.read_rom(HEADER_CGB_FLAG) & HEADER_CGB_B != 0;
-        if self.is_cgb() {
+        let cgb_cart = self.model.is_cgb_hardware() && self.cart.read_rom(HEADER_CGB_FLAG) & HEADER_CGB_B != 0;
+        if self.model.is_cgb_hardware() {
             self.cgb_mode = if cgb_cart {
                 CgbMode::Cgb
             } else {
@@ -235,15 +235,15 @@ impl<A: AudioCallback> Gb<A> {
         self.write_mem(io_addr(SCY), 0x00);
         self.write_mem(io_addr(SCX), 0x00);
         // OBP0/OBP1: $00 on CGB, $FF on DMG.
-        self.write_mem(io_addr(OBP0), if self.is_cgb() { 0x00 } else { 0xFF });
-        self.write_mem(io_addr(OBP1), if self.is_cgb() { 0x00 } else { 0xFF });
+        self.write_mem(io_addr(OBP0), if self.model.is_cgb_hardware() { 0x00 } else { 0xFF });
+        self.write_mem(io_addr(OBP1), if self.model.is_cgb_hardware() { 0x00 } else { 0xFF });
         self.write_mem(io_addr(WY), 0x00);
         self.write_mem(io_addr(WX), 0x00);
         // LCDC: $91 on all models.
         self.write_mem(io_addr(LCDC), 0x91);
         self.write_mem(io_addr(LYC), 0x00);
         // DMA: $00 on CGB, $FF on DMG.
-        self.dma.set_reg(if self.is_cgb() { 0x00 } else { 0xFF });
+        self.dma.set_reg(if self.model.is_cgb_hardware() { 0x00 } else { 0xFF });
         // BGP: $FC on all models.
         self.write_mem(io_addr(BGP), 0xFC);
         // Where the boot ROM leaves the PPU: measured by running the real boot
@@ -266,7 +266,7 @@ impl<A: AudioCallback> Gb<A> {
             _ => (148, 361),
         };
         self.ppu.set_position(line, dot);
-        if self.is_cgb() {
+        if self.model.is_cgb_hardware() {
             // Auto-increment on, at the index the boot ROM stopped at.
             self.write_mem(io_addr(BCPS), 0xC8);
             self.write_mem(io_addr(OCPS), 0xD0);
@@ -286,7 +286,7 @@ impl<A: AudioCallback> Gb<A> {
         //   cycleCounter = 0x102A0 (CGB) or 0x18FCC (DMG)
         //   internal_counter = cycleCounter - divLastUpdate
         //   DIV = internal_counter & 0xFFFF
-        if self.is_cgb() {
+        if self.model.is_cgb_hardware() {
             // DIV at the first cartridge instruction, measured by running the
             // real boot ROMs. The boot time depends a little on the header
             // (the compatibility palette lookup hashes the title): these
@@ -463,12 +463,6 @@ impl<A: AudioCallback> Gb<A> {
 
     #[must_use]
     #[inline]
-    pub const fn is_cgb(&self) -> bool {
-        self.model.is_cgb_hardware()
-    }
-
-    #[must_use]
-    #[inline]
     pub const fn pixel_data_rgba(&self) -> &[u8] {
         self.ppu.pixel_data_rgba()
     }
@@ -501,11 +495,6 @@ impl<A: AudioCallback> Gb<A> {
         }
 
         self.units_ran -= UNITS_PER_FRAME;
-    }
-
-    #[inline]
-    pub fn step_cpu(&mut self) {
-        self.run_cpu();
     }
 
     #[inline]

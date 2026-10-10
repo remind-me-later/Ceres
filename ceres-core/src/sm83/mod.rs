@@ -178,10 +178,6 @@ impl Sm83 {
         self.de
     }
 
-    pub const fn f(&self) -> u8 {
-        (self.af & 0xFF) as u8
-    }
-
     pub const fn hl(&self) -> u16 {
         self.hl
     }
@@ -395,8 +391,7 @@ impl Sm83 {
 
     #[must_use]
     fn get_r(&self, bus: &mut impl Bus, op: u8) -> u8 {
-        let id = ((op >> 1) + 1) & 3;
-        let lo = op & 1 != 0;
+        let (id, lo) = Self::operand(op);
         if id == 0 {
             if lo { self.a() } else { bus.read(self.hl) }
         } else if lo {
@@ -453,14 +448,27 @@ impl Sm83 {
         sp.wrapping_add(offset)
     }
 
+    /// The register pair in bits 4-5 of `op`: BC, DE, HL or SP (ids 1 to 4,
+    /// as in `get_rr`).
     #[must_use]
-    const fn opcode_to_reg_id(op: u8) -> u8 {
+    const fn pair_id(op: u8) -> u8 {
         (op >> 4) + 1
     }
 
+    /// The pair in bits 4-5 of `op` with AF (id 0) in place of SP: PUSH, POP
+    /// and the registers B, D, H and A, the high halves of the pairs.
     #[must_use]
-    const fn opcode_to_reg_id_no_sp(op: u8) -> u8 {
-        Self::opcode_to_reg_id(op) & 0x03
+    const fn pair_id_af(op: u8) -> u8 {
+        Self::pair_id(op) & 0x03
+    }
+
+    /// Where the 8-bit operand in bits 0-2 of `op` is (`op >> 3` for the
+    /// destination of LD r,r'): B C D E H L (HL) A are the high and low
+    /// halves of the pairs 1, 2, 3 and 0, (HL) taking the place of F. Returns
+    /// the pair id and whether it is the low half.
+    #[must_use]
+    const fn operand(op: u8) -> (u8, bool) {
+        (((op >> 1) + 1) & 3, op & 1 != 0)
     }
 
     #[must_use]
@@ -507,11 +515,10 @@ impl Sm83 {
     }
 
     fn set_r(&mut self, bus: &mut impl Bus, op: u8, val: u8) {
-        let id = ((op >> 1) + 1) & 3;
-        let lo = op & 1 != 0;
+        let (id, lo) = Self::operand(op);
         if id == 0 {
             if lo {
-                self.af = u16::from_le_bytes([self.f(), val]);
+                self.set_a(val);
             } else {
                 bus.write(self.hl, val);
             }
@@ -629,7 +636,9 @@ impl Sm83 {
     }
 }
 
-// Instructions
+// Instructions. In the names, r is an 8-bit register and rr a pair, high
+// and low are the halves of a pair (B D H A and C E L), dhl is (HL), d8 and
+// d16 are immediates, a8 and a16 immediate addresses.
 impl Sm83 {
     fn exec(&mut self, bus: &mut impl Bus, op: u8) {
         match op {
@@ -637,17 +646,17 @@ impl Sm83 {
             0x01 | 0x11 | 0x21 | 0x31 => self.ld_rr_d16(bus, op),
             0x02 | 0x12 => self.ld_drr_a(bus, op),
             0x03 | 0x13 | 0x23 | 0x33 => self.inc_rr(bus, op),
-            0x04 | 0x14 | 0x24 | 0x3C => self.inc_hr(op),
-            0x05 | 0x15 | 0x25 | 0x3D => self.dec_hr(op),
-            0x06 | 0x16 | 0x26 | 0x3E => self.ld_hr_d8(bus, op),
+            0x04 | 0x14 | 0x24 | 0x3C => self.inc_high(op),
+            0x05 | 0x15 | 0x25 | 0x3D => self.dec_high(op),
+            0x06 | 0x16 | 0x26 | 0x3E => self.ld_high_d8(bus, op),
             0x07 => self.rlca(),
             0x08 => self.ld_da16_sp(bus),
             0x09 | 0x19 | 0x29 | 0x39 => self.add_hl_rr(bus, op),
             0x0A | 0x1A => self.ld_a_drr(bus, op),
             0x0B | 0x1B | 0x2B | 0x3B => self.dec_rr(bus, op),
-            0x0C | 0x1C | 0x2C => self.inc_lr(op),
-            0x0D | 0x1D | 0x2D => self.dec_lr(op),
-            0x0E | 0x1E | 0x2E => self.ld_lr_d8(bus, op),
+            0x0C | 0x1C | 0x2C => self.inc_low(op),
+            0x0D | 0x1D | 0x2D => self.dec_low(op),
+            0x0E | 0x1E | 0x2E => self.ld_low_d8(bus, op),
             0x0F => self.rrca(),
             0x10 => self.stop(bus),
             0x17 => self.rla(),
@@ -746,7 +755,7 @@ impl Sm83 {
     }
 
     fn add_hl_rr(&mut self, bus: &mut impl Bus, op: u8) {
-        let id = Self::opcode_to_reg_id(op);
+        let id = Self::pair_id(op);
         let hl = self.hl;
         let rr = self.get_rr(id);
         let (res, carry) = hl.overflowing_add(rr);
@@ -860,8 +869,8 @@ impl Sm83 {
         }
     }
 
-    fn dec_hr(&mut self, op: u8) {
-        let id = Self::opcode_to_reg_id_no_sp(op);
+    fn dec_high(&mut self, op: u8) {
+        let id = Self::pair_id_af(op);
         let rr = self.get_rr(id).wrapping_sub(0x100);
         self.set_rr(id, rr);
         self.af &= !(ZF | HF);
@@ -876,8 +885,8 @@ impl Sm83 {
         }
     }
 
-    fn dec_lr(&mut self, op: u8) {
-        let id = Self::opcode_to_reg_id(op);
+    fn dec_low(&mut self, op: u8) {
+        let id = Self::pair_id(op);
         let val = self.get_rr(id).wrapping_sub(1) & 0xFF;
         let rr = self.get_rr(id) & 0xFF00 | val;
         self.set_rr(id, rr);
@@ -895,7 +904,7 @@ impl Sm83 {
     }
 
     fn dec_rr(&mut self, bus: &mut impl Bus, op: u8) {
-        let id = Self::opcode_to_reg_id(op);
+        let id = Self::pair_id(op);
         bus.tick_oam_bug(self.get_rr(id));
         self.set_rr(id, self.get_rr(id).wrapping_sub(1));
     }
@@ -962,8 +971,8 @@ impl Sm83 {
         }
     }
 
-    fn inc_hr(&mut self, op: u8) {
-        let id = Self::opcode_to_reg_id_no_sp(op);
+    fn inc_high(&mut self, op: u8) {
+        let id = Self::pair_id_af(op);
         let rr = self.get_rr(id).wrapping_add(0x100);
         self.set_rr(id, rr);
         self.af &= !(NF | ZF | HF);
@@ -977,8 +986,8 @@ impl Sm83 {
         }
     }
 
-    fn inc_lr(&mut self, op: u8) {
-        let id = Self::opcode_to_reg_id(op);
+    fn inc_low(&mut self, op: u8) {
+        let id = Self::pair_id(op);
         let val = self.get_rr(id).wrapping_add(1) & 0xFF;
         let rr = self.get_rr(id) & 0xFF00 | val;
         self.set_rr(id, rr);
@@ -995,7 +1004,7 @@ impl Sm83 {
     }
 
     fn inc_rr(&mut self, bus: &mut impl Bus, op: u8) {
-        let id = Self::opcode_to_reg_id(op);
+        let id = Self::pair_id(op);
         bus.tick_oam_bug(self.get_rr(id));
         self.set_rr(id, self.get_rr(id).wrapping_add(1));
     }
@@ -1058,7 +1067,7 @@ impl Sm83 {
     }
 
     fn ld_a_drr(&mut self, bus: &mut impl Bus, op: u8) {
-        let addr = self.get_rr(Self::opcode_to_reg_id(op));
+        let addr = self.get_rr(Self::pair_id(op));
         let val = bus.read(addr);
         self.set_a(val);
     }
@@ -1100,7 +1109,7 @@ impl Sm83 {
     }
 
     fn ld_drr_a(&self, bus: &mut impl Bus, op: u8) {
-        let id = Self::opcode_to_reg_id(op);
+        let id = Self::pair_id(op);
         let addr = self.get_rr(id);
         bus.write(addr, self.a());
     }
@@ -1111,20 +1120,20 @@ impl Sm83 {
         self.hl = res;
     }
 
-    fn ld_hr_d8(&mut self, bus: &mut impl Bus, op: u8) {
-        let id = Self::opcode_to_reg_id_no_sp(op);
+    fn ld_high_d8(&mut self, bus: &mut impl Bus, op: u8) {
+        let id = Self::pair_id_af(op);
         let hi = u16::from(self.imm8(bus));
         self.set_rr(id, (hi << 8) | self.get_rr(id) & 0xFF);
     }
 
-    fn ld_lr_d8(&mut self, bus: &mut impl Bus, op: u8) {
-        let id = Self::opcode_to_reg_id(op);
+    fn ld_low_d8(&mut self, bus: &mut impl Bus, op: u8) {
+        let id = Self::pair_id(op);
         let lo = u16::from(self.imm8(bus));
         self.set_rr(id, self.get_rr(id) & 0xFF00 | lo);
     }
 
     fn ld_rr_d16(&mut self, bus: &mut impl Bus, op: u8) {
-        let id = Self::opcode_to_reg_id(op);
+        let id = Self::pair_id(op);
         let imm = self.imm16(bus);
         self.set_rr(id, imm);
     }
@@ -1155,13 +1164,13 @@ impl Sm83 {
 
     fn pop_rr(&mut self, bus: &mut impl Bus, op: u8) {
         let val = self.pop(bus);
-        let id = Self::opcode_to_reg_id_no_sp(op);
+        let id = Self::pair_id_af(op);
         self.set_rr(id, val);
         self.af &= 0xFFF0;
     }
 
     fn push_rr(&mut self, bus: &mut impl Bus, op: u8) {
-        let id = Self::opcode_to_reg_id_no_sp(op);
+        let id = Self::pair_id_af(op);
         self.push(bus, self.get_rr(id));
     }
 
@@ -1642,7 +1651,7 @@ impl<A: AudioCallback> Bus for Gb<A> {
 
     fn dma_run(&mut self, wake: bool) {
         if wake {
-            self.dma.add_cycles(4);
+            self.dma.set_cycles(4);
         }
         self.run_dma();
     }

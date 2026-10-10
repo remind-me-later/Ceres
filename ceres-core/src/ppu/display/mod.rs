@@ -230,7 +230,7 @@ const fn model_ge_cgb_d(m: Model) -> bool {
 
 impl Ppu {
     #[inline]
-    pub(in crate::ppu) const fn hw_cgb(&self) -> bool {
+    pub(in crate::ppu) const fn is_cgb_hardware(&self) -> bool {
         self.model.is_cgb_hardware()
     }
 

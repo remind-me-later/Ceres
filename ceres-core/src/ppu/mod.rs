@@ -454,7 +454,7 @@ impl Ppu {
         // Disabling objects while an object is being fetched aborts the
         // fetch on non-CGB hardware.
         self.abort_object_fetch_on_obj_disable(val);
-        if self.hw_cgb() && self.lcdc & LCDC_WIN_EN_B != 0 && val & LCDC_WIN_EN_B == 0 {
+        if self.is_cgb_hardware() && self.lcdc & LCDC_WIN_EN_B != 0 && val & LCDC_WIN_EN_B == 0 {
             self.cancel_window_start();
         }
 

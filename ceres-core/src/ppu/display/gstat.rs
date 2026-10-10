@@ -412,7 +412,7 @@ impl Ppu {
     /// The CGB follows gambatte's model (up to revision C).
     #[must_use]
     pub const fn gambatte_stat(&self) -> bool {
-        self.hw_cgb() && !model_ge_cgb_d(self.model)
+        self.is_cgb_hardware() && !model_ge_cgb_d(self.model)
     }
 
     /// The STAT interrupt and LY follow gambatte's model (its CGB, and its
@@ -427,7 +427,7 @@ impl Ppu {
         if !self.gambatte_irq() {
             return;
         }
-        self.d.gstat.cgb = self.hw_cgb();
+        self.d.gstat.cgb = self.is_cgb_hardware();
         let ds = self.double_speed();
         let g = &mut self.d.gstat;
         g.g += 1;
@@ -441,7 +441,7 @@ impl Ppu {
         if !g.lcd_on {
             return;
         }
-        if self.hw_cgb() {
+        if self.is_cgb_hardware() {
             self.gstat_window_checks();
         }
         self.gstat_events(ints, ds);

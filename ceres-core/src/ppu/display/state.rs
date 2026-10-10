@@ -158,7 +158,7 @@ impl Ppu {
         if !self.gambatte_stat() {
             self.wy_check();
         }
-        self.d.cpu.oam_write_blocked = self.hw_cgb() && !self.double_speed();
+        self.d.cpu.oam_write_blocked = self.is_cgb_hardware() && !self.double_speed();
         self.d.objs.accessed_oam_row = 0;
         self.d.objs.size_change = None;
         self.sleep(State::LineOamWriteLock, 2);
@@ -169,7 +169,7 @@ impl Ppu {
     fn first_line(&mut self, ints: &mut Interrupts, state: State) -> Option<State> {
         match state {
             State::LcdOn => {
-                if !self.hw_cgb() {
+                if !self.is_cgb_hardware() {
                     self.sleep(State::FirstLine, 1);
                     return None;
                 }
@@ -207,7 +207,7 @@ impl Ppu {
                 self.d.irq.mode_for_interrupt = 3;
                 self.d.cpu.oam_write_blocked = true;
                 self.d.cpu.oam_read_blocked = true;
-                let vram_blocked = self.double_speed() || !self.hw_cgb();
+                let vram_blocked = self.double_speed() || !self.is_cgb_hardware();
                 self.d.cpu.vram_read_blocked = vram_blocked;
                 self.d.cpu.vram_write_blocked = vram_blocked;
                 self.sleep_in_line(State::FirstLinePalettesLock, 2);
@@ -233,7 +233,7 @@ impl Ppu {
     fn oam_scan(&mut self, ints: &mut Interrupts, state: State) -> Option<State> {
         match state {
             State::LineOamWriteLock => {
-                self.d.cpu.oam_write_blocked = self.hw_cgb();
+                self.d.cpu.oam_write_blocked = self.is_cgb_hardware();
                 self.sleep(State::LineLy, 1);
                 None
             }
@@ -246,7 +246,7 @@ impl Ppu {
                 if self.d.current_line != 0 {
                     self.d.irq.mode_for_interrupt = 2;
                     self.stat &= !STAT_MODE_B;
-                } else if !self.hw_cgb() {
+                } else if !self.is_cgb_hardware() {
                     self.stat &= !STAT_MODE_B;
                 } else {
                     // CGB line 0: STAT keeps its mode bits.
@@ -263,7 +263,7 @@ impl Ppu {
                 if !self.gambatte_stat() {
                     self.wy_check();
                 }
-                if self.d.current_line == 0 && !self.hw_cgb() {
+                if self.d.current_line == 0 && !self.is_cgb_hardware() {
                     // The DMG's mode 2 condition of line 0 comes one dot after
                     // the other lines'.
                     self.stat_update(ints);
@@ -281,22 +281,22 @@ impl Ppu {
             }
             State::OamScanNext => {
                 // The CGB adds the object before the sleep.
-                if self.hw_cgb() {
+                if self.is_cgb_hardware() {
                     self.add_object_from_index(self.d.objs.index);
                 }
                 self.sleep(State::OamScanObject, 2);
                 None
             }
             State::OamScanObject => {
-                if !self.hw_cgb() {
+                if !self.is_cgb_hardware() {
                     self.add_object_from_index(self.d.objs.index);
                     self.d.objs.accessed_oam_row = (self.d.objs.index & !1) * 4 + 8;
                 }
                 if self.d.objs.index == 37 {
-                    self.d.cpu.vram_read_blocked = !self.hw_cgb();
+                    self.d.cpu.vram_read_blocked = !self.is_cgb_hardware();
                     self.d.cpu.vram_write_blocked = false;
                     self.d.cpu.cgb_palettes_blocked = false;
-                    self.d.cpu.oam_write_blocked = self.hw_cgb();
+                    self.d.cpu.oam_write_blocked = self.is_cgb_hardware();
                 }
                 self.d.objs.index += 1;
                 if self.d.objs.index < Oam::OBJECTS {
@@ -480,7 +480,7 @@ impl Ppu {
     /// Line 153: LY reads 0 for most of it, at a revision specific time.
     fn line_153(&mut self, ints: &mut Interrupts, state: State) -> Option<State> {
         let cgb_d = model_ge_cgb_d(self.model);
-        let early_lyzero = self.hw_cgb() && !cgb_d && self.double_speed();
+        let early_lyzero = self.is_cgb_hardware() && !cgb_d && self.double_speed();
         match state {
             State::Line153 => {
                 self.d.irq.ly_for_comparison = -1;
@@ -524,7 +524,7 @@ impl Ppu {
                 self.stat_update(ints);
                 // The DMG compares with line 0 one dot later, and so does the
                 // CGB in double speed.
-                let compare_zero = if self.hw_cgb() && !self.double_speed() {
+                let compare_zero = if self.is_cgb_hardware() && !self.double_speed() {
                     4
                 } else {
                     5
@@ -534,7 +534,7 @@ impl Ppu {
             State::Line153CompareZero => {
                 self.d.irq.ly_for_comparison = 0;
                 self.stat_update(ints);
-                let rest = if self.hw_cgb() && !self.double_speed() {
+                let rest = if self.is_cgb_hardware() && !self.double_speed() {
                     12
                 } else {
                     11
@@ -547,7 +547,7 @@ impl Ppu {
                 self.d.window.wy_triggered = false;
                 self.d.window.line0_wy_countdown = if self.double_speed() {
                     8
-                } else if self.hw_cgb() {
+                } else if self.is_cgb_hardware() {
                     7
                 } else {
                     6

@@ -90,7 +90,7 @@ impl Ppu {
             1 => self.stat & STAT_IF_VBLANK_B != 0,
             2 => self.stat & STAT_IF_OAM_B != 0,
             MODE_VBLANK_ENTRY => {
-                let stat = if self.hw_cgb() && !self.double_speed() {
+                let stat = if self.is_cgb_hardware() && !self.double_speed() {
                     self.d.irq.entry_stat
                 } else {
                     self.stat
@@ -130,7 +130,7 @@ impl Ppu {
             self.gstat_write_lyc(val, ints);
         }
         let state = self.d.state;
-        let cgb = self.hw_cgb();
+        let cgb = self.is_cgb_hardware();
         // These are the states around LY changes; the display routine calls
         // `stat_update` itself so LYC writes conflict on the right dot.
         if state == State::Line153LycGlitch && cgb {
@@ -168,7 +168,7 @@ impl Ppu {
         // On the CGB the HBlank condition is already held a dot before the
         // mode bits change are evaluated: a write in that gap comes too late
         // to prevent the interrupt.
-        if self.hw_cgb()
+        if self.is_cgb_hardware()
             && self.d.state == State::HBlankStart
             && self.d.irq.mode_for_interrupt == 0
             && self.lcdc & LCDC_ON_B != 0
@@ -186,7 +186,7 @@ impl Ppu {
             // does, with the glitch that sets all the enables).
             if old & STAT_LYC_B != 0
                 && old & STAT_IF_LYC_B == 0
-                && (!self.hw_cgb() || val & STAT_IF_LYC_B != 0)
+                && (!self.is_cgb_hardware() || val & STAT_IF_LYC_B != 0)
             {
                 ints.request_lcd();
             }
@@ -204,7 +204,7 @@ impl Ppu {
 
         // On the DMG the HBlank interrupt condition begins when HBlankStart runs,
         // a dot after the mode bits change: a write in between does not see it.
-        let in_hblank_gap = !self.hw_cgb()
+        let in_hblank_gap = !self.is_cgb_hardware()
             && self.d.state == State::HBlankStart
             && self.d.irq.mode_for_interrupt == 0;
         if in_hblank_gap {

@@ -13,7 +13,7 @@ use {
 
 impl Ppu {
     pub(super) fn render_pixel_if_possible(&mut self) -> Option<PixelOut> {
-        let obj_en = self.lcdc & LCDC_OBJ_EN_B != 0 || self.hw_cgb();
+        let obj_en = self.lcdc & LCDC_OBJ_EN_B != 0 || self.is_cgb_hardware();
         if self.d.objs.count != 0 && obj_en && self.d.objs.x[self.d.objs.count - 1] == 0 {
             return None;
         }
