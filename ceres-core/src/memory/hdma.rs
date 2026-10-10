@@ -21,7 +21,7 @@ const HDMA_BLOCK_SIZE: u16 = 0x10;
     reason = "Independent flags of the transfer state machine"
 )]
 #[derive(Default)]
-pub struct Hdma {
+pub(crate) struct Hdma {
     /// gambatte's `haltHdmaState_` for a speed switch on the CGB-C.
     switch_state: SwitchHdma,
     /// STAT mode was non-zero when the CPU last halted/stopped; an `HBlank`
@@ -40,7 +40,7 @@ pub struct Hdma {
 /// at the wake if the wake is in an `HBlank` that did not request it yet
 /// (`Low`), not (`High`), or in any case (`Requested`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum SwitchHdma {
+pub(crate) enum SwitchHdma {
     #[default]
     Low,
     High,
@@ -49,46 +49,46 @@ pub enum SwitchHdma {
 
 impl Hdma {
     #[must_use]
-    pub const fn switch_state(&self) -> SwitchHdma {
+    pub(crate) const fn switch_state(&self) -> SwitchHdma {
         self.switch_state
     }
 
-    pub const fn set_switch_state(&mut self, state: SwitchHdma) {
+    pub(crate) const fn set_switch_state(&mut self, state: SwitchHdma) {
         self.switch_state = state;
     }
 
     /// An `HBlank` transfer is requested and has not run yet.
     #[must_use]
-    pub const fn hblank_requested(&self) -> bool {
+    pub(crate) const fn hblank_requested(&self) -> bool {
         self.on && self.on_hblank
     }
 
     #[must_use]
-    pub const fn hblank_enabled(&self) -> bool {
+    pub(crate) const fn hblank_enabled(&self) -> bool {
         self.on_hblank
     }
 
     /// The request of an `HBlank` transfer is dropped.
-    pub const fn ack_hblank_request(&mut self) {
+    pub(crate) const fn ack_hblank_request(&mut self) {
         if self.on_hblank {
             self.on = false;
         }
     }
 
     /// An `HBlank` transfer is requested.
-    pub const fn request_hblank(&mut self) {
+    pub(crate) const fn request_hblank(&mut self) {
         if self.on_hblank {
             self.on = true;
         }
     }
 
     #[must_use]
-    pub const fn is_on(&self) -> bool {
+    pub(crate) const fn is_on(&self) -> bool {
         self.on
     }
 
     #[must_use]
-    pub const fn read_hdma5(&self) -> u8 {
+    pub(crate) const fn read_hdma5(&self) -> u8 {
         // active on low
         (if self.on || self.on_hblank {
             0
@@ -98,58 +98,58 @@ impl Hdma {
     }
 
     #[must_use]
-    pub const fn is_transferring(&self) -> bool {
+    pub(crate) const fn is_transferring(&self) -> bool {
         self.in_progress
     }
 
     #[must_use]
-    pub const fn has_multiple_steps_left(&self) -> bool {
+    pub(crate) const fn has_multiple_steps_left(&self) -> bool {
         self.steps_left > 1
     }
 
     #[must_use]
-    pub const fn is_at_block_end(&self) -> bool {
+    pub(crate) const fn is_at_block_end(&self) -> bool {
         (self.dst & (HDMA_BLOCK_SIZE - 1)) == HDMA_BLOCK_SIZE - 1
     }
 
     #[must_use]
-    pub const fn cpu_halted(&self) -> bool {
+    pub(crate) const fn cpu_halted(&self) -> bool {
         self.cpu_halted
     }
 
-    pub const fn set_cpu_halted(&mut self, halted: bool, mode_is_hblank: bool) {
+    pub(crate) const fn set_cpu_halted(&mut self, halted: bool, mode_is_hblank: bool) {
         self.cpu_halted = halted;
         if halted {
             self.allow_on_wake = !mode_is_hblank;
         }
     }
 
-    pub const fn note_stop(&mut self, mode_is_hblank: bool) {
+    pub(crate) const fn note_stop(&mut self, mode_is_hblank: bool) {
         self.allow_on_wake = !mode_is_hblank;
     }
 
     /// Wake-up from HALT/STOP or interrupt dispatch.
-    pub const fn wake(&mut self, mode_is_hblank: bool) {
+    pub(crate) const fn wake(&mut self, mode_is_hblank: bool) {
         if self.on_hblank && mode_is_hblank && self.allow_on_wake {
             self.on = true;
         }
     }
 
     /// The PPU reached the start of `HBlank`.
-    pub const fn hblank_edge(&mut self, stopped: bool) {
+    pub(crate) const fn hblank_edge(&mut self, stopped: bool) {
         if self.on_hblank && !self.cpu_halted && !stopped {
             self.on = true;
         }
     }
 
     /// The LCD was switched off while STAT reported a non-zero mode.
-    pub const fn lcd_off_edge(&mut self) {
+    pub(crate) const fn lcd_off_edge(&mut self) {
         if self.on_hblank {
             self.on = true;
         }
     }
 
-    pub fn write_hdma1(&mut self, val: u8) {
+    pub(crate) fn write_hdma1(&mut self, val: u8) {
         self.src = (self.src & 0xF0) | (u16::from(val) << 8);
         // Range 0xE*** acts like 0xF*** and can't overflow to anything
         // meaningful.
@@ -158,20 +158,20 @@ impl Hdma {
         }
     }
 
-    pub const fn write_hdma2(&mut self, val: u8) {
+    pub(crate) const fn write_hdma2(&mut self, val: u8) {
         self.src = (self.src & 0xFF00) | (val as u16 & !(HDMA_BLOCK_SIZE - 1));
     }
 
-    pub fn write_hdma3(&mut self, val: u8) {
+    pub(crate) fn write_hdma3(&mut self, val: u8) {
         self.dst = (self.dst & 0xF0) | (u16::from(val) << 8);
     }
 
-    pub const fn write_hdma4(&mut self, val: u8) {
+    pub(crate) const fn write_hdma4(&mut self, val: u8) {
         self.dst = (self.dst & 0xFF00) | (val as u16 & !(HDMA_BLOCK_SIZE - 1));
     }
 
     /// `in_hblank`: STAT mode is 0 and the PPU is not at the HBlank/OAM edge.
-    pub const fn write_hdma5(&mut self, val: u8, in_hblank: bool) {
+    pub(crate) const fn write_hdma5(&mut self, val: u8, in_hblank: bool) {
         self.steps_left = (val as u16 & HDMA5_BLOCKS) + 1;
         if val & HDMA5_HBLANK_B == 0 && self.on_hblank {
             // Cancel the running HBlank transfer.

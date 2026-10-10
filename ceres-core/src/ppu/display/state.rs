@@ -22,7 +22,7 @@ const HBLANK_HDMA_DELAY: u8 = 1;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
-pub enum State {
+pub(crate) enum State {
     // The first line after the LCD is turned on: no OAM scan.
     LcdOn = 0,
     FirstLine = 23,

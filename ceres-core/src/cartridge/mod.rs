@@ -11,7 +11,7 @@ use {
 };
 
 #[derive(Debug)]
-pub struct Cartridge {
+pub(crate) struct Cartridge {
     /// True for the special MBC1 1 MiB (64-bank) "multicart" wiring.
     /// Detected via the heuristic that every ROM bank carries the
     /// Nintendo logo at $0104–$0133, which real multicarts tend to do
@@ -75,8 +75,8 @@ const HEADER_TITLE: usize = 0x134;
 const HEADER_TITLE_END_OLD: usize = 0x144;
 const HEADER_TITLE_END_NEW: usize = 0x13F;
 /// Bit 7 set: the game supports the CGB.
-pub const HEADER_CGB_FLAG: u16 = 0x143;
-pub const HEADER_CGB_B: u8 = 0x80;
+pub(crate) const HEADER_CGB_FLAG: u16 = 0x143;
+pub(crate) const HEADER_CGB_B: u8 = 0x80;
 const HEADER_CART_TYPE: usize = 0x147;
 const HEADER_RAM_SIZE: usize = 0x149;
 /// 0x33 means the new licensee code (at 0x144) is used instead.
@@ -117,7 +117,7 @@ fn detect_mbc1_multicart(rom: &[u8], rom_size: ROMSize) -> bool {
 
 impl Cartridge {
     #[must_use]
-    pub fn ascii_title(&self) -> &[u8] {
+    pub(crate) fn ascii_title(&self) -> &[u8] {
         let range = if self.is_old_licensee_code() {
             HEADER_TITLE..HEADER_TITLE_END_OLD
         } else {
@@ -130,7 +130,7 @@ impl Cartridge {
     }
 
     #[must_use]
-    pub const fn global_checksum(&self) -> u16 {
+    pub(crate) const fn global_checksum(&self) -> u16 {
         u16::from_le_bytes([
             self.rom[HEADER_GLOBAL_CHECKSUM + 1],
             self.rom[HEADER_GLOBAL_CHECKSUM],
@@ -138,29 +138,29 @@ impl Cartridge {
     }
 
     #[must_use]
-    pub const fn has_battery(&self) -> bool {
+    pub(crate) const fn has_battery(&self) -> bool {
         self.has_battery
     }
 
     #[must_use]
-    pub const fn header_checksum(&self) -> u8 {
+    pub(crate) const fn header_checksum(&self) -> u8 {
         self.rom[HEADER_CHECKSUM]
     }
 
     #[must_use]
-    pub const fn is_old_licensee_code(&self) -> bool {
+    pub(crate) const fn is_old_licensee_code(&self) -> bool {
         self.rom[HEADER_OLD_LICENSEE] != NEW_LICENSEE
     }
 
     /// The cartridge RAM, with or without a battery (MBC2's built-in 512
     /// half-bytes included).
     #[must_use]
-    pub fn ram(&self) -> &[u8] {
+    pub(crate) fn ram(&self) -> &[u8] {
         &self.ram
     }
 
     #[must_use]
-    pub fn ram_mut(&mut self) -> &mut [u8] {
+    pub(crate) fn ram_mut(&mut self) -> &mut [u8] {
         &mut self.ram
     }
 
@@ -168,7 +168,7 @@ impl Cartridge {
         clippy::similar_names,
         reason = "ROM and RAM are common names in this context"
     )]
-    pub fn new(rom: Box<[u8]>) -> Result<Self, Error> {
+    pub(crate) fn new(rom: Box<[u8]>) -> Result<Self, Error> {
         if rom.len() < HEADER_END {
             return Err(Error::InvalidRomHeaderSize);
         }
@@ -232,7 +232,7 @@ impl Cartridge {
     }
 
     #[must_use]
-    pub fn read_ram(&self, addr: u16) -> u8 {
+    pub(crate) fn read_ram(&self, addr: u16) -> u8 {
         const fn mbc_read_ram(cart: &Cartridge, ram_enabled: bool, addr: u16) -> u8 {
             if cart.ram_size.has_ram() && ram_enabled {
                 let addr = cart.ram_addr(addr);
@@ -263,7 +263,7 @@ impl Cartridge {
     }
 
     #[must_use]
-    pub const fn read_rom(&self, addr: u16) -> u8 {
+    pub(crate) const fn read_rom(&self, addr: u16) -> u8 {
         let (lo, hi) = self.rom_offsets;
 
         let bank_addr = match addr {
@@ -276,7 +276,7 @@ impl Cartridge {
     }
 
     #[must_use]
-    pub const fn rtc(&self) -> Option<&Mbc3RTC> {
+    pub(crate) const fn rtc(&self) -> Option<&Mbc3RTC> {
         if let Mbc::Mbc3 {
             rtc: Some(ref rtc), ..
         } = self.mbc
@@ -288,7 +288,7 @@ impl Cartridge {
     }
 
     #[must_use]
-    pub const fn rtc_mut(&mut self) -> Option<&mut Mbc3RTC> {
+    pub(crate) const fn rtc_mut(&mut self) -> Option<&mut Mbc3RTC> {
         if let Mbc::Mbc3 { ref mut rtc, .. } = self.mbc {
             rtc.as_mut()
         } else {
@@ -296,7 +296,7 @@ impl Cartridge {
         }
     }
 
-    pub const fn run_rtc(&mut self, units: u32) {
+    pub(crate) const fn run_rtc(&mut self, units: u32) {
         if let Mbc::Mbc3 {
             rtc: Some(ref mut rtc),
             ..
@@ -307,11 +307,11 @@ impl Cartridge {
     }
 
     #[must_use]
-    pub const fn version(&self) -> u8 {
+    pub(crate) const fn version(&self) -> u8 {
         self.rom[HEADER_VERSION]
     }
 
-    pub fn write_ram(&mut self, addr: u16, val: u8) {
+    pub(crate) fn write_ram(&mut self, addr: u16, val: u8) {
         fn mbc_write_ram(cart: &mut Cartridge, ram_enabled: bool, addr: u16, val: u8) {
             if cart.ram_size.has_ram() && ram_enabled {
                 let addr = cart.ram_addr(addr);
@@ -342,7 +342,7 @@ impl Cartridge {
     }
 
     #[expect(clippy::too_many_lines)]
-    pub fn write_rom(&mut self, addr: u16, val: u8) {
+    pub(crate) fn write_rom(&mut self, addr: u16, val: u8) {
         match self.mbc {
             Mbc::Mbc0 => (),
             Mbc::Mbc1 { ref mut bank_mode } => {

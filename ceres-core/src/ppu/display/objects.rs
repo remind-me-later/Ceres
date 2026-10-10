@@ -18,7 +18,7 @@ const MAX_OBJECTS_PER_LINE: usize = 10;
 
 /// The mode 2 object search.
 #[derive(Clone)]
-pub struct ObjectSearch {
+pub(super) struct ObjectSearch {
     pub count: usize,
     pub found: usize,
     /// OAM indices of the objects on the line, sorted by X (descending).
@@ -40,7 +40,7 @@ pub struct ObjectSearch {
 /// the size at line cycles `2 * index` and `2 * index + 1` on gambatte's
 /// clock and is large if either sample is; the samples after `lc` see `new`.
 #[derive(Clone, Copy)]
-pub struct SizeChange {
+pub(super) struct SizeChange {
     pub line: u8,
     pub lc: i64,
     pub new: bool,
@@ -73,7 +73,7 @@ impl Default for ObjectSearch {
 
 /// The fetch of an object's tile in mode 3.
 #[derive(Clone, Default)]
-pub struct ObjectFetch {
+pub(super) struct ObjectFetch {
     pub flags: u8,
     pub line_address: u16,
     pub data: [u8; 2],
@@ -196,7 +196,7 @@ impl Ppu {
     /// read in the same cycle would see. The search samples the size later
     /// than this PPU looks at each entry (gambatte's `OamReader`), so the
     /// entries already searched are looked at again.
-    pub fn cgb_obj_size_write(&mut self, val: u8, units_early: i64) {
+    pub(crate) fn cgb_obj_size_write(&mut self, val: u8, units_early: i64) {
         let new = val & LCDC_OBJ_SIZE_B != 0;
         if !self.gambatte_stat()
             || self.lcdc & LCDC_ON_B == 0
@@ -266,7 +266,7 @@ impl Ppu {
         self.is_cgb_hardware() && !self.opri
     }
 
-    pub const fn set_obj_size_fetch(&mut self, big: bool) {
+    pub(crate) const fn set_obj_size_fetch(&mut self, big: bool) {
         self.d.obj_fetch.size_16 = big;
     }
 

@@ -7,9 +7,9 @@ mod vram;
 
 use crate::interrupts::Interrupts;
 use display::{LAST_LINE, LINE_LENGTH, LINES, LINES_PER_FRAME};
-pub use oam::Oam;
-pub use oam_bug::unusable_index;
-pub use vram::Vram;
+pub(crate) use oam::Oam;
+pub(crate) use oam_bug::unusable_index;
+pub(crate) use vram::Vram;
 use {self::color_palette::ColorPalette, crate::CgbMode, crate::Model, rgba_buf::RgbaBuf};
 
 pub const PX_WIDTH: u8 = 160;
@@ -17,40 +17,40 @@ pub const PX_HEIGHT: u8 = 144;
 
 // LCDC bits
 /// DMG: background and window enable. CGB: their priority over objects.
-pub const LCDC_BG_EN_B: u8 = 0x01;
-pub const LCDC_OBJ_EN_B: u8 = 0x02;
+pub(crate) const LCDC_BG_EN_B: u8 = 0x01;
+pub(crate) const LCDC_OBJ_EN_B: u8 = 0x02;
 /// Objects are 8x16.
-pub const LCDC_OBJ_SIZE_B: u8 = 0x04;
+pub(crate) const LCDC_OBJ_SIZE_B: u8 = 0x04;
 /// The background uses the tile map at 0x9C00.
-pub const LCDC_BG_MAP_B: u8 = 0x08;
+pub(crate) const LCDC_BG_MAP_B: u8 = 0x08;
 /// The background and window use the tiles at 0x8000.
-pub const LCDC_TILE_SEL_B: u8 = 0x10;
-pub const LCDC_WIN_EN_B: u8 = 0x20;
+pub(crate) const LCDC_TILE_SEL_B: u8 = 0x10;
+pub(crate) const LCDC_WIN_EN_B: u8 = 0x20;
 /// The window uses the tile map at 0x9C00.
-pub const LCDC_WIN_MAP_B: u8 = 0x40;
-pub const LCDC_ON_B: u8 = 0x80;
+pub(crate) const LCDC_WIN_MAP_B: u8 = 0x40;
+pub(crate) const LCDC_ON_B: u8 = 0x80;
 
 // Tile attribute bits: OAM byte 3, and the background map attributes in
 // VRAM bank 1 on the CGB.
 /// The object goes behind background colors 1-3 (the background tile goes
 /// over the objects on the CGB).
-pub const ATTR_PRIORITY_B: u8 = 0x80;
-pub const ATTR_Y_FLIP_B: u8 = 0x40;
-pub const ATTR_X_FLIP_B: u8 = 0x20;
+pub(crate) const ATTR_PRIORITY_B: u8 = 0x80;
+pub(crate) const ATTR_Y_FLIP_B: u8 = 0x40;
+pub(crate) const ATTR_X_FLIP_B: u8 = 0x20;
 /// DMG mode: the object uses OBP1.
-pub const ATTR_DMG_PALETTE_B: u8 = 0x10;
+pub(crate) const ATTR_DMG_PALETTE_B: u8 = 0x10;
 /// CGB: the tile is in VRAM bank 1.
-pub const ATTR_BANK_B: u8 = 0x08;
+pub(crate) const ATTR_BANK_B: u8 = 0x08;
 /// CGB: the palette number.
-pub const ATTR_CGB_PALETTE: u8 = 0x07;
+pub(crate) const ATTR_CGB_PALETTE: u8 = 0x07;
 
 // STAT bits
-pub const STAT_MODE_B: u8 = 0x3;
-pub const STAT_LYC_B: u8 = 0x4;
-pub const STAT_IF_HBLANK_B: u8 = 0x8;
-pub const STAT_IF_VBLANK_B: u8 = 0x10;
-pub const STAT_IF_OAM_B: u8 = 0x20;
-pub const STAT_IF_LYC_B: u8 = 0x40;
+pub(crate) const STAT_MODE_B: u8 = 0x3;
+pub(crate) const STAT_LYC_B: u8 = 0x4;
+pub(crate) const STAT_IF_HBLANK_B: u8 = 0x8;
+pub(crate) const STAT_IF_VBLANK_B: u8 = 0x10;
+pub(crate) const STAT_IF_OAM_B: u8 = 0x20;
+pub(crate) const STAT_IF_LYC_B: u8 = 0x40;
 
 #[non_exhaustive]
 #[derive(Clone, Copy, Default)]
@@ -65,7 +65,7 @@ pub enum ColorCorrectionMode {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Mode {
+pub(crate) enum Mode {
     HBlank = 0,
     VBlank = 1,
     OamScan = 2,
@@ -73,7 +73,7 @@ pub enum Mode {
 }
 
 #[derive(Default)]
-pub struct Ppu {
+pub(crate) struct Ppu {
     model: Model,
     bcp: ColorPalette,
     bgp: u8,
@@ -108,7 +108,7 @@ pub struct Ppu {
 // IO
 impl Ppu {
     #[must_use]
-    pub fn new(model: Model) -> Self {
+    pub(crate) fn new(model: Model) -> Self {
         // Not deterministic on real hardware, but 00 (CGB) and FF (DMG) are
         // by far the most common power-on values.
         let obp = if model.is_cgb_hardware() { 0x00 } else { 0xFF };
@@ -126,24 +126,24 @@ impl Ppu {
     }
 
     #[must_use]
-    pub const fn bcp(&self) -> &ColorPalette {
+    pub(crate) const fn bcp(&self) -> &ColorPalette {
         &self.bcp
     }
 
     #[must_use]
-    pub const fn bcp_mut(&mut self) -> &mut ColorPalette {
+    pub(crate) const fn bcp_mut(&mut self) -> &mut ColorPalette {
         &mut self.bcp
     }
 
     /// The HBlank HDMA request has been raised (the STAT mode bits turn to 0
     /// a couple of dots before).
     #[must_use]
-    pub const fn hdma_period(&self) -> bool {
+    pub(crate) const fn hdma_period(&self) -> bool {
         matches!(self.mode(), Mode::HBlank) && self.d.hblank_hdma_pending() == 0
     }
 
     #[must_use]
-    pub const fn mode(&self) -> Mode {
+    pub(crate) const fn mode(&self) -> Mode {
         match self.stat & STAT_MODE_B {
             0 => Mode::HBlank,
             1 => Mode::VBlank,
@@ -153,33 +153,33 @@ impl Ppu {
     }
 
     #[must_use]
-    pub const fn ocp(&self) -> &ColorPalette {
+    pub(crate) const fn ocp(&self) -> &ColorPalette {
         &self.ocp
     }
 
     #[must_use]
-    pub const fn ocp_mut(&mut self) -> &mut ColorPalette {
+    pub(crate) const fn ocp_mut(&mut self) -> &mut ColorPalette {
         &mut self.ocp
     }
 
     #[must_use]
-    pub const fn pixel_data_rgba(&self) -> &[u8] {
+    pub(crate) const fn pixel_data_rgba(&self) -> &[u8] {
         self.rgba_buf_present.pixel_data()
     }
 
     #[must_use]
-    pub const fn read_bgp(&self) -> u8 {
+    pub(crate) const fn read_bgp(&self) -> u8 {
         self.bgp
     }
 
     #[must_use]
-    pub const fn read_lcdc(&self) -> u8 {
+    pub(crate) const fn read_lcdc(&self) -> u8 {
         self.lcdc
     }
 
     /// LY as the CPU reads it.
     #[must_use]
-    pub fn cpu_read_ly(&self) -> u8 {
+    pub(crate) fn cpu_read_ly(&self) -> u8 {
         let Some((ly, t)) = self.line_position() else {
             return self.ly;
         };
@@ -204,7 +204,7 @@ impl Ppu {
 
     /// STAT as the CPU reads it.
     #[must_use]
-    pub fn cpu_read_stat(&self) -> u8 {
+    pub(crate) fn cpu_read_stat(&self) -> u8 {
         let stat = self.read_stat();
         let Some((ly, t)) = self.line_position() else {
             return stat;
@@ -288,100 +288,100 @@ impl Ppu {
 
     /// `position_in_line` as a signed value (-16..=160).
     #[must_use]
-    pub const fn fifo_position(&self) -> i16 {
+    pub(crate) const fn fifo_position(&self) -> i16 {
         let p = self.d.position_in_line();
         if p >= 240 { p as i16 - 256 } else { p as i16 }
     }
 
     #[inline]
-    pub const fn set_tile_sel_glitch(&mut self, active: bool) {
+    pub(crate) const fn set_tile_sel_glitch(&mut self, active: bool) {
         self.d.set_tile_sel_glitch(active);
     }
 
     /// Set while a CPU write to WX is landing (SameBoy's `wx_just_changed`).
     #[inline]
-    pub const fn set_wx_just_changed(&mut self, active: bool) {
+    pub(crate) const fn set_wx_just_changed(&mut self, active: bool) {
         self.d.set_wx_just_changed(active);
     }
 
     /// Set while a CPU write that turns the window on is landing.
     #[inline]
-    pub const fn set_window_enable_pending(&mut self, active: bool) {
+    pub(crate) const fn set_window_enable_pending(&mut self, active: bool) {
         self.d.set_window_enable_pending(active);
     }
 
     #[must_use]
-    pub const fn is_fetching_sprite(&self) -> bool {
+    pub(crate) const fn is_fetching_sprite(&self) -> bool {
         self.d.fetching_object()
     }
 
     /// Whether `HBlank` was entered since the last call.
-    pub const fn take_hblank_hdma_edge(&mut self) -> bool {
+    pub(crate) const fn take_hblank_hdma_edge(&mut self) -> bool {
         self.d.take_hblank_hdma_edge()
     }
 
     /// Whether the LCD was switched off in a non-zero mode since the last call.
-    pub const fn take_lcd_off_hdma_edge(&mut self) -> bool {
+    pub(crate) const fn take_lcd_off_hdma_edge(&mut self) -> bool {
         self.d.take_lcd_off_hdma_edge()
     }
 
     /// The PPU is at the edge between HBlank and the OAM scan (SameBoy's
     /// display state 7), where some register writes behave differently.
     #[must_use]
-    pub fn at_oam_scan_edge(&self) -> bool {
+    pub(crate) fn at_oam_scan_edge(&self) -> bool {
         self.d.state() == display::State::OamScanStart
     }
 
     #[must_use]
-    pub const fn read_lyc(&self) -> u8 {
+    pub(crate) const fn read_lyc(&self) -> u8 {
         self.lyc
     }
 
     #[must_use]
-    pub const fn read_obp0(&self) -> u8 {
+    pub(crate) const fn read_obp0(&self) -> u8 {
         self.obp0
     }
 
     #[must_use]
-    pub const fn read_obp1(&self) -> u8 {
+    pub(crate) const fn read_obp1(&self) -> u8 {
         self.obp1
     }
 
     #[must_use]
-    pub const fn read_opri(&self) -> u8 {
+    pub(crate) const fn read_opri(&self) -> u8 {
         // The unused bits read 1.
         self.opri as u8 | 0xFE
     }
 
     #[must_use]
-    pub const fn read_scx(&self) -> u8 {
+    pub(crate) const fn read_scx(&self) -> u8 {
         self.scx
     }
 
     #[must_use]
-    pub const fn read_scy(&self) -> u8 {
+    pub(crate) const fn read_scy(&self) -> u8 {
         self.scy
     }
 
     #[must_use]
-    pub const fn read_stat(&self) -> u8 {
+    pub(crate) const fn read_stat(&self) -> u8 {
         // The unused bits read 1.
         self.stat | 0x80
     }
 
     #[must_use]
-    pub const fn read_wx(&self) -> u8 {
+    pub(crate) const fn read_wx(&self) -> u8 {
         self.wx
     }
 
     #[must_use]
-    pub const fn read_wy(&self) -> u8 {
+    pub(crate) const fn read_wy(&self) -> u8 {
         self.wy
     }
 
     /// Advances the PPU by one CPU T-cycle: a dot in single speed, half of
     /// one in double speed.
-    pub fn tick_t_cycle(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
+    pub(crate) fn tick_t_cycle(&mut self, ints: &mut Interrupts, cgb_mode: CgbMode, double_speed: bool) {
         self.cgb_mode = cgb_mode;
         self.double_speed = double_speed;
         self.count_chunk_cycle();
@@ -400,7 +400,7 @@ impl Ppu {
     /// Runs the display `cycles` T-cycles ahead of the CPU, which will not
     /// run those cycles again. Unless `any_line`, only done around the end
     /// of the frame.
-    pub fn run_ahead(
+    pub(crate) fn run_ahead(
         &mut self,
         ints: &mut Interrupts,
         cgb_mode: CgbMode,
@@ -420,11 +420,11 @@ impl Ppu {
             .saturating_add(u8::try_from(units).unwrap_or(u8::MAX));
     }
 
-    pub const fn set_color_correction_mode(&mut self, mode: ColorCorrectionMode) {
+    pub(crate) const fn set_color_correction_mode(&mut self, mode: ColorCorrectionMode) {
         self.color_correction_mode = mode;
     }
 
-    pub fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts) {
+    pub(crate) fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts) {
         let was_on = self.lcdc & LCDC_ON_B != 0;
         let is_on = val & LCDC_ON_B != 0;
 
@@ -462,33 +462,33 @@ impl Ppu {
         self.d.schedule_wy_check();
     }
 
-    pub fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
+    pub(crate) fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
         self.write_lyc_reg(val, ints);
     }
 
-    pub const fn write_bgp(&mut self, val: u8) {
+    pub(crate) const fn write_bgp(&mut self, val: u8) {
         self.bgp = val;
     }
 
-    pub const fn write_obp0(&mut self, val: u8) {
+    pub(crate) const fn write_obp0(&mut self, val: u8) {
         self.obp0 = val;
     }
 
-    pub const fn write_obp1(&mut self, val: u8) {
+    pub(crate) const fn write_obp1(&mut self, val: u8) {
         self.obp1 = val;
     }
 
-    pub const fn write_opri(&mut self, val: u8) {
+    pub(crate) const fn write_opri(&mut self, val: u8) {
         self.opri = val & 1 != 0;
     }
 
-    pub const fn write_scx(&mut self, val: u8) {
+    pub(crate) const fn write_scx(&mut self, val: u8) {
         self.scx = val;
     }
 
     /// Place the PPU `dot` dots into `line` (post-boot state injection). The
     /// PPU is restarted as if the LCD had just been turned on and run forward.
-    pub fn set_position(&mut self, line: u8, dot: i32) {
+    pub(crate) fn set_position(&mut self, line: u8, dot: i32) {
         if self.lcdc & LCDC_ON_B == 0 {
             return;
         }
@@ -511,19 +511,19 @@ impl Ppu {
         }
     }
 
-    pub const fn write_scy(&mut self, val: u8) {
+    pub(crate) const fn write_scy(&mut self, val: u8) {
         self.scy = val;
     }
 
-    pub fn write_stat(&mut self, val: u8, ints: &mut Interrupts) {
+    pub(crate) fn write_stat(&mut self, val: u8, ints: &mut Interrupts) {
         self.write_stat_reg(val, ints);
     }
 
-    pub const fn write_wx(&mut self, val: u8) {
+    pub(crate) const fn write_wx(&mut self, val: u8) {
         self.wx = val;
     }
 
-    pub fn write_wy(&mut self, val: u8) {
+    pub(crate) fn write_wy(&mut self, val: u8) {
         self.gstat_write_wy(val);
         self.wy = val;
         self.d.schedule_wy_check();
@@ -532,7 +532,7 @@ impl Ppu {
     /// CGB palette RAM is blocked from the CPU while the PPU reads it.
     #[inline]
     #[must_use]
-    pub fn is_cgb_palettes_accessible(&self) -> bool {
+    pub(crate) fn is_cgb_palettes_accessible(&self) -> bool {
         if let Some(unlocked) = self.gstat_palettes_unlocked() {
             return unlocked;
         }
@@ -543,12 +543,12 @@ impl Ppu {
 
     /// STOP-mode hooks (the PPU engine does not distinguish STOP yet).
     #[inline]
-    pub const fn enter_stop_mode(&mut self) {
+    pub(crate) const fn enter_stop_mode(&mut self) {
         self.block_ppu_accesses(true);
     }
 
     #[inline]
-    pub const fn leave_stop_mode(&mut self) {
+    pub(crate) const fn leave_stop_mode(&mut self) {
         self.block_ppu_accesses(false);
     }
 }

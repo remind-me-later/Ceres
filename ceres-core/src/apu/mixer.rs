@@ -10,7 +10,7 @@ const CH_STEP: i32 = 0xFF0 / 0xF / 8;
 /// A channel's connection to its DAC: whether it is playing, the digital
 /// sample it outputs and the resulting level after NR50/NR51.
 #[derive(Clone, Copy)]
-pub struct ChannelOutput {
+pub(super) struct ChannelOutput {
     /// The channel is on (NR52 bits 0-3).
     pub active: bool,
     /// The 4-bit sample read back through PCM12/PCM34. Set to 0x10 when it
@@ -25,7 +25,7 @@ pub struct ChannelOutput {
 }
 
 impl ChannelOutput {
-    pub const fn new() -> Self {
+    pub(super) const fn new() -> Self {
         Self {
             active: false,
             sample: 0,
@@ -36,7 +36,7 @@ impl ChannelOutput {
 
     /// What powering the APU off clears: the level of the DAC stays until the
     /// next update.
-    pub const fn power_off(&mut self) {
+    pub(super) const fn power_off(&mut self) {
         *self = Self {
             level: self.level,
             ..Self::new()
@@ -44,7 +44,7 @@ impl ChannelOutput {
     }
 
     /// The sample a PCM register read sees.
-    pub const fn pcm(&self, masked: bool) -> u8 {
+    pub(super) const fn pcm(&self, masked: bool) -> u8 {
         if !self.active {
             return 0;
         }
@@ -58,7 +58,7 @@ impl ChannelOutput {
     /// Sets the sample of channel `index` to `value` (SameBoy's
     /// `update_sample`). `volume` is the envelope volume, which biases the
     /// output on the AGB.
-    pub fn update(&mut self, index: usize, value: u8, dac_enabled: bool, volume: u8, c: &Ctx) {
+    pub(super) fn update(&mut self, index: usize, value: u8, dac_enabled: bool, volume: u8, c: &Ctx) {
         let left = c.nr51 & (0x10 << index) != 0;
         let right = c.nr51 & (1 << index) != 0;
         let left_volume = i32::from((c.nr50 >> 4) & 7) + 1;
@@ -101,7 +101,7 @@ impl ChannelOutput {
 
 /// Averages the channel levels over each output sample and sends the result
 /// through the DAC model and a high-pass filter.
-pub struct Mixer {
+pub(super) struct Mixer {
     /// Per-channel (left, right) level integrated over the current output
     /// sample, in level x 1/65536 dot.
     acc: [(i64, i64); N_CHANNELS],
@@ -115,7 +115,7 @@ pub struct Mixer {
 }
 
 impl Mixer {
-    pub fn new(sample_rate: i32) -> Self {
+    pub(super) fn new(sample_rate: i32) -> Self {
         Self {
             acc: [(0, 0); N_CHANNELS],
             dac_charge: [0.0; N_CHANNELS],
@@ -130,7 +130,7 @@ impl Mixer {
         (i64::from(DOTS_PER_SEC) << 16) / i64::from(sample_rate.max(1))
     }
 
-    pub fn set_sample_rate(&mut self, sample_rate: i32) {
+    pub(super) fn set_sample_rate(&mut self, sample_rate: i32) {
         self.sample_rate = sample_rate;
         self.sample_period = Self::sample_period_from_rate(sample_rate);
         self.render_timer = 0;
@@ -141,7 +141,7 @@ impl Mixer {
     /// Mixes the channel `levels` over `ticks` APU ticks. `dacs` gives the
     /// state of the DAC of each channel, `None` when there are none (the
     /// AGB); it is only called when an output sample is rendered.
-    pub fn mix<C: AudioCallback, D: Fn() -> Option<[bool; N_CHANNELS]>>(
+    pub(super) fn mix<C: AudioCallback, D: Fn() -> Option<[bool; N_CHANNELS]>>(
         &mut self,
         ticks: u32,
         levels: [(i32, i32); N_CHANNELS],

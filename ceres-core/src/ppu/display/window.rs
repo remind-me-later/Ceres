@@ -14,7 +14,7 @@ use {
     reason = "Independent trigger and glitch flags"
 )]
 #[derive(Clone)]
-pub struct Window {
+pub(super) struct Window {
     /// The window line being drawn (0xFF before the first one).
     pub line: u8,
     pub tile_x: u8,
@@ -212,7 +212,7 @@ impl Ppu {
 
     /// Called by the CPU's LCDC write handler: disabling the window while a
     /// window tile is being fetched suppresses the pixel-insertion glitch.
-    pub const fn note_window_disable(&mut self, old: u8, new: u8) {
+    pub(crate) const fn note_window_disable(&mut self, old: u8, new: u8) {
         if old & LCDC_WIN_EN_B != 0 && new & LCDC_WIN_EN_B == 0 && self.d.window.being_fetched {
             self.d.window.no_pixel_insertion_glitch = true;
         }

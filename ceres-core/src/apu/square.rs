@@ -15,7 +15,7 @@ const DUTIES: [[u8; 8]; 4] = [
 ];
 
 #[derive(Clone, Copy)]
-pub struct Square {
+pub(super) struct Square {
     /// 0 for channel 1, 1 for channel 2.
     index: usize,
     out: ChannelOutput,
@@ -41,7 +41,7 @@ pub struct Square {
 }
 
 impl Square {
-    pub const fn new(index: usize) -> Self {
+    pub(super) const fn new(index: usize) -> Self {
         Self {
             index,
             out: ChannelOutput::new(),
@@ -60,7 +60,7 @@ impl Square {
     }
 
     /// Clears the channel, but the DAC keeps its level until the next update.
-    pub const fn power_off(&mut self) {
+    pub(super) const fn power_off(&mut self) {
         let mut out = self.out;
         out.power_off();
         *self = Self {
@@ -69,69 +69,69 @@ impl Square {
         };
     }
 
-    pub const fn out(&self) -> &ChannelOutput {
+    pub(super) const fn out(&self) -> &ChannelOutput {
         &self.out
     }
 
-    pub const fn out_mut(&mut self) -> &mut ChannelOutput {
+    pub(super) const fn out_mut(&mut self) -> &mut ChannelOutput {
         &mut self.out
     }
 
-    pub const fn length_counter(&self) -> u16 {
+    pub(super) const fn length_counter(&self) -> u16 {
         self.length.counter
     }
 
-    pub const fn set_length_counter(&mut self, counter: u16) {
+    pub(super) const fn set_length_counter(&mut self, counter: u16) {
         self.length.counter = counter;
     }
 
-    pub const fn dac_enabled(&self) -> bool {
+    pub(super) const fn dac_enabled(&self) -> bool {
         self.envelope.dac_enabled()
     }
 
-    pub const fn read_nrx2(&self) -> u8 {
+    pub(super) const fn read_nrx2(&self) -> u8 {
         self.envelope.nrx2
     }
 
-    pub const fn set_envelope_countdown(&mut self, countdown: u8) {
+    pub(super) const fn set_envelope_countdown(&mut self, countdown: u8) {
         self.envelope.countdown = countdown;
     }
 
     /// Every 8th DIV event.
-    pub const fn step_envelope_countdown(&mut self) {
+    pub(super) const fn step_envelope_countdown(&mut self) {
         self.envelope.step_countdown();
     }
 
     /// The secondary DIV event.
-    pub const fn reload_envelope(&mut self) {
+    pub(super) const fn reload_envelope(&mut self) {
         if self.out.active {
             self.envelope.reload();
         }
     }
 
     /// Every other DIV event.
-    pub fn tick_length(&mut self, c: &Ctx) {
+    pub(super) fn tick_length(&mut self, c: &Ctx) {
         if self.length.tick() {
             self.disable(c);
         }
     }
 
-    pub const fn period(&self) -> u16 {
+    pub(super) const fn period(&self) -> u16 {
         self.period
     }
 
-    pub const fn set_period(&mut self, period: u16) {
+    pub(super) const fn set_period(&mut self, period: u16) {
         self.period = period;
     }
 
     /// Powering the APU on leaves the countdown at its maximum.
-    pub const fn power_on(&mut self) {
+    pub(super) const fn power_on(&mut self) {
         self.countdown = 0xFFFF;
     }
 
     /// The state the boot ROM leaves on channel 1: `played` when it played
     /// the start-up sound (see `PostBoot`).
-    pub const fn post_boot(
+    pub(super) const fn post_boot(
         &mut self,
         played: bool,
         countdown: u16,
@@ -156,15 +156,15 @@ impl Square {
         }
     }
 
-    pub const fn read_nrx1(&self) -> u8 {
+    pub(super) const fn read_nrx1(&self) -> u8 {
         (self.duty << 6) | NRX1_LENGTH
     }
 
-    pub const fn read_nrx4(&self) -> u8 {
+    pub(super) const fn read_nrx4(&self) -> u8 {
         self.nrx4 | 0xBF
     }
 
-    pub fn update_sample(&mut self, value: u8, c: &Ctx) {
+    pub(super) fn update_sample(&mut self, value: u8, c: &Ctx) {
         self.out.update(
             self.index,
             value,
@@ -175,7 +175,7 @@ impl Square {
     }
 
     /// Outputs the current step of the duty cycle.
-    pub fn update_duty_sample(&mut self, c: &Ctx) {
+    pub(super) fn update_duty_sample(&mut self, c: &Ctx) {
         if self.suppressed {
             if c.rev.is_agb() {
                 self.update_sample(self.out.sample, c);
@@ -186,12 +186,12 @@ impl Square {
         self.update_sample(if on { self.envelope.volume } else { 0 }, c);
     }
 
-    pub fn disable(&mut self, c: &Ctx) {
+    pub(super) fn disable(&mut self, c: &Ctx) {
         self.out.active = false;
         self.update_sample(0, c);
     }
 
-    pub fn run(&mut self, cycles: u32, c: &Ctx) {
+    pub(super) fn run(&mut self, cycles: u32, c: &Ctx) {
         if !self.out.active {
             return;
         }
@@ -215,7 +215,7 @@ impl Square {
     }
 
     /// Steps the volume if the envelope clock is high.
-    pub fn tick_envelope(&mut self, c: &Ctx) {
+    pub(super) fn tick_envelope(&mut self, c: &Ctx) {
         if !self.envelope.clock.clock {
             return;
         }
@@ -236,12 +236,12 @@ impl Square {
     }
 
     /// `value` has bits 0-5 masked off when written while the APU is off.
-    pub const fn write_nrx1(&mut self, value: u8) {
+    pub(super) const fn write_nrx1(&mut self, value: u8) {
         self.length.counter = 0x40 - (value & NRX1_LENGTH) as u16;
         self.duty = value >> 6;
     }
 
-    pub fn write_nrx2(&mut self, value: u8, c: &Ctx) {
+    pub(super) fn write_nrx2(&mut self, value: u8, c: &Ctx) {
         if value & NRX2_DAC == 0 {
             // This disables the DAC.
             self.envelope.nrx2 = value;
@@ -254,14 +254,14 @@ impl Square {
         }
     }
 
-    pub const fn write_nrx3(&mut self, value: u8) {
+    pub(super) const fn write_nrx3(&mut self, value: u8) {
         self.period = (self.period & !0xFF) | value as u16;
         if self.just_reloaded {
             self.countdown = (self.period ^ PERIOD_MASK) * 2 + 1;
         }
     }
 
-    pub fn write_nrx4(&mut self, value: u8, c: &Ctx) {
+    pub(super) fn write_nrx4(&mut self, value: u8, c: &Ctx) {
         // When the period changes right before being updated from >=$700 to
         // <$700 the countdown should change to the old period but the current
         // sample should not change; step the index backwards instead.

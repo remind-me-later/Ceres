@@ -9,11 +9,11 @@ use core::{cmp::Ordering, time::Duration};
 //   RTC count in.
 
 /// Dots per frame.
-pub const DOTS_PER_FRAME: i32 = 70224;
+pub(crate) const DOTS_PER_FRAME: i32 = 70224;
 /// Dots per second.
-pub const DOTS_PER_SEC: i32 = 1 << 22;
+pub(crate) const DOTS_PER_SEC: i32 = 1 << 22;
 /// 8 MHz units per frame.
-pub const UNITS_PER_FRAME: i32 = 2 * DOTS_PER_FRAME;
+pub(crate) const UNITS_PER_FRAME: i32 = 2 * DOTS_PER_FRAME;
 
 // TAC bits
 const TAC_ENABLE_B: u8 = 0x04;
@@ -23,12 +23,12 @@ const TAC_CLOCK: u8 = 0x03;
 /// The bit of the internal counter (DIV is its high byte) whose falling edge
 /// clocks the APU's frame sequencer: DIV bit 4, bit 5 in double speed.
 #[must_use]
-pub const fn apu_div_bit(double_speed: bool) -> u16 {
+pub(crate) const fn apu_div_bit(double_speed: bool) -> u16 {
     if double_speed { 0x2000 } else { 0x1000 }
 }
 pub const FRAME_DURATION: Duration = Duration::new(0, 16_742_706); // DOTS_PER_FRAME / DOTS_PER_SEC
 
-pub struct Clock {
+pub(crate) struct Clock {
     pub div: u16,
     pub tac: u8,
     pub tima: u8,
@@ -90,7 +90,7 @@ impl Default for Clock {
 }
 
 impl Clock {
-    pub fn tima(&self) -> u8 {
+    pub(crate) fn tima(&self) -> u8 {
         if (1..=4).contains(&self.tima_reload_pending) {
             0
         } else {
@@ -98,7 +98,7 @@ impl Clock {
         }
     }
 
-    pub const fn tma(&self) -> u8 {
+    pub(crate) const fn tma(&self) -> u8 {
         self.tma
     }
 }

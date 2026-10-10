@@ -1,7 +1,7 @@
 use crate::ppu::ColorCorrectionMode;
 
 // DMG palette colors RGB
-pub const GRAYSCALE_PALETTE: [(u8, u8, u8); 4] = [
+pub(super) const GRAYSCALE_PALETTE: [(u8, u8, u8); 4] = [
     (0xFF, 0xFF, 0xFF),
     (0xAA, 0xAA, 0xAA),
     (0x55, 0x55, 0x55),
@@ -18,7 +18,7 @@ const SPEC_INDEX: u8 = 0x3F;
 const PAL_RAM_SIZE: u8 = 0x20;
 const PAL_RAM_SIZE_COLORS: u8 = PAL_RAM_SIZE * 3;
 
-pub struct ColorPalette {
+pub(crate) struct ColorPalette {
     // Rgb color ram
     buffer: [u8; PAL_RAM_SIZE_COLORS as usize],
     spec: u8,
@@ -34,14 +34,14 @@ impl Default for ColorPalette {
 }
 
 impl ColorPalette {
-    pub fn init_compat_palette(&mut self) {
+    pub(crate) fn init_compat_palette(&mut self) {
         // White, light gray, dark gray and black in every palette.
         const GRAYS: [u8; 12] = [31, 31, 31, 21, 21, 21, 10, 10, 10, 0, 0, 0];
         let (palettes, _) = self.buffer.as_chunks_mut::<{ GRAYS.len() }>();
         palettes.fill(GRAYS);
     }
     #[must_use]
-    pub const fn data(&self) -> u8 {
+    pub(crate) const fn data(&self) -> u8 {
         let i = (self.index() as usize / 2) * 3;
 
         if self.index() & 1 == 0 {
@@ -70,7 +70,7 @@ impl ColorPalette {
     // For color correction values see: https://github.com/LIJI32/SameBoy/blob/master/Core/display.c#L355
     // TODO: should this be done on GPU?
     #[must_use]
-    pub fn rgb(
+    pub(crate) fn rgb(
         &self,
         palette: u8,
         color: u8,
@@ -176,7 +176,7 @@ impl ColorPalette {
         (new_r, new_g, new_b)
     }
 
-    pub const fn set_data(&mut self, val: u8) {
+    pub(crate) const fn set_data(&mut self, val: u8) {
         let i = (self.index() as usize / 2) * 3;
 
         if self.index() & 1 == 0 {
@@ -198,18 +198,18 @@ impl ColorPalette {
 
     /// A data write the PPU's palette access blocking dropped still advances
     /// the index.
-    pub const fn auto_increment(&mut self) {
+    pub(crate) const fn auto_increment(&mut self) {
         if self.is_increment_enabled() {
             self.spec = (self.spec & SPEC_INCREMENT_B) | (self.index() + 1) & SPEC_INDEX;
         }
     }
 
-    pub const fn set_spec(&mut self, val: u8) {
+    pub(crate) const fn set_spec(&mut self, val: u8) {
         self.spec = val;
     }
 
     #[must_use]
-    pub const fn spec(&self) -> u8 {
+    pub(crate) const fn spec(&self) -> u8 {
         // Bit 6 reads 1.
         self.spec | 0x40
     }

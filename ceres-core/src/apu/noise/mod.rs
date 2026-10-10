@@ -12,7 +12,7 @@ use super::{
     reason = "Independent hardware flags of the channel state machine"
 )]
 #[derive(Clone, Copy)]
-pub struct Noise {
+pub(super) struct Noise {
     out: ChannelOutput,
     length: Length,
     envelope: Envelope,
@@ -44,7 +44,7 @@ pub struct Noise {
 }
 
 impl Noise {
-    pub const fn new() -> Self {
+    pub(super) const fn new() -> Self {
         Self {
             out: ChannelOutput::new(),
             length: Length::new(),
@@ -68,81 +68,81 @@ impl Noise {
     }
 
     /// Clears the channel, but the DAC keeps its level until the next update.
-    pub const fn power_off(&mut self) {
+    pub(super) const fn power_off(&mut self) {
         let mut out = self.out;
         out.power_off();
         *self = Self { out, ..Self::new() };
     }
 
-    pub const fn out(&self) -> &ChannelOutput {
+    pub(super) const fn out(&self) -> &ChannelOutput {
         &self.out
     }
 
-    pub const fn out_mut(&mut self) -> &mut ChannelOutput {
+    pub(super) const fn out_mut(&mut self) -> &mut ChannelOutput {
         &mut self.out
     }
 
-    pub const fn length_counter(&self) -> u16 {
+    pub(super) const fn length_counter(&self) -> u16 {
         self.length.counter
     }
 
-    pub const fn set_length_counter(&mut self, counter: u16) {
+    pub(super) const fn set_length_counter(&mut self, counter: u16) {
         self.length.counter = counter;
     }
 
-    pub const fn dac_enabled(&self) -> bool {
+    pub(super) const fn dac_enabled(&self) -> bool {
         self.envelope.dac_enabled()
     }
 
-    pub const fn read_nr42(&self) -> u8 {
+    pub(super) const fn read_nr42(&self) -> u8 {
         self.envelope.nrx2
     }
 
-    pub const fn set_envelope_countdown(&mut self, countdown: u8) {
+    pub(super) const fn set_envelope_countdown(&mut self, countdown: u8) {
         self.envelope.countdown = countdown;
     }
 
     /// Every 8th DIV event.
-    pub const fn step_envelope_countdown(&mut self) {
+    pub(super) const fn step_envelope_countdown(&mut self) {
         self.envelope.step_countdown();
     }
 
     /// The secondary DIV event.
-    pub const fn reload_envelope(&mut self) {
+    pub(super) const fn reload_envelope(&mut self) {
         if self.out.active {
             self.envelope.reload();
         }
     }
 
     /// Every other DIV event.
-    pub fn tick_length(&mut self, c: &Ctx) {
+    pub(super) fn tick_length(&mut self, c: &Ctx) {
         if self.length.tick() {
             self.disable(c);
         }
     }
 
-    pub const fn length_enabled(&self) -> bool {
+    pub(super) const fn length_enabled(&self) -> bool {
         self.length.enabled
     }
 
     /// The phase of the divider advances by `cycles` 2 MHz ticks.
-    pub const fn advance_alignment(&mut self, cycles: u32) {
+    pub(super) const fn advance_alignment(&mut self, cycles: u32) {
         self.alignment = self.alignment.wrapping_add(cycles as u8);
     }
 
-    pub const fn set_alignment(&mut self, alignment: u8) {
+    pub(super) const fn set_alignment(&mut self, alignment: u8) {
         self.alignment = alignment;
     }
 
-    pub const fn read_nr43(&self) -> u8 {
+    pub(super) const fn read_nr43(&self) -> u8 {
         self.nr43
     }
 
-    pub const fn read_nr44(&self) -> u8 {
+    pub(super) const fn read_nr44(&self) -> u8 {
         if self.length.enabled { 0xFF } else { 0xBF }
     }
 
-    pub fn update_sample(&mut self, value: u8, c: &Ctx) {
+    pub(super) fn update_sample(&mut self, value: u8, c: &Ctx) {
         self.out.update(
             NOISE,
             value,
@@ -152,7 +152,7 @@ impl Noise {
         );
     }
 
-    pub fn disable(&mut self, c: &Ctx) {
+    pub(super) fn disable(&mut self, c: &Ctx) {
         self.out.active = false;
         self.update_sample(0, c);
     }
@@ -206,7 +206,7 @@ impl Noise {
     }
 
     /// Steps the volume if the envelope clock is high.
-    pub fn tick_envelope(&mut self, c: &Ctx) {
+    pub(super) fn tick_envelope(&mut self, c: &Ctx) {
         if !self.envelope.clock.clock {
             return;
         }
@@ -229,7 +229,7 @@ impl Noise {
 
     /// Advances the delayed DMG start. Returns the ticks to run before the
     /// channel starts, if it starts within `cycles`.
-    pub const fn delayed_start(&mut self, cycles: u32) -> Option<u32> {
+    pub(super) const fn delayed_start(&mut self, cycles: u32) -> Option<u32> {
         let delayed = self.dmg_delayed_start as u32;
         if delayed == 0 {
             return None;
@@ -244,7 +244,7 @@ impl Noise {
         Some(delayed)
     }
 
-    pub fn run(&mut self, cycles: u32, c: &Ctx) {
+    pub(super) fn run(&mut self, cycles: u32, c: &Ctx) {
         if !self.counter_active && !self.background_counter_active {
             return;
         }
@@ -274,11 +274,11 @@ impl Noise {
         }
     }
 
-    pub const fn write_nr41(&mut self, value: u8) {
+    pub(super) const fn write_nr41(&mut self, value: u8) {
         self.length.counter = 0x40 - (value & NRX1_LENGTH) as u16;
     }
 
-    pub fn write_nr42(&mut self, value: u8, c: &Ctx) {
+    pub(super) fn write_nr42(&mut self, value: u8, c: &Ctx) {
         if value & NRX2_DAC == 0 {
             // This disables the DAC.
             if self.out.active && self.nr43 & 7 != 0 {
@@ -298,7 +298,7 @@ impl Noise {
         }
     }
 
-    pub fn write_nr43(&mut self, value: u8, c: &Ctx) {
+    pub(super) fn write_nr43(&mut self, value: u8, c: &Ctx) {
         if self.countdown_reloaded {
             let divisor = Self::divisor(value);
             let align = usize::from(self.alignment & 3);
@@ -332,7 +332,7 @@ impl Noise {
         self.switch_clock(value, c);
     }
 
-    pub fn write_nr44(&mut self, value: u8, c: &Ctx) {
+    pub(super) fn write_nr44(&mut self, value: u8, c: &Ctx) {
         if value & NRX4_TRIGGER_B != 0 {
             self.envelope.unlock();
             if !c.rev.is_cgb() && self.alignment & 3 != 0 {

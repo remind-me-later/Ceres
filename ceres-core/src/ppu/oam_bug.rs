@@ -123,7 +123,7 @@ impl Ppu {
 
     /// The "write" corruption: an address in OAM range was put on the bus
     /// (writes, `inc rr`, `push`, ...).
-    pub fn trigger_oam_bug(&mut self, addr: u16) {
+    pub(crate) fn trigger_oam_bug(&mut self, addr: u16) {
         if self.is_cgb_hardware() || !(OAM_START..IO_START).contains(&addr) {
             return;
         }
@@ -193,7 +193,7 @@ impl Ppu {
     }
 
     /// The "read" corruption: a CPU read of OAM while the PPU owns it.
-    pub fn trigger_oam_bug_read(&mut self, addr: u16) {
+    pub(crate) fn trigger_oam_bug_read(&mut self, addr: u16) {
         if self.is_cgb_hardware() || !(OAM_START..IO_START).contains(&addr) {
             return;
         }
@@ -312,7 +312,7 @@ impl Ppu {
 
     /// Side-effect free view of the unusable area (for non-CPU readers).
     #[must_use]
-    pub fn peek_unusable(&self, addr: u16) -> u8 {
+    pub(crate) fn peek_unusable(&self, addr: u16) -> u8 {
         if self.d.cpu().oam_read_blocked || self.d.cpu().oam_write_blocked && !self.is_cgb_hardware() {
             0xFF
         } else {
@@ -321,7 +321,7 @@ impl Ppu {
     }
 
     /// CPU read of `0xFE00..=0xFEFF`. `dma_blocked`: an OAM DMA owns the bus.
-    pub fn cpu_read_oam_area(&mut self, addr: u16, dma_blocked: bool) -> u8 {
+    pub(crate) fn cpu_read_oam_area(&mut self, addr: u16, dma_blocked: bool) -> u8 {
         if self.d.cpu().oam_write_blocked && !self.is_cgb_hardware() {
             self.trigger_oam_bug_read(addr);
             return 0xFF;
@@ -346,7 +346,7 @@ impl Ppu {
     }
 
     /// CPU write to `0xFE00..=0xFEFF`.
-    pub fn cpu_write_oam_area(&mut self, addr: u16, val: u8, dma_blocked: bool) {
+    pub(crate) fn cpu_write_oam_area(&mut self, addr: u16, val: u8, dma_blocked: bool) {
         if self
             .gstat_oam_lock(true)
             .unwrap_or_else(|| self.d.cpu().oam_write_blocked)
@@ -405,7 +405,7 @@ impl Ppu {
 
 /// Where a byte of the unusable area (`low` is 0xA0..=0xFF) is kept, on the
 /// revisions that keep it in memory.
-pub const fn unusable_index(model: Model, low: u8) -> Option<usize> {
+pub(crate) const fn unusable_index(model: Model, low: u8) -> Option<usize> {
     let low = match model {
         Model::CgbD if low >= 0xC0 => low | 0xF0,
         Model::CgbD => low,

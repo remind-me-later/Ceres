@@ -3,14 +3,14 @@
 use super::{NRX4_LENGTH_B, NRX4_TRIGGER_B};
 
 #[derive(Clone, Copy)]
-pub struct Length {
+pub(super) struct Length {
     /// Ticks left before the channel stops (SameBoy's `pulse_length`).
     pub counter: u16,
     pub enabled: bool,
 }
 
 impl Length {
-    pub const fn new() -> Self {
+    pub(super) const fn new() -> Self {
         Self {
             counter: 0,
             enabled: false,
@@ -18,7 +18,7 @@ impl Length {
     }
 
     /// Ticks the timer. Returns `true` if it expired.
-    pub const fn tick(&mut self) -> bool {
+    pub(super) const fn tick(&mut self) -> bool {
         if self.enabled && self.counter != 0 {
             self.counter -= 1;
             return self.counter == 0;
@@ -27,7 +27,7 @@ impl Length {
     }
 
     /// A trigger with an expired timer reloads it to `max` (64 or 256).
-    pub const fn trigger(&mut self, max: u16) {
+    pub(super) const fn trigger(&mut self, max: u16) {
         if self.counter == 0 {
             self.counter = max;
             self.enabled = false;
@@ -37,7 +37,7 @@ impl Length {
     /// Writes NRx4 (`value`), after a trigger. `always_glitch` makes even a
     /// write that leaves the timer disabled glitch (the CGB-B and older do it
     /// for the squares and the wave). Returns `true` if the timer expired.
-    pub const fn write(
+    pub(super) const fn write(
         &mut self,
         value: u8,
         always_glitch: bool,

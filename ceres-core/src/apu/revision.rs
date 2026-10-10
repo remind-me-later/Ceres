@@ -6,7 +6,7 @@ use crate::Model;
 /// ordering (e.g. `rev <= Revision::CgbC`). All the DMG-family models share a
 /// revision, but the Game Boy Light is distinguished for a wave RAM glitch.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Revision {
+pub(super) enum Revision {
     Dmg,
     Mgb,
     Cgb0,
@@ -19,7 +19,7 @@ pub enum Revision {
 }
 
 impl Revision {
-    pub const fn new(model: Model) -> Self {
+    pub(super) const fn new(model: Model) -> Self {
         match model {
             Model::Dmg0 | Model::DmgB | Model::Sgb | Model::Sgb2 => Self::Dmg,
             Model::Mgb => Self::Mgb,
@@ -34,17 +34,17 @@ impl Revision {
     }
 
     /// CGB hardware, the AGB included.
-    pub fn is_cgb(self) -> bool {
+    pub(super) fn is_cgb(self) -> bool {
         self >= Self::Cgb0
     }
 
     /// The AGB mixes the channels digitally: there are no per-channel DACs.
-    pub fn is_agb(self) -> bool {
+    pub(super) fn is_agb(self) -> bool {
         self == Self::Agb
     }
 
     /// The CGB-D and E share a set of glitches.
-    pub const fn is_cgb_de(self) -> bool {
+    pub(super) const fn is_cgb_de(self) -> bool {
         matches!(self, Self::CgbD | Self::CgbE)
     }
 }

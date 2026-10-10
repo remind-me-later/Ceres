@@ -12,7 +12,7 @@ use {
 /// What the PPU sees of the DMA and HDMA, and of STOP mode.
 #[expect(clippy::struct_excessive_bools, reason = "Independent bus states")]
 #[derive(Clone)]
-pub struct PpuBus {
+pub(super) struct PpuBus {
     /// OAM index the DMA is writing (`Dma::DEST_IDLE`: no transfer).
     pub dma_dest: u8,
     /// Where `dma_dest` will be once the T-cycles the PPU is running are
@@ -67,7 +67,7 @@ impl Default for PpuBus {
     reason = "One lock per memory and direction"
 )]
 #[derive(Clone, Default)]
-pub struct CpuAccess {
+pub(crate) struct CpuAccess {
     pub oam_read_blocked: bool,
     pub oam_write_blocked: bool,
     pub vram_read_blocked: bool,
@@ -77,7 +77,7 @@ pub struct CpuAccess {
 
 impl CpuAccess {
     /// The CPU can access the OAM and the VRAM.
-    pub const fn unlock_oam_vram(&mut self) {
+    pub(crate) const fn unlock_oam_vram(&mut self) {
         self.oam_read_blocked = false;
         self.oam_write_blocked = false;
         self.vram_read_blocked = false;
@@ -85,7 +85,7 @@ impl CpuAccess {
     }
 
     /// The CPU can access the OAM, the VRAM and the CGB palettes.
-    pub const fn unlock_all(&mut self) {
+    pub(crate) const fn unlock_all(&mut self) {
         self.unlock_oam_vram();
         self.cgb_palettes_blocked = false;
     }
@@ -144,7 +144,7 @@ impl Ppu {
 
     /// The OAM DMA's state, as the PPU sees it: it copies `dest` (an OAM
     /// index, `Dma::DEST_IDLE` when idle) next.
-    pub const fn set_dma_state(&mut self, dest: u8, src: u16, modulo: bool) {
+    pub(crate) const fn set_dma_state(&mut self, dest: u8, src: u16, modulo: bool) {
         self.d.bus.dma_dest = dest;
         self.d.bus.dma_src = src;
         self.d.bus.dma_modulo = modulo;
@@ -152,7 +152,7 @@ impl Ppu {
 
     /// The PPU is about to run `cycles` T-cycles, after which the OAM DMA
     /// will have reached `dest_next`.
-    pub const fn set_dma_lookahead(&mut self, dest_next: u8, cycles: i32) {
+    pub(crate) const fn set_dma_lookahead(&mut self, dest_next: u8, cycles: i32) {
         self.d.bus.dma_dest_next = dest_next;
         self.d.bus.chunk_left = cycles;
     }
@@ -163,12 +163,12 @@ impl Ppu {
     }
 
     /// A new DMA byte starts: the bus fight of the last one is over.
-    pub const fn clear_dma_vram_conflict(&mut self) {
+    pub(crate) const fn clear_dma_vram_conflict(&mut self) {
         self.d.bus.dma_ppu_vram_conflict = false;
     }
 
     /// An HDMA burst starts (`true`) or ends; `src` is the byte it reads next.
-    pub const fn set_hdma_state(&mut self, in_progress: bool, src: u16) {
+    pub(crate) const fn set_hdma_state(&mut self, in_progress: bool, src: u16) {
         self.d.bus.hdma_in_progress = in_progress;
         self.d.bus.hdma_src = src;
         if in_progress {
@@ -177,39 +177,39 @@ impl Ppu {
     }
 
     /// The VRAM address the PPU read during the last HDMA byte, if it did.
-    pub const fn take_hdma_conflict_addr(&mut self) -> Option<u16> {
+    pub(crate) const fn take_hdma_conflict_addr(&mut self) -> Option<u16> {
         let addr = self.d.bus.addr_for_hdma_conflict;
         self.d.bus.addr_for_hdma_conflict = 0xFFFF;
         if addr == 0xFFFF { None } else { Some(addr) }
     }
 
     /// STOP: the PPU's accesses are blocked (unless the CPU's already were).
-    pub const fn block_ppu_accesses(&mut self, blocked: bool) {
+    pub(crate) const fn block_ppu_accesses(&mut self, blocked: bool) {
         self.d.bus.oam_ppu_blocked = blocked && !self.d.cpu.oam_read_blocked;
         self.d.bus.vram_ppu_blocked = blocked && !self.d.cpu.vram_read_blocked;
         self.d.bus.cgb_palettes_ppu_blocked = blocked && !self.d.cpu.cgb_palettes_blocked;
     }
 
-    pub const fn set_cpu_idle(&mut self, idle: bool) {
+    pub(crate) const fn set_cpu_idle(&mut self, idle: bool) {
         self.d.bus.cpu_idle = idle;
     }
 
     // CPU-visible memory access, gated by the flags above.
 
     #[must_use]
-    pub fn vram_read_blocked(&self) -> bool {
+    pub(crate) fn vram_read_blocked(&self) -> bool {
         self.gstat_mode3_lock(79)
             .unwrap_or(self.d.cpu.vram_read_blocked)
     }
 
     #[must_use]
-    pub fn vram_write_blocked(&self) -> bool {
+    pub(crate) fn vram_write_blocked(&self) -> bool {
         self.gstat_mode3_lock(79)
             .unwrap_or(self.d.cpu.vram_write_blocked)
     }
 
     #[must_use]
-    pub const fn oam_read_blocked(&self) -> bool {
+    pub(crate) const fn oam_read_blocked(&self) -> bool {
         self.d.cpu.oam_read_blocked
     }
 }

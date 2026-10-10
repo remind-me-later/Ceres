@@ -3,13 +3,13 @@ use {
     crate::{AudioCallback, Cartridge, CgbMode, Gb, error::Error},
 };
 
-pub struct Reader<'a> {
+pub(crate) struct Reader<'a> {
     data: &'a [u8],
     position: usize,
 }
 
 impl<'a> Reader<'a> {
-    pub fn load_state<A: AudioCallback>(
+    pub(crate) fn load_state<A: AudioCallback>(
         &mut self,
         gb: &mut Gb<A>,
         secs_since_unix_epoch: u64,
@@ -68,7 +68,7 @@ impl<'a> Reader<'a> {
         self.read_exact(dest)
     }
 
-    pub const fn new(data: &'a [u8]) -> Self {
+    pub(crate) const fn new(data: &'a [u8]) -> Self {
         Self { data, position: 0 }
     }
 

@@ -5,7 +5,7 @@ use crate::Error;
     reason = "The order follows the RAM size"
 )]
 #[derive(Debug, Default)]
-pub enum RAMSize {
+pub(super) enum RAMSize {
     #[default]
     NoRAM,
     Kb8,
@@ -15,15 +15,15 @@ pub enum RAMSize {
 }
 
 impl RAMSize {
-    pub const BANK_SIZE: u16 = 0x2000;
+    pub(super) const BANK_SIZE: u16 = 0x2000;
 
     #[must_use]
-    pub const fn has_ram(&self) -> bool {
+    pub(super) const fn has_ram(&self) -> bool {
         !matches!(self, Self::NoRAM)
     }
 
     #[must_use]
-    pub const fn mask(&self) -> u8 {
+    pub(super) const fn mask(&self) -> u8 {
         match *self {
             Self::NoRAM | Self::Kb8 => 0x0,
             Self::Kb32 => 0x3,
@@ -32,7 +32,7 @@ impl RAMSize {
         }
     }
 
-    pub const fn new(byte: u8) -> Result<Self, Error> {
+    pub(super) const fn new(byte: u8) -> Result<Self, Error> {
         use RAMSize::{Kb8, Kb32, Kb64, Kb128, NoRAM};
         let ram_size = match byte {
             0 => NoRAM,
@@ -58,7 +58,7 @@ impl RAMSize {
     }
 
     #[must_use]
-    pub const fn size_bytes(&self) -> u32 {
+    pub(super) const fn size_bytes(&self) -> u32 {
         // Max size is 0x2000 * 0x10 = 0x20000 so it fits in a u32
         self.num_banks() as u32 * Self::BANK_SIZE as u32
     }

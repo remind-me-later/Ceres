@@ -3,7 +3,7 @@
 use super::{Ctx, PERIOD_MASK, revision::Revision, square::Square};
 
 #[derive(Clone, Copy)]
-pub struct Sweep {
+pub(super) struct Sweep {
     nr10: u8,
     /// Advances every 4th DIV event; a sweep step happens when it reaches 7.
     countdown: u8,
@@ -21,7 +21,7 @@ pub struct Sweep {
 }
 
 impl Sweep {
-    pub const fn new() -> Self {
+    pub(super) const fn new() -> Self {
         Self {
             nr10: 0,
             countdown: 0,
@@ -36,11 +36,11 @@ impl Sweep {
         }
     }
 
-    pub const fn read_nr10(&self) -> u8 {
+    pub(super) const fn read_nr10(&self) -> u8 {
         self.nr10 | 0x80
     }
 
-    pub const fn set_countdown(&mut self, countdown: u8) {
+    pub(super) const fn set_countdown(&mut self, countdown: u8) {
         self.countdown = countdown;
     }
 
@@ -73,7 +73,7 @@ impl Sweep {
     }
 
     /// Every 4th DIV event.
-    pub fn div_event(&mut self, ch1: &mut Square, c: &Ctx) {
+    pub(super) fn div_event(&mut self, ch1: &mut Square, c: &Ctx) {
         self.countdown = (self.countdown + 1) & 7;
         self.trigger_calculation(ch1, c);
     }
@@ -108,7 +108,7 @@ impl Sweep {
     }
 
     /// Advances the sweep by `cycles` 2 MHz ticks (it runs at 1 MHz).
-    pub fn run(&mut self, cycles: u32, ch1: &mut Square, c: &Ctx) {
+    pub(super) fn run(&mut self, cycles: u32, ch1: &mut Square, c: &Ctx) {
         let mut sweep_cycles = cycles / 2;
         if cycles & 1 != 0 && c.lf_div == 0 {
             sweep_cycles += 1;
@@ -141,7 +141,7 @@ impl Sweep {
     }
 
     /// Channel 1 was triggered (`was_active`: it was already playing).
-    pub fn trigger(&mut self, ch1: &Square, was_active: bool, c: &Ctx) {
+    pub(super) fn trigger(&mut self, ch1: &Square, was_active: bool, c: &Ctx) {
         self.instant_calculation_done = false;
         self.shadow_period = 0;
         self.completed_addend = 0;
@@ -167,7 +167,7 @@ impl Sweep {
         self.countdown = self.pace() ^ 7;
     }
 
-    pub fn write_nr10(&mut self, value: u8, ch1: &mut Square, c: &Ctx) {
+    pub(super) fn write_nr10(&mut self, value: u8, ch1: &mut Square, c: &Ctx) {
         if self.calculate_countdown != 0 || self.calculate_countdown_reload_timer != 0 {
             self.write_glitch(value, ch1, c);
         }

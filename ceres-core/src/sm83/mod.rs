@@ -1,4 +1,4 @@
-pub mod conflict;
+pub(crate) mod conflict;
 #[cfg(kani)]
 mod proofs;
 
@@ -34,7 +34,7 @@ const CF: u16 = 0x10;
 ///   the machine after all preceding M-cycles of the instruction), perform
 ///   the access, then defer the access's own 4 T-cycles.
 /// - The host flushes whatever remains at the end of each `step`.
-pub trait Bus {
+pub(crate) trait Bus {
     /// One internal (no bus access) M-cycle: defer 4 T-cycles.
     fn tick(&mut self);
 
@@ -138,7 +138,7 @@ pub trait Bus {
 
 #[expect(clippy::struct_excessive_bools, reason = "Independent CPU state flags")]
 #[derive(Default)]
-pub struct Sm83 {
+pub(crate) struct Sm83 {
     af: u16,
     bc: u16,
     de: u16,
@@ -158,75 +158,75 @@ pub struct Sm83 {
 }
 
 impl Sm83 {
-    pub const fn take_illegal_opcode(&mut self) -> bool {
+    pub(crate) const fn take_illegal_opcode(&mut self) -> bool {
         mem::replace(&mut self.has_executed_illegal_opcode, false)
     }
 
-    pub const fn a(&self) -> u8 {
+    pub(crate) const fn a(&self) -> u8 {
         (self.af >> 8) as u8
     }
 
-    pub const fn af(&self) -> u16 {
+    pub(crate) const fn af(&self) -> u16 {
         self.af
     }
 
-    pub const fn bc(&self) -> u16 {
+    pub(crate) const fn bc(&self) -> u16 {
         self.bc
     }
 
-    pub const fn de(&self) -> u16 {
+    pub(crate) const fn de(&self) -> u16 {
         self.de
     }
 
-    pub const fn hl(&self) -> u16 {
+    pub(crate) const fn hl(&self) -> u16 {
         self.hl
     }
 
-    pub const fn is_halted(&self) -> bool {
+    pub(crate) const fn is_halted(&self) -> bool {
         self.is_halted
     }
 
-    pub const fn ime(&self) -> bool {
+    pub(crate) const fn ime(&self) -> bool {
         self.ime
     }
 
-    pub fn take_ld_b_b_breakpoint(&mut self) -> bool {
+    pub(crate) fn take_ld_b_b_breakpoint(&mut self) -> bool {
         mem::take(&mut self.ld_b_b_breakpoint)
     }
 
-    pub const fn pc(&self) -> u16 {
+    pub(crate) const fn pc(&self) -> u16 {
         self.pc
     }
 
-    pub const fn sp(&self) -> u16 {
+    pub(crate) const fn sp(&self) -> u16 {
         self.sp
     }
 }
 
 impl Sm83 {
     /// Set the program counter.
-    pub const fn set_pc(&mut self, pc: u16) {
+    pub(crate) const fn set_pc(&mut self, pc: u16) {
         self.pc = pc;
     }
 
-    pub const fn set_af(&mut self, af: u16) {
+    pub(crate) const fn set_af(&mut self, af: u16) {
         // The low nibble of F is always zero.
         self.af = af & 0xFFF0;
     }
 
-    pub const fn set_bc(&mut self, bc: u16) {
+    pub(crate) const fn set_bc(&mut self, bc: u16) {
         self.bc = bc;
     }
 
-    pub const fn set_de(&mut self, de: u16) {
+    pub(crate) const fn set_de(&mut self, de: u16) {
         self.de = de;
     }
 
-    pub const fn set_hl(&mut self, hl: u16) {
+    pub(crate) const fn set_hl(&mut self, hl: u16) {
         self.hl = hl;
     }
 
-    pub const fn set_sp(&mut self, sp: u16) {
+    pub(crate) const fn set_sp(&mut self, sp: u16) {
         self.sp = sp;
     }
 }
@@ -244,7 +244,7 @@ impl Sm83 {
     /// then if EI was pending, flip IME in place. If the instruction is DI
     /// it will clear IME again; if it's anything else, IME will stay true
     /// through subsequent step calls.
-    pub fn step<B: Bus>(&mut self, bus: &mut B) {
+    pub(crate) fn step<B: Bus>(&mut self, bus: &mut B) {
         // Port of SameBoy's `GB_cpu_run` control flow. All time of the
         // previous instruction has been flushed, so interrupt lines are
         // sampled with the hardware at instruction end.

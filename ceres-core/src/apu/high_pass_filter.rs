@@ -1,6 +1,6 @@
 use crate::{Sample, timing::DOTS_PER_SEC};
 
-pub struct HighPassFilter {
+pub(super) struct HighPassFilter {
     capacitor_l: f32,
     capacitor_r: f32,
     filter_coeff: f32,
@@ -17,13 +17,13 @@ impl Default for HighPassFilter {
 }
 
 impl HighPassFilter {
-    pub fn new(sample_rate: i32) -> Self {
+    pub(super) fn new(sample_rate: i32) -> Self {
         let mut hpf = Self::default();
         hpf.set_sample_rate(sample_rate);
         hpf
     }
 
-    pub fn set_sample_rate(&mut self, sample_rate: i32) {
+    pub(super) fn set_sample_rate(&mut self, sample_rate: i32) {
         // Value from SameBoy apu.c: pow(0.999958, 4194304 / sample_rate)
         #[expect(clippy::cast_precision_loss)]
         let cycles_per_sample = DOTS_PER_SEC as f32 / sample_rate as f32;
@@ -31,7 +31,7 @@ impl HighPassFilter {
     }
 
     #[expect(clippy::float_arithmetic)]
-    pub fn high_pass(&mut self, l: Sample, r: Sample) -> (Sample, Sample) {
+    pub(super) fn high_pass(&mut self, l: Sample, r: Sample) -> (Sample, Sample) {
         let l_f32 = f32::from(l);
         let r_f32 = f32::from(r);
 

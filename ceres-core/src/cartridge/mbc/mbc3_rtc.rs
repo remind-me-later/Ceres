@@ -8,8 +8,8 @@ const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
 const DAYS: u64 = 0x200;
 
 /// The RAM bank numbers that map a clock register instead.
-pub const RTC_REG_FIRST: u8 = 0x08;
-pub const RTC_REG_LAST: u8 = 0x0C;
+pub(crate) const RTC_REG_FIRST: u8 = 0x08;
+pub(crate) const RTC_REG_LAST: u8 = 0x0C;
 
 /// The control register's index, and its bits.
 const CONTROL: usize = 4;
@@ -24,7 +24,7 @@ const CONTROL_MASK: u8 = CONTROL_CARRY_B | CONTROL_HALT_B | CONTROL_DAY_HIGH_B;
 /// The MBC3's real-time clock (SameBoy's model): the clock ticks the real
 /// registers, the CPU reads the latched copy.
 #[derive(Default, Debug)]
-pub struct Mbc3RTC {
+pub(crate) struct Mbc3RTC {
     /// 8 MHz units since the last tick.
     cycles: u32,
     /// Seconds, minutes, hours, days (low) and control (day bit 8, halt and
@@ -41,7 +41,7 @@ impl Mbc3RTC {
     ///
     /// # Errors
     /// Returns `Err(())` if `val` is not in the range 0x8..=0xC.  
-    pub fn map_reg(&mut self, val: u8) -> Result<(), ()> {
+    pub(crate) fn map_reg(&mut self, val: u8) -> Result<(), ()> {
         if !(RTC_REG_FIRST..=RTC_REG_LAST).contains(&val) {
             return Err(());
         }
@@ -50,7 +50,7 @@ impl Mbc3RTC {
     }
 
     /// The latched register that is mapped, if any.
-    pub fn read(&self, ram_enabled: bool) -> Option<u8> {
+    pub(crate) fn read(&self, ram_enabled: bool) -> Option<u8> {
         const MASKS: [u8; 5] = [0x3F, 0x3F, 0x1F, 0xFF, CONTROL_MASK];
         self.mapped.filter(|_| ram_enabled).map(|m| {
             let index = usize::from(m.get() - RTC_REG_FIRST);
@@ -59,13 +59,13 @@ impl Mbc3RTC {
     }
 
     /// Copies the real registers to the latched ones (any write to $6000-$7FFF).
-    pub const fn latch(&mut self) {
+    pub(crate) const fn latch(&mut self) {
         self.latched = self.real;
     }
 
     /// Advances the clock by `units` 8 MHz units (a CPU cycle in double speed,
     /// two in single speed).
-    pub const fn run(&mut self, units: u32) {
+    pub(crate) const fn run(&mut self, units: u32) {
         if self.real[CONTROL] & CONTROL_HALT_B != 0 {
             return;
         }
@@ -77,7 +77,7 @@ impl Mbc3RTC {
         }
     }
 
-    pub const fn unmap_reg(&mut self) {
+    pub(crate) const fn unmap_reg(&mut self) {
         self.mapped = None;
     }
 
@@ -110,7 +110,7 @@ impl Mbc3RTC {
     }
 
     #[must_use]
-    pub fn write(&mut self, ram_enabled: bool, val: u8) -> Option<()> {
+    pub(crate) fn write(&mut self, ram_enabled: bool, val: u8) -> Option<()> {
         self.mapped.filter(|_| ram_enabled).map(|m| {
             let index = usize::from(m.get() - RTC_REG_FIRST);
             if index == 0 {
@@ -128,7 +128,7 @@ impl Mbc3RTC {
     /// SameBoy, the whole days are added first, then the rest a second at a
     /// time. A halted clock does not move.
     #[expect(clippy::cast_possible_truncation)]
-    pub const fn add_seconds(&mut self, secs: u64) {
+    pub(crate) const fn add_seconds(&mut self, secs: u64) {
         if self.real[CONTROL] & CONTROL_HALT_B != 0 {
             return;
         }
@@ -150,20 +150,20 @@ impl Mbc3RTC {
     }
 
     /// The clock registers: seconds, minutes, hours, days and control.
-    pub const fn real(&self) -> [u8; 5] {
+    pub(crate) const fn real(&self) -> [u8; 5] {
         self.real
     }
 
-    pub const fn set_real(&mut self, real: [u8; 5]) {
+    pub(crate) const fn set_real(&mut self, real: [u8; 5]) {
         self.real = real;
         self.real[CONTROL] &= CONTROL_MASK;
     }
 
-    pub const fn latched(&self) -> [u8; 5] {
+    pub(crate) const fn latched(&self) -> [u8; 5] {
         self.latched
     }
 
-    pub const fn set_latched(&mut self, latched: [u8; 5]) {
+    pub(crate) const fn set_latched(&mut self, latched: [u8; 5]) {
         self.latched = latched;
     }
 }

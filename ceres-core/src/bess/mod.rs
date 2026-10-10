@@ -19,8 +19,8 @@ const CGB_PALETTES_SIZE: u32 = 0x40;
 /// The footer: the offset of the first block, then "BESS".
 const FOOTER_SIZE: usize = 8;
 
-pub use read::Reader;
-pub use write::Writer;
+pub(crate) use read::Reader;
+pub(crate) use write::Writer;
 
 #[cfg(test)]
 mod tests {

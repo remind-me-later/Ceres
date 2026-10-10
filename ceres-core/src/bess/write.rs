@@ -7,17 +7,17 @@ use crate::{
     ppu::{Oam, Vram},
 };
 
-pub struct Writer<'a> {
+pub(crate) struct Writer<'a> {
     buf: &'a mut Vec<u8>,
     position: usize,
 }
 
 impl<'a> Writer<'a> {
-    pub const fn new(buf: &'a mut Vec<u8>) -> Self {
+    pub(crate) const fn new(buf: &'a mut Vec<u8>) -> Self {
         Self { buf, position: 0 }
     }
 
-    pub fn save_state<A: AudioCallback>(&mut self, gb: &Gb<A>, secs_since_unix_epoch: u64) {
+    pub(crate) fn save_state<A: AudioCallback>(&mut self, gb: &Gb<A>, secs_since_unix_epoch: u64) {
         let cgb = matches!(gb.cgb_mode, CgbMode::Cgb);
         let palette = if cgb { CGB_PALETTES_SIZE } else { 0 };
         let sizes = WrittenSizes {

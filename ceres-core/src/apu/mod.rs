@@ -32,7 +32,7 @@ mod square;
 mod sweep;
 mod wave;
 
-pub use post_boot::PostBoot;
+pub(crate) use post_boot::PostBoot;
 
 use {
     crate::{Model, timing::apu_div_bit},
@@ -102,7 +102,7 @@ const N_CHANNELS: usize = 4;
 
 /// Machine state the APU needs on each access.
 #[derive(Clone, Copy, Default)]
-pub struct ApuCtx {
+pub(crate) struct ApuCtx {
     pub address_bus: u16,
     pub div_counter: u16,
     pub double_speed: bool,
@@ -133,7 +133,7 @@ enum SkipDivEvent {
     Skip,
 }
 
-pub struct Apu<A: AudioCallback> {
+pub(crate) struct Apu<A: AudioCallback> {
     audio_callback: A,
     mixer: Mixer,
     rev: Revision,
@@ -157,7 +157,7 @@ pub struct Apu<A: AudioCallback> {
 }
 
 impl<A: AudioCallback> Apu<A> {
-    pub fn new(sample_rate: i32, audio_callback: A) -> Self {
+    pub(crate) fn new(sample_rate: i32, audio_callback: A) -> Self {
         Self {
             audio_callback,
             mixer: Mixer::new(sample_rate),
@@ -176,16 +176,16 @@ impl<A: AudioCallback> Apu<A> {
         }
     }
 
-    pub const fn set_model(&mut self, model: Model) {
+    pub(crate) const fn set_model(&mut self, model: Model) {
         self.rev = Revision::new(model);
     }
 
-    pub fn set_sample_rate(&mut self, sample_rate: i32) {
+    pub(crate) fn set_sample_rate(&mut self, sample_rate: i32) {
         self.mixer.set_sample_rate(sample_rate);
     }
 
     /// Resets everything but the wave RAM.
-    pub const fn reset(&mut self) {
+    pub(crate) const fn reset(&mut self) {
         self.enabled = false;
         self.nr50 = 0;
         self.nr51 = 0;
@@ -243,7 +243,7 @@ impl<A: AudioCallback> Apu<A> {
 
     /// Every machine step starts with an unmasked PCM (SameBoy's "sort of
     /// hacky, but too many cross-component interactions to do it right").
-    pub const fn reset_pcm_mask(&mut self) {
+    pub(crate) const fn reset_pcm_mask(&mut self) {
         self.squares[SQUARE_1].out_mut().pcm_mask = 0xF;
         self.squares[SQUARE_2].out_mut().pcm_mask = 0xF;
         self.wave.out_mut().pcm_mask = 0xF;
@@ -251,12 +251,12 @@ impl<A: AudioCallback> Apu<A> {
     }
 
     #[must_use]
-    pub fn pcm12(&self) -> u8 {
+    pub(crate) fn pcm12(&self) -> u8 {
         self.pcm_pair(SQUARE_2, SQUARE_1)
     }
 
     #[must_use]
-    pub fn pcm34(&self) -> u8 {
+    pub(crate) fn pcm34(&self) -> u8 {
         self.pcm_pair(NOISE, WAVE)
     }
 
@@ -274,7 +274,7 @@ impl<A: AudioCallback> Apu<A> {
         self.noise.tick_envelope(c);
     }
 
-    pub fn delayed_envelope_tick(&mut self, ctx: &ApuCtx) {
+    pub(crate) fn delayed_envelope_tick(&mut self, ctx: &ApuCtx) {
         self.pending_envelope_tick = false;
         if !self.enabled {
             return;
@@ -286,17 +286,17 @@ impl<A: AudioCallback> Apu<A> {
 
     /// NR52 bit 7: the APU is powered.
     #[must_use]
-    pub const fn is_enabled(&self) -> bool {
+    pub(crate) const fn is_enabled(&self) -> bool {
         self.enabled
     }
 
     #[must_use]
-    pub const fn pending_envelope_tick(&self) -> bool {
+    pub(crate) const fn pending_envelope_tick(&self) -> bool {
         self.pending_envelope_tick
     }
 
     /// A falling edge of DIV bit 4 (5 in double speed).
-    pub fn div_event(&mut self, ctx: &ApuCtx) {
+    pub(crate) fn div_event(&mut self, ctx: &ApuCtx) {
         self.reset_pcm_mask();
         if !self.enabled {
             return;
@@ -341,7 +341,7 @@ impl<A: AudioCallback> Apu<A> {
 
     /// A rising edge of DIV bit 4 (5 in double speed): the envelopes whose
     /// countdown expired raise their clock.
-    pub fn div_secondary_event(&mut self) {
+    pub(crate) fn div_secondary_event(&mut self) {
         self.reset_pcm_mask();
         if !self.enabled {
             return;
@@ -355,7 +355,7 @@ impl<A: AudioCallback> Apu<A> {
     // -- running --------------------------------------------------------------
 
     /// Runs the APU for `ticks` ticks and feeds the mixer.
-    pub fn tick(&mut self, ctx: &ApuCtx, ticks: u32) {
+    pub(crate) fn tick(&mut self, ctx: &ApuCtx, ticks: u32) {
         self.run(ctx, ticks);
         let levels = [
             self.output(SQUARE_1).level,
@@ -424,7 +424,7 @@ impl<A: AudioCallback> Apu<A> {
 
     /// Reads a register (`reg` is the low byte of the 0xFF10..=0xFF3F address).
     #[must_use]
-    pub fn read(&self, reg: usize) -> u8 {
+    pub(crate) fn read(&self, reg: usize) -> u8 {
         match reg {
             NR10 => self.sweep.read_nr10(),
             NR11 | NR21 => self.squares[usize::from(reg == NR21)].read_nrx1(),
@@ -451,7 +451,7 @@ impl<A: AudioCallback> Apu<A> {
     }
 
     /// Writes a register (`reg` is the low byte of the 0xFF10..=0xFF3F address).
-    pub fn write(&mut self, ctx: &ApuCtx, reg: usize, value: u8) {
+    pub(crate) fn write(&mut self, ctx: &ApuCtx, reg: usize, value: u8) {
         // Only the wave RAM, and the length timers on the DMG, can be written
         // with the APU off.
         if !self.enabled

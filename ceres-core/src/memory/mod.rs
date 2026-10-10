@@ -7,102 +7,102 @@ mod wram;
 
 use crate::{AudioCallback, Model, ppu};
 use crate::{CgbMode, Gb};
-pub use dma::Dma;
-pub use hdma::{Hdma, SwitchHdma};
-pub use hram::Hram;
-pub use key1::{Key1, SpeedSwitch};
-pub use wram::Wram;
+pub(crate) use dma::Dma;
+pub(crate) use hdma::{Hdma, SwitchHdma};
+pub(crate) use hram::Hram;
+pub(crate) use key1::{Key1, SpeedSwitch};
+pub(crate) use wram::Wram;
 
 // The memory map
-pub const VRAM_START: u16 = 0x8000;
-pub const CART_RAM_START: u16 = 0xA000;
-pub const WRAM_START: u16 = 0xC000;
+pub(crate) const VRAM_START: u16 = 0x8000;
+pub(crate) const CART_RAM_START: u16 = 0xA000;
+pub(crate) const WRAM_START: u16 = 0xC000;
 /// Echo RAM: the work RAM again, up to the OAM.
-pub const ECHO_START: u16 = 0xE000;
+pub(crate) const ECHO_START: u16 = 0xE000;
 /// Echo RAM addresses are work RAM ones with this bit set.
-pub const ECHO_B: u16 = 0x2000;
-pub const OAM_START: u16 = 0xFE00;
+pub(crate) const ECHO_B: u16 = 0x2000;
+pub(crate) const OAM_START: u16 = 0xFE00;
 /// The unusable area after the OAM.
-pub const UNUSABLE_START: u16 = 0xFEA0;
+pub(crate) const UNUSABLE_START: u16 = 0xFEA0;
 /// The I/O registers, then the high RAM and IE.
-pub const IO_START: u16 = 0xFF00;
-pub const HRAM_START: u16 = 0xFF80;
+pub(crate) const IO_START: u16 = 0xFF00;
+pub(crate) const HRAM_START: u16 = 0xFF80;
 
 /// The address of the I/O register at `reg` (one of the offsets below).
 #[must_use]
-pub const fn io_addr(reg: u8) -> u16 {
+pub(crate) const fn io_addr(reg: u8) -> u16 {
     IO_START | reg as u16
 }
 
 // IO addresses
 // JoyP
-pub const P1: u8 = 0x00;
+pub(crate) const P1: u8 = 0x00;
 // Serial
-pub const SB: u8 = 0x01;
-pub const SC: u8 = 0x02;
+pub(crate) const SB: u8 = 0x01;
+pub(crate) const SC: u8 = 0x02;
 // Timer
-pub const DIV: u8 = 0x04;
-pub const TIMA: u8 = 0x05;
-pub const TMA: u8 = 0x06;
-pub const TAC: u8 = 0x07;
+pub(crate) const DIV: u8 = 0x04;
+pub(crate) const TIMA: u8 = 0x05;
+pub(crate) const TMA: u8 = 0x06;
+pub(crate) const TAC: u8 = 0x07;
 // IF
-pub const IF: u8 = 0x0F;
+pub(crate) const IF: u8 = 0x0F;
 // APU
-pub const NR10: u8 = 0x10;
-pub const NR14: u8 = 0x14;
-pub const NR21: u8 = 0x16;
-pub const NR24: u8 = 0x19;
-pub const NR30: u8 = 0x1A;
-pub const NR34: u8 = 0x1E;
-pub const NR41: u8 = 0x20;
-pub const NR44: u8 = 0x23;
-pub const NR50: u8 = 0x24;
-pub const NR52: u8 = 0x26;
-pub const WAV_BEG: u8 = 0x30;
-pub const WAV_END: u8 = 0x3F;
+pub(crate) const NR10: u8 = 0x10;
+pub(crate) const NR14: u8 = 0x14;
+pub(crate) const NR21: u8 = 0x16;
+pub(crate) const NR24: u8 = 0x19;
+pub(crate) const NR30: u8 = 0x1A;
+pub(crate) const NR34: u8 = 0x1E;
+pub(crate) const NR41: u8 = 0x20;
+pub(crate) const NR44: u8 = 0x23;
+pub(crate) const NR50: u8 = 0x24;
+pub(crate) const NR52: u8 = 0x26;
+pub(crate) const WAV_BEG: u8 = 0x30;
+pub(crate) const WAV_END: u8 = 0x3F;
 // PPU
-pub const LCDC: u8 = 0x40;
-pub const STAT: u8 = 0x41;
-pub const SCY: u8 = 0x42;
-pub const SCX: u8 = 0x43;
-pub const LY: u8 = 0x44;
-pub const LYC: u8 = 0x45;
-pub const DMA: u8 = 0x46;
-pub const BGP: u8 = 0x47;
-pub const OBP0: u8 = 0x48;
-pub const OBP1: u8 = 0x49;
-pub const BANK: u8 = 0x50;
-pub const WY: u8 = 0x4A;
-pub const WX: u8 = 0x4B;
-pub const KEY0: u8 = 0x4C;
-pub const KEY1: u8 = 0x4D;
-pub const VBK: u8 = 0x4F;
+pub(crate) const LCDC: u8 = 0x40;
+pub(crate) const STAT: u8 = 0x41;
+pub(crate) const SCY: u8 = 0x42;
+pub(crate) const SCX: u8 = 0x43;
+pub(crate) const LY: u8 = 0x44;
+pub(crate) const LYC: u8 = 0x45;
+pub(crate) const DMA: u8 = 0x46;
+pub(crate) const BGP: u8 = 0x47;
+pub(crate) const OBP0: u8 = 0x48;
+pub(crate) const OBP1: u8 = 0x49;
+pub(crate) const BANK: u8 = 0x50;
+pub(crate) const WY: u8 = 0x4A;
+pub(crate) const WX: u8 = 0x4B;
+pub(crate) const KEY0: u8 = 0x4C;
+pub(crate) const KEY1: u8 = 0x4D;
+pub(crate) const VBK: u8 = 0x4F;
 // HDMA
-pub const HDMA1: u8 = 0x51;
-pub const HDMA2: u8 = 0x52;
-pub const HDMA3: u8 = 0x53;
-pub const HDMA4: u8 = 0x54;
-pub const HDMA5: u8 = 0x55;
+pub(crate) const HDMA1: u8 = 0x51;
+pub(crate) const HDMA2: u8 = 0x52;
+pub(crate) const HDMA3: u8 = 0x53;
+pub(crate) const HDMA4: u8 = 0x54;
+pub(crate) const HDMA5: u8 = 0x55;
 // Palettes
-pub const BCPS: u8 = 0x68;
-pub const BCPD: u8 = 0x69;
-pub const OCPS: u8 = 0x6A;
-pub const OCPD: u8 = 0x6B;
-pub const OPRI: u8 = 0x6C;
+pub(crate) const BCPS: u8 = 0x68;
+pub(crate) const BCPD: u8 = 0x69;
+pub(crate) const OCPS: u8 = 0x6A;
+pub(crate) const OCPD: u8 = 0x6B;
+pub(crate) const OPRI: u8 = 0x6C;
 // WRAM select
-pub const SVBK: u8 = 0x70;
+pub(crate) const SVBK: u8 = 0x70;
 // APU digital out
-pub const PCM12: u8 = 0x76;
-pub const PCM34: u8 = 0x77;
+pub(crate) const PCM12: u8 = 0x76;
+pub(crate) const PCM34: u8 = 0x77;
 // Undocumented CGB registers
-pub const UNDOC_FF72: u8 = 0x72;
-pub const UNDOC_FF73: u8 = 0x73;
-pub const UNDOC_FF75: u8 = 0x75;
+pub(crate) const UNDOC_FF72: u8 = 0x72;
+pub(crate) const UNDOC_FF73: u8 = 0x73;
+pub(crate) const UNDOC_FF75: u8 = 0x75;
 // HRAM
-pub const HRAM_BEG: u8 = 0x80;
-pub const HRAM_END: u8 = 0xFE;
+pub(crate) const HRAM_BEG: u8 = 0x80;
+pub(crate) const HRAM_END: u8 = 0xFE;
 // IE
-pub const IE: u8 = 0xFF;
+pub(crate) const IE: u8 = 0xFF;
 
 impl<A: AudioCallback> Gb<A> {
     #[must_use]

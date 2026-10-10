@@ -1,10 +1,10 @@
 mod mbc3_rtc;
 
 use crate::Error;
-pub use mbc3_rtc::{Mbc3RTC, RTC_REG_FIRST, RTC_REG_LAST};
+pub(super) use mbc3_rtc::{Mbc3RTC, RTC_REG_FIRST, RTC_REG_LAST};
 
 #[derive(Debug, Default)]
-pub enum Mbc {
+pub(super) enum Mbc {
     #[default]
     Mbc0,
     Mbc1 {
@@ -24,7 +24,7 @@ pub enum Mbc {
 }
 
 impl Mbc {
-    pub fn mbc_and_battery(mbc_byte: u8) -> Result<(Self, bool), Error> {
+    pub(super) fn mbc_and_battery(mbc_byte: u8) -> Result<(Self, bool), Error> {
         let res = match mbc_byte {
             0x00 => (Self::Mbc0, false),
             0x01 | 0x02 => (Self::Mbc1 { bank_mode: false }, false),

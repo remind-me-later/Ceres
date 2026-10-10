@@ -17,14 +17,14 @@ const LYC_DROP_HOLD: u8 = 8;
 
 /// `mode_for_interrupt` while the line is held by the HBlank or the OAM
 /// condition as VBlank starts.
-pub const MODE_VBLANK_ENTRY: i8 = 4;
+pub(super) const MODE_VBLANK_ENTRY: i8 = 4;
 
 #[expect(
     clippy::struct_excessive_bools,
     reason = "Independent interrupt line and glitch flags"
 )]
 #[derive(Clone)]
-pub struct StatIrq {
+pub(super) struct StatIrq {
     /// `ly_for_comparison`; `-1` is SameBoy's `(uint16_t)-1`.
     pub ly_for_comparison: i32,
     /// The mode the STAT interrupt sees (-1: none).
@@ -113,7 +113,7 @@ impl Ppu {
 
     /// The DMA's last cycle: during the OAM scan edge it raises the mode 2
     /// bits (SameBoy `GB_dma_run`).
-    pub fn dma_finished(&mut self, ints: &mut Interrupts) {
+    pub(crate) fn dma_finished(&mut self, ints: &mut Interrupts) {
         if self.d.state == State::OamScanObject {
             self.stat |= 2;
             self.stat_update(ints);
@@ -121,7 +121,7 @@ impl Ppu {
     }
 
     /// Re-evaluates the STAT interrupt line (after a DMA start).
-    pub fn refresh_stat(&mut self, ints: &mut Interrupts) {
+    pub(crate) fn refresh_stat(&mut self, ints: &mut Interrupts) {
         self.stat_update(ints);
     }
 

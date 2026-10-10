@@ -101,7 +101,7 @@ impl LateReg {
     reason = "Independent event flags, as in gambatte"
 )]
 #[derive(Clone, Debug)]
-pub struct GStat {
+pub(super) struct GStat {
     /// The clock: half dots since the LCD was turned on, and the position
     /// in the line.
     g: u64,
@@ -411,14 +411,14 @@ impl GStat {
 impl Ppu {
     /// The CGB follows gambatte's model (up to revision C).
     #[must_use]
-    pub const fn gambatte_stat(&self) -> bool {
+    pub(crate) const fn gambatte_stat(&self) -> bool {
         self.is_cgb_hardware() && !model_ge_cgb_d(self.model)
     }
 
     /// The STAT interrupt and LY follow gambatte's model (its CGB, and its
     /// DMG, a DMG-B).
     #[must_use]
-    pub fn gambatte_irq(&self) -> bool {
+    pub(crate) fn gambatte_irq(&self) -> bool {
         self.gambatte_stat() || self.model == crate::Model::DmgB
     }
 
@@ -629,7 +629,7 @@ impl Ppu {
 
     /// An LCDC write `units_early` before a read's point: gambatte's window
     /// checks see it 2 cycles after that point.
-    pub fn gstat_write_lcdc(&mut self, val: u8, units_early: i64) {
+    pub(crate) fn gstat_write_lcdc(&mut self, val: u8, units_early: i64) {
         let ds = self.double_speed();
         let g = &mut self.d.gstat;
         let after = g.g.cast_signed() + units_early + GStat::cc(ds, 2);
@@ -643,7 +643,7 @@ impl Ppu {
     }
 
     /// The LCDC write is complete.
-    pub const fn gstat_lcdc_write_done(&mut self) {
+    pub(crate) const fn gstat_lcdc_write_done(&mut self) {
         self.d.gstat.lcdc_tracked = false;
     }
 
@@ -653,12 +653,12 @@ impl Ppu {
 
     /// An HBlank HDMA enabled now starts with the current HBlank (gambatte's
     /// `isHdmaPeriod(cc + 4)`); `None` before mode 0 began.
-    pub fn gstat_hdma_enable_in_hblank(&self) -> Option<bool> {
+    pub(crate) fn gstat_hdma_enable_in_hblank(&self) -> Option<bool> {
         self.gstat_hdma_period(4)
     }
 
     /// gambatte's `isHdmaPeriod(cc + offset)`; `None` before mode 0 began.
-    pub fn gstat_hdma_period(&self, offset: i64) -> Option<bool> {
+    pub(crate) fn gstat_hdma_period(&self, offset: i64) -> Option<bool> {
         let g = &self.d.gstat;
         if !self.gambatte_stat() || !g.lcd_on {
             return None;

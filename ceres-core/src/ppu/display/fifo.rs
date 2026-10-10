@@ -1,7 +1,7 @@
 //! The background and object pixel FIFOs.
 
 #[derive(Clone, Copy, Default)]
-pub struct Item {
+pub(super) struct Item {
     pub pixel: u8,
     pub palette: u8,
     pub priority: u8,
@@ -10,26 +10,26 @@ pub struct Item {
 
 /// An 8-entry ring, like SameBoy's `GB_fifo_t`.
 #[derive(Clone, Copy, Default)]
-pub struct Fifo {
+pub(super) struct Fifo {
     pub items: [Item; 8],
     pub read_end: u8,
     pub size: u8,
 }
 
 impl Fifo {
-    pub const fn clear(&mut self) {
+    pub(super) const fn clear(&mut self) {
         self.read_end = 0;
         self.size = 0;
     }
 
-    pub fn pop(&mut self) -> Item {
+    pub(super) fn pop(&mut self) -> Item {
         let item = self.items[usize::from(self.read_end)];
         self.read_end = (self.read_end + 1) & 7;
         self.size -= 1;
         item
     }
 
-    pub fn push_bg_row(
+    pub(super) fn push_bg_row(
         &mut self,
         mut lower: u8,
         mut upper: u8,
@@ -59,7 +59,7 @@ impl Fifo {
         }
     }
 
-    pub fn overlay_object_row(
+    pub(super) fn overlay_object_row(
         &mut self,
         mut lower: u8,
         mut upper: u8,
@@ -92,7 +92,7 @@ impl Fifo {
 
 /// One pixel as it reaches the LCD, before palette lookup.
 #[derive(Clone, Copy)]
-pub struct PixelOut {
+pub(super) struct PixelOut {
     pub lx: u8,
     /// Background colour id (already 0 when the background is disabled).
     pub bg_pixel: u8,

@@ -10,12 +10,8 @@ use crate::{
     memory::{BGP, HRAM_START, IF, IO_START, LCDC, LYC, NR10, OBP0, OBP1, SCX, SCY, STAT, WX, WY},
 };
 
-#[expect(
-    clippy::module_name_repetitions,
-    reason = "Named after SameBoy's `conflict_t`; it is used outside this module"
-)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum ConflictType {
+pub(crate) enum ConflictType {
     #[default]
     ReadOld,
     ReadNew,
@@ -35,7 +31,7 @@ pub enum ConflictType {
     ScyDmg,
 }
 
-pub const DMG_CONFLICT_MAP: [ConflictType; 128] = {
+pub(crate) const DMG_CONFLICT_MAP: [ConflictType; 128] = {
     let mut map = [ConflictType::ReadOld; 128];
     map[IF as usize] = ConflictType::WriteCpu;
     map[LCDC as usize] = ConflictType::DmgLcdc;
@@ -51,7 +47,7 @@ pub const DMG_CONFLICT_MAP: [ConflictType; 128] = {
     map
 };
 
-pub const SGB_CONFLICT_MAP: [ConflictType; 128] = {
+pub(crate) const SGB_CONFLICT_MAP: [ConflictType; 128] = {
     let mut map = [ConflictType::ReadOld; 128];
     map[IF as usize] = ConflictType::WriteCpu;
     map[LCDC as usize] = ConflictType::SgbLcdc;
@@ -67,7 +63,7 @@ pub const SGB_CONFLICT_MAP: [ConflictType; 128] = {
     map
 };
 
-pub const CGB_CONFLICT_MAP: [ConflictType; 128] = {
+pub(crate) const CGB_CONFLICT_MAP: [ConflictType; 128] = {
     let mut map = [ConflictType::ReadOld; 128];
     map[IF as usize] = ConflictType::WriteCpu;
     map[LCDC as usize] = ConflictType::LcdcCgb;
@@ -82,7 +78,7 @@ pub const CGB_CONFLICT_MAP: [ConflictType; 128] = {
     map
 };
 
-pub const CGB_DOUBLE_CONFLICT_MAP: [ConflictType; 128] = {
+pub(crate) const CGB_DOUBLE_CONFLICT_MAP: [ConflictType; 128] = {
     let mut map = [ConflictType::ReadOld; 128];
     map[IF as usize] = ConflictType::WriteCpu;
     map[NR10 as usize] = ConflictType::Nr10CgbDouble;
@@ -96,11 +92,7 @@ pub const CGB_DOUBLE_CONFLICT_MAP: [ConflictType; 128] = {
 };
 
 #[must_use]
-#[expect(
-    clippy::module_name_repetitions,
-    reason = "Reads better at the call sites than a bare `get`"
-)]
-pub const fn get_conflict(model: Model, double_speed: bool, addr: u16) -> ConflictType {
+pub(crate) const fn get_conflict(model: Model, double_speed: bool, addr: u16) -> ConflictType {
     if addr < IO_START || addr >= HRAM_START {
         return ConflictType::ReadOld;
     }

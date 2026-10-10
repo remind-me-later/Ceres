@@ -1,7 +1,7 @@
 use crate::{PX_HEIGHT, PX_WIDTH};
 use alloc::{boxed::Box, vec};
 
-pub struct RgbaBuf {
+pub(super) struct RgbaBuf {
     data: Box<[u8; Self::RGB_BUF_SIZE as usize]>,
 }
 
@@ -25,22 +25,22 @@ impl RgbaBuf {
     const PX_TOTAL: u16 = PX_WIDTH as u16 * PX_HEIGHT as u16;
     const RGB_BUF_SIZE: u32 = Self::PX_TOTAL as u32 * Self::BPP;
 
-    pub fn clear(&mut self) {
+    pub(super) fn clear(&mut self) {
         self.data.fill(0xff);
     }
 
     #[must_use]
-    pub const fn pixel_data(&self) -> &[u8] {
+    pub(super) const fn pixel_data(&self) -> &[u8] {
         self.data.as_slice()
     }
 
     #[must_use]
-    pub const fn px(&self, index: u32) -> (u8, u8, u8) {
+    pub(super) const fn px(&self, index: u32) -> (u8, u8, u8) {
         let base = (index * Self::BPP) as usize;
         (self.data[base], self.data[base + 1], self.data[base + 2])
     }
 
-    pub fn set_px(&mut self, index: u32, rgb: (u8, u8, u8)) {
+    pub(super) fn set_px(&mut self, index: u32, rgb: (u8, u8, u8)) {
         let base = index * Self::BPP;
         self.data[base as usize] = rgb.0;
         self.data[base as usize + 1] = rgb.1;

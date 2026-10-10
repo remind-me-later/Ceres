@@ -78,14 +78,14 @@ mutex_integer = "warn"
 needless_raw_strings = "warn"
 non_ascii_literal = "warn"
 non_zero_suggestions = "warn"
-nursery = "warn"
+nursery = { level = "warn", priority = -1 }
 out_of_bounds_indexing = "warn"
 panic = "warn"
 panic_in_result_fn = "allow"
 partial_pub_fields = "warn"
 pathbuf_init_then_push = "warn"
 pattern_type_mismatch = "warn"
-pedantic = "warn"
+pedantic = { level = "warn", priority = -1 }
 pointer_format = "warn"
 precedence_bits = "warn"
 print_stderr = "warn"
@@ -95,6 +95,8 @@ pub_with_shorthand = "allow"
 pub_without_shorthand = "warn"
 rc_buffer = "warn"
 rc_mutex = "warn"
+# `pub(crate)` marks what is internal (see `unreachable_pub`).
+redundant_pub_crate = "allow"
 redundant_type_annotations = "warn"
 ref_patterns = "allow"
 renamed_function_params = "warn"
@@ -130,4 +132,5 @@ wildcard_enum_match_arm = "allow"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
+unreachable_pub = "warn"
 unsafe_code = "forbid"

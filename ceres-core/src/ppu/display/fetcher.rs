@@ -21,7 +21,7 @@ const TILE_DATA_SIGNED: u16 = 0x1000;
 /// The steps of the fetcher, two dots each but the last (SameBoy's
 /// `fetcher_step_t`).
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub enum FetcherStep {
+pub(super) enum FetcherStep {
     #[default]
     GetTileT1,
     GetTileT2,
@@ -33,7 +33,7 @@ pub enum FetcherStep {
 }
 
 impl FetcherStep {
-    pub const fn next(self) -> Self {
+    pub(super) const fn next(self) -> Self {
         match self {
             Self::GetTileT1 => Self::GetTileT2,
             Self::GetTileT2 => Self::DataLowT1,
@@ -46,7 +46,7 @@ impl FetcherStep {
 }
 
 #[derive(Clone, Default)]
-pub struct Fetcher {
+pub(super) struct Fetcher {
     pub step: FetcherStep,
     pub tile: u8,
     pub attributes: u8,

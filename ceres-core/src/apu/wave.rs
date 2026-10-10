@@ -6,7 +6,7 @@ use super::{
 };
 
 #[derive(Clone, Copy)]
-pub struct Wave {
+pub(super) struct Wave {
     out: ChannelOutput,
     length: Length,
     /// NR30 bit 7: the DAC is on.
@@ -33,7 +33,7 @@ pub struct Wave {
 }
 
 impl Wave {
-    pub const fn new() -> Self {
+    pub(super) const fn new() -> Self {
         Self {
             out: ChannelOutput::new(),
             length: Length::new(),
@@ -52,7 +52,7 @@ impl Wave {
 
     /// Clears the channel, but the DAC keeps its level until the next update
     /// and the wave RAM is unchanged.
-    pub const fn power_off(&mut self) {
+    pub(super) const fn power_off(&mut self) {
         let mut out = self.out;
         out.power_off();
         *self = Self {
@@ -62,28 +62,28 @@ impl Wave {
         };
     }
 
-    pub const fn out(&self) -> &ChannelOutput {
+    pub(super) const fn out(&self) -> &ChannelOutput {
         &self.out
     }
 
-    pub const fn out_mut(&mut self) -> &mut ChannelOutput {
+    pub(super) const fn out_mut(&mut self) -> &mut ChannelOutput {
         &mut self.out
     }
 
-    pub const fn length_counter(&self) -> u16 {
+    pub(super) const fn length_counter(&self) -> u16 {
         self.length.counter
     }
 
-    pub const fn set_length_counter(&mut self, counter: u16) {
+    pub(super) const fn set_length_counter(&mut self, counter: u16) {
         self.length.counter = counter;
     }
 
-    pub const fn dac_enabled(&self) -> bool {
+    pub(super) const fn dac_enabled(&self) -> bool {
         self.dac_enabled
     }
 
     /// Resets the channel but the wave RAM.
-    pub const fn reset(&mut self) {
+    pub(super) const fn reset(&mut self) {
         *self = Self {
             ram: self.ram,
             ..Self::new()
@@ -91,21 +91,21 @@ impl Wave {
     }
 
     /// Every other DIV event.
-    pub fn tick_length(&mut self, c: &Ctx) {
+    pub(super) fn tick_length(&mut self, c: &Ctx) {
         if self.length.tick() {
             self.expire(c);
         }
     }
 
-    pub const fn read_nr30(&self) -> u8 {
+    pub(super) const fn read_nr30(&self) -> u8 {
         if self.dac_enabled { 0xFF } else { 0x7F }
     }
 
-    pub const fn read_nr32(&self) -> u8 {
+    pub(super) const fn read_nr32(&self) -> u8 {
         self.nr32 | 0x9F
     }
 
-    pub const fn read_nr34(&self) -> u8 {
+    pub(super) const fn read_nr34(&self) -> u8 {
         if self.length.enabled { 0xFF } else { 0xBF }
     }
 
@@ -115,7 +115,7 @@ impl Wave {
         [4, 0, 1, 2][((self.nr32 >> 5) & 3) as usize]
     }
 
-    pub fn update_sample(&mut self, value: u8, c: &Ctx) {
+    pub(super) fn update_sample(&mut self, value: u8, c: &Ctx) {
         self.out.update(WAVE, value, self.dac_enabled, 0, c);
     }
 
@@ -128,7 +128,7 @@ impl Wave {
         self.update_sample(nibble >> self.shift(), c);
     }
 
-    pub fn disable(&mut self, c: &Ctx) {
+    pub(super) fn disable(&mut self, c: &Ctx) {
         self.out.active = false;
         self.update_sample(0, c);
     }
@@ -145,23 +145,23 @@ impl Wave {
         Some(usize::from(self.position / 2))
     }
 
-    pub fn read_ram(&self, offset: usize, rev: Revision) -> u8 {
+    pub(super) fn read_ram(&self, offset: usize, rev: Revision) -> u8 {
         self.ram_index(offset, rev).map_or(0xFF, |i| self.ram[i])
     }
 
-    pub fn write_ram(&mut self, offset: usize, value: u8, rev: Revision) {
+    pub(super) fn write_ram(&mut self, offset: usize, value: u8, rev: Revision) {
         if let Some(i) = self.ram_index(offset, rev) {
             self.ram[i] = value;
         }
     }
 
     /// A stopped DMG wave channel has a read pending.
-    pub const fn has_bugged_read(&self) -> bool {
+    pub(super) const fn has_bugged_read(&self) -> bool {
         self.bugged_read_countdown != 0
     }
 
     /// The pending read of a stopped DMG wave channel.
-    pub fn run_bugged_read(&mut self, cycles: u32, c: &Ctx) {
+    pub(super) fn run_bugged_read(&mut self, cycles: u32, c: &Ctx) {
         for _ in 0..cycles {
             self.bugged_read_countdown = self.bugged_read_countdown.wrapping_sub(1);
             if self.bugged_read_countdown == 0 {
@@ -174,7 +174,7 @@ impl Wave {
         }
     }
 
-    pub fn run(&mut self, cycles: u32, c: &Ctx) {
+    pub(super) fn run(&mut self, cycles: u32, c: &Ctx) {
         self.just_read = false;
         if self.out.active {
             let mut cycles_left = cycles;
@@ -222,7 +222,7 @@ impl Wave {
         self.disable(c);
     }
 
-    pub fn write_nr30(&mut self, value: u8, c: &Ctx) {
+    pub(super) fn write_nr30(&mut self, value: u8, c: &Ctx) {
         self.dac_enabled = value & NR30_DAC_B != 0;
         if !self.dac_enabled {
             self.pulsed = false;
@@ -239,18 +239,18 @@ impl Wave {
         }
     }
 
-    pub const fn write_nr31(&mut self, value: u8) {
+    pub(super) const fn write_nr31(&mut self, value: u8) {
         self.length.counter = 0x100 - value as u16;
     }
 
-    pub fn write_nr32(&mut self, value: u8, c: &Ctx) {
+    pub(super) fn write_nr32(&mut self, value: u8, c: &Ctx) {
         self.nr32 = value;
         if self.out.active {
             self.update_wave_sample(c);
         }
     }
 
-    pub const fn write_nr33(&mut self, value: u8) {
+    pub(super) const fn write_nr33(&mut self, value: u8) {
         self.period = (self.period & !0xFF) | value as u16;
         if self.bugged_read_countdown == 1 {
             // Just reloaded the countdown.
@@ -258,7 +258,7 @@ impl Wave {
         }
     }
 
-    pub fn write_nr34(&mut self, value: u8, c: &Ctx) {
+    pub(super) fn write_nr34(&mut self, value: u8, c: &Ctx) {
         self.period = (self.period & 0xFF) | (u16::from(value & NRX4_PERIOD_HIGH) << 8);
         if value & NRX4_TRIGGER_B != 0 {
             self.trigger(c);

@@ -18,7 +18,7 @@ const FAST_CLOCK_BIT: u16 = 0x04;
 
 /// The serial port, without a link cable: a transfer on the internal clock
 /// shifts in ones. The bytes sent are captured for test ROMs.
-pub struct Serial {
+pub(crate) struct Serial {
     count: u8,
     div_mask: u16,
     master_clock: bool,
@@ -45,36 +45,36 @@ impl Default for Serial {
 impl Serial {
     /// Sets the master clock flip-flop from the system counter (it toggles on
     /// every falling edge of bit 7, so it follows bit 8 until DIV is written).
-    pub const fn set_master_clock(&mut self, val: bool) {
+    pub(crate) const fn set_master_clock(&mut self, val: bool) {
         self.master_clock = val;
     }
 
     /// The system counter bit whose falling edges clock the serial port.
     #[must_use]
-    pub const fn div_mask(&self) -> u16 {
+    pub(crate) const fn div_mask(&self) -> u16 {
         self.div_mask
     }
 
     /// Get the serial output as a string (used by test ROMs)
     #[must_use]
-    pub fn output(&self) -> &str {
+    pub(crate) fn output(&self) -> &str {
         &self.output
     }
 
     #[must_use]
-    pub const fn read_sb(&self) -> u8 {
+    pub(crate) const fn read_sb(&self) -> u8 {
         self.sb
     }
 
     #[must_use]
-    pub const fn read_sc(&self) -> u8 {
+    pub(crate) const fn read_sc(&self) -> u8 {
         self.sc
     }
 
     /// A falling edge of the selected system counter bit: toggles the master
     /// clock and shifts a bit on every second edge (port of SameBoy's
     /// `GB_serial_master_edge`).
-    pub fn master_edge(&mut self, ints: &mut Interrupts) {
+    pub(crate) fn master_edge(&mut self, ints: &mut Interrupts) {
         self.master_clock = !self.master_clock;
 
         if !self.master_clock && self.sc & SC_INTERNAL_TRANSFER == SC_INTERNAL_TRANSFER {
@@ -105,7 +105,7 @@ impl Serial {
 
     /// Completes the transfer now if its last bit is shifted within `cycles`
     /// system clock cycles (the interrupt acknowledge looks ahead that far).
-    pub fn complete_if_due(&mut self, div: u16, cycles: u16, ints: &mut Interrupts) {
+    pub(crate) fn complete_if_due(&mut self, div: u16, cycles: u16, ints: &mut Interrupts) {
         if !self.master_clock
             || self.sc & SC_INTERNAL_TRANSFER != SC_INTERNAL_TRANSFER
             || self.count != 7
@@ -121,12 +121,12 @@ impl Serial {
         }
     }
 
-    pub const fn write_sb(&mut self, val: u8) {
+    pub(crate) const fn write_sb(&mut self, val: u8) {
         self.sb = val;
         self.sb_sent = val; // Store original value for later capture
     }
 
-    pub fn write_sc(&mut self, mut val: u8, ints: &mut Interrupts, cgb_mode: CgbMode) {
+    pub(crate) fn write_sc(&mut self, mut val: u8, ints: &mut Interrupts, cgb_mode: CgbMode) {
         self.count = 0;
 
         let cgb = matches!(cgb_mode, CgbMode::Cgb);

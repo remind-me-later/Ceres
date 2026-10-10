@@ -156,7 +156,7 @@ impl Sgb {
     }
 }
 
-pub struct Joypad {
+pub(crate) struct Joypad {
     // P1
     actions_flag: bool,
     button_mask: u8,
@@ -172,7 +172,7 @@ impl Default for Joypad {
 
 impl Joypad {
     #[must_use]
-    pub fn new(is_sgb: bool) -> Self {
+    pub(crate) fn new(is_sgb: bool) -> Self {
         Self {
             actions_flag: true,
             directions_flag: true,
@@ -181,7 +181,7 @@ impl Joypad {
         }
     }
 
-    pub const fn press(&mut self, button: Button, ints: &mut Interrupts) {
+    pub(crate) const fn press(&mut self, button: Button, ints: &mut Interrupts) {
         let old = self.read_p1();
         self.button_mask |= button as u8;
         // The interrupt fires when an input line goes low: not for a button
@@ -192,7 +192,7 @@ impl Joypad {
     }
 
     #[must_use]
-    pub const fn read_p1(&self) -> u8 {
+    pub(crate) const fn read_p1(&self) -> u8 {
         // Bits 6 and 7 read 1.
         let mut res = !P1_SELECT;
 
@@ -220,11 +220,11 @@ impl Joypad {
         res
     }
 
-    pub const fn release(&mut self, button: Button) {
+    pub(crate) const fn release(&mut self, button: Button) {
         self.button_mask &= !(button as u8);
     }
 
-    pub fn write_joy(&mut self, val: u8) {
+    pub(crate) fn write_joy(&mut self, val: u8) {
         let old = (u8::from(!self.actions_flag) << 5) | (u8::from(!self.directions_flag) << 4);
         if let Some(ref mut sgb) = self.sgb {
             // The packet receiver only sees changes of the selected lines.

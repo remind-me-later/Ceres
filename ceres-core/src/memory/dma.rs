@@ -12,7 +12,7 @@ use {
     },
 };
 
-pub struct Dma {
+pub(crate) struct Dma {
     /// Cycles to process on the next `Gb::run_dma`.
     cycles: i32,
     /// Cycles left over from the previous run (a byte takes 4).
@@ -32,9 +32,9 @@ pub struct Dma {
 
 impl Dma {
     /// `current_dest` while no transfer is running.
-    pub const DEST_IDLE: u8 = 0xA1;
+    pub(crate) const DEST_IDLE: u8 = 0xA1;
     /// `current_dest` during the start-up delay of a transfer.
-    pub const DEST_START_UP: u8 = 0xFF;
+    pub(crate) const DEST_START_UP: u8 = 0xFF;
 }
 
 impl Default for Dma {
@@ -61,7 +61,7 @@ enum DmaBus {
 impl Dma {
     /// The DMA register powers on as 00 on CGB and FF on DMG hardware.
     #[must_use]
-    pub fn new(model: Model) -> Self {
+    pub(crate) fn new(model: Model) -> Self {
         Self {
             reg: if model.is_cgb_hardware() { 0x00 } else { 0xFF },
             ..Self::default()
@@ -69,50 +69,50 @@ impl Dma {
     }
 
     #[must_use]
-    pub const fn is_active(&self) -> bool {
+    pub(crate) const fn is_active(&self) -> bool {
         self.current_dest != Self::DEST_IDLE
     }
 
     /// The next step of the transfer is its last one, which hands OAM back.
     #[must_use]
-    pub const fn is_in_last_step(&self) -> bool {
+    pub(crate) const fn is_in_last_step(&self) -> bool {
         self.current_dest == Oam::SIZE
     }
 
     /// CPU reads of OAM return 0xFF while the DMA owns it.
     #[must_use]
-    pub const fn blocks_oam_read(&self) -> bool {
+    pub(crate) const fn blocks_oam_read(&self) -> bool {
         self.is_active() && (self.current_dest != 0 || self.restarting)
     }
 
     /// CPU writes to OAM are dropped while a transfer is active.
     #[must_use]
-    pub const fn blocks_oam_write(&self) -> bool {
+    pub(crate) const fn blocks_oam_write(&self) -> bool {
         self.is_active()
     }
 
     #[must_use]
-    pub const fn read(&self) -> u8 {
+    pub(crate) const fn read(&self) -> u8 {
         self.reg
     }
 
-    pub const fn set_reg(&mut self, val: u8) {
+    pub(crate) const fn set_reg(&mut self, val: u8) {
         self.reg = val;
     }
 
     /// The HDMA copies bytes into OAM while an OAM DMA is running, but only
     /// on the M-cycle phase where the DMA has the bus free.
     #[must_use]
-    pub const fn hdma_can_write_oam(&self, double_speed: bool) -> bool {
+    pub(crate) const fn hdma_can_write_oam(&self, double_speed: bool) -> bool {
         self.is_active() && (self.cycles_modulo == 2 || double_speed)
     }
 
     /// The T-cycles the next `run_dma` runs (SameBoy's `dma_cycles`).
-    pub const fn set_cycles(&mut self, cycles: i32) {
+    pub(crate) const fn set_cycles(&mut self, cycles: i32) {
         self.cycles = cycles;
     }
 
-    pub fn write(&mut self, val: u8) {
+    pub(crate) fn write(&mut self, val: u8) {
         self.restarting = self.current_dest != Self::DEST_IDLE && self.current_dest != Oam::SIZE;
         self.restart_at = (1..Oam::SIZE)
             .contains(&self.current_dest)

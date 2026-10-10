@@ -5,7 +5,7 @@ use crate::{AudioCallback, Model};
 /// ROMs: the start-up "ding" of channel 1 has decayed to volume 0, and the
 /// frame sequencer and channel phases follow the length of the boot.
 #[derive(Clone, Copy)]
-pub struct PostBoot {
+pub(crate) struct PostBoot {
     div_divider: u8,
     sweep_countdown: u8,
     /// Channel 1 was triggered by the boot ROM (everything but the SGB).
@@ -22,7 +22,7 @@ pub struct PostBoot {
 impl PostBoot {
     /// `cgb_cart` is set when the cartridge header has the CGB flag.
     #[must_use]
-    pub const fn new(model: Model, cgb_cart: bool) -> Self {
+    pub(crate) const fn new(model: Model, cgb_cart: bool) -> Self {
         let mut pb = Self {
             div_divider: 57,
             sweep_countdown: 0,
@@ -94,7 +94,7 @@ impl PostBoot {
 
 impl<A: AudioCallback> Apu<A> {
     /// Sets the state the boot ROM leaves behind (see [`PostBoot`]).
-    pub fn post_boot(&mut self, pb: PostBoot) {
+    pub(crate) fn post_boot(&mut self, pb: PostBoot) {
         self.reset();
         self.enabled = true;
         self.nr50 = 0x77;

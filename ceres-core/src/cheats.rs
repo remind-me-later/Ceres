@@ -2,13 +2,13 @@ use crate::Error;
 use core::fmt;
 
 #[derive(Default)]
-pub struct GameGenie {
+pub(crate) struct GameGenie {
     codes: [GameGenieCode; 3],
     number_of_active_codes: u8,
 }
 
 impl GameGenie {
-    pub const fn activate_code(&mut self, code: GameGenieCode) -> Result<(), Error> {
+    pub(crate) const fn activate_code(&mut self, code: GameGenieCode) -> Result<(), Error> {
         if self.number_of_active_codes < 3 {
             self.codes[self.number_of_active_codes as usize] = code;
             self.number_of_active_codes += 1;
@@ -18,11 +18,11 @@ impl GameGenie {
         }
     }
 
-    pub fn active_codes(&self) -> &[GameGenieCode] {
+    pub(crate) fn active_codes(&self) -> &[GameGenieCode] {
         &self.codes[..self.number_of_active_codes as usize]
     }
 
-    pub fn deactivate_code(&mut self, code: &GameGenieCode) {
+    pub(crate) fn deactivate_code(&mut self, code: &GameGenieCode) {
         let active = self.number_of_active_codes as usize;
         if let Some(pos) = self.codes[..active].iter().position(|c| c == code) {
             // The code goes past the active ones.
@@ -31,7 +31,7 @@ impl GameGenie {
         }
     }
 
-    pub fn query(&self, address: u16, old_data: u8) -> Option<u8> {
+    pub(crate) fn query(&self, address: u16, old_data: u8) -> Option<u8> {
         self.active_codes()
             .iter()
             .find(|c| c.address == address && c.old_data == old_data)

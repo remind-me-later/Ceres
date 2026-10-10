@@ -5,14 +5,14 @@ use super::{NRX2_DAC, revision::Revision};
 /// The clock line of the envelope. Ticking it to the volume limit locks it
 /// until the channel is restarted.
 #[derive(Clone, Copy)]
-pub struct EnvelopeClock {
+pub(super) struct EnvelopeClock {
     pub locked: bool,
     pub clock: bool,
     pub should_lock: bool,
 }
 
 impl EnvelopeClock {
-    pub const fn set(&mut self, value: bool, direction: bool, volume: u8) {
+    pub(super) const fn set(&mut self, value: bool, direction: bool, volume: u8) {
         if self.clock == value {
             return;
         }
@@ -27,7 +27,7 @@ impl EnvelopeClock {
 }
 
 #[derive(Clone, Copy)]
-pub struct Envelope {
+pub(super) struct Envelope {
     /// NRx2: initial volume (bits 4-7), direction (bit 3, 1 = up) and pace.
     pub nrx2: u8,
     pub volume: u8,
@@ -36,7 +36,7 @@ pub struct Envelope {
 }
 
 impl Envelope {
-    pub const fn new() -> Self {
+    pub(super) const fn new() -> Self {
         Self {
             nrx2: 0,
             volume: 0,
@@ -50,7 +50,7 @@ impl Envelope {
     }
 
     /// The upper 5 bits of NRx2 power the channel's DAC.
-    pub const fn dac_enabled(self) -> bool {
+    pub(super) const fn dac_enabled(self) -> bool {
         self.nrx2 & NRX2_DAC != 0
     }
 
@@ -63,20 +63,20 @@ impl Envelope {
     }
 
     /// The channel was triggered.
-    pub const fn unlock(&mut self) {
+    pub(super) const fn unlock(&mut self) {
         self.clock.locked = false;
         self.clock.clock = false;
     }
 
     /// Loads the initial volume and pace on a trigger.
-    pub const fn restart(&mut self) {
+    pub(super) const fn restart(&mut self) {
         self.volume = self.nrx2 >> 4;
         self.countdown = self.pace();
     }
 
     /// Every 8th DIV event, the countdown of an envelope whose clock is low
     /// advances.
-    pub const fn step_countdown(&mut self) {
+    pub(super) const fn step_countdown(&mut self) {
         if !self.clock.clock {
             self.countdown = self.countdown.wrapping_sub(1) & 7;
         }
@@ -84,7 +84,7 @@ impl Envelope {
 
     /// The secondary DIV event raises the clock of an envelope whose
     /// countdown expired.
-    pub const fn reload(&mut self) {
+    pub(super) const fn reload(&mut self) {
         if self.countdown == 0 {
             self.countdown = self.pace();
             self.clock
@@ -94,7 +94,7 @@ impl Envelope {
 
     /// Steps the volume on a clock edge. Returns the volume before the step,
     /// or `None` if the envelope did not step.
-    pub const fn tick(&mut self) -> Option<u8> {
+    pub(super) const fn tick(&mut self) -> Option<u8> {
         self.clock.set(false, false, 0);
         if self.clock.locked || self.pace() == 0 {
             return None;
@@ -110,7 +110,7 @@ impl Envelope {
 
     /// Writes NRx2 while the channel plays (the "zombie mode" volume
     /// glitch). Before the CGB-D some of these are non-deterministic.
-    pub fn write_while_active(&mut self, rev: Revision, value: u8) {
+    pub(super) fn write_while_active(&mut self, rev: Revision, value: u8) {
         let old = self.nrx2;
         if rev <= Revision::CgbC {
             self.zombie_step(0xFF, old);
