@@ -22,7 +22,8 @@ pub(super) struct ChannelOutput {
     /// Output level (left, right).
     pub level: (i32, i32),
     /// Bits of the sample that a PCM register read sees this M-cycle (the
-    /// CGB-C and older miss some while the channel updates).
+    /// CGB-C and older miss some while the channel updates, see
+    /// `Revision::has_pcm_glitch`).
     pub pcm_mask: u8,
 }
 

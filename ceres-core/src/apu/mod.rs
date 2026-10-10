@@ -260,7 +260,7 @@ impl<A: AudioCallback> Apu<A> {
     }
 
     fn pcm_pair(&self, high: usize, low: usize) -> u8 {
-        let masked = self.rev <= Revision::CgbC;
+        let masked = self.rev.has_pcm_glitch();
         (self.output(high).pcm(masked) << 4) | self.output(low).pcm(masked)
     }
 
