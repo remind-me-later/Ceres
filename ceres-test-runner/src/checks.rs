@@ -78,7 +78,7 @@ impl CompletionCheck for ExactScreenshotCheck {
 /// # Errors
 ///
 /// Returns an error if it cannot be read or is not the size of the screen.
-pub fn load_screenshot(path: &Path) -> Result<Vec<u8>> {
+fn load_screenshot(path: &Path) -> Result<Vec<u8>> {
     let image = image::open(path)?.to_rgba8();
     anyhow::ensure!(
         image.width() == u32::from(PX_WIDTH) && image.height() == u32::from(PX_HEIGHT),
@@ -121,7 +121,7 @@ fn report_mismatches(expected: &[u8], actual: &[u8]) {
 /// only in their palette have the same ranks. Colours as bright as each
 /// other keep the order they first appear in.
 #[must_use]
-pub fn rank_image(rgba: &[u8]) -> Vec<u8> {
+fn rank_image(rgba: &[u8]) -> Vec<u8> {
     let rgb = |p: &[u8]| [p[0], p[1], p[2]];
     let mut colors: Vec<[u8; 3]> = Vec::new();
     for pixel in rgba.chunks(4).map(rgb) {

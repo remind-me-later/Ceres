@@ -30,6 +30,8 @@ pub mod timeouts {
     /// little-things-gb and the scribbltests (the boot ROM, then a few
     /// seconds, statcount-auto's 270 frames being the longest).
     pub const SCREENSHOT: u32 = 900;
+    /// mbc3-tester checks every bank before showing its result.
+    pub const MBC3_TESTER: u32 = 2300;
     /// The slowest SameSuite ROM needs about 100.
     pub const SAME_SUITE: u32 = 600;
     /// `is_if_set_during_ime0`, the slowest GBMicrotest ROM, needs about 23.
