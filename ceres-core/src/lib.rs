@@ -6,6 +6,7 @@ mod bootrom;
 mod cartridge;
 #[cfg(feature = "game_genie")]
 mod cheats;
+mod cpu_bus;
 mod error;
 mod interrupts;
 mod joypad;
