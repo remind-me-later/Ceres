@@ -7,6 +7,15 @@
 
 use crate::{AudioCallback, Gb, Model};
 
+// HDMA5 bits
+/// Write: an `HBlank` transfer. Read: no transfer is running.
+const HDMA5_HBLANK_B: u8 = 0x80;
+const HDMA5_IDLE_B: u8 = 0x80;
+/// The length in blocks, minus 1.
+const HDMA5_BLOCKS: u16 = 0x7F;
+/// A transfer copies 16-byte blocks: the low bits of the addresses are 0.
+const HDMA_BLOCK_SIZE: u16 = 0x10;
+
 #[expect(
     clippy::struct_excessive_bools,
     reason = "Independent flags of the transfer state machine"
@@ -81,8 +90,11 @@ impl Hdma {
     #[must_use]
     pub const fn read_hdma5(&self) -> u8 {
         // active on low
-        (((!(self.on || self.on_hblank)) as u8) << 7)
-            | (self.steps_left.wrapping_sub(1) & 0x7F) as u8
+        (if self.on || self.on_hblank {
+            0
+        } else {
+            HDMA5_IDLE_B
+        }) | (self.steps_left.wrapping_sub(1) & HDMA5_BLOCKS) as u8
     }
 
     #[must_use]
@@ -97,7 +109,7 @@ impl Hdma {
 
     #[must_use]
     pub const fn is_at_block_end(&self) -> bool {
-        (self.dst & 0xF) == 0xF
+        (self.dst & (HDMA_BLOCK_SIZE - 1)) == HDMA_BLOCK_SIZE - 1
     }
 
     #[must_use]
@@ -147,7 +159,7 @@ impl Hdma {
     }
 
     pub const fn write_hdma2(&mut self, val: u8) {
-        self.src = (self.src & 0xFF00) | (val & 0xF0) as u16;
+        self.src = (self.src & 0xFF00) | (val as u16 & !(HDMA_BLOCK_SIZE - 1));
     }
 
     pub fn write_hdma3(&mut self, val: u8) {
@@ -155,19 +167,19 @@ impl Hdma {
     }
 
     pub const fn write_hdma4(&mut self, val: u8) {
-        self.dst = (self.dst & 0xFF00) | (val & 0xF0) as u16;
+        self.dst = (self.dst & 0xFF00) | (val as u16 & !(HDMA_BLOCK_SIZE - 1));
     }
 
     /// `in_hblank`: STAT mode is 0 and the PPU is not at the HBlank/OAM edge.
     pub const fn write_hdma5(&mut self, val: u8, in_hblank: bool) {
-        self.steps_left = (val & 0x7F) as u16 + 1;
-        if val & 0x80 == 0 && self.on_hblank {
+        self.steps_left = (val as u16 & HDMA5_BLOCKS) + 1;
+        if val & HDMA5_HBLANK_B == 0 && self.on_hblank {
             // Cancel the running HBlank transfer.
             self.on_hblank = false;
             return;
         }
-        self.on = val & 0x80 == 0;
-        self.on_hblank = val & 0x80 != 0;
+        self.on = val & HDMA5_HBLANK_B == 0;
+        self.on_hblank = val & HDMA5_HBLANK_B != 0;
         if self.on_hblank && in_hblank {
             self.on = true;
         }
@@ -217,7 +229,7 @@ impl<A: AudioCallback> Gb<A> {
                 self.ppu.vram_mut().write_hdma(addr, byte, mirror);
             }
 
-            if self.hdma.dst.trailing_zeros() >= 4
+            if self.hdma.dst & (HDMA_BLOCK_SIZE - 1) == 0
                 && self.hdma.cpu_halted()
                 && self.key1.is_enabled()
             {
@@ -225,7 +237,7 @@ impl<A: AudioCallback> Gb<A> {
                 // speed leaves the length as it was and ends the transfer.
                 self.hdma.on = false;
                 self.hdma.on_hblank = false;
-            } else if self.hdma.dst.trailing_zeros() >= 4 {
+            } else if self.hdma.dst & (HDMA_BLOCK_SIZE - 1) == 0 {
                 self.hdma.steps_left = self.hdma.steps_left.wrapping_sub(1);
                 if self.hdma.steps_left == 0 || self.hdma.dst == 0 {
                     self.hdma.on = false;

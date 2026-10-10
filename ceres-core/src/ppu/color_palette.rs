@@ -8,6 +8,12 @@ pub const GRAYSCALE_PALETTE: [(u8, u8, u8); 4] = [
     (0x00, 0x00, 0x00),
 ];
 
+// BCPS/OCPS bits
+/// The index goes up after each write to the data register.
+const SPEC_INCREMENT_B: u8 = 0x80;
+/// The byte of palette RAM the data register accesses.
+const SPEC_INDEX: u8 = 0x3F;
+
 // CGB palette RAM
 const PAL_RAM_SIZE: u8 = 0x20;
 const PAL_RAM_SIZE_COLORS: u8 = PAL_RAM_SIZE * 3;
@@ -53,12 +59,12 @@ impl ColorPalette {
 
     #[must_use]
     const fn index(&self) -> u8 {
-        self.spec & 0x3F
+        self.spec & SPEC_INDEX
     }
 
     #[must_use]
     const fn is_increment_enabled(&self) -> bool {
-        self.spec & 0x80 != 0
+        self.spec & SPEC_INCREMENT_B != 0
     }
 
     // For color correction values see: https://github.com/LIJI32/SameBoy/blob/master/Core/display.c#L355
@@ -194,7 +200,7 @@ impl ColorPalette {
     /// the index.
     pub const fn auto_increment(&mut self) {
         if self.is_increment_enabled() {
-            self.spec = (self.spec & 0x80) | (self.index() + 1) & 0x3F;
+            self.spec = (self.spec & SPEC_INCREMENT_B) | (self.index() + 1) & SPEC_INDEX;
         }
     }
 
@@ -204,6 +210,7 @@ impl ColorPalette {
 
     #[must_use]
     pub const fn spec(&self) -> u8 {
+        // Bit 6 reads 1.
         self.spec | 0x40
     }
 }

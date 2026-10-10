@@ -1,3 +1,9 @@
+// KEY1 bits
+/// The CPU runs in double speed.
+const KEY1_SPEED_B: u8 = 0x80;
+/// A speed switch is armed: the next STOP performs it.
+const KEY1_ARMED_B: u8 = 0x01;
+
 #[derive(Default)]
 pub struct Key1 {
     key1: u8,
@@ -18,33 +24,34 @@ pub struct SpeedSwitch {
 
 impl Key1 {
     pub const fn set_double_speed(&mut self, on: bool) {
-        self.key1 = (self.key1 & 0x7F) | ((on as u8) << 7);
+        self.key1 = (self.key1 & !KEY1_SPEED_B) | if on { KEY1_SPEED_B } else { 0 };
     }
 
     pub const fn toggle_double_speed(&mut self) {
-        self.key1 ^= 0x80;
+        self.key1 ^= KEY1_SPEED_B;
     }
 
     pub const fn clear_request(&mut self) {
-        self.key1 &= 0x80;
+        self.key1 &= KEY1_SPEED_B;
     }
 
     #[must_use]
     pub const fn is_enabled(&self) -> bool {
-        self.key1 & 0x80 != 0
+        self.key1 & KEY1_SPEED_B != 0
     }
 
     #[must_use]
     pub const fn is_requested(&self) -> bool {
-        self.key1 & 1 != 0
+        self.key1 & KEY1_ARMED_B != 0
     }
 
     #[must_use]
     pub const fn read(&self) -> u8 {
-        self.key1 | 0x7E
+        // The other bits read 1.
+        self.key1 | !(KEY1_SPEED_B | KEY1_ARMED_B)
     }
 
     pub const fn write(&mut self, val: u8) {
-        self.key1 = self.key1 & 0x80 | val & 1;
+        self.key1 = self.key1 & KEY1_SPEED_B | val & KEY1_ARMED_B;
     }
 }

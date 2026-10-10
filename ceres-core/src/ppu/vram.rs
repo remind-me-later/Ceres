@@ -34,6 +34,7 @@ impl Vram {
 
     #[must_use]
     pub const fn read_vbk(&self) -> u8 {
+        // The unused bits read 1.
         (self.vbk as u8) | 0xFE
     }
 

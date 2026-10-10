@@ -14,6 +14,7 @@ impl Svbk {
 
     #[must_use]
     pub const fn read(&self) -> u8 {
+        // The unused bits read 1.
         self.svbk | 0xF8
     }
 

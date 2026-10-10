@@ -349,6 +349,7 @@ impl Ppu {
 
     #[must_use]
     pub const fn read_opri(&self) -> u8 {
+        // The unused bits read 1.
         self.opri as u8 | 0xFE
     }
 
@@ -364,6 +365,7 @@ impl Ppu {
 
     #[must_use]
     pub const fn read_stat(&self) -> u8 {
+        // The unused bits read 1.
         self.stat | 0x80
     }
 
