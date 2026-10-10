@@ -279,14 +279,10 @@ impl Sm83 {
             self.ime_toggle = false;
         }
 
-        if self.is_halted && !effective_ime && interrupt_pending {
-            // Wake up from HALT without calling the interrupt code.
-            self.is_halted = false;
-            bus.wake_from_stop();
-            bus.dma_run(true);
-        } else if self.is_halted && self.halt_bug && effective_ime && interrupt_pending {
-            // The opcode HALT prefetched for a transfer runs before the
-            // interrupt is dispatched (gambatte's `setMinIntTime`).
+        if self.is_halted && interrupt_pending && (!effective_ime || self.halt_bug) {
+            // Wake up from HALT without calling the interrupt code. With the
+            // IME set, the opcode HALT prefetched for a transfer runs before
+            // the interrupt is dispatched (gambatte's `setMinIntTime`).
             self.is_halted = false;
             bus.wake_from_stop();
             bus.dma_run(true);
@@ -341,32 +337,13 @@ impl Sm83 {
         // the value from BEFORE the write if it targets IF or IE.
         self.sp = self.sp.wrapping_sub(1);
 
-        let writes_flags = self.sp == 0xFF0F;
-        let writes_enable = self.sp == 0xFFFF;
-
-        let old_flags = if writes_flags {
-            bus.read_if() & 0x1F
-        } else {
-            0
-        };
-        let old_enable = if writes_enable {
-            bus.read_ie() & 0x1F
-        } else {
-            0
-        };
+        let old_flags = (self.sp == 0xFF0F).then(|| bus.read_if() & 0x1F);
+        let old_enable = (self.sp == 0xFFFF).then(|| bus.read_ie() & 0x1F);
 
         bus.write(self.sp, lo);
 
-        let flags = if writes_flags {
-            old_flags
-        } else {
-            bus.read_if() & 0x1F
-        };
-        let enable = if writes_enable {
-            old_enable
-        } else {
-            bus.read_ie() & 0x1F
-        };
+        let flags = old_flags.unwrap_or_else(|| bus.read_if() & 0x1F);
+        let enable = old_enable.unwrap_or_else(|| bus.read_ie() & 0x1F);
 
         let queue = enable & flags;
 
@@ -395,8 +372,7 @@ impl Sm83 {
     }
 
     fn do_jump_relative(&mut self, bus: &mut impl Bus) {
-        #[expect(clippy::cast_sign_loss)]
-        let offset = self.imm8(bus).cast_signed() as u16;
+        let offset = self.imm8_offset(bus);
         bus.tick_oam_bug(self.pc);
         self.pc = self.pc.wrapping_add(offset);
     }
@@ -444,6 +420,27 @@ impl Sm83 {
         let val = bus.read(self.pc);
         self.pc = self.pc.wrapping_add(1);
         val
+    }
+
+    /// The signed immediate byte, sign extended.
+    #[must_use]
+    fn imm8_offset(&mut self, bus: &mut impl Bus) -> u16 {
+        i16::from(self.imm8(bus).cast_signed()).cast_unsigned()
+    }
+
+    /// SP plus the signed immediate, with the flags of ADD SP,r8 and
+    /// LD HL,SP+r8.
+    fn sp_plus_imm8(&mut self, bus: &mut impl Bus) -> u16 {
+        let sp = self.sp;
+        let offset = self.imm8_offset(bus);
+        self.af &= 0xFF00;
+        if (sp & 0xF) + (offset & 0xF) > 0xF {
+            self.af |= HF;
+        }
+        if (sp & 0xFF) + (offset & 0xFF) > 0xFF {
+            self.af |= CF;
+        }
+        sp.wrapping_add(offset)
     }
 
     #[must_use]
@@ -495,6 +492,10 @@ impl Sm83 {
         }
     }
 
+    fn set_a(&mut self, val: u8) {
+        self.af = (u16::from(val) << 8) | (self.af & 0xFF);
+    }
+
     fn set_r(&mut self, bus: &mut impl Bus, op: u8, val: u8) {
         let id = ((op >> 1) + 1) & 3;
         let lo = op & 1 != 0;
@@ -525,32 +526,30 @@ impl Sm83 {
 
 // ALU
 impl Sm83 {
-    fn adc(&mut self, val: u8) {
+    /// The ALU operation selected by bits 3-5 of `op`.
+    fn alu(&mut self, op: u8, val: u8) {
+        match (op >> 3) & 7 {
+            0 => self.add(val, false),
+            1 => self.add(val, self.af & CF != 0),
+            2 => self.sub(val, false),
+            3 => self.sub(val, self.af & CF != 0),
+            4 => self.and(val),
+            5 => self.xor(val),
+            6 => self.or(val),
+            _ => self.cp(val),
+        }
+    }
+
+    fn add(&mut self, val: u8, carry: bool) {
         let val = u16::from(val);
         let a = self.af >> 8;
-        let carry = u16::from((self.af & CF) != 0);
+        let carry = u16::from(carry);
         let res = a + val + carry;
         self.af = res << 8;
         if res.trailing_zeros() >= 8 {
             self.af |= ZF;
         }
         if (a & 0xF) + (val & 0xF) + carry > 0x0F {
-            self.af |= HF;
-        }
-        if res > 0xFF {
-            self.af |= CF;
-        }
-    }
-
-    fn add(&mut self, val: u8) {
-        let val = u16::from(val);
-        let a = self.af >> 8;
-        let res = a + val;
-        self.af = res << 8;
-        if res.trailing_zeros() >= 8 {
-            self.af |= ZF;
-        }
-        if (a & 0xF) + (val & 0xF) > 0x0F {
             self.af |= HF;
         }
         if res > 0xFF {
@@ -592,13 +591,12 @@ impl Sm83 {
         }
     }
 
-    fn sbc(&mut self, val: u8) {
+    fn sub(&mut self, val: u8, carry: bool) {
         let val = u16::from(val);
         let a = self.af >> 8;
-        let carry = u16::from((self.af & CF) != 0);
+        let carry = u16::from(carry);
         let res = a.wrapping_sub(val).wrapping_sub(carry);
         self.af = (res << 8) | NF;
-
         if res.trailing_zeros() >= 8 {
             self.af |= ZF;
         }
@@ -606,21 +604,6 @@ impl Sm83 {
             self.af |= HF;
         }
         if res > 0xFF {
-            self.af |= CF;
-        }
-    }
-
-    fn sub(&mut self, val: u8) {
-        let val = u16::from(val);
-        let a = self.af >> 8;
-        self.af = (a.wrapping_sub(val) << 8) | NF;
-        if a == val {
-            self.af |= ZF;
-        }
-        if (a & 0xF) < (val & 0xF) {
-            self.af |= HF;
-        }
-        if a < val {
             self.af |= CF;
         }
     }
@@ -673,103 +656,97 @@ impl Sm83 {
             0x3A => self.ld_a_dhld(bus),
             0x3F => self.ccf(),
             0x40 => self.ld_b_b(),
-            0x41 | 0x42 | 0x43 | 0x44 | 0x45 | 0x46 | 0x47 | 0x4A | 0x4B | 0x4C | 0x4D | 0x4E
-            | 0x4F | 0x48 | 0x50 | 0x51 | 0x53 | 0x54 | 0x55 | 0x56 | 0x57 | 0x5A | 0x5C | 0x5D
-            | 0x5E | 0x5F | 0x58 | 0x59 | 0x60 | 0x61 | 0x62 | 0x63 | 0x65 | 0x66 | 0x67 | 0x6A
-            | 0x6B | 0x6C | 0x6E | 0x6F | 0x68 | 0x69 | 0x7A | 0x7B | 0x7C | 0x7D | 0x7E | 0x78
-            | 0x79 | 0x77 | 0x70 | 0x73 | 0x72 | 0x71 | 0x74 | 0x75 => self.ld(bus, op),
+            // The LD r,r' that are not NOPs (matched above).
+            0x41..=0x75 | 0x77..=0x7F => self.ld(bus, op),
             0x76 => self.halt(bus),
-            0x80..=0x87 => self.add_a_r(bus, op),
-            0x88..=0x8F => self.adc_a_r(bus, op),
-            0x90..=0x97 => self.sub_a_r(bus, op),
-            0x98..=0x9F => self.sbc_a_r(bus, op),
-            0xA0..=0xA7 => self.and_a_r(bus, op),
-            0xA8..=0xAF => self.xor_a_r(bus, op),
-            0xB0..=0xB7 => self.or_a_r(bus, op),
-            0xB8..=0xBF => self.cp_a_r(bus, op),
+            0x80..=0xBF => self.alu_a_r(bus, op),
+            0xC6 | 0xCE | 0xD6 | 0xDE | 0xE6 | 0xEE | 0xF6 | 0xFE => self.alu_a_d8(bus, op),
             0xC0 | 0xC8 | 0xD0 | 0xD8 => self.ret_cc(bus, op),
             0xC1 | 0xD1 | 0xE1 | 0xF1 => self.pop_rr(bus, op),
             0xC2 | 0xCA | 0xD2 | 0xDA => self.jp_cc(bus, op),
             0xC3 => self.jp_a16(bus),
             0xC4 | 0xCC | 0xD4 | 0xDC => self.call_cc_a16(bus, op),
             0xC5 | 0xD5 | 0xE5 | 0xF5 => self.push_rr(bus, op),
-            0xC6 => self.add_a_d8(bus),
             0xC7 | 0xCF | 0xD7 | 0xDF | 0xE7 | 0xEF | 0xF7 | 0xFF => self.rst(bus, op),
             0xC9 => self.ret(bus),
             0xCB => self.exec_cb(bus),
             0xCD => self.call_nn(bus),
-            0xCE => self.adc_a_d8(bus),
-            0xD6 => self.sub_a_d8(bus),
             0xD9 => self.reti(bus),
-            0xDE => self.sbc_a_d8(bus),
             0xE0 => self.ldh_da8_a(bus),
             0xE2 => self.ldh_dc_a(bus),
-            0xE6 => self.and_a_d8(bus),
             0xE8 => self.add_sp_r8(bus),
             0xE9 => self.jp_hl(),
             0xEA => self.ld_da16_a(bus),
-            0xEE => self.xor_a_d8(bus),
             0xF0 => self.ldh_a_da8(bus),
             0xF2 => self.ldh_a_dc(bus),
             0xF3 => self.di(),
-            0xF6 => self.or_a_d8(bus),
             0xF8 => self.ld_hl_sp_r8(bus),
             0xF9 => self.ld16_sp_hl(bus),
             0xFA => self.ld_a_da16(bus),
             0xFB => self.ei(),
-            0xFE => self.cp_a_d8(bus),
             _ => self.illegal(bus),
         }
     }
 
     fn exec_cb(&mut self, bus: &mut impl Bus) {
         let op = self.imm8(bus);
-        match op >> 3 {
-            0 => self.rlc_r(bus, op),
-            1 => self.rrc_r(bus, op),
-            2 => self.rl_r(bus, op),
-            3 => self.rr_r(bus, op),
-            4 => self.sla_r(bus, op),
-            5 => self.sra_r(bus, op),
-            6 => self.swap_r(bus, op),
-            7 => self.srl_r(bus, op),
-            _ => self.bit_r(bus, op),
+        if op < 0x40 {
+            self.shift_r(bus, op);
+        } else {
+            self.bit_r(bus, op);
         }
     }
 
-    fn adc_a_d8(&mut self, bus: &mut impl Bus) {
+    fn alu_a_d8(&mut self, bus: &mut impl Bus, op: u8) {
         let val = self.imm8(bus);
-        self.adc(val);
+        self.alu(op, val);
     }
 
-    fn adc_a_r(&mut self, bus: &mut impl Bus, op: u8) {
+    fn alu_a_r(&mut self, bus: &mut impl Bus, op: u8) {
         let val = self.get_r(bus, op);
-        self.adc(val);
+        self.alu(op, val);
     }
 
-    fn add_a_d8(&mut self, bus: &mut impl Bus) {
-        let val = self.imm8(bus);
-        self.add(val);
-    }
-
-    fn add_a_r(&mut self, bus: &mut impl Bus, op: u8) {
+    /// The CB rotates, shifts and SWAP.
+    fn shift_r(&mut self, bus: &mut impl Bus, op: u8) {
         let val = self.get_r(bus, op);
-        self.add(val);
+        let carry_in = self.af & CF != 0;
+        let (res, carry) = match op >> 3 {
+            // RLC, RRC
+            0 => (val.rotate_left(1), val & 0x80 != 0),
+            1 => (val.rotate_right(1), val & 1 != 0),
+            // RL, RR
+            2 => ((val << 1) | u8::from(carry_in), val & 0x80 != 0),
+            3 => ((val >> 1) | (u8::from(carry_in) << 7), val & 1 != 0),
+            // SLA, SRA
+            4 => (val << 1, val & 0x80 != 0),
+            5 => ((val >> 1) | (val & 0x80), val & 1 != 0),
+            // SWAP, SRL
+            6 => (val.rotate_left(4), false),
+            _ => (val >> 1, val & 1 != 0),
+        };
+        self.set_r(bus, op, res);
+        self.af &= 0xFF00;
+        if carry {
+            self.af |= CF;
+        }
+        if res == 0 {
+            self.af |= ZF;
+        }
     }
 
     fn add_hl_rr(&mut self, bus: &mut impl Bus, op: u8) {
         let id = Self::opcode_to_reg_id(op);
         let hl = self.hl;
         let rr = self.get_rr(id);
-        self.hl = hl.wrapping_add(rr);
+        let (res, carry) = hl.overflowing_add(rr);
+        self.hl = res;
 
         self.af &= !(NF | CF | HF);
-
-        if ((hl & 0xFFF) + (rr & 0xFFF)) & 0x1000 != 0 {
+        if (hl & 0xFFF) + (rr & 0xFFF) > 0xFFF {
             self.af |= HF;
         }
-
-        if (u32::from(hl) + u32::from(rr)) & 0x10000 != 0 {
+        if carry {
             self.af |= CF;
         }
 
@@ -777,50 +754,26 @@ impl Sm83 {
     }
 
     fn add_sp_r8(&mut self, bus: &mut impl Bus) {
-        let sp = self.sp;
-        #[expect(clippy::cast_sign_loss)]
-        let offset = self.imm8(bus).cast_signed() as u16;
+        let res = self.sp_plus_imm8(bus);
         bus.tick();
         bus.tick();
-        self.sp = self.sp.wrapping_add(offset);
-        self.af &= 0xFF00;
-
-        if (sp & 0xF) + (offset & 0xF) > 0xF {
-            self.af |= HF;
-        }
-
-        if (sp & 0xFF) + (offset & 0xFF) > 0xFF {
-            self.af |= CF;
-        }
-    }
-
-    fn and_a_d8(&mut self, bus: &mut impl Bus) {
-        let val = self.imm8(bus);
-        self.and(val);
-    }
-
-    fn and_a_r(&mut self, bus: &mut impl Bus, op: u8) {
-        let val = self.get_r(bus, op);
-        self.and(val);
+        self.sp = res;
     }
 
     fn bit_r(&mut self, bus: &mut impl Bus, op: u8) {
         let val = self.get_r(bus, op);
-        let bit_no = (op >> 3) & 7;
-        let bit = 1 << bit_no;
-        if op & 0xC0 == 0x40 {
-            // bit
-            self.af &= 0xFF00 | CF;
-            self.af |= HF;
-            if bit & val == 0 {
-                self.af |= ZF;
+        let bit = 1 << ((op >> 3) & 7);
+        match op & 0xC0 {
+            0x40 => {
+                // BIT
+                self.af &= 0xFF00 | CF;
+                self.af |= HF;
+                if bit & val == 0 {
+                    self.af |= ZF;
+                }
             }
-        } else if op & 0xC0 == 0x80 {
-            // res
-            self.set_r(bus, op, val & !bit);
-        } else {
-            // set
-            self.set_r(bus, op, val | bit);
+            0x80 => self.set_r(bus, op, val & !bit),
+            _ => self.set_r(bus, op, val | bit),
         }
     }
 
@@ -839,16 +792,6 @@ impl Sm83 {
     const fn ccf(&mut self) {
         self.af ^= CF;
         self.af &= !(HF | NF);
-    }
-
-    fn cp_a_d8(&mut self, bus: &mut impl Bus) {
-        let val = self.imm8(bus);
-        self.cp(val);
-    }
-
-    fn cp_a_r(&mut self, bus: &mut impl Bus, op: u8) {
-        let val = self.get_r(bus, op);
-        self.cp(val);
     }
 
     const fn cpl(&mut self) {
@@ -967,11 +910,10 @@ impl Sm83 {
 
         // The HALT bug also happens on a CGB, in both CGB and DMG modes.
         if bus.interrupts_pending() {
+            self.is_halted = false;
             if self.ime {
-                self.is_halted = false;
                 self.pc = self.pc.wrapping_sub(1);
             } else {
-                self.is_halted = false;
                 self.halt_bug = true;
             }
         } else {
@@ -1088,32 +1030,27 @@ impl Sm83 {
     }
 
     fn ld_a_da16(&mut self, bus: &mut impl Bus) {
-        self.af &= 0xFF;
         let addr = self.imm16(bus);
-        self.af |= u16::from(bus.read(addr)) << 8;
+        let val = bus.read(addr);
+        self.set_a(val);
     }
 
     fn ld_a_dhld(&mut self, bus: &mut impl Bus) {
-        let addr = self.hl;
-        let val = u16::from(bus.read(addr));
-        self.af &= 0xFF;
-        self.af |= val << 8;
-        self.hl = addr.wrapping_sub(1);
+        let val = bus.read(self.hl);
+        self.set_a(val);
+        self.hl = self.hl.wrapping_sub(1);
     }
 
     fn ld_a_dhli(&mut self, bus: &mut impl Bus) {
-        let addr = self.hl;
-        let val = u16::from(bus.read(addr));
-        self.af &= 0xFF;
-        self.af |= val << 8;
-        self.hl = addr.wrapping_add(1);
+        let val = bus.read(self.hl);
+        self.set_a(val);
+        self.hl = self.hl.wrapping_add(1);
     }
 
     fn ld_a_drr(&mut self, bus: &mut impl Bus, op: u8) {
-        let id = Self::opcode_to_reg_id(op);
-        self.af &= 0xFF;
-        let addr = self.get_rr(id);
-        self.af |= u16::from(bus.read(addr)) << 8;
+        let addr = self.get_rr(Self::opcode_to_reg_id(op));
+        let val = bus.read(addr);
+        self.set_a(val);
     }
 
     // Sets the debug breakpoint flag. Test ROMs like cgb-acid2 and dmg-acid2
@@ -1159,19 +1096,9 @@ impl Sm83 {
     }
 
     fn ld_hl_sp_r8(&mut self, bus: &mut impl Bus) {
-        self.af &= 0xFF00;
-        #[expect(clippy::cast_sign_loss)]
-        let offset = self.imm8(bus).cast_signed() as u16;
+        let res = self.sp_plus_imm8(bus);
         bus.tick();
-        self.hl = self.sp.wrapping_add(offset);
-
-        if (self.sp & 0xF) + (offset & 0xF) > 0xF {
-            self.af |= HF;
-        }
-
-        if (self.sp & 0xFF) + (offset & 0xFF) > 0xFF {
-            self.af |= CF;
-        }
+        self.hl = res;
     }
 
     fn ld_hr_d8(&mut self, bus: &mut impl Bus, op: u8) {
@@ -1193,14 +1120,14 @@ impl Sm83 {
     }
 
     fn ldh_a_da8(&mut self, bus: &mut impl Bus) {
-        let tmp = u16::from(self.imm8(bus));
-        self.af &= 0xFF;
-        self.af |= u16::from(bus.read(0xFF00 | tmp)) << 8;
+        let addr = 0xFF00 | u16::from(self.imm8(bus));
+        let val = bus.read(addr);
+        self.set_a(val);
     }
 
     fn ldh_a_dc(&mut self, bus: &mut impl Bus) {
-        self.af &= 0xFF;
-        self.af |= u16::from(bus.read(0xFF00 | self.bc & 0xFF)) << 8;
+        let val = bus.read(0xFF00 | self.bc & 0xFF);
+        self.set_a(val);
     }
 
     fn ldh_da8_a(&mut self, bus: &mut impl Bus) {
@@ -1215,16 +1142,6 @@ impl Sm83 {
 
     #[expect(clippy::unused_self)]
     const fn nop(&self) {}
-
-    fn or_a_d8(&mut self, bus: &mut impl Bus) {
-        let val = self.imm8(bus);
-        self.or(val);
-    }
-
-    fn or_a_r(&mut self, bus: &mut impl Bus, op: u8) {
-        let val = self.get_r(bus, op);
-        self.or(val);
-    }
 
     fn pop_rr(&mut self, bus: &mut impl Bus, op: u8) {
         let val = self.pop(bus);
@@ -1256,22 +1173,6 @@ impl Sm83 {
         self.ime = true;
     }
 
-    fn rl_r(&mut self, bus: &mut impl Bus, op: u8) {
-        let val = self.get_r(bus, op);
-        let carry = self.af & CF != 0;
-        let bit7 = val & 0x80 != 0;
-
-        self.af &= 0xFF00;
-        let val = (val << 1) | u8::from(carry);
-        self.set_r(bus, op, val);
-        if bit7 {
-            self.af |= CF;
-        }
-        if val == 0 {
-            self.af |= ZF;
-        }
-    }
-
     fn rla(&mut self) {
         let bit7 = self.af & 0x8000 != 0;
         let carry = self.af & CF != 0;
@@ -1280,19 +1181,6 @@ impl Sm83 {
 
         if bit7 {
             self.af |= CF;
-        }
-    }
-
-    fn rlc_r(&mut self, bus: &mut impl Bus, op: u8) {
-        let val = self.get_r(bus, op);
-        let carry = val & 0x80 != 0;
-        self.af &= 0xFF00;
-        self.set_r(bus, op, (val << 1) | u8::from(carry));
-        if carry {
-            self.af |= CF;
-        }
-        if val == 0 {
-            self.af |= ZF;
         }
     }
 
@@ -1305,22 +1193,6 @@ impl Sm83 {
         }
     }
 
-    fn rr_r(&mut self, bus: &mut impl Bus, op: u8) {
-        let val = self.get_r(bus, op);
-        let carry = self.af & CF != 0;
-        let bit1 = val & 1 != 0;
-        let val = (val >> 1) | (u8::from(carry) << 7);
-        self.set_r(bus, op, val);
-
-        self.af &= 0xFF00;
-        if bit1 {
-            self.af |= CF;
-        }
-        if val == 0 {
-            self.af |= ZF;
-        }
-    }
-
     fn rra(&mut self) {
         let bit1 = self.af & 0x0100 != 0;
         let carry = self.af & CF != 0;
@@ -1328,20 +1200,6 @@ impl Sm83 {
         self.af = (self.af >> 1) & 0xFF00 | (u16::from(carry) << 15);
         if bit1 {
             self.af |= CF;
-        }
-    }
-
-    fn rrc_r(&mut self, bus: &mut impl Bus, op: u8) {
-        let val = self.get_r(bus, op);
-        let carry = (val & 0x01) != 0;
-        self.af &= 0xFF00;
-        let val = (val >> 1) | (u8::from(carry) << 7);
-        self.set_r(bus, op, val);
-        if carry {
-            self.af |= CF;
-        }
-        if val == 0 {
-            self.af |= ZF;
         }
     }
 
@@ -1358,60 +1216,9 @@ impl Sm83 {
         self.pc = u16::from(op) ^ 0xC7;
     }
 
-    fn sbc_a_d8(&mut self, bus: &mut impl Bus) {
-        let val = self.imm8(bus);
-        self.sbc(val);
-    }
-
-    fn sbc_a_r(&mut self, bus: &mut impl Bus, op: u8) {
-        let val = self.get_r(bus, op);
-        self.sbc(val);
-    }
-
     const fn scf(&mut self) {
         self.af |= CF;
         self.af &= !(HF | NF);
-    }
-
-    fn sla_r(&mut self, bus: &mut impl Bus, op: u8) {
-        let val = self.get_r(bus, op);
-        let carry = val & 0x80 != 0;
-        let res = val << 1;
-        self.set_r(bus, op, res);
-
-        self.af &= 0xFF00;
-        if carry {
-            self.af |= CF;
-        }
-        if res == 0 {
-            self.af |= ZF;
-        }
-    }
-
-    fn sra_r(&mut self, bus: &mut impl Bus, op: u8) {
-        let val = self.get_r(bus, op);
-        let bit7 = val & 0x80;
-        self.af &= 0xFF00;
-        if val & 1 != 0 {
-            self.af |= CF;
-        }
-        let val = (val >> 1) | bit7;
-        self.set_r(bus, op, val);
-        if val == 0 {
-            self.af |= ZF;
-        }
-    }
-
-    fn srl_r(&mut self, bus: &mut impl Bus, op: u8) {
-        let val = self.get_r(bus, op);
-        self.af &= 0xFF00;
-        self.set_r(bus, op, val >> 1);
-        if val & 1 != 0 {
-            self.af |= CF;
-        }
-        if val >> 1 == 0 {
-            self.af |= ZF;
-        }
     }
 
     fn stop(&mut self, bus: &mut impl Bus) {
@@ -1469,34 +1276,6 @@ impl Sm83 {
         }
     }
 
-    fn sub_a_d8(&mut self, bus: &mut impl Bus) {
-        let val = self.imm8(bus);
-        self.sub(val);
-    }
-
-    fn sub_a_r(&mut self, bus: &mut impl Bus, op: u8) {
-        let val = self.get_r(bus, op);
-        self.sub(val);
-    }
-
-    fn swap_r(&mut self, bus: &mut impl Bus, op: u8) {
-        let val = self.get_r(bus, op);
-        self.af &= 0xFF00;
-        self.set_r(bus, op, val.rotate_left(4));
-        if val == 0 {
-            self.af |= ZF;
-        }
-    }
-
-    fn xor_a_d8(&mut self, bus: &mut impl Bus) {
-        let val = self.imm8(bus);
-        self.xor(val);
-    }
-
-    fn xor_a_r(&mut self, bus: &mut impl Bus, op: u8) {
-        let val = self.get_r(bus, op);
-        self.xor(val);
-    }
 }
 
 impl<A: AudioCallback> Gb<A> {
