@@ -2,6 +2,7 @@ pub mod conflict;
 
 use crate::{
     AudioCallback, Gb, Model,
+    interrupts::{INT_MASK, INT_VECTOR_BASE},
     memory::{IE, IF, IO_START, P1, SCX, SwitchHdma, io_addr},
     ppu::{
         LCDC_BG_EN_B, LCDC_BG_MAP_B, LCDC_OBJ_EN_B, LCDC_OBJ_SIZE_B, LCDC_ON_B, LCDC_TILE_SEL_B,
@@ -341,13 +342,13 @@ impl Sm83 {
         // the value from BEFORE the write if it targets IF or IE.
         self.sp = self.sp.wrapping_sub(1);
 
-        let old_flags = (self.sp == io_addr(IF)).then(|| bus.read_if() & 0x1F);
-        let old_enable = (self.sp == io_addr(IE)).then(|| bus.read_ie() & 0x1F);
+        let old_flags = (self.sp == io_addr(IF)).then(|| bus.read_if() & INT_MASK);
+        let old_enable = (self.sp == io_addr(IE)).then(|| bus.read_ie() & INT_MASK);
 
         bus.write(self.sp, lo);
 
-        let flags = old_flags.unwrap_or_else(|| bus.read_if() & 0x1F);
-        let enable = old_enable.unwrap_or_else(|| bus.read_ie() & 0x1F);
+        let flags = old_flags.unwrap_or_else(|| bus.read_if() & INT_MASK);
+        let enable = old_enable.unwrap_or_else(|| bus.read_ie() & INT_MASK);
 
         let queue = enable & flags;
 
@@ -358,8 +359,10 @@ impl Sm83 {
         if queue != 0 {
             let bit = (queue.trailing_zeros() & 7) as u8;
             bus.ack_interrupt(1 << bit);
-            self.pc = 0x40 | (u16::from(bit) << 3);
+            self.pc = INT_VECTOR_BASE | (u16::from(bit) << 3);
         } else {
+            // The request went away during the dispatch (IE overwritten by
+            // the push): the CPU jumps to 0.
             self.pc = 0x0000;
         }
 
@@ -1372,8 +1375,11 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 // real value is in place for what the PPU does in the next dot,
                 // except at the edge between HBlank and OAM mode, where the OAM
                 // interrupt seems to be blocked by HBlank interrupts.
-                if self.ppu.at_oam_scan_edge() && self.ppu.read_stat() & 0x28 == 0x08 {
-                    self.write_mem(addr, !0x20);
+                let stat = self.ppu.read_stat();
+                if self.ppu.at_oam_scan_edge()
+                    && stat & (STAT_IF_OAM_B | STAT_IF_HBLANK_B) == STAT_IF_HBLANK_B
+                {
+                    self.write_mem(addr, !STAT_IF_OAM_B);
                     self.advance_dots(1);
                     self.write_mem(addr, val);
                 } else {

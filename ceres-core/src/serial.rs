@@ -1,9 +1,20 @@
 use crate::{CgbMode, interrupts::Interrupts};
 use alloc::string::String;
 
-const START: u8 = 0x80;
-const CGB_SPEED: u8 = 0x2;
-const SHIFT: u8 = 0x1;
+// SC bits
+/// A transfer is running (or requested).
+const SC_START_B: u8 = 0x80;
+/// CGB: the fast clock.
+const SC_FAST_CLOCK_B: u8 = 0x02;
+/// This side drives the clock.
+const SC_INTERNAL_CLOCK_B: u8 = 0x01;
+/// A transfer this side clocks.
+const SC_INTERNAL_TRANSFER: u8 = SC_START_B | SC_INTERNAL_CLOCK_B;
+
+/// The system counter bit whose falling edges toggle the master clock: a bit
+/// shifts every second edge, at 8192 Hz (262144 Hz with the fast clock).
+const CLOCK_BIT: u16 = 0x80;
+const FAST_CLOCK_BIT: u16 = 0x04;
 
 // VERY PARTIAL Serial port implementation with output capture for test ROMs
 pub struct Serial {
@@ -20,7 +31,7 @@ impl Default for Serial {
     fn default() -> Self {
         Self {
             count: 0,
-            div_mask: 0x80,
+            div_mask: CLOCK_BIT,
             master_clock: false,
             output: String::new(),
             sb: 0,
@@ -65,7 +76,7 @@ impl Serial {
     pub fn master_edge(&mut self, ints: &mut Interrupts) {
         self.master_clock = !self.master_clock;
 
-        if !self.master_clock && self.sc & (START | SHIFT) == START | SHIFT {
+        if !self.master_clock && self.sc & SC_INTERNAL_TRANSFER == SC_INTERNAL_TRANSFER {
             self.shift_in(ints);
         }
     }
@@ -75,7 +86,7 @@ impl Serial {
         self.count += 1;
         if self.count == 8 {
             self.count = 0;
-            self.sc &= !START;
+            self.sc &= !SC_START_B;
             ints.request_serial();
 
             // Capture the byte that was just transferred
@@ -94,7 +105,10 @@ impl Serial {
     /// Completes the transfer now if its last bit is shifted within `cycles`
     /// system clock cycles (the interrupt acknowledge looks ahead that far).
     pub fn complete_if_due(&mut self, div: u16, cycles: u16, ints: &mut Interrupts) {
-        if !self.master_clock || self.sc & (START | SHIFT) != START | SHIFT || self.count != 7 {
+        if !self.master_clock
+            || self.sc & SC_INTERNAL_TRANSFER != SC_INTERNAL_TRANSFER
+            || self.count != 7
+        {
             return;
         }
         // The edge is the system counter's selected bit falling: the
@@ -116,7 +130,7 @@ impl Serial {
 
         let cgb = matches!(cgb_mode, CgbMode::Cgb);
         if !cgb {
-            val |= CGB_SPEED;
+            val |= SC_FAST_CLOCK_B;
         }
 
         // Writing SC while the master clock is high clocks the port once
@@ -127,10 +141,10 @@ impl Serial {
 
         // Bits 6-2 and bit 1 (unless CGB) always read 1.
         self.sc = val | 0x7C;
-        self.div_mask = if cgb && val & CGB_SPEED != 0 {
-            0x04
+        self.div_mask = if cgb && val & SC_FAST_CLOCK_B != 0 {
+            FAST_CLOCK_BIT
         } else {
-            0x80
+            CLOCK_BIT
         };
     }
 }

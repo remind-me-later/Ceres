@@ -18,6 +18,15 @@ pub enum Button {
 }
 
 /// Bits in an SGB command packet (16 bytes).
+// P1 bits
+/// Low selects the action buttons (A, B, Select, Start).
+const P1_ACTIONS_B: u8 = 0x20;
+/// Low selects the direction keys.
+const P1_DIRECTIONS_B: u8 = 0x10;
+const P1_SELECT: u8 = P1_ACTIONS_B | P1_DIRECTIONS_B;
+/// The input lines, low while a selected button is pressed.
+const P1_INPUTS: u8 = 0x0F;
+
 const SGB_PACKET_BITS: usize = 16 * 8;
 /// Longest SGB command: 7 packets.
 const SGB_COMMAND_BYTES: usize = 7 * 16;
@@ -85,7 +94,7 @@ impl Sgb {
             usize::from(self.command[0] & 7).max(1) * SGB_PACKET_BITS
         };
 
-        if value & 0x20 != 0 && old & 0x20 == 0 && self.player_count & 1 == 0 {
+        if value & P1_ACTIONS_B != 0 && old & P1_ACTIONS_B == 0 && self.player_count & 1 == 0 {
             self.current_player = (self.current_player + 1) & (self.player_count - 1);
         }
 
@@ -184,18 +193,19 @@ impl Joypad {
 
     #[must_use]
     pub const fn read_p1(&self) -> u8 {
-        let mut res = 0xCF;
+        // Bits 6 and 7 read 1.
+        let mut res = !P1_SELECT;
 
         if self.actions_flag {
             res &= !(self.button_mask >> 4);
         } else {
-            res |= 0x20;
+            res |= P1_ACTIONS_B;
         }
 
         if self.directions_flag {
-            res &= !(self.button_mask & 0xF);
+            res &= !(self.button_mask & P1_INPUTS);
         } else {
-            res |= 0x10;
+            res |= P1_DIRECTIONS_B;
         }
 
         // With no line selected a multiplayer SGB reports the player ID.
@@ -204,7 +214,7 @@ impl Joypad {
             && let Some(ref sgb) = self.sgb
             && sgb.player_count > 1
         {
-            res = (res & 0xF0) | (0xF - sgb.current_player);
+            res = (res & !P1_INPUTS) | (P1_INPUTS - sgb.current_player);
         }
 
         res
@@ -218,11 +228,11 @@ impl Joypad {
         let old = (u8::from(!self.actions_flag) << 5) | (u8::from(!self.directions_flag) << 4);
         if let Some(ref mut sgb) = self.sgb {
             // The packet receiver only sees changes of the selected lines.
-            if old != val & 0x30 {
+            if old != val & P1_SELECT {
                 sgb.write(old, val);
             }
         }
-        self.actions_flag = val & 0x20 == 0;
-        self.directions_flag = val & 0x10 == 0;
+        self.actions_flag = val & P1_ACTIONS_B == 0;
+        self.directions_flag = val & P1_DIRECTIONS_B == 0;
     }
 }

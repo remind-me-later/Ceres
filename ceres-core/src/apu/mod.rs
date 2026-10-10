@@ -35,8 +35,14 @@ mod wave;
 pub use post_boot::PostBoot;
 
 use {
-    crate::Model, mixer::ChannelOutput, mixer::Mixer, noise::Noise, revision::Revision,
-    square::Square, sweep::Sweep, wave::Wave,
+    crate::{Model, timing::apu_div_bit},
+    mixer::ChannelOutput,
+    mixer::Mixer,
+    noise::Noise,
+    revision::Revision,
+    square::Square,
+    sweep::Sweep,
+    wave::Wave,
 };
 
 pub type Sample = i16;
@@ -542,7 +548,7 @@ impl<A: AudioCallback> Apu<A> {
         // is set skips the first DIV/APU event. The write takes effect an
         // M-cycle after the one it started in (measured with Gambatte's tests).
         let div_counter = ctx.div_counter.wrapping_add(4);
-        if div_counter & if ctx.double_speed { 0x2000 } else { 0x1000 } != 0 {
+        if div_counter & apu_div_bit(ctx.double_speed) != 0 {
             self.skip_div_event = SkipDivEvent::Skip;
             self.div_divider = 1;
         }

@@ -5,6 +5,18 @@ use core::{cmp::Ordering, time::Duration};
 pub const DOTS_PER_FRAME: i32 = 70224;
 /// T-cycles per second (4MHz).
 pub const DOTS_PER_SEC: i32 = 1 << 22;
+
+// TAC bits
+const TAC_ENABLE_B: u8 = 0x04;
+/// The input clock select.
+const TAC_CLOCK: u8 = 0x03;
+
+/// The bit of the internal counter (DIV is its high byte) whose falling edge
+/// clocks the APU's frame sequencer: DIV bit 4, bit 5 in double speed.
+#[must_use]
+pub const fn apu_div_bit(double_speed: bool) -> u16 {
+    if double_speed { 0x2000 } else { 0x1000 }
+}
 pub const FRAME_DURATION: Duration = Duration::new(0, 16_742_706); // DOTS_PER_FRAME / DOTS_PER_SEC
 
 pub struct Clock {
@@ -202,7 +214,7 @@ impl<A: AudioCallback> Gb<A> {
 
     #[must_use]
     const fn is_tac_enabled(&self) -> bool {
-        self.clock.tac & 4 != 0
+        self.clock.tac & TAC_ENABLE_B != 0
     }
 
     #[must_use]
@@ -214,7 +226,7 @@ impl<A: AudioCallback> Gb<A> {
     #[must_use]
     #[inline]
     pub const fn read_tac(&self) -> u8 {
-        0xF8 | self.clock.tac
+        !(TAC_ENABLE_B | TAC_CLOCK) | self.clock.tac
     }
 
     /// What the APU needs to know about the machine.
@@ -317,7 +329,7 @@ impl<A: AudioCallback> Gb<A> {
     /// early when it is clocked at 16 cycles or slower: the reset counts as
     /// a falling edge of the tapped bit a bit sooner.
     pub(crate) const fn tima_speed_change_catch_up(&mut self) {
-        if self.key1.is_requested() && self.is_tac_enabled() && self.clock.tac & 3 != 0 {
+        if self.key1.is_requested() && self.is_tac_enabled() && self.clock.tac & TAC_CLOCK != 0 {
             let mux = Self::sys_clk_tac_mux(self.clock.tac);
             let div = self.clock.div;
             if div & mux == 0 && div.wrapping_add(4) & mux != 0 {
@@ -339,9 +351,11 @@ impl<A: AudioCallback> Gb<A> {
         self.clock.during_div_write = false;
     }
 
+    /// The bit of the internal counter whose falling edge clocks TIMA:
+    /// 4096, 262144, 65536 or 16384 Hz.
     #[must_use]
     const fn sys_clk_tac_mux(tac: u8) -> u16 {
-        match tac & 3 {
+        match tac & TAC_CLOCK {
             0 => 1 << 9,
             1 => 1 << 3,
             2 => 1 << 5,
@@ -353,10 +367,10 @@ impl<A: AudioCallback> Gb<A> {
     pub const fn write_tac(&mut self, val: u8) {
         // Timer glitch: the AND gate output falls when (old_enable AND old_div_bit) was 1
         // and (new_enable AND new_div_bit) is 0, causing a spurious TIMA increment.
-        if (self.clock.tac & 4) != 0 {
+        if (self.clock.tac & TAC_ENABLE_B) != 0 {
             let old_bit = Self::sys_clk_tac_mux(self.clock.tac);
             if (self.clock.div & old_bit) != 0
-                && ((val & 4) == 0 || (self.clock.div & Self::sys_clk_tac_mux(val)) == 0)
+                && ((val & TAC_ENABLE_B) == 0 || (self.clock.div & Self::sys_clk_tac_mux(val)) == 0)
             {
                 self.inc_tima();
             }
@@ -399,11 +413,7 @@ impl<A: AudioCallback> Gb<A> {
     // only modify div inside this function
     fn set_system_clk(&mut self, val: u16) {
         let triggers = self.clock.div & !val;
-        let apu_bit = if self.key1.is_enabled() {
-            0x2000
-        } else {
-            0x1000
-        };
+        let apu_bit = apu_div_bit(self.key1.is_enabled());
 
         // increase TIMA on falling edge of TAC mux
         if self.is_tac_enabled() && (triggers & Self::sys_clk_tac_mux(self.clock.tac) != 0) {
