@@ -13,6 +13,9 @@ pub(crate) const INT_VECTOR_BASE: u16 = 0x40;
 pub(crate) struct Interrupts {
     ie: u8,
     ifr: u8,
+    /// LCD interrupt requests so far (see `ppu::trace`).
+    #[cfg(feature = "debug")]
+    lcd_requests: u32,
 }
 
 impl Interrupts {
@@ -43,6 +46,16 @@ impl Interrupts {
 
     pub(crate) const fn request_lcd(&mut self) {
         self.ifr |= INT_LCD_B;
+        #[cfg(feature = "debug")]
+        {
+            self.lcd_requests = self.lcd_requests.wrapping_add(1);
+        }
+    }
+
+    #[cfg(feature = "debug")]
+    #[must_use]
+    pub(crate) const fn lcd_requests(&self) -> u32 {
+        self.lcd_requests
     }
 
     pub(crate) const fn request_p1(&mut self) {

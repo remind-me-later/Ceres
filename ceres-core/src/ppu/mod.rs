@@ -3,12 +3,16 @@ mod display;
 mod oam;
 mod oam_bug;
 mod rgba_buf;
+#[cfg(feature = "debug")]
+mod trace;
 mod vram;
 
 use crate::interrupts::Interrupts;
 use display::{LAST_LINE, LINE_LENGTH, LINES, LINES_PER_FRAME, PALETTE_LOCK_CYCLE};
 pub(crate) use oam::Oam;
 pub(crate) use oam_bug::unusable_index;
+#[cfg(feature = "debug")]
+pub use trace::{PpuEvent, PpuEventKind};
 pub(crate) use vram::Vram;
 use {self::color_palette::ColorPalette, crate::CgbMode, crate::Model, rgba_buf::RgbaBuf};
 
@@ -103,6 +107,8 @@ pub(crate) struct Ppu {
     /// Half-dots the display already ran ahead of the CPU (see
     /// `Gb::ack_interrupt`) and must not run again.
     skip_units: u8,
+    #[cfg(feature = "debug")]
+    trace: trace::Trace,
 }
 
 // IO
@@ -403,6 +409,8 @@ impl Ppu {
                 continue;
             }
             self.run_display(ints);
+            #[cfg(feature = "debug")]
+            self.trace_unit(ints);
         }
     }
 
@@ -469,10 +477,14 @@ impl Ppu {
         self.lcdc = val;
         self.set_obj_size_fetch(val & LCDC_OBJ_SIZE_B != 0);
         self.d.schedule_wy_check();
+        #[cfg(feature = "debug")]
+        self.trace_requests(ints);
     }
 
     pub(crate) fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
         self.write_lyc_reg(val, ints);
+        #[cfg(feature = "debug")]
+        self.trace_requests(ints);
     }
 
     pub(crate) const fn write_bgp(&mut self, val: u8) {
@@ -526,6 +538,8 @@ impl Ppu {
 
     pub(crate) fn write_stat(&mut self, val: u8, ints: &mut Interrupts) {
         self.write_stat_reg(val, ints);
+        #[cfg(feature = "debug")]
+        self.trace_requests(ints);
     }
 
     pub(crate) const fn write_wx(&mut self, val: u8) {

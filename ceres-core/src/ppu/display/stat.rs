@@ -118,11 +118,15 @@ impl Ppu {
             self.stat |= 2;
             self.stat_update(ints);
         }
+        #[cfg(feature = "debug")]
+        self.trace_requests(ints);
     }
 
     /// Re-evaluates the STAT interrupt line (after a DMA start).
     pub(crate) fn refresh_stat(&mut self, ints: &mut Interrupts) {
         self.stat_update(ints);
+        #[cfg(feature = "debug")]
+        self.trace_requests(ints);
     }
 
     pub(in crate::ppu) fn write_lyc_reg(&mut self, val: u8, ints: &mut Interrupts) {

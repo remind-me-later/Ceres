@@ -35,6 +35,8 @@ use memory::{
     BCPS, BGP, IE, IF, Key1, LCDC, LYC, OBP0, OBP1, OCPS, P1, SCX, SCY, SpeedSwitch, WX, WY,
     io_addr,
 };
+#[cfg(feature = "debug")]
+pub use ppu::{PpuEvent, PpuEventKind};
 use serial::Serial;
 use {
     apu::{Apu, PostBoot},

@@ -1,7 +1,10 @@
 //! What test harnesses and debuggers look at (the `debug` feature): the CPU
 //! registers, the breakpoint opcodes test ROMs use and the serial output.
 
-use crate::{AudioCallback, Gb};
+use {
+    crate::{AudioCallback, Gb, PpuEvent},
+    alloc::vec::Vec,
+};
 
 impl<A: AudioCallback> Gb<A> {
     /// Whether `ld b, b` (0x40) ran since the last call. Test ROMs such as
@@ -98,5 +101,18 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     pub fn serial_output(&self) -> &str {
         self.serial.output()
+    }
+
+    /// Starts recording what the CPU sees of the PPU (its LCD interrupt
+    /// requests and STAT and LY reads), or stops and forgets it.
+    #[inline]
+    pub fn set_ppu_trace(&mut self, enabled: bool) {
+        self.ppu.set_trace(enabled, &self.ints);
+    }
+
+    /// The PPU events recorded since the last call.
+    #[inline]
+    pub fn take_ppu_trace(&mut self) -> Vec<PpuEvent> {
+        self.ppu.take_trace()
     }
 }

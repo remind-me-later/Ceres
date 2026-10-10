@@ -207,6 +207,8 @@ impl<A: AudioCallback> Gb<A> {
             .dma_read_redirect(addr)
             .map_or(0xFF, |addr| self.read_mem(addr));
         self.dma_after_read(addr);
+        #[cfg(feature = "debug")]
+        self.ppu.trace_read(addr, value);
         value
     }
 
