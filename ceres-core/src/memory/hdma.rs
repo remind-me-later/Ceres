@@ -16,10 +16,24 @@ const HDMA5_BLOCKS: u16 = 0x7F;
 /// A transfer copies 16-byte blocks: the low bits of the addresses are 0.
 const HDMA_BLOCK_SIZE: u16 = 0x10;
 
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "Independent flags of the transfer state machine"
-)]
+/// The transfer HDMA5 started.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Transfer {
+    #[default]
+    Idle,
+    /// A general-purpose transfer: all the blocks in one burst.
+    General,
+    /// An `HBlank` transfer: a block per `HBlank`, once `requested`.
+    HBlank { requested: bool },
+}
+
+impl Transfer {
+    /// A block is due (SameBoy's `hdma_on`).
+    const fn is_due(self) -> bool {
+        matches!(self, Self::General | Self::HBlank { requested: true })
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct Hdma {
     /// gambatte's `haltHdmaState_` for a speed switch on the CGB-C.
@@ -30,8 +44,7 @@ pub(crate) struct Hdma {
     cpu_halted: bool,
     dst: u16,
     in_progress: bool,
-    on: bool,
-    on_hblank: bool,
+    transfer: Transfer,
     src: u16,
     steps_left: u16,
 }
@@ -60,40 +73,45 @@ impl Hdma {
     /// An `HBlank` transfer is requested and has not run yet.
     #[must_use]
     pub(crate) const fn hblank_requested(&self) -> bool {
-        self.on && self.on_hblank
+        matches!(self.transfer, Transfer::HBlank { requested: true })
     }
 
     #[must_use]
     pub(crate) const fn hblank_enabled(&self) -> bool {
-        self.on_hblank
+        matches!(self.transfer, Transfer::HBlank { .. })
+    }
+
+    /// Sets whether an `HBlank` transfer has a block requested (nothing
+    /// happens without one).
+    const fn set_hblank_requested(&mut self, requested: bool) {
+        if let Transfer::HBlank { .. } = self.transfer {
+            self.transfer = Transfer::HBlank { requested };
+        }
     }
 
     /// The request of an `HBlank` transfer is dropped.
     pub(crate) const fn ack_hblank_request(&mut self) {
-        if self.on_hblank {
-            self.on = false;
-        }
+        self.set_hblank_requested(false);
     }
 
     /// An `HBlank` transfer is requested.
     pub(crate) const fn request_hblank(&mut self) {
-        if self.on_hblank {
-            self.on = true;
-        }
+        self.set_hblank_requested(true);
     }
 
+    /// A block is due.
     #[must_use]
     pub(crate) const fn is_on(&self) -> bool {
-        self.on
+        self.transfer.is_due()
     }
 
     #[must_use]
     pub(crate) const fn read_hdma5(&self) -> u8 {
-        // active on low
-        (if self.on || self.on_hblank {
-            0
-        } else {
+        // Bit 7 is low while a transfer is active.
+        (if matches!(self.transfer, Transfer::Idle) {
             HDMA5_IDLE_B
+        } else {
+            0
         }) | (self.steps_left.wrapping_sub(1) & HDMA5_BLOCKS) as u8
     }
 
@@ -130,23 +148,21 @@ impl Hdma {
 
     /// Wake-up from HALT/STOP or interrupt dispatch.
     pub(crate) const fn wake(&mut self, mode_is_hblank: bool) {
-        if self.on_hblank && mode_is_hblank && self.allow_on_wake {
-            self.on = true;
+        if mode_is_hblank && self.allow_on_wake {
+            self.request_hblank();
         }
     }
 
     /// The PPU reached the start of `HBlank`.
     pub(crate) const fn hblank_edge(&mut self, stopped: bool) {
-        if self.on_hblank && !self.cpu_halted && !stopped {
-            self.on = true;
+        if !self.cpu_halted && !stopped {
+            self.request_hblank();
         }
     }
 
     /// The LCD was switched off while STAT reported a non-zero mode.
     pub(crate) const fn lcd_off_edge(&mut self) {
-        if self.on_hblank {
-            self.on = true;
-        }
+        self.request_hblank();
     }
 
     pub(crate) fn write_hdma1(&mut self, val: u8) {
@@ -173,16 +189,22 @@ impl Hdma {
     /// `in_hblank`: STAT mode is 0 and the PPU is not at the HBlank/OAM edge.
     pub(crate) const fn write_hdma5(&mut self, val: u8, in_hblank: bool) {
         self.steps_left = (val as u16 & HDMA5_BLOCKS) + 1;
-        if val & HDMA5_HBLANK_B == 0 && self.on_hblank {
-            // Cancel the running HBlank transfer.
-            self.on_hblank = false;
-            return;
-        }
-        self.on = val & HDMA5_HBLANK_B == 0;
-        self.on_hblank = val & HDMA5_HBLANK_B != 0;
-        if self.on_hblank && in_hblank {
-            self.on = true;
-        }
+        let hblank = val & HDMA5_HBLANK_B != 0;
+        self.transfer = match self.transfer {
+            // Bit 7 clear cancels an HBlank transfer, but a block already
+            // requested still runs, then the rest as a general transfer.
+            Transfer::HBlank { requested } if !hblank => {
+                if requested {
+                    Transfer::General
+                } else {
+                    Transfer::Idle
+                }
+            }
+            _ if hblank => Transfer::HBlank {
+                requested: in_hblank,
+            },
+            _ => Transfer::General,
+        };
     }
 }
 
@@ -196,7 +218,7 @@ impl<A: AudioCallback> Gb<A> {
         self.ppu.set_hdma_state(true, self.hdma.src);
         self.advance_t_cycles(cycles);
 
-        while self.hdma.on {
+        while self.hdma.transfer.is_due() {
             let src = self.hdma.src;
             self.ppu.set_hdma_state(true, src);
             // Valid sources: ROM, cart RAM and WRAM. Anything else
@@ -235,17 +257,17 @@ impl<A: AudioCallback> Gb<A> {
             {
                 // A block that ends with the CPU halted by a switch to double
                 // speed leaves the length as it was and ends the transfer.
-                self.hdma.on = false;
-                self.hdma.on_hblank = false;
+                self.hdma.transfer = Transfer::Idle;
             } else if self.hdma.dst & (HDMA_BLOCK_SIZE - 1) == 0 {
                 self.hdma.steps_left = self.hdma.steps_left.wrapping_sub(1);
+                // The transfer ends with its last block, or when the
+                // destination wraps past the end of VRAM.
                 if self.hdma.steps_left == 0 || self.hdma.dst == 0 {
-                    self.hdma.on = false;
-                    self.hdma.on_hblank = false;
-                } else if self.hdma.on_hblank {
-                    self.hdma.on = false;
+                    self.hdma.transfer = Transfer::Idle;
                 } else {
-                    // A general purpose transfer goes on with the next block.
+                    // An HBlank transfer waits for the next HBlank; a general
+                    // one goes on with the next block.
+                    self.hdma.ack_hblank_request();
                 }
             } else {
                 // The block goes on.
