@@ -1,20 +1,17 @@
-//! Integration test using the Gambatte hardware test ROMs.
-//!
-//! Source: <https://github.com/pokemon-speedrunning/gambatte-core> (`test/hwtests`).
-//! Most ROMs show a hexadecimal result on screen whose expected value, for a
-//! DMG-CPU-08 and/or a CPU-CGB-C, is encoded in the file name
-//! (`..._dmg08_out<hex>`, `..._cgb04c_out<hex>`, `..._dmg08_cgb04c_out<hex>`).
-//! The screen has to match Gambatte's monochrome digit glyphs.
+//! Integration test using the Gambatte hardware test ROMs (see
+//! `ceres_test_runner::gambatte` for how they report).
 //!
 //! This is a slow test (minutes): run it with `cargo test --test gambatte --
 //! --ignored`. Every ROM has to pass.
 
-use ceres_test_runner::gambatte::{collect_roms, expected, roms_dir, run_rom};
+use ceres_test_runner::{
+    collect_roms,
+    gambatte::{expected, roms_dir, run_rom},
+};
 
 fn check(cgb: bool) {
     let root = roms_dir();
-    let mut roms = Vec::new();
-    collect_roms(&root, &mut roms);
+    let roms = collect_roms(&root);
 
     let mut failures = Vec::new();
     let mut ran = 0;

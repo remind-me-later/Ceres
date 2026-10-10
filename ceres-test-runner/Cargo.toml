@@ -5,12 +5,11 @@ edition.workspace = true
 readme.workspace = true
 repository.workspace = true
 license.workspace = true
-build = "build.rs"
 
 [dependencies]
 anyhow = "1.0"
 ceres-core = { path = "../ceres-core", features = ["debug"] }
-image = { version = "*", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [build-dependencies]
 anyhow = "1.0"

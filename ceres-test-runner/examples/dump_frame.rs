@@ -1,37 +1,43 @@
-//! Debug helper: run a test ROM for N frames and dump the framebuffer as PNG.
+//! Debug helper: runs a test ROM from the boot ROM for up to N frames (or
+//! until its `ld b, b` breakpoint) and saves the screen as a PNG.
 //!
-//! Usage: `cargo run -p ceres-test-runner --example dump_frame -- <rom> <model> <frames> <out.png>`
+//! Usage: `cargo run -p ceres-test-runner --example dump_frame -- <rom> <dmg|cgb|cgbc> <frames> <out.png>`
+//! (`<rom>` is under `external/test-roms`; `cgb` is a CGB-E.)
 
-use ceres_core::{AudioCallback, Gb, GbBuilder, Model, Sample};
-use ceres_test_runner::load_test_rom;
+use ceres_core::{GbBuilder, Model, PX_HEIGHT, PX_WIDTH};
+use ceres_test_runner::{DummyAudioCallback, load_test_rom};
 
-pub struct NoAudio;
-impl AudioCallback for NoAudio {
-    fn audio_sample(&self, _l: Sample, _r: Sample) {}
-}
+const USAGE: &str = "usage: dump_frame <rom> <dmg|cgb|cgbc> <frames> <out.png>";
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    let rom_rel = &args[1];
-    let model = match args[2].as_str() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let [rom, model, frames, out] = args.as_slice() else {
+        eprintln!("{USAGE}");
+        std::process::exit(2);
+    };
+    let model = match model.as_str() {
         "dmg" => Model::DmgB,
         "cgb" => Model::CgbE,
         "cgbc" => Model::CgbC,
-        other => panic!("unknown model {other}"),
+        _ => {
+            eprintln!("{USAGE}");
+            std::process::exit(2);
+        }
     };
-    let frames: u32 = args[3].parse().unwrap();
-    let out = &args[4];
+    let Ok(frames) = frames.parse::<u32>() else {
+        eprintln!("{USAGE}");
+        std::process::exit(2);
+    };
 
-    let rom = load_test_rom(rom_rel).expect("load rom");
-    let mut gb: Gb<NoAudio> = GbBuilder::new(48000, NoAudio)
+    let rom = load_test_rom(rom).expect("load ROM");
+    let mut gb = GbBuilder::new(48000, DummyAudioCallback)
         .with_model(model)
-        .with_run_bootrom(true)
         .with_rom(rom.into_boxed_slice())
-        .expect("build gb")
+        .expect("valid ROM")
         .build();
     gb.set_color_correction_mode(ceres_core::ColorCorrectionMode::Disabled);
 
-    // Stop at the `ld b,b` breakpoint like the screenshot tests do.
+    // Stop at the `ld b, b` breakpoint, like the screenshot tests.
     for _ in 0..frames {
         gb.run_frame();
         if gb.take_ld_b_b_breakpoint() {
@@ -39,7 +45,13 @@ fn main() {
         }
     }
 
-    let rgba = gb.pixel_data_rgba();
-    image::save_buffer(out, rgba, 160, 144, image::ColorType::Rgba8).expect("save png");
+    image::save_buffer(
+        out,
+        gb.pixel_data_rgba(),
+        u32::from(PX_WIDTH),
+        u32::from(PX_HEIGHT),
+        image::ColorType::Rgba8,
+    )
+    .expect("save PNG");
     println!("wrote {out}");
 }

@@ -5,37 +5,14 @@
 //! emulator follows.
 
 use ceres_core::Model;
-use ceres_test_runner::run_screenshot_test;
+use ceres_test_runner::{checks::TestResult, rom_test, run_ranked_screenshot, timeouts};
 
-macro_rules! screenshot_test {
-    ($name:ident, $rom:literal, $screenshot:literal, $model:expr) => {
-        #[test]
-        fn $name() {
-            let result = run_screenshot_test($rom, $screenshot, $model, 900);
-            assert!(result.is_passed(), "{result:?}");
-        }
-    };
-    ($name:ident, $rom:literal, $screenshot:literal, $model:expr, ignore = $reason:literal) => {
-        #[test]
-        #[ignore = $reason]
-        fn $name() {
-            let result = run_screenshot_test($rom, $screenshot, $model, 900);
-            assert!(result.is_passed(), "{result:?}");
-        }
-    };
+fn screenshot(rom: &str, screenshot: &str, model: Model) -> TestResult {
+    run_ranked_screenshot(rom, screenshot, model, timeouts::SCREENSHOT)
 }
 
-screenshot_test!(
-    bully_bully_dmg,
-    "bully/bully.gb",
-    "bully/bully.png",
-    Model::DmgB,
-    ignore = "fails the same way in SameBoy"
-);
-screenshot_test!(
-    bully_bully_cgbe,
-    "bully/bully.gb",
-    "bully/bully.png",
-    Model::CgbE,
-    ignore = "fails the same way in SameBoy"
+rom_test!(bully_bully_dmg: screenshot("bully/bully.gb", "bully/bully.png", Model::DmgB));
+rom_test!(
+    #[ignore = "fails the same way in SameBoy"]
+    bully_bully_cgbe: screenshot("bully/bully.gb", "bully/bully.png", Model::CgbE)
 );

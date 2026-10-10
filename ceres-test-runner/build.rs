@@ -1,7 +1,10 @@
-//! Build script for Game Boy test ROMs
+//! Build script for the Game Boy test ROMs.
 //!
-//! This script downloads the mooneye and wilbertpol test ROMs from the
-//! gameboy-test-roms release if they are not already present.
+//! Downloads the whole `c-sp/gameboy-test-roms` release (all the suites the
+//! tests use) into `external/test-roms` with `curl` and `unzip`, unless the
+//! Mooneye and Wilbertpol ROMs are already there. It only reruns when this
+//! file changes: to download again, delete the directory and run `cargo
+//! clean --package ceres-test-runner`.
 
 use std::path::PathBuf;
 use std::process::Command;

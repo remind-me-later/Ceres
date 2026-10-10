@@ -12,7 +12,10 @@
 //! It runs on at most 4 threads (`GAMBATTE_JOBS` changes that).
 
 use {
-    ceres_test_runner::gambatte::{collect_roms, expected, roms_dir, run_rom},
+    ceres_test_runner::{
+        collect_roms,
+        gambatte::{expected, roms_dir, run_rom},
+    },
     std::{
         sync::{
             Mutex,
@@ -37,8 +40,7 @@ fn main() {
     };
 
     let root = roms_dir();
-    let mut roms = Vec::new();
-    collect_roms(&root, &mut roms);
+    let roms = collect_roms(&root);
 
     // One job per (ROM, model) with an expected result.
     let mut jobs = Vec::new();

@@ -1,116 +1,33 @@
-//! PPU rendering accuracy tests
+//! PPU rendering accuracy tests: cgb-acid2, cgb-acid-hell and dmg-acid2.
 //!
-//! These tests validate the Pixel Processing Unit implementation using
-//! visual accuracy test ROMs like cgb-acid2 and dmg-acid2.
+//! The screen must be the reference screenshot, pixel for pixel, when the ROM
+//! reaches its `ld b, b` breakpoint.
 
+use ceres_core::Model;
 use ceres_test_runner::{
-    expected_screenshot_path, load_test_rom, test_roms_dir,
-    test_runner::{ScreenshotCheck, TestConfig, TestRunner, timeouts},
+    Run,
+    checks::{ExactScreenshotCheck, TestResult},
+    rom_test, run_exact_screenshot, test_roms_dir, timeouts,
 };
 
-#[test]
-fn test_cgb_acid2() {
-    let rom = match load_test_rom("cgb-acid2/cgb-acid2.gbc") {
-        Ok(rom) => rom,
-        Err(e) => panic!("Failed to load test ROM: {e}"),
-    };
-
-    let screenshot_path = test_roms_dir().join("cgb-acid2/cgb-acid2.png");
-    let config = TestConfig {
-        model: ceres_core::Model::CgbE,
-        timeout_frames: timeouts::CGB_ACID2,
-        ..TestConfig::default()
-    };
-
-    let check = Box::new(ScreenshotCheck::new(screenshot_path));
-
-    let mut runner = match TestRunner::new(rom, config, check) {
-        Ok(runner) => runner,
-        Err(e) => panic!("Failed to create test runner: {e}"),
-    };
-
-    let result = runner.run();
-    assert!(result.is_passed(), "CGB Acid2 PPU test failed");
+fn cgb_acid(rom: &str, screenshot: &str) -> TestResult {
+    Run::new(rom, Model::CgbE)
+        .timeout(timeouts::CGB_ACID2)
+        .check(ExactScreenshotCheck::new(test_roms_dir().join(screenshot)))
 }
 
-#[test]
-fn test_cgb_acid_hell() {
-    let rom = match load_test_rom("cgb-acid-hell/cgb-acid-hell.gbc") {
-        Ok(rom) => rom,
-        Err(e) => panic!("Failed to load test ROM: {e}"),
-    };
-
-    let screenshot_path = test_roms_dir().join("cgb-acid-hell/cgb-acid-hell.png");
-    let config = TestConfig {
-        model: ceres_core::Model::CgbE,
-        timeout_frames: timeouts::CGB_ACID2,
-        ..TestConfig::default()
-    };
-
-    let check = Box::new(ScreenshotCheck::new(screenshot_path));
-
-    let mut runner = match TestRunner::new(rom, config, check) {
-        Ok(runner) => runner,
-        Err(e) => panic!("Failed to create test runner: {e}"),
-    };
-
-    let result = runner.run();
-    assert!(result.is_passed(), "CGB Acid Hell PPU test failed");
-}
-
-#[test]
-fn test_dmg_acid2_dmg() {
-    let rom = match load_test_rom("dmg-acid2/dmg-acid2.gb") {
-        Ok(rom) => rom,
-        Err(e) => panic!("Failed to load test ROM: {e}"),
-    };
-
-    let screenshot_path =
-        expected_screenshot_path("dmg-acid2/dmg-acid2.gb", ceres_core::Model::DmgB)
-            .expect("Expected screenshot not found");
-
-    let config = TestConfig {
-        model: ceres_core::Model::DmgB,
-        timeout_frames: timeouts::DMG_ACID2,
-        ..TestConfig::default()
-    };
-
-    let check = Box::new(ScreenshotCheck::new(screenshot_path));
-
-    let mut runner = match TestRunner::new(rom, config, check) {
-        Ok(runner) => runner,
-        Err(e) => panic!("Failed to create test runner: {e}"),
-    };
-
-    let result = runner.run();
-    assert!(result.is_passed(), "DMG Acid2 PPU test failed (DMG mode)");
-}
-
-#[test]
-fn test_dmg_acid2_cgb() {
-    let rom = match load_test_rom("dmg-acid2/dmg-acid2.gb") {
-        Ok(rom) => rom,
-        Err(e) => panic!("Failed to load test ROM: {e}"),
-    };
-
-    let screenshot_path =
-        expected_screenshot_path("dmg-acid2/dmg-acid2.gb", ceres_core::Model::CgbE)
-            .expect("Expected screenshot not found");
-
-    let config = TestConfig {
-        model: ceres_core::Model::CgbE,
-        timeout_frames: timeouts::DMG_ACID2,
-        ..TestConfig::default()
-    };
-
-    let check = Box::new(ScreenshotCheck::new(screenshot_path));
-
-    let mut runner = match TestRunner::new(rom, config, check) {
-        Ok(runner) => runner,
-        Err(e) => panic!("Failed to create test runner: {e}"),
-    };
-
-    let result = runner.run();
-
-    assert!(result.is_passed(), "DMG Acid2 PPU test failed (CGB mode)");
-}
+rom_test!(test_cgb_acid2: cgb_acid("cgb-acid2/cgb-acid2.gbc", "cgb-acid2/cgb-acid2.png"));
+rom_test!(test_cgb_acid_hell: cgb_acid(
+    "cgb-acid-hell/cgb-acid-hell.gbc",
+    "cgb-acid-hell/cgb-acid-hell.png"
+));
+rom_test!(test_dmg_acid2_dmg: run_exact_screenshot(
+    "dmg-acid2/dmg-acid2.gb",
+    Model::DmgB,
+    timeouts::DMG_ACID2
+));
+rom_test!(test_dmg_acid2_cgb: run_exact_screenshot(
+    "dmg-acid2/dmg-acid2.gb",
+    Model::CgbE,
+    timeouts::DMG_ACID2
+));

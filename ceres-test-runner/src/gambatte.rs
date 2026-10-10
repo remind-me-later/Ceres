@@ -7,19 +7,16 @@
 //! The screen has to match Gambatte's monochrome digit glyphs.
 
 use {
-    crate::test_roms_dir,
-    ceres_core::{AudioCallback, ColorCorrectionMode, GbBuilder, Model, Sample},
+    crate::{Run, test_roms_dir},
+    ceres_core::{Model, PX_WIDTH},
     std::path::{Path, PathBuf},
 };
 
-/// Gambatte runs 15 frames from the post-boot state (the 16th is displayed).
-pub const FRAMES: u32 = 16;
-
-/// Width of the screen in pixels.
-const SCREEN_WIDTH: usize = 160;
+/// Frames a ROM runs from the post-boot state, as in Gambatte's test runner.
+const FRAMES: u32 = 16;
 
 /// Gambatte's 8x8 hex digit glyphs (bit 7 = leftmost pixel, set = black).
-pub const GLYPHS: [[u8; 8]; 16] = [
+const GLYPHS: [[u8; 8]; 16] = [
     [0x00, 0x7F, 0x41, 0x41, 0x41, 0x41, 0x41, 0x7F],
     [0x00, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08],
     [0x00, 0x7F, 0x01, 0x01, 0x7F, 0x40, 0x40, 0x7F],
@@ -37,12 +34,6 @@ pub const GLYPHS: [[u8; 8]; 16] = [
     [0x00, 0x7F, 0x40, 0x40, 0x7F, 0x40, 0x40, 0x7F],
     [0x00, 0x7F, 0x40, 0x40, 0x7F, 0x40, 0x40, 0x40],
 ];
-
-struct NoAudio;
-
-impl AudioCallback for NoAudio {
-    fn audio_sample(&self, _l: Sample, _r: Sample) {}
-}
 
 /// Directory with the Gambatte test ROMs.
 #[must_use]
@@ -82,7 +73,7 @@ pub fn expected(stem: &str, cgb: bool) -> Option<String> {
 fn glyph_matches(rgba: &[u8], cell: usize, glyph: [u8; 8]) -> bool {
     glyph.iter().enumerate().all(|(y, row)| {
         (0..8).all(|x| {
-            let p = (y * SCREEN_WIDTH + cell * 8 + x) * 4;
+            let p = (y * usize::from(PX_WIDTH) + cell * 8 + x) * 4;
             let px = &rgba[p..p + 3];
             if row & (0x80 >> x) != 0 {
                 px.iter().all(|c| c & 0xF8 == 0)
@@ -107,48 +98,14 @@ pub fn screen_text(rgba: &[u8], digits: usize) -> String {
         .collect()
 }
 
-/// Runs the ROM at `path` and returns the first `digits` digits it shows, or
-/// `None` if the ROM does not load.
-///
-/// # Panics
-///
-/// Panics if the ROM cannot be read.
+/// Runs the ROM at `path` (on a CPU-CGB-C or a DMG-CPU-08) and returns the
+/// first `digits` digits it shows, or `None` if the ROM cannot be loaded.
 #[must_use]
 pub fn run_rom(path: &Path, cgb: bool, digits: usize) -> Option<String> {
-    let rom = std::fs::read(path).expect("read ROM");
-    let mut gb = GbBuilder::new(48000, NoAudio)
-        .with_model(if cgb { Model::CgbC } else { Model::DmgB })
-        .with_run_bootrom(false)
-        .with_rom(rom.into_boxed_slice())
-        .ok()?
-        .build();
-    gb.set_color_correction_mode(ColorCorrectionMode::Disabled);
-    for _ in 0..FRAMES {
-        gb.run_frame();
-    }
+    let gb = Run::new(path, if cgb { Model::CgbC } else { Model::DmgB })
+        .skip_boot_rom()
+        .timeout(FRAMES)
+        .machine()
+        .ok()?;
     Some(screen_text(gb.pixel_data_rgba(), digits))
-}
-
-/// Appends every `.gb`/`.gbc` file below `dir` to `out`, in name order.
-///
-/// # Panics
-///
-/// Panics if a directory cannot be read.
-pub fn collect_roms(dir: &Path, out: &mut Vec<PathBuf>) {
-    let mut entries: Vec<_> = std::fs::read_dir(dir)
-        .expect("gambatte directory")
-        .filter_map(Result::ok)
-        .map(|e| e.path())
-        .collect();
-    entries.sort();
-    for path in entries {
-        if path.is_dir() {
-            collect_roms(&path, out);
-        } else if matches!(
-            path.extension().and_then(|e| e.to_str()),
-            Some("gb" | "gbc")
-        ) {
-            out.push(path);
-        }
-    }
 }

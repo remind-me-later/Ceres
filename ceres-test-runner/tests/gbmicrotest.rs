@@ -4,12 +4,16 @@
 //! on a real DMG-CPU-08 and report through HRAM: `0xFF80` holds the actual
 //! result, `0xFF81` the expected one and `0xFF82` is `0x01` on success or
 //! `0xFF` on failure.
+//!
+//! The ROMs that fail are listed in `gbmicrotest_known_failures.txt`: SameBoy,
+//! the model for the PPU and CPU timing, fails them in exactly the same way.
+//! The test fails on any other failure, and on a known failure that now
+//! passes. Run with `BLESS=1` to rewrite the list.
 
-use ceres_core::{AudioCallback, GbBuilder, Model, Sample};
-use ceres_test_runner::{load_test_rom, test_roms_dir};
-
-/// Enough for every self-checking ROM (`is_if_set_during_ime0` needs ~23).
-const MAX_FRAMES: u32 = 60;
+use ceres_core::Model;
+use ceres_test_runner::{
+    Run, check_known_failures, checks::MicrotestCheck, collect_roms, test_roms_dir, timeouts,
+};
 
 /// ROMs that never report a result: test benches, visual or manual ROMs and
 /// tests that only make sense with a screenshot.
@@ -47,76 +51,24 @@ const NOT_SELF_CHECKING: &[&str] = &[
     "wave_write_to_0xC003.gb",
 ];
 
-/// Hardware-verified failures: SameBoy (the model for the PPU/CPU timing)
-/// fails these in exactly the same way.
-const KNOWN_FAILURES: &[&str] = &["halt_op_dupe_delay.gb", "stat_write_glitch_l154_d.gb"];
-
-struct NoAudio;
-
-impl AudioCallback for NoAudio {
-    fn audio_sample(&self, _l: Sample, _r: Sample) {}
-}
-
-/// `Some(true)` if the ROM reported success, `Some(false)` on failure.
-fn run_rom(name: &str) -> Option<bool> {
-    let rom = load_test_rom(&format!("gbmicrotest/{name}")).expect("load ROM");
-    let mut gb = GbBuilder::new(48000, NoAudio)
-        .with_model(Model::DmgB)
-        .with_run_bootrom(false)
-        .with_rom(rom.into_boxed_slice())
-        .expect("valid ROM")
-        .build();
-
-    for _ in 0..MAX_FRAMES {
-        gb.run_frame();
-        match gb.read_mem(0xFF82) {
-            0x01 => return Some(true),
-            0xFF => return Some(false),
-            _ => (),
-        }
-    }
-    None
-}
-
 #[test]
 fn gbmicrotest_suite() {
-    let dir = test_roms_dir().join("gbmicrotest");
-    let mut names: Vec<String> = std::fs::read_dir(&dir)
-        .expect("gbmicrotest directory")
-        .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
-        .filter(|name| {
-            std::path::Path::new(name)
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("gb"))
-        })
-        .collect();
-    names.sort();
-
-    let mut unexpected_failures = Vec::new();
-    let mut unexpected_passes = Vec::new();
+    let mut failures = Vec::new();
     let mut checked = 0;
-
-    for name in &names {
-        if NOT_SELF_CHECKING.contains(&name.as_str()) {
+    for path in collect_roms(&test_roms_dir().join("gbmicrotest")) {
+        let name = path.file_name().and_then(|n| n.to_str()).expect("name");
+        if NOT_SELF_CHECKING.contains(&name) {
             continue;
         }
         checked += 1;
-        let passed = run_rom(name) == Some(true);
-        let known_failure = KNOWN_FAILURES.contains(&name.as_str());
-        if !passed && !known_failure {
-            unexpected_failures.push(name.clone());
-        } else if passed && known_failure {
-            unexpected_passes.push(name.clone());
+        let result = Run::new(&path, Model::DmgB)
+            .skip_boot_rom()
+            .timeout(timeouts::GBMICROTEST)
+            .check(MicrotestCheck);
+        if !result.is_passed() {
+            failures.push(name.to_string());
         }
     }
-
     assert!(checked > 400, "only {checked} gbmicrotest ROMs were run");
-    assert!(
-        unexpected_failures.is_empty(),
-        "gbmicrotest failures: {unexpected_failures:?}"
-    );
-    assert!(
-        unexpected_passes.is_empty(),
-        "gbmicrotest ROMs now pass, remove them from KNOWN_FAILURES: {unexpected_passes:?}"
-    );
+    check_known_failures("gbmicrotest_known_failures.txt", failures);
 }
