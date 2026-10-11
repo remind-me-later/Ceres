@@ -3,7 +3,6 @@
 use {
     super::{LINES, fetcher::FetcherStep, model_ge_cgb_d, pos, state::State, window::Window},
     crate::{
-        interrupts::Interrupts,
         ppu::{
             ATTR_CGB_PALETTE, ATTR_DMG_PALETTE_B, ATTR_PRIORITY_B, ATTR_X_FLIP_B, LCDC_OBJ_EN_B,
             LCDC_WIN_EN_B, Oam, PX_WIDTH, Ppu, STAT_MODE_B,
@@ -51,7 +50,7 @@ impl Ppu {
         clippy::too_many_lines,
         reason = "SameBoy's mode 3 loop: one arm per step"
     )]
-    pub(super) fn mode3(&mut self, ints: &mut Interrupts, resume: State) -> Mode3Flow {
+    pub(super) fn mode3(&mut self, resume: State) -> Mode3Flow {
         // On the DMG, disabling objects aborts an object fetch (see
         // `abort_object_fetch_on_obj_disable`).
         let unless_aborted = |ppu: &Self, step| {
@@ -115,9 +114,6 @@ impl Ppu {
                         if obj.x == 167 {
                             // The HBlank interrupt does not wait for the fetch of an
                             // object at the right edge, unlike the STAT mode.
-                            self.d.irq.mode_for_interrupt = 0;
-                            self.stat_update(ints);
-                            self.gstat_mode3_end();
                             self.timing_mode3_end();
                         }
                         Step::WaitForTile
@@ -181,9 +177,6 @@ impl Ppu {
                 }
                 Step::AfterPixel => {
                     if self.d.window.wx_166_interrupt_glitch {
-                        self.d.irq.mode_for_interrupt = 0;
-                        self.stat_update(ints);
-                        self.gstat_mode3_end();
                         self.timing_mode3_end();
                     }
                     Step::WindowCheck
@@ -263,7 +256,6 @@ impl Ppu {
 
         if !self.double_speed() {
             self.stat &= !STAT_MODE_B;
-            self.d.irq.mode_for_interrupt = 0;
             self.d.cpu.oam_read_blocked = model_ge_cgb_d(self.model);
             self.d.cpu.vram_read_blocked = false;
             self.d.cpu.oam_write_blocked = false;

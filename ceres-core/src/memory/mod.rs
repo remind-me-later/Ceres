@@ -267,12 +267,11 @@ impl<A: AudioCallback> Gb<A> {
             STAT => self.ppu.write_stat(val, &mut self.ints),
             SCY => self.ppu.write_scy(val),
             SCX => self.ppu.write_scx(val),
-            LYC => self.ppu.write_lyc(val, &mut self.ints),
+            LYC => self.ppu.write_lyc(val),
             DMA => {
                 self.dma.write(val);
                 self.ppu
                     .set_dma_state(DmaPhase::StartUp, u16::from(val) << 8, true);
-                self.ppu.refresh_stat(&mut self.ints);
             }
             BGP => self.ppu.write_bgp(val),
             OBP0 => self.ppu.write_obp0(val),
@@ -302,7 +301,7 @@ impl<A: AudioCallback> Gb<A> {
             HDMA3 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.write_hdma3(val),
             HDMA4 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.write_hdma4(val),
             HDMA5 if matches!(self.cgb_mode, CgbMode::Cgb) => {
-                let in_hblank = self.ppu.gstat_hdma_enable_in_hblank().unwrap_or_else(|| {
+                let in_hblank = self.ppu.cgb_c_hdma_enable_in_hblank().unwrap_or_else(|| {
                     matches!(self.ppu.mode(), ppu::Mode::HBlank) && !self.ppu.at_oam_scan_edge()
                 });
                 self.hdma.write_hdma5(val, in_hblank);

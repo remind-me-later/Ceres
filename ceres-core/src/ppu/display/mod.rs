@@ -19,7 +19,7 @@
 mod bus;
 mod fetcher;
 mod fifo;
-mod gstat;
+mod cgb_c;
 mod mode3;
 mod objects;
 mod pixels;
@@ -34,15 +34,14 @@ use {
     core::mem,
     fetcher::Fetcher,
     fifo::Fifo,
-    gstat::GStat,
+    cgb_c::CgbC,
     objects::{ObjectFetch, ObjectSearch},
-    stat::StatIrq,
     window::Window,
 };
 
 use super::{LCDC_WIN_EN_B, PX_HEIGHT, Ppu, STAT_MODE_B, oam_bug::NO_ROW};
 
-pub(super) use {gstat::PALETTE_LOCK_CYCLE, state::State};
+pub(super) use {cgb_c::PALETTE_LOCK_CYCLE, state::State};
 
 pub(super) const MODE2_LENGTH: i32 = 80;
 /// The PPU addresses VRAM from 0 (0x8000 for the CPU), bank 1 after bank 0.
@@ -99,8 +98,13 @@ pub(super) struct Display {
     obj_fetch: ObjectFetch,
     fetcher: Fetcher,
     window: Window,
-    irq: StatIrq,
-    gstat: GStat,
+    /// The line the WY check compares with on the DMG and in double speed
+    /// (SameBoy's `ly_for_comparison`); `-1` around LY changes.
+    ly_for_comparison: i32,
+    /// Line 153's comparison line changes in the second half of the current
+    /// dot (CGB-C in double speed).
+    line153_compare_pending: bool,
+    cgb_c: CgbC,
     /// The LCD timing and STAT interrupt (`timing.rs`).
     timing: timing::LcdTiming,
     bus: PpuBus,
@@ -136,8 +140,9 @@ impl Default for Display {
             obj_fetch: ObjectFetch::default(),
             fetcher: Fetcher::default(),
             window: Window::default(),
-            irq: StatIrq::default(),
-            gstat: GStat::default(),
+            ly_for_comparison: 0,
+            line153_compare_pending: false,
+            cgb_c: CgbC::default(),
             timing: timing::LcdTiming::default(),
             bus: PpuBus::default(),
             cpu: CpuAccess::default(),
@@ -283,7 +288,7 @@ impl Ppu {
         self.ly = 0;
         self.stat &= !STAT_MODE_B;
         self.d.current_line = 0;
-        self.d.irq.ly_for_comparison = 0;
+        self.d.ly_for_comparison = 0;
         self.d.window.wy_triggered = false;
         self.d.window.line0_wy_countdown = 0;
         self.d.line_clock_valid = false;
@@ -302,12 +307,8 @@ impl Ppu {
     /// for the accesses that land between units: after a speed switch or in
     /// a split write in double speed.
     pub(in crate::ppu) fn run_display(&mut self, ints: &mut Interrupts) {
-        let mut muted = Interrupts::default();
-        self.gstat_unit(if self.timing_live() { &mut muted } else { ints });
-        // On the CGB the unit only shadows the live model (`debug`).
-        if self.timing_live() || cfg!(feature = "debug") {
-            self.timing_unit(ints);
-        }
+        self.timing_unit(ints);
+        self.cgb_c_unit();
         // Pre-run bookkeeping (top of GB_display_run).
         if self.d.window.wy_triggered {
             self.d.window.wy_check_scheduled = false;
@@ -320,8 +321,6 @@ impl Ppu {
         if cut {
             if self.d.state == State::HBlankStart {
                 self.stat &= !STAT_MODE_B;
-                self.d.irq.mode_for_interrupt = 0;
-                self.stat_update(ints);
             }
             self.d.state = State::Mode3Abort;
             self.d.wait = 0;
@@ -329,13 +328,6 @@ impl Ppu {
 
         self.d.half_dot = !self.d.half_dot;
         if self.d.half_dot || cut {
-            if self.d.irq.delayed_glitch_hblank_interrupt && self.d.current_line < LINES {
-                self.d.irq.delayed_glitch_hblank_interrupt = false;
-                self.d.irq.mode_for_interrupt = 0;
-                self.stat_update(ints);
-                self.d.irq.mode_for_interrupt = 3;
-            }
-
             self.d.line_clock += 1;
             if count_down(&mut self.d.hblank_hdma_delay) {
                 self.d.hblank_hdma_edge = true;
@@ -346,15 +338,11 @@ impl Ppu {
                 self.d.window.wy_triggered = self.lcdc & LCDC_WIN_EN_B != 0 && self.wy == 0;
             }
             self.step_state_machine(ints);
-        } else if self.d.irq.line153_compare_pending {
-            self.d.irq.line153_compare_pending = false;
-            self.d.irq.ly_for_comparison = LAST_LINE.into();
-            self.stat_update(ints);
+        } else if self.d.line153_compare_pending {
+            self.d.line153_compare_pending = false;
+            self.d.ly_for_comparison = LAST_LINE.into();
         } else {
             // Nothing runs in the second half of a dot.
-        }
-        if count_down(&mut self.d.irq.lyc_line_hold) {
-            self.stat_update(ints);
         }
         self.advance_wy_unit();
     }

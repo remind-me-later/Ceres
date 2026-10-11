@@ -332,7 +332,7 @@ impl Ppu {
             return 0xFF;
         }
         if self
-            .gstat_oam_lock(false)
+            .cgb_c_oam_lock(false)
             .unwrap_or_else(|| self.d.cpu().oam_read_blocked)
         {
             if !self.is_cgb_hardware() {
@@ -350,7 +350,7 @@ impl Ppu {
     /// CPU write to `0xFE00..=0xFEFF`.
     pub(crate) fn cpu_write_oam_area(&mut self, addr: u16, val: u8, dma_blocked: bool) {
         if self
-            .gstat_oam_lock(true)
+            .cgb_c_oam_lock(true)
             .unwrap_or_else(|| self.d.cpu().oam_write_blocked)
         {
             self.trigger_oam_bug(addr);

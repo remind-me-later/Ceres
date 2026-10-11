@@ -79,9 +79,9 @@ impl Ppu {
             return;
         }
         let comparison = if (!self.is_cgb_hardware() || self.double_speed())
-            && self.d.irq.ly_for_comparison != -1
+            && self.d.ly_for_comparison != -1
         {
-            i32::from(self.d.irq.ly_for_comparison.to_le_bytes()[0])
+            i32::from(self.d.ly_for_comparison.to_le_bytes()[0])
         } else {
             i32::from(self.d.current_line)
         };

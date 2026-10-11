@@ -43,7 +43,7 @@ impl<A: AudioCallback> Gb<A> {
                 self.advance_t_cycles(pending + 1);
                 // In double speed a write to IF lands after the LCD
                 // interrupts of the next cycle (gambatte `updateIrqs(cc + 2)`).
-                if addr == io_addr(IF) && self.key1.is_enabled() && self.ppu.gambatte_cgb_timing() {
+                if addr == io_addr(IF) && self.key1.is_enabled() && self.ppu.cgb_c_timing() {
                     self.ppu
                         .run_ahead(&mut self.ints, self.cgb_mode, true, 1, true);
                 }
@@ -150,8 +150,8 @@ impl<A: AudioCallback> Gb<A> {
                 let old = self.ppu.read_lcdc();
                 self.advance_t_cycles(pending);
                 self.ppu.cgb_obj_size_write(val, 0);
-                if self.ppu.gambatte_cgb_timing() {
-                    self.ppu.gstat_write_lcdc(val, 0);
+                if self.ppu.cgb_c_timing() {
+                    self.ppu.cgb_c_write_lcdc(val, 0);
                 }
                 let delay_obj_size = self.ppu.read_scx() & 7 != 0;
                 self.write_mem(
@@ -174,15 +174,15 @@ impl<A: AudioCallback> Gb<A> {
                 self.ppu.set_tile_sel_glitch(false);
                 self.ppu.set_window_enable_pending(false);
                 self.write_mem(addr, val);
-                self.ppu.gstat_lcdc_write_done();
+                self.ppu.cgb_c_lcdc_write_done();
                 self.time_deferred = 3;
             }
             ConflictType::LcdcCgbDouble => {
                 let old = self.ppu.read_lcdc();
                 self.advance_t_cycles(pending - 2);
                 self.ppu.cgb_obj_size_write(val, 2);
-                if self.ppu.gambatte_cgb_timing() {
-                    self.ppu.gstat_write_lcdc(val, 2);
+                if self.ppu.cgb_c_timing() {
+                    self.ppu.cgb_c_write_lcdc(val, 2);
                 }
                 // Turning the window on waits for the end of the write too.
                 let late = LCDC_ON_B | LCDC_BG_EN_B | (!old & LCDC_WIN_EN_B);
@@ -192,7 +192,7 @@ impl<A: AudioCallback> Gb<A> {
                 self.advance_t_cycles(2);
                 self.ppu.set_tile_sel_glitch(false);
                 self.write_mem(addr, val);
-                self.ppu.gstat_lcdc_write_done();
+                self.ppu.cgb_c_lcdc_write_done();
                 self.time_deferred = 4;
             }
             // Registers the tile fetcher consumes land a dot before the ones the

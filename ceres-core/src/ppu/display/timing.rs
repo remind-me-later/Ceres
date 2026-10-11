@@ -14,20 +14,15 @@
 //! What gambatte models as separate events with suppression rules (an event
 //! is lost when another source already holds the line) falls out of the OR.
 //!
-//! It drives the STAT interrupt and the LY and STAT reads of the DMG family.
-//! On the CGB, `gstat.rs` (up to revision C) and SameBoy's model (`stat.rs`)
-//! still do; there it runs as a shadow (the `debug` feature records its
-//! interrupts in the PPU trace, and `Gb::set_timing_live` lets it drive the
-//! interrupt and the reads instead). Live, it passes the CGB suites too:
-//! gambatte's 3023 CGB-C checks, SameSuite, Mooneye, AGE.
-//!
+//! It drives the STAT interrupt and the LY and STAT reads of every model.
 //! The revisions share the structure and differ in a table of phases
 //! (`Phases`) and of CPU access delays (`Delays`). The CGB's were fitted to
-//! the tests; `doc/cgb-hardware-tests.md` lists what hardware should
-//! confirm.
+//! the CGB test suites (gambatte's CGB-C checks, SameSuite, Mooneye, AGE);
+//! `doc/cgb-hardware-tests.md` lists what hardware should confirm.
 //!
-//! Times are in half dots on gambatte's line clock (`h`, 0 where LY changes
-//! for a CPU read, 912 per line), so they compare directly with `gstat.rs`.
+//! Times are in half dots on a line clock (`h`, 912 per line) that the
+//! pixel pipeline resyncs at every line end; `h = 0` is where LY changes for
+//! a CPU read (gambatte's clock, which its tests are written against).
 
 use {
     super::{LAST_LINE, LINE_LENGTH, LINES},
@@ -150,11 +145,9 @@ pub(super) struct LcdTiming {
     lyc_pending: Option<(u8, u8)>,
     /// Written enables and the half dots until they reach the line (CGB).
     stat_pending: Option<(u8, u8)>,
-    /// The line rose in the last unit.
-    unit_edge: bool,
-    /// The unit drives the interrupt on the CGB too (an experiment:
-    /// `Gb::set_timing_live`).
-    live: bool,
+    /// An input of the line changed outside a unit without the line being
+    /// re-evaluated.
+    dirty: bool,
 }
 
 impl Default for LcdTiming {
@@ -176,13 +169,22 @@ impl Default for LcdTiming {
             stat_line: false,
             lyc_pending: None,
             stat_pending: None,
-            unit_edge: false,
-            live: false,
+            dirty: false,
         }
     }
 }
 
 impl LcdTiming {
+    /// The line and half dot on the clock.
+    pub(super) const fn position(&self) -> (u8, i32) {
+        (self.line, self.h)
+    }
+
+    /// The LCD is on.
+    pub(super) const fn is_on(&self) -> bool {
+        self.on
+    }
+
     /// The interrupt line for these enables.
     const fn line_for(&self, enables: u8) -> bool {
         (enables & STAT_IF_LYC_B != 0 && self.ly_match)
@@ -215,12 +217,20 @@ impl LcdTiming {
             return false;
         }
 
+        // The line is re-evaluated only when one of its inputs changed: in
+        // most half dots none does.
+        let mut changed = self.dirty;
+        self.dirty = false;
         if self.hblank_pending {
             self.hblank_pending = false;
             self.hblank = true;
+            changed = true;
         }
         match self.h {
-            0 => self.line_end = false,
+            0 => {
+                self.line_end = false;
+                changed = true;
+            }
             LINE_END_H => {
                 self.line_end = true;
                 self.ly = if self.line == LAST_LINE {
@@ -228,12 +238,14 @@ impl LcdTiming {
                 } else {
                     self.line + 1
                 };
+                changed = true;
             }
             _ => {}
         }
         // No line reset as LY becomes 144: HBlank holds into VBlank.
-        if self.h == self.phases.hblank_clear && self.line != LAST_VISIBLE_LINE {
+        if self.h == self.phases.hblank_clear && self.line != LAST_VISIBLE_LINE && self.hblank {
             self.hblank = false;
+            changed = true;
         }
         let sample = self.h & 7 == LY_MATCH_PHASE;
         let mut rose = false;
@@ -248,32 +260,45 @@ impl LcdTiming {
                 self.lyc_pending = Some((lyc, if left > 1 { left - 1 } else { 1 }));
             }
         }
-        if sample {
-            self.ly_match = self.ly == self.lyc;
+        if sample && self.ly_match != (self.ly == self.lyc) {
+            self.ly_match = !self.ly_match;
+            changed = true;
         }
         if self.h == self.phases.line153_ly_reset && self.line == LAST_LINE {
             self.ly = 0;
         }
-        rose |= self.update_line();
+        if changed {
+            rose |= self.update_line();
+        }
         // VBlank is latched on the same clock edge as LY=LYC, a gate later:
         // LY=LYC dropping as VBlank starts leaves the line low in between.
         // Written enables (CGB) land with it: the line sees both at once.
+        changed = false;
         if let Some((enables, left)) = self.stat_pending {
             if left <= 1 {
                 self.enables = enables;
                 self.stat_pending = None;
+                changed = true;
             } else {
                 self.stat_pending = Some((enables, left - 1));
             }
         }
         if self.h == VBLANK_H {
             match self.line {
-                LAST_VISIBLE_LINE => self.vblank = true,
-                LAST_LINE => self.vblank = false,
+                LAST_VISIBLE_LINE => {
+                    self.vblank = true;
+                    changed = true;
+                }
+                LAST_LINE => {
+                    self.vblank = false;
+                    changed = true;
+                }
                 _ => {}
             }
         }
-        rose |= self.update_line();
+        if changed {
+            rose |= self.update_line();
+        }
         rose
     }
 }
@@ -313,15 +338,6 @@ const CGB_DOUBLE_SPEED_DELAYS: Delays = Delays {
 };
 
 impl LcdTiming {
-    /// The unit `n` half dots ahead.
-    fn ahead(&self, n: u8) -> Self {
-        let mut t = self.clone();
-        for _ in 0..n {
-            t.unit();
-        }
-        t
-    }
-
     /// STAT's mode as a read sees it; `pipeline` is the mode the drawing
     /// pipeline is in, which tells mode 3 from mode 0.
     const fn read_mode(&self, pipeline: u8) -> u8 {
@@ -362,14 +378,17 @@ impl Ppu {
     /// the one that rises has not risen yet.
     pub(in crate::ppu) fn timing_read_ly(&self) -> u8 {
         let delay = self.delays().ly_read;
-        let t = self.d.timing.ahead(delay);
-        if self.d.timing.phases.cgb && delay > 0 {
-            let before = self.d.timing.ahead(delay - 1);
-            if before.ly != t.ly {
-                return before.ly & t.ly;
-            }
+        let mut t = self.d.timing.clone();
+        let mut before = t.ly;
+        for _ in 0..delay {
+            before = t.ly;
+            t.unit();
         }
-        t.ly
+        if self.d.timing.phases.cgb && delay > 0 && before != t.ly {
+            before & t.ly
+        } else {
+            t.ly
+        }
     }
 
     /// STAT's mode and LY=LYC flag as a CPU read sees them, over `stat`
@@ -385,46 +404,29 @@ impl Ppu {
             return enables | if t.ly_match { STAT_LYC_B } else { 0 };
         }
         let delays = self.delays();
-        let flag_view = t.ahead(delays.flag_read);
         let holds = t.phases.cgb && (self.double_speed() || t.phases.flag_holds);
-        let lyc_flag = flag_view.ly_match && (holds || flag_view.ly == flag_view.lyc);
-        let mode = t.ahead(delays.mode_read).read_mode(stat & STAT_MODE_B);
+        // One run ahead serves both views.
+        let mut t = t.clone();
+        let (mut lyc_flag, mut mode) = (false, 0);
+        for k in 0..=delays.flag_read.max(delays.mode_read) {
+            if k > 0 {
+                t.unit();
+            }
+            if k == delays.flag_read {
+                lyc_flag = t.ly_match && (holds || t.ly == t.lyc);
+            }
+            if k == delays.mode_read {
+                mode = t.read_mode(stat & STAT_MODE_B);
+            }
+        }
         enables | mode | if lyc_flag { STAT_LYC_B } else { 0 }
     }
 
-    /// Advances the shadow timing unit by a half dot; its interrupt is
-    /// recorded with the unit's (`take_timing_edge`).
+    /// Advances the unit by a half dot.
     pub(super) const fn timing_unit(&mut self, ints: &mut Interrupts) {
-        let rose = self.d.timing.unit();
-        self.d.timing.unit_edge = rose;
-        if rose && self.timing_live() {
+        if self.d.timing.unit() {
             ints.request_lcd();
         }
-    }
-
-    /// The line rose outside a unit (a register write).
-    #[cfg_attr(
-        not(feature = "debug"),
-        expect(
-            clippy::missing_const_for_fn,
-            clippy::needless_pass_by_ref_mut,
-            reason = "The debug build traces it"
-        )
-    )]
-    fn timing_rose(&mut self, ints: &mut Interrupts) {
-        #[cfg(feature = "debug")]
-        self.trace_shadow_lcd_interrupt();
-        if self.timing_live() {
-            ints.request_lcd();
-        }
-    }
-
-    /// Whether the interrupt line rose in the last unit.
-    #[cfg(feature = "debug")]
-    pub(in crate::ppu) const fn take_timing_edge(&mut self) -> bool {
-        let rose = self.d.timing.unit_edge;
-        self.d.timing.unit_edge = false;
-        rose
     }
 
     /// Mode 3 ended: the HBlank gate rises in the next unit.
@@ -433,7 +435,7 @@ impl Ppu {
     }
 
     /// The LCD was turned on: the line clock starts at line 0.
-    pub(in crate::ppu) fn timing_lcd_on(&mut self, ints: &mut Interrupts) {
+    pub(in crate::ppu) const fn timing_lcd_on(&mut self, ints: &mut Interrupts) {
         let phases = if !self.is_cgb_hardware() {
             DMG_PHASES
         } else if super::model_ge_cgb_d(self.model) {
@@ -454,7 +456,7 @@ impl Ppu {
         t.hblank_pending = false;
         t.ly_match = t.lyc == 0;
         if t.update_line() {
-            self.timing_rose(ints);
+            ints.request_lcd();
         }
     }
 
@@ -470,8 +472,7 @@ impl Ppu {
         t.update_line();
     }
 
-    /// Checks the clock against the start of a line on `line_clock` (as
-    /// `gstat_line_end` does).
+    /// Resyncs the clock with the pixel pipeline at a line end.
     pub(super) const fn timing_line_end(&mut self, line: u8) {
         self.d.timing.line = line;
         self.d.timing.h = LINE_H - 19;
@@ -483,28 +484,17 @@ impl Ppu {
         (self.d.timing.line, self.d.timing.h)
     }
 
-    /// The unit drives the STAT interrupt and the reads: on the DMG family,
-    /// and on the CGB with `Gb::set_timing_live`.
-    pub(in crate::ppu) const fn timing_live(&self) -> bool {
-        !self.is_cgb_hardware() || self.d.timing.live
-    }
-
-    /// See `Gb::set_timing_live`.
-    #[cfg(feature = "debug")]
-    pub(crate) const fn set_timing_live(&mut self, live: bool) {
-        self.d.timing.live = live;
-    }
-
     /// A STAT write. On the DMG the write briefly sets every enable: any
     /// active source raises the interrupt (with the LCD off, a set LY=LYC).
     /// The CGB has no such glitch, and its enables reach the line later.
-    pub(in crate::ppu) fn timing_write_stat(&mut self, val: u8, ints: &mut Interrupts) {
+    pub(in crate::ppu) const fn timing_write_stat(&mut self, val: u8, ints: &mut Interrupts) {
         let delay = self.delays().stat_write;
         let t = &mut self.d.timing;
         let enables = val & STAT_ENABLES;
         // A write still on its way lands now.
         if let Some((pending, _)) = t.stat_pending.take() {
             t.enables = pending;
+            t.dirty = true;
         }
         if t.on && delay > 0 {
             t.stat_pending = Some((enables, delay));
@@ -514,7 +504,7 @@ impl Ppu {
         t.stat_line |= glitch;
         t.enables = enables;
         if t.update_line() || glitch {
-            self.timing_rose(ints);
+            ints.request_lcd();
         }
     }
 

@@ -393,7 +393,7 @@ impl<A: AudioCallback> Gb<A> {
                     self.ppu.write_oam_by_dma(OAM_START | u16::from(at), value);
                 }
                 self.dma.phase = self.dma.phase.step();
-                self.ppu.dma_finished(&mut self.ints);
+                self.ppu.dma_finished();
                 break;
             };
             self.dma.restart_at = None;

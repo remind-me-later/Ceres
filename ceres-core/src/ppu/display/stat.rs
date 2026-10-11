@@ -1,229 +1,30 @@
-//! The STAT interrupt line and the LY=LYC comparison.
+//! The STAT and LYC registers. The interrupt and the LY=LYC flag they feed
+//! are the timing unit's (`timing.rs`).
 
 use {
-    super::{model_ge_cgb_d, state::State},
+    super::state::State,
     crate::{
         interrupts::Interrupts,
-        ppu::{
-            LCDC_ON_B, Ppu, STAT_IF_HBLANK_B, STAT_IF_LYC_B, STAT_IF_OAM_B, STAT_IF_VBLANK_B,
-            STAT_LYC_B,
-        },
+        ppu::Ppu,
     },
 };
 
-/// Half-dots a CGB write to LYC that drops the LYC condition leaves it
-/// blocking the mode 0 and mode 2 conditions (gambatte's `MStatIrqEvent`).
-const LYC_DROP_HOLD: u8 = 8;
-
-/// `mode_for_interrupt` while the line is held by the HBlank or the OAM
-/// condition as VBlank starts.
-pub(super) const MODE_VBLANK_ENTRY: i8 = 4;
-
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "Independent interrupt line and glitch flags"
-)]
-#[derive(Clone)]
-pub(super) struct StatIrq {
-    /// `ly_for_comparison`; `-1` is SameBoy's `(uint16_t)-1`.
-    pub ly_for_comparison: i32,
-    /// The mode the STAT interrupt sees (-1: none).
-    pub mode_for_interrupt: i8,
-    pub stat_interrupt_line: bool,
-    pub lyc_interrupt_line: bool,
-    pub delayed_glitch_hblank_interrupt: bool,
-    /// The STAT register as it was when VBlank entry began; at normal speed
-    /// the CGB does not see the enables written later in the entry hold
-    /// (`MODE_VBLANK_ENTRY`).
-    pub entry_stat: u8,
-    /// The LYC compare of line 153 runs in the second half of the current dot
-    /// (CGB-C in double speed).
-    pub line153_compare_pending: bool,
-    /// Half-dots the LYC condition keeps blocking the mode 0 and mode 2
-    /// conditions after a CGB write to LYC dropped it.
-    pub lyc_line_hold: u8,
-}
-
-impl Default for StatIrq {
-    fn default() -> Self {
-        Self {
-            ly_for_comparison: 0,
-            mode_for_interrupt: -1,
-            stat_interrupt_line: false,
-            lyc_interrupt_line: false,
-            delayed_glitch_hblank_interrupt: false,
-            entry_stat: 0,
-            line153_compare_pending: false,
-            lyc_line_hold: 0,
-        }
-    }
-}
-
 impl Ppu {
-    pub(in crate::ppu) fn stat_update(&mut self, ints: &mut Interrupts) {
-        if self.lcdc & LCDC_ON_B == 0 {
-            return;
-        }
-
-        let previous = self.d.irq.stat_interrupt_line;
-
-        // LY=LYC flag
-        // `model <= CGB_C` in SameBoy's ordering: everything before CGB-D.
-        let le_c = !model_ge_cgb_d(self.model) && !self.double_speed();
-        if self.d.irq.ly_for_comparison != -1 || le_c {
-            if self.d.irq.ly_for_comparison == i32::from(self.lyc) {
-                self.d.irq.lyc_interrupt_line = true;
-                self.stat |= STAT_LYC_B;
-            } else {
-                if self.d.irq.ly_for_comparison != -1 {
-                    self.d.irq.lyc_interrupt_line = false;
-                }
-                self.stat &= !STAT_LYC_B;
-            }
-        }
-
-        self.d.irq.stat_interrupt_line = match self.d.irq.mode_for_interrupt {
-            0 => self.stat & STAT_IF_HBLANK_B != 0,
-            1 => self.stat & STAT_IF_VBLANK_B != 0,
-            2 => self.stat & STAT_IF_OAM_B != 0,
-            MODE_VBLANK_ENTRY => {
-                let stat = if self.is_cgb_hardware() && !self.double_speed() {
-                    self.d.irq.entry_stat
-                } else {
-                    self.stat
-                };
-                stat & (STAT_IF_HBLANK_B | STAT_IF_OAM_B) != 0
-            }
-            _ => false,
-        };
-
-        if self.stat & STAT_IF_LYC_B != 0
-            && (self.d.irq.lyc_interrupt_line || self.d.irq.lyc_line_hold > 0)
-        {
-            self.d.irq.stat_interrupt_line = true;
-        }
-
-        if self.d.irq.stat_interrupt_line
-            && !previous
-            && !self.gambatte_cgb_timing()
-            && !self.timing_live()
-        {
-            ints.request_lcd();
-        }
-    }
-
     /// The DMA's last cycle: during the OAM scan edge it raises the mode 2
     /// bits (SameBoy `GB_dma_run`).
-    pub(crate) fn dma_finished(&mut self, ints: &mut Interrupts) {
+    pub(crate) fn dma_finished(&mut self) {
         if self.d.state == State::OamScanObject {
             self.stat |= 2;
-            self.stat_update(ints);
         }
-        #[cfg(feature = "debug")]
-        self.trace_requests(ints);
     }
 
-    /// Re-evaluates the STAT interrupt line (after a DMA start).
-    pub(crate) fn refresh_stat(&mut self, ints: &mut Interrupts) {
-        self.stat_update(ints);
-        #[cfg(feature = "debug")]
-        self.trace_requests(ints);
-    }
-
-    pub(in crate::ppu) fn write_lyc_reg(&mut self, val: u8, ints: &mut Interrupts) {
-        if self.gambatte_cgb_timing() {
-            let mut muted = Interrupts::default();
-            self.gstat_write_lyc(val, if self.timing_live() { &mut muted } else { ints });
-        }
+    pub(in crate::ppu) const fn write_lyc_reg(&mut self, val: u8) {
         self.timing_write_lyc(val);
-        let state = self.d.state;
-        let cgb = self.is_cgb_hardware();
-        // These are the states around LY changes; the display routine calls
-        // `stat_update` itself so LYC writes conflict on the right dot.
-        if state == State::Line153LycGlitch && cgb {
-            self.d.irq.ly_for_comparison = 153;
-            self.stat_update(ints);
-            self.d.irq.ly_for_comparison = 0;
-        }
-        if cgb && !self.double_speed() && val != self.lyc && self.d.irq.lyc_interrupt_line {
-            self.d.irq.lyc_line_hold = LYC_DROP_HOLD;
-        }
         self.lyc = val;
-        if !cgb
-            || !matches!(
-                state,
-                State::LineOamWriteLock
-                    | State::VBlankLy
-                    | State::Line153Compare
-                    | State::Line153CompareZero
-            )
-        {
-            if state == State::Line153LyZero && cgb {
-                self.d.irq.ly_for_comparison = 153;
-                self.stat_update(ints);
-                self.d.irq.ly_for_comparison = -1;
-            } else {
-                self.stat_update(ints);
-            }
-        }
     }
 
-    pub(in crate::ppu) fn write_stat_reg(&mut self, val: u8, ints: &mut Interrupts) {
-        if self.gambatte_cgb_timing() {
-            let mut muted = Interrupts::default();
-            self.gstat_write_stat(val, if self.timing_live() { &mut muted } else { ints });
-        }
+    pub(in crate::ppu) const fn write_stat_reg(&mut self, val: u8, ints: &mut Interrupts) {
         self.timing_write_stat(val, ints);
-        // On the CGB the HBlank condition is already held a dot before the
-        // mode bits change are evaluated: a write in that gap comes too late
-        // to prevent the interrupt.
-        if self.is_cgb_hardware()
-            && self.d.state == State::HBlankStart
-            && self.d.irq.mode_for_interrupt == 0
-            && self.lcdc & LCDC_ON_B != 0
-        {
-            self.stat_update(ints);
-        }
-        let old = self.stat;
-        self.stat &= 7;
-        self.stat |= val & !7;
-        self.stat |= 0x80;
-
-        if self.lcdc & LCDC_ON_B == 0 {
-            // With the LCD off the LY=LYC flag stays as it was: enabling the
-            // LYC interrupt while it is set raises it.
-            if old & STAT_LYC_B != 0
-                && old & STAT_IF_LYC_B == 0
-                && val & STAT_IF_LYC_B != 0
-                && !self.timing_live()
-            {
-                ints.request_lcd();
-            }
-            return;
-        }
-
-        // The CGB's entry hold sees the enables written up to two dots before
-        // the VBlank condition is evaluated.
-        if self.d.irq.mode_for_interrupt == MODE_VBLANK_ENTRY
-            && self.d.state == State::VBlankLyCompare
-            && self.d.wait >= 2
-        {
-            self.d.irq.entry_stat = self.stat;
-        }
-
-        // Annoying edge timing case.
-        if self.double_speed()
-            && self.d.state == State::OamScanObject
-            && self.d.objs.index == 0
-            && self.d.wait == 1
-            && !self.d.half_dot
-            && val & STAT_IF_OAM_B != 0
-        {
-            self.d.irq.mode_for_interrupt = 2;
-            self.stat_update(ints);
-            self.d.irq.mode_for_interrupt = -1;
-        } else {
-            self.stat_update(ints);
-        }
+        self.stat = (self.stat & 7) | (val & !7) | 0x80;
     }
 }

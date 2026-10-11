@@ -218,11 +218,6 @@ impl Run {
             .with_context(|| format!("Failed to load {}", self.rom.display()))?
             .build();
         gb.set_color_correction_mode(ceres_core::ColorCorrectionMode::Disabled);
-        // Experiment: the hardware-structured LCD timing unit drives the STAT
-        // interrupt and the LY/STAT reads on the CGB too.
-        if std::env::var_os("CERES_TIMING_LIVE").is_some() {
-            gb.set_timing_live(true);
-        }
         Ok(gb)
     }
 

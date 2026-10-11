@@ -9,11 +9,11 @@
 use {
     super::{
         LAST_LINE, LINE_LENGTH, LINES, MODE2_LENGTH, mode3::Mode3Flow, model_ge_cgb_d, pos,
-        stat::MODE_VBLANK_ENTRY, window::Window,
+        window::Window,
     },
     crate::{
         interrupts::Interrupts,
-        ppu::{Oam, Ppu, STAT_IF_OAM_B, STAT_MODE_B, oam_bug::NO_ROW},
+        ppu::{Oam, Ppu, STAT_MODE_B, oam_bug::NO_ROW},
     },
 };
 
@@ -103,7 +103,7 @@ impl Ppu {
                 | State::FirstLineOamLock
                 | State::FirstLineMode3
                 | State::FirstLinePalettesLock
-                | State::FirstLineVramLock => self.first_line(ints, state),
+                | State::FirstLineVramLock => self.first_line(state),
 
                 State::LineOamWriteLock
                 | State::LineLy
@@ -111,7 +111,7 @@ impl Ppu {
                 | State::OamScanNext
                 | State::OamScanObject
                 | State::Mode3PalettesLock
-                | State::Mode3Start => self.oam_scan(ints, state),
+                | State::Mode3Start => self.oam_scan(state),
 
                 State::Mode3
                 | State::Mode3WindowDelay
@@ -121,7 +121,7 @@ impl Ppu {
                 | State::Mode3ObjectLow
                 | State::Mode3ObjectHigh
                 | State::Mode3Pixel => {
-                    if matches!(self.mode3(ints, state), Mode3Flow::Done) {
+                    if matches!(self.mode3(state), Mode3Flow::Done) {
                         self.mode3_done();
                     }
                     None
@@ -134,7 +134,7 @@ impl Ppu {
                 | State::NextLine
                 | State::Mode3Abort
                 | State::LongLineEnd
-                | State::AbortedLineStart => self.hblank(ints, state),
+                | State::AbortedLineStart => self.hblank(state),
 
                 State::VBlankLine
                 | State::VBlankLy
@@ -148,7 +148,7 @@ impl Ppu {
                 | State::Line153Compare
                 | State::Line153CompareZero
                 | State::Line153LycGlitch
-                | State::FrameEnd => self.line_153(ints, state),
+                | State::FrameEnd => self.line_153(state),
             };
             match next {
                 Some(next) => state = next,
@@ -159,7 +159,7 @@ impl Ppu {
 
     /// Starts a visible line (lines 0..=143).
     pub(super) fn line_start(&mut self) {
-        if !self.gambatte_cgb_timing() {
+        if !self.cgb_c_timing() {
             self.wy_check();
         }
         self.d.cpu.oam_write_blocked = self.is_cgb_hardware() && !self.double_speed();
@@ -170,7 +170,7 @@ impl Ppu {
 
     /// The first line after the LCD is turned on: it has no OAM scan, and is
     /// shorter.
-    fn first_line(&mut self, ints: &mut Interrupts, state: State) -> Option<State> {
+    fn first_line(&mut self, state: State) -> Option<State> {
         match state {
             State::LcdOn => {
                 if !self.is_cgb_hardware() {
@@ -185,20 +185,17 @@ impl Ppu {
                 self.d.window.wy_triggered = false;
                 self.d.position_in_line = pos(-16);
                 self.d.line_has_fractional_scrolling = false;
-                self.d.irq.ly_for_comparison = 0;
+                self.d.ly_for_comparison = 0;
                 self.stat &= !STAT_MODE_B;
-                self.d.irq.mode_for_interrupt = -1;
                 self.d.cpu.unlock_all();
                 self.d.cfl = MODE2_LENGTH - 4;
                 self.d.line_clock = 0;
-                self.stat_update(ints);
                 self.sleep(State::FirstLineOamLock, MODE2_LENGTH - 4);
                 None
             }
             State::FirstLineOamLock => {
                 self.d.cpu.oam_write_blocked = true;
                 self.d.cfl += 2;
-                self.stat_update(ints);
                 self.sleep(State::FirstLineMode3, 2);
                 None
             }
@@ -208,7 +205,6 @@ impl Ppu {
                 // Mode 0 is shorter on the first line 0.
                 self.d.cfl += 8;
                 self.stat = (self.stat & !STAT_MODE_B) | 3;
-                self.d.irq.mode_for_interrupt = 3;
                 self.d.cpu.oam_write_blocked = true;
                 self.d.cpu.oam_read_blocked = true;
                 let vram_blocked = self.double_speed() || !self.is_cgb_hardware();
@@ -234,7 +230,7 @@ impl Ppu {
     }
 
     /// Lines 0..=143 up to mode 3: LY changes and the OAM scan.
-    fn oam_scan(&mut self, ints: &mut Interrupts, state: State) -> Option<State> {
+    fn oam_scan(&mut self, state: State) -> Option<State> {
         match state {
             State::LineOamWriteLock => {
                 self.d.cpu.oam_write_blocked = self.is_cgb_hardware();
@@ -244,18 +240,12 @@ impl Ppu {
             State::LineLy => {
                 self.ly = self.d.current_line;
                 self.d.cpu.oam_read_blocked = !self.double_speed() || model_ge_cgb_d(self.model);
-                self.d.irq.ly_for_comparison = if self.d.current_line != 0 { -1 } else { 0 };
-                // The OAM STAT interrupt occurs 1 T-cycle before STAT
-                // actually changes, except on line 0.
-                if self.d.current_line != 0 {
-                    self.d.irq.mode_for_interrupt = 2;
+                self.d.ly_for_comparison = if self.d.current_line != 0 { -1 } else { 0 };
+                // The mode bits clear a dot before mode 2 (the CGB's line 0
+                // keeps them).
+                if self.d.current_line != 0 || !self.is_cgb_hardware() {
                     self.stat &= !STAT_MODE_B;
-                } else if !self.is_cgb_hardware() {
-                    self.stat &= !STAT_MODE_B;
-                } else {
-                    // CGB line 0: STAT keeps its mode bits.
                 }
-                self.stat_update(ints);
                 self.sleep(State::OamScanStart, 1);
                 None
             }
@@ -263,14 +253,10 @@ impl Ppu {
                 self.d.cpu.oam_read_blocked = true;
                 self.d.cpu.oam_write_blocked = true;
                 self.stat = (self.stat & !STAT_MODE_B) | 2;
-                self.d.irq.ly_for_comparison = i32::from(self.d.current_line);
-                if !self.gambatte_cgb_timing() {
+                self.d.ly_for_comparison = i32::from(self.d.current_line);
+                if !self.cgb_c_timing() {
                     self.wy_check();
                 }
-                self.d.irq.mode_for_interrupt = 2;
-                self.stat_update(ints);
-                self.d.irq.mode_for_interrupt = -1;
-                self.stat_update(ints);
                 self.d.objs.count = 0;
                 self.d.objs.found = 0;
                 self.d.objs.index = 0;
@@ -303,13 +289,11 @@ impl Ppu {
                 self.d.objs.accessed_oam_row = NO_ROW;
                 self.d.objs.found = self.d.objs.count;
                 self.stat = (self.stat & !STAT_MODE_B) | 3;
-                self.d.irq.mode_for_interrupt = 3;
                 self.d.cpu.vram_read_blocked = true;
                 self.d.cpu.vram_write_blocked = true;
                 self.d.cpu.cgb_palettes_blocked = false;
                 self.d.cpu.oam_write_blocked = true;
                 self.d.cpu.oam_read_blocked = true;
-                self.stat_update(ints);
                 self.sleep_in_line(State::Mode3PalettesLock, 3);
                 None
             }
@@ -328,17 +312,14 @@ impl Ppu {
 
     /// HBlank and the end of the visible lines, including the lines cut off
     /// in mode 3.
-    fn hblank(&mut self, ints: &mut Interrupts, state: State) -> Option<State> {
+    fn hblank(&mut self, state: State) -> Option<State> {
         match state {
             State::HBlankStart => {
-                self.gstat_mode3_end();
                 self.timing_mode3_end();
-                self.gstat_hblank();
+                self.cgb_c_hblank();
                 self.stat &= !STAT_MODE_B;
-                self.d.irq.mode_for_interrupt = 0;
                 self.d.cpu.unlock_oam_vram();
                 self.d.hblank_hdma_delay = HBLANK_HDMA_DELAY;
-                self.stat_update(ints);
                 self.sleep_in_line(State::HBlankHdma, 2);
                 None
             }
@@ -371,25 +352,17 @@ impl Ppu {
                     self.sleep(State::AbortedLineStart, 2);
                     return None;
                 }
-                if (156..pos(-16)).contains(&self.d.position_in_line) {
-                    self.d.irq.delayed_glitch_hblank_interrupt = true;
-                }
                 self.d.position_in_line = pos(-16);
                 self.d.line_has_fractional_scrolling = false;
                 Some(State::VBlankLine)
             }
             State::AbortedLineStart => {
                 self.ly = self.d.current_line;
-                if (156..pos(-16)).contains(&self.d.position_in_line) {
-                    self.d.irq.delayed_glitch_hblank_interrupt = true;
-                }
-                self.stat_update(ints);
                 self.d.position_in_line = pos(-15);
                 self.mode3_start();
                 Some(State::Mode3)
             }
             State::LineEnd => {
-                self.gstat_line_end(self.d.current_line);
                 self.timing_line_end(self.d.current_line);
                 self.d.cfl = 0;
                 self.d.line_clock = 0;
@@ -413,36 +386,17 @@ impl Ppu {
     fn vblank(&mut self, ints: &mut Interrupts, state: State) -> Option<State> {
         match state {
             State::VBlankLine => {
-                self.d.irq.ly_for_comparison = -1;
-                self.stat_update(ints);
+                self.d.ly_for_comparison = -1;
                 self.sleep(State::VBlankLy, 2);
                 None
             }
             State::VBlankLy => {
                 self.ly = self.d.current_line;
-                if self.d.current_line == LINES {
-                    if !self.gambatte_cgb_timing()
-                        && !self.timing_live()
-                        && !self.d.irq.stat_interrupt_line
-                        && self.stat & STAT_IF_OAM_B != 0
-                    {
-                        ints.request_lcd();
-                    }
-                    // Until the VBlank condition takes over, the line is held
-                    // by the HBlank or the OAM one (see `stat_update`).
-                    self.d.irq.mode_for_interrupt = MODE_VBLANK_ENTRY;
-                    self.d.irq.entry_stat = self.stat;
-                }
                 self.sleep(State::VBlankLyCompare, 2);
                 None
             }
             State::VBlankLyCompare => {
-                if self.d.irq.delayed_glitch_hblank_interrupt {
-                    self.d.irq.delayed_glitch_hblank_interrupt = false;
-                    self.d.irq.mode_for_interrupt = 0;
-                }
-                self.d.irq.ly_for_comparison = i32::from(self.d.current_line);
-                self.stat_update(ints);
+                self.d.ly_for_comparison = i32::from(self.d.current_line);
                 self.sleep(State::VBlankLineRest, 1);
                 None
             }
@@ -452,15 +406,6 @@ impl Ppu {
                     self.stat &= !STAT_MODE_B;
                     self.stat |= 1;
                     ints.request_vblank();
-                    if !self.gambatte_cgb_timing()
-                        && !self.timing_live()
-                        && !self.d.irq.stat_interrupt_line
-                        && self.stat & STAT_IF_OAM_B != 0
-                    {
-                        ints.request_lcd();
-                    }
-                    self.d.irq.mode_for_interrupt = 1;
-                    self.stat_update(ints);
                     self.present_frame();
                 }
                 self.sleep(State::VBlankLineEnd, LINE_LENGTH - 5);
@@ -479,13 +424,12 @@ impl Ppu {
     }
 
     /// Line 153: LY reads 0 for most of it, at a revision specific time.
-    fn line_153(&mut self, ints: &mut Interrupts, state: State) -> Option<State> {
+    fn line_153(&mut self, state: State) -> Option<State> {
         let cgb_d = model_ge_cgb_d(self.model);
         let early_lyzero = self.is_cgb_hardware() && !cgb_d && self.double_speed();
         match state {
             State::Line153 => {
-                self.d.irq.ly_for_comparison = -1;
-                self.stat_update(ints);
+                self.d.ly_for_comparison = -1;
                 self.sleep(State::Line153Ly, 2);
             }
             State::Line153Ly => {
@@ -504,25 +448,23 @@ impl Ppu {
             State::Line153LyZero => {
                 if early_lyzero {
                     // The compare comes in the half dot before this dot's work.
-                    self.d.irq.line153_compare_pending = true;
+                    self.d.line153_compare_pending = true;
                     self.sleep(State::Line153Compare, 3);
                     return None;
                 }
                 if !cgb_d && !self.double_speed() {
                     self.ly = 0;
                 }
-                self.d.irq.ly_for_comparison = LAST_LINE.into();
-                self.stat_update(ints);
+                self.d.ly_for_comparison = LAST_LINE.into();
                 self.sleep(State::Line153Compare, if cgb_d { 4 } else { 2 });
             }
             State::Line153Compare => {
                 self.ly = 0;
-                self.d.irq.ly_for_comparison = if cgb_d || self.double_speed() {
+                self.d.ly_for_comparison = if cgb_d || self.double_speed() {
                     153
                 } else {
                     -1
                 };
-                self.stat_update(ints);
                 // The DMG compares with line 0 one dot later, and so does the
                 // CGB in double speed.
                 let compare_zero = if self.is_cgb_hardware() && !self.double_speed() {
@@ -533,8 +475,7 @@ impl Ppu {
                 self.sleep(State::Line153CompareZero, compare_zero);
             }
             State::Line153CompareZero => {
-                self.d.irq.ly_for_comparison = 0;
-                self.stat_update(ints);
+                self.d.ly_for_comparison = 0;
                 let rest = if self.is_cgb_hardware() && !self.double_speed() {
                     12
                 } else {

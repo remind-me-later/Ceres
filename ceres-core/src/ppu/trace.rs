@@ -1,9 +1,9 @@
 //! What the CPU saw of the PPU (the `debug` feature): its LCD interrupt
-//! requests and the values STAT and LY reads returned, each with where the
-//! display was. Two timing models of the PPU agree when these agree.
+//! requests, its STAT and LYC writes and the values STAT and LY reads
+//! returned, each with where the display and the timing unit were.
 
 use {
-    super::{LCDC_ON_B, Ppu},
+    super::Ppu,
     crate::interrupts::Interrupts,
     alloc::vec::Vec,
     core::mem,
@@ -19,12 +19,8 @@ pub enum PpuEventKind {
     StatRead(u8),
     /// The CPU read LY and got this value.
     LyRead(u8),
-    /// The shadow timing unit would have requested the LCD interrupt.
-    ShadowLcdInterrupt,
     /// The CPU wrote this value to STAT (`0xFF41`) or LYC (`0xFF45`).
     Write { addr: u16, value: u8 },
-    /// The shadow timing unit reads another value at `addr`.
-    ShadowReadMismatch { addr: u16, live: u8, shadow: u8 },
 }
 
 /// An event and where the display was.
@@ -89,9 +85,6 @@ impl Ppu {
     pub(super) fn trace_unit(&mut self, ints: &Interrupts) {
         self.trace.unit += 1;
         self.trace_requests(ints);
-        if self.take_timing_edge() {
-            self.trace_shadow_lcd_interrupt();
-        }
     }
 
     /// Records the LCD interrupt requests made since the last look.
@@ -103,11 +96,6 @@ impl Ppu {
         self.trace.lcd_requests = requests;
     }
 
-    /// The shadow timing unit's interrupt line rose.
-    pub(in crate::ppu) fn trace_shadow_lcd_interrupt(&mut self) {
-        self.record(PpuEventKind::ShadowLcdInterrupt);
-    }
-
     /// The CPU wrote `value` to STAT or LYC.
     pub(super) fn trace_write(&mut self, addr: u16, value: u8) {
         self.record(PpuEventKind::Write { addr, value });
@@ -115,26 +103,10 @@ impl Ppu {
 
     /// The CPU read `value` from STAT or LY.
     pub(crate) fn trace_read(&mut self, addr: u16, value: u8) {
-        let shadow = match addr {
-            0xFF41 => {
-                self.record(PpuEventKind::StatRead(value));
-                Some(self.timing_read_stat(self.read_stat()))
-            }
-            0xFF44 => {
-                self.record(PpuEventKind::LyRead(value));
-                Some(self.timing_read_ly())
-            }
-            _ => return,
-        };
-        let Some(shadow) = shadow else {
-            return;
-        };
-        if shadow != value && self.lcdc & LCDC_ON_B != 0 {
-            self.record(PpuEventKind::ShadowReadMismatch {
-                addr,
-                live: value,
-                shadow,
-            });
+        match addr {
+            0xFF41 => self.record(PpuEventKind::StatRead(value)),
+            0xFF44 => self.record(PpuEventKind::LyRead(value)),
+            _ => {}
         }
     }
 }

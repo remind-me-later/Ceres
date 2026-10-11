@@ -8,7 +8,7 @@ mod trace;
 mod vram;
 
 use crate::interrupts::Interrupts;
-use display::{LAST_LINE, LINE_LENGTH, LINES, LINES_PER_FRAME, PALETTE_LOCK_CYCLE};
+use display::{LINE_LENGTH, LINES, LINES_PER_FRAME, PALETTE_LOCK_CYCLE};
 pub(crate) use oam::Oam;
 pub(crate) use oam_bug::unusable_index;
 #[cfg(feature = "debug")]
@@ -186,116 +186,13 @@ impl Ppu {
     /// LY as the CPU reads it.
     #[must_use]
     pub(crate) fn cpu_read_ly(&self) -> u8 {
-        if self.timing_live() {
-            return self.timing_read_ly();
-        }
-        let Some((ly, t)) = self.line_position() else {
-            return self.ly;
-        };
-        let ds = self.double_speed();
-        if ly == LAST_LINE {
-            if !ds || t <= 2 * LINE_LENGTH - 2 {
-                0
-            } else {
-                LAST_LINE
-            }
-        } else if t <= 6 + 4 * i32::from(ds) {
-            let next = ly + 1;
-            if t == 6 + 4 * i32::from(ds) {
-                ly & next
-            } else {
-                next
-            }
-        } else {
-            ly
-        }
+        self.timing_read_ly()
     }
 
     /// STAT as the CPU reads it.
     #[must_use]
     pub(crate) fn cpu_read_stat(&self) -> u8 {
-        let stat = self.read_stat();
-        if self.timing_live() {
-            return self.timing_read_stat(stat);
-        }
-        let Some((ly, t)) = self.line_position() else {
-            return stat;
-        };
-        // The line the LY=LYC flag compares with, and the time left until
-        // that comparison changes again.
-        let ds = i32::from(self.double_speed());
-        let line_time = LINE_LENGTH << ds;
-        let (cmp_ly, left) = if ly == LAST_LINE {
-            let left = t - (line_time - 6 - 6 * ds);
-            if left <= 0 {
-                (0, left + line_time)
-            } else {
-                (LAST_LINE, left)
-            }
-        } else {
-            let left = t - (2 + 2 * ds);
-            if left <= 0 {
-                (ly + 1, left + line_time)
-            } else {
-                (ly, left)
-            }
-        };
-        let stat = if cmp_ly == self.lyc && left > 2 {
-            stat | STAT_LYC_B
-        } else {
-            stat & !STAT_LYC_B
-        };
-        // The mode at the line edges and around VBlank.
-        let line_cycles = LINE_LENGTH - (t >> ds);
-        let frame_cycles = i32::from(ly) * LINE_LENGTH + line_cycles;
-        let vblank = i32::from(LINES) * LINE_LENGTH;
-        let frame = i32::from(LINES_PER_FRAME) * LINE_LENGTH;
-        let mode = if (vblank - 3..frame - 3).contains(&frame_cycles) {
-            u8::from((vblank - 2..frame - 4 + ds).contains(&frame_cycles))
-        } else if !(77..453).contains(&line_cycles) {
-            2
-        } else if stat & STAT_MODE_B == 0 {
-            0
-        } else {
-            3
-        };
-        (stat & !STAT_MODE_B) | mode
-    }
-
-    /// The line and the cycles left until it ends, on gambatte's clock (a
-    /// CGB in single speed counts dots, in double speed half dots); `None`
-    /// where the line timing is not the regular one.
-    fn line_position(&self) -> Option<(u8, i32)> {
-        if !self.gambatte_cgb_timing() || self.lcdc & LCDC_ON_B == 0 || !self.d.line_clock_valid() {
-            return None;
-        }
-        // Half dots since this line began, counted at the read; LY changes
-        // 19 half dots into the line on gambatte's clock.
-        let lc = self.d.line_clock().rem_euclid(LINE_LENGTH);
-        let tau = 2 * lc + i32::from(!self.d.half_dot());
-        let line = self.d.current_line();
-        let line = if tau >= 4 {
-            line
-        } else {
-            (line + 1) % LINES_PER_FRAME
-        };
-        let (ly, h) = if tau < 19 {
-            (
-                if line == 0 { LAST_LINE } else { line - 1 },
-                tau - 19 + 2 * LINE_LENGTH,
-            )
-        } else {
-            (line, tau - 19)
-        };
-        let left = 2 * LINE_LENGTH - h;
-        Some((
-            ly,
-            if self.double_speed() {
-                left
-            } else {
-                (left + 1) / 2
-            },
-        ))
+        self.timing_read_stat(self.read_stat())
     }
 
     /// `position_in_line` as a signed value (-16..=160).
@@ -451,25 +348,14 @@ impl Ppu {
         let was_on = self.lcdc & LCDC_ON_B != 0;
         let is_on = val & LCDC_ON_B != 0;
 
-        if !self.d_lcdc_tracked() {
-            self.gstat_set_lcdc(val);
+        if !self.cgb_c_lcdc_tracked() {
+            self.cgb_c_set_lcdc(val);
         }
         if is_on && !was_on {
-            // With LYC 0 the LY=LYC condition starts with the LCD, unless the
-            // flag stayed set while it was off.
-            if self.gambatte_cgb_timing()
-                && !self.timing_live()
-                && self.stat & (STAT_IF_LYC_B | STAT_LYC_B) == STAT_IF_LYC_B
-                && self.lyc == 0
-            {
-                ints.request_lcd();
-            }
             self.d.restart();
-            self.gstat_lcd_on();
             self.timing_lcd_on(ints);
         } else if !is_on && was_on {
             self.lcd_off();
-            self.gstat_lcd_off();
             self.timing_lcd_off();
             self.rgba_buf_present.clear();
         } else {
@@ -490,12 +376,14 @@ impl Ppu {
         self.trace_requests(ints);
     }
 
-    pub(crate) fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
+    #[cfg_attr(
+        not(feature = "debug"),
+        expect(clippy::missing_const_for_fn, reason = "The debug build traces it")
+    )]
+    pub(crate) fn write_lyc(&mut self, val: u8) {
         #[cfg(feature = "debug")]
         self.trace_write(0xFF45, val);
-        self.write_lyc_reg(val, ints);
-        #[cfg(feature = "debug")]
-        self.trace_requests(ints);
+        self.write_lyc_reg(val);
     }
 
     pub(crate) const fn write_bgp(&mut self, val: u8) {
@@ -526,7 +414,6 @@ impl Ppu {
         }
         let mut ints = Interrupts::default();
         self.d.restart();
-        self.gstat_lcd_on();
         self.timing_lcd_on(&mut ints);
         // `line_clock` restarts on every visible line and keeps running
         // through VBlank, starting from its first line.
@@ -548,6 +435,10 @@ impl Ppu {
         self.scy = val;
     }
 
+    #[cfg_attr(
+        not(feature = "debug"),
+        expect(clippy::missing_const_for_fn, reason = "The debug build traces it")
+    )]
     pub(crate) fn write_stat(&mut self, val: u8, ints: &mut Interrupts) {
         #[cfg(feature = "debug")]
         self.trace_write(0xFF41, val);
@@ -561,7 +452,7 @@ impl Ppu {
     }
 
     pub(crate) fn write_wy(&mut self, val: u8) {
-        self.gstat_write_wy(val);
+        self.cgb_c_write_wy(val);
         self.wy = val;
         self.d.schedule_wy_check();
     }
@@ -570,11 +461,11 @@ impl Ppu {
     #[inline]
     #[must_use]
     pub(crate) fn is_cgb_palettes_accessible(&self) -> bool {
-        if let Some(unlocked) = self.gstat_palettes_unlocked() {
+        if let Some(unlocked) = self.cgb_c_palettes_unlocked() {
             return unlocked;
         }
         !self
-            .gstat_mode3_lock(PALETTE_LOCK_CYCLE)
+            .cgb_c_mode3_lock(PALETTE_LOCK_CYCLE)
             .unwrap_or_else(|| self.d.cpu().cgb_palettes_blocked)
     }
 

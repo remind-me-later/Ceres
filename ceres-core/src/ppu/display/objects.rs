@@ -218,7 +218,7 @@ impl Ppu {
     /// entries already searched are looked at again.
     pub(crate) fn cgb_obj_size_write(&mut self, val: u8, units_early: i64) {
         let new = val & LCDC_OBJ_SIZE_B != 0;
-        if !self.gambatte_cgb_timing()
+        if !self.cgb_c_timing()
             || self.lcdc & LCDC_ON_B == 0
             || (self.lcdc & LCDC_OBJ_SIZE_B != 0) == new
         {
@@ -232,7 +232,7 @@ impl Ppu {
             _ => return,
         };
         let line = self.d.current_line;
-        let Some(lc) = self.gstat_size_change_cycle(line, units_early) else {
+        let Some(lc) = self.cgb_c_size_change_cycle(line, units_early) else {
             return;
         };
         let change = SizeChange { line, lc, new };
