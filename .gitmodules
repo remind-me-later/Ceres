@@ -49,3 +49,6 @@
 [submodule "external/disassemblies/hardware.inc"]
 	path = external/disassemblies/hardware.inc
 	url = git@github.com:gbdev/hardware.inc.git
+[submodule "external/docs/dmg-schematics"]
+	path = external/docs/dmg-schematics
+	url = git@github.com:msinger/dmg-schematics.git
