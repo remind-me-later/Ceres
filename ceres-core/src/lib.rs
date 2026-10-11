@@ -349,17 +349,31 @@ impl<A: AudioCallback> Gb<A> {
         self.game_genie.deactivate_code(code);
     }
 
-    /// Loads a BESS save state (which Ceres also uses as the battery save).
-    /// Only the memories and the clock of the cartridge are restored so far,
-    /// not the CPU, the I/O registers or the palettes. The clock moves on by
-    /// the time since `secs_since_unix_epoch` that the state was saved.
+    /// Loads a BESS save state (ceres' own, or another emulator's: SameBoy
+    /// puts its native state before the BESS blocks). The game resumes where
+    /// it was saved: the CPU, the I/O registers, the memories, the palettes,
+    /// the cartridge's registers and clock. The clock moves on by the time
+    /// since `secs_since_unix_epoch` that the state was saved.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error, and changes nothing, if `buf` is not a valid state
+    /// or is from another family of models (DMG, SGB or CGB).
+    #[inline]
+    pub fn load_state(&mut self, buf: &[u8], secs_since_unix_epoch: u64) -> Result<(), Error> {
+        bess::Reader::new(buf).load_state(self, secs_since_unix_epoch)
+    }
+
+    /// Loads only what the cartridge's battery keeps from a save state (its
+    /// RAM and clock), so the game boots with its saved progress. The state
+    /// can come from any model.
     ///
     /// # Errors
     ///
     /// Returns an error if `buf` is not a valid state.
     #[inline]
-    pub fn load_state(&mut self, buf: &[u8], secs_since_unix_epoch: u64) -> Result<(), Error> {
-        bess::Reader::new(buf).load_state(self, secs_since_unix_epoch)
+    pub fn load_save_data(&mut self, buf: &[u8], secs_since_unix_epoch: u64) -> Result<(), Error> {
+        bess::Reader::new(buf).load_save_data(self, secs_since_unix_epoch)
     }
 
     #[must_use]

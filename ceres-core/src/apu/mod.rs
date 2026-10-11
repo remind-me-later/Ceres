@@ -449,6 +449,25 @@ impl<A: AudioCallback> Apu<A> {
         }
     }
 
+    /// A register as last written, as far as the APU keeps it: what a state
+    /// restores by writing it back (BESS). The period registers, which read
+    /// $FF, come from the channels; NRx4's trigger bit is clear.
+    pub(crate) fn bess_register(&self, reg: usize) -> u8 {
+        let period_low = |period: u16| period.to_le_bytes()[0];
+        let nrx4 = |read: u8, period: u16| (read & 0x40) | (period.to_le_bytes()[1] & 7);
+        match reg {
+            NR13 | NR23 => period_low(self.squares[usize::from(reg == NR23)].period()),
+            NR14 | NR24 => {
+                let square = &self.squares[usize::from(reg == NR24)];
+                nrx4(square.read_nrx4(), square.period())
+            }
+            NR33 => period_low(self.wave.period()),
+            NR34 => nrx4(self.wave.read_nr34(), self.wave.period()),
+            NR44 => self.noise.read_nr44() & 0x40,
+            _ => self.read(reg),
+        }
+    }
+
     /// Writes a register (`reg` is the low byte of the 0xFF10..=0xFF3F address).
     pub(crate) fn write(&mut self, ctx: &ApuCtx, reg: usize, value: u8) {
         // Only the wave RAM, and the length timers on the DMG, can be written

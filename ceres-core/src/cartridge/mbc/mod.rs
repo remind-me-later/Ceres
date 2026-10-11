@@ -10,6 +10,7 @@ mod mbc5;
 
 use super::{ram_size::RAMSize, rom_size::ROMSize};
 use crate::Error;
+use alloc::{vec, vec::Vec};
 pub(super) use mbc1::Mbc1;
 pub(super) use mbc3::Mbc3;
 pub(super) use mbc3_rtc::Mbc3RTC;
@@ -115,6 +116,34 @@ impl Mbc {
             Self::Mbc3(ref mut mbc3) => mbc3.write(addr, val, map, rom_size, ram_size),
             Self::Mbc5(ref mut mbc5) => mbc5.write(addr, val, map, rom_size, ram_size),
         }
+    }
+}
+
+impl Mbc {
+    /// The register writes that restore the mapper's state, in order (the
+    /// BESS MBC block): every mapper's RAM enable, then its bank registers.
+    pub(super) fn bess_writes(&self, map: &Mapping) -> Vec<(u16, u8)> {
+        let ram_enable = (0x0000, if map.ram_enabled { RAM_ENABLE_KEY } else { 0 });
+        #[expect(clippy::cast_possible_truncation, reason = "bank numbers fit the registers")]
+        let rom_bank = (map.rom.1 / rom_bank(1)) as u8;
+        #[expect(clippy::cast_possible_truncation, reason = "bank numbers fit the registers")]
+        let ram_bank = (map.ram / ram_bank(1)) as u8;
+        let mut writes = vec![ram_enable];
+        match *self {
+            Self::Mbc0 => return Vec::new(),
+            Self::Mbc1(ref mbc1) => writes.extend(mbc1.bess_writes()),
+            // Bit 8 of the address selects the ROM bank register.
+            Self::Mbc2 => writes.push((0x0100, rom_bank)),
+            Self::Mbc3(ref mbc3) => {
+                let mapped = mbc3.rtc().and_then(Mbc3RTC::mapped_reg);
+                writes.extend([(0x2000, rom_bank), (0x4000, mapped.unwrap_or(ram_bank))]);
+            }
+            Self::Mbc5(ref mbc5) => {
+                writes.extend(mbc5.bess_writes());
+                writes.push((0x4000, ram_bank));
+            }
+        }
+        writes
     }
 }
 

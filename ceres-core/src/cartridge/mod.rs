@@ -4,7 +4,7 @@ mod rom_size;
 
 use {
     crate::Error,
-    alloc::boxed::Box,
+    alloc::{boxed::Box, vec::Vec},
     mbc::{Mapping, Mbc, Mbc3RTC},
     ram_size::RAMSize,
     rom_size::ROMSize,
@@ -80,12 +80,22 @@ impl Cartridge {
         &title[..len]
     }
 
+    /// The header's title area, 0x134-0x143, as it is (it also holds the
+    /// manufacturer code and the CGB flag on newer cartridges).
     #[must_use]
-    pub(crate) const fn global_checksum(&self) -> u16 {
-        u16::from_le_bytes([
-            self.rom[HEADER_GLOBAL_CHECKSUM + 1],
+    pub(crate) fn header_title_area(&self) -> [u8; 0x10] {
+        let mut title = [0; 0x10];
+        title.copy_from_slice(&self.rom[HEADER_TITLE..HEADER_TITLE_END_OLD]);
+        title
+    }
+
+    /// The global checksum's bytes, as they are in the header.
+    #[must_use]
+    pub(crate) const fn global_checksum_bytes(&self) -> [u8; 2] {
+        [
             self.rom[HEADER_GLOBAL_CHECKSUM],
-        ])
+            self.rom[HEADER_GLOBAL_CHECKSUM + 1],
+        ]
     }
 
     #[must_use]
@@ -264,6 +274,11 @@ impl Cartridge {
                 }
             }
         }
+    }
+
+    /// The register writes that restore the mapper's state (BESS).
+    pub(crate) fn bess_mbc_writes(&self) -> Vec<(u16, u8)> {
+        self.mbc.bess_writes(&self.map)
     }
 
     /// A write to the mapper's registers (0x0000-0x7FFF).

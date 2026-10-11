@@ -18,6 +18,11 @@ impl Default for Mbc5 {
 }
 
 impl Mbc5 {
+    /// The ROM bank register writes that restore this state (BESS).
+    pub(super) const fn bess_writes(&self) -> [(u16, u8); 2] {
+        [(0x2000, self.lo), (0x3000, self.hi)]
+    }
+
     pub(super) const fn write(
         &mut self,
         addr: u16,

@@ -165,6 +165,13 @@ impl Hdma {
         self.request_hblank();
     }
 
+    /// HDMA1-HDMA4 as last written (they read $FF).
+    pub(crate) const fn registers(&self) -> [u8; 4] {
+        let [src_lo, src_hi] = self.src.to_le_bytes();
+        let [dst_lo, dst_hi] = self.dst.to_le_bytes();
+        [src_hi, src_lo, dst_hi, dst_lo]
+    }
+
     pub(crate) fn write_hdma1(&mut self, val: u8) {
         self.src = (self.src & 0xF0) | (u16::from(val) << 8);
         // Range 0xE*** acts like 0xF*** and can't overflow to anything

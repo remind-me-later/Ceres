@@ -143,6 +143,20 @@ impl Serial {
         }
     }
 
+    /// Sets SC without clocking the port (a state load): a transfer in
+    /// progress restarts from its first bit.
+    pub(crate) const fn set_sc(&mut self, val: u8, cgb_mode: CgbMode) {
+        self.count = 0;
+        let cgb = matches!(cgb_mode, CgbMode::Cgb);
+        let val = if cgb { val } else { val | SC_FAST_CLOCK_B };
+        self.sc = val | 0x7C;
+        self.div_mask = if cgb && val & SC_FAST_CLOCK_B != 0 {
+            FAST_CLOCK_BIT
+        } else {
+            CLOCK_BIT
+        };
+    }
+
     pub(crate) fn write_sc(&mut self, mut val: u8, ints: &mut Interrupts, cgb_mode: CgbMode) {
         self.count = 0;
 

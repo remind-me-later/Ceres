@@ -254,6 +254,10 @@ impl Wave {
         }
     }
 
+    pub(super) const fn period(&self) -> u16 {
+        self.period
+    }
+
     pub(super) const fn write_nr33(&mut self, value: u8) {
         self.period = (self.period & !0xFF) | value as u16;
         if self.bugged_read_countdown == 1 {

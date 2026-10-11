@@ -96,6 +96,17 @@ impl Sm83 {
 }
 
 impl Sm83 {
+    /// Sets IME (a state load).
+    pub(crate) const fn set_ime(&mut self, ime: bool) {
+        self.ime = ime;
+        self.ime_toggle = false;
+    }
+
+    /// Halts or wakes the CPU (a state load).
+    pub(crate) const fn set_halted(&mut self, halted: bool) {
+        self.is_halted = halted;
+    }
+
     /// Set the program counter.
     pub(crate) const fn set_pc(&mut self, pc: u16) {
         self.pc = pc;

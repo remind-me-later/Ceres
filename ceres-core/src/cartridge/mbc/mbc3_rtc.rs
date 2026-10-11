@@ -49,6 +49,11 @@ impl Mbc3RTC {
         Ok(())
     }
 
+    /// The clock register mapped to 0xA000-0xBFFF, if any (0x08-0x0C).
+    pub(crate) fn mapped_reg(&self) -> Option<u8> {
+        self.mapped.map(NonZeroU8::get)
+    }
+
     /// The latched register that is mapped, if any.
     pub(crate) fn read(&self, ram_enabled: bool) -> Option<u8> {
         const MASKS: [u8; 5] = [0x3F, 0x3F, 0x1F, 0xFF, CONTROL_MASK];

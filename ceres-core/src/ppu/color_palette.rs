@@ -1,4 +1,4 @@
-use crate::ppu::ColorCorrectionMode;
+use {crate::ppu::ColorCorrectionMode, core::array};
 
 // DMG palette colors RGB
 pub(super) const GRAYSCALE_PALETTE: [(u8, u8, u8); 4] = [
@@ -40,11 +40,37 @@ impl ColorPalette {
         let (palettes, _) = self.buffer.as_chunks_mut::<{ GRAYS.len() }>();
         palettes.fill(GRAYS);
     }
+    /// The palette RAM as the CPU sees it: 32 colors, 2 bytes each.
+    pub(crate) const RAW_SIZE: usize = PAL_RAM_SIZE as usize * 2;
+
+    /// The palette RAM as the CPU sees it.
+    #[must_use]
+    pub(crate) fn raw(&self) -> [u8; Self::RAW_SIZE] {
+        array::from_fn(|i| {
+            #[expect(clippy::cast_possible_truncation, reason = "i < 64")]
+            self.byte(i as u8)
+        })
+    }
+
+    /// Loads the palette RAM as the CPU sees it (a state load).
+    pub(crate) fn set_raw(&mut self, raw: &[u8; Self::RAW_SIZE]) {
+        for (i, &val) in raw.iter().enumerate() {
+            #[expect(clippy::cast_possible_truncation, reason = "i < 64")]
+            self.set_byte(i as u8, val);
+        }
+    }
+
     #[must_use]
     pub(crate) const fn data(&self) -> u8 {
-        let i = (self.index() as usize / 2) * 3;
+        self.byte(self.index())
+    }
 
-        if self.index() & 1 == 0 {
+    /// The byte at `index` of the palette RAM.
+    #[must_use]
+    const fn byte(&self, index: u8) -> u8 {
+        let i = (index as usize / 2) * 3;
+
+        if index & 1 == 0 {
             // red and green
             let r = self.buffer[i];
             let g = self.buffer[i + 1] << 5;
@@ -177,9 +203,15 @@ impl ColorPalette {
     }
 
     pub(crate) const fn set_data(&mut self, val: u8) {
-        let i = (self.index() as usize / 2) * 3;
+        self.set_byte(self.index(), val);
+        self.auto_increment();
+    }
 
-        if self.index() & 1 == 0 {
+    /// Writes the byte at `index` of the palette RAM.
+    const fn set_byte(&mut self, index: u8, val: u8) {
+        let i = (index as usize / 2) * 3;
+
+        if index & 1 == 0 {
             // red
             self.buffer[i] = val & 0x1F;
             // green
@@ -192,8 +224,6 @@ impl ColorPalette {
             // blue
             self.buffer[i + 2] = (val & 0x7C) >> 2;
         }
-
-        self.auto_increment();
     }
 
     /// A data write the PPU's palette access blocking dropped still advances

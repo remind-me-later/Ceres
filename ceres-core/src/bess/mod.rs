@@ -1,23 +1,37 @@
-//! Best Effort Save State (https://github.com/LIJI32/SameBoy/blob/master/BESS.md).
-//! Every integer is in little-endian byte order.
+//! Best Effort Save State 1.0
+//! (`external/reference-implementations/SameBoy/BESS.md`).
+//!
+//! Ceres has no native state format: a state is the memories followed by the
+//! BESS blocks, which carry everything that is restored. Every integer is in
+//! little-endian byte order.
 
 mod read;
 mod write;
 
+use crate::Model;
+
 /// CORE: the version, the model, the CPU registers and the I/O registers,
 /// then a size and an offset for each of the 7 memories.
 const CORE_BLOCK_SIZE: u32 = 0xD0;
-/// The CPU state (0x10 bytes) and the I/O registers (0x80).
-const CORE_REGISTERS_SIZE: usize = 0x90;
+/// The I/O registers, 0xFF00-0xFF7F.
+const IO_SIZE: usize = 0x80;
 /// INFO: the title (0x10 bytes) and the global checksum.
 const INFO_BLOCK_SIZE: u32 = 0x12;
-const INFO_TITLE_SIZE: usize = 0x10;
+/// XOAM: the memory behind the unusable area, 0xFEA0-0xFEFF.
+const XOAM_BLOCK_SIZE: u32 = 0x60;
 /// RTC: the 10 clock registers (4 bytes each) and a 64-bit timestamp.
 const RTC_BLOCK_SIZE: u32 = 0x30;
-/// The CGB's background and object palette memories.
-const CGB_PALETTES_SIZE: u32 = 0x40;
+/// The other cartridges' clock and accessory blocks, checked but not used.
+const HUC3_BLOCK_SIZE: u32 = 0x11;
+const TPP1_BLOCK_SIZE: u32 = 0x11;
+const MBC7_BLOCK_SIZE: u32 = 0x0A;
+/// An MBC block entry: a 16-bit address and the byte written there.
+const MBC_PAIR_SIZE: usize = 3;
 /// The footer: the offset of the first block, then "BESS".
 const FOOTER_SIZE: usize = 8;
+
+const MAJOR_VERSION: u16 = 1;
+const MINOR_VERSION: u16 = 1;
 
 pub(crate) use read::Reader;
 pub(crate) use write::Writer;
@@ -32,10 +46,6 @@ enum Memory {
     Oam,
     Hram,
     BgPalette,
-    #[expect(
-        dead_code,
-        reason = "Only its place in the layout: the palettes are not restored yet"
-    )]
     ObjPalette,
 }
 
@@ -70,72 +80,43 @@ impl Layout {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::{AudioCallback, Gb, GbBuilder, Model, Sample};
-    use alloc::{boxed::Box, vec, vec::Vec};
+/// The CPU's execution state in the CORE block.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Execution {
+    Running = 0,
+    Halted = 1,
+    Stopped = 2,
+}
 
-    struct Silent;
-
-    impl AudioCallback for Silent {
-        fn audio_sample(&self, _: Sample, _: Sample) {}
-    }
-
-    /// A 32 KiB ROM that enables the cartridge RAM, writes 0x42 to $C123 and
-    /// $A045, then loops.
-    fn rom(cart_type: u8, ram_size: u8, cgb: bool) -> Box<[u8]> {
-        const CODE: [u8; 15] = [
-            0x3E, 0x0A, 0xEA, 0x00, 0x00, // ld [$0000], $0A
-            0x3E, 0x42, 0xEA, 0x23, 0xC1, // ld [$C123], $42
-            0xEA, 0x45, 0xA0, // ld [$A045], a
-            0x18, 0xFE, // jr @
-        ];
-        let mut rom = vec![0; 0x8000];
-        rom[0x100..0x100 + CODE.len()].copy_from_slice(&CODE);
-        rom[0x143] = if cgb { 0x80 } else { 0 };
-        rom[0x147] = cart_type;
-        rom[0x149] = ram_size;
-        rom.into_boxed_slice()
-    }
-
-    #[expect(clippy::expect_used, reason = "the test ROMs are valid")]
-    fn build(rom: Box<[u8]>, model: Model) -> Gb<Silent> {
-        GbBuilder::new(48000, Silent)
-            .with_model(model)
-            .with_run_bootrom(false)
-            .with_rom(rom)
-            .expect("a valid ROM")
-            .build()
-    }
-
-    #[test]
-    fn round_trip() {
-        let carts = [
-            ("MBC1+RAM+BATTERY", 0x03, 0x02),
-            ("MBC1+RAM", 0x02, 0x02),
-            ("MBC2+BATTERY", 0x06, 0x00),
-            ("MBC2+BATTERY with a RAM size", 0x06, 0x02),
-        ];
-        for (model, cgb) in [
-            (Model::DmgB, false),
-            (Model::CgbE, false),
-            (Model::CgbE, true),
-        ] {
-            for (name, cart_type, ram_size) in carts {
-                let mut gb = build(rom(cart_type, ram_size, cgb), model);
-                gb.run_frame();
-                assert_eq!(gb.cart.ram()[0x45] & 0xF, 2, "{name}, CGB {cgb}: ran");
-
-                let mut state = Vec::new();
-                gb.save_state(&mut state, 0);
-                let mut loaded = build(rom(cart_type, ram_size, cgb), model);
-                assert!(
-                    loaded.load_state(&state, 0).is_ok(),
-                    "{name}, CGB {cgb}: loads"
-                );
-                assert_eq!(loaded.read_mem(0xC123), 0x42, "{name}, CGB {cgb}: WRAM");
-                assert_eq!(loaded.cart.ram(), gb.cart.ram(), "{name}, CGB {cgb}: RAM");
-            }
-        }
+/// A model's four-character BESS identifier: the family (`G`, `S` or `C`),
+/// the model in it, and the CPU revision where the family has them.
+const fn model_id(model: Model) -> [u8; 4] {
+    *match model {
+        Model::Dmg0 => b"GD0 ",
+        Model::DmgB => b"GDB ",
+        Model::Mgb => b"GM  ",
+        Model::Sgb => b"SN  ",
+        Model::Sgb2 => b"S2  ",
+        Model::Cgb0 => b"CC0 ",
+        Model::CgbA => b"CCA ",
+        Model::CgbB => b"CCB ",
+        Model::CgbC => b"CCC ",
+        Model::CgbD => b"CCD ",
+        Model::CgbE => b"CCE ",
+        Model::Agb => b"CA  ",
     }
 }
+
+/// A state from a model of `family` can be loaded on `model`: the families
+/// are mutually incompatible, the models and revisions in one are not.
+const fn same_family(family: u8, model: Model) -> bool {
+    match family {
+        b'G' => matches!(model, Model::Dmg0 | Model::DmgB | Model::Mgb),
+        b'S' => matches!(model, Model::Sgb | Model::Sgb2),
+        b'C' => model.is_cgb_hardware(),
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests;

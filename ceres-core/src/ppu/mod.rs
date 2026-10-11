@@ -14,7 +14,8 @@ pub(crate) use oam_bug::unusable_index;
 #[cfg(feature = "debug")]
 pub use trace::{PpuEvent, PpuEventKind};
 pub(crate) use vram::Vram;
-use {self::color_palette::ColorPalette, crate::CgbMode, crate::Model, rgba_buf::RgbaBuf};
+pub(crate) use color_palette::ColorPalette;
+use {crate::CgbMode, crate::Model, rgba_buf::RgbaBuf};
 
 pub const PX_WIDTH: u8 = 160;
 pub const PX_HEIGHT: u8 = 144;
