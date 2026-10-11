@@ -12,6 +12,17 @@ use std::{
 use thread_priority::ThreadBuilderExt as _;
 use {ceres_core::Gb, std::path::Path, std::sync::Arc};
 
+/// How a game with save data starts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum StartFrom {
+    /// Where it was left: the whole save state is restored.
+    #[default]
+    SaveState,
+    /// From the boot ROM, with the saved progress (the cartridge's RAM and
+    /// clock).
+    Boot,
+}
+
 pub struct GbThread {
     audio_stream: audio::Stream,
     exiting: Arc<AtomicBool>,
@@ -19,6 +30,7 @@ pub struct GbThread {
     model: ceres_core::Model,
     multiplier: Arc<AtomicU32>,
     pause_condvar: Arc<(Mutex<bool>, Condvar)>,
+    start_from: StartFrom,
     thread_handle: Option<std::thread::JoinHandle<()>>,
 }
 
@@ -69,6 +81,7 @@ impl GbThread {
             self.model,
             Some(rom_path),
             sav_path,
+            self.start_from,
         )?;
 
         if let Ok(mut gb) = self.gb.lock() {
@@ -98,6 +111,7 @@ impl GbThread {
         model: ceres_core::Model,
         rom_path: Option<&Path>,
         sav_path: Option<&Path>,
+        start_from: StartFrom,
     ) -> Result<Gb<audio::AudioCallbackImpl>, Error> {
         let gb_builder = GbBuilder::new(audio_stream.sample_rate(), ring_buffer).with_model(model);
 
@@ -132,7 +146,13 @@ impl GbThread {
                     .unwrap()
                     .as_secs();
 
-                gb.load_state(&save_data_buf, secs_since_unix_epoch)?;
+                // A state from another model (the model setting changed since)
+                // only gives the saved progress.
+                if start_from == StartFrom::Boot
+                    || gb.load_state(&save_data_buf, secs_since_unix_epoch).is_err()
+                {
+                    gb.load_save_data(&save_data_buf, secs_since_unix_epoch)?;
+                }
                 Ok(gb)
             } else {
                 let gb = gb_builder.build();
@@ -309,7 +329,15 @@ impl GbThread {
         let audio_stream = audio::Stream::new().map_err(Error::Audio)?;
         let ring_buffer = audio_stream.ring_buffer();
 
-        let gb = Self::create_new_gb(&audio_stream, ring_buffer, model, rom_path, sav_path)?;
+        let start_from = StartFrom::default();
+        let gb = Self::create_new_gb(
+            &audio_stream,
+            ring_buffer,
+            model,
+            rom_path,
+            sav_path,
+            start_from,
+        )?;
         let gb = Arc::new(Mutex::new(gb));
 
         let pause_condvar = Arc::new((Mutex::new(false), Condvar::new()));
@@ -340,7 +368,14 @@ impl GbThread {
             audio_stream,
             model,
             multiplier,
+            start_from,
         })
+    }
+
+    /// How the games opened from now on start, if they have save data.
+    #[inline]
+    pub const fn set_start_from(&mut self, start_from: StartFrom) {
+        self.start_from = start_from;
     }
 
     /// Pauses the Game Boy thread and audio stream.

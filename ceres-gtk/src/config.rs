@@ -18,6 +18,11 @@ pub struct Config {
     /// Whether to use pixel-perfect scaling
     pub pixel_perfect: bool,
 
+    /// Whether games resume from their save state (otherwise they boot,
+    /// with their saved progress)
+    #[serde(default = "resume_save_state_default")]
+    pub resume_save_state: bool,
+
     /// Shader mode: "Nearest", "Scale2x", "Scale3x", "LCD", "CRT"
     pub shader_mode: String,
 
@@ -32,6 +37,7 @@ impl Default for Config {
             gb_model: "cgb".to_owned(),
             shader_mode: "Nearest".to_owned(),
             pixel_perfect: false,
+            resume_save_state: resume_save_state_default(),
             color_correction: "Modern Balanced".to_owned(),
             volume: 1.0,
         }
@@ -78,4 +84,9 @@ impl Config {
 
         Ok(())
     }
+}
+
+/// Games resume where they were left unless asked otherwise.
+const fn resume_save_state_default() -> bool {
+    true
 }

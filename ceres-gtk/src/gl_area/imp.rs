@@ -11,6 +11,7 @@ pub struct GlArea {
     model: RefCell<ceres_std::Model>,
     pixel_perfect: RefCell<bool>,
     renderer: RefCell<Option<Renderer>>,
+    resume_save_state: RefCell<bool>,
     shader: RefCell<ShaderMode>,
     shader_changed: RefCell<Option<ShaderMode>>,
 }
@@ -75,6 +76,7 @@ impl ObjectSubclass for GlArea {
             model: RefCell::new(ceres_std::Model::default()),
             is_running: RefCell::new(false),
             pixel_perfect: RefCell::new(false),
+            resume_save_state: RefCell::new(true),
             color_correction: RefCell::new(ceres_std::ColorCorrectionMode::default()),
         }
     }
@@ -107,6 +109,11 @@ impl ObjectImpl for GlArea {
                     .blurb("Whether to use pixel-perfect scaling")
                     .default_value(false)
                     .build(),
+                glib::ParamSpecBoolean::builder("resume-save-state")
+                    .nick("Resume Save State")
+                    .blurb("Whether games resume from their save state instead of booting")
+                    .default_value(true)
+                    .build(),
                 glib::ParamSpecString::builder("color-correction")
                     .nick("Color Correction")
                     .blurb("The color correction mode to use")
@@ -127,6 +134,7 @@ impl ObjectImpl for GlArea {
             .to_value(),
             "emulator-running" => self.is_running.borrow().to_value(),
             "pixel-perfect" => self.pixel_perfect.borrow().to_value(),
+            "resume-save-state" => self.resume_save_state.borrow().to_value(),
             "color-correction" => match *self.color_correction.borrow() {
                 ceres_std::ColorCorrectionMode::CorrectCurves => "CorrectCurves",
                 ceres_std::ColorCorrectionMode::Disabled => "Disabled",
@@ -178,6 +186,17 @@ impl ObjectImpl for GlArea {
                     let size = renderer.current_size();
                     renderer.resize_viewport(size.0, size.1, use_pixel_perfect);
                 }
+            }
+            "resume-save-state" => {
+                let resume = value.get::<bool>().unwrap();
+                self.resume_save_state.replace(resume);
+                self.gb_thread
+                    .borrow_mut()
+                    .set_start_from(if resume {
+                        ceres_std::StartFrom::SaveState
+                    } else {
+                        ceres_std::StartFrom::Boot
+                    });
             }
             "color-correction" => {
                 let correction_str = value.get::<String>().unwrap();

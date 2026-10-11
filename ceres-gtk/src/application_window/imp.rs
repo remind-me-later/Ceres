@@ -144,6 +144,8 @@ impl ApplicationWindow {
         self.gb_area
             .set_property("pixel-perfect", config.pixel_perfect);
         self.gb_area
+            .set_property("resume-save-state", config.resume_save_state);
+        self.gb_area
             .set_property("color-correction", &config.color_correction);
         self.volume_button.set_value(config.volume);
 
@@ -192,6 +194,7 @@ impl ApplicationWindow {
         config.gb_model = self.gb_area.property::<String>("gb-model");
         config.shader_mode = self.gb_area.property::<String>("shader-mode");
         config.pixel_perfect = self.gb_area.property::<bool>("pixel-perfect");
+        config.resume_save_state = self.gb_area.property::<bool>("resume-save-state");
         config.color_correction = self.gb_area.property::<String>("color-correction");
         config.volume = self.volume_button.value();
 
