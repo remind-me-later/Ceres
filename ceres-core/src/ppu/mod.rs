@@ -186,9 +186,8 @@ impl Ppu {
     /// LY as the CPU reads it.
     #[must_use]
     pub(crate) fn cpu_read_ly(&self) -> u8 {
-        #[cfg(feature = "debug")]
         if self.timing_live() {
-            return self.timing_read_ly().unwrap_or(self.ly);
+            return self.timing_read_ly();
         }
         let Some((ly, t)) = self.line_position() else {
             return self.ly;
@@ -216,9 +215,8 @@ impl Ppu {
     #[must_use]
     pub(crate) fn cpu_read_stat(&self) -> u8 {
         let stat = self.read_stat();
-        #[cfg(feature = "debug")]
         if self.timing_live() {
-            return self.timing_read_stat(stat).unwrap_or(stat);
+            return self.timing_read_stat(stat);
         }
         let Some((ly, t)) = self.line_position() else {
             return stat;
@@ -268,7 +266,7 @@ impl Ppu {
     /// CGB in single speed counts dots, in double speed half dots); `None`
     /// where the line timing is not the regular one.
     fn line_position(&self) -> Option<(u8, i32)> {
-        if !self.gambatte_stat_irq() || self.lcdc & LCDC_ON_B == 0 || !self.d.line_clock_valid() {
+        if !self.gambatte_cgb_timing() || self.lcdc & LCDC_ON_B == 0 || !self.d.line_clock_valid() {
             return None;
         }
         // Half dots since this line began, counted at the read; LY changes
@@ -459,7 +457,7 @@ impl Ppu {
         if is_on && !was_on {
             // With LYC 0 the LY=LYC condition starts with the LCD, unless the
             // flag stayed set while it was off.
-            if self.gambatte_stat_irq()
+            if self.gambatte_cgb_timing()
                 && !self.timing_live()
                 && self.stat & (STAT_IF_LYC_B | STAT_LYC_B) == STAT_IF_LYC_B
                 && self.lyc == 0
@@ -468,12 +466,10 @@ impl Ppu {
             }
             self.d.restart();
             self.gstat_lcd_on();
-            #[cfg(feature = "debug")]
             self.timing_lcd_on(ints);
         } else if !is_on && was_on {
             self.lcd_off();
             self.gstat_lcd_off();
-            #[cfg(feature = "debug")]
             self.timing_lcd_off();
             self.rgba_buf_present.clear();
         } else {
@@ -529,7 +525,6 @@ impl Ppu {
         let mut ints = Interrupts::default();
         self.d.restart();
         self.gstat_lcd_on();
-        #[cfg(feature = "debug")]
         self.timing_lcd_on(&mut ints);
         // `line_clock` restarts on every visible line and keeps running
         // through VBlank, starting from its first line.

@@ -1,15 +1,13 @@
 //! The CGB's STAT interrupt, after gambatte's event model.
 //!
 //! SameBoy's state machine (`state.rs`) runs on every model: it draws the
-//! pixels and sets the modes. On the models that gambatte was measured on,
-//! this event model takes over parts of it:
-//!
-//! - `gambatte_stat_irq()` (the CGB up to revision C and the DMG-B): the STAT
-//!   interrupt, the LY=LYC flag, LY reads and the LYC and STAT writes.
-//!   SameBoy's interrupt line is still computed, but it requests nothing.
-//! - `gambatte_cgb_timing()` (the CGB up to revision C): also the WY checks,
-//!   the CPU's VRAM, palette and OAM locks, OBJ size writes and the HDMA
-//!   periods, which follow gambatte's line clock.
+//! pixels and sets the modes. On the CGB up to revision C, which gambatte was
+//! measured on, this event model takes over parts of it
+//! (`gambatte_cgb_timing()`): the STAT interrupt, the LY=LYC flag, LY reads
+//! and the LYC and STAT writes, and also the WY checks, the CPU's VRAM,
+//! palette and OAM locks, OBJ size writes and the HDMA periods, which follow
+//! gambatte's line clock. SameBoy's interrupt line is still computed there,
+//! but it requests nothing. (The DMG family has `timing.rs` instead.)
 //!
 //! Each source raises the interrupt as a separate event at a fixed point of
 //! the line (mode 0 at the end of mode 3), and an event is suppressed when
@@ -121,7 +119,6 @@ pub(super) struct GStat {
 
     /// STAT as the LCD sees it (`statReg_`).
     stat: u8,
-    cgb: bool,
 
     // `LycIrq`.
     lyc_time: u64,
@@ -161,7 +158,6 @@ impl Default for GStat {
             ly: 0,
             h: 0,
             stat: 0,
-            cgb: true,
             lyc_time: DISABLED,
             lyc_src: 0,
             lyc_stat_src: 0,
@@ -251,13 +247,6 @@ impl GStat {
         self.lyc_src = lyc;
         self.lyc_time = self.lyc_time.min(src_time);
         let left = self.until(self.lyc_time, ds);
-        if !self.cgb {
-            if left > 4 || src_time != self.lyc_time {
-                self.lyc_reg = lyc;
-            }
-            self.lyc_stat = stat;
-            return;
-        }
         if left > 6 + 4 * i64::from(ds) || (src_time != self.lyc_time && left > 2) {
             self.lyc_reg = lyc;
         }
@@ -359,24 +348,7 @@ impl GStat {
         }
     }
 
-    /// gambatte's `statChangeTriggersStatIrqDmg`: on the DMG any STAT write
-    /// raises the interrupt in HBlank, VBlank or with LY=LYC, unless the line
-    /// was already held.
-    const fn stat_change_triggers_dmg(&self, old: u8, ds: bool) -> bool {
-        let lyc = self.lyc_cmp(ds).0 == self.lyc_reg;
-        if self.ly < LINES {
-            if !self.m0_done {
-                return lyc && old & STAT_IF_LYC_B == 0;
-            }
-            return old & STAT_IF_HBLANK_B == 0 && !(lyc && old & STAT_IF_LYC_B != 0);
-        }
-        old & STAT_IF_VBLANK_B == 0 && !(lyc && old & STAT_IF_LYC_B != 0)
-    }
-
     fn stat_change_triggers(&self, old: u8, data: u8, ds: bool) -> bool {
-        if !self.cgb {
-            return self.stat_change_triggers_dmg(old, ds);
-        }
         if data & !old & (STAT_IF_LYC_B | STAT_IF_OAM_B | STAT_IF_VBLANK_B | STAT_IF_HBLANK_B) == 0
         {
             return false;
@@ -395,8 +367,7 @@ impl GStat {
             return self.stat & STAT_IF_HBLANK_B != 0 && !self.m0_ahead() && data == self.ly;
         }
         self.stat & STAT_IF_VBLANK_B != 0
-            && !(self.ly == LAST_LINE
-                && self.time_to_next_ly(ds) <= 2 + 2 * i64::from(ds) + 2 * i64::from(self.cgb))
+            && !(self.ly == LAST_LINE && self.time_to_next_ly(ds) <= 4 + 2 * i64::from(ds))
     }
 
     fn lyc_change_triggers(&self, old: u8, data: u8, ds: bool) -> bool {
@@ -407,9 +378,8 @@ impl GStat {
             return false;
         }
         let (mut cmp_ly, cmp_left) = self.lyc_cmp(ds);
-        let cgb2 = 2 * i64::from(self.cgb);
-        if cmp_left <= 4 + 4 * i64::from(ds) + cgb2 {
-            if old == cmp_ly && cmp_left > cgb2 {
+        if cmp_left <= 6 + 4 * i64::from(ds) {
+            if old == cmp_ly && cmp_left > 2 {
                 // LY and LYC change together: the flag never goes low.
                 return false;
             }
@@ -431,19 +401,11 @@ impl Ppu {
         self.is_cgb_hardware() && !model_ge_cgb_d(self.model)
     }
 
-    /// The STAT interrupt and LY follow gambatte's model (its CGB, and its
-    /// DMG, a DMG-B).
-    #[must_use]
-    pub(crate) fn gambatte_stat_irq(&self) -> bool {
-        self.gambatte_cgb_timing() || self.model == crate::Model::DmgB
-    }
-
     /// Advances gambatte's clock by a unit and runs the events that are due.
     pub(super) fn gstat_unit(&mut self, ints: &mut Interrupts) {
-        if !self.gambatte_stat_irq() {
+        if !self.gambatte_cgb_timing() {
             return;
         }
-        self.d.gstat.cgb = self.is_cgb_hardware();
         let ds = self.double_speed();
         let g = &mut self.d.gstat;
         g.g += 1;
@@ -457,9 +419,7 @@ impl Ppu {
         if !g.lcd_on {
             return;
         }
-        if self.is_cgb_hardware() {
-            self.gstat_window_checks();
-        }
+        self.gstat_window_checks();
         self.gstat_events(ints, ds);
     }
 
@@ -764,7 +724,7 @@ impl Ppu {
             if g.stat_change_triggers(old, data, ds) {
                 ints.request_lcd();
             }
-            let late = GStat::cc(ds, 2 * i64::from(g.cgb));
+            let late = GStat::cc(ds, 2);
             g.m_stat.write(g.g, g.g + late.cast_unsigned(), data);
         } else {
             g.m_stat.set(data);
@@ -786,11 +746,11 @@ impl Ppu {
         }
         g.m_lyc.write(
             g.g,
-            g.g + GStat::cc(ds, 5 * i64::from(g.cgb) + 1 - i64::from(ds)).cast_unsigned(),
+            g.g + GStat::cc(ds, 6 - i64::from(ds)).cast_unsigned(),
             data,
         );
         if g.lyc_change_triggers(old, data, ds) {
-            if ds || !g.cgb {
+            if ds {
                 ints.request_lcd();
             } else {
                 g.oneshot_time = g.g + GStat::cc(ds, 5).cast_unsigned();

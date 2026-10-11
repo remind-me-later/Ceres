@@ -267,17 +267,10 @@ impl Ppu {
                 if !self.gambatte_cgb_timing() {
                     self.wy_check();
                 }
-                if self.d.current_line == 0 && !self.is_cgb_hardware() {
-                    // The DMG's mode 2 condition of line 0 comes one dot after
-                    // the other lines'.
-                    self.stat_update(ints);
-                    self.d.irq.line0_pulse = 1;
-                } else {
-                    self.d.irq.mode_for_interrupt = 2;
-                    self.stat_update(ints);
-                    self.d.irq.mode_for_interrupt = -1;
-                    self.stat_update(ints);
-                }
+                self.d.irq.mode_for_interrupt = 2;
+                self.stat_update(ints);
+                self.d.irq.mode_for_interrupt = -1;
+                self.stat_update(ints);
                 self.d.objs.count = 0;
                 self.d.objs.found = 0;
                 self.d.objs.index = 0;
@@ -339,7 +332,6 @@ impl Ppu {
         match state {
             State::HBlankStart => {
                 self.gstat_mode3_end();
-                #[cfg(feature = "debug")]
                 self.timing_mode3_end();
                 self.gstat_hblank();
                 self.stat &= !STAT_MODE_B;
@@ -398,7 +390,6 @@ impl Ppu {
             }
             State::LineEnd => {
                 self.gstat_line_end(self.d.current_line);
-                #[cfg(feature = "debug")]
                 self.timing_line_end(self.d.current_line);
                 self.d.cfl = 0;
                 self.d.line_clock = 0;
@@ -430,7 +421,7 @@ impl Ppu {
             State::VBlankLy => {
                 self.ly = self.d.current_line;
                 if self.d.current_line == LINES {
-                    if !self.gambatte_stat_irq()
+                    if !self.gambatte_cgb_timing()
                         && !self.timing_live()
                         && !self.d.irq.stat_interrupt_line
                         && self.stat & STAT_IF_OAM_B != 0
@@ -461,7 +452,7 @@ impl Ppu {
                     self.stat &= !STAT_MODE_B;
                     self.stat |= 1;
                     ints.request_vblank();
-                    if !self.gambatte_stat_irq()
+                    if !self.gambatte_cgb_timing()
                         && !self.timing_live()
                         && !self.d.irq.stat_interrupt_line
                         && self.stat & STAT_IF_OAM_B != 0

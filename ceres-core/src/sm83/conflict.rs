@@ -18,7 +18,6 @@ pub(crate) enum ConflictType {
     WriteCpu,
     StatCgb,
     StatCgbDouble,
-    StatDmg,
     PaletteDmg,
     PaletteCgb,
     DmgLcdc,
@@ -35,7 +34,9 @@ pub(crate) const DMG_CONFLICT_MAP: [ConflictType; 128] = {
     let mut map = [ConflictType::ReadOld; 128];
     map[IF as usize] = ConflictType::WriteCpu;
     map[LCDC as usize] = ConflictType::DmgLcdc;
-    map[STAT as usize] = ConflictType::StatDmg;
+    // The STAT write bug (every enable set for a moment) is in the LCD
+    // timing unit (`ppu/display/timing.rs`).
+    map[STAT as usize] = ConflictType::ReadOld;
     map[SCY as usize] = ConflictType::ScyDmg;
     map[SCX as usize] = ConflictType::ScxDmgAndCgbDouble;
     map[LYC as usize] = ConflictType::ReadOld;
@@ -51,7 +52,9 @@ pub(crate) const SGB_CONFLICT_MAP: [ConflictType; 128] = {
     let mut map = [ConflictType::ReadOld; 128];
     map[IF as usize] = ConflictType::WriteCpu;
     map[LCDC as usize] = ConflictType::SgbLcdc;
-    map[STAT as usize] = ConflictType::StatDmg;
+    // The STAT write bug (every enable set for a moment) is in the LCD
+    // timing unit (`ppu/display/timing.rs`).
+    map[STAT as usize] = ConflictType::ReadOld;
     map[SCY as usize] = ConflictType::ScyDmg;
     map[SCX as usize] = ConflictType::ScxDmgAndCgbDouble;
     map[LYC as usize] = ConflictType::ReadOld;

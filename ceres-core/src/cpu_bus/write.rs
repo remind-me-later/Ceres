@@ -50,35 +50,6 @@ impl<A: AudioCallback> Gb<A> {
                 self.write_mem(addr, val);
                 self.time_deferred = 3;
             }
-            // The DMG STAT-write bug is basically the STAT register being
-            // read as FF for a single T-cycle.
-            ConflictType::StatDmg if self.ppu.gambatte_stat_irq() => {
-                // The STAT write bug is in the PPU's STAT interrupt events.
-                self.flush_deferred_time();
-                self.write_mem(addr, val);
-                self.time_deferred = 4;
-            }
-            ConflictType::StatDmg => {
-                self.flush_deferred_time();
-                // The write glitches the register for a dot (all the enables are
-                // on) before the real value lands. The glitch is a pulse, the
-                // real value is in place for what the PPU does in the next dot,
-                // except at the edge between HBlank and OAM mode, where the OAM
-                // interrupt seems to be blocked by HBlank interrupts.
-                let stat = self.ppu.read_stat();
-                if self.ppu.at_oam_scan_edge()
-                    && stat & (STAT_IF_OAM_B | STAT_IF_HBLANK_B) == STAT_IF_HBLANK_B
-                {
-                    self.write_mem(addr, !STAT_IF_OAM_B);
-                    self.advance_t_cycles(1);
-                    self.write_mem(addr, val);
-                } else {
-                    self.write_mem(addr, 0xFF);
-                    self.write_mem(addr, val);
-                    self.advance_t_cycles(1);
-                }
-                self.time_deferred = 3;
-            }
             ConflictType::StatCgb => {
                 // The LYC and the VBlank enables reach the PPU a dot after the
                 // others (the HBlank one too when it is turned off).

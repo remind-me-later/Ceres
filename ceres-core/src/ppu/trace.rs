@@ -108,11 +108,11 @@ impl Ppu {
         let shadow = match addr {
             0xFF41 => {
                 self.record(PpuEventKind::StatRead(value));
-                self.timing_read_stat(self.read_stat())
+                Some(self.timing_read_stat(self.read_stat()))
             }
             0xFF44 => {
                 self.record(PpuEventKind::LyRead(value));
-                self.timing_read_ly()
+                Some(self.timing_read_ly())
             }
             _ => return,
         };

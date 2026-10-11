@@ -25,7 +25,6 @@ mod objects;
 mod pixels;
 mod stat;
 mod state;
-#[cfg(feature = "debug")]
 mod timing;
 mod window;
 
@@ -102,8 +101,7 @@ pub(super) struct Display {
     window: Window,
     irq: StatIrq,
     gstat: GStat,
-    /// The hardware-structured timing unit, run as a shadow of `gstat`.
-    #[cfg(feature = "debug")]
+    /// The LCD timing and STAT interrupt (`timing.rs`).
     timing: timing::LcdTiming,
     bus: PpuBus,
     cpu: CpuAccess,
@@ -140,7 +138,6 @@ impl Default for Display {
             window: Window::default(),
             irq: StatIrq::default(),
             gstat: GStat::default(),
-            #[cfg(feature = "debug")]
             timing: timing::LcdTiming::default(),
             bus: PpuBus::default(),
             cpu: CpuAccess::default(),
@@ -297,13 +294,6 @@ impl Ppu {
         self.rgba_buf_present = mem::take(&mut self.rgb_buf);
     }
 
-    /// Without the `debug` feature there is no shadow timing unit.
-    #[cfg(not(feature = "debug"))]
-    #[expect(clippy::unused_self, reason = "Only the debug build has the unit")]
-    pub(in crate::ppu) const fn timing_live(&self) -> bool {
-        false
-    }
-
     /// Advance the display by one unit (half a dot, SameBoy's 8 MHz tick).
     ///
     /// SameBoy's state machine runs the code that follows a sleep as soon as
@@ -314,8 +304,10 @@ impl Ppu {
     pub(in crate::ppu) fn run_display(&mut self, ints: &mut Interrupts) {
         let mut muted = Interrupts::default();
         self.gstat_unit(if self.timing_live() { &mut muted } else { ints });
-        #[cfg(feature = "debug")]
-        self.timing_unit(ints);
+        // On the CGB the unit only shadows the live model (`debug`).
+        if self.timing_live() || cfg!(feature = "debug") {
+            self.timing_unit(ints);
+        }
         // Pre-run bookkeeping (top of GB_display_run).
         if self.d.window.wy_triggered {
             self.d.window.wy_check_scheduled = false;
@@ -352,12 +344,6 @@ impl Ppu {
                 // The trigger of line 0 is decided afresh: a WY that
                 // changed since the line began can also take it away.
                 self.d.window.wy_triggered = self.lcdc & LCDC_WIN_EN_B != 0 && self.wy == 0;
-            }
-            if count_down(&mut self.d.irq.line0_pulse) {
-                self.d.irq.mode_for_interrupt = 2;
-                self.stat_update(ints);
-                self.d.irq.mode_for_interrupt = -1;
-                self.stat_update(ints);
             }
             self.step_state_machine(ints);
         } else if self.d.irq.line153_compare_pending {

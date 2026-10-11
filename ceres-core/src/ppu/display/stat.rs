@@ -36,8 +36,6 @@ pub(super) struct StatIrq {
     /// the CGB does not see the enables written later in the entry hold
     /// (`MODE_VBLANK_ENTRY`).
     pub entry_stat: u8,
-    /// Dots until line 0's mode 2 interrupt condition pulses (0: none).
-    pub line0_pulse: u8,
     /// The LYC compare of line 153 runs in the second half of the current dot
     /// (CGB-C in double speed).
     pub line153_compare_pending: bool,
@@ -55,7 +53,6 @@ impl Default for StatIrq {
             lyc_interrupt_line: false,
             delayed_glitch_hblank_interrupt: false,
             entry_stat: 0,
-            line0_pulse: 0,
             line153_compare_pending: false,
             lyc_line_hold: 0,
         }
@@ -108,7 +105,7 @@ impl Ppu {
 
         if self.d.irq.stat_interrupt_line
             && !previous
-            && !self.gambatte_stat_irq()
+            && !self.gambatte_cgb_timing()
             && !self.timing_live()
         {
             ints.request_lcd();
@@ -134,11 +131,10 @@ impl Ppu {
     }
 
     pub(in crate::ppu) fn write_lyc_reg(&mut self, val: u8, ints: &mut Interrupts) {
-        if self.gambatte_stat_irq() {
+        if self.gambatte_cgb_timing() {
             let mut muted = Interrupts::default();
             self.gstat_write_lyc(val, if self.timing_live() { &mut muted } else { ints });
         }
-        #[cfg(feature = "debug")]
         self.timing_write_lyc(val);
         let state = self.d.state;
         let cgb = self.is_cgb_hardware();
@@ -173,11 +169,10 @@ impl Ppu {
     }
 
     pub(in crate::ppu) fn write_stat_reg(&mut self, val: u8, ints: &mut Interrupts) {
-        if self.gambatte_stat_irq() {
+        if self.gambatte_cgb_timing() {
             let mut muted = Interrupts::default();
             self.gstat_write_stat(val, if self.timing_live() { &mut muted } else { ints });
         }
-        #[cfg(feature = "debug")]
         self.timing_write_stat(val, ints);
         // On the CGB the HBlank condition is already held a dot before the
         // mode bits change are evaluated: a write in that gap comes too late
@@ -196,11 +191,10 @@ impl Ppu {
 
         if self.lcdc & LCDC_ON_B == 0 {
             // With the LCD off the LY=LYC flag stays as it was: enabling the
-            // LYC interrupt while it is set raises it (on the DMG any write
-            // does, with the glitch that sets all the enables).
+            // LYC interrupt while it is set raises it.
             if old & STAT_LYC_B != 0
                 && old & STAT_IF_LYC_B == 0
-                && (!self.is_cgb_hardware() || val & STAT_IF_LYC_B != 0)
+                && val & STAT_IF_LYC_B != 0
                 && !self.timing_live()
             {
                 ints.request_lcd();
@@ -217,15 +211,6 @@ impl Ppu {
             self.d.irq.entry_stat = self.stat;
         }
 
-        // On the DMG the HBlank interrupt condition begins when HBlankStart runs,
-        // a dot after the mode bits change: a write in between does not see it.
-        let in_hblank_gap = !self.is_cgb_hardware()
-            && self.d.state == State::HBlankStart
-            && self.d.irq.mode_for_interrupt == 0;
-        if in_hblank_gap {
-            self.d.irq.mode_for_interrupt = 3;
-        }
-
         // Annoying edge timing case.
         if self.double_speed()
             && self.d.state == State::OamScanObject
@@ -239,10 +224,6 @@ impl Ppu {
             self.d.irq.mode_for_interrupt = -1;
         } else {
             self.stat_update(ints);
-        }
-
-        if in_hblank_gap {
-            self.d.irq.mode_for_interrupt = 0;
         }
     }
 }
