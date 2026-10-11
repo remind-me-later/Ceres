@@ -39,11 +39,11 @@ use {
 const LINE_H: i32 = 2 * LINE_LENGTH;
 /// The line-end pulse rises 8 half dots (an M-cycle) before the line and
 /// lasts an M-cycle.
-const LINE_END_H: i32 = LINE_H - 8;
+pub(super) const LINE_END_H: i32 = LINE_H - 8;
 /// The line reset that clears the HBlank gate, just after the pulse.
-const LINE_RESET_H: i32 = LINE_END_H + 2;
+pub(super) const LINE_RESET_H: i32 = LINE_END_H + 2;
 /// VBlank is latched half an M-cycle after the pulse.
-const VBLANK_H: i32 = LINE_END_H + 4;
+pub(super) const VBLANK_H: i32 = LINE_END_H + 4;
 /// LY=LYC is sampled once per M-cycle, at this phase.
 const LY_MATCH_PHASE: i32 = 4;
 

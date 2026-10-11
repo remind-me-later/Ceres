@@ -232,7 +232,7 @@ impl Ppu {
             _ => return,
         };
         let line = self.d.current_line;
-        let Some(lc) = self.cgb_c_size_change_cycle(line, units_early) else {
+        let Some(lc) = self.cgb_c_size_change_cycle(units_early) else {
             return;
         };
         let change = SizeChange { line, lc, new };

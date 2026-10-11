@@ -2,7 +2,7 @@
 //! the bus, and the locks that keep the CPU out of the memory the PPU uses.
 
 use {
-    super::{VRAM_BANK1, VRAM_OFFSET_MASK, cgb_c::VRAM_LOCK_CYCLE},
+    super::{VRAM_BANK1, VRAM_OFFSET_MASK},
     crate::{
         memory::{DmaPhase, VRAM_START},
         ppu::Ppu,
@@ -197,15 +197,13 @@ impl Ppu {
     // CPU-visible memory access, gated by the flags above.
 
     #[must_use]
-    pub(crate) fn vram_read_blocked(&self) -> bool {
-        self.cgb_c_mode3_lock(VRAM_LOCK_CYCLE)
-            .unwrap_or(self.d.cpu.vram_read_blocked)
+    pub(crate) const fn vram_read_blocked(&self) -> bool {
+        self.cgb_c_vram_blocked(self.d.cpu.vram_read_blocked)
     }
 
     #[must_use]
-    pub(crate) fn vram_write_blocked(&self) -> bool {
-        self.cgb_c_mode3_lock(VRAM_LOCK_CYCLE)
-            .unwrap_or(self.d.cpu.vram_write_blocked)
+    pub(crate) const fn vram_write_blocked(&self) -> bool {
+        self.cgb_c_vram_blocked(self.d.cpu.vram_write_blocked)
     }
 
     #[must_use]

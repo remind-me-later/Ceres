@@ -250,6 +250,7 @@ impl Ppu {
                 None
             }
             State::OamScanStart => {
+                self.cgb_c_scan_start();
                 self.d.cpu.oam_read_blocked = true;
                 self.d.cpu.oam_write_blocked = true;
                 self.stat = (self.stat & !STAT_MODE_B) | 2;

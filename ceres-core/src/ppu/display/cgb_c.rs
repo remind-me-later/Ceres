@@ -1,28 +1,29 @@
-//! What the CGB up to revision C does at fixed points of the line clock, as
-//! gambatte measured it: when the CPU may access VRAM, the palettes and
-//! OAM around mode 3 and the line end, when an HBlank HDMA runs, when an
-//! OBJ size write reaches the object search, and when the window's WY check
-//! sees WY and LCDC.
+//! Where the CGB up to revision C differs from the pixel pipeline's own
+//! access timing (which the other models follow), as gambatte's CGB-C tests
+//! measured it. Each rule is an offset from an event of the pipeline or of
+//! the LCD's line counter (`timing.rs`):
 //!
-//! These follow the timing unit's clock (`timing.rs`: `h` in half dots, 912
-//! per line, 0 where LY changes for a read). On the other models the
-//! pixel pipeline's own state decides.
+//! - the CPU sees mode 3's VRAM lock 2 CPU cycles after the pipeline takes
+//!   it, and the palette lock a dot after that;
+//! - the palettes unlock 3 half dots and 2 CPU cycles after HBlank begins;
+//! - OAM writes for the next line lock only once LY has changed;
+//! - an HBlank HDMA can run from 3 half dots after HBlank begins to the
+//!   line reset that ends the HBlank (`timing.rs`);
+//! - the object search samples each entry's OBJ size twice, a dot apart, a
+//!   little after the pipeline looks at the entry;
+//! - the WY check runs twice at the line end, on the line counter's edges,
+//!   and sees WY and LCDC 2 CPU cycles after a write.
+//!
+//! On the first line after the LCD is turned on, the mode 3 and OAM locks
+//! are the pipeline's own.
 
 use {
-    super::{LAST_LINE, LINE_LENGTH, LINES, State, model_ge_cgb_d},
+    super::{
+        LAST_LINE, LINES, State, model_ge_cgb_d,
+        timing::{LINE_END_H, LINE_RESET_H, VBLANK_H},
+    },
     crate::ppu::{LCDC_WIN_EN_B, Ppu},
 };
-
-/// Dots and half dots per line.
-const LINE: i64 = LINE_LENGTH as i64;
-const LINE_H: i64 = 2 * LINE;
-
-const LAST_VISIBLE_LINE: u8 = LINES - 1;
-
-/// The line cycle from which the CGB-C locks VRAM in mode 3.
-pub(in crate::ppu) const VRAM_LOCK_CYCLE: i64 = 79;
-/// The line cycle from which it locks the palettes.
-pub(in crate::ppu) const PALETTE_LOCK_CYCLE: i64 = 80;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct Pending {
@@ -72,16 +73,42 @@ impl LateReg {
 pub(super) struct CgbC {
     /// Half dots since power on.
     now: u64,
-    /// Mode 3 of the current line is over.
-    hblank: bool,
-    /// `h` when HBlank began.
-    hblank_h: i64,
     /// WY and LCDC as the WY check sees them.
     wy: LateReg,
     lcdc: LateReg,
     /// The LCDC write in progress went through `cgb_c_write_lcdc`.
     lcdc_tracked: bool,
+    // Half dots since a pipeline event, the event's own half dot counting
+    // as 1:
+    /// since the pipeline locked VRAM for mode 3 (0: unlocked);
+    vram_lock_age: u16,
+    /// since HBlank began (`None` from LY's change to the line's HBlank);
+    hblank_age: Option<u16>,
+    /// since the line's OAM scan began.
+    scan_age: Option<u16>,
 }
+
+impl CgbC {
+    /// The LCD was turned on.
+    pub(super) const fn restart(&mut self) {
+        self.hblank_age = None;
+    }
+}
+
+/// An age a half dot later.
+const fn older(age: Option<u16>) -> Option<u16> {
+    match age {
+        Some(age) => Some(age.saturating_add(1)),
+        None => None,
+    }
+}
+
+/// The palettes and an HBlank HDMA wait this many half dots after HBlank
+/// begins (plus 2 CPU cycles for the palettes).
+const HBLANK_WAIT: i64 = 3;
+/// Half dots from the start of the OAM scan to LY's change, plus the event's
+/// own half dot.
+const SCAN_START_TO_LY: i64 = 8;
 
 /// `n` CPU cycles in half dots.
 const fn cc(ds: bool, n: i64) -> i64 {
@@ -95,19 +122,10 @@ impl Ppu {
         self.is_cgb_hardware() && !model_ge_cgb_d(self.model)
     }
 
-    /// The line and half dot on the timing unit's clock.
+    /// The line and half dot on the LCD's line counter (`timing.rs`).
     fn clock(&self) -> (u8, i64) {
         let (line, h) = self.d.timing.position();
         (line, i64::from(h))
-    }
-
-    /// The line cycle (dots) of the clock: gambatte's `lyCounter`, which
-    /// counts CPU cycles.
-    fn line_cycles(&self) -> i64 {
-        let ds = self.double_speed();
-        let left = LINE_H - self.clock().1;
-        let left = if ds { left } else { left / 2 };
-        LINE - (left >> u32::from(ds))
     }
 
     /// Advances a half dot (after the timing unit): runs the WY checks.
@@ -118,18 +136,20 @@ impl Ppu {
         self.d.cgb_c.now += 1;
         let (line, h) = self.clock();
         if h == 0 {
-            self.d.cgb_c.hblank = false;
+            self.d.cgb_c.hblank_age = None;
         }
         if !self.d.timing.is_on() {
             return;
         }
-        // The WY checks at the end of a line: at line cycle 450 against the
-        // line, at 454 against the next one.
-        let ly = match h {
-            900 => line,
-            908 if line == LAST_LINE => 0,
-            908 => line + 1,
-            _ => return,
+        // The WY checks at the end of a line: half an M-cycle before the
+        // line-end pulse against the line, at the VBlank latch's edge
+        // against the next one.
+        let ly = if h == i64::from(LINE_END_H) - 4 {
+            line
+        } else if h == i64::from(VBLANK_H) {
+            if line == LAST_LINE { 0 } else { line + 1 }
+        } else {
+            return;
         };
         let c = &mut self.d.cgb_c;
         c.wy.settle(c.now);
@@ -139,83 +159,58 @@ impl Ppu {
         }
     }
 
-    /// The VRAM and palette locks at the start of mode 3 follow the line
-    /// clock: `Some(false)` before line cycle `threshold`, `Some(true)`
-    /// after it while the PPU is still in its object search; `None` leaves
-    /// it to the PPU's own lock.
-    pub(in crate::ppu) fn cgb_c_mode3_lock(&self, threshold: i64) -> Option<bool> {
-        let (line, _) = self.clock();
-        if !self.cgb_c_timing()
-            || !self.d.timing.is_on()
-            || !self.d.line_clock_valid()
-            || line >= LINES
+    /// A half dot ran (after the pipeline's state machine): counts the time
+    /// since the pipeline's lock events.
+    pub(super) const fn cgb_c_after_unit(&mut self) {
+        if !self.cgb_c_timing() {
+            return;
+        }
+        let locked = self.d.cpu.vram_read_blocked && self.d.cpu.vram_write_blocked;
+        let c = &mut self.d.cgb_c;
+        c.vram_lock_age = if locked { c.vram_lock_age.saturating_add(1) } else { 0 };
+        c.hblank_age = older(c.hblank_age);
+        c.scan_age = older(c.scan_age);
+    }
+
+    /// 2 CPU cycles in half dots: how late the CGB-C's CPU sees mode 3's
+    /// VRAM lock.
+    const fn lock_delay(&self) -> u16 {
+        if self.double_speed() { 2 } else { 4 }
+    }
+
+    /// VRAM as the CPU sees it locked: 2 cycles after the pipeline.
+    pub(in crate::ppu) const fn cgb_c_vram_blocked(&self, pipeline: bool) -> bool {
+        if !self.cgb_c_timing() || !self.d.line_clock_valid() {
+            return pipeline;
+        }
+        pipeline && self.d.cgb_c.vram_lock_age > self.lock_delay()
+    }
+
+    /// The palettes as the CPU sees them locked: a dot after VRAM, until 2
+    /// cycles and 3 half dots after HBlank begins.
+    pub(in crate::ppu) fn cgb_c_palettes_blocked(&self, pipeline: bool) -> bool {
+        if !self.cgb_c_timing() || !self.d.timing.is_on() {
+            return pipeline;
+        }
+        let c = &self.d.cgb_c;
+        if let Some(age) = c.hblank_age
+            && self.d.current_line < LINES
         {
-            return None;
+            return i64::from(age) <= HBLANK_WAIT + cc(self.double_speed(), 2);
         }
-        if self.line_cycles() + i64::from(self.double_speed()) < threshold {
-            return Some(false);
+        if !self.d.line_clock_valid() {
+            return pipeline;
         }
-        matches!(
-            self.d.state(),
-            State::OamScanStart
-                | State::OamScanNext
-                | State::OamScanObject
-                | State::Mode3PalettesLock
-        )
-        .then_some(true)
+        pipeline || c.vram_lock_age > self.lock_delay() + 2
     }
 
-    /// The OAM lock at the end of a line follows the line clock:
-    /// `Some(blocked)` in the last dots of the line, unlocked before them
-    /// once mode 3 is over, `None` elsewhere.
-    pub(in crate::ppu) fn cgb_c_oam_lock(&self, write: bool) -> Option<bool> {
-        if !self.cgb_c_timing() || !self.d.timing.is_on() || !self.d.line_clock_valid() {
-            return None;
+    /// OAM as CPU writes see it locked: for the next line only once LY has
+    /// changed.
+    pub(in crate::ppu) const fn cgb_c_oam_write_blocked(&self, pipeline: bool) -> bool {
+        if !self.cgb_c_timing() || !self.d.line_clock_valid() {
+            return pipeline;
         }
-        let (line, _) = self.clock();
-        let left = if write {
-            4
-        } else {
-            4 - i64::from(self.double_speed())
-        };
-        if self.line_cycles() + left >= LINE {
-            Some(!(LAST_VISIBLE_LINE..LAST_LINE).contains(&line))
-        } else if line >= LINES || self.d.cgb_c.hblank {
-            Some(false)
-        } else {
-            None
-        }
-    }
-
-    /// The line cycle (relative to `line`) after which the object search
-    /// sees an OBJ_SIZE write landing now, `units_early` before a read's
-    /// point; `-1` if it lands before the line.
-    pub(in crate::ppu) fn cgb_c_size_change_cycle(
-        &self,
-        line: u8,
-        units_early: i64,
-    ) -> Option<i64> {
-        let ds = self.double_speed();
-        let (clock_line, h) = self.clock();
-        let mut h = h + units_early + cc(ds, 2);
-        if clock_line != line {
-            // Only a write in the last dots of the line before counts.
-            let next = if clock_line == LAST_LINE {
-                0
-            } else {
-                clock_line + 1
-            };
-            if next != line {
-                return None;
-            }
-            h -= LINE_H;
-        }
-        if h < 0 {
-            return Some(-1);
-        }
-        let left = LINE_H - h;
-        let t = if ds { left } else { left / 2 };
-        Some(LINE - (t >> u32::from(ds)))
+        pipeline && !matches!(self.d.state(), State::LineOamWriteLock | State::LineLy)
     }
 
     /// A WY write: the WY checks see it 2 cycles later.
@@ -260,7 +255,8 @@ impl Ppu {
         self.cgb_c_hdma_period(4)
     }
 
-    /// gambatte's `isHdmaPeriod(cc + offset)`; `None` before mode 0 began.
+    /// The HBlank HDMA period, `offset` CPU cycles ahead: from 3 half dots
+    /// after HBlank begins to the line reset; `None` before HBlank.
     pub(crate) fn cgb_c_hdma_period(&self, offset: i64) -> Option<bool> {
         if !self.cgb_c_timing() || !self.d.timing.is_on() {
             return None;
@@ -269,31 +265,35 @@ impl Ppu {
         if line >= LINES {
             return Some(false);
         }
-        let c = &self.d.cgb_c;
-        if !c.hblank {
-            return None;
+        let age = i64::from(self.d.cgb_c.hblank_age?);
+        let ahead = cc(self.double_speed(), offset);
+        Some(h + ahead < i64::from(LINE_RESET_H) && age + ahead > HBLANK_WAIT)
+    }
+
+    /// The line cycle (dots since LY changed) after which the object search
+    /// sees an OBJ_SIZE write landing now, `units_early` before a read's
+    /// point; `-1` if it lands before the line. The search samples entry `i`
+    /// at line cycles `2 * i` and `2 * i + 1` (`objects.rs`).
+    pub(in crate::ppu) fn cgb_c_size_change_cycle(&self, units_early: i64) -> Option<i64> {
+        if matches!(
+            self.d.state(),
+            State::LineOamWriteLock | State::LineLy | State::OamScanStart
+        ) {
+            return Some(-1);
         }
-        let ds = self.double_speed();
-        let at = h + cc(ds, offset);
-        Some(at + cc(ds, 3 + 3 * i64::from(ds)) < LINE_H && at >= c.hblank_h + 3)
+        let age = i64::from(self.d.cgb_c.scan_age?);
+        // The write reaches the search 2 cycles later.
+        let h = age - SCAN_START_TO_LY + units_early + cc(self.double_speed(), 2);
+        Some(if h < 0 { -1 } else { (h + 1) / 2 })
     }
 
     /// HBlank began.
-    pub(super) fn cgb_c_hblank(&mut self) {
-        let h = self.clock().1;
-        self.d.cgb_c.hblank = true;
-        self.d.cgb_c.hblank_h = h;
+    pub(super) const fn cgb_c_hblank(&mut self) {
+        self.d.cgb_c.hblank_age = Some(0);
     }
 
-    /// The palettes become accessible 2 cycles after mode 0 begins on
-    /// gambatte's clock (`m0Time + 2`); `None` outside HBlank.
-    pub(in crate::ppu) fn cgb_c_palettes_unlocked(&self) -> Option<bool> {
-        let (line, h) = self.clock();
-        let c = &self.d.cgb_c;
-        if !self.cgb_c_timing() || !self.d.timing.is_on() || !c.hblank || line >= LINES {
-            return None;
-        }
-        // Mode 0 begins (`m0Time`) 3 units after HBlankStart.
-        Some(h >= c.hblank_h + 3 + cc(self.double_speed(), 2))
+    /// The line's OAM scan began.
+    pub(super) const fn cgb_c_scan_start(&mut self) {
+        self.d.cgb_c.scan_age = Some(0);
     }
 }

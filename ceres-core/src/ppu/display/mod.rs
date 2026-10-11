@@ -41,7 +41,7 @@ use {
 
 use super::{LCDC_WIN_EN_B, PX_HEIGHT, Ppu, STAT_MODE_B, oam_bug::NO_ROW};
 
-pub(super) use {cgb_c::PALETTE_LOCK_CYCLE, state::State};
+pub(super) use state::State;
 
 pub(super) const MODE2_LENGTH: i32 = 80;
 /// The PPU addresses VRAM from 0 (0x8000 for the CPU), bank 1 after bank 0.
@@ -157,6 +157,7 @@ impl Display {
         self.cfl = 0;
         self.window.wy_units = 0;
         self.half_dot = false;
+        self.cgb_c.restart();
     }
 
     pub(super) const fn state(&self) -> State {
@@ -344,6 +345,7 @@ impl Ppu {
         } else {
             // Nothing runs in the second half of a dot.
         }
+        self.cgb_c_after_unit();
         self.advance_wy_unit();
     }
 }

@@ -8,7 +8,7 @@ mod trace;
 mod vram;
 
 use crate::interrupts::Interrupts;
-use display::{LINE_LENGTH, LINES, LINES_PER_FRAME, PALETTE_LOCK_CYCLE};
+use display::{LINE_LENGTH, LINES, LINES_PER_FRAME};
 pub(crate) use oam::Oam;
 pub(crate) use oam_bug::unusable_index;
 #[cfg(feature = "debug")]
@@ -461,12 +461,7 @@ impl Ppu {
     #[inline]
     #[must_use]
     pub(crate) fn is_cgb_palettes_accessible(&self) -> bool {
-        if let Some(unlocked) = self.cgb_c_palettes_unlocked() {
-            return unlocked;
-        }
-        !self
-            .cgb_c_mode3_lock(PALETTE_LOCK_CYCLE)
-            .unwrap_or_else(|| self.d.cpu().cgb_palettes_blocked)
+        !self.cgb_c_palettes_blocked(self.d.cpu().cgb_palettes_blocked)
     }
 
     /// STOP-mode hooks (the PPU engine does not distinguish STOP yet).

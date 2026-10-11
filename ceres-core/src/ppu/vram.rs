@@ -67,7 +67,7 @@ impl Vram {
 
 impl Ppu {
     #[must_use]
-    pub(crate) fn read_vram(&self, addr: u16) -> u8 {
+    pub(crate) const fn read_vram(&self, addr: u16) -> u8 {
         if self.vram_read_blocked() {
             0xFF
         } else {
@@ -83,7 +83,7 @@ impl Ppu {
         &mut self.vram
     }
 
-    pub(crate) fn write_vram(&mut self, addr: u16, val: u8) {
+    pub(crate) const fn write_vram(&mut self, addr: u16, val: u8) {
         if !self.vram_write_blocked() {
             self.vram.write(addr, val);
         }
