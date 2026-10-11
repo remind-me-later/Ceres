@@ -21,6 +21,8 @@ pub enum PpuEventKind {
     LyRead(u8),
     /// The shadow timing unit would have requested the LCD interrupt.
     ShadowLcdInterrupt,
+    /// The CPU wrote this value to STAT (`0xFF41`) or LYC (`0xFF45`).
+    Write { addr: u16, value: u8 },
     /// The shadow timing unit reads another value at `addr`.
     ShadowReadMismatch { addr: u16, live: u8, shadow: u8 },
 }
@@ -40,6 +42,8 @@ pub struct PpuEvent {
     /// The line and half dot on the timing unit's clock (`timing.rs`).
     pub timing_line: u8,
     pub timing_h: i32,
+    /// The CPU ran at double speed.
+    pub double_speed: bool,
     pub kind: PpuEventKind,
 }
 
@@ -76,6 +80,7 @@ impl Ppu {
             second_half: !self.d.half_dot(),
             timing_line: self.timing_position().0,
             timing_h: self.timing_position().1,
+            double_speed: self.double_speed(),
             kind,
         });
     }
@@ -101,6 +106,11 @@ impl Ppu {
     /// The shadow timing unit's interrupt line rose.
     pub(in crate::ppu) fn trace_shadow_lcd_interrupt(&mut self) {
         self.record(PpuEventKind::ShadowLcdInterrupt);
+    }
+
+    /// The CPU wrote `value` to STAT or LYC.
+    pub(super) fn trace_write(&mut self, addr: u16, value: u8) {
+        self.record(PpuEventKind::Write { addr, value });
     }
 
     /// The CPU read `value` from STAT or LY.

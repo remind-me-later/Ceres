@@ -491,6 +491,8 @@ impl Ppu {
     }
 
     pub(crate) fn write_lyc(&mut self, val: u8, ints: &mut Interrupts) {
+        #[cfg(feature = "debug")]
+        self.trace_write(0xFF45, val);
         self.write_lyc_reg(val, ints);
         #[cfg(feature = "debug")]
         self.trace_requests(ints);
@@ -547,6 +549,8 @@ impl Ppu {
     }
 
     pub(crate) fn write_stat(&mut self, val: u8, ints: &mut Interrupts) {
+        #[cfg(feature = "debug")]
+        self.trace_write(0xFF41, val);
         self.write_stat_reg(val, ints);
         #[cfg(feature = "debug")]
         self.trace_requests(ints);
