@@ -4,7 +4,7 @@
 //! memory access without side effects, watchpoints).
 
 use {
-    crate::{AudioCallback, Gb, PpuEvent, timing::UNITS_PER_FRAME},
+    crate::{AudioCallback, Gb, Model, PpuEvent, timing::UNITS_PER_FRAME},
     alloc::{vec, vec::Vec},
 };
 
@@ -234,16 +234,15 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
-    /// Runs the rest of the frame, or until `stop` (asked after each step)
-    /// says to stop. Returns whether the frame ended.
+    /// Runs the rest of the frame, or until `stop` (asked after every step,
+    /// the frame's last one included) says to stop. Returns whether the
+    /// frame ended.
     #[inline]
     pub fn run_frame_until<F: FnMut(&mut Self) -> bool>(&mut self, mut stop: F) -> bool {
         loop {
-            if self.step() {
-                return true;
-            }
-            if stop(self) {
-                return false;
+            let ended = self.step();
+            if stop(self) || ended {
+                return ended;
             }
         }
     }
@@ -289,6 +288,12 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     pub const fn take_watch_hit(&mut self) -> Option<WatchHit> {
         self.watch.hit.take()
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn model(&self) -> Model {
+        self.model
     }
 
     /// The ROM banks mapped at 0x0000-0x3FFF and 0x4000-0x7FFF.
