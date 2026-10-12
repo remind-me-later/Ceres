@@ -23,7 +23,8 @@ struct Windows<'a> {
 
 pub struct App<'a> {
     // Config parameters
-    pixel_data_rgba: Box<[u8]>,
+    /// The last emulated frame shown.
+    last_frame: u64,
     pixel_perfect: bool,
     project_dirs: directories::ProjectDirs,
     sav_path: Option<std::path::PathBuf>,
@@ -109,8 +110,6 @@ impl App<'_> {
             None
         };
 
-        let pixel_data_rgba = vec![0; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice();
-
         let mut thread = GbThread::new(model, sav_path.as_deref(), rom_path)?;
 
         thread.resume()?;
@@ -121,7 +120,7 @@ impl App<'_> {
             shader_option,
             windows: None,
             sav_path,
-            pixel_data_rgba,
+            last_frame: 0,
             pixel_perfect,
         })
     }
@@ -156,13 +155,17 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
             )));
 
             // FIXME: handle bad copy
+            // Only a new frame is uploaded and drawn: the timer runs at
+            // 60 Hz, the Game Boy at 59.7.
             if let Some(windows) = self.windows.as_mut()
                 && matches!(
-                    self.thread.copy_pixel_data_rgba(&mut self.pixel_data_rgba),
-                    Ok(())
+                    self.thread
+                        .with_new_frame(&mut self.last_frame, |rgba| windows
+                            .main
+                            .update_texture(rgba)),
+                    Ok(true)
                 )
             {
-                windows.main.update_texture(&self.pixel_data_rgba);
                 windows.main.window().request_redraw();
             }
         }
@@ -235,6 +238,8 @@ impl winit::application::ApplicationHandler<CeresEvent> for App<'_> {
                         match win_id {
                             id if id == windows.main.window().id() => {
                                 windows.main.resize(PhysicalSize { width, height });
+                                // Drawn now: no new frame comes while paused.
+                                windows.main.window().request_redraw();
                             }
                             _ => (),
                         }

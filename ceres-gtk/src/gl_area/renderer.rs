@@ -44,7 +44,14 @@ impl std::fmt::Display for ShaderMode {
     }
 }
 
+/// Draws the Game Boy screen.
+///
+/// The current and the previous frame (the LCD shader blends the previous one
+/// in) are two textures that swap roles on each new frame: a new frame is
+/// uploaded over the older one.
 pub struct Renderer {
+    /// The texture holding the current frame.
+    current: usize,
     current_size: (u32, u32),
     dims_unif: UniformLocation,
     gl: Context,
@@ -53,8 +60,7 @@ pub struct Renderer {
     pbo_upload_current: NativeBuffer,
     program: NativeProgram,
     scale_unif: UniformLocation,
-    texture_current: NativeTexture,
-    texture_previous: NativeTexture,
+    textures: [NativeTexture; 2],
     vao: NativeVertexArray,
 }
 
@@ -67,65 +73,17 @@ impl Renderer {
         self.current_size
     }
 
-    pub fn draw_frame(&mut self, rgba: &[u8]) {
+    /// Draws the current frame (and the previous one, for the LCD shader).
+    pub fn draw(&mut self) {
         unsafe {
-            // Copy current texture to previous texture
-            self.gl.copy_image_sub_data(
-                self.texture_current,
-                glow::TEXTURE_2D,
-                0,
-                0,
-                0,
-                0,
-                self.texture_previous,
-                glow::TEXTURE_2D,
-                0,
-                0,
-                0,
-                0,
-                PX_WIDTH as i32,
-                PX_HEIGHT as i32,
-                1,
-            );
-
-            // Upload new rgba data to current texture via PBO
-            self.gl
-                .bind_buffer(glow::PIXEL_UNPACK_BUFFER, Some(self.pbo_upload_current));
-            let ptr = self.gl.map_buffer_range(
-                glow::PIXEL_UNPACK_BUFFER,
-                0,
-                PBO_BUFFER_SIZE,
-                glow::MAP_WRITE_BIT | glow::MAP_INVALIDATE_BUFFER_BIT,
-            );
-            if !ptr.is_null() {
-                let dest_slice =
-                    core::slice::from_raw_parts_mut(ptr.cast::<u8>(), PBO_BUFFER_SIZE as usize);
-                dest_slice.copy_from_slice(rgba);
-                self.gl.unmap_buffer(glow::PIXEL_UNPACK_BUFFER);
-            } else {
-                eprintln!("Failed to map PBO for current texture");
-            }
-
+            // The shader reads the current frame on unit 0, the previous one
+            // on unit 2.
             self.gl.active_texture(glow::TEXTURE0);
             self.gl
-                .bind_texture(glow::TEXTURE_2D, Some(self.texture_current)); // Ensure correct texture is bound
-            self.gl.tex_sub_image_2d(
-                glow::TEXTURE_2D,
-                0,
-                0,
-                0,
-                PX_WIDTH as i32,
-                PX_HEIGHT as i32,
-                glow::RGBA,
-                glow::UNSIGNED_BYTE,
-                glow::PixelUnpackData::BufferOffset(0),
-            );
-            self.gl.bind_buffer(glow::PIXEL_UNPACK_BUFFER, None);
-
-            // Ensure previous texture is active on its unit (though binding persists, good for clarity)
+                .bind_texture(glow::TEXTURE_2D, Some(self.textures[self.current]));
             self.gl.active_texture(glow::TEXTURE2);
             self.gl
-                .bind_texture(glow::TEXTURE_2D, Some(self.texture_previous));
+                .bind_texture(glow::TEXTURE_2D, Some(self.textures[1 - self.current]));
 
             self.gl.use_program(Some(self.program));
 
@@ -295,12 +253,12 @@ impl Renderer {
             gl.uniform_1_u32_slice(Some(&scale_unif), &[ShaderMode::Nearest as u32]);
 
             Self {
+                current: 0,
                 current_size: (PX_WIDTH, PX_HEIGHT),
                 gl,
                 program,
                 vao,
-                texture_current,
-                texture_previous,
+                textures: [texture_current, texture_previous],
                 pbo_upload_current,
                 dims_unif,
                 scale_unif,
@@ -313,6 +271,49 @@ impl Renderer {
     pub const fn resize_viewport(&mut self, width: u32, height: u32, pixel_perfect: bool) {
         self.new_size = Some((width, height, pixel_perfect));
         self.current_size = (width, height);
+    }
+
+    /// Uploads a new frame, which `write` puts in the pixel buffer: it goes
+    /// over the older texture, and the current one becomes the previous one.
+    pub fn upload_frame(&mut self, write: impl FnOnce(&mut [u8])) {
+        self.current = 1 - self.current;
+        unsafe {
+            self.gl
+                .bind_buffer(glow::PIXEL_UNPACK_BUFFER, Some(self.pbo_upload_current));
+            // Invalidating lets the driver hand out fresh memory while the
+            // last upload may still read the old one.
+            let ptr = self.gl.map_buffer_range(
+                glow::PIXEL_UNPACK_BUFFER,
+                0,
+                PBO_BUFFER_SIZE,
+                glow::MAP_WRITE_BIT | glow::MAP_INVALIDATE_BUFFER_BIT,
+            );
+            if ptr.is_null() {
+                eprintln!("Failed to map PBO for current texture");
+            } else {
+                write(core::slice::from_raw_parts_mut(
+                    ptr.cast::<u8>(),
+                    PBO_BUFFER_SIZE as usize,
+                ));
+                self.gl.unmap_buffer(glow::PIXEL_UNPACK_BUFFER);
+            }
+
+            self.gl.active_texture(glow::TEXTURE0);
+            self.gl
+                .bind_texture(glow::TEXTURE_2D, Some(self.textures[self.current]));
+            self.gl.tex_sub_image_2d(
+                glow::TEXTURE_2D,
+                0,
+                0,
+                0,
+                PX_WIDTH as i32,
+                PX_HEIGHT as i32,
+                glow::RGBA,
+                glow::UNSIGNED_BYTE,
+                glow::PixelUnpackData::BufferOffset(0),
+            );
+            self.gl.bind_buffer(glow::PIXEL_UNPACK_BUFFER, None);
+        }
     }
 }
 

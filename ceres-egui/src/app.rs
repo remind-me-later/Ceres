@@ -31,9 +31,7 @@ impl App {
 
         let sav_path = rom_path.and_then(|path| Self::sav_path_from_rom_path(&project_dirs, path));
 
-        let pixel_data_rgba = Arc::new(Mutex::new(
-            vec![0; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice(),
-        ));
+        let pixel_data_rgba = Arc::new(Mutex::new(screen::Frame::new()));
 
         let mut thread = GbThread::new(model, sav_path.as_deref(), rom_path)?;
 
@@ -205,10 +203,15 @@ impl eframe::App for App {
             });
         });
 
-        if let Ok(mut buffer) = self.screen.mut_buffer().lock()
-            && self.thread.copy_pixel_data_rgba(&mut buffer).is_err()
-        {
-            eprintln!("couldn't copy pixel data");
+        if let Ok(mut frame) = self.screen.mut_buffer().lock() {
+            let screen::Frame { number, rgba } = &mut *frame;
+            if self
+                .thread
+                .with_new_frame(number, |new| rgba.copy_from_slice(new))
+                .is_err()
+            {
+                eprintln!("couldn't copy pixel data");
+            }
         }
 
         egui::CentralPanel::default()

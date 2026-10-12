@@ -28,15 +28,22 @@ impl From<crate::ShaderOption> for ShaderOption {
     }
 }
 
+/// Draws the Game Boy screen.
+///
+/// The current and the previous frame (the LCD shader blends the previous one
+/// in) are two textures that swap roles on each new frame: a new frame is
+/// written over the older one, and one of two bind groups made up front picks
+/// which is which.
 pub struct PipelineWrapper<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
-    diffuse_bind_group: wgpu::BindGroup,
+    /// `frame_bind_groups[i]` binds `textures[i]` as the current frame and
+    /// the other one as the previous frame.
+    frame_bind_groups: [wgpu::BindGroup; 2],
+    /// The texture holding the current frame.
+    current: usize,
     dimensions_uniform: wgpu::Buffer,
-    frame_texture: Texture,
-    prev_frame_texture: Texture,
     render_pipeline: wgpu::RenderPipeline,
-    sampler: wgpu::Sampler,
     scale_uniform: wgpu::Buffer,
-    texture_bind_group_layout: wgpu::BindGroupLayout,
+    textures: [Texture; 2],
     uniform_bind_group: wgpu::BindGroup,
 }
 
@@ -52,8 +59,10 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
         target_format: wgpu::TextureFormat,
         shader_option: ShaderOption,
     ) -> Self {
-        let frame_texture = Texture::new(device, PX_WIDTH, PX_HEIGHT, Some("current_frame"));
-        let prev_frame_texture = Texture::new(device, PX_WIDTH, PX_HEIGHT, Some("prev_frame"));
+        let textures = [
+            Texture::new(device, PX_WIDTH, PX_HEIGHT, Some("frame_0")),
+            Texture::new(device, PX_WIDTH, PX_HEIGHT, Some("frame_1")),
+        ];
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -90,23 +99,27 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
 
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
 
-        let diffuse_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(frame_texture.view()),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(prev_frame_texture.view()),
-                },
-            ],
-            label: None,
+        let frame_bind_groups: [wgpu::BindGroup; 2] = core::array::from_fn(|current| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &texture_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(textures[current].view()),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(
+                            textures[1 - current].view(),
+                        ),
+                    },
+                ],
+                label: None,
+            })
         });
 
         let uniform_bind_group_layout =
@@ -206,14 +219,12 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
         });
 
         Self {
-            diffuse_bind_group,
+            frame_bind_groups,
+            current: 0,
             dimensions_uniform,
-            frame_texture,
-            prev_frame_texture,
             render_pipeline,
-            sampler,
             scale_uniform,
-            texture_bind_group_layout,
+            textures,
             uniform_bind_group,
         }
     }
@@ -221,7 +232,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
     #[inline]
     pub fn paint(&self, render_pass: &mut wgpu::RenderPass) {
         render_pass.set_pipeline(&self.render_pipeline);
-        render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
+        render_pass.set_bind_group(0, &self.frame_bind_groups[self.current], &[]);
         render_pass.set_bind_group(1, &self.uniform_bind_group, &[]);
         render_pass.draw(0..4, 0..1);
     }
@@ -259,37 +270,11 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
         );
     }
 
+    /// Shows a new frame: it goes over the older texture, and the current
+    /// one becomes the previous one.
     #[inline]
-    pub fn update_screen_texture(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        rgba: &[u8],
-    ) {
-        // Swap the frame textures
-        std::mem::swap(&mut self.frame_texture, &mut self.prev_frame_texture);
-
-        // Update the bind group with the new texture views
-        self.diffuse_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &self.texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(self.frame_texture.view()),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(self.prev_frame_texture.view()),
-                },
-            ],
-            label: None,
-        });
-
-        // Update the current frame texture
-        self.frame_texture.update(queue, rgba);
+    pub fn upload_frame(&mut self, queue: &wgpu::Queue, rgba: &[u8]) {
+        self.current = 1 - self.current;
+        self.textures[self.current].update(queue, rgba);
     }
 }

@@ -149,8 +149,7 @@ impl State<'_> {
     }
 
     pub fn update_texture(&mut self, rgba: &[u8]) {
-        self.gb_screen
-            .update_screen_texture(&self.device, &self.queue, rgba);
+        self.gb_screen.upload_frame(&self.queue, rgba);
     }
 
     pub const fn window(&self) -> &Arc<winit::window::Window> {

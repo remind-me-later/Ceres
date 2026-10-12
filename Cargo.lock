@@ -706,6 +706,7 @@ dependencies = [
  "cpal",
  "gilrs",
  "image",
+ "pollster 0.4.0",
  "ringbuf",
  "rubato",
  "spin_sleep",

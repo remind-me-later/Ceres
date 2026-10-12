@@ -7,7 +7,10 @@ use core::sync::atomic::Ordering::Relaxed;
 use std::io::Read as _;
 use std::{
     fs::OpenOptions,
-    sync::{Condvar, Mutex, atomic::AtomicU32},
+    sync::{
+        Condvar, Mutex,
+        atomic::{AtomicU32, AtomicU64},
+    },
 };
 use thread_priority::ThreadBuilderExt as _;
 use {ceres_core::Gb, std::path::Path, std::sync::Arc};
@@ -26,6 +29,8 @@ pub enum StartFrom {
 pub struct GbThread {
     audio_stream: audio::Stream,
     exiting: Arc<AtomicBool>,
+    /// Frames emulated so far.
+    frame: Arc<AtomicU64>,
     gb: Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
     model: ceres_core::Model,
     multiplier: Arc<AtomicU32>,
@@ -102,6 +107,36 @@ impl GbThread {
             debug_assert_eq!(buffer.len(), gb.pixel_data_rgba().len());
             buffer.copy_from_slice(gb.pixel_data_rgba());
             Ok(())
+        })
+    }
+
+    /// Frames emulated so far: the screen changed when this did.
+    #[must_use]
+    #[inline]
+    pub fn frame(&self) -> u64 {
+        self.frame.load(Relaxed)
+    }
+
+    /// Calls `f` with the screen if a frame was emulated since `last_seen`,
+    /// which then moves to it. Returns whether it did.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the Game Boy thread is not running.
+    #[inline]
+    pub fn with_new_frame<F: FnOnce(&[u8])>(
+        &self,
+        last_seen: &mut u64,
+        f: F,
+    ) -> Result<bool, Error> {
+        if self.frame() == *last_seen {
+            return Ok(false);
+        }
+        self.gb.lock().map_or(Err(Error::NoThreadRunning), |gb| {
+            // Read under the lock, so the count goes with the pixels.
+            *last_seen = self.frame();
+            f(gb.pixel_data_rgba());
+            Ok(true)
         })
     }
 
@@ -198,6 +233,7 @@ impl GbThread {
 
     fn gb_loop(
         gb: &Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
+        frame: &Arc<AtomicU64>,
         exiting: &Arc<AtomicBool>,
         pause_condvar: &Arc<(Mutex<bool>, Condvar)>,
         multiplier: &Arc<AtomicU32>,
@@ -265,7 +301,7 @@ impl GbThread {
                 }
 
                 gb.run_frame();
-                // ctx.paint(gb.pixel_data_rgba());
+                frame.fetch_add(1, Relaxed);
             }
             // ctx.request_repaint();
 
@@ -343,6 +379,7 @@ impl GbThread {
         let pause_condvar = Arc::new((Mutex::new(false), Condvar::new()));
         let exiting = Arc::new(AtomicBool::new(false));
         let multiplier = Arc::new(AtomicU32::new(1));
+        let frame = Arc::new(AtomicU64::new(0));
 
         // FIXME: use proper user facing config options
         let gilrs = gilrs::Gilrs::new().map_err(|e| Error::GamePadError(e.to_string()))?;
@@ -353,16 +390,18 @@ impl GbThread {
             let exit = Arc::clone(&exiting);
             let pause_condvar = Arc::clone(&pause_condvar);
             let multiplier = Arc::clone(&multiplier);
+            let frame = Arc::clone(&frame);
 
             // std::thread::spawn(move || gb_loop(gb, exit, pause_thread))
             thread_builder.spawn_with_priority(thread_priority::ThreadPriority::Max, move |_| {
-                Self::gb_loop(&gb, &exit, &pause_condvar, &multiplier, gilrs);
+                Self::gb_loop(&gb, &frame, &exit, &pause_condvar, &multiplier, gilrs);
             })?
         };
 
         Ok(Self {
             gb,
             exiting,
+            frame,
             pause_condvar,
             thread_handle: Some(thread_handle),
             audio_stream,
