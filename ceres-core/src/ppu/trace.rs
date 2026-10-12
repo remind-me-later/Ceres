@@ -2,12 +2,7 @@
 //! requests, its STAT and LYC writes and the values STAT and LY reads
 //! returned, each with where the display and the timing unit were.
 
-use {
-    super::Ppu,
-    crate::interrupts::Interrupts,
-    alloc::vec::Vec,
-    core::mem,
-};
+use {super::Ppu, crate::interrupts::Interrupts, alloc::vec::Vec, core::mem};
 
 /// What happened.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

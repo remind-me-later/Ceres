@@ -113,9 +113,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> PipelineWrapper<PX_WIDTH, PX_HEI
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::TextureView(
-                            textures[1 - current].view(),
-                        ),
+                        resource: wgpu::BindingResource::TextureView(textures[1 - current].view()),
                     },
                 ],
                 label: None,

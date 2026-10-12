@@ -3,10 +3,7 @@
 
 use {
     super::state::State,
-    crate::{
-        interrupts::Interrupts,
-        ppu::Ppu,
-    },
+    crate::{interrupts::Interrupts, ppu::Ppu},
 };
 
 impl Ppu {

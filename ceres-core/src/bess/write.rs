@@ -1,7 +1,7 @@
 use {
     super::{
-        CORE_BLOCK_SIZE, Execution, INFO_BLOCK_SIZE, IO_SIZE, Layout,
-        MAJOR_VERSION, MINOR_VERSION, RTC_BLOCK_SIZE, XOAM_BLOCK_SIZE, model_id,
+        CORE_BLOCK_SIZE, Execution, INFO_BLOCK_SIZE, IO_SIZE, Layout, MAJOR_VERSION, MINOR_VERSION,
+        RTC_BLOCK_SIZE, XOAM_BLOCK_SIZE, model_id,
     },
     crate::{
         AudioCallback, Cartridge, CgbMode, Gb,
@@ -56,7 +56,10 @@ impl<'a> Writer<'a> {
         for memory in memories {
             self.write_all(memory);
         }
-        #[expect(clippy::cast_possible_truncation, reason = "a state is far below 4 GiB")]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a state is far below 4 GiB"
+        )]
         let offset_to_first_block = { self.position as u32 };
 
         self.write_name_block();

@@ -23,7 +23,11 @@ pub(in crate::cartridge) struct Mbc1 {
 impl Mbc1 {
     /// The register writes that restore this state (BESS).
     pub(super) fn bess_writes(&self) -> [(u16, u8); 3] {
-        [(0x2000, self.lo), (0x4000, self.hi), (0x6000, u8::from(self.bank_mode))]
+        [
+            (0x2000, self.lo),
+            (0x4000, self.hi),
+            (0x6000, u8::from(self.bank_mode)),
+        ]
     }
 
     pub(super) fn new(rom: &[u8], rom_size: ROMSize) -> Self {

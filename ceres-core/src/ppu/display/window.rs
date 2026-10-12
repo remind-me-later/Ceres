@@ -78,13 +78,12 @@ impl Ppu {
         if self.lcdc & LCDC_ON_B == 0 {
             return;
         }
-        let comparison = if (!self.is_cgb_hardware() || self.double_speed())
-            && self.d.ly_for_comparison != -1
-        {
-            i32::from(self.d.ly_for_comparison.to_le_bytes()[0])
-        } else {
-            i32::from(self.d.current_line)
-        };
+        let comparison =
+            if (!self.is_cgb_hardware() || self.double_speed()) && self.d.ly_for_comparison != -1 {
+                i32::from(self.d.ly_for_comparison.to_le_bytes()[0])
+            } else {
+                i32::from(self.d.current_line)
+            };
         if self.lcdc & LCDC_WIN_EN_B != 0 && i32::from(self.wy) == comparison {
             self.d.window.wy_triggered = true;
         }

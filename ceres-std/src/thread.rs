@@ -184,7 +184,9 @@ impl GbThread {
                 // A state from another model (the model setting changed since)
                 // only gives the saved progress.
                 if start_from == StartFrom::Boot
-                    || gb.load_state(&save_data_buf, secs_since_unix_epoch).is_err()
+                    || gb
+                        .load_state(&save_data_buf, secs_since_unix_epoch)
+                        .is_err()
                 {
                     gb.load_save_data(&save_data_buf, secs_since_unix_epoch)?;
                 }

@@ -17,9 +17,9 @@
 //!   the CPU-visible access locks
 
 mod bus;
+mod cgb_c;
 mod fetcher;
 mod fifo;
-mod cgb_c;
 mod mode3;
 mod objects;
 mod pixels;
@@ -31,10 +31,10 @@ mod window;
 use {
     crate::{CgbMode, Model, interrupts::Interrupts},
     bus::{CpuAccess, PpuBus},
+    cgb_c::CgbC,
     core::mem,
     fetcher::Fetcher,
     fifo::Fifo,
-    cgb_c::CgbC,
     objects::{ObjectFetch, ObjectSearch},
     window::Window,
 };

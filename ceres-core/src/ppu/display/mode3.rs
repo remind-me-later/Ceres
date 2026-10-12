@@ -2,11 +2,9 @@
 
 use {
     super::{LINES, fetcher::FetcherStep, model_ge_cgb_d, pos, state::State, window::Window},
-    crate::{
-        ppu::{
-            ATTR_CGB_PALETTE, ATTR_DMG_PALETTE_B, ATTR_PRIORITY_B, ATTR_X_FLIP_B, LCDC_OBJ_EN_B,
-            LCDC_WIN_EN_B, Oam, PX_WIDTH, Ppu, STAT_MODE_B,
-        },
+    crate::ppu::{
+        ATTR_CGB_PALETTE, ATTR_DMG_PALETTE_B, ATTR_PRIORITY_B, ATTR_X_FLIP_B, LCDC_OBJ_EN_B,
+        LCDC_WIN_EN_B, Oam, PX_WIDTH, Ppu, STAT_MODE_B,
     },
 };
 

@@ -167,7 +167,11 @@ impl Ppu {
         }
         let locked = self.d.cpu.vram_read_blocked && self.d.cpu.vram_write_blocked;
         let c = &mut self.d.cgb_c;
-        c.vram_lock_age = if locked { c.vram_lock_age.saturating_add(1) } else { 0 };
+        c.vram_lock_age = if locked {
+            c.vram_lock_age.saturating_add(1)
+        } else {
+            0
+        };
         c.hblank_age = older(c.hblank_age);
         c.scan_age = older(c.scan_age);
     }

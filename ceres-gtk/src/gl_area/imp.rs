@@ -65,7 +65,6 @@ impl ObjectSubclass for GlArea {
     type Type = super::GlArea;
 
     fn new() -> Self {
-
         let gb_thread = Rc::new(RefCell::new(
             ceres_std::GbThread::new(ceres_std::Model::CgbC, None, None)
                 .expect("Failed to create GbThread"),
@@ -198,13 +197,11 @@ impl ObjectImpl for GlArea {
             "resume-save-state" => {
                 let resume = value.get::<bool>().unwrap();
                 self.resume_save_state.replace(resume);
-                self.gb_thread
-                    .borrow_mut()
-                    .set_start_from(if resume {
-                        ceres_std::StartFrom::SaveState
-                    } else {
-                        ceres_std::StartFrom::Boot
-                    });
+                self.gb_thread.borrow_mut().set_start_from(if resume {
+                    ceres_std::StartFrom::SaveState
+                } else {
+                    ceres_std::StartFrom::Boot
+                });
             }
             "color-correction" => {
                 let correction_str = value.get::<String>().unwrap();

@@ -56,7 +56,9 @@ impl Gpu {
     /// Paints the screen and returns its middle pixel.
     #[expect(clippy::unwrap_used, reason = "a test")]
     fn paint(&self, pipeline: &PipelineWrapper<W, H>) -> [u8; 4] {
-        let view = self.target.create_view(&wgpu::TextureViewDescriptor::default());
+        let view = self
+            .target
+            .create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
@@ -130,11 +132,17 @@ fn shows_the_new_frame_and_ghosts_the_previous_one() {
     // The LCD shader mixes in the previous frame (red under blue).
     pipeline.shader_option(&gpu.queue, ShaderOption::Lcd);
     let [red, green, blue, _] = gpu.paint(&pipeline);
-    assert!(red > 0x40 && green == 0 && blue > 0x40, "red ghost under blue");
+    assert!(
+        red > 0x40 && green == 0 && blue > 0x40,
+        "red ghost under blue"
+    );
 
     pipeline.upload_frame(&gpu.queue, &solid([0, 0xFF, 0]));
     let ghosted = gpu.paint(&pipeline);
     let [red2, green2, blue2, _] = ghosted;
-    assert!(red2 == 0 && green2 > 0x40 && blue2 > 0x40, "blue ghost under green");
+    assert!(
+        red2 == 0 && green2 > 0x40 && blue2 > 0x40,
+        "blue ghost under green"
+    );
     assert_eq!(gpu.paint(&pipeline), ghosted, "a repaint changes nothing");
 }

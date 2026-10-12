@@ -227,7 +227,10 @@ fn writes_the_blocks_in_order() {
     let gb = build(register_rom(true), Model::CgbE);
     let (_, blocks) = split(&saved(&gb));
     let names: Vec<_> = blocks.iter().map(|block| block.name).collect();
-    assert_eq!(names, [*b"NAME", *b"INFO", *b"CORE", *b"XOAM", *b"MBC ", *b"END "]);
+    assert_eq!(
+        names,
+        [*b"NAME", *b"INFO", *b"CORE", *b"XOAM", *b"MBC ", *b"END "]
+    );
     let core = &blocks[2].payload;
     assert_eq!(core.len(), 0xD0);
     assert_eq!(&core[4..8], b"CCE ");
@@ -237,7 +240,11 @@ fn writes_the_blocks_in_order() {
     // MBC1: RAM enable, the ROM bank registers, the mode.
     assert_eq!(blocks[4].payload.len() % 3, 0);
 
-    for (model, id) in [(Model::Sgb2, b"S2  "), (Model::Agb, b"CA  "), (Model::Mgb, b"GM  ")] {
+    for (model, id) in [
+        (Model::Sgb2, b"S2  "),
+        (Model::Agb, b"CA  "),
+        (Model::Mgb, b"GM  "),
+    ] {
         let (_, other) = split(&saved(&build(register_rom(false), model)));
         assert_eq!(&other[2].payload[4..8], id);
     }
@@ -324,8 +331,6 @@ fn loads_a_state_with_native_data_first() {
     assert_eq!(loaded.wram.wram(), gb.wram.wram());
     assert_eq!(loaded.cpu.pc(), gb.cpu.pc());
 }
-
-
 
 /// Cut anywhere, a state fails to load instead of panicking.
 #[test]

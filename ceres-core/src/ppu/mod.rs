@@ -8,13 +8,13 @@ mod trace;
 mod vram;
 
 use crate::interrupts::Interrupts;
+pub(crate) use color_palette::ColorPalette;
 use display::{LINE_LENGTH, LINES, LINES_PER_FRAME};
 pub(crate) use oam::Oam;
 pub(crate) use oam_bug::unusable_index;
 #[cfg(feature = "debug")]
 pub use trace::{PpuEvent, PpuEventKind};
 pub(crate) use vram::Vram;
-pub(crate) use color_palette::ColorPalette;
 use {crate::CgbMode, crate::Model, rgba_buf::RgbaBuf};
 
 pub const PX_WIDTH: u8 = 160;

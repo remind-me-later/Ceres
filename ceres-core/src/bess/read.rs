@@ -1,16 +1,16 @@
 use {
     super::{
-        Buffer, CORE_BLOCK_SIZE, Execution, FOOTER_SIZE, HUC3_BLOCK_SIZE, INFO_BLOCK_SIZE,
-        IO_SIZE, Layout, MAJOR_VERSION, MBC_PAIR_SIZE, MBC7_BLOCK_SIZE, Memory, RTC_BLOCK_SIZE,
+        Buffer, CORE_BLOCK_SIZE, Execution, FOOTER_SIZE, HUC3_BLOCK_SIZE, INFO_BLOCK_SIZE, IO_SIZE,
+        Layout, MAJOR_VERSION, MBC_PAIR_SIZE, MBC7_BLOCK_SIZE, Memory, RTC_BLOCK_SIZE,
         TPP1_BLOCK_SIZE, XOAM_BLOCK_SIZE, same_family,
     },
     crate::{
         AudioCallback, CgbMode, Gb,
         error::Error,
         memory::{
-            BANK, BCPS, BGP, DIV, DMA, HDMA1, HDMA2, HDMA3, HDMA4, IF, KEY0, KEY1, LCDC, LY,
-            LYC, NR52, OBP0, OBP1, OCPS, P1, SB, SC, SCX, SCY, STAT, SVBK, TAC, TIMA, TMA,
-            UNDOC_FF72, UNDOC_FF73, UNDOC_FF75, VBK, WX, WY, io_addr,
+            BANK, BCPS, BGP, DIV, DMA, HDMA1, HDMA2, HDMA3, HDMA4, IF, KEY0, KEY1, LCDC, LY, LYC,
+            NR52, OBP0, OBP1, OCPS, P1, SB, SC, SCX, SCY, STAT, SVBK, TAC, TIMA, TMA, UNDOC_FF72,
+            UNDOC_FF73, UNDOC_FF75, VBK, WX, WY, io_addr,
         },
         ppu::ColorPalette,
     },
@@ -109,7 +109,11 @@ impl<'a> Reader<'a> {
     /// Reads the blocks, with the checks BESS asks for (and those SameBoy
     /// treats as fatal); `same_model` also requires the state to be from
     /// the family of `gb`'s model.
-    fn parse<A: AudioCallback>(&mut self, gb: &Gb<A>, same_model: bool) -> Result<State<'a>, Error> {
+    fn parse<A: AudioCallback>(
+        &mut self,
+        gb: &Gb<A>,
+        same_model: bool,
+    ) -> Result<State<'a>, Error> {
         let offset_to_first_block = self.read_footer()?;
         self.seek(offset_to_first_block as usize)?;
 
@@ -388,9 +392,17 @@ impl<A: AudioCallback> Gb<A> {
         // The memories.
         let layout = &core.layout;
         copy_memory(data, layout.get(Memory::Ram), self.wram.wram_mut());
-        copy_memory(data, layout.get(Memory::Vram), self.ppu.vram_mut().bytes_mut());
+        copy_memory(
+            data,
+            layout.get(Memory::Vram),
+            self.ppu.vram_mut().bytes_mut(),
+        );
         copy_memory(data, layout.get(Memory::MbcRam), self.cart.ram_mut());
-        copy_memory(data, layout.get(Memory::Oam), self.ppu.oam_mut().bytes_mut());
+        copy_memory(
+            data,
+            layout.get(Memory::Oam),
+            self.ppu.oam_mut().bytes_mut(),
+        );
         copy_memory(data, layout.get(Memory::Hram), self.hram.hram_mut());
         if self.model.is_cgb_hardware() {
             let palette = |memory| {

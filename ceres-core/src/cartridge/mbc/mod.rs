@@ -124,9 +124,15 @@ impl Mbc {
     /// BESS MBC block): every mapper's RAM enable, then its bank registers.
     pub(super) fn bess_writes(&self, map: &Mapping) -> Vec<(u16, u8)> {
         let ram_enable = (0x0000, if map.ram_enabled { RAM_ENABLE_KEY } else { 0 });
-        #[expect(clippy::cast_possible_truncation, reason = "bank numbers fit the registers")]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "bank numbers fit the registers"
+        )]
         let rom_bank = (map.rom.1 / rom_bank(1)) as u8;
-        #[expect(clippy::cast_possible_truncation, reason = "bank numbers fit the registers")]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "bank numbers fit the registers"
+        )]
         let ram_bank = (map.ram / ram_bank(1)) as u8;
         let mut writes = vec![ram_enable];
         match *self {
