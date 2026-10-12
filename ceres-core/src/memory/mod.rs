@@ -3,6 +3,8 @@ mod hdma;
 mod hram;
 mod key1;
 mod svbk;
+#[cfg(test)]
+mod tests;
 mod wram;
 
 use crate::{AudioCallback, Model, ppu};
@@ -328,7 +330,14 @@ impl<A: AudioCallback> Gb<A> {
                     self.ppu.write_opri(val);
                 }
             }
-            SVBK if matches!(self.cgb_mode, CgbMode::Cgb) => self.wram.svbk_mut().write(val),
+            // The CGB boot ROM selects bank 1 after switching a DMG game to
+            // DMG mode, so the boot ROM can still switch banks then (as in
+            // SameBoy).
+            SVBK if matches!(self.cgb_mode, CgbMode::Cgb)
+                || (self.model.is_cgb_hardware() && self.bootrom.is_enabled()) =>
+            {
+                self.wram.svbk_mut().write(val);
+            }
             // Undocumented CGB registers. Per Pan Docs: FF72/FF73 are full
             // R/W (any bit can be written), FF75 only bits 4-6 are writable
             // (bits 0-3, 7 always read as 1).
