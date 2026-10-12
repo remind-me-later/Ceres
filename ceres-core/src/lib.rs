@@ -30,7 +30,10 @@ use cheats::GameGenie;
 #[cfg(feature = "game_genie")]
 pub use cheats::GameGenieCode;
 #[cfg(feature = "debug")]
-pub use debug::{MemoryAccess, WatchHit};
+pub use debug::{
+    HdmaKind, HdmaState, IoAccess, MemoryAccess, OamDmaPhase, OamDmaState, PpuState, TimerState,
+    WatchHit,
+};
 use interrupts::Interrupts;
 use joypad::Joypad;
 use memory::{
@@ -99,6 +102,12 @@ pub struct Gb<A: AudioCallback> {
     /// The addresses a debugger watches.
     #[cfg(feature = "debug")]
     watch: debug::Watchpoints,
+    /// 8 MHz units run since power on (see `clock_units`).
+    #[cfg(feature = "debug")]
+    clock_units: u64,
+    /// The CPU's I/O accesses, while a trace wants them.
+    #[cfg(feature = "debug")]
+    io_log: debug::IoLog,
 }
 
 impl<A: AudioCallback> Gb<A> {
@@ -418,6 +427,10 @@ impl<A: AudioCallback> Gb<A> {
             game_genie: GameGenie::default(),
             #[cfg(feature = "debug")]
             watch: debug::Watchpoints::default(),
+            #[cfg(feature = "debug")]
+            clock_units: 0,
+            #[cfg(feature = "debug")]
+            io_log: debug::IoLog::default(),
         }
     }
 

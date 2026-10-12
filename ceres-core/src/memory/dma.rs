@@ -84,6 +84,21 @@ enum DmaBus {
     Vram,
 }
 
+#[cfg(feature = "debug")]
+impl Dma {
+    pub(crate) const fn debug_state(&self) -> crate::OamDmaState {
+        crate::OamDmaState {
+            phase: match self.phase {
+                DmaPhase::Idle => crate::OamDmaPhase::Idle,
+                DmaPhase::StartUp => crate::OamDmaPhase::StartUp,
+                DmaPhase::Copy { next } => crate::OamDmaPhase::Copy { next },
+                DmaPhase::Last => crate::OamDmaPhase::Last,
+            },
+            source: self.current_src,
+        }
+    }
+}
+
 impl Dma {
     /// The DMA register powers on as 00 on CGB and FF on DMG hardware.
     #[must_use]

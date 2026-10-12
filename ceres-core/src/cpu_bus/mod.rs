@@ -45,6 +45,8 @@ impl<A: AudioCallback> Bus for Gb<A> {
         self.flush_deferred_time();
         self.address_bus = addr;
         let val = self.cpu_read_mem(addr);
+        #[cfg(feature = "debug")]
+        self.log_io(addr, val, crate::MemoryAccess::Read, 0);
         self.time_deferred = 4;
         val
     }

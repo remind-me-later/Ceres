@@ -3,6 +3,13 @@
 //! what a debugger needs to stop and inspect the machine (single steps,
 //! memory access without side effects, watchpoints).
 
+mod io_log;
+mod state;
+
+pub use io_log::IoAccess;
+pub(crate) use io_log::IoLog;
+pub use state::{HdmaKind, HdmaState, OamDmaPhase, OamDmaState, PpuState, TimerState};
+
 use {
     crate::{AudioCallback, Gb, Model, PpuEvent, memory::Wram, timing::UNITS_PER_FRAME},
     alloc::{vec, vec::Vec},

@@ -1,5 +1,8 @@
-use crate::{AudioCallback, Gb, GbBuilder, MemoryAccess, Model, Sample, WatchHit};
-use alloc::{boxed::Box, vec};
+use crate::{
+    AudioCallback, Gb, GbBuilder, MemoryAccess, Model, PpuEventKind, Sample, WatchHit,
+    timing::UNITS_PER_FRAME,
+};
+use alloc::{boxed::Box, vec, vec::Vec};
 use core::cell::Cell;
 
 /// Hashes the samples it gets, so two runs can be compared.
@@ -38,14 +41,25 @@ fn rom() -> Box<[u8]> {
     rom.into_boxed_slice()
 }
 
-#[expect(clippy::expect_used, reason = "the test ROM is valid")]
 fn build() -> Gb<Hasher> {
+    build_with(rom())
+}
+
+#[expect(clippy::expect_used, reason = "the test ROM is valid")]
+fn build_with(rom: Box<[u8]>) -> Gb<Hasher> {
     GbBuilder::new(48000, Hasher::default())
         .with_model(Model::DmgB)
         .with_run_bootrom(false)
-        .with_rom(rom())
+        .with_rom(rom)
         .expect("a valid ROM")
         .build()
+}
+
+/// A ROM running `code` from the entry point.
+fn rom_with(code: &[u8]) -> Box<[u8]> {
+    let mut rom = vec![0; 0x8000];
+    rom[0x100..0x100 + code.len()].copy_from_slice(code);
+    rom.into_boxed_slice()
 }
 
 /// What two runs must agree on.
@@ -154,5 +168,89 @@ fn peek_and_poke() {
         gb.peek_mem(0xC000),
         before.wrapping_sub(passes),
         "the patched code ran"
+    );
+}
+
+#[test]
+fn clock_units_count_frames() {
+    let mut gb = build();
+    for _ in 0..3 {
+        gb.run_frame();
+    }
+    // Frames count the same units, and keep what's left of the last one.
+    assert_eq!(
+        gb.clock_units(),
+        3 * u64::from(UNITS_PER_FRAME.cast_unsigned()) + u64::from(gb.units_ran.cast_unsigned())
+    );
+}
+
+#[test]
+fn io_log_matches_the_ppu_trace() {
+    // $0100 ldh a, [LY] ; $0102 jr $0100
+    let mut gb = build_with(rom_with(&[0xF0, 0x44, 0x18, 0xFC]));
+    gb.set_io_log(true);
+    gb.set_ppu_trace(true);
+    gb.run_frame();
+
+    let log: Vec<_> = gb
+        .take_io_log()
+        .into_iter()
+        .filter(|access| access.addr == 0xFF44)
+        .map(|access| {
+            assert_eq!(access.access, MemoryAccess::Read);
+            (access.value, access.line, access.half_dot)
+        })
+        .collect();
+    let trace: Vec<_> = gb
+        .take_ppu_trace()
+        .into_iter()
+        .filter_map(|event| match event.kind {
+            PpuEventKind::LyRead(value) => Some((value, event.timing_line, event.timing_h)),
+            _ => None,
+        })
+        .collect();
+    assert!(log.len() > 1000, "LY was read all frame");
+    assert_eq!(log, trace);
+}
+
+#[test]
+fn timer_state() {
+    // $0100 ld a, $05 ; $0102 ldh [TAC], a ; $0104 jr $0104
+    let mut gb = build_with(rom_with(&[0x3E, 0x05, 0xE0, 0x07, 0x18, 0xFE]));
+    for _ in 0..2000 {
+        gb.step();
+    }
+    let timer = gb.timer_state();
+    assert_eq!(timer.tac & 7, 5);
+    assert_eq!(timer.tima, gb.peek_mem(0xFF05));
+    assert_eq!(timer.div_counter.to_le_bytes()[1], gb.peek_mem(0xFF04));
+}
+
+#[test]
+fn ppu_state() {
+    let mut gb = build();
+    // Where each mode starts on line 10, in half dots.
+    let mut starts = [None; 4];
+    let mut last_mode = None;
+    for _ in 0..40_000 {
+        gb.step();
+        let ppu = gb.ppu_state();
+        assert!(ppu.lcd_on);
+        assert_eq!(ppu.mode, gb.peek_mem(0xFF41) & 3, "STAT shows the mode");
+        if ppu.line == 10 && last_mode != Some(ppu.mode) {
+            starts[usize::from(ppu.mode)].get_or_insert(ppu.half_dot);
+        }
+        last_mode = Some(ppu.mode);
+        assert!((0..912).contains(&ppu.half_dot), "{ppu:?}");
+    }
+    assert!(starts[1].is_none(), "no VBlank on line 10: {starts:?}");
+    let [Some(hblank), _, Some(scan), Some(drawing)] = starts else {
+        unreachable!("every other mode on line 10: {starts:?}");
+    };
+    assert!(scan < drawing && drawing < hblank, "{starts:?}");
+    // Mode 3 lasts 172 dots and more.
+    assert!(
+        (2 * 172..2 * 300).contains(&(hblank - drawing)),
+        "{starts:?}"
     );
 }

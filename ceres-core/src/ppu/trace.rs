@@ -2,7 +2,12 @@
 //! requests, its STAT and LYC writes and the values STAT and LY reads
 //! returned, each with where the display and the timing unit were.
 
-use {super::Ppu, crate::interrupts::Interrupts, alloc::vec::Vec, core::mem};
+use {
+    super::{LCDC_ON_B, Ppu},
+    crate::interrupts::Interrupts,
+    alloc::vec::Vec,
+    core::mem,
+};
 
 /// What happened.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -48,6 +53,19 @@ pub(super) struct Trace {
 }
 
 impl Ppu {
+    /// Where the display is, for a debugger.
+    pub(crate) const fn debug_state(&self) -> crate::PpuState {
+        let (line, half_dot) = self.timing_position();
+        crate::PpuState {
+            lcd_on: self.lcdc & LCDC_ON_B != 0,
+            mode: self.mode() as u8,
+            line,
+            half_dot,
+            pipeline_line: self.d.current_line(),
+            double_speed: self.double_speed(),
+        }
+    }
+
     /// Starts recording events, or stops and forgets them.
     pub(crate) fn set_trace(&mut self, enabled: bool, ints: &Interrupts) {
         self.trace.enabled = enabled;

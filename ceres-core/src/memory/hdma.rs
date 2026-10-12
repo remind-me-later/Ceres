@@ -60,6 +60,22 @@ pub(crate) enum SwitchHdma {
     Requested,
 }
 
+#[cfg(feature = "debug")]
+impl Hdma {
+    pub(crate) const fn debug_state(&self) -> crate::HdmaState {
+        crate::HdmaState {
+            kind: match self.transfer {
+                Transfer::Idle => crate::HdmaKind::Idle,
+                Transfer::General => crate::HdmaKind::General,
+                Transfer::HBlank { requested } => crate::HdmaKind::HBlank { requested },
+            },
+            source: self.src,
+            destination: self.dst,
+            blocks_left: self.steps_left,
+        }
+    }
+}
+
 impl Hdma {
     #[must_use]
     pub(crate) const fn switch_state(&self) -> SwitchHdma {

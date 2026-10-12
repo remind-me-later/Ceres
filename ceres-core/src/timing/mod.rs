@@ -111,6 +111,11 @@ impl<A: AudioCallback> Gb<A> {
         if t_cycles <= 0 {
             return;
         }
+        #[cfg(feature = "debug")]
+        {
+            let units_per_cycle = if self.key1.is_enabled() { 1 } else { 2 };
+            self.clock_units += u64::from(t_cycles.cast_unsigned()) * units_per_cycle;
+        }
         self.advance_cycles(t_cycles);
     }
 
