@@ -28,6 +28,12 @@ version = "*"
 default-features = false
 features = ["v4_10"]
 
+# Translates the WGSL screen shader to GLSL (build.rs).
+[build-dependencies.naga]
+version = "*"
+default-features = false
+features = ["wgsl-in", "glsl-out"]
+
 [lints.clippy]
 allow_attributes = "warn"
 arbitrary_source_item_ordering = "warn"
