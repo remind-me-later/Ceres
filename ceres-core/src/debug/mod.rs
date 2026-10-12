@@ -31,6 +31,10 @@ pub enum MemoryAccess {
 pub struct WatchHit {
     pub addr: u16,
     pub access: MemoryAccess,
+    /// The byte read or written.
+    pub value: u8,
+    /// What the byte was before a write (the value, for a read).
+    pub old: u8,
 }
 
 /// The addresses whose CPU reads or writes stop a debugger, as one bit per
@@ -56,15 +60,18 @@ impl Watchpoints {
         }
     }
 
-    /// Notes a CPU access, if `addr` is watched for it.
+    /// Whether a CPU access to `addr` is watched (and the first since the
+    /// last `take_hit`).
     #[inline]
-    pub(crate) fn check(&mut self, addr: u16, access: MemoryAccess) {
-        if self.any
+    pub(crate) fn is_watched(&self, addr: u16, access: MemoryAccess) -> bool {
+        self.any
             && self.hit.is_none()
             && self.bits(access)[usize::from(addr) / 64] & (1 << (addr % 64)) != 0
-        {
-            self.hit = Some(WatchHit { addr, access });
-        }
+    }
+
+    /// Notes a watched access.
+    pub(crate) const fn hit(&mut self, hit: WatchHit) {
+        self.hit = Some(hit);
     }
 
     fn set(&mut self, addr: u16, access: MemoryAccess, watched: bool) {

@@ -21,7 +21,15 @@ impl<A: AudioCallback> Gb<A> {
     pub(super) fn cpu_write(&mut self, addr: u16, val: u8) {
         #[cfg(feature = "debug")]
         {
-            self.watch.check(addr, crate::MemoryAccess::Write);
+            if self.watch.is_watched(addr, crate::MemoryAccess::Write) {
+                let old = self.peek_mem(addr);
+                self.watch.hit(crate::WatchHit {
+                    addr,
+                    access: crate::MemoryAccess::Write,
+                    value: val,
+                    old,
+                });
+            }
             self.log_io(addr, val, crate::MemoryAccess::Write, self.time_deferred);
         }
         let conflict = conflict::get_conflict(self.model, self.key1.is_enabled(), addr);

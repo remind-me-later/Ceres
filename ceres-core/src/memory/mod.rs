@@ -201,8 +201,6 @@ impl<A: AudioCallback> Gb<A> {
     /// CPU read: like `read_mem`, but OAM accesses can corrupt OAM (DMG).
     #[inline]
     pub fn cpu_read_mem(&mut self, addr: u16) -> u8 {
-        #[cfg(feature = "debug")]
-        self.watch.check(addr, crate::MemoryAccess::Read);
         if (OAM_START..IO_START).contains(&addr) {
             let dma_blocked = self.dma.blocks_oam_read();
             return self.ppu.cpu_read_oam_area(addr, dma_blocked);

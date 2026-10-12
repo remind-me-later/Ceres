@@ -1,5 +1,5 @@
 use crate::{
-    AudioCallback, Gb, GbBuilder, MemoryAccess, Model, PpuEventKind, Sample, WatchHit,
+    AudioCallback, Gb, GbBuilder, MemoryAccess, Model, PpuEventKind, Sample,
     timing::UNITS_PER_FRAME,
 };
 use alloc::{boxed::Box, vec, vec::Vec};
@@ -109,6 +109,7 @@ fn steps_match_frames() {
 }
 
 #[test]
+#[expect(clippy::expect_used, reason = "a test")]
 fn watchpoints() {
     let mut gb = build();
     gb.set_watchpoint(0xC010, MemoryAccess::Write, true);
@@ -119,26 +120,23 @@ fn watchpoints() {
         hit = gb.take_watch_hit();
         hit.is_some()
     }));
+    let write = hit.expect("a write hit");
+    assert_eq!((write.addr, write.access), (0xC010, MemoryAccess::Write));
     assert_eq!(
-        hit,
-        Some(WatchHit {
-            addr: 0xC010,
-            access: MemoryAccess::Write
-        })
+        write.value,
+        write.old.wrapping_add(1),
+        "the loop increments"
     );
+    assert_eq!(gb.peek_mem(0xC010), write.value);
     assert_eq!(gb.cpu_pc(), 0x0106, "stops after `ld [hl+], a`");
 
     assert!(!gb.run_frame_until(|gb| {
         hit = gb.take_watch_hit();
         hit.is_some()
     }));
-    assert_eq!(
-        hit,
-        Some(WatchHit {
-            addr: 0xC020,
-            access: MemoryAccess::Read
-        })
-    );
+    let read = hit.expect("a read hit");
+    assert_eq!((read.addr, read.access), (0xC020, MemoryAccess::Read));
+    assert_eq!((read.value, read.old), (gb.peek_mem(0xC020), read.value));
     assert_eq!(gb.cpu_pc(), 0x0104, "stops after `ld a, [hl]`");
 
     gb.clear_watchpoints();

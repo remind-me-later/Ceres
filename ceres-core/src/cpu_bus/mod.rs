@@ -46,7 +46,17 @@ impl<A: AudioCallback> Bus for Gb<A> {
         self.address_bus = addr;
         let val = self.cpu_read_mem(addr);
         #[cfg(feature = "debug")]
-        self.log_io(addr, val, crate::MemoryAccess::Read, 0);
+        {
+            if self.watch.is_watched(addr, crate::MemoryAccess::Read) {
+                self.watch.hit(crate::WatchHit {
+                    addr,
+                    access: crate::MemoryAccess::Read,
+                    value: val,
+                    old: val,
+                });
+            }
+            self.log_io(addr, val, crate::MemoryAccess::Read, 0);
+        }
         self.time_deferred = 4;
         val
     }
