@@ -31,8 +31,8 @@ use cheats::GameGenie;
 pub use cheats::GameGenieCode;
 #[cfg(feature = "debug")]
 pub use debug::{
-    HdmaKind, HdmaState, IoAccess, MemoryAccess, OamDmaPhase, OamDmaState, PpuState, TimerState,
-    WatchHit,
+    HdmaKind, HdmaState, Instruction, IoAccess, MemoryAccess, OamDmaPhase, OamDmaState, Operand,
+    PpuState, TimerState, WatchHit, disassemble,
 };
 use interrupts::Interrupts;
 use joypad::Joypad;

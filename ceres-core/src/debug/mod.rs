@@ -3,9 +3,11 @@
 //! what a debugger needs to stop and inspect the machine (single steps,
 //! memory access without side effects, watchpoints).
 
+mod disasm;
 mod io_log;
 mod state;
 
+pub use disasm::{Instruction, Operand, disassemble};
 pub use io_log::IoAccess;
 pub(crate) use io_log::IoLog;
 pub use state::{HdmaKind, HdmaState, OamDmaPhase, OamDmaState, PpuState, TimerState};
@@ -313,6 +315,14 @@ impl<A: AudioCallback> Gb<A> {
             _ => false,
         };
         boot_area && self.bootrom.read(addr).is_some()
+    }
+
+    /// The byte at `addr` (0x0000-0x7FFF) of the cartridge's ROM bank
+    /// `bank`, whether it's mapped or not.
+    #[must_use]
+    #[inline]
+    pub fn peek_rom(&self, bank: u32, addr: u16) -> u8 {
+        self.cart.read_rom_bank(bank, addr)
     }
 
     /// The ROM banks mapped at 0x0000-0x3FFF and 0x4000-0x7FFF.

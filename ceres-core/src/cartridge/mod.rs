@@ -233,6 +233,14 @@ impl Cartridge {
         self.rom[self.rom_index(addr)] = val;
     }
 
+    /// The byte at `addr` (0x0000-0x7FFF) of ROM bank `bank`, mapped or not
+    /// (the bank number wraps around the ROM's size).
+    #[cfg(feature = "debug")]
+    pub(crate) fn read_rom_bank(&self, bank: u32, addr: u16) -> u8 {
+        let offset = bank as usize * ROMSize::BANK_SIZE as usize + (addr & 0x3FFF) as usize;
+        self.rom[offset % self.rom.len()]
+    }
+
     /// The ROM banks mapped at 0x0000-0x3FFF and 0x4000-0x7FFF.
     #[cfg(feature = "debug")]
     pub(crate) const fn rom_banks(&self) -> (u32, u32) {

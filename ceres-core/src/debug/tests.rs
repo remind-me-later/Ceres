@@ -153,6 +153,9 @@ fn peek_and_poke() {
     assert_eq!(gb.peek_mem(0x0104), 0x3D);
     assert_eq!(gb.rom_banks(), (0, 1), "the MBC didn't see the write");
 
+    assert_eq!(gb.peek_rom(0, 0x0104), 0x3D, "peek_rom sees the patch");
+    assert_eq!(gb.peek_rom(1, 0x4000), gb.peek_mem(0x4000));
+
     gb.poke_mem(0x8010, 0xAB);
     gb.poke_mem(0xFE00, 0xCD);
     assert_eq!(gb.peek_mem(0x8010), 0xAB);
