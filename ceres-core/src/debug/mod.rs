@@ -4,7 +4,7 @@
 //! memory access without side effects, watchpoints).
 
 use {
-    crate::{AudioCallback, Gb, Model, PpuEvent, timing::UNITS_PER_FRAME},
+    crate::{AudioCallback, Gb, Model, PpuEvent, memory::Wram, timing::UNITS_PER_FRAME},
     alloc::{vec, vec::Vec},
 };
 
@@ -296,11 +296,37 @@ impl<A: AudioCallback> Gb<A> {
         self.model
     }
 
+    /// Whether the CPU reads the boot ROM at `addr`, not the cartridge.
+    #[must_use]
+    #[inline]
+    pub fn boot_rom_at(&self, addr: u16) -> bool {
+        let boot_area = match addr {
+            0x0000..=0x00FF => true,
+            0x0200..=0x08FF => self.model.is_cgb_hardware(),
+            _ => false,
+        };
+        boot_area && self.bootrom.read(addr).is_some()
+    }
+
     /// The ROM banks mapped at 0x0000-0x3FFF and 0x4000-0x7FFF.
     #[must_use]
     #[inline]
     pub const fn rom_banks(&self) -> (u32, u32) {
         self.cart.rom_banks()
+    }
+
+    /// The WRAM bank mapped at 0xD000-0xDFFF (1 but on a CGB in CGB mode).
+    #[must_use]
+    #[inline]
+    pub const fn wram_bank(&self) -> u8 {
+        (self.wram.svbk().bank_offset() / Wram::BANK_SIZE) as u8
+    }
+
+    /// The VRAM bank mapped at 0x8000-0x9FFF.
+    #[must_use]
+    #[inline]
+    pub const fn vram_bank(&self) -> u8 {
+        self.ppu.vram().bank()
     }
 
     /// The cartridge RAM bank mapped at 0xA000-0xBFFF.

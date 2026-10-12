@@ -32,6 +32,13 @@ impl Vram {
         self.vram_at_bank(addr, self.vbk as u8)
     }
 
+    /// The bank the CPU sees.
+    #[cfg(feature = "debug")]
+    #[must_use]
+    pub(crate) const fn bank(&self) -> u8 {
+        self.vbk as u8
+    }
+
     #[must_use]
     pub(crate) const fn read_vbk(&self) -> u8 {
         // The unused bits read 1.

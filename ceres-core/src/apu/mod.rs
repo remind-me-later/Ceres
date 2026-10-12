@@ -156,7 +156,7 @@ pub(crate) struct Apu<A: AudioCallback> {
 }
 
 impl<A: AudioCallback> Apu<A> {
-    #[cfg(test)]
+    #[cfg(all(test, feature = "debug"))]
     pub(crate) const fn audio_callback(&self) -> &A {
         &self.audio_callback
     }
