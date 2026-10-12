@@ -309,8 +309,45 @@ impl<A: AudioCallback> Gb<A> {
     /// and without starting transfers or sounds), then the memories.
     fn load_bess(&mut self, state: &State<'_>, data: &[u8], secs_since_unix_epoch: u64) {
         let core = &state.core;
-        let io = |reg: u8| core.io[usize::from(reg)];
         self.soft_reset();
+        self.load_io_registers(&core.io);
+
+        // The cartridge's registers, in order.
+        for &[lo, hi, val] in state.mbc.as_chunks::<MBC_PAIR_SIZE>().0 {
+            self.write_mem(u16::from_le_bytes([lo, hi]), val);
+        }
+
+        self.load_memories(&core.layout, data);
+        if let Some(xoam) = state.xoam {
+            self.ppu.oam_mut().extra_mut().copy_from_slice(xoam);
+        }
+        if let Some(rtc) = state.rtc {
+            self.load_rtc(rtc, secs_since_unix_epoch);
+        }
+
+        // The interrupts, then the CPU.
+        self.write_mem(io_addr(IF), core.io[usize::from(IF)]);
+        self.ints.write_ie(core.ie);
+        let cpu = &mut self.cpu;
+        cpu.set_pc(core.pc);
+        cpu.set_af(core.af);
+        cpu.set_bc(core.bc);
+        cpu.set_de(core.de);
+        cpu.set_hl(core.hl);
+        cpu.set_sp(core.sp);
+        cpu.set_ime(core.ime);
+        cpu.set_halted(core.execution == Execution::Halted);
+        if core.execution == Execution::Stopped {
+            self.ppu.enter_stop_mode();
+            self.clock.stopped = true;
+            self.ppu.set_cpu_idle(true);
+        }
+    }
+
+    /// Writes the I/O registers of a state as a ROM would, in an order that
+    /// keeps them from interfering, without starting transfers or sounds.
+    fn load_io_registers(&mut self, io: &[u8; IO_SIZE]) {
+        let io = |reg: u8| io[usize::from(reg)];
 
         // KEY0 decides the CGB's mode, BANK whether the boot ROM is mapped.
         if self.model.is_cgb_hardware() {
@@ -383,14 +420,10 @@ impl<A: AudioCallback> Gb<A> {
                 self.write_mem(io_addr(reg), io(reg));
             }
         }
+    }
 
-        // The cartridge's registers, in order.
-        for &[lo, hi, val] in state.mbc.as_chunks::<MBC_PAIR_SIZE>().0 {
-            self.write_mem(u16::from_le_bytes([lo, hi]), val);
-        }
-
-        // The memories.
-        let layout = &core.layout;
+    /// Copies a state's memories.
+    fn load_memories(&mut self, layout: &Layout, data: &[u8]) {
         copy_memory(data, layout.get(Memory::Ram), self.wram.wram_mut());
         copy_memory(
             data,
@@ -412,30 +445,6 @@ impl<A: AudioCallback> Gb<A> {
             };
             self.ppu.bcp_mut().set_raw(&palette(Memory::BgPalette));
             self.ppu.ocp_mut().set_raw(&palette(Memory::ObjPalette));
-        }
-        if let Some(xoam) = state.xoam {
-            self.ppu.oam_mut().extra_mut().copy_from_slice(xoam);
-        }
-        if let Some(rtc) = state.rtc {
-            self.load_rtc(rtc, secs_since_unix_epoch);
-        }
-
-        // The interrupts, then the CPU.
-        self.write_mem(io_addr(IF), io(IF));
-        self.ints.write_ie(core.ie);
-        let cpu = &mut self.cpu;
-        cpu.set_pc(core.pc);
-        cpu.set_af(core.af);
-        cpu.set_bc(core.bc);
-        cpu.set_de(core.de);
-        cpu.set_hl(core.hl);
-        cpu.set_sp(core.sp);
-        cpu.set_ime(core.ime);
-        cpu.set_halted(core.execution == Execution::Halted);
-        if core.execution == Execution::Stopped {
-            self.ppu.enter_stop_mode();
-            self.clock.stopped = true;
-            self.ppu.set_cpu_idle(true);
         }
     }
 

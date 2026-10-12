@@ -1,3 +1,4 @@
+use audioadapter_buffers::direct::InterleavedSlice;
 use cpal::traits::{DeviceTrait as _, HostTrait as _, StreamTrait as _};
 use ringbuf::{
     HeapRb,
@@ -77,18 +78,16 @@ impl AudioProcessor {
         let input_interleaved = vec![0.0; resampler.input_frames_max() * 2];
 
         Ok(Self {
-            resampler,
             input_interleaved,
-            volume,
             consumer,
+            resampler,
+            volume,
         })
     }
 
     fn write_samples_interleaved(&mut self, buffer: &mut [ProcessSample]) {
         // 1. Lock consumer and prepare input
-        let mut cons = if let Ok(cons) = self.consumer.lock() {
-            cons
-        } else {
+        let Ok(mut cons) = self.consumer.lock() else {
             buffer.fill(0.0); // Silence on poisoned lock
             return;
         };
@@ -112,33 +111,29 @@ impl AudioProcessor {
         // 3. Pop Samples and convert to interleaved f32
         let vol = f32::from_bits(self.volume.load(Ordering::Relaxed));
 
+        let scale = |sample: i16| f32::from(sample) / f32::from(i16::MAX) * vol;
         self.input_interleaved
-            .chunks_exact_mut(2)
+            .as_chunks_mut::<2>()
+            .0
+            .iter_mut()
             .zip(cons.pop_iter())
             .take(needed)
-            .for_each(|(interleaved, (l, r))| {
-                interleaved[0] = f32::from(l) / f32::from(i16::MAX) * vol;
-                interleaved[1] = f32::from(r) / f32::from(i16::MAX) * vol;
-            });
+            .for_each(|(frame, (l, r))| *frame = [scale(l), scale(r)]);
 
         std::mem::drop(cons); // Unlock early before heavy resampling
 
         // 4. Resample directly into the output buffer
-        let input_adapter =
-            audioadapter_buffers::direct::InterleavedSlice::new(&self.input_interleaved, 2, needed)
-                .unwrap();
-
-        let mut output_adapter = audioadapter_buffers::direct::InterleavedSlice::new_mut(
-            buffer,
-            2,
-            self.resampler.output_frames_max(),
-        )
-        .unwrap();
-
-        if let Err(e) =
-            self.resampler
-                .process_into_buffer(&input_adapter, &mut output_adapter, None)
-        {
+        let output_frames = self.resampler.output_frames_max();
+        let result = InterleavedSlice::new(&self.input_interleaved, 2, needed)
+            .map_err(|e| e.to_string())
+            .and_then(|input| {
+                let mut output = InterleavedSlice::new_mut(buffer, 2, output_frames)
+                    .map_err(|e| e.to_string())?;
+                self.resampler
+                    .process_into_buffer(&input, &mut output, None)
+                    .map_err(|e| e.to_string())
+            });
+        if let Err(e) = result {
             eprintln!("Resampler error: {e}");
             buffer.fill(0.0); // Silence on error
         }
@@ -188,7 +183,7 @@ impl Stream {
     pub fn mute(&mut self) {
         let vol = f32::from_bits(self.volume.load(Ordering::Relaxed));
         self.volume_before_mute = Some(vol);
-        self.volume.store(0.0f32.to_bits(), Ordering::Relaxed);
+        self.volume.store(0.0_f32.to_bits(), Ordering::Relaxed);
     }
 
     pub fn new() -> Result<Self, Error> {
