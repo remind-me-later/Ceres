@@ -34,6 +34,22 @@ Indicate breaking changes by appending `!` after the type/scope (e.g.,
 `feat(api)!: change memory access API`) or by adding a `BREAKING CHANGE:` footer
 in the commit body.
 
+### AI-Assisted Contributions
+
+Commits written with the help of an AI agent (Claude Code, Copilot, Cursor and
+the like) must say so with an `Assisted-by:` footer naming the tool and, where
+known, the model:
+
+```text
+fix(ppu): correct the mode 3 length with a window
+
+Assisted-by: Claude Code (Claude Opus 5.5)
+```
+
+AI agents working on this repository must add this footer to every commit they
+create. The contributor submitting the change remains responsible for it and
+should review the result as they would their own code.
+
 ### Examples
 
 ```text
