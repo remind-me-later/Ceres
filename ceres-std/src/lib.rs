@@ -4,6 +4,9 @@ mod thread;
 #[cfg(feature = "cli")]
 pub mod cli;
 
+#[cfg(feature = "debugger")]
+pub mod debugger;
+
 #[cfg(feature = "wgpu_renderer")]
 pub mod wgpu_renderer;
 

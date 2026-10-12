@@ -65,6 +65,8 @@ default-features = false
 
 [features]
 cli = ["dep:clap"]
+# A console debugger in the terminal (`GbThread::start_debugger`).
+debugger = ["ceres-core/debug"]
 game_genie = ["ceres-core/game_genie"]
 screenshot = ["dep:image"]
 wgpu_renderer = ["dep:wgpu"]
