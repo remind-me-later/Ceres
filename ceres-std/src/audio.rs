@@ -31,6 +31,9 @@ struct AudioProcessor {
     input_interleaved: Vec<ProcessSample>,
     consumer: Arc<Mutex<RbConsumer>>,
     resampler: rubato::Async<ProcessSample>,
+    /// The last callback ran out of samples. A stopped emulator (a debugger
+    /// breakpoint) runs out on every one: only the first is logged.
+    underrun: bool,
     volume: Arc<AtomicU32>,
 }
 
@@ -81,6 +84,7 @@ impl AudioProcessor {
             input_interleaved,
             consumer,
             resampler,
+            underrun: false,
             volume,
         })
     }
@@ -103,10 +107,14 @@ impl AudioProcessor {
 
         // 2. Underrun Check
         if needed > num_samples {
-            eprintln!("Underrun: needed {needed}, got {num_samples}");
+            if !self.underrun {
+                eprintln!("Underrun: needed {needed}, got {num_samples}");
+            }
+            self.underrun = true;
             buffer.fill(0.0);
             return;
         }
+        self.underrun = false;
 
         // 3. Pop Samples and convert to interleaved f32
         let vol = f32::from_bits(self.volume.load(Ordering::Relaxed));
