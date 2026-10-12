@@ -210,6 +210,11 @@ impl Cartridge {
 
     #[must_use]
     pub(crate) const fn read_rom(&self, addr: u16) -> u8 {
+        self.rom[self.rom_index(addr)]
+    }
+
+    /// Where the ROM byte the CPU sees at `addr` (0x0000-0x7FFF) is kept.
+    const fn rom_index(&self, addr: u16) -> usize {
         let (lo, hi) = self.map.rom;
 
         let bank_addr = match addr {
@@ -218,7 +223,27 @@ impl Cartridge {
             _ => unreachable!(),
         };
 
-        self.rom[bank_addr as usize]
+        bank_addr as usize
+    }
+
+    /// Changes the ROM byte the CPU sees at `addr` (0x0000-0x7FFF), in the
+    /// bank mapped there (a debugger's write: the MBC doesn't see it).
+    #[cfg(feature = "debug")]
+    pub(crate) const fn patch_rom(&mut self, addr: u16, val: u8) {
+        self.rom[self.rom_index(addr)] = val;
+    }
+
+    /// The ROM banks mapped at 0x0000-0x3FFF and 0x4000-0x7FFF.
+    #[cfg(feature = "debug")]
+    pub(crate) const fn rom_banks(&self) -> (u32, u32) {
+        let bank_size = ROMSize::BANK_SIZE as u32;
+        (self.map.rom.0 / bank_size, self.map.rom.1 / bank_size)
+    }
+
+    /// The RAM bank mapped at 0xA000-0xBFFF.
+    #[cfg(feature = "debug")]
+    pub(crate) const fn ram_bank(&self) -> u32 {
+        self.map.ram / RAMSize::BANK_SIZE as u32
     }
 
     #[must_use]

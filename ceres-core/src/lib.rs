@@ -29,6 +29,8 @@ use cartridge::{Cartridge, HEADER_CGB_B, HEADER_CGB_FLAG};
 use cheats::GameGenie;
 #[cfg(feature = "game_genie")]
 pub use cheats::GameGenieCode;
+#[cfg(feature = "debug")]
+pub use debug::{MemoryAccess, WatchHit};
 use interrupts::Interrupts;
 use joypad::Joypad;
 use memory::{
@@ -94,6 +96,9 @@ pub struct Gb<A: AudioCallback> {
     /// Undocumented CGB register at $FF75 (bits 0-3, 7 read as 1; bits 4-6 R/W).
     /// Pan Docs "FF75 — Bits 4-6 (CGB Mode only)".
     undoc_ff75: u8,
+    /// The addresses a debugger watches.
+    #[cfg(feature = "debug")]
+    watch: debug::Watchpoints,
 }
 
 impl<A: AudioCallback> Gb<A> {
@@ -411,6 +416,8 @@ impl<A: AudioCallback> Gb<A> {
             undoc_ff75: 0,
             #[cfg(feature = "game_genie")]
             game_genie: GameGenie::default(),
+            #[cfg(feature = "debug")]
+            watch: debug::Watchpoints::default(),
         }
     }
 

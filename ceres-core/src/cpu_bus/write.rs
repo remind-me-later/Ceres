@@ -19,6 +19,8 @@ impl<A: AudioCallback> Gb<A> {
         reason = "One arm per register class, like SameBoy's `cycle_write`"
     )]
     pub(super) fn cpu_write(&mut self, addr: u16, val: u8) {
+        #[cfg(feature = "debug")]
+        self.watch.check(addr, crate::MemoryAccess::Write);
         let conflict = conflict::get_conflict(self.model, self.key1.is_enabled(), addr);
 
         let pending = self.time_deferred;

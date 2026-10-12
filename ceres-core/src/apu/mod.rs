@@ -156,6 +156,11 @@ pub(crate) struct Apu<A: AudioCallback> {
 }
 
 impl<A: AudioCallback> Apu<A> {
+    #[cfg(test)]
+    pub(crate) const fn audio_callback(&self) -> &A {
+        &self.audio_callback
+    }
+
     pub(crate) fn new(sample_rate: i32, audio_callback: A) -> Self {
         Self {
             audio_callback,
