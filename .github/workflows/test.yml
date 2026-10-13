@@ -22,8 +22,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      # The tests only need the boot ROMs; the other submodules are reference
+      # code and documentation.
+      - name: Check out the boot ROM sources
+        run: git submodule update --init --recursive external/gb-bootroms
 
       - name: Cache RGBDS
         id: cache-rgbds
