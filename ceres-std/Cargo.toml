@@ -45,6 +45,12 @@ features = ["std"]
 version = "*"
 default-features = false
 
+[dependencies.rustyline]
+version = "*"
+default-features = false
+features = ["with-file-history"]
+optional = true
+
 [dependencies.spin_sleep]
 version = "*"
 default-features = false
@@ -66,7 +72,7 @@ default-features = false
 [features]
 cli = ["dep:clap"]
 # A console debugger in the terminal (`GbThread::start_debugger`).
-debugger = ["ceres-core/debug"]
+debugger = ["ceres-core/debug", "dep:rustyline"]
 game_genie = ["ceres-core/game_genie"]
 screenshot = ["dep:image"]
 wgpu_renderer = ["dep:wgpu"]

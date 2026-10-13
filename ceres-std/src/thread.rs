@@ -32,6 +32,12 @@ pub struct GbThread {
     /// Frames emulated so far.
     frame: Arc<AtomicU64>,
     gb: Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
+    /// The console debugger, once started (see `start_debugger`).
+    #[cfg(feature = "debugger")]
+    debugger: Arc<std::sync::OnceLock<Arc<crate::debugger::Debugger<audio::AudioCallbackImpl>>>>,
+    /// The ROM running, for the debugger's symbols.
+    #[cfg(feature = "debugger")]
+    rom_path: Option<std::path::PathBuf>,
     model: ceres_core::Model,
     multiplier: Arc<AtomicU32>,
     pause_condvar: Arc<(Mutex<bool>, Condvar)>,
@@ -92,8 +98,45 @@ impl GbThread {
         if let Ok(mut gb) = self.gb.lock() {
             *gb = gb_new;
         }
+        #[cfg(feature = "debugger")]
+        {
+            self.rom_path = Some(rom_path.to_path_buf());
+            if let Some(debugger) = self.debugger.get() {
+                Self::announce_symbols(debugger.load_symbols(Some(rom_path)));
+            }
+        }
 
         Ok(())
+    }
+
+    /// Starts the console debugger on the terminal: the game runs on, and
+    /// Ctrl-C there stops it. `history` keeps the commands between runs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the terminal can't be used.
+    #[cfg(feature = "debugger")]
+    #[inline]
+    pub fn start_debugger(&self, history: Option<std::path::PathBuf>) -> Result<(), Error> {
+        if self.debugger.get().is_some() {
+            return Ok(());
+        }
+        let debugger = crate::debugger::Debugger::new(Arc::clone(&self.gb));
+        Self::announce_symbols(debugger.load_symbols(self.rom_path.as_deref()));
+        crate::debugger::spawn(Arc::clone(&debugger), history)?;
+        // Every stop runs the audio out of samples: not worth a message over
+        // the console's prompt.
+        self.audio_stream.report_underruns(false);
+        // The emulator thread checks every instruction from now on.
+        self.debugger.get_or_init(|| debugger);
+        Ok(())
+    }
+
+    #[cfg(feature = "debugger")]
+    fn announce_symbols(count: Option<usize>) {
+        if let Some(count) = count {
+            println!("debugger: {count} symbols");
+        }
     }
 
     /// Copies the pixel data in RGBA format to the provided buffer.
@@ -239,6 +282,9 @@ impl GbThread {
         exiting: &Arc<AtomicBool>,
         pause_condvar: &Arc<(Mutex<bool>, Condvar)>,
         multiplier: &Arc<AtomicU32>,
+        #[cfg(feature = "debugger")] debugger: &std::sync::OnceLock<
+            Arc<crate::debugger::Debugger<audio::AudioCallbackImpl>>,
+        >,
         mut gilrs: gilrs::Gilrs,
     ) {
         let mut next_render_time = std::time::Instant::now();
@@ -255,6 +301,15 @@ impl GbThread {
                     // Reset timing after pause to avoid burst catch-up
                     next_render_time = std::time::Instant::now();
                 }
+            }
+
+            // Stopped in the debugger: wait without the machine's lock, so
+            // the console can look at it.
+            #[cfg(feature = "debugger")]
+            if let Some(debugger) = debugger.get()
+                && debugger.wait_while_stopped(exiting)
+            {
+                next_render_time = std::time::Instant::now();
             }
 
             if exiting.load(Relaxed) {
@@ -302,6 +357,17 @@ impl GbThread {
                     }
                 }
 
+                #[cfg(feature = "debugger")]
+                if let Some(debugger) = debugger.get() {
+                    // A frame the debugger stopped isn't over: no frame to
+                    // show, no time to wait.
+                    if !debugger.run_frame(&mut gb) {
+                        continue;
+                    }
+                } else {
+                    gb.run_frame();
+                }
+                #[cfg(not(feature = "debugger"))]
                 gb.run_frame();
                 frame.fetch_add(1, Relaxed);
             }
@@ -382,6 +448,8 @@ impl GbThread {
         let exiting = Arc::new(AtomicBool::new(false));
         let multiplier = Arc::new(AtomicU32::new(1));
         let frame = Arc::new(AtomicU64::new(0));
+        #[cfg(feature = "debugger")]
+        let debugger = Arc::new(std::sync::OnceLock::new());
 
         // FIXME: use proper user facing config options
         let gilrs = gilrs::Gilrs::new().map_err(|e| Error::GamePadError(e.to_string()))?;
@@ -393,10 +461,21 @@ impl GbThread {
             let pause_condvar = Arc::clone(&pause_condvar);
             let multiplier = Arc::clone(&multiplier);
             let frame = Arc::clone(&frame);
+            #[cfg(feature = "debugger")]
+            let debugger = Arc::clone(&debugger);
 
             // std::thread::spawn(move || gb_loop(gb, exit, pause_thread))
             thread_builder.spawn_with_priority(thread_priority::ThreadPriority::Max, move |_| {
-                Self::gb_loop(&gb, &frame, &exit, &pause_condvar, &multiplier, gilrs);
+                Self::gb_loop(
+                    &gb,
+                    &frame,
+                    &exit,
+                    &pause_condvar,
+                    &multiplier,
+                    #[cfg(feature = "debugger")]
+                    &debugger,
+                    gilrs,
+                );
             })?
         };
 
@@ -404,6 +483,10 @@ impl GbThread {
             gb,
             exiting,
             frame,
+            #[cfg(feature = "debugger")]
+            debugger,
+            #[cfg(feature = "debugger")]
+            rom_path: rom_path.map(Path::to_path_buf),
             pause_condvar,
             thread_handle: Some(thread_handle),
             audio_stream,

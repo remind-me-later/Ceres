@@ -34,6 +34,9 @@ struct AudioProcessor {
     /// The last callback ran out of samples. A stopped emulator (a debugger
     /// breakpoint) runs out on every one: only the first is logged.
     underrun: bool,
+    /// Whether to log underruns: not while a debugger stops the game,
+    /// which runs out of samples on every stop.
+    report_underruns: Arc<AtomicBool>,
     volume: Arc<AtomicU32>,
 }
 
@@ -59,7 +62,11 @@ impl AudioProcessor {
             .clamp(ORIG_RATIO * 0.85, ORIG_RATIO * MAX_RESAMPLE_RATIO_RELATIVE)
     }
 
-    fn new(volume: Arc<AtomicU32>, consumer: Arc<Mutex<RbConsumer>>) -> Result<Self, Error> {
+    fn new(
+        volume: Arc<AtomicU32>,
+        consumer: Arc<Mutex<RbConsumer>>,
+        report_underruns: Arc<AtomicBool>,
+    ) -> Result<Self, Error> {
         let chunk_size = BUFFER_SIZE as usize;
 
         let resampler = rubato::Async::<ProcessSample>::new_sinc(
@@ -85,6 +92,7 @@ impl AudioProcessor {
             consumer,
             resampler,
             underrun: false,
+            report_underruns,
             volume,
         })
     }
@@ -107,7 +115,7 @@ impl AudioProcessor {
 
         // 2. Underrun Check
         if needed > num_samples {
-            if !self.underrun {
+            if !self.underrun && self.report_underruns.load(Ordering::Relaxed) {
                 eprintln!("Underrun: needed {needed}, got {num_samples}");
             }
             self.underrun = true;
@@ -175,6 +183,8 @@ pub struct Stream {
     /// cpal doesn't start streams on creation, and pausing one that never
     /// played is an error in some backends (ALSA).
     playing: AtomicBool,
+    #[cfg(feature = "debugger")]
+    report_underruns: Arc<AtomicBool>,
     ring_buffer: AudioCallbackImpl,
     sample_rate: i32,
     stream: cpal::Stream,
@@ -207,7 +217,12 @@ impl Stream {
         let prod = Arc::new(Mutex::new(prod));
         let cons = Arc::new(Mutex::new(cons));
 
-        let mut audio_processor = AudioProcessor::new(processor_volume, Arc::clone(&cons))?;
+        let report_underruns = Arc::new(AtomicBool::new(true));
+        let mut audio_processor = AudioProcessor::new(
+            processor_volume,
+            Arc::clone(&cons),
+            Arc::clone(&report_underruns),
+        )?;
 
         let host = cpal::default_host();
         let device = host.default_output_device().ok_or(Error::GetOutputDevice)?;
@@ -232,10 +247,18 @@ impl Stream {
             ring_buffer: AudioCallbackImpl::new(prod),
             consumer: cons,
             playing: AtomicBool::new(false),
+            #[cfg(feature = "debugger")]
+            report_underruns,
             volume,
             volume_before_mute: None,
             sample_rate: SAMPLE_RATE,
         })
+    }
+
+    /// Whether running out of samples is logged.
+    #[cfg(feature = "debugger")]
+    pub fn report_underruns(&self, report: bool) {
+        self.report_underruns.store(report, Ordering::Relaxed);
     }
 
     pub fn pause(&self) -> Result<(), Error> {

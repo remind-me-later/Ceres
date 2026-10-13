@@ -30,14 +30,19 @@ fn main() -> anyhow::Result<()> {
         CERES_STYLIZED,
         options,
         Box::new(move |cc| {
-            Ok(Box::new(App::new(
+            let app = App::new(
                 cc,
                 args.model(),
                 project_dirs,
                 args.file(),
                 args.shader_option(),
                 args.pixel_perfect(),
-            )?))
+            )?;
+            #[cfg(feature = "debugger")]
+            if args.debugger() {
+                app.start_debugger()?;
+            }
+            Ok(Box::new(app))
         }),
     )
     .map_err(Into::into)

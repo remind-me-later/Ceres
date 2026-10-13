@@ -125,6 +125,14 @@ impl App<'_> {
         })
     }
 
+    /// Starts the console debugger on the terminal.
+    #[cfg(feature = "debugger")]
+    pub fn start_debugger(&self) -> anyhow::Result<()> {
+        let history = self.project_dirs.data_dir().join("debugger_history");
+        self.thread.start_debugger(Some(history))?;
+        Ok(())
+    }
+
     fn save_data(&self) -> anyhow::Result<()> {
         std::fs::create_dir_all(self.project_dirs.data_dir())?;
         if let Some(sav_path) = &self.sav_path {

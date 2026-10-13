@@ -18,6 +18,14 @@ pub struct App {
 }
 
 impl App {
+    /// Starts the console debugger on the terminal.
+    #[cfg(feature = "debugger")]
+    pub fn start_debugger(&self) -> anyhow::Result<()> {
+        let history = self.project_dirs.data_dir().join("debugger_history");
+        self.thread.start_debugger(Some(history))?;
+        Ok(())
+    }
+
     pub fn new(
         cc: &eframe::CreationContext<'_>,
         model: ceres_std::Model,
