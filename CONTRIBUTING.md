@@ -115,21 +115,29 @@ cargo test --package ceres-test-runner -- --ignored
 
 ### CI/CD Pipeline
 
-GitHub Actions automatically runs tests on every push. It installs the RGBDS
-toolchain, caches dependencies and test ROMs, and runs tests for `ceres-core`
-and `ceres-test-runner`.
+GitHub Actions runs the tests on pushes and pull requests to `main`. It
+installs the RGBDS toolchain, caches dependencies and test ROMs, runs the
+tests for `ceres-core` and `ceres-test-runner` with coverage, and uploads the
+coverage to [Codecov](https://codecov.io/gh/remind-me-later/Ceres).
 
 ### Code Coverage
 
-To analyze test coverage using `cargo-llvm-cov`:
+To analyze test coverage locally with `cargo-llvm-cov` and `cargo-nextest`:
 
 ```bash
-# Install cargo-llvm-cov
-cargo install cargo-llvm-cov
+# Install cargo-llvm-cov and nextest (Rust's llvm-tools must match rustc's
+# LLVM: `rustup component add llvm-tools-preview`, or the system LLVM on
+# distributions whose rustc uses it)
+cargo install cargo-llvm-cov cargo-nextest
 
 # Generate HTML report
-cargo llvm-cov --package ceres-core --package ceres-test-runner --html
+cargo llvm-cov nextest --release --package ceres-core \
+    --package ceres-test-runner --html
 
 # Open report
 xdg-open target/llvm-cov/html/index.html
 ```
+
+Run it in release with nextest, as above. A debug build makes the ROM tests
+very slow, and test threads sharing one process fight over the coverage
+counters: nextest runs each test in its own process.

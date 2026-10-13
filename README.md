@@ -1,5 +1,7 @@
 # Ceres
 
+[![codecov](https://codecov.io/gh/remind-me-later/Ceres/branch/main/graph/badge.svg)](https://codecov.io/gh/remind-me-later/Ceres)
+
 Some kind of GameBoy/Color emulator written in rust.
 
 ![logo](media/logo/ceres.webp)
