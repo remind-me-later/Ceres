@@ -7,7 +7,9 @@
 //!   watched byte had and gets).
 //! - `[x]` is the byte at x, `{x}` the little-endian word.
 //! - `bank:addr` gives an address a bank: reading `[$3A:$4000]` reads ROM
-//!   bank 3A whether it's mapped or not. A symbol has its bank.
+//!   bank 3A whether it's mapped or not. A symbol has its bank. Written as
+//!   symbol files do, `3A:4000` (four hex digits after the colon) or
+//!   `BOOT:0064`, both parts are hex.
 //! - Operators bind as in C (SameBoy's own order is unusual), with `:`
 //!   tightest: unary `- ! ~`, `* / %`, `+ -`, `<< >>`, `< <= > >=`,
 //!   `== !=`, `&`, `^`, `|`, `&&`, `||`, then `=`, which assigns a register,
@@ -160,7 +162,8 @@ pub enum UnOp {
 pub enum Expr {
     Number(u16),
     Register(Register),
-    Symbol(Value),
+    /// An address with its bank: a symbol, or `BB:AAAA`.
+    Address(Value),
     Old,
     New,
     Byte(Box<Self>),
@@ -174,6 +177,8 @@ pub enum Expr {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Token {
     Number(u16),
+    /// `BB:AAAA`, as symbol files write addresses.
+    Address(Value),
     Name(String),
     /// An operator or a bracket.
     Punct(&'static str),
@@ -195,7 +200,9 @@ fn lex(text: &str) -> Result<Vec<Token>, String> {
     while let Some(&first) = rest.first() {
         let binary_number =
             first == b'%' && !after_operand(&tokens) && matches!(rest.get(1), Some(b'0' | b'1'));
-        let (token, len) = if first == b'$' || first.is_ascii_digit() || binary_number {
+        let (token, len) = if let Some((address, len)) = banked_address(rest) {
+            (Token::Address(address), len)
+        } else if first == b'$' || first.is_ascii_digit() || binary_number {
             number(rest)?
         } else if first.is_ascii_alphabetic() || first == b'_' || first == b'.' {
             let len = rest
@@ -217,6 +224,32 @@ fn lex(text: &str) -> Result<Vec<Token>, String> {
     Ok(tokens)
 }
 
+/// `BB:AAAA` or `BOOT:AAAA` at the start of `text`, and its length: hex,
+/// four digits after the colon, as symbol files write addresses.
+fn banked_address(text: &[u8]) -> Option<(Value, usize)> {
+    let colon = text.iter().position(|&byte| byte == b':')?;
+    let bank = Bank::parse(&ascii(&text[..colon]))?;
+    let addr = text.get(colon + 1..colon + 5)?;
+    if !addr.iter().all(u8::is_ascii_hexdigit) {
+        return None;
+    }
+    // Not the start of a longer name or number.
+    if text
+        .get(colon + 5)
+        .is_some_and(|&byte| byte.is_ascii_alphanumeric() || b"_.@#$".contains(&byte))
+    {
+        return None;
+    }
+    let value = u16::from_str_radix(&ascii(addr), 16).ok()?;
+    Some((
+        Value {
+            bank: Some(bank),
+            value,
+        },
+        colon + 5,
+    ))
+}
+
 /// ASCII bytes as a string.
 fn ascii(bytes: &[u8]) -> String {
     bytes.iter().map(|&byte| char::from(byte)).collect()
@@ -226,7 +259,7 @@ fn ascii(bytes: &[u8]) -> String {
 fn after_operand(tokens: &[Token]) -> bool {
     matches!(
         tokens.last(),
-        Some(Token::Number(_) | Token::Name(_) | Token::Punct(")" | "]" | "}"))
+        Some(Token::Number(_) | Token::Address(_) | Token::Name(_) | Token::Punct(")" | "]" | "}"))
     )
 }
 
@@ -307,6 +340,7 @@ impl Parser<'_> {
     fn operand(&mut self) -> Result<Expr, String> {
         match self.next() {
             Some(Token::Number(value)) => Ok(Expr::Number(value)),
+            Some(Token::Address(address)) => Ok(Expr::Address(address)),
             Some(Token::Name(name)) => self.name(&name),
             Some(Token::Punct("(")) => {
                 let inner = self.expr(0)?;
@@ -349,7 +383,7 @@ impl Parser<'_> {
             .symbols
             .and_then(|symbols| symbols.find(name))
             .ok_or_else(|| format!("no register or symbol `{name}`"))?;
-        Ok(Expr::Symbol(Value {
+        Ok(Expr::Address(Value {
             bank: Some(symbol.bank),
             value: symbol.addr,
         }))
@@ -413,6 +447,7 @@ impl Expr {
             None => Ok(expr),
             Some(Token::Punct(punct)) => Err(format!("unexpected `{punct}`")),
             Some(Token::Number(value)) => Err(format!("unexpected {value}")),
+            Some(Token::Address(address)) => Err(format!("unexpected {:04X}", address.value)),
             Some(Token::Name(name)) => Err(format!("unexpected `{name}`")),
         }
     }
@@ -433,7 +468,7 @@ impl Expr {
         Ok(match self {
             Self::Number(value) => Value::plain(*value),
             Self::Register(register) => Value::plain(register.read(gb)),
-            Self::Symbol(value) => *value,
+            Self::Address(value) => *value,
             Self::Old | Self::New => {
                 let watched = watched.ok_or("`old` and `new` are for watchpoint conditions")?;
                 Value::plain(u16::from(if matches!(self, Self::Old) {
@@ -674,6 +709,25 @@ mod tests {
         // Bank 2 isn't mapped (bank 1 is), but ROM can be read anyway.
         assert_eq!(eval("[BankTwo]", &mut gb), Ok(0x22));
         assert_eq!(eval("[2:$4000]", &mut gb), Ok(0x22));
+        // As symbol files write them: hex.
+        assert_eq!(eval("[02:4000]", &mut gb), Ok(0x22));
+        let address = Expr::parse("3A:4579", None).unwrap();
+        assert_eq!(
+            address.eval(&mut gb, None),
+            Ok(Value {
+                bank: Some(Bank::Number(0x3A)),
+                value: 0x4579
+            })
+        );
+        assert_eq!(
+            Expr::parse("BOOT:0064", None).unwrap().eval(&mut gb, None),
+            Ok(Value {
+                bank: Some(Bank::Boot),
+                value: 0x64
+            })
+        );
+        // Not four hex digits: a bank in decimal.
+        assert_eq!(eval("10:20", &mut gb), Ok(20));
         assert_eq!(eval("[$4000]", &mut gb), Ok(0));
         // Other banked memory can't be.
         assert_eq!(
