@@ -38,6 +38,28 @@ use {
 /// Half dots per line.
 const LINE_H: i32 = 2 * LINE_LENGTH;
 
+/// A register write on its way to the timing unit.
+#[derive(Clone, Copy)]
+struct PendingWrite {
+    value: u8,
+    half_dots_left: u8,
+}
+
+impl PendingWrite {
+    /// The write a half dot later. It stays at 1 while it waits for
+    /// something else (the CGB's LY=LYC sample).
+    const fn ticked(self) -> Self {
+        Self {
+            half_dots_left: if self.half_dots_left > 1 {
+                self.half_dots_left - 1
+            } else {
+                1
+            },
+            ..self
+        }
+    }
+}
+
 /// Where the LCD's clock is.
 #[derive(Clone, Copy)]
 pub(in crate::ppu) struct ClockPosition {
@@ -149,10 +171,10 @@ pub(super) struct LcdTiming {
     lyc: u8,
     /// `SUKO`: the interrupt line.
     stat_line: bool,
-    /// A written LYC and the half dots until it reaches the comparison.
-    lyc_pending: Option<(u8, u8)>,
-    /// Written enables and the half dots until they reach the line (CGB).
-    stat_pending: Option<(u8, u8)>,
+    /// A written LYC on its way to the comparison.
+    lyc_pending: Option<PendingWrite>,
+    /// Written enables on their way to the line (CGB).
+    stat_pending: Option<PendingWrite>,
     /// An input of the line changed outside a unit without the line being
     /// re-evaluated.
     dirty: bool,
@@ -260,15 +282,15 @@ impl LcdTiming {
         }
         let sample = self.h & 7 == LY_MATCH_PHASE;
         let mut rose = false;
-        if let Some((lyc, left)) = self.lyc_pending {
+        if let Some(write) = self.lyc_pending {
             // The CGB's comparison takes a new LYC only at a sample.
-            if left <= 1 && (sample || !self.phases.cgb) {
-                self.lyc = lyc;
+            if write.half_dots_left <= 1 && (sample || !self.phases.cgb) {
+                self.lyc = write.value;
                 self.lyc_pending = None;
                 self.ly_match = self.ly == self.lyc;
                 rose |= self.update_line();
             } else {
-                self.lyc_pending = Some((lyc, if left > 1 { left - 1 } else { 1 }));
+                self.lyc_pending = Some(write.ticked());
             }
         }
         if sample && self.ly_match != (self.ly == self.lyc) {
@@ -285,13 +307,13 @@ impl LcdTiming {
         // LY=LYC dropping as VBlank starts leaves the line low in between.
         // Written enables (CGB) land with it: the line sees both at once.
         changed = false;
-        if let Some((enables, left)) = self.stat_pending {
-            if left <= 1 {
-                self.enables = enables;
+        if let Some(write) = self.stat_pending {
+            if write.half_dots_left <= 1 {
+                self.enables = write.value;
                 self.stat_pending = None;
                 changed = true;
             } else {
-                self.stat_pending = Some((enables, left - 1));
+                self.stat_pending = Some(write.ticked());
             }
         }
         if self.h == VBLANK_H {
@@ -503,12 +525,15 @@ impl Ppu {
         let t = &mut self.d.timing;
         let enables = val & STAT_ENABLES;
         // A write still on its way lands now.
-        if let Some((pending, _)) = t.stat_pending.take() {
-            t.enables = pending;
+        if let Some(write) = t.stat_pending.take() {
+            t.enables = write.value;
             t.dirty = true;
         }
         if t.on && delay > 0 {
-            t.stat_pending = Some((enables, delay));
+            t.stat_pending = Some(PendingWrite {
+                value: enables,
+                half_dots_left: delay,
+            });
             return;
         }
         let glitch = !t.phases.cgb && t.line_for(STAT_ENABLES) && !t.stat_line;
@@ -526,7 +551,10 @@ impl Ppu {
         let delay = self.delays().lyc_write;
         let t = &mut self.d.timing;
         if t.on {
-            t.lyc_pending = Some((val, delay));
+            t.lyc_pending = Some(PendingWrite {
+                value: val,
+                half_dots_left: delay,
+            });
         } else {
             t.lyc = val;
             t.lyc_pending = None;
