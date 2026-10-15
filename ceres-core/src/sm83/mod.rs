@@ -24,6 +24,81 @@ const NF: u16 = 0x40;
 const HF: u16 = 0x20;
 const CF: u16 = 0x10;
 
+/// A register pair, as an opcode names it.
+#[derive(Clone, Copy)]
+enum Pair {
+    Af,
+    Bc,
+    De,
+    Hl,
+    Sp,
+}
+
+impl Pair {
+    /// The pair in bits 4-5 of `op`: BC, DE, HL or SP.
+    const fn from_op(op: u8) -> Self {
+        match (op >> 4) & 3 {
+            0 => Self::Bc,
+            1 => Self::De,
+            2 => Self::Hl,
+            _ => Self::Sp,
+        }
+    }
+
+    /// The pair in bits 4-5 of `op` with AF in place of SP (PUSH and POP).
+    const fn from_push_pop(op: u8) -> Self {
+        match Self::from_op(op) {
+            Self::Sp => Self::Af,
+            pair => pair,
+        }
+    }
+}
+
+/// An 8-bit operand, as bits 0-2 of an opcode name it (bits 3-5 for the
+/// destination of LD r,r'): a register, or the byte at HL.
+#[derive(Clone, Copy)]
+enum Reg8 {
+    B,
+    C,
+    D,
+    E,
+    H,
+    L,
+    HlIndirect,
+    A,
+}
+
+impl Reg8 {
+    const fn from_op(op: u8) -> Self {
+        match op & 7 {
+            0 => Self::B,
+            1 => Self::C,
+            2 => Self::D,
+            3 => Self::E,
+            4 => Self::H,
+            5 => Self::L,
+            6 => Self::HlIndirect,
+            _ => Self::A,
+        }
+    }
+}
+
+const fn high(pair: u16) -> u8 {
+    pair.to_le_bytes()[1]
+}
+
+const fn low(pair: u16) -> u8 {
+    pair.to_le_bytes()[0]
+}
+
+const fn with_high(pair: u16, val: u8) -> u16 {
+    u16::from_le_bytes([low(pair), val])
+}
+
+const fn with_low(pair: u16, val: u8) -> u16 {
+    u16::from_le_bytes([val, high(pair)])
+}
+
 #[expect(clippy::struct_excessive_bools, reason = "Independent CPU state flags")]
 #[derive(Default)]
 pub(crate) struct Sm83 {
@@ -54,7 +129,7 @@ impl Sm83 {
     }
 
     pub(crate) const fn a(&self) -> u8 {
-        (self.af >> 8) as u8
+        high(self.af)
     }
 
     pub(crate) const fn af(&self) -> u16 {
@@ -293,26 +368,32 @@ impl Sm83 {
     }
 
     #[must_use]
+    #[expect(
+        clippy::inline_always,
+        reason = "about 2% of a frame's time: the `Reg8` match stops it being inlined"
+    )]
+    #[inline(always)]
     fn get_r(&self, bus: &mut impl Bus, op: u8) -> u8 {
-        let (id, lo) = Self::operand(op);
-        if id == 0 {
-            if lo { self.a() } else { bus.read(self.hl) }
-        } else if lo {
-            (self.get_rr(id) & 0xFF) as u8
-        } else {
-            (self.get_rr(id) >> 8) as u8
+        match Reg8::from_op(op) {
+            Reg8::B => high(self.bc),
+            Reg8::C => low(self.bc),
+            Reg8::D => high(self.de),
+            Reg8::E => low(self.de),
+            Reg8::H => high(self.hl),
+            Reg8::L => low(self.hl),
+            Reg8::HlIndirect => bus.read(self.hl),
+            Reg8::A => self.a(),
         }
     }
 
     #[must_use]
-    const fn get_rr(&self, id: u8) -> u16 {
-        match id {
-            0 => self.af,
-            1 => self.bc,
-            2 => self.de,
-            3 => self.hl,
-            4 => self.sp,
-            _ => unreachable!(),
+    const fn get_rr(&self, pair: Pair) -> u16 {
+        match pair {
+            Pair::Af => self.af,
+            Pair::Bc => self.bc,
+            Pair::De => self.de,
+            Pair::Hl => self.hl,
+            Pair::Sp => self.sp,
         }
     }
 
@@ -349,29 +430,6 @@ impl Sm83 {
             self.af |= CF;
         }
         sp.wrapping_add(offset)
-    }
-
-    /// The register pair in bits 4-5 of `op`: BC, DE, HL or SP (ids 1 to 4,
-    /// as in `get_rr`).
-    #[must_use]
-    const fn pair_id(op: u8) -> u8 {
-        (op >> 4) + 1
-    }
-
-    /// The pair in bits 4-5 of `op` with AF (id 0) in place of SP (PUSH and
-    /// POP).
-    #[must_use]
-    const fn pair_id_af(op: u8) -> u8 {
-        Self::pair_id(op) & 0x03
-    }
-
-    /// Where the 8-bit operand in bits 0-2 of `op` is (`op >> 3` for the
-    /// destination of LD r,r'): B C D E H L (HL) A are the high and low
-    /// halves of the pairs 1, 2, 3 and 0, (HL) taking the place of F. Returns
-    /// the pair id and whether it is the low half.
-    #[must_use]
-    const fn operand(op: u8) -> (u8, bool) {
-        (((op >> 1) + 1) & 3, op & 1 != 0)
     }
 
     #[must_use]
@@ -413,33 +471,32 @@ impl Sm83 {
         }
     }
 
-    fn set_a(&mut self, val: u8) {
-        self.af = (u16::from(val) << 8) | (self.af & 0xFF);
+    const fn set_a(&mut self, val: u8) {
+        self.af = with_high(self.af, val);
     }
 
+    #[expect(clippy::inline_always, reason = "as `get_r`")]
+    #[inline(always)]
     fn set_r(&mut self, bus: &mut impl Bus, op: u8, val: u8) {
-        let (id, lo) = Self::operand(op);
-        if id == 0 {
-            if lo {
-                self.set_a(val);
-            } else {
-                bus.write(self.hl, val);
-            }
-        } else if lo {
-            self.set_rr(id, u16::from(val) | self.get_rr(id) & 0xFF00);
-        } else {
-            self.set_rr(id, (u16::from(val) << 8) | self.get_rr(id) & 0xFF);
+        match Reg8::from_op(op) {
+            Reg8::B => self.bc = with_high(self.bc, val),
+            Reg8::C => self.bc = with_low(self.bc, val),
+            Reg8::D => self.de = with_high(self.de, val),
+            Reg8::E => self.de = with_low(self.de, val),
+            Reg8::H => self.hl = with_high(self.hl, val),
+            Reg8::L => self.hl = with_low(self.hl, val),
+            Reg8::HlIndirect => bus.write(self.hl, val),
+            Reg8::A => self.set_a(val),
         }
     }
 
-    fn set_rr(&mut self, id: u8, val: u16) {
-        match id {
-            0 => self.af = val,
-            1 => self.bc = val,
-            2 => self.de = val,
-            3 => self.hl = val,
-            4 => self.sp = val,
-            _ => unreachable!(),
+    const fn set_rr(&mut self, pair: Pair, val: u16) {
+        match pair {
+            Pair::Af => self.af = val,
+            Pair::Bc => self.bc = val,
+            Pair::De => self.de = val,
+            Pair::Hl => self.hl = val,
+            Pair::Sp => self.sp = val,
         }
     }
 }

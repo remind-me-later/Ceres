@@ -2,7 +2,7 @@
 
 use crate::memory::{IO_START, P1, io_addr};
 
-use super::{Bus, CF, HF, NF, Sm83, ZF};
+use super::{Bus, CF, HF, NF, Pair, Sm83, ZF};
 
 // Instructions. In the names, r is an 8-bit register or (HL) (see
 // `operand`) and rr a pair, dhl is (HL), d8 and d16 are immediates, a8 and
@@ -117,9 +117,9 @@ impl Sm83 {
     }
 
     fn add_hl_rr(&mut self, bus: &mut impl Bus, op: u8) {
-        let id = Self::pair_id(op);
+        let pair = Pair::from_op(op);
         let hl = self.hl;
-        let rr = self.get_rr(id);
+        let rr = self.get_rr(pair);
         let (res, carry) = hl.overflowing_add(rr);
         self.hl = res;
 
@@ -232,9 +232,9 @@ impl Sm83 {
     }
 
     fn dec_rr(&mut self, bus: &mut impl Bus, op: u8) {
-        let id = Self::pair_id(op);
-        bus.tick_oam_bug(self.get_rr(id));
-        self.set_rr(id, self.get_rr(id).wrapping_sub(1));
+        let pair = Pair::from_op(op);
+        bus.tick_oam_bug(self.get_rr(pair));
+        self.set_rr(pair, self.get_rr(pair).wrapping_sub(1));
     }
 
     const fn di(&mut self) {
@@ -303,9 +303,9 @@ impl Sm83 {
     }
 
     fn inc_rr(&mut self, bus: &mut impl Bus, op: u8) {
-        let id = Self::pair_id(op);
-        bus.tick_oam_bug(self.get_rr(id));
-        self.set_rr(id, self.get_rr(id).wrapping_add(1));
+        let pair = Pair::from_op(op);
+        bus.tick_oam_bug(self.get_rr(pair));
+        self.set_rr(pair, self.get_rr(pair).wrapping_add(1));
     }
 
     fn jp_a16(&mut self, bus: &mut impl Bus) {
@@ -366,7 +366,7 @@ impl Sm83 {
     }
 
     fn ld_a_drr(&mut self, bus: &mut impl Bus, op: u8) {
-        let addr = self.get_rr(Self::pair_id(op));
+        let addr = self.get_rr(Pair::from_op(op));
         let val = bus.read(addr);
         self.set_a(val);
     }
@@ -413,8 +413,8 @@ impl Sm83 {
     }
 
     fn ld_drr_a(&self, bus: &mut impl Bus, op: u8) {
-        let id = Self::pair_id(op);
-        let addr = self.get_rr(id);
+        let pair = Pair::from_op(op);
+        let addr = self.get_rr(pair);
         bus.write(addr, self.a());
     }
 
@@ -431,9 +431,9 @@ impl Sm83 {
     }
 
     fn ld_rr_d16(&mut self, bus: &mut impl Bus, op: u8) {
-        let id = Self::pair_id(op);
+        let pair = Pair::from_op(op);
         let imm = self.imm16(bus);
-        self.set_rr(id, imm);
+        self.set_rr(pair, imm);
     }
 
     fn ldh_a_da8(&mut self, bus: &mut impl Bus) {
@@ -462,14 +462,14 @@ impl Sm83 {
 
     fn pop_rr(&mut self, bus: &mut impl Bus, op: u8) {
         let val = self.pop(bus);
-        let id = Self::pair_id_af(op);
-        self.set_rr(id, val);
+        let pair = Pair::from_push_pop(op);
+        self.set_rr(pair, val);
         self.af &= 0xFFF0;
     }
 
     fn push_rr(&mut self, bus: &mut impl Bus, op: u8) {
-        let id = Self::pair_id_af(op);
-        self.push(bus, self.get_rr(id));
+        let pair = Pair::from_push_pop(op);
+        self.push(bus, self.get_rr(pair));
     }
 
     fn ret(&mut self, bus: &mut impl Bus) {
