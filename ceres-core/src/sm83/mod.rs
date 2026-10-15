@@ -368,11 +368,6 @@ impl Sm83 {
     }
 
     #[must_use]
-    #[expect(
-        clippy::inline_always,
-        reason = "about 1% of the emulation time: the `Reg8` match stops it being inlined"
-    )]
-    #[inline(always)]
     fn get_r(&self, bus: &mut impl Bus, op: u8) -> u8 {
         match Reg8::from_op(op) {
             Reg8::B => high(self.bc),
@@ -475,8 +470,6 @@ impl Sm83 {
         self.af = with_high(self.af, val);
     }
 
-    #[expect(clippy::inline_always, reason = "as `get_r`")]
-    #[inline(always)]
     fn set_r(&mut self, bus: &mut impl Bus, op: u8, val: u8) {
         match Reg8::from_op(op) {
             Reg8::B => self.bc = with_high(self.bc, val),
