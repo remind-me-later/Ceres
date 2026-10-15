@@ -3,7 +3,7 @@
 use {
     super::{
         LINES,
-        fifo::{Item, PixelOut},
+        fifo::{Item, ObjPixel, PixelOut},
         pos,
     },
     crate::{
@@ -81,7 +81,10 @@ impl Ppu {
             lx: self.d.lcd_x,
             bg_pixel,
             bg_palette: fifo_item.palette,
-            obj: draw_oam.then_some((oam_item.pixel, oam_item.palette)),
+            obj: draw_oam.then_some(ObjPixel {
+                pixel: oam_item.pixel,
+                palette: oam_item.palette,
+            }),
         };
 
         self.d.position_in_line = self.d.position_in_line.wrapping_add(1);
@@ -114,7 +117,7 @@ impl Ppu {
             return (0, 0, 0);
         }
 
-        if let Some((pixel, palette)) = out.obj {
+        if let Some(ObjPixel { pixel, palette }) = out.obj {
             let shade = if cgb_mode == CgbMode::Cgb {
                 pixel
             } else {

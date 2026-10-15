@@ -106,6 +106,14 @@ impl Fifo {
     }
 }
 
+/// An object's pixel, drawn over the background.
+#[derive(Clone, Copy)]
+pub(super) struct ObjPixel {
+    /// Colour id.
+    pub pixel: u8,
+    pub palette: u8,
+}
+
 /// One pixel as it reaches the LCD, before palette lookup.
 #[derive(Clone, Copy)]
 pub(super) struct PixelOut {
@@ -114,5 +122,5 @@ pub(super) struct PixelOut {
     pub bg_pixel: u8,
     pub bg_palette: u8,
     /// Object pixel, if one is drawn over the background.
-    pub obj: Option<(u8, u8)>,
+    pub obj: Option<ObjPixel>,
 }
