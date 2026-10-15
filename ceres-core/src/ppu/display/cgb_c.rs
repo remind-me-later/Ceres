@@ -275,7 +275,7 @@ impl Ppu {
     }
 
     /// The line cycle (dots since LY changed) after which the object search
-    /// sees an OBJ_SIZE write landing now, `units_early` before a read's
+    /// sees an `OBJ_SIZE` write landing now, `units_early` before a read's
     /// point; `-1` if it lands before the line. The search samples entry `i`
     /// at line cycles `2 * i` and `2 * i + 1` (`objects.rs`).
     pub(in crate::ppu) fn cgb_c_size_change_cycle(&self, units_early: i64) -> Option<i64> {

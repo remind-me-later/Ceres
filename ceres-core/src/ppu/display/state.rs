@@ -17,7 +17,7 @@ use {
     },
 };
 
-/// Dots from HBlankStart to the HBlank HDMA request.
+/// Dots from `HBlankStart` to the HBlank HDMA request.
 const HBLANK_HDMA_DELAY: u8 = 1;
 
 /// The OAM scan index at which the CPU's VRAM and palette access changes

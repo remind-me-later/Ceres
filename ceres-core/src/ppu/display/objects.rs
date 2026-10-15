@@ -41,12 +41,12 @@ pub(super) struct ObjectSearch {
     /// The last Y and X the search read from the OAM.
     pub y_bus: u8,
     pub x_bus: u8,
-    /// A CGB-C OBJ_SIZE write during this line's search (see
+    /// A CGB-C `OBJ_SIZE` write during this line's search (see
     /// `cgb_obj_size_write`).
     pub size_change: Option<SizeChange>,
 }
 
-/// OBJ_SIZE changed while the CGB-C was searching `line`: an entry samples
+/// `OBJ_SIZE` changed while the CGB-C was searching `line`: an entry samples
 /// the size at line cycles `2 * index` and `2 * index + 1` on gambatte's
 /// clock and is large if either sample is; the samples after `lc` see `new`.
 #[derive(Clone, Copy)]
@@ -101,7 +101,7 @@ pub(super) struct ObjectFetch {
     pub data: [u8; 2],
     pub active: bool,
     pub aborted: bool,
-    /// OBJ_SIZE as the object fetch sees it (it can land a dot before the
+    /// `OBJ_SIZE` as the object fetch sees it (it can land a dot before the
     /// object search sees it).
     pub size_16: bool,
 }
@@ -212,7 +212,7 @@ impl Ppu {
         objs.count -= 1;
     }
 
-    /// A CGB-C write that changes OBJ_SIZE, `units_early` before the point a
+    /// A CGB-C write that changes `OBJ_SIZE`, `units_early` before the point a
     /// read in the same cycle would see. The search samples the size later
     /// than this PPU looks at each entry (gambatte's `OamReader`), so the
     /// entries already searched are looked at again.

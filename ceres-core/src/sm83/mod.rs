@@ -143,7 +143,7 @@ impl Sm83 {
     /// instruction completes. SameBoy (sm83_cpu.c:1636-1640) toggles IME
     /// at the start of each instruction fetch using `ime_toggle`, and the
     /// pre-toggle IME is used for interrupt dispatch decisions. We mirror
-    /// that: capture the IME value seen by this instruction (effective_ime),
+    /// that: capture the IME value seen by this instruction (`effective_ime`),
     /// then if EI was pending, flip IME in place. If the instruction is DI
     /// it will clear IME again; if it's anything else, IME will stay true
     /// through subsequent step calls.
