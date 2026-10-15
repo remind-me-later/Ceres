@@ -32,6 +32,18 @@ pub(super) enum FetcherStep {
     Push,
 }
 
+/// How a tile data read goes while a write to LCDC's tile-select bit lands
+/// (Matt Currie's research in the mealybug-tearoom-tests PPU documentation).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum TileSelGlitch {
+    /// No glitch: the fetcher reads the tile data from VRAM.
+    ReadVram,
+    /// The fetcher takes this byte instead of reading VRAM.
+    Use(u8),
+    /// The CGB-D reads VRAM, but from the unsigned tile area.
+    CgbD,
+}
+
 impl FetcherStep {
     pub(super) const fn next(self) -> Self {
         match self {
@@ -71,16 +83,24 @@ impl Ppu {
         }
     }
 
-    /// `data_for_tile_sel_glitch`: returns (data, use_glitched, cgb_d_glitch).
-    pub(super) fn data_for_tile_sel_glitch(&mut self) -> (u8, bool, bool) {
-        if self.d.fetcher.last_tileset {
-            if self.model != Model::CgbD {
-                return (self.d.fetcher.tile, self.d.fetcher.tile & 0x80 == 0, false);
-            }
-            self.d.fetcher.data_address &= !TILE_DATA_SIGNED;
-            return (0, false, true);
+    /// How this tile data read goes (SameBoy's `data_for_tile_sel_glitch`).
+    /// On the CGB-D it moves `data_address` into the unsigned tile area.
+    pub(super) fn tile_sel_glitch(&mut self) -> TileSelGlitch {
+        if !self.d.fetcher.tile_sel_glitch {
+            return TileSelGlitch::ReadVram;
         }
-        (self.d.fetcher.sel_glitch_data, true, false)
+        if !self.d.fetcher.last_tileset {
+            return TileSelGlitch::Use(self.d.fetcher.sel_glitch_data);
+        }
+        if self.model == Model::CgbD {
+            self.d.fetcher.data_address &= !TILE_DATA_SIGNED;
+            return TileSelGlitch::CgbD;
+        }
+        if self.d.fetcher.tile & 0x80 == 0 {
+            TileSelGlitch::Use(self.d.fetcher.tile)
+        } else {
+            TileSelGlitch::ReadVram
+        }
     }
 
     pub(super) fn tile_address(&self) -> u16 {
@@ -167,23 +187,14 @@ impl Ppu {
                     self.d.fetcher.step = self.d.fetcher.step.next();
                     return;
                 }
-                let (use_glitched, cgb_d_glitch) = if self.d.fetcher.tile_sel_glitch {
-                    let (data, used, d) = self.data_for_tile_sel_glitch();
-                    self.d.fetcher.data[0] = data;
-                    (used, d)
-                } else {
-                    (false, false)
+                self.d.fetcher.data[0] = match self.tile_sel_glitch() {
+                    TileSelGlitch::Use(data) => data,
+                    TileSelGlitch::ReadVram | TileSelGlitch::CgbD => {
+                        self.vram_read(self.d.fetcher.data_address)
+                    }
                 };
-                if !use_glitched {
-                    self.d.fetcher.data[0] = self.vram_read(self.d.fetcher.data_address);
-                }
                 if self.d.fetcher.last_tileset && self.d.fetcher.tile_sel_glitch {
                     self.d.fetcher.sel_glitch_data = self.vram_read(self.d.fetcher.data_address);
-                } else if cgb_d_glitch {
-                    self.d.fetcher.sel_glitch_data =
-                        self.vram_read(self.d.fetcher.data_address & !TILE_DATA_SIGNED);
-                } else {
-                    // No glitch to propagate.
                 }
                 self.d.fetcher.step = self.d.fetcher.step.next();
             }
@@ -196,28 +207,19 @@ impl Ppu {
                     }
                     return;
                 }
-                let (use_glitched, cgb_d_glitch) = if self.d.fetcher.tile_sel_glitch {
-                    let (data, used, d) = self.data_for_tile_sel_glitch();
+                let glitch = self.tile_sel_glitch();
+                if glitch == TileSelGlitch::CgbD {
+                    self.d.fetcher.data_address -= 1;
+                }
+                if let TileSelGlitch::Use(data) = glitch {
                     self.d.fetcher.data[1] = data;
-                    if d {
-                        self.d.fetcher.data_address -= 1;
-                    }
-                    (used, d)
                 } else {
-                    (false, false)
-                };
-                if !use_glitched {
                     let value = self.vram_read(self.d.fetcher.data_address);
                     self.d.fetcher.data[1] = value;
                     self.d.fetcher.sel_glitch_data = value;
                 }
                 if self.d.fetcher.last_tileset && self.d.fetcher.tile_sel_glitch {
                     self.d.fetcher.sel_glitch_data = self.vram_read(self.d.fetcher.data_address);
-                } else if cgb_d_glitch {
-                    self.d.fetcher.sel_glitch_data =
-                        self.vram_read((self.d.fetcher.data_address & !TILE_DATA_SIGNED) + 1);
-                } else {
-                    // No glitch to propagate.
                 }
                 if self.d.window.wx_triggered {
                     self.d.window.tile_x = (self.d.window.tile_x + 1) & 0x1F;
