@@ -1,12 +1,59 @@
 use {crate::ppu::ColorCorrectionMode, core::array};
 
+/// A colour's red, green and blue: 8-bit channels, or anything else kept per
+/// channel.
+#[derive(Clone, Copy)]
+pub(crate) struct Rgb<T = u8> {
+    pub r: T,
+    pub g: T,
+    pub b: T,
+}
+
+impl Rgb {
+    pub(super) const BLACK: Self = Self::gray(0x00);
+
+    const fn gray(level: u8) -> Self {
+        Self {
+            r: level,
+            g: level,
+            b: level,
+        }
+    }
+}
+
 // DMG palette colors RGB
-pub(super) const GRAYSCALE_PALETTE: [(u8, u8, u8); 4] = [
-    (0xFF, 0xFF, 0xFF),
-    (0xAA, 0xAA, 0xAA),
-    (0x55, 0x55, 0x55),
-    (0x00, 0x00, 0x00),
+pub(super) const GRAYSCALE_PALETTE: [Rgb; 4] = [
+    Rgb::gray(0xFF),
+    Rgb::gray(0xAA),
+    Rgb::gray(0x55),
+    Rgb::BLACK,
 ];
+
+/// The range a channel is squeezed into by the reduced contrast modes.
+#[derive(Clone, Copy)]
+struct ChannelRange {
+    low: u16,
+    high: u16,
+}
+
+impl ChannelRange {
+    #[expect(clippy::cast_possible_truncation, reason = "c is at most 255")]
+    const fn squeeze(self, c: u16) -> u8 {
+        (c * (self.high - self.low) / 255 + self.low) as u8
+    }
+}
+
+const LOW_CONTRAST: Rgb<ChannelRange> = Rgb {
+    r: ChannelRange { low: 45, high: 162 },
+    g: ChannelRange { low: 41, high: 167 },
+    b: ChannelRange { low: 38, high: 157 },
+};
+
+const REDUCED_CONTRAST: Rgb<ChannelRange> = Rgb {
+    r: ChannelRange { low: 40, high: 220 },
+    g: ChannelRange { low: 36, high: 224 },
+    b: ChannelRange { low: 32, high: 216 },
+};
 
 // BCPS/OCPS bits
 /// The index goes up after each write to the data register.
@@ -101,7 +148,7 @@ impl ColorPalette {
         palette: u8,
         color: u8,
         color_correction_mode: ColorCorrectionMode,
-    ) -> (u8, u8, u8) {
+    ) -> Rgb {
         const SCALE_CHANNEL_WITH_CURVE: [u8; 32] = [
             0, 6, 12, 20, 28, 36, 45, 56, 66, 76, 88, 100, 113, 125, 137, 149, 161, 172, 182, 192,
             202, 210, 218, 225, 232, 238, 243, 247, 250, 252, 254, 255,
@@ -117,7 +164,11 @@ impl ColorPalette {
         let mut b = self.buffer[i + 2];
 
         if matches!(color_correction_mode, ColorCorrectionMode::Disabled) {
-            return (scale_channel(r), scale_channel(g), scale_channel(b));
+            return Rgb {
+                r: scale_channel(r),
+                g: scale_channel(g),
+                b: scale_channel(b),
+            };
         }
 
         (r, g, b) = (
@@ -127,11 +178,11 @@ impl ColorPalette {
         );
 
         if matches!(color_correction_mode, ColorCorrectionMode::CorrectCurves) {
-            return (r, g, b);
+            return Rgb { r, g, b };
         }
 
-        let (mut new_r, mut new_g, mut new_b) = (r, g, b);
-
+        // Green is mixed with a little blue.
+        let mut corrected = Rgb { r, g, b };
         if g != b {
             let gamma = if matches!(
                 color_correction_mode,
@@ -148,7 +199,7 @@ impl ColorPalette {
                 clippy::cast_sign_loss
             )]
             {
-                new_g = (((f32::from(g) / 255.0)
+                corrected.g = (((f32::from(g) / 255.0)
                     .powf(gamma)
                     .mul_add(3.0, (f32::from(b) / 255.0).powf(gamma))
                     / 4.0)
@@ -159,47 +210,13 @@ impl ColorPalette {
         }
 
         match color_correction_mode {
-            ColorCorrectionMode::LowContrast => {
-                (new_r, new_g, new_b) =
-                    squeeze_contrast((new_r, new_g, new_b), [(45, 162), (41, 167), (38, 157)]);
-            }
-            ColorCorrectionMode::ReduceContrast => {
-                (new_r, new_g, new_b) =
-                    squeeze_contrast((new_r, new_g, new_b), [(40, 220), (36, 224), (32, 216)]);
-            }
-            ColorCorrectionMode::ModernBoostContrast => {
-                let old_max = r.max(g.max(b));
-                let new_max = new_r.max(new_g.max(new_b));
-
-                #[expect(clippy::cast_possible_truncation)]
-                if new_max != 0 {
-                    new_r = (u16::from(new_r) * u16::from(old_max) / u16::from(new_max)) as u8;
-                    new_g = (u16::from(new_g) * u16::from(old_max) / u16::from(new_max)) as u8;
-                    new_b = (u16::from(new_b) * u16::from(old_max) / u16::from(new_max)) as u8;
-                }
-
-                let old_min = r.min(g.min(b));
-                let new_min = new_r.min(new_g.min(new_b));
-
-                #[expect(clippy::cast_possible_truncation)]
-                if new_min != 0xFF {
-                    new_r = 0xFF
-                        - ((0xFF - u16::from(new_r)) * (0xFF - u16::from(old_min))
-                            / (0xFF - u16::from(new_min))) as u8;
-                    new_g = 0xFF
-                        - ((0xFF - u16::from(new_g)) * (0xFF - u16::from(old_min))
-                            / (0xFF - u16::from(new_min))) as u8;
-                    new_b = 0xFF
-                        - ((0xFF - u16::from(new_b)) * (0xFF - u16::from(old_min))
-                            / (0xFF - u16::from(new_min))) as u8;
-                }
-            }
+            ColorCorrectionMode::LowContrast => squeeze_contrast(corrected, LOW_CONTRAST),
+            ColorCorrectionMode::ReduceContrast => squeeze_contrast(corrected, REDUCED_CONTRAST),
+            ColorCorrectionMode::ModernBoostContrast => boost_contrast(Rgb { r, g, b }, corrected),
             ColorCorrectionMode::ModernBalanced
             | ColorCorrectionMode::Disabled
-            | ColorCorrectionMode::CorrectCurves => {}
+            | ColorCorrectionMode::CorrectCurves => corrected,
         }
-
-        (new_r, new_g, new_b)
     }
 
     pub(crate) const fn set_data(&mut self, val: u8) {
@@ -245,15 +262,53 @@ impl ColorPalette {
     }
 }
 
-/// Mixes a little of the other two channels into each one, then squeezes it
-/// into its `(low, high)` range.
+/// Stretches the corrected colour `new` back to the brightest and darkest
+/// channels of the uncorrected `old`.
 #[expect(clippy::cast_possible_truncation)]
-fn squeeze_contrast((r, g, b): (u8, u8, u8), ranges: [(u16, u16); 3]) -> (u8, u8, u8) {
-    let (r, g, b) = (u16::from(r), u16::from(g), u16::from(b));
-    let squeeze = |c: u16, (low, high): (u16, u16)| (c * (high - low) / 255 + low) as u8;
-    (
-        squeeze(r * 15 / 16 + (g + b) / 32, ranges[0]),
-        squeeze(g * 15 / 16 + (r + b) / 32, ranges[1]),
-        squeeze(b * 15 / 16 + (r + g) / 32, ranges[2]),
-    )
+fn boost_contrast(old: Rgb, new: Rgb) -> Rgb {
+    let Rgb { r, g, b } = old;
+    let Rgb {
+        r: mut new_r,
+        g: mut new_g,
+        b: mut new_b,
+    } = new;
+
+    let old_max = r.max(g.max(b));
+    let new_max = new_r.max(new_g.max(new_b));
+    if new_max != 0 {
+        new_r = (u16::from(new_r) * u16::from(old_max) / u16::from(new_max)) as u8;
+        new_g = (u16::from(new_g) * u16::from(old_max) / u16::from(new_max)) as u8;
+        new_b = (u16::from(new_b) * u16::from(old_max) / u16::from(new_max)) as u8;
+    }
+
+    let old_min = r.min(g.min(b));
+    let new_min = new_r.min(new_g.min(new_b));
+    if new_min != 0xFF {
+        new_r = 0xFF
+            - ((0xFF - u16::from(new_r)) * (0xFF - u16::from(old_min))
+                / (0xFF - u16::from(new_min))) as u8;
+        new_g = 0xFF
+            - ((0xFF - u16::from(new_g)) * (0xFF - u16::from(old_min))
+                / (0xFF - u16::from(new_min))) as u8;
+        new_b = 0xFF
+            - ((0xFF - u16::from(new_b)) * (0xFF - u16::from(old_min))
+                / (0xFF - u16::from(new_min))) as u8;
+    }
+
+    Rgb {
+        r: new_r,
+        g: new_g,
+        b: new_b,
+    }
+}
+
+/// Mixes a little of the other two channels into each one, then squeezes it
+/// into its range.
+const fn squeeze_contrast(rgb: Rgb, ranges: Rgb<ChannelRange>) -> Rgb {
+    let (r, g, b) = (rgb.r as u16, rgb.g as u16, rgb.b as u16);
+    Rgb {
+        r: ranges.r.squeeze(r * 15 / 16 + (g + b) / 32),
+        g: ranges.g.squeeze(g * 15 / 16 + (r + b) / 32),
+        b: ranges.b.squeeze(b * 15 / 16 + (r + g) / 32),
+    }
 }

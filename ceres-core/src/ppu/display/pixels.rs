@@ -8,7 +8,10 @@ use {
     },
     crate::{
         CgbMode,
-        ppu::{LCDC_BG_EN_B, LCDC_OBJ_EN_B, PX_WIDTH, Ppu, color_palette::GRAYSCALE_PALETTE},
+        ppu::{
+            LCDC_BG_EN_B, LCDC_OBJ_EN_B, PX_WIDTH, Ppu,
+            color_palette::{GRAYSCALE_PALETTE, Rgb},
+        },
     },
 };
 
@@ -102,19 +105,19 @@ impl Ppu {
     }
 
     #[must_use]
-    const fn mono_rgb(index: u8) -> (u8, u8, u8) {
+    const fn mono_rgb(index: u8) -> Rgb {
         GRAYSCALE_PALETTE[index as usize]
     }
 
     /// Palette lookup for one LCD pixel (SameBoy's `render_pixel_if_possible`
     /// tail): the BGP/OBP shade is picked here, at the dot the pixel is drawn.
     #[must_use]
-    pub(super) fn pixel_rgb(&self, out: PixelOut) -> (u8, u8, u8) {
+    pub(super) fn pixel_rgb(&self, out: PixelOut) -> Rgb {
         let cgb_mode = self.cgb_mode;
 
         // The PPU can't read the palettes in STOP mode: black.
         if self.d.bus.cgb_palettes_ppu_blocked {
-            return (0, 0, 0);
+            return Rgb::BLACK;
         }
 
         if let Some(ObjPixel { pixel, palette }) = out.obj {
@@ -145,7 +148,7 @@ impl Ppu {
 
     /// Colour used for the first pixel of a line the PPU failed to draw.
     #[must_use]
-    pub(super) fn desync_color(&self) -> (u8, u8, u8) {
+    pub(super) fn desync_color(&self) -> Rgb {
         match self.cgb_mode {
             CgbMode::Dmg => Self::mono_rgb(0),
             _ => self.bcp.rgb(0, 0, self.color_correction_mode),
