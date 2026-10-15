@@ -1,4 +1,7 @@
-use crate::{Sample, timing::DOTS_PER_SEC};
+use {
+    super::mixer::Stereo,
+    crate::{Sample, timing::DOTS_PER_SEC},
+};
 
 pub(super) struct HighPassFilter {
     capacitor_l: f32,
@@ -31,9 +34,9 @@ impl HighPassFilter {
     }
 
     #[expect(clippy::float_arithmetic)]
-    pub(super) fn high_pass(&mut self, l: Sample, r: Sample) -> (Sample, Sample) {
-        let l_f32 = f32::from(l);
-        let r_f32 = f32::from(r);
+    pub(super) fn high_pass(&mut self, input: Stereo<Sample>) -> Stereo<Sample> {
+        let l_f32 = f32::from(input.left);
+        let r_f32 = f32::from(input.right);
 
         let out_left_f32 = l_f32 - self.capacitor_l;
         let out_right_f32 = r_f32 - self.capacitor_r;
@@ -50,6 +53,9 @@ impl HighPassFilter {
             .round()
             .clamp(f32::from(i16::MIN), f32::from(i16::MAX)) as i16;
 
-        (out_left, out_right)
+        Stereo {
+            left: out_left,
+            right: out_right,
+        }
     }
 }

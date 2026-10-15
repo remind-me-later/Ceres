@@ -7,6 +7,13 @@ use crate::{AudioCallback, timing::DOTS_PER_SEC};
 /// largest amplitude, 0xFF0, over its 15 steps and the 8 master volumes.
 const CH_STEP: i32 = 0xFF0 / 0xF / 8;
 
+/// A left and a right value.
+#[derive(Clone, Copy, Default)]
+pub(super) struct Stereo<T> {
+    pub left: T,
+    pub right: T,
+}
+
 /// A channel's connection to its DAC: whether it is playing, the digital
 /// sample it outputs and the resulting level after NR50/NR51.
 #[derive(Clone, Copy)]
@@ -19,8 +26,8 @@ pub(super) struct ChannelOutput {
     /// has to be refreshed, which leaves a DC offset on a channel whose DAC
     /// is off.
     pub sample: u8,
-    /// Output level (left, right).
-    pub level: (i32, i32),
+    /// Output level.
+    pub level: Stereo<i32>,
     /// Bits of the sample that a PCM register read sees this M-cycle (the
     /// CGB-C and older miss some while the channel updates, see
     /// `Revision::has_pcm_glitch`).
@@ -33,7 +40,7 @@ impl ChannelOutput {
             index,
             active: false,
             sample: 0,
-            level: (0, 0),
+            level: Stereo { left: 0, right: 0 },
             pcm_mask: 0xF,
         }
     }
@@ -79,10 +86,10 @@ impl ChannelOutput {
                 (i32::from(value), 0)
             };
             let bias = if self.active { i32::from(volume) } else { 0 };
-            self.level = (
-                (0xF - if left { value * 2 + bias } else { silence }) * left_volume,
-                (0xF - if right { value * 2 + bias } else { silence }) * right_volume,
-            );
+            self.level = Stereo {
+                left: (0xF - if left { value * 2 + bias } else { silence }) * left_volume,
+                right: (0xF - if right { value * 2 + bias } else { silence }) * right_volume,
+            };
             return;
         }
 
@@ -96,19 +103,19 @@ impl ChannelOutput {
             self.sample
         };
         let v = 0xF - i32::from(value) * 2;
-        self.level = (
-            if left { v * left_volume } else { 0 },
-            if right { v * right_volume } else { 0 },
-        );
+        self.level = Stereo {
+            left: if left { v * left_volume } else { 0 },
+            right: if right { v * right_volume } else { 0 },
+        };
     }
 }
 
 /// Averages the channel levels over each output sample and sends the result
 /// through the DAC model and a high-pass filter.
 pub(super) struct Mixer {
-    /// Per-channel (left, right) level integrated over the current output
-    /// sample, in level x 1/65536 dot.
-    acc: [(i64, i64); N_CHANNELS],
+    /// Per-channel level integrated over the current output sample, in
+    /// level x 1/65536 dot.
+    acc: [Stereo<i64>; N_CHANNELS],
     /// How much each channel's DAC is charged (1.0 = fully).
     dac_charge: [f32; N_CHANNELS],
     sample_rate: i32,
@@ -121,7 +128,7 @@ pub(super) struct Mixer {
 impl Mixer {
     pub(super) fn new(sample_rate: i32) -> Self {
         Self {
-            acc: [(0, 0); N_CHANNELS],
+            acc: [Stereo::default(); N_CHANNELS],
             dac_charge: [0.0; N_CHANNELS],
             sample_rate,
             sample_period: Self::sample_period_from_rate(sample_rate),
@@ -138,7 +145,7 @@ impl Mixer {
         self.sample_rate = sample_rate;
         self.sample_period = Self::sample_period_from_rate(sample_rate);
         self.render_timer = 0;
-        self.acc = [(0, 0); N_CHANNELS];
+        self.acc = [Stereo::default(); N_CHANNELS];
         self.hpf.set_sample_rate(sample_rate);
     }
 
@@ -148,7 +155,7 @@ impl Mixer {
     pub(super) fn mix<C: AudioCallback, D: Fn() -> Option<[bool; N_CHANNELS]>>(
         &mut self,
         ticks: u32,
-        levels: [(i32, i32); N_CHANNELS],
+        levels: [Stereo<i32>; N_CHANNELS],
         dacs: D,
         callback: &C,
     ) {
@@ -156,8 +163,8 @@ impl Mixer {
         while remaining > 0 {
             let step = remaining.min(self.sample_period - self.render_timer);
             for (acc, level) in self.acc.iter_mut().zip(&levels) {
-                acc.0 += i64::from(level.0) * step;
-                acc.1 += i64::from(level.1) * step;
+                acc.left += i64::from(level.left) * step;
+                acc.right += i64::from(level.right) * step;
             }
             self.render_timer += step;
             remaining -= step;
@@ -188,18 +195,18 @@ impl Mixer {
                 let c = *charge;
                 multiplier *= (3.0 * c).mul_add(c, -(2.0 * c * c * c));
             }
-            left = (self.acc[ch].0 as f32 / period).mul_add(multiplier, left);
-            right = (self.acc[ch].1 as f32 / period).mul_add(multiplier, right);
+            left = (self.acc[ch].left as f32 / period).mul_add(multiplier, left);
+            right = (self.acc[ch].right as f32 / period).mul_add(multiplier, right);
         }
-        self.acc = [(0, 0); N_CHANNELS];
+        self.acc = [Stereo::default(); N_CHANNELS];
         self.render_timer -= self.sample_period;
 
         #[expect(clippy::cast_possible_truncation)]
-        let (l, r) = (
-            left.clamp(-32768.0, 32767.0) as i16,
-            right.clamp(-32768.0, 32767.0) as i16,
-        );
-        let (l, r) = self.hpf.high_pass(l, r);
-        callback.audio_sample(l, r);
+        let sample = Stereo {
+            left: left.clamp(-32768.0, 32767.0) as i16,
+            right: right.clamp(-32768.0, 32767.0) as i16,
+        };
+        let out = self.hpf.high_pass(sample);
+        callback.audio_sample(out.left, out.right);
     }
 }
