@@ -1,5 +1,18 @@
-use crate::{AudioCallback, Gb, apu::ApuCtx, ppu::Mode};
+#[cfg(kani)]
+mod proofs;
+mod timer;
+
+pub(crate) use timer::Clock;
+
+use crate::{
+    AudioCallback, CgbMode, Gb, Model,
+    apu::{Apu, ApuCtx},
+    interrupts::Interrupts,
+    ppu::Mode,
+    serial::Serial,
+};
 use core::{cmp::Ordering, time::Duration};
+use timer::TimerHost;
 
 // Time is counted in three units:
 // - a dot is a 4 MHz cycle, the PPU's pixel clock;
@@ -15,11 +28,6 @@ pub(crate) const DOTS_PER_SEC: i32 = 1 << 22;
 /// 8 MHz units per frame.
 pub(crate) const UNITS_PER_FRAME: i32 = 2 * DOTS_PER_FRAME;
 
-// TAC bits
-const TAC_ENABLE_B: u8 = 0x04;
-/// The input clock select.
-const TAC_CLOCK: u8 = 0x03;
-
 /// The bit of the internal counter (DIV is its high byte) whose falling edge
 /// clocks the APU's frame sequencer: DIV bit 4, bit 5 in double speed.
 #[must_use]
@@ -28,78 +36,91 @@ pub(crate) const fn apu_div_bit(double_speed: bool) -> u16 {
 }
 pub const FRAME_DURATION: Duration = Duration::new(0, 16_742_706); // DOTS_PER_FRAME / DOTS_PER_SEC
 
-pub(crate) struct Clock {
-    pub div: u16,
-    pub tac: u8,
-    pub tima: u8,
-    pub tma: u8,
-    /// T-cycles remaining until TIMA is reloaded from TMA.
-    /// `0` means no reload is pending; `1..=4` are the reads-0 window;
-    /// `5..=8` are the writes-ignore window.
-    pub tima_reload_pending: u8,
-    /// Independent countdown for the timer IRQ fire time. `0` means
-    /// no IRQ pending. On overflow we set this to `3` for DMG and `4`
-    /// for CGB, then the IRQ fires when it reaches 0.
-    ///
-    /// DMG: matches gambatte's `Tima::updateTima` which sets
-    /// `tmatime_ = lastUpdate_ + 3` (libgambatte/src/tima.cpp:99).
-    ///
-    /// CGB: matches gambatte's `Memory::ackIrq` which does
-    /// `updateTimaIrq(cc + 2 + isCgb())` for the *next* IRQ event
-    /// (libgambatte/src/memory.cpp:439), and SameBoy's per-M-cycle
-    /// state machine which advances one M-cycle (= 4 T-cycles) per
-    /// overflow. Both effectively fire the IRQ one T-cycle later on
-    /// CGB than on DMG.
-    ///
-    /// Kept separate from `tima_reload_pending` so the reads-0 window
-    /// (4 T-cycles, required by mooneye `tima_reload.s`) can coexist
-    /// with the model-specific IRQ fire time.
-    pub tima_irq_countdown: u8,
-    pub div_cycles: i32,
-    pub div_state: u8,
-    pub stopped: bool,
-    /// A DIV write is in progress (the APU's sweep glitches depend on it).
-    pub during_div_write: bool,
-    /// Cycles the frame sequencer of an APU that was already running lags
-    /// the DIV counter by: a speed switch to double speed leaves it a cycle
-    /// behind when `apu_odd` is set.
-    pub apu_delay: u16,
-    /// gambatte's `lastUpdate_ % 2`: odd for an APU powered on in single
-    /// speed, even in double speed, flipped by each switch back to single
-    /// speed.
-    pub apu_odd: bool,
-}
-
-impl Default for Clock {
-    fn default() -> Self {
-        Self {
-            div: 8,
-            tac: 0,
-            tima: 0,
-            tma: 0,
-            tima_reload_pending: 0,
-            tima_irq_countdown: 0,
-            div_cycles: 0,
-            div_state: 0,
-            stopped: false,
-            during_div_write: false,
-            apu_delay: 0,
-            apu_odd: true,
-        }
+/// What the APU needs to know about the machine, with the timer as `clock`.
+const fn apu_ctx(clock: &Clock, double_speed: bool, pc: u16, address_bus: u16) -> ApuCtx {
+    ApuCtx {
+        address_bus,
+        div_counter: clock.div,
+        double_speed,
+        during_div_write: clock.during_div_write,
+        pc,
+        stopped: clock.stopped,
     }
 }
 
-impl Clock {
-    pub(crate) fn tima(&self) -> u8 {
-        if (1..=4).contains(&self.tima_reload_pending) {
-            0
-        } else {
-            self.tima
+/// The rest of the machine as the timer reaches it: `Gb` borrowed apart
+/// from its `Clock`, so the timer can run while the host is in use.
+struct TimerPorts<'a, A: AudioCallback> {
+    apu: &'a mut Apu<A>,
+    serial: &'a mut Serial,
+    ints: &'a mut Interrupts,
+    model: Model,
+    cgb_mode: CgbMode,
+    double_speed: bool,
+    pc: u16,
+    address_bus: u16,
+}
+
+impl<A: AudioCallback> TimerPorts<'_, A> {
+    const fn apu_ctx(&self, clock: &Clock) -> ApuCtx {
+        apu_ctx(clock, self.double_speed, self.pc, self.address_bus)
+    }
+}
+
+impl<A: AudioCallback> TimerHost for TimerPorts<'_, A> {
+    #[inline]
+    fn is_cgb_hardware(&self) -> bool {
+        self.model.is_cgb_hardware()
+    }
+
+    #[inline]
+    fn is_cgb_mode(&self) -> bool {
+        matches!(self.cgb_mode, CgbMode::Cgb)
+    }
+
+    #[inline]
+    fn double_speed(&self) -> bool {
+        self.double_speed
+    }
+
+    #[inline]
+    fn request_timer_interrupt(&mut self) {
+        self.ints.request_timer();
+    }
+
+    #[inline]
+    fn serial_div_mask(&self) -> u16 {
+        self.serial.div_mask()
+    }
+
+    #[inline]
+    fn serial_clock_edge(&mut self) {
+        self.serial.master_edge(self.ints);
+    }
+
+    #[inline]
+    fn apu_frame_sequencer_step(&mut self, clock: &Clock) {
+        let ctx = self.apu_ctx(clock);
+        self.apu.div_event(&ctx);
+    }
+
+    #[inline]
+    fn apu_envelopes_armed(&mut self) {
+        self.apu.div_secondary_event();
+    }
+
+    #[inline]
+    fn apu_delayed_envelope_tick(&mut self, clock: &Clock) {
+        if self.apu.pending_envelope_tick() {
+            let ctx = self.apu_ctx(clock);
+            self.apu.delayed_envelope_tick(&ctx);
         }
     }
 
-    pub(crate) const fn tma(&self) -> u8 {
-        self.tma
+    #[inline]
+    fn apu_m_cycle(&mut self, clock: &Clock) {
+        let ctx = self.apu_ctx(clock);
+        self.apu.tick(&ctx, if ctx.double_speed { 1 } else { 2 });
     }
 }
 
@@ -199,126 +220,78 @@ impl<A: AudioCallback> Gb<A> {
             .run_rtc(cycles.cast_unsigned() * if double_speed { 1 } else { 2 });
     }
 
-    const fn inc_tima(&mut self) {
-        self.clock.tima = self.clock.tima.wrapping_add(1);
-
-        if self.clock.tima == 0 {
-            // TIMA overflow.
-            //
-            // The reads-0 / writes-ignore state machine (`tima_reload_pending`)
-            // holds for 4+4 T-cycles, as required by the mooneye
-            // `tima_reload.s` test (it samples at 4-T-cycle granularity
-            // and expects TIMA reads to be 0 for 4 cycles, then TMA).
-            //
-            // The IRQ fire time is decoupled via `tima_irq_countdown`,
-            // which is set to 3 on DMG and 4 on CGB so it matches
-            // gambatte's `Tima::updateTima` (DMG, libgambatte/src/tima.cpp:99)
-            // and gambatte's `Memory::ackIrq` plus SameBoy's per-M-cycle
-            // state machine (CGB, libgambatte/src/memory.cpp:439). See
-            // the field docs on `tima_irq_countdown`.
-            self.clock.tima = self.clock.tma;
-            self.clock.tima_reload_pending = 4;
-            self.clock.tima_irq_countdown = if matches!(self.cgb_mode, crate::CgbMode::Cgb) {
-                4
-            } else {
-                3
-            };
-        }
-    }
-
-    #[must_use]
-    const fn is_tac_enabled(&self) -> bool {
-        self.clock.tac & TAC_ENABLE_B != 0
-    }
-
     #[must_use]
     #[inline]
     pub const fn read_div(&self) -> u8 {
-        ((self.clock.div >> 8) & 0xFF) as u8
+        self.clock.read_div()
     }
 
     #[must_use]
     #[inline]
     pub const fn read_tac(&self) -> u8 {
-        !(TAC_ENABLE_B | TAC_CLOCK) | self.clock.tac
+        self.clock.read_tac()
     }
 
     /// What the APU needs to know about the machine.
     pub(crate) const fn apu_ctx(&self) -> ApuCtx {
-        ApuCtx {
-            address_bus: self.address_bus,
-            div_counter: self.clock.div,
-            double_speed: self.key1.is_enabled(),
-            during_div_write: self.clock.during_div_write,
-            pc: self.cpu.pc(),
-            stopped: self.clock.stopped,
-        }
+        apu_ctx(
+            &self.clock,
+            self.key1.is_enabled(),
+            self.cpu.pc(),
+            self.address_bus,
+        )
     }
 
-    /// Runs the APU for the 2 MHz ticks of one DIV step (one M-cycle).
-    fn run_apu_step(&mut self) {
-        let ctx = self.apu_ctx();
-        self.apu.tick(&ctx, if ctx.double_speed { 1 } else { 2 });
+    /// The timer, and the rest of the machine as it reaches it.
+    const fn timer(&mut self) -> (&mut Clock, TimerPorts<'_, A>) {
+        let ports = TimerPorts {
+            apu: &mut self.apu,
+            serial: &mut self.serial,
+            ints: &mut self.ints,
+            model: self.model,
+            cgb_mode: self.cgb_mode,
+            double_speed: self.key1.is_enabled(),
+            pc: self.cpu.pc(),
+            address_bus: self.address_bus,
+        };
+        (&mut self.clock, ports)
     }
 
     #[inline]
     pub fn run_timers(&mut self, cpu_t_cycles: i32) {
-        // The timers (and DIV) are frozen in STOP mode (the CGB's APU is not).
-        if self.clock.stopped {
-            if self.model.is_cgb_hardware() {
-                self.run_apu_step();
-            }
-            return;
-        }
-        for _ in 0..cpu_t_cycles {
-            // The CPU-side DIV-reset signal being held delays the timers
-            // by a few T-cycles (set when entering STOP).
-            if self.clock.div_cycles < 0 {
-                self.clock.div_cycles += 1;
-                continue;
-            }
-            if self.clock.tima_reload_pending > 0 {
-                if self.clock.tima_reload_pending <= 4 {
-                    self.clock.tima_reload_pending -= 1;
-                    if self.clock.tima_reload_pending == 0 {
-                        // Transition into the writes-ignore window. The
-                        // IRQ is fired by `tima_irq_countdown` (separately
-                        // below), not here, so the IRQ fire time is no
-                        // longer tied to the reads-0 / writes-ignore
-                        // windows.
-                        self.clock.tima_reload_pending = 5;
-                    }
-                } else {
-                    // In "Reloaded" state (5, 6, 7, 8).
-                    self.clock.tima_reload_pending += 1;
-                    if self.clock.tima_reload_pending > 8 {
-                        self.clock.tima_reload_pending = 0;
-                    }
-                }
-            }
+        let (clock, mut ports) = self.timer();
+        clock.run(&mut ports, cpu_t_cycles);
+    }
 
-            // Independent IRQ countdown — fires 3 T-cycles after overflow
-            // on DMG and 4 on CGB (see `tima_irq_countdown` field docs and
-            // `inc_tima` for the per-model initial value).
-            if self.clock.tima_irq_countdown > 0 {
-                self.clock.tima_irq_countdown -= 1;
-                if self.clock.tima_irq_countdown == 0 {
-                    self.ints.request_timer();
-                }
-            }
-
-            let div = self.clock.div.wrapping_add(1);
-            if div.trailing_zeros() >= 2 {
-                if self.apu.pending_envelope_tick() {
-                    let ctx = self.apu_ctx();
-                    self.apu.delayed_envelope_tick(&ctx);
-                }
-                self.set_system_clk(div);
-                self.run_apu_step();
-            } else {
-                self.set_system_clk(div);
-            }
+    /// A speed switch makes the timer see the STOP's DIV reset a little
+    /// early (see `Clock::speed_switch_catch_up`).
+    pub(crate) fn tima_speed_change_catch_up(&mut self) {
+        if self.key1.is_requested() {
+            let (clock, ports) = self.timer();
+            clock.speed_switch_catch_up(&ports);
         }
+    }
+
+    #[inline]
+    pub fn write_div(&mut self) {
+        let (clock, mut ports) = self.timer();
+        clock.write_div(&mut ports);
+    }
+
+    #[inline]
+    pub fn write_tac(&mut self, val: u8) {
+        let (clock, ports) = self.timer();
+        clock.write_tac(&ports, val);
+    }
+
+    #[inline]
+    pub const fn write_tima(&mut self, val: u8) {
+        self.clock.write_tima(val);
+    }
+
+    #[inline]
+    pub const fn write_tma(&mut self, val: u8) {
+        self.clock.write_tma(val);
     }
 
     /// The CPU just switched to double speed.
@@ -337,123 +310,5 @@ impl<A: AudioCallback> Gb<A> {
     pub(crate) const fn left_double_speed(&mut self) {
         self.clock.apu_delay = 0;
         self.clock.apu_odd = !self.clock.apu_odd;
-    }
-
-    /// A speed switch makes the timer see the STOP's DIV reset four cycles
-    /// early when it is clocked at 16 cycles or slower: the reset counts as
-    /// a falling edge of the tapped bit a bit sooner.
-    pub(crate) const fn tima_speed_change_catch_up(&mut self) {
-        if self.key1.is_requested() && self.is_tac_enabled() && self.clock.tac & TAC_CLOCK != 0 {
-            let mux = Self::sys_clk_tac_mux(self.clock.tac);
-            let div = self.clock.div;
-            if div & mux == 0 && div.wrapping_add(4) & mux != 0 {
-                self.inc_tima();
-            }
-        }
-    }
-
-    #[inline]
-    pub fn write_div(&mut self) {
-        // Writing DIV resets the system clock and the APU's internal phase
-        // counter (gambatte's `sound_unit::reset_cycle_counter` on div write).
-        // Without this, the APU length counter / serial transfer can step
-        // immediately after a DIV write, which breaks gambatte's
-        // serial/sound testsuite.
-        self.clock.apu_delay = 0;
-        self.clock.during_div_write = true;
-        self.set_system_clk(0);
-        self.clock.during_div_write = false;
-    }
-
-    /// The bit of the internal counter whose falling edge clocks TIMA:
-    /// 4096, 262144, 65536 or 16384 Hz.
-    #[must_use]
-    const fn sys_clk_tac_mux(tac: u8) -> u16 {
-        match tac & TAC_CLOCK {
-            0 => 1 << 9,
-            1 => 1 << 3,
-            2 => 1 << 5,
-            _ => 1 << 7,
-        }
-    }
-
-    #[inline]
-    pub const fn write_tac(&mut self, val: u8) {
-        // Timer glitch: the AND gate output falls when (old_enable AND old_div_bit) was 1
-        // and (new_enable AND new_div_bit) is 0, causing a spurious TIMA increment.
-        if (self.clock.tac & TAC_ENABLE_B) != 0 {
-            let old_bit = Self::sys_clk_tac_mux(self.clock.tac);
-            if (self.clock.div & old_bit) != 0
-                && ((val & TAC_ENABLE_B) == 0 || (self.clock.div & Self::sys_clk_tac_mux(val)) == 0)
-            {
-                self.inc_tima();
-            }
-        }
-
-        self.clock.tac = val;
-    }
-
-    #[inline]
-    pub const fn write_tima(&mut self, val: u8) {
-        // Writing to TIMA during the "Reloaded" state (writes-ignore window,
-        // `tima_reload_pending >= 5`) is dropped on the floor. Writing
-        // during the "Reloading" window (the 4-T-cycle reads-0 window) or
-        // outside the state machine cancels both the pending reload and the
-        // pending IRQ — matching gambatte's `Tima::setTima`:
-        //
-        //   if (tmatime_ - cc < 4) tmatime_ = disabled_time;
-        //
-        // (libgambatte/src/tima.cpp:116-117). This is what the gambatte
-        // testsuite's `tc01_late_tima_irq_1` and the mooneye
-        // `timer_tima_write_reloading` test depend on.
-        if self.clock.tima_reload_pending >= 5 {
-            return;
-        }
-        self.clock.tima_reload_pending = 0;
-        self.clock.tima_irq_countdown = 0;
-        self.clock.tima = val;
-    }
-
-    #[inline]
-    pub const fn write_tma(&mut self, val: u8) {
-        self.clock.tma = val;
-        // If TMA is written during the reload window or the reloaded cycle,
-        // the new value is used for TIMA.
-        if self.clock.tima_reload_pending != 0 {
-            self.clock.tima = val;
-        }
-    }
-
-    // only modify div inside this function
-    fn set_system_clk(&mut self, val: u16) {
-        let triggers = self.clock.div & !val;
-        let apu_bit = apu_div_bit(self.key1.is_enabled());
-
-        // increase TIMA on falling edge of TAC mux
-        if self.is_tac_enabled() && (triggers & Self::sys_clk_tac_mux(self.clock.tac) != 0) {
-            self.inc_tima();
-        }
-
-        // advance serial master clock
-        if triggers & self.serial.div_mask() != 0 {
-            self.serial.master_edge(&mut self.ints);
-        }
-
-        // The APU's frame sequencer follows the falling edge of an APU_DIV
-        // bit; a rising edge arms the envelopes.
-        let (a_old, a_new) = (
-            self.clock.div.wrapping_sub(self.clock.apu_delay),
-            val.wrapping_sub(self.clock.apu_delay),
-        );
-        if a_old & !a_new & apu_bit != 0 {
-            let ctx = self.apu_ctx();
-            self.apu.div_event(&ctx);
-        } else if !a_old & a_new & apu_bit != 0 {
-            self.apu.div_secondary_event();
-        } else {
-            // No edge of the APU bit.
-        }
-
-        self.clock.div = val;
     }
 }
