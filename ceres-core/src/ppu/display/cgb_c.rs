@@ -20,7 +20,7 @@
 use {
     super::{
         LAST_LINE, LINES, State, model_ge_cgb_d,
-        timing::{LINE_END_H, LINE_RESET_H, VBLANK_H},
+        timing::{ClockPosition, LINE_END_H, LINE_RESET_H, VBLANK_H},
     },
     crate::ppu::{LCDC_WIN_EN_B, Ppu},
 };
@@ -122,19 +122,14 @@ impl Ppu {
         self.is_cgb_hardware() && !model_ge_cgb_d(self.model)
     }
 
-    /// The line and half dot on the LCD's line counter (`timing.rs`).
-    fn clock(&self) -> (u8, i64) {
-        let (line, h) = self.d.timing.position();
-        (line, i64::from(h))
-    }
-
     /// Advances a half dot (after the timing unit): runs the WY checks.
     pub(super) fn cgb_c_unit(&mut self) {
         if !self.cgb_c_timing() {
             return;
         }
         self.d.cgb_c.now += 1;
-        let (line, h) = self.clock();
+        let ClockPosition { line, half_dot } = self.d.timing.position();
+        let h = i64::from(half_dot);
         if h == 0 {
             self.d.cgb_c.hblank_age = None;
         }
@@ -265,7 +260,8 @@ impl Ppu {
         if !self.cgb_c_timing() || !self.d.timing.is_on() {
             return None;
         }
-        let (line, h) = self.clock();
+        let ClockPosition { line, half_dot } = self.d.timing.position();
+        let h = i64::from(half_dot);
         if line >= LINES {
             return Some(false);
         }

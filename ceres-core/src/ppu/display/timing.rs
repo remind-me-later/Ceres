@@ -37,6 +37,14 @@ use {
 
 /// Half dots per line.
 const LINE_H: i32 = 2 * LINE_LENGTH;
+
+/// Where the LCD's clock is.
+#[derive(Clone, Copy)]
+pub(in crate::ppu) struct ClockPosition {
+    pub line: u8,
+    /// The half dot within the line.
+    pub half_dot: i32,
+}
 /// The line-end pulse rises 8 half dots (an M-cycle) before the line and
 /// lasts an M-cycle.
 pub(super) const LINE_END_H: i32 = LINE_H - 8;
@@ -175,9 +183,12 @@ impl Default for LcdTiming {
 }
 
 impl LcdTiming {
-    /// The line and half dot on the clock.
-    pub(super) const fn position(&self) -> (u8, i32) {
-        (self.line, self.h)
+    /// Where the clock is.
+    pub(super) const fn position(&self) -> ClockPosition {
+        ClockPosition {
+            line: self.line,
+            half_dot: self.h,
+        }
     }
 
     /// The LCD is on.
@@ -478,10 +489,10 @@ impl Ppu {
         self.d.timing.h = LINE_H - 19;
     }
 
-    /// The line and half dot on the unit's clock.
+    /// Where the unit's clock is.
     #[cfg(feature = "debug")]
-    pub(in crate::ppu) const fn timing_position(&self) -> (u8, i32) {
-        (self.d.timing.line, self.d.timing.h)
+    pub(in crate::ppu) const fn timing_position(&self) -> ClockPosition {
+        self.d.timing.position()
     }
 
     /// A STAT write. On the DMG the write briefly sets every enable: any

@@ -55,12 +55,12 @@ pub(super) struct Trace {
 impl Ppu {
     /// Where the display is, for a debugger.
     pub(crate) const fn debug_state(&self) -> crate::PpuState {
-        let (line, half_dot) = self.timing_position();
+        let clock = self.timing_position();
         crate::PpuState {
             lcd_on: self.lcdc & LCDC_ON_B != 0,
             mode: self.mode() as u8,
-            line,
-            half_dot,
+            line: clock.line,
+            half_dot: clock.half_dot,
             pipeline_line: self.d.current_line(),
             double_speed: self.double_speed(),
         }
@@ -82,13 +82,14 @@ impl Ppu {
         if !self.trace.enabled {
             return;
         }
+        let clock = self.timing_position();
         self.trace.events.push(PpuEvent {
             unit: self.trace.unit,
             line: self.d.current_line(),
             line_clock: self.d.line_clock(),
             second_half: !self.d.half_dot(),
-            timing_line: self.timing_position().0,
-            timing_h: self.timing_position().1,
+            timing_line: clock.line,
+            timing_h: clock.half_dot,
             double_speed: self.double_speed(),
             kind,
         });
