@@ -138,9 +138,11 @@ pub(super) fn dma<A: AudioCallback>(gb: &Gb<A>) -> String {
 }
 
 pub(super) fn cartridge<A: AudioCallback>(gb: &Gb<A>) -> String {
-    let (fixed, switchable) = gb.rom_banks();
+    let banks = gb.rom_banks();
     let cart = format!(
-        "ROM0 bank {fixed:02X}  ROMX bank {switchable:02X}  SRAM bank {:02X}",
+        "ROM0 bank {:02X}  ROMX bank {:02X}  SRAM bank {:02X}",
+        banks.rom0,
+        banks.romx,
         gb.ram_bank()
     );
     if gb.model().is_cgb_hardware() {

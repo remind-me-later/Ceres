@@ -32,7 +32,7 @@ pub use cheats::GameGenieCode;
 #[cfg(feature = "debug")]
 pub use debug::{
     HdmaKind, HdmaState, Instruction, IoAccess, MemoryAccess, OamDmaPhase, OamDmaState, Operand,
-    PpuState, TimerState, WatchHit, disassemble,
+    PpuState, RomBanks, TimerState, WatchHit, disassemble,
 };
 use interrupts::Interrupts;
 use joypad::Joypad;

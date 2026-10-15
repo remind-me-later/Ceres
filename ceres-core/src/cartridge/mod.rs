@@ -215,11 +215,9 @@ impl Cartridge {
 
     /// Where the ROM byte the CPU sees at `addr` (0x0000-0x7FFF) is kept.
     const fn rom_index(&self, addr: u16) -> usize {
-        let (lo, hi) = self.map.rom;
-
         let bank_addr = match addr {
-            0x0000..=0x3FFF => lo | (addr & 0x3FFF) as u32,
-            0x4000..=0x7FFF => hi | (addr & 0x3FFF) as u32,
+            0x0000..=0x3FFF => self.map.rom.rom0 | (addr & 0x3FFF) as u32,
+            0x4000..=0x7FFF => self.map.rom.romx | (addr & 0x3FFF) as u32,
             _ => unreachable!(),
         };
 
@@ -243,9 +241,12 @@ impl Cartridge {
 
     /// The ROM banks mapped at 0x0000-0x3FFF and 0x4000-0x7FFF.
     #[cfg(feature = "debug")]
-    pub(crate) const fn rom_banks(&self) -> (u32, u32) {
+    pub(crate) const fn rom_banks(&self) -> crate::RomBanks {
         let bank_size = ROMSize::BANK_SIZE as u32;
-        (self.map.rom.0 / bank_size, self.map.rom.1 / bank_size)
+        crate::RomBanks {
+            rom0: self.map.rom.rom0 / bank_size,
+            romx: self.map.rom.romx / bank_size,
+        }
     }
 
     /// The RAM bank mapped at 0xA000-0xBFFF.

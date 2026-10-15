@@ -36,7 +36,7 @@ pub fn mapped_bank<A: AudioCallback>(gb: &Gb<A>, addr: u16) -> Bank {
         return Bank::Boot;
     }
     Bank::Number(match addr {
-        0x4000..=0x7FFF => gb.rom_banks().1,
+        0x4000..=0x7FFF => gb.rom_banks().romx,
         0x8000..=0x9FFF => u32::from(gb.vram_bank()),
         0xA000..=0xBFFF => gb.ram_bank(),
         0xD000..=0xDFFF => u32::from(gb.wram_bank()),

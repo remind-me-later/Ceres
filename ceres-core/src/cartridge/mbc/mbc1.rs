@@ -1,6 +1,6 @@
 //! The MBC1, with the multicart wiring.
 
-use super::{Mapping, ram_bank, rom_bank};
+use super::{Mapping, RomOffsets, ram_bank, rom_bank};
 use crate::cartridge::{HEADER_LOGO, NINTENDO_LOGO, rom_size::ROMSize};
 
 #[derive(Debug)]
@@ -59,7 +59,7 @@ impl Mbc1 {
         }
     }
 
-    const fn rom_offsets(&self, rom_size: ROMSize) -> (u32, u32) {
+    const fn rom_offsets(&self, rom_size: ROMSize) -> RomOffsets {
         let lo = self.lo & 0x1F;
 
         if self.multicart {
@@ -73,7 +73,10 @@ impl Mbc1 {
             let quadrant = (self.hi & 3) as u16 * 16;
             // In mode 1, 0x0000-0x3FFF maps the quadrant's first bank.
             let first = if self.bank_mode { quadrant } else { 0 };
-            return (rom_bank(first), rom_bank(quadrant + lo_bank as u16));
+            return RomOffsets {
+                rom0: rom_bank(first),
+                romx: rom_bank(quadrant + lo_bank as u16),
+            };
         }
 
         let hi = self.hi << 5;
@@ -90,7 +93,10 @@ impl Mbc1 {
             bank += 1;
         }
 
-        (rom_bank(first), rom_bank(bank & rom_size.mask()))
+        RomOffsets {
+            rom0: rom_bank(first),
+            romx: rom_bank(bank & rom_size.mask()),
+        }
     }
 }
 

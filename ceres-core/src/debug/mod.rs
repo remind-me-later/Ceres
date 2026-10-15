@@ -17,6 +17,16 @@ use {
     alloc::{vec, vec::Vec},
 };
 
+/// The ROM banks the CPU sees.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct RomBanks {
+    /// The bank at 0x0000-0x3FFF (not always 0 on an MBC1).
+    pub rom0: u32,
+    /// The bank at 0x4000-0x7FFF.
+    pub romx: u32,
+}
+
 /// A CPU memory access.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -335,7 +345,7 @@ impl<A: AudioCallback> Gb<A> {
     /// The ROM banks mapped at 0x0000-0x3FFF and 0x4000-0x7FFF.
     #[must_use]
     #[inline]
-    pub const fn rom_banks(&self) -> (u32, u32) {
+    pub const fn rom_banks(&self) -> RomBanks {
         self.cart.rom_banks()
     }
 

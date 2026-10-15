@@ -1,9 +1,9 @@
 //! The MBC3 and MBC30, with the real-time clock.
 
 use super::{
-    Mapping, Mbc3RTC,
+    Mapping, Mbc3RTC, RomOffsets,
     mbc3_rtc::{RTC_REG_FIRST, RTC_REG_LAST},
-    ram_bank, rom_bank,
+    ram_bank,
 };
 use crate::cartridge::{ram_size::RAMSize, rom_size::ROMSize};
 
@@ -47,7 +47,7 @@ impl Mbc3 {
                 let mask = if self.is_mbc30 { 0xFF } else { 0x7F };
                 #[expect(clippy::cast_possible_truncation, reason = "masked to 8 bits")]
                 let bank = val & (rom_size.mask() & mask) as u8;
-                map.rom = (0, rom_bank(u16::from(bank.max(1))));
+                map.rom = RomOffsets::romx_bank(u16::from(bank.max(1)));
             }
             0x4000..=0x5FFF => {
                 if (RTC_REG_FIRST..=RTC_REG_LAST).contains(&val) {

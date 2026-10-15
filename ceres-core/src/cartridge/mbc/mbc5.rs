@@ -1,6 +1,6 @@
 //! The MBC5.
 
-use super::{Mapping, ram_bank, rom_bank};
+use super::{Mapping, RomOffsets, ram_bank};
 use crate::cartridge::{ram_size::RAMSize, rom_size::ROMSize};
 
 #[derive(Debug)]
@@ -41,7 +41,7 @@ impl Mbc5 {
                 }
                 // Bank 0 is not corrected to 1.
                 let bank = u16::from_le_bytes([self.lo, self.hi]) & rom_size.mask();
-                map.rom = (0, rom_bank(bank));
+                map.rom = RomOffsets::romx_bank(bank);
             }
             0x4000..=0x5FFF => map.ram = ram_bank(val & ram_size.mask()),
             _ => (),

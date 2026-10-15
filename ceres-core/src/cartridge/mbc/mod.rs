@@ -19,11 +19,30 @@ pub(super) use mbc5::Mbc5;
 /// Writing it in the low nibble to 0x0000-0x1FFF enables the cartridge RAM.
 const RAM_ENABLE_KEY: u8 = 0x0A;
 
+/// Where in the ROM the two ROM windows the CPU sees start, in bytes.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct RomOffsets {
+    /// 0x0000-0x3FFF.
+    pub rom0: u32,
+    /// 0x4000-0x7FFF.
+    pub romx: u32,
+}
+
+impl RomOffsets {
+    /// Bank 0 at 0x0000-0x3FFF and `bank` at 0x4000-0x7FFF, as every mapper
+    /// but the MBC1 maps them.
+    const fn romx_bank(bank: u16) -> Self {
+        Self {
+            rom0: 0,
+            romx: rom_bank(bank),
+        }
+    }
+}
+
 /// What the CPU sees of the cartridge: set by the mapper's registers.
 #[derive(Debug)]
 pub(super) struct Mapping {
-    /// The ROM offsets of 0x0000-0x3FFF and 0x4000-0x7FFF.
-    pub rom: (u32, u32),
+    pub rom: RomOffsets,
     /// The RAM offset of 0xA000-0xBFFF (masked by the RAM size on access).
     pub ram: u32,
     pub ram_enabled: bool,
@@ -32,7 +51,7 @@ pub(super) struct Mapping {
 impl Default for Mapping {
     fn default() -> Self {
         Self {
-            rom: (0, rom_bank(1)),
+            rom: RomOffsets::romx_bank(1),
             ram: 0,
             ram_enabled: false,
         }
@@ -128,7 +147,7 @@ impl Mbc {
             clippy::cast_possible_truncation,
             reason = "bank numbers fit the registers"
         )]
-        let rom_bank = (map.rom.1 / rom_bank(1)) as u8;
+        let rom_bank = (map.rom.romx / rom_bank(1)) as u8;
         #[expect(
             clippy::cast_possible_truncation,
             reason = "bank numbers fit the registers"
@@ -165,6 +184,6 @@ fn mbc2_write(addr: u16, val: u8, map: &mut Mapping, rom_size: ROMSize) {
         // 4 bits, 0 maps bank 1.
         let bank = val & 0xF;
         let bank = if bank == 0 { 1 } else { bank };
-        map.rom = (0, rom_bank(u16::from(bank) & rom_size.mask()));
+        map.rom = RomOffsets::romx_bank(u16::from(bank) & rom_size.mask());
     }
 }

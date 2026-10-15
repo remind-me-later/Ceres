@@ -1,5 +1,5 @@
 use crate::{
-    AudioCallback, Gb, GbBuilder, MemoryAccess, Model, PpuEventKind, Sample,
+    AudioCallback, Gb, GbBuilder, MemoryAccess, Model, PpuEventKind, RomBanks, Sample,
     timing::UNITS_PER_FRAME,
 };
 use alloc::{boxed::Box, vec, vec::Vec};
@@ -149,7 +149,11 @@ fn peek_and_poke() {
     // `inc a` becomes `dec a`, in the ROM itself.
     gb.poke_mem(0x0104, 0x3D);
     assert_eq!(gb.peek_mem(0x0104), 0x3D);
-    assert_eq!(gb.rom_banks(), (0, 1), "the MBC didn't see the write");
+    assert_eq!(
+        gb.rom_banks(),
+        RomBanks { rom0: 0, romx: 1 },
+        "the MBC didn't see the write"
+    );
 
     assert_eq!(gb.peek_rom(0, 0x0104), 0x3D, "peek_rom sees the patch");
     assert_eq!(gb.peek_rom(1, 0x4000), gb.peek_mem(0x4000));
