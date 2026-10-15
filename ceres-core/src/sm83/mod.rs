@@ -370,7 +370,7 @@ impl Sm83 {
     #[must_use]
     #[expect(
         clippy::inline_always,
-        reason = "about 2% of a frame's time: the `Reg8` match stops it being inlined"
+        reason = "about 1% of the emulation time: the `Reg8` match stops it being inlined"
     )]
     #[inline(always)]
     fn get_r(&self, bus: &mut impl Bus, op: u8) -> u8 {
