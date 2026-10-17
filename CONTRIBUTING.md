@@ -67,7 +67,6 @@ chore(deps): update winit to 0.29
 - Format Rust code with `cargo fmt --all`
 - Format TOML with `tombi format`, and check it with `tombi lint`
 - Format Markdown with `rumdl fmt .`, and check it with `rumdl check .`
-- Format JSON and YAML with `prettier --write "**/*.{json,yaml,yml}"`
 - Ensure tests pass (see below)
 
 The settings of tombi and rumdl are in `tombi.toml` and `.rumdl.toml`. CI
