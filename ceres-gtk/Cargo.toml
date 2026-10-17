@@ -6,11 +6,6 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-ceres-std = { path = "../ceres-std", features = [
-  "cli",
-  "game_genie",
-  "screenshot",
-] }
 glow = { version = "*" }
 libloading = { version = "*" }
 serde = { version = "*", features = ["derive"] }
@@ -22,6 +17,10 @@ version = "*"
 default-features = false
 features = ["v1_5"]
 
+[dependencies.ceres-std]
+path = "../ceres-std"
+features = ["cli", "game_genie", "screenshot"]
+
 [dependencies.gtk]
 package = "gtk4"
 version = "*"
@@ -32,7 +31,7 @@ features = ["v4_10"]
 [build-dependencies.naga]
 version = "*"
 default-features = false
-features = ["wgsl-in", "glsl-out"]
+features = ["glsl-out", "wgsl-in"]
 
 [features]
 # A console debugger in the terminal (`--debugger`).
