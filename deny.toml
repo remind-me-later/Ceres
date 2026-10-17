@@ -1,5 +1,10 @@
 [advisories]
 yanked = "deny"
+# Unmaintained crates only count when a crate of the workspace depends on them
+# directly: the ones deeper in the tree (zbus, ttf-parser... through eframe and
+# winit) are not ours to replace. Vulnerabilities and yanked crates are
+# checked at any depth.
+unmaintained = "workspace"
 
 [licenses]
 confidence-threshold = 1.0
