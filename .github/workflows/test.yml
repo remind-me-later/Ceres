@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.4.0
 
       # The tests only need the boot ROMs; the other submodules are reference
       # code and documentation.
@@ -30,7 +30,7 @@ jobs:
 
       - name: Cache RGBDS
         id: cache-rgbds
-        uses: actions/cache@v4
+        uses: actions/cache@v4.3.0
         with:
           path: ~/rgbds
           key: rgbds-linux-x86_64-latest
@@ -60,7 +60,7 @@ jobs:
         with:
           components: llvm-tools-preview
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v4.3.0
         with:
           path: ~/.cargo/registry/index
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
@@ -68,7 +68,7 @@ jobs:
             ${{ runner.os }}-cargo-registry-
 
       - name: Cache cargo registry cache
-        uses: actions/cache@v4
+        uses: actions/cache@v4.3.0
         with:
           path: ~/.cargo/registry/cache
           key: ${{ runner.os }}-cargo-cache-${{ hashFiles('**/Cargo.lock') }}
@@ -76,7 +76,7 @@ jobs:
             ${{ runner.os }}-cargo-cache-
 
       - name: Cache cargo git
-        uses: actions/cache@v4
+        uses: actions/cache@v4.3.0
         with:
           path: ~/.cargo/git/db
           key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
@@ -84,7 +84,7 @@ jobs:
             ${{ runner.os }}-cargo-git-
 
       - name: Cache cargo build
-        uses: actions/cache@v4
+        uses: actions/cache@v4.3.0
         with:
           path: target
           key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
@@ -92,13 +92,13 @@ jobs:
             ${{ runner.os }}-cargo-build-
 
       - name: Cache test ROMs
-        uses: actions/cache@v4
+        uses: actions/cache@v4.3.0
         with:
           path: external/test-roms
           key: test-roms-v7.0
 
       - name: Install cargo-llvm-cov and nextest
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@v2.87.29
         with:
           tool: cargo-llvm-cov,nextest
 
@@ -113,7 +113,7 @@ jobs:
         # Note: Test ROMs are automatically downloaded by the build script
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@v7.1.1
         with:
           files: lcov.info
           use_oidc: true

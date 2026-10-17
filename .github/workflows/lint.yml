@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.4.0
 
       # The version of the action and the one of rumdl are pinned together:
       # change both to update. The settings are in .rumdl.toml.
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.4.0
 
       # As above, the action and tombi are pinned together. The settings are
       # in tombi.toml.

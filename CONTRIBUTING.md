@@ -127,6 +127,14 @@ A second workflow, `Lint`, runs on the same events. It lints the Markdown with
 [tombi](https://github.com/tombi-toml/tombi), and fails if the files are not
 formatted as `rumdl fmt .` and `tombi format` would leave them.
 
+The actions that the workflows use are pinned to commits in
+`.github/workflows/actions.lock`, which the
+[gh-actions-lock](https://github.com/github/gh-actions-lock) extension of the
+GitHub CLI writes (`gh extension install github/gh-actions-lock`). When a
+workflow adds, removes or changes an action, run `gh actions-lock` and commit
+the lockfile and the workflow changes it makes. `gh actions-lock --verify`
+checks the lockfile without writing anything.
+
 ### Code Coverage
 
 To analyze test coverage locally with `cargo-llvm-cov` and `cargo-nextest`:
