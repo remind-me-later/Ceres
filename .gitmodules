@@ -52,3 +52,9 @@
 [submodule "external/test-sources/blargg-test-roms"]
 	path = external/test-sources/blargg-test-roms
 	url = git@github.com:remind-me-later/blargg-test-roms.git
+[submodule "external/reference-implementations/dmg-sim"]
+	path = external/reference-implementations/dmg-sim
+	url = git@github.com:msinger/dmg-sim.git
+[submodule "external/tools/nlconv"]
+	path = external/tools/nlconv
+	url = git@github.com:msinger/nlconv.git
