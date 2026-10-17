@@ -1,0 +1,38 @@
+# Dependabot version updates: a pull request each week for the Cargo
+# dependencies (Cargo.lock) and for the actions of the workflows. The pull
+# requests run the Test, Lint and Deny workflows like any other. Dependabot
+# reads this file from the default branch, and opens its pull requests against
+# it.
+#
+# A new release waits a week (cooldown) before it is proposed. Security
+# updates are not delayed by it, but they need "Dependabot security updates"
+# to be enabled in the settings of the repository.
+version: 2
+
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    # The minor and patch updates of all the crates go in one pull request;
+    # each major update gets its own.
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # Dependabot also updates the entries of .github/workflows/actions.lock in
+  # the same pull request, for the workflows that are in it (see
+  # CONTRIBUTING.md).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "ci(deps)"

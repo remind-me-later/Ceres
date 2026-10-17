@@ -144,6 +144,12 @@ workflow adds, removes or changes an action, run `gh actions-lock` and commit
 the lockfile and the workflow changes it makes. `gh actions-lock --verify`
 checks the lockfile without writing anything.
 
+[Dependabot](https://docs.github.com/en/code-security/dependabot) proposes the
+updates of the Cargo dependencies and of the actions once a week
+(`.github/dependabot.yml`), in pull requests that run the three workflows. For
+the actions it also updates `actions.lock`. The minor and patch updates of the
+crates come in one pull request, and each major update in its own.
+
 ### Code Coverage
 
 To analyze test coverage locally with `cargo-llvm-cov` and `cargo-nextest`:
