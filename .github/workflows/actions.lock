@@ -3,6 +3,9 @@
 # Docs: https://gh.io/actions-lockfile
 version: 'v0.0.3'
 workflows:
+    '.github/workflows/deny.yml':
+        - 'actions/checkout@v4.4.0'
+        - 'taiki-e/install-action@v2.87.29'
     '.github/workflows/lint.yml':
         - 'actions/checkout@v4.4.0'
         - 'rvben/rumdl@v0.2.78'

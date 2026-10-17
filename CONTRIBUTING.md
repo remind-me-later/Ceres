@@ -127,6 +127,15 @@ A second workflow, `Lint`, runs on the same events. It lints the Markdown with
 [tombi](https://github.com/tombi-toml/tombi), and fails if the files are not
 formatted as `rumdl fmt .` and `tombi format` would leave them.
 
+A third one, `Deny`, runs [cargo-deny](https://github.com/EmbarkStudios/cargo-deny)
+on the same events and once a week (`cargo deny --all-features check`, with the
+settings of `deny.toml`). It checks the dependencies for security advisories and
+yanked versions, licenses, bans and sources. The advisory database changes every
+day, so a new advisory can fail it without a change of ours: update the crate,
+or, if there is no fix, add the advisory to `ignore` in `deny.toml` with the
+reason. Unmaintained crates only count when the workspace depends on them
+directly.
+
 The actions that the workflows use are pinned to commits in
 `.github/workflows/actions.lock`, which the
 [gh-actions-lock](https://github.com/github/gh-actions-lock) extension of the

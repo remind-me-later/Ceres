@@ -1,0 +1,34 @@
+# GitHub Actions workflow that checks the dependencies of Ceres with
+# cargo-deny: advisories (RustSec), licenses, bans and sources, as set in
+# deny.toml. The advisory database changes every day, so it also runs once a
+# week: a new advisory then shows up without waiting for a push.
+name: Deny
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 5 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  deny:
+    name: Dependencies (cargo-deny)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4.4.0
+
+      # cargo-deny only reads the manifests and Cargo.lock, so the submodules
+      # are not needed. The version is pinned: change it to update.
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2.87.29
+        with:
+          tool: cargo-deny@0.20.2
+
+      - name: Check the dependencies
+        run: cargo deny --all-features check
