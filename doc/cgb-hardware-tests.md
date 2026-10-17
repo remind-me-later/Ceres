@@ -38,6 +38,7 @@ and 1 in double speed, and an M-cycle 8 or 4.
 ## Open questions
 
 ### 1. LY read while LY increments
+
 - **Measure:** read LY on every cycle across the end of a line, for an
   increment that carries through several bits (7→8, 0x0F→0x10, 0x53→0x54,
   0x8F→0x90), in normal and double speed. Repeat on a DMG if possible.
@@ -53,6 +54,7 @@ and 1 in double speed, and an M-cycle 8 or 4.
   or none (gambatte's value comes from something else).
 
 ### 2. Where a read sees LY, the LY=LYC flag and the mode bits
+
 - **Measure:** read LY and STAT on every cycle across the end of a line
   (with LYC matching the old LY) and across the end of line 143 and line
   153, at normal speed and in double speed, and after switching speed with
@@ -81,6 +83,7 @@ and 1 in double speed, and an M-cycle 8 or 4.
   with each other, ceres is overfitting a single read delay.
 
 ### 3. When a STAT write reaches the interrupt
+
 - **Measure:** at normal speed, enable (or disable) one STAT interrupt
   source with a write a few cycles before its source rises: the VBlank
   start (LY 144), the OAM interrupt of line 0 (end of line 153), the
@@ -100,6 +103,7 @@ and 1 in double speed, and an M-cycle 8 or 4.
   match, the one-delay model holds.
 
 ### 4. When an LYC write reaches the comparison
+
 - **Measure:** write LYC (to the current LY, or away from it) a few cycles
   before the end of a line, sweeping the write one cycle at a time, at both
   speeds and with the CPU's cycles shifted against the LCD's
@@ -119,6 +123,7 @@ and 1 in double speed, and an M-cycle 8 or 4.
   means a fixed delay.
 
 ### 5. A STAT write at the VBlank latch
+
 - **Measure:** at normal speed, write STAT 4 half dots before LY becomes
   144 (and before line 153 ends), toggling the VBlank and OAM enables in
   different combinations.
@@ -132,6 +137,7 @@ and 1 in double speed, and an M-cycle 8 or 4.
 - **Outcomes:** whether either combination raises the interrupt.
 
 ### 6. What differs between the CGB-C and the CGB-E
+
 - **Measure:** run the ROMs of entries 1–5 on both revisions, and in
   particular: read LY every cycle across the start of line 153 (when does
   it read 0?), read STAT across the end of line 153 (when does mode 1 end?)

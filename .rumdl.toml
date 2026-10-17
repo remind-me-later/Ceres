@@ -1,0 +1,19 @@
+# Settings of rumdl, which lints and formats the Markdown of the repository:
+#
+#   rumdl check .       lint
+#   rumdl fmt .         format
+#   rumdl fmt --check . what CI runs, together with rumdl check
+#
+# https://github.com/rvben/rumdl
+
+[global]
+# The submodules are other projects' files, and target/ is build output
+# (.gitignore is followed too).
+exclude = ["external", "target"]
+# Inline HTML (the screenshots of the README) and bare URLs are fine.
+disable = ["MD033", "MD034"]
+
+[MD013]
+# Long lines are fine in code and in tables.
+code-blocks = false
+tables = false
