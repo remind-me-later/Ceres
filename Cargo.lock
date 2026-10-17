@@ -696,6 +696,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ceres-hdlgen"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+]
+
+[[package]]
 name = "ceres-std"
 version = "0.1.0"
 dependencies = [

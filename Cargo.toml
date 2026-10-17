@@ -4,6 +4,7 @@ members = [
   "ceres-core",
   "ceres-egui",
   "ceres-gtk",
+  "ceres-hdlgen",
   "ceres-std",
   "ceres-test-runner",
   "ceres-winit",
