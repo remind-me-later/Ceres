@@ -65,10 +65,13 @@ chore(deps): update winit to 0.29
 ## Code Style
 
 - Format Rust code with `cargo fmt --all`
-- Format TOML with `tombi format`
-- Format JSON, Markdown, YAML and JSON with
-  `prettier --write "**/*.{json,yaml,yml,md,json}"`
+- Format TOML with `tombi format`, and check it with `tombi lint`
+- Format Markdown with `rumdl fmt .`, and check it with `rumdl check .`
+- Format JSON and YAML with `prettier --write "**/*.{json,yaml,yml}"`
 - Ensure tests pass (see below)
+
+The settings of tombi and rumdl are in `tombi.toml` and `.rumdl.toml`. CI
+runs them with tombi 1.8.5 and rumdl 0.2.78.
 
 ## Testing
 
@@ -119,6 +122,11 @@ GitHub Actions runs the tests on pushes and pull requests to `main`. It
 installs the RGBDS toolchain, caches dependencies and test ROMs, runs the
 tests for `ceres-core` and `ceres-test-runner` with coverage, and uploads the
 coverage to [Codecov](https://codecov.io/gh/remind-me-later/Ceres).
+
+A second workflow, `Lint`, runs on the same events. It lints the Markdown with
+[rumdl](https://github.com/rvben/rumdl) and the TOML with
+[tombi](https://github.com/tombi-toml/tombi), and fails if the files are not
+formatted as `rumdl fmt .` and `tombi format` would leave them.
 
 ### Code Coverage
 
