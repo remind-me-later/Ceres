@@ -25,6 +25,11 @@ fn main() -> anyhow::Result<()> {
         args.pixel_perfect(),
     )?;
 
+    #[cfg(feature = "debugger")]
+    if args.debugger() {
+        main_window.start_debugger()?;
+    }
+
     main_event_loop.run_app(&mut main_window)?;
 
     Ok(())

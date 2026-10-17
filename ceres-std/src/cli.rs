@@ -162,6 +162,15 @@ pub struct Cli {
         required = false
     )]
     shader_option: ShaderOption,
+    #[cfg(feature = "debugger")]
+    #[arg(
+        long,
+        help = "Debug the game in this terminal",
+        long_help = "Debug the game in this terminal, with a console after SameBoy's: \
+           Ctrl-C stops the game, `help` lists the commands.",
+        required = false
+    )]
+    debugger: bool,
 }
 
 impl Cli {
@@ -187,5 +196,13 @@ impl Cli {
     #[inline]
     pub const fn shader_option(&self) -> ShaderOption {
         self.shader_option
+    }
+
+    /// Whether to start the console debugger.
+    #[cfg(feature = "debugger")]
+    #[must_use]
+    #[inline]
+    pub const fn debugger(&self) -> bool {
+        self.debugger
     }
 }

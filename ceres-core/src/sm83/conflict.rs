@@ -1,0 +1,124 @@
+//! Access-conflict classes for writes to PPU/CPU-visible I/O registers.
+//!
+//! These mirror SameBoy's `GB_CONFLICT_*` handling: a register write does not
+//! always land at the end of its M-cycle, and some registers are written in
+//! two steps. The maps are selected by hardware (`GB_is_cgb`), not by the
+//! mode a ROM runs in, exactly like SameBoy.
+
+use crate::{
+    Model,
+    memory::{BGP, HRAM_START, IF, IO_START, LCDC, LYC, NR10, OBP0, OBP1, SCX, SCY, STAT, WX, WY},
+};
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum ConflictType {
+    #[default]
+    ReadOld,
+    ReadNew,
+    WriteCpu,
+    StatCgb,
+    StatCgbDouble,
+    PaletteDmg,
+    PaletteCgb,
+    DmgLcdc,
+    SgbLcdc,
+    WxDmg,
+    LcdcCgb,
+    LcdcCgbDouble,
+    Nr10CgbDouble,
+    ScxDmgAndCgbDouble,
+    ScyDmg,
+}
+
+pub(crate) const DMG_CONFLICT_MAP: [ConflictType; 128] = {
+    let mut map = [ConflictType::ReadOld; 128];
+    map[IF as usize] = ConflictType::WriteCpu;
+    map[LCDC as usize] = ConflictType::DmgLcdc;
+    // The STAT write bug (every enable set for a moment) is in the LCD
+    // timing unit (`ppu/display/timing.rs`).
+    map[STAT as usize] = ConflictType::ReadOld;
+    map[SCY as usize] = ConflictType::ScyDmg;
+    map[SCX as usize] = ConflictType::ScxDmgAndCgbDouble;
+    map[LYC as usize] = ConflictType::ReadOld;
+    map[BGP as usize] = ConflictType::PaletteDmg;
+    map[OBP0 as usize] = ConflictType::PaletteDmg;
+    map[OBP1 as usize] = ConflictType::PaletteDmg;
+    map[WY as usize] = ConflictType::ReadOld;
+    map[WX as usize] = ConflictType::WxDmg;
+    map
+};
+
+pub(crate) const SGB_CONFLICT_MAP: [ConflictType; 128] = {
+    let mut map = [ConflictType::ReadOld; 128];
+    map[IF as usize] = ConflictType::WriteCpu;
+    map[LCDC as usize] = ConflictType::SgbLcdc;
+    // The STAT write bug (every enable set for a moment) is in the LCD
+    // timing unit (`ppu/display/timing.rs`).
+    map[STAT as usize] = ConflictType::ReadOld;
+    map[SCY as usize] = ConflictType::ScyDmg;
+    map[SCX as usize] = ConflictType::ScxDmgAndCgbDouble;
+    map[LYC as usize] = ConflictType::ReadOld;
+    map[BGP as usize] = ConflictType::ReadNew;
+    map[OBP0 as usize] = ConflictType::ReadNew;
+    map[OBP1 as usize] = ConflictType::ReadNew;
+    map[WY as usize] = ConflictType::ReadOld;
+    map[WX as usize] = ConflictType::WxDmg;
+    map
+};
+
+pub(crate) const CGB_CONFLICT_MAP: [ConflictType; 128] = {
+    let mut map = [ConflictType::ReadOld; 128];
+    map[IF as usize] = ConflictType::WriteCpu;
+    map[LCDC as usize] = ConflictType::LcdcCgb;
+    map[STAT as usize] = ConflictType::StatCgb;
+    map[SCX as usize] = ConflictType::ReadOld;
+    map[LYC as usize] = ConflictType::WriteCpu;
+    map[BGP as usize] = ConflictType::PaletteCgb;
+    map[OBP0 as usize] = ConflictType::PaletteCgb;
+    map[OBP1 as usize] = ConflictType::PaletteCgb;
+    map[WY as usize] = ConflictType::ReadOld;
+    map[WX as usize] = ConflictType::WriteCpu;
+    map
+};
+
+pub(crate) const CGB_DOUBLE_CONFLICT_MAP: [ConflictType; 128] = {
+    let mut map = [ConflictType::ReadOld; 128];
+    map[IF as usize] = ConflictType::WriteCpu;
+    map[NR10 as usize] = ConflictType::Nr10CgbDouble;
+    map[LCDC as usize] = ConflictType::LcdcCgbDouble;
+    map[STAT as usize] = ConflictType::StatCgbDouble;
+    map[SCX as usize] = ConflictType::ScxDmgAndCgbDouble;
+    map[LYC as usize] = ConflictType::ReadOld;
+    map[WY as usize] = ConflictType::ReadOld;
+    map[WX as usize] = ConflictType::ReadOld;
+    map
+};
+
+#[must_use]
+pub(crate) const fn get_conflict(model: Model, double_speed: bool, addr: u16) -> ConflictType {
+    if addr < IO_START || addr >= HRAM_START {
+        return ConflictType::ReadOld;
+    }
+
+    let offset = (addr - IO_START) as usize;
+
+    // Up to the CGB-C the STAT and LYC writes land at once: their timing is
+    // in the PPU's STAT interrupt events.
+    if matches!(model, Model::Cgb0 | Model::CgbA | Model::CgbB | Model::CgbC)
+        && (offset == STAT as usize || offset == LYC as usize)
+    {
+        return ConflictType::ReadOld;
+    }
+
+    if model.is_cgb_hardware() {
+        if double_speed {
+            CGB_DOUBLE_CONFLICT_MAP[offset]
+        } else {
+            CGB_CONFLICT_MAP[offset]
+        }
+    } else if matches!(model, Model::Sgb | Model::Sgb2) {
+        SGB_CONFLICT_MAP[offset]
+    } else {
+        DMG_CONFLICT_MAP[offset]
+    }
+}

@@ -1,7 +1,7 @@
-use crate::{PX_HEIGHT, PX_WIDTH};
+use crate::{PX_HEIGHT, PX_WIDTH, ppu::color_palette::Rgb};
 use alloc::{boxed::Box, vec};
 
-pub struct RgbaBuf {
+pub(super) struct RgbaBuf {
     data: Box<[u8; Self::RGB_BUF_SIZE as usize]>,
 }
 
@@ -25,21 +25,29 @@ impl RgbaBuf {
     const PX_TOTAL: u16 = PX_WIDTH as u16 * PX_HEIGHT as u16;
     const RGB_BUF_SIZE: u32 = Self::PX_TOTAL as u32 * Self::BPP;
 
-    pub fn clear(&mut self) {
-        for byte in self.data.iter_mut() {
-            *byte = 0xff;
-        }
+    pub(super) fn clear(&mut self) {
+        self.data.fill(0xff);
     }
 
     #[must_use]
-    pub const fn pixel_data(&self) -> &[u8] {
+    pub(super) const fn pixel_data(&self) -> &[u8] {
         self.data.as_slice()
     }
 
-    pub fn set_px(&mut self, index: u32, rgb: (u8, u8, u8)) {
-        let base = index * Self::BPP;
-        self.data[base as usize] = rgb.0;
-        self.data[base as usize + 1] = rgb.1;
-        self.data[base as usize + 2] = rgb.2;
+    #[must_use]
+    pub(super) const fn px(&self, index: u32) -> Rgb {
+        let base = (index * Self::BPP) as usize;
+        Rgb {
+            r: self.data[base],
+            g: self.data[base + 1],
+            b: self.data[base + 2],
+        }
+    }
+
+    pub(super) fn set_px(&mut self, index: u32, rgb: Rgb) {
+        let base = (index * Self::BPP) as usize;
+        self.data[base] = rgb.r;
+        self.data[base + 1] = rgb.g;
+        self.data[base + 2] = rgb.b;
     }
 }

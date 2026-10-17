@@ -1,13 +1,37 @@
-use crate::timing::DOTS_PER_SEC;
 use core::num::NonZeroU8;
 
+/// 8 MHz units in a second: the RTC runs off its own crystal, so a second is
+/// 4 194 304 CPU cycles in single speed and twice as many in double speed.
+const SECOND_UNITS: u32 = 0x0080_0000;
+const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
+/// The day counter has 9 bits: the carry is set when it overflows.
+const DAYS: u64 = 0x200;
+
+/// The RAM bank numbers that map a clock register instead.
+pub(crate) const RTC_REG_FIRST: u8 = 0x08;
+pub(crate) const RTC_REG_LAST: u8 = 0x0C;
+
+/// The control register's index, and its bits.
+const CONTROL: usize = 4;
+/// Bit 8 of the day counter.
+const CONTROL_DAY_HIGH_B: u8 = 0x01;
+/// The clock is stopped.
+const CONTROL_HALT_B: u8 = 0x40;
+/// The day counter overflowed.
+const CONTROL_CARRY_B: u8 = 0x80;
+const CONTROL_MASK: u8 = CONTROL_CARRY_B | CONTROL_HALT_B | CONTROL_DAY_HIGH_B;
+
+/// The MBC3's real-time clock (SameBoy's model): the clock ticks the real
+/// registers, the CPU reads the latched copy.
 #[derive(Default, Debug)]
-pub struct Mbc3RTC {
-    carry: bool,
-    dots: i32,
-    halt: bool,
+pub(crate) struct Mbc3RTC {
+    /// 8 MHz units since the last tick.
+    cycles: u32,
+    /// Seconds, minutes, hours, days (low) and control (day bit 8, halt and
+    /// carry) as written / ticked.
+    real: [u8; 5],
+    latched: [u8; 5],
     mapped: Option<NonZeroU8>,
-    regs: [u8; 5],
 }
 
 impl Mbc3RTC {
@@ -17,162 +41,196 @@ impl Mbc3RTC {
     ///
     /// # Errors
     /// Returns `Err(())` if `val` is not in the range 0x8..=0xC.  
-    pub fn map_reg(&mut self, val: u8) -> Result<(), ()> {
-        if !(0x8..=0xC).contains(&val) {
+    pub(crate) fn map_reg(&mut self, val: u8) -> Result<(), ()> {
+        if !(RTC_REG_FIRST..=RTC_REG_LAST).contains(&val) {
             return Err(());
         }
-
-        #[expect(
-            clippy::unwrap_used,
-            reason = "val can only be 0x8..=0xC it will panic only when passed 0"
-        )]
-        {
-            self.mapped = Some(NonZeroU8::new(val).unwrap());
-        }
+        self.mapped = NonZeroU8::new(val);
         Ok(())
     }
 
-    pub fn read(&self, ram_enabled: bool) -> Option<u8> {
-        ram_enabled
-            .then(|| {
-                self.mapped.map(|m| match m.get() {
-                    0x8 => self.regs[0],
-                    0x9 => self.regs[1],
-                    0xA => self.regs[2],
-                    0xB => self.regs[3],
-                    0xC => self.regs[4] | (u8::from(self.halt) << 6) | (u8::from(self.carry) << 7),
-                    _ => unreachable!("Not a valid RTC register"),
-                })
-            })
-            .flatten()
+    /// The clock register mapped to 0xA000-0xBFFF, if any (0x08-0x0C).
+    pub(crate) fn mapped_reg(&self) -> Option<u8> {
+        self.mapped.map(NonZeroU8::get)
     }
 
-    pub const fn run(&mut self, dots: i32) {
-        if self.halt {
+    /// The latched register that is mapped, if any.
+    pub(crate) fn read(&self, ram_enabled: bool) -> Option<u8> {
+        const MASKS: [u8; 5] = [0x3F, 0x3F, 0x1F, 0xFF, CONTROL_MASK];
+        self.mapped.filter(|_| ram_enabled).map(|m| {
+            let index = usize::from(m.get() - RTC_REG_FIRST);
+            self.latched[index] & MASKS[index]
+        })
+    }
+
+    /// Copies the real registers to the latched ones (any write to $6000-$7FFF).
+    pub(crate) const fn latch(&mut self) {
+        self.latched = self.real;
+    }
+
+    /// Advances the clock by `units` 8 MHz units (a CPU cycle in double speed,
+    /// two in single speed).
+    pub(crate) const fn run(&mut self, units: u32) {
+        if self.real[CONTROL] & CONTROL_HALT_B != 0 {
             return;
         }
 
-        self.dots += dots;
-        // TODO: this while is not at all necessary
-        while self.dots > DOTS_PER_SEC {
-            self.dots -= DOTS_PER_SEC + 1;
-            self.update_secs();
+        self.cycles += units;
+        while self.cycles >= SECOND_UNITS {
+            self.cycles -= SECOND_UNITS;
+            self.tick();
         }
     }
 
-    pub const fn unmap_reg(&mut self) {
+    pub(crate) const fn unmap_reg(&mut self) {
         self.mapped = None;
     }
 
-    const fn update_secs(&mut self) {
-        self.regs[0] = (self.regs[0] + 1) & 0x3F;
-        if self.regs[0] == 60 {
-            self.regs[0] = 0;
-
-            self.regs[1] = (self.regs[1] + 1) & 0x3F;
-            if self.regs[1] == 60 {
-                self.regs[1] = 0;
-
-                self.regs[2] = (self.regs[2] + 1) & 0x1F;
-                if self.regs[2] == 24 {
-                    self.regs[2] = 0;
-
-                    self.regs[3] = self.regs[3].wrapping_add(1);
-                    if self.regs[3] == 0 {
-                        self.regs[4] = (self.regs[4] + 1) & 1;
-                        if self.regs[4] == 0 {
-                            self.carry = true;
-                        }
-                    }
-                }
-            }
+    /// One second passes.
+    const fn tick(&mut self) {
+        let r = &mut self.real;
+        r[0] = r[0].wrapping_add(1);
+        if r[0] != 60 {
+            return;
         }
+        r[0] = 0;
+        r[1] = r[1].wrapping_add(1);
+        if r[1] != 60 {
+            return;
+        }
+        r[1] = 0;
+        r[2] = r[2].wrapping_add(1);
+        if r[2] != 24 {
+            return;
+        }
+        r[2] = 0;
+        r[3] = r[3].wrapping_add(1);
+        if r[3] != 0 {
+            return;
+        }
+        if r[CONTROL] & CONTROL_DAY_HIGH_B != 0 {
+            r[CONTROL] |= CONTROL_CARRY_B;
+        }
+        r[CONTROL] ^= CONTROL_DAY_HIGH_B;
     }
 
     #[must_use]
-    pub fn write(&mut self, ram_enabled: bool, val: u8) -> Option<()> {
-        ram_enabled
-            .then(|| {
-                self.mapped.map(|m| match m.get() {
-                    0x8 => self.regs[0] = val & 0x3F,
-                    0x9 => self.regs[1] = val & 0x3F,
-                    0xA => self.regs[2] = val & 0x1F,
-                    0xB => self.regs[3] = val,
-                    0xC => {
-                        let val = val & 0xC1;
-                        self.regs[4] = val;
-                        self.carry = val & 0x80 != 0;
-                        self.halt = val & 0x40 != 0;
-                    }
-                    _ => unreachable!("Not a valid RTC register"),
-                })
-            })
-            .flatten()
+    pub(crate) fn write(&mut self, ram_enabled: bool, val: u8) -> Option<()> {
+        self.mapped.filter(|_| ram_enabled).map(|m| {
+            let index = usize::from(m.get() - RTC_REG_FIRST);
+            if index == 0 {
+                // Writing the seconds restarts the sub-second count.
+                self.cycles = 0;
+            }
+            self.real[index] = val;
+        })
     }
 }
 
 // Getters and Setters
 impl Mbc3RTC {
+    /// `secs` seconds pass at once (a save state loaded later). As in
+    /// SameBoy, the whole days are added first, then the rest a second at a
+    /// time. A halted clock does not move.
     #[expect(clippy::cast_possible_truncation)]
-    pub fn add_seconds(&mut self, val: u64) {
-        let secs = u64::from(self.regs[0]) + val;
-        self.regs[0] = (secs % 60) as u8;
+    pub(crate) const fn add_seconds(&mut self, secs: u64) {
+        if self.real[CONTROL] & CONTROL_HALT_B != 0 {
+            return;
+        }
 
-        let mins = u64::from(self.regs[1]) + secs / 60;
-        self.regs[1] = (mins % 60) as u8;
+        let day = self.real[3] as u64 | (((self.real[CONTROL] & CONTROL_DAY_HIGH_B) as u64) << 8);
+        let day = day + secs / SECONDS_PER_DAY;
+        if day >= DAYS {
+            self.real[CONTROL] |= CONTROL_CARRY_B;
+        }
+        let day = day % DAYS;
+        self.real[3] = day as u8;
+        self.real[CONTROL] = (self.real[CONTROL] & !CONTROL_DAY_HIGH_B) | (day >> 8) as u8;
 
-        let hours = u64::from(self.regs[2]) + mins / 60;
-        self.regs[2] = (hours % 24) as u8;
-
-        let days = u64::from(self.regs[3]) + hours / 24;
-        self.regs[3] = (days % 256) as u8;
-
-        let carry = days / 256;
-        self.regs[4] = (self.regs[4] + carry as u8) & 0x1;
-
-        self.carry = carry != 0;
+        let mut left = secs % SECONDS_PER_DAY;
+        while left != 0 {
+            self.tick();
+            left -= 1;
+        }
     }
 
-    pub fn control(&self) -> u8 {
-        self.regs[4] | (u8::from(self.halt) << 6) | (u8::from(self.carry) << 7)
+    /// The clock registers: seconds, minutes, hours, days and control.
+    pub(crate) const fn real(&self) -> [u8; 5] {
+        self.real
     }
 
-    pub const fn days(&self) -> u8 {
-        self.regs[3]
+    pub(crate) const fn set_real(&mut self, real: [u8; 5]) {
+        self.real = real;
+        self.real[CONTROL] &= CONTROL_MASK;
     }
 
-    pub const fn hours(&self) -> u8 {
-        self.regs[2]
+    pub(crate) const fn latched(&self) -> [u8; 5] {
+        self.latched
     }
 
-    pub const fn minutes(&self) -> u8 {
-        self.regs[1]
+    pub(crate) const fn set_latched(&mut self, latched: [u8; 5]) {
+        self.latched = latched;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CONTROL_CARRY_B, CONTROL_DAY_HIGH_B, CONTROL_HALT_B, Mbc3RTC, SECONDS_PER_DAY};
+
+    fn rtc(real: [u8; 5]) -> Mbc3RTC {
+        let mut rtc = Mbc3RTC::default();
+        rtc.set_real(real);
+        rtc
     }
 
-    pub const fn seconds(&self) -> u8 {
-        self.regs[0]
+    #[test]
+    fn add_seconds_matches_ticking() {
+        let starts = [
+            [0, 0, 0, 0, 0],
+            [59, 59, 23, 255, 0],
+            [12, 34, 5, 255, CONTROL_DAY_HIGH_B],
+            [30, 59, 23, 255, CONTROL_DAY_HIGH_B],
+        ];
+        let durations = [
+            0,
+            1,
+            59,
+            3600,
+            SECONDS_PER_DAY - 1,
+            SECONDS_PER_DAY,
+            3 * SECONDS_PER_DAY + 12_345,
+        ];
+        for start in starts {
+            for secs in durations {
+                let mut ticked = rtc(start);
+                for _ in 0..secs {
+                    ticked.tick();
+                }
+                let mut added = rtc(start);
+                added.add_seconds(secs);
+                assert_eq!(added.real(), ticked.real(), "{start:?} + {secs} s");
+            }
+        }
     }
 
-    pub const fn set_control(&mut self, val: u8) {
-        let val = val & 0xC1;
-        self.regs[4] = val;
-        self.carry = val & 0x80 != 0;
-        self.halt = val & 0x40 != 0;
+    #[test]
+    fn day_carry_only_when_the_9_bit_counter_overflows() {
+        let mut day_255 = rtc([0, 0, 0, 255, 0]);
+        day_255.add_seconds(SECONDS_PER_DAY);
+        assert_eq!(day_255.real(), [0, 0, 0, 0, CONTROL_DAY_HIGH_B], "day 256");
+
+        let mut day_511 = rtc([0, 0, 0, 255, CONTROL_DAY_HIGH_B]);
+        day_511.add_seconds(SECONDS_PER_DAY);
+        assert_eq!(day_511.real(), [0, 0, 0, 0, CONTROL_CARRY_B], "day 512");
     }
 
-    pub const fn set_days(&mut self, val: u8) {
-        self.regs[3] = val;
-    }
-
-    pub const fn set_hours(&mut self, val: u8) {
-        self.regs[2] = val;
-    }
-
-    pub const fn set_minutes(&mut self, val: u8) {
-        self.regs[1] = val;
-    }
-
-    pub const fn set_seconds(&mut self, val: u8) {
-        self.regs[0] = val;
+    #[test]
+    fn add_seconds_keeps_a_halted_clock_and_the_latched_registers() {
+        let halted = [1, 2, 3, 4, CONTROL_HALT_B];
+        let mut rtc = rtc(halted);
+        rtc.set_latched([5, 6, 7, 8, 0]);
+        rtc.add_seconds(1000);
+        assert_eq!(rtc.real(), halted, "halted");
+        assert_eq!(rtc.latched(), [5, 6, 7, 8, 0], "latched");
     }
 }

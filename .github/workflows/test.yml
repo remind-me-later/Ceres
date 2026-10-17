@@ -10,6 +10,11 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: read
+  # Codecov checks uploads against GitHub's OIDC token, so no secret is needed.
+  id-token: write
+
 jobs:
   test:
     name: Test Suite
@@ -17,8 +22,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      # The tests only need the boot ROMs; the other submodules are reference
+      # code and documentation.
+      - name: Check out the boot ROM sources
+        run: git submodule update --init --recursive external/gb-bootroms
 
       - name: Cache RGBDS
         id: cache-rgbds
@@ -49,6 +57,8 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
@@ -87,6 +97,23 @@ jobs:
           path: external/test-roms
           key: test-roms-v7.0
 
-      - name: Run integration tests
-        run: cargo test --package ceres-test-runner
+      - name: Install cargo-llvm-cov and nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov,nextest
+
+      # nextest runs each test in its own process: threads sharing one
+      # process would fight over the coverage counters. Release builds keep
+      # the ROM tests fast and count the same lines.
+      - name: Run tests with coverage
+        run: >
+          cargo llvm-cov nextest --release
+          --package ceres-core --package ceres-test-runner
+          --lcov --output-path lcov.info
         # Note: Test ROMs are automatically downloaded by the build script
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          files: lcov.info
+          use_oidc: true

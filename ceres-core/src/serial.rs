@@ -1,108 +1,182 @@
 use crate::{CgbMode, interrupts::Interrupts};
+#[cfg(feature = "debug")]
 use alloc::string::String;
 
-const START: u8 = 0x80;
-const CGB_SPEED: u8 = 0x2;
-const SHIFT: u8 = 0x1;
+// SC bits
+/// A transfer is running (or requested).
+const SC_START_B: u8 = 0x80;
+/// CGB: the fast clock.
+const SC_FAST_CLOCK_B: u8 = 0x02;
+/// This side drives the clock.
+const SC_INTERNAL_CLOCK_B: u8 = 0x01;
+/// A transfer this side clocks.
+const SC_INTERNAL_TRANSFER: u8 = SC_START_B | SC_INTERNAL_CLOCK_B;
 
-// VERY PARTIAL Serial port implementation with output capture for test ROMs
-#[derive(Default)]
-pub struct Serial {
+/// The system counter bit whose falling edges toggle the master clock: a bit
+/// shifts every second edge, at 8192 Hz (262144 Hz with the fast clock).
+const CLOCK_BIT: u16 = 0x80;
+const FAST_CLOCK_BIT: u16 = 0x04;
+
+/// The serial port, without a link cable: a transfer on the internal clock
+/// shifts in ones. With the `debug` feature the bytes sent are captured for
+/// test ROMs.
+pub(crate) struct Serial {
     count: u8,
-    div_mask: u8,
+    div_mask: u16,
     master_clock: bool,
+    /// The printable bytes sent.
+    #[cfg(feature = "debug")]
     output: String,
     sb: u8,
-    sb_sent: u8, // Store the original byte being sent
+    /// The byte being sent, as written.
+    #[cfg(feature = "debug")]
+    sb_sent: u8,
     sc: u8,
 }
 
+impl Default for Serial {
+    fn default() -> Self {
+        Self {
+            count: 0,
+            div_mask: CLOCK_BIT,
+            master_clock: false,
+            #[cfg(feature = "debug")]
+            output: String::new(),
+            sb: 0,
+            #[cfg(feature = "debug")]
+            sb_sent: 0,
+            sc: 0x7E,
+        }
+    }
+}
+
 impl Serial {
+    /// Sets the master clock flip-flop from the system counter (it toggles on
+    /// every falling edge of bit 7, so it follows bit 8 until DIV is written).
+    pub(crate) const fn set_master_clock(&mut self, val: bool) {
+        self.master_clock = val;
+    }
+
+    /// The system counter bit whose falling edges clock the serial port.
     #[must_use]
-    pub const fn div_mask(&self) -> u8 {
+    pub(crate) const fn div_mask(&self) -> u16 {
         self.div_mask
     }
 
-    /// Get the serial output as a string (used by test ROMs)
+    /// The printable bytes sent (test ROMs print their results).
+    #[cfg(feature = "debug")]
     #[must_use]
-    pub fn output(&self) -> &str {
+    pub(crate) fn output(&self) -> &str {
         &self.output
     }
 
     #[must_use]
-    pub const fn read_sb(&self) -> u8 {
+    pub(crate) const fn read_sb(&self) -> u8 {
         self.sb
     }
 
     #[must_use]
-    pub const fn read_sc(&self, cgb_mode: CgbMode) -> u8 {
-        const SC_MASK: u8 = !(START | SHIFT);
+    pub(crate) const fn read_sc(&self) -> u8 {
+        self.sc
+    }
 
-        if matches!(cgb_mode, CgbMode::Cgb) {
-            self.sc | SC_MASK
-        } else {
-            self.sc | CGB_SPEED | SC_MASK
+    /// A falling edge of the selected system counter bit: toggles the master
+    /// clock and shifts a bit on every second edge (port of SameBoy's
+    /// `GB_serial_master_edge`).
+    pub(crate) fn master_edge(&mut self, ints: &mut Interrupts) {
+        self.master_clock = !self.master_clock;
+
+        if !self.master_clock && self.sc & SC_INTERNAL_TRANSFER == SC_INTERNAL_TRANSFER {
+            self.shift_in(ints);
         }
     }
 
-    pub fn run_master(&mut self, ints: &mut Interrupts) {
-        self.master_clock ^= true;
+    /// Shifts one bit in (and out); the eighth one completes the transfer.
+    #[cfg_attr(
+        not(feature = "debug"),
+        expect(clippy::missing_const_for_fn, reason = "not const with the capture")
+    )]
+    fn shift_in(&mut self, ints: &mut Interrupts) {
+        self.count += 1;
+        if self.count == 8 {
+            self.count = 0;
+            self.sc &= !SC_START_B;
+            ints.request_serial();
 
-        if !self.master_clock && (self.sc & (START | SHIFT) == (START | SHIFT)) {
-            self.count += 1;
-            if self.count > 7 {
-                // Transfer complete - capture the ORIGINAL byte that was sent
-                let transferred_byte = self.sb_sent;
-
-                self.count = 0;
-                ints.request_serial();
-                self.sc &= !START;
-
-                // Capture the byte that was just transferred
-                // Test ROMs like Blargg's tests output via serial
-                if (0x20..0x7F).contains(&transferred_byte) {
-                    // Printable ASCII character
-                    self.output.push(transferred_byte as char);
-                } else if transferred_byte == b'\n' {
-                    self.output.push('\n');
-                } else if transferred_byte == b'\r' {
-                    self.output.push('\r');
-                } else if transferred_byte != 0 {
-                    // For debugging: capture non-zero non-printable bytes as hex
-                    // write!(&mut self.output, "[{transferred_byte:02X}]");
-                } else {
-                    // Zero byte - ignore
+            #[cfg(feature = "debug")]
+            {
+                let byte = self.sb_sent;
+                if (0x20..0x7F).contains(&byte) || matches!(byte, b'\n' | b'\r') {
+                    self.output.push(char::from(byte));
                 }
             }
+        }
 
-            self.sb <<= 1;
+        self.sb <<= 1;
+        // When no device is connected, the input bit reads as 1.
+        self.sb |= 1;
+    }
 
-            // When no device is connected, the input bit reads as 1
-            self.sb |= 1;
+    /// Completes the transfer now if its last bit is shifted within `cycles`
+    /// system clock cycles (the interrupt acknowledge looks ahead that far).
+    pub(crate) fn complete_if_due(&mut self, div: u16, cycles: u16, ints: &mut Interrupts) {
+        if !self.master_clock
+            || self.sc & SC_INTERNAL_TRANSFER != SC_INTERNAL_TRANSFER
+            || self.count != 7
+        {
+            return;
+        }
+        // The edge is the system counter's selected bit falling: the
+        // increment that wraps the bits below it.
+        let period = self.div_mask << 1;
+        let cycles_to_edge = period - (div & (period - 1));
+        if cycles_to_edge <= cycles {
+            self.shift_in(ints);
         }
     }
 
-    pub const fn write_sb(&mut self, val: u8) {
+    pub(crate) const fn write_sb(&mut self, val: u8) {
         self.sb = val;
-        self.sb_sent = val; // Store original value for later capture
+        #[cfg(feature = "debug")]
+        {
+            self.sb_sent = val;
+        }
     }
 
-    pub fn write_sc(&mut self, mut val: u8, ints: &mut Interrupts, cgb_mode: CgbMode) {
+    /// Sets SC without clocking the port (a state load): a transfer in
+    /// progress restarts from its first bit.
+    pub(crate) const fn set_sc(&mut self, val: u8, cgb_mode: CgbMode) {
+        self.count = 0;
+        let cgb = matches!(cgb_mode, CgbMode::Cgb);
+        let val = if cgb { val } else { val | SC_FAST_CLOCK_B };
+        self.sc = val | 0x7C;
+        self.div_mask = if cgb && val & SC_FAST_CLOCK_B != 0 {
+            FAST_CLOCK_BIT
+        } else {
+            CLOCK_BIT
+        };
+    }
+
+    pub(crate) fn write_sc(&mut self, mut val: u8, ints: &mut Interrupts, cgb_mode: CgbMode) {
         self.count = 0;
 
-        if matches!(cgb_mode, CgbMode::Cgb) {
-            val |= 2;
+        let cgb = matches!(cgb_mode, CgbMode::Cgb);
+        if !cgb {
+            val |= SC_FAST_CLOCK_B;
         }
 
-        self.sc = val | !(START | CGB_SPEED | SHIFT);
-        self.div_mask = if matches!(cgb_mode, CgbMode::Cgb) && val & CGB_SPEED != 0 {
-            4
-        } else {
-            0x80
-        };
-
+        // Writing SC while the master clock is high clocks the port once
+        // more, with the old SC value.
         if self.master_clock {
-            self.run_master(ints);
+            self.master_edge(ints);
         }
+
+        // Bits 6-2 and bit 1 (unless CGB) always read 1.
+        self.sc = val | 0x7C;
+        self.div_mask = if cgb && val & SC_FAST_CLOCK_B != 0 {
+            FAST_CLOCK_BIT
+        } else {
+            CLOCK_BIT
+        };
     }
 }

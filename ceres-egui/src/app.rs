@@ -18,6 +18,14 @@ pub struct App {
 }
 
 impl App {
+    /// Starts the console debugger on the terminal.
+    #[cfg(feature = "debugger")]
+    pub fn start_debugger(&self) -> anyhow::Result<()> {
+        let history = self.project_dirs.data_dir().join("debugger_history");
+        self.thread.start_debugger(Some(history))?;
+        Ok(())
+    }
+
     pub fn new(
         cc: &eframe::CreationContext<'_>,
         model: ceres_std::Model,
@@ -31,9 +39,7 @@ impl App {
 
         let sav_path = rom_path.and_then(|path| Self::sav_path_from_rom_path(&project_dirs, path));
 
-        let pixel_data_rgba = Arc::new(Mutex::new(
-            vec![0; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice(),
-        ));
+        let pixel_data_rgba = Arc::new(Mutex::new(screen::Frame::new()));
 
         let mut thread = GbThread::new(model, sav_path.as_deref(), rom_path)?;
 
@@ -88,8 +94,8 @@ impl eframe::App for App {
     }
 
     #[expect(clippy::too_many_lines)]
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::TopBottomPanel::top("top_panel").show(ctx, |top_panel_ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        egui::Panel::top("top_panel").show(ui, |top_panel_ui| {
             egui::MenuBar::new().ui(top_panel_ui, |menu_bar_ui| {
                 menu_bar_ui.menu_button("File", |menu_button_ui| {
                     if menu_button_ui.button("Open").clicked() {
@@ -205,10 +211,15 @@ impl eframe::App for App {
             });
         });
 
-        if let Ok(mut buffer) = self.screen.mut_buffer().lock()
-            && self.thread.copy_pixel_data_rgba(&mut buffer).is_err()
-        {
-            eprintln!("couldn't copy pixel data");
+        if let Ok(mut frame) = self.screen.mut_buffer().lock() {
+            let screen::Frame { number, rgba } = &mut *frame;
+            if self
+                .thread
+                .with_new_frame(number, |new| rgba.copy_from_slice(new))
+                .is_err()
+            {
+                eprintln!("couldn't copy pixel data");
+            }
         }
 
         egui::CentralPanel::default()
@@ -220,12 +231,12 @@ impl eframe::App for App {
                 fill: egui::Color32::BLACK,
                 stroke: egui::Stroke::NONE,
             })
-            .show(ctx, |central_panel_ui| {
+            .show(ui, |central_panel_ui| {
                 self.screen.custom_painting(central_panel_ui);
             });
 
         self.thread.press_release(|p| {
-            ctx.input(|i| {
+            ui.input(|i| {
                 const KEY_DICT: [(Key, ceres_std::Button); 8] = [
                     (Key::W, ceres_std::Button::Up),
                     (Key::S, ceres_std::Button::Down),
@@ -251,7 +262,7 @@ impl eframe::App for App {
             true
         });
 
-        ctx.request_repaint();
+        ui.request_repaint();
     }
 }
 
@@ -268,7 +279,7 @@ fn setup_theme(ctx: &egui::Context) {
     let blue = egui::Color32::from_rgb(69, 133, 136); // Blue accent
     // let aqua = egui::Color32::from_rgb(104, 157, 106); // Aqua accent
 
-    let mut style = (*ctx.style()).clone();
+    let mut style = (*ctx.global_style()).clone();
 
     style.visuals.window_fill = bg0;
     style.visuals.panel_fill = bg0;
@@ -327,5 +338,5 @@ fn setup_theme(ctx: &egui::Context) {
 
     style.visuals.override_text_color = Some(fg0);
 
-    ctx.set_style(style);
+    ctx.set_global_style(style);
 }

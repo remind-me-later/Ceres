@@ -33,5 +33,9 @@ version = "*"
 default-features = false
 features = ["rwh_06", "wayland", "wayland-csd-adwaita"]
 
+[features]
+# A console debugger in the terminal (`--debugger`).
+debugger = ["ceres-std/debugger"]
+
 [lints]
 workspace = true

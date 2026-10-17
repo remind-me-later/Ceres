@@ -1,0 +1,17 @@
+# Clippy settings: https://doc.rust-lang.org/clippy/lint_configuration.html
+
+# Names that `doc_markdown` should not ask to put in backticks: the emulators
+# and test suites Ceres is compared with, and Game Boy hardware terms. ".."
+# keeps Clippy's default list.
+doc-valid-idents = [
+  "..",
+  "GateBoy",
+  "SameBoy",
+  "SameSuite",
+  "HBlank",
+  "VBlank",
+  "NRx1",
+  "NRx2",
+  "NRx3",
+  "NRx4",
+]

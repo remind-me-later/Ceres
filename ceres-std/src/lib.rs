@@ -4,6 +4,9 @@ mod thread;
 #[cfg(feature = "cli")]
 pub mod cli;
 
+#[cfg(feature = "debugger")]
+pub mod debugger;
+
 #[cfg(feature = "wgpu_renderer")]
 pub mod wgpu_renderer;
 
@@ -12,7 +15,7 @@ pub use ceres_core::GameGenieCode;
 
 pub use ceres_core::ColorCorrectionMode;
 pub use ceres_core::{Button, Model, PX_HEIGHT, PX_WIDTH};
-pub use thread::{Error, GbThread, Pressable};
+pub use thread::{Error, GbThread, Pressable, StartFrom};
 
 pub const PIXEL_BUFFER_SIZE: usize = 4 * PX_WIDTH as usize * PX_HEIGHT as usize;
 

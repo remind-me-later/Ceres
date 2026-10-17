@@ -26,5 +26,9 @@ version = "*"
 [dependencies.winit]
 version = "*"
 
+[features]
+# A console debugger in the terminal (`--debugger`).
+debugger = ["ceres-std/debugger"]
+
 [lints]
 workspace = true

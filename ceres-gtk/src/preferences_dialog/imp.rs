@@ -12,6 +12,7 @@ pub struct PreferencesDialog {
     initializing: Rc<RefCell<bool>>,
     pixel_perfect_row: adw::SwitchRow,
     preferences_page: adw::PreferencesPage,
+    resume_save_state_row: adw::SwitchRow,
     shader_row: adw::ComboRow,
 }
 
@@ -64,7 +65,13 @@ impl Default for PreferencesDialog {
         ]);
         color_correction_row.set_model(Some(&color_corrections));
 
+        let resume_save_state_row = adw::SwitchRow::builder()
+            .title("Resume From Save State")
+            .subtitle("Start games where you left them; off, they boot with their saved progress")
+            .build();
+
         emulation_group.add(&gb_model_row);
+        emulation_group.add(&resume_save_state_row);
         emulation_group.add(&shader_row);
         emulation_group.add(&pixel_perfect_row);
         emulation_group.add(&color_correction_row);
@@ -92,6 +99,7 @@ impl Default for PreferencesDialog {
             gl_area_bindings: RefCell::new(Vec::new()),
             initializing: Rc::new(RefCell::new(true)),
             pixel_perfect_row,
+            resume_save_state_row,
             cheats_group,
             add_code_row,
             code_rows: RefCell::new(Vec::new()),
@@ -236,6 +244,13 @@ impl PreferencesDialog {
             .sync_create()
             .build();
 
+        // Bind the resume-from-save-state row
+        let resume_save_state_binding = gl_area
+            .bind_property("resume-save-state", &self.resume_save_state_row, "active")
+            .bidirectional()
+            .sync_create()
+            .build();
+
         // Bind color correction row to GlArea property
         let color_correction_binding = gl_area
             .bind_property("color-correction", &self.color_correction_row, "selected")
@@ -274,6 +289,7 @@ impl PreferencesDialog {
         bindings.push(shader_binding);
         bindings.push(gb_model_binding);
         bindings.push(pixel_perfect_binding);
+        bindings.push(resume_save_state_binding);
         bindings.push(color_correction_binding);
 
         // Cheats: wire add/remove logic and initial refresh

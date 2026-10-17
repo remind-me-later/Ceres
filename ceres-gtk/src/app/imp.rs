@@ -48,6 +48,16 @@ impl Application {
             let pixel_perfect = options.pixel_perfect();
             gl_area.set_property("pixel-perfect", pixel_perfect);
 
+            #[cfg(feature = "debugger")]
+            if options.debugger() {
+                let history = glib::user_data_dir()
+                    .join(ceres_std::cli::CERES_BIN)
+                    .join("debugger_history");
+                if let Err(e) = gl_area.gb_thread().borrow().start_debugger(Some(history)) {
+                    eprintln!("debugger: {e}");
+                }
+            }
+
             if let Some(file_path) = &options.file()
                 && let Some(action) = app_window.lookup_action("win.load-file")
             {

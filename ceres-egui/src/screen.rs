@@ -5,8 +5,27 @@ use eframe::wgpu;
 use std::sync::Arc;
 use std::sync::Mutex;
 
+/// The last emulated frame, shared with the paint callback.
+pub struct Frame {
+    /// The emulated frame it is (`GbThread::frame`).
+    pub number: u64,
+    pub rgba: Box<[u8]>,
+}
+
+impl Frame {
+    pub fn new() -> Self {
+        Self {
+            number: 0,
+            rgba: vec![0; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice(),
+        }
+    }
+}
+
+/// The emulated frame the screen texture holds, kept with the pipeline.
+struct UploadedFrame(u64);
+
 pub struct GBScreen<const PX_WIDTH: u32, const PX_HEIGHT: u32> {
-    buffer: Arc<Mutex<Box<[u8]>>>,
+    buffer: Arc<Mutex<Frame>>,
     pixel_perfect: bool,
     shader_option: ShaderOption,
     size: (f32, f32),
@@ -28,7 +47,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
         ));
     }
 
-    pub const fn mut_buffer(&mut self) -> &mut Arc<Mutex<Box<[u8]>>> {
+    pub const fn mut_buffer(&mut self) -> &mut Arc<Mutex<Frame>> {
         &mut self.buffer
     }
 
@@ -38,7 +57,7 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
 
     pub fn new(
         cc: &eframe::CreationContext<'_>,
-        gb: Arc<Mutex<Box<[u8]>>>,
+        gb: Arc<Mutex<Frame>>,
         shader_option: ShaderOption,
     ) -> Self {
         // Get the WGPU render state from the eframe creation context. This can also be retrieved
@@ -52,11 +71,9 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> GBScreen<PX_WIDTH, PX_HEIGHT> {
                 shader_option.into(),
             );
 
-            wgpu_render_state
-                .renderer
-                .write()
-                .callback_resources
-                .insert(pipeline_wrapper);
+            let resources = &mut wgpu_render_state.renderer.write().callback_resources;
+            resources.insert(pipeline_wrapper);
+            resources.insert(UploadedFrame(0));
         }
 
         Self {
@@ -98,16 +115,25 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
 
     fn prepare(
         &self,
-        device: &wgpu::Device,
+        _device: &wgpu::Device,
         queue: &wgpu::Queue,
         _screen_descriptor: &eframe::egui_wgpu::ScreenDescriptor,
         _egui_encoder: &mut wgpu::CommandEncoder,
         callback_resources: &mut eframe::egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
+        let uploaded = callback_resources
+            .get::<UploadedFrame>()
+            .map_or(0, |uploaded| uploaded.0);
+        let mut new_frame = None;
         if let Some(pipeline) = callback_resources.get_mut::<PipelineWrapper<PX_WIDTH, PX_HEIGHT>>()
         {
-            if let Ok(buffer) = self.buffer.lock() {
-                pipeline.update_screen_texture(device, queue, &buffer);
+            // egui repaints more often than frames come: only a new one is
+            // uploaded (and the previous one kept for the LCD shader).
+            if let Ok(frame) = self.buffer.lock()
+                && frame.number != uploaded
+            {
+                pipeline.upload_frame(queue, &frame.rgba);
+                new_frame = Some(frame.number);
             }
 
             #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
@@ -121,6 +147,9 @@ impl<const PX_WIDTH: u32, const PX_HEIGHT: u32> eframe::egui_wgpu::CallbackTrait
             pipeline.shader_option(queue, self.shader_option.into());
         } else {
             eprintln!("No resources found for GBScreen");
+        }
+        if let Some(number) = new_frame {
+            callback_resources.insert(UploadedFrame(number));
         }
 
         Vec::with_capacity(0)

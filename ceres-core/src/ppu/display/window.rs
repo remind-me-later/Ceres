@@ -1,0 +1,230 @@
+//! The window: the WY trigger, the WX start and their glitches.
+
+use {
+    super::{
+        fetcher::{Fetcher, FetcherStep},
+        fifo::Fifo,
+        pos,
+        state::State,
+    },
+    crate::ppu::{LCDC_ON_B, LCDC_WIN_EN_B, Ppu},
+};
+
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Independent trigger and glitch flags"
+)]
+#[derive(Clone)]
+pub(super) struct Window {
+    /// The window line being drawn (`Window::NO_LINE` before the first one).
+    pub line: u8,
+    pub tile_x: u8,
+    /// The window started on this line.
+    pub wx_triggered: bool,
+    /// WY matched LY in this frame.
+    pub wy_triggered: bool,
+    pub being_fetched: bool,
+    pub wy_check_scheduled: bool,
+    /// Dots until the WY trigger of line 0 is decided (0: not pending).
+    pub line0_wy_countdown: u8,
+    /// SameBoy's `wy_check_modulo`: time since the LCD was turned on modulo 8,
+    /// in units of half a dot (a T-cycle in double speed, two per dot in
+    /// single speed).
+    pub wy_units: u8,
+    pub wy_just_checked: bool,
+    pub cgb_wx_glitch: bool,
+    pub no_pixel_insertion_glitch: bool,
+    pub wx_166_interrupt_glitch: bool,
+    /// A CPU write to WX is landing (SameBoy's `wx_just_changed`).
+    pub wx_just_changed: bool,
+    /// A CPU write that turns the window on is landing: the pixel pipeline
+    /// sees the new enable a dot after the WY trigger does.
+    pub enable_pending: bool,
+    /// The background FIFO and fetcher as the window start found them, for a
+    /// CGB window start that is called off.
+    pub saved: Option<(Fifo, Fetcher)>,
+}
+
+impl Window {
+    /// `line` before the first window line: it wraps to 0 when the window
+    /// starts.
+    pub(super) const NO_LINE: u8 = 0xFF;
+}
+
+impl Default for Window {
+    fn default() -> Self {
+        Self {
+            line: Self::NO_LINE,
+            tile_x: 0,
+            wx_triggered: false,
+            wy_triggered: false,
+            being_fetched: false,
+            wy_check_scheduled: false,
+            line0_wy_countdown: 0,
+            wy_units: 0,
+            wy_just_checked: false,
+            cgb_wx_glitch: false,
+            no_pixel_insertion_glitch: false,
+            wx_166_interrupt_glitch: false,
+            wx_just_changed: false,
+            enable_pending: false,
+            saved: None,
+        }
+    }
+}
+
+impl Ppu {
+    pub(super) fn wy_check(&mut self) {
+        if self.lcdc & LCDC_ON_B == 0 {
+            return;
+        }
+        let comparison =
+            if (!self.is_cgb_hardware() || self.double_speed()) && self.d.ly_for_comparison != -1 {
+                i32::from(self.d.ly_for_comparison.to_le_bytes()[0])
+            } else {
+                i32::from(self.d.current_line)
+            };
+        if self.lcdc & LCDC_WIN_EN_B != 0 && i32::from(self.wy) == comparison {
+            self.d.window.wy_triggered = true;
+        }
+    }
+
+    /// Half a dot passes. SameBoy runs the scheduled WY check on a grid of
+    /// 8 of them (counted from the moment the LCD was turned on), which sits
+    /// at a different offset in each speed and hardware.
+    pub(in crate::ppu) fn advance_wy_unit(&mut self) {
+        self.d.window.wy_units = (self.d.window.wy_units + 1) & 7;
+        if self.d.window.wy_check_scheduled && !self.d.window.wy_triggered {
+            let offset = if self.double_speed {
+                6
+            } else if self.is_cgb_hardware() {
+                0
+            } else {
+                2
+            };
+            if (self.d.window.wy_units + offset).trailing_zeros() >= 3 {
+                self.d.window.wy_check_scheduled = false;
+                self.wy_check();
+                if self.d.state == State::Mode3Pixel
+                    && self.is_cgb_hardware()
+                    && !self.double_speed()
+                {
+                    self.d.window.wy_just_checked = true;
+                }
+            }
+        }
+    }
+
+    pub(super) fn update_wx_glitch(&mut self) {
+        if !self.is_cgb_hardware() {
+            return;
+        }
+        if self.lcdc & LCDC_WIN_EN_B == 0 || !self.d.window.wy_triggered {
+            self.d.window.cgb_wx_glitch = false;
+            return;
+        }
+        let position = self.d.position_in_line;
+        if self.wx == 0 {
+            // (position + 16 <= 8) in u8 arithmetic
+            self.d.window.cgb_wx_glitch = position.wrapping_add(16) <= 8
+                || (position == pos(-7) && self.d.line_has_fractional_scrolling);
+            return;
+        }
+        self.d.window.cgb_wx_glitch = position
+            .wrapping_add(7)
+            .wrapping_add(u8::from(self.d.window.being_fetched))
+            == self.wx;
+    }
+
+    /// Window activation check at the top of a mode-3 iteration. Returns
+    /// `true` if the engine went to sleep (state 42).
+    pub(super) fn mode3_window(&mut self) -> bool {
+        self.d.window.wx_166_interrupt_glitch = false;
+        if self.d.window.wy_just_checked {
+            self.d.window.wy_just_checked = false;
+        } else if !self.d.window.wx_triggered
+            && self.d.window.wy_triggered
+            && self.lcdc & LCDC_WIN_EN_B != 0
+            && !self.d.window.enable_pending
+        {
+            let position = self.d.position_in_line;
+            let hw = self.is_cgb_hardware();
+            let should_activate = if self.wx == 0 {
+                position == pos(-7)
+                    || position == pos(-16) && self.scx & 7 != 0
+                    || (pos(-15)..=pos(-8)).contains(&position)
+            } else if u16::from(self.wx) < 166 + u16::from(hw) {
+                if self.wx == position.wrapping_add(7) {
+                    true
+                } else if !hw
+                    && self.wx == position.wrapping_add(6)
+                    && !self.d.window.wx_just_changed
+                {
+                    // LCD-PPU horizontal desync on DMG units.
+                    if self.is_dmg_family() && self.d.lcd_x > 0 {
+                        self.d.lcd_x -= 1;
+                    }
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            if should_activate {
+                self.d.window.line = self.d.window.line.wrapping_add(1);
+                self.d.window.tile_x = 0;
+                self.d.window.saved = hw.then(|| (self.d.bg_fifo, self.d.fetcher.clone()));
+                self.d.bg_fifo.clear();
+                if self.wx == 0 && self.scx & 7 != 0 && !hw {
+                    self.sleep_in_line(State::Mode3WindowDelay, 1);
+                    return true;
+                } else if self.wx == 166 {
+                    self.d.window.wx_166_interrupt_glitch = true;
+                } else {
+                    // Nothing special about this window start.
+                }
+                self.mode3_window_activated();
+            } else if !hw && self.wx == 166 && self.wx == position.wrapping_add(7) {
+                self.d.window.line = self.d.window.line.wrapping_add(1);
+            } else {
+                // The window does not start here.
+            }
+        } else {
+            // The window is already on, or is not being checked.
+        }
+        false
+    }
+
+    pub(super) const fn mode3_window_activated(&mut self) {
+        self.d.window.wx_triggered = true;
+        self.d.fetcher.step = FetcherStep::GetTileT1;
+        self.d.window.being_fetched = true;
+    }
+
+    /// On CGB, disabling the window while its start is still in progress (its
+    /// first tile not pushed yet) calls it off: the pixels go on from the
+    /// background where they were instead of waiting for the window's tile.
+    pub(in crate::ppu) const fn cancel_window_start(&mut self) {
+        let window = &mut self.d.window;
+        if window.being_fetched
+            && window.wx_triggered
+            && self.d.bg_fifo.is_empty()
+            && let Some((fifo, fetcher)) = window.saved.take()
+        {
+            window.wx_triggered = false;
+
+            self.d.bg_fifo = fifo;
+            self.d.fetcher = fetcher;
+        }
+    }
+
+    /// Called by the CPU's LCDC write handler: disabling the window while a
+    /// window tile is being fetched suppresses the pixel-insertion glitch.
+    pub(crate) const fn note_window_disable(&mut self, old: u8, new: u8) {
+        if old & LCDC_WIN_EN_B != 0 && new & LCDC_WIN_EN_B == 0 && self.d.window.being_fetched {
+            self.d.window.no_pixel_insertion_glitch = true;
+        }
+    }
+}

@@ -4,439 +4,323 @@ mod rom_size;
 
 use {
     crate::Error,
-    alloc::boxed::Box,
-    mbc::{Mbc, Mbc3RTC},
+    alloc::{boxed::Box, vec::Vec},
+    mbc::{Mapping, Mbc, Mbc3RTC},
     ram_size::RAMSize,
     rom_size::ROMSize,
 };
 
 #[derive(Debug)]
-pub struct Cartridge {
+pub(crate) struct Cartridge {
     has_battery: bool,
     mbc: Mbc,
-
+    map: Mapping,
     ram: Box<[u8]>,
-    ram_bank: u8,
-    ram_enabled: bool,
-    ram_offset: u32,
     ram_size: RAMSize,
-
     rom: Box<[u8]>,
-    rom_bank_hi: u8,
-    rom_bank_lo: u8,
-    rom_offsets: (u32, u32),
     rom_size: ROMSize,
 }
 
+/// No cartridge: 32 KiB of ROM reading $FF, no mapper and no RAM.
 impl Default for Cartridge {
-    #[expect(
-        clippy::similar_names,
-        reason = "ROM and RAM are common names in this context"
-    )]
     fn default() -> Self {
         let rom_size = ROMSize::default();
-        let ram_size = RAMSize::default();
-        let mbc = Mbc::default();
-        let has_battery = false;
-
-        let rom = alloc::vec![0xFF; rom_size.size_bytes() as usize].into_boxed_slice();
-        let ram = alloc::vec![0xFF; ram_size.size_bytes() as usize].into_boxed_slice();
-
         Self {
-            mbc,
-            rom,
-            ram,
-            rom_bank_lo: 1,
-            rom_bank_hi: 0,
-            rom_offsets: (0, u32::from(ROMSize::BANK_SIZE)),
-            ram_size,
+            has_battery: false,
+            mbc: Mbc::default(),
+            map: Mapping::default(),
+            ram: Box::default(),
+            ram_size: RAMSize::default(),
+            rom: alloc::vec![0xFF; rom_size.size_bytes() as usize].into_boxed_slice(),
             rom_size,
-            ram_enabled: false,
-            ram_bank: 0,
-            ram_offset: 0,
-            has_battery,
         }
     }
 }
 
+// Cartridge header offsets
+pub(crate) const HEADER_LOGO: usize = 0x104;
+const HEADER_TITLE: usize = 0x134;
+/// The title is 16 bytes long with an old licensee code, 11 with a new one.
+const HEADER_TITLE_END_OLD: usize = 0x144;
+const HEADER_TITLE_END_NEW: usize = 0x13F;
+/// Bit 7 set: the game supports the CGB.
+pub(crate) const HEADER_CGB_FLAG: u16 = 0x143;
+pub(crate) const HEADER_CGB_B: u8 = 0x80;
+const HEADER_CART_TYPE: usize = 0x147;
+const HEADER_RAM_SIZE: usize = 0x149;
+/// 0x33 means the new licensee code (at 0x144) is used instead.
+const HEADER_OLD_LICENSEE: usize = 0x14B;
+const NEW_LICENSEE: u8 = 0x33;
+const HEADER_VERSION: usize = 0x14C;
+const HEADER_CHECKSUM: usize = 0x14D;
+/// Big endian, unlike everything else in the header.
+const HEADER_GLOBAL_CHECKSUM: usize = 0x14E;
+const HEADER_END: usize = 0x150;
+
+/// Nintendo logo bytes at $0104-$0133, used by the boot ROM to verify a
+/// legitimate cartridge. Real MBC1 multicarts typically repeat this logo
+/// in every ROM bank; standard MBC1 carts only have it in bank 0.
+pub(crate) const NINTENDO_LOGO: [u8; 48] = [
+    0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00, 0x0D,
+    0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9, 0x99,
+    0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E,
+];
+
 impl Cartridge {
     #[must_use]
-    pub fn ascii_title(&self) -> &[u8] {
+    pub(crate) fn ascii_title(&self) -> &[u8] {
         let range = if self.is_old_licensee_code() {
-            0x134..0x144
+            HEADER_TITLE..HEADER_TITLE_END_OLD
         } else {
-            0x134..0x13F
+            HEADER_TITLE..HEADER_TITLE_END_NEW
         };
 
         let title = &self.rom[range];
-        let mut i = 0;
-        while i < title.len() && title[i] != 0 {
-            i += 1;
-        }
-        &title[..i]
+        let len = title.iter().position(|&b| b == 0).unwrap_or(title.len());
+        &title[..len]
+    }
+
+    /// The header's title area, 0x134-0x143, as it is (it also holds the
+    /// manufacturer code and the CGB flag on newer cartridges).
+    #[must_use]
+    pub(crate) fn header_title_area(&self) -> [u8; 0x10] {
+        let mut title = [0; 0x10];
+        title.copy_from_slice(&self.rom[HEADER_TITLE..HEADER_TITLE_END_OLD]);
+        title
+    }
+
+    /// The global checksum's bytes, as they are in the header.
+    #[must_use]
+    pub(crate) const fn global_checksum_bytes(&self) -> [u8; 2] {
+        [
+            self.rom[HEADER_GLOBAL_CHECKSUM],
+            self.rom[HEADER_GLOBAL_CHECKSUM + 1],
+        ]
     }
 
     #[must_use]
-    pub const fn global_checksum(&self) -> u16 {
-        u16::from_le_bytes([self.rom[0x14F], self.rom[0x14E]])
-    }
-
-    #[must_use]
-    pub const fn has_battery(&self) -> bool {
+    pub(crate) const fn has_battery(&self) -> bool {
         self.has_battery
     }
 
     #[must_use]
-    pub const fn header_checksum(&self) -> u8 {
-        self.rom[0x14D]
+    pub(crate) const fn header_checksum(&self) -> u8 {
+        self.rom[HEADER_CHECKSUM]
     }
 
     #[must_use]
-    pub const fn is_old_licensee_code(&self) -> bool {
-        let code = self.rom[0x14B];
-        code != 0x33
+    pub(crate) const fn is_old_licensee_code(&self) -> bool {
+        self.rom[HEADER_OLD_LICENSEE] != NEW_LICENSEE
+    }
+
+    /// The cartridge RAM, with or without a battery (MBC2's built-in 512
+    /// half-bytes included).
+    #[must_use]
+    pub(crate) fn ram(&self) -> &[u8] {
+        &self.ram
     }
 
     #[must_use]
-    pub fn mbc_ram(&self) -> Option<&[u8]> {
-        self.has_battery.then_some(&*self.ram)
-    }
-
-    #[must_use]
-    pub fn mbc_ram_mut(&mut self) -> Option<&mut [u8]> {
-        self.has_battery.then_some(&mut *self.ram)
+    pub(crate) fn ram_mut(&mut self) -> &mut [u8] {
+        &mut self.ram
     }
 
     #[expect(
         clippy::similar_names,
         reason = "ROM and RAM are common names in this context"
     )]
-    pub fn new(rom: Box<[u8]>) -> Result<Self, Error> {
-        if rom.len() < 0x150 {
+    pub(crate) fn new(rom: Box<[u8]>) -> Result<Self, Error> {
+        if rom.len() < HEADER_END {
             return Err(Error::InvalidRomHeaderSize);
         }
 
-        // NOTE: Superfluous but silences clippy false positive
-        assert!(rom.len() >= 0x150, "ROM is too small to be valid");
+        let rom_size = ROMSize::from_len(rom.len())?;
+        let ram_size = RAMSize::new(rom[HEADER_RAM_SIZE])?;
 
-        let rom_size = ROMSize::new(rom[0x148])?;
-        let ram_size = RAMSize::new(rom[0x149])?;
-        let (mbc, has_battery) = Mbc::mbc_and_battery(rom[0x147])?;
+        // Unused space reads as $FF.
+        let rom = if rom.len() == rom_size.size_bytes() as usize {
+            rom
+        } else {
+            let mut padded = alloc::vec![0xFF; rom_size.size_bytes() as usize];
+            padded[..rom.len()].copy_from_slice(&rom);
+            padded.into_boxed_slice()
+        };
 
-        #[expect(clippy::cast_possible_truncation)]
-        if rom_size.size_bytes() as usize != rom.len() {
-            return Err(Error::RomSizeDifferentThanActual {
-                expected: rom_size.size_bytes(),
-                actual: rom.len() as u32,
-            });
-        }
+        let (mbc, has_battery) = Mbc::new(rom[HEADER_CART_TYPE], &rom, rom_size, ram_size)?;
 
-        // MBC2 has built-in 512 bytes of 4-bit RAM regardless of header
-        let actual_ram_size = if matches!(mbc, Mbc::Mbc2) {
-            0x200 // 512 bytes
+        // The MBC2 has 512 half-bytes of RAM built in, whatever the header says.
+        let ram_len = if matches!(mbc, Mbc::Mbc2) {
+            0x200
         } else {
             ram_size.size_bytes() as usize
         };
-        let ram = alloc::vec![0xFF; actual_ram_size].into_boxed_slice();
 
         Ok(Self {
-            mbc,
-            rom,
-            ram,
-            rom_bank_lo: 1,
-            rom_bank_hi: 0,
-            rom_offsets: (0, u32::from(ROMSize::BANK_SIZE)),
-            ram_size,
-            rom_size,
-            ram_enabled: false,
-            ram_bank: 0,
-            ram_offset: 0,
             has_battery,
+            mbc,
+            map: Mapping::default(),
+            ram: alloc::vec![0xFF; ram_len].into_boxed_slice(),
+            ram_size,
+            rom,
+            rom_size,
         })
     }
 
+    /// The RAM index of `addr` (0xA000-0xBFFF) in the mapped bank, wrapped
+    /// by the RAM size.
     #[must_use]
-    const fn ram_addr(&self, addr: u16) -> u32 {
-        // Mask the final address with RAM size to handle wrapping
-        let raw_addr = self.ram_offset | (addr & 0x1FFF) as u32;
-        if self.ram_size.size_bytes() > 0 {
-            raw_addr & (self.ram_size.size_bytes() - 1)
-        } else {
-            raw_addr
-        }
+    const fn ram_index(&self, addr: u16) -> usize {
+        let addr = self.map.ram | (addr & 0x1FFF) as u32;
+        (addr & (self.ram_size.size_bytes() - 1)) as usize
+    }
+
+    /// The 4-bit RAM of the MBC2, mirrored over 0xA000-0xBFFF.
+    const fn mbc2_ram_index(addr: u16) -> usize {
+        (addr & 0x1FF) as usize
     }
 
     #[must_use]
-    pub const fn ram_size_bytes(&self) -> u32 {
-        self.ram_size.size_bytes()
-    }
-
-    #[must_use]
-    pub fn read_ram(&self, addr: u16) -> u8 {
-        const fn mbc_read_ram(cart: &Cartridge, ram_enabled: bool, addr: u16) -> u8 {
-            if cart.ram_size.has_ram() && ram_enabled {
-                let addr = cart.ram_addr(addr);
-                cart.ram[addr as usize]
+    pub(crate) fn read_ram(&self, addr: u16) -> u8 {
+        let enabled = self.map.ram_enabled;
+        let banked = || {
+            if self.ram_size.has_ram() && enabled {
+                self.ram[self.ram_index(addr)]
             } else {
                 0xFF
             }
-        }
+        };
 
-        match &self.mbc {
+        match self.mbc {
             Mbc::Mbc0 => 0xFF,
-            Mbc::Mbc1 { .. } | Mbc::Mbc5 => mbc_read_ram(self, self.ram_enabled, addr),
+            Mbc::Mbc1(_) | Mbc::Mbc5(_) => banked(),
+            // The upper 4 bits read 1.
             Mbc::Mbc2 => {
-                // MBC2 has built-in 512 bytes of 4-bit RAM
-                // Upper 4 bits always read as 0xF
-                if self.ram_enabled {
-                    let ram_addr = (addr & 0x1FF) as usize; // 512 bytes
-                    (self.ram[ram_addr] & 0xF) | 0xF0
+                if enabled {
+                    (self.ram[Self::mbc2_ram_index(addr)] & 0xF) | 0xF0
                 } else {
                     0xFF
                 }
             }
-            Mbc::Mbc3 { rtc, .. } => rtc
-                .as_ref()
-                .and_then(|r| r.read(self.ram_enabled))
-                .unwrap_or_else(|| mbc_read_ram(self, self.ram_enabled, addr)),
+            Mbc::Mbc3(ref mbc3) => mbc3
+                .rtc()
+                .and_then(|r| r.read(enabled))
+                .unwrap_or_else(banked),
         }
     }
 
     #[must_use]
-    pub const fn read_rom(&self, addr: u16) -> u8 {
-        let (lo, hi) = self.rom_offsets;
+    pub(crate) const fn read_rom(&self, addr: u16) -> u8 {
+        self.rom[self.rom_index(addr)]
+    }
 
+    /// Where the ROM byte the CPU sees at `addr` (0x0000-0x7FFF) is kept.
+    const fn rom_index(&self, addr: u16) -> usize {
         let bank_addr = match addr {
-            0x0000..=0x3FFF => lo | (addr & 0x3FFF) as u32,
-            0x4000..=0x7FFF => hi | (addr & 0x3FFF) as u32,
+            0x0000..=0x3FFF => self.map.rom.rom0 | (addr & 0x3FFF) as u32,
+            0x4000..=0x7FFF => self.map.rom.romx | (addr & 0x3FFF) as u32,
             _ => unreachable!(),
         };
 
-        self.rom[bank_addr as usize]
+        bank_addr as usize
+    }
+
+    /// Changes the ROM byte the CPU sees at `addr` (0x0000-0x7FFF), in the
+    /// bank mapped there (a debugger's write: the MBC doesn't see it).
+    #[cfg(feature = "debug")]
+    pub(crate) const fn patch_rom(&mut self, addr: u16, val: u8) {
+        self.rom[self.rom_index(addr)] = val;
+    }
+
+    /// The byte at `addr` (0x0000-0x7FFF) of ROM bank `bank`, mapped or not
+    /// (the bank number wraps around the ROM's size).
+    #[cfg(feature = "debug")]
+    pub(crate) fn read_rom_bank(&self, bank: u32, addr: u16) -> u8 {
+        let offset = bank as usize * ROMSize::BANK_SIZE as usize + (addr & 0x3FFF) as usize;
+        self.rom[offset % self.rom.len()]
+    }
+
+    /// The ROM banks mapped at 0x0000-0x3FFF and 0x4000-0x7FFF.
+    #[cfg(feature = "debug")]
+    pub(crate) const fn rom_banks(&self) -> crate::RomBanks {
+        let bank_size = ROMSize::BANK_SIZE as u32;
+        crate::RomBanks {
+            rom0: self.map.rom.rom0 / bank_size,
+            romx: self.map.rom.romx / bank_size,
+        }
+    }
+
+    /// The RAM bank mapped at 0xA000-0xBFFF.
+    #[cfg(feature = "debug")]
+    pub(crate) const fn ram_bank(&self) -> u32 {
+        self.map.ram / RAMSize::BANK_SIZE as u32
     }
 
     #[must_use]
-    pub const fn rtc(&self) -> Option<&Mbc3RTC> {
-        if let Mbc::Mbc3 { rtc: Some(rtc), .. } = &self.mbc {
-            Some(rtc)
+    pub(crate) const fn rtc(&self) -> Option<&Mbc3RTC> {
+        if let Mbc::Mbc3(ref mbc3) = self.mbc {
+            mbc3.rtc()
         } else {
             None
         }
     }
 
     #[must_use]
-    pub const fn rtc_mut(&mut self) -> Option<&mut Mbc3RTC> {
-        if let Mbc::Mbc3 { rtc, .. } = &mut self.mbc {
-            rtc.as_mut()
+    pub(crate) const fn rtc_mut(&mut self) -> Option<&mut Mbc3RTC> {
+        if let Mbc::Mbc3(ref mut mbc3) = self.mbc {
+            mbc3.rtc_mut()
         } else {
             None
         }
     }
 
-    pub const fn run_rtc(&mut self, dots: i32) {
-        if let Mbc::Mbc3 { rtc: Some(rtc), .. } = &mut self.mbc {
-            rtc.run(dots);
+    pub(crate) const fn run_rtc(&mut self, units: u32) {
+        if let Some(rtc) = self.rtc_mut() {
+            rtc.run(units);
         }
     }
 
     #[must_use]
-    pub const fn version(&self) -> u8 {
-        self.rom[0x14C]
+    pub(crate) const fn version(&self) -> u8 {
+        self.rom[HEADER_VERSION]
     }
 
-    pub fn write_ram(&mut self, addr: u16, val: u8) {
-        fn mbc_write_ram(cart: &mut Cartridge, ram_enabled: bool, addr: u16, val: u8) {
-            if cart.ram_size.has_ram() && ram_enabled {
-                let addr = cart.ram_addr(addr);
-                cart.ram[addr as usize] = val;
-            }
+    pub(crate) fn write_ram(&mut self, addr: u16, val: u8) {
+        let enabled = self.map.ram_enabled;
+        // A mapped clock register takes the write.
+        if let Some(rtc) = self.rtc_mut()
+            && rtc.write(enabled, val).is_some()
+        {
+            return;
         }
 
-        match &mut self.mbc {
+        match self.mbc {
             Mbc::Mbc0 => (),
-            Mbc::Mbc1 { .. } | Mbc::Mbc5 => {
-                mbc_write_ram(self, self.ram_enabled, addr, val);
-            }
-            Mbc::Mbc2 => {
-                // MBC2 has built-in 512 bytes of 4-bit RAM
-                // Only lower 4 bits are stored
-                if self.ram_enabled {
-                    let ram_addr = (addr & 0x1FF) as usize; // 512 bytes
-                    self.ram[ram_addr] = val & 0xF;
+            Mbc::Mbc1(_) | Mbc::Mbc3(_) | Mbc::Mbc5(_) => {
+                if self.ram_size.has_ram() && enabled {
+                    let index = self.ram_index(addr);
+                    self.ram[index] = val;
                 }
             }
-            Mbc::Mbc3 { rtc, .. } => rtc
-                .as_mut()
-                .and_then(|r| r.write(self.ram_enabled, val))
-                .unwrap_or_else(|| {
-                    mbc_write_ram(self, self.ram_enabled, addr, val);
-                }),
+            // Only the low 4 bits are stored.
+            Mbc::Mbc2 => {
+                if enabled {
+                    self.ram[Self::mbc2_ram_index(addr)] = val & 0xF;
+                }
+            }
         }
     }
 
-    #[expect(clippy::too_many_lines)]
-    pub fn write_rom(&mut self, addr: u16, val: u8) {
-        match &mut self.mbc {
-            Mbc::Mbc0 => (),
-            Mbc::Mbc1 { bank_mode } => {
-                const fn mbc1_rom_offsets(c: &Cartridge, bank_mode: bool) -> (u32, u32) {
-                    // MBC1 bank_lo only uses lower 5 bits
-                    let lo = c.rom_bank_lo & 0x1F;
-                    let hi = c.rom_bank_hi << 5;
+    /// The register writes that restore the mapper's state (BESS).
+    pub(crate) fn bess_mbc_writes(&self) -> Vec<(u16, u8)> {
+        self.mbc.bess_writes(&self.map)
+    }
 
-                    let lo_bank = if bank_mode {
-                        hi as u16 & c.rom_size.mask()
-                    } else {
-                        0
-                    };
-
-                    // Calculate combined bank BEFORE ROM size mask
-                    let mut combined = (hi | lo) as u16;
-
-                    // The 0→1 correction happens on the UNMASKED lower 5 bits:
-                    // if lower 5 bits of combined bank are 0, increment
-                    // This check must happen BEFORE applying the ROM size mask
-                    if combined.trailing_zeros() >= 5 {
-                        combined += 1;
-                    }
-
-                    // Now apply ROM size mask to get the actual bank
-                    let hi_bank = combined & c.rom_size.mask();
-
-                    (
-                        ROMSize::BANK_SIZE as u32 * lo_bank as u32,
-                        ROMSize::BANK_SIZE as u32 * hi_bank as u32,
-                    )
-                }
-
-                const fn mbc1_ram_offset(cart: &Cartridge, bank_mode: bool) -> u32 {
-                    let bank = if bank_mode {
-                        cart.rom_bank_hi as u32
-                    } else {
-                        0
-                    };
-                    RAMSize::BANK_SIZE as u32 * bank
-                }
-
-                match addr {
-                    0x0000..=0x1FFF => {
-                        self.ram_enabled = (val & 0xF) == 0xA;
-                    }
-                    0x2000..=0x3FFF => {
-                        let bank_mode = *bank_mode;
-
-                        // Store raw value, masking and 0→1 correction happen in mbc1_rom_offsets
-                        self.rom_bank_lo = val;
-                        self.rom_offsets = mbc1_rom_offsets(self, bank_mode);
-                    }
-                    0x4000..=0x5FFF => {
-                        let bank_mode = *bank_mode;
-
-                        self.rom_bank_hi = val & 3;
-                        self.rom_offsets = mbc1_rom_offsets(self, bank_mode);
-                        self.ram_offset = mbc1_ram_offset(self, bank_mode);
-                    }
-                    0x6000..=0x7FFF => {
-                        *bank_mode = val & 1 != 0;
-                        let bank_mode = *bank_mode;
-
-                        self.rom_offsets = mbc1_rom_offsets(self, bank_mode);
-                        self.ram_offset = mbc1_ram_offset(self, bank_mode);
-                    }
-                    _ => (),
-                }
-            }
-            Mbc::Mbc2 => {
-                if addr <= 0x3FFF {
-                    // MBC2 uses bit 8 to distinguish RAM enable from ROM bank
-                    if (addr >> 8) & 1 == 0 {
-                        self.ram_enabled = (val & 0xF) == 0xA;
-                    } else {
-                        // MBC2 only uses lower 4 bits for bank number
-                        // Store raw value, apply 0→1 correction based on lower 4 bits
-                        let bank = val & 0xF;
-                        let bank = if bank == 0 { 1 } else { bank };
-                        // Apply ROM size mask and calculate offset
-                        let masked_bank = u16::from(bank) & self.rom_size.mask();
-                        self.rom_bank_lo = bank;
-                        self.rom_offsets =
-                            (0, u32::from(ROMSize::BANK_SIZE) * u32::from(masked_bank));
-                    }
-                }
-            }
-            Mbc::Mbc3 { rtc, is_mbc30 } => match addr {
-                0x0000..=0x1FFF => {
-                    self.ram_enabled = (val & 0x0F) == 0x0A;
-                }
-                0x2000..=0x3FFF => {
-                    let mask = if *is_mbc30 { 0xFF } else { 0x7F };
-                    #[expect(clippy::cast_possible_truncation)]
-                    {
-                        self.rom_bank_lo = val & (self.rom_size.mask() & mask) as u8;
-                    }
-
-                    if self.rom_bank_lo == 0 {
-                        self.rom_bank_lo = 1;
-                    }
-
-                    self.rom_offsets = (
-                        0,
-                        u32::from(ROMSize::BANK_SIZE) * u32::from(self.rom_bank_lo),
-                    );
-                }
-                0x4000..=0x5FFF => {
-                    if (0x8..=0xC).contains(&val) {
-                        // Write to RTC registers
-                        if let Some(rtc) = rtc.as_mut() {
-                            #[expect(
-                                clippy::unwrap_used,
-                                reason = "val can only be 0x8..=0xC it will panic only when passed 0"
-                            )]
-                            rtc.map_reg(val).unwrap();
-                        }
-                    } else {
-                        // Choose RAM bank
-                        let mask = if *is_mbc30 { 0xF } else { 0x7 };
-                        self.ram_bank = val & mask & self.ram_size.mask();
-                        self.ram_offset = u32::from(RAMSize::BANK_SIZE) * u32::from(self.ram_bank);
-
-                        if let Some(r) = rtc.as_mut() {
-                            r.unmap_reg();
-                        }
-                    }
-                }
-                0x6000..=0x7FFF => {
-                    // TODO: no need to latch?
-                }
-                _ => (),
-            },
-            Mbc::Mbc5 => {
-                const fn mbc5_rom_offsets(cart: &Cartridge) -> (u32, u32) {
-                    let lo = cart.rom_bank_lo as u16;
-                    let hi = (cart.rom_bank_hi as u16) << 8;
-                    let rom_bank = (hi | lo) & cart.rom_size.mask();
-                    (0, ROMSize::BANK_SIZE as u32 * rom_bank as u32)
-                }
-
-                match addr {
-                    0x0000..=0x1FFF => {
-                        self.ram_enabled = val & 0xF == 0xA;
-                    }
-                    0x2000..=0x2FFF => {
-                        self.rom_bank_lo = val;
-                        self.rom_offsets = mbc5_rom_offsets(self);
-                    }
-                    0x3000..=0x3FFF => {
-                        self.rom_bank_hi = val;
-                        self.rom_offsets = mbc5_rom_offsets(self);
-                    }
-                    0x4000..=0x5FFF => {
-                        self.ram_bank = val & self.ram_size.mask();
-                        self.ram_offset = u32::from(RAMSize::BANK_SIZE) * u32::from(self.ram_bank);
-                    }
-                    _ => (),
-                }
-            }
-        }
+    /// A write to the mapper's registers (0x0000-0x7FFF).
+    pub(crate) fn write_rom(&mut self, addr: u16, val: u8) {
+        self.mbc
+            .write(addr, val, &mut self.map, self.rom_size, self.ram_size);
     }
 }
+
+#[cfg(test)]
+mod tests;

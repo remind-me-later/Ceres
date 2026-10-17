@@ -1,0 +1,2 @@
+[files]
+exclude = ["external/**/*.toml"]

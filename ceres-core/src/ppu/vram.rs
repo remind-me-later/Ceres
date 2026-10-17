@@ -1,6 +1,6 @@
 use crate::ppu::Ppu;
 
-pub struct Vram {
+pub(crate) struct Vram {
     bytes: [u8; Self::SIZE_CGB as usize],
     vbk: bool,
 }
@@ -15,66 +15,83 @@ impl Default for Vram {
 }
 
 impl Vram {
-    pub const SIZE_CGB: u16 = Self::SIZE_GB * 2;
-    pub const SIZE_GB: u16 = 0x2000;
+    pub(crate) const SIZE_CGB: u16 = Self::SIZE_GB * 2;
+    pub(crate) const SIZE_GB: u16 = 0x2000;
 
     #[must_use]
-    pub const fn bytes(&self) -> &[u8] {
+    pub(crate) const fn bytes(&self) -> &[u8] {
         &self.bytes
     }
 
     #[must_use]
-    pub const fn bytes_mut(&mut self) -> &mut [u8] {
+    pub(crate) const fn bytes_mut(&mut self) -> &mut [u8] {
         &mut self.bytes
     }
 
-    pub const fn read(&self, addr: u16) -> u8 {
+    pub(crate) const fn read(&self, addr: u16) -> u8 {
         self.vram_at_bank(addr, self.vbk as u8)
     }
 
+    /// The bank the CPU sees.
+    #[cfg(feature = "debug")]
     #[must_use]
-    pub const fn read_vbk(&self) -> u8 {
+    pub(crate) const fn bank(&self) -> u8 {
+        self.vbk as u8
+    }
+
+    #[must_use]
+    pub(crate) const fn read_vbk(&self) -> u8 {
+        // The unused bits read 1.
         (self.vbk as u8) | 0xFE
     }
 
+    /// Where `addr` is kept in `bank`.
+    const fn index(addr: u16, bank: u16) -> usize {
+        ((addr & 0x1FFF) + bank * Self::SIZE_GB) as usize
+    }
+
     #[must_use]
-    pub const fn vram_at_bank(&self, addr: u16, bank: u8) -> u8 {
-        let bank = bank as u16 * Self::SIZE_GB;
-        let i = (addr & 0x1FFF) + bank;
-        self.bytes[i as usize]
+    pub(crate) const fn vram_at_bank(&self, addr: u16, bank: u8) -> u8 {
+        self.bytes[Self::index(addr, bank as u16)]
     }
 
-    pub fn write(&mut self, addr: u16, val: u8) {
-        let bank = u16::from(self.vbk) * Self::SIZE_GB;
-        let i = (addr & 0x1FFF) + bank;
-        self.bytes[i as usize] = val;
+    pub(crate) const fn write(&mut self, addr: u16, val: u8) {
+        self.bytes[Self::index(addr, self.vbk as u16)] = val;
     }
 
-    pub const fn write_vbk(&mut self, val: u8) {
+    /// HDMA write into the selected bank; `mirror` also writes the other bank.
+    pub(crate) const fn write_hdma(&mut self, addr: u16, val: u8, mirror: bool) {
+        self.bytes[Self::index(addr, self.vbk as u16)] = val;
+        if mirror {
+            self.bytes[Self::index(addr, !self.vbk as u16)] = val;
+        }
+    }
+
+    pub(crate) const fn write_vbk(&mut self, val: u8) {
         self.vbk = val & 1 != 0;
     }
 }
 
 impl Ppu {
     #[must_use]
-    pub const fn read_vram(&self, addr: u16) -> u8 {
-        if self.vram_read_blocked {
+    pub(crate) const fn read_vram(&self, addr: u16) -> u8 {
+        if self.vram_read_blocked() {
             0xFF
         } else {
             self.vram.read(addr)
         }
     }
 
-    pub const fn vram(&self) -> &Vram {
+    pub(crate) const fn vram(&self) -> &Vram {
         &self.vram
     }
 
-    pub const fn vram_mut(&mut self) -> &mut Vram {
+    pub(crate) const fn vram_mut(&mut self) -> &mut Vram {
         &mut self.vram
     }
 
-    pub fn write_vram(&mut self, addr: u16, val: u8) {
-        if !self.vram_write_blocked {
+    pub(crate) const fn write_vram(&mut self, addr: u16, val: u8) {
+        if !self.vram_write_blocked() {
             self.vram.write(addr, val);
         }
     }

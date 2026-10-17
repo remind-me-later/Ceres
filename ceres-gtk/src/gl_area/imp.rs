@@ -1,16 +1,21 @@
 use super::renderer::{Renderer, ShaderMode};
 use gtk::{glib, prelude::*, subclass::prelude::*};
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 pub struct GlArea {
-    buffer: RefCell<Box<[u8]>>,
     callbacks: RefCell<Option<gtk::TickCallbackId>>,
     color_correction: RefCell<ceres_std::ColorCorrectionMode>,
     gb_thread: Rc<RefCell<ceres_std::GbThread>>,
     is_running: RefCell<bool>,
+    /// The last emulated frame uploaded (`GbThread::frame`).
+    last_frame: Cell<u64>,
     model: RefCell<ceres_std::Model>,
     pixel_perfect: RefCell<bool>,
     renderer: RefCell<Option<Renderer>>,
+    resume_save_state: RefCell<bool>,
     shader: RefCell<ShaderMode>,
     shader_changed: RefCell<Option<ShaderMode>>,
 }
@@ -33,6 +38,8 @@ impl GlArea {
     fn play(&self) {
         let widget = self.obj();
 
+        // Drawn on every refresh of the display: a frame emulated before the
+        // paint shows in it. Only new frames are uploaded (`render`).
         *self.callbacks.borrow_mut() = Some(widget.add_tick_callback(move |gl_area, _| {
             gl_area.queue_draw();
 
@@ -58,8 +65,6 @@ impl ObjectSubclass for GlArea {
     type Type = super::GlArea;
 
     fn new() -> Self {
-        let buffer = RefCell::new(vec![0_u8; ceres_std::PIXEL_BUFFER_SIZE].into_boxed_slice());
-
         let gb_thread = Rc::new(RefCell::new(
             ceres_std::GbThread::new(ceres_std::Model::CgbC, None, None)
                 .expect("Failed to create GbThread"),
@@ -67,14 +72,15 @@ impl ObjectSubclass for GlArea {
 
         Self {
             gb_thread,
-            buffer,
             renderer: Default::default(),
             shader_changed: Default::default(),
             callbacks: Default::default(),
             shader: RefCell::new(ShaderMode::default()),
             model: RefCell::new(ceres_std::Model::default()),
             is_running: RefCell::new(false),
+            last_frame: Cell::new(0),
             pixel_perfect: RefCell::new(false),
+            resume_save_state: RefCell::new(true),
             color_correction: RefCell::new(ceres_std::ColorCorrectionMode::default()),
         }
     }
@@ -107,6 +113,11 @@ impl ObjectImpl for GlArea {
                     .blurb("Whether to use pixel-perfect scaling")
                     .default_value(false)
                     .build(),
+                glib::ParamSpecBoolean::builder("resume-save-state")
+                    .nick("Resume Save State")
+                    .blurb("Whether games resume from their save state instead of booting")
+                    .default_value(true)
+                    .build(),
                 glib::ParamSpecString::builder("color-correction")
                     .nick("Color Correction")
                     .blurb("The color correction mode to use")
@@ -127,6 +138,7 @@ impl ObjectImpl for GlArea {
             .to_value(),
             "emulator-running" => self.is_running.borrow().to_value(),
             "pixel-perfect" => self.pixel_perfect.borrow().to_value(),
+            "resume-save-state" => self.resume_save_state.borrow().to_value(),
             "color-correction" => match *self.color_correction.borrow() {
                 ceres_std::ColorCorrectionMode::CorrectCurves => "CorrectCurves",
                 ceres_std::ColorCorrectionMode::Disabled => "Disabled",
@@ -150,6 +162,8 @@ impl ObjectImpl for GlArea {
                 let mode = ShaderMode::from(shader_str.as_str());
                 self.shader_changed.replace(Some(mode));
                 self.shader.replace(mode);
+                // Shown at once, also while paused.
+                self.obj().queue_draw();
             }
             "gb-model" => {
                 let model_str = value.get::<String>().unwrap();
@@ -178,6 +192,16 @@ impl ObjectImpl for GlArea {
                     let size = renderer.current_size();
                     renderer.resize_viewport(size.0, size.1, use_pixel_perfect);
                 }
+                self.obj().queue_draw();
+            }
+            "resume-save-state" => {
+                let resume = value.get::<bool>().unwrap();
+                self.resume_save_state.replace(resume);
+                self.gb_thread.borrow_mut().set_start_from(if resume {
+                    ceres_std::StartFrom::SaveState
+                } else {
+                    ceres_std::StartFrom::Boot
+                });
             }
             "color-correction" => {
                 let correction_str = value.get::<String>().unwrap();
@@ -266,14 +290,19 @@ impl GLAreaImpl for GlArea {
             rend.choose_scale_mode(scale_mode);
         }
 
-        {
-            let mut buffer = self.buffer.borrow_mut();
-            let thread = self.gb_thread.borrow();
-            if thread.copy_pixel_data_rgba(&mut buffer).is_err() {
-                eprintln!("Failed to copy pixel data, no GB thread running?");
-            }
+        // A new frame goes straight from the emulator into the pixel buffer.
+        let mut last_frame = self.last_frame.get();
+        let uploaded = self
+            .gb_thread
+            .borrow()
+            .with_new_frame(&mut last_frame, |rgba| {
+                rend.upload_frame(|pbo| pbo.copy_from_slice(rgba));
+            });
+        if uploaded.is_err() {
+            eprintln!("Failed to copy pixel data, no GB thread running?");
         }
-        rend.draw_frame(self.buffer.borrow().as_ref());
+        self.last_frame.set(last_frame);
+        rend.draw();
 
         glib::Propagation::Proceed
     }

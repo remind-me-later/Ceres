@@ -5,6 +5,12 @@ edition.workspace = true
 repository.workspace = true
 license.workspace = true
 
+[dependencies.audioadapter]
+version = "*"
+
+[dependencies.audioadapter-buffers]
+version = "*"
+
 [dependencies.bytemuck]
 version = "*"
 default-features = false
@@ -39,6 +45,12 @@ features = ["std"]
 version = "*"
 default-features = false
 
+[dependencies.rustyline]
+version = "*"
+default-features = false
+features = ["with-file-history"]
+optional = true
+
 [dependencies.spin_sleep]
 version = "*"
 default-features = false
@@ -48,13 +60,19 @@ version = "*"
 default-features = false
 
 [dependencies.wgpu]
-version = "27"
+version = "*"
 default-features = false
 features = ["dx12", "metal", "vulkan", "wgsl"]
 optional = true
 
+[dev-dependencies.pollster]
+version = "*"
+default-features = false
+
 [features]
 cli = ["dep:clap"]
+# A console debugger in the terminal (`GbThread::start_debugger`).
+debugger = ["ceres-core/debug", "dep:rustyline"]
 game_genie = ["ceres-core/game_genie"]
 screenshot = ["dep:image"]
 wgpu_renderer = ["dep:wgpu"]

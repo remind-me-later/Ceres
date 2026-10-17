@@ -1,0 +1,81 @@
+//! The length timer that stops a channel (NRx1 and bit 6 of NRx4).
+
+use super::{NRX4_LENGTH_B, NRX4_TRIGGER_B, revision::Revision};
+
+#[derive(Clone, Copy)]
+pub(super) struct Length {
+    /// Ticks left before the channel stops (SameBoy's `pulse_length`).
+    pub counter: u16,
+    pub enabled: bool,
+    /// The longest length: 64, 256 for the wave channel.
+    pub max: u16,
+}
+
+impl Length {
+    pub(super) const fn new(max: u16) -> Self {
+        Self {
+            counter: 0,
+            enabled: false,
+            max,
+        }
+    }
+
+    /// Writes the length register: the timer counts up from `length` to the
+    /// maximum.
+    pub(super) const fn load(&mut self, length: u16) {
+        self.counter = self.max - length;
+    }
+
+    /// Ticks the timer. Returns `true` if it expired.
+    pub(super) const fn tick(&mut self) -> bool {
+        if self.enabled && self.counter != 0 {
+            self.counter -= 1;
+            return self.counter == 0;
+        }
+        false
+    }
+
+    /// A trigger with an expired timer reloads it.
+    pub(super) const fn trigger(&mut self) {
+        if self.counter == 0 {
+            self.counter = self.max;
+            self.enabled = false;
+        }
+    }
+
+    /// The wave channel's timer, the longest.
+    const fn is_wave(self) -> bool {
+        self.max == 0x100
+    }
+
+    /// Writes NRx4 (`value`), after a trigger. Returns `true` if the timer
+    /// expired.
+    pub(super) fn write(&mut self, value: u8, rev: Revision, div_divider: u8) -> bool {
+        let mut expired = false;
+        // APU glitch: enabling the length while the DIV divider's LSB is 1
+        // ticks the length once. On the CGB-B and older, any write while it
+        // is disabled does.
+        let glitch = value & NRX4_LENGTH_B != 0 || (rev.is_cgb() && rev <= Revision::CgbB);
+        if glitch && !self.enabled && div_divider & 1 != 0 {
+            if self.counter != 0 {
+                self.counter -= 1;
+                // The CGB-B's wave channel keeps playing until the next
+                // glitched write: it takes one more write to stop it.
+                if self.counter == 0 && !(rev == Revision::CgbB && self.is_wave()) {
+                    if value & NRX4_TRIGGER_B != 0 {
+                        // A trigger reloads it, minus the glitched tick.
+                        self.counter = self.max - 1;
+                    } else {
+                        expired = true;
+                    }
+                }
+            } else if rev == Revision::CgbB && self.is_wave() {
+                expired = true;
+            } else {
+                // An expired timer stays expired.
+            }
+        }
+        self.enabled = value & NRX4_LENGTH_B != 0;
+        expired
+    }
+}

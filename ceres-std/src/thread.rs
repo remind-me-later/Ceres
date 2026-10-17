@@ -7,18 +7,41 @@ use core::sync::atomic::Ordering::Relaxed;
 use std::io::Read as _;
 use std::{
     fs::OpenOptions,
-    sync::{Condvar, Mutex, atomic::AtomicU32},
+    sync::{
+        Condvar, Mutex,
+        atomic::{AtomicU32, AtomicU64},
+    },
 };
 use thread_priority::ThreadBuilderExt as _;
 use {ceres_core::Gb, std::path::Path, std::sync::Arc};
 
+/// How a game with save data starts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum StartFrom {
+    /// Where it was left: the whole save state is restored.
+    #[default]
+    SaveState,
+    /// From the boot ROM, with the saved progress (the cartridge's RAM and
+    /// clock).
+    Boot,
+}
+
 pub struct GbThread {
     audio_stream: audio::Stream,
     exiting: Arc<AtomicBool>,
+    /// Frames emulated so far.
+    frame: Arc<AtomicU64>,
     gb: Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
+    /// The console debugger, once started (see `start_debugger`).
+    #[cfg(feature = "debugger")]
+    debugger: Arc<std::sync::OnceLock<Arc<crate::debugger::Debugger<audio::AudioCallbackImpl>>>>,
+    /// The ROM running, for the debugger's symbols.
+    #[cfg(feature = "debugger")]
+    rom_path: Option<std::path::PathBuf>,
     model: ceres_core::Model,
     multiplier: Arc<AtomicU32>,
     pause_condvar: Arc<(Mutex<bool>, Condvar)>,
+    start_from: StartFrom,
     thread_handle: Option<std::thread::JoinHandle<()>>,
 }
 
@@ -69,13 +92,51 @@ impl GbThread {
             self.model,
             Some(rom_path),
             sav_path,
+            self.start_from,
         )?;
 
         if let Ok(mut gb) = self.gb.lock() {
             *gb = gb_new;
         }
+        #[cfg(feature = "debugger")]
+        {
+            self.rom_path = Some(rom_path.to_path_buf());
+            if let Some(debugger) = self.debugger.get() {
+                Self::announce_symbols(debugger.load_symbols(Some(rom_path)));
+            }
+        }
 
         Ok(())
+    }
+
+    /// Starts the console debugger on the terminal: the game runs on, and
+    /// Ctrl-C there stops it. `history` keeps the commands between runs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the terminal can't be used.
+    #[cfg(feature = "debugger")]
+    #[inline]
+    pub fn start_debugger(&self, history: Option<std::path::PathBuf>) -> Result<(), Error> {
+        if self.debugger.get().is_some() {
+            return Ok(());
+        }
+        let debugger = crate::debugger::Debugger::new(Arc::clone(&self.gb));
+        Self::announce_symbols(debugger.load_symbols(self.rom_path.as_deref()));
+        crate::debugger::spawn(Arc::clone(&debugger), history)?;
+        // Every stop runs the audio out of samples: not worth a message over
+        // the console's prompt.
+        self.audio_stream.report_underruns(false);
+        // The emulator thread checks every instruction from now on.
+        self.debugger.get_or_init(|| debugger);
+        Ok(())
+    }
+
+    #[cfg(feature = "debugger")]
+    fn announce_symbols(count: Option<usize>) {
+        if let Some(count) = count {
+            println!("debugger: {count} symbols");
+        }
     }
 
     /// Copies the pixel data in RGBA format to the provided buffer.
@@ -92,12 +153,43 @@ impl GbThread {
         })
     }
 
+    /// Frames emulated so far: the screen changed when this did.
+    #[must_use]
+    #[inline]
+    pub fn frame(&self) -> u64 {
+        self.frame.load(Relaxed)
+    }
+
+    /// Calls `f` with the screen if a frame was emulated since `last_seen`,
+    /// which then moves to it. Returns whether it did.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the Game Boy thread is not running.
+    #[inline]
+    pub fn with_new_frame<F: FnOnce(&[u8])>(
+        &self,
+        last_seen: &mut u64,
+        f: F,
+    ) -> Result<bool, Error> {
+        if self.frame() == *last_seen {
+            return Ok(false);
+        }
+        self.gb.lock().map_or(Err(Error::NoThreadRunning), |gb| {
+            // Read under the lock, so the count goes with the pixels.
+            *last_seen = self.frame();
+            f(gb.pixel_data_rgba());
+            Ok(true)
+        })
+    }
+
     fn create_new_gb(
         audio_stream: &audio::Stream,
         ring_buffer: audio::AudioCallbackImpl,
         model: ceres_core::Model,
         rom_path: Option<&Path>,
         sav_path: Option<&Path>,
+        start_from: StartFrom,
     ) -> Result<Gb<audio::AudioCallbackImpl>, Error> {
         let gb_builder = GbBuilder::new(audio_stream.sample_rate(), ring_buffer).with_model(model);
 
@@ -110,7 +202,7 @@ impl GbThread {
                 gb_builder.with_rom(rom)?
             };
 
-            if gb_builder.can_load_save_data()
+            if gb_builder.has_battery()
                 && let Some(sav_path) = sav_path
             {
                 let mut gb = gb_builder.build();
@@ -132,7 +224,15 @@ impl GbThread {
                     .unwrap()
                     .as_secs();
 
-                gb.load_data(&save_data_buf, secs_since_unix_epoch)?;
+                // A state from another model (the model setting changed since)
+                // only gives the saved progress.
+                if start_from == StartFrom::Boot
+                    || gb
+                        .load_state(&save_data_buf, secs_since_unix_epoch)
+                        .is_err()
+                {
+                    gb.load_save_data(&save_data_buf, secs_since_unix_epoch)?;
+                }
                 Ok(gb)
             } else {
                 let gb = gb_builder.build();
@@ -178,9 +278,13 @@ impl GbThread {
 
     fn gb_loop(
         gb: &Arc<Mutex<Gb<audio::AudioCallbackImpl>>>,
+        frame: &Arc<AtomicU64>,
         exiting: &Arc<AtomicBool>,
         pause_condvar: &Arc<(Mutex<bool>, Condvar)>,
         multiplier: &Arc<AtomicU32>,
+        #[cfg(feature = "debugger")] debugger: &std::sync::OnceLock<
+            Arc<crate::debugger::Debugger<audio::AudioCallbackImpl>>,
+        >,
         mut gilrs: gilrs::Gilrs,
     ) {
         let mut next_render_time = std::time::Instant::now();
@@ -197,6 +301,15 @@ impl GbThread {
                     // Reset timing after pause to avoid burst catch-up
                     next_render_time = std::time::Instant::now();
                 }
+            }
+
+            // Stopped in the debugger: wait without the machine's lock, so
+            // the console can look at it.
+            #[cfg(feature = "debugger")]
+            if let Some(debugger) = debugger.get()
+                && debugger.wait_while_stopped(exiting)
+            {
+                next_render_time = std::time::Instant::now();
             }
 
             if exiting.load(Relaxed) {
@@ -244,8 +357,19 @@ impl GbThread {
                     }
                 }
 
+                #[cfg(feature = "debugger")]
+                if let Some(debugger) = debugger.get() {
+                    // A frame the debugger stopped isn't over: no frame to
+                    // show, no time to wait.
+                    if !debugger.run_frame(&mut gb) {
+                        continue;
+                    }
+                } else {
+                    gb.run_frame();
+                }
+                #[cfg(not(feature = "debugger"))]
                 gb.run_frame();
-                // ctx.paint(gb.pixel_data_rgba());
+                frame.fetch_add(1, Relaxed);
             }
             // ctx.request_repaint();
 
@@ -309,12 +433,23 @@ impl GbThread {
         let audio_stream = audio::Stream::new().map_err(Error::Audio)?;
         let ring_buffer = audio_stream.ring_buffer();
 
-        let gb = Self::create_new_gb(&audio_stream, ring_buffer, model, rom_path, sav_path)?;
+        let start_from = StartFrom::default();
+        let gb = Self::create_new_gb(
+            &audio_stream,
+            ring_buffer,
+            model,
+            rom_path,
+            sav_path,
+            start_from,
+        )?;
         let gb = Arc::new(Mutex::new(gb));
 
         let pause_condvar = Arc::new((Mutex::new(false), Condvar::new()));
         let exiting = Arc::new(AtomicBool::new(false));
         let multiplier = Arc::new(AtomicU32::new(1));
+        let frame = Arc::new(AtomicU64::new(0));
+        #[cfg(feature = "debugger")]
+        let debugger = Arc::new(std::sync::OnceLock::new());
 
         // FIXME: use proper user facing config options
         let gilrs = gilrs::Gilrs::new().map_err(|e| Error::GamePadError(e.to_string()))?;
@@ -325,22 +460,46 @@ impl GbThread {
             let exit = Arc::clone(&exiting);
             let pause_condvar = Arc::clone(&pause_condvar);
             let multiplier = Arc::clone(&multiplier);
+            let frame = Arc::clone(&frame);
+            #[cfg(feature = "debugger")]
+            let debugger = Arc::clone(&debugger);
 
             // std::thread::spawn(move || gb_loop(gb, exit, pause_thread))
             thread_builder.spawn_with_priority(thread_priority::ThreadPriority::Max, move |_| {
-                Self::gb_loop(&gb, &exit, &pause_condvar, &multiplier, gilrs);
+                Self::gb_loop(
+                    &gb,
+                    &frame,
+                    &exit,
+                    &pause_condvar,
+                    &multiplier,
+                    #[cfg(feature = "debugger")]
+                    &debugger,
+                    gilrs,
+                );
             })?
         };
 
         Ok(Self {
             gb,
             exiting,
+            frame,
+            #[cfg(feature = "debugger")]
+            debugger,
+            #[cfg(feature = "debugger")]
+            rom_path: rom_path.map(Path::to_path_buf),
             pause_condvar,
             thread_handle: Some(thread_handle),
             audio_stream,
             model,
             multiplier,
+            start_from,
         })
+    }
+
+    /// How the games opened from now on start, if they have save data.
+    #[inline]
+    pub const fn set_start_from(&mut self, start_from: StartFrom) {
+        self.start_from = start_from;
     }
 
     /// Pauses the Game Boy thread and audio stream.
@@ -476,7 +635,7 @@ impl GbThread {
 
         self.gb.lock().map_or(Err(Error::NoThreadRunning), |gb| {
             let mut buf = Vec::new();
-            gb.save_data(&mut buf, secs_since_unix_epoch);
+            gb.save_state(&mut buf, secs_since_unix_epoch);
             writer.write_all(&buf).map_err(Error::Io)
         })
     }

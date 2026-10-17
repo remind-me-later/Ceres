@@ -34,6 +34,22 @@ Indicate breaking changes by appending `!` after the type/scope (e.g.,
 `feat(api)!: change memory access API`) or by adding a `BREAKING CHANGE:` footer
 in the commit body.
 
+### AI-Assisted Contributions
+
+Commits written with the help of an AI agent (Claude Code, Copilot, Cursor and
+the like) must say so with an `Assisted-by:` footer naming the tool and, where
+known, the model:
+
+```text
+fix(ppu): correct the mode 3 length with a window
+
+Assisted-by: Claude Code (Claude Opus 5.5)
+```
+
+AI agents working on this repository must add this footer to every commit they
+create. The contributor submitting the change remains responsible for it and
+should review the result as they would their own code.
+
 ### Examples
 
 ```text
@@ -49,10 +65,12 @@ chore(deps): update winit to 0.29
 ## Code Style
 
 - Format Rust code with `cargo fmt --all`
-- Format TOML with `tombi format`
-- Format JSON, Markdown, YAML and JSON with
-  `prettier --write "**/*.{json,yaml,yml,md,json}"`
+- Format TOML with `tombi format`, and check it with `tombi lint`
+- Format Markdown with `rumdl fmt .`, and check it with `rumdl check .`
 - Ensure tests pass (see below)
+
+The settings of tombi and rumdl are in `tombi.toml` and `.rumdl.toml`. CI
+runs them with tombi 1.8.5 and rumdl 0.2.78.
 
 ## Testing
 
@@ -99,21 +117,34 @@ cargo test --package ceres-test-runner -- --ignored
 
 ### CI/CD Pipeline
 
-GitHub Actions automatically runs tests on every push. It installs the RGBDS
-toolchain, caches dependencies and test ROMs, and runs tests for `ceres-core`
-and `ceres-test-runner`.
+GitHub Actions runs the tests on pushes and pull requests to `main`. It
+installs the RGBDS toolchain, caches dependencies and test ROMs, runs the
+tests for `ceres-core` and `ceres-test-runner` with coverage, and uploads the
+coverage to [Codecov](https://codecov.io/gh/remind-me-later/Ceres).
+
+A second workflow, `Lint`, runs on the same events. It lints the Markdown with
+[rumdl](https://github.com/rvben/rumdl) and the TOML with
+[tombi](https://github.com/tombi-toml/tombi), and fails if the files are not
+formatted as `rumdl fmt .` and `tombi format` would leave them.
 
 ### Code Coverage
 
-To analyze test coverage using `cargo-llvm-cov`:
+To analyze test coverage locally with `cargo-llvm-cov` and `cargo-nextest`:
 
 ```bash
-# Install cargo-llvm-cov
-cargo install cargo-llvm-cov
+# Install cargo-llvm-cov and nextest (Rust's llvm-tools must match rustc's
+# LLVM: `rustup component add llvm-tools-preview`, or the system LLVM on
+# distributions whose rustc uses it)
+cargo install cargo-llvm-cov cargo-nextest
 
 # Generate HTML report
-cargo llvm-cov --package ceres-core --package ceres-test-runner --html
+cargo llvm-cov nextest --release --package ceres-core \
+    --package ceres-test-runner --html
 
 # Open report
 xdg-open target/llvm-cov/html/index.html
 ```
+
+Run it in release with nextest, as above. A debug build makes the ROM tests
+very slow, and test threads sharing one process fight over the coverage
+counters: nextest runs each test in its own process.

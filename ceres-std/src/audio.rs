@@ -1,10 +1,13 @@
+use audioadapter_buffers::direct::InterleavedSlice;
 use cpal::traits::{DeviceTrait as _, HostTrait as _, StreamTrait as _};
 use ringbuf::{
     HeapRb,
     traits::{Consumer as _, Observer as _, Producer as _, Split as _},
 };
-use rubato::Resampler as _;
-use {std::sync::Arc, std::sync::Mutex};
+use rubato::{Adjustable as _, Resampler as _};
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 // Buffer size is the number of samples per channel per callback
 const BUFFER_SIZE: u32 = 512;
@@ -20,19 +23,21 @@ const MAX_RESAMPLE_RATIO_RELATIVE: f64 = 5.0;
 
 type ProcessSample = f32;
 
-type Rb = HeapRb<ceres_core::Sample>;
+type Rb = HeapRb<(ceres_core::Sample, ceres_core::Sample)>;
 type RbProducer = <Rb as ringbuf::traits::Split>::Prod;
 type RbConsumer = <Rb as ringbuf::traits::Split>::Cons;
 
 struct AudioProcessor {
-    buffer_input_left: Vec<ceres_core::Sample>,
-    buffer_input_right: Vec<ceres_core::Sample>,
-    input_buf: Vec<Vec<ProcessSample>>,
-    left_consumer: Arc<Mutex<RbConsumer>>,
-    output_buf: Vec<Vec<ProcessSample>>,
-    resampler: rubato::SincFixedOut<ProcessSample>,
-    right_consumer: Arc<Mutex<RbConsumer>>,
-    volume: Arc<Mutex<f32>>,
+    input_interleaved: Vec<ProcessSample>,
+    consumer: Arc<Mutex<RbConsumer>>,
+    resampler: rubato::Async<ProcessSample>,
+    /// The last callback ran out of samples. A stopped emulator (a debugger
+    /// breakpoint) runs out on every one: only the first is logged.
+    underrun: bool,
+    /// Whether to log underruns: not while a debugger stops the game,
+    /// which runs out of samples on every stop.
+    report_underruns: Arc<AtomicBool>,
+    volume: Arc<AtomicU32>,
 }
 
 impl AudioProcessor {
@@ -49,8 +54,8 @@ impl AudioProcessor {
         }
 
         // Adjust ratio based on buffer occupancy
-        // If buffer is too full, speed up playback (increase ratio)
-        // If buffer is too empty, slow down playback (decrease ratio)
+        // If buffer is too full, speed up playback (decrease ratio)
+        // If buffer is too empty, slow down playback (increase ratio)
         let adjustment = -error * 0.05;
 
         (ORIG_RATIO * (1.0 + adjustment))
@@ -58,143 +63,107 @@ impl AudioProcessor {
     }
 
     fn new(
-        volume: Arc<Mutex<f32>>,
-        left_consumer: Arc<Mutex<RbConsumer>>,
-        right_consumer: Arc<Mutex<RbConsumer>>,
+        volume: Arc<AtomicU32>,
+        consumer: Arc<Mutex<RbConsumer>>,
+        report_underruns: Arc<AtomicBool>,
     ) -> Result<Self, Error> {
         let chunk_size = BUFFER_SIZE as usize;
 
-        let resampler = rubato::SincFixedOut::<ProcessSample>::new(
+        let resampler = rubato::Async::<ProcessSample>::new_sinc(
             ORIG_RATIO,
             MAX_RESAMPLE_RATIO_RELATIVE,
-            rubato::SincInterpolationParameters {
+            &rubato::SincInterpolationParameters {
                 sinc_len: 256,
-                f_cutoff: 0.95,
+                f_cutoff: Some(0.95),
                 oversampling_factor: 128,
                 interpolation: rubato::SincInterpolationType::Cubic,
                 window: rubato::WindowFunction::Blackman,
             },
             chunk_size,
             2,
+            rubato::FixedAsync::Output,
         )
         .map_err(|_err| Error::BuildStream)?;
 
-        let input_buf = resampler.input_buffer_allocate(true);
-        let output_buf = resampler.output_buffer_allocate(true);
+        let input_interleaved = vec![0.0; resampler.input_frames_max() * 2];
 
         Ok(Self {
+            input_interleaved,
+            consumer,
             resampler,
-            output_buf,
-            input_buf,
+            underrun: false,
+            report_underruns,
             volume,
-            left_consumer,
-            right_consumer,
-            buffer_input_left: Vec::with_capacity(chunk_size * 2),
-            buffer_input_right: Vec::with_capacity(chunk_size * 2),
         })
     }
 
     fn write_samples_interleaved(&mut self, buffer: &mut [ProcessSample]) {
-        // 1. Lock consumer to check status and set resample ratio
-        let needed;
-        let num_samples;
-
-        if let Ok(left) = self.left_consumer.lock() {
-            num_samples = left.occupied_len();
-
-            std::mem::drop(left); // Release lock early
-
-            let ratio = Self::compute_resample_ratio(num_samples);
-
-            // This is fine because the emulator thread does NOT need this lock.
-            self.resampler
-                .set_resample_ratio(ratio, true)
-                .unwrap_or_else(|e| eprintln!("Failed to set resample ratio: {e}"));
-
-            needed = self.resampler.input_frames_next();
-        } else {
+        // 1. Lock consumer and prepare input
+        let Ok(mut cons) = self.consumer.lock() else {
             buffer.fill(0.0); // Silence on poisoned lock
-            return;
-        }
-
-        // 2. Underrun Check
-        if needed > num_samples {
-            eprintln!("Underrun: needed {needed}, got {num_samples}");
-            buffer.fill(0.0);
-            return;
-        }
-
-        // 3. Pop Samples
-        if let Ok(mut left) = self.left_consumer.lock()
-            && let Ok(mut right) = self.right_consumer.lock()
-        {
-            self.buffer_input_left.clear();
-            self.buffer_input_right.clear();
-
-            self.buffer_input_left.extend(left.pop_iter().take(needed));
-            self.buffer_input_right
-                .extend(right.pop_iter().take(needed));
-        } else {
-            buffer.fill(0.0);
-            return;
-        }
-
-        // 4. Prepare Resampler Input (No locks held)
-        let (input_buf_left, input_buf_right) = self.input_buf.split_at_mut(1);
-
-        // Get volume and immediately unlock
-        let vol = if let Ok(vol) = self.volume.lock() {
-            *vol
-        } else {
-            buffer.fill(0.0);
             return;
         };
 
-        for ((l, &l1), (r, &r1)) in input_buf_left[0]
-            .iter_mut()
-            .zip(self.buffer_input_left.iter())
-            .zip(
-                input_buf_right[0]
-                    .iter_mut()
-                    .zip(self.buffer_input_right.iter()),
-            )
-            .take(needed)
-        {
-            *l = f32::from(l1) / f32::from(i16::MAX) * vol;
-            *r = f32::from(r1) / f32::from(i16::MAX) * vol;
-        }
+        let num_samples = cons.occupied_len();
+        let ratio = Self::compute_resample_ratio(num_samples);
 
-        // 5. Resample (Heavy Work)
-        match self
-            .resampler
-            .process_into_buffer(&self.input_buf, &mut self.output_buf, None)
-        {
-            Ok(_) => {
-                buffer
-                    .chunks_exact_mut(2)
-                    .zip(self.output_buf[0].iter().zip(self.output_buf[1].iter()))
-                    .for_each(|(out, (&sample_l, &sample_r))| {
-                        out[0] = sample_l;
-                        out[1] = sample_r;
-                    });
+        self.resampler
+            .set_resample_ratio(ratio, true)
+            .unwrap_or_else(|e| eprintln!("Failed to set resample ratio: {e}"));
+
+        let needed = self.resampler.input_frames_next();
+
+        // 2. Underrun Check
+        if needed > num_samples {
+            if !self.underrun && self.report_underruns.load(Ordering::Relaxed) {
+                eprintln!("Underrun: needed {needed}, got {num_samples}");
             }
-            Err(e) => {
-                eprintln!("Resampler error: {e}");
-                buffer.fill(0.0); // Silence on error
-            }
+            self.underrun = true;
+            buffer.fill(0.0);
+            return;
+        }
+        self.underrun = false;
+
+        // 3. Pop Samples and convert to interleaved f32
+        let vol = f32::from_bits(self.volume.load(Ordering::Relaxed));
+
+        let scale = |sample: i16| f32::from(sample) / f32::from(i16::MAX) * vol;
+        self.input_interleaved
+            .as_chunks_mut::<2>()
+            .0
+            .iter_mut()
+            .zip(cons.pop_iter())
+            .take(needed)
+            .for_each(|(frame, (l, r))| *frame = [scale(l), scale(r)]);
+
+        std::mem::drop(cons); // Unlock early before heavy resampling
+
+        // 4. Resample directly into the output buffer
+        let output_frames = self.resampler.output_frames_max();
+        let result = InterleavedSlice::new(&self.input_interleaved, 2, needed)
+            .map_err(|e| e.to_string())
+            .and_then(|input| {
+                let mut output = InterleavedSlice::new_mut(buffer, 2, output_frames)
+                    .map_err(|e| e.to_string())?;
+                self.resampler
+                    .process_into_buffer(&input, &mut output, None)
+                    .map_err(|e| e.to_string())
+            });
+        if let Err(e) = result {
+            eprintln!("Resampler error: {e}");
+            buffer.fill(0.0); // Silence on error
         }
     }
 }
 
 #[derive(Clone)]
 pub struct AudioCallbackImpl {
-    left: Arc<Mutex<RbProducer>>,
-    right: Arc<Mutex<RbProducer>>,
+    rb: Arc<Mutex<RbProducer>>,
 }
 
 impl AudioCallbackImpl {
-    const fn new(left: Arc<Mutex<RbProducer>>, right: Arc<Mutex<RbProducer>>) -> Self {
-        Self { left, right }
+    const fn new(rb: Arc<Mutex<RbProducer>>) -> Self {
+        Self { rb }
     }
 }
 
@@ -202,24 +171,24 @@ impl ceres_core::AudioCallback for AudioCallbackImpl {
     fn audio_sample(&self, l: ceres_core::Sample, r: ceres_core::Sample) {
         // Emulator thread locks ONLY the Producer side.
         // This never blocks on the Audio Thread.
-        if let Ok(mut left) = self.left.lock() {
-            left.try_push(l).ok();
-        }
-        if let Ok(mut right) = self.right.lock() {
-            right.try_push(r).ok();
+        if let Ok(mut rb) = self.rb.lock() {
+            rb.try_push((l, r)).ok();
         }
     }
 }
 
 #[expect(clippy::struct_field_names)]
 pub struct Stream {
-    // We hold references to consumers to clear them on pause
-    left_consumer: Arc<Mutex<RbConsumer>>,
-    right_consumer: Arc<Mutex<RbConsumer>>,
+    consumer: Arc<Mutex<RbConsumer>>,
+    /// cpal doesn't start streams on creation, and pausing one that never
+    /// played is an error in some backends (ALSA).
+    playing: AtomicBool,
+    #[cfg(feature = "debugger")]
+    report_underruns: Arc<AtomicBool>,
     ring_buffer: AudioCallbackImpl,
     sample_rate: i32,
     stream: cpal::Stream,
-    volume: Arc<Mutex<f32>>,
+    volume: Arc<AtomicU32>,
     volume_before_mute: Option<f32>,
 }
 
@@ -230,34 +199,29 @@ impl Stream {
     }
 
     pub fn mute(&mut self) {
-        if let Ok(mut vol) = self.volume.lock() {
-            self.volume_before_mute = Some(*vol);
-            *vol = 0.0;
-        }
+        let vol = f32::from_bits(self.volume.load(Ordering::Relaxed));
+        self.volume_before_mute = Some(vol);
+        self.volume.store(0.0_f32.to_bits(), Ordering::Relaxed);
     }
 
     pub fn new() -> Result<Self, Error> {
         const INITIAL_VOLUME: f32 = 1.0;
 
-        let volume = Arc::new(Mutex::new(INITIAL_VOLUME));
-        let buffer_volume = Arc::clone(&volume);
+        let volume = Arc::new(AtomicU32::new(INITIAL_VOLUME.to_bits()));
+        let processor_volume = Arc::clone(&volume);
 
-        // Initialize Ring Buffers
-        let left_rb = Rb::new(RING_BUFFER_SIZE);
-        let right_rb = Rb::new(RING_BUFFER_SIZE);
+        // Initialize Interleaved Ring Buffer
+        let rb = Rb::new(RING_BUFFER_SIZE);
+        let (prod, cons) = rb.split();
 
-        let (left_prod, left_cons) = left_rb.split();
-        let (right_prod, right_cons) = right_rb.split();
+        let prod = Arc::new(Mutex::new(prod));
+        let cons = Arc::new(Mutex::new(cons));
 
-        let left_prod = Arc::new(Mutex::new(left_prod));
-        let right_prod = Arc::new(Mutex::new(right_prod));
-        let left_cons = Arc::new(Mutex::new(left_cons));
-        let right_cons = Arc::new(Mutex::new(right_cons));
-
+        let report_underruns = Arc::new(AtomicBool::new(true));
         let mut audio_processor = AudioProcessor::new(
-            buffer_volume,
-            Arc::clone(&left_cons),
-            Arc::clone(&right_cons),
+            processor_volume,
+            Arc::clone(&cons),
+            Arc::clone(&report_underruns),
         )?;
 
         let host = cpal::default_host();
@@ -275,40 +239,47 @@ impl Stream {
         };
 
         let stream = device
-            .build_output_stream(&config, data_callback, error_callback, None)
+            .build_output_stream(config, data_callback, error_callback, None)
             .map_err(|_err| Error::BuildStream)?;
 
-        let res = Self {
+        Ok(Self {
             stream,
-            ring_buffer: AudioCallbackImpl::new(left_prod, right_prod),
-            left_consumer: left_cons,
-            right_consumer: right_cons,
+            ring_buffer: AudioCallbackImpl::new(prod),
+            consumer: cons,
+            playing: AtomicBool::new(false),
+            #[cfg(feature = "debugger")]
+            report_underruns,
             volume,
             volume_before_mute: None,
             sample_rate: SAMPLE_RATE,
-        };
+        })
+    }
 
-        res.pause()?;
-
-        Ok(res)
+    /// Whether running out of samples is logged.
+    #[cfg(feature = "debugger")]
+    pub fn report_underruns(&self, report: bool) {
+        self.report_underruns.store(report, Ordering::Relaxed);
     }
 
     pub fn pause(&self) -> Result<(), Error> {
-        self.stream.pause().map_err(|_err| Error::PauseStream)?;
+        if self.playing.load(Ordering::Relaxed) {
+            self.stream.pause().map_err(|_err| Error::PauseStream)?;
+            self.playing.store(false, Ordering::Relaxed);
+        }
 
         // Clear buffers on pause
-        if let Ok(mut l) = self.left_consumer.lock() {
-            l.clear();
-        }
-        if let Ok(mut r) = self.right_consumer.lock() {
-            r.clear();
+        if let Ok(mut cons) = self.consumer.lock() {
+            cons.clear();
         }
 
         Ok(())
     }
 
     pub fn resume(&self) -> Result<(), Error> {
-        self.stream.play().map_err(|_err| Error::PlayStream)
+        self.stream.play().map_err(|_err| Error::PlayStream)?;
+        self.playing.store(true, Ordering::Relaxed);
+
+        Ok(())
     }
 
     #[must_use]
@@ -322,22 +293,18 @@ impl Stream {
     }
 
     pub fn set_volume(&self, volume: f32) {
-        if let Ok(mut vol) = self.volume.lock() {
-            *vol = volume;
-        }
+        self.volume.store(volume.to_bits(), Ordering::Relaxed);
     }
 
     pub fn unmute(&mut self) {
-        if let Some(vol) = self.volume_before_mute.take()
-            && let Ok(mut v) = self.volume.lock()
-        {
-            *v = vol;
+        if let Some(vol) = self.volume_before_mute.take() {
+            self.volume.store(vol.to_bits(), Ordering::Relaxed);
         }
     }
 
     #[must_use]
     pub fn volume(&self) -> f32 {
-        self.volume.lock().map_or(0.0, |vol| *vol)
+        f32::from_bits(self.volume.load(Ordering::Relaxed))
     }
 }
 

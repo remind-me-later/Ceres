@@ -1,0 +1,55 @@
+# GitHub Actions workflow for the Markdown and TOML files of Ceres: lints them
+# and checks their format. To fix what it reports, run `rumdl fmt .` and
+# `tombi format` (see CONTRIBUTING.md).
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  markdown:
+    name: Markdown (rumdl)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The version of the action and the one of rumdl are pinned together:
+      # change both to update. The settings are in .rumdl.toml.
+      - name: Lint
+        uses: rvben/rumdl@v0.2.78
+        with:
+          version: "0.2.78"
+          command: check
+
+      - name: Check the format
+        uses: rvben/rumdl@v0.2.78
+        with:
+          version: "0.2.78"
+          command: fmt-check
+
+  toml:
+    name: TOML (tombi)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # As above, the action and tombi are pinned together. The settings are
+      # in tombi.toml.
+      - name: Install tombi
+        uses: tombi-toml/setup-tombi@v1.8.5
+        with:
+          version: "1.8.5"
+
+      - name: Lint
+        run: tombi lint --error-on-warnings --diagnostics-format github
+
+      - name: Check the format
+        run: tombi format --check --diagnostics-format github

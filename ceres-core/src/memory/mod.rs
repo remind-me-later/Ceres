@@ -3,92 +3,108 @@ mod hdma;
 mod hram;
 mod key1;
 mod svbk;
+#[cfg(test)]
+mod tests;
 mod wram;
 
 use crate::{AudioCallback, Model, ppu};
 use crate::{CgbMode, Gb};
-pub use dma::Dma;
-pub use hdma::Hdma;
-pub use hram::Hram;
-pub use key1::Key1;
-pub use wram::Wram;
+pub(crate) use dma::{Dma, DmaPhase};
+pub(crate) use hdma::{Hdma, SwitchHdma};
+pub(crate) use hram::Hram;
+pub(crate) use key1::{Key1, SpeedSwitch};
+pub(crate) use wram::Wram;
+
+// The memory map
+pub(crate) const VRAM_START: u16 = 0x8000;
+pub(crate) const CART_RAM_START: u16 = 0xA000;
+pub(crate) const WRAM_START: u16 = 0xC000;
+/// Echo RAM: the work RAM again, up to the OAM.
+pub(crate) const ECHO_START: u16 = 0xE000;
+/// Echo RAM addresses are work RAM ones with this bit set.
+pub(crate) const ECHO_B: u16 = 0x2000;
+pub(crate) const OAM_START: u16 = 0xFE00;
+/// The unusable area after the OAM.
+pub(crate) const UNUSABLE_START: u16 = 0xFEA0;
+/// The I/O registers, then the high RAM and IE.
+pub(crate) const IO_START: u16 = 0xFF00;
+pub(crate) const HRAM_START: u16 = 0xFF80;
+
+/// The address of the I/O register at `reg` (one of the offsets below).
+#[must_use]
+pub(crate) const fn io_addr(reg: u8) -> u16 {
+    IO_START | reg as u16
+}
 
 // IO addresses
 // JoyP
-const P1: u8 = 0x00;
+pub(crate) const P1: u8 = 0x00;
 // Serial
-const SB: u8 = 0x01;
-const SC: u8 = 0x02;
+pub(crate) const SB: u8 = 0x01;
+pub(crate) const SC: u8 = 0x02;
 // Timer
-const DIV: u8 = 0x04;
-const TIMA: u8 = 0x05;
-const TMA: u8 = 0x06;
-const TAC: u8 = 0x07;
+pub(crate) const DIV: u8 = 0x04;
+pub(crate) const TIMA: u8 = 0x05;
+pub(crate) const TMA: u8 = 0x06;
+pub(crate) const TAC: u8 = 0x07;
 // IF
-const IF: u8 = 0x0F;
+pub(crate) const IF: u8 = 0x0F;
 // APU
-const NR10: u8 = 0x10;
-const NR11: u8 = 0x11;
-const NR12: u8 = 0x12;
-const NR13: u8 = 0x13;
-const NR14: u8 = 0x14;
-const NR21: u8 = 0x16;
-const NR22: u8 = 0x17;
-const NR23: u8 = 0x18;
-const NR24: u8 = 0x19;
-const NR30: u8 = 0x1A;
-const NR31: u8 = 0x1B;
-const NR32: u8 = 0x1C;
-const NR33: u8 = 0x1D;
-const NR34: u8 = 0x1E;
-const NR41: u8 = 0x20;
-const NR42: u8 = 0x21;
-const NR43: u8 = 0x22;
-const NR44: u8 = 0x23;
-const NR50: u8 = 0x24;
-const NR51: u8 = 0x25;
-const NR52: u8 = 0x26;
-const WAV_BEG: u8 = 0x30;
-const WAV_END: u8 = 0x3F;
+pub(crate) const NR10: u8 = 0x10;
+pub(crate) const NR14: u8 = 0x14;
+pub(crate) const NR21: u8 = 0x16;
+pub(crate) const NR24: u8 = 0x19;
+pub(crate) const NR30: u8 = 0x1A;
+pub(crate) const NR34: u8 = 0x1E;
+pub(crate) const NR41: u8 = 0x20;
+pub(crate) const NR44: u8 = 0x23;
+pub(crate) const NR50: u8 = 0x24;
+pub(crate) const NR52: u8 = 0x26;
+pub(crate) const WAV_BEG: u8 = 0x30;
+pub(crate) const WAV_END: u8 = 0x3F;
 // PPU
-const LCDC: u8 = 0x40;
-const STAT: u8 = 0x41;
-const SCY: u8 = 0x42;
-const SCX: u8 = 0x43;
-const LY: u8 = 0x44;
-const LYC: u8 = 0x45;
-const DMA: u8 = 0x46;
-const BGP: u8 = 0x47;
-const OBP0: u8 = 0x48;
-const OBP1: u8 = 0x49;
-const BANK: u8 = 0x50;
-const WY: u8 = 0x4A;
-const WX: u8 = 0x4B;
-const KEY0: u8 = 0x4C;
-const KEY1: u8 = 0x4D;
-const VBK: u8 = 0x4F;
+pub(crate) const LCDC: u8 = 0x40;
+pub(crate) const STAT: u8 = 0x41;
+pub(crate) const SCY: u8 = 0x42;
+pub(crate) const SCX: u8 = 0x43;
+pub(crate) const LY: u8 = 0x44;
+pub(crate) const LYC: u8 = 0x45;
+pub(crate) const DMA: u8 = 0x46;
+pub(crate) const BGP: u8 = 0x47;
+pub(crate) const OBP0: u8 = 0x48;
+pub(crate) const OBP1: u8 = 0x49;
+pub(crate) const BANK: u8 = 0x50;
+pub(crate) const WY: u8 = 0x4A;
+pub(crate) const WX: u8 = 0x4B;
+pub(crate) const KEY0: u8 = 0x4C;
+pub(crate) const KEY1: u8 = 0x4D;
+pub(crate) const VBK: u8 = 0x4F;
 // HDMA
-const HDMA1: u8 = 0x51;
-const HDMA2: u8 = 0x52;
-const HDMA3: u8 = 0x53;
-const HDMA4: u8 = 0x54;
-const HDMA5: u8 = 0x55;
+pub(crate) const HDMA1: u8 = 0x51;
+pub(crate) const HDMA2: u8 = 0x52;
+pub(crate) const HDMA3: u8 = 0x53;
+pub(crate) const HDMA4: u8 = 0x54;
+pub(crate) const HDMA5: u8 = 0x55;
 // Palettes
-const BCPS: u8 = 0x68;
-const BCPD: u8 = 0x69;
-const OCPS: u8 = 0x6A;
-const OCPD: u8 = 0x6B;
-const OPRI: u8 = 0x6C;
+pub(crate) const BCPS: u8 = 0x68;
+pub(crate) const BCPD: u8 = 0x69;
+pub(crate) const OCPS: u8 = 0x6A;
+pub(crate) const OCPD: u8 = 0x6B;
+pub(crate) const OPRI: u8 = 0x6C;
 // WRAM select
-const SVBK: u8 = 0x70;
+pub(crate) const SVBK: u8 = 0x70;
 // APU digital out
-const PCM12: u8 = 0x76;
-const PCM34: u8 = 0x77;
+pub(crate) const PCM12: u8 = 0x76;
+pub(crate) const PCM34: u8 = 0x77;
+// Undocumented CGB registers
+pub(crate) const UNDOC_FF72: u8 = 0x72;
+pub(crate) const UNDOC_FF73: u8 = 0x73;
+pub(crate) const UNDOC_FF75: u8 = 0x75;
 // HRAM
-const HRAM_BEG: u8 = 0x80;
-const HRAM_END: u8 = 0xFE;
+pub(crate) const HRAM_BEG: u8 = 0x80;
+pub(crate) const HRAM_END: u8 = 0xFE;
 // IE
-const IE: u8 = 0xFF;
+pub(crate) const IE: u8 = 0xFF;
 
 impl<A: AudioCallback> Gb<A> {
     #[must_use]
@@ -100,55 +116,46 @@ impl<A: AudioCallback> Gb<A> {
 
     #[must_use]
     fn read_boot_or_cart(&self, addr: u16) -> u8 {
-        self.bootrom.read(addr).unwrap_or_else(|| {
-            #[cfg(feature = "game_genie")]
-            {
-                let data = self.cart.read_rom(addr);
-                self.game_genie
-                    .query(addr, data)
-                    .map_or(data, |gg_data| gg_data)
-            }
+        self.bootrom
+            .read(addr)
+            .unwrap_or_else(|| self.read_cart_rom(addr))
+    }
 
-            #[cfg(not(feature = "game_genie"))]
-            {
-                self.cart.read_rom(addr)
-            }
-        })
+    /// A cartridge ROM byte, as patched by the active Game Genie codes.
+    #[must_use]
+    #[cfg_attr(
+        not(feature = "game_genie"),
+        expect(clippy::missing_const_for_fn, reason = "not const with the cheats")
+    )]
+    fn read_cart_rom(&self, addr: u16) -> u8 {
+        let data = self.cart.read_rom(addr);
+        #[cfg(feature = "game_genie")]
+        let data = self.game_genie.query(addr, data).unwrap_or(data);
+        data
     }
 
     #[must_use]
-    fn read_high(&self, addr: u8) -> u8 {
+    fn read_io(&self, addr: u8) -> u8 {
         match addr {
             P1 => self.joy.read_p1(),
             SB => self.serial.read_sb(),
-            SC => self.serial.read_sc(self.cgb_mode),
+            SC => self.serial.read_sc(),
             DIV => self.read_div(),
             TIMA => self.clock.tima(),
             TMA => self.clock.tma(),
             TAC => self.read_tac(),
             IF => self.ints.read_if(),
-            NR10 => self.apu.read_nr10(),
-            NR11 => self.apu.read_nr11(),
-            NR12 => self.apu.read_nr12(),
-            NR14 => self.apu.read_nr14(),
-            NR21 => self.apu.read_nr21(),
-            NR22 => self.apu.read_nr22(),
-            NR24 => self.apu.read_nr24(),
-            NR30 => self.apu.read_nr30(),
-            NR32 => self.apu.read_nr32(),
-            NR34 => self.apu.read_nr34(),
-            NR42 => self.apu.read_nr42(),
-            NR43 => self.apu.read_nr43(),
-            NR44 => self.apu.read_nr44(),
-            NR50 => self.apu.read_nr50(),
-            NR51 => self.apu.read_nr51(),
-            NR52 => self.apu.read_nr52(),
-            WAV_BEG..=WAV_END => self.apu.read_wave_ram(addr, self.is_cgb()),
+            NR10..=NR14
+            | NR21..=NR24
+            | NR30..=NR34
+            | NR41..=NR44
+            | NR50..=NR52
+            | WAV_BEG..=WAV_END => self.apu.read(usize::from(addr)),
             LCDC => self.ppu.read_lcdc(),
-            STAT => self.ppu.read_stat(),
+            STAT => self.ppu.cpu_read_stat(),
             SCY => self.ppu.read_scy(),
             SCX => self.ppu.read_scx(),
-            LY => self.ppu.read_ly(),
+            LY => self.ppu.cpu_read_ly(),
             LYC => self.ppu.read_lyc(),
             DMA => self.dma.read(),
             BGP => self.ppu.read_bgp(),
@@ -156,33 +163,55 @@ impl<A: AudioCallback> Gb<A> {
             OBP1 => self.ppu.read_obp1(),
             WY => self.ppu.read_wy(),
             WX => self.ppu.read_wx(),
-            KEY1 if self.are_cgb_regs_available() => self.key1.read(),
-            VBK if self.are_cgb_regs_available() => self.ppu.vram().read_vbk(),
-            HDMA5 if self.are_cgb_regs_available() => self.hdma.read_hdma5(),
-            BCPS if self.are_cgb_regs_available() => self.ppu.bcp().spec(),
-            BCPD if self.are_cgb_regs_available() => {
+            KEY1 if matches!(self.cgb_mode, CgbMode::Cgb) => self.key1.read(),
+            VBK if self.model.is_cgb_hardware() => self.ppu.vram().read_vbk(),
+            HDMA5 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.read_hdma5(),
+            BCPS if self.model.is_cgb_hardware() => self.ppu.bcp().spec(),
+            BCPD if matches!(self.cgb_mode, CgbMode::Cgb) => {
                 if self.ppu.is_cgb_palettes_accessible() {
                     self.ppu.bcp().data()
                 } else {
                     0xFF
                 }
             }
-            OCPS if self.are_cgb_regs_available() => self.ppu.ocp().spec(),
-            OCPD if self.are_cgb_regs_available() => {
+            OCPS if self.model.is_cgb_hardware() => self.ppu.ocp().spec(),
+            OCPD if matches!(self.cgb_mode, CgbMode::Cgb) => {
                 if self.ppu.is_cgb_palettes_accessible() {
                     self.ppu.ocp().data()
                 } else {
                     0xFF
                 }
             }
-            OPRI if self.are_cgb_regs_available() => self.ppu.read_opri(),
-            SVBK if self.are_cgb_regs_available() => self.wram.svbk().read(),
-            PCM12 if self.are_cgb_regs_available() => self.apu.pcm12(),
-            PCM34 if self.are_cgb_regs_available() => self.apu.pcm34(),
+            OPRI if self.bootrom.is_enabled() => self.ppu.read_opri(),
+            SVBK if matches!(self.cgb_mode, CgbMode::Cgb) => self.wram.svbk().read(),
+            PCM12 if self.model.is_cgb_hardware() => self.apu.pcm12(),
+            PCM34 if self.model.is_cgb_hardware() => self.apu.pcm34(),
+            // Undocumented CGB registers. Per Pan Docs "FF72-FF73 — Bits 0-7
+            // (CGB Mode only)": full R/W, init $00. "FF75 — Bits 4-6
+            // (CGB Mode only)": bits 0-3 and 7 read as 1, bits 4-6 are R/W.
+            UNDOC_FF72 if self.model.is_cgb_hardware() => self.undoc_ff72,
+            UNDOC_FF73 if self.model.is_cgb_hardware() => self.undoc_ff73,
+            UNDOC_FF75 if self.model.is_cgb_hardware() => (self.undoc_ff75 & 0x70) | 0x8F,
             HRAM_BEG..=HRAM_END => self.hram.read(addr),
             IE => self.ints.read_ie(),
             _ => 0xFF,
         }
+    }
+
+    /// CPU read: like `read_mem`, but OAM accesses can corrupt OAM (DMG).
+    #[inline]
+    pub fn cpu_read_mem(&mut self, addr: u16) -> u8 {
+        if (OAM_START..IO_START).contains(&addr) {
+            let dma_blocked = self.dma.blocks_oam_read();
+            return self.ppu.cpu_read_oam_area(addr, dma_blocked);
+        }
+        let value = self
+            .dma_read_redirect(addr)
+            .map_or(0xFF, |addr| self.read_mem(addr));
+        self.dma_after_read(addr);
+        #[cfg(feature = "debug")]
+        self.ppu.trace_read(addr, value);
+        value
     }
 
     #[must_use]
@@ -190,60 +219,26 @@ impl<A: AudioCallback> Gb<A> {
     pub fn read_mem(&self, addr: u16) -> u8 {
         match addr {
             0x0000..=0x00FF => self.read_boot_or_cart(addr),
-            0x0200..=0x08FF => {
-                if matches!(
-                    self.model,
-                    Model::Cgb0
-                        | Model::CgbA
-                        | Model::CgbB
-                        | Model::CgbC
-                        | Model::CgbD
-                        | Model::CgbE
-                ) {
-                    self.read_boot_or_cart(addr)
-                } else {
-                    #[cfg(feature = "game_genie")]
-                    {
-                        let data = self.cart.read_rom(addr);
-                        self.game_genie.query(addr, data).unwrap_or(data)
-                    }
-
-                    #[cfg(not(feature = "game_genie"))]
-                    {
-                        self.cart.read_rom(addr)
-                    }
-                }
-            }
-            0x0100..=0x01FF | 0x0900..=0x7FFF => {
-                #[cfg(feature = "game_genie")]
-                {
-                    let data = self.cart.read_rom(addr);
-                    self.game_genie.query(addr, data).unwrap_or(data)
-                }
-
-                #[cfg(not(feature = "game_genie"))]
-                {
-                    self.cart.read_rom(addr)
-                }
-            }
+            0x0200..=0x08FF if self.model.is_cgb_hardware() => self.read_boot_or_cart(addr),
+            0x0100..=0x7FFF => self.read_cart_rom(addr),
             0x8000..=0x9FFF => self.ppu.read_vram(addr),
             0xA000..=0xBFFF => self.cart.read_ram(addr),
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.read_wram_lo(addr),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.read_wram_hi(addr),
             0xFE00..=0xFE9F => {
-                if self.dma.blocks_oam() {
+                if self.dma.blocks_oam_read() {
                     0xFF
                 } else {
                     self.ppu.read_oam(addr)
                 }
             }
-            0xFEA0..=0xFEFF => 0xFF,
-            0xFF00..=0xFFFF => self.read_high((addr & 0xFF) as u8),
+            0xFEA0..=0xFEFF => self.ppu.peek_unusable(addr),
+            0xFF00..=0xFFFF => self.read_io((addr & 0xFF) as u8),
         }
     }
 
-    #[expect(clippy::cognitive_complexity, clippy::too_many_lines)]
-    fn write_high(&mut self, addr: u8, val: u8) {
+    #[expect(clippy::cognitive_complexity)]
+    fn write_io(&mut self, addr: u8, val: u8) {
         match addr {
             P1 => self.joy.write_joy(val),
             SB => self.serial.write_sb(val),
@@ -253,66 +248,33 @@ impl<A: AudioCallback> Gb<A> {
             TMA => self.write_tma(val),
             TAC => self.write_tac(val),
             IF => self.ints.write_if(val),
-            NR10 if self.apu.enabled() => self.apu.write_nr10(val),
-            NR11 => {
-                if self.apu.enabled() {
-                    self.apu.write_nr11(val);
-                } else if !self.is_cgb() {
-                    self.apu.write_nr11(val & 0x3F);
-                } else {
-                    // Don't write anything on CGB when APU is disabled
+            NR10..=NR14
+            | NR21..=NR24
+            | NR30..=NR34
+            | NR41..=NR44
+            | NR50..=NR52
+            | WAV_BEG..=WAV_END => {
+                if addr == NR52 && val & 0x80 != 0 && !self.apu.is_enabled() {
+                    self.apu_powered_on();
+                }
+                let ctx = self.apu_ctx();
+                self.apu.write(&ctx, usize::from(addr), val);
+            }
+            LCDC => {
+                self.ppu.write_lcdc(val, &mut self.ints);
+                if self.ppu.take_lcd_off_hdma_edge() {
+                    self.hdma.lcd_off_edge();
                 }
             }
-            NR12 if self.apu.enabled() => self.apu.write_nr12(val),
-            NR13 if self.apu.enabled() => self.apu.write_nr13(val),
-            NR14 if self.apu.enabled() => self.apu.write_nr14(val),
-            NR21 => {
-                if self.apu.enabled() {
-                    self.apu.write_nr21(val);
-                } else if !self.is_cgb() {
-                    self.apu.write_nr21(val & 0x3F);
-                } else {
-                    // Don't write anything on CGB when APU is disabled
-                }
-            }
-            NR22 if self.apu.enabled() => self.apu.write_nr22(val),
-            NR23 if self.apu.enabled() => self.apu.write_nr23(val),
-            NR24 if self.apu.enabled() => self.apu.write_nr24(val),
-            NR30 if self.apu.enabled() => self.apu.write_nr30(val),
-            NR31 => {
-                if self.apu.enabled() || !self.is_cgb() {
-                    self.apu.write_nr31(val);
-                }
-            }
-            NR32 if self.apu.enabled() => self.apu.write_nr32(val),
-            NR33 if self.apu.enabled() => self.apu.write_nr33(val),
-            NR34 if self.apu.enabled() => self.apu.write_nr34(val, self.is_cgb()),
-            NR41 => {
-                if self.apu.enabled() || !self.is_cgb() {
-                    self.apu.write_nr41(val);
-                }
-            }
-            NR42 if self.apu.enabled() => self.apu.write_nr42(val),
-            NR43 if self.apu.enabled() => self.apu.write_nr43(val),
-            NR44 if self.apu.enabled() => self.apu.write_nr44(val),
-            NR50 => self.apu.write_nr50(val),
-            NR51 => self.apu.write_nr51(val),
-            NR52 => {
-                let div = self.read_div();
-                let div_bit = if self.key1.is_enabled() {
-                    div & 0x20 != 0
-                } else {
-                    div & 0x10 != 0
-                };
-                self.apu.write_nr52(val, div_bit, self.is_cgb());
-            }
-            WAV_BEG..=WAV_END => self.apu.write_wave_ram(addr, val, self.is_cgb()),
-            LCDC => self.ppu.write_lcdc(val, &mut self.ints),
             STAT => self.ppu.write_stat(val, &mut self.ints),
             SCY => self.ppu.write_scy(val),
             SCX => self.ppu.write_scx(val),
-            LYC => self.ppu.write_lyc(val, &mut self.ints),
-            DMA => self.dma.write(val),
+            LYC => self.ppu.write_lyc(val),
+            DMA => {
+                self.dma.write(val);
+                self.ppu
+                    .set_dma_state(DmaPhase::StartUp, u16::from(val) << 8, true);
+            }
             BGP => self.ppu.write_bgp(val),
             OBP0 => self.ppu.write_obp0(val),
             OBP1 => self.ppu.write_obp1(val),
@@ -329,40 +291,59 @@ impl<A: AudioCallback> Gb<A> {
                     self.cgb_mode = CgbMode::Compat;
                 }
             }
-            KEY1 if self.are_cgb_regs_available() => self.key1.write(val),
-            VBK if self.are_cgb_regs_available() => self.ppu.vram_mut().write_vbk(val),
             BANK => {
                 if val & 1 != 0 {
                     self.bootrom.disable();
                 }
             }
-            HDMA1 if self.are_cgb_regs_available() => self.hdma.write_hdma1(val),
-            HDMA2 if self.are_cgb_regs_available() => self.hdma.write_hdma2(val),
-            HDMA3 if self.are_cgb_regs_available() => self.hdma.write_hdma3(val),
-            HDMA4 if self.are_cgb_regs_available() => self.hdma.write_hdma4(val),
-            HDMA5 if self.are_cgb_regs_available() => {
-                let in_hblank = matches!(self.ppu.mode(), ppu::Mode::HBlank);
+            VBK if matches!(self.cgb_mode, CgbMode::Cgb) => self.ppu.vram_mut().write_vbk(val),
+            KEY1 if matches!(self.cgb_mode, CgbMode::Cgb) => self.key1.write(val),
+            HDMA1 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.write_hdma1(val),
+            HDMA2 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.write_hdma2(val),
+            HDMA3 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.write_hdma3(val),
+            HDMA4 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.write_hdma4(val),
+            HDMA5 if matches!(self.cgb_mode, CgbMode::Cgb) => {
+                let in_hblank = self.ppu.cgb_c_hdma_enable_in_hblank().unwrap_or_else(|| {
+                    matches!(self.ppu.mode(), ppu::Mode::HBlank) && !self.ppu.at_oam_scan_edge()
+                });
                 self.hdma.write_hdma5(val, in_hblank);
             }
-            BCPS if self.are_cgb_regs_available() => self.ppu.bcp_mut().set_spec(val),
+            BCPS if self.model.is_cgb_hardware() => self.ppu.bcp_mut().set_spec(val),
             BCPD if self.are_cgb_regs_available() => {
                 if self.ppu.is_cgb_palettes_accessible() {
                     self.ppu.bcp_mut().set_data(val);
+                } else {
+                    self.ppu.bcp_mut().auto_increment();
                 }
             }
-            OCPS if self.are_cgb_regs_available() => self.ppu.ocp_mut().set_spec(val),
+            OCPS if self.model.is_cgb_hardware() => self.ppu.ocp_mut().set_spec(val),
             OCPD if self.are_cgb_regs_available() => {
                 if self.ppu.is_cgb_palettes_accessible() {
                     self.ppu.ocp_mut().set_data(val);
+                } else {
+                    self.ppu.ocp_mut().auto_increment();
                 }
             }
-            OPRI if self.are_cgb_regs_available() => {
+            OPRI if self.model.is_cgb_hardware() => {
                 // FIXME: understand behaviour outside of bootrom
                 if self.bootrom.is_enabled() {
                     self.ppu.write_opri(val);
                 }
             }
-            SVBK if self.are_cgb_regs_available() => self.wram.svbk_mut().write(val),
+            // The CGB boot ROM selects bank 1 after switching a DMG game to
+            // DMG mode, so the boot ROM can still switch banks then (as in
+            // SameBoy).
+            SVBK if matches!(self.cgb_mode, CgbMode::Cgb)
+                || (self.model.is_cgb_hardware() && self.bootrom.is_enabled()) =>
+            {
+                self.wram.svbk_mut().write(val);
+            }
+            // Undocumented CGB registers. Per Pan Docs: FF72/FF73 are full
+            // R/W (any bit can be written), FF75 only bits 4-6 are writable
+            // (bits 0-3, 7 always read as 1).
+            UNDOC_FF72 if self.model.is_cgb_hardware() => self.undoc_ff72 = val,
+            UNDOC_FF73 if self.model.is_cgb_hardware() => self.undoc_ff73 = val,
+            UNDOC_FF75 if self.model.is_cgb_hardware() => self.undoc_ff75 = val & 0x70,
             HRAM_BEG..=HRAM_END => self.hram.write(addr, val),
             IE => self.ints.write_ie(val),
             _ => (),
@@ -371,6 +352,13 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub fn write_mem(&mut self, addr: u16, val: u8) {
+        let Some(addr) = (if addr < OAM_START {
+            self.dma_write_redirect(addr, val)
+        } else {
+            Some(addr)
+        }) else {
+            return;
+        };
         match addr {
             // FIXME: we assume bootrom doesn't write to rom
             0x0000..=0x7FFF => self.cart.write_rom(addr, val),
@@ -378,15 +366,11 @@ impl<A: AudioCallback> Gb<A> {
             0xA000..=0xBFFF => self.cart.write_ram(addr, val),
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.write_wram_lo(addr, val),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.write_wram_hi(addr, val),
-            0xFE00..=0xFE9F => {
-                if self.dma.blocks_oam() {
-                    return;
-                }
-
-                self.ppu.write_oam(addr, val);
+            0xFE00..=0xFEFF => {
+                let dma_blocked = self.dma.blocks_oam_write();
+                self.ppu.cpu_write_oam_area(addr, val, dma_blocked);
             }
-            0xFEA0..=0xFEFF => (),
-            0xFF00..=0xFFFF => self.write_high((addr & 0xFF) as u8, val),
+            0xFF00..=0xFFFF => self.write_io((addr & 0xFF) as u8, val),
         }
     }
 }

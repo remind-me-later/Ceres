@@ -37,6 +37,7 @@ impl State<'_> {
                 power_preference: wgpu::PowerPreference::LowPower,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
             })
             .await
             .context("unable to obtain wgpu adapter")?;
@@ -60,6 +61,7 @@ impl State<'_> {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
+            color_space: wgpu::SurfaceColorSpace::Auto,
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::AutoVsync,
@@ -86,11 +88,7 @@ impl State<'_> {
         })
     }
 
-    pub const fn on_lost(&mut self) {
-        self.resize(self.size);
-    }
-
-    pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self) {
         if let Some(scaling) = self.new_shader_option.take() {
             self.gb_screen.shader_option(&self.queue, scaling.into());
         }
@@ -108,7 +106,12 @@ impl State<'_> {
             self.surface.configure(&self.device, &self.config);
         }
 
-        let output = self.surface.get_current_texture()?;
+        // TODO: graciously handle surface errors
+        let output = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
+            err => panic!("Surface error: {err:?}"),
+        };
+
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -138,9 +141,7 @@ impl State<'_> {
             self.queue.submit(core::iter::once(encoder.finish()));
         }
 
-        output.present();
-
-        Ok(())
+        self.queue.present(output);
     }
 
     pub const fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
@@ -148,8 +149,7 @@ impl State<'_> {
     }
 
     pub fn update_texture(&mut self, rgba: &[u8]) {
-        self.gb_screen
-            .update_screen_texture(&self.device, &self.queue, rgba);
+        self.gb_screen.upload_frame(&self.queue, rgba);
     }
 
     pub const fn window(&self) -> &Arc<winit::window::Window> {

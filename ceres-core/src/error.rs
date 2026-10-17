@@ -1,35 +1,46 @@
 use core::{error, fmt};
 use fmt::Display;
 
+#[cfg(feature = "game_genie")]
 const COMMON_GAME_GENIE_FORMAT_STRING: &str =
     "expected a game genie code of the form ABC-DEF-GHI, where A..I are hex digits";
 
 #[non_exhaustive]
 #[derive(Debug)]
 pub enum Error {
-    InvalidGameGenieCodeExpectedHyphen { pos: u8 },
-    InvalidGameGenieCodeLength { actual: usize },
-    InvalidGameGenieCodeNotHexDigit { pos: u8 },
+    #[cfg(feature = "game_genie")]
+    InvalidGameGenieCodeExpectedHyphen {
+        pos: u8,
+    },
+    #[cfg(feature = "game_genie")]
+    InvalidGameGenieCodeLength {
+        actual: usize,
+    },
+    #[cfg(feature = "game_genie")]
+    InvalidGameGenieCodeNotHexDigit {
+        pos: u8,
+    },
     InvalidRamSize,
     InvalidRomHeaderSize,
     InvalidRomSize,
-    // FIXME: add variants for invalid save state details
     InvalidSaveState,
-    NonAsciiTitleString,
-    RamSizeDifferentThanActual { expected: u32, actual: u32 },
-    RomSizeDifferentThanActual { expected: u32, actual: u32 },
+    #[cfg(feature = "game_genie")]
     TooManyGameGenieCodes,
-    UnsupportedMBC { mbc_hex_code: u8 },
+    UnsupportedMBC {
+        mbc_hex_code: u8,
+    },
 }
 
 impl Display for Error {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
+            #[cfg(feature = "game_genie")]
             Self::InvalidGameGenieCodeLength { actual } => write!(
                 f,
                 "{COMMON_GAME_GENIE_FORMAT_STRING}: expected length 11, got {actual}",
             ),
+            #[cfg(feature = "game_genie")]
             Self::InvalidGameGenieCodeExpectedHyphen { pos } => {
                 write!(
                     f,
@@ -37,6 +48,7 @@ impl Display for Error {
                     pos + 1
                 )
             }
+            #[cfg(feature = "game_genie")]
             Self::InvalidGameGenieCodeNotHexDigit { pos } => {
                 write!(
                     f,
@@ -59,22 +71,10 @@ impl Display for Error {
             Self::InvalidSaveState => {
                 write!(f, "invalid save state")
             }
-            Self::NonAsciiTitleString => write!(
-                f,
-                "invalid title string in cartridge header, contains non ASCII \
-             characters"
-            ),
             Self::UnsupportedMBC { mbc_hex_code } => {
                 write!(f, "unsupported MBC: {mbc_hex_code:02X}")
             }
-            Self::RomSizeDifferentThanActual { expected, actual } => write!(
-                f,
-                "header ROM size is different from the size of the supplied file: expected {expected} bytes, got {actual} bytes"
-            ),
-            Self::RamSizeDifferentThanActual { expected, actual } => write!(
-                f,
-                "header RAM size is different from the size of the supplied file: expected {expected} bytes, got {actual} bytes"
-            ),
+            #[cfg(feature = "game_genie")]
             Self::TooManyGameGenieCodes => {
                 write!(f, "too many Game Genie codes activated (maximum is 3)")
             }

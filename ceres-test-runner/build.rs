@@ -1,10 +1,12 @@
-//! Build script to download Game Boy test ROMs
+//! Build script for the Game Boy test ROMs.
 //!
-//! This script automatically downloads test ROMs from the gameboy-test-roms
-//! repository if they're not already present. This is particularly useful for
-//! CI/CD pipelines where the ROMs need to be downloaded automatically.
+//! Downloads the whole `c-sp/gameboy-test-roms` release (all the suites the
+//! tests use) into `external/test-roms` with `curl` and `unzip`, unless the
+//! Mooneye and Wilbertpol ROMs are already there. It only reruns when this
+//! file changes: to download again, delete the directory and run `cargo
+//! clean --package ceres-test-runner`.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::{Context, Result};
@@ -15,65 +17,61 @@ const VERSION: &str = "v7.0";
 fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
 
-    // Get the test-roms directory path
-    let test_roms_dir = get_test_roms_dir()?;
+    let repo_root = get_repo_root()?;
+    let test_roms_dir = repo_root.join("external").join("test-roms");
 
-    // Check if ROMs are already downloaded (check for key directories)
     if roms_already_downloaded(&test_roms_dir) {
-        // Already have ROMs, nothing to do
         return Ok(());
     }
 
-    // Always download when building/testing this crate
     println!("cargo:warning=Downloading Game Boy test ROMs v{VERSION}...");
-
     download_and_extract_roms(&test_roms_dir).context("Failed to download test ROMs")?;
-
     println!("cargo:warning=Test ROMs downloaded successfully!");
 
     Ok(())
 }
 
-/// Get the path to the test-roms directory
-fn get_test_roms_dir() -> Result<PathBuf> {
+/// Get the path to the repo root directory
+fn get_repo_root() -> Result<PathBuf> {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").context("CARGO_MANIFEST_DIR not set")?;
 
-    let test_roms_dir = PathBuf::from(manifest_dir)
+    let repo_root = PathBuf::from(manifest_dir)
         .parent()
         .context("Failed to get parent directory")?
-        .join("external")
-        .join("test-roms");
+        .to_path_buf();
 
-    Ok(test_roms_dir)
+    Ok(repo_root)
 }
 
-/// Check if test ROMs are already downloaded
-fn roms_already_downloaded(test_roms_dir: &Path) -> bool {
-    // Check for the presence of key ROM directories
-    let blargg_dir = test_roms_dir.join("blargg");
-    let cpu_instrs = blargg_dir.join("cpu_instrs");
+/// Check if the mooneye/wilbertpol test ROMs are already downloaded
+fn roms_already_downloaded(test_roms_dir: &std::path::Path) -> bool {
+    let mooneye = test_roms_dir
+        .join("mooneye-test-suite")
+        .join("acceptance")
+        .join("add_sp_e_timing.gb");
+    let wilbertpol = test_roms_dir
+        .join("mooneye-test-suite-wilbertpol")
+        .join("acceptance")
+        .join("add_sp_e_timing.gb");
 
-    cpu_instrs.exists() && cpu_instrs.join("cpu_instrs.gb").exists()
+    mooneye.exists() && wilbertpol.exists()
 }
 
 /// Download and extract test ROMs using curl and unzip
-fn download_and_extract_roms(test_roms_dir: &Path) -> Result<()> {
+fn download_and_extract_roms(test_roms_dir: &std::path::Path) -> Result<()> {
     let url = format!(
         "https://github.com/{REPO}/releases/download/{VERSION}/game-boy-test-roms-{VERSION}.zip"
     );
 
     println!("cargo:warning=Downloading from: {url}");
 
-    // Create test-roms directory if it doesn't exist
     std::fs::create_dir_all(test_roms_dir).context("Failed to create test-roms directory")?;
 
-    // Create a temporary file for the download
     let temp_zip = test_roms_dir.with_file_name("test-roms-temp.zip");
 
-    // Download using curl
     let download_status = Command::new("curl")
-        .arg("-L") // Follow redirects
-        .arg("-f") // Fail on HTTP errors
+        .arg("-L")
+        .arg("-f")
         .arg("-o")
         .arg(&temp_zip)
         .arg(&url)
@@ -86,10 +84,9 @@ fn download_and_extract_roms(test_roms_dir: &Path) -> Result<()> {
 
     println!("cargo:warning=Extracting test ROMs...");
 
-    // Extract using unzip directly to test-roms directory
     let extract_status = Command::new("unzip")
-        .arg("-q") // Quiet mode
-        .arg("-o") // Overwrite without prompting
+        .arg("-q")
+        .arg("-o")
         .arg(&temp_zip)
         .arg("-d")
         .arg(test_roms_dir)
@@ -100,7 +97,6 @@ fn download_and_extract_roms(test_roms_dir: &Path) -> Result<()> {
         anyhow::bail!("Extraction failed with unzip exit code: {extract_status}");
     }
 
-    // Clean up the zip file
     let _ = std::fs::remove_file(&temp_zip);
 
     Ok(())
