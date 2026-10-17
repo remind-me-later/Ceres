@@ -173,3 +173,19 @@ xdg-open target/llvm-cov/html/index.html
 Run it in release with nextest, as above. A debug build makes the ROM tests
 very slow, and test threads sharing one process fight over the coverage
 counters: nextest runs each test in its own process.
+
+## HDL Model
+
+`hdl/` holds a gate-level VHDL model of the DMG-CPU B that `ceres-hdlgen`
+generates from the netlist traced from the die and from dmg-sim's cell models
+(see [hdl/README.md](hdl/README.md)). It needs [nvc](https://github.com/nickg/nvc)
+or GHDL and GNU make:
+
+```bash
+cd hdl
+make                      # generate the VHDL and analyse it
+make run TIME="40 ms"     # simulate; the pins are traced to trace.txt
+```
+
+The generated VHDL is not committed. After changing `ceres-hdlgen`, compare a
+run with the previous one: the model must keep matching dmg-sim pin for pin.

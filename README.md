@@ -141,6 +141,10 @@ A:FF F:00 B:FB C:1F D:D0 E:00 H:C7 L:B1 SP:DFF3 PC:C365 PCMEM:F0,44,FE,90 CY:264
 - `ceres-winit` contains the `winit` frontend.
 - `ceres-egui` contains the `egui` frontend.
 - `ceres-gtk` contains the `gtk` frontend.
+- `hdl` contains a gate-level VHDL model of the DMG-CPU B, the reference for
+  how the hardware behaves (see [hdl/README.md](hdl/README.md)).
+- `ceres-hdlgen` generates that model from the netlist traced from the die and
+  from dmg-sim's cell models.
 
 ## Contributing
 
@@ -169,3 +173,6 @@ and detailed testing instructions.
 - [GiiBiiAdvance](https://github.com/AntonioND/giibiiadvance)
 - [MetroBoy/GateBoy](https://github.com/aappleby/metroboy/tree/master)
 - [Furrtek schematics](https://github.com/furrtek/DMG-CPU-Inside)
+- [dmg-schematics](https://github.com/msinger/dmg-schematics) and
+  [dmg-sim](https://github.com/msinger/dmg-sim), the netlist and the
+  simulation of the DMG-CPU B that the VHDL model is generated from

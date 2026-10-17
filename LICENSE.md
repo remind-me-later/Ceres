@@ -16,3 +16,10 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## Exception
+
+The files in `hdl/gate`, and the VHDL that `ceres-hdlgen` generates into
+`hdl/build/gen`, derive from Michael Singer's dmg-schematics and dmg-sim and
+are licensed under the Creative Commons Attribution-ShareAlike 4.0
+International License (see `hdl/gate/LICENSE`).
