@@ -147,7 +147,9 @@ checks the lockfile without writing anything.
 [Dependabot](https://docs.github.com/en/code-security/dependabot) proposes the
 updates of the Cargo dependencies and of the actions once a week
 (`.github/dependabot.yml`), in pull requests that run the three workflows. For
-the actions it also updates `actions.lock`. The minor and patch updates of the
+the actions it also updates `actions.lock`. The crates of the graphical
+frontends (`eframe`, `egui*`, `winit`, `wgpu*`, `naga`) move together, so all
+their updates share a pull request. The minor and patch updates of the other
 crates come in one pull request, and each major update in its own.
 
 ### Code Coverage

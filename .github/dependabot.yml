@@ -16,9 +16,15 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
-    # The minor and patch updates of all the crates go in one pull request;
-    # each major update gets its own.
     groups:
+      # The crates of the graphical frontends move together (eframe pins its
+      # egui crates, egui-wgpu a version of wgpu, and a 0.x minor release is
+      # a breaking one), so all their updates, major ones included, share a
+      # pull request. A dependency goes in the first group it matches.
+      gui:
+        patterns: ["eframe", "egui*", "winit", "wgpu*", "naga"]
+      # The minor and patch updates of the other crates go in one pull
+      # request; each major update gets its own.
       minor-and-patch:
         patterns: ["*"]
         update-types: [minor, patch]
