@@ -49,6 +49,8 @@ pub struct Cell {
     pub name: String,
     pub type_name: String,
     pub is_virtual: bool,
+    /// The functional block the cell belongs to (`-> ppu-stat`), or "".
+    pub category: String,
     /// Attributes in the order they are written (`attrib "a=b" ...`).
     pub attribs: Vec<(String, String)>,
 }
@@ -77,6 +79,9 @@ pub struct Netlist {
     pub types: Vec<CellType>,
     pub cells: Vec<Cell>,
     pub wires: Vec<Wire>,
+    /// The categories (functional blocks) in the order they are declared,
+    /// with the comment that describes them.
+    pub categories: Vec<(String, String)>,
     type_index: HashMap<String, usize>,
     cell_index: HashMap<String, usize>,
     /// Which wire each cell port is connected to.
@@ -96,6 +101,13 @@ impl Netlist {
             let mut pending: Vec<Token> = Vec::new();
             for (num, line) in text.lines().enumerate() {
                 let at = || format!("{}:{}", file.display(), num + 1);
+                // `category ppu-stat :blue; # FF41 STAT, FF44 LY & FF45 LYC`:
+                // the description is a comment, which the lexer drops.
+                if let Some(rest) = line.trim_start().strip_prefix("category ") {
+                    let (decl, doc) = rest.split_once('#').unwrap_or((rest, ""));
+                    let name = decl.split([':', ';']).next().unwrap_or("").trim();
+                    nl.categories.push((name.to_owned(), doc.trim().to_owned()));
+                }
                 pending.extend(lex(line).with_context(at)?);
                 while let Some(end) = pending.iter().position(|t| *t == Token::Eot) {
                     let stmt: Vec<Token> = pending.drain(..=end).collect();
@@ -198,9 +210,11 @@ impl Netlist {
                     }
                     p.next();
                 }
-                if p.eat(&Token::To) {
-                    p.name("category name")?;
-                }
+                let category = if p.eat(&Token::To) {
+                    p.name("category name")?
+                } else {
+                    String::new()
+                };
                 p.strings();
                 let mut attribs = Vec::new();
                 if p.keyword("attrib") {
@@ -217,6 +231,7 @@ impl Netlist {
                     name,
                     type_name,
                     is_virtual,
+                    category,
                     attribs,
                 });
             }

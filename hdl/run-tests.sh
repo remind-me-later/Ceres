@@ -1,9 +1,10 @@
 #!/bin/sh
 # Runs test ROMs on the gate-level model with nvc, several at a time.
 #
-#   run-tests.sh [PATTERN]
+#   run-tests.sh [PATTERN...]
 #
-# The tests are the lines of tests.txt (or those that contain PATTERN):
+# The tests are the lines of tests.txt (or those that contain one of the
+# PATTERNs):
 #
 #   <kind> <ROM, relative to the repository> <time limit, e.g. 300ms>
 #
@@ -40,8 +41,10 @@ fi
 
 make -C "$HDL" SIM=nvc >/dev/null
 
-pattern=${1:-}
-grep -v '^#' "$HDL/tests.txt" | grep -v '^[[:space:]]*$' | grep -F -- "$pattern" |
+# grep -e PATTERN for each, or -e '' for all.
+[ $# -gt 0 ] || set -- ''
+for p; do set -- "$@" -e "$p"; shift; done
+grep -v '^#' "$HDL/tests.txt" | grep -v '^[[:space:]]*$' | grep -F "$@" |
 	while read -r kind rom limit; do
 		printf '%s\0%s\0%s\0' "$kind" "$rom" "$limit"
 	done |

@@ -11,6 +11,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
 
+use crate::File;
+
 pub use ast::{Expr, Module};
 pub use vhdl::real_expr;
 
@@ -32,6 +34,18 @@ pub struct Library {
     pub order: Vec<String>,
     /// Files that could not be parsed, with the reason.
     pub unparsed: Vec<(String, String)>,
+    /// The source files, in order, with what they define.
+    pub sources: Vec<Source>,
+}
+
+/// A cell file of dmg-sim (`dmg_cpu_b/cells/nand2.sv`).
+pub struct Source {
+    /// `dmg` or `sm83`.
+    pub group: &'static str,
+    /// The file name without `.sv`.
+    pub stem: String,
+    pub packages: Vec<String>,
+    pub modules: Vec<String>,
 }
 
 /// Cells that are written by hand in VHDL (`hdl/gate/cells`): memories,
@@ -49,13 +63,13 @@ pub const HAND_WRITTEN: &[&str] = &[
 
 /// Reads the cell files of dmg-sim (`dmg_cpu_b/cells` and `sm83/cells`).
 pub fn read_library(dmg_sim: &Path, defines: &HashSet<&str>) -> Result<Library> {
-    let mut files: Vec<PathBuf> = Vec::new();
-    for dir in ["dmg_cpu_b/cells", "sm83/cells"] {
+    let mut files: Vec<(&'static str, PathBuf)> = Vec::new();
+    for (group, dir) in [("dmg", "dmg_cpu_b/cells"), ("sm83", "sm83/cells")] {
         let dir = dmg_sim.join(dir);
         for e in fs::read_dir(&dir).with_context(|| format!("reading {}", dir.display()))? {
             let p = e?.path();
             if p.extension().is_some_and(|x| x == "sv") {
-                files.push(p);
+                files.push((group, p));
             }
         }
     }
@@ -65,8 +79,9 @@ pub fn read_library(dmg_sim: &Path, defines: &HashSet<&str>) -> Result<Library> 
         modules: HashMap::new(),
         order: Vec::new(),
         unparsed: Vec::new(),
+        sources: Vec::new(),
     };
-    for f in files {
+    for (group, f) in files {
         let src = fs::read_to_string(&f).with_context(|| format!("reading {}", f.display()))?;
         let name = f
             .file_name()
@@ -82,15 +97,26 @@ pub fn read_library(dmg_sim: &Path, defines: &HashSet<&str>) -> Result<Library> 
             }
             Ok(())
         });
+        let mut source = Source {
+            group,
+            stem: name.strip_suffix(".sv").unwrap_or(&name).to_owned(),
+            packages: Vec::new(),
+            modules: Vec::new(),
+        };
         for u in units {
             match u {
-                parser::Unit::Package(pkg) => lib.packages.push(pkg),
+                parser::Unit::Package(pkg) => {
+                    source.packages.push(pkg.name.clone());
+                    lib.packages.push(pkg);
+                }
                 parser::Unit::Module(m) => {
+                    source.modules.push(m.name.clone());
                     lib.order.push(m.name.clone());
                     lib.modules.insert(m.name.clone(), m);
                 }
             }
         }
+        lib.sources.push(source);
         if let Err(e) = result
             && !HAND_WRITTEN
                 .iter()
@@ -102,90 +128,99 @@ pub fn read_library(dmg_sim: &Path, defines: &HashSet<&str>) -> Result<Library> 
     Ok(lib)
 }
 
-/// The packages in an order where each comes after the ones it refers to.
-fn package_order(pkgs: &[ast::Package]) -> Vec<&ast::Package> {
-    fn refs(e: &Expr, out: &mut Vec<String>) {
-        match e {
-            Expr::Scoped(p, _) => out.push(p.clone()),
-            Expr::Call(f, args) => {
-                if let Some((p, _)) = f.split_once("::") {
-                    out.push(p.to_owned());
-                }
-                args.iter().flatten().for_each(|a| refs(a, out));
-            }
-            Expr::Unary(_, a) => refs(a, out),
-            Expr::Binary(_, a, b) | Expr::Index(a, b) => {
-                refs(a, out);
-                refs(b, out);
-            }
-            Expr::Cond(a, b, c) => {
-                refs(a, out);
-                refs(b, out);
-                refs(c, out);
-            }
-            Expr::Concat(v) => v.iter().for_each(|a| refs(a, out)),
-            Expr::Ident(_) | Expr::Num(_) => {}
-        }
-    }
-    let mut done: Vec<&ast::Package> = Vec::new();
-    let mut left: Vec<&ast::Package> = pkgs.iter().collect();
-    while !left.is_empty() {
-        let before = left.len();
-        left.retain(|p| {
-            let mut r = Vec::new();
-            p.params.iter().for_each(|(_, e)| refs(e, &mut r));
-            let ready = r.iter().all(|n| {
-                n == &p.name
-                    || !pkgs.iter().any(|q| &q.name == n)
-                    || done.iter().any(|q| &q.name == n)
-            });
-            if ready {
-                done.push(p);
-            }
-            !ready
-        });
-        if left.len() == before {
-            // A cycle: keep the rest in file order.
-            done.append(&mut left);
-        }
-    }
-    done
-}
-
-/// The VHDL of the cell library: packages, entities and architectures, in an
-/// order that can be analysed. Returns the text and the cells that could not
-/// be translated, with the reason.
-pub fn translate(lib: &Library) -> (String, Vec<(String, String)>) {
-    let mut packages = String::new();
-    let mut entities = String::new();
-    let mut archs = String::new();
+/// The VHDL of the cell library: a file for each cell file of dmg-sim, with
+/// its packages, entities and architectures, in an order that can be
+/// analysed (a file after the files it uses). Returns the files and the
+/// cells that could not be translated, with the reason.
+pub fn translate(lib: &Library) -> (Vec<File>, Vec<(String, String)>) {
     let mut failed = Vec::new();
-    for p in package_order(&lib.packages) {
-        match vhdl::package(p) {
-            Ok(s) => {
-                packages.push_str(&s);
-                packages.push('\n');
+    // Each file with the names it defines, in lower case.
+    let mut files: Vec<(File, Vec<String>)> = Vec::new();
+    for src in &lib.sources {
+        let mut body = String::new();
+        let mut defines = Vec::new();
+        for p in lib
+            .packages
+            .iter()
+            .filter(|p| src.packages.contains(&p.name))
+        {
+            match vhdl::package(p) {
+                Ok(s) => {
+                    body.push_str(&s);
+                    body.push('\n');
+                    defines.push(p.name.to_ascii_lowercase());
+                }
+                Err(e) => failed.push((p.name.clone(), format!("{e:#}"))),
             }
-            Err(e) => failed.push((p.name.clone(), format!("{e:#}"))),
         }
-    }
-    for name in &lib.order {
-        if HAND_WRITTEN.contains(&name.as_str()) {
+        for name in &src.modules {
+            if HAND_WRITTEN.contains(&name.as_str()) {
+                continue;
+            }
+            let m = &lib.modules[name];
+            match vhdl::entity(m).and_then(|e| Ok((e, vhdl::architecture(m, &lib.modules)?))) {
+                Ok((e, a)) => {
+                    body.push_str(&e);
+                    body.push('\n');
+                    body.push_str(&a);
+                    body.push('\n');
+                    defines.push(name.to_ascii_lowercase());
+                }
+                Err(e) => failed.push((name.clone(), format!("{e:#}"))),
+            }
+        }
+        if body.is_empty() {
             continue;
         }
-        let m = &lib.modules[name];
-        match vhdl::entity(m).and_then(|e| Ok((e, vhdl::architecture(m, &lib.modules)?))) {
-            Ok((e, a)) => {
-                entities.push_str(&e);
-                entities.push('\n');
-                archs.push_str(&a);
-                archs.push('\n');
-            }
-            Err(e) => failed.push((name.clone(), format!("{e:#}"))),
-        }
+        let dir = if src.group == "dmg" {
+            "dmg_cpu_b"
+        } else {
+            "sm83"
+        };
+        let text = format!(
+            "-- Generated by ceres-hdlgen from dmg-sim's {dir}/cells/{}.sv (CC-BY-SA 4.0).\n\
+             -- Do not edit.\n\n{body}",
+            src.stem
+        );
+        let path = format!("cells/{}/{}.vhd", src.group, src.stem);
+        files.push((File { path, text }, defines));
     }
-    let header = "-- Generated by ceres-hdlgen from the cells of dmg-sim (CC-BY-SA 4.0).\n-- Do not edit.\n\n";
-    (format!("{header}{packages}{entities}{archs}"), failed)
+    (analysis_order(files), failed)
+}
+
+/// The files in an order where each comes after the files that define a
+/// name it uses, otherwise in their order.
+fn analysis_order(files: Vec<(File, Vec<String>)>) -> Vec<File> {
+    let uses: Vec<HashSet<String>> = files
+        .iter()
+        .map(|(f, _)| {
+            f.text
+                .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                .map(str::to_ascii_lowercase)
+                .collect()
+        })
+        .collect();
+    let deps: Vec<Vec<usize>> = (0..files.len())
+        .map(|i| {
+            (0..files.len())
+                .filter(|&j| j != i && files[j].1.iter().any(|n| uses[i].contains(n)))
+                .collect()
+        })
+        .collect();
+    let mut done = vec![false; files.len()];
+    let mut order = Vec::with_capacity(files.len());
+    while order.len() < files.len() {
+        // The first file whose dependencies are done; on a cycle, the first
+        // file left.
+        let next = (0..files.len())
+            .find(|&i| !done[i] && deps[i].iter().all(|&j| done[j]))
+            .or_else(|| (0..files.len()).find(|&i| !done[i]))
+            .unwrap_or_default();
+        done[next] = true;
+        order.push(next);
+    }
+    let mut files: Vec<Option<File>> = files.into_iter().map(|(f, _)| Some(f)).collect();
+    order.into_iter().filter_map(|i| files[i].take()).collect()
 }
 
 #[cfg(test)]
@@ -200,6 +235,7 @@ mod tests {
             modules: HashMap::new(),
             order: Vec::new(),
             unparsed: Vec::new(),
+            sources: Vec::new(),
         };
         while !p.at_end() {
             match p.unit() {
@@ -211,9 +247,15 @@ mod tests {
                 Err(e) => panic!("{e:#}"),
             }
         }
-        let (vhdl, failed) = translate(&lib);
+        lib.sources.push(Source {
+            group: "dmg",
+            stem: "test".to_owned(),
+            packages: lib.packages.iter().map(|p| p.name.clone()).collect(),
+            modules: lib.order.clone(),
+        });
+        let (files, failed) = translate(&lib);
         assert!(failed.is_empty(), "{failed:?}");
-        vhdl
+        files.into_iter().map(|f| f.text).collect()
     }
 
     #[test]

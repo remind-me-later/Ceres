@@ -29,10 +29,27 @@ BUILD := build
 GEN   := $(BUILD)/gen
 WORK  := $(BUILD)/$(SIM)
 
-GENERATED := $(GEN)/cells.vhd $(GEN)/sm83.vhd $(GEN)/dmg_cpu_b.vhd
-SOURCES   := support/verilog.vhd gate/timing.vhd $(GEN)/cells.vhd gate/cells.vhd \
-             $(GEN)/sm83.vhd $(GEN)/dmg_cpu_b.vhd tb/gameboy_tb.vhd
+# The generator writes the cells (cells.txt) and the chip, one file per
+# block of the schematics (chip.txt), and lists them in the order they can
+# be analysed.
+GENERATED := $(GEN)/cells.txt $(GEN)/chip.txt
 GENERATOR := $(wildcard ../ceres-hdlgen/src/*.rs ../ceres-hdlgen/src/*/*.rs)
+
+# The hand-written files, in the order they are analysed (a unit after the
+# units it uses).
+SUPPORT := support/verilog.vhd gate/keeper.vhd gate/timing.vhd
+CELLS   := $(addprefix gate/cells/,bus_bit.vhd memory.vhd simplified_sram.vhd \
+             high_ram.vhd oam.vhd wave_ram.vhd boot_rom.vhd audio.vhd)
+TB      := $(addprefix tb/,util.vhd video_ram.vhd work_ram.vhd cartridge.vhd \
+             serial_receiver.vhd pin_trace.vhd oam_conflict.vhd mooneye_result.vhd \
+             gbmicrotest_result.vhd gameboy_tb.vhd)
+
+# All of them: the generated cells after the support files, the chip after
+# all the cells, the testbench last. The lists are read when a recipe runs,
+# since the generator writes them.
+generated = $$(sed 's|^|$(abspath $(GEN))/|' $(abspath $(GEN))/$(1))
+SOURCES = $(call abs,$(SUPPORT)) $(call generated,cells.txt) $(call abs,$(CELLS)) \
+          $(call generated,chip.txt) $(call abs,$(TB))
 
 NVC  := nvc -M 4g --std=2008
 GHDL := ghdl
@@ -55,14 +72,14 @@ gen: $(GENERATED)
 $(GENERATED) &: $(GENERATOR)
 	cargo run --release -p ceres-hdlgen --bin ceres-hdlgen -- --out $(GEN)
 
-$(BUILD)/nvc/analysed: $(SOURCES)
+$(BUILD)/nvc/analysed: $(SUPPORT) $(GENERATED) $(CELLS) $(TB)
 	mkdir -p $(BUILD)/nvc
-	cd $(BUILD)/nvc && $(NVC) -a $(call abs,$(SOURCES))
+	cd $(BUILD)/nvc && $(NVC) -a $(SOURCES)
 	touch $@
 
-$(BUILD)/ghdl/analysed: $(SOURCES)
+$(BUILD)/ghdl/analysed: $(SUPPORT) $(GENERATED) $(CELLS) $(TB)
 	mkdir -p $(BUILD)/ghdl
-	cd $(BUILD)/ghdl && $(GHDL) -a --std=08 $(call abs,$(SOURCES))
+	cd $(BUILD)/ghdl && $(GHDL) -a --std=08 $(SOURCES)
 	touch $@
 
 run: $(WORK)/analysed

@@ -17,25 +17,75 @@ The model is generated from two sources:
   measurements of a real chip.
 
 `ceres-hdlgen` (in the workspace) reads both and writes the VHDL into
-`build/gen`, which is not committed:
+`build/gen`, which is not committed. The rest is written by hand.
 
-- `cells.vhd`: the cell library, translated from dmg-sim's SystemVerilog;
-- `sm83.vhd`: the SM83 CPU core, from the netlist;
-- `dmg_cpu_b.vhd`: the chip, from the netlist.
+## Where things are
 
-The rest is written by hand:
+The chip is split as msinger's schematics split it: each category of cells
+(the timer, the STAT register, a sound channel, the ALU...) is one VHDL
+entity in its own file, whose ports are the wires it shares with the other
+blocks and the pins. The cells and nets keep their names from the die
+(`u_tola` is the cell TOLA, `n_tola` the net it drives), so a name in the
+schematics can be found with grep.
 
-| Path | Contents | License |
-| --- | --- | --- |
-| `support/verilog.vhd` | Verilog semantics in VHDL (delays, strengths, keeper) | MIT |
-| `gate/timing.vhd` | the delay model of dmg-sim | CC BY-SA 4.0 |
-| `gate/cells.vhd` | the memories, the boot ROM and the analog audio | CC BY-SA 4.0 |
-| `tb/gameboy_tb.vhd` | a Game Boy board: crystal, reset, RAMs, cartridge | MIT |
+| Path | Contents |
+| --- | --- |
+| `build/gen/dmg_cpu_b.vhd` | the chip: its pins, and the blocks connected by the wires they share |
+| `build/gen/dmg_cpu_b/*.vhd` | its 38 blocks: `timer`, `serial`, `int`, `ppu_stat`, `apu_ch1`... |
+| `build/gen/sm83.vhd` | the SM83 CPU core, a component of the chip, built the same way |
+| `build/gen/sm83/*.vhd` | its 27 blocks: `reg_bc`, `alu_core`, `dec1`, `seq`, `irq`... |
+| `build/gen/cells/` | the cells, one file each (`nand2`, `dffr`...), translated from dmg-sim |
+| `gate/cells/` | the cells that are not gates, by hand: the memories, the boot ROM, the analog audio |
+| `gate/timing.vhd` | the delay model: from the wire lengths and the transistor widths |
+| `gate/keeper.vhd` | the bus keeper, which holds the value of an undriven bus |
+| `support/verilog.vhd` | Verilog semantics in VHDL: delays, strengths, unknown values |
+| `tb/gameboy_tb.vhd` | the Game Boy board around the chip: crystal, reset, and the parts below |
+| `tb/video_ram.vhd`, `tb/work_ram.vhd` | the two RAMs on the board |
+| `tb/cartridge.vhd` | a cartridge: ROM, RAM, no MBC, MBC1 or MBC5 |
+| `tb/serial_receiver.vhd` | the other end of the serial link (Blargg's tests report there) |
+| `tb/oam_conflict.vhd` | dmg-sim's resolution of OAM DMA conflicts, which the gates cannot model |
+| `tb/mooneye_result.vhd`, `tb/gbmicrotest_result.vhd` | how these test ROMs report their result |
+| `tb/pin_trace.vhd` | the trace of the pins |
+| `tb/util.vhd` | helpers: files, ROM images, the result of a test |
 
-The files in `gate/`, and the VHDL generated into `build/gen`, derive from
-dmg-schematics and dmg-sim and are licensed under
-[CC BY-SA 4.0](gate/LICENSE), like them. The generator and the other files are
-MIT, like the rest of Ceres.
+The first line of each hand-written file gives its license. The files that
+derive from dmg-schematics or dmg-sim, which are all of `gate/`, the parts
+of the testbench that follow dmg-sim's, and the VHDL generated into
+`build/gen`, are licensed under [CC BY-SA 4.0](gate/LICENSE), like their
+sources. The generator and the other files are MIT, like the rest of
+Ceres.
+
+## Reading VHDL
+
+VHDL describes hardware, but it reads like a program in a few kinds of
+statements:
+
+- An **entity** is the outside of a component: its `generic`s (parameters
+  fixed when it is placed, like const generics in Rust) and its `port`s,
+  the wires it connects to, each `in`, `out` or `inout`. An
+  **architecture** is the inside.
+- `u_tola : entity work.dmg_nand2 generic map (...) port map (in1 =>
+  n_a, ...)` places one instance of a component and connects its ports to
+  wires, like constructing a struct. `work` is the library everything is
+  compiled into.
+- A **signal** is a wire, such as `n_tola`. Its type `std_ulogic` is one
+  bit with nine values: `'0'` and `'1'`, `'Z'` (nothing drives it), `'X'`
+  (unknown, such as two drivers that disagree), `'L'` and `'H'` (weakly
+  driven, by a pull-up or a keeper), and `'U'` (never set). `std_logic` is
+  the same type for a wire that several outputs drive, a bus: its value is
+  computed from all of them.
+- A **process** is code that runs again whenever a signal in its list
+  changes (`process (a, b)`), or that waits (`wait until rising_edge(clk)`,
+  `wait for 2 us`). `x <= v after 3 ns` changes the signal `x` later;
+  variables (`v := ...`) change at once, as in Rust.
+- A **package** holds constants, types and functions, like a module.
+- `<< signal ^.dut.u_cpu.n_opcode0 : std_ulogic >>` is an external name:
+  the testbench reaching into the chip by the path of a net, as a debugger
+  would.
+
+The generated cells (`build/gen/cells/`) model the delays of Verilog gates
+with processes, and are the hardest part to read; the blocks are only
+instances and wires.
 
 ## Running it
 

@@ -1,3 +1,5 @@
+-- SPDX-License-Identifier: CC-BY-SA-4.0
+
 -- Delay model of the DMG-CPU B and of its SM83 core.
 --
 -- Ported from dmg-sim (dmg_cpu_b/timing-default.sv and
