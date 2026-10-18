@@ -52,12 +52,23 @@ begin
 end architecture;
 
 -------------------------------------------------------------------------------
+-- The bytes of a memory, for the testbench to look at.
+
+library ieee;
+use ieee.std_logic_1164.all;
+
+package dmg_memory is
+  type bytes is array (natural range <>) of std_logic_vector(7 downto 0);
+end package;
+
+-------------------------------------------------------------------------------
 -- Static RAM with precharged bit lines, as a behaviour (dmg-sim's
 -- dmg_simplified_sram): N bytes, 4 columns per word line.
 
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
+use work.dmg_memory.all;
 
 entity dmg_simplified_sram is
   generic (N : positive; AW : positive);
@@ -71,6 +82,10 @@ entity dmg_simplified_sram is
 end entity;
 
 architecture sim of dmg_simplified_sram is
+  -- A copy of the content, which the testbench reads by an external name
+  -- (the memory itself is a variable, as dmg-sim writes and reads it in
+  -- the same step).
+  signal mem_view : bytes(0 to N - 1) := (others => (others => '0'));
   -- The address of the selected byte, or -1.
   function address(row, row_n : std_logic_vector; cols : std_logic_vector) return integer is
     variable wl, c : integer;
@@ -105,6 +120,7 @@ begin
       end if;
       if adr /= -1 and to_x01(wldrv_ena) = '1' and not is_x(last) then
         mem(adr) := last;
+        mem_view(adr) <= last;
       end if;
     end if;
     if to_x01(bl_pch_n) = '1' and to_x01(wldrv_ena) = '1' then

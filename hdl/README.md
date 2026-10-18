@@ -47,13 +47,42 @@ You need [nvc](https://github.com/nickg/nvc) (or
 ```bash
 make                                # generate and analyse
 make run TIME="40 ms"               # simulate, pins traced to trace.txt
-make run TIME="2 s" ROM=game.gb     # with a cartridge (no memory bank controller)
+make run TIME="2 s" ROM=game.gb     # with a cartridge (none, MBC1 or MBC5)
 make SIM=ghdl run TIME="40 ms"      # with GHDL
 ```
 
 The chip spends its first 31.2 ms in its power-on reset; the CPU starts after
 that. Every change of the pins goes to the trace file as `<time> <pin>
-<value>`. A second of the Game Boy takes minutes to hours to simulate.
+<value>`. A second of the Game Boy takes about an hour to simulate, and two
+when six simulations run at once.
+
+## Comparing with dmg-sim
+
+dmg-sim runs on Icarus Verilog, which `make ref` builds from its submodule
+with a probe of the pins:
+
+```bash
+make run TIME="34 ms" TRACE=model.txt
+make ref-run REF_SECS=0.002 REF_TRACE=ref.txt   # 2 ms after the reset
+make diff TRACE=model.txt REF_TRACE=ref.txt
+```
+
+`make smoke`, which CI runs, simulates 33 ms with dmg-sim's quickboot ROM and
+checks the hash of the pin trace against `smoke.sha256`. That trace matched
+dmg-sim pin for pin; after a change that alters it, check the new one with
+`make diff` before updating the hash.
+
+## Test ROMs
+
+`run-tests.sh` runs the test ROMs of `tests.txt` on the model, six at a time,
+and writes the results to `build/results.txt`. The testbench recognises how
+each kind of test reports its result and stops there: Mooneye's registers at
+`LD B,B`, gbmicrotest's `FF82` in high RAM, and Blargg's text on the serial
+port. Each test starts with the power-on reset and dmg-sim's quickboot ROM,
+which skips the logo but keeps the timings of the boot ROM (DIV, the PPU, the
+APU): the CPU reaches the cartridge's entry point at 182 ms, after about
+twelve minutes of simulation (25 when six run at once). The results are in
+[results-gate.md](results-gate.md).
 
 ## How it follows dmg-sim
 
@@ -85,8 +114,5 @@ as Icarus runs dmg-sim.
 - As in dmg-sim's default build, OAM and wave RAM use a simplified SRAM: the
   OAM corruption bug and the wave RAM corruption of Blargg's dmg_sound test 10
   are not reproduced.
-- dmg-sim's testbench forces the OAM data lines during a conflict between OAM
-  DMA and the CPU; this is not ported yet.
-- The cartridge has no memory bank controller yet (dmg-sim has MBC1 and MBC5).
 - While the chip powers up, unknown values can settle differently from Icarus
   during the first 100 µs.
