@@ -357,7 +357,16 @@ pub fn emit(nl: &Netlist) -> Result<String> {
     writeln!(s, "architecture gates of {module_id} is")?;
     for (wi, n) in hdl_name.iter().enumerate() {
         if wire_ports[wi].is_empty() {
-            let ty = if is_real[wi] { "real" } else { "std_logic" };
+            // A wire with one plain output on it needs no resolution.
+            let w = &nl.wires[wi];
+            let single = w.sources.len() == 1 && nl.dir(&w.sources[0]) == Dir::Out && !keeper[wi];
+            let ty = if is_real[wi] {
+                "real"
+            } else if single {
+                "std_ulogic"
+            } else {
+                "std_logic"
+            };
             writeln!(s, "  signal {n} : {ty};")?;
         }
     }

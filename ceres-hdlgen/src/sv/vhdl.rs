@@ -806,8 +806,12 @@ pub fn entity(m: &Module) -> Result<String> {
                 PortDir::Output => "out",
                 PortDir::Inout => "inout",
             };
+            // Inputs and plain outputs need no resolution: std_ulogic is
+            // faster to simulate. Tri-state outputs and inouts are resolved.
             let ty = if p.kind == NetKind::Real {
                 "real"
+            } else if p.dir == PortDir::Input || (p.dir == PortDir::Output && !p.tri) {
+                "std_ulogic"
             } else {
                 "std_logic"
             };
