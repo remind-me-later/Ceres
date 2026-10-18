@@ -1,30 +1,31 @@
-# Test ROMs for the gate-level model (run-tests.sh):
-#   <kind> <ROM, relative to the repository> <time limit>
-# The time counts from power-on: the CPU leaves quickboot for the entry point
-# at 182 ms. With six tests at once, 100 ms take about 13 minutes.
+# Test ROMs for the oracle (run-tests.sh):
+#   <kind> <ROM, relative to the repository> <SECS>
+# SECS is the time limit in seconds after the chip's reset (31.2 ms after
+# power-on), as dmg-sim counts it; the CPU reaches the cartridge's entry
+# point 0.15 s after the reset.
 
 # gbmicrotest: GateBoy fails the line 153 and STAT write glitch tests, ceres
-# passes them; the model settles which behaviour the netlist has.
-gbmicrotest external/test-roms/gbmicrotest/div_inc_timing_a.gb 250 ms
-gbmicrotest external/test-roms/gbmicrotest/div_inc_timing_b.gb 250 ms
-gbmicrotest external/test-roms/gbmicrotest/line_153_ly_a.gb 300 ms
-gbmicrotest external/test-roms/gbmicrotest/line_153_ly_b.gb 300 ms
-gbmicrotest external/test-roms/gbmicrotest/line_153_ly_c.gb 300 ms
-gbmicrotest external/test-roms/gbmicrotest/line_153_lyc_a.gb 300 ms
-gbmicrotest external/test-roms/gbmicrotest/line_153_lyc_b.gb 300 ms
-gbmicrotest external/test-roms/gbmicrotest/line_153_lyc_int_a.gb 300 ms
-gbmicrotest external/test-roms/gbmicrotest/line_153_lyc_int_b.gb 300 ms
-gbmicrotest external/test-roms/gbmicrotest/stat_write_glitch_l0_a.gb 300 ms
-gbmicrotest external/test-roms/gbmicrotest/stat_write_glitch_l0_b.gb 300 ms
-gbmicrotest external/test-roms/gbmicrotest/stat_write_glitch_l1_a.gb 300 ms
-gbmicrotest external/test-roms/gbmicrotest/stat_write_glitch_l1_b.gb 300 ms
-gbmicrotest external/test-roms/gbmicrotest/hblank_int_scx0.gb 300 ms
-gbmicrotest external/test-roms/gbmicrotest/hblank_int_scx3.gb 300 ms
+# passes them; the netlist settles which behaviour the chip has.
+gbmicrotest external/test-roms/gbmicrotest/div_inc_timing_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/div_inc_timing_b.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/line_153_ly_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/line_153_ly_b.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/line_153_ly_c.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/line_153_lyc_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/line_153_lyc_b.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/line_153_lyc_int_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/line_153_lyc_int_b.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/stat_write_glitch_l0_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/stat_write_glitch_l0_b.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/stat_write_glitch_l1_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/stat_write_glitch_l1_b.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/hblank_int_scx0.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/hblank_int_scx3.gb 0.25
 
 # Mooneye acceptance: the timings of the CPU and the timer.
-mooneye external/test-roms/mooneye-test-suite/acceptance/timer/div_write.gb 1200 ms
-mooneye external/test-roms/mooneye-test-suite/acceptance/div_timing.gb 1200 ms
-mooneye external/test-roms/mooneye-test-suite/acceptance/ei_sequence.gb 600 ms
-mooneye external/test-roms/mooneye-test-suite/acceptance/di_timing-GS.gb 1200 ms
-mooneye external/test-roms/mooneye-test-suite/acceptance/intr_timing.gb 1200 ms
-mooneye external/test-roms/mooneye-test-suite/acceptance/oam_dma_timing.gb 1200 ms
+mooneye external/test-roms/mooneye-test-suite/acceptance/timer/div_write.gb 1.1
+mooneye external/test-roms/mooneye-test-suite/acceptance/div_timing.gb 1.1
+mooneye external/test-roms/mooneye-test-suite/acceptance/ei_sequence.gb 0.6
+mooneye external/test-roms/mooneye-test-suite/acceptance/di_timing-GS.gb 1.1
+mooneye external/test-roms/mooneye-test-suite/acceptance/intr_timing.gb 1.1
+mooneye external/test-roms/mooneye-test-suite/acceptance/oam_dma_timing.gb 1.1

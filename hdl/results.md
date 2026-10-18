@@ -1,9 +1,10 @@
-# Test ROM results of the gate-level model
+# Test ROM results of the oracle
 
-Results of `run-tests.sh` (the ROMs of [tests.txt](tests.txt)) on the
-gate-level model with nvc 1.23, from power-on with dmg-sim's quickboot ROM.
-The CPU reaches the cartridge's entry point (`0100`) at 182.06 ms. dmg-sim's
-column is its own README's table, for the ROMs it lists.
+Results of `run-tests.sh` (the ROMs of [tests.txt](tests.txt)) on dmg-sim
+with Icarus Verilog 13, from power-on with dmg-sim's quickboot ROM. The CPU
+reaches the cartridge's entry point (`0100`) at 182.06 ms; the times are
+from power-on. The column "dmg-sim's table" is the table in dmg-sim's
+README, for the ROMs it lists.
 
 ## gbmicrotest
 
@@ -38,13 +39,13 @@ The netlist behaves as ceres and the ROMs expect.
 A test ends with `LD B,B` and passes with the Fibonacci numbers 3, 5, 8, 13,
 21 and 34 in B, C, D, E, H and L.
 
-| Test                       | Result | dmg-sim | Finished  |
-| -------------------------- | :----: | :-----: | --------: |
-| acceptance/di\_timing-GS   |   ✅   |   ✅    |  436.6 ms |
-| acceptance/div\_timing     |   ✅   |   ✅    |  356.4 ms |
-| acceptance/ei\_sequence    |   ✅   |   ✅    |  356.3 ms |
-| acceptance/intr\_timing    |   ✅   |   ✅    |  356.3 ms |
-| acceptance/oam\_dma\_timing |   ✅   |   ✅    |  406.4 ms |
-| acceptance/timer/div\_write |   ✅   |   ✅    | 1038.2 ms |
+| Test                       | Result | dmg-sim's table | Finished  |
+| -------------------------- | :----: | :-------------: | --------: |
+| acceptance/di\_timing-GS   |   ✅   |       ✅        |  436.6 ms |
+| acceptance/div\_timing     |   ✅   |       ✅        |  356.4 ms |
+| acceptance/ei\_sequence    |   ✅   |       ✅        |  356.3 ms |
+| acceptance/intr\_timing    |   ✅   |       ✅        |  356.3 ms |
+| acceptance/oam\_dma\_timing |   ✅   |       ✅        |  406.4 ms |
+| acceptance/timer/div\_write |   ✅   |       ✅        | 1038.2 ms |
 
-With six at once, div\_write took 95 minutes and the others 45 to 55.
+The whole list took 2 hours 40 minutes with six tests at once.

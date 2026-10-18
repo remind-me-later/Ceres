@@ -174,21 +174,18 @@ Run it in release with nextest, as above. A debug build makes the ROM tests
 very slow, and test threads sharing one process fight over the coverage
 counters: nextest runs each test in its own process.
 
-## HDL Model
+## HDL Oracle
 
-`hdl/` holds a gate-level VHDL model of the DMG-CPU B that `ceres-hdlgen`
-generates from the netlist traced from the die and from dmg-sim's cell models
-(see [hdl/README.md](hdl/README.md)). It needs [nvc](https://github.com/nickg/nvc)
-or GHDL and GNU make:
+`hdl/` runs test ROMs on dmg-sim, the gate-level simulation of the netlist
+traced from the die, as the reference for how the hardware behaves (see
+[hdl/README.md](hdl/README.md)). It needs Icarus Verilog and GNU make:
 
 ```bash
 cd hdl
-make                      # generate the VHDL and analyse it
-make run TIME="40 ms"     # simulate; the pins are traced to trace.txt
+make                      # build dmg-sim from its submodule, with our probes
+make smoke                # 33 ms from power-on: the pin trace must not change
+./run-tests.sh mooneye    # run the Mooneye tests of tests.txt
 ```
 
-The generated VHDL is not committed. The `HDL` workflow runs `make smoke`,
-which checks 33 ms of the pins against a trace that matched dmg-sim. After a
-change that alters it, compare with dmg-sim (`make ref-run` and `make diff`)
-before updating `hdl/smoke.sha256`. `hdl/run-tests.sh` runs test ROMs on the
-model; it takes hours, so it is not part of CI.
+The test ROMs take hours, so they are not part of CI. After updating the
+dmg-sim submodule or Icarus, run `make smoke` and the test ROMs again.
