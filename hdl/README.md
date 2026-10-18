@@ -114,8 +114,18 @@ what each block does rather than of its cells:
 | `apu_ch2.vhd`      | channel 2: square wave (FF16 to FF19)                    |
 | `apu_ch3.vhd`      | channel 3: wave RAM (FF1A to FF1E, FF30 to FF3F)         |
 | `apu_ch4.vhd`      | channel 4: noise (FF20 to FF23)                          |
+| `sm83.vhd`         | the CPU core: its blocks, its data bus and the bridge    |
+| `sm83_decoder.vhd` | the first decoder: the step of the instruction           |
+| `sm83_control.vhd` | the second and third decoders: the control lines         |
+| `sm83_sequencer.vhd` | the opcode, the M-cycles, HALT, STOP and IME           |
+| `sm83_registers.vhd` | the registers and the buses that read them             |
+| `sm83_idu.vhd`     | the IDU: increments and decrements of 16 bits            |
+| `sm83_alu.vhd`     | the ALU and the flags                                    |
+| `sm83_interrupts.vhd` | IE, the interrupts' priority and vectors              |
 
-The CPU core is not written yet.
+The test ROMs run on the model itself: only the crystal and the pins come
+from dmg-sim (with what the cartridge, the work RAM and the VRAM chip
+answer).
 
 The model keeps time in phases: every edge of the 4 MiHz clock starts one,
 and eight of them, A to H, make an M-cycle (`clocking.vhd`). Registers
@@ -144,10 +154,11 @@ BOOT=fast PHASES=1 TESTS=check/roms.txt ./run-tests.sh   # record, in dmg-sim
 make check                                               # check the model
 ```
 
-`check/roms.txt` lists the test ROMs the model is checked on. One of them,
-`check/apu.asm`, is ours: a stimulus that plays the APU's four channels
-through most of what they do, in 70 ms. `make` builds it with
-[RGBDS](https://rgbds.gbdev.io) (1.0 is tested).
+`check/roms.txt` lists the test ROMs the model is checked on. Two of them
+are ours: `check/apu.asm` plays the APU's four channels through most of what
+they do, in 70 ms, and `check/cpu.asm` executes every opcode and takes
+interrupts. `make` builds them with [RGBDS](https://rgbds.gbdev.io) (1.0 is
+tested).
 
 `BOOT=fast` starts the test ROMs with a boot ROM that only turns the LCD on
 and jumps to the cartridge (`build/fastboot.bin`): the recordings then take

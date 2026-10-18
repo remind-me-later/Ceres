@@ -460,6 +460,27 @@ module probe_phases;
 	                      `CHIP.ch4_eg_stop})
 	`TRACE(ch4_volume, {`CHIP.ch4_env3, `CHIP.ch4_env2, `CHIP.ch4_env1, `CHIP.ch4_env0})
 	`TRACE(ch4_out, `CHIP.ch4_out)
+
+	// The CPU core
+`define CPU `CHIP.cpu_inst
+	`TRACE(cpu_opcode, `CPU.opcode)
+	`TRACE(cpu_mcyc, `CPU.mcyc)
+	`TRACE(cpu_state, {`CPU.table_cb, `CPU.in_intr, `CPU.halt, `CPU.stop, `CPU.int_entry,
+	                   !`CPU.ime_n, `CPU.ime_state})
+	`TRACE(cpu_control, {`CPU.ctl_fetch, `CPU.ctl_mread, `CPU.ctl_mwrite, `CPU.ctl_sel_reg_w,
+	                     `CPU.alu_cond_fail, `CPU.int_take, `CPU.int_pending})
+	`TRACE(cpu_a, `CPU.reg_a)
+	`TRACE(cpu_flags, {`CPU.flag_z, `CPU.flag_n, `CPU.flag_h, `CPU.flag_c})
+	`TRACE(cpu_bc, {`CPU.reg_b, `CPU.reg_c})
+	`TRACE(cpu_de, {`CPU.reg_d, `CPU.reg_e})
+	`TRACE(cpu_hl, {`CPU.reg_h, `CPU.reg_l})
+	`TRACE(cpu_sp, {`CPU.reg_sph, `CPU.reg_spl})
+	`TRACE(cpu_pc, {`CPU.reg_pch, `CPU.reg_pcl})
+	`TRACE(cpu_wz, {`CPU.reg_w, `CPU.reg_z})
+	`TRACE(cpu_ie, `CPU.reg_ie)
+	`TRACE(cpu_db, `CPU.db)
+	`TRACE(cpu_res, `CPU.res)
+	`TRACE(cpu_idu, `CPU.idu_out)
 endmodule
 
 `default_nettype wire

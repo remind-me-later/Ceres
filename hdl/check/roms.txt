@@ -33,3 +33,7 @@ gbmicrotest external/test-roms/gbmicrotest/ppu_scx_vs_bgp.gb 0.05
 # channels with check/apu.asm, which make builds.
 gbmicrotest external/test-roms/gbmicrotest/audio_testbench.gb 0.08
 gbmicrotest hdl/build/apu.gb 0.075
+
+# The CPU core: every opcode, and interrupts (check/cpu.asm, which make
+# builds).
+gbmicrotest hdl/build/cpu.gb 0.02

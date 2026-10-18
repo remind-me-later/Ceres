@@ -1,22 +1,17 @@
 -- SPDX-License-Identifier: MIT
 --
 -- Checks the model against dmg-sim, phase by phase. dmg-sim's samples
--- (ORACLE, see ../oracle/probe_phases.sv) give the inputs: the crystal, the
--- pins, and what is not modelled yet: the CPU core, the APU and the PPU's
--- rendering. At the end of every phase, the model's signals must have
--- dmg-sim's values. The blocks of the model drive each other, so that what
--- passes between them within a phase (such as the STAT write glitch)
--- counts.
+-- (ORACLE, see ../oracle/probe_phases.sv) give the inputs: the crystal and
+-- the pins, with what the chips on the cartridge bus and the VRAM bus
+-- answer. At the end of every phase, the model's signals must have
+-- dmg-sim's values. The blocks of the model, the CPU core among them, drive
+-- each other, so that what passes between them within a phase (such as the
+-- STAT write glitch) counts.
 --
--- Within a phase, the inputs follow dmg-sim's timing roughly: the chip's
--- flip-flops change a few ns after the clock's edge, the chips on the
--- cartridge bus and the VRAM bus answer at 10 ns, the CPU core's outputs
--- come at 15 ns, its address's high byte at 22 ns and low byte at 33 ns,
--- and its data at 40 ns. The internal
--- data bus is precharged high in phase A (external_bus), and keeps its
--- value while nobody drives it. The CPU core pulls the bits that are 0 on
--- its side down whenever it does not read (when it writes, from phase B or
--- E): the latches that a write opens see the precharged FF first.
+-- Within a phase, the inputs follow dmg-sim's timing roughly: the chips on
+-- the cartridge bus and the VRAM bus answer 10 ns after the edge. The
+-- internal data bus is precharged high in phase A (external_bus and the CPU
+-- core), and keeps its value while nobody drives it.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -25,6 +20,7 @@ use ieee.numeric_std.all;
 use work.clocking.all;
 use work.oracle.all;
 use work.sprite_slots.all;
+use work.sm83_controls.all;
 
 entity chip_tb is
 	generic (
@@ -48,12 +44,13 @@ architecture check of chip_tb is
 	signal cpl, cpg, fr, s          : std_ulogic;
 
 	-- The CPU core
-	signal read, write, ctl_mreq     : std_ulogic := '0';
+	signal read, write, ctl_mreq     : std_ulogic;
 	signal mreq, fexx_ffxx           : std_ulogic;
 	signal boot_slow                 : std_ulogic := '1';
-	signal osc_ena                   : std_ulogic := '1';
-	signal clk_ena                   : std_ulogic := '0';
-	signal acks                      : std_ulogic_vector(4 downto 0) := (others => '0');
+	signal osc_ena                   : std_ulogic;
+	signal clk_ena                   : std_ulogic;
+	signal inta                      : std_ulogic_vector(7 downto 0);
+	signal acks                      : std_ulogic_vector(4 downto 0);
 	signal addr                      : std_logic_vector(15 downto 0);
 	signal data                      : std_logic_vector(7 downto 0);
 
@@ -113,15 +110,28 @@ architecture check of chip_tb is
 	signal kept : std_ulogic_vector(7 downto 0) := (others => '1');
 
 	shared variable dmg : oracle_t;
-
-	-- The addresses whose reads the model answers (or that nothing answers):
-	-- all but IE, which is in the CPU core.
-	function modelled(a : std_ulogic_vector(15 downto 0)) return boolean is
-		constant n : natural := to_integer(to_01(unsigned(a)));
-	begin
-		return n /= 16#FFFF#;  -- IE, in the CPU core
-	end function;
 begin
+	-- The CPU core. The chip decodes FE00 to FFFF and the boot ROM's
+	-- addresses for its memory request, which is slower than the request:
+	-- the request is high for a moment at the start of such accesses,
+	-- enough for the latches of the address pins. (Both decodings take
+	-- about 10 ns in dmg-sim.)
+	-- @hw die: the chip's TUNA SYRO, TULO TUTU
+	fexx_ffxx <= '1' after 10 ns when addr(15 downto 9) = "1111111" else '0' after 10 ns;
+	boot_slow <= boot_sel after 10 ns;
+
+	u_cpu : entity work.sm83
+		port map (
+			clk => clk_1mhz, exec_phase => exec_phase, data_phase => data_phase,
+			write_phase => clk_t4, pch_phase => pch_phase, sys_reset => cpu_sys_reset,
+			pwron_reset => reset, clk_ready => osc_stable, wake => cpu_wakeup, nmi => '0',
+			oe_n => t1_only, internal_access => fexx_ffxx, shadow_access => boot_slow,
+			shadow_override => t2_only, int => "000" & flags,
+			a => addr, d => data, ctl_mreq => ctl_mreq, mreq => mreq, rd => read, wr => write,
+			m1 => open, halt_n => clk_ena, stop_n => osc_ena, inta => inta
+		);
+	acks <= inta(4 downto 0);
+
 	u_clocks : entity work.clocks
 		port map (
 			ck1 => ck1, reset_pin_n => reset_pin_n, t1 => t1, t2 => t2, phi => phi,
@@ -333,16 +343,6 @@ begin
 			active => apu_active(4), dac_on => apu_dac(4), output => ch4_out
 		);
 
-	-- The CPU core's request goes out unless the address is the boot ROM's
-	-- or FE00 to FFFF, which the core decodes itself. The decoding is slower
-	-- than the request, so that the request is high for a moment at the
-	-- start of such accesses: enough for the latches of the address pins.
-	-- (Both decodings take about 10 ns in dmg-sim.)
-	-- @hw die: the CPU core's ZLYZ (oa211), the chip's TUNA SYRO, TULO TUTU
-	fexx_ffxx  <= '1' after 10 ns when addr(15 downto 9) = "1111111" else '0' after 10 ns;
-	boot_slow  <= boot_sel after 10 ns;
-	mreq       <= transport ctl_mreq and not fexx_ffxx and (not boot_slow or t2_only) after 8 ns;
-
 	-- The bus keeper holds the last value driven onto the data bus.
 	keeper : process (data)
 	begin
@@ -358,18 +358,12 @@ begin
 	end generate;
 
 	run : process
-		variable value      : std_ulogic_vector(7 downto 0);
-		variable address    : std_ulogic_vector(15 downto 0);
-		variable p          : phase_t;
 		variable lcd_was_on   : boolean := false;
 		variable mode3_was_on : boolean := false;
 	begin
 		dmg.open_file(ORACLE);
 		while dmg.next_phase loop
-			-- The edge that starts the phase. The rest of the phase follows
-			-- dmg-sim's timing, roughly: the CPU core's outputs 15 ns after
-			-- the edge, its address's high byte at 22 ns and low byte at 33 ns,
-			-- and its data at 40 ns.
+			-- The edge that starts the phase.
 			ck1 <= dmg.bit_value("ck1");
 			if dmg.phase > 0 then
 				wait for 1 ns;
@@ -397,50 +391,7 @@ begin
 			end if;
 
 			if dmg.phase > 0 then
-				wait for 5 ns;
-			end if;
-			osc_ena  <= dmg.bit_value("osc_ena");
-			clk_ena  <= dmg.bit_value("clk_ena");
-			ctl_mreq <= dmg.bit_value("ctl_mreq");
-			write    <= dmg.bit_value("write");
-			read     <= dmg.bit_value("read");
-			acks     <= dmg.vector_value("int_acks");
-
-			address := dmg.vector_value("addr");
-			if dmg.phase > 0 then
-				wait for 7 ns;
-			end if;
-			addr(15 downto 8) <= address(15 downto 8);
-			if dmg.phase > 0 then
-				wait for 11 ns;
-			end if;
-			addr(7 downto 0) <= address(7 downto 0);
-
-			-- The blocks that are not modelled answer the CPU's reads with
-			-- dmg-sim's value. Outside reads, the CPU core's own data bus is
-			-- bridged onto the chip's in phases B to H: the core pulls the bits
-			-- down that are 0 on its side, as when it writes.
-			if dmg.phase > 0 then
-				wait for 7 ns;
-			end if;
-			p     := dmg.phase_value;
-			value := dmg.vector_value("data");
-			if dmg.bit_value("cpu_rd") = '1' then
-				if not modelled(dmg.vector_value("addr")) then
-					data <= value;
-				else
-					data <= (others => 'Z');
-				end if;
-			elsif p /= A then
-				for i in data'range loop
-					data(i) <= '0' when value(i) = '0' else 'Z';
-				end loop;
-			else
-				data <= (others => 'Z');
-			end if;
-
-			if dmg.phase > 0 then
-				wait for T_phase - 41 ns;
+				wait for T_phase - 11 ns;
 			else
 				wait for T_phase - 1 ns;
 			end if;
@@ -463,8 +414,54 @@ begin
 			dmg.check("reset2", image(reset2));
 			dmg.check("div", image(std_ulogic_vector(div)));
 
-			-- The CPU core's request, which the testbench computes like the core
+			-- The CPU core
 			dmg.check("mreq", image(mreq));
+			dmg.check("ctl_mreq", image(ctl_mreq));
+			dmg.check("read", image(read));
+			dmg.check("write", image(write));
+			dmg.check("osc_ena", image(osc_ena));
+			dmg.check("clk_ena", image(clk_ena));
+			dmg.check("int_acks", image(acks));
+			dmg.check("addr", image(std_ulogic_vector(addr)));
+			dmg.check("cpu_opcode", image(<< signal .chip_tb.u_cpu.opcode : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("cpu_mcyc", image(<< signal .chip_tb.u_cpu.mcyc : std_ulogic_vector(2 downto 0) >>));
+			-- In dmg-sim, the interrupt logic's dynamic nodes start
+			-- undefined: int_entry and int_pending are 1 for the first
+			-- M-cycle, while the reset holds the core.
+			if dmg.phase > 8 then
+				dmg.check("cpu_state", image(<< signal .chip_tb.u_cpu.table_cb : std_ulogic >>)
+					& image(<< signal .chip_tb.u_cpu.in_intr : std_ulogic >>)
+					& image(<< signal .chip_tb.u_cpu.halt : std_ulogic >>)
+					& image(<< signal .chip_tb.u_cpu.stop : std_ulogic >>)
+					& image(<< signal .chip_tb.u_cpu.int_entry : std_ulogic >>)
+					& image(<< signal .chip_tb.u_cpu.ime : std_ulogic >>)
+					& image(<< signal .chip_tb.u_cpu.u_sequencer.ime_state : std_ulogic >>));
+				dmg.check("cpu_control", image(<< signal .chip_tb.u_cpu.c : controls_t >>.fetch)
+					& image(<< signal .chip_tb.u_cpu.c : controls_t >>.mread)
+					& image(<< signal .chip_tb.u_cpu.c : controls_t >>.mwrite)
+					& image(<< signal .chip_tb.u_cpu.sel_reg_w : std_ulogic >>)
+					& image(<< signal .chip_tb.u_cpu.cond_fail : std_ulogic >>)
+					& image(<< signal .chip_tb.u_cpu.int_take : std_ulogic >>)
+					& image(<< signal .chip_tb.u_cpu.int_pending : std_ulogic >>));
+			end if;
+			dmg.check("cpu_a", image(<< signal .chip_tb.u_cpu.u_registers.a : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("cpu_flags", image(<< signal .chip_tb.u_cpu.flags : std_ulogic_vector(7 downto 4) >>));
+			dmg.check("cpu_bc", image(<< signal .chip_tb.u_cpu.u_registers.b : std_ulogic_vector(7 downto 0) >>)
+				& image(<< signal .chip_tb.u_cpu.u_registers.c_reg : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("cpu_de", image(<< signal .chip_tb.u_cpu.u_registers.d : std_ulogic_vector(7 downto 0) >>)
+				& image(<< signal .chip_tb.u_cpu.u_registers.e : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("cpu_hl", image(<< signal .chip_tb.u_cpu.u_registers.h : std_ulogic_vector(7 downto 0) >>)
+				& image(<< signal .chip_tb.u_cpu.u_registers.l : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("cpu_sp", image(<< signal .chip_tb.u_cpu.u_registers.sph : std_ulogic_vector(7 downto 0) >>)
+				& image(<< signal .chip_tb.u_cpu.u_registers.spl : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("cpu_pc", image(<< signal .chip_tb.u_cpu.u_registers.pch : std_ulogic_vector(7 downto 0) >>)
+				& image(<< signal .chip_tb.u_cpu.u_registers.pcl : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("cpu_wz", image(<< signal .chip_tb.u_cpu.u_registers.w : std_ulogic_vector(7 downto 0) >>)
+				& image(<< signal .chip_tb.u_cpu.u_registers.z : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("cpu_ie", image(<< signal .chip_tb.u_cpu.u_interrupts.ie : std_ulogic_vector(7 downto 0) >>));
+			dmg.check_bus("cpu_db", image(std_ulogic_vector(<< signal .chip_tb.u_cpu.db : std_logic_vector(7 downto 0) >>)));
+			dmg.check("cpu_res", image(<< signal .chip_tb.u_cpu.res : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("cpu_idu", image(<< signal .chip_tb.u_cpu.idu_out : std_ulogic_vector(15 downto 0) >>));
 
 			-- The timer and the interrupt flags
 			dmg.check("tima", image(<< signal .chip_tb.u_timer.tima : std_ulogic_vector(7 downto 0) >>));
