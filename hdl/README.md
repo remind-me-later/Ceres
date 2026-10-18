@@ -104,17 +104,27 @@ what each block does rather than of its cells:
 | `dma.vhd`          | OAM DMA (FF46)                                           |
 | `lcd_control.vhd`  | LCDC (FF40) and the PPU's resets                         |
 | `lcd_timing.vhd`   | lines and frames: LX, LY, LYC, STAT, the LCD's sync pins |
+| `oam_scan.vhd`     | the OAM scan (mode 2)                                    |
+| `sprite_store.vhd` | the ten sprites of the line, and their X matchers        |
+| `oam.vhd`          | OAM, its buses and its latches                           |
+| `render.vhd`       | mode 3: the fetcher, the window, the shifters, the pixel |
+| `vram_bus.vhd`     | the VRAM bus                                             |
 
-The CPU core, the APU and the PPU's rendering are not written yet.
+The CPU core and the APU are not written yet.
 
 The model keeps time in phases: every edge of the 4 MiHz clock starts one,
 and eight of them, A to H, make an M-cycle (`clocking.vhd`). Registers
 change at those edges, or at the edges of the signals that clock them in
 the chip; latches are latches. Each behaviour carries a tag that says where
 it comes from: `@hw die:` names the cells of the netlist that it describes.
-Where the chip's behaviour depends on which of two signals arrives first
-within a phase (a glitch), the model says so in a comment, with a delay
-(`after`) of the size dmg-sim has.
+A flip-flop's output changes 1 ns after its clock's edge (`tco`), so that
+every flip-flop clocked by an edge, or by a clock derived from it, sees
+the values from before the edge, as in the chip. Where the chip's
+behaviour depends on which of two signals arrives first within a phase (a
+glitch), the model says so in a comment, with a delay (`after`) of the
+size dmg-sim has; buses that keep their value when nobody drives them get
+a driver delay of 1 ns, so that the glitches of the model's zero-delay
+logic do not reach them.
 
 ### Checking it
 
@@ -125,9 +135,11 @@ runs the model on the same inputs and compares. The checks need
 [nvc](https://github.com/nickg/nvc) (1.23 is tested).
 
 ```bash
-BOOT=fast PHASES=1 ./run-tests.sh timer_ dma_   # record test ROMs in dmg-sim
-make check                                      # check the model on each
+BOOT=fast PHASES=1 TESTS=check/roms.txt ./run-tests.sh   # record, in dmg-sim
+make check                                               # check the model
 ```
+
+`check/roms.txt` lists the test ROMs the model is checked on.
 
 `BOOT=fast` starts the test ROMs with a boot ROM that only turns the LCD on
 and jumps to the cartridge (`build/fastboot.bin`): the recordings then take

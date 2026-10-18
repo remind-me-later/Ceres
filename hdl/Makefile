@@ -71,7 +71,8 @@ phases: $(VVP)
 # The readable model, in the order nvc analyses it, and its checks.
 MODEL  := rtl/clocking.vhd rtl/clocks.vhd rtl/divider.vhd rtl/timer.vhd rtl/interrupts.vhd \
           rtl/serial.vhd rtl/joypad.vhd rtl/test_mode.vhd rtl/boot_rom.vhd rtl/high_ram.vhd \
-          rtl/external_bus.vhd rtl/dma.vhd rtl/lcd_control.vhd rtl/lcd_timing.vhd
+          rtl/external_bus.vhd rtl/dma.vhd rtl/lcd_control.vhd rtl/lcd_timing.vhd \
+          rtl/oam_scan.vhd rtl/sprite_store.vhd rtl/oam.vhd rtl/render.vhd rtl/vram_bus.vhd
 CHECKS := check/oracle.vhd check/chip_tb.vhd
 TBS    := chip_tb
 WORK   := $(BUILD)/model

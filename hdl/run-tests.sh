@@ -4,8 +4,8 @@
 #
 #   run-tests.sh [PATTERN...]
 #
-# The tests are the lines of tests.txt (or those that contain one of the
-# PATTERNs):
+# The tests are the lines of tests.txt, or of the file TESTS names (or those
+# that contain one of the PATTERNs):
 #
 #   <kind> <ROM, relative to the repository> <SECS>
 #
@@ -26,6 +26,7 @@ set -eu
 HDL=$(cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(cd -- "$HDL/.." && pwd)
 JOBS=${JOBS:-6}
+TESTS=${TESTS:-$HDL/tests.txt}
 PHASES=${PHASES:-0}
 QUICKBOOT=$ROOT/external/reference-implementations/dmg-sim/boot/quickboot.bin
 RUNS=$HDL/build/runs
@@ -58,7 +59,7 @@ make -C "$HDL" >/dev/null
 # grep -e PATTERN for each, or -e '' for all.
 [ $# -gt 0 ] || set -- ''
 for p; do set -- "$@" -e "$p"; shift; done
-grep -v '^#' "$HDL/tests.txt" | grep -v '^[[:space:]]*$' | grep -F "$@" |
+grep -v '^#' "$TESTS" | grep -v '^[[:space:]]*$' | grep -F "$@" |
 	while read -r kind rom secs; do
 		printf '%s\0%s\0%s\0' "$kind" "$rom" "$secs"
 	done |

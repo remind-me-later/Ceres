@@ -167,7 +167,7 @@ begin
 		if test_reset = '1' then
 			cpu_sys_reset_i <= '0';
 		elsif starts(clk_in, phase_i, A) then
-			cpu_sys_reset_i <= sys_reset_i;
+			cpu_sys_reset_i <= sys_reset_i after tco;
 		end if;
 	end process;
 	cpu_sys_reset <= cpu_sys_reset_i;

@@ -35,7 +35,8 @@ package oracle is
 		impure function vector_value(name : string) return std_ulogic_vector;
 		impure function phase_value return phase_t;
 
-		-- Compares a value with dmg-sim's.
+		-- Compares a value with dmg-sim's. The bits that dmg-sim has as x
+		-- (unknown since power-on) match any value.
 		procedure check(name : string; actual : string);
 
 		-- Compares a bus with dmg-sim's, except the bits that dmg-sim has as
@@ -240,8 +241,18 @@ package body oracle is
 
 		procedure check(name : string; actual : string) is
 			constant expected : string := value(name);
+			variable masked   : string(actual'range) := actual;
 		begin
-			if actual /= expected then
+			-- What dmg-sim does not know (x: never set since power-on), any value
+			-- matches.
+			if actual'length = expected'length then
+				for i in expected'range loop
+					if expected(i) = 'x' then
+						masked(actual'left + i - expected'left) := 'x';
+					end if;
+				end loop;
+			end if;
+			if masked /= expected then
 				mismatches := mismatches + 1;
 				report "phase " & integer'image(current) & " (" & value("phase") & "): " & name & " is "
 					& actual & ", dmg-sim " & expected severity error;

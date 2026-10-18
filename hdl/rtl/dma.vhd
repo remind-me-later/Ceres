@@ -10,6 +10,8 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+use work.clocking.all;
+
 entity dma is
 	port (
 		dma_phi    : in std_ulogic;  -- high in phases A to D, and while the CPU is halted
@@ -71,7 +73,7 @@ begin
 		if hard_reset = '1' then
 			start_1 <= '0';
 		elsif rising_edge(dma_phi) then
-			start_1 <= requested and not write_ff46;
+			start_1 <= requested and not write_ff46 after tco;
 		end if;
 	end process;
 
@@ -80,7 +82,7 @@ begin
 		if hard_reset = '1' then
 			start_2 <= '0';
 		elsif falling_edge(dma_phi) then
-			start_2 <= start_1;
+			start_2 <= start_1 after tco;
 		end if;
 	end process;
 
@@ -106,7 +108,7 @@ begin
 		if restart = '1' then
 			count <= (others => '0');
 		elsif rising_edge(dma_phi) and enabled = '1' then
-			count <= count + 1;
+			count <= count + 1 after tco;
 		end if;
 	end process;
 
@@ -115,7 +117,7 @@ begin
 		if restart = '1' then
 			done <= '0';
 		elsif falling_edge(dma_phi) then
-			done <= '1' when count(7) = '1' and count(4 downto 0) = "11111" else '0';
+			done <= '1' after tco when count(7) = '1' and count(4 downto 0) = "11111" else '0' after tco;
 		end if;
 	end process;
 
@@ -125,7 +127,7 @@ begin
 		if hard_reset = '1' then
 			run <= '0';
 		elsif rising_edge(dma_phi) then
-			run <= enabled;
+			run <= enabled after tco;
 		end if;
 	end process;
 	dma_run <= run;

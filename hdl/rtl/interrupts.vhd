@@ -10,6 +10,8 @@
 library ieee;
 use ieee.std_logic_1164.all;
 
+use work.clocking.all;
+
 entity interrupts is
 	port (
 		reset2 : in std_ulogic;
@@ -54,7 +56,7 @@ begin
 			elsif write_if = '1' and to_x01(data(i)) = '1' then
 				flags_i(i) <= '1';
 			elsif rising_edge(requests(i)) then
-				flags_i(i) <= '1';
+				flags_i(i) <= '1' after tco;
 			end if;
 		end process;
 	end generate;

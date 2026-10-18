@@ -12,6 +12,8 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+use work.clocking.all;
+
 entity lcd_timing is
 	port (
 		clk        : in std_ulogic;
@@ -83,9 +85,9 @@ begin
 			wuvu_i <= '0';
 			vena   <= '0';
 		elsif falling_edge(clk) then
-			wuvu_i <= not wuvu_i;
+			wuvu_i <= not wuvu_i after tco;
 			if wuvu_i = '1' then
-				vena <= not vena;
+				vena <= not vena after tco;
 			end if;
 		end if;
 	end process;
@@ -99,7 +101,7 @@ begin
 		if ppu_reset = '1' then
 			wosu_i <= '0';
 		elsif rising_edge(clk) then
-			wosu_i <= not wuvu_i;
+			wosu_i <= not wuvu_i after tco;
 		end if;
 	end process;
 	wosu <= wosu_i;
@@ -113,7 +115,7 @@ begin
 		if vclk_i = '1' or ppu_reset = '1' then
 			lx_i <= (others => '0');
 		elsif rising_edge(hclk_i) then
-			lx_i <= lx_i + 1;
+			lx_i <= lx_i + 1 after tco;
 		end if;
 	end process;
 	lx <= lx_i;
@@ -123,7 +125,7 @@ begin
 		if ppu_reset = '1' then
 			vclk_i <= '0';
 		elsif falling_edge(hclk_i) then
-			vclk_i <= '1' when lx_i = 113 else '0';
+			vclk_i <= '1' after tco when lx_i = 113 else '0' after tco;
 		end if;
 	end process;
 	vclk <= vclk_i;
@@ -135,7 +137,7 @@ begin
 		if ppu_reset = '1' then
 			nype <= '0';
 		elsif rising_edge(hclk_i) then
-			nype <= vclk_i;
+			nype <= vclk_i after tco;
 		end if;
 	end process;
 
@@ -150,7 +152,7 @@ begin
 		if ly_reset = '1' then
 			ly_i <= (others => '0');
 		elsif rising_edge(vclk_i) then
-			ly_i <= ly_i + 1;
+			ly_i <= ly_i + 1 after tco;
 		end if;
 	end process;
 	ly <= ly_i;
@@ -161,8 +163,8 @@ begin
 			line_153   <= '0';
 			first_line <= '0';
 		elsif falling_edge(nype) then
-			line_153   <= '1' when ly_i = 153 else '0';
-			first_line <= '1' when ly_i = 0 else '0';
+			line_153   <= '1' after tco when ly_i = 153 else '0' after tco;
+			first_line <= '1' after tco when ly_i = 0 else '0' after tco;
 		end if;
 	end process;
 
@@ -173,7 +175,7 @@ begin
 		if ppu_reset = '1' then
 			mode1_i <= '0';
 		elsif rising_edge(nype) then
-			mode1_i <= ly_i(7) and ly_i(4);
+			mode1_i <= ly_i(7) and ly_i(4) after tco;
 		end if;
 	end process;
 	mode1 <= mode1_i;
@@ -187,7 +189,7 @@ begin
 		if ppu_reset = '1' then
 			frame <= '0';
 		elsif rising_edge(mode1_i) then
-			frame <= not frame;
+			frame <= not frame after tco;
 		end if;
 	end process;
 
@@ -196,7 +198,7 @@ begin
 		if ppu_reset = '1' then
 			line_parity <= '0';
 		elsif falling_edge(vclk_i) then
-			line_parity <= not line_parity;
+			line_parity <= not line_parity after tco;
 		end if;
 	end process;
 
@@ -209,7 +211,7 @@ begin
 		if ppu_reset = '1' then
 			cpg_lx <= '0';
 		elsif falling_edge(hclk_i) then
-			cpg_lx <= '1' when lx_i = 0 or lx_i = 7 or lx_i = 45 or lx_i = 83 else '0';
+			cpg_lx <= '1' after tco when lx_i = 0 or lx_i = 7 or lx_i = 45 or lx_i = 83 else '0' after tco;
 		end if;
 	end process;
 	cpg <= cpg_lx or vclk_i;
@@ -234,7 +236,7 @@ begin
 		if hard_reset = '1' then
 			lyc_match <= '0';
 		elsif rising_edge(hclk_i) then
-			lyc_match <= '1' when std_ulogic_vector(ly_i) = lyc else '0';
+			lyc_match <= '1' after tco when std_ulogic_vector(ly_i) = lyc else '0' after tco;
 		end if;
 	end process;
 

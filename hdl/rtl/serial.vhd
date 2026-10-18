@@ -9,6 +9,8 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+use work.clocking.all;
+
 entity serial is
 	port (
 		reset2 : in std_ulogic;
@@ -66,10 +68,10 @@ begin
 			if int_serial_i = '1' then
 				transfer <= '0';
 			elsif falling_edge(write_sc) then
-				transfer <= to_x01(data(7));
+				transfer <= to_x01(data(7)) after tco;
 			end if;
 			if falling_edge(write_sc) then
-				internal_clock <= to_x01(data(0));
+				internal_clock <= to_x01(data(0)) after tco;
 			end if;
 		end if;
 	end process;
@@ -82,7 +84,7 @@ begin
 		if write_sc = '1' then
 			half <= '0';
 		elsif falling_edge(div(5)) then
-			half <= not half;
+			half <= not half after tco;
 		end if;
 	end process;
 
@@ -116,9 +118,9 @@ begin
 				sb(i) <= '1';
 			elsif rising_edge(serial_clock) then
 				if i = 0 then
-					sb(i) <= to_x01(sin);
+					sb(i) <= to_x01(sin) after tco;
 				else
-					sb(i) <= sb(i - 1);
+					sb(i) <= sb(i - 1) after tco;
 				end if;
 			end if;
 		end loop;
@@ -131,7 +133,7 @@ begin
 		if reset2 = '1' then
 			ser_out <= '0';
 		elsif falling_edge(serial_clock) then
-			ser_out <= sb(7);
+			ser_out <= sb(7) after tco;
 		end if;
 	end process;
 
@@ -148,7 +150,7 @@ begin
 		if write_sc = '1' or reset2 = '1' then
 			count <= (others => '0');
 		elsif rising_edge(serial_clock) then
-			count <= count + 1;
+			count <= count + 1 after tco;
 		end if;
 	end process;
 	int_serial_i <= count(3);

@@ -296,8 +296,8 @@ module probe_phases;
 	                    `CHIP.sprite_px_b3, `CHIP.sprite_px_b2, `CHIP.sprite_px_b1, `CHIP.sprite_px_b0})
 	`TRACE(sp_shift_pal, {`CHIP.sprite_px_palette, `CHIP.moda, `CHIP.nuke, `CHIP.palu, `CHIP.somy, `CHIP.rosa,
 	                      `CHIP.sata, `CHIP.rugo})
-	`TRACE(sp_shift_prio, {`CHIP.sprite_px_priority, `CHIP.vumo, `CHIP.woda, `CHIP.wyfu, `CHIP.vosa,
-	                       `CHIP.wuru, `CHIP.vezo})
+	`TRACE(sp_shift_prio, {`CHIP.sprite_px_priority, `CHIP.vumo, `CHIP.woda, `CHIP.xete, `CHIP.wyfu,
+	                       `CHIP.vosa, `CHIP.wuru, `CHIP.vezo})
 	`TRACE(oam_addr, {`CHIP.oam_a7, `CHIP.oam_a6, `CHIP.oam_a5, `CHIP.oam_a4, `CHIP.oam_a3, `CHIP.oam_a2,
 	                  `CHIP.oam_a1, !`CHIP.oam_a0_n_tri})
 	`TRACE(oam_a_bus, {!`CHIP.oam_a_d7_n, !`CHIP.oam_a_d6_n, !`CHIP.oam_a_d5_n, !`CHIP.oam_a_d4_n,
@@ -307,19 +307,56 @@ module probe_phases;
 	`TRACE(oam_ctl, {`CHIP.oam_oe, `CHIP.oam_a_wr2, `CHIP.oam_b_wr2, !`CHIP.oam_bl_precharge_n,
 	                 !`CHIP.oam_wldrv_precharge_n, `CHIP.oam_data_latch, !`CHIP.oam_addr_cpu_n,
 	                 !`CHIP.oam_addr_dma_n, !`CHIP.oam_addr_parse_n, !`CHIP.oam_addr_render_n})
-	`TRACE(oam_latch_b, {`CHIP.zeca, `CHIP.yses, `CHIP.xafu, `CHIP.zaxe, `CHIP.\wone , `CHIP.zuca, `CHIP.yceb,
+	`TRACE(oam_latch_b, ~{`CHIP.zeca, `CHIP.yses, `CHIP.xafu, `CHIP.zaxe, `CHIP.\wone , `CHIP.zuca, `CHIP.yceb,
 	                     `CHIP.ydyv})
 	`TRACE(oam_latch_y, {`CHIP.yzab_n, `CHIP.xote_n, `CHIP.wyso_n, `CHIP.ybog_n, `CHIP.xyju_n, `CHIP.yjex_n,
 	                     `CHIP.xegu_n, `CHIP.xuso_n})
 	`TRACE(ma, {!`CHIP.ma12_n, !`CHIP.ma11_n, !`CHIP.ma10_n, !`CHIP.ma9_n, !`CHIP.ma8_n, !`CHIP.ma7_n,
 	            !`CHIP.ma6_n, !`CHIP.ma5_n, !`CHIP.ma4_n, !`CHIP.ma3_n, !`CHIP.ma2_n, !`CHIP.ma1_n,
 	            !`CHIP.ma0_n})
+	`TRACE(oam_latch_a, ~{`CHIP.eced, `CHIP.zuve, `CHIP.cyra, `CHIP.wyno, `CHIP.yvel, `CHIP.ysex, `CHIP.yrum,
+	                      `CHIP.xyky})
+	`TRACE(oam_latch_x, {`CHIP.sprite_priority, `CHIP.sprite_y_flip, `CHIP.sprite_x_flip, `CHIP.sprite_palette,
+	                     `CHIP.zezy_n, `CHIP.zyve_n, `CHIP.zyty_n, `CHIP.ylor_n})
+	`TRACE(md_out, !`CHIP.rahu)
 	`TRACE(ma_pins, `CHIP.ma_pad)
 	`TRACE(md_pins, `CHIP.md_pad)
 	`TRACE(mcs_n, `CHIP.mcs_n_pad)
 	`TRACE(mrd_n, `CHIP.mrd_n_pad)
 	`TRACE(mwr_n, `CHIP.mwr_n_pad)
 	`TRACE(md, {`CHIP.md7, `CHIP.md6, `CHIP.md5, `CHIP.md4, `CHIP.md3, `CHIP.md2, `CHIP.md1, `CHIP.md0})
+
+	// The sprite store: each slot's X, line and index in OAM
+	`TRACE(sprite_x0, ~{`CHIP.xako, `CHIP.wote, `CHIP.xuny, `CHIP.welo, `CHIP.zulu, `CHIP.zola, `CHIP.ylah, `CHIP.xepe})
+	`TRACE(sprite_x1, ~{`CHIP.cusy, `CHIP.dyfu, `CHIP.ceso, `CHIP.dake, `CHIP.dazo, `CHIP.desu, `CHIP.duko, `CHIP.dany})
+	`TRACE(sprite_x2, ~{`CHIP.depy, `CHIP.enor, `CHIP.ejuf, `CHIP.duhy, `CHIP.goxu, `CHIP.fuby, `CHIP.fyty, `CHIP.foka})
+	`TRACE(sprite_x3, ~{`CHIP.weco, `CHIP.wyna, `CHIP.wuha, `CHIP.xomy, `CHIP.xeka, `CHIP.xabe, `CHIP.xyba, `CHIP.xoly})
+	`TRACE(sprite_x4, ~{`CHIP.xepa, `CHIP.wyde, `CHIP.zala, `CHIP.ybed, `CHIP.xury, `CHIP.zyjo, `CHIP.ygaj, `CHIP.wedu})
+	`TRACE(sprite_x5, ~{`CHIP.cuvy, `CHIP.dury, `CHIP.dyby, `CHIP.cywe, `CHIP.fesy, `CHIP.fozy, `CHIP.faxa, `CHIP.fusa})
+	`TRACE(sprite_x6, ~{`CHIP.zesa, `CHIP.zoly, `CHIP.zogo, `CHIP.zecu, `CHIP.yvag, `CHIP.ymem, `CHIP.yrac, `CHIP.ycol})
+	`TRACE(sprite_x7, ~{`CHIP.fede, `CHIP.exuk, `CHIP.faxe, `CHIP.fazu, `CHIP.ehyn, `CHIP.erol, `CHIP.epum, `CHIP.eraz})
+	`TRACE(sprite_x8, ~{`CHIP.fyca, `CHIP.ebow, `CHIP.enad, `CHIP.ezuf, `CHIP.gaza, `CHIP.gady, `CHIP.gypu, `CHIP.gavy})
+	`TRACE(sprite_x9, ~{`CHIP.yzof, `CHIP.ynep, `CHIP.yrop, `CHIP.ypod, `CHIP.xexa, `CHIP.xuzo, `CHIP.xere, `CHIP.xuvy})
+	`TRACE(sprite_line0, ~{`CHIP.gyho_n, `CHIP.bozu_n, `CHIP.cufo_n, `CHIP.fyhy_n})
+	`TRACE(sprite_line1, ~{`CHIP.abug_n, `CHIP.abop_n, `CHIP.arof_n, `CHIP.ames_n})
+	`TRACE(sprite_line2, ~{`CHIP.ykuk_n, `CHIP.xazy_n, `CHIP.xosy_n, `CHIP.ylov_n})
+	`TRACE(sprite_line3, ~{`CHIP.zury_n, `CHIP.zene_n, `CHIP.zylu_n, `CHIP.zuro_n})
+	`TRACE(sprite_line4, ~{`CHIP.cumu_n, `CHIP.cono_n, `CHIP.caju_n, `CHIP.capo_n})
+	`TRACE(sprite_line5, ~{`CHIP.aned_n, `CHIP.abux_n, `CHIP.abeg_n, `CHIP.acep_n})
+	`TRACE(sprite_line6, ~{`CHIP.zube_n, `CHIP.zexo_n, `CHIP.zafu_n, `CHIP.zumy_n})
+	`TRACE(sprite_line7, ~{`CHIP.xygo_n, `CHIP.xaku_n, `CHIP.ygum_n, `CHIP.xyna_n})
+	`TRACE(sprite_line8, ~{`CHIP.afym_n, `CHIP.afut_n, `CHIP.afyx_n, `CHIP.azap_n})
+	`TRACE(sprite_line9, ~{`CHIP.dewu_n, `CHIP.dysy_n, `CHIP.fofo_n, `CHIP.cana_n})
+	`TRACE(sprite_index0, ~{`CHIP.ygus_n, `CHIP.ysok_n, `CHIP.yzep_n, `CHIP.wyte_n, `CHIP.zony_n, `CHIP.ywak_n})
+	`TRACE(sprite_index1, ~{`CHIP.cajy_n, `CHIP.cuza_n, `CHIP.coma_n, `CHIP.cufa_n, `CHIP.cebo_n, `CHIP.cadu_n})
+	`TRACE(sprite_index2, ~{`CHIP.boxa_n, `CHIP.buna_n, `CHIP.bulu_n, `CHIP.beca_n, `CHIP.byhu_n, `CHIP.buhe_n})
+	`TRACE(sprite_index3, ~{`CHIP.dafu_n, `CHIP.deba_n, `CHIP.duha_n, `CHIP.duny_n, `CHIP.dese_n, `CHIP.devy_n})
+	`TRACE(sprite_index4, ~{`CHIP.xynu_n, `CHIP.xege_n, `CHIP.xabo_n, `CHIP.wanu_n, `CHIP.xefe_n, `CHIP.xave_n})
+	`TRACE(sprite_index5, ~{`CHIP.ekap_n, `CHIP.etav_n, `CHIP.ebex_n, `CHIP.goru_n, `CHIP.etym_n, `CHIP.ekop_n})
+	`TRACE(sprite_index6, ~{`CHIP.gecu_n, `CHIP.foxy_n, `CHIP.gohu_n, `CHIP.fogo_n, `CHIP.gacy_n, `CHIP.gabo_n})
+	`TRACE(sprite_index7, ~{`CHIP.fuzo_n, `CHIP.gesy_n, `CHIP.fysu_n, `CHIP.fefa_n, `CHIP.gyno_n, `CHIP.gule_n})
+	`TRACE(sprite_index8, ~{`CHIP.axuv_n, `CHIP.bada_n, `CHIP.apev_n, `CHIP.bado_n, `CHIP.bexy_n, `CHIP.byhe_n})
+	`TRACE(sprite_index9, ~{`CHIP.xufo_n, `CHIP.xute_n, `CHIP.xotu_n, `CHIP.xyfe_n, `CHIP.yzor_n, `CHIP.yber_n})
 endmodule
 
 `default_nettype wire

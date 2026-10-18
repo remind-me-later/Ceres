@@ -9,6 +9,8 @@
 library ieee;
 use ieee.std_logic_1164.all;
 
+use work.clocking.all;
+
 entity test_mode is
 	port (
 		t1, t2 : in std_ulogic;  -- pins
@@ -46,7 +48,7 @@ begin
 		if reset2 = '1' then
 			ff60_i <= (others => '0');
 		elsif falling_edge(write_ff60) then
-			ff60_i <= to_x01(data(1 downto 0));
+			ff60_i <= to_x01(data(1 downto 0)) after tco;
 		end if;
 	end process;
 	ff60 <= ff60_i;

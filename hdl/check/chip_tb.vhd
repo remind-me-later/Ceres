@@ -8,9 +8,11 @@
 -- passes between them within a phase (such as the STAT write glitch)
 -- counts.
 --
--- Within a phase, the inputs follow dmg-sim's timing roughly: the CPU
--- core's outputs come 15 ns after the clock's edge, its address's high
--- byte at 22 ns and low byte at 33 ns, and its data at 40 ns. The internal
+-- Within a phase, the inputs follow dmg-sim's timing roughly: the chip's
+-- flip-flops change a few ns after the clock's edge, the chips on the
+-- cartridge bus and the VRAM bus answer at 10 ns, the CPU core's outputs
+-- come at 15 ns, its address's high byte at 22 ns and low byte at 33 ns,
+-- and its data at 40 ns. The internal
 -- data bus is precharged high in phase A (external_bus), and keeps its
 -- value while nobody drives it. The CPU core pulls the bits that are 0 on
 -- its side down whenever it does not read (when it writes, from phase B or
@@ -22,6 +24,7 @@ use ieee.numeric_std.all;
 
 use work.clocking.all;
 use work.oracle.all;
+use work.sprite_slots.all;
 
 entity chip_tb is
 	generic (
@@ -54,9 +57,12 @@ architecture check of chip_tb is
 	signal addr                      : std_logic_vector(15 downto 0);
 	signal data                      : std_logic_vector(7 downto 0);
 
-	-- Not modelled yet
-	signal mode2, mode3, mode0 : std_ulogic := '0';
-	signal int_jp_unused       : std_ulogic;
+	-- The VRAM chip's pins
+	signal ma_pins             : std_ulogic_vector(12 downto 0);
+	signal md_pins             : std_logic_vector(7 downto 0);
+	signal mcs_n, mrd_n, mwr_n : std_logic;
+	signal cp, st              : std_ulogic;
+	signal ld                  : std_ulogic_vector(1 downto 0);
 
 	-- Between the blocks
 	signal clk                                                  : std_ulogic;
@@ -81,6 +87,21 @@ architecture check of chip_tb is
 	signal wuvu, wosu, hclk, vclk, mode1                        : std_ulogic;
 	signal lx                                                   : unsigned(6 downto 0);
 	signal ly                                                   : unsigned(7 downto 0);
+	signal mode2, mode3, mode0                                  : std_ulogic;
+	signal line_start, scanning, ceno, stop_scan                : std_ulogic;
+	signal scan_index                                           : unsigned(5 downto 0);
+	signal y_match                                              : std_ulogic;
+	signal sprite_line_in                                       : std_ulogic_vector(3 downto 0);
+	signal save                                                 : std_ulogic_vector(9 downto 0);
+	signal x_match                                              : std_ulogic;
+	signal render_index                                         : std_logic_vector(5 downto 0);
+	signal render_line                                          : std_logic_vector(3 downto 0);
+	signal oam_addr, oam_even, oam_odd                          : std_ulogic_vector(7 downto 0);
+	signal px                                                   : unsigned(7 downto 0);
+	signal rendering, fetch_read, fetch_hold, sprite_loaded     : std_ulogic;
+	signal render_ma, ma                                        : std_logic_vector(12 downto 0);
+	signal fetching, sprite_read, sprite_mrd                    : std_ulogic;
+	signal md                                                   : std_logic_vector(7 downto 0);
 
 	-- The bus keeper
 	signal kept : std_ulogic_vector(7 downto 0) := (others => '1');
@@ -91,11 +112,7 @@ architecture check of chip_tb is
 	function modelled(a : std_ulogic_vector(15 downto 0)) return boolean is
 		constant n : natural := to_integer(to_01(unsigned(a)));
 	begin
-		return not ((n >= 16#8000# and n <= 16#9FFF#)   -- VRAM
-		         or (n >= 16#FE00# and n <= 16#FEFF#)   -- OAM
-		         or (n >= 16#FF10# and n <= 16#FF3F#)   -- the APU
-		         or n = 16#FF42# or n = 16#FF43#        -- SCY, SCX
-		         or (n >= 16#FF47# and n <= 16#FF4B#)   -- palettes, WY, WX
+		return not ((n >= 16#FF10# and n <= 16#FF3F#)   -- the APU
 		         or n = 16#FFFF#);                      -- IE, in the CPU core
 	end function;
 begin
@@ -209,6 +226,61 @@ begin
 			cpl => cpl, cpg => cpg, fr => fr, s => s
 		);
 
+	u_oam_scan : entity work.oam_scan
+		port map (
+			clk => clk, ppu_reset => ppu_reset, wuvu => wuvu, wosu => wosu, vclk => vclk, ly => ly,
+			tall => lcdc(2), dma_run => dma_run, sprite_y => oam_even,
+			line_start => line_start, mode2 => mode2, scanning => scanning, ceno => ceno,
+			stop_scan => stop_scan, index => scan_index,
+			y_match => y_match, sprite_line => sprite_line_in, save => save
+		);
+
+	u_sprite_store : entity work.sprite_store
+		port map (
+			wuvu => wuvu, line_start => line_start, ppu_reset => ppu_reset,
+			oam_index => unsigned(oam_addr(7 downto 2)), save => save, sprite_x => oam_odd,
+			sprite_line => sprite_line_in,
+			px => px, enabled => rendering and lcdc(1), rendering => rendering, loaded => sprite_loaded,
+			x_match => x_match, index => render_index, line => render_line
+		);
+
+	u_oam : entity work.oam
+		port map (
+			clk => clk, hard_reset => hard_reset, clk_t4 => clk_t4, dma_phi => dma_phi,
+			wuvu => wuvu, wosu => wosu,
+			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			dma_run => dma_run, dma_addr => dma_addr(7 downto 0), dma_addr_ext => dma_addr_ext,
+			vram_to_oam => vram_to_oam, d_pins => d_pins, md => md,
+			mode2 => mode2, mode3 => mode3, scan_index => scan_index, render_index => render_index,
+			fetch_read => fetch_read, fetch_hold => fetch_hold,
+			oam_addr => oam_addr, even => oam_even, odd => oam_odd
+		);
+
+	u_render : entity work.render
+		port map (
+			clk => clk, ppu_reset => ppu_reset, hard_reset => hard_reset, hclk => hclk,
+			mode1 => mode1, ly => ly, lcdc => lcdc,
+			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			line_start => line_start, stop_scan => stop_scan, ceno => ceno, x_match => x_match,
+			sprite_line => render_line, tile => oam_even, attributes => oam_odd, md => md,
+			mode3 => mode3, mode0 => mode0, px => px,
+			rendering => rendering, fetch_read => fetch_read, fetch_hold => fetch_hold,
+			sprite_loaded => sprite_loaded,
+			ma => render_ma, fetching => fetching, sprite_read => sprite_read, sprite_mrd => sprite_mrd,
+			cp => cp, st => st, ld => ld
+		);
+
+	u_vram_bus : entity work.vram_bus
+		port map (
+			hard_reset => hard_reset, clk_t4 => clk_t4, cpu_wr_sync => cpu_wr_sync,
+			cpu_ext_cs_en => cpu_ext_cs_en, t1_only => t1_only,
+			addr => addr, data => data, cpu_rd => cpu_rd, write => write, non_vram_mreq => non_vram_mreq,
+			vram_to_oam => vram_to_oam, dma_addr => dma_addr(12 downto 0),
+			mode3 => mode3, fetching => fetching, sprite_read => sprite_read, sprite_mrd => sprite_mrd,
+			render_ma => render_ma, ma => ma, md => md,
+			ma_pins => ma_pins, md_pins => md_pins, mcs_n => mcs_n, mrd_n => mrd_n, mwr_n => mwr_n
+		);
+
 	-- The CPU core's request goes out unless the address is the boot ROM's
 	-- or FE00 to FFFF, which the core decodes itself. The decoding is slower
 	-- than the request, so that the request is high for a moment at the
@@ -234,9 +306,11 @@ begin
 	end generate;
 
 	run : process
-		variable value   : std_ulogic_vector(7 downto 0);
-		variable address : std_ulogic_vector(15 downto 0);
-		variable p       : phase_t;
+		variable value      : std_ulogic_vector(7 downto 0);
+		variable address    : std_ulogic_vector(15 downto 0);
+		variable p          : phase_t;
+		variable lcd_was_on   : boolean := false;
+		variable mode3_was_on : boolean := false;
 	begin
 		dmg.open_file(ORACLE);
 		while dmg.next_phase loop
@@ -252,20 +326,26 @@ begin
 			reset_pin_n <= dmg.bit_value("reset_n");
 			t1          <= dmg.bit_value("t1");
 			t2          <= dmg.bit_value("t2");
-			mode2       <= dmg.bit_value("mode2");
-			mode3       <= dmg.bit_value("mode3");
-			mode0       <= dmg.bit_value("mode0");
 
-			-- The cartridge and the work RAM drive the data pins when the chip
-			-- does not.
+			-- The cartridge, the work RAM and the VRAM chip answer the chip's
+			-- pins 10 ns after the edge, when they do not see the chip drive
+			-- their data.
+			if dmg.phase > 0 then
+				wait for 9 ns;
+			end if;
 			if dmg.bit_value("pins_out") = '1' then
 				d_pins <= (others => 'Z');
 			else
 				d_pins <= dmg.vector_value("d_pins");
 			end if;
+			if dmg.bit_value("md_out") = '1' then
+				md_pins <= (others => 'Z');
+			else
+				md_pins <= dmg.vector_value("md_pins");
+			end if;
 
 			if dmg.phase > 0 then
-				wait for 14 ns;
+				wait for 5 ns;
 			end if;
 			osc_ena  <= dmg.bit_value("osc_ena");
 			clk_ena  <= dmg.bit_value("clk_ena");
@@ -418,6 +498,113 @@ begin
 			dmg.check("cpg", image(cpg));
 			dmg.check("fr", image(fr));
 			dmg.check("s", image(s));
+
+			-- The PPU's rendering, once the LCD has been on, and the fetcher's
+			-- once mode 3 has started: before, their counters run from the
+			-- unknown state of power-on.
+			if dmg.bit_value("ppu_reset") = '0' then
+				lcd_was_on := true;
+			end if;
+			if dmg.bit_value("mode3") = '1' then
+				mode3_was_on := true;
+			end if;
+			if lcd_was_on then
+			dmg.check("mode2", image(mode2));
+			dmg.check("mode3", image(mode3));
+			dmg.check("mode0", image(mode0));
+			dmg.check("px", image(std_ulogic_vector(px)));
+			dmg.check("mode_state", image(mode2) & image(mode3) & image(mode0)
+				& image(<< signal .chip_tb.u_render.px9 : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.voga : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.stop_mode3 : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.clkpipe : std_ulogic >>) & image(x_match));
+			dmg.check("scan_index", image(std_ulogic_vector(scan_index)));
+			dmg.check("scan_state", image(<< signal .chip_tb.u_oam_scan.start_scan : std_ulogic >>)
+				& image(<< signal .chip_tb.u_oam_scan.anel : std_ulogic >>) & image(scanning) & image(ceno)
+				& image(<< signal .chip_tb.u_oam_scan.byba : std_ulogic >>)
+				& image(<< signal .chip_tb.u_oam_scan.doba : std_ulogic >>) & image(stop_scan));
+			dmg.check("sprite_count", image(std_ulogic_vector(<< signal .chip_tb.u_oam_scan.count : unsigned(3 downto 0) >>)));
+			dmg.check("sprite_save", image(<< signal .chip_tb.u_oam_scan.not_saving : std_ulogic >>)
+				& image(<< signal .chip_tb.u_oam_scan.save_enable : std_ulogic >>) & image(y_match));
+			if mode3_was_on then
+			dmg.check("fetch", image(<< signal .chip_tb.u_render.fetch_count : unsigned(2 downto 0) >>(0))
+				& image(<< signal .chip_tb.u_render.fetch_count : unsigned(2 downto 0) >>(1))
+				& image(<< signal .chip_tb.u_render.fetch_count : unsigned(2 downto 0) >>(2))
+				& image(<< signal .chip_tb.u_render.lyzu : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.lovy : std_ulogic >>) & image(fetching)
+				& image(<< signal .chip_tb.u_render.nyka : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.pory : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.pygo : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.started : std_ulogic >>));
+			end if;
+			dmg.check("window_state", image(<< signal .chip_tb.u_render.nopa : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.nunu : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.in_window : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.pyco : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.sovy : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.wy_latch : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.sary : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.wy_match : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.wxy_match : std_ulogic >>));
+			dmg.check("fine", image(<< signal .chip_tb.u_render.rene : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.ryfa : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.discard : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.puxa : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.nyze : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.paho : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.fine : unsigned(2 downto 0) >>(1))
+				& image(<< signal .chip_tb.u_render.fine : unsigned(2 downto 0) >>(2))
+				& image(<< signal .chip_tb.u_render.fine : unsigned(2 downto 0) >>(0)));
+			dmg.check("sprite_fetch", image(<< signal .chip_tb.u_render.sprite_step : unsigned(2 downto 0) >>(0))
+				& image(<< signal .chip_tb.u_render.sprite_step : unsigned(2 downto 0) >>(1))
+				& image(<< signal .chip_tb.u_render.sprite_step : unsigned(2 downto 0) >>(2))
+				& image(<< signal .chip_tb.u_render.sobu : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.suda : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.busy : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.tobu : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.vonu : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.seba : std_ulogic >>)
+				& image(<< signal .chip_tb.u_render.tyfo : std_ulogic >>));
+			dmg.check("scy", image(<< signal .chip_tb.u_render.scy : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("scx", image(<< signal .chip_tb.u_render.scx : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("wy", image(<< signal .chip_tb.u_render.wy : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("wx", image(<< signal .chip_tb.u_render.wx : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("bgp", image(<< signal .chip_tb.u_render.bgp : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("obp0", image(<< signal .chip_tb.u_render.obp0 : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("obp1", image(<< signal .chip_tb.u_render.obp1 : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("win_y", image(std_ulogic_vector(<< signal .chip_tb.u_render.win_y : unsigned(7 downto 0) >>)));
+			dmg.check("win_x", image(std_ulogic_vector(<< signal .chip_tb.u_render.win_x : unsigned(4 downto 0) >>)));
+			dmg.check("bg_tile", image(<< signal .chip_tb.u_render.bg_tile : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("bg_low", image(<< signal .chip_tb.u_render.bg_low : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("bg_shift_a", image(<< signal .chip_tb.u_render.bg_shift_a : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("bg_shift_b", image(<< signal .chip_tb.u_render.bg_shift_b : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("sp_low_a", image(<< signal .chip_tb.u_render.sp_low_a : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("sp_low_b", image(<< signal .chip_tb.u_render.sp_low_b : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("sp_shift_a", image(<< signal .chip_tb.u_render.sp_a : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("sp_shift_b", image(<< signal .chip_tb.u_render.sp_b : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("sp_shift_pal", image(<< signal .chip_tb.u_render.sp_palette : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("sp_shift_prio", image(<< signal .chip_tb.u_render.sp_priority : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("oam_addr", image(oam_addr));
+			dmg.check("oam_latch_b", image(<< signal .chip_tb.u_oam.first_even : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("oam_latch_a", image(<< signal .chip_tb.u_oam.first_odd : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("oam_latch_y", image(oam_even));
+			dmg.check("oam_latch_x", image(oam_odd));
+			dmg.check("ma", image(std_ulogic_vector(ma)));
+			dmg.check("md", image(std_ulogic_vector(md)));
+			dmg.check("ma_pins", image(ma_pins));
+			dmg.check("md_pins", image(std_ulogic_vector(md_pins)));
+			dmg.check("mcs_n", image(mcs_n));
+			dmg.check("mrd_n", image(mrd_n));
+			dmg.check("mwr_n", image(mwr_n));
+			for i in 0 to 9 loop
+				dmg.check("sprite_x" & integer'image(i), image(<< signal .chip_tb.u_sprite_store.xs : x_t >>(i)));
+				dmg.check("sprite_line" & integer'image(i), image(<< signal .chip_tb.u_sprite_store.lines : line_t >>(i)));
+				dmg.check("sprite_index" & integer'image(i), image(<< signal .chip_tb.u_sprite_store.indexes : index_t >>(i)));
+			end loop;
+			dmg.check("cp", image(cp));
+			dmg.check("st", image(st));
+			dmg.check("ld", image(ld));
+			end if;
 
 			-- The data bus
 			dmg.check_bus("data", image(std_ulogic_vector(data)));

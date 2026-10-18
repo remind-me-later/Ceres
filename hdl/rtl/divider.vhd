@@ -53,10 +53,10 @@ begin
 			count <= (others => '0');
 		elsif starts(clk, phase, A) then
 			if test_fast = '1' then
-				count(5 downto 0)  <= count(5 downto 0) + 1;
-				count(15 downto 6) <= count(15 downto 6) + 1;
+				count(5 downto 0)  <= count(5 downto 0) + 1 after tco;
+				count(15 downto 6) <= count(15 downto 6) + 1 after tco;
 			else
-				count <= count + 1;
+				count <= count + 1 after tco;
 			end if;
 		end if;
 	end process;

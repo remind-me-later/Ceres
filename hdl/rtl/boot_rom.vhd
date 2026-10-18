@@ -10,6 +10,8 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+use work.clocking.all;
+
 entity boot_rom is
 	generic (
 		IMAGE : string  -- the file with the boot ROM's 256 bytes
@@ -60,7 +62,7 @@ begin
 		if reset2 = '1' then
 			unmapped <= '0';
 		elsif falling_edge(write_ff50) then
-			unmapped <= unmapped or to_x01(data(0));
+			unmapped <= unmapped or to_x01(data(0)) after tco;
 		end if;
 	end process;
 

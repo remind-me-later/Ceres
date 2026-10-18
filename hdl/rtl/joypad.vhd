@@ -62,7 +62,7 @@ begin
 		if reset2 = '1' then
 			p1 <= (others => '0');
 		elsif falling_edge(write_p1) then
-			p1 <= to_x01(data);
+			p1 <= to_x01(data) after tco;
 		end if;
 	end process;
 
@@ -107,7 +107,7 @@ begin
 		if reset2 = '1' then
 			history <= (others => '0');
 		elsif starts(clk, phase, A) then
-			history <= history(2 downto 0) & pressed;
+			history <= history(2 downto 0) & pressed after tco;
 		end if;
 	end process;
 	int_jp <= history(0) and history(3);

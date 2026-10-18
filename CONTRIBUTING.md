@@ -194,6 +194,6 @@ dmg-sim submodule or Icarus, run `make smoke` and the test ROMs again.
 it, check it against dmg-sim with [nvc](https://github.com/nickg/nvc):
 
 ```bash
-BOOT=fast PHASES=1 ./run-tests.sh timer_ dma_ lcdon_   # record, once
-make check                                            # check the model
+BOOT=fast PHASES=1 TESTS=check/roms.txt ./run-tests.sh   # record, once
+make check                                               # check the model
 ```

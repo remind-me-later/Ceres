@@ -1,0 +1,30 @@
+# The test ROMs that the readable model is checked on (see ../README.md):
+#
+#   BOOT=fast PHASES=1 TESTS=check/roms.txt ./run-tests.sh
+#   make check
+#
+# Same format as ../tests.txt. With BOOT=fast, SECS counts from the reset
+# too, and the cartridge starts right after it. The ppu_ ROMs report no
+# result: they run for SECS.
+
+# The timer, OAM DMA, the LCD's start, and the STAT write glitch.
+gbmicrotest external/test-roms/gbmicrotest/timer_tima_write_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/timer_tma_write_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/dma_0x1000.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/dma_0x9000.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/lcdon_to_stat2_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/lcdon_to_ly1_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/stat_write_glitch_l0_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/stat_write_glitch_l0_b.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/stat_write_glitch_l1_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/stat_write_glitch_l1_b.gb 0.25
+
+# The PPU's rendering: sprites, the window, scrolling, and the CPU's
+# access to OAM and VRAM.
+gbmicrotest external/test-roms/gbmicrotest/sprite4_3_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/win10_scx3_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/oam_read_l1_c.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/vram_read_l1_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/ppu_sprite_testbench.gb 0.05
+gbmicrotest external/test-roms/gbmicrotest/ppu_win_vs_wx.gb 0.05
+gbmicrotest external/test-roms/gbmicrotest/ppu_scx_vs_bgp.gb 0.05

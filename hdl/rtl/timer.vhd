@@ -55,7 +55,7 @@ begin
 		if reset2 = '1' then
 			tma <= (others => '0');
 		elsif falling_edge(write_tma) then
-			tma <= to_x01(data);
+			tma <= to_x01(data) after tco;
 		end if;
 	end process;
 
@@ -66,7 +66,7 @@ begin
 		if reset2 = '1' then
 			tac <= (others => '0');
 		elsif falling_edge(write_tac) then
-			tac <= to_x01(data(2 downto 0));
+			tac <= to_x01(data(2 downto 0)) after tco;
 		end if;
 	end process;
 
@@ -107,7 +107,7 @@ begin
 		if load = '1' then
 			tima <= load_value;
 		elsif falling_edge(timer_clock) then
-			tima <= std_ulogic_vector(unsigned(tima) + 1);
+			tima <= std_ulogic_vector(unsigned(tima) + 1) after tco;
 		end if;
 	end process;
 
@@ -122,12 +122,12 @@ begin
 			bit7_before <= '0';
 		else
 			if starts(clk, phase, A) then
-				int_timer_i <= bit7_before and not tima(7);
+				int_timer_i <= bit7_before and not tima(7) after tco;
 			end if;
 			if load = '1' then
 				bit7_before <= '0';
 			elsif starts(clk, phase, A) then
-				bit7_before <= tima(7);
+				bit7_before <= tima(7) after tco;
 			end if;
 		end if;
 	end process;
