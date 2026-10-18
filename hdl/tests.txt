@@ -22,6 +22,22 @@ gbmicrotest external/test-roms/gbmicrotest/stat_write_glitch_l1_b.gb 0.25
 gbmicrotest external/test-roms/gbmicrotest/hblank_int_scx0.gb 0.25
 gbmicrotest external/test-roms/gbmicrotest/hblank_int_scx3.gb 0.25
 
+# gbmicrotest: the timer and its interrupt.
+gbmicrotest external/test-roms/gbmicrotest/timer_tima_reload_256k_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/timer_tima_write_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/timer_tma_write_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/timer_tima_phase_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/int_timer_halt.gb 0.25
+
+# gbmicrotest: OAM DMA, from the cartridge and from VRAM.
+gbmicrotest external/test-roms/gbmicrotest/dma_0x1000.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/dma_0x9000.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/dma_timing_a.gb 0.25
+
+# gbmicrotest: the PPU's timing after the LCD is turned on.
+gbmicrotest external/test-roms/gbmicrotest/lcdon_to_stat2_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/lcdon_to_ly1_a.gb 0.25
+
 # Mooneye acceptance: the timings of the CPU and the timer.
 mooneye external/test-roms/mooneye-test-suite/acceptance/timer/div_write.gb 1.1
 mooneye external/test-roms/mooneye-test-suite/acceptance/div_timing.gb 1.1

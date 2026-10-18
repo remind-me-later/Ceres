@@ -5,31 +5,50 @@
 #   make run        simulate SECS seconds after the reset, trace the pins
 #   make smoke      33 ms from power-on with dmg-sim's quickboot ROM: the
 #                   pin trace must have the hash in smoke.sha256
+#   make phases     simulate as make run, and record the signals the
+#                   readable model is checked against (PHASES)
+#   make model      analyse the readable model (rtl/) and its checks
+#   make check      check the readable model against the recorded signals
+#                   of every test in build/runs (see run-tests.sh)
 #
 # Variables:
 #   SECS     simulated seconds after the chip's power-on reset (31.2 ms)
 #   ROM      cartridge ROM (none, MBC1 or MBC5 from its header; "" for none)
 #   BOOTROM  boot ROM image
 #   TRACE    file for the changes of the pins ("" for none)
+#   PHASES   file for the signals of each phase (make phases)
+#   ORACLE   recorded signals to check against ("" for every test's)
 
 SECS    ?= 0.01
 ROM     ?=
 BOOTROM ?= ../external/gb-bootroms/bin/dmg.bin
 TRACE   ?= trace.txt
+PHASES  ?= phases.txt
+ORACLE  ?=
 
 BUILD   := build
 DMG_SIM := ../external/reference-implementations/dmg-sim
 SIM     := $(BUILD)/dmg-sim
 VVP     := $(SIM)/dmg_cpu_b_gameboy.vvp
-PROBES  := oracle/probe_pins.sv oracle/probe_results.sv
+PROBES  := oracle/probe_pins.sv oracle/probe_results.sv oracle/probe_phases.sv
 
 QUICKBOOT := $(DMG_SIM)/boot/quickboot.bin
+FASTBOOT  := $(BUILD)/fastboot.bin
 
 abs = $(abspath $(1))
 
-.PHONY: all run smoke clean
+.PHONY: all run phases smoke model check clean
 
-all: $(VVP)
+all: $(VVP) $(FASTBOOT)
+
+# A boot ROM that only turns the LCD on and goes to 0100, for the checks
+# of the readable model, which do not need the boot ROM's timing:
+#   0000  LD SP,FFFE / LD A,91 / LDH (40),A / LD A,01 / JP 00FE
+#   00FE  LDH (50),A
+$(FASTBOOT):
+	mkdir -p $(BUILD)
+	{ printf '\061\376\377\076\221\340\100\076\001\303\376\000'; \
+	  head -c 242 /dev/zero; printf '\340\120'; } >$@
 
 # dmg-sim is copied from its submodule, which stays clean. Icarus 13 has no
 # string method tolower, which dmg-sim only uses for event files.
@@ -44,6 +63,39 @@ $(VVP): $(PROBES)
 run: $(VVP)
 	vvp -N $(VVP) -none +BOOTROM=$(call abs,$(BOOTROM)) $(if $(ROM),+ROM=$(call abs,$(ROM))) \
 		+SECS=$(SECS) $(if $(TRACE),+PINS_FILE=$(call abs,$(TRACE)))
+
+phases: $(VVP)
+	vvp -N $(VVP) -none +BOOTROM=$(call abs,$(BOOTROM)) $(if $(ROM),+ROM=$(call abs,$(ROM))) \
+		+SECS=$(SECS) +PHASES_FILE=$(call abs,$(PHASES))
+
+# The readable model, in the order nvc analyses it, and its checks.
+MODEL  := rtl/clocking.vhd rtl/clocks.vhd rtl/divider.vhd rtl/timer.vhd rtl/interrupts.vhd \
+          rtl/serial.vhd rtl/joypad.vhd rtl/test_mode.vhd rtl/boot_rom.vhd rtl/high_ram.vhd \
+          rtl/external_bus.vhd rtl/dma.vhd rtl/lcd_control.vhd rtl/lcd_timing.vhd
+CHECKS := check/oracle.vhd check/chip_tb.vhd
+TBS    := chip_tb
+WORK   := $(BUILD)/model
+NVC    := nvc --std=2008 --work=$(abspath $(WORK))/work
+
+model: $(WORK)/analysed
+
+$(WORK)/analysed: $(MODEL) $(CHECKS)
+	mkdir -p $(WORK)
+	$(NVC) -a $(call abs,$(MODEL) $(CHECKS))
+	touch $@
+
+# Each testbench on each test's recorded signals (build/runs and
+# build/runs-fast, see run-tests.sh).
+ORACLES = $(if $(ORACLE),$(ORACLE),$(shell find $(BUILD)/runs $(BUILD)/runs-fast -name phases.txt 2>/dev/null | sort))
+
+check: $(WORK)/analysed $(FASTBOOT)
+	@set -e; for o in $(abspath $(ORACLES)); do \
+		case $$o in */runs-fast/*) boot=$(call abs,$(FASTBOOT));; *) boot=$(call abs,$(QUICKBOOT));; esac; \
+		for tb in $(TBS); do \
+			echo "$$tb $${o#$(abspath $(BUILD))/}"; \
+			$(NVC) -e --jit $$tb -gORACLE=$$o -gBOOTROM=$$boot -r 2>&1 | grep -v '^   \|FINISH called'; \
+		done; \
+	done
 
 # The changes at one time are sorted, so that the hash does not depend on
 # the order Icarus runs the probes in.

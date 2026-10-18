@@ -30,6 +30,16 @@ they pass. dmg-sim's README lists no gbmicrotest.
 | stat\_write\_glitch\_l0\_b |   ✅   |   E2   |   E2   | 182.2 ms |
 | stat\_write\_glitch\_l1\_a |   ✅   |   E0   |   E0   | 182.3 ms |
 | stat\_write\_glitch\_l1\_b |   ✅   |   E2   |   E2   | 182.3 ms |
+| timer\_tima\_reload\_256k\_a |   ✅   |   FF   |   FF   | 182.1 ms |
+| timer\_tima\_write\_a    |   ✅   |   7F   |   7F   | 182.1 ms |
+| timer\_tma\_write\_a     |   ✅   |   71   |   71   | 182.1 ms |
+| timer\_tima\_phase\_a    |   ✅   |   FE   |   FE   | 182.1 ms |
+| int\_timer\_halt         |   ✅   |   0F   |   0F   | 182.1 ms |
+| dma\_0x1000             |   ✅   |   99   |   99   | 182.3 ms |
+| dma\_0x9000             |   ✅   |   99   |   99   | 182.3 ms |
+| dma\_timing\_a          |   ✅   |   81   |   81   | 182.1 ms |
+| lcdon\_to\_stat2\_a      |   ✅   |   80   |   80   | 182.2 ms |
+| lcdon\_to\_ly1\_a        |   ✅   |   00   |   00   | 182.2 ms |
 
 GateBoy fails the line 153 and STAT write glitch tests and ceres passes them.
 The netlist behaves as ceres and the ROMs expect.

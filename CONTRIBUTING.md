@@ -189,3 +189,11 @@ make smoke                # 33 ms from power-on: the pin trace must not change
 
 The test ROMs take hours, so they are not part of CI. After updating the
 dmg-sim submodule or Icarus, run `make smoke` and the test ROMs again.
+
+`hdl/rtl/` is the readable model of the hardware, in VHDL. After changing
+it, check it against dmg-sim with [nvc](https://github.com/nickg/nvc):
+
+```bash
+BOOT=fast PHASES=1 ./run-tests.sh timer_ dma_ lcdon_   # record, once
+make check                                            # check the model
+```
