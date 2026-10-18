@@ -109,8 +109,13 @@ what each block does rather than of its cells:
 | `oam.vhd`          | OAM, its buses and its latches                           |
 | `render.vhd`       | mode 3: the fetcher, the window, the shifters, the pixel |
 | `vram_bus.vhd`     | the VRAM bus                                             |
+| `apu_control.vhd`  | the APU's power, clocks and frame sequencer; the mixer   |
+| `apu_ch1.vhd`      | channel 1: square wave with a sweep (FF10 to FF14)       |
+| `apu_ch2.vhd`      | channel 2: square wave (FF16 to FF19)                    |
+| `apu_ch3.vhd`      | channel 3: wave RAM (FF1A to FF1E, FF30 to FF3F)         |
+| `apu_ch4.vhd`      | channel 4: noise (FF20 to FF23)                          |
 
-The CPU core and the APU are not written yet.
+The CPU core is not written yet.
 
 The model keeps time in phases: every edge of the 4 MiHz clock starts one,
 and eight of them, A to H, make an M-cycle (`clocking.vhd`). Registers
@@ -139,7 +144,10 @@ BOOT=fast PHASES=1 TESTS=check/roms.txt ./run-tests.sh   # record, in dmg-sim
 make check                                               # check the model
 ```
 
-`check/roms.txt` lists the test ROMs the model is checked on.
+`check/roms.txt` lists the test ROMs the model is checked on. One of them,
+`check/apu.asm`, is ours: a stimulus that plays the APU's four channels
+through most of what they do, in 70 ms. `make` builds it with
+[RGBDS](https://rgbds.gbdev.io) (1.0 is tested).
 
 `BOOT=fast` starts the test ROMs with a boot ROM that only turns the LCD on
 and jumps to the cartridge (`build/fastboot.bin`): the recordings then take

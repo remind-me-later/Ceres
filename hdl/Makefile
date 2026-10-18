@@ -34,12 +34,13 @@ PROBES  := oracle/probe_pins.sv oracle/probe_results.sv oracle/probe_phases.sv
 
 QUICKBOOT := $(DMG_SIM)/boot/quickboot.bin
 FASTBOOT  := $(BUILD)/fastboot.bin
+APU_ROM   := $(BUILD)/apu.gb
 
 abs = $(abspath $(1))
 
 .PHONY: all run phases smoke model check clean
 
-all: $(VVP) $(FASTBOOT)
+all: $(VVP) $(FASTBOOT) $(APU_ROM)
 
 # A boot ROM that only turns the LCD on and goes to 0100, for the checks
 # of the readable model, which do not need the boot ROM's timing:
@@ -49,6 +50,13 @@ $(FASTBOOT):
 	mkdir -p $(BUILD)
 	{ printf '\061\376\377\076\221\340\100\076\001\303\376\000'; \
 	  head -c 242 /dev/zero; printf '\340\120'; } >$@
+
+# The APU's stimulus, for the checks too (check/apu.asm).
+$(APU_ROM): check/apu.asm
+	mkdir -p $(BUILD)
+	rgbasm -o $(BUILD)/apu.o $<
+	rgblink -o $@ $(BUILD)/apu.o
+	rgbfix -v -p 0 $@
 
 # dmg-sim is copied from its submodule, which stays clean. Icarus 13 has no
 # string method tolower, which dmg-sim only uses for event files.
@@ -72,7 +80,8 @@ phases: $(VVP)
 MODEL  := rtl/clocking.vhd rtl/clocks.vhd rtl/divider.vhd rtl/timer.vhd rtl/interrupts.vhd \
           rtl/serial.vhd rtl/joypad.vhd rtl/test_mode.vhd rtl/boot_rom.vhd rtl/high_ram.vhd \
           rtl/external_bus.vhd rtl/dma.vhd rtl/lcd_control.vhd rtl/lcd_timing.vhd \
-          rtl/oam_scan.vhd rtl/sprite_store.vhd rtl/oam.vhd rtl/render.vhd rtl/vram_bus.vhd
+          rtl/oam_scan.vhd rtl/sprite_store.vhd rtl/oam.vhd rtl/render.vhd rtl/vram_bus.vhd \
+          rtl/apu_control.vhd rtl/apu_ch1.vhd rtl/apu_ch2.vhd rtl/apu_ch3.vhd rtl/apu_ch4.vhd
 CHECKS := check/oracle.vhd check/chip_tb.vhd
 TBS    := chip_tb
 WORK   := $(BUILD)/model

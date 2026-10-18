@@ -102,18 +102,24 @@ architecture check of chip_tb is
 	signal render_ma, ma                                        : std_logic_vector(12 downto 0);
 	signal fetching, sprite_read, sprite_mrd                    : std_ulogic;
 	signal md                                                   : std_logic_vector(7 downto 0);
+	signal apu_reset, apu_phi, apu_test                         : std_ulogic;
+	signal ajer, ch1_1mhz, ch2_1mhz, ch3_2mhz, ch4_1mhz, khz512 : std_ulogic;
+	signal hz512, hz256, hz128, hz128_ch1                       : std_ulogic;
+	signal apu_active, apu_dac                                  : std_ulogic_vector(4 downto 1);
+	signal ch1_out, ch2_out, ch3_out, ch4_out                   : std_ulogic_vector(3 downto 0);
+	signal so1, so2                                             : real;
 
 	-- The bus keeper
 	signal kept : std_ulogic_vector(7 downto 0) := (others => '1');
 
 	shared variable dmg : oracle_t;
 
-	-- The addresses whose reads the model answers (or that nothing answers).
+	-- The addresses whose reads the model answers (or that nothing answers):
+	-- all but IE, which is in the CPU core.
 	function modelled(a : std_ulogic_vector(15 downto 0)) return boolean is
 		constant n : natural := to_integer(to_01(unsigned(a)));
 	begin
-		return not ((n >= 16#FF10# and n <= 16#FF3F#)   -- the APU
-		         or n = 16#FFFF#);                      -- IE, in the CPU core
+		return n /= 16#FFFF#;  -- IE, in the CPU core
 	end function;
 begin
 	u_clocks : entity work.clocks
@@ -279,6 +285,52 @@ begin
 			mode3 => mode3, fetching => fetching, sprite_read => sprite_read, sprite_mrd => sprite_mrd,
 			render_ma => render_ma, ma => ma, md => md,
 			ma_pins => ma_pins, md_pins => md_pins, mcs_n => mcs_n, mrd_n => mrd_n, mwr_n => mwr_n
+		);
+
+	u_apu_control : entity work.apu_control
+		port map (
+			clk => clk, reset2 => reset2, data_phase => data_phase, clk_t4 => clk_t4, div => div,
+			t1_only => t1_only,
+			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			apu_reset => apu_reset, apu_phi => apu_phi, test => apu_test,
+			ajer => ajer, ch1_1mhz => ch1_1mhz, ch2_1mhz => ch2_1mhz, ch3_2mhz => ch3_2mhz,
+			ch4_1mhz => ch4_1mhz, khz512 => khz512,
+			hz512 => hz512, hz256 => hz256, hz128 => hz128, hz128_ch1 => hz128_ch1,
+			active => apu_active, dac_on => apu_dac,
+			ch1 => ch1_out, ch2 => ch2_out, ch3 => ch3_out, ch4 => ch4_out, vin => 2.2,
+			so1 => so1, so2 => so2
+		);
+
+	u_apu_ch2 : entity work.apu_ch2
+		port map (
+			apu_reset => apu_reset, apu_phi => apu_phi, clk_t4 => clk_t4, ch2_1mhz => ch2_1mhz,
+			hz256 => hz256, hz128 => hz128, hz512 => hz512, test => apu_test,
+			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			active => apu_active(2), dac_on => apu_dac(2), output => ch2_out
+		);
+
+	u_apu_ch1 : entity work.apu_ch1
+		port map (
+			apu_reset => apu_reset, apu_phi => apu_phi, clk_t4 => clk_t4, ajer => ajer, ch1_1mhz => ch1_1mhz,
+			hz256 => hz256, hz128 => hz128, hz128_ch1 => hz128_ch1, hz512 => hz512, test => apu_test,
+			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			active => apu_active(1), dac_on => apu_dac(1), output => ch1_out
+		);
+
+	u_apu_ch3 : entity work.apu_ch3
+		port map (
+			clk => clk, apu_reset => apu_reset, apu_phi => apu_phi, clk_t4 => clk_t4, pch_phase => pch_phase,
+			ajer => ajer, ch3_2mhz => ch3_2mhz, hz256 => hz256, test => apu_test,
+			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			active => apu_active(3), dac_on => apu_dac(3), output => ch3_out
+		);
+
+	u_apu_ch4 : entity work.apu_ch4
+		port map (
+			apu_reset => apu_reset, apu_phi => apu_phi, clk_t4 => clk_t4, ch4_1mhz => ch4_1mhz, khz512 => khz512,
+			hz256 => hz256, hz128 => hz128, hz512 => hz512, test => apu_test,
+			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			active => apu_active(4), dac_on => apu_dac(4), output => ch4_out
 		);
 
 	-- The CPU core's request goes out unless the address is the boot ROM's
@@ -605,6 +657,109 @@ begin
 			dmg.check("st", image(st));
 			dmg.check("ld", image(ld));
 			end if;
+
+			-- The APU
+			dmg.check("apu_reset", image(apu_reset));
+			dmg.check("apu_power", image(<< signal .chip_tb.u_apu_control.power : std_ulogic >>));
+			dmg.check("apu_test", image(apu_test) & image(<< signal .chip_tb.u_apu_control.test_bit5 : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_control.baza : std_ulogic >>));
+			dmg.check("nr50", image(<< signal .chip_tb.u_apu_control.nr50 : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("nr51", image(<< signal .chip_tb.u_apu_control.nr51 : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("apu_clocks", image(ajer) & image(ch1_1mhz) & image(<< signal .chip_tb.u_apu_control.atep : std_ulogic >>)
+				& image(ch2_1mhz) & image(ch3_2mhz) & image(<< signal .chip_tb.u_apu_control.atyk : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_control.avok : std_ulogic >>) & image(khz512));
+			dmg.check("sequencer", image(<< signal .chip_tb.u_apu_control.bara : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_control.caru : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_control.bylu : std_ulogic >>));
+			dmg.check("nr21", image(<< signal .chip_tb.u_apu_ch2.duty : std_ulogic_vector(1 downto 0) >>));
+			dmg.check("nr22", image(<< signal .chip_tb.u_apu_ch2.envelope : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("ch2_frequency", image(<< signal .chip_tb.u_apu_ch2.frequency : std_ulogic_vector(10 downto 0) >>));
+			dmg.check("ch2_length_on", image(<< signal .chip_tb.u_apu_ch2.length_on : std_ulogic >>));
+			dmg.check("ch2_trigger", image(<< signal .chip_tb.u_apu_ch2.trigger : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch2.start : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch2.triggered : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch2.restart : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch2.restarted : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch2.running : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch2.frozen : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch2.active_i : std_ulogic >>));
+			dmg.check("ch2_counter", image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch2.counter : unsigned(10 downto 0) >>)));
+			dmg.check("ch2_duty", image(<< signal .chip_tb.u_apu_ch2.reload : std_ulogic >>)
+				& image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch2.step : unsigned(2 downto 0) >>))
+				& image(<< signal .chip_tb.u_apu_ch2.wave : std_ulogic >>));
+			dmg.check("ch2_length", image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch2.length : unsigned(5 downto 0) >>)));
+			dmg.check("ch2_expired", image(<< signal .chip_tb.u_apu_ch2.expired : std_ulogic >>));
+			dmg.check("ch2_envelope", image(<< signal .chip_tb.u_apu_ch2.hz64 : std_ulogic >>)
+				& image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch2.period : unsigned(2 downto 0) >>))
+				& image(<< signal .chip_tb.u_apu_ch2.tick : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch2.at_limit : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch2.env_stopped : std_ulogic >>));
+			dmg.check("ch2_volume", image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch2.volume : unsigned(3 downto 0) >>)));
+			dmg.check("ch2_out", image(ch2_out));
+
+			dmg.check("apu_active", image(apu_active));
+			dmg.check("apu_dac", image(apu_dac));
+			dmg.check("nr10", image(<< signal .chip_tb.u_apu_ch1.sweep : std_ulogic_vector(6 downto 0) >>));
+			dmg.check("nr11", image(<< signal .chip_tb.u_apu_ch1.duty : std_ulogic_vector(1 downto 0) >>));
+			dmg.check("nr12", image(<< signal .chip_tb.u_apu_ch1.envelope : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("ch1_acc", image(<< signal .chip_tb.u_apu_ch1.acc : std_ulogic_vector(10 downto 0) >>));
+			dmg.check("ch1_length_on", image(<< signal .chip_tb.u_apu_ch1.length_on : std_ulogic >>));
+			dmg.check("ch1_trigger", image(<< signal .chip_tb.u_apu_ch1.trigger : std_ulogic >>) & image(<< signal .chip_tb.u_apu_ch1.start : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch1.triggered : std_ulogic >>) & image(<< signal .chip_tb.u_apu_ch1.restart : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch1.restarted : std_ulogic >>) & image(<< signal .chip_tb.u_apu_ch1.running : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch1.frozen : std_ulogic >>) & image(<< signal .chip_tb.u_apu_ch1.active_i : std_ulogic >>));
+			dmg.check("ch1_counter", image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch1.counter : unsigned(10 downto 0) >>)));
+			dmg.check("ch1_duty", image(<< signal .chip_tb.u_apu_ch1.reload : std_ulogic >>) & image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch1.step : unsigned(2 downto 0) >>))
+				& image(<< signal .chip_tb.u_apu_ch1.wave : std_ulogic >>));
+			dmg.check("ch1_length", image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch1.length : unsigned(5 downto 0) >>)));
+			dmg.check("ch1_expired", image(<< signal .chip_tb.u_apu_ch1.expired : std_ulogic >>));
+			dmg.check("ch1_envelope", image(<< signal .chip_tb.u_apu_ch1.hz64 : std_ulogic >>) & image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch1.period : unsigned(2 downto 0) >>))
+				& image(<< signal .chip_tb.u_apu_ch1.tick : std_ulogic >>) & image(<< signal .chip_tb.u_apu_ch1.at_limit : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch1.env_stopped : std_ulogic >>));
+			dmg.check("ch1_volume", image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch1.volume : unsigned(3 downto 0) >>)));
+			dmg.check("ch1_sweep", image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch1.sweep_count : unsigned(2 downto 0) >>)) & image(<< signal .chip_tb.u_apu_ch1.sweep_step : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch1.shifting : std_ulogic >>) & image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch1.shifts : unsigned(2 downto 0) >>))
+				& image(<< signal .chip_tb.u_apu_ch1.shift_done : std_ulogic >>));
+			dmg.check("ch1_shifted", image(<< signal .chip_tb.u_apu_ch1.shifted : std_ulogic_vector(10 downto 0) >>));
+			dmg.check("ch1_augend", image(<< signal .chip_tb.u_apu_ch1.augend : std_ulogic_vector(10 downto 0) >>));
+			dmg.check("ch1_addend", image(<< signal .chip_tb.u_apu_ch1.addend : std_ulogic_vector(10 downto 0) >>));
+			dmg.check("ch1_out", image(ch1_out));
+			dmg.check("nr30", image(<< signal .chip_tb.u_apu_ch3.dac_on_i : std_ulogic >>));
+			dmg.check("nr32", image(<< signal .chip_tb.u_apu_ch3.level : std_ulogic_vector(1 downto 0) >>));
+			dmg.check("ch3_frequency", image(<< signal .chip_tb.u_apu_ch3.frequency : std_ulogic_vector(10 downto 0) >>));
+			dmg.check("ch3_length_on", image(<< signal .chip_tb.u_apu_ch3.length_on : std_ulogic >>));
+			dmg.check("ch3_trigger", image(<< signal .chip_tb.u_apu_ch3.trigger : std_ulogic >>) & image(<< signal .chip_tb.u_apu_ch3.start : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch3.triggered : std_ulogic >>) & image(<< signal .chip_tb.u_apu_ch3.restart : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch3.restarted : std_ulogic >>) & image(<< signal .chip_tb.u_apu_ch3.running : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch3.frozen : std_ulogic >>) & image(<< signal .chip_tb.u_apu_ch3.playing : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch3.active_i : std_ulogic >>));
+			dmg.check("ch3_counter", image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch3.counter : unsigned(10 downto 0) >>)));
+			dmg.check("ch3_position", image(<< signal .chip_tb.u_apu_ch3.reload : std_ulogic >>) & image(<< signal .chip_tb.u_apu_ch3.wrapped : std_ulogic >>)
+				& image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch3.position : unsigned(4 downto 0) >>)));
+			dmg.check("ch3_length", image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch3.length : unsigned(7 downto 0) >>)));
+			dmg.check("ch3_expired", image(<< signal .chip_tb.u_apu_ch3.expired : std_ulogic >>));
+			dmg.check("ch3_fetch", image(<< signal .chip_tb.u_apu_ch3.busa : std_ulogic >>) & image(<< signal .chip_tb.u_apu_ch3.bano : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch3.fetch : std_ulogic >>) & image(<< signal .chip_tb.u_apu_ch3.azet : std_ulogic >>));
+			dmg.check("ch3_sample", image(<< signal .chip_tb.u_apu_ch3.sample_byte : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("ch3_out", image(ch3_out));
+			dmg.check("nr42", image(<< signal .chip_tb.u_apu_ch4.envelope : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("nr43", image(<< signal .chip_tb.u_apu_ch4.noise : std_ulogic_vector(7 downto 0) >>));
+			dmg.check("ch4_length_on", image(<< signal .chip_tb.u_apu_ch4.length_on : std_ulogic >>));
+			dmg.check("ch4_trigger", image(<< signal .chip_tb.u_apu_ch4.trigger : std_ulogic >>) & image(<< signal .chip_tb.u_apu_ch4.start : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch4.triggered : std_ulogic >>) & image(<< signal .chip_tb.u_apu_ch4.restart : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch4.restarted : std_ulogic >>) & image(<< signal .chip_tb.u_apu_ch4.running : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch4.frozen : std_ulogic >>) & image(<< signal .chip_tb.u_apu_ch4.active_i : std_ulogic >>));
+			dmg.check("ch4_divider", image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch4.divider : unsigned(2 downto 0) >>)) & image(<< signal .chip_tb.u_apu_ch4.divided : std_ulogic >>));
+			dmg.check("ch4_prescaler", image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch4.prescaler : unsigned(13 downto 0) >>)));
+			dmg.check("ch4_lfsr", image(<< signal .chip_tb.u_apu_ch4.lfsr : std_ulogic_vector(15 downto 1) >>)
+				& image(<< signal .chip_tb.u_apu_ch4.joto : std_ulogic >>));
+			dmg.check("ch4_length", image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch4.length : unsigned(5 downto 0) >>)));
+			dmg.check("ch4_expired", image(<< signal .chip_tb.u_apu_ch4.expired : std_ulogic >>));
+			dmg.check("ch4_envelope", image(<< signal .chip_tb.u_apu_ch4.hz64 : std_ulogic >>) & image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch4.period : unsigned(2 downto 0) >>))
+				& image(<< signal .chip_tb.u_apu_ch4.tick : std_ulogic >>) & image(<< signal .chip_tb.u_apu_ch4.at_limit : std_ulogic >>)
+				& image(<< signal .chip_tb.u_apu_ch4.env_stopped : std_ulogic >>));
+			dmg.check("ch4_volume", image(std_ulogic_vector(<< signal .chip_tb.u_apu_ch4.volume : unsigned(3 downto 0) >>)));
+			dmg.check("ch4_out", image(ch4_out));
 
 			-- The data bus
 			dmg.check_bus("data", image(std_ulogic_vector(data)));

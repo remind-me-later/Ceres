@@ -357,6 +357,109 @@ module probe_phases;
 	`TRACE(sprite_index7, ~{`CHIP.fuzo_n, `CHIP.gesy_n, `CHIP.fysu_n, `CHIP.fefa_n, `CHIP.gyno_n, `CHIP.gule_n})
 	`TRACE(sprite_index8, ~{`CHIP.axuv_n, `CHIP.bada_n, `CHIP.apev_n, `CHIP.bado_n, `CHIP.bexy_n, `CHIP.byhe_n})
 	`TRACE(sprite_index9, ~{`CHIP.xufo_n, `CHIP.xute_n, `CHIP.xotu_n, `CHIP.xyfe_n, `CHIP.yzor_n, `CHIP.yber_n})
+	// The APU's control
+	`TRACE(apu_reset, `CHIP.apu_reset)
+	`TRACE(apu_power, !`CHIP.hada_n)
+	`TRACE(apu_test, {`CHIP.ff26_d4, `CHIP.bowy, `CHIP.baza})
+	`TRACE(nr50, {`CHIP.l_vin_en, !`CHIP.lvolume2_n, !`CHIP.lvolume1_n, !`CHIP.lvolume0_n, `CHIP.r_vin_en,
+	              !`CHIP.rvolume2_n, !`CHIP.rvolume1_n, !`CHIP.rvolume0_n})
+	`TRACE(nr51, {`CHIP.lmixer3, `CHIP.lmixer2, `CHIP.lmixer1, `CHIP.lmixer0, `CHIP.rmixer3, `CHIP.rmixer2,
+	              `CHIP.rmixer1, `CHIP.rmixer0})
+	`TRACE(apu_clocks, {`CHIP.ajer, !`CHIP.calo_n, `CHIP.atep, `CHIP.ch2_1mhz, `CHIP.ch3_2mhz, !`CHIP.atyk_n,
+	                    `CHIP.avok, `CHIP.jeso_512k})
+	`TRACE(sequencer, {!`CHIP.bara_n, !`CHIP.caru_n, !`CHIP.bylu_n})
+	`TRACE(apu_read, !`CHIP.adak | `CHIP.hefa | !`CHIP.jure | !`CHIP.dole | !`CHIP.coro | !`CHIP.guru
+	                 | !`CHIP.huma)
+
+	// The APU's channel 2
+	`TRACE(nr21, {`CHIP.ff16_d7, `CHIP.ff16_d6})
+	`TRACE(nr22, {`CHIP.ff17_d7, `CHIP.ff17_d6, `CHIP.ff17_d5, `CHIP.ff17_d4, `CHIP.ff17_d3, `CHIP.ff17_d2,
+	              `CHIP.ff17_d1, `CHIP.ff17_d0})
+	`TRACE(ch2_frequency, {`CHIP.jupy, `CHIP.jany, `CHIP.jefu, `CHIP.gupu, `CHIP.gumy, `CHIP.goda, `CHIP.fora,
+	                       `CHIP.fome, `CHIP.fedy, `CHIP.fova, `CHIP.fofe})
+	`TRACE(ch2_length_on, `CHIP.ff19_d6)
+	`TRACE(ch2_trigger, {`CHIP.etap, `CHIP.ch2_start, `CHIP.dala_n, `CHIP.ch2_restart, `CHIP.dory, `CHIP.caza,
+	                     `CHIP.ch2_fdis, `CHIP.dane})
+	`TRACE(ch2_counter, {`CHIP.ch2_ftick, `CHIP.hepu, `CHIP.hevy, !`CHIP.gane_n, `CHIP.goca, `CHIP.gano, `CHIP.fuxo,
+	                     !`CHIP.cyvo_n, `CHIP.ezof, `CHIP.dynu, `CHIP.done})
+	`TRACE(ch2_duty, {`CHIP.gyko, `CHIP.dyve, `CHIP.cagy, `CHIP.cano, `CHIP.dome})
+	`TRACE(ch2_length, {!`CHIP.ch2_len_timer_stop, `CHIP.buva, !`CHIP.came_n, `CHIP.conu, `CHIP.cera, `CHIP.eryc})
+	`TRACE(ch2_expired, `CHIP.cyre)
+	`TRACE(ch2_envelope, {`CHIP.jyna, `CHIP.jevy, `CHIP.jona, `CHIP.jore, `CHIP.jopa, `CHIP.hepo,
+	                      `CHIP.ch2_eg_stop})
+	`TRACE(ch2_volume, {`CHIP.ch2_env3, `CHIP.ch2_env2, `CHIP.ch2_env1, `CHIP.ch2_env0})
+	`TRACE(ch2_out, `CHIP.ch2_out)
+
+	// The APU's channels 1, 3 and 4, and the status of all four
+	`TRACE(apu_active, {!`CHIP.ch4_active_n, !`CHIP.ch3_active_n, !`CHIP.ch2_active_n, !`CHIP.ch1_active_n})
+	`TRACE(apu_dac, {!`CHIP.ch4_amp_en_n, !`CHIP.ch3_amp_en_n, !`CHIP.ch2_amp_en_n, !`CHIP.ch1_amp_en_n})
+	`TRACE(nr10, {!`CHIP.ff10_d6_n, !`CHIP.ff10_d5_n, !`CHIP.ff10_d4_n, !`CHIP.ff10_d3_n, !`CHIP.ff10_d2_n,
+	              !`CHIP.ff10_d1_n, !`CHIP.ff10_d0_n})
+	`TRACE(nr11, {`CHIP.ff11_d7, `CHIP.ff11_d6})
+	`TRACE(nr12, {`CHIP.ff12_d7, `CHIP.ff12_d6, `CHIP.ff12_d5, `CHIP.ff12_d4, `CHIP.ff12_d3, `CHIP.ff12_d2,
+	              `CHIP.ff12_d1, `CHIP.ff12_d0})
+	`TRACE(ch1_acc, {`CHIP.acc_d10, `CHIP.acc_d9, `CHIP.acc_d8, `CHIP.acc_d7, `CHIP.acc_d6, `CHIP.acc_d5,
+	                 `CHIP.acc_d4, `CHIP.acc_d3, `CHIP.acc_d2, `CHIP.acc_d1, `CHIP.acc_d0})
+	`TRACE(ch1_length_on, {`CHIP.ff14_d6})
+	`TRACE(ch1_trigger, {`CHIP.dupe, `CHIP.ch1_start, `CHIP.fyfo_n, `CHIP.ch1_restart, `CHIP.fare,
+	                     `CHIP.ch1_restart_dly, `CHIP.ch1_fdis, `CHIP.cyto})
+	`TRACE(ch1_counter, {`CHIP.ch1_ftick, `CHIP.evak, `CHIP.emus, !`CHIP.ekov_n, `CHIP.feva, `CHIP.hyke,
+	                     `CHIP.jema, !`CHIP.kyna_n, `CHIP.jyty, `CHIP.hyfe, `CHIP.gaxe})
+	`TRACE(ch1_duty, {`CHIP.comy, `CHIP.dape, `CHIP.eros, `CHIP.esut, `CHIP.duwo})
+	`TRACE(ch1_length, {!`CHIP.ch1_len_timer_stop, `CHIP.cura, !`CHIP.cuno_n, `CHIP.bovy, `CHIP.cavy,
+	                    `CHIP.bacy})
+	`TRACE(ch1_expired, {`CHIP.cero})
+	`TRACE(ch1_envelope, {`CHIP.kaly, `CHIP.kera, `CHIP.kenu, `CHIP.jova, `CHIP.ch1_eg_tick, `CHIP.kyno,
+	                      `CHIP.ch1_eg_stop})
+	`TRACE(ch1_volume, {`CHIP.ch1_env3, `CHIP.ch1_env2, `CHIP.ch1_env1, `CHIP.ch1_env0})
+	`TRACE(ch1_sweep, {`CHIP.caxy, `CHIP.cypu, `CHIP.cupo, `CHIP.bexa, !`CHIP.femu_n, `CHIP.byra, `CHIP.caja,
+	                   `CHIP.copa, !`CHIP.byte_n})
+	`TRACE(ch1_shifted, {`CHIP.beku, `CHIP.agez, `CHIP.elux, `CHIP.exac, `CHIP.fedo, `CHIP.fude, `CHIP.jota,
+	                     `CHIP.jolu, `CHIP.goga, `CHIP.jefa, `CHIP.fabu})
+	`TRACE(ch1_augend, {`CHIP.doly, `CHIP.dofy, `CHIP.dexe, `CHIP.dele, `CHIP.exap, `CHIP.faxo, `CHIP.gyme,
+	                    `CHIP.jyme, `CHIP.kare, `CHIP.jode, `CHIP.galo})
+	`TRACE(ch1_addend, {`CHIP.deva, `CHIP.eter, `CHIP.defa, `CHIP.edok, `CHIP.epyr, `CHIP.gele, `CHIP.jete,
+	                    `CHIP.jape, `CHIP.hele, `CHIP.hopa, `CHIP.hora})
+	`TRACE(ch1_out, `CHIP.ch1_out)
+	`TRACE(nr30, {!`CHIP.ch3_amp_en_n})
+	`TRACE(nr32, {`CHIP.ff1c_d6, `CHIP.ff1c_d5})
+	`TRACE(ch3_frequency, {`CHIP.jacy, `CHIP.jety, `CHIP.jemo, `CHIP.kogu, `CHIP.kana, `CHIP.jove, `CHIP.jypo,
+	                       `CHIP.jefe, `CHIP.jaxa, `CHIP.jovy, `CHIP.koga})
+	`TRACE(ch3_length_on, {`CHIP.ff1e_d6})
+	`TRACE(ch3_trigger, {`CHIP.gavu, `CHIP.foba, `CHIP.gofy_n, `CHIP.ch3_restart, `CHIP.gyta, `CHIP.gyra,
+	                     `CHIP.ch3_fdis, `CHIP.fozu, `CHIP.ch3_active})
+	`TRACE(ch3_counter, {`CHIP.ch3_ftick, `CHIP.keza, `CHIP.keju, !`CHIP.keno_n, `CHIP.kafo, `CHIP.kepa,
+	                     `CHIP.kygu, !`CHIP.kemu_n, `CHIP.kunu, `CHIP.kupe, `CHIP.kutu})
+	`TRACE(ch3_position, {`CHIP.huno, `CHIP.fety, `CHIP.efal, `CHIP.exel, `CHIP.efuz, `CHIP.erus,
+	                      `CHIP.wave_nibble_sel})
+	`TRACE(ch3_length, {!`CHIP.ch3_len_timer_stop, `CHIP.fave, `CHIP.foro, `CHIP.gemo, !`CHIP.gapo_n,
+	                    `CHIP.gatu, `CHIP.fory, `CHIP.gevo})
+	`TRACE(ch3_expired, {`CHIP.fexu})
+	`TRACE(ch3_fetch, {`CHIP.busa, `CHIP.bano, `CHIP.azus, `CHIP.azet})
+	`TRACE(ch3_sample, {!`CHIP.bepa_n, !`CHIP.bora_n, !`CHIP.cevo_n, !`CHIP.cuvo_n, !`CHIP.begu_n,
+	                    !`CHIP.budy_n, !`CHIP.cesy_n, !`CHIP.cyfo_n})
+	`TRACE(ch3_out, `CHIP.ch3_out)
+	`TRACE(nr42, {`CHIP.ff21_d7, `CHIP.ff21_d6, `CHIP.ff21_d5, `CHIP.ff21_d4, `CHIP.ff21_d3, `CHIP.ff21_d2,
+	              `CHIP.ff21_d1, `CHIP.ff21_d0})
+	`TRACE(nr43, {`CHIP.ff22_d7, `CHIP.ff22_d6, `CHIP.ff22_d5, `CHIP.ff22_d4, `CHIP.ff22_d3, !`CHIP.ff22_d2_n,
+	              !`CHIP.ff22_d1_n, !`CHIP.ff22_d0_n})
+	`TRACE(ch4_length_on, {`CHIP.ff23_d6})
+	`TRACE(ch4_trigger, {`CHIP.hoga, `CHIP.ch4_start, `CHIP.hazo_n, `CHIP.ch4_restart, `CHIP.gora, `CHIP.gaty,
+	                     `CHIP.ch4_fdis, `CHIP.ch4_active})
+	`TRACE(ch4_divider, {`CHIP.jyfu, `CHIP.jyre, `CHIP.jyco, `CHIP.gary})
+	`TRACE(ch4_prescaler, {`CHIP.esep, `CHIP.dere, `CHIP.dota, `CHIP.erut, `CHIP.dete, `CHIP.dose, `CHIP.demo,
+	                       `CHIP.doke, `CHIP.dale, `CHIP.dure, `CHIP.epor, `CHIP.ezef, `CHIP.deko,
+	                       `CHIP.cexo})
+	`TRACE(ch4_lfsr, {`CHIP.hezu, `CHIP.hyro, `CHIP.heno, `CHIP.hory, `CHIP.hepa, `CHIP.javo, `CHIP.jepe,
+	                  `CHIP.juxe, `CHIP.hape, `CHIP.jaju, `CHIP.kywy, `CHIP.kuzy, `CHIP.kuta, `CHIP.ketu,
+	                  `CHIP.komu, `CHIP.joto})
+	`TRACE(ch4_length, {!`CHIP.ch4_len_timer_stop, `CHIP.fylo, !`CHIP.cedo_n, `CHIP.dena, `CHIP.favy,
+	                    `CHIP.dano})
+	`TRACE(ch4_expired, {`CHIP.fugo})
+	`TRACE(ch4_envelope, {`CHIP.abel, `CHIP.dogo, `CHIP.cofe, `CHIP.cuna, `CHIP.ch4_eg_tick, `CHIP.fyno,
+	                      `CHIP.ch4_eg_stop})
+	`TRACE(ch4_volume, {`CHIP.ch4_env3, `CHIP.ch4_env2, `CHIP.ch4_env1, `CHIP.ch4_env0})
+	`TRACE(ch4_out, `CHIP.ch4_out)
 endmodule
 
 `default_nettype wire
