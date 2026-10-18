@@ -28,6 +28,7 @@ they pass. dmg-sim's README lists no gbmicrotest.
 | line\_153\_lyc\_int\_b  |   ✅   |   FF   |   01   | 198.7 ms |
 | stat\_write\_glitch\_l0\_a |   ✅   |   E2   |   E2   | 182.1 ms |
 | stat\_write\_glitch\_l0\_b |   ✅   |   E2   |   E2   | 182.2 ms |
+| stat\_write\_glitch\_l0\_c |   ✅   |   E0   |   E0   | 182.2 ms |
 | stat\_write\_glitch\_l1\_a |   ✅   |   E0   |   E0   | 182.3 ms |
 | stat\_write\_glitch\_l1\_b |   ✅   |   E2   |   E2   | 182.3 ms |
 | timer\_tima\_reload\_256k\_a |   ✅   |   FF   |   FF   | 182.1 ms |
@@ -57,5 +58,8 @@ A test ends with `LD B,B` and passes with the Fibonacci numbers 3, 5, 8, 13,
 | acceptance/intr\_timing    |   ✅   |       ✅        |  356.3 ms |
 | acceptance/oam\_dma\_timing |   ✅   |       ✅        |  406.4 ms |
 | acceptance/timer/div\_write |   ✅   |       ✅        | 1038.2 ms |
+| acceptance/timer/rapid\_toggle |   ✅   |       ✅        |  356.3 ms |
+| acceptance/timer/tim01\_div\_trigger |   ✅   |       ✅        |  356.3 ms |
+| acceptance/timer/tima\_reload |   ✅   |       ✅        |  356.6 ms |
 
 The whole list took 2 hours 40 minutes with six tests at once.
