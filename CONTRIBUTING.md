@@ -187,5 +187,8 @@ make                      # generate the VHDL and analyse it
 make run TIME="40 ms"     # simulate; the pins are traced to trace.txt
 ```
 
-The generated VHDL is not committed. After changing `ceres-hdlgen`, compare a
-run with the previous one: the model must keep matching dmg-sim pin for pin.
+The generated VHDL is not committed. The `HDL` workflow runs `make smoke`,
+which checks 33 ms of the pins against a trace that matched dmg-sim. After a
+change that alters it, compare with dmg-sim (`make ref-run` and `make diff`)
+before updating `hdl/smoke.sha256`. `hdl/run-tests.sh` runs test ROMs on the
+model; it takes hours, so it is not part of CI.

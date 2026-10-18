@@ -6,6 +6,10 @@ workflows:
     '.github/workflows/deny.yml':
         - 'actions/checkout@v4.4.0'
         - 'taiki-e/install-action@v2.87.29'
+    '.github/workflows/hdl.yml':
+        - 'actions/checkout@v4.4.0'
+        - 'dtolnay/rust-toolchain@stable'
+        - 'nickg/setup-nvc@v1'
     '.github/workflows/lint.yml':
         - 'actions/checkout@v4.4.0'
         - 'rvben/rumdl@v0.2.78'
@@ -44,6 +48,11 @@ dependencies:
         commit: 'sha1-b725eda525362e7cf34af9a7243cac1e3f01a7ec'
         owner_id: 1940490
         repo_id: 260749683
+    'nickg/setup-nvc@v1':
+        ref: 'v1'
+        commit: 'sha1-48f966dfc9b27bf13e873a473fcf1649ef8f5a0f'
+        owner_id: 11442
+        repo_id: 830901173
     'rvben/rumdl@v0.2.78':
         ref: 'v0.2.78'
         commit: 'sha1-9c4cc2a2ebe176de68e1788106e25af8a9bd3899'
