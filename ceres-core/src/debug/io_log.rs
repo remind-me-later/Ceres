@@ -1,5 +1,5 @@
-//! A log of the CPU's accesses to the I/O registers (0xFF00-0xFFFF), with
-//! when they happened, for traces.
+//! A log of the CPU's accesses to the I/O registers (0xFF00-0xFFFF), or to
+//! any address, with when they happened, for traces.
 
 use {
     super::MemoryAccess,
@@ -27,6 +27,8 @@ pub struct IoAccess {
 #[derive(Default)]
 pub(crate) struct IoLog {
     enabled: bool,
+    /// Every address, not only the I/O registers'.
+    all: bool,
     accesses: Vec<IoAccess>,
 }
 
@@ -35,6 +37,16 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     pub fn set_io_log(&mut self, enabled: bool) {
         self.io_log.enabled = enabled;
+        self.io_log.all = false;
+        self.io_log.accesses.clear();
+    }
+
+    /// Starts logging every CPU access, to any address, or stops and
+    /// forgets them. `take_io_log` returns them.
+    #[inline]
+    pub fn set_bus_log(&mut self, enabled: bool) {
+        self.io_log.enabled = enabled;
+        self.io_log.all = enabled;
         self.io_log.accesses.clear();
     }
 
@@ -44,7 +56,7 @@ impl<A: AudioCallback> Gb<A> {
         mem::take(&mut self.io_log.accesses)
     }
 
-    /// Logs a CPU access, if it's to an I/O register and the log is on.
+    /// Logs a CPU access, if the log is on and takes the address.
     /// `t_cycles_ahead`: how far the access is past the clock (a write
     /// lands after the time still deferred).
     #[inline]
@@ -55,7 +67,7 @@ impl<A: AudioCallback> Gb<A> {
         access: MemoryAccess,
         t_cycles_ahead: i32,
     ) {
-        if !self.io_log.enabled || addr < 0xFF00 {
+        if !self.io_log.enabled || (addr < 0xFF00 && !self.io_log.all) {
             return;
         }
         let units_per_cycle = if self.key1.is_enabled() { 1 } else { 2 };

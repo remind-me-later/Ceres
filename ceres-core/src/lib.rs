@@ -553,6 +553,8 @@ pub struct GbBuilder<A: AudioCallback> {
     model: Model,
     sample_rate: i32,
     run_bootrom: bool,
+    #[cfg(feature = "debug")]
+    bootrom: Option<Box<[u8]>>,
 }
 
 impl<A: AudioCallback> GbBuilder<A> {
@@ -564,6 +566,11 @@ impl<A: AudioCallback> GbBuilder<A> {
             self.cart.unwrap_or_default(),
             self.audio_callback,
         );
+
+        #[cfg(feature = "debug")]
+        if let Some(bootrom) = self.bootrom {
+            gb.bootrom = Bootrom::custom(bootrom);
+        }
 
         if !self.run_bootrom {
             gb.skip_bootrom();
@@ -588,6 +595,8 @@ impl<A: AudioCallback> GbBuilder<A> {
             sample_rate,
             audio_callback,
             run_bootrom: true,
+            #[cfg(feature = "debug")]
+            bootrom: None,
         }
     }
 
@@ -602,6 +611,16 @@ impl<A: AudioCallback> GbBuilder<A> {
     #[inline]
     pub const fn with_run_bootrom(mut self, run_bootrom: bool) -> Self {
         self.run_bootrom = run_bootrom;
+        self
+    }
+
+    /// Runs this boot ROM instead of the model's own, such as one that skips
+    /// the logo but leaves the machine as the real one does.
+    #[cfg(feature = "debug")]
+    #[must_use]
+    #[inline]
+    pub fn with_bootrom(mut self, bootrom: Box<[u8]>) -> Self {
+        self.bootrom = Some(bootrom);
         self
     }
 

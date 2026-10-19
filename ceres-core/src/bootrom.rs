@@ -1,4 +1,4 @@
-use crate::Model;
+use {crate::Model, alloc::borrow::Cow};
 
 const DMG0_BOOTROM: &[u8] = include_bytes!("../../external/gb-bootroms/bin/dmg0.bin");
 const DMG_BOOTROM: &[u8] = include_bytes!("../../external/gb-bootroms/bin/dmg.bin");
@@ -11,7 +11,7 @@ const CGB_E_BOOTROM: &[u8] = include_bytes!("../../external/gb-bootroms/bin/cgbE
 const AGB_BOOTROM: &[u8] = include_bytes!("../../external/gb-bootroms/bin/agb.bin");
 
 pub(crate) struct Bootrom {
-    data: &'static [u8],
+    data: Cow<'static, [u8]>,
     is_enabled: bool,
 }
 
@@ -41,12 +41,23 @@ impl Bootrom {
             Model::Agb => AGB_BOOTROM,
         };
         Self {
-            data,
+            data: Cow::Borrowed(data),
+            is_enabled: true,
+        }
+    }
+
+    /// A boot ROM other than the model's own (such as one that skips the
+    /// logo), for tests.
+    #[cfg(feature = "debug")]
+    pub(crate) fn custom(data: Box<[u8]>) -> Self {
+        Self {
+            data: Cow::Owned(data.into_vec()),
             is_enabled: true,
         }
     }
 
     pub(crate) fn read(&self, addr: u16) -> Option<u8> {
-        self.is_enabled.then(|| self.data[addr as usize])
+        self.is_enabled
+            .then(|| self.data.get(addr as usize).copied().unwrap_or(0xFF))
     }
 }
