@@ -110,3 +110,40 @@ The whole list took 2 hours 40 minutes with six tests at once.
 The readable model, on its own (`MODEL=1 ./run-tests.sh`, see the
 [README](README.md#running-it)), gets every result of these tables, with
 the same values, finished at the same times. It took 9 minutes.
+
+## Pictures
+
+`compare-ceres.sh` also compares the frames (see the [README](README.md#comparing-ceres-with-it)).
+The 32 ROMs of Mealybug Tearoom's `ppu/` directory, run for 0.5 s from
+quickboot, make the same accesses on ceres and on the readable model in all
+of them. Their pictures:
+
+- Identical in all frames (6): `m2_win_en_toggle`, `m3_scx_high_5_bits`,
+  `m3_wx_4_change`, `m3_wx_4_change_sprites`, `m3_wx_5_change` and
+  `m3_wx_6_change`.
+- Different in the first picture only, the same afterwards (7):
+  `m3_lcdc_bg_en_change` (14 pixels), `m3_lcdc_bg_map_change`,
+  `m3_lcdc_tile_sel_change`, `m3_lcdc_tile_sel_win_change` and
+  `m3_lcdc_win_map_change` (8 each), `m3_scy_change` (139) and
+  `m3_lcdc_win_en_change_multiple` (2471).
+- Different in the last picture too (16), in this many pixels:
+  `m3_bgp_change` 496, `m3_bgp_change_sprites` 120, `m3_lcdc_obj_size_change`
+  629, `m3_lcdc_obj_size_change_scx` 535, `m3_lcdc_obj_en_change_variant`
+  144, `m3_window_timing` 138, `m3_window_timing_wx_0` 144, `win_without_bg`
+  281, `m3_scx_high_5_bits_change2` 162, `m3_lcdc_win_en_change_multiple_wx`
+  18, and 140 in each of `m3_lcdc_bg_en_change2`, `m3_lcdc_bg_map_change2`,
+  `m3_lcdc_tile_sel_change2`, `m3_lcdc_tile_sel_win_change2`,
+  `m3_lcdc_win_map_change2` and `m3_scy_change2`.
+- Nothing drawn in 0.5 s, on either side (3): `m3_lcdc_obj_en_change`,
+  `m3_obp0_change` and `m3_scx_low_3_bits` (they need more `SECS`).
+
+The 140 pixels are the same in six ROMs: in `m3_scy_change2`, one shade step
+(2 on the model, 1 on ceres) in five rows of every eight, from x = 3 to 8.
+`dmg-acid2` differs in about 570 pixels of its settled picture (fastboot),
+around the eyes, nose and cheeks.
+
+Which of the two is right is not settled by the comparison. Where the
+screenshots of the real DMG (`*_dmg_blob.png`) have four gray levels, ceres
+matches `m3_bgp_change` and `m3_lcdc_obj_size_change` pixel for pixel, as it
+does the shade counts of `dmg-acid2-dmg.png`; the model's pictures have not
+been compared with the hardware's.

@@ -16,14 +16,19 @@
 //! once without spending time on it: of two accesses in one M-cycle, the
 //! trace keeps the last, and the number dropped goes to stderr.
 //!
+//! `--frames FILE` also writes every frame the LCD presents, as the model
+//! does: `frame N`, then 144 lines of 160 digits, the shades 0 (white) to 3
+//! (black). A frame is taken when LY reaches 144, which is when ceres
+//! presents it.
+//!
 //! `--bootrom FILE` runs another boot ROM, such as dmg-sim's quickboot, which
 //! skips the logo but leaves the machine as the real one does.
 //!
 //! Usage: `cargo run -p ceres-test-runner --example bus_trace -- <rom>
-//! [--bootrom FILE] [--mcycles N] [--out FILE]`
+//! [--bootrom FILE] [--mcycles N] [--out FILE] [--frames FILE]`
 
 use anyhow::{Context as _, Result, bail};
-use ceres_core::{GbBuilder, IoAccess, MemoryAccess, Model};
+use ceres_core::{GbBuilder, IoAccess, MemoryAccess, Model, PX_HEIGHT, PX_WIDTH};
 use ceres_test_runner::{DummyAudioCallback, load_test_rom};
 use std::{
     fs::File,
@@ -32,7 +37,7 @@ use std::{
 };
 
 const USAGE: &str = "\
-usage: bus_trace <rom> [--bootrom FILE] [--mcycles N] [--out FILE]
+usage: bus_trace <rom> [--bootrom FILE] [--mcycles N] [--out FILE] [--frames FILE]
 
 <rom> is a path, or one under external/test-roms.
 --mcycles: M-cycles to trace from the first access (1048576, a second, by
@@ -40,6 +45,11 @@ default).";
 
 /// 8 MHz units per M-cycle at single speed.
 const UNITS_PER_MCYCLE: u64 = 8;
+
+/// The register that holds the line being drawn, and the first line of
+/// VBlank, where ceres presents the frame.
+const LY: u16 = 0xFF44;
+const FIRST_VBLANK_LINE: u8 = 144;
 
 /// Reads `path` as given, else under the test ROMs directory.
 fn read_rom(path: &Path) -> Result<Vec<u8>> {
@@ -50,7 +60,31 @@ fn read_rom(path: &Path) -> Result<Vec<u8>> {
     }
 }
 
-fn trace<W: Write>(rom: &Path, bootrom: Option<&Path>, mcycles: u64, mut out: W) -> Result<()> {
+/// Writes a frame as the model does, a digit per pixel: the shade, 0 for the
+/// lightest of the DMG's four grays.
+fn write_frame<W: Write>(out: &mut W, number: u64, rgba: &[u8]) -> io::Result<()> {
+    writeln!(out, "frame {number}")?;
+    let width = usize::from(PX_WIDTH);
+    for row in rgba.chunks_exact(width * 4).take(usize::from(PX_HEIGHT)) {
+        let digits: Vec<u8> = row
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|px| b'0' + (0xFF - px[0]) / 0x55)
+            .collect();
+        out.write_all(&digits)?;
+        out.write_all(b"\n")?;
+    }
+    Ok(())
+}
+
+fn trace<W: Write>(
+    rom: &Path,
+    bootrom: Option<&Path>,
+    mcycles: u64,
+    mut out: W,
+    mut frames: Option<BufWriter<File>>,
+) -> Result<()> {
     let rom = read_rom(rom)?;
     let mut builder = GbBuilder::new(48000, DummyAudioCallback)
         .with_model(Model::DmgB)
@@ -68,8 +102,20 @@ fn trace<W: Write>(rom: &Path, bootrom: Option<&Path>, mcycles: u64, mut out: W)
     // The last access, written once the next one is in another M-cycle.
     let mut last: Option<(u64, IoAccess)> = None;
     let mut dropped = 0_u64;
+    let mut frame = 0_u64;
+    let mut in_vblank = false;
     loop {
         gb.step();
+        if let Some(frames) = frames.as_mut() {
+            // A step is a fraction of a line: the frame is still the one
+            // presented when LY reached 144.
+            let vblank = gb.peek_mem(LY) >= FIRST_VBLANK_LINE;
+            if vblank && !in_vblank {
+                write_frame(frames, frame, gb.pixel_data_rgba())?;
+                frame += 1;
+            }
+            in_vblank = vblank;
+        }
         for access in gb.take_io_log() {
             let first = *first.get_or_insert(access.clock_units);
             let mcycle = (access.clock_units - first) / UNITS_PER_MCYCLE;
@@ -82,6 +128,9 @@ fn trace<W: Write>(rom: &Path, bootrom: Option<&Path>, mcycles: u64, mut out: W)
             }
             if mcycle >= mcycles {
                 out.flush()?;
+                if let Some(frames) = frames.as_mut() {
+                    frames.flush()?;
+                }
                 if dropped > 0 {
                     eprintln!("{dropped} accesses dropped (two in one M-cycle)");
                 }
@@ -111,6 +160,7 @@ fn main() -> Result<()> {
     let mut mcycles = 1_048_576;
     let mut out = None;
     let mut bootrom = None;
+    let mut frames = None;
     while let Some(arg) = args.next() {
         let mut value = |name: &str| {
             args.next()
@@ -119,6 +169,7 @@ fn main() -> Result<()> {
         match arg.as_str() {
             "--mcycles" => mcycles = value("--mcycles")?.parse()?,
             "--out" => out = Some(PathBuf::from(value("--out")?)),
+            "--frames" => frames = Some(PathBuf::from(value("--frames")?)),
             "--bootrom" => bootrom = Some(PathBuf::from(value("--bootrom")?)),
             "--help" | "-h" => {
                 println!("{USAGE}");
@@ -129,17 +180,31 @@ fn main() -> Result<()> {
         }
     }
     let rom = rom.with_context(|| format!("which ROM?\n\n{USAGE}"))?;
+    let frames = frames
+        .map(|path| {
+            File::create(&path)
+                .map(BufWriter::new)
+                .with_context(|| format!("can't create {}", path.display()))
+        })
+        .transpose()?;
     let traced = match out {
         Some(path) => {
             let file =
                 File::create(&path).with_context(|| format!("can't create {}", path.display()))?;
-            trace(&rom, bootrom.as_deref(), mcycles, BufWriter::new(file))
+            trace(
+                &rom,
+                bootrom.as_deref(),
+                mcycles,
+                BufWriter::new(file),
+                frames,
+            )
         }
         None => trace(
             &rom,
             bootrom.as_deref(),
             mcycles,
             BufWriter::new(io::stdout().lock()),
+            frames,
         ),
     };
     // A reader that has seen enough (`| head`) isn't an error.

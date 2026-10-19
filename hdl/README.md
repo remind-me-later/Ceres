@@ -181,13 +181,30 @@ a second this way, and the 513 of them 10 minutes, six at a time:
 
 ```bash
 ls ../external/test-roms/gbmicrotest/*.gb | sed 's|^\.\./||' |
-	TEST=gbmicrotest xargs -n 1 -P 6 ./compare-ceres.sh
+	TEST=gbmicrotest NOFRAMES=1 xargs -n 1 -P 6 ./compare-ceres.sh
 ```
 
 The traces go to `build/compare/<ROM>/`: `model.txt` from the model's
 runner (`BUS_TRACE`), `ceres.txt` from ceres's example `bus_trace`
 (`ceres-test-runner/examples/bus_trace.rs`), which runs the same boot ROM
 (`GbBuilder::with_bootrom`).
+
+It compares the screen too: every frame the LCD completes, as the model's
+LCD pins draw it (`FRAMES`) and as ceres presents it (`bus_trace --frames`),
+in `model-frames.txt` and `ceres-frames.txt` (`frame N`, then 144 lines of
+160 digits, 0 white to 3 black). The report gives the first picture that
+differs, how many pixels differ in it and the first of them. The LCD shows
+nothing in the first frame after it is turned on, and the model and ceres do
+not agree on whether that frame exists, so the all-white frames before the
+first picture are left out on both sides. A ROM that draws on its own needs
+no `TEST`, only `SECS` long enough, and `BOOT=quick`: fastboot leaves VRAM
+as the board's chip powers up, with arbitrary bytes that the ROM may show,
+where quickboot zeroes it as the real boot ROM does (`NOFRAMES=1` skips the
+screen):
+
+```bash
+BOOT=quick ./compare-ceres.sh external/test-roms/dmg-acid2/dmg-acid2.gb 0.6
+```
 
 Over gbmicrotest, ceres and the model make the same accesses in 491 ROMs
 of 513. The others differ in three ways (see also

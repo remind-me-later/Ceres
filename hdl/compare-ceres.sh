@@ -21,6 +21,15 @@
 # the real boot ROM does (for the tests of that state, such as gbmicrotest's
 # poweron_* and Mooneye's boot_*). TEST=gbmicrotest (or mooneye, blargg)
 # ends the run when the test reports its result, usually within a frame.
+#
+# The screen is compared too: every whole frame on the LCD, as the model's
+# LCD pins draw it (FRAMES) and as ceres presents it (bus_trace --frames),
+# in model-frames.txt and ceres-frames.txt (a line of 160 digits per row, 0
+# white to 3 black), compared by compare-frames.sh: the first picture that
+# differs and how many differ. NOFRAMES=1 skips this. Without TEST, give SECS
+# enough for the ROM to draw. Use BOOT=quick for pictures: fastboot leaves
+# VRAM as the model's board powers up (arbitrary bytes), quickboot zeroes it
+# and sets the palette as the real boot ROM does.
 
 set -eu
 
@@ -38,21 +47,34 @@ mkdir -p "$dir"
 make -C "$HDL" -s model build/fastboot.bin
 cargo build -q --release --manifest-path "$ROOT/Cargo.toml" -p ceres-test-runner --example bus_trace
 
+frames_model= frames_ceres=
+if [ -z "${NOFRAMES:-}" ]; then
+	frames_model=$dir/model-frames.txt
+	frames_ceres=$dir/ceres-frames.txt
+fi
+
 (cd "$dir" && nvc --std=2008 -H 64m --work="$HDL/build/model/work" -e --jit gameboy_tb \
-	-gBOOTROM="$BOOTROM" -gROM="$ROOT/$rom" -gSECS="$secs" -gTEST="${TEST:-}" -gBUS_TRACE="$dir/model.txt" -r \
-	>model.log 2>&1)
+	-gBOOTROM="$BOOTROM" -gROM="$ROOT/$rom" -gSECS="$secs" -gBUS_TRACE="$dir/model.txt" \
+	${TEST:+"-gTEST=$TEST"} ${frames_model:+"-gFRAMES=$frames_model"} -r >model.log 2>&1)
 
 # The same M-cycles from ceres: up to the model's last, which may be cut.
 mcycles=$(tail -n 1 "$dir/model.txt" | cut -d ' ' -f 1)
 sed -i "/^$mcycles /,\$d" "$dir/model.txt"
 "$ROOT/target/release/examples/bus_trace" "$ROOT/$rom" --bootrom "$BOOTROM" \
-	--mcycles "$mcycles" --out "$dir/ceres.txt"
+	--mcycles "$mcycles" --out "$dir/ceres.txt" ${frames_ceres:+--frames "$frames_ceres"}
 
+status=0
 echo "$rom: $(wc -l <"$dir/model.txt") accesses in $mcycles M-cycles"
 if cmp -s "$dir/ceres.txt" "$dir/model.txt"; then
 	echo "same"
 else
 	# The first difference, with the accesses before it.
 	diff -U 8 "$dir/ceres.txt" "$dir/model.txt" | awk '/^@@/ { n++ } n == 1' | head -n 40
-	exit 1
+	status=1
 fi
+
+# The frames (compare-frames.sh).
+if [ -n "$frames_model" ]; then
+	"$HDL/compare-frames.sh" "$frames_model" "$frames_ceres" || status=1
+fi
+exit $status

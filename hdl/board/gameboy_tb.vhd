@@ -14,6 +14,10 @@
 -- TEST), what the serial port sends to SERIAL_FILE, and the last whole frame
 -- on the LCD to SCREEN, as a PGM picture.
 --
+-- FRAMES gets every whole frame on the LCD, as ceres's example bus_trace
+-- writes them (../compare-ceres.sh): "frame N", then 144 lines of 160 digits,
+-- the pixels' two bits (0 white, 3 black).
+--
 -- BUS_TRACE gets a line per memory access of the CPU, as ceres's example
 -- bus_trace writes them (../compare-ceres.sh): the M-cycle, counted from
 -- the CPU's first access, R or W, the address and the byte, in hexadecimal.
@@ -38,6 +42,7 @@ entity gameboy_tb is
 		RESULT_FILE : string := "";
 		SERIAL_FILE : string := "";
 		SCREEN      : string := "";
+		FRAMES      : string := "";
 		BUS_TRACE   : string := ""
 	);
 end entity;
@@ -247,6 +252,8 @@ begin
 		variable x       : natural range 0 to 160 := 0;
 		variable y       : natural range 0 to 144 := 0;
 		variable enabled : boolean := false;
+		variable shown   : natural := 0;
+		file frames_file : text;
 
 		procedure take_pixel is
 		begin
@@ -272,16 +279,30 @@ begin
 			end loop;
 			file_close(f);
 		end procedure;
+
+		procedure write_frame is
+			variable l : line;
+		begin
+			write(l, "frame " & integer'image(shown));
+			writeline(frames_file, l);
+			for row in frame'range loop
+				for col in line_t'range loop
+					write(l, to_integer(unsigned(to_01(frame(row)(col)))));
+				end loop;
+				writeline(frames_file, l);
+			end loop;
+			shown := shown + 1;
+		end procedure;
 	begin
-		if SCREEN = "" then
+		if SCREEN = "" and FRAMES = "" then
 			wait;
+		end if;
+		if FRAMES /= "" then
+			file_open(frames_file, FRAMES, write_mode);
 		end if;
 		loop
 			wait until rising_edge(s) or falling_edge(cp) or falling_edge(st) or rising_edge(cpl) or falling_edge(cpl);
 			if rising_edge(s) then
-				if y = 144 then
-					write_screen;
-				end if;
 				y := 0;
 			elsif falling_edge(cp) then
 				take_pixel;
@@ -298,6 +319,16 @@ begin
 						frame(y)(i) := pixels(i mod x) when x > 0 else "00";
 					end loop;
 					y := y + 1;
+					-- The frame is whole when its last line is latched, not
+					-- when the next one starts: the LCD may go off between.
+					if y = 144 then
+						if SCREEN /= "" then
+							write_screen;
+						end if;
+						if FRAMES /= "" then
+							write_frame;
+						end if;
+					end if;
 				end if;
 			elsif falling_edge(cpl) then
 				enabled := cpg = '1';
