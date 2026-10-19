@@ -26,8 +26,14 @@ grep window /tmp/oracle.txt | LC_ALL=C sort -k1,1 -k2,2 | diff - /tmp/ceres.txt
 
 `gambatte_runner` takes an optional path filter, so a family can be iterated on
 in seconds; the `gambatte` test (`cargo nextest run -p ceres-test-runner
---test gambatte --run-ignored only`) is still the one that guards the whole
-set: every ROM has to pass.
+--test gambatte`) is still the one that guards the whole set: every ROM has to
+pass.
+
+Like that test, the runner stops a ROM once its result has been on screen for
+two frames. That is how the 4674 checks fit in half a minute; they give the
+same results as running all 16 frames of Gambatte's own runner, which
+`GAMBATTE_FULL=1` does. `GAMBATTE_FRAMES=1` adds the frames each ROM ran as a
+last column.
 
 ## Tracing
 

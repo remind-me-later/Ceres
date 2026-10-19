@@ -87,12 +87,10 @@ cargo test --package ceres-test-runner
 A test is one ROM on one model, so a ROM that is checked on several models
 counts once for each.
 
-Gambatte takes minutes, so it only runs on request
-(`cargo test --test gambatte -- --ignored`) and CI skips it. The tests that
-don't pass are marked `#[ignore]` in `ceres-test-runner/tests`, each with its
-reason: most fail the same way in SameBoy, the reference Ceres follows; a few
-are gaps (OAM DMA quirks, seven Mealybug ROMs not investigated yet); and 13
-Mealybug ROMs have no reference screenshot upstream.
+The tests that don't pass are marked `#[ignore]` in `ceres-test-runner/tests`,
+each with its reason: most fail the same way in SameBoy, the reference Ceres
+follows; a few are gaps (OAM DMA quirks, seven Mealybug ROMs not investigated
+yet); and 13 Mealybug ROMs have no reference screenshot upstream.
 
 ## Documentation
 
