@@ -64,11 +64,11 @@ and 1 in double speed, and an M-cycle 8 or 4.
   and the tests fix those points only where they happen to read. To pass
   gambatte's 3023 CGB tests, ceres reads each signal at its own delay:
 
-  | Signal | DMG | CGB normal speed | CGB double speed |
-  |---|---|---|---|
-  | LY | 4 | 4 | 2 |
-  | LY=LYC flag | 3 | 1 | 2, and it holds until the next LY=LYC sample instead of dropping as LY changes |
-  | Mode bits | 4 | 4 | 3 |
+  | Signal      | DMG | CGB normal speed | CGB double speed                                                               |
+  | ----------- | --- | ---------------- | ------------------------------------------------------------------------------ |
+  | LY          | 4   | 4                | 2                                                                              |
+  | LY=LYC flag | 3   | 1                | 2, and it holds until the next LY=LYC sample instead of dropping as LY changes |
+  | Mode bits   | 4   | 4                | 3                                                                              |
 
   The CGB's mode 2 also runs a half dot earlier than the DMG's (from
   `h = 909` to 157 on the delayed clock, against 910 to 158), and mode 1
@@ -76,6 +76,7 @@ and 1 in double speed, and an M-cycle 8 or 4.
   below what one normal-speed read can resolve, so these were fitted
   through the `lcd_offset` ROMs, whose CPU cycles sit a dot or two off the
   usual grid.
+
 - **Ceres today:** the table above.
 - **Outcomes:** for each signal, the first cycle that sees the new value,
   at both speeds. If LY, the flag and the mode bits all change at the
