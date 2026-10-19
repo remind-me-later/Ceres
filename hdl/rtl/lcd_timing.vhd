@@ -61,6 +61,7 @@ architecture rtl of lcd_timing is
 	signal vclk_i               : std_ulogic := '0';
 	signal nype                 : std_ulogic := '0';
 	signal mode1_i              : std_ulogic := '0';
+	signal stat_mode2           : std_ulogic;  -- mode 2, as STAT sees it
 	signal ly_i                 : unsigned(7 downto 0) := (others => '0');
 	signal line_153             : std_ulogic := '0';
 	signal ly_reset             : std_ulogic;
@@ -263,10 +264,15 @@ begin
 	int_vbl  <= mode1_i;
 
 	-- STAT's mode bits: 0 HBlank, 1 VBlank, 2 OAM scan, 3 pixels. (The
-	-- latch RUPO between ROPO and bit 2 is held open outside reset.)
+	-- latch RUPO between ROPO and bit 2 is held open outside reset.) Mode 2
+	-- reaches bit 1 through slower gates than OAM's: it ends there 2 ns
+	-- after the scan's flag falls (../rtl/oam_scan.vhd), after mode 3 has
+	-- begun, and a read then sees mode 2 or 3, never 0, as on dmg-sim
+	-- (gbmicrotest's oam_write_l1_a, lcdon_to_stat3_c).
 	-- @hw die: SADU TEBY, XATY WUGA, RUPO SEGO; the enables PUZO POFO SASY
 	-- POTE; LY: VEGA..WEZE; LYC: RETU..PUFY (not_if0)
-	data <= 'Z' & stat_enable & lyc_match & (mode2 or mode3) & (mode3 or mode1_i)
+	stat_mode2 <= '1' when mode2 = '1' else '0' after 2 ns;
+	data <= 'Z' & stat_enable & lyc_match & (stat_mode2 or mode3) & (mode3 or mode1_i)
 	            when cpu_rd = '1' and addr = x"FF41" else
 	        std_logic_vector(ly_i) when cpu_rd = '1' and addr = x"FF44" else
 	        lyc when cpu_rd = '1' and addr = x"FF45" else

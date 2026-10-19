@@ -83,17 +83,15 @@ begin
 	line_start_i <= (start_scan and not anel) or ppu_reset;
 	line_start   <= line_start_i;
 
-	-- The stop clears the latch as mode 3's latch sets (../rtl/render.vhd,
-	-- XYMU), 1 ns after it: STAT's bit 1 (mode 2 or 3) holds through the
-	-- change, and a read of STAT then sees mode 2 or 3, never 0, as on
-	-- dmg-sim (gbmicrotest's oam_write_l1_a and lcdon_to_stat3_c).
+	-- The stop clears the latch 1 ns before mode 3's latch sets
+	-- (../rtl/render.vhd, XYMU): OAM is free for that moment, and a write
+	-- of the CPU lands, as on dmg-sim (gbmicrotest's oam_write_l1_c).
+	-- STAT does not see the moment (../rtl/lcd_timing.vhd).
 	-- @hw die: BESU (nor_latch), ASEN; CENO (dffr)
 	scan_latch : process (all)
 	begin
-		if ppu_reset = '1' then
+		if ppu_reset = '1' or stop_scan_i = '1' then
 			scanning_i <= '0';
-		elsif stop_scan_i = '1' then
-			scanning_i <= '0' after 1 ns;
 		elsif start_scan = '1' then
 			scanning_i <= '1';
 		end if;

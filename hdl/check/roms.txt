@@ -16,6 +16,7 @@ gbmicrotest external/test-roms/gbmicrotest/lcdon_to_stat2_a.gb 0.25
 gbmicrotest external/test-roms/gbmicrotest/lcdon_to_ly1_a.gb 0.25
 gbmicrotest external/test-roms/gbmicrotest/lcdon_to_stat3_c.gb 0.25
 gbmicrotest external/test-roms/gbmicrotest/oam_write_l1_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/oam_write_l1_c.gb 0.25
 gbmicrotest external/test-roms/gbmicrotest/stat_write_glitch_l0_a.gb 0.25
 gbmicrotest external/test-roms/gbmicrotest/stat_write_glitch_l0_b.gb 0.25
 gbmicrotest external/test-roms/gbmicrotest/stat_write_glitch_l1_a.gb 0.25
