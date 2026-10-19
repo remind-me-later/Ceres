@@ -122,10 +122,9 @@ what each block does rather than of its cells:
 | `sm83_idu.vhd`     | the IDU: increments and decrements of 16 bits            |
 | `sm83_alu.vhd`     | the ALU and the flags                                    |
 | `sm83_interrupts.vhd` | IE, the interrupts' priority and vectors              |
+| `dmg_cpu_b.vhd`    | the chip: the blocks wired together, behind its pins     |
 
-The test ROMs run on the model itself: only the crystal and the pins come
-from dmg-sim (with what the cartridge, the work RAM and the VRAM chip
-answer).
+`dmg_cpu_b.vhd` has the chip's pins, as dmg-sim's `dmg_cpu_b` has them.
 
 The model keeps time in phases: every edge of the 4 MiHz clock starts one,
 and eight of them, A to H, make an M-cycle (`clocking.vhd`). Registers
@@ -141,12 +140,36 @@ size dmg-sim has; buses that keep their value when nobody drives them get
 a driver delay of 1 ns, so that the glitches of the model's zero-delay
 logic do not reach them.
 
+### Running it
+
+`board/` is the Game Boy around the chip, as dmg-sim's board
+(`dmg_cpu_b_gameboy.sv`) has it: the crystal, the reset at power-on, the
+cartridge (its ROM and RAM, with no MBC, MBC1 or MBC5), the work RAM, the
+VRAM chip, the buttons, and keepers on the buses (`gameboy.vhd`).
+`gameboy_tb.vhd` runs a ROM on it, recognises the test ROMs' results as
+the oracle's probe does, and can save the last frame on the LCD as a
+picture:
+
+```bash
+make run-model SECS=0.1 ROM=game.gb SCREEN=screen.pgm
+MODEL=1 ./run-tests.sh            # the test ROMs, to build/results-model.txt
+```
+
+The model runs about 25 times as fast as dmg-sim: a second of the Game
+Boy takes about two and a half minutes, and the list of `tests.txt` 9
+minutes, six at a time. On every test of the list, it gets the result
+dmg-sim gets, with the same values, at the same time (to the 0.1 ms of
+[results.md](results.md)). The board's crystal runs at dmg-sim's 119 ns per
+half period, which rounds the real one's 119.2 ns, so that the times match.
+
 ### Checking it
 
 The model is checked against dmg-sim phase by phase: the probe
 `oracle/probe_phases.sv` records, at the end of every phase, the signals
 that the model has too (under the model's names), and `check/chip_tb.vhd`
-runs the model on the same inputs and compares. The checks need
+runs the model of the chip on the same inputs and compares. Only the
+crystal and the pins come from dmg-sim, with what the cartridge, the work
+RAM and the VRAM chip answer. The checks need
 [nvc](https://github.com/nickg/nvc) (1.23 is tested).
 
 ```bash

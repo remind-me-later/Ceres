@@ -7,7 +7,11 @@
 #                   pin trace must have the hash in smoke.sha256
 #   make phases     simulate as make run, and record the signals the
 #                   readable model is checked against (PHASES)
-#   make model      analyse the readable model (rtl/) and its checks
+#   make model      analyse the readable model (rtl/), its board (board/)
+#                   and its checks
+#   make run-model  run ROM on the readable model, on its own, for SECS
+#                   seconds after the reset (SCREEN: the last frame, as a
+#                   PGM picture)
 #   make check      check the readable model against the recorded signals
 #                   of every test in build/runs (see run-tests.sh)
 #
@@ -18,6 +22,7 @@
 #   TRACE    file for the changes of the pins ("" for none)
 #   PHASES   file for the signals of each phase (make phases)
 #   ORACLE   recorded signals to check against ("" for every test's)
+#   SCREEN   file for the last frame on the LCD (make run-model)
 
 SECS    ?= 0.01
 ROM     ?=
@@ -25,6 +30,7 @@ BOOTROM ?= ../external/gb-bootroms/bin/dmg.bin
 TRACE   ?= trace.txt
 PHASES  ?= phases.txt
 ORACLE  ?=
+SCREEN  ?=
 
 BUILD   := build
 DMG_SIM := ../external/reference-implementations/dmg-sim
@@ -39,7 +45,7 @@ CPU_ROM   := $(BUILD)/cpu.gb
 
 abs = $(abspath $(1))
 
-.PHONY: all run phases smoke model check clean
+.PHONY: all run phases smoke model run-model check clean
 
 all: $(VVP) $(FASTBOOT) $(APU_ROM) $(CPU_ROM)
 
@@ -85,7 +91,9 @@ MODEL  := rtl/clocking.vhd rtl/clocks.vhd rtl/divider.vhd rtl/timer.vhd rtl/inte
           rtl/oam_scan.vhd rtl/sprite_store.vhd rtl/oam.vhd rtl/render.vhd rtl/vram_bus.vhd \
           rtl/apu_control.vhd rtl/apu_ch1.vhd rtl/apu_ch2.vhd rtl/apu_ch3.vhd rtl/apu_ch4.vhd \
           rtl/sm83_decoder.vhd rtl/sm83_control.vhd rtl/sm83_sequencer.vhd rtl/sm83_interrupts.vhd \
-          rtl/sm83_registers.vhd rtl/sm83_idu.vhd rtl/sm83_alu.vhd rtl/sm83.vhd
+          rtl/sm83_registers.vhd rtl/sm83_idu.vhd rtl/sm83_alu.vhd rtl/sm83.vhd \
+          rtl/dmg_cpu_b.vhd
+BOARD  := board/keeper.vhd board/cartridge.vhd board/gameboy.vhd board/gameboy_tb.vhd
 CHECKS := check/oracle.vhd check/chip_tb.vhd
 TBS    := chip_tb
 WORK   := $(BUILD)/model
@@ -93,10 +101,14 @@ NVC    := nvc --std=2008 --work=$(abspath $(WORK))/work
 
 model: $(WORK)/analysed
 
-$(WORK)/analysed: $(MODEL) $(CHECKS)
+$(WORK)/analysed: $(MODEL) $(BOARD) $(CHECKS)
 	mkdir -p $(WORK)
-	$(NVC) -a $(call abs,$(MODEL) $(CHECKS))
+	$(NVC) -a $(call abs,$(MODEL) $(BOARD) $(CHECKS))
 	touch $@
+
+run-model: $(WORK)/analysed
+	$(NVC) -e --jit gameboy_tb -gBOOTROM=$(call abs,$(BOOTROM)) $(if $(ROM),-gROM=$(call abs,$(ROM))) \
+		-gSECS=$(SECS) $(if $(SCREEN),-gSCREEN=$(call abs,$(SCREEN))) -r
 
 # Each testbench on each test's recorded signals (build/runs and
 # build/runs-fast, see run-tests.sh).

@@ -7,7 +7,16 @@
 
 library ieee;
 use ieee.std_logic_1164.all;
+
+package high_ram_types is
+	type ram_t is array (0 to 127) of std_ulogic_vector(7 downto 0);
+end package;
+
+library ieee;
+use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
+
+use work.high_ram_types.all;
 
 entity high_ram is
 	port (
@@ -20,8 +29,6 @@ entity high_ram is
 end entity;
 
 architecture rtl of high_ram is
-	type ram_t is array (0 to 127) of std_ulogic_vector(7 downto 0);
-
 	signal ram      : ram_t := (others => (others => '0'));
 	signal selected : std_ulogic;
 	signal index    : natural range 0 to 127;

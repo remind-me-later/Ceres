@@ -19,7 +19,10 @@
 # the readable model is checked against (oracle/probe_phases.sv); with
 # BOOT=fast, the boot ROM is build/fastboot.bin instead, which reaches the
 # cartridge right after the reset, and the tests run in build/runs-fast/
-# (their results do not count: the boot ROM's timing is missing).
+# (their results do not count: the boot ROM's timing is missing). With
+# MODEL=1, the tests run on the readable model (board/gameboy_tb.vhd, with
+# nvc) instead of dmg-sim, in build/runs-model/ (or build/runs-fast-model/)
+# and with build/results-model.txt.
 
 set -eu
 
@@ -36,7 +39,13 @@ if [ "${BOOT:-}" = fast ]; then
 	RUNS=$HDL/build/runs-fast
 	RESULTS=$HDL/build/results-fast
 fi
+MODEL=${MODEL:-0}
+if [ "$MODEL" = 1 ]; then
+	RUNS=$RUNS-model
+	RESULTS=$RESULTS-model
+fi
 VVP=$HDL/build/dmg-sim/dmg_cpu_b_gameboy.vvp
+NVC="nvc --std=2008 --work=$HDL/build/model/work"
 
 # One test (the script calls itself for each, in parallel).
 if [ "${1:-}" = --one ]; then
@@ -44,17 +53,28 @@ if [ "${1:-}" = --one ]; then
 	dir=$RUNS/${rom%.gb}
 	mkdir -p "$dir"
 	rm -f "$dir/result.txt"
-	phases=
-	[ "$PHASES" = 1 ] && phases=+PHASES_FILE=phases.txt
-	(cd "$dir" && vvp -N "$VVP" -none +BOOTROM="$QUICKBOOT" +ROM="$ROOT/$rom" \
-		+SECS="$secs" +TEST="$kind" +RESULT_FILE=result.txt +SERIAL_FILE=serial.txt $phases \
-		>log.txt 2>&1) || true
+	if [ "$MODEL" = 1 ]; then
+		(cd "$dir" && $NVC -e --jit gameboy_tb -gBOOTROM="$QUICKBOOT" -gROM="$ROOT/$rom" \
+			-gSECS="$secs" -gTEST="$kind" -gRESULT_FILE="$dir/result.txt" \
+			-gSERIAL_FILE="$dir/serial.txt" -gSCREEN="$dir/screen.pgm" -r \
+			>log.txt 2>&1) || true
+	else
+		phases=
+		[ "$PHASES" = 1 ] && phases=+PHASES_FILE=phases.txt
+		(cd "$dir" && vvp -N "$VVP" -none +BOOTROM="$QUICKBOOT" +ROM="$ROOT/$rom" \
+			+SECS="$secs" +TEST="$kind" +RESULT_FILE=result.txt +SERIAL_FILE=serial.txt $phases \
+			>log.txt 2>&1) || true
+	fi
 	result=$(cat "$dir/result.txt" 2>/dev/null || echo "error (see log.txt)")
 	echo "$rom $result"
 	exit 0
 fi
 
-make -C "$HDL" >/dev/null
+if [ "$MODEL" = 1 ]; then
+	make -C "$HDL" model build/fastboot.bin >/dev/null
+else
+	make -C "$HDL" >/dev/null
+fi
 
 # grep -e PATTERN for each, or -e '' for all.
 [ $# -gt 0 ] || set -- ''

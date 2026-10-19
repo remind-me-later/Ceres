@@ -63,3 +63,7 @@ A test ends with `LD B,B` and passes with the Fibonacci numbers 3, 5, 8, 13,
 | acceptance/timer/tima\_reload |   ✅   |       ✅        |  356.6 ms |
 
 The whole list took 2 hours 40 minutes with six tests at once.
+
+The readable model, on its own (`MODEL=1 ./run-tests.sh`, see the
+[README](README.md#running-it)), gets every result of these tables, with
+the same values, finished at the same times. It took 9 minutes.
