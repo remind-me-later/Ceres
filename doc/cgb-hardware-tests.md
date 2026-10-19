@@ -76,7 +76,6 @@ and 1 in double speed, and an M-cycle 8 or 4.
   below what one normal-speed read can resolve, so these were fitted
   through the `lcd_offset` ROMs, whose CPU cycles sit a dot or two off the
   usual grid.
-
 - **Ceres today:** the table above.
 - **Outcomes:** for each signal, the first cycle that sees the new value,
   at both speeds. If LY, the flag and the mode bits all change at the
@@ -156,3 +155,64 @@ and 1 in double speed, and an M-cycle 8 or 4.
 - **Outcomes:** the cycle of each change on each revision. A revision
   difference that shows up in only one of these reads would point at a
   different mechanism than a uniform shift.
+
+### 7. What the OAM scan reads while an OAM DMA is copying
+
+This one concerns the DMG as well as the CGB, and it is the one entry where
+ceres does not pass every test: two hardware-verified ROMs disagree under any
+rule ceres has tried.
+
+- **Measure:** start an OAM DMA at a chosen dot of the line before a visible
+  line, with sprite 39 (the last one the scan reads) on that line, and see
+  whether the line gets a sprite, on screen or from the length of mode 3.
+  Sweep three things, one at a time:
+  - the dot where the DMA starts, which sets how many bytes it has written
+    when the scan begins (0 to 160), and so where the DMA ends against the
+    scan;
+  - the data the DMA copies: a sprite table, or a fill value such as `0xA0`;
+  - the Y and X of sprite 39 before the DMA, and of the sprites on the
+    previous line.
+
+  Run `strikethrough.gb` and gambatte's `oamdma/late_sp39y_2` on the same
+  units as the sweep, DMG and CGB, and note each unit's revision.
+- **Why the tests disagree:** both have the DMA running during the whole OAM
+  scan, and both are verified on hardware, but they want opposite things.
+  - `strikethrough.gb` starts the DMA at the end of line 67, so that it has
+    written 2 bytes when line 68's scan begins. The reference screenshots
+    (`strikethrough-dmg.png`, `strikethrough-cgb.png`) show a sprite on line
+    68 at the Y and X of sprite 39, the last entry read on line 67 (Y `0x54`,
+    X `0x4f`): the scan seems to keep the last values it read, so every entry
+    of line 68 looks like sprite 39. Ceres draws nothing, 7 pixels short on
+    row 68. The ROM does not record which device the screenshots come from.
+  - `oamdma/late_sp39y_2` (`_ds_2` in double speed) has the DMA 26 bytes in
+    when the scan of line 3 begins, and still running at sprite 39's read on
+    line 4. It expects no sprite (`out0`, against `out3` for `_1`, where the
+    DMA ends one cycle earlier). Sprite 39 is at Y `0x10`, X `0xA0` before
+    the DMA, so a scan that keeps its last values would see a sprite and
+    read 3. Gambatte's tests were made on a DMG-08 and a CGB-04c.
+- **Ceres today:** once the DMA has written its first byte, the scan reads
+  `0xFF` for every entry until the DMA ends (`add_object_from_index` in
+  `ceres-core/src/ppu/display/objects.rs`, commit `619d53ca`). That passes
+  all 17 of gambatte's `oamdma/late_sp*` ROMs (4 DMG, 13 CGB) and fails
+  `strikethrough` on the DMG, CGB-C and CGB-E (`#[ignore]`d in
+  `ceres-test-runner/tests/strikethrough.rs`). Keeping the last values
+  instead, as SameBoy does, passes `strikethrough` on all three and fails
+  `late_sp39y_2` on the DMG and CGB and `late_sp39y_ds_2`. Using `0xFF` only
+  when the DMA's first write lands in the middle of a scan changes nothing,
+  since in both ROMs the DMA is already running when the scan begins.
+
+  To see it: `cargo test -p ceres-test-runner --test strikethrough --
+  --ignored`, and `cargo run --release -p ceres-test-runner --example
+  gambatte_runner -- both oamdma`.
+- **Outcomes:** the two ROMs on the same unit decide between the two ways
+  out, and either one closes the entry:
+  - *They pass together on one unit*, so one rule explains both and the
+    difference is in how far the DMA has got, in the data it copies, or in
+    how long ago the scan last read OAM. The sweep shows which. Ceres should
+    then use that rule, so that every `oamdma` ROM and `strikethrough` pass,
+    and the `#[ignore]`s go.
+  - *Each passes only on some units*, so the units differ (a DMG revision, or
+    a unit-to-unit variation: SameBoy notes that pre-CGB units differ in
+    what the scan reads when a DMA is halted). Ceres then follows the
+    revision each test was made on, and the test of the other one runs only
+    on the model it was verified on, with the reason written next to it.
