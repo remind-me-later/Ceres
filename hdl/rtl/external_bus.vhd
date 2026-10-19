@@ -76,11 +76,15 @@ begin
 	cpu_wr <= not to_x01(wr_n) when t1_only = '1' else cpu_wr_sync;
 
 	-- An access that leaves the chip: mreq, outside VRAM (8000 to 9FFF).
-	-- The decoding of VRAM's addresses settles a few ns after mreq rises, so
-	-- that a VRAM access leaves the chip for a moment when it starts.
-	-- @hw die: SORE TEVY TEXO (the delay is dmg-sim's)
-	vram_addr       <= '1' after 5 ns when addr(15 downto 13) = "100" else '0' after 5 ns;
-	non_vram_mreq_i <= mreq and not vram_addr;
+	-- The decoding of VRAM's addresses takes 0.3 ns; TEXO rises 2.4 ns
+	-- after mreq and falls 1.35 ns after the decoding, and passes no
+	-- shorter pulse. An address from the register file reaches the
+	-- decoding 3 or 4 ns after mreq rises (../rtl/sm83.vhd), and a VRAM
+	-- access from there leaves the chip for a moment when it starts; one
+	-- from W (LD (nn),A, LD A,(nn)) arrives with mreq and does not.
+	-- @hw die: SORE TEVY TEXO (the delays are dmg-sim's)
+	vram_addr       <= '1' after 300 ps when addr(15 downto 13) = "100" else '0' after 300 ps;
+	non_vram_mreq_i <= '1' after 2400 ps when mreq = '1' and vram_addr = '0' else '0' after 1350 ps;
 	non_vram_mreq   <= non_vram_mreq_i;
 
 	-- The address pins hold the address of the last access that left the
@@ -90,7 +94,12 @@ begin
 	-- byte, and their high byte drops to 00 with the internal bus.)
 	-- @hw die: ALOR APUR ALYR ARET AVYS ATEV AROS ARYM LUNO LYSA PATE LUMY
 	-- LOBU LONU NYRE (dlatch), LOXO LASY MATE
-	addr_latch <= non_vram_mreq_i or t2_only;
+	--
+	-- The latches take a new address only if they stay open for about
+	-- 2.7 ns: the moment a VRAM access leaves the chip passes the address
+	-- when it comes from HL or SP, and not when it comes from BC or DE,
+	-- which arrive sooner (as in dmg-sim).
+	addr_latch <= non_vram_mreq_i or t2_only after 2700 ps;
 
 	address_latch : process (all)
 	begin

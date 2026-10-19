@@ -57,16 +57,27 @@ end entity;
 
 architecture rtl of sm83 is
 	-- The core's outputs reach the chip later than its flip-flops change:
-	-- the control lines about 15 ns after the edge, the address's high byte
-	-- at 22 ns and its low byte at 33 ns, the data at 40 ns.
+	-- the control lines 14 ns after the edge, the address's high byte at
+	-- 21 to 26 ns and its low byte at 32 ns, the data at 39 ns.
+	--
+	-- How soon the high byte arrives depends on what drives it: the
+	-- precharge (to 00, at the end of an access) at 21 ns, W at 22 ns, the
+	-- register file at 25 ns (PC, BC, DE, or FF for LDH) or 26 ns (HL and
+	-- SP). The chip's request (mreq) rises at 22 ns: an address from W is
+	-- there with it, one from a register comes after it, which matters to
+	-- the decoding of VRAM's addresses (../rtl/external_bus.vhd).
 	-- @hw measured: dmg-sim (the delays of its gates and wires)
-	constant t_control : time := 14 ns;
-	constant t_addr_hi : time := 21 ns;
-	constant t_addr_lo : time := 32 ns;
+	constant t_control      : time := 14 ns;
+	constant t_addr_hi      : time := 25 ns;  -- from PC, BC, DE or FF
+	constant t_addr_hi_late : time := 26 ns;  -- from HL or SP
+	constant t_addr_hi_w    : time := 22 ns;  -- from W
+	constant t_precharged   : time := 21 ns;  -- precharged
+	constant t_addr_lo    : time := 32 ns;
 	constant t_data    : time := 39 ns;
 	constant t_mreq_gate : time := 8 ns;
 
 	signal s           : steps_t;
+	signal addr_from_w, addr_late, addr_driven : std_ulogic;
 	signal c           : controls_t;
 	signal db          : std_logic_vector(7 downto 0);
 	signal kept        : std_ulogic_vector(7 downto 0) := (others => '1');
@@ -121,7 +132,8 @@ begin
 		port map (
 			write_phase => write_phase, sys_reset => sys_reset, s => s, c => c, op => opcode,
 			res => res, idu_out => idu_out, int_vector => int_vector, flags => flags, db => db,
-			op1 => op1, op2 => op2, idu_in => idu_in, reg_a => reg_a, reg_z => reg_z, reg_w => reg_w
+			op1 => op1, op2 => op2, idu_in => idu_in, addr_from_w => addr_from_w,
+			addr_late => addr_late, addr_driven => addr_driven, reg_a => reg_a, reg_z => reg_z, reg_w => reg_w
 		);
 
 	u_idu : entity work.sm83_idu
@@ -201,8 +213,11 @@ begin
 
 	-- The address: the IDU's input, the high byte first.
 	-- @hw die: IDU_BIT (buf_a, buf_b)
-	a(15 downto 8) <= transport std_logic_vector(idu_in(15 downto 8)) after t_addr_hi when oe = '1' else
-	                  (others => 'Z') after t_addr_hi;
+	a(15 downto 8) <= transport (others => 'Z') after t_addr_hi when oe = '0' else
+	                  std_logic_vector(idu_in(15 downto 8)) after t_addr_hi_w when addr_from_w = '1' else
+	                  std_logic_vector(idu_in(15 downto 8)) after t_addr_hi_late when addr_late = '1' else
+	                  std_logic_vector(idu_in(15 downto 8)) after t_addr_hi when addr_driven = '1' else
+	                  std_logic_vector(idu_in(15 downto 8)) after t_precharged;
 	a(7 downto 0)  <= transport std_logic_vector(idu_in(7 downto 0)) after t_addr_lo when oe = '1' else
 	                  (others => 'Z') after t_addr_lo;
 end architecture;

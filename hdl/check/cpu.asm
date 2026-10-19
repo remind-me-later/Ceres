@@ -360,6 +360,28 @@ ENDR
 	ldh [$FF07], a
 	ldh [$FFFF], a
 
+	; VRAM accesses with the address from each source: W (LD (nn),A,
+	; LD A,(nn), LD (nn),SP) and the register file (BC, DE, HL, SP). The
+	; one from W reaches the chip's decoding of VRAM sooner, which decides
+	; whether the access shows on the cartridge's address pins for a moment
+	; (../rtl/external_bus.vhd).
+	ld a, $3C
+	ld [$8123], a
+	ld a, [$8167]
+	ld bc, $8134
+	ld [bc], a
+	ld a, [bc]
+	ld de, $8145
+	ld [de], a
+	ld hl, $8156
+	ld [hl+], a
+	ld a, [hl]
+	ld [$81A0], sp
+	ld sp, $8190
+	push bc
+	pop bc
+	ld sp, $DFFF
+
 .end:
 	jr .end
 

@@ -83,6 +83,9 @@ entity sm83_registers is
 		op1         : out std_ulogic_vector(7 downto 0);
 		op2         : out std_ulogic_vector(7 downto 0);
 		idu_in      : out std_ulogic_vector(15 downto 0);
+		addr_from_w : out std_ulogic;  -- W drives the address's high byte
+		addr_late   : out std_ulogic;  -- HL or SP does
+		addr_driven : out std_ulogic;  -- something does (else it is precharged)
 		reg_a, reg_z, reg_w : out std_ulogic_vector(7 downto 0)
 	);
 end entity;
@@ -206,6 +209,16 @@ begin
 	                       or (all8(c.reg_pc_to_idu_en or s.jr_m1) and pch)
 	                       or (all8(c.reg_sp_to_idu_en) and sph)
 	                       or (all8(s.jr_m2 or c.ld_nn_sp_or_ldx_exec) and w);
+
+	-- Which drives the high byte, for the delay with which it leaves the
+	-- core (../rtl/sm83.vhd): W's own gates are faster than the register
+	-- file's outputs, and HL's and SP's are the slowest.
+	addr_from_w <= s.jr_m2 or c.ld_nn_sp_or_ldx_exec;
+	addr_late   <= c.reg_hl_to_idu_en or c.reg_sp_to_idu_en;
+	addr_driven <= c.reg_bc_to_idu_en or c.reg_de_to_idu_en or c.reg_hl_to_idu_en
+	               or c.reg_pc_to_idu_en or s.jr_m1 or c.reg_sp_to_idu_en
+	               or c.ld_c_a_or_ld_a_c_m0 or c.ld_n_a_or_ld_a_n_m1
+	               or s.jr_m2 or c.ld_nn_sp_or_ldx_exec;
 
 	----------------------------------------------------------------------
 	-- PC and SP onto the data bus (CALL, RST and the interrupt's entry push
