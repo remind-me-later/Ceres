@@ -87,18 +87,15 @@ rom_test!(
     age_oam_write_ncmbce_cgbe: registers("age-test-roms/oam/oam-write-ncmBCE.gb", Model::CgbE)
 );
 rom_test!(
-    #[ignore = "fails the same way in SameBoy"]
     age_speed_switch_caution_spsw_interrupts_cgbbc_cgbc: registers("age-test-roms/speed-switch/caution/spsw-interrupts-cgbBC.gb", Model::CgbC)
 );
 rom_test!(
     age_speed_switch_caution_spsw_interrupts_cgbe_cgbe: registers("age-test-roms/speed-switch/caution/spsw-interrupts-cgbE.gb", Model::CgbE)
 );
 rom_test!(
-    #[ignore = "fails the same way in SameBoy"]
     age_speed_switch_spsw_ch2_lc_delay_cgbbce_cgbc: registers("age-test-roms/speed-switch/spsw-ch2-lc-delay-cgbBCE.gb", Model::CgbC)
 );
 rom_test!(
-    #[ignore = "fails the same way in SameBoy"]
     age_speed_switch_spsw_ch2_lc_delay_cgbbce_cgbe: registers("age-test-roms/speed-switch/spsw-ch2-lc-delay-cgbBCE.gb", Model::CgbE)
 );
 rom_test!(
@@ -123,7 +120,6 @@ rom_test!(
     age_speed_switch_spsw_tima_cgbbc_cgbc: registers("age-test-roms/speed-switch/spsw-tima-cgbBC.gb", Model::CgbC)
 );
 rom_test!(
-    #[ignore = "fails the same way in SameBoy"]
     age_speed_switch_spsw_tima_cgbe_cgbe: registers("age-test-roms/speed-switch/spsw-tima-cgbE.gb", Model::CgbE)
 );
 rom_test!(

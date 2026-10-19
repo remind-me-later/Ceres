@@ -75,7 +75,7 @@ cargo test --package ceres-test-runner
 | SameSuite                           | APU, DMA, interrupts, PPU, SGB                                                   | 204 of 204   |
 | Gambatte                            | LCD and STAT timing, timers, DMA, interrupts, HALT, sound                        | 4674 of 4674 |
 | GBMicrotest                         | CPU, timer, DMA and PPU timing, to the cycle                                     | 480 of 482   |
-| AGE                                 | LY, STAT, OAM and VRAM access, HALT, speed switch, mode 3 rendering              | 73 of 84     |
+| AGE                                 | LY, STAT, OAM and VRAM access, HALT, speed switch, mode 3 rendering              | 77 of 84     |
 | Mealybug Tearoom Tests              | PPU registers changed in the middle of a line                                    | 66 of 89     |
 | dmg-acid2, cgb-acid2, cgb-acid-hell | PPU rendering, pixel for pixel                                                   | 4 of 4       |
 | Scribbltests, Turtle Tests          | STAT, LY=LYC and window timing                                                   | 14 of 14     |

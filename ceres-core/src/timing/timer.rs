@@ -86,6 +86,10 @@ pub(crate) struct Clock {
     /// the DIV counter by: a speed switch to double speed leaves it a cycle
     /// behind when `apu_odd` is set.
     pub apu_delay: u16,
+    /// The level of the delayed APU bit right after a DIV write in double
+    /// speed, until the next tick: the reset reaches the lagging sequencer a
+    /// cycle late, so for that cycle it still sees the bit as it was.
+    pub apu_late_bit: Option<bool>,
     /// gambatte's `lastUpdate_ % 2`: odd for an APU powered on in single
     /// speed, even in double speed, flipped by each switch back to single
     /// speed.
@@ -106,6 +110,7 @@ impl Default for Clock {
             stopped: false,
             during_div_write: false,
             apu_delay: 0,
+            apu_late_bit: None,
             apu_odd: true,
         }
     }
@@ -224,8 +229,13 @@ impl Clock {
     /// A speed switch makes the timer see the STOP's DIV reset four cycles
     /// early when it is clocked at 16 cycles or slower: the reset counts as
     /// a falling edge of the tapped bit a bit sooner.
-    pub(crate) fn speed_switch_catch_up(&mut self, host: &impl TimerHost) {
-        if self.is_tac_enabled() && self.tac & TAC_CLOCK != 0 {
+    ///
+    /// On a CGB-E (`late_slow_timers`) that holds for the 262144 Hz timer
+    /// only; the 65536 and 16384 Hz ones see the reset on time (AGE
+    /// `spsw-tima-cgbE`).
+    pub(crate) fn speed_switch_catch_up(&mut self, host: &impl TimerHost, late_slow_timers: bool) {
+        let clock = self.tac & TAC_CLOCK;
+        if self.is_tac_enabled() && clock != 0 && !(late_slow_timers && clock != 1) {
             let mux = Self::sys_clk_tac_mux(self.tac);
             if self.div & mux == 0 && self.div.wrapping_add(4) & mux != 0 {
                 self.inc_tima(host);
@@ -233,16 +243,37 @@ impl Clock {
         }
     }
 
+    /// A write to DIV by the CPU.
+    ///
+    /// It resets the system clock and the APU's internal phase counter
+    /// (gambatte's `sound_unit::reset_cycle_counter` on div write). Without
+    /// the reset, the APU length counter / serial transfer can step
+    /// immediately after a DIV write, which breaks gambatte's serial/sound
+    /// testsuite.
+    ///
+    /// A frame sequencer that lags DIV (`apu_delay`, in double speed) keeps
+    /// its lag: the falling edge the reset causes reaches it a cycle late,
+    /// like every other edge (AGE `spsw-ch2-lc-delay`, `TEST_DS_DIV_RESET`).
     pub(crate) fn write_div(&mut self, host: &mut impl TimerHost) {
-        // Writing DIV resets the system clock and the APU's internal phase
-        // counter (gambatte's `sound_unit::reset_cycle_counter` on div write).
-        // Without this, the APU length counter / serial transfer can step
-        // immediately after a DIV write, which breaks gambatte's
-        // serial/sound testsuite.
-        self.apu_delay = 0;
         self.during_div_write = true;
-        self.set_div(host, 0);
+        if self.apu_delay == 0 {
+            self.set_div(host, 0);
+        } else {
+            let apu_bit = apu_div_bit(host.double_speed());
+            let level = self.div.wrapping_sub(self.apu_delay) & apu_bit != 0;
+            self.timer_edges(host, 0);
+            self.div = 0;
+            self.apu_late_bit = Some(level);
+        }
         self.during_div_write = false;
+    }
+
+    /// The DIV reset of a speed switch (STOP): the sequencer's lag ends with
+    /// the old speed.
+    pub(crate) fn reset_div_for_speed_switch(&mut self, host: &mut impl TimerHost) {
+        self.apu_delay = 0;
+        self.apu_late_bit = None;
+        self.write_div(host);
     }
 
     /// The bit of the internal counter whose falling edge clocks TIMA:
@@ -301,11 +332,10 @@ impl Clock {
         }
     }
 
-    // only modify div inside this function
-    #[inline]
-    fn set_div(&mut self, host: &mut impl TimerHost, val: u16) {
+    /// The edges of DIV's bits that clock TIMA and the serial port when the
+    /// counter goes to `val`.
+    fn timer_edges(&mut self, host: &mut impl TimerHost, val: u16) {
         let triggers = self.div & !val;
-        let apu_bit = apu_div_bit(host.double_speed());
 
         // increase TIMA on falling edge of TAC mux
         if self.is_tac_enabled() && (triggers & Self::sys_clk_tac_mux(self.tac) != 0) {
@@ -316,16 +346,24 @@ impl Clock {
         if triggers & host.serial_div_mask() != 0 {
             host.serial_clock_edge();
         }
+    }
+
+    // only modify div inside this function (and `write_div`)
+    #[inline]
+    fn set_div(&mut self, host: &mut impl TimerHost, val: u16) {
+        let apu_bit = apu_div_bit(host.double_speed());
+        self.timer_edges(host, val);
 
         // The APU's frame sequencer follows the falling edge of an APU_DIV
         // bit; a rising edge arms the envelopes.
-        let (a_old, a_new) = (
-            self.div.wrapping_sub(self.apu_delay),
-            val.wrapping_sub(self.apu_delay),
-        );
-        if a_old & !a_new & apu_bit != 0 {
+        let old = self
+            .apu_late_bit
+            .take()
+            .unwrap_or_else(|| self.div.wrapping_sub(self.apu_delay) & apu_bit != 0);
+        let new = val.wrapping_sub(self.apu_delay) & apu_bit != 0;
+        if old && !new {
             host.apu_frame_sequencer_step(self);
-        } else if !a_old & a_new & apu_bit != 0 {
+        } else if !old && new {
             host.apu_envelopes_armed();
         } else {
             // No edge of the APU bit.
