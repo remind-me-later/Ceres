@@ -45,7 +45,7 @@ if [ "$MODEL" = 1 ]; then
 	RESULTS=$RESULTS-model
 fi
 VVP=$HDL/build/dmg-sim/dmg_cpu_b_gameboy.vvp
-NVC="nvc --std=2008 --work=$HDL/build/model/work"
+NVC="nvc --std=2008 -H 64m --work=$HDL/build/model/work"
 
 # One test (the script calls itself for each, in parallel).
 if [ "${1:-}" = --one ]; then

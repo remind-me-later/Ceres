@@ -12,6 +12,8 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+use std.textio.all;
+
 entity cartridge is
 	generic (
 		ROM : string  -- the file with the ROM's bytes; "" for no cartridge
@@ -28,12 +30,12 @@ end entity;
 
 architecture board of cartridge is
 	type bytes_t is array (natural range <>) of std_ulogic_vector(7 downto 0);
-	type bytes_ptr is access bytes_t;
 
 	type mbc_t is (none, mbc1, mbc5);
 
 	-- The ROM's bytes, as many as the file has, in a shared variable: a
-	-- ROM can have 8 MiB.
+	-- ROM can have 8 MiB. They are kept as characters, a byte each in
+	-- memory, where a std_ulogic_vector would take eight.
 	type rom_store is protected
 		procedure load(path : string);
 		impure function size return natural;
@@ -41,7 +43,7 @@ architecture board of cartridge is
 	end protected;
 
 	type rom_store is protected body
-		variable bytes : bytes_ptr := null;
+		variable bytes : line := null;
 
 		procedure load(path : string) is
 			type byte_file is file of character;
@@ -49,21 +51,21 @@ architecture board of cartridge is
 			variable st : file_open_status;
 			variable c  : character;
 			variable n  : natural := 0;
-			variable grown : bytes_ptr;
+			variable grown : line;
 		begin
 			file_open(st, f, path, read_mode);
 			assert st = open_ok report "cannot open the ROM " & path severity failure;
-			bytes := new bytes_t(0 to 32767);
+			bytes := new string(1 to 32768);
 			while not endfile(f) loop
-				if n > bytes'high then
-					grown := new bytes_t(0 to 2 * bytes'length - 1);
+				if n = bytes'length then
+					grown := new string(1 to 2 * bytes'length);
 					grown(bytes'range) := bytes.all;
 					deallocate(bytes);
 					bytes := grown;
 				end if;
 				read(f, c);
-				bytes(n) := std_ulogic_vector(to_unsigned(character'pos(c), 8));
 				n := n + 1;
+				bytes(n) := c;
 			end loop;
 			file_close(f);
 		end procedure;
@@ -78,7 +80,7 @@ architecture board of cartridge is
 
 		impure function byte(i : natural) return std_ulogic_vector is
 		begin
-			return bytes(i mod bytes'length);
+			return std_ulogic_vector(to_unsigned(character'pos(bytes(i mod bytes'length + 1)), 8));
 		end function;
 	end protected body;
 
@@ -164,8 +166,9 @@ begin
 	-- Where the ROM and the RAM are read: the banks the MBC selects, and the
 	-- address pins.
 	decode : process (all)
-		variable bank : natural;
-		variable low  : natural;
+		variable bank  : natural;
+		variable upper : natural range 0 to 3;
+		variable low   : natural;
 	begin
 		rom_addr <= 0;
 		ram_addr <= 0;
@@ -188,12 +191,16 @@ begin
 					else
 						bank := to_integer(rom_bank(4 downto 0));
 					end if;
-					rom_addr <= bank * 16384 + low;
+					-- The MBC's other two bits (AA13 and AA14) address the RAM,
+					-- and ROMs of 1 MiB and more as A19 and A20, which dmg-sim's
+					-- board leaves out; a smaller ROM repeats there.
 					if mode = '1' or a(14) = '1' then
-						ram_addr <= to_integer(ram_bank(1 downto 0)) * 8192 + to_integer(unsigned(a(12 downto 0)));
+						upper := to_integer(ram_bank(1 downto 0));
 					else
-						ram_addr <= to_integer(unsigned(a(12 downto 0)));
+						upper := 0;
 					end if;
+					rom_addr <= (upper * 32 + bank) * 16384 + low;
+					ram_addr <= upper * 8192 + to_integer(unsigned(a(12 downto 0)));
 					rom_cs <= reset_n = '0' or (a(15) = '0' and rd_n = '0');
 					ram_cs <= enabled = '1' and cs_n = '0' and a(14) = '0';
 				when mbc5 =>

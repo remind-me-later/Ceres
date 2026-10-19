@@ -162,6 +162,47 @@ dmg-sim gets, with the same values, at the same time (to the 0.1 ms of
 [results.md](results.md)). The board's crystal runs at dmg-sim's 119 ns per
 half period, which rounds the real one's 119.2 ns, so that the times match.
 
+### Comparing ceres with it
+
+`compare-ceres.sh` runs a ROM on the model and on ceres, both from
+power-on with the same boot ROM, and compares what their CPUs do on the
+bus: one line per access, with the M-cycle, R or W, the address and the
+byte. The first line that differs is where ceres and the chip part ways.
+
+```bash
+TEST=gbmicrotest ./compare-ceres.sh external/test-roms/gbmicrotest/line_153_ly_a.gb
+```
+
+The boot ROM is `build/fastboot.bin`, which turns the LCD on and jumps to
+the cartridge right after the reset; `BOOT=quick` runs dmg-sim's quickboot
+instead, 150 ms longer, for the ROMs that test the state the real boot ROM
+leaves. `TEST` ends the run at the test's result. A gbmicrotest takes about
+a second this way, and the 513 of them 10 minutes, six at a time:
+
+```bash
+ls ../external/test-roms/gbmicrotest/*.gb | sed 's|^\.\./||' |
+	TEST=gbmicrotest xargs -n 1 -P 6 ./compare-ceres.sh
+```
+
+The traces go to `build/compare/<ROM>/`: `model.txt` from the model's
+runner (`BUS_TRACE`), `ceres.txt` from ceres's example `bus_trace`
+(`ceres-test-runner/examples/bus_trace.rs`), which runs the same boot ROM
+(`GbBuilder::with_bootrom`).
+
+Over gbmicrotest, ceres and the model make the same accesses in 491 ROMs
+of 513. The others differ in three ways (see also
+[results.md](results.md)):
+
+- The read after HALT, when an interrupt is already pending (7 ROMs, a
+  line each): the chip reads the byte after the HALT, ceres the HALT
+  itself. Both push the HALT's address, in the same M-cycles.
+- The state at power-on (15 ROMs: `poweron_*`, `000-oam_lock`, `temp`):
+  RAM and the registers that no boot ROM writes start as dmg-sim starts
+  them, at 0 in every cell (OAM's bytes are FF, and the board's VRAM holds
+  arbitrary bytes), where ceres has zeros.
+- With quickboot, the timer's enable (`halt_bug`, `004-tima_boot_phase`):
+  the netlist counts on enabling the timer, ceres and the real DMG do not.
+
 ### Checking it
 
 The model is checked against dmg-sim phase by phase: the probe

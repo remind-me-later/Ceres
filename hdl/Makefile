@@ -13,7 +13,8 @@
 #                   seconds after the reset (SCREEN: the last frame, as a
 #                   PGM picture)
 #   make check      check the readable model against the recorded signals
-#                   of every test in build/runs (see run-tests.sh)
+#                   of every test in build/runs, JOBS at a time (see
+#                   run-tests.sh)
 #
 # Variables:
 #   SECS     simulated seconds after the chip's power-on reset (31.2 ms)
@@ -23,6 +24,7 @@
 #   PHASES   file for the signals of each phase (make phases)
 #   ORACLE   recorded signals to check against ("" for every test's)
 #   SCREEN   file for the last frame on the LCD (make run-model)
+#   JOBS     checks at a time (make check)
 
 SECS    ?= 0.01
 ROM     ?=
@@ -31,6 +33,7 @@ TRACE   ?= trace.txt
 PHASES  ?= phases.txt
 ORACLE  ?=
 SCREEN  ?=
+JOBS    ?= 6
 
 BUILD   := build
 DMG_SIM := ../external/reference-implementations/dmg-sim
@@ -97,7 +100,7 @@ BOARD  := board/keeper.vhd board/cartridge.vhd board/gameboy.vhd board/gameboy_t
 CHECKS := check/oracle.vhd check/chip_tb.vhd
 TBS    := chip_tb
 WORK   := $(BUILD)/model
-NVC    := nvc --std=2008 --work=$(abspath $(WORK))/work
+NVC    := nvc --std=2008 -H 64m --work=$(abspath $(WORK))/work
 
 model: $(WORK)/analysed
 
@@ -114,14 +117,16 @@ run-model: $(WORK)/analysed
 # build/runs-fast, see run-tests.sh).
 ORACLES = $(if $(ORACLE),$(ORACLE),$(shell find $(BUILD)/runs $(BUILD)/runs-fast -name phases.txt 2>/dev/null | sort))
 
+# Each check prints its report in one piece, when it ends.
 check: $(WORK)/analysed $(FASTBOOT)
-	@set -e; for o in $(abspath $(ORACLES)); do \
+	@printf '%s\n' $(abspath $(ORACLES)) | xargs -P $(JOBS) -I{} sh -c '\
+		o={}; \
 		case $$o in */runs-fast/*) boot=$(call abs,$(FASTBOOT));; *) boot=$(call abs,$(QUICKBOOT));; esac; \
 		for tb in $(TBS); do \
-			echo "$$tb $${o#$(abspath $(BUILD))/}"; \
-			$(NVC) -e --jit $$tb -gORACLE=$$o -gBOOTROM=$$boot -r 2>&1 | grep -v '^   \|FINISH called'; \
-		done; \
-	done
+			report=$$($(NVC) -e --jit $$tb -gORACLE=$$o -gBOOTROM=$$boot -r 2>&1 \
+				| grep -v "^   \|FINISH called\|metavalue detected"); \
+			printf "%s %s\n%s\n" $$tb "$${o#$(abspath $(BUILD))/}" "$$report"; \
+		done'
 
 # The changes at one time are sorted, so that the hash does not depend on
 # the order Icarus runs the probes in.

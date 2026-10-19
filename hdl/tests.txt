@@ -35,9 +35,23 @@ gbmicrotest external/test-roms/gbmicrotest/dma_0x1000.gb 0.25
 gbmicrotest external/test-roms/gbmicrotest/dma_0x9000.gb 0.25
 gbmicrotest external/test-roms/gbmicrotest/dma_timing_a.gb 0.25
 
-# gbmicrotest: the PPU's timing after the LCD is turned on.
+# gbmicrotest: the two that ceres and SameBoy fail; the netlist fails them
+# too, with the same values.
+gbmicrotest external/test-roms/gbmicrotest/halt_op_dupe_delay.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/stat_write_glitch_l154_d.gb 0.25
+
+# gbmicrotest: ones that the netlist fails and ceres passes (see
+# results.md): the timer's enable, and the state at power-on.
+gbmicrotest external/test-roms/gbmicrotest/halt_bug.gb 0.2
+gbmicrotest external/test-roms/gbmicrotest/poweron_oam_000.gb 0.17
+gbmicrotest external/test-roms/gbmicrotest/poweron_dma_000.gb 0.17
+
+# gbmicrotest: the PPU's timing after the LCD is turned on, and at the
+# entry point.
 gbmicrotest external/test-roms/gbmicrotest/lcdon_to_stat2_a.gb 0.25
 gbmicrotest external/test-roms/gbmicrotest/lcdon_to_ly1_a.gb 0.25
+gbmicrotest external/test-roms/gbmicrotest/oam_write_l1_a.gb 0.2
+gbmicrotest external/test-roms/gbmicrotest/poweron_stat_026.gb 0.17
 
 # Mooneye acceptance: the timings of the CPU and the timer.
 mooneye external/test-roms/mooneye-test-suite/acceptance/timer/div_write.gb 1.1

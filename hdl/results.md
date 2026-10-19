@@ -41,9 +41,52 @@ they pass. dmg-sim's README lists no gbmicrotest.
 | dma\_timing\_a          |   ✅   |   81   |   81   | 182.1 ms |
 | lcdon\_to\_stat2\_a      |   ✅   |   80   |   80   | 182.2 ms |
 | lcdon\_to\_ly1\_a        |   ✅   |   00   |   00   | 182.2 ms |
+| oam\_write\_l1\_a        |   ✅   |   F0   |   F0   | 182.3 ms |
+| poweron\_stat\_026       |   ✅   |   86   |   86   | 182.1 ms |
+| halt\_bug               |   ❌   |   18   |   14   | 182.1 ms |
+| poweron\_oam\_000        |   ❌   |   FF   |   FF   | 182.1 ms |
+| poweron\_dma\_000        |   ❌   |   00   |   FF   | 182.1 ms |
+| halt\_op\_dupe\_delay     |   ❌   |   01   |   55   | 182.4 ms |
+| stat\_write\_glitch\_l154\_d |   ❌   |   E1   |   E0   | 198.9 ms |
 
 GateBoy fails the line 153 and STAT write glitch tests and ceres passes them.
 The netlist behaves as ceres and the ROMs expect.
+
+ceres and SameBoy fail `halt_op_dupe_delay` and `stat_write_glitch_l154_d`
+(ceres's `gbmicrotest_known_failures.txt`). The netlist fails them too, with
+the same values: the CPU's accesses on ceres and on the readable model are
+the same, M-cycle by M-cycle (`compare-ceres.sh`). The ROMs were checked on
+a real DMG: either the chip they ran on behaves otherwise than the
+netlist's DMG-CPU B here, or the netlist has an error.
+
+ceres passes the other three that fail here, and the netlist cannot tell
+how a real chip behaves in them:
+
+- `halt_bug` reads TIMA right after it enables the timer. The netlist's
+  enable reaches the timer's clock before its select, and enabling it with
+  the old selected bit of the divider at 1 and the new one at 0 gives a
+  pulse of no width, on which dmg-sim counts: TIMA is one ahead from there.
+  The DMG that the ROM was checked on does not count.
+- `poweron_oam_000` reads OAM, and `poweron_dma_000` reads `FF46`, which no
+  boot ROM writes. dmg-sim starts every flip-flop and RAM cell at 0, which
+  makes OAM's bytes FF and the DMA register 00. A real chip starts with
+  whatever its cells settle to: OAM was not all FF and `FF46` was FF on the
+  DMG the ROMs were checked on (`OBP0` and `OBP1` too, in
+  `poweron_obp0_000` and `poweron_obp1_000`).
+
+The readable model gets the same results. It failed `oam_write_l1_a` and
+`poweron_stat_026` at first, with STAT's mode 0 where dmg-sim has 2: a read
+at the end of the OAM scan saw the scan's flag clear before the flag of
+mode 3 was set. In dmg-sim, OAM sees that moment (a write of the CPU
+lands then: `oam_write_l1_c`) and STAT does not; the model now holds mode 2
+in STAT until mode 3 has begun. Two ROMs that the
+comparison ran showed one more difference, on the cartridge's address pins:
+a VRAM access shows there for a moment when its address comes from HL or
+SP, which reach the chip 4 ns after the request, but not when it comes
+from W (`LD (nn),A`), which arrives with it, nor from BC or DE, a
+nanosecond sooner than HL, too soon for the pins' latches to take it. The
+model's core now drives the address with the delay of its source, as
+measured in dmg-sim.
 
 ## Mooneye
 

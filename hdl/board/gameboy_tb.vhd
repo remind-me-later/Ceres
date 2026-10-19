@@ -13,6 +13,10 @@
 -- to RESULT_FILE ("pass ...", "fail ...", "timeout", or "done" without
 -- TEST), what the serial port sends to SERIAL_FILE, and the last whole frame
 -- on the LCD to SCREEN, as a PGM picture.
+--
+-- BUS_TRACE gets a line per memory access of the CPU, as ceres's example
+-- bus_trace writes them (../compare-ceres.sh): the M-cycle, counted from
+-- the CPU's first access, R or W, the address and the byte, in hexadecimal.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -21,7 +25,9 @@ use ieee.numeric_std.all;
 use std.textio.all;
 use std.env.finish;
 
+use work.clocking.all;
 use work.high_ram_types.all;
+use work.sm83_controls.all;
 
 entity gameboy_tb is
 	generic (
@@ -31,7 +37,8 @@ entity gameboy_tb is
 		TEST        : string := "";
 		RESULT_FILE : string := "";
 		SERIAL_FILE : string := "";
-		SCREEN      : string := ""
+		SCREEN      : string := "";
+		BUS_TRACE   : string := ""
 	);
 end entity;
 
@@ -183,6 +190,46 @@ begin
 					end_with("pass serial: " & received.all);
 				elsif received(received'high - 5 to received'high) = "Failed" then
 					end_with("fail serial: " & received.all);
+				end if;
+			end if;
+		end loop;
+	end process;
+
+	-- The CPU's accesses, seen in the middle of phase H: the M-cycle's
+	-- address and the byte on the core's data bus, read or written. The
+	-- phases run on through HALT, which stops the core's clocks (no
+	-- data_phase then), so that M-cycles count time.
+	accesses : process
+		alias phase      is << signal .gameboy_tb.u_gameboy.u_chip.phase : phase_t >>;
+		alias data_phase is << signal .gameboy_tb.u_gameboy.u_chip.data_phase : std_ulogic >>;
+		alias c          is << signal .gameboy_tb.u_gameboy.u_chip.u_cpu.c : controls_t >>;
+		alias address    is << signal .gameboy_tb.u_gameboy.u_chip.u_cpu.idu_in : std_ulogic_vector(15 downto 0) >>;
+		alias db         is << signal .gameboy_tb.u_gameboy.u_chip.u_cpu.db : std_logic_vector(7 downto 0) >>;
+		file f            : text;
+		variable l        : line;
+		variable mcycle   : natural := 0;
+		variable started  : boolean := false;
+		variable kind     : character;
+	begin
+		if BUS_TRACE = "" then
+			wait;
+		end if;
+		file_open(f, BUS_TRACE, write_mode);
+		loop
+			wait until phase = A or phase = H;
+			if phase = A then
+				mcycle := mcycle + 1;
+			else
+				wait for 60 ns;
+				if data_phase = '1' and (c.fetch = '1' or c.mread = '1' or c.mwrite = '1') then
+					if not started then
+						started := true;
+						mcycle  := 0;
+					end if;
+					kind := 'W' when c.mwrite = '1' else 'R';
+					write(l, integer'image(mcycle) & ' ' & kind & ' ' & to_hstring(address) & ' '
+						& to_hstring(to_x01(db)));
+					writeline(f, l);
 				end if;
 			end if;
 		end loop;
