@@ -129,8 +129,13 @@ of them. Their pictures, as `compare-frames.sh` finds them:
   `m3_bgp_change` 496, `m3_bgp_change_sprites` 328,
   `m3_lcdc_obj_en_change_variant` 144, `m3_scx_high_5_bits_change2` 30,
   `m3_window_timing` 138 and `m3_window_timing_wx_0` 144.
-- Nothing drawn in 0.5 s, on either side (3): `m3_lcdc_obj_en_change`,
-  `m3_obp0_change` and `m3_scx_low_3_bits` (they need more `SECS`).
+- Nothing drawn after quickboot, on either side (3): `m3_lcdc_obj_en_change`,
+  `m3_obp0_change` and `m3_scx_low_3_bits` need the state that the real boot
+  ROM leaves. With it (`BOOT=real`, 1.5 s) the two sides make the same
+  accesses through the whole boot, and the ROM's own picture is the same on
+  both; only four pictures of the boot logo's scroll differ (60, 106, 106 and
+  150 pixels, in the top rows, the same in the three), where the boot ROM
+  writes SCY within a dot of the fetch of the first tiles.
 
 `dmg-acid2` differs only in its first picture (62 pixels).
 

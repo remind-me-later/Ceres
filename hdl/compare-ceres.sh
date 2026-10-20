@@ -21,6 +21,10 @@
 # the real boot ROM does (for the tests of that state, such as gbmicrotest's
 # poweron_* and Mooneye's boot_*). TEST=gbmicrotest (or mooneye, blargg)
 # ends the run when the test reports its result, usually within a frame.
+# BOOT=real runs the real DMG boot ROM (external/gb-bootroms), for the ROMs
+# that need the state it leaves and do nothing after quickboot: Mealybug's
+# m3_lcdc_obj_en_change, m3_obp0_change and m3_scx_low_3_bits, which draw
+# after about 1.1 s of its logo.
 #
 # PIXELS=1 also compares the pixel pipeline's timeline (model-pixels.txt and
 # ceres-pixels.txt, compare-pixels.sh).
@@ -41,6 +45,7 @@ HDL=$(cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(cd -- "$HDL/.." && pwd)
 BOOTROM=$HDL/build/fastboot.bin
 [ "${BOOT:-fast}" = quick ] && BOOTROM=$ROOT/external/reference-implementations/dmg-sim/boot/quickboot.bin
+[ "${BOOT:-fast}" = real ] && BOOTROM=$ROOT/external/gb-bootroms/bin/dmg.bin
 
 [ $# -ge 1 ] || { echo "usage: $0 <ROM> [SECS]" >&2; exit 2; }
 rom=$1

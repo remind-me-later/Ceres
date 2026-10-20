@@ -201,7 +201,7 @@ differ, the last among them. A ROM that draws on its own needs
 no `TEST`, only `SECS` long enough, and `BOOT=quick`: fastboot leaves VRAM
 as the board's chip powers up, with arbitrary bytes that the ROM may show,
 where quickboot zeroes it as the real boot ROM does (`NOFRAMES=1` skips the
-screen):
+screen; `BOOT=real` runs the real DMG boot ROM, for ROMs that need its state):
 
 ```bash
 BOOT=quick ./compare-ceres.sh external/test-roms/dmg-acid2/dmg-acid2.gb 0.6
