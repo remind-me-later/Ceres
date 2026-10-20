@@ -43,3 +43,14 @@ gbmicrotest hdl/build/apu.gb 0.075
 # The CPU core: every opcode, and interrupts (check/cpu.asm, which make
 # builds).
 gbmicrotest hdl/build/cpu.gb 0.02
+
+# Mealybug Tearoom's PPU tests where the readable model's picture differed
+# from ceres's (hdl/results.md): they change a register in the middle of a
+# line. Recorded from quickboot, which they need for the state of VRAM.
+# m3_window_timing and m3_lcdc_win_en_change_multiple_wx are not here: the
+# model differs from dmg-sim in them on purpose (render.vhd, bg_tile_clock).
+gbmicrotest external/test-roms/mealybug-tearoom-tests/ppu/m3_bgp_change.gb 0.255
+gbmicrotest external/test-roms/mealybug-tearoom-tests/ppu/m3_bgp_change_sprites.gb 0.26
+gbmicrotest external/test-roms/mealybug-tearoom-tests/ppu/m3_window_timing_wx_0.gb 0.27
+gbmicrotest external/test-roms/mealybug-tearoom-tests/ppu/m3_lcdc_obj_en_change_variant.gb 0.255
+gbmicrotest external/test-roms/mealybug-tearoom-tests/ppu/win_without_bg.gb 0.29

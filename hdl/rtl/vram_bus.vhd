@@ -102,7 +102,7 @@ begin
 
 	-- The drivers of the PPU's addresses take a moment: a glitch shorter
 	-- than that does not reach the lines, which keep their value.
-	render_settled <= render_ma after 1 ns;
+	render_settled <= render_ma after 2 ns;
 	ma_pins <= to_x01(ma);
 
 	-- The data: the CPU's while it writes VRAM, the pins' otherwise.
