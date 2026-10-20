@@ -224,7 +224,9 @@ turn on. They are open.
 - The 16 ROMs that differ in the first picture only: in every one the model's
   first picture is the same as its later ones and ceres's is not (in
   `m3_scy_change`, in its first two lines, where the pixel timelines of the
-  two sides are the same). No screenshot shows those frames.
+  two sides are the same; in `m3_lcdc_tile_sel_change`, the 8 pixels are a
+  sprite on line 0 that ceres does not draw in that frame, whose OAM nothing
+  writes after the LCD is turned on). No screenshot shows those frames.
 - `m3_scx_high_5_bits_change2` (30 pixels, seven lines, a hole of four pixels
-  in the model where SCX changes): no screenshot; its recording on dmg-sim is
-  listed in `check/roms.txt`.
+  in the model where SCX changes): the model matches dmg-sim to the end of
+  the run, so it is the netlist's against ceres's; no screenshot shows it.

@@ -54,3 +54,4 @@ gbmicrotest external/test-roms/mealybug-tearoom-tests/ppu/m3_bgp_change_sprites.
 gbmicrotest external/test-roms/mealybug-tearoom-tests/ppu/m3_window_timing_wx_0.gb 0.27
 gbmicrotest external/test-roms/mealybug-tearoom-tests/ppu/m3_lcdc_obj_en_change_variant.gb 0.255
 gbmicrotest external/test-roms/mealybug-tearoom-tests/ppu/win_without_bg.gb 0.29
+gbmicrotest external/test-roms/mealybug-tearoom-tests/ppu/m3_scx_high_5_bits_change2.gb 0.325
