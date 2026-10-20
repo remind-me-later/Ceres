@@ -192,11 +192,12 @@ runner (`BUS_TRACE`), `ceres.txt` from ceres's example `bus_trace`
 It compares the screen too: every frame the LCD completes, as the model's
 LCD pins draw it (`FRAMES`) and as ceres presents it (`bus_trace --frames`),
 in `model-frames.txt` and `ceres-frames.txt` (`frame N`, then 144 lines of
-160 digits, 0 white to 3 black). The report gives the first picture that
-differs, how many pixels differ in it and the first of them. The LCD shows
-nothing in the first frame after it is turned on, and the model and ceres do
-not agree on whether that frame exists, so the all-white frames before the
-first picture are left out on both sides. A ROM that draws on its own needs
+160 digits, 0 white to 3 black). Neither writes the first frame after the
+LCD is turned on, which the LCD does not show (its first line is not a whole
+one on the pins), and `compare-frames.sh` leaves out the all-white frames
+before the first picture. The report gives the first picture that differs,
+how many pixels differ in it and the first of them, and how many pictures
+differ, the last among them. A ROM that draws on its own needs
 no `TEST`, only `SECS` long enough, and `BOOT=quick`: fastboot leaves VRAM
 as the board's chip powers up, with arbitrary bytes that the ROM may show,
 where quickboot zeroes it as the real boot ROM does (`NOFRAMES=1` skips the
@@ -235,10 +236,11 @@ BOOT=fast PHASES=1 TESTS=check/roms.txt ./run-tests.sh   # record, in dmg-sim
 make check                                               # check the model
 ```
 
-`check/roms.txt` lists the test ROMs the model is checked on. Two of them
+`check/roms.txt` lists the test ROMs the model is checked on. Three of them
 are ours: `check/apu.asm` plays the APU's four channels through most of what
-they do, in 70 ms, and `check/cpu.asm` executes every opcode and takes
-interrupts. `make` builds them with [RGBDS](https://rgbds.gbdev.io) (1.0 is
+they do, in 70 ms, `check/cpu.asm` executes every opcode and takes
+interrupts, and `check/sprites.asm` draws sprites whose tiles tell the two
+bit planes apart. `make` builds them with [RGBDS](https://rgbds.gbdev.io) (1.0 is
 tested).
 
 `BOOT=fast` starts the test ROMs with a boot ROM that only turns the LCD on

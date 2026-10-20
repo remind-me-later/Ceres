@@ -25,7 +25,8 @@
 # The screen is compared too: every whole frame on the LCD, as the model's
 # LCD pins draw it (FRAMES) and as ceres presents it (bus_trace --frames),
 # in model-frames.txt and ceres-frames.txt (a line of 160 digits per row, 0
-# white to 3 black), compared by compare-frames.sh: the first picture that
+# white to 3 black; the first frame after the LCD is turned on is left out),
+# compared by compare-frames.sh: the first picture that
 # differs and how many differ. NOFRAMES=1 skips this. Without TEST, give SECS
 # enough for the ROM to draw. Use BOOT=quick for pictures: fastboot leaves
 # VRAM as the model's board powers up (arbitrary bytes), quickboot zeroes it

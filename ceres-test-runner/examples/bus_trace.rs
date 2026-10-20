@@ -19,7 +19,8 @@
 //! `--frames FILE` also writes every frame the LCD presents, as the model
 //! does: `frame N`, then 144 lines of 160 digits, the shades 0 (white) to 3
 //! (black). A frame is taken when LY reaches 144, which is when ceres
-//! presents it.
+//! presents it. The first frame after the LCD is turned on is left out: the
+//! LCD does not show it, and the model does not write it.
 //!
 //! `--bootrom FILE` runs another boot ROM, such as dmg-sim's quickboot, which
 //! skips the logo but leaves the machine as the real one does.
@@ -49,6 +50,8 @@ const UNITS_PER_MCYCLE: u64 = 8;
 /// The register that holds the line being drawn, and the first line of
 /// VBlank, where ceres presents the frame.
 const LY: u16 = 0xFF44;
+const LCDC: u16 = 0xFF40;
+const LCDC_ON_B: u8 = 0x80;
 const FIRST_VBLANK_LINE: u8 = 144;
 
 /// Reads `path` as given, else under the test ROMs directory.
@@ -104,15 +107,26 @@ fn trace<W: Write>(
     let mut dropped = 0_u64;
     let mut frame = 0_u64;
     let mut in_vblank = false;
+    let mut lcd_on = false;
+    let mut unshown = true;
     loop {
         gb.step();
         if let Some(frames) = frames.as_mut() {
             // A step is a fraction of a line: the frame is still the one
             // presented when LY reached 144.
+            let on = gb.peek_mem(LCDC) & LCDC_ON_B != 0;
+            if on && !lcd_on {
+                unshown = true;
+            }
+            lcd_on = on;
             let vblank = gb.peek_mem(LY) >= FIRST_VBLANK_LINE;
             if vblank && !in_vblank {
-                write_frame(frames, frame, gb.pixel_data_rgba())?;
-                frame += 1;
+                if unshown {
+                    unshown = false;
+                } else {
+                    write_frame(frames, frame, gb.pixel_data_rgba())?;
+                    frame += 1;
+                }
             }
             in_vblank = vblank;
         }

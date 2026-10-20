@@ -252,6 +252,7 @@ begin
 		variable x       : natural range 0 to 160 := 0;
 		variable y       : natural range 0 to 144 := 0;
 		variable enabled : boolean := false;
+		variable first   : boolean := true;   -- the frame after the LCD is turned on
 		variable shown   : natural := 0;
 		file frames_file : text;
 
@@ -321,16 +322,26 @@ begin
 					y := y + 1;
 					-- The frame is whole when its last line is latched, not
 					-- when the next one starts: the LCD may go off between.
+					-- The first one after the LCD is turned on is not shown
+					-- (nor does ceres's example write it): its first line is
+					-- not a whole one.
 					if y = 144 then
-						if SCREEN /= "" then
-							write_screen;
-						end if;
-						if FRAMES /= "" then
-							write_frame;
+						if first then
+							first := false;
+						else
+							if SCREEN /= "" then
+								write_screen;
+							end if;
+							if FRAMES /= "" then
+								write_frame;
+							end if;
 						end if;
 					end if;
 				end if;
 			elsif falling_edge(cpl) then
+				if cpg = '1' and not enabled then
+					first := true;
+				end if;
 				enabled := cpg = '1';
 			end if;
 		end loop;
