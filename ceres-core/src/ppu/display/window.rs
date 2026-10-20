@@ -160,10 +160,13 @@ impl Ppu {
                     && self.wx == position.wrapping_add(6)
                     && !self.d.window.wx_just_changed
                 {
-                    // LCD-PPU horizontal desync on DMG units.
-                    if self.is_dmg_family() && self.d.lcd_x > 0 {
-                        self.d.lcd_x -= 1;
-                    }
+                    // The window starts a pixel after its WX matched, because
+                    // it was off then (or WY had not triggered). SameBoy
+                    // also steps the LCD column back here ("horizontal
+                    // desync"), so that the window's first pixel overwrites
+                    // the one before it; the DMG does not: the netlist and
+                    // the screenshot of m3_lcdc_win_en_change_multiple_wx
+                    // keep that pixel, and the window starts after it.
                     true
                 } else {
                     false

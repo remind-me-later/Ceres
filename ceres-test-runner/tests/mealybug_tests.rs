@@ -148,7 +148,6 @@ rom_test!(
 
 // m3_lcdc_win_en_change_multiple_wx.gb
 rom_test!(
-    #[ignore = "fails (not investigated yet)"]
     test_mb_m3_lcdc_win_en_change_multiple_wx_dmg_blob: mealybug("m3_lcdc_win_en_change_multiple_wx.gb", Model::DmgB)
 );
 // Note: Missing reference screenshot in upstream mealybug repository for CGB

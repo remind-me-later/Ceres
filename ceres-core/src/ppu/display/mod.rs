@@ -260,12 +260,6 @@ impl Ppu {
         self.double_speed
     }
 
-    /// True when a DMG-family model (not SGB) is running.
-    #[inline]
-    pub(super) const fn is_dmg_family(&self) -> bool {
-        matches!(self.model, Model::Dmg0 | Model::DmgB | Model::Mgb)
-    }
-
     /// Sleep for `n` dots; the code of state `id` runs afterwards.
     #[inline]
     pub(super) const fn sleep(&mut self, id: State, n: i32) {

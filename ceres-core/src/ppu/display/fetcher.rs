@@ -64,6 +64,11 @@ pub(super) struct Fetcher {
     pub attributes: u8,
     pub data: [u8; 2],
     pub tile_index_address: u16,
+    /// The tile's address in the background map, which the DMG reads instead
+    /// if the window is turned off after the fetch began in it.
+    pub bg_index_address: u16,
+    /// The fetch began in the window.
+    pub window_tile: bool,
     pub data_address: u16,
     pub last_tileset: bool,
     /// The tile row, latched on the CGB-D and newer.
@@ -76,7 +81,12 @@ pub(super) struct Fetcher {
 
 impl Ppu {
     pub(super) const fn fetcher_y_value(&self) -> u8 {
-        if self.d.window.wx_triggered {
+        // The DMG's "in window" falls with LCDC bit 5, at once: the data of a
+        // tile that began in the window is read with the background's row
+        // if the window is turned off meanwhile (the flag stays up until the
+        // next tile).
+        if self.d.window.wx_triggered && (self.lcdc & LCDC_WIN_EN_B != 0 || self.is_cgb_hardware())
+        {
             self.d.window.line
         } else {
             self.d.current_line.wrapping_add(self.scy)
@@ -103,6 +113,28 @@ impl Ppu {
         }
     }
 
+    /// The address of the tile's number in the window's map or the
+    /// background's, for the row `y` of it.
+    fn tile_index_address(&self, window: bool, y: u8) -> u16 {
+        let map = if self.lcdc & LCDC_BG_MAP_B != 0 && !window
+            || self.lcdc & LCDC_WIN_MAP_B != 0 && window
+        {
+            TILE_MAP_1
+        } else {
+            TILE_MAP_0
+        };
+        let position = self.d.position_in_line;
+        let x: u16 = if window {
+            u16::from(self.d.window.tile_x)
+        } else if position.wrapping_add(16) < 8 {
+            u16::from(self.scx >> 3)
+        } else {
+            let sub = u16::from(self.is_cgb_hardware() && !self.d.obj_fetch.active);
+            ((u16::from(self.scx) + u16::from(position) + 8 - sub) / 8) & (TILE_MAP_WIDTH - 1)
+        };
+        map + x + u16::from(y / 8) * TILE_MAP_WIDTH
+    }
+
     pub(super) fn tile_address(&self) -> u16 {
         let mut address = if self.d.fetcher.last_tileset {
             u16::from(self.d.fetcher.tile) * TILE_BYTES
@@ -122,32 +154,24 @@ impl Ppu {
         match self.d.fetcher.step {
             FetcherStep::GetTileT1 => {
                 self.update_wx_glitch();
-                let mut map = TILE_MAP_0;
                 if self.lcdc & LCDC_WIN_EN_B == 0 {
                     self.d.window.wx_triggered = false;
                 }
-                if self.lcdc & LCDC_BG_MAP_B != 0 && !self.d.window.wx_triggered
-                    || self.lcdc & LCDC_WIN_MAP_B != 0 && self.d.window.wx_triggered
-                {
-                    map = TILE_MAP_1;
-                }
+                #[cfg(feature = "debug")]
+                self.trace_tile_fetch(self.d.window.wx_triggered);
 
                 let y = self.fetcher_y_value();
-                let position = self.d.position_in_line;
-                let x: u16 = if self.d.window.wx_triggered {
-                    u16::from(self.d.window.tile_x)
-                } else if position.wrapping_add(16) < 8 {
-                    u16::from(self.scx >> 3)
-                } else {
-                    let sub = u16::from(self.is_cgb_hardware() && !self.d.obj_fetch.active);
-                    ((u16::from(self.scx) + u16::from(position) + 8 - sub) / 8)
-                        & (TILE_MAP_WIDTH - 1)
-                };
                 if model_ge_cgb_d(self.model) {
                     // Cached on CGB-D and newer, so it cannot mix tiles.
                     self.d.fetcher.y = y;
                 }
-                self.d.fetcher.tile_index_address = map + x + u16::from(y / 8) * TILE_MAP_WIDTH;
+                let window = self.d.window.wx_triggered;
+                self.d.fetcher.window_tile = window;
+                self.d.fetcher.tile_index_address = self.tile_index_address(window, y);
+                // Where the tile would be if the window were off by the time
+                // it is read (see `GetTileT2`).
+                self.d.fetcher.bg_index_address =
+                    self.tile_index_address(false, self.d.current_line.wrapping_add(self.scy));
                 self.d.fetcher.step = self.d.fetcher.step.next();
             }
             FetcherStep::GetTileT2 => {
@@ -155,7 +179,17 @@ impl Ppu {
                     self.d.fetcher.step = self.d.fetcher.step.next();
                     return;
                 }
-                let address = self.d.fetcher.tile_index_address;
+                // The DMG picks the map at the moment of the read, and "in
+                // window" fell with LCDC bit 5: the tile comes from the
+                // background's map.
+                let address = if self.d.fetcher.window_tile
+                    && self.lcdc & LCDC_WIN_EN_B == 0
+                    && !self.is_cgb_hardware()
+                {
+                    self.d.fetcher.bg_index_address
+                } else {
+                    self.d.fetcher.tile_index_address
+                };
                 self.d.fetcher.tile = self.vram_read(address);
                 if self.is_cgb_hardware() {
                     self.d.fetcher.attributes = self.vram_read(address + VRAM_BANK1);

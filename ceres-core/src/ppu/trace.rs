@@ -1,6 +1,7 @@
 //! What the CPU saw of the PPU (the `debug` feature): its LCD interrupt
 //! requests, its STAT and LYC writes and the values STAT and LY reads
-//! returned, each with where the display and the timing unit were.
+//! returned, each with where the display and the timing unit were; and what
+//! the pixel pipeline did: the pixels it pushed and the tile fetches it began.
 
 use {
     super::{LCDC_ON_B, Ppu},
@@ -19,8 +20,13 @@ pub enum PpuEventKind {
     StatRead(u8),
     /// The CPU read LY and got this value.
     LyRead(u8),
-    /// The CPU wrote this value to STAT (`0xFF41`) or LYC (`0xFF45`).
+    /// The CPU wrote this value to LCDC (`0xFF40`), STAT (`0xFF41`), LYC
+    /// (`0xFF45`) or WX (`0xFF4B`).
     Write { addr: u16, value: u8 },
+    /// The pipeline pushed the pixel of column `x` to the LCD.
+    Pixel { x: u8 },
+    /// The background fetcher began a tile: the window's or the background's.
+    TileFetch { window: bool },
 }
 
 /// An event and where the display was.
@@ -110,7 +116,17 @@ impl Ppu {
         self.trace.lcd_requests = requests;
     }
 
-    /// The CPU wrote `value` to STAT or LYC.
+    /// The pipeline pushed the pixel of column `x`.
+    pub(super) fn trace_pixel(&mut self, x: u8) {
+        self.record(PpuEventKind::Pixel { x });
+    }
+
+    /// The background fetcher began a tile.
+    pub(super) fn trace_tile_fetch(&mut self, window: bool) {
+        self.record(PpuEventKind::TileFetch { window });
+    }
+
+    /// The CPU wrote `value` to LCDC, STAT, LYC or WX.
     pub(super) fn trace_write(&mut self, addr: u16, value: u8) {
         self.record(PpuEventKind::Write { addr, value });
     }

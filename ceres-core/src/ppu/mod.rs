@@ -346,6 +346,8 @@ impl Ppu {
     }
 
     pub(crate) fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts) {
+        #[cfg(feature = "debug")]
+        self.trace_write(0xFF40, val);
         let was_on = self.lcdc & LCDC_ON_B != 0;
         let is_on = val & LCDC_ON_B != 0;
 
@@ -448,7 +450,13 @@ impl Ppu {
         self.trace_requests(ints);
     }
 
-    pub(crate) const fn write_wx(&mut self, val: u8) {
+    #[cfg_attr(
+        not(feature = "debug"),
+        expect(clippy::missing_const_for_fn, reason = "the debug feature traces it")
+    )]
+    pub(crate) fn write_wx(&mut self, val: u8) {
+        #[cfg(feature = "debug")]
+        self.trace_write(0xFF4B, val);
         self.wx = val;
     }
 

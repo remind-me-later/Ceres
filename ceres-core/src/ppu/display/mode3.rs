@@ -164,6 +164,8 @@ impl Ppu {
                     self.d.obj_fetch.aborted = false;
                     self.d.obj_fetch.active = false;
                     if let Some(out) = self.render_pixel_if_possible() {
+                        #[cfg(feature = "debug")]
+                        self.trace_pixel(out.lx);
                         self.output_pixel(out);
                     }
                     self.advance_fetcher();
