@@ -22,14 +22,22 @@
 //! presents it. The first frame after the LCD is turned on is left out: the
 //! LCD does not show it, and the model does not write it.
 //!
+//! `--pixels FILE` also writes what the pixel pipeline did, a line each:
+//! `<line> P <x> <t>` for a pixel pushed to the LCD (column x) and
+//! `<line> T <w|b> <t>` for a tile fetch begun (the window's or the
+//! background's) and `<line> W <40|42|43|47|4B> <value> <t>` for a write to LCDC,
+//! SCY, SCX, BGP or WX, with t the half dots since the line began on the
+//! pipeline's clock; the model's testbench writes the same (`PIXELS`), for
+//! `hdl/compare-pixels.sh`.
+//!
 //! `--bootrom FILE` runs another boot ROM, such as dmg-sim's quickboot, which
 //! skips the logo but leaves the machine as the real one does.
 //!
 //! Usage: `cargo run -p ceres-test-runner --example bus_trace -- <rom>
-//! [--bootrom FILE] [--mcycles N] [--out FILE] [--frames FILE]`
+//! [--bootrom FILE] [--mcycles N] [--out FILE] [--frames FILE] [--pixels FILE]`
 
 use anyhow::{Context as _, Result, bail};
-use ceres_core::{GbBuilder, IoAccess, MemoryAccess, Model, PX_HEIGHT, PX_WIDTH};
+use ceres_core::{GbBuilder, IoAccess, MemoryAccess, Model, PX_HEIGHT, PX_WIDTH, PpuEventKind};
 use ceres_test_runner::{DummyAudioCallback, load_test_rom};
 use std::{
     fs::File,
@@ -38,7 +46,7 @@ use std::{
 };
 
 const USAGE: &str = "\
-usage: bus_trace <rom> [--bootrom FILE] [--mcycles N] [--out FILE] [--frames FILE]
+usage: bus_trace <rom> [--bootrom FILE] [--mcycles N] [--out FILE] [--frames FILE] [--pixels FILE]
 
 <rom> is a path, or one under external/test-roms.
 --mcycles: M-cycles to trace from the first access (1048576, a second, by
@@ -87,6 +95,7 @@ fn trace<W: Write>(
     mcycles: u64,
     mut out: W,
     mut frames: Option<BufWriter<File>>,
+    mut pixels: Option<BufWriter<File>>,
 ) -> Result<()> {
     let rom = read_rom(rom)?;
     let mut builder = GbBuilder::new(48000, DummyAudioCallback)
@@ -100,6 +109,7 @@ fn trace<W: Write>(
     }
     let mut gb = builder.build();
     gb.set_bus_log(true);
+    gb.set_ppu_trace(pixels.is_some());
 
     let mut first = None;
     // The last access, written once the next one is in another M-cycle.
@@ -111,6 +121,29 @@ fn trace<W: Write>(
     let mut unshown = true;
     loop {
         gb.step();
+        if let Some(pixels) = pixels.as_mut() {
+            for event in gb.take_ppu_trace() {
+                let t = 2 * event.line_clock + i32::from(event.second_half);
+                match event.kind {
+                    PpuEventKind::Pixel { x } => writeln!(pixels, "{} P {x} {t}", event.line)?,
+                    PpuEventKind::TileFetch { window } => {
+                        let kind = if window { 'w' } else { 'b' };
+                        writeln!(pixels, "{} T {kind} {t}", event.line)?;
+                    }
+                    PpuEventKind::Write { addr, value }
+                        if matches!(addr, 0xFF40 | 0xFF42 | 0xFF43 | 0xFF47 | 0xFF4B) =>
+                    {
+                        writeln!(
+                            pixels,
+                            "{} W {:02X} {value:02X} {t}",
+                            event.line,
+                            addr & 0xFF
+                        )?;
+                    }
+                    _ => {}
+                }
+            }
+        }
         if let Some(frames) = frames.as_mut() {
             // A step is a fraction of a line: the frame is still the one
             // presented when LY reached 144.
@@ -145,6 +178,9 @@ fn trace<W: Write>(
                 if let Some(frames) = frames.as_mut() {
                     frames.flush()?;
                 }
+                if let Some(pixels) = pixels.as_mut() {
+                    pixels.flush()?;
+                }
                 if dropped > 0 {
                     eprintln!("{dropped} accesses dropped (two in one M-cycle)");
                 }
@@ -175,6 +211,7 @@ fn main() -> Result<()> {
     let mut out = None;
     let mut bootrom = None;
     let mut frames = None;
+    let mut pixels = None;
     while let Some(arg) = args.next() {
         let mut value = |name: &str| {
             args.next()
@@ -184,6 +221,7 @@ fn main() -> Result<()> {
             "--mcycles" => mcycles = value("--mcycles")?.parse()?,
             "--out" => out = Some(PathBuf::from(value("--out")?)),
             "--frames" => frames = Some(PathBuf::from(value("--frames")?)),
+            "--pixels" => pixels = Some(PathBuf::from(value("--pixels")?)),
             "--bootrom" => bootrom = Some(PathBuf::from(value("--bootrom")?)),
             "--help" | "-h" => {
                 println!("{USAGE}");
@@ -201,6 +239,13 @@ fn main() -> Result<()> {
                 .with_context(|| format!("can't create {}", path.display()))
         })
         .transpose()?;
+    let pixels = pixels
+        .map(|path| {
+            File::create(&path)
+                .map(BufWriter::new)
+                .with_context(|| format!("can't create {}", path.display()))
+        })
+        .transpose()?;
     let traced = match out {
         Some(path) => {
             let file =
@@ -211,6 +256,7 @@ fn main() -> Result<()> {
                 mcycles,
                 BufWriter::new(file),
                 frames,
+                pixels,
             )
         }
         None => trace(
@@ -219,6 +265,7 @@ fn main() -> Result<()> {
             mcycles,
             BufWriter::new(io::stdout().lock()),
             frames,
+            pixels,
         ),
     };
     // A reader that has seen enough (`| head`) isn't an error.

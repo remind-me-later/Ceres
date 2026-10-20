@@ -389,7 +389,13 @@ impl Ppu {
         self.write_lyc_reg(val);
     }
 
-    pub(crate) const fn write_bgp(&mut self, val: u8) {
+    #[cfg_attr(
+        not(feature = "debug"),
+        expect(clippy::missing_const_for_fn, reason = "the debug feature traces it")
+    )]
+    pub(crate) fn write_bgp(&mut self, val: u8) {
+        #[cfg(feature = "debug")]
+        self.trace_write(0xFF47, val);
         self.bgp = val;
     }
 
@@ -405,7 +411,13 @@ impl Ppu {
         self.opri = val & 1 != 0;
     }
 
-    pub(crate) const fn write_scx(&mut self, val: u8) {
+    #[cfg_attr(
+        not(feature = "debug"),
+        expect(clippy::missing_const_for_fn, reason = "the debug feature traces it")
+    )]
+    pub(crate) fn write_scx(&mut self, val: u8) {
+        #[cfg(feature = "debug")]
+        self.trace_write(0xFF43, val);
         self.scx = val;
     }
 
@@ -434,7 +446,13 @@ impl Ppu {
         }
     }
 
-    pub(crate) const fn write_scy(&mut self, val: u8) {
+    #[cfg_attr(
+        not(feature = "debug"),
+        expect(clippy::missing_const_for_fn, reason = "the debug feature traces it")
+    )]
+    pub(crate) fn write_scy(&mut self, val: u8) {
+        #[cfg(feature = "debug")]
+        self.trace_write(0xFF42, val);
         self.scy = val;
     }
 

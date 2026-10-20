@@ -21,7 +21,8 @@ pub enum PpuEventKind {
     /// The CPU read LY and got this value.
     LyRead(u8),
     /// The CPU wrote this value to LCDC (`0xFF40`), STAT (`0xFF41`), LYC
-    /// (`0xFF45`) or WX (`0xFF4B`).
+    /// (`0xFF45`), SCY (`0xFF42`), SCX (`0xFF43`), BGP (`0xFF47`) or
+    /// WX (`0xFF4B`).
     Write { addr: u16, value: u8 },
     /// The pipeline pushed the pixel of column `x` to the LCD.
     Pixel { x: u8 },
@@ -126,7 +127,7 @@ impl Ppu {
         self.record(PpuEventKind::TileFetch { window });
     }
 
-    /// The CPU wrote `value` to LCDC, STAT, LYC or WX.
+    /// The CPU wrote `value` to LCDC, SCY, SCX, STAT, BGP, LYC or WX.
     pub(super) fn trace_write(&mut self, addr: u16, value: u8) {
         self.record(PpuEventKind::Write { addr, value });
     }
