@@ -709,8 +709,11 @@ begin
 	obj_a <= sp_a(7) and lcdc(1);
 	obj_b <= sp_b(7) and lcdc(1);
 
+	-- A sprite's A plane is the tile's high byte (read second) and B the low
+	-- one (read first), the other way round from the background's A and B:
+	-- the palette picks 2*A + B (the cells of OBP0 and OBP1).
 	show_sprite <= (obj_a or obj_b) and not (sp_priority(7) and (bg_a or bg_b));
-	pixel       <= obj_b & obj_a when show_sprite = '1' else bg_b & bg_a;
+	pixel       <= obj_a & obj_b when show_sprite = '1' else bg_b & bg_a;
 
 	palette <= bgp when show_sprite = '0' else
 	           obp1 when sp_palette(7) = '1' else

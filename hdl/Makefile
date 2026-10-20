@@ -45,12 +45,13 @@ QUICKBOOT := $(DMG_SIM)/boot/quickboot.bin
 FASTBOOT  := $(BUILD)/fastboot.bin
 APU_ROM   := $(BUILD)/apu.gb
 CPU_ROM   := $(BUILD)/cpu.gb
+SPRITES_ROM := $(BUILD)/sprites.gb
 
 abs = $(abspath $(1))
 
 .PHONY: all run phases smoke model run-model check clean
 
-all: $(VVP) $(FASTBOOT) $(APU_ROM) $(CPU_ROM)
+all: $(VVP) $(FASTBOOT) $(APU_ROM) $(CPU_ROM) $(SPRITES_ROM)
 
 # A boot ROM that only turns the LCD on and goes to 0100, for the checks
 # of the readable model, which do not need the boot ROM's timing:
@@ -61,8 +62,8 @@ $(FASTBOOT):
 	{ printf '\061\376\377\076\221\340\100\076\001\303\376\000'; \
 	  head -c 242 /dev/zero; printf '\340\120'; } >$@
 
-# The stimuli of the APU and the CPU core, for the checks too
-# (check/apu.asm, check/cpu.asm).
+# The stimuli of the APU, the CPU core and the PPU's sprites, for the checks too
+# (check/apu.asm, check/cpu.asm, check/sprites.asm).
 $(BUILD)/%.gb: check/%.asm
 	mkdir -p $(BUILD)
 	rgbasm -o $(BUILD)/$*.o $<

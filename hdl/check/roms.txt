@@ -31,6 +31,9 @@ gbmicrotest external/test-roms/gbmicrotest/vram_read_l1_a.gb 0.25
 gbmicrotest external/test-roms/gbmicrotest/ppu_sprite_testbench.gb 0.05
 gbmicrotest external/test-roms/gbmicrotest/ppu_win_vs_wx.gb 0.05
 gbmicrotest external/test-roms/gbmicrotest/ppu_scx_vs_bgp.gb 0.05
+# Sprites with tiles of one bit plane each (check/sprites.asm, which make
+# builds): the pixels' two bits, which no ROM above tells apart.
+gbmicrotest hdl/build/sprites.gb 0.07
 
 # The APU (they report no result either): channel 4 alone, and all four
 # channels with check/apu.asm, which make builds.
