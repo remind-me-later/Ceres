@@ -22,6 +22,9 @@
 # poweron_* and Mooneye's boot_*). TEST=gbmicrotest (or mooneye, blargg)
 # ends the run when the test reports its result, usually within a frame.
 #
+# PIXELS=1 also compares the pixel pipeline's timeline (model-pixels.txt and
+# ceres-pixels.txt, compare-pixels.sh).
+#
 # The screen is compared too: every whole frame on the LCD, as the model's
 # LCD pins draw it (FRAMES) and as ceres presents it (bus_trace --frames),
 # in model-frames.txt and ceres-frames.txt (a line of 160 digits per row, 0
@@ -54,15 +57,23 @@ if [ -z "${NOFRAMES:-}" ]; then
 	frames_ceres=$dir/ceres-frames.txt
 fi
 
+pixels_model= pixels_ceres=
+if [ -n "${PIXELS:-}" ]; then
+	pixels_model=$dir/model-pixels.txt
+	pixels_ceres=$dir/ceres-pixels.txt
+fi
+
 (cd "$dir" && nvc --std=2008 -H 64m --work="$HDL/build/model/work" -e --jit gameboy_tb \
 	-gBOOTROM="$BOOTROM" -gROM="$ROOT/$rom" -gSECS="$secs" -gBUS_TRACE="$dir/model.txt" \
-	${TEST:+"-gTEST=$TEST"} ${frames_model:+"-gFRAMES=$frames_model"} -r >model.log 2>&1)
+	${TEST:+"-gTEST=$TEST"} ${frames_model:+"-gFRAMES=$frames_model"} \
+	${pixels_model:+"-gPIXELS=$pixels_model"} -r >model.log 2>&1)
 
 # The same M-cycles from ceres: up to the model's last, which may be cut.
 mcycles=$(tail -n 1 "$dir/model.txt" | cut -d ' ' -f 1)
 sed -i "/^$mcycles /,\$d" "$dir/model.txt"
 "$ROOT/target/release/examples/bus_trace" "$ROOT/$rom" --bootrom "$BOOTROM" \
-	--mcycles "$mcycles" --out "$dir/ceres.txt" ${frames_ceres:+--frames "$frames_ceres"}
+	--mcycles "$mcycles" --out "$dir/ceres.txt" ${frames_ceres:+--frames "$frames_ceres"} \
+	${pixels_ceres:+--pixels "$pixels_ceres"}
 
 status=0
 echo "$rom: $(wc -l <"$dir/model.txt") accesses in $mcycles M-cycles"
@@ -72,6 +83,12 @@ else
 	# The first difference, with the accesses before it.
 	diff -U 8 "$dir/ceres.txt" "$dir/model.txt" | awk '/^@@/ { n++ } n == 1' | head -n 40
 	status=1
+fi
+
+# What the pixel pipeline did, a line at a time (compare-pixels.sh), with
+# PIXELS=1.
+if [ -n "$pixels_model" ]; then
+	"$HDL/compare-pixels.sh" "$pixels_model" "$pixels_ceres" || status=1
 fi
 
 # The frames (compare-frames.sh).

@@ -18,6 +18,12 @@
 -- writes them (../compare-ceres.sh): "frame N", then 144 lines of 160 digits,
 -- the pixels' two bits (0 white, 3 black).
 --
+-- PIXELS gets what the pixel pipeline does, a line each (../compare-pixels.sh,
+-- as ceres's bus_trace writes them): "<LY> P <x> <t>" for a pixel the LCD
+-- takes (column x) and "<LY> T <w|b> <t>" for a tile fetch that begins (the
+-- window's or the background's) and "<LY> W <40|42|43|47|4B> <value> <t>"
+-- for a change of LCDC, SCY, SCX, BGP or WX, t in half dots of the crystal.
+--
 -- BUS_TRACE gets a line per memory access of the CPU, as ceres's example
 -- bus_trace writes them (../compare-ceres.sh): the M-cycle, counted from
 -- the CPU's first access, R or W, the address and the byte, in hexadecimal.
@@ -43,7 +49,8 @@ entity gameboy_tb is
 		SERIAL_FILE : string := "";
 		SCREEN      : string := "";
 		FRAMES      : string := "";
-		BUS_TRACE   : string := ""
+		BUS_TRACE   : string := "";
+		PIXELS      : string := ""
 	);
 end entity;
 
@@ -235,6 +242,77 @@ begin
 					write(l, integer'image(mcycle) & ' ' & kind & ' ' & to_hstring(address) & ' '
 						& to_hstring(to_x01(db)));
 					writeline(f, l);
+				end if;
+			end if;
+		end loop;
+	end process;
+
+	-- The pixels the LCD takes, and the tiles the fetcher starts.
+	pixel_events : process
+		alias tile_map  is << signal .gameboy_tb.u_gameboy.u_chip.u_render.tile_map_cycle : std_ulogic >>;
+		alias in_window is << signal .gameboy_tb.u_gameboy.u_chip.u_render.in_window : std_ulogic >>;
+		alias ly        is << signal .gameboy_tb.u_gameboy.u_chip.ly : unsigned(7 downto 0) >>;
+		alias lcdc      is << signal .gameboy_tb.u_gameboy.u_chip.lcdc : std_ulogic_vector(7 downto 0) >>;
+		alias wx        is << signal .gameboy_tb.u_gameboy.u_chip.u_render.wx : std_ulogic_vector(7 downto 0) >>;
+		alias scy       is << signal .gameboy_tb.u_gameboy.u_chip.u_render.scy : std_ulogic_vector(7 downto 0) >>;
+		alias scx       is << signal .gameboy_tb.u_gameboy.u_chip.u_render.scx : std_ulogic_vector(7 downto 0) >>;
+		alias bgp       is << signal .gameboy_tb.u_gameboy.u_chip.u_render.bgp : std_ulogic_vector(7 downto 0) >>;
+		file f          : text;
+		variable l      : line;
+		variable x      : natural range 0 to 161 := 0;
+
+		procedure event(what : string) is
+		begin
+			write(l, integer'image(to_integer(ly)) & ' ' & what & ' ' & integer'image(now / 119 ns));
+			writeline(f, l);
+		end procedure;
+
+		procedure take_pixel is
+		begin
+			if x < 160 then
+				event("P " & integer'image(x));
+			end if;
+			if x < 161 then
+				x := x + 1;
+			end if;
+		end procedure;
+	begin
+		if PIXELS = "" then
+			wait;
+		end if;
+		file_open(f, PIXELS, write_mode);
+		loop
+			wait until falling_edge(cp) or falling_edge(st) or rising_edge(cpl) or rising_edge(tile_map)
+				or lcdc'event or wx'event or scy'event or scx'event or bgp'event
+				or rising_edge(in_window);
+			if falling_edge(cp) then
+				take_pixel;
+				if st = '1' then
+					x := 0;
+				end if;
+			elsif falling_edge(st) or rising_edge(cpl) then
+				take_pixel;
+			elsif lcdc'event then
+				event("W 40 " & to_hstring(lcdc));
+			elsif wx'event then
+				event("W 4B " & to_hstring(wx));
+			elsif scy'event then
+				event("W 42 " & to_hstring(scy));
+			elsif scx'event then
+				event("W 43 " & to_hstring(scx));
+			elsif bgp'event then
+				event("W 47 " & to_hstring(bgp));
+			elsif rising_edge(in_window) then
+				-- The window starts in the middle of a tile fetch: it restarts
+				-- (a start before the fetch has its own fetch).
+				if tile_map = '1' then
+					event("T w");
+				end if;
+			elsif rising_edge(tile_map) then
+				if in_window = '1' then
+					event("T w");
+				else
+					event("T b");
 				end if;
 			end if;
 		end loop;

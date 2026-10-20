@@ -207,6 +207,26 @@ screen):
 BOOT=quick ./compare-ceres.sh external/test-roms/dmg-acid2/dmg-acid2.gb 0.6
 ```
 
+When the pictures differ, `PIXELS=1` also compares what the pixel pipeline
+did, line by line (`compare-pixels.sh`, `model-pixels.txt` and
+`ceres-pixels.txt`): when each pixel was pushed to the LCD, when each tile
+fetch began, in the window or in the background, and when the ROM wrote
+LCDC, SCY, SCX, BGP or WX, all in half dots from the line's first pixel. Two
+timelines that agree while the pictures differ mean that the difference is in
+the data (a map, a row, a palette), not in the timing; with a name
+for the line, `compare-pixels.sh model-pixels.txt ceres-pixels.txt 16` shows
+only that line.
+
+```bash
+BOOT=quick PIXELS=1 NOFRAMES=1 ./compare-ceres.sh \
+	external/test-roms/mealybug-tearoom-tests/ppu/m3_lcdc_win_en_change_multiple_wx.gb 0.5
+```
+
+The two sides place some events by their own conventions: the model's tile
+fetches begin half a dot sooner than ceres's, which the script corrects; and
+a register's write lands, on each side, a fixed dot or so apart from the
+other's (the same in every line), which it does not.
+
 Over gbmicrotest, ceres and the model make the same accesses in 491 ROMs
 of 513. The others differ in three ways (see also
 [results.md](results.md)):

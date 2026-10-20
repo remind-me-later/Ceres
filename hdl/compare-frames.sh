@@ -43,7 +43,7 @@ awk '
 		for (f = 0; f < shown; f++) {
 			n = 0
 			for (y = 0; y < 144; y++) {
-				a = pix[1, f + first[1], y]; b = pix[2, f + first[2], y]
+				a = pix[1, f + first[1], y] ""; b = pix[2, f + first[2], y] ""   # as strings: awk compares digits as numbers
 				if (a == b) continue
 				for (x = 1; x <= 160; x++) {
 					m = substr(a, x, 1); c = substr(b, x, 1)

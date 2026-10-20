@@ -116,39 +116,115 @@ the same values, finished at the same times. It took 9 minutes.
 `compare-ceres.sh` also compares the frames (see the [README](README.md#comparing-ceres-with-it)).
 The 32 ROMs of Mealybug Tearoom's `ppu/` directory, run for 0.5 s from
 quickboot, make the same accesses on ceres and on the readable model in all
-of them. Their pictures:
+of them. Their pictures, as `compare-frames.sh` finds them:
 
-- Identical in all frames (6): `m2_win_en_toggle`, `m3_scx_high_5_bits`,
-  `m3_wx_4_change`, `m3_wx_4_change_sprites`, `m3_wx_5_change` and
-  `m3_wx_6_change`.
+- Identical in all frames (7): `m2_win_en_toggle`, `m3_scx_high_5_bits`,
+  `m3_wx_4_change`, `m3_wx_4_change_sprites`, `m3_wx_5_change`,
+  `m3_wx_6_change` and `win_without_bg`.
 - Different in the first picture only, the same afterwards (16): 3 to 38
-  pixels in 14 of them, mostly in the first line (`m3_lcdc_bg_en_change2`,
-  `m3_lcdc_bg_map_change`, `m3_scy_change2` 8 and so on), and `m3_scy_change`
-  139 and `m3_lcdc_win_en_change_multiple` 2471.
-- Different in the last picture too (7), in this many pixels:
-  `m3_bgp_change` 496, `m3_bgp_change_sprites` 120,
-  `m3_lcdc_obj_en_change_variant` 144, `m3_window_timing` 138,
-  `m3_window_timing_wx_0` 144, `win_without_bg` 281 and
-  `m3_lcdc_win_en_change_multiple_wx` 18.
+  pixels in 13 of them, `m3_scy_change` 139,
+  `m3_lcdc_win_en_change_multiple_wx` 151 and
+  `m3_lcdc_win_en_change_multiple` 7121.
+- Different in the last picture too (6), in this many pixels:
+  `m3_bgp_change` 496, `m3_bgp_change_sprites` 328,
+  `m3_lcdc_obj_en_change_variant` 144, `m3_scx_high_5_bits_change2` 30,
+  `m3_window_timing` 138 and `m3_window_timing_wx_0` 144.
 - Nothing drawn in 0.5 s, on either side (3): `m3_lcdc_obj_en_change`,
   `m3_obp0_change` and `m3_scx_low_3_bits` (they need more `SECS`).
 
 `dmg-acid2` differs only in its first picture (62 pixels).
 
-The first run of the comparison had 140 pixels differing in six of these
-ROMs and 570 in `dmg-acid2`, all of them sprite pixels with one of their two
-bits where the other should be (a tile with only its low plane set came out
-as colour 2). The model's mix of a sprite's pixel had its A and B planes the
-wrong way round: in the netlist, the palette cells of OBP0 and OBP1 pick
-`2*A + B`, A being the plane latched from the tile's second byte. dmg-sim
-agrees with ceres on a ROM that tells the planes apart (`check/sprites.asm`,
-now one of the checked ROMs: the check fails on the old mix with `ld is 10,
-dmg-sim 01` and passes on the new one), and it showed that the first frame
-after the LCD is turned on is displaced by a line on the pins, which is why
-neither side writes it.
+Where the real DMG's screenshots (`*_dmg_blob.png`) can decide, the
+comparison with them says who is right: the settled pictures of ceres and of
+the model are the screenshots, pixel for pixel, in `m2_win_en_toggle`,
+`m3_scy_change`, `m3_scx_high_5_bits`, `m3_wx_4/5/6_change`,
+`m3_wx_4_change_sprites`, `m3_lcdc_obj_size_change(_scx)`,
+`m3_lcdc_win_en_change_multiple` and `m3_lcdc_win_en_change_multiple_wx`;
+ceres's alone, in `m3_bgp_change`, `m3_bgp_change_sprites`,
+`m3_window_timing`, `m3_window_timing_wx_0` and
+`m3_lcdc_obj_en_change_variant`.
 
-Which of the two is right in the rest is not settled by the comparison.
-Where the screenshots of the real DMG (`*_dmg_blob.png`) have four gray
-levels, ceres matches `m3_bgp_change` and `m3_lcdc_obj_size_change` pixel
-for pixel, as it does the shade counts of `dmg-acid2-dmg.png`; the model's
-pictures have not been compared with the hardware's.
+### What the differences were
+
+The comparison, and the work that followed it, found these, in the order
+they were found:
+
+- **Sprite planes, in the model.** 140 pixels in six ROMs and 570 in
+  `dmg-acid2` were sprite pixels with one of their two bits where the other
+  belongs (a tile with only its low plane set came out as colour 2). The
+  model's mix of a sprite's pixel had its A and B planes the wrong way
+  round: in the netlist, the palette cells of OBP0 and OBP1 pick `2*A + B`,
+  A being the plane latched from the tile's second byte. dmg-sim agrees with
+  ceres on a ROM that tells the planes apart (`check/sprites.asm`, now one of
+  the checked ROMs: the check fails on the old mix with `ld is 10, dmg-sim
+  01` and passes on the new one). It also showed that the first frame after
+  the LCD is turned on is displaced by a line on the pins, which is why
+  neither side writes it.
+- **The window's enable bit, in ceres.** `m3_lcdc_win_en_change_multiple_wx`
+  (43 pixels off the screenshot; its DMG test was ignored) had three causes,
+  all found by comparing the pixel timelines with the model's: the DMG's
+  "in window" falls with LCDC bit 5 at once, so a tile that began in the
+  window reads its number from the background's map, and its data with the
+  background's row, if bit 5 falls before the read (ceres decided both when
+  the fetch began); and a window that starts a pixel after its WX matched
+  did not overwrite the pixel before it (ceres stepped the LCD column back,
+  SameBoy's "horizontal desync"; no test of ceres's suite reaches that, and
+  the screenshot contradicts it). The ceres test passes now.
+- **The sprite address, in the model.** At a write to LCDC the register
+  shows FF for a moment, until the bus has the data. When that moment began
+  a nanosecond before the address of a sprite fetch was released, bit 2
+  (8×16 sprites) forced a bit of the address and the bus kept the glitch:
+  `ma` differed from dmg-sim's at a phase end in
+  `m3_lcdc_obj_en_change_variant`.
+  The drivers of the PPU's addresses now filter pulses shorter than 2 ns,
+  not 1; all the recordings still match, and this one now matches dmg-sim to
+  the end.
+
+### Where the model differs from dmg-sim, on purpose
+
+At a window start the fetch counter is reset, and when it was at 3 its bit 1
+falls a moment before MYSO does, so the clock of the tile register pulses
+for no time and the register takes the VRAM bus, which is still precharged
+(FF). dmg-sim, whose gates are slower than that pulse is wide, does not
+show it: the check on `m3_window_timing` and on
+`m3_lcdc_win_en_change_multiple_wx` differs there (`bg_tile` FF, `ld` 11
+where dmg-sim has 01). The real DMG does: with the pulse, the model's picture
+of `m3_lcdc_win_en_change_multiple_wx` is the screenshot's, pixel for pixel,
+and so is `m3_scy_change`'s; with a 1 ns delay on the clock (which makes the
+check pass) it is not (2109 pixels off in the first, 354 in the second).
+The model keeps the pulse: it is the die's, and the hardware shows it;
+`render.vhd` says so. Those two recordings are not among the checked ROMs.
+
+### Where the model and dmg-sim agree and the hardware does not
+
+In `m3_bgp_change`, `m3_bgp_change_sprites`, `m3_window_timing_wx_0` and
+`m3_lcdc_obj_en_change_variant` the model matches dmg-sim to the end of the
+run and ceres's test of the screenshot passes. What the netlist and its fitted delays
+give differs from the chip in how a register write lines up with the pixel
+clock:
+
+- At every write to BGP the register shows FF for 39 ns, until the data
+  arrives, and `ld` follows; the model (and dmg-sim) draw a black pixel where
+  a pixel is taken in that moment. The screenshots have none of them (496
+  pixels in `m3_bgp_change`), and the end of a line in
+  `m3_lcdc_obj_en_change_variant`, where BGP is written, shows the new
+  palette a pixel earlier than the model does. Sampling `ld` at the other
+  edge of CP gives the same pictures.
+- The window of `m3_window_timing` and `m3_window_timing_wx_0`, whose WX the
+  ROM writes in every line, starts a pixel later in the model than in the
+  screenshot, with the stall in the same place: the first window pixel
+  replaces the old pixel there, not the one after.
+
+These are where the netlist is not enough: the real delays of the write path
+(how long the bus is precharged, how long the latch takes) are what they
+turn on. They are open.
+
+### Not looked into
+
+- The 16 ROMs that differ in the first picture only: in every one the model's
+  first picture is the same as its later ones and ceres's is not (in
+  `m3_scy_change`, in its first two lines, where the pixel timelines of the
+  two sides are the same). No screenshot shows those frames.
+- `m3_scx_high_5_bits_change2` (30 pixels, seven lines, a hole of four pixels
+  in the model where SCX changes): no screenshot; its recording on dmg-sim is
+  listed in `check/roms.txt`.

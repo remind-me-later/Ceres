@@ -353,6 +353,14 @@ begin
 	-- the low byte is latched in count 3.
 	-- @hw die: RAWA..PYJU (dffr_cc_q), MOFU LEBO LUVE LABU; LEGU..NEFO
 	-- (dlatch_ee_q), NYDY
+	-- When the window starts while the counter is at 3, it is reset to 0 and
+	-- its bit 1 falls a moment before MYSO does: this clock pulses for no
+	-- time, and the register takes the bus, which is still precharged.
+	-- dmg-sim, whose gates are slower than that pulse is wide, does not
+	-- show it (build/check on m3_window_timing differs there); the screens
+	-- of the real DMG do: with this pulse the model draws
+	-- m3_lcdc_win_en_change_multiple_wx and m3_scy_change as the hardware
+	-- does, and without it (a delay on the clock) it does not.
 	bg_tile_clock <= myso and not fetch_count(1);
 
 	tile_ff : process (bg_tile_clock)
