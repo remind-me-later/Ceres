@@ -41,7 +41,10 @@ begin
 	-- LCDC is a set of latches, open while the CPU writes it.
 	-- @hw die: VYXE XYLO XYMO XAFO WEXU WYMO WOKY XONA (drlatch_ee), WARU
 	-- XUBO XURE, XARE
-	write_lcdc <= '1' when cpu_wr = '1' and addr = x"FF40" else '0';
+	-- It opens 3 ns after the CPU's strobe and the address, as dmg-sim's gates
+	-- do, and closes with it: opening at once showed a change of the sprites'
+	-- size to the OAM scan that dmg-sim does not (Gambatte's late_sizechange2).
+	write_lcdc <= '1' after 3 ns when cpu_wr = '1' and addr = x"FF40" else '0';
 
 	lcdc_latch : process (all)
 	begin

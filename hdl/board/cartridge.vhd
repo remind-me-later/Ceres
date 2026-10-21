@@ -100,7 +100,10 @@ architecture board of cartridge is
 
 	-- The MBC's registers
 	signal enabled  : std_ulogic := '0';
-	signal rom_bank : unsigned(8 downto 0) := (others => '0');
+	-- (A real MBC5 powers up with bank 1 at 4000 to 7FFF, as the MBC1 does;
+	-- dmg-sim's board starts the MBC5 at 0, and ROMs that call into the second
+	-- bank without selecting it, such as Gambatte's, need 1.)
+	signal rom_bank : unsigned(8 downto 0) := to_unsigned(1, 9);
 	signal ram_bank : unsigned(3 downto 0) := (others => '0');
 	signal mode     : std_ulogic := '0';
 
@@ -133,7 +136,7 @@ begin
 	begin
 		if reset_n = '0' then
 			enabled  <= '0';
-			rom_bank <= (others => '0');
+			rom_bank <= to_unsigned(1, 9);
 			ram_bank <= (others => '0');
 			mode     <= '0';
 		elsif rising_edge(wr_n) and not is_x(a(15 downto 12)) then
