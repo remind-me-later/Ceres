@@ -204,17 +204,20 @@ The model keeps the pulse: it is the die's, and the hardware shows it;
 
 In `m3_bgp_change`, `m3_bgp_change_sprites`, `m3_window_timing_wx_0` and
 `m3_lcdc_obj_en_change_variant` the model matches dmg-sim to the end of the
-run and ceres's test of the screenshot passes. What the netlist and its fitted delays
-give differs from the chip in how a register write lines up with the pixel
-clock:
+run and ceres's test of the screenshot passes. What the netlist and its
+fitted delays give differs from the chip in how a register write lines up with
+the pixel clock:
 
-- At every write to BGP the register shows FF for 39 ns, until the data
-  arrives, and `ld` follows; the model (and dmg-sim) draw a black pixel where
-  a pixel is taken in that moment. The screenshots have none of them (496
-  pixels in `m3_bgp_change`), and the end of a line in
-  `m3_lcdc_obj_en_change_variant`, where BGP is written, shows the new
-  palette a pixel earlier than the model does. Sampling `ld` at the other
-  edge of CP gives the same pictures.
+- Each write to BGP leaves a black pixel at the change of palette on the
+  real DMG: the screenshot of `m3_bgp_change` has 15 pixels of the darkest
+  shade in a line where the model has 12, and ceres, which draws them,
+  matches it exactly. In the model and in dmg-sim the register does show FF
+  for 39 ns while the write's data is on its way (`ld` follows), but the LCD
+  takes no pixel in that moment in these ROMs. The real chip's glitch is
+  wider, or the pixel is sampled elsewhere, or both; sampling `ld` at the
+  other edge of CP gives the same pictures. The end of a line in
+  `m3_lcdc_obj_en_change_variant`, where BGP is written, is the same kind of
+  difference: ceres draws black from a pixel earlier than the model does.
 - The window of `m3_window_timing` and `m3_window_timing_wx_0`, whose WX the
   ROM writes in every line, starts a pixel later in the model than in the
   screenshot, with the stall in the same place: the first window pixel
