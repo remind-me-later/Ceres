@@ -241,6 +241,15 @@ of 513. The others differ in three ways (see also
 - With quickboot, the timer's enable (`halt_bug`, `004-tima_boot_phase`):
   the netlist counts on enabling the timer, ceres and the real DMG do not.
 
+### Gambatte's ROMs
+
+`run-gambatte.sh` runs Gambatte's DMG test ROMs (the ones whose names carry
+`dmg08_out`) on the model from quickboot, 16 frames after the ROM starts,
+reads the digits in the top row of the screen with Gambatte's glyphs, as
+ceres's `gambatte_dmg` does, and compares them with the digits in the file's
+name. Each takes a minute or two, six at a time; `STRIDE=8` runs every eighth.
+The results are in `build/gambatte/results.txt` (see [results.md](results.md)).
+
 ### Checking it
 
 The model is checked against dmg-sim phase by phase: the probe

@@ -238,3 +238,43 @@ turn on. They are open.
 - `m3_scx_high_5_bits_change2` (30 pixels, seven lines, a hole of four pixels
   in the model where SCX changes): the model matches dmg-sim to the end of
   the run, so it is the netlist's against ceres's; no screenshot shows it.
+
+## The tests that ceres ignores
+
+Of the tests ceres ignores, the ones for CGB and MGB models do not apply to a
+DMG-CPU B. For the others (all run from the real boot ROM, 6 s of emulated
+time, and compared with the real DMG's screenshot where there is one):
+
+- Mealybug's `m3_lcdc_bg_en_change` ("fails, not investigated yet"): the model
+  fails it in the same four pixels as ceres (column 0 of lines 19 to 22, black
+  where the screenshot is white).
+- Mealybug's eight DMG tests with no screenshot upstream: the model's picture is
+  ceres's in all but `m3_scx_high_5_bits_change2` (30 pixels, see above).
+- `strikethrough` (the OAM DMA quirk, "not emulated"): **the model draws the
+  screenshot pixel for pixel**; ceres is 7 pixels off. The netlist has the
+  quirk.
+- `age m3-bg-bgp` (DMG): the model is 40 pixels off the screenshot, ceres 2; the
+  model's are the black pixels at the writes to BGP that it lacks (see above).
+- `little-things-gb tellinglys` (DMG): the model fails in the same 5064 pixels as
+  ceres.
+- Blargg's `oam_bug` ROMs: not run. They take 50 to 100 s of emulated time and
+  test the OAM corruption bug, which dmg-sim's default build does not have.
+- gbmicrotest's `halt_op_dupe_delay` and `stat_write_glitch_l154_d`: the model
+  fails them with the values ceres does (above).
+- Gambatte's `gambatte_dmg` (ignored for its length): `hdl/run-gambatte.sh` runs
+  its ROMs on the model from quickboot and reads the digits as ceres does. Every
+  eighth of the 1747 ROMs, 207 of them: **190 pass, 17 fail**, all in `oamdma`:
+  the `busypush` and `busyread` ROMs, where the CPU pushes to, or reads, the
+  area at `FE00`/`FEA0` while an OAM DMA runs (for instance a read of `FEFF` gives
+  `FF` on the model, `00` on the hardware). The model matches dmg-sim to the
+  end of the one of them that was recorded, so these are the netlist's and the
+  board's, not the model's.
+
+Running them found two mistakes in the model's own test bench, now fixed. Its
+MBC5 started with ROM bank 0 at `4000` to `7FFF` (dmg-sim's board does; a real
+chip starts with bank 1), which broke every Gambatte ROM that calls into the
+second bank. And the write strobe of LCDC opened as soon as the CPU's write
+did, a few nanoseconds before dmg-sim's, which made the model see a change of
+the sprites' size during the OAM scan that dmg-sim does not
+(`sprites/late_sizechange2_*`): the strobe opens 3 ns later now, and all the
+recordings, the Mealybug pictures and these ROMs agree.
