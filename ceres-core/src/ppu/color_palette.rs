@@ -68,6 +68,9 @@ const PAL_RAM_SIZE_COLORS: u8 = PAL_RAM_SIZE * 3;
 pub(crate) struct ColorPalette {
     // Rgb color ram
     buffer: [u8; PAL_RAM_SIZE_COLORS as usize],
+    /// Bit 15 of each color, which the display ignores but the CPU reads back
+    /// as written.
+    bit15: [bool; PAL_RAM_SIZE as usize],
     spec: u8,
 }
 
@@ -75,6 +78,7 @@ impl Default for ColorPalette {
     fn default() -> Self {
         Self {
             buffer: [0; PAL_RAM_SIZE_COLORS as usize],
+            bit15: [false; PAL_RAM_SIZE as usize],
             spec: 0,
         }
     }
@@ -126,7 +130,12 @@ impl ColorPalette {
             // green and blue
             let g = self.buffer[i + 1] >> 3;
             let b = self.buffer[i + 2] << 2;
-            g | b
+            let bit15 = if self.bit15[index as usize / 2] {
+                0x80
+            } else {
+                0
+            };
+            g | b | bit15
         }
     }
 
@@ -240,6 +249,8 @@ impl ColorPalette {
             self.buffer[i + 1] = tmp | ((val & 3) << 3);
             // blue
             self.buffer[i + 2] = (val & 0x7C) >> 2;
+            // unused bit
+            self.bit15[index as usize / 2] = val & 0x80 != 0;
         }
     }
 
@@ -310,5 +321,39 @@ const fn squeeze_contrast(rgb: Rgb, ranges: Rgb<ChannelRange>) -> Rgb {
         r: ranges.r.squeeze(r * 15 / 16 + (g + b) / 32),
         g: ranges.g.squeeze(g * 15 / 16 + (r + b) / 32),
         b: ranges.b.squeeze(b * 15 / 16 + (r + g) / 32),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use {super::ColorPalette, crate::ppu::ColorCorrectionMode};
+
+    /// Game Boy Wars 3 writes palette bytes with bit 7 set and loops until the
+    /// read-back matches.
+    #[test]
+    fn every_data_bit_reads_back() {
+        let mut palette = ColorPalette::default();
+        for index in 0..0x40 {
+            for val in [0x00, 0x80, 0xCA, 0xFF] {
+                palette.set_spec(index);
+                palette.set_data(val);
+                assert_eq!(palette.data(), val, "index {index:#04x}");
+            }
+        }
+    }
+
+    #[test]
+    fn bit_15_does_not_change_the_color() {
+        let mut palette = ColorPalette::default();
+        palette.set_spec(1);
+        palette.set_data(0x7C);
+        let blue = palette.rgb(0, 0, ColorCorrectionMode::Disabled);
+        palette.set_spec(1);
+        palette.set_data(0xFC);
+        let with_bit_15 = palette.rgb(0, 0, ColorCorrectionMode::Disabled);
+        assert_eq!(
+            (blue.r, blue.g, blue.b),
+            (with_bit_15.r, with_bit_15.g, with_bit_15.b)
+        );
     }
 }
