@@ -22,7 +22,8 @@ entity vram_bus is
 
 		-- The CPU's bus
 		addr          : in    std_ulogic_vector(15 downto 0);
-		data          : inout std_logic_vector(7 downto 0);
+		data          : in std_logic_vector(7 downto 0);
+		data_out : out std_logic_vector(7 downto 0);
 		cpu_rd        : in    std_ulogic;
 		write         : in    std_ulogic;  -- the CPU core writes
 		non_vram_mreq : in    std_ulogic;
@@ -113,7 +114,7 @@ begin
 
 	-- The CPU reads VRAM in phases G and H.
 	-- @hw die: TYVY SEBY, RUGA..TOKU (not_if1)
-	data <= to_x01(md) when cpu_vram = '1' and cpu_rd = '1' and clk_t4 = '1' else (others => 'Z');
+	data_out <= to_x01(md) when cpu_vram = '1' and cpu_rd = '1' and clk_t4 = '1' else (others => 'Z');
 
 	-- /MCS is low while anyone uses VRAM; /MRD unless the CPU writes it, or
 	-- in mode 3, unless the PPU reads it; /MWR while the CPU writes it, in

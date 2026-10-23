@@ -32,7 +32,8 @@ entity apu_ch2 is
 
 		-- The CPU's bus
 		addr   : in    std_ulogic_vector(15 downto 0);
-		data   : inout std_logic_vector(7 downto 0);
+		data   : in std_logic_vector(7 downto 0);
+		data_out : out std_logic_vector(7 downto 0);
 		cpu_rd : in    std_ulogic;
 		cpu_wr : in    std_ulogic;
 
@@ -381,7 +382,7 @@ begin
 	-- @hw die: CORO CECY CEKA, GURU GEXA HUVU..HYRY, HUMA GOJY; FAPE GUZA
 	-- FUTY HYPO, FAVA..GAZO HUNA JARO JEKE
 	----------------------------------------------------------------------
-	data <= duty & "ZZZZZZ" when cpu_rd = '1' and addr = x"FF16" else
+	data_out <= duty & "ZZZZZZ" when cpu_rd = '1' and addr = x"FF16" else
 	        envelope when cpu_rd = '1' and addr = x"FF17" else
 	        std_ulogic_vector(counter(7 downto 0)) when cpu_rd = '1' and addr = x"FF18" and test = '1' else
 	        'Z' & length_on & "ZZZ" & std_ulogic_vector(counter(10 downto 8))

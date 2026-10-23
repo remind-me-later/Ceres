@@ -24,7 +24,8 @@ entity divider is
 
 		-- The CPU's bus
 		addr   : in    std_ulogic_vector(15 downto 0);
-		data   : inout std_logic_vector(7 downto 0);
+		data   : in std_logic_vector(7 downto 0);
+		data_out : out std_logic_vector(7 downto 0);
 		cpu_rd : in    std_ulogic;
 		cpu_wr : in    std_ulogic;
 
@@ -63,5 +64,5 @@ begin
 	div <= count;
 
 	-- @hw die: TAGY, TAWU TAKU TEMU TUSE UPUG SEPU SAWA TATU (not_if1)
-	data <= std_logic_vector(count(13 downto 6)) when cpu_rd = '1' and addr = x"FF04" else (others => 'Z');
+	data_out <= std_logic_vector(count(13 downto 6)) when cpu_rd = '1' and addr = x"FF04" else (others => 'Z');
 end architecture;

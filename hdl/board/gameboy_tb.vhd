@@ -50,7 +50,14 @@ entity gameboy_tb is
 		SCREEN      : string := "";
 		FRAMES      : string := "";
 		BUS_TRACE   : string := "";
-		PIXELS      : string := ""
+		PIXELS      : string := "";
+
+		-- Without the sound channels, which are not simulated: faster (see
+		-- dmg_cpu_b)
+		WITH_CHANNELS : boolean := true;
+
+		-- VRAM starting with zeros (see gameboy)
+		VRAM_ZERO : boolean := false
 	);
 end entity;
 
@@ -98,7 +105,7 @@ architecture run of gameboy_tb is
 begin
 	u_gameboy : entity work.gameboy
 		generic map (
-			ROM => ROM, BOOTROM => BOOTROM
+			ROM => ROM, BOOTROM => BOOTROM, WITH_CHANNELS => WITH_CHANNELS, VRAM_ZERO => VRAM_ZERO
 		)
 		port map (
 			sin => sin, sout => sout, sck => sck,

@@ -21,7 +21,14 @@ entity gameboy is
 		-- half period of 119.2 ns); dmg-sim's runs at 119 ns, the half period
 		-- rounded to its unit of time, and so does this one by default, so
 		-- that the two keep the same time.
-		T_HALF : time := 119 ns
+		T_HALF : time := 119 ns;
+
+		-- Whether the chip has its four sound channels (see dmg_cpu_b)
+		WITH_CHANNELS : boolean := true;
+
+		-- Whether the VRAM chip starts with zeros, as dmg-sim's quickboot
+		-- leaves it, instead of arbitrary bytes (hdl/boot/tinyboot.asm)
+		VRAM_ZERO : boolean := false
 	);
 	port (
 		-- The buttons held down: Start, Select, B, A, Down, Up, Left, Right
@@ -62,6 +69,15 @@ architecture board of gameboy is
 		return r;
 	end function;
 
+	-- The VRAM at power-on: arbitrary, or zeros (VRAM_ZERO).
+	function vram_power_on(zero : boolean) return bytes_t is
+	begin
+		if zero then
+			return (0 to 8191 => (others => '0'));
+		end if;
+		return arbitrary(8192, 2);
+	end function;
+
 	signal ck1     : std_ulogic := '0';
 	signal ck2     : std_ulogic;
 	signal reset_n : std_ulogic := '0';
@@ -83,7 +99,7 @@ architecture board of gameboy is
 	signal p14, p15 : std_logic;
 
 	signal work_ram  : bytes_t(0 to 8191) := arbitrary(8192, 1);
-	signal video_ram : bytes_t(0 to 8191) := arbitrary(8192, 2);
+	signal video_ram : bytes_t(0 to 8191) := vram_power_on(VRAM_ZERO);
 begin
 	-- The crystal, between CK1 and CK2 (the chip's inverter): CK1 takes the
 	-- value of CK2 half a period later. The reset holds for 64 periods.
@@ -97,7 +113,7 @@ begin
 
 	u_chip : entity work.dmg_cpu_b
 		generic map (
-			BOOTROM => BOOTROM
+			BOOTROM => BOOTROM, WITH_CHANNELS => WITH_CHANNELS
 		)
 		port map (
 			ck1 => ck1, ck2 => ck2, reset_n => reset_n, t1 => '0', t2 => '0',

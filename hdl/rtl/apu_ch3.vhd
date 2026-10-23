@@ -34,7 +34,8 @@ entity apu_ch3 is
 
 		-- The CPU's bus
 		addr   : in    std_ulogic_vector(15 downto 0);
-		data   : inout std_logic_vector(7 downto 0);
+		data   : in std_logic_vector(7 downto 0);
+		data_out : out std_logic_vector(7 downto 0);
 		cpu_rd : in    std_ulogic;
 		cpu_wr : in    std_ulogic;
 
@@ -368,7 +369,7 @@ begin
 	-- fetch, and are precharged (FF) otherwise.
 	-- @hw die: FASY GEKO, HENU HAMU HUCO, GAWA HACA; DUGU..BEZU (not_if1)
 	----------------------------------------------------------------------
-	data <= dac_on_i & "ZZZZZZZ" when cpu_rd = '1' and addr = x"FF1A" else
+	data_out <= dac_on_i & "ZZZZZZZ" when cpu_rd = '1' and addr = x"FF1A" else
 	        'Z' & level & "ZZZZZ" when cpu_rd = '1' and addr = x"FF1C" else
 	        'Z' & length_on & "ZZZZZZ" when cpu_rd = '1' and addr = x"FF1E" else
 	        bit_lines when cpu_rd = '1' and wave_area = '1' else

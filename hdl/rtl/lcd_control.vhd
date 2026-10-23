@@ -16,7 +16,8 @@ entity lcd_control is
 
 		-- The CPU's bus
 		addr   : in    std_ulogic_vector(15 downto 0);
-		data   : inout std_logic_vector(7 downto 0);
+		data   : in std_logic_vector(7 downto 0);
+		data_out : out std_logic_vector(7 downto 0);
 		cpu_rd : in    std_ulogic;
 		cpu_wr : in    std_ulogic;
 
@@ -63,5 +64,5 @@ begin
 	ppu_reset <= not lcdc_i(7) or reset2;
 
 	-- @hw die: VYRE WYCE, WYPO XERO WYJU WUKA VOKE VATO VAHA XEBU (not_if0)
-	data <= lcdc_i when cpu_rd = '1' and addr = x"FF40" else (others => 'Z');
+	data_out <= lcdc_i when cpu_rd = '1' and addr = x"FF40" else (others => 'Z');
 end architecture;

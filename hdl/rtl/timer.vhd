@@ -22,7 +22,8 @@ entity timer is
 
 		-- The CPU's bus
 		addr   : in    std_ulogic_vector(15 downto 0);
-		data   : inout std_logic_vector(7 downto 0);
+		data   : in std_logic_vector(7 downto 0);
+		data_out : out std_logic_vector(7 downto 0);
 		cpu_rd : in    std_ulogic;
 		cpu_wr : in    std_ulogic;
 
@@ -134,7 +135,7 @@ begin
 	int_timer <= int_timer_i;
 
 	-- @hw die: TEDA TUBY SORA, SOKU..PUSO SETE..SAPU RYLA ROTE SUPE (not_if1)
-	data <= tima when cpu_rd = '1' and addr = x"FF05" else
+	data_out <= tima when cpu_rd = '1' and addr = x"FF05" else
 	        tma when cpu_rd = '1' and addr = x"FF06" else
 	        "ZZZZZ" & tac when cpu_rd = '1' and addr = x"FF07" else
 	        (others => 'Z');

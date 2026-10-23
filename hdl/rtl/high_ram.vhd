@@ -22,7 +22,8 @@ entity high_ram is
 	port (
 		-- The CPU's bus
 		addr   : in    std_ulogic_vector(15 downto 0);
-		data   : inout std_logic_vector(7 downto 0);
+		data   : in std_logic_vector(7 downto 0);
+		data_out : out std_logic_vector(7 downto 0);
 		cpu_rd : in    std_ulogic;
 		cpu_wr : in    std_ulogic
 	);
@@ -47,5 +48,5 @@ begin
 	end process;
 
 	-- @hw die: ABUF APOW, high_ram
-	data <= ram(index) when selected = '1' and cpu_rd = '1' else (others => 'Z');
+	data_out <= ram(index) when selected = '1' and cpu_rd = '1' else (others => 'Z');
 end architecture;

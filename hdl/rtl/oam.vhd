@@ -26,7 +26,8 @@ entity oam is
 
 		-- The CPU's bus
 		addr   : in    std_ulogic_vector(15 downto 0);
-		data   : inout std_logic_vector(7 downto 0);
+		data   : in std_logic_vector(7 downto 0);
+		data_out : out std_logic_vector(7 downto 0);
 		cpu_rd : in    std_ulogic;
 		cpu_wr : in    std_ulogic;
 
@@ -219,7 +220,7 @@ begin
 
 	-- The CPU reads OAM from the first latches, in phases G and H.
 	-- @hw die: LEKO MYNU, WUKU WEWU GUKO WUME, and the buf_if0 onto d0..d7
-	data <= first_odd when cpu_access = '1' and cpu_rd = '1' and clk_t4 = '1' and addr_i(0) = '1' else
+	data_out <= first_odd when cpu_access = '1' and cpu_rd = '1' and clk_t4 = '1' and addr_i(0) = '1' else
 	        first_even when cpu_access = '1' and cpu_rd = '1' and clk_t4 = '1' and addr_i(0) = '0' else
 	        (others => 'Z');
 end architecture;

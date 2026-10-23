@@ -34,7 +34,8 @@ entity apu_ch1 is
 
 		-- The CPU's bus
 		addr   : in    std_ulogic_vector(15 downto 0);
-		data   : inout std_logic_vector(7 downto 0);
+		data   : in std_logic_vector(7 downto 0);
+		data_out : out std_logic_vector(7 downto 0);
 		cpu_rd : in    std_ulogic;
 		cpu_wr : in    std_ulogic;
 
@@ -508,7 +509,7 @@ begin
 	-- NR14 read the frequency counter.
 	-- @hw die: ATYN ASOP, BEXU, HAMY HOCU, BALE BYTU; DAXA DYPU EVAJ DUPY
 	----------------------------------------------------------------------
-	data <= 'Z' & sweep when cpu_rd = '1' and addr = x"FF10" else
+	data_out <= 'Z' & sweep when cpu_rd = '1' and addr = x"FF10" else
 	        duty & "ZZZZZZ" when cpu_rd = '1' and addr = x"FF11" else
 	        envelope when cpu_rd = '1' and addr = x"FF12" else
 	        std_ulogic_vector(counter(7 downto 0)) when cpu_rd = '1' and addr = x"FF13" and test = '1' else

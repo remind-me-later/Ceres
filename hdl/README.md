@@ -176,8 +176,9 @@ TEST=gbmicrotest ./compare-ceres.sh external/test-roms/gbmicrotest/line_153_ly_a
 The boot ROM is `build/fastboot.bin`, which turns the LCD on and jumps to
 the cartridge right after the reset; `BOOT=quick` runs dmg-sim's quickboot
 instead, 150 ms longer, for the ROMs that test the state the real boot ROM
-leaves. `TEST` ends the run at the test's result. A gbmicrotest takes about
-a second this way, and the 513 of them 10 minutes, six at a time:
+leaves (`BOOT=tiny`, below, has its state in less time). `TEST` ends the run
+at the test's result. A gbmicrotest takes about a second this way, and the 513
+of them 10 minutes, six at a time:
 
 ```bash
 ls ../external/test-roms/gbmicrotest/*.gb | sed 's|^\.\./||' |
@@ -244,11 +245,43 @@ of 513. The others differ in three ways (see also
 ### Gambatte's ROMs
 
 `run-gambatte.sh` runs Gambatte's DMG test ROMs (the ones whose names carry
-`dmg08_out`) on the model from quickboot, 16 frames after the ROM starts,
-reads the digits in the top row of the screen with Gambatte's glyphs, as
-ceres's `gambatte_dmg` does, and compares them with the digits in the file's
-name. Each takes a minute or two, six at a time; `STRIDE=8` runs every eighth.
-The results are in `build/gambatte/results.txt` (see [results.md](results.md)).
+`dmg08_out`) on the model from the short boot ROM (below), 16 frames after
+the ROM starts, reads the digits in the top row of the screen with Gambatte's
+glyphs, as ceres's `gambatte_dmg` does, and compares them with the digits in
+the file's name. Each takes a minute or so, `JOBS` at a time (default six);
+`STRIDE=8` runs every eighth; `BOOT=quick` runs quickboot instead. The
+results are in `build/gambatte/results.txt` (see [results.md](results.md)).
+
+### Making a run shorter
+
+The model's time goes to the simulator's events, not to the code it runs, so
+what helps is fewer events and less simulated time:
+
+- `BOOT=tiny` starts the ROM from `build/tinyboot.bin` (`boot/tinyboot.asm`,
+  built with RGBDS by `make`): a 256-byte boot ROM that does not clear VRAM
+  and leaves the machine as quickboot does, to the cycle, at the ROM's entry:
+  the LCD on, the divider and the PPU in the same phase, the registers and
+  the stack as quickboot leaves them. It reaches the ROM after 17841
+  M-cycles instead of 158449, which is 0.13 s less of the Game Boy's time.
+  It needs `-gVRAM_ZERO=true` (the script passes it): the board's VRAM chip
+  then powers up zeroed, as quickboot's cleared VRAM. Over the 513
+  gbmicrotest ROMs and the 1575 Gambatte DMG ROMs, ceres makes the same
+  accesses from tinyboot as from quickboot; on the model, the 207 Gambatte
+  ROMs sampled give the same results. The sound is not matched (the APU's
+  sequencer and the envelopes start in another phase), so it is not for the
+  sound tests.
+- `APU=0` (`-gWITH_CHANNELS=false` of `dmg_cpu_b`) leaves out the four sound
+  channels, whose outputs read as zero. Not for ROMs that read NR52's bits
+  0 to 3 or the channels' registers.
+- The `data` bus of each block is split into `data : in` and `data_out : out`
+  (the top ties them together): nvc cannot collapse the nets of an `inout`
+  port, and the 19 blocks that drive the bus made 22% of all the value
+  changes, in about 20 copies of it. That always applies.
+
+One Gambatte ROM, to 16 frames after its start, took 97 s before these
+(quickboot), takes 89 s with the split bus alone, 69 s from tinyboot, and 61 s
+without the channels. Optimisation levels, ahead-of-time compilation, `--jit`
+and `--no-collapse` do not change it (the last makes it 60% slower).
 
 ### Checking it
 

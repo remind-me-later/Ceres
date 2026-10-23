@@ -262,8 +262,9 @@ time, and compared with the real DMG's screenshot where there is one):
 - gbmicrotest's `halt_op_dupe_delay` and `stat_write_glitch_l154_d`: the model
   fails them with the values ceres does (above).
 - Gambatte's `gambatte_dmg` (ignored for its length): `hdl/run-gambatte.sh` runs
-  its ROMs on the model from quickboot and reads the digits as ceres does. Every
-  eighth of the 1747 ROMs, 207 of them: **190 pass, 17 fail**, all in `oamdma`:
+  its ROMs on the model (from quickboot or the short boot ROM, with the same
+  results) and reads the digits as ceres does. Every eighth of the 1747 ROMs,
+  207 of them: **190 pass, 17 fail**, all in `oamdma`:
   the `busypush` and `busyread` ROMs, where the CPU pushes to, or reads, the
   area at `FE00`/`FEA0` while an OAM DMA runs (for instance a read of `FEFF` gives
   `FF` on the model, `00` on the hardware). The model matches dmg-sim to the

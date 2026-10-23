@@ -32,7 +32,8 @@ entity apu_ch4 is
 
 		-- The CPU's bus
 		addr   : in    std_ulogic_vector(15 downto 0);
-		data   : inout std_logic_vector(7 downto 0);
+		data   : in std_logic_vector(7 downto 0);
+		data_out : out std_logic_vector(7 downto 0);
 		cpu_rd : in    std_ulogic;
 		cpu_wr : in    std_ulogic;
 
@@ -401,7 +402,7 @@ begin
 	-- Reads: NR42, NR43, NR44's bit 6.
 	-- @hw die: HASU, HEZE KEKA JORA, BARE CURY; BAGU ATEL (test)
 	----------------------------------------------------------------------
-	data <= envelope when cpu_rd = '1' and addr = x"FF21" else
+	data_out <= envelope when cpu_rd = '1' and addr = x"FF21" else
 	        noise when cpu_rd = '1' and addr = x"FF22" else
 	        'Z' & length_on & "ZZZZZ" & (counter_clock and bypass) when cpu_rd = '1' and addr = x"FF23" and test = '1' else
 	        'Z' & length_on & "ZZZZZZ" when cpu_rd = '1' and addr = x"FF23" else

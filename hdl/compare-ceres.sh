@@ -21,6 +21,11 @@
 # the real boot ROM does (for the tests of that state, such as gbmicrotest's
 # poweron_* and Mooneye's boot_*). TEST=gbmicrotest (or mooneye, blargg)
 # ends the run when the test reports its result, usually within a frame.
+# BOOT=tiny runs build/tinyboot.bin, which leaves the machine as quickboot does
+# (the same accesses, in the 513 gbmicrotest and the 1575 Gambatte ROMs
+# compared) in a ninth of the time: 17.8 thousand M-cycles, not 158 thousand.
+# It is not for sound tests; APU=0 leaves out the four sound channels (15 %
+# faster, nothing sounds, their registers read as unconnected).
 # BOOT=real runs the real DMG boot ROM (external/gb-bootroms), for the ROMs
 # that need the state it leaves and do nothing after quickboot: Mealybug's
 # m3_lcdc_obj_en_change, m3_obp0_change and m3_scx_low_3_bits, which draw
@@ -46,6 +51,13 @@ ROOT=$(cd -- "$HDL/.." && pwd)
 BOOTROM=$HDL/build/fastboot.bin
 [ "${BOOT:-fast}" = quick ] && BOOTROM=$ROOT/external/reference-implementations/dmg-sim/boot/quickboot.bin
 [ "${BOOT:-fast}" = real ] && BOOTROM=$ROOT/external/gb-bootroms/bin/dmg.bin
+# BOOT=tiny: quickboot's machine in a ninth of its time, the VRAM zeroed by the
+# board (boot/tinyboot.asm); for the model, which simulates the boot slowly.
+vram_zero=
+if [ "${BOOT:-fast}" = tiny ]; then
+	BOOTROM=$HDL/build/tinyboot.bin
+	vram_zero=true
+fi
 
 [ $# -ge 1 ] || { echo "usage: $0 <ROM> [SECS]" >&2; exit 2; }
 rom=$1
@@ -53,7 +65,7 @@ secs=${2:-0.1}
 dir=$HDL/build/compare/${rom%.gb}
 mkdir -p "$dir"
 
-make -C "$HDL" -s model build/fastboot.bin
+make -C "$HDL" -s model build/fastboot.bin build/tinyboot.bin
 cargo build -q --release --manifest-path "$ROOT/Cargo.toml" -p ceres-test-runner --example bus_trace
 
 frames_model= frames_ceres=
@@ -69,7 +81,7 @@ if [ -n "${PIXELS:-}" ]; then
 fi
 
 (cd "$dir" && nvc --std=2008 -H 64m --work="$HDL/build/model/work" -e --jit gameboy_tb \
-	-gBOOTROM="$BOOTROM" -gROM="$ROOT/$rom" -gSECS="$secs" -gBUS_TRACE="$dir/model.txt" \
+	-gBOOTROM="$BOOTROM" ${vram_zero:+"-gVRAM_ZERO=$vram_zero"} ${APU:+"-gWITH_CHANNELS=false"} -gROM="$ROOT/$rom" -gSECS="$secs" -gBUS_TRACE="$dir/model.txt" \
 	${TEST:+"-gTEST=$TEST"} ${frames_model:+"-gFRAMES=$frames_model"} \
 	${pixels_model:+"-gPIXELS=$pixels_model"} -r >model.log 2>&1)
 

@@ -40,7 +40,8 @@ entity external_bus is
 
 		-- The CPU's bus
 		addr   : inout std_logic_vector(15 downto 0);
-		data   : inout std_logic_vector(7 downto 0);
+		data   : in std_logic_vector(7 downto 0);
+		data_out : out std_logic_vector(7 downto 0);
 		cpu_rd : out   std_ulogic;
 		cpu_wr : out   std_ulogic;
 
@@ -166,7 +167,7 @@ begin
 	-- (not_if0), SOLE LECO AFOP; RYMA..TAJU (not_if0); TUTY..TEMY (buf_if0)
 	precharge <= not exec_phase and not t1_only;
 
-	data <= (others => '1') when precharge = '1' else
+	data_out <= (others => '1') when precharge = '1' else
 	        latched_data when read_pins = '1' else
 	        to_x01(d_pins) when t1_only = '1' and to_x01(rd_n) = '1' else
 	        (others => 'Z');

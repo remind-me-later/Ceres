@@ -22,7 +22,8 @@ entity boot_rom is
 
 		-- The CPU's bus
 		addr   : in    std_ulogic_vector(15 downto 0);
-		data   : inout std_logic_vector(7 downto 0);
+		data   : in std_logic_vector(7 downto 0);
+		data_out : out std_logic_vector(7 downto 0);
 		cpu_rd : in    std_ulogic;
 		cpu_wr : in    std_ulogic;
 
@@ -71,7 +72,7 @@ begin
 	boot_sel   <= boot_sel_i;
 
 	-- @hw die: YULA YAZA, ZUFA ZADO, boot_rom
-	data <= rom(to_integer(to_01(unsigned(addr(7 downto 0))))) when cpu_rd = '1' and boot_sel_i = '1' and t2_only = '0' else
+	data_out <= rom(to_integer(to_01(unsigned(addr(7 downto 0))))) when cpu_rd = '1' and boot_sel_i = '1' and t2_only = '0' else
 	        "ZZZZZZZ" & unmapped when cpu_rd = '1' and addr = x"FF50" else
 	        (others => 'Z');
 end architecture;

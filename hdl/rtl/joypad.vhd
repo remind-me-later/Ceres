@@ -20,7 +20,8 @@ entity joypad is
 
 		-- The CPU's bus
 		addr   : in    std_ulogic_vector(15 downto 0);
-		data   : inout std_logic_vector(7 downto 0);
+		data   : in std_logic_vector(7 downto 0);
+		data_out : out std_logic_vector(7 downto 0);
 		cpu_rd : in    std_ulogic;
 		cpu_wr : in    std_ulogic;
 
@@ -94,7 +95,7 @@ begin
 	end process;
 
 	-- @hw die: KEMA KURO KUVE JEKU KOCE CUDY (not_if0)
-	data <= "ZZ" & p1(5 downto 4) & read_value when read_p1 = '1' else (others => 'Z');
+	data_out <= "ZZ" & p1(5 downto 4) & read_value when read_p1 = '1' else (others => 'Z');
 
 	-- A button is pressed when one of P10 to P13 is low. The interrupt is
 	-- requested when that is so at the start of an M-cycle and was so three

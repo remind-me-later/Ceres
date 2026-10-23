@@ -6,13 +6,15 @@
 # A ROM's file name says what it shows on the screen on the hardware it was
 # checked on: "..._dmg08_out3.gbc" shows the digit 3 (the name has other
 # parts for other models; audio tests, which compare sound, are left out).
-# The model runs each ROM, in build/gambatte/<ROM>/, from quickboot, which
-# leaves the machine as the real boot ROM does, for SECS seconds from the
-# chip's reset (0.42, which is 16 frames after the ROM starts, as ceres's
-# gambatte_dmg test runs them), reads the digits in the top row of the last
+# The model runs each ROM, in build/gambatte/<ROM>/, from build/tinyboot.bin,
+# which leaves the machine as quickboot does and so, as nearly, as the real
+# boot ROM does (BOOT=quick runs quickboot itself, nine times slower to start),
+# for SECS seconds from the chip's reset (0.29, which is 16 frames after the ROM
+# starts, as ceres's gambatte_dmg test runs them; 0.42 with quickboot), reads the digits in the top row of the last
 # frame on the LCD with Gambatte's glyphs, and compares them. The results
 # are in build/gambatte/results.txt: PASS or FAIL, the ROM, the expected
-# digits and the digits read. Only the ROMs whose path contains one of the
+# digits and the digits read. APU=0 runs the model without the sound channels
+# (15 % faster; the ROMs that read their registers then fail). Only the ROMs whose path contains one of the
 # PATTERNs run, if there are any, and with STRIDE=n only every n-th of them
 # (the 1747 ROMs take most of a day). JOBS sets how many run at a time (6).
 
@@ -22,8 +24,17 @@ HDL=$(cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(cd -- "$HDL/.." && pwd)
 GAMBATTE=external/test-roms/gambatte
 OUT=$HDL/build/gambatte
-QUICKBOOT=$ROOT/external/reference-implementations/dmg-sim/boot/quickboot.bin
-SECS=${SECS:-0.42}
+if [ "${BOOT:-tiny}" = quick ]; then
+	BOOTROM=$ROOT/external/reference-implementations/dmg-sim/boot/quickboot.bin
+	SECS=${SECS:-0.42}
+	VRAM_ZERO=false
+else
+	BOOTROM=$HDL/build/tinyboot.bin
+	SECS=${SECS:-0.29}
+	VRAM_ZERO=true
+fi
+CHANNELS=true
+[ -n "${APU:-}" ] && CHANNELS=false
 
 # One ROM (the script calls itself for each, in parallel).
 if [ "${1:-}" = --one ]; then
@@ -43,7 +54,8 @@ if [ "${1:-}" = --one ]; then
 	dir=${dir%.*}
 	mkdir -p "$dir"
 	(cd "$dir" && nvc --std=2008 -H 64m --work="$HDL/build/model/work" -e --jit gameboy_tb \
-		-gBOOTROM="$QUICKBOOT" -gROM="$ROOT/$rom" -gSECS="$SECS" -gFRAMES="$dir/frames.txt" -r \
+		-gBOOTROM="$BOOTROM" -gVRAM_ZERO="$VRAM_ZERO" -gWITH_CHANNELS="$CHANNELS" \
+		-gROM="$ROOT/$rom" -gSECS="$SECS" -gFRAMES="$dir/frames.txt" -r \
 		>log.txt 2>&1) || true
 	got=$(awk -v n=${#expected} '
 		BEGIN {
@@ -82,7 +94,7 @@ if [ "${1:-}" = --one ]; then
 fi
 
 mkdir -p "$OUT"
-make -C "$HDL" -s model >/dev/null
+make -C "$HDL" -s model build/tinyboot.bin >/dev/null
 cd "$ROOT"
 : >"$OUT/results.txt"
 find "$GAMBATTE" \( -name '*.gb' -o -name '*.gbc' \) | sort |

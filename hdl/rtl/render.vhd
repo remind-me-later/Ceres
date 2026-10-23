@@ -33,7 +33,8 @@ entity render is
 
 		-- The CPU's bus
 		addr   : in    std_ulogic_vector(15 downto 0);
-		data   : inout std_logic_vector(7 downto 0);
+		data   : in std_logic_vector(7 downto 0);
+		data_out : out std_logic_vector(7 downto 0);
 		cpu_rd : in    std_ulogic;
 		cpu_wr : in    std_ulogic;
 
@@ -188,7 +189,7 @@ begin
 		end if;
 	end process;
 
-	data <= scy  when cpu_rd = '1' and addr = x"FF42" else
+	data_out <= scy  when cpu_rd = '1' and addr = x"FF42" else
 	        scx  when cpu_rd = '1' and addr = x"FF43" else
 	        bgp  when cpu_rd = '1' and addr = x"FF47" else
 	        obp0 when cpu_rd = '1' and addr = x"FF48" else

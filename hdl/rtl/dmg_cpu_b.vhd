@@ -23,7 +23,12 @@ use work.clocking.all;
 
 entity dmg_cpu_b is
 	generic (
-		BOOTROM : string  -- the file with the boot ROM's 256 bytes
+		BOOTROM : string;  -- the file with the boot ROM's 256 bytes
+
+		-- Without the four sound channels (the registers of the sound
+		-- controller stay) the simulation runs about 15 % faster; the
+		-- channels' registers read as unconnected, and nothing sounds.
+		WITH_CHANNELS : boolean := true
 	);
 	port (
 		-- The crystal, between CK1 and CK2
@@ -170,25 +175,25 @@ begin
 	u_divider : entity work.divider
 		port map (
 			clk => clk, phase => phase, reset => reset, osc_ena => osc_ena, test_fast => ff60(1),
-			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr, div => div
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr, div => div
 		);
 
 	u_timer : entity work.timer
 		port map (
 			clk => clk, phase => phase, clk_t4 => clk_t4, reset2 => reset2, div => div,
-			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr, int_timer => int_timer
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr, int_timer => int_timer
 		);
 
 	u_interrupts : entity work.interrupts
 		port map (
 			reset2 => reset2, requests => int_jp & int_serial & int_timer & int_stat & int_vbl,
-			acks => acks, addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr, flags => flags
+			acks => acks, addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr, flags => flags
 		);
 
 	u_serial : entity work.serial
 		port map (
 			reset2 => reset2, div => div,
-			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 			sin => sin, sout => sout, sck => sck,
 			test_pins => ff60(0), sin_drive => sin_drive, sout_test => sout_test,
 			int_serial => int_serial
@@ -197,7 +202,7 @@ begin
 	u_joypad : entity work.joypad
 		port map (
 			clk => clk, phase => phase, clk_1mhz => clk_1mhz, reset2 => reset2,
-			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 			p10_13 => p10_13, p14 => p14, p15 => p15,
 			test_pins => ff60(0), sin_drive => sin_drive, sout_test => sout_test,
 			int_jp => int_jp, cpu_wakeup => cpu_wakeup
@@ -216,12 +221,12 @@ begin
 		)
 		port map (
 			reset2 => reset2, t2_only => t2_only,
-			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr, boot_sel => boot_sel
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr, boot_sel => boot_sel
 		);
 
 	u_high_ram : entity work.high_ram
 		port map (
-			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr
 		);
 
 	u_external_bus : entity work.external_bus
@@ -231,7 +236,7 @@ begin
 			read => read, write => write, mreq => mreq, boot_sel => boot_sel,
 			dma_addr_ext => dma_addr_ext, dma_addr => dma_addr,
 			t1_only => t1_only, t2_only => t2_only,
-			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 			non_vram_mreq => non_vram_mreq,
 			a_pins => a, d_pins => d, rd_n => rd_n, wr_n => wr_n, cs_n => cs_n
 		);
@@ -242,7 +247,7 @@ begin
 	u_dma : entity work.dma
 		port map (
 			dma_phi => dma_phi, hard_reset => reset2,
-			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 			dma_run => dma_run, dma_addr => dma_addr, dma_addr_ext => dma_addr_ext,
 			vram_to_oam => vram_to_oam
 		);
@@ -250,7 +255,7 @@ begin
 	u_lcd_control : entity work.lcd_control
 		port map (
 			clk => clk, reset2 => reset2,
-			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 			lcdc => lcdc, ppu_4mhz => ppu_4mhz, hard_reset => hard_reset, ppu_reset => ppu_reset
 		);
 
@@ -258,7 +263,7 @@ begin
 		port map (
 			clk => clk, ppu_reset => ppu_reset, hard_reset => hard_reset, lcd_on => lcdc(7), div => div,
 			mode2 => mode2, mode3 => mode3, mode0 => mode0,
-			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 			wuvu => wuvu, wosu => wosu, hclk => hclk, vclk => vclk, lx => lx, ly => ly, mode1 => mode1,
 			int_vbl => int_vbl, int_stat => int_stat,
 			cpl => cpl, cpg => cpg, fr => fr, s => s
@@ -286,7 +291,7 @@ begin
 		port map (
 			clk => clk, hard_reset => hard_reset, clk_t4 => clk_t4, dma_phi => dma_phi,
 			wuvu => wuvu, wosu => wosu,
-			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 			dma_run => dma_run, dma_addr => dma_addr(7 downto 0), dma_addr_ext => dma_addr_ext,
 			vram_to_oam => vram_to_oam, d_pins => d, md => vram_data,
 			mode2 => mode2, mode3 => mode3, scan_index => scan_index, render_index => render_index,
@@ -298,7 +303,7 @@ begin
 		port map (
 			clk => clk, ppu_reset => ppu_reset, hard_reset => hard_reset, hclk => hclk,
 			mode1 => mode1, ly => ly, lcdc => lcdc,
-			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 			line_start => line_start, stop_scan => stop_scan, ceno => ceno, x_match => x_match,
 			sprite_line => render_line, tile => oam_even, attributes => oam_odd, md => vram_data,
 			mode3 => mode3, mode0 => mode0, px => px,
@@ -312,7 +317,7 @@ begin
 		port map (
 			hard_reset => hard_reset, clk_t4 => clk_t4, cpu_wr_sync => cpu_wr_sync,
 			cpu_ext_cs_en => cpu_ext_cs_en, t1_only => t1_only,
-			addr => addr, data => data, cpu_rd => cpu_rd, write => write, non_vram_mreq => non_vram_mreq,
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, write => write, non_vram_mreq => non_vram_mreq,
 			vram_to_oam => vram_to_oam, dma_addr => dma_addr(12 downto 0),
 			mode3 => mode3, fetching => fetching, sprite_read => sprite_read, sprite_mrd => sprite_mrd,
 			render_ma => render_ma, ma => vram_addr, md => vram_data,
@@ -323,7 +328,7 @@ begin
 		port map (
 			clk => clk, reset2 => reset2, data_phase => data_phase, clk_t4 => clk_t4, div => div,
 			t1_only => t1_only,
-			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 			apu_reset => apu_reset, apu_phi => apu_phi, test => apu_test,
 			ajer => ajer, ch1_1mhz => ch1_1mhz, ch2_1mhz => ch2_1mhz, ch3_2mhz => ch3_2mhz,
 			ch4_1mhz => ch4_1mhz, khz512 => khz512,
@@ -333,37 +338,48 @@ begin
 			so1 => so1, so2 => so2
 		);
 
-	u_apu_ch2 : entity work.apu_ch2
-		port map (
-			apu_reset => apu_reset, apu_phi => apu_phi, clk_t4 => clk_t4, ch2_1mhz => ch2_1mhz,
-			hz256 => hz256, hz128 => hz128, hz512 => hz512, test => apu_test,
-			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
-			active => apu_active(2), dac_on => apu_dac(2), output => ch2_out
-		);
+	channels : if WITH_CHANNELS generate
+		u_apu_ch2 : entity work.apu_ch2
+			port map (
+				apu_reset => apu_reset, apu_phi => apu_phi, clk_t4 => clk_t4, ch2_1mhz => ch2_1mhz,
+				hz256 => hz256, hz128 => hz128, hz512 => hz512, test => apu_test,
+				addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+				active => apu_active(2), dac_on => apu_dac(2), output => ch2_out
+			);
 
-	u_apu_ch1 : entity work.apu_ch1
-		port map (
-			apu_reset => apu_reset, apu_phi => apu_phi, clk_t4 => clk_t4, ajer => ajer, ch1_1mhz => ch1_1mhz,
-			hz256 => hz256, hz128 => hz128, hz128_ch1 => hz128_ch1, hz512 => hz512, test => apu_test,
-			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
-			active => apu_active(1), dac_on => apu_dac(1), output => ch1_out
-		);
+		u_apu_ch1 : entity work.apu_ch1
+			port map (
+				apu_reset => apu_reset, apu_phi => apu_phi, clk_t4 => clk_t4, ajer => ajer, ch1_1mhz => ch1_1mhz,
+				hz256 => hz256, hz128 => hz128, hz128_ch1 => hz128_ch1, hz512 => hz512, test => apu_test,
+				addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+				active => apu_active(1), dac_on => apu_dac(1), output => ch1_out
+			);
 
-	u_apu_ch3 : entity work.apu_ch3
-		port map (
-			clk => clk, apu_reset => apu_reset, apu_phi => apu_phi, clk_t4 => clk_t4, pch_phase => pch_phase,
-			ajer => ajer, ch3_2mhz => ch3_2mhz, hz256 => hz256, test => apu_test,
-			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
-			active => apu_active(3), dac_on => apu_dac(3), output => ch3_out
-		);
+		u_apu_ch3 : entity work.apu_ch3
+			port map (
+				clk => clk, apu_reset => apu_reset, apu_phi => apu_phi, clk_t4 => clk_t4, pch_phase => pch_phase,
+				ajer => ajer, ch3_2mhz => ch3_2mhz, hz256 => hz256, test => apu_test,
+				addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+				active => apu_active(3), dac_on => apu_dac(3), output => ch3_out
+			);
 
-	u_apu_ch4 : entity work.apu_ch4
-		port map (
-			apu_reset => apu_reset, apu_phi => apu_phi, clk_t4 => clk_t4, ch4_1mhz => ch4_1mhz, khz512 => khz512,
-			hz256 => hz256, hz128 => hz128, hz512 => hz512, test => apu_test,
-			addr => addr, data => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
-			active => apu_active(4), dac_on => apu_dac(4), output => ch4_out
-		);
+		u_apu_ch4 : entity work.apu_ch4
+			port map (
+				apu_reset => apu_reset, apu_phi => apu_phi, clk_t4 => clk_t4, ch4_1mhz => ch4_1mhz, khz512 => khz512,
+				hz256 => hz256, hz128 => hz128, hz512 => hz512, test => apu_test,
+				addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+				active => apu_active(4), dac_on => apu_dac(4), output => ch4_out
+			);
+	end generate;
+
+	no_channels : if not WITH_CHANNELS generate
+		apu_active <= (others => '0');
+		apu_dac    <= (others => '0');
+		ch1_out    <= (others => '0');
+		ch2_out    <= (others => '0');
+		ch3_out    <= (others => '0');
+		ch4_out    <= (others => '0');
+	end generate;
 
 	-- The bus keeper holds the last value driven onto the data bus.
 	keeper : process (data)

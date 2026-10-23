@@ -27,7 +27,8 @@ entity apu_control is
 
 		-- The CPU's bus
 		addr   : in    std_ulogic_vector(15 downto 0);
-		data   : inout std_logic_vector(7 downto 0);
+		data   : in std_logic_vector(7 downto 0);
+		data_out : out std_logic_vector(7 downto 0);
 		cpu_rd : in    std_ulogic;
 		cpu_wr : in    std_ulogic;
 
@@ -239,7 +240,7 @@ begin
 
 	-- The status: the power and the channels.
 	-- @hw die: JURE HOPE, DOLE COTO DURU EFUS FEWA FATE KAMU KOGE; ADAK, GUMU
-	data <= power & "ZZZ" & active(4) & active(3) & active(2) & active(1)
+	data_out <= power & "ZZZ" & active(4) & active(3) & active(2) & active(1)
 	            when cpu_rd = '1' and addr = x"FF26" else
 	        nr50 when cpu_rd = '1' and addr = x"FF24" else
 	        nr51 when cpu_rd = '1' and addr = x"FF25" else

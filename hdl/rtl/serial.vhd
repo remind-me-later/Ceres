@@ -18,7 +18,8 @@ entity serial is
 
 		-- The CPU's bus
 		addr   : in    std_ulogic_vector(15 downto 0);
-		data   : inout std_logic_vector(7 downto 0);
+		data   : in std_logic_vector(7 downto 0);
+		data_out : out std_logic_vector(7 downto 0);
 		cpu_rd : in    std_ulogic;
 		cpu_wr : in    std_ulogic;
 
@@ -157,7 +158,7 @@ begin
 	int_serial   <= int_serial_i;
 
 	-- @hw die: CUGY..ETAK (not_if1), CORE ELUV
-	data <= sb when read_sb = '1' else
+	data_out <= sb when read_sb = '1' else
 	        transfer & "ZZZZZZ" & internal_clock when read_sc = '1' else
 	        (others => 'Z');
 end architecture;

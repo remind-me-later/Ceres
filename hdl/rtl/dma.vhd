@@ -19,7 +19,8 @@ entity dma is
 
 		-- The CPU's bus
 		addr   : in    std_ulogic_vector(15 downto 0);
-		data   : inout std_logic_vector(7 downto 0);
+		data   : in std_logic_vector(7 downto 0);
+		data_out : out std_logic_vector(7 downto 0);
 		cpu_rd : in    std_ulogic;
 		cpu_wr : in    std_ulogic;
 
@@ -140,5 +141,5 @@ begin
 	vram_to_oam  <= run and from_vram;
 
 	-- @hw die: POLY ROFO REMA PANE PARE RALY RESU NUVY (not_if1)
-	data <= source when cpu_rd = '1' and addr = x"FF46" else (others => 'Z');
+	data_out <= source when cpu_rd = '1' and addr = x"FF46" else (others => 'Z');
 end architecture;
