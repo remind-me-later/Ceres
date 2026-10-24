@@ -269,8 +269,9 @@ impl<A: AudioCallback> Gb<A> {
     /// early (see `Clock::speed_switch_catch_up`).
     pub(crate) fn tima_speed_change_catch_up(&mut self) {
         if self.key1.is_requested() {
+            let late_slow_timers = self.model == Model::CgbE;
             let (clock, ports) = self.timer();
-            clock.speed_switch_catch_up(&ports);
+            clock.speed_switch_catch_up(&ports, late_slow_timers);
         }
     }
 
@@ -278,6 +279,12 @@ impl<A: AudioCallback> Gb<A> {
     pub fn write_div(&mut self) {
         let (clock, mut ports) = self.timer();
         clock.write_div(&mut ports);
+    }
+
+    /// The DIV reset that STOP does when the CPU switches speed.
+    pub(crate) fn reset_div_for_speed_switch(&mut self) {
+        let (clock, mut ports) = self.timer();
+        clock.reset_div_for_speed_switch(&mut ports);
     }
 
     #[inline]

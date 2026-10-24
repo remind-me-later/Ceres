@@ -38,7 +38,10 @@ pub(super) struct ObjectSearch {
     pub index: u8,
     /// OAM row the PPU is reading (DMG OAM bug); `NO_ROW` when none.
     pub accessed_oam_row: u8,
-    /// The last Y and X the search read from the OAM.
+    /// The OAM's two output latches: the last pair of bytes the PPU read,
+    /// an entry's Y and X from the search, or an object's tile and
+    /// attributes from the fetch. While a DMA runs the search does not read
+    /// OAM and compares each entry with these.
     pub y_bus: u8,
     pub x_bus: u8,
     /// A CGB-C `OBJ_SIZE` write during this line's search (see
@@ -145,12 +148,11 @@ impl Ppu {
             self.d.bus.dma_phase
         };
         let dma_active = phase != DmaPhase::Idle;
-        if !self.d.bus.cpu_idle && phase.written().is_some() {
-            // Once a DMA has written its first byte the object search reads
-            // 0xFF until the transfer ends.
-            self.d.objs.y_bus = 0xFF;
-            self.d.objs.x_bus = 0xFF;
-        } else {
+        // Once a DMA has written its first byte the object search stops
+        // reading OAM until the transfer ends, and every entry sees what the
+        // latches hold (on the DMG-CPU B's netlist, the scan's latches stay
+        // closed while the DMA runs).
+        if self.d.bus.cpu_idle || phase.written().is_none() {
             self.d.objs.y_bus = self.oam_read(base + Oam::ENTRY_Y);
             self.d.objs.x_bus = self.oam_read(base + Oam::ENTRY_X);
         }

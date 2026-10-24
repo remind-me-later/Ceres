@@ -113,6 +113,13 @@ cargo test --package ceres-test-runner test_dmg_acid2
 
 # Run ignored tests (known failures)
 cargo test --package ceres-test-runner -- --ignored
+
+# Run only the Gambatte hardware tests (4674 ROMs, split into shards)
+cargo test --release --package ceres-test-runner --test gambatte
+
+# Run a family of them on both models and print one line per ROM, to compare
+# with the Gambatte oracle (see ceres-test-runner/tools/gambatte-oracle)
+cargo run --release --package ceres-test-runner --example gambatte_runner -- both window
 ```
 
 ### CI/CD Pipeline
@@ -120,7 +127,10 @@ cargo test --package ceres-test-runner -- --ignored
 GitHub Actions runs the tests on pushes and pull requests to `main`. It
 installs the RGBDS toolchain, caches dependencies and test ROMs, runs the
 tests for `ceres-core` and `ceres-test-runner` with coverage, and uploads the
-coverage to [Codecov](https://codecov.io/gh/remind-me-later/Ceres).
+coverage to [Codecov](https://codecov.io/gh/remind-me-later/Ceres). The
+Gambatte hardware tests run there too: they are split into 16 tests so that
+nextest spreads them over the cores, and a ROM stops as soon as its result has
+been on screen for two frames.
 
 A second workflow, `Lint`, runs on the same events. It lints the Markdown with
 [rumdl](https://github.com/rvben/rumdl) and the TOML with

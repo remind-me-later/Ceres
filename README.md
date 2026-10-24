@@ -1,5 +1,6 @@
 # Ceres
 
+[![Test](https://github.com/remind-me-later/Ceres/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/remind-me-later/Ceres/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/remind-me-later/Ceres/branch/main/graph/badge.svg)](https://codecov.io/gh/remind-me-later/Ceres)
 
 Some kind of GameBoy/Color emulator written in rust.
@@ -46,12 +47,6 @@ To build:
 
 - In the root directory `cargo run`.
 
-## Testing
-
-To run the integration tests:
-
-`cargo test --package ceres-test-runner`
-
 ## Key bindings
 
 | Gameboy | Emulator |
@@ -62,75 +57,49 @@ To run the integration tests:
 | Start   | M        |
 | Select  | N        |
 
-## Debugging
+## Testing
 
-Ceres has a console debugger in the style of SameBoy's. Build a frontend with
-the `debugger` feature and start it with `--debugger` from a terminal: the
-game runs in its window and the console reads commands in the terminal.
-
-```sh
-cargo run -p ceres-gtk --features debugger -- --debugger game.gb
-```
-
-Ctrl-C stops the game, `continue` runs it again, Ctrl-D closes the console
-and lets the game run on. `help` lists the commands, `help <command>`
-explains one. Commands can be shortened as in SameBoy (`c`, `s`, `n`, `bt`,
-`x`), and an empty line repeats the last one.
-
-| Command | Does |
-| --- | --- |
-| `continue`, `interrupt` | run, stop |
-| `step`, `next`, `finish` | one instruction, over calls, out of the function |
-| `breakpoint <expr> [to <end>] [if <cond>]`, `delete [id]` | stop before an instruction |
-| `watch/r`, `/w`, `/rw <expr> [to <end>] [if <cond>]`, `unwatch [id]` | stop after a read or write; `old` and `new` in the condition |
-| `list`, `softbreak on` | breakpoints and watchpoints; stop at `ld b, b` |
-| `print/x`, `/d`, `/b`, `/a <expr>` | evaluate, or assign: `p a = 5`, `p [wCounter] = 3` |
-| `examine/<count> <expr>`, `disassemble/<count> [expr]` | memory, code |
-| `registers`, `backtrace` | the CPU, the calls that led here |
-| `lcd`, `timer`, `dma`, `ints`, `cartridge` | the hardware's state, the banks mapped |
-| `ticks`, `reset`, `save <file>`, `load <file>` | time between stops, reset, BESS states |
-
-Addresses are written as in symbol files, a bank and an address in hex:
-`39:4579`, `BOOT:0064`. Elsewhere numbers are decimal unless `$hex` or
-`%binary`. Expressions have registers, symbols, `[x]` and `{x}` for the byte
-and word at x, and C's operators.
-
-If an [RGBDS](https://rgbds.gbdev.io/) symbol file is next to the ROM
-(`game.sym` for `game.gb`, from `rgblink -n game.sym`), labels work
-everywhere: `b SplashScreen`, `d PlayMusic`, `w/w wPlayerName`. A breakpoint
-or watchpoint on a label stops only in the label's bank (or in the boot ROM,
-for `BOOT:` labels); on a plain address it stops in any bank.
-
-`save bug.bess` keeps the moment as a BESS state, which SameBoy and the
-trace tool below can load too. A loaded state is a starting point, not an
-exact rewind: BESS doesn't hold every internal phase of the PPU.
-
-## Tracing the emulator
-
-`ceres-test-runner`'s `trace` example writes a line per instruction in
-[Gameboy Doctor](https://github.com/robert/gameboy-doctor)'s format, the CPU's
-state before it runs, as fast as the machine allows:
+The integration tests run the emulator on the ROMs of the
+[Game Boy Test Roms](https://github.com/c-sp/gameboy-test-roms) collection
+and check the registers, the serial output or the screen against the real
+hardware's:
 
 ```sh
-cargo run -p ceres-test-runner --example trace -- game.gb --frames 2 --timing --io
+cargo test --package ceres-test-runner
 ```
 
-```text
-A:FF F:00 B:FB C:1F D:D0 E:00 H:C7 L:B1 SP:DFF3 PC:C365 PCMEM:F0,44,FE,90 CY:264520 LY:135 DOT:416
-  R FF44=87 CY:264536 LY:135 DOT:424
-```
+| Suite                               | What it checks                                                                   | Passing      |
+| ----------------------------------- | -------------------------------------------------------------------------------- | ------------ |
+| Mooneye (and the Wilbertpol fork)   | CPU, timers, interrupts, OAM DMA, PPU timing, MBCs, boot state                   | 164 of 165   |
+| Blargg                              | CPU instructions and timing, memory timing, interrupts, HALT bug, sound, OAM bug | 117 of 119   |
+| SameSuite                           | APU, DMA, interrupts, PPU, SGB                                                   | 204 of 204   |
+| Gambatte                            | LCD and STAT timing, timers, DMA, interrupts, HALT, sound                        | 4674 of 4674 |
+| GBMicrotest                         | CPU, timer, DMA and PPU timing, to the cycle                                     | 480 of 482   |
+| AGE                                 | LY, STAT, OAM and VRAM access, HALT, speed switch, mode 3 rendering              | 77 of 84     |
+| Mealybug Tearoom Tests              | PPU registers changed in the middle of a line                                    | 66 of 89     |
+| dmg-acid2, cgb-acid2, cgb-acid-hell | PPU rendering, pixel for pixel                                                   | 4 of 4       |
+| Scribbltests, Turtle Tests          | STAT, LY=LYC and window timing                                                   | 14 of 14     |
+| rtc3test, mbc3-tester               | MBC3 clock and banks                                                             | 12 of 12     |
+| Little Things GB                    | First frame after the LCD turns on, joypad interrupt timing                      | 3 of 6       |
+| BullyGB                             | Edge cases of the hardware                                                       | 1 of 2       |
+| strikethrough                       | An OAM DMA quirk                                                                 | 3 of 3       |
 
-- `--timing` adds the clock (half dots) and where the display is.
-- `--io` adds the instruction's I/O register accesses.
-- `--state bug.bess` starts from a BESS state, such as one the debugger
-  saved. SameBoy saves and loads the same format, so both emulators can be
-  traced from the same moment and diffed. `--model` must be the model the
-  state was saved with.
-- `--skip-boot` starts after the boot ROM, as Doctor's logs do. They also
-  read LY as 0x90 all the time, which Ceres doesn't fake, so they match a
-  trace up to the first LY read.
-- `--frames N` (1 by default), `--max-lines N` and `--out FILE` set how much
-  is written and where. A frame is a few megabytes.
+A test is one ROM on one model, so a ROM that is checked on several models
+counts once for each.
+
+The tests that don't pass are marked `#[ignore]` in `ceres-test-runner/tests`,
+each with its reason: most fail the same way in SameBoy, the reference Ceres
+follows; a few are gaps (the MGB's OAM DMA quirk during HALT, seven Mealybug
+ROMs not investigated yet); and 13 Mealybug ROMs have no reference screenshot
+upstream.
+
+## Documentation
+
+- [Debugger](doc/debugger.md): a console debugger in the style of SameBoy's.
+- [Tracing](doc/tracing.md): a per-instruction trace in Gameboy Doctor's
+  format, to diff against other emulators.
+- [CGB hardware tests](doc/cgb-hardware-tests.md): what is left to measure on
+  a real CGB.
 
 ## Folder organization
 

@@ -247,8 +247,13 @@ impl<A: AudioCallback> Bus for Gb<A> {
                 });
         }
         self.tima_speed_change_catch_up();
-        self.write_div();
-        if !ime {
+        self.reset_div_for_speed_switch();
+        // The timers start counting four cycles after the reset when
+        // interrupts are disabled. A CGB up to revision C does the same when
+        // an enabled interrupt is already pending, so that it is serviced a
+        // M-cycle sooner after the reset than on a CGB-E (AGE
+        // `spsw-interrupts`).
+        if !ime || (self.ppu.cgb_c_timing() && self.ints.is_any_requested()) {
             self.clock.div_cycles = -4;
         }
         self.ppu.enter_stop_mode();
