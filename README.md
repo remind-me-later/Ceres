@@ -82,15 +82,16 @@ cargo test --package ceres-test-runner
 | rtc3test, mbc3-tester               | MBC3 clock and banks                                                             | 12 of 12     |
 | Little Things GB                    | First frame after the LCD turns on, joypad interrupt timing                      | 3 of 6       |
 | BullyGB                             | Edge cases of the hardware                                                       | 1 of 2       |
-| strikethrough                       | An OAM DMA quirk                                                                 | 0 of 3       |
+| strikethrough                       | An OAM DMA quirk                                                                 | 3 of 3       |
 
 A test is one ROM on one model, so a ROM that is checked on several models
 counts once for each.
 
 The tests that don't pass are marked `#[ignore]` in `ceres-test-runner/tests`,
 each with its reason: most fail the same way in SameBoy, the reference Ceres
-follows; a few are gaps (OAM DMA quirks, seven Mealybug ROMs not investigated
-yet); and 13 Mealybug ROMs have no reference screenshot upstream.
+follows; a few are gaps (the MGB's OAM DMA quirk during HALT, seven Mealybug
+ROMs not investigated yet); and 13 Mealybug ROMs have no reference screenshot
+upstream.
 
 ## Documentation
 

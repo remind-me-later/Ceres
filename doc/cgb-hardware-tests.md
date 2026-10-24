@@ -158,61 +158,48 @@ and 1 in double speed, and an M-cycle 8 or 4.
 
 ### 7. What the OAM scan reads while an OAM DMA is copying
 
-This one concerns the DMG as well as the CGB, and it is the one entry where
-ceres does not pass every test: two hardware-verified ROMs disagree under any
-rule ceres has tried.
+This one concerns the DMG as well as the CGB. Two hardware-verified ROMs
+seemed to want opposite things; the DMG-CPU B's netlist explains both, and
+ceres now does what it does on every model. Only the CGB is left to check,
+since there is no netlist for it.
 
-- **Measure:** start an OAM DMA at a chosen dot of the line before a visible
-  line, with sprite 39 (the last one the scan reads) on that line, and see
-  whether the line gets a sprite, on screen or from the length of mode 3.
-  Sweep three things, one at a time:
-  - the dot where the DMA starts, which sets how many bytes it has written
-    when the scan begins (0 to 160), and so where the DMA ends against the
-    scan;
-  - the data the DMA copies: a sprite table, or a fill value such as `0xA0`;
-  - the Y and X of sprite 39 before the DMA, and of the sprites on the
-    previous line.
-
-  Run `strikethrough.gb` and gambatte's `oamdma/late_sp39y_2` on the same
-  units as the sweep, DMG and CGB, and note each unit's revision.
-- **Why the tests disagree:** both have the DMA running during the whole OAM
-  scan, and both are verified on hardware, but they want opposite things.
+- **Measure:** on a CGB, start an OAM DMA at a chosen dot of the line before a
+  visible line, with sprite 39 (the last one the scan reads) on that line, and
+  see whether the line gets a sprite, on screen or from the length of mode 3.
+  Sweep the dot where the DMA starts, the data it copies, the Y and X of
+  sprite 39 before the DMA, and whether the line before drew a sprite (and
+  with which tile and attributes). Note each unit's revision.
+- **The two ROMs:** both have the DMA running during the whole OAM scan.
   - `strikethrough.gb` starts the DMA at the end of line 67, so that it has
     written 2 bytes when line 68's scan begins. The reference screenshots
     (`strikethrough-dmg.png`, `strikethrough-cgb.png`) show a sprite on line
     68 at the Y and X of sprite 39, the last entry read on line 67 (Y `0x54`,
-    X `0x4f`): the scan seems to keep the last values it read, so every entry
-    of line 68 looks like sprite 39. Ceres draws nothing, 7 pixels short on
-    row 68. The ROM does not record which device the screenshots come from.
+    X `0x4f`): every entry of line 68 looks like sprite 39.
   - `oamdma/late_sp39y_2` (`_ds_2` in double speed) has the DMA 26 bytes in
     when the scan of line 3 begins, and still running at sprite 39's read on
     line 4. It expects no sprite (`out0`, against `out3` for `_1`, where the
-    DMA ends one cycle earlier). Sprite 39 is at Y `0x10`, X `0xA0` before
-    the DMA, so a scan that keeps its last values would see a sprite and
-    read 3. Gambatte's tests were made on a DMG-08 and a CGB-04c.
-- **Ceres today:** once the DMA has written its first byte, the scan reads
-  `0xFF` for every entry until the DMA ends (`add_object_from_index` in
-  `ceres-core/src/ppu/display/objects.rs`, commit `619d53ca`). That passes
-  all 17 of gambatte's `oamdma/late_sp*` ROMs (4 DMG, 13 CGB) and fails
-  `strikethrough` on the DMG, CGB-C and CGB-E (`#[ignore]`d in
-  `ceres-test-runner/tests/strikethrough.rs`). Keeping the last values
-  instead, as SameBoy does, passes `strikethrough` on all three and fails
-  `late_sp39y_2` on the DMG and CGB and `late_sp39y_ds_2`. Using `0xFF` only
-  when the DMA's first write lands in the middle of a scan changes nothing,
-  since in both ROMs the DMA is already running when the scan begins.
-
-  To see it: `cargo test -p ceres-test-runner --test strikethrough --
-  --ignored`, and `cargo run --release -p ceres-test-runner --example
-  gambatte_runner -- both oamdma`.
-- **Outcomes:** the two ROMs on the same unit decide between the two ways
-  out, and either one closes the entry:
-  - *They pass together on one unit*, so one rule explains both and the
-    difference is in how far the DMA has got, in the data it copies, or in
-    how long ago the scan last read OAM. The sweep shows which. Ceres should
-    then use that rule, so that every `oamdma` ROM and `strikethrough` pass,
-    and the `#[ignore]`s go.
-  - *Each passes only on some units*, so the units differ (a DMG revision, or
-    a unit-to-unit variation: SameBoy notes that pre-CGB units differ in
-    what the scan reads when a DMA is halted). Ceres then follows the
-    revision each test was made on, and the test of the other one runs only
-    on the model it was verified on, with the reason written next to it.
+    DMA ends one cycle earlier), although sprite 39 is at Y `0x10`, X `0xA0`
+    before the DMA, on lines 0 to 7.
+- **The netlist:** while a DMA runs, the scan does not read OAM but goes on,
+  and compares each entry with what OAM's two output latches took last
+  (`hdl/rtl/oam.vhd`, `oam_scan.vhd` on the branch `hdl`). That is the Y and X
+  of the last entry the scan read, unless an object fetch of mode 3 read the
+  object's tile and attributes since. In `strikethrough` the latches still
+  hold sprite 39's Y and X from line 67's scan. In `late_sp39y_2` the line
+  before the DMA drew sprite 39 itself, and its fetch left its tile and
+  attributes in the latches (`0xA0`, `0xA0`): a Y of `0xA0` is on no line.
+  The readable model passes both on a DMG-CPU B, and all 16 of gambatte's DMG
+  `late_sp*` ROMs.
+- **Ceres today:** the same latches (`y_bus` and `x_bus` in
+  `ceres-core/src/ppu/display/objects.rs`), on every model. It passes
+  `strikethrough` on the DMG, CGB-C and CGB-E, and all of gambatte's `oamdma`
+  ROMs on both models (`cargo run --release -p ceres-test-runner --example
+  gambatte_runner -- both oamdma`). Earlier rules each failed one of the two:
+  reading `0xFF` during the DMA failed `strikethrough`, and keeping the scan's
+  last Y and X but not the fetch's tile and attributes (SameBoy) failed
+  `late_sp39y_2`.
+- **Outcomes:** if the CGB's sweep always shows the object that was read last
+  (by the scan or by the fetch), the rule holds there too. If not, the CGB
+  differs, and only the DMG keeps the netlist's rule. SameBoy notes that
+  pre-CGB units differ in what the scan reads when a DMA is halted, which
+  this does not cover.
