@@ -137,29 +137,31 @@ impl Ppu {
         }
     }
 
+    /// The DMA's state as the object search sees it: on CGB the search runs
+    /// ahead of it, by two T-cycles in single speed, by a whole M-cycle in
+    /// double speed.
+    const fn search_dma_phase(&self) -> DmaPhase {
+        let lead = if self.double_speed { 3 } else { 2 };
+        if self.is_cgb_hardware() && self.d.bus.chunk_left <= lead {
+            self.d.bus.dma_phase_next
+        } else {
+            self.d.bus.dma_phase
+        }
+    }
+
     /// A DMA has written its first byte and the CPU runs: the object search
-    /// does not read OAM until the transfer ends.
+    /// does not read OAM until the transfer ends, and every entry sees what
+    /// the latches hold (on the DMG-CPU B's netlist, the scan's latches stay
+    /// closed while the DMA runs).
     #[must_use]
     pub(in crate::ppu) const fn dma_hides_object_search(&self) -> bool {
-        !self.d.bus.cpu_idle && self.d.bus.dma_phase.written().is_some()
+        !self.d.bus.cpu_idle && self.search_dma_phase().written().is_some()
     }
 
     pub(super) fn add_object_from_index(&mut self, index: u8) {
         let base = u16::from(index) * Oam::ENTRY_SIZE;
-        // On CGB the object search runs ahead of the DMA's state: by two
-        // T-cycles in single speed, by a whole M-cycle in double speed.
-        let lead = if self.double_speed { 3 } else { 2 };
-        let phase = if self.is_cgb_hardware() && self.d.bus.chunk_left <= lead {
-            self.d.bus.dma_phase_next
-        } else {
-            self.d.bus.dma_phase
-        };
-        let dma_active = phase != DmaPhase::Idle;
-        // Once a DMA has written its first byte the object search stops
-        // reading OAM until the transfer ends, and every entry sees what the
-        // latches hold (on the DMG-CPU B's netlist, the scan's latches stay
-        // closed while the DMA runs).
-        if self.d.bus.cpu_idle || phase.written().is_none() {
+        let dma_active = self.search_dma_phase() != DmaPhase::Idle;
+        if !self.dma_hides_object_search() {
             self.d.objs.y_bus = self.oam_read(base + Oam::ENTRY_Y);
             self.d.objs.x_bus = self.oam_read(base + Oam::ENTRY_X);
         }

@@ -203,3 +203,25 @@ since there is no netlist for it.
   differs, and only the DMG keeps the netlist's rule. SameBoy notes that
   pre-CGB units differ in what the scan reads when a DMA is halted, which
   this does not cover.
+
+### 8. STAT during an OAM DMA
+
+Another rule taken from the DMG-CPU B's netlist, which no CGB test
+contradicts.
+
+- **Measure:** on a CGB, start an OAM DMA a few lines before a visible line,
+  and read STAT from high RAM every M-cycle across that line's OAM scan, at
+  both speeds; sweep the DMA's start so that it begins and ends at each point
+  of the scan.
+- **Why the tests don't decide:** no test reads STAT while a DMA runs.
+- **The netlist:** STAT's mode 2 is the scan's flag gated by the DMA's (ACYL,
+  from BESU and BOGE): while a DMA runs the scan goes on, but STAT shows mode
+  0, as the scan hides from the OAM bus. The STAT interrupt's OAM source is
+  the line clock, which the DMA does not gate.
+- **Ceres today:** the same on every model, from the DMA's first byte to its
+  end, as the object search sees the DMA (`dma_hides_object_search` in
+  `ceres-core/src/ppu/display/objects.rs`; on CGB the search runs ahead of
+  the DMA's state).
+- **Outcomes:** mode 0 during the scan confirms it for the CGB, and where it
+  begins and ends whether ceres's edges are right; mode 2 means the CGB
+  differs, and only the DMG keeps the rule.
