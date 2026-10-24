@@ -262,12 +262,14 @@ brief ones. What is left:
   which corrupts OAM on the real chip and in ceres, and not in the netlist's
   plain OAM: the lines have other sprites on the two sides.
 - **The end of VBlank**: ceres's STAT shows mode 0 for an M-cycle between
-  mode 1 and line 0's mode 2, in every frame; the model goes from 1 to 2. In
-  the `stat_write_glitch_l154` ROMs it lasts two M-cycles. It is a dot of
-  ceres's clock (VBlank clears two half dots before the scan shows) that only
-  the end of a step sees: a ROM that reads STAT every two M-cycles across the
-  end of line 153, twice, a frame and an M-cycle apart (so in every M-cycle),
-  reads the same 400 values on both sides, mode 1 then mode 2, never 0.
+  mode 1 and line 0's mode 2, in every frame, where the model's samples go
+  from 1 to 2 (in the `stat_write_glitch_l154` ROMs, two M-cycles). The
+  reads agree: `check/stat_vblank_end.asm` reads STAT in every M-cycle across
+  the end of line 153 (twice, each pass from a HALT that ends at line 152's
+  LY=LYC interrupt, the second an M-cycle sooner), and both sides read the
+  same 400 values: mode 1, then mode 0 for one M-cycle, then line 0's mode 2
+  (20 M-cycles), 3 (43) and 0 (51). The model's mode 0 there falls between
+  its points of sampling.
 - **The first mode 3 after the LCD is turned on** comes an M-cycle sooner on
   ceres in every ROM that turns it on (one change, within the M-cycle off
   above), and gbmicrotest's `lcdon_to_stat3` ROMs pass on both sides: a

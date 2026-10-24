@@ -250,7 +250,10 @@ BOOT=tiny APU=0 CUTS=1 NOFRAMES=1 ./compare-ceres.sh \
 
 makes the same accesses on both sides, with the same changes but three
 brief counts of TIMA and the first mode 3 after the LCD is turned on, which
-ceres's STAT shows an M-cycle sooner.
+ceres's STAT shows an M-cycle sooner. Where a change between the points of
+sampling matters, a ROM that reads the register in every M-cycle settles
+it through the bus traces: `check/stat_vblank_end.asm` (`make` builds it)
+does so with STAT across the end of VBlank (see [results.md](results.md)).
 
 Over gbmicrotest, ceres and the model make the same accesses in 491 ROMs
 of 513. The others differ in three ways (see also
