@@ -16,7 +16,9 @@
 # digits and the digits read. APU=0 runs the model without the sound channels
 # (15 % faster; the ROMs that read their registers then fail). Only the ROMs whose path contains one of the
 # PATTERNs run, if there are any, and with STRIDE=n only every n-th of them
-# (the 1747 ROMs take most of a day). JOBS sets how many run at a time (6).
+# (the 1747 ROMs take about 10 hours on 12 cores: a ROM alone takes 70 s, but
+# the machine does one every 20 s however many run at once, from about 8 on).
+# JOBS sets how many run at a time (6).
 
 set -eu
 

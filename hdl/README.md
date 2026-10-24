@@ -248,9 +248,12 @@ of 513. The others differ in three ways (see also
 `dmg08_out`) on the model from the short boot ROM (below), 16 frames after
 the ROM starts, reads the digits in the top row of the screen with Gambatte's
 glyphs, as ceres's `gambatte_dmg` does, and compares them with the digits in
-the file's name. Each takes a minute or so, `JOBS` at a time (default six);
-`STRIDE=8` runs every eighth; `BOOT=quick` runs quickboot instead. The
-results are in `build/gambatte/results.txt` (see [results.md](results.md)).
+the file's name. A ROM alone takes 70 s, but a 12-core laptop (8 threads on
+the 4 fast cores, then the slow ones) finishes one every 20 s with 8 or more
+at a time, so the 1747 take about 10 hours and `STRIDE=8` (207 ROMs, 70
+minutes) runs every eighth; `JOBS` sets how many run at a time (default
+six); `BOOT=quick` runs quickboot instead. The results are in
+`build/gambatte/results.txt` (see [results.md](results.md)).
 
 ### Making a run shorter
 
