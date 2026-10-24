@@ -277,7 +277,9 @@ what helps is fewer events and less simulated time:
   channels: their registers and the wave RAM no longer drive the data bus (a
   read gives the bus keeper's last value) and NR52's bits 0 to 3 read 0.
   Nothing else sees them, so a ROM that does not read those registers draws
-  the same picture and makes the same accesses.
+  the same picture and makes the same accesses. On every eighth of
+  Gambatte's ROMs (207), it changed the results of five, all in `sound/`,
+  which read NR52 or the wave RAM.
 - The `data` bus of each block is split into `data : in` and `data_out : out`
   (the top ties them together): nvc cannot collapse the nets of an `inout`
   port, and the 19 blocks that drive the bus made 22% of all the value
