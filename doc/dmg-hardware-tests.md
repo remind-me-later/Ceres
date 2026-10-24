@@ -254,6 +254,25 @@ printed on the CPU noted.
 
 [gb-schematics]: https://github.com/Gekkio/gb-schematics
 
+### 13. STAT during an OAM DMA
+
+- **Measure:** start an OAM DMA a few lines before a visible line, and read
+  STAT from high RAM every M-cycle across that line's OAM scan; sweep the
+  DMA's start so that it begins and ends at each point of the scan.
+- **The evidence:** no test ROM reads STAT while a DMA runs.
+- **The netlist:** STAT's mode 2 is the scan's flag gated by the DMA's (ACYL,
+  from BESU and BOGE): while a DMA runs the scan goes on, but STAT shows mode
+  0, as the scan hides from the OAM bus. The STAT interrupt's OAM source is
+  the line clock, which the DMA does not gate. Found by the cut traces of
+  `hdl/compare-ceres.sh` (`CUTS=1`) on gbmicrotest's `dma_basic`.
+- **Ceres today:** follows the netlist on the DMG, from
+  the DMA's first byte to its end, as the scan stops reading OAM; the CGB
+  shows mode 2, as before.
+- **Outcomes:** mode 0 during the scan confirms the netlist; the M-cycles
+  where it begins and ends against the DMA's start, whether ceres's edges
+  are right. On a CGB, which has no netlist, whether it does the same.
+- **Needs:** a test ROM; a DMG and a CGB.
+
 ## Settled by the netlist, not followed by ceres
 
 - **EI followed by HALT with an interrupt pending:** the chip's dispatch reads
@@ -285,6 +304,7 @@ printed on the CPU noted.
 | 10. OAM and wave RAM bugs  |       ✅        |                |       | B, C           |
 | 11. Cartridge bus edges    |                 |   cartridge    |   ✅  | B              |
 | 12. Sound output           |                 |                |   ✅  | any            |
+| 13. STAT during DMA        |       ✅        |                |       | B, C, a CGB    |
 
 A cartridge built on a microcontroller (one that serves the ROM and logs
 the bus) would make most of these automatic: it can run a list of ROMs, read

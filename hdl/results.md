@@ -255,15 +255,19 @@ brief ones. What is left:
   netlist, STAT's mode 2 is the scan's flag gated by the DMA's (ACYL, from
   BESU and BOGE): while a DMA runs, the scan goes on, but STAT, like the OAM
   bus, does not see it. No test reads STAT then; a CPU running from high RAM
-  can.
+  can. Ceres now does the same on the DMG (entry 13 of
+  [the DMG's list](../doc/dmg-hardware-tests.md) is what would confirm it).
 - **The length of mode 3 in `oam_sprite_trashing`**: on 48 lines, mode 3
   ends 4 M-cycles apart, both ways. The ROM writes OAM while the PPU reads it,
   which corrupts OAM on the real chip and in ceres, and not in the netlist's
   plain OAM: the lines have other sprites on the two sides.
 - **The end of VBlank**: ceres's STAT shows mode 0 for an M-cycle between
   mode 1 and line 0's mode 2, in every frame; the model goes from 1 to 2. In
-  the `stat_write_glitch_l154` ROMs it lasts two M-cycles. Whether a read can
-  see it, or only the end of ceres's step does, is not looked into.
+  the `stat_write_glitch_l154` ROMs it lasts two M-cycles. It is a dot of
+  ceres's clock (VBlank clears two half dots before the scan shows) that only
+  the end of a step sees: a ROM that reads STAT every two M-cycles across the
+  end of line 153, twice, a frame and an M-cycle apart (so in every M-cycle),
+  reads the same 400 values on both sides, mode 1 then mode 2, never 0.
 - **The first mode 3 after the LCD is turned on** comes an M-cycle sooner on
   ceres in every ROM that turns it on (one change, within the M-cycle off
   above), and gbmicrotest's `lcdon_to_stat3` ROMs pass on both sides: a
