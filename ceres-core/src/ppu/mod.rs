@@ -190,10 +190,21 @@ impl Ppu {
         self.timing_read_ly()
     }
 
-    /// STAT as the CPU reads it.
+    /// STAT as the CPU reads it. On the DMG, STAT's mode 2 is the object
+    /// search's flag gated by the OAM DMA's: once a DMA has written its
+    /// first byte the search goes on, but STAT shows mode 0, as it hides from
+    /// the OAM bus (the DMG-CPU B's netlist, ACYL). The CGB's is not known.
     #[must_use]
     pub(crate) fn cpu_read_stat(&self) -> u8 {
-        self.timing_read_stat(self.read_stat())
+        let stat = self.timing_read_stat(self.read_stat());
+        if !self.is_cgb_hardware()
+            && self.dma_hides_object_search()
+            && stat & STAT_MODE_B == Mode::OamScan as u8
+        {
+            stat & !STAT_MODE_B
+        } else {
+            stat
+        }
     }
 
     /// `position_in_line` as a signed value (-16..=160).
