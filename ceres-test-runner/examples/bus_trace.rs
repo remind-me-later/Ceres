@@ -36,7 +36,10 @@
 //! a read would see them, and DIV when the divider does not count on (a
 //! write to DIV, STOP), with its value in M-cycles (the counter shifted
 //! right by 2); the model's testbench writes the same (`CUTS`), for
-//! `hdl/compare-cuts.sh`.
+//! `hdl/compare-cuts.sh`. Ceres runs its time in steps, sometimes of more
+//! than an M-cycle (an instruction's internal ones), and sees the state at
+//! the end of each: a change in a longer step gets a fourth field, the
+//! step's first M-cycle, where it may have happened as well.
 //!
 //! `--bootrom FILE` runs another boot ROM, such as dmg-sim's quickboot, which
 //! skips the logo but leaves the machine as the real one does.
@@ -103,31 +106,37 @@ fn write_frame<W: Write>(out: &mut W, number: u64, rgba: &[u8]) -> io::Result<()
 }
 
 /// Writes the fields of `state` that differ from `last` (all of them if
-/// there is none). The divider is written when it did not count on from
-/// `last`'s value, `cycles` T-cycles before.
+/// there is none), as changed in the M-cycles `since` to `mcycle`. The
+/// divider is written when it did not count on from `last`'s value,
+/// `cycles` T-cycles before.
 fn write_cuts<W: Write>(
     out: &mut W,
-    mcycle: u64,
+    (since, mcycle): (u64, u64),
     state: CutState,
     last: Option<&CutSample>,
     cycles: u64,
 ) -> io::Result<()> {
     let old = last.map(|last| last.state);
     let changed = |f: fn(&CutState) -> u8| old.is_none_or(|old| f(&old) != f(&state));
+    let from = if since < mcycle {
+        format!(" {since}")
+    } else {
+        String::new()
+    };
     if changed(|s| s.interrupt_flags) {
-        writeln!(out, "{mcycle} IF {:02X}", state.interrupt_flags)?;
+        writeln!(out, "{mcycle} IF {:02X}{from}", state.interrupt_flags)?;
     }
     if changed(|s| s.tima) {
-        writeln!(out, "{mcycle} TIMA {:02X}", state.tima)?;
+        writeln!(out, "{mcycle} TIMA {:02X}{from}", state.tima)?;
     }
     if changed(|s| u8::from(s.dma)) {
-        writeln!(out, "{mcycle} DMA {}", u8::from(state.dma))?;
+        writeln!(out, "{mcycle} DMA {}{from}", u8::from(state.dma))?;
     }
     if changed(|s| s.ly) {
-        writeln!(out, "{mcycle} LY {:02X}", state.ly)?;
+        writeln!(out, "{mcycle} LY {:02X}{from}", state.ly)?;
     }
     if changed(|s| s.stat_mode) {
-        writeln!(out, "{mcycle} MODE {}", state.stat_mode)?;
+        writeln!(out, "{mcycle} MODE {}{from}", state.stat_mode)?;
     }
     let counted = old.is_some_and(|old| {
         old.div
@@ -135,7 +144,7 @@ fn write_cuts<W: Write>(
             == state.div
     });
     if !counted {
-        writeln!(out, "{mcycle} DIV {:04X}", state.div >> 2)?;
+        writeln!(out, "{mcycle} DIV {:04X}{from}", state.div >> 2)?;
     }
     Ok(())
 }
@@ -156,8 +165,9 @@ fn write_cut_samples<W: Write>(
             continue;
         };
         let mcycle = (sample.clock_units - 1 - first) / UNITS_PER_MCYCLE;
+        let since = sample.since_units.saturating_sub(first) / UNITS_PER_MCYCLE;
         let cycles = last.map_or(0, |last| (sample.clock_units - last.clock_units) / 2);
-        write_cuts(out, mcycle, sample.state, last.as_ref(), cycles)?;
+        write_cuts(out, (since, mcycle), sample.state, last.as_ref(), cycles)?;
         *last = Some(sample);
     }
     Ok(())

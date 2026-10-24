@@ -239,6 +239,36 @@ turn on. They are open.
   in the model where SCX changes): the model matches dmg-sim to the end of
   the run, so it is the netlist's against ceres's; no screenshot shows it.
 
+## What the blocks show each other
+
+`compare-ceres.sh` with `CUTS=1` (see the
+[README](README.md#comparing-ceres-with-it)) over the 513 gbmicrotest ROMs,
+from fastboot to their results (9 minutes, six at a time). 491 make the same
+accesses; the 22 others are the read after HALT (7) and the power-on state
+(15), as above. In 506, the IF, TIMA, DMA, LY, MODE and DIV
+changes are the same on both sides, but for changes an M-cycle off their
+usual difference (a change between the two sides' points of sampling) and
+brief ones. What is left:
+
+- **STAT during an OAM DMA** (`dma_basic`): the DMA runs through line 1's
+  OAM scan, and STAT shows mode 0 there on the model, mode 2 on ceres. In the
+  netlist, STAT's mode 2 is the scan's flag gated by the DMA's (ACYL, from
+  BESU and BOGE): while a DMA runs, the scan goes on, but STAT, like the OAM
+  bus, does not see it. No test reads STAT then; a CPU running from high RAM
+  can.
+- **The length of mode 3 in `oam_sprite_trashing`**: on 48 lines, mode 3
+  ends 4 M-cycles apart, both ways. The ROM writes OAM while the PPU reads it,
+  which corrupts OAM on the real chip and in ceres, and not in the netlist's
+  plain OAM: the lines have other sprites on the two sides.
+- **The end of VBlank**: ceres's STAT shows mode 0 for an M-cycle between
+  mode 1 and line 0's mode 2, in every frame; the model goes from 1 to 2. In
+  the `stat_write_glitch_l154` ROMs it lasts two M-cycles. Whether a read can
+  see it, or only the end of ceres's step does, is not looked into.
+- **The first mode 3 after the LCD is turned on** comes an M-cycle sooner on
+  ceres in every ROM that turns it on (one change, within the M-cycle off
+  above), and gbmicrotest's `lcdon_to_stat3` ROMs pass on both sides: a
+  change between the points of sampling, it seems.
+
 ## The tests that ceres ignores
 
 Of the tests ceres ignores, the ones for CGB and MGB models do not apply to a

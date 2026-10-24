@@ -123,7 +123,7 @@ fi
 if [ -n "$cuts_model" ]; then
 	awk -v last="$mcycles" '$1 < last' "$cuts_model" >"$cuts_model.cut"
 	mv "$cuts_model.cut" "$cuts_model"
-	"$HDL/compare-cuts.sh" "$cuts_model" "$cuts_ceres" || status=1
+	"$HDL/compare-cuts.sh" "$cuts_model" "$cuts_ceres" "$dir/model.txt" || status=1
 fi
 
 # The frames (compare-frames.sh).

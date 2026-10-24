@@ -27,12 +27,15 @@ pub struct CutState {
     pub stat_mode: u8,
 }
 
-/// The state, and when it began.
+/// The state, and when it began: in the step of time from `since_units` to
+/// `clock_units`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct CutSample {
-    /// `Gb::clock_units` when the state was seen.
+    /// `Gb::clock_units` when the state was seen, at the end of the step.
     pub clock_units: u64,
+    /// `Gb::clock_units` when the step began.
+    pub since_units: u64,
     pub state: CutState,
 }
 
@@ -60,8 +63,9 @@ impl<A: AudioCallback> Gb<A> {
         mem::take(&mut self.cut_trace.samples)
     }
 
-    /// Records the state if something but the divider's counting changed.
-    pub(crate) fn record_cut(&mut self) {
+    /// Records the state if something but the divider's counting changed in
+    /// the step of time that began at `since_units`.
+    pub(crate) fn record_cut(&mut self, since_units: u64) {
         if !self.cut_trace.enabled {
             return;
         }
@@ -78,6 +82,7 @@ impl<A: AudioCallback> Gb<A> {
         };
         let sample = CutSample {
             clock_units: self.clock_units,
+            since_units,
             state,
         };
         // The divider counts T-cycles.
