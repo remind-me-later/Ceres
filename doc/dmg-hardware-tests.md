@@ -77,11 +77,12 @@ printed on the CPU noted.
     sprite (traced in the model).
 
   SameBoy keeps the scan's last Y and X, which is the first case only.
-- **Ceres today:** the scan reads `0xFF` while the DMA runs, which passes
-  gambatte's `late_sp*` ROMs and fails `strikethrough` (ignored).
-- **Outcomes:** no hardware needed for the DMG: ceres can keep the two
-  latches as the netlist does, which should pass both ROMs. Hardware is
-  needed only for the CGB, which has no netlist, if the rule fails there.
+- **Ceres today:** keeps the two latches as the netlist does (commit
+  `5e9d9783`), on every model, and passes `strikethrough` and all of
+  gambatte's `oamdma` ROMs. It used to read `0xFF` during the DMA, which
+  failed `strikethrough`.
+- **Outcomes:** settled for the DMG. On the CGB, which has no netlist, the
+  rule passes the tests; entry 7 of the CGB list says what would confirm it.
 
 ### 2. A write to BGP during mode 3
 
