@@ -31,8 +31,8 @@ use cheats::GameGenie;
 pub use cheats::GameGenieCode;
 #[cfg(feature = "debug")]
 pub use debug::{
-    HdmaKind, HdmaState, Instruction, IoAccess, MemoryAccess, OamDmaPhase, OamDmaState, Operand,
-    PpuState, RomBanks, TimerState, WatchHit, disassemble,
+    CutSample, CutState, HdmaKind, HdmaState, Instruction, IoAccess, MemoryAccess, OamDmaPhase,
+    OamDmaState, Operand, PpuState, RomBanks, TimerState, WatchHit, disassemble,
 };
 use interrupts::Interrupts;
 use joypad::Joypad;
@@ -108,6 +108,9 @@ pub struct Gb<A: AudioCallback> {
     /// The CPU's I/O accesses, while a trace wants them.
     #[cfg(feature = "debug")]
     io_log: debug::IoLog,
+    /// The state between the blocks, while a trace wants it.
+    #[cfg(feature = "debug")]
+    cut_trace: debug::CutTrace,
 }
 
 impl<A: AudioCallback> Gb<A> {
@@ -431,6 +434,8 @@ impl<A: AudioCallback> Gb<A> {
             clock_units: 0,
             #[cfg(feature = "debug")]
             io_log: debug::IoLog::default(),
+            #[cfg(feature = "debug")]
+            cut_trace: debug::CutTrace::default(),
         }
     }
 

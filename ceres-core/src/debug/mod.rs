@@ -3,10 +3,13 @@
 //! what a debugger needs to stop and inspect the machine (single steps,
 //! memory access without side effects, watchpoints).
 
+mod cut_trace;
 mod disasm;
 mod io_log;
 mod state;
 
+pub(crate) use cut_trace::CutTrace;
+pub use cut_trace::{CutSample, CutState};
 pub use disasm::{Instruction, Operand, disassemble};
 pub use io_log::IoAccess;
 pub(crate) use io_log::IoLog;

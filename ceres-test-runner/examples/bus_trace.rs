@@ -30,14 +30,26 @@
 //! pipeline's clock; the model's testbench writes the same (`PIXELS`), for
 //! `hdl/compare-pixels.sh`.
 //!
+//! `--cuts FILE` also writes what the blocks of the chip show each other, a
+//! line per change: `<M-cycle> <name> <value>`, with IF (its five bits),
+//! TIMA, DMA (1 while an OAM DMA copies), LY and MODE (STAT's mode bits) as
+//! a read would see them, and DIV when the divider does not count on (a
+//! write to DIV, STOP), with its value in M-cycles (the counter shifted
+//! right by 2); the model's testbench writes the same (`CUTS`), for
+//! `hdl/compare-cuts.sh`.
+//!
 //! `--bootrom FILE` runs another boot ROM, such as dmg-sim's quickboot, which
 //! skips the logo but leaves the machine as the real one does.
 //!
 //! Usage: `cargo run -p ceres-test-runner --example bus_trace -- <rom>
-//! [--bootrom FILE] [--mcycles N] [--out FILE] [--frames FILE] [--pixels FILE]`
+//! [--bootrom FILE] [--mcycles N] [--out FILE] [--frames FILE] [--pixels FILE]
+//! [--cuts FILE]`
 
 use anyhow::{Context as _, Result, bail};
-use ceres_core::{GbBuilder, IoAccess, MemoryAccess, Model, PX_HEIGHT, PX_WIDTH, PpuEventKind};
+use ceres_core::{
+    CutSample, CutState, GbBuilder, IoAccess, MemoryAccess, Model, PX_HEIGHT, PX_WIDTH,
+    PpuEventKind,
+};
 use ceres_test_runner::{DummyAudioCallback, load_test_rom};
 use std::{
     fs::File,
@@ -47,6 +59,7 @@ use std::{
 
 const USAGE: &str = "\
 usage: bus_trace <rom> [--bootrom FILE] [--mcycles N] [--out FILE] [--frames FILE] [--pixels FILE]
+                 [--cuts FILE]
 
 <rom> is a path, or one under external/test-roms.
 --mcycles: M-cycles to trace from the first access (1048576, a second, by
@@ -89,6 +102,67 @@ fn write_frame<W: Write>(out: &mut W, number: u64, rgba: &[u8]) -> io::Result<()
     Ok(())
 }
 
+/// Writes the fields of `state` that differ from `last` (all of them if
+/// there is none). The divider is written when it did not count on from
+/// `last`'s value, `cycles` T-cycles before.
+fn write_cuts<W: Write>(
+    out: &mut W,
+    mcycle: u64,
+    state: CutState,
+    last: Option<&CutSample>,
+    cycles: u64,
+) -> io::Result<()> {
+    let old = last.map(|last| last.state);
+    let changed = |f: fn(&CutState) -> u8| old.is_none_or(|old| f(&old) != f(&state));
+    if changed(|s| s.interrupt_flags) {
+        writeln!(out, "{mcycle} IF {:02X}", state.interrupt_flags)?;
+    }
+    if changed(|s| s.tima) {
+        writeln!(out, "{mcycle} TIMA {:02X}", state.tima)?;
+    }
+    if changed(|s| u8::from(s.dma)) {
+        writeln!(out, "{mcycle} DMA {}", u8::from(state.dma))?;
+    }
+    if changed(|s| s.ly) {
+        writeln!(out, "{mcycle} LY {:02X}", state.ly)?;
+    }
+    if changed(|s| s.stat_mode) {
+        writeln!(out, "{mcycle} MODE {}", state.stat_mode)?;
+    }
+    let counted = old.is_some_and(|old| {
+        old.div
+            .wrapping_add(u16::try_from(cycles & 0xFFFF).unwrap_or_default())
+            == state.div
+    });
+    if !counted {
+        writeln!(out, "{mcycle} DIV {:04X}", state.div >> 2)?;
+    }
+    Ok(())
+}
+
+/// Writes the cut samples taken since the last call, from the M-cycle of the
+/// CPU's first access (`first`, in 8 MHz units) on. `last` is the last one
+/// written.
+fn write_cut_samples<W: Write>(
+    out: &mut W,
+    samples: Vec<CutSample>,
+    first: Option<u64>,
+    last: &mut Option<CutSample>,
+) -> io::Result<()> {
+    for sample in samples {
+        // A sample comes at the end of the time it covers: it belongs to the
+        // M-cycle of its last unit.
+        let Some(first) = first.filter(|&first| sample.clock_units > first) else {
+            continue;
+        };
+        let mcycle = (sample.clock_units - 1 - first) / UNITS_PER_MCYCLE;
+        let cycles = last.map_or(0, |last| (sample.clock_units - last.clock_units) / 2);
+        write_cuts(out, mcycle, sample.state, last.as_ref(), cycles)?;
+        *last = Some(sample);
+    }
+    Ok(())
+}
+
 fn trace<W: Write>(
     rom: &Path,
     bootrom: Option<&Path>,
@@ -96,6 +170,7 @@ fn trace<W: Write>(
     mut out: W,
     mut frames: Option<BufWriter<File>>,
     mut pixels: Option<BufWriter<File>>,
+    mut cuts: Option<BufWriter<File>>,
 ) -> Result<()> {
     let rom = read_rom(rom)?;
     let mut builder = GbBuilder::new(48000, DummyAudioCallback)
@@ -110,6 +185,7 @@ fn trace<W: Write>(
     let mut gb = builder.build();
     gb.set_bus_log(true);
     gb.set_ppu_trace(pixels.is_some());
+    gb.set_cut_trace(cuts.is_some());
 
     let mut first = None;
     // The last access, written once the next one is in another M-cycle.
@@ -119,6 +195,8 @@ fn trace<W: Write>(
     let mut in_vblank = false;
     let mut lcd_on = false;
     let mut unshown = true;
+    // The last state written to `cuts`.
+    let mut last_cut: Option<CutSample> = None;
     loop {
         gb.step();
         if let Some(pixels) = pixels.as_mut() {
@@ -175,6 +253,9 @@ fn trace<W: Write>(
             }
             if mcycle >= mcycles {
                 out.flush()?;
+                if let Some(cuts) = cuts.as_mut() {
+                    cuts.flush()?;
+                }
                 if let Some(frames) = frames.as_mut() {
                     frames.flush()?;
                 }
@@ -187,6 +268,9 @@ fn trace<W: Write>(
                 return Ok(());
             }
             last = Some((mcycle, access));
+        }
+        if let Some(cuts) = cuts.as_mut() {
+            write_cut_samples(cuts, gb.take_cut_trace(), first, &mut last_cut)?;
         }
     }
 }
@@ -212,6 +296,7 @@ fn main() -> Result<()> {
     let mut bootrom = None;
     let mut frames = None;
     let mut pixels = None;
+    let mut cuts = None;
     while let Some(arg) = args.next() {
         let mut value = |name: &str| {
             args.next()
@@ -222,6 +307,7 @@ fn main() -> Result<()> {
             "--out" => out = Some(PathBuf::from(value("--out")?)),
             "--frames" => frames = Some(PathBuf::from(value("--frames")?)),
             "--pixels" => pixels = Some(PathBuf::from(value("--pixels")?)),
+            "--cuts" => cuts = Some(PathBuf::from(value("--cuts")?)),
             "--bootrom" => bootrom = Some(PathBuf::from(value("--bootrom")?)),
             "--help" | "-h" => {
                 println!("{USAGE}");
@@ -232,20 +318,14 @@ fn main() -> Result<()> {
         }
     }
     let rom = rom.with_context(|| format!("which ROM?\n\n{USAGE}"))?;
-    let frames = frames
-        .map(|path| {
-            File::create(&path)
-                .map(BufWriter::new)
-                .with_context(|| format!("can't create {}", path.display()))
-        })
-        .transpose()?;
-    let pixels = pixels
-        .map(|path| {
-            File::create(&path)
-                .map(BufWriter::new)
-                .with_context(|| format!("can't create {}", path.display()))
-        })
-        .transpose()?;
+    let create = |path: PathBuf| {
+        File::create(&path)
+            .map(BufWriter::new)
+            .with_context(|| format!("can't create {}", path.display()))
+    };
+    let frames = frames.map(create).transpose()?;
+    let pixels = pixels.map(create).transpose()?;
+    let cuts = cuts.map(create).transpose()?;
     let traced = match out {
         Some(path) => {
             let file =
@@ -257,6 +337,7 @@ fn main() -> Result<()> {
                 BufWriter::new(file),
                 frames,
                 pixels,
+                cuts,
             )
         }
         None => trace(
@@ -266,6 +347,7 @@ fn main() -> Result<()> {
             BufWriter::new(io::stdout().lock()),
             frames,
             pixels,
+            cuts,
         ),
     };
     // A reader that has seen enough (`| head`) isn't an error.

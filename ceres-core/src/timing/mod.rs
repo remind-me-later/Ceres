@@ -138,6 +138,8 @@ impl<A: AudioCallback> Gb<A> {
             self.clock_units += u64::from(t_cycles.cast_unsigned()) * units_per_cycle;
         }
         self.advance_cycles(t_cycles);
+        #[cfg(feature = "debug")]
+        self.record_cut();
     }
 
     /// Port of SameBoy's `GB_advance_cycles`: the speed switch phases are

@@ -228,6 +228,26 @@ fetches begin half a dot sooner than ceres's, which the script corrects; and
 a register's write lands, on each side, a fixed dot or so apart from the
 other's (the same in every line), which it does not.
 
+`CUTS=1` also compares what the chip's blocks show each other, which the
+CPU sees only when it reads it: IF, TIMA, the OAM DMA's run, LY and STAT's
+mode bits as a read would see them, and the divider where it does not count
+on (a write to DIV, STOP), a line per change (`compare-cuts.sh`,
+`model-cuts.txt` and `ceres-cuts.txt`). The model samples them when it
+samples the accesses, ceres at the end of each step of its time, so a kind
+of change (mode 3 starting, TIMA counting) can come an M-cycle apart on the
+two sides, always the same: the script finds the usual difference of each
+kind, and lists the changes only one side has and those off it. For
+instance:
+
+```sh
+BOOT=tiny APU=0 CUTS=1 NOFRAMES=1 ./compare-ceres.sh \
+    external/test-roms/mooneye-test-suite/acceptance/timer/tim01.gb 0.1
+```
+
+makes the same accesses on both sides, and shows ceres's TIMA counting
+once more three M-cycles after a write to DIV, which the ROM overwrites
+before it reads it.
+
 Over gbmicrotest, ceres and the model make the same accesses in 491 ROMs
 of 513. The others differ in three ways (see also
 [results.md](results.md)):

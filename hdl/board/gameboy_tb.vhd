@@ -27,6 +27,12 @@
 -- BUS_TRACE gets a line per memory access of the CPU, as ceres's example
 -- bus_trace writes them (../compare-ceres.sh): the M-cycle, counted from
 -- the CPU's first access, R or W, the address and the byte, in hexadecimal.
+--
+-- CUTS gets what the blocks of the chip show each other, a line per change,
+-- as ceres's example bus_trace writes them (../compare-cuts.sh): the
+-- M-cycle, then IF, TIMA, DMA (1 while OAM DMA runs), LY or MODE (STAT's mode
+-- bits) as a read would see them, and DIV when the divider does not count on
+-- (a write to DIV, STOP), its value in M-cycles; values in hexadecimal.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -51,6 +57,7 @@ entity gameboy_tb is
 		FRAMES      : string := "";
 		BUS_TRACE   : string := "";
 		PIXELS      : string := "";
+		CUTS        : string := "";
 
 		-- Without the sound channels, which are not simulated: faster (see
 		-- dmg_cpu_b)
@@ -249,6 +256,85 @@ begin
 					write(l, integer'image(mcycle) & ' ' & kind & ' ' & to_hstring(address) & ' '
 						& to_hstring(to_x01(db)));
 					writeline(f, l);
+				end if;
+			end if;
+		end loop;
+	end process;
+
+	-- What the blocks show each other, seen when the accesses are (in the
+	-- middle of phase H), from the M-cycle of the CPU's first access on.
+	cut_trace : process
+		alias phase      is << signal .gameboy_tb.u_gameboy.u_chip.phase : phase_t >>;
+		alias data_phase is << signal .gameboy_tb.u_gameboy.u_chip.data_phase : std_ulogic >>;
+		alias c          is << signal .gameboy_tb.u_gameboy.u_chip.u_cpu.c : controls_t >>;
+		alias flags      is << signal .gameboy_tb.u_gameboy.u_chip.flags : std_ulogic_vector(4 downto 0) >>;
+		alias tima       is << signal .gameboy_tb.u_gameboy.u_chip.u_timer.tima : std_ulogic_vector(7 downto 0) >>;
+		alias dma_run    is << signal .gameboy_tb.u_gameboy.u_chip.dma_run : std_ulogic >>;
+		alias ly         is << signal .gameboy_tb.u_gameboy.u_chip.u_lcd_timing.ly_i : unsigned(7 downto 0) >>;
+		alias stat_mode2 is << signal .gameboy_tb.u_gameboy.u_chip.u_lcd_timing.stat_mode2 : std_ulogic >>;
+		alias mode3      is << signal .gameboy_tb.u_gameboy.u_chip.mode3 : std_ulogic >>;
+		alias mode1      is << signal .gameboy_tb.u_gameboy.u_chip.u_lcd_timing.mode1_i : std_ulogic >>;
+		alias div        is << signal .gameboy_tb.u_gameboy.u_chip.div : unsigned(15 downto 0) >>;
+		file f          : text;
+		variable l      : line;
+		variable mcycle : natural := 0;
+		variable first  : boolean := true;
+		variable seen   : boolean := false;
+		variable mode   : std_ulogic_vector(1 downto 0);
+		variable last_flags, flags_now : std_ulogic_vector(7 downto 0);
+		variable last_tima, last_ly    : std_ulogic_vector(7 downto 0);
+		variable last_mode             : std_ulogic_vector(1 downto 0);
+		variable last_dma              : std_ulogic;
+		variable last_div              : unsigned(15 downto 0);
+
+		procedure put(name : string; value : string) is
+		begin
+			write(l, integer'image(mcycle) & ' ' & name & ' ' & value);
+			writeline(f, l);
+		end procedure;
+	begin
+		if CUTS = "" then
+			wait;
+		end if;
+		file_open(f, CUTS, write_mode);
+		loop
+			wait until phase = A or phase = H;
+			if phase = A then
+				mcycle := mcycle + 1;
+			else
+				wait for 60 ns;
+				if not seen and data_phase = '1' and (c.fetch = '1' or c.mread = '1' or c.mwrite = '1') then
+					seen   := true;
+					mcycle := 0;
+				end if;
+				if seen then
+					flags_now := "000" & to_x01(flags);
+					mode      := (stat_mode2 or mode3) & (mode3 or mode1);
+					if first or flags_now /= last_flags then
+						put("IF", to_hstring(flags_now));
+					end if;
+					if first or to_x01(tima) /= last_tima then
+						put("TIMA", to_hstring(to_x01(tima)));
+					end if;
+					if first or to_x01(dma_run) /= last_dma then
+						put("DMA", to_string(to_x01(dma_run)));
+					end if;
+					if first or std_ulogic_vector(ly) /= last_ly then
+						put("LY", to_hstring(std_ulogic_vector(ly)));
+					end if;
+					if first or to_x01(mode) /= last_mode then
+						put("MODE", integer'image(to_integer(unsigned(to_01(mode)))));
+					end if;
+					if first or div /= last_div + 1 then
+						put("DIV", to_hstring(div));
+					end if;
+					first      := false;
+					last_flags := flags_now;
+					last_tima  := to_x01(tima);
+					last_dma   := to_x01(dma_run);
+					last_ly    := std_ulogic_vector(ly);
+					last_mode  := to_x01(mode);
+					last_div   := div;
 				end if;
 			end if;
 		end loop;

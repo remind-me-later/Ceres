@@ -232,6 +232,35 @@ fn timer_state() {
 }
 
 #[test]
+fn cut_trace() {
+    let mut gb = build();
+    gb.set_cut_trace(true);
+    for _ in 0..40_000 {
+        gb.step();
+    }
+    let samples = gb.take_cut_trace();
+    // The ROM never writes DIV: a sample is taken for a change of the rest,
+    // never for the divider's counting alone.
+    let moved = |s: &crate::CutState| (s.interrupt_flags, s.tima, s.dma, s.ly, s.stat_mode);
+    for (before, after) in samples.iter().zip(samples.iter().skip(1)) {
+        assert_ne!(moved(&before.state), moved(&after.state), "{after:?}");
+        assert!(before.clock_units < after.clock_units, "{after:?}");
+    }
+    // LY counts the lines, and the modes go round.
+    assert!(
+        samples
+            .windows(2)
+            .any(|p| p[1].state.ly == p[0].state.ly.wrapping_add(1))
+    );
+    for mode in 0..4 {
+        assert!(
+            samples.iter().any(|s| s.state.stat_mode == mode),
+            "mode {mode}"
+        );
+    }
+}
+
+#[test]
 fn ppu_state() {
     let mut gb = build();
     // Where each mode starts on line 10, in half dots.
