@@ -137,6 +137,13 @@ impl Ppu {
         }
     }
 
+    /// A DMA has written its first byte and the CPU runs: the object search
+    /// does not read OAM until the transfer ends.
+    #[must_use]
+    pub(in crate::ppu) const fn dma_hides_object_search(&self) -> bool {
+        !self.d.bus.cpu_idle && self.d.bus.dma_phase.written().is_some()
+    }
+
     pub(super) fn add_object_from_index(&mut self, index: u8) {
         let base = u16::from(index) * Oam::ENTRY_SIZE;
         // On CGB the object search runs ahead of the DMA's state: by two
