@@ -175,3 +175,12 @@ and detailed testing instructions.
 - [dmg-schematics](https://github.com/msinger/dmg-schematics) and
   [dmg-sim](https://github.com/msinger/dmg-sim), the netlist and the
   simulation of the DMG-CPU B that `hdl` uses as its reference
+
+### Hardware
+
+- [Game Boy hardware database](https://gbhwdb.gekkio.fi/), the parts found on
+  opened consoles: [DMG](https://gbhwdb.gekkio.fi/consoles/dmg/),
+  [MGB](https://gbhwdb.gekkio.fi/consoles/mgb/) and
+  [CGB](https://gbhwdb.gekkio.fi/consoles/cgb/)
+- [gb-schematics](https://github.com/Gekkio/gb-schematics), schematics of the
+  boards (DMG, MGB, MGL, SGB, AGS), measured from real ones
