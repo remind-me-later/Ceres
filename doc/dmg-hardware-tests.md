@@ -265,9 +265,9 @@ printed on the CPU noted.
   0, as the scan hides from the OAM bus. The STAT interrupt's OAM source is
   the line clock, which the DMA does not gate. Found by the cut traces of
   `hdl/compare-ceres.sh` (`CUTS=1`) on gbmicrotest's `dma_basic`.
-- **Ceres today:** follows the netlist on the DMG, from
-  the DMA's first byte to its end, as the scan stops reading OAM; the CGB
-  shows mode 2, as before.
+- **Ceres today:** follows the netlist, from the DMA's first byte to its end,
+  as the scan stops reading OAM; on the CGB too, which has no netlist, since
+  no test contradicts it (entry 8 of the CGB list).
 - **Outcomes:** mode 0 during the scan confirms the netlist; the M-cycles
   where it begins and ends against the DMA's start, whether ceres's edges
   are right. On a CGB, which has no netlist, whether it does the same.

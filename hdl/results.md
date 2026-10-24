@@ -255,7 +255,7 @@ brief ones. What is left:
   netlist, STAT's mode 2 is the scan's flag gated by the DMA's (ACYL, from
   BESU and BOGE): while a DMA runs, the scan goes on, but STAT, like the OAM
   bus, does not see it. No test reads STAT then; a CPU running from high RAM
-  can. Ceres now does the same on the DMG (entry 13 of
+  can. Ceres now does the same, on the CGB too (entry 13 of
   [the DMG's list](../doc/dmg-hardware-tests.md) is what would confirm it).
 - **The length of mode 3 in `oam_sprite_trashing`**: on 48 lines, mode 3
   ends 4 M-cycles apart, both ways. The ROM writes OAM while the PPU reads it,
