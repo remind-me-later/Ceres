@@ -214,7 +214,7 @@ fn trace<W: Write>(
     let mut unshown = true;
     // The last state written to `cuts`.
     let mut last_cut: Option<CutSample> = None;
-    loop {
+    'run: loop {
         gb.step();
         if let Some(pixels) = pixels.as_mut() {
             for event in gb.take_ppu_trace() {
@@ -269,27 +269,33 @@ fn trace<W: Write>(
                 None => {}
             }
             if mcycle >= mcycles {
-                out.flush()?;
-                if let Some(cuts) = cuts.as_mut() {
-                    cuts.flush()?;
-                }
-                if let Some(frames) = frames.as_mut() {
-                    frames.flush()?;
-                }
-                if let Some(pixels) = pixels.as_mut() {
-                    pixels.flush()?;
-                }
-                if dropped > 0 {
-                    eprintln!("{dropped} accesses dropped (two in one M-cycle)");
-                }
-                return Ok(());
+                break 'run;
             }
             last = Some((mcycle, access));
         }
         if let Some(cuts) = cuts.as_mut() {
             write_cut_samples(cuts, gb.take_cut_trace(), first, &mut last_cut)?;
         }
+        // The CPU can stop using the bus for good (the older Mooneye tests
+        // end on opcode ED, which locks it up): stop by the clock as well.
+        if first.is_some_and(|first| (gb.clock_units() - first) / UNITS_PER_MCYCLE >= mcycles) {
+            if let Some((last_mcycle, last_access)) = last {
+                write_access(&mut out, last_mcycle, &last_access)?;
+            }
+            break;
+        }
     }
+    out.flush()?;
+    for file in [cuts.as_mut(), frames.as_mut(), pixels.as_mut()]
+        .into_iter()
+        .flatten()
+    {
+        file.flush()?;
+    }
+    if dropped > 0 {
+        eprintln!("{dropped} accesses dropped (two in one M-cycle)");
+    }
+    Ok(())
 }
 
 fn write_access<W: Write>(out: &mut W, mcycle: u64, access: &IoAccess) -> io::Result<()> {
