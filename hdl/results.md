@@ -328,18 +328,39 @@ cuts are the same in 50.
   interrupt sources now see the LCD off 3 half dots after the write: the
   probe makes the same accesses on both sides, and so do the three ROMs'
   cuts.
-- **The window on line 0** (Gambatte's `enable_wxA6_2x_spxA7_*` and
-  `m2int_wxA6_spxA7_*`, ten ROMs, MODE, OAMB and VRAMB; the 34 other WX=A5
-  and A6 ROMs are the same): with WY 0, WX A6 and a sprite at X A7, on the
-  first line 0 after the window is turned on, the model starts the window
-  at the end of the line (two window fetches after the background's), which
-  stalls mode 3; ceres does not. Both then draw line 1 as window, and lines
-  2 on as background. `check/window_line0_sprite.asm` reads STAT every
-  M-cycle across that line's end: ceres reads mode 0 an M-cycle where the
-  model reads mode 3, so the CPU can see it; no hardware test reads there.
-  On ceres's DMG a WX of 166 only counts the window's line where it matches
-  (`window.rs`). Why the netlist starts the window on line 0 and not on
-  lines 2 to 7, which have the sprite too, is not traced yet.
+- **The window at WX 166, in ceres** (Gambatte's `enable_wxA6_2x_spxA7_*`
+  and `m2int_wxA6_spxA7_*`, ten ROMs, MODE, OAMB and VRAMB; the 34 other
+  WX=A5 and A6 ROMs were the same): with WY 0, WX A6 and a sprite at X A7,
+  on the first line 0 after the window is turned on, mode 3 lasted three
+  M-cycles longer on the model. `check/window_line0_sprite.asm` reads STAT
+  every M-cycle across that line's end (ceres read mode 0 an M-cycle where
+  the model read mode 3: the CPU can see it; no hardware test reads there),
+  and its colours (background 1, window 3, sprite 2) showed a second
+  difference. A waveform of `render.vhd` gives both, as flip-flops half a
+  dot or more apart, not races:
+  - WX matches the pixel counter at its last dot (px A6): PYCO takes the
+    match at the dot's rise, and at its end the window latch sets, as px
+    becomes A7 and the sprite matches. The window's start resets the
+    fetcher, so the sprite's fetch waits for the window's first tile and
+    the next (11 dots), and only then does mode 3 end. Without a sprite
+    there, mode 3 ends at A7 and the start shows nothing. The pixel at
+    column 159 stays the background's.
+  - PYCO is reset only by the LCD's reset, and samples the match (WY's
+    latch and WX, not LCDC bit 5) at every dot: at the start of the next
+    line it still holds the match of the line before, and the window starts
+    as the line does, if bit 5 is on then. In the probe's second pass the
+    window was turned off in line 1 of the frame before, after WY had
+    matched, and on again in VBlank: the model drew line 0 as window, ceres
+    as background (ceres carried the window into the next line only if bit
+    5 was on at the end of the line before).
+
+  Ceres's DMG now does both (`mode3.rs`, `window.rs`): an object fetched
+  after a window start at WX 166 waits 11 dots more, and the next line
+  starts in the window if WY had matched and WX was 166 at the end of the
+  line before, and the window is on when the line's mode 3 starts. The
+  probe makes the same accesses on both sides, with the same cuts and the
+  same pictures, and all 44 of Gambatte's WX=A5 and A6 DMG ROMs have the
+  same cuts.
 
 Mooneye's older tests (`mooneye-test-suite-wilbertpol`) end on the opcode
 ED, which locks the CPU, not on `LD B,B`: `TEST=mooneye` does not end them
