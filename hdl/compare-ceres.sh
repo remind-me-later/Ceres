@@ -35,8 +35,9 @@
 # ceres-pixels.txt, compare-pixels.sh).
 #
 # CUTS=1 also compares what the blocks show each other (model-cuts.txt and
-# ceres-cuts.txt, compare-cuts.sh): IF, TIMA, the OAM DMA, LY, STAT's mode
-# and the divider's jumps, change by change.
+# ceres-cuts.txt, compare-cuts.sh): IF, TIMA, the OAM DMA, LY, STAT's mode,
+# the OAM's and VRAM's being busy for the CPU (OAMB, VRAMB) and the
+# divider's jumps, change by change.
 #
 # The screen is compared too: every whole frame on the LCD, as the model's
 # LCD pins draw it (FRAMES) and as ceres presents it (bus_trace --frames),

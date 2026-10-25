@@ -5,11 +5,11 @@
 #   compare-cuts.sh <model-cuts.txt> <ceres-cuts.txt> [<model.txt>]
 #
 # A line of a file is a change: "<M-cycle> <name> <value>", the name IF,
-# TIMA, DMA, LY, MODE or DIV (see board/gameboy_tb.vhd, CUTS). A ceres line
-# can have a fourth field: ceres sees the state at the end of each step of
-# its time, and a step can be longer than an M-cycle (an instruction's
-# internal ones); the field is the step's first M-cycle, where the change may
-# have been as well.
+# TIMA, DMA, LY, MODE, OAMB, VRAMB or DIV (see board/gameboy_tb.vhd, CUTS). A
+# ceres line can have a fourth field: ceres sees the state at the end of each
+# step of its time, and a step can be longer than an M-cycle (an
+# instruction's internal ones); the field is the step's first M-cycle, where
+# the change may have been as well.
 #
 # For each name, the two files' changes are paired in time: a change pairs
 # with the other side's next one if their values are the same (DIV's do not
@@ -23,13 +23,15 @@
 #
 # The two sides see a change at different points of an M-cycle, so the M-cycles
 # of a pair may differ by a constant; the usual difference (model minus ceres)
-# is found for each kind of change apart: for IF, DMA and MODE each value (a
-# mode can begin at another point of an M-cycle than the next); for TIMA and
-# LY a count (+1) and a change that sets them (a reload, line 153's LY 0);
-# and, given the model's bus trace (model.txt), a change in the M-cycle of a
-# write to its register or in the next (TIMA, IF, DIV, DMA's FF46, and LCDC
-# for LY and MODE). The first line of a name, the state the trace starts
-# with, does not count.
+# is found for each kind of change apart: for IF, DMA, MODE, OAMB and VRAMB
+# each value (a mode can begin at another point of an M-cycle than the next);
+# for TIMA and LY a count (+1) and a change that sets them (a reload, line
+# 153's LY 0); and, given the model's bus trace (model.txt), a change in the
+# M-cycle of a write to its register or in the next (TIMA, IF, DIV, FF46 for
+# DMA and OAMB, LCDC for LY, MODE, OAMB and VRAMB). The first line of a name,
+# the state the trace starts with, does not count. A kind with a single
+# change (a DMA's start) has that change's difference as its usual one: it
+# can only be judged against other ROMs'.
 #
 # Prints, for each name, how many changes each side has, the usual difference
 # of each kind (and the others, with how many changes have them), and the
@@ -43,13 +45,13 @@ set -eu
 [ $# -ge 2 ] || { echo "usage: $0 <model-cuts.txt> <ceres-cuts.txt> [<model.txt>]" >&2; exit 2; }
 
 awk -v window="${WINDOW:-3}" '
-	# The kind of the model'"'"'s change i: a write; for IF, DMA and MODE its
-	# value; for TIMA and LY whether it counts on (+1) or is set.
+	# The kind of the model'"'"'s change i: a write; for IF, DMA, MODE, OAMB and
+	# VRAMB its value; for TIMA and LY whether it counts on (+1) or is set.
 	function kind(name, i,    v, t, before) {
 		v = value[1, name, i]
 		t = at[1, name, i]
 		if ((name, t) in written || (name, t - 1) in written) return "write"
-		if (name == "IF" || name == "DMA" || name == "MODE") return name "=" v
+		if (name == "IF" || name == "DMA" || name == "MODE" || name == "OAMB" || name == "VRAMB") return name "=" v
 		if (name == "TIMA" || name == "LY") {
 			before = value[1, name, i - 1]
 			return (hex(before) + 1) % 256 == hex(v) ? "+1" : "set"
@@ -101,8 +103,13 @@ awk -v window="${WINDOW:-3}" '
 			if ($3 == "FF05") written["TIMA", $1] = 1
 			else if ($3 == "FF0F") written["IF", $1] = 1
 			else if ($3 == "FF04") written["DIV", $1] = 1
-			else if ($3 == "FF46") written["DMA", $1] = 1
-			else if ($3 == "FF40") { written["LY", $1] = 1; written["MODE", $1] = 1 }
+			else if ($3 == "FF46") { written["DMA", $1] = 1; written["OAMB", $1] = 1 }
+			else if ($3 == "FF40") {
+				written["LY", $1] = 1
+				written["MODE", $1] = 1
+				written["OAMB", $1] = 1
+				written["VRAMB", $1] = 1
+			}
 		}
 		next
 	}

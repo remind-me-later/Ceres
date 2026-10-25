@@ -241,7 +241,17 @@ fn cut_trace() {
     let samples = gb.take_cut_trace();
     // The ROM never writes DIV: a sample is taken for a change of the rest,
     // never for the divider's counting alone.
-    let moved = |s: &crate::CutState| (s.interrupt_flags, s.tima, s.dma, s.ly, s.stat_mode);
+    let moved = |s: &crate::CutState| {
+        (
+            s.interrupt_flags,
+            s.tima,
+            s.dma,
+            s.ly,
+            s.stat_mode,
+            s.oam_blocked,
+            s.vram_blocked,
+        )
+    };
     for (before, after) in samples.iter().zip(samples.iter().skip(1)) {
         assert_ne!(moved(&before.state), moved(&after.state), "{after:?}");
         assert!(before.clock_units < after.clock_units, "{after:?}");
@@ -257,6 +267,12 @@ fn cut_trace() {
             samples.iter().any(|s| s.state.stat_mode == mode),
             "mode {mode}"
         );
+    }
+    // The PPU takes OAM and VRAM from the CPU in every line, and gives them
+    // back.
+    for blocked in [false, true] {
+        assert!(samples.iter().any(|s| s.state.oam_blocked == blocked));
+        assert!(samples.iter().any(|s| s.state.vram_blocked == blocked));
     }
 }
 

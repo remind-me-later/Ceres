@@ -31,8 +31,9 @@
 -- CUTS gets what the blocks of the chip show each other, a line per change,
 -- as ceres's example bus_trace writes them (../compare-cuts.sh): the
 -- M-cycle, then IF, TIMA, DMA (1 while OAM DMA runs), LY or MODE (STAT's mode
--- bits) as a read would see them, and DIV when the divider does not count on
--- (a write to DIV, STOP), its value in M-cycles; values in hexadecimal.
+-- bits) as a read would see them, OAMB and VRAMB (1 while the CPU cannot
+-- read OAM, or VRAM), and DIV when the divider does not count on (a write
+-- to DIV, STOP), its value in M-cycles; values in hexadecimal.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -275,6 +276,7 @@ begin
 		alias mode3      is << signal .gameboy_tb.u_gameboy.u_chip.mode3 : std_ulogic >>;
 		alias mode1      is << signal .gameboy_tb.u_gameboy.u_chip.u_lcd_timing.mode1_i : std_ulogic >>;
 		alias div        is << signal .gameboy_tb.u_gameboy.u_chip.div : unsigned(15 downto 0) >>;
+		alias oam_free   is << signal .gameboy_tb.u_gameboy.u_chip.u_oam.free : std_ulogic >>;
 		file f          : text;
 		variable l      : line;
 		variable mcycle : natural := 0;
@@ -285,6 +287,7 @@ begin
 		variable last_tima, last_ly    : std_ulogic_vector(7 downto 0);
 		variable last_mode             : std_ulogic_vector(1 downto 0);
 		variable last_dma              : std_ulogic;
+		variable last_oamb, last_vramb : std_ulogic;
 		variable last_div              : unsigned(15 downto 0);
 
 		procedure put(name : string; value : string) is
@@ -325,6 +328,12 @@ begin
 					if first or to_x01(mode) /= last_mode then
 						put("MODE", integer'image(to_integer(unsigned(to_01(mode)))));
 					end if;
+					if first or to_x01(not oam_free) /= last_oamb then
+						put("OAMB", to_string(to_x01(not oam_free)));
+					end if;
+					if first or to_x01(mode3) /= last_vramb then
+						put("VRAMB", to_string(to_x01(mode3)));
+					end if;
 					if first or div /= last_div + 1 then
 						put("DIV", to_hstring(div));
 					end if;
@@ -335,6 +344,8 @@ begin
 					last_ly    := std_ulogic_vector(ly);
 					last_mode  := to_x01(mode);
 					last_div   := div;
+					last_oamb  := to_x01(not oam_free);
+					last_vramb := to_x01(mode3);
 				end if;
 			end if;
 		end loop;

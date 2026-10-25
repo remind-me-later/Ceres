@@ -33,7 +33,8 @@
 //! `--cuts FILE` also writes what the blocks of the chip show each other, a
 //! line per change: `<M-cycle> <name> <value>`, with IF (its five bits),
 //! TIMA, DMA (1 while an OAM DMA copies), LY and MODE (STAT's mode bits) as
-//! a read would see them, and DIV when the divider does not count on (a
+//! a read would see them, OAMB and VRAMB (1 while a CPU read of OAM, or of
+//! VRAM, would give 0xFF), and DIV when the divider does not count on (a
 //! write to DIV, STOP), with its value in M-cycles (the counter shifted
 //! right by 2); the model's testbench writes the same (`CUTS`), for
 //! `hdl/compare-cuts.sh`. Ceres runs its time in steps, sometimes of more
@@ -137,6 +138,12 @@ fn write_cuts<W: Write>(
     }
     if changed(|s| s.stat_mode) {
         writeln!(out, "{mcycle} MODE {}{from}", state.stat_mode)?;
+    }
+    if changed(|s| u8::from(s.oam_blocked)) {
+        writeln!(out, "{mcycle} OAMB {}{from}", u8::from(state.oam_blocked))?;
+    }
+    if changed(|s| u8::from(s.vram_blocked)) {
+        writeln!(out, "{mcycle} VRAMB {}{from}", u8::from(state.vram_blocked))?;
     }
     let counted = old.is_some_and(|old| {
         old.div

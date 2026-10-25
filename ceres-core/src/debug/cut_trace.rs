@@ -1,7 +1,8 @@
 //! A trace of what the blocks of the machine show each other: the interrupt
-//! flags, the divider, TIMA, the OAM DMA, LY and the mode STAT shows. It is
-//! recorded whenever one of them changes, for comparing with the readable
-//! VHDL model of the chip, which writes the same (`hdl/compare-cuts.sh`).
+//! flags, the divider, TIMA, the OAM DMA, LY, the mode STAT shows, and whether
+//! the CPU's reads of OAM and VRAM are shut out. It is recorded whenever one
+//! of them changes, for comparing with the readable VHDL model of the chip,
+//! which writes the same (`hdl/compare-cuts.sh`).
 
 use {
     super::OamDmaPhase,
@@ -25,6 +26,10 @@ pub struct CutState {
     /// LY and STAT's mode bits, as a read would see them.
     pub ly: u8,
     pub stat_mode: u8,
+    /// A CPU read of OAM, or of VRAM, would read 0xFF: the PPU or a DMA
+    /// has it.
+    pub oam_blocked: bool,
+    pub vram_blocked: bool,
 }
 
 /// The state, and when it began: in the step of time from `since_units` to
@@ -79,6 +84,9 @@ impl<A: AudioCallback> Gb<A> {
             ),
             ly: self.read_mem(0xFF44),
             stat_mode: self.read_mem(0xFF41) & 3,
+            oam_blocked: self.dma.blocks_oam_read()
+                || (self.ppu.debug_state().lcd_on && self.ppu.oam_read_blocked()),
+            vram_blocked: self.ppu.vram_read_blocked(),
         };
         let sample = CutSample {
             clock_units: self.clock_units,

@@ -230,7 +230,8 @@ other's (the same in every line), which it does not.
 
 `CUTS=1` also compares what the chip's blocks show each other, which the
 CPU sees only when it reads it: IF, TIMA, the OAM DMA's run, LY and STAT's
-mode bits as a read would see them, and the divider where it does not count
+mode bits as a read would see them, whether a read of OAM or of VRAM would
+give FF (the PPU or a DMA has it), and the divider where it does not count
 on (a write to DIV, STOP), a line per change (`compare-cuts.sh`,
 `model-cuts.txt` and `ceres-cuts.txt`). The model samples them once an
 M-cycle, when it samples the accesses; ceres at the end of each step of its
