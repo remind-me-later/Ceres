@@ -303,6 +303,12 @@ impl Sm83 {
     fn dispatch_interrupt<B: Bus>(&mut self, bus: &mut B) {
         // M1: dummy fetch. M2: PC (and SP) on the address bus.
         bus.read(self.pc);
+        // After a HALT the interrupt cut short, the fetch did not advance PC
+        // and the dispatch takes it back: the HALT runs again on return.
+        if self.halt_bug {
+            self.pc = self.pc.wrapping_sub(1);
+            self.halt_bug = false;
+        }
         // A pending HDMA burst goes first, like after any opcode fetch.
         bus.tick_hdma();
         bus.tick_oam_bug(self.pc.wrapping_add(1));

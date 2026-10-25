@@ -257,12 +257,11 @@ impl Sm83 {
 
         // The HALT bug also happens on a CGB, in both CGB and DMG modes.
         if bus.interrupts_pending() {
+            // PC does not move past the next fetch. With the IME set, that
+            // fetch is the dispatch's: it reads the opcode after the HALT and
+            // returns to the HALT.
             self.is_halted = false;
-            if self.ime {
-                self.pc = self.pc.wrapping_sub(1);
-            } else {
-                self.halt_bug = true;
-            }
+            self.halt_bug = true;
         } else {
             // A transfer requested during the HALT's fetch has the next
             // opcode prefetched: it runs twice, as with the HALT bug.
