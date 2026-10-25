@@ -98,6 +98,9 @@ pub(crate) struct Ppu {
     rgb_buf: RgbaBuf,
     rgba_buf_present: RgbaBuf,
     scx: u8,
+    /// SCX as the pixel mixer sees it, for the fine scroll: on the DMG it
+    /// takes a write's low bits a dot after the tile fetcher does.
+    mixer_scx: u8,
     scy: u8,
     /// STAT as SameBoy keeps it: mode bits, LYC flag and the enable bits.
     stat: u8,
@@ -428,6 +431,16 @@ impl Ppu {
         #[cfg(feature = "debug")]
         self.trace_write(0xFF43, val);
         self.scx = val;
+        self.mixer_scx = val;
+    }
+
+    /// The low bits of SCX that the pixel mixer still sees during a write.
+    pub(crate) const fn hold_mixer_scx_low(&mut self, old: u8) {
+        self.mixer_scx = (self.scx & !7) | (old & 7);
+    }
+
+    pub(crate) const fn release_mixer_scx(&mut self) {
+        self.mixer_scx = self.scx;
     }
 
     /// Place the PPU `dot` dots into `line` (post-boot state injection). The

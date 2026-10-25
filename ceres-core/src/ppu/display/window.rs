@@ -159,7 +159,7 @@ impl Ppu {
             let hw = self.is_cgb_hardware();
             let should_activate = if self.wx == 0 {
                 position == pos(-7)
-                    || position == pos(-16) && self.scx & 7 != 0
+                    || position == pos(-16) && self.mixer_scx & 7 != 0
                     || (pos(-15)..=pos(-8)).contains(&position)
             } else if u16::from(self.wx) < 166 + u16::from(hw) {
                 if self.wx == position.wrapping_add(7) {
@@ -188,7 +188,7 @@ impl Ppu {
                 self.d.window.tile_x = 0;
                 self.d.window.saved = hw.then(|| (self.d.bg_fifo, self.d.fetcher.clone()));
                 self.d.bg_fifo.clear();
-                if self.wx == 0 && self.scx & 7 != 0 && !hw {
+                if self.wx == 0 && self.mixer_scx & 7 != 0 && !hw {
                     self.sleep_in_line(State::Mode3WindowDelay, 1);
                     return true;
                 } else if self.wx == 166 {

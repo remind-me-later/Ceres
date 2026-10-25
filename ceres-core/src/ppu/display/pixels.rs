@@ -48,8 +48,8 @@ impl Ppu {
         if position.wrapping_add(16) < 8 {
             if position == pos(-17) {
                 self.d.position_in_line = pos(-16);
-            } else if position & 7 == self.scx & 7
-                || self.d.window.being_fetched && position & 7 == 6 && self.scx & 7 == 7
+            } else if position & 7 == self.mixer_scx & 7
+                || self.d.window.being_fetched && position & 7 == 6 && self.mixer_scx & 7 == 7
             {
                 self.d.position_in_line = pos(-8);
             } else if position == pos(-9) {

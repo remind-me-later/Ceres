@@ -213,16 +213,18 @@ impl<A: AudioCallback> Gb<A> {
             ConflictType::ScxDmgAndCgbDouble | ConflictType::ScyDmg => {
                 // The tile fetcher sees these two dots before the pixel mixer.
                 // On the DMG the mixer, which discards SCX's low bits, sees them
-                // a dot before the end of the write.
+                // a dot before the end of the write; the fetcher, whose map
+                // column is the sum of SCX and the position, sees all of SCX
+                // at once (the netlist has one latch).
                 let old = self.ppu.read_scx();
                 self.advance_t_cycles(pending - 2);
+                self.write_mem(addr, val);
                 if self.model.is_cgb_hardware() || addr != io_addr(SCX) {
-                    self.write_mem(addr, val);
                     self.time_deferred = 6;
                 } else {
-                    self.write_mem(addr, (old & 7) | (val & !7));
+                    self.ppu.hold_mixer_scx_low(old);
                     self.advance_t_cycles(1);
-                    self.write_mem(addr, val);
+                    self.ppu.release_mixer_scx();
                     self.time_deferred = 5;
                 }
             }
