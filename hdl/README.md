@@ -256,6 +256,14 @@ sampling matters, a ROM that reads the register in every M-cycle settles
 it through the bus traces: `check/stat_vblank_end.asm` (`make` builds it)
 does so with STAT across the end of VBlank (see [results.md](results.md)).
 
+`sweep-cuts.sh NAME < roms.txt` runs this on a list of ROMs, `JOBS` at a
+time, with the environment's `BOOT`, `TEST`, `APU` and `SECS`, writes a
+line per ROM to `build/sweeps/NAME.txt` and prints the differences grouped
+across the ROMs, as in [results.md](results.md#what-the-blocks-show-each-other).
+`compare-ceres.sh` stops a side that runs too long or writes a file past
+1 GiB (a ROM that ends on a locked CPU without a `TEST` to see it); the
+sweep lists such ROMs first.
+
 Over gbmicrotest, ceres and the model make the same accesses in 491 ROMs
 of 513. The others differ in three ways (see also
 [results.md](results.md)):

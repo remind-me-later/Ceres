@@ -48,6 +48,11 @@
 # enough for the ROM to draw. Use BOOT=quick for pictures: fastboot leaves
 # VRAM as the model's board powers up (arbitrary bytes), quickboot zeroes it
 # and sets the palette as the real boot ROM does.
+#
+# A run that hangs or writes without end stops: the model after 600 s plus
+# 1200 s per simulated second, ceres after 120 s, and any file passing
+# 1 GiB. The script then prints "timed out:" or "too large:" and the side,
+# and exits with 124 or 153.
 
 set -eu
 
@@ -91,17 +96,33 @@ if [ -n "${CUTS:-}" ]; then
 	cuts_ceres=$dir/ceres-cuts.txt
 fi
 
-(cd "$dir" && nvc --std=2008 -H 64m --work="$HDL/build/model/work" -e --jit gameboy_tb \
+# Stops a side that runs too long or writes too much (1 GiB, in the 512-byte
+# blocks of a POSIX shell's ulimit).
+ulimit -f 2097152
+stopped() {
+	case $1 in
+	124) echo "timed out: $2 after $3 s" ;;
+	153) echo "too large: a file of $2 passed 1 GiB" ;;
+	*) echo "failed: $2, exit status $1" ;;
+	esac
+	exit "$1"
+}
+
+limit=$(awk -v s="$secs" 'BEGIN { print int(600 + 1200 * s) }')
+rc=0
+(cd "$dir" && timeout "$limit" nvc --std=2008 -H 64m --work="$HDL/build/model/work" -e --jit gameboy_tb \
 	-gBOOTROM="$BOOTROM" ${vram_zero:+"-gVRAM_ZERO=$vram_zero"} ${APU:+"-gWITH_CHANNELS=false"} -gROM="$ROOT/$rom" -gSECS="$secs" -gBUS_TRACE="$dir/model.txt" \
 	${TEST:+"-gTEST=$TEST"} ${frames_model:+"-gFRAMES=$frames_model"} \
-	${pixels_model:+"-gPIXELS=$pixels_model"} ${cuts_model:+"-gCUTS=$cuts_model"} -r >model.log 2>&1)
+	${pixels_model:+"-gPIXELS=$pixels_model"} ${cuts_model:+"-gCUTS=$cuts_model"} -r >model.log 2>&1) || rc=$?
+[ $rc -eq 0 ] || stopped $rc model "$limit"
 
 # The same M-cycles from ceres: up to the model's last, which may be cut.
 mcycles=$(tail -n 1 "$dir/model.txt" | cut -d ' ' -f 1)
 sed -i "/^$mcycles /,\$d" "$dir/model.txt"
-"$ROOT/target/release/examples/bus_trace" "$ROOT/$rom" --bootrom "$BOOTROM" \
+timeout 120 "$ROOT/target/release/examples/bus_trace" "$ROOT/$rom" --bootrom "$BOOTROM" \
 	--mcycles "$mcycles" --out "$dir/ceres.txt" ${frames_ceres:+--frames "$frames_ceres"} \
-	${pixels_ceres:+--pixels "$pixels_ceres"} ${cuts_ceres:+--cuts "$cuts_ceres"}
+	${pixels_ceres:+--pixels "$pixels_ceres"} ${cuts_ceres:+--cuts "$cuts_ceres"} || rc=$?
+[ $rc -eq 0 ] || stopped $rc ceres 120
 
 status=0
 echo "$rom: $(wc -l <"$dir/model.txt") accesses in $mcycles M-cycles"
