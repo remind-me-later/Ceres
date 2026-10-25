@@ -76,6 +76,9 @@ pub(super) const LINE_RESET_H: i32 = LINE_END_H + 2;
 pub(super) const VBLANK_H: i32 = LINE_END_H + 4;
 /// LY=LYC is sampled once per M-cycle, at this phase.
 const LY_MATCH_PHASE: i32 = 4;
+/// The half dots from an LCDC write that turns the LCD off to the sources of
+/// the interrupt seeing it.
+const LCD_OFF_LATE: u8 = 3;
 
 const LAST_VISIBLE_LINE: u8 = LINES - 1;
 
@@ -493,8 +496,18 @@ impl Ppu {
         }
     }
 
-    /// The LCD was turned off: LY=LYC keeps its last value.
-    pub(in crate::ppu) const fn timing_lcd_off(&mut self) {
+    /// The LCD was turned off: LY=LYC keeps its last value. The LCD's reset
+    /// reaches the sources of the interrupt a moment after the write lands
+    /// here: the clock runs on for those half dots, and an interrupt that
+    /// rises in them is requested (in the netlist a line-end pulse 2 half
+    /// dots after the write still requests line 0x45's mode 2 interrupt:
+    /// the reset follows it by 156 ns; `hdl/check/lcd_off_line_start.asm`).
+    pub(in crate::ppu) const fn timing_lcd_off(&mut self, ints: &mut Interrupts) {
+        let mut late = LCD_OFF_LATE;
+        while late > 0 {
+            self.timing_unit(ints);
+            late -= 1;
+        }
         let t = &mut self.d.timing;
         t.on = false;
         t.ly = 0;

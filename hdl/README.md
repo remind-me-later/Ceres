@@ -254,7 +254,9 @@ brief counts of TIMA and the first mode 3 after the LCD is turned on, which
 ceres's STAT shows an M-cycle sooner. Where a change between the points of
 sampling matters, a ROM that reads the register in every M-cycle settles
 it through the bus traces: `check/stat_vblank_end.asm` (`make` builds it)
-does so with STAT across the end of VBlank (see [results.md](results.md)).
+does so with STAT across the end of VBlank, and
+`check/lcd_off_line_start.asm` turns the LCD off at each M-cycle around a
+line's start and reads IF (see [results.md](results.md)).
 
 `sweep-cuts.sh NAME < roms.txt` runs this on a list of ROMs, `JOBS` at a
 time, with the environment's `BOOT`, `TEST`, `APU` and `SECS`, writes a

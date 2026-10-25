@@ -368,7 +368,7 @@ impl Ppu {
             self.timing_lcd_on(ints);
         } else if !is_on && was_on {
             self.lcd_off();
-            self.timing_lcd_off();
+            self.timing_lcd_off(ints);
             self.rgba_buf_present.clear();
         } else {
             // The LCD stays as it is.
