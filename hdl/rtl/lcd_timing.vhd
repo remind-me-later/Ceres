@@ -75,7 +75,6 @@ architecture rtl of lcd_timing is
 	signal lyc_match            : std_ulogic := '0';
 	signal stat_enable          : std_ulogic_vector(6 downto 3) := (others => '0');
 	signal write_stat, write_lyc : std_ulogic;
-	signal int_oam              : std_ulogic;
 begin
 	-- The PPU's clock is the chip's, inverted. wuvu halves it on its rising
 	-- edge (the chip's falling edge), and vena halves that again: hclk.
@@ -257,10 +256,12 @@ begin
 
 	-- The interrupts. The STAT interrupt is the OR of its enabled sources;
 	-- IF's flag is set when it rises. The OAM source is the end of each line
-	-- outside VBlank (vclk), when the next line's OAM scan begins.
+	-- outside VBlank (vclk), when the next line's OAM scan begins. At the end
+	-- of VBlank, mode 1 falls as vclk rises: one expression, so that the OR
+	-- does not drop for a delta cycle between them and set the flag again,
+	-- as on the DMG (Gambatte's m2irq_ly00_lcdstat30: no interrupt).
 	-- @hw die: TAPA, SUKO TUVA VOTY; VYPU
-	int_oam  <= vclk_i and not mode1_i;
-	int_stat <= (stat_enable(6) and lyc_match) or (stat_enable(5) and int_oam) or
+	int_stat <= (stat_enable(6) and lyc_match) or (stat_enable(5) and vclk_i and not mode1_i) or
 	            (stat_enable(4) and mode1_i) or (stat_enable(3) and mode0);
 	int_vbl  <= mode1_i;
 
