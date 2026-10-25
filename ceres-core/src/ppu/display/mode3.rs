@@ -6,7 +6,12 @@ use {
         ATTR_CGB_PALETTE, ATTR_DMG_PALETTE_B, ATTR_PRIORITY_B, ATTR_X_FLIP_B, LCDC_OBJ_EN_B,
         LCDC_WIN_EN_B, Oam, PX_WIDTH, Ppu, STAT_MODE_B,
     },
+    core::mem,
 };
+
+/// Dots the DMG's window start at WX = 166 adds before an object fetch at
+/// the line's end: its first tile (6) and the next one, to the data (5).
+const WINDOW_TILES_BEFORE_OBJECT: i32 = 11;
 
 pub(super) enum Mode3Flow {
     Slept,
@@ -40,6 +45,15 @@ impl Ppu {
         self.d.bg_fifo.push_bg_row(0, 0, 0, false, false);
         self.d.lcd_x = 0;
         self.d.fetcher.step = FetcherStep::GetTileT1;
+        self.d.window.started_after_line = false;
+        // The DMG's WX match at the last line's end is held (PYCO, NUNU)
+        // until this line's first pixel; LCDC bit 5 holds the window off
+        // until then.
+        if mem::take(&mut self.d.window.wx_166_carry) && self.lcdc & LCDC_WIN_EN_B != 0 {
+            self.d.window.wx_triggered = true;
+            self.d.window.tile_x = 1;
+            self.d.window.line = self.d.window.line.wrapping_add(1);
+        }
     }
 
     /// Runs the mode 3 loop from `resume` (the sleep that ended) until it
@@ -120,6 +134,14 @@ impl Ppu {
                     }
                 }
                 Step::WaitForTile => {
+                    if mem::take(&mut self.d.window.started_after_line) {
+                        // The window's start restarted the fetcher: the
+                        // object waits for the window's first tile and the
+                        // next one (the line ends after it, whatever the
+                        // fetcher holds).
+                        self.sleep_in_line(State::Mode3ObjectFetch, 1 + WINDOW_TILES_BEFORE_OBJECT);
+                        return Mode3Flow::Slept;
+                    }
                     // The background fetcher finishes its tile first.
                     let next = if self.d.fetcher.step < FetcherStep::DataHighT2
                         || self.d.bg_fifo.is_empty()
@@ -243,17 +265,9 @@ impl Ppu {
         if self.d.current_line == LINES - 1 {
             self.d.window.line = Window::NO_LINE;
         }
-        if !self.is_cgb_hardware()
-            && self.d.window.wy_triggered
-            && self.lcdc & LCDC_WIN_EN_B != 0
-            && self.wx == 166
-        {
-            self.d.window.wx_triggered = true;
-            self.d.window.tile_x = 1;
-            self.d.window.line = self.d.window.line.wrapping_add(1);
-        } else {
-            self.d.window.wx_triggered = false;
-        }
+        self.d.window.wx_triggered = false;
+        self.d.window.wx_166_carry =
+            !self.is_cgb_hardware() && self.d.window.wy_triggered && self.wx == 166;
 
         if !self.double_speed() {
             self.stat &= !STAT_MODE_B;

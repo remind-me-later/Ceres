@@ -222,6 +222,7 @@ impl Ppu {
                 self.d.cpu.vram_read_blocked = true;
                 self.d.cpu.vram_write_blocked = true;
                 self.d.window.wx_triggered = false;
+                self.d.window.wx_166_carry = false;
                 self.mode3_start();
                 Some(State::Mode3)
             }

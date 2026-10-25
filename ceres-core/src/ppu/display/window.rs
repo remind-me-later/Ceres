@@ -35,6 +35,12 @@ pub(super) struct Window {
     pub cgb_wx_glitch: bool,
     pub no_pixel_insertion_glitch: bool,
     pub wx_166_interrupt_glitch: bool,
+    /// On the DMG, the window started after the line's last pixel (WX =
+    /// 166): an object fetched there waits for the window's first tiles.
+    pub started_after_line: bool,
+    /// On the DMG, WX was 166 at the end of a line after WY matched: the next
+    /// line starts in the window if the window is on when its mode 3 starts.
+    pub wx_166_carry: bool,
     /// A CPU write to WX is landing (SameBoy's `wx_just_changed`).
     pub wx_just_changed: bool,
     /// A CPU write that turns the window on is landing: the pixel pipeline
@@ -66,6 +72,8 @@ impl Default for Window {
             cgb_wx_glitch: false,
             no_pixel_insertion_glitch: false,
             wx_166_interrupt_glitch: false,
+            started_after_line: false,
+            wx_166_carry: false,
             wx_just_changed: false,
             enable_pending: false,
             saved: None,
@@ -190,7 +198,11 @@ impl Ppu {
                 }
                 self.mode3_window_activated();
             } else if !hw && self.wx == 166 && self.wx == position.wrapping_add(7) {
+                // The DMG starts the window after the last pixel (its WX
+                // match is latched at the last dot): only an object fetch
+                // after it sees the window's fetches.
                 self.d.window.line = self.d.window.line.wrapping_add(1);
+                self.d.window.started_after_line = true;
             } else {
                 // The window does not start here.
             }
