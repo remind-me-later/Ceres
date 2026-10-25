@@ -432,9 +432,9 @@ begin
 		variable pixels  : line_t;
 		variable frame   : frame_t;
 		variable x       : natural range 0 to 160 := 0;
-		variable y       : natural range 0 to 144 := 0;
+		-- 144: no frame is being taken, until S starts one.
+		variable y       : natural range 0 to 144 := 144;
 		variable enabled : boolean := false;
-		variable first   : boolean := true;   -- the frame after the LCD is turned on
 		variable shown   : natural := 0;
 		file frames_file : text;
 
@@ -504,25 +504,22 @@ begin
 					y := y + 1;
 					-- The frame is whole when its last line is latched, not
 					-- when the next one starts: the LCD may go off between.
-					-- The first one after the LCD is turned on is not shown
-					-- (nor does ceres's example write it): its first line is
-					-- not a whole one.
 					if y = 144 then
-						if first then
-							first := false;
-						else
-							if SCREEN /= "" then
-								write_screen;
-							end if;
-							if FRAMES /= "" then
-								write_frame;
-							end if;
+						if SCREEN /= "" then
+							write_screen;
+						end if;
+						if FRAMES /= "" then
+							write_frame;
 						end if;
 					end if;
 				end if;
 			elsif falling_edge(cpl) then
+				-- The first frame after the LCD is turned on is not shown
+				-- (nor does ceres's example write it): S does not start it,
+				-- and its first line is not a whole one. A frame cut off
+				-- when the LCD went off is not taken either.
 				if cpg = '1' and not enabled then
-					first := true;
+					y := 144;
 				end if;
 				enabled := cpg = '1';
 			end if;

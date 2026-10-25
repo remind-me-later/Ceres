@@ -6,8 +6,8 @@
 # Neither writes the first frame after the LCD is turned on, which the LCD
 # does not show; the all-white frames before the first picture are left out
 # on both sides, since the number of them can differ. (A frame is complete on
-# the model when its last line is latched, on ceres when LY reaches 144: ceres
-# may have one more at the cut.)
+# the model when its last line is latched, on ceres when STAT's mode becomes
+# 1: ceres may have one more at the cut.)
 #
 # Prints how many frames each has, the first picture that differs, with its
 # first pixels, and how many pictures differ, the last among them. Exits 1

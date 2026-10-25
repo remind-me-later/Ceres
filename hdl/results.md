@@ -118,14 +118,9 @@ The 32 ROMs of Mealybug Tearoom's `ppu/` directory, run for 0.5 s from
 quickboot, make the same accesses on ceres and on the readable model in all
 of them. Their pictures, as `compare-frames.sh` finds them:
 
-- Identical in all frames (7): `m2_win_en_toggle`, `m3_scx_high_5_bits`,
-  `m3_wx_4_change`, `m3_wx_4_change_sprites`, `m3_wx_5_change`,
-  `m3_wx_6_change` and `win_without_bg`.
-- Different in the first picture only, the same afterwards (16): 3 to 38
-  pixels in 13 of them, `m3_scy_change` 139,
-  `m3_lcdc_win_en_change_multiple_wx` 151 and
-  `m3_lcdc_win_en_change_multiple` 7121.
-- Different in the last picture too (6), in this many pixels:
+- Identical in all frames (23).
+- Different in the last picture (6), in all of their pictures, in this many
+  pixels:
   `m3_bgp_change` 496, `m3_bgp_change_sprites` 328,
   `m3_lcdc_obj_en_change_variant` 144, `m3_scx_high_5_bits_change2` 30,
   `m3_window_timing` 138 and `m3_window_timing_wx_0` 144.
@@ -137,7 +132,18 @@ of them. Their pictures, as `compare-frames.sh` finds them:
   150 pixels, in the top rows, the same in the three), where the boot ROM
   writes SCY within a dot of the fetch of the first tiles.
 
-`dmg-acid2` differs only in its first picture (62 pixels).
+`dmg-acid2` is identical in all frames.
+
+16 of the 23 differed in the first picture only, and `dmg-acid2` too, until
+both sides' frame writers were mended: the first picture was not the same
+frame on the two sides. After the LCD is turned on, S does not pulse until
+the second frame; the model's writer, which skipped a frame after the LCD
+was turned on and counted the lines from S, skipped the second frame as
+well when the LCD had been on before (at power-on its count of lines starts
+at 0, without S). Ceres's took a frame when LY reached 144, which is a few
+dots before ceres presents it: when a step ended between, it wrote the frame
+before again. A frame is now taken from S on the model, and from STAT's mode
+1 on ceres.
 
 Where the real DMG's screenshots (`*_dmg_blob.png`) can decide, the
 comparison with them says who is right: the settled pictures of ceres and of
@@ -229,12 +235,6 @@ turn on. They are open.
 
 ### Not looked into
 
-- The 16 ROMs that differ in the first picture only: in every one the model's
-  first picture is the same as its later ones and ceres's is not (in
-  `m3_scy_change`, in its first two lines, where the pixel timelines of the
-  two sides are the same; in `m3_lcdc_tile_sel_change`, the 8 pixels are a
-  sprite on line 0 that ceres does not draw in that frame, whose OAM nothing
-  writes after the LCD is turned on). No screenshot shows those frames.
 - `m3_scx_high_5_bits_change2` (30 pixels, seven lines, a hole of four pixels
   in the model where SCX changes): the model matches dmg-sim to the end of
   the run, so it is the netlist's against ceres's; no screenshot shows it.
