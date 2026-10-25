@@ -118,12 +118,12 @@ The 32 ROMs of Mealybug Tearoom's `ppu/` directory, run for 0.5 s from
 quickboot, make the same accesses on ceres and on the readable model in all
 of them. Their pictures, as `compare-frames.sh` finds them:
 
-- Identical in all frames (23).
-- Different in the last picture (6), in all of their pictures, in this many
+- Identical in all frames (24).
+- Different in the last picture (5), in all of their pictures, in this many
   pixels:
   `m3_bgp_change` 496, `m3_bgp_change_sprites` 328,
-  `m3_lcdc_obj_en_change_variant` 144, `m3_scx_high_5_bits_change2` 30,
-  `m3_window_timing` 138 and `m3_window_timing_wx_0` 144.
+  `m3_lcdc_obj_en_change_variant` 144, `m3_window_timing` 138 and
+  `m3_window_timing_wx_0` 144.
 - Nothing drawn after quickboot, on either side (3): `m3_lcdc_obj_en_change`,
   `m3_obp0_change` and `m3_scx_low_3_bits` need the state that the real boot
   ROM leaves. With it (`BOOT=real`, 1.5 s) the two sides make the same
@@ -233,20 +233,42 @@ These are where the netlist is not enough: the real delays of the write path
 (how long the bus is precharged, how long the latch takes) are what they
 turn on. They are open.
 
-### Not looked into
+### SCX's low bits and the tile's column, in ceres
 
-- `m3_scx_high_5_bits_change2` (30 pixels, seven lines, a hole of four pixels
-  in the model where SCX changes): the model matches dmg-sim to the end of
-  the run, so it is the netlist's against ceres's; no screenshot shows it.
+`m3_scx_high_5_bits_change2` differed in 30 pixels, a hole of four pixels on
+seven lines in the model where the ROM writes SCX in mode 3. A waveform of
+`render.vhd` shows why: the column of the map read is the sum of SCX and
+the pixel counter (`(px + SCX) >> 3`, SCX's low bits carrying), worked out
+by gates from the latch of SCX until the tile register takes the map's byte
+at the end of the fetcher's count 1. The write lands 157 ns after the map
+read begins and 200 ns before that, so the read takes all of the new value:
+on line 48, px 19 plus SCX 3F gives column 11 (tile 4C, whose row is half
+black, half white), where SCX 38 would give 10.
+
+Ceres's DMG wrote SCX's high bits a dot before its low bits, for the pixel
+mixer, whose fine scroll takes the low bits a dot later (Gambatte's
+`scx_during_m3/scx_m3_extend_1` and
+`enable_display/ly0_late_scx7_m3stat_scx3_2` fail without that, and pass on
+the model); the tile fetcher saw the late low bits too, and read column 10.
+The fetcher now sees all of SCX as the write lands, and only the mixer (the
+fine scroll, and the window at WX 0, which waits for it) keeps the old low
+bits for that dot (`cpu_bus/write.rs`, `mixer_scx`). The picture is then the
+model's in all frames, and the whole suite passes, AGE's `m3-bg-scx` and
+the two Gambatte ROMs among them. (Reading the map at the fetcher's second
+dot instead, with SCX as it is then, was tried first: it draws this ROM as
+the model does on the line where the write lands early in the fetch, but
+not where it lands a dot later, and AGE's `m3-bg-scx` and `m3-bg-lcdc`
+fail with it. The model draws both of those as the DMG does.)
 
 ## What the blocks show each other
 
 `compare-ceres.sh` with `CUTS=1` (see the
 [README](README.md#comparing-ceres-with-it)) over the 513 gbmicrotest ROMs,
 from fastboot to their results (9 minutes, six at a time). 491 make the same
-accesses; the 22 others are the read after HALT (7) and the power-on state
-(15), as above. In 507, the IF, TIMA, DMA, LY, MODE, OAMB, VRAMB and DIV
-changes are the same on both sides, but for changes an M-cycle off their
+accesses; the 22 others are the read after HALT (7, since fixed in ceres: see
+the full Gambatte sweep below) and the power-on state (15), as above. In 507,
+the IF, TIMA, DMA, LY, MODE, OAMB, VRAMB and DIV changes are the same on both
+sides, but for changes an M-cycle off their
 usual difference (a change between the two sides' points of sampling) and
 brief ones (`sweep-cuts.sh`, 8 minutes, eight at a time). Of the others,
 two differ in their accesses (`500-scx-timing` and `minimal`: TIMA counts
@@ -310,12 +332,13 @@ cuts are the same in 50.
   (`lcd_timing.vhd`). Both now agree with ceres.
 - **The LCD turned off in VBlank, with STAT's mode 0 source on** (Mooneye's
   `stat_write_if-GS` and Gambatte's `frame0/1/2_m0irq_count_scx*`, IF
-  only): the model sets the STAT flag, ceres does not. The LCD's reset
+  only): the model set the STAT flag, ceres did not. The LCD's reset
   clears mode 1 (POPU) a delta cycle before the pixel counter leaves 167,
-  so `mode0 <= stop_mode3 and not mode1` (`render.vhd`) pulses: the same
-  kind of hazard. No hardware test reads IF there; open (entry 14 of
-  [the DMG's list](../doc/dmg-hardware-tests.md)), the model left as the
-  netlist gives it.
+  so `mode0 <= stop_mode3 and not mode1` (`render.vhd`) pulsed: the same
+  kind of hazard. In dmg-sim mode 1 falls 2 ns before the compare, and the
+  gate swallows the pulse; the model now does too, since the fix of mode
+  0's rise below, and agrees with ceres. No hardware test reads IF there
+  (entry 14 of [the DMG's list](../doc/dmg-hardware-tests.md)).
 - **The LCD turned off in the M-cycle a line begins, in ceres** (Mooneye's
   `intr_2_mode0_timing_sprites*`, IF only): the model requests line 0x45's
   mode 2 interrupt and then turns the LCD off; ceres turned it off first.
@@ -366,6 +389,67 @@ Mooneye's older tests (`mooneye-test-suite-wilbertpol`) end on the opcode
 ED, which locks the CPU, not on `LD B,B`: `TEST=mooneye` does not end them
 and they run for `SECS`.
 
+### All of Gambatte's DMG tests
+
+The same sweep over all 1747 of Gambatte's DMG ROMs (tinyboot, `SECS=0.29`,
+`APU=0`, eight at a time: 9.5 hours): 1573 make the same accesses, 1711 have
+the same cuts. Of the others, 129 are `oamdma` ROMs that push, read, call an
+interrupt or RST while a DMA has the bus (the busy bus, as above; the other
+230 of them are the same on both sides). The 77 left ran again after the
+fixes below, the sound ones with the APU: 58 are then the same in their
+accesses and their cuts.
+
+- **Without the APU** (29: 26 of `sound/`, and `m1`'s three
+  `lyc14*_ly148_push_m1irq_late_enable`, which push onto the stack in wave
+  RAM): they read NR52 or wave RAM, which `APU=0` leaves out. With the APU
+  all 29 are the same.
+- **The read after a HALT cut short, in ceres** (eight of `halt/`, EI then
+  HALT with the interrupt pending): the chip's dispatch reads the address
+  after the HALT, ceres read the HALT's own (it took PC back in the HALT).
+  Ceres now takes PC back in the dispatch, after its read (`sm83/mod.rs`);
+  the eight make the same accesses, and the seven gbmicrotest ROMs above
+  with them.
+- **A write to LYC that ends LY = LYC as mode 3 ends, in the model**
+  (`m0enable/lycdisable_ff45_3`, 2 on the DMG, 0 on the model): with STAT's
+  LYC and mode 0 sources on, dmg-sim's STAT line drops for 13 ns, as LY =
+  LYC's flag (ROPO, at hclk + 1 ns) falls before mode 0 rises (at hclk + 14
+  ns, from the pixel counter, whose clock comes 8 ns after hclk), and its
+  rise sets IF. The model's counter clocked first and mode 0 rose with hclk.
+  Mode 0 now rises 14 ns after its compare (`render.vhd`); the recording is
+  in `check/roms.txt`, and all 147 `m0enable` and `lycEnable` ROMs pass on
+  the model. The same delay swallows mode 0's pulse at the LCD's turning
+  off (above), and the 12 `frame*_m0irq_count` ROMs and four IF-only others
+  (`lcdirq_precedence`, `m1`) are now the same too.
+
+The 19 that still differ:
+
+- **The DMA's bus, in the netlist** (6): `oamdma`'s three `srambankchange_1`
+  (cartridge RAM read while the DMA has the external bus: the model reads 00,
+  ceres the DMA's byte, 4, as the DMG) and `oamdma_srcFE00_readFE00`,
+  `oamdma_srcFF00_readFE00` and `oamdma_srcFF00_readFE45` (a DMA from `FE00`
+  or `FF00`: the model copies 83 or 64 where the DMG and ceres give `FF` and
+  00). Recorded in dmg-sim from fastboot (`srambankchange_1` from `0000`,
+  `srcFE00_readFE00`), the model's internal signals are dmg-sim's to well
+  past the read, so dmg-sim reads the same: the netlist's, as the busy bus.
+  (The cartridge's address pins differ in both recordings where the CPU
+  runs from `7FFF` into `8000`: the model's latch keeps the low byte `FF`,
+  dmg-sim's takes the precharged 00. Only the cartridge sees it; open.)
+
+Not yet looked into:
+
+- In their accesses (1): `oam_access/postread_scx3_2` (OAM read as mode 3
+  ends: 00 on ceres, `FF` on the model; with `xout1` in its name, Gambatte's
+  own runner, which looks for `dmg08_out`, does not run it on the DMG).
+- In MODE, OAMB and VRAMB (2): `oamdma/late_sp00x_2` and `late_sp39x_2`.
+- In MODE only (4): `oamdma_late_halt_stat_1`,
+  `oamdmasrc80_halt_lycirq_read8000`, `speedchange/key1_set` and
+  `lyc153int_m2irq_ifw_2`.
+- In IF only (6): `irq_precedence`'s `late_if_via_sp_if_1` and
+  `late_m0irq_vs_tima_scx3_2` (and its `_halt_`), `m1`'s
+  `lycint143_m1irq_late_retrigger_2`, `m2m1irq_ifw_2` and `m2m1irq_ifw_3`: a
+  flag that rises in the M-cycle the CPU writes IF, which the two sides
+  sample in another order.
+
 ## The tests that ceres ignores
 
 Of the tests ceres ignores, the ones for CGB and MGB models do not apply to a
@@ -376,7 +460,8 @@ time, and compared with the real DMG's screenshot where there is one):
   fails it in the same four pixels as ceres (column 0 of lines 19 to 22, black
   where the screenshot is white).
 - Mealybug's eight DMG tests with no screenshot upstream: the model's picture is
-  ceres's in all but `m3_scx_high_5_bits_change2` (30 pixels, see above).
+  ceres's in all of them (in `m3_scx_high_5_bits_change2` since ceres's fix of
+  SCX's low bits, see above).
 - `strikethrough` (the OAM DMA quirk, "not emulated"): **the model draws the
   screenshot pixel for pixel**; ceres is 7 pixels off. The netlist has the
   quirk.

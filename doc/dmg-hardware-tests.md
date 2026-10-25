@@ -201,12 +201,13 @@ printed on the CPU noted.
   `m3_lcdc_bg_map_change2`, `m3_lcdc_tile_sel_change2`,
   `m3_lcdc_tile_sel_win_change2`, `m3_lcdc_win_map_change2`,
   `m3_scx_high_5_bits_change2`, `m3_scy_change2` and `win_without_bg`.
-- **The netlist:** draws ceres's picture in all but
-  `m3_scx_high_5_bits_change2`, where it leaves a hole of four pixels where SCX
-  changes (30 pixels in seven lines), matching dmg-sim to the end.
+- **The netlist:** draws ceres's picture in all of them. In
+  `m3_scx_high_5_bits_change2` it leaves a hole of four pixels where SCX
+  changes (30 pixels in seven lines, matching dmg-sim to the end), which
+  ceres now draws too: the map's column takes all of SCX, low bits
+  included, as the write lands ([results](../hdl/results.md)).
 - **Ceres today:** its tests of these are ignored.
-- **Outcomes:** a reference picture for each, and for
-  `m3_scx_high_5_bits_change2` which of the two is right.
+- **Outcomes:** a reference picture for each.
 - **Needs:** a test ROM; a camera or a logic analyser on the LCD connector.
 
 ### 10. The OAM corruption bug and the wave RAM's
@@ -283,23 +284,18 @@ printed on the CPU noted.
   with that source on, but do not look at the flag then.
 - **The netlist:** the LCD's reset clears mode 1 (POPU) at once, while the
   pixel counter, at 167 since the last line, is reset through the line's
-  start a gate later, so `mode0 = stop_mode3 and not mode1` rises for that
-  moment: a static hazard, whose width is a matter of the die's delays. In
-  the readable model it is a delta cycle wide and sets the STAT flag; in
-  `hdl/compare-ceres.sh`'s cut traces (`CUTS=1`) only IF differs.
+  start a gate later, so `mode0 = stop_mode3 and not mode1` would rise for
+  that moment: a static hazard, whose width is a matter of the die's delays.
+  In dmg-sim mode 1 falls 2 ns before the compare, and the gate's own delay
+  swallows the pulse: mode 0 does not rise and the flag is not set. The
+  readable model, where the pulse was a delta cycle wide and set the flag,
+  now swallows it too (mode 0 rises 14 ns after its compare).
 - **Ceres today:** turning the LCD off clears VBlank and HBlank together and
-  requests nothing.
+  requests nothing, as dmg-sim does.
 - **Outcomes:** the flag set shows the pulse is wide enough on the chip;
   not set, that ceres is right. Run at several points, since a pulse this
   short can depend on the line and the unit.
 - **Needs:** a test ROM; a B and a C.
-
-## Settled by the netlist, not followed by ceres
-
-- **EI followed by HALT with an interrupt pending:** the chip's dispatch reads
-  the address after the HALT; ceres reads the HALT's own address. Software
-  cannot see the read, so this is only a difference on the bus; seven
-  gbmicrotest ROMs show it in `hdl/compare-ceres.sh`.
 
 ## Settled by hardware where the netlist was not enough
 
