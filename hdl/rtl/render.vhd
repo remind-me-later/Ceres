@@ -217,7 +217,13 @@ begin
 
 	stop_mode3 <= '1' when px_i = 167 and x_match = '0' else '0';
 	mode0_i    <= stop_mode3 and not mode1;
-	mode0      <= mode0_i;
+	-- On the chip, the pixel counter's clock comes 8 ns after hclk, and mode
+	-- 0 rises 14 ns after it, when LY = LYC's flag has long changed at that
+	-- edge. Here the counter's clock comes first, so mode 0's rise waits:
+	-- a write to LYC that clears the flag at the end of mode 3 drops STAT's
+	-- interrupt line for a moment, and the rise sets IF's flag (Gambatte's
+	-- lycdisable_ff45_3, measured in dmg-sim).
+	mode0      <= '1' after 14 ns when mode0_i = '1' else '0';
 
 	voga_ff : process (clk, line_start)
 	begin

@@ -57,7 +57,9 @@ gbmicrotest external/test-roms/mealybug-tearoom-tests/ppu/win_without_bg.gb 0.29
 gbmicrotest external/test-roms/mealybug-tearoom-tests/ppu/m3_scx_high_5_bits_change2.gb 0.325
 
 # Gambatte's DMG ROMs that failed on the model at first: the sprites' size
-# changed late (the strobe of LCDC opened too soon), and a push during an
-# OAM DMA.
+# changed late (the strobe of LCDC opened too soon), a push during an OAM
+# DMA, and a write to LYC that ends LY = LYC as mode 3 ends (mode 0 rose too
+# soon; the ROM's answer is read 0.3 ms after the reset, from fastboot).
 gbmicrotest external/test-roms/gambatte/sprites/late_sizechange2_sp00_2_dmg08_cgb04c_out0.gbc 0.42
 gbmicrotest external/test-roms/gambatte/oamdma/oamdma_src0000_busypushFF01_dmg08_out657600DF_cgb04c_out657612DF.gbc 0.42
+gbmicrotest external/test-roms/gambatte/m0enable/lycdisable_ff45_3_dmg08_out2_cgb04c_out0.gbc 0.03
