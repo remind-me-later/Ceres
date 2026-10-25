@@ -18,9 +18,10 @@
 //!
 //! `--frames FILE` also writes every frame the LCD presents, as the model
 //! does: `frame N`, then 144 lines of 160 digits, the shades 0 (white) to 3
-//! (black). A frame is taken when LY reaches 144, which is when ceres
-//! presents it. The first frame after the LCD is turned on is left out: the
-//! LCD does not show it, and the model does not write it.
+//! (black). A frame is taken when STAT shows mode 1, which is when ceres
+//! presents it (a few dots after LY reaches 144). The first frame after the
+//! LCD is turned on is left out: the LCD does not show it, and the model does
+//! not write it.
 //!
 //! `--pixels FILE` also writes what the pixel pipeline did, a line each:
 //! `<line> P <x> <t>` for a pixel pushed to the LCD (column x) and
@@ -72,12 +73,12 @@ default).";
 /// 8 MHz units per M-cycle at single speed.
 const UNITS_PER_MCYCLE: u64 = 8;
 
-/// The register that holds the line being drawn, and the first line of
-/// VBlank, where ceres presents the frame.
-const LY: u16 = 0xFF44;
+/// STAT's mode 1, VBlank: ceres presents the frame as the mode becomes 1.
+const STAT: u16 = 0xFF41;
+const STAT_MODE_B: u8 = 0x03;
+const STAT_MODE_VBLANK: u8 = 1;
 const LCDC: u16 = 0xFF40;
 const LCDC_ON_B: u8 = 0x80;
-const FIRST_VBLANK_LINE: u8 = 144;
 
 /// Reads `path` as given, else under the test ROMs directory.
 fn read_rom(path: &Path) -> Result<Vec<u8>> {
@@ -241,13 +242,14 @@ fn trace<W: Write>(
         }
         if let Some(frames) = frames.as_mut() {
             // A step is a fraction of a line: the frame is still the one
-            // presented when LY reached 144.
+            // presented when the mode became 1. (LY is not enough: it
+            // becomes 144 a few dots before, and a step can end between.)
             let on = gb.peek_mem(LCDC) & LCDC_ON_B != 0;
             if on && !lcd_on {
                 unshown = true;
             }
             lcd_on = on;
-            let vblank = gb.peek_mem(LY) >= FIRST_VBLANK_LINE;
+            let vblank = gb.peek_mem(STAT) & STAT_MODE_B == STAT_MODE_VBLANK;
             if vblank && !in_vblank {
                 if unshown {
                     unshown = false;
