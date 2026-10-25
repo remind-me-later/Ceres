@@ -245,10 +245,13 @@ turn on. They are open.
 [README](README.md#comparing-ceres-with-it)) over the 513 gbmicrotest ROMs,
 from fastboot to their results (9 minutes, six at a time). 491 make the same
 accesses; the 22 others are the read after HALT (7) and the power-on state
-(15), as above. In 506, the IF, TIMA, DMA, LY, MODE and DIV
+(15), as above. In 507, the IF, TIMA, DMA, LY, MODE, OAMB, VRAMB and DIV
 changes are the same on both sides, but for changes an M-cycle off their
 usual difference (a change between the two sides' points of sampling) and
-brief ones. What is left:
+brief ones (`sweep-cuts.sh`, 8 minutes, eight at a time). Of the others,
+two differ in their accesses (`500-scx-timing` and `minimal`: TIMA counts
+from the power-on state); what the others show, and what the sweeps showed
+before ceres or the model was changed:
 
 - **STAT during an OAM DMA** (`dma_basic`): the DMA runs through line 1's
   OAM scan, and STAT shows mode 0 there on the model, mode 2 on ceres. In the
@@ -260,7 +263,8 @@ brief ones. What is left:
 - **The length of mode 3 in `oam_sprite_trashing`**: on 48 lines, mode 3
   ends 4 M-cycles apart, both ways. The ROM writes OAM while the PPU reads it,
   which corrupts OAM on the real chip and in ceres, and not in the netlist's
-  plain OAM: the lines have other sprites on the two sides.
+  plain OAM: the lines have other sprites on the two sides (and OAMB and
+  VRAMB, which follow mode 3, differ with it).
 - **The end of VBlank**: ceres's STAT shows mode 0 for an M-cycle between
   mode 1 and line 0's mode 2, in every frame, where the model's samples go
   from 1 to 2 (in the `stat_write_glitch_l154` ROMs, two M-cycles). The
@@ -274,6 +278,72 @@ brief ones. What is left:
   ceres in every ROM that turns it on (one change, within the M-cycle off
   above), and gbmicrotest's `lcdon_to_stat3` ROMs pass on both sides: a
   change between the points of sampling, it seems.
+
+### Mooneye, Mealybug and Gambatte
+
+The same sweep, from tinyboot, over Mooneye's 54 DMG tests (both suites,
+`TEST=mooneye`, `SECS=2`), Mealybug's 32 `ppu/` ROMs (`SECS=0.4`) and every
+eighth of Gambatte's DMG tests (202, `SECS=0.29`), with `APU=0`:
+
+| Suite    | ROMs | Same accesses | Same cuts |   Time |
+| -------- | ---: | ------------: | --------: | -----: |
+| Mooneye  |   54 |            51 |        47 | 68 min |
+| Mealybug |   32 |            32 |        32 | 13 min |
+| Gambatte |  202 |           185 |       198 | 54 min |
+
+With the fix of ceres below (the LCD turned off as a line begins), Mooneye's
+cuts are the same in 50.
+
+- **Accesses.** Gambatte's 17 are its `oamdma` ROMs that push or read while
+  a DMA has the bus, which the model fails (the busy bus is not modelled).
+  Mooneye's three read what power-on leaves: `boot_hwio-G` reads FF46,
+  `FF` on ceres and on the DMG (Pan Docs), 00 on the model (an initial
+  value of the VHDL); `gpu/intr_0_timing` and `gpu/intr_1_timing` read
+  WRAM they never wrote, and print it, so their timing differs after it.
+- **The STAT interrupt at the end of VBlank, in the model.** With STAT's
+  mode 1 and mode 2 sources both on, mode 1 falls as vclk rises, and the
+  OR of the sources dropped for a delta cycle between them and rose again,
+  which set IF (Gambatte's `m2irq_ly00_lcdstat30` read E2 where the DMG
+  reads E0; Mooneye's `stat_irq_blocking` differed in IF). On the die this
+  is a static hazard of the OR; the hardware test says it does not set
+  the flag, and the model now computes the two sources in one expression
+  (`lcd_timing.vhd`). Both now agree with ceres.
+- **The LCD turned off in VBlank, with STAT's mode 0 source on** (Mooneye's
+  `stat_write_if-GS` and Gambatte's `frame0/1/2_m0irq_count_scx*`, IF
+  only): the model sets the STAT flag, ceres does not. The LCD's reset
+  clears mode 1 (POPU) a delta cycle before the pixel counter leaves 167,
+  so `mode0 <= stop_mode3 and not mode1` (`render.vhd`) pulses: the same
+  kind of hazard. No hardware test reads IF there; open (entry 14 of
+  [the DMG's list](../doc/dmg-hardware-tests.md)), the model left as the
+  netlist gives it.
+- **The LCD turned off in the M-cycle a line begins, in ceres** (Mooneye's
+  `intr_2_mode0_timing_sprites*`, IF only): the model requests line 0x45's
+  mode 2 interrupt and then turns the LCD off; ceres turned it off first.
+  `check/lcd_off_line_start.asm` turns the LCD off at 16 M-cycles in a row
+  around line 69's start, with STAT's mode 2 source on, and reads IF after
+  each: in one of them the model reads E2, ceres read E0. There the model's
+  line-end pulse (vclk, from which LY counts and the mode 2 source rises)
+  comes 156 ns before the LCD's reset, more than a phase, so the netlist
+  settles it; ceres's write landed 2 half dots before its pulse. Ceres's
+  interrupt sources now see the LCD off 3 half dots after the write: the
+  probe makes the same accesses on both sides, and so do the three ROMs'
+  cuts.
+- **The window on line 0** (Gambatte's `enable_wxA6_2x_spxA7_*` and
+  `m2int_wxA6_spxA7_*`, ten ROMs, MODE, OAMB and VRAMB; the 34 other WX=A5
+  and A6 ROMs are the same): with WY 0, WX A6 and a sprite at X A7, on the
+  first line 0 after the window is turned on, the model starts the window
+  at the end of the line (two window fetches after the background's), which
+  stalls mode 3; ceres does not. Both then draw line 1 as window, and lines
+  2 on as background. `check/window_line0_sprite.asm` reads STAT every
+  M-cycle across that line's end: ceres reads mode 0 an M-cycle where the
+  model reads mode 3, so the CPU can see it; no hardware test reads there.
+  On ceres's DMG a WX of 166 only counts the window's line where it matches
+  (`window.rs`). Why the netlist starts the window on line 0 and not on
+  lines 2 to 7, which have the sprite too, is not traced yet.
+
+Mooneye's older tests (`mooneye-test-suite-wilbertpol`) end on the opcode
+ED, which locks the CPU, not on `LD B,B`: `TEST=mooneye` does not end them
+and they run for `SECS`.
 
 ## The tests that ceres ignores
 

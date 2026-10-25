@@ -273,6 +273,27 @@ printed on the CPU noted.
   are right. On a CGB, which has no netlist, whether it does the same.
 - **Needs:** a test ROM; a DMG and a CGB.
 
+### 14. The LCD turned off in VBlank, with STAT's mode 0 source on
+
+- **Measure:** with STAT's mode 0 interrupt enabled (STAT bit 3) and the
+  others off, turn the LCD off in VBlank, at several lines and dots, and
+  read IF; with IE 0, so that nothing is dispatched.
+- **The evidence:** no test ROM reads IF there. Mooneye's `stat_write_if-GS`
+  and gambatte's `frame0/1/2_m0irq_count_scx*` turn the LCD off in VBlank
+  with that source on, but do not look at the flag then.
+- **The netlist:** the LCD's reset clears mode 1 (POPU) at once, while the
+  pixel counter, at 167 since the last line, is reset through the line's
+  start a gate later, so `mode0 = stop_mode3 and not mode1` rises for that
+  moment: a static hazard, whose width is a matter of the die's delays. In
+  the readable model it is a delta cycle wide and sets the STAT flag; in
+  `hdl/compare-ceres.sh`'s cut traces (`CUTS=1`) only IF differs.
+- **Ceres today:** turning the LCD off clears VBlank and HBlank together and
+  requests nothing.
+- **Outcomes:** the flag set shows the pulse is wide enough on the chip;
+  not set, that ceres is right. Run at several points, since a pulse this
+  short can depend on the line and the unit.
+- **Needs:** a test ROM; a B and a C.
+
 ## Settled by the netlist, not followed by ceres
 
 - **EI followed by HALT with an interrupt pending:** the chip's dispatch reads
@@ -287,6 +308,12 @@ printed on the CPU noted.
   dmg-sim's gates are too slow to pass it; the real DMG's screenshots show it
   (`m3_lcdc_win_en_change_multiple_wx`, `m3_scy_change`), and the readable
   model keeps it.
+
+- **The STAT interrupt at the end of VBlank:** with STAT's mode 1 and mode
+  2 sources both on, mode 1 falls as the line clock, the mode 2 source,
+  rises: a static hazard of the OR of the sources, which the readable model
+  showed as a pulse setting IF. Gambatte's `m2irq_ly00_lcdstat30` reads no
+  interrupt on a DMG, and the model now computes the two in one expression.
 
 ## What to get
 
@@ -305,6 +332,7 @@ printed on the CPU noted.
 | 11. Cartridge bus edges    |                 |   cartridge    |   ✅  | B              |
 | 12. Sound output           |                 |                |   ✅  | any            |
 | 13. STAT during DMA        |       ✅        |                |       | B, C, a CGB    |
+| 14. LCD off in VBlank      |       ✅        |                |       | B, C           |
 
 A cartridge built on a microcontroller (one that serves the ROM and logs
 the bus) would make most of these automatic: it can run a list of ROMs, read
