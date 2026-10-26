@@ -162,20 +162,20 @@ CGB is left to check, since there is no netlist for it.
   in the last T-cycles of the dispatch (the line 153 LY = LYC compare, a
   mode 2 or mode 0 start), sweeping the request a cycle at a time; read IF
   in the handler.
-- **The evidence:** no test that ceres runs tells the two apart: with the
-  run-ahead below switched off, all of Gambatte's, Mooneye's, gbmicrotest's,
-  AGE's and SameSuite's tests still pass (2026-10-26).
+- **The evidence:** no test that ceres runs tells the two apart: all of
+  Gambatte's, Mooneye's, gbmicrotest's, AGE's and SameSuite's tests pass with
+  and without Gambatte's run-ahead (below).
 - **The netlist:** keeps the request: IF's flag is set after the
   acknowledge has cleared the other one (the proof in
   `ceres-core/src/interrupts/netlist_proofs.rs`, under its mapping of T-cycles
   to phases).
-- **Ceres today:** runs the LCD two cycles ahead of the acknowledge
-  (`ack_interrupt` in `ceres-core/src/cpu_bus/mod.rs`), from Gambatte, at
-  normal speed on every model: what it requests then counts as already
-  requested, and the acknowledge clears it.
-- **Outcomes:** the flag set confirms the netlist, and ceres can drop the
-  run-ahead on the DMG; not set, the run-ahead stands. On a CGB, which has no
-  netlist, whichever it shows.
+- **Ceres today:** keeps the request, as the netlist does, on every model
+  (`ack_interrupt` in `ceres-core/src/cpu_bus/mod.rs`). Until 2026-10-26 it
+  ran the LCD two cycles ahead of the acknowledge at normal speed, as
+  Gambatte does, so that what the LCD requested then counted as already
+  requested and the acknowledge cleared it.
+- **Outcomes:** the flag set confirms the netlist; not set, the run-ahead
+  comes back. On a CGB, which has no netlist, whichever it shows.
 - **Needs:** a test ROM; a B, a C and a CGB.
 
 ## Open questions on the DMG
