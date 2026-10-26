@@ -41,6 +41,7 @@ entity clocks is
 
 		double_speed : in std_ulogic;  -- KEY1 bit 7
 		ppu_ena      : in std_ulogic;  -- the 4 MiHz clock runs
+		core_hold    : in std_ulogic;  -- HDMA holds the CPU core (in phase A)
 
 		clk   : out std_ulogic;  -- the CPU's clock: 4 MiHz, 8 MiHz in double speed
 		phase : out phase_t;     -- the phase of the CPU's M-cycle
@@ -54,6 +55,15 @@ entity clocks is
 		pch_phase     : out std_ulogic;  -- high in B to F
 		cpu_wr_sync   : out std_ulogic;  -- a CPU write, in E to G
 		cpu_ext_cs_en : out std_ulogic;  -- a CPU access may select the cartridge, C to H
+
+		-- The same for the CPU core and its accesses, on the core's phases,
+		-- which stop while HDMA holds the core
+		phase_core      : out phase_t;
+		clk_1mhz_core   : out std_ulogic;
+		clk_t4_core     : out std_ulogic;
+		data_phase_core : out std_ulogic;
+		exec_phase_core : out std_ulogic;
+		pch_phase_core  : out std_ulogic;
 
 		-- Resets, all active high
 		reset         : out std_ulogic;  -- the /RESET pin
@@ -72,6 +82,10 @@ architecture rtl of clocks is
 	signal double_sel             : std_ulogic := '0';
 	signal clk_in                 : std_ulogic := '0';
 	signal afur, alef, apuk, adyk : std_ulogic := '0';
+	signal clk_core               : std_ulogic;
+	signal afur_c, alef_c, apuk_c, adyk_c : std_ulogic := '0';
+	signal phase_c                : phase_t := H;
+	signal clk_1mhz_c             : std_ulogic;
 	signal phase_i                : phase_t := H;
 	signal reset_i                : std_ulogic;
 	signal waiting                : std_ulogic;
@@ -177,11 +191,56 @@ begin
 	-- @hw die: BATE BASU BUKE
 	pch_phase <= not clk_ena when phase_i = G or phase_i = H or phase_i = A else '1';
 
+	-- The CPU core's phases: a copy of the latches above, on a clock that
+	-- HDMA holds high, in phase A, for whole M-cycles (it rises and falls a
+	-- moment after the clock's rise at the start of an M-cycle, while the
+	-- clock is high). Outside HDMA they are the same as the others; the
+	-- divider, the timer, the serial port, OAM DMA and the APU keep the
+	-- others, and count on.
+	-- @hw inferred: guess (how HDMA stops the CPU core is not known; it
+	-- stops at an opcode fetch, ../hdma.vhd)
+	clk_core <= '1' when core_hold = '1' else clk_in;
+
+	core_counter : process (all)
+	begin
+		if test_reset = '1' then
+			afur_c <= '0';
+			alef_c <= '0';
+			apuk_c <= '0';
+			adyk_c <= '0';
+		elsif clk_core = '1' then
+			afur_c <= not adyk_c;
+			apuk_c <= alef_c;
+		else
+			alef_c <= afur_c;
+			adyk_c <= apuk_c;
+		end if;
+	end process;
+
+	with std_ulogic_vector'(afur_c & alef_c & apuk_c & adyk_c) select phase_c <=
+		A when "1000",
+		B when "1100",
+		C when "1110",
+		D when "1111",
+		E when "0111",
+		F when "0011",
+		G when "0001",
+		H when others;
+	phase_core <= phase_c;
+
+	clk_1mhz_c      <= '1' when phase_c = A or osc_ena = '0' else '0';
+	clk_1mhz_core   <= clk_1mhz_c;
+	clk_t4_core     <= clk_ena when phase_c = G or phase_c = H else '0';
+	data_phase_core <= clk_ena when phase_c >= E else '0';
+	exec_phase_core <= clk_ena and not clk_1mhz_c;
+	pch_phase_core  <= not clk_ena when phase_c = G or phase_c = H or phase_c = A else '1';
+
+	-- A CPU access's strobes, on the core's phases.
 	-- @hw die: AFAS AREV APOV
-	cpu_wr_sync <= write when phase_i = E or phase_i = F or phase_i = G else '0';
+	cpu_wr_sync <= write when phase_c = E or phase_c = F or phase_c = G else '0';
 
 	-- @hw die: AGUT AWOD ABUZ
-	cpu_ext_cs_en <= '1' when (t1 = '1' and t2 = '0') or (mreq = '1' and phase_i >= C) else '0';
+	cpu_ext_cs_en <= '1' when (t1 = '1' and t2 = '0') or (mreq = '1' and phase_c >= C) else '0';
 
 	-- @hw die: PHI (pad_out)
 	phi <= not data_phase_i;

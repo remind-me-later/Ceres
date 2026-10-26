@@ -256,11 +256,12 @@ begin
 
 	-- The CPU's accesses, seen in the middle of phase H: the M-cycle's
 	-- address and the byte on the core's data bus, read or written, numbered
-	-- by mcycle_at.
+	-- by mcycle_at. The phases are the core's, which stop while HDMA holds
+	-- it.
 	accesses : process
 		alias double_speed is << signal .gameboy_tb.u_gameboy.u_chip.double_speed : std_ulogic >>;
-		alias phase      is << signal .gameboy_tb.u_gameboy.u_chip.phase : phase_t >>;
-		alias data_phase is << signal .gameboy_tb.u_gameboy.u_chip.data_phase : std_ulogic >>;
+		alias phase      is << signal .gameboy_tb.u_gameboy.u_chip.phase_core : phase_t >>;
+		alias data_phase is << signal .gameboy_tb.u_gameboy.u_chip.data_phase_core : std_ulogic >>;
 		alias c          is << signal .gameboy_tb.u_gameboy.u_chip.u_cpu.c : controls_t >>;
 		alias address    is << signal .gameboy_tb.u_gameboy.u_chip.u_cpu.idu_in : std_ulogic_vector(15 downto 0) >>;
 		alias db         is << signal .gameboy_tb.u_gameboy.u_chip.u_cpu.db : std_logic_vector(7 downto 0) >>;

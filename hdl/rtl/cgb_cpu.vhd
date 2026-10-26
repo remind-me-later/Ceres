@@ -111,15 +111,23 @@ architecture rtl of cgb_cpu is
 	signal dma_phi                                              : std_ulogic;
 	signal dma_run, dma_addr_ext, vram_to_oam                   : std_ulogic;
 	signal dma_addr                                             : std_ulogic_vector(15 downto 0);
+	signal phase_core                                           : phase_t;
+	signal clk_1mhz_core, clk_t4_core, data_phase_core          : std_ulogic;
+	signal exec_phase_core, pch_phase_core                      : std_ulogic;
+	signal hdma_hold, hdma_bus, hdma_vram_write, ext_dma        : std_ulogic;
+	signal hdma_bus_addr, ext_dma_addr                          : std_ulogic_vector(15 downto 0);
+	signal hdma_vram_addr                                       : std_ulogic_vector(12 downto 0);
+	signal hdma_vram_data                                       : std_ulogic_vector(7 downto 0);
+	signal m1                                                   : std_ulogic;
 	signal lcdc                                                 : std_ulogic_vector(7 downto 0);
 	signal ppu_4mhz, hard_reset, ppu_reset                      : std_ulogic;
 	signal wuvu, wosu, hclk, vclk, mode1                        : std_ulogic;
 	signal lx                                                   : unsigned(6 downto 0);
 	signal ly                                                   : unsigned(7 downto 0);
-	signal mode2, mode3, mode0                                  : std_ulogic;
+	signal mode2, mode3, mode0, mode0_early                     : std_ulogic;
 	signal line_start, scanning, ceno, stop_scan                : std_ulogic;
 	signal scan_index                                           : unsigned(5 downto 0);
-	signal start_line                                           : std_ulogic;
+	signal start_line, hblank_hdma                              : std_ulogic;
 	signal y_match                                              : std_ulogic;
 	signal sprite_line_in                                       : std_ulogic_vector(3 downto 0);
 	signal save                                                 : std_ulogic_vector(9 downto 0);
@@ -168,13 +176,13 @@ begin
 
 	u_cpu : entity work.sm83
 		port map (
-			clk => clk_1mhz, exec_phase => exec_phase, data_phase => data_phase,
-			write_phase => clk_t4, pch_phase => pch_phase, sys_reset => cpu_sys_reset,
+			clk => clk_1mhz_core, exec_phase => exec_phase_core, data_phase => data_phase_core,
+			write_phase => clk_t4_core, pch_phase => pch_phase_core, sys_reset => cpu_sys_reset,
 			pwron_reset => reset, clk_ready => osc_stable, wake => cpu_wakeup or switch_wake, nmi => '0',
 			oe_n => t1_only, internal_access => fexx_ffxx, shadow_access => boot_slow,
 			shadow_override => t2_only, int => "000" & flags,
 			a => addr, d => data, ctl_mreq => ctl_mreq, mreq => mreq, rd => read, wr => write,
-			m1 => open, halt_n => clk_ena, stop_n => osc_ena, inta => inta
+			m1 => m1, halt_n => clk_ena, stop_n => osc_ena, inta => inta
 		);
 	acks <= inta(4 downto 0);
 
@@ -183,10 +191,13 @@ begin
 			ck1 => ck1, reset_pin_n => reset_n, t1 => t1, t2 => t2, phi => phi,
 			osc_ena => osc_ena, clk_ena => clk_ena, mreq => mreq, write => write,
 			test_reset => test_reset, div_16hz => div(15), double_speed => double_speed,
-			ppu_ena => ppu_ena, clk => clk, phase => phase, clk4 => clk4,
+			ppu_ena => ppu_ena, core_hold => hdma_hold, clk => clk, phase => phase, clk4 => clk4,
 			clk_1mhz => clk_1mhz, clk_t4 => clk_t4, data_phase => data_phase,
 			exec_phase => exec_phase, pch_phase => pch_phase, cpu_wr_sync => cpu_wr_sync,
 			cpu_ext_cs_en => cpu_ext_cs_en,
+			phase_core => phase_core, clk_1mhz_core => clk_1mhz_core, clk_t4_core => clk_t4_core,
+			data_phase_core => data_phase_core, exec_phase_core => exec_phase_core,
+			pch_phase_core => pch_phase_core,
 			reset => reset, osc_stable => osc_stable, sys_reset => sys_reset,
 			cpu_sys_reset => cpu_sys_reset, reset2 => reset2
 		);
@@ -272,14 +283,28 @@ begin
 
 	u_external_bus : entity work.external_bus
 		port map (
-			clk_t4 => clk_t4, exec_phase => exec_phase, cpu_wr_sync => cpu_wr_sync,
+			clk_t4 => clk_t4_core, exec_phase => exec_phase_core, cpu_wr_sync => cpu_wr_sync,
 			cpu_ext_cs_en => cpu_ext_cs_en,
 			read => read, write => write, mreq => mreq, boot_sel => boot_sel,
-			dma_addr_ext => dma_addr_ext, dma_addr => dma_addr,
+			dma_addr_ext => ext_dma, dma_addr => ext_dma_addr,
 			t1_only => t1_only, t2_only => t2_only,
 			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 			non_vram_mreq => non_vram_mreq,
 			a_pins => a, d_pins => d, rd_n => rd_n, wr_n => wr_n, cs_n => cs_n
+		);
+
+	-- HDMA takes the cartridge's bus as OAM DMA does (the CPU core waits).
+	ext_dma      <= dma_addr_ext or hdma_bus;
+	ext_dma_addr <= hdma_bus_addr when hdma_bus = '1' else dma_addr;
+
+	u_hdma : entity work.hdma
+		port map (
+			clk => clk, phase => phase, reset2 => reset2, cgb_mode => cgb_mode,
+			double_speed => double_speed,
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			fetch => m1, running => clk_ena, mode0 => hblank_hdma, lcd_on => lcdc(7),
+			hold => hdma_hold, bus_on => hdma_bus, bus_addr => hdma_bus_addr, d_pins => d,
+			vram_write => hdma_vram_write, vram_addr => hdma_vram_addr, vram_data => hdma_vram_data
 		);
 
 	-- @hw die: UVYT
@@ -306,11 +331,12 @@ begin
 		port map (
 			clk => clk4, ppu_reset => ppu_reset, hard_reset => hard_reset, lcd_on => lcdc(7), div => div,
 			double_speed => double_speed,
-			mode3 => mode3, mode0 => mode0, scanning => scanning, scan_index => scan_index,
+			mode3 => mode3, mode0 => mode0, mode0_early => mode0_early,
+			scanning => scanning, scan_index => scan_index,
 			dma_run => dma_run,
 			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 			wuvu => wuvu, wosu => wosu, hclk => hclk, vclk => vclk, lx => lx, ly => ly, mode1 => mode1,
-			start_line => start_line,
+			start_line => start_line, hblank_hdma => hblank_hdma,
 			int_vbl => int_vbl, int_stat => int_stat,
 			cpl => cpl, cpg => cpg, fr => fr, s => s
 		);
@@ -356,7 +382,7 @@ begin
 			line_start => line_start, stop_scan => stop_scan, ceno => ceno, x_match => x_match,
 			sprite_line => render_line, tile => oam_even, attributes => oam_odd, sprite_index => render_index,
 			md => vram_data, md_attr => vram_attr,
-			mode3 => mode3, mode0 => mode0, px => px,
+			mode3 => mode3, mode0 => mode0, mode0_early => mode0_early, px => px,
 			rendering => rendering, fetch_read => fetch_read, fetch_hold => fetch_hold,
 			sprite_loaded => sprite_loaded,
 			ma => render_ma, bank => render_bank, fetching => fetching, sprite_read => sprite_read,
@@ -376,10 +402,11 @@ begin
 	u_vram_bus : entity work.vram_bus
 		port map (
 			hard_reset => hard_reset, reset2 => reset2, cgb_mode => cgb_mode,
-			clk_t4 => clk_t4, cpu_wr_sync => cpu_wr_sync,
+			clk_t4 => clk_t4_core, cpu_wr_sync => cpu_wr_sync,
 			cpu_ext_cs_en => cpu_ext_cs_en, t1_only => t1_only,
 			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, write => write, non_vram_mreq => non_vram_mreq,
 			vram_to_oam => vram_to_oam, dma_addr => dma_addr(12 downto 0),
+			hdma_write => hdma_vram_write, hdma_addr => hdma_vram_addr, hdma_data => hdma_vram_data,
 			clk4 => clk4, double_speed => double_speed, start_line => start_line,
 			mode3 => mode3, fetching => fetching, sprite_read => sprite_read, sprite_mrd => sprite_mrd,
 			render_ma => render_ma, render_bank => render_bank, ma => vram_addr, md => vram_data,

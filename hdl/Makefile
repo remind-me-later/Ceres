@@ -115,7 +115,7 @@ phases: $(VVP)
 
 # The readable model, in the order nvc analyses it, and its checks.
 MODEL  := rtl/clocking.vhd rtl/revisions.vhd rtl/clocks.vhd rtl/divider.vhd rtl/timer.vhd rtl/interrupts.vhd \
-          rtl/serial.vhd rtl/joypad.vhd rtl/test_mode.vhd rtl/boot_rom.vhd rtl/cgb_mode.vhd rtl/speed_switch.vhd rtl/high_ram.vhd \
+          rtl/serial.vhd rtl/joypad.vhd rtl/test_mode.vhd rtl/boot_rom.vhd rtl/cgb_mode.vhd rtl/speed_switch.vhd rtl/hdma.vhd rtl/high_ram.vhd \
           rtl/wram_bank.vhd \
           rtl/external_bus.vhd rtl/dma.vhd rtl/lcd_control.vhd rtl/lcd_timing.vhd \
           rtl/oam_scan.vhd rtl/sprite_store.vhd rtl/oam.vhd rtl/render.vhd rtl/colour_palettes.vhd rtl/vram_bus.vhd \

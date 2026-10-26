@@ -39,6 +39,7 @@ entity lcd_timing is
 		-- From the rendering
 		mode3      : in std_ulogic;  -- pixels
 		mode0      : in std_ulogic;  -- HBlank
+		mode0_early : in std_ulogic;  -- ... without the DMG's delay
 		scanning   : in std_ulogic;  -- the OAM scan runs (mode 2, whatever OAM DMA does)
 		scan_index : in unsigned(5 downto 0);  -- the scan's sprite
 		dma_run    : in std_ulogic;  -- OAM DMA copies
@@ -60,6 +61,7 @@ entity lcd_timing is
 		ly    : out unsigned(7 downto 0);
 		mode1 : out std_ulogic;  -- VBlank
 		start_line : out std_ulogic;  -- the first line after the LCD is turned on
+		hblank_hdma : out std_ulogic;  -- HBlank for HDMA: a dot after mode 3 ends
 
 		int_vbl  : out std_ulogic;
 		int_stat : out std_ulogic;
@@ -103,6 +105,7 @@ architecture rtl of lcd_timing is
 	signal flag_now             : std_ulogic;
 	signal flag_late            : std_ulogic_vector(1 to 3) := (others => '0');
 	signal mode0_late           : std_ulogic := '0';
+	signal mode0_hdma           : std_ulogic_vector(1 to 2) := "00";
 	signal hblank               : std_ulogic;
 	signal ly_late              : std_ulogic_vector(7 downto 0) := (others => '0');
 	signal line_153_late        : std_ulogic_vector(1 to 2) := (others => '0');
@@ -323,7 +326,10 @@ begin
 	--   the interrupt sees both at once.
 	-- - A written LYC reaches the comparison at its first sample (the rise
 	--   of hclk) 6 half dots or more after ceres's write.
-	-- - The interrupt's HBlank source falls a half dot after mode 0's.
+	-- - The interrupt's HBlank source rises as mode 3 ends, without the
+	--   DMG's delay (in a half dot, ceres raises it before anything else
+	--   changes: an LYC or STAT write landing there comes after it), and
+	--   falls a half dot after mode 0.
 	-- - A read sees the LY = LYC flag 3 half dots late (ceres reads it 1
 	--   ahead); on the CGB-C it drops as LY changes, as the DMG's, but
 	--   holds until the next sample on the CGB-E.
@@ -345,6 +351,7 @@ begin
 			lyc_late      <= lyc & lyc_late(1 to 4);
 			flag_late     <= flag_now & flag_late(1 to 2);
 			mode0_late    <= mode0;
+			mode0_hdma    <= mode0_early & mode0_hdma(1);
 			ly_late       <= std_ulogic_vector(ly_i);
 			line_153_late <= line_153 & line_153_late(1);
 			mode1_late    <= mode1_i & mode1_late(1);
@@ -361,7 +368,11 @@ begin
 	             lyc_match and (ppu_reset or (std_ulogic_vector(ly_i) ?= lyc_compared));
 	flag_read <= flag_late(3);
 
-	hblank <= mode0 or mode0_late;
+	hblank <= mode0_early or mode0_late;
+
+	-- HDMA sees HBlank a dot after mode 3 ends.
+	-- @hw inferred: ceres (HBLANK_HDMA_DELAY, from SameBoy)
+	hblank_hdma <= mode0_hdma(2) and mode0_early;
 
 	-- Mode 2 as a read sees it: from the rise of the clock after nype's
 	-- (vclk high, wuvu low; the next line is a visible one) to the rise

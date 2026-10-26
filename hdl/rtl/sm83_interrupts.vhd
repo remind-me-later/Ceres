@@ -35,6 +35,7 @@ entity sm83_interrupts is
 		ffxx        : out std_ulogic;
 		ffff        : out std_ulogic;
 		int_pending : out std_ulogic;  -- an enabled interrupt is requested
+		int_now     : out std_ulogic;  -- ... before the latch (for the CGB's HALT)
 		int_take    : out std_ulogic;  -- one is selected (in write_phase)
 		inta        : out std_ulogic_vector(7 downto 0);  -- the acknowledges
 		int_vector  : out std_ulogic_vector(7 downto 3)   -- the vector's bits
@@ -105,6 +106,7 @@ begin
 	end process;
 
 	int_pending <= '1' when pending /= x"00" else '0';
+	int_now     <= '1' when requested /= x"00" else '0';
 
 	priority : process (all)
 		variable lower : std_ulogic;  -- a lower one is requested

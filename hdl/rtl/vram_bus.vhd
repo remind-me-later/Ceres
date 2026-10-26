@@ -39,6 +39,11 @@ entity vram_bus is
 		vram_to_oam : in std_ulogic;
 		dma_addr    : in std_ulogic_vector(12 downto 0);
 
+		-- HDMA, which writes VRAM
+		hdma_write : in std_ulogic;
+		hdma_addr  : in std_ulogic_vector(12 downto 0);
+		hdma_data  : in std_ulogic_vector(7 downto 0);
+
 		-- The PPU
 		clk4         : in std_ulogic;
 		double_speed : in std_ulogic;
@@ -133,12 +138,17 @@ begin
 	cpu_vram   <= cpu_select and not ppu_owns;
 	cpu_write  <= cpu_vram and cpu_writes;
 
-	-- The address: the CPU's, outside mode 3 and DMA; DMA's; or the PPU's.
-	-- (Nobody drives it at times in mode 3: it keeps its value.)
+	-- The address: HDMA's while it writes; the CPU's, outside mode 3 and
+	-- DMA; DMA's; or the PPU's. (Nobody drives it at times in mode 3: it
+	-- keeps its value.) HDMA writes whatever the PPU does.
 	-- @hw die: XANE XEDU, AHOC, and the not_if0 onto ~ma0..~ma12
+	-- @hw inferred: ceres (HDMA's writes ignore the PPU's lock); the
+	-- clashes with the PPU's reads are not modelled
 	address : process (all)
 	begin
-		if vram_to_oam = '0' and ppu_owns = '0' then
+		if hdma_write = '1' then
+			ma <= vbk & hdma_addr;
+		elsif vram_to_oam = '0' and ppu_owns = '0' then
 			ma <= vbk & addr(12 downto 0);
 		elsif vram_to_oam = '1' then
 			ma <= vbk & dma_addr;
@@ -156,8 +166,10 @@ begin
 	-- The data: the CPU's while it writes VRAM, the pins' otherwise.
 	-- @hw die: RAHU, TEME..SUZA (buf_if0); RELA RENA, RODY..RAKU (not_if1);
 	-- MD0..MD7 (pad_bidir_pu), ROFA, REGE..RYZE RURA..RADY
-	md      <= to_x01(data) when cpu_write = '1' else to_x01(md_pins);
-	md_pins <= to_x01(md) when cpu_write = '1' else (others => 'H');
+	md      <= hdma_data when hdma_write = '1' else
+	           to_x01(data) when cpu_write = '1' else to_x01(md_pins);
+	md_pins <= hdma_data when hdma_write = '1' else
+	           to_x01(md) when cpu_write = '1' else (others => 'H');
 
 	-- The CPU reads VRAM in phases G and H.
 	-- @hw die: TYVY SEBY, RUGA..TOKU (not_if1)
@@ -170,10 +182,10 @@ begin
 	-- phases E to G.
 	-- @hw die: SUTU TODE SOKY ROSU; RYLU SOHO RAWA RACU SEMA REFO RUTE RONU;
 	-- TUJA TYJY SOHY TAXY SYSY SOFY RAGU; ~MCS ~MRD ~MWR (pad_bidir)
-	idle    <= not (fetching or vram_to_oam or sprite_read or cpu_vram);
+	idle    <= not (fetching or vram_to_oam or sprite_read or cpu_vram or hdma_write);
 	reading <= (not (sose and write) nand not ppu_owns) and not sprite_mrd and not fetching
 	           and not vram_to_oam;
-	writing <= not (sose and cpu_wr_sync and cpu_vram);
+	writing <= not ((sose and cpu_wr_sync and cpu_vram) or hdma_write);
 
 	mcs_n <= 'Z' when tuto = '1' else idle;
 	mrd_n <= 'Z' when tuto = '1' else reading;

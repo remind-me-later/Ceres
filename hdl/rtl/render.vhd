@@ -71,6 +71,7 @@ entity render is
 
 		mode3 : out std_ulogic;
 		mode0 : out std_ulogic;
+		mode0_early : out std_ulogic;  -- mode 0 without the DMG's delay
 		px    : out unsigned(7 downto 0);  -- the pixel counter
 
 		-- To OAM and the sprite store
@@ -260,6 +261,7 @@ begin
 	-- interrupt line for a moment, and the rise sets IF's flag (Gambatte's
 	-- lycdisable_ff45_3, measured in dmg-sim).
 	mode0      <= '1' after 14 ns when mode0_i = '1' else '0';
+	mode0_early <= mode0_i;
 
 	voga_ff : process (clk, line_start)
 	begin

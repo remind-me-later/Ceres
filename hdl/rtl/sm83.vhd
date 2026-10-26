@@ -98,7 +98,7 @@ architecture rtl of sm83 is
 	signal idu_in, idu_out : std_ulogic_vector(15 downto 0);
 	signal reg_a, reg_z, reg_w : std_ulogic_vector(7 downto 0);
 	signal int_vector  : std_ulogic_vector(7 downto 3);
-	signal int_take, int_pending : std_ulogic;
+	signal int_take, int_pending, int_now : std_ulogic;
 	signal ffxx, ffff  : std_ulogic;
 	signal rd_i        : std_ulogic;
 	signal ctl_mreq_i  : std_ulogic := '0';
@@ -122,7 +122,7 @@ begin
 			write_phase => write_phase, sys_reset => sys_reset, pwron_reset => pwron_reset,
 			clk_ready => clk_ready, wake => wake, nmi => nmi, test_freeze => '0',
 			s => s, c => c, db => db, alu_cond_fail => cond_fail, int_take => int_take,
-			int_pending => int_pending,
+			int_pending => int_pending, int_now => int_now,
 			opcode => opcode, mcyc => mcyc, table_cb => table_cb, in_intr => in_intr,
 			sel_reg_w => sel_reg_w, sel_reg_z => sel_reg_z, halt => halt, stop => stop,
 			int_entry => int_entry, nmi_entry => nmi_entry, ime => ime
@@ -155,7 +155,7 @@ begin
 		port map (
 			data_phase => data_phase, write_phase => write_phase, sys_reset => sys_reset,
 			s => s, c => c, rd => rd_i, a => idu_in, db => db, int => int, nmi_entry => nmi_entry,
-			ffxx => ffxx, ffff => ffff, int_pending => int_pending, int_take => int_take,
+			ffxx => ffxx, ffff => ffff, int_pending => int_pending, int_now => int_now, int_take => int_take,
 			inta => inta, int_vector => int_vector
 		);
 

@@ -45,6 +45,37 @@ where the two differ, the blocks say so.
 | The stop's length | | 16 periods of the crystal into double speed, 4 out of it | fitted to ceres, whose times pass Gambatte's `speedchange` tests: with them, `speedchange2_div_1`, `_div_2` and `speedchange2_key1` make the same accesses as on ceres through two switches |
 | The PPU in a switch | stops with the oscillator | its 4 MiHz clock has a gate of its own (`clocks.vhd`, `speed_switch.vhd`): it stops for 10 periods of the crystal (5 dots) from the stop, either way, while the oscillator may already run | ceres and SameBoy (`speed_switch_freeze`: 5 T-cycles of the normal speed); with it, `lycint_ly_ds_1` makes the same accesses as on ceres |
 
+### The CPU
+
+| What | DMG (netlist) | CGB (model) | Source |
+| ---- | ------------- | ----------- | ------ |
+| Leaving HALT | the requests as their latch holds them from the M-cycle's middle (phase E) | the requests as they are at the M-cycle's start: one in an M-cycle's first half wakes the CPU an M-cycle later (`sm83_sequencer.vhd`) | ceres (SameBoy: the DMG samples 2 dots into a halted step, the CGB at its start); with it, cgb-acid2 and Gambatte's `hdma_start` make ceres's accesses |
+| Waiting for HDMA | | the core's clock held in phase A for whole M-cycles (`clocks.vhd`) | guess |
+
+### HDMA
+
+| What | Behaviour in the model (`hdma.vhd`) | Source |
+| ---- | ----------------------------------- | ------ |
+| HDMA1 to HDMA4 (FF51 to FF54) | the source (its low 4 bits 0; E000 on reads as F000 on) and the destination in VRAM (low 4 bits 0, 13 bits used); they read FF | Pan Docs; ceres |
+| HDMA5 (FF55) | write: the blocks of 16 bytes, minus 1, and bit 7, an HBlank transfer; bit 7 clear stops an HBlank transfer (a requested block still runs, then the rest at once); read: bit 7 high when no transfer runs, the blocks left minus 1 | Pan Docs; ceres |
+| Where it runs | after an opcode fetch: the CPU core waits, its clock held for whole M-cycles while the divider, the timer and the rest count on (`clocks.vhd`); the M-cycle after the fetch then follows | ceres, SameBoy; guess (how the core is held) |
+| How long | 8n + 1 M-cycles for n blocks (16n + 1 in double speed): a byte every half M-cycle (every M-cycle), half an M-cycle to begin and one to end (an M-cycle to begin) | ceres (from SameBoy) |
+| The bytes | read from the cartridge's bus as OAM DMA reads it (ROM, its RAM, the work RAM in SVBK's bank); FF from 8000 to 9FFF and from E000 on; written to VRAM in VBK's bank, whatever the PPU does | ceres |
+| HBlank's blocks | requested when mode 0 begins with the CPU running, when the transfer starts in mode 0, and when the LCD is turned off | ceres |
+
+HDMA sees HBlank a dot after mode 3 ends, where ceres requests the block.
+
+Not modelled: transfers while the CPU is halted or switches speed (and
+the requests at the wake), writes to both banks while the PPU blocks
+VRAM, clashes with the PPU's reads or OAM DMA, and OAM written by HDMA.
+
+Of Gambatte's 94 HDMA ROMs that do none of these, 68 pass. Those in double
+speed fail on the LCD's double-speed reads (below), not on the transfer:
+its length is ceres's. At normal speed six fail: the display turned off
+during a transfer (`hdma_disable_display_2`, `hdma_disabled_display_1`),
+a late enable (`hdma_late_enable_1`), a late length (`hdma_late_length_1`)
+and two with SCX 2 (`hdma_start_scx2_1`, `hdma_late_disable_scx2_1`).
+
 ### Registers the DMG does not have
 
 | Register | Behaviour in the model | Source |
@@ -102,7 +133,7 @@ half dot.
 | ---- | ------------- | ----------- |
 | STAT's enables | the latches follow the write: the interrupt sees them at once, and every source for a moment (the write's glitch) | 4 half dots after ceres's write (3 after the strobe), with no glitch; at VBlank's latch, at the same moment as it |
 | A written LYC | the comparison's next sample | its first sample 6 half dots or more after ceres's write |
-| The HBlank source of the interrupt | falls with mode 0, at the line's start | a half dot later |
+| The HBlank source of the interrupt | rises 14 ns after mode 3 ends (after the LY = LYC flag of that edge), falls with mode 0 | rises as mode 3 ends, before anything else of that half dot; falls a half dot after mode 0 |
 | The LY = LYC flag, read | as the comparison sampled it | 3 half dots later; on the CGB-C it drops as LY changes, as on the DMG; on the CGB-E it holds until the next sample |
 | Mode 2, read | the scan's flag (from h = 906) | from h = 909 to 157, then mode 3 |
 | Mode 1, read | VBlank's latch (from h = 908 of line 143) | from h = 911; on the CGB-E until 2 half dots after the latch's end |
@@ -111,23 +142,34 @@ half dot.
 
 Double speed has the same rules for now: its own are not modelled yet.
 
-With these, cgb-acid2 draws the same 14 pictures as ceres, which match the
-real CGB's (its reference picture), but wakes from a HALT on its LY = LYC
-interrupt an M-cycle before ceres does: no one alignment of the DMG's PPU
-with the CPU gives ceres's timings for every interrupt source
-(`doc/cgb-hardware-tests.md`, entry 10).
+With these and the CPU's HALT (below), cgb-acid2 makes the same accesses
+as on ceres and draws the same 14 pictures, which match the real CGB's
+(its reference picture).
 
-## Not modelled yet
+## Left out
 
-Planned, in this order (each will move up into the tables):
+What the model does not have, and why:
 
-1. HDMA (FF51 to FF55): the general-purpose transfer and the HBlank one.
-2. The APU: PCM12 and PCM34 (FF76, FF77), wave RAM while channel 3 plays,
-   the lengths while the APU is off, the frame sequencer in double speed.
-3. The serial port's fast clock (SC bit 1), the infrared port RP (FF56),
-   FEA0 to FEFF, OAM DMA's sources, the OAM bug.
-4. The CGB-C's other differences (`doc/cgb-hardware-tests.md`, entry 6;
-   the LCD's timing already has those that ceres knows).
+- **The LCD's double-speed rules.** In double speed the model keeps the
+  normal speed's rules. Ceres's double-speed delays are fits to
+  Gambatte's tests, and no single phase of the PPU against the CPU, with
+  reads and writes where this CPU core puts them, gave them all: further
+  fitting would add a guess per signal. Most of Gambatte's double-speed
+  LCD and HDMA ROMs fail for this.
+- **The last normal-speed LCD timings:** STAT's mode on the first line
+  after the LCD is turned on with SCX 7
+  (`enable_display/ly0_late_scx7_m3stat_scx0_2`), and an HBlank enable
+  late on line 143 (`m1/ly143_late_m0enable_2`). Of the 69 LCD ROMs whose
+  results differ between the DMG and the CGB, the rest pass.
+- **The CGB-C's other differences** (`doc/cgb-hardware-tests.md`, entry
+  6): the LCD's timing has those that ceres knows (`REVISION`); the rest
+  would be more fitting.
+- **The infrared port (RP, FF56), PCM12 and PCM34 (FF76, FF77)**: small
+  registers that nothing else depends on.
+- **The APU's other CGB differences** (wave RAM while channel 3 plays,
+  the lengths while the APU is off), **the serial port's fast clock (SC bit
+  1), FEA0 to FEFF, OAM DMA's sources and the OAM bug**: not done; each
+  would be a row in the tables above.
 
 ## Running it
 
