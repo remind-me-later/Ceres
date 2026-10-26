@@ -1,4 +1,6 @@
 #[cfg(kani)]
+mod netlist_proofs;
+#[cfg(kani)]
 mod proofs;
 mod timer;
 
