@@ -83,6 +83,23 @@ These come from dmg-sim:
 - Icarus 13 has no string method `tolower`, which dmg-sim uses only for its
   event files; the build comments it out in its copy of dmg-sim.
 
+## Die images
+
+The photos of the chips' dies. None is stored in the repository.
+
+| Chip | Image | Layer, size | By, licence |
+| ---- | ----- | ----------- | ----------- |
+| DMG-CPU B | [siliconpr0n.org/map/nintendo/dmg-cpu-b/single](https://siliconpr0n.org/map/nintendo/dmg-cpu-b/single/): `nintendo_dmg-cpu-b_mcmaster_mz_mit20x.jpg`, `nintendo_dmg-cpu-b_mcmaster_s1-1_mit20x.jpg` | 20x | John McMaster; the dies that dmg-schematics' overlay of the cells is drawn on |
+| CPU CGB B | [CPU Graveyard](https://happytrees.org/dieshots/Nintendo_-_CPU_CGB_B), from [Siliconinsider's post](https://x.com/Siliconinsid/status/1599887576797585408) | top metal, 1000×1070 | Antoine Bercovici, CC BY-NC-SA 4.0 |
+| CPU CGB C | [CPU Graveyard](https://happytrees.org/dieshots/Nintendo_-_CPU-CGB_C); [siliconpr0n's map](https://siliconpr0n.org/map/nintendo/cpu-cgb-c/) (`mz_5x`, `mz_10x`) and [page](https://siliconpr0n.org/archive/doku.php?id=ryancor:nintendo:cpu-cgb-c) | top metal, 2047×2160 on CPU Graveyard | Ryan Cornateanu, CC BY 4.0 |
+| "CPU CGB B" (die label CYUH54) | [siliconpr0n's map](https://siliconpr0n.org/map/nintendo/cpu-cgb-b/): [`nintendo_cpu-cgb-b_poly_10x.jpg`](https://siliconpr0n.org/map/nintendo/cpu-cgb-b/single/nintendo_cpu-cgb-b_poly_10x.jpg) (directory `drdecap_poly_10x`) | polysilicon, 10x, 6045×7755 | Dr Decap; siliconpr0n's wiki is CC BY 4.0 |
+
+siliconpr0n.org answers scripts with 403; its CGB pages and the
+polysilicon image were fetched through the Internet Archive
+(`web.archive.org/web/2024id_/<url>`). What the CGB's images show, and why
+they cannot be traced, is in
+[doc/cgb-hardware-tests.md](../doc/cgb-hardware-tests.md#9-what-the-die-photos-show-of-the-chips-blocks).
+
 ## The readable model
 
 `rtl/` describes the chip in VHDL, one file per block, in the words of
