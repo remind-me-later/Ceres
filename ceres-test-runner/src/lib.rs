@@ -8,6 +8,7 @@
 //! (see [`check_known_failures`]).
 
 pub mod checks;
+pub mod facts;
 pub mod gambatte;
 
 use anyhow::{Context as _, Result};

@@ -261,6 +261,7 @@ begin
 	-- does not drop for a delta cycle between them and set the flag again,
 	-- as on the DMG (Gambatte's m2irq_ly00_lcdstat30: no interrupt).
 	-- @hw die: TAPA, SUKO TUVA VOTY; VYPU
+	-- @fact stat-or-at-vblank-end
 	int_stat <= (stat_enable(6) and lyc_match) or (stat_enable(5) and vclk_i and not mode1_i) or
 	            (stat_enable(4) and mode1_i) or (stat_enable(3) and mode0);
 	int_vbl  <= mode1_i;

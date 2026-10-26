@@ -223,6 +223,7 @@ begin
 	-- a write to LYC that clears the flag at the end of mode 3 drops STAT's
 	-- interrupt line for a moment, and the rise sets IF's flag (Gambatte's
 	-- lycdisable_ff45_3, measured in dmg-sim).
+	-- @fact mode-0-rises-after-lyc-flag, @fact lcd-off-in-vblank-mode-0-source
 	mode0      <= '1' after 14 ns when mode0_i = '1' else '0';
 
 	voga_ff : process (clk, line_start)
@@ -368,6 +369,7 @@ begin
 	-- of the real DMG do: with this pulse the model draws
 	-- m3_lcdc_win_en_change_multiple_wx and m3_scy_change as the hardware
 	-- does, and without it (a delay on the clock) it does not.
+	-- @fact window-start-tile-register-pulse
 	bg_tile_clock <= myso and not fetch_count(1);
 
 	tile_ff : process (bg_tile_clock)

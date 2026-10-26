@@ -723,6 +723,8 @@ dependencies = [
  "anyhow",
  "ceres-core",
  "image",
+ "serde",
+ "toml",
 ]
 
 [[package]]

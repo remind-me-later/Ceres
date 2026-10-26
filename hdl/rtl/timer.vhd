@@ -82,6 +82,7 @@ begin
 	-- makes the clock rise and fall at once, and TIMA counts. tac_select is
 	-- the select a moment (a delta cycle) after TAC.
 	-- @hw die: TEKO UKAP TECY (muxi), SOGU
+	-- @fact timer-enable-race
 	tac_select <= tac(1 downto 0);
 
 	with tac_select select timer_clock <=

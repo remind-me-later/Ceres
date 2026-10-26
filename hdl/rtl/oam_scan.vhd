@@ -110,6 +110,7 @@ begin
 
 	-- OAM DMA hides the scan from the OAM bus and from STAT, but it goes on.
 	-- @hw die: ACYL BOGE
+	-- @fact stat-during-oam-dma
 	mode2 <= scanning_i and not dma_run;
 
 	-- The sprite's index counts at the rising edges of wuvu, up to 39.

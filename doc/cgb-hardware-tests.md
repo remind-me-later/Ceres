@@ -4,7 +4,7 @@ The CGB's LCD timing in ceres is fitted to test ROMs that were verified on
 real consoles (gambatte, SameSuite, AGE, Mooneye, Mealybug). Where those tests
 leave a timing undecided, ceres picks a value that passes them all, and the
 choice is listed here so that a small test ROM run on a real CGB can settle
-it.
+it. Each entry is a fact of [facts.toml](facts.toml).
 
 Each entry says what to measure, why the existing tests do not pin it down,
 what ceres does today, and the outcomes that would tell the candidates apart.

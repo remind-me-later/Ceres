@@ -42,6 +42,7 @@ pub(super) struct ObjectSearch {
     /// an entry's Y and X from the search, or an object's tile and
     /// attributes from the fetch. While a DMA runs the search does not read
     /// OAM and compares each entry with these.
+    // @fact oam-scan-during-dma
     pub y_bus: u8,
     pub x_bus: u8,
     /// A CGB-C `OBJ_SIZE` write during this line's search (see
@@ -153,6 +154,7 @@ impl Ppu {
     /// does not read OAM until the transfer ends, and every entry sees what
     /// the latches hold (on the DMG-CPU B's netlist, the scan's latches stay
     /// closed while the DMA runs).
+    // @fact stat-during-oam-dma
     #[must_use]
     pub(in crate::ppu) const fn dma_hides_object_search(&self) -> bool {
         !self.d.bus.cpu_idle && self.search_dma_phase().written().is_some()

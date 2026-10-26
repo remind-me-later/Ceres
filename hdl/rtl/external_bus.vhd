@@ -100,6 +100,7 @@ begin
 	-- 2.7 ns: the moment a VRAM access leaves the chip passes the address
 	-- when it comes from HL or SP, and not when it comes from BC or DE,
 	-- which arrive sooner (as in dmg-sim).
+	-- @fact cartridge-bus-edges
 	addr_latch <= non_vram_mreq_i or t2_only after 2700 ps;
 
 	address_latch : process (all)

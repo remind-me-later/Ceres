@@ -91,7 +91,8 @@ impl<A: AudioCallback> Bus for Gb<A> {
         // Gambatte runs the LCD two cycles ahead of an acknowledge: the LYC
         // interrupt that the compare around line 153 raises that soon counts
         // as already requested and is swallowed by the acknowledge. (In double
-        // speed the compare itself comes early enough.)
+        // speed the compare itself comes early enough.) No test needs it, and
+        // the netlist keeps the request: @fact ack-run-ahead
         if !self.key1.is_enabled() {
             self.ppu
                 .run_ahead(&mut self.ints, self.cgb_mode, false, 2, false);

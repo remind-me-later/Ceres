@@ -78,6 +78,7 @@ pub(super) const VBLANK_H: i32 = LINE_END_H + 4;
 const LY_MATCH_PHASE: i32 = 4;
 /// The half dots from an LCDC write that turns the LCD off to the sources of
 /// the interrupt seeing it.
+// @fact lcd-off-at-line-start
 const LCD_OFF_LATE: u8 = 3;
 
 const LAST_VISIBLE_LINE: u8 = LINES - 1;
@@ -124,6 +125,7 @@ const DMG_PHASES: Phases = Phases {
 
 /// The CGB up to revision C (gambatte's tests): the HBlank gate clears and
 /// the OAM scan reads a half dot off the DMG's.
+// @fact cgb-read-delays, @fact cgb-c-against-cgb-e
 const CGB_C_PHASES: Phases = Phases {
     cgb: true,
     hblank_clear: LINE_RESET_H + 1,
@@ -341,6 +343,7 @@ impl LcdTiming {
 
 /// How many half dots after the unit's clock a CPU access lands: writes
 /// reach the unit that much later, reads see it that much ahead.
+// @fact cgb-read-delays, @fact cgb-stat-write-delay, @fact cgb-lyc-write-sampled
 struct Delays {
     stat_write: u8,
     /// On the CGB, at the first LY=LYC sample after it.
@@ -420,6 +423,7 @@ impl Ppu {
             before = t.ly;
             t.unit();
         }
+        // @fact cgb-ly-read-during-increment
         if self.d.timing.phases.cgb && delay > 0 && before != t.ly {
             before & t.ly
         } else {

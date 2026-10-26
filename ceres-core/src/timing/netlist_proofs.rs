@@ -121,6 +121,7 @@ struct NetTimer {
     /// Whether enabling the timer while its select changes counts, as in
     /// dmg-sim (`doc/dmg-hardware-tests.md`, entry 4). The DMG that
     /// gbmicrotest was checked on does not count.
+    // @fact timer-enable-race
     enable_race_counts: bool,
 }
 
@@ -352,9 +353,10 @@ fn ceres_for(net: &NetTimer) -> Clock {
     }
 }
 
-/// Where ceres parts from the netlist.
+/// Where ceres parts from the netlist: each is a fact of `doc/facts.toml`.
 fn known_difference(net: &NetTimer, access: Access) -> bool {
-    // 1. A tick between an overflow and the end of the reload is lost: TIMA
+    // 1. @fact tima-reload-tick
+    //    A tick between an overflow and the end of the reload is lost: TIMA
     //    loads TMA through the M-cycle after the overflow, from the A edge
     //    that starts it (the load comes before the divider's tick). Ceres
     //    holds TMA from the overflow on, and adds the tick to it.
@@ -377,7 +379,8 @@ fn known_difference(net: &NetTimer, access: Access) -> bool {
     let falls_at_edge =
         NetTimer::clock_of(tac, tac, count) && !NetTimer::clock_of(tac, tac, count.wrapping_add(1));
     let lost_tick = (net.int_timer && glitch) || (overflowed && (glitch || falls_at_edge));
-    // 2. The load still holds bit7_before at 0 at the A edge that ends that
+    // 2. @fact tima-reload-unseen-overflow
+    //    The load still holds bit7_before at 0 at the A edge that ends that
     //    M-cycle, so a tick at that edge, or a glitch in the next M-cycle,
     //    that takes a TIMA of FF (a TMA of FF) to 00 overflows unseen; ceres
     //    reloads and interrupts.

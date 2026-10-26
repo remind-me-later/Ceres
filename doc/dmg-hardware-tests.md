@@ -25,7 +25,8 @@ a test ROM on a flash cartridge, a logic analyser on the cartridge bus or the
 LCD connector, or a scope. The CGB's list is
 [cgb-hardware-tests.md](cgb-hardware-tests.md); its entry on the OAM scan
 during an OAM DMA concerns the DMG too, and entry 1 here adds the netlist's
-answer.
+answer. Each entry is a fact of [facts.toml](facts.toml), which says in a
+line what it rests on and what settling it takes.
 
 [dmg-schematics]: https://github.com/msinger/dmg-schematics
 [dmg-sim]: https://github.com/msinger/dmg-sim
@@ -172,11 +173,20 @@ printed on the CPU noted.
 ### 7. The background's enable in `m3_lcdc_bg_en_change`
 
 - **Measure:** the ROM on a B and on a C.
-- **The evidence:** Mealybug's screenshot (`DMG-blob`).
-- **The netlist:** fails it in the same four pixels as ceres: column 0 of lines
-  19 to 22, black where the screenshot is white.
+- **The evidence:** two screenshots that differ in 228 pixels: Mealybug's
+  `DMG-blob` one, and its `DMG-CPU B` one, with a photo of the unit
+  (`m3_lcdc_bg_en_change_dmg_b.png` in the test ROMs). The two units disagree,
+  so the result depends on the revision or the unit.
+- **The netlist:** fails it in the same four pixels as ceres against the
+  `DMG-blob` screenshot (column 0 of lines 19 to 22, black where the
+  screenshot is white), and in 232 against the `DMG-CPU B` one, although the
+  netlist is a B's.
 - **Ceres today:** fails it (ignored, "not investigated yet").
-- **Outcomes:** as in entry 6: a netlist error or a revision difference.
+- **Outcomes:** as in entry 6: a netlist error or a revision difference. That
+  a real B is further from the netlist than the blob points at a race whose
+  outcome varies between units. Mealybug's `m3_lcdc_win_en_change_multiple_wx`
+  also has both screenshots, 3 pixels apart, and the netlist draws the
+  blob's.
 - **Needs:** a test ROM; units of both revisions.
 
 ### 8. The state that the boot ROM does not set
@@ -297,6 +307,49 @@ printed on the CPU noted.
   short can depend on the line and the unit.
 - **Needs:** a test ROM; a B and a C.
 
+### 15. An LCD interrupt requested as the CPU acknowledges another
+
+- **Measure:** with two STAT sources or the LCD's and another interrupt
+  enabled, let an interrupt be dispatched while the LCD raises its request
+  in the last T-cycles of the dispatch (the line 153 LY = LYC compare, a
+  mode 2 or mode 0 start), sweeping the request a cycle at a time; read IF
+  in the handler.
+- **The evidence:** no test that ceres runs tells the two apart: with the
+  run-ahead below switched off, all of Gambatte's, Mooneye's, gbmicrotest's,
+  AGE's and SameSuite's tests still pass (2026-10-26).
+- **The netlist:** keeps the request: IF's flag is set after the
+  acknowledge has cleared the other one (the proof in
+  `ceres-core/src/interrupts/netlist_proofs.rs`, under its mapping of T-cycles
+  to phases).
+- **Ceres today:** runs the LCD two cycles ahead of the acknowledge
+  (`ack_interrupt` in `ceres-core/src/cpu_bus/mod.rs`), from Gambatte, at
+  normal speed on every model: what it requests then counts as already
+  requested, and the acknowledge clears it.
+- **Outcomes:** the flag set confirms the netlist, and ceres can drop the
+  run-ahead on the DMG; not set, the run-ahead stands. On a CGB, which has no
+  netlist, whichever it shows.
+- **Needs:** a test ROM; a B, a C and a CGB.
+
+### 16. A tick of the timer while TIMA reloads
+
+- **Measure:** let TIMA overflow, and in the M-cycle of the reload that
+  follows make the timer tick: by the divider's own edge, by a write to DIV,
+  or by a write to TAC that drops the selected bit; then read TIMA. Repeat
+  with TMA at `FF`, the tick at the end of the reload, to see whether the
+  `FF` to `00` overflows again.
+- **The evidence:** no test found that tells the two apart: ceres and the
+  readable model pass the same timer tests.
+- **The netlist:** TIMA loads TMA through the whole M-cycle after the
+  overflow, so the tick is lost; and the overflow flip-flop's input stays at
+  0 through the reload, so `FF` to `00` at its end overflows unseen. These
+  are the two known differences of the timer's proof
+  (`known_difference` in `ceres-core/src/timing/netlist_proofs.rs`).
+- **Ceres today:** adds the tick to TMA, and reloads and interrupts on the
+  second overflow.
+- **Outcomes:** for each, whether the tick counts and whether the overflow
+  interrupts.
+- **Needs:** a test ROM; a B and a C.
+
 ## Settled by hardware where the netlist was not enough
 
 - **The tile register at a window start:** the fetch counter's reset gives its
@@ -329,6 +382,8 @@ printed on the CPU noted.
 | 12. Sound output           |                 |                |   ✅  | any            |
 | 13. STAT during DMA        |       ✅        |                |       | B, C, a CGB    |
 | 14. LCD off in VBlank      |       ✅        |                |       | B, C           |
+| 15. Interrupt at an acknowledge |  ✅        |                |       | B, C, a CGB    |
+| 16. Tick during a reload   |       ✅        |                |       | B, C           |
 
 A cartridge built on a microcontroller (one that serves the ROM and logs
 the bus) would make most of these automatic: it can run a list of ROMs, read

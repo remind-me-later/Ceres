@@ -1,0 +1,399 @@
+# What is known about the hardware where it is not simply known.
+#
+# One table per behaviour whose evidence is missing or contradictory, where
+# ceres departs from the DMG-CPU B's netlist, or whose outcome hangs on a
+# race. Behaviours that the netlist, the hardware-verified tests and ceres
+# all agree on are not listed. Code that implements or depends on a fact
+# says so with a tag, `@fact <id>`, in a comment.
+#
+# Fields:
+#
+# - title: the behaviour, in a line.
+# - models: dmg, mgb, sgb, cgb, cgb-c, cgb-e.
+# - netlist: what the netlist (hdl/rtl, dmg-sim) does, against ceres: same,
+#   differs, silent (it cannot tell: two drivers, the RAMs' cells, the
+#   power-on state, the analogue side) or none (no netlist: CGB only).
+# - hardware: what the hardware-verified test ROMs in `tests` show, against
+#   ceres: same, differs, or none (no test looks).
+# - emulators (optional): agree if SameBoy and Gambatte do what ceres
+#   does, disagree if not, where that is all the evidence there is.
+# - race (optional): the outcome hangs on which of two signals comes first;
+#   order if they are a phase or more apart, width if the die's physics
+#   decides (a pulse of almost no width, two paths of almost one delay).
+# - tests: test ROMs or their directories, under external/test-roms.
+# - open: the open questions that would settle it, as document#anchor.
+# - needs: what settling them takes: flash-cart, logic-analyser-lcd,
+#   logic-analyser-cartridge, scope, camera, the units (dmg-b, dmg-c, cgb-c,
+#   cgb-e) or several-units.
+# - note (optional): what the fields do not say.
+#
+# The test `facts` of ceres-test-runner checks that a departure from the
+# netlist rests on a hardware test or an open question, that ceres failing
+# a hardware test has an open question, that the ROMs and the anchors
+# exist, that every open question of those documents is a fact's, and that
+# every tag names a fact. `cargo run -p ceres-test-runner --example facts`
+# prints the open questions, the departures from the netlist and the races.
+
+# The OAM scan and OAM DMA
+
+[oam-scan-during-dma]
+title = "What the OAM scan compares while an OAM DMA has OAM"
+models = ["dmg", "cgb"]
+netlist = "same"
+hardware = "same"
+emulators = "disagree"
+tests = [
+  "strikethrough/strikethrough.gb",
+  "gambatte/oamdma/late_sp39y_2_dmg08_cgb04c_out0.gbc",
+]
+open = [
+  "doc/dmg-hardware-tests.md#1-what-the-oam-scan-reads-while-an-oam-dma-is-copying",
+  "doc/cgb-hardware-tests.md#7-what-the-oam-scan-reads-while-an-oam-dma-is-copying",
+]
+needs = ["flash-cart", "cgb-c", "cgb-e"]
+note = "Settled on the DMG by the netlist's two OAM latches; the CGB has the rule because its tests pass with it. SameBoy keeps only the scan's last Y and X."
+
+[stat-during-oam-dma]
+title = "STAT shows mode 0, not 2, while an OAM DMA hides the scan"
+models = ["dmg", "cgb"]
+netlist = "same"
+hardware = "none"
+open = [
+  "doc/dmg-hardware-tests.md#13-stat-during-an-oam-dma",
+  "doc/cgb-hardware-tests.md#8-stat-during-an-oam-dma",
+]
+needs = ["flash-cart", "dmg-b", "dmg-c", "cgb-c", "cgb-e"]
+
+[bus-with-two-drivers]
+title = "What the CPU reads and pushes while an OAM DMA has the bus"
+models = ["dmg"]
+netlist = "differs"
+hardware = "same"
+tests = [
+  "gambatte/oamdma/oamdma_src0000_busypush0001_dmg08_cgb04c_out5576AA34.gbc",
+  "gambatte/oamdma/oamdma_src0000_busyreadFE00_1_dmg08_cgb04c_out0.gbc",
+]
+open = ["doc/dmg-hardware-tests.md#5-writes-and-reads-of-the-cpu-during-an-oam-dma"]
+needs = ["flash-cart", "logic-analyser-cartridge", "dmg-b", "dmg-c"]
+note = "The model fails 17 of the 207 sampled Gambatte ROMs, all busypush and busyread; it matches dmg-sim, so the netlist (with the board) gives other values. Probably electrical."
+
+[dma-reads-external-bus-held]
+title = "Cartridge RAM read while an OAM DMA has the external bus gives the DMA's byte"
+models = ["dmg"]
+netlist = "differs"
+hardware = "same"
+tests = ["gambatte/oamdma/oamdma_src0000_srambankchange_1_dmg08_cgb04c_out4.gbc"]
+note = "The model and dmg-sim read 00."
+
+[dma-from-fe00-ff00]
+title = "An OAM DMA from FE00 or FF00 copies FF and 00"
+models = ["dmg"]
+netlist = "differs"
+hardware = "same"
+tests = [
+  "gambatte/oamdma/oamdma_srcFE00_readFE00_dmg08_cgb04c_out0.gbc",
+  "gambatte/oamdma/oamdma_srcFF00_readFE00_dmg08_out1_cgb04c_out0.gbc",
+  "gambatte/oamdma/oamdma_srcFF00_readFE45_dmg08_out1_cgb04c_out0.gbc",
+]
+note = "The model and dmg-sim copy 83 or 64."
+
+# The PPU
+
+[bgp-write-in-mode-3]
+title = "A write to BGP in mode 3 leaves a black pixel"
+models = ["dmg"]
+netlist = "differs"
+hardware = "same"
+race = "width"
+tests = [
+  "mealybug-tearoom-tests/ppu/m3_bgp_change.gb",
+  "mealybug-tearoom-tests/ppu/m3_bgp_change_sprites.gb",
+  "mealybug-tearoom-tests/ppu/m3_lcdc_obj_en_change_variant.gb",
+]
+open = ["doc/dmg-hardware-tests.md#2-a-write-to-bgp-during-mode-3"]
+needs = ["flash-cart", "logic-analyser-lcd", "dmg-b", "dmg-c"]
+note = "The netlist's FF lasts 39 ns and the LCD takes no pixel in it. AGE's m3-bg-bgp is 2 pixels off on ceres, 40 on the model."
+
+[window-start-wx-written-every-line]
+title = "Where the window starts when WX is written every line"
+models = ["dmg"]
+netlist = "differs"
+hardware = "same"
+race = "width"
+tests = [
+  "mealybug-tearoom-tests/ppu/m3_window_timing.gb",
+  "mealybug-tearoom-tests/ppu/m3_window_timing_wx_0.gb",
+]
+open = ["doc/dmg-hardware-tests.md#3-where-the-window-starts-when-wx-is-written-every-line"]
+needs = ["flash-cart", "logic-analyser-lcd", "dmg-b", "dmg-c"]
+note = "The netlist starts the window a pixel later."
+
+[window-start-tile-register-pulse]
+title = "At a window start the tile register takes the precharged bus (FF)"
+models = ["dmg"]
+netlist = "same"
+hardware = "same"
+race = "width"
+tests = [
+  "mealybug-tearoom-tests/ppu/m3_lcdc_win_en_change_multiple_wx.gb",
+  "mealybug-tearoom-tests/ppu/m3_scy_change.gb",
+]
+note = "The fetch counter's reset gives the clock a pulse of no width: dmg-sim's slower gates swallow it, the readable model keeps it, as the screenshots show."
+
+[bg-enable-change-column-0]
+title = "The background's enable written in mode 3 (m3_lcdc_bg_en_change)"
+models = ["dmg"]
+netlist = "same"
+hardware = "differs"
+tests = ["mealybug-tearoom-tests/ppu/m3_lcdc_bg_en_change.gb"]
+open = ["doc/dmg-hardware-tests.md#7-the-backgrounds-enable-in-m3_lcdc_bg_en_change"]
+needs = ["flash-cart", "dmg-b", "dmg-c"]
+note = "Ceres and the model are 4 pixels off the DMG-blob screenshot and 232 off Mealybug's DMG-CPU B one: the two units differ, and the netlist, a B, is closer to the blob."
+
+[pictures-without-screenshots]
+title = "Mealybug's eight DMG ROMs with no screenshot"
+models = ["dmg"]
+netlist = "same"
+hardware = "none"
+tests = ["mealybug-tearoom-tests/ppu/m3_scx_high_5_bits_change2.gb"]
+open = ["doc/dmg-hardware-tests.md#9-pictures-that-no-screenshot-shows"]
+needs = ["flash-cart", "camera"]
+
+[stat-mode-2-until-mode-3]
+title = "STAT holds mode 2 until mode 3 has begun"
+models = ["dmg"]
+netlist = "same"
+hardware = "same"
+race = "width"
+tests = ["gbmicrotest/oam_write_l1_a.gb", "gbmicrotest/poweron_stat_026.gb"]
+note = "In dmg-sim the scan's flag clears a moment before mode 3's sets; OAM sees that moment (oam_write_l1_c), STAT does not."
+
+[window-wx-166]
+title = "The window at WX 166: an object there waits for it, and it carries into the next line"
+models = ["dmg"]
+netlist = "same"
+hardware = "none"
+note = "Flip-flops half a dot or more apart, read from render.vhd; the CPU can see it in STAT, and no hardware test reads there. Only the netlist speaks."
+
+# The STAT interrupt
+
+[stat-or-at-vblank-end]
+title = "STAT's mode 1 source falls as the mode 2 source rises: no interrupt"
+models = ["dmg"]
+netlist = "same"
+hardware = "same"
+race = "width"
+tests = ["gambatte/lcdirq_precedence/m2irq_ly00_lcdstat30_dmg08_cgb04c_out0.gbc"]
+note = "A static hazard of the OR of the sources; the model computes the two in one expression."
+
+[mode-0-rises-after-lyc-flag]
+title = "Mode 0 rises 14 ns after its compare, after LY = LYC's flag has changed"
+models = ["dmg"]
+netlist = "same"
+hardware = "same"
+race = "width"
+tests = ["gambatte/m0enable/lycdisable_ff45_3_dmg08_out2_cgb04c_out0.gbc"]
+note = "dmg-sim's STAT line drops for 13 ns between the two, and its rise sets IF."
+
+[lcd-off-in-vblank-mode-0-source]
+title = "The LCD turned off in VBlank, with STAT's mode 0 source on, requests nothing"
+models = ["dmg"]
+netlist = "same"
+hardware = "none"
+race = "width"
+open = ["doc/dmg-hardware-tests.md#14-the-lcd-turned-off-in-vblank-with-stats-mode-0-source-on"]
+needs = ["flash-cart", "dmg-b", "dmg-c"]
+
+[lcd-off-at-line-start]
+title = "The LCD turned off in the M-cycle a line begins: the line's mode 2 interrupt comes first"
+models = ["dmg"]
+netlist = "same"
+hardware = "none"
+race = "order"
+note = "The line-end pulse comes 156 ns before the LCD's reset; hdl/check/lcd_off_line_start.asm reads IF at each M-cycle around it."
+
+# Interrupts and the timer
+
+[ack-run-ahead]
+title = "An LCD interrupt requested as the CPU acknowledges another"
+models = ["dmg", "cgb"]
+netlist = "differs"
+hardware = "none"
+open = ["doc/dmg-hardware-tests.md#15-an-lcd-interrupt-requested-as-the-cpu-acknowledges-another"]
+needs = ["flash-cart", "dmg-b", "dmg-c", "cgb-c", "cgb-e"]
+note = "Ceres runs the LCD two cycles ahead of the acknowledge and drops what it requests then; the netlist keeps it. Every suite passes without the run-ahead (2026-10-26)."
+
+[timer-enable-race]
+title = "Enabling the timer with TAC as its select changes does not count"
+models = ["dmg"]
+netlist = "differs"
+hardware = "same"
+race = "width"
+tests = ["gbmicrotest/halt_bug.gb", "gbmicrotest/004-tima_boot_phase.gb"]
+open = ["doc/dmg-hardware-tests.md#4-enabling-the-timer-with-tac"]
+needs = ["flash-cart", "dmg-b", "dmg-c"]
+note = "The netlist's enable reaches the clock gate before the select, and dmg-sim counts on the pulse of no width."
+
+[tima-reload-tick]
+title = "A tick of the timer while TIMA reloads from TMA"
+models = ["dmg"]
+netlist = "differs"
+hardware = "none"
+open = ["doc/dmg-hardware-tests.md#16-a-tick-of-the-timer-while-tima-reloads"]
+needs = ["flash-cart", "dmg-b", "dmg-c"]
+note = "The netlist loses it (TIMA loads TMA through the M-cycle after the overflow); ceres adds it to TMA. The first known difference of the timer's proof."
+
+[tima-reload-unseen-overflow]
+title = "TIMA at FF ticking to 00 as a reload ends"
+models = ["dmg"]
+netlist = "differs"
+hardware = "none"
+open = ["doc/dmg-hardware-tests.md#16-a-tick-of-the-timer-while-tima-reloads"]
+needs = ["flash-cart", "dmg-b", "dmg-c"]
+note = "The netlist holds the overflow flip-flop's input at 0 through the reload, so the overflow goes unseen; ceres reloads and interrupts. The second known difference of the timer's proof."
+
+# The CPU
+
+[halt-op-dupe-delay]
+title = "gbmicrotest's halt_op_dupe_delay"
+models = ["dmg"]
+netlist = "same"
+hardware = "differs"
+emulators = "agree"
+tests = ["gbmicrotest/halt_op_dupe_delay.gb"]
+open = ["doc/dmg-hardware-tests.md#6-halt_op_dupe_delay-and-stat_write_glitch_l154_d"]
+needs = ["flash-cart", "dmg-b", "dmg-c"]
+note = "Ceres, SameBoy and the netlist fail it with the same values and the same accesses."
+
+[stat-write-glitch-line-154]
+title = "gbmicrotest's stat_write_glitch_l154_d"
+models = ["dmg"]
+netlist = "same"
+hardware = "differs"
+emulators = "agree"
+tests = ["gbmicrotest/stat_write_glitch_l154_d.gb"]
+open = ["doc/dmg-hardware-tests.md#6-halt_op_dupe_delay-and-stat_write_glitch_l154_d"]
+needs = ["flash-cart", "dmg-b", "dmg-c"]
+
+# What the netlist cannot tell
+
+[power-on-state]
+title = "OAM and the registers that no boot ROM writes, at power-on"
+models = ["dmg"]
+netlist = "silent"
+hardware = "same"
+tests = [
+  "gbmicrotest/poweron_oam_000.gb",
+  "gbmicrotest/poweron_dma_000.gb",
+  "gbmicrotest/poweron_obp0_000.gb",
+  "gbmicrotest/poweron_obp1_000.gb",
+]
+open = ["doc/dmg-hardware-tests.md#8-the-state-that-the-boot-rom-does-not-set"]
+needs = ["flash-cart", "several-units"]
+note = "dmg-sim starts every cell at 0."
+
+[oam-corruption-bug]
+title = "The OAM corruption bug's values"
+models = ["dmg"]
+netlist = "silent"
+hardware = "differs"
+emulators = "agree"
+tests = ["blargg/oam_bug/rom_singles/7-timing_effect.gb"]
+open = ["doc/dmg-hardware-tests.md#10-the-oam-corruption-bug-and-the-wave-rams"]
+needs = ["flash-cart", "dmg-b", "dmg-c"]
+note = "SameBoy fails it the same way."
+
+[wave-ram-corruption]
+title = "Wave RAM corrupted by a trigger while channel 3 reads it"
+models = ["dmg"]
+netlist = "silent"
+hardware = "same"
+tests = ["blargg/dmg_sound/rom_singles/10-wave trigger while on.gb"]
+open = ["doc/dmg-hardware-tests.md#10-the-oam-corruption-bug-and-the-wave-rams"]
+needs = ["flash-cart", "dmg-b", "dmg-c"]
+
+[cartridge-bus-edges]
+title = "The edges of the cartridge bus within an M-cycle"
+models = ["dmg"]
+netlist = "differs"
+hardware = "none"
+race = "width"
+open = ["doc/dmg-hardware-tests.md#11-the-cartridge-bus-within-an-m-cycle"]
+needs = ["logic-analyser-cartridge", "dmg-b"]
+note = "Ceres has no edges. In the netlist a VRAM access shows on the address pins when its address comes from HL or SP, not from BC or DE: a latch open for 2.9 to 3.6 ns against 2.3 to 2.5."
+
+[sound-output]
+title = "The amplifier and the board's filter"
+models = ["dmg"]
+netlist = "silent"
+hardware = "none"
+open = ["doc/dmg-hardware-tests.md#12-the-sound-output"]
+needs = ["scope"]
+
+# The CGB's LCD timing, fitted to the tests
+
+[cgb-ly-read-during-increment]
+title = "LY read as it increments gives old & new"
+models = ["cgb"]
+netlist = "none"
+hardware = "same"
+tests = [
+  "gambatte/lcd_offset/offset1_lyc98int_ly_count_ds_2_cgb04c_out9A.gbc",
+  "gambatte/lcd_offset/offset2_lyc98int_ly_count_2_cgb04c_out9A.gbc",
+  "age-test-roms/speed-switch/spsw-mode0-cgbBCE.gb",
+]
+open = ["doc/cgb-hardware-tests.md#1-ly-read-while-ly-increments"]
+needs = ["flash-cart", "cgb-c", "cgb-e"]
+note = "These three fail without it, and no other ROM of the suites (2026-10-26)."
+
+[cgb-read-delays]
+title = "Where a read sees LY, the LY = LYC flag and the mode bits"
+models = ["cgb"]
+netlist = "none"
+hardware = "same"
+tests = ["gambatte/lcd_offset", "gambatte/lycint_lycflag"]
+open = ["doc/cgb-hardware-tests.md#2-where-a-read-sees-ly-the-lylyc-flag-and-the-mode-bits"]
+needs = ["flash-cart", "cgb-c", "cgb-e"]
+note = "Each signal at its own delay, fitted to Gambatte's 3023 CGB checks."
+
+[cgb-stat-write-delay]
+title = "When a STAT write reaches the interrupt"
+models = ["cgb"]
+netlist = "none"
+hardware = "same"
+emulators = "disagree"
+tests = ["gambatte/m0enable/late_enable_lcdoffset1_1_cgb04c_out2.gbc", "gambatte/m2enable"]
+open = ["doc/cgb-hardware-tests.md#3-when-a-stat-write-reaches-the-interrupt"]
+needs = ["flash-cart", "cgb-c", "cgb-e"]
+note = "Gambatte fits per-source rules, ceres one delay and an order; they part at writes the tests do not make."
+
+[cgb-lyc-write-sampled]
+title = "A written LYC takes effect at the next LY = LYC sample"
+models = ["cgb"]
+netlist = "none"
+hardware = "same"
+tests = ["gambatte/lycEnable"]
+open = ["doc/cgb-hardware-tests.md#4-when-an-lyc-write-reaches-the-comparison"]
+needs = ["flash-cart", "cgb-c", "cgb-e"]
+
+[cgb-stat-write-at-vblank-latch]
+title = "A STAT write in the half dot of the VBlank latch"
+models = ["cgb"]
+netlist = "none"
+hardware = "same"
+tests = [
+  "gambatte/m1/m1irq_disable_1_dmg08_out3_cgb04c_out1.gbc",
+  "gambatte/m1/ly143_late_m2enable_2_dmg08_out3_cgb04c_out1.gbc",
+]
+open = ["doc/cgb-hardware-tests.md#5-a-stat-write-at-the-vblank-latch"]
+needs = ["flash-cart", "cgb-c", "cgb-e"]
+
+[cgb-c-against-cgb-e]
+title = "Line 153's LY reset, the end of mode 1 and the LY = LYC flag, CGB-C against CGB-E"
+models = ["cgb-c", "cgb-e"]
+netlist = "none"
+hardware = "same"
+tests = ["gambatte/ly0", "age-test-roms/ly"]
+open = ["doc/cgb-hardware-tests.md#6-what-differs-between-the-cgb-c-and-the-cgb-e"]
+needs = ["flash-cart", "cgb-c", "cgb-e"]
+note = "Gambatte's tests are a CGB-C's, Mooneye's and AGE's a CGB-D or E's."

@@ -157,6 +157,7 @@ begin
 	-- are open while the scan reads (wosu low), while the sprite fetch reads,
 	-- and while the CPU reads.
 	-- @hw die: BOTA, AJEP XUJA ASYT BODE, YVAL YRYV ZODO
+	-- @fact oam-scan-during-dma
 	cpu_read_oam <= fexx and cpu_rd and not clk_t4;
 	latch_open   <= (mode2 and not wosu) or fetch_read or cpu_read_oam;
 

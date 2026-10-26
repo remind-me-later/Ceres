@@ -288,6 +288,7 @@ impl Clock {
         }
     }
 
+    // @fact timer-enable-race: enabling the timer does not count.
     pub(crate) fn write_tac(&mut self, host: &impl TimerHost, val: u8) {
         // Timer glitch: the AND gate output falls when (old_enable AND old_div_bit) was 1
         // and (new_enable AND new_div_bit) is 0, causing a spurious TIMA increment.
