@@ -40,7 +40,10 @@ entity vram_bus is
 		dma_addr    : in std_ulogic_vector(12 downto 0);
 
 		-- The PPU
-		mode3       : in std_ulogic;
+		clk4         : in std_ulogic;
+		double_speed : in std_ulogic;
+		start_line   : in std_ulogic;  -- the first line after the LCD is turned on
+		mode3        : in std_ulogic;
 		fetching    : in std_ulogic;
 		sprite_read : in std_ulogic;
 		sprite_mrd  : in std_ulogic;
@@ -68,6 +71,8 @@ architecture rtl of vram_bus is
 	signal cpu_select : std_ulogic;  -- tole
 	signal cpu_writes : std_ulogic;  -- ruvy
 	signal cpu_vram  : std_ulogic;  -- sere: the CPU accesses VRAM
+	signal ppu_owns  : std_ulogic;  -- mode 3 takes VRAM from the CPU
+	signal mode3_edges : natural range 0 to 10 := 0;
 	signal cpu_write : std_ulogic;  -- sazo: ... and writes it
 	signal reading   : std_ulogic;  -- racu: nobody reads VRAM
 	signal idle      : std_ulogic;  -- sutu: nobody uses VRAM
@@ -101,6 +106,23 @@ begin
 	end process;
 	tuto <= t1_only and not soto;
 
+	-- Mode 3 takes VRAM from the CPU, but on the first line after the LCD
+	-- is turned on, at normal speed, only 10 half dots (5 dots) after it
+	-- begins.
+	-- @hw inferred: ceres (its FirstLineMode3 to FirstLineVramLock, from
+	-- SameBoy), Gambatte's enable_display/ly0_late_vramr and _vramw (CGB:
+	-- the access lands, DMG: it does not)
+	mode3_count : process (clk4, mode3)
+	begin
+		if mode3 = '0' then
+			mode3_edges <= 0;
+		elsif clk4'event and mode3_edges < 10 then
+			mode3_edges <= mode3_edges + 1;
+		end if;
+	end process;
+	ppu_owns <= '0' when mode3 = '1' and start_line = '1' and double_speed = '0' and mode3_edges < 10 else
+	            mode3;
+
 	-- The CPU addresses VRAM: 8000 to 9FFF, without leaving the chip, in
 	-- phases C to H; outside mode 3.
 	-- @hw die: TEFA SOSE TUCA TOLE ROPY SERE, TEGU SALE RUVY SAZO
@@ -108,7 +130,7 @@ begin
 	sose      <= addr(15) and not fexx_ffxx and not non_vram_mreq;
 	cpu_select <= not to_x01(mcs_n) when tuto = '1' else sose and cpu_ext_cs_en;
 	cpu_writes <= not to_x01(mrd_n) when tuto = '1' else sose and write;
-	cpu_vram   <= cpu_select and not mode3;
+	cpu_vram   <= cpu_select and not ppu_owns;
 	cpu_write  <= cpu_vram and cpu_writes;
 
 	-- The address: the CPU's, outside mode 3 and DMA; DMA's; or the PPU's.
@@ -116,7 +138,7 @@ begin
 	-- @hw die: XANE XEDU, AHOC, and the not_if0 onto ~ma0..~ma12
 	address : process (all)
 	begin
-		if vram_to_oam = '0' and mode3 = '0' then
+		if vram_to_oam = '0' and ppu_owns = '0' then
 			ma <= vbk & addr(12 downto 0);
 		elsif vram_to_oam = '1' then
 			ma <= vbk & dma_addr;
@@ -149,7 +171,7 @@ begin
 	-- @hw die: SUTU TODE SOKY ROSU; RYLU SOHO RAWA RACU SEMA REFO RUTE RONU;
 	-- TUJA TYJY SOHY TAXY SYSY SOFY RAGU; ~MCS ~MRD ~MWR (pad_bidir)
 	idle    <= not (fetching or vram_to_oam or sprite_read or cpu_vram);
-	reading <= (not (sose and write) nand not mode3) and not sprite_mrd and not fetching
+	reading <= (not (sose and write) nand not ppu_owns) and not sprite_mrd and not fetching
 	           and not vram_to_oam;
 	writing <= not (sose and cpu_wr_sync and cpu_vram);
 

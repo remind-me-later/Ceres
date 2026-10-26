@@ -102,7 +102,7 @@ architecture rtl of cgb_cpu is
 	signal ff60                                                 : std_ulogic_vector(1 downto 0);
 	signal boot_sel, boot_on                                    : std_ulogic;
 	signal cgb_mode, dmg_priority                               : std_ulogic;
-	signal clk4, double_speed, switch_wake                      : std_ulogic;
+	signal clk4, double_speed, switch_wake, ppu_ena                    : std_ulogic;
 	signal apu_div                                              : unsigned(15 downto 0);
 	signal int_timer, int_serial, int_jp, int_vbl, int_stat     : std_ulogic;
 	signal cpu_wakeup                                           : std_ulogic;
@@ -119,6 +119,7 @@ architecture rtl of cgb_cpu is
 	signal mode2, mode3, mode0                                  : std_ulogic;
 	signal line_start, scanning, ceno, stop_scan                : std_ulogic;
 	signal scan_index                                           : unsigned(5 downto 0);
+	signal start_line                                           : std_ulogic;
 	signal y_match                                              : std_ulogic;
 	signal sprite_line_in                                       : std_ulogic_vector(3 downto 0);
 	signal save                                                 : std_ulogic_vector(9 downto 0);
@@ -182,7 +183,7 @@ begin
 			ck1 => ck1, reset_pin_n => reset_n, t1 => t1, t2 => t2, phi => phi,
 			osc_ena => osc_ena, clk_ena => clk_ena, mreq => mreq, write => write,
 			test_reset => test_reset, div_16hz => div(15), double_speed => double_speed,
-			clk => clk, phase => phase, clk4 => clk4,
+			ppu_ena => ppu_ena, clk => clk, phase => phase, clk4 => clk4,
 			clk_1mhz => clk_1mhz, clk_t4 => clk_t4, data_phase => data_phase,
 			exec_phase => exec_phase, pch_phase => pch_phase, cpu_wr_sync => cpu_wr_sync,
 			cpu_ext_cs_en => cpu_ext_cs_en,
@@ -247,7 +248,7 @@ begin
 		port map (
 			ck1 => ck1, reset2 => reset2, cgb_mode => cgb_mode, osc_ena => osc_ena,
 			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
-			double_speed => double_speed, wake => switch_wake
+			double_speed => double_speed, wake => switch_wake, ppu_ena => ppu_ena
 		);
 
 	u_cgb_mode : entity work.cgb_mode
@@ -301,11 +302,15 @@ begin
 		);
 
 	u_lcd_timing : entity work.lcd_timing
+		generic map (REVISION => REVISION)
 		port map (
 			clk => clk4, ppu_reset => ppu_reset, hard_reset => hard_reset, lcd_on => lcdc(7), div => div,
-			mode2 => mode2, mode3 => mode3, mode0 => mode0,
+			double_speed => double_speed,
+			mode3 => mode3, mode0 => mode0, scanning => scanning, scan_index => scan_index,
+			dma_run => dma_run,
 			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 			wuvu => wuvu, wosu => wosu, hclk => hclk, vclk => vclk, lx => lx, ly => ly, mode1 => mode1,
+			start_line => start_line,
 			int_vbl => int_vbl, int_stat => int_stat,
 			cpl => cpl, cpg => cpg, fr => fr, s => s
 		);
@@ -319,12 +324,15 @@ begin
 			y_match => y_match, sprite_line => sprite_line_in, save => save
 		);
 
+	-- The CGB fetches the sprites on the line whatever LCDC bit 1 says (it
+	-- only stops drawing them, ../render.vhd): the DMG's fetches need it.
+	-- @hw inferred: SameBoy, ceres
 	u_sprite_store : entity work.sprite_store
 		port map (
 			wuvu => wuvu, line_start => line_start, ppu_reset => ppu_reset,
 			oam_index => unsigned(oam_addr(7 downto 2)), save => save, sprite_x => oam_odd,
 			sprite_line => sprite_line_in,
-			px => px, enabled => rendering and lcdc(1), rendering => rendering, loaded => sprite_loaded,
+			px => px, enabled => rendering, rendering => rendering, loaded => sprite_loaded,
 			x_match => x_match, index => render_index, line => render_line
 		);
 
@@ -358,7 +366,8 @@ begin
 
 	u_colour_palettes : entity work.colour_palettes
 		port map (
-			reset2 => reset2, cgb_mode => cgb_mode, boot_on => boot_on, mode3 => mode3,
+			reset2 => reset2, cgb_mode => cgb_mode, boot_on => boot_on,
+			clk4 => clk4, double_speed => double_speed, start_line => start_line, mode3 => mode3,
 			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 			pixel_obj => pixel_obj, pixel_palette => pixel_palette, pixel_colour => pixel_colour,
 			rgb => rgb
@@ -371,6 +380,7 @@ begin
 			cpu_ext_cs_en => cpu_ext_cs_en, t1_only => t1_only,
 			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, write => write, non_vram_mreq => non_vram_mreq,
 			vram_to_oam => vram_to_oam, dma_addr => dma_addr(12 downto 0),
+			clk4 => clk4, double_speed => double_speed, start_line => start_line,
 			mode3 => mode3, fetching => fetching, sprite_read => sprite_read, sprite_mrd => sprite_mrd,
 			render_ma => render_ma, render_bank => render_bank, ma => vram_addr, md => vram_data,
 			ma_pins => ma, md_pins => md, mcs_n => mcs_n, mrd_n => mrd_n, mwr_n => mwr_n

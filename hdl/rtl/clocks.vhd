@@ -11,6 +11,8 @@
 -- phases, and everything that counts them (the divider, the timer, the
 -- serial port, OAM DMA, the cartridge's PHI), go twice as fast. The speed
 -- changes only while the oscillator is stopped (by STOP, ../speed_switch.vhd).
+-- The 4 MiHz clock has a gate of its own (ppu_ena), which holds it in a
+-- switch for its own time: halved apart, it keeps its level while stopped.
 -- @hw inferred: Pan Docs ("FF4D — KEY1", "Rendering": dots do not change
 -- with the speed; "Audio": APU ticks neither); the clocks' circuit is a
 -- guess.
@@ -38,6 +40,7 @@ entity clocks is
 		div_16hz   : in std_ulogic;  -- the last bit of the divider
 
 		double_speed : in std_ulogic;  -- KEY1 bit 7
+		ppu_ena      : in std_ulogic;  -- the 4 MiHz clock runs
 
 		clk   : out std_ulogic;  -- the CPU's clock: 4 MiHz, 8 MiHz in double speed
 		phase : out phase_t;     -- the phase of the CPU's M-cycle
@@ -64,6 +67,8 @@ end entity;
 architecture rtl of clocks is
 	signal osc                    : std_ulogic;
 	signal clk4_i                 : std_ulogic := '0';
+	signal osc_ppu                : std_ulogic;  -- no rise at power-on, as osc
+	signal clk4_ppu               : std_ulogic := '0';
 	signal double_sel             : std_ulogic := '0';
 	signal clk_in                 : std_ulogic := '0';
 	signal afur, alef, apuk, adyk : std_ulogic := '0';
@@ -102,7 +107,18 @@ begin
 	          osc when double_sel = '1' else
 	          clk4_i;
 	clk    <= clk_in;
-	clk4   <= '1' when osc_ena = '0' else clk4_i;
+
+	-- The 4 MiHz clock of the PPU and the APU, halved from its own gate.
+	-- @hw inferred: guess
+	osc_ppu <= ck1 when ppu_ena = '1' else '1';
+
+	halve_ppu : process (osc_ppu)
+	begin
+		if rising_edge(osc_ppu) then
+			clk4_ppu <= not clk4_ppu;
+		end if;
+	end process;
+	clk4 <= clk4_ppu;
 
 	-- Four latches count the phases: AFUR and APUK are open while the clock
 	-- is high, ALEF and ADYK while it is low, and each copies the one before

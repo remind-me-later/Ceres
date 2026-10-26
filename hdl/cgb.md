@@ -43,6 +43,7 @@ where the two differ, the blocks say so.
 | KEY1 (FF4D) | | bit 0 armed (R/W), bit 7 the speed; the CGB's mode only (`speed_switch.vhd`) | Pan Docs |
 | The switch | | STOP with KEY1 bit 0: the DMG's STOP, which stops the oscillator and clears the divider; the speed changes while it is stopped; the switch wakes the CPU core a moment later, as a joypad line would; the CPU core then waits, as after the DMG's STOP, for the divider's bit 15: 2^15 M-cycles at the new speed (or an interrupt) | guess, which gives ceres's and SameBoy's 0x20008 T-cycles and the reset of DIV |
 | The stop's length | | 16 periods of the crystal into double speed, 4 out of it | fitted to ceres, whose times pass Gambatte's `speedchange` tests: with them, `speedchange2_div_1`, `_div_2` and `speedchange2_key1` make the same accesses as on ceres through two switches |
+| The PPU in a switch | stops with the oscillator | its 4 MiHz clock has a gate of its own (`clocks.vhd`, `speed_switch.vhd`): it stops for 10 periods of the crystal (5 dots) from the stop, either way, while the oscillator may already run | ceres and SameBoy (`speed_switch_freeze`: 5 T-cycles of the normal speed); with it, `lycint_ly_ds_1` makes the same accesses as on ceres |
 
 ### Registers the DMG does not have
 
@@ -71,32 +72,62 @@ own registers do (a guess for each).
 | A sprite's attributes | bits 4 to 7 | also bits 0 to 3, the palette and bank, in the CGB's mode only | Pan Docs; ceres (the bank in the CGB's mode only) |
 | Priority between sprites | the one fetched first (by X, then OAM order) | the same with OPRI 1; with OPRI 0, a pixel of a sprite earlier in OAM also replaces one of a later sprite | SameBoy (`fifo_overlay_object_row`); Pan Docs |
 | LCDC bit 0 | hides the background | the DMG's mode: the same; the CGB's: turns off the priorities over sprites | Pan Docs; SameBoy |
+| VRAM on the first line after the LCD is turned on | mode 3 takes it from the CPU | at normal speed, 5 dots after mode 3 begins (`vram_bus.vhd`) | ceres (from SameBoy); Gambatte's `enable_display/ly0_late_vramr`, `_vramw` |
+| LCDC bit 1 | the sprites are neither fetched nor drawn | they are fetched (mode 3 is as long), not drawn (`cgb_cpu.vhd`, the sprite store's enable) | SameBoy; ceres |
+| WX's match | needs WY's latch only: with the window off, a match still holds the fetcher's next tile back a dot | needs the window on too (`render.vhd`) | cgb-acid2's picture of a real CGB (its footer, under WX 5F with the window off); ceres |
 | Priority over sprites | the sprite's bit 7 | the sprite's bit 7 or the tile's | Pan Docs |
 | The pixel | BGP, OBP0, OBP1: a shade on LD0, LD1 | the CGB's mode: the palette and colour; the DMG's: the DMG palettes' shade in the background's palette 0 or the sprites' 0 or 1 | Pan Docs ("Compatibility palettes"); SameBoy |
-| The palettes | | BCPS, BCPD, OCPS, OCPD, two RAMs of 64 bytes (zeros at power-on); locked in mode 3 (reads FF, writes lost, the index still moves); data registers dead in the DMG's mode after the boot ROM (`colour_palettes.vhd`) | Pan Docs; SameBoy; ceres (zeros); guess (mode 3 exactly) |
+| The palettes | | BCPS, BCPD, OCPS, OCPD, two RAMs of 64 bytes (zeros at power-on); locked while the PPU draws, from 3 dots after mode 3 begins (2 on the first line after the LCD is turned on) to 4 dots after it ends (2 in double speed): reads FF, writes lost, the index still moves; data registers dead in the DMG's mode after the boot ROM (`colour_palettes.vhd`) | Pan Docs; SameBoy; ceres (zeros, the lock's edges) |
 | The LCD's pins | LD0, LD1 | 15 bits of colour | Pan Docs (the CGB's LCD) |
 
-With these, cgb-acid2 draws its picture on the model as on the real CGB but
-for 158 pixels: the footer's text is one pixel to the right. Ceres draws it
-exactly. The bus traces part first at the LY = LYC interrupt that wakes a
-HALT, one M-cycle earlier on the model: the CGB's STAT timing, below.
+### The LCD's timing
+
+The counters and the interrupt's sources are the DMG's (`lcd_timing.vhd`);
+what moves is what the CPU sees of them, and when its writes take effect,
+by a few half dots (edges of the 4 MiHz clock). No circuit is known for
+these: each is ceres's rule, fitted to Gambatte's, SameSuite's, Mooneye's
+and AGE's CGB tests (`doc/cgb-hardware-tests.md`, entries 1 to 6), placed
+at the half dot where ceres has it.
+
+A CPU access here begins (its strobe, phase E) a half dot after ceres's,
+measured on the PPU's clock, and a read takes the byte as phase H ends, 4
+half dots on: it sees the PPU as ceres's reads do, which look 4 half dots
+ahead. At normal speed every access lands on the same half dot of the
+line's M-cycles, and there a rule moved by up to 3 half dots, either way,
+gives the same values: the DMG and the CGB differ in what reads see only
+after a speed switch has moved that grid, or for rules tied to a single
+half dot.
+
+| What | DMG (netlist) | CGB (model) |
+| ---- | ------------- | ----------- |
+| STAT's enables | the latches follow the write: the interrupt sees them at once, and every source for a moment (the write's glitch) | 4 half dots after ceres's write (3 after the strobe), with no glitch; at VBlank's latch, at the same moment as it |
+| A written LYC | the comparison's next sample | its first sample 6 half dots or more after ceres's write |
+| The HBlank source of the interrupt | falls with mode 0, at the line's start | a half dot later |
+| The LY = LYC flag, read | as the comparison sampled it | 3 half dots later; on the CGB-C it drops as LY changes, as on the DMG; on the CGB-E it holds until the next sample |
+| Mode 2, read | the scan's flag (from h = 906) | from h = 909 to 157, then mode 3 |
+| Mode 1, read | VBlank's latch (from h = 908 of line 143) | from h = 911; on the CGB-E until 2 half dots after the latch's end |
+| LY, read | the counter | the counter; when it changed at the last edge, old and new ANDed |
+| LY on line 153 | 0 from 4 half dots into the line | the same on the CGB-C; 6 on the CGB-E |
+
+Double speed has the same rules for now: its own are not modelled yet.
+
+With these, cgb-acid2 draws the same 14 pictures as ceres, which match the
+real CGB's (its reference picture), but wakes from a HALT on its LY = LYC
+interrupt an M-cycle before ceres does: no one alignment of the DMG's PPU
+with the CPU gives ceres's timings for every interrupt source
+(`doc/cgb-hardware-tests.md`, entry 10).
 
 ## Not modelled yet
 
 Planned, in this order (each will move up into the tables):
 
-1. The CGB's LCD timing, which ceres fits to Gambatte's, SameSuite's and
-   AGE's tests (`doc/cgb-hardware-tests.md`, entries 2 to 5): the LY = LYC
-   flag a half dot after LY changes (the DMG: three halves later), a written
-   LYC taking effect at the comparator's next sample (once an M-cycle),
-   mode 2 half a dot earlier, mode 1 from the end of line 143, the STAT
-   write's delay to the interrupt, and in double speed their own delays.
-2. HDMA (FF51 to FF55): the general-purpose transfer and the HBlank one.
-3. The APU: PCM12 and PCM34 (FF76, FF77), wave RAM while channel 3 plays,
+1. HDMA (FF51 to FF55): the general-purpose transfer and the HBlank one.
+2. The APU: PCM12 and PCM34 (FF76, FF77), wave RAM while channel 3 plays,
    the lengths while the APU is off, the frame sequencer in double speed.
-4. The serial port's fast clock (SC bit 1), the infrared port RP (FF56),
+3. The serial port's fast clock (SC bit 1), the infrared port RP (FF56),
    FEA0 to FEFF, OAM DMA's sources, the OAM bug.
-5. The CGB-C's differences (`doc/cgb-hardware-tests.md`, entry 6).
+4. The CGB-C's other differences (`doc/cgb-hardware-tests.md`, entry 6;
+   the LCD's timing already has those that ceres knows).
 
 ## Running it
 

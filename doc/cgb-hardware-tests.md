@@ -273,3 +273,31 @@ their sources, in `hdl/README.md` ("Die images").
     the boot ROM.
   - The CYUH54 die: which chip and revision it is. If it is a CGB D or E,
     its plan next to the CGB B's shows where the revisions differ.
+
+### 10. Where the interrupts' sources sit against the CPU
+
+Found by the CGB's VHDL model (`hdl/cgb.md`, "The LCD's timing").
+
+- **Measure:** at normal speed, sweep a HALT by one M-cycle at a time across
+  the rise of each STAT source (LY = LYC, HBlank, the OAM scan at a line's
+  end, VBlank) and record the M-cycle the CPU wakes in; and sweep a STAT
+  write that turns HBlank's source off across the end of mode 3.
+- **Why the tests don't decide:** in the model, the DMG's counters and
+  sources run on the PPU's clock, a CPU access begins (its strobe) a half
+  dot after ceres's, and a read takes the byte 4 half dots later: reads
+  then see what ceres's do, which look 4 half dots ahead. With the sources
+  where the DMG has them, `m2enable/disable_1`, `m2int_m3stat_1`,
+  `lycint_ly_1` and `boot_regs-cgb` make the same accesses as on ceres, but
+  cgb-acid2 wakes from HALT on its LY = LYC interrupt an M-cycle early, and
+  `m0enable/disable_2` misses an HBlank interrupt that a STAT write turns off
+  just after it rises. With the PPU a half dot later against the CPU,
+  cgb-acid2 matches, but `m2int_m3stat_1` takes its VBlank interrupt an
+  M-cycle late. No one alignment of the DMG's PPU with the CPU gives ceres's
+  timings for every source: ceres's rules (from gambatte's, fitted to the
+  CGB-C's tests) put the sources at slightly different places against the
+  CPU than the DMG's circuit does.
+- **Ceres today:** the timing unit of entries 2 to 5.
+- **Outcomes:** for each source, the cycle at which it wakes the CPU, and
+  the last cycle at which a STAT write still turns it off. If they line up
+  with the DMG's places, ceres's offsets are fits; if not, they show where
+  the CGB's circuit differs.

@@ -300,10 +300,9 @@ begin
 		alias flags      is << signal .gameboy_tb.u_gameboy.u_chip.flags : std_ulogic_vector(4 downto 0) >>;
 		alias tima       is << signal .gameboy_tb.u_gameboy.u_chip.u_timer.tima : std_ulogic_vector(7 downto 0) >>;
 		alias dma_run    is << signal .gameboy_tb.u_gameboy.u_chip.dma_run : std_ulogic >>;
-		alias ly         is << signal .gameboy_tb.u_gameboy.u_chip.u_lcd_timing.ly_i : unsigned(7 downto 0) >>;
-		alias stat_mode2 is << signal .gameboy_tb.u_gameboy.u_chip.u_lcd_timing.stat_mode2 : std_ulogic >>;
+		alias ly_read    is << signal .gameboy_tb.u_gameboy.u_chip.u_lcd_timing.ly_read : std_ulogic_vector(7 downto 0) >>;
+		alias mode_read  is << signal .gameboy_tb.u_gameboy.u_chip.u_lcd_timing.mode_read : std_ulogic_vector(1 downto 0) >>;
 		alias mode3      is << signal .gameboy_tb.u_gameboy.u_chip.mode3 : std_ulogic >>;
-		alias mode1      is << signal .gameboy_tb.u_gameboy.u_chip.u_lcd_timing.mode1_i : std_ulogic >>;
 		alias div        is << signal .gameboy_tb.u_gameboy.u_chip.div : unsigned(15 downto 0) >>;
 		alias oam_free   is << signal .gameboy_tb.u_gameboy.u_chip.u_oam.free : std_ulogic >>;
 		file f          : text;
@@ -338,7 +337,7 @@ begin
 			end if;
 			if seen then
 				flags_now := "000" & to_x01(flags);
-				mode      := (stat_mode2 or mode3) & (mode3 or mode1);
+				mode      := mode_read;
 				if first or flags_now /= last_flags then
 					put("IF", to_hstring(flags_now));
 				end if;
@@ -348,8 +347,8 @@ begin
 				if first or to_x01(dma_run) /= last_dma then
 					put("DMA", to_string(to_x01(dma_run)));
 				end if;
-				if first or std_ulogic_vector(ly) /= last_ly then
-					put("LY", to_hstring(std_ulogic_vector(ly)));
+				if first or ly_read /= last_ly then
+					put("LY", to_hstring(ly_read));
 				end if;
 				if first or to_x01(mode) /= last_mode then
 					put("MODE", integer'image(to_integer(unsigned(to_01(mode)))));
@@ -367,7 +366,7 @@ begin
 				last_flags := flags_now;
 				last_tima  := to_x01(tima);
 				last_dma   := to_x01(dma_run);
-				last_ly    := std_ulogic_vector(ly);
+				last_ly    := ly_read;
 				last_mode  := to_x01(mode);
 				last_div   := div;
 				last_oamb  := to_x01(not oam_free);

@@ -486,9 +486,14 @@ begin
 		end if;
 	end process;
 
-	-- WX matches the pixel counter.
+	-- WX matches the pixel counter. On the CGB only while the window is on:
+	-- on the DMG, WY's latch is enough, and a match with the window off
+	-- still holds the fetcher's next tile back for a dot (RYFA, below).
 	-- @hw die: NOGY NUKO
-	wxy_match <= '1' when wy_latch = '1' and wx = std_ulogic_vector(px_i) else '0';
+	-- @hw inferred: cgb-acid2's picture of a real CGB (the footer, under WX
+	-- 5F with the window turned off: no dot lost), ceres (the window's start
+	-- needs LCDC bit 5)
+	wxy_match <= '1' when lcdc(5) = '1' and wy_latch = '1' and wx = std_ulogic_vector(px_i) else '0';
 
 	-- The window starts at a dot where WX matches, after two clocks.
 	-- @hw die: PYCO (dffr), clocked by ROCO; NUNU (dffr); PYNU (nor_latch),
