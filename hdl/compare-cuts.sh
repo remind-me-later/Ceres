@@ -140,6 +140,14 @@ awk -v window="${WINDOW:-3}" '
 					pc[pairs] = j
 					i++
 					j++
+				} else if (j < c && at[2, name, j + 1] - at[2, name, j] <= 1 && pairs_with(name, i, j + 1)) {
+					# A brief change, whose next change pairs (ceres saw IF
+					# between a request and the write that overrides it).
+					alone(2, name, j, c)
+					j++
+				} else if (i < m && at[1, name, i + 1] - at[1, name, i] <= 1 && pairs_with(name, i + 1, j)) {
+					alone(1, name, i, m)
+					i++
 				} else if (at[1, name, i] < from[2, name, j] || \
 					(at[1, name, i] <= at[2, name, j] && value[1, name, i] != value[2, name, j])) {
 					i += alone(1, name, i, m)
