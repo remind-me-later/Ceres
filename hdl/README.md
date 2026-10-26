@@ -299,16 +299,18 @@ of 513. The others differ in three ways (see also
 
 ### Gambatte's ROMs
 
-`run-gambatte.sh` runs Gambatte's DMG test ROMs (the ones whose names carry
-`dmg08_out`) on the model from the short boot ROM (below), 16 frames after
-the ROM starts, reads the digits in the top row of the screen with Gambatte's
-glyphs, as ceres's `gambatte_dmg` does, and compares them with the digits in
-the file's name. A ROM alone takes 70 s, but a 12-core laptop (8 threads on
-the 4 fast cores, then the slow ones) finishes one every 20 s with 8 or more
-at a time, so the 1747 take about 10 hours and `STRIDE=8` (207 ROMs, 70
-minutes) runs every eighth; `JOBS` sets how many run at a time (default
-six); `BOOT=quick` runs quickboot instead. The results are in
-`build/gambatte/results.txt` (see [results.md](results.md)).
+`run-gambatte.sh` runs Gambatte's test ROMs on the model from the short boot
+ROM (below), 16 frames after the ROM starts, reads the digits in the top row
+of the screen with Gambatte's glyphs, as ceres's `gambatte_dmg` does, and
+compares them with the digits in the file's name. On this branch the chip is
+a CGB, and the ROMs are those with a CGB-C's result (`cgb04c_out`), from
+`build/tinyboot_cgb.bin` (`REVISION=E` runs a CGB-E); `WORK` runs a copy of
+the model's library, so that the model can be rebuilt meanwhile, and `OUT`
+names the results' directory. A ROM alone takes 70 s or more, but a 12-core
+laptop (8 threads on the 4 fast cores, then the slow ones) finishes one
+every 20 s with 8 or more at a time; `STRIDE=n` runs every n-th ROM, and
+`JOBS` sets how many run at a time (default six). The results are in
+`build/gambatte/results.txt`.
 
 ### Making a run shorter
 
